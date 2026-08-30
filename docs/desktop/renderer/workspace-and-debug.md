@@ -104,6 +104,8 @@ Browser presentation 位于 `packages/features/browser/src/renderer/`，主要�
 
 新建浏览器 panel 以内部 `about:blank` 标识首页，但实际内容由 React 渲染，不会默认请求外部搜索站点。成功的主页面导航会更新最近访问；首页允许逐条删除。地址栏旁的星标负责收藏/取消收藏；首页重新激活时会从本地投影恢复收藏与历史。
 
+Browser panel 为保留 guest/webview 状态，会把非当前会话的实例继续挂载但隐藏。每个实例的 Workspace Slot context 必须从它自己的 `targetIdentity` 解析，React/Slot identity 使用 `targetIdentity + panelId`；切换当前 thread 只改变可见性，不能把 active project/thread 写入全部后台 panel，也不能因此批量 remount。
+
 `apps/desktop/renderer/src/composition/BrowserFeaturePane.tsx` 只注入 preload bridge、i18n、通知、外链、Select 和 Workspace resize handle。Feature renderer 负责可见 tab UI；可信 guest registry 和 CDP 由同一 Feature 的 main 入口持有。详情见 [main 浏览器文档](../../features/browser.md)。
 
 ## 外部 Workspace apps

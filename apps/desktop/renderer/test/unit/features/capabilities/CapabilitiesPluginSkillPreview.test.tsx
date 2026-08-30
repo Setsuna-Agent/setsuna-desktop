@@ -2,8 +2,20 @@
 
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ComponentProps } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CapabilitiesPluginDetail } from '../../../../src/features/capabilities/CapabilitiesPluginDetail.js';
+import { CapabilitiesPluginDetail as UnhostedCapabilitiesPluginDetail } from '../../../../src/features/capabilities/CapabilitiesPluginDetail.js';
+import { RendererPluginTestHost } from '../../support/RendererPluginTestHost.js';
+
+function CapabilitiesPluginDetail(
+  props: ComponentProps<typeof UnhostedCapabilitiesPluginDetail>,
+) {
+  return (
+    <RendererPluginTestHost>
+      <UnhostedCapabilitiesPluginDetail {...props} />
+    </RendererPluginTestHost>
+  );
+}
 
 describe('CapabilitiesPluginDetail Skill preview', () => {
   afterEach(() => {

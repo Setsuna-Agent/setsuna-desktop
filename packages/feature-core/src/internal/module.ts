@@ -61,10 +61,10 @@ export function defineProcessFeature<
         dependencies.map(({ slot }) => [slot, context.dependencies[slot]]),
       ) as ResolveDependencies<TSpec>;
       return input.setup(Object.freeze({
-        scope: context.scope,
+        // Preserve process-specific context injected by the host (for example,
+        // the renderer UI registrar) while narrowing the dependency object.
+        ...context,
         dependencies: Object.freeze(resolved),
-        health: context.health,
-        provide: context.provide,
       }));
     },
   });

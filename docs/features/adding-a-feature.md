@@ -79,6 +79,7 @@ packages/features/word-count/
   },
   "dependencies": {
     "@setsuna-desktop/feature-core": "workspace:*",
+    "@setsuna-desktop/renderer-contracts": "workspace:*",
     "react": "^18.3.1"
   },
   "scripts": {
@@ -109,7 +110,8 @@ packages/features/word-count/
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
   "references": [
-    { "path": "../../feature-core/tsconfig.build.json" }
+    { "path": "../../feature-core/tsconfig.build.json" },
+    { "path": "../../renderer-contracts/tsconfig.build.json" }
   ]
 }
 ```
@@ -371,7 +373,7 @@ export function WordCountView({
 }
 ```
 
-`src/renderer/feature.tsx` 把 client 和静态 view contribution 组合起来：
+`src/renderer/feature.tsx` 把 client 和 scope-bound Slot contribution 组合起来：
 
 ```tsx
 import { requiredCapability } from '@setsuna-desktop/feature-core/capability';
@@ -380,6 +382,7 @@ import {
   defineRendererFeature,
   rendererFeatureOperationTransportCapability,
 } from '@setsuna-desktop/feature-core/renderer';
+import { registerSettingsPage } from '@setsuna-desktop/renderer-contracts/settings';
 import { wordCountFeature } from '../contracts/index.js';
 import { createWordCountClient } from './client.js';
 import { wordCountMessages } from './messages.js';
@@ -395,18 +398,17 @@ export const wordCountRendererFeature = defineRendererFeature({
   messages: [wordCountMessages],
   setup(context) {
     const client = createWordCountClient(context.dependencies.transport);
-    return {
-      settingsViews: [{
-        sectionId: 'word-count',
-        location: 'capabilities',
-        order: 900,
-        titleKey: 'feature.wordCount.title',
-        descriptionKey: 'feature.wordCount.description',
-        render: ({ translate, ui }) => (
-          <WordCountView client={client} translate={translate} ui={ui} />
-        ),
-      }],
-    };
+    registerSettingsPage(context.ui, {
+      entryId: 'word-count.settings-page',
+      sectionId: 'word-count',
+      location: 'capabilities',
+      order: 900,
+      titleKey: 'feature.wordCount.title',
+      descriptionKey: 'feature.wordCount.description',
+      render: ({ translate, ui }) => (
+        <WordCountView client={client} translate={translate} ui={ui} />
+      ),
+    });
   },
 });
 ```
@@ -421,7 +423,7 @@ export { wordCountRendererFeature } from './feature.js';
 Feature 状态同生命周期的标题栏动作，可在 contribution 声明 `pageHeading: 'view'`，并在 view
 中用 `ui.PageHeading` 渲染标题和 action；不要通过宿主私有组件导入或 CSS 位移实现。
 
-不要修改通用 runtime client、Settings/Capabilities page switch 或组件生命周期 Registry。宿主只读取 renderer composition 生成的只读 catalog。
+不要修改通用 runtime client、Settings/Capabilities page switch，也不要在 React component/hook/effect 中注册 Slot。`context.ui` 自动把 disposer 绑定到当前 `FeatureScope`；初始装配由唯一 Renderer composition root 原子 commit。
 
 ## 第五步：接入构建图
 
@@ -506,7 +508,7 @@ const rendererFeatures = defineRendererFeatureHost({
 | --- | --- | --- |
 | Feature settings | contracts 定义 settings bundle；runtime Feature 声明 `settings` 并注入 settings registry | schema、defaults、revision、migration、public/secret projection；`syncPolicy: 'portable'` 自动参与 WebDAV，secret backup 名称必须显式 opt in |
 | 私有持久事件 | contracts 定义 `feature.event` contract；runtime owner 建 projection | 每个历史 schema version 有 codec；未知 owner 不阻塞 Core，已知 owner 未知版本 fail closed |
-| 工具结果专属 UI | contracts 定义稳定 `resultKind + major + payload codec`；renderer 返回 `toolResultViews` | 未注册或解码失败时保留通用 fallback |
+| 工具结果专属 UI | contracts 定义稳定 `resultKind + major + payload codec`；renderer 调用 `registerChatToolResult(context.ui, ...)` | 仍属于 Chat typed chain resolver；未注册或解码失败时保留通用 fallback |
 | Feature 间调用 | provider 暴露窄 Capability，consumer 只导入 provider `/contracts` | 不导入实现，不使用全局 service locator |
 | Electron/OS 能力 | 新增真实 `main` entry，资源和 IPC handler 交给 FeatureScope | sender 校验、路径安全、取消、逆序清理 |
 | renderer 固定 bridge | contracts 定义 bridge，`preload` entry 用 `definePreloadFeature` 贡献固定 key | 不暴露 raw `ipcRenderer` 或任意 dispatch |

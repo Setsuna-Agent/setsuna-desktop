@@ -6,31 +6,28 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MessageItem } from '../../../../../src/features/chat/conversation/ChatMessageItem.js';
 import type { ChatDisplayItem } from '../../../../../src/features/chat/conversation/chatMessageDisplay.js';
 
-vi.mock('../../../../../src/composition/feature-view-registries.js', async (importOriginal) => {
-  const original = await importOriginal<typeof import('../../../../../src/composition/feature-view-registries.js')>();
+vi.mock('../../../../../src/features/chat/tool-runs/runtimeFeatureToolResults.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../../../../src/features/chat/tool-runs/runtimeFeatureToolResults.js')>();
   return {
     ...original,
-    useRendererFeatureViews: () => ({
-      toolResults: {
-        resolve(value: unknown) {
-          if (!value || typeof value !== 'object'
-            || (value as { resultKind?: unknown }).resultKind !== 'test.persistent-result') return null;
-          return {
-            featureId: 'test-feature',
-            payload: {},
-            contribution: {
-              id: 'test.persistent-result-view',
-              resultKind: 'test.persistent-result',
-              major: 1,
-              payload: { parse: (payload: unknown) => payload },
-              presentation: 'replace',
-              workHistoryPresentation: 'persistent',
-              render: () => <div className="subagent-task-card" />,
-            },
-          };
+    useRuntimeFeatureToolResultResolver: () => (run: RuntimeToolRun) => {
+      const value = run.data;
+      if (!value || typeof value !== 'object'
+        || (value as { resultKind?: unknown }).resultKind !== 'test.persistent-result') return null;
+      return {
+        featureId: 'test-feature',
+        payload: {},
+        contribution: {
+          id: 'test.persistent-result-view',
+          resultKind: 'test.persistent-result',
+          major: 1,
+          payload: { parse: (payload: unknown) => payload },
+          presentation: 'replace',
+          workHistoryPresentation: 'persistent',
+          render: () => <div className="subagent-task-card" />,
         },
-      },
-    }),
+      };
+    },
   };
 });
 

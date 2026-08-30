@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   activeKeyboardShortcutBindings,
+  browserShortcutTabId,
   isModalDialogVisible,
   matchingKeyboardShortcutCommand,
 } from '../../../../src/app/controller/useAppKeyboardShortcuts.js';
@@ -31,12 +32,33 @@ describe('activeKeyboardShortcutBindings', () => {
     const handlers = {
       'app.newChat': { execute: () => undefined },
       'app.openSettings': { enabled: false, execute: () => undefined },
+      'browser.reload': { execute: () => undefined },
     } as const;
 
     expect(activeKeyboardShortcutBindings(
       handlers,
-      (commandId) => commandId === 'app.newChat' ? ['Control+KeyN'] : ['Control+Comma'],
-    )).toEqual(['Control+KeyN']);
+      (commandId) => {
+        if (commandId === 'app.newChat') return ['Control+KeyN'];
+        if (commandId === 'browser.reload') return ['Control+KeyR'];
+        return ['Control+Comma'];
+      },
+    )).toEqual(['Control+KeyN', 'Control+KeyR']);
+  });
+});
+
+describe('browserShortcutTabId', () => {
+  it('uses the browser tab that forwarded the shortcut instead of another active surface', () => {
+    expect(browserShortcutTabId({
+      ...keyEvent({ code: 'KeyR', ctrlKey: true, key: 'r' }),
+      source: { kind: 'embedded-browser', tabId: 'bottom-browser' },
+    }, 'side-browser')).toBe('bottom-browser');
+  });
+
+  it('does not guess another tab when an embedded browser has not registered its source yet', () => {
+    expect(browserShortcutTabId({
+      ...keyEvent({ code: 'KeyR', ctrlKey: true, key: 'r' }),
+      source: { kind: 'embedded-browser', tabId: null },
+    }, 'side-browser')).toBeNull();
   });
 });
 

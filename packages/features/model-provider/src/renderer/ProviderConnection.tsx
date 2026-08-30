@@ -3,8 +3,12 @@ import type {
   DesktopNetworkProxyServerState,
   ModelProviderKind,
   ProviderConfigState,
-} from '@setsuna-desktop/contracts';
-import type { RendererTranslate, SettingsViewUi } from '@setsuna-desktop/feature-core/renderer';
+  } from '@setsuna-desktop/contracts';
+import type { RendererTranslate,
+} from '@setsuna-desktop/feature-core/renderer';
+import type {
+  SettingsViewUi,
+} from '@setsuna-desktop/renderer-contracts/settings';
 import { TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import type { ModelProviderCatalog } from '../contracts/index.js';

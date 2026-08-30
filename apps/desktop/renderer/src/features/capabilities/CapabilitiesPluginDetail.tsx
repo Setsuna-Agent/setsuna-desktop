@@ -12,10 +12,17 @@ import type {
 import { Dropdown, type MenuProps } from 'antd';
 import { AlertTriangle, BookOpen, Check, Download, FileText, Loader2, MessageSquare, MoreHorizontal, Plug, ShieldCheck, ShieldOff, Trash2, Workflow, Wrench } from 'lucide-react';
 import { useState } from 'react';
-import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import {
+  settingsPageKey,
+  settingsPageSlot,
+} from '@setsuna-desktop/renderer-contracts/settings';
 import { FeatureContributionBoundary } from '../../composition/FeatureContributionBoundary.js';
 import { FeatureRecoveryShell } from '../../composition/FeatureRecoveryShell.js';
-import { useRendererFeatureViews } from '../../composition/feature-view-registries.js';
+import {
+  RendererOwnedKeyedSlot,
+  useRendererOwnedKeyedEntries,
+} from '../../kernel/renderer-plugins/RendererKernelProvider.js';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { Button, IconButton, PageHeader } from '../../shared/ui/primitives.js';
 import { settingsViewUi } from '../../shared/ui/SettingsViewUi.js';
 import { CapabilitiesPluginDetailSection } from './CapabilitiesPluginDetailSection.js';
@@ -71,7 +78,7 @@ export function CapabilitiesPluginDetail({
   runtimeHooks?: CapabilitiesHook[];
 }) {
   const { t } = useI18n();
-  const featureViews = useRendererFeatureViews();
+  const settingsPages = useRendererOwnedKeyedEntries(settingsPageSlot);
   const [selectedItem, setSelectedItem] = useState<CapabilitiesPluginItem | null>(null);
   const plugin = installedPlugin ?? marketplacePlugin;
   if (!plugin) return null;
@@ -109,8 +116,9 @@ export function CapabilitiesPluginDetail({
     : Math.max(resources.length, marketplaceMetadata?.capabilities.resources ?? 0);
   const installed = Boolean(installedPlugin ?? marketplaceMetadata?.installed);
   const installedFromMarketplace = installedPlugin?.installationSource === 'marketplace';
-  const featureSettings = featureViews.settings.find('capabilities', plugin.id);
-  const FeatureSettingsView = featureSettings?.render;
+  const featureSettings = settingsPages.find((entry) => (
+    entry.metadata.location === 'capabilities' && entry.metadata.sectionId === plugin.id
+  ));
   const publisher = marketplaceMetadata?.publisher ?? plugin.publisher;
   const subtitle = [publisher, plugin.version ? `v${plugin.version}` : null].filter(Boolean).join(' · ') || t('capabilities.market.pluginSummary');
   const extension = installedPlugin?.extension ?? marketplaceMetadata?.extension;
@@ -266,22 +274,32 @@ export function CapabilitiesPluginDetail({
         </section>
       ) : null}
 
-      {installedFromMarketplace && FeatureSettingsView ? (
+      {installedFromMarketplace && featureSettings ? (
         <FeatureContributionBoundary
           fallback={(reset) => (
             <FeatureRecoveryShell
-              candidateFeatureIds={[featureSettings.featureId]}
+              candidateFeatureIds={[
+                featureSettings.owner.featureId ?? featureSettings.owner.pluginId,
+              ]}
               onRetryView={reset}
               reason="view-failed"
             />
           )}
-          featureId={featureSettings.featureId}
-          resetKey={`${featureSettings.featureId}:${featureSettings.sectionId}`}
+          featureId={featureSettings.owner.featureId ?? featureSettings.owner.pluginId}
+          resetKey={JSON.stringify([
+            featureSettings.owner.scopeId,
+            featureSettings.entryId,
+            plugin.id,
+          ])}
         >
-          <FeatureSettingsView
-            sectionId={featureSettings.sectionId}
-            translate={t}
-            ui={settingsViewUi}
+          <RendererOwnedKeyedSlot
+            entryKey={settingsPageKey('capabilities', plugin.id)}
+            slot={settingsPageSlot}
+            props={{
+              sectionId: plugin.id,
+              translate: t,
+              ui: settingsViewUi,
+            }}
           />
         </FeatureContributionBoundary>
       ) : installedFromMarketplace ? (

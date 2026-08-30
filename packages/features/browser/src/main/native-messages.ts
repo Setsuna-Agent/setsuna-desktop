@@ -17,6 +17,9 @@ const zhCNMessages = {
   'browser.back': '后退',
   'browser.forward': '前进',
   'browser.reload': '重新加载',
+  'browser.normalReload': '正常刷新',
+  'browser.hardReload': '硬刷新',
+  'browser.emptyCacheAndHardReload': '清空缓存并进行硬刷新',
 } as const;
 
 export type BrowserNativeMessageKey = keyof typeof zhCNMessages;
@@ -39,6 +42,9 @@ const enUSMessages: Record<BrowserNativeMessageKey, string> = {
   'browser.back': 'Back',
   'browser.forward': 'Forward',
   'browser.reload': 'Reload',
+  'browser.normalReload': 'Normal Reload',
+  'browser.hardReload': 'Hard Reload',
+  'browser.emptyCacheAndHardReload': 'Empty Cache and Hard Reload',
 };
 
 const messages: Record<RuntimeInterfaceLanguage, Record<BrowserNativeMessageKey, string>> = {

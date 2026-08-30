@@ -9,6 +9,7 @@ export type EmbeddedBrowserKeyboardShortcut = {
 export function embeddedBrowserKeyboardShortcut(
   input: Input,
   activeBindings: ReadonlySet<string>,
+  source?: DesktopKeyboardShortcutInput['source'],
 ): EmbeddedBrowserKeyboardShortcut | null {
   if (
     input.type !== 'keyDown'
@@ -45,6 +46,7 @@ export function embeddedBrowserKeyboardShortcut(
       metaKey: input.meta,
       repeat: input.isAutoRepeat,
       shiftKey: input.shift,
+      ...(source ? { source } : {}),
     },
   };
 }

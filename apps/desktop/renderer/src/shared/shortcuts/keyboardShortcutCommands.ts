@@ -29,6 +29,8 @@ export const KEYBOARD_SHORTCUT_COMMAND_IDS = [
   'workspace.openSideChat',
   'workspace.openBrowser',
   'workspace.openConversationDebug',
+  'browser.reload',
+  'browser.hardReload',
 ] as const;
 
 export type KeyboardShortcutCommandId = typeof KEYBOARD_SHORTCUT_COMMAND_IDS[number];
@@ -199,6 +201,20 @@ export const keyboardShortcutCommands: readonly KeyboardShortcutCommand[] = [
     labelKey: 'shortcuts.command.openConversationDebug',
     descriptionKey: 'shortcuts.command.openConversationDebugDescription',
     defaultBindings: primaryBinding('KeyD', true),
+  },
+  {
+    id: 'browser.reload',
+    group: 'workspace',
+    labelKey: 'shortcuts.command.reloadBrowser',
+    descriptionKey: 'shortcuts.command.reloadBrowserDescription',
+    defaultBindings: primaryBinding('KeyR'),
+  },
+  {
+    id: 'browser.hardReload',
+    group: 'workspace',
+    labelKey: 'shortcuts.command.hardReloadBrowser',
+    descriptionKey: 'shortcuts.command.hardReloadBrowserDescription',
+    defaultBindings: primaryBinding('KeyR', true),
   },
 ];
 

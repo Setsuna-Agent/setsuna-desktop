@@ -32,6 +32,5 @@ export const pluginManagementRendererFeature = defineRendererFeature({
       client: createPluginManagementClient(context.dependencies.transport),
       scope: context.scope,
     }));
-    return {};
   },
 });

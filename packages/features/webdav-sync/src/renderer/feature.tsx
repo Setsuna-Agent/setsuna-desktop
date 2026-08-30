@@ -2,8 +2,11 @@ import { requiredCapability } from '@setsuna-desktop/feature-core/capability';
 import {
   defineRendererDependencies,
   defineRendererFeature,
-  type SettingsViewHostProps,
 } from '@setsuna-desktop/feature-core/renderer';
+import {
+  registerSettingsPage,
+  type SettingsPageSlotProps,
+} from '@setsuna-desktop/renderer-contracts/settings';
 import { CloudCog } from 'lucide-react';
 import { webDavSyncFeature } from '../contracts/index.js';
 import type { WebDavSyncDesktopBridge } from '../contracts/index.js';
@@ -22,8 +25,8 @@ export const webDavSyncRendererFeature = defineRendererFeature({
   messages: [webDavSyncMessages],
   setup(context) {
     const { bridge } = context.dependencies.host;
-    return {
-      settingsViews: [{
+    registerSettingsPage(context.ui, {
+        entryId: 'webdav-sync.settings-page',
         icon: CloudCog,
         sectionId: 'webdav-sync',
         location: 'settings',
@@ -32,8 +35,7 @@ export const webDavSyncRendererFeature = defineRendererFeature({
         titleKey: 'feature.webdavSync.settings.title',
         descriptionKey: 'feature.webdavSync.settings.description',
         render: (props) => <WebDavSyncSettingsView bridge={bridge} {...props} />,
-      }],
-    };
+    });
   },
 });
 
@@ -41,7 +43,7 @@ function WebDavSyncSettingsView({
   bridge,
   translate,
   ui,
-}: SettingsViewHostProps & Readonly<{
+}: SettingsPageSlotProps & Readonly<{
   bridge: WebDavSyncDesktopBridge | null;
 }>) {
   const locale = typeof document === 'undefined'

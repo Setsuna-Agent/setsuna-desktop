@@ -16,6 +16,7 @@ import type {
   DesktopTerminalSession,
 } from '@setsuna-desktop/feature-terminal/contracts';
 import type { DesktopWorkspaceApp } from '@setsuna-desktop/feature-workspace-apps/contracts';
+import type { RendererWorkspacePanelType } from '@setsuna-desktop/renderer-contracts/workspace';
 
 export type {
   DesktopDiffFile,
@@ -30,16 +31,7 @@ export type {
 };
 
 export type DesktopPanelSlot = 'side' | 'bottom';
-export type DesktopPanelType =
-  | 'overview'
-  | 'browser'
-  | 'chat'
-  | 'subagent'
-  | 'conversation-debug'
-  | 'files'
-  | 'file'
-  | 'review'
-  | 'terminal';
+export type DesktopPanelType = RendererWorkspacePanelType;
 export type DesktopBrowserPanelState = BrowserPanelState;
 export type DesktopPanelTab = {
   browser?: DesktopBrowserPanelState;

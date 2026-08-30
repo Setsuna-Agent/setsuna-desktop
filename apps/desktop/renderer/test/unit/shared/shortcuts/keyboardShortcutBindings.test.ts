@@ -79,6 +79,13 @@ describe('keyboard shortcut bindings', () => {
     expect(newChat.defaultBindings.darwin).toEqual(['Meta+KeyN']);
     expect(newChat.defaultBindings.win32).toEqual(['Control+KeyN']);
     expect(newChat.defaultBindings.linux).toEqual(['Control+KeyN']);
+    expect(keyboardShortcutCommand('browser.reload').defaultBindings).toEqual({
+      darwin: ['Meta+KeyR'],
+      linux: ['Control+KeyR'],
+      win32: ['Control+KeyR'],
+    });
+    expect(keyboardShortcutCommand('browser.hardReload').defaultBindings.win32)
+      .toEqual(['Control+Shift+KeyR']);
   });
 
   it('keeps every platform default canonical and conflict-free', () => {

@@ -65,8 +65,10 @@ class FakeWebContents extends EventEmitter {
   readonly debugger = new FakeBrowserDebugger();
   deviceEmulation: unknown = null;
   focusCount = 0;
+  hardReloadCount = 0;
   hostFocusCount = 0;
   readonly inputEvents: KeyboardInputEvent[] = [];
+  reloadCount = 0;
   readonly hostWebContents = { focus: () => { this.hostFocusCount += 1; } };
   userAgent = 'Desktop Chrome/140.0.0.0';
   readonly session = { getUserAgent: () => 'Desktop Chrome/140.0.0.0' };
@@ -84,6 +86,8 @@ class FakeWebContents extends EventEmitter {
   focus(): void { this.focusCount += 1; }
   isDestroyed(): boolean { return this.destroyed; }
   isLoading(): boolean { return this.loading; }
+  reload(): void { this.reloadCount += 1; }
+  reloadIgnoringCache(): void { this.hardReloadCount += 1; }
   sendInputEvent(event: KeyboardInputEvent): void { this.inputEvents.push(event); }
 
   async capturePage() {
@@ -271,6 +275,20 @@ describe('DesktopBrowserController', () => {
     });
     expect(contents.captureCount).toBe(2);
     await expect(controller.captureScreenshot('../invalid')).resolves.toBeNull();
+  });
+
+  it('reloads a registered tab with the requested cache policy', () => {
+    const contents = new FakeWebContents(14);
+    const controller = new DesktopBrowserController({ createAutomation: () => new FakeAutomation() });
+    controller.registerTab('tab-1', asWebContents(contents));
+
+    expect(controller.tabIdForWebContents(contents.id)).toBe('tab-1');
+    expect(controller.tabIdForWebContents(999)).toBeNull();
+    expect(controller.reloadTab('tab-1', 'normal')).toBe(true);
+    expect(controller.reloadTab('tab-1', 'hard')).toBe(true);
+    expect(controller.reloadTab('missing', 'normal')).toBe(false);
+    expect(contents.reloadCount).toBe(1);
+    expect(contents.hardReloadCount).toBe(1);
   });
 
   it('invalidates old snapshot refs and routes real-input commands through the tab adapter', async () => {

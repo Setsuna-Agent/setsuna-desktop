@@ -36,9 +36,15 @@ export const browserMainFeature = defineMainFeature({
 
     context.scope.add(() => controlServer.stop());
     context.scope.add(() => controller.clear());
-    context.scope.add(registerBrowserIpc(context.scope, controller, host.mainWindow));
+    context.scope.add(registerBrowserIpc(
+      context.scope,
+      controller,
+      host.mainWindow,
+      () => host.interfaceLanguage(),
+    ));
     context.scope.add(installEmbeddedBrowserWebviews({
       activeKeyboardShortcutBindings: () => host.activeKeyboardShortcutBindings(),
+      browserTabIdForWebContents: (webContentsId) => controller.tabIdForWebContents(webContentsId),
       interfaceLanguage: () => host.interfaceLanguage(),
       mainWindow: host.mainWindow,
     }));

@@ -4,6 +4,7 @@ import {
   defineRendererFeature,
   rendererFeatureOperationTransportCapability,
 } from '@setsuna-desktop/feature-core/renderer';
+import { registerSettingsPage } from '@setsuna-desktop/renderer-contracts/settings';
 import { visionRecognitionFeature } from '../contracts/index.js';
 import { createVisionRecognitionClient } from './client.js';
 import { visionRecognitionMessages } from './messages.js';
@@ -19,8 +20,8 @@ export const visionRecognitionRendererFeature = defineRendererFeature({
   messages: [visionRecognitionMessages],
   setup(context) {
     const client = createVisionRecognitionClient(context.dependencies.transport);
-    return {
-      settingsViews: [{
+    registerSettingsPage(context.ui, {
+        entryId: 'vision-recognition.capabilities-page',
         sectionId: 'openai-vision-recognition',
         location: 'capabilities',
         order: 110,
@@ -28,7 +29,6 @@ export const visionRecognitionRendererFeature = defineRendererFeature({
         render: ({ translate, ui }) => (
           <VisionRecognitionSettingsView client={client} translate={translate} ui={ui} />
         ),
-      }],
-    };
+    });
   },
 });

@@ -4,6 +4,7 @@ import {
   defineRendererFeature,
   rendererFeatureOperationTransportCapability,
 } from '@setsuna-desktop/feature-core/renderer';
+import { registerSettingsPageExtension } from '@setsuna-desktop/renderer-contracts/settings';
 import { memoryFeature } from '../contracts/index.js';
 import { createMemoryClient } from './client.js';
 import { memoryMessages } from './messages.js';
@@ -23,8 +24,8 @@ export const memoryRendererFeature = defineRendererFeature({
   messages: [memoryMessages],
   setup(context) {
     const client = createMemoryClient(context.dependencies.transport);
-    return {
-      settingsSectionExtensions: [{
+    registerSettingsPageExtension(context.ui, {
+        entryId: 'memory.personalization-settings',
         id: 'memory-preferences',
         targetSectionId: 'personalization',
         order: 320,
@@ -47,14 +48,15 @@ export const memoryRendererFeature = defineRendererFeature({
             />
           ),
         }],
-      }, {
+    });
+    registerSettingsPageExtension(context.ui, {
+        entryId: 'memory.task-model-settings',
         id: 'memory-task-models',
         targetSectionId: 'taskModels',
         order: 320,
         render: ({ translate, ui }) => (
           <MemoryTaskModelSettingsView client={client} translate={translate} ui={ui} />
         ),
-      }],
-    };
+    });
   },
 });

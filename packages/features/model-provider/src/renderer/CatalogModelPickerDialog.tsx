@@ -1,4 +1,9 @@
-import type { RendererTranslate, SettingsViewUi } from '@setsuna-desktop/feature-core/renderer';
+import type {
+  RendererTranslate,
+} from '@setsuna-desktop/feature-core/renderer';
+import type {
+  SettingsViewUi,
+} from '@setsuna-desktop/renderer-contracts/settings';
 import { Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { ModelProviderCatalogModel } from '../contracts/index.js';

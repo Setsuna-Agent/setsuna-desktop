@@ -1,5 +1,11 @@
-import type { ProviderConfigState, ProviderModelConfig } from '@setsuna-desktop/contracts';
-import type { RendererTranslate, SettingsViewUi } from '@setsuna-desktop/feature-core/renderer';
+import type {
+  ProviderConfigState,
+  ProviderModelConfig } from '@setsuna-desktop/contracts';
+import type { RendererTranslate,
+} from '@setsuna-desktop/feature-core/renderer';
+import type {
+  SettingsViewUi,
+} from '@setsuna-desktop/renderer-contracts/settings';
 import { ListChecks, Pencil, Plus, RefreshCw, Trash2, TriangleAlert } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { ModelProviderCatalogModel, ModelProviderCatalogPlan } from '../contracts/index.js';

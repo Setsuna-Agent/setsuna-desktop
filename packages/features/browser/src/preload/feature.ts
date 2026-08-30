@@ -15,6 +15,8 @@ export const browserPreloadFeature = definePreloadFeature<BrowserPreloadBridgeCo
     const browser: BrowserDesktopBridge = {
       captureScreenshot: (tabId) =>
         ipcRenderer.invoke(BROWSER_IPC_CHANNELS.captureScreenshot, { tabId }),
+      reloadTab: (tabId, mode) =>
+        ipcRenderer.invoke(BROWSER_IPC_CHANNELS.reloadTab, { mode, tabId }),
       resolveFavicon: (webContentsId, faviconUrls) =>
         ipcRenderer.invoke(BROWSER_IPC_CHANNELS.resolveFavicon, {
           faviconUrls: [...faviconUrls],
@@ -28,6 +30,11 @@ export const browserPreloadFeature = definePreloadFeature<BrowserPreloadBridgeCo
         ipcRenderer.invoke(BROWSER_IPC_CHANNELS.setActiveTab, { tabId }),
       setDeviceEmulation: (tabId, emulation) =>
         ipcRenderer.invoke(BROWSER_IPC_CHANNELS.setDeviceEmulation, { emulation, tabId }),
+      showReloadMenu: (webContentsId, shortcutBindings) =>
+        ipcRenderer.invoke(BROWSER_IPC_CHANNELS.showReloadMenu, {
+          shortcutBindings: shortcutBindings ? { ...shortcutBindings } : undefined,
+          webContentsId,
+        }),
       onOpenNewTab(callback) {
         const listener = (_event: IpcRendererEvent, request: BrowserOpenNewTabRequest) => callback(request);
         ipcRenderer.on(BROWSER_IPC_CHANNELS.openNewTab, listener);

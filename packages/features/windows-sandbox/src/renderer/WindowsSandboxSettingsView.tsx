@@ -1,7 +1,9 @@
 import type {
   RendererTranslate,
-  SettingsViewUi,
 } from '@setsuna-desktop/feature-core/renderer';
+import type {
+  SettingsViewUi,
+} from '@setsuna-desktop/renderer-contracts/settings';
 import { Download, RefreshCw, Trash2, Wrench } from 'lucide-react';
 import type {
   DesktopWindowsSandboxState,

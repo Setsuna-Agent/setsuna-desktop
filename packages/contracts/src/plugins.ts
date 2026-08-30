@@ -32,6 +32,7 @@ export type RuntimeExtensionManifest = {
   runtime: 'node-worker';
   capabilities: RuntimeExtensionCapability[];
   network?: RuntimeExtensionNetworkPolicy;
+  rendererUi?: import('./plugin-ui.js').RuntimePluginUiManifest;
 };
 export type RuntimeExtensionTrustState = 'trusted' | 'untrusted' | 'modified';
 export type RuntimeInstalledExtension = RuntimeExtensionManifest & { trust: RuntimeExtensionTrustState };

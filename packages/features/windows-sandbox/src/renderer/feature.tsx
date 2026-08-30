@@ -3,6 +3,7 @@ import {
   defineRendererDependencies,
   defineRendererFeature,
 } from '@setsuna-desktop/feature-core/renderer';
+import { registerSettingsPageExtension } from '@setsuna-desktop/renderer-contracts/settings';
 import { windowsSandboxFeature } from '../contracts/index.js';
 import { windowsSandboxRendererHostCapability } from './capabilities.js';
 import { windowsSandboxMessages } from './messages.js';
@@ -18,16 +19,15 @@ export const windowsSandboxRendererFeature = defineRendererFeature({
   messages: [windowsSandboxMessages],
   setup(context) {
     const { host } = context.dependencies;
-    if (host.platform !== 'win32') return {};
-    return {
-      settingsSectionExtensions: [{
+    if (host.platform !== 'win32') return;
+    registerSettingsPageExtension(context.ui, {
+        entryId: 'windows-sandbox.runtime-settings',
         id: 'windows-sandbox',
         targetSectionId: 'runtime',
         order: 100,
         render: ({ translate, ui }) => (
           <WindowsSandboxSettingsView bridge={host.bridge} translate={translate} ui={ui} />
         ),
-      }],
-    };
+    });
   },
 });

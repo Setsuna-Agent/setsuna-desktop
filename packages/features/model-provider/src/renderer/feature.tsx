@@ -4,6 +4,7 @@ import {
   defineRendererFeature,
   rendererFeatureOperationTransportCapability,
 } from '@setsuna-desktop/feature-core/renderer';
+import { registerSettingsPage } from '@setsuna-desktop/renderer-contracts/settings';
 import { HardDrive } from 'lucide-react';
 import { modelProviderFeature } from '../contracts/index.js';
 import { modelProviderRendererHostCapability, modelProviderRendererStateCapability } from './capabilities.js';
@@ -32,8 +33,8 @@ export const modelProviderRendererFeature = defineRendererFeature({
     service.start();
     context.scope.add(() => service.dispose());
     context.provide(stateProvider, service);
-    return {
-      settingsViews: [{
+    registerSettingsPage(context.ui, {
+        entryId: 'model-provider.settings-page',
         sectionId: 'model-provider',
         location: 'settings',
         navigationGroupId: 'models-and-services',
@@ -51,7 +52,6 @@ export const modelProviderRendererFeature = defineRendererFeature({
             ui={ui}
           />
         ),
-      }],
-    };
+    });
   },
 });

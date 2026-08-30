@@ -1,8 +1,10 @@
 import type {
   RendererTranslate,
+} from '@setsuna-desktop/feature-core/renderer';
+import type {
   SettingsButtonProps,
   SettingsIconButtonProps,
-} from '@setsuna-desktop/feature-core/renderer';
+} from '@setsuna-desktop/renderer-contracts/settings';
 import { CircleAlert, Gauge, LoaderCircle, X } from 'lucide-react';
 import {
   useCallback,

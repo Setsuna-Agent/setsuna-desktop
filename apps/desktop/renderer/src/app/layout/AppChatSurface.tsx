@@ -15,6 +15,7 @@ import {
   type WorkspaceProject,
 } from '@setsuna-desktop/contracts';
 import type { ReviewTarget } from '@setsuna-desktop/feature-review/contracts';
+import { workspacePanelSlot } from '@setsuna-desktop/renderer-contracts/workspace';
 import {
   lazy,
   Suspense,
@@ -52,6 +53,7 @@ import {
   latestCompletedFeatureReview,
 } from '../../composition/review-feature-adapter.js';
 import type { DesktopBrowserPanelInstance } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
+import { desktopWorkspacePanelTargetContext } from '../../features/workspace/hooks/useDesktopWorkspacePanelSession.js';
 import type { WorkspaceFileDraftState } from '../../features/workspace/hooks/useWorkspaceFileDraft.js';
 import type {
   DesktopPanelDropPlacement,
@@ -77,6 +79,7 @@ import type {
   ConversationOverviewVisibility,
 } from '../types.js';
 import { FloatingWorkspacePanelSlot } from './FloatingWorkspacePanelSlot.js';
+import { RendererOwnedKeyedSlot } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
 
 const ConversationDebugFeaturePanel = lazy(async () => {
   const module = await import('../../composition/conversation-debug-feature-panel.js');
@@ -138,6 +141,7 @@ export function AppChatSurface({
   runtimeClient,
   sidePanelPresent,
   terminalSessionsByPanelId,
+  threads,
   onActivateBottomPanel,
   onCancelActiveTurn,
   onAccessModeChange,
@@ -341,6 +345,16 @@ export function AppChatSurface({
     )?.findings ?? [],
     [activeTurnId, currentThread?.messages],
   );
+  const currentThreadId = currentThread?.id;
+  const currentThreadProjectId = currentThread?.projectId;
+  const projectIdByThreadId = useMemo(
+    () => {
+      const projects = new Map(threads.map((thread) => [thread.id, thread.projectId] as const));
+      if (currentThreadId) projects.set(currentThreadId, currentThreadProjectId);
+      return projects;
+    },
+    [currentThreadId, currentThreadProjectId, threads],
+  );
   const openChatWorkspaceFile = onOpenProjectFile;
   const chatPanelInstances = [
     ...sidePanelSlot.panels
@@ -485,12 +499,20 @@ export function AppChatSurface({
         {sidePanelPresent && sideActivePanel && !isFloatingPanelType(sideActivePanel.type) ? (
           <SideWorkspacePanelSlot>
             <Suspense fallback={null}>
-              <WorkspacePanel
-                {...workspacePanelProps}
-                activePanel={sideActivePanel}
+              <WorkspacePanelRenderer
+                panel={sideActivePanel}
                 placement="side"
-                terminalSession={terminalSessionsByPanelId[sideActivePanel.id] ?? null}
-              />
+                projectId={activeProject?.id ?? null}
+                threadId={currentThread?.id ?? null}
+                visible
+              >
+                <WorkspacePanel
+                  {...workspacePanelProps}
+                  activePanel={sideActivePanel}
+                  placement="side"
+                  terminalSession={terminalSessionsByPanelId[sideActivePanel.id] ?? null}
+                />
+              </WorkspacePanelRenderer>
             </Suspense>
           </SideWorkspacePanelSlot>
         ) : null}
@@ -513,12 +535,20 @@ export function AppChatSurface({
               resizeValue={terminalHeight}
             >
               {!isFloatingPanelType(bottomActivePanel.type) ? (
-                <WorkspacePanel
-                  {...workspacePanelProps}
-                  activePanel={bottomActivePanel}
+                <WorkspacePanelRenderer
+                  panel={bottomActivePanel}
                   placement="bottom"
-                  terminalSession={terminalSessionsByPanelId[bottomActivePanel.id] ?? null}
-                />
+                  projectId={activeProject?.id ?? null}
+                  threadId={currentThread?.id ?? null}
+                  visible
+                >
+                  <WorkspacePanel
+                    {...workspacePanelProps}
+                    activePanel={bottomActivePanel}
+                    placement="bottom"
+                    terminalSession={terminalSessionsByPanelId[bottomActivePanel.id] ?? null}
+                  />
+                </WorkspacePanelRenderer>
               ) : null}
             </BottomToolsPanel>
           </Suspense>
@@ -559,7 +589,15 @@ export function AppChatSurface({
           );
           return (
             <FloatingWorkspacePanelSlot hidden={hidden} key={panel.id} placement={placement}>
-              {chatPanel}
+              <WorkspacePanelRenderer
+                panel={panel}
+                placement={placement}
+                projectId={activeProject?.id ?? null}
+                threadId={currentThread?.id ?? null}
+                visible={!hidden}
+              >
+                {chatPanel}
+              </WorkspacePanelRenderer>
             </FloatingWorkspacePanelSlot>
           );
         })}
@@ -594,11 +632,27 @@ export function AppChatSurface({
           ) : null;
           return (
             <FloatingWorkspacePanelSlot hidden={hidden} key={panel.id} placement={placement}>
-              {subagentPanel}
+              <WorkspacePanelRenderer
+                panel={panel}
+                placement={placement}
+                projectId={activeProject?.id ?? null}
+                threadId={currentThread?.id ?? null}
+                visible={!hidden}
+              >
+                {subagentPanel}
+              </WorkspacePanelRenderer>
             </FloatingWorkspacePanelSlot>
           );
         })}
         {browserPanelInstances.map((instance) => {
+          const targetContext = desktopWorkspacePanelTargetContext(
+            instance.targetIdentity,
+            projectIdByThreadId,
+          );
+          const browserPanelInstanceId = JSON.stringify([
+            instance.targetIdentity,
+            instance.panel.id,
+          ]);
           const browserPanel = (
             <Suspense fallback={null}>
               <PersistentBrowserPanel
@@ -616,10 +670,19 @@ export function AppChatSurface({
           return (
             <FloatingWorkspacePanelSlot
               hidden={!instance.active}
-              key={instance.panel.id}
+              key={browserPanelInstanceId}
               placement={instance.placement}
             >
-              {browserPanel}
+              <WorkspacePanelRenderer
+                panel={instance.panel}
+                placement={instance.placement}
+                projectId={targetContext.projectId}
+                surfaceInstanceId={browserPanelInstanceId}
+                threadId={targetContext.threadId}
+                visible={instance.active}
+              >
+                {browserPanel}
+              </WorkspacePanelRenderer>
             </FloatingWorkspacePanelSlot>
           );
         })}
@@ -629,21 +692,66 @@ export function AppChatSurface({
             placement={activeDebugPanel.placement}
           >
             <Suspense fallback={null}>
-              <ConversationDebugFeaturePanel
-                eventSource={runtimeClient}
+              <WorkspacePanelRenderer
+                panel={activeDebugPanel.panel}
                 placement={activeDebugPanel.placement}
-                thread={currentThread}
-                onResizeStep={onWorkspaceResizeStep}
-                onResizeStart={onWorkspaceResizeStart}
-                resizeMax={workspaceMaxWidth}
-                resizeMin={workspaceMinWidth}
-                resizeValue={workspaceWidth}
-              />
+                projectId={activeProject?.id ?? null}
+                threadId={currentThread?.id ?? null}
+                visible
+              >
+                <ConversationDebugFeaturePanel
+                  eventSource={runtimeClient}
+                  placement={activeDebugPanel.placement}
+                  thread={currentThread}
+                  onResizeStep={onWorkspaceResizeStep}
+                  onResizeStart={onWorkspaceResizeStart}
+                  resizeMax={workspaceMaxWidth}
+                  resizeMin={workspaceMinWidth}
+                  resizeValue={workspaceWidth}
+                />
+              </WorkspacePanelRenderer>
             </Suspense>
           </FloatingWorkspacePanelSlot>
         ) : null}
       </ChatNavigationBoundaries>
     </ReviewFeatureGitCommitProvider>
+  );
+}
+
+function WorkspacePanelRenderer({
+  children,
+  panel,
+  placement,
+  projectId,
+  surfaceInstanceId: explicitSurfaceInstanceId,
+  threadId,
+  visible,
+}: Readonly<{
+  children: ReactNode;
+  panel: DesktopPanelTab;
+  placement: DesktopPanelSlot;
+  projectId: string | null;
+  surfaceInstanceId?: string;
+  threadId: string | null;
+  visible: boolean;
+}>) {
+  const surfaceInstanceId = explicitSurfaceInstanceId ?? `${placement}:${panel.id}`;
+  return (
+    <RendererOwnedKeyedSlot
+      entryKey={panel.type}
+      instanceKey={JSON.stringify([projectId, threadId, surfaceInstanceId])}
+      slot={workspacePanelSlot}
+      props={{
+        panelId: panel.id,
+        panelType: panel.type,
+        placement,
+        projectId,
+        surfaceInstanceId,
+        threadId,
+        visible,
+        renderDefault: () => children,
+      }}
+    />
   );
 }
 

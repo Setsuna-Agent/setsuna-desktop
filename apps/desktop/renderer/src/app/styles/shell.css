@@ -263,6 +263,12 @@
   white-space: nowrap;
 }
 
+/* Slot renderers are React elements even when their selected contribution
+ * returns null. Empty shell regions must not reserve or cover route content. */
+.chat-toolbar-title:empty {
+  display: none;
+}
+
 .app-project-toolbar-title {
   display: inline-flex;
   align-items: center;
@@ -587,6 +593,14 @@
   z-index: 15;
 }
 
+/* A Renderer Slot can be a truthy React element whose selected contribution
+ * renders null. Hide the region in that case without merging content styles
+ * into the full-width workbench grid item. */
+:root[data-desktop-platform='win32'] .app-workbench__main-title:has(> .chat-toolbar-title:empty),
+:root[data-desktop-platform='linux'] .app-workbench__main-title:has(> .chat-toolbar-title:empty) {
+  display: none;
+}
+
 :root[data-desktop-platform='win32'] .app-workbench__main-title,
 :root[data-desktop-platform='win32'] .app-workbench__main-actions {
   height: var(--desktop-workspace-toolbar-height);
@@ -626,6 +640,13 @@
   border-left: 1px solid var(--desktop-agent-subtle-divider);
   background: var(--desktop-agent-main-bg);
   z-index: 14;
+}
+
+:root[data-desktop-platform='win32'] .app-workbench__main-actions:empty,
+:root[data-desktop-platform='linux'] .app-workbench__main-actions:empty,
+:root[data-desktop-platform='win32'] .app-workbench__workspace-toolbar:empty,
+:root[data-desktop-platform='linux'] .app-workbench__workspace-toolbar:empty {
+  display: none;
 }
 
 :root[data-desktop-platform='win32'] .desktop-workspace-panel,

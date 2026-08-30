@@ -6,6 +6,7 @@ import {
   defineRendererDependencies,
   defineRendererFeature,
 } from '@setsuna-desktop/feature-core/renderer';
+import { registerSettingsPageExtension } from '@setsuna-desktop/renderer-contracts/settings';
 import { lazy } from 'react';
 import { updaterFeature } from '../contracts/index.js';
 import {
@@ -37,8 +38,8 @@ export const updaterRendererFeature = defineRendererFeature({
     service.start();
     context.scope.add(() => service.dispose());
     context.provide(stateProvider, service);
-    return {
-      settingsSectionExtensions: [{
+    registerSettingsPageExtension(context.ui, {
+        entryId: 'updater.about-settings',
         id: 'updater-about',
         targetSectionId: 'about',
         order: 100,
@@ -51,7 +52,6 @@ export const updaterRendererFeature = defineRendererFeature({
             ui={ui}
           />
         ),
-      }],
-    };
+    });
   },
 });

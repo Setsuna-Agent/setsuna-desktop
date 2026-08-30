@@ -1,6 +1,6 @@
 import type { FileDiff, PostRenderPhase } from '@pierre/diffs';
 import type { DiffLineAnnotation } from '@pierre/diffs/react';
-import type { CheckboxProps } from '@setsuna-desktop/feature-core/renderer';
+import type { CheckboxProps } from '@setsuna-desktop/renderer-contracts/settings';
 import type { DesktopWorkspaceApp } from '@setsuna-desktop/feature-workspace-apps/contracts';
 import { createContext, useContext, type ComponentType, type ReactNode } from 'react';
 import type {

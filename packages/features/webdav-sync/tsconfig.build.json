@@ -18,6 +18,7 @@
   "references": [
     { "path": "../../contracts/tsconfig.build.json" },
     { "path": "../../feature-core/tsconfig.build.json" },
+    { "path": "../../renderer-contracts/tsconfig.build.json" },
     { "path": "../image-generation/tsconfig.build.json" },
     { "path": "../memory/tsconfig.build.json" },
     { "path": "../vision-recognition/tsconfig.build.json" }

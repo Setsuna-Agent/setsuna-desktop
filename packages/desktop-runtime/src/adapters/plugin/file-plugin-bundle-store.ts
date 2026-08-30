@@ -8,6 +8,7 @@ import type {
   RuntimePluginRemoveResult,
   RuntimePluginSkill
 } from '@setsuna-desktop/contracts';
+import { parseRuntimePluginUiManifest } from '@setsuna-desktop/contracts';
 import type { McpStore } from '@setsuna-desktop/feature-mcp/contracts';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, realpath, rm, stat } from 'node:fs/promises';
@@ -763,6 +764,9 @@ function publicManifestExtension(extension: NonNullable<ParsedPluginManifest['ex
     capabilities: [...extension.capabilities],
     ...(extension.network ? {
       network: { allowedOrigins: [...extension.network.allowedOrigins] },
+    } : {}),
+    ...(extension.rendererUi ? {
+      rendererUi: parseRuntimePluginUiManifest(extension.rendererUi),
     } : {}),
   };
 }

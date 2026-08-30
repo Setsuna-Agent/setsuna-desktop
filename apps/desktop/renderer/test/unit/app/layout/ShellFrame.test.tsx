@@ -43,4 +43,27 @@ describe('ShellFrame', () => {
     expect(newChatIndex).toBeGreaterThan(activityIndex);
   });
 
+  it('leaves nullable Renderer Slot regions structurally empty', () => {
+    vi.stubGlobal('window', {
+      setsunaDesktop: { desktop: { platform: 'win32' } },
+    });
+
+    const emptySlot = <EmptySlot />;
+    const html = renderToStaticMarkup(
+      <ShellFrame
+        actions={emptySlot}
+        toolbarTitle={emptySlot}
+        workspaceToolbar={emptySlot}
+      />,
+    );
+
+    expect(html).toContain('<div class="app-workbench__main-title"><div class="chat-toolbar-title"></div></div>');
+    expect(html).toContain('<div class="app-workbench__workspace-toolbar"></div>');
+    expect(html).toContain('<div class="app-workbench__main-actions"></div>');
+    expect(html).not.toContain('app-workbench__main-title chat-toolbar-title');
+  });
 });
+
+function EmptySlot() {
+  return null;
+}

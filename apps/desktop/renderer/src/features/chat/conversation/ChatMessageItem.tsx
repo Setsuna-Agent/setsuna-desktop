@@ -9,14 +9,16 @@ import { BookOpen, MessageSquare, ShieldCheck, Target, Users } from 'lucide-reac
 import { memo, useMemo, type FormEvent, type ReactNode } from 'react';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { Checkbox } from '../../../shared/ui/primitives.js';
-import { useRendererFeatureViews } from '../../../composition/feature-view-registries.js';
 import type { DesktopReviewOpenHandler } from '../../workspace/model.js';
 import type { RuntimePluginUse } from '../plugin-usage/runtimePluginUsage.js';
 import { RuntimePluginUses } from '../plugin-usage/RuntimePluginUses.js';
 import { MarkdownRenderer } from '../markdown/MarkdownRenderer.js';
 import { SkillReferenceText } from '../skills/SkillReference.js';
 import { fileChangeSummaryFromRuns } from '../tool-runs/runtimeFileChanges.js';
-import { resolveRuntimeFeatureToolResult } from '../tool-runs/runtimeFeatureToolResults.js';
+import {
+  resolveRuntimeFeatureToolResult,
+  useRuntimeFeatureToolResultResolver,
+} from '../tool-runs/runtimeFeatureToolResults.js';
 import {
   FileChangesSummaryCard,
   RuntimeAssistantTailToolResults,
@@ -359,7 +361,7 @@ function AssistantRunContent({
   showThinkingInTranscript: boolean;
 }) {
   const { locale, t } = useI18n();
-  const featureViews = useRendererFeatureViews();
+  const resolveFeatureToolResult = useRuntimeFeatureToolResultResolver();
   // The transcript is append-only: collapsing a later write into an earlier row
   // would remove or rewrite work that the user has already seen above it.
   const displaySegments = item.segments;
@@ -452,7 +454,7 @@ function AssistantRunContent({
         plan: timelinePlan,
         isPersistentToolResult: (run) =>
           resolveRuntimeFeatureToolResult(
-            featureViews.toolResults,
+            resolveFeatureToolResult,
             run,
           )?.contribution.workHistoryPresentation === 'persistent',
         workHistoryDefaultExpanded: workHistoryState.expanded,

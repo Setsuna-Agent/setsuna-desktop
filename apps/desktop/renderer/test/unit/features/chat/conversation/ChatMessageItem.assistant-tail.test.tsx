@@ -6,39 +6,36 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MessageItem } from '../../../../../src/features/chat/conversation/ChatMessageItem.js';
 import type { ChatDisplayItem } from '../../../../../src/features/chat/conversation/chatMessageDisplay.js';
 
-vi.mock('../../../../../src/composition/feature-view-registries.js', async (importOriginal) => {
-  const original = await importOriginal<typeof import('../../../../../src/composition/feature-view-registries.js')>();
+vi.mock('../../../../../src/features/chat/tool-runs/runtimeFeatureToolResults.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../../../../src/features/chat/tool-runs/runtimeFeatureToolResults.js')>();
   return {
     ...original,
-    useRendererFeatureViews: () => ({
-      toolResults: {
-        resolve(value: unknown, context?: Readonly<{ toolName: string }>) {
-          if (!value || typeof value !== 'object'
-            || context?.toolName !== 'publish_artifact'
-            || (value as { resultKind?: unknown }).resultKind !== 'test.tail-result') return null;
-          const payload = (value as { payload?: { name?: string; path?: string } }).payload;
-          if (!payload?.name || !payload.path) return null;
-          return {
-            featureId: 'test-feature',
-            payload,
-            contribution: {
-              id: 'test.tail-result-view',
-              resultKind: 'test.tail-result',
-              major: 1,
-              payload: { parse: (payload: unknown) => payload },
-              identity: (resultPayload: unknown) => (resultPayload as { path: string }).path,
-              placement: 'assistant-tail',
-              presentation: 'replace',
-              render: ({ payload: resultPayload }: { payload: unknown }) => (
-                <div className="test-tail-result">
-                  {(resultPayload as { name: string }).name}
-                </div>
-              ),
-            },
-          };
+    useRuntimeFeatureToolResultResolver: () => (run: RuntimeToolRun) => {
+      const value = run.data;
+      if (!value || typeof value !== 'object'
+        || run.name !== 'publish_artifact'
+        || (value as { resultKind?: unknown }).resultKind !== 'test.tail-result') return null;
+      const payload = (value as { payload?: { name?: string; path?: string } }).payload;
+      if (!payload?.name || !payload.path) return null;
+      return {
+        featureId: 'test-feature',
+        payload,
+        contribution: {
+          id: 'test.tail-result-view',
+          resultKind: 'test.tail-result',
+          major: 1,
+          payload: { parse: (resultPayload: unknown) => resultPayload },
+          identity: (resultPayload: unknown) => (resultPayload as { path: string }).path,
+          placement: 'assistant-tail',
+          presentation: 'replace',
+          render: ({ payload: resultPayload }: { payload: unknown }) => (
+            <div className="test-tail-result">
+              {(resultPayload as { name: string }).name}
+            </div>
+          ),
         },
-      },
-    }),
+      };
+    },
   };
 });
 

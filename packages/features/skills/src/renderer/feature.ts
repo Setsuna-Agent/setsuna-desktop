@@ -29,6 +29,5 @@ export const skillsRendererFeature = defineRendererFeature({
       client: createSkillsRendererClient(context.dependencies.transport),
       scope: context.scope,
     }));
-    return {};
   },
 });

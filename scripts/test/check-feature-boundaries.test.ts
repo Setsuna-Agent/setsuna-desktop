@@ -212,6 +212,76 @@ describe('Feature boundary checker', () => {
       ));
     });
   });
+
+  it('keeps Renderer contracts out of non-Renderer processes and Desktop implementations', async () => {
+    await withFixture({
+      'packages/renderer-contracts/src/unsafe.ts': `
+        import { readFile } from 'node:fs/promises';
+        export const unsafe = readFile;
+      `,
+      'packages/features/memory/src/runtime/renderer-contract-leak.ts': `
+        import type { SettingsViewUi } from '@setsuna-desktop/renderer-contracts/settings';
+        export type Leak = SettingsViewUi;
+      `,
+    }, async (root) => {
+      const violations = await checkFeatureBoundaries(root);
+      expect(violations).toContainEqual(expect.stringContaining(
+        'renderer-contracts cannot import process or Desktop implementation "node:fs/promises"',
+      ));
+      expect(violations).toContainEqual(expect.stringContaining(
+        'non-Renderer process cannot import Renderer-only contracts',
+      ));
+    });
+  });
+
+  it('requires one Renderer Plugin Runtime composition root once the Runtime module exists', async () => {
+    await withFixture({
+      'apps/desktop/renderer/src/kernel/renderer-plugins/runtime.ts': `
+        export function createRendererPluginRuntime() { return {}; }
+      `,
+    }, async (root) => {
+      const violations = await checkFeatureBoundaries(root);
+      expect(violations).toContainEqual(expect.stringContaining(
+        'Renderer Plugin Runtime must have one composition root; found 0',
+      ));
+    });
+  });
+
+  it('rejects duplicate Renderer Feature routes, component registration, and a second Plugin Runtime root', async () => {
+    await withFixture({
+      'packages/features/memory/package.json': JSON.stringify({
+        name: '@setsuna-desktop/feature-memory',
+        version: '0.1.0',
+        exports: {
+          './contracts': './dist/contracts/index.js',
+          './renderer/feature': './dist/renderer/feature.js',
+        },
+        scripts: { build: 'tsc -b tsconfig.build.json' },
+      }),
+      'apps/desktop/renderer/src/kernel/renderer-plugins/runtime.ts': `
+        export function createRendererPluginRuntime() { return {}; }
+      `,
+      'apps/desktop/renderer/src/composition/plugin-runtime-one.ts': `
+        import { createRendererPluginRuntime } from '@renderer/kernel/renderer-plugins/runtime.js';
+        export const runtimeOne = createRendererPluginRuntime();
+      `,
+      'apps/desktop/renderer/src/composition/nested/plugin-runtime-two.ts': `
+        import { createRendererPluginRuntime } from '../../kernel/renderer-plugins/runtime.js';
+        export const runtimeTwo = createRendererPluginRuntime();
+      `,
+      'apps/desktop/renderer/src/features/chat/BadRegistration.tsx': `
+        export function BadRegistration({ ui }) {
+          ui.list({}, { id: 'bad.registration', order: 0, render: () => null });
+          return null;
+        }
+      `,
+    }, async (root) => {
+      const violations = await checkFeatureBoundaries(root);
+      expect(violations).toContainEqual(expect.stringContaining('duplicate "./renderer/feature" exports are forbidden'));
+      expect(violations).toContainEqual(expect.stringContaining('Renderer Slot registration cannot run inside a React component'));
+      expect(violations).toContainEqual(expect.stringContaining('Renderer Plugin Runtime must have one composition root; found 2'));
+    });
+  });
 });
 
 async function withFixture(

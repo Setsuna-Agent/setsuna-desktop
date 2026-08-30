@@ -4,6 +4,7 @@ import {
   defineRendererFeature,
   rendererFeatureOperationTransportCapability,
 } from '@setsuna-desktop/feature-core/renderer';
+import { registerSettingsPageExtension } from '@setsuna-desktop/renderer-contracts/settings';
 import { approvalReviewFeature } from '../contracts/index.js';
 import { ApprovalReviewSettingsView } from './ApprovalReviewSettingsView.js';
 import { createApprovalReviewClient } from './client.js';
@@ -19,8 +20,8 @@ export const approvalReviewRendererFeature = defineRendererFeature({
   messages: [approvalReviewMessages],
   setup(context) {
     const client = createApprovalReviewClient(context.dependencies.transport);
-    return {
-      settingsSectionExtensions: [{
+    registerSettingsPageExtension(context.ui, {
+        entryId: 'approval-review.task-model-settings',
         id: 'approval-review-task-model',
         targetSectionId: 'taskModels',
         order: 200,
@@ -31,7 +32,6 @@ export const approvalReviewRendererFeature = defineRendererFeature({
             ui={ui}
           />
         ),
-      }],
-    };
+    });
   },
 });

@@ -12,7 +12,10 @@ import type {
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
 import type { ReviewTarget } from '@setsuna-desktop/feature-review/contracts';
-import type { ComposerActiveTurn } from '@setsuna-desktop/feature-core/renderer';
+import {
+  chatComposerStatusSlot,
+  type ChatComposerActiveTurn,
+} from '@setsuna-desktop/renderer-contracts/chat';
 import {
   useCallback,
   useEffect,
@@ -28,8 +31,7 @@ import type {
   ChatSkillSelectionRequest,
   ChatWorkspaceMentionRequest,
 } from '../../app/types.js';
-import { FeatureContributionBoundary } from '../../composition/FeatureContributionBoundary.js';
-import { useRendererFeatureViews } from '../../composition/feature-view-registries.js';
+import { RendererOwnedListSlot } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { RuntimeAccessModeSelection } from '../../shared/lib/runtimeAccessMode.js';
 import { ChatAttachmentTray } from './composer/ChatAttachmentTray.js';
@@ -84,7 +86,7 @@ export function applyChatComposerFocusRequest(
 export function composerActiveTurn(
   thread: RuntimeThread | null | undefined,
   activeTurnId: string | null,
-): ComposerActiveTurn | undefined {
+): ChatComposerActiveTurn | undefined {
   if (!thread || !activeTurnId) return undefined;
   const turn = thread.turns?.find((candidate) => candidate.id === activeTurnId);
   if (!turn) return undefined;
@@ -169,7 +171,6 @@ export function ChatComposer({
   onWorkspaceMentionRequestConsumed?: (requestId: number) => void;
 }) {
   const { t } = useI18n();
-  const featureViews = useRendererFeatureViews();
   const [selectedSkills, setSelectedSkills] = useState<RuntimeSkillSummary[]>([]);
   const [pendingModelSelection, setPendingModelSelection] = useState<{
     reference: RuntimeConfiguredModelReference;
@@ -721,32 +722,16 @@ export function ChatComposer({
         onEdit={queuedTurnEdit.edit}
         onSendNow={sendQueuedTurnInputNow}
       />
-      {currentThread ? featureViews.composerStatuses.list().map((contribution) => {
-        const StatusView = contribution.render;
-        return (
-          <FeatureContributionBoundary
-            key={`${contribution.featureId}:${contribution.id}:${currentThread.id}`}
-            featureId={contribution.featureId}
-            resetKey={`${currentThread.id}:${activeTurnId ?? ''}`}
-            fallback={(reset) => (
-              <button
-                type="button"
-                className="chat-composer-status-fallback"
-                data-composer-status-view={contribution.id}
-                onClick={reset}
-              >
-                {t('common.retry')}
-              </button>
-            )}
-          >
-            <StatusView
-              activeTurn={activeComposerTurn}
-              threadId={currentThread.id}
-              translate={t}
-            />
-          </FeatureContributionBoundary>
-        );
-      }) : null}
+      {currentThread ? (
+        <RendererOwnedListSlot
+          slot={chatComposerStatusSlot}
+          props={{
+            activeTurn: activeComposerTurn,
+            threadId: currentThread.id,
+            translate: t,
+          }}
+        />
+      ) : null}
       <Sender
         ref={senderRef}
         value={draft}

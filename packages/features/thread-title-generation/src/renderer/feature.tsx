@@ -4,6 +4,7 @@ import {
   defineRendererFeature,
   rendererFeatureOperationTransportCapability,
 } from '@setsuna-desktop/feature-core/renderer';
+import { registerSettingsPageExtension } from '@setsuna-desktop/renderer-contracts/settings';
 import { threadTitleGenerationFeature } from '../contracts/index.js';
 import { createThreadTitleGenerationClient } from './client.js';
 import { threadTitleGenerationMessages } from './messages.js';
@@ -19,8 +20,8 @@ export const threadTitleGenerationRendererFeature = defineRendererFeature({
   messages: [threadTitleGenerationMessages],
   setup(context) {
     const client = createThreadTitleGenerationClient(context.dependencies.transport);
-    return {
-      settingsSectionExtensions: [{
+    registerSettingsPageExtension(context.ui, {
+        entryId: 'thread-title-generation.task-model-settings',
         id: 'thread-title-generation-task-model',
         targetSectionId: 'taskModels',
         order: 100,
@@ -31,7 +32,6 @@ export const threadTitleGenerationRendererFeature = defineRendererFeature({
             ui={ui}
           />
         ),
-      }],
-    };
+    });
   },
 });

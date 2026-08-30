@@ -59,6 +59,10 @@ vi.mock('../../../../src/shared/i18n/I18nProvider.js', () => ({
   }),
 }));
 
+vi.mock('../../../../src/kernel/renderer-plugins/RendererKernelProvider.js', () => ({
+  RendererOwnedListSlot: () => null,
+}));
+
 vi.mock('../../../../src/features/chat/composer/ChatApprovalPolicyMenu.js', () => ({
   ChatApprovalPolicyMenu: () => <div data-component="approval-policy" />,
 }));

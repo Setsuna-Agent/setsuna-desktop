@@ -1,4 +1,9 @@
-import type { RendererTranslate, SettingsViewUi } from '@setsuna-desktop/feature-core/renderer';
+import type {
+  RendererTranslate,
+} from '@setsuna-desktop/feature-core/renderer';
+import type {
+  SettingsViewUi,
+} from '@setsuna-desktop/renderer-contracts/settings';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
 

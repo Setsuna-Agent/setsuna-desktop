@@ -4,6 +4,7 @@ import {
   defineRendererFeature,
   rendererFeatureOperationTransportCapability,
 } from '@setsuna-desktop/feature-core/renderer';
+import { registerSettingsPageExtension } from '@setsuna-desktop/renderer-contracts/settings';
 import { workspaceDependenciesFeature } from '../contracts/index.js';
 import { createWorkspaceDependenciesClient } from './client.js';
 import { workspaceDependenciesMessages } from './messages.js';
@@ -19,15 +20,14 @@ export const workspaceDependenciesRendererFeature = defineRendererFeature({
   messages: [workspaceDependenciesMessages],
   setup(context) {
     const client = createWorkspaceDependenciesClient(context.dependencies.transport);
-    return {
-      settingsSectionExtensions: [{
+    registerSettingsPageExtension(context.ui, {
+        entryId: 'workspace-dependencies.runtime-settings',
         id: 'workspace-dependencies',
         targetSectionId: 'runtime',
         order: 200,
         render: ({ translate, ui }) => (
           <WorkspaceDependenciesSettingsView client={client} translate={translate} ui={ui} />
         ),
-      }],
-    };
+    });
   },
 });

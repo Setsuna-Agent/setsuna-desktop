@@ -13,7 +13,10 @@ import type {
   RuntimePluginSummary,
   RuntimePluginTool,
 } from '@setsuna-desktop/contracts';
-import { RUNTIME_EXTENSION_API_VERSION } from '@setsuna-desktop/contracts';
+import {
+  parseRuntimePluginUiManifest,
+  RUNTIME_EXTENSION_API_VERSION,
+} from '@setsuna-desktop/contracts';
 import { createHash } from 'node:crypto';
 import { chmod, copyFile, mkdir, readFile, readdir, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -245,12 +248,19 @@ async function normalizePluginExtension(
     capabilities.push(normalized);
   }
   const network = normalizeExtensionNetworkPolicy(record.network, capabilities);
+  const rendererUi = record.rendererUi === undefined
+    ? undefined
+    : parseRuntimePluginUiManifest(record.rendererUi);
+  if (rendererUi && !capabilities.includes('ui')) {
+    throw new Error('Plugin extension rendererUi requires the ui capability.');
+  }
   return {
     extension: {
       apiVersion: RUNTIME_EXTENSION_API_VERSION,
       runtime: 'node-worker',
       capabilities,
       ...(network ? { network } : {}),
+      ...(rendererUi ? { rendererUi } : {}),
       entry,
     },
   };
@@ -685,6 +695,9 @@ export function cloneInstalledRecord(plugin: InstalledPluginRecord): InstalledPl
         ...(plugin.extension.network ? {
           network: { allowedOrigins: [...plugin.extension.network.allowedOrigins] },
         } : {}),
+        ...(plugin.extension.rendererUi ? {
+          rendererUi: parseRuntimePluginUiManifest(plugin.extension.rendererUi),
+        } : {}),
       },
     } : {}),
   };
@@ -702,6 +715,9 @@ export function publicPluginExtension(extension: InstalledPluginExtensionRecord)
     capabilities: [...extension.capabilities],
     ...(extension.network ? {
       network: { allowedOrigins: [...extension.network.allowedOrigins] },
+    } : {}),
+    ...(extension.rendererUi ? {
+      rendererUi: parseRuntimePluginUiManifest(extension.rendererUi),
     } : {}),
     trust,
   };

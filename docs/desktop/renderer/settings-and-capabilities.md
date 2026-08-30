@@ -11,7 +11,7 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 
 ### 页面编排
 
-`SettingsPage.tsx` 负责宿主 section 导航和数据/回调分发，并通过通用 `settings` contribution slot 挂载纵向 Feature 设置。具体宿主内容位于：
+`SettingsPage.tsx` 负责宿主 section 导航和数据/回调分发，并消费 `renderer.settings.page` keyed Slot 与当前 page 拥有的 `renderer.settings.page.extensions` Slot。页面 metadata 和 renderer 来自同一 contribution，导航不再维护第二份 Feature catalog。具体宿主内容位于：
 
 - `sections/`
 - `data-root/`
@@ -30,19 +30,19 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 | `TaskModelSettings.tsx` | 标题、代码审查、审批审查与上下文压缩等宿主任务的模型选择 |
 | `ArchivedThreadsSettings.tsx` | 归档线程管理 |
 
-Memory 是独立 renderer Feature，但不单独占用设置导航。它的 setup 静态返回两个 `settingsSectionExtensions`，把启用/生成/外部上下文策略和记忆管理入口追加到“个性化”，把抽取/整理模型追加到“专用模型”；preview、delete、clear 和保存状态仍由 Feature 自己持有，`SettingsPage` 不接收任何 Memory 专用 prop。标准 Section/Group/Row、Switch、Select 和 Button 由宿主通过 `SettingsViewHostProps.ui` 注入，因此业务所有权独立不等于信息架构或视觉系统独立。
+Memory 是独立 renderer Feature，但不单独占用设置导航。它在 setup 中通过 `registerSettingsPageExtension(context.ui, ...)` 注册两个 keyed extension，把启用/生成/外部上下文策略和记忆管理入口追加到“个性化”，把抽取/整理模型追加到“专用模型”；preview、delete、clear 和保存状态仍由 Feature 自己持有，`SettingsPage` 不接收任何 Memory 专用 prop。标准 Section/Group/Row、Switch、Select 和 Button 由宿主通过 Slot props 中的 `ui` 注入，因此业务所有权独立不等于信息架构或视觉系统独立。
 
-Updater 也是独立 renderer Feature。它通过 `settingsSectionExtensions` 填充宿主保留的“关于”分区，并由 `UpdaterRendererStateService` 单点订阅 preload 状态；设置页和 App controller 不传递 updater 专用 props。顶栏铃铛只在 `composition/UpdaterFeatureBoundary.tsx` 占用宿主动作插槽，状态、动作、文案和样式仍由 `packages/features/updater/src/renderer` 拥有。
+Updater 也是独立 renderer Feature。它通过 Settings extension Slot 填充宿主保留的“关于”分区，并由 `UpdaterRendererStateService` 单点订阅 preload 状态；设置页和 App controller 不传递 updater 专用 props。顶栏铃铛属于默认 topbar action renderer；替换整个 topbar action Slot 时会随默认实现一起替换，状态、动作、文案和样式仍由 `packages/features/updater/src/renderer` 拥有。
 
-WebDAV Sync 也是独立 renderer Feature，并通过 setup 返回静态 `settingsViews` contribution，形成完整“同步”页面。它用 `navigationGroupId` 声明归入宿主“模型与服务”分组；没有已知宿主归属的 contribution 才进入独立“功能”分组，为后续可安装/第三方功能保留。连接、自动备份、数据类别、当前快照、还原检查、文案和 scoped CSS 都位于 `packages/features/webdav-sync/src/renderer`；宿主设置页只渲染只读 catalog，不读取 WebDAV 状态，也不持有 bridge 方法。标准表单控件由 `SettingsViewHostProps.ui` 注入，Feature 只维护业务特有布局。
+WebDAV Sync 也是独立 renderer Feature，并通过 `registerSettingsPage(context.ui, ...)` 形成完整“同步”页面。它用 `navigationGroupId` 声明归入宿主“模型与服务”分组；没有已知宿主归属的 contribution 才进入独立“功能”分组。连接、自动备份、数据类别、当前快照、还原检查、文案和 scoped CSS 都位于 `packages/features/webdav-sync/src/renderer`；宿主设置页只消费 Slot descriptor，不读取 WebDAV 状态，也不持有 bridge 方法。
 
-Network Proxy 同样通过静态 `settingsViews` contribution 提供完整“代理服务器”页面，状态订阅、编辑动作、文案与 scoped CSS 位于 `packages/features/network-proxy/src/renderer`。Model Provider Feature 通过宿主 capability 读取代理服务器公开投影；宿主设置页不直接调用代理 bridge，也不拥有代理 section。preload 子桥类型由 Feature contract 贡献，renderer 不接触端口、凭据或本地文件。
+Network Proxy 同样通过 Settings page Slot 提供完整“代理服务器”页面，状态订阅、编辑动作、文案与 scoped CSS 位于 `packages/features/network-proxy/src/renderer`。Model Provider Feature 通过宿主 capability 读取代理服务器公开投影；宿主设置页不直接调用代理 bridge，也不拥有代理 section。preload 子桥类型由 Feature contract 贡献，renderer 不接触端口、凭据或本地文件。
 
 `shared/ui/SettingsViewUi.tsx` 是 Settings View 的宿主设计系统入口。它复用现有 `primitives.tsx` 和设置页布局样式，统一 focus、disabled、danger/primary、密度与可访问性；Feature 只为预览卡片、业务结果等特有 presentation 写 scoped CSS，并使用 `tokens.css` 公开的 `--sd-*` 语义 token。完整页面默认由宿主渲染标题；需要把 Feature 状态动作放进标题栏时，contribution 声明 `pageHeading: 'view'`，再使用注入的 `ui.PageHeading`，不能用正文定位或负 margin 模拟标题 action。
 
 ### Provider settings
 
-模型服务由 `packages/features/model-provider/` 独立拥有，并通过 `settingsViews` contribution 挂载到宿主设置页。renderer service 负责读取、暂存和串行保存，宿主只注入 Settings UI、品牌图标和网络代理能力。
+模型服务由 `packages/features/model-provider/` 独立拥有，并通过 Settings page Slot 挂载到宿主设置页。renderer service 负责读取、暂存和串行保存，宿主只注入 Settings UI、品牌图标和网络代理能力。
 
 Feature 管理：
 
@@ -73,7 +73,7 @@ Feature 管理：
   其余命令不受风险提示规则限制。Windows Shell 即使处于完全访问，也会将 `TEMP` / `TMP` / `TMPDIR` 指向系统临时
   目录下的独立会话目录，并在进程结束后清理；临时文件不应回落到当前项目工作区。
 
-Approval Review Feature 通过 `taskModels` settings section extension 贡献独立 provider/model 选择；值保存在 Feature settings，未配置或引用失效时跟随当前对话模型。自动审查的等待、允许、拒绝和人工降级状态仍由 Core tool run 投影展示，renderer 不持有未截断工具参数，也不能回答标记为 `automatic` 的审批请求。
+Approval Review Feature 通过目标为 `taskModels` 的 Settings extension Slot 贡献独立 provider/model 选择；值保存在 Feature settings，未配置或引用失效时跟随当前对话模型。自动审查的等待、允许、拒绝和人工降级状态仍由 Core tool run 投影展示，renderer 不持有未截断工具参数，也不能回答标记为 `automatic` 的审批请求。
 
 ### Data root
 
@@ -91,8 +91,8 @@ Approval Review Feature 通过 `taskModels` settings section extension 贡献独
 ### Usage
 
 Usage 是独立纵向 Feature，源码位于 `packages/features/usage/`。renderer setup 通过
-`settingsViews` 贡献完整的“用量分析”页面，并归入宿主“模型与服务”导航组。
-`SettingsPage` 只渲染 contribution catalog，不接收 usage 数据或 query callback。
+Usage 的 Renderer Feature 注册完整的“用量分析” Settings page entry，并归入宿主“模型与服务”导航组。
+`SettingsPage` 只渲染当前 Slot winner，不接收 usage 数据或 query callback。
 Usage 声明 view-owned page heading，把时段筛选作为 `ui.PageHeading` 的 action 渲染在标题右侧。
 
 Feature 自己负责：
@@ -115,7 +115,7 @@ renderer 只负责范围选择与展示，不重新计算计费真源。年度 A
 
 ### Workspace dependencies
 
-Workspace Dependencies 是独立纵向 Feature，源码位于 `packages/features/workspace-dependencies/`。renderer setup 通过 `settingsSectionExtensions` 把设置追加到“运行时”区域；设置视图、controller、文案和 scoped CSS 都由 Feature 自己持有，宿主页不读取包源或工具链状态。
+Workspace Dependencies 是独立纵向 Feature，源码位于 `packages/features/workspace-dependencies/`。renderer setup 通过 Settings extension Slot 把设置追加到“运行时”区域；设置视图、controller、文案和 scoped CSS 都由 Feature 自己持有，宿主页不读取包源或工具链状态。
 
 Windows Sandbox 同样由 `packages/features/windows-sandbox/` 纵向拥有。renderer setup 仅在 Windows 返回“运行时”设置扩展；状态 controller、安装/修复/卸载动作、文案和 scoped CSS 均留在 Feature 内，宿主 Runtime Settings 不再读取平台或 sandbox bridge。
 

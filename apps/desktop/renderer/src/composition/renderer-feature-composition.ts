@@ -21,70 +21,51 @@ import { browserRendererFeature } from '@setsuna-desktop/feature-browser/rendere
 import {
   collaborationRendererStateCapability,
   createNoopCollaborationRendererStateService,
-  type CollaborationRendererStateService,
 } from '@setsuna-desktop/feature-collaboration/contracts';
 import { collaborationRendererFeature } from '@setsuna-desktop/feature-collaboration/renderer';
 import {
   conversationDebugRendererFeature,
   conversationDebugRendererStateCapability,
   createNoopConversationDebugRendererService,
-  type ConversationDebugRendererService,
 } from '@setsuna-desktop/feature-conversation-debug/renderer';
 import { imageGenerationRendererAssetsCapability } from '@setsuna-desktop/feature-image-generation/contracts';
 import { imageGenerationRendererFeature } from '@setsuna-desktop/feature-image-generation/renderer';
 import { goalRendererFeature } from '@setsuna-desktop/feature-goal/renderer';
 import { memoryRendererFeature } from '@setsuna-desktop/feature-memory/renderer';
 import { threadTitleGenerationRendererFeature } from '@setsuna-desktop/feature-thread-title-generation/renderer';
-import {
-  mcpRendererServiceCapability,
-  type McpRendererService,
-} from '@setsuna-desktop/feature-mcp/contracts';
+import { mcpRendererServiceCapability } from '@setsuna-desktop/feature-mcp/contracts';
 import { mcpRendererFeature } from '@setsuna-desktop/feature-mcp/renderer';
 import {
   modelProviderRendererFeature,
   modelProviderRendererHostCapability,
   modelProviderRendererStateCapability,
-  type ModelProviderRendererStateService,
 } from '@setsuna-desktop/feature-model-provider/renderer';
 import {
   pluginManagementRendererHostCapability,
   pluginManagementRendererServiceCapability,
-  type PluginManagementRendererService,
 } from '@setsuna-desktop/feature-plugin-management/contracts';
 import { pluginManagementRendererFeature } from '@setsuna-desktop/feature-plugin-management/renderer';
-import {
-  reviewRendererServiceCapability,
-  type ReviewRendererService,
-} from '@setsuna-desktop/feature-review/contracts';
-import { reviewRendererFeature } from '@setsuna-desktop/feature-review/renderer/feature';
-import {
-  runtimeActivityRendererServiceCapability,
-  type RuntimeActivityRendererService,
-} from '@setsuna-desktop/feature-runtime-activity/contracts';
+import { reviewRendererServiceCapability } from '@setsuna-desktop/feature-review/contracts';
+import { reviewRendererFeature } from '@setsuna-desktop/feature-review/renderer';
+import { runtimeActivityRendererServiceCapability } from '@setsuna-desktop/feature-runtime-activity/contracts';
 import { runtimeActivityRendererFeature } from '@setsuna-desktop/feature-runtime-activity/renderer';
 import {
   createNoopSideConversationRendererService,
   sideConversationRendererHostCapability,
   sideConversationRendererServiceCapability,
-  type SideConversationRendererService,
 } from '@setsuna-desktop/feature-side-conversation/contracts';
 import { sideConversationRendererFeature } from '@setsuna-desktop/feature-side-conversation/renderer';
-import {
-  skillsRendererServiceCapability,
-  type SkillsRendererService,
-} from '@setsuna-desktop/feature-skills/contracts';
+import { skillsRendererServiceCapability } from '@setsuna-desktop/feature-skills/contracts';
 import { skillsRendererFeature } from '@setsuna-desktop/feature-skills/renderer';
 import {
   networkProxyRendererFeature,
   networkProxyRendererHostCapability,
   networkProxyRendererStateCapability,
-  type NetworkProxyRendererStateService,
 } from '@setsuna-desktop/feature-network-proxy/renderer';
 import { terminalRendererFeature } from '@setsuna-desktop/feature-terminal/renderer';
 import {
   createNoopUsageRendererStateService,
   usageRendererStateCapability,
-  type UsageRendererStateService,
 } from '@setsuna-desktop/feature-usage/contracts';
 import {
   usageRendererFeature,
@@ -94,7 +75,6 @@ import {
   updaterRendererFeature,
   updaterRendererHostCapability,
   updaterRendererStateCapability,
-  type UpdaterRendererStateService,
 } from '@setsuna-desktop/feature-updater/renderer';
 import { visionRecognitionRendererFeature } from '@setsuna-desktop/feature-vision-recognition/renderer';
 import {
@@ -103,21 +83,28 @@ import {
 } from '@setsuna-desktop/feature-webdav-sync/renderer';
 import { workspaceDependenciesRendererFeature } from '@setsuna-desktop/feature-workspace-dependencies/renderer';
 import { workspaceAppsRendererFeature } from '@setsuna-desktop/feature-workspace-apps/renderer';
+import { appReadySlot } from '@setsuna-desktop/renderer-contracts/shell';
+import { chatToolResultResolverSlot } from '@setsuna-desktop/renderer-contracts/chat';
 import {
   windowsSandboxRendererFeature,
   windowsSandboxRendererHostCapability,
 } from '@setsuna-desktop/feature-windows-sandbox/renderer';
 import { createDesktopFeatureOperationTransport } from './desktop-feature-operation-transport.js';
 import { createDesktopRuntimeClient } from '../services/runtime-client/client.js';
-import {
-  createRendererFeatureViews,
-  type RendererFeatureViews,
-} from './feature-view-registries.js';
 import { RendererFeatureEventHub } from './renderer-feature-event-hub.js';
 import { usageRendererHost } from './UsageFeatureBoundary.js';
 import { modelProviderRendererHost } from './ModelProviderFeatureBoundary.js';
 import { hostMessages } from '../shared/i18n/messages.js';
 import type { AppLocale } from '../shared/i18n/I18nProvider.js';
+import {
+  createRendererPluginRuntime,
+  type RendererPluginRuntime,
+} from '../kernel/renderer-plugins/runtime.js';
+import { createRendererLayoutPreferenceController } from '../kernel/renderer-plugins/layout-preference-controller.js';
+import { createRendererLayoutPreferenceStore } from '../kernel/renderer-plugins/layout-preferences.js';
+import { activateBuiltinRendererPlugins } from './builtin-renderer-plugins.js';
+import type { BuiltinRendererFeatureServices } from './BuiltinRendererFeatureServicesBoundary.js';
+import { activateDeclarativePluginUiGateway } from '../kernel/declarative-plugin-ui/gateway.js';
 
 const rendererFeatures = defineRendererFeatureHost({
   required: [
@@ -152,21 +139,11 @@ const rendererFeatures = defineRendererFeatureHost({
 });
 
 export type ActiveRendererFeatures = Readonly<{
-  collaboration: CollaborationRendererStateService;
   composition: RendererFeatureComposition;
-  conversationDebug: ConversationDebugRendererService;
+  events: RendererFeatureEventHub;
   messages: ComposedRendererMessages<AppLocale>;
-  mcp: McpRendererService;
-  modelProvider: ModelProviderRendererStateService;
-  networkProxy: NetworkProxyRendererStateService;
-  pluginManagement: PluginManagementRendererService;
-  runtimeActivity: RuntimeActivityRendererService;
-  review: ReviewRendererService;
-  sideConversation: SideConversationRendererService;
-  skills: SkillsRendererService;
-  updater: UpdaterRendererStateService;
-  usage: UsageRendererStateService;
-  views: RendererFeatureViews;
+  rendererPlugins: RendererPluginRuntime;
+  services: BuiltinRendererFeatureServices;
 }>;
 
 export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererFeatures> {
@@ -175,9 +152,22 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
   if (!runtime || !desktop) throw new Error('Desktop Feature bridge is unavailable.');
   const runtimeClient = createDesktopRuntimeClient();
   const events = new RendererFeatureEventHub();
-  const { composition, messages } = await rendererFeatures.activate({
-    hostMessages,
-    hostCapabilities: [
+  const layoutPreferenceStore = createRendererLayoutPreferenceStore(window.localStorage);
+  const layoutPreferenceLoad = layoutPreferenceStore.load();
+  if (layoutPreferenceLoad.issues.length) {
+    console.warn('[RendererPluginRuntime] Ignored invalid saved layout preferences.');
+  }
+  const rendererPlugins = createRendererPluginRuntime({
+    initialPreferences: layoutPreferenceLoad.preferences,
+  });
+  const layoutPreferences = createRendererLayoutPreferenceController(
+    rendererPlugins,
+    layoutPreferenceStore,
+  );
+  const activated = await rendererFeatures.activate({
+      createUiRegistrar: (owner, track) => rendererPlugins.createRegistrar(owner, track),
+      hostMessages,
+      hostCapabilities: [
       provideHostCapability(
         artifactRendererHostCapability,
         Object.freeze({
@@ -248,10 +238,38 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
           platform: desktop.platform,
         }),
       ),
-    ],
+      ],
+    }).catch(async (error: unknown) => {
+    await rendererPlugins.dispose();
+    throw error;
   });
-  return completeFeatureHostActivation(composition, (host) => {
-    const views: RendererFeatureViews = createRendererFeatureViews(host.composition.activations(), events);
+  const { composition, messages } = activated;
+  return completeFeatureHostActivation(composition, async (host) => {
+    rendererPlugins.declareRoot(
+      Object.freeze({ pluginId: 'core.renderer-kernel', scopeId: 'host:kernel' }),
+      Object.freeze({ slot: appReadySlot, required: true }),
+    );
+    rendererPlugins.declareRoot(
+      Object.freeze({ pluginId: 'core.chat-host', scopeId: 'host:chat' }),
+      Object.freeze({
+        slot: chatToolResultResolverSlot,
+        fallback: Object.freeze({ resolve: () => null }),
+      }),
+    );
+    let disposeBuiltinPlugins: Awaited<ReturnType<typeof activateBuiltinRendererPlugins>>;
+    try {
+      disposeBuiltinPlugins = await activateBuiltinRendererPlugins(rendererPlugins, {
+        layoutPreferences,
+      });
+    } catch (error) {
+      await rendererPlugins.dispose();
+      throw error;
+    }
+    host.add(async () => {
+      await rendererPlugins.dispose();
+      await disposeBuiltinPlugins();
+    });
+    rendererPlugins.commitInitial();
     const dependencies = host.composition.resolveHostDependencies({
       collaboration: optionalCapability(
         collaborationRendererStateCapability,
@@ -278,22 +296,21 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
         createNoopUsageRendererStateService,
       ),
     });
+    try {
+      const disposeDeclarativePluginUi = await activateDeclarativePluginUiGateway(
+        rendererPlugins,
+        dependencies.pluginManagement,
+      );
+      host.add(disposeDeclarativePluginUi);
+    } catch {
+      console.warn('[DeclarativePluginUi] Gateway activation failed; third-party UI was isolated.');
+    }
     return Object.freeze({
-      collaboration: dependencies.collaboration,
       composition: host.composition,
-      conversationDebug: dependencies.conversationDebug,
-      mcp: dependencies.mcp,
+      events,
       messages,
-      modelProvider: dependencies.modelProvider,
-      networkProxy: dependencies.networkProxy,
-      pluginManagement: dependencies.pluginManagement,
-      runtimeActivity: dependencies.runtimeActivity,
-      review: dependencies.review,
-      sideConversation: dependencies.sideConversation,
-      skills: dependencies.skills,
-      updater: dependencies.updater,
-      usage: dependencies.usage,
-      views,
+      rendererPlugins,
+      services: Object.freeze({ ...dependencies }),
     });
   });
 }

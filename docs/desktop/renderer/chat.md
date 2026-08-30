@@ -2,7 +2,7 @@
 
 源码目录：`apps/desktop/renderer/src/features/chat/`
 
-Chat feature 把 runtime thread snapshot 投影为对话 UI，并负责 composer、附件、队列动作、工具运行、Markdown 和 Plugin 使用归因。Feature-owned 工具结果通过通用只读 catalog 嵌入时间线；Runtime message/event 仍是持久化真源。
+Chat feature 把 runtime thread snapshot 投影为对话 UI，并负责 composer、附件、队列动作、工具运行、Markdown 和 Plugin 使用归因。Chat route 拥有 conversation/composer/details/workspace 子 Slot；Feature-owned 工具结果通过 Chat typed chain resolver 嵌入时间线。Runtime message/event 仍是持久化真源。
 
 ## 子目录
 
@@ -27,7 +27,7 @@ Chat feature 把 runtime thread snapshot 投影为对话 UI，并负责 composer
 - Thread transcript。
 - Overview / Git controls；后台服务由 Runtime Activity Feature 通过宿主 boundary 组合进来。
 - Scroll pin 与 timeline divider。
-- Tool runs 和 Feature tool-result contribution。
+- Tool runs 和 `renderer.chat.tool-result.resolve` chain contribution。
 - Composer。
 
 它不直接实现 message folding、Markdown parser 或 queue state machine；这些分别在纯 helper、子组件和 hooks。
@@ -45,6 +45,8 @@ Chat feature 把 runtime thread snapshot 投影为对话 UI，并负责 composer
 - 取回编辑 footer。
 
 Composer state 由 `useChatComposerSession` 和专用 hooks 管理，避免页面切换时草稿与异步请求互相覆盖。
+
+Renderer Slot 的实例身份沿用这套 session 语义：Conversation/Details 跟随具体 thread surface，Composer 则使用 `variant + composerKey`。首次发送把 new-thread slot claim 为新 thread 时，Composer Slot 不会因 threadId 出现而中途 remount。空白 starter 的可替换 Conversation 内容与宿主 Composer 是同级所有权；Conversation winner 即使完全替换默认内容，也不能让发送入口消失。
 
 侧边对话的创建事务、异常退出清理和 owner 竞争由 `packages/features/side-conversation/` 持有；宿主 `SideChatPanel -> ChatWorkspace -> ChatComposer` 只组合通用 thread surface 并传递可见性聚焦信号。只有面板从隐藏变为当前可见面板时才聚焦 Sender，并把光标放到草稿末尾；普通重渲染不会持续抢占焦点。
 

@@ -85,6 +85,11 @@ export async function composeFeatureModules<
   hostCapabilities?: readonly HostCapabilityProvider[];
   /** Runs only after the static graph is proven valid and before any Feature setup. */
   beforeActivation?: () => void;
+  /** Process-specific setup data that is scoped to one Feature activation. */
+  setupContextExtension?: (input: Readonly<{
+    module: TModule;
+    scope: FeatureScopeController['scope'];
+  }>) => Readonly<Record<string, unknown>>;
 }>): Promise<FeatureComposition<TActivation>> {
   const hostCapabilities = input.hostCapabilities ?? [];
   const validation = validateComposition(input.mounts, hostCapabilities);
@@ -147,6 +152,7 @@ export async function composeFeatureModules<
       );
       const declaredProviderKeys = new Set(module.provides.map(({ token }) => capabilityKey(token)));
       const setupContext: ErasedFeatureSetupContext = Object.freeze({
+        ...input.setupContextExtension?.({ module, scope: scope.scope }),
         scope: scope.scope,
         dependencies,
         health: health.reporter,

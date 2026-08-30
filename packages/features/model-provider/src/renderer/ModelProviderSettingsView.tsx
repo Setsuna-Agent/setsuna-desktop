@@ -4,7 +4,12 @@ import {
   type ProviderConfigState,
   type ProviderModelConfig,
 } from '@setsuna-desktop/contracts';
-import type { RendererTranslate, SettingsViewUi } from '@setsuna-desktop/feature-core/renderer';
+import type {
+  RendererTranslate,
+} from '@setsuna-desktop/feature-core/renderer';
+import type {
+  SettingsViewUi,
+} from '@setsuna-desktop/renderer-contracts/settings';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ModelProviderCatalog } from '../contracts/index.js';
 import type { ModelProviderRendererHost } from './capabilities.js';

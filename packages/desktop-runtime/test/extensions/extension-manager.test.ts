@@ -1,13 +1,10 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import { describe, expect, it, vi } from 'vitest';
-import { inspectBundleTree } from '../../src/adapters/plugin/file-plugin-bundle-model.js';
 import { ExtensionManager } from '../../src/extensions/extension-manager.js';
-import type { ExtensionUiContext, ExtensionUiCoordinator } from '../../src/extensions/extension-ui-coordinator.js';
+import type { ExtensionUiContext } from '../../src/extensions/extension-ui-coordinator.js';
 import { sanitizedExtensionEnvironment } from '../../src/extensions/extension-worker-client.js';
 import type { InstalledPluginRecord } from '../../src/ports/plugin-bundle-store.js';
+import { extensionFixture, testManager } from './support/extension-manager-fixture.js';
 
 describe('extension manager', () => {
   it('loads trusted workers, exposes namespaced tools, state, UI, and lifecycle handlers', async () => {
@@ -479,6 +476,180 @@ describe('extension manager', () => {
     }
   });
 
+  it('runs only manifest-declared Renderer UI actions with bounded global state access', async () => {
+    const fixture = await extensionFixture({ includeRendererUiAction: true });
+    const state = {
+      get: vi.fn(async () => undefined),
+      set: vi.fn(async () => undefined),
+      delete: vi.fn(async () => undefined),
+    };
+    const manager = testManager(fixture.record, state, { handle: vi.fn(async () => null) });
+    try {
+      await expect(manager.runRendererUiAction({
+        pluginId: 'worker-demo',
+        actionId: 'profile.save',
+        values: { displayName: 'Setsuna' },
+        context: {
+          contributionId: 'profile.settings',
+          surface: 'renderer.settings.page.extensions',
+        },
+      })).resolves.toEqual({ status: 'completed' });
+      expect(state.set).toHaveBeenCalledWith('worker-demo', 'global', 'profile', 'Setsuna');
+
+      await expect(manager.runRendererUiAction({
+        pluginId: 'worker-demo',
+        actionId: 'profile.save',
+        values: { undeclared: 'value' },
+        context: {
+          contributionId: 'profile.settings',
+          surface: 'renderer.settings.page.extensions',
+        },
+      })).rejects.toThrow('undeclared field');
+      await expect(manager.runRendererUiAction({
+        pluginId: 'worker-demo',
+        actionId: 'profile.save',
+        values: { displayName: 'Setsuna' },
+        context: {
+          contributionId: 'profile.settings',
+          surface: 'renderer.chat.composer.status',
+          threadId: 'thread_1',
+        },
+      })).rejects.toThrow('not allowed by contribution');
+    } finally {
+      await manager.shutdown();
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it('requires Renderer UI action state requests to declare global scope', async () => {
+    const fixture = await extensionFixture({ includeRendererUiAction: true });
+    const state = {
+      get: vi.fn(async () => undefined),
+      set: vi.fn(async () => undefined),
+      delete: vi.fn(async () => undefined),
+    };
+    const manager = testManager(fixture.record, state, { handle: vi.fn(async () => null) });
+    const handleHostRequest = Reflect.get(manager, 'handleHostRequest') as (
+      this: ExtensionManager,
+      method: string,
+      params: unknown,
+      context: { threadId: string; rendererUiAction?: boolean },
+      plugin: { id: string; name: string },
+      extension: NonNullable<InstalledPluginRecord['extension']>,
+    ) => Promise<unknown>;
+
+    try {
+      await expect(handleHostRequest.call(
+        manager,
+        'state.set',
+        { key: 'profile', value: 'unsafe' },
+        { rendererUiAction: true, threadId: 'thread_1' },
+        { id: fixture.record.id, name: fixture.record.name },
+        fixture.record.extension!,
+      )).rejects.toThrow('may use only global extension state');
+      expect(state.set).not.toHaveBeenCalled();
+    } finally {
+      await manager.shutdown();
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects model host requests forged from a Renderer UI action', async () => {
+    const fixture = await extensionFixture({
+      forgeRendererUiModelRequests: true,
+      includeRendererUiAction: true,
+    });
+    const state = {
+      get: vi.fn(async () => undefined),
+      set: vi.fn(async () => undefined),
+      delete: vi.fn(async () => undefined),
+    };
+    const imageGeneration = {
+      isAvailable: vi.fn(async () => true),
+      generate: vi.fn(async () => ({ assetId: 'must-not-run' })),
+      cleanupTurn: vi.fn(async () => undefined),
+    };
+    const visionRecognition = {
+      isAvailable: vi.fn(async () => true),
+      analyze: vi.fn(async () => ({ text: 'must-not-run' })),
+    };
+    const manager = testManager(
+      fixture.record,
+      state,
+      { handle: vi.fn(async () => null) },
+      { imageGeneration, visionRecognition },
+    );
+
+    try {
+      await expect(manager.runRendererUiAction({
+        pluginId: 'worker-demo',
+        actionId: 'profile.save',
+        values: { displayName: 'Setsuna' },
+        context: {
+          contributionId: 'profile.settings',
+          surface: 'renderer.settings.page.extensions',
+        },
+      })).resolves.toEqual({ status: 'completed' });
+      expect(imageGeneration.generate).not.toHaveBeenCalled();
+      expect(visionRecognition.analyze).not.toHaveBeenCalled();
+      expect(state.set).toHaveBeenCalledWith(
+        'worker-demo',
+        'global',
+        'forged-model-errors',
+        [
+          'Renderer UI actions cannot use model host capabilities.',
+          'Renderer UI actions cannot use model host capabilities.',
+        ].join('|'),
+      );
+    } finally {
+      await manager.shutdown();
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it('cancels an in-flight Renderer UI action and leaves its terminated worker stopped', async () => {
+    const fixture = await extensionFixture({
+      blockRendererUiAction: true,
+      includeRendererUiAction: true,
+    });
+    const state = {
+      get: vi.fn(async () => undefined),
+      set: vi.fn(async () => undefined),
+      delete: vi.fn(async () => undefined),
+    };
+    const manager = testManager(fixture.record, state, { handle: vi.fn(async () => null) });
+    try {
+      const controller = new AbortController();
+      const cancellation = new Error('Renderer UI action cancelled by test');
+      const action = manager.runRendererUiAction({
+        pluginId: 'worker-demo',
+        actionId: 'profile.save',
+        values: { displayName: 'Setsuna' },
+        context: {
+          contributionId: 'profile.settings',
+          surface: 'renderer.settings.page.extensions',
+        },
+      }, controller.signal);
+      await vi.waitFor(() => {
+        expect(state.set).toHaveBeenCalledWith(
+          'worker-demo',
+          'global',
+          'profile-started',
+          true,
+        );
+      });
+      controller.abort(cancellation);
+
+      await expect(action).rejects.toBe(cancellation);
+      await expect(manager.listStatuses()).resolves.toMatchObject({
+        extensions: [{ pluginId: 'worker-demo', state: 'stopped' }],
+      });
+    } finally {
+      await manager.shutdown();
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
   it('passes only an explicit environment allowlist to extension workers', () => {
     expect(sanitizedExtensionEnvironment({
       PATH: 'safe-path',
@@ -493,181 +664,3 @@ describe('extension manager', () => {
     });
   });
 });
-
-async function extensionFixture(options: {
-  exitAfterActivation?: boolean;
-  failFirstActivation?: boolean;
-  includeDetachedUiTool?: boolean;
-  includeDelayedUiTool?: boolean;
-  includePendingEvent?: boolean;
-} = {}): Promise<{
-  activationPath: string;
-  entryPath: string;
-  record: InstalledPluginRecord;
-  root: string;
-}> {
-  const root = await mkdtemp(path.join(tmpdir(), 'setsuna-extension-test-'));
-  const pluginRoot = path.join(root, 'plugin');
-  const entryDirectory = path.join(pluginRoot, 'extension');
-  const entryPath = path.join(entryDirectory, 'entry.mjs');
-  const activationPath = path.join(root, 'activations.log');
-  const failOncePath = path.join(root, 'fail-once');
-  await mkdir(entryDirectory, { recursive: true });
-  if (options.failFirstActivation) await writeFile(failOncePath, '1', 'utf8');
-  await writeFile(entryPath, `
-import { appendFileSync, existsSync, unlinkSync } from 'node:fs';
-appendFileSync(${JSON.stringify(activationPath)}, 'activated\\n');
-if (existsSync(${JSON.stringify(failOncePath)})) {
-  unlinkSync(${JSON.stringify(failOncePath)});
-  throw new Error('deliberate first activation failure');
-}
-
-export default function activate(api) {
-  console.log('extension activated');
-  ${options.exitAfterActivation ? 'setTimeout(() => process.exit(17), 50);' : ''}
-  api.registerTool({
-    name: 'echo',
-    description: 'Echo a value and update state.',
-    inputSchema: {
-      type: 'object',
-      properties: { text: { type: 'string' } },
-      required: ['text'],
-      additionalProperties: false,
-    },
-    async execute(input, context) {
-      const count = Number(await context.state.get('count', 'thread') ?? 0) + 1;
-      await context.state.set('count', count, 'thread');
-      await context.ui.notify({ message: 'ran ' + count });
-      return { content: context.threadId + ':' + input.text + ':' + count, data: { count } };
-    },
-  });
-  api.registerTool({
-    name: 'blocked',
-    description: 'Ignore cancellation while blocking the worker event loop.',
-    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-    execute() {
-      for (;;) { /* deliberately CPU-bound for cancellation recovery coverage */ }
-    },
-  });
-  api.registerTool({
-    name: 'slow',
-    description: 'Wait until cancelled.',
-    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-    execute(_input, context) {
-      return new Promise((_resolve, reject) => {
-        context.signal.addEventListener('abort', () => reject(context.signal.reason), { once: true });
-      });
-    },
-  });
-  ${options.includeDelayedUiTool ? `api.registerTool({
-    name: 'delayed-ui',
-    description: 'Wait for a host UI response.',
-    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-    async execute(_input, context) {
-      const approved = await context.ui.confirm({ title: 'Continue?' });
-      return { content: String(approved) };
-    },
-  });` : ''}
-  ${options.includeDetachedUiTool ? `let detachedUi;
-  let detachedContinuation;
-  api.registerTool({
-    name: 'detached-ui',
-    description: 'Start host UI without awaiting its response.',
-    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-    execute(_input, context) {
-      detachedUi = context.ui.confirm({ title: 'Detached?' });
-      detachedContinuation = detachedUi.then((approved) => (
-        context.state.set('late-after-parent', approved, 'thread')
-      ));
-      return { content: 'parent complete' };
-    },
-  });
-  api.registerTool({
-    name: 'detached-ui-status',
-    description: 'Report whether the detached host call settled.',
-    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-    async execute() {
-      const status = await Promise.race([
-        detachedUi.then(
-          (value) => 'settled:' + String(value),
-          () => 'rejected',
-        ),
-        new Promise((resolve) => setTimeout(() => resolve('pending'), 100)),
-      ]);
-      const continuation = await Promise.race([
-        detachedContinuation.then(
-          () => 'settled',
-          () => 'rejected',
-        ),
-        new Promise((resolve) => setTimeout(() => resolve('pending'), 100)),
-      ]);
-      return { content: status + ';continuation:' + continuation };
-    },
-  });` : ''}
-  ${options.includePendingEvent ? `api.on('prompt.before', (_payload, context) => (
-    new Promise((_resolve, reject) => {
-      context.signal.addEventListener('abort', () => reject(context.signal.reason), { once: true });
-    })
-  ));` : ''}
-  api.on('prompt.before', (payload) => ({
-    input: String(payload.input).toUpperCase(),
-    context: ['from extension'],
-  }));
-  api.on('prompt.before', (payload) => ({
-    input: String(payload.input) + '!',
-  }));
-}
-`, 'utf8');
-  const { bundleHash } = await inspectBundleTree(pluginRoot);
-  return {
-    activationPath,
-    entryPath,
-    root,
-    record: {
-      id: 'worker-demo',
-      name: 'Worker Demo',
-      installedAt: '2026-08-09T00:00:00.000Z',
-      sourcePath: pluginRoot,
-      installPath: pluginRoot,
-      manifestPath: path.join(pluginRoot, '.setsuna-plugin', 'plugin.json'),
-      skills: [],
-      skillEntries: [],
-      mcpServers: [],
-      mcpServerInputs: [],
-      hooks: [],
-      hookCount: 0,
-      resources: [],
-      extension: {
-        apiVersion: 1,
-        runtime: 'node-worker',
-        capabilities: ['tools', 'events', 'state', 'ui'],
-        entry: path.join('extension', 'entry.mjs'),
-        bundleHash,
-        trustedHash: bundleHash,
-      },
-    },
-  };
-}
-
-function testManager(
-  record: InstalledPluginRecord,
-  state: {
-    get(pluginId: string, scope: string, key: string): Promise<unknown>;
-    set(pluginId: string, scope: string, key: string, value: unknown): Promise<void>;
-    delete(pluginId: string, scope: string, key: string): Promise<void>;
-  },
-  ui: Pick<ExtensionUiCoordinator, 'handle'>,
-  options: { eventTimeoutMs?: number; toolTimeoutMs?: number } = {},
-): ExtensionManager {
-  return new ExtensionManager(
-    { listInstalledRecords: async () => [structuredClone(record)] },
-    state,
-    ui,
-    {
-      workerEntryPath: path.resolve('packages/desktop-runtime/src/extensions/extension-worker-entry.ts'),
-      workerExecArgv: ['--import', pathToFileURL(path.resolve('node_modules/tsx/dist/loader.mjs')).href],
-      eventTimeoutMs: options.eventTimeoutMs ?? 2_000,
-      toolTimeoutMs: options.toolTimeoutMs ?? 2_000,
-    },
-  );
-}

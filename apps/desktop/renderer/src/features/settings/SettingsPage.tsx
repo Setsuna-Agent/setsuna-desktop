@@ -3,19 +3,19 @@ import type {
   RuntimeThread,
   RuntimeThreadSummary,
 } from '@setsuna-desktop/contracts';
-import type { RegisteredSettingsView, RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
+import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import {
-  Archive,
-  Bot,
-  Info,
-  Keyboard,
+  settingsPageSlot,
+  type SettingsPageEntryDescriptor,
+} from '@setsuna-desktop/renderer-contracts/settings';
+import {
   Puzzle,
-  SlidersHorizontal,
-  Sparkles,
-  Wrench,
 } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
-import { useRendererFeatureViews } from '../../composition/feature-view-registries.js';
+import { useState } from 'react';
+import {
+  RendererOwnedKeyedSlot,
+  useRendererOwnedKeyedEntries,
+} from '../../kernel/renderer-plugins/RendererKernelProvider.js';
 import { EmptyState, PageBackButton } from '../../shared/ui/primitives.js';
 import { SettingsPageHeading, settingsViewUi } from '../../shared/ui/SettingsViewUi.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
@@ -26,7 +26,6 @@ import { PersonalizationSettings } from './sections/PersonalizationSettings.js';
 import { RuntimeAdvancedSettings, RuntimePolicySettings } from './sections/RuntimeSettings.js';
 import { TaskModelSettings } from './sections/TaskModelSettings.js';
 import type {
-  CoreSettingsSectionId,
   RuntimePreferenceInput,
   SettingsSectionId,
 } from './settings-types.js';
@@ -35,61 +34,25 @@ import { SettingsSectionExtensionOutlet } from './SettingsSectionExtensionOutlet
 
 export { ArchivedThreadsSettings } from './sections/ArchivedThreadsSettings.js';
 
-type SettingsSidebarSection = {
-  id: SettingsSectionId;
-  labelKey: MessageKey;
-  icon: ReactNode;
-  order: number;
-};
-
 type SettingsSidebarGroup = {
   id: string;
   labelKey: MessageKey;
-  sections: readonly SettingsSidebarSection[];
 };
 
 const settingsSectionGroups = [
   {
     id: 'preferences',
     labelKey: 'settings.group.preferences',
-    sections: [
-      { id: 'general', labelKey: 'settings.section.general', icon: <SlidersHorizontal size={14} />, order: 100 },
-      { id: 'shortcuts', labelKey: 'settings.section.shortcuts', icon: <Keyboard size={14} />, order: 200 },
-      { id: 'personalization', labelKey: 'settings.section.personalization', icon: <Sparkles size={14} />, order: 300 },
-    ],
   },
   {
     id: 'models-and-services',
     labelKey: 'settings.group.modelsAndServices',
-    sections: [
-      { id: 'taskModels', labelKey: 'settings.section.taskModels', icon: <Bot size={14} />, order: 300 },
-    ],
   },
   {
     id: 'data-and-system',
     labelKey: 'settings.group.dataAndSystem',
-    sections: [
-      { id: 'archives', labelKey: 'settings.section.archives', icon: <Archive size={14} />, order: 100 },
-      { id: 'runtime', labelKey: 'settings.section.runtime', icon: <Wrench size={14} />, order: 200 },
-      { id: 'about', labelKey: 'settings.section.about', icon: <Info size={14} />, order: 300 },
-    ],
   },
 ] satisfies readonly SettingsSidebarGroup[];
-
-const settingsSectionLabelKeys: Record<CoreSettingsSectionId, MessageKey> = {
-  general: 'settings.section.general',
-  shortcuts: 'settings.section.shortcuts',
-  personalization: 'settings.section.personalization',
-  taskModels: 'settings.section.taskModels',
-  archives: 'settings.section.archives',
-  runtime: 'settings.section.runtime',
-  about: 'settings.section.about',
-};
-
-const settingsSectionDescriptionKeys: Partial<Record<CoreSettingsSectionId, MessageKey>> = {
-  shortcuts: 'settings.section.shortcutsDescription',
-  taskModels: 'settings.section.taskModelsDescription',
-};
 
 export function SettingsPage({
   archivedThreads,
@@ -115,59 +78,54 @@ export function SettingsPage({
   onSetSkillExtraRoots: (roots: string[]) => Promise<void>;
 }) {
   const { t } = useI18n();
-  const featureViews = useRendererFeatureViews();
-  const featureSections = featureViews.settings.list('settings');
+  const pages = useRendererOwnedKeyedEntries(settingsPageSlot)
+    .filter((entry) => entry.metadata.location === 'settings')
+    .sort(compareSettingsPages);
   // initialSection 支持从聊天页引导卡片直达某个分区；设置页每次进入都会重新挂载，
   // 所以这里只需在挂载时取一次初始值。
   const [activeSection, setActiveSection] = useState<SettingsSectionId>(initialSection ?? 'general');
-  const activeFeatureSection = featureSections.find((section) => section.sectionId === activeSection);
-  const activeSectionExtensions = featureViews.settings.listSectionExtensions(activeSection);
+  const selectedPage = pages.find((entry) => entry.metadata.sectionId === activeSection)
+    ?? pages.find((entry) => entry.metadata.sectionId === 'general');
+  const resolvedSection = selectedPage?.metadata.sectionId ?? 'general';
   const translateFeature: RendererTranslate = t;
 
-  const FeatureSettingsContent = activeFeatureSection?.render;
-  const content = FeatureSettingsContent ? (
-    <FeatureSettingsContent
-      sectionId={activeFeatureSection.sectionId}
-      translate={translateFeature}
-      ui={settingsViewUi}
-    />
-  ) : activeSection === 'general' ? (
+  const defaultContent = resolvedSection === 'general' ? (
       <GeneralSettings config={config} onSave={onSaveRuntimePreferences} />
-    ) : activeSection === 'shortcuts' ? (
+    ) : resolvedSection === 'shortcuts' ? (
       <KeyboardShortcutsSettings />
-    ) : activeSection === 'taskModels' ? (
+    ) : resolvedSection === 'taskModels' ? (
       config ? (
         <TaskModelSettings config={config} onSave={onSaveRuntimePreferences} />
       ) : (
         <EmptyState title={t('settings.configUnavailable')} />
       )
-    ) : activeSection === 'archives' ? (
+    ) : resolvedSection === 'archives' ? (
       <ArchivedThreadsSettings
         threads={archivedThreads}
         onDeleteAll={onDeleteAllArchivedThreads}
         onDelete={onDeleteArchivedThread}
         onRestore={onRestoreArchivedThread}
       />
-    ) : activeSection === 'personalization' ? (
+    ) : resolvedSection === 'personalization' ? (
       config ? (
         <PersonalizationSettings config={config} onSavePreferences={onSaveRuntimePreferences} />
       ) : (
         <EmptyState title={t('settings.configUnavailable')} />
       )
-    ) : activeSection === 'about' ? (
+    ) : resolvedSection === 'about' ? (
       null
-    ) : activeSection === 'runtime' && config ? (
+    ) : resolvedSection === 'runtime' && config ? (
       <RuntimePolicySettings
         config={config}
         onSave={onSaveRuntimePreferences}
       />
-    ) : activeSection === 'runtime' ? (
+    ) : resolvedSection === 'runtime' ? (
       <EmptyState title={t('settings.configUnavailable')} />
     ) : (
       <EmptyState title={t('settings.configUnavailable')} />
     );
 
-  const trailingContent = activeSection === 'runtime' && config ? (
+  const trailingContent = resolvedSection === 'runtime' && config ? (
     <RuntimeAdvancedSettings
       config={config}
       skillExtraRoots={skillExtraRoots}
@@ -176,45 +134,53 @@ export function SettingsPage({
     />
   ) : null;
 
-  const coreSection = activeSection as CoreSettingsSectionId;
-  const coreDescriptionKey = settingsSectionDescriptionKeys[coreSection];
-  const title = activeFeatureSection
-    ? translateFeature(activeFeatureSection.titleKey as `feature.${string}`)
-    : t(settingsSectionLabelKeys[coreSection]);
-  const description = activeFeatureSection?.descriptionKey
-    ? translateFeature(activeFeatureSection.descriptionKey as `feature.${string}`)
-    : coreDescriptionKey ? t(coreDescriptionKey) : undefined;
+  const title = selectedPage
+    ? translateSettingsKey(t, selectedPage.metadata.titleKey)
+    : t('settings.configUnavailable');
+  const description = selectedPage?.metadata.descriptionKey
+    ? translateSettingsKey(t, selectedPage.metadata.descriptionKey)
+    : undefined;
 
   return (
     <>
       <SettingsSidebar
-        activeSection={activeSection}
-        featureSections={featureSections}
+        activeSection={resolvedSection}
+        pages={pages}
         onBack={onBack}
         onSelectSection={setActiveSection}
       />
       <main className="desktop-settings-panel">
         <section
           className={`chat-user-settings__content ${
-            activeFeatureSection?.layout === 'wide' ? 'chat-user-settings__content--wide' : ''
+            selectedPage?.metadata.layout === 'wide' ? 'chat-user-settings__content--wide' : ''
           }`}
-          data-settings-feature={activeFeatureSection?.featureId}
+          data-settings-feature={selectedPage?.owner.featureId}
         >
-          {activeFeatureSection?.pageHeading !== 'view' ? (
+          {selectedPage?.metadata.pageHeading !== 'view' ? (
             <SettingsPageHeading
               description={description}
               title={title}
             />
           ) : null}
           <SettingsSectionExtensionOutlet
-            key={activeSection}
-            extensions={activeSectionExtensions}
-            sectionId={activeSection}
+            key={resolvedSection}
+            sectionId={resolvedSection}
             trailingContent={trailingContent}
             translate={translateFeature}
             ui={settingsViewUi}
           >
-            {content}
+            {selectedPage ? (
+              <RendererOwnedKeyedSlot
+                entryKey={selectedPage.key}
+                slot={settingsPageSlot}
+                props={{
+                  renderDefault: () => defaultContent,
+                  sectionId: resolvedSection,
+                  translate: translateFeature,
+                  ui: settingsViewUi,
+                }}
+              />
+            ) : defaultContent}
           </SettingsSectionExtensionOutlet>
         </section>
       </main>
@@ -224,17 +190,17 @@ export function SettingsPage({
 
 export function SettingsSidebar({
   activeSection,
-  featureSections,
+  pages,
   onBack,
   onSelectSection,
 }: {
   activeSection: SettingsSectionId;
-  featureSections: readonly RegisteredSettingsView[];
+  pages: readonly SettingsPageEntryDescriptor[];
   onBack: () => void;
   onSelectSection: (section: SettingsSectionId) => void;
 }) {
   const { t } = useI18n();
-  const { byGroup, ungrouped } = partitionFeatureSections(featureSections);
+  const { byGroup, ungrouped } = partitionSettingsPages(pages);
   return (
     <nav className="app-sidebar desktop-settings-sidebar chat-user-settings__nav">
       <PageBackButton
@@ -257,26 +223,14 @@ export function SettingsSidebar({
               <div id={titleId} className="chat-user-settings__tab-group-title">
                 {t(group.labelKey)}
               </div>
-              {mergeSettingsGroupSections(group.sections, byGroup.get(group.id) ?? []).map((item) => (
-                item.kind === 'core' ? (
-                  <button
-                    key={item.section.id}
-                    className={activeSection === item.section.id ? 'is-active' : ''}
-                    type="button"
-                    onClick={() => onSelectSection(item.section.id)}
-                  >
-                    {item.section.icon}
-                    <span>{t(item.section.labelKey)}</span>
-                  </button>
-                ) : (
-                  <SettingsFeatureSectionButton
-                    key={item.section.sectionId}
-                    active={activeSection === item.section.sectionId}
-                    section={item.section}
-                    translate={t}
-                    onSelect={() => onSelectSection(item.section.sectionId)}
-                  />
-                )
+              {(byGroup.get(group.id) ?? []).map((page) => (
+                <SettingsPageButton
+                  key={page.entryId}
+                  active={activeSection === page.metadata.sectionId}
+                  page={page}
+                  translate={t}
+                  onSelect={() => onSelectSection(page.metadata.sectionId)}
+                />
               ))}
             </div>
           );
@@ -290,13 +244,13 @@ export function SettingsSidebar({
             <div id="settings-sidebar-group-features" className="chat-user-settings__tab-group-title">
               {t('settings.group.features')}
             </div>
-            {ungrouped.map((section) => (
-              <SettingsFeatureSectionButton
-                key={section.sectionId}
-                active={activeSection === section.sectionId}
-                section={section}
+            {ungrouped.map((page) => (
+              <SettingsPageButton
+                key={page.entryId}
+                active={activeSection === page.metadata.sectionId}
+                page={page}
                 translate={t}
-                onSelect={() => onSelectSection(section.sectionId)}
+                onSelect={() => onSelectSection(page.metadata.sectionId)}
               />
             ))}
           </div>
@@ -306,53 +260,51 @@ export function SettingsSidebar({
   );
 }
 
-function SettingsFeatureSectionButton({
+function SettingsPageButton({
   active,
   onSelect,
-  section,
+  page,
   translate,
 }: Readonly<{
   active: boolean;
   onSelect(): void;
-  section: RegisteredSettingsView;
+  page: SettingsPageEntryDescriptor;
   translate: ReturnType<typeof useI18n>['t'];
 }>) {
-  const Icon = section.icon ?? Puzzle;
+  const Icon = page.metadata.icon ?? Puzzle;
   return (
     <button className={active ? 'is-active' : ''} type="button" onClick={onSelect}>
       <Icon size={14} />
-      <span>{translateFeatureTitle(translate, section.titleKey)}</span>
+      <span>{translateSettingsKey(translate, page.metadata.titleKey)}</span>
     </button>
   );
 }
 
-function partitionFeatureSections(featureSections: readonly RegisteredSettingsView[]) {
+function partitionSettingsPages(pages: readonly SettingsPageEntryDescriptor[]) {
   const knownGroups = new Set(settingsSectionGroups.map((group) => group.id));
-  const byGroup = new Map<string, RegisteredSettingsView[]>();
-  const ungrouped: RegisteredSettingsView[] = [];
-  for (const section of featureSections) {
-    const groupId = section.navigationGroupId;
+  const byGroup = new Map<string, SettingsPageEntryDescriptor[]>();
+  const ungrouped: SettingsPageEntryDescriptor[] = [];
+  for (const page of pages) {
+    const groupId = page.metadata.navigationGroupId;
     if (!groupId || !knownGroups.has(groupId)) {
-      ungrouped.push(section);
+      ungrouped.push(page);
       continue;
     }
     const group = byGroup.get(groupId) ?? [];
-    group.push(section);
+    group.push(page);
     byGroup.set(groupId, group);
   }
+  for (const group of byGroup.values()) group.sort(compareSettingsPages);
+  ungrouped.sort(compareSettingsPages);
   return { byGroup, ungrouped };
 }
 
-function mergeSettingsGroupSections(
-  coreSections: readonly SettingsSidebarSection[],
-  featureSections: readonly RegisteredSettingsView[],
-) {
-  return [
-    ...coreSections.map((section) => ({ kind: 'core' as const, order: section.order, section })),
-    ...featureSections.map((section) => ({ kind: 'feature' as const, order: section.order, section })),
-  ].sort((left, right) => left.order - right.order);
+function compareSettingsPages(left: SettingsPageEntryDescriptor, right: SettingsPageEntryDescriptor): number {
+  return left.metadata.order - right.metadata.order || left.entryId.localeCompare(right.entryId);
 }
 
-function translateFeatureTitle(translate: ReturnType<typeof useI18n>['t'], key: string): string {
-  return (translate as RendererTranslate)(key as `feature.${string}`);
+function translateSettingsKey(translate: ReturnType<typeof useI18n>['t'], key: string): string {
+  return key.startsWith('feature.')
+    ? (translate as RendererTranslate)(key as `feature.${string}`)
+    : translate(key as MessageKey);
 }

@@ -1139,8 +1139,50 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
   resize: vertical;
 }
 
-.chat-tool-run__elicitation-field select[multiple] {
-  min-height: 72px;
+.chat-tool-run__elicitation-multi-select {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 3px;
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  background: var(--app-surface);
+}
+
+.chat-tool-run__elicitation-multi-select-option {
+  display: grid;
+  grid-template-columns: 15px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 6px 7px;
+  border-radius: 4px;
+  color: var(--app-text);
+  transition: background 120ms ease;
+}
+
+.chat-tool-run__elicitation-multi-select-option:hover:not(.is-disabled) {
+  background: color-mix(in srgb, var(--app-text) 5%, transparent);
+}
+
+.chat-tool-run__elicitation-multi-select-option.is-selected {
+  background: var(--app-accent-soft);
+}
+
+.chat-tool-run__elicitation-multi-select-option > .sd-checkbox__control {
+  margin-top: 2px;
+}
+
+.chat-tool-run__elicitation-multi-select-copy {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  line-height: 18px;
+}
+
+.chat-tool-run__elicitation-multi-select-copy > small {
+  line-height: 16px;
 }
 
 .chat-tool-run__elicitation-field--boolean {

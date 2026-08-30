@@ -13,6 +13,7 @@ import { protocolRecord } from './extension-worker-protocol.js';
 
 type ToolHandler = (input: unknown, context: ExtensionHandlerContext) => unknown | Promise<unknown>;
 type EventHandler = (payload: unknown, context: ExtensionHandlerContext) => unknown | Promise<unknown>;
+type UiActionHandler = (input: unknown, context: ExtensionHandlerContext) => unknown | Promise<unknown>;
 
 type ExtensionHandlerContext = Record<string, unknown> & {
   signal: AbortSignal;
@@ -55,6 +56,7 @@ const capabilities = new Set(
 const eventNames = new Set<RuntimeExtensionEventName>(RUNTIME_EXTENSION_EVENT_NAMES);
 const tools = new Map<string, { definition: ExtensionWorkerTool; execute: ToolHandler }>();
 const handlers = new Map<RuntimeExtensionEventName, EventHandler[]>();
+const uiActions = new Map<string, UiActionHandler>();
 const activeRequests = new Map<string, AbortController>();
 const pendingHostCalls = new Map<string, {
   parentId: string;
@@ -115,6 +117,16 @@ async function activate(): Promise<void> {
       const normalized = eventName as RuntimeExtensionEventName;
       handlers.set(normalized, [...(handlers.get(normalized) ?? []), handler as EventHandler]);
     },
+    onUiAction(actionId: unknown, handler: unknown): void {
+      requireCapability('ui');
+      const id = requiredText(actionId, 'Extension UI action id');
+      if (!/^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/u.test(id) || id.length > 96) {
+        throw new Error(`Invalid extension UI action id: ${id}`);
+      }
+      if (typeof handler !== 'function') throw new Error(`Extension UI action ${id} requires a handler.`);
+      if (uiActions.has(id)) throw new Error(`Duplicate extension UI action: ${id}`);
+      uiActions.set(id, handler as UiActionHandler);
+    },
   });
   const moduleUrl = `${pathToFileURL(entryPath).href}?setsuna_extension=${encodeURIComponent(pluginId)}`;
   const extensionModule = await import(moduleUrl) as { default?: unknown; activate?: unknown };
@@ -126,6 +138,7 @@ async function activate(): Promise<void> {
     type: 'ready',
     tools: [...tools.values()].map((tool) => ({ ...tool.definition, inputSchema: { ...tool.definition.inputSchema } })),
     events: [...handlers.keys()],
+    uiActions: [...uiActions.keys()],
   });
 }
 
@@ -183,7 +196,9 @@ async function handleHostMessage(message: HostToExtensionWorkerMessage): Promise
   try {
     const result = message.method === 'tool.execute'
       ? await executeTool(message.id, message.params, controller.signal)
-      : await dispatchEvent(message.id, message.params, controller.signal);
+      : message.method === 'event.dispatch'
+        ? await dispatchEvent(message.id, message.params, controller.signal)
+        : await dispatchUiAction(message.id, message.params, controller.signal);
     send({ type: 'response', id: message.id, ok: true, result });
   } catch (error) {
     send({ type: 'response', id: message.id, ok: false, error: errorMessage(error) });
@@ -220,23 +235,48 @@ async function dispatchEvent(requestId: string, params: unknown, signal: AbortSi
   return { outcomes };
 }
 
-function handlerContext(requestId: string, value: unknown, signal: AbortSignal): ExtensionHandlerContext {
+async function dispatchUiAction(requestId: string, params: unknown, signal: AbortSignal): Promise<unknown> {
+  const record = requiredRecord(params, 'Extension UI action request must be an object.');
+  const actionId = requiredText(record.actionId, 'Extension UI action id');
+  const handler = uiActions.get(actionId);
+  if (!handler) throw new Error(`Unknown extension UI action: ${actionId}`);
+  return handler(
+    requiredRecord(record.input, 'Extension UI action input must be an object.'),
+    handlerContext(requestId, record.context, signal, {
+      defaultStateScope: 'global',
+      interactiveUi: false,
+      modelCapabilities: false,
+    }),
+  );
+}
+
+function handlerContext(
+  requestId: string,
+  value: unknown,
+  signal: AbortSignal,
+  options: Readonly<{
+    defaultStateScope?: ExtensionStateScope;
+    interactiveUi?: boolean;
+    modelCapabilities?: boolean;
+  }> = {},
+): ExtensionHandlerContext {
   const context = protocolRecord(value) ?? {};
+  const defaultStateScope = options.defaultStateScope ?? 'thread';
   return {
     ...context,
     signal,
     ...(capabilities.has('state') ? {
       state: {
-        get: (key: string, scope: ExtensionStateScope = 'thread') => hostCall(requestId, 'state.get', { key, scope }),
-        set: async (key: string, value: unknown, scope: ExtensionStateScope = 'thread') => {
+        get: (key: string, scope: ExtensionStateScope = defaultStateScope) => hostCall(requestId, 'state.get', { key, scope }),
+        set: async (key: string, value: unknown, scope: ExtensionStateScope = defaultStateScope) => {
           await hostCall(requestId, 'state.set', { key, scope, value });
         },
-        delete: async (key: string, scope: ExtensionStateScope = 'thread') => {
+        delete: async (key: string, scope: ExtensionStateScope = defaultStateScope) => {
           await hostCall(requestId, 'state.delete', { key, scope });
         },
       },
     } : {}),
-    ...(capabilities.has('ui') ? {
+    ...(capabilities.has('ui') && options.interactiveUi !== false ? {
       ui: {
         notify: async (input: unknown) => { await hostCall(requestId, 'ui.notify', input); },
         confirm: (input: unknown) => hostCall(requestId, 'ui.confirm', input) as Promise<boolean>,
@@ -251,12 +291,12 @@ function handlerContext(requestId: string, value: unknown, signal: AbortSignal):
         ),
       },
     } : {}),
-    ...(capabilities.has('image-generation') ? {
+    ...(capabilities.has('image-generation') && options.modelCapabilities !== false ? {
       imageGeneration: {
         generate: (input: unknown) => hostCall(requestId, 'image-generation.generate', input),
       },
     } : {}),
-    ...(capabilities.has('vision-recognition') ? {
+    ...(capabilities.has('vision-recognition') && options.modelCapabilities !== false ? {
       visionRecognition: {
         analyze: (input: unknown) => hostCall(requestId, 'vision-recognition.analyze', input),
       },

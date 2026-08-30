@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { WebviewTag } from 'electron';
 import { useCallback, useState } from 'react';
@@ -111,6 +111,22 @@ describe('BrowserPanel interactions', () => {
     expect(screen.getByRole('menuitem', { name: 'Reset zoom' }).textContent).toBe('110%');
   });
 
+  it('opens the native reload menu from the refresh button context menu', async () => {
+    const showReloadMenu = vi.fn(async () => true);
+    browserBridge = createBrowserBridge({ showReloadMenu });
+    renderBrowserPanel();
+    Object.assign(document.querySelector('webview') as unknown as WebviewTag, {
+      getWebContentsId: () => 42,
+    });
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Refresh' }));
+
+    await waitFor(() => expect(showReloadMenu).toHaveBeenCalledWith(42, {
+      hard: 'Control+Shift+KeyR',
+      normal: 'Control+KeyR',
+    }));
+  });
+
   it('keeps the last confirmed zoom and reports a rejected webview action', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const setZoomFactor = vi.fn(() => { throw new Error('detached'); });
@@ -189,6 +205,10 @@ function BrowserPanelHarness({ url }: { url: string }) {
           id: 'browser-interaction',
           title: 'New tab',
         }}
+        reloadShortcutBindings={{
+          hard: 'Control+Shift+KeyR',
+          normal: 'Control+KeyR',
+        }}
         translate={translate}
         onPanelMetadataChange={() => undefined}
       />
@@ -220,10 +240,12 @@ function createBrowserBridge(overrides: Partial<BrowserDesktopBridge> = {}): Bro
   return {
     captureScreenshot: vi.fn(async () => null),
     onOpenNewTab: vi.fn(() => () => undefined),
+    reloadTab: vi.fn(async () => true),
     registerTab: vi.fn(async () => false),
     resolveFavicon: vi.fn(async () => null),
     setActiveTab: vi.fn(async () => true),
     setDeviceEmulation: vi.fn(async () => true),
+    showReloadMenu: vi.fn(async () => true),
     unregisterTab: vi.fn(async () => true),
     ...overrides,
   };

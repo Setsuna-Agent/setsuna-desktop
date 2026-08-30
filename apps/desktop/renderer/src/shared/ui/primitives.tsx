@@ -1,5 +1,7 @@
 import { Tooltip as AntTooltip, type TooltipProps } from 'antd';
-import type { CheckboxProps } from '@setsuna-desktop/feature-core/renderer';
+import type {
+  CheckboxProps,
+} from '@setsuna-desktop/renderer-contracts/settings';
 import { ArrowLeft } from 'lucide-react';
 import {
   forwardRef,

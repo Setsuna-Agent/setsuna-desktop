@@ -51,6 +51,9 @@ export async function checkFeatureBoundaries(repositoryRoot = defaultRepositoryR
     if (Object.hasOwn(manifest.exports ?? {}, '.')) {
       violations.push(`${repositoryPath(repositoryRoot, packagePath)}: Feature packages must not provide a root "." export.`);
     }
+    if (Object.hasOwn(manifest.exports ?? {}, './renderer/feature')) {
+      violations.push(`${repositoryPath(repositoryRoot, packagePath)}: duplicate "./renderer/feature" exports are forbidden; use "./renderer".`);
+    }
   }
 
   const identityOwners = new Map();
@@ -78,6 +81,7 @@ export async function checkFeatureBoundaries(repositoryRoot = defaultRepositoryR
         }
       }
       if (entry === 'renderer') checkRendererTransportBoundary(repositoryRoot, filePath, sourceText, violations);
+      if (entry === 'renderer') checkRendererSlotRegistrationLocation(repositoryRoot, filePath, sourceText, violations);
       if ((entry === 'runtime' || entry === 'renderer' || entry === 'main') && /FeatureModule\s*</u.test(sourceText)) {
         violations.push(`${repositoryPath(repositoryRoot, filePath)}: heterogeneous Feature modules must use the erased module type returned by define*Feature().`);
       }
@@ -140,6 +144,8 @@ export async function checkFeatureBoundaries(repositoryRoot = defaultRepositoryR
   }
 
   await checkHostProcessImports(repositoryRoot, violations);
+  await checkRendererContractBoundaries(repositoryRoot, featureDirectories, violations);
+  await checkRendererPluginComposition(repositoryRoot, violations);
   await checkCompositionRoots(repositoryRoot, violations);
   await checkCentralFeatureImports(repositoryRoot, violations);
   return violations;
@@ -344,6 +350,13 @@ function checkProcessExportSymmetry(
 
 function checkProcessImport(repositoryRoot, filePath, entry, specifier, violations) {
   const fail = (message) => violations.push(`${repositoryPath(repositoryRoot, filePath)}: ${message}`);
+  if (
+    entry !== 'renderer'
+    && (specifier === '@setsuna-desktop/renderer-contracts'
+      || specifier.startsWith('@setsuna-desktop/renderer-contracts/'))
+  ) {
+    fail(`the ${entry} entry cannot import Renderer-only contracts "${specifier}".`);
+  }
   if (entry === 'contracts') {
     if (nodeBuiltins.has(specifier) || specifier === 'electron' || specifier === 'react' || specifier.startsWith('react/')) {
       fail(`contracts entry cannot import process library "${specifier}".`);
@@ -411,6 +424,142 @@ async function checkHostProcessImports(repositoryRoot, violations) {
       }
     }
   }
+}
+
+async function checkRendererContractBoundaries(repositoryRoot, featureDirectories, violations) {
+  const rendererContractsRoot = path.join(repositoryRoot, 'packages/renderer-contracts/src');
+  for (const filePath of await collectFiles(rendererContractsRoot)) {
+    if (!sourceExtensions.has(path.extname(filePath))) continue;
+    const sourceText = await readFile(filePath, 'utf8');
+    for (const specifier of importedSpecifiers(sourceText)) {
+      const resolvedRelative = specifier.startsWith('.')
+        ? path.resolve(path.dirname(filePath), specifier)
+        : null;
+      if (
+        nodeBuiltins.has(specifier)
+        || specifier === 'electron'
+        || specifier === '@renderer'
+        || specifier.startsWith('@renderer/')
+        || /\/(?:runtime|main|preload)(?:\/|$)/u.test(specifier)
+        || (resolvedRelative && !isWithin(resolvedRelative, rendererContractsRoot))
+      ) {
+        violations.push(
+          `${repositoryPath(repositoryRoot, filePath)}: renderer-contracts cannot import process or Desktop implementation "${specifier}".`,
+        );
+      }
+    }
+  }
+
+  const forbiddenRoots = [
+    path.join(repositoryRoot, 'packages/contracts/src'),
+    path.join(repositoryRoot, 'packages/desktop-runtime/src'),
+    path.join(repositoryRoot, 'apps/desktop/main/src'),
+    path.join(repositoryRoot, 'apps/desktop/preload/src'),
+    ...featureDirectories.flatMap((directory) => [
+      path.join(directory, 'src/contracts'),
+      path.join(directory, 'src/runtime'),
+      path.join(directory, 'src/main'),
+      path.join(directory, 'src/preload'),
+    ]),
+  ];
+  for (const root of forbiddenRoots) {
+    for (const filePath of await collectFiles(root)) {
+      if (!sourceExtensions.has(path.extname(filePath))) continue;
+      const sourceText = await readFile(filePath, 'utf8');
+      const forbidden = importedSpecifiers(sourceText).find((specifier) => (
+        specifier === '@setsuna-desktop/renderer-contracts'
+        || specifier.startsWith('@setsuna-desktop/renderer-contracts/')
+      ));
+      if (forbidden) {
+        violations.push(
+          `${repositoryPath(repositoryRoot, filePath)}: non-Renderer process cannot import Renderer-only contracts "${forbidden}".`,
+        );
+      }
+    }
+  }
+}
+
+async function checkRendererPluginComposition(repositoryRoot, violations) {
+  const rendererRoot = path.join(repositoryRoot, 'apps/desktop/renderer/src');
+  const runtimeModulePath = path.join(rendererRoot, 'kernel/renderer-plugins/runtime.ts');
+  const rendererFiles = await collectFiles(rendererRoot);
+  const runtimeExists = rendererFiles.some((filePath) => (
+    sourceModuleIdentity(filePath) === sourceModuleIdentity(runtimeModulePath)
+  ));
+  const declarations = [];
+  for (const filePath of rendererFiles) {
+    if (!sourceExtensions.has(path.extname(filePath))) continue;
+    const sourceText = await readFile(filePath, 'utf8');
+    checkRendererSlotRegistrationLocation(repositoryRoot, filePath, sourceText, violations);
+    const count = countResolvedImportedBindingCalls(
+      filePath,
+      sourceText,
+      rendererRoot,
+      runtimeModulePath,
+      'createRendererPluginRuntime',
+    );
+    for (let index = 0; index < count; index += 1) declarations.push(filePath);
+  }
+  if (runtimeExists && declarations.length !== 1) {
+    violations.push(
+      `${repositoryPath(repositoryRoot, rendererRoot)}: Renderer Plugin Runtime must have one composition root; found ${declarations.length}.`,
+    );
+  }
+}
+
+function checkRendererSlotRegistrationLocation(repositoryRoot, filePath, sourceText, violations) {
+  const sourceFile = ts.createSourceFile(filePath, sourceText, ts.ScriptTarget.Latest, true);
+  const registrationMethods = new Set(['chain', 'keyed', 'list', 'single']);
+  let reported = false;
+  const visit = (node) => {
+    if (
+      !reported
+      && ts.isCallExpression(node)
+      && ts.isPropertyAccessExpression(node.expression)
+      && registrationMethods.has(node.expression.name.text)
+      && isUiRegistrarExpression(node.expression.expression)
+      && rendererRegistrationRunsInComponentOrEffect(node)
+    ) {
+      reported = true;
+      violations.push(
+        `${repositoryPath(repositoryRoot, filePath)}: Renderer Slot registration cannot run inside a React component, Hook, or effect.`,
+      );
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+}
+
+function isUiRegistrarExpression(node) {
+  if (ts.isIdentifier(node)) return node.text === 'ui';
+  return ts.isPropertyAccessExpression(node) && node.name.text === 'ui';
+}
+
+function rendererRegistrationRunsInComponentOrEffect(node) {
+  for (let current = node.parent; current; current = current.parent) {
+    if (
+      ts.isCallExpression(current)
+      && ts.isIdentifier(current.expression)
+      && (current.expression.text === 'useEffect' || current.expression.text === 'useLayoutEffect')
+    ) return true;
+    if (!ts.isFunctionLike(current)) continue;
+    const name = functionLikeName(current);
+    if (!name) continue;
+    if (name === 'activate' || name === 'setup') return false;
+    return name.startsWith('use') || /^[A-Z]/u.test(name);
+  }
+  return false;
+}
+
+function functionLikeName(node) {
+  if ('name' in node && node.name && ts.isIdentifier(node.name)) return node.name.text;
+  const parent = node.parent;
+  if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) return parent.name.text;
+  if (ts.isPropertyAssignment(parent)) {
+    if (ts.isIdentifier(parent.name) || ts.isStringLiteralLike(parent.name)) return parent.name.text;
+  }
+  if (ts.isMethodDeclaration(node) && node.name && ts.isIdentifier(node.name)) return node.name.text;
+  return null;
 }
 
 async function checkCompositionRoots(repositoryRoot, violations) {
@@ -545,13 +694,45 @@ function countImportedBindingCalls(filePath, sourceText, moduleName, exportedNam
   return calls;
 }
 
+function countResolvedImportedBindingCalls(
+  filePath,
+  sourceText,
+  rendererRoot,
+  targetModulePath,
+  exportedName,
+) {
+  const sourceFile = ts.createSourceFile(filePath, sourceText, ts.ScriptTarget.Latest, true);
+  const targetIdentity = sourceModuleIdentity(targetModulePath);
+  const localNames = importedBindingNamesMatching(
+    sourceFile,
+    exportedName,
+    (moduleName) => {
+      const resolved = resolveRendererModuleSpecifier(rendererRoot, filePath, moduleName);
+      return resolved !== null && sourceModuleIdentity(resolved) === targetIdentity;
+    },
+  );
+  let calls = 0;
+  visitImportedCalls(sourceFile, localNames, () => {
+    calls += 1;
+  });
+  return calls;
+}
+
 function importedBindingNames(sourceFile, moduleName, exportedName) {
+  return importedBindingNamesMatching(
+    sourceFile,
+    exportedName,
+    (candidate) => candidate === moduleName,
+  );
+}
+
+function importedBindingNamesMatching(sourceFile, exportedName, matchesModule) {
   const localNames = new Set();
   for (const statement of sourceFile.statements) {
     if (
       !ts.isImportDeclaration(statement)
       || !ts.isStringLiteral(statement.moduleSpecifier)
-      || statement.moduleSpecifier.text !== moduleName
+      || !matchesModule(statement.moduleSpecifier.text)
     ) continue;
     const bindings = statement.importClause?.namedBindings;
     if (!bindings || !ts.isNamedImports(bindings)) continue;
@@ -562,6 +743,22 @@ function importedBindingNames(sourceFile, moduleName, exportedName) {
     }
   }
   return localNames;
+}
+
+function resolveRendererModuleSpecifier(rendererRoot, importerPath, moduleName) {
+  if (moduleName.startsWith('.')) {
+    return path.resolve(path.dirname(importerPath), moduleName);
+  }
+  if (moduleName === '@renderer') return rendererRoot;
+  if (moduleName.startsWith('@renderer/')) {
+    return path.join(rendererRoot, ...moduleName.slice('@renderer/'.length).split('/'));
+  }
+  return null;
+}
+
+function sourceModuleIdentity(filePath) {
+  const identity = path.normalize(filePath.replace(/\.(?:[cm]?[jt]sx?)$/u, ''));
+  return process.platform === 'win32' ? identity.toLowerCase() : identity;
 }
 
 function visitImportedCalls(sourceFile, localNames, onCall) {
@@ -596,6 +793,11 @@ async function collectFiles(directory, files = []) {
 
 function repositoryPath(repositoryRoot, filePath) {
   return path.relative(repositoryRoot, filePath).replaceAll(path.sep, '/');
+}
+
+function isWithin(candidate, directory) {
+  const relative = path.relative(directory, candidate);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
 const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : null;

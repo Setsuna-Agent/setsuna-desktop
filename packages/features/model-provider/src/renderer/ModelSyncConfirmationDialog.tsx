@@ -1,5 +1,10 @@
-import type { ProviderModelConfig } from '@setsuna-desktop/contracts';
-import type { RendererTranslate, SettingsViewUi } from '@setsuna-desktop/feature-core/renderer';
+import type {
+  ProviderModelConfig } from '@setsuna-desktop/contracts';
+import type { RendererTranslate,
+} from '@setsuna-desktop/feature-core/renderer';
+import type {
+  SettingsViewUi,
+} from '@setsuna-desktop/renderer-contracts/settings';
 import { TriangleAlert } from 'lucide-react';
 
 export function ModelSyncConfirmationDialog({

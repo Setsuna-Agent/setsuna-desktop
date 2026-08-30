@@ -130,6 +130,27 @@ handler 可以返回：
 
 `session.start`、`prompt.before`、`tool.before`、`compact.before` 的 worker/协议错误按 fail-closed 处理。`tool.after` 和 `turn.settled` 已位于副作用或 turn 终点，错误只形成模型反馈或 warning，不反写已经完成的状态。
 
+### `api.onUiAction(actionId, handler)`
+
+声明 `ui` capability 且 manifest 包含 [`rendererUi`](bundles.md#声明式-renderer-ui) 时，extension 可以为已声明的 button action 注册 handler：
+
+```js
+export default function activate(api) {
+  api.onUiAction('save-preference', async (input, ctx) => {
+    await ctx.state.set('label', input.values.label, 'global');
+  });
+}
+```
+
+host 会用 `contributionId` 把 action 精确绑定到触发它的 contribution，再校验提交字段、必填值、最大长度、select option、Slot surface 和 Chat thread ID。同一 action ID 即使被多个 contribution 复用，也不会混用它们的字段集合；handler 只有在 worker 实际注册同名 action 时才会执行。
+
+Renderer UI action 不是第二套交互通道：
+
+- `ctx.state` 默认为 `global`，仍需 manifest 声明 `state`。
+- `ctx.network` 仅在声明 `network` 且命中 origin allowlist 时存在。
+- 不提供 `ctx.ui.confirm/select/input`，避免 action 内再创建悬空交互；也不提供图片生成或视觉识别私有桥。
+- handler 返回值会被 host 忽略，Renderer 只获得 host-owned `{ status: "completed" }`；错误也只显示通用失败状态。
+
 ### handler context
 
 工具和事件 handler 会收到只包含当前请求信息的 `ctx`：
@@ -235,7 +256,7 @@ const value = await ctx.ui.input({ message: 'Name', placeholder: 'example' });
 ## v1 暂不提供
 
 - 任意第三方扩展 API 或第三方包的通用源码级兼容层；内置工具只使用 Setsuna 已审查的 v1 能力子集。
-- 任意 renderer 组件、主题、快捷键、命令面板或模型 provider 注入。
+- 任意 renderer React/HTML/CSS/JavaScript、主题、快捷键、命令面板或模型 provider 注入；只提供 manifest 中的受限 `rendererUi` schema。
 - 远程扩展仓库、签名验证、依赖安装脚本和自动更新。
 - OS 级沙箱或按 Node 模块划分的权限系统。
 - 热替换正在运行的代码；升级和内容变化统一停 worker 后重新激活。

@@ -9,6 +9,7 @@ import {
   readPluginManagementSnapshot,
   readPluginHooks,
   removeInstalledPlugin,
+  runInstalledPluginRendererUiAction,
   setPluginHookState,
   setInstalledPluginExtensionTrust,
   updateMarketplacePlugin,
@@ -19,6 +20,7 @@ import {
   type PluginManagementItemTarget,
   type PluginManagementPluginTarget,
 } from '../contracts/index.js';
+import type { RuntimePluginUiActionInput } from '@setsuna-desktop/contracts';
 
 export function createPluginManagementClient(transport: FeatureOperationTransport) {
   return Object.freeze({
@@ -50,6 +52,10 @@ export function createPluginManagementClient(transport: FeatureOperationTranspor
     remove: (input: PluginManagementPluginTarget, options?: Readonly<{ signal?: AbortSignal }>) => (
       transport.call(removeInstalledPlugin, input, options)
     ),
+    runRendererUiAction: (
+      input: RuntimePluginUiActionInput,
+      options?: Readonly<{ signal?: AbortSignal }>,
+    ) => transport.call(runInstalledPluginRendererUiAction, input, options),
     setExtensionTrust: (
       input: PluginManagementExtensionTrustInput,
       options?: Readonly<{ signal?: AbortSignal }>,
