@@ -57,6 +57,8 @@ export const pluginManagementRuntimeHostCapability: CapabilityToken<PluginManage
 
 export interface PluginManagementRendererHost {
   readonly bridge: PluginManagementDesktopBridge | null;
+  /** Opens an allow-listed external URL through the desktop host. */
+  openExternal(url: string): Promise<boolean>;
 }
 
 export const pluginManagementRendererHostCapability: CapabilityToken<PluginManagementRendererHost> = defineCapability({

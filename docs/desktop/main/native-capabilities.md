@@ -86,11 +86,11 @@ Integration 测试：`packages/features/terminal/test/integration/main/terminal-
 Workspace Apps 源码：
 
 - `packages/features/workspace-apps/src/{contracts,main,preload,renderer}/`
-- `apps/desktop/renderer/src/composition/workspace-apps-feature-adapter.tsx`
+- `apps/desktop/renderer/src/composition/WorkspaceAppsFeatureBoundary.tsx`
 
 Workspace Apps 是纵向 Feature，拥有应用 DTO 与固定 IPC channel、平台应用检测和启动参数、preload 子桥，以及 launcher、图标、偏好、文案和作用域样式。它检测 VS Code、Cursor、Finder/Explorer、Terminal、JetBrains 等应用；renderer 只传结构化 app ID、workspace root、relative path 和可选行号，main 不通过 shell 字符串拼接命令。Feature scope 会排空在途操作并撤销 handler。
 
-宿主 Workspace hook 继续负责当前 project、panel 和文件动作的编排，通过 `composition/workspace-apps-feature-adapter.tsx` 注入宿主 i18n。Feature 测试位于 `packages/features/workspace-apps/test/`。
+宿主 Workspace hook 继续负责当前 project、panel 和文件动作的编排，并通过 `WorkspaceAppsFeatureBoundary.tsx` 提供当前 workspace、打开动作和偏好存取。Feature 自己向 `renderer.shell.topbar.action` 注册 launcher，不再由 `AppReadyLayout` 直接渲染。Feature 测试位于 `packages/features/workspace-apps/test/`。
 
 ## Plugin Management
 

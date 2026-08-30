@@ -682,7 +682,7 @@
   border: 1px solid transparent;
   border-radius: 8px;
   color: var(--app-text-secondary);
-  background: color-mix(in srgb, var(--app-text) 4%, transparent);
+  background: transparent;
   font-family: inherit;
   font-size: 12px;
   line-height: 14px;
@@ -697,7 +697,7 @@
 .chat-sender-plan-badge:focus-visible {
   border-color: transparent;
   color: var(--app-text);
-  background: color-mix(in srgb, var(--app-text) 6%, transparent);
+  background: var(--desktop-agent-control-hover-bg);
   box-shadow: none;
 }
 

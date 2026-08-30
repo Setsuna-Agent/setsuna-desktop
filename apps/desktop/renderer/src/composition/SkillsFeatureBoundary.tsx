@@ -25,20 +25,16 @@ export function SkillsFeatureServiceBoundary({
   );
 }
 
-export function useSkillsFeature(): Readonly<{
-  service: SkillsRendererService;
-  snapshot: SkillsRendererSnapshot;
-}> {
+export function useSkillsFeatureSnapshot(): SkillsRendererSnapshot {
   const service = useSkillsFeatureService();
-  const snapshot = useSyncExternalStore(
+  return useSyncExternalStore(
     (listener) => service.subscribe(listener),
     () => service.getSnapshot(),
     () => service.getSnapshot(),
   );
-  return { service, snapshot };
 }
 
-export function useSkillsFeatureService(): SkillsRendererService {
+function useSkillsFeatureService(): SkillsRendererService {
   const service = useContext(SkillsFeatureContext);
   if (!service) throw new Error('SkillsFeatureServiceBoundary is missing.');
   return service;

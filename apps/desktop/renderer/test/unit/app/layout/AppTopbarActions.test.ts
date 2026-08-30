@@ -2,8 +2,8 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../../../src/composition/UpdaterFeatureBoundary.js', () => ({
-  UpdaterFeatureTopbarAction: () => null,
+vi.mock('../../../../src/kernel/renderer-plugins/RendererKernelProvider.js', () => ({
+  RendererOwnedListSlot: () => null,
 }));
 
 import { AppTopbarActions } from '../../../../src/app/layout/AppTopbarActions.js';

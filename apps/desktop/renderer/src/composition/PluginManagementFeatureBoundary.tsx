@@ -1,5 +1,4 @@
 import type {
-  PluginManagementHookSnapshot,
   PluginManagementRendererService,
   PluginManagementSnapshot,
 } from '@setsuna-desktop/feature-plugin-management/contracts';
@@ -26,27 +25,22 @@ export function PluginManagementFeatureServiceBoundary({
   );
 }
 
-export function usePluginManagementFeature(): Readonly<{
-  hookSnapshot: PluginManagementHookSnapshot;
-  service: PluginManagementRendererService;
-  snapshot: PluginManagementSnapshot;
-}> {
-  const service = usePluginManagementFeatureService();
-  const snapshot = useSyncExternalStore(
-    (listener) => service.subscribe(listener),
-    () => service.getSnapshot(),
-    () => service.getSnapshot(),
-  );
-  const hookSnapshot = useSyncExternalStore(
-    (listener) => service.subscribe(listener),
-    () => service.getHookSnapshot(),
-    () => service.getHookSnapshot(),
-  );
-  return { hookSnapshot, service, snapshot };
+export function usePluginManagementFeatureSnapshot(): PluginManagementSnapshot {
+  return usePluginManagementSnapshot(usePluginManagementFeatureService());
 }
 
-export function usePluginManagementFeatureService(): PluginManagementRendererService {
+function usePluginManagementFeatureService(): PluginManagementRendererService {
   const service = useContext(PluginManagementFeatureContext);
   if (!service) throw new Error('PluginManagementFeatureServiceBoundary is missing.');
   return service;
+}
+
+function usePluginManagementSnapshot(
+  service: PluginManagementRendererService,
+): PluginManagementSnapshot {
+  return useSyncExternalStore(
+    (listener) => service.subscribe(listener),
+    () => service.getSnapshot(),
+    () => service.getSnapshot(),
+  );
 }

@@ -280,9 +280,9 @@ RuntimeEvent log
 - [x] 把 `process/*` session、background terminal 与连接清理下沉到 `process-manager.ts`。
 - [x] `command-exec.ts` 降至 513 行并保留原 facade/导出；command 与 process 状态机只有基础设施复用，不共享 session owner。
 
-`CapabilitiesPage.tsx`：
+历史上的单体 Capabilities 页面：
 
-- [x] 把 MCP、Skill 双列目录项下沉到 `CapabilitiesCatalogItems.tsx`。
+- [x] 曾把 MCP、Skill 双列目录项下沉为宿主子组件；后续已进一步迁移到各自 Feature-owned page Slot。
 - [x] 把 Hook 创建和管理统一收敛到 Plugin Bundle 流程，移除独立目录与 editor。
 - [x] 页面只保留筛选、mutation 和跨能力编排。
 

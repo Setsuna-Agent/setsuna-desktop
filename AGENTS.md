@@ -50,7 +50,7 @@
 - 改模型供应商：先看 `packages/features/model-provider/`；配置与 typed operation 在 `contracts/`，Pi 协议适配、stream/replay/compaction 在 `runtime/`，设置页与状态服务在 `renderer/`。宿主只在 `runtime-feature-composition.ts` 注入配置、代理 fetch 并绑定采样 capability。
 - 改聊天 UI：从 `apps/desktop/renderer/src/features/chat/` 进入，页面编排在根目录，消息、输入、工具、产物、mention 分别在 `conversation/composer/tool-runs/artifacts/mentions`。
 - 改项目/文件/review/terminal：看 `apps/desktop/renderer/src/features/workspace/` 及其 `hooks/`，main 侧对应 `src/review/`、`src/terminal/`、`src/workspace/`。
-- 改设置或能力管理：看 `SettingsPage.tsx`、`CapabilitiesPage.tsx`、runtime config/MCP/Skill stores 和 `FileSkillRegistry`。
+- 改设置或能力管理：宿主导航看 `SettingsPage.tsx` 与 `CapabilitiesShell.tsx`；Plugin、Skill、MCP 页面和状态分别由 `packages/features/{plugin-management,skills,mcp}/src/renderer/` 持有，跨目录刷新走 capabilities refresh coordinator。
 - 改发布流程：看 `package.json` 的 `build` 配置、`scripts/*release*`、`.github/workflows/*`。
 
 ## 设计约束

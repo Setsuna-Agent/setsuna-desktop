@@ -2,7 +2,7 @@
 
 模块导航见 [Plugins README](README.md)。本篇定义 Bundle schema、安装事务和安全边界；实现入口位于 `packages/desktop-runtime/src/adapters/plugin/`。
 
-Setsuna Plugin Bundle 用一个包同时分发 Skills、MCP 配置、Hooks、只读资源和可选的可执行扩展。普通用户可以在“能力 → 插件”市场选择内置插件，也可以从右上角“创建 → 导入本地插件”选择一个已准备好的 Bundle 目录；renderer 不会看到所选路径或 `.setsuna-plugin/plugin.json` 内容。随应用发布的内置插件统一使用 `schemaVersion: 2`；只有声明 `extension` 的 Bundle 才启动可执行 worker。旧的本地 `schemaVersion: 1` 静态 Bundle 继续兼容，但不再作为内置插件模板，详见 [可执行扩展 API v1](extensions.md)。
+Setsuna Plugin Bundle 用一个包同时分发 Skills、MCP 配置、Hooks、只读资源和可选的可执行扩展。普通用户可以在“能力 → 插件”市场选择内置插件，也可以通过页面标题栏的“导入本地插件”选择一个已准备好的 Bundle 目录；renderer 不会看到所选路径或 `.setsuna-plugin/plugin.json` 内容。随应用发布的内置插件统一使用 `schemaVersion: 2`；只有声明 `extension` 的 Bundle 才启动可执行 worker。旧的本地 `schemaVersion: 1` 静态 Bundle 继续兼容，但不再作为内置插件模板，详见 [可执行扩展 API v1](extensions.md)。
 
 ## 目录示例
 
@@ -168,7 +168,7 @@ Bundle 是否执行代码由 `extension` 字段决定，而不是由 schema 版�
 
 应用根目录的 `plugins/` 是默认精选市场源，打包时随应用发布。Plugin Management renderer service 通过 `GET /v1/features/plugin-management` 获取不含本地路径、命令或凭据的聚合投影；投影包含已安装插件、市场、extension 状态，以及详情页需要的 Tool、Skill、MCP、Hook 和 resource 描述。点击安装后只向 `POST /v1/features/plugin-management/marketplace/:pluginId/install` 提交插件 ID。runtime 根据可信目录找到 Bundle，并复制到 Electron `userData/runtime/plugins/<plugin-id>`；安装目录完全由 Setsuna 管理。
 
-普通用户从随应用发布的市场卡片一键安装，不需要下载或解压 Bundle。右上角“创建”菜单统一提供“用对话创建插件”和“导入本地插件”：前者会选中内置 `create-plugin-in-chat` Skill，由模型调用 `configure_plugin` 创建或更新受管 Plugin；后者用于导入已经准备好的开发 Bundle 目录。能力页使用 Electron 原生目录选择器，主进程把用户选中的路径提交给 runtime 的受保护 Plugin Management operation；通用 renderer runtime proxy 明确拒绝该路径。内部开发工具 `install_plugin_bundle` 仍可执行目录侧载。模型发起的创建、更新、侧载和卸载始终需要审批。安装后：
+普通用户从随应用发布的市场卡片一键安装，不需要下载或解压 Bundle。页面标题栏提供“用对话创建插件”和“导入本地插件”：前者会选中内置 `create-plugin-in-chat` Skill，由模型调用 `configure_plugin` 创建或更新受管 Plugin；后者用于导入已经准备好的开发 Bundle 目录。能力页使用 Electron 原生目录选择器，主进程把用户选中的路径提交给 runtime 的受保护 Plugin Management operation；通用 renderer runtime proxy 明确拒绝该路径。内部开发工具 `install_plugin_bundle` 仍可执行目录侧载。模型发起的创建、更新、侧载和卸载始终需要审批。安装后：
 
 - Bundle 被复制到 runtime 数据目录，运行不依赖原始目录继续存在。
 - Skills 会出现在技能页并标记为 Plugin 来源。
@@ -220,7 +220,7 @@ Bundle 是否执行代码由 `extension` 字段决定，而不是由 schema 版�
 | 可执行扩展 | `extensions/extension-manager.ts`、`extension-worker-{client,entry}.ts`、`adapters/tool/extension-tool-host.ts` |
 | Skill 投影 | `adapters/skill/file-skill-registry.ts` |
 | Runtime REST | `server/runtime-rest-routes.ts` |
-| Renderer | `apps/desktop/renderer/src/features/capabilities/CapabilitiesPlugin*.tsx` |
+| Renderer | `packages/features/plugin-management/src/renderer/PluginCapabilitiesPage.tsx`、`PluginDetail.tsx`、`PluginItemDialog.tsx` |
 
 ## 验证
 
@@ -231,6 +231,6 @@ Bundle 是否执行代码由 `extension` 字段决定，而不是由 schema 版�
 - `test/adapters/tool/plugin-bundle-tool-host.test.ts`
 - `packages/desktop-runtime/test/extensions/`
 - `packages/desktop-runtime/test/integration/agent-loop/extensions.test.ts`
-- `apps/desktop/renderer/test/unit/features/capabilities/CapabilitiesPluginComponents.test.tsx`
+- `packages/features/plugin-management/test/renderer/`
 
 修改 manifest schema 时还要同步 contracts、市场摘要、renderer detail、打包文件列表和数据根迁移校验。

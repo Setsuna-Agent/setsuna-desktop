@@ -9,6 +9,7 @@ import type {
   RuntimeSkillSummary,
 } from '@setsuna-desktop/contracts';
 import { defineCapability, type CapabilityToken } from '@setsuna-desktop/feature-core/capability';
+import type { SkillDirectoryInspectionResult } from './operations.js';
 
 export type SkillInjection = {
   id: string;
@@ -90,6 +91,10 @@ export type SkillsOperationOptions = Readonly<{ signal?: AbortSignal }>;
 export interface SkillsRendererService {
   getSnapshot(): SkillsRendererSnapshot;
   subscribe(listener: SkillsRendererListener): () => void;
+  inspectDirectories(
+    paths: string[],
+    options?: SkillsOperationOptions,
+  ): Promise<SkillDirectoryInspectionResult>;
   refresh(options?: SkillsOperationOptions): Promise<RuntimeSkillList>;
   createSkill(input: RuntimeSkillInput, options?: SkillsOperationOptions): Promise<RuntimeSkillDetail>;
   getSkill(skillId: string, options?: SkillsOperationOptions): Promise<RuntimeSkillDetail>;

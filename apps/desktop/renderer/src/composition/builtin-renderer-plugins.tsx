@@ -36,6 +36,7 @@ import {
   shellRouteSlot,
   shellSidebarSlot,
   shellTopbarActionsSlot,
+  shellTopbarActionSlot,
   shellTopbarTitleSlot,
   shellWorkspaceToolbarSlot,
   type RendererAppRouteId,
@@ -49,6 +50,7 @@ import type { RendererPluginRuntime } from '../kernel/renderer-plugins/runtime.j
 import type { RendererLayoutPreferenceController } from '../kernel/renderer-plugins/layout-preference-controller.js';
 import { useState, type ReactNode } from 'react';
 import { RendererPluginInspectorSettings } from './renderer-plugins/RendererPluginInspectorSettings.js';
+import { FeatureRecoveryShell } from './FeatureRecoveryShell.js';
 
 const REQUIRED_APP_ROUTE_IDS: readonly RendererAppRouteId[] = Object.freeze([
   'chat',
@@ -81,6 +83,22 @@ const CORE_SETTINGS_PAGES = Object.freeze([
 const REQUIRED_SETTINGS_PAGE_KEYS = Object.freeze(
   CORE_SETTINGS_PAGES.map(([sectionId]) => settingsPageKey('settings', sectionId)),
 );
+
+const REQUIRED_CAPABILITIES_PAGE_KEYS = Object.freeze([
+  settingsPageKey('capabilities', 'plugins'),
+  settingsPageKey('capabilities', 'skills'),
+  settingsPageKey('capabilities', 'mcp'),
+]);
+
+const CAPABILITIES_FEATURE_ID_BY_SECTION: Readonly<Record<string, string>> = Object.freeze({
+  mcp: 'mcp',
+  plugins: 'plugin-management',
+  skills: 'skills',
+});
+
+const HOST_WORKSPACE_PANEL_TYPES = WORKSPACE_PANEL_TYPES.filter((panelType) => (
+  panelType !== 'browser' && panelType !== 'terminal'
+));
 
 const appShellPlugin = defineRendererPlugin({
   id: 'core.app-shell',
@@ -119,7 +137,17 @@ const routePlugin = defineRendererPlugin({
       declareRendererChildSlot(settingsPageExtensionSlot),
     ]);
     registerRoute(ui, 'capabilities', [
-      declareRendererChildSlot(settingsPageSlot),
+      declareRendererChildSlot(settingsPageSlot, {
+        fallback: {
+          render: ({ sectionId }) => (
+            <FeatureRecoveryShell
+              candidateFeatureIds={[CAPABILITIES_FEATURE_ID_BY_SECTION[sectionId] ?? sectionId]}
+              reason="view-missing"
+            />
+          ),
+        },
+        requiredKeys: REQUIRED_CAPABILITIES_PAGE_KEYS,
+      }),
     ]);
   },
 });
@@ -129,7 +157,16 @@ const shellRegionsPlugin = defineRendererPlugin({
   activate({ ui }) {
     registerDefaultSingle(ui, shellSidebarSlot, 'shell.sidebar.default');
     registerDefaultSingle(ui, shellTopbarTitleSlot, 'shell.topbar-title.default');
-    registerDefaultSingle(ui, shellTopbarActionsSlot, 'shell.topbar-actions.default');
+    ui.single(shellTopbarActionsSlot, {
+      id: 'shell.topbar-actions.default',
+      priority: 0,
+      children: [declareRendererChildSlot(shellTopbarActionSlot)],
+      render: ({ renderDefault }, slots) => (
+        <RendererOwnedSlotsProvider slots={slots}>
+          {renderDefault()}
+        </RendererOwnedSlotsProvider>
+      ),
+    });
     registerDefaultSingle(ui, shellWorkspaceToolbarSlot, 'shell.workspace-toolbar.default');
     registerDefaultSingle(ui, shellOverlaySlot, 'shell.overlay.default');
   },
@@ -156,7 +193,7 @@ const chatHostPlugin = defineRendererPlugin({
 const workspaceHostPlugin = defineRendererPlugin({
   id: 'core.workspace-host',
   activate({ ui }) {
-    for (const panelType of WORKSPACE_PANEL_TYPES) {
+    for (const panelType of HOST_WORKSPACE_PANEL_TYPES) {
       ui.keyed(workspacePanelSlot, {
         id: `workspace.${panelType}.default`,
         key: panelType,

@@ -247,8 +247,8 @@ const value = await ctx.ui.input({ message: 'Name', placeholder: 'example' });
 ## 安装、状态与调试
 
 - 内置市场：照常从“能力 → 插件”安装。
-- Agent 创建：从右上角“创建 → 用对话创建插件”进入，由 `configure_plugin` 写入 runtime 受管草稿并安装，不需要选择本地目录。
-- 本地目录：从右上角“创建 → 导入本地插件”进入，由 Electron 主进程选择目录并调用受保护的 Plugin Management operation；也可以通过 `install_plugin_bundle` 工具侧载。renderer REST 不接收任意本地路径。
+- Agent 创建：从页面标题栏的“用对话创建插件”进入，由 `configure_plugin` 写入 runtime 受管草稿并安装，不需要选择本地目录。
+- 本地目录：从页面标题栏的“导入本地插件”进入，由 Electron 主进程选择目录并调用受保护的 Plugin Management operation；也可以通过 `install_plugin_bundle` 工具侧载。renderer REST 不接收任意本地路径。
 - `GET /v1/features/plugin-management` 的 `extensions` 字段返回完整管理页初始状态；turn 结算只重读 `GET /v1/features/plugin-management/extensions`，避免为 worker 状态变化重新扫描整个插件市场。两个响应都携带 runtime 全局 `catalogRevision`；版本变化时 renderer 才重读完整快照，因此其他线程安装、更新、移除或配置 Plugin 也能同步到当前页面。两处均返回 worker 的 `stopped | starting | running | failed`、已注册工具、事件和错误。
 - `PUT /v1/features/plugin-management/installed/:pluginId/extension-trust` 使用 `{ "trusted": true | false }` 信任或撤销本地开发者侧载的当前安装包；内置市场扩展由安装和升级流程管理。
 - worker 的 `console.log/info/debug` 会重定向到 stderr，避免破坏 JSONL 控制通道；异常会显示在 Plugin 详情的运行状态中。
@@ -270,5 +270,5 @@ const value = await ctx.ui.input({ message: 'Name', placeholder: 'example' });
 - Worker/RPC/状态/UI：`packages/desktop-runtime/src/extensions/`
 - 动态工具：`packages/desktop-runtime/src/adapters/tool/extension-tool-host.ts`
 - 生命周期：`packages/desktop-runtime/src/loop/{core,lifecycle,tools}/`
-- 管理 UI：`apps/desktop/renderer/src/features/capabilities/CapabilitiesPluginDetail.tsx`
+- 管理 UI：`packages/features/plugin-management/src/renderer/PluginDetail.tsx`
 - 回归测试：`packages/desktop-runtime/test/extensions/`、`test/integration/agent-loop/extensions.test.ts`

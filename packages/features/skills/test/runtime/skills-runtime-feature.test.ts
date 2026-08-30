@@ -14,6 +14,7 @@ import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createSkill,
+  inspectSkillDirectories,
   readSkill,
   setSkillExtraRoots,
   skillsControlCapability,
@@ -69,6 +70,12 @@ describe('skillsRuntimeFeature', () => {
     })).resolves.toMatchObject({ id: 'local-helper', name: 'Local Helper' });
     await expect(routeHandlers.get(readSkill.id)?.({ skillId: 'missing' })).rejects.toMatchObject({
       code: 'SKILL_NOT_FOUND',
+    });
+    const missingSkillRoot = path.join(process.cwd(), '.missing-skill-root');
+    await expect(routeHandlers.get(inspectSkillDirectories.id)?.({
+      paths: [missingSkillRoot],
+    })).resolves.toEqual({
+      directories: [{ path: missingSkillRoot, skillCount: 0 }],
     });
     const unnormalizedRoot = `${process.cwd()}${path.sep}skills${path.sep}..${path.sep}shared`;
     await expect(routeHandlers.get(setSkillExtraRoots.id)?.({

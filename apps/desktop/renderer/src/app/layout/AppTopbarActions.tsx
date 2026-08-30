@@ -1,5 +1,6 @@
 import { CircleGauge } from 'lucide-react';
-import { UpdaterFeatureTopbarAction } from '../../composition/UpdaterFeatureBoundary.js';
+import { shellTopbarActionSlot } from '@setsuna-desktop/renderer-contracts/shell';
+import { RendererOwnedListSlot } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
 import { PanelPlacementIcon } from '../../features/workspace/PanelPlacementIcon.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { IconButton } from '../../shared/ui/primitives.js';
@@ -31,7 +32,10 @@ export function AppTopbarActions({
 
   return (
     <>
-      <UpdaterFeatureTopbarAction />
+      <RendererOwnedListSlot
+        slot={shellTopbarActionSlot}
+        props={{ activeRouteId: activeView, translate: t, ui: { IconButton } }}
+      />
       {activeView === 'chat' && conversationOverviewAvailable ? (
         <ShortcutTooltip
           commandId="chat.toggleOverview"

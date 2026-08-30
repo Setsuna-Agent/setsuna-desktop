@@ -144,7 +144,7 @@ export class RendererPluginManagementService implements PluginManagementRenderer
       if (signal.aborted) throw signal.reason;
       return installed;
     }, options);
-    if (result) await this.refresh();
+    if (result) await this.refreshPluginState();
     return result;
   }
 
@@ -153,7 +153,7 @@ export class RendererPluginManagementService implements PluginManagementRenderer
       (signal) => this.options.client.installMarketplace(input, { signal }),
       options,
     );
-    await this.refresh();
+    await this.refreshPluginState();
     return result;
   }
 
@@ -162,7 +162,7 @@ export class RendererPluginManagementService implements PluginManagementRenderer
       (signal) => this.options.client.updateMarketplace(input, { signal }),
       options,
     );
-    await this.refresh();
+    await this.refreshPluginState();
     return result;
   }
 
@@ -171,7 +171,7 @@ export class RendererPluginManagementService implements PluginManagementRenderer
       (signal) => this.options.client.remove(input, { signal }),
       options,
     );
-    await this.refresh();
+    await this.refreshPluginState();
     return result;
   }
 
@@ -259,6 +259,10 @@ export class RendererPluginManagementService implements PluginManagementRenderer
     const result = this.hookMutationTail.then(operation, operation);
     this.hookMutationTail = result.then(() => undefined, () => undefined);
     return result;
+  }
+
+  private async refreshPluginState(): Promise<void> {
+    await Promise.all([this.refresh(), this.refreshHooks()]);
   }
 
   private applyHookSnapshot(snapshot: PluginManagementHookSnapshot, sequence: number): void {

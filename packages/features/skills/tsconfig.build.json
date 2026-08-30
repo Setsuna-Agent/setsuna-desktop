@@ -9,13 +9,15 @@
     "lib": ["ES2022", "DOM"],
     "strict": true,
     "skipLibCheck": true,
-    "types": ["node"],
+    "types": ["node", "react"],
+    "jsx": "react-jsx",
     "rootDir": "src",
     "outDir": "dist"
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
   "references": [
     { "path": "../../contracts/tsconfig.build.json" },
-    { "path": "../../feature-core/tsconfig.build.json" }
+    { "path": "../../feature-core/tsconfig.build.json" },
+    { "path": "../../renderer-contracts/tsconfig.build.json" }
   ]
 }

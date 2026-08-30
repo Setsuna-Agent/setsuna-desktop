@@ -1,4 +1,5 @@
 import { defineKeyedRendererSlot } from '@setsuna-desktop/feature-core/renderer';
+import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import type { ReactNode } from 'react';
 
 export type RendererWorkspacePanelType =
@@ -21,6 +22,7 @@ export type WorkspacePanelSlotProps = Readonly<{
   projectId: string | null;
   surfaceInstanceId: string;
   threadId: string | null;
+  translate: RendererTranslate;
   visible: boolean;
   renderDefault(): ReactNode;
 }>;

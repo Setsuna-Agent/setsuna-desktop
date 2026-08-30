@@ -3,7 +3,9 @@
 源码：
 
 - `apps/desktop/renderer/src/features/settings/`
-- `apps/desktop/renderer/src/features/capabilities/`
+- `apps/desktop/renderer/src/features/capabilities/`（宿主壳与共享布局样式）
+- `packages/features/{plugin-management,skills,mcp}/src/renderer/`（能力页面与状态 owner）
+- `packages/renderer-contracts/src/{settings,capabilities}.ts`（Slot 与刷新 contract）
 
 Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调用的扩展能力。两者共享 runtime state，但承担不同产品语义。
 
@@ -32,7 +34,7 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 
 Memory 是独立 renderer Feature，但不单独占用设置导航。它在 setup 中通过 `registerSettingsPageExtension(context.ui, ...)` 注册两个 keyed extension，把启用/生成/外部上下文策略和记忆管理入口追加到“个性化”，把抽取/整理模型追加到“专用模型”；preview、delete、clear 和保存状态仍由 Feature 自己持有，`SettingsPage` 不接收任何 Memory 专用 prop。标准 Section/Group/Row、Switch、Select 和 Button 由宿主通过 Slot props 中的 `ui` 注入，因此业务所有权独立不等于信息架构或视觉系统独立。
 
-Updater 也是独立 renderer Feature。它通过 Settings extension Slot 填充宿主保留的“关于”分区，并由 `UpdaterRendererStateService` 单点订阅 preload 状态；设置页和 App controller 不传递 updater 专用 props。顶栏铃铛属于默认 topbar action renderer；替换整个 topbar action Slot 时会随默认实现一起替换，状态、动作、文案和样式仍由 `packages/features/updater/src/renderer` 拥有。
+Updater 也是独立 renderer Feature。它通过 Settings extension Slot 填充宿主保留的“关于”分区，并由 `UpdaterRendererStateService` 单点订阅 preload 状态；设置页和 App controller 不传递 updater 专用 props。顶栏铃铛由 Feature 自己注册到 `renderer.shell.topbar.action`，状态、动作、文案和样式均由 `packages/features/updater/src/renderer` 持有。
 
 WebDAV Sync 也是独立 renderer Feature，并通过 `registerSettingsPage(context.ui, ...)` 形成完整“同步”页面。它用 `navigationGroupId` 声明归入宿主“模型与服务”分组；没有已知宿主归属的 contribution 才进入独立“功能”分组。连接、自动备份、数据类别、当前快照、还原检查、文案和 scoped CSS 都位于 `packages/features/webdav-sync/src/renderer`；宿主设置页只消费 Slot descriptor，不读取 WebDAV 状态，也不持有 bridge 方法。
 
@@ -123,32 +125,29 @@ Feature 的 typed operations 读取 Node.js/Python/uv 状态、更新 npm/Python
 
 ## Capabilities
 
-`CapabilitiesPage.tsx` 只编排筛选、mutation 和跨能力状态：
+`CapabilitiesShell.tsx` 是薄宿主：它只从 `renderer.settings.page` keyed Slot 的 metadata 生成一级导航，在 topbar 或 Windows 页内渲染标签，并把当前 key 对应的页面 contribution 挂到 outlet。它不读取 Plugin、Skill、MCP snapshot，也不执行业务 mutation。
 
-- `CapabilitiesCatalogItems.tsx`：MCP、Skill 的双列目录项。
-- Plugin market/editor 继续位于各自子模块。
+三个一级页面由各自 Renderer Feature 在 setup 中注册，`navigationGroupId = capabilities.catalog` 只表达共同的信息架构：
+
+- `packages/features/plugin-management/src/renderer/PluginCapabilitiesPage.tsx`
+- `packages/features/skills/src/renderer/SkillsCapabilitiesPage.tsx`
+- `packages/features/mcp/src/renderer/McpCapabilitiesPage.tsx`
+
+宿主只通过 Slot props 提供设计系统、当前 workspace、创建对话入口和选中的 Plugin ID。业务页面直接消费自己 setup 创建的 service；缺失 contribution 时由 composition root 的 `FeatureRecoveryShell` 提供诊断与恢复入口。
 
 Hook 不再作为一级目录或独立表单暴露；它是 Plugin Bundle 内的一项能力，由插件创建、导入和安装流程统一管理。
 
 ### Plugin market
 
-Plugin 管理的跨层所有权位于 `packages/features/plugin-management/`：contracts 声明聚合 snapshot、Hook projection 与安装、更新、卸载、详情、扩展信任、Hook 状态 typed operations；runtime 只通过 Plugin Store、Marketplace、Extension Manager 和 `RuntimeHookManagement` 窄 host 能力实现；renderer service 持有 Plugin/Hook snapshot、并发 refresh 与 mutation 后收敛。宿主 `CapabilitiesPage` 继续承担 Plugin、Skill、MCP 的统一信息架构和视觉适配，但不再通过 `DesktopRuntimeClient` 保存 Plugin 或 Hook 状态。
+Plugin 管理的跨层所有权位于 `packages/features/plugin-management/`：contracts 声明聚合 snapshot、Hook projection 与安装、更新、卸载、详情、扩展信任、Hook 状态 typed operations；runtime 只通过 Plugin Store、Marketplace、Extension Manager 和 `RuntimeHookManagement` 窄 host 能力实现；renderer service 持有 Plugin/Hook snapshot、并发 refresh 与 mutation 后收敛。`PluginCapabilitiesPage`、`PluginDetail`、`PluginItemDialog` 和展示 helper 同样位于 Feature 包内，宿主不再保存或适配 Plugin/Hook 状态。
 
-相关组件：
+默认市场来自随应用打包的 `plugins/`，renderer 只接收无路径摘要。市场首页分别展示市场目录和不在目录内的本地安装项；卡片直接表达安装、更新和打开状态。详情页展示声明的 Tool/Skill/MCP/Hook/resource 元数据，并负责 install/update/uninstall 动作。
 
-- `CapabilitiesPluginMarket`
-- `CapabilitiesPluginListItem`
-- `CapabilitiesPluginDetail`
-- `CapabilitiesPluginInstallButton`
-- `CapabilitiesInstalledPluginShortcut`
+Capabilities 的一级标签默认通过 `AppRouteTopbarPortal` 挂载到 `ShellFrame` 的 route topbar slot；Windows 下改为放在能力页内容顶部。各 Feature page 自己持有标题、搜索、刷新、创建/导入和详情返回动作，但复用宿主注入的 controls 与共享能力页布局样式。
 
-默认市场来自随应用打包的 `plugins/`，renderer 只接收无路径摘要。市场首页由已安装快捷区、精选区和按能力分类的紧凑列表组成。详情页展示声明的 Tool/Skill/MCP/Hook/resource 元数据，并负责 install/update/uninstall 动作。
+页面标题栏分别提供“用对话创建插件”和“导入本地插件”；不属于默认市场的已安装 Plugin 在本地来源分区单独展示。
 
-Capabilities 的一级标签默认通过 `AppRouteTopbarPortal` 挂载到 `ShellFrame` 的 route topbar slot；Windows 下改为放在能力页内容顶部，分类与数量分别对齐该行两端，并使用一致的顶部/左右页边距。插件、MCP 与 Skill 的详情或编辑页沿用同一顶部基线。插件市场首页不提供搜索框，其他能力分类仍保留各自的目录搜索。
-
-本地 Plugin Bundle 通过右上角“创建”菜单导入；不属于默认市场的已安装 Plugin 单独标识。
-
-图片生成和视觉识别第一方 Plugin 的配置不在 `CapabilitiesPluginDetail` 中硬编码。各自的 renderer Feature 在 setup 时静态返回对应 Plugin 详情的设置与测试视图：
+图片生成和视觉识别第一方 Plugin 的配置不在 Plugin Management 页面中硬编码。各自的 renderer Feature 在 setup 时静态返回对应 Plugin 详情的设置与测试视图：
 
 - `packages/features/image-generation/src/renderer/`
 - `packages/features/vision-recognition/src/renderer/`
@@ -159,7 +158,7 @@ Bundle 规则见 [Plugin Bundle](../../extensions/plugins/bundles.md)。
 
 ### MCP
 
-`mcp/CapabilitiesMcpEditor.tsx` 与 `mcp-editor-model.ts` 管理：
+`packages/features/mcp/src/renderer/McpCapabilitiesPage.tsx` 管理目录、详情和编辑状态：
 
 - `stdio` / `streamable_http` transport。
 - Command/args 或 URL。
@@ -170,16 +169,16 @@ Bundle 规则见 [Plugin Bundle](../../extensions/plugins/bundles.md)。
 
 保存时保持结构化字段，不把 command/args 拼成 shell 文本。List/status 不显示 secret 值。
 
-MCP 的 renderer 状态与命令由 `packages/features/mcp/src/renderer` 持有。Feature service 通过 typed operations 管理 server snapshot、工具发现、保存、启停、删除和 OAuth 登录/登出，并用统一请求序列阻止迟到 refresh 回退 mutation 结果。宿主 `CapabilitiesPage` 继续负责 Plugin、Skill、MCP 的统一信息架构和视觉适配，只通过 composition boundary 消费 MCP service；旧 `/v1/mcp/*` REST 与 App Server 仍作为兼容 adapter 调用同一个 `McpControl`。
+MCP 的 renderer 状态与命令由 `packages/features/mcp/src/renderer` 持有。Feature service 通过 typed operations 管理 server snapshot、工具发现、保存、启停、删除和 OAuth 登录/登出，并用统一请求序列阻止迟到 refresh 回退 mutation 结果；旧 `/v1/mcp/*` REST 与 App Server 仍作为兼容 adapter 调用同一个 `McpControl`。
 
 ### Skills
 
-- `CapabilitiesSkillDetail.tsx`：详情、启用、默认选择、依赖状态。
-- `CapabilitiesSkillEditor.tsx`：用户 Skill 创建/编辑。
+- `SkillsCapabilitiesPage.tsx`：目录、详情、启用、默认选择和 MCP dependency 状态。
+- 同一 Feature 页面持有用户 Skill 创建/编辑状态；内置和 Plugin Skill 只读。
 
 内置和 Plugin Skill 只读；用户 Skill 才能修改正文。MCP dependency 的安装与认证通过 runtime coordinator。
 
-Skills 的 renderer snapshot 与命令由 `packages/features/skills/src/renderer/` 持有。Feature service 通过 `/v1/features/skills/*` typed operations 管理 catalog、extra roots、CRUD 和 MCP dependency，并串行化 mutation、阻止迟到 refresh 回退最新结果；宿主 `CapabilitiesPage` 与 Settings 只通过 composition boundary 消费该 service。
+Skills 的 renderer snapshot 与命令由 `packages/features/skills/src/renderer/` 持有。Feature service 通过 `/v1/features/skills/*` typed operations 管理 catalog、extra roots、CRUD 和 MCP dependency，并串行化 mutation、阻止迟到 refresh 回退最新结果。额外 Skill 根目录也由 Skills Feature 通过 Settings extension Slot 挂到“运行时”，宿主 Settings 不再接收 Skills 专用 props。该设置扫描用户级的 `.agents`、Codex、Claude、Grok 和 Pi Skill 目录，由宿主把相对主目录约定解析为跨平台绝对路径；未继承且没有可发现 Skill 的目录不展示，其他目录显示 Skill 数量并支持一键继承，用户仍可通过系统目录选择器添加自定义根目录。
 
 “用对话创建 Skill”发出面向下一次主聊天 composer 的待消费请求，不绑定短生命周期 `composerKey`；切换到聊天或 composer 重建后，请求仍会插入对应 Skill slot 并聚焦输入框。
 
@@ -191,13 +190,15 @@ Skills 的 renderer snapshot 与命令由 `packages/features/skills/src/renderer
 
 ## State 与 refresh
 
-宿主 Settings 通过 `useRuntimeClientState` facade 获取通用 Config；Skills、MCP，以及 Plugin 列表、市场、extension 与 Hook 状态由各自 renderer service 独立持有。其他 Feature-owned 设置同样由 renderer composition 注入的 typed client/controller 读取：
+宿主 Settings 通过 `useRuntimeClientState` facade 获取通用 Config；Skills、MCP，以及 Plugin 列表、市场、extension 与 Hook 状态由各自 renderer service 独立持有。composition root 只提供一个窄 `CapabilitiesRefreshCoordinator`：三个 Feature 在 setup 时登记自己的刷新动作，调用方按 owner 请求刷新；单个 owner 失败会记录后台错误，但不会阻止其他 owner 收敛。
+
+刷新规则：
 
 - Config save 后更新统一 config state。
 - Image Generation、Vision Recognition 与 Workspace Dependencies 的设置更新不经过统一 config state，成功后只刷新所属 Feature controller。
 - Skills、MCP 与 Plugin Management 分别维护独立 snapshot，迟到的旧 refresh 不覆盖新状态；Plugin Management 串行 Hook mutation，并让已开始的旧 refresh 无法覆盖 mutation 结果。
 - Hook query 记录当前 project cwd；切换 project 或后台刷新失败时保留最后一次有效投影。
-- Plugin install/update/remove 先由 Feature service 重读 Plugin snapshot，再让宿主刷新可能被 Bundle 改变的 Skill、MCP 和 Hook，而不是靠局部猜测所有权变化；turn 结算读取 extension 状态时会同时比较 runtime 的全局 Plugin catalog revision，只有 revision 变化才刷新完整 Plugin snapshot，因此协作子线程的插件变更也能收敛。Plugin Skill 编辑/删除只刷新已安装插件摘要。
+- Plugin install/update/remove 先由 Feature service 重读 Plugin snapshot，再通过 coordinator 刷新可能被 Bundle 改变的 Skill 与 MCP；Skill 的 Plugin/MCP dependency mutation 同样只请求相关 owner。runtime 初次 ready 与 turn 结算触发一次 best-effort `refreshAll()`，因此协作子线程的能力变更也能收敛。
 
 ## Developer features
 
@@ -225,8 +226,9 @@ Settings：
 
 Capabilities：
 
-- `CapabilitiesPage.test.ts`
-- Plugin components/display/localization。
+- `apps/desktop/renderer/test/unit/composition/capabilities-refresh-coordinator.test.ts`
+- `apps/desktop/renderer/test/unit/composition/renderer-feature-composition.test.ts`
+- `packages/features/{plugin-management,skills,mcp}/test/renderer/` 的 service/presentation 测试。
 - Plugin Management Hook runtime/service。
 
 跨层修改还需要 runtime config/MCP/Skill/Plugin store 与 server integration tests。

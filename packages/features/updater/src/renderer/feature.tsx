@@ -7,6 +7,7 @@ import {
   defineRendererFeature,
 } from '@setsuna-desktop/feature-core/renderer';
 import { registerSettingsPageExtension } from '@setsuna-desktop/renderer-contracts/settings';
+import { shellTopbarActionSlot } from '@setsuna-desktop/renderer-contracts/shell';
 import { lazy } from 'react';
 import { updaterFeature } from '../contracts/index.js';
 import {
@@ -15,6 +16,7 @@ import {
 } from './capabilities.js';
 import { updaterMessages } from './messages.js';
 import { UpdaterRendererStateService } from './service.js';
+import { UpdaterTopbarAction } from './UpdaterTopbarAction.js';
 
 const UpdaterSettingsView = lazy(async () => {
   const module = await import('./UpdaterSettingsView.js');
@@ -38,6 +40,11 @@ export const updaterRendererFeature = defineRendererFeature({
     service.start();
     context.scope.add(() => service.dispose());
     context.provide(stateProvider, service);
+    context.ui.list(shellTopbarActionSlot, {
+      id: 'updater.ready-action',
+      order: 100,
+      render: (props) => <UpdaterTopbarAction {...props} service={service} />,
+    });
     registerSettingsPageExtension(context.ui, {
         entryId: 'updater.about-settings',
         id: 'updater-about',

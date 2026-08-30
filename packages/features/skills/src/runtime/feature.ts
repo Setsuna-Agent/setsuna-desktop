@@ -13,6 +13,7 @@ import {
   authenticateSkillMcpDependency,
   createSkill,
   deleteSkill,
+  inspectSkillDirectories,
   installSkillMcpDependencies,
   readSkill,
   readSkills,
@@ -22,6 +23,7 @@ import {
   skillsRuntimeHostCapability,
   updateSkill,
 } from '../contracts/index.js';
+import { inspectSkillDirectoryPaths } from './skill-directory-inspection.js';
 
 const dependencies = defineRuntimeDependencies({
   host: requiredCapability(skillsRuntimeHostCapability),
@@ -39,6 +41,11 @@ export const skillsRuntimeFeature = defineRuntimeFeature({
     const { routes } = context.dependencies;
 
     routes.register(context.scope, readSkills, () => preserveSkillOperation(() => control.listSkills()));
+    routes.register(context.scope, inspectSkillDirectories, ({ paths }) => (
+      preserveSkillOperation(() => inspectSkillDirectoryPaths(
+        normalizeRuntimeSkillPaths(paths, 'paths'),
+      ))
+    ));
     routes.register(context.scope, createSkill, (input) => (
       preserveSkillOperation(() => control.createSkill(input))
     ));
@@ -61,7 +68,7 @@ export const skillsRuntimeFeature = defineRuntimeFeature({
       preserveSkillOperation(() => control.authenticateMcpDependency(skillId, serverKey))
     ));
     routes.register(context.scope, setSkillExtraRoots, async ({ extraRoots }) => {
-      const normalizedRoots = normalizeRuntimeSkillExtraRoots(extraRoots);
+      const normalizedRoots = normalizeRuntimeSkillPaths(extraRoots, 'extraRoots');
       await preserveSkillOperation(() => control.setExtraRoots(normalizedRoots));
       return preserveSkillOperation(() => control.listSkills());
     });
@@ -102,12 +109,12 @@ function skillNotFound(skillId: string): FeatureOperationFailure<'SKILL_NOT_FOUN
   });
 }
 
-function normalizeRuntimeSkillExtraRoots(extraRoots: readonly string[]): string[] {
-  return extraRoots.map((root, index) => {
+function normalizeRuntimeSkillPaths(paths: readonly string[], label: string): string[] {
+  return paths.map((root, index) => {
     if (!path.isAbsolute(root)) {
       throw new FeatureOperationFailure({
         code: 'INVALID_INPUT',
-        message: `extraRoots[${index}] must be an absolute path.`,
+        message: `${label}[${index}] must be an absolute path.`,
         retryable: false,
       });
     }

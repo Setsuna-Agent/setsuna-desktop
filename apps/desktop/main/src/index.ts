@@ -65,6 +65,7 @@ import {
   prepareDesktopWindowsSandbox,
 } from './composition/windows-sandbox-feature-host.js';
 import { registerWindowsTitlebarDoubleClick } from './window/frame.js';
+import { registerMainWindowNavigationGuards } from './window/navigation.js';
 import { DesktopWindowCloseBehaviorController } from './window/close-behavior.js';
 import { DesktopWindowPreferencesStore } from './window/preferences.js';
 import { showStartupSplash, waitForRendererFirstPaint } from './window/splash/window.js';
@@ -164,6 +165,7 @@ async function createWindow(): Promise<void> {
   });
   // The splash and app share one native window so the OS never animates a window swap.
   const currentMainWindow = createMainBrowserWindow(desktopIcon, windowState.bounds);
+  registerMainWindowNavigationGuards(currentMainWindow, (url) => shell.openExternal(url));
   let activeKeyboardShortcutBindings = new Set<string>();
   trackDesktopWindowState(currentMainWindow, windowStateFilePath);
   let startupClosedBeforeHandoff = false;
@@ -433,10 +435,6 @@ async function createWindow(): Promise<void> {
     void shutdownDesktopServices();
     if (mainWindow === currentMainWindow) mainWindow = null;
   });
-  currentMainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
-    return { action: 'deny' };
-  });
   const publishWindowMaximizedState = () => {
     if (currentMainWindow.isDestroyed()) return;
     currentMainWindow.webContents.send(
@@ -481,6 +479,7 @@ async function createDataRootMaintenanceWindow(): Promise<void> {
     },
   );
   const currentMainWindow = createMainBrowserWindow(desktopIcon, windowState.bounds);
+  registerMainWindowNavigationGuards(currentMainWindow, (url) => shell.openExternal(url));
   mainWindow = currentMainWindow;
   trackDesktopWindowState(currentMainWindow, profileLayout.windowStatePath);
   registerWindowsTitlebarDoubleClick(currentMainWindow);

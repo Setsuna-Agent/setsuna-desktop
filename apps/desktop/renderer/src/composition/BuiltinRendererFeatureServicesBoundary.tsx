@@ -1,6 +1,5 @@
 import type { CollaborationRendererStateService } from '@setsuna-desktop/feature-collaboration/contracts';
 import type { ConversationDebugRendererService } from '@setsuna-desktop/feature-conversation-debug/renderer';
-import type { McpRendererService } from '@setsuna-desktop/feature-mcp/contracts';
 import type { ModelProviderRendererStateService } from '@setsuna-desktop/feature-model-provider/renderer';
 import type { NetworkProxyRendererStateService } from '@setsuna-desktop/feature-network-proxy/renderer';
 import type { PluginManagementRendererService } from '@setsuna-desktop/feature-plugin-management/contracts';
@@ -8,12 +7,12 @@ import type { ReviewRendererService } from '@setsuna-desktop/feature-review/cont
 import type { RuntimeActivityRendererService } from '@setsuna-desktop/feature-runtime-activity/contracts';
 import type { SideConversationRendererService } from '@setsuna-desktop/feature-side-conversation/contracts';
 import type { SkillsRendererService } from '@setsuna-desktop/feature-skills/contracts';
-import type { UpdaterRendererStateService } from '@setsuna-desktop/feature-updater/renderer';
 import type { UsageRendererStateService } from '@setsuna-desktop/feature-usage/contracts';
+import type { CapabilitiesRefreshCoordinator } from '@setsuna-desktop/renderer-contracts/capabilities';
 import type { ReactNode } from 'react';
 import { CollaborationFeatureServiceBoundary } from './CollaborationFeatureBoundary.js';
 import { ConversationDebugFeatureServiceBoundary } from './ConversationDebugFeatureBoundary.js';
-import { McpFeatureServiceBoundary } from './McpFeatureBoundary.js';
+import { CapabilitiesRefreshBoundary } from './CapabilitiesRefreshBoundary.js';
 import { ModelProviderFeatureServiceBoundary } from './ModelProviderFeatureBoundary.js';
 import { NetworkProxyFeatureServiceBoundary } from './NetworkProxyFeatureBoundary.js';
 import { PluginManagementFeatureServiceBoundary } from './PluginManagementFeatureBoundary.js';
@@ -21,13 +20,12 @@ import { ReviewFeatureServiceBoundary } from './ReviewFeatureBoundary.js';
 import { RuntimeActivityFeatureServiceBoundary } from './RuntimeActivityFeatureBoundary.js';
 import { SideConversationFeatureServiceBoundary } from './SideConversationFeatureBoundary.js';
 import { SkillsFeatureServiceBoundary } from './SkillsFeatureBoundary.js';
-import { UpdaterFeatureServiceBoundary } from './UpdaterFeatureBoundary.js';
 import { UsageFeatureServiceBoundary } from './UsageFeatureBoundary.js';
 
 export type BuiltinRendererFeatureServices = Readonly<{
   collaboration: CollaborationRendererStateService;
+  capabilitiesRefresh: CapabilitiesRefreshCoordinator;
   conversationDebug: ConversationDebugRendererService;
-  mcp: McpRendererService;
   modelProvider: ModelProviderRendererStateService;
   networkProxy: NetworkProxyRendererStateService;
   pluginManagement: PluginManagementRendererService;
@@ -35,7 +33,6 @@ export type BuiltinRendererFeatureServices = Readonly<{
   runtimeActivity: RuntimeActivityRendererService;
   sideConversation: SideConversationRendererService;
   skills: SkillsRendererService;
-  updater: UpdaterRendererStateService;
   usage: UsageRendererStateService;
 }>;
 
@@ -51,7 +48,7 @@ export function BuiltinRendererFeatureServicesBoundary({
   services: BuiltinRendererFeatureServices;
 }>) {
   return (
-    <UpdaterFeatureServiceBoundary service={services.updater}>
+    <CapabilitiesRefreshBoundary coordinator={services.capabilitiesRefresh}>
       <NetworkProxyFeatureServiceBoundary service={services.networkProxy}>
         <ModelProviderFeatureServiceBoundary service={services.modelProvider}>
           <ConversationDebugFeatureServiceBoundary service={services.conversationDebug}>
@@ -62,9 +59,7 @@ export function BuiltinRendererFeatureServicesBoundary({
                     <RuntimeActivityFeatureServiceBoundary service={services.runtimeActivity}>
                       <PluginManagementFeatureServiceBoundary service={services.pluginManagement}>
                         <SkillsFeatureServiceBoundary service={services.skills}>
-                          <McpFeatureServiceBoundary service={services.mcp}>
-                            {children}
-                          </McpFeatureServiceBoundary>
+                          {children}
                         </SkillsFeatureServiceBoundary>
                       </PluginManagementFeatureServiceBoundary>
                     </RuntimeActivityFeatureServiceBoundary>
@@ -75,6 +70,6 @@ export function BuiltinRendererFeatureServicesBoundary({
           </ConversationDebugFeatureServiceBoundary>
         </ModelProviderFeatureServiceBoundary>
       </NetworkProxyFeatureServiceBoundary>
-    </UpdaterFeatureServiceBoundary>
+    </CapabilitiesRefreshBoundary>
   );
 }

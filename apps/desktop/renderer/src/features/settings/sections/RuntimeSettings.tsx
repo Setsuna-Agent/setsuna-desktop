@@ -1,6 +1,6 @@
 import type { RuntimeConfigState } from '@setsuna-desktop/contracts';
-import { ChevronRight, FileJson2, FolderOpen, Plus, ShieldCheck, X } from 'lucide-react';
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { ChevronRight, FileJson2, Plus, ShieldCheck } from 'lucide-react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { localizedRuntimeAccessModeOptions } from '../../../shared/i18n/runtimeAccessModeCopy.js';
 import {
@@ -8,8 +8,12 @@ import {
   runtimeAccessModeForConfig,
 } from '../../../shared/lib/runtimeAccessMode.js';
 import { RuntimeAccessModeMenu } from '../../../shared/ui/RuntimeAccessModeMenu.js';
+import {
+  SettingsDirectoryList,
+  SettingsListEditor,
+} from '../../../shared/ui/SettingsListFields.js';
 import { SettingsToggle } from '../../../shared/ui/SettingsViewUi.js';
-import { Button, IconButton, TextArea, TextField } from '../../../shared/ui/primitives.js';
+import { Button, TextArea, TextField } from '../../../shared/ui/primitives.js';
 import { SettingsPathValue } from '../components/SettingsPathValue.js';
 import { DataLocationSettings } from '../data-root/DataLocationSettings.js';
 import type { RuntimePreferenceInput } from '../settings-types.js';
@@ -104,14 +108,10 @@ export function RuntimePolicySettings({
 
 export function RuntimeAdvancedSettings({
   config,
-  skillExtraRoots,
   onSave,
-  onSetSkillExtraRoots,
 }: {
   config: RuntimeConfigState;
-  skillExtraRoots: string[];
   onSave: (input: RuntimePreferenceInput) => Promise<void>;
-  onSetSkillExtraRoots: (roots: string[]) => Promise<void>;
 }) {
   const { t } = useI18n();
   const [featureFlagsDraft, setFeatureFlagsDraft] = useState(() => JSON.stringify(config.features ?? {}, null, 2));
@@ -160,19 +160,19 @@ export function RuntimeAdvancedSettings({
             label={t('settings.runtime.bypassHookTrust')}
             onChange={(bypassHookTrust) => void onSave({ bypassHookTrust })}
           />
-          <RuntimeDirectoryListField
+          <SettingsDirectoryList
             description={t('settings.runtime.readableRootsDescription')}
             label={t('settings.runtime.readableRoots')}
             value={config.sandboxWorkspaceWrite?.readableRoots ?? []}
             onSave={(readableRoots) => onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), readableRoots } })}
           />
-          <RuntimeDirectoryListField
+          <SettingsDirectoryList
             description={t('settings.runtime.writableRootsDescription')}
             label={t('settings.runtime.writableRoots')}
             value={config.sandboxWorkspaceWrite?.writableRoots ?? []}
             onSave={(writableRoots) => onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), writableRoots } })}
           />
-          <RuntimeDirectoryListField
+          <SettingsDirectoryList
             description={t('settings.runtime.deniedRootsDescription')}
             label={t('settings.runtime.deniedRoots')}
             value={config.sandboxWorkspaceWrite?.deniedRoots ?? []}
@@ -183,12 +183,6 @@ export function RuntimeAdvancedSettings({
             label={t('settings.runtime.deniedGlob')}
             value={config.sandboxWorkspaceWrite?.deniedGlobPatterns ?? []}
             onSave={(deniedGlobPatterns) => onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), deniedGlobPatterns } })}
-          />
-          <RuntimeDirectoryListField
-            description={t('settings.runtime.skillRootsDescription')}
-            label={t('settings.runtime.skillRoots')}
-            value={skillExtraRoots}
-            onSave={onSetSkillExtraRoots}
           />
           <div className="chat-user-settings__runtime-json-field">
             <span>{t('settings.runtime.featureFlags')}</span>
@@ -209,66 +203,6 @@ export function RuntimeAdvancedSettings({
         {advancedError ? <div className="chat-user-settings__runtime-error">{advancedError}</div> : null}
       </details>
     </div>
-  );
-}
-
-function RuntimeDirectoryListField({
-  description,
-  label,
-  value,
-  onSave,
-}: {
-  description: string;
-  label: string;
-  value: string[];
-  onSave: (items: string[]) => Promise<void>;
-}) {
-  const { t } = useI18n();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const commit = async (items: string[]) => {
-    setBusy(true);
-    setError(null);
-    try {
-      await onSave(items);
-      return true;
-    } catch (unknownError) {
-      setError(errorMessage(unknownError, t('settings.runtime.saveError', { label })));
-      return false;
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const addDirectory = async () => {
-    const api = window.setsunaDesktop?.desktop;
-    if (!api?.selectDirectory) {
-      setError(t('settings.runtime.selectUnsupported'));
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      const selected = await api.selectDirectory({ title: t('settings.runtime.selectLabel', { label }) });
-      if (selected && !value.includes(selected)) await onSave([...value, selected]);
-    } catch (unknownError) {
-      setError(errorMessage(unknownError, t('settings.runtime.addError', { label })));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <RuntimeListEditor
-      action={<Button icon={<FolderOpen size={14} />} disabled={busy} onClick={() => void addDirectory()}>{busy ? t('common.processing') : t('settings.runtime.addDirectory')}</Button>}
-      busy={busy}
-      description={description}
-      error={error}
-      items={value}
-      label={label}
-      onRemove={(item) => void commit(value.filter((current) => current !== item))}
-    />
   );
 }
 
@@ -310,7 +244,7 @@ function RuntimeTextListField({
   };
 
   return (
-    <RuntimeListEditor
+    <SettingsListEditor
       action={(
         <form className="chat-user-settings__runtime-list-add" onSubmit={(event) => void addItem(event)}>
           <TextField aria-label={t('settings.runtime.addLabel', { label })} disabled={busy} placeholder={t('settings.runtime.rulePlaceholder')} value={draft} onChange={(event) => setDraft(event.currentTarget.value)} />
@@ -324,49 +258,5 @@ function RuntimeTextListField({
       label={label}
       onRemove={(item) => void commit(value.filter((current) => current !== item))}
     />
-  );
-}
-
-function RuntimeListEditor({
-  action,
-  busy,
-  description,
-  error,
-  items,
-  label,
-  onRemove,
-}: {
-  action: ReactNode;
-  busy: boolean;
-  description: string;
-  error: string | null;
-  items: string[];
-  label: string;
-  onRemove: (item: string) => void;
-}) {
-  const { t } = useI18n();
-  return (
-    <div className="chat-user-settings__runtime-list-editor">
-      <div className="chat-user-settings__runtime-list-head">
-        <span className="chat-user-settings__runtime-list-copy">
-          <strong>{label}</strong>
-          <small>{description}</small>
-        </span>
-        {action}
-      </div>
-      {items.length ? (
-        <div className="chat-user-settings__runtime-list-items">
-          {items.map((item) => (
-            <div className="chat-user-settings__runtime-list-item" key={item}>
-              <code title={item}>{item}</code>
-              <IconButton label={t('settings.runtime.removeLabel', { item })} disabled={busy} onClick={() => onRemove(item)}><X size={14} /></IconButton>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <span className="chat-user-settings__runtime-list-empty">{t('common.noneAdded')}</span>
-      )}
-      {error ? <span className="chat-user-settings__runtime-list-error" role="alert">{error}</span> : null}
-    </div>
   );
 }

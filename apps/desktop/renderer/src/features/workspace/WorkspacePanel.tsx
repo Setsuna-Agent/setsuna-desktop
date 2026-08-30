@@ -21,10 +21,9 @@ import {
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import { BrowserFeatureIcon } from '../../composition/browser-feature-adapter.js';
+import { BrowserFeatureIcon } from '../../composition/BrowserWorkspaceFeatureBoundary.js';
 import { EditIcon } from '../../shared/ui/EditIcon.js';
 import { ReviewFeaturePanel } from '../../composition/review-feature-panel-adapter.js';
-import { TerminalFeaturePane } from '../../composition/TerminalFeaturePane.js';
 import { CodeFileView } from '../../shared/code/PierreCode.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { KeyboardShortcutCommandId } from '../../shared/shortcuts/keyboardShortcutCommands.js';
@@ -43,12 +42,10 @@ import type {
   DesktopPanelTab,
   DesktopReviewFocusRequest,
   DesktopReviewState,
-  DesktopTerminalSession,
   DesktopWorkspaceApp,
   ProjectTreeNode,
   WorkspaceFileFocusRequest,
 } from './model.js';
-import { desktopPanelTitle } from './PanelChrome.js';
 import {
   WorkspaceFileContextMenu,
   type WorkspaceFileContextTarget,
@@ -81,7 +78,6 @@ export function WorkspacePanel({
   reviewState,
   selectedWorkspaceApp,
   workspaceApps,
-  terminalSession,
   onAddFileToConversation,
   onCopyFilePath,
   onExternalOpenFile,
@@ -95,7 +91,6 @@ export function WorkspacePanel({
   onOpenReviewPanel,
   onOpenSideChat,
   onOpenTerminalPanel,
-  onTerminalTitleChange,
   onReviewRefresh,
   onReviewBaseRefChange,
   onReviewSourceChange,
@@ -120,7 +115,6 @@ export function WorkspacePanel({
   reviewState: DesktopReviewState | null;
   selectedWorkspaceApp: DesktopWorkspaceApp | null;
   workspaceApps: DesktopWorkspaceApp[];
-  terminalSession: DesktopTerminalSession | null;
   onAddFileToConversation: (entry: WorkspaceEntrySearchItem) => void;
   onCopyFilePath: (filePath: string) => void;
   onExternalOpenFile: (filePath?: string | null, line?: number) => void;
@@ -134,7 +128,6 @@ export function WorkspacePanel({
   onOpenReviewPanel?: () => void;
   onOpenSideChat: () => void;
   onOpenTerminalPanel: () => void;
-  onTerminalTitleChange?: (panelId: string, title: string) => void;
   onReviewRefresh: () => void;
   onReviewBaseRefChange: (baseRef: string) => void;
   onReviewSourceChange: (source: DesktopReviewSource) => void;
@@ -391,13 +384,6 @@ export function WorkspacePanel({
         onSourceChange={onReviewSourceChange}
         onRevealFile={onRevealFile}
       />
-    ) : activePanel.type === 'terminal' ? (
-      <section className="desktop-workspace-terminal-panel" aria-label={desktopPanelTitle(activePanel, t)}>
-        <TerminalFeaturePane
-          session={terminalSession}
-          onTitleChange={(title) => onTerminalTitleChange?.(activePanel.id, title)}
-        />
-      </section>
     ) : (
       <section
         className={`desktop-editor ${fileDraft.errorMessage ? 'has-save-error' : ''}`}

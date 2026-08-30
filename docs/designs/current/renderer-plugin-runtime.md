@@ -98,7 +98,7 @@ Setsuna 采用以下方向：
 | Collaboration | typed tool result | `collaboration.spawn-result@1` | Chat-owned typed tool-result resolver |
 | Image Generation | typed tool result | `image-generation.result@1` | Chat-owned typed tool-result resolver |
 
-当时 catalog 的真实宿主 consumer 主要是 `ChatComposer`、`SettingsPage`、`CapabilitiesPluginDetail`、`ChatMessageItem`、`RuntimeToolRuns`、`useSideChat` 和 runtime thread state refresh。迁移已同时替换 producer 与这些 consumer，没有只停留在类型更名。
+当时 catalog 的真实宿主 consumer 主要是 `ChatComposer`、`SettingsPage`、Plugin Management 详情页、`ChatMessageItem`、`RuntimeToolRuns`、`useSideChat` 和 runtime thread state refresh。迁移已同时替换 producer 与这些 consumer，没有只停留在类型更名。
 
 ### 参考实现的启发与限制
 
