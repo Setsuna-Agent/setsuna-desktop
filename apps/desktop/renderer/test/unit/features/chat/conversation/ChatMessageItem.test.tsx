@@ -6,6 +6,7 @@ import { MessageItem } from '../../../../../src/features/chat/conversation/ChatM
 import type { ChatDisplayItem } from '../../../../../src/features/chat/conversation/chatMessageDisplay.js';
 import type { RuntimePluginUse } from '../../../../../src/features/chat/plugin-usage/runtimePluginUsage.js';
 import { SkillReferenceCatalogProvider } from '../../../../../src/features/chat/skills/SkillReference.js';
+import { RendererPluginTestHost } from '../../../support/RendererPluginTestHost.js';
 
 function userItem(message: RuntimeMessage): Extract<ChatDisplayItem, { type: 'user' }> {
   return {
@@ -59,26 +60,28 @@ function renderUserMessage(
         onToggleDelete: () => undefined,
       };
   return renderToStaticMarkup(
-    <SkillReferenceCatalogProvider skills={options.skills ?? []}>
-      <MessageItem
-        {...mutationHandlers}
-        activeAssistantItemId={null}
-        activeTurnId={null}
-        assistantItemIdByTurnId={new Map()}
-        deleteMode={false}
-        editingDraft={editing ? message.content : ''}
-        editingMessageId={editing ? message.id : null}
-        editingSubmitting={false}
-        expandedWorkHistoryItemIds={new Set()}
-        item={{ ...userItem(message), ...options.item }}
-        onAnswerApproval={async () => undefined}
-        onCancelEdit={() => undefined}
-        onEditDraftChange={() => undefined}
-        onWorkHistoryExpandedChange={() => undefined}
-        pluginUses={[]}
-        selectedForDelete={false}
-      />
-    </SkillReferenceCatalogProvider>,
+    <RendererPluginTestHost>
+      <SkillReferenceCatalogProvider skills={options.skills ?? []}>
+        <MessageItem
+          {...mutationHandlers}
+          activeAssistantItemId={null}
+          activeTurnId={null}
+          assistantItemIdByTurnId={new Map()}
+          deleteMode={false}
+          editingDraft={editing ? message.content : ''}
+          editingMessageId={editing ? message.id : null}
+          editingSubmitting={false}
+          expandedWorkHistoryItemIds={new Set()}
+          item={{ ...userItem(message), ...options.item }}
+          onAnswerApproval={async () => undefined}
+          onCancelEdit={() => undefined}
+          onEditDraftChange={() => undefined}
+          onWorkHistoryExpandedChange={() => undefined}
+          pluginUses={[]}
+          selectedForDelete={false}
+        />
+      </SkillReferenceCatalogProvider>
+    </RendererPluginTestHost>,
   );
 }
 
@@ -93,35 +96,37 @@ function renderPlanMessage(pluginUses: RuntimePluginUse[]): string {
     planMode: { mode: 'plan', status: 'awaiting_confirmation' },
   };
   return renderToStaticMarkup(
-    <MessageItem
-      activeAssistantItemId={null}
-      activeTurnId={null}
-      assistantItemIdByTurnId={new Map()}
-      deleteMode={false}
-      editingDraft=""
-      editingMessageId={null}
-      editingSubmitting={false}
-      expandedWorkHistoryItemIds={new Set()}
-      item={{
-        type: 'assistant',
-        id: message.id,
-        handledSteerMessageIds: [],
-        messageIds: [message.id],
-        segments: [message],
-        steerMessages: [],
-        turnId: message.turnId,
-      }}
-      onAnswerApproval={async () => undefined}
-      onCancelEdit={() => undefined}
-      onEditDraftChange={() => undefined}
-      onStartEdit={() => undefined}
-      onStartDelete={() => undefined}
-      onSubmitEdit={() => undefined}
-      onToggleDelete={() => undefined}
-      onWorkHistoryExpandedChange={() => undefined}
-      pluginUses={pluginUses}
-      selectedForDelete={false}
-    />,
+    <RendererPluginTestHost>
+      <MessageItem
+        activeAssistantItemId={null}
+        activeTurnId={null}
+        assistantItemIdByTurnId={new Map()}
+        deleteMode={false}
+        editingDraft=""
+        editingMessageId={null}
+        editingSubmitting={false}
+        expandedWorkHistoryItemIds={new Set()}
+        item={{
+          type: 'assistant',
+          id: message.id,
+          handledSteerMessageIds: [],
+          messageIds: [message.id],
+          segments: [message],
+          steerMessages: [],
+          turnId: message.turnId,
+        }}
+        onAnswerApproval={async () => undefined}
+        onCancelEdit={() => undefined}
+        onEditDraftChange={() => undefined}
+        onStartEdit={() => undefined}
+        onStartDelete={() => undefined}
+        onSubmitEdit={() => undefined}
+        onToggleDelete={() => undefined}
+        onWorkHistoryExpandedChange={() => undefined}
+        pluginUses={pluginUses}
+        selectedForDelete={false}
+      />
+    </RendererPluginTestHost>,
   );
 }
 
@@ -133,37 +138,39 @@ function renderAssistantMessage(
 ): string {
   const turnId = segments[0]?.turnId ?? 'turn_assistant';
   return renderToStaticMarkup(
-    <MessageItem
-      activeAssistantItemId={active ? 'assistant_item' : null}
-      activeTurnId={active ? turnId : null}
-      assistantItemIdByTurnId={new Map()}
-      deleteMode={false}
-      editingDraft=""
-      editingMessageId={null}
-      editingSubmitting={false}
-      expandedWorkHistoryItemIds={new Set()}
-      item={{
-        type: 'assistant',
-        id: 'assistant_item',
-        handledSteerMessageIds: [],
-        messageIds: segments.map((segment) => segment.id),
-        reviewExit,
-        segments,
-        steerMessages: [],
-        turnId,
-      }}
-      onAnswerApproval={async () => undefined}
-      onCancelEdit={() => undefined}
-      onEditDraftChange={() => undefined}
-      onStartEdit={() => undefined}
-      onStartDelete={() => undefined}
-      onSubmitEdit={() => undefined}
-      onToggleDelete={() => undefined}
-      onWorkHistoryExpandedChange={() => undefined}
-      pluginUses={[]}
-      selectedForDelete={false}
-      showThinkingInTranscript={showThinkingInTranscript}
-    />,
+    <RendererPluginTestHost>
+      <MessageItem
+        activeAssistantItemId={active ? 'assistant_item' : null}
+        activeTurnId={active ? turnId : null}
+        assistantItemIdByTurnId={new Map()}
+        deleteMode={false}
+        editingDraft=""
+        editingMessageId={null}
+        editingSubmitting={false}
+        expandedWorkHistoryItemIds={new Set()}
+        item={{
+          type: 'assistant',
+          id: 'assistant_item',
+          handledSteerMessageIds: [],
+          messageIds: segments.map((segment) => segment.id),
+          reviewExit,
+          segments,
+          steerMessages: [],
+          turnId,
+        }}
+        onAnswerApproval={async () => undefined}
+        onCancelEdit={() => undefined}
+        onEditDraftChange={() => undefined}
+        onStartEdit={() => undefined}
+        onStartDelete={() => undefined}
+        onSubmitEdit={() => undefined}
+        onToggleDelete={() => undefined}
+        onWorkHistoryExpandedChange={() => undefined}
+        pluginUses={[]}
+        selectedForDelete={false}
+        showThinkingInTranscript={showThinkingInTranscript}
+      />
+    </RendererPluginTestHost>,
   );
 }
 

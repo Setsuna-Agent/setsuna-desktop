@@ -7,6 +7,7 @@ import {
   defineRendererFeature,
   rendererFeatureOperationTransportCapability,
 } from '@setsuna-desktop/feature-core/renderer';
+import { registerSettingsPage } from '@setsuna-desktop/renderer-contracts/settings';
 import { ChartNoAxesCombined } from 'lucide-react';
 import { lazy } from 'react';
 import {
@@ -41,8 +42,8 @@ export const usageRendererFeature = defineRendererFeature({
       scope: context.scope,
     });
     context.provide(stateProvider, service);
-    return {
-      settingsViews: [{
+    registerSettingsPage(context.ui, {
+        entryId: 'usage.settings-page',
         descriptionKey: 'feature.usage.settings.description',
         icon: ChartNoAxesCombined,
         sectionId: 'usage',
@@ -59,7 +60,6 @@ export const usageRendererFeature = defineRendererFeature({
             ui={ui}
           />
         ),
-      }],
-    };
+    });
   },
 });

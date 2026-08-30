@@ -6,6 +6,10 @@ import { modelProviderFeature } from '@setsuna-desktop/feature-model-provider/co
 import { modelProviderRendererFeature } from '@setsuna-desktop/feature-model-provider/renderer';
 import { webDavSyncFeature } from '@setsuna-desktop/feature-webdav-sync/contracts';
 import { webDavSyncRendererFeature } from '@setsuna-desktop/feature-webdav-sync/renderer';
+import type {
+  SettingsPageEntryDescriptor,
+  SettingsPageMetadata,
+} from '@setsuna-desktop/renderer-contracts/settings';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
@@ -23,17 +27,7 @@ describe('SettingsSidebar', () => {
   it('groups settings navigation by purpose while preserving the section order', () => {
     const html = renderSettingsSidebar({
       activeSection: 'general',
-      featureSections: [{
-        descriptionKey: 'feature.modelProvider.description',
-        featureId: modelProviderFeature.id,
-        icon: () => createElement('svg', { 'data-settings-icon': 'model-provider' }),
-        location: 'settings',
-        navigationGroupId: 'models-and-services',
-        order: 200,
-        render: () => null,
-        sectionId: 'model-provider',
-        titleKey: 'feature.modelProvider.title',
-      }],
+      pages: basePages,
       onBack: vi.fn(),
       onSelectSection: vi.fn(),
     });
@@ -50,17 +44,15 @@ describe('SettingsSidebar', () => {
   it('places built-in Feature settings in their declared host group', () => {
     const html = renderSettingsSidebar({
       activeSection: 'webdav-sync',
-      featureSections: [{
+      pages: [...basePages, page({
         descriptionKey: 'feature.webdavSync.settings.description',
-        featureId: webDavSyncFeature.id,
         icon: () => createElement('svg', { 'data-settings-icon': 'webdav-sync' }),
         location: 'settings',
         navigationGroupId: 'models-and-services',
         order: 350,
-        render: () => null,
         sectionId: 'webdav-sync',
         titleKey: 'feature.webdavSync.settings.title',
-      }],
+      }, webDavSyncFeature.id)],
       onBack: vi.fn(),
       onSelectSection: vi.fn(),
     });
@@ -74,17 +66,15 @@ describe('SettingsSidebar', () => {
   it('merges Feature settings into the host group by declared order', () => {
     const html = renderSettingsSidebar({
       activeSection: 'network-proxy',
-      featureSections: [{
+      pages: [...basePages, page({
         descriptionKey: 'feature.networkProxy.settings.description',
-        featureId: networkProxyFeature.id,
         icon: () => createElement('svg', { 'data-settings-icon': 'network-proxy' }),
         location: 'settings',
         navigationGroupId: 'models-and-services',
         order: 250,
-        render: () => null,
         sectionId: 'network-proxy',
         titleKey: 'feature.networkProxy.settings.title',
-      }],
+      }, networkProxyFeature.id)],
       onBack: vi.fn(),
       onSelectSection: vi.fn(),
     });
@@ -94,6 +84,53 @@ describe('SettingsSidebar', () => {
     expect(featurePosition).toBeLessThan(html.indexOf('专用模型'));
   });
 });
+
+const basePages: readonly SettingsPageEntryDescriptor[] = [
+  page({
+    location: 'settings',
+    navigationGroupId: 'preferences',
+    order: 100,
+    sectionId: 'general',
+    titleKey: 'settings.section.general',
+  }, 'host'),
+  page({
+    location: 'settings',
+    navigationGroupId: 'preferences',
+    order: 200,
+    sectionId: 'shortcuts',
+    titleKey: 'settings.section.shortcuts',
+  }, 'host'),
+  page({
+    location: 'settings',
+    navigationGroupId: 'models-and-services',
+    order: 200,
+    sectionId: 'model-provider',
+    titleKey: 'feature.modelProvider.title',
+  }, modelProviderFeature.id),
+  page({
+    location: 'settings',
+    navigationGroupId: 'models-and-services',
+    order: 300,
+    sectionId: 'taskModels',
+    titleKey: 'settings.section.taskModels',
+  }, 'host'),
+  page({
+    location: 'settings',
+    navigationGroupId: 'data-and-system',
+    order: 100,
+    sectionId: 'archives',
+    titleKey: 'settings.section.archives',
+  }, 'host'),
+];
+
+function page(metadata: SettingsPageMetadata, featureId: string): SettingsPageEntryDescriptor {
+  return Object.freeze({
+    entryId: `fixture.${metadata.sectionId.toLowerCase()}`,
+    key: `settings/${metadata.sectionId}`,
+    metadata,
+    owner: Object.freeze({ featureId, pluginId: `feature.${featureId}`, scopeId: `fixture:${featureId}` }),
+  });
+}
 
 function renderSettingsSidebar(props: Parameters<typeof SettingsSidebar>[0]): string {
   return renderToStaticMarkup(createElement(

@@ -25,6 +25,11 @@ export type DesktopWorkspaceBrowserPanelInstance = {
   targetIdentity: ChatComposerTargetIdentity;
 };
 
+export type DesktopWorkspacePanelTargetContext = {
+  projectId: string | null;
+  threadId: string | null;
+};
+
 const EMPTY_PANEL_LAYOUT: DesktopWorkspacePanelLayout = {
   bottomPanelSlot: createEmptyPanelSlot(),
   sidePanelExpanded: false,
@@ -36,6 +41,24 @@ export function desktopWorkspacePanelLayout(
   targetIdentity: ChatComposerTargetIdentity,
 ): DesktopWorkspacePanelLayout {
   return layouts[targetIdentity] ?? EMPTY_PANEL_LAYOUT;
+}
+
+export function desktopWorkspacePanelTargetContext(
+  targetIdentity: ChatComposerTargetIdentity,
+  projectIdByThreadId: ReadonlyMap<string, string | undefined>,
+): DesktopWorkspacePanelTargetContext {
+  if (targetIdentity.startsWith('thread:')) {
+    const threadId = targetIdentity.slice('thread:'.length);
+    return {
+      projectId: projectIdByThreadId.get(threadId) ?? null,
+      threadId,
+    };
+  }
+  const projectId = targetIdentity.slice('new-thread-slot:'.length);
+  return {
+    projectId: projectId === 'global' ? null : projectId,
+    threadId: null,
+  };
 }
 
 export function updateDesktopWorkspacePanelLayout(

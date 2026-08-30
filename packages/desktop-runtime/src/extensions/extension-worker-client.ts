@@ -22,11 +22,14 @@ export type ExtensionWorkerRequestContext = {
   permissionProfile?: RuntimePermissionProfile;
   signal?: AbortSignal;
   onOutput?(message: string): void;
+  /** Restricts host calls made while handling a declarative Renderer action. */
+  rendererUiAction?: boolean;
 };
 
 export type ExtensionWorkerReady = {
   tools: ExtensionWorkerTool[];
   events: string[];
+  uiActions: string[];
 };
 
 type PendingRequest = {
@@ -126,7 +129,7 @@ export class ExtensionWorkerClient {
   }
 
   async request(
-    method: 'tool.execute' | 'event.dispatch',
+    method: 'tool.execute' | 'event.dispatch' | 'ui.action',
     params: unknown,
     context: ExtensionWorkerRequestContext,
     timeoutMs: number,
@@ -235,13 +238,19 @@ export class ExtensionWorkerClient {
     if (!record || typeof record.type !== 'string') throw new Error('Extension worker message must be an object.');
     const message = record as ExtensionWorkerToHostMessage;
     if (message.type === 'ready') {
-      if (!Array.isArray(message.tools) || !Array.isArray(message.events)) throw new Error('Invalid extension worker ready message.');
+      if (!Array.isArray(message.tools) || !Array.isArray(message.events) || !Array.isArray(message.uiActions)) {
+        throw new Error('Invalid extension worker ready message.');
+      }
       const tools = message.tools.map(validateWorkerTool);
       const events = [...message.events];
+      const uiActions = message.uiActions.map((actionId) => {
+        if (typeof actionId !== 'string' || !actionId.trim()) throw new Error('Invalid extension worker UI action.');
+        return actionId;
+      });
       const resolve = this.readyResolve;
       this.readyResolve = null;
       this.readyReject = null;
-      resolve?.({ tools, events });
+      resolve?.({ tools, events, uiActions });
       return;
     }
     if (message.type === 'fatal') {

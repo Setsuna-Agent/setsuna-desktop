@@ -6,6 +6,7 @@ import {
   defineRendererFeatureHost,
   defineRendererMessageBundle,
   resolveRendererMessage,
+  type RendererUiRegistrarFactory,
 } from '../../src/renderer/index.js';
 import { FeatureCompositionValidationError } from '../../src/status.js';
 
@@ -32,6 +33,7 @@ describe('Renderer Feature messages', () => {
       required: [],
       optional: [module],
     }).activate({
+      createUiRegistrar: testUiRegistrarFactory,
       hostMessages: {
         'zh-CN': { 'host.title': '宿主' },
         'en-US': { 'host.title': 'Host' },
@@ -66,7 +68,10 @@ describe('Renderer Feature messages', () => {
     const error = await captureError(() => defineRendererFeatureHost({
       required: [],
       optional: modules,
-    }).activate({ hostMessages: { 'en-US': {} } }));
+    }).activate({
+      createUiRegistrar: testUiRegistrarFactory,
+      hostMessages: { 'en-US': {} },
+    }));
 
     expect(error).toBeInstanceOf(FeatureCompositionValidationError);
     expect((error as FeatureCompositionValidationError).issues).toEqual([
@@ -95,3 +100,11 @@ async function captureError(run: () => Promise<unknown>): Promise<unknown> {
     return error;
   }
 }
+
+const testUiRegistrarFactory: RendererUiRegistrarFactory = (owner) => ({
+  owner,
+  single: () => () => undefined,
+  list: () => () => undefined,
+  keyed: () => () => undefined,
+  chain: () => () => undefined,
+});

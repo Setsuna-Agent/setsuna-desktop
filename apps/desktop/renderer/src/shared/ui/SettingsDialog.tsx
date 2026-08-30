@@ -1,4 +1,6 @@
-import type { SettingsDialogProps } from '@setsuna-desktop/feature-core/renderer';
+import type {
+  SettingsDialogProps,
+} from '@setsuna-desktop/renderer-contracts/settings';
 import { Modal } from 'antd';
 import { X } from 'lucide-react';
 

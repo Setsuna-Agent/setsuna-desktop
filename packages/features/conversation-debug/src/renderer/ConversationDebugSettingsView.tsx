@@ -1,7 +1,9 @@
 import type {
   RendererTranslate,
-  SettingsViewUi,
 } from '@setsuna-desktop/feature-core/renderer';
+import type {
+  SettingsViewUi,
+} from '@setsuna-desktop/renderer-contracts/settings';
 import { useSyncExternalStore } from 'react';
 import type { ConversationDebugRendererService } from './service.js';
 

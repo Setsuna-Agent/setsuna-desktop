@@ -118,6 +118,50 @@ describe('file plugin bundle store', () => {
       .rejects.toThrow('must be an .mjs file');
   });
 
+  it('validates declarative Renderer UI during bundle inspection and requires its capability', async () => {
+    const fixture = await createPluginFixture();
+    await addExecutableExtension(fixture.bundleDir);
+    const runtime = await createPluginRuntime(fixture.root);
+    const manifest = await readPluginManifestFixture(fixture.bundleDir);
+    const extension = manifest.extension as Record<string, unknown>;
+    const rendererUi = {
+      schemaVersion: 1,
+      actions: [],
+      contributions: [{
+        id: 'plugin.about',
+        slot: 'renderer.settings.page.extensions',
+        target: 'about',
+        tree: { type: 'text', text: 'Plugin diagnostics' },
+      }],
+    };
+    await patchPluginManifest(fixture.bundleDir, { extension: { ...extension, rendererUi } });
+    await expect(runtime.plugins.inspectPlugin({ path: fixture.bundleDir })).resolves.toMatchObject({
+      extension: { rendererUi },
+    });
+
+    await patchPluginManifest(fixture.bundleDir, {
+      extension: { ...extension, capabilities: ['tools'], rendererUi },
+    });
+    await expect(runtime.plugins.inspectPlugin({ path: fixture.bundleDir }))
+      .rejects.toThrow('requires the ui capability');
+
+    await patchPluginManifest(fixture.bundleDir, {
+      extension: {
+        ...extension,
+        rendererUi: {
+          ...rendererUi,
+          contributions: [{
+            id: 'unsafe.root',
+            slot: 'renderer.app.ready',
+            tree: { type: 'text', text: 'unsafe' },
+          }],
+        },
+      },
+    });
+    await expect(runtime.plugins.inspectPlugin({ path: fixture.bundleDir }))
+      .rejects.toThrow('Slot is not allowed');
+  });
+
   it('requires exact origins for host-managed extension networking', async () => {
     const fixture = await createPluginFixture();
     await addExecutableExtension(fixture.bundleDir);

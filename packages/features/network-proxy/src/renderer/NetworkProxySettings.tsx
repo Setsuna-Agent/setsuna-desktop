@@ -3,11 +3,13 @@ import type {
   DesktopNetworkProxyScope,
   DesktopNetworkProxyServerInput,
   DesktopNetworkProxyServerState,
-} from '@setsuna-desktop/contracts';
+  } from '@setsuna-desktop/contracts';
 import type {
   RendererTranslate,
-  SettingsViewUi,
 } from '@setsuna-desktop/feature-core/renderer';
+import type {
+  SettingsViewUi,
+} from '@setsuna-desktop/renderer-contracts/settings';
 import { Plus, Server } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { NetworkProxyRendererView } from './context.js';

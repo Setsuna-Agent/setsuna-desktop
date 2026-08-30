@@ -17,7 +17,7 @@ Feature Core 是第一方纵向 Feature 的静态组合内核。它解决“谁�
 | `src/operation.ts` / `codec.ts` | typed operation、输入输出 codec 与稳定失败 envelope |
 | `src/settings.ts` | Feature settings document、revision、migration、public/secret projection |
 | `src/runtime/` | runtime route、settings、event projection 与 runtime FeatureHost |
-| `src/renderer/` | renderer FeatureHost、messages、typed transport、view contribution catalog |
+| `src/renderer/` | renderer FeatureHost、messages、typed transport 与通用 Slot contract |
 | `src/main/` | main FeatureHost 与 native Capability 组合 |
 | `src/preload/` | preload bridge key 的静态组合与冲突校验 |
 
@@ -93,9 +93,9 @@ Feature 私有持久状态使用 `feature.event` envelope。Core 只维护全局
 
 ## Renderer contribution
 
-Renderer setup 可以静态返回 settings view/extension、tool-result view、composer status view 和其他已有 catalog contribution。Feature 同时拥有自己的 typed client/controller、messages 和 scoped styles。
+Renderer Feature setup 通过 scope-bound `context.ui` 向 `single/list/keyed/chain` typed Slot 注册 contribution。Settings page/extension、Chat composer status、tool-result resolver 和 Shell/Workspace surface 的具体 contract 位于 `@setsuna-desktop/renderer-contracts`，不回流到通用 Feature Core。Feature 同时拥有自己的 typed client/controller、messages 和 scoped styles。
 
-宿主提供标准 UI primitives、导航位置和明确 host props；Feature 不获取整个 App store，也不能 raw `fetch` 或访问任意 `window.setsunaDesktop`。Contribution 在 renderer host 激活阶段一次性形成只读 catalog，不允许 React 组件挂载时动态注册。
+宿主提供标准 UI primitives、导航位置和明确 host props；Feature 不获取整个 App store，也不能 raw `fetch` 或访问任意 `window.setsunaDesktop`。Renderer FeatureHost 必须显式注入 registrar factory，不存在把 UI 注册静默吞掉的 noop 模式。Registrar 自动把 disposer 记入当前 `FeatureScope`，启动时由 Renderer Plugin Runtime 一次原子 commit；不允许 React component/hook/effect 挂载时注册。`keyed` owner 用 `requiredKeys` 声明必备 key；visual declaration fallback 只接收 Slot props，不能声明或访问 child outlets。
 
 ## Main 与 preload contribution
 

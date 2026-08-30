@@ -5,6 +5,7 @@ import {
   rendererFeatureEventFeedCapability,
   rendererFeatureOperationTransportCapability,
 } from '@setsuna-desktop/feature-core/renderer';
+import { registerChatToolResult } from '@setsuna-desktop/renderer-contracts/chat';
 import {
   collaborationFeature,
   collaborationLegacySpawnResultCodec,
@@ -34,8 +35,7 @@ export const collaborationRendererFeature = defineRendererFeature({
       scope: context.scope,
     });
     context.provide(declareCapabilityProvider(collaborationRendererStateCapability), service);
-    return {
-      toolResultViews: [{
+    registerChatToolResult(context.ui, {
         id: 'collaboration.spawn-result-view',
         resultKind: 'collaboration.spawn-result',
         major: 1,
@@ -46,7 +46,6 @@ export const collaborationRendererFeature = defineRendererFeature({
         },
         presentation: 'replace',
         render: CollaborationSpawnResultView,
-      }],
-    };
+    });
   },
 });

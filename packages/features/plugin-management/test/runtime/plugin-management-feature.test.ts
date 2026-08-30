@@ -1,4 +1,5 @@
 import { createFeatureScope } from '@setsuna-desktop/feature-core/scope';
+import { FeatureOperationCancelledError } from '@setsuna-desktop/feature-core/status';
 import { describe, expect, it, vi } from 'vitest';
 import {
   installLocalPlugin,
@@ -7,6 +8,7 @@ import {
   readPluginExtensionStatuses,
   readPluginHooks,
   readPluginManagementSnapshot,
+  runInstalledPluginRendererUiAction,
   setPluginHookState,
   updateMarketplacePlugin,
   type PluginManagementRuntimeHost,
@@ -99,6 +101,66 @@ describe('plugin management runtime feature', () => {
       retryable: false,
     });
 
+    await scope.finishDispose();
+  });
+
+  it('forwards route cancellation to Renderer UI actions without converting it to a plugin failure', async () => {
+    const controller = new AbortController();
+    const cancellation = new FeatureOperationCancelledError('Feature scope is draining.');
+    let notifyStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      notifyStarted = resolve;
+    });
+    const runRendererUiAction = vi.fn((_input, signal?: AbortSignal) => (
+      new Promise<never>((_resolve, reject) => {
+        notifyStarted();
+        const cancel = () => reject(signal?.reason);
+        if (signal?.aborted) cancel();
+        else signal?.addEventListener('abort', cancel, { once: true });
+      })
+    ));
+    const routes = new Map<string, (
+      input: unknown,
+      signal: AbortSignal,
+    ) => unknown | PromiseLike<unknown>>();
+    const scope = createFeatureScope({
+      featureId: pluginManagementFeature.id,
+      process: 'runtime',
+      scopeId: 'plugin-management-action-cancellation-test',
+    });
+
+    await pluginManagementRuntimeFeature.setup({
+      dependencies: {
+        host: { runRendererUiAction } as unknown as PluginManagementRuntimeHost,
+        routes: {
+          register(_scope, operation, handler) {
+            routes.set(operation.id, (input, signal) => handler(input as never, { signal }));
+            return Object.freeze({ dispose() {} });
+          },
+        },
+      },
+      health: { setCondition() {} },
+      provide() {},
+      scope: scope.scope,
+    });
+
+    const input = {
+      actionId: 'profile.save',
+      context: {
+        contributionId: 'profile.settings',
+        surface: 'renderer.settings.page.extensions',
+      },
+      pluginId: 'worker-demo',
+      values: { displayName: 'Setsuna' },
+    } as const;
+    const action = Promise.resolve(
+      routes.get(runInstalledPluginRendererUiAction.id)?.(input, controller.signal),
+    );
+    await started;
+    controller.abort(cancellation);
+
+    await expect(action).rejects.toBe(cancellation);
+    expect(runRendererUiAction).toHaveBeenCalledWith(input, controller.signal);
     await scope.finishDispose();
   });
 });

@@ -1,5 +1,6 @@
 import { requiredCapability } from '@setsuna-desktop/feature-core/capability';
 import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
+import { FeatureOperationCancelledError } from '@setsuna-desktop/feature-core/status';
 import {
   defineRuntimeDependencies,
   defineRuntimeFeature,
@@ -18,6 +19,7 @@ import {
   readPluginManagementSnapshot,
   readPluginHooks,
   removeInstalledPlugin,
+  runInstalledPluginRendererUiAction,
   setInstalledPluginExtensionTrust,
   setPluginHookState,
   type PluginManagementRuntimeHost,
@@ -80,6 +82,12 @@ export const pluginManagementRuntimeFeature = defineRuntimeFeature({
     routes.register(context.scope, removeInstalledPlugin, (input) => (
       preservePluginOperationError(() => host.remove(input))
     ));
+    routes.register(context.scope, runInstalledPluginRendererUiAction, (input, operation) => (
+      preservePluginOperationError(
+        () => host.runRendererUiAction(input, operation.signal),
+        operation.signal,
+      )
+    ));
     routes.register(context.scope, setInstalledPluginExtensionTrust, (input) => (
       preservePluginOperationError(() => host.setExtensionTrust(input))
     ));
@@ -124,10 +132,18 @@ function pluginHookMutationResult(
   });
 }
 
-async function preservePluginOperationError<T>(operation: () => Promise<T>): Promise<T> {
+async function preservePluginOperationError<T>(
+  operation: () => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
   try {
     return await operation();
   } catch (error) {
+    if (signal?.aborted) {
+      throw signal.reason instanceof Error
+        ? signal.reason
+        : new FeatureOperationCancelledError();
+    }
     if (error instanceof FeatureOperationFailure) throw error;
     throw new FeatureOperationFailure({
       code: 'PLUGIN_OPERATION_FAILED',

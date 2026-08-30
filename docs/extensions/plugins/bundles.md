@@ -84,6 +84,58 @@ my-plugin/
 - `hooks` 使用现有 Hook 事件与 matcher。`id`、`name`、`description`、触发事件和 matcher 会安全投影到插件详情页；命令和本地路径不会发送给 renderer。`{{pluginRoot}}` 安装时替换为私有安装目录，并按当前平台安全引用。
 - `resources` 必须显式声明。Agent 只能读取不超过 8 MiB 的受支持图片，或不超过 512 KiB 的 UTF-8 文本。
 
+### 声明式 Renderer UI
+
+需要在 Setsuna 宿主界面中显示少量配置或状态时，Bundle 可以在 manifest 的 `extension` 对象内增加 `rendererUi`。它必须同时声明 `extension.capabilities` 中的 `ui`；UI tree 只是受限 JSON，实际 React component、表单状态、审批与成功/失败提示均由宿主拥有。
+
+```json
+{
+  "extension": {
+    "apiVersion": 1,
+    "runtime": "node-worker",
+    "entry": "extension/entry.mjs",
+    "capabilities": ["ui", "state"],
+    "rendererUi": {
+      "schemaVersion": 1,
+      "actions": [
+        {
+          "id": "save-preference",
+          "approval": {
+            "title": "保存插件设置",
+            "message": "允许此插件保存当前设置吗？"
+          }
+        }
+      ],
+      "contributions": [
+        {
+          "id": "preferences",
+          "slot": "renderer.settings.page.extensions",
+          "target": "general",
+          "order": 500,
+          "tree": {
+            "type": "stack",
+            "children": [
+              { "type": "field", "name": "label", "label": "显示名称", "maxLength": 80 },
+              { "type": "button", "actionId": "save-preference", "label": "保存", "variant": "primary" }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+首版固定边界：
+
+- Slot 只允许 `renderer.settings.page.extensions` 和 `renderer.chat.composer.status`；Settings target 只允许 `general/about`，Chat 区域不允许 `field/select`。
+- node 只允许 `stack/text/badge/notice/button/field/select`，未知字段直接拒绝，因此不存在 HTML、CSS、`className`、script、函数 handler 或任意 URL 入口。
+- 单个 manifest 最多 16 个 contribution、32 个 action、128 个 node、24 个字段，树深最多 8 层；文本、选项和提交值也都有独立上限。
+- UI 只在安装记录与当前 Bundle hash 仍处于 `trusted` 时挂载；更新、卸载或撤销信任会通过 Renderer transaction 替换/撤销整个 Plugin UI。
+- Button 只能引用 manifest 中的 action ID。宿主先展示 `approval` 文案，再携带当前 `contributionId` 通过 Plugin Management typed operation 调用 worker 的 `api.onUiAction`；Runtime 只按该 contribution 校验字段，Plugin 返回的 markup 或错误文本不会进入 Renderer。
+
+完整所有权与安全决策见 [Renderer Plugin Runtime](../../designs/current/renderer-plugin-runtime.md)，worker 动作 API 见 [可执行扩展 API v1](extensions.md#apionuiactionactionid-handler)。
+
 ### Skill 自动激活
 
 任意 Plugin Skill 都可以在 `SKILL.md` frontmatter 中声明自动激活词，不依赖插件 ID 或内置白名单：

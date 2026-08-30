@@ -1,7 +1,9 @@
 import type {
   RendererTranslate,
-  SettingsViewUi,
 } from '@setsuna-desktop/feature-core/renderer';
+import type {
+  SettingsViewUi,
+} from '@setsuna-desktop/renderer-contracts/settings';
 import { Popconfirm } from 'antd';
 import { Info, Monitor, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';

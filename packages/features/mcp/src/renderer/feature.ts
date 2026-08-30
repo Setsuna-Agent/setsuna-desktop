@@ -29,6 +29,5 @@ export const mcpRendererFeature = defineRendererFeature({
       client: createMcpRendererClient(context.dependencies.transport),
       scope: context.scope,
     }));
-    return {};
   },
 });

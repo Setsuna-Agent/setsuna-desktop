@@ -1,9 +1,26 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
+import {
+  shellOverlaySlot,
+  shellRouteSlot,
+  shellSidebarSlot,
+  shellTopbarActionsSlot,
+  shellTopbarTitleSlot,
+  shellWorkspaceToolbarSlot,
+} from '@setsuna-desktop/renderer-contracts/shell';
+import {
+  BROWSER_HOME_URL,
+  type BrowserReloadMode,
+} from '@setsuna-desktop/feature-browser/contracts';
 import type { SettingsSectionId } from '../../features/settings/settings-types.js';
 import { WorkspaceAppsFeatureLauncher } from '../../composition/workspace-apps-feature-adapter.js';
 import type { DesktopAppController } from '../controller/useDesktopAppController.js';
 import type { ConversationOverviewVisibility } from '../types.js';
-import { useAppKeyboardShortcuts, type AppKeyboardShortcutHandlers } from '../controller/useAppKeyboardShortcuts.js';
+import {
+  browserShortcutTabId,
+  useAppKeyboardShortcuts,
+  type AppKeyboardShortcutEvent,
+  type AppKeyboardShortcutHandlers,
+} from '../controller/useAppKeyboardShortcuts.js';
 import { useThreadNavigationHistory } from '../controller/useThreadNavigationHistory.js';
 import { AppOverlays } from './AppOverlays.js';
 import { AppProjectToolbarTitle } from './AppProjectToolbarTitle.js';
@@ -15,8 +32,13 @@ import { AppWorkspaceToolbar } from './AppWorkspaceToolbar.js';
 import { RuntimeErrorNotice, runtimeErrorNoticeMessage } from './RuntimeErrorNotice.js';
 import { ShellFrame } from './ShellFrame.js';
 import { useSecondaryRoutePrefetch } from './useSecondaryRoutePrefetch.js';
+import {
+  RendererOwnedSingleSlot,
+  useRendererOwnedSlots,
+} from '../../kernel/renderer-plugins/RendererKernelProvider.js';
 
 export function AppReadyLayout({ controller }: { controller: DesktopAppController }) {
+  const slots = useRendererOwnedSlots();
   const {
     activeProject,
     activeProjectId,
@@ -121,6 +143,17 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     }
     void workspacePanels.loadReviewState();
   }, [activeWorkspace, workspacePanels]);
+  const activeBrowserPanelId = workspacePanels.browserPanelInstances.find((instance) => (
+    instance.active && instance.panel.browser?.url !== BROWSER_HOME_URL
+  ))?.panel.id ?? null;
+  const reloadBrowserPanel = useCallback((
+    mode: BrowserReloadMode,
+    event: AppKeyboardShortcutEvent,
+  ) => {
+    const browserPanelId = browserShortcutTabId(event, activeBrowserPanelId);
+    if (!browserPanelId) return;
+    void window.setsunaDesktop?.browser.reloadTab(browserPanelId, mode).catch(() => undefined);
+  }, [activeBrowserPanelId]);
   const windowMenuActions = useMemo(
     () => ({
       onNewChat: () => {
@@ -217,7 +250,16 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       enabled: activeView === 'chat' && workspacePanels.conversationDebugEnabled,
       execute: () => workspacePanels.openDesktopPanel('side', 'conversation-debug'),
     },
+    'browser.reload': {
+      enabled: activeView === 'chat' && Boolean(activeBrowserPanelId),
+      execute: (event) => reloadBrowserPanel('normal', event),
+    },
+    'browser.hardReload': {
+      enabled: activeView === 'chat' && Boolean(activeBrowserPanelId),
+      execute: (event) => reloadBrowserPanel('hard', event),
+    },
   }), [
+    activeBrowserPanelId,
     activeView,
     activeWorkspace,
     chatActions,
@@ -227,6 +269,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     openCapabilities,
     openFilesPanel,
     openReviewPanel,
+    reloadBrowserPanel,
     runtime.activeTurnId,
     runtime.currentThread,
     runtimeActivityOpen,
@@ -261,53 +304,79 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
           onGoForward={threadHistory.goForward}
         />
       ) : undefined}
-      toolbarTitle={activeView === 'chat' && activeProject ? (
-        <AppProjectToolbarTitle
-          key={activeProject.id}
-          project={activeProject}
-          title={toolbarTitle ?? activeProject.name}
-          archiveThreadDisabled={Boolean(currentThread?.activeTurnId)}
-          onArchiveThread={currentThread
-            ? () => void navigation.archiveThread(currentThread)
-            : undefined}
-          onRenameThread={currentThread
-            ? () => navigation.openRenameThread(currentThread)
-            : undefined}
+      toolbarTitle={(
+        <RendererOwnedSingleSlot
+          slot={shellTopbarTitleSlot}
+          props={{
+            renderDefault: () => activeView === 'chat' && activeProject ? (
+              <AppProjectToolbarTitle
+                key={activeProject.id}
+                project={activeProject}
+                title={toolbarTitle ?? activeProject.name}
+                archiveThreadDisabled={Boolean(currentThread?.activeTurnId)}
+                onArchiveThread={currentThread
+                  ? () => void navigation.archiveThread(currentThread)
+                  : undefined}
+                onRenameThread={currentThread
+                  ? () => navigation.openRenameThread(currentThread)
+                  : undefined}
+              />
+            ) : toolbarTitle,
+          }}
         />
-      ) : toolbarTitle}
-      workspaceToolbar={activeView === 'chat' ? <AppWorkspaceToolbar projectWorkspace={projectWorkspace} workspacePanels={workspacePanels} /> : undefined}
+      )}
+      workspaceToolbar={(
+        <RendererOwnedSingleSlot
+          slot={shellWorkspaceToolbarSlot}
+          props={{
+            renderDefault: () => activeView === 'chat'
+              ? <AppWorkspaceToolbar projectWorkspace={projectWorkspace} workspacePanels={workspacePanels} />
+              : undefined,
+          }}
+        />
+      )}
       menuActions={windowMenuActions}
       className={shellClassName}
-      actions={activeView === 'chat' ? (
-        <>
-          {activeWorkspace?.path ? (
-            <WorkspaceAppsFeatureLauncher
-              selectedWorkspaceApp={workspacePanels.selectedWorkspaceApp}
-              workspaceAppMenuOpen={workspacePanels.workspaceAppMenuOpen}
-              workspaceApps={workspacePanels.workspaceApps}
-              onOpenCurrentWorkspaceApp={() => {
-                workspacePanels.closeWorkspaceMenus();
-                void workspacePanels.openSelectedWorkspaceApp();
-              }}
-              onSelectWorkspaceApp={workspacePanels.selectWorkspaceApp}
-              onToggleWorkspaceAppMenu={workspacePanels.toggleWorkspaceAppMenu}
-            />
-          ) : null}
-          <AppTopbarActions
-            activeView={activeView}
-            bottomPanelVisible={workspacePanels.bottomPanelVisible}
-            bottomTerminalPanelActive={workspacePanels.bottomTerminalPanelActive}
-            conversationOverviewAvailable={Boolean(runtime.currentThread)}
-            conversationOverviewVisible={conversationOverviewRendered}
-            sidePanelVisible={workspacePanels.sidePanelVisible}
-            onToggleConversationOverview={handleToggleConversationOverview}
-            onToggleSidePanel={workspacePanels.toggleSidePanel}
-            onToggleBottomTerminal={workspacePanels.toggleBottomTerminal}
-          />
-        </>
-      ) : undefined}
+      actions={(
+        <RendererOwnedSingleSlot
+          slot={shellTopbarActionsSlot}
+          props={{
+            renderDefault: () => activeView === 'chat' ? (
+              <>
+                {activeWorkspace?.path ? (
+                  <WorkspaceAppsFeatureLauncher
+                    selectedWorkspaceApp={workspacePanels.selectedWorkspaceApp}
+                    workspaceAppMenuOpen={workspacePanels.workspaceAppMenuOpen}
+                    workspaceApps={workspacePanels.workspaceApps}
+                    onOpenCurrentWorkspaceApp={() => {
+                      workspacePanels.closeWorkspaceMenus();
+                      void workspacePanels.openSelectedWorkspaceApp();
+                    }}
+                    onSelectWorkspaceApp={workspacePanels.selectWorkspaceApp}
+                    onToggleWorkspaceAppMenu={workspacePanels.toggleWorkspaceAppMenu}
+                  />
+                ) : null}
+                <AppTopbarActions
+                  activeView={activeView}
+                  bottomPanelVisible={workspacePanels.bottomPanelVisible}
+                  bottomTerminalPanelActive={workspacePanels.bottomTerminalPanelActive}
+                  conversationOverviewAvailable={Boolean(runtime.currentThread)}
+                  conversationOverviewVisible={conversationOverviewRendered}
+                  sidePanelVisible={workspacePanels.sidePanelVisible}
+                  onToggleConversationOverview={handleToggleConversationOverview}
+                  onToggleSidePanel={workspacePanels.toggleSidePanel}
+                  onToggleBottomTerminal={workspacePanels.toggleBottomTerminal}
+                />
+              </>
+            ) : undefined,
+          }}
+        />
+      )}
     >
-      <AppSidebarSurface
+      <RendererOwnedSingleSlot
+        slot={shellSidebarSlot}
+        props={{
+          renderDefault: () => <AppSidebarSurface
         activeProjectId={activeProjectId}
         activeThreadId={runtime.currentThread?.id}
         runningThreadId={(runtime.activeTurnId || runtime.currentThread?.activeTurnId) ? runtime.currentThread?.id ?? null : null}
@@ -328,9 +397,14 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         onResizeStep={handleSidebarResizeStep}
         onResizeStart={handleSidebarResizeStart}
         runtimeActivityTriggerRef={runtimeActivityTriggerRef}
+          />,
+        }}
       />
 
-      <AppRouteContent
+      {slots.keyed(shellRouteSlot, activeView, {
+        routeId: activeView,
+        renderDefault: () => (
+          <AppRouteContent
         activeProject={activeProject}
         activeWorkspace={activeWorkspace}
         activeView={activeView}
@@ -365,24 +439,33 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         onWorkspaceResizeStep={handleWorkspaceResizeStep}
         workspaceMaxWidth={workspaceMaxWidth}
         workspaceMinWidth={workspaceMinWidth}
-        workspaceWidth={workspaceWidth}
-      />
+            workspaceWidth={workspaceWidth}
+          />
+        ),
+      })}
 
       {visibleRuntimeError ? (
         <RuntimeErrorNotice message={visibleRuntimeError} onDismiss={() => runtime.setError(null)} />
       ) : null}
 
-      <AppOverlays
-        client={runtime.client}
-        navigation={navigation}
-        projects={runtime.projects}
-        runtimeActivityOpen={runtimeActivityOpen}
-        runtimeActivityTriggerRef={runtimeActivityTriggerRef}
-        searchTriggerRef={searchTriggerRef}
-        threads={runtime.threads}
-        onActivitiesChanged={runtime.reloadThreads}
-        onCloseRuntimeActivity={() => setRuntimeActivityOpen(false)}
-        onOpenThread={navigation.selectThread}
+      <RendererOwnedSingleSlot
+        slot={shellOverlaySlot}
+        props={{
+          renderDefault: () => (
+            <AppOverlays
+              client={runtime.client}
+              navigation={navigation}
+              projects={runtime.projects}
+              runtimeActivityOpen={runtimeActivityOpen}
+              runtimeActivityTriggerRef={runtimeActivityTriggerRef}
+              searchTriggerRef={searchTriggerRef}
+              threads={runtime.threads}
+              onActivitiesChanged={runtime.reloadThreads}
+              onCloseRuntimeActivity={() => setRuntimeActivityOpen(false)}
+              onOpenThread={navigation.selectThread}
+            />
+          ),
+        }}
       />
     </ShellFrame>
   );

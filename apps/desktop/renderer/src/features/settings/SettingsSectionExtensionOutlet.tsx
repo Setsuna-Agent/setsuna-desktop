@@ -1,9 +1,14 @@
-import type {
-  RegisteredSettingsSectionExtension,
-  RendererTranslate,
-  SettingsViewUi,
-} from '@setsuna-desktop/feature-core/renderer';
+import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
+import {
+  settingsPageExtensionSlot,
+  type SettingsPageExtensionEntryDescriptor,
+  type SettingsViewUi,
+} from '@setsuna-desktop/renderer-contracts/settings';
 import { useState, type ReactNode } from 'react';
+import {
+  RendererOwnedKeyedSlot,
+  useRendererOwnedKeyedEntries,
+} from '../../kernel/renderer-plugins/RendererKernelProvider.js';
 
 type ActiveSubpage = Readonly<{
   extensionId: string;
@@ -18,33 +23,41 @@ type ActiveSubpage = Readonly<{
  */
 export function SettingsSectionExtensionOutlet({
   children,
-  extensions,
   sectionId,
   trailingContent,
   translate,
   ui,
 }: Readonly<{
   children: ReactNode;
-  extensions: readonly RegisteredSettingsSectionExtension[];
   sectionId: string;
   trailingContent?: ReactNode;
   translate: RendererTranslate;
   ui: SettingsViewUi;
 }>) {
+  const extensions = useRendererOwnedKeyedEntries(settingsPageExtensionSlot)
+    .filter((entry) => entry.metadata.targetSectionId === sectionId)
+    .sort(compareExtensions);
   const [active, setActive] = useState<ActiveSubpage | null>(null);
   const activeExtension = active
-    ? extensions.find((extension) => extension.id === active.extensionId)
+    ? extensions.find((extension) => extension.metadata.id === active.extensionId)
     : undefined;
-  const activeSubpage = activeExtension?.subpages?.find((subpage) => subpage.id === active?.subpageId);
+  const activeSubpage = activeExtension?.metadata.subpageIds.includes(active?.subpageId ?? '');
 
-  if (activeSubpage) {
-    const Subpage = activeSubpage.render;
+  if (activeExtension && activeSubpage && active) {
     return (
-      <Subpage
-        sectionId={sectionId}
-        translate={translate}
-        ui={ui}
-        onBack={() => setActive(null)}
+      <RendererOwnedKeyedSlot
+        entryKey={activeExtension.key}
+        slot={settingsPageExtensionSlot}
+        props={{
+          mode: {
+            kind: 'subpage',
+            onBack: () => setActive(null),
+            subpageId: active.subpageId,
+          },
+          sectionId,
+          translate,
+          ui,
+        }}
       />
     );
   }
@@ -55,18 +68,24 @@ export function SettingsSectionExtensionOutlet({
       {extensions.length ? (
         <div className="chat-user-settings__section-extensions">
           {extensions.map((extension) => {
-            const Extension = extension.render;
             return (
-              <Extension
-                key={`${extension.featureId}:${extension.id}`}
-                sectionId={extension.targetSectionId}
-                translate={translate}
-                ui={ui}
-                openSubpage={(subpageId) => {
-                  if (!extension.subpages?.some((subpage) => subpage.id === subpageId)) {
-                    throw new Error(`Unknown settings subpage: ${extension.id}:${subpageId}`);
-                  }
-                  setActive({ extensionId: extension.id, subpageId });
+              <RendererOwnedKeyedSlot
+                key={extension.entryId}
+                entryKey={extension.key}
+                slot={settingsPageExtensionSlot}
+                props={{
+                  mode: {
+                    kind: 'section',
+                    openSubpage: (subpageId) => {
+                      if (!extension.metadata.subpageIds.includes(subpageId)) {
+                        throw new Error(`Unknown settings subpage: ${extension.metadata.id}:${subpageId}`);
+                      }
+                      setActive({ extensionId: extension.metadata.id, subpageId });
+                    },
+                  },
+                  sectionId,
+                  translate,
+                  ui,
                 }}
               />
             );
@@ -76,4 +95,11 @@ export function SettingsSectionExtensionOutlet({
       {trailingContent}
     </>
   );
+}
+
+function compareExtensions(
+  left: SettingsPageExtensionEntryDescriptor,
+  right: SettingsPageExtensionEntryDescriptor,
+): number {
+  return left.metadata.order - right.metadata.order || left.entryId.localeCompare(right.entryId);
 }

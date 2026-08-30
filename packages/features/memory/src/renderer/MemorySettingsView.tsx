@@ -1,7 +1,9 @@
 import type {
   RendererTranslate,
-  SettingsViewUi,
 } from '@setsuna-desktop/feature-core/renderer';
+import type {
+  SettingsViewUi,
+} from '@setsuna-desktop/renderer-contracts/settings';
 import { ArrowLeft, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import type {

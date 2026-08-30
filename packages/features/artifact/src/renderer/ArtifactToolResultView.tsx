@@ -1,4 +1,4 @@
-import type { ToolResultViewProps } from '@setsuna-desktop/feature-core/renderer';
+import type { ChatToolResultViewProps } from '@setsuna-desktop/renderer-contracts/chat';
 import { Button, Dropdown, type MenuProps } from 'antd';
 import { ChevronDown, ExternalLink, Globe2 } from 'lucide-react';
 import { useState } from 'react';
@@ -13,7 +13,7 @@ export function ArtifactToolResultView({
   host,
   payload,
   translate,
-}: ToolResultViewProps<RuntimeArtifact> & Readonly<{ host: ArtifactRendererHost }>) {
+}: ChatToolResultViewProps<RuntimeArtifact> & Readonly<{ host: ArtifactRendererHost }>) {
   const onOpenBrowser = useArtifactBrowserNavigation();
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);

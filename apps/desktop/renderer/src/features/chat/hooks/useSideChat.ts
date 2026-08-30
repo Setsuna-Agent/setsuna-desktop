@@ -16,7 +16,7 @@ import {
 } from '../../../services/runtime-client/runtimeThreadState.js';
 import { useIdentityRequestGuard } from '../../../shared/hooks/useIdentityRequestGuard.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
-import { useRendererFeatureViews } from '../../../composition/feature-view-registries.js';
+import { useRendererFeatureEvents } from '../../../composition/renderer-feature-events-context.js';
 import { useSideConversationFeatureService } from '../../../composition/SideConversationFeatureBoundary.js';
 import { useReviewFeatureService } from '../../../composition/ReviewFeatureBoundary.js';
 import { startThreadReview } from '../../workspace/hooks/startThreadReview.js';
@@ -44,7 +44,7 @@ export function useSideChat({
   setError,
 }: SideChatOptions) {
   const { locale, t } = useI18n();
-  const featureViews = useRendererFeatureViews();
+  const featureEvents = useRendererFeatureEvents();
   const sideConversationService = useSideConversationFeatureService();
   const review = useReviewFeatureService();
   const [currentThread, setCurrentThreadState] = useState<RuntimeThread | null>(null);
@@ -122,7 +122,7 @@ export function useSideChat({
 
       if (projection.resynced) {
         if (projection.thread) {
-          featureViews.events.resync(projection.thread.id, projection.thread.lastSeq);
+          featureEvents.resync(projection.thread.id, projection.thread.lastSeq);
         }
         terminalTurnIdsRef.current.clear();
         setActiveTurnId(activeTurnIdFromThreadSnapshot(
@@ -132,7 +132,7 @@ export function useSideChat({
         void reloadThreads();
       }
 
-      for (const event of projection.acceptedEvents) featureViews.events.accept(event);
+      for (const event of projection.acceptedEvents) featureEvents.accept(event);
       const coreEvents = projection.acceptedEvents.filter(isCoreRuntimeEvent);
       const activeTurnEvents = coreEvents.filter((event) => (
         event.type === 'turn.started' || isTerminalSideChatEvent(event)
@@ -154,7 +154,7 @@ export function useSideChat({
         if (event.type === 'runtime.error') setError(event.payload.message);
       }
     });
-  }, [client, featureViews.events, reloadThreads, setError, threadId]);
+  }, [client, featureEvents, reloadThreads, setError, threadId]);
 
   useEffect(() => {
     if (!effectiveActiveTurnId || !threadId) return undefined;

@@ -1,7 +1,9 @@
 import type {
   RendererTranslate,
-  SettingsViewUi,
 } from '@setsuna-desktop/feature-core/renderer';
+import type {
+  SettingsViewUi,
+} from '@setsuna-desktop/renderer-contracts/settings';
 import { networkProxyMessages } from '../../src/renderer/messages.js';
 
 const Button: SettingsViewUi['Button'] = ({ children, icon, ...props }) => (

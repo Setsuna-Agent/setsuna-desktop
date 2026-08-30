@@ -1,5 +1,5 @@
 import { defineRuntimeCodec } from '@setsuna-desktop/feature-core/codec';
-import type { ToolResultViewProps } from '@setsuna-desktop/feature-core/renderer';
+import type { ChatToolResultViewProps } from '@setsuna-desktop/renderer-contracts/chat';
 
 export type ImageGenerationToolResultPayload = Readonly<{
   imageCount: number;
@@ -30,7 +30,7 @@ export const imageGenerationToolResultPayloadCodec = defineRuntimeCodec<ImageGen
 export function ImageGenerationToolResultView({
   payload,
   translate,
-}: ToolResultViewProps<ImageGenerationToolResultPayload>) {
+}: ChatToolResultViewProps<ImageGenerationToolResultPayload>) {
   return (
     <div data-feature-id="image-generation" className="feature-image-generation-result">
       <strong>{translate('feature.imageGeneration.result.generated', { count: payload.imageCount })}</strong>

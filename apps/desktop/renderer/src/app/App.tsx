@@ -1,4 +1,5 @@
 import { Component, useCallback, useEffect, type ErrorInfo, type ReactNode } from 'react';
+import { appReadySlot } from '@setsuna-desktop/renderer-contracts/shell';
 import { CollaborationFeatureNavigationBoundary } from '../composition/CollaborationFeatureBoundary.js';
 import { ReviewFeatureHostBoundary } from '../composition/review-feature-adapter.js';
 import { Button, EmptyState, StatusBadge } from '../shared/ui/primitives.js';
@@ -9,6 +10,7 @@ import { DesktopDataRootGate } from './layout/DesktopDataRootGate.js';
 import { ShellFrame } from './layout/ShellFrame.js';
 import { DesktopDataRootProvider } from './providers/DesktopDataRootProvider.js';
 import { ToastProvider } from './providers/ToastProvider.js';
+import { RendererRootSingleSlot } from '../kernel/renderer-plugins/RendererKernelProvider.js';
 
 export function App() {
   // 沙箱化的浏览器预览不会注入桌面 preload bridge；误打开 renderer 开发地址时只显示中性底色。
@@ -64,7 +66,12 @@ function AppContent() {
     );
   }
 
-  return <ReadyAppContent controller={controller} />;
+  return (
+    <RendererRootSingleSlot
+      slot={appReadySlot}
+      props={{ renderDefault: () => <ReadyAppContent controller={controller} /> }}
+    />
+  );
 }
 
 function ReadyAppContent({ controller }: Readonly<{

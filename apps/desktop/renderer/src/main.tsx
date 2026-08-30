@@ -12,20 +12,11 @@ import 'katex/dist/katex.min.css';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './app/App.js';
-import { CollaborationFeatureServiceBoundary } from './composition/CollaborationFeatureBoundary.js';
-import { ConversationDebugFeatureServiceBoundary } from './composition/ConversationDebugFeatureBoundary.js';
-import { NetworkProxyFeatureServiceBoundary } from './composition/NetworkProxyFeatureBoundary.js';
-import { ModelProviderFeatureServiceBoundary } from './composition/ModelProviderFeatureBoundary.js';
-import { McpFeatureServiceBoundary } from './composition/McpFeatureBoundary.js';
-import { PluginManagementFeatureServiceBoundary } from './composition/PluginManagementFeatureBoundary.js';
-import { RuntimeActivityFeatureServiceBoundary } from './composition/RuntimeActivityFeatureBoundary.js';
-import { ReviewFeatureServiceBoundary } from './composition/ReviewFeatureBoundary.js';
-import { SideConversationFeatureServiceBoundary } from './composition/SideConversationFeatureBoundary.js';
-import { SkillsFeatureServiceBoundary } from './composition/SkillsFeatureBoundary.js';
-import { UpdaterFeatureServiceBoundary } from './composition/UpdaterFeatureBoundary.js';
-import { UsageFeatureServiceBoundary } from './composition/UsageFeatureBoundary.js';
+import { renderRendererBootstrapFatalSurface } from './app/RendererBootstrapFatalSurface.js';
+import { BuiltinRendererFeatureServicesBoundary } from './composition/BuiltinRendererFeatureServicesBoundary.js';
 import { activateBuiltinRendererFeatures } from './composition/renderer-feature-composition.js';
-import { RendererFeatureViewsProvider } from './composition/feature-view-registries.js';
+import { RendererFeatureEventsProvider } from './composition/renderer-feature-events-context.js';
+import { RendererKernelProvider } from './kernel/renderer-plugins/RendererKernelProvider.js';
 import { CodeAppearanceProvider } from './shared/code/CodeAppearanceProvider.js';
 import { applyDesktopPlatformAttribute } from './shared/lib/desktopPlatform.js';
 import { I18nProvider, initializeLocalePreference } from './shared/i18n/I18nProvider.js';
@@ -53,6 +44,7 @@ import './features/workspace/styles/bottom-panel.css';
 import './features/chat/styles/chat.css';
 import './features/chat/styles/chat-timeline-divider.css';
 import './shared/styles/loading-indicators.css';
+import './kernel/declarative-plugin-ui/declarative-plugin-ui.css';
 import './features/chat/styles/markdown.css';
 import './features/chat/styles/chat-composer.css';
 import './features/chat/styles/chat-send-queue.css';
@@ -76,37 +68,17 @@ async function bootstrapRenderer(): Promise<void> {
   createRoot(document.getElementById('root') as HTMLElement).render(
     <React.StrictMode>
       <I18nProvider messageCatalog={features.messages}>
-        <RendererFeatureViewsProvider views={features.views}>
-          <UpdaterFeatureServiceBoundary service={features.updater}>
-            <NetworkProxyFeatureServiceBoundary service={features.networkProxy}>
-              <ModelProviderFeatureServiceBoundary service={features.modelProvider}>
-                <ConversationDebugFeatureServiceBoundary service={features.conversationDebug}>
-                  <CollaborationFeatureServiceBoundary service={features.collaboration}>
-                    <SideConversationFeatureServiceBoundary service={features.sideConversation}>
-                      <ReviewFeatureServiceBoundary service={features.review}>
-                        <UsageFeatureServiceBoundary service={features.usage}>
-                          <RuntimeActivityFeatureServiceBoundary service={features.runtimeActivity}>
-                            <PluginManagementFeatureServiceBoundary service={features.pluginManagement}>
-                              <SkillsFeatureServiceBoundary service={features.skills}>
-                                <McpFeatureServiceBoundary service={features.mcp}>
-                                  <KeyboardShortcutsProvider>
-                                    <CodeAppearanceProvider>
-                                      <App />
-                                    </CodeAppearanceProvider>
-                                  </KeyboardShortcutsProvider>
-                                </McpFeatureServiceBoundary>
-                              </SkillsFeatureServiceBoundary>
-                            </PluginManagementFeatureServiceBoundary>
-                          </RuntimeActivityFeatureServiceBoundary>
-                        </UsageFeatureServiceBoundary>
-                      </ReviewFeatureServiceBoundary>
-                    </SideConversationFeatureServiceBoundary>
-                  </CollaborationFeatureServiceBoundary>
-                </ConversationDebugFeatureServiceBoundary>
-              </ModelProviderFeatureServiceBoundary>
-            </NetworkProxyFeatureServiceBoundary>
-          </UpdaterFeatureServiceBoundary>
-        </RendererFeatureViewsProvider>
+        <RendererKernelProvider runtime={features.rendererPlugins}>
+          <RendererFeatureEventsProvider events={features.events}>
+            <BuiltinRendererFeatureServicesBoundary services={features.services}>
+              <KeyboardShortcutsProvider>
+                <CodeAppearanceProvider>
+                  <App />
+                </CodeAppearanceProvider>
+              </KeyboardShortcutsProvider>
+            </BuiltinRendererFeatureServicesBoundary>
+          </RendererFeatureEventsProvider>
+        </RendererKernelProvider>
       </I18nProvider>
     </React.StrictMode>,
   );
@@ -114,4 +86,5 @@ async function bootstrapRenderer(): Promise<void> {
 
 void bootstrapRenderer().catch((error: unknown) => {
   console.error('[RendererFeatureComposition]', error);
+  renderRendererBootstrapFatalSurface(error);
 });

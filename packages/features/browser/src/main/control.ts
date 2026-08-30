@@ -4,6 +4,7 @@ import type {
   DesktopBrowserDeviceEmulation,
   DesktopBrowserDeviceUserAgentProfile,
   DesktopBrowserKeyModifier,
+  BrowserReloadMode,
   DesktopBrowserScreenshot,
   DesktopBrowserTab,
 } from '../contracts/index.js';
@@ -104,6 +105,31 @@ export class DesktopBrowserController implements BrowserControlExecutor {
 
   setActiveTab(tabId: string | null): void {
     this.activeTabId = tabId ? normalizeTabId(tabId) : null;
+  }
+
+  tabIdForWebContents(webContentsId: number): string | null {
+    for (const [tabId, entry] of this.tabs) {
+      if (entry.contents.id === webContentsId && !entry.contents.isDestroyed()) return tabId;
+    }
+    return null;
+  }
+
+  reloadTab(tabId: string, mode: BrowserReloadMode): boolean {
+    let entry: RegisteredBrowserTab | undefined;
+    try {
+      entry = this.tabs.get(normalizeTabId(tabId));
+    } catch {
+      return false;
+    }
+    if (!entry || entry.contents.isDestroyed()) return false;
+    try {
+      if (mode === 'hard') entry.contents.reloadIgnoringCache();
+      else entry.contents.reload();
+      return true;
+    } catch {
+      // 快捷键到达主进程前，标签页可能已经关闭或被替换。
+      return false;
+    }
   }
 
   async captureScreenshot(tabId: string): Promise<DesktopBrowserScreenshot | null> {

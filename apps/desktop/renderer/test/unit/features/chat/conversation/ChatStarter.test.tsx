@@ -3,7 +3,10 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ChatStarter } from '../../../../../src/features/chat/conversation/ChatStarter.js';
+import {
+  ChatStarter,
+  ChatStarterContent,
+} from '../../../../../src/features/chat/conversation/ChatStarter.js';
 import { I18nProvider } from '../../../../../src/shared/i18n/I18nProvider.js';
 
 afterEach(cleanup);
@@ -13,7 +16,9 @@ describe('ChatStarter', () => {
     const onSend = vi.fn().mockResolvedValue(true);
     render(
       <I18nProvider initialLocale="zh-CN">
-        <ChatStarter composer={<div>composer</div>} projectName="Setsuna" onSend={onSend} />
+        <ChatStarter composer={<div>composer</div>}>
+          <ChatStarterContent projectName="Setsuna" onSend={onSend} />
+        </ChatStarter>
       </I18nProvider>,
     );
 
@@ -22,5 +27,16 @@ describe('ChatStarter', () => {
 
     expect(onSend).toHaveBeenCalledOnce();
     expect(onSend).toHaveBeenCalledWith(prompt);
+  });
+
+  it('keeps the host composer outside replaceable starter content', () => {
+    render(
+      <ChatStarter composer={<div>host composer</div>}>
+        <div>replacement conversation</div>
+      </ChatStarter>,
+    );
+
+    expect(screen.getByText('replacement conversation')).toBeTruthy();
+    expect(screen.getByText('host composer')).toBeTruthy();
   });
 });

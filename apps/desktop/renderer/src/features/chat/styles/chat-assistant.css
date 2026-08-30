@@ -8,6 +8,8 @@
 }
 
 .chat-starter__stage {
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
   width: min(720px, 100%);
   margin: auto;
@@ -15,6 +17,7 @@
 }
 
 .chat-starter__title {
+  order: 1;
   margin: 0;
   color: var(--app-text);
   font-size: 26px;
@@ -25,10 +28,12 @@
 }
 
 .chat-starter__notice {
+  order: 2;
   margin-top: 22px;
 }
 
 .chat-starter__composer {
+  order: 3;
   margin-top: 20px;
 }
 
@@ -82,6 +87,7 @@
 }
 
 .chat-starter__suggestions {
+  order: 4;
   margin-top: 16px;
 }
 

@@ -7,6 +7,7 @@ import {
   defineRendererFeature,
   rendererFeatureOperationTransportCapability,
 } from '@setsuna-desktop/feature-core/renderer';
+import { registerSettingsPageExtension } from '@setsuna-desktop/renderer-contracts/settings';
 import { conversationDebugFeature } from '../contracts/index.js';
 import { conversationDebugRendererStateCapability } from './capabilities.js';
 import { createConversationDebugClient } from './client.js';
@@ -32,8 +33,8 @@ export const conversationDebugRendererFeature = defineRendererFeature({
     service.start();
     context.scope.add(() => service.dispose());
     context.provide(stateProvider, service);
-    return {
-      settingsSectionExtensions: [{
+    registerSettingsPageExtension(context.ui, {
+        entryId: 'conversation-debug.runtime-settings',
         id: 'conversation-debug',
         targetSectionId: 'runtime',
         order: 210,
@@ -44,7 +45,6 @@ export const conversationDebugRendererFeature = defineRendererFeature({
             ui={ui}
           />
         ),
-      }],
-    };
+    });
   },
 });

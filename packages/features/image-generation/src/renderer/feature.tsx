@@ -4,6 +4,8 @@ import {
   defineRendererFeature,
   rendererFeatureOperationTransportCapability,
 } from '@setsuna-desktop/feature-core/renderer';
+import { registerSettingsPage } from '@setsuna-desktop/renderer-contracts/settings';
+import { registerChatToolResult } from '@setsuna-desktop/renderer-contracts/chat';
 import {
   imageGenerationFeature,
   imageGenerationRendererAssetsCapability,
@@ -28,23 +30,22 @@ export const imageGenerationRendererFeature = defineRendererFeature({
   setup(context) {
     const client = createImageGenerationClient(context.dependencies.transport);
     const assets = context.dependencies.assets;
-    return {
-      settingsViews: [{
-        sectionId: 'openai-image-generation',
-        location: 'capabilities',
-        order: 100,
-        titleKey: 'feature.imageGeneration.settings.title',
-        render: ({ translate, ui }) => (
-          <ImageGenerationSettingsView assets={assets} client={client} translate={translate} ui={ui} />
-        ),
-      }],
-      toolResultViews: [{
+    registerSettingsPage(context.ui, {
+      entryId: 'image-generation.capabilities-page',
+      sectionId: 'openai-image-generation',
+      location: 'capabilities',
+      order: 100,
+      titleKey: 'feature.imageGeneration.settings.title',
+      render: ({ translate, ui }) => (
+        <ImageGenerationSettingsView assets={assets} client={client} translate={translate} ui={ui} />
+      ),
+    });
+    registerChatToolResult(context.ui, {
         id: 'image-generation.result-view',
         resultKind: 'image-generation.result',
         major: 1,
         payload: imageGenerationToolResultPayloadCodec,
         render: ImageGenerationToolResultView,
-      }],
-    };
+    });
   },
 });

@@ -11,7 +11,10 @@ import type {
   RuntimePluginMarketplaceItem,
   RuntimePluginRemoveResult,
   RuntimePluginSummary,
+  RuntimePluginUiActionInput,
+  RuntimePluginUiActionResult,
 } from '@setsuna-desktop/contracts';
+import { RUNTIME_PLUGIN_UI_LIMITS } from '@setsuna-desktop/contracts';
 import { defineRuntimeCodec } from '@setsuna-desktop/feature-core/codec';
 import { defineFeatureOperation } from '@setsuna-desktop/feature-core/operation';
 import type {
@@ -96,6 +99,46 @@ const hookStateCodec = defineRuntimeCodec<PluginManagementHookStateInput>((value
     ...(typeof record.enabled === 'boolean' ? { enabled: record.enabled } : {}),
     ...(typeof record.trusted === 'boolean' ? { trusted: record.trusted } : {}),
   });
+});
+
+const rendererUiActionInputCodec = defineRuntimeCodec<RuntimePluginUiActionInput>((value) => {
+  const record = objectRecord(value, 'Plugin renderer UI action input must be an object.');
+  const context = objectRecord(record.context, 'Plugin renderer UI action context must be an object.');
+  const values = objectRecord(record.values, 'Plugin renderer UI action values must be an object.');
+  const valueEntries = Object.entries(values);
+  if (valueEntries.length > RUNTIME_PLUGIN_UI_LIMITS.fields) {
+    throw new Error('Plugin renderer UI action contains too many values.');
+  }
+  const normalizedValues: Record<string, string> = {};
+  for (const [key, item] of valueEntries) {
+    if (!/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/u.test(key) || typeof item !== 'string') {
+      throw new Error('Plugin renderer UI action value is invalid.');
+    }
+    if (item.length > RUNTIME_PLUGIN_UI_LIMITS.valueCharacters) {
+      throw new Error('Plugin renderer UI action value is too large.');
+    }
+    normalizedValues[key] = item;
+  }
+  const surface = context.surface;
+  if (surface !== 'renderer.chat.composer.status' && surface !== 'renderer.settings.page.extensions') {
+    throw new Error('Plugin renderer UI action surface is invalid.');
+  }
+  return Object.freeze({
+    pluginId: nonEmptyText(record.pluginId, 'pluginId'),
+    actionId: nonEmptyText(record.actionId, 'actionId'),
+    values: Object.freeze(normalizedValues),
+    context: Object.freeze({
+      contributionId: nonEmptyText(context.contributionId, 'contributionId'),
+      surface,
+      ...(context.threadId === undefined ? {} : { threadId: nonEmptyText(context.threadId, 'threadId') }),
+    }),
+  });
+});
+
+const rendererUiActionResultCodec = defineRuntimeCodec<RuntimePluginUiActionResult>((value) => {
+  const record = objectRecord(value, 'Plugin renderer UI action result must be an object.');
+  if (record.status !== 'completed') throw new Error('Plugin renderer UI action result is invalid.');
+  return Object.freeze({ status: 'completed' });
 });
 
 const snapshotCodec = defineRuntimeCodec<PluginManagementSnapshot>((value) => {
@@ -301,6 +344,16 @@ export const setInstalledPluginExtensionTrust = defineFeatureOperation({
   output: pluginListCodec,
   errors: pluginOperationErrors,
   idempotency: 'idempotent',
+});
+
+export const runInstalledPluginRendererUiAction = defineFeatureOperation({
+  id: 'plugin-management.renderer-ui-action.run',
+  method: 'POST',
+  path: '/v1/features/plugin-management/installed/:pluginId/renderer-ui/actions/:actionId',
+  input: rendererUiActionInputCodec,
+  output: rendererUiActionResultCodec,
+  errors: pluginOperationErrors,
+  idempotency: 'non-idempotent',
 });
 
 function pluginSummary(value: unknown): RuntimePluginSummary {

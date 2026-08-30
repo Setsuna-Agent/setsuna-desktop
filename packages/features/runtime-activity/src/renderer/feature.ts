@@ -31,6 +31,5 @@ export const runtimeActivityRendererFeature = defineRendererFeature({
       client: createRuntimeActivityClient(context.dependencies.transport),
       scope: context.scope,
     }));
-    return {};
   },
 });

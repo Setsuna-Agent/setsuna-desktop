@@ -21,6 +21,7 @@
   "dependencies": {
     "@setsuna-desktop/contracts": "workspace:*",
     "@setsuna-desktop/feature-core": "workspace:*",
+    "@setsuna-desktop/renderer-contracts": "workspace:*",
     "antd": "^6.3.6",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1"

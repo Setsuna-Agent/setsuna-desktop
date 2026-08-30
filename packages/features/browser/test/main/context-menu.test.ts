@@ -1,12 +1,18 @@
 import type { ContextMenuParams, MenuItemConstructorOptions, WebContents } from 'electron';
 import { describe, expect, it } from 'vitest';
-import { createBrowserContextMenuTemplate } from '../../src/main/context-menu.js';
+import {
+  createBrowserContextMenuTemplate,
+  createBrowserReloadMenuTemplate,
+} from '../../src/main/context-menu.js';
 
 class FakeWebContents {
   readonly calls: string[] = [];
   destroyed = false;
   canGoBackValue = true;
   canGoForwardValue = false;
+  readonly session = {
+    clearCache: async () => { this.calls.push('clear-cache'); },
+  };
 
   canGoBack(): boolean { return this.canGoBackValue; }
   canGoForward(): boolean { return this.canGoForwardValue; }
@@ -21,6 +27,7 @@ class FakeWebContents {
   paste(): void { this.calls.push('paste'); }
   redo(): void { this.calls.push('redo'); }
   reload(): void { this.calls.push('reload'); }
+  reloadIgnoringCache(): void { this.calls.push('hard-reload'); }
   selectAll(): void { this.calls.push('select-all'); }
   undo(): void { this.calls.push('undo'); }
 }
@@ -137,6 +144,47 @@ describe('browser context menu', () => {
     click(template, '重新加载');
 
     expect(contents.calls).toEqual([]);
+  });
+
+  it('provides normal, hard, and cache-clearing reload actions', async () => {
+    const contents = new FakeWebContents();
+    const template = createBrowserReloadMenuTemplate(asWebContents(contents), 'zh-CN', {
+      hard: 'Control+Shift+KeyR',
+      normal: 'Control+KeyR',
+    });
+
+    expect(labels(template)).toEqual([
+      '正常刷新',
+      '硬刷新',
+      '清空缓存并进行硬刷新',
+    ]);
+    expect(template[0]?.accelerator).toBe('Ctrl+R');
+    expect(template[1]?.accelerator).toBe('Ctrl+Shift+R');
+
+    const customizedTemplate = createBrowserReloadMenuTemplate(asWebContents(contents), 'zh-CN', {
+      hard: 'Alt+Shift+KeyH',
+      normal: 'Control+KeyJ',
+    });
+    expect(customizedTemplate[0]?.accelerator).toBe('Ctrl+J');
+    expect(customizedTemplate[1]?.accelerator).toBe('Alt+Shift+H');
+    const unboundTemplate = createBrowserReloadMenuTemplate(asWebContents(contents), 'zh-CN', {
+      hard: null,
+      normal: null,
+    });
+    expect(unboundTemplate[0]?.accelerator).toBeUndefined();
+    expect(unboundTemplate[1]?.accelerator).toBeUndefined();
+
+    click(template, '正常刷新');
+    click(template, '硬刷新');
+    click(template, '清空缓存并进行硬刷新');
+    await Promise.resolve();
+
+    expect(contents.calls).toEqual([
+      'reload',
+      'hard-reload',
+      'clear-cache',
+      'hard-reload',
+    ]);
   });
 });
 

@@ -70,6 +70,10 @@ export type DesktopKeyboardShortcutInput = {
   metaKey: boolean;
   repeat: boolean;
   shiftKey: boolean;
+  source?: {
+    kind: 'embedded-browser';
+    tabId: string | null;
+  };
 };
 
 export type DesktopWindowCloseBehavior = 'quit' | 'hide-to-tray';

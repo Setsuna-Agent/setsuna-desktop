@@ -22,6 +22,7 @@
     "@setsuna-desktop/contracts": "workspace:*",
     "@setsuna-desktop/feature-core": "workspace:*",
     "@setsuna-desktop/feature-network-proxy": "workspace:*",
+    "@setsuna-desktop/renderer-contracts": "workspace:*",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1"
   },

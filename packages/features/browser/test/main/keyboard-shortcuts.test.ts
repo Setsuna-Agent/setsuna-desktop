@@ -5,27 +5,32 @@ import { embeddedBrowserKeyboardShortcut } from '../../src/main/keyboard-shortcu
 describe('embedded browser keyboard shortcuts', () => {
   it('forwards only bindings currently active in the host renderer', () => {
     const shortcut = embeddedBrowserKeyboardShortcut(
-      keyInput({ code: 'KeyB', control: true, shift: true }),
-      new Set(['Control+Shift+KeyB']),
+      keyInput({ code: 'KeyR', control: true, key: 'r' }),
+      new Set(['Control+KeyR']),
+      { kind: 'embedded-browser', tabId: 'bottom-browser' },
     );
 
     expect(shortcut).toEqual({
-      binding: 'Control+Shift+KeyB',
+      binding: 'Control+KeyR',
       input: {
         altGraph: false,
         altKey: false,
-        code: 'KeyB',
+        code: 'KeyR',
         ctrlKey: true,
         isComposing: false,
-        key: 'b',
+        key: 'r',
         metaKey: false,
         repeat: false,
-        shiftKey: true,
+        shiftKey: false,
+        source: {
+          kind: 'embedded-browser',
+          tabId: 'bottom-browser',
+        },
       },
     });
     expect(embeddedBrowserKeyboardShortcut(
-      keyInput({ code: 'KeyB', control: true }),
-      new Set(['Control+Shift+KeyB']),
+      keyInput({ code: 'KeyR', control: true, key: 'r', shift: true }),
+      new Set(['Control+KeyR']),
     )).toBeNull();
   });
 

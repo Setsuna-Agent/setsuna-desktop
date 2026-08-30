@@ -6,8 +6,11 @@ import {
   defineRendererDependencies,
   defineRendererFeature,
   type RendererTranslate,
-  type SettingsViewUi,
 } from '@setsuna-desktop/feature-core/renderer';
+import {
+  registerSettingsPage,
+  type SettingsViewUi,
+} from '@setsuna-desktop/renderer-contracts/settings';
 import { Network } from 'lucide-react';
 import { networkProxyFeature } from '../contracts/index.js';
 import {
@@ -36,8 +39,8 @@ export const networkProxyRendererFeature = defineRendererFeature({
     service.start();
     context.scope.add(() => service.dispose());
     context.provide(stateProvider, service);
-    return {
-      settingsViews: [{
+    registerSettingsPage(context.ui, {
+        entryId: 'network-proxy.settings-page',
         descriptionKey: 'feature.networkProxy.settings.description',
         icon: Network,
         sectionId: 'network-proxy',
@@ -48,8 +51,7 @@ export const networkProxyRendererFeature = defineRendererFeature({
         render: ({ translate, ui }) => (
           <NetworkProxySettingsView service={service} translate={translate} ui={ui} />
         ),
-      }],
-    };
+    });
   },
 });
 

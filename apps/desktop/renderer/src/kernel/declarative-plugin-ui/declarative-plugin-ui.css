@@ -1,0 +1,117 @@
+.declarative-plugin-ui {
+  min-width: 0;
+}
+
+.declarative-plugin-ui__stack {
+  display: flex;
+  min-width: 0;
+}
+
+.declarative-plugin-ui__stack--column {
+  flex-direction: column;
+}
+
+.declarative-plugin-ui__stack--row {
+  align-items: center;
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.declarative-plugin-ui__stack--compact {
+  gap: 6px;
+}
+
+.declarative-plugin-ui__stack--normal {
+  gap: 12px;
+}
+
+.declarative-plugin-ui__text,
+.declarative-plugin-ui__badge,
+.declarative-plugin-ui__notice,
+.declarative-plugin-ui__field {
+  color: var(--sd-color-text);
+  font-size: 13px;
+}
+
+.declarative-plugin-ui .is-muted {
+  color: var(--sd-color-text-muted);
+}
+
+.declarative-plugin-ui .is-success {
+  color: var(--sd-color-success);
+}
+
+.declarative-plugin-ui .is-warning {
+  color: var(--sd-color-warning);
+}
+
+.declarative-plugin-ui .is-danger {
+  color: var(--sd-color-danger);
+}
+
+.declarative-plugin-ui__badge {
+  background: var(--sd-color-surface-muted);
+  border: 1px solid var(--sd-color-border);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.declarative-plugin-ui__notice {
+  background: var(--sd-color-surface-muted);
+  border: 1px solid var(--sd-color-border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+}
+
+.declarative-plugin-ui__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.declarative-plugin-ui__field input,
+.declarative-plugin-ui__field select {
+  background: var(--sd-color-input);
+  border: 1px solid var(--sd-color-border);
+  border-radius: 7px;
+  color: var(--sd-color-text);
+  min-height: 34px;
+  padding: 6px 9px;
+}
+
+.declarative-plugin-ui__button {
+  background: var(--sd-color-surface-muted);
+  border: 1px solid var(--sd-color-border);
+  border-radius: 7px;
+  color: var(--sd-color-text);
+  cursor: pointer;
+  min-height: 28px;
+  padding: 4px 9px;
+}
+
+.declarative-plugin-ui__button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.declarative-plugin-ui__button.is-primary {
+  background: var(--sd-color-accent);
+  color: var(--sd-color-accent-text);
+}
+
+.declarative-plugin-ui__action-status:empty {
+  display: none;
+}
+
+.declarative-plugin-ui__action-status {
+  color: var(--sd-color-text-muted);
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.declarative-plugin-ui--compact .declarative-plugin-ui__notice {
+  padding: 4px 8px;
+}

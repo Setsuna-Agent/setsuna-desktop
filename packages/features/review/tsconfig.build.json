@@ -18,6 +18,7 @@
   "references": [
     { "path": "../../contracts/tsconfig.build.json" },
     { "path": "../../feature-core/tsconfig.build.json" },
+    { "path": "../../renderer-contracts/tsconfig.build.json" },
     { "path": "../workspace-apps/tsconfig.build.json" }
   ]
 }

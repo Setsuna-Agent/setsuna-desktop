@@ -1,4 +1,5 @@
 import type { FeatureScope } from '@setsuna-desktop/feature-core/scope';
+import type { RuntimePluginUiActionInput } from '@setsuna-desktop/contracts';
 import type {
   PluginManagementDesktopBridge,
   PluginManagementExtensionTrustInput,
@@ -172,6 +173,16 @@ export class RendererPluginManagementService implements PluginManagementRenderer
     );
     await this.refresh();
     return result;
+  }
+
+  runRendererUiAction(
+    input: RuntimePluginUiActionInput,
+    options?: Readonly<{ signal?: AbortSignal }>,
+  ) {
+    return this.options.scope.runOperation(
+      (signal) => this.options.client.runRendererUiAction(input, { signal }),
+      options,
+    );
   }
 
   async setExtensionTrust(

@@ -1,8 +1,8 @@
 # Feature Composition 落地基线
 
-Setsuna Desktop 用纵向 Feature 收拢跨 contracts、runtime、Electron main/preload 与 renderer 的业务所有权。它不是插件平台，也不提供运行时安装、动态发现或版本协商。
+Setsuna Desktop 用纵向 Feature 收拢跨 contracts、runtime、Electron main/preload 与 renderer 的业务所有权。Feature Composition 本身不是运行时可安装插件平台，也不负责动态发现或版本协商；Renderer 内部的 UI 组合交给独立的 [Renderer Plugin Runtime](../designs/current/renderer-plugin-runtime.md)。
 
-- 不新增通用 Registry、额外状态维度、版本协商、代码生成或运行时动态发现。
+- 不为业务 Feature 新增第二份 Registry、额外状态维度、版本协商、代码生成或运行时动态发现。
 - 源码与各进程 composition root 是运行时 Feature inventory 的事实来源。
 - package export、TypeScript reference 和 build script 只是静态构建图，不得反向成为第二套运行时 catalog。
 
@@ -16,7 +16,7 @@ Setsuna Desktop 用纵向 Feature 收拢跨 contracts、runtime、Electron main/
 packages/features/<feature>
   ├─ contracts  跨进程 DTO、Capability、operation、event、settings
   ├─ runtime    use case、route、tool、projection、service
-  ├─ renderer   typed controller、view contribution、messages、style
+  ├─ renderer   typed controller、Slot contribution、messages、style
   ├─ main       可选 native handler 与资源生命周期
   └─ preload    可选固定 bridge contribution
 
@@ -45,6 +45,7 @@ const rendererFeatures = defineRendererFeatureHost({
 });
 
 const { composition, messages } = await rendererFeatures.activate({
+  createUiRegistrar: (owner, track) => rendererPlugins.createRegistrar(owner, track),
   hostMessages,
   hostCapabilities,
 });
@@ -55,7 +56,7 @@ const { composition, messages } = await rendererFeatures.activate({
 | 进程 | API 自动负责 |
 | --- | --- |
 | runtime | 启动策略、settings 静态登记、依赖排序、激活与清理 |
-| renderer | 启动策略、messages 合并、静态 contribution、激活与清理 |
+| renderer | 启动策略、messages 合并、scope-bound `ctx.ui`、激活与清理 |
 | main | 启动策略、依赖排序、native scope 清理 |
 | preload | bridge key 校验、冲突检查、一次性 compose |
 
@@ -69,11 +70,11 @@ const { composition, messages } = await rendererFeatures.activate({
 | --- | --- | --- |
 | package/entry/identity 静态结构无效 | architecture check 失败 | 不启动应用 |
 | Feature 图重复、缺 Capability 或有环 | `FeatureCompositionValidationError` | 不运行 setup；runtime settings catalog 也不发布 |
-| settings/messages/preload/view 静态贡献冲突 | `FeatureCompositionValidationError` | 对外不发布半成品 catalog 或 bridge |
+| settings/messages/preload 静态贡献冲突 | `FeatureCompositionValidationError` | 对外不发布半成品 catalog 或 bridge |
 | optional Feature setup 失败 | 进程继续 ready；该 Feature 为 `failed` | 该 scope 立即回滚；静态 settings/messages 仍可用于诊断与恢复 |
 | required Feature setup 或必需依赖失败 | `FeatureReadinessError`，进程不 ready | 已激活 scope 按依赖逆序回滚 |
 | Feature 可运行但凭据或远端条件暂不可用 | `degraded` | scope 保持可用，管理与恢复操作仍可执行 |
-| setup 后的宿主绑定或 renderer catalog 装配失败 | composition root 抛错 | `completeFeatureHostActivation` 逆序撤销宿主绑定，随后 dispose composition |
+| setup 后的宿主绑定或 Renderer Slot 初始 transaction 失败 | composition root 抛错 | 不发布半成品 snapshot；`completeFeatureHostActivation` 逆序撤销宿主绑定，随后 dispose composition；Renderer 在 `createRoot()` 前写入静态 fatal surface并允许 reload |
 
 结构错误与执行失败不得混成一类普通 `Error`。结构错误携带稳定 issue code 和相关 `featureIds`；执行失败通过 Feature status/diagnostic 暴露。definition factory 在模块加载期发现的纯编程错误仍可直接抛出普通错误。
 
@@ -99,8 +100,10 @@ FeatureScope 本身不设置独立超时：它先 abort，再等待已进入的�
 - Core `RuntimeEvent` 保持封闭 union；只有所属 Feature 解释的持久状态使用 `feature.event` envelope 和 owner codec/migration。
 - Runtime projection query 从缓存 `throughSeq + 1` 追到查询开始时固定的 durable high water；不维护 live buffer、tail 或 gap 状态机。
 - Renderer 的 Core projection 是唯一 SSE sequence owner。Feature event 只触发 typed snapshot 刷新，不在 renderer 维护第二套 reducer。
-- Renderer setup 返回静态 view contribution；启动后形成只读 catalog，不在组件生命周期注册业务 view。重复或非法 contribution 会使整个 renderer host 装配失败并回滚。
+- Renderer Feature 在 setup 中通过 scope-bound `context.ui` 注册 typed Slot contribution；Renderer host 必须显式提供 registrar factory，disposer 自动进入同一 `FeatureScope`。禁止在 React component/hook/effect 中注册。初始 graph 一次校验和 commit，keyed owner 的 `requiredKeys` 逐 key 验证；后续 mount/replace/preference 变更使用串行 transaction，失败保留上一 snapshot。
 - 外部 Plugin 的 renderer contribution 仍走受限 declarative gateway，不能注入 React、HTML、全局 CSS 或任意 renderer JavaScript，也不获得任意 IPC 或 Feature 内部 Capability；需要执行代码的 Plugin extension 只有通过信任校验后，才会在独立 Node worker 中经由显式 capability 和受控 host API 运行。
+
+层级 Slot Tree、布局偏好、inspection、声明式 Plugin UI 与动态 client bundle 的延期条件见 [Renderer Plugin Runtime 设计](../designs/current/renderer-plugin-runtime.md)。
 
 ## 持久兼容责任
 

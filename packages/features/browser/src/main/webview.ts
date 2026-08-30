@@ -22,6 +22,7 @@ import {
 
 export function installEmbeddedBrowserWebviews(input: Readonly<{
   activeKeyboardShortcutBindings(): ReadonlySet<string>;
+  browserTabIdForWebContents(webContentsId: number): string | null;
   interfaceLanguage(): RuntimeInterfaceLanguage;
   mainWindow: BrowserWindow;
 }>): () => void {
@@ -54,6 +55,10 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
       const shortcut = embeddedBrowserKeyboardShortcut(
         keyboardInput,
         input.activeKeyboardShortcutBindings(),
+        {
+          kind: 'embedded-browser',
+          tabId: input.browserTabIdForWebContents(guestContents.id),
+        },
       );
       if (!shortcut) return;
       const hostWebContents = guestContents.hostWebContents;

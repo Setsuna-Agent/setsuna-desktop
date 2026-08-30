@@ -2,7 +2,7 @@ import type {
   RuntimeHookRun,
   RuntimeToolRun,
 } from '@setsuna-desktop/contracts';
-import type { ResolvedToolResultView } from '@setsuna-desktop/feature-core/renderer';
+import type { ResolvedChatToolResult } from '@setsuna-desktop/renderer-contracts/chat';
 import { ChevronDown } from 'lucide-react';
 import {
   useEffect,
@@ -13,7 +13,6 @@ import {
 } from 'react';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { FeatureContributionBoundary } from '../../../composition/FeatureContributionBoundary.js';
-import { useRendererFeatureViews } from '../../../composition/feature-view-registries.js';
 import { useChatThreadId } from '../conversation/ChatThreadProvider.js';
 import { WorkspaceFileLink } from '../markdown/WorkspaceFileLink.js';
 import type {
@@ -37,7 +36,11 @@ import {
   fileChangesFromToolRun,
   type RuntimeFileChange,
 } from './runtimeFileChanges.js';
-import { assistantTailFeatureToolResults, resolveRuntimeFeatureToolResult } from './runtimeFeatureToolResults.js';
+import {
+  assistantTailFeatureToolResults,
+  resolveRuntimeFeatureToolResult,
+  useRuntimeFeatureToolResultResolver,
+} from './runtimeFeatureToolResults.js';
 import {
   GroupedHookRunList,
   hasHookRuns,
@@ -98,6 +101,7 @@ import {
   networkApprovalSummary,
   permissionApprovalSummary,
 } from './runtimeApprovalSummaries.js';
+import { ToolPreview } from './ToolPreview.js';
 
 export type { ToolRunGroup, ToolRunGroupKind, ToolRunSummaryMode } from './runtime-tool-run-types.js';
 
@@ -121,12 +125,12 @@ export function RuntimeToolRuns({
   onAnswerApproval: AnswerApprovalHandler;
   summaryMode?: ToolRunSummaryMode;
 }) {
-  const featureViews = useRendererFeatureViews();
+  const resolveFeatureToolResult = useRuntimeFeatureToolResultResolver();
   const visibleRuns = runs.filter(isDisplayableRuntimeToolRun);
   if (!visibleRuns.length) return null;
   const singleRun = visibleRuns.length === 1 ? visibleRuns[0] : undefined;
   const replacement = singleRun
-    ? resolveRuntimeFeatureToolResult(featureViews.toolResults, singleRun)
+    ? resolveRuntimeFeatureToolResult(resolveFeatureToolResult, singleRun)
     : null;
   if (singleRun
     && replacement?.contribution.placement !== 'assistant-tail'
@@ -140,7 +144,7 @@ export function RuntimeToolRuns({
   const group = compactToolRunGroups(groupToolRuns(
     visibleRuns,
     (run) => resolveRuntimeFeatureToolResult(
-      featureViews.toolResults,
+      resolveFeatureToolResult,
       run,
     )?.contribution.resultKind,
   ), summaryMode)[0];
@@ -153,8 +157,8 @@ export function RuntimeToolRuns({
 }
 
 export function RuntimeAssistantTailToolResults({ runs }: Readonly<{ runs: RuntimeToolRun[] }>) {
-  const featureViews = useRendererFeatureViews();
-  const results = assistantTailFeatureToolResults(featureViews.toolResults, runs);
+  const resolveFeatureToolResult = useRuntimeFeatureToolResultResolver();
+  const results = assistantTailFeatureToolResults(resolveFeatureToolResult, runs);
   if (!results.length) return null;
   return (
     <div className="chat-assistant-run__segment chat-feature-tool-results--tail">
@@ -227,14 +231,14 @@ function ToolRunDisplayPanel({
   onAnswerApproval: AnswerApprovalHandler;
 }): JSX.Element {
   const { t } = useI18n();
-  const featureViews = useRendererFeatureViews();
+  const resolveFeatureToolResult = useRuntimeFeatureToolResultResolver();
   // 当流式运行项从单项变为分组或混合分组时，保持此组件及其根 DOM 节点稳定。
   // 展开状态只在本地保存；新的待授权请求会自动展开，普通流式更新不会覆盖用户选择。
   if (group.type === 'mixed') {
     return mixedToolRunGroupPanelNode(group, onAnswerApproval, t, nestedDetails);
   }
   if (group.type === 'single') {
-    const featureResult = resolveRuntimeFeatureToolResult(featureViews.toolResults, group.run);
+    const featureResult = resolveRuntimeFeatureToolResult(resolveFeatureToolResult, group.run);
     if (featureResult && featureResult.contribution.placement !== 'assistant-tail') {
       const content = <FeatureToolResultView result={featureResult} runId={group.run.id} />;
       if (featureResult.contribution.presentation === 'replace') return content;
@@ -270,7 +274,7 @@ function FeatureToolResultView({
   result,
   runId,
 }: Readonly<{
-  result: ResolvedToolResultView;
+  result: ResolvedChatToolResult;
   runId: string;
 }>) {
   const { t } = useI18n();
@@ -878,16 +882,6 @@ function displayedGenericToolRunDiagnostic(run: RuntimeToolRun, t: Translate): s
     return '';
   }
   return diagnostic;
-}
-
-function ToolPreview({ code = false, label, value }: { code?: boolean; label: string; value: string }) {
-  if (!value.trim()) return null;
-  return (
-    <div className="chat-tool-run__preview">
-      <div className="chat-tool-run__preview-label">{label}</div>
-      {code ? <pre>{value}</pre> : <p>{value}</p>}
-    </div>
-  );
 }
 
 export {

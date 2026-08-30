@@ -1,4 +1,4 @@
-import type { ToolResultViewProps } from '@setsuna-desktop/feature-core/renderer';
+import type { ChatToolResultViewProps } from '@setsuna-desktop/renderer-contracts/chat';
 import type { CollaborationSpawnResult } from '../contracts/index.js';
 import { AgentAvatar } from './AgentAvatar.js';
 import { useCollaborationState, useCollaborationTaskNavigation } from './context.js';
@@ -8,7 +8,7 @@ export function CollaborationSpawnResultView({
   payload,
   threadId,
   translate,
-}: ToolResultViewProps<CollaborationSpawnResult>) {
+}: ChatToolResultViewProps<CollaborationSpawnResult>) {
   const liveParentThreadId = threadId === payload.parentThreadId ? threadId : null;
   const snapshot = useCollaborationState(liveParentThreadId);
   const task = liveParentThreadId

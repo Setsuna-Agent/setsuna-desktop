@@ -1,0 +1,35 @@
+{
+  "name": "@setsuna-desktop/renderer-contracts",
+  "version": "0.1.0",
+  "description": "Stable typed UI composition contracts for the Setsuna Desktop renderer.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./chat": {
+      "types": "./dist/chat.d.ts",
+      "default": "./dist/chat.js"
+    },
+    "./settings": {
+      "types": "./dist/settings.d.ts",
+      "default": "./dist/settings.js"
+    },
+    "./shell": {
+      "types": "./dist/shell.d.ts",
+      "default": "./dist/shell.js"
+    },
+    "./workspace": {
+      "types": "./dist/workspace.d.ts",
+      "default": "./dist/workspace.js"
+    }
+  },
+  "dependencies": {
+    "@setsuna-desktop/feature-core": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "typecheck": "tsc -b --pretty false"
+  },
+  "peerDependencies": {
+    "react": "^18.3.1"
+  }
+}

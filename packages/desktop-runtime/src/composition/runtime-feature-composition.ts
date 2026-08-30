@@ -294,6 +294,9 @@ export async function activateBuiltinRuntimeFeatures(
           listHooks: (input) => runtime.hookManagement.list(input),
           listMarketplace: () => runtime.pluginMarketplace.listPlugins(),
           listPlugins: () => runtime.pluginStore.listPlugins(),
+          runRendererUiAction: (input, signal) => (
+            runtime.extensionManager.runRendererUiAction(input, signal)
+          ),
           deleteStandaloneHook: (input) => runtime.hookManagement.deleteStandalone(input),
           remove: ({ pluginId }) => runtime.pluginStore.removePlugin(pluginId),
           setHookState: (input) => runtime.hookManagement.setState(input),

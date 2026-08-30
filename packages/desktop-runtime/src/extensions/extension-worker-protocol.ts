@@ -7,7 +7,7 @@ export type ExtensionWorkerTool = {
 };
 
 export type HostToExtensionWorkerMessage =
-  | { type: 'request'; id: string; method: 'tool.execute' | 'event.dispatch'; params: unknown }
+  | { type: 'request'; id: string; method: 'tool.execute' | 'event.dispatch' | 'ui.action'; params: unknown }
   | { type: 'cancel'; requestId: string }
   | { type: 'host.cancel'; parentId: string }
   | { type: 'host.response'; id: string; ok: true; result: unknown }
@@ -15,7 +15,7 @@ export type HostToExtensionWorkerMessage =
   | { type: 'shutdown' };
 
 export type ExtensionWorkerToHostMessage =
-  | { type: 'ready'; tools: ExtensionWorkerTool[]; events: RuntimeExtensionEventName[] }
+  | { type: 'ready'; tools: ExtensionWorkerTool[]; events: RuntimeExtensionEventName[]; uiActions: string[] }
   | { type: 'response'; id: string; ok: true; result: unknown }
   | { type: 'response'; id: string; ok: false; error: string }
   | { type: 'host.request'; id: string; parentId: string; method: string; params: unknown }

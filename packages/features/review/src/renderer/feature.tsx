@@ -7,6 +7,7 @@ import {
   defineRendererFeature,
   rendererFeatureOperationTransportCapability,
 } from '@setsuna-desktop/feature-core/renderer';
+import { registerSettingsPageExtension } from '@setsuna-desktop/renderer-contracts/settings';
 import {
   reviewFeature,
   reviewRendererServiceCapability,
@@ -31,8 +32,8 @@ export const reviewRendererFeature = defineRendererFeature({
   setup(context) {
     const client = createReviewClient(context.dependencies.transport);
     context.provide(serviceProvider, new RendererReviewService(client));
-    return {
-      settingsSectionExtensions: [{
+    registerSettingsPageExtension(context.ui, {
+        entryId: 'review.task-model-settings',
         id: 'desktop-review-task-model',
         targetSectionId: 'taskModels',
         order: 80,
@@ -43,7 +44,6 @@ export const reviewRendererFeature = defineRendererFeature({
             ui={ui}
           />
         ),
-      }],
-    };
+    });
   },
 });

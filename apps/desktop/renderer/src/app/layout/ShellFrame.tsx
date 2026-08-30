@@ -125,7 +125,9 @@ export function ShellFrame({
       </header>
       <div className={`app-workbench ${inspectorOpen ? '' : 'app-workbench--inspector-closed'}`}>
         {customFrame && (toolbarTitle || viewTabs) ? (
-          <div className="app-workbench__main-title">{toolbarTitle ? <div className="chat-toolbar-title">{toolbarTitle}</div> : viewTabs}</div>
+          <div className="app-workbench__main-title">
+            {toolbarTitle ? <div className="chat-toolbar-title">{toolbarTitle}</div> : viewTabs}
+          </div>
         ) : null}
         {customFrame && workspaceToolbar ? <div className="app-workbench__workspace-toolbar">{workspaceToolbar}</div> : null}
         {customFrame && actions ? <div className="app-workbench__main-actions">{actions}</div> : null}

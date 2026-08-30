@@ -5,6 +5,7 @@ import {
   rendererFeatureEventFeedCapability,
   rendererFeatureOperationTransportCapability,
 } from '@setsuna-desktop/feature-core/renderer';
+import { chatComposerStatusSlot } from '@setsuna-desktop/renderer-contracts/chat';
 import { goalFeature } from '../contracts/index.js';
 import { createGoalClient } from './client.js';
 import { GoalComposerStatusView } from './GoalComposerStatusView.js';
@@ -23,19 +24,27 @@ export const goalRendererFeature = defineRendererFeature({
     const client = createGoalClient(context.dependencies.transport);
     const feed = context.dependencies.eventFeed;
     const scope = context.scope;
-    return {
-      composerStatusViews: [{
-        id: 'goal.composer-status',
-        order: 100,
-        render: (props) => (
-          <GoalComposerStatusView
-            {...props}
-            client={client}
-            feed={feed}
-            scope={scope}
-          />
-        ),
-      }],
-    };
+    context.ui.list(chatComposerStatusSlot, {
+      id: 'goal.composer-status',
+      order: 100,
+      render: (props) => (
+        <GoalComposerStatusView
+          {...props}
+          client={client}
+          feed={feed}
+          scope={scope}
+        />
+      ),
+      errorFallback: (_error, props, reset) => (
+        <button
+          type="button"
+          className="chat-composer-status-fallback"
+          data-composer-status-view="goal.composer-status"
+          onClick={reset}
+        >
+          {props.translate('feature.goal.retry')}
+        </button>
+      ),
+    });
   },
 });

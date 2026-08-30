@@ -16,3 +16,87 @@
   color: var(--text-tertiary);
   font-size: 13px;
 }
+
+.app-bootstrap-fatal {
+  display: grid;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 100%;
+  padding: 32px;
+  place-items: center;
+  color: var(--app-text);
+  background: var(--app-bg);
+}
+
+.app-bootstrap-fatal__panel {
+  display: grid;
+  width: min(480px, 100%);
+  gap: 12px;
+  padding: 24px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-popover);
+}
+
+.app-bootstrap-fatal__product {
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.app-bootstrap-fatal__panel h1,
+.app-bootstrap-fatal__panel p,
+.app-bootstrap-fatal__detail {
+  margin: 0;
+}
+
+.app-bootstrap-fatal__panel h1 {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 28px;
+}
+
+.app-bootstrap-fatal__panel p,
+.app-bootstrap-fatal__detail {
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.app-bootstrap-fatal__panel p {
+  color: var(--app-text-muted);
+}
+
+.app-bootstrap-fatal__detail {
+  max-height: 160px;
+  padding: 9px 10px;
+  border-radius: var(--app-radius-sm);
+  color: var(--app-danger);
+  background: color-mix(in srgb, var(--app-danger) 6%, var(--app-surface-muted));
+  font-family: var(--app-code-font-family);
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.app-bootstrap-fatal__reload {
+  justify-self: start;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--app-primary);
+  border-radius: var(--app-radius-sm);
+  color: var(--app-primary-text);
+  background: var(--app-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.app-bootstrap-fatal__reload:hover {
+  border-color: var(--app-primary-hover);
+  background: var(--app-primary-hover);
+}
+
+.app-bootstrap-fatal__reload:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-primary) 18%, transparent);
+}

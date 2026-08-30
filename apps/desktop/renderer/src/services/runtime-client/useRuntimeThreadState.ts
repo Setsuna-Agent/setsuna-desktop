@@ -18,7 +18,7 @@ import {
 } from 'react';
 import { startThreadReview } from '../../features/workspace/hooks/startThreadReview.js';
 import { isPrimaryConversationThread } from './runtimeThreadRelations.js';
-import { useRendererFeatureViews } from '../../composition/feature-view-registries.js';
+import { useRendererFeatureEvents } from '../../composition/renderer-feature-events-context.js';
 import type {
   ReviewFeatureService,
   ReviewFeatureTarget,
@@ -91,7 +91,7 @@ export function useRuntimeThreadState({
   setActiveProjectId,
 }: RuntimeThreadStateOptions) {
   const { locale, t } = useI18n();
-  const featureViews = useRendererFeatureViews();
+  const featureEvents = useRendererFeatureEvents();
   const [threads, setThreads] = useState<RuntimeThreadSummary[]>([]);
   const [archivedThreads, setArchivedThreads] = useState<RuntimeThreadSummary[]>([]);
   const [currentThread, setCurrentThreadState] = useState<RuntimeThread | null>(null);
@@ -272,7 +272,7 @@ export function useRuntimeThreadState({
 
         if (projection.resynced) {
           if (projection.thread) {
-            featureViews.events.resync(projection.thread.id, projection.thread.lastSeq);
+            featureEvents.resync(projection.thread.id, projection.thread.lastSeq);
           }
           setActivityEvents([]);
           terminalTurnIdsRef.current.clear();
@@ -283,7 +283,7 @@ export function useRuntimeThreadState({
           refreshThreadsSoon(true);
         }
 
-        for (const event of projection.acceptedEvents) featureViews.events.accept(event);
+        for (const event of projection.acceptedEvents) featureEvents.accept(event);
         const coreEvents = projection.acceptedEvents.filter(isCoreRuntimeEvent);
         const activityBatch = coreEvents.filter(isRuntimeActivityEvent);
         if (activityBatch.length) {
@@ -320,7 +320,7 @@ export function useRuntimeThreadState({
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
     };
-  }, [client, currentThreadCommit, currentThreadId, featureViews.events, onError, onTurnSettled, refreshThreadsSoon]);
+  }, [client, currentThreadCommit, currentThreadId, featureEvents, onError, onTurnSettled, refreshThreadsSoon]);
 
   useEffect(() => {
     if (!effectiveActiveTurnId || !currentThreadId) {

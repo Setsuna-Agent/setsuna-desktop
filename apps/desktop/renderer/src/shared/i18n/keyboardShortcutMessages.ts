@@ -63,6 +63,10 @@ export const keyboardShortcutZhCN = {
   'shortcuts.command.openBrowserDescription': '在右侧工作区打开一个浏览器标签页。',
   'shortcuts.command.openConversationDebug': '打开对话调试',
   'shortcuts.command.openConversationDebugDescription': '打开当前对话的运行流程调试面板。',
+  'shortcuts.command.reloadBrowser': '刷新浏览器页面',
+  'shortcuts.command.reloadBrowserDescription': '正常刷新当前可见的内置浏览器页面。',
+  'shortcuts.command.hardReloadBrowser': '硬刷新浏览器页面',
+  'shortcuts.command.hardReloadBrowserDescription': '忽略 HTTP 缓存并刷新当前可见的内置浏览器页面。',
 } as const;
 
 export const keyboardShortcutEnUS = {
@@ -130,4 +134,8 @@ export const keyboardShortcutEnUS = {
   'shortcuts.command.openBrowserDescription': 'Open a browser tab in the right workspace.',
   'shortcuts.command.openConversationDebug': 'Open conversation debug',
   'shortcuts.command.openConversationDebugDescription': 'Open the runtime flow debugger for the current conversation.',
+  'shortcuts.command.reloadBrowser': 'Reload browser page',
+  'shortcuts.command.reloadBrowserDescription': 'Reload the currently visible embedded browser page normally.',
+  'shortcuts.command.hardReloadBrowser': 'Hard reload browser page',
+  'shortcuts.command.hardReloadBrowserDescription': 'Reload the currently visible embedded browser page while bypassing the HTTP cache.',
 } as const;

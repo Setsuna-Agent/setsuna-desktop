@@ -10,6 +10,11 @@ import type {
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
 import type { ReviewTarget } from '@setsuna-desktop/feature-review/contracts';
+import {
+  chatComposerSlot,
+  chatConversationSlot,
+  chatDetailsSlot,
+} from '@setsuna-desktop/renderer-contracts/chat';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type {
   ChatImageAttachmentOutcome,
@@ -34,7 +39,7 @@ import {
 } from './conversation/ChatWorkspaceScroll.js';
 import { ConversationOverviewPanel } from './conversation/ConversationOverviewPanel.js';
 import type { AnswerApprovalHandler } from './conversation/chat-workspace-types.js';
-import { ChatStarter } from './conversation/ChatStarter.js';
+import { ChatStarter, ChatStarterContent } from './conversation/ChatStarter.js';
 import { activeModelContextWindowTokens, contextTokenUsageFromThread } from './conversation/chatContextUsage.js';
 import { conversationOverviewFromMessages } from './conversation/chatConversationOverview.js';
 import { ChatTranscript } from './conversation/ChatTranscript.js';
@@ -47,6 +52,7 @@ import type { ChatQueuedTurnActions } from './hooks/useQueuedTurnInputActions.js
 import { useModelSetupNotice } from './hooks/useModelSetupNotice.js';
 import { useChatStarterTransition } from './hooks/useChatStarterTransition.js';
 import { useThreadMessageHistory } from './hooks/useThreadMessageHistory.js';
+import { RendererOwnedSingleSlot } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
 
 export function ChatWorkspace({
   activeTurnId,
@@ -238,105 +244,141 @@ export function ChatWorkspace({
     },
     [beginStarterTransition, cancelStarterTransition, onSend],
   );
+  const surfaceInstanceId = `${variant}:${currentThread?.id ?? activeProject?.id ?? 'new'}`;
+  const composerSurfaceInstanceId = `${variant}:${composerKey}`;
   const composer = (starter = false) => (
-    <ChatComposer
-      key={composerKey}
-      activeTurnId={activeTurnId}
-      activeProject={activeProject}
-      canClearContext={canClearContext}
-      client={client}
-      contextCompacting={contextCompactionRunning}
-      contextUsage={contextUsage}
-      config={config}
-      currentThread={currentThread}
-      draft={draft}
-      focusOnReveal={focusComposerOnReveal}
-      focusRequest={focusComposerRequest}
-      onFocusRequestConsumed={onFocusComposerRequestConsumed}
-      imageAttachmentRequest={imageAttachmentRequest}
-      skillSelectionRequest={skillSelectionRequest}
-      workspaceMentionRequest={workspaceMentionRequest}
-      skills={skills}
-      sideConversation={variant === 'side'}
-      starter={starter}
-      onCancelActiveTurn={onCancelActiveTurn}
-      onAccessModeChange={onAccessModeChange}
-      onCompactContext={onCompactContext}
-      onClearContext={onClearContext}
-      onDraftChange={onDraftChange}
-      onSelectModel={onSelectModel}
-      onSearchProjectEntries={onSearchProjectEntries}
-      onOpenSideChat={onOpenSideChat}
-      onSetMultiAgentEnabled={onSetMultiAgentEnabled}
-      onSend={handleSend}
-      queuedTurnActions={queuedTurnActions}
-      onStartThreadReview={onStartThreadReview}
-      onImageAttachmentRequestConsumed={onImageAttachmentRequestConsumed}
-      onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
-      onWorkspaceMentionRequestConsumed={onWorkspaceMentionRequestConsumed}
+    <RendererOwnedSingleSlot
+      instanceKey={composerSurfaceInstanceId}
+      slot={chatComposerSlot}
+      props={{
+        surfaceInstanceId: composerSurfaceInstanceId,
+        renderDefault: () => (
+          <ChatComposer
+            key={composerKey}
+            activeTurnId={activeTurnId}
+            activeProject={activeProject}
+            canClearContext={canClearContext}
+            client={client}
+            contextCompacting={contextCompactionRunning}
+            contextUsage={contextUsage}
+            config={config}
+            currentThread={currentThread}
+            draft={draft}
+            focusOnReveal={focusComposerOnReveal}
+            focusRequest={focusComposerRequest}
+            onFocusRequestConsumed={onFocusComposerRequestConsumed}
+            imageAttachmentRequest={imageAttachmentRequest}
+            skillSelectionRequest={skillSelectionRequest}
+            workspaceMentionRequest={workspaceMentionRequest}
+            skills={skills}
+            sideConversation={variant === 'side'}
+            starter={starter}
+            onCancelActiveTurn={onCancelActiveTurn}
+            onAccessModeChange={onAccessModeChange}
+            onCompactContext={onCompactContext}
+            onClearContext={onClearContext}
+            onDraftChange={onDraftChange}
+            onSelectModel={onSelectModel}
+            onSearchProjectEntries={onSearchProjectEntries}
+            onOpenSideChat={onOpenSideChat}
+            onSetMultiAgentEnabled={onSetMultiAgentEnabled}
+            onSend={handleSend}
+            queuedTurnActions={queuedTurnActions}
+            onStartThreadReview={onStartThreadReview}
+            onImageAttachmentRequestConsumed={onImageAttachmentRequestConsumed}
+            onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
+            onWorkspaceMentionRequestConsumed={onWorkspaceMentionRequestConsumed}
+          />
+        ),
+      }}
+    />
+  );
+  const conversation = (renderDefault: () => ReactNode) => (
+    <RendererOwnedSingleSlot
+      instanceKey={surfaceInstanceId}
+      slot={chatConversationSlot}
+      props={{ surfaceInstanceId, renderDefault }}
     />
   );
   return (
     <main className={`chat-main-panel desktop-chat-panel ${variant === 'side' ? 'desktop-chat-panel--side' : ''}`}>
       <div className="chat-main-workspace">
         <div className={conversationClassName} ref={conversationRef}>
-          <ChatTranscript
-            activeTurnId={activeTurnId}
-            contextCompactionRunning={contextCompactionRunning}
-            contentRef={contentRef}
-            currentThread={currentThread}
-            messageHistory={messageHistory}
-            messages={messages}
-            plugins={plugins}
-            reviewState={reviewState}
-            scrollToBottomRef={scrollToBottomRef}
-            showEmptyStarter={showEmptyStarter}
-            showThinkingInTranscript={showThinkingInTranscript}
-            skills={skills}
-            starterContent={showEmptyStarter ? (
-              <ChatStarter
-                key={starterKey}
-                composer={composer(true)}
-                modelSetupNotice={modelSetupNotice}
-                projectName={activeProject?.name}
-                settleComposerHeight={starterComposerHeight}
-                settleOffsetY={starterOffsetY}
-                settlePhase={starterSettlePhase}
-                onSend={handleSend}
-              />
-            ) : undefined}
-            onAnswerApproval={onAnswerApproval}
-            onDeleteMessages={onDeleteMessages}
-            onDeleteModeChange={setDeleteModeActive}
-            onDiscardFileChanges={onDiscardFileChanges}
-            onEditUserMessage={onEditUserMessage}
-            onOpenFileReview={onOpenFileReview}
-          />
+          {showEmptyStarter ? (
+            <div className="chat-messages chat-messages--starter">
+              <div className="chat-content-frame">
+                <ChatStarter
+                  key={starterKey}
+                  composer={composer(true)}
+                  settleComposerHeight={starterComposerHeight}
+                  settleOffsetY={starterOffsetY}
+                  settlePhase={starterSettlePhase}
+                >
+                  {conversation(() => (
+                    <ChatStarterContent
+                      modelSetupNotice={modelSetupNotice}
+                      projectName={activeProject?.name}
+                      onSend={handleSend}
+                    />
+                  ))}
+                </ChatStarter>
+              </div>
+            </div>
+          ) : conversation(() => (
+            <ChatTranscript
+              activeTurnId={activeTurnId}
+              contextCompactionRunning={contextCompactionRunning}
+              contentRef={contentRef}
+              currentThread={currentThread}
+              messageHistory={messageHistory}
+              messages={messages}
+              plugins={plugins}
+              reviewState={reviewState}
+              scrollToBottomRef={scrollToBottomRef}
+              showThinkingInTranscript={showThinkingInTranscript}
+              skills={skills}
+              onAnswerApproval={onAnswerApproval}
+              onDeleteMessages={onDeleteMessages}
+              onDeleteModeChange={setDeleteModeActive}
+              onDiscardFileChanges={onDiscardFileChanges}
+              onEditUserMessage={onEditUserMessage}
+              onOpenFileReview={onOpenFileReview}
+            />
+          ))}
           {overviewRequested && conversationOverview && currentThread ? (
             <div
               aria-hidden={overviewAutoHidden || undefined}
               className={`chat-conversation-overview ${overviewAutoHidden ? 'is-auto-hidden' : ''}`}
               ref={overviewRef}
             >
-              <ConversationOverviewPanel
-                activeProject={activeProject}
-                compact={overviewCompact}
-                contextLabel={overviewContextLabel}
-                contextPercent={contextUsage.visiblePercent || contextUsage.percent}
-                overview={conversationOverview}
-                reviewControls={reviewControls}
-                reviewError={reviewError}
-                reviewState={reviewState}
-                onCollapse={() => {
-                  setOverviewManuallyCollapsed(true);
-                  setOverviewManuallyExpanded(false);
+              <RendererOwnedSingleSlot
+                instanceKey={surfaceInstanceId}
+                slot={chatDetailsSlot}
+                props={{
+                  surfaceInstanceId,
+                  renderDefault: () => (
+                    <ConversationOverviewPanel
+                      activeProject={activeProject}
+                      compact={overviewCompact}
+                      contextLabel={overviewContextLabel}
+                      contextPercent={contextUsage.visiblePercent || contextUsage.percent}
+                      overview={conversationOverview}
+                      reviewControls={reviewControls}
+                      reviewError={reviewError}
+                      reviewState={reviewState}
+                      onCollapse={() => {
+                        setOverviewManuallyCollapsed(true);
+                        setOverviewManuallyExpanded(false);
+                      }}
+                      onExpand={() => {
+                        setOverviewManuallyCollapsed(false);
+                        setOverviewManuallyExpanded(!overviewCanExpand);
+                      }}
+                      onOpenReview={onOpenFileReview}
+                      currentThread={currentThread}
+                    />
+                  ),
                 }}
-                onExpand={() => {
-                  setOverviewManuallyCollapsed(false);
-                  setOverviewManuallyExpanded(!overviewCanExpand);
-                }}
-                onOpenReview={onOpenFileReview}
-                currentThread={currentThread}
               />
             </div>
           ) : null}

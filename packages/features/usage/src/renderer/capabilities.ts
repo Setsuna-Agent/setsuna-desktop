@@ -1,5 +1,7 @@
 import { defineCapability, type CapabilityToken } from '@setsuna-desktop/feature-core/capability';
-import type { SettingsTooltipProps } from '@setsuna-desktop/feature-core/renderer';
+import type {
+  SettingsTooltipProps,
+} from '@setsuna-desktop/renderer-contracts/settings';
 import type { ComponentType } from 'react';
 import type { UsageProviderDescriptor } from '../contracts/index.js';
 

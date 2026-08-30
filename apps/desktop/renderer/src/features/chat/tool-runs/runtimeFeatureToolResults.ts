@@ -1,30 +1,44 @@
 import type { RuntimeToolRun } from '@setsuna-desktop/contracts';
-import type {
-  ResolvedToolResultView,
-  ToolResultViewCatalog,
-} from '@setsuna-desktop/feature-core/renderer';
+import {
+  chatToolResultResolverSlot,
+  type ResolvedChatToolResult,
+} from '@setsuna-desktop/renderer-contracts/chat';
+import { useRendererRootChainResolver } from '../../../kernel/renderer-plugins/RendererKernelProvider.js';
+import { useCallback } from 'react';
 
 export type RuntimeFeatureToolResult = Readonly<{
-  result: ResolvedToolResultView;
+  result: ResolvedChatToolResult;
   runId: string;
 }>;
 
 export function resolveRuntimeFeatureToolResult(
-  catalog: ToolResultViewCatalog,
+  resolve: RuntimeFeatureToolResultResolver,
   run: RuntimeToolRun,
-): ResolvedToolResultView | null {
-  return catalog.resolve(run.data, { toolName: run.name });
+): ResolvedChatToolResult | null {
+  return resolve(run);
+}
+
+export type RuntimeFeatureToolResultResolver = (
+  run: RuntimeToolRun,
+) => ResolvedChatToolResult | null;
+
+export function useRuntimeFeatureToolResultResolver(): RuntimeFeatureToolResultResolver {
+  const resolve = useRendererRootChainResolver(chatToolResultResolverSlot);
+  return useCallback(
+    (run: RuntimeToolRun) => resolve({ toolName: run.name, value: run.data }),
+    [resolve],
+  );
 }
 
 /** Keeps the latest position and payload when a persistent result republishes the same identity. */
 export function assistantTailFeatureToolResults(
-  catalog: ToolResultViewCatalog,
+  resolve: RuntimeFeatureToolResultResolver,
   runs: readonly RuntimeToolRun[],
 ): RuntimeFeatureToolResult[] {
   const seenIdentities = new Set<string>();
   const results = [...runs].reverse().flatMap((run) => {
     if (run.status !== 'success') return [];
-    const result = resolveRuntimeFeatureToolResult(catalog, run);
+    const result = resolveRuntimeFeatureToolResult(resolve, run);
     if (result?.contribution.placement !== 'assistant-tail') return [];
     const identity = result.contribution.identity?.(result.payload);
     if (identity) {

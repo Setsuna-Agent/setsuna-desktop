@@ -5,6 +5,10 @@ import type {
   RuntimeExtensionStatusList,
   RuntimeMessageAttachment,
   RuntimePluginReference,
+  RuntimePluginUiActionInput,
+  RuntimePluginUiActionResult,
+  RuntimePluginUiContribution,
+  RuntimePluginUiNode,
 } from '@setsuna-desktop/contracts';
 import { RUNTIME_EXTENSION_EVENT_NAMES } from '@setsuna-desktop/contracts';
 import { createHash } from 'node:crypto';
@@ -78,6 +82,10 @@ const DEFAULT_VISION_RECOGNITION_TOOL_TIMEOUT_MS = 16 * 60_000;
 const FIRST_PARTY_HOST_CAPABILITIES = new Set<RuntimeExtensionCapability>([
   'image-generation',
   'vision-recognition',
+]);
+const RENDERER_UI_ACTION_MODEL_METHODS = new Set([
+  'image-generation.generate',
+  'vision-recognition.analyze',
 ]);
 
 export class ExtensionManager implements ExtensionRuntime {
@@ -255,6 +263,73 @@ export class ExtensionManager implements ExtensionRuntime {
     return aggregate;
   }
 
+  async runRendererUiAction(
+    input: RuntimePluginUiActionInput,
+    signal?: AbortSignal,
+  ): Promise<RuntimePluginUiActionResult> {
+    if (this.shuttingDown) throw new Error('Extension runtime is shutting down.');
+    throwIfExtensionCancelled(signal);
+    const plugin = (await this.plugins.listInstalledRecords()).find((candidate) => candidate.id === input.pluginId);
+    throwIfExtensionCancelled(signal);
+    if (!plugin?.extension) throw new Error(`Extension plugin is not installed: ${input.pluginId}`);
+    const rendererUi = plugin.extension.rendererUi;
+    if (!rendererUi || !plugin.extension.capabilities.includes('ui')) {
+      throw new Error(`Extension did not declare Renderer UI: ${input.pluginId}`);
+    }
+    const action = rendererUi.actions.find((candidate) => candidate.id === input.actionId);
+    if (!action) throw new Error(`Unknown extension Renderer UI action: ${input.actionId}`);
+    const contribution = rendererUi.contributions.find((candidate) => (
+      candidate.id === input.context.contributionId
+      && candidate.slot === input.context.surface
+      && treeUsesAction(candidate.tree, input.actionId)
+    ));
+    if (!contribution) {
+      throw new Error(
+        `Extension Renderer UI action is not allowed by contribution ${input.context.contributionId}.`,
+      );
+    }
+    if (input.context.surface === 'renderer.chat.composer.status' && !input.context.threadId) {
+      throw new Error('Chat Renderer UI actions require an active thread.');
+    }
+    validateRendererUiActionValues(input.values, [contribution]);
+
+    let active: ActiveExtension | null = null;
+    try {
+      active = await this.ensureActive(plugin);
+      if (!active) throw new Error(`Extension bundle is not trusted: ${plugin.id}`);
+      if (!active.ready.uiActions.includes(input.actionId)) {
+        throw new Error(`Extension worker did not register Renderer UI action: ${input.actionId}`);
+      }
+      await active.client.request(
+        'ui.action',
+        {
+          actionId: input.actionId,
+          input: { values: { ...input.values } },
+          context: {
+            contributionId: contribution.id,
+            surface: input.context.surface,
+            ...(input.context.threadId ? { threadId: input.context.threadId } : {}),
+          },
+        },
+        {
+          threadId: input.context.threadId ?? `renderer-ui:${plugin.id}`,
+          rendererUiAction: true,
+          ...(signal ? { signal } : {}),
+        },
+        this.toolTimeoutMs,
+      );
+      throwIfExtensionCancelled(signal);
+      return Object.freeze({ status: 'completed' });
+    } catch (error) {
+      if (signal?.aborted) {
+        if (active) await this.markStoppedAfterCancellation(plugin.id, active.client);
+        throw extensionCancellationError(signal);
+      }
+      await this.markFailed(plugin.id, error, active?.client);
+      throw error;
+    }
+  }
+
   private toolTimeoutFor(plugin: InstalledPluginRecord): number {
     const capabilities = plugin.extension?.capabilities ?? [];
     if (capabilities.includes('vision-recognition')) return this.visionRecognitionToolTimeoutMs;
@@ -350,6 +425,7 @@ export class ExtensionManager implements ExtensionRuntime {
       entry: extension.entry,
       capabilities: extension.capabilities,
       network: extension.network,
+      rendererUi: extension.rendererUi,
     });
     const existing = this.active.get(plugin.id);
     if (existing?.signature === signature && existing.client.isRunning()) return existing;
@@ -415,10 +491,18 @@ export class ExtensionManager implements ExtensionRuntime {
     plugin: RuntimePluginReference,
     extension: InstalledPluginExtensionRecord,
   ): Promise<unknown> {
+    // Worker helpers are not a security boundary: extension code can write the
+    // JSONL protocol directly. Enforce Renderer action restrictions at dispatch.
+    if (context.rendererUiAction && RENDERER_UI_ACTION_MODEL_METHODS.has(method)) {
+      throw new Error('Renderer UI actions cannot use model host capabilities.');
+    }
     if (method.startsWith('state.')) {
       requireCapability(extension, 'state');
       const input = requiredRecord(params, 'Extension state request must be an object.');
       const key = requiredText(input.key, 'Extension state key');
+      if (context.rendererUiAction && input.scope !== 'global') {
+        throw new Error('Renderer UI actions may use only global extension state.');
+      }
       const scope = stateScope(input.scope, context);
       if (method === 'state.get') return this.state.get(plugin.id, scope, key);
       if (method === 'state.set') {
@@ -432,6 +516,7 @@ export class ExtensionManager implements ExtensionRuntime {
     }
     if (method.startsWith('ui.')) {
       requireCapability(extension, 'ui');
+      if (context.rendererUiAction) throw new Error('Renderer UI actions cannot open nested interactive UI.');
       if (method !== 'ui.notify' && method !== 'ui.confirm' && method !== 'ui.select' && method !== 'ui.input') {
         throw new Error(`Unsupported extension UI method: ${method}`);
       }
@@ -693,6 +778,38 @@ function mergeEventResults(aggregate: ExtensionEventOutcome, value: unknown): vo
     }
     if (typeof outcome.feedback === 'string' && outcome.feedback.trim()) {
       aggregate.feedback = [aggregate.feedback, outcome.feedback.trim()].filter(Boolean).join('\n');
+    }
+  }
+}
+
+function treeUsesAction(node: RuntimePluginUiNode, actionId: string): boolean {
+  if (node.type === 'button') return node.actionId === actionId;
+  return node.type === 'stack' && node.children.some((child) => treeUsesAction(child, actionId));
+}
+
+function validateRendererUiActionValues(
+  values: Readonly<Record<string, string>>,
+  contributions: readonly RuntimePluginUiContribution[],
+): void {
+  const fields = new Map<string, Extract<RuntimePluginUiNode, { type: 'field' | 'select' }>>();
+  const visit = (node: RuntimePluginUiNode): void => {
+    if (node.type === 'field' || node.type === 'select') fields.set(node.name, node);
+    if (node.type === 'stack') node.children.forEach(visit);
+  };
+  contributions.forEach((contribution) => visit(contribution.tree));
+  for (const [name, value] of Object.entries(values)) {
+    const field = fields.get(name);
+    if (!field) throw new Error(`Renderer UI action contains an undeclared field: ${name}`);
+    if (field.type === 'field' && value.length > (field.maxLength ?? 4_000)) {
+      throw new Error(`Renderer UI action field is too large: ${name}`);
+    }
+    if (field.type === 'select' && !field.options.some((option) => option.value === value)) {
+      throw new Error(`Renderer UI action select value is invalid: ${name}`);
+    }
+  }
+  for (const field of fields.values()) {
+    if (field.type === 'field' && field.required && !values[field.name]?.trim()) {
+      throw new Error(`Renderer UI action field is required: ${field.name}`);
     }
   }
 }

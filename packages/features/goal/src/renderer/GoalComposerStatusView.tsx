@@ -2,11 +2,13 @@ import { Input, Modal } from 'antd';
 import { Pause, Play, RefreshCw, SquarePen as EditIcon, Target, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type {
-  ComposerActiveTurn,
-  ComposerStatusViewHostProps,
   RendererFeatureEventFeed,
 } from '@setsuna-desktop/feature-core/renderer';
 import type { FeatureScope } from '@setsuna-desktop/feature-core/scope';
+import type {
+  ChatComposerActiveTurn,
+  ChatComposerStatusSlotProps,
+} from '@setsuna-desktop/renderer-contracts/chat';
 import type { Goal, GoalPatch } from '../contracts/index.js';
 import type { GoalClient } from './client.js';
 import {
@@ -31,7 +33,7 @@ export function GoalComposerStatusView({
   scope,
   threadId,
   translate,
-}: ComposerStatusViewHostProps & Readonly<{
+}: ChatComposerStatusSlotProps & Readonly<{
   client: GoalClient;
   feed: RendererFeatureEventFeed;
   scope: FeatureScope;
@@ -68,7 +70,7 @@ export function GoalComposerStatusView({
   );
 }
 
-export function goalActiveTurnStartedAt(activeTurn?: ComposerActiveTurn): string | undefined {
+export function goalActiveTurnStartedAt(activeTurn?: ChatComposerActiveTurn): string | undefined {
   return activeTurn?.taskKind === 'goal' ? activeTurn.startedAt : undefined;
 }
 
@@ -83,7 +85,7 @@ function GoalStatus({
   controller(): GoalRendererController | null;
   goal: Goal;
   projectionError: string | null;
-  translate: ComposerStatusViewHostProps['translate'];
+  translate: ChatComposerStatusSlotProps['translate'];
 }>) {
   const [editOpen, setEditOpen] = useState(false);
   const [draft, setDraft] = useState(goal.objective);
@@ -234,7 +236,7 @@ function GoalUnavailableStatus({
 }: Readonly<{
   error: string;
   onRetry(): void;
-  translate: ComposerStatusViewHostProps['translate'];
+  translate: ChatComposerStatusSlotProps['translate'];
 }>) {
   return (
     <div

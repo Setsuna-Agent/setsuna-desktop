@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MarkdownNavigationProvider } from '../../../../../src/features/chat/markdown/MarkdownNavigationProvider.js';
 import { RuntimeToolRuns, groupToolRuns } from '../../../../../src/features/chat/tool-runs/RuntimeToolRuns.js';
+import { withRendererPluginTestHost } from '../../../support/RendererPluginTestHost.js';
 
 export function shellRun(status: RuntimeToolRun['status']): RuntimeToolRun {
   return {
@@ -144,10 +145,10 @@ export function firstToolRunSummaryHtml(html: string): string {
 
 export function renderedHtml(runs: RuntimeToolRun[], summaryMode?: 'aggregate' | 'latest'): string {
   const children = createElement(RuntimeToolRuns, { runs, summaryMode, onAnswerApproval: () => undefined });
-  const html = renderToStaticMarkup(createElement(MarkdownNavigationProvider, {
+  const html = renderToStaticMarkup(withRendererPluginTestHost(createElement(MarkdownNavigationProvider, {
     children,
     onOpenWorkspaceFile: () => undefined,
     workspaceRoot: '/Users/dev/project',
-  }));
+  })));
   return html;
 }

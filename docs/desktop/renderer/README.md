@@ -11,7 +11,9 @@ Renderer 是桌面工作台 UI。它只依赖共享 contracts 和 preload 暴露
 | `src/app/` | 入口、顶层 controller、layout、providers、sidebar | [App 与 runtime 状态](app-and-runtime-state.md) |
 | `src/features/chat/` | 对话、composer、tool run、Markdown、附件 | [Chat](chat.md) |
 | `src/features/workspace/` | 项目文件、面板 session 与 Feature surface 编排 | [Workspace 与 debug](workspace-and-debug.md) |
-| `src/composition/` | Renderer Feature catalog、registry 与 native Feature adapter | [Feature Composition](../../designs/history/feature-composition-architecture.md) |
+| `src/composition/` | 唯一 Renderer Feature composition root、内置 Renderer Plugin 与 host capability 投影 | [Feature Composition](../../architecture/feature-composition.md) |
+| `src/kernel/renderer-plugins/` | Slot registry、transaction、selection、layout preference、outlet 与 inspection | [Renderer Plugin Runtime](../../designs/current/renderer-plugin-runtime.md) |
+| `src/kernel/declarative-plugin-ui/` | 普通 Plugin JSON schema 到 host-owned React primitive 的安全 gateway | [Plugin Bundles](../../extensions/plugins/bundles.md) |
 | `packages/features/review/src/renderer/` | Review panel、Git 控件、状态、文案与样式 | [Workspace 与 debug](workspace-and-debug.md) |
 | `packages/features/conversation-debug/src/renderer/` | 事件/trace 图、列表、inspector 与 Feature settings | [Workspace 与 debug](workspace-and-debug.md) |
 | `packages/features/runtime-activity/src/renderer/` | 跨线程运行任务、后台服务管理与全局 Overlay | [App 与 runtime 状态](app-and-runtime-state.md) |
@@ -31,13 +33,19 @@ window.setsunaDesktop
         ├→ createDesktopRuntimeClient → useRuntimeClientState
         │                              ├→ useRuntimeConfigState
         │                              └→ useRuntimeThreadState
-        └→ Renderer Feature composition → Feature-owned services
+        └→ Renderer Feature composition
+               ├→ Feature-owned services
+               └→ scope-bound UI registration
+                          ↓
+                  Renderer Plugin Runtime
+                  ├→ immutable Slot snapshot
+                  └→ RendererKernelProvider
         ↓
 useDesktopAppController
         ↓
 AppReadyLayout
         ↓
-route / feature components
+owned Slot outlets / feature components
 ```
 
 Runtime state、导航状态、feature 临时状态分开持有：
@@ -63,7 +71,9 @@ Runtime state、导航状态、feature 临时状态分开持有：
 - Conversation debug。
 - Workspace side/bottom surfaces。
 
-`AppRouteContent.tsx` 决定主内容，`AppReadyLayout.tsx` 组合 shell、sidebar、toolbar、workspace 和 overlays。新增 view 时先定义 app 类型与导航动作，再接 layout，避免通过多个布尔值隐式组合。
+`AppReadyLayout.tsx` 保留 controller 状态和默认 JSX，但 shell、sidebar、topbar、route、workspace 和 overlay 都经过 owner-bound Slot outlet 组合。Chat route 声明 conversation/composer/details/workspace 子 Slot，Settings route 声明 page/extensions 子 Slot；替换父 contribution 会让它所有的子树一起失活。
+
+新增可替换 UI 时，先确认是否有真实的第二个组合者，再在 `@setsuna-desktop/renderer-contracts` 中定义最小 typed Slot，由 Feature setup 或 host Plugin activate 注册。不在 React component/hook/effect 中创建 contribution。完整所有权、事务和安全边界见 [Renderer Plugin Runtime 设计](../../designs/current/renderer-plugin-runtime.md)。
 
 ## Feature 边界
 

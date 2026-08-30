@@ -6,6 +6,7 @@
 
 ## 当前设计
 
+- [Renderer Plugin Runtime](current/renderer-plugin-runtime.md)：已实施；记录静态 Renderer Plugin、层级 Slot Tree、布局偏好、Inspector、声明式第三方 UI、安全边界与 client bundle 延期门槛。
 - [Active turn 发送队列](current/queued-turn-inputs.md)：Contract event、runtime FIFO/steer/Goal 调度、REST 和 renderer composer 的完整链路。
 - [持久化 Goal](current/persistent-goals.md)：`pi-goal` 对齐、状态机、自动续轮、安全停止、恢复和 composer 控制。
 - [WebDAV 自动备份与手动还原](current/webdav-backup-and-restore.md)：已实施的数据白名单、API Key 端到端加密、不可变快照、还原损失清单和崩溃回滚协议。

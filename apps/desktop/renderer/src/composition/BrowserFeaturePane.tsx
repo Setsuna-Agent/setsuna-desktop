@@ -12,6 +12,7 @@ import type {
 } from '../features/workspace/model.js';
 import { WorkspaceResizeHandle } from '../features/workspace/WorkspaceResizeHandle.js';
 import { useI18n } from '../shared/i18n/I18nProvider.js';
+import { useKeyboardShortcuts } from '../shared/shortcuts/KeyboardShortcutsProvider.js';
 import { SelectField } from '../shared/ui/primitives.js';
 
 export function BrowserFeaturePane({
@@ -38,6 +39,7 @@ export function BrowserFeaturePane({
   resizeValue: number;
 }>) {
   const { t } = useI18n();
+  const { bindingsFor } = useKeyboardShortcuts();
   const toast = useToast();
   const notify = useCallback<BrowserNotify>((tone, message) => {
     toast.show(message, { tone });
@@ -51,6 +53,10 @@ export function BrowserFeaturePane({
       openExternal={(url) => { void window.setsunaDesktop?.links.openExternal(url); }}
       panel={{ browser: panel.browser, id: panel.id, title: panel.title }}
       placement={placement}
+      reloadShortcutBindings={{
+        hard: bindingsFor('browser.hardReload')[0] ?? null,
+        normal: bindingsFor('browser.reload')[0] ?? null,
+      }}
       resizeHandle={(
         <WorkspaceResizeHandle
           max={resizeMax}

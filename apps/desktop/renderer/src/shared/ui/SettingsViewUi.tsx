@@ -11,7 +11,7 @@ import type {
   SettingsTooltipProps,
   SettingsToggleProps,
   SettingsViewUi,
-} from '@setsuna-desktop/feature-core/renderer';
+} from '@setsuna-desktop/renderer-contracts/settings';
 import { ChevronRight } from 'lucide-react';
 import { useEffect } from 'react';
 import { useToast } from '../../app/providers/ToastProvider.js';

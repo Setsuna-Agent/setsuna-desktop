@@ -27,14 +27,15 @@ export function RuntimeStructuredInputField({
     ?? field.enum?.map((item, index) => ({ const: item, title: field.enumNames?.[index] ?? item }));
   const arrayChoices: Array<{ const: string; title: string; description?: string }> | undefined = field.items?.anyOf
     ?? field.items?.enum?.map((item) => ({ const: item, title: item }));
-  const selectedDescriptions = (field.type === 'array' ? arrayChoices : choices)
-    ?.filter((choice) => Array.isArray(value) ? value.includes(choice.const) : value === choice.const)
+  const selectedArrayValues = Array.isArray(value) ? value : [];
+  const selectedDescriptions = choices
+    ?.filter((choice) => value === choice.const)
     .map((choice) => choice.description)
     .filter((description): description is string => Boolean(description));
 
   return (
     <div className={`chat-tool-run__elicitation-field${field.type === 'boolean' ? ' chat-tool-run__elicitation-field--boolean' : ''}`}>
-      <label id={labelId} htmlFor={fieldId}>{label}{required ? <em>{t('toolRun.input.required')}</em> : null}</label>
+      <label id={labelId} htmlFor={field.type === 'array' ? undefined : fieldId}>{label}{required ? <em>{t('toolRun.input.required')}</em> : null}</label>
       {field.description ? <small>{field.description}</small> : null}
       {field.type === 'boolean' ? (
         <Checkbox
@@ -57,16 +58,36 @@ export function RuntimeStructuredInputField({
           onChange={(event) => onChange(event.currentTarget.value === '' ? '' : Number(event.currentTarget.value))}
         />
       ) : field.type === 'array' ? (
-        <select
-          id={fieldId}
-          name={name}
-          multiple
-          required={required}
-          value={Array.isArray(value) ? value : []}
-          onChange={(event) => onChange([...event.currentTarget.selectedOptions].map((option) => option.value))}
+        <div
+          aria-labelledby={labelId}
+          className="chat-tool-run__elicitation-multi-select"
+          role="group"
         >
-          {(arrayChoices ?? []).map((choice) => <option key={choice.const} value={choice.const}>{choice.title}</option>)}
-        </select>
+          {(arrayChoices ?? []).map((choice, index) => {
+            const checked = selectedArrayValues.includes(choice.const);
+            const selectionLimitReached = field.maxItems !== undefined && selectedArrayValues.length >= field.maxItems;
+            return (
+              <Checkbox
+                checked={checked}
+                className={`chat-tool-run__elicitation-multi-select-option${checked ? ' is-selected' : ''}`}
+                disabled={!checked && selectionLimitReached}
+                id={`${fieldId}-${index}`}
+                key={choice.const}
+                name={name}
+                required={required && selectedArrayValues.length === 0 && index === 0}
+                value={choice.const}
+                onChange={(nextChecked) => onChange(nextChecked
+                  ? [...selectedArrayValues, choice.const]
+                  : selectedArrayValues.filter((item) => item !== choice.const))}
+              >
+                <span className="chat-tool-run__elicitation-multi-select-copy">
+                  <span>{choice.title}</span>
+                  {choice.description ? <small>{choice.description}</small> : null}
+                </span>
+              </Checkbox>
+            );
+          })}
+        </div>
       ) : choices?.length ? (
         <SelectField
           aria-labelledby={labelId}

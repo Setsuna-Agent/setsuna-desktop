@@ -5,9 +5,17 @@ import {
   type BrowserDesktopBridge,
   type BrowserPanelDescriptor,
   type BrowserPanelMetadataPatch,
+  type BrowserReloadShortcutBindings,
 } from '../contracts/index.js';
 import { ArrowLeft, ArrowRight, House, RefreshCw, Star, X } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from 'react';
 import { BrowserAddressBar } from './BrowserAddressBar.js';
 import { BrowserDeviceToolbar } from './BrowserDeviceToolbar.js';
 import { BrowserDeviceViewport } from './BrowserDeviceViewport.js';
@@ -106,6 +114,7 @@ export function BrowserPanel({
   openExternal,
   panel,
   placement = 'side',
+  reloadShortcutBindings,
   onPanelMetadataChange,
   onScreenshotAttachment,
   resizeHandle,
@@ -118,6 +127,7 @@ export function BrowserPanel({
   openExternal?: (url: string) => void;
   panel: BrowserPanelDescriptor;
   placement?: 'bottom' | 'side';
+  reloadShortcutBindings?: BrowserReloadShortcutBindings;
   onPanelMetadataChange: (panelId: string, patch: BrowserPanelMetadataPatch) => void;
   onScreenshotAttachment?: BrowserScreenshotAttachmentHandler;
   resizeHandle?: ReactNode;
@@ -293,6 +303,24 @@ export function BrowserPanel({
     }
   };
 
+  const showReloadMenu = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    if (tab.loading || !bridge) return;
+    const webview = webviewRef.current;
+    let webContentsId = 0;
+    if (!runAttachedWebviewAction(webview, (attachedWebview) => {
+      webContentsId = attachedWebview.getWebContentsId();
+    })) {
+      reportBrowserActionFailure(translate('feature.browser.reloadFailed'));
+      return;
+    }
+    void bridge.showReloadMenu(webContentsId, reloadShortcutBindings).then((shown) => {
+      if (!shown) reportBrowserActionFailure(translate('feature.browser.reloadFailed'));
+    }).catch((error) => {
+      reportBrowserActionFailure(translate('feature.browser.reloadFailed'), error);
+    });
+  };
+
   const printActivePage = () => {
     const webview = webviewRef.current;
     if (!webview) return;
@@ -357,7 +385,7 @@ export function BrowserPanel({
         <button className="desktop-browser-navigation__button" type="button" disabled={!tab.canGoForward} aria-label={translate('feature.browser.forward')} onClick={() => navigateHistory('forward')}>
           <ArrowRight size={14} />
         </button>
-        <button className="desktop-browser-navigation__button" type="button" disabled={tab.showingHome} aria-label={translate(tab.loading ? 'feature.browser.stop' : 'feature.browser.refresh')} onClick={reload}>
+        <button className="desktop-browser-navigation__button" type="button" disabled={tab.showingHome} aria-label={translate(tab.loading ? 'feature.browser.stop' : 'feature.browser.refresh')} onClick={reload} onContextMenu={showReloadMenu}>
           {tab.loading ? <X size={13} /> : <RefreshCw size={13} />}
         </button>
         <button

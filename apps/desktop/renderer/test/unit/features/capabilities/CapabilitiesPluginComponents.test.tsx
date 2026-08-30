@@ -1,11 +1,17 @@
 // @vitest-environment happy-dom
 
 import type { RuntimePluginMarketplaceItem } from '@setsuna-desktop/contracts';
+import type { RendererOwnedSlotRenderer } from '@setsuna-desktop/feature-core/renderer';
+import {
+  settingsPageKey,
+  type SettingsPageEntryDescriptor,
+} from '@setsuna-desktop/renderer-contracts/settings';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ComponentProps } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CapabilitiesPluginDetail } from '../../../../src/features/capabilities/CapabilitiesPluginDetail.js';
+import { CapabilitiesPluginDetail as UnhostedCapabilitiesPluginDetail } from '../../../../src/features/capabilities/CapabilitiesPluginDetail.js';
 import { CapabilitiesLegacyHooksDetail } from '../../../../src/features/capabilities/CapabilitiesLegacyHooksDetail.js';
 import {
   CapabilitiesPluginFilePreview,
@@ -13,6 +19,45 @@ import {
 } from '../../../../src/features/capabilities/CapabilitiesPluginItemDialog.js';
 import { CapabilitiesPluginListItem } from '../../../../src/features/capabilities/CapabilitiesPluginListItem.js';
 import { CapabilitiesPluginMarket } from '../../../../src/features/capabilities/CapabilitiesPluginMarket.js';
+import { RendererPluginTestHost } from '../../support/RendererPluginTestHost.js';
+
+function CapabilitiesPluginDetail(
+  props: ComponentProps<typeof UnhostedCapabilitiesPluginDetail>,
+) {
+  return (
+    <RendererPluginTestHost>
+      <UnhostedCapabilitiesPluginDetail {...props} />
+    </RendererPluginTestHost>
+  );
+}
+
+const brokenSettingsEntry = Object.freeze({
+  entryId: 'broken-settings.capabilities-page',
+  key: settingsPageKey('capabilities', 'broken-settings-plugin'),
+  metadata: Object.freeze({
+    location: 'capabilities' as const,
+    order: 100,
+    sectionId: 'broken-settings-plugin',
+    titleKey: 'fixture.brokenSettings',
+  }),
+  owner: Object.freeze({
+    featureId: 'broken-settings',
+    pluginId: 'feature.broken-settings',
+    scopeId: 'renderer:broken-settings:0',
+  }),
+}) satisfies SettingsPageEntryDescriptor;
+
+const brokenSettingsSlots = Object.freeze({
+  chain: () => null as never,
+  keyed: () => <BrokenFeatureSettings />,
+  keyedEntries: () => Object.freeze([brokenSettingsEntry]),
+  list: () => null,
+  single: () => null,
+}) as unknown as RendererOwnedSlotRenderer;
+
+function BrokenFeatureSettings(): never {
+  throw new Error('broken settings fixture');
+}
 
 describe('capabilities plugin components', () => {
   afterEach(() => {
@@ -685,6 +730,37 @@ describe('capabilities plugin components', () => {
 
     expect(html).toContain('图片生成');
     expect(html).not.toContain('data-feature-id="image-generation"');
+  });
+
+  it('keeps a failed Feature settings contribution inside the plugin detail recovery shell', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    render(
+      <RendererPluginTestHost slots={brokenSettingsSlots}>
+        <UnhostedCapabilitiesPluginDetail
+          error={null}
+          installedPlugin={{
+            id: 'broken-settings-plugin',
+            name: 'Broken Settings Plugin',
+            installedAt: '2026-08-30T00:00:00.000Z',
+            installationSource: 'marketplace',
+            skills: [],
+            mcpServers: [],
+            hooks: [],
+            hookCount: 0,
+            resources: [],
+          }}
+          installing={false}
+          removing={false}
+          onBack={() => undefined}
+          onInstall={async () => undefined}
+          onRemove={async () => undefined}
+        />
+      </RendererPluginTestHost>,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Broken Settings Plugin' })).toBeTruthy();
+    expect(document.querySelector('[data-feature-recovery="true"]')).toBeTruthy();
   });
 
   it('keeps vision settings out of the plugin detail when its Feature contribution is absent', () => {

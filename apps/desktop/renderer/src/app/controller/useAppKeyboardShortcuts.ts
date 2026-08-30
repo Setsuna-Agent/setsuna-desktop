@@ -10,11 +10,13 @@ import {
 } from '../../shared/shortcuts/keyboardShortcutCommands.js';
 import { useKeyboardShortcuts } from '../../shared/shortcuts/KeyboardShortcutsProvider.js';
 
+export type AppKeyboardShortcutEvent = KeyboardEvent | DesktopKeyboardShortcutInput;
+
 export type AppKeyboardShortcutHandler = {
   enabled?: boolean;
   allowInModal?: boolean;
   allowInTerminal?: boolean;
-  execute: () => void;
+  execute: (event: AppKeyboardShortcutEvent) => void;
 };
 
 export type AppKeyboardShortcutHandlers = Partial<
@@ -37,7 +39,7 @@ export function useAppKeyboardShortcuts(handlers: AppKeyboardShortcutHandlers): 
 
       if ('preventDefault' in event) event.preventDefault();
       if ('stopPropagation' in event) event.stopPropagation();
-      handler.execute();
+      handler.execute(event);
     };
     const handleKeyDown = (event: KeyboardEvent) => executeShortcut(event);
 
@@ -78,6 +80,14 @@ export function matchingKeyboardShortcutCommand(
     }
   }
   return null;
+}
+
+export function browserShortcutTabId(
+  event: AppKeyboardShortcutEvent,
+  fallbackTabId: string | null,
+): string | null {
+  if ('source' in event && event.source?.kind === 'embedded-browser') return event.source.tabId;
+  return fallbackTabId;
 }
 
 export function isModalDialogVisible(

@@ -3,6 +3,7 @@ import {
   claimDesktopWorkspacePanelLayout,
   desktopWorkspaceBrowserPanelInstances,
   desktopWorkspacePanelLayout,
+  desktopWorkspacePanelTargetContext,
   resetDesktopWorkspacePanelLayout,
   updateDesktopWorkspacePanelLayout,
   type DesktopWorkspacePanelLayouts,
@@ -71,6 +72,26 @@ describe('desktop workspace panel sessions', () => {
 
     expect(whileViewingB).toEqual([{ active: false, panel: browser, placement: 'side', targetIdentity: threadA }]);
     expect(afterReturningToA).toEqual([{ active: true, panel: browser, placement: 'side', targetIdentity: threadA }]);
+  });
+
+  it('derives browser Slot context from the panel target instead of the active conversation', () => {
+    const projectIdByThreadId = new Map([
+      ['thread-A', 'project-A'],
+      ['thread-B', 'project-B'],
+    ]);
+
+    expect(desktopWorkspacePanelTargetContext('thread:thread-A', projectIdByThreadId)).toEqual({
+      projectId: 'project-A',
+      threadId: 'thread-A',
+    });
+    expect(desktopWorkspacePanelTargetContext('new-thread-slot:project-C', projectIdByThreadId)).toEqual({
+      projectId: 'project-C',
+      threadId: null,
+    });
+    expect(desktopWorkspacePanelTargetContext('new-thread-slot:global', projectIdByThreadId)).toEqual({
+      projectId: null,
+      threadId: null,
+    });
   });
 
   it('keeps a browser mounted and active in the bottom slot', () => {
