@@ -61,14 +61,13 @@ describe('RendererPluginInspectorSettings filtering', () => {
     }));
     const entrySummary = html.match(
       /<summary class="renderer-plugin-inspector__entry-summary">([\s\S]*?)<\/summary>/,
-    )?.[1].replace(/<[^>]+>/g, '');
+    )?.[1];
 
     expect(html).toContain(
       '<details class="chat-user-settings__section-block chat-user-settings__advanced-disclosure renderer-plugin-inspector">',
     );
-    expect(entrySummary).toContain('2 active entries');
-    expect(entrySummary).not.toContain('settings.general');
-    expect(entrySummary).not.toContain('settings.runtime');
+    expect(entrySummary).toContain('>2 active entries</span>');
+    expect(entrySummary).not.toMatch(/>settings\.(?:general|runtime)</);
   });
 });
 
