@@ -6,6 +6,7 @@ export const terminalMessages = defineRendererMessageBundle({
   messages: {
     'zh-CN': {
       'feature.terminal.error': '终端错误',
+      'feature.terminal.label': '终端',
       'feature.terminal.exited': '进程已退出：{code}',
       'feature.terminal.closed': '终端已关闭',
       'feature.terminal.restartBlocked': '终端仍在运行，无法重新启动。',
@@ -17,6 +18,7 @@ export const terminalMessages = defineRendererMessageBundle({
     },
     'en-US': {
       'feature.terminal.error': 'Terminal error',
+      'feature.terminal.label': 'Terminal',
       'feature.terminal.exited': 'Process exited: {code}',
       'feature.terminal.closed': 'Terminal closed',
       'feature.terminal.restartBlocked': 'The terminal is still running and cannot be restarted.',

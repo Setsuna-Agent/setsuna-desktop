@@ -1,4 +1,9 @@
 export { terminalRendererFeature } from './feature.js';
+export {
+  TerminalWorkspacePanel,
+  TerminalWorkspacePanelHostProvider,
+  type TerminalWorkspacePanelHost,
+} from './TerminalWorkspacePanel.js';
 export { LazyTerminalPane } from './LazyTerminalPane.js';
 export { TerminalPane, type TerminalPaneProps } from './TerminalPane.js';
 export {

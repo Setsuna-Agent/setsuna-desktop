@@ -55,6 +55,16 @@ main RuntimeHost
 - 监视目录变化并通知 app-server。
 - 返回 prompt injection。
 
+运行时设置提供以下用户级 extra root 快捷入口：
+
+- `~/.agents/skills`
+- `~/.codex/skills`
+- `~/.claude/skills`
+- `~/.grok/skills`
+- `~/.pi/agent/skills`
+
+这些路径由宿主使用当前用户主目录解析，并由 Skills Feature 的只读 typed operation 统计直接子目录中的 `SKILL.md`。未继承且计数为零的预设不会展示；已继承项始终保留取消入口。继承状态仅作用于当前 runtime 会话。Setsuna 自己的 `runtime/user-skills/` 始终由 registry 自动加载，不作为 extra root 重复展示。
+
 ## 选择与自动激活
 
 注入来源：
@@ -135,7 +145,7 @@ Skill 本身不能把 secret 写入 manifest；认证仍走 MCP/native secret �
 - `packages/features/skills/src/runtime/`
 - `packages/features/skills/src/renderer/`
 - `packages/contracts/src/skills.ts`
-- Renderer `features/capabilities/CapabilitiesSkill*.tsx`
+- Renderer 页面 `packages/features/skills/src/renderer/SkillsCapabilitiesPage.tsx`
 
 ## 测试
 
@@ -143,4 +153,4 @@ Skill 本身不能把 secret 写入 manifest；认证仍走 MCP/native secret �
 - `test/adapters/skill/skill-mcp-dependency-coordinator.test.ts`
 - `test/adapters/tool/skill-management-tool-host.test.ts`
 - Runtime server capabilities tests。
-- Renderer capabilities tests。
+- `packages/features/skills/test/renderer/`。

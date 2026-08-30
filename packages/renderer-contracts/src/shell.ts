@@ -1,8 +1,10 @@
 import {
   defineKeyedRendererSlot,
+  defineListRendererSlot,
   defineSingleRendererSlot,
 } from '@setsuna-desktop/feature-core/renderer';
-import type { ReactNode } from 'react';
+import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
+import type { ButtonHTMLAttributes, ComponentType, ReactNode } from 'react';
 
 export type RendererAppRouteId = 'capabilities' | 'chat' | 'settings';
 
@@ -19,6 +21,19 @@ export type ShellRouteSlotProps = Readonly<{
 
 export type ShellRegionSlotProps = Readonly<{
   renderDefault(): ReactNode;
+}>;
+
+export type ShellTopbarIconButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> & Readonly<{
+  children: ReactNode;
+  label: string;
+}>;
+
+export type ShellTopbarActionSlotProps = Readonly<{
+  activeRouteId: RendererAppRouteId;
+  translate: RendererTranslate;
+  ui: Readonly<{
+    IconButton: ComponentType<ShellTopbarIconButtonProps>;
+  }>;
 }>;
 
 export const appReadySlot = defineSingleRendererSlot<AppReadySlotProps>({
@@ -47,6 +62,12 @@ export const shellTopbarTitleSlot = defineSingleRendererSlot<ShellRegionSlotProp
 
 export const shellTopbarActionsSlot = defineSingleRendererSlot<ShellRegionSlotProps>({
   id: 'renderer.shell.topbar.actions',
+  scope: 'app',
+  userConfigurable: true,
+});
+
+export const shellTopbarActionSlot = defineListRendererSlot<ShellTopbarActionSlotProps>({
+  id: 'renderer.shell.topbar.action',
   scope: 'app',
   userConfigurable: true,
 });

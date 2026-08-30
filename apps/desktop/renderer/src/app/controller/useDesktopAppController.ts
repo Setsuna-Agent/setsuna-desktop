@@ -28,10 +28,7 @@ import { useNetworkProxyFeatureView } from '../../composition/NetworkProxyFeatur
 import { useModelProviderFeatureService } from '../../composition/ModelProviderFeatureBoundary.js';
 import { useConversationDebugFeatureEnabled } from '../../composition/ConversationDebugFeatureBoundary.js';
 import { useUsageFeatureInvalidation } from '../../composition/UsageFeatureBoundary.js';
-import { usePluginManagementFeatureService } from '../../composition/PluginManagementFeatureBoundary.js';
-import { useMcpFeatureService } from '../../composition/McpFeatureBoundary.js';
-import { useSkillsFeatureService } from '../../composition/SkillsFeatureBoundary.js';
-import { reportRuntimeBackgroundFailure } from '../../services/runtime-client/runtimeClientErrors.js';
+import { useCapabilitiesRefreshCoordinator } from '../../composition/CapabilitiesRefreshBoundary.js';
 import { useReviewFeatureService } from '../../composition/ReviewFeatureBoundary.js';
 import type { RuntimeTurnSettlement } from '../../services/runtime-client/useRuntimeThreadState.js';
 import { useDesktopNavigation } from './useDesktopNavigation.js';
@@ -51,25 +48,12 @@ export function useDesktopAppController() {
   const modelProvider = useModelProviderFeatureService();
   const conversationDebugEnabled = useConversationDebugFeatureEnabled();
   const invalidateUsage = useUsageFeatureInvalidation();
-  const mcp = useMcpFeatureService();
-  const skills = useSkillsFeatureService();
-  const pluginManagement = usePluginManagementFeatureService();
+  const capabilitiesRefresh = useCapabilitiesRefreshCoordinator();
   const review = useReviewFeatureService();
   const handleTurnSettled = useCallback((settlement: RuntimeTurnSettlement) => {
     if (settlement.usageChanged) invalidateUsage(settlement.threadId);
-    void pluginManagement.refreshExtensions().catch((unknownError) => {
-      reportRuntimeBackgroundFailure('plugin status refresh after turn', unknownError);
-    });
-    void pluginManagement.refreshHooks().catch((unknownError) => {
-      reportRuntimeBackgroundFailure('Plugin Hook refresh after turn', unknownError);
-    });
-    void mcp.refresh().catch((unknownError) => {
-      reportRuntimeBackgroundFailure('MCP refresh after turn', unknownError);
-    });
-    void skills.refresh().catch((unknownError) => {
-      reportRuntimeBackgroundFailure('Skill refresh after turn', unknownError);
-    });
-  }, [invalidateUsage, mcp, pluginManagement, skills]);
+    void capabilitiesRefresh.refreshAll();
+  }, [capabilitiesRefresh, invalidateUsage]);
   const runtime = useRuntimeClientState({
     activeProjectId,
     modelProvider,
@@ -94,22 +78,8 @@ export function useDesktopAppController() {
 
   useEffect(() => {
     if (loadState !== 'ready') return;
-    void pluginManagement.refresh().catch((unknownError) => {
-      reportRuntimeBackgroundFailure('plugin management refresh', unknownError);
-    });
-  }, [loadState, pluginManagement]);
-  useEffect(() => {
-    if (loadState !== 'ready') return;
-    void mcp.refresh().catch((unknownError) => {
-      reportRuntimeBackgroundFailure('MCP management refresh', unknownError);
-    });
-  }, [loadState, mcp]);
-  useEffect(() => {
-    if (loadState !== 'ready') return;
-    void skills.refresh().catch((unknownError) => {
-      reportRuntimeBackgroundFailure('Skill catalog refresh', unknownError);
-    });
-  }, [loadState, skills]);
+    void capabilitiesRefresh.refreshAll();
+  }, [capabilitiesRefresh, loadState]);
   const chatTargetIdentity = chatComposerTargetIdentity(
     currentThread?.id,
     currentThread ? null : activeProjectId,

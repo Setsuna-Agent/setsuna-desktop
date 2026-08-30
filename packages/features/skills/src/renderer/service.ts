@@ -38,6 +38,13 @@ export class RendererSkillsService implements SkillsRendererService {
     return this.snapshot;
   }
 
+  inspectDirectories(paths: string[], options?: SkillsOperationOptions) {
+    return this.options.scope.runOperation(
+      (signal) => this.options.client.inspectDirectories(paths, { signal }),
+      options,
+    );
+  }
+
   subscribe(listener: SkillsRendererListener): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);

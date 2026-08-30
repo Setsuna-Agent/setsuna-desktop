@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@setsuna-desktop/feature-core": "workspace:*",
+    "@setsuna-desktop/renderer-contracts": "workspace:*",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "lucide-react": "^0.468.0",

@@ -45,7 +45,7 @@ describe('renderer feature composition', () => {
       path: '/v1/features/plugin-management/installed',
     }));
 
-    expect(features.services.mcp.getSnapshot()).toBeNull();
+    expect(features.services.capabilitiesRefresh.refreshAll).toEqual(expect.any(Function));
     expect(features.services.skills.getSnapshot()).toEqual({ extraRoots: [], skills: [] });
     expect(features.services.networkProxy.available).toBe(false);
     expect(features.services.sideConversation.available).toBe(true);
@@ -60,8 +60,20 @@ describe('renderer feature composition', () => {
     expect(findSlot(inspection.roots, 'renderer.chat.composer.status')).toMatchObject({
       activeEntryIds: ['goal.composer-status'],
     });
-    expect(findSlot(inspection.roots, 'renderer.settings.page')?.activeEntryIds).toContain(
-      'settings.general',
+    expect(findSlot(inspection.roots, 'renderer.shell.topbar.action')?.activeEntryIds).toEqual([
+      'workspace-apps.launcher',
+      'updater.ready-action',
+    ]);
+    expect(findSlot(inspection.roots, 'renderer.workspace.panel')?.activeEntryIds).toEqual(
+      expect.arrayContaining(['browser.workspace-panel', 'terminal.workspace-panel']),
+    );
+    expect(findSlot(inspection.roots, 'renderer.settings.page')?.activeEntryIds).toEqual(
+      expect.arrayContaining([
+        'mcp.capabilities-page',
+        'plugin-management.capabilities-page',
+        'settings.general',
+        'skills.capabilities-page',
+      ]),
     );
     const [appReadyEntry] = snapshot.resolveSingle(appReadySlot).entries;
     if (!appReadyEntry) throw new Error('Expected the built-in app shell entry.');

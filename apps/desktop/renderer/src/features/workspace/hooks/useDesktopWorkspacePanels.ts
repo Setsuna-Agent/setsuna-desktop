@@ -1,11 +1,11 @@
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import type { CollaborationTask } from '@setsuna-desktop/feature-collaboration/contracts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { clearTerminalFeatureRestoreBuffer } from '../../../composition/terminal-feature-adapter.js';
+import { clearTerminalWorkspaceRestoreBuffer } from '../../../composition/TerminalWorkspaceFeatureBoundary.js';
 import {
   readPreferredWorkspaceAppId,
   writePreferredWorkspaceAppId,
-} from '../../../composition/workspace-apps-feature-adapter.js';
+} from '../../../composition/WorkspaceAppsFeatureBoundary.js';
 import { useReviewFeatureState } from '../../../composition/review-feature-adapter.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import {
@@ -170,7 +170,7 @@ export function useDesktopWorkspacePanels({
       const sessionsByProject = sessionsByPanel[panelId];
       if (!sessionsByProject) return sessionsByPanel;
       for (const session of Object.values(sessionsByProject)) {
-        clearTerminalFeatureRestoreBuffer(session.sessionId);
+        clearTerminalWorkspaceRestoreBuffer(session.sessionId);
         void window.setsunaDesktop?.terminal.close(session.sessionId).catch(() => undefined);
       }
       const next = { ...sessionsByPanel };

@@ -7,6 +7,7 @@ import {
   authenticateSkillMcpDependency,
   createSkill,
   deleteSkill,
+  inspectSkillDirectories,
   installSkillMcpDependencies,
   readSkill,
   readSkills,
@@ -31,6 +32,9 @@ export function createSkillsRendererClient(transport: FeatureOperationTransport)
     ),
     getSkill: (skillId: string, options?: OperationOptions) => (
       transport.call(readSkill, { skillId }, options)
+    ),
+    inspectDirectories: (paths: string[], options?: OperationOptions) => (
+      transport.call(inspectSkillDirectories, { paths }, options)
     ),
     installMcpDependencies: (skillId: string, options?: OperationOptions) => (
       transport.call(installSkillMcpDependencies, { skillId }, options)

@@ -19,6 +19,44 @@ export type SettingsViewLocation = 'capabilities' | 'settings';
 export type SettingsPageKey = `${SettingsViewLocation}/${string}`;
 export type SettingsPageExtensionKey = `${string}/${string}`;
 
+export const CAPABILITIES_CATALOG_NAVIGATION_GROUP_ID = 'catalog';
+
+export type CapabilitiesBreadcrumbProps = Readonly<{
+  currentLabel: string;
+  parentLabel: string;
+  onBack(): void;
+}>;
+
+export type CapabilitiesCreateMenuItem = Readonly<{
+  description: string;
+  disabled?: boolean;
+  icon: ReactNode;
+  id: string;
+  onSelect(): void;
+  title: string;
+}>;
+
+export type CapabilitiesCreateMenuProps = Readonly<{
+  busy?: boolean;
+  buttonLabel: string;
+  items: readonly CapabilitiesCreateMenuItem[];
+  onOpenChange(open: boolean): void;
+  open: boolean;
+}>;
+
+export type CapabilitiesPageNavigation = Readonly<{
+  /** Optional deep-link selected by another renderer surface, such as a plugin card in Chat. */
+  activeItemId: string | null;
+  /** Catalog-only navigation supplied by the host; detail and editor views omit it. */
+  catalogNavigation: ReactNode;
+  catalogNavigationInPage: boolean;
+  workspacePath: string | null;
+  openChat(skillId: string): void;
+  renderBreadcrumb(props: CapabilitiesBreadcrumbProps): ReactNode;
+  renderCreateMenu(props: CapabilitiesCreateMenuProps): ReactNode;
+  setActiveItemId(itemId: string | null): void;
+}>;
+
 export type SettingsButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & Readonly<{
   icon?: ReactNode;
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -104,10 +142,72 @@ export type SettingsNavigationRowProps = Readonly<{
   onClick(): void;
 }>;
 
+export type SettingsDirectoryListProps = Readonly<{
+  description: string;
+  formatPresetCount?(count: number): string;
+  inspectDirectories?(paths: readonly string[]): Promise<readonly Readonly<{
+    count: number;
+    path: string;
+  }>[]>;
+  label: string;
+  onSave(items: string[]): Promise<unknown>;
+  presetAddLabel?: string;
+  presetRemoveLabel?: string;
+  presets?: readonly Readonly<{
+    homeRelativePath: readonly string[];
+    id: string;
+    label: string;
+  }>[];
+  value: readonly string[];
+}>;
+
 export type SettingsPageHeadingProps = Readonly<{
   action?: ReactNode;
   description?: string;
   title: string;
+}>;
+
+export type SettingsPageHeaderProps = Readonly<{
+  actions?: ReactNode;
+  className?: string;
+  leading?: ReactNode;
+  subtitle?: ReactNode;
+  title: ReactNode;
+}>;
+
+export type SettingsActionMenuItem = Readonly<{
+  danger?: boolean;
+  disabled?: boolean;
+  icon?: ReactNode;
+  id: string;
+  label: ReactNode;
+}>;
+
+export type SettingsActionMenuProps = Readonly<{
+  items: readonly SettingsActionMenuItem[];
+  label: string;
+  onSelect(id: string): void;
+}>;
+
+export type SettingsPageOutletProps = Readonly<{
+  sectionId: string;
+}>;
+
+export type SettingsPluginIconProps = Readonly<{
+  className?: string;
+  name?: string;
+  pluginId?: string;
+  variant?: 'card' | 'detail' | 'inline' | 'installed' | 'list' | 'menu';
+}>;
+
+export type SettingsSkillIconProps = Readonly<{
+  className?: string;
+  skill?: Readonly<{
+    icon?: string;
+    kind: 'builtin' | 'plugin' | 'user';
+    pluginId?: string;
+  }>;
+  variant?: 'inline' | 'list' | 'menu';
 }>;
 
 export type SettingsDialogProps = Readonly<{
@@ -124,17 +224,23 @@ export type SettingsDialogProps = Readonly<{
 
 /** Host-owned controls keep Feature settings consistent and accessible. */
 export type SettingsViewUi = Readonly<{
+  ActionMenu: ComponentType<SettingsActionMenuProps>;
   Button: ComponentType<SettingsButtonProps>;
   Checkbox: ComponentType<CheckboxProps>;
   Dialog: ComponentType<SettingsDialogProps>;
+  DirectoryList: ComponentType<SettingsDirectoryListProps>;
   EmptyState: ComponentType<Readonly<{ action?: ReactNode; body?: string; title: string }>>;
   Group: ComponentType<SettingsGroupProps>;
   IconButton: ComponentType<SettingsIconButtonProps>;
   NavigationRow: ComponentType<SettingsNavigationRowProps>;
+  PageHeader: ComponentType<SettingsPageHeaderProps>;
   PageHeading: ComponentType<SettingsPageHeadingProps>;
+  PageOutlet: ComponentType<SettingsPageOutletProps>;
+  PluginIcon: ComponentType<SettingsPluginIconProps>;
   Row: ComponentType<SettingsRowProps>;
   Section: ComponentType<SettingsSectionProps>;
   SelectField: ComponentType<SettingsSelectFieldProps>;
+  SkillIcon: ComponentType<SettingsSkillIconProps>;
   TextArea: ComponentType<TextareaHTMLAttributes<HTMLTextAreaElement>>;
   TextField: ComponentType<InputHTMLAttributes<HTMLInputElement>>;
   Toggle: ComponentType<SettingsToggleProps>;
@@ -143,6 +249,7 @@ export type SettingsViewUi = Readonly<{
 }>;
 
 export type SettingsPageSlotProps = Readonly<{
+  capabilities?: CapabilitiesPageNavigation;
   /** Host implementation used by built-in settings page entries. */
   renderDefault?(): ReactNode;
   sectionId: string;

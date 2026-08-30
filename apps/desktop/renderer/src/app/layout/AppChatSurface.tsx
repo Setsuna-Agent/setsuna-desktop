@@ -1,757 +1,99 @@
+import type { WorkspaceEntrySearchItem } from '@setsuna-desktop/contracts';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
+import { ArtifactFeatureNavigationBoundary } from '../../composition/ArtifactFeatureBoundary.js';
 import {
-  type AnswerRuntimeApprovalInput,
-  type DesktopRuntimeClient,
-  type RuntimeConfiguredModelReference,
-  type RuntimeConfigState,
-  type RuntimePluginSummary,
-  type RuntimeReviewFinding,
-  type RuntimeSkillSummary,
-  type RuntimeThread,
-  type RuntimeThreadSummary,
-  type WorkspaceEntry,
-  type WorkspaceEntrySearchItem,
-  type WorkspaceEntrySearchResponse,
-  type WorkspaceFileRead,
-  type WorkspaceProject,
-} from '@setsuna-desktop/contracts';
-import type { ReviewTarget } from '@setsuna-desktop/feature-review/contracts';
-import { workspacePanelSlot } from '@setsuna-desktop/renderer-contracts/workspace';
-import {
-  lazy,
-  Suspense,
-  useCallback,
-  useMemo,
-  useRef,
-  useState,
-  type ComponentProps,
-  type Dispatch,
-  type PointerEvent as ReactPointerEvent,
-  type ReactNode,
-  type SetStateAction,
-} from 'react';
-import { ChatWorkspace } from '../../features/chat/ChatWorkspace.js';
-import { SideChatPanel } from '../../features/chat/SideChatPanel.js';
-import { SubagentConversationPanel } from '../../features/chat/SubagentConversationPanel.js';
-import type { ChatModelSelectionHandler } from '../../features/chat/chatModelSelection.js';
+  ReviewFeatureConversationGitControls,
+  ReviewFeatureGitCommitProvider,
+} from '../../composition/review-feature-adapter.js';
+import { useChatImageAttachmentRequest } from '../../features/chat/hooks/useChatImageAttachmentRequest.js';
 import {
   RuntimePluginNavigationProvider,
   type OpenRuntimePluginHandler,
 } from '../../features/chat/plugin-usage/RuntimePluginNavigation.js';
-import { useChatImageAttachmentRequest } from '../../features/chat/hooks/useChatImageAttachmentRequest.js';
-import type { ChatQueuedTurnActions } from '../../features/chat/hooks/useQueuedTurnInputActions.js';
-import { MarkdownNavigationProvider } from '../../features/chat/markdown/MarkdownNavigationProvider.js';
+import type { WorkspaceFileContextTarget } from '../../features/workspace/WorkspaceFileContextMenu.js';
+import type { ChatWorkspaceMentionRequest } from '../types.js';
 import {
-  WorkspaceFileContextMenu,
-  type WorkspaceFileContextTarget,
-} from '../../features/workspace/WorkspaceFileContextMenu.js';
+  ChatConversationSurface,
+  type ChatConversationSurfaceModel,
+} from './ChatConversationSurface.js';
 import {
-  ArtifactFeatureNavigationBoundary,
-} from '../../composition/ArtifactFeatureBoundary.js';
-import {
-  ReviewFeatureConversationGitControls,
-  ReviewFeatureGitCommitProvider,
-  latestCompletedFeatureReview,
-} from '../../composition/review-feature-adapter.js';
-import type { DesktopBrowserPanelInstance } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
-import { desktopWorkspacePanelTargetContext } from '../../features/workspace/hooks/useDesktopWorkspacePanelSession.js';
-import type { WorkspaceFileDraftState } from '../../features/workspace/hooks/useWorkspaceFileDraft.js';
-import type {
-  DesktopPanelDropPlacement,
-  DesktopPanelSlot,
-  DesktopPanelSlotState,
-  DesktopPanelTab,
-  DesktopPanelTabPatch,
-  DesktopPanelType,
-  DesktopReviewFocusRequest,
-  DesktopReviewOpenHandler,
-  DesktopReviewState,
-  DesktopTerminalSession,
-  DesktopWorkspaceApp,
-  WorkspaceFileFocusRequest,
-} from '../../features/workspace/model.js';
-import { latestDesktopReviewSummaryFromMessages } from '../../features/workspace/runtimeReviewSummary.js';
-import type { DesktopReviewSource } from '@setsuna-desktop/feature-review/contracts';
-import { workspaceFileMentionEntry } from '../../features/workspace/workspaceFileMention.js';
-import type { RuntimeAccessModeSelection } from '../../shared/lib/runtimeAccessMode.js';
-import type {
-  ChatSkillSelectionRequest,
-  ChatWorkspaceMentionRequest,
-  ConversationOverviewVisibility,
-} from '../types.js';
-import { FloatingWorkspacePanelSlot } from './FloatingWorkspacePanelSlot.js';
-import { RendererOwnedKeyedSlot } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
-
-const ConversationDebugFeaturePanel = lazy(async () => {
-  const module = await import('../../composition/conversation-debug-feature-panel.js');
-  return { default: module.ConversationDebugFeaturePanel };
-});
-const BottomToolsPanel = lazy(async () => {
-  const module = await import('../../features/workspace/BottomToolsPanel.js');
-  return { default: module.BottomToolsPanel };
-});
-const BrowserPanel = lazy(async () => {
-  const module = await import('../../composition/BrowserFeaturePane.js');
-  return { default: module.BrowserFeaturePane };
-});
-const WorkspacePanel = lazy(async () => {
-  const module = await import('../../features/workspace/WorkspacePanel.js');
-  return { default: module.WorkspacePanel };
-});
-
-type AnswerApprovalHandler = (approvalId: string, input: AnswerRuntimeApprovalInput) => void | Promise<void>;
-type BrowserPanelMetadataHandler = (
-  targetIdentity: DesktopBrowserPanelInstance['targetIdentity'],
-  panelId: string,
-  patch: DesktopPanelTabPatch,
-) => void;
+  DesktopWorkspacePanelLayer,
+  type DesktopWorkspacePanelModel,
+} from './DesktopWorkspacePanelLayer.js';
 
 export function AppChatSurface({
-  activeProject,
-  activeWorkspace,
-  activeTurnId,
-  bottomActivePanel,
-  bottomPanelSlot,
-  bottomPanelVisible,
-  browserPanelInstances,
-  canClearContext,
-  composerKey,
-  config,
-  conversationDebugEnabled,
-  conversationOverviewShowRequest,
-  conversationOverviewVisibility,
-  contextCompacting,
-  currentThread,
-  draft,
-  focusComposerRequest,
-  fileDraft,
-  fileFocusRequest,
-  filePreview,
-  plugins,
-  panelLauncherTypes,
-  skillSelectionRequest,
-  reviewError,
-  reviewFocusRequest,
-  reviewLoading,
-  reviewState,
-  selectedWorkspaceApp,
-  workspaceApps,
-  skills,
-  sideActivePanel,
-  sidePanelSlot,
-  runtimeClient,
-  sidePanelPresent,
-  terminalSessionsByPanelId,
-  threads,
-  onActivateBottomPanel,
-  onCancelActiveTurn,
-  onAccessModeChange,
-  onConversationOverviewRenderedChange,
-  onFocusComposerRequestConsumed,
-  onAnswerApproval,
-  onCompactContext,
-  onClearContext,
-  onDeleteMessages,
-  onDiscardFileChanges,
-  onClosePanel,
-  onCloseBottomSlot,
-  onCopyFilePath,
-  onDraftChange,
-  onEditUserMessage,
-  onExternalOpenFile,
-  onOpenFileWithApp,
-  onSelectModel,
-  onSearchProjectEntries,
-  onOpenBottomPanel,
-  onOpenBrowser,
-  onOpenConversationDebug,
-  onOpenMarkdownWebLink,
+  conversation,
   onOpenPlugin,
-  onOpenFilesPanel,
-  onOpenModelSettings,
-  onOpenFileReviewPanel,
-  onOpenSideChat,
-  onOpenSideTerminalPanel,
-  onOpenEntry,
-  onOpenProjectFile,
-  onOpenWorkspaceDirectory,
-  onMoveBottomPanel,
-  onReorderBottomPanels,
-  onReloadThreads,
-  onReviewBaseRefChange,
-  onReviewRefresh,
-  onReviewSourceChange,
-  onRevealFile,
-  onSideChatError,
-  onSetMultiAgentEnabled,
-  onStartThreadReview,
-  onSend,
-  queuedTurnActions,
-  onSkillSelectionRequestConsumed,
-  onTerminalResizeStep,
-  onTerminalResizeStart,
-  onUpdateBrowserPanel,
-  onUpdateDesktopPanel,
-  terminalHeight,
-  terminalMaxHeight,
-  terminalMinHeight,
-  onWorkspaceResizeStep,
-  onWorkspaceResizeStart,
-  workspaceMaxWidth,
-  workspaceMinWidth,
-  workspaceWidth,
-}: {
-  activeProject?: WorkspaceProject;
-  activeWorkspace?: WorkspaceProject;
-  activeTurnId: string | null;
-  bottomActivePanel?: DesktopPanelTab | null;
-  bottomPanelSlot: DesktopPanelSlotState;
-  bottomPanelVisible: boolean;
-  browserPanelInstances: DesktopBrowserPanelInstance[];
-  canClearContext: boolean;
-  composerKey: string;
-  config: RuntimeConfigState | null;
-  conversationDebugEnabled: boolean;
-  conversationOverviewShowRequest: number;
-  conversationOverviewVisibility: ConversationOverviewVisibility;
-  contextCompacting: boolean;
-  currentThread: RuntimeThread | null;
-  draft: string;
-  focusComposerRequest: number;
-  fileDraft: WorkspaceFileDraftState;
-  fileFocusRequest: WorkspaceFileFocusRequest | null;
-  filePreview: WorkspaceFileRead | null;
-  plugins: RuntimePluginSummary[];
-  panelLauncherTypes: DesktopPanelType[];
-  skillSelectionRequest: ChatSkillSelectionRequest | null;
-  reviewError: string | null;
-  reviewFocusRequest: DesktopReviewFocusRequest | null;
-  reviewLoading: boolean;
-  reviewState: DesktopReviewState | null;
-  selectedWorkspaceApp: DesktopWorkspaceApp | null;
-  workspaceApps: DesktopWorkspaceApp[];
-  skills: RuntimeSkillSummary[];
-  threads: RuntimeThreadSummary[];
-  sideActivePanel?: DesktopPanelTab | null;
-  sidePanelSlot: DesktopPanelSlotState;
-  runtimeClient: DesktopRuntimeClient;
-  sidePanelPresent: boolean;
-  terminalSessionsByPanelId: Record<string, DesktopTerminalSession>;
-  onActivateBottomPanel: (panelId: string) => void;
-  onCancelActiveTurn: () => void;
-  onAccessModeChange: (selection: RuntimeAccessModeSelection) => void;
-  onConversationOverviewRenderedChange: (visible: boolean) => void;
-  onFocusComposerRequestConsumed: (requestId: number) => void;
-  onAnswerApproval: AnswerApprovalHandler;
-  onCompactContext: () => void;
-  onClearContext: () => void;
-  onDeleteMessages: (messageIds: string[]) => void | Promise<void>;
-  onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
-  onClosePanel: (placement: DesktopPanelSlot, panelId: string) => void;
-  onCloseBottomSlot: () => void;
-  onCopyFilePath: (filePath: string) => void;
-  onDraftChange: (value: string) => void;
-  onEditUserMessage: (messageId: string, content: string) => void | Promise<void>;
-  onExternalOpenFile: (filePath?: string | null, line?: number) => void;
-  onOpenFileWithApp: (appId: string, filePath: string, line?: number) => void;
-  onSelectModel: ChatModelSelectionHandler;
-  onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
-  onOpenBottomPanel: (panel: DesktopPanelType) => void;
-  onOpenBrowser: (url?: string) => void;
-  onOpenConversationDebug: () => void;
-  onOpenMarkdownWebLink: (url: string) => void;
+  workspace,
+}: Readonly<{
+  conversation: ChatConversationSurfaceModel;
   onOpenPlugin: OpenRuntimePluginHandler;
-  onOpenFilesPanel: () => void;
-  onOpenModelSettings: () => void;
-  onOpenFileReviewPanel?: DesktopReviewOpenHandler;
-  onOpenSideChat: () => void;
-  onOpenSideTerminalPanel: () => void;
-  onOpenEntry: (entry: WorkspaceEntry) => void;
-  onOpenProjectFile: (filePath: string, line?: number) => void;
-  onOpenWorkspaceDirectory: (directoryPath: string) => void;
-  onMoveBottomPanel: (
-    panelId: string,
-    targetPlacement: DesktopPanelSlot,
-    targetPanelId: string | null,
-    placement: DesktopPanelDropPlacement,
-  ) => void;
-  onReorderBottomPanels: (panelId: string, targetPanelId: string, placement: DesktopPanelDropPlacement) => void;
-  onReloadThreads: () => Promise<unknown>;
-  onReviewBaseRefChange: (baseRef: string) => void | Promise<void>;
-  onReviewRefresh: () => void | Promise<void>;
-  onReviewSourceChange: (source: DesktopReviewSource) => void;
-  onRevealFile: (filePath: string) => void;
-  onSideChatError: Dispatch<SetStateAction<string | null>>;
-  onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
-  onStartThreadReview: (
-    target: ReviewTarget,
-    modelSelection?: RuntimeConfiguredModelReference,
-  ) => Promise<unknown>;
-  onSend: (value?: string, options?: { attachments?: RuntimeThread['messages'][number]['attachments']; goalMode?: boolean; skillIds?: string[]; skillReferences?: RuntimeThread['messages'][number]['skillReferences']; thinking?: boolean; thinkingEffort?: string }) => Promise<boolean>;
-  queuedTurnActions: ChatQueuedTurnActions;
-  onSkillSelectionRequestConsumed: (requestId: number) => void;
-  onTerminalResizeStep: (delta: number) => void;
-  onTerminalResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
-  onUpdateBrowserPanel: BrowserPanelMetadataHandler;
-  onUpdateDesktopPanel: (panelId: string, patch: DesktopPanelTabPatch) => void;
-  terminalHeight: number;
-  terminalMaxHeight: number;
-  terminalMinHeight: number;
-  onWorkspaceResizeStep: (delta: number) => void;
-  onWorkspaceResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
-  workspaceMaxWidth: number;
-  workspaceMinWidth: number;
-  workspaceWidth: number;
-}) {
+  workspace: DesktopWorkspacePanelModel;
+}>) {
   const {
     imageAttachmentRequest,
     requestImageAttachment,
     resolveImageAttachmentRequest,
-  } = useChatImageAttachmentRequest(composerKey);
+  } = useChatImageAttachmentRequest(conversation.composerKey);
   const [scopedWorkspaceMentionRequest, setScopedWorkspaceMentionRequest] = useState<{
     composerKey: string;
     request: ChatWorkspaceMentionRequest;
   } | null>(null);
-  const [workspaceFileContextTarget, setWorkspaceFileContextTarget] = useState<WorkspaceFileContextTarget | null>(
-    null,
-  );
+  const [workspaceFileContextTarget, setWorkspaceFileContextTarget] = useState<WorkspaceFileContextTarget | null>(null);
   const workspaceMentionRequestIdRef = useRef(0);
-  const workspaceMentionRequest = scopedWorkspaceMentionRequest?.composerKey === composerKey
+  const workspaceMentionRequest = scopedWorkspaceMentionRequest?.composerKey === conversation.composerKey
     ? scopedWorkspaceMentionRequest.request
     : null;
   const requestWorkspaceMention = useCallback((entry: WorkspaceEntrySearchItem) => {
     workspaceMentionRequestIdRef.current += 1;
     setScopedWorkspaceMentionRequest({
-      composerKey,
+      composerKey: conversation.composerKey,
       request: { entry, requestId: workspaceMentionRequestIdRef.current },
     });
-  }, [composerKey]);
+  }, [conversation.composerKey]);
   const consumeWorkspaceMentionRequest = useCallback((requestId: number) => {
-    setScopedWorkspaceMentionRequest((current) => current?.request.requestId === requestId ? null : current);
+    setScopedWorkspaceMentionRequest((current) => (
+      current?.request.requestId === requestId ? null : current
+    ));
   }, []);
-  const closeWorkspaceFileContextMenu = useCallback(() => {
-    setWorkspaceFileContextTarget(null);
-  }, []);
-  const addWorkspaceFileToConversation = useCallback((filePath: string) => {
-    requestWorkspaceMention(workspaceFileMentionEntry(filePath));
-  }, [requestWorkspaceMention]);
-  const latestReviewSummary = useMemo(
-    () => latestDesktopReviewSummaryFromMessages(currentThread?.messages ?? []),
-    [currentThread?.messages],
-  );
-  const latestReviewFindings = useMemo<RuntimeReviewFinding[]>(
-    () => latestCompletedFeatureReview(
-      currentThread?.messages ?? [],
-      activeTurnId,
-    )?.findings ?? [],
-    [activeTurnId, currentThread?.messages],
-  );
-  const currentThreadId = currentThread?.id;
-  const currentThreadProjectId = currentThread?.projectId;
-  const projectIdByThreadId = useMemo(
-    () => {
-      const projects = new Map(threads.map((thread) => [thread.id, thread.projectId] as const));
-      if (currentThreadId) projects.set(currentThreadId, currentThreadProjectId);
-      return projects;
-    },
-    [currentThreadId, currentThreadProjectId, threads],
-  );
-  const openChatWorkspaceFile = onOpenProjectFile;
-  const chatPanelInstances = [
-    ...sidePanelSlot.panels
-      .filter((panel) => panel.type === 'chat')
-      .map((panel) => ({ panel, placement: 'side' as const })),
-    ...bottomPanelSlot.panels
-      .filter((panel) => panel.type === 'chat')
-      .map((panel) => ({ panel, placement: 'bottom' as const })),
-  ];
-  const subagentPanelInstances = [
-    ...sidePanelSlot.panels
-      .filter((panel) => panel.type === 'subagent' && panel.subagent)
-      .map((panel) => ({ panel, placement: 'side' as const })),
-    ...bottomPanelSlot.panels
-      .filter((panel) => panel.type === 'subagent' && panel.subagent)
-      .map((panel) => ({ panel, placement: 'bottom' as const })),
-  ];
-  const activeDebugPanel = sidePanelPresent && sideActivePanel?.type === 'conversation-debug'
-    ? { panel: sideActivePanel, placement: 'side' as const }
-    : bottomPanelVisible && bottomActivePanel?.type === 'conversation-debug'
-      ? { panel: bottomActivePanel, placement: 'bottom' as const }
-      : null;
-  const workspacePanelProps = {
-    activeProject: activeWorkspace,
-    fileDraft,
-    fileFocusRequest,
-    filePreview,
-    latestReviewSummary,
-    latestReviewFindings,
-    reviewError,
-    reviewFocusRequest,
-    reviewLoading,
-    reviewState,
-    selectedWorkspaceApp,
-    workspaceApps,
-    onAddFileToConversation: requestWorkspaceMention,
-    onCopyFilePath,
-    onExternalOpenFile,
-    onOpenFileWithApp,
-    onSearchProjectEntries,
-    onOpenEntry,
-    onOpenProjectFile,
-    onOpenFilesPanel,
-    onOpenBrowser,
-    onOpenConversationDebug: conversationDebugEnabled ? onOpenConversationDebug : undefined,
-    onOpenReviewPanel: onOpenFileReviewPanel,
-    onOpenSideChat,
-    onOpenTerminalPanel: onOpenSideTerminalPanel,
-    onTerminalTitleChange: (panelId: string, title: string) => onUpdateDesktopPanel(panelId, { title }),
-    onReviewBaseRefChange,
-    onReviewRefresh,
-    onReviewSourceChange,
-    onRevealFile,
-    onResizeStep: onWorkspaceResizeStep,
-    onResizeStart: onWorkspaceResizeStart,
-    resizeMax: workspaceMaxWidth,
-    resizeMin: workspaceMinWidth,
-    resizeValue: workspaceWidth,
-  } satisfies Omit<ComponentProps<typeof WorkspacePanel>, 'activePanel' | 'placement' | 'terminalSession'>;
 
   return (
     <ReviewFeatureGitCommitProvider
-      activeProject={activeWorkspace}
-      reviewLoading={reviewLoading}
-      reviewState={reviewState}
-      onReviewRefresh={onReviewRefresh}
+      activeProject={workspace.context.activeWorkspace}
+      reviewLoading={workspace.context.reviewLoading}
+      reviewState={workspace.context.reviewState}
+      onReviewRefresh={workspace.actions.onReviewRefresh}
     >
-      <ChatNavigationBoundaries onOpenBrowser={onOpenBrowser} onOpenPlugin={onOpenPlugin}>
-        <MarkdownNavigationProvider
-          onOpenInAppBrowser={onOpenBrowser}
-          onOpenWebLink={onOpenMarkdownWebLink}
-          workspaceRoot={activeWorkspace?.path}
-          onOpenWorkspaceDirectory={onOpenWorkspaceDirectory}
-          onOpenWorkspaceFile={openChatWorkspaceFile}
+      <ChatNavigationBoundaries
+        onOpenBrowser={conversation.onOpenBrowser}
+        onOpenPlugin={onOpenPlugin}
+      >
+        <ChatConversationSurface
+          imageAttachmentRequest={imageAttachmentRequest}
+          model={conversation}
+          reviewControls={(
+            <ReviewFeatureConversationGitControls
+              activeProject={workspace.context.activeWorkspace}
+              reviewError={workspace.context.reviewError}
+              reviewLoading={workspace.context.reviewLoading}
+              reviewState={workspace.context.reviewState}
+              onReviewRefresh={workspace.actions.onReviewRefresh}
+            />
+          )}
+          workspaceMentionRequest={workspaceMentionRequest}
+          onImageAttachmentRequestConsumed={resolveImageAttachmentRequest}
           onOpenWorkspaceFileContextMenu={setWorkspaceFileContextTarget}
-        >
-          <ChatWorkspace
-            activeTurnId={activeTurnId}
-            activeProject={activeWorkspace}
-            canClearContext={canClearContext}
-            client={runtimeClient}
-            composerKey={composerKey}
-            conversationOverviewShowRequest={conversationOverviewShowRequest}
-            conversationOverviewVisibility={conversationOverviewVisibility}
-            contextCompacting={contextCompacting}
-            config={config}
-            currentThread={currentThread}
-            draft={draft}
-            focusComposerOnReveal
-            focusComposerRequest={focusComposerRequest}
-            imageAttachmentRequest={imageAttachmentRequest}
-            plugins={plugins}
-            reviewControls={(
-              <ReviewFeatureConversationGitControls
-                activeProject={activeWorkspace}
-                reviewError={reviewError}
-                reviewLoading={reviewLoading}
-                reviewState={reviewState}
-                onReviewRefresh={onReviewRefresh}
-              />
-            )}
-            reviewError={reviewError}
-            reviewState={reviewState}
-            skillSelectionRequest={skillSelectionRequest}
-            workspaceMentionRequest={workspaceMentionRequest}
-            skills={skills}
-            onCancelActiveTurn={onCancelActiveTurn}
-            onAccessModeChange={onAccessModeChange}
-            onConversationOverviewRenderedChange={onConversationOverviewRenderedChange}
-            onFocusComposerRequestConsumed={onFocusComposerRequestConsumed}
-            onAnswerApproval={onAnswerApproval}
-            onCompactContext={onCompactContext}
-            onClearContext={onClearContext}
-            onDeleteMessages={onDeleteMessages}
-            onDiscardFileChanges={onDiscardFileChanges}
-            onDraftChange={onDraftChange}
-            onEditUserMessage={onEditUserMessage}
-            onOpenSideChat={onOpenSideChat}
-            onOpenFileReview={onOpenFileReviewPanel}
-            onOpenModelSettings={onOpenModelSettings}
-            onSearchProjectEntries={onSearchProjectEntries}
-            onSelectModel={onSelectModel}
-            onSend={onSend}
-            queuedTurnActions={queuedTurnActions}
-            onSetMultiAgentEnabled={onSetMultiAgentEnabled}
-            onStartThreadReview={onStartThreadReview}
-            onImageAttachmentRequestConsumed={resolveImageAttachmentRequest}
-            onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
-            onWorkspaceMentionRequestConsumed={consumeWorkspaceMentionRequest}
-          />
-        </MarkdownNavigationProvider>
-        <WorkspaceFileContextMenu
-          selectedWorkspaceApp={selectedWorkspaceApp}
-          target={workspaceFileContextTarget}
-          workspaceApps={workspaceApps}
-          onAddToConversation={addWorkspaceFileToConversation}
-          onClose={closeWorkspaceFileContextMenu}
-          onCopyPath={onCopyFilePath}
-          onOpenWithApp={onOpenFileWithApp}
-          onReveal={onRevealFile}
+          onWorkspaceMentionRequestConsumed={consumeWorkspaceMentionRequest}
         />
-        {sidePanelPresent && sideActivePanel && !isFloatingPanelType(sideActivePanel.type) ? (
-          <SideWorkspacePanelSlot>
-            <Suspense fallback={null}>
-              <WorkspacePanelRenderer
-                panel={sideActivePanel}
-                placement="side"
-                projectId={activeProject?.id ?? null}
-                threadId={currentThread?.id ?? null}
-                visible
-              >
-                <WorkspacePanel
-                  {...workspacePanelProps}
-                  activePanel={sideActivePanel}
-                  placement="side"
-                  terminalSession={terminalSessionsByPanelId[sideActivePanel.id] ?? null}
-                />
-              </WorkspacePanelRenderer>
-            </Suspense>
-          </SideWorkspacePanelSlot>
-        ) : null}
-        {bottomPanelVisible && bottomActivePanel ? (
-          <Suspense fallback={null}>
-            <BottomToolsPanel
-              activePanel={bottomActivePanel}
-              availablePanelTypes={panelLauncherTypes}
-              panels={bottomPanelSlot.panels}
-              onActivatePanel={onActivateBottomPanel}
-              onClosePanel={(panelId) => onClosePanel('bottom', panelId)}
-              onCloseSlot={onCloseBottomSlot}
-              onMovePanel={onMoveBottomPanel}
-              onOpenPanel={onOpenBottomPanel}
-              onReorderPanels={onReorderBottomPanels}
-              onResizeStep={onTerminalResizeStep}
-              onResizeStart={onTerminalResizeStart}
-              resizeMax={terminalMaxHeight}
-              resizeMin={terminalMinHeight}
-              resizeValue={terminalHeight}
-            >
-              {!isFloatingPanelType(bottomActivePanel.type) ? (
-                <WorkspacePanelRenderer
-                  panel={bottomActivePanel}
-                  placement="bottom"
-                  projectId={activeProject?.id ?? null}
-                  threadId={currentThread?.id ?? null}
-                  visible
-                >
-                  <WorkspacePanel
-                    {...workspacePanelProps}
-                    activePanel={bottomActivePanel}
-                    placement="bottom"
-                    terminalSession={terminalSessionsByPanelId[bottomActivePanel.id] ?? null}
-                  />
-                </WorkspacePanelRenderer>
-              ) : null}
-            </BottomToolsPanel>
-          </Suspense>
-        ) : null}
-        {chatPanelInstances.map(({ panel, placement }) => {
-          const hidden = placement === 'side'
-            ? !sidePanelPresent || sideActivePanel?.id !== panel.id
-            : !bottomPanelVisible || bottomActivePanel?.id !== panel.id;
-          const chatPanel = (
-            <SideChatPanel
-              activeProjectId={activeProject?.id ?? null}
-              activeWorkspace={activeWorkspace}
-              client={runtimeClient}
-              config={config}
-              hidden={hidden}
-              parentThread={currentThread}
-              placement={placement}
-              plugins={plugins}
-              selectedWorkspaceApp={selectedWorkspaceApp}
-              skills={skills}
-              onAccessModeChange={onAccessModeChange}
-              onError={onSideChatError}
-              onOpenWorkspaceFile={openChatWorkspaceFile}
-              onOpenWorkspaceDirectory={onOpenWorkspaceDirectory}
-              onOpenMarkdownWebLink={onOpenMarkdownWebLink}
-              onOpenInAppBrowser={onOpenBrowser}
-              onOpenFileReview={onOpenFileReviewPanel}
-              onOpenSideChat={onOpenSideChat}
-              onReloadThreads={onReloadThreads}
-              onSelectModel={onSelectModel}
-              onSetMultiAgentEnabled={onSetMultiAgentEnabled}
-              onWorkspaceResizeStep={onWorkspaceResizeStep}
-              onWorkspaceResizeStart={onWorkspaceResizeStart}
-              workspaceMaxWidth={workspaceMaxWidth}
-              workspaceMinWidth={workspaceMinWidth}
-              workspaceWidth={workspaceWidth}
-            />
-          );
-          return (
-            <FloatingWorkspacePanelSlot hidden={hidden} key={panel.id} placement={placement}>
-              <WorkspacePanelRenderer
-                panel={panel}
-                placement={placement}
-                projectId={activeProject?.id ?? null}
-                threadId={currentThread?.id ?? null}
-                visible={!hidden}
-              >
-                {chatPanel}
-              </WorkspacePanelRenderer>
-            </FloatingWorkspacePanelSlot>
-          );
-        })}
-        {subagentPanelInstances.map(({ panel, placement }) => {
-          const hidden = placement === 'side'
-            ? !sidePanelPresent || sideActivePanel?.id !== panel.id
-            : !bottomPanelVisible || bottomActivePanel?.id !== panel.id;
-          const subagent = panel.subagent;
-          const subagentPanel = subagent ? (
-            <SubagentConversationPanel
-              childThreadId={subagent.threadId}
-              client={runtimeClient}
-              config={config}
-              hidden={hidden}
-              initialDisplayName={panel.title ?? ''}
-              parentThreadId={subagent.parentThreadId}
-              placement={placement}
-              plugins={plugins}
-              skills={skills}
-              workspaceRoot={activeWorkspace?.path}
-              onClose={() => onClosePanel(placement, panel.id)}
-              onError={onSideChatError}
-              onOpenFileReview={onOpenFileReviewPanel}
-              onOpenMarkdownWebLink={onOpenMarkdownWebLink}
-              onOpenInAppBrowser={onOpenBrowser}
-              onResizeStep={onWorkspaceResizeStep}
-              onResizeStart={onWorkspaceResizeStart}
-              workspaceMaxWidth={workspaceMaxWidth}
-              workspaceMinWidth={workspaceMinWidth}
-              workspaceWidth={workspaceWidth}
-            />
-          ) : null;
-          return (
-            <FloatingWorkspacePanelSlot hidden={hidden} key={panel.id} placement={placement}>
-              <WorkspacePanelRenderer
-                panel={panel}
-                placement={placement}
-                projectId={activeProject?.id ?? null}
-                threadId={currentThread?.id ?? null}
-                visible={!hidden}
-              >
-                {subagentPanel}
-              </WorkspacePanelRenderer>
-            </FloatingWorkspacePanelSlot>
-          );
-        })}
-        {browserPanelInstances.map((instance) => {
-          const targetContext = desktopWorkspacePanelTargetContext(
-            instance.targetIdentity,
-            projectIdByThreadId,
-          );
-          const browserPanelInstanceId = JSON.stringify([
-            instance.targetIdentity,
-            instance.panel.id,
-          ]);
-          const browserPanel = (
-            <Suspense fallback={null}>
-              <PersistentBrowserPanel
-                instance={instance}
-                onPanelMetadataChange={onUpdateBrowserPanel}
-                onScreenshotAttachment={requestImageAttachment}
-                onResizeStep={onWorkspaceResizeStep}
-                onResizeStart={onWorkspaceResizeStart}
-                resizeMax={workspaceMaxWidth}
-                resizeMin={workspaceMinWidth}
-                resizeValue={workspaceWidth}
-              />
-            </Suspense>
-          );
-          return (
-            <FloatingWorkspacePanelSlot
-              hidden={!instance.active}
-              key={browserPanelInstanceId}
-              placement={instance.placement}
-            >
-              <WorkspacePanelRenderer
-                panel={instance.panel}
-                placement={instance.placement}
-                projectId={targetContext.projectId}
-                surfaceInstanceId={browserPanelInstanceId}
-                threadId={targetContext.threadId}
-                visible={instance.active}
-              >
-                {browserPanel}
-              </WorkspacePanelRenderer>
-            </FloatingWorkspacePanelSlot>
-          );
-        })}
-        {activeDebugPanel && conversationDebugEnabled ? (
-          <FloatingWorkspacePanelSlot
-            key={activeDebugPanel.panel.id}
-            placement={activeDebugPanel.placement}
-          >
-            <Suspense fallback={null}>
-              <WorkspacePanelRenderer
-                panel={activeDebugPanel.panel}
-                placement={activeDebugPanel.placement}
-                projectId={activeProject?.id ?? null}
-                threadId={currentThread?.id ?? null}
-                visible
-              >
-                <ConversationDebugFeaturePanel
-                  eventSource={runtimeClient}
-                  placement={activeDebugPanel.placement}
-                  thread={currentThread}
-                  onResizeStep={onWorkspaceResizeStep}
-                  onResizeStart={onWorkspaceResizeStart}
-                  resizeMax={workspaceMaxWidth}
-                  resizeMin={workspaceMinWidth}
-                  resizeValue={workspaceWidth}
-                />
-              </WorkspacePanelRenderer>
-            </Suspense>
-          </FloatingWorkspacePanelSlot>
-        ) : null}
+        <DesktopWorkspacePanelLayer
+          model={workspace}
+          requestImageAttachment={requestImageAttachment}
+          workspaceFileContextTarget={workspaceFileContextTarget}
+          onAddWorkspaceMention={requestWorkspaceMention}
+          onCloseFileContextMenu={() => setWorkspaceFileContextTarget(null)}
+        />
       </ChatNavigationBoundaries>
     </ReviewFeatureGitCommitProvider>
-  );
-}
-
-function WorkspacePanelRenderer({
-  children,
-  panel,
-  placement,
-  projectId,
-  surfaceInstanceId: explicitSurfaceInstanceId,
-  threadId,
-  visible,
-}: Readonly<{
-  children: ReactNode;
-  panel: DesktopPanelTab;
-  placement: DesktopPanelSlot;
-  projectId: string | null;
-  surfaceInstanceId?: string;
-  threadId: string | null;
-  visible: boolean;
-}>) {
-  const surfaceInstanceId = explicitSurfaceInstanceId ?? `${placement}:${panel.id}`;
-  return (
-    <RendererOwnedKeyedSlot
-      entryKey={panel.type}
-      instanceKey={JSON.stringify([projectId, threadId, surfaceInstanceId])}
-      slot={workspacePanelSlot}
-      props={{
-        panelId: panel.id,
-        panelType: panel.type,
-        placement,
-        projectId,
-        surfaceInstanceId,
-        threadId,
-        visible,
-        renderDefault: () => children,
-      }}
-    />
   );
 }
 
@@ -761,7 +103,7 @@ function ChatNavigationBoundaries({
   onOpenPlugin,
 }: Readonly<{
   children: ReactNode;
-  onOpenBrowser: (url?: string) => void;
+  onOpenBrowser(url?: string): void;
   onOpenPlugin: OpenRuntimePluginHandler;
 }>) {
   return (
@@ -771,45 +113,4 @@ function ChatNavigationBoundaries({
       </RuntimePluginNavigationProvider>
     </ArtifactFeatureNavigationBoundary>
   );
-}
-
-function SideWorkspacePanelSlot({
-  children,
-  hidden = false,
-}: {
-  children: ReactNode;
-  hidden?: boolean;
-}) {
-  return (
-    <div className="desktop-workspace-panel-slot" hidden={hidden}>
-      {children}
-    </div>
-  );
-}
-
-function PersistentBrowserPanel({
-  instance,
-  onPanelMetadataChange,
-  ...panelProps
-}: {
-  instance: DesktopBrowserPanelInstance;
-  onPanelMetadataChange: BrowserPanelMetadataHandler;
-} & Omit<ComponentProps<typeof BrowserPanel>, 'hidden' | 'onPanelMetadataChange' | 'panel'>) {
-  const updatePanelMetadata = useCallback((panelId: string, patch: DesktopPanelTabPatch) => {
-    onPanelMetadataChange(instance.targetIdentity, panelId, patch);
-  }, [instance.targetIdentity, onPanelMetadataChange]);
-
-  return (
-    <BrowserPanel
-      {...panelProps}
-      hidden={!instance.active}
-      panel={instance.panel}
-      placement={instance.placement}
-      onPanelMetadataChange={updatePanelMetadata}
-    />
-  );
-}
-
-function isFloatingPanelType(type: DesktopPanelType): boolean {
-  return type === 'browser' || type === 'chat' || type === 'subagent' || type === 'conversation-debug';
 }

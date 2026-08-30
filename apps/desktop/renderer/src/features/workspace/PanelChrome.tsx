@@ -1,5 +1,5 @@
 import { Bug, FileDiff, FileText, FolderOpen, MessageSquare, PanelRight, Terminal, Users } from 'lucide-react';
-import { BrowserFeatureFavicon } from '../../composition/browser-feature-adapter.js';
+import { BrowserFavicon as BrowserFeatureFavicon } from '../../composition/BrowserWorkspaceFeatureBoundary.js';
 import { translate, type Translate } from '../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../shared/i18n/messages.js';
 import { fileName, type DesktopPanelTab, type DesktopPanelType } from './model.js';

@@ -31,7 +31,13 @@ describe('RendererPluginManagementService', () => {
     const readInstalled = vi.fn(async () => ({
       plugins: [{ id: 'updated-installed' }] as PluginManagementSnapshot['plugins'],
     }));
-    const client = { readExtensions, readInstalled, readSnapshot } as unknown as PluginManagementClient;
+    const readHooks = vi.fn(async () => ({ hooks: [] }));
+    const client = {
+      readExtensions,
+      readHooks,
+      readInstalled,
+      readSnapshot,
+    } as unknown as PluginManagementClient;
     const installResult = {
       installedMcpServers: [],
       plugin: { id: 'installed' },
@@ -72,9 +78,10 @@ describe('RendererPluginManagementService', () => {
       plugins: [{ id: 'updated-installed' }],
     });
     expect(readSnapshot).toHaveBeenCalledTimes(3);
+    expect(readHooks).toHaveBeenCalledTimes(1);
     expect(readExtensions).toHaveBeenCalledTimes(1);
     expect(readInstalled).toHaveBeenCalledTimes(1);
-    expect(listener).toHaveBeenCalledTimes(4);
+    expect(listener).toHaveBeenCalledTimes(5);
 
     await scope.finishDispose();
   });

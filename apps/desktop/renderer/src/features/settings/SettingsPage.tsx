@@ -58,24 +58,20 @@ export function SettingsPage({
   archivedThreads,
   config,
   initialSection,
-  skillExtraRoots,
   onBack,
   onSaveRuntimePreferences,
   onDeleteAllArchivedThreads,
   onDeleteArchivedThread,
   onRestoreArchivedThread,
-  onSetSkillExtraRoots,
 }: {
   archivedThreads: RuntimeThreadSummary[];
   config: RuntimeConfigState | null;
   initialSection?: SettingsSectionId;
-  skillExtraRoots: string[];
   onBack: () => void;
   onSaveRuntimePreferences: (input: RuntimePreferenceInput) => Promise<void>;
   onDeleteAllArchivedThreads: (threadIds: string[]) => Promise<void>;
   onDeleteArchivedThread: (threadId: string) => Promise<void>;
   onRestoreArchivedThread: (threadId: string) => Promise<RuntimeThread>;
-  onSetSkillExtraRoots: (roots: string[]) => Promise<void>;
 }) {
   const { t } = useI18n();
   const pages = useRendererOwnedKeyedEntries(settingsPageSlot)
@@ -128,9 +124,7 @@ export function SettingsPage({
   const trailingContent = resolvedSection === 'runtime' && config ? (
     <RuntimeAdvancedSettings
       config={config}
-      skillExtraRoots={skillExtraRoots}
       onSave={onSaveRuntimePreferences}
-      onSetSkillExtraRoots={onSetSkillExtraRoots}
     />
   ) : null;
 

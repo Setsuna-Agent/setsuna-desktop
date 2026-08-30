@@ -79,7 +79,7 @@ Review preference 按 workspace 持久化在 localStorage。Main 才执行 Git �
 
 ## Terminal
 
-Terminal presentation 位于 `packages/features/terminal/src/renderer/`；`apps/desktop/renderer/src/composition/TerminalFeaturePane.tsx` 只注入 preload bridge、i18n、外链和外观变更。Workspace hook 继续拥有 panel/project 对 session 的编排：
+Terminal presentation 位于 `packages/features/terminal/src/renderer/`。Renderer Feature 通过 `TerminalWorkspacePanel.tsx` 注册 `renderer.workspace.panel/terminal`；宿主 `apps/desktop/renderer/src/composition/TerminalWorkspaceFeatureBoundary.tsx` 只提供 panel 与 session 的映射、preload bridge、外链和外观变更。Workspace hook 继续拥有 panel/project 对 session 的编排：
 
 1. 通过 preload 打开 main `node-pty` session。
 2. 订阅有 sequence 的 terminal event。
@@ -106,11 +106,11 @@ Browser presentation 位于 `packages/features/browser/src/renderer/`，主要�
 
 Browser panel 为保留 guest/webview 状态，会把非当前会话的实例继续挂载但隐藏。每个实例的 Workspace Slot context 必须从它自己的 `targetIdentity` 解析，React/Slot identity 使用 `targetIdentity + panelId`；切换当前 thread 只改变可见性，不能把 active project/thread 写入全部后台 panel，也不能因此批量 remount。
 
-`apps/desktop/renderer/src/composition/BrowserFeaturePane.tsx` 只注入 preload bridge、i18n、通知、外链、Select 和 Workspace resize handle。Feature renderer 负责可见 tab UI；可信 guest registry 和 CDP 由同一 Feature 的 main 入口持有。详情见 [main 浏览器文档](../../features/browser.md)。
+Browser Renderer Feature 通过 `BrowserWorkspacePanel.tsx` 注册 `renderer.workspace.panel/browser`；`apps/desktop/renderer/src/composition/BrowserWorkspaceFeatureBoundary.tsx` 只注入 panel binding、preload bridge、通知、外链和截图附件动作。Feature renderer 负责可见 tab UI；可信 guest registry 和 CDP 由同一 Feature 的 main 入口持有。详情见 [main 浏览器文档](../../features/browser.md)。
 
 ## 外部 Workspace apps
 
-`packages/features/workspace-apps/src/renderer/` 拥有 launcher、glyph、应用图标、用户偏好、文案和作用域样式。宿主 `composition/workspace-apps-feature-adapter.tsx` 只注入 i18n；Workspace hook 继续拥有 project/panel 状态和打开动作编排。
+`packages/features/workspace-apps/src/renderer/` 拥有 launcher、glyph、应用图标、用户偏好、文案和作用域样式，并向 `renderer.shell.topbar.action` 注册自己的 action。宿主 `composition/WorkspaceAppsFeatureBoundary.tsx` 只提供当前 workspace、打开动作和偏好存取；Workspace hook 继续拥有 project/panel 状态和打开动作编排。
 
 打开 workspace/file 时只传结构化 app ID、workspace root、relative path 和可选 line；平台命令由 main 构造。
 

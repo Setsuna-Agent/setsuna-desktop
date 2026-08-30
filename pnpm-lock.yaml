@@ -257,12 +257,14 @@ importers:
     specifiers:
       '@setsuna-desktop/contracts': workspace:*
       '@setsuna-desktop/feature-core': workspace:*
+      '@setsuna-desktop/renderer-contracts': workspace:*
       electron: '>=30'
       lucide-react: ^0.468.0
       react: ^18.3.1
     dependencies:
       '@setsuna-desktop/contracts': link:../../contracts
       '@setsuna-desktop/feature-core': link:../../feature-core
+      '@setsuna-desktop/renderer-contracts': link:../../renderer-contracts
       electron: 43.2.0
       lucide-react: 0.468.0_react@18.3.1
       react: 18.3.1
@@ -332,10 +334,16 @@ importers:
       '@modelcontextprotocol/sdk': ^1.30.0
       '@setsuna-desktop/contracts': workspace:*
       '@setsuna-desktop/feature-core': workspace:*
+      '@setsuna-desktop/renderer-contracts': workspace:*
+      lucide-react: ^0.468.0
+      react: ^18.3.1
     dependencies:
       '@modelcontextprotocol/sdk': 1.30.0_zod@4.4.3
       '@setsuna-desktop/contracts': link:../../contracts
       '@setsuna-desktop/feature-core': link:../../feature-core
+      '@setsuna-desktop/renderer-contracts': link:../../renderer-contracts
+      lucide-react: 0.468.0_react@18.3.1
+      react: 18.3.1
 
   packages/features/memory:
     specifiers:
@@ -400,11 +408,21 @@ importers:
     specifiers:
       '@setsuna-desktop/contracts': workspace:*
       '@setsuna-desktop/feature-core': workspace:*
+      '@setsuna-desktop/renderer-contracts': workspace:*
       electron: '>=30'
+      lucide-react: ^0.468.0
+      react: ^18.3.1
+      react-markdown: ^10.1.0
+      remark-gfm: ^4.0.1
     dependencies:
       '@setsuna-desktop/contracts': link:../../contracts
       '@setsuna-desktop/feature-core': link:../../feature-core
+      '@setsuna-desktop/renderer-contracts': link:../../renderer-contracts
       electron: 43.2.0
+      lucide-react: 0.468.0_react@18.3.1
+      react: 18.3.1
+      react-markdown: 10.1.0_ldrqq4ddkzwykih5vpyejmhynu
+      remark-gfm: 4.0.1
 
   packages/features/review:
     specifiers:
@@ -458,13 +476,20 @@ importers:
     specifiers:
       '@setsuna-desktop/contracts': workspace:*
       '@setsuna-desktop/feature-core': workspace:*
+      '@setsuna-desktop/renderer-contracts': workspace:*
+      lucide-react: ^0.468.0
+      react: ^18.3.1
     dependencies:
       '@setsuna-desktop/contracts': link:../../contracts
       '@setsuna-desktop/feature-core': link:../../feature-core
+      '@setsuna-desktop/renderer-contracts': link:../../renderer-contracts
+      lucide-react: 0.468.0_react@18.3.1
+      react: 18.3.1
 
   packages/features/terminal:
     specifiers:
       '@setsuna-desktop/feature-core': workspace:*
+      '@setsuna-desktop/renderer-contracts': workspace:*
       '@xterm/addon-fit': ^0.11.0
       '@xterm/xterm': ^6.0.0
       electron: '>=30'
@@ -473,6 +498,7 @@ importers:
       react: ^18.3.1
     dependencies:
       '@setsuna-desktop/feature-core': link:../../feature-core
+      '@setsuna-desktop/renderer-contracts': link:../../renderer-contracts
       '@xterm/addon-fit': 0.11.0
       '@xterm/xterm': 6.0.0
       electron: 43.2.0
@@ -585,12 +611,14 @@ importers:
   packages/features/workspace-apps:
     specifiers:
       '@setsuna-desktop/feature-core': workspace:*
+      '@setsuna-desktop/renderer-contracts': workspace:*
       electron: '>=30'
       lucide-react: ^0.468.0
       react: ^18.3.1
       react-dom: ^18.3.1
     dependencies:
       '@setsuna-desktop/feature-core': link:../../feature-core
+      '@setsuna-desktop/renderer-contracts': link:../../renderer-contracts
       electron: 43.2.0
       lucide-react: 0.468.0_react@18.3.1
       react: 18.3.1

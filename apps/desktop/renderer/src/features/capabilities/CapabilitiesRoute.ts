@@ -1,3 +1,3 @@
 import './styles/capabilities.css';
 
-export { CapabilitiesPage as default } from './CapabilitiesPage.js';
+export { CapabilitiesShell as default } from './CapabilitiesShell.js';

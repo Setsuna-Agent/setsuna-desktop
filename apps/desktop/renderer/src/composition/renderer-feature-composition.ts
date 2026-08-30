@@ -33,7 +33,6 @@ import { imageGenerationRendererFeature } from '@setsuna-desktop/feature-image-g
 import { goalRendererFeature } from '@setsuna-desktop/feature-goal/renderer';
 import { memoryRendererFeature } from '@setsuna-desktop/feature-memory/renderer';
 import { threadTitleGenerationRendererFeature } from '@setsuna-desktop/feature-thread-title-generation/renderer';
-import { mcpRendererServiceCapability } from '@setsuna-desktop/feature-mcp/contracts';
 import { mcpRendererFeature } from '@setsuna-desktop/feature-mcp/renderer';
 import {
   modelProviderRendererFeature,
@@ -74,7 +73,6 @@ import {
 import {
   updaterRendererFeature,
   updaterRendererHostCapability,
-  updaterRendererStateCapability,
 } from '@setsuna-desktop/feature-updater/renderer';
 import { visionRecognitionRendererFeature } from '@setsuna-desktop/feature-vision-recognition/renderer';
 import {
@@ -85,6 +83,7 @@ import { workspaceDependenciesRendererFeature } from '@setsuna-desktop/feature-w
 import { workspaceAppsRendererFeature } from '@setsuna-desktop/feature-workspace-apps/renderer';
 import { appReadySlot } from '@setsuna-desktop/renderer-contracts/shell';
 import { chatToolResultResolverSlot } from '@setsuna-desktop/renderer-contracts/chat';
+import { capabilitiesRefreshCoordinatorCapability } from '@setsuna-desktop/renderer-contracts/capabilities';
 import {
   windowsSandboxRendererFeature,
   windowsSandboxRendererHostCapability,
@@ -105,6 +104,7 @@ import { createRendererLayoutPreferenceStore } from '../kernel/renderer-plugins/
 import { activateBuiltinRendererPlugins } from './builtin-renderer-plugins.js';
 import type { BuiltinRendererFeatureServices } from './BuiltinRendererFeatureServicesBoundary.js';
 import { activateDeclarativePluginUiGateway } from '../kernel/declarative-plugin-ui/gateway.js';
+import { createCapabilitiesRefreshCoordinator } from './capabilities-refresh-coordinator.js';
 
 const rendererFeatures = defineRendererFeatureHost({
   required: [
@@ -152,6 +152,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
   if (!runtime || !desktop) throw new Error('Desktop Feature bridge is unavailable.');
   const runtimeClient = createDesktopRuntimeClient();
   const events = new RendererFeatureEventHub();
+  const capabilitiesRefresh = createCapabilitiesRefreshCoordinator();
   const layoutPreferenceStore = createRendererLayoutPreferenceStore(window.localStorage);
   const layoutPreferenceLoad = layoutPreferenceStore.load();
   if (layoutPreferenceLoad.issues.length) {
@@ -168,6 +169,10 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
       createUiRegistrar: (owner, track) => rendererPlugins.createRegistrar(owner, track),
       hostMessages,
       hostCapabilities: [
+      provideHostCapability(
+        capabilitiesRefreshCoordinatorCapability,
+        capabilitiesRefresh,
+      ),
       provideHostCapability(
         artifactRendererHostCapability,
         Object.freeze({
@@ -215,7 +220,11 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
       ),
       provideHostCapability(
         pluginManagementRendererHostCapability,
-        Object.freeze({ bridge: window.setsunaDesktop?.plugins ?? null }),
+        Object.freeze({
+          bridge: window.setsunaDesktop?.plugins ?? null,
+          openExternal: (url: string) => window.setsunaDesktop?.links.openExternal(url)
+            ?? Promise.resolve(false),
+        }),
       ),
       provideHostCapability(
         updaterRendererHostCapability,
@@ -279,7 +288,6 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
         conversationDebugRendererStateCapability,
         createNoopConversationDebugRendererService,
       ),
-      mcp: requiredCapability(mcpRendererServiceCapability),
       networkProxy: requiredCapability(networkProxyRendererStateCapability),
       modelProvider: requiredCapability(modelProviderRendererStateCapability),
       pluginManagement: requiredCapability(pluginManagementRendererServiceCapability),
@@ -290,7 +298,6 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
         createNoopSideConversationRendererService,
       ),
       skills: requiredCapability(skillsRendererServiceCapability),
-      updater: requiredCapability(updaterRendererStateCapability),
       usage: optionalCapability(
         usageRendererStateCapability,
         createNoopUsageRendererStateService,
@@ -310,7 +317,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
       events,
       messages,
       rendererPlugins,
-      services: Object.freeze({ ...dependencies }),
+      services: Object.freeze({ ...dependencies, capabilitiesRefresh }),
     });
   });
 }

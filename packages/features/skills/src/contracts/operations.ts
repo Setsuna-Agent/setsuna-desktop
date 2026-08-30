@@ -19,6 +19,11 @@ export type SkillTarget = Readonly<{ skillId: string }>;
 export type SkillUpdateInput = Readonly<{ skillId: string; patch: RuntimeSkillPatch }>;
 export type SkillDependencyTarget = Readonly<{ skillId: string; serverKey: string }>;
 export type SkillExtraRootsInput = Readonly<{ extraRoots: string[] }>;
+export type SkillDirectoryInspectionInput = Readonly<{ paths: string[] }>;
+export type SkillDirectoryInspection = Readonly<{ path: string; skillCount: number }>;
+export type SkillDirectoryInspectionResult = Readonly<{
+  directories: SkillDirectoryInspection[];
+}>;
 
 const emptyInputCodec = defineRuntimeCodec<undefined>((value) => {
   if (value === undefined || value === null) return undefined;
@@ -55,6 +60,26 @@ const skillExtraRootsCodec = defineRuntimeCodec<SkillExtraRootsInput>((value) =>
   const record = objectRecord(value, 'Skill extra roots input must be an object.');
   return Object.freeze({
     extraRoots: uniqueTextArray(record.extraRoots, 'extraRoots'),
+  });
+});
+
+const skillDirectoryInspectionInputCodec = defineRuntimeCodec<SkillDirectoryInspectionInput>((value) => {
+  const record = objectRecord(value, 'Skill directory inspection input must be an object.');
+  const paths = uniqueTextArray(record.paths, 'paths');
+  if (paths.length > 16) throw new Error('Skill directory inspection accepts at most 16 paths.');
+  return Object.freeze({ paths });
+});
+
+const skillDirectoryInspectionResultCodec = defineRuntimeCodec<SkillDirectoryInspectionResult>((value) => {
+  const record = objectRecord(value, 'Skill directory inspection result must be an object.');
+  return Object.freeze({
+    directories: arrayValue(record.directories, 'directories').map((item) => {
+      const directory = objectRecord(item, 'Skill directory inspection must be an object.');
+      return Object.freeze({
+        path: nonEmptyText(directory.path, 'path'),
+        skillCount: nonNegativeInteger(directory.skillCount, 'skillCount'),
+      });
+    }),
   });
 });
 
@@ -100,6 +125,16 @@ export const readSkills = defineFeatureOperation({
   path: '/v1/features/skills',
   input: emptyInputCodec,
   output: skillListCodec,
+  errors: skillOperationErrors,
+  idempotency: 'safe',
+});
+
+export const inspectSkillDirectories = defineFeatureOperation({
+  id: 'skills.directories.inspect',
+  method: 'POST',
+  path: '/v1/features/skills/directories/inspect',
+  input: skillDirectoryInspectionInputCodec,
+  output: skillDirectoryInspectionResultCodec,
   errors: skillOperationErrors,
   idempotency: 'safe',
 });
@@ -321,6 +356,13 @@ function stableId(value: unknown, label: string): string {
 
 function booleanValue(value: unknown, label: string): boolean {
   if (typeof value !== 'boolean') throw new Error(`Skill ${label} must be boolean.`);
+  return value;
+}
+
+function nonNegativeInteger(value: unknown, label: string): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+    throw new Error(`Skill ${label} must be a non-negative integer.`);
+  }
   return value;
 }
 

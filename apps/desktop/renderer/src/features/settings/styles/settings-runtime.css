@@ -131,6 +131,10 @@
   border-top: 1px solid var(--app-border);
 }
 
+.desktop-settings-panel .sd-settings-group > .chat-user-settings__runtime-list-editor:first-child {
+  border-top: 0;
+}
+
 .chat-user-settings__runtime-json-field > span,
 .chat-user-settings__runtime-memory-tuning > strong {
   color: var(--app-text-secondary);
@@ -181,6 +185,92 @@
   border: 1px solid var(--app-border);
   border-radius: 7px;
   background: var(--app-bg);
+}
+
+.chat-user-settings__runtime-directory-presets {
+  display: grid;
+}
+
+.chat-user-settings__runtime-directory-preset {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 5px 0;
+}
+
+.chat-user-settings__runtime-directory-preset + .chat-user-settings__runtime-directory-preset {
+  border-top: 1px solid var(--app-border);
+}
+
+.chat-user-settings__runtime-directory-preset-icon {
+  display: inline-grid;
+  place-items: center;
+  color: var(--app-text-muted);
+}
+
+.chat-user-settings__runtime-directory-preset.is-inherited .chat-user-settings__runtime-directory-preset-icon {
+  color: var(--app-success);
+}
+
+.chat-user-settings__runtime-directory-preset-copy {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.chat-user-settings__runtime-directory-preset-copy strong {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--app-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 17px;
+}
+
+.chat-user-settings__runtime-directory-preset-count {
+  color: var(--app-text-muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.chat-user-settings__runtime-directory-preset-copy code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-user-settings__runtime-directory-preset-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  justify-self: end;
+  width: 68px;
+  justify-content: center;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  color: var(--app-text-muted);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chat-user-settings__runtime-directory-preset-action:hover:not(:disabled),
+.chat-user-settings__runtime-directory-preset-action:focus-visible {
+  color: var(--app-text);
+}
+
+.chat-user-settings__runtime-directory-preset-action:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
 .chat-user-settings__runtime-list-item {

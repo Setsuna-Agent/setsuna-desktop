@@ -9,7 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { BrowserFeatureIcon } from '../../composition/browser-feature-adapter.js';
+import { BrowserFeatureIcon } from '../../composition/BrowserWorkspaceFeatureBoundary.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../shared/i18n/messages.js';
 import type { KeyboardShortcutCommandId } from '../../shared/shortcuts/keyboardShortcutCommands.js';

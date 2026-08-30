@@ -16,6 +16,7 @@
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
   "references": [
-    { "path": "../../feature-core/tsconfig.build.json" }
+    { "path": "../../feature-core/tsconfig.build.json" },
+    { "path": "../../renderer-contracts/tsconfig.build.json" }
   ]
 }

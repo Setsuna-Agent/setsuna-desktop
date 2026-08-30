@@ -9,3 +9,8 @@ export {
   WorkspaceAppLauncher,
   workspaceAppLauncherMenuPosition,
 } from './WorkspaceAppLauncher.js';
+export {
+  WorkspaceAppsTopbarAction,
+  WorkspaceAppsTopbarHostProvider,
+  type WorkspaceAppsTopbarHost,
+} from './WorkspaceAppsTopbarAction.js';

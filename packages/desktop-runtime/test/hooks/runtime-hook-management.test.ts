@@ -2,14 +2,15 @@ import type {
   RuntimeConfigInput,
   RuntimeConfigState,
 } from '@setsuna-desktop/contracts';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { RuntimeHookManagement } from '../../src/hooks/runtime-hook-management.js';
 import type { ConfigStore } from '../../src/ports/config-store.js';
 
 describe('RuntimeHookManagement', () => {
   it('projects opaque renderer data and safely applies state and delete mutations', async () => {
-    const configPath = '/tmp/setsuna/runtime/config.json';
-    const pluginSourcePath = '/tmp/setsuna/plugins/guard/hooks.json';
+    const configPath = path.resolve('/tmp/setsuna/runtime/config.json');
+    const pluginSourcePath = path.resolve('/tmp/setsuna/plugins/guard/hooks.json');
     const firstKey = `${configPath}:pre_tool_use:0:0`;
     const secondKey = `${configPath}:pre_tool_use:0:1`;
     const pluginKey = `${pluginSourcePath}:post_tool_use:0:0`;

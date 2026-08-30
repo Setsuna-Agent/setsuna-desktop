@@ -22,6 +22,7 @@ export {
   authenticateSkillMcpDependency,
   createSkill,
   deleteSkill,
+  inspectSkillDirectories,
   installSkillMcpDependencies,
   readSkill,
   readSkills,
@@ -30,6 +31,9 @@ export {
 } from './operations.js';
 export type {
   SkillDependencyTarget,
+  SkillDirectoryInspection,
+  SkillDirectoryInspectionInput,
+  SkillDirectoryInspectionResult,
   SkillExtraRootsInput,
   SkillTarget,
   SkillUpdateInput,
