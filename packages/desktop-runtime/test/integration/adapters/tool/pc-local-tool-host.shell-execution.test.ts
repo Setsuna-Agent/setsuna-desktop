@@ -266,7 +266,15 @@ describe('pc local shell execution', () => {
       .filter((entry) => entry && path.resolve(entry) !== runtimePackageBin)
       .join(path.delimiter);
     const workspaceDependencies = createManagedWorkspaceDependencies(dependencyDataDir);
-    const { host } = await createHost({ workspaceDependencies });
+    const { host, projectDir } = await createHost({ workspaceDependencies });
+    await writeFile(path.join(projectDir, 'package.json'), `${JSON.stringify({
+      name: 'setsuna-sandbox-package-script',
+      version: '1.0.0',
+      packageManager: 'pnpm@7.33.7',
+      scripts: {
+        'sandbox-check': 'node -e "console.log(\'package-script-ok\')"',
+      },
+    }, null, 2)}\n`, 'utf8');
 
     try {
       const result = await host.runTool('run_shell_command', {
@@ -274,6 +282,7 @@ describe('pc local shell execution', () => {
           'node --version',
           'pnpm --version',
           'corepack --version',
+          'pnpm run sandbox-check',
           'python3 --version',
           'pip3 --version',
           'uv --version',
@@ -289,6 +298,7 @@ describe('pc local shell execution', () => {
 
       expect(result.content).toContain('Sandbox: macos-seatbelt');
       expect(result.content).toMatch(/v\d+\.\d+/u);
+      expect(result.content).toContain('package-script-ok');
       expect(result.content).toContain('Python');
       expect(result.content).toContain('uv');
     } finally {
@@ -405,7 +415,7 @@ describe('pc local shell execution', () => {
     }
   });
 
-  it.skipIf(process.platform !== 'darwin' || !existsSync('/usr/bin/sandbox-exec'))('enforces macOS shell readable roots after variable expansion', async () => {
+  it.skipIf(process.platform !== 'darwin' || !existsSync('/usr/bin/sandbox-exec'))('keeps host-readable files available to macOS sandboxed toolchains', async () => {
     const { host, projectDir } = await createHost();
     const secretDir = await mkdtemp(path.join(homedir(), '.setsuna-seatbelt-secret-'));
     const secretPath = path.join(secretDir, 'secret.txt');
@@ -426,22 +436,19 @@ describe('pc local shell execution', () => {
       }, context);
       expect(visible.content).toContain('workspace visible');
 
-      await expect(host.runTool('run_shell_command', {
+      const hostFile = await host.runTool('run_shell_command', {
         command: `cat "$HOME/${path.basename(secretDir)}/secret.txt"`,
         risk_level: 'low',
         yield_time_ms: 0,
-      }, context)).rejects.toMatchObject({
-        failureKind: 'sandbox_denied',
-        failureStage: 'execution',
-      });
-      await expect(host.runTool('run_shell_command', {
+      }, context);
+      expect(hostFile.content).toContain('must stay private');
+
+      const systemFile = await host.runTool('run_shell_command', {
         command: 'cat /etc/passwd',
         risk_level: 'low',
         yield_time_ms: 0,
-      }, context)).rejects.toMatchObject({
-        failureKind: 'sandbox_denied',
-        failureStage: 'execution',
-      });
+      }, context);
+      expect(systemFile.content).toContain('root:');
     } finally {
       await rm(secretDir, { recursive: true, force: true });
     }

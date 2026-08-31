@@ -562,8 +562,11 @@ export function shellSandboxProfile(
     '(version 1)',
     '(allow default)',
   ];
-  const readableRoots = [...plan.readableRoots, ...MACOS_SEATBELT_SYSTEM_READ_ROOTS];
-  lines.push(seatbeltDenyOutsideRoots('file-read*', readableRoots, MACOS_SEATBELT_EXACT_READ_PATHS));
+  // Keep the process sandbox as a write/network integrity boundary. Language
+  // runtimes and package managers routinely discover host-readable toolchains,
+  // configs and plugins outside the workspace; blanket read confinement makes
+  // ordinary nested process execution fail. Explicit deny roots and globs below
+  // still protect paths that the user or runtime marked as sensitive.
   if (!plan.networkAccess) lines.push('(deny network*)');
   if (profile === 'read-only') {
     lines.push(seatbeltDenyWritesOutsideRoots(plan.writableRoots));
@@ -597,36 +600,6 @@ function isSandboxExecutionPlan(value: unknown): value is SandboxExecutionPlan {
   const record = recordInput(value);
   return typeof record.provider === 'string' && Array.isArray(record.readableRoots);
 }
-
-const MACOS_SEATBELT_SYSTEM_READ_ROOTS: readonly string[] = [
-  '/System',
-  '/usr',
-  '/bin',
-  '/sbin',
-  '/dev',
-  '/Library/Apple',
-  // Keep OS bootstrap/network data narrowly scoped; granting all of /private/etc
-  // would reintroduce an unrestricted local-config read channel.
-  '/private/etc/ssl',
-  '/private/etc/hosts',
-  '/private/etc/resolv.conf',
-  '/private/etc/services',
-  '/private/etc/protocols',
-  '/private/var/select/sh',
-  '/private/var/select/developer_dir',
-  '/var/select/developer_dir',
-  '/private/var/db/timezone',
-];
-
-const MACOS_SEATBELT_EXACT_READ_PATHS: readonly string[] = [
-  '/private/etc/hosts',
-  '/private/etc/resolv.conf',
-  '/private/etc/services',
-  '/private/etc/protocols',
-  '/private/var/select/sh',
-  '/private/var/select/developer_dir',
-  '/var/select/developer_dir',
-];
 
 function shellSandboxTempRoots(temporaryRoot: unknown): string[] {
   const candidate = String(temporaryRoot ?? '').trim();
@@ -714,39 +687,6 @@ function seatbeltProtectedMetadataRules(plan: SandboxExecutionPlan) {
       `(deny file-write* (subpath ${seatbeltString(protectedRoot)}))`,
     ];
   });
-}
-
-function seatbeltDenyOutsideRoots(
-  operation: string,
-  roots: readonly string[],
-  exactPaths: readonly string[] = [],
-): string {
-  const normalizedRoots = roots.filter(Boolean).map((root) => path.resolve(root));
-  const normalizedExactPaths = exactPaths.filter(Boolean).map((filePath) => path.resolve(filePath));
-  const filters = normalizedRoots.map((root) => `(require-not (subpath ${seatbeltString(root)}))`);
-  // Seatbelt's subpath filter excludes the directory itself. Shell startup and
-  // getcwd need metadata reads on each parent, so allow only those exact
-  // directory nodes without exposing sibling contents.
-  for (const traversalPath of seatbeltTraversalPaths([...normalizedRoots, ...normalizedExactPaths])) {
-    filters.push(`(require-not (literal ${seatbeltString(traversalPath)}))`);
-  }
-  if (!filters.length) return `(deny ${operation})`;
-  if (filters.length === 1) return `(deny ${operation} ${filters[0]})`;
-  return `(deny ${operation} (require-all ${filters.join(' ')}))`;
-}
-
-function seatbeltTraversalPaths(roots: readonly string[]): string[] {
-  const paths = new Set(['/']);
-  for (const root of roots) {
-    let current = root;
-    while (current) {
-      paths.add(current);
-      const parent = path.dirname(current);
-      if (parent === current) break;
-      current = parent;
-    }
-  }
-  return [...paths];
 }
 
 function seatbeltDenyWritesOutsideRoots(roots: readonly string[]): string {
