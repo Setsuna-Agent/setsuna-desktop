@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, realpath, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -158,7 +159,7 @@ describe('Windows native sandbox adapter', () => {
       USERPROFILE: profileRoot,
     });
 
-    expect(readableRoots).toEqual(expect.arrayContaining([
+    const expectedReadableRoots = [
       systemRoot,
       programFiles,
       programFilesX86,
@@ -166,7 +167,9 @@ describe('Windows native sandbox adapter', () => {
       documents,
       path.dirname(localPrograms),
       roamingPnpm,
-    ]));
+    ].map((candidate) => realpathSync.native(candidate));
+
+    expect(readableRoots).toEqual(expect.arrayContaining(expectedReadableRoots));
     for (const protectedRoot of [
       profileRoot,
       path.join(profileRoot, 'AppData'),
@@ -175,7 +178,7 @@ describe('Windows native sandbox adapter', () => {
       ssh,
       codex,
     ]) {
-      expect(readableRoots).not.toContain(protectedRoot);
+      expect(readableRoots).not.toContain(realpathSync.native(protectedRoot));
     }
   });
 
