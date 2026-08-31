@@ -162,6 +162,8 @@ runtime 只额外追加用于读取超限结果的 `read_tool_result`；工具�
 
 Windows 原生 shell provider 由 `packages/features/windows-sandbox/src/runtime` 拥有，并在 runtime composition 中绑定到通用 `ShellSandboxProvider` port。`PcLocalToolHost` 只消费 capability、control root、sandbox-only 网络环境、curl 环境补丁和 request writer；Windows sidecar 探测、环境变量与请求协议不进入 Core adapter。
 
+受限 shell 的 OS sandbox 是写入完整性与网络出口边界，不作为宿主文件的读取保密边界。macOS Seatbelt 与 Windows provider 都允许命令读取宿主账户原本可读、且工具链正常启动所需的文件；写入仍限于 workspace、显式 writable roots 与每次执行的临时目录，工作区 `.git` / `.agents` / `.codex` 等元数据继续只读，网络继续服从 sandbox policy。macOS 仍强制执行显式 `deniedRoots` 与 `deniedGlobPatterns`；直接文件工具则继续受 effective readable roots 约束，不能借 shell 绕过用户声明的敏感路径规则。
+
 `security/shell-command-analysis.ts`：
 
 - 解析 command structure。

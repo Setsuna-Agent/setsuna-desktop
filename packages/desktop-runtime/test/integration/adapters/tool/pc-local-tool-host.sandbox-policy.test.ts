@@ -152,9 +152,7 @@ describe('pc local shell sandbox policy', () => {
     expect(lines.slice(0, 2)).toEqual(['(version 1)', '(allow default)']);
     expect(lines).toContain('(deny network*)');
     expect(lines).toContain(denyOutsideWritableRoots);
-    expect(lines.some((line) => line.startsWith('(deny file-read* (require-all ')
-      && line.includes(`(require-not (subpath ${JSON.stringify(path.resolve(root))}))`)
-      && line.includes('(require-not (literal "/"))'))).toBe(true);
+    expect(lines.some((line) => line.startsWith('(deny file-read* (require-all '))).toBe(false);
     expect(lines).toEqual(expect.arrayContaining([
       `(deny file-read* (literal ${JSON.stringify(path.resolve(deniedRoot))}))`,
       `(deny file-read* (subpath ${JSON.stringify(path.resolve(deniedRoot))}))`,

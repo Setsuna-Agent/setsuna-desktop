@@ -1267,6 +1267,7 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
 }
 
 .chat-mcp-terminal {
+  position: relative;
   width: 100%;
   min-width: 0;
   max-width: 100%;
@@ -1285,11 +1286,79 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
 }
 
 .chat-mcp-terminal__header {
-  padding: 7px 10px 3px;
+  min-height: 18px;
+  padding: 7px 38px 3px 10px;
   color: color-mix(in srgb, currentColor 72%, transparent);
   font-family: var(--app-font-family);
   font-size: 12px;
   line-height: 18px;
+}
+
+.chat-mcp-terminal__metadata {
+  display: flow-root;
+  margin: 0;
+}
+
+.chat-mcp-terminal__metadata-trigger {
+  position: absolute;
+  top: 5px;
+  right: 7px;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  color: color-mix(in srgb, currentColor 56%, transparent);
+  background: transparent;
+  cursor: pointer;
+  list-style: none;
+  place-items: center;
+}
+
+.chat-mcp-terminal__metadata-trigger::-webkit-details-marker {
+  display: none;
+}
+
+.chat-mcp-terminal__metadata-trigger:hover,
+.chat-mcp-terminal__metadata-trigger:focus-visible,
+.chat-mcp-terminal__metadata[open] > .chat-mcp-terminal__metadata-trigger {
+  color: var(--app-text);
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.chat-mcp-terminal__metadata-trigger:focus-visible {
+  outline: none;
+  box-shadow: var(--app-focus-ring);
+}
+
+.chat-mcp-terminal__metadata-panel {
+  max-height: 220px;
+  margin: 4px 10px 3px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  border-radius: 6px;
+  color: color-mix(in srgb, currentColor 82%, transparent);
+  background: color-mix(in srgb, var(--app-surface) 88%, transparent);
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+.chat-mcp-terminal__metadata-title {
+  margin-bottom: 5px;
+  color: color-mix(in srgb, currentColor 72%, transparent);
+  font-family: var(--app-font-family);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.chat-mcp-terminal__metadata-panel pre {
+  margin: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .chat-mcp-terminal__body {
