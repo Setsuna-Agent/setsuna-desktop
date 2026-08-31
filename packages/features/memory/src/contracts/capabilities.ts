@@ -85,7 +85,6 @@ export interface MemoryControl {
   createCitationOutputFilter(): MemoryCitationOutputFilter;
   systemPrompt(context: MemoryToolContext): Promise<string | null>;
   listTools(context: MemoryToolContext): Promise<readonly RuntimeToolDefinition[]>;
-  toolRuntimeProfile(name: string): Readonly<{ exposure: 'deferred' }> | null;
   runTool(name: string, input: unknown, context: MemoryToolContext): Promise<MemoryToolExecutionResult>;
 }
 
@@ -166,7 +165,6 @@ export function createNoopMemoryControl(): MemoryControl {
     createCitationOutputFilter: () => passthroughCitationFilter(),
     systemPrompt: async () => null,
     listTools: async () => [],
-    toolRuntimeProfile: () => null,
     runTool: async () => { throw new Error('Memory Feature is unavailable.'); },
   });
 }

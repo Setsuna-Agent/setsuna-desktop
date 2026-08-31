@@ -49,7 +49,7 @@ import {
 import { RuntimePromptContextAssembler } from '../context/runtime-prompt-context-assembler.js';
 import { isRuntimeReadOnlyTool } from '../context/runtime-read-only-tools.js';
 import type { RuntimeToolCallExecutor } from '../tools/runtime-tool-call-executor.js';
-import { RUNTIME_PROVIDED_TOOL_NAMES, RuntimeToolRouter } from '../tools/tool-router.js';
+import { READ_TOOL_RESULT_TOOL_NAME, RuntimeToolRouter } from '../tools/tool-router.js';
 import { modelFacingTools, samplingToolRuntimes } from './agent-loop-tool-utils.js';
 import { normalizeModelConversationHistory } from './runtime-model-message-order.js';
 import type { RuntimeResolvedTurnModel } from './runtime-thread-model.js';
@@ -103,8 +103,6 @@ type RuntimeSamplingContextBuilderOptions = {
  */
 export class RuntimeSamplingContextBuilder {
   private readonly promptContexts: RuntimePromptContextAssembler;
-  /** turnId → 已激活 deferred 工具名;跨 sampling step 保持,turn 结束清理。 */
-  private readonly deferredActivations = new Map<string, Set<string>>();
 
   constructor(private readonly options: RuntimeSamplingContextBuilderOptions) {
     this.promptContexts = new RuntimePromptContextAssembler({
@@ -114,11 +112,6 @@ export class RuntimeSamplingContextBuilder {
       skillRegistry: options.skillRegistry,
       toolHost: options.toolHost,
     });
-  }
-
-  /** turn 结束时清理 deferred 激活状态,避免跨 turn 泄漏。 */
-  cleanupTurn(turnId: string): void {
-    this.deferredActivations.delete(turnId);
   }
 
   async build({
@@ -247,9 +240,6 @@ export class RuntimeSamplingContextBuilder {
           ...(toolAccess === 'read-only' ? { allowTool: (tool: RuntimeToolDefinition) => isRuntimeReadOnlyTool(tool.name) } : {}),
           strictApprovalRequiresSerial: Boolean(this.options.approvalGate && (stepRuntimeConfig?.approvalPolicy ?? 'on-request') === 'strict'),
           toolResultStore: this.options.toolResultStore,
-          // deferred 激活按 turn 保持,新的 sampling step 恢复上一 step 的加载集合。
-          loadedDeferredToolNames: this.deferredActivationNames(turnId),
-          onDeferredActivated: (names) => this.recordDeferredActivation(turnId, names),
         })
       : null;
     const availableTools = toolAccess === 'none'
@@ -259,7 +249,6 @@ export class RuntimeSamplingContextBuilder {
           dynamicTools,
           collaborationTools,
           goalTools,
-          toolRouter?.loadedDeferredToolNames(),
           toolRouter?.catalogToolDefinitions,
         );
     const sideConversation = (snapshotThread ?? thread).kind === 'side';
@@ -270,7 +259,7 @@ export class RuntimeSamplingContextBuilder {
       : availableTools;
     const tools = toolAccess === 'read-only'
       ? scopedTools?.filter((tool) => (
-          isRuntimeReadOnlyTool(tool.name) || RUNTIME_PROVIDED_TOOL_NAMES.has(tool.name)
+          isRuntimeReadOnlyTool(tool.name) || tool.name === READ_TOOL_RESULT_TOOL_NAME
         ))
       : scopedTools;
     const advertisedToolNames = tools?.map((tool) => tool.name) ?? [];
@@ -302,7 +291,6 @@ export class RuntimeSamplingContextBuilder {
       toolContext,
       toolRouter,
       tools: tools ?? [],
-      // 权限与工具安全规则基于完整允许目录,不随 tool_search 结果变化。
       catalogTools: toolRouter?.catalogToolDefinitions ?? tools ?? [],
     });
     const fragments = promptContext.fragments;
@@ -359,12 +347,6 @@ export class RuntimeSamplingContextBuilder {
       toolNames: advertisedToolNames,
       advertisedToolNames,
       toolRuntimes,
-      ...(toolRouter?.deferredCatalogSize() !== undefined && toolRouter.deferredCatalogSize() > 0
-        ? { deferredToolCatalogSize: toolRouter.deferredCatalogSize() }
-        : {}),
-      ...(toolRouter?.loadedDeferredToolNames().length
-        ? { loadedDeferredToolNames: toolRouter.loadedDeferredToolNames() }
-        : {}),
       ...toolResultTokenTelemetry(modelRequestMessages(messages)),
       ...(toolChoice ? { toolChoice } : {}),
       toolEnvironment: environment,
@@ -415,16 +397,6 @@ export class RuntimeSamplingContextBuilder {
       .sort();
   }
 
-  private deferredActivationNames(turnId: string): string[] {
-    return [...(this.deferredActivations.get(turnId) ?? [])];
-  }
-
-  private recordDeferredActivation(turnId: string, names: string[]): void {
-    if (!names.length) return;
-    const existing = this.deferredActivations.get(turnId) ?? new Set<string>();
-    for (const name of names) existing.add(name);
-    this.deferredActivations.set(turnId, existing);
-  }
 }
 
 /**

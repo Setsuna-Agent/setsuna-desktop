@@ -15,7 +15,6 @@ export type ArtifactToolExecutionContext = Readonly<{
 }>;
 
 export type ArtifactToolRuntimeProfile = Readonly<{
-  exposure: 'direct';
   supportsParallel: true;
 }>;
 

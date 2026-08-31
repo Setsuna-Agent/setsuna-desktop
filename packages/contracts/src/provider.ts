@@ -111,11 +111,6 @@ export type RuntimeModelRequestContextWindow = {
 export type RuntimeModelRequestToolRuntime = {
   name: string;
   source: 'host' | 'dynamic' | 'collaboration' | 'goal';
-  /**
-   * direct: 定义随每次请求稳定下发；deferred: 通过 tool_search 命中后才追加到
-   * 后续请求的 tools 后缀。旧快照只有 'direct'。
-   */
-  exposure: 'direct' | 'deferred';
   supportsParallel: boolean;
   waitsForRuntimeCancellation: boolean;
 };
@@ -150,10 +145,6 @@ export type RuntimeModelRequestStepSnapshot = {
   mcpServerCount: number;
   permissionProfile: RuntimePermissionProfile;
   sandboxWorkspaceWrite?: RuntimeSandboxWorkspaceWrite;
-  /** deferred 工具目录大小;未启用 tool_search 时省略。 */
-  deferredToolCatalogSize?: number;
-  /** 本 turn 已通过 tool_search 激活并追加到 tools 后缀的 deferred 工具名。 */
-  loadedDeferredToolNames?: string[];
   /** 本次请求 tool 消息中可见(截断后)输出 token 之和。 */
   toolResultVisibleTokens?: number;
   /** 本次请求 tool 消息中原始输出 token 之和(仅统计被截断的结果)。 */

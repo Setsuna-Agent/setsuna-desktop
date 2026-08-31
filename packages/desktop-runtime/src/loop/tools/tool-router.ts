@@ -20,11 +20,6 @@ import type {
   ToolOrchestratorRunResult,
 } from './tool-orchestrator.js';
 import {
-  buildDeferredToolSearchText,
-  DeferredToolSearchIndex,
-  type DeferredToolSearchEntry,
-} from './deferred-tool-search.js';
-import {
   TOOL_OUTPUT_BUDGET_DEFAULT_TOKENS,
   TOOL_OUTPUT_BUDGET_READ_TOOL_RESULT_TOKENS,
   TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS,
@@ -45,15 +40,7 @@ export const LOCAL_PARALLEL_READ_ONLY_TOOL_NAMES = new Set([
   'workspace_read_file',
 ]);
 
-export const TOOL_SEARCH_TOOL_NAME = 'tool_search';
 export const READ_TOOL_RESULT_TOOL_NAME = 'read_tool_result';
-export const RUNTIME_PROVIDED_TOOL_NAMES: ReadonlySet<string> = new Set([
-  TOOL_SEARCH_TOOL_NAME,
-  READ_TOOL_RESULT_TOOL_NAME,
-]);
-
-/** 每个 turn 最多激活的 deferred 工具数。 */
-export const MAX_LOADED_DEFERRED_TOOLS = 16;
 
 /** read_tool_result 单次工具消息的总字节上限（≈8k tokens）。 */
 export const READ_TOOL_RESULT_OUTPUT_BYTES = TOOL_OUTPUT_BUDGET_READ_TOOL_RESULT_TOKENS * 4;
@@ -61,20 +48,6 @@ export const READ_TOOL_RESULT_OUTPUT_BYTES = TOOL_OUTPUT_BUDGET_READ_TOOL_RESULT
 const READ_TOOL_RESULT_METADATA_RESERVE_BYTES = 512;
 export const READ_TOOL_RESULT_PAGE_BYTES = READ_TOOL_RESULT_OUTPUT_BYTES
   - READ_TOOL_RESULT_METADATA_RESERVE_BYTES;
-
-const TOOL_SEARCH_TOOL: RuntimeToolDefinition = {
-  name: TOOL_SEARCH_TOOL_NAME,
-  description: 'Some tools are intentionally omitted from the current tool list. When no advertised tool clearly covers a requested capability, search the deferred catalog before claiming the capability is unavailable. Matching definitions are appended to the tools of your next request.',
-  inputSchema: {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
-      query: { type: 'string', description: 'What capability you need, e.g. "open a browser tab" or "run git log".' },
-      max_results: { type: 'integer', minimum: 1, maximum: 8, description: 'Maximum concrete tools to return. Defaults to 8.' },
-    },
-    required: ['query'],
-  },
-};
 
 const READ_TOOL_RESULT_TOOL: RuntimeToolDefinition = {
   name: READ_TOOL_RESULT_TOOL_NAME,
@@ -117,53 +90,25 @@ export type RuntimeToolRouterOptions = {
   allowTool?(tool: RuntimeToolDefinition): boolean;
   strictApprovalRequiresSerial?: boolean;
   toolResultStore?: ToolResultStore;
-  /** 本 turn 之前已激活的 deferred 工具名,用于跨 sampling step 保持激活。 */
-  loadedDeferredToolNames?: string[];
-  /** 激活集合变化(新增 deferred 工具)时通知外部持久化 per-turn 状态。 */
-  onDeferredActivated?(names: string[]): void;
 };
 
 /**
- * 显式维护 catalog/direct/deferred/loaded/advertised 五类工具集合。
- *
- * 最终模型工具顺序固定为:所有 direct 工具 → tool_search / read_tool_result →
- * collaboration / goal / dynamic direct 工具(由调用方追加)→ 已加载 deferred
- * 工具后缀。这样搜索只改变末尾后缀,不会打乱静态前缀。
+ * 维护经过权限与可见性过滤的 host catalog，并追加 runtime 自带工具。
+ * catalog 中的工具默认全部随每次模型请求下发。
  */
 export class RuntimeToolRouter {
   private readonly catalogTools: RuntimeToolDefinition[];
   private readonly catalogToolNames: ReadonlySet<string>;
-  private readonly directTools: RuntimeToolDefinition[];
-  private readonly deferredEntries: DeferredToolSearchEntry[];
-  private readonly searchIndex: DeferredToolSearchIndex;
   private readonly profiles: Map<string, ToolRuntimeProfile>;
-  /** Deferred tools that were advertised when this sampling step was built. */
-  private readonly advertisedDeferredToolNames = new Set<string>();
-  /** Deferred tools activated for the next sampling step of the same turn. */
-  private readonly loadedDeferredTools = new Map<string, RuntimeToolDefinition>();
 
   private constructor(
     private readonly options: RuntimeToolRouterOptions,
     catalogTools: RuntimeToolDefinition[],
-    directTools: RuntimeToolDefinition[],
-    deferredEntries: DeferredToolSearchEntry[],
     profiles: Map<string, ToolRuntimeProfile>,
   ) {
     this.catalogTools = catalogTools;
     this.catalogToolNames = new Set(catalogTools.map((tool) => tool.name));
-    this.directTools = directTools;
-    this.deferredEntries = deferredEntries;
-    this.searchIndex = new DeferredToolSearchIndex(deferredEntries);
     this.profiles = profiles;
-    // 跨 step 保持的激活按全局 catalog 顺序恢复，保证 tools 后缀字节稳定。
-    // 只接受仍属于 deferred catalog 的名称，避免 profile 变化后重复暴露 direct 工具。
-    const loadedNames = new Set(options.loadedDeferredToolNames ?? []);
-    for (const entry of deferredEntries) {
-      if (!loadedNames.has(entry.name)) continue;
-      if (this.loadedDeferredTools.size >= MAX_LOADED_DEFERRED_TOOLS) break;
-      this.loadedDeferredTools.set(entry.name, entry.definition);
-      this.advertisedDeferredToolNames.add(entry.name);
-    }
   }
 
   static async create(options: RuntimeToolRouterOptions): Promise<RuntimeToolRouter> {
@@ -179,41 +124,23 @@ export class RuntimeToolRouter {
       catalogTools.push(tool);
     }
 
-    const directTools: RuntimeToolDefinition[] = [];
-    const deferredEntries: DeferredToolSearchEntry[] = [];
-    catalogTools.forEach((tool, catalogOrder) => {
-      const profile = profiles.get(tool.name);
-      if (profile?.exposure === 'deferred') {
-        deferredEntries.push({
-          name: tool.name,
-          searchText: buildDeferredToolSearchText(tool, profile.searchAliases),
-          definition: tool,
-          catalogOrder,
-        });
-      } else {
-        directTools.push(tool);
-      }
-    });
-
-    return new RuntimeToolRouter(options, catalogTools, directTools, deferredEntries, profiles);
+    return new RuntimeToolRouter(options, catalogTools, profiles);
   }
 
-  /** 本次请求实际下发给模型的工具(静态 direct 前缀 + 已加载 deferred 后缀)。 */
+  /** 本次请求实际下发给模型的完整可见工具目录。 */
   get tools(): RuntimeToolDefinition[] {
     return this.advertisedTools();
   }
 
-  /** 完整允许目录(含 deferred),用于工具安全规则与 permissions prompt 的稳定构建。 */
+  /** 完整允许目录，用于工具安全规则与 permissions prompt 的稳定构建。 */
   get catalogToolDefinitions(): RuntimeToolDefinition[] {
     return this.catalogTools;
   }
 
   private advertisedTools(): RuntimeToolDefinition[] {
     return [
-      ...this.directTools,
-      TOOL_SEARCH_TOOL,
+      ...this.catalogTools,
       READ_TOOL_RESULT_TOOL,
-      ...this.deferredToolsInCatalogOrder(this.advertisedDeferredToolNames),
     ];
   }
 
@@ -222,26 +149,12 @@ export class RuntimeToolRouter {
    * Schema，不是执行权限；真正的权限与审批仍由 catalog 过滤和 orchestrator 负责。
    */
   canRouteTool(name: string): boolean {
-    return this.catalogToolNames.has(name) || RUNTIME_PROVIDED_TOOL_NAMES.has(name);
+    return this.catalogToolNames.has(name) || name === READ_TOOL_RESULT_TOOL_NAME;
   }
 
   /** host catalog 与 runtime 自带工具始终阻止同名动态工具接管。 */
   reservesDynamicToolName(name: string): boolean {
-    return this.catalogToolNames.has(name) || RUNTIME_PROVIDED_TOOL_NAMES.has(name);
-  }
-
-  advertisedToolNames(): string[] {
-    return this.advertisedTools().map((tool) => tool.name);
-  }
-
-  /** deferred 目录大小(遥测用)。 */
-  deferredCatalogSize(): number {
-    return this.searchIndex.size;
-  }
-
-  /** 当前已加载的 deferred 工具名(catalog 顺序,遥测与 per-turn 状态用)。 */
-  loadedDeferredToolNames(): string[] {
-    return this.loadedDeferredToolsInCatalogOrder().map((tool) => tool.name);
+    return this.catalogToolNames.has(name) || name === READ_TOOL_RESULT_TOOL_NAME;
   }
 
   async toolRuntimeMetadata(): Promise<RuntimeModelRequestToolRuntime[]> {
@@ -250,7 +163,6 @@ export class RuntimeToolRouter {
       return {
         name: tool.name,
         source: 'host' as const,
-        exposure: this.profileExposure(tool.name) === 'deferred' ? 'deferred' as const : 'direct' as const,
         supportsParallel: profile.supportsParallel === true,
         waitsForRuntimeCancellation: profile.waitsForRuntimeCancellation !== false,
       };
@@ -258,12 +170,10 @@ export class RuntimeToolRouter {
   }
 
   async systemPrompt(): Promise<string | null> {
-    // 工具安全规则基于完整允许目录构建,不随搜索结果变化。
     return this.options.toolHost.systemPrompt?.(this.options.context, { tools: this.catalogTools }) ?? null;
   }
 
   async externalContext() {
-    // MCP server instructions 只随当前已暴露工具加载,避免一次性注入所有 server。
     return this.options.toolHost.externalContext?.(this.options.context, { tools: this.advertisedTools() }) ?? [];
   }
 
@@ -305,8 +215,6 @@ export class RuntimeToolRouter {
     parsedArguments: unknown,
     options: ToolOrchestratorRunOptions = {},
   ): Promise<ToolOrchestratorRunResult> {
-    // 模型可能准确调用未下发 Schema 的 deferred 工具。只要它仍在经过 hidden、
-    // allowTool 等过滤的 host catalog 中，就进入与 direct 工具相同的审批和执行链路。
     if (!this.catalogToolNames.has(toolCall.name)) {
       throw new Error(`Tool ${toolCall.name} is not registered in the allowed tool catalog.`);
     }
@@ -323,26 +231,6 @@ export class RuntimeToolRouter {
         waitsForRuntimeCancellation: profile.waitsForRuntimeCancellation !== false,
       },
     );
-  }
-
-  /**
-   * Codex 风格 tool_search:返回具体工具名与简短描述,不在 tool message 中
-   * 重复完整 Schema(定义在下一轮 tools 后缀里提供)。命中的工具在当前 turn
-   * 保持激活。
-   */
-  async runToolSearch(query: string, maxResults: number | undefined): Promise<string> {
-    const results = this.searchIndex.search(query, maxResults);
-    const active = this.activateDeferredTools(results.map((result) => result.name));
-    const activeNames = new Set(active);
-    const visible = results.filter((result) => activeNames.has(result.name));
-    if (!visible.length) {
-      return 'No deferred tools matched the query. Try a different capability description, or use the direct tools already advertised in this request.';
-    }
-    return [
-      `Matching tools (${visible.length}):`,
-      ...visible.map((result) => `- ${result.name}: ${result.description}`),
-      'Full definitions are appended to the tools of your next request.',
-    ].join('\n');
   }
 
   /** 读取超限工具结果的分页,线程无权访问时返回提示文本。 */
@@ -382,40 +270,6 @@ export class RuntimeToolRouter {
     return TOOL_OUTPUT_BUDGET_DEFAULT_TOKENS;
   }
 
-  /**
-   * 激活命中的 deferred 工具(按 catalog 顺序追加,不按 BM25 排名),
-   * 每个 turn 最多 MAX_LOADED_DEFERRED_TOOLS 个。返回激活后仍处于
-   * loaded 集合的名称。
-   */
-  activateDeferredTools(names: string[]): string[] {
-    const wanted = new Set(names);
-    let changed = false;
-    for (const entry of this.deferredEntries) {
-      if (!wanted.has(entry.name)) continue;
-      if (this.loadedDeferredTools.size >= MAX_LOADED_DEFERRED_TOOLS) break;
-      if (!this.loadedDeferredTools.has(entry.name)) {
-        this.loadedDeferredTools.set(entry.name, entry.definition);
-        changed = true;
-      }
-    }
-    const loaded = this.loadedDeferredToolNames();
-    if (changed) this.options.onDeferredActivated?.(loaded);
-    return loaded;
-  }
-
-  private loadedDeferredToolsInCatalogOrder(): RuntimeToolDefinition[] {
-    return this.deferredToolsInCatalogOrder(new Set(this.loadedDeferredTools.keys()));
-  }
-
-  private deferredToolsInCatalogOrder(names: ReadonlySet<string>): RuntimeToolDefinition[] {
-    return this.catalogTools
-      .filter((tool) => names.has(tool.name));
-  }
-
-  private profileExposure(name: string): ToolRuntimeProfile['exposure'] {
-    return this.profiles.get(name)?.exposure;
-  }
-
   private async profileFor(name: string): Promise<ToolRuntimeProfile> {
     const existing = this.profiles.get(name);
     if (existing) return existing;
@@ -445,7 +299,7 @@ async function runtimeProfileForTool(
 }
 
 function toolIsHidden(profile: ToolRuntimeProfile): boolean {
-  return profile.exposure === 'hidden' || profile.visibleToModel === false;
+  return profile.visibleToModel === false;
 }
 
 function normalizeReadToolResultArgs(value: unknown): { resultId: string; offset: number; limit: number } | null {

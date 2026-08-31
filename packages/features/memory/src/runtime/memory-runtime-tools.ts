@@ -128,14 +128,6 @@ export class MemoryRuntimeTools {
     return tools;
   }
 
-  /**
-   * recall_memory 是高频主入口,保持 direct;remember 与 memory 文件类低频工具
-   * 走 deferred 暴露,经 tool_search 激活。
-   */
-  toolRuntimeProfile(name: string): { exposure: 'deferred' } | null {
-    return name === 'recall_memory' ? null : { exposure: 'deferred' };
-  }
-
   private async toolVisibility(): Promise<{ canRead: boolean; canWrite: boolean }> {
     const config = await this.readPreferences().catch(() => null);
     if (!config) return { canRead: false, canWrite: false };

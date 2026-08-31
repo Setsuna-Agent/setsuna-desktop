@@ -49,9 +49,7 @@ import { FILE_MUTATION_TOOL_NAMES, ToolApprovalStore, ToolOrchestrator } from '.
 import { boundToolOutput, TOOL_OUTPUT_BUDGET_DEFAULT_TOKENS } from './tool-output-budget.js';
 import {
   READ_TOOL_RESULT_TOOL_NAME,
-  RUNTIME_PROVIDED_TOOL_NAMES,
   RuntimeToolRouter,
-  TOOL_SEARCH_TOOL_NAME,
 } from './tool-router.js';
 
 const APP_SERVER_DYNAMIC_TOOL_TIMEOUT_MS = 120_000;
@@ -246,14 +244,14 @@ export class RuntimeToolCallExecutor {
         await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
         return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, undefined, toolRouter);
       }
-      // tool_search / read_tool_result 由 router 直接实现,不经过宿主工具审批链。
-      if (RUNTIME_PROVIDED_TOOL_NAMES.has(toolCall.name)) {
+      // read_tool_result 由 router 直接实现，不经过宿主工具审批链。
+      if (toolCall.name === READ_TOOL_RESULT_TOOL_NAME) {
         if (!toolRouter) {
           content = `Tool ${toolCall.name} failed: no tool host is available.`;
           await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
           return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, undefined, toolRouter);
         }
-        content = await this.runRuntimeProvidedTool(toolCall, parsedArguments, context, toolRouter);
+        content = await toolRouter.runReadToolResult(parsedArguments, context.threadId);
         await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'success', content);
         return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, undefined, toolRouter);
       }
@@ -288,31 +286,11 @@ export class RuntimeToolCallExecutor {
     return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, attachments, toolRouter);
   }
 
-  /**
-   * 执行 runtime 直接提供的工具(tool_search / read_tool_result)。
-   *
-   * @param toolCall 对应的模型工具调用。
-   * @param parsedArguments 已解析的工具参数。
-   * @param context 当前工具执行上下文。
-   * @param toolRouter 当前 sampling step 捕获的工具路由器。
-   */
-  private async runRuntimeProvidedTool(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext, toolRouter: RuntimeToolRouter): Promise<string> {
-    if (toolCall.name === TOOL_SEARCH_TOOL_NAME) {
-      const args = normalizeToolSearchArgs(parsedArguments);
-      return toolRouter.runToolSearch(args.query, args.maxResults);
-    }
-    if (toolCall.name === READ_TOOL_RESULT_TOOL_NAME) {
-      return toolRouter.runReadToolResult(parsedArguments, context.threadId);
-    }
-    throw new Error(`Unknown runtime tool: ${toolCall.name}`);
-  }
-
   private appServerDynamicToolForCall(threadId: string, name: string, toolRouter: RuntimeToolRouter | null): AppServerDynamicToolLookup | null {
     const registration = this.appServerDynamicToolsByThread.get(threadId);
     const tool = registration?.toolsByName.get(name);
     if (!registration || !tool) return null;
-    // 完整 host catalog（包括尚未激活的 deferred 工具）和 runtime 自带工具
-    // 始终保留名称所有权，避免执行目标随 sampling step 改变。
+    // 完整 host catalog 和 runtime 自带工具始终保留名称所有权。
     if (toolRouter?.reservesDynamicToolName(name)) return null;
     return { registration, tool };
   }
@@ -831,17 +809,4 @@ function parsePreviewJson(value: string | undefined): unknown {
   } catch {
     return null;
   }
-}
-
-function normalizeToolSearchArgs(value: unknown): { query: string; maxResults: number | undefined } {
-  const input = isPlainRecord(value) ? value : {};
-  const query = typeof input.query === 'string' ? input.query.trim() : '';
-  const maxResults = typeof input.max_results === 'number' && Number.isInteger(input.max_results)
-    ? Math.max(1, Math.min(8, input.max_results))
-    : undefined;
-  return { query, maxResults };
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

@@ -380,10 +380,6 @@ export class RuntimeMemoryCoordinator implements MemoryControl {
     return this.tools.listTools(context);
   }
 
-  toolRuntimeProfile(name: string) {
-    return this.tools.toolRuntimeProfile(name);
-  }
-
   runTool(name: string, input: unknown, context: MemoryToolContext): Promise<MemoryToolExecutionResult> {
     return this.tools.runTool(name, input, context);
   }

@@ -75,18 +75,15 @@ export function modelFacingTools(
   dynamicTools: RuntimeDynamicToolDefinition[] | undefined,
   collaborationTools: readonly RuntimeToolDefinition[] = [],
   goalTools: readonly RuntimeToolDefinition[] = [],
-  deferredToolNames: readonly string[] = [],
   hostCatalogTools: readonly RuntimeToolDefinition[] = tools ?? [],
 ): RuntimeToolDefinition[] | undefined {
-  const deferredNames = new Set(deferredToolNames);
-  // Host tools keep ownership on collisions, but loaded deferred definitions are
-  // emitted only after every stable direct/collaboration/goal/dynamic definition.
+  // Host and runtime tools keep ownership on collisions with tools appended by
+  // feature controls or the App Server.
   const names = new Set([
     ...hostCatalogTools.map((tool) => tool.name),
     ...(tools ?? []).map((tool) => tool.name),
   ]);
-  const deferredTools = (tools ?? []).filter((tool) => deferredNames.has(tool.name));
-  const merged = (tools ?? []).filter((tool) => !deferredNames.has(tool.name));
+  const merged = [...(tools ?? [])];
   for (const tool of collaborationTools) {
     if (!names.has(tool.name)) {
       names.add(tool.name);
@@ -104,7 +101,6 @@ export function modelFacingTools(
     names.add(tool.name);
     merged.push(tool);
   }
-  merged.push(...deferredTools);
   return merged.length ? merged : undefined;
 }
 
@@ -134,8 +130,7 @@ export async function samplingToolRuntimes(
       source: collaborationToolNames.has(tool.name)
         ? 'collaboration'
         : goalToolNames.has(tool.name) ? 'goal'
-        : dynamicToolNames.has(tool.name) ? 'dynamic' : 'host',
-      exposure: 'direct',
+          : dynamicToolNames.has(tool.name) ? 'dynamic' : 'host',
       supportsParallel: false,
       waitsForRuntimeCancellation: true,
     };

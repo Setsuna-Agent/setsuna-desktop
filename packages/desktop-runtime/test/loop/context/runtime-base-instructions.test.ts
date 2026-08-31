@@ -28,10 +28,7 @@ describe('runtime base instructions', () => {
       'Keep code, identifiers, paths, commands, and quoted text unchanged unless the user asks to translate or rewrite them.',
     );
     expect(RUNTIME_BASE_INSTRUCTIONS).toMatch(
-      /tool_search.*before claiming that capability is unavailable.*searches return no match/su,
-    );
-    expect(RUNTIME_BASE_INSTRUCTIONS).toMatch(
-      /tool_search and read_tool_result do not require a preamble.*Do not narrate their names.*unless the user explicitly asks or you are debugging the runtime/su,
+      /result-retrieval tool read_tool_result does not require a preamble.*Do not narrate its name.*unless the user explicitly asks or you are debugging the runtime/su,
     );
   });
 });

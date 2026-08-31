@@ -173,22 +173,10 @@ export class BrowserRuntimeTools implements BrowserRuntimeToolService {
     return this.control ? [OPEN_BROWSER_TOOL, ...controlToolsForContext(context)] : [OPEN_BROWSER_TOOL];
   }
 
-  /**
-   * Browser 全部工具走 deferred 暴露:模型需要浏览网页时才经 tool_search 激活,
-   * 避免每次请求都携带整组浏览器工具定义。
-   */
   toolRuntimeProfile(name: string): BrowserToolRuntimeProfile | null {
-    return {
-      exposure: 'deferred',
-      ...(name === BROWSER_SNAPSHOT_TOOL_NAME
-        ? { modelOutputTokenLimit: browserSnapshotOutputTokenLimit }
-        : {}),
-      ...(name === OPEN_BROWSER_TOOL_NAME
-        ? { searchAliases: ['open url', 'open website', 'web page'] }
-        : name === BROWSER_SNAPSHOT_TOOL_NAME
-          ? { searchAliases: ['page snapshot', 'read page', 'browser state'] }
-          : {}),
-    };
+    return name === BROWSER_SNAPSHOT_TOOL_NAME
+      ? { modelOutputTokenLimit: browserSnapshotOutputTokenLimit }
+      : null;
   }
 
   systemPrompt(context: BrowserToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): string | null {
