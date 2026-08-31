@@ -13,6 +13,8 @@ import type {
   RuntimePluginSummary,
   RuntimePluginUiActionInput,
   RuntimePluginUiActionResult,
+  RuntimePluginUiStateInput,
+  RuntimePluginUiStateResult,
 } from '@setsuna-desktop/contracts';
 import { RUNTIME_PLUGIN_UI_LIMITS } from '@setsuna-desktop/contracts';
 import { defineRuntimeCodec } from '@setsuna-desktop/feature-core/codec';
@@ -104,23 +106,9 @@ const hookStateCodec = defineRuntimeCodec<PluginManagementHookStateInput>((value
 const rendererUiActionInputCodec = defineRuntimeCodec<RuntimePluginUiActionInput>((value) => {
   const record = objectRecord(value, 'Plugin renderer UI action input must be an object.');
   const context = objectRecord(record.context, 'Plugin renderer UI action context must be an object.');
-  const values = objectRecord(record.values, 'Plugin renderer UI action values must be an object.');
-  const valueEntries = Object.entries(values);
-  if (valueEntries.length > RUNTIME_PLUGIN_UI_LIMITS.fields) {
-    throw new Error('Plugin renderer UI action contains too many values.');
-  }
-  const normalizedValues: Record<string, string> = {};
-  for (const [key, item] of valueEntries) {
-    if (!/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/u.test(key) || typeof item !== 'string') {
-      throw new Error('Plugin renderer UI action value is invalid.');
-    }
-    if (item.length > RUNTIME_PLUGIN_UI_LIMITS.valueCharacters) {
-      throw new Error('Plugin renderer UI action value is too large.');
-    }
-    normalizedValues[key] = item;
-  }
+  const normalizedValues = rendererUiValues(record.values, 'Plugin renderer UI action');
   const surface = context.surface;
-  if (surface !== 'renderer.chat.composer.status' && surface !== 'renderer.settings.page.extensions') {
+  if (surface !== 'renderer.chat.composer.status' && surface !== 'renderer.capabilities.plugin.details') {
     throw new Error('Plugin renderer UI action surface is invalid.');
   }
   return Object.freeze({
@@ -139,6 +127,21 @@ const rendererUiActionResultCodec = defineRuntimeCodec<RuntimePluginUiActionResu
   const record = objectRecord(value, 'Plugin renderer UI action result must be an object.');
   if (record.status !== 'completed') throw new Error('Plugin renderer UI action result is invalid.');
   return Object.freeze({ status: 'completed' });
+});
+
+const rendererUiStateInputCodec = defineRuntimeCodec<RuntimePluginUiStateInput>((value) => {
+  const record = objectRecord(value, 'Plugin renderer UI state input must be an object.');
+  return Object.freeze({
+    pluginId: nonEmptyText(record.pluginId, 'pluginId'),
+    contributionId: nonEmptyText(record.contributionId, 'contributionId'),
+  });
+});
+
+const rendererUiStateResultCodec = defineRuntimeCodec<RuntimePluginUiStateResult>((value) => {
+  const record = objectRecord(value, 'Plugin renderer UI state result must be an object.');
+  return Object.freeze({
+    values: rendererUiValues(record.values, 'Plugin renderer UI state'),
+  });
 });
 
 const snapshotCodec = defineRuntimeCodec<PluginManagementSnapshot>((value) => {
@@ -356,6 +359,16 @@ export const runInstalledPluginRendererUiAction = defineFeatureOperation({
   idempotency: 'non-idempotent',
 });
 
+export const readInstalledPluginRendererUiState = defineFeatureOperation({
+  id: 'plugin-management.renderer-ui-state.read',
+  method: 'GET',
+  path: '/v1/features/plugin-management/installed/:pluginId/renderer-ui/contributions/:contributionId/state',
+  input: rendererUiStateInputCodec,
+  output: rendererUiStateResultCodec,
+  errors: pluginOperationErrors,
+  idempotency: 'safe',
+});
+
 function pluginSummary(value: unknown): RuntimePluginSummary {
   const record = objectRecord(value, 'Plugin summary must be an object.');
   nonEmptyText(record.id, 'plugin id');
@@ -441,6 +454,24 @@ function pluginItemKind(value: unknown): RuntimePluginItemKind {
 
 function stringArray(value: unknown, label: string): string[] {
   return arrayValue(value, label).map((item) => nonEmptyText(item, label));
+}
+
+function rendererUiValues(value: unknown, label: string): Readonly<Record<string, string>> {
+  const entries = Object.entries(objectRecord(value, `${label} values must be an object.`));
+  if (entries.length > RUNTIME_PLUGIN_UI_LIMITS.fields) {
+    throw new Error(`${label} contains too many values.`);
+  }
+  const normalized: Record<string, string> = {};
+  for (const [key, item] of entries) {
+    if (!/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/u.test(key) || typeof item !== 'string') {
+      throw new Error(`${label} value is invalid.`);
+    }
+    if (item.length > RUNTIME_PLUGIN_UI_LIMITS.valueCharacters) {
+      throw new Error(`${label} value is too large.`);
+    }
+    normalized[key] = item;
+  }
+  return Object.freeze(normalized);
 }
 
 function arrayValue(value: unknown, label: string): unknown[] {

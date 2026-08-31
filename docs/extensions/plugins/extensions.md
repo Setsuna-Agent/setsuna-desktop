@@ -137,7 +137,7 @@ handler 可以返回：
 ```js
 export default function activate(api) {
   api.onUiAction('save-preference', async (input, ctx) => {
-    await ctx.state.set('label', input.values.label, 'global');
+    await ctx.state.set('preferences', { label: input.values.label }, 'global');
   });
 }
 ```
@@ -146,10 +146,12 @@ host 会用 `contributionId` 把 action 精确绑定到触发它的 contribution
 
 Renderer UI action 不是第二套交互通道：
 
-- `ctx.state` 默认为 `global`，仍需 manifest 声明 `state`。
+- `ctx.state` 只允许显式传入 `global` scope，仍需 manifest 声明 `state`。
 - `ctx.network` 仅在声明 `network` 且命中 origin allowlist 时存在。
 - 不提供 `ctx.ui.confirm/select/input`，避免 action 内再创建悬空交互；也不提供图片生成或视觉识别私有桥。
 - handler 返回值会被 host 忽略，Renderer 只获得 host-owned `{ status: "completed" }`；错误也只显示通用失败状态。
+
+Plugin 详情 contribution 若声明 `stateKey`，host 会从同名 global state 记录回填表单，并只返回 contribution 已声明的合法字符串字段。action handler 应把完整字段 object 写回该 key；action 成功后 Renderer 会重新读取 canonical state。这个读取路径不会启动 worker，也不能枚举其他 state key。
 
 ### handler context
 

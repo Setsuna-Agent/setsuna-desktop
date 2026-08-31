@@ -232,25 +232,13 @@ export default function activate(api) {
             contributions: [
               {
                 id: 'profile.settings',
-                slot: 'renderer.settings.page.extensions',
-                target: 'general',
+                slot: 'renderer.capabilities.plugin.details',
+                stateKey: 'profile',
                 tree: {
                   type: 'stack',
                   children: [
                     { type: 'field', name: 'displayName', label: 'Display name', required: true },
                     { type: 'button', actionId: 'profile.save', label: 'Save' },
-                  ],
-                },
-              },
-              {
-                id: 'profile.secondary',
-                slot: 'renderer.settings.page.extensions',
-                target: 'about',
-                tree: {
-                  type: 'stack',
-                  children: [
-                    { type: 'field', name: 'secondaryName', label: 'Secondary name', required: true },
-                    { type: 'button', actionId: 'profile.save', label: 'Save secondary' },
                   ],
                 },
               },

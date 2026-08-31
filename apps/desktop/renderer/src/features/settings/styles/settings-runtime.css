@@ -2,11 +2,6 @@
   align-items: stretch;
 }
 
-.desktop-settings-panel .renderer-layout-preferences__actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
 .desktop-settings-panel .chat-user-settings__runtime-advanced-section {
   margin-top: 20px;
 }

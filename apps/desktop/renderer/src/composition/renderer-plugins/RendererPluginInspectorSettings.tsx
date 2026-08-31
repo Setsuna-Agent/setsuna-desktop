@@ -184,6 +184,7 @@ function InspectionNode({
         path: node.path,
         required: node.required,
         requiredKeys: node.requiredKeys,
+        userConfigurable: node.userConfigurable,
       }, null, 2)}</pre>
     </details>
   );

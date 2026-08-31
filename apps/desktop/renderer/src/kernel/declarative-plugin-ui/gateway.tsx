@@ -9,11 +9,10 @@ import { defineRendererPlugin, type RendererPluginDefinition } from '@setsuna-de
 import type { Disposer } from '@setsuna-desktop/feature-core/scope';
 import type { PluginManagementRendererService } from '@setsuna-desktop/feature-plugin-management/contracts';
 import { chatComposerStatusSlot } from '@setsuna-desktop/renderer-contracts/chat';
-import { registerSettingsPageExtension } from '@setsuna-desktop/renderer-contracts/settings';
+import { registerSettingsPage } from '@setsuna-desktop/renderer-contracts/settings';
 import type { RendererPluginRuntime } from '../renderer-plugins/runtime.js';
 import { DeclarativePluginUiView } from './DeclarativePluginUiView.js';
 
-const SETTINGS_TARGET_ALLOWLIST = new Set(['about', 'general']);
 const CHAT_NODE_ALLOWLIST = new Set<RuntimePluginUiNode['type']>([
   'badge',
   'button',
@@ -135,34 +134,34 @@ function declarativeRendererPlugin(
           ui.list(chatComposerStatusSlot, {
             id: entryId,
             order: contribution.order ?? 0,
-            render: ({ threadId }) => (
+            render: ({ threadId, translate }) => (
               <DeclarativePluginUiView
-                contributionId={contribution.id}
+                contribution={contribution}
                 manifest={manifest}
-                node={contribution.tree}
                 pluginId={pluginId}
                 service={service}
-                slot={contribution.slot}
                 threadId={threadId}
+                translate={translate}
               />
             ),
           });
           continue;
         }
-        registerSettingsPageExtension(ui, {
+        registerSettingsPage(ui, {
           entryId,
-          id: `third-party.${identity}.${contribution.id}`,
+          location: 'capabilities',
           order: contribution.order ?? 0,
-          targetSectionId: contribution.target as 'about' | 'general',
-          render: ({ ui: settingsUi }) => (
+          pageHeading: 'view',
+          sectionId: pluginId,
+          titleKey: 'feature.pluginManagement.title',
+          render: ({ translate, ui: settingsUi }) => (
             <DeclarativePluginUiView
-              contributionId={contribution.id}
+              contribution={contribution}
               manifest={manifest}
-              node={contribution.tree}
               pluginId={pluginId}
               service={service}
               settingsUi={settingsUi}
-              slot={contribution.slot}
+              translate={translate}
             />
           ),
         });
@@ -179,12 +178,7 @@ export function rendererPluginIdentity(pluginId: string): string {
 export function assertHostAllowedContribution(
   contribution: RuntimePluginUiContribution,
 ): RuntimePluginUiContribution {
-  if (contribution.slot === 'renderer.settings.page.extensions') {
-    if (!contribution.target || !SETTINGS_TARGET_ALLOWLIST.has(contribution.target)) {
-      throw new Error(`Settings target is not host-allowlisted: ${String(contribution.target)}`);
-    }
-    return contribution;
-  }
+  if (contribution.slot === 'renderer.capabilities.plugin.details') return contribution;
   visitNodes(contribution.tree, (node) => {
     if (!CHAT_NODE_ALLOWLIST.has(node.type)) {
       throw new Error(`Node ${node.type} is not allowed in the chat composer status Slot.`);

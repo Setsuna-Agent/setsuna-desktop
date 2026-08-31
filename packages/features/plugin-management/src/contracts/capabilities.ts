@@ -7,6 +7,8 @@ import type {
   RuntimePluginRemoveResult,
   RuntimePluginUiActionInput,
   RuntimePluginUiActionResult,
+  RuntimePluginUiStateInput,
+  RuntimePluginUiStateResult,
 } from '@setsuna-desktop/contracts';
 import { defineCapability, type CapabilityToken } from '@setsuna-desktop/feature-core/capability';
 import type { PluginManagementDesktopBridge } from './bridge.js';
@@ -43,6 +45,7 @@ export interface PluginManagementRuntimeHost {
     input: RuntimePluginUiActionInput,
     signal?: AbortSignal,
   ): Promise<RuntimePluginUiActionResult>;
+  readRendererUiState(input: RuntimePluginUiStateInput): Promise<RuntimePluginUiStateResult>;
   remove(input: PluginManagementPluginTarget): Promise<RuntimePluginRemoveResult>;
   setExtensionTrust(input: PluginManagementExtensionTrustInput): Promise<RuntimePluginList>;
   setHookState(input: PluginManagementHookStateInput): Promise<PluginManagementHookMutationResult>;
@@ -100,6 +103,10 @@ export interface PluginManagementRendererService {
     input: RuntimePluginUiActionInput,
     options?: Readonly<{ signal?: AbortSignal }>,
   ): Promise<RuntimePluginUiActionResult>;
+  readRendererUiState(
+    input: RuntimePluginUiStateInput,
+    options?: Readonly<{ signal?: AbortSignal }>,
+  ): Promise<RuntimePluginUiStateResult>;
   setExtensionTrust(
     input: PluginManagementExtensionTrustInput,
     options?: Readonly<{ signal?: AbortSignal }>,

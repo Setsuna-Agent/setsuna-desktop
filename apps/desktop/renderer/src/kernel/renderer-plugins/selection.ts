@@ -55,6 +55,7 @@ export type RendererSlotInspectionNode = Readonly<{
   required: boolean;
   requiredKeys: readonly string[];
   slotId: string;
+  userConfigurable: boolean;
 }>;
 
 export type RendererSlotInspection = Readonly<{
@@ -159,6 +160,7 @@ function inspectDeclaration(
     required: declaration.required,
     requiredKeys: declaration.requiredKeys,
     slotId: declaration.slot.id,
+    userConfigurable: declaration.slot.userConfigurable,
   });
 }
 

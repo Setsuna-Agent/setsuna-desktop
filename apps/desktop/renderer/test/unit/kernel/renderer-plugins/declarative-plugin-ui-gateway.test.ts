@@ -2,7 +2,9 @@ import {
   parseRuntimePluginUiManifest,
   type RuntimePluginSummary,
 } from '@setsuna-desktop/contracts';
+import type { RendererPluginDefinition } from '@setsuna-desktop/feature-core/renderer';
 import type { PluginManagementRendererService } from '@setsuna-desktop/feature-plugin-management/contracts';
+import { settingsPageSlot } from '@setsuna-desktop/renderer-contracts/settings';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   activateDeclarativePluginUiGateway,
@@ -14,20 +16,26 @@ import type { RendererPluginRuntime } from '../../../../src/kernel/renderer-plug
 describe('declarative Plugin UI gateway', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('allows only approved settings targets and compact chat primitives', () => {
+  it('keeps settings in Plugin details and limits chat to compact primitives', () => {
     const settings = contribution({
       id: 'safe.settings',
-      slot: 'renderer.settings.page.extensions',
-      target: 'general',
+      slot: 'renderer.capabilities.plugin.details',
       tree: { type: 'field', name: 'label', label: 'Label' },
     });
     expect(assertHostAllowedContribution(settings)).toBe(settings);
 
-    expect(() => assertHostAllowedContribution(contribution({
-      ...settings,
-      id: 'runtime.settings',
-      target: 'runtime',
-    }))).toThrow('not host-allowlisted');
+    const migratedLegacySettings = contribution({
+      id: 'legacy.settings',
+      slot: 'renderer.settings.page.extensions',
+      target: 'general',
+      tree: { type: 'text', text: 'Legacy settings' },
+    });
+    expect(migratedLegacySettings).toMatchObject({
+      id: 'legacy.settings',
+      slot: 'renderer.capabilities.plugin.details',
+    });
+    expect(migratedLegacySettings).not.toHaveProperty('target');
+    expect(assertHostAllowedContribution(migratedLegacySettings)).toBe(migratedLegacySettings);
     expect(() => assertHostAllowedContribution(contribution({
       id: 'chat.field',
       slot: 'renderer.chat.composer.status',
@@ -40,7 +48,11 @@ describe('declarative Plugin UI gateway', () => {
   it('stays subscribed and mounts a later snapshot after the initial refresh fails', async () => {
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const disposeMount = vi.fn();
-    const mount = vi.fn(async () => disposeMount);
+    const mountedPlugins: RendererPluginDefinition[] = [];
+    const mount = vi.fn(async (plugin: RendererPluginDefinition) => {
+      mountedPlugins.push(plugin);
+      return disposeMount;
+    });
     let plugins: readonly RuntimePluginSummary[] = [];
     let emitSnapshot: (() => void) | undefined;
     const unsubscribe = vi.fn();
@@ -79,6 +91,21 @@ describe('declarative Plugin UI gateway', () => {
     plugins = [installedUiPlugin()];
     emitSnapshot?.();
     await vi.waitFor(() => expect(mount).toHaveBeenCalledOnce());
+    const mountedPlugin = mountedPlugins[0];
+    if (!mountedPlugin) throw new Error('Expected the declarative Renderer Plugin to mount.');
+    const keyed = vi.fn(() => () => undefined);
+    await mountedPlugin.activate({ ui: { keyed } as never });
+    expect(keyed).toHaveBeenCalledWith(settingsPageSlot, expect.objectContaining({
+      key: 'capabilities/recoverable-ui',
+      metadata: expect.objectContaining({
+        location: 'capabilities',
+        sectionId: 'recoverable-ui',
+      }),
+    }));
+
+    plugins = [];
+    emitSnapshot?.();
+    await vi.waitFor(() => expect(disposeMount).toHaveBeenCalledOnce());
 
     await disposeGateway();
     expect(unsubscribe).toHaveBeenCalledOnce();
@@ -114,8 +141,7 @@ function installedUiPlugin(): RuntimePluginSummary {
         actions: [],
         contributions: [{
           id: 'recoverable.settings',
-          slot: 'renderer.settings.page.extensions',
-          target: 'general',
+          slot: 'renderer.capabilities.plugin.details',
           tree: { type: 'text', text: 'Recovered' },
         }],
       }),

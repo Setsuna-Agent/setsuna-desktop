@@ -99,6 +99,12 @@ export function PluginDetail({
     ? installedPlugin?.extension
     : undefined;
   const extensionTrusted = localExtension?.trust === 'trusted';
+  const hasDeclarativeSettings = installedPlugin?.extension?.trust === 'trusted'
+    && Boolean(installedPlugin.extension.rendererUi?.contributions.some(
+      (contribution) => contribution.slot === 'renderer.capabilities.plugin.details',
+    ));
+  const hasPluginSettings = installedPlugin?.installationSource === 'marketplace'
+    || hasDeclarativeSettings;
   const subtitle = [plugin.publisher, plugin.version ? `v${plugin.version}` : null].filter(Boolean).join(' · ');
   const actionItems = [
     ...(marketplacePlugin?.updateAvailable ? [{
@@ -196,7 +202,7 @@ export function PluginDetail({
             </section>
           ) : null}
 
-          {installedPlugin?.installationSource === 'marketplace' ? <ui.PageOutlet sectionId={plugin.id} /> : null}
+          {hasPluginSettings ? <ui.PageOutlet sectionId={plugin.id} /> : null}
 
           <PluginDetailSection count={tools.length} icon={<Wrench size={15} />} title={translate('feature.pluginManagement.tools')}>
             {tools.map((tool) => (

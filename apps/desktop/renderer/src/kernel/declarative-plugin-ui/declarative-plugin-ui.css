@@ -102,6 +102,27 @@
   color: var(--sd-color-accent-text);
 }
 
+.declarative-plugin-ui__approval {
+  background: var(--sd-color-surface-muted);
+  border: 1px solid var(--sd-color-border);
+  border-radius: 8px;
+  color: var(--sd-color-text);
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 10px 12px;
+}
+
+.declarative-plugin-ui__approval-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
 .declarative-plugin-ui__action-status:empty {
   display: none;
 }

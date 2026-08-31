@@ -16,8 +16,14 @@ describe('bundled web-search extension', () => {
     const root = path.resolve('plugins/web-search');
     const manifest = await readPluginManifest(root);
     expect(manifest.extension).toMatchObject({
-      capabilities: ['tools', 'network'],
+      capabilities: ['tools', 'network', 'ui', 'state'],
       network: { allowedOrigins: ['https://api.tavily.com'] },
+      rendererUi: {
+        contributions: [expect.objectContaining({
+          id: 'preferences.settings',
+          stateKey: 'preferences',
+        })],
+      },
     });
     expect(manifest.tools).toEqual([expect.objectContaining({
       name: WEB_SEARCH_TOOL_NAME,
@@ -51,11 +57,32 @@ describe('bundled web-search extension', () => {
         ],
       });
     };
-    const manager = await webSearchManager(root, fetchImpl);
+    const stateValues = new Map<string, unknown>();
+    stateValues.set('web-search:global:preferences', { maxResults: '8', topic: 'finance' });
+    const manager = await webSearchManager(root, fetchImpl, stateValues);
     const host = new ExtensionToolHost(manager);
     const context = { threadId: 'thread_1', turnId: 'turn_1', toolCallId: 'call_1' };
 
     try {
+      await expect(manager.readRendererUiState({
+        pluginId: WEB_SEARCH_PLUGIN_ID,
+        contributionId: 'preferences.settings',
+      })).resolves.toEqual({ values: { maxResults: '8' } });
+      await expect(manager.runRendererUiAction({
+        pluginId: WEB_SEARCH_PLUGIN_ID,
+        actionId: 'preferences.save',
+        values: { maxResults: '8' },
+        context: {
+          contributionId: 'preferences.settings',
+          surface: 'renderer.capabilities.plugin.details',
+        },
+      })).resolves.toEqual({ status: 'completed' });
+      await expect(manager.readRendererUiState({
+        pluginId: WEB_SEARCH_PLUGIN_ID,
+        contributionId: 'preferences.settings',
+      })).resolves.toEqual({ values: { maxResults: '8' } });
+      expect(stateValues.get('web-search:global:preferences')).toEqual({ maxResults: '8' });
+
       await expect(host.listTools(context)).resolves.toEqual([
         expect.objectContaining({ name: WEB_SEARCH_TOOL_NAME }),
       ]);
@@ -65,6 +92,15 @@ describe('bundled web-search extension', () => {
         plugin: { id: WEB_SEARCH_PLUGIN_ID, name: '网络搜索' },
       });
       await expect(host.approvalForTool(WEB_SEARCH_TOOL_NAME, {}, context)).resolves.toBeNull();
+
+      await host.runTool(WEB_SEARCH_TOOL_NAME, {
+        query: 'current MCP release',
+      }, context);
+      expect(JSON.parse(String(requestInit?.body))).toMatchObject({
+        query: 'current MCP release',
+        max_results: 8,
+        topic: 'general',
+      });
 
       const result = await host.runTool(WEB_SEARCH_TOOL_NAME, {
         query: 'current MCP release',
@@ -113,6 +149,7 @@ describe('bundled web-search extension', () => {
 async function webSearchManager(
   root: string,
   networkFetch: ExtensionNetworkFetch,
+  stateValues: Map<string, unknown>,
 ): Promise<ExtensionManager> {
   const manifest = await readPluginManifest(root);
   const { bundleHash } = await inspectBundleTree(root);
@@ -148,9 +185,13 @@ async function webSearchManager(
   return new ExtensionManager(
     { listInstalledRecords: async () => [structuredClone(record)] },
     {
-      get: async () => undefined,
-      set: async () => undefined,
-      delete: async () => undefined,
+      get: async (pluginId, scope, key) => stateValues.get(`${pluginId}:${scope}:${key}`),
+      set: async (pluginId, scope, key, value) => {
+        stateValues.set(`${pluginId}:${scope}:${key}`, structuredClone(value));
+      },
+      delete: async (pluginId, scope, key) => {
+        stateValues.delete(`${pluginId}:${scope}:${key}`);
+      },
     },
     { handle: async () => null },
     {

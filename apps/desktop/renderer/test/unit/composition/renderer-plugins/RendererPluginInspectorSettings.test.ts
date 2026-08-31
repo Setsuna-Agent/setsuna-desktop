@@ -50,6 +50,7 @@ describe('RendererPluginInspectorSettings filtering', () => {
         required: true,
         requiredKeys: ['settings/general', 'settings/runtime'],
         slotId: 'renderer.settings.page',
+        userConfigurable: true,
       }],
       snapshotVersion: 1,
       stalePreferences: [],

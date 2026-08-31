@@ -9,6 +9,8 @@
 
 Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调用的扩展能力。两者共享 runtime state，但承担不同产品语义。
 
+普通 Plugin 的业务配置归属于该 Plugin 详情页，不进入“通用”“关于”等宿主 Settings section。manifest 中的受限声明式 UI 由 Plugin Management 在对应详情内挂载；Settings extension Slot 只供随 Desktop 编译、具有明确宿主信息架构归属的内部 Feature 使用。
+
 ## Settings
 
 ### 页面编排

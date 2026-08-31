@@ -3,7 +3,7 @@
   "id": "web-search",
   "name": "网络搜索",
   "icon": "web-search",
-  "version": "1.1.0",
+  "version": "1.2.1",
   "description": "搜索公开网络并返回可引用的来源链接与内容片段；无需配置 API Key，匿名额度受 Tavily keyless 服务限流约束。",
   "publisher": "Setsuna",
   "tags": ["搜索", "联网", "实时信息"],
@@ -23,9 +23,57 @@
     "apiVersion": 1,
     "runtime": "node-worker",
     "entry": "extension/entry.mjs",
-    "capabilities": ["tools", "network"],
+    "capabilities": ["tools", "network", "ui", "state"],
     "network": {
       "allowedOrigins": ["https://api.tavily.com"]
+    },
+    "rendererUi": {
+      "schemaVersion": 1,
+      "actions": [
+        {
+          "id": "preferences.save",
+          "approval": {
+            "title": "保存网络搜索设置？",
+            "message": "新的默认结果数将用于后续未显式指定结果数量的网络搜索。"
+          }
+        }
+      ],
+      "contributions": [
+        {
+          "id": "preferences.settings",
+          "slot": "renderer.capabilities.plugin.details",
+          "stateKey": "preferences",
+          "order": 500,
+          "tree": {
+            "type": "stack",
+            "children": [
+              {
+                "type": "notice",
+                "title": "网络搜索",
+                "text": "搜索主题由模型根据当前问题选择；这里只设置未显式指定时使用的结果数量。"
+              },
+              {
+                "type": "select",
+                "name": "maxResults",
+                "label": "默认结果数",
+                "defaultValue": "5",
+                "options": [
+                  { "label": "3 条", "value": "3" },
+                  { "label": "5 条", "value": "5" },
+                  { "label": "8 条", "value": "8" },
+                  { "label": "10 条", "value": "10" }
+                ]
+              },
+              {
+                "type": "button",
+                "actionId": "preferences.save",
+                "label": "保存网络搜索设置",
+                "variant": "primary"
+              }
+            ]
+          }
+        }
+      ]
     }
   }
 }

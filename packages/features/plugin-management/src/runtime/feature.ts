@@ -16,6 +16,7 @@ import {
   readInstalledPluginItem,
   readPluginExtensionStatuses,
   readMarketplacePluginItem,
+  readInstalledPluginRendererUiState,
   readPluginManagementSnapshot,
   readPluginHooks,
   removeInstalledPlugin,
@@ -81,6 +82,9 @@ export const pluginManagementRuntimeFeature = defineRuntimeFeature({
     ));
     routes.register(context.scope, removeInstalledPlugin, (input) => (
       preservePluginOperationError(() => host.remove(input))
+    ));
+    routes.register(context.scope, readInstalledPluginRendererUiState, (input) => (
+      preservePluginOperationError(() => host.readRendererUiState(input))
     ));
     routes.register(context.scope, runInstalledPluginRendererUiAction, (input, operation) => (
       preservePluginOperationError(

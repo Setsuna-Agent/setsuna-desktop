@@ -3,7 +3,6 @@ import {
   defineRendererPlugin,
   type RendererPluginDefinition,
   type RendererSingleSlot,
-  type RendererTranslate,
 } from '@setsuna-desktop/feature-core/renderer';
 import type { Disposer } from '@setsuna-desktop/feature-core/scope';
 import {
@@ -18,14 +17,12 @@ import {
   settingsPageKey,
   settingsPageExtensionSlot,
   settingsPageSlot,
-  type SettingsViewUi,
 } from '@setsuna-desktop/renderer-contracts/settings';
 import {
   Archive,
   Bot,
   Info,
   Keyboard,
-  RotateCcw,
   SlidersHorizontal,
   Sparkles,
   Wrench,
@@ -47,8 +44,7 @@ import {
 } from '@setsuna-desktop/renderer-contracts/workspace';
 import { RendererOwnedSlotsProvider } from '../kernel/renderer-plugins/RendererKernelProvider.js';
 import type { RendererPluginRuntime } from '../kernel/renderer-plugins/runtime.js';
-import type { RendererLayoutPreferenceController } from '../kernel/renderer-plugins/layout-preference-controller.js';
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { RendererPluginInspectorSettings } from './renderer-plugins/RendererPluginInspectorSettings.js';
 import { FeatureRecoveryShell } from './FeatureRecoveryShell.js';
 
@@ -223,6 +219,19 @@ const coreSettingsPlugin = defineRendererPlugin({
   },
 });
 
+const rendererDiagnosticsPlugin = defineRendererPlugin({
+  id: 'core.renderer-diagnostics',
+  activate({ ui }) {
+    registerSettingsPageExtension(ui, {
+      entryId: 'settings.renderer-inspector',
+      id: 'renderer-inspector',
+      order: 950,
+      targetSectionId: 'runtime',
+      render: (props) => <RendererPluginInspectorSettings {...props} />,
+    });
+  },
+});
+
 const builtinRendererPlugins: readonly RendererPluginDefinition[] = Object.freeze([
   appShellPlugin,
   routePlugin,
@@ -230,21 +239,15 @@ const builtinRendererPlugins: readonly RendererPluginDefinition[] = Object.freez
   chatHostPlugin,
   workspaceHostPlugin,
   coreSettingsPlugin,
+  rendererDiagnosticsPlugin,
 ]);
 
 export async function activateBuiltinRendererPlugins(
   runtime: RendererPluginRuntime,
-  options: Readonly<{
-    layoutPreferences: RendererLayoutPreferenceController;
-  }>,
 ): Promise<Disposer> {
   const activated: Array<readonly Disposer[]> = [];
   try {
-    const plugins = [
-      ...builtinRendererPlugins,
-      createLayoutPreferencesSettingsPlugin(options.layoutPreferences),
-    ];
-    for (const plugin of plugins) {
+    for (const plugin of builtinRendererPlugins) {
       const disposers: Disposer[] = [];
       const ui = runtime.createRegistrar(
         Object.freeze({ pluginId: plugin.id, scopeId: `host:${plugin.id}` }),
@@ -263,73 +266,6 @@ export async function activateBuiltinRendererPlugins(
     disposed = true;
     await disposePluginRegistrations(activated);
   };
-}
-
-function createLayoutPreferencesSettingsPlugin(
-  controller: RendererLayoutPreferenceController,
-): RendererPluginDefinition {
-  return defineRendererPlugin({
-    id: 'core.layout-preferences',
-    activate({ ui }) {
-      registerSettingsPageExtension(ui, {
-        entryId: 'settings.layout-preferences',
-        id: 'layout-preferences',
-        order: 900,
-        targetSectionId: 'runtime',
-        render: (props) => <LayoutPreferencesSettings controller={controller} {...props} />,
-      });
-      registerSettingsPageExtension(ui, {
-        entryId: 'settings.renderer-inspector',
-        id: 'renderer-inspector',
-        order: 950,
-        targetSectionId: 'runtime',
-        render: (props) => <RendererPluginInspectorSettings {...props} />,
-      });
-    },
-  });
-}
-
-function LayoutPreferencesSettings({
-  controller,
-  translate,
-  ui,
-}: Readonly<{
-  controller: RendererLayoutPreferenceController;
-  translate: RendererTranslate;
-  ui: SettingsViewUi;
-}>) {
-  const [status, setStatus] = useState<'idle' | 'resetting' | 'done' | 'error'>('idle');
-  const reset = async () => {
-    setStatus('resetting');
-    try {
-      await controller.reset();
-      setStatus('done');
-    } catch {
-      setStatus('error');
-    }
-  };
-  return (
-    <ui.Section featureId="core.layout-preferences">
-      <ui.Group>
-        <ui.Row
-          description={translate('feature.rendererLayout.description')}
-          label={translate('feature.rendererLayout.preferences')}
-        >
-          <div className="renderer-layout-preferences__actions">
-            <ui.Button
-              disabled={status === 'resetting'}
-              icon={<RotateCcw size={13} />}
-              onClick={() => void reset()}
-            >
-              {translate(status === 'resetting' ? 'feature.rendererLayout.resetting' : 'feature.rendererLayout.reset')}
-            </ui.Button>
-          </div>
-        </ui.Row>
-      </ui.Group>
-      {status === 'done' ? <ui.Toast message={translate('feature.rendererLayout.resetDone')} tone="success" /> : null}
-      {status === 'error' ? <ui.Toast message={translate('feature.rendererLayout.resetError')} tone="error" /> : null}
-    </ui.Section>
-  );
 }
 
 function registerRoute(

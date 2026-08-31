@@ -254,6 +254,10 @@ async function normalizePluginExtension(
   if (rendererUi && !capabilities.includes('ui')) {
     throw new Error('Plugin extension rendererUi requires the ui capability.');
   }
+  if (rendererUi?.contributions.some((contribution) => contribution.stateKey)
+    && !capabilities.includes('state')) {
+    throw new Error('Plugin extension rendererUi state binding requires the state capability.');
+  }
   return {
     extension: {
       apiVersion: RUNTIME_EXTENSION_API_VERSION,
