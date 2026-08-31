@@ -439,8 +439,8 @@ packages/features/ — 0 direct / 882 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 502 total files
-├── src/ — 2 direct / 291 total files
+packages/desktop-runtime/ — 4 direct / 503 total files
+├── src/ — 2 direct / 292 total files
 │   ├── adapters/ — 109 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── event/ — 2 direct / 2 total files
@@ -458,7 +458,7 @@ packages/desktop-runtime/ — 4 direct / 502 total files
 │   │   │   └── pc-local/ — 22 direct / 22 total files
 │   │   └── workspace/ — 5 direct / 5 total files
 │   ├── composition/ — 3 direct / 3 total files
-│   ├── extensions/ — 7 direct / 7 total files
+│   ├── extensions/ — 8 direct / 8 total files
 │   ├── features/ — 6 files
 │   │   ├── events/ — 1 direct / 1 total files
 │   │   ├── management/ — 1 direct / 1 total files

@@ -378,6 +378,20 @@ describe('runtime factory tool wiring', () => {
         expect.arrayContaining([expect.objectContaining({ name: WEB_SEARCH_TOOL_NAME })]),
       );
       await runtime.pluginMarketplace.installPlugin(WEB_SEARCH_PLUGIN_ID);
+      await expect(runtime.pluginStore.listPlugins()).resolves.toMatchObject({
+        plugins: [expect.objectContaining({
+          id: WEB_SEARCH_PLUGIN_ID,
+          extension: expect.objectContaining({
+            rendererUi: expect.objectContaining({
+              contributions: [expect.objectContaining({ id: 'preferences.settings' })],
+            }),
+          }),
+        })],
+      });
+      await expect(runtime.extensionManager.readRendererUiState({
+        pluginId: WEB_SEARCH_PLUGIN_ID,
+        contributionId: 'preferences.settings',
+      })).resolves.toEqual({ values: {} });
       await expect(runtime.toolHost.listTools({ threadId: 'thread_1' })).resolves.toEqual(
         expect.arrayContaining([expect.objectContaining({ name: WEB_SEARCH_TOOL_NAME })]),
       );
@@ -392,6 +406,10 @@ describe('runtime factory tool wiring', () => {
       }]);
 
       await runtime.pluginStore.removePlugin(WEB_SEARCH_PLUGIN_ID);
+      await expect(runtime.extensionManager.readRendererUiState({
+        pluginId: WEB_SEARCH_PLUGIN_ID,
+        contributionId: 'preferences.settings',
+      })).rejects.toThrow('not installed');
       await expect(runtime.toolHost.listTools({ threadId: 'thread_1' })).resolves.not.toEqual(
         expect.arrayContaining([expect.objectContaining({ name: WEB_SEARCH_TOOL_NAME })]),
       );

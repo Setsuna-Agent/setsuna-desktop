@@ -1,6 +1,6 @@
 # Renderer Plugin Runtime 设计、迁移计划与实施记录
 
-状态：核心里程碑 A 已实施（2026-08-30）；里程碑 B、C 的 Runtime 底座已实现，但真实产品消费闭环尚未完成；条件里程碑 D 明确延期。
+状态：核心里程碑 A 已实施（2026-08-30）；里程碑 B 的 Runtime/诊断底座与里程碑 C 的插件详情闭环已实施（2026-08-31）；条件里程碑 D 明确延期。
 
 本文既记录 Setsuna Desktop Renderer 从“宿主页面 + 若干静态 view catalog”迁移到“静态编译的 Renderer Plugin Runtime + 有所有权的层级 Slot Tree”的设计，也记录实际实施顺序、源码映射和验收边界。[Feature Composition](../../architecture/feature-composition.md)与本文共同描述当前源码事实。
 
@@ -28,14 +28,15 @@ Setsuna 采用以下方向：
 | 里程碑 | 状态 | 当前结果 |
 | --- | --- | --- |
 | A：静态 Renderer Plugin Runtime | 已完成 | 四种 typed Slot、层级所有权、事务、outlet、fallback、Feature scope 注册、App Shell/Chat/Settings/Capabilities/Workspace 迁移和旧 catalog 删除均已落地 |
-| B：偏好与检查 | Runtime 底座完成 | V1 布局偏好、原子 mount/replace/unmount、恢复默认布局和脱敏 Slot Tree Inspector 已落地；真实选择、排序与隐藏入口尚未闭环 |
-| C：普通第三方声明式 UI | Runtime 底座完成 | Bundle `extension.rendererUi` schema、安装时校验、可信 manifest gateway、host primitive、审批动作和 worker handler 已贯通；尚无仓库内真实可安装 manifest |
+| B：偏好与检查 | 底座已完成 | V1 布局偏好、原子 mount/replace/unmount 和脱敏 Slot Tree Inspector 已落地；raw Slot 排序/显隐不作为普通用户设置暴露 |
+| C：普通第三方声明式 UI | 已完成 | Bundle `extension.rendererUi` schema、安装时校验、可信 manifest gateway、host primitive、状态回填、审批动作和 worker handler 已贯通；业务配置只挂载在所属插件详情，内置 `web-search` 是首个真实可安装消费者 |
 | D：受信 client bundle | 延期 | 没有独立分发 React bundle 的真实消费者；当前不存在第三方 React/HTML/CSS/JavaScript 加载入口 |
 
-实际实现与设计有两处有意收敛：
+实际实现与设计有三处有意收敛：
 
 1. 迁移在同一个实现批次中按 owner 逐项完成，旧 producer 随迁移立即删除，因此没有把 `legacy-renderer-view-adapter.ts` 留进 production，也没有形成 catalog/Slot 双写真源。
 2. `main.tsx` 已不再逐个嵌套业务 Feature boundary；composition 把仍有真实 React consumer 的 Feature-local service 聚合成一个 `BuiltinRendererFeatureServicesBoundary`。这只是已解析 capability 的 React 投影，不是第二个服务容器，也不允许全局任意查询。
+3. Slot Runtime 的 selection/order/hidden preference 保留为内部组合底座，但高级设置不暴露 raw Slot ID、entry ID、上下移动或显隐控件。只有具体产品 surface 出现稳定且有意义的用户定制需求时，才由该 surface owner 提供语义化入口。
 
 当前源码映射：
 
@@ -47,10 +48,10 @@ Setsuna 采用以下方向：
 | React provider、owner-bound outlet、error boundary | `RendererKernelProvider.tsx`、`RendererSlotErrorBoundary.tsx` |
 | 内置 host Plugin 与初始 Slot Tree | `apps/desktop/renderer/src/composition/builtin-renderer-plugins.tsx` |
 | 唯一 Renderer composition root | `apps/desktop/renderer/src/composition/renderer-feature-composition.ts` |
-| 布局偏好与调试面板 | `layout-preferences.ts`、`layout-preference-controller.ts`、`composition/renderer-plugins/RendererPluginInspectorSettings.tsx` |
+| 布局偏好底座与调试面板 | `layout-preferences.ts`、`layout-preference-controller.ts`、`composition/renderer-plugins/RendererPluginInspectorSettings.tsx` |
 | 第三方 JSON schema | `packages/contracts/src/plugin-ui.ts` |
 | 声明式 UI gateway/host renderer | `apps/desktop/renderer/src/kernel/declarative-plugin-ui/` |
-| action typed operation | `packages/features/plugin-management/src/contracts/operations.ts` |
+| state/action typed operation | `packages/features/plugin-management/src/contracts/operations.ts` |
 | worker action 注册与执行 | `packages/desktop-runtime/src/extensions/extension-{manager,worker-entry,worker-client,worker-protocol}.ts` |
 
 ## 背景与现状
@@ -643,7 +644,7 @@ type RendererSlotInspection = Readonly<{
 
 ## 分阶段实施计划
 
-整个方案分为一个已实施核心里程碑、两个已完成底座但尚未形成产品闭环的里程碑，以及一个条件里程碑。交付时应至少拆为 A（核心 catalog → Slot 迁移）、B（偏好与 Inspector）、C（第三方声明式 UI）三个独立变更；Browser 等旁支不混入 Renderer Runtime 核心提交。
+整个方案分为已形成产品闭环的核心里程碑 A、偏好里程碑 B、声明式 UI 里程碑 C，以及一个条件里程碑。交付时应至少拆为 A（核心 catalog → Slot 迁移）、B（偏好与 Inspector）、C（第三方声明式 UI）三个独立变更；Browser 等旁支不混入 Renderer Runtime 核心提交。
 
 ### 里程碑 A：静态 Renderer Plugin Runtime（已完成）
 
@@ -801,7 +802,7 @@ type RendererSlotInspection = Readonly<{
 
 回滚：依赖 Git 版本回滚整个 owner 迁移；主干不保留已无消费者的兼容层。
 
-### 里程碑 B：配置、排序与 Slot Tree Inspector（底座已实现，产品编辑闭环待完成）
+### 里程碑 B：布局偏好底座与 Slot Tree Inspector（底座已完成）
 
 #### B1：Layout preference store（已完成）
 
@@ -809,7 +810,7 @@ type RendererSlotInspection = Readonly<{
 2. 在 Runtime transaction 中应用 single/keyed selection、list order 与 hidden entries。
 3. 只允许 owner 标记为 `userConfigurable` 的 Slot；普通 Plugin 不能自行提高信任级别或改 Kernel allowlist。
 4. 为 missing/stale entry 提供无损读取和 inspector 诊断。
-5. Settings 增加“恢复默认布局”，清除 projection 而不修改 Plugin inventory。
+5. controller 提供原子 reset，清除 projection 而不修改 Plugin inventory；该能力不等于必须提供全局用户入口。
 
 验收：非法 preference 不破坏上一 snapshot；卸载/重装 entry 后选择可以恢复；不存在 layout 与 catalog 双写。
 
@@ -831,13 +832,22 @@ type RendererSlotInspection = Readonly<{
 
 验收：真实冲突、dormant subtree、stale preference 与 render error 都能从 inspector 定位到 owner。
 
-### 里程碑 C：普通第三方 Plugin 的声明式 UI（底座已实现，真实 manifest 闭环待完成）
+#### B4：产品入口边界（已定稿）
+
+1. 高级设置不投影 raw Slot ID、Plugin ID、entry ID、selection/order/hidden，也不提供通用“上移/下移/显示”编辑器。
+2. 单 entry 没有排序空间，双 entry 的技术顺序也不足以构成用户任务；Runtime 能修改并不自动意味着普通用户需要操作。
+3. 若未来工具栏、状态区或其他 surface 出现真实定制需求，由该 surface owner 使用用户可理解的名称、预览和约束提供专属入口，再映射到同一 preference controller。
+4. Slot Tree Inspector 仅承担诊断职责，可以展示 `userConfigurable`、当前 winner 与 stale preference，但不伪装成业务设置。
+
+验收：高级设置中不存在 raw Slot 布局编辑器；诊断 Inspector 仍能解释 selection/order/hidden 的 Runtime 结果，具体业务配置留在对应 Feature 或 Plugin 详情。
+
+### 里程碑 C：普通第三方 Plugin 的声明式 UI（已完成）
 
 #### C1：定义最小 schema 与 gateway（已完成）
 
 1. 从两个真实第三方 UI 用例反推 schema；首版只提供 Stack、Text、Badge、Button、Field、Select、Notice 等 host primitive。
 2. Schema 必须 JSON-safe、带版本、节点数/深度/文本长度上限，不允许 HTML、CSS、className、script 或任意 URL handler。
-3. contribution 只能进入 manifest 与 host 双重 allowlist 的 list/keyed Slot；不能占据 app root、安全确认和 credential surface。
+3. contribution 只能进入 manifest 与 host 双重 allowlist 的插件详情或紧凑状态 surface；不能占据宿主 Settings、app root、安全确认和 credential surface。
 4. action 使用声明式 action ID，经 Plugin worker host API、capability 和审批策略执行。
 5. runtime/plugin-management owner 负责 schema 存储和状态；preload 只暴露查询/订阅所需窄 API；Renderer 负责校验后投影为 host UI kit。
 
@@ -852,6 +862,17 @@ type RendererSlotInspection = Readonly<{
 7. Renderer UI action 的 state host request 必须显式携带 `scope: 'global'`。省略 scope、传入 thread/project scope 或试图依赖 `stateScope()` 的上下文默认值都 fail closed，避免 action context 中携带的 threadId 把未声明 scope 静默升级为线程状态写入。
 
 验收：恶意深树、未知 node、越权 Slot/action、超限 payload 与 worker 执行失败均 fail closed；普通 Plugin 始终无法获得 DOM 或 preload object。
+
+#### C3：真实 manifest 与设置状态闭环（已完成）
+
+1. Plugin 详情 contribution 可以声明一个固定 `stateKey`；它只绑定 Plugin 自己的 global extension state，且 manifest 必须同时声明 `state` capability。每个 Plugin 最多一个详情 contribution。
+2. Runtime 读取状态前重新校验当前 Bundle hash，只把该 contribution 已声明且仍满足长度/option 约束的字符串字段投影给 Renderer；无效或额外字段不会跨边界。
+3. Renderer 在挂载时回填状态，编辑期间使用 host-owned 控件，动作审批使用内联 host UI；action 成功后重新读取 canonical state，所有请求随组件与 Feature scope 取消。
+4. 内置 `web-search` 提供首个真实插件详情 contribution。用户只保存默认结果数；主题由模型按当前问题选择，未明确时回退 `general`，不形成跨请求偏好。
+5. 安装、信任快照、状态读取、worker action、工具消费与卸载撤销分别由真实 Bundle/runtime/gateway 测试覆盖，不增加任意 React、HTML、CSS 或脚本入口。
+6. 早期 schema v1 的 Settings Slot 只作为升级输入读取：`general/about` target 会被丢弃，canonical contribution 强制归一化到所属插件详情，不保留全局挂载能力。
+
+验收：安装 `web-search` 后 contribution 只在“网络搜索”插件详情中挂载并回填默认设置，保存后新工具调用消费持久值，显式工具参数不被覆盖；卸载后 UI entry、工具和状态读取能力立即撤销。
 
 ### 条件里程碑 D：受信 client bundle
 
@@ -947,6 +968,18 @@ type RendererSlotInspection = Readonly<{
 
 代码评审后的收口修正也已纳入上述统计：没有显式 fallback 的 `single/keyed` contribution 发生渲染错误时会继续冒泡到最近的 host/App recovery boundary，只有可独立隔离的 `list` entry 默认隐藏；Capabilities 的可选 Feature settings 在 Slot 外恢复了 `FeatureContributionBoundary`，因此局部失败仍停留在插件详情页；非 app outlet 使用显式 `instanceKey`，并将它纳入 React boundary key/reset identity；Composer 进一步使用稳定 `composerKey` session identity，starter 中的 Conversation winner 只能替换 starter 内容而不能吞掉宿主 Composer；持久 Browser panel 从各自 target 恢复 scope context，切换 active conversation 不再重建全部 inactive panel。声明式 UI gateway 先订阅再首次刷新，启动期瞬时故障可由后续 snapshot 自动恢复；Renderer UI action 的 operation signal 已贯穿 host、manager 和 worker，取消不会被转成插件失败，state host request 还必须显式声明 global scope；动态 mount 返回的 entry disposer 在 commit 后通过 mutation queue 删除 live registration，旧 epoch disposer 不会伤及 replacement。Renderer Runtime root 检查器解析实际 module identity 并在模块存在时要求恰好一个 root。Inspector 同时读取 rooted tree 与 `inspection.dormant`，dormant candidate 携带 `slotId`，因此 Slot、Plugin、entry、state 搜索不再遗漏不可达注册项。
 
+### 里程碑 B 产品边界复核记录（2026-08-31）
+
+- 曾实现的全局 `RendererLayoutPreferencesSettings` 在产品复核后撤回：单/双 entry 的上移、下移与显隐暴露了 Runtime 机制，却没有对应的普通用户任务。
+- V1 preference store、事务 controller 和 Inspector 诊断能力保留为内部底座；高级设置只保留 Renderer Slot Inspector，不再承担布局配置。
+- 后续若有真实布局定制需求，入口必须归属于对应 surface，并使用业务名称与约束，不能重新暴露 raw Slot/entry 模型。
+
+### 里程碑 C 产品闭环验收记录（2026-08-31）
+
+- `web-search` 真实 Bundle manifest 已声明插件详情 contribution、`ui/state` capability 和固定 `preferences` 状态键；配置只出现在所属插件详情，不进入宿主“通用”页。
+- 相关 contract、Bundle、ExtensionManager、Feature route、Renderer hydration/action、gateway 与 composition smoke 测试共 9 个文件、57 个测试通过；runtime factory 同时覆盖真实市场安装与卸载。
+- `pnpm typecheck` 与 `pnpm lint` 通过，包含 architecture check、`Tree.md` 校验和全仓 TypeScript project references。
+
 ## 完成标准
 
 里程碑 A 完成需同时满足：
@@ -971,7 +1004,7 @@ type RendererSlotInspection = Readonly<{
 - [x] mount/unmount/override 使用 transaction，失败保留旧 snapshot。
 - [x] 动态 entry disposer 在 commit 后仍通过 mutation queue 生效，并以 registration identity 防止旧 disposer 删除 replacement。
 - [x] Inspector 不保存第二 tree，也不泄漏 props/Capability value。
-- [ ] 至少一个生产 UI 能写入 selection/order/hidden entries；当前生产设置只提供 reset，`update()` 尚无真实编辑消费者。
+- [x] 高级设置不暴露 raw Slot 的 selection/order/hidden；具体定制入口必须由对应 surface owner 设计。
 
 里程碑 C 完成需同时满足：
 
@@ -980,7 +1013,8 @@ type RendererSlotInspection = Readonly<{
 - [x] gateway 在首次刷新前订阅，启动期刷新失败后可由后续 snapshot 恢复并正常释放订阅/挂载。
 - [x] Renderer UI action 继承 route/Feature scope 取消信号，取消会终止 worker、恢复为 `stopped`，且不会包装成 `PLUGIN_OPERATION_FAILED`。
 - [x] 主 Renderer 没有第三方 React/HTML/CSS/JavaScript 执行路径。
-- [ ] 至少一个仓库内可安装 Plugin manifest 实际声明 `rendererUi` 并跑通安装、投影、action 与卸载闭环；当前只有 contract/gateway 测试 fixture。
+- [x] 普通 Plugin 的业务配置只能进入所属插件详情，不能插入宿主 Settings section。
+- [x] 内置 `web-search` manifest 实际声明 `rendererUi`，并跑通详情挂载、安装、状态投影、action、工具消费与卸载撤销闭环。
 
 ## 明确延期的决策
 
@@ -1010,6 +1044,7 @@ type RendererSlotInspection = Readonly<{
 - `apps/desktop/renderer/src/features/settings/`
 - `apps/desktop/renderer/src/features/workspace/`
 - `packages/desktop-runtime/src/extensions/extension-manager.ts`
+- `packages/desktop-runtime/src/extensions/extension-renderer-ui.ts`
 - `packages/features/plugin-management/src/contracts/operations.ts`
 - [Feature Composition 当前基线](../../architecture/feature-composition.md)
 - [Feature Core](../../core/feature-core/README.md)

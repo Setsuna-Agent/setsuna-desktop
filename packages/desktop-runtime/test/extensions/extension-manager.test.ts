@@ -479,19 +479,25 @@ describe('extension manager', () => {
   it('runs only manifest-declared Renderer UI actions with bounded global state access', async () => {
     const fixture = await extensionFixture({ includeRendererUiAction: true });
     const state = {
-      get: vi.fn(async () => undefined),
+      get: vi.fn(async () => ({ displayName: 'Persisted', undeclared: 'must not cross' })),
       set: vi.fn(async () => undefined),
       delete: vi.fn(async () => undefined),
     };
     const manager = testManager(fixture.record, state, { handle: vi.fn(async () => null) });
     try {
+      await expect(manager.readRendererUiState({
+        pluginId: 'worker-demo',
+        contributionId: 'profile.settings',
+      })).resolves.toEqual({ values: { displayName: 'Persisted' } });
+      expect(state.get).toHaveBeenCalledWith('worker-demo', 'global', 'profile');
+
       await expect(manager.runRendererUiAction({
         pluginId: 'worker-demo',
         actionId: 'profile.save',
         values: { displayName: 'Setsuna' },
         context: {
           contributionId: 'profile.settings',
-          surface: 'renderer.settings.page.extensions',
+          surface: 'renderer.capabilities.plugin.details',
         },
       })).resolves.toEqual({ status: 'completed' });
       expect(state.set).toHaveBeenCalledWith('worker-demo', 'global', 'profile', 'Setsuna');
@@ -502,7 +508,7 @@ describe('extension manager', () => {
         values: { undeclared: 'value' },
         context: {
           contributionId: 'profile.settings',
-          surface: 'renderer.settings.page.extensions',
+          surface: 'renderer.capabilities.plugin.details',
         },
       })).rejects.toThrow('undeclared field');
       await expect(manager.runRendererUiAction({
@@ -587,7 +593,7 @@ describe('extension manager', () => {
         values: { displayName: 'Setsuna' },
         context: {
           contributionId: 'profile.settings',
-          surface: 'renderer.settings.page.extensions',
+          surface: 'renderer.capabilities.plugin.details',
         },
       })).resolves.toEqual({ status: 'completed' });
       expect(imageGeneration.generate).not.toHaveBeenCalled();
@@ -627,7 +633,7 @@ describe('extension manager', () => {
         values: { displayName: 'Setsuna' },
         context: {
           contributionId: 'profile.settings',
-          surface: 'renderer.settings.page.extensions',
+          surface: 'renderer.capabilities.plugin.details',
         },
       }, controller.signal);
       await vi.waitFor(() => {

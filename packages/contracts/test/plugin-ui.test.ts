@@ -11,8 +11,8 @@ describe('Plugin declarative Renderer UI contract', () => {
       actions: [{ id: 'profile.save', approval: { message: 'Save this Plugin profile?' } }],
       contributions: [{
         id: 'profile.settings',
-        slot: 'renderer.settings.page.extensions',
-        target: 'general',
+        slot: 'renderer.capabilities.plugin.details',
+        stateKey: 'profile',
         tree: {
           type: 'stack',
           children: [
@@ -23,17 +23,44 @@ describe('Plugin declarative Renderer UI contract', () => {
       }],
     });
 
-    expect(manifest.contributions[0]).toMatchObject({ id: 'profile.settings', target: 'general' });
+    expect(manifest.contributions[0]).toMatchObject({
+      id: 'profile.settings',
+      stateKey: 'profile',
+      slot: 'renderer.capabilities.plugin.details',
+    });
+    const migratedLegacySettings = parseRuntimePluginUiManifest({
+      schemaVersion: 1,
+      actions: [],
+      contributions: [{
+        id: 'legacy.settings',
+        slot: 'renderer.settings.page.extensions',
+        target: 'general',
+        tree: { type: 'text', text: 'Legacy settings' },
+      }],
+    }).contributions[0];
+    expect(migratedLegacySettings).toMatchObject({
+      id: 'legacy.settings',
+      slot: 'renderer.capabilities.plugin.details',
+    });
+    expect(migratedLegacySettings).not.toHaveProperty('target');
     expect(Object.isFrozen(manifest.contributions[0].tree)).toBe(true);
     expect(() => parseRuntimePluginUiManifest({
       ...manifest,
       contributions: [{
         id: 'unsafe',
-        slot: 'renderer.settings.page.extensions',
-        target: 'general',
+        slot: 'renderer.capabilities.plugin.details',
         tree: { type: 'text', text: 'unsafe', dangerouslySetInnerHTML: { __html: '<script />' } },
       }],
     })).toThrow('unsupported property');
+    expect(() => parseRuntimePluginUiManifest({
+      ...manifest,
+      contributions: [{
+        id: 'new.target',
+        slot: 'renderer.capabilities.plugin.details',
+        target: 'general',
+        tree: { type: 'text', text: 'Not global' },
+      }],
+    })).toThrow('cannot declare a settings target');
     expect(() => parseRuntimePluginUiManifest({
       ...manifest,
       contributions: [{
@@ -50,6 +77,24 @@ describe('Plugin declarative Renderer UI contract', () => {
         tree: deepStack(RUNTIME_PLUGIN_UI_LIMITS.depth + 1),
       }],
     })).toThrow('too deep');
+    expect(() => parseRuntimePluginUiManifest({
+      ...manifest,
+      contributions: [{
+        id: 'chat.state',
+        slot: 'renderer.chat.composer.status',
+        stateKey: 'profile',
+        tree: { type: 'text', text: 'unsafe state binding' },
+      }],
+    })).toThrow('cannot bind state outside Plugin details');
+    expect(() => parseRuntimePluginUiManifest({
+      ...manifest,
+      contributions: [{
+        id: 'empty.state',
+        slot: 'renderer.capabilities.plugin.details',
+        stateKey: 'profile',
+        tree: { type: 'text', text: 'no fields' },
+      }],
+    })).toThrow('requires at least one field');
   });
 });
 

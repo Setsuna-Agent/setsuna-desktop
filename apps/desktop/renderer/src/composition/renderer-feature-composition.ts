@@ -99,7 +99,6 @@ import {
   createRendererPluginRuntime,
   type RendererPluginRuntime,
 } from '../kernel/renderer-plugins/runtime.js';
-import { createRendererLayoutPreferenceController } from '../kernel/renderer-plugins/layout-preference-controller.js';
 import { createRendererLayoutPreferenceStore } from '../kernel/renderer-plugins/layout-preferences.js';
 import { activateBuiltinRendererPlugins } from './builtin-renderer-plugins.js';
 import type { BuiltinRendererFeatureServices } from './BuiltinRendererFeatureServicesBoundary.js';
@@ -161,10 +160,6 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
   const rendererPlugins = createRendererPluginRuntime({
     initialPreferences: layoutPreferenceLoad.preferences,
   });
-  const layoutPreferences = createRendererLayoutPreferenceController(
-    rendererPlugins,
-    layoutPreferenceStore,
-  );
   const activated = await rendererFeatures.activate({
       createUiRegistrar: (owner, track) => rendererPlugins.createRegistrar(owner, track),
       hostMessages,
@@ -267,9 +262,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
     );
     let disposeBuiltinPlugins: Awaited<ReturnType<typeof activateBuiltinRendererPlugins>>;
     try {
-      disposeBuiltinPlugins = await activateBuiltinRendererPlugins(rendererPlugins, {
-        layoutPreferences,
-      });
+      disposeBuiltinPlugins = await activateBuiltinRendererPlugins(rendererPlugins);
     } catch (error) {
       await rendererPlugins.dispose();
       throw error;

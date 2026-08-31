@@ -79,10 +79,13 @@ describe('renderer feature composition', () => {
     if (!appReadyEntry) throw new Error('Expected the built-in app shell entry.');
     const [settingsRouteEntry] = snapshot.resolveKeyed(shellRouteSlot, 'settings', appReadyEntry).entries;
     if (!settingsRouteEntry) throw new Error('Expected the built-in settings route entry.');
-    const layoutPreferences = snapshot
-      .resolveKeyedEntries(settingsPageExtensionSlot, settingsRouteEntry)
-      .find((entry) => entry.metadata.id === 'layout-preferences');
-    expect(layoutPreferences?.metadata.targetSectionId).toBe('runtime');
+    const runtimeExtensions = snapshot.resolveKeyedEntries(
+      settingsPageExtensionSlot,
+      settingsRouteEntry,
+    );
+    expect(runtimeExtensions.find((entry) => entry.metadata.id === 'layout-preferences')).toBeUndefined();
+    expect(runtimeExtensions.find((entry) => entry.metadata.id === 'renderer-inspector')?.metadata)
+      .toMatchObject({ targetSectionId: 'runtime' });
     const artifact = {
       id: 'artifact_legacy',
       kind: 'file' as const,

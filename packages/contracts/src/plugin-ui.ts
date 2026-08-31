@@ -13,7 +13,7 @@ export const RUNTIME_PLUGIN_UI_LIMITS = Object.freeze({
 
 export type RuntimePluginUiSlotId =
   | 'renderer.chat.composer.status'
-  | 'renderer.settings.page.extensions';
+  | 'renderer.capabilities.plugin.details';
 
 export type RuntimePluginUiTone = 'default' | 'muted' | 'success' | 'warning' | 'danger';
 
@@ -88,8 +88,11 @@ export type RuntimePluginUiAction = Readonly<{
 export type RuntimePluginUiContribution = Readonly<{
   id: string;
   slot: RuntimePluginUiSlotId;
-  /** Required and allowlisted by the host for settings extensions. */
-  target?: string;
+  /**
+   * Optional global extension-state record used to hydrate declared fields.
+   * The host projects only valid string values for fields in this contribution.
+   */
+  stateKey?: string;
   order?: number;
   tree: RuntimePluginUiNode;
 }>;
@@ -113,6 +116,15 @@ export type RuntimePluginUiActionInput = Readonly<{
 
 export type RuntimePluginUiActionResult = Readonly<{ status: 'completed' }>;
 
+export type RuntimePluginUiStateInput = Readonly<{
+  pluginId: string;
+  contributionId: string;
+}>;
+
+export type RuntimePluginUiStateResult = Readonly<{
+  values: Readonly<Record<string, string>>;
+}>;
+
 type ParseBudget = {
   fields: number;
   nodes: number;
@@ -121,6 +133,7 @@ type ParseBudget = {
 
 const IDENTITY_PATTERN = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/u;
 const FIELD_PATTERN = /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/u;
+const STATE_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/u;
 
 /**
  * Parses untrusted manifest data into a bounded, JSON-only projection. Unknown
@@ -161,33 +174,50 @@ export function parseRuntimePluginUiManifest(value: unknown): RuntimePluginUiMan
     });
   });
   const contributionIds = new Set<string>();
+  let pluginDetailsContributionSeen = false;
   const contributions = rawContributions.map((item, index) => {
     const contribution = exactRecord(
       item,
-      ['id', 'slot', 'target', 'order', 'tree'],
+      ['id', 'slot', 'target', 'stateKey', 'order', 'tree'],
       `Plugin rendererUi contributions[${index}]`,
     );
     const id = identity(contribution.id, `Plugin rendererUi contributions[${index}].id`);
     if (contributionIds.has(id)) throw new Error(`Duplicate Plugin rendererUi contribution: ${id}.`);
     contributionIds.add(id);
+    const legacySettingsSlot = contribution.slot === 'renderer.settings.page.extensions';
     const slot = pluginUiSlot(contribution.slot);
-    const target = contribution.target === undefined
-      ? undefined
-      : identity(contribution.target, `Plugin rendererUi contribution ${id} target`);
-    if (slot === 'renderer.settings.page.extensions' && !target) {
-      throw new Error(`Plugin rendererUi contribution ${id} requires a settings target.`);
+    if (legacySettingsSlot) {
+      if (contribution.target !== 'general' && contribution.target !== 'about') {
+        throw new Error(`Legacy Plugin rendererUi contribution ${id} requires a known settings target.`);
+      }
+    } else if (contribution.target !== undefined) {
+      throw new Error(`Plugin rendererUi contribution ${id} cannot declare a settings target.`);
     }
-    if (slot !== 'renderer.settings.page.extensions' && target) {
-      throw new Error(`Plugin rendererUi contribution ${id} cannot target a keyed settings page.`);
+    if (slot === 'renderer.capabilities.plugin.details') {
+      if (pluginDetailsContributionSeen) {
+        throw new Error('Plugin rendererUi allows only one Plugin details contribution.');
+      }
+      pluginDetailsContributionSeen = true;
+    }
+    const stateKey = contribution.stateKey === undefined
+      ? undefined
+      : extensionStateKey(contribution.stateKey, `Plugin rendererUi contribution ${id} stateKey`);
+    if (stateKey && slot !== 'renderer.capabilities.plugin.details') {
+      throw new Error(`Plugin rendererUi contribution ${id} cannot bind state outside Plugin details.`);
+    }
+    const fieldNames = new Set<string>();
+    const tree = parseNode(contribution.tree, 1, budget, actionIds, fieldNames);
+    if (stateKey && !fieldNames.size) {
+      throw new Error(`Plugin rendererUi contribution ${id} stateKey requires at least one field.`);
     }
     return Object.freeze({
       id,
       slot,
-      ...(target ? { target } : {}),
+      ...(stateKey ? { stateKey } : {}),
       ...(contribution.order === undefined ? {} : {
         order: finiteOrder(contribution.order, `Plugin rendererUi contribution ${id} order`),
       }),
-      tree: parseNode(contribution.tree, 1, budget, actionIds, new Set<string>()),
+      tree,
     });
   });
   return Object.freeze({
@@ -340,7 +370,11 @@ function registerField(name: string, names: Set<string>, budget: ParseBudget): v
 }
 
 function pluginUiSlot(value: unknown): RuntimePluginUiSlotId {
-  if (value === 'renderer.chat.composer.status' || value === 'renderer.settings.page.extensions') return value;
+  if (value === 'renderer.chat.composer.status' || value === 'renderer.capabilities.plugin.details') return value;
+  // Schema v1 originally allowed Plugin settings in host Settings sections.
+  // Read those manifests for upgrade compatibility, but never preserve their
+  // target: the canonical projection always belongs to the Plugin detail page.
+  if (value === 'renderer.settings.page.extensions') return 'renderer.capabilities.plugin.details';
   throw new Error(`Plugin rendererUi Slot is not allowed: ${String(value)}.`);
 }
 
@@ -353,6 +387,12 @@ function identity(value: unknown, label: string): string {
 function fieldName(value: unknown, label: string): string {
   const result = nonEmptyText(value, label);
   if (!FIELD_PATTERN.test(result)) throw new Error(`${label} is invalid.`);
+  return result;
+}
+
+function extensionStateKey(value: unknown, label: string): string {
+  const result = nonEmptyText(value, label);
+  if (!STATE_KEY_PATTERN.test(result)) throw new Error(`${label} is invalid.`);
   return result;
 }
 

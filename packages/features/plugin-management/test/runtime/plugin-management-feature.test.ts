@@ -5,6 +5,7 @@ import {
   installLocalPlugin,
   pluginManagementFeature,
   readInstalledPlugins,
+  readInstalledPluginRendererUiState,
   readPluginExtensionStatuses,
   readPluginHooks,
   readPluginManagementSnapshot,
@@ -22,6 +23,7 @@ describe('plugin management runtime feature', () => {
       plugin: { id: 'local-plugin' },
       reusedMcpServers: [],
     }));
+    const readRendererUiState = vi.fn(async () => ({ values: { maxResults: '5' } }));
     const updateMarketplace = vi.fn(async () => {
       throw new Error('Marketplace plugin update is not available: local-plugin');
     });
@@ -35,6 +37,7 @@ describe('plugin management runtime feature', () => {
       listHooks: vi.fn(async () => ({ hooks: [] })),
       listMarketplace: vi.fn(async () => ({ errors: ['catalog warning'], plugins: [] })),
       listPlugins: vi.fn(async () => ({ plugins: [] })),
+      readRendererUiState,
       deleteStandaloneHook: vi.fn(),
       remove: vi.fn(),
       setExtensionTrust: vi.fn(),
@@ -79,6 +82,10 @@ describe('plugin management runtime feature', () => {
     await expect(routes.get(readInstalledPlugins.id)?.(undefined)).resolves.toEqual({
       plugins: [],
     });
+    await expect(routes.get(readInstalledPluginRendererUiState.id)?.({
+      contributionId: 'preferences.settings',
+      pluginId: 'web-search',
+    })).resolves.toEqual({ values: { maxResults: '5' } });
     await expect(routes.get(readPluginHooks.id)?.({ cwd: '/tmp/workspace' })).resolves.toEqual({
       hooks: [],
     });
@@ -148,7 +155,7 @@ describe('plugin management runtime feature', () => {
       actionId: 'profile.save',
       context: {
         contributionId: 'profile.settings',
-        surface: 'renderer.settings.page.extensions',
+        surface: 'renderer.capabilities.plugin.details',
       },
       pluginId: 'worker-demo',
       values: { displayName: 'Setsuna' },

@@ -129,8 +129,7 @@ describe('file plugin bundle store', () => {
       actions: [],
       contributions: [{
         id: 'plugin.about',
-        slot: 'renderer.settings.page.extensions',
-        target: 'about',
+        slot: 'renderer.capabilities.plugin.details',
         tree: { type: 'text', text: 'Plugin diagnostics' },
       }],
     };
@@ -144,6 +143,24 @@ describe('file plugin bundle store', () => {
     });
     await expect(runtime.plugins.inspectPlugin({ path: fixture.bundleDir }))
       .rejects.toThrow('requires the ui capability');
+
+    await patchPluginManifest(fixture.bundleDir, {
+      extension: {
+        ...extension,
+        capabilities: ['tools', 'ui'],
+        rendererUi: {
+          ...rendererUi,
+          contributions: [{
+            id: 'plugin.preferences',
+            slot: 'renderer.capabilities.plugin.details',
+            stateKey: 'preferences',
+            tree: { type: 'field', name: 'label', label: 'Label' },
+          }],
+        },
+      },
+    });
+    await expect(runtime.plugins.inspectPlugin({ path: fixture.bundleDir }))
+      .rejects.toThrow('state binding requires the state capability');
 
     await patchPluginManifest(fixture.bundleDir, {
       extension: {

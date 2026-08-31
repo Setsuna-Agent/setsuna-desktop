@@ -201,6 +201,13 @@
   overflow-wrap: anywhere;
 }
 
+.desktop-capabilities-plugin-detail > .declarative-plugin-ui--settings {
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--app-border) 84%, transparent);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface);
+}
+
 .desktop-capabilities-plugin-detail__item-icon {
   display: inline-flex;
   align-items: center;

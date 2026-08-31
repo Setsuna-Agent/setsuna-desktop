@@ -109,8 +109,8 @@ my-plugin/
       "contributions": [
         {
           "id": "preferences",
-          "slot": "renderer.settings.page.extensions",
-          "target": "general",
+          "slot": "renderer.capabilities.plugin.details",
+          "stateKey": "preferences",
           "order": 500,
           "tree": {
             "type": "stack",
@@ -128,10 +128,14 @@ my-plugin/
 
 首版固定边界：
 
-- Slot 只允许 `renderer.settings.page.extensions` 和 `renderer.chat.composer.status`；Settings target 只允许 `general/about`，Chat 区域不允许 `field/select`。
+- Slot 只允许插件自己的 `renderer.capabilities.plugin.details` 和紧凑状态区 `renderer.chat.composer.status`。普通 Plugin 不能把业务设置插入“通用”“关于”等宿主设置页。
+- 每个 Plugin 最多声明一个详情设置 contribution；详情页允许 `field/select`，Chat 区域不允许表单节点。
+- 已安装的早期 schema v1 manifest 若仍声明 `renderer.settings.page.extensions` 和 `general/about` target，读取时会丢弃 target 并归一化到所属插件详情；新 manifest 必须使用上面的详情 Slot。
 - node 只允许 `stack/text/badge/notice/button/field/select`，未知字段直接拒绝，因此不存在 HTML、CSS、`className`、script、函数 handler 或任意 URL 入口。
 - 单个 manifest 最多 16 个 contribution、32 个 action、128 个 node、24 个字段，树深最多 8 层；文本、选项和提交值也都有独立上限。
 - UI 只在安装记录与当前 Bundle hash 仍处于 `trusted` 时挂载；更新、卸载或撤销信任会通过 Renderer transaction 替换/撤销整个 Plugin UI。
+- Plugin 详情 contribution 可以用 `stateKey` 绑定 Plugin 自己的一条 global extension state 记录；此时必须同时声明 `state` capability，且 contribution 至少包含一个 `field/select`。Chat contribution 不能绑定状态。
+- 绑定状态必须是以字段名为 key、字符串为 value 的 JSON object。宿主读取前重新校验当前 Bundle hash，只回填该 contribution 已声明且满足长度/select 约束的值；缺失、无效和额外字段被忽略，由 manifest 默认值补齐。
 - Button 只能引用 manifest 中的 action ID。宿主先展示 `approval` 文案，再携带当前 `contributionId` 通过 Plugin Management typed operation 调用 worker 的 `api.onUiAction`；Runtime 只按该 contribution 校验字段，Plugin 返回的 markup 或错误文本不会进入 Renderer。
 
 完整所有权与安全决策见 [Renderer Plugin Runtime](../../designs/current/renderer-plugin-runtime.md)，worker 动作 API 见 [可执行扩展 API v1](extensions.md#apionuiactionactionid-handler)。
@@ -162,7 +166,7 @@ Bundle 是否执行代码由 `extension` 字段决定，而不是由 schema 版�
 
 这两个 bridge 只能由随应用发布的受控 marketplace Bundle 声明，本地侧载和 Agent 创建的 Bundle 会在安装阶段被拒绝。视觉插件详情页由 Vision Recognition Feature contribution 提供，只选择“模型服务”中已启用且标记为支持图片的模型；provider/model 引用保存在该 Feature 的 portable `model-selection` document，并复用已有协议、服务地址、API key 和代理设置。扩展 worker 不会得到这些凭据或附件路径。
 
-`web-search` 已是完整可执行扩展：Bundle 内实现 `web_search` 的输入校验、Tavily keyless 请求、结果归一化和外部上下文格式化；runtime 只提供通用的精确 origin allowlist、代理、取消、超时和响应大小限制。它不需要用户配置 API key，但受匿名额度限制；查询会发给外部搜索服务，结果按不可信外部上下文处理。插件默认不安装，卸载后 worker 与工具都会立即消失。
+`web-search` 已是完整可执行扩展，也是首个真实声明式 Renderer UI 消费者：用户在“插件 → 网络搜索”详情中只保存默认结果数；搜索主题由模型按当前问题选择 `general/news/finance`，没有明确类别时回退 `general`。工具调用显式提供的结果数始终优先于插件偏好。Bundle 内实现 `web_search` 的输入校验、Tavily keyless 请求、结果归一化和外部上下文格式化；runtime 只提供通用的精确 origin allowlist、代理、取消、超时和响应大小限制。它不需要用户配置 API key，但受匿名额度限制；查询会发给外部搜索服务，结果按不可信外部上下文处理。插件默认不安装，卸载后 UI、worker 与工具都会立即消失。
 
 ## 安装和卸载
 
