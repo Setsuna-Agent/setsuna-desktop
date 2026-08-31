@@ -47,9 +47,7 @@ export type McpToolExecutionResult = {
 };
 
 export type McpToolRuntimeProfile = {
-  exposure?: 'direct' | 'deferred' | 'hidden';
   modelOutputTokenLimit?: number;
-  searchAliases?: string[];
   supportsParallel?: boolean;
   waitsForRuntimeCancellation?: boolean;
   visibleToModel?: boolean;

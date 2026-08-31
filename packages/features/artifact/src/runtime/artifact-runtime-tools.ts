@@ -66,7 +66,7 @@ export class ArtifactRuntimeTools implements ArtifactRuntimeToolService {
 
   toolRuntimeProfile(name: string) {
     return name === PUBLISH_ARTIFACT_TOOL_NAME
-      ? { exposure: 'direct' as const, supportsParallel: true as const }
+      ? { supportsParallel: true as const }
       : null;
   }
 

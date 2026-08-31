@@ -29,10 +29,6 @@ export class WorkspaceImageToolHost implements ToolHost {
     return context.modelCapabilities?.supportsImages === true ? [VIEW_IMAGE_TOOL] : [];
   }
 
-  toolRuntimeProfile(name: string) {
-    return name === VIEW_IMAGE_TOOL_NAME ? { exposure: 'direct' as const } : null;
-  }
-
   systemPrompt(context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): string | null {
     if (context.modelCapabilities?.supportsImages !== true
       || (request && !request.tools.some((tool) => tool.name === VIEW_IMAGE_TOOL_NAME))) return null;

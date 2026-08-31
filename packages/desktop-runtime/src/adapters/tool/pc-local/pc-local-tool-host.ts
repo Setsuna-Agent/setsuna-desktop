@@ -53,8 +53,8 @@ type PcLocalToolHostOptions = {
 
 const EXCLUDED_PC_TOOLS = new Set(['configure_mcp_server']);
 const REQUEST_PERMISSIONS_TOOL_NAME = 'request_permissions';
-/** Shell、后台进程和 Git 工具走 deferred 暴露,经 tool_search 激活。 */
-const DEFERRED_PC_TOOL_NAMES = new Set([
+/** Shell、后台进程和 Git 工具使用更严格的模型输出上限。 */
+const BOUNDED_OUTPUT_PC_TOOL_NAMES = new Set([
   'exec_command',
   'run_shell_command',
   'write_stdin',
@@ -289,16 +289,8 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
 
   toolRuntimeProfile(name: string, context: ToolExecutionContext): ToolRuntimeProfile | null {
     const profile: ToolRuntimeProfile = {};
-    if (DEFERRED_PC_TOOL_NAMES.has(name)) {
-      profile.exposure = 'deferred';
+    if (BOUNDED_OUTPUT_PC_TOOL_NAMES.has(name)) {
       profile.modelOutputTokenLimit = TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS;
-      const normalized = this.normalizeToolName(name);
-      if (normalized === 'run_shell_command') {
-        profile.searchAliases = ['shell', 'terminal', 'command line', 'bash'];
-      }
-      if (name.startsWith('git_') || name === 'read_diff') {
-        profile.searchAliases = ['git', 'version control', 'commit history', 'diff'];
-      }
     }
     if (this.normalizeToolName(name) === 'run_shell_command' && context.permissionProfile !== 'danger-full-access') {
       const boundCapability = this.shellSandboxProvider?.capability();

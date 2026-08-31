@@ -44,7 +44,7 @@ type RuntimeAgentTurnRunnerOptions = {
   hooks: Pick<RuntimeHookCoordinator, 'runStopHooks' | 'runTurnStartHooks' | 'stopContinuationMessages'>;
   ids: IdGenerator;
   modelSampler: Pick<RuntimeModelSampler, 'sample'>;
-  samplingContexts: Pick<RuntimeSamplingContextBuilder, 'build' | 'cleanupTurn'>;
+  samplingContexts: Pick<RuntimeSamplingContextBuilder, 'build'>;
   threadTitleGeneration(): Pick<ThreadTitleGenerationControl, 'start'>;
   toolExecutor: Pick<RuntimeToolCallExecutor, 'cleanupTurn' | 'runToolCalls'>;
   toolHost?: ToolHost;
@@ -510,8 +510,6 @@ export class RuntimeAgentTurnRunner {
       } finally {
         // 轮次级审批只在当前轮次活动期间有效。
         this.options.toolExecutor.cleanupTurn(turnId);
-        // deferred 工具激活同样按 turn 清理,避免跨轮泄漏。
-        this.options.samplingContexts.cleanupTurn(turnId);
       }
     }
   }

@@ -23,7 +23,7 @@ describe('MCP capability adapters', () => {
         seenContexts.push(context);
         return [{ name: 'mcp__docs__search', description: 'Search', inputSchema: { type: 'object' } }];
       }),
-      toolRuntimeProfile: () => ({ exposure: 'deferred' }),
+      toolRuntimeProfile: () => ({ modelOutputTokenLimit: 8_000 }),
       systemPrompt: () => null,
       externalContext: async () => [],
       approvalForTool: async () => null,

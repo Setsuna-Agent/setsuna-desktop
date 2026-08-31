@@ -17,11 +17,9 @@ describe('runtime AppServer SWE turn metadata and diffs', () => {
         conversationMessageIds: ['msg_user'],
         messageIds: ['msg_system', 'msg_user'],
         toolNames: ['read_file'],
-        loadedDeferredToolNames: ['mcp__search__web'],
         toolRuntimes: [{
           name: 'read_file',
           source: 'host' as const,
-          exposure: 'direct' as const,
           supportsParallel: true,
           waitsForRuntimeCancellation: true,
         }],
@@ -123,11 +121,9 @@ describe('runtime AppServer SWE turn metadata and diffs', () => {
       const mappedStepSnapshot = mappedSnapshot[0];
       if (mappedStepSnapshot?.method !== 'turn/stepSnapshot/updated') throw new Error('expected a step snapshot notification');
       mappedStepSnapshot.params.stepSnapshot.snapshot.toolRuntimes![0]!.name = 'mutated';
-      mappedStepSnapshot.params.stepSnapshot.snapshot.loadedDeferredToolNames!.push('mutated');
       mappedStepSnapshot.params.stepSnapshot.snapshot.toolEnvironment!.workspaceRoots!.push('/mutated');
       mappedStepSnapshot.params.stepSnapshot.snapshot.toolEnvironment!.repository!.workspacePrefix = 'mutated';
       expect(stepSnapshot.toolRuntimes[0]!.name).toBe('read_file');
-      expect(stepSnapshot.loadedDeferredToolNames).toEqual(['mcp__search__web']);
       expect(stepSnapshot.toolEnvironment.workspaceRoots).toEqual(['/tmp/project']);
       expect(stepSnapshot.toolEnvironment.repository.workspacePrefix).toBe('project');
       expect(mapEvent(safety)).toEqual([{

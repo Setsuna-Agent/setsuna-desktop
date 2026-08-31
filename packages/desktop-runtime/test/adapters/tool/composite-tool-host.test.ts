@@ -20,13 +20,13 @@ describe('CompositeToolHost', () => {
     const internal = promptHost('internal_tool', 'Internal tool policy', () => {
       listCalls += 1;
     });
-    internal.toolRuntimeProfile = () => ({ exposure: 'hidden' });
+    internal.toolRuntimeProfile = () => ({ visibleToModel: false });
     const host = new CompositeToolHost([internal]);
     const context: ToolExecutionContext = { threadId: 'thread_1' };
 
     await host.listTools(context);
 
-    await expect(host.toolRuntimeProfile('internal_tool', context)).resolves.toEqual({ exposure: 'hidden' });
+    await expect(host.toolRuntimeProfile('internal_tool', context)).resolves.toEqual({ visibleToModel: false });
     expect(listCalls).toBe(1);
   });
 

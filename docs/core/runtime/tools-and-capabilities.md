@@ -56,7 +56,10 @@ Factory 当前按顺序组合：
 
 ### `tool-router.ts`
 
-根据名称选择 ToolHost，处理 alias 和不存在的 tool。
+每个采样步骤从 `ToolHost` 获取最新目录，先应用任务级 `allowTool` 与显式
+`visibleToModel: false` 过滤，再按 catalog 顺序把所有可见工具 schema 下发给模型。
+runtime 只额外追加用于读取超限结果的 `read_tool_result`；工具是否需要审批、能否并行
+以及输出上限仍由 runtime profile 和 orchestrator 决定。
 
 ### `tool-orchestrator-policy.ts`
 

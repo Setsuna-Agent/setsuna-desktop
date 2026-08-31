@@ -11,9 +11,7 @@ export type BrowserToolExecutionContext = Readonly<{
 }>;
 
 export type BrowserToolRuntimeProfile = Readonly<{
-  exposure?: 'direct' | 'deferred' | 'hidden';
   modelOutputTokenLimit?: number;
-  searchAliases?: string[];
 }>;
 
 export type BrowserToolApprovalRequirement = Readonly<{

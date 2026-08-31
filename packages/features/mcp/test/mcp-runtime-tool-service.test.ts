@@ -43,7 +43,7 @@ describe('McpRuntimeToolServiceImpl', () => {
       'mcp__docs__search',
     ]);
     expect(service.toolRuntimeProfile('configure_mcp_server', context)).toBeNull();
-    expect(service.toolRuntimeProfile('mcp__docs__search', context)).toMatchObject({ exposure: 'deferred' });
+    expect(service.toolRuntimeProfile('mcp__docs__search', context)).toMatchObject({ modelOutputTokenLimit: 8_000 });
     expect(service.systemPrompt(context, { tools: [configure!] })).toContain('configure_mcp_server');
     expect(service.systemPrompt(context, { tools: [configure!] })).not.toContain('Enabled MCP server tools');
     expect(service.systemPrompt(context, { tools: [search!] })).toContain('Enabled MCP server tools');

@@ -187,13 +187,10 @@ describe('agent loop reasoning and attachments', () => {
   
       await loop.sendTurn(thread.id, { input: 'inspect the visible page' });
       const saved = await threadStore.getThread(thread.id);
-      const sampledScreenshot = modelClient.requests[2]?.messages.find((message) =>
+      const sampledScreenshot = modelClient.requests[1]?.messages.find((message) =>
         message.role === 'tool' && message.toolName === 'browser_screenshot');
   
-      // browser 工具 deferred：首次请求只有 tool_search，经搜索激活后下一轮才出现。
-      expect(modelClient.requests[0]?.tools?.map((tool) => tool.name)).not.toContain('browser_screenshot');
-      expect(modelClient.requests[0]?.tools?.map((tool) => tool.name)).toContain('tool_search');
-      expect(modelClient.requests[1]?.tools?.map((tool) => tool.name)).toContain('browser_screenshot');
+      expect(modelClient.requests[0]?.tools?.map((tool) => tool.name)).toContain('browser_screenshot');
       expect(sampledScreenshot?.attachments).toEqual([
         expect.objectContaining({
           size: 5,

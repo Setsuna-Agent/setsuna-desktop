@@ -20,15 +20,11 @@ describe('pc local process lifecycle', () => {
     };
 
     expect(host.toolRuntimeProfile('exec_command', restrictedContext)).toEqual({
-      exposure: 'deferred',
       modelOutputTokenLimit: TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS,
-      searchAliases: ['shell', 'terminal', 'command line', 'bash'],
       requiresSandboxBypassApproval: true,
     });
     expect(host.toolRuntimeProfile('run_shell_command', restrictedContext)).toEqual({
-      exposure: 'deferred',
       modelOutputTokenLimit: TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS,
-      searchAliases: ['shell', 'terminal', 'command line', 'bash'],
       requiresSandboxBypassApproval: true,
     });
     expect(host.toolRuntimeProfile('read_file', restrictedContext)).toBeNull();
@@ -36,9 +32,7 @@ describe('pc local process lifecycle', () => {
       ...restrictedContext,
       permissionProfile: 'danger-full-access',
     })).toEqual({
-      exposure: 'deferred',
       modelOutputTokenLimit: TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS,
-      searchAliases: ['shell', 'terminal', 'command line', 'bash'],
     });
   });
 

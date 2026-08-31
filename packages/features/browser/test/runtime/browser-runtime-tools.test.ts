@@ -3,7 +3,6 @@ import { BrowserRuntimeTools, normalizeBrowserToolUrl } from '../../src/runtime/
 import {
   READ_TOOL_RESULT_TOOL_NAME,
   RuntimeToolRouter,
-  TOOL_SEARCH_TOOL_NAME,
 } from '../../../../desktop-runtime/src/loop/tools/tool-router.js';
 import type { BrowserControlPort } from '../../src/contracts/index.js';
 
@@ -17,7 +16,6 @@ describe('BrowserRuntimeTools', () => {
     ]);
     await expect(host.approvalForTool()).resolves.toBeNull();
     expect(host.toolRuntimeProfile('browser_snapshot')).toMatchObject({
-      exposure: 'deferred',
       modelOutputTokenLimit: 4_000,
     });
     await expect(host.runTool('open_browser', { url: 'www.baidu.com' }, context)).resolves.toMatchObject({
@@ -109,13 +107,19 @@ describe('BrowserRuntimeTools', () => {
       orchestrator: null,
       toolHost: host,
     });
-    expect(router.advertisedToolNames()).toEqual([TOOL_SEARCH_TOOL_NAME, READ_TOOL_RESULT_TOOL_NAME]);
-    expect(router.deferredCatalogSize()).toBe(10);
-    // browser 工具经 tool_search 激活后才进入 tools 后缀。
-    const searchResult = await router.runToolSearch('browser snapshot', undefined);
-    expect(searchResult).toContain('browser_snapshot');
-    expect(router.loadedDeferredToolNames()).toContain('browser_tabs');
-    expect(router.loadedDeferredToolNames()).toContain('browser_screenshot');
+    expect(router.tools.map((tool) => tool.name)).toEqual([
+      'open_browser',
+      'browser_tabs',
+      'browser_snapshot',
+      'browser_screenshot',
+      'browser_click',
+      'browser_type',
+      'browser_scroll',
+      'browser_key',
+      'browser_navigate',
+      'browser_wait',
+      READ_TOOL_RESULT_TOOL_NAME,
+    ]);
     const systemPrompt = await router.systemPrompt();
     expect(systemPrompt).toContain('Call browser_screenshot directly');
     expect(systemPrompt).toContain('Prefer nodes marked clickable=true');

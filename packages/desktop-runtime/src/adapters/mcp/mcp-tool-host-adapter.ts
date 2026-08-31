@@ -103,9 +103,7 @@ function toMcpRunContext(context: ToolExecutionContext): McpToolRunContext {
 
 function toHostProfile(profile: McpToolRuntimeProfile): ToolRuntimeProfile {
   return {
-    ...(profile.exposure ? { exposure: profile.exposure } : {}),
     ...(profile.modelOutputTokenLimit !== undefined ? { modelOutputTokenLimit: profile.modelOutputTokenLimit } : {}),
-    ...(profile.searchAliases ? { searchAliases: profile.searchAliases } : {}),
     ...(profile.supportsParallel !== undefined ? { supportsParallel: profile.supportsParallel } : {}),
     ...(profile.waitsForRuntimeCancellation !== undefined ? { waitsForRuntimeCancellation: profile.waitsForRuntimeCancellation } : {}),
     ...(profile.visibleToModel !== undefined ? { visibleToModel: profile.visibleToModel } : {}),

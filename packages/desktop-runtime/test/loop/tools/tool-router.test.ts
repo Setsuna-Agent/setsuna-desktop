@@ -5,12 +5,11 @@ import {
   READ_TOOL_RESULT_PAGE_BYTES,
   READ_TOOL_RESULT_TOOL_NAME,
   RuntimeToolRouter,
-  TOOL_SEARCH_TOOL_NAME,
 } from '../../../src/loop/tools/tool-router.js';
 import type { ToolResultStore } from '../../../src/ports/tool-result-store.js';
 import type { RuntimeToolExecutionContext, ToolHost } from '../../../src/ports/tool-host.js';
 
-const RUNTIME_PROVIDED_NAMES = [TOOL_SEARCH_TOOL_NAME, READ_TOOL_RESULT_TOOL_NAME];
+const RUNTIME_PROVIDED_NAMES = [READ_TOOL_RESULT_TOOL_NAME];
 
 describe('RuntimeToolRouter', () => {
   it('advertises direct host tools plus the runtime-provided tools', async () => {
@@ -21,12 +20,11 @@ describe('RuntimeToolRouter', () => {
       toolHost: directToolHost(),
     });
 
-    expect(router.advertisedToolNames()).toEqual(['direct_tool', 'news_lookup', ...RUNTIME_PROVIDED_NAMES]);
+    expect(router.tools.map((tool) => tool.name)).toEqual(['direct_tool', 'news_lookup', ...RUNTIME_PROVIDED_NAMES]);
     await expect(router.toolRuntimeMetadata()).resolves.toEqual([
-      expect.objectContaining({ name: 'direct_tool', exposure: 'direct', source: 'host' }),
-      expect.objectContaining({ name: 'news_lookup', exposure: 'direct', source: 'host' }),
-      expect.objectContaining({ name: TOOL_SEARCH_TOOL_NAME, exposure: 'direct', source: 'host' }),
-      expect.objectContaining({ name: READ_TOOL_RESULT_TOOL_NAME, exposure: 'direct', source: 'host' }),
+      expect.objectContaining({ name: 'direct_tool', source: 'host' }),
+      expect.objectContaining({ name: 'news_lookup', source: 'host' }),
+      expect.objectContaining({ name: READ_TOOL_RESULT_TOOL_NAME, source: 'host' }),
     ]);
   });
 
@@ -39,108 +37,49 @@ describe('RuntimeToolRouter', () => {
       toolHost: hiddenToolHost(),
     });
 
-    expect(router.advertisedToolNames()).toEqual(['direct_tool', ...RUNTIME_PROVIDED_NAMES]);
+    expect(router.tools.map((tool) => tool.name)).toEqual(['direct_tool', ...RUNTIME_PROVIDED_NAMES]);
     expect(router.canRouteTool('internal_tool')).toBe(false);
     await expect(router.runToolCall({ id: 'call_hidden', name: 'internal_tool', arguments: '{}' }, {}))
       .rejects.toThrow('is not registered in the allowed tool catalog');
     expect(runToolCall).not.toHaveBeenCalled();
   });
 
-  it('keeps deferred tools out of the initial advertised set and reports them as deferred', async () => {
+  it('advertises every visible host tool in catalog order', async () => {
     const router = await RuntimeToolRouter.create({
       approvalPolicy: 'on-request',
       context: runtimeToolContext(),
       orchestrator: null,
-      toolHost: deferredToolHost(),
+      toolHost: catalogToolHost(),
     });
 
-    expect(router.advertisedToolNames()).toEqual([
+    expect(router.tools.map((tool) => tool.name)).toEqual([
       'read_file',
       'recall_memory',
-      ...RUNTIME_PROVIDED_NAMES,
-    ]);
-    expect(router.deferredCatalogSize()).toBe(3);
-    expect(router.loadedDeferredToolNames()).toEqual([]);
-    await expect(router.toolRuntimeMetadata()).resolves.toEqual([
-      expect.objectContaining({ name: 'read_file', exposure: 'direct' }),
-      expect.objectContaining({ name: 'recall_memory', exposure: 'direct' }),
-      expect.objectContaining({ name: TOOL_SEARCH_TOOL_NAME, exposure: 'direct' }),
-      expect.objectContaining({ name: READ_TOOL_RESULT_TOOL_NAME, exposure: 'direct' }),
-    ]);
-  });
-
-  it('activates searched tools only for the next step and keeps the direct prefix stable', async () => {
-    let activatedNames: string[] = [];
-    const router = await RuntimeToolRouter.create({
-      approvalPolicy: 'on-request',
-      context: runtimeToolContext(),
-      orchestrator: null,
-      toolHost: deferredToolHost(),
-      onDeferredActivated: (names) => { activatedNames = names; },
-    });
-    const prefixBefore = router.advertisedToolNames().slice(0, 3).join('\0');
-
-    const result = await router.runToolSearch('browser snapshot', undefined);
-    expect(result).toContain('browser_snapshot');
-    expect(router.loadedDeferredToolNames()).toEqual(['browser_snapshot']);
-
-    // The router belongs to the request that called tool_search, so the model-facing
-    // advertising snapshot must not mutate in the same step.
-    expect(router.advertisedToolNames().slice(0, 3).join('\0')).toBe(prefixBefore);
-    expect(router.advertisedToolNames()).toEqual([
-      'read_file',
-      'recall_memory',
-      ...RUNTIME_PROVIDED_NAMES,
-    ]);
-    expect(activatedNames).toEqual(['browser_snapshot']);
-
-    const nextStepRouter = await RuntimeToolRouter.create({
-      approvalPolicy: 'on-request',
-      context: runtimeToolContext(),
-      orchestrator: null,
-      toolHost: deferredToolHost(),
-      loadedDeferredToolNames: activatedNames,
-    });
-    expect(nextStepRouter.advertisedToolNames()).toEqual([
-      'read_file',
-      'recall_memory',
-      ...RUNTIME_PROVIDED_NAMES,
       'browser_snapshot',
-    ]);
-
-    // 连续搜索同一工具不会改变 loaded 集合。
-    await router.runToolSearch('browser snapshot', undefined);
-    expect(router.loadedDeferredToolNames()).toEqual(['browser_snapshot']);
-  });
-
-  it('seeds activation from a previous step of the same turn', async () => {
-    const router = await RuntimeToolRouter.create({
-      approvalPolicy: 'on-request',
-      context: runtimeToolContext(),
-      orchestrator: null,
-      toolHost: deferredToolHost(),
-      loadedDeferredToolNames: ['git_status', 'run_shell_command'],
-    });
-
-    expect(router.advertisedToolNames()).toEqual([
-      'read_file',
-      'recall_memory',
-      ...RUNTIME_PROVIDED_NAMES,
       'run_shell_command',
       'git_status',
+      ...RUNTIME_PROVIDED_NAMES,
+    ]);
+    await expect(router.toolRuntimeMetadata()).resolves.toEqual([
+      expect.objectContaining({ name: 'read_file' }),
+      expect.objectContaining({ name: 'recall_memory' }),
+      expect.objectContaining({ name: 'browser_snapshot' }),
+      expect.objectContaining({ name: 'run_shell_command' }),
+      expect.objectContaining({ name: 'git_status' }),
+      expect.objectContaining({ name: READ_TOOL_RESULT_TOOL_NAME }),
     ]);
   });
 
-  it('routes an allowed deferred tool even when it was not advertised', async () => {
+  it('routes an advertised host tool through the normal execution chain', async () => {
     const runToolCall = vi.fn(async () => ({ content: 'done', processed: true, status: 'success' as const }));
     const router = await RuntimeToolRouter.create({
       approvalPolicy: 'on-request',
       context: runtimeToolContext(),
       orchestrator: { runToolCall } as unknown as ToolOrchestrator,
-      toolHost: deferredToolHost(),
+      toolHost: catalogToolHost(),
     });
 
-    expect(router.advertisedToolNames()).not.toContain('run_shell_command');
+    expect(router.tools.map((tool) => tool.name)).toContain('run_shell_command');
     await router.runToolCall({ id: 'call_1', name: 'run_shell_command', arguments: '{}' }, {});
 
     expect(runToolCall).toHaveBeenCalledWith(
@@ -152,21 +91,18 @@ describe('RuntimeToolRouter', () => {
     );
   });
 
-  it('does not expose write or shell tools through search in a read-only catalog', async () => {
+  it('exposes only allowed tools in a read-only catalog', async () => {
     const router = await RuntimeToolRouter.create({
       approvalPolicy: 'on-request',
       context: runtimeToolContext(),
       orchestrator: null,
-      toolHost: deferredToolHost(),
+      toolHost: catalogToolHost(),
       allowTool: (tool) => tool.name === 'read_file' || tool.name === 'git_status',
     });
 
-    expect(router.deferredCatalogSize()).toBe(1);
+    expect(router.tools.map((tool) => tool.name)).toEqual(['read_file', 'git_status', READ_TOOL_RESULT_TOOL_NAME]);
     expect(router.canRouteTool('run_shell_command')).toBe(false);
     expect(router.canRouteTool('git_status')).toBe(true);
-    const result = await router.runToolSearch('shell', undefined);
-    expect(result).toContain('No deferred tools matched');
-    expect(router.loadedDeferredToolNames()).toEqual([]);
   });
 
   it('reads tool results through the result store with thread authorization', async () => {
@@ -216,7 +152,7 @@ describe('RuntimeToolRouter', () => {
       approvalPolicy: 'on-request',
       context: runtimeToolContext(),
       orchestrator: null,
-      toolHost: deferredToolHost(),
+      toolHost: catalogToolHost(),
     });
 
     await expect(router.modelOutputTokenLimitFor('read_file')).resolves.toBe(10_000);
@@ -226,7 +162,7 @@ describe('RuntimeToolRouter', () => {
   });
 
   it('lets an explicit profile output limit override a built-in name fallback', async () => {
-    const host = deferredToolHost();
+    const host = catalogToolHost();
     const baseProfile = host.toolRuntimeProfile;
     host.toolRuntimeProfile = async (name, context) => {
       const profile = await baseProfile?.(name, context);
@@ -250,7 +186,6 @@ describe('RuntimeToolRouter', () => {
     const toolHost: ToolHost = {
       listTools: async () => [{ name: 'plugin_tool', description: 'Plugin tool', inputSchema: { type: 'object' } }],
       toolRuntimeProfile: () => ({
-        exposure: 'direct',
         plugin: { id: 'demo-plugin', name: 'Demo Plugin', icon: 'demo' },
       }),
       runTool: async () => ({ content: 'unused' }),
@@ -293,12 +228,12 @@ function hiddenToolHost(): ToolHost {
       { name: 'direct_tool', description: 'Visible', inputSchema: { type: 'object' } },
       { name: 'internal_tool', description: 'Internal only', inputSchema: { type: 'object' } },
     ],
-    toolRuntimeProfile: (name) => ({ exposure: name === 'internal_tool' ? 'hidden' : 'direct' }),
+    toolRuntimeProfile: (name) => name === 'internal_tool' ? { visibleToModel: false } : null,
     runTool: async () => ({ content: 'unused' }),
   };
 }
 
-function deferredToolHost(): ToolHost {
+function catalogToolHost(): ToolHost {
   const tools: RuntimeToolDefinition[] = [
     { name: 'read_file', description: 'Read a UTF-8 text file.', inputSchema: { type: 'object' } },
     { name: 'recall_memory', description: 'Recall durable local memories.', inputSchema: { type: 'object' } },
@@ -306,10 +241,8 @@ function deferredToolHost(): ToolHost {
     { name: 'run_shell_command', description: 'Run a foreground shell command.', inputSchema: { type: 'object' } },
     { name: 'git_status', description: 'Show Git status for the workspace.', inputSchema: { type: 'object' } },
   ];
-  const deferred = new Set(['browser_snapshot', 'run_shell_command', 'git_status']);
   return {
     listTools: async () => tools,
-    toolRuntimeProfile: (name) => deferred.has(name) ? { exposure: 'deferred' } : null,
     runTool: async () => ({ content: 'unused' }),
   };
 }

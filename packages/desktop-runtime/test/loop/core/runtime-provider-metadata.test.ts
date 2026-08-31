@@ -4,10 +4,7 @@ import {
   bindProviderMetadataToSemanticMessage,
   providerMetadataMatchesSemanticMessage,
 } from '../../../src/utils/runtime-message-semantic-fingerprint.js';
-import {
-  mergeRuntimeProviderMetadata,
-  retainRuntimeProviderToolCalls,
-} from '../../../src/loop/core/runtime-provider-metadata.js';
+import { mergeRuntimeProviderMetadata } from '../../../src/loop/core/runtime-provider-metadata.js';
 
 describe('runtime provider metadata merge', () => {
   it('appends Anthropic blocks and detaches nested input', () => {
@@ -87,36 +84,6 @@ describe('runtime provider metadata merge', () => {
     })).toBe(false);
   });
 
-  it('removes unexecuted replay calls and detaches the remote response chain', () => {
-    const metadata: RuntimeMessageProviderMetadata = {
-      schemaVersion: 3,
-      source: {
-        providerId: 'provider-1',
-        providerKind: 'openai-responses',
-        model: 'gpt-test',
-        endpointFingerprint: 'a'.repeat(64),
-      },
-      assistantReplay: {
-        responseId: 'resp_1',
-        blocks: [
-          { type: 'thinking', text: 'reason', signature: 'signed' },
-          { type: 'tool_call', id: 'search_1', name: 'tool_search', arguments: { query: 'notion pages' } },
-          { type: 'tool_call', id: 'search_2', name: 'tool_search', arguments: { query: 'notion blocks' } },
-        ],
-      },
-    };
-
-    expect(retainRuntimeProviderToolCalls(metadata, new Set(['search_1']))).toEqual({
-      schemaVersion: 3,
-      source: metadata.source,
-      assistantReplay: {
-        blocks: [
-          { type: 'thinking', text: 'reason', signature: 'signed' },
-          { type: 'tool_call', id: 'search_1', name: 'tool_search', arguments: { query: 'notion pages' } },
-        ],
-      },
-    });
-  });
 });
 
 function responsesMetadata(responseId: string, itemId: string): RuntimeMessageProviderMetadata {

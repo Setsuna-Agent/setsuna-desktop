@@ -18,8 +18,8 @@ import { McpRuntimeTools } from './tools/runtime-tools.js';
  * `McpRuntimeToolService` 暴露给 desktop-runtime 的 `McpToolHostAdapter`。
  *
  * 保持顺序：management tools 在前，runtime tools（resources + server tools）在后；
- * runtime tool 的 deferred profile 与 token 上限不变；server instructions 只在
- * 对应 runtime MCP tool 被暴露时注入。
+ * runtime tool 的输出上限由 profile 提供；server instructions 只在对应
+ * runtime MCP tool 被暴露时注入。
  */
 export class McpRuntimeToolServiceImpl implements McpRuntimeToolService {
   private readonly management: McpManagementTools;

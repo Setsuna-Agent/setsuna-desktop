@@ -106,7 +106,6 @@ export class UserInputToolHost implements ToolHost {
   toolRuntimeProfile(name: string) {
     if (name !== REQUEST_USER_INPUT_TOOL_NAME) return null;
     return {
-      exposure: 'direct' as const,
       supportsParallel: false,
       waitsForRuntimeCancellation: true,
       approvalMode: 'selfManaged' as const,

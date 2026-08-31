@@ -34,10 +34,6 @@ export class MemoryToolHost implements ToolHost {
     return [...await this.control.listTools(memoryContext(context))];
   }
 
-  toolRuntimeProfile(name: string) {
-    return this.control.toolRuntimeProfile(name);
-  }
-
   async runTool(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult> {
     return this.control.runTool(name, input, memoryContext(context));
   }

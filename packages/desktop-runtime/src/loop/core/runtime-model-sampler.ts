@@ -14,7 +14,7 @@ import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ModelClient } from '../../ports/model-client.js';
 import type { RuntimeToolCallExecutor, ToolPreviewAnnouncement } from '../tools/runtime-tool-call-executor.js';
-import { TOOL_SEARCH_TOOL_NAME, type RuntimeToolRouter } from '../tools/tool-router.js';
+import type { RuntimeToolRouter } from '../tools/tool-router.js';
 import { bindProviderMetadataToSemanticMessage } from '../../utils/runtime-message-semantic-fingerprint.js';
 import { toolCallFromModelStreamItem, toolsForModelRequest, upsertRuntimeToolCall } from './agent-loop-tool-utils.js';
 import {
@@ -23,10 +23,7 @@ import {
   createLegacyModelStreamMirrorState,
 } from './model-stream-output.js';
 import type { RuntimeModelStreamEventPublisher } from './runtime-model-stream-event-publisher.js';
-import {
-  mergeRuntimeProviderMetadata,
-  retainRuntimeProviderToolCalls,
-} from './runtime-provider-metadata.js';
+import { mergeRuntimeProviderMetadata } from './runtime-provider-metadata.js';
 
 type TurnThinkingOptions = Pick<ModelRequest, 'thinking' | 'reasoningEffort'>;
 
@@ -104,7 +101,6 @@ export class RuntimeModelSampler {
     const partialToolCalls = new Map<string, RuntimeToolCall>();
     const announcedToolPreviews = new Map<string, ToolPreviewAnnouncement>();
     const providerAgentItemIds = new Set<string>();
-    const toolSearchFilter = createToolSearchStreamFilter();
     const output = createAssistantOutputAccumulator(async (delta) => {
       appendAssistantStreamPart(assistantStreamParts, 'content', delta);
       await this.options.streamEvents.publishAssistantDelta(threadId, turnId, assistantMessageId, delta);
@@ -179,54 +175,46 @@ export class RuntimeModelSampler {
         await streamBridge.consume(item);
         continue;
       }
-      for (const filteredItem of filterModelStreamEvents(item, toolSearchFilter)) {
-        if (await this.options.streamEvents.publishModelStreamProtocolEvent(threadId, turnId, filteredItem)) {
-          if (captureProtocolUsage && filteredItem.type === 'token_count') usage = filteredItem.usage;
-          await streamBridge.consume(filteredItem);
-          const protocolToolCall = toolCallFromModelStreamItem(filteredItem);
-          if (protocolToolCall) toolCalls = upsertRuntimeToolCall(toolCalls, protocolToolCall);
-          continue;
-        }
-        if (filteredItem.type === 'reasoning_delta') {
-          await this.options.streamEvents.mirrorLegacyReasoningDelta(mirror, threadId, turnId, assistantMessageId, filteredItem.text);
-          await streamBridge.appendReasoning(filteredItem.text);
-        }
-        if (filteredItem.type === 'text_delta') {
-          await this.options.streamEvents.publishAssistantItemDelta(threadId, turnId, assistantMessageId, filteredItem.text);
-          await streamBridge.appendAgent(filteredItem.text);
-        }
-        if (filteredItem.type === 'tool_call_delta') {
-          await this.options.streamEvents.mirrorLegacyToolCallDelta(mirror, threadId, turnId, filteredItem.call);
-          await this.options.toolExecutor.publishToolCallDeltaPreview({
-            announcedToolPreviews,
-            call: filteredItem.call,
-            partialToolCalls,
-            threadId,
-            toolRouter: step.toolRouter,
-            turnId,
-          });
-        }
-        if (filteredItem.type === 'tool_calls') {
-          toolCalls = retainToolCalls(filteredItem.toolCalls, toolSearchFilter);
-          await this.options.streamEvents.mirrorLegacyToolCallsCompleted(mirror, threadId, turnId, toolCalls);
-        }
-        if (filteredItem.type === 'usage') {
-          usage = filteredItem.usage;
-          await this.options.streamEvents.mirrorLegacyUsage(mirror, threadId, turnId, filteredItem.usage);
-        }
+      if (await this.options.streamEvents.publishModelStreamProtocolEvent(threadId, turnId, item)) {
+        if (captureProtocolUsage && item.type === 'token_count') usage = item.usage;
+        await streamBridge.consume(item);
+        const protocolToolCall = toolCallFromModelStreamItem(item);
+        if (protocolToolCall) toolCalls = upsertRuntimeToolCall(toolCalls, protocolToolCall);
+        continue;
+      }
+      if (item.type === 'reasoning_delta') {
+        await this.options.streamEvents.mirrorLegacyReasoningDelta(mirror, threadId, turnId, assistantMessageId, item.text);
+        await streamBridge.appendReasoning(item.text);
+      }
+      if (item.type === 'text_delta') {
+        await this.options.streamEvents.publishAssistantItemDelta(threadId, turnId, assistantMessageId, item.text);
+        await streamBridge.appendAgent(item.text);
+      }
+      if (item.type === 'tool_call_delta') {
+        await this.options.streamEvents.mirrorLegacyToolCallDelta(mirror, threadId, turnId, item.call);
+        await this.options.toolExecutor.publishToolCallDeltaPreview({
+          announcedToolPreviews,
+          call: item.call,
+          partialToolCalls,
+          threadId,
+          toolRouter: step.toolRouter,
+          turnId,
+        });
+      }
+      if (item.type === 'tool_calls') {
+        toolCalls = item.toolCalls;
+        await this.options.streamEvents.mirrorLegacyToolCallsCompleted(mirror, threadId, turnId, toolCalls);
+      }
+      if (item.type === 'usage') {
+        usage = item.usage;
+        await this.options.streamEvents.mirrorLegacyUsage(mirror, threadId, turnId, item.usage);
       }
     }
 
     await streamBridge.finish();
     await this.options.streamEvents.completeLegacyStreamItems(mirror, threadId, turnId, assistantMessageId);
     const memoryCitation = await output.finish();
-    let text = output.text();
-    if (toolSearchFilter.discardedCallIds.size) {
-      assistantMessage.providerMetadata = retainRuntimeProviderToolCalls(
-        assistantMessage.providerMetadata,
-        new Set(toolCalls.map((toolCall) => toolCall.id)),
-      );
-    }
+    const text = output.text();
     if (!text.trim() && !toolCalls.length) {
       // Reasoning travels on its own stream channel, so an empty content channel is an explicit
       // provider-boundary failure instead of a tag-parsing decision.
@@ -248,85 +236,6 @@ export class RuntimeModelSampler {
       usage,
     };
   }
-}
-
-type ToolSearchStreamFilter = {
-  retainedCallId?: string;
-  discardedCallIds: Set<string>;
-  discardedItemIds: Set<string>;
-  pendingToolCallItems: Map<string, ModelStreamEvent[]>;
-};
-
-function createToolSearchStreamFilter(): ToolSearchStreamFilter {
-  return {
-    discardedCallIds: new Set(),
-    discardedItemIds: new Set(),
-    pendingToolCallItems: new Map(),
-  };
-}
-
-/** A single discovery pass is enough per sampling step; the model can refine it next round. */
-function retainToolCall(toolCall: RuntimeToolCall, filter: ToolSearchStreamFilter): boolean {
-  if (filter.discardedCallIds.has(toolCall.id)) return false;
-  if (toolCall.name !== TOOL_SEARCH_TOOL_NAME) return true;
-  if (!filter.retainedCallId) {
-    filter.retainedCallId = toolCall.id;
-    return true;
-  }
-  if (filter.retainedCallId === toolCall.id) return true;
-  filter.discardedCallIds.add(toolCall.id);
-  return false;
-}
-
-function retainToolCalls(
-  toolCalls: RuntimeToolCall[],
-  filter: ToolSearchStreamFilter,
-): RuntimeToolCall[] {
-  return toolCalls.filter((toolCall) => retainToolCall(toolCall, filter));
-}
-
-/**
- * Defers unnamed tool-call lifecycle items until completion, when the call name is known, then
- * filters duplicate discovery calls before any part of their lifecycle crosses the event boundary.
- */
-function filterModelStreamEvents(
-  event: ModelStreamEvent,
-  filter: ToolSearchStreamFilter,
-): ModelStreamEvent[] {
-  if (event.type === 'item_started' && event.item.kind === 'tool_call') {
-    const toolCall = toolCallFromModelStreamItem(event);
-    if (!toolCall) {
-      filter.pendingToolCallItems.set(event.item.id, [event]);
-      return [];
-    }
-    if (retainToolCall(toolCall, filter)) return [event];
-    filter.discardedItemIds.add(event.item.id);
-    return [];
-  }
-  if (event.type === 'item_delta') {
-    const pending = filter.pendingToolCallItems.get(event.itemId);
-    if (pending) {
-      pending.push(event);
-      return [];
-    }
-    return filter.discardedItemIds.has(event.itemId) ? [] : [event];
-  }
-  if (event.type === 'item_completed' && event.item.kind === 'tool_call') {
-    const pending = filter.pendingToolCallItems.get(event.item.id) ?? [];
-    filter.pendingToolCallItems.delete(event.item.id);
-    const toolCall = toolCallFromModelStreamItem(event);
-    if (!toolCall || retainToolCall(toolCall, filter)) return [...pending, event];
-    filter.discardedItemIds.add(event.item.id);
-    return [];
-  }
-  if (event.type === 'tool_call_delta') {
-    return retainToolCall({
-      id: event.call.id,
-      name: event.call.name,
-      arguments: event.call.argumentsDelta,
-    }, filter) ? [event] : [];
-  }
-  return [event];
 }
 
 function appendAssistantStreamPart(

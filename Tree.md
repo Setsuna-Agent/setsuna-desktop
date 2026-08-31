@@ -439,8 +439,8 @@ packages/features/ — 0 direct / 882 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 504 total files
-├── src/ — 2 direct / 292 total files
+packages/desktop-runtime/ — 4 direct / 502 total files
+├── src/ — 2 direct / 291 total files
 │   ├── adapters/ — 109 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── event/ — 2 direct / 2 total files
@@ -465,11 +465,11 @@ packages/desktop-runtime/ — 4 direct / 504 total files
 │   │   ├── routes/ — 1 direct / 1 total files
 │   │   └── settings/ — 3 direct / 3 total files
 │   ├── hooks/ — 4 direct / 4 total files
-│   ├── loop/ — 62 files
+│   ├── loop/ — 61 files
 │   │   ├── context/ — 16 direct / 16 total files
 │   │   ├── core/ — 24 direct / 24 total files
 │   │   ├── lifecycle/ — 10 direct / 10 total files
-│   │   └── tools/ — 12 direct / 12 total files
+│   │   └── tools/ — 11 direct / 11 total files
 │   ├── ports/ — 30 direct / 30 total files
 │   ├── runtime/ — 3 direct / 8 total files
 │   │   └── use-cases/ — 5 direct / 5 total files
@@ -478,7 +478,7 @@ packages/desktop-runtime/ — 4 direct / 504 total files
 │   │   └── app-server/ — 23 direct / 23 total files
 │   ├── shared/ — 3 direct / 3 total files
 │   └── utils/ — 6 direct / 6 total files
-└── test/ — 208 files
+└── test/ — 207 files
     ├── adapters/ — 48 files
     │   ├── approval/ — 1 direct / 1 total files
     │   ├── feature/ — 1 direct / 1 total files
@@ -511,11 +511,11 @@ packages/desktop-runtime/ — 4 direct / 504 total files
     │   │   └── tool/ — 6 direct / 6 total files
     │   ├── agent-loop/ — 25 direct / 25 total files
     │   └── runtime-server/ — 15 direct / 15 total files
-    ├── loop/ — 30 files
+    ├── loop/ — 29 files
     │   ├── context/ — 12 direct / 12 total files
     │   ├── core/ — 8 direct / 8 total files
     │   ├── lifecycle/ — 5 direct / 5 total files
-    │   └── tools/ — 5 direct / 5 total files
+    │   └── tools/ — 4 direct / 4 total files
     ├── runtime/ — 2 direct / 4 total files
     │   └── use-cases/ — 2 direct / 2 total files
     ├── security/ — 3 direct / 3 total files
