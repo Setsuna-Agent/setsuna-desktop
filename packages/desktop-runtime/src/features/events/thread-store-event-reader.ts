@@ -1,14 +1,19 @@
-import type { ThreadEventReader } from '@setsuna-desktop/feature-core/runtime';
+import type { FeatureProjectionCheckpoints, ThreadEventReader } from '@setsuna-desktop/feature-core/runtime';
 import type { ThreadStore } from '../../ports/thread-store.js';
 
 /** Fixed-watermark adapter over the append-only Core ThreadStore. */
 export class ThreadStoreEventReader implements ThreadEventReader {
-  constructor(private readonly store: Pick<ThreadStore, 'getThread' | 'readEventPage'>) {}
+  constructor(private readonly store: Pick<ThreadStore, 'readEventPage'> & {
+    getThreadLastSeq(threadId: string): Promise<number>;
+    readonly projectionCheckpoints?: FeatureProjectionCheckpoints;
+  }) {}
+
+  get checkpoints(): FeatureProjectionCheckpoints | undefined {
+    return this.store.projectionCheckpoints;
+  }
 
   async highWater(threadId: string): Promise<number> {
-    const thread = await this.store.getThread(threadId);
-    if (!thread) throw new Error(`Thread not found: ${threadId}`);
-    return thread.lastSeq;
+    return this.store.getThreadLastSeq(threadId);
   }
 
   async readPage(

@@ -17,7 +17,14 @@ export function createGoalEnabledAgentLoop(options: AgentLoopOptions): AgentLoop
   const loop = new AgentLoop({ ...options, eventWriter });
   const registry = createRuntimeGoalEventRegistry();
   const projection = createFeatureProjectionStore<GoalState>({
-    eventReader: new ThreadStoreEventReader(options.threadStore),
+    eventReader: new ThreadStoreEventReader({
+      getThreadLastSeq: async (threadId) => {
+        const thread = await options.threadStore.getThread(threadId);
+        if (!thread) throw new Error(`Thread not found: ${threadId}`);
+        return thread.lastSeq;
+      },
+      readEventPage: (threadId, query) => options.threadStore.readEventPage(threadId, query),
+    }),
     initialState: () => Object.freeze({ goal: null }),
     reduce: (state, record) => registry.reduce(state, record),
   });

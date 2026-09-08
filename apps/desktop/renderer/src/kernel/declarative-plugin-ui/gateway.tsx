@@ -46,11 +46,12 @@ type ActiveUiPlugin = Readonly<{
  * Bridges trusted Plugin manifest data into transactional Renderer mounts. The
  * controller owns subscription and cleanup; React components never register UI.
  */
-export async function activateDeclarativePluginUiGateway(
+export function activateDeclarativePluginUiGateway(
   runtime: RendererPluginRuntime,
   service: PluginManagementRendererService,
-): Promise<Disposer> {
+): Disposer {
   const active = new Map<string, ActiveUiPlugin>();
+  const startupRefresh = new AbortController();
   let disposed = false;
   let tail: Promise<void> = Promise.resolve();
 
@@ -64,6 +65,7 @@ export async function activateDeclarativePluginUiGateway(
       await current.dispose();
     }
     for (const [pluginId, next] of desired) {
+      if (disposed) return;
       const current = active.get(pluginId);
       if (current?.signature === next.signature) continue;
       try {
@@ -86,25 +88,24 @@ export async function activateDeclarativePluginUiGateway(
     console.warn('[DeclarativePluginUi] Snapshot synchronization failed; waiting for the next update.');
   };
   const scheduleSync = () => {
+    if (disposed) return;
     void enqueueSync().catch(reportSyncFailure);
   };
 
   // Subscribe first so a transient startup refresh failure cannot permanently
   // detach the gateway from later Plugin Management snapshots.
   const unsubscribe = service.subscribe(scheduleSync);
-  try {
-    await service.refreshInstalled();
-  } catch {
+  // Optional Plugin UI loads alongside the Core workbench bootstrap. Return ownership
+  // immediately so a slow catalog cannot block first paint or delay shutdown cleanup.
+  void service.refreshInstalled({ signal: startupRefresh.signal }).then(scheduleSync, () => {
+    if (disposed) return;
     console.warn('[DeclarativePluginUi] Initial Plugin refresh failed; waiting for the next update.');
-  }
-  try {
-    await enqueueSync();
-  } catch {
-    reportSyncFailure();
-  }
+    scheduleSync();
+  });
   return async () => {
     if (disposed) return;
     disposed = true;
+    startupRefresh.abort();
     unsubscribe();
     await tail;
     const disposers = [...active.values()].map(({ dispose }) => dispose).reverse();

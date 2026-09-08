@@ -12,6 +12,7 @@ import {
   goalControlCapability,
   goalFeature,
   goalRuntimeHostCapability,
+  goalStateCodec,
   readGoalState,
   type GoalState,
   updateGoalState,
@@ -34,6 +35,7 @@ export const goalRuntimeFeature = defineRuntimeFeature({
     const registry = createRuntimeGoalEventRegistry();
     const projection = createFeatureProjectionStore<GoalState>({
       eventReader: context.dependencies.threadEvents,
+      checkpoint: { key: `${goalFeature.id}:1`, codec: goalStateCodec },
       initialState: () => Object.freeze({ goal: null }),
       reduce: (state, record) => registry.reduce(state, record),
     });

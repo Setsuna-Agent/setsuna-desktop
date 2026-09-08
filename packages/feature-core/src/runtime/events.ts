@@ -1,5 +1,10 @@
 import { defineCapability, type CapabilityToken } from '../capability.js';
 import type { SequencedThreadEventRecord } from '../events.js';
+import {
+  restoreFeatureProjectionCheckpoint,
+  type FeatureProjectionCheckpoints,
+  type FeatureProjectionCheckpointDefinition,
+} from './projection-checkpoints.js';
 
 export type ThreadEventReadPage = Readonly<{
   records: readonly SequencedThreadEventRecord[];
@@ -7,6 +12,7 @@ export type ThreadEventReadPage = Readonly<{
 }>;
 
 export interface ThreadEventReader {
+  readonly checkpoints?: FeatureProjectionCheckpoints;
   highWater(threadId: string): Promise<number>;
   readPage(
     threadId: string,
@@ -37,6 +43,7 @@ export function createFeatureProjectionStore<TState>(input: Readonly<{
   initialState(): TState;
   reduce(state: TState, record: SequencedThreadEventRecord): TState;
   pageSize?: number;
+  checkpoint?: FeatureProjectionCheckpointDefinition<TState>;
 }>): FeatureProjectionStore<TState> {
   const cache = new Map<string, CacheEntry<TState>>();
   const loads = new Map<string, Promise<Readonly<{ state: TState; throughSeq: number }>>>();
@@ -49,8 +56,14 @@ export function createFeatureProjectionStore<TState>(input: Readonly<{
   }>> => {
     const highWater = await input.eventReader.highWater(threadId);
     if (disposed) throw new Error('Feature projection store is disposed.');
-    const current = cache.get(threadId);
-    if (current?.throughSeq === highWater) return Object.freeze({ ...current });
+    const current = cache.get(threadId) ?? await restoreFeatureProjectionCheckpoint(
+      input.eventReader.checkpoints, input.checkpoint, threadId, highWater,
+    );
+    if (disposed) throw new Error('Feature projection store is disposed.');
+    if (current?.throughSeq === highWater) {
+      cache.set(threadId, current);
+      return Object.freeze({ ...current });
+    }
     if (current && current.throughSeq > highWater) {
       throw new Error(`Feature projection high water moved backwards for ${threadId}.`);
     }
@@ -76,6 +89,10 @@ export function createFeatureProjectionStore<TState>(input: Readonly<{
       }
     }
     const entry = { state, throughSeq };
+    if (input.checkpoint && input.eventReader.checkpoints) {
+      await input.eventReader.checkpoints.write(threadId, input.checkpoint.key, entry);
+      if (disposed) throw new Error('Feature projection store is disposed.');
+    }
     cache.set(threadId, entry);
     return Object.freeze({ ...entry });
   };

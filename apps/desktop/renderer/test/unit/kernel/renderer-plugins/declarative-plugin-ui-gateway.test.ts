@@ -20,6 +20,43 @@ import type { RendererPluginRuntime } from '../../../../src/kernel/renderer-plug
 describe('declarative Plugin UI gateway', () => {
   afterEach(() => vi.restoreAllMocks());
 
+  it.each([false, true])('returns before a slow catalog refresh and owns late mounts (closed=%s)', async (closeBeforeRefresh) => {
+    let finishRefresh!: () => void;
+    let refreshSignal: AbortSignal | undefined;
+    const pendingRefresh = new Promise<void>((resolve) => { finishRefresh = resolve; });
+    const disposeMount = vi.fn();
+    const mount = vi.fn(async () => disposeMount);
+    const unsubscribe = vi.fn();
+    const service = {
+      getSnapshot: () => ({ plugins: [installedUiPlugin()], catalogRevision: 'fixture' }),
+      subscribe: vi.fn(() => unsubscribe),
+      refreshInstalled: vi.fn(({ signal }: { signal: AbortSignal }) => {
+        refreshSignal = signal;
+        return pendingRefresh;
+      }),
+    } as unknown as PluginManagementRendererService;
+
+    const dispose = activateDeclarativePluginUiGateway({ mount } as unknown as RendererPluginRuntime, service);
+    expect(typeof dispose).toBe('function');
+    expect(mount).not.toHaveBeenCalled();
+    if (closeBeforeRefresh) {
+      await dispose();
+      expect(refreshSignal?.aborted).toBe(true);
+    }
+
+    // Even an upstream that ignores cancellation must never mount after gateway disposal.
+    finishRefresh();
+    await pendingRefresh;
+    if (closeBeforeRefresh) {
+      expect(mount).not.toHaveBeenCalled();
+    } else {
+      await vi.waitFor(() => expect(mount).toHaveBeenCalledOnce());
+      await dispose();
+      expect(disposeMount).toHaveBeenCalledOnce();
+    }
+    expect(unsubscribe).toHaveBeenCalledOnce();
+  });
+
   it('keeps settings in Plugin details and limits chat to compact primitives', () => {
     const settings = contribution({
       id: 'safe.settings',
@@ -79,7 +116,7 @@ describe('declarative Plugin UI gateway', () => {
       subscribe,
     } as unknown as PluginManagementRendererService;
 
-    const disposeGateway = await activateDeclarativePluginUiGateway(
+    const disposeGateway = activateDeclarativePluginUiGateway(
       { mount } as unknown as RendererPluginRuntime,
       service,
     );
@@ -87,9 +124,9 @@ describe('declarative Plugin UI gateway', () => {
     expect(subscribe.mock.invocationCallOrder[0]).toBeLessThan(
       refreshInstalled.mock.invocationCallOrder[0],
     );
-    expect(warning).toHaveBeenCalledWith(
+    await vi.waitFor(() => expect(warning).toHaveBeenCalledWith(
       '[DeclarativePluginUi] Initial Plugin refresh failed; waiting for the next update.',
-    );
+    ));
     expect(mount).not.toHaveBeenCalled();
 
     plugins = [installedUiPlugin()];
@@ -144,15 +181,15 @@ describe('declarative Plugin UI gateway', () => {
       subscribe: vi.fn(() => () => undefined),
     } as unknown as PluginManagementRendererService;
 
-    const dispose = await activateDeclarativePluginUiGateway(
+    const dispose = activateDeclarativePluginUiGateway(
       { mount } as unknown as RendererPluginRuntime,
       service,
     );
 
-    expect(list).toHaveBeenCalledWith(
+    await vi.waitFor(() => expect(list).toHaveBeenCalledWith(
       shellSidebarPluginEntrySlot,
       expect.objectContaining({ id: expect.stringContaining('.navigation') }),
-    );
+    ));
     const sidebarCalls = list.mock.calls as unknown as Array<[unknown, Record<string, unknown>]>;
     const sidebarRegistration = sidebarCalls.find(([slot]) => slot === shellSidebarPluginEntrySlot)?.[1];
     expect(sidebarRegistration).not.toHaveProperty('when');
@@ -187,11 +224,11 @@ describe('declarative Plugin UI gateway', () => {
       }),
     } as unknown as PluginManagementRendererService;
 
-    const dispose = await activateDeclarativePluginUiGateway(
+    const dispose = activateDeclarativePluginUiGateway(
       { mount } as unknown as RendererPluginRuntime,
       service,
     );
-    expect(mount).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(mount).toHaveBeenCalledOnce());
 
     catalogRevision = 'revision-2';
     emitSnapshot?.();

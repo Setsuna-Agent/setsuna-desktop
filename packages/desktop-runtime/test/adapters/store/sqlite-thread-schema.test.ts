@@ -4,6 +4,31 @@ import { ensureSqliteThreadSchema } from '../../../src/adapters/store/sqlite-thr
 const { DatabaseSync } = process.getBuiltinModule('node:sqlite') as typeof import('node:sqlite');
 
 describe('SQLite thread schema', () => {
+  it('upgrades v3 without rewriting thread history and cascades cached projections on deletion', () => {
+    const database = new DatabaseSync(':memory:');
+    try {
+      database.exec(`
+        PRAGMA foreign_keys = ON;
+        CREATE TABLE threads (id TEXT PRIMARY KEY, snapshot_json TEXT);
+        INSERT INTO threads VALUES ('thread_1', '{"messages":[]}');
+        PRAGMA user_version = 3;
+      `);
+      ensureSqliteThreadSchema(database);
+      ensureSqliteThreadSchema(database);
+      expect(database.prepare('SELECT * FROM threads').get()).toMatchObject({
+        id: 'thread_1', snapshot_json: '{"messages":[]}',
+      });
+      database.exec(`
+        INSERT INTO feature_projection_checkpoints VALUES ('thread_1', 'goal:1', 0, '{"goal":null}');
+        DELETE FROM threads WHERE id = 'thread_1';
+      `);
+      expect(database.prepare('SELECT * FROM feature_projection_checkpoints').all()).toEqual([]);
+      expect(database.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 4 });
+    } finally {
+      database.close();
+    }
+  });
+
   it('migrates a v1 thread table through the retained-event and side-thread schemas', () => {
     const database = new DatabaseSync(':memory:');
     try {
@@ -19,7 +44,7 @@ describe('SQLite thread schema', () => {
 
       ensureSqliteThreadSchema(database);
 
-      expect(database.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 3 });
+      expect(database.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 4 });
       const columns = database.prepare('PRAGMA table_info(threads)').all()
         .map((row) => (row as { name: string }).name);
       expect(columns).toEqual(expect.arrayContaining([
@@ -36,6 +61,9 @@ describe('SQLite thread schema', () => {
       expect(database.prepare(`
         SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'runtime_event_ids'
       `).get()).toMatchObject({ name: 'runtime_event_ids' });
+      expect(database.prepare(`
+        SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'feature_projection_checkpoints'
+      `).get()).toMatchObject({ name: 'feature_projection_checkpoints' });
     } finally {
       database.close();
     }

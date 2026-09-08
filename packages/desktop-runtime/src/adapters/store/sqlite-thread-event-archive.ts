@@ -85,14 +85,13 @@ export function readArchivedEventPage(
   throughSeq: number,
   limit: number,
 ): StoredThreadEvent[] {
-  // Blocks can contain sparse transient seq values because durable events stay
-  // in runtime_events. They are non-empty and non-overlapping, so limiting block
-  // rows by the event limit still supplies enough candidates without scanning the tail.
+  // Non-overlapping blocks have the same start/end ordering. Order by end_seq so
+  // SQLite can seek via its (thread_id, end_seq) index instead of rescanning older blocks.
   const rows = database.prepare(`
     SELECT start_seq, end_seq, events_gzip
     FROM runtime_event_archives
     WHERE thread_id = ? AND end_seq > ? AND start_seq <= ?
-    ORDER BY start_seq ASC
+    ORDER BY end_seq ASC
     LIMIT ?
   `).all(threadId, afterSeq, throughSeq, limit);
   const events: StoredThreadEvent[] = [];

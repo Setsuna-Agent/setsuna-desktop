@@ -186,6 +186,7 @@ describe('sqlite thread store', () => {
 
     const legacy = new DatabaseSync(path.join(dataDir, 'threads.sqlite'));
     legacy.exec(`
+      DROP TABLE feature_projection_checkpoints;
       DROP TABLE runtime_event_archives;
       DROP TABLE runtime_event_ids;
       DROP TABLE thread_messages;
@@ -263,7 +264,7 @@ describe('sqlite thread store', () => {
     await first.close();
 
     const database = new DatabaseSync(path.join(dataDir, 'threads.sqlite'), { readOnly: true });
-    expect(database.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 3 });
+    expect(database.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 4 });
     database.close();
 
     const reopened = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
@@ -414,7 +415,7 @@ describe('sqlite thread store', () => {
     await expect(reopened.listEvents(thread.id, 0)).resolves.toHaveLength(5);
     await reopened.close();
 
-    const inspected = new DatabaseSync(path.join(dataDir, 'threads.sqlite'), { readOnly: true });
+    const inspected = new DatabaseSync(path.join(dataDir, 'threads.sqlite'));
     expect(inspected.prepare(`
       SELECT COUNT(*) AS count FROM runtime_event_archives WHERE thread_id = ?
     `).get(thread.id)).toMatchObject({ count: 1 });
@@ -424,7 +425,20 @@ describe('sqlite thread store', () => {
     expect(inspected.prepare(`
       SELECT COUNT(*) AS count FROM runtime_event_ids WHERE thread_id = ?
     `).get(thread.id)).toMatchObject({ count: 5 });
+    inspected.prepare('UPDATE runtime_event_archives SET events_gzip = ? WHERE thread_id = ?')
+      .run(Buffer.from('invalid gzip'), thread.id);
     inspected.close();
+
+    // A page must neither decompress nor validate archive blocks belonging to a later page.
+    const boundedReader = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    try {
+      await expect(boundedReader.readEventPage(thread.id, { afterSeq: 0, throughSeq: 5, limit: 2 }))
+        .resolves.toMatchObject([{ seq: 1 }, { seq: 2 }]);
+      await expect(boundedReader.readEventPage(thread.id, { afterSeq: 2, throughSeq: 5, limit: 2 }))
+        .rejects.toThrow('Invalid SQLite runtime event archive');
+    } finally {
+      await boundedReader.close();
+    }
   });
 
   it('rejects a gap in persisted SQLite events instead of returning a partial history', async () => {

@@ -11,6 +11,7 @@ import {
   collaborationControlCapability,
   collaborationFeature,
   collaborationRuntimeHostCapability,
+  collaborationStateCodec,
   createInitialCollaborationState,
   readCollaborationState,
   type CollaborationState,
@@ -33,6 +34,7 @@ export const collaborationRuntimeFeature = defineRuntimeFeature({
     const registry = createRuntimeCollaborationEventRegistry();
     const projection = createFeatureProjectionStore<CollaborationState>({
       eventReader: context.dependencies.threadEvents,
+      checkpoint: { key: `${collaborationFeature.id}:1`, codec: collaborationStateCodec },
       initialState: createInitialCollaborationState,
       reduce: (state, record) => registry.reduce(state, record),
     });

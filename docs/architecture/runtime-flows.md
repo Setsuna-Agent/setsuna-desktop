@@ -43,6 +43,10 @@
 
 Runtime 的 `src/cli.ts` 创建 server；`src/runtime/runtime-factory.ts` 组装 ports/adapters；`src/server/runtime-server.ts` 在监听前完成 store recovery 和 stale turn 结算。
 
+Goal 和 Collaboration 的 Feature 投影使用 SQLite `feature_projection_checkpoints` 保存状态与已处理事件序号。重启时先校验 Feature 自己的 codec 和带 reducer 版本的 key，再回放检查点之后的事件；首次启动、版本变化或缓存损坏时从历史事件重建。检查点只是可重建缓存，历史事件仍是真源，异常任务结算仍在 runtime ready 前完成。事件高水位直接查询线程序号，不加载或复制完整聊天记录。
+
+生成图片清理先枚举本地 asset ID，再检查会话引用；没有本地图片时不读取历史，已找到全部候选引用时提前结束扫描。
+
 ## Renderer 初始化
 
 `DesktopDataRootGate` 先读取 main 侧数据根状态：
@@ -54,6 +58,8 @@ Runtime 的 `src/cli.ts` 创建 server；`src/runtime/runtime-factory.ts` 组装
 
 - 核心状态：config、可见 threads、包含归档的 threads、projects。失败会使工作台进入 error。
 - 纵向 Feature 状态：Skills、MCP、plugins、usage 等由各自 renderer service 独立加载，不进入 Core bootstrap result。
+
+第三方 Plugin UI gateway 在注册订阅后立即交还生命周期控制，插件目录刷新与 Core 工作台加载并行。刷新结束再动态挂载插件 UI；销毁 gateway 会取消刷新，并阻止迟到结果再次挂载。
 
 恢复上次线程后，renderer 以该线程的 `lastSeq` 建立 SSE 订阅。
 

@@ -95,6 +95,21 @@ export class FileGeneratedImageStore implements GeneratedImageStore {
       return [rm(candidate, { recursive: true, force: true })];
     }));
   }
+
+  /** Discover cleanup candidates before paying to scan conversation history. */
+  async listAssetIds(): Promise<string[]> {
+    await mkdir(this.root, { recursive: true });
+    const entries = await readdir(this.root, { withFileTypes: true });
+    return entries.flatMap((entry) => {
+      if (!entry.isDirectory()) return [];
+      try {
+        return [assertSafeRuntimeId(entry.name, 'Generated image asset id')];
+      } catch {
+        // Recovery can remove malformed directories without searching for impossible references.
+        return [];
+      }
+    });
+  }
 }
 
 function safeImageFileName(name: string, type: SafeImageMimeType): string {

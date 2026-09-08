@@ -307,7 +307,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
       ),
     });
     try {
-      const disposeDeclarativePluginUi = await activateDeclarativePluginUiGateway(
+      const disposeDeclarativePluginUi = activateDeclarativePluginUiGateway(
         rendererPlugins,
         dependencies.pluginManagement,
       );
