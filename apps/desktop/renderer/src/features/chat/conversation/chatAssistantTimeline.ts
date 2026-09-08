@@ -1,4 +1,4 @@
-import type { RuntimeMessage } from '@setsuna-desktop/contracts';
+import type { RuntimeMessage, RuntimeToolRun } from '@setsuna-desktop/contracts';
 import type { RuntimePluginUse } from '../plugin-usage/runtimePluginUsage.js';
 import { isTranscriptHiddenRuntimeToolRun } from '../tool-runs/runtimeToolRunVisibility.js';
 import { isActiveRuntimeToolRun } from '../tool-runs/runtimeToolRunState.js';
@@ -15,7 +15,8 @@ export type AssistantRunTimelineBlock =
       contentSegments: AssistantWorkContentSegment[];
       thinkingSegments: AssistantWorkThinkingSegment[];
     }
-  | { type: 'content'; id: string; segment: RuntimeMessage; content: string }
+  | { type: 'content'; id: string; segment: RuntimeMessage; content: string; finalAnswer: boolean }
+  | { type: 'toolResult'; id: string; segment: RuntimeMessage; run: RuntimeToolRun }
   | { type: 'loading'; id: string; segment: RuntimeMessage }
   | { type: 'error'; id: string; segment: RuntimeMessage };
 
@@ -45,6 +46,7 @@ export function createAssistantRunTimeline(
   options: {
     contextCompactionActive?: boolean;
     contextCompactions?: RuntimeMessage[];
+    isTimelineToolResult?: (run: RuntimeToolRun) => boolean;
     messageOrderIds?: string[];
     showThinkingInTranscript?: boolean;
   } = {},
@@ -135,6 +137,7 @@ export function createAssistantRunTimeline(
     if (!parsedEntry) return;
     const { index, parsed } = parsedEntry;
     const inFinalAnswer = finalStarted && index >= finalStartIndex;
+    const hasTimelineToolResult = parsed.toolRuns.some((run) => options.isTimelineToolResult?.(run) === true);
     // Walk the item stream directly so retained thinking and any work that follows
     // final content stay at their real transcript positions.
     parsed.items.forEach((item) => {
@@ -146,7 +149,8 @@ export function createAssistantRunTimeline(
         return;
       }
       if (item.type === 'content') {
-        if (!inFinalAnswer || !isCommittedFinalAnswer(item.segment.segment)) {
+        const finalAnswer = inFinalAnswer && isCommittedFinalAnswer(item.segment.segment);
+        if (!finalAnswer && !hasTimelineToolResult) {
           appendWork(parsed.segment, {
             contentSegments: [item.segment],
             items: [item],
@@ -159,6 +163,7 @@ export function createAssistantRunTimeline(
           id: item.segment.id,
           segment: parsed.segment,
           content: item.segment.content,
+          finalAnswer,
         });
         return;
       }
@@ -167,9 +172,12 @@ export function createAssistantRunTimeline(
         return;
       }
       if (item.type === 'toolRuns') {
-        appendWork(parsed.segment, {
-          items: [item],
-          toolRuns: item.toolRuns,
+        appendOrderedToolRuns({
+          appendWork,
+          flushWork,
+          item,
+          blocks,
+          isTimelineToolResult: options.isTimelineToolResult,
         });
       }
     });
@@ -192,6 +200,56 @@ export function createAssistantRunTimeline(
 
   flushWork();
   return blocks;
+}
+
+function appendOrderedToolRuns({
+  appendWork,
+  blocks,
+  flushWork,
+  isTimelineToolResult,
+  item,
+}: {
+  appendWork: (
+    segment: RuntimeMessage,
+    input: {
+      items?: AssistantWorkItem[];
+      toolRuns?: RuntimeToolRun[];
+    },
+  ) => void;
+  blocks: AssistantRunTimelineBlock[];
+  flushWork: () => void;
+  isTimelineToolResult?: (run: RuntimeToolRun) => boolean;
+  item: Extract<AssistantWorkItem, { type: 'toolRuns' }>;
+}): void {
+  if (!item.toolRuns.some((run) => isTimelineToolResult?.(run) === true)) {
+    appendWork(item.segment, { items: [item], toolRuns: item.toolRuns });
+    return;
+  }
+  let workRuns: RuntimeToolRun[] = [];
+  const flushWorkRuns = () => {
+    if (!workRuns.length) return;
+    appendWork(item.segment, {
+      items: [{ ...item, id: `${item.id}:chunk:${workRuns[0]?.id ?? 'work'}`, toolRuns: workRuns }],
+      toolRuns: workRuns,
+    });
+    workRuns = [];
+  };
+
+  for (const run of item.toolRuns) {
+    if (isTimelineToolResult?.(run) !== true) {
+      workRuns.push(run);
+      continue;
+    }
+    flushWorkRuns();
+    flushWork();
+    blocks.push({
+      type: 'toolResult',
+      id: `${item.segment.id}:tool-result:${run.id}`,
+      segment: item.segment,
+      run,
+    });
+  }
+  flushWorkRuns();
 }
 
 function orderedAssistantTimelineMessages(

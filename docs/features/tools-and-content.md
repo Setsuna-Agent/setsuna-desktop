@@ -75,7 +75,7 @@ Plugin Management 是 Plugin catalog 和管理事务的业务 owner，横跨 run
 
 | 进程 | 所有权 |
 | --- | --- |
-| Runtime | 聚合 snapshot、市场/已安装详情、install/update/remove、Hook 状态、extension trust |
+| Runtime | 聚合 snapshot、市场/已安装详情、install/update/remove、Hook 状态、extension trust、可信 sandbox page 源码读取 |
 | Main | 本地目录选择、可信 sender 校验、通过 RuntimeHost 安装绝对目录 |
 | Preload | `plugins` 子桥，只暴露固定本地安装入口 |
 | Renderer | Plugin/Hook/extension state service、详情和 mutation 收敛 |
@@ -86,6 +86,7 @@ Plugin Management 还拥有：
 
 - 内置市场与已安装 Bundle 的聚合投影。
 - Plugin item 详情读取。
+- 已信任 Renderer UI document 的完整 hash 快照读取。
 - 更新、卸载和 extension trust。
 - Plugin Hook 的启停，以及 legacy standalone Hook 的最窄清理接口。
 - catalog revision，供 Agent turn 在跨线程 mutation 后决定是否刷新扩展快照。

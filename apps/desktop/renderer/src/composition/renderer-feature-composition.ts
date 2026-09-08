@@ -63,6 +63,10 @@ import {
 } from '@setsuna-desktop/feature-network-proxy/renderer';
 import { terminalRendererFeature } from '@setsuna-desktop/feature-terminal/renderer';
 import {
+  uiCardRendererFeature,
+  uiCardRendererHostCapability,
+} from '@setsuna-desktop/feature-ui-card/renderer';
+import {
   createNoopUsageRendererStateService,
   usageRendererStateCapability,
 } from '@setsuna-desktop/feature-usage/contracts';
@@ -104,6 +108,7 @@ import { activateBuiltinRendererPlugins } from './builtin-renderer-plugins.js';
 import type { BuiltinRendererFeatureServices } from './BuiltinRendererFeatureServicesBoundary.js';
 import { activateDeclarativePluginUiGateway } from '../kernel/declarative-plugin-ui/gateway.js';
 import { createCapabilitiesRefreshCoordinator } from './capabilities-refresh-coordinator.js';
+import { SandboxedUiFrame } from '../kernel/sandboxed-plugin-ui/SandboxedUiFrame.js';
 
 const rendererFeatures = defineRendererFeatureHost({
   required: [
@@ -117,6 +122,7 @@ const rendererFeatures = defineRendererFeatureHost({
     runtimeActivityRendererFeature,
     skillsRendererFeature,
     terminalRendererFeature,
+    uiCardRendererFeature,
     updaterRendererFeature,
     windowsSandboxRendererFeature,
     workspaceAppsRendererFeature,
@@ -220,6 +226,10 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
           openExternal: (url: string) => window.setsunaDesktop?.links.openExternal(url)
             ?? Promise.resolve(false),
         }),
+      ),
+      provideHostCapability(
+        uiCardRendererHostCapability,
+        Object.freeze({ SandboxedUiFrame }),
       ),
       provideHostCapability(
         updaterRendererHostCapability,

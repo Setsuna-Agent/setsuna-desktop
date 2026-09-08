@@ -6,7 +6,8 @@ import {
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import type { ButtonHTMLAttributes, ComponentType, ReactNode } from 'react';
 
-export type RendererAppRouteId = 'capabilities' | 'chat' | 'settings';
+export type RendererAppRouteId = 'capabilities' | 'chat' | 'plugin' | 'settings';
+export type RendererPluginViewKey = string;
 
 export type AppReadySlotProps = Readonly<{
   /** Host implementation used by the built-in shell contribution. */
@@ -21,6 +22,20 @@ export type ShellRouteSlotProps = Readonly<{
 
 export type ShellRegionSlotProps = Readonly<{
   renderDefault(): ReactNode;
+}>;
+
+export type ShellSidebarPluginEntrySlotProps = Readonly<{
+  activeViewKey: RendererPluginViewKey | null;
+  projectId?: string;
+  threadId?: string;
+  onOpen(viewKey: RendererPluginViewKey): void;
+}>;
+
+export type ShellPluginPageSlotProps = Readonly<{
+  cwd?: string;
+  projectId?: string;
+  threadId?: string;
+  renderUnavailable(): ReactNode;
 }>;
 
 export type ShellTopbarIconButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> & Readonly<{
@@ -54,6 +69,20 @@ export const shellSidebarSlot = defineSingleRendererSlot<ShellRegionSlotProps>({
   userConfigurable: true,
 });
 
+/** Host-owned outlet for declarative Plugin feature navigation only. */
+export const shellSidebarPluginEntrySlot = defineListRendererSlot<ShellSidebarPluginEntrySlotProps>({
+  id: 'renderer.shell.sidebar.plugin-entry',
+  scope: 'app',
+  userConfigurable: true,
+});
+
+/** Standalone Plugin pages are keyed so install/remove can mount transactionally. */
+export const shellPluginPageSlot = defineKeyedRendererSlot<RendererPluginViewKey, ShellPluginPageSlotProps>({
+  id: 'renderer.shell.plugin-page',
+  scope: 'app',
+  userConfigurable: true,
+});
+
 export const shellTopbarTitleSlot = defineSingleRendererSlot<ShellRegionSlotProps>({
   id: 'renderer.shell.topbar.title',
   scope: 'app',
@@ -83,3 +112,7 @@ export const shellOverlaySlot = defineSingleRendererSlot<ShellRegionSlotProps>({
   scope: 'app',
   userConfigurable: true,
 });
+
+export function rendererPluginViewKey(pluginId: string, contributionId: string): RendererPluginViewKey {
+  return `${pluginId}/${contributionId}`;
+}

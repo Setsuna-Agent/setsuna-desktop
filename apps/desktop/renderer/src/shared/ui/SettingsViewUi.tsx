@@ -22,6 +22,7 @@ import { Dropdown, type MenuProps } from 'antd';
 import { ChevronRight, MoreHorizontal } from 'lucide-react';
 import { Component, useEffect, type ErrorInfo, type ReactNode } from 'react';
 import { useToast } from '../../app/providers/ToastProvider.js';
+import { SandboxedUiFrame } from '../../kernel/sandboxed-plugin-ui/SandboxedUiFrame.js';
 import {
   Button,
   Checkbox,
@@ -63,6 +64,7 @@ export const settingsViewUi = Object.freeze({
   PageOutlet: SettingsFeaturePageOutlet,
   PluginIcon,
   Row: SettingsRow,
+  SandboxedUiFrame,
   Section: SettingsSection,
   SelectField: SettingsSelectField,
   SkillIcon,

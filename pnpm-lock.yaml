@@ -35,6 +35,7 @@ importers:
       '@setsuna-desktop/feature-skills': workspace:*
       '@setsuna-desktop/feature-terminal': workspace:*
       '@setsuna-desktop/feature-thread-title-generation': workspace:*
+      '@setsuna-desktop/feature-ui-card': workspace:*
       '@setsuna-desktop/feature-updater': workspace:*
       '@setsuna-desktop/feature-usage': workspace:*
       '@setsuna-desktop/feature-vision-recognition': workspace:*
@@ -109,6 +110,7 @@ importers:
       '@setsuna-desktop/feature-skills': link:packages/features/skills
       '@setsuna-desktop/feature-terminal': link:packages/features/terminal
       '@setsuna-desktop/feature-thread-title-generation': link:packages/features/thread-title-generation
+      '@setsuna-desktop/feature-ui-card': link:packages/features/ui-card
       '@setsuna-desktop/feature-updater': link:packages/features/updater
       '@setsuna-desktop/feature-usage': link:packages/features/usage
       '@setsuna-desktop/feature-vision-recognition': link:packages/features/vision-recognition
@@ -507,6 +509,18 @@ importers:
       react: 18.3.1
 
   packages/features/thread-title-generation:
+    specifiers:
+      '@setsuna-desktop/contracts': workspace:*
+      '@setsuna-desktop/feature-core': workspace:*
+      '@setsuna-desktop/renderer-contracts': workspace:*
+      react: ^18.3.1
+    dependencies:
+      '@setsuna-desktop/contracts': link:../../contracts
+      '@setsuna-desktop/feature-core': link:../../feature-core
+      '@setsuna-desktop/renderer-contracts': link:../../renderer-contracts
+      react: 18.3.1
+
+  packages/features/ui-card:
     specifiers:
       '@setsuna-desktop/contracts': workspace:*
       '@setsuna-desktop/feature-core': workspace:*
@@ -5968,7 +5982,7 @@ packages:
 
   /glob/7.2.3:
     resolution: {integrity: sha512-nFR0zLpU2YCaRxwoCJvL6UvCH2JFyFVIvwTLsIf21AuHlMskA1hhTdk+LlYJtOlYt9v6dvszD2BGRqBL+iQK9Q==}
-    deprecated: Glob versions prior to v9 are no longer supported
+    deprecated: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
     dependencies:
       fs.realpath: 1.0.0
       inflight: 1.0.6

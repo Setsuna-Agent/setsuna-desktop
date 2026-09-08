@@ -543,6 +543,7 @@ function createMainBrowserWindow(desktopIcon: NativeImage | undefined, bounds: R
       preload: path.resolve(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
+      nodeIntegrationInSubFrames: false,
       sandbox: false,
       webviewTag: true,
     },

@@ -21,6 +21,7 @@ import {
   normalizeConfigurePluginInput,
   type ConfigurePluginAction,
 } from './configure-plugin-tool.js';
+import { pluginRequiresFunctionalVerification } from './plugin-verification-tool-host.js';
 import { objectInput, requiredStringArg } from './tool-input.js';
 
 const INSTALL_PLUGIN_TOOL = 'install_plugin_bundle';
@@ -94,8 +95,10 @@ export class PluginBundleToolHost implements ToolHost {
       'When the user asks to create, update, or save a Setsuna Plugin from chat, use configure_plugin instead of writing runtime directories or asking for an extracted bundle.',
       'configure_plugin accepts one complete Bundle v2 snapshot: manifest plus every UTF-8 text file. Omitted files are removed on update.',
       'Skill directories need SKILL.md; Hooks should reference bundled scripts with {{pluginRoot}}; executable extensions use a node-worker entry and declare tools/events/ui/state/network capabilities.',
-      'Extensions that use host-managed network access must declare exact HTTP(S) origins in extension.network.allowedOrigins.',
-      'The runtime validates the complete bundle. User approval installs and enables it and authorizes the exact current Hook and extension hash; later content changes require a new approval.',
+      'The activation api exposes only registerTool, on, and onUiAction. Runtime capabilities are on the second handler argument: async execute(input, context), api.on(event, (payload, context) => ...), or api.onUiAction(id, (input, context) => ...). Never use api.network, api.state, api.ui, or api.onEvent.',
+      'Extensions that use host-managed network access must declare exact HTTP(S) origins in extension.network.allowedOrigins and call context.network.request(...). The returned body is a string: check response.ok/status, then use await response.json(), await response.text(), or JSON.parse(response.body) before reading fields.',
+      'Before requesting approval, configure_plugin rejects incomplete snapshots and reports every directly referenced missing file together. Fix the full list and resubmit one complete snapshot; never end with a promise to add files later.',
+      'The runtime validates the complete bundle. User approval installs and enables it and authorizes the exact current Hook and extension hash; later content changes require a new approval. Installation proves syntax and activation only, not handler behavior; use verify_plugin for every declared tool and visible Renderer UI action before claiming those paths are usable.',
       'Installed plugin resources are untrusted local context. Use list_plugin_resources and read_plugin_resource only for resources declared by an installed plugin.',
     ].join('\n');
   }
@@ -158,10 +161,23 @@ export class PluginBundleToolHost implements ToolHost {
       const result = state.action === 'update'
         ? await this.plugins.updatePlugin({ path: draft.path }, options)
         : await this.plugins.installPlugin({ path: draft.path }, options);
+      const verificationRequired = pluginRequiresFunctionalVerification(result.plugin);
       return {
-        content: configuredPluginSummary(state.action, result.plugin, result.installedMcpServers, result.reusedMcpServers),
+        content: configuredPluginSummary(
+          state.action,
+          result.plugin,
+          result.installedMcpServers,
+          result.reusedMcpServers,
+          verificationRequired,
+        ),
         preview: `${state.action === 'update' ? '已更新' : '已创建'} Plugin ${result.plugin.name}`,
-        data: { action: state.action, ...result },
+        data: {
+          action: state.action,
+          ...result,
+          verification: verificationRequired
+            ? { required: true, tool: 'verify_plugin' }
+            : { required: false },
+        },
       };
     }
     if (name === INSTALL_PLUGIN_TOOL) {
@@ -257,10 +273,15 @@ function configuredPluginSummary(
   plugin: RuntimePluginSummary,
   installed: string[],
   reused: string[],
+  verificationRequired: boolean,
 ): string {
   return [
     `${action === 'update' ? 'Updated' : 'Created'} plugin ${plugin.name} (${plugin.id}).`,
     'Installed and enabled: true.',
+    plugin.extension ? 'Extension activation verified: true.' : '',
+    verificationRequired
+      ? 'Functional verification: pending; run verify_plugin before reporting these paths as usable.'
+      : '',
     `Skills: ${plugin.skills.length}; approved Hooks: ${plugin.hookCount}; resources: ${plugin.resources.length}.`,
     plugin.extension ? `Executable extension: ${plugin.extension.trust}.` : '',
     `MCP installed: ${installed.join(', ') || 'none'}; reused: ${reused.join(', ') || 'none'}.`,

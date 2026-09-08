@@ -32,6 +32,8 @@ export type RuntimeExtensionManifest = {
   runtime: 'node-worker';
   capabilities: RuntimeExtensionCapability[];
   network?: RuntimeExtensionNetworkPolicy;
+  /** Cards generated at runtime by declared tools; source stays in each tool result. */
+  uiCards?: readonly import('./plugin-ui-card.js').RuntimePluginUiCardDeclaration[];
   rendererUi?: import('./plugin-ui.js').RuntimePluginUiManifest;
 };
 export type RuntimeExtensionTrustState = 'trusted' | 'untrusted' | 'modified';

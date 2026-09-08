@@ -1,20 +1,17 @@
-import { mkdir, mkdtemp, readFile, readdir, stat, symlink, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, readFile, readdir, stat, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { FilePluginBundleStore } from '../../../src/adapters/plugin/file-plugin-bundle-store.js';
-import { FileSkillRegistry } from '../../../src/adapters/skill/file-skill-registry.js';
-import { FileConfigStore } from '../../../src/adapters/store/file-config-store.js';
-import { FileMcpStore } from '../../../src/adapters/store/file-mcp-store.js';
-import { FileExtensionStateStore } from '../../../src/extensions/file-extension-state-store.js';
-import { InMemoryDesktopNativeBridge } from '../../support/in-memory-secret-store.js';
 import { discoverRuntimeHooks } from '../../../src/hooks/runtime-hooks.js';
-import { systemClock } from '../../../src/ports/clock.js';
-
-const ONE_PIXEL_PNG = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
-  'base64',
-);
+import {
+  ONE_PIXEL_PNG,
+  addExecutableExtension,
+  addSandboxedRendererPage,
+  createPluginFixture,
+  createPluginRuntime,
+  patchPluginManifest,
+  readPluginManifestFixture,
+  writePluginManifestFixture,
+} from './support/file-plugin-bundle-store-fixture.js';
 
 describe('file plugin bundle store', () => {
   it('keeps executable extensions untrusted until the exact installed bundle hash is approved', async () => {
@@ -44,6 +41,76 @@ describe('file plugin bundle store', () => {
 
     const retrusted = await runtime.plugins.setExtensionTrust('demo', true);
     expect(retrusted.plugins[0].extension?.trust).toBe('trusted');
+  });
+
+  it('persists UI card metadata and rejects declarations without a matching Plugin tool', async () => {
+    const fixture = await createPluginFixture();
+    await addExecutableExtension(fixture.bundleDir);
+    const manifest = await readPluginManifestFixture(fixture.bundleDir);
+    const extension = manifest.extension as Record<string, unknown>;
+    const preview = { html: '<main>Summary</main>' };
+    const uiCards = [{ id: 'document.summary', label: 'Document summary', toolName: 'analyze_document', preview }];
+    await patchPluginManifest(fixture.bundleDir, { extension: { ...extension, uiCards } });
+    const runtime = await createPluginRuntime(fixture.root);
+    const installed = await runtime.plugins.installPlugin({ path: fixture.bundleDir });
+    expect(installed.plugin.extension?.uiCards).toMatchObject(uiCards);
+
+    const invalid = [{ id: 'unknown.card', label: 'Unknown card', toolName: 'missing_tool', preview }];
+    await patchPluginManifest(fixture.bundleDir, { extension: { ...extension, uiCards: invalid } });
+    await expect(runtime.plugins.inspectPlugin({ path: fixture.bundleDir }))
+      .rejects.toThrow('references an undeclared tool: missing_tool');
+  });
+
+  it('projects previews from the legacy root uiCards location for installed bundles', async () => {
+    const fixture = await createPluginFixture();
+    await addExecutableExtension(fixture.bundleDir);
+    const uiCards = [{
+      id: 'document.summary',
+      label: 'Document summary',
+      toolName: 'analyze_document',
+      preview: { html: '<main>Summary</main>' },
+    }];
+    await patchPluginManifest(fixture.bundleDir, { uiCards });
+    const runtime = await createPluginRuntime(fixture.root);
+    const installed = await runtime.plugins.installPlugin({ path: fixture.bundleDir });
+    expect(installed.plugin.extension?.uiCards).toBeUndefined();
+
+    await expect(runtime.plugins.listPlugins()).resolves.toMatchObject({
+      plugins: [{ extension: { uiCards } }],
+    });
+    const [record] = await runtime.plugins.listInstalledRecords();
+    expect(record.extension?.uiCards).toBeUndefined();
+  });
+
+  it('isolates stale persisted Renderer UI metadata without breaking Plugin reads', async () => {
+    const fixture = await createPluginFixture();
+    await addExecutableExtension(fixture.bundleDir);
+    const runtime = await createPluginRuntime(fixture.root);
+    await runtime.plugins.installPlugin({ path: fixture.bundleDir });
+    const indexPath = path.join(runtime.dataDir, 'plugins.json');
+    const index = JSON.parse(await readFile(indexPath, 'utf8')) as {
+      plugins: Array<{ extension?: Record<string, unknown> }>;
+    };
+    const extension = index.plugins[0]?.extension;
+    if (!extension) throw new Error('Expected installed extension metadata.');
+    extension.rendererUi = {
+      schemaVersion: 1,
+      actions: [],
+      contributions: [{
+        id: 'preferences.settings',
+        slot: 'renderer.capabilities.plugin.details',
+        stateKey: 'preferences',
+        tree: { type: 'text', text: 'Old settings UI' },
+      }],
+    };
+    await writeFile(indexPath, JSON.stringify(index, null, 2));
+
+    const [record] = await runtime.plugins.listInstalledRecords();
+    expect(record.extension).toMatchObject({ capabilities: ['tools', 'events', 'state', 'ui'] });
+    expect(record.extension).not.toHaveProperty('rendererUi');
+    await expect(runtime.plugins.listPlugins()).resolves.toMatchObject({
+      plugins: [{ id: 'demo', extension: expect.not.objectContaining({ rendererUi: expect.anything() }) }],
+    });
   });
 
   it('does not carry executable-extension trust across a changed local update', async () => {
@@ -165,6 +232,26 @@ describe('file plugin bundle store', () => {
     await patchPluginManifest(fixture.bundleDir, {
       extension: {
         ...extension,
+        capabilities: ['ui'],
+        rendererUi: {
+          schemaVersion: 2,
+          actions: [],
+          contributions: [{
+            id: 'plugin.page',
+            slot: 'renderer.plugin.page',
+            navigation: { label: 'Plugin page' },
+            data: { stateKey: 'plugin.view', scope: 'global' },
+            tree: { type: 'text', text: { path: 'status', fallback: 'Idle' } },
+          }],
+        },
+      },
+    });
+    await expect(runtime.plugins.inspectPlugin({ path: fixture.bundleDir }))
+      .rejects.toThrow('state binding requires the state capability');
+
+    await patchPluginManifest(fixture.bundleDir, {
+      extension: {
+        ...extension,
         rendererUi: {
           ...rendererUi,
           contributions: [{
@@ -177,6 +264,61 @@ describe('file plugin bundle store', () => {
     });
     await expect(runtime.plugins.inspectPlugin({ path: fixture.bundleDir }))
       .rejects.toThrow('Slot is not allowed');
+  });
+
+  it('rejects manifest resource paths whose casing differs from the bundle', async () => {
+    const fixture = await createPluginFixture();
+    await addExecutableExtension(fixture.bundleDir);
+    const { resources } = await addSandboxedRendererPage(fixture.bundleDir);
+    const pageScript = resources.find((resource) => resource.id === 'page-js');
+    if (!pageScript) throw new Error('Expected the Renderer UI script resource.');
+    pageScript.path = 'UI/page.js';
+    await patchPluginManifest(fixture.bundleDir, { resources });
+    const runtime = await createPluginRuntime(fixture.root);
+
+    await expect(runtime.plugins.inspectPlugin({ path: fixture.bundleDir }))
+      .rejects.toThrow('Plugin path casing does not match the bundle: UI/page.js');
+  });
+
+  it('binds sandboxed Plugin pages only to declared, typed UI resources', async () => {
+    const fixture = await createPluginFixture();
+    await addExecutableExtension(fixture.bundleDir);
+    const { rendererUi, resources } = await addSandboxedRendererPage(fixture.bundleDir);
+    const runtime = await createPluginRuntime(fixture.root);
+
+    await expect(runtime.plugins.inspectPlugin({ path: fixture.bundleDir })).resolves.toMatchObject({
+      extension: { rendererUi },
+      resources: expect.arrayContaining([expect.objectContaining({ id: 'page-html' })]),
+    });
+
+    await patchPluginManifest(fixture.bundleDir, {
+      resources: resources.filter((resource) => resource.id !== 'page-js'),
+    });
+    await expect(runtime.plugins.inspectPlugin({ path: fixture.bundleDir }))
+      .rejects.toThrow('resource is not declared: page-js');
+  });
+
+  it('serves sandboxed page bytes only from the exact trusted bundle snapshot', async () => {
+    const fixture = await createPluginFixture();
+    await addExecutableExtension(fixture.bundleDir);
+    await addSandboxedRendererPage(fixture.bundleDir);
+    const runtime = await createPluginRuntime(fixture.root);
+    await runtime.plugins.installPlugin({ path: fixture.bundleDir });
+
+    await expect(runtime.plugins.readTrustedRendererUiDocument('demo', 'plugin.page'))
+      .rejects.toThrow('not trusted');
+    await runtime.plugins.setExtensionTrust('demo', true);
+    await expect(runtime.plugins.readTrustedRendererUiDocument('demo', 'plugin.page')).resolves.toEqual({
+      revision: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      html: '<main id="app"></main>\n',
+      css: '#app { display: grid; }\n',
+      js: 'window.setsunaUI.ready.then(() => {});\n',
+    });
+
+    const [installed] = await runtime.plugins.listInstalledRecords();
+    await writeFile(path.join(installed.installPath, 'ui', 'page.js'), 'location.href = "https://example.com/leak";\n');
+    await expect(runtime.plugins.readTrustedRendererUiDocument('demo', 'plugin.page'))
+      .rejects.toThrow('no longer trusted');
   });
 
   it('requires exact origins for host-managed extension networking', async () => {
@@ -244,7 +386,10 @@ describe('file plugin bundle store', () => {
     await runtime.plugins.installPlugin({ path: fixture.bundleDir });
     const finishMutation = vi.fn(async () => undefined);
     const beginPluginMutation = vi.fn(async () => finishMutation);
-    runtime.plugins.setRuntimeMutationCoordinator({ beginPluginMutation });
+    runtime.plugins.setRuntimeMutationCoordinator({
+      beginPluginMutation,
+      validatePluginActivation: vi.fn(async () => undefined),
+    });
 
     await runtime.plugins.setExtensionTrust('demo', true);
     await patchPluginManifest(fixture.bundleDir, { version: '2.0.0' });
@@ -254,6 +399,88 @@ describe('file plugin bundle store', () => {
     expect(beginPluginMutation.mock.calls).toEqual([['demo'], ['demo'], ['demo']]);
     expect(finishMutation).toHaveBeenCalledTimes(3);
   });
+
+  it('keeps the installed bundle when a trusted staged update cannot activate', async () => {
+    const fixture = await createPluginFixture();
+    await addExecutableExtension(fixture.bundleDir);
+    const runtime = await createPluginRuntime(fixture.root);
+    await runtime.plugins.installPlugin({ path: fixture.bundleDir });
+    const validatePluginActivation = vi.fn(async () => {
+      throw new Error('staged worker failed');
+    });
+    runtime.plugins.setRuntimeMutationCoordinator({
+      beginPluginMutation: vi.fn(async () => async () => undefined),
+      validatePluginActivation,
+    });
+    await patchPluginManifest(fixture.bundleDir, { version: '2.0.0' });
+
+    await expect(runtime.plugins.updatePlugin(
+      { path: fixture.bundleDir },
+      { trustExtension: true },
+    )).rejects.toThrow('staged worker failed');
+    await expect(runtime.plugins.listPlugins()).resolves.toMatchObject({
+      plugins: [{ id: 'demo', version: '1.0.0' }],
+    });
+    expect(validatePluginActivation).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'demo',
+      installPath: expect.stringContaining('.demo.'),
+    }));
+  });
+
+  it('does not install a trusted extension when staged activation fails', async () => {
+    const fixture = await createPluginFixture();
+    await addExecutableExtension(fixture.bundleDir);
+    const runtime = await createPluginRuntime(fixture.root);
+    const validatePluginActivation = vi.fn(async () => {
+      throw new Error('staged worker failed');
+    });
+    runtime.plugins.setRuntimeMutationCoordinator({
+      beginPluginMutation: vi.fn(async () => async () => undefined),
+      validatePluginActivation,
+    });
+
+    await expect(runtime.plugins.installPlugin(
+      { path: fixture.bundleDir },
+      { trustExtension: true },
+    )).rejects.toThrow('staged worker failed');
+    await expect(runtime.plugins.listPlugins()).resolves.toEqual({ plugins: [] });
+    expect(validatePluginActivation).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'demo',
+      installPath: expect.stringContaining('.demo.'),
+    }));
+  });
+
+  it.each(['install', 'update'] as const)(
+    'rejects a trusted %s when activation mutates the staged bundle',
+    async (operation) => {
+      const fixture = await createPluginFixture();
+      await addExecutableExtension(fixture.bundleDir);
+      const runtime = await createPluginRuntime(fixture.root);
+      if (operation === 'update') {
+        await runtime.plugins.installPlugin({ path: fixture.bundleDir });
+        await patchPluginManifest(fixture.bundleDir, { version: '2.0.0' });
+      }
+      const validatePluginActivation = vi.fn(async (plugin) => {
+        await writeFile(
+          path.join(plugin.installPath, 'extension', 'entry.mjs'),
+          'export default () => { /* mutated during activation */ };\n',
+        );
+      });
+      runtime.plugins.setRuntimeMutationCoordinator({
+        beginPluginMutation: vi.fn(async () => async () => undefined),
+        validatePluginActivation,
+      });
+
+      const mutation = operation === 'install'
+        ? runtime.plugins.installPlugin({ path: fixture.bundleDir }, { trustExtension: true })
+        : runtime.plugins.updatePlugin({ path: fixture.bundleDir }, { trustExtension: true });
+      await expect(mutation).rejects.toThrow('Plugin bundle changed during activation validation');
+      await expect(runtime.plugins.listPlugins()).resolves.toMatchObject({
+        plugins: operation === 'install' ? [] : [{ id: 'demo', version: '1.0.0' }],
+      });
+      expect(validatePluginActivation).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('installs and removes bundled Skills, MCP, Hooks, and resources', async () => {
     const fixture = await createPluginFixture();
@@ -635,111 +862,3 @@ describe('file plugin bundle store', () => {
     await expect(runtime.plugins.listPlugins()).resolves.toEqual({ plugins: [] });
   });
 });
-
-async function createPluginRuntime(root: string) {
-  const dataDir = path.join(root, 'runtime');
-  const builtinDir = path.join(root, 'builtin-skills');
-  await mkdir(builtinDir, { recursive: true });
-  const skills = new FileSkillRegistry(builtinDir, dataDir);
-  const mcp = new FileMcpStore(dataDir, new InMemoryDesktopNativeBridge());
-  const config = new FileConfigStore(dataDir);
-  const extensionState = new FileExtensionStateStore(dataDir);
-  const invalidateServer = vi.fn(async () => undefined);
-  const plugins = new FilePluginBundleStore(
-    dataDir,
-    skills,
-    mcp,
-    { invalidateServer },
-    config,
-    systemClock,
-    extensionState,
-  );
-  return { config, dataDir, extensionState, invalidateServer, mcp, plugins, skills };
-}
-
-async function readPluginManifestFixture(bundleDir: string): Promise<Record<string, unknown>> {
-  return JSON.parse(await readFile(path.join(bundleDir, '.setsuna-plugin', 'plugin.json'), 'utf8')) as Record<string, unknown>;
-}
-
-async function writePluginManifestFixture(bundleDir: string, manifest: Record<string, unknown>): Promise<void> {
-  await writeFile(path.join(bundleDir, '.setsuna-plugin', 'plugin.json'), JSON.stringify(manifest, null, 2));
-}
-
-async function patchPluginManifest(bundleDir: string, patch: Record<string, unknown>): Promise<void> {
-  await writePluginManifestFixture(bundleDir, { ...await readPluginManifestFixture(bundleDir), ...patch });
-}
-
-async function addExecutableExtension(bundleDir: string): Promise<void> {
-  await mkdir(path.join(bundleDir, 'extension'), { recursive: true });
-  await writeFile(path.join(bundleDir, 'extension', 'entry.mjs'), 'export default () => {};\n');
-  await patchPluginManifest(bundleDir, {
-    schemaVersion: 2,
-    extension: {
-      apiVersion: 1,
-      runtime: 'node-worker',
-      entry: 'extension/entry.mjs',
-      capabilities: ['tools', 'events', 'state', 'ui'],
-    },
-  });
-}
-
-async function createPluginFixture(parent?: string): Promise<{ root: string; bundleDir: string }> {
-  const root = parent ?? await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-test-'));
-  await mkdir(root, { recursive: true });
-  const bundleDir = path.join(root, 'bundle');
-  await Promise.all([
-    mkdir(path.join(bundleDir, '.setsuna-plugin'), { recursive: true }),
-    mkdir(path.join(bundleDir, 'skills', 'docs-helper'), { recursive: true }),
-    mkdir(path.join(bundleDir, 'hooks'), { recursive: true }),
-    mkdir(path.join(bundleDir, 'resources'), { recursive: true }),
-  ]);
-  await Promise.all([
-    writeFile(path.join(bundleDir, 'skills', 'docs-helper', 'SKILL.md'), [
-      '---',
-      'name: Plugin Docs Helper',
-      'description: Reads bundled documentation.',
-      '---',
-      '',
-      '# Plugin Docs Helper',
-      '',
-      'Use the bundled docs.',
-    ].join('\r\n')),
-    writeFile(path.join(bundleDir, 'hooks', 'post.mjs'), 'process.exit(0);\n'),
-    writeFile(path.join(bundleDir, 'resources', 'guide.md'), '# Bundled guide\n'),
-    writeFile(path.join(bundleDir, 'resources', 'logo.png'), ONE_PIXEL_PNG),
-    writeFile(path.join(bundleDir, '.setsuna-plugin', 'plugin.json'), JSON.stringify({
-      schemaVersion: 1,
-      id: 'demo',
-      name: 'Demo Plugin',
-      icon: 'context7',
-      version: '1.0.0',
-      description: 'Plugin fixture',
-      tools: [{
-        name: 'analyze_document',
-        description: 'Analyze the current document.',
-      }],
-      skills: ['skills/docs-helper'],
-      mcpServers: [{
-        key: 'plugin_docs',
-        label: 'Plugin Docs',
-        description: 'Search bundled documentation.',
-        transport: 'streamable_http',
-        url: 'https://docs.example/mcp',
-      }],
-      hooks: [{
-        id: 'audit-read',
-        name: 'Audit reads',
-        description: 'Records documentation reads.',
-        eventName: 'PostToolUse',
-        matcher: 'read_file',
-        command: 'node {{pluginRoot}}/hooks/post.mjs',
-        timeoutSec: 10,
-      }],
-      resources: [
-        { id: 'guide', label: 'Guide', path: 'resources/guide.md' },
-        { id: 'logo', label: 'Logo', path: 'resources/logo.png' },
-      ],
-    }, null, 2)),
-  ]);
-  return { root, bundleDir };
-}

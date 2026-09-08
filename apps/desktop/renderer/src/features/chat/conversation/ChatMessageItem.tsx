@@ -372,19 +372,28 @@ function AssistantRunContent({
     () => createAssistantRunTimeline(displaySegments, pluginUses, {
       contextCompactionActive,
       contextCompactions: item.contextCompactions ?? [],
+      isTimelineToolResult: (run) => run.status === 'success' && (
+        resolveRuntimeFeatureToolResult(resolveFeatureToolResult, run)
+          ?.contribution.placement === 'assistant-timeline'
+      ),
       messageOrderIds: item.messageIds,
       showThinkingInTranscript,
     }),
-    [contextCompactionActive, displaySegments, item.contextCompactions, item.messageIds, pluginUses, showThinkingInTranscript],
+    [contextCompactionActive, displaySegments, item.contextCompactions, item.messageIds, pluginUses, resolveFeatureToolResult, showThinkingInTranscript],
   );
   const toolAttachments = item.toolAttachments ?? [];
   const toolRuns = useMemo(() => displaySegments.flatMap((segment) => segment.toolRuns ?? []), [displaySegments]);
   const hasRenderableContent = timelineBlocks.length > 0 || toolAttachments.length > 0;
   const hasWorkBlock = timelineBlocks.some((block) => block.type === 'work');
+  const hasAnchoredTimelineContent = timelineBlocks.some((block) => (
+    block.type === 'content' || block.type === 'toolResult'
+  ));
   const hasActiveThinking = timelineBlocks.some((block) => (
     block.type === 'work' && block.thinkingSegments.some((segment) => segment.active)
   ));
-  const hasFinalAnswerContent = timelineBlocks.some((block) => block.type === 'content' && block.content.trim());
+  const hasFinalAnswerContent = timelineBlocks.some((block) => (
+    block.type === 'content' && block.finalAnswer && block.content.trim()
+  ));
   const hasHiddenOnlyFinalAnswer = !hasFinalAnswerContent && displaySegments.some((segment) => (
     segment.phase === 'final_answer'
     && segment.status !== 'streaming'
@@ -392,7 +401,10 @@ function AssistantRunContent({
     && !visibleMarkdownContent(segment.content).trim()
   ));
   const workHistoryState = workHistoryDisplayState({ hasFinalAnswerContent, runActive: active });
-  const showActiveWorkPlaceholder = active && status !== 'error' && !hasWorkBlock;
+  const showActiveWorkPlaceholder = active
+    && status !== 'error'
+    && !hasWorkBlock
+    && !hasAnchoredTimelineContent;
   // 工具行本身已经提供实时进度，只有模型继续处理且没有活动工具时才显示尾部等待反馈。
   const showTrailingLoading = !hasActiveThinking && shouldShowAssistantTrailingLoading({
     active,
@@ -614,8 +626,8 @@ function renderAssistantTimelinePlan({
       return;
     }
 
-    if (!(hideFinalContent && node.block.type === 'content')) {
-      nodes.push(assistantTimelineNode(node.block, active, t));
+    if (!(hideFinalContent && node.block.type === 'content' && node.block.finalAnswer)) {
+      nodes.push(assistantTimelineNode(node.block, active, onAnswerApproval, t));
     }
     if (node.guidanceAfter.length) {
       nodes.push(<GuidanceMessageList handledMessageIds={handledGuidanceMessageIds} key={`${node.block.id}:guidance`} markerMode="handled" messages={node.guidanceAfter} />);
@@ -835,7 +847,12 @@ function hasExpandedWorkHistoryPanel(panelIds: Set<string>, itemId: string): boo
   return [...panelIds].some((panelId) => panelId.startsWith(prefix));
 }
 
-function assistantTimelineNode(block: Exclude<AssistantRunTimelineBlock, { type: 'work' }>, runActive: boolean, t: Translate): ReactNode {
+function assistantTimelineNode(
+  block: Exclude<AssistantRunTimelineBlock, { type: 'work' }>,
+  runActive: boolean,
+  onAnswerApproval: AnswerApprovalHandler,
+  t: Translate,
+): ReactNode {
   if (block.type === 'content') {
     return (
       <div className="chat-assistant-run__segment" key={block.id}>
@@ -844,6 +861,13 @@ function assistantTimelineNode(block: Exclude<AssistantRunTimelineBlock, { type:
           legacyThinkingTags={block.segment.streamParts === undefined}
           streaming={block.segment.status === 'streaming'}
         />
+      </div>
+    );
+  }
+  if (block.type === 'toolResult') {
+    return (
+      <div className="chat-assistant-run__segment chat-assistant-run__tool-result" key={block.id}>
+        <RuntimeToolRuns onAnswerApproval={onAnswerApproval} runs={[block.run]} />
       </div>
     );
   }

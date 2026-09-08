@@ -1,0 +1,30 @@
+.plugin-ui-card {
+  width: min(100%, 680px);
+}
+
+.plugin-ui-card__frame {
+  border-radius: 16px;
+  clip-path: inset(0 round 16px);
+}
+
+.plugin-ui-card__attribution {
+  min-width: 0;
+  margin-top: 7px;
+  padding: 0 2px;
+  overflow: hidden;
+  color: var(--sd-color-text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plugin-ui-card__unavailable {
+  width: min(100%, 680px);
+  padding: 12px 14px;
+  border: 1px solid var(--sd-color-border);
+  border-radius: var(--sd-radius-md);
+  color: var(--sd-color-text-muted);
+  background: var(--sd-color-surface-muted);
+  font-size: 13px;
+}

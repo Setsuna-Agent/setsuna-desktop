@@ -92,6 +92,18 @@
   overscroll-behavior: contain;
 }
 
+.desktop-agent-sidebar__plugin-entries {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 8px 8px;
+}
+
+.desktop-agent-sidebar__plugin-entries:empty {
+  display: none;
+}
+
 .desktop-agent-sidebar__group {
   flex: 0 0 auto;
   min-width: 0;

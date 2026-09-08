@@ -91,6 +91,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   const [conversationOverviewRendered, setConversationOverviewRendered] = useState(false);
   const [conversationOverviewShowRequest, setConversationOverviewShowRequest] = useState(0);
   const [selectedCapabilitiesPluginId, setSelectedCapabilitiesPluginId] = useState<string | null>(null);
+  const [selectedPluginViewKey, setSelectedPluginViewKey] = useState<string | null>(null);
   // 记录下一次进入设置页时应定位到的分区；普通入口会先清空，避免上一次的直达请求残留。
   const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSectionId | null>(null);
   const [runtimeActivityOpen, setRuntimeActivityOpen] = useState(false);
@@ -121,6 +122,10 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   const openCapabilitiesPlugin = useCallback((pluginId: string) => {
     setSelectedCapabilitiesPluginId(pluginId);
     setActiveView('capabilities');
+  }, [setActiveView]);
+  const openPluginView = useCallback((viewKey: string) => {
+    setSelectedPluginViewKey(viewKey);
+    setActiveView('plugin');
   }, [setActiveView]);
   const openSettings = useCallback(() => {
     setSettingsInitialSection(null);
@@ -394,9 +399,11 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         maxWidth={sidebarMaxWidth}
         minWidth={sidebarMinWidth}
         onOpenCapabilities={openCapabilities}
+        onOpenPluginView={openPluginView}
         onOpenRuntimeActivity={() => setRuntimeActivityOpen(true)}
         onOpenSettings={openSettings}
         onResetDraft={resetComposer}
+        selectedPluginViewKey={selectedPluginViewKey}
         onResizeStep={handleSidebarResizeStep}
         onResizeStart={handleSidebarResizeStart}
         runtimeActivityTriggerRef={runtimeActivityTriggerRef}
@@ -412,6 +419,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         activeWorkspace={activeWorkspace}
         activeView={activeView}
         selectedCapabilitiesPluginId={selectedCapabilitiesPluginId}
+        selectedPluginViewKey={selectedPluginViewKey}
         settingsInitialSection={settingsInitialSection}
         chatActions={chatActions}
         composerKey={composerKey}

@@ -23,6 +23,16 @@ export function registerMainWindowNavigationGuards(
     event.preventDefault();
     openSupportedExternalUrl(url);
   });
+  window.webContents.on('will-frame-navigate', (event) => {
+    if (event.isMainFrame) {
+      if (event.initiator && event.initiator !== window.webContents.mainFrame) event.preventDefault();
+      return;
+    }
+    if (isInitialSandboxFrameUrl(event.url)) return;
+    // Free-form Plugin UI runs in srcdoc iframes. It may update its own hash,
+    // but it must not turn navigation into an undeclared network channel.
+    event.preventDefault();
+  });
 }
 
 export function isSupportedExternalUrl(url: string): boolean {
@@ -48,4 +58,8 @@ export function isTrustedRendererNavigation(currentUrl: string, targetUrl: strin
   } catch {
     return false;
   }
+}
+
+function isInitialSandboxFrameUrl(url: string): boolean {
+  return url === 'about:blank' || url === 'about:srcdoc';
 }

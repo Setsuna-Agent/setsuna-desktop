@@ -194,29 +194,37 @@ describe('runtime factory tool wiring', () => {
 
   it('creates and updates a managed local Plugin through the chat tool', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-runtime-plugin-tool-test-'));
-    const runtime = createRuntimeFactory({ dataDir });
+    const runtime = createRuntimeFactory({
+      dataDir,
+      extensionWorkerEntryPath: path.resolve('packages/desktop-runtime/src/extensions/extension-worker-entry.ts'),
+      extensionWorkerExecArgv: ['--import', pathToFileURL(path.resolve('node_modules/tsx/dist/loader.mjs')).href],
+    });
     const context = { threadId: 'thread_1', turnId: 'turn_1' };
     const input = {
       manifest: {
         id: 'factory-plugin',
         name: 'Factory Plugin',
         description: 'Created through configure_plugin.',
+        tools: [{ name: 'health_check', description: 'Verify the Plugin execution path.' }],
         extension: {
           apiVersion: 1,
           runtime: 'node-worker',
           entry: 'extension/entry.mjs',
-          capabilities: ['state'],
+          capabilities: ['tools', 'state'],
         },
       },
       files: [{
         path: 'extension/entry.mjs',
-        content: 'export default function activate() {}\n',
+        content: factoryPluginEntry('created'),
       }],
     };
 
     try {
       await expect(runtime.toolHost.listTools(context)).resolves.toEqual(
-        expect.arrayContaining([expect.objectContaining({ name: 'configure_plugin' })]),
+        expect.arrayContaining([
+          expect.objectContaining({ name: 'configure_plugin' }),
+          expect.objectContaining({ name: 'verify_plugin' }),
+        ]),
       );
       await expect(runtime.toolHost.approvalForTool?.('configure_plugin', input, context)).resolves.toMatchObject({
         reason: expect.stringContaining('授权当前完整包哈希'),
@@ -227,18 +235,34 @@ describe('runtime factory tool wiring', () => {
         expectedPreviewIntegrityToken: createPreview?.integrityToken,
       });
 
-      expect(created).toMatchObject({ data: { action: 'create', plugin: { id: 'factory-plugin' } } });
+      expect(created).toMatchObject({
+        data: {
+          action: 'create',
+          plugin: { id: 'factory-plugin' },
+          verification: { required: true, tool: 'verify_plugin' },
+        },
+      });
       await expect(runtime.pluginStore.listPlugins()).resolves.toMatchObject({
         plugins: [expect.objectContaining({
           id: 'factory-plugin',
           extension: expect.objectContaining({ trust: 'trusted' }),
         })],
       });
+      const verificationInput = {
+        pluginId: 'factory-plugin',
+        checks: [{ kind: 'tool', name: 'health_check', input: { value: 'ready' } }],
+      };
+      await expect(runtime.toolHost.approvalForTool?.('verify_plugin', verificationInput, context))
+        .resolves.toMatchObject({ reason: expect.stringContaining('实际执行 1 个扩展路径') });
+      await expect(runtime.toolHost.runTool('verify_plugin', verificationInput, context)).resolves.toMatchObject({
+        content: expect.stringContaining('Verified and usable: true.'),
+        data: { pluginId: 'factory-plugin', verified: true },
+      });
 
       const updateInput = {
         ...input,
         manifest: { ...input.manifest, version: '1.0.1', description: 'Updated through configure_plugin.' },
-        files: [{ ...input.files[0], content: 'export default function activate() { /* updated */ }\n' }],
+        files: [{ ...input.files[0], content: factoryPluginEntry('updated') }],
       };
       const updatePreview = await runtime.toolHost.previewToolCall?.('configure_plugin', updateInput, context);
       expect(updatePreview?.resultPreview).toContain('"action":"update"');
@@ -477,6 +501,28 @@ describe('runtime factory tool wiring', () => {
     }
   });
 });
+
+function factoryPluginEntry(marker: string): string {
+  return `
+export default function activate(api) {
+  // ${marker}
+  api.registerTool({
+    name: 'health_check',
+    description: 'Verify the Plugin execution path.',
+    inputSchema: {
+      type: 'object',
+      properties: { value: { type: 'string' } },
+      required: ['value'],
+      additionalProperties: false,
+    },
+    async execute(input, context) {
+      await context.state.set('health', input.value, 'thread');
+      return { content: 'health:' + input.value };
+    },
+  });
+}
+`;
+}
 
 class RejectingProxyBridge extends InMemoryDesktopNativeBridge {
   readonly proxyInputs: DesktopResolveNetworkProxyInput[] = [];

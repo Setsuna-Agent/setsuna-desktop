@@ -55,7 +55,7 @@ describe('renderer feature composition', () => {
       activeEntryIds: ['app-shell.default'],
     });
     expect(findSlot(inspection.roots, 'renderer.shell.route')).toMatchObject({
-      activeEntryIds: ['routes.chat', 'routes.settings', 'routes.capabilities'],
+      activeEntryIds: ['routes.chat', 'routes.settings', 'routes.capabilities', 'routes.plugin'],
     });
     expect(findSlot(inspection.roots, 'renderer.chat.composer.status')).toMatchObject({
       activeEntryIds: ['goal.composer-status'],
@@ -118,6 +118,24 @@ describe('renderer feature composition', () => {
         payload: { path: 'output/report.pdf' },
       });
     }
+    expect(features.rendererPlugins.getSnapshot().resolveChain(chatToolResultResolverSlot, {
+      plugin: { id: 'weather-card', name: 'Weather Card' },
+      toolName: 'weather_today',
+      value: {
+        resultKind: 'plugin.ui-card',
+        resultMajor: 1,
+        payload: {
+          id: 'weather.hangzhou.today',
+          pluginId: 'weather-card',
+          html: '<main>28°C</main>',
+          permissions: { network: false, hostActions: [] },
+        },
+      },
+    })).toMatchObject({
+      featureId: 'ui-card',
+      contribution: { placement: 'assistant-timeline' },
+      payload: { id: 'weather.hangzhou.today', pluginId: 'weather-card' },
+    });
     await features.composition.dispose();
   });
 });

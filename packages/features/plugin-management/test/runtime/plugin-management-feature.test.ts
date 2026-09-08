@@ -6,6 +6,8 @@ import {
   pluginManagementFeature,
   readInstalledPlugins,
   readInstalledPluginRendererUiState,
+  readInstalledPluginRendererUiData,
+  readInstalledPluginRendererUiDocument,
   readPluginExtensionStatuses,
   readPluginHooks,
   readPluginManagementSnapshot,
@@ -38,6 +40,13 @@ describe('plugin management runtime feature', () => {
       listMarketplace: vi.fn(async () => ({ errors: ['catalog warning'], plugins: [] })),
       listPlugins: vi.fn(async () => ({ plugins: [] })),
       readRendererUiState,
+      readRendererUiData: vi.fn(async () => ({ data: { summary: { label: 'Ready' } } })),
+      readRendererUiDocument: vi.fn(async () => ({
+        revision: 'trusted-hash',
+        html: '<main>Ready</main>',
+        css: '',
+        js: '',
+      })),
       deleteStandaloneHook: vi.fn(),
       remove: vi.fn(),
       setExtensionTrust: vi.fn(),
@@ -86,6 +95,29 @@ describe('plugin management runtime feature', () => {
       contributionId: 'preferences.settings',
       pluginId: 'web-search',
     })).resolves.toEqual({ values: { maxResults: '5' } });
+    const rendererUiDataInput = {
+      pluginId: 'release-checker',
+      context: {
+        contributionId: 'release.page',
+        projectId: 'project_1',
+        surface: 'renderer.plugin.page',
+      },
+    } as const;
+    await expect(routes.get(readInstalledPluginRendererUiData.id)?.(rendererUiDataInput)).resolves.toEqual({
+      data: { summary: { label: 'Ready' } },
+    });
+    expect(host.readRendererUiData).toHaveBeenCalledWith(rendererUiDataInput);
+    const rendererUiDocumentInput = {
+      pluginId: 'release-checker',
+      contributionId: 'release.page',
+    } as const;
+    await expect(routes.get(readInstalledPluginRendererUiDocument.id)?.(rendererUiDocumentInput)).resolves.toEqual({
+      revision: 'trusted-hash',
+      html: '<main>Ready</main>',
+      css: '',
+      js: '',
+    });
+    expect(host.readRendererUiDocument).toHaveBeenCalledWith(rendererUiDocumentInput);
     await expect(routes.get(readPluginHooks.id)?.({ cwd: '/tmp/workspace' })).resolves.toEqual({
       hooks: [],
     });

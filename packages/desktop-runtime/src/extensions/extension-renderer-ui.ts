@@ -56,6 +56,6 @@ function rendererUiFields(contribution: RuntimePluginUiContribution): Map<string
     if (node.type === 'field' || node.type === 'select') fields.set(node.name, node);
     if (node.type === 'stack') node.children.forEach(visit);
   };
-  visit(contribution.tree);
+  if (contribution.tree) visit(contribution.tree);
   return fields;
 }

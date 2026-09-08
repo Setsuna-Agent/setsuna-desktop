@@ -200,6 +200,8 @@ Thread 首屏只携带最新 160 条 message，`useThreadMessageHistory` 通过 
 
 `RuntimeToolRuns` 通过 renderer Feature catalog 解析持久 tool data，并把工具名作为来源上下文传入 catalog。Artifact 的 `artifact.file@1` codec、旧数据 decoder、来源约束、稳定文件 identity、文案、样式和卡片由 `packages/features/artifact/src/renderer` 拥有，并声明为 `assistant-tail`：轮次完成前只保留普通工具历史，完成后把成品卡片放到最终回答之后；同一工作区路径重复发布时只保留最新卡片。Chat 只提供通用 result slot、去重编排、错误边界和布局，不解释 Artifact payload。
 
+`packages/features/ui-card` 注册 `plugin.ui-card@1` assistant-timeline result，并额外要求 `RuntimeToolRun.plugin` 来源；没有经过 runtime 盖章的普通工具数据不会匹配。Chat 从持久化 assistant segment 与 tool run 重建 `text → card → text` 顺序：同一工具调用前已经输出的正文保持可见，卡片占据真实工具位置，后续 assistant segment 继续排在卡片之后。这个顺序不依赖临时 React state，SSE 重连和历史消息加载都会得到相同结果。HTML/CSS/JS 只进入该 Feature 的 opaque-origin sandbox iframe，外层标题和 Plugin 来源由宿主持有，Chat 本身不执行或解释卡片源码。
+
 `plugin-usage/` 继续从 runtime thread/tool data 投影 Plugin Skill、MCP、Hook 和 resource 的使用归因；这与 Artifact 成品协议没有共享业务 owner，因此不再放在同一目录。
 
 进行中与已完成状态使用 runtime 记录，不根据工具名称在 UI 猜测来源。

@@ -2,8 +2,15 @@ import type {
   RuntimeExtensionEventName,
   RuntimeExtensionStatusList,
   RuntimePluginReference,
+  RuntimePluginUiActionInput,
+  RuntimePluginUiActionResult,
+  RuntimePluginUiDataInput,
+  RuntimePluginUiDataResult,
   RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
+import type {
+  InstalledPluginRecord,
+} from './plugin-bundle-store.js';
 import type {
   ToolExecutionContext,
   ToolExecutionResult,
@@ -52,6 +59,9 @@ export type ExtensionRuntime = {
   dispatch(eventName: RuntimeExtensionEventName, context: ExtensionEventContext): Promise<ExtensionEventOutcome>;
   cleanupTurn(context: ToolExecutionContext, outcome: ToolTurnCleanupOutcome): Promise<void>;
   listStatuses(): Promise<RuntimeExtensionStatusList>;
+  readRendererUiData(input: RuntimePluginUiDataInput): Promise<RuntimePluginUiDataResult>;
+  runRendererUiAction(input: RuntimePluginUiActionInput, signal?: AbortSignal): Promise<RuntimePluginUiActionResult>;
+  validatePluginActivation(plugin: InstalledPluginRecord): Promise<void>;
   beginPluginMutation(pluginId: string): Promise<() => Promise<void>>;
   shutdown(): Promise<void>;
 };

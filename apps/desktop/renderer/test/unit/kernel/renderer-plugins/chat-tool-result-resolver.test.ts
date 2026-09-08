@@ -78,6 +78,30 @@ describe('Chat tool-result resolver Slot', () => {
     expect(resolve(snapshot, { unrelated: true })).toBeNull();
   });
 
+  it('can require verified Plugin provenance for executable result surfaces', () => {
+    const runtime = createToolResultRuntime();
+    registerChatToolResult(runtime.createRegistrar({
+      featureId: 'ui-card',
+      pluginId: 'feature.ui-card',
+      scopeId: 'fixture:ui-card',
+    }), {
+      id: 'plugin.ui-card-view',
+      resultKind: 'plugin.ui-card',
+      major: 1,
+      payload: defineRuntimeCodec((value) => value),
+      pluginSource: 'required',
+      render: () => null,
+    });
+    const snapshot = runtime.commitInitial();
+    const value = { resultKind: 'plugin.ui-card', resultMajor: 1, payload: { id: 'weather' } };
+
+    expect(resolve(snapshot, value)).toBeNull();
+    expect(resolve(snapshot, value, { id: 'weather-plugin', name: 'Weather' })).toMatchObject({
+      featureId: 'ui-card',
+      payload: { id: 'weather' },
+    });
+  });
+
   it('recovers Collaboration legacy results registered during Feature activation', async () => {
     const runtime = createToolResultRuntime();
     const transport: FeatureOperationTransport = {
@@ -142,6 +166,7 @@ function createToolResultRuntime() {
 function resolve(
   snapshot: RendererPluginSnapshot,
   value: unknown,
+  plugin?: Readonly<{ id: string; name: string }>,
 ) {
-  return snapshot.resolveChain(chatToolResultResolverSlot, { value });
+  return snapshot.resolveChain(chatToolResultResolverSlot, { value, ...(plugin ? { plugin } : {}) });
 }

@@ -1,4 +1,5 @@
 import { readFile, rm, writeFile } from 'node:fs/promises';
+import { parseRuntimePluginUiManifest } from '@setsuna-desktop/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import { ExtensionManager } from '../../src/extensions/extension-manager.js';
 import type { ExtensionUiContext } from '../../src/extensions/extension-ui-coordinator.js';
@@ -335,13 +336,13 @@ describe('extension manager', () => {
     const record = {
       ...fixture.record,
       installationSource: 'local' as const,
-      tools: [{
-        name: 'echo',
+      tools: fixture.record.tools?.map((tool) => tool.name === 'echo' ? {
+        ...tool,
         exposure: 'direct' as const,
         supportsParallel: true,
         requiresApproval: false,
         requiresSandboxBypassApproval: false,
-      }],
+      } : tool),
     };
     const manager = testManager(
       record,
@@ -527,6 +528,202 @@ describe('extension manager', () => {
     }
   });
 
+  it('stamps Plugin tool cards with verified provenance before persistence', async () => {
+    const fixture = await extensionFixture({ includeRendererUiCard: true });
+    const manager = testManager(
+      fixture.record,
+      {
+        get: vi.fn(async () => undefined),
+        set: vi.fn(async () => undefined),
+        delete: vi.fn(async () => undefined),
+      },
+      { handle: vi.fn(async () => null) },
+    );
+    try {
+      const tool = (await manager.listTools({ threadId: 'thread_1' }))
+        .find((candidate) => candidate.localName === 'ui-card');
+      if (!tool) throw new Error('Expected the UI card fixture tool.');
+
+      await expect(manager.runTool(tool.name, {}, { threadId: 'thread_1' })).resolves.toMatchObject({
+        content: 'Hangzhou is sunny and 28 degrees.',
+        data: {
+          resultKind: 'plugin.ui-card',
+          resultMajor: 1,
+          payload: {
+            id: 'weather.hangzhou.today',
+            pluginId: 'worker-demo',
+            data: { temperature: 28, condition: 'sunny' },
+          },
+        },
+      });
+    } finally {
+      await manager.shutdown();
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it('supports a fetch-shaped network call before returning a Plugin UI card', async () => {
+    const fixture = await extensionFixture({ includeFetchStyleNetworkCard: true });
+    const networkFetch = vi.fn(async () => new Response(JSON.stringify({
+      city: 'Hangzhou',
+      temperature: 28,
+    }), { headers: { 'content-type': 'application/json' } }));
+    const manager = testManager(
+      fixture.record,
+      {
+        get: vi.fn(async () => undefined),
+        set: vi.fn(async () => undefined),
+        delete: vi.fn(async () => undefined),
+      },
+      { handle: vi.fn(async () => null) },
+      { networkFetch },
+    );
+    try {
+      const tool = (await manager.listTools({ threadId: 'thread_1' }))
+        .find((candidate) => candidate.localName === 'network-ui-card');
+      if (!tool) throw new Error('Expected the network UI card fixture tool.');
+
+      await expect(manager.runTool(tool.name, {}, { threadId: 'thread_1' })).resolves.toMatchObject({
+        content: 'Hangzhou is 28 degrees.',
+        data: {
+          resultKind: 'plugin.ui-card',
+          payload: {
+            pluginId: 'worker-demo',
+            data: { city: 'Hangzhou', temperature: 28 },
+          },
+        },
+      });
+      expect(networkFetch).toHaveBeenCalledWith(
+        new URL('https://api.example.test/weather'),
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.any(Headers),
+          redirect: 'manual',
+        }),
+      );
+    } finally {
+      await manager.shutdown();
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it('allows a sandboxed Plugin page to invoke only declared actions with bounded JSON', async () => {
+    const fixture = await extensionFixture({ includeRendererUiAction: true });
+    const rendererUi = parseRuntimePluginUiManifest({
+      schemaVersion: 2,
+      actions: [{ id: 'profile.save', approval: { message: 'Refresh weather?' } }],
+      contributions: [{
+        id: 'weather.page',
+        slot: 'renderer.plugin.page',
+        navigation: { label: 'Weather' },
+        document: { htmlResourceId: 'weather-html', actionIds: ['profile.save'] },
+      }],
+    });
+    const record: InstalledPluginRecord = {
+      ...fixture.record,
+      extension: { ...fixture.record.extension!, rendererUi },
+    };
+    const state = {
+      get: vi.fn(async () => undefined),
+      set: vi.fn(async () => undefined),
+      delete: vi.fn(async () => undefined),
+    };
+    const manager = testManager(record, state, { handle: vi.fn(async () => null) });
+    try {
+      await expect(manager.runRendererUiAction({
+        pluginId: 'worker-demo',
+        actionId: 'profile.save',
+        values: {},
+        payload: { city: '杭州', units: { temperature: 'celsius' } },
+        context: {
+          contributionId: 'weather.page',
+          surface: 'renderer.plugin.page',
+        },
+      })).resolves.toEqual({ status: 'completed' });
+      expect(state.set).toHaveBeenCalledWith(
+        'worker-demo',
+        'global',
+        'ui-payload',
+        { city: '杭州', units: { temperature: 'celsius' } },
+      );
+
+      await expect(manager.runRendererUiAction({
+        pluginId: 'worker-demo',
+        actionId: 'profile.save',
+        values: { undeclared: 'value' },
+        context: {
+          contributionId: 'weather.page',
+          surface: 'renderer.plugin.page',
+        },
+      })).rejects.toThrow('undeclared field');
+    } finally {
+      await manager.shutdown();
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it('reads only declared project UI data and keeps page actions in that scope', async () => {
+    const fixture = await extensionFixture({ includeRendererUiAction: true });
+    const rendererUi = parseRuntimePluginUiManifest({
+      schemaVersion: 2,
+      actions: [{ id: 'profile.save', approval: { message: 'Run checks?' } }],
+      contributions: [{
+        id: 'release.page',
+        slot: 'renderer.plugin.page',
+        navigation: { label: 'Release checker', badge: { path: 'summary.label' } },
+        data: { stateKey: 'release.view', scope: 'project' },
+        tree: {
+          type: 'stack',
+          children: [
+            { type: 'field', name: 'displayName', label: 'Command' },
+            { type: 'button', actionId: 'profile.save', label: 'Run' },
+          ],
+        },
+      }],
+    });
+    const record: InstalledPluginRecord = {
+      ...fixture.record,
+      extension: { ...fixture.record.extension!, rendererUi },
+    };
+    const state = {
+      get: vi.fn(async () => ({ summary: { label: 'Ready' } })),
+      set: vi.fn(async () => undefined),
+      delete: vi.fn(async () => undefined),
+    };
+    const manager = testManager(record, state, { handle: vi.fn(async () => null) });
+    try {
+      await expect(manager.readRendererUiData({
+        pluginId: 'worker-demo',
+        context: {
+          contributionId: 'release.page',
+          surface: 'renderer.plugin.page',
+          projectId: 'project_1',
+        },
+      })).resolves.toEqual({ data: { summary: { label: 'Ready' } } });
+      expect(state.get).toHaveBeenCalledWith('worker-demo', 'project:project_1', 'release.view');
+
+      await expect(manager.runRendererUiAction({
+        pluginId: 'worker-demo',
+        actionId: 'profile.save',
+        values: { displayName: 'pnpm test' },
+        context: {
+          contributionId: 'release.page',
+          surface: 'renderer.plugin.page',
+          projectId: 'project_1',
+        },
+      })).resolves.toEqual({ status: 'completed' });
+      expect(state.set).toHaveBeenCalledWith('worker-demo', 'project:project_1', 'profile', 'pnpm test');
+
+      await expect(manager.readRendererUiData({
+        pluginId: 'worker-demo',
+        context: { contributionId: 'release.page', surface: 'renderer.plugin.page' },
+      })).rejects.toThrow('active project');
+    } finally {
+      await manager.shutdown();
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
   it('requires Renderer UI action state requests to declare global scope', async () => {
     const fixture = await extensionFixture({ includeRendererUiAction: true });
     const state = {
@@ -539,7 +736,7 @@ describe('extension manager', () => {
       this: ExtensionManager,
       method: string,
       params: unknown,
-      context: { threadId: string; rendererUiAction?: boolean },
+      context: { threadId: string; rendererUiAction?: boolean; rendererUiStateScope?: 'global' },
       plugin: { id: string; name: string },
       extension: NonNullable<InstalledPluginRecord['extension']>,
     ) => Promise<unknown>;
@@ -548,8 +745,8 @@ describe('extension manager', () => {
       await expect(handleHostRequest.call(
         manager,
         'state.set',
-        { key: 'profile', value: 'unsafe' },
-        { rendererUiAction: true, threadId: 'thread_1' },
+        { key: 'profile', scope: 'thread', value: 'unsafe' },
+        { rendererUiAction: true, rendererUiStateScope: 'global', threadId: 'thread_1' },
         { id: fixture.record.id, name: fixture.record.name },
         fixture.record.extension!,
       )).rejects.toThrow('may use only global extension state');

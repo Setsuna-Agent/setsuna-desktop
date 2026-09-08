@@ -1,4 +1,5 @@
 import type { RuntimeCodec } from '@setsuna-desktop/feature-core/codec';
+import type { RuntimePluginReference } from '@setsuna-desktop/contracts';
 import {
   defineChainRendererSlot,
   defineListRendererSlot,
@@ -55,9 +56,18 @@ export const chatComposerStatusSlot = defineListRendererSlot<ChatComposerStatusS
 
 export type ChatToolResultViewProps<TPayload> = Readonly<{
   payload: TPayload;
+  plugin?: RuntimePluginReference;
   threadId: string | null;
   translate: RendererTranslate;
 }>;
+
+export type ChatToolResultPlacement =
+  /** Keep the result inside its ordinary tool-run surface. */
+  | 'inline'
+  /** Render the result at its persisted tool-run position between assistant text segments. */
+  | 'assistant-timeline'
+  /** Collect the result after the assistant turn has completed and render it at the end. */
+  | 'assistant-tail';
 
 export type ChatToolResultRegistration<TPayload> = Readonly<{
   id: string;
@@ -65,13 +75,15 @@ export type ChatToolResultRegistration<TPayload> = Readonly<{
   major: number;
   payload: RuntimeCodec<TPayload>;
   sourceToolNames?: readonly string[];
+  /** Reject matching data that was not emitted by a verified Plugin tool run. */
+  pluginSource?: 'required';
   legacy?: Readonly<{
     matches(value: unknown): boolean;
     payload: RuntimeCodec<TPayload>;
   }>;
   identity?: (payload: TPayload) => string | null;
   presentation?: 'details' | 'replace';
-  placement?: 'inline' | 'assistant-tail';
+  placement?: ChatToolResultPlacement;
   workHistoryPresentation?: 'persistent';
   render: ComponentType<ChatToolResultViewProps<TPayload>>;
 }>;
@@ -82,19 +94,21 @@ export type ErasedChatToolResultRegistration = Readonly<{
   major: number;
   payload: RuntimeCodec<unknown>;
   sourceToolNames?: readonly string[];
+  pluginSource?: 'required';
   legacy?: Readonly<{
     matches(value: unknown): boolean;
     payload: RuntimeCodec<unknown>;
   }>;
   identity?: (payload: unknown) => string | null;
   presentation?: 'details' | 'replace';
-  placement?: 'inline' | 'assistant-tail';
+  placement?: ChatToolResultPlacement;
   workHistoryPresentation?: 'persistent';
   render: ComponentType<ChatToolResultViewProps<unknown>>;
 }>;
 
 export type ChatToolResultResolverInput = Readonly<{
   toolName?: string;
+  plugin?: RuntimePluginReference;
   value: unknown;
 }>;
 
@@ -121,13 +135,13 @@ export function registerChatToolResult<TPayload>(
   const featureId = ui.owner.featureId ?? ui.owner.pluginId;
   return ui.chain(chatToolResultResolverSlot, {
     id: `tool-result.${contribution.resultKind}.v${contribution.major}`,
-    select: ({ toolName, value }) => {
+    select: ({ plugin, toolName, value }) => {
       const envelope = toolResultEnvelope(value);
       if (envelope) {
         if (
           envelope.resultKind !== erased.resultKind
           || envelope.resultMajor !== erased.major
-          || !matchesToolResultSource(erased, toolName)
+          || !matchesToolResultSource(erased, toolName, plugin)
         ) return null;
         try {
           return resolvedToolResult(featureId, erased, erased.payload.parse(envelope.payload));
@@ -136,7 +150,7 @@ export function registerChatToolResult<TPayload>(
           return null;
         }
       }
-      if (!matchesToolResultSource(erased, toolName)) return null;
+      if (!matchesToolResultSource(erased, toolName, plugin)) return null;
       const legacy = erased.legacy;
       if (!legacy || !legacy.matches(value)) return null;
       try {
@@ -189,9 +203,10 @@ function eraseToolResultContribution<TPayload>(
 function matchesToolResultSource(
   contribution: ErasedChatToolResultRegistration,
   toolName: string | undefined,
+  plugin: RuntimePluginReference | undefined,
 ): boolean {
-  return !contribution.sourceToolNames
-    || Boolean(toolName && contribution.sourceToolNames.includes(toolName));
+  if (contribution.pluginSource === 'required' && !plugin) return false;
+  return !contribution.sourceToolNames || Boolean(toolName && contribution.sourceToolNames.includes(toolName));
 }
 
 function resolvedToolResult(

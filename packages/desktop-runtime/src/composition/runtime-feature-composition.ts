@@ -298,6 +298,10 @@ export async function activateBuiltinRuntimeFeatures(
           runRendererUiAction: (input, signal) => (
             runtime.extensionManager.runRendererUiAction(input, signal)
           ),
+          readRendererUiData: (input) => runtime.extensionManager.readRendererUiData(input),
+          readRendererUiDocument: ({ contributionId, pluginId }) => (
+            runtime.pluginStore.readTrustedRendererUiDocument(pluginId, contributionId)
+          ),
           deleteStandaloneHook: (input) => runtime.hookManagement.deleteStandalone(input),
           remove: ({ pluginId }) => runtime.pluginStore.removePlugin(pluginId),
           setHookState: (input) => runtime.hookManagement.setState(input),

@@ -1,0 +1,7 @@
+.sandboxed-ui-frame {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent !important;
+}

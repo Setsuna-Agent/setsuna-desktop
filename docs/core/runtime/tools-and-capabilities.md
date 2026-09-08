@@ -276,6 +276,7 @@ MCP server 只维护启用状态和工具可用范围，不再提供必需、调
 - 校验 manifest、文件数量/大小/path/symlink。
 - 复制到 runtime 私有目录。
 - 安装 Skill/MCP/Hook/resource。
+- 从同一次可信 Bundle hash 快照读取 sandbox Renderer UI 资源。
 - 维护所有权。
 - 失败回滚。
 - 卸载时只删除仍归 Plugin 所有且未被用户修改的资源。
@@ -284,11 +285,13 @@ MCP server 只维护启用状态和工具可用范围，不再提供必需、调
 
 `PluginBundleToolHost` 提供 `configure_plugin`、内部目录侧载、卸载和 resource 工具，模型发起 mutation 需要审批。`configure_plugin` 接收完整 Bundle v2 manifest 与 UTF-8 文本文件快照，由 `FilePluginDraftStore` 原子写入 runtime 受管草稿，再复用标准安装事务。审批预览与完整性 token 绑定本次内容；批准后当前版本直接安装并启用，后续修改需要重新审批。普通 renderer 只按 marketplace plugin ID 安装，开发者目录导入通过 Electron 窄桥接完成。
 
+安装事务验证 manifest、源码语法、引用完整性和 staged worker 激活，但不会虚构输入执行业务 handler。`PluginVerificationToolHost` 提供需要单独审批的 `verify_plugin`：它按本地工具名和 Renderer UI action ID 走真实 `ExtensionManager` 执行路径，因而会使用相同的 network/state bridge、结果归一化和取消机制；声明了 `uiCards` 的工具必须实际返回 `plugin.ui-card@1`，UI action 还可断言页面依赖的状态路径。Agent 创建可执行插件时，安装成功只能报告“已安装”，只有功能检查全部通过才能报告“可用”。
+
 详情见 [Plugin Bundle](../../extensions/plugins/bundles.md)。
 
 ## First-party Plugin tools
 
-所有 Plugin 工具都由受信 Node worker 从 Bundle 注册，runtime 不再按 Plugin ID 注册专用 ToolHost。工具 schema、输入校验和面向模型的结果语义必须位于 Bundle；卸载后 worker 与工具一起消失。
+所有 Plugin 工具都由受信 Node worker 从 Bundle 注册，runtime 不再按 Plugin ID 注册专用 ToolHost。工具 schema、输入校验和面向模型的结果语义必须位于 Bundle；卸载后 worker 与工具一起消失。声明 `ui` 的工具可以返回 `plugin.ui-card@1`，runtime 会绑定真实 Plugin 来源并在持久化前校验 HTML/CSS/JS 与 JSON 数据，Renderer 只在隔离 iframe 中执行卡片脚本。
 
 宿主只提供无法安全放进 worker 的窄能力：
 

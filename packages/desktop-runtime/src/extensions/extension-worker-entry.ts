@@ -29,7 +29,7 @@ type ExtensionHandlerContext = Record<string, unknown> & {
     input(input: unknown): Promise<string | null>;
   };
   network?: {
-    request(input: unknown): Promise<ExtensionNetworkResponse>;
+    request(input: unknown, init?: unknown): Promise<ExtensionNetworkResponse>;
   };
   imageGeneration?: {
     generate(input: unknown): Promise<unknown>;
@@ -41,10 +41,13 @@ type ExtensionHandlerContext = Record<string, unknown> & {
 
 type ExtensionStateScope = 'global' | 'project' | 'thread';
 type ExtensionNetworkResponse = {
+  ok: boolean;
   status: number;
   statusText: string;
   headers: Record<string, string>;
   body: string;
+  text(): Promise<string>;
+  json(): Promise<unknown>;
 };
 
 const MAX_PROTOCOL_LINE_BYTES = 1024 * 1024;
@@ -240,14 +243,20 @@ async function dispatchUiAction(requestId: string, params: unknown, signal: Abor
   const actionId = requiredText(record.actionId, 'Extension UI action id');
   const handler = uiActions.get(actionId);
   if (!handler) throw new Error(`Unknown extension UI action: ${actionId}`);
+  const actionContext = requiredRecord(record.context, 'Extension UI action context must be an object.');
   return handler(
     requiredRecord(record.input, 'Extension UI action input must be an object.'),
-    handlerContext(requestId, record.context, signal, {
-      defaultStateScope: 'global',
+    handlerContext(requestId, actionContext, signal, {
+      defaultStateScope: extensionStateScope(actionContext.stateScope),
       interactiveUi: false,
       modelCapabilities: false,
     }),
   );
+}
+
+function extensionStateScope(value: unknown): ExtensionStateScope {
+  if (value === 'global' || value === 'project' || value === 'thread') return value;
+  throw new Error('Extension UI action state scope is invalid.');
 }
 
 function handlerContext(
@@ -286,8 +295,8 @@ function handlerContext(
     } : {}),
     ...(capabilities.has('network') ? {
       network: {
-        request: async (input: unknown) => normalizeNetworkResponse(
-          await hostCall(requestId, 'network.request', input),
+        request: async (input: unknown, init?: unknown) => normalizeNetworkResponse(
+          await hostCall(requestId, 'network.request', normalizeNetworkRequest(input, init)),
         ),
       },
     } : {}),
@@ -304,6 +313,23 @@ function handlerContext(
   };
 }
 
+/**
+ * Keep the auditable object request as the wire format while accepting the
+ * fetch-shaped call that extension authors and generated JavaScript naturally use.
+ */
+function normalizeNetworkRequest(input: unknown, init: unknown): unknown {
+  if (typeof input === 'string' || input instanceof URL) {
+    const options = init === undefined
+      ? {}
+      : requiredRecord(init, 'Extension network request options must be an object.');
+    return { ...options, url: String(input) };
+  }
+  if (init !== undefined) {
+    throw new Error('Extension network request options require a URL string as the first argument.');
+  }
+  return input;
+}
+
 function normalizeNetworkResponse(value: unknown): ExtensionNetworkResponse {
   const record = requiredRecord(value, 'Extension network response must be an object.');
   if (!Number.isInteger(record.status)) throw new Error('Extension network response status is invalid.');
@@ -313,11 +339,16 @@ function normalizeNetworkResponse(value: unknown): ExtensionNetworkResponse {
     if (typeof headerValue === 'string') normalizedHeaders[name] = headerValue;
   }
   if (typeof record.bodyBase64 !== 'string') throw new Error('Extension network response body is invalid.');
+  const status = record.status as number;
+  const body = Buffer.from(record.bodyBase64, 'base64').toString('utf8');
   return {
-    status: record.status as number,
+    ok: status >= 200 && status < 300,
+    status,
     statusText: typeof record.statusText === 'string' ? record.statusText : '',
     headers: normalizedHeaders,
-    body: Buffer.from(record.bodyBase64, 'base64').toString('utf8'),
+    body,
+    text: async () => body,
+    json: async () => JSON.parse(body) as unknown,
   };
 }
 

@@ -3,6 +3,7 @@ import type {
   RuntimeExtensionCapability,
   RuntimePermissionProfile,
 } from '@setsuna-desktop/contracts';
+import type { RuntimePluginUiDataScope } from '@setsuna-desktop/contracts';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import type {
@@ -24,6 +25,8 @@ export type ExtensionWorkerRequestContext = {
   onOutput?(message: string): void;
   /** Restricts host calls made while handling a declarative Renderer action. */
   rendererUiAction?: boolean;
+  /** Exact state scope declared by the contribution that owns the action. */
+  rendererUiStateScope?: RuntimePluginUiDataScope;
 };
 
 export type ExtensionWorkerReady = {

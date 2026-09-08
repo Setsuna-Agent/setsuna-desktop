@@ -3,20 +3,23 @@ import type {
   RuntimeExtensionEventName,
   RuntimeExtensionStatus,
   RuntimeExtensionStatusList,
-  RuntimeMessageAttachment,
   RuntimePluginReference,
   RuntimePluginUiActionInput,
   RuntimePluginUiActionResult,
   RuntimePluginUiStateInput,
   RuntimePluginUiStateResult,
+  RuntimePluginUiDataInput,
+  RuntimePluginUiDataResult,
 } from '@setsuna-desktop/contracts';
-import { RUNTIME_EXTENSION_EVENT_NAMES } from '@setsuna-desktop/contracts';
+import {
+  parseRuntimePluginUiData,
+  RUNTIME_EXTENSION_EVENT_NAMES,
+} from '@setsuna-desktop/contracts';
 import { createHash } from 'node:crypto';
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { inspectBundleTree, pathIsInside } from '../adapters/plugin/file-plugin-bundle-model.js';
-import { assertSafeRuntimeId } from '../security/runtime-id.js';
+import { pathIsInside } from '../adapters/plugin/file-plugin-bundle-model.js';
 import type {
   ExtensionEventContext,
   ExtensionEventOutcome,
@@ -40,10 +43,21 @@ import {
 } from './extension-network-coordinator.js';
 import { ExtensionUiCoordinator } from './extension-ui-coordinator.js';
 import {
-  projectRendererUiState,
-  treeUsesRendererUiAction,
+  assertDeclaredExtensionRegistrations,
+  validateStagedExtensionActivation,
+} from './extension-activation-validator.js';
+import {
+  ExtensionBundleTrustCoordinator,
+  type ExtensionBundleTrustResolver,
+} from './extension-bundle-trust.js';
+import {
+  assertRendererUiScopeContext,
+  contributionUsesAction,
   validateRendererUiActionValues,
-} from './extension-renderer-ui.js';
+} from './extension-renderer-ui-policy.js';
+import { stateScope } from './extension-state-scope.js';
+import { normalizeExtensionToolResult } from './extension-tool-result.js';
+import { projectRendererUiState } from './extension-renderer-ui.js';
 import {
   ExtensionWorkerClient,
   type ExtensionWorkerReady,
@@ -67,6 +81,7 @@ type ExtensionManagerOptions = {
   visionRecognitionToolTimeoutMs?: number;
   eventTimeoutMs?: number;
   networkFetch?: ExtensionNetworkFetch;
+  verifyBundleTrust?: ExtensionBundleTrustResolver;
   imageGeneration?: {
     isAvailable(): Promise<boolean>;
     generate(input: unknown, context: ToolExecutionContext): Promise<unknown>;
@@ -95,6 +110,7 @@ const RENDERER_UI_ACTION_MODEL_METHODS = new Set([
 
 export class ExtensionManager implements ExtensionRuntime {
   private readonly active = new Map<string, ActiveExtension>();
+  private readonly bundleTrust: ExtensionBundleTrustCoordinator;
   private readonly pluginLocks = new Map<string, Promise<void>>();
   private readonly statuses = new Map<string, RuntimeExtensionStatus>();
   private readonly workerEntryPath: string;
@@ -124,6 +140,7 @@ export class ExtensionManager implements ExtensionRuntime {
       ?? DEFAULT_VISION_RECOGNITION_TOOL_TIMEOUT_MS;
     this.eventTimeoutMs = options.eventTimeoutMs ?? 10_000;
     this.network = new ExtensionNetworkCoordinator(options.networkFetch);
+    this.bundleTrust = new ExtensionBundleTrustCoordinator(options.verifyBundleTrust);
     this.imageGeneration = options.imageGeneration;
     this.visionRecognition = options.visionRecognition;
   }
@@ -209,8 +226,10 @@ export class ExtensionManager implements ExtensionRuntime {
         workerRequestContext(context),
         this.toolTimeoutFor(active.plugin),
       );
-      return normalizeToolResult(
+      return normalizeExtensionToolResult(
         result,
+        active.plugin.id,
+        active.plugin.extension?.capabilities.includes('ui') === true,
         active.plugin.extension?.capabilities.includes('image-generation') === true,
       );
     } catch (error) {
@@ -286,7 +305,7 @@ export class ExtensionManager implements ExtensionRuntime {
     const contribution = rendererUi.contributions.find((candidate) => (
       candidate.id === input.context.contributionId
       && candidate.slot === input.context.surface
-      && treeUsesRendererUiAction(candidate.tree, input.actionId)
+      && contributionUsesAction(candidate, input.actionId)
     ));
     if (!contribution) {
       throw new Error(
@@ -296,7 +315,9 @@ export class ExtensionManager implements ExtensionRuntime {
     if (input.context.surface === 'renderer.chat.composer.status' && !input.context.threadId) {
       throw new Error('Chat Renderer UI actions require an active thread.');
     }
-    validateRendererUiActionValues(input.values, contribution);
+    const actionStateScope = contribution.data?.scope ?? 'global';
+    assertRendererUiScopeContext(actionStateScope, input.context);
+    validateRendererUiActionValues(input.values, [contribution]);
 
     let active: ActiveExtension | null = null;
     try {
@@ -309,16 +330,25 @@ export class ExtensionManager implements ExtensionRuntime {
         'ui.action',
         {
           actionId: input.actionId,
-          input: { values: { ...input.values } },
+          input: {
+            values: { ...input.values },
+            ...(input.payload ? { payload: structuredClone(input.payload) } : {}),
+          },
           context: {
             contributionId: contribution.id,
+            ...(input.context.cwd ? { cwd: input.context.cwd } : {}),
             surface: input.context.surface,
+            stateScope: actionStateScope,
+            ...(input.context.projectId ? { projectId: input.context.projectId } : {}),
             ...(input.context.threadId ? { threadId: input.context.threadId } : {}),
           },
         },
         {
           threadId: input.context.threadId ?? `renderer-ui:${plugin.id}`,
+          ...(input.context.cwd ? { cwd: input.context.cwd } : {}),
+          ...(input.context.projectId ? { projectId: input.context.projectId } : {}),
           rendererUiAction: true,
+          rendererUiStateScope: actionStateScope,
           ...(signal ? { signal } : {}),
         },
         this.toolTimeoutMs,
@@ -355,6 +385,34 @@ export class ExtensionManager implements ExtensionRuntime {
     return Object.freeze({ values: projectRendererUiState(stored, contribution) });
   }
 
+  async readRendererUiData(input: RuntimePluginUiDataInput): Promise<RuntimePluginUiDataResult> {
+    if (this.shuttingDown) throw new Error('Extension runtime is shutting down.');
+    const plugin = (await this.plugins.listInstalledRecords()).find((candidate) => candidate.id === input.pluginId);
+    if (!plugin?.extension) throw new Error(`Extension plugin is not installed: ${input.pluginId}`);
+    const rendererUi = plugin.extension.rendererUi;
+    if (!rendererUi || !plugin.extension.capabilities.includes('ui')) {
+      throw new Error(`Extension did not declare Renderer UI: ${input.pluginId}`);
+    }
+    if (!plugin.extension.capabilities.includes('state')) {
+      throw new Error(`Extension did not declare state for Renderer UI data: ${input.pluginId}`);
+    }
+    const contribution = rendererUi.contributions.find((candidate) => (
+      candidate.id === input.context.contributionId
+      && candidate.slot === input.context.surface
+    ));
+    if (!contribution?.data) {
+      throw new Error(`Extension Renderer UI contribution does not declare data: ${input.context.contributionId}`);
+    }
+    assertRendererUiScopeContext(contribution.data.scope, input.context);
+    await this.assertRendererUiBundleTrusted(plugin);
+    const scope = stateScope(contribution.data.scope, {
+      threadId: input.context.threadId ?? `renderer-ui:${plugin.id}`,
+      ...(input.context.projectId ? { projectId: input.context.projectId } : {}),
+    });
+    const value = await this.state.get(plugin.id, scope, contribution.data.stateKey);
+    return Object.freeze({ data: parseRuntimePluginUiData(value ?? {}) });
+  }
+
   private toolTimeoutFor(plugin: InstalledPluginRecord): number {
     const capabilities = plugin.extension?.capabilities ?? [];
     if (capabilities.includes('vision-recognition')) return this.visionRecognitionToolTimeoutMs;
@@ -363,8 +421,7 @@ export class ExtensionManager implements ExtensionRuntime {
   }
 
   private async assertRendererUiBundleTrusted(plugin: InstalledPluginRecord): Promise<void> {
-    const bundle = await inspectBundleTree(plugin.installPath);
-    if (plugin.extension?.trustedHash && plugin.extension.trustedHash === bundle.bundleHash) return;
+    if (await this.bundleTrust.verify(plugin)) return;
     await this.stopActive(plugin.id);
     this.statuses.set(plugin.id, { pluginId: plugin.id, state: 'stopped', tools: [], events: [] });
     throw new Error(`Extension bundle is not trusted: ${plugin.id}`);
@@ -391,8 +448,7 @@ export class ExtensionManager implements ExtensionRuntime {
           await this.markFailed(plugin.id, new Error('Extension worker exited unexpectedly.'), active.client);
           continue;
         }
-        const bundle = await inspectBundleTree(plugin.installPath);
-        if (!plugin.extension?.trustedHash || plugin.extension.trustedHash !== bundle.bundleHash) {
+        if (!await this.bundleTrust.verify(plugin)) {
           await this.stopActive(plugin.id);
           this.statuses.set(plugin.id, { pluginId: plugin.id, state: 'stopped', tools: [], events: [] });
         }
@@ -413,6 +469,7 @@ export class ExtensionManager implements ExtensionRuntime {
   async beginPluginMutation(pluginId: string): Promise<() => Promise<void>> {
     const release = await this.acquirePluginLock(pluginId);
     try {
+      this.bundleTrust.invalidate(pluginId);
       await this.stopActiveLocked(pluginId);
       this.statuses.set(pluginId, { pluginId, state: 'stopped', tools: [], events: [] });
       return async () => release();
@@ -420,6 +477,17 @@ export class ExtensionManager implements ExtensionRuntime {
       release();
       throw error;
     }
+  }
+
+  async validatePluginActivation(plugin: InstalledPluginRecord): Promise<void> {
+    if (!plugin.extension) return;
+    if (this.shuttingDown) throw new Error('Extension runtime is shutting down.');
+    assertFirstPartyHostCapabilities(plugin);
+    await validateStagedExtensionActivation({
+      plugin,
+      workerEntryPath: this.workerEntryPath,
+      workerExecArgv: this.workerExecArgv,
+    });
   }
 
   async shutdown(): Promise<void> {
@@ -447,14 +515,14 @@ export class ExtensionManager implements ExtensionRuntime {
     const extension = plugin.extension;
     if (!extension) return null;
     assertFirstPartyHostCapabilities(plugin);
-    const bundle = await inspectBundleTree(plugin.installPath);
-    if (!extension.trustedHash || extension.trustedHash !== bundle.bundleHash) {
+    const bundleHash = await this.bundleTrust.verify(plugin);
+    if (!bundleHash) {
       await this.stopActiveLocked(plugin.id);
       this.statuses.set(plugin.id, { pluginId: plugin.id, state: 'stopped', tools: [], events: [] });
       return null;
     }
     const signature = JSON.stringify({
-      hash: bundle.bundleHash,
+      hash: bundleHash,
       entry: extension.entry,
       capabilities: extension.capabilities,
       network: extension.network,
@@ -486,6 +554,11 @@ export class ExtensionManager implements ExtensionRuntime {
     });
     try {
       const ready = await client.start();
+      assertDeclaredExtensionRegistrations(
+        plugin,
+        ready.tools.map((tool) => tool.name),
+        ready.uiActions,
+      );
       const tools = ready.tools.map((tool): ExtensionRegisteredTool => {
         const policy = extensionToolPolicy(plugin, tool.name);
         return {
@@ -533,10 +606,14 @@ export class ExtensionManager implements ExtensionRuntime {
       requireCapability(extension, 'state');
       const input = requiredRecord(params, 'Extension state request must be an object.');
       const key = requiredText(input.key, 'Extension state key');
-      if (context.rendererUiAction && input.scope !== 'global') {
-        throw new Error('Renderer UI actions may use only global extension state.');
+      if (context.rendererUiAction && !context.rendererUiStateScope) {
+        throw new Error('Renderer UI action state scope is missing.');
       }
-      const scope = stateScope(input.scope, context);
+      const requestedScope = input.scope ?? context.rendererUiStateScope;
+      if (context.rendererUiAction && requestedScope !== context.rendererUiStateScope) {
+        throw new Error(`Renderer UI actions may use only ${context.rendererUiStateScope} extension state.`);
+      }
+      const scope = stateScope(requestedScope, context);
       if (method === 'state.get') return this.state.get(plugin.id, scope, key);
       if (method === 'state.set') {
         await this.state.set(plugin.id, scope, key, input.value);
@@ -740,60 +817,6 @@ function extensionCancellationError(signal?: AbortSignal): Error {
   return signal?.reason instanceof Error ? signal.reason : new Error('Extension request was cancelled.');
 }
 
-function normalizeToolResult(value: unknown, allowGeneratedAttachments = false): ToolExecutionResult {
-  if (typeof value === 'string') return { content: value };
-  const record = protocolRecord(value);
-  if (!record) return { content: JSON.stringify(value ?? null) };
-  const content = typeof record.content === 'string' ? record.content : JSON.stringify(value);
-  const attachments = normalizeExtensionAttachments(record.attachments, allowGeneratedAttachments);
-  return {
-    content,
-    ...(attachments ? { attachments } : {}),
-    ...(typeof record.preview === 'string' ? { preview: record.preview } : {}),
-    ...('data' in record ? { data: record.data } : {}),
-    ...(record.containsExternalContext === true ? { containsExternalContext: true } : {}),
-  };
-}
-
-function normalizeExtensionAttachments(
-  value: unknown,
-  allowed: boolean,
-): RuntimeMessageAttachment[] | undefined {
-  if (value === undefined) return undefined;
-  if (!allowed) throw new Error('This extension is not allowed to return managed image attachments.');
-  if (!Array.isArray(value) || value.length > 10) {
-    throw new Error('Extension image attachments must be an array with at most 10 items.');
-  }
-  return value.map((item, index): RuntimeMessageAttachment => {
-    const record = requiredRecord(item, `Extension image attachment ${index + 1} must be an object.`);
-    if (record.source !== 'generated') {
-      throw new Error(`Extension image attachment ${index + 1} must be a managed generated asset.`);
-    }
-    const size = record.size;
-    if (!Number.isInteger(size) || (size as number) <= 0 || (size as number) > 20 * 1024 * 1024) {
-      throw new Error(`Extension image attachment ${index + 1} has an invalid size.`);
-    }
-    return {
-      id: boundedAttachmentText(record.id, `Extension image attachment ${index + 1} id`, 160),
-      name: boundedAttachmentText(record.name, `Extension image attachment ${index + 1} name`, 255),
-      type: boundedAttachmentText(record.type, `Extension image attachment ${index + 1} type`, 100),
-      size: size as number,
-      source: 'generated',
-      assetId: assertSafeRuntimeId(
-        boundedAttachmentText(record.assetId, `Extension image attachment ${index + 1} asset id`, 160),
-        'Extension image asset id',
-      ),
-      modelVisible: false,
-    };
-  });
-}
-
-function boundedAttachmentText(value: unknown, label: string, maxLength: number): string {
-  const text = requiredText(value, label);
-  if (text.length > maxLength) throw new Error(`${label} is too long.`);
-  return text;
-}
-
 function mergeEventResults(aggregate: ExtensionEventOutcome, value: unknown): void {
   const result = protocolRecord(value);
   if (!result || !Array.isArray(result.outcomes)) throw new Error('Extension event result is invalid.');
@@ -820,17 +843,6 @@ function isBeforeEvent(eventName: RuntimeExtensionEventName): boolean {
     || eventName === 'prompt.before'
     || eventName === 'tool.before'
     || eventName === 'compact.before';
-}
-
-function stateScope(value: unknown, context: ExtensionWorkerRequestContext): string {
-  const scope = value === undefined ? 'thread' : requiredText(value, 'Extension state scope');
-  if (scope === 'global') return 'global';
-  if (scope === 'project') {
-    if (!context.projectId) throw new Error('Project-scoped extension state requires an active project.');
-    return `project:${context.projectId}`;
-  }
-  if (scope === 'thread') return `thread:${context.threadId}`;
-  throw new Error(`Unsupported extension state scope: ${scope}`);
 }
 
 function requireCapability(

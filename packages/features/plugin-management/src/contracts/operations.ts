@@ -15,8 +15,16 @@ import type {
   RuntimePluginUiActionResult,
   RuntimePluginUiStateInput,
   RuntimePluginUiStateResult,
+  RuntimePluginUiDataInput,
+  RuntimePluginUiDataResult,
+  RuntimePluginUiDocumentReadInput,
+  RuntimePluginUiDocumentReadResult,
 } from '@setsuna-desktop/contracts';
-import { RUNTIME_PLUGIN_UI_LIMITS } from '@setsuna-desktop/contracts';
+import {
+  parseRuntimePluginUiData,
+  parseSandboxedUiSource,
+  RUNTIME_PLUGIN_UI_LIMITS,
+} from '@setsuna-desktop/contracts';
 import { defineRuntimeCodec } from '@setsuna-desktop/feature-core/codec';
 import { defineFeatureOperation } from '@setsuna-desktop/feature-core/operation';
 import type {
@@ -105,21 +113,13 @@ const hookStateCodec = defineRuntimeCodec<PluginManagementHookStateInput>((value
 
 const rendererUiActionInputCodec = defineRuntimeCodec<RuntimePluginUiActionInput>((value) => {
   const record = objectRecord(value, 'Plugin renderer UI action input must be an object.');
-  const context = objectRecord(record.context, 'Plugin renderer UI action context must be an object.');
   const normalizedValues = rendererUiValues(record.values, 'Plugin renderer UI action');
-  const surface = context.surface;
-  if (surface !== 'renderer.chat.composer.status' && surface !== 'renderer.capabilities.plugin.details') {
-    throw new Error('Plugin renderer UI action surface is invalid.');
-  }
   return Object.freeze({
     pluginId: nonEmptyText(record.pluginId, 'pluginId'),
     actionId: nonEmptyText(record.actionId, 'actionId'),
     values: Object.freeze(normalizedValues),
-    context: Object.freeze({
-      contributionId: nonEmptyText(context.contributionId, 'contributionId'),
-      surface,
-      ...(context.threadId === undefined ? {} : { threadId: nonEmptyText(context.threadId, 'threadId') }),
-    }),
+    ...(record.payload === undefined ? {} : { payload: parseRuntimePluginUiData(record.payload) }),
+    context: rendererUiContext(record.context),
   });
 });
 
@@ -141,6 +141,36 @@ const rendererUiStateResultCodec = defineRuntimeCodec<RuntimePluginUiStateResult
   const record = objectRecord(value, 'Plugin renderer UI state result must be an object.');
   return Object.freeze({
     values: rendererUiValues(record.values, 'Plugin renderer UI state'),
+  });
+});
+
+const rendererUiDataInputCodec = defineRuntimeCodec<RuntimePluginUiDataInput>((value) => {
+  const record = objectRecord(value, 'Plugin renderer UI data input must be an object.');
+  return Object.freeze({
+    pluginId: nonEmptyText(record.pluginId, 'pluginId'),
+    context: rendererUiContext(record.context),
+  });
+});
+
+const rendererUiDataResultCodec = defineRuntimeCodec<RuntimePluginUiDataResult>((value) => {
+  const record = objectRecord(value, 'Plugin renderer UI data result must be an object.');
+  return Object.freeze({ data: parseRuntimePluginUiData(record.data) });
+});
+
+const rendererUiDocumentInputCodec = defineRuntimeCodec<RuntimePluginUiDocumentReadInput>((value) => {
+  const record = objectRecord(value, 'Plugin renderer UI document input must be an object.');
+  return Object.freeze({
+    pluginId: nonEmptyText(record.pluginId, 'pluginId'),
+    contributionId: nonEmptyText(record.contributionId, 'contributionId'),
+  });
+});
+
+const rendererUiDocumentResultCodec = defineRuntimeCodec<RuntimePluginUiDocumentReadResult>((value) => {
+  const record = objectRecord(value, 'Plugin renderer UI document result must be an object.');
+  const source = parseSandboxedUiSource(record, 'Plugin page source');
+  return Object.freeze({
+    revision: nonEmptyText(record.revision, 'revision'),
+    ...source,
   });
 });
 
@@ -369,6 +399,47 @@ export const readInstalledPluginRendererUiState = defineFeatureOperation({
   idempotency: 'safe',
 });
 
+export const readInstalledPluginRendererUiData = defineFeatureOperation({
+  id: 'plugin-management.renderer-ui-data.read',
+  method: 'POST',
+  path: '/v1/features/plugin-management/installed/:pluginId/renderer-ui/data',
+  input: rendererUiDataInputCodec,
+  output: rendererUiDataResultCodec,
+  errors: pluginOperationErrors,
+  idempotency: 'idempotent',
+});
+
+export const readInstalledPluginRendererUiDocument = defineFeatureOperation({
+  id: 'plugin-management.renderer-ui-document.read',
+  method: 'GET',
+  path: '/v1/features/plugin-management/installed/:pluginId/renderer-ui/documents/:contributionId',
+  input: rendererUiDocumentInputCodec,
+  output: rendererUiDocumentResultCodec,
+  errors: pluginOperationErrors,
+  idempotency: 'safe',
+});
+
+function rendererUiContext(
+  value: unknown,
+): RuntimePluginUiActionInput['context'] {
+  const context = objectRecord(value, 'Plugin renderer UI context must be an object.');
+  const surface = context.surface;
+  if (
+    surface !== 'renderer.chat.composer.status'
+    && surface !== 'renderer.capabilities.plugin.details'
+    && surface !== 'renderer.settings.page.extensions'
+    && surface !== 'renderer.plugin.page'
+  ) {
+    throw new Error('Plugin renderer UI surface is invalid.');
+  }
+  return Object.freeze({
+    contributionId: nonEmptyText(context.contributionId, 'contributionId'),
+    ...(context.cwd === undefined ? {} : { cwd: nonEmptyText(context.cwd, 'cwd') }),
+    surface,
+    ...(context.projectId === undefined ? {} : { projectId: nonEmptyText(context.projectId, 'projectId') }),
+    ...(context.threadId === undefined ? {} : { threadId: nonEmptyText(context.threadId, 'threadId') }),
+  });
+}
 function pluginSummary(value: unknown): RuntimePluginSummary {
   const record = objectRecord(value, 'Plugin summary must be an object.');
   nonEmptyText(record.id, 'plugin id');

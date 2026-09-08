@@ -9,6 +9,10 @@ import type {
   RuntimePluginUiActionResult,
   RuntimePluginUiStateInput,
   RuntimePluginUiStateResult,
+  RuntimePluginUiDataInput,
+  RuntimePluginUiDataResult,
+  RuntimePluginUiDocumentReadInput,
+  RuntimePluginUiDocumentReadResult,
 } from '@setsuna-desktop/contracts';
 import { defineCapability, type CapabilityToken } from '@setsuna-desktop/feature-core/capability';
 import type { PluginManagementDesktopBridge } from './bridge.js';
@@ -46,6 +50,10 @@ export interface PluginManagementRuntimeHost {
     signal?: AbortSignal,
   ): Promise<RuntimePluginUiActionResult>;
   readRendererUiState(input: RuntimePluginUiStateInput): Promise<RuntimePluginUiStateResult>;
+  readRendererUiData(input: RuntimePluginUiDataInput): Promise<RuntimePluginUiDataResult>;
+  readRendererUiDocument(
+    input: RuntimePluginUiDocumentReadInput,
+  ): Promise<RuntimePluginUiDocumentReadResult>;
   remove(input: PluginManagementPluginTarget): Promise<RuntimePluginRemoveResult>;
   setExtensionTrust(input: PluginManagementExtensionTrustInput): Promise<RuntimePluginList>;
   setHookState(input: PluginManagementHookStateInput): Promise<PluginManagementHookMutationResult>;
@@ -75,6 +83,8 @@ export interface PluginManagementRendererService {
   getSnapshot(): PluginManagementSnapshot;
   getHookSnapshot(): PluginManagementHookSnapshot;
   subscribe(listener: PluginManagementRendererListener): () => void;
+  /** Subscribes only to Renderer UI data invalidations for one Plugin. */
+  subscribeRendererUiData(pluginId: string, listener: PluginManagementRendererListener): () => void;
   refresh(options?: Readonly<{ signal?: AbortSignal }>): Promise<PluginManagementSnapshot>;
   refreshExtensions(options?: Readonly<{ signal?: AbortSignal }>): Promise<PluginManagementExtensionSnapshot>;
   refreshInstalled(options?: Readonly<{ signal?: AbortSignal }>): Promise<RuntimePluginList>;
@@ -107,6 +117,14 @@ export interface PluginManagementRendererService {
     input: RuntimePluginUiStateInput,
     options?: Readonly<{ signal?: AbortSignal }>,
   ): Promise<RuntimePluginUiStateResult>;
+  readRendererUiData(
+    input: RuntimePluginUiDataInput,
+    options?: Readonly<{ signal?: AbortSignal }>,
+  ): Promise<RuntimePluginUiDataResult>;
+  readRendererUiDocument(
+    input: RuntimePluginUiDocumentReadInput,
+    options?: Readonly<{ signal?: AbortSignal }>,
+  ): Promise<RuntimePluginUiDocumentReadResult>;
   setExtensionTrust(
     input: PluginManagementExtensionTrustInput,
     options?: Readonly<{ signal?: AbortSignal }>,

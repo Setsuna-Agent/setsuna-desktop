@@ -1,5 +1,7 @@
 import type { RuntimeThreadSummary, WorkspaceProject } from '@setsuna-desktop/contracts';
 import type { PointerEvent as ReactPointerEvent, Ref, RefObject } from 'react';
+import { shellSidebarPluginEntrySlot } from '@setsuna-desktop/renderer-contracts/shell';
+import { RendererOwnedListSlot } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
 import type { DesktopNavigationState } from '../controller/useDesktopNavigation.js';
 import { AgentSidebar } from '../sidebar/AgentSidebar.js';
 import type { MainView } from '../types.js';
@@ -20,8 +22,10 @@ export function AppSidebarSurface({
   minWidth,
   onOpenCapabilities,
   onOpenRuntimeActivity,
+  onOpenPluginView,
   onOpenSettings,
   onResetDraft,
+  selectedPluginViewKey,
   onResizeStep,
   onResizeStart,
   runtimeActivityTriggerRef,
@@ -41,8 +45,10 @@ export function AppSidebarSurface({
   minWidth: number;
   onOpenCapabilities: () => void;
   onOpenRuntimeActivity: () => void;
+  onOpenPluginView: (viewKey: string) => void;
   onOpenSettings: () => void;
   onResetDraft: () => void;
+  selectedPluginViewKey: string | null;
   onResizeStep: (delta: number) => void;
   onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   runtimeActivityTriggerRef: RefObject<HTMLButtonElement>;
@@ -60,6 +66,17 @@ export function AppSidebarSurface({
       forceExpandedProjectIds={navigation.forceExpandedProjectIds}
       globalThreads={globalThreads}
       projectActionMenuId={navigation.projectActionMenuId}
+      pluginEntries={(
+        <RendererOwnedListSlot
+          slot={shellSidebarPluginEntrySlot}
+          props={{
+            activeViewKey: activeView === 'plugin' ? selectedPluginViewKey : null,
+            ...(activeProjectId ? { projectId: activeProjectId } : {}),
+            ...(activeThreadId ? { threadId: activeThreadId } : {}),
+            onOpen: onOpenPluginView,
+          }}
+        />
+      )}
       projects={projects}
       projectsCollapsed={navigation.projectsCollapsed}
       searchOpen={navigation.sidebarSearchOpen}

@@ -14,7 +14,10 @@ vi.mock('../../../../../src/features/chat/tool-runs/runtimeFeatureToolResults.js
       const value = run.data;
       if (!value || typeof value !== 'object'
         || run.name !== 'publish_artifact'
-        || (value as { resultKind?: unknown }).resultKind !== 'test.tail-result') return null;
+        || !['test.tail-result', 'test.timeline-result'].includes(String(
+          (value as { resultKind?: unknown }).resultKind,
+        ))) return null;
+      const resultKind = (value as { resultKind: 'test.tail-result' | 'test.timeline-result' }).resultKind;
       const payload = (value as { payload?: { name?: string; path?: string } }).payload;
       if (!payload?.name || !payload.path) return null;
       return {
@@ -22,11 +25,11 @@ vi.mock('../../../../../src/features/chat/tool-runs/runtimeFeatureToolResults.js
         payload,
         contribution: {
           id: 'test.tail-result-view',
-          resultKind: 'test.tail-result',
+          resultKind,
           major: 1,
           payload: { parse: (resultPayload: unknown) => resultPayload },
           identity: (resultPayload: unknown) => (resultPayload as { path: string }).path,
-          placement: 'assistant-tail',
+          placement: resultKind === 'test.timeline-result' ? 'assistant-timeline' : 'assistant-tail',
           presentation: 'replace',
           render: ({ payload: resultPayload }: { payload: unknown }) => (
             <div className="test-tail-result">
@@ -41,7 +44,28 @@ vi.mock('../../../../../src/features/chat/tool-runs/runtimeFeatureToolResults.js
 
 afterEach(cleanup);
 
-describe('MessageItem assistant-tail Feature results', () => {
+describe('MessageItem Feature result placement', () => {
+  it('renders a timeline result between assistant text segments at its tool position', () => {
+    const view = render(timelineMessageItem());
+    const introduction = view.getByText('Weather introduction.');
+    const card = view.getByText('weather-card');
+    const finalAnswer = view.getByText('Weather advice.');
+
+    expect(introduction.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(card.compareDocumentPosition(finalAnswer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(view.getAllByText('weather-card')).toHaveLength(1);
+    expect(card.closest('details.chat-tool-run')).toBeNull();
+  });
+
+  it('shows a completed timeline result while the assistant turn is still active', () => {
+    const view = render(timelineMessageItem(false));
+    const introduction = view.getByText('Weather introduction.');
+    const card = view.getByText('weather-card');
+
+    expect(introduction.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(view.container.querySelector('.chat-work-history')).toBeNull();
+  });
+
   it('waits for completion and renders the result after the final answer', () => {
     const view = render(messageItem(false));
     expect(view.container.querySelector('.test-tail-result')).toBeNull();
@@ -64,6 +88,62 @@ describe('MessageItem assistant-tail Feature results', () => {
     expect(view.getAllByText('report.pdf')).toHaveLength(1);
   });
 });
+
+function timelineMessageItem(completed = true) {
+  const toolSegment: RuntimeMessage = {
+    id: 'assistant_weather_tool',
+    turnId: 'turn_weather',
+    role: 'assistant',
+    content: 'Weather introduction.',
+    createdAt: '2026-08-28T00:00:00.000Z',
+    status: 'complete',
+    phase: 'commentary',
+    toolRuns: [artifactRun(
+      'weather_tool_1',
+      'weather-card',
+      'weather/hangzhou',
+      'test.timeline-result',
+    )],
+  };
+  const finalSegment: RuntimeMessage = {
+    id: 'assistant_weather_answer',
+    turnId: toolSegment.turnId,
+    role: 'assistant',
+    content: 'Weather advice.',
+    createdAt: '2026-08-28T00:00:01.000Z',
+    status: 'complete',
+    phase: 'final_answer',
+  };
+  const segments = completed ? [toolSegment, finalSegment] : [toolSegment];
+  const item: Extract<ChatDisplayItem, { type: 'assistant' }> = {
+    type: 'assistant',
+    id: 'assistant_weather_item',
+    handledSteerMessageIds: [],
+    messageIds: segments.map((segment) => segment.id),
+    segments,
+    steerMessages: [],
+    turnId: toolSegment.turnId,
+  };
+  return (
+    <MessageItem
+      activeAssistantItemId={completed ? null : item.id}
+      activeTurnId={completed ? null : toolSegment.turnId ?? null}
+      assistantItemIdByTurnId={new Map()}
+      deleteMode={false}
+      editingDraft=""
+      editingMessageId={null}
+      editingSubmitting={false}
+      expandedWorkHistoryItemIds={new Set()}
+      item={item}
+      onAnswerApproval={async () => undefined}
+      onCancelEdit={() => undefined}
+      onEditDraftChange={() => undefined}
+      onWorkHistoryExpandedChange={() => undefined}
+      pluginUses={[]}
+      selectedForDelete={false}
+    />
+  );
+}
 
 function messageItem(completed: boolean, runs = [artifactRun()]) {
   const toolSegment: RuntimeMessage = {
@@ -119,13 +199,14 @@ function artifactRun(
   id = 'publish_artifact_1',
   name = 'report.pdf',
   path = 'output/report.pdf',
+  resultKind: 'test.tail-result' | 'test.timeline-result' = 'test.tail-result',
 ): RuntimeToolRun {
   return {
     id,
     name: 'publish_artifact',
     status: 'success',
     data: {
-      resultKind: 'test.tail-result',
+      resultKind,
       resultMajor: 1,
       payload: { name, path },
     },
