@@ -2,6 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { managedGeneratedImageAssetIdsFromStore } from '../../src/utils/generated-image-assets.js';
 
 describe('generated image asset reference scanning', () => {
+  it('does not read any history when there are no local image candidates', async () => {
+    const store = { listThreads: vi.fn(), getThread: vi.fn() };
+    await expect(managedGeneratedImageAssetIdsFromStore(store, new Set())).resolves.toEqual(new Set());
+    expect(store.listThreads).not.toHaveBeenCalled();
+    expect(store.getThread).not.toHaveBeenCalled();
+  });
+
   it('stops loading thread snapshots once every candidate asset is found', async () => {
     const getThread = vi.fn(async (threadId: string) => ({
       messages: threadId === 'thread_first'

@@ -40,18 +40,18 @@ export function readThreadEventPage(
   }
   if (query.afterSeq === query.throughSeq) return [];
 
-  // Archive blocks contain transient events while durable events remain in the
-  // hot table. At most one page from each source is enough before merging.
+  // Sequences are contiguous across both sources, so a page cannot extend beyond
+  // afterSeq + limit. Bound both reads before decompressing unrelated archive blocks.
+  const pageThroughSeq = Math.min(query.throughSeq, query.afterSeq + query.limit);
   const events = [
-    ...readArchivedEventPage(database, threadId, query.afterSeq, query.throughSeq, query.limit),
-    ...readRawEventPage(database, threadId, query.afterSeq, query.throughSeq, query.limit),
+    ...readArchivedEventPage(database, threadId, query.afterSeq, pageThroughSeq, query.limit),
+    ...readRawEventPage(database, threadId, query.afterSeq, pageThroughSeq, query.limit),
   ]
     .sort((left, right) => left.seq - right.seq)
     .slice(0, query.limit);
   assertContinuousEvents(events, threadId, query.afterSeq, 'runtime event');
-  const expectedEndSeq = Math.min(query.throughSeq, query.afterSeq + query.limit);
-  if (events.at(-1)?.seq !== expectedEndSeq) {
-    throw new Error(`SQLite runtime event page for ${threadId} did not reach expected seq ${expectedEndSeq}.`);
+  if (events.at(-1)?.seq !== pageThroughSeq) {
+    throw new Error(`SQLite runtime event page for ${threadId} did not reach expected seq ${pageThroughSeq}.`);
   }
   return events;
 }

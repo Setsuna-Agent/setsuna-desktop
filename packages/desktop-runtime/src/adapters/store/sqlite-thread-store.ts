@@ -44,6 +44,7 @@ import {
   updateThreadProjection,
 } from './sqlite-thread-projections.js';
 import { ensureSqliteThreadSchema } from './sqlite-thread-schema.js';
+import { SqliteFeatureProjectionCheckpoints } from './sqlite-feature-projection-checkpoints.js';
 import {
   changedRows,
   numberColumn,
@@ -101,6 +102,11 @@ export class RuntimeStorageInUseError extends Error {
  */
 export class SqliteThreadStore implements ThreadStore {
   readonly databasePath: string;
+  readonly projectionCheckpoints = new SqliteFeatureProjectionCheckpoints(async (operation) => {
+    await this.ensureReady();
+    this.assertOwnership();
+    return operation(this.requireDatabase());
+  });
 
   private readonly ownerId: string;
   private readonly checkpointDelayMs: number;
@@ -216,6 +222,13 @@ export class SqliteThreadStore implements ThreadStore {
   async getThread(threadId: string): Promise<RuntimeThread | null> {
     const { thread } = await this.readThread(threadId);
     return thread ? cloneThread(thread) : null;
+  }
+
+  async getThreadLastSeq(threadId: string): Promise<number> {
+    const safeThreadId = assertSafeRuntimeId(threadId, 'Thread id');
+    await this.ensureReady();
+    this.assertOwnership();
+    return readEventArchiveState(this.requireDatabase(), safeThreadId).lastSeq;
   }
 
   async getTurnActivity(threadId: string, turnId: string) {

@@ -1,6 +1,17 @@
 import type { DatabaseSync } from 'node:sqlite';
 
-export const SQLITE_THREAD_SCHEMA_VERSION = 3;
+export const SQLITE_THREAD_SCHEMA_VERSION = 4;
+
+const FEATURE_PROJECTION_CHECKPOINT_SCHEMA = `
+  CREATE TABLE feature_projection_checkpoints (
+    thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+    projection_key TEXT NOT NULL,
+    through_seq INTEGER NOT NULL CHECK (through_seq >= 0),
+    state_json TEXT NOT NULL,
+    PRIMARY KEY (thread_id, projection_key)
+  ) WITHOUT ROWID;
+  PRAGMA user_version = 4;
+`;
 
 export function ensureSqliteThreadSchema(database: DatabaseSync): void {
   let version = schemaVersion(database);
@@ -60,6 +71,10 @@ export function ensureSqliteThreadSchema(database: DatabaseSync): void {
         CHECK (kind IN ('regular', 'side'));
       PRAGMA user_version = 3;
     `));
+    version = 3;
+  }
+  if (version === 3) {
+    withTransaction(database, () => database.exec(FEATURE_PROJECTION_CHECKPOINT_SCHEMA));
     return;
   }
   if (version !== 0) throw new Error(`Unsupported SQLite thread store schema: ${version}`);
@@ -146,7 +161,7 @@ export function ensureSqliteThreadSchema(database: DatabaseSync): void {
       lease_expires_at INTEGER NOT NULL
     );
 
-    PRAGMA user_version = 3;
+    ${FEATURE_PROJECTION_CHECKPOINT_SCHEMA}
   `));
 }
 

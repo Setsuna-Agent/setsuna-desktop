@@ -42,7 +42,8 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
     await runtime.mcpStore.migrateLegacySecrets();
     await runtime.threadStore.recover();
     const recoveredThreads = await runtime.threadStore.listThreads({ includeArchived: true, includeSide: true });
-    const recoveredGeneratedImageAssetIds = await managedGeneratedImageAssetIdsFromStore(runtime.threadStore);
+    const imageCandidates = new Set(await runtime.generatedImageStore.listAssetIds());
+    const recoveredGeneratedImageAssetIds = await managedGeneratedImageAssetIdsFromStore(runtime.threadStore, imageCandidates);
     await runtime.generatedImageStore.recover([...recoveredGeneratedImageAssetIds]);
     await runtime.attachmentStore.recover(recoveredThreads.map((thread) => thread.id));
     // 工具结果按 thread 授权,启动时清理已删除线程的孤儿结果,避免悬空引用。

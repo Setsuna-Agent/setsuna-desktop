@@ -183,13 +183,13 @@ packages/contracts/ — 4 direct / 76 total files
 ### `packages/feature-core/`
 
 ```text
-packages/feature-core/ — 4 direct / 31 total files
-├── src/ — 8 direct / 22 total files
+packages/feature-core/ — 4 direct / 32 total files
+├── src/ — 8 direct / 23 total files
 │   ├── internal/ — 3 direct / 3 total files
 │   ├── main/ — 1 direct / 1 total files
 │   ├── preload/ — 1 direct / 1 total files
 │   ├── renderer/ — 5 direct / 5 total files
-│   └── runtime/ — 4 direct / 4 total files
+│   └── runtime/ — 5 direct / 5 total files
 └── test/ — 5 files
     ├── composition/ — 1 direct / 1 total files
     ├── preload/ — 1 direct / 1 total files
@@ -447,9 +447,9 @@ packages/features/ — 0 direct / 897 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 515 total files
-├── src/ — 2 direct / 300 total files
-│   ├── adapters/ — 112 files
+packages/desktop-runtime/ — 4 direct / 517 total files
+├── src/ — 2 direct / 301 total files
+│   ├── adapters/ — 113 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── event/ — 2 direct / 2 total files
 │   │   ├── feature/ — 6 direct / 6 total files
@@ -461,7 +461,7 @@ packages/desktop-runtime/ — 4 direct / 515 total files
 │   │   ├── plugin/ — 8 direct / 8 total files
 │   │   ├── search/ — 5 direct / 5 total files
 │   │   ├── skill/ — 4 direct / 4 total files
-│   │   ├── store/ — 34 direct / 34 total files
+│   │   ├── store/ — 35 direct / 35 total files
 │   │   ├── tool/ — 15 direct / 37 total files
 │   │   │   └── pc-local/ — 22 direct / 22 total files
 │   │   └── workspace/ — 5 direct / 5 total files
@@ -486,8 +486,8 @@ packages/desktop-runtime/ — 4 direct / 515 total files
 │   │   └── app-server/ — 23 direct / 23 total files
 │   ├── shared/ — 3 direct / 3 total files
 │   └── utils/ — 6 direct / 6 total files
-└── test/ — 211 files
-    ├── adapters/ — 50 files
+└── test/ — 212 files
+    ├── adapters/ — 51 files
     │   ├── approval/ — 1 direct / 1 total files
     │   ├── feature/ — 1 direct / 1 total files
     │   ├── mcp/ — 2 direct / 2 total files
@@ -498,7 +498,7 @@ packages/desktop-runtime/ — 4 direct / 515 total files
     │   │   └── support/ — 1 direct / 1 total files
     │   ├── search/ — 4 direct / 4 total files
     │   ├── skill/ — 1 direct / 1 total files
-    │   ├── store/ — 14 direct / 14 total files
+    │   ├── store/ — 15 direct / 15 total files
     │   ├── tool/ — 8 direct / 13 total files
     │   │   └── pc-local/ — 5 direct / 5 total files
     │   └── workspace/ — 5 direct / 5 total files

@@ -6,7 +6,7 @@ describe('ThreadStoreEventReader', () => {
   it('delegates fixed-watermark page bounds to the ThreadStore', async () => {
     const records = [{ seq: 6 }] as StoredThreadEvent[];
     const store = {
-      getThread: vi.fn(),
+      getThreadLastSeq: vi.fn(),
       readEventPage: vi.fn().mockResolvedValue(records),
     };
     const reader = new ThreadStoreEventReader(store);

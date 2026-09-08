@@ -101,6 +101,11 @@ export type {
   ThreadEventReadPage,
 } from './events.js';
 export type {
+  FeatureProjectionCheckpoint,
+  FeatureProjectionCheckpoints,
+  FeatureProjectionCheckpointDefinition,
+} from './projection-checkpoints.js';
+export type {
   FeatureActivationStatus,
   FeatureCriticality,
   FeatureDiagnostic,

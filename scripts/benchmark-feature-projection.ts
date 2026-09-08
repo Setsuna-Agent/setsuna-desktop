@@ -6,6 +6,7 @@ import { isFeatureEventEnvelope } from '@setsuna-desktop/feature-core/events';
 import { defineFeature } from '@setsuna-desktop/feature-core/definition';
 import {
   createFeatureProjectionStore,
+  type FeatureProjectionCheckpoints,
   type ThreadEventReader,
 } from '@setsuna-desktop/feature-core/runtime';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -17,7 +18,8 @@ type BenchmarkThreadStore = Readonly<{
   recover(): Promise<void>;
   createThread(input: Readonly<{ title: string }>): Promise<Readonly<{ id: string; lastSeq: number }>>;
   appendEvents(threadId: string, events: readonly PendingStoredThreadEvent[]): Promise<readonly StoredThreadEvent[]>;
-  getThread(threadId: string): Promise<Readonly<{ lastSeq: number }> | null>;
+  getThreadLastSeq(threadId: string): Promise<number>;
+  readonly projectionCheckpoints: FeatureProjectionCheckpoints;
   readEventPage(
     threadId: string,
     input: Readonly<{ afterSeq: number; throughSeq: number; limit: number }>,
@@ -31,7 +33,7 @@ type BenchmarkThreadStoreConstructor = new (
   ids: Readonly<{ id(prefix: string): string }>,
 ) => BenchmarkThreadStore;
 type ThreadStoreEventReaderConstructor = new (
-  store: Pick<BenchmarkThreadStore, 'getThread' | 'readEventPage'>,
+  store: Pick<BenchmarkThreadStore, 'getThreadLastSeq' | 'readEventPage' | 'projectionCheckpoints'>,
 ) => ThreadEventReader;
 
 // This diagnostic intentionally exercises the concrete adapters without adding runtime internals
@@ -53,6 +55,7 @@ const runs = integerArgument('--runs', 3);
 const batchSize = integerArgument('--batch-size', 5_000);
 
 type BenchmarkRow = Readonly<{
+  mode: 'full-replay' | 'checkpoint';
   events: number;
   projections: number;
   medianMs: number;
@@ -69,7 +72,7 @@ async function main(): Promise<void> {
   }
 
   console.table(rows);
-  console.log('Diagnostic only: process-cold projection stores over a real SQLite reader; OS cache is not cleared and no threshold is enforced.');
+  console.log('Diagnostic only: fresh projection stores over real SQLite, with full replay or pre-populated durable checkpoints; OS cache is not cleared.');
 }
 
 async function benchmarkEventCount(eventCount: number): Promise<readonly BenchmarkRow[]> {
@@ -94,6 +97,7 @@ async function benchmarkEventCount(eventCount: number): Promise<readonly Benchma
       return [
         await runScenario(readerStore, thread.id, eventCount, 1),
         await runScenario(readerStore, thread.id, eventCount, 2),
+        await runScenario(readerStore, thread.id, eventCount, 2, true),
       ];
     } finally {
       await readerStore.close();
@@ -108,15 +112,23 @@ async function runScenario(
   threadId: string,
   eventCount: number,
   projectionCount: 1 | 2,
+  checkpointed = false,
 ): Promise<BenchmarkRow> {
   const durations: number[] = [];
   const pageCounts: number[] = [];
   const recordCounts: number[] = [];
-  for (let run = 0; run < runs; run += 1) {
+  // The unmeasured first read creates the checkpoints used by subsequent cold projections.
+  for (let run = checkpointed ? -1 : 0; run < runs; run += 1) {
     const reader = new CountingThreadEventReader(new ThreadStoreEventReader(store));
     const featureIds = projectionCount === 1 ? [firstFeature] : [firstFeature, secondFeature];
     const projections = featureIds.map((featureId) => createFeatureProjectionStore<number>({
       eventReader: reader,
+      ...(checkpointed ? { checkpoint: { key: `${featureId}:1`, codec: {
+        parse(value: unknown) {
+          if (typeof value !== 'number') throw new Error('Invalid benchmark checkpoint.');
+          return value;
+        },
+      } } } : {}),
       initialState: () => 0,
       reduce: (state, record) => (
         isFeatureEventEnvelope(record) && record.featureId === featureId ? state + 1 : state
@@ -124,9 +136,11 @@ async function runScenario(
     }));
     const startedAt = performance.now();
     const snapshots = await Promise.all(projections.map((projection) => projection.read(threadId)));
-    durations.push(performance.now() - startedAt);
-    pageCounts.push(reader.pages);
-    recordCounts.push(reader.records);
+    if (run >= 0) {
+      durations.push(performance.now() - startedAt);
+      pageCounts.push(reader.pages);
+      recordCounts.push(reader.records);
+    }
     for (const snapshot of snapshots) {
       if (snapshot.throughSeq !== eventCount) {
         throw new Error(`Projection stopped at ${snapshot.throughSeq}; expected ${eventCount}.`);
@@ -135,6 +149,7 @@ async function runScenario(
     await Promise.all(projections.map((projection) => projection.dispose()));
   }
   return Object.freeze({
+    mode: checkpointed ? 'checkpoint' : 'full-replay',
     events: eventCount,
     projections: projectionCount,
     medianMs: rounded(median(durations)),
@@ -150,6 +165,10 @@ class CountingThreadEventReader implements ThreadEventReader {
   records = 0;
 
   constructor(private readonly reader: ThreadEventReader) {}
+
+  get checkpoints(): FeatureProjectionCheckpoints | undefined {
+    return this.reader.checkpoints;
+  }
 
   highWater(threadId: string): Promise<number> {
     return this.reader.highWater(threadId);

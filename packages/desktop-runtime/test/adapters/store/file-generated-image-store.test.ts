@@ -50,13 +50,18 @@ describe('file generated image store', () => {
     testDirectories.push(dataDir);
     let nextId = 0;
     const store = new FileGeneratedImageStore(dataDir, { id: () => `generated_image_${++nextId}` });
+    await expect(store.listAssetIds()).resolves.toEqual([]);
     const retained = await store.create({ name: 'retained.png', type: 'image/png', data: ONE_PIXEL_PNG });
     const orphaned = await store.create({ name: 'orphaned.png', type: 'image/png', data: ONE_PIXEL_PNG });
+    await writeFile(path.join(dataDir, 'generated-images', '.DS_Store'), 'metadata');
+    expect(await store.listAssetIds()).toEqual(expect.arrayContaining([retained.assetId, orphaned.assetId]));
+    expect(await store.listAssetIds()).toHaveLength(2);
 
     await store.recover([retained.assetId, '../invalid']);
 
     await expect(access(path.join(dataDir, 'generated-images', retained.assetId))).resolves.toBeUndefined();
     await expect(access(path.join(dataDir, 'generated-images', orphaned.assetId))).rejects.toThrow();
+    await expect(store.listAssetIds()).resolves.toEqual([retained.assetId]);
   });
 
   it('clones a managed asset into a new opaque directory for thread forks', async () => {
