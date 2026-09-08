@@ -1,9 +1,9 @@
 import type { AddressInfo } from 'node:net';
 import type { DesktopNativeBridge } from '../ports/secret-store.js';
-import type { createRuntimeFactory } from '../runtime/runtime-factory.js';
+import type { createRuntimeFactory, RuntimeFactoryOptions } from '../runtime/runtime-factory.js';
 import type { AppServerPtyFactory } from './app-server/command-exec.js';
 
-export type RuntimeServerOptions = {
+export type RuntimeServerOptions = Pick<RuntimeFactoryOptions, 'extensionWorkerEntryPath' | 'extensionWorkerExecArgv'> & {
   dataDir: string;
   token: string;
   version: string;

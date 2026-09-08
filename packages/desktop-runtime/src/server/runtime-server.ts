@@ -34,6 +34,8 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
     builtinSkillsDir: options.builtinSkillsDir,
     builtinPluginsDir: options.builtinPluginsDir,
     nativeBridge: options.nativeBridge,
+    extensionWorkerEntryPath: options.extensionWorkerEntryPath,
+    extensionWorkerExecArgv: options.extensionWorkerExecArgv,
   });
   let featureComposition: RuntimeFeatureComposition | null = null;
   try {

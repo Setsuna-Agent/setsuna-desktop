@@ -1,6 +1,7 @@
 import type { RuntimeThread } from '@setsuna-desktop/contracts';
 import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { InMemoryDesktopNativeBridge } from '../in-memory-secret-store.js';
 import type { AppServerPtyFactory } from '../../../src/server/app-server/command-exec.js';
 import { createRuntimeServer, type RuntimeServer } from '../../../src/server/runtime-server.js';
@@ -99,6 +100,9 @@ export async function createRuntimeServerTestHarness() {
         token,
         version: 'test',
         nativeBridge: new InMemoryDesktopNativeBridge(),
+        // Source-level tests start real extension workers without a prior build.
+        extensionWorkerEntryPath: path.resolve('packages/desktop-runtime/src/extensions/extension-worker-entry.ts'),
+        extensionWorkerExecArgv: ['--import', pathToFileURL(path.resolve('node_modules/tsx/dist/loader.mjs')).href],
         // Windows CI 可能没有可附加的 ConPTY 控制台，因此这些协议测试不使用真实 node-pty。
         commandExecPtyFactory: process.platform === 'win32' ? createTestAppServerPtyFactory() : undefined,
       });
