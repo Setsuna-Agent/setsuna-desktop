@@ -1,4 +1,4 @@
-import type { RuntimePluginInstallResult } from '@setsuna-desktop/contracts';
+import type { RuntimePluginInstallResult, RuntimePluginUiActionInput } from '@setsuna-desktop/contracts';
 import { createFeatureScope } from '@setsuna-desktop/feature-core/scope';
 import { describe, expect, it, vi } from 'vitest';
 import type {
@@ -190,6 +190,40 @@ describe('RendererPluginManagementService', () => {
       managementId: hook.managementId,
     }, expect.anything());
     expect(service.getHookSnapshot()).toEqual({ hooks: [mutatedHook] });
+
+    await scope.finishDispose();
+  });
+
+  it('invalidates Renderer UI data for the acting Plugin after every settled action', async () => {
+    const input = {
+      actionId: 'weather.refresh',
+      context: { contributionId: 'weather.page', surface: 'renderer.plugin.page' },
+      pluginId: 'weather',
+      values: {},
+    } satisfies RuntimePluginUiActionInput;
+    const runRendererUiAction = vi.fn()
+      .mockResolvedValueOnce({ status: 'completed' })
+      .mockRejectedValueOnce(new Error('action failed'));
+    const client = { runRendererUiAction } as unknown as PluginManagementClient;
+    const scope = createFeatureScope({
+      featureId: 'plugin-management',
+      process: 'renderer',
+      scopeId: 'plugin-management-ui-data-invalidation-test',
+    });
+    scope.activate();
+    const service = new RendererPluginManagementService({ bridge: null, client, scope: scope.scope });
+    const weatherListener = vi.fn();
+    const otherListener = vi.fn();
+    const unsubscribe = service.subscribeRendererUiData('weather', weatherListener);
+    service.subscribeRendererUiData('other-plugin', otherListener);
+
+    await expect(service.runRendererUiAction(input)).resolves.toEqual({ status: 'completed' });
+    expect(weatherListener).toHaveBeenCalledTimes(1);
+    expect(otherListener).not.toHaveBeenCalled();
+
+    await expect(service.runRendererUiAction(input)).rejects.toThrow('action failed');
+    expect(weatherListener).toHaveBeenCalledTimes(2);
+    unsubscribe();
 
     await scope.finishDispose();
   });

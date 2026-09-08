@@ -272,6 +272,27 @@
   animation: desktop-capabilities-spin 0.85s linear infinite;
 }
 
+.desktop-plugin-ui-preview-dialog__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+}
+
+.desktop-plugin-ui-preview-dialog__note {
+  margin: 0;
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 17px;
+}
+
+.desktop-plugin-ui-preview-dialog__frame {
+  width: min(100%, 680px);
+  margin-inline: auto;
+  border-radius: 16px;
+  clip-path: inset(0 round 16px);
+}
+
 .desktop-capabilities-plugin-detail .is-spinning {
   animation: desktop-capabilities-spin 0.85s linear infinite;
 }

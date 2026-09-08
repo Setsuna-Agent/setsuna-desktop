@@ -59,7 +59,7 @@ describe('createAssistantGuidanceTimelinePlan', () => {
     const assistant = assistantMessage('assistant_content', 'answer');
     const guidance = userMessage('user_steer', 'extra guidance');
     const plan = createAssistantGuidanceTimelinePlan({
-      blocks: [{ type: 'content', id: 'assistant_content:content', segment: assistant, content: 'answer' }],
+      blocks: [{ type: 'content', id: 'assistant_content:content', segment: assistant, content: 'answer', finalAnswer: true }],
       guidanceMessages: [guidance],
       messageOrderIds: ['assistant_content', 'user_steer'],
       turnActive: false,
@@ -78,7 +78,7 @@ describe('createAssistantGuidanceTimelinePlan', () => {
     const assistant = assistantMessage('assistant_content', 'answer');
     const guidance = userMessage('user_steer', 'extra guidance');
     const plan = createAssistantGuidanceTimelinePlan({
-      blocks: [{ type: 'content', id: 'assistant_content:content', segment: assistant, content: 'answer' }],
+      blocks: [{ type: 'content', id: 'assistant_content:content', segment: assistant, content: 'answer', finalAnswer: true }],
       guidanceMessages: [guidance],
       messageOrderIds: ['user_steer', 'assistant_content'],
       turnActive: false,
@@ -128,7 +128,7 @@ describe('createAssistantGuidanceTimelinePlan', () => {
     const plan = createAssistantGuidanceTimelinePlan({
       blocks: [
         { ...workBlock('work_before', [before]), active: false },
-        { type: 'content', id: 'assistant_body:content', segment: body, content: body.content },
+        { type: 'content', id: 'assistant_body:content', segment: body, content: body.content, finalAnswer: true },
         { ...workBlock('work_after', [after]), active: false },
       ],
       guidanceMessages: [],

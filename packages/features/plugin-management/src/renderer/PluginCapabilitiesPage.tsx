@@ -63,9 +63,11 @@ export function PluginCapabilitiesPage({
   const t = translate as PluginManagementTranslate;
 
   useEffect(() => {
-    if (snapshot.catalogRevision !== '__uninitialized__') return;
+    // Chat tools can mutate Plugin bundles while this feature service is idle.
+    // Refresh on page entry and item navigation so details never reuse a stale
+    // install manifest or extension failure from an earlier activation.
     void service.refresh().catch(() => undefined);
-  }, [service, snapshot.catalogRevision]);
+  }, [selectedPluginId, service]);
 
   useEffect(() => {
     void service.refreshHooks(capabilities?.workspacePath ? { cwd: capabilities.workspacePath } : {})

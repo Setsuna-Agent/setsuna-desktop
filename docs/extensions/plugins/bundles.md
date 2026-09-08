@@ -83,10 +83,11 @@ my-plugin/
 - `mcpServers` 支持 `stdio` 和 `streamable_http`。HTTP 必须是 HTTPS，或仅限 loopback 的 HTTP。
 - `hooks` 使用现有 Hook 事件与 matcher。`id`、`name`、`description`、触发事件和 matcher 会安全投影到插件详情页；命令和本地路径不会发送给 renderer。`{{pluginRoot}}` 安装时替换为私有安装目录，并按当前平台安全引用。
 - `resources` 必须显式声明。Agent 只能读取不超过 8 MiB 的受支持图片，或不超过 512 KiB 的 UTF-8 文本。
+- `extension.uiCards` 是运行时对话卡片的安装目录信息；每项包含稳定 `id`、用户可见 `label`、可选 `description`、顶层 `tools` 中存在的 `toolName`，以及必需的静态 `preview`。预览带有示例 HTML/CSS/JS 和有界 JSON 数据，只在无网络、无 host action 的沙箱中展示；工具运行时的真实卡片源码仍在工具结果中动态产生。
 
-### 声明式 Renderer UI
+### Renderer UI：宿主组件与沙箱页面
 
-需要在 Setsuna 宿主界面中显示少量配置或状态时，Bundle 可以在 manifest 的 `extension` 对象内增加 `rendererUi`。它必须同时声明 `extension.capabilities` 中的 `ui`；UI tree 只是受限 JSON，实际 React component、表单状态、审批与成功/失败提示均由宿主拥有。
+需要在 Setsuna 宿主界面中显示配置或状态时，Bundle 可以在 manifest 的 `extension` 对象内增加 `rendererUi`。它必须同时声明 `extension.capabilities` 中的 `ui`；使用动态数据时还要声明 `state`。每个 contribution 二选一：`tree` 由宿主组件渲染，适合紧凑状态和普通表单；`document` 把 Bundle 内的 HTML/CSS/JS 作为 opaque-origin sandbox iframe 渲染，适合自由布局的独立功能页。两者都由宿主管理侧栏入口、数据 scope、action allowlist 与审批。
 
 ```json
 {
@@ -96,7 +97,7 @@ my-plugin/
     "entry": "extension/entry.mjs",
     "capabilities": ["ui", "state"],
     "rendererUi": {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "actions": [
         {
           "id": "save-preference",
@@ -108,14 +109,19 @@ my-plugin/
       ],
       "contributions": [
         {
-          "id": "preferences",
-          "slot": "renderer.capabilities.plugin.details",
-          "stateKey": "preferences",
+          "id": "preferences.page",
+          "slot": "renderer.plugin.page",
+          "navigation": {
+            "label": "插件设置",
+            "badge": { "path": "status.label", "fallback": "未配置" }
+          },
+          "data": { "stateKey": "preferences.view", "scope": "global" },
           "order": 500,
           "tree": {
             "type": "stack",
             "children": [
-              { "type": "field", "name": "label", "label": "显示名称", "maxLength": 80 },
+              { "type": "text", "text": { "path": "status.detail", "fallback": "保存设置后显示状态。" } },
+              { "type": "field", "name": "label", "label": "显示名称", "defaultValue": { "path": "config.label" }, "maxLength": 80 },
               { "type": "button", "actionId": "save-preference", "label": "保存", "variant": "primary" }
             ]
           }
@@ -126,17 +132,117 @@ my-plugin/
 }
 ```
 
-首版固定边界：
+自由页面只允许进入 `renderer.plugin.page`，其源码必须是已声明资源：
 
-- Slot 只允许插件自己的 `renderer.capabilities.plugin.details` 和紧凑状态区 `renderer.chat.composer.status`。普通 Plugin 不能把业务设置插入“通用”“关于”等宿主设置页。
-- 每个 Plugin 最多声明一个详情设置 contribution；详情页允许 `field/select`，Chat 区域不允许表单节点。
-- 已安装的早期 schema v1 manifest 若仍声明 `renderer.settings.page.extensions` 和 `general/about` target，读取时会丢弃 target 并归一化到所属插件详情；新 manifest 必须使用上面的详情 Slot。
-- node 只允许 `stack/text/badge/notice/button/field/select`，未知字段直接拒绝，因此不存在 HTML、CSS、`className`、script、函数 handler 或任意 URL 入口。
+```json
+{
+  "resources": [
+    { "id": "dashboard-html", "path": "ui/dashboard.html" },
+    { "id": "dashboard-css", "path": "ui/dashboard.css" },
+    { "id": "dashboard-js", "path": "ui/dashboard.js" }
+  ],
+  "extension": {
+    "apiVersion": 1,
+    "runtime": "node-worker",
+    "entry": "extension/entry.mjs",
+    "capabilities": ["ui", "state"],
+    "rendererUi": {
+      "schemaVersion": 2,
+      "actions": [
+        { "id": "dashboard.refresh", "approval": { "message": "刷新仪表盘数据吗？" } }
+      ],
+      "contributions": [
+        {
+          "id": "dashboard.page",
+          "slot": "renderer.plugin.page",
+          "navigation": { "label": "仪表盘" },
+          "data": { "stateKey": "dashboard.view", "scope": "global" },
+          "document": {
+            "htmlResourceId": "dashboard-html",
+            "cssResourceId": "dashboard-css",
+            "jsResourceId": "dashboard-js",
+            "actionIds": ["dashboard.refresh"]
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+沙箱脚本通过 `window.setsunaUI` 读取和订阅宿主投影，并可请求该 document 明确列出的 action：
+
+```js
+const snapshot = await window.setsunaUI.ready;
+render(snapshot.data);
+window.setsunaUI.subscribe(({ data }) => render(data));
+await window.setsunaUI.invoke('dashboard.refresh', { range: '7d' });
+```
+
+固定边界：
+
+- schemaVersion 1 继续兼容插件详情设置和紧凑 Chat contribution；早期 `renderer.settings.page.extensions` 的 `general/about` 输入会归一化到所属插件详情。详情 contribution 可用 `stateKey` 绑定一条 global state，且至少包含一个字段。
+- schemaVersion 2 新增 `renderer.plugin.page`、宿主侧栏入口、作用域数据和绑定；允许的 Slot 为 `renderer.capabilities.plugin.details`、`renderer.plugin.page`、`renderer.settings.page.extensions` 和 `renderer.chat.composer.status`。Settings target 只允许 `general/about`，Chat 区域不允许 `field/select`。
+- `tree` node 只允许 `stack/text/badge/notice/button/field/select`，未知字段直接拒绝；它不接受 HTML、CSS、`className`、script、函数 handler 或任意 URL。
+- `document` 只接受已声明的 `.html/.htm`、`.css`、`.js/.mjs` 文本资源，并沿用交互卡片的单文件和总源码上限。宿主从一次完整 Bundle hash 快照中同时取得源码字节；当前 hash 与用户信任的 hash 不一致时拒绝返回，避免校验和读取之间出现可执行内容替换。
+- document iframe 只带 `sandbox="allow-scripts"`，绝不带 `allow-same-origin`。CSP 禁止直接网络、远程资源、worker、嵌套 frame、对象、媒体和表单；Electron 主窗口另外阻止子 frame 离开 `about:srcdoc/about:blank`。页面没有 Node、Electron、preload、文件系统或宿主 DOM，只能使用 `window.setsunaUI`。
+- 动态值只能使用 `{ "path": "summary.label", "fallback": "未运行" }` 从 contribution 声明的 `data.stateKey` 读取。数据 scope 只能是 `global/project/thread`，JSON 大小、深度和条目数均受限；renderer 不能自行选择 state key。
 - 单个 manifest 最多 16 个 contribution、32 个 action、128 个 node、24 个字段，树深最多 8 层；文本、选项和提交值也都有独立上限。
 - UI 只在安装记录与当前 Bundle hash 仍处于 `trusted` 时挂载；更新、卸载或撤销信任会通过 Renderer transaction 替换/撤销整个 Plugin UI。
-- Plugin 详情 contribution 可以用 `stateKey` 绑定 Plugin 自己的一条 global extension state 记录；此时必须同时声明 `state` capability，且 contribution 至少包含一个 `field/select`。Chat contribution 不能绑定状态。
-- 绑定状态必须是以字段名为 key、字符串为 value 的 JSON object。宿主读取前重新校验当前 Bundle hash，只回填该 contribution 已声明且满足长度/select 约束的值；缺失、无效和额外字段被忽略，由 manifest 默认值补齐。
-- Button 只能引用 manifest 中的 action ID。宿主先展示 `approval` 文案，再携带当前 `contributionId` 通过 Plugin Management typed operation 调用 worker 的 `api.onUiAction`；Runtime 只按该 contribution 校验字段，Plugin 返回的 markup 或错误文本不会进入 Renderer。
+- Button 或 document `invoke()` 只能引用当前 contribution 明确列出的 manifest action ID。宿主先展示 `approval` 文案，再携带当前 `contributionId`、有界 JSON payload 和可用的 project/thread/cwd 上下文，通过 Plugin Management typed operation 调用 worker 的 `api.onUiAction`；Runtime 只按该 contribution 校验字段和 state scope，Plugin 返回的 markup 或错误文本不会进入 Renderer。动作完成后宿主重新读取声明的数据快照。
+
+### 对话 HTML/CSS/JS 卡片
+
+声明 `ui` 的 extension 工具还可以在标准工具结果 `data` 中返回 `plugin.ui-card@1`。新 Bundle 应在 manifest 的 `extension.uiCards` 同时声明可展示的卡片模板和对应工具；这样详情页能在运行工具前列出它，而不把动态源码误列为静态资源：
+
+```json
+{
+  "tools": [{ "name": "get_weather", "description": "查询实时天气并返回天气卡片。" }],
+  "extension": {
+    "apiVersion": 1,
+    "runtime": "node-worker",
+    "entry": "extension/entry.mjs",
+    "capabilities": ["tools", "ui", "network"],
+    "uiCards": [
+      {
+        "id": "weather.current",
+        "label": "实时天气卡片",
+        "description": "展示当前天气和短期预报。",
+        "toolName": "get_weather",
+        "preview": {
+          "html": "<main id=\"weather\"></main>",
+          "css": "html,body{margin:0;background:transparent}.card{padding:20px;border-radius:18px;color:#fff;background:#28506b}.temp{font-size:48px;font-weight:700}",
+          "js": "window.setsunaUI.ready.then(({data})=>{document.querySelector('#weather').innerHTML=`<section class=\"card\"><div>${data.city} · ${data.condition}</div><div class=\"temp\">${data.temperature}°C</div></section>`})",
+          "data": { "city": "杭州", "condition": "晴", "temperature": 28 }
+        }
+      }
+    ]
+  }
+}
+```
+
+卡片和上面的独立页面共用沙箱 frame，但卡片源码随工具结果持久化，并显示宿主持有的 Plugin 来源标题；Chat 会把卡片放在该工具调用的真实时间线位置，因此工具前后的 assistant 文本可以稳定显示为 `文字 → 卡片 → 文字`。v1 卡片没有 host action，也不能直接联网：
+
+```js
+return {
+  content: '杭州今天晴，28°C。',
+  data: {
+    resultKind: 'plugin.ui-card',
+    resultMajor: 1,
+    payload: {
+      id: 'weather.hangzhou.today',
+      title: '杭州天气',
+      html: '<main id="weather"></main>',
+      css: '#weather { padding: 20px; }',
+      js: 'window.setsunaUI.ready.then(({data}) => render(data));',
+      data: { temperature: 28, condition: '晴' },
+      permissions: { network: false, hostActions: [] }
+    }
+  }
+};
+```
+
+worker 不应填写 `pluginId`；runtime 只接受来自真实 Plugin tool run 的卡片，用已验证的 Plugin ID 盖章并在持久化前校验 envelope、JSON 数据和 HTML/CSS/JS 大小，动态返回的卡片 JavaScript 还会做语法检查。`uiCards` 只负责安装摘要和静态详情预览，不授权执行，也不限制同一模板每次返回不同数据和源码。预览不会执行工具、联网或发起 host action。升级前没有 `uiCards` 的 Bundle 会根据 `ui` 能力与已声明工具做兼容展示，但必须更新清单补充 `uiCards.preview` 后才能看到真实预览。需要天气、搜索等实时数据时，工具必须从 handler 的第二个参数调用 `context.network.request` 查询 allowlist origin；响应 `body` 是字符串，应检查状态后调用 `response.json()`/`response.text()` 或显式 `JSON.parse`，再把纯结果投影给卡片。卡片自身不能请求网络。
 
 完整所有权与安全决策见 [Renderer Plugin Runtime](../../designs/current/renderer-plugin-runtime.md)，worker 动作 API 见 [可执行扩展 API v1](extensions.md#apionuiactionactionid-handler)。
 
@@ -160,7 +266,7 @@ runtime 会用当前 turn 的用户文本、附件名和附件 MIME 类型匹配
 
 ### 随应用实现的原生能力
 
-Bundle 是否执行代码由 `extension` 字段决定，而不是由 schema 版本决定。没有 `extension` 的 v2 Bundle 仍是纯声明式插件；声明 `extension` 后，代码只在独立 Node worker 中运行，并受完整包哈希信任、能力声明、JSONL 协议和标准工具审批约束。它不进入 runtime 或 renderer 进程，也不等同于 OS 沙箱。完整契约见 [可执行扩展 API v1](extensions.md)。
+Bundle 是否执行代码由 `extension` 字段决定，而不是由 schema 版本决定。没有 `extension` 的 v2 Bundle 仍是纯声明式插件；extension 入口只在独立 Node worker 中运行，并受完整包哈希信任、能力声明、JSONL 协议和标准工具审批约束。可选的 document/card JavaScript 只在上述 opaque-origin iframe 中运行，不进入主 Renderer module graph。Node worker 不等同于 OS 沙箱，完整契约见 [可执行扩展 API v1](extensions.md)。
 
 需要 runtime 凭据或受管附件的第一方插件也必须由 Bundle extension 注册和实现工具，不能在 runtime 里配一套隐藏 ToolHost。`openai-image-generation` 的 `generate_image` schema、输入校验、结果格式位于插件 `extension/`，只通过 marketplace 专用的 `image-generation` bridge 请求 host 使用私有 Images API 配置并保存受管资产；`openai-vision-recognition` 同样在 Bundle 内实现 `analyze_image`，通过 `vision-recognition` bridge 传递附件 ID 和问题。host 只负责密钥、代理、provider adapter、thread 归属校验和二进制落盘，不持有工具定义或面向模型的结果语义。
 
@@ -192,6 +298,7 @@ Bundle 是否执行代码由 `extension` 字段决定，而不是由 schema 版�
 - 草稿写入 runtime 私有的 `plugin-drafts/<plugin-id>`，再复用标准 Bundle 校验和事务式安装链路。模型不能指定目标目录，也不能覆盖从内置市场或其他本地目录安装的同名 Plugin。
 - 审批预览包含规范化后的 manifest、完整文件内容、能力数量和每个文件的 SHA-256。执行时会重新计算完整性 token；审批后内容或动作发生变化会以 `preview_changed` 拒绝执行。
 - 一次批准同时授权安装和启用审批中展示的版本。若其中包含 Hook 或可执行扩展，当前命令/Bundle 哈希会随安装写入信任状态，不再弹出第二次“信任”确认；任何后续内容更新都需要新的 `configure_plugin` 审批。
+- extension 安装前会检查入口、页面与静态卡片脚本语法，并在 staged 目录临时启动 worker，核对声明工具和 UI action 已注册；这仍只证明“能加载”。Agent 随后必须用 `verify_plugin` 实际执行每个用户可见工具/UI action，只有返回 `Verified and usable: true` 才能宣称功能可用。验证调用可能联网或更新 Plugin 状态，因此展示完整输入并单独审批。
 
 这项授权只适用于 Agent 受管草稿。`install_plugin_bundle` 和能力页的本地目录导入仍按开发者侧载处理，不会因为目录存在就自动信任 Hook 或可执行扩展；随应用发布的内置市场继续使用应用控制的可信来源规则。
 

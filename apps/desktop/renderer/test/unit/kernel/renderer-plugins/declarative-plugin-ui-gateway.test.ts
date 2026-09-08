@@ -5,6 +5,10 @@ import {
 import type { RendererPluginDefinition } from '@setsuna-desktop/feature-core/renderer';
 import type { PluginManagementRendererService } from '@setsuna-desktop/feature-plugin-management/contracts';
 import { settingsPageSlot } from '@setsuna-desktop/renderer-contracts/settings';
+import {
+  shellPluginPageSlot,
+  shellSidebarPluginEntrySlot,
+} from '@setsuna-desktop/renderer-contracts/shell';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   activateDeclarativePluginUiGateway,
@@ -111,6 +115,92 @@ describe('declarative Plugin UI gateway', () => {
     expect(unsubscribe).toHaveBeenCalledOnce();
     expect(disposeMount).toHaveBeenCalledOnce();
   });
+
+  it('maps a standalone contribution to a host sidebar entry and keyed page', async () => {
+    const list = vi.fn(() => vi.fn());
+    const keyed = vi.fn(() => vi.fn());
+    const mount = vi.fn(async (plugin) => {
+      await plugin.activate({
+        ui: {
+          chain: vi.fn(),
+          keyed,
+          list,
+          owner: { pluginId: plugin.id, scopeId: `test:${plugin.id}` },
+          single: vi.fn(),
+        } as never,
+      });
+      return vi.fn();
+    });
+    const plugin = installedPagePlugin();
+    const service = {
+      getSnapshot: () => ({
+        catalogRevision: 'fixture',
+        extensions: [],
+        marketplace: [],
+        marketplaceErrors: [],
+        plugins: [plugin],
+      }),
+      refreshInstalled: vi.fn(async () => ({ plugins: [plugin] })),
+      subscribe: vi.fn(() => () => undefined),
+    } as unknown as PluginManagementRendererService;
+
+    const dispose = await activateDeclarativePluginUiGateway(
+      { mount } as unknown as RendererPluginRuntime,
+      service,
+    );
+
+    expect(list).toHaveBeenCalledWith(
+      shellSidebarPluginEntrySlot,
+      expect.objectContaining({ id: expect.stringContaining('.navigation') }),
+    );
+    const sidebarCalls = list.mock.calls as unknown as Array<[unknown, Record<string, unknown>]>;
+    const sidebarRegistration = sidebarCalls.find(([slot]) => slot === shellSidebarPluginEntrySlot)?.[1];
+    expect(sidebarRegistration).not.toHaveProperty('when');
+    expect(keyed).toHaveBeenCalledWith(
+      shellPluginPageSlot,
+      expect.objectContaining({ id: expect.stringContaining('.page'), key: 'release-checker/release.page' }),
+    );
+    await dispose();
+  });
+
+  it('remounts sandbox pages when the trusted catalog revision changes', async () => {
+    const plugin = installedPagePlugin();
+    const firstDispose = vi.fn();
+    const secondDispose = vi.fn();
+    const mount = vi.fn()
+      .mockResolvedValueOnce(firstDispose)
+      .mockResolvedValueOnce(secondDispose);
+    let catalogRevision = 'revision-1';
+    let emitSnapshot: (() => void) | undefined;
+    const service = {
+      getSnapshot: () => ({
+        catalogRevision,
+        extensions: [],
+        marketplace: [],
+        marketplaceErrors: [],
+        plugins: [plugin],
+      }),
+      refreshInstalled: vi.fn(async () => ({ plugins: [plugin] })),
+      subscribe: vi.fn((listener: () => void) => {
+        emitSnapshot = listener;
+        return () => undefined;
+      }),
+    } as unknown as PluginManagementRendererService;
+
+    const dispose = await activateDeclarativePluginUiGateway(
+      { mount } as unknown as RendererPluginRuntime,
+      service,
+    );
+    expect(mount).toHaveBeenCalledOnce();
+
+    catalogRevision = 'revision-2';
+    emitSnapshot?.();
+    await vi.waitFor(() => expect(mount).toHaveBeenCalledTimes(2));
+    expect(firstDispose).toHaveBeenCalledOnce();
+
+    await dispose();
+    expect(secondDispose).toHaveBeenCalledOnce();
+  });
 });
 
 function contribution(input: Record<string, unknown>) {
@@ -143,6 +233,37 @@ function installedUiPlugin(): RuntimePluginSummary {
           id: 'recoverable.settings',
           slot: 'renderer.capabilities.plugin.details',
           tree: { type: 'text', text: 'Recovered' },
+        }],
+      }),
+    },
+  };
+}
+
+function installedPagePlugin(): RuntimePluginSummary {
+  return {
+    id: 'release-checker',
+    name: 'Release checker',
+    description: 'Checks a project before release.',
+    installedAt: '2026-08-31T00:00:00.000Z',
+    skills: [],
+    mcpServers: [],
+    hooks: [],
+    hookCount: 0,
+    resources: [],
+    extension: {
+      apiVersion: 1,
+      runtime: 'node-worker',
+      capabilities: ['ui', 'state'],
+      trust: 'trusted',
+      rendererUi: parseRuntimePluginUiManifest({
+        schemaVersion: 2,
+        actions: [],
+        contributions: [{
+          id: 'release.page',
+          slot: 'renderer.plugin.page',
+          navigation: { label: 'Release checker', badge: { path: 'summary.label' } },
+          data: { stateKey: 'release.view', scope: 'project' },
+          tree: { type: 'text', text: { path: 'summary.detail', fallback: 'Not run' } },
         }],
       }),
     },

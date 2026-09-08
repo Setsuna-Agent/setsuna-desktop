@@ -1,8 +1,13 @@
 import { mkdir, mkdtemp, realpath, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import type { RuntimePluginSummary } from '@setsuna-desktop/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import { PluginBundleToolHost } from '../../../src/adapters/tool/plugin-bundle-tool-host.js';
+import {
+  configurePluginRendererUiSchema,
+  normalizeConfigurePluginInput,
+} from '../../../src/adapters/tool/configure-plugin-tool.js';
 import type { InstalledPluginRecord, PluginBundleStore } from '../../../src/ports/plugin-bundle-store.js';
 import type { PluginDraftStore } from '../../../src/ports/plugin-draft-store.js';
 
@@ -12,6 +17,98 @@ const ONE_PIXEL_PNG = Buffer.from(
 );
 
 describe('plugin bundle tool host', () => {
+  it('advertises scoped Renderer UI data and normalizes the former top-level shorthand', () => {
+    expect(configurePluginRendererUiSchema).toMatchObject({
+      additionalProperties: false,
+      properties: {
+        contributions: {
+          items: {
+            additionalProperties: false,
+            properties: {
+              data: { required: ['stateKey', 'scope'] },
+              slot: {
+                enum: expect.arrayContaining(['renderer.capabilities.plugin.details']),
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const normalized = normalizeConfigurePluginInput({
+      manifest: {
+        id: 'release-checker',
+        name: 'Release Checker',
+        extension: {
+          apiVersion: 1,
+          runtime: 'node-worker',
+          entry: 'extension/entry.mjs',
+          capabilities: ['ui', 'state'],
+          rendererUi: {
+            schemaVersion: 2,
+            actions: [],
+            contributions: [{
+              id: 'release.page',
+              slot: 'renderer.plugin.page',
+              stateKey: 'release.view',
+              scope: 'project',
+              navigation: { label: 'Release Checker' },
+              tree: { type: 'text', text: 'Not run' },
+            }],
+          },
+        },
+      },
+      files: [{ path: 'extension/entry.mjs', content: 'export default function activate() {}\n' }],
+    });
+
+    expect(normalized.manifest).toMatchObject({
+      extension: {
+        rendererUi: {
+          contributions: [{
+            data: { scope: 'project', stateKey: 'release.view' },
+          }],
+        },
+      },
+    });
+    const extension = normalized.manifest.extension as {
+      rendererUi: { contributions: Array<Record<string, unknown>> };
+    };
+    expect(extension.rendererUi.contributions[0]).not.toHaveProperty('stateKey');
+    expect(extension.rendererUi.contributions[0]).not.toHaveProperty('scope');
+  });
+
+  it('normalizes misplaced UI cards but rejects other fields outside the tool schema', () => {
+    const normalized = normalizeConfigurePluginInput({
+      manifest: {
+        id: 'weather-card',
+        name: 'Weather Card',
+        tools: [{ name: 'get_weather' }],
+        extension: {
+          apiVersion: 1,
+          runtime: 'node-worker',
+          entry: 'extension/entry.mjs',
+          capabilities: ['tools', 'ui'],
+        },
+        uiCards: [{
+          id: 'weather.current',
+          label: 'Current weather',
+          toolName: 'get_weather',
+          preview: { html: '<main>28°C</main>' },
+        }],
+      },
+      files: [{ path: 'extension/entry.mjs', content: 'export default function activate() {}\n' }],
+    });
+
+    expect(normalized.manifest).not.toHaveProperty('uiCards');
+    expect(normalized.manifest).toMatchObject({
+      extension: { uiCards: [{ id: 'weather.current', toolName: 'get_weather' }] },
+    });
+    expect(() => normalizeConfigurePluginInput({
+      manifest: { id: 'unknown-field', name: 'Unknown Field', surprise: true },
+      files: [],
+    })).toThrow('configure_plugin.manifest contains unsupported field: surprise');
+  });
+
   it('gates plugin tools by feature and requires approval for capability mutations', async () => {
     const store = pluginStoreFixture();
     const host = new PluginBundleToolHost(store, pluginDraftStoreFixture());
@@ -127,16 +224,159 @@ describe('plugin bundle tool host', () => {
     await expect(host.approvalForTool('configure_plugin', input)).rejects.toThrow('installed from another source');
   });
 
+  it('requests functional verification only when the installed extension exposes a verifiable path', async () => {
+    const store = pluginStoreFixture();
+    const installPlugin = vi.mocked(store.installPlugin);
+    installPlugin
+      .mockResolvedValueOnce(pluginInstallResult(pluginSummaryFixture({
+        extension: {
+          apiVersion: 1,
+          runtime: 'node-worker',
+          capabilities: ['events'],
+          trust: 'trusted',
+        },
+      })))
+      .mockResolvedValueOnce(pluginInstallResult(pluginSummaryFixture({
+        extension: {
+          apiVersion: 1,
+          runtime: 'node-worker',
+          capabilities: ['ui'],
+          rendererUi: {
+            schemaVersion: 2,
+            actions: [],
+            contributions: [{
+              id: 'status.page',
+              slot: 'renderer.plugin.page',
+              navigation: { label: 'Status' },
+              tree: { type: 'text', text: 'Ready' },
+            }],
+          },
+          trust: 'trusted',
+        },
+      })))
+      .mockResolvedValueOnce(pluginInstallResult(pluginSummaryFixture({
+        tools: [{ name: 'echo' }],
+        extension: {
+          apiVersion: 1,
+          runtime: 'node-worker',
+          capabilities: ['tools'],
+          trust: 'trusted',
+        },
+      })));
+    const host = new PluginBundleToolHost(store, pluginDraftStoreFixture());
+    const input = configurePluginInput('export default function activate() {}\n');
+
+    const eventsOnly = await host.runTool('configure_plugin', input, { threadId: 'thread_1' });
+    expect(eventsOnly).toMatchObject({ data: { verification: { required: false } } });
+    expect(eventsOnly.content).not.toContain('Functional verification: pending');
+
+    const readOnlyPage = await host.runTool('configure_plugin', input, { threadId: 'thread_1' });
+    expect(readOnlyPage).toMatchObject({ data: { verification: { required: false } } });
+
+    const withTool = await host.runTool('configure_plugin', input, { threadId: 'thread_1' });
+    expect(withTool).toMatchObject({
+      data: { verification: { required: true, tool: 'verify_plugin' } },
+    });
+    expect(withTool.content).toContain('Functional verification: pending');
+  });
+
   it('binds configure_plugin execution to the exact approved bundle contents', async () => {
     const store = pluginStoreFixture();
     const drafts = pluginDraftStoreFixture();
     const host = new PluginBundleToolHost(store, drafts);
 
-    await expect(host.runTool('configure_plugin', configurePluginInput('changed code\n'), {
+    await expect(host.runTool('configure_plugin', configurePluginInput('export default function activate() { /* changed */ }\n'), {
       threadId: 'thread_1',
       expectedPreviewIntegrityToken: 'configure-plugin:stale',
     })).rejects.toMatchObject({ failureKind: 'preview_changed', failureStage: 'preflight' });
     expect(drafts.writeDraft).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid extension JavaScript before requesting approval', async () => {
+    const store = pluginStoreFixture();
+    const host = new PluginBundleToolHost(store, pluginDraftStoreFixture());
+
+    await expect(host.approvalForTool(
+      'configure_plugin',
+      configurePluginInput('export default function activate() { const view = <div class="broken">; }\n'),
+    )).rejects.toThrow(/extension\/entry\.mjs is not valid JavaScript[\s\S]*Unexpected token/u);
+    expect(store.listInstalledRecords).not.toHaveBeenCalled();
+  });
+
+  it('rejects an incomplete complete snapshot before approval and reports all missing plugin files', async () => {
+    const store = pluginStoreFixture();
+    const host = new PluginBundleToolHost(store, pluginDraftStoreFixture());
+    const approval = host.approvalForTool('configure_plugin', {
+      manifest: {
+        id: 'hangzhou-weather',
+        name: '杭州天气',
+        resources: [
+          { id: 'weather-html', path: 'ui/weather.html' },
+          { id: 'weather-css', path: 'ui/weather.css' },
+          { id: 'weather-js', path: 'ui/weather.js' },
+        ],
+        extension: {
+          apiVersion: 1,
+          entry: 'extension/entry.mjs',
+          capabilities: ['ui', 'state', 'network'],
+          network: { allowedOrigins: ['https://api.open-meteo.com'] },
+          rendererUi: {
+            schemaVersion: 2,
+            actions: [{ id: 'weather.refresh', approval: { message: '联网刷新天气吗？' } }],
+            contributions: [{
+              id: 'weather.page',
+              slot: 'renderer.plugin.page',
+              navigation: { label: '天气' },
+              data: { stateKey: 'weather.view', scope: 'global' },
+              document: {
+                htmlResourceId: 'weather-html',
+                cssResourceId: 'weather-css',
+                jsResourceId: 'weather-js',
+                actionIds: ['weather.refresh'],
+              },
+            }],
+          },
+        },
+      },
+      files: [{ path: 'ui/weather.html', content: '<main id="weather"></main>' }],
+    });
+
+    await expect(approval).rejects.toThrow(
+      /ui\/weather\.css[\s\S]*ui\/weather\.js[\s\S]*runtime must be "node-worker"[\s\S]*extension\/entry\.mjs/u,
+    );
+    expect(store.listInstalledRecords).not.toHaveBeenCalled();
+  });
+
+  it('requires manifest references to match canonical draft paths exactly', () => {
+    expect(() => normalizeConfigurePluginInput({
+      manifest: {
+        id: 'case-sensitive-entry',
+        name: 'Case-sensitive entry',
+        extension: {
+          apiVersion: 1,
+          runtime: 'node-worker',
+          entry: 'extension/Entry.mjs',
+          capabilities: ['tools'],
+        },
+      },
+      files: [{ path: 'extension/entry.mjs', content: 'export default function activate() {}\n' }],
+    })).toThrow('files is missing manifest.extension.entry: extension/Entry.mjs');
+
+    if (path.sep === '/') {
+      expect(() => normalizeConfigurePluginInput({
+        manifest: {
+          id: 'backslash-entry',
+          name: 'Backslash entry',
+          extension: {
+            apiVersion: 1,
+            runtime: 'node-worker',
+            entry: 'extension\\entry.mjs',
+            capabilities: ['tools'],
+          },
+        },
+        files: [{ path: 'extension/entry.mjs', content: 'export default function activate() {}\n' }],
+      })).toThrow('files is missing manifest.extension.entry: extension\\entry.mjs');
+    }
   });
 
   it('recognizes an AI-managed draft through a symlinked runtime data root', async () => {
@@ -227,6 +467,12 @@ function pluginStoreFixture(): PluginBundleStore {
     listInstalledRecords: vi.fn(async () => []),
     readItemContent: vi.fn(async (pluginId, kind, itemId) => ({ pluginId, kind, itemId, files: [] })),
     readBundleItemContent: vi.fn(async (_input, kind, itemId) => ({ pluginId: 'demo', kind, itemId, files: [] })),
+    readTrustedRendererUiDocument: vi.fn(async () => ({
+      revision: 'trusted-hash',
+      html: '',
+      css: '',
+      js: '',
+    })),
     readResource: vi.fn(async (_pluginId, resourceId) => resourceId === 'logo'
       ? {
           pluginId: 'demo',
@@ -254,6 +500,24 @@ function pluginDraftStoreFixture(): PluginDraftStore {
     pathFor: vi.fn((pluginId) => `/managed/plugin-drafts/${pluginId}`),
     writeDraft: vi.fn(async (input) => ({ pluginId: input.pluginId, path: `/managed/plugin-drafts/${input.pluginId}` })),
   };
+}
+
+function pluginSummaryFixture(patch: Partial<RuntimePluginSummary> = {}): RuntimePluginSummary {
+  return {
+    id: 'demo',
+    name: 'Demo',
+    installedAt: '2026-07-15T00:00:00.000Z',
+    skills: [],
+    mcpServers: [],
+    hooks: [],
+    hookCount: 0,
+    resources: [],
+    ...patch,
+  };
+}
+
+function pluginInstallResult(plugin: RuntimePluginSummary) {
+  return { plugin, installedMcpServers: [], reusedMcpServers: [] };
 }
 
 function configurePluginInput(code: string) {

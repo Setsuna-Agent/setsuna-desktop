@@ -1,7 +1,8 @@
 import type {
   RuntimePluginUiAction,
   RuntimePluginUiActionInput,
-  RuntimePluginUiContribution,
+  RuntimePluginUiTreeContribution,
+  RuntimePluginUiData,
   RuntimePluginUiManifest,
   RuntimePluginUiNode,
 } from '@setsuna-desktop/contracts';
@@ -16,6 +17,11 @@ import {
   type ChangeEvent,
   type ReactNode,
 } from 'react';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import {
+  resolveRuntimePluginUiText,
+  useDeclarativePluginUiData,
+} from './useDeclarativePluginUiData.js';
 
 type ActionState =
   | Readonly<{ state: 'idle' }>
@@ -24,35 +30,67 @@ type ActionState =
 
 type HydrationState = 'loading' | 'ready' | 'error';
 
-export function DeclarativePluginUiView({
+type DeclarativePluginUiViewProps = Readonly<{
+  contribution: RuntimePluginUiTreeContribution;
+  cwd?: string;
+  manifest: RuntimePluginUiManifest;
+  pluginId: string;
+  projectId?: string;
+  service: PluginManagementRendererService;
+  settingsUi?: SettingsViewUi;
+  threadId?: string;
+  translate?: RendererTranslate;
+}>;
+
+export function DeclarativePluginUiView(props: DeclarativePluginUiViewProps) {
+  const { contribution, pluginId, projectId, threadId } = props;
+  const instanceKey = `${pluginId}\u0000${contribution.id}\u0000${projectId ?? ''}\u0000${threadId ?? ''}`;
+
+  // A scope change represents a different Plugin UI instance. Remounting keeps
+  // form drafts and in-flight actions from crossing project/thread boundaries.
+  return <DeclarativePluginUiViewInstance key={instanceKey} {...props} />;
+}
+
+function DeclarativePluginUiViewInstance({
   contribution,
+  cwd,
   manifest,
   pluginId,
+  projectId,
   service,
   settingsUi,
   threadId,
   translate,
-}: Readonly<{
-  contribution: RuntimePluginUiContribution;
-  manifest: RuntimePluginUiManifest;
-  pluginId: string;
-  service: PluginManagementRendererService;
-  settingsUi?: SettingsViewUi;
-  threadId?: string;
-  translate: RendererTranslate;
-}>) {
-  const { id: contributionId, slot, stateKey, tree: node } = contribution;
-  const initialValues = useMemo(() => collectInitialValues(node), [node]);
+}: DeclarativePluginUiViewProps) {
+  const { t } = useI18n();
+  const translateFeature: RendererTranslate = translate ?? t;
+  const { id: contributionId, stateKey, tree: node } = contribution;
+  const dataState = useDeclarativePluginUiData({
+    contribution,
+    pluginId,
+    projectId,
+    service,
+    threadId,
+  });
+  const initialValues = useMemo(
+    () => collectInitialValues(contribution.tree, dataState.data),
+    [contribution.tree, dataState.data],
+  );
   const [values, setValues] = useState<Readonly<Record<string, string>>>(initialValues);
+  const dirtyFields = useRef(new Set<string>());
   const [hydrationState, setHydrationState] = useState<HydrationState>(stateKey ? 'loading' : 'ready');
   const [actionState, setActionState] = useState<ActionState>({ state: 'idle' });
   const actionController = useRef<AbortController | null>(null);
   const actions = useMemo(() => new Map(manifest.actions.map((action) => [action.id, action])), [manifest]);
+  useEffect(() => {
+    setValues((current) => Object.freeze(Object.fromEntries(Object.entries(initialValues).map(([name, value]) => [
+      name,
+      dirtyFields.current.has(name) ? current[name] ?? value : value,
+    ]))));
+  }, [initialValues]);
 
   useEffect(() => {
     const controller = new AbortController();
-    setValues(initialValues);
-    setActionState({ state: 'idle' });
     if (!stateKey) {
       setHydrationState('ready');
       return () => controller.abort();
@@ -63,6 +101,7 @@ export function DeclarativePluginUiView({
       { signal: controller.signal },
     ).then((result) => {
       if (controller.signal.aborted) return;
+      dirtyFields.current.clear();
       setValues(Object.freeze({ ...initialValues, ...result.values }));
       setHydrationState('ready');
     }).catch(() => {
@@ -74,11 +113,16 @@ export function DeclarativePluginUiView({
   useEffect(() => () => actionController.current?.abort(), [contributionId, pluginId]);
 
   const updateValue = (name: string, value: string) => {
+    dirtyFields.current.add(name);
     setValues((current) => Object.freeze({ ...current, [name]: value }));
     setActionState({ state: 'idle' });
   };
   const requestAction = (action: RuntimePluginUiAction) => {
-    if (actionState.state === 'running' || hydrationState === 'loading') return;
+    if (
+      actionState.state === 'running'
+      || hydrationState === 'loading'
+      || dataState.status === 'loading'
+    ) return;
     if (!requiredFieldsComplete(node, values)) {
       setActionState({ actionId: action.id, reason: 'required', state: 'error' });
       return;
@@ -99,13 +143,16 @@ export function DeclarativePluginUiView({
       actionId: action.id,
       values: Object.freeze({ ...values }),
       context: Object.freeze({
-        contributionId,
-        surface: slot,
+        contributionId: contribution.id,
+        ...(cwd ? { cwd } : {}),
+        surface: contribution.slot,
+        ...(projectId ? { projectId } : {}),
         ...(threadId ? { threadId } : {}),
       }),
     });
     try {
       await service.runRendererUiAction(input, { signal: controller.signal });
+      dirtyFields.current.clear();
       if (stateKey) {
         setHydrationState('loading');
         try {
@@ -133,18 +180,29 @@ export function DeclarativePluginUiView({
   const pendingAction = actionState.state === 'confirming'
     ? actions.get(actionState.actionId)
     : undefined;
-  const disabled = hydrationState === 'loading' || actionState.state === 'running';
-  const status = actionStatus(actionState, hydrationState, translate);
-
+  const disabled = hydrationState === 'loading'
+    || dataState.status === 'loading'
+    || actionState.state === 'running';
+  const status = [
+    dataState.status === 'loading' ? t('pluginUi.dataLoading') : null,
+    dataState.status === 'error' ? t('pluginUi.dataUnavailable') : null,
+    actionStatus(actionState, hydrationState, translateFeature),
+  ].filter(Boolean).join(' ');
+  const mode = contribution.slot === 'renderer.chat.composer.status'
+    ? 'compact'
+    : contribution.slot === 'renderer.plugin.page'
+      ? 'page'
+      : 'settings';
   return (
-    <div className={`declarative-plugin-ui declarative-plugin-ui--${slot === 'renderer.chat.composer.status' ? 'compact' : 'settings'}`}>
-      {renderNode(node, 'root', {
+    <div className={`declarative-plugin-ui declarative-plugin-ui--${mode}`}>
+      {renderNode(contribution.tree, 'root', {
         actions,
         actionState,
+        data: dataState.data,
         disabled,
         requestAction,
         settingsUi,
-        translate,
+        translate: translateFeature,
         updateValue,
         values,
       })}
@@ -154,7 +212,7 @@ export function DeclarativePluginUiView({
           onCancel={cancelAction}
           onConfirm={() => void confirmAction()}
           settingsUi={settingsUi}
-          translate={translate}
+          translate={translateFeature}
         />
       ) : null}
       <div aria-live="polite" className="declarative-plugin-ui__action-status">
@@ -167,6 +225,7 @@ export function DeclarativePluginUiView({
 type RenderContext = Readonly<{
   actions: ReadonlyMap<string, RuntimePluginUiAction>;
   actionState: ActionState;
+  data: RuntimePluginUiData;
   disabled: boolean;
   requestAction(action: RuntimePluginUiAction): void;
   settingsUi?: SettingsViewUi;
@@ -187,16 +246,25 @@ function renderNode(node: RuntimePluginUiNode, path: string, context: RenderCont
     );
   }
   if (node.type === 'text') {
-    return <span className={`declarative-plugin-ui__text is-${node.tone ?? 'default'}`} key={path}>{node.text}</span>;
+    return (
+      <span className={`declarative-plugin-ui__text is-${node.tone ?? 'default'}`} key={path}>
+        {resolveRuntimePluginUiText(node.text, context.data)}
+      </span>
+    );
   }
   if (node.type === 'badge') {
-    return <span className={`declarative-plugin-ui__badge is-${node.tone ?? 'default'}`} key={path}>{node.text}</span>;
+    return (
+      <span className={`declarative-plugin-ui__badge is-${node.tone ?? 'default'}`} key={path}>
+        {resolveRuntimePluginUiText(node.text, context.data)}
+      </span>
+    );
   }
   if (node.type === 'notice') {
+    const title = resolveRuntimePluginUiText(node.title, context.data);
     return (
       <div className={`declarative-plugin-ui__notice is-${node.tone ?? 'default'}`} key={path} role="status">
-        {node.title ? <strong>{node.title}</strong> : null}
-        <span>{node.text}</span>
+        {title ? <strong>{title}</strong> : null}
+        <span>{resolveRuntimePluginUiText(node.text, context.data)}</span>
       </div>
     );
   }
@@ -343,11 +411,22 @@ function actionStatus(
   return '';
 }
 
-function collectInitialValues(node: RuntimePluginUiNode): Readonly<Record<string, string>> {
+function collectInitialValues(
+  node: RuntimePluginUiNode,
+  data: RuntimePluginUiData,
+): Readonly<Record<string, string>> {
   const values: Record<string, string> = {};
   visitNodes(node, (candidate) => {
-    if (candidate.type === 'field') values[candidate.name] = candidate.defaultValue ?? '';
-    if (candidate.type === 'select') values[candidate.name] = candidate.defaultValue ?? candidate.options[0]?.value ?? '';
+    if (candidate.type === 'field') {
+      values[candidate.name] = resolveRuntimePluginUiText(candidate.defaultValue, data)
+        .slice(0, candidate.maxLength);
+    }
+    if (candidate.type === 'select') {
+      const resolved = resolveRuntimePluginUiText(candidate.defaultValue, data);
+      values[candidate.name] = candidate.options.some((option) => option.value === resolved)
+        ? resolved
+        : candidate.options[0]?.value ?? '';
+    }
   });
   return Object.freeze(values);
 }

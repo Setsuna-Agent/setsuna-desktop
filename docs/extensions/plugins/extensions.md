@@ -2,7 +2,7 @@
 
 Setsuna 的可执行扩展允许插件动态注册工具、订阅 Agent 生命周期、保存隔离状态，并通过受控 UI 与用户交互。v1 是 Setsuna 原生协议，不直接兼容任意第三方扩展源码。
 
-可执行扩展属于 Plugin Bundle v2。它与 Skill、MCP、命令 Hook 和资源共用安装事务，但代码只在独立 Node worker 中加载，不进入 runtime 或 renderer 进程。
+可执行扩展属于 Plugin Bundle v2。它与 Skill、MCP、命令 Hook 和资源共用安装事务；extension 入口只在独立 Node worker 中加载，不进入 runtime 或主 Renderer。可选的自由页面/卡片脚本由另一条 sandbox iframe 链路隔离。
 
 ## 内置 Setsuna 工具
 
@@ -101,6 +101,8 @@ export default function activate(api) {
 
 扩展工具默认串行执行、支持 turn 取消，并进入 Setsuna 的标准工具审批。因为 worker 不在 OS 沙箱内，workspace-write 模式还会明确请求无沙箱执行授权；用户已经选择 `danger-full-access` 或完整免确认策略时，沿用该全局授权。只有应用控制的 marketplace Bundle 可以通过已校验 manifest 放宽单个工具的并行和审批策略。
 
+声明 `ui` 后，工具的 `data` 可以返回 `plugin.ui-card@1` HTML/CSS/JS 卡片。新 Bundle 还应在 `extension.uiCards` 声明卡片的 `id/label/description/toolName/preview`，让插件详情页在“界面”分组中列出这项动态能力并用静态示例数据安全预览；真实卡片源码仍由每次工具结果产生。runtime 在结果持久化前验证 schema 和源码上限、覆盖真实 `pluginId`；Renderer 只在工具运行记录也带有同一 Plugin 来源时解析，并把源码放入 opaque-origin sandbox iframe，再按该 tool run 的持久位置插入 assistant timeline。卡片及预览都没有网络或 host action；实时数据应由工具先通过 `ctx.network.request` 获取，再作为有界 JSON 传给卡片。完整 envelope 见 [Plugin Bundles](bundles.md#对话-htmlcssjs-卡片)。
+
 ### `api.on(eventName, handler)`
 
 同一扩展内按注册顺序执行，扩展之间按 Plugin ID 排序。前一个 handler 返回的 `input` 会传给后一个 handler；返回 `block: true` 后不再执行后续 handler 或扩展。
@@ -132,21 +134,27 @@ handler 可以返回：
 
 ### `api.onUiAction(actionId, handler)`
 
-声明 `ui` capability 且 manifest 包含 [`rendererUi`](bundles.md#声明式-renderer-ui) 时，extension 可以为已声明的 button action 注册 handler：
+声明 `ui` capability 且 manifest 包含 [`rendererUi`](bundles.md#renderer-ui宿主组件与沙箱页面) 时，extension 可以为已声明的 tree button 或 sandbox document action 注册 handler：
 
 ```js
 export default function activate(api) {
   api.onUiAction('save-preference', async (input, ctx) => {
-    await ctx.state.set('preferences', { label: input.values.label }, 'global');
+    await ctx.state.set('preferences.view', {
+      config: { label: input.values.label },
+      status: { label: '已保存', detail: '设置已更新。' },
+    });
   });
 }
 ```
 
 host 会用 `contributionId` 把 action 精确绑定到触发它的 contribution，再校验提交字段、必填值、最大长度、select option、Slot surface 和 Chat thread ID。同一 action ID 即使被多个 contribution 复用，也不会混用它们的字段集合；handler 只有在 worker 实际注册同名 action 时才会执行。
 
+tree action 的字段位于 `input.values`；sandbox document 通过 `window.setsunaUI.invoke(actionId, payload)` 提交的有界 JSON 位于 `input.payload`。两种输入都不能改变 action ID、contribution、scope 或 host 上下文。
+
 Renderer UI action 不是第二套交互通道：
 
-- `ctx.state` 只允许显式传入 `global` scope，仍需 manifest 声明 `state`。
+- `ctx.state` 的默认 scope 由触发 action 的 contribution 决定：存在 `data` 时严格使用其 `global/project/thread` scope，否则为兼容 v1 使用 `global`。host 拒绝 action 显式切换到其他 scope；使用 state 仍需 manifest 声明 `state`。
+- 独立功能页 action 会收到当前 `projectId`、`threadId` 和可用的 `cwd`，用于处理当前工作区；这些上下文不会改变上面的 state scope 限制。
 - `ctx.network` 仅在声明 `network` 且命中 origin allowlist 时存在。
 - 不提供 `ctx.ui.confirm/select/input`，避免 action 内再创建悬空交互；也不提供图片生成或视觉识别私有桥。
 - handler 返回值会被 host 忽略，Renderer 只获得 host-owned `{ status: "completed" }`；错误也只显示通用失败状态。
@@ -212,7 +220,7 @@ const response = await ctx.network.request({
 });
 ```
 
-目标 origin 必须精确命中 `extension.network.allowedOrigins`。host 会复用应用的直连、系统代理或自定义代理设置，跟随父工具取消，强制超时、请求体和响应体上限，并禁止自动跨 origin 重定向。返回值包含 `status`、`statusText`、`headers` 和 UTF-8 `body`。该 API 是可审计的网络通道，不会把 runtime token、模型凭据或 native bridge token 交给 worker。
+也兼容常见的 `ctx.network.request(url, init)` 写法，但宿主进程收到的仍是上面的规范化对象。目标 origin 必须精确命中 `extension.network.allowedOrigins`。host 会复用应用的直连、系统代理或自定义代理设置，跟随父工具取消，强制超时、请求体和响应体上限，并禁止自动跨 origin 重定向。返回值包含 `ok`、`status`、`statusText`、`headers` 和 UTF-8 `body`，并提供异步 `text()`、`json()` 便捷方法。该 API 是可审计的网络通道，不会把 runtime token、模型凭据或 native bridge token 交给 worker。
 
 ### 结构化 UI
 
@@ -231,13 +239,14 @@ const choice = await ctx.ui.select({
 const value = await ctx.ui.input({ message: 'Name', placeholder: 'example' });
 ```
 
-`notify` 可用于所有 handler。`confirm`、`select`、`input` 必须发生在工具执行或 `tool.before`/`tool.after` 中，以便审批卡片绑定真实 `toolCallId`；在 prompt、session、compaction 或 settled 回调中调用会立即失败，而不会创建用户看不到的悬空审批。扩展不能注入 React、HTML、CSS 或任意 renderer 脚本。
+`notify` 可用于所有 handler。`confirm`、`select`、`input` 必须发生在工具执行或 `tool.before`/`tool.after` 中，以便审批卡片绑定真实 `toolCallId`；在 prompt、session、compaction 或 settled 回调中调用会立即失败，而不会创建用户看不到的悬空审批。自由 HTML/CSS/JS 只能通过 manifest document 或 `plugin.ui-card@1` 进入专用沙箱，不能借这些结构化对话 API 注入主 Renderer。
 
 ## 信任与进程边界
 
 - 本地目录安装的可执行扩展默认 `untrusted`，不会激活。用户需要在“能力 → 插件”详情中确认信任。
 - 随应用发布的内置市场是受控来源，安装和升级时自动校验并启用完整包，能力页不会为内置扩展显示手动信任或撤销入口；普通本地更新不会把旧信任转移给变更后的内容。
 - Agent 通过 `configure_plugin` 创建或更新扩展时，工具审批会展示完整文本内容和逐文件哈希，并绑定本次动作的完整性 token。批准后只信任并启用该版 Bundle；任何内容更新都必须再次审批。
+- `configure_plugin` 的 staged activation 只验证模块加载和注册契约。Agent 创建的扩展还必须通过 `verify_plugin` 执行代表性的工具与 Renderer UI action；该检查走真实 network/state bridge，并可断言卡片结果和页面状态路径，未返回 `Verified and usable: true` 时不能报告功能已可用。
 - 信任绑定整个 Bundle 的确定性 SHA-256：排序后的相对路径、文件大小和文件内容都参与计算。安装会比较源目录与 staged 副本；启动、事件分发和每次工具执行前还会重新校验。
 - 任意文件变化都会使状态变成 `modified` 并停止后续执行。本地侧载扩展必须再次明确授权当前哈希；内置扩展需要从受控市场更新或重新安装。信任切换、升级和卸载也会先停止 worker，再变更目录或索引。
 - 每个 Plugin 最多一个按需启动的 Node worker。host 与 worker 使用有 1 MiB 单行上限的 JSONL RPC，带启动/请求超时、取消传播、stderr 截断和异常退出回收。
@@ -258,7 +267,7 @@ const value = await ctx.ui.input({ message: 'Name', placeholder: 'example' });
 ## v1 暂不提供
 
 - 任意第三方扩展 API 或第三方包的通用源码级兼容层；内置工具只使用 Setsuna 已审查的 v1 能力子集。
-- 任意 renderer React/HTML/CSS/JavaScript、主题、快捷键、命令面板或模型 provider 注入；只提供 manifest 中的受限 `rendererUi` schema。
+- 任意主 Renderer React/JavaScript、全局主题/CSS、快捷键、命令面板或模型 provider 注入；HTML/CSS/JS 只允许进入受限 `rendererUi.document` 或 `plugin.ui-card@1` 沙箱。
 - 远程扩展仓库、签名验证、依赖安装脚本和自动更新。
 - OS 级沙箱或按 Node 模块划分的权限系统。
 - 热替换正在运行的代码；升级和内容变化统一停 worker 后重新激活。
@@ -269,7 +278,7 @@ const value = await ctx.ui.input({ message: 'Name', placeholder: 'example' });
 
 - Contract：`packages/contracts/src/plugins.ts`、`http.ts`
 - Bundle 与信任：`packages/desktop-runtime/src/adapters/plugin/file-plugin-bundle-{model,store}.ts`
-- Worker/RPC/状态/UI：`packages/desktop-runtime/src/extensions/`
+- Worker/RPC/状态/UI：`packages/desktop-runtime/src/extensions/`、`packages/features/ui-card/`
 - 动态工具：`packages/desktop-runtime/src/adapters/tool/extension-tool-host.ts`
 - 生命周期：`packages/desktop-runtime/src/loop/{core,lifecycle,tools}/`
 - 管理 UI：`packages/features/plugin-management/src/renderer/PluginDetail.tsx`

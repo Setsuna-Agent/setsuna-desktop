@@ -19,6 +19,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type Ref,
   type RefObject,
+  type ReactNode,
 } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
@@ -39,6 +40,7 @@ export function AgentSidebar({
   forceExpandedProjectIds,
   globalThreads,
   projectActionMenuId,
+  pluginEntries,
   projects,
   projectsCollapsed,
   searchOpen,
@@ -82,6 +84,7 @@ export function AgentSidebar({
   forceExpandedProjectIds: Set<string>;
   globalThreads: RuntimeThreadSummary[];
   projectActionMenuId: string | null;
+  pluginEntries?: ReactNode;
   projects: WorkspaceProject[];
   projectsCollapsed: boolean;
   searchOpen: boolean;
@@ -141,6 +144,9 @@ export function AgentSidebar({
         </ShortcutTooltip>
       </div>
       <div className="desktop-agent-sidebar__body">
+        <nav className="desktop-agent-sidebar__plugin-entries" aria-label={t('sidebar.pluginFeatures')}>
+          {pluginEntries}
+        </nav>
         <ProjectSection
           activeProjectId={activeProjectId}
           activeThreadId={activeThreadId}

@@ -9,6 +9,7 @@ import { useCallback } from 'react';
 export type RuntimeFeatureToolResult = Readonly<{
   result: ResolvedChatToolResult;
   runId: string;
+  plugin?: RuntimeToolRun['plugin'];
 }>;
 
 export function resolveRuntimeFeatureToolResult(
@@ -25,7 +26,7 @@ export type RuntimeFeatureToolResultResolver = (
 export function useRuntimeFeatureToolResultResolver(): RuntimeFeatureToolResultResolver {
   const resolve = useRendererRootChainResolver(chatToolResultResolverSlot);
   return useCallback(
-    (run: RuntimeToolRun) => resolve({ toolName: run.name, value: run.data }),
+    (run: RuntimeToolRun) => resolve({ plugin: run.plugin, toolName: run.name, value: run.data }),
     [resolve],
   );
 }
@@ -46,7 +47,7 @@ export function assistantTailFeatureToolResults(
       if (seenIdentities.has(key)) return [];
       seenIdentities.add(key);
     }
-    return [{ result, runId: run.id }];
+    return [{ result, runId: run.id, ...(run.plugin ? { plugin: run.plugin } : {}) }];
   });
   return results.reverse();
 }

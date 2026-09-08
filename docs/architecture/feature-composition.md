@@ -101,9 +101,9 @@ FeatureScope 本身不设置独立超时：它先 abort，再等待已进入的�
 - Runtime projection query 从缓存 `throughSeq + 1` 追到查询开始时固定的 durable high water；不维护 live buffer、tail 或 gap 状态机。
 - Renderer 的 Core projection 是唯一 SSE sequence owner。Feature event 只触发 typed snapshot 刷新，不在 renderer 维护第二套 reducer。
 - Renderer Feature 在 setup 中通过 scope-bound `context.ui` 注册 typed Slot contribution；Renderer host 必须显式提供 registrar factory，disposer 自动进入同一 `FeatureScope`。禁止在 React component/hook/effect 中注册。初始 graph 一次校验和 commit，keyed owner 的 `requiredKeys` 逐 key 验证；后续 mount/replace/preference 变更使用串行 transaction，失败保留上一 snapshot。
-- 外部 Plugin 的 renderer contribution 仍走受限 declarative gateway，不能注入 React、HTML、全局 CSS 或任意 renderer JavaScript，也不获得任意 IPC 或 Feature 内部 Capability；需要执行代码的 Plugin extension 只有通过信任校验后，才会在独立 Node worker 中经由显式 capability 和受控 host API 运行。
+- 外部 Plugin 的 renderer contribution 仍走受限 gateway：`tree` 投影为宿主组件，自由 HTML/CSS/JavaScript 只进入 opaque-origin sandbox iframe；两者都不能注入主 Renderer React/DOM/全局 CSS，也不获得任意 IPC 或 Feature 内部 Capability。Plugin extension 只有通过信任校验后，才会在独立 Node worker 中经由显式 capability 和受控 host API 运行。
 
-层级 Slot Tree、布局偏好、inspection、声明式 Plugin UI 与动态 client bundle 的延期条件见 [Renderer Plugin Runtime 设计](../designs/current/renderer-plugin-runtime.md)。
+层级 Slot Tree、布局偏好、inspection、host tree/sandbox Plugin UI 与 React client bundle 的延期条件见 [Renderer Plugin Runtime 设计](../designs/current/renderer-plugin-runtime.md)。
 
 ## 持久兼容责任
 

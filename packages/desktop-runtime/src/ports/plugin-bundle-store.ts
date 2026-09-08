@@ -9,6 +9,7 @@ import type {
   RuntimePluginMarketplaceItem,
   RuntimePluginRemoveResult,
   RuntimePluginSummary,
+  RuntimePluginUiDocumentReadResult,
 } from '@setsuna-desktop/contracts';
 
 export type InstalledPluginExtensionRecord = RuntimeExtensionManifest & {
@@ -59,6 +60,7 @@ export type PluginBundleMutationOptions = {
 };
 
 export type PluginRuntimeMutationCoordinator = {
+  validatePluginActivation(plugin: InstalledPluginRecord): Promise<void>;
   beginPluginMutation(pluginId: string): Promise<() => Promise<void>>;
 };
 
@@ -75,6 +77,10 @@ export type PluginBundleStore = {
   setExtensionTrust(pluginId: string, trusted: boolean): Promise<RuntimePluginList>;
   listInstalledRecords(): Promise<InstalledPluginRecord[]>;
   readResource(pluginId: string, resourceId: string): Promise<PluginResourceRead>;
+  readTrustedRendererUiDocument(
+    pluginId: string,
+    contributionId: string,
+  ): Promise<RuntimePluginUiDocumentReadResult>;
   readItemContent(pluginId: string, kind: RuntimePluginItemKind, itemId: string): Promise<RuntimePluginItemContent>;
   readBundleItemContent(input: RuntimePluginInstallInput, kind: RuntimePluginItemKind, itemId: string): Promise<RuntimePluginItemContent>;
 };

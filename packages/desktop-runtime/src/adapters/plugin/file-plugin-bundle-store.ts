@@ -8,8 +8,11 @@ import type {
   RuntimePluginRemoveResult,
   RuntimePluginSkill
 } from '@setsuna-desktop/contracts';
-import { parseRuntimePluginUiManifest } from '@setsuna-desktop/contracts';
+import {
+  parseRuntimePluginUiManifest,
+} from '@setsuna-desktop/contracts';
 import type { McpStore } from '@setsuna-desktop/feature-mcp/contracts';
+import { parseSandboxedUiSource } from '@setsuna-desktop/contracts';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, realpath, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -50,18 +53,24 @@ import {
   pluginMcpServerDescriptor,
   pluginMcpServerUnmodified,
   publicPluginSummary,
+  publicManifestExtension,
+  readBundleFileSnapshot,
   readPluginFilePreview,
   readPluginManifest,
   removePluginHooks,
   requiredBundleDirectory,
+  installedExtensionRecord,
+  stagedPluginRecord,
   trustPluginHooks
 } from './file-plugin-bundle-model.js';
 import { sameLegacyMarketplaceSource, samePath } from './legacy-marketplace-source.js';
+import { projectLegacyRootUiCards } from './legacy-plugin-ui-card-metadata.js';
 
 export class FilePluginBundleStore implements PluginBundleStore {
   private readonly indexPath: string;
   private readonly pluginsDir: string;
   private runtimeMutation: PluginRuntimeMutationCoordinator = {
+    validatePluginActivation: async () => undefined,
     beginPluginMutation: async () => async () => undefined,
   };
   constructor(
@@ -91,7 +100,8 @@ export class FilePluginBundleStore implements PluginBundleStore {
     await this.migrateConfiguredLegacyMarketplaceInstallations();
     const index = await this.readIndex();
     return {
-      plugins: await Promise.all(index.plugins.map(async (plugin) => {
+      plugins: await Promise.all(index.plugins.map(async (indexedPlugin) => {
+        const plugin = await projectLegacyRootUiCards(indexedPlugin);
         if (!plugin.extension) return publicPluginSummary(plugin);
         const currentHash = await inspectBundleTree(plugin.installPath)
           .then((result) => result.bundleHash)
@@ -267,6 +277,10 @@ export class FilePluginBundleStore implements PluginBundleStore {
         const stagedBundle = await inspectBundleTree(stagingPath);
         if (stagedBundle.bundleHash !== sourceBundle.bundleHash) {
           throw new Error('Plugin bundle changed while staging the install.');
+        }
+        if (options.trustExtension && record.extension) {
+          await this.runtimeMutation.validatePluginActivation(stagedPluginRecord(record, stagingPath));
+          await assertStagedBundleUnchanged(stagingPath, stagedBundle.bundleHash);
         }
         await renameWithRetry(stagingPath, installPath);
         installActivated = true;
@@ -464,6 +478,11 @@ export class FilePluginBundleStore implements PluginBundleStore {
             ),
           } : {}),
         };
+
+        if (options.trustExtension && record.extension) {
+          await this.runtimeMutation.validatePluginActivation(stagedPluginRecord(record, stagingPath));
+          await assertStagedBundleUnchanged(stagingPath, stagedBundle.bundleHash);
+        }
 
         let oldDirectoryMoved = false;
         let newDirectoryActivated = false;
@@ -728,6 +747,58 @@ export class FilePluginBundleStore implements PluginBundleStore {
     };
   }
 
+  async readTrustedRendererUiDocument(pluginId: string, contributionId: string) {
+    const plugin = (await this.readIndex()).plugins.find((item) => item.id === normalizePluginId(pluginId));
+    if (!plugin?.extension) throw new Error(`Extension plugin is not installed: ${pluginId}`);
+    if (!plugin.extension.capabilities.includes('ui') || !plugin.extension.trustedHash) {
+      throw new Error(`Extension bundle is not trusted for Renderer UI: ${plugin.id}`);
+    }
+    const rendererUi = parseRuntimePluginUiManifest(plugin.extension.rendererUi);
+    const contribution = rendererUi.contributions.find((candidate) => (
+      candidate.id === contributionId
+      && candidate.slot === 'renderer.plugin.page'
+      && candidate.document
+    ));
+    if (!contribution?.document) {
+      throw new Error(`Sandboxed Plugin page not found: ${plugin.id}/${contributionId}`);
+    }
+
+    const resourceIds = [
+      contribution.document.htmlResourceId,
+      contribution.document.cssResourceId,
+      contribution.document.jsResourceId,
+    ].filter((value): value is string => Boolean(value));
+    const resources = resourceIds.map((resourceId) => {
+      const resource = plugin.resources.find((candidate) => candidate.id === resourceId);
+      if (!resource) throw new Error(`Plugin UI resource not found: ${plugin.id}/${resourceId}`);
+      return resource;
+    });
+    const snapshot = await readBundleFileSnapshot(
+      plugin.installPath,
+      resources.map((resource) => resource.path),
+    );
+    if (snapshot.bundleHash !== plugin.extension.trustedHash) {
+      throw new Error(`Extension bundle is no longer trusted: ${plugin.id}`);
+    }
+
+    const sourceById = new Map(resources.map((resource) => {
+      const key = path.normalize(resource.path).split(path.sep).join('/');
+      const content = snapshot.files.get(key);
+      if (!content) throw new Error(`Plugin UI resource was not captured: ${plugin.id}/${resource.id}`);
+      return [resource.id, decodePluginUiText(content, resource.id)] as const;
+    }));
+    const source = parseSandboxedUiSource({
+      html: sourceById.get(contribution.document.htmlResourceId) ?? '',
+      css: contribution.document.cssResourceId
+        ? sourceById.get(contribution.document.cssResourceId) ?? ''
+        : '',
+      js: contribution.document.jsResourceId
+        ? sourceById.get(contribution.document.jsResourceId) ?? ''
+        : '',
+    }, 'Plugin page source');
+    return Object.freeze({ revision: snapshot.bundleHash, ...source });
+  }
+
   async readItemContent(
     pluginId: string,
     kind: RuntimePluginItemKind,
@@ -757,31 +828,12 @@ export class FilePluginBundleStore implements PluginBundleStore {
   }
 }
 
-function publicManifestExtension(extension: NonNullable<ParsedPluginManifest['extension']>) {
-  return {
-    apiVersion: extension.apiVersion,
-    runtime: extension.runtime,
-    capabilities: [...extension.capabilities],
-    ...(extension.network ? {
-      network: { allowedOrigins: [...extension.network.allowedOrigins] },
-    } : {}),
-    ...(extension.rendererUi ? {
-      rendererUi: parseRuntimePluginUiManifest(extension.rendererUi),
-    } : {}),
-  };
-}
-
-function installedExtensionRecord(
-  extension: NonNullable<ParsedPluginManifest['extension']>,
-  bundleHash: string,
-  trustedHash?: string,
-) {
-  return {
-    ...publicManifestExtension(extension),
-    entry: extension.entry,
-    bundleHash,
-    ...(trustedHash ? { trustedHash } : {}),
-  };
+function decodePluginUiText(content: Buffer, resourceId: string): string {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(content);
+  } catch {
+    throw new Error(`Plugin UI resource must be UTF-8 text: ${resourceId}`);
+  }
 }
 
 const MARKETPLACE_ONLY_EXTENSION_CAPABILITIES = new Set([
@@ -798,6 +850,13 @@ function assertExtensionCapabilitySource(
   ));
   if (restricted && options.installationSource !== 'marketplace') {
     throw new Error(`Plugin extension capability is reserved for the bundled marketplace: ${restricted}`);
+  }
+}
+
+async function assertStagedBundleUnchanged(stagingPath: string, expectedHash: string): Promise<void> {
+  const validatedBundle = await inspectBundleTree(stagingPath);
+  if (validatedBundle.bundleHash !== expectedHash) {
+    throw new Error('Plugin bundle changed during activation validation.');
   }
 }
 

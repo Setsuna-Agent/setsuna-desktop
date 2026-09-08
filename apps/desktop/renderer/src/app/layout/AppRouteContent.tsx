@@ -21,6 +21,7 @@ import type {
 import { CapabilitiesRouteAdapter } from './CapabilitiesRouteAdapter.js';
 import { ChatRouteAdapter } from './ChatRouteAdapter.js';
 import { SettingsRouteAdapter } from './SettingsRouteAdapter.js';
+import { PluginRouteAdapter } from './PluginRouteAdapter.js';
 
 export type AppRouteContentProps = Readonly<{
   activeProject?: WorkspaceProject;
@@ -35,6 +36,7 @@ export type AppRouteContentProps = Readonly<{
   projectWorkspace: ProjectWorkspaceState;
   runtime: RuntimeClientState;
   selectedCapabilitiesPluginId: string | null;
+  selectedPluginViewKey: string | null;
   settingsInitialSection?: SettingsSectionId | null;
   setActiveView: Dispatch<SetStateAction<MainView>>;
   setDraft: Dispatch<SetStateAction<string>>;
@@ -66,5 +68,16 @@ export type AppRouteContentProps = Readonly<{
 export function AppRouteContent(props: AppRouteContentProps) {
   if (props.activeView === 'settings') return <SettingsRouteAdapter {...props} />;
   if (props.activeView === 'capabilities') return <CapabilitiesRouteAdapter {...props} />;
+  if (props.activeView === 'plugin') {
+    return (
+      <PluginRouteAdapter
+        activeProjectId={props.activeProject?.id}
+        activeProjectPath={props.activeProject?.path}
+        activeThreadId={props.runtime.currentThread?.id}
+        selectedViewKey={props.selectedPluginViewKey}
+        onBack={() => props.setActiveView('chat')}
+      />
+    );
+  }
   return <ChatRouteAdapter {...props} />;
 }

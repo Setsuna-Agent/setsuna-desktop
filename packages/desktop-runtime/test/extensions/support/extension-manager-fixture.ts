@@ -15,7 +15,9 @@ export async function extensionFixture(options: {
   includeDetachedUiTool?: boolean;
   includeDelayedUiTool?: boolean;
   includePendingEvent?: boolean;
+  includeFetchStyleNetworkCard?: boolean;
   includeRendererUiAction?: boolean;
+  includeRendererUiCard?: boolean;
 } = {}): Promise<{
   activationPath: string;
   entryPath: string;
@@ -104,6 +106,54 @@ export default function activate(api) {
       });
     },
   });
+  ${options.includeRendererUiCard ? `api.registerTool({
+    name: 'ui-card',
+    description: 'Return a sandboxed weather card.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    execute() {
+      return {
+        content: 'Hangzhou is sunny and 28 degrees.',
+        data: {
+          resultKind: 'plugin.ui-card',
+          resultMajor: 1,
+          payload: {
+            id: 'weather.hangzhou.today',
+            title: 'Hangzhou weather',
+            html: '<main id="weather"></main>',
+            css: '#weather { color: orange; }',
+            js: 'window.setsunaUI.ready.then(() => {});',
+            data: { temperature: 28, condition: 'sunny' },
+            permissions: { network: false, hostActions: [] },
+          },
+        },
+      };
+    },
+  });` : ''}
+  ${options.includeFetchStyleNetworkCard ? `api.registerTool({
+    name: 'network-ui-card',
+    description: 'Fetch weather and return a sandboxed card.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    async execute(_input, context) {
+      const response = await context.network.request('https://api.example.test/weather', {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+      });
+      const weather = JSON.parse(await response.text());
+      return {
+        content: weather.city + ' is ' + weather.temperature + ' degrees.',
+        data: {
+          resultKind: 'plugin.ui-card',
+          resultMajor: 1,
+          payload: {
+            id: 'weather.network.today',
+            html: '<main id="weather"></main>',
+            data: weather,
+            permissions: { network: false, hostActions: [] },
+          },
+        },
+      };
+    },
+  });` : ''}
   ${options.includeDelayedUiTool ? `api.registerTool({
     name: 'delayed-ui',
     description: 'Wait for a host UI response.',
@@ -181,7 +231,8 @@ export default function activate(api) {
     return;` : options.blockRendererUiAction ? `await context.state.set('profile-started', true);
     return new Promise((_resolve, reject) => {
       context.signal.addEventListener('abort', () => reject(context.signal.reason), { once: true });
-    });` : `await context.state.set('profile', input.values.displayName);
+    });` : `if (input.payload) await context.state.set('ui-payload', input.payload);
+    await context.state.set('profile', input.values.displayName);
     return { markup: '<script>must not cross the host boundary</script>' };`}
   });` : ''}
   api.on('prompt.before', (payload) => ({
@@ -201,6 +252,17 @@ export default function activate(api) {
     record: {
       id: 'worker-demo',
       name: 'Worker Demo',
+      tools: [
+        { name: 'echo' },
+        { name: 'blocked' },
+        { name: 'slow' },
+        ...(options.includeRendererUiCard ? [{ name: 'ui-card' }] : []),
+        ...(options.includeFetchStyleNetworkCard ? [{ name: 'network-ui-card' }] : []),
+        ...(options.includeDelayedUiTool ? [{ name: 'delayed-ui' }] : []),
+        ...(options.includeDetachedUiTool
+          ? [{ name: 'detached-ui' }, { name: 'detached-ui-status' }]
+          : []),
+      ],
       installedAt: '2026-08-09T00:00:00.000Z',
       sourcePath: pluginRoot,
       installPath: pluginRoot,
@@ -221,10 +283,14 @@ export default function activate(api) {
           'events',
           'state',
           'ui',
+          ...(options.includeFetchStyleNetworkCard ? ['network'] as const : []),
           ...(options.forgeRendererUiModelRequests
             ? ['image-generation', 'vision-recognition'] as const
             : []),
         ],
+        ...(options.includeFetchStyleNetworkCard ? {
+          network: { allowedOrigins: ['https://api.example.test'] },
+        } : {}),
         ...(options.includeRendererUiAction ? {
           rendererUi: {
             schemaVersion: 1,

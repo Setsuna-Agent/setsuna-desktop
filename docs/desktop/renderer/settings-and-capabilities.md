@@ -141,7 +141,7 @@ Hook 不再作为一级目录或独立表单暴露；它是 Plugin Bundle 内的
 
 ### Plugin market
 
-Plugin 管理的跨层所有权位于 `packages/features/plugin-management/`：contracts 声明聚合 snapshot、Hook projection 与安装、更新、卸载、详情、扩展信任、Hook 状态 typed operations；runtime 只通过 Plugin Store、Marketplace、Extension Manager 和 `RuntimeHookManagement` 窄 host 能力实现；renderer service 持有 Plugin/Hook snapshot、并发 refresh 与 mutation 后收敛。`PluginCapabilitiesPage`、`PluginDetail`、`PluginItemDialog` 和展示 helper 同样位于 Feature 包内，宿主不再保存或适配 Plugin/Hook 状态。
+Plugin 管理的跨层所有权位于 `packages/features/plugin-management/`：contracts 声明聚合 snapshot、Hook projection 与安装、更新、卸载、详情、扩展信任、Renderer UI data/action/document、Hook 状态 typed operations；runtime 只通过 Plugin Store、Marketplace、Extension Manager 和 `RuntimeHookManagement` 窄 host 能力实现；renderer service 持有 Plugin/Hook snapshot、并发 refresh 与 mutation 后收敛。`PluginCapabilitiesPage`、`PluginDetail`、`PluginItemDialog` 和展示 helper 同样位于 Feature 包内，宿主不再保存或适配 Plugin/Hook 状态。
 
 默认市场来自随应用打包的 `plugins/`，renderer 只接收无路径摘要。市场首页分别展示市场目录和不在目录内的本地安装项；卡片直接表达安装、更新和打开状态。详情页展示声明的 Tool/Skill/MCP/Hook/resource 元数据，并负责 install/update/uninstall 动作。
 

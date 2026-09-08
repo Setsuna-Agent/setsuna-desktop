@@ -13,7 +13,8 @@ Renderer 是桌面工作台 UI。它只依赖共享 contracts 和 preload 暴露
 | `src/features/workspace/` | 项目文件、面板 session 与 Feature surface 编排 | [Workspace 与 debug](workspace-and-debug.md) |
 | `src/composition/` | 唯一 Renderer Feature composition root、内置 Renderer Plugin 与 host capability 投影 | [Feature Composition](../../architecture/feature-composition.md) |
 | `src/kernel/renderer-plugins/` | Slot registry、transaction、selection、layout preference、outlet 与 inspection | [Renderer Plugin Runtime](../../designs/current/renderer-plugin-runtime.md) |
-| `src/kernel/declarative-plugin-ui/` | 普通 Plugin JSON schema 到 host-owned React primitive 的安全 gateway | [Plugin Bundles](../../extensions/plugins/bundles.md) |
+| `src/kernel/declarative-plugin-ui/` | 普通 Plugin host tree 与 sandbox page 到白名单 Slot 的安全 gateway | [Plugin Bundles](../../extensions/plugins/bundles.md) |
+| `packages/features/ui-card/src/renderer/` | 独立页面/对话卡片共享的 opaque-origin iframe 与 typed card renderer | [Plugin Bundles](../../extensions/plugins/bundles.md) |
 | `packages/features/review/src/renderer/` | Review panel、Git 控件、状态、文案与样式 | [Workspace 与 debug](workspace-and-debug.md) |
 | `packages/features/conversation-debug/src/renderer/` | 事件/trace 图、列表、inspector 与 Feature settings | [Workspace 与 debug](workspace-and-debug.md) |
 | `packages/features/runtime-activity/src/renderer/` | 跨线程运行任务、后台服务管理与全局 Overlay | [App 与 runtime 状态](app-and-runtime-state.md) |

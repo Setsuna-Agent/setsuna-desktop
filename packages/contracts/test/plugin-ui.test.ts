@@ -1,8 +1,49 @@
 import {
   parseRuntimePluginUiManifest,
+  parseRuntimePluginUiData,
   RUNTIME_PLUGIN_UI_LIMITS,
 } from '../src/plugin-ui.js';
+import { parseRuntimePluginUiCardDeclarations } from '../src/plugin-ui-card.js';
 import { describe, expect, it } from 'vitest';
+
+describe('Plugin UI card declarations', () => {
+  it('bounds static previews while validating each runtime card owner', () => {
+    const preview = { html: '<main>Weather</main>', data: { temperature: 28 } };
+    const cards = parseRuntimePluginUiCardDeclarations([{
+      id: 'weather.current',
+      label: 'Current weather',
+      description: 'Interactive weather summary.',
+      toolName: 'get_weather',
+      preview,
+    }]);
+
+    expect(cards).toEqual([{
+      id: 'weather.current',
+      label: 'Current weather',
+      description: 'Interactive weather summary.',
+      toolName: 'get_weather',
+      preview: { ...preview, css: '', js: '' },
+    }]);
+    expect(Object.isFrozen(cards)).toBe(true);
+    expect(() => parseRuntimePluginUiCardDeclarations([
+      { id: 'weather.current', label: 'Weather', toolName: 'get_weather', preview },
+      { id: 'weather.current', label: 'Forecast', toolName: 'get_forecast', preview },
+    ])).toThrow('Duplicate Plugin extension UI card');
+    expect(() => parseRuntimePluginUiCardDeclarations([{
+      id: 'weather.current',
+      label: 'Weather',
+      toolName: 'get_weather',
+      preview,
+      html: '<script />',
+    }])).toThrow('Unsupported property');
+    expect(() => parseRuntimePluginUiCardDeclarations([{
+      id: 'weather.empty',
+      label: 'Weather',
+      toolName: 'get_weather',
+      preview: { html: '', css: '', js: '' },
+    }])).toThrow('must contain HTML or JavaScript');
+  });
+});
 
 describe('Plugin declarative Renderer UI contract', () => {
   it('accepts the bounded host schema and rejects executable, unknown, or over-budget shapes', () => {
@@ -95,6 +136,120 @@ describe('Plugin declarative Renderer UI contract', () => {
         tree: { type: 'text', text: 'no fields' },
       }],
     })).toThrow('requires at least one field');
+  });
+
+  it('supports a scoped standalone release-checker page with state bindings', () => {
+    const manifest = parseRuntimePluginUiManifest({
+      schemaVersion: 2,
+      actions: [{ id: 'release.run', approval: { message: 'Run the project release checks?' } }],
+      contributions: [{
+        id: 'release.page',
+        slot: 'renderer.plugin.page',
+        navigation: { label: 'Release checker', badge: { path: 'summary.label', fallback: 'Not run' } },
+        data: { stateKey: 'release.view', scope: 'project' },
+        tree: {
+          type: 'stack',
+          children: [
+            { type: 'notice', title: 'Latest result', text: { path: 'summary.detail', fallback: 'Run checks to begin.' } },
+            { type: 'field', name: 'command', label: 'Check command', defaultValue: { path: 'config.command' } },
+            { type: 'button', actionId: 'release.run', label: 'Run checks' },
+          ],
+        },
+      }],
+    });
+    const data = parseRuntimePluginUiData({
+      config: { command: 'pnpm test' },
+      summary: { detail: '12 checks passed', label: 'Ready' },
+    });
+
+    expect(manifest.contributions[0]).toMatchObject({
+      data: { scope: 'project', stateKey: 'release.view' },
+      navigation: { label: 'Release checker' },
+      slot: 'renderer.plugin.page',
+    });
+    expect(data.summary).toEqual({ detail: '12 checks passed', label: 'Ready' });
+    expect(() => parseRuntimePluginUiManifest({
+      ...manifest,
+      contributions: [{
+        id: 'release.unscoped',
+        slot: 'renderer.plugin.page',
+        navigation: { label: 'Release checker' },
+        tree: { type: 'text', text: { path: 'summary.label' } },
+      }],
+    })).toThrow('without a data declaration');
+    expect(() => parseRuntimePluginUiData({ invalid: Number.NaN })).toThrow('non-finite');
+    expect(() => parseRuntimePluginUiData({ oversized: 'x'.repeat(RUNTIME_PLUGIN_UI_LIMITS.dataBytes + 1) }))
+      .toThrow('data is too large');
+  });
+
+  it('rejects settings targets and Plugin details scopes the host cannot supply', () => {
+    expect(() => parseRuntimePluginUiManifest({
+      schemaVersion: 2,
+      actions: [],
+      contributions: [{
+        id: 'settings.unknown',
+        slot: 'renderer.settings.page.extensions',
+        target: 'runtime',
+        tree: { type: 'text', text: 'Unsupported target' },
+      }],
+    })).toThrow('requires a known settings target');
+
+    for (const scope of ['project', 'thread'] as const) {
+      expect(() => parseRuntimePluginUiManifest({
+        schemaVersion: 2,
+        actions: [],
+        contributions: [{
+          id: `details.${scope}`,
+          slot: 'renderer.capabilities.plugin.details',
+          data: { stateKey: 'details.view', scope },
+          tree: { type: 'text', text: 'Unavailable scope' },
+        }],
+      })).toThrow('Plugin details data must use global scope');
+    }
+  });
+
+  it('supports a sandboxed standalone document but never embeds one into chat or settings', () => {
+    const manifest = parseRuntimePluginUiManifest({
+      schemaVersion: 2,
+      actions: [{ id: 'weather.refresh', approval: { message: 'Refresh weather?' } }],
+      contributions: [{
+        id: 'weather.page',
+        slot: 'renderer.plugin.page',
+        navigation: { label: 'Weather' },
+        data: { stateKey: 'weather.view', scope: 'global' },
+        document: {
+          htmlResourceId: 'weather-html',
+          cssResourceId: 'weather-css',
+          jsResourceId: 'weather-js',
+          actionIds: ['weather.refresh'],
+        },
+      }],
+    });
+
+    expect(manifest.contributions[0]).toMatchObject({
+      document: {
+        htmlResourceId: 'weather-html',
+        actionIds: ['weather.refresh'],
+      },
+    });
+    expect(() => parseRuntimePluginUiManifest({
+      ...manifest,
+      contributions: [{
+        id: 'weather.chat',
+        slot: 'renderer.chat.composer.status',
+        document: { htmlResourceId: 'weather-html', actionIds: [] },
+      }],
+    })).toThrow('standalone Plugin page');
+    expect(() => parseRuntimePluginUiManifest({
+      ...manifest,
+      contributions: [{
+        id: 'weather.ambiguous',
+        slot: 'renderer.plugin.page',
+        navigation: { label: 'Weather' },
+        tree: { type: 'text', text: 'Weather' },
+        document: { htmlResourceId: 'weather-html', actionIds: [] },
+      }],
+    })).toThrow('exactly one of tree or document');
   });
 });
 

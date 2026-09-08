@@ -14,9 +14,11 @@ import type {
   RuntimePluginTool,
 } from '@setsuna-desktop/contracts';
 import {
+  parseRuntimePluginUiCardDeclarations,
   parseRuntimePluginUiManifest,
   RUNTIME_EXTENSION_API_VERSION,
 } from '@setsuna-desktop/contracts';
+import { PLUGIN_UI_CARD_LIMITS } from '@setsuna-desktop/contracts';
 import { createHash } from 'node:crypto';
 import { chmod, copyFile, mkdir, readFile, readdir, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -203,6 +205,7 @@ export async function readPluginManifest(sourcePath: string): Promise<ParsedPlug
   const name = requiredString(record.name, 'Plugin name');
   const skills = await normalizePluginSkills(sourcePath, id, record.skills);
   const resources = await normalizePluginResources(sourcePath, record.resources);
+  const tools = normalizePluginTools(record.tools);
   return {
     id,
     name,
@@ -210,12 +213,12 @@ export async function readPluginManifest(sourcePath: string): Promise<ParsedPlug
     ...optionalMarketplaceFields(record),
     sourcePath,
     manifestPath,
-    tools: normalizePluginTools(record.tools),
+    tools,
     skillEntries: skills,
     mcpServers: normalizePluginMcpServers(record.mcpServers ?? record.mcp_servers),
     hooks: normalizePluginHooks(record.hooks),
     resources,
-    ...await normalizePluginExtension(sourcePath, schemaVersion, record.extension),
+    ...await normalizePluginExtension(sourcePath, schemaVersion, record.extension, resources, tools),
   };
 }
 
@@ -223,6 +226,8 @@ async function normalizePluginExtension(
   sourcePath: string,
   schemaVersion: 1 | 2,
   value: unknown,
+  resources: readonly RuntimePluginResource[],
+  tools: readonly RuntimePluginTool[],
 ): Promise<{ extension?: RuntimeExtensionManifest & { entry: string } }> {
   if (value === undefined) return {};
   if (schemaVersion !== 2) throw new Error('Executable extensions require plugin schemaVersion 2.');
@@ -248,15 +253,55 @@ async function normalizePluginExtension(
     capabilities.push(normalized);
   }
   const network = normalizeExtensionNetworkPolicy(record.network, capabilities);
+  const uiCards = record.uiCards === undefined
+    ? undefined
+    : parseRuntimePluginUiCardDeclarations(record.uiCards);
+  if (uiCards && !capabilities.includes('ui')) {
+    throw new Error('Plugin extension uiCards requires the ui capability.');
+  }
+  for (const card of uiCards ?? []) {
+    if (!tools.some((tool) => tool.name === card.toolName)) {
+      throw new Error(`Plugin extension UI card references an undeclared tool: ${card.toolName}`);
+    }
+  }
   const rendererUi = record.rendererUi === undefined
     ? undefined
     : parseRuntimePluginUiManifest(record.rendererUi);
   if (rendererUi && !capabilities.includes('ui')) {
     throw new Error('Plugin extension rendererUi requires the ui capability.');
   }
-  if (rendererUi?.contributions.some((contribution) => contribution.stateKey)
+  if (rendererUi?.contributions.some((contribution) => contribution.stateKey || contribution.data)
     && !capabilities.includes('state')) {
     throw new Error('Plugin extension rendererUi state binding requires the state capability.');
+  }
+  for (const contribution of rendererUi?.contributions ?? []) {
+    if (!contribution.document) continue;
+    const documentResources: ReadonlyArray<Readonly<{
+      resourceId?: string;
+      extensions: readonly string[];
+      maxBytes: number;
+      label: string;
+    }>> = [
+      { resourceId: contribution.document.htmlResourceId, extensions: ['.html', '.htm'], maxBytes: PLUGIN_UI_CARD_LIMITS.htmlBytes, label: 'HTML' },
+      { resourceId: contribution.document.cssResourceId, extensions: ['.css'], maxBytes: PLUGIN_UI_CARD_LIMITS.cssBytes, label: 'CSS' },
+      { resourceId: contribution.document.jsResourceId, extensions: ['.js', '.mjs'], maxBytes: PLUGIN_UI_CARD_LIMITS.jsBytes, label: 'JavaScript' },
+    ];
+    let totalBytes = 0;
+    for (const { resourceId, extensions, maxBytes, label } of documentResources) {
+      if (!resourceId) continue;
+      const resource = resources.find((candidate) => candidate.id === resourceId);
+      if (!resource) throw new Error(`Plugin extension Renderer UI resource is not declared: ${resourceId}`);
+      if (!extensions.includes(path.extname(resource.path).toLowerCase())) {
+        throw new Error(`Plugin extension Renderer UI ${label} resource has an invalid file type.`);
+      }
+      if (resource.size > maxBytes) {
+        throw new Error(`Plugin extension Renderer UI ${label} resource is too large.`);
+      }
+      totalBytes += resource.size;
+    }
+    if (totalBytes > PLUGIN_UI_CARD_LIMITS.sourceBytes) {
+      throw new Error('Plugin extension Renderer UI document source is too large.');
+    }
   }
   return {
     extension: {
@@ -264,6 +309,7 @@ async function normalizePluginExtension(
       runtime: 'node-worker',
       capabilities,
       ...(network ? { network } : {}),
+      ...(uiCards ? { uiCards } : {}),
       ...(rendererUi ? { rendererUi } : {}),
       entry,
     },
@@ -541,6 +587,30 @@ export function cloneHooks(hooks: RuntimeHooksConfig): RuntimeHooksConfig {
 }
 
 export async function inspectBundleTree(root: string): Promise<{ bundleHash: string }> {
+  const snapshot = await readBundleTreeSnapshot(root, []);
+  return { bundleHash: snapshot.bundleHash };
+}
+
+/**
+ * Hashes one immutable view of the bundle and retains only the requested file
+ * bytes. Callers can therefore prove that UI source is part of the exact
+ * trusted hash instead of checking the directory before or after a separate
+ * read (which would leave a time-of-check/time-of-use gap).
+ */
+export async function readBundleFileSnapshot(
+  root: string,
+  relativePaths: readonly string[],
+): Promise<{ bundleHash: string; files: ReadonlyMap<string, Buffer> }> {
+  return readBundleTreeSnapshot(root, relativePaths);
+}
+
+async function readBundleTreeSnapshot(
+  root: string,
+  relativePaths: readonly string[],
+): Promise<{ bundleHash: string; files: ReadonlyMap<string, Buffer> }> {
+  const requested = new Set(relativePaths.map((relativePath) => (
+    safeRelativePath(relativePath, 'Plugin snapshot file path').split(path.sep).join('/')
+  )));
   let fileCount = 0;
   let totalBytes = 0;
   const files: Array<{ absolutePath: string; relativePath: string; size: number }> = [];
@@ -569,12 +639,21 @@ export async function inspectBundleTree(root: string): Promise<{ bundleHash: str
   }
   files.sort((left, right) => left.relativePath < right.relativePath ? -1 : left.relativePath > right.relativePath ? 1 : 0);
   const hash = createHash('sha256');
+  const selected = new Map<string, Buffer>();
   for (const file of files) {
+    const content = await readFile(file.absolutePath);
+    if (content.byteLength !== file.size) {
+      throw new Error(`Plugin bundle changed while being inspected: ${file.relativePath}`);
+    }
     const relativePathBytes = Buffer.byteLength(file.relativePath);
     hash.update(`${relativePathBytes}:${file.relativePath}:${file.size}:`, 'utf8');
-    hash.update(await readFile(file.absolutePath));
+    hash.update(content);
+    if (requested.has(file.relativePath)) selected.set(file.relativePath, content);
   }
-  return { bundleHash: hash.digest('hex') };
+  for (const relativePath of requested) {
+    if (!selected.has(relativePath)) throw new Error(`Plugin snapshot file not found: ${relativePath}`);
+  }
+  return { bundleHash: hash.digest('hex'), files: selected };
 }
 
 export async function copyBundleTree(sourceRoot: string, destinationRoot: string): Promise<void> {
@@ -610,7 +689,20 @@ export async function safeExistingPath(root: string, relativePath: string): Prom
   // macOS commonly exposes /var through a /private/var symlink. Compare real
   // paths on both sides so a valid file is not mistaken for a bundle escape.
   const resolvedRoot = await realpath(root);
-  const target = await realpath(path.resolve(resolvedRoot, relativePath));
+  const normalizedRelativePath = safeRelativePath(relativePath, 'Plugin path');
+  let exactPath = resolvedRoot;
+  for (const segment of normalizedRelativePath.split(path.sep)) {
+    const entries = await readdir(exactPath);
+    if (!entries.includes(segment)) {
+      const caseVariant = entries.find((entry) => entry.toLowerCase() === segment.toLowerCase());
+      if (caseVariant) {
+        throw new Error(`Plugin path casing does not match the bundle: ${relativePath}`);
+      }
+      throw new Error(`Plugin path does not exist: ${relativePath}`);
+    }
+    exactPath = path.join(exactPath, segment);
+  }
+  const target = await realpath(exactPath);
   if (!pathIsInside(resolvedRoot, target)) throw new Error(`Plugin path escapes the bundle: ${relativePath}`);
   return target;
 }
@@ -678,6 +770,21 @@ export function publicPluginSummary(plugin: InstalledPluginRecord): RuntimePlugi
 }
 
 export function cloneInstalledRecord(plugin: InstalledPluginRecord): InstalledPluginRecord {
+  const uiCards = installedUiCards(plugin.extension?.uiCards);
+  const rendererUi = installedRendererUi(plugin.extension?.rendererUi);
+  const extension = plugin.extension ? {
+    ...plugin.extension,
+    capabilities: [...plugin.extension.capabilities],
+    ...(plugin.extension.network ? {
+      network: { allowedOrigins: [...plugin.extension.network.allowedOrigins] },
+    } : {}),
+  } : undefined;
+  if (extension) {
+    if (uiCards) extension.uiCards = uiCards;
+    else delete extension.uiCards;
+    if (rendererUi) extension.rendererUi = rendererUi;
+    else delete extension.rendererUi;
+  }
   return {
     ...plugin,
     ...(plugin.tools?.length ? { tools: plugin.tools.map((tool) => ({ ...tool })) } : {}),
@@ -692,22 +799,54 @@ export function cloneInstalledRecord(plugin: InstalledPluginRecord): InstalledPl
     mcpServerInputs: plugin.mcpServerInputs.map((server) => ({ ...server, args: [...(server.args ?? [])] })),
     hooks: (plugin.hooks ?? []).map((hook) => ({ ...hook })),
     resources: plugin.resources.map((resource) => ({ ...resource })),
-    ...(plugin.extension ? {
-      extension: {
-        ...plugin.extension,
-        capabilities: [...plugin.extension.capabilities],
-        ...(plugin.extension.network ? {
-          network: { allowedOrigins: [...plugin.extension.network.allowedOrigins] },
-        } : {}),
-        ...(plugin.extension.rendererUi ? {
-          rendererUi: parseRuntimePluginUiManifest(plugin.extension.rendererUi),
-        } : {}),
-      },
+    ...(extension ? { extension } : {}),
+  };
+}
+
+export function stagedPluginRecord(
+  plugin: InstalledPluginRecord,
+  stagingPath: string,
+): InstalledPluginRecord {
+  return {
+    ...plugin,
+    installPath: stagingPath,
+    manifestPath: path.join(stagingPath, PLUGIN_MANIFEST_RELATIVE_PATH),
+  };
+}
+
+export function publicManifestExtension(extension: NonNullable<ParsedPluginManifest['extension']>) {
+  return {
+    apiVersion: extension.apiVersion,
+    runtime: extension.runtime,
+    capabilities: [...extension.capabilities],
+    ...(extension.network ? {
+      network: { allowedOrigins: [...extension.network.allowedOrigins] },
+    } : {}),
+    ...(extension.uiCards ? {
+      uiCards: parseRuntimePluginUiCardDeclarations(extension.uiCards),
+    } : {}),
+    ...(extension.rendererUi ? {
+      rendererUi: parseRuntimePluginUiManifest(extension.rendererUi),
     } : {}),
   };
 }
 
+export function installedExtensionRecord(
+  extension: NonNullable<ParsedPluginManifest['extension']>,
+  bundleHash: string,
+  trustedHash?: string,
+) {
+  return {
+    ...publicManifestExtension(extension),
+    entry: extension.entry,
+    bundleHash,
+    ...(trustedHash ? { trustedHash } : {}),
+  };
+}
+
 export function publicPluginExtension(extension: InstalledPluginExtensionRecord) {
+  const uiCards = installedUiCards(extension.uiCards);
+  const rendererUi = installedRendererUi(extension.rendererUi);
   const trust = !extension.trustedHash
     ? 'untrusted' as const
     : extension.trustedHash === extension.bundleHash
@@ -720,9 +859,33 @@ export function publicPluginExtension(extension: InstalledPluginExtensionRecord)
     ...(extension.network ? {
       network: { allowedOrigins: [...extension.network.allowedOrigins] },
     } : {}),
-    ...(extension.rendererUi ? {
-      rendererUi: parseRuntimePluginUiManifest(extension.rendererUi),
-    } : {}),
+    ...(uiCards ? { uiCards } : {}),
+    ...(rendererUi ? { rendererUi } : {}),
     trust,
   };
+}
+
+function installedUiCards(
+  value: unknown,
+): ReturnType<typeof parseRuntimePluginUiCardDeclarations> | undefined {
+  if (value === undefined) return undefined;
+  try {
+    return parseRuntimePluginUiCardDeclarations(value);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Installed indexes can outlive the Renderer UI schema that created them.
+ * Invalid UI metadata is optional and must not make unrelated tools or turns
+ * unavailable; fresh install/update paths remain strictly validated.
+ */
+function installedRendererUi(value: unknown): ReturnType<typeof parseRuntimePluginUiManifest> | undefined {
+  if (value === undefined) return undefined;
+  try {
+    return parseRuntimePluginUiManifest(value);
+  } catch {
+    return undefined;
+  }
 }

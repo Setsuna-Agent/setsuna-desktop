@@ -136,3 +136,97 @@
 .declarative-plugin-ui--compact .declarative-plugin-ui__notice {
   padding: 4px 8px;
 }
+
+.declarative-plugin-navigation__icon {
+  width: var(--desktop-agent-icon-size);
+  height: var(--desktop-agent-icon-size);
+  border-radius: 5px;
+  font-size: var(--desktop-agent-icon-size);
+}
+
+.declarative-plugin-navigation__badge {
+  flex: 0 0 auto;
+  max-width: 72px;
+  overflow: hidden;
+  border-radius: 999px;
+  padding: 1px 6px;
+  color: var(--app-sidebar-text-secondary);
+  background: var(--desktop-agent-sidebar-hover-bg);
+  font-size: 11px;
+  line-height: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.declarative-plugin-page {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: auto;
+  padding: 36px clamp(24px, 6vw, 72px);
+  color: var(--sd-color-text);
+  background: var(--sd-color-surface);
+}
+
+.declarative-plugin-page--unavailable {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.declarative-plugin-page__header,
+.declarative-plugin-page__content {
+  width: min(100%, 760px);
+  margin: 0 auto;
+}
+
+.declarative-plugin-page__header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 28px;
+}
+
+.declarative-plugin-page__header h1,
+.declarative-plugin-page__header p {
+  margin: 0;
+}
+
+.declarative-plugin-page__header h1 {
+  font-size: 22px;
+  line-height: 30px;
+}
+
+.declarative-plugin-page__header p {
+  margin-top: 3px;
+  color: var(--sd-color-text-muted);
+  font-size: 13px;
+}
+
+.declarative-plugin-page__content {
+  border: 1px solid var(--sd-color-border);
+  border-radius: 12px;
+  padding: 18px;
+  background: var(--sd-color-surface-muted);
+}
+
+.declarative-plugin-page__content.is-sandboxed {
+  width: min(100%, 1120px);
+  overflow: hidden;
+  padding: 0;
+  background: var(--sd-color-surface);
+}
+
+.sandboxed-plugin-ui__frame {
+  min-height: 320px;
+}
+
+.sandboxed-plugin-ui__status {
+  padding: 18px;
+  color: var(--sd-color-text-muted);
+  font-size: 13px;
+}
+
+.sandboxed-plugin-ui__status.is-error {
+  color: var(--sd-color-danger);
+}

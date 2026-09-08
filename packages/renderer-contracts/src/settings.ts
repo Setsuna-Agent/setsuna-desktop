@@ -193,6 +193,21 @@ export type SettingsPageOutletProps = Readonly<{
   sectionId: string;
 }>;
 
+export type SettingsSandboxedUiDataValue =
+  | boolean
+  | null
+  | number
+  | string
+  | readonly SettingsSandboxedUiDataValue[]
+  | Readonly<{ [key: string]: SettingsSandboxedUiDataValue }>;
+
+export type SettingsSandboxedUiFrameProps = Readonly<{
+  className?: string;
+  data?: Readonly<Record<string, SettingsSandboxedUiDataValue>>;
+  source: Readonly<{ html: string; css: string; js: string }>;
+  title: string;
+}>;
+
 export type SettingsPluginIconProps = Readonly<{
   className?: string;
   name?: string;
@@ -238,6 +253,8 @@ export type SettingsViewUi = Readonly<{
   PageOutlet: ComponentType<SettingsPageOutletProps>;
   PluginIcon: ComponentType<SettingsPluginIconProps>;
   Row: ComponentType<SettingsRowProps>;
+  /** Optional host-owned isolated frame for security-sensitive previews. */
+  SandboxedUiFrame?: ComponentType<SettingsSandboxedUiFrameProps>;
   Section: ComponentType<SettingsSectionProps>;
   SelectField: ComponentType<SettingsSelectFieldProps>;
   SkillIcon: ComponentType<SettingsSkillIconProps>;

@@ -5,7 +5,10 @@ import type {
   RuntimePluginMarketplaceItem,
   RuntimePluginMarketplaceList,
 } from '@setsuna-desktop/contracts';
-import { parseRuntimePluginUiManifest } from '@setsuna-desktop/contracts';
+import {
+  parseRuntimePluginUiCardDeclarations,
+  parseRuntimePluginUiManifest,
+} from '@setsuna-desktop/contracts';
 import { readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import type { PluginBundleInspection, PluginBundleStore } from '../../ports/plugin-bundle-store.js';
@@ -59,6 +62,9 @@ export class FilePluginMarketplace implements PluginMarketplace {
               capabilities: [...plugin.extension.capabilities],
               ...(plugin.extension.network ? {
                 network: { allowedOrigins: [...plugin.extension.network.allowedOrigins] },
+              } : {}),
+              ...(plugin.extension.uiCards ? {
+                uiCards: parseRuntimePluginUiCardDeclarations(plugin.extension.uiCards),
               } : {}),
               ...(plugin.extension.rendererUi ? {
                 rendererUi: parseRuntimePluginUiManifest(plugin.extension.rendererUi),

@@ -30,7 +30,9 @@ import {
 import {
   appReadySlot,
   shellOverlaySlot,
+  shellPluginPageSlot,
   shellRouteSlot,
+  shellSidebarPluginEntrySlot,
   shellSidebarSlot,
   shellTopbarActionsSlot,
   shellTopbarActionSlot,
@@ -52,6 +54,7 @@ const REQUIRED_APP_ROUTE_IDS: readonly RendererAppRouteId[] = Object.freeze([
   'chat',
   'settings',
   'capabilities',
+  'plugin',
 ]);
 
 const WORKSPACE_PANEL_TYPES: readonly RendererWorkspacePanelType[] = Object.freeze([
@@ -145,13 +148,27 @@ const routePlugin = defineRendererPlugin({
         requiredKeys: REQUIRED_CAPABILITIES_PAGE_KEYS,
       }),
     ]);
+    registerRoute(ui, 'plugin', [
+      declareRendererChildSlot(shellPluginPageSlot, {
+        fallback: { render: ({ renderUnavailable }) => renderUnavailable() },
+      }),
+    ]);
   },
 });
 
 const shellRegionsPlugin = defineRendererPlugin({
   id: 'core.shell-regions',
   activate({ ui }) {
-    registerDefaultSingle(ui, shellSidebarSlot, 'shell.sidebar.default');
+    ui.single(shellSidebarSlot, {
+      id: 'shell.sidebar.default',
+      priority: 0,
+      children: [declareRendererChildSlot(shellSidebarPluginEntrySlot)],
+      render: ({ renderDefault }, slots) => (
+        <RendererOwnedSlotsProvider slots={slots}>
+          {renderDefault()}
+        </RendererOwnedSlotsProvider>
+      ),
+    });
     registerDefaultSingle(ui, shellTopbarTitleSlot, 'shell.topbar-title.default');
     ui.single(shellTopbarActionsSlot, {
       id: 'shell.topbar-actions.default',

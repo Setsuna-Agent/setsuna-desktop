@@ -137,7 +137,7 @@ export function RuntimeToolRuns({
     && replacement?.contribution.presentation === 'replace') {
     return (
       <div className="chat-tool-runs">
-        <FeatureToolResultView result={replacement} runId={singleRun.id} />
+        <FeatureToolResultView plugin={singleRun.plugin} result={replacement} runId={singleRun.id} />
       </div>
     );
   }
@@ -162,8 +162,8 @@ export function RuntimeAssistantTailToolResults({ runs }: Readonly<{ runs: Runti
   if (!results.length) return null;
   return (
     <div className="chat-assistant-run__segment chat-feature-tool-results--tail">
-      {results.map(({ result, runId }) => (
-        <FeatureToolResultView key={runId} result={result} runId={runId} />
+      {results.map(({ plugin, result, runId }) => (
+        <FeatureToolResultView key={runId} plugin={plugin} result={result} runId={runId} />
       ))}
     </div>
   );
@@ -240,7 +240,9 @@ function ToolRunDisplayPanel({
   if (group.type === 'single') {
     const featureResult = resolveRuntimeFeatureToolResult(resolveFeatureToolResult, group.run);
     if (featureResult && featureResult.contribution.placement !== 'assistant-tail') {
-      const content = <FeatureToolResultView result={featureResult} runId={group.run.id} />;
+      const content = (
+        <FeatureToolResultView plugin={group.run.plugin} result={featureResult} runId={group.run.id} />
+      );
       if (featureResult.contribution.presentation === 'replace') return content;
       return (
         <FlatToolRunRow
@@ -271,11 +273,13 @@ function ToolRunDisplayPanel({
 }
 
 function FeatureToolResultView({
+  plugin,
   result,
   runId,
 }: Readonly<{
   result: ResolvedChatToolResult;
   runId: string;
+  plugin?: RuntimeToolRun['plugin'];
 }>) {
   const { t } = useI18n();
   const threadId = useChatThreadId();
@@ -291,7 +295,7 @@ function FeatureToolResultView({
       featureId={result.featureId}
       resetKey={`${runId}:${result.contribution.resultKind}:${result.contribution.major}`}
     >
-      <ResultView payload={result.payload} threadId={threadId} translate={t} />
+      <ResultView payload={result.payload} plugin={plugin} threadId={threadId} translate={t} />
     </FeatureContributionBoundary>
   );
 }

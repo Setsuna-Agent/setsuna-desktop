@@ -37,6 +37,7 @@ import { ExtensionToolHost } from '../adapters/tool/extension-tool-host.js';
 import { MemoryToolHost } from '../adapters/tool/memory-tool-host.js';
 import { PcLocalToolHost } from '../adapters/tool/pc-local/pc-local-tool-host.js';
 import { PluginBundleToolHost } from '../adapters/tool/plugin-bundle-tool-host.js';
+import { PluginVerificationToolHost } from '../adapters/tool/plugin-verification-tool-host.js';
 import { SkillManagementToolHost } from '../adapters/tool/skill-management-tool-host.js';
 import { UserInputToolHost } from '../adapters/tool/user-input-tool-host.js';
 import { WorkspaceImageToolHost } from '../adapters/tool/workspace-image-tool-host.js';
@@ -186,6 +187,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     browserToolHost,
     mcpToolHost,
     new PluginBundleToolHost(pluginStore, pluginDraftStore),
+    new PluginVerificationToolHost(pluginStore, extensionManager),
     new ExtensionToolHost(extensionManager),
     new WorkspaceImageToolHost(workspaceProjects),
     artifactToolHost,

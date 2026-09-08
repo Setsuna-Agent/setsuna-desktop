@@ -14,6 +14,8 @@ import {
   pluginManagementRuntimeHostCapability,
   readInstalledPlugins,
   readInstalledPluginItem,
+  readInstalledPluginRendererUiData,
+  readInstalledPluginRendererUiDocument,
   readPluginExtensionStatuses,
   readMarketplacePluginItem,
   readInstalledPluginRendererUiState,
@@ -91,6 +93,12 @@ export const pluginManagementRuntimeFeature = defineRuntimeFeature({
         () => host.runRendererUiAction(input, operation.signal),
         operation.signal,
       )
+    ));
+    routes.register(context.scope, readInstalledPluginRendererUiData, (input) => (
+      preservePluginOperationError(() => host.readRendererUiData(input))
+    ));
+    routes.register(context.scope, readInstalledPluginRendererUiDocument, (input) => (
+      preservePluginOperationError(() => host.readRendererUiDocument(input))
     ));
     routes.register(context.scope, setInstalledPluginExtensionTrust, (input) => (
       preservePluginOperationError(() => host.setExtensionTrust(input))

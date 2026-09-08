@@ -5,6 +5,8 @@ import {
   readInstalledPlugins,
   readInstalledPluginItem,
   readInstalledPluginRendererUiState,
+  readInstalledPluginRendererUiData,
+  readInstalledPluginRendererUiDocument,
   readPluginExtensionStatuses,
   readMarketplacePluginItem,
   readPluginManagementSnapshot,
@@ -21,7 +23,12 @@ import {
   type PluginManagementItemTarget,
   type PluginManagementPluginTarget,
 } from '../contracts/index.js';
-import type { RuntimePluginUiActionInput, RuntimePluginUiStateInput } from '@setsuna-desktop/contracts';
+import type {
+  RuntimePluginUiActionInput,
+  RuntimePluginUiStateInput,
+  RuntimePluginUiDataInput,
+  RuntimePluginUiDocumentReadInput,
+} from '@setsuna-desktop/contracts';
 
 export function createPluginManagementClient(transport: FeatureOperationTransport) {
   return Object.freeze({
@@ -45,6 +52,14 @@ export function createPluginManagementClient(transport: FeatureOperationTranspor
       input: RuntimePluginUiStateInput,
       options?: Readonly<{ signal?: AbortSignal }>,
     ) => transport.call(readInstalledPluginRendererUiState, input, options),
+    readRendererUiData: (
+      input: RuntimePluginUiDataInput,
+      options?: Readonly<{ signal?: AbortSignal }>,
+    ) => transport.call(readInstalledPluginRendererUiData, input, options),
+    readRendererUiDocument: (
+      input: RuntimePluginUiDocumentReadInput,
+      options?: Readonly<{ signal?: AbortSignal }>,
+    ) => transport.call(readInstalledPluginRendererUiDocument, input, options),
     readHooks: (input: PluginManagementHookQuery, options?: Readonly<{ signal?: AbortSignal }>) => (
       transport.call(readPluginHooks, input, options)
     ),

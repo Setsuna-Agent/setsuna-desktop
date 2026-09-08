@@ -10,6 +10,7 @@ import {
   matchingPluginHook,
   mergePluginSkills,
   pluginMatchesQuery,
+  pluginUiSurfaces,
 } from '../../src/renderer/pluginPresentation.js';
 
 describe('plugin presentation', () => {
@@ -53,6 +54,51 @@ describe('plugin presentation', () => {
       legacy,
       pluginHook({ managementId: 'duplicate', pluginHookId: undefined }),
     ], 'guard', item)).toBeUndefined();
+  });
+
+  it('presents declared cards and persistent UI without inferring cards from the broad ui capability', () => {
+    const surfaces = pluginUiSurfaces({
+      apiVersion: 1,
+      runtime: 'node-worker',
+      capabilities: ['tools', 'ui'],
+      uiCards: [{
+        id: 'git.history',
+        label: 'Git history',
+        toolName: 'git_tree',
+        preview: { html: '<main>History</main>', css: '', js: '', data: {} },
+      }],
+      rendererUi: {
+        schemaVersion: 2,
+        actions: [],
+        contributions: [{
+          id: 'git.page',
+          slot: 'renderer.plugin.page',
+          navigation: { label: 'Git history' },
+          tree: { type: 'text', text: 'History' },
+        }],
+      },
+    });
+
+    expect(surfaces).toMatchObject([
+      {
+        id: 'card:git.history',
+        kind: 'chat-card',
+        renderMode: 'sandbox',
+        toolName: 'git_tree',
+        preview: { html: '<main>History</main>' },
+      },
+      {
+        id: 'contribution:git.page',
+        kind: 'standalone-page',
+        renderMode: 'host',
+        sidebarEntry: true,
+      },
+    ]);
+    expect(pluginUiSurfaces({
+      apiVersion: 1,
+      runtime: 'node-worker',
+      capabilities: ['tools', 'ui'],
+    })).toEqual([]);
   });
 });
 

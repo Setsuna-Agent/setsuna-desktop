@@ -13,7 +13,7 @@ Setsuna 采用以下方向：
 3. 在 Renderer 内增加轻量 Plugin Runtime。宿主 UI 与 Feature UI 都通过作用域绑定的激活上下文注册，不在 React 组件生命周期中注册。
 4. UI 组合使用有父子所有权的 typed Slot Tree，首期支持 `single / list / keyed / chain`。
 5. 首期所有 React 插件均静态编译进 Desktop bundle；不实现独立 client bundle、Module Federation、import map 或远程代码加载。
-6. 普通第三方 Plugin 继续运行在 Node worker，只能通过声明式 UI gateway 进入白名单 Slot，不能向主 Renderer 注入 React、HTML、CSS 或 JavaScript。
+6. 普通第三方 Plugin 继续运行在 Node worker。简单 UI 通过声明式 gateway 进入白名单 Slot；自由 HTML/CSS/JavaScript 只进入 opaque-origin sandbox iframe，不能向主 Renderer 注入 React、脚本或全局样式。
 7. `preload` 继续是窄桥接。Renderer Plugin 只能获得显式注入的 Capability，不能直接访问 runtime token、端口、文件系统或完整的 `window.setsunaDesktop`。
 8. 布局偏好是 Slot Runtime 之上的可迁移投影，不是插件 inventory、Slot 声明或业务状态的第二真源。
 9. 安全审批、凭据、更新完整性、顶层恢复与桥接授权属于不可替换 Kernel；“万物可修改”只覆盖产品组合层。
@@ -28,9 +28,9 @@ Setsuna 采用以下方向：
 | 里程碑 | 状态 | 当前结果 |
 | --- | --- | --- |
 | A：静态 Renderer Plugin Runtime | 已完成 | 四种 typed Slot、层级所有权、事务、outlet、fallback、Feature scope 注册、App Shell/Chat/Settings/Capabilities/Workspace 迁移和旧 catalog 删除均已落地 |
-| B：偏好与检查 | 底座已完成 | V1 布局偏好、原子 mount/replace/unmount 和脱敏 Slot Tree Inspector 已落地；raw Slot 排序/显隐不作为普通用户设置暴露 |
-| C：普通第三方声明式 UI | 已完成 | Bundle `extension.rendererUi` schema、安装时校验、可信 manifest gateway、host primitive、状态回填、审批动作和 worker handler 已贯通；业务配置只挂载在所属插件详情，内置 `web-search` 是首个真实可安装消费者 |
-| D：受信 client bundle | 延期 | 没有独立分发 React bundle 的真实消费者；当前不存在第三方 React/HTML/CSS/JavaScript 加载入口 |
+| B：偏好与检查 | 底座已完成 | V1 布局偏好、原子 mount/replace/unmount、恢复默认布局和脱敏 Slot Tree Inspector 已落地；raw Slot 排序/显隐不作为普通用户设置暴露 |
+| C：普通第三方 UI | 已完成 | v1 插件详情设置兼容；v2 声明式 UI、沙箱独立页、侧栏入口、作用域数据、审批 action 与 `plugin.ui-card@1` 对话卡片已贯通，内置 `web-search` 是首个真实设置消费者 |
+| D：受信 React client bundle | 延期 | 当前自由 UI 只在 opaque-origin iframe 内运行，没有第三方代码进入主 Renderer module graph |
 
 实际实现与设计有三处有意收敛：
 
@@ -51,7 +51,8 @@ Setsuna 采用以下方向：
 | 布局偏好底座与调试面板 | `layout-preferences.ts`、`layout-preference-controller.ts`、`composition/renderer-plugins/RendererPluginInspectorSettings.tsx` |
 | 第三方 JSON schema | `packages/contracts/src/plugin-ui.ts` |
 | 声明式 UI gateway/host renderer | `apps/desktop/renderer/src/kernel/declarative-plugin-ui/` |
-| state/action typed operation | `packages/features/plugin-management/src/contracts/operations.ts` |
+| 自由页面/卡片沙箱与 typed result | `packages/features/ui-card/` |
+| state/data/document/action typed operation | `packages/features/plugin-management/src/contracts/operations.ts` |
 | worker action 注册与执行 | `packages/desktop-runtime/src/extensions/extension-{manager,worker-entry,worker-client,worker-protocol}.ts` |
 
 ## 背景与现状
@@ -120,7 +121,7 @@ DeepSeek Harness 验证了几个关键机制确实有价值：
 - UI 依赖通过 Feature Capability 或宿主显式依赖注入，不通过实现包互相 import。
 - Slot 的候选项、winner、fallback、inactive 原因、owner 和子树可以检查。
 - 支持启用、禁用、排序、用户选择和布局偏好，但不为这些能力牺牲静态启动的简单性。
-- 普通第三方插件可以在安全边界内贡献声明式 UI，而不获得 DOM、React runtime 或 preload bridge。
+- 普通第三方插件可以贡献宿主声明式 UI，或在隔离 iframe 内获得自己的 DOM；两者都不获得主 Renderer React runtime、宿主 DOM 或 preload bridge。
 - 最终收窄各 Feature 的 `/renderer` 公共面：默认只导出 Renderer Feature 模块和明确的稳定 contract，不再把内部组件树当公共 API。
 
 ## 非目标
@@ -603,7 +604,7 @@ type RendererSlotInspection = Readonly<{
 | Kernel | Desktop 固定代码 | 安全根、恢复、bridge gate | 宿主内部 | 不可被 Slot 替换 |
 | 内置 Renderer Plugin | 随 Desktop 编译 | 完整 typed Slot | 显式 Feature/host Capability | 不能直接访问完整 preload bridge |
 | 应用签名 Renderer Plugin（未来） | Setsuna 签名并随受控渠道发布 | 只进入 manifest allowlist Slot | 版本化、显式 Capability | 不能仅凭用户点“信任”获得主 Renderer 执行权 |
-| 普通第三方 Plugin | Node worker | JSON-safe declarative schema，仅白名单 Slot | worker host API 与审批策略 | React、DOM、HTML、CSS、renderer JS、任意 IPC |
+| 普通第三方 Plugin | Node worker + opaque-origin UI iframe | 白名单 Slot 中的 host tree 或 sandbox document；对话 `ui-card` | worker host API、声明 action 与审批策略 | 主 Renderer React/DOM、preload、任意 IPC、卡片直连网络 |
 
 以下 surface 永不向普通第三方 schema 开放：
 
@@ -614,15 +615,17 @@ type RendererSlotInspection = Readonly<{
 - Kernel error/recovery；
 - preload/native capability 授权。
 
-声明式 UI action 只能引用 manifest 中声明的 action ID，由 host 携带当前 `contributionId` 转成受控 operation。Runtime 必须按该 contribution 精确校验 Slot 与字段，不能把复用同一 action ID 的其他 contribution 字段合并进来。Schema 不能携带函数、事件脚本、URL handler、style 字符串或 raw markup。
+tree UI action 只能引用 manifest 中声明的 action ID，由 host 携带当前 `contributionId` 转成受控 operation。Sandbox document 还必须在自身 `actionIds` 中列出该 action，桥接 payload 经过有界 JSON 校验。Runtime 必须按当前 contribution 精确校验 Slot、字段、action 和 state scope，不能把复用同一 action ID 的其他 contribution 权限合并进来。tree schema 不能携带函数、事件脚本、URL handler、style 字符串或 raw markup；document/card 源码只能进入下述隔离 frame。
+
+自由 UI frame 使用 `srcdoc` 与 `<iframe sandbox="allow-scripts">`，明确不启用 `allow-same-origin`。宿主生成 CSP，禁止 connect、远程脚本/样式、form、frame、worker、object 和 media；主进程阻止子 frame 导航到 `about:srcdoc/about:blank` 之外。frame 不继承 preload/Node，消息只接受当前 `contentWindow` 的版本化 channel，并限制 action allowlist、JSON 体积、消息频率和高度。独立页源码从参与完整可信 Bundle hash 的同一批字节中读取；对话卡片源码在 Plugin 工具结果持久化前由 runtime 盖上真实来源并校验。
 
 ## 样式与主题规则
 
-- Slot Runtime 不接收 raw CSS 字符串，也不在首期动态插入 `<style>`。
+- 主 Renderer Slot Runtime 不接收 raw CSS 字符串，也不动态插入第三方 `<style>`；sandbox document/card 的 CSS 只存在于其 opaque-origin frame。
 - 内置 Plugin 样式仍由 Vite 静态打包，但必须使用稳定 plugin root class、CSS Module 或明确域前缀，禁止无 owner 的全局 selector。
 - 全局 token 仍只在 `shared/styles/tokens.css`；Plugin 可以消费 token，不能在自己的样式中重定义全局安全/布局 token。
 - Slot outlet 默认不为了注册系统增加可见布局 wrapper；调试属性仅附着到已有 owner root，必要的 ErrorBoundary wrapper 不改变语义标签。
-- 普通第三方 schema 只能使用 host UI kit 和受控布局 primitive，不接受任意 className/style。
+- 普通第三方 tree 只能使用 host UI kit 和受控布局 primitive，不接受任意 className/style；需要自由样式时必须选择 sandbox document/card。
 - 主题包若以后出现，应作为 token/theme contract 单独设计，不借 Renderer Plugin 绕过 CSS 边界。
 
 ## 当前 contribution 的迁移映射
@@ -644,7 +647,7 @@ type RendererSlotInspection = Readonly<{
 
 ## 分阶段实施计划
 
-整个方案分为已形成产品闭环的核心里程碑 A、偏好里程碑 B、声明式 UI 里程碑 C，以及一个条件里程碑。交付时应至少拆为 A（核心 catalog → Slot 迁移）、B（偏好与 Inspector）、C（第三方声明式 UI）三个独立变更；Browser 等旁支不混入 Renderer Runtime 核心提交。
+整个方案分为三个已实施里程碑和一个条件里程碑：A（核心 catalog → Slot 迁移）、B（偏好与 Inspector）、C（第三方 host tree + sandbox UI）。Browser 等旁支不混入 Renderer Runtime 核心提交。
 
 ### 里程碑 A：静态 Renderer Plugin Runtime（已完成）
 
@@ -746,7 +749,7 @@ type RendererSlotInspection = Readonly<{
 5. tool-result codec registry 从通用 view bundle 中拆成 Chat owner 的 typed resolver，但保持 envelope、major、legacy、identity、placement 和 fallback 兼容。
 6. side conversation 使用独立 `surfaceInstanceId`，验证同一 thread 多 surface 不共享 React 本地状态。
 
-高收益测试：Goal status 与 active turn props、assistant-tail tool result、legacy tool result、side chat surface isolation。
+高收益测试：Goal status 与 active turn props、assistant-timeline/assistant-tail tool result、legacy tool result、side chat surface isolation。
 
 验收：旧 `composerStatusViews` 数量归零并删除旧 consumer；Chat 整体、Composer 或 Details 可以分别被测试 Plugin 替换。
 
@@ -841,27 +844,30 @@ type RendererSlotInspection = Readonly<{
 
 验收：高级设置中不存在 raw Slot 布局编辑器；诊断 Inspector 仍能解释 selection/order/hidden 的 Runtime 结果，具体业务配置留在对应 Feature 或 Plugin 详情。
 
-### 里程碑 C：普通第三方 Plugin 的声明式 UI（已完成）
+### 里程碑 C：普通第三方 Plugin UI（已完成）
 
 #### C1：定义最小 schema 与 gateway（已完成）
 
 1. 从两个真实第三方 UI 用例反推 schema；首版只提供 Stack、Text、Badge、Button、Field、Select、Notice 等 host primitive。
-2. Schema 必须 JSON-safe、带版本、节点数/深度/文本长度上限，不允许 HTML、CSS、className、script 或任意 URL handler。
-3. contribution 只能进入 manifest 与 host 双重 allowlist 的插件详情或紧凑状态 surface；不能占据宿主 Settings、app root、安全确认和 credential surface。
+2. tree schema 必须 JSON-safe、带版本、节点数/深度/文本长度上限，不允许 HTML、CSS、className、script 或任意 URL handler。
+3. contribution 只能进入 manifest 与 host 双重 allowlist 的插件详情、紧凑状态、受控 Settings 扩展或独立功能页；不能占据 app root、安全确认和 credential surface。
 4. action 使用声明式 action ID，经 Plugin worker host API、capability 和审批策略执行。
 5. runtime/plugin-management owner 负责 schema 存储和状态；preload 只暴露查询/订阅所需窄 API；Renderer 负责校验后投影为 host UI kit。
+6. v2 `renderer.plugin.page` 可用 `document` 引用 Bundle 内声明的 HTML/CSS/JS 资源。Runtime 从一次完整可信 hash 快照读取源码，Renderer 只把源码放入共享 sandbox frame。
+7. Plugin 工具可返回 `plugin.ui-card@1`；runtime 绑定真实 Plugin provenance 后持久化，Chat typed result resolver 只接受带相同来源的结果，并按对应 tool run 的持久位置把 sandbox frame 插入 assistant timeline。工具前后的 assistant segment 因此可稳定重放为 `text → card → text`，不依赖正文标记或尾部搬运。
 
 #### C2：生命周期与失败（已完成）
 
 1. Plugin 安装事务成功且当前 Bundle 已受信后，gateway 才发布 schema contribution。
-2. 卸载、更新或撤销信任导致 Plugin Management snapshot 变化时，gateway 以 transaction 替换/撤销其全部 UI entry。worker 仅在 action 时按需启动；正常 `stopped` 不代表 manifest UI 已失效。
+2. 卸载、更新或撤销信任导致 Plugin Management snapshot 变化时，gateway 以 transaction 替换/撤销其全部 UI entry。动态数据与 document 源码读取都校验精确信任 hash，不会仅为侧栏 badge 激活第三方代码；worker 在 action 或其他扩展能力真正执行时按需启动。正常 `stopped` 不代表 manifest UI 已失效。
 3. schema 版本不支持或 validation 失败只隔离该 Plugin UI，不能使 Renderer root 失败。
 4. action error 显示 host-owned error state，不执行 Plugin 提供的错误 markup。
 5. gateway 在首次 `refreshInstalled()` 前先订阅 Plugin Management snapshot。启动期刷新瞬时失败只记录诊断，gateway 仍返回有效 disposer，并由后续 snapshot 通知重新 reconcile，不要求重启应用。
 6. action operation 的组合取消信号必须从 runtime route 贯穿 `PluginManagementRuntimeHost`、`ExtensionManager` 与 worker request。请求断开、Feature drain 或 runtime 关闭会取消并终止对应 worker，状态回到可重新激活的 `stopped`；取消原因保留为 `OPERATION_CANCELLED`，不能包装成 `PLUGIN_OPERATION_FAILED`，也不能把一次取消记为插件故障。
-7. Renderer UI action 的 state host request 必须显式携带 `scope: 'global'`。省略 scope、传入 thread/project scope 或试图依赖 `stateScope()` 的上下文默认值都 fail closed，避免 action context 中携带的 threadId 把未声明 scope 静默升级为线程状态写入。
+7. Renderer UI v2 contribution 可声明唯一 `data.stateKey` 与 `global/project/thread` scope。数据查询只能读取该 key；action 的默认 state scope 由 host 注入并锁定为同一 scope，worker 省略 scope 时使用它，显式请求其他 scope 会 fail closed。v1 或无 data 的 contribution 保持 `global` 默认值。
+8. document 只能请求自身 `actionIds`；卡片 v1 不开放 host action。两者的直接网络、Node/Electron/preload、宿主 DOM、弹窗、下载、表单和 frame 导航均被禁止。
 
-验收：恶意深树、未知 node、越权 Slot/action、超限 payload 与 worker 执行失败均 fail closed；普通 Plugin 始终无法获得 DOM 或 preload object。
+验收：恶意深树、未知 node、被篡改源码、伪造 Plugin 来源、越权 Slot/action、超限 payload 与 worker 执行失败均 fail closed；普通 Plugin 只能获得自己 opaque-origin frame 的 DOM，无法获得宿主 DOM 或 preload object。
 
 #### C3：真实 manifest 与设置状态闭环（已完成）
 
@@ -869,17 +875,17 @@ type RendererSlotInspection = Readonly<{
 2. Runtime 读取状态前重新校验当前 Bundle hash，只把该 contribution 已声明且仍满足长度/option 约束的字符串字段投影给 Renderer；无效或额外字段不会跨边界。
 3. Renderer 在挂载时回填状态，编辑期间使用 host-owned 控件，动作审批使用内联 host UI；action 成功后重新读取 canonical state，所有请求随组件与 Feature scope 取消。
 4. 内置 `web-search` 提供首个真实插件详情 contribution。用户只保存默认结果数；主题由模型按当前问题选择，未明确时回退 `general`，不形成跨请求偏好。
-5. 安装、信任快照、状态读取、worker action、工具消费与卸载撤销分别由真实 Bundle/runtime/gateway 测试覆盖，不增加任意 React、HTML、CSS 或脚本入口。
+5. 安装、信任快照、状态读取、worker action、工具消费与卸载撤销分别由真实 Bundle/runtime/gateway 测试覆盖；第三方 HTML/CSS/JS 只允许进入 opaque-origin sandbox，不进入主 Renderer module graph。
 6. 早期 schema v1 的 Settings Slot 只作为升级输入读取：`general/about` target 会被丢弃，canonical contribution 强制归一化到所属插件详情，不保留全局挂载能力。
 
 验收：安装 `web-search` 后 contribution 只在“网络搜索”插件详情中挂载并回填默认设置，保存后新工具调用消费持久值，显式工具参数不被覆盖；卸载后 UI entry、工具和状态读取能力立即撤销。
 
-### 条件里程碑 D：受信 client bundle
+### 条件里程碑 D：受信 React client bundle
 
 本里程碑不属于当前实现承诺。只有同时满足以下条件才启动独立设计：
 
 1. 至少两个真实、独立发布的 Plugin 必须在不重发 Desktop 的情况下安装或更新 React UI。
-2. 声明式 schema 已被证明无法表达核心需求，而不是开发者偏好直接写 React。
+2. host tree 与 sandbox document/card 都已被证明无法表达核心需求，而不是开发者偏好直接写 React。
 3. 已确定代码签名、发布者身份、撤销、兼容版本和安全响应 owner。
 4. 已决定 shared React/runtime、CSS 隔离、CSP、source map、依赖图、失败回滚、崩溃隔离、更新与卸载协议。
 5. 普通“用户已信任”不能成为进入主 Renderer 的唯一条件；代码必须应用签名/策展，或运行在隔离 web surface。
@@ -966,7 +972,7 @@ type RendererSlotInspection = Readonly<{
 
 全量 unit 唯一失败是未被本设计改动触碰的 `packages/desktop-runtime/test/hooks/runtime-hook-management.test.ts:49`：测试仍期望 mutation 后直接观察到 `trustedHash`，实际为 `undefined`。该文件与对应 Hook implementation 都不在本次 diff 中，已单独复现，因此没有借 Renderer 重构顺手改变其行为；应由 Hook owner 独立修复或更新断言。
 
-代码评审后的收口修正也已纳入上述统计：没有显式 fallback 的 `single/keyed` contribution 发生渲染错误时会继续冒泡到最近的 host/App recovery boundary，只有可独立隔离的 `list` entry 默认隐藏；Capabilities 的可选 Feature settings 在 Slot 外恢复了 `FeatureContributionBoundary`，因此局部失败仍停留在插件详情页；非 app outlet 使用显式 `instanceKey`，并将它纳入 React boundary key/reset identity；Composer 进一步使用稳定 `composerKey` session identity，starter 中的 Conversation winner 只能替换 starter 内容而不能吞掉宿主 Composer；持久 Browser panel 从各自 target 恢复 scope context，切换 active conversation 不再重建全部 inactive panel。声明式 UI gateway 先订阅再首次刷新，启动期瞬时故障可由后续 snapshot 自动恢复；Renderer UI action 的 operation signal 已贯穿 host、manager 和 worker，取消不会被转成插件失败，state host request 还必须显式声明 global scope；动态 mount 返回的 entry disposer 在 commit 后通过 mutation queue 删除 live registration，旧 epoch disposer 不会伤及 replacement。Renderer Runtime root 检查器解析实际 module identity 并在模块存在时要求恰好一个 root。Inspector 同时读取 rooted tree 与 `inspection.dormant`，dormant candidate 携带 `slotId`，因此 Slot、Plugin、entry、state 搜索不再遗漏不可达注册项。
+代码评审后的收口修正也已纳入上述统计：没有显式 fallback 的 `single/keyed` contribution 发生渲染错误时会继续冒泡到最近的 host/App recovery boundary，只有可独立隔离的 `list` entry 默认隐藏；Capabilities 的可选 Feature settings 在 Slot 外恢复了 `FeatureContributionBoundary`，因此局部失败仍停留在插件详情页；非 app outlet 使用显式 `instanceKey`，并将它纳入 React boundary key/reset identity；Composer 进一步使用稳定 `composerKey` session identity，starter 中的 Conversation winner 只能替换 starter 内容而不能吞掉宿主 Composer；持久 Browser panel 从各自 target 恢复 scope context，切换 active conversation 不再重建全部 inactive panel。声明式 UI gateway 先订阅再首次刷新，启动期瞬时故障可由后续 snapshot 自动恢复；Renderer UI action 的 operation signal 已贯穿 host、manager 和 worker，取消不会被转成插件失败，state host request 由 contribution 声明的 scope 锁定；动态 mount 返回的 entry disposer 在 commit 后通过 mutation queue 删除 live registration，旧 epoch disposer 不会伤及 replacement。Renderer Runtime root 检查器解析实际 module identity 并在模块存在时要求恰好一个 root。Inspector 同时读取 rooted tree 与 `inspection.dormant`，dormant candidate 携带 `slotId`，因此 Slot、Plugin、entry、state 搜索不再遗漏不可达注册项。
 
 ### 里程碑 B 产品边界复核记录（2026-08-31）
 
@@ -1008,12 +1014,12 @@ type RendererSlotInspection = Readonly<{
 
 里程碑 C 完成需同时满足：
 
-- [x] 普通第三方 Plugin 只有 JSON-safe schema 和受控 action。
+- [x] 普通第三方 Plugin 只有 host tree 或隔离 document/card，跨宿主边界的 action 始终受控。
 - [x] allowlist、安全 surface、资源上限、信任变更和 worker action lifecycle 均有 fail-closed 测试。
 - [x] gateway 在首次刷新前订阅，启动期刷新失败后可由后续 snapshot 恢复并正常释放订阅/挂载。
 - [x] Renderer UI action 继承 route/Feature scope 取消信号，取消会终止 worker、恢复为 `stopped`，且不会包装成 `PLUGIN_OPERATION_FAILED`。
-- [x] 主 Renderer 没有第三方 React/HTML/CSS/JavaScript 执行路径。
-- [x] 普通 Plugin 的业务配置只能进入所属插件详情，不能插入宿主 Settings section。
+- [x] 主 Renderer 没有第三方 React/HTML/CSS/JavaScript 执行路径；自由源码只进入 opaque-origin iframe。
+- [x] Bundle、runtime、typed operation、gateway、对话 result resolver 和共享 sandbox frame 均有跨层 fixture 覆盖。
 - [x] 内置 `web-search` manifest 实际声明 `rendererUi`，并跑通详情挂载、安装、状态投影、action、工具消费与卸载撤销闭环。
 
 ## 明确延期的决策
@@ -1022,7 +1028,7 @@ type RendererSlotInspection = Readonly<{
 - 跨 Desktop 版本的 Slot API negotiation。
 - layout preference 是否跨设备/WebDAV 同步。
 - Plugin 提供完整主题或全局 CSS。
-- Plugin UI 独立进程/WebContents 隔离形态。
+- 将 iframe 升级为独立 renderer process/WebContents 的更强 CPU/崩溃隔离形态。
 - 开发态保留 React state 的细粒度 HMR。
 
 这些问题不应提前体现在首期 contract 中；出现真实消费者后单独设计。

@@ -1,5 +1,10 @@
 import type { FeatureScope } from '@setsuna-desktop/feature-core/scope';
-import type { RuntimePluginUiActionInput, RuntimePluginUiStateInput } from '@setsuna-desktop/contracts';
+import type {
+  RuntimePluginUiActionInput,
+  RuntimePluginUiStateInput,
+  RuntimePluginUiDataInput,
+  RuntimePluginUiDocumentReadInput,
+} from '@setsuna-desktop/contracts';
 import type {
   PluginManagementDesktopBridge,
   PluginManagementExtensionTrustInput,
@@ -31,6 +36,7 @@ export class RendererPluginManagementService implements PluginManagementRenderer
   private hookSnapshot = EMPTY_HOOK_SNAPSHOT;
   private hookQuery: PluginManagementHookQuery = Object.freeze({});
   private readonly listeners = new Set<PluginManagementRendererListener>();
+  private readonly rendererUiDataListeners = new Map<string, Set<PluginManagementRendererListener>>();
   private hookRefreshSequence = 0;
   private appliedHookRefreshSequence = 0;
   private hookMutationTail: Promise<void> = Promise.resolve();
@@ -58,6 +64,19 @@ export class RendererPluginManagementService implements PluginManagementRenderer
   subscribe(listener: PluginManagementRendererListener): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  subscribeRendererUiData(pluginId: string, listener: PluginManagementRendererListener): () => void {
+    let listeners = this.rendererUiDataListeners.get(pluginId);
+    if (!listeners) {
+      listeners = new Set();
+      this.rendererUiDataListeners.set(pluginId, listeners);
+    }
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+      if (!listeners.size) this.rendererUiDataListeners.delete(pluginId);
+    };
   }
 
   async refresh(options?: Readonly<{ signal?: AbortSignal }>): Promise<PluginManagementSnapshot> {
@@ -175,14 +194,20 @@ export class RendererPluginManagementService implements PluginManagementRenderer
     return result;
   }
 
-  runRendererUiAction(
+  async runRendererUiAction(
     input: RuntimePluginUiActionInput,
     options?: Readonly<{ signal?: AbortSignal }>,
   ) {
-    return this.options.scope.runOperation(
-      (signal) => this.options.client.runRendererUiAction(input, { signal }),
-      options,
-    );
+    try {
+      return await this.options.scope.runOperation(
+        (signal) => this.options.client.runRendererUiAction(input, { signal }),
+        options,
+      );
+    } finally {
+      // Extension state writes are durable even when the action later fails or is
+      // cancelled, so every settled action must invalidate data-bound surfaces.
+      for (const listener of this.rendererUiDataListeners.get(input.pluginId) ?? []) listener();
+    }
   }
 
   readRendererUiState(
@@ -191,6 +216,26 @@ export class RendererPluginManagementService implements PluginManagementRenderer
   ) {
     return this.options.scope.runOperation(
       (signal) => this.options.client.readRendererUiState(input, { signal }),
+      options,
+    );
+  }
+
+  readRendererUiData(
+    input: RuntimePluginUiDataInput,
+    options?: Readonly<{ signal?: AbortSignal }>,
+  ) {
+    return this.options.scope.runOperation(
+      (signal) => this.options.client.readRendererUiData(input, { signal }),
+      options,
+    );
+  }
+
+  readRendererUiDocument(
+    input: RuntimePluginUiDocumentReadInput,
+    options?: Readonly<{ signal?: AbortSignal }>,
+  ) {
+    return this.options.scope.runOperation(
+      (signal) => this.options.client.readRendererUiDocument(input, { signal }),
       options,
     );
   }

@@ -1,6 +1,6 @@
 import type { RuntimeMessageAttachment, WorkspaceEntrySearchItem } from '@setsuna-desktop/contracts';
 
-export type MainView = 'chat' | 'capabilities' | 'settings';
+export type MainView = 'chat' | 'capabilities' | 'plugin' | 'settings';
 
 export type ConversationOverviewVisibility = 'auto' | 'hidden' | 'shown';
 

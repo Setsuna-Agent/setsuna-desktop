@@ -1,14 +1,34 @@
 import type {
+  RuntimeExtensionManifest,
   RuntimePluginHook,
   RuntimePluginMarketplaceItem,
   RuntimePluginMcpServerDescriptor,
   RuntimePluginSkill,
   RuntimePluginSummary,
   RuntimePluginTool,
+  RuntimePluginUiCardPreview,
 } from '@setsuna-desktop/contracts';
 import type { PluginManagementHook } from '../contracts/index.js';
 
 export type PluginMcpDetail = RuntimePluginMcpServerDescriptor & Readonly<{ owned?: boolean }>;
+
+export type PluginUiSurfaceKind =
+  | 'chat-card'
+  | 'composer-status'
+  | 'plugin-details'
+  | 'settings'
+  | 'standalone-page';
+
+export type PluginUiSurface = Readonly<{
+  id: string;
+  kind: PluginUiSurfaceKind;
+  title?: string;
+  description?: string;
+  toolName?: string;
+  preview?: RuntimePluginUiCardPreview;
+  renderMode: 'host' | 'sandbox';
+  sidebarEntry?: boolean;
+}>;
 
 export function installedPluginsOutsideCatalog(
   installed: readonly RuntimePluginSummary[],
@@ -65,6 +85,41 @@ export function mergePluginHooks(
   return mergeByKey(catalog, installed, (item) => item.id, includeCatalogOnly);
 }
 
+export function pluginUiSurfaces(
+  extension: RuntimeExtensionManifest | undefined,
+): PluginUiSurface[] {
+  if (!extension) return [];
+  const declaredCards = extension.uiCards ?? [];
+  const cards: PluginUiSurface[] = declaredCards.map((card) => ({
+    id: `card:${card.id}`,
+    kind: 'chat-card',
+    title: card.label,
+    ...(card.description ? { description: card.description } : {}),
+    toolName: card.toolName,
+    preview: card.preview,
+    renderMode: 'sandbox',
+  }));
+
+  const contributions = (extension.rendererUi?.contributions ?? []).map((contribution): PluginUiSurface => {
+    const kind = contribution.slot === 'renderer.plugin.page'
+      ? 'standalone-page'
+      : contribution.slot === 'renderer.settings.page.extensions'
+        ? 'settings'
+        : contribution.slot === 'renderer.chat.composer.status'
+          ? 'composer-status'
+          : 'plugin-details';
+    return {
+      id: `contribution:${contribution.id}`,
+      kind,
+      ...(contribution.navigation?.label ? { title: contribution.navigation.label } : {}),
+      description: contribution.id,
+      renderMode: contribution.document ? 'sandbox' : 'host',
+      ...(contribution.slot === 'renderer.plugin.page' ? { sidebarEntry: true } : {}),
+    };
+  });
+  return [...cards, ...contributions];
+}
+
 export function matchingPluginHook(
   hooks: readonly PluginManagementHook[],
   pluginId: string,
@@ -106,6 +161,16 @@ function searchablePluginValues(
     ...plugin.mcpServers.flatMap((server) => [server.key, server.label, server.description ?? '']),
     ...plugin.hooks.flatMap((hook) => [hook.id, hook.name, hook.description ?? '']),
     ...plugin.resources.flatMap((resource) => [resource.id, resource.label, resource.path]),
+    ...(plugin.extension?.uiCards ?? []).flatMap((card) => [
+      card.id,
+      card.label,
+      card.description ?? '',
+      card.toolName,
+    ]),
+    ...(plugin.extension?.rendererUi?.contributions ?? []).flatMap((contribution) => [
+      contribution.id,
+      contribution.navigation?.label ?? '',
+    ]),
   ];
 }
 

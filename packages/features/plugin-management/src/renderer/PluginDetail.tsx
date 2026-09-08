@@ -15,6 +15,7 @@ import {
   FileText,
   Loader2,
   MessageSquare,
+  Monitor,
   Plug,
   ShieldCheck,
   ShieldOff,
@@ -27,19 +28,26 @@ import type {
   PluginManagementHook,
   PluginManagementRendererService,
 } from '../contracts/index.js';
-import type { PluginManagementTranslate } from './messages.js';
+import type {
+  PluginManagementMessageKey,
+  PluginManagementTranslate,
+} from './messages.js';
 import {
   PluginDetailItem,
   PluginDetailItemIcon,
   PluginDetailSection,
 } from './PluginDetailPrimitives.js';
 import { PluginItemDialog, type PluginDetailItem as SelectedPluginItem } from './PluginItemDialog.js';
+import { PluginUiPreviewDialog } from './PluginUiPreviewDialog.js';
 import {
   formatPluginFileSize,
   mergePluginHooks,
   mergePluginMcpServers,
   mergePluginSkills,
   mergePluginTools,
+  pluginUiSurfaces,
+  type PluginUiSurface,
+  type PluginUiSurfaceKind,
 } from './pluginPresentation.js';
 
 export function PluginDetail({
@@ -80,6 +88,7 @@ export function PluginDetail({
   useSkill?(skillId: string): void;
 }>) {
   const [selectedItem, setSelectedItem] = useState<SelectedPluginItem | null>(null);
+  const [selectedSurface, setSelectedSurface] = useState<PluginUiSurface | null>(null);
   const plugin = installedPlugin ?? marketplacePlugin;
   if (!plugin) return null;
   const includeCatalogOnly = !installedPlugin;
@@ -88,6 +97,9 @@ export function PluginDetail({
   const mcpServers = mergePluginMcpServers(marketplacePlugin?.mcpServers ?? [], installedPlugin?.mcpServers ?? [], includeCatalogOnly);
   const pluginHooks = mergePluginHooks(marketplacePlugin?.hooks ?? [], installedPlugin?.hooks ?? [], includeCatalogOnly);
   const resources = installedPlugin?.resources ?? marketplacePlugin?.resources ?? [];
+  const interfaces = pluginUiSurfaces(
+    installedPlugin?.extension ?? marketplacePlugin?.extension,
+  );
   const hookCount = installedPlugin
     ? Math.max(pluginHooks.length, installedPlugin.hookCount)
     : Math.max(pluginHooks.length, marketplacePlugin?.capabilities.hooks ?? 0);
@@ -204,6 +216,27 @@ export function PluginDetail({
 
           {hasPluginSettings ? <ui.PageOutlet sectionId={plugin.id} /> : null}
 
+          <PluginDetailSection count={interfaces.length} icon={<Monitor size={15} />} title={translate('feature.pluginManagement.interfaces')}>
+            {interfaces.map((surface) => {
+              const title = surface.title ?? translate(UI_SURFACE_LABEL_KEYS[surface.kind]);
+              return (
+                <PluginDetailItem
+                  badges={pluginUiSurfaceBadges(surface, translate)}
+                  description={pluginUiSurfaceDescription(surface, translate)}
+                  icon={(
+                    <PluginDetailItemIcon>
+                      {surface.kind === 'chat-card' ? <MessageSquare size={16} /> : <Monitor size={16} />}
+                    </PluginDetailItemIcon>
+                  )}
+                  key={surface.id}
+                  title={title}
+                  viewLabel={translate('feature.pluginManagement.interface.previewItem', { title })}
+                  onClick={surface.kind === 'chat-card' ? () => setSelectedSurface(surface) : undefined}
+                />
+              );
+            })}
+          </PluginDetailSection>
+
           <PluginDetailSection count={tools.length} icon={<Wrench size={15} />} title={translate('feature.pluginManagement.tools')}>
             {tools.map((tool) => (
               <PluginDetailItem
@@ -298,6 +331,56 @@ export function PluginDetail({
           onSetHookTrust={onSetHookTrust}
         />
       ) : null}
+      {selectedSurface ? (
+        <PluginUiPreviewDialog
+          surface={selectedSurface}
+          translate={translate}
+          ui={ui}
+          onClose={() => setSelectedSurface(null)}
+        />
+      ) : null}
     </main>
   );
+}
+
+const UI_SURFACE_LABEL_KEYS: Readonly<Record<PluginUiSurfaceKind, PluginManagementMessageKey>> = {
+  'chat-card': 'feature.pluginManagement.interface.chatCard',
+  'composer-status': 'feature.pluginManagement.interface.composerStatus',
+  'plugin-details': 'feature.pluginManagement.interface.pluginDetails',
+  settings: 'feature.pluginManagement.interface.settings',
+  'standalone-page': 'feature.pluginManagement.interface.standalonePage',
+};
+
+function pluginUiSurfaceBadges(
+  surface: PluginUiSurface,
+  translate: PluginManagementTranslate,
+): string[] {
+  return [
+    translate(UI_SURFACE_LABEL_KEYS[surface.kind]),
+    ...(surface.sidebarEntry ? [translate('feature.pluginManagement.interface.sidebarEntry')] : []),
+    ...(surface.kind === 'chat-card' ? [
+      translate(surface.preview
+        ? 'feature.pluginManagement.interface.previewAvailable'
+        : 'feature.pluginManagement.interface.previewMissing'),
+      translate('feature.pluginManagement.interface.runtimeGenerated'),
+    ] : [
+      translate(surface.renderMode === 'sandbox'
+        ? 'feature.pluginManagement.interface.sandboxed'
+        : 'feature.pluginManagement.interface.hostRendered'),
+    ]),
+  ];
+}
+
+function pluginUiSurfaceDescription(
+  surface: PluginUiSurface,
+  translate: PluginManagementTranslate,
+): string {
+  if (surface.kind !== 'chat-card') {
+    return translate('feature.pluginManagement.interface.contributionDescription', {
+      id: surface.description ?? surface.id,
+    });
+  }
+  if (surface.description) return surface.description;
+  const tool = surface.toolName ?? surface.title ?? surface.id;
+  return translate('feature.pluginManagement.interface.runtimeCardDescription', { tool });
 }
