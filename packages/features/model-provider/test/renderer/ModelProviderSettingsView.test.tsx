@@ -503,44 +503,62 @@ describe('ModelProviderSettingsView', () => {
     }));
   });
 
-  it('clears preset credentials and models before switching to a custom service', async () => {
+  it.each(['', 'replacement-secret'])('preserves preset configuration when switching to custom with API key draft %j', async (apiKeyDraft) => {
     const user = userEvent.setup();
-    const onProviderIdentityChange = vi.fn();
     const provider: ProviderConfigState = {
       id: 'provider-deepseek',
-      name: 'DeepSeek',
+      name: 'My DeepSeek',
       catalogProviderId: 'deepseek',
       provider: 'openai-compatible',
-      baseUrl: 'https://api.deepseek.com',
+      baseUrl: 'https://gateway.example/deepseek/v1',
       enabled: true,
       apiKeySet: true,
       apiKeyPreview: 'sk-••••',
+      proxyRoute: { mode: 'direct' },
       models: [modelFixture('deepseek-chat', 'DeepSeek Chat', true)],
     };
+    const customProvider = { ...provider, catalogProviderId: null };
+    const save = vi.fn(async (_input: ModelProviderSettingsInput) => ({
+      activeProviderId: provider.id,
+      providers: [customProvider],
+    }));
+    const service = new ModelProviderRendererStateService({
+      catalog: async () => clientCatalogFixture(),
+      read: async () => ({ activeProviderId: provider.id, providers: [provider] }),
+      save,
+      discover: async () => ({ models: [] }),
+    }, null);
+    service.start();
     render(
-      <ProviderConnection
-        apiKey=""
-        catalog={clientCatalogFixture()}
-        provider={provider}
-        proxyServers={[]}
+      <ModelProviderSettingsView
+        host={{ BrandIcon: () => null, BrandIconPicker: () => null, networkProxyBridge: null }}
+        service={service}
         translate={translate}
         ui={testUi}
-        onApiKeyChange={vi.fn()}
-        onChange={vi.fn()}
-        onProviderIdentityChange={onProviderIdentityChange}
       />,
     );
 
-    await user.selectOptions(screen.getByLabelText('厂商'), '__custom__');
-    const dialog = screen.getByRole('dialog');
-    expect(onProviderIdentityChange).not.toHaveBeenCalled();
-    await user.click(within(dialog).getByRole('button', { name: '确认更换' }));
-    expect(onProviderIdentityChange).toHaveBeenCalledWith(expect.objectContaining({
-      catalogProviderId: null,
-      apiKeySet: false,
-      apiKeyPreview: '',
-      models: [],
-    }));
+    const vendor = await screen.findByLabelText('厂商');
+    const apiKey = screen.getByLabelText(/^API Key/u) as HTMLInputElement;
+    if (apiKeyDraft) fireEvent.change(apiKey, { target: { value: apiKeyDraft } });
+    await user.selectOptions(vendor, '__custom__');
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(service.snapshot().state?.providers[0]).toEqual(customProvider);
+    expect(apiKey.value).toBe(apiKeyDraft);
+    expect((screen.getByLabelText('API Base URL') as HTMLInputElement).value).toBe(provider.baseUrl);
+    expect(screen.getByText('DeepSeek Chat')).toBeTruthy();
+    await waitFor(() => expect(save).toHaveBeenCalled());
+    const saved = save.mock.calls.at(-1)?.[0];
+    expect(saved).toEqual({
+      activeProviderId: provider.id,
+      providers: [{
+        ...providerInputFixture(customProvider),
+        icon: null,
+        ...(apiKeyDraft ? { apiKey: apiKeyDraft } : {}),
+      }],
+    });
+    service.dispose();
   });
 });
 

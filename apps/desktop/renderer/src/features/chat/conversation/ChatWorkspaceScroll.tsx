@@ -141,6 +141,7 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
   // sticky 状态放在 ref 里，滚动事件高频触发时不需要每次 rerender。
   const shouldStickToBottomRef = useRef(true);
   const userScrollIntentRef = useRef(false);
+  const lastScrollTopRef = useRef(0);
   const scrollFrameRef = useRef<number | null>(null);
   // token 递增会让已排队的 animation-frame 滚动失效，用于线程切换或用户手势打断。
   const scrollScheduleTokenRef = useRef(0);
@@ -159,6 +160,7 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
     const node = scrollRef.current;
     if (!node) return;
     node.scrollTop = node.scrollHeight;
+    lastScrollTopRef.current = node.scrollTop;
     setShowScrollBottom(false);
   }, []);
   const schedulePinnedScroll = useCallback(
@@ -189,7 +191,7 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
     [scrollToBottomNow, showEmptyStarter],
   );
 
-  const syncScrollBottomState = useCallback(() => {
+  const syncScrollBottomState = useCallback((movingTowardBottom = false) => {
     const node = scrollRef.current;
     if (!node || showEmptyStarter) {
       setShowScrollBottom(false);
@@ -198,8 +200,8 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
 
     const distanceToBottom = scrollDistanceToBottom(node);
     const atBottom = distanceToBottom <= stickyBottomThresholdPx;
-    if (atBottom) {
-      // 回到底部后重新进入 sticky 模式，后续流式内容继续自动跟随。
+    if (atBottom && (shouldStickToBottomRef.current || movingTowardBottom)) {
+      // 向上滚动时即使仍在底部容差内也不能重新吸附；尺寸通知同样不能恢复跟随。
       userScrollIntentRef.current = false;
       shouldStickToBottomRef.current = true;
       setShowScrollBottom(false);
@@ -222,6 +224,14 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
 
     setShowScrollBottom(true);
   }, [schedulePinnedScroll, scrollDistanceToBottom, showEmptyStarter]);
+
+  const handleScroll = useCallback(() => {
+    const node = scrollRef.current;
+    if (!node) return;
+    const movingTowardBottom = node.scrollTop > lastScrollTopRef.current;
+    lastScrollTopRef.current = node.scrollTop;
+    syncScrollBottomState(movingTowardBottom);
+  }, [syncScrollBottomState]);
 
   const scrollToBottom = useCallback(
     (behavior: ScrollBehavior = 'auto') => {
@@ -248,6 +258,7 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
     shouldStickToBottomRef.current = false;
     const node = scrollRef.current;
     if (!node) return;
+    lastScrollTopRef.current = node.scrollTop;
     setShowScrollBottom(scrollDistanceToBottom(node) > scrollBottomThresholdPx);
   }, [cancelScheduledScroll, scrollDistanceToBottom, showEmptyStarter]);
 
@@ -347,7 +358,7 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
 
   return {
     contentRef,
-    handleScroll: syncScrollBottomState,
+    handleScroll,
     handleScrollKeyDown,
     handleScrollTouchMove,
     handleScrollWheel,

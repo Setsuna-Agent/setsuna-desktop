@@ -77,12 +77,10 @@ export function selectCatalogPlan(
 }
 
 export function detachCatalogProvider(provider: ProviderConfigState): ProviderConfigState {
+  // Custom mode unlocks the existing connection; it does not switch services.
   return {
     ...provider,
     catalogProviderId: null,
-    apiKeySet: false,
-    apiKeyPreview: '',
-    models: [],
   };
 }
 

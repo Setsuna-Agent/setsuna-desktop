@@ -1,13 +1,16 @@
 // @vitest-environment happy-dom
 
 import type { RuntimeMessage, RuntimeToolRun } from '@setsuna-desktop/contracts';
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MessageItem } from '../../../../../src/features/chat/conversation/ChatMessageItem.js';
 import type { ChatDisplayItem } from '../../../../../src/features/chat/conversation/chatMessageDisplay.js';
 
 vi.mock('../../../../../src/features/chat/tool-runs/runtimeFeatureToolResults.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('../../../../../src/features/chat/tool-runs/runtimeFeatureToolResults.js')>();
+  const ResultView = ({ payload }: { payload: unknown }) => (
+    <div className="test-tail-result">{(payload as { name: string }).name}</div>
+  );
   return {
     ...original,
     useRuntimeFeatureToolResultResolver: () => (run: RuntimeToolRun) => {
@@ -31,11 +34,7 @@ vi.mock('../../../../../src/features/chat/tool-runs/runtimeFeatureToolResults.js
           identity: (resultPayload: unknown) => (resultPayload as { path: string }).path,
           placement: resultKind === 'test.timeline-result' ? 'assistant-timeline' : 'assistant-tail',
           presentation: 'replace',
-          render: ({ payload: resultPayload }: { payload: unknown }) => (
-            <div className="test-tail-result">
-              {(resultPayload as { name: string }).name}
-            </div>
-          ),
+          render: ResultView,
         },
       };
     },
@@ -66,6 +65,53 @@ describe('MessageItem Feature result placement', () => {
     expect(view.container.querySelector('.chat-work-history')).toBeNull();
   });
 
+  it('keeps one work header across a card, subsequent streaming work, and the final answer', () => {
+    const earlierWork: RuntimeMessage = {
+      id: 'weather_lookup',
+      turnId: 'turn_weather',
+      role: 'assistant',
+      content: 'Looking up the weather.',
+      createdAt: '2026-08-28T00:00:00.000Z',
+      status: 'complete',
+      phase: 'commentary',
+      toolRuns: [{ id: 'lookup', name: 'exec_command', status: 'success' }],
+    };
+    const followup: RuntimeMessage = {
+      ...earlierWork,
+      id: 'weather_followup',
+      content: '',
+      status: 'streaming',
+      toolRuns: [],
+    };
+    const view = render(timelineMessageItem(false, [], [earlierWork]));
+    const header = view.container.querySelector<HTMLButtonElement>('.chat-work-history__summary')!;
+    const card = view.getByText('weather-card');
+    expect(view.container.querySelectorAll('.chat-work-history__summary')).toHaveLength(1);
+
+    for (const content of ['', 'Checking tomorrow too.']) {
+      view.rerender(timelineMessageItem(false, [{ ...followup, content }], [earlierWork]));
+      expect(view.container.querySelectorAll('.chat-work-history__summary')).toHaveLength(1);
+      expect(view.container.querySelector('.chat-work-history__summary')).toBe(header);
+      expect(view.getByText('weather-card')).toBe(card);
+    }
+    fireEvent.click(header);
+    expect(header.getAttribute('aria-expanded')).toBe('true');
+    const before = view.getByText('Looking up the weather.');
+    const after = view.getByText('Checking tomorrow too.');
+    expect(before.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(card.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    view.rerender(timelineMessageItem(true, [{ ...followup, content: 'Tomorrow forecast.', status: 'complete', phase: 'final_answer' }], [earlierWork]));
+    expect(view.container.querySelectorAll('.chat-work-history__summary')).toHaveLength(1);
+    expect(view.container.querySelector('.chat-work-history__summary')).toBe(header);
+    expect(header.textContent).toContain('已处理');
+    expect(header.getAttribute('aria-expanded')).toBe('false');
+    expect(view.getByText('weather-card')).toBe(card);
+    expect(view.getByText('Tomorrow forecast.')).toBeTruthy();
+    expect(view.getByText('Weather advice.')).toBeTruthy();
+    expect(view.queryByText('Looking up the weather.')).toBeNull();
+  });
+
   it('waits for completion and renders the result after the final answer', () => {
     const view = render(messageItem(false));
     expect(view.container.querySelector('.test-tail-result')).toBeNull();
@@ -89,7 +135,7 @@ describe('MessageItem Feature result placement', () => {
   });
 });
 
-function timelineMessageItem(completed = true) {
+function timelineMessageItem(completed = true, followupSegments: RuntimeMessage[] = [], leadingSegments: RuntimeMessage[] = []) {
   const toolSegment: RuntimeMessage = {
     id: 'assistant_weather_tool',
     turnId: 'turn_weather',
@@ -114,7 +160,7 @@ function timelineMessageItem(completed = true) {
     status: 'complete',
     phase: 'final_answer',
   };
-  const segments = completed ? [toolSegment, finalSegment] : [toolSegment];
+  const segments = [...leadingSegments, toolSegment, ...followupSegments, ...(completed ? [finalSegment] : [])];
   const item: Extract<ChatDisplayItem, { type: 'assistant' }> = {
     type: 'assistant',
     id: 'assistant_weather_item',
