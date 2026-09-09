@@ -54,9 +54,8 @@ import { workHistoryDisplayState } from './chatWorkHistoryState.js';
 import {
   ActiveWorkPlaceholder,
   AssistantLoadingIndicator,
-  inferWorkTiming,
-  WorkHistoryPanel,
 } from './ChatWorkHistory.js';
+import { ChatWorkHistoryTimeline, type WorkHistoryTimelineSection } from './ChatWorkHistoryTimeline.js';
 import { ChatThinkingDisclosure } from './ChatThinkingDisclosure.js';
 import { ContextCompactionStatus } from './ContextCompactionStatus.js';
 
@@ -607,34 +606,42 @@ function renderAssistantTimelinePlan({
   t: Translate;
   workHistoryDefaultExpanded: boolean;
   hideFinalContent?: boolean;
-}): ReactNode[] {
-  const nodes: ReactNode[] = [];
+}): ReactNode {
+  const sections: WorkHistoryTimelineSection[] = [];
 
   plan.nodes.forEach((node) => {
     if (node.type === 'workHistory') {
-      nodes.push(
-        ...assistantWorkHistoryNodes({
-          handledGuidanceMessageIds,
-          itemId,
-          onAnswerApproval,
-          onExpandedChange: onWorkHistoryExpandedChange,
-          plan: node,
-          isPersistentToolResult,
-          workHistoryDefaultExpanded,
-        }),
-      );
+      const section = assistantWorkHistorySection({
+        handledGuidanceMessageIds,
+        itemId,
+        onAnswerApproval,
+        plan: node,
+        isPersistentToolResult,
+      });
+      if (section) sections.push(section);
       return;
     }
 
+    const nodes: ReactNode[] = [];
     if (!(hideFinalContent && node.block.type === 'content' && node.block.finalAnswer)) {
-      nodes.push(assistantTimelineNode(node.block, active, onAnswerApproval, t));
+      const content = assistantTimelineNode(node.block, active, onAnswerApproval, t);
+      if (content) nodes.push(content);
     }
     if (node.guidanceAfter.length) {
       nodes.push(<GuidanceMessageList handledMessageIds={handledGuidanceMessageIds} key={`${node.block.id}:guidance`} markerMode="handled" messages={node.guidanceAfter} />);
     }
+    if (nodes.length) sections.push({ type: 'content', id: node.block.id, children: nodes });
   });
 
-  return nodes;
+  return (
+    <ChatWorkHistoryTimeline
+      active={active}
+      defaultExpanded={workHistoryDefaultExpanded}
+      itemId={itemId}
+      onExpandedChange={onWorkHistoryExpandedChange}
+      sections={sections}
+    />
+  );
 }
 
 function ReviewSummaryCard({
@@ -703,23 +710,19 @@ function ReviewSummaryCard({
   );
 }
 
-function assistantWorkHistoryNodes({
+function assistantWorkHistorySection({
   handledGuidanceMessageIds,
   itemId,
   onAnswerApproval,
-  onExpandedChange,
   plan,
   isPersistentToolResult,
-  workHistoryDefaultExpanded,
 }: {
   handledGuidanceMessageIds: Set<string>;
   itemId: string;
   onAnswerApproval: AnswerApprovalHandler;
-  onExpandedChange: WorkHistoryExpandedChangeHandler;
   plan: Extract<AssistantGuidanceTimelinePlan['nodes'][number], { type: 'workHistory' }>;
   isPersistentToolResult: (run: RuntimeToolRun) => boolean;
-  workHistoryDefaultExpanded: boolean;
-}): ReactNode[] {
+}): Extract<WorkHistoryTimelineSection, { type: 'work' }> | null {
   const surfaces = splitWorkHistorySurfaces(plan.entries, isPersistentToolResult);
   const workNodes: ReactNode[] = [];
   const persistentNodes: ReactNode[] = [];
@@ -760,30 +763,18 @@ function assistantWorkHistoryNodes({
     }
   }
   flushPersistentWorkGroup();
-  if (!workNodes.length && !plan.active) return [];
-  const workHistoryKey = plan.blocks[0]?.id ?? itemId;
-  const workTiming = inferWorkTiming(plan.blocks.flatMap((block) => block.segments));
-  const panelId = `${itemId}:work-history:${workHistoryKey}`;
-  return [(
-    <WorkHistoryPanel
-      active={plan.active}
-      collapseWhenContentFollows={plan.hasFollowingContent}
-      completedAtMs={workTiming.completedAtMs}
-      defaultExpanded={workHistoryDefaultExpanded && !plan.hasFollowingContent}
-      hasDetails={hasCollapsibleDetails}
-      key={panelId}
-      onExpandedChange={onExpandedChange}
-      panelId={panelId}
-      persistentChildren={persistentNodes.length ? (
-        <div className="chat-persistent-tool-result-grid">
-          {persistentNodes}
-        </div>
-      ) : undefined}
-      startedAtMs={workTiming.startedAtMs}
-    >
-      {workNodes}
-    </WorkHistoryPanel>
-  )];
+  if (!workNodes.length && !plan.active) return null;
+  return {
+    type: 'work',
+    id: plan.blocks[0]?.id ?? itemId,
+    segments: plan.blocks.flatMap((block) => block.segments),
+    hasFollowingContent: plan.hasFollowingContent,
+    hasDetails: hasCollapsibleDetails,
+    children: workNodes,
+    persistentChildren: persistentNodes.length ? (
+      <div className="chat-persistent-tool-result-grid">{persistentNodes}</div>
+    ) : undefined,
+  };
 }
 
 type AssistantWorkHistorySurface =

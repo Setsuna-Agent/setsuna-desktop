@@ -49,13 +49,7 @@ describe('model provider catalog selection', () => {
       supportsImages: true,
     });
     expect(detachCatalogProvider({ ...providerFixture(), catalogProviderId: 'openai' }))
-      .toEqual(expect.objectContaining({
-        apiKeySet: false,
-        apiKeyPreview: '',
-        models: [],
-      }));
-    expect(detachCatalogProvider({ ...providerFixture(), catalogProviderId: 'openai' }))
-      .toHaveProperty('catalogProviderId', null);
+      .toEqual({ ...providerFixture(), catalogProviderId: null });
   });
 
   it('infers legacy catalog records without overriding an explicit custom-service choice', () => {

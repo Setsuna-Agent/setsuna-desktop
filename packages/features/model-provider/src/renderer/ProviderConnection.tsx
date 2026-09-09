@@ -70,7 +70,7 @@ export function ProviderConnection({
             onValueChange={(value) => {
               const next = catalog.providers.find((candidate) => candidate.id === value);
               if (next) requestChange(selectCatalogProvider(provider, next), true);
-              else requestChange(detachCatalogProvider(provider), true);
+              else onChange(detachCatalogProvider(provider));
             }}
           >
             {catalog.providers.map((candidate) => (

@@ -183,6 +183,7 @@
   overflow: hidden;
   border: 1px solid var(--chat-settings-divider);
   border-radius: 12px;
+  color: var(--app-text);
   background: var(--app-surface);
 }
 

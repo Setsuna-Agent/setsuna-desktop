@@ -40,17 +40,21 @@ describe('SandboxedPluginUiView', () => {
     } as unknown as PluginManagementRendererService;
     vi.spyOn(window, 'confirm').mockReturnValue(true);
 
-    render(
-      <SandboxedPluginUiView
-        contribution={contribution}
-        manifest={manifest}
-        pluginId="weather-plugin"
-        revision="2026-08-31T00:00:00.000Z"
-        service={service}
-      />,
-    );
+    // Async resource reads mount the iframe; flush its effects before sending
+    // the one-shot bridge message so the host listener is already registered.
+    await act(async () => {
+      render(
+        <SandboxedPluginUiView
+          contribution={contribution}
+          manifest={manifest}
+          pluginId="weather-plugin"
+          revision="2026-08-31T00:00:00.000Z"
+          service={service}
+        />,
+      );
+    });
 
-    const frame = await screen.findByTitle('Weather') as HTMLIFrameElement;
+    const frame = screen.getByTitle('Weather') as HTMLIFrameElement;
     expect(readRendererUiDocument).toHaveBeenCalledWith({
       pluginId: 'weather-plugin',
       contributionId: 'weather.page',

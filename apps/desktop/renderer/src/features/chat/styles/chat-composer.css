@@ -300,7 +300,7 @@
 .chat-sender > .chat-command-menu {
   --chat-command-menu-shift: 0px;
   position: absolute;
-  bottom: calc(100% - 6px);
+  bottom: calc(100% + 6px);
   left: 50%;
   z-index: 30;
   width: min(var(--chat-content-max-width), calc(100% - var(--chat-content-inline-padding) - var(--chat-content-inline-padding)));
@@ -316,7 +316,6 @@
 }
 
 .chat-sender--starter > .chat-command-menu {
-  bottom: calc(100% + 6px);
   width: 100%;
 }
 
