@@ -701,11 +701,19 @@
   left: 0;
   z-index: 30;
   box-sizing: border-box;
-  width: min(var(--chat-content-max-width), 100%);
+  /* 模型菜单挂在输入框内部，但绝对定位的包含块是 .chat-sender 的 padding box，
+     所以要像 .chat-sender > .chat-command-menu 一样自己扣掉左右内边距，
+     否则会比输入框宽出两倍内边距。 */
+  width: min(var(--chat-content-max-width), calc(100% - var(--chat-content-inline-padding) - var(--chat-content-inline-padding)));
   max-height: var(--chat-command-menu-max-height, 280px);
   margin-inline: auto;
   margin-bottom: 0;
   overflow: hidden;
+}
+
+/* starter 态的 .chat-sender 自身没有内边距，宽度可直接跟随输入框。 */
+.chat-sender--starter .chat-model-command-menu {
+  width: min(var(--chat-content-max-width), 100%);
 }
 
 .chat-model-command-menu__header {
