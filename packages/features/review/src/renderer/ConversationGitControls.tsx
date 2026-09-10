@@ -1,5 +1,7 @@
+import { TextField, Button } from '@setsuna-desktop/renderer-ui';
+
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
-import { Check, ChevronDown, GitBranch, GitCommitHorizontal, Search } from 'lucide-react';
+import { Check, ChevronDown, GitBranch, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type {
   DesktopDiffSummary,
@@ -7,7 +9,6 @@ import type {
   DesktopReviewState,
 } from '../contracts/index.js';
 import { WorkspaceGitBranchCreateControl } from './git/WorkspaceGitBranchCreateControl.js';
-import { useWorkspaceGitCommitDialog } from './git/WorkspaceGitCommitDialog.js';
 import { useReviewRendererHost } from './host.js';
 import type { ReviewTranslate } from './messages.js';
 
@@ -27,7 +28,6 @@ export function ConversationGitControls({
   onReviewRefresh?: () => void | Promise<void>;
 }) {
   const { bridge, translate: t } = useReviewRendererHost();
-  const { canOpenCommitDialog, openCommitDialog } = useWorkspaceGitCommitDialog();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [branchMenuOpen, setBranchMenuOpen] = useState(false);
   const [branchQuery, setBranchQuery] = useState('');
@@ -135,7 +135,7 @@ export function ConversationGitControls({
 
   return (
     <div className="chat-conversation-git" ref={rootRef}>
-      <button
+      <Button variant="ghost"
         type="button"
         className="chat-conversation-overview-panel__row chat-conversation-git__branch-row"
         disabled={!hasGit || reviewLoading}
@@ -160,22 +160,7 @@ export function ConversationGitControls({
           </span>
           <ChevronDown size={12} />
         </span>
-      </button>
-      <button
-        type="button"
-        className="chat-conversation-overview-panel__row"
-        disabled={!canOpenCommitDialog}
-        onClick={() => {
-          closeBranchMenu();
-          openCommitDialog();
-        }}
-      >
-        <span className="chat-conversation-overview-panel__icon">
-          <GitCommitHorizontal size={14} />
-        </span>
-        <span className="chat-conversation-overview-panel__label">{t('feature.review.git.commitOrPush')}</span>
-      </button>
-
+      </Button>
       {branchMenuOpen ? (
         <BranchMenu
           branchDraft={branchDraft}
@@ -239,7 +224,7 @@ function BranchMenu({
     <div className="chat-git-branch-menu">
       <label className="chat-git-branch-menu__search">
         <Search size={13} />
-        <input
+        <TextField
           value={query}
           placeholder={t('feature.review.git.searchBranches')}
           onChange={(event) => onQueryChange(event.currentTarget.value)}
@@ -248,7 +233,7 @@ function BranchMenu({
       <div className="chat-git-branch-menu__label">{t('feature.review.git.branch')}</div>
       <div className="chat-git-branch-menu__list">
         {filteredBranches.length ? filteredBranches.map((branch) => (
-          <button
+          <Button variant="ghost"
             type="button"
             className={`chat-git-branch-menu__item ${branch.current ? 'is-current' : ''} ${branch.uncommittedFiles > 0 ? 'has-detail' : ''}`}
             disabled={Boolean(busyAction) || branch.name === currentBranch}
@@ -267,7 +252,7 @@ function BranchMenu({
             <span className="chat-git-branch-menu__check">
               {branch.current ? <Check size={13} /> : null}
             </span>
-          </button>
+          </Button>
         )) : (
           <div className="chat-git-branch-menu__empty">{t('feature.review.git.noMatchingBranches')}</div>
         )}

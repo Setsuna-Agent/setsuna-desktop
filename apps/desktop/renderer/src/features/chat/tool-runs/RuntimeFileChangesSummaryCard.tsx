@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import { ChevronDown, FileDiff, Undo2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
@@ -103,7 +104,7 @@ export function FileChangesSummaryCard({
         {onOpenReview || onDiscardChanges ? (
           <span className="chat-file-changes__actions">
             {onDiscardChanges ? (
-              <button
+              <Button variant="danger"
                 className="chat-file-changes__action chat-file-changes__action--danger"
                 type="button"
                 disabled={!canDiscard || discarding}
@@ -119,16 +120,16 @@ export function FileChangesSummaryCard({
                   )}
                 </span>
                 <Undo2 size={13} />
-              </button>
+              </Button>
             ) : null}
             {onOpenReview ? (
-              <button
+              <Button variant="ghost"
                 className="chat-file-changes__action chat-file-changes__action--review"
                 type="button"
                 onClick={() => onOpenReview()}
               >
                 <span>{t('toolRun.changes.review')}</span>
-              </button>
+              </Button>
             ) : null}
           </span>
         ) : null}
@@ -139,7 +140,7 @@ export function FileChangesSummaryCard({
       <div className="chat-file-changes__list">
         {visibleFiles.map((file) => (
           <div className="chat-file-changes__item" key={file.path}>
-            <button
+            <Button variant="ghost"
               className="chat-file-changes__row"
               type="button"
               disabled={!onOpenReview}
@@ -152,11 +153,11 @@ export function FileChangesSummaryCard({
                 deletions={file.deletions}
                 showZero
               />
-            </button>
+            </Button>
           </div>
         ))}
         {hasMoreFiles ? (
-          <button
+          <Button variant="ghost"
             className="chat-file-changes__more"
             type="button"
             aria-expanded={showAllFiles}
@@ -171,7 +172,7 @@ export function FileChangesSummaryCard({
               className="chat-file-changes__more-chevron"
               size={13}
             />
-          </button>
+          </Button>
         ) : null}
       </div>
     </section>

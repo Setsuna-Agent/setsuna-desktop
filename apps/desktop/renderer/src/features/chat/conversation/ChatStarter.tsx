@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import {
   Bug,
   GitPullRequest,
@@ -104,22 +105,20 @@ export function ChatStarterContent({
 
       <div
         aria-label={t('chat.starter.suggestions')}
-        className="chat-starter__suggestions chat-starter__reveal chat-starter__reveal--suggestions flex flex-col"
+        className="chat-starter__suggestions chat-starter__reveal chat-starter__reveal--suggestions"
         role="group"
       >
         {suggestions.map(({ icon: Icon, prompt }) => (
-          <button
-            className="chat-starter__suggestion -mx-2 flex min-h-10 items-center gap-3 rounded-control px-2 py-2.5 text-left text-[14px] transition-[background-color,color,transform] duration-150 ease-out-strong active:scale-[0.99]"
+          <Button variant="ghost"
+            className="chat-starter__suggestion"
             disabled={pendingPrompt !== null}
             key={prompt}
             type="button"
             onClick={() => void sendSuggestion(prompt)}
           >
-            <span className="flex size-5 shrink-0 items-center justify-center">
-              <Icon aria-hidden="true" size={15} strokeWidth={1.8} />
-            </span>
-            <span className="min-w-0 truncate">{prompt}</span>
-          </button>
+            <Icon className="chat-starter__suggestion-icon" aria-hidden="true" size={15} strokeWidth={1.8} />
+            <span className="chat-starter__suggestion-label">{prompt}</span>
+          </Button>
         ))}
       </div>
     </>

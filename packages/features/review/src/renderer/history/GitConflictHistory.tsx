@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import { Archive, ChevronDown, GitMerge, MessageSquare } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { GitConflictTaskRecord } from '../context.js';
@@ -33,12 +34,12 @@ export function GitConflictHistory({ workspaceRoot, tasks, selectedTurnId, onSel
   return (
     <section className={'git-conflict-history' + (expanded ? '' : ' is-collapsed')} aria-label={t('feature.review.git.conflictHistory')}>
       <div className="git-conflict-history__header">
-        <button className="git-history-section-heading" type="button" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
+        <Button variant="ghost" className="git-history-section-heading" type="button" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
           <GitMerge size={14} />
           <span className="git-history-graph__heading">{t('feature.review.git.conflicts')}</span>
           <span className="git-changes-count">{visibleTasks.length}</span>
           <ChevronDown size={13} className={expanded ? '' : 'is-collapsed'} />
-        </button>
+        </Button>
         <ReviewIconButton className="git-conflict-history__archive-all" label={t('feature.review.git.archiveAllConflicts')}
           disabled={archive.disabled || !visibleTasks.length} aria-busy={archive.pending}
           onClick={() => { void archiveRecords(visibleTasks); }}><Archive size={13} /></ReviewIconButton>
@@ -51,11 +52,11 @@ export function GitConflictHistory({ workspaceRoot, tasks, selectedTurnId, onSel
             return <ContextMenu key={task.turnId} trigger={['contextMenu']} menu={{ items: [
               { key: 'archive', icon: <Archive size={14} />, label: archiveLabel, disabled: archive.disabled, onClick: () => { void archiveRecords([task]); } },
             ] }}><div role="listitem" className="git-conflict-history__row">
-              <button className="git-conflict-history__entry" type="button" aria-pressed={selectedTurnId === task.turnId} onClick={() => onSelect(task.turnId)}>
+              <Button variant="ghost" className="git-conflict-history__entry" type="button" aria-pressed={selectedTurnId === task.turnId} onClick={() => onSelect(task.turnId)}>
                 <MessageSquare size={14} />
                 <span>{title}</span>
                 <time dateTime={task.createdAt} title={new Date(task.createdAt).toLocaleString(locale)}>{dateFormat.format(new Date(task.createdAt))}</time>
-              </button>
+              </Button>
               <ReviewIconButton className="git-conflict-history__archive" label={archiveLabel} disabled={archive.disabled} onClick={() => { void archiveRecords([task]); }}>
                 <Archive size={13} />
               </ReviewIconButton>

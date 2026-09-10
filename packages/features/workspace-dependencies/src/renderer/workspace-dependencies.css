@@ -78,7 +78,7 @@
   flex: 0 0 7px;
   width: 7px;
   height: 7px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-full);
   color: var(--sd-color-text-muted, GrayText);
   background: currentColor;
 }

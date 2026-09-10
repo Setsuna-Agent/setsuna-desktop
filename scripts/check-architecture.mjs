@@ -13,12 +13,14 @@ const featureSourceRoots = featureDirectories.map((directory) => path.join(direc
 const layerRoots = new Map([
   ['contracts', path.join(repositoryRoot, 'packages/contracts/src')],
   ['feature-core', path.join(repositoryRoot, 'packages/feature-core/src')],
+  ['renderer-ui', path.join(repositoryRoot, 'packages/renderer-ui/src')],
   ['runtime', path.join(repositoryRoot, 'packages/desktop-runtime/src')],
   ['main', path.join(repositoryRoot, 'apps/desktop/main/src')],
   ['preload', path.join(repositoryRoot, 'apps/desktop/preload/src')],
   ['renderer', path.join(repositoryRoot, 'apps/desktop/renderer/src')],
 ]);
 const testRoots = [
+  path.join(repositoryRoot, 'packages/renderer-ui/test'),
   path.join(repositoryRoot, 'packages/contracts/test'),
   path.join(repositoryRoot, 'packages/desktop-runtime/test'),
   path.join(repositoryRoot, 'apps/desktop/main/test'),
@@ -33,7 +35,8 @@ const allowedLayerDependencies = new Map([
   ['runtime', new Set(['contracts', 'feature-core'])],
   ['main', new Set(['contracts', 'feature-core', 'runtime'])],
   ['preload', new Set(['contracts', 'feature-core'])],
-  ['renderer', new Set(['contracts', 'feature-core'])],
+  ['renderer-ui', new Set()],
+  ['renderer', new Set(['contracts', 'feature-core', 'renderer-ui'])],
 ]);
 const sourceExtensions = new Set(['.cjs', '.css', '.cts', '.js', '.jsx', '.mjs', '.mts', '.ts', '.tsx']);
 const codeExtensions = new Set(['.cjs', '.cts', '.js', '.jsx', '.mjs', '.mts', '.ts', '.tsx']);
@@ -48,6 +51,7 @@ const maxDirectSourceFiles = 35;
 const rendererRoot = layerRoots.get('renderer');
 const rendererAppServerPath = '/v1/swe/app-server';
 const productionEntrypoints = new Set([
+  path.join(repositoryRoot, 'packages/renderer-ui/src/index.ts'),
   path.join(repositoryRoot, 'packages/contracts/src/index.ts'),
   path.join(repositoryRoot, 'packages/desktop-runtime/src/cli.ts'),
   path.join(repositoryRoot, 'packages/desktop-runtime/src/index.ts'),
@@ -114,6 +118,7 @@ function sourceLayerForPath(filePath) {
 }
 
 function sourceLayerForSpecifier(specifier) {
+  if (specifier === '@setsuna-desktop/renderer-ui' || specifier.startsWith('@setsuna-desktop/renderer-ui/')) return 'renderer-ui';
   if (specifier === '@setsuna-desktop/contracts' || specifier.startsWith('@setsuna-desktop/contracts/')) {
     return 'contracts';
   }

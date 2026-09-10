@@ -1,5 +1,5 @@
 import type { DesktopDataMigrationPlan } from '@setsuna-desktop/contracts';
-import { Modal } from 'antd';
+import { Dialog } from '@setsuna-desktop/renderer-ui';
 import { FolderOpen, MoveRight } from 'lucide-react';
 import { useState } from 'react';
 import { useDesktopDataRoot } from '../../../app/providers/DesktopDataRootProvider.js';
@@ -102,14 +102,12 @@ export function DataLocationSettings({ fallbackRoot }: { fallbackRoot: string })
       </div>
       <DataRootBackupSettings />
       {error && !plan ? <div className="chat-user-settings__runtime-error">{error}</div> : null}
-      <Modal
-        centered
+      <Dialog
         width={680}
         open={scanning || Boolean(plan)}
         title={t('dataRoot.plan.title')}
-        closable={!beginning}
-        maskClosable={!beginning}
-        onCancel={() => {
+        dismissible={!beginning}
+        onClose={() => {
           if (beginning) return;
           setPlan(null);
           setTargetRoot('');
@@ -182,7 +180,7 @@ export function DataLocationSettings({ fallbackRoot }: { fallbackRoot: string })
             {error ? <div className="data-root-plan__issue is-blocker">{error}</div> : null}
           </div>
         ) : null}
-      </Modal>
+      </Dialog>
     </>
   );
 }

@@ -1,3 +1,4 @@
+import { ResizeHandle } from '@setsuna-desktop/renderer-ui';
 import { useRef, useState, type ReactNode, type RefObject } from 'react';
 import { useReviewRendererHost } from '../host.js';
 
@@ -39,7 +40,7 @@ function HistoryResizeHandle({ container, label, value, min, max, onChange }: {
 }) {
   const drag = useRef<{ pointerId: number; y: number; height: number; value: number } | null>(null);
   const change = (next: number) => onChange(Math.max(min, Math.min(max, next)));
-  return <button
+  return <ResizeHandle
     className="git-history-split__handle"
     type="button"
     role="separator"

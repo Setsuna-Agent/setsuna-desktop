@@ -1,5 +1,5 @@
 import type { RuntimeToolRun } from '@setsuna-desktop/contracts';
-import { FileText, Search, TerminalSquare } from 'lucide-react';
+import { FileText, Search, SquareTerminal } from 'lucide-react';
 import { translate, useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { WorkspaceFileLink, WorkspacePathLabel } from '../markdown/WorkspaceFileLink.js';
 import type {
@@ -880,7 +880,7 @@ function automaticApprovalReviewTitle(
 
 export function inspectionEntryIcon(kind: InspectionEntryKind) {
   if (kind === 'fileSearch') return <Search size={14} />;
-  if (kind === 'gitStatus') return <TerminalSquare size={14} />;
+  if (kind === 'gitStatus') return <SquareTerminal size={14} />;
   return <FileText size={14} />;
 }
 

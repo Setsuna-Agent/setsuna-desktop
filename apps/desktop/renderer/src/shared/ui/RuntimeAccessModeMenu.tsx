@@ -1,6 +1,5 @@
-import { Button as AntButton, Dropdown, Modal } from 'antd';
+import { Button as ModeButton, Dropdown, Dialog } from '@setsuna-desktop/renderer-ui';
 import {
-  Check,
   ChevronDown,
   Folder,
   Globe2,
@@ -28,6 +27,12 @@ const modeIcons: Record<RuntimeAccessMode, LucideIcon> = {
   'full-access': ShieldOff,
 };
 
+const fullAccessCapabilities = [
+  { icon: Folder, title: 'accessMode.confirm.files', description: 'accessMode.confirm.filesDescription' },
+  { icon: SquareTerminal, title: 'accessMode.confirm.terminal', description: 'accessMode.confirm.terminalDescription' },
+  { icon: Globe2, title: 'accessMode.confirm.internet', description: 'accessMode.confirm.internetDescription' },
+] as const;
+
 export function RuntimeAccessModeMenu({
   disabled,
   mode,
@@ -51,9 +56,6 @@ export function RuntimeAccessModeMenu({
       label: (
         <span className="runtime-access-mode-menu__item">
           <RuntimeAccessModeOptionContent option={option} />
-          <span className="runtime-access-mode-menu__check">
-            {option.value === mode ? <Check size={14} /> : null}
-          </span>
         </span>
       ),
     };
@@ -109,8 +111,8 @@ export function RuntimeAccessModeMenu({
             onClick: ({ key }) => requestModeChange(key as RuntimeAccessMode),
           }}
         >
-          <AntButton
-            type="text"
+          <ModeButton
+            variant="ghost"
             size="small"
             className={`chat-authorization-switch chat-approval-menu__trigger runtime-access-mode-trigger${triggerClassName}`}
             disabled={disabled}
@@ -118,81 +120,51 @@ export function RuntimeAccessModeMenu({
             <ActiveIcon className="runtime-access-mode-trigger__icon" size={13} />
             <span className="runtime-access-mode-trigger__label">{activeOption.label}</span>
             <ChevronDown className="runtime-access-mode-trigger__arrow" size={12} />
-          </AntButton>
+          </ModeButton>
         </Dropdown>
       )}
-      <Modal
+      <Dialog
         aria-label={t('accessMode.confirm.label')}
-        centered
         className="runtime-access-mode-confirm"
-        closable={false}
-        destroyOnHidden
-        footer={null}
-        mask={{ closable: true }}
-        open={fullAccessConfirmationOpen}
-        rootClassName="runtime-access-mode-confirm-root"
-        width={520}
-        onCancel={() => setFullAccessConfirmationOpen(false)}
-      >
-        <div className="runtime-access-mode-confirm__dialog">
-          <header className="runtime-access-mode-confirm__header">
-            <TriangleAlert size={17} aria-hidden="true" />
-            <h2>{t('accessMode.confirm.title')}</h2>
-          </header>
-          <p className="runtime-access-mode-confirm__intro">
-            {t('accessMode.confirm.intro')}
-          </p>
-          <div className="runtime-access-mode-confirm__capabilities">
-            <div className="runtime-access-mode-confirm__capability">
-              <span className="runtime-access-mode-confirm__capability-icon is-files" aria-hidden="true">
-                <Folder size={17} />
-              </span>
-              <span className="runtime-access-mode-confirm__capability-copy">
-                <strong>{t('accessMode.confirm.files')}</strong>
-                <small>{t('accessMode.confirm.filesDescription')}</small>
-              </span>
-            </div>
-            <div className="runtime-access-mode-confirm__capability">
-              <span className="runtime-access-mode-confirm__capability-icon is-terminal" aria-hidden="true">
-                <SquareTerminal size={15} />
-              </span>
-              <span className="runtime-access-mode-confirm__capability-copy">
-                <strong>{t('accessMode.confirm.terminal')}</strong>
-                <small>{t('accessMode.confirm.terminalDescription')}</small>
-              </span>
-            </div>
-            <div className="runtime-access-mode-confirm__capability">
-              <span className="runtime-access-mode-confirm__capability-icon is-internet" aria-hidden="true">
-                <Globe2 size={17} />
-              </span>
-              <span className="runtime-access-mode-confirm__capability-copy">
-                <strong>{t('accessMode.confirm.internet')}</strong>
-                <small>{t('accessMode.confirm.internetDescription')}</small>
-              </span>
-            </div>
-          </div>
-          <p className="runtime-access-mode-confirm__risk">
-            {t('accessMode.confirm.risk')}
-          </p>
-          <footer className="runtime-access-mode-confirm__actions">
-            <Button
-              autoFocus
-              className="runtime-access-mode-confirm__cancel"
-              onClick={() => setFullAccessConfirmationOpen(false)}
-            >
+        title={t('accessMode.confirm.title')}
+        description={t('accessMode.confirm.intro')}
+        showClose={false}
+        footer={(
+          <>
+            <Button onClick={() => setFullAccessConfirmationOpen(false)}>
               {t('common.cancel')}
             </Button>
             <Button
-              className="runtime-access-mode-confirm__enable"
               icon={<TriangleAlert size={14} />}
               variant="danger"
               onClick={confirmFullAccess}
             >
               {t('accessMode.confirm.enable')}
             </Button>
-          </footer>
+          </>
+        )}
+        open={fullAccessConfirmationOpen}
+        width={520}
+        onClose={() => setFullAccessConfirmationOpen(false)}
+      >
+        <div className="runtime-access-mode-confirm__body">
+          <ul className="runtime-access-mode-confirm__capabilities">
+            {fullAccessCapabilities.map(({ icon: Icon, title, description }) => (
+              <li className="runtime-access-mode-confirm__capability" key={title}>
+                <Icon className="runtime-access-mode-confirm__capability-icon" size={18} aria-hidden="true" />
+                <span className="runtime-access-mode-confirm__capability-copy">
+                  <strong>{t(title)}</strong>
+                  <small>{t(description)}</small>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="runtime-access-mode-confirm__risk">
+            <TriangleAlert size={16} aria-hidden="true" />
+            <span>{t('accessMode.confirm.risk')}</span>
+          </p>
         </div>
-      </Modal>
+      </Dialog>
     </>
   );
 }

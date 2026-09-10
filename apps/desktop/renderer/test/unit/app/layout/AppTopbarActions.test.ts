@@ -36,7 +36,7 @@ describe('AppTopbarActions', () => {
 
   it('非终端底栏打开时保留选中背景但仍表达打开终端', () => {
     const html = renderActions({ activeView: 'chat', bottomPanelVisible: true, sidePanelVisible: false });
-    const bottomPanelButton = html.match(/<button aria-label="打开底栏终端"[^>]*>/)?.[0] ?? '';
+    const bottomPanelButton = html.match(/<button[^>]*aria-label="打开底栏终端"[^>]*>/)?.[0] ?? '';
 
     expect(bottomPanelButton).toContain('aria-pressed="false"');
     expect(bottomPanelButton).toContain('is-active');
@@ -50,7 +50,7 @@ describe('AppTopbarActions', () => {
       bottomTerminalPanelActive: true,
       sidePanelVisible: false,
     });
-    const bottomPanelButton = html.match(/<button aria-label="关闭终端"[^>]*>/)?.[0] ?? '';
+    const bottomPanelButton = html.match(/<button[^>]*aria-label="关闭终端"[^>]*>/)?.[0] ?? '';
 
     expect(bottomPanelButton).toContain('aria-pressed="true"');
     expect(bottomPanelButton).toContain('is-active');

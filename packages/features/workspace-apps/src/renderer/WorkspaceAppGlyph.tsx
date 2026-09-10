@@ -1,4 +1,4 @@
-import { Code2 } from 'lucide-react';
+import { Code2, SquareTerminal } from 'lucide-react';
 import type { DesktopWorkspaceApp } from '../contracts/index.js';
 import { workspaceAppIconAssets } from './workspaceAppIcons.js';
 import './workspace-apps.css';
@@ -67,13 +67,7 @@ function workspaceAppSystemIcon(icon: string) {
     );
   }
   if (icon === 'terminal') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="3" y="4" width="18" height="16" rx="4" fill="#2f3437" />
-        <path d="m7 9 3 3-3 3" fill="none" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M12.2 15h4.2" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" />
-      </svg>
-    );
+    return <SquareTerminal size={15} />;
   }
   return <Code2 size={15} />;
 }

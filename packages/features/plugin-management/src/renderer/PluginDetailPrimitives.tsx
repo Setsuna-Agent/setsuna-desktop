@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useId, useState, type ReactNode } from 'react';
 
@@ -20,7 +21,7 @@ export function PluginDetailSection({
     <section className={`desktop-capabilities-plugin-detail__section${expanded ? ' is-expanded' : ''}`}>
       <header>
         <h3>
-          <button
+          <Button variant="ghost"
             aria-controls={contentId}
             aria-expanded={expanded}
             className="desktop-capabilities-plugin-detail__section-toggle"
@@ -33,7 +34,7 @@ export function PluginDetailSection({
               <small>{count}</small>
               <ChevronDown aria-hidden="true" className="desktop-capabilities-plugin-detail__section-chevron" size={15} />
             </span>
-          </button>
+          </Button>
         </h3>
       </header>
       <div className="desktop-capabilities-plugin-detail__section-content" hidden={!expanded} id={contentId}>
@@ -76,14 +77,14 @@ export function PluginDetailItem({
     </>
   );
   return onClick ? (
-    <button
+    <Button variant="ghost"
       aria-label={viewLabel}
       className="desktop-capabilities-plugin-detail__item"
       type="button"
       onClick={onClick}
     >
       {content}
-    </button>
+    </Button>
   ) : <div className="desktop-capabilities-plugin-detail__item is-static">{content}</div>;
 }
 

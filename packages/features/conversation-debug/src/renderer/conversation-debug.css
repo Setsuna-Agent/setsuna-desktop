@@ -202,7 +202,7 @@
 .conversation-debug-flow__scroll-progress span {
   display: block;
   height: 2px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-full);
   background: var(--app-text-muted);
 }
 
@@ -375,7 +375,7 @@
 .conversation-debug-node:hover {
   border-color: var(--app-border-strong);
   background: var(--app-surface);
-  box-shadow: 0 2px 5px color-mix(in srgb, #000000 7%, transparent);
+  box-shadow: var(--app-shadow-raised);
 }
 
 .conversation-debug-node.is-selected {
@@ -803,7 +803,7 @@
   border: 1px solid var(--app-border-strong);
   border-radius: var(--app-radius-md);
   background: var(--app-surface);
-  box-shadow: 0 12px 32px color-mix(in srgb, #000000 12%, transparent);
+  box-shadow: var(--app-shadow-popover);
   animation: conversation-debug-inspector-enter 160ms ease-out;
 }
 

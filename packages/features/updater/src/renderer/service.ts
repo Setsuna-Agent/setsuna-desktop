@@ -82,10 +82,6 @@ export class UpdaterRendererStateService {
     this.runInstallAction(() => this.bridge?.quitAndInstall() ?? null)
   );
 
-  readonly promptReadyUpdate = (): Promise<DesktopUpdateActionResult | null> => (
-    this.runInstallAction(() => this.bridge?.promptReadyUpdate() ?? null)
-  );
-
   private async runStateAction(
     flag: 'checking',
     action: () => Promise<DesktopUpdateState> | null,

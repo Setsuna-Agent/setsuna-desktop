@@ -137,10 +137,10 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     setSettingsInitialSection('model-provider');
     setActiveView('settings');
   }, [setActiveView]);
-  const openFilesPanel = useCallback(() => {
+  const openFilesPanel = useCallback(async () => {
     if (!activeWorkspace?.path) return;
     workspacePanels.closeWorkspaceMenus();
-    projectWorkspace.setFilePreview(null);
+    if (!await projectWorkspace.setFilePreview(null)) return;
     if (!workspacePanels.activateDesktopPanelByType('files')) {
       workspacePanels.openDesktopPanel('side', 'files');
     }

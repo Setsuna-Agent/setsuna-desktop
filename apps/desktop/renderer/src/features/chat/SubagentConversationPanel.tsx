@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import type {
   DesktopRuntimeClient,
   RuntimeConfigState,
@@ -165,11 +166,11 @@ function SubagentHeader({
       </div>
       <div className="subagent-panel-header__actions">
         {activeTurnId ? (
-          <button type="button" className="subagent-panel-header__cancel" onClick={onCancel}>
+          <Button variant="ghost" type="button" className="subagent-panel-header__cancel" onClick={onCancel}>
             {t('feature.collaboration.panel.cancelTurn')}
-          </button>
+          </Button>
         ) : null}
-        <button
+        <Button variant="ghost"
           type="button"
           className="subagent-panel-header__close"
           aria-label={t('feature.collaboration.panel.close')}
@@ -177,7 +178,7 @@ function SubagentHeader({
           onClick={onClose}
         >
           <X size={15} aria-hidden="true" />
-        </button>
+        </Button>
       </div>
     </header>
   );

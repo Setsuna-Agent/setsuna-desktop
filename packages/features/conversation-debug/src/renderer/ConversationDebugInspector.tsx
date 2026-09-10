@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import { X } from 'lucide-react';
 import {
   useId,
@@ -109,7 +110,7 @@ export function ConversationDebugInspector({
         className="conversation-debug-inspector__tabs"
         role="tablist"
       >
-        <button
+        <Button variant="ghost"
           ref={overviewTabRef}
           aria-controls={`${tabId}-overview`}
           aria-selected={view === 'overview'}
@@ -121,8 +122,8 @@ export function ConversationDebugInspector({
           onKeyDown={(event) => selectViewWithKeyboard(event, 'records')}
         >
           {t('feature.conversationDebug.inspector.view.overview')}
-        </button>
-        <button
+        </Button>
+        <Button variant="ghost"
           ref={recordsTabRef}
           aria-controls={`${tabId}-records`}
           aria-selected={view === 'records'}
@@ -135,7 +136,7 @@ export function ConversationDebugInspector({
         >
           {t('feature.conversationDebug.inspector.view.records')}
           <small>{records.length}</small>
-        </button>
+        </Button>
       </div>
 
       <div

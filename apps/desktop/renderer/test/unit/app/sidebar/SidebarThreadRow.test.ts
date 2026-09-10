@@ -26,7 +26,8 @@ describe('SidebarThreadRow', () => {
   it('disables the archive action while the thread is running', () => {
     const html = renderRow({ ...thread, activeTurnId: 'turn_goal_1' });
 
-    expect(html).toContain('aria-label="归档对话" disabled');
+    const archive = html.match(/<button[^>]*aria-label="归档对话"[^>]*>/)?.[0];
+    expect(archive).toContain('disabled=""');
   });
 
   it('keeps the archive action enabled when idle', () => {

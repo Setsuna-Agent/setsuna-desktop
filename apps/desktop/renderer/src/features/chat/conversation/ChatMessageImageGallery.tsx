@@ -7,7 +7,7 @@ import {
   type RuntimeInlineMessageAttachment,
   type RuntimeStoredMessageAttachment,
 } from '@setsuna-desktop/contracts';
-import { Dropdown, Image, type MenuProps } from 'antd';
+import { Dropdown, ImagePreview, ImagePreviewGroup, type MenuProps } from '@setsuna-desktop/renderer-ui';
 import { Copy, FolderOpen } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
@@ -62,7 +62,7 @@ export function ChatMessageImageGallery({
 
   return (
     <div className="chat-image-gallery-shell" style={style}>
-      <Image.PreviewGroup>
+      <ImagePreviewGroup>
         <div
           className={`chat-image-gallery chat-image-gallery--${variant} ${multiple ? 'chat-image-gallery--multiple' : 'chat-image-gallery--single'}`}
           aria-label={t('chat.image.count', { count: attachments.length })}
@@ -81,7 +81,7 @@ export function ChatMessageImageGallery({
             );
           })}
         </div>
-      </Image.PreviewGroup>
+      </ImagePreviewGroup>
     </div>
   );
 }
@@ -121,11 +121,10 @@ function ChatMessageImage({
       title={attachment.name}
     >
       {source ? (
-        <Image
+        <ImagePreview
           src={source}
           alt={attachment.name}
           className="chat-message-image__content"
-          preview={{ mask: null }}
         />
       ) : (
         <div className="chat-message-image__placeholder" role={loadError ? 'alert' : 'status'}>

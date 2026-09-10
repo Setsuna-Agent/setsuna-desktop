@@ -1,4 +1,5 @@
-import { Bug, FileDiff, FolderOpen, GitBranch, MessageSquare, Plus, Terminal, X } from 'lucide-react';
+import { Button } from '@setsuna-desktop/renderer-ui';
+import { Bug, FileDiff, FolderOpen, GitBranch, MessageSquare, Plus, SquareTerminal, X } from 'lucide-react';
 import {
   useEffect,
   useRef,
@@ -31,7 +32,7 @@ const panelLauncherItems: Array<{ key: DesktopPanelType; labelKey: MessageKey; i
   { key: 'review', labelKey: 'workspace.panel.launcher.review', icon: <FileDiff size={14} /> },
   { key: 'changes', labelKey: 'workspace.panel.launcher.changes', icon: <GitBranch size={14} /> },
   { key: 'files', labelKey: 'workspace.panel.launcher.files', icon: <FolderOpen size={14} /> },
-  { key: 'terminal', labelKey: 'workspace.panel.launcher.terminal', icon: <Terminal size={14} /> },
+  { key: 'terminal', labelKey: 'workspace.panel.launcher.terminal', icon: <SquareTerminal size={14} /> },
   { key: 'chat', labelKey: 'workspace.panel.launcher.sideChat', icon: <MessageSquare size={14} /> },
   {
     key: 'browser',
@@ -435,7 +436,7 @@ export function DesktopPanelHeader({
                 onPointerDown={(event) => handlePointerDown(event, panel)}
                 style={tabStyle}
               >
-                <button
+                <Button variant="ghost"
                   className="chat-file-review-panel__tab-button"
                   disabled={closing}
                   type="button"
@@ -443,9 +444,9 @@ export function DesktopPanelHeader({
                   onClick={(event) => handleTabClick(event, panel.id)}
                 >
                   {renderTabLabel(panel)}
-                </button>
+                </Button>
                 {onClosePanel ? (
-                  <button
+                  <Button variant="ghost"
                     className="chat-file-review-panel__tab-close"
                     disabled={closing}
                     type="button"
@@ -457,14 +458,14 @@ export function DesktopPanelHeader({
                     }}
                   >
                     <span className="chat-file-review-panel__tab-close-glyph" aria-hidden="true" />
-                  </button>
+                  </Button>
                 ) : null}
               </span>
             );
           })}
           {onOpenPanel && launcherItems.length ? (
             <span className="desktop-panel-launcher" ref={launcherRef}>
-              <button
+              <Button variant="ghost"
                 ref={launcherButtonRef}
                 aria-expanded={launcherOpen}
                 aria-haspopup="menu"
@@ -477,7 +478,7 @@ export function DesktopPanelHeader({
                 }}
               >
                 <Plus size={14} />
-              </button>
+              </Button>
               {launcherOpen
                 ? createPortal(
                     <span
@@ -489,7 +490,7 @@ export function DesktopPanelHeader({
                       {launcherItems.map((item) => {
                         const shortcutCommandId = panelLauncherShortcutCommands[item.key];
                         return (
-                          <button
+                          <Button variant="ghost"
                             key={item.key}
                             type="button"
                             role="menuitem"
@@ -508,7 +509,7 @@ export function DesktopPanelHeader({
                                 commandId={shortcutCommandId}
                               />
                             ) : null}
-                          </button>
+                          </Button>
                         );
                       })}
                     </span>,
@@ -525,7 +526,7 @@ export function DesktopPanelHeader({
               commandId="layout.toggleTerminal"
               label={t(bottomTerminalActive ? 'topbar.closeTerminal' : 'workspace.panel.openBottomTerminal')}
             >
-              <button
+              <Button variant="ghost"
                 className={[
                   'app-shell-icon-control',
                   'chat-file-review-panel__close',
@@ -540,12 +541,12 @@ export function DesktopPanelHeader({
                 onClick={onToggleBottomTerminal}
               >
                 <PanelPlacementIcon placement="bottom" />
-              </button>
+              </Button>
             </ShortcutTooltip>
           ) : null}
           {placement === 'side' ? (
             <ShortcutTooltip commandId="layout.toggleWorkspace" label={t('workspace.panel.collapseSide')}>
-              <button
+              <Button variant="ghost"
                 className="app-shell-icon-control chat-file-review-panel__close chat-file-review-panel__panel-close chat-file-review-panel__close--active"
                 type="button"
                 aria-label={t('workspace.panel.collapseSide')}
@@ -553,10 +554,10 @@ export function DesktopPanelHeader({
                 onClick={onClose}
               >
                 <PanelPlacementIcon placement="side" />
-              </button>
+              </Button>
             </ShortcutTooltip>
           ) : (
-            <button
+            <Button variant="ghost"
               className="chat-file-review-panel__close chat-file-review-panel__panel-close"
               type="button"
               aria-label={t('workspace.panel.close')}
@@ -564,7 +565,7 @@ export function DesktopPanelHeader({
               onClick={onClose}
             >
               <X size={14} />
-            </button>
+            </Button>
           )}
         </span>
       </div>

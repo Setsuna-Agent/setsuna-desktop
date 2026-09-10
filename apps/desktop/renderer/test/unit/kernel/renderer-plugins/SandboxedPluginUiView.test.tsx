@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 
+import { ConfirmationProvider } from '@setsuna-desktop/renderer-ui';
 import { parseRuntimePluginUiManifest } from '@setsuna-desktop/contracts';
 import type { PluginManagementRendererService } from '@setsuna-desktop/feature-plugin-management/contracts';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -38,19 +39,18 @@ describe('SandboxedPluginUiView', () => {
         return () => { dataListener = () => undefined; };
       },
     } as unknown as PluginManagementRendererService;
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     // Async resource reads mount the iframe; flush its effects before sending
     // the one-shot bridge message so the host listener is already registered.
     await act(async () => {
       render(
-        <SandboxedPluginUiView
+        <ConfirmationProvider><SandboxedPluginUiView
           contribution={contribution}
           manifest={manifest}
           pluginId="weather-plugin"
           revision="2026-08-31T00:00:00.000Z"
           service={service}
-        />,
+        /></ConfirmationProvider>,
       );
     });
 
@@ -72,6 +72,10 @@ describe('SandboxedPluginUiView', () => {
         payload: { city: '杭州' },
       },
     }));
+
+    await screen.findByRole('dialog');
+    expect(runRendererUiAction).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '确认' }));
 
     await waitFor(() => expect(runRendererUiAction).toHaveBeenCalledWith({
       pluginId: 'weather-plugin',

@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import { Minus, Plus } from 'lucide-react';
 import {
   useCallback,
@@ -334,7 +335,7 @@ export function ConversationDebugFlow({
                 node.seqEnd > node.seqStart ? `–${node.seqEnd}` : ''
               }`;
               return (
-                <button
+                <Button variant="ghost"
                   aria-pressed={selectedNodeId === node.id}
                   className={[
                     'conversation-debug-node',
@@ -380,7 +381,7 @@ export function ConversationDebugFlow({
                       {t('feature.conversationDebug.recordCountShort', { count: recordCount })}
                     </em>
                   </span>
-                </button>
+                </Button>
               );
             })}
           </div>
@@ -413,7 +414,7 @@ export function ConversationDebugFlow({
           className="conversation-debug-flow__controls"
           role="group"
         >
-          <button
+          <Button variant="ghost"
             aria-label={t('feature.conversationDebug.canvas.zoomOut')}
             disabled={!canvasNavigation.canZoomOut}
             title={t('feature.conversationDebug.canvas.zoomOut')}
@@ -421,8 +422,8 @@ export function ConversationDebugFlow({
             onClick={canvasNavigation.zoomOut}
           >
             <Minus aria-hidden="true" size={14} strokeWidth={1.8} />
-          </button>
-          <button
+          </Button>
+          <Button variant="ghost"
             aria-label={t('feature.conversationDebug.canvas.zoomReset')}
             className="conversation-debug-flow__zoom-value"
             title={t('feature.conversationDebug.canvas.zoomReset')}
@@ -430,8 +431,8 @@ export function ConversationDebugFlow({
             onClick={resetCurrentView}
           >
             {Math.round(canvasNavigation.zoom * 100)}%
-          </button>
-          <button
+          </Button>
+          <Button variant="ghost"
             aria-label={t('feature.conversationDebug.canvas.zoomIn')}
             disabled={!canvasNavigation.canZoomIn}
             title={t('feature.conversationDebug.canvas.zoomIn')}
@@ -439,7 +440,7 @@ export function ConversationDebugFlow({
             onClick={canvasNavigation.zoomIn}
           >
             <Plus aria-hidden="true" size={14} strokeWidth={1.8} />
-          </button>
+          </Button>
         </div>
       </div>
     </div>

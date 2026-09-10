@@ -17,17 +17,13 @@
   height: 34px;
   padding: 0 10px;
   border: 1px solid var(--app-border);
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   color: var(--app-text-muted);
   background: var(--app-surface);
 }
 
-.settings-shortcuts__search:focus-within {
-  border-color: var(--app-primary);
-  box-shadow: var(--app-focus-ring);
-}
-
 .settings-shortcuts__search input {
+  box-shadow: none;
   width: 100%;
   min-width: 0;
   border: 0;
@@ -59,7 +55,7 @@
 
 .settings-shortcuts__list {
   border: 1px solid var(--chat-settings-divider);
-  border-radius: 9px;
+  border-radius: var(--app-radius-sm);
   background: var(--app-surface);
   overflow: hidden;
 }
@@ -134,7 +130,7 @@
   flex: 0 0 auto;
   height: 30px;
   border: 1px solid var(--app-border);
-  border-radius: 6px;
+  border-radius: var(--app-radius-xs);
   background: var(--app-surface-muted);
   overflow: hidden;
 }
@@ -204,7 +200,7 @@
   height: 30px;
   padding: 0;
   place-items: center;
-  border-radius: 6px;
+  border-radius: var(--app-radius-xs);
 }
 
 .settings-shortcuts__reset {
@@ -212,7 +208,7 @@
   width: 30px;
   height: 30px;
   place-items: center;
-  border-radius: 6px;
+  border-radius: var(--app-radius-xs);
 }
 
 .settings-shortcuts__add:disabled,
@@ -223,10 +219,9 @@
 .settings-shortcuts__recorder {
   height: 30px;
   border: 1px solid var(--app-primary);
-  border-radius: 6px;
+  border-radius: var(--app-radius-xs);
   color: var(--app-primary);
   background: color-mix(in srgb, var(--app-primary) 7%, var(--app-surface));
-  box-shadow: var(--app-focus-ring);
   font-size: 12px;
   white-space: nowrap;
 }
@@ -261,7 +256,7 @@
 .settings-shortcuts__empty {
   padding: 36px 18px;
   border: 1px dashed var(--app-border);
-  border-radius: 9px;
+  border-radius: var(--app-radius-sm);
   color: var(--app-text-muted);
   text-align: center;
   font-size: 12px;

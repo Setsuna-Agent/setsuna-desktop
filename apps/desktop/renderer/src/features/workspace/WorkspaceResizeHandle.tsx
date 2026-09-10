@@ -1,3 +1,4 @@
+import { ResizeHandle } from '@setsuna-desktop/renderer-ui';
 import type { KeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 
@@ -26,7 +27,7 @@ export function WorkspaceResizeHandle({
   };
 
   return (
-    <button
+    <ResizeHandle
       className="desktop-workspace-panel__resize-handle"
       type="button"
       role="separator"

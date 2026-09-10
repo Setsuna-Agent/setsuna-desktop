@@ -18,7 +18,6 @@ describe('UpdaterRendererStateService', () => {
       }),
       addDownloadSource: vi.fn(),
       checkForUpdates: vi.fn(),
-      promptReadyUpdate: vi.fn(),
       quitAndInstall: vi.fn(),
       removeDownloadSource: vi.fn(),
       selectDownloadSource: vi.fn(),

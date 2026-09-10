@@ -1,0 +1,373 @@
+/* beUI's compact product controls. Geometry and state styling have one owner. */
+
+/* Layout defaults must yield to host rows/grids regardless of CSS import order. */
+:where(.sd-button) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  gap: 6px;
+  min-height: var(--app-control-height);
+  padding: 5px 12px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-control);
+}
+
+/* Compact controls use small corners; host rows can override their outer edges. */
+:where(.sd-button--ghost, .sd-button[role='menuitem']) {
+  justify-content: normal;
+  min-height: 0;
+  border-radius: var(--app-radius-xs);
+  text-align: start;
+}
+
+.sd-button {
+  background: var(--app-surface);
+  color: var(--app-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+/* Press feedback only changes color so controls and popup anchors stay still. */
+.sd-button:is(:hover, :active):not(:disabled) {
+  background: var(--desktop-agent-control-hover-bg);
+  border-color: var(--app-border-strong);
+}
+
+.sd-button:focus-visible {
+  outline: 2px solid var(--app-primary);
+  outline-offset: 2px;
+}
+
+.sd-button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.sd-button--primary {
+  color: var(--app-primary-text);
+  background: var(--app-primary);
+  border-color: transparent;
+}
+
+.sd-button--primary:is(:hover, :active):not(:disabled) {
+  color: var(--app-primary-text);
+  background: var(--app-primary-hover);
+  border-color: transparent;
+}
+
+.sd-button--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--app-text-secondary);
+}
+
+.sd-button--ghost:is(:hover, :active):not(:disabled) {
+  border-color: transparent;
+  color: var(--app-text);
+}
+
+.sd-button--danger {
+  color: var(--app-danger);
+  border-color: color-mix(in srgb, var(--app-danger) 20%, var(--app-border));
+  background: var(--app-danger-bg);
+}
+
+.sd-button--danger:is(:hover, :active):not(:disabled) {
+  color: var(--app-danger);
+  background: color-mix(in srgb, var(--app-danger) 14%, var(--app-surface));
+  border-color: var(--app-danger);
+}
+
+:where(.sd-button--small) {
+  min-height: 28px;
+  padding: 3px 9px;
+}
+
+.sd-button--small {
+  font-size: 12px;
+}
+
+:where(.sd-button--large) {
+  min-height: 38px;
+  padding: 8px 16px;
+}
+
+.sd-button__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+:where(.sd-icon-button) {
+  justify-content: center;
+  width: var(--app-control-height);
+  height: var(--app-control-height);
+  min-height: 0;
+  padding: 0;
+  border-radius: var(--app-radius-sm);
+}
+
+.sd-icon-button[data-state='open'] {
+  color: var(--app-text);
+  background: var(--desktop-agent-control-active-bg);
+}
+
+/* Embedded fields own their surface and insets, even when feature CSS loads first. */
+:where(.sd-field, .sd-textarea) {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-sm);
+  padding: 6px 10px;
+  color: var(--app-text);
+  background: var(--app-surface);
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.sd-field, .sd-textarea {
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+:where(.sd-field) {
+  min-height: var(--app-control-height);
+}
+
+:where(.sd-textarea) {
+  display: block;
+  resize: vertical;
+  min-height: 64px;
+}
+
+.sd-field::placeholder, .sd-textarea::placeholder {
+  color: var(--app-text-subtle);
+}
+
+:where(.sd-field:hover:not(:disabled):not(:focus):not(.is-open),
+  .sd-textarea:hover:not(:disabled):not(:focus)) {
+  border-color: var(--app-border-strong);
+}
+
+:where(.sd-field:focus, .sd-textarea:focus) {
+  outline: none;
+}
+
+:where(.sd-field:disabled, .sd-textarea:disabled) {
+  background: var(--app-surface-muted);
+  opacity: 0.6;
+}
+
+.sd-field[aria-invalid='true'], .sd-textarea[aria-invalid='true'] {
+  border-color: var(--app-danger);
+}
+
+.sd-field-shell {
+  display: flex;
+  align-items: center;
+  position: relative;
+  min-width: 0;
+}
+
+.sd-field-shell__icon {
+  position: absolute;
+  left: 10px;
+  display: inline-flex;
+  color: var(--app-text-muted);
+  pointer-events: none;
+}
+
+.sd-field-shell:has(.sd-field-shell__icon) > .sd-field {
+  padding-left: 32px;
+}
+
+.sd-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--app-text);
+}
+
+.sd-checkbox.is-disabled {
+  opacity: 0.5;
+}
+
+.sd-checkbox__box {
+  position: relative;
+  display: inline-flex;
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+}
+
+.sd-checkbox__control {
+  appearance: none;
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 5px;
+  background: var(--app-surface);
+}
+
+.sd-checkbox__control:checked, .sd-checkbox__control:indeterminate {
+  border-color: var(--app-primary);
+  background: var(--app-primary);
+}
+
+.sd-checkbox__control:focus-visible {
+  outline: 2px solid var(--app-primary);
+  outline-offset: 2px;
+}
+
+.sd-checkbox__box > svg {
+  position: absolute;
+  inset: 2px;
+  width: 13px;
+  height: 13px;
+  color: var(--app-primary-text);
+  pointer-events: none;
+}
+
+.sd-switch {
+  display: inline-flex;
+  align-items: center;
+  width: 38px;
+  height: 24px;
+  padding: 3px;
+  border: none;
+  border-radius: 999px;
+  background: var(--app-border-strong);
+  flex-shrink: 0;
+  transition: background 160ms ease;
+}
+
+.sd-switch[data-state='checked'] {
+  background: var(--app-primary);
+}
+
+.sd-switch:disabled {
+  opacity: 0.45;
+}
+
+.sd-switch:focus-visible {
+  outline: 2px solid var(--app-primary);
+  outline-offset: 2px;
+}
+
+.sd-switch__thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--app-primary-text);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 15%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sd-button, .sd-field, .sd-textarea, .sd-switch {
+    transition: none;
+  }
+}
+
+.sd-toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.sd-checkbox__native-mark {
+  opacity: 0;
+  scale: 0.5;
+  transition: opacity 120ms ease, scale 160ms var(--app-ease-out);
+}
+
+.sd-checkbox__control:checked + .sd-checkbox__native-mark {
+  opacity: 1;
+  scale: 1;
+}
+
+.sd-slider {
+  appearance: none;
+  width: 100%;
+  height: 20px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.sd-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: var(--app-radius-full);
+  background: linear-gradient(90deg, var(--app-primary) var(--sd-slider-progress), var(--app-border) var(--sd-slider-progress));
+}
+
+.sd-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border: 3px solid var(--app-surface);
+  border-radius: 50%;
+  background: var(--app-primary);
+  box-shadow: var(--app-shadow-button);
+}
+
+.sd-slider::-moz-range-track {
+  height: 4px;
+  border-radius: var(--app-radius-full);
+  background: var(--app-border);
+}
+
+.sd-slider::-moz-range-progress {
+  height: 4px;
+  border-radius: var(--app-radius-full);
+  background: var(--app-primary);
+}
+
+.sd-slider::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border: 3px solid var(--app-surface);
+  border-radius: 50%;
+  background: var(--app-primary);
+  box-shadow: var(--app-shadow-button);
+}
+
+.sd-slider:focus-visible {
+  outline: 2px solid var(--app-primary);
+  outline-offset: 3px;
+  border-radius: var(--app-radius-sm);
+}
+
+.sd-slider:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* The host positions the hit area and its 1px line; only that line changes on interaction. */
+.sd-resize-handle {
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  background: transparent;
+  box-shadow: none;
+  touch-action: none;
+  user-select: none;
+}
+
+.sd-resize-handle:is(:hover, :focus-visible, :active, .is-resizing)::after {
+  background: var(--app-border-strong);
+}

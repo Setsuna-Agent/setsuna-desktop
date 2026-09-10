@@ -1,3 +1,4 @@
+import { Slider } from '@setsuna-desktop/renderer-ui';
 import type {
   DesktopWindowCloseBehavior,
   RuntimeConfigState,
@@ -322,7 +323,7 @@ export function GeneralSettings({
             </span>
             <div className="chat-user-settings__slider" style={{ '--settings-scale-progress': fontSizeProgress } as CSSProperties}>
               <div className="settings-scale-control__range">
-                <input id="settings-page-scale" aria-label={t('settings.general.pageScale')} type="range" min={0} max={fontSizeOptions.length - 1} step={1} value={fontSizeIndex} onChange={(event) => setFontSize(fontSizeOptions[Number(event.currentTarget.value)] ?? '100')} />
+                <Slider id="settings-page-scale" aria-label={t('settings.general.pageScale')} min={0} max={fontSizeOptions.length - 1} step={1} value={fontSizeIndex} onChange={(event) => setFontSize(fontSizeOptions[Number(event.currentTarget.value)] ?? '100')} />
                 <div className="settings-scale-control__marks" aria-hidden="true">
                   {fontSizeOptions.map((option, index) => Number(option) % 10 === 0 ? (
                     <span

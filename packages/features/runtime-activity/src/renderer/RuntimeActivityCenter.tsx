@@ -1,3 +1,4 @@
+import { Button as UiButton, Dialog } from '@setsuna-desktop/renderer-ui';
 import type {
   RendererTranslate,
 } from '@setsuna-desktop/feature-core/renderer';
@@ -5,18 +6,16 @@ import type {
   SettingsButtonProps,
   SettingsIconButtonProps,
 } from '@setsuna-desktop/renderer-contracts/settings';
-import { CircleAlert, Gauge, LoaderCircle, X } from 'lucide-react';
+import { CircleAlert, Gauge, LoaderCircle } from 'lucide-react';
 import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ComponentType,
   type KeyboardEvent as ReactKeyboardEvent,
   type RefObject,
 } from 'react';
-import { createPortal } from 'react-dom';
 import {
   RuntimeActiveTaskRows,
   RuntimeBackgroundServiceRows,
@@ -54,10 +53,9 @@ export function RuntimeActivityCenter({
   returnFocusRef,
   service,
   translate: t,
-  ui: { Button, IconButton },
+  ui: { Button },
 }: RuntimeActivityCenterProps) {
   const [activeTab, setActiveTab] = useState<RuntimeActivityTab>('tasks');
-  const dialogRef = useRef<HTMLElement | null>(null);
   const nowMs = useRuntimeActivityClock();
   const projectNameById = useMemo(
     () => new Map(projects.map((project) => [project.id, project.name])),
@@ -85,65 +83,24 @@ export function RuntimeActivityCenter({
     window.setTimeout(() => returnFocusRef.current?.focus(), 0);
   }, [onClose, returnFocusRef]);
 
-  useEffect(() => {
-    const focusFrame = window.requestAnimationFrame(() => {
-      dialogRef.current?.querySelector<HTMLButtonElement>('[role="tab"]')?.focus();
-    });
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        closeAndRestoreFocus();
-        return;
-      }
-      if (event.key !== 'Tab') return;
-      trapRuntimeActivityDialogFocus(event, dialogRef.current);
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.cancelAnimationFrame(focusFrame);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [closeAndRestoreFocus]);
-
   const openThread = useCallback((threadId: string) => {
     closeAndRestoreFocus();
     void onOpenThread(threadId);
   }, [closeAndRestoreFocus, onOpenThread]);
 
-  if (typeof document === 'undefined') return null;
-  return createPortal(
-    <div
-      className="runtime-activity-backdrop"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) closeAndRestoreFocus();
-      }}
-    >
-      <section
-        aria-labelledby="runtime-activity-title"
-        aria-modal="true"
-        className="runtime-activity-dialog"
-        ref={dialogRef}
-        role="dialog"
-        tabIndex={-1}
-      >
-        <header className="runtime-activity-dialog__header">
-          <span className="runtime-activity-dialog__heading-icon" aria-hidden="true">
-            <Gauge size={17} />
+  return (
+    <Dialog title={t('feature.runtimeActivity.title')} description={t('feature.runtimeActivity.description')}
+      width={760} className="runtime-activity-dialog" onClose={closeAndRestoreFocus}
+      footer={error && snapshot ? (
+        <div className="runtime-activity-dialog__footer">
+          <span className="runtime-activity-dialog__status" role="status" title={error}>
+            {t('feature.runtimeActivity.refreshFailed', { error })}
           </span>
-          <span className="runtime-activity-dialog__heading">
-            <strong id="runtime-activity-title">{t('feature.runtimeActivity.title')}</strong>
-            <small>{t('feature.runtimeActivity.description')}</small>
-          </span>
-          <IconButton
-            className="runtime-activity-dialog__close"
-            label={t('feature.runtimeActivity.close')}
-            onClick={closeAndRestoreFocus}
-          >
-            <X size={15} />
-          </IconButton>
-        </header>
-
+          <Button variant="ghost" onClick={() => void refresh(true)}>
+            {t('feature.runtimeActivity.retry')}
+          </Button>
+        </div>
+      ) : null}>
         <div
           className="runtime-activity-tabs"
           role="tablist"
@@ -215,20 +172,7 @@ export function RuntimeActivityCenter({
             </div>
           )}
         </div>
-
-        {error && snapshot ? (
-          <footer className="runtime-activity-dialog__footer">
-            <span className="runtime-activity-dialog__status" role="status" title={error}>
-              {t('feature.runtimeActivity.refreshFailed', { error })}
-            </span>
-            <Button variant="ghost" onClick={() => void refresh(true)}>
-              {t('feature.runtimeActivity.retry')}
-            </Button>
-          </footer>
-        ) : null}
-      </section>
-    </div>,
-    document.body,
+    </Dialog>
   );
 }
 
@@ -246,7 +190,7 @@ function RuntimeActivityTabButton({
   onSelect: () => void;
 }) {
   return (
-    <button
+    <UiButton variant="ghost"
       aria-controls={`runtime-activity-panel-${id}`}
       aria-selected={active}
       className={active ? 'is-active' : undefined}
@@ -258,7 +202,7 @@ function RuntimeActivityTabButton({
     >
       <span>{label}</span>
       {count > 0 ? <span className="runtime-activity-tabs__count">{count}</span> : null}
-    </button>
+    </UiButton>
   );
 }
 
@@ -284,25 +228,4 @@ function useRuntimeActivityClock(): number {
     return () => window.clearInterval(intervalId);
   }, []);
   return nowMs;
-}
-
-function trapRuntimeActivityDialogFocus(event: KeyboardEvent, dialog: HTMLElement | null): void {
-  if (!dialog) return;
-  const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(
-    'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
-  )).filter((item) => item.offsetParent !== null || item === document.activeElement);
-  if (!focusable.length) {
-    event.preventDefault();
-    dialog.focus();
-    return;
-  }
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
-  }
 }

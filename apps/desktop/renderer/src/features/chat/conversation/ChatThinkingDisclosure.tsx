@@ -1,4 +1,4 @@
-import ThinkIcon from '@ant-design/x/es/think/icons/think.js';
+import { Brain as ThinkIcon } from 'lucide-react';
 import { ChevronDown } from 'lucide-react';
 import { useState, type ReactNode, type SyntheticEvent } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';

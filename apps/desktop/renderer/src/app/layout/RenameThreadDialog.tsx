@@ -1,4 +1,4 @@
-import { createPortal } from 'react-dom';
+import { Dialog } from '@setsuna-desktop/renderer-ui';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { Button, TextField } from '../../shared/ui/primitives.js';
 
@@ -15,33 +15,15 @@ export function RenameThreadDialog({
 }) {
   const { t } = useI18n();
 
-  return createPortal(
-    <div className="desktop-agent-modal-backdrop" role="presentation" onMouseDown={onCancel}>
-      <form
-        className="desktop-agent-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('dialog.renameChat')}
-        onMouseDown={(event) => event.stopPropagation()}
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSave();
-        }}
-      >
-        <header>
-          <strong>{t('dialog.renameChat')}</strong>
-        </header>
-        <TextField autoFocus value={title} placeholder={t('dialog.chatTitle')} onChange={(event) => onChange(event.target.value)} />
-        <footer>
-          <Button type="button" variant="ghost" onClick={onCancel}>
-            {t('common.cancel')}
-          </Button>
-          <Button type="submit" variant="primary" disabled={!title.trim()}>
-            {t('common.save')}
-          </Button>
-        </footer>
+  return (
+    <Dialog title={t('dialog.renameChat')} width={420} onClose={onCancel}>
+      <form onSubmit={(event) => { event.preventDefault(); onSave(); }}>
+        <TextField autoFocus value={title} aria-label={t('dialog.chatTitle')} placeholder={t('dialog.chatTitle')} onChange={(event) => onChange(event.target.value)} />
+        <div className="sd-dialog-form-actions">
+          <Button variant="ghost" onClick={onCancel}>{t('common.cancel')}</Button>
+          <Button type="submit" variant="primary" disabled={!title.trim()}>{t('common.save')}</Button>
+        </div>
       </form>
-    </div>,
-    document.body,
+    </Dialog>
   );
 }

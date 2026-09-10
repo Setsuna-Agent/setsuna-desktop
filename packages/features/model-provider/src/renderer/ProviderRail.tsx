@@ -1,3 +1,4 @@
+import { Button as UiButton } from '@setsuna-desktop/renderer-ui';
 import type {
   ProviderConfigState } from '@setsuna-desktop/contracts';
 import type { RendererTranslate,
@@ -40,7 +41,7 @@ export function ProviderRail({
       </div>
       <nav className="model-provider-settings__rail-list" aria-label={translate('feature.modelProvider.title')}>
         {providers.map((provider) => (
-          <button
+          <UiButton variant="ghost"
             key={provider.id}
             aria-current={provider.id === selectedProviderId ? 'true' : undefined}
             className={`model-provider-settings__rail-item${provider.id === selectedProviderId ? ' is-active' : ''}${provider.enabled ? '' : ' is-disabled'}`}
@@ -56,7 +57,7 @@ export function ProviderRail({
                 <span>{translate('feature.modelProvider.modelCount', { count: provider.models.length })}</span>
               </small>
             </span>
-          </button>
+          </UiButton>
         ))}
       </nav>
     </aside>

@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
 import { Copy, Trash2 } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
@@ -84,7 +85,7 @@ function MessageFooterAction({
 }) {
   return (
     <ActionTooltip placement="top" title={label}>
-      <button
+      <Button variant="ghost"
         className={active ? 'is-copied' : ''}
         type="button"
         aria-label={label}
@@ -96,7 +97,7 @@ function MessageFooterAction({
         }}
       >
         {children}
-      </button>
+      </Button>
     </ActionTooltip>
   );
 }

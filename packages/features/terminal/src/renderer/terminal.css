@@ -4,7 +4,8 @@
   height: 100%;
   min-width: 0;
   min-height: 0;
-  padding: 8px 0 14px 10px;
+  /* The panel tab bar already provides the gap above the first terminal row. */
+  padding: 0 0 14px 10px;
   overflow: hidden;
   background: var(--app-bg);
 }
@@ -18,7 +19,7 @@
   gap: 10px;
   padding: 7px 9px 7px 11px;
   border: 1px solid var(--app-border);
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   background: color-mix(in srgb, var(--app-bg) 92%, transparent);
   color: var(--app-muted);
   font-size: 12px;
@@ -27,7 +28,7 @@
 
 .feature-terminal__restart button {
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--app-radius-xs);
   padding: 5px 8px;
   background: var(--app-primary);
   color: var(--app-primary-text);
@@ -74,7 +75,7 @@
 .feature-terminal .xterm-viewport::-webkit-scrollbar-thumb {
   min-height: 40px;
   border: 2px solid transparent;
-  border-radius: 999px;
+  border-radius: var(--app-radius-full);
   background: var(--chat-scrollbar-thumb);
   background-clip: content-box;
 }
@@ -109,7 +110,7 @@
 }
 
 .feature-terminal .xterm .xterm-scrollable-element > .scrollbar > .slider {
-  border-radius: 999px !important;
+  border-radius: var(--app-radius-full) !important;
   background: var(--chat-scrollbar-thumb) !important;
 }
 

@@ -10,7 +10,6 @@ export const UPDATER_IPC_CHANNELS = Object.freeze({
   addDownloadSource: 'desktop-updater:add-download-source',
   selectDownloadSource: 'desktop-updater:select-download-source',
   removeDownloadSource: 'desktop-updater:remove-download-source',
-  promptReady: 'desktop-updater:prompt-ready',
   installReady: 'desktop-updater:quit-and-install',
   stateChange: 'desktop-updater:state-change',
 } as const);
@@ -22,7 +21,6 @@ export interface UpdaterDesktopBridge {
   selectDownloadSource(sourceId: string): Promise<DesktopUpdateState>;
   removeDownloadSource(sourceId: string): Promise<DesktopUpdateState>;
   quitAndInstall(): Promise<DesktopUpdateActionResult>;
-  promptReadyUpdate(): Promise<DesktopUpdateActionResult>;
   onStateChange(callback: (state: DesktopUpdateState) => void): () => void;
 }
 

@@ -123,7 +123,7 @@ export function SettingsDirectoryList({
     return {
       ...preset,
       count: path ? inspectionCounts?.get(normalizeDirectory(path, platform)) : undefined,
-      displayPath: path ?? `~/${preset.homeRelativePath.join('/')}`,
+      displayPath: `~/${preset.homeRelativePath.join('/')}`,
       inherited,
       path,
     };
@@ -154,7 +154,7 @@ export function SettingsDirectoryList({
             key={preset.id}
           >
             <span className="chat-user-settings__runtime-directory-preset-icon" aria-hidden="true">
-              {preset.inherited ? <Check size={14} /> : <Folder size={14} />}
+              {preset.inherited ? <Check size={16} /> : <Folder size={16} />}
             </span>
             <span className="chat-user-settings__runtime-directory-preset-copy">
               <strong>
@@ -165,18 +165,18 @@ export function SettingsDirectoryList({
                   </span>
                 ) : null}
               </strong>
-              <code title={preset.displayPath}>{preset.displayPath}</code>
+              <code title={preset.path ?? preset.displayPath}>{preset.displayPath}</code>
             </span>
-            <button
+            <Button variant="secondary" size="small"
               aria-label={actionAriaLabel}
               className="chat-user-settings__runtime-directory-preset-action"
               disabled={busy || !preset.path}
+              icon={preset.inherited ? <X aria-hidden="true" size={13} /> : <Plus aria-hidden="true" size={13} />}
               type="button"
               onClick={togglePreset}
             >
-              {preset.inherited ? <X aria-hidden="true" size={13} /> : <Plus aria-hidden="true" size={13} />}
               <span>{actionLabel}</span>
-            </button>
+            </Button>
           </div>
         );
       })}
@@ -185,6 +185,7 @@ export function SettingsDirectoryList({
 
   return (
     <SettingsListEditor
+      className={hasHomePresets ? 'chat-user-settings__runtime-list-editor--presets' : undefined}
       action={(
         <Button
           disabled={busy}
@@ -210,6 +211,7 @@ export function SettingsDirectoryList({
 export function SettingsListEditor({
   action,
   busy,
+  className = '',
   description,
   error,
   items,
@@ -220,6 +222,7 @@ export function SettingsListEditor({
 }: Readonly<{
   action: ReactNode;
   busy: boolean;
+  className?: string;
   children?: ReactNode;
   description: string;
   error: string | null;
@@ -230,7 +233,7 @@ export function SettingsListEditor({
 }>) {
   const { t } = useI18n();
   return (
-    <div className="chat-user-settings__runtime-list-editor">
+    <div className={`chat-user-settings__runtime-list-editor ${className}`}>
       <div className="chat-user-settings__runtime-list-head">
         <span className="chat-user-settings__runtime-list-copy">
           <strong>{label}</strong>

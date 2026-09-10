@@ -1,5 +1,5 @@
 import type { RuntimeThread, RuntimeThreadSummary } from '@setsuna-desktop/contracts';
-import { Popconfirm } from 'antd';
+import { ConfirmDialogTrigger } from '@setsuna-desktop/renderer-ui';
 import { Archive, Trash2, Undo2 } from 'lucide-react';
 import { useState } from 'react';
 import { Button, EmptyState, IconButton } from '../../../shared/ui/primitives.js';
@@ -52,17 +52,16 @@ export function ArchivedThreadsSettings({
         <div className="settings-archives-header">
           <div className="chat-user-settings__group-title">{t('settings.archives.title')}</div>
           {threads.length ? (
-            <Popconfirm
+            <ConfirmDialogTrigger
               title={t('settings.archives.deleteAllTitle', { count: threads.length })}
               description={t('settings.archives.irreversible')}
-              placement="bottomRight"
-              okText={t('settings.archives.deleteAll')}
-              cancelText={t('common.cancel')}
-              okButtonProps={{ danger: true }}
+              confirmLabel={t('settings.archives.deleteAll')}
+              cancelLabel={t('common.cancel')}
+              danger
               onConfirm={deleteAll}
             >
               <Button icon={<Trash2 size={14} />} variant="danger" disabled={deletingAll || busyThreadId !== null}>{t('settings.archives.deleteAll')}</Button>
-            </Popconfirm>
+            </ConfirmDialogTrigger>
           ) : null}
         </div>
         <div className="settings-archives-list">
@@ -76,9 +75,9 @@ export function ArchivedThreadsSettings({
                   <small>{t('settings.archives.messagesUpdated', { count: thread.messageCount, date: formatSettingsDate(thread.updatedAt, locale) })}</small>
                 </span>
                 <Button icon={<Undo2 size={14} />} disabled={busy} onClick={() => void runAction(thread.id, () => onRestore(thread.id))}>{t('settings.archives.restore')}</Button>
-                <Popconfirm title={t('settings.archives.deleteTitle', { title: thread.title || t('settings.archives.untitled') })} description={t('settings.archives.irreversible')} placement="topRight" okText={t('settings.archives.deletePermanently')} cancelText={t('common.cancel')} okButtonProps={{ danger: true }} onConfirm={() => runAction(thread.id, () => onDelete(thread.id))}>
+                <ConfirmDialogTrigger title={t('settings.archives.deleteTitle', { title: thread.title || t('settings.archives.untitled') })} description={t('settings.archives.irreversible')} confirmLabel={t('settings.archives.deletePermanently')} cancelLabel={t('common.cancel')} danger onConfirm={() => runAction(thread.id, () => onDelete(thread.id))}>
                   <IconButton label={t('settings.archives.deleteLabel', { title: thread.title || t('settings.archives.untitled') })} variant="danger" disabled={busy}><Trash2 size={14} /></IconButton>
-                </Popconfirm>
+                </ConfirmDialogTrigger>
               </div>
             );
           }) : <EmptyState title={t('settings.archives.empty')} />}

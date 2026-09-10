@@ -1,3 +1,4 @@
+import { useConfirm } from '@setsuna-desktop/renderer-ui';
 import type {
   RendererTranslate,
 } from '@setsuna-desktop/feature-core/renderer';
@@ -75,6 +76,7 @@ export function MemoryPreviewSettingsView({
   ui,
 }: MemorySettingsViewProps & Readonly<{ onBack(): void }>) {
   const { Button, EmptyState, Section } = ui;
+  const confirm = useConfirm();
   const [preview, setPreview] = useState<RuntimeMemoryPreview | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -109,7 +111,12 @@ export function MemoryPreviewSettingsView({
   }
 
   async function clear() {
-    if (!window.confirm(translate('feature.memory.settings.resetConfirm'))) return;
+    if (!await confirm({
+      title: translate('feature.memory.settings.reset'),
+      description: translate('feature.memory.settings.resetConfirm'),
+      confirmLabel: translate('feature.memory.settings.reset'),
+      danger: true,
+    })) return;
     setPreviewBusy(true);
     setPreviewError(null);
     try {

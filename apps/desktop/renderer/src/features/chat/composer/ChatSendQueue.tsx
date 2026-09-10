@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import {
   normalizeRuntimeQueuedTurnInputKind,
   type RuntimeQueuedTurnInput,
@@ -99,7 +100,7 @@ export const ChatSendQueue = memo(function ChatSendQueue({
                 ) : null}
               </div>
               <div className="chat-send-queue__actions">
-                <button
+                <Button variant="ghost"
                   className="chat-send-queue__send-now"
                   type="button"
                   disabled={actionsDisabled || sendNowWaitsForCurrent}
@@ -111,8 +112,8 @@ export const ChatSendQueue = memo(function ChatSendQueue({
                   <span>{pendingAction?.type === 'send' && itemPending
                     ? t('chat.queue.sending')
                     : t('chat.queue.sendNow')}</span>
-                </button>
-                <button
+                </Button>
+                <Button variant="ghost"
                   className="chat-send-queue__icon-action"
                   type="button"
                   disabled={actionsDisabled || editDisabled}
@@ -121,8 +122,8 @@ export const ChatSendQueue = memo(function ChatSendQueue({
                   onClick={() => void runItemAction(item.id, 'edit', () => onEdit(item))}
                 >
                   <EditIcon size={13} aria-hidden="true" />
-                </button>
-                <button
+                </Button>
+                <Button variant="danger"
                   className="chat-send-queue__icon-action is-danger"
                   type="button"
                   disabled={actionsDisabled}
@@ -133,7 +134,7 @@ export const ChatSendQueue = memo(function ChatSendQueue({
                   onClick={() => void runItemAction(item.id, 'delete', () => onDelete(item.id))}
                 >
                   <Trash2 size={13} aria-hidden="true" />
-                </button>
+                </Button>
               </div>
             </li>
           );

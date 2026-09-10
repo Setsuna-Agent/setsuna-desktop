@@ -1,3 +1,4 @@
+import { TextField, TextArea } from '@setsuna-desktop/renderer-ui';
 import type {
   RuntimeStructuredInputField as RuntimeStructuredInputFieldSchema,
   RuntimeStructuredInputValue,
@@ -46,7 +47,7 @@ export function RuntimeStructuredInputField({
           onChange={onChange}
         />
       ) : field.type === 'number' || field.type === 'integer' ? (
-        <input
+        <TextField
           id={fieldId}
           name={name}
           type="number"
@@ -101,7 +102,7 @@ export function RuntimeStructuredInputField({
           {choices.map((choice) => <option key={choice.const} value={choice.const}>{choice.title}</option>)}
         </SelectField>
       ) : field.multiline ? (
-        <textarea
+        <TextArea
           id={fieldId}
           name={name}
           required={required}
@@ -112,7 +113,7 @@ export function RuntimeStructuredInputField({
           onChange={(event) => onChange(event.currentTarget.value)}
         />
       ) : (
-        <input
+        <TextField
           id={fieldId}
           name={name}
           type={inputType(field.format)}

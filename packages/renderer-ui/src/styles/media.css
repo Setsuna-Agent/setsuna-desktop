@@ -1,0 +1,113 @@
+.sd-image {
+  display: inline-flex;
+  max-width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: var(--app-radius-lg);
+  overflow: hidden;
+  line-height: 0;
+  cursor: zoom-in;
+}
+
+.sd-image__content {
+  display: block;
+  max-width: 100%;
+  object-fit: cover;
+}
+
+.sd-image-viewer__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--app-z-image);
+  background: rgb(0 0 0 / 85%);
+  backdrop-filter: blur(6px);
+}
+
+.sd-image-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--app-z-image) + 1);
+  display: flex;
+  flex-direction: column;
+  color: #fff;
+  outline: none;
+}
+
+.sd-image-viewer__title {
+  margin: 0;
+  padding: 16px 64px 16px 24px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.sd-image-viewer__close {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+}
+
+.sd-image-viewer__canvas {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+}
+
+.sd-image-viewer__canvas > img {
+  max-width: 90vw;
+  max-height: 75vh;
+  object-fit: contain;
+  transform-origin: center;
+}
+
+.sd-image-viewer__toolbar {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+  padding: 12px;
+}
+
+.sd-image-viewer .sd-icon-button {
+  color: #fff;
+}
+
+.sd-image-viewer .sd-icon-button:hover:not(:disabled) {
+  background: rgb(255 255 255 / 15%);
+  color: #fff;
+}
+
+.sd-message {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.sd-message--end {
+  justify-content: flex-end;
+}
+
+.sd-message__body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.sd-message__content {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sd-message__content--soft {
+  padding: 10px 14px;
+  border-radius: var(--app-radius-xl);
+  background: var(--chat-message-user-bg);
+}
+
+.sd-message__footer {
+  margin-top: 8px;
+}

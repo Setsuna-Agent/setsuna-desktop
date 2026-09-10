@@ -1,3 +1,5 @@
+import { TextField, Button as UiButton, useConfirm } from '@setsuna-desktop/renderer-ui';
+
 import { Keyboard, RotateCcw, Search, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
@@ -40,6 +42,7 @@ const captureErrorKeys: Record<KeyboardShortcutCaptureError, MessageKey> = {
 
 export function KeyboardShortcutsSettings() {
   const { t } = useI18n();
+  const confirm = useConfirm();
   const {
     bindingsFor,
     commandForBinding,
@@ -84,7 +87,7 @@ export function KeyboardShortcutsSettings() {
     if (recordingTarget?.commandId === commandId && recordingTarget.index === index) stopRecording();
   }, [bindingsFor, recordingTarget, setBindings, stopRecording]);
 
-  const recordShortcut = useCallback((event: KeyboardEvent, target: RecordingTarget) => {
+  const recordShortcut = useCallback(async (event: KeyboardEvent, target: RecordingTarget) => {
     event.preventDefault();
     event.stopPropagation();
     if (event.key === 'Escape') {
@@ -112,10 +115,16 @@ export function KeyboardShortcutsSettings() {
     }
     const conflictingCommandId = commandForBinding(result.binding, target.commandId);
     if (conflictingCommandId) {
-      const confirmed = window.confirm(t('shortcuts.capture.conflict', {
-        command: t(keyboardShortcutCommand(conflictingCommandId).labelKey),
-        shortcut: formatKeyboardShortcutBinding(result.binding, platform),
-      }));
+      // Release keyboard capture before the modal takes focus so Tab/Escape remain usable.
+      stopRecording();
+      const confirmed = await confirm({
+        title: t('shortcuts.capture.replace'),
+        description: t('shortcuts.capture.conflict', {
+          command: t(keyboardShortcutCommand(conflictingCommandId).labelKey),
+          shortcut: formatKeyboardShortcutBinding(result.binding, platform),
+        }),
+        confirmLabel: t('shortcuts.capture.replace'),
+      });
       if (!confirmed) return;
       setBindings(
         conflictingCommandId,
@@ -127,13 +136,13 @@ export function KeyboardShortcutsSettings() {
     else currentBindings[target.index] = result.binding;
     setBindings(target.commandId, currentBindings);
     stopRecording();
-  }, [bindingsFor, commandForBinding, platform, removeBinding, setBindings, stopRecording, t]);
+  }, [bindingsFor, commandForBinding, confirm, platform, removeBinding, setBindings, stopRecording, t]);
 
   useEffect(() => {
     if (!recordingTarget) return undefined;
     // Keep recording at the window level so a focus change cannot leave the UI
     // in recording mode while making keyboard input impossible to capture.
-    const handleKeyDown = (event: KeyboardEvent) => recordShortcut(event, recordingTarget);
+    const handleKeyDown = (event: KeyboardEvent) => { void recordShortcut(event, recordingTarget); };
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [recordShortcut, recordingTarget]);
@@ -143,7 +152,7 @@ export function KeyboardShortcutsSettings() {
       <div className="settings-shortcuts__toolbar">
         <label className="settings-shortcuts__search">
           <Search size={14} aria-hidden="true" />
-          <input
+          <TextField
             type="search"
             value={query}
             placeholder={t('shortcuts.search')}
@@ -155,8 +164,9 @@ export function KeyboardShortcutsSettings() {
         <Button
           className="settings-shortcuts__reset-all"
           icon={<RotateCcw size={13} />}
-          onClick={() => {
-            if (!window.confirm(t('shortcuts.resetAllConfirm'))) return;
+          onClick={async () => {
+            stopRecording();
+            if (!await confirm({ title: t('shortcuts.resetAllConfirm'), confirmLabel: t('shortcuts.resetAll') })) return;
             resetAll();
             stopRecording();
           }}
@@ -254,22 +264,22 @@ function KeyboardShortcutRow({
             }
             return (
               <span className="settings-shortcuts__binding" key={binding}>
-                <button
+                <UiButton variant="ghost"
                   className="settings-shortcuts__binding-key"
                   type="button"
                   onClick={() => onEdit(index)}
                   aria-label={t('shortcuts.edit', { shortcut: label })}
                 >
                   <kbd>{label}</kbd>
-                </button>
-                <button
+                </UiButton>
+                <UiButton variant="ghost"
                   className="settings-shortcuts__binding-remove"
                   type="button"
                   onClick={() => onRemove(index)}
                   aria-label={t('shortcuts.remove', { shortcut: label })}
                 >
                   <X size={12} />
-                </button>
+                </UiButton>
               </span>
             );
           })}
@@ -278,7 +288,7 @@ function KeyboardShortcutRow({
           {adding ? (
             <ShortcutRecorder mode="icon" />
           ) : (
-            <button
+            <UiButton variant="ghost"
               className="settings-shortcuts__add"
               type="button"
               aria-label={t('shortcuts.add')}
@@ -287,9 +297,9 @@ function KeyboardShortcutRow({
               onClick={onAdd}
             >
               <EditIcon size={13} />
-            </button>
+            </UiButton>
           )}
-          <button
+          <UiButton variant="ghost"
             className="settings-shortcuts__reset"
             type="button"
             aria-label={t('shortcuts.resetCommand')}
@@ -298,7 +308,7 @@ function KeyboardShortcutRow({
             onClick={onReset}
           >
             <RotateCcw size={13} />
-          </button>
+          </UiButton>
         </span>
       </span>
       {recordingIndex !== undefined ? (
@@ -315,7 +325,7 @@ function ShortcutRecorder({ mode }: {
 }) {
   const { t } = useI18n();
   return (
-    <button
+    <UiButton variant="ghost"
       autoFocus
       className={`settings-shortcuts__recorder settings-shortcuts__recorder--${mode}`}
       type="button"
@@ -323,6 +333,6 @@ function ShortcutRecorder({ mode }: {
       title={mode === 'icon' ? t('shortcuts.recording') : undefined}
     >
       {mode === 'icon' ? <Keyboard size={13} /> : t('shortcuts.recordingCompact')}
-    </button>
+    </UiButton>
   );
 }

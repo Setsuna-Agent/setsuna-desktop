@@ -1,3 +1,4 @@
+import { Button as UiButton } from '@setsuna-desktop/renderer-ui';
 import type {
   RuntimePluginFilePreview,
   RuntimePluginHook,
@@ -211,22 +212,22 @@ function PluginFilePreview({
         </span>
         {markdown ? (
           <span className="desktop-plugin-item-dialog__view-switch" role="group" aria-label={name}>
-            <button
+            <UiButton variant="ghost"
               aria-pressed={!source}
               className={!source ? 'is-active' : undefined}
               type="button"
               onClick={() => setSource(false)}
             >
               {translate('feature.pluginManagement.preview')}
-            </button>
-            <button
+            </UiButton>
+            <UiButton variant="ghost"
               aria-pressed={source}
               className={source ? 'is-active' : undefined}
               type="button"
               onClick={() => setSource(true)}
             >
               {translate('feature.pluginManagement.source')}
-            </button>
+            </UiButton>
           </span>
         ) : null}
       </header>

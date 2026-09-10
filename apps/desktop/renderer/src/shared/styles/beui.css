@@ -1,9 +1,4 @@
-/* Design foundation adapted from Beautiful UI by Shane Levine (MIT).
-   See THIRD_PARTY_NOTICES.md for the upstream license.
-
-   Tailwind is a utility layer only. Omitting Preflight keeps Ant Design and
-   Electron's existing element defaults in charge while the harness can use
-   Tailwind's layout primitives. */
+/* beUI utility bridge. Theme state and design tokens are owned by tokens.css. */
 @layer theme, base, components, utilities;
 @import 'tailwindcss/theme.css' layer(theme);
 @import 'tailwindcss/utilities.css' layer(utilities);
@@ -12,6 +7,22 @@
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
 @theme inline {
+  --color-background: var(--app-bg);
+  --color-foreground: var(--app-text);
+  --color-card: var(--app-surface);
+  --color-card-foreground: var(--app-text);
+  --color-popover: var(--app-surface);
+  --color-popover-foreground: var(--app-text);
+  --color-primary: var(--app-primary);
+  --color-primary-foreground: var(--app-primary-text);
+  --color-secondary: var(--app-surface-muted);
+  --color-secondary-foreground: var(--app-text-secondary);
+  --color-muted: var(--app-surface-muted);
+  --color-muted-foreground: var(--app-text-muted);
+  --color-border: var(--app-border);
+  --color-input: var(--app-border);
+  --color-ring: var(--app-primary);
+  --color-destructive: var(--app-danger);
   --color-page: var(--app-bg);
   --color-canvas: var(--app-window-bg);
   --color-surface: var(--app-surface);
@@ -41,19 +52,18 @@
   --shadow-overlay: var(--app-shadow-overlay);
   --shadow-inset-field: var(--app-shadow-inset-field);
 
-  --font-sans: Inter, var(--app-font-family);
-  --font-mono: 'JetBrains Mono', var(--app-code-font-family);
+  --font-sans: var(--app-font-family);
+  --font-mono: var(--app-code-font-family);
 
-  /* Beautiful UI's four-level geometry. The OS window radius remains a
-     separate platform token because Windows DWM clips it at roughly 8px. */
-  --radius-chip: 6px;
-  --radius-control: 8px;
-  --radius-card: 10px;
-  --radius-window: 14px;
+  /* Component geometry follows the host tokens; OS window clipping is separate. */
+  --radius-chip: var(--app-radius-xs);
+  --radius-control: var(--app-radius-control);
+  --radius-card: var(--app-radius-lg);
+  --radius-window: var(--app-window-radius);
 
-  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-out-strong: var(--app-ease-out);
   --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
-  --ease-link: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-link: var(--app-ease-out);
 }
 
 ::selection {

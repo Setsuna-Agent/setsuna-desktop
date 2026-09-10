@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import { LoadingText } from './LoadingText.js';
 
 type ChatTimelineDividerProps = {
@@ -14,9 +15,9 @@ export function ChatTimelineDivider({
   onClick,
 }: ChatTimelineDividerProps) {
   const labelNode = onClick ? (
-    <button className="chat-timeline-divider__action" type="button" onClick={onClick}>
+    <Button variant="ghost" className="chat-timeline-divider__action" type="button" onClick={onClick}>
       {label}
-    </button>
+    </Button>
   ) : loading ? (
     <LoadingText className="chat-timeline-divider__label">{label}</LoadingText>
   ) : (

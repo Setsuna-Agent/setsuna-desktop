@@ -1,12 +1,12 @@
+import { Button as UiButton, Button, Dropdown } from '@setsuna-desktop/renderer-ui';
 import type {
   ProviderConfigState,
   ProviderModelConfig,
   RuntimeConfigState,
 } from '@setsuna-desktop/contracts';
-import { Button, Dropdown } from 'antd';
+
 import {
   ArrowUp,
-  Check,
   Plus,
   Sparkles,
   Square,
@@ -105,7 +105,7 @@ export function ChatComposerFooter({
   return (
     <div className="chat-sender__footer">
       <div className="chat-sender__left-actions">
-        <button
+        <UiButton variant="ghost"
           className={`chat-sender-icon-button chat-sender-command-button ${commandControl.active ? 'is-active' : ''}`}
           type="button"
           disabled={commandControl.disabled}
@@ -115,7 +115,7 @@ export function ChatComposerFooter({
           onClick={commandControl.onOpen}
         >
           <Plus size={14} />
-        </button>
+        </UiButton>
         <ChatThinkingMenu
           disabled={thinkingControl.disabled}
           enabled={thinkingControl.enabled}
@@ -196,8 +196,8 @@ function ChatComposerPrimaryAction({
 
   if (primaryAction.queueReady) {
     return (
-      <button
-        className="chat-sender-attachment-submit"
+      <UiButton variant="primary"
+        className="chat-prompt__submit"
         type="button"
         aria-label={t('chat.composer.queue')}
         title={t('chat.composer.queue')}
@@ -205,36 +205,36 @@ function ChatComposerPrimaryAction({
         onClick={primaryAction.onSubmit}
       >
         <ArrowUp size={16} />
-      </button>
+      </UiButton>
     );
   }
 
   if (hasActiveTurn) {
     return (
       <ShortcutTooltip commandId="chat.cancelTurn" label={t('chat.composer.stop')}>
-        <button
-          className="chat-sender-stop"
+        <UiButton variant="primary"
+          className="chat-prompt__submit"
           type="button"
           aria-label={t('chat.composer.stop')}
           onClick={primaryAction.onCancelActiveTurn}
         >
           <Square size={11} />
-        </button>
+        </UiButton>
       </ShortcutTooltip>
     );
   }
 
   if (primaryAction.attachmentOnlyReady) {
     return (
-      <button
-        className="chat-sender-attachment-submit"
+      <UiButton variant="primary"
+        className="chat-prompt__submit"
         type="button"
         aria-label={t('chat.composer.send')}
         disabled={primaryAction.attachmentsBusy || primaryAction.submitting}
         onClick={primaryAction.onSubmit}
       >
         <ArrowUp size={16} />
-      </button>
+      </UiButton>
     );
   }
 
@@ -253,11 +253,11 @@ function ChatModeBadge({
   const { t } = useI18n();
 
   return (
-    <button className="chat-sender-plan-badge" type="button" disabled={disabled} aria-label={t('chat.composer.closeBadge', { label })} title={t('chat.composer.closeBadge', { label })} onClick={onClose}>
+    <UiButton variant="ghost" className="chat-sender-plan-badge" type="button" disabled={disabled} aria-label={t('chat.composer.closeBadge', { label })} title={t('chat.composer.closeBadge', { label })} onClick={onClose}>
       <span className="chat-sender-plan-badge__dot" aria-hidden="true" />
       <span className="chat-sender-plan-badge__label">{label}</span>
       <X className="chat-sender-plan-badge__close" size={11} aria-hidden="true" />
-    </button>
+    </UiButton>
   );
 }
 
@@ -288,26 +288,19 @@ function ChatThinkingMenu({
 
   const thinkingLabel = enabled ? (currentEffort ? formatThinkingEffort(currentEffort, t('chat.composer.thinking')) : t('chat.composer.thinking')) : '';
   const selectedThinkingKey = enabled && currentEffort ? currentEffort : 'off';
-  const renderThinkingMenuItem = (label: string, active: boolean) => (
-    <span className="chat-thinking-menu__item">
-      <span className="chat-thinking-menu__icon" />
-      <span>{label}</span>
-      <span className="chat-thinking-menu__check">{active ? <Check size={13} /> : null}</span>
-    </span>
-  );
   const items: NonNullable<ComponentProps<typeof Dropdown>['menu']>['items'] = [
     {
       key: 'off',
-      label: renderThinkingMenuItem(t('chat.composer.thinkingOff'), !enabled),
+      label: t('chat.composer.thinkingOff'),
     },
     ...thinkingConfig.efforts.map((effort) => ({
       key: effort,
-      label: renderThinkingMenuItem(formatThinkingEffort(effort, t('chat.composer.thinking')), enabled && currentEffort === effort),
+      label: formatThinkingEffort(effort, t('chat.composer.thinking')),
     })),
   ];
   const thinkingSwitch = (
     <Button
-      type="text"
+      variant="ghost"
       size="small"
       className="chat-thinking-switch"
       disabled={disabled}

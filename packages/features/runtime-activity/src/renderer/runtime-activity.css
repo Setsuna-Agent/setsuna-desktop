@@ -33,7 +33,7 @@
   gap: 6px;
   min-height: 30px;
   padding: 2px 4px 2px 6px;
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
 }
 
 .runtime-activity-conversation-service:hover {
@@ -71,7 +71,7 @@
   height: 22px;
   padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--app-radius-xs);
   color: var(--app-text-muted);
   background: transparent;
   cursor: pointer;
@@ -108,79 +108,9 @@
   }
 }
 
-.runtime-activity-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1200;
-  display: grid;
-  place-items: center;
-  padding: 32px;
-  background: color-mix(in srgb, var(--app-text) 16%, transparent);
-}
-
 .runtime-activity-dialog {
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
-  width: min(740px, calc(100vw - 48px));
   height: min(530px, calc(100vh - 64px));
   min-height: 360px;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--app-border) 72%, transparent);
-  border-radius: 12px;
-  outline: 0;
-  color: var(--app-text);
-  background: var(--app-surface);
-  box-shadow: var(--app-shadow-modal);
-}
-
-.runtime-activity-dialog__header {
-  display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) 28px;
-  align-items: center;
-  gap: 10px;
-  min-height: 65px;
-  padding: 12px 16px 10px;
-}
-
-.runtime-activity-dialog__heading-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--app-radius-md);
-  color: var(--app-text);
-  background: var(--app-accent-subtle);
-}
-
-.runtime-activity-dialog__heading {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.runtime-activity-dialog__heading strong {
-  overflow: hidden;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 19px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.runtime-activity-dialog__heading small {
-  overflow: hidden;
-  color: var(--app-text-muted);
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 16px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.runtime-activity-dialog__close {
-  align-self: start;
 }
 
 .runtime-activity-tabs {
@@ -238,7 +168,7 @@
   min-width: 19px;
   height: 18px;
   padding: 0 6px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-full);
   color: var(--app-text-muted);
   background: var(--app-surface-muted);
   font-size: 10px;
@@ -330,7 +260,7 @@
   width: 28px;
   height: 28px;
   border: 1px solid color-mix(in srgb, var(--app-border) 86%, transparent);
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
   color: var(--app-text-muted);
   background: var(--app-surface);
 }
@@ -460,13 +390,10 @@
 
 .runtime-activity-dialog__footer {
   display: flex;
-  min-height: 54px;
   align-items: center;
   justify-content: flex-end;
   gap: 16px;
-  padding: 9px 14px 9px 18px;
-  border-top: 1px solid var(--app-border);
-  background: var(--app-surface);
+  width: 100%;
 }
 
 .runtime-activity-dialog__status {
@@ -480,12 +407,8 @@
 }
 
 @media (max-width: 620px) {
-  .runtime-activity-backdrop {
-    padding: 20px;
-  }
 
   .runtime-activity-dialog {
-    width: calc(100vw - 24px);
     height: min(530px, calc(100vh - 32px));
   }
 
@@ -500,3 +423,5 @@
     display: none;
   }
 }
+
+.runtime-activity-dialog > .sd-dialog__body { display: flex; flex-direction: column; flex: 1; }

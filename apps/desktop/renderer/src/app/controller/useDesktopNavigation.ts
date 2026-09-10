@@ -12,7 +12,7 @@ import type { MainView } from '../types.js';
 type DesktopNavigationOptions = {
   activeProjectId: string | null;
   client: DesktopRuntimeClient;
-  confirmDiscardProjectFile: () => boolean;
+  confirmDiscardProjectFile: () => Promise<boolean>;
   currentThread: RuntimeThread | null;
   globalThreads: RuntimeThreadSummary[];
   reloadThreads: () => Promise<RuntimeThreadSummary[]>;
@@ -81,8 +81,8 @@ export function useDesktopNavigation({
     });
   }, []);
 
-  const startCurrentThread = useCallback(() => {
-    if (!confirmDiscardProjectFile()) return;
+  const startCurrentThread = useCallback(async () => {
+    if (!await confirmDiscardProjectFile()) return;
     navigationRequests.invalidate();
     setActiveView('chat');
     setThreadActionMenuId(null);
@@ -97,8 +97,8 @@ export function useDesktopNavigation({
     }
   }, [activeProjectId, confirmDiscardProjectFile, expandProject, navigationRequests, resetNewThreadWorkspacePanels, setActiveProjectId, setActiveView, setCurrentThread]);
 
-  const startGlobalThread = useCallback(() => {
-    if (!confirmDiscardProjectFile()) return;
+  const startGlobalThread = useCallback(async () => {
+    if (!await confirmDiscardProjectFile()) return;
     navigationRequests.invalidate();
     setActiveView('chat');
     setSessionsCollapsed(false);
@@ -111,8 +111,8 @@ export function useDesktopNavigation({
   }, [confirmDiscardProjectFile, navigationRequests, resetNewThreadWorkspacePanels, resetProjectWorkspaceState, setActiveProjectId, setActiveView, setCurrentThread]);
 
   const startProjectThread = useCallback(
-    (projectId: string) => {
-      if (!confirmDiscardProjectFile()) return;
+    async (projectId: string) => {
+      if (!await confirmDiscardProjectFile()) return;
       navigationRequests.invalidate();
       setActiveView('chat');
       setThreadActionMenuId(null);
@@ -128,7 +128,7 @@ export function useDesktopNavigation({
 
   const selectThread = useCallback(
     async (threadId: string) => {
-      if (!confirmDiscardProjectFile()) return;
+      if (!await confirmDiscardProjectFile()) return;
       const isLatest = navigationRequests.begin();
       setActiveView('chat');
       setThreadActionMenuId(null);
@@ -170,7 +170,7 @@ export function useDesktopNavigation({
 
   const archiveThread = useCallback(
     async (thread: RuntimeThreadSummary) => {
-      if (currentThread?.id === thread.id && !confirmDiscardProjectFile()) return;
+      if (currentThread?.id === thread.id && !await confirmDiscardProjectFile()) return;
       const isLatest = navigationRequests.begin();
       setThreadActionMenuId(null);
       await client.updateThread(thread.id, { archived: true });
@@ -202,7 +202,7 @@ export function useDesktopNavigation({
 
   const selectProject = useCallback(
     async (project: WorkspaceProject) => {
-      if (project.id !== currentProjectId && !confirmDiscardProjectFile()) return;
+      if (project.id !== currentProjectId && !await confirmDiscardProjectFile()) return;
       const isLatest = navigationRequests.begin();
       setActiveView('chat');
       if (project.id !== currentProjectId) resetProjectWorkspaceState();
@@ -218,7 +218,7 @@ export function useDesktopNavigation({
   );
 
   const enterChatMode = useCallback(async () => {
-    if (!confirmDiscardProjectFile()) return;
+    if (!await confirmDiscardProjectFile()) return;
     const isLatest = navigationRequests.begin();
     setActiveView('chat');
     setSessionsCollapsed(false);
@@ -284,7 +284,7 @@ export function useDesktopNavigation({
     const pathChanged = existingProject !== null && existingProject.path !== nextPath;
     const changesCurrentWorkspace = existingProject === null
       || (existingProject.id === currentProjectId && pathChanged);
-    if (changesCurrentWorkspace && !confirmDiscardProjectFile()) {
+    if (changesCurrentWorkspace && !await confirmDiscardProjectFile()) {
       return false;
     }
     const project = existingProject
@@ -306,7 +306,7 @@ export function useDesktopNavigation({
 
   const hideProjectFromNavigation = useCallback(
     async (project: WorkspaceProject, persist: () => Promise<void>) => {
-      if (!confirmDiscardProjectFile()) return false;
+      if (!await confirmDiscardProjectFile()) return false;
       await persist();
       const list = await client.listProjects();
       const nextThreads = await reloadThreads();

@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import type {
   RuntimeThread,
   WorkspaceProject,
@@ -60,15 +61,15 @@ export function ConversationOverviewPanel({
 
   if (compact) {
     return (
-      <button className="chat-conversation-overview-chip" type="button" aria-label={t('conversation.overview.expand')} onClick={onExpand}>
+      <Button variant="ghost" className="chat-conversation-overview-chip" type="button" aria-label={t('conversation.overview.expand')} onClick={onExpand}>
         <FileDiff size={13} />
-        <span>{hasFileChanges ? t('conversation.overview.changes') : t('conversation.overview.environment')}</span>
+        <span>{hasFileChanges ? t('conversation.overview.review') : t('conversation.overview.environment')}</span>
         {hasFileChanges ? (
           <ChangeCountText additions={changeStats.additions} deletions={changeStats.deletions} />
         ) : (
           <span className="chat-conversation-overview-chip__meta">{contextLabel}</span>
         )}
-      </button>
+      </Button>
     );
   }
 
@@ -76,12 +77,12 @@ export function ConversationOverviewPanel({
     <section className="chat-conversation-overview-panel" aria-label={t('conversation.overview.title')}>
       <div className="chat-conversation-overview-panel__header">
         <span>{t('conversation.overview.title')}</span>
-        <button type="button" aria-label={t('conversation.overview.collapse')} title={t('conversation.overview.collapse')} onClick={onCollapse}>
+        <Button variant="ghost" type="button" aria-label={t('conversation.overview.collapse')} title={t('conversation.overview.collapse')} onClick={onCollapse}>
           <ChevronUp aria-hidden="true" size={15} />
-        </button>
+        </Button>
       </div>
       <div className="chat-conversation-overview-panel__actions">
-        <button
+        <Button variant="ghost"
           type="button"
           className="chat-conversation-overview-panel__row"
           disabled={!onOpenReview}
@@ -90,13 +91,13 @@ export function ConversationOverviewPanel({
           <span className="chat-conversation-overview-panel__icon">
             <FileDiff size={14} />
           </span>
-          <span className="chat-conversation-overview-panel__label">{t('conversation.overview.changes')}</span>
+          <span className="chat-conversation-overview-panel__label">{t('conversation.overview.review')}</span>
           <span className="chat-conversation-overview-panel__meta" title={reviewFailed ? reviewError ?? undefined : undefined}>
             {hasFileChanges ? (
               <ChangeCountText additions={changeStats.additions} deletions={changeStats.deletions} />
             ) : reviewPending ? t('conversation.overview.loading') : reviewFailed ? t('conversation.overview.loadFailed') : t('conversation.overview.noChanges')}
           </span>
-        </button>
+        </Button>
         {reviewControls}
         <div className="chat-conversation-overview-panel__row chat-conversation-overview-panel__row--static">
           <span className="chat-conversation-overview-panel__icon">

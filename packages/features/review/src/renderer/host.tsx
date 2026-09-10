@@ -1,7 +1,7 @@
 import type { FileDiff, PostRenderPhase } from '@pierre/diffs';
 import type { DiffLineAnnotation } from '@pierre/diffs/react';
 import type { CheckboxProps, SettingsDialogProps, SettingsSelectFieldProps, SettingsToggleProps } from '@setsuna-desktop/renderer-contracts/settings';
-import type { DropdownProps } from 'antd';
+import type { DropdownProps } from '@setsuna-desktop/renderer-ui';
 import type { DesktopWorkspaceApp } from '@setsuna-desktop/feature-workspace-apps/contracts';
 import { createContext, useContext, type ComponentType, type ReactNode, type RefObject } from 'react';
 import type {

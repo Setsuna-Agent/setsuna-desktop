@@ -30,6 +30,7 @@
     "@setsuna-desktop/contracts": "workspace:*",
     "@setsuna-desktop/feature-core": "workspace:*",
     "@setsuna-desktop/renderer-contracts": "workspace:*",
+    "@setsuna-desktop/renderer-ui": "workspace:*",
     "lucide-react": "^0.468.0",
     "proxy-chain": "3.0.0",
     "react": "^18.3.1"

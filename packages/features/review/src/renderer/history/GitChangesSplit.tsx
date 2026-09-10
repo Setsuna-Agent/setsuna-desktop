@@ -1,3 +1,4 @@
+import { ResizeHandle } from '@setsuna-desktop/renderer-ui';
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useReviewRendererHost } from '../host.js';
 
@@ -41,7 +42,7 @@ export function GitChangesSplit({ navigation, children, detailOpen, editingMessa
       style={availableWidth ? { '--git-nav-width': width + 'px' } as CSSProperties : undefined}
     >
       {children}
-      <button
+      <ResizeHandle
         className={'desktop-review-file-tree__resize-handle git-changes-panel__resize-handle' + (resizing ? ' is-resizing' : '')}
         type="button"
         role="separator"

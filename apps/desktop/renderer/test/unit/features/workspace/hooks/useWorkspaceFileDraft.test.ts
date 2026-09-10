@@ -1,12 +1,46 @@
+// @vitest-environment happy-dom
+
 import {
   WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES,
   type WorkspaceFileRead,
 } from '@setsuna-desktop/contracts';
-import { describe, expect, it } from 'vitest';
+import { ConfirmationProvider } from '@setsuna-desktop/renderer-ui';
+import { act, cleanup, fireEvent, renderHook, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   canEditWorkspaceFile,
   reconcileWorkspaceFileDraftAfterSave,
+  useWorkspaceFileDraft,
 } from '../../../../../src/features/workspace/hooks/useWorkspaceFileDraft.js';
+
+afterEach(cleanup);
+
+it('retains an unsaved draft until confirmation and rejects a decision for a file that has changed', async () => {
+  const file: WorkspaceFileRead = {
+    projectId: 'project-1', path: 'notes.txt', content: 'original', size: 8,
+    revision: 'revision-1', preview: { kind: 'text' }, truncated: false,
+  };
+  const client = { readProjectFileForEdit: vi.fn(), saveProjectFile: vi.fn() };
+  const view = renderHook(({ currentFile }) => useWorkspaceFileDraft({
+    client, file: currentFile, onFilePrepared: vi.fn(), onFileSaved: vi.fn(),
+  }), { initialProps: { currentFile: file }, wrapper: ConfirmationProvider });
+  await act(async () => { await view.result.current.startEditing(); });
+  act(() => view.result.current.updateContent('unsaved edit'));
+  let decision!: Promise<boolean>;
+  act(() => { decision = view.result.current.confirmDiscardChanges(); });
+  expect(view.result.current.dirty).toBe(true);
+  fireEvent.click(await screen.findByRole('button', { name: '取消' }));
+  await act(async () => { expect(await decision).toBe(false); });
+  expect(view.result.current.content).toBe('unsaved edit');
+  expect(view.result.current.dirty).toBe(true);
+
+  act(() => { decision = view.result.current.confirmDiscardChanges(); });
+  view.rerender({ currentFile: { ...file, path: 'another.txt' } });
+  fireEvent.click(await screen.findByRole('button', { name: '确认' }));
+  await act(async () => { expect(await decision).toBe(false); });
+  expect(view.result.current.content).toBe('original');
+  expect(client.saveProjectFile).not.toHaveBeenCalled();
+});
 
 describe('canEditWorkspaceFile', () => {
   const textFile: WorkspaceFileRead = {

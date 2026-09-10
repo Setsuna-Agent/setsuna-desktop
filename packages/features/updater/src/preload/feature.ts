@@ -24,7 +24,6 @@ export const updaterPreloadFeature = definePreloadFeature<UpdaterPreloadBridgeCo
         ipcRenderer.invoke(UPDATER_IPC_CHANNELS.removeDownloadSource, sourceId)
       ),
       quitAndInstall: () => ipcRenderer.invoke(UPDATER_IPC_CHANNELS.installReady),
-      promptReadyUpdate: () => ipcRenderer.invoke(UPDATER_IPC_CHANNELS.promptReady),
       onStateChange(callback) {
         const listener = (
           _event: IpcRendererEvent,

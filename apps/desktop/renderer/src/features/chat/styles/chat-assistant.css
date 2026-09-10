@@ -87,24 +87,44 @@
 }
 
 .chat-starter__suggestions {
+  display: flex;
+  flex-direction: column;
   order: 4;
   margin-top: 16px;
+  /* Align with the prompt's text, including its 1px outer border. */
+  padding-inline: calc(var(--chat-prompt-inline-padding) + 1px);
 }
 
-/* Tailwind Preflight is intentionally not enabled app-wide, so native buttons
-   must be reset at this component boundary to match the upstream harness. */
-.chat-starter__suggestion {
-  appearance: none;
+.chat-starter__suggestion.sd-button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-width: 0;
+  min-height: 30px;
+  padding: 5px 0;
   border: 0;
+  border-radius: var(--app-radius-sm);
   color: var(--app-text-subtle);
   background: transparent;
-  box-shadow: none;
+  text-align: left;
   cursor: pointer;
 }
 
-.chat-starter__suggestion:hover:not(:disabled) {
-  color: var(--app-text);
-  background: var(--desktop-agent-control-hover-bg);
+.chat-starter__suggestion-icon {
+  flex-shrink: 0;
+}
+
+.chat-starter__suggestion-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-starter__suggestion.sd-button:is(:hover, :active):not(:disabled) {
+  color: var(--app-text-secondary);
+  background: transparent;
 }
 
 .chat-starter__suggestion:disabled {
@@ -552,7 +572,7 @@ button.chat-plugin-use:focus-visible {
 .chat-assistant-loading__dots span {
   width: 4px;
   height: 4px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-full);
   background: currentColor;
   opacity: 0.42;
   animation: chat-assistant-loading-dot 1.12s ease-in-out infinite;

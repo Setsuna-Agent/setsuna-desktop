@@ -163,7 +163,8 @@
   line-height: 0;
   opacity: 0;
   pointer-events: none;
-  transform: translateY(-50%);
+  /* Keep centering independent of transforms used by tab animations. */
+  translate: 0 -50%;
   transition: background-color 120ms ease, opacity 120ms ease;
 }
 
@@ -196,7 +197,7 @@
   left: 5.25px;
   width: 7.5px;
   height: 1px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-full);
   background: currentColor;
   content: "";
   transform-origin: center;

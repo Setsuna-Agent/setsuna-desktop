@@ -1,3 +1,5 @@
+import { useConfirm } from '@setsuna-desktop/renderer-ui';
+import { Button } from '@setsuna-desktop/renderer-ui';
 import { Minus, PanelLeft, Plus, X } from 'lucide-react';
 import {
   useCallback,
@@ -207,6 +209,7 @@ function TitlebarNavigation({
 }
 
 function WindowTopbarMenu({ actions }: { actions: WindowMenuActions }) {
+  const confirm = useConfirm();
   const { t } = useI18n();
   const [openMenu, setOpenMenu] = useState<WindowMenuKey | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -222,8 +225,10 @@ function WindowTopbarMenu({ actions }: { actions: WindowMenuActions }) {
     executeDocumentEditCommand(document, target, command);
   }, []);
   const menus = useMemo(
-    () => windowMenuDefinitions(actions, t, executeEditCommand),
-    [actions, executeEditCommand, t],
+    () => windowMenuDefinitions(actions, t, executeEditCommand, () => {
+      void confirm({ title: t('shell.menu.about'), description: 'Setsuna Desktop', acknowledgement: true });
+    }),
+    [actions, confirm, executeEditCommand, t],
   );
   const windowMenuLabels: Array<{ key: WindowMenuKey; label: string }> = [
     { key: 'file', label: t('shell.menu.file') },
@@ -259,7 +264,7 @@ function WindowTopbarMenu({ actions }: { actions: WindowMenuActions }) {
     <nav className="app-topbar__menu" aria-label={t('shell.window.menu')} ref={rootRef}>
       {windowMenuLabels.map((item) => (
         <span className="app-topbar__menu-group" key={item.key}>
-          <button
+          <Button variant="ghost"
             aria-expanded={openMenu === item.key}
             aria-haspopup="menu"
             data-window-menu-trigger={item.key}
@@ -277,7 +282,7 @@ function WindowTopbarMenu({ actions }: { actions: WindowMenuActions }) {
             onClick={() => setOpenMenu((current) => (current === item.key ? null : item.key))}
           >
             {item.label}
-          </button>
+          </Button>
           {openMenu === item.key ? (
             <span
               className="app-topbar__menu-popover"
@@ -300,7 +305,7 @@ function WindowTopbarMenu({ actions }: { actions: WindowMenuActions }) {
               }}
             >
               {menus[item.key].map((menuItem) => (
-                <button
+                <Button variant="ghost"
                   disabled={menuItem.disabled}
                   key={menuItem.key}
                   role="menuitem"
@@ -313,7 +318,7 @@ function WindowTopbarMenu({ actions }: { actions: WindowMenuActions }) {
                   }}
                 >
                   {menuItem.label}
-                </button>
+                </Button>
               ))}
             </span>
           ) : null}
@@ -327,6 +332,7 @@ function windowMenuDefinitions(
   actions: WindowMenuActions,
   t: Translate,
   executeEditCommand: (command: string) => void,
+  showAbout: () => void,
 ): Record<WindowMenuKey, WindowMenuItem[]> {
   return {
     file: [
@@ -344,9 +350,7 @@ function windowMenuDefinitions(
       menuItem('capabilities', t('shell.menu.capabilities'), actions.onOpenCapabilities),
     ],
     help: [
-      menuItem('about', t('shell.menu.about'), () => {
-        window.alert('Setsuna Desktop');
-      }),
+      menuItem('about', t('shell.menu.about'), showAbout),
     ],
   };
 }
@@ -375,15 +379,15 @@ function WindowControls() {
 
   return (
     <div className="app-window-controls" aria-label={t('shell.window.controls')}>
-      <button type="button" aria-label={t('shell.window.minimize')} title={t('shell.window.minimize')} onClick={() => void controls?.minimize()}>
+      <Button variant="ghost" type="button" aria-label={t('shell.window.minimize')} title={t('shell.window.minimize')} onClick={() => void controls?.minimize()}>
         <Minus size={14} />
-      </button>
-      <button type="button" aria-label={t('shell.window.maximize')} title={t('shell.window.maximize')} onClick={() => void controls?.toggleMaximize()}>
+      </Button>
+      <Button variant="ghost" type="button" aria-label={t('shell.window.maximize')} title={t('shell.window.maximize')} onClick={() => void controls?.toggleMaximize()}>
         <WindowMaximizeIcon />
-      </button>
-      <button className="app-window-controls__close" type="button" aria-label={t('shell.window.close')} title={t('shell.window.close')} onClick={() => void controls?.close()}>
+      </Button>
+      <Button variant="ghost" className="app-window-controls__close" type="button" aria-label={t('shell.window.close')} title={t('shell.window.close')} onClick={() => void controls?.close()}>
         <X size={14} />
-      </button>
+      </Button>
     </div>
   );
 }

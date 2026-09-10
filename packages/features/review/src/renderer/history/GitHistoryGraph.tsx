@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import { ChevronDown, GitBranch, GitCommitHorizontal, Tag } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { DesktopGitCommit, DesktopGitRef } from '../../contracts/index.js';
@@ -54,12 +55,12 @@ export const GitHistoryGraph = memo(function GitHistoryGraph({
 
   return (
     <section className={'git-history-graph' + (expanded ? '' : ' is-collapsed')}>
-      <button className="git-history-section-heading" type="button" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
+      <Button variant="ghost" className="git-history-section-heading" type="button" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
         <GitCommitHorizontal size={14} />
         <span className="git-history-graph__heading">{t('feature.review.history.graph')}</span>
         <span className="git-changes-count">{commits.length}{hasMore ? '+' : ''}</span>
         <ChevronDown size={13} className={expanded ? '' : 'is-collapsed'} />
-      </button>
+      </Button>
       {expanded ? (
         <GitHistoryScrollArea className="git-history-graph__scroll" scrollRef={scrollRef} onScroll={(event) => setViewport({ top: event.currentTarget.scrollTop, height: event.currentTarget.clientHeight })}>
           <div className="git-history-graph__rows" role="list" style={{ height: commits.length * GIT_GRAPH_ROW_HEIGHT }}>
@@ -68,7 +69,7 @@ export const GitHistoryGraph = memo(function GitHistoryGraph({
               return (
                 <GitHistoryCommitMenu key={commit.oid} workspaceRoot={workspaceRoot} commit={commit} onOpenChanges={onSelect}>
                   <div className={'git-history-row' + (selectedOid === commit.oid ? ' is-selected' : '')} role="listitem" style={{ top: index * GIT_GRAPH_ROW_HEIGHT, height: GIT_GRAPH_ROW_HEIGHT }}>
-                    <button
+                    <Button variant="ghost"
                       className="git-history-row__commit"
                       type="button"
                       aria-pressed={selectedOid === commit.oid}
@@ -86,13 +87,13 @@ export const GitHistoryGraph = memo(function GitHistoryGraph({
                       <GraphGlyph row={rows[index]} head={head === commit.oid} merge={commit.parents.length > 1} />
                       <span className={'git-history-row__subject' + (head === commit.oid ? ' is-head' : '')}>{commit.subject || commit.oid.slice(0, 8)}</span>
                       <span className="git-history-row__author">{commit.author}</span>
-                    </button>
+                    </Button>
                     <span className="git-history-row__refs">
                       {(refsByOid.get(commit.oid) ?? []).map((ref) => (
-                        <button className={'git-history-ref is-' + ref.kind} type="button" key={ref.name} title={ref.label} onClick={() => onSelectRef(ref)}>
+                        <Button variant="ghost" className={'git-history-ref is-' + ref.kind} type="button" key={ref.name} title={ref.label} onClick={() => onSelectRef(ref)}>
                           {ref.kind === 'tag' ? <Tag size={10} /> : <GitBranch size={10} />}
                           <span>{ref.label}</span>
-                        </button>
+                        </Button>
                       ))}
                     </span>
                   </div>
@@ -100,9 +101,9 @@ export const GitHistoryGraph = memo(function GitHistoryGraph({
               );
             })}
           </div>
-          {error ? <div className="git-history-status" role="alert">{error}<button type="button" onClick={onRetry}>{t('feature.review.history.retry')}</button></div> : null}
+          {error ? <div className="git-history-status" role="alert">{error}<Button variant="ghost" type="button" onClick={onRetry}>{t('feature.review.history.retry')}</Button></div> : null}
           {!commits.length && !error ? <p className="git-history-status">{t(loading ? 'feature.review.history.loading' : 'feature.review.history.emptyHistory')}</p> : null}
-          {hasMore ? <button className="git-history-more" type="button" disabled={loading} onClick={onLoadMore}>{t(loading ? 'feature.review.history.loading' : 'feature.review.history.more')}</button> : null}
+          {hasMore ? <Button variant="ghost" className="git-history-more" type="button" disabled={loading} onClick={onLoadMore}>{t(loading ? 'feature.review.history.loading' : 'feature.review.history.more')}</Button> : null}
         </GitHistoryScrollArea>
       ) : null}
     </section>

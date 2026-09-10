@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import { Check, Copy } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { CodeFileView } from '../../../shared/code/PierreCode.js';
@@ -111,7 +112,7 @@ function CodeCopyButton({ code }: { code: string }) {
   };
 
   return (
-    <button
+    <Button variant="ghost"
       className={copied ? 'chat-code-highlighter__copy is-copied' : 'chat-code-highlighter__copy'}
       type="button"
       aria-label={copied ? t('chat.markdown.codeCopied') : t('chat.markdown.copyCode')}
@@ -123,7 +124,7 @@ function CodeCopyButton({ code }: { code: string }) {
       <span className="chat-code-highlighter__copy-label">
         {copied ? t('chat.markdown.copied') : t('chat.markdown.copy')}
       </span>
-    </button>
+    </Button>
   );
 }
 

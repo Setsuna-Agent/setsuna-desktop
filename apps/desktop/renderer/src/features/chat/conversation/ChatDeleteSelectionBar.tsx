@@ -1,5 +1,5 @@
+import { Button, Checkbox } from '@setsuna-desktop/renderer-ui';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
-import { Checkbox } from '../../../shared/ui/primitives.js';
 
 export function DeleteSelectionBar({
   allChecked,
@@ -37,12 +37,12 @@ export function DeleteSelectionBar({
           <span>{t('chat.delete.selectAll')}</span>
         </Checkbox>
         <span className="chat-delete-bar__count">{t('chat.delete.selected', { count: selectedCount })}</span>
-        <button type="button" className="chat-delete-bar__cancel" disabled={loading} onClick={onCancel}>
+        <Button type="button" disabled={loading} onClick={onCancel}>
           {t('common.cancel')}
-        </button>
-        <button type="button" className="chat-delete-bar__confirm" disabled={disabled} onClick={onConfirm}>
+        </Button>
+        <Button variant="danger" type="button" disabled={disabled} loading={loading} onClick={onConfirm}>
           {loading ? t('chat.delete.deleting') : t('common.delete')}
-        </button>
+        </Button>
       </div>
     </div>
   );

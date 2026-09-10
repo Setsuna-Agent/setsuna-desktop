@@ -4,6 +4,7 @@ import {
   type WorkspaceFileRead,
 } from '@setsuna-desktop/contracts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useConfirm } from '@setsuna-desktop/renderer-ui';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 
 type WorkspaceFileDraftOptions = {
@@ -29,6 +30,7 @@ export function useWorkspaceFileDraft({
   onFileSaved,
 }: WorkspaceFileDraftOptions) {
   const { t } = useI18n();
+  const confirm = useConfirm();
   const [session, setSession] = useState<WorkspaceFileDraftSession | null>(null);
   const [prepareError, setPrepareError] = useState<string | null>(null);
   const [preparingFileKey, setPreparingFileKey] = useState<string | null>(null);
@@ -103,7 +105,7 @@ export function useWorkspaceFileDraft({
     setSession((current) => current ? { ...current, content, error: null } : current);
   }, []);
 
-  const confirmDiscardChanges = useCallback((): boolean => {
+  const confirmDiscardChanges = useCallback(async (): Promise<boolean> => {
     if (!dirty) {
       editRequestRef.current = null;
       setPrepareError(null);
@@ -114,17 +116,18 @@ export function useWorkspaceFileDraft({
       }
       return true;
     }
-    if (!window.confirm(t('workspace.files.unsavedConfirm'))) return false;
+    if (!await confirm({ title: t('workspace.files.unsavedConfirm'), danger: true })) return false;
+    if (currentFileKeyRef.current !== fileKey) return false;
     editRequestRef.current = null;
     saveRequestRef.current = null;
     setPrepareError(null);
     setPreparingFileKey(null);
     setSession(null);
     return true;
-  }, [dirty, editing, t]);
+  }, [confirm, dirty, editing, fileKey, t]);
 
   const cancelEditing = useCallback(() => {
-    confirmDiscardChanges();
+    void confirmDiscardChanges();
   }, [confirmDiscardChanges]);
 
   const save = useCallback(async (): Promise<boolean> => {

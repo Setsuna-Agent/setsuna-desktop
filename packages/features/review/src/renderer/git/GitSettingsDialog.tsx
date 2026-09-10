@@ -1,3 +1,5 @@
+import { TextArea, Button } from '@setsuna-desktop/renderer-ui';
+
 import { useId } from 'react';
 import { GitMerge, Settings, Sparkles } from 'lucide-react';
 import { DEFAULT_COMMIT_MESSAGE_PROMPT, DEFAULT_CONFLICT_RESOLUTION_PROMPT, MAX_COMMIT_MESSAGE_PROMPT_CHARS } from '../../contracts/index.js';
@@ -16,10 +18,10 @@ export function GitSettingsDialog({ onClose }: { onClose: () => void }) {
       subtitle={t('feature.review.git.settingsDescription')} closeLabel={t('common.cancel')} onClose={close}
       footer={(
         <div className="git-settings__actions">
-          <button type="button" className="sd-button" disabled={pending === 'saving'} onClick={close}>{t('common.cancel')}</button>
-          <button type="button" className="sd-button sd-button--primary" disabled={disabled || !draft.commitMessagePrompt.trim() || !draft.conflictResolutionPrompt.trim() || error === 'conflict'} onClick={() => { void save().then((saved) => { if (saved) onClose(); }); }}>
+          <Button variant="ghost" type="button" disabled={pending === 'saving'} onClick={close}>{t('common.cancel')}</Button>
+          <Button variant="primary" type="button" disabled={disabled || !draft.commitMessagePrompt.trim() || !draft.conflictResolutionPrompt.trim() || error === 'conflict'} onClick={() => { void save().then((saved) => { if (saved) onClose(); }); }}>
             {t(pending === 'saving' ? 'feature.review.git.promptSaving' : 'feature.review.git.promptSave')}
-          </button>
+          </Button>
         </div>
       )}
     >
@@ -59,7 +61,7 @@ export function GitSettingsDialog({ onClose }: { onClose: () => void }) {
         {error ? (
           <div className="git-settings__error" role="alert">
             <span>{t(error === 'conflict' ? 'feature.review.git.settingsConflict' : error === 'load' ? 'feature.review.git.settingsLoadFailed' : 'feature.review.git.settingsSaveFailed')}</span>
-            {error !== 'save' ? <button type="button" className="sd-button" disabled={busy} onClick={() => { void load(); }}>{t('feature.review.git.promptReload')}</button> : null}
+            {error !== 'save' ? <Button variant="ghost" type="button" disabled={busy} onClick={() => { void load(); }}>{t('feature.review.git.promptReload')}</Button> : null}
           </div>
         ) : null}
       </div>
@@ -76,9 +78,9 @@ function PromptField({ label, description, value, defaultValue, disabled, onChan
     <div className="git-settings__prompt">
       <div className="git-settings__prompt-heading">
         <label htmlFor={id}>{label}</label>
-        <button type="button" className="sd-button sd-button--ghost" disabled={disabled || value === defaultValue} onClick={() => onChange(defaultValue)}>{t('feature.review.git.promptReset')}</button>
+        <Button variant="ghost" type="button" disabled={disabled || value === defaultValue} onClick={() => onChange(defaultValue)}>{t('feature.review.git.promptReset')}</Button>
       </div>
-      <textarea id={id} aria-describedby={`${id}-description`} className="sd-textarea git-settings__input" rows={5}
+      <TextArea id={id} aria-describedby={`${id}-description`} className="git-settings__input" rows={5}
         maxLength={MAX_COMMIT_MESSAGE_PROMPT_CHARS} disabled={disabled} value={value} onChange={(event) => onChange(event.currentTarget.value)} />
       <small id={`${id}-description`}>{description}</small>
     </div>

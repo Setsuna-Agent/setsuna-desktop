@@ -2,23 +2,6 @@
   z-index: 130;
 }
 
-.desktop-plugin-item-dialog.desktop-agent-modal {
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 0;
-  width: min(760px, 100%);
-  max-height: min(760px, calc(var(--app-scaled-viewport-height, 100dvh) - 48px));
-  padding: 0;
-  overflow: hidden;
-}
-
-.desktop-plugin-item-dialog.desktop-agent-modal > .desktop-plugin-item-dialog__header {
-  display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) auto;
-  gap: 10px;
-  padding: 13px 14px;
-  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 76%, transparent);
-}
-
 .desktop-plugin-item-dialog__icon {
   display: inline-flex;
   align-items: center;
@@ -60,7 +43,6 @@
   align-content: start;
   gap: 12px;
   min-height: 0;
-  padding: 14px;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -161,7 +143,7 @@
   gap: 1px;
   padding: 2px;
   border: 1px solid color-mix(in srgb, var(--app-border) 76%, transparent);
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
   background: color-mix(in srgb, var(--app-bg) 88%, var(--app-text) 2%);
 }
 
@@ -169,7 +151,7 @@
   min-height: 23px;
   padding: 0 8px;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--app-radius-xs);
   color: var(--app-text-muted);
   background: transparent;
   font: inherit;
@@ -185,7 +167,7 @@
 .desktop-plugin-item-dialog__view-switch button.is-active {
   color: var(--app-text);
   background: var(--app-surface);
-  box-shadow: 0 1px 3px color-mix(in srgb, #000 13%, transparent);
+  box-shadow: var(--app-shadow-card);
 }
 
 .desktop-plugin-item-dialog__view-switch button:focus-visible {
@@ -217,7 +199,6 @@
   grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   min-width: 0;
-  padding: 10px;
 }
 
 .desktop-plugin-item-dialog__file > pre:focus-visible {
@@ -263,11 +244,6 @@
   object-fit: contain;
 }
 
-.desktop-plugin-item-dialog > footer {
-  padding: 11px 14px;
-  border-top: 1px solid color-mix(in srgb, var(--app-border) 76%, transparent);
-}
-
 .desktop-plugin-item-dialog .is-spinning {
   animation: desktop-capabilities-spin 0.85s linear infinite;
 }
@@ -289,7 +265,7 @@
 .desktop-plugin-ui-preview-dialog__frame {
   width: min(100%, 680px);
   margin-inline: auto;
-  border-radius: 16px;
+  border-radius: var(--app-radius-lg);
   clip-path: inset(0 round 16px);
 }
 
@@ -752,11 +728,11 @@
   background: var(--app-surface);
 }
 
-.desktop-capabilities-mcp-tool > .sd-checkbox__control {
+.desktop-capabilities-mcp-tool > .sd-checkbox__box {
   margin: 2px 0 0;
 }
 
-.desktop-capabilities-mcp-tool > span {
+.desktop-capabilities-mcp-tool > span:not(.sd-checkbox__box) {
   display: grid;
   gap: 1px;
   min-width: 0;

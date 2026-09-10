@@ -22,9 +22,9 @@ const composerHarness = vi.hoisted(() => ({
   queuedEdit: {} as Record<string, unknown>,
 }));
 
-vi.mock('@ant-design/x', async () => {
+vi.mock('../../../../src/features/chat/composer/editor/ChatPromptInput.js', async () => {
   const React = await import('react');
-  const Sender = React.forwardRef(({
+  const ChatPromptInput = React.forwardRef(({
     footer,
     header,
     onSubmit,
@@ -41,17 +41,11 @@ vi.mock('@ant-design/x', async () => {
       <button type="button" data-testid="sender-submit" onClick={() => void onSubmit?.()}>submit</button>
     </div>
   ));
-  Sender.displayName = 'MockSender';
-  return { Sender };
+  ChatPromptInput.displayName = 'MockSender';
+  return { ChatPromptInput };
 });
 
-vi.mock('antd', () => ({
-  Button: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button type="button" {...props}>{children}</button>
-  ),
-  Dropdown: ({ children }: { children?: React.ReactNode }) => children,
-  Tooltip: ({ children }: { children?: React.ReactNode }) => children,
-}));
+
 
 vi.mock('../../../../src/shared/i18n/I18nProvider.js', () => ({
   useI18n: () => ({

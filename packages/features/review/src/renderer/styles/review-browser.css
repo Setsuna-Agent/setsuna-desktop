@@ -7,24 +7,17 @@
   overflow: hidden;
 }
 
-.desktop-review-file-browser__diff {
-  border-right: 1px solid color-mix(in srgb, var(--app-border) 70%, transparent);
-}
-
 .desktop-review-file-tree {
   position: relative;
   display: grid;
-  grid-template-rows: 34px 40px minmax(0, 1fr);
+  grid-template-rows: 34px auto minmax(0, 1fr);
   width: var(--desktop-review-file-tree-width, 248px);
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  border-left: 1px solid color-mix(in srgb, var(--app-border) 70%, transparent);
   color: var(--app-text-secondary);
   background: var(--app-surface);
-}
-
-.desktop-review-file-tree.is-collapsed {
-  grid-template-rows: 34px;
 }
 
 .desktop-review-file-tree__resize-handle {
@@ -34,12 +27,7 @@
   left: -5px;
   z-index: 4;
   width: 10px;
-  padding: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
   cursor: col-resize;
-  touch-action: none;
 }
 
 .desktop-review-file-tree__resize-handle::after {
@@ -52,15 +40,8 @@
   content: '';
 }
 
-.desktop-review-file-tree__resize-handle:hover::after,
-.desktop-review-file-tree__resize-handle:focus-visible::after,
-.desktop-review-file-tree__resize-handle.is-resizing::after,
 body.desktop-review-file-tree-resizing .desktop-review-file-tree__resize-handle::after {
-  background: var(--app-text-muted);
-}
-
-.desktop-review-file-tree__resize-handle:focus-visible {
-  box-shadow: 0 0 0 2px var(--desktop-review-focus-ring);
+  background: var(--app-border-strong);
 }
 
 body.desktop-review-file-tree-resizing,
@@ -80,11 +61,6 @@ body.desktop-review-file-tree-resizing * {
   color: var(--app-text-muted);
   font-size: 12px;
   font-weight: 500;
-}
-
-.desktop-review-file-tree.is-collapsed .desktop-review-file-tree__header {
-  justify-content: center;
-  padding: 0;
 }
 
 .desktop-review-file-tree__header-label {
@@ -130,30 +106,30 @@ body.desktop-review-file-tree-resizing * {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 28px;
+  height: 30px;
   min-width: 0;
-  margin: 6px 8px;
+  margin: 8px;
   padding: 0 7px;
   border: 1px solid color-mix(in srgb, var(--app-border) 76%, transparent);
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
   color: var(--app-text-muted);
   background: var(--app-bg);
 }
 
-.desktop-review-file-tree__search:focus-within {
-  border-color: color-mix(in srgb, var(--desktop-review-focus) 58%, var(--app-border));
-  box-shadow: 0 0 0 2px var(--desktop-review-focus-ring);
-}
-
 .desktop-review-file-tree__search input {
+  box-shadow: none;
   width: 100%;
   min-width: 0;
+  min-height: 0;
+  height: 100%;
+  padding: 0;
   border: 0;
   outline: 0;
   color: var(--app-text);
   background: transparent;
   font: inherit;
   font-size: 12px;
+  line-height: 20px;
 }
 
 .desktop-review-file-tree__search input::placeholder {
@@ -183,7 +159,7 @@ body.desktop-review-file-tree-resizing * {
   min-width: 0;
   padding: 0 6px 0 calc(4px + var(--desktop-review-tree-indent, 0px));
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--app-radius-xs);
   color: var(--app-text-muted);
   background: transparent;
   font-family: var(--app-font-family);

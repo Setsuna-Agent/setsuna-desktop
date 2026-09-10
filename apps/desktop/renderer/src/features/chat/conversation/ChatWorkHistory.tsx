@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
 import { ChevronDown } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
@@ -174,9 +175,9 @@ export function WorkHistoryPanel({
   return (
     <div className={`chat-work-history ${expanded ? 'is-expanded' : ''} ${hasDetails ? 'is-toggleable' : ''}`}>
       {hasDetails ? (
-        <button className="chat-work-history__summary" type="button" aria-expanded={expanded} title={expanded ? t('chat.work.collapse') : t('chat.work.expand')} onClick={() => setManualExpanded((value) => !value)}>
+        <Button variant="ghost" className="chat-work-history__summary" type="button" aria-expanded={expanded} title={expanded ? t('chat.work.collapse') : t('chat.work.expand')} onClick={() => setManualExpanded((value) => !value)}>
           {summaryContent}
-        </button>
+        </Button>
       ) : (
         <div className="chat-work-history__summary">{summaryContent}</div>
       )}

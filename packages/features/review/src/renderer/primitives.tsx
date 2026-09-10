@@ -1,9 +1,11 @@
-import { Tooltip } from 'antd';
+import { IconButton, Tooltip } from '@setsuna-desktop/renderer-ui';
+
 import { type ButtonHTMLAttributes, type ReactElement, type ReactNode } from 'react';
 
 type ReviewIconButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   label: string;
   children: ReactNode;
+  tooltip?: boolean;
   variant?: 'secondary' | 'ghost' | 'danger';
 };
 
@@ -11,44 +13,48 @@ export function ReviewIconButton({
   label,
   children,
   className = '',
+  tooltip = false,
+  title = label,
   variant = 'ghost',
   type = 'button',
   ...props
 }: ReviewIconButtonProps) {
-  return (
-    <button
-      aria-label={label}
-      className={`sd-icon-button sd-icon-button--${variant} ${className}`}
-      title={label}
+  const button = (
+    <IconButton variant={variant}
+      label={label}
+      className={className}
+      title={tooltip ? '' : title}
       type={type}
       {...props}
     >
       {children}
-    </button>
+    </IconButton>
   );
+  return tooltip ? <ReviewActionTooltip title={title}>{button}</ReviewActionTooltip> : button;
 }
 
 export function ReviewActionTooltip({
   children,
+  disabled = false,
+  className = '',
   placement = 'bottom-end',
   title,
 }: Readonly<{
   children: ReactNode;
+  disabled?: boolean;
+  className?: string;
   placement?: 'bottom-end' | 'top';
   title: string;
 }>) {
   return (
     <Tooltip
-      arrow={false}
-      autoAdjustOverflow
-      classNames={{ root: 'sd-tooltip', container: 'sd-tooltip__container' }}
-      destroyOnHidden
+      disabled={disabled}
       mouseEnterDelay={0.18}
       placement={placement === 'bottom-end' ? 'bottomRight' : 'top'}
       title={title}
     >
       <span
-        className={`sd-action-tooltip sd-action-tooltip--${placement}`}
+        className={`sd-action-tooltip sd-action-tooltip--${placement} ${className}`}
         data-tooltip={title}
       >
         {children as ReactElement}

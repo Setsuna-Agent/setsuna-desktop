@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { Check, ChevronDown } from 'lucide-react';
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
@@ -81,7 +82,7 @@ export function WorkspaceAppLauncher({
 
   return (
     <div className="desktop-workspace-launcher" ref={launcherRef} role="group" aria-label={translate('feature.workspaceApps.launcher.label')}>
-      <button
+      <Button variant="ghost"
         className="desktop-workspace-launcher__main"
         type="button"
         disabled={!selectedWorkspaceApp}
@@ -95,8 +96,8 @@ export function WorkspaceAppLauncher({
         <span className="desktop-workspace-launcher__label">
           {selectedWorkspaceApp?.label ?? translate('feature.workspaceApps.launcher.open')}
         </span>
-      </button>
-      <button
+      </Button>
+      <Button variant="ghost"
         className={`desktop-workspace-launcher__trigger ${workspaceAppMenuOpen ? 'is-active' : ''}`}
         type="button"
         disabled={!workspaceApps.length}
@@ -109,7 +110,7 @@ export function WorkspaceAppLauncher({
         }}
       >
         <ChevronDown size={13} />
-      </button>
+      </Button>
       {workspaceAppMenuOpen
         ? createPortal(
             <div
@@ -120,13 +121,13 @@ export function WorkspaceAppLauncher({
             >
               {workspaceApps.length ? (
                 workspaceApps.map((app) => (
-                  <button className={selectedWorkspaceApp?.id === app.id ? 'is-selected' : ''} key={app.id} type="button" role="menuitem" onClick={() => onSelectWorkspaceApp(app)}>
+                  <Button variant="ghost" className={selectedWorkspaceApp?.id === app.id ? 'is-selected' : ''} key={app.id} type="button" role="menuitem" onClick={() => onSelectWorkspaceApp(app)}>
                     <span className="desktop-workspace-launcher__menu-main">
                       <WorkspaceAppGlyph app={app} />
                       <span>{app.label}</span>
                     </span>
                     {selectedWorkspaceApp?.id === app.id ? <Check className="desktop-workspace-launcher__menu-check" size={13} /> : null}
-                  </button>
+                  </Button>
                 ))
               ) : (
                 <span>{translate('feature.workspaceApps.launcher.noApps')}</span>

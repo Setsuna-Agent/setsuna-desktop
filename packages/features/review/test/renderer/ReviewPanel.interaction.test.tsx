@@ -638,16 +638,25 @@ describe('DesktopReviewPanel interactions', () => {
       .getAttribute('aria-valuenow')).toBe('288');
     expect(window.localStorage.getItem('setsuna-desktop:review-file-browser-width')).toBe('288');
 
-    fireEvent.click(screen.getByRole('button', { name: '收起变更文件' }));
-    expect(document.querySelector('.desktop-review-file-tree')?.classList
-      .contains('is-collapsed')).toBe(true);
+    fireEvent.change(screen.getByRole('searchbox', { name: '筛选变更文件' }), {
+      target: { value: 'file-1.ts' },
+    });
+    const treeToggle = screen.getByRole('button', { name: '收起变更文件', expanded: true, pressed: true });
+    expect(treeToggle.closest('.desktop-review-panel__toolbar')).toBeTruthy();
+    expect(treeToggle.nextElementSibling).toBe(screen.getByRole('button', { name: '提交或推送' }));
+    fireEvent.click(treeToggle);
+    expect(document.querySelector('.desktop-review-file-tree')).toBeNull();
     expect(screen.queryByRole('separator', { name: '调整变更文件栏宽度' })).toBeNull();
-    expect(screen.getByRole('button', { name: '展开变更文件' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '展开变更文件', expanded: false, pressed: false })).toBe(treeToggle);
     expect(window.localStorage.getItem('setsuna-desktop:review-file-browser-visible')).toBe('false');
 
     fireEvent.click(screen.getByRole('button', { name: '展开变更文件' }));
     expect(screen.getByRole('separator', { name: '调整变更文件栏宽度' })
       .getAttribute('aria-valuenow')).toBe('288');
+    expect(screen.getByRole('button', { name: '切换为目录树' })).toBeTruthy();
+    expect((screen.getByRole('searchbox', { name: '筛选变更文件' }) as HTMLInputElement).value).toBe('file-1.ts');
+    expect(screen.queryByRole('button', { name: 'src/file-0.ts' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'src/file-1.ts' }).getAttribute('aria-current')).toBe('true');
     expect(pierreRender).toHaveBeenCalledTimes(selectedDiffRenderCount);
   });
 });

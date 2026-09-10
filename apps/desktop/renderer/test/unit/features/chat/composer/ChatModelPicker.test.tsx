@@ -5,16 +5,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChatModelPicker } from '../../../../../src/features/chat/composer/ChatModelPicker.js';
 
-vi.mock('antd', () => ({
-  Button: ({ children, className, disabled, onClick }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button type="button" className={className} disabled={disabled} onClick={onClick}>{children}</button>
-  ),
-  Input: ({ onChange, placeholder, value }: React.InputHTMLAttributes<HTMLInputElement>) => (
-    <input onChange={onChange} placeholder={placeholder} value={value} />
-  ),
-  Progress: () => <span data-component="progress" />,
-  Tooltip: ({ children }: { children?: React.ReactNode }) => children,
-}));
+
 
 vi.mock('../../../../../src/shared/branding/BrandIconMark.js', () => ({
   BrandIconMark: () => <span data-component="brand" />,

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { RuntimeConfiguredModelReference } from '@setsuna-desktop/contracts';
 import { useGitConflictTasks, useReviewRendererService, type GitConflictTaskRecord } from '../context.js';
 import { useReviewRendererHost } from '../host.js';
@@ -16,6 +16,7 @@ export function useAutoResolveGitConflicts({ threadId, workspaceRoot, modelSelec
   const { tasks, recordTasks } = useGitConflictTasks();
   const { locale, notifyError, notifySuccess, translate: t } = useReviewRendererHost();
   const identity = `${threadId ?? ''}\0${workspaceRoot}`;
+  const [openRequest, setOpenRequest] = useState<{ identity: string; turnId: string } | null>(null);
   const current = useRef(identity);
   current.current = identity;
   useEffect(() => {
@@ -41,7 +42,11 @@ export function useAutoResolveGitConflicts({ threadId, workspaceRoot, modelSelec
       });
       if (result.started) {
         recordTasks(workspaceRoot, [result]);
-        if (current.current === identity) notifySuccess(t('feature.review.git.conflictStarted'));
+        if (current.current === identity) {
+          // History hydration only updates records; a live Git action may request opening its progress.
+          setOpenRequest({ identity, turnId: result.turnId });
+          notifySuccess(t('feature.review.git.conflictStarted'));
+        }
       }
       return { started: result.started, error: null };
     } catch (error) {
@@ -50,5 +55,9 @@ export function useAutoResolveGitConflicts({ threadId, workspaceRoot, modelSelec
         : null };
     }
   };
-  return { resolveConflicts, conflictTasks: tasks.get(workspaceRoot) ?? EMPTY_TASKS };
+  return {
+    resolveConflicts,
+    conflictTasks: tasks.get(workspaceRoot) ?? EMPTY_TASKS,
+    conflictOpenRequest: openRequest?.identity === identity ? openRequest.turnId : null,
+  };
 }

@@ -1,3 +1,5 @@
+import { useConfirm } from '@setsuna-desktop/renderer-ui';
+import { ResizeHandle, Button } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeThreadSummary, WorkspaceProject } from '@setsuna-desktop/contracts';
 import {
   Archive,
@@ -125,22 +127,22 @@ export function AgentSidebar({
     <aside className="app-sidebar desktop-agent-sidebar" aria-hidden={collapsed || undefined}>
       <div className="desktop-agent-sidebar__top-actions">
         <ShortcutTooltip commandId="app.newChat" label={t('app.newChat')} placement="bottom">
-          <button className="desktop-agent-command" type="button" onClick={onCreateCurrentThread}>
+          <Button variant="ghost" className="desktop-agent-command" type="button" onClick={onCreateCurrentThread}>
             <Plus className="desktop-agent-command__icon" size={15} />
             <span className="desktop-agent-command__label">{t('app.newChat')}</span>
-          </button>
+          </Button>
         </ShortcutTooltip>
         <ShortcutTooltip commandId="app.searchChats" label={t('sidebar.search')} placement="bottom">
-          <button ref={searchTriggerRef} className={`desktop-agent-command ${searchOpen ? 'is-active' : ''}`} type="button" onClick={onToggleSearch}>
+          <Button variant="ghost" ref={searchTriggerRef} className={`desktop-agent-command ${searchOpen ? 'is-active' : ''}`} type="button" onClick={onToggleSearch}>
             <Search className="desktop-agent-command__icon" size={15} />
             <span className="desktop-agent-command__label">{t('sidebar.search')}</span>
-          </button>
+          </Button>
         </ShortcutTooltip>
         <ShortcutTooltip commandId="app.openCapabilities" label={t('sidebar.plugins')} placement="bottom">
-          <button className={`desktop-agent-command ${activeView === 'capabilities' ? 'is-active' : ''}`} type="button" onClick={onOpenCapabilities}>
+          <Button variant="ghost" className={`desktop-agent-command ${activeView === 'capabilities' ? 'is-active' : ''}`} type="button" onClick={onOpenCapabilities}>
             <Blocks className="desktop-agent-command__icon" size={15} />
             <span className="desktop-agent-command__label">{t('sidebar.plugins')}</span>
-          </button>
+          </Button>
         </ShortcutTooltip>
       </div>
       <div className="desktop-agent-sidebar__body">
@@ -192,7 +194,7 @@ export function AgentSidebar({
         onOpenRuntimeActivity={onOpenRuntimeActivity}
         onOpenSettings={onOpenSettings}
       />
-      <button
+      <ResizeHandle
         className="desktop-agent-sidebar__resize-handle"
         type="button"
         role="separator"
@@ -269,20 +271,20 @@ function ProjectSection({
   return (
     <section className="desktop-agent-sidebar__group">
       <div className="desktop-agent-sidebar__section-head">
-        <button className="desktop-agent-sidebar__section-title-button" type="button" onClick={onToggleProjectsCollapsed}>
+        <Button variant="ghost" className="desktop-agent-sidebar__section-title-button" type="button" onClick={onToggleProjectsCollapsed}>
           <span>{t('sidebar.projects')}</span>
           <ChevronDown className={`desktop-agent-sidebar__section-toggle ${projectsCollapsed ? 'is-collapsed' : ''}`} size={13} />
-        </button>
+        </Button>
         <div className="desktop-agent-sidebar__section-actions">
           <ShortcutTooltip commandId="app.addProject" label={t('sidebar.createProject')}>
-            <button
+            <Button variant="ghost"
               className="agent-sidebar-icon-button"
               type="button"
               aria-label={t('sidebar.createProject')}
               onClick={onCreateProject}
             >
               <FolderPlus size={14} />
-            </button>
+            </Button>
           </ShortcutTooltip>
         </div>
       </div>
@@ -309,7 +311,7 @@ function ProjectSection({
                         if (projectActionMenuId !== project.id) onToggleProjectActions(project.id);
                       }}
                     >
-                      <button
+                      <Button variant="ghost"
                         className="desktop-agent-project__select"
                         type="button"
                         onClick={() => onSelectProject(project)}
@@ -326,7 +328,7 @@ function ProjectSection({
                           <span className="desktop-agent-project__name">{project.name}</span>
                           {!project.path ? <small>{t('sidebar.projectUnbound')}</small> : null}
                         </span>
-                      </button>
+                      </Button>
                       <ProjectActionMenu
                         open={projectActionMenuId === project.id}
                         project={project}
@@ -358,9 +360,9 @@ function ProjectSection({
                 );
               })
             ) : (
-              <button className="desktop-agent-sidebar__empty-project" type="button" onClick={onCreateProject}>
+              <Button variant="ghost" className="desktop-agent-sidebar__empty-project" type="button" onClick={onCreateProject}>
                 {t('sidebar.createProject')}
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -388,6 +390,7 @@ function ProjectActionMenu({
 }) {
   const { t } = useI18n();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const confirm = useConfirm();
   const toggleMenu = () => onToggleProjectActions(project.id);
   const handleTriggerClick = (event: ReactMouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
@@ -412,7 +415,7 @@ function ProjectActionMenu({
       onContextMenu={stopProjectActionContextMenu}
       onKeyDown={stopProjectActionEvent}
     >
-      <button
+      <Button variant="ghost"
         className="desktop-agent-project__action desktop-agent-project__more"
         ref={triggerRef}
         type="button"
@@ -422,41 +425,52 @@ function ProjectActionMenu({
         onClick={handleTriggerClick}
       >
         <MoreHorizontal size={14} />
-      </button>
+      </Button>
       <SidebarFloatingMenu open={open} placement="bottom-right" triggerRef={triggerRef} onClose={toggleMenu}>
-        <button
+        <Button variant="ghost"
           type="button"
           role="menuitem"
           onClick={() => onEditProject(project)}
         >
           <Settings size={13} />
           {t('sidebar.editProject')}
-        </button>
-        <button
+        </Button>
+        <Button variant="ghost"
           type="button"
           role="menuitem"
-          onClick={() => {
-            const confirmed = window.confirm(t('sidebar.archiveProjectTitle', { project: project.name }));
+          onClick={async () => {
+            toggleMenu();
+            const confirmed = await confirm({
+              title: t('sidebar.archiveProject'),
+              description: t('sidebar.archiveProjectTitle', { project: project.name }),
+              confirmLabel: t('sidebar.archiveProject'),
+            });
             if (confirmed) onArchiveProject(project);
           }}
         >
           <Archive size={13} />
           {t('sidebar.archiveProject')}
-        </button>
-        <button
+        </Button>
+        <Button variant="danger"
           type="button"
           role="menuitem"
           className="is-danger"
-          onClick={() => {
-            const confirmed = window.confirm(t('sidebar.removeProjectTitle', { project: project.name }));
+          onClick={async () => {
+            toggleMenu();
+            const confirmed = await confirm({
+              title: t('common.remove'),
+              description: t('sidebar.removeProjectTitle', { project: project.name }),
+              confirmLabel: t('common.remove'),
+              danger: true,
+            });
             if (confirmed) onRemoveProject(project);
           }}
         >
           <Trash2 size={13} />
           {t('common.remove')}
-        </button>
+        </Button>
       </SidebarFloatingMenu>
-      <button
+      <Button variant="ghost"
         className="desktop-agent-project__action desktop-agent-project__new-thread"
         type="button"
         aria-label={t('sidebar.newProjectChat', { project: project.name })}
@@ -464,7 +478,7 @@ function ProjectActionMenu({
         onClick={() => onCreateProjectThread(project.id)}
       >
         <Plus size={14} />
-      </button>
+      </Button>
     </span>
   );
 }
@@ -503,18 +517,18 @@ function GlobalThreadSection({
   return (
     <section className="desktop-agent-sidebar__group desktop-agent-sidebar__group--sessions">
       <div className="desktop-agent-sidebar__section-head">
-        <button
+        <Button variant="ghost"
           className={`desktop-agent-sidebar__section-title-button ${!activeProjectId ? 'is-active' : ''}`}
           type="button"
           onClick={activeProjectId ? onEnterChatMode : onToggleSessionsCollapsed}
         >
           <span>{t('sidebar.chats')}</span>
           <ChevronDown className={`desktop-agent-sidebar__section-toggle ${sessionsCollapsed ? 'is-collapsed' : ''}`} size={13} />
-        </button>
+        </Button>
         <div className="desktop-agent-sidebar__section-actions">
-          <button className="agent-sidebar-icon-button" type="button" aria-label={t('app.newChat')} onClick={onCreateGlobalThread}>
+          <Button variant="ghost" className="agent-sidebar-icon-button" type="button" aria-label={t('app.newChat')} onClick={onCreateGlobalThread}>
             <Plus size={14} />
-          </button>
+          </Button>
         </div>
       </div>
       {!sessionsCollapsed ? (

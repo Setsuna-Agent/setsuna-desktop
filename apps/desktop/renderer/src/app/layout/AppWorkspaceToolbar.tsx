@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import { Maximize2, Minimize2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { WorkspaceTopbar } from '../../features/workspace/WorkspaceTopbar.js';
@@ -25,7 +26,7 @@ export function AppWorkspaceToolbar({
   const maximizeLabel = t(workspaceMaximized ? 'workspace.panel.restoreWidth' : 'workspace.panel.maximize');
   const actions = (
     <AppTooltip title={maximizeLabel} placement="bottom">
-      <button
+      <Button variant="ghost"
         className={'app-shell-icon-control chat-file-review-panel__close' + (workspaceMaximized ? ' chat-file-review-panel__close--active' : '')}
         type="button"
         aria-label={maximizeLabel}
@@ -33,7 +34,7 @@ export function AppWorkspaceToolbar({
         onClick={onToggleMaximized}
       >
         {workspaceMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-      </button>
+      </Button>
     </AppTooltip>
   );
   const sidePanels = workspacePanels.sidePanelSlot.panels;
@@ -66,9 +67,9 @@ export function AppWorkspaceToolbar({
         workspacePanels.closeWorkspaceMenus();
         workspacePanels.openDesktopPanel('side', 'conversation-debug');
       }}
-      onOpenFilesPanel={() => {
+      onOpenFilesPanel={async () => {
         workspacePanels.closeWorkspaceMenus();
-        projectWorkspace.setFilePreview(null);
+        if (!await projectWorkspace.setFilePreview(null)) return;
         workspacePanels.openDesktopPanel('side', 'files');
       }}
       onOpenReviewPanel={() => {
@@ -91,13 +92,13 @@ export function AppWorkspaceToolbar({
       onReorderPanels={(panelId, targetPanelId, placement) => {
         workspacePanels.reorderDesktopPanel('side', panelId, targetPanelId, placement);
       }}
-      onSelectPanel={(panelId) => {
+      onSelectPanel={async (panelId) => {
         const panel = workspacePanels.sidePanelSlot.panels.find((item) => item.id === panelId);
         if (panel?.type === 'file' && panel.filePath) {
           void projectWorkspace.openProjectFile(panel.filePath);
           return;
         }
-        if (panel?.type === 'files') projectWorkspace.setFilePreview(null);
+        if (panel?.type === 'files' && !await projectWorkspace.setFilePreview(null)) return;
         workspacePanels.activateDesktopPanel('side', panelId);
       }}
       onToggleTerminal={workspacePanels.toggleBottomTerminal}
@@ -135,7 +136,7 @@ function WorkspaceOverviewToolbar({
               commandId="layout.toggleTerminal"
               label={bottomTerminalActive ? t('topbar.closeTerminal') : t('topbar.openBottomTerminal')}
             >
-              <button
+              <Button variant="ghost"
                 className={[
                   'app-shell-icon-control',
                   'chat-file-review-panel__close',
@@ -150,10 +151,10 @@ function WorkspaceOverviewToolbar({
                 onClick={onToggleTerminal}
               >
                 <PanelPlacementIcon placement="bottom" />
-              </button>
+              </Button>
             </ShortcutTooltip>
             <ShortcutTooltip commandId="layout.toggleWorkspace" label={t('topbar.collapseRightSidebar')}>
-              <button
+              <Button variant="ghost"
                 className="app-shell-icon-control chat-file-review-panel__close chat-file-review-panel__panel-close chat-file-review-panel__close--active"
                 type="button"
                 aria-label={t('topbar.collapseRightSidebar')}
@@ -161,7 +162,7 @@ function WorkspaceOverviewToolbar({
                 onClick={onToggleWorkspace}
               >
                 <PanelPlacementIcon placement="side" />
-              </button>
+              </Button>
             </ShortcutTooltip>
           </span>
         </div>

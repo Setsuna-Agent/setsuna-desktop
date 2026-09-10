@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeTaskKind } from '@setsuna-desktop/contracts';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import type {
@@ -14,7 +15,7 @@ import {
   Radio,
   ShieldAlert,
   Target,
-  Terminal,
+  SquareTerminal,
 } from 'lucide-react';
 import {
   formatRuntimeActivityDuration,
@@ -138,7 +139,7 @@ export function RuntimeBackgroundServiceRows({
             >
               <span className="runtime-activity-row__identity">
                 <span className="runtime-activity-row__icon" aria-hidden="true">
-                  <Terminal size={15} />
+                  <SquareTerminal size={15} />
                 </span>
                 <span className="runtime-activity-row__copy">
                   <strong title={service.command}>{command}</strong>
@@ -189,7 +190,7 @@ function RuntimeActivityStopButton({
   translate: RendererTranslate;
 }) {
   return (
-    <button
+    <Button variant="ghost"
       aria-label={ariaLabel}
       className="runtime-activity-row__action"
       disabled={stopping}
@@ -203,7 +204,7 @@ function RuntimeActivityStopButton({
     >
       {stopping ? <LoaderCircle className="is-spinning" size={12} aria-hidden="true" /> : null}
       <span>{t('feature.runtimeActivity.action.stop')}</span>
-    </button>
+    </Button>
   );
 }
 
@@ -228,7 +229,7 @@ function TaskKindIcon({ kind }: { kind: RuntimeTaskKind }) {
   if (kind === 'goal') return <Target size={15} />;
   if (kind === 'review') return <FileSearch size={15} />;
   if (kind === 'compact') return <Layers3 size={15} />;
-  if (kind === 'user_shell') return <Terminal size={15} />;
+  if (kind === 'user_shell') return <SquareTerminal size={15} />;
   return <Bot size={15} />;
 }
 

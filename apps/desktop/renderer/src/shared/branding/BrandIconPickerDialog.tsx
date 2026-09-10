@@ -1,3 +1,4 @@
+import { Button as UiButton } from '@setsuna-desktop/renderer-ui';
 import type { BrandIconConfig } from '@setsuna-desktop/contracts';
 import { Check, ImagePlus, Sparkles, Upload } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
@@ -106,7 +107,7 @@ export function BrandIconPickerDialog({
               <span>{t('settings.brand.brandCount', { count: PROVIDER_BRAND_CATALOG.length })}</span>
             </div>
             <div className="settings-provider-icon-grid" role="radiogroup" aria-label={t('settings.brand.iconLabel', { subject: subjectLabel })}>
-              <button
+              <UiButton variant="ghost"
                 aria-checked={draftIcon === undefined}
                 className={`settings-provider-icon-option ${draftIcon === undefined ? 'is-selected' : ''}`}
                 role="radio"
@@ -119,12 +120,12 @@ export function BrandIconPickerDialog({
                 </span>
                 <span>{t('settings.brand.automatic')}</span>
                 {draftIcon === undefined ? <Check className="settings-provider-icon-option__check" size={12} /> : null}
-              </button>
+              </UiButton>
               {PROVIDER_BRAND_CATALOG.map((brand) => {
                 const selected = draftIcon?.type === 'preset' && draftIcon.key === brand.key;
                 const label = localizedProviderBrandLabel(brand, t);
                 return (
-                  <button
+                  <UiButton variant="ghost"
                     key={brand.key}
                     aria-checked={selected}
                     className={`settings-provider-icon-option ${selected ? 'is-selected' : ''}`}
@@ -137,7 +138,7 @@ export function BrandIconPickerDialog({
                     </span>
                     <span title={label}>{label}</span>
                     {selected ? <Check className="settings-provider-icon-option__check" size={12} /> : null}
-                  </button>
+                  </UiButton>
                 );
               })}
             </div>
@@ -160,7 +161,7 @@ export function BrandIconPickerDialog({
                   chooseCustomFile(file);
                 }}
               />
-              <button
+              <UiButton variant="ghost"
                 aria-pressed={draftIcon?.type === 'custom'}
                 className="settings-provider-icon-upload__preview"
                 disabled={!customIcon}
@@ -174,7 +175,7 @@ export function BrandIconPickerDialog({
                 ) : (
                   <span className="settings-provider-icon-upload__placeholder"><ImagePlus size={18} /></span>
                 )}
-              </button>
+              </UiButton>
               <div className="settings-provider-icon-upload__copy">
                 <strong>{customIcon ? t('settings.brand.customImage') : t('settings.brand.uploadTitle')}</strong>
                 <span>{customIcon ? t('settings.brand.reselect') : t('settings.brand.uploadHint')}</span>

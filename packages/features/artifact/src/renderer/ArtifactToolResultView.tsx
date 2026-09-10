@@ -1,5 +1,5 @@
 import type { ChatToolResultViewProps } from '@setsuna-desktop/renderer-contracts/chat';
-import { Button, Dropdown, type MenuProps } from 'antd';
+import { Button, Dropdown, type MenuProps } from '@setsuna-desktop/renderer-ui';
 import { ChevronDown, ExternalLink, Globe2 } from 'lucide-react';
 import { useState } from 'react';
 import type { ArtifactRendererHost, RuntimeArtifact } from '../contracts/index.js';

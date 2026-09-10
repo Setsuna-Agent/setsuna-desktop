@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import type {
   RuntimeConfigState,
   RuntimeThread,
@@ -267,10 +268,10 @@ function SettingsPageButton({
 }>) {
   const Icon = page.metadata.icon ?? Puzzle;
   return (
-    <button className={active ? 'is-active' : ''} type="button" onClick={onSelect}>
+    <Button variant="ghost" className={active ? 'is-active' : ''} type="button" onClick={onSelect}>
       <Icon size={14} />
       <span>{translateSettingsKey(translate, page.metadata.titleKey)}</span>
-    </button>
+    </Button>
   );
 }
 

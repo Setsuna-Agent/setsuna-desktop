@@ -1,3 +1,4 @@
+import { Window } from 'happy-dom';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ShellFrame } from '../../../../src/app/layout/ShellFrame.js';
@@ -9,9 +10,9 @@ describe('ShellFrame', () => {
   });
 
   it.each(['linux', 'win32'])('places route controls inside the %s titlebar drag track', (platform) => {
-    vi.stubGlobal('window', {
+    vi.stubGlobal('window', Object.assign(new Window(), {
       setsunaDesktop: { desktop: { platform } },
-    });
+    }));
 
     const html = renderToStaticMarkup(<ShellFrame />);
     const dragTrackIndex = html.indexOf('app-topbar__drag');
@@ -23,9 +24,9 @@ describe('ShellFrame', () => {
   });
 
   it('places feature navigation actions beside the sidebar control', () => {
-    vi.stubGlobal('window', {
+    vi.stubGlobal('window', Object.assign(new Window(), {
       setsunaDesktop: { desktop: { platform: 'darwin' } },
-    });
+    }));
 
     const html = renderToStaticMarkup(
       <ShellFrame
@@ -44,9 +45,9 @@ describe('ShellFrame', () => {
   });
 
   it('leaves nullable Renderer Slot regions structurally empty', () => {
-    vi.stubGlobal('window', {
+    vi.stubGlobal('window', Object.assign(new Window(), {
       setsunaDesktop: { desktop: { platform: 'win32' } },
-    });
+    }));
 
     const emptySlot = <EmptySlot />;
     const html = renderToStaticMarkup(

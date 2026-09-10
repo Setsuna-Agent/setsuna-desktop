@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import { useEffect, useRef } from 'react';
 import { useConversationDebugI18n } from './context.js';
 import { conversationDebugStatusLabel } from './conversationDebugCopy.js';
@@ -39,7 +40,7 @@ export function ConversationDebugTurnNavigator({
           const preview = turn.inputPreview || status;
           return (
             <li key={turn.id}>
-              <button
+              <Button variant="ghost"
                 aria-current={activeTurnId === turn.id ? 'step' : undefined}
                 aria-label={t('feature.conversationDebug.canvas.jumpToTurn', {
                   index: index + 1,
@@ -52,7 +53,7 @@ export function ConversationDebugTurnNavigator({
                 onClick={() => onNavigate(turn.id)}
               >
                 <span>{index + 1}</span>
-              </button>
+              </Button>
             </li>
           );
         })}

@@ -25,7 +25,6 @@ export type UpdaterViewModel = Readonly<{
   selectDownloadSource(sourceId: string): Promise<DesktopUpdateState | null>;
   removeDownloadSource(sourceId: string): Promise<DesktopUpdateState | null>;
   installReadyUpdate(): Promise<DesktopUpdateActionResult | null>;
-  promptReadyUpdate(): Promise<DesktopUpdateActionResult | null>;
 }>;
 
 export function useUpdaterView(translate: RendererTranslate): UpdaterViewModel {
@@ -66,7 +65,6 @@ export function useUpdaterServiceView(
       selectDownloadSource: service.selectDownloadSource,
       removeDownloadSource: service.removeDownloadSource,
       installReadyUpdate: service.installReadyUpdate,
-      promptReadyUpdate: service.promptReadyUpdate,
     };
   }, [checking, installing, service, state, translate]);
 }

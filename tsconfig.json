@@ -32,6 +32,7 @@
     { "path": "./packages/features/workspace-dependencies/tsconfig.build.json" },
     { "path": "./packages/desktop-runtime" },
     { "path": "./tsconfig.electron.json" },
-    { "path": "./tsconfig.renderer.json" }
+    { "path": "./tsconfig.renderer.json" },
+    { "path": "./packages/renderer-ui/tsconfig.build.json" }
   ]
 }

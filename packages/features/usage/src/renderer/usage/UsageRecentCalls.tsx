@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import type {
   RuntimeUsageRecord,
 } from '@setsuna-desktop/contracts';
@@ -148,23 +149,23 @@ export function UsageRecentCalls({
           {pageError ? (
             <span className="settings-usage-records__pagination-error" role="alert">{pageError}</span>
           ) : null}
-          <button
+          <Button variant="ghost"
             aria-label={t('feature.usage.previousPage')}
             disabled={page === 1 || pageLoading}
             type="button"
             onClick={() => void loadPage(page - 1)}
           >
             <span aria-hidden="true">‹</span>
-          </button>
+          </Button>
           <span aria-live="polite">{t('feature.usage.pageStatus', { page, total: totalPages })}</span>
-          <button
+          <Button variant="ghost"
             aria-label={t('feature.usage.nextPage')}
             disabled={page === totalPages || pageLoading}
             type="button"
             onClick={() => void loadPage(page + 1)}
           >
             <span aria-hidden="true">›</span>
-          </button>
+          </Button>
         </footer>
       ) : null}
     </section>

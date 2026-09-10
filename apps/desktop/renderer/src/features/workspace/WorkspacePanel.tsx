@@ -1,3 +1,5 @@
+import { FileTreeToggle, ResizeHandle, TextField, Button } from '@setsuna-desktop/renderer-ui';
+
 import {
   WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES,
   type WorkspaceEntry,
@@ -8,7 +10,7 @@ import {
   type RuntimeReviewFinding,
 } from '@setsuna-desktop/contracts';
 import type { DesktopReviewSource } from '@setsuna-desktop/feature-review/contracts';
-import { Bug, ChevronDown, FileDiff, Folder, FolderOpen, GitBranch, MessageSquare, Save, Search, Terminal, X } from 'lucide-react';
+import { Bug, ChevronDown, FileDiff, FolderOpen, GitBranch, MessageSquare, Save, Search, SquareTerminal, X } from 'lucide-react';
 import {
   lazy,
   Suspense,
@@ -278,7 +280,7 @@ export function WorkspacePanel({
     return (
       <div className="desktop-file-tree-node" key={node.path}>
         <div className={`desktop-file-row-shell ${selected ? 'is-active' : ''}`} style={{ '--desktop-file-tree-indent': `${level * FILE_TREE_INDENT_STEP_PX}px` } as CSSProperties}>
-          <button
+          <Button variant="ghost"
             className={`desktop-file-row desktop-file-row--${node.type}`}
             type="button"
             title={node.path}
@@ -293,7 +295,7 @@ export function WorkspacePanel({
             <WorkspaceFileIcon path={node.path} type={node.type} />
             <span title={node.path}>{node.name}</span>
             {loading ? <span className="desktop-file-row__loading">...</span> : null}
-          </button>
+          </Button>
         </div>
         {directory && expanded ? node.children.map((child) => renderTreeNode(child, level + 1)) : null}
       </div>
@@ -342,14 +344,12 @@ export function WorkspacePanel({
             </IconButton>
           )
         ) : null}
-        <IconButton
-          className="app-shell-icon-control desktop-editor__tree-toggle"
+        <FileTreeToggle
+          className="app-shell-icon-control"
           label={t(treeVisible ? 'workspace.files.collapseTree' : 'workspace.files.expandTree')}
-          aria-pressed={treeVisible}
-          onClick={() => setTreeVisible((current) => !current)}
-        >
-          {treeVisible ? <FolderOpen size={16} /> : <Folder size={16} />}
-        </IconButton>
+          expanded={treeVisible}
+          onToggle={() => setTreeVisible((current) => !current)}
+        />
       </span>
     </div>
   ) : null;
@@ -358,6 +358,7 @@ export function WorkspacePanel({
     activePanel.type === 'overview' ? (
       <WorkspaceOverviewPanel
         activeProject={activeProject}
+        isGitRepository={reviewState?.isGitRepository === true}
         onOpenFilesPanel={onOpenFilesPanel}
         onOpenBrowser={onOpenBrowser}
         onOpenConversationDebug={onOpenConversationDebug}
@@ -458,7 +459,7 @@ export function WorkspacePanel({
           {showsFileExplorer ? (
             <section className={`desktop-file-explorer ${treeVisible ? '' : 'desktop-file-explorer--tree-collapsed'}`}>
               <div className="desktop-file-tree" aria-hidden={!treeVisible}>
-                <button
+                <ResizeHandle
                   className="desktop-file-tree__resize-handle"
                   type="button"
                   role="separator"
@@ -481,7 +482,7 @@ export function WorkspacePanel({
                 />
                 <div className="desktop-file-search">
                   <Search size={13} />
-                  <input
+                  <TextField
                     value={treeQuery}
                     onChange={(event) => updateTreeQuery(event.target.value)}
                     placeholder={t('workspace.files.filter')}
@@ -532,6 +533,7 @@ export function WorkspacePanel({
 
 export function WorkspaceOverviewPanel({
   activeProject,
+  isGitRepository,
   onOpenFilesPanel,
   onOpenBrowser,
   onOpenConversationDebug,
@@ -541,6 +543,7 @@ export function WorkspaceOverviewPanel({
   onOpenTerminalPanel,
 }: {
   activeProject?: WorkspaceProject;
+  isGitRepository: boolean;
   onOpenFilesPanel: () => void;
   onOpenBrowser: () => void;
   onOpenConversationDebug?: () => void;
@@ -566,14 +569,14 @@ export function WorkspaceOverviewPanel({
       onClick: () => onOpenReviewPanel?.(),
       shortcutCommandId: 'workspace.openReview',
     },
-    {
+    ...(isGitRepository ? [{
       key: 'changes',
       label: t('workspace.panel.changes'),
       icon: <GitBranch size={15} />,
       disabled: !activeProject?.path || !onOpenChangesPanel,
       onClick: () => onOpenChangesPanel?.(),
-      shortcutCommandId: 'workspace.openChanges',
-    },
+      shortcutCommandId: 'workspace.openChanges' as const,
+    }] : []),
     {
       key: 'files',
       label: t('workspace.overview.files'),
@@ -585,7 +588,7 @@ export function WorkspaceOverviewPanel({
     {
       key: 'terminal',
       label: t('workspace.overview.terminal'),
-      icon: <Terminal size={15} />,
+      icon: <SquareTerminal size={15} />,
       disabled: !activeProject?.path,
       onClick: onOpenTerminalPanel,
       shortcutCommandId: 'workspace.openTerminal',
@@ -620,7 +623,7 @@ export function WorkspaceOverviewPanel({
     <section className="desktop-workspace-overview" aria-label={t('workspace.overview.label')}>
       <div className="desktop-workspace-overview__actions">
         {actions.map((action) => (
-          <button
+          <Button variant="ghost"
             className="desktop-workspace-overview__action"
             data-workspace-overview-action={action.key}
             disabled={action.disabled}
@@ -634,7 +637,7 @@ export function WorkspaceOverviewPanel({
               className="desktop-workspace-overview__action-shortcut"
               commandId={action.shortcutCommandId}
             /> : null}
-          </button>
+          </Button>
         ))}
       </div>
     </section>

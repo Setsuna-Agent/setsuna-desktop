@@ -15,6 +15,7 @@ export const reviewPreloadFeature = definePreloadFeature<ReviewPreloadBridgeCont
     const desktopReview: DesktopReviewBridge = {
       getHistory: (workspaceRoot, options) => ipcRenderer.invoke(REVIEW_IPC_CHANNELS.getHistory, { workspaceRoot, options }),
       getCommitDetails: (workspaceRoot, oid) => ipcRenderer.invoke(REVIEW_IPC_CHANNELS.getCommitDetails, { workspaceRoot, oid }),
+      getCommitAuthorAvatar: (githubCommitUrl) => ipcRenderer.invoke(REVIEW_IPC_CHANNELS.getCommitAuthorAvatar, { githubCommitUrl }),
       getCommitFileDiff: (workspaceRoot, input) => ipcRenderer.invoke(REVIEW_IPC_CHANNELS.getCommitFileDiff, { workspaceRoot, ...input }),
       getState: (workspaceRoot, options) => ipcRenderer.invoke(REVIEW_IPC_CHANNELS.getState, {
         workspaceRoot,

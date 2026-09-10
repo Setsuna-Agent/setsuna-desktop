@@ -39,12 +39,12 @@ describe('ConversationOverviewPanel', () => {
       reviewState: localReviewState,
     });
 
-    expect(compactHtml).toContain('变更');
+    expect(compactHtml).toContain('审查');
     expect(compactHtml).toContain('aria-label="展开对话环境信息"');
     expect(compactHtml).toContain('+74');
     expect(compactHtml).toContain('-252');
     expect(compactHtml).not.toContain('2 个文件');
-    expect(expandedHtml).toContain('变更');
+    expect(expandedHtml).toContain('审查');
     expect(expandedHtml).toContain('+74');
     expect(expandedHtml).toContain('-252');
     expect(expandedHtml).not.toContain('2 个文件');

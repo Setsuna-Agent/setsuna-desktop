@@ -1,3 +1,5 @@
+import { TextField, Button as UiButton, useConfirm } from '@setsuna-desktop/renderer-ui';
+
 import type {
   RuntimePluginMarketplaceItem,
   RuntimePluginSummary,
@@ -61,6 +63,7 @@ export function PluginCapabilitiesPage({
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const t = translate as PluginManagementTranslate;
+  const confirm = useConfirm();
 
   useEffect(() => {
     // Chat tools can mutate Plugin bundles while this feature service is idle.
@@ -128,12 +131,20 @@ export function PluginCapabilitiesPage({
     true,
   );
   const removePlugin = async (plugin: RuntimePluginSummary) => {
-    if (!window.confirm(t('feature.pluginManagement.confirmRemove', { name: plugin.name }))) return;
+    if (!await confirm({
+      title: t('feature.pluginManagement.confirmRemove', { name: plugin.name }),
+      confirmLabel: t('feature.pluginManagement.remove'),
+      danger: true,
+    })) return;
     await run(`remove:${plugin.id}`, () => service.remove({ pluginId: plugin.id }), true);
     closePlugin();
   };
   const setExtensionTrust = async (plugin: RuntimePluginSummary, trusted: boolean) => {
-    if (trusted && !window.confirm(t('feature.pluginManagement.confirmTrust', { name: plugin.name }))) return;
+    if (trusted && !await confirm({
+      title: t('feature.pluginManagement.trust'),
+      description: t('feature.pluginManagement.confirmTrust', { name: plugin.name }),
+      confirmLabel: t('feature.pluginManagement.trust'),
+    })) return;
     await run(`trust:${plugin.id}`, () => service.setExtensionTrust({ pluginId: plugin.id, trusted }));
   };
   const setHookEnabled = (hook: PluginManagementHook, enabled: boolean) => run(
@@ -141,15 +152,20 @@ export function PluginCapabilitiesPage({
     () => service.setHookEnabled(hook, enabled),
   );
   const setHookTrust = async (hook: PluginManagementHook, trusted: boolean) => {
-    if (trusted && !window.confirm(t('feature.pluginManagement.confirmHookTrust', {
-      command: hookCommandSummary(hook),
-    }))) return;
+    if (trusted && !await confirm({
+      title: t('feature.pluginManagement.trustHook'),
+      description: t('feature.pluginManagement.confirmHookTrust', { command: hookCommandSummary(hook) }),
+      confirmLabel: t('feature.pluginManagement.trustHook'),
+    })) return;
     await run(`hook:${hook.managementId}`, () => service.setHookTrust(hook, trusted));
   };
   const deleteStandaloneHook = async (hook: PluginManagementHook) => {
-    if (!window.confirm(t('feature.pluginManagement.confirmDeleteHook', {
-      name: hookDisplayName(hook),
-    }))) return;
+    if (!await confirm({
+      title: t('feature.pluginManagement.deleteHook'),
+      description: t('feature.pluginManagement.confirmDeleteHook', { name: hookDisplayName(hook) }),
+      confirmLabel: t('feature.pluginManagement.deleteHook'),
+      danger: true,
+    })) return;
     await run(`hook:${hook.managementId}`, () => service.deleteStandaloneHook(hook));
   };
 
@@ -261,7 +277,7 @@ export function PluginCapabilitiesPage({
         <div className="desktop-capabilities-search-row">
           <label className="desktop-capabilities-search">
             <Search size={14} />
-            <input aria-label={t('feature.pluginManagement.search')} placeholder={t('feature.pluginManagement.search')} value={query} onChange={(event) => setQuery(event.currentTarget.value)} />
+            <TextField aria-label={t('feature.pluginManagement.search')} placeholder={t('feature.pluginManagement.search')} value={query} onChange={(event) => setQuery(event.currentTarget.value)} />
           </label>
         </div>
         {hasPageErrors ? (
@@ -343,10 +359,10 @@ function InstalledPluginShortcut({ onOpen, plugin, ui }: Readonly<{
   const updateAvailable = 'updateAvailable' in plugin && plugin.updateAvailable;
   return (
     <article className={`desktop-plugin-installed-shortcut${updateAvailable ? ' has-update' : ''}`}>
-      <button aria-label={plugin.name} type="button" onClick={onOpen}>
+      <UiButton variant="ghost" aria-label={plugin.name} type="button" onClick={onOpen}>
         <ui.PluginIcon name={plugin.icon} pluginId={plugin.id} variant="installed" />
         {updateAvailable ? <span aria-hidden="true" className="desktop-plugin-installed-shortcut__update" /> : null}
-      </button>
+      </UiButton>
       <span aria-hidden="true" className="desktop-plugin-installed-shortcut__name">{plugin.name}</span>
     </article>
   );
@@ -361,9 +377,9 @@ function LegacyHooksShortcut({ count, onOpen, translate, ui }: Readonly<{
   const name = translate('feature.pluginManagement.legacyHooks');
   return (
     <article className="desktop-plugin-installed-shortcut">
-      <button aria-label={name} title={`${name} · ${count}`} type="button" onClick={onOpen}>
+      <UiButton variant="ghost" aria-label={name} title={`${name} · ${count}`} type="button" onClick={onOpen}>
         <ui.PluginIcon pluginId="setsuna-legacy-hooks" variant="installed" />
-      </button>
+      </UiButton>
       <span aria-hidden="true" className="desktop-plugin-installed-shortcut__name">{name}</span>
     </article>
   );
@@ -391,11 +407,11 @@ function PluginCard({ installed, marketplace, onInstall, onOpen, pending, transl
         : 'feature.pluginManagement.install');
   return (
     <article className="desktop-capability-list-item">
-      <button className="desktop-capability-list-item__identity" type="button" onClick={onOpen}>
+      <UiButton variant="ghost" className="desktop-capability-list-item__identity" type="button" onClick={onOpen}>
         <ui.PluginIcon name={plugin.icon} pluginId={plugin.id} variant="list" />
         <span className="desktop-capability-list-item__copy"><strong>{plugin.name}</strong><span>{plugin.description ?? plugin.id}</span></span>
-      </button>
-      <button
+      </UiButton>
+      <UiButton variant="ghost"
         aria-label={`${actionLabel}: ${plugin.name}`}
         className={`desktop-plugin-market__get${installedWithoutUpdate ? ' is-installed' : ''}`}
         disabled={pending || installedWithoutUpdate || !onInstall}
@@ -404,7 +420,7 @@ function PluginCard({ installed, marketplace, onInstall, onOpen, pending, transl
       >
         {pending ? <Loader2 className="is-spinning" size={13} /> : null}
         <span>{actionLabel}</span>
-      </button>
+      </UiButton>
     </article>
   );
 }

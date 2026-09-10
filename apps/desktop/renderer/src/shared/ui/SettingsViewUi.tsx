@@ -16,7 +16,7 @@ import {
   settingsPageKey,
   settingsPageSlot,
 } from '@setsuna-desktop/renderer-contracts/settings';
-import { Dropdown, type MenuProps } from 'antd';
+import { Dropdown, Switch, type MenuProps } from '@setsuna-desktop/renderer-ui';
 import { ChevronRight, MoreHorizontal } from 'lucide-react';
 import { Component, useEffect, type ErrorInfo, type ReactNode } from 'react';
 import { useToast } from '../../app/providers/ToastProvider.js';
@@ -83,7 +83,6 @@ function SettingsActionMenu({ items, label, onSelect }: SettingsActionMenuProps)
   }));
   return (
     <Dropdown
-      destroyOnHidden
       menu={{ items: menuItems, onClick: ({ key }) => onSelect(String(key)) }}
       placement="bottomRight"
       trigger={['click']}
@@ -227,15 +226,7 @@ export function SettingsToggle({
           <small>{description}</small>
         </span>
       </span>
-      <label className="sd-check" title={accessibleLabel}>
-        <input
-          aria-label={accessibleLabel}
-          type="checkbox"
-          checked={checked}
-          disabled={disabled}
-          onChange={(event) => onChange(event.currentTarget.checked)}
-        />
-      </label>
+      <Switch label={accessibleLabel} checked={checked} disabled={disabled} onCheckedChange={onChange} />
     </div>
   );
 }

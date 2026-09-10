@@ -76,10 +76,10 @@ describe('SettingsDirectoryList', () => {
       </I18nProvider>,
     );
 
-    expect(await screen.findByText('C:\\Users\\setsuna\\.agents\\skills')).toBeTruthy();
+    expect((await screen.findByText('~/.agents/skills')).getAttribute('title')).toBe('C:\\Users\\setsuna\\.agents\\skills');
     expect(screen.getByText('2 个')).toBeTruthy();
     expect(screen.queryByText('Claude Skills')).toBeNull();
-    expect(screen.getByText('C:\\Users\\setsuna\\.pi\\agent\\skills')).toBeTruthy();
+    expect(screen.getByText('~/.pi/agent/skills').getAttribute('title')).toBe('C:\\Users\\setsuna\\.pi\\agent\\skills');
 
     fireEvent.click(screen.getByRole('button', { name: '继承 全局共享 Skills' }));
     await waitFor(() => expect(onSave).toHaveBeenCalledWith([

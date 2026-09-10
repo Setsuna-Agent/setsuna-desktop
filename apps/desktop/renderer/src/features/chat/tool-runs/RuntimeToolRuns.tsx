@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import type {
   RuntimeHookRun,
   RuntimeToolRun,
@@ -289,7 +290,7 @@ function FeatureToolResultView({
       fallback={(reset) => (
         <div className="chat-tool-run__preview" role="alert">
           <p>{t('featureRecovery.toolResultFailed')}</p>
-          <button type="button" onClick={reset}>{t('common.retry')}</button>
+          <Button variant="ghost" type="button" onClick={reset}>{t('common.retry')}</Button>
         </div>
       )}
       featureId={result.featureId}

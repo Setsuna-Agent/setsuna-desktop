@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import type { ChatToolResultViewProps } from '@setsuna-desktop/renderer-contracts/chat';
 import type { CollaborationSpawnResult } from '../contracts/index.js';
 import { AgentAvatar } from './AgentAvatar.js';
@@ -22,7 +23,7 @@ export function CollaborationSpawnResultView({
   const historical = !liveParentThreadId || (!snapshot.loading && !task);
   const canOpen = Boolean(liveParentThreadId && task && navigation);
   return (
-    <button
+    <Button variant="ghost"
       type="button"
       className={`subagent-task-card${historical ? ' subagent-task-card--historical' : ''}`}
       disabled={!canOpen}
@@ -36,6 +37,6 @@ export function CollaborationSpawnResultView({
         {identity.displayName || translate('feature.collaboration.card.unnamedAgent')}
       </strong>
       <SubagentTaskStatus status={status} translate={translate} showLabel={false} />
-    </button>
+    </Button>
   );
 }

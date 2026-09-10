@@ -305,8 +305,6 @@ async function createWindow(): Promise<void> {
           input: Parameters<typeof globalThis.fetch>[0],
           init?: RequestInit,
         ) => requireNetworkProxyMainService().fetch('updater', input, init),
-        interfaceLanguage: () => interfaceLanguage,
-        mainWindow: currentMainWindow,
       }),
       webDavSyncHost: Object.freeze({
         appVersion: app.getVersion(),

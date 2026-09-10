@@ -1,4 +1,4 @@
-import { Popconfirm } from 'antd';
+import { ConfirmDialogTrigger } from '@setsuna-desktop/renderer-ui';
 import { Archive, Eye, Trash2, Undo2 } from 'lucide-react';
 import { useState } from 'react';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
@@ -38,14 +38,14 @@ export function ArchivedGitConflictsSettings({ client, translate: t, ui }: {
           <div className="git-conflict-archive-actions">
             <Button icon={<Eye size={14} />} onClick={() => setSelected(task)}>{t('feature.review.git.viewArchivedConflict')}</Button>
             <Button icon={<Undo2 size={14} />} disabled={pending} onClick={() => { void restore(task); }}>{t('feature.review.git.restoreConflict')}</Button>
-            <Popconfirm title={t('feature.review.git.deleteConflictTitle', { title: labels[task.operation] })}
-              description={t('feature.review.git.deleteConflictDescription')} placement="topRight" disabled={pending}
-              okText={t('feature.review.git.deleteConflict')} cancelText={t('feature.review.git.deleteConflictCancel')} okButtonProps={{ danger: true }}
+            <ConfirmDialogTrigger title={t('feature.review.git.deleteConflictTitle', { title: labels[task.operation] })}
+              description={t('feature.review.git.deleteConflictDescription')} disabled={pending}
+              confirmLabel={t('feature.review.git.deleteConflict')} cancelLabel={t('feature.review.git.deleteConflictCancel')} danger
               onConfirm={async () => {
                 if (await remove(task) && selected?.turnId === task.turnId) setSelected(null);
               }}>
               <IconButton label={t('feature.review.git.deleteConflict')} variant="danger" disabled={pending}><Trash2 size={14} /></IconButton>
-            </Popconfirm>
+            </ConfirmDialogTrigger>
           </div>
         </Row>)}
         {records?.length === 0 ? <EmptyState title={t('feature.review.git.noArchivedConflicts')} /> : null}

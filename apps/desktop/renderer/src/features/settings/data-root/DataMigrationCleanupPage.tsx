@@ -1,7 +1,7 @@
 import type {
   DesktopDataRootState,
 } from '@setsuna-desktop/contracts';
-import { Modal } from 'antd';
+import { Dialog } from '@setsuna-desktop/renderer-ui';
 import { CheckCircle2, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ShellFrame } from '../../../app/layout/ShellFrame.js';
@@ -105,14 +105,12 @@ export function DataMigrationCleanupPage({ state }: { state: NormalDataRootState
         </section>
       </main>
 
-      <Modal
-        centered
+      <Dialog
         width={600}
         open={confirmOpen}
         title={t('dataRoot.cleanup.confirmTitle')}
-        closable={!pending}
-        maskClosable={!pending}
-        onCancel={() => setConfirmOpen(false)}
+        dismissible={!pending}
+        onClose={() => setConfirmOpen(false)}
         footer={(
           <div className="data-root-plan__actions">
             <Button disabled={pending} onClick={() => setConfirmOpen(false)}>
@@ -135,7 +133,7 @@ export function DataMigrationCleanupPage({ state }: { state: NormalDataRootState
           </div>
           <strong>{t('dataRoot.cleanup.irreversible')}</strong>
         </div>
-      </Modal>
+      </Dialog>
     </ShellFrame>
   );
 }

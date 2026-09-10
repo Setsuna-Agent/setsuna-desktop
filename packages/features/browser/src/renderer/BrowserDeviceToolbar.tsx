@@ -1,3 +1,5 @@
+import { TextField, SelectField as UiSelectField, Button } from '@setsuna-desktop/renderer-ui';
+
 import { RotateCw } from 'lucide-react';
 import {
   useEffect,
@@ -69,7 +71,7 @@ export function BrowserDeviceToolbar({
         })}
       </SelectField>
       <span className="desktop-browser-device-toolbar__dimensions">
-        <input
+        <TextField
           aria-label={translate('feature.browser.viewportWidth')}
           inputMode="numeric"
           max={5120}
@@ -81,7 +83,7 @@ export function BrowserDeviceToolbar({
           onKeyDown={blurOnEnter}
         />
         <span aria-hidden="true">×</span>
-        <input
+        <TextField
           aria-label={translate('feature.browser.viewportHeight')}
           inputMode="numeric"
           max={5120}
@@ -93,7 +95,7 @@ export function BrowserDeviceToolbar({
           onKeyDown={blurOnEnter}
         />
       </span>
-      <button
+      <Button variant="ghost"
         aria-label={translate('feature.browser.rotateDevice')}
         className="desktop-browser-device-toolbar__rotate"
         title={translate('feature.browser.rotateDevice')}
@@ -101,7 +103,7 @@ export function BrowserDeviceToolbar({
         onClick={() => onChange(rotateBrowserDevice(value))}
       >
         <RotateCw size={14} />
-      </button>
+      </Button>
       <SelectField
         aria-label={translate('feature.browser.deviceZoom')}
         className="desktop-browser-device-toolbar__scale"
@@ -122,13 +124,13 @@ function NativeBrowserSelectField({
   value,
 }: BrowserSelectFieldProps) {
   return (
-    <select
+    <UiSelectField
       aria-label={ariaLabel}
       className={className}
       value={value}
-      onChange={(event) => onValueChange(event.currentTarget.value)}
+      onValueChange={onValueChange}
     >
       {children}
-    </select>
+    </UiSelectField>
   );
 }

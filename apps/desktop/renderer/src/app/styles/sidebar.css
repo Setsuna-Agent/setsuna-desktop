@@ -294,12 +294,16 @@
   content: none;
 }
 
+.chat-sidebar-user__trigger,
+.chat-sidebar-user__more {
+  height: 28px;
+}
+
 .chat-sidebar-user__trigger {
   display: flex;
   align-items: center;
   gap: var(--desktop-agent-leading-gap);
   width: 100%;
-  height: 38px;
   padding: 0 9px 0 calc(var(--desktop-agent-leading-center) - var(--desktop-agent-row-start) - 1px - var(--desktop-agent-icon-size) / 2);
   border: 1px solid transparent;
   border-radius: var(--app-radius-md);
@@ -316,7 +320,6 @@
   align-items: center;
   justify-content: center;
   width: 28px;
-  height: 28px;
   padding: 0;
   border: 1px solid transparent;
   border-radius: var(--app-radius-md);
@@ -635,6 +638,13 @@
 
 .desktop-agent-project__select:focus-visible {
   outline: 0;
+}
+
+/* 整行容器统一承载状态背景，内部点击区不再叠加按钮的 hover 底色。 */
+.desktop-agent-session__select:hover:not(:disabled),
+.desktop-agent-project__select:hover:not(:disabled) {
+  color: inherit;
+  background: transparent;
 }
 
 .desktop-agent-project__text {

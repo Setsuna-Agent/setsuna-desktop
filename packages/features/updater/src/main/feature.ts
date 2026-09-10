@@ -36,8 +36,6 @@ export const updaterMainFeature = defineMainFeature({
     context.scope.add(registerUpdaterIpc(
       context.scope,
       updater,
-      host.mainWindow,
-      () => host.interfaceLanguage(),
     ));
 
     let initializePromise: Promise<void> | null = null;

@@ -7,7 +7,6 @@ import '@fontsource/inter/latin-500.css';
 import '@fontsource/inter/latin-600.css';
 import '@fontsource/jetbrains-mono/latin-400.css';
 import '@fontsource/jetbrains-mono/latin-500.css';
-import 'antd/dist/reset.css';
 import 'katex/dist/katex.min.css';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
@@ -29,13 +28,14 @@ import { KeyboardShortcutsProvider } from './shared/shortcuts/KeyboardShortcutsP
 
 // Shared defaults must load before feature styles so scoped components can override them.
 import './shared/styles/tokens.css';
-import './shared/styles/beautiful-ui.css';
+import './shared/styles/beui.css';
 import './app/styles/app.css';
 import './features/settings/styles/settings-data-root.css';
 import './shared/styles/file-icons.css';
 import './shared/styles/brand-icons.css';
 import './shared/styles/plugin-icons.css';
 import './shared/styles/primitives.css';
+import '@setsuna-desktop/renderer-ui/styles.css';
 import './app/styles/sidebar.css';
 import './app/styles/project-editor.css';
 import './features/workspace/styles/panel-chrome.css';

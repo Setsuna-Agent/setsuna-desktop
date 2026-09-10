@@ -61,7 +61,7 @@ describe('chat attachment cards', () => {
     expect(html).toContain('chat-image-gallery--multiple');
     expect(html).toContain('--chat-image-gallery-columns:2');
     expect(html).toContain('--chat-image-gallery-width:360px');
-    expect(html.match(/class="ant-image-img/g)).toHaveLength(2);
+    expect(html.match(/class="sd-image__content/g)).toHaveLength(2);
   });
 
   it('renders generated asset references without requiring persisted Base64 data', () => {

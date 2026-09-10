@@ -1,5 +1,6 @@
+import { Button, ImagePreview, ImagePreviewGroup } from '@setsuna-desktop/renderer-ui';
 import { isRuntimeInlineMessageAttachment } from '@setsuna-desktop/contracts';
-import { Image } from 'antd';
+
 import { LoaderCircle, TriangleAlert, X } from 'lucide-react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { WorkspaceFileIcon } from '../../workspace/WorkspaceFileIcon.js';
@@ -23,13 +24,13 @@ export function ChatAttachmentTray({
   return (
     <div className={`chat-attachment-tray ${items.length ? 'is-open' : ''}`}>
       <div className="chat-attachment-tray__clip">
-        <Image.PreviewGroup>
+        <ImagePreviewGroup>
           <div className="chat-attachments" aria-label={t('chat.attachments.label')}>
             {items.map((item) => (
               <ComposerAttachmentCard disabled={disabled} item={item} key={item.key} onRemove={onRemove} />
             ))}
           </div>
-        </Image.PreviewGroup>
+        </ImagePreviewGroup>
       </div>
     </div>
   );
@@ -60,7 +61,7 @@ function ComposerAttachmentCard({
       title={item.error || item.name}
     >
       {imagePreviewUrl ? (
-        <Image src={imagePreviewUrl} alt={item.name} className="chat-attachment__image" preview={{ mask: null }} />
+        <ImagePreview src={imagePreviewUrl} alt={item.name} className="chat-attachment__image" />
       ) : (
         <>
           <span className="chat-attachment__file-icon" aria-hidden="true">
@@ -80,7 +81,7 @@ function ComposerAttachmentCard({
           </span>
         </>
       )}
-      <button
+      <Button variant="danger"
         className="chat-attachment__remove"
         type="button"
         aria-label={t('chat.attachments.remove', { name: item.name })}
@@ -88,7 +89,7 @@ function ComposerAttachmentCard({
         onClick={() => onRemove(item.key)}
       >
         <X size={12} />
-      </button>
+      </Button>
     </div>
   );
 }

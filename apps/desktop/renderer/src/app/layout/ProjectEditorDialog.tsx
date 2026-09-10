@@ -1,11 +1,11 @@
+import { Button as UiButton, ConfirmDialogTrigger, Dialog } from '@setsuna-desktop/renderer-ui';
 import {
   WORKSPACE_PROJECT_NAME_MAX_CHARS,
   type UpdateWorkspaceProjectInput,
   type WorkspaceProject,
 } from '@setsuna-desktop/contracts';
 import { Folder, FolderPlus, Link2Off, X } from 'lucide-react';
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
-import { createPortal } from 'react-dom';
+import { useId, useState, type FormEvent } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { Button, IconButton, TextField } from '../../shared/ui/primitives.js';
 
@@ -23,25 +23,11 @@ export function ProjectEditorDialog({
   onSave,
 }: ProjectEditorDialogProps) {
   const { t } = useI18n();
-  const titleId = useId();
-  const descriptionId = useId();
-  const previousFocusRef = useRef<HTMLElement | null>(
-    typeof document === 'undefined' ? null : document.activeElement as HTMLElement | null,
-  );
+  const formId = useId();
   const [name, setName] = useState(project?.name ?? '');
   const [directoryPath, setDirectoryPath] = useState<string | undefined>(project?.path);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !busy) onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [busy, onClose]);
-
-  useEffect(() => () => previousFocusRef.current?.focus(), []);
 
   const chooseDirectory = async () => {
     const selectDirectory = window.setsunaDesktop?.desktop?.selectDirectory;
@@ -79,7 +65,7 @@ export function ProjectEditorDialog({
   };
 
   const remove = async () => {
-    if (!project || busy || !window.confirm(t('sidebar.removeProjectTitle', { project: project.name }))) return;
+    if (!project || busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -92,36 +78,33 @@ export function ProjectEditorDialog({
     }
   };
 
-  const dialog = (
-    <div
-      className="desktop-agent-modal-backdrop desktop-project-editor-backdrop"
-      role="presentation"
-      onMouseDown={() => {
-        if (!busy) onClose();
-      }}
-    >
-      <form
-        className="desktop-agent-modal desktop-project-editor"
-        role="dialog"
-        aria-modal="true"
-        aria-busy={busy}
-        aria-labelledby={titleId}
-        aria-describedby={descriptionId}
-        onMouseDown={(event) => event.stopPropagation()}
-        onSubmit={(event) => void submit(event)}
-      >
-        <header className="desktop-project-editor__header">
-          <div>
-            <strong id={titleId}>
-              {t(project ? 'sidebar.editProject' : 'sidebar.createProject')}
-            </strong>
-            <small id={descriptionId}>{t('sidebar.projectEditorDescription')}</small>
-          </div>
-          <IconButton label={t('common.close')} disabled={busy} onClick={onClose}>
-            <X size={15} />
-          </IconButton>
-        </header>
+  const footer = (
+    <div className="desktop-project-editor__footer">
+      <span>
+        {project ? (
+          <ConfirmDialogTrigger title={t('sidebar.removeProjectTitle', { project: project.name })}
+            confirmLabel={t('sidebar.removeProject')} cancelLabel={t('common.cancel')}
+            danger disabled={busy} onConfirm={remove}>
+            <Button disabled={busy} variant="danger">{t('sidebar.removeProject')}</Button>
+          </ConfirmDialogTrigger>
+        ) : null}
+      </span>
+      <span>
+        <Button disabled={busy} type="button" variant="ghost" onClick={onClose}>
+          {t('common.cancel')}
+        </Button>
+        <Button disabled={busy || !name.trim()} form={formId} type="submit" variant="primary">
+          {t('common.save')}
+        </Button>
+      </span>
+    </div>
+  );
 
+  return (
+    <Dialog title={t(project ? 'sidebar.editProject' : 'sidebar.createProject')}
+      description={t('sidebar.projectEditorDescription')} className="desktop-project-editor"
+      width={520} footer={footer} dismissible={!busy} onClose={onClose}>
+      <form id={formId} aria-busy={busy} onSubmit={(event) => void submit(event)}>
         <div className="desktop-project-editor__body">
           <label className="desktop-project-editor__field">
             <span>{t('sidebar.projectName')}</span>
@@ -160,7 +143,7 @@ export function ProjectEditorDialog({
                   <span>{t('sidebar.projectDirectoryUnbound')}</span>
                 </div>
               )}
-              <button
+              <UiButton variant="ghost"
                 className="desktop-project-editor__choose-directory"
                 type="button"
                 disabled={busy}
@@ -168,35 +151,15 @@ export function ProjectEditorDialog({
               >
                 <FolderPlus size={15} aria-hidden="true" />
                 <span>{t(directoryPath ? 'sidebar.changeProjectDirectory' : 'sidebar.bindProjectDirectory')}</span>
-              </button>
+              </UiButton>
             </div>
           </div>
 
           {error ? <div className="desktop-project-editor__error" role="alert">{error}</div> : null}
         </div>
-
-        <footer className="desktop-project-editor__footer">
-          <span>
-            {project ? (
-              <Button disabled={busy} type="button" variant="danger" onClick={() => void remove()}>
-                {t('sidebar.removeProject')}
-              </Button>
-            ) : null}
-          </span>
-          <span>
-            <Button disabled={busy} type="button" variant="ghost" onClick={onClose}>
-              {t('common.cancel')}
-            </Button>
-            <Button disabled={busy || !name.trim()} type="submit" variant="primary">
-              {t('common.save')}
-            </Button>
-          </span>
-        </footer>
       </form>
-    </div>
+    </Dialog>
   );
-
-  return typeof document === 'undefined' ? dialog : createPortal(dialog, document.body);
 }
 
 function directoryName(directoryPath: string): string {

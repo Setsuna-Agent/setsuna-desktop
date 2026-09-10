@@ -353,9 +353,11 @@ function checkProcessImport(repositoryRoot, filePath, entry, specifier, violatio
   if (
     entry !== 'renderer'
     && (specifier === '@setsuna-desktop/renderer-contracts'
-      || specifier.startsWith('@setsuna-desktop/renderer-contracts/'))
+      || specifier.startsWith('@setsuna-desktop/renderer-contracts/')
+      || specifier === '@setsuna-desktop/renderer-ui'
+      || specifier.startsWith('@setsuna-desktop/renderer-ui/'))
   ) {
-    fail(`the ${entry} entry cannot import Renderer-only contracts "${specifier}".`);
+    fail(`the ${entry} entry cannot import Renderer-only packages "${specifier}".`);
   }
   if (entry === 'contracts') {
     if (nodeBuiltins.has(specifier) || specifier === 'electron' || specifier === 'react' || specifier.startsWith('react/')) {
