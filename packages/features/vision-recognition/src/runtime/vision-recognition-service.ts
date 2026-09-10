@@ -308,11 +308,14 @@ export class RuntimeVisionRecognitionService implements VisionRecognitionService
   }
 }
 
+// `model.enabled` marks the provider's active chat model and is rewritten whenever the user
+// switches chat models, so it must not decide vision availability. The other model pickers
+// (memory, review, thread title) likewise only require an enabled provider.
 function availableVisionModels(providers: readonly ProviderConfigState[]): readonly VisionRecognitionModelOption[] {
   return Object.freeze(providers.flatMap((provider) => {
     if (!provider.enabled) return [];
     return provider.models.flatMap((model) => (
-      model.enabled && model.supportsImages && model.id.trim() && model.code.trim()
+      model.supportsImages && model.id.trim() && model.code.trim()
         ? [Object.freeze({
             providerId: provider.id,
             providerName: provider.name || provider.id,
@@ -331,7 +334,9 @@ function selectVisionModel(
 ): Readonly<{ provider: ProviderConfigState; model: ProviderModelConfig }> | null {
   const provider = providers.find((item) => item.enabled && item.id === reference.providerId);
   const model = provider?.models.find((item) => item.id === reference.modelId);
-  if (!provider || !model?.enabled || !model.supportsImages || !model.code.trim()) return null;
+  // A saved selection stays valid as long as the model is still configured on an enabled
+  // provider; the provider's active chat model flag must not invalidate it.
+  if (!provider || !model?.supportsImages || !model.code.trim()) return null;
   return Object.freeze({ provider, model });
 }
 

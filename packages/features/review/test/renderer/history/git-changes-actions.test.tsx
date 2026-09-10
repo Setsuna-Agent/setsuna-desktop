@@ -29,9 +29,10 @@ function createBridge(operations: Partial<DesktopReviewBridge>): DesktopReviewBr
   } as DesktopReviewBridge;
 }
 
-function surface(bridge: DesktopReviewBridge, { root = '/repo', onRefresh = noop, onOpen = noop, reviewState = state, onOpenEditor, conversationModelSelection, service = createNoopReviewRendererService() }: {
+function surface(bridge: DesktopReviewBridge, { root = '/repo', onRefresh = noop, onOpen = noop, reviewState = state, onOpenEditor, conversationModelSelection, notifyError, service = createNoopReviewRendererService() }: {
   service?: ReviewRendererService;
   conversationModelSelection?: RuntimeConfiguredModelReference;
+  notifyError?: (message: string) => void;
   root?: string;
   onRefresh?: () => void;
   onOpen?: (path: string) => void;
@@ -39,7 +40,7 @@ function surface(bridge: DesktopReviewBridge, { root = '/repo', onRefresh = noop
   onOpenEditor?: CommitMessageEditorLauncher;
 } = {}) {
   return (
-    <ConfirmationProvider><ReviewRendererProvider service={service}><ReviewRendererTestHost bridge={bridge}>
+    <ConfirmationProvider><ReviewRendererProvider service={service}><ReviewRendererTestHost bridge={bridge} notifyError={notifyError}>
       <WorkspaceGitCommitProvider threadId="thread_1" activeProject={{ id: root, path: root, name: 'Repository', createdAt: '', updatedAt: '' }} reviewState={reviewState} reviewLoading={false} onReviewRefresh={onRefresh} onOpenMessageEditor={onOpenEditor} conversationModelSelection={conversationModelSelection}>
         <GitChangesPanel editingMessage workspaceRoot={root} reviewState={reviewState} reviewError={null} reviewLoading={false} onRefresh={onRefresh} actions={{
           workspaceApps: [], onAddFileToConversation: noop, onCopyFilePath: noop, onExternalOpenFile: noop,
@@ -133,17 +134,22 @@ it('uses the latest conversation model when generating after switching conversat
   await waitFor(() => expect(generateCommitMessage).toHaveBeenLastCalledWith('/repo', { includeUnstaged: false, modelSelection: second }, expect.any(Function)));
 });
 
-it('does not turn an empty index into a commit-all action through buttons or form submission', async () => {
+it('explains an empty index instead of turning it into a commit-all action through buttons or form submission', async () => {
   const commit = vi.fn();
   const generateCommitMessage = vi.fn();
-  render(surface(createBridge({ commit, generateCommitMessage }), { reviewState: { ...state, stagedSummary: null } }));
+  const notifyError = vi.fn();
+  render(surface(createBridge({ commit, generateCommitMessage }), { notifyError, reviewState: { ...state, stagedSummary: null } }));
   const input = screen.getByRole('textbox', { name: '提交消息' });
   fireEvent.change(input, { target: { value: 'Only staged changes' } });
   const form = screen.getByRole('form', { name: '提交到 main' });
-  expect((within(form).getByRole('button', { name: '提交', exact: true }) as HTMLButtonElement).disabled).toBe(true);
-  expect(screen.getAllByRole('button', { name: '提交', exact: true }).every((button) => (button as HTMLButtonElement).disabled)).toBe(true);
-  expect((screen.getByRole('button', { name: 'AI 生成提交消息' }) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.getAllByRole('button', { name: '提交', exact: true })
+    .every((button) => !(button as HTMLButtonElement).disabled)).toBe(true);
+  fireEvent.click(within(form).getByRole('button', { name: '提交', exact: true }));
+  expect(notifyError).toHaveBeenCalledWith('暂存区没有更改，先暂存要提交的文件');
+  expect(commit).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'AI 生成提交消息' }));
   fireEvent.submit(form);
+  expect(notifyError).toHaveBeenCalledTimes(3);
   expect(commit).not.toHaveBeenCalled();
   expect(generateCommitMessage).not.toHaveBeenCalled();
 });

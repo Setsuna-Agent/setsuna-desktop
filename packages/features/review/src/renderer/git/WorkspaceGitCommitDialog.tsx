@@ -37,6 +37,7 @@ import { localReviewChangeStats } from '../reviewChanges.js';
 import { WorkspaceGitBranchCreateControl } from './WorkspaceGitBranchCreateControl.js';
 import { useCommitMessageEditor, type CommitMessageEditorLauncher } from './useCommitMessageEditor.js';
 import { useAutoResolveGitConflicts } from './useAutoResolveGitConflicts.js';
+import { commitBlockedMessage, commitPrerequisiteMessage } from './commitBlockedMessage.js';
 import { createCommitMessageDocument } from './commit-message-document.js';
 import { GitOperationError } from './GitOperationError.js';
 
@@ -53,8 +54,9 @@ type WorkspaceGitCommitDialogContextValue = {
     message: string;
     setMessage: (message: string) => void;
     currentBranch: string;
-    available: boolean;
     busy: boolean;
+    commitBlockedReason: string | null;
+    generateBlockedReason: string | null;
     generating: boolean;
     committing: boolean;
     error: string | null;
@@ -105,7 +107,7 @@ export function WorkspaceGitCommitProvider({
   onReviewRefresh?: () => void | Promise<void>;
   onOpenMessageEditor?: CommitMessageEditorLauncher;
 }>) {
-  const { bridge, notifySuccess, translate: t, ui: { Checkbox } } = useReviewRendererHost();
+  const { bridge, notifyError, notifySuccess, translate: t, ui: { Checkbox } } = useReviewRendererHost();
   const [open, setOpen] = useState(false);
   const [branchMenuOpen, setBranchMenuOpen] = useState(false);
   const [commitMessage, setCommitMessage] = useState('');
@@ -134,6 +136,18 @@ export function WorkspaceGitCommitProvider({
   const commitableFileCount = includeUnstaged
     ? changeStats.fileCount
     : stagedFileCount;
+
+  // Commit surfaces stay clickable so a click can explain the missing prerequisite instead of
+  // silently doing nothing.
+  const commitPrerequisites = {
+    busy: Boolean(busyAction),
+    committableFileCount: stagedFileCount,
+    gitRepository: Boolean(reviewState?.isGitRepository),
+    projectSelected: Boolean(activeProject),
+    reviewLoading,
+  };
+  const commitBlockedReason = commitBlockedMessage({ ...commitPrerequisites, message: commitMessage }, t);
+  const generateBlockedReason = commitPrerequisiteMessage(commitPrerequisites, t);
 
   const resetDialog = useCallback((nextOpen = false) => {
     setOpen(nextOpen);
@@ -293,6 +307,14 @@ export function WorkspaceGitCommitProvider({
     });
   };
 
+  const runComposerCommit = (options?: Parameters<typeof commitChanges>[0]) => {
+    if (commitBlockedReason) {
+      notifyError(commitBlockedReason);
+      return;
+    }
+    commitChanges(options);
+  };
+
   const pushBranch = () => {
     void runGitAction('push', async (api, isCurrent) => {
       await api.push(workspaceRoot);
@@ -317,7 +339,7 @@ export function WorkspaceGitCommitProvider({
     });
   };
 
-  const generateMessage = () => {
+  const runGenerateMessage = () => {
     void runGitAction('generate-message', async (api, isCurrent) => {
       const generated = await generateDraft(api, false, isCurrent);
       if (!isCurrent()) return;
@@ -337,16 +359,23 @@ export function WorkspaceGitCommitProvider({
       message: commitMessage,
       setMessage: setCommitMessage,
       currentBranch,
-      available: canOpenCommitDialog && stagedFileCount > 0,
       busy: Boolean(busyAction),
+      commitBlockedReason,
+      generateBlockedReason,
       generating: busyAction === 'generate-message' || commitPhase === 'generating',
       committing: commitPhase === 'committing',
       error,
       dismissError,
-      generateMessage,
-      commit: () => commitChanges(),
-      commitAndPush: () => commitChanges({ push: true }),
-      commitAndSync: () => commitChanges({ sync: true }),
+      generateMessage: () => {
+        if (generateBlockedReason) {
+          notifyError(generateBlockedReason);
+          return;
+        }
+        runGenerateMessage();
+      },
+      commit: () => runComposerCommit(),
+      commitAndPush: () => runComposerCommit({ push: true }),
+      commitAndSync: () => runComposerCommit({ sync: true }),
       amend: () => commitChanges({ amend: true }),
       canAmend: canOpenCommitDialog && messageEditor.available,
       push: pushBranch,

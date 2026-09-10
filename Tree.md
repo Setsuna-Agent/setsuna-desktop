@@ -211,7 +211,7 @@ packages/renderer-ui/ — 3 direct / 32 total files
 ### `packages/features/`
 
 ```text
-packages/features/ — 0 direct / 961 total files
+packages/features/ — 0 direct / 963 total files
 ├── approval-review/ — 2 direct / 20 total files
 │   ├── src/ — 17 files
 │   │   ├── contracts/ — 5 direct / 5 total files
@@ -322,23 +322,24 @@ packages/features/ — 0 direct / 961 total files
 │       ├── main/ — 1 direct / 1 total files
 │       ├── renderer/ — 3 direct / 3 total files
 │       └── runtime/ — 1 direct / 1 total files
-├── review/ — 2 direct / 140 total files
-│   ├── src/ — 113 files
+├── review/ — 2 direct / 142 total files
+│   ├── src/ — 114 files
 │   │   ├── contracts/ — 16 direct / 16 total files
 │   │   ├── main/ — 16 direct / 16 total files
 │   │   ├── preload/ — 2 direct / 2 total files
-│   │   ├── renderer/ — 30 direct / 71 total files
-│   │   │   ├── git/ — 9 direct / 9 total files
+│   │   ├── renderer/ — 30 direct / 72 total files
+│   │   │   ├── git/ — 10 direct / 10 total files
 │   │   │   ├── history/ — 23 direct / 23 total files
 │   │   │   ├── hooks/ — 2 direct / 2 total files
 │   │   │   ├── model/ — 1 direct / 1 total files
 │   │   │   └── styles/ — 6 direct / 6 total files
 │   │   └── runtime/ — 8 direct / 8 total files
-│   └── test/ — 25 files
+│   └── test/ — 26 files
 │       ├── integration/ — 4 files
 │       │   └── main/ — 4 direct / 4 total files
 │       ├── main/ — 4 direct / 4 total files
-│       ├── renderer/ — 6 direct / 13 total files
+│       ├── renderer/ — 6 direct / 14 total files
+│       │   ├── git/ — 1 direct / 1 total files
 │       │   ├── history/ — 6 direct / 6 total files
 │       │   └── hooks/ — 1 direct / 1 total files
 │       └── runtime/ — 4 direct / 4 total files

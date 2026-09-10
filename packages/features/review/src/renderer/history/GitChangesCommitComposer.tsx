@@ -15,13 +15,13 @@ export function GitChangesCommitComposer({ blocked = false }: { blocked?: boolea
   const { inputRef, height, resizeHandleProps } = useCommitMessageInputResize();
   const message = composer?.message ?? '';
   const busy = Boolean(composer?.busy || blocked);
-  const canCommit = Boolean(composer?.available && !busy && message.trim());
   const target = t('feature.review.history.commitTarget', { branch: composer?.currentBranch ?? 'HEAD' });
 
   return (
     <form className="git-changes-composer" aria-label={target} onSubmit={(event) => {
       event.preventDefault();
-      if (canCommit) composer?.commit();
+      // The shared composer explains blocked commits, so the form always forwards the attempt.
+      composer?.commit();
     }}>
       <div className="git-changes-composer__input">
         <TextArea
@@ -47,8 +47,7 @@ export function GitChangesCommitComposer({ blocked = false }: { blocked?: boolea
             type="button"
             aria-label={t('feature.review.history.generateMessage')}
             aria-busy={composer?.generating || undefined}
-            disabled={!composer?.available || busy}
-            onClick={composer?.generateMessage}
+            onClick={() => composer?.generateMessage()}
           >
             {composer?.generating ? <Loader2 size={14} className="chat-git-loading-icon" /> : <Sparkles size={14} />}
           </Button>
@@ -63,7 +62,7 @@ export function GitChangesCommitComposer({ blocked = false }: { blocked?: boolea
       </div>
       <div className="git-changes-composer__submit">
         <Button variant="primary" size="small" className="git-changes-nav__commit" type="submit"
-          disabled={!canCommit} loading={composer?.committing} icon={<Check size={14} />} title={target}>
+          loading={composer?.committing} icon={<Check size={14} />} title={target}>
           {t(composer?.committing ? 'feature.review.git.committing' : 'feature.review.git.commit')}
         </Button>
         <GitCommitActionMenu disabled={busy} />

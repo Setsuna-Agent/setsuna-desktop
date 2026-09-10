@@ -445,21 +445,69 @@ describe('runtime server AppServer catalog and thread listing', () => {
             isDefault: true,
           },
         ],
-        nextCursor: null,
+        nextCursor: '1',
       });
   
-      await expect(harness.appServerRpc('model/list', { includeHidden: true, cursor: '1', limit: 1 })).resolves.toMatchObject({
+      await expect(harness.appServerRpc('model/list', { cursor: '1', limit: 1 })).resolves.toMatchObject({
         data: [
           {
             id: 'catalog-openai:beta',
             model: 'gpt-beta',
-            hidden: true,
+            hidden: false,
             defaultReasoningEffort: 'none',
             inputModalities: ['text'],
             isDefault: false,
           },
         ],
         nextCursor: null,
+      });
+
+      await harness.runtimeFetch('/v1/config', {
+        method: 'PUT',
+        body: JSON.stringify({
+          activeProviderId: 'catalog-openai',
+          providers: [
+            {
+              id: 'catalog-openai',
+              name: 'Catalog OpenAI',
+              provider: 'openai-responses',
+              baseUrl: 'https://api.openai.test/v1',
+              apiKey: 'sk-catalog',
+              enabled: true,
+              models: [
+                { id: 'alpha', name: 'GPT Alpha', code: 'gpt-alpha', enabled: true, maxOutputTokens: 2000, thinkingEnabled: true, thinkingEfforts: ['low', 'high'], defaultThinkingEffort: 'high', supportsImages: true },
+                { id: 'beta', name: 'GPT Beta', code: 'gpt-beta', enabled: false, maxOutputTokens: 2000, thinkingEnabled: false, thinkingEfforts: [] },
+              ],
+            },
+            {
+              id: 'catalog-off',
+              name: 'Catalog Off',
+              provider: 'openai-responses',
+              baseUrl: 'https://api.openai.test/v1',
+              apiKey: 'sk-off',
+              enabled: false,
+              models: [
+                { id: 'gamma', name: 'GPT Gamma', code: 'gpt-gamma', enabled: true, maxOutputTokens: 2000, thinkingEnabled: false, thinkingEfforts: [] },
+              ],
+            },
+          ],
+        }),
+      });
+
+      // The selected model of a provider does not decide catalog visibility, and only a disabled
+      // provider hides its models.
+      await expect(harness.appServerRpc('model/list', {})).resolves.toMatchObject({
+        data: [
+          expect.objectContaining({ id: 'catalog-openai:alpha', hidden: false }),
+          expect.objectContaining({ id: 'catalog-openai:beta', hidden: false }),
+        ],
+      });
+      await expect(harness.appServerRpc('model/list', { includeHidden: true })).resolves.toMatchObject({
+        data: [
+          expect.objectContaining({ id: 'catalog-openai:alpha' }),
+          expect.objectContaining({ id: 'catalog-openai:beta' }),
+          expect.objectContaining({ id: 'catalog-off:gamma', hidden: true }),
+        ],
       });
   
       await expect(harness.appServerRpcEnvelope({

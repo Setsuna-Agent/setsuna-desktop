@@ -93,6 +93,38 @@ describe('RuntimeVisionRecognitionService', () => {
     }]);
   });
 
+  it('keeps an image-capable model available while another model is the provider active chat model', async () => {
+    const [fixture] = provider().models;
+    const requests: VisionRecognitionTextRequest[] = [];
+    const service = await createService({
+      providers: [provider({
+        models: [
+          { ...fixture!, id: 'chat-model', name: 'Chat', code: 'gpt-text', enabled: true, supportsImages: false },
+          { ...fixture!, id: 'vision-model', name: 'Qwen Vision', code: 'qwen-vl-max', enabled: false, supportsImages: true },
+        ],
+      })],
+      async generateText(input) {
+        requests.push(input);
+        return { content: 'Recognized.' };
+      },
+    });
+
+    await expect(service.readSettings()).resolves.toMatchObject({
+      selection: { providerId: 'vision-provider', modelId: 'vision-model' },
+      health: 'ready',
+      availableModels: [{
+        providerId: 'vision-provider',
+        modelId: 'vision-model',
+        modelCode: 'qwen-vl-max',
+      }],
+    });
+    await expect(service.analyze(
+      { attachment_id: 'attachment_asset_1', prompt: 'Describe it.' },
+      { threadId: 'thread_1' },
+    )).resolves.toMatchObject({ model: 'qwen-vl-max', modelId: 'vision-model' });
+    expect(requests[0]).toMatchObject({ providerId: 'vision-provider', model: 'qwen-vl-max' });
+  });
+
   it('keeps provider health degraded across settings refreshes until a retry succeeds', async () => {
     let attempts = 0;
     const service = await createService({

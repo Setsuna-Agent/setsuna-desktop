@@ -78,12 +78,11 @@ export function GitCommitActionMenu({ disabled = false }: { disabled?: boolean }
 function useGitCommitMenuItems(): MenuProps['items'] {
   const { translate: t } = useReviewRendererHost();
   const { composer } = useWorkspaceGitCommitDialog();
-  const canCommit = Boolean(composer?.available && !composer.busy && composer.message.trim());
   return [
-    { key: 'commit-only', label: t('feature.review.git.commit'), disabled: !canCommit, onClick: composer?.commit },
+    { key: 'commit-only', label: t('feature.review.git.commit'), onClick: composer?.commit },
     { key: 'commit-amend', label: t('feature.review.git.commitAmend'), disabled: !composer?.canAmend || composer.busy, onClick: composer?.amend },
     { type: 'divider' },
-    { key: 'commit-push', label: t('feature.review.git.commitAndPush'), disabled: !canCommit, onClick: composer?.commitAndPush },
-    { key: 'commit-sync', label: t('feature.review.git.commitAndSync'), disabled: !canCommit, onClick: composer?.commitAndSync },
+    { key: 'commit-push', label: t('feature.review.git.commitAndPush'), onClick: composer?.commitAndPush },
+    { key: 'commit-sync', label: t('feature.review.git.commitAndSync'), onClick: composer?.commitAndSync },
   ];
 }
