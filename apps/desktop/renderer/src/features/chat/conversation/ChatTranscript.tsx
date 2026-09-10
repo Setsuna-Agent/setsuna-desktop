@@ -31,10 +31,8 @@ import {
   MessageItem,
 } from './ChatMessageItem.js';
 import { TranscriptWindowDivider } from './TranscriptWindowDivider.js';
-import {
-  ChatScrollOverlay,
-  usePinnedChatScroll,
-} from './ChatWorkspaceScroll.js';
+import { usePinnedChatScroll } from './ChatWorkspaceScroll.js';
+import { ScrollOverlay } from '../../../shared/ui/ScrollOverlay.js';
 import { ContextCompactionStatus } from './ContextCompactionStatus.js';
 import { StreamingScrollPinProvider } from './StreamingScrollPinProvider.js';
 import { ChatThreadProvider } from './ChatThreadProvider.js';
@@ -331,7 +329,7 @@ export function ChatTranscript({
           </div>
         </MarkdownViewportProvider>
       </div>
-      <ChatScrollOverlay disabled={showEmptyStarter} scrollRef={scrollRefInternal} scrollSignal={scrollSignal} />
+      <ScrollOverlay disabled={showEmptyStarter} scrollRef={scrollRefInternal} scrollSignal={scrollSignal} />
       {showScrollBottom && !showEmptyStarter ? (
         <div className="chat-scroll-bottom-anchor">
           <button className="chat-scroll-bottom" type="button" aria-label={t('chat.scrollBottom')} onClick={() => scrollToBottom()}>

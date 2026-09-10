@@ -448,6 +448,38 @@ describe('desktop review state actions', () => {
     await expect(readFile(trackedPath, 'utf8')).resolves.toBe('initial\n');
     await expect(readFile(untrackedPath, 'utf8')).rejects.toThrow();
   }, GIT_INTEGRATION_TEST_TIMEOUT_MS);
+
+  it('treats a selected file path literally during stage, unstage, and discard', async () => {
+    const repo = await mkGitRepo();
+    const selected = ' [x].txt';
+    const neighbour = ' x.txt';
+    for (const name of [selected, neighbour]) await writeFile(path.join(repo, name), 'original\n');
+    await git(repo, ['add', '--all']);
+    await git(repo, ['commit', '-m', 'Add filenames containing pathspec characters']);
+    for (const name of [selected, neighbour]) await writeFile(path.join(repo, name), 'changed\n');
+    await stageReviewFiles(repo, [selected]);
+    expect((await execFileAsync('git', ['diff', '--cached', '--name-only', '-z'], { cwd: repo })).stdout).toBe(selected + '\0');
+    await unstageReviewFiles(repo, [selected]);
+    expect(await git(repo, ['diff', '--cached', '--name-only'])).toBe('');
+    await discardUnstagedReviewFiles(repo, [selected]);
+    expect(await readFile(path.join(repo, selected), 'utf8')).toBe('original\n');
+    expect(await readFile(path.join(repo, neighbour), 'utf8')).toBe('changed\n');
+    const untracked = ' scratch.txt';
+    await writeFile(path.join(repo, untracked), 'new\n');
+    await discardUnstagedReviewFiles(repo, [untracked]);
+    await expect(readFile(path.join(repo, untracked))).rejects.toThrow();
+  }, GIT_INTEGRATION_TEST_TIMEOUT_MS);
+
+  it('unstages a new file before the first commit without deleting working content', async () => {
+    const repo = await mkdtemp(path.join(tmpdir(), 'setsuna-review-unborn-'));
+    await git(repo, ['init']);
+    await writeFile(path.join(repo, 'new.txt'), 'staged\n');
+    await stageReviewFiles(repo, ['new.txt']);
+    await writeFile(path.join(repo, 'new.txt'), 'edited after staging\n');
+    await unstageReviewFiles(repo, ['new.txt']);
+    expect(await git(repo, ['ls-files'])).toBe('');
+    expect(await readFile(path.join(repo, 'new.txt'), 'utf8')).toBe('edited after staging\n');
+  }, GIT_INTEGRATION_TEST_TIMEOUT_MS);
 });
 
 async function mkGitRepo(): Promise<string> {

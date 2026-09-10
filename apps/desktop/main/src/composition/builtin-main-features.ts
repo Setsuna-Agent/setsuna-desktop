@@ -35,6 +35,7 @@ import {
   reviewFilePreviewCapability,
   reviewRendererSenderCapability,
   type DesktopCommitMessageGenerationSource,
+  type ReviewCommitMessageGenerator,
 } from '@setsuna-desktop/feature-review/contracts';
 import { reviewMainFeature } from '@setsuna-desktop/feature-review/main';
 import {
@@ -104,6 +105,7 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
   networkProxyHost: NetworkProxyMainHost;
   pluginManagementHost: PluginManagementMainHost;
   requestRuntime(input: RuntimeRequestInput): Promise<unknown>;
+  requestRuntimeProgress(input: RuntimeRequestInput, options: { signal?: AbortSignal; onProgress: (value: unknown) => void }): Promise<unknown>;
   updaterHost: UpdaterMainHost;
   webDavSyncHost: WebDavSyncMainHost;
   windowsSandboxHost: WindowsSandboxMainHost;
@@ -129,12 +131,18 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
       provideHostCapability(
         reviewCommitMessageCapability,
         Object.freeze({
-          generate: async (source: DesktopCommitMessageGenerationSource) => {
-            const result = await input.requestRuntime({
+          generate: async (source: DesktopCommitMessageGenerationSource, options?: Parameters<ReviewCommitMessageGenerator['generate']>[1]) => {
+            const request = {
               path: generateReviewCommitMessage.path,
               method: generateReviewCommitMessage.method,
               body: source,
-            });
+            };
+            const result = options?.onProgress
+              ? await input.requestRuntimeProgress(request, {
+                signal: options.signal,
+                onProgress: (value) => options.onProgress?.(generateReviewCommitMessage.output.parse(value).message),
+              })
+              : await input.requestRuntime(request);
             return generateReviewCommitMessage.output.parse(result).message;
           },
         }),

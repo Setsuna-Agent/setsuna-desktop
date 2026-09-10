@@ -7,11 +7,12 @@ import {
   featureOperationPathParameters,
   type FeatureOperationDescriptor,
   type FeatureOperationErrorDefinitions,
+  type FeatureOperationMethod,
   type FeatureOperationTransport,
 } from '@setsuna-desktop/feature-core/operation';
 
 export function createDesktopFeatureOperationTransport(
-  bridge: DesktopRuntimeBridge,
+  bridge: Pick<DesktopRuntimeBridge, 'request' | 'cancelRequest'>,
 ): FeatureOperationTransport {
   return Object.freeze({
     async call<TInput, TOutput, TErrors extends FeatureOperationErrorDefinitions>(
@@ -21,7 +22,7 @@ export function createDesktopFeatureOperationTransport(
     ): Promise<TOutput> {
       if (options.signal?.aborted) throw cancelledFailure();
       const parsedInput = operation.input.parse(input);
-      const request = materializeOperationRequest(operation.path, parsedInput);
+      const request = materializeOperationRequest(operation.path, operation.method, parsedInput);
       const requestId = crypto.randomUUID();
       const cancel = () => {
         void bridge.cancelRequest(requestId);
@@ -31,9 +32,7 @@ export function createDesktopFeatureOperationTransport(
         const response = await bridge.request<RuntimeFeatureOperationResponse>({
           path: request.path,
           method: operation.method,
-          ...(operation.method === 'GET' || operation.method === 'DELETE' || request.body === undefined
-            ? {}
-            : { body: request.body }),
+          ...(request.body === undefined ? {} : { body: request.body }),
           requestId,
           responseMode: 'feature-operation',
         });
@@ -58,12 +57,15 @@ export function createDesktopFeatureOperationTransport(
 
 function materializeOperationRequest(
   routePath: string,
+  method: FeatureOperationMethod,
   input: unknown,
 ): Readonly<{ path: string; body?: unknown }> {
   const parameters = featureOperationPathParameters(routePath);
-  if (!parameters.length) return Object.freeze({ path: routePath, body: input });
+  const usesQuery = method === 'GET' || method === 'DELETE';
+  if (!parameters.length && !usesQuery) return Object.freeze({ path: routePath, body: input });
+  if (!parameters.length && input === undefined) return Object.freeze({ path: routePath });
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
-    throw new Error('Feature operation path parameters require an object input.');
+    throw new Error('Feature operation URL parameters require an object input.');
   }
   const body = { ...(input as Record<string, unknown>) };
   let path = routePath;
@@ -74,6 +76,20 @@ function materializeOperationRequest(
     }
     path = path.replace(`:${parameter}`, encodeURIComponent(value));
     delete body[parameter];
+  }
+  if (usesQuery) {
+    // Bodyless requests must carry remaining input in the query; dropping it
+    // makes renderer-validated requests fail the runtime's input codec.
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(body)) {
+      if (value === undefined) continue;
+      if (typeof value !== 'string' && typeof value !== 'boolean'
+        && !(typeof value === 'number' && Number.isFinite(value))) {
+        throw new Error(`Feature operation query parameter "${key}" must be a string, boolean, or finite number.`);
+      }
+      query.set(key, String(value));
+    }
+    return Object.freeze({ path: query.size ? `${path}?${query}` : path });
   }
   return Object.freeze({
     path,

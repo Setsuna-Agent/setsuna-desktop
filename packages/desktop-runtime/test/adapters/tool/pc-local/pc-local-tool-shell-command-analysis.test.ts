@@ -7,6 +7,25 @@ import {
 import { shellCommandRisk } from '../../../../src/adapters/tool/pc-local/pc-local-tools.js';
 
 describe('PC local shell destructive-command analysis', () => {
+  it('distinguishes Git index and ref mutations from read-only inspection', () => {
+    for (const [command, writesMetadata] of [
+      ['git add -- index.html && git diff --cached', true],
+      ['git -C "repo with spaces" -c core.quotepath=false add -- index.html', true],
+      ['git rebase --continue', true],
+      ['git stash pop', true],
+      ['git tag v1', true],
+      ['git stash list', false],
+      ['git --no-pager stash show --stat', false],
+      ['git tag --list "v*"', false],
+      ['git tag', false],
+      ['git diff --cached --name-only', false],
+      ['echo "git add index.html"', false],
+    ] as const) {
+      expect(shellWritePathCandidates(command).includes('.git'), command).toBe(writesMetadata);
+      expect(Boolean(obviousHighRiskShellReason(command)), command).toBe(writesMetadata);
+    }
+  });
+
   it('matches destructive deletion commands when approval prompts are disabled', () => {
     for (const command of [
       'rm -f scoped.txt',

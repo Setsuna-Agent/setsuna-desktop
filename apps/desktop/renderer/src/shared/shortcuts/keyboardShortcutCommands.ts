@@ -25,6 +25,7 @@ export const KEYBOARD_SHORTCUT_COMMAND_IDS = [
   'chat.toggleOverview',
   'workspace.openFiles',
   'workspace.openReview',
+  'workspace.openChanges',
   'workspace.openTerminal',
   'workspace.openSideChat',
   'workspace.openBrowser',
@@ -173,6 +174,13 @@ export const keyboardShortcutCommands: readonly KeyboardShortcutCommand[] = [
     labelKey: 'shortcuts.command.openReview',
     descriptionKey: 'shortcuts.command.openReviewDescription',
     defaultBindings: primaryBinding('KeyG', true),
+  },
+  {
+    id: 'workspace.openChanges',
+    group: 'workspace',
+    labelKey: 'shortcuts.command.openChanges',
+    descriptionKey: 'shortcuts.command.openChangesDescription',
+    defaultBindings: primaryBinding('KeyH', true),
   },
   {
     id: 'workspace.openTerminal',

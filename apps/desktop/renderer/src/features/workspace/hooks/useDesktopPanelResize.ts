@@ -19,7 +19,7 @@ const SIDEBAR_WIDTH_VARIABLES = ['--app-sidebar-width', '--app-topbar-sidebar-wi
 const SIDEBAR_MIN_WIDTH = 208;
 const SIDEBAR_MAX_WIDTH = 360;
 export const WORKBENCH_MAIN_MIN_WIDTH = 420;
-export const WORKBENCH_EXPANDED_SIDEBAR_MAIN_MIN_WIDTH = 520;
+export const WORKBENCH_SPLIT_MAIN_MIN_WIDTH = 520;
 const WORKBENCH_MAIN_MIN_HEIGHT = 260;
 const WORKSPACE_MIN_WIDTH = 460;
 const WORKSPACE_DEFAULT_WIDTH = 640;
@@ -32,9 +32,11 @@ export function useDesktopPanelResize(
 ) {
   const [sidebarWidth, setSidebarWidth] = useState(240);
   const [workspaceWidth, setWorkspaceWidth] = useState(WORKSPACE_DEFAULT_WIDTH);
+  const [workspaceRestoreWidth, setWorkspaceRestoreWidth] = useState<number | null>(null);
   const [workspacePreviewWidth, setWorkspacePreviewWidth] = useState<number | null>(null);
   const [terminalHeight, setTerminalHeight] = useState(260);
   const workspacePreviewCanFitSidebarRef = useRef<boolean | null>(null);
+  const workspaceMaximized = workspaceRestoreWidth !== null;
   const setShellVariables = useCallback(
     (names: CssVariableName, value: string) => {
       const shell = shellRef.current;
@@ -93,6 +95,7 @@ export function useDesktopPanelResize(
   );
   const beginWorkspacePreviewResize = useCallback(
     (value: number) => {
+      setWorkspaceRestoreWidth(null);
       workspacePreviewCanFitSidebarRef.current = canWorkspaceKeepSidebarExpanded(value);
       setWorkspacePreviewWidth(null);
     },
@@ -141,15 +144,27 @@ export function useDesktopPanelResize(
     [stepResizeValue],
   );
   const handleWorkspaceResizeStep = useCallback(
-    (delta: number) => stepResizeValue('--desktop-agent-workspace-width', clampWorkspaceWidth, setWorkspaceWidth, delta),
+    (delta: number) => {
+      setWorkspaceRestoreWidth(null);
+      stepResizeValue('--desktop-agent-workspace-width', clampWorkspaceWidth, setWorkspaceWidth, delta);
+    },
     [clampWorkspaceWidth, stepResizeValue],
   );
+  const toggleWorkspaceMaximized = useCallback(() => {
+    // Keep the normal width separate so resizing the window while maximized does not overwrite it.
+    const nextValue = clampWorkspaceWidth(workspaceRestoreWidth ?? Number.POSITIVE_INFINITY);
+    setWorkspaceRestoreWidth(workspaceMaximized ? null : workspaceWidth);
+    endWorkspacePreviewResize();
+    setWorkspaceWidth(nextValue);
+    setShellVariables('--desktop-agent-workspace-width', workspaceWidthCssValue(nextValue, workspaceVisible));
+  }, [clampWorkspaceWidth, endWorkspacePreviewResize, setShellVariables, workspaceMaximized, workspaceRestoreWidth, workspaceVisible, workspaceWidth]);
   const fitWorkspaceForExpandedSidebar = useCallback(() => {
     const maxExpandedWorkspaceWidth = workspaceMaxWidthForExpandedSidebar({
       sidebarWidth,
       viewportWidth: shellRef.current?.clientWidth ?? viewportWidth(),
     });
     workspacePreviewCanFitSidebarRef.current = null;
+    setWorkspaceRestoreWidth(null);
     setWorkspacePreviewWidth(null);
     setWorkspaceWidth((current) => {
       const nextValue = Math.min(current, maxExpandedWorkspaceWidth);
@@ -171,7 +186,7 @@ export function useDesktopPanelResize(
       frame = window.requestAnimationFrame(() => {
         frame = 0;
         setWorkspaceWidth((current) => {
-          const nextValue = clampWorkspaceWidth(current);
+          const nextValue = clampWorkspaceWidth(workspaceMaximized ? Number.POSITIVE_INFINITY : current);
           setShellVariables('--desktop-agent-workspace-width', workspaceWidthCssValue(nextValue, workspaceVisible));
           if (nextValue === current) return current;
           return nextValue;
@@ -190,7 +205,7 @@ export function useDesktopPanelResize(
       if (frame) window.cancelAnimationFrame(frame);
       window.removeEventListener('resize', syncResponsiveBounds);
     };
-  }, [bottomPanelVisible, clampTerminalHeight, clampWorkspaceWidth, setShellVariables, workspaceVisible]);
+  }, [bottomPanelVisible, clampTerminalHeight, clampWorkspaceWidth, setShellVariables, workspaceMaximized, workspaceVisible]);
 
   const terminalMaxHeight = clampTerminalHeight(TERMINAL_MAX_HEIGHT);
   const workspaceMaxWidth = clampWorkspaceWidth(Number.POSITIVE_INFINITY);
@@ -204,6 +219,7 @@ export function useDesktopPanelResize(
     handleWorkspaceResizeStep,
     handleWorkspaceResizeStart,
     fitWorkspaceForExpandedSidebar,
+    toggleWorkspaceMaximized,
     sidebarMaxWidth: SIDEBAR_MAX_WIDTH,
     sidebarMinWidth: SIDEBAR_MIN_WIDTH,
     sidebarWidth,
@@ -211,6 +227,7 @@ export function useDesktopPanelResize(
     terminalHeight,
     terminalMinHeight: TERMINAL_MIN_HEIGHT,
     workspaceMaxWidth,
+    workspaceMaximized,
     workspaceMinWidth: WORKSPACE_MIN_WIDTH,
     workspaceLayoutWidth,
     workspaceWidth,
@@ -320,8 +337,8 @@ export function workspaceMaxWidthForLayout({
   sidebarWidth: number;
   viewportWidth: number;
 }): number {
-  const expandedLayoutMaxWidth = availableViewportWidth - sidebarWidth - WORKBENCH_MAIN_MIN_WIDTH;
-  const collapsedLayoutMaxWidth = availableViewportWidth - WORKBENCH_MAIN_MIN_WIDTH;
+  const expandedLayoutMaxWidth = availableViewportWidth - sidebarWidth - WORKBENCH_SPLIT_MAIN_MIN_WIDTH;
+  const collapsedLayoutMaxWidth = availableViewportWidth - WORKBENCH_SPLIT_MAIN_MIN_WIDTH;
   // 左侧边栏可以自动折叠，因此工作区拖动范围应允许越过展开布局的限制，
   // 并最终停在折叠布局中。
   const layoutMaxWidth = Math.max(expandedLayoutMaxWidth, collapsedLayoutMaxWidth);
@@ -335,7 +352,7 @@ export function workspaceMaxWidthForExpandedSidebar({
   sidebarWidth: number;
   viewportWidth: number;
 }): number {
-  const layoutMaxWidth = availableViewportWidth - sidebarWidth - WORKBENCH_EXPANDED_SIDEBAR_MAIN_MIN_WIDTH;
+  const layoutMaxWidth = availableViewportWidth - sidebarWidth - WORKBENCH_SPLIT_MAIN_MIN_WIDTH;
   return Math.max(WORKSPACE_MIN_WIDTH, Math.floor(layoutMaxWidth));
 }
 
@@ -379,7 +396,7 @@ function readShellPixelVariable(shell: HTMLElement | null, name: string, fallbac
 }
 
 function viewportWidth(): number {
-  return typeof window === 'undefined' ? WORKSPACE_MIN_WIDTH + SIDEBAR_MAX_WIDTH + WORKBENCH_MAIN_MIN_WIDTH : window.innerWidth * pageScaleInverse();
+  return typeof window === 'undefined' ? WORKSPACE_MIN_WIDTH + SIDEBAR_MAX_WIDTH + WORKBENCH_SPLIT_MAIN_MIN_WIDTH : window.innerWidth * pageScaleInverse();
 }
 
 function readWorkbenchHeight(shell: HTMLElement | null): number {

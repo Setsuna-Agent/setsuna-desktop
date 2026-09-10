@@ -71,6 +71,13 @@
   --app-mono-chip-radius: var(--app-radius-xs);
   --app-success: var(--app-green-active);
   --app-warning: var(--app-orange-active);
+  /* Git graph lanes share a theme palette; light backgrounds need darker strokes. */
+  --desktop-git-graph-blue: #2563eb;
+  --desktop-git-graph-yellow: #a16207;
+  --desktop-git-graph-purple: #9333ea;
+  --desktop-git-graph-teal: #0f766e;
+  --desktop-git-graph-orange: #c2410c;
+  --desktop-git-graph-indigo: #4f46e5;
   --file-icon-seti-blue: #519aba;
   --file-icon-seti-grey: #4d5a5e;
   --file-icon-seti-grey-light: #6d8086;
@@ -282,6 +289,12 @@
   --app-mono-chip-bg: color-mix(in srgb, var(--app-text) 8%, transparent);
   --app-success: var(--app-green-hover);
   --app-warning: var(--app-orange-hover);
+  --desktop-git-graph-blue: #75beff;
+  --desktop-git-graph-yellow: #e5b54a;
+  --desktop-git-graph-purple: #cf75cf;
+  --desktop-git-graph-teal: #55bca4;
+  --desktop-git-graph-orange: #c58c63;
+  --desktop-git-graph-indigo: #9c8ee5;
   --file-icon-seti-white: #d4d7d6;
   --file-icon-seti-yellow: #cbcb41;
   --file-icon-seti-ignore: #41535b;

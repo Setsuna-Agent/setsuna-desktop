@@ -581,6 +581,7 @@
 }
 
 .chat-sender__footer {
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 12px;
   width: 100%;
@@ -589,6 +590,24 @@
 .chat-sender__left-actions,
 .chat-sender__right-actions {
   gap: 6px;
+  max-width: 100%;
+}
+
+.chat-sender__left-actions {
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+}
+
+.chat-sender__right-actions {
+  flex: 1 1 120px;
+  justify-content: flex-end;
+}
+
+/* Keep send/stop controls in the composer while the model label gives up space first. */
+.chat-sender__primary-action {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
 }
 
 .chat-sender-divider {
@@ -601,6 +620,7 @@
 
 .chat-sender-icon-button {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   width: 26px;
@@ -740,7 +760,10 @@
 
 .chat-model-picker {
   display: inline-flex;
+  flex: 0 1 auto;
   align-items: center;
+  min-width: 0;
+  max-width: 280px;
 }
 
 .chat-model-command-menu {
@@ -840,7 +863,8 @@
 .chat-model-selector.ant-btn {
   display: inline-flex;
   align-items: center;
-  max-width: min(280px, 42vw);
+  min-width: 0;
+  max-width: 100%;
   height: 26px;
   padding-inline: 8px;
   gap: 5px;

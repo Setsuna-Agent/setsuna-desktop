@@ -5,31 +5,33 @@ import {
 import type {
   DesktopCommitMessageGenerationSource,
   DesktopDiffFile,
-  DesktopDiffLine,
   DesktopDiffSummary,
   DesktopReviewActionResult,
   DesktopReviewBranch,
   DesktopReviewCommitInput,
+  DesktopReviewCommitMessage,
   DesktopReviewCommitResult,
   DesktopReviewCreateBranchOptions,
   DesktopReviewPushResult,
+  DesktopReviewPullResult,
+  DesktopReviewPullOptions,
   DesktopReviewState,
   DesktopReviewStateOptions,
 } from '../contracts/index.js';
-import { execFile } from 'node:child_process';
+import { COMMIT_MESSAGE_HISTORY_LIMIT, MAX_COMMIT_MESSAGE_EXAMPLE_CHARS } from '../contracts/index.js';
 import { realpath, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import {
   classifyReviewImages,
   readResolvedReviewFile,
   resolveReviewWorkspaceFile,
   type ReviewDiffVersionContext,
 } from './image-classification.js';
+import { runGit, runGitRaw } from './git-command.js';
+import { pullGitChanges } from './git-pull.js';
+import { MAX_DIFF_LINES_PER_FILE, parseUnifiedDiff } from './diff-parser.js';
+import { readCommitMessageContext } from './commit-message-context.js';
 
-const execFileAsync = promisify(execFile);
-
-const MAX_DIFF_LINES_PER_FILE = 2500;
 const MAX_UNTRACKED_FILE_BYTES = 512 * 1024;
 const MAX_COMMIT_MESSAGE_SOURCE_CHARS = 24_000;
 const REVIEW_DIFF_CONTEXT_LINES = 6;
@@ -119,7 +121,7 @@ export async function resolveDesktopReviewRepository(value: string): Promise<Des
 
 export async function stageReviewFiles(workspaceRoot: string, filePaths: string[]): Promise<DesktopReviewActionResult> {
   const { root, gitRoot, files } = await resolveReviewAction(workspaceRoot, filePaths);
-  await runGit(['add', '--', ...files], gitRoot);
+  await runGit(['--literal-pathspecs', 'add', '--', ...files], gitRoot);
   return {
     ok: true,
     files,
@@ -129,7 +131,11 @@ export async function stageReviewFiles(workspaceRoot: string, filePaths: string[
 
 export async function unstageReviewFiles(workspaceRoot: string, filePaths: string[]): Promise<DesktopReviewActionResult> {
   const { root, gitRoot, files } = await resolveReviewAction(workspaceRoot, filePaths);
-  await runGit(['reset', '--', ...files], gitRoot);
+  const hasHead = await runGit(['rev-parse', '--verify', 'HEAD'], gitRoot).then(() => true).catch(() => false);
+  // An unborn branch has no tree to reset against; remove only the index entries.
+  await runGit(hasHead
+    ? ['--literal-pathspecs', 'reset', '--', ...files]
+    : ['--literal-pathspecs', 'rm', '--cached', '--force', '--ignore-unmatch', '--', ...files], gitRoot);
   return {
     ok: true,
     files,
@@ -141,15 +147,14 @@ export async function discardUnstagedReviewFiles(workspaceRoot: string, filePath
   const { root, gitRoot, files } = await resolveReviewAction(workspaceRoot, filePaths);
   const untracked = new Set(
     (
-      await runGit(['ls-files', '--others', '--exclude-standard', '--', ...files], gitRoot).catch(() => '')
+      await runGitRaw(['--literal-pathspecs', 'ls-files', '-z', '--others', '--exclude-standard', '--', ...files], gitRoot)
     )
-      .split(/\r?\n/)
-      .map((line) => line.trim())
+      .split('\0')
       .filter(Boolean),
   );
 
   const tracked = files.filter((filePath) => !untracked.has(filePath));
-  if (tracked.length) await runGit(['restore', '--worktree', '--', ...tracked], gitRoot);
+  if (tracked.length) await runGit(['--literal-pathspecs', 'restore', '--worktree', '--', ...tracked], gitRoot);
   await Promise.all(
     files
       .filter((filePath) => untracked.has(filePath))
@@ -187,6 +192,28 @@ export async function createAndCheckoutReviewBranch(
   return getDesktopReviewState(root);
 }
 
+export async function getReviewCommitMessage(workspaceRoot: string): Promise<DesktopReviewCommitMessage> {
+  const gitRoot = await requireGitRoot(await resolveWorkspaceDirectory(workspaceRoot));
+  const oid = await runGit(['rev-parse', '--verify', 'HEAD'], gitRoot).catch(() => {
+    throw new Error('当前分支还没有可修改的提交。');
+  });
+  const [branch, message, context] = await Promise.all([
+    currentGitBranchName(gitRoot),
+    runGit(['log', '-1', '--format=%B', oid], gitRoot),
+    readCommitMessageContext(gitRoot, oid),
+  ]);
+  return { oid, branch, message, context };
+}
+
+async function assertAmendTarget(gitRoot: string, target: DesktopReviewCommitInput['amend']) {
+  if (!target) return;
+  const [oid, branch] = await Promise.all([
+    runGit(['rev-parse', '--verify', 'HEAD'], gitRoot).catch(() => ''),
+    currentGitBranchName(gitRoot),
+  ]);
+  if (oid !== target.oid || branch !== target.branch) throw new Error('编辑期间分支或最新提交已变化，请重新打开“提交（修改）”。');
+}
+
 export async function commitReviewChanges(
   workspaceRoot: string,
   input: DesktopReviewCommitInput,
@@ -194,24 +221,34 @@ export async function commitReviewChanges(
   const root = await resolveWorkspaceDirectory(workspaceRoot);
   const gitRoot = await requireGitRoot(root);
   const message = normalizeCommitMessage(input.message);
-  if (input.includeUnstaged !== false) await runGit(['add', '--all'], gitRoot);
+  await assertAmendTarget(gitRoot, input.amend);
+  if (input.includeUnstaged === true) await runGit(['add', '--all'], gitRoot);
 
   const stagedFiles = await runGit(['diff', '--cached', '--name-only', '--'], gitRoot)
     .then((output) => output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean))
     .catch(() => []);
-  if (!stagedFiles.length) throw new Error('没有可提交的暂存更改。');
+  if (!stagedFiles.length && !input.amend) throw new Error('没有可提交的暂存更改。');
 
-  await runGit(['commit', '-m', message], gitRoot);
-  const commitHash = await runGit(['rev-parse', '--short', 'HEAD'], gitRoot).catch(() => '');
+  await assertAmendTarget(gitRoot, input.amend);
+  // Amending a message must also preserve commits intentionally created empty.
+  await runGit(['commit', ...(input.amend ? ['--amend', '--allow-empty'] : []), '-m', message], gitRoot);
+  let commitHash = await runGit(['rev-parse', '--short', 'HEAD'], gitRoot).catch(() => '');
   let pushed = false;
   let pushError: string | undefined;
-  if (input.push) {
+  let syncError: string | undefined;
+  if (input.push || input.sync) {
     try {
+      if (input.sync) {
+        const upstream = await runGit(['rev-parse', '--verify', '@{upstream}'], gitRoot).catch(() => '');
+        if (upstream) await pullGitChanges(gitRoot, true);
+      }
       await pushCurrentBranch(gitRoot);
       pushed = true;
+      if (input.sync) commitHash = await runGit(['rev-parse', '--short', 'HEAD'], gitRoot);
     } catch (error) {
       // 此时提交已经持久化，因此将推送失败报告为部分失败。
-      pushError = error instanceof Error ? error.message : String(error);
+      const message = error instanceof Error ? error.message : String(error);
+      if (input.sync) syncError = message; else pushError = message;
     }
   }
   return {
@@ -219,6 +256,7 @@ export async function commitReviewChanges(
     commitHash,
     pushed,
     ...(pushError ? { pushError } : {}),
+    ...(input.sync ? { synced: pushed, ...(syncError ? { syncError } : {}) } : {}),
     state: await getDesktopReviewState(root),
   };
 }
@@ -234,14 +272,22 @@ export async function pushReviewBranch(workspaceRoot: string): Promise<DesktopRe
   };
 }
 
+export async function pullReviewBranch(workspaceRoot: string, options: DesktopReviewPullOptions = {}): Promise<DesktopReviewPullResult> {
+  const root = await resolveWorkspaceDirectory(workspaceRoot);
+  const gitRoot = await requireGitRoot(root);
+  await pullGitChanges(gitRoot, options.rebase === true);
+  return { ok: true, pulled: true, state: await getDesktopReviewState(root) };
+}
+
 export async function getCommitMessageGenerationSource(
   workspaceRoot: string,
-  includeUnstaged = true,
+  includeUnstaged = false,
 ): Promise<DesktopCommitMessageGenerationSource> {
   const root = await resolveWorkspaceDirectory(workspaceRoot);
   const gitRoot = await requireGitRoot(root);
-  const [status, stagedDiff, unstagedDiff, untrackedFiles] = await Promise.all([
-    gitStatusPorcelain(gitRoot),
+  const [status, stagedDiff, unstagedDiff, untrackedFiles, recentMessages] = await Promise.all([
+    // The status must describe the same scope as the diff, including partially staged files.
+    includeUnstaged ? gitStatusPorcelain(gitRoot) : runGit(['diff', '--cached', '--name-status', '--no-renames', '--'], gitRoot),
     runGit(['diff', '--no-ext-diff', '--cached', '--unified=3', '--'], gitRoot).catch(() => ''),
     includeUnstaged ? runGit(['diff', '--no-ext-diff', '--unified=3', '--'], gitRoot).catch(() => '') : Promise.resolve(''),
     includeUnstaged
@@ -249,6 +295,10 @@ export async function getCommitMessageGenerationSource(
         .then((output) => output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean))
         .catch(() => [])
       : Promise.resolve([]),
+    // Full messages retain body conventions; unborn repositories have no examples yet.
+    runGit(['log', '--date-order', '--no-merges', `--max-count=${COMMIT_MESSAGE_HISTORY_LIMIT}`, '--format=%B%x00', 'HEAD', '--'], gitRoot)
+      .then((output) => output.split('\0').map((message) => message.trim().slice(0, MAX_COMMIT_MESSAGE_EXAMPLE_CHARS)).filter(Boolean))
+      .catch(() => []),
   ]);
   const untrackedSummary = untrackedFiles.length ? `Untracked files:\n${untrackedFiles.map((file) => `- ${file}`).join('\n')}` : '';
   const diff = truncateCommitMessageSource(
@@ -263,6 +313,7 @@ export async function getCommitMessageGenerationSource(
     branch: await currentGitBranch(gitRoot),
     status,
     diff,
+    recentMessages,
   };
 }
 
@@ -307,12 +358,11 @@ function normalizeReviewFilePaths(gitRoot: string, filePaths: string[]): string[
 }
 
 function normalizeReviewFilePath(gitRoot: string, filePath: string): string {
-  const trimmed = filePath.trim();
-  if (!trimmed) throw new Error('文件路径为空。');
-  if (path.isAbsolute(trimmed)) throw new Error('文件路径必须在项目内。');
-  const absolutePath = path.resolve(gitRoot, trimmed);
+  if (!filePath || filePath.includes('\0')) throw new Error('文件路径为空或无效。');
+  if (path.isAbsolute(filePath)) throw new Error('文件路径必须在项目内。');
+  const absolutePath = path.resolve(gitRoot, filePath);
   const relative = path.relative(gitRoot, absolutePath);
-  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('文件路径必须在项目内。');
+  if (!relative || relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) throw new Error('文件路径必须在项目内。');
   return relative.split(path.sep).join('/');
 }
 
@@ -538,159 +588,6 @@ async function diffSummary(
   return summary;
 }
 
-function parseUnifiedDiff(output: string): DesktopDiffSummary {
-  const files: DesktopDiffFile[] = [];
-  let current: DesktopDiffFile | null = null;
-  let currentPatchLines: string[] = [];
-  let oldLine = 0;
-  let newLine = 0;
-  let truncated = false;
-
-  const finishCurrentFile = () => {
-    if (!current) return;
-    if (!current.truncated && !current.contentKind) {
-      current.patch = currentPatchLines.join('\n');
-    }
-    files.push(current);
-  };
-
-  for (const rawLine of output.split(/\r?\n/)) {
-    if (rawLine.startsWith('diff --git ')) {
-      finishCurrentFile();
-      const diffPaths = parseDiffPaths(rawLine);
-      current = {
-        path: diffPaths.path,
-        ...(diffPaths.previousPath ? { previousPath: diffPaths.previousPath } : {}),
-        action: 'Modified',
-        additions: 0,
-        deletions: 0,
-        truncated: false,
-        lines: [],
-      };
-      currentPatchLines = [rawLine];
-      oldLine = 0;
-      newLine = 0;
-      truncated = false;
-      continue;
-    }
-    if (!current) continue;
-    // Truncated previews are rebuilt from their bounded line list in the
-    // renderer, so retaining the remaining raw patch only duplicates data.
-    if (!current.truncated) currentPatchLines.push(rawLine);
-    if (rawLine.startsWith('new file mode')) current.action = 'Created';
-    if (rawLine.startsWith('deleted file mode')) current.action = 'Deleted';
-    if (rawLine.startsWith('rename from ')) {
-      current.action = 'Renamed';
-      current.previousPath = rawLine.slice('rename from '.length);
-    }
-    if (rawLine.startsWith('rename to ')) current.path = rawLine.slice('rename to '.length);
-    if (rawLine.startsWith('Binary files ') || rawLine === 'GIT binary patch') {
-      current.contentKind = 'binary';
-      current.lines = [];
-      continue;
-    }
-    if (rawLine.startsWith('+++ b/')) current.path = rawLine.slice(6);
-    if (rawLine.startsWith('@@ ')) {
-      const match = rawLine.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
-      if (match) {
-        const nextOldLine = Number(match[1]);
-        const nextNewLine = Number(match[2]);
-        const hiddenLineCount = omittedUnmodifiedLineCount({
-          previousOldLine: oldLine,
-          previousNewLine: newLine,
-          nextOldLine,
-          nextNewLine,
-        });
-        if (current.lines.length > 0 && hiddenLineCount > 0) {
-          pushDiffLine(current, {
-            type: 'gap',
-            lineNumber: current.lines.length + 1,
-            content: formatUnmodifiedLineGap(hiddenLineCount),
-          }, truncated);
-          truncated = current.truncated;
-        }
-        oldLine = nextOldLine;
-        newLine = nextNewLine;
-      }
-      continue;
-    }
-    if (rawLine.startsWith('---') || rawLine.startsWith('+++') || rawLine.startsWith('index ')) continue;
-
-    if (rawLine.startsWith('+')) {
-      current.additions += 1;
-      pushDiffLine(current, {
-        type: 'added',
-        lineNumber: current.lines.length + 1,
-        newLine,
-        content: rawLine.slice(1),
-      }, truncated);
-      newLine += 1;
-      truncated = current.truncated;
-      continue;
-    }
-    if (rawLine.startsWith('-')) {
-      current.deletions += 1;
-      pushDiffLine(current, {
-        type: 'removed',
-        lineNumber: current.lines.length + 1,
-        oldLine,
-        content: rawLine.slice(1),
-      }, truncated);
-      oldLine += 1;
-      truncated = current.truncated;
-      continue;
-    }
-    if (rawLine.startsWith(' ')) {
-      pushDiffLine(current, {
-        type: 'context',
-        lineNumber: current.lines.length + 1,
-        oldLine,
-        newLine,
-        content: rawLine.slice(1),
-      }, truncated);
-      oldLine += 1;
-      newLine += 1;
-    }
-    truncated = current.truncated;
-  }
-
-  finishCurrentFile();
-  return {
-    files,
-    additions: files.reduce((total, file) => total + file.additions, 0),
-    deletions: files.reduce((total, file) => total + file.deletions, 0),
-  };
-}
-
-function omittedUnmodifiedLineCount({
-  previousOldLine,
-  previousNewLine,
-  nextOldLine,
-  nextNewLine,
-}: {
-  previousOldLine: number;
-  previousNewLine: number;
-  nextOldLine: number;
-  nextNewLine: number;
-}): number {
-  if (!previousOldLine || !previousNewLine) return 0;
-  const oldGap = nextOldLine - previousOldLine;
-  const newGap = nextNewLine - previousNewLine;
-  return Math.max(0, Math.max(oldGap, newGap));
-}
-
-function formatUnmodifiedLineGap(count: number): string {
-  return `${count} unmodified ${count === 1 ? 'line' : 'lines'}`;
-}
-
-function pushDiffLine(file: DesktopDiffFile, line: DesktopDiffLine, alreadyTruncated: boolean): void {
-  if (alreadyTruncated || file.lines.length >= MAX_DIFF_LINES_PER_FILE) {
-    file.truncated = true;
-    return;
-  }
-  file.lines.push(line);
-}
-
 async function summarizeUntrackedFile(gitRoot: string, relativePath: string): Promise<DesktopDiffFile | null> {
   const resolved = await resolveReviewWorkspaceFile(gitRoot, relativePath);
   if (!resolved) return null;
@@ -776,22 +673,4 @@ function mergeDiffSummaries(left: DesktopDiffSummary, right: DesktopDiffSummary)
     additions: left.additions + right.additions,
     deletions: left.deletions + right.deletions,
   };
-}
-
-function parseDiffPaths(line: string): { path: string; previousPath?: string } {
-  const match = line.match(/^diff --git a\/(.+) b\/(.+)$/);
-  if (!match) return { path: line.replace(/^diff --git /, '') };
-  return {
-    path: match[2],
-    ...(match[1] !== match[2] ? { previousPath: match[1] } : {}),
-  };
-}
-
-async function runGit(args: string[], cwd: string): Promise<string> {
-  const { stdout } = await execFileAsync('git', ['-c', 'core.quotepath=false', ...args], {
-    cwd,
-    maxBuffer: 12 * 1024 * 1024,
-    windowsHide: true,
-  });
-  return stdout.trim();
 }

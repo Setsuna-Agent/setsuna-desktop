@@ -171,11 +171,13 @@ export function ChatComposerFooter({
           provider={modelProvider}
           onSelect={onSelectModel}
         />
-        <ChatComposerPrimaryAction
-          hasActiveTurn={hasActiveTurn}
-          primaryAction={primaryAction}
-          senderActions={senderActions}
-        />
+        <div className="chat-sender__primary-action">
+          <ChatComposerPrimaryAction
+            hasActiveTurn={hasActiveTurn}
+            primaryAction={primaryAction}
+            senderActions={senderActions}
+          />
+        </div>
       </div>
     </div>
   );

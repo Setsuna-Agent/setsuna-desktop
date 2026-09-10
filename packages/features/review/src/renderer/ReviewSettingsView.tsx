@@ -6,19 +6,27 @@ import type {
 } from '@setsuna-desktop/renderer-contracts/settings';
 import { useEffect, useState } from 'react';
 import type {
-  ReviewModelOption,
+  ReviewModelSelection,
   ReviewSettingsState,
 } from '../contracts/index.js';
 import type { ReviewClient } from './client.js';
+import { ReviewModelSelect } from './ReviewModelSelect.js';
+import type { ReviewMessageKey } from './messages.js';
 
 export function ReviewSettingsView({
   client,
   translate,
   ui,
+  groupKey = 'feature.review.settings.group',
+  modelKey = 'feature.review.settings.model',
+  descriptionKey = 'feature.review.settings.description',
 }: Readonly<{
   client: Pick<ReviewClient, 'readSettings' | 'updateSettings'>;
   translate: RendererTranslate;
   ui: SettingsViewUi;
+  groupKey?: ReviewMessageKey;
+  modelKey?: ReviewMessageKey;
+  descriptionKey?: ReviewMessageKey;
 }>) {
   const { Group, Row, Section, SelectField, Toast } = ui;
   const [state, setState] = useState<ReviewSettingsState | null>(null);
@@ -33,22 +41,14 @@ export function ReviewSettingsView({
     return () => abort.abort();
   }, [client]);
 
-  const selectedValue = state?.selection ? referenceValue(state.selection) : '';
-  const selectionAvailable = !selectedValue || Boolean(
-    state?.availableModels.some((option) => referenceValue(option) === selectedValue),
-  );
-
-  async function save(value: string) {
+  async function save(selection: ReviewModelSelection) {
     if (!state) return;
     setSaving(true);
     setError(null);
     try {
-      const selected = state.availableModels.find((option) => referenceValue(option) === value);
       setState(await client.updateSettings({
         expectedRevision: state.revision,
-        selection: selected
-          ? { providerId: selected.providerId, modelId: selected.modelId }
-          : null,
+        selection,
       }));
     } catch (saveError) {
       setError(errorMessage(saveError));
@@ -59,29 +59,14 @@ export function ReviewSettingsView({
 
   return (
     <Section featureId="desktop-review">
-      <Group title={translate('feature.review.settings.group')}>
+      <Group title={translate(groupKey)}>
         <Row
-          label={translate('feature.review.settings.model')}
-          description={translate('feature.review.settings.description')}
+          label={translate(modelKey)}
+          description={translate(descriptionKey)}
         >
-          <SelectField
-            aria-label={translate('feature.review.settings.model')}
-            disabled={!state || saving}
-            value={selectedValue}
-            onValueChange={(value) => { void save(value); }}
-          >
-            <option value="">{translate('feature.review.settings.followCurrent')}</option>
-            {!selectionAvailable ? (
-              <option value={selectedValue} disabled>
-                {translate('feature.review.settings.unavailable')}
-              </option>
-            ) : null}
-            {state?.availableModels.map((option) => (
-              <option key={referenceValue(option)} value={referenceValue(option)}>
-                {modelOptionLabel(option)}
-              </option>
-            ))}
-          </SelectField>
+          <ReviewModelSelect SelectField={SelectField} translate={translate} label={translate(modelKey)}
+            disabled={!state || saving} selection={state?.selection ?? null} models={state?.availableModels ?? []}
+            onChange={(selection) => { void save(selection); }} />
         </Row>
         {state && state.availableModels.length === 0 ? (
           <Toast tone="info" message={translate('feature.review.settings.empty')} />
@@ -90,17 +75,6 @@ export function ReviewSettingsView({
       </Group>
     </Section>
   );
-}
-
-function referenceValue(reference: Readonly<{ providerId: string; modelId: string }>): string {
-  return JSON.stringify([reference.providerId, reference.modelId]);
-}
-
-function modelOptionLabel(option: ReviewModelOption): string {
-  const model = option.modelName && option.modelName !== option.modelCode
-    ? `${option.modelName} (${option.modelCode})`
-    : option.modelCode;
-  return `${option.providerName} · ${model}`;
 }
 
 function errorMessage(error: unknown): string {

@@ -2,6 +2,7 @@ import type {
   FeatureOperationDescriptor,
   FeatureOperationErrorDefinitions,
   FeatureOperationMethod,
+  FeatureOperationStreamFrame,
 } from '@setsuna-desktop/feature-core/operation';
 import {
   FeatureOperationFailure,
@@ -39,7 +40,7 @@ export class RuntimeRouteRegistry implements RuntimeRouteRegistrar {
     operation: FeatureOperationDescriptor<TInput, TOutput, TErrors>,
     handler: (
       input: TInput,
-      context: RuntimeFeatureRouteHandlerContext,
+      context: RuntimeFeatureRouteHandlerContext<TOutput>,
     ) => TOutput | PromiseLike<TOutput>,
   ): Readonly<{ dispose(): void }> {
     const patternKey = featureOperationPatternKey(operation.method, operation.path);
@@ -89,6 +90,12 @@ export class RuntimeRouteRegistry implements RuntimeRouteRegistrar {
     if (!matched) return false;
 
     const { operation, scope } = matched.registration;
+    const streaming = operation.supportsProgress && request.headers.accept === 'application/x-ndjson';
+    const writeFrame = (frame: FeatureOperationStreamFrame) => {
+      if (response.destroyed || response.writableEnded) return;
+      if (!response.headersSent) response.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store' });
+      response.write(`${JSON.stringify(frame)}\n`);
+    };
     const requestAbort = new AbortController();
     const abortOperation = () => {
       if (!requestAbort.signal.aborted) {
@@ -103,13 +110,26 @@ export class RuntimeRouteRegistry implements RuntimeRouteRegistrar {
     try {
       const rawInput = await routeInput(request, url, matched.parameters);
       const output = await scope.runOperation(
-        (signal) => matched.registration.invoke(rawInput, { signal }),
+        (signal) => matched.registration.invoke(rawInput, {
+          signal,
+          ...(streaming ? { reportProgress: (value: unknown) => {
+            signal.throwIfAborted();
+            writeFrame({ type: 'progress', value: operation.output.parse(value) });
+          } } : {}),
+        }),
         { signal: requestAbort.signal },
       );
-      sendJson(response, 200, operation.output.parse(output));
+      const value = operation.output.parse(output);
+      if (streaming) {
+        writeFrame({ type: 'result', value });
+        response.end();
+      } else sendJson(response, 200, value);
     } catch (error) {
       const failure = operationFailure(operation, error);
-      sendJson(response, failure.status, {
+      if (streaming) {
+        writeFrame({ type: 'error', error: failure.error });
+        response.end();
+      } else sendJson(response, failure.status, {
         error: failure.error.message,
         code: failure.error.code,
         retryable: failure.error.retryable,

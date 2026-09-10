@@ -54,6 +54,7 @@
 
 .desktop-review-file-tree__resize-handle:hover::after,
 .desktop-review-file-tree__resize-handle:focus-visible::after,
+.desktop-review-file-tree__resize-handle.is-resizing::after,
 body.desktop-review-file-tree-resizing .desktop-review-file-tree__resize-handle::after {
   background: var(--app-text-muted);
 }

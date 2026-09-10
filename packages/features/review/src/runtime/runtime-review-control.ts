@@ -1,60 +1,28 @@
 import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
-import {
-  FeatureSettingsRevisionConflictError,
-  type RuntimeFeatureSettingsDocumentHandle,
-} from '@setsuna-desktop/feature-core/settings';
 import type {
   ReviewControl,
-  ReviewModelSelection,
   ReviewRuntimeHost,
-  ReviewSettingsState,
   ReviewSettingsUpdate,
   StartReviewInput,
 } from '../contracts/index.js';
 import { createReviewTurnRequest } from './review-request.js';
-
-type SelectionHandle = Pick<RuntimeFeatureSettingsDocumentHandle<
-  ReviewModelSelection,
-  ReviewModelSelection,
-  ReviewModelSelection,
-  undefined
->, 'read' | 'readPublic' | 'update'>;
+import { readReviewModelSettings, updateReviewModelSettings, type ReviewModelSettingsHandle } from './settings.js';
 
 /** Owns Agent Review input policy and delegates only the generic turn mutation to Core. */
 export class RuntimeReviewControl implements ReviewControl {
   readonly available = true;
 
   constructor(
-    private readonly settings: SelectionHandle,
+    private readonly settings: ReviewModelSettingsHandle,
     private readonly host: ReviewRuntimeHost,
   ) {}
 
-  async readSettings(): Promise<ReviewSettingsState> {
-    try {
-      const [current, availableModels] = await Promise.all([
-        this.settings.readPublic(),
-        this.host.listModelOptions(),
-      ]);
-      return Object.freeze({
-        selection: current.value,
-        revision: current.revision,
-        availableModels,
-      });
-    } catch (error) {
-      throw settingsFailure(error);
-    }
+  readSettings() {
+    return readReviewModelSettings(this.settings, this.host);
   }
 
-  async updateSettings(input: ReviewSettingsUpdate): Promise<ReviewSettingsState> {
-    try {
-      await this.settings.update({
-        expectedRevision: input.expectedRevision,
-        patch: input.selection,
-      });
-      return this.readSettings();
-    } catch (error) {
-      throw settingsFailure(error);
-    }
+  updateSettings(input: ReviewSettingsUpdate) {
+    return updateReviewModelSettings(this.settings, this.host, input);
   }
 
   async start(input: StartReviewInput) {
@@ -94,20 +62,4 @@ export class RuntimeReviewControl implements ReviewControl {
       });
     }
   }
-}
-
-function settingsFailure(error: unknown): FeatureOperationFailure {
-  if (error instanceof FeatureOperationFailure) return error;
-  if (error instanceof FeatureSettingsRevisionConflictError) {
-    return new FeatureOperationFailure({
-      code: 'REVISION_CONFLICT',
-      message: 'Review settings changed. Reload before saving again.',
-      retryable: true,
-    });
-  }
-  return new FeatureOperationFailure({
-    code: 'SETTINGS_UNAVAILABLE',
-    message: 'Review settings are unavailable.',
-    retryable: true,
-  });
 }

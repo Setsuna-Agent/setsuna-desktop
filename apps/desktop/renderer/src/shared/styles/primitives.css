@@ -1,3 +1,5 @@
+@import './context-menu.css';
+
 .app-toast-region {
   position: fixed;
   top: calc(var(--app-topbar-height) + 12px);
@@ -641,7 +643,8 @@
 }
 
 .sd-button.is-active:not(:disabled),
-.sd-icon-button.is-active:not(:disabled) {
+.sd-icon-button.is-active:not(:disabled),
+.sd-icon-button.ant-dropdown-open:not(:disabled) {
   border-color: var(--sd-control-active-border);
   color: var(--sd-control-active-color);
   background: var(--sd-control-active-bg);
@@ -898,6 +901,60 @@
   background: var(--app-danger-bg);
 }
 
+/* Shared settings controls also render in dialogs outside the settings page. */
+.sd-settings-toggle {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  width: 100%;
+}
+
+.sd-settings-toggle > .sd-settings-row__label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.sd-settings-row__copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.sd-settings-row__copy small {
+  max-width: 560px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  font-weight: var(--app-font-weight);
+  line-height: 18px;
+}
+
+.sd-settings-toggle > .sd-check {
+  align-self: center;
+  justify-self: end;
+}
+
+.sd-settings-toggle > .sd-check input {
+  width: 34px;
+  height: 20px;
+}
+
+.sd-settings-toggle > .sd-check input::before {
+  width: 14px;
+  height: 14px;
+}
+
+.sd-settings-toggle > .sd-check input:checked::before {
+  transform: translateX(14px);
+}
+
 .sd-check {
   display: inline-flex;
   align-items: center;
@@ -1010,4 +1067,32 @@
 
 .sd-checkbox__control:disabled {
   opacity: 0.5;
+}
+
+.sd-scrollbar-overlay {
+  position: absolute;
+  right: 0;
+  z-index: 7;
+  width: var(--chat-scrollbar-width);
+  pointer-events: none;
+}
+
+.sd-scrollbar-overlay__thumb {
+  box-sizing: border-box;
+  width: var(--chat-scrollbar-width);
+  margin-left: 0;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--chat-scrollbar-thumb);
+  background-clip: content-box;
+  cursor: default;
+  pointer-events: auto;
+  transition: background 120ms ease;
+}
+
+.sd-scrollbar-overlay:hover .sd-scrollbar-overlay__thumb,
+.sd-scrollbar-overlay__thumb:hover,
+.sd-scrollbar-overlay__thumb:active {
+  background: color-mix(in srgb, var(--app-muted) 48%, transparent);
+  background-clip: content-box;
 }

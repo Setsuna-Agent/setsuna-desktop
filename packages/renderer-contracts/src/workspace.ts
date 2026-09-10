@@ -2,16 +2,22 @@ import { defineKeyedRendererSlot } from '@setsuna-desktop/feature-core/renderer'
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import type { ReactNode } from 'react';
 
-export type RendererWorkspacePanelType =
-  | 'overview'
-  | 'browser'
-  | 'chat'
-  | 'subagent'
-  | 'conversation-debug'
-  | 'files'
-  | 'file'
-  | 'review'
-  | 'terminal';
+/** Shared by panel state and host registration so every panel type has an outlet. */
+export const RENDERER_WORKSPACE_PANEL_TYPES = Object.freeze([
+  'overview',
+  'browser',
+  'chat',
+  'subagent',
+  'conversation-debug',
+  'files',
+  'file',
+  'review',
+  'changes',
+  'commit-message',
+  'terminal',
+] as const);
+
+export type RendererWorkspacePanelType = typeof RENDERER_WORKSPACE_PANEL_TYPES[number];
 
 export type RendererWorkspacePanelPlacement = 'bottom' | 'side';
 

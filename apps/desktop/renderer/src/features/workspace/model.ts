@@ -87,6 +87,7 @@ export const createBrowserPanel = (id: string, url = DEFAULT_BROWSER_URL): Deskt
   };
 };
 export const createReviewPanel = (): DesktopPanelTab => ({ id: REVIEW_PANEL_ID, type: 'review', title: '审查' });
+export const createChangesPanel = (): DesktopPanelTab => ({ id: 'changes', type: 'changes', title: '变更' });
 export const createFilesPanel = (): DesktopPanelTab => ({ id: FILES_PANEL_ID, type: 'files', title: '打开文件' });
 export const createFilePanel = (filePath: string): DesktopPanelTab => ({ id: `file:${filePath}`, type: 'file', title: fileName(filePath), filePath });
 export const activePanelInSlot = (slot: DesktopPanelSlotState) => slot.panels.find((panel) => panel.id === slot.active) ?? null;
@@ -134,8 +135,8 @@ export const addPanelToSlotState = (slot: DesktopPanelSlotState, panel: DesktopP
     if (existing) return { ...slot, active: existing.id };
   }
   const panelsWithoutOverview = panel.type === 'overview' ? slot.panels : slot.panels.filter((item) => item.type !== 'overview');
-  if (panel.type === 'review') {
-    const existing = panelsWithoutOverview.find((item) => item.type === 'review');
+  if (panel.type === 'review' || panel.type === 'changes') {
+    const existing = panelsWithoutOverview.find((item) => item.type === panel.type);
     if (existing) return { active: existing.id, panels: panelsWithoutOverview };
   }
   if (panel.type === 'files') {

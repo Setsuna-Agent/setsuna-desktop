@@ -237,6 +237,7 @@ export function ChatRouteAdapter({
       },
       onCloseBottomSlot: () => workspacePanels.closeDesktopPanelSlot('bottom'),
       onClosePanel: workspacePanels.closeDesktopPanelItem,
+      onOpenCommitMessageEditor: workspacePanels.openCommitMessageEditor,
       onCopyFilePath: workspacePanels.copyWorkspaceFilePath,
       onExternalOpenFile: workspacePanels.openFileInWorkspaceApp,
       onMoveBottomPanel: (panelId, targetPlacement, targetPanelId, placement) => {
@@ -248,6 +249,7 @@ export function ChatRouteAdapter({
       },
       onOpenBrowser: workspacePanels.openBrowserPanel,
       onOpenConversationDebug: () => workspacePanels.openDesktopPanel('side', 'conversation-debug'),
+      onOpenChangesPanel: () => workspacePanels.openDesktopPanel('side', 'changes'),
       onOpenEntry: (entry) => { void projectWorkspace.openEntry(entry); },
       onOpenFileReviewPanel: openFileReviewPanel,
       onOpenFilesPanel: () => {

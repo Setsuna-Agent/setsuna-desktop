@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type RefObject } from 'react';
 import {
-  WORKBENCH_EXPANDED_SIDEBAR_MAIN_MIN_WIDTH,
+  WORKBENCH_SPLIT_MAIN_MIN_WIDTH,
   WORKBENCH_MAIN_MIN_WIDTH,
 } from '../../features/workspace/hooks/useDesktopPanelResize.js';
 
@@ -63,7 +63,7 @@ export function canFitDesktopSidebar({
 }): boolean {
   if (availableViewportWidth <= SIDEBAR_AUTO_COLLAPSE_MOBILE_WIDTH) return false;
   const reservedWorkspaceWidth = workspaceVisible ? workspaceWidth : 0;
-  const expandedMainMinWidth = workspaceVisible ? WORKBENCH_EXPANDED_SIDEBAR_MAIN_MIN_WIDTH : WORKBENCH_MAIN_MIN_WIDTH;
+  const expandedMainMinWidth = workspaceVisible ? WORKBENCH_SPLIT_MAIN_MIN_WIDTH : WORKBENCH_MAIN_MIN_WIDTH;
   return availableViewportWidth >= sidebarWidth + reservedWorkspaceWidth + expandedMainMinWidth;
 }
 

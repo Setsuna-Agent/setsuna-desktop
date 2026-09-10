@@ -19,12 +19,14 @@ describe('model stream text collector', () => {
   });
 
   it('uses completed agent content and ignores reasoning items', () => {
-    const collector = createModelStreamTextCollector();
+    const progress: string[] = [];
+    const collector = createModelStreamTextCollector((text) => progress.push(text));
     collector.consume({ type: 'item_started', item: { id: 'reasoning_1', kind: 'reasoning', status: 'in_progress' } });
     collector.consume({ type: 'item_delta', itemId: 'reasoning_1', delta: 'private reasoning' });
     collector.consume({ type: 'item_completed', item: { id: 'agent_1', kind: 'agent_message', content: 'visible answer', status: 'completed' } });
 
     expect(collector.text()).toBe('visible answer');
+    expect(progress).toEqual(['visible answer']);
   });
 
   it('keeps deltas from compatible providers that omit item lifecycle events', () => {

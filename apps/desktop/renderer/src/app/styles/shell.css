@@ -100,9 +100,11 @@
 .app-shell-icon-control:hover:not(:disabled),
 .app-shell-icon-control:active:not(:disabled),
 .app-shell-icon-control.is-active,
+.app-shell-icon-control.ant-dropdown-open:not(:disabled),
 .sd-icon-button.app-shell-icon-control:hover:not(:disabled),
 .sd-icon-button.app-shell-icon-control:active:not(:disabled),
-.sd-icon-button.app-shell-icon-control.is-active {
+.sd-icon-button.app-shell-icon-control.is-active,
+.sd-icon-button.app-shell-icon-control.ant-dropdown-open:not(:disabled) {
   border: 0;
   color: var(--app-text);
   background: var(--desktop-agent-control-hover-bg);

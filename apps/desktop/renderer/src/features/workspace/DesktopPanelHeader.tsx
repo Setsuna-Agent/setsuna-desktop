@@ -1,4 +1,4 @@
-import { Bug, FileDiff, FolderOpen, MessageSquare, Plus, Terminal, X } from 'lucide-react';
+import { Bug, FileDiff, FolderOpen, GitBranch, MessageSquare, Plus, Terminal, X } from 'lucide-react';
 import {
   useEffect,
   useRef,
@@ -7,6 +7,7 @@ import {
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { BrowserFeatureIcon } from '../../composition/BrowserWorkspaceFeatureBoundary.js';
@@ -28,6 +29,7 @@ export type DesktopPanelPlacement = 'side' | 'bottom';
 
 const panelLauncherItems: Array<{ key: DesktopPanelType; labelKey: MessageKey; icon: JSX.Element }> = [
   { key: 'review', labelKey: 'workspace.panel.launcher.review', icon: <FileDiff size={14} /> },
+  { key: 'changes', labelKey: 'workspace.panel.launcher.changes', icon: <GitBranch size={14} /> },
   { key: 'files', labelKey: 'workspace.panel.launcher.files', icon: <FolderOpen size={14} /> },
   { key: 'terminal', labelKey: 'workspace.panel.launcher.terminal', icon: <Terminal size={14} /> },
   { key: 'chat', labelKey: 'workspace.panel.launcher.sideChat', icon: <MessageSquare size={14} /> },
@@ -42,6 +44,7 @@ const panelLauncherItems: Array<{ key: DesktopPanelType; labelKey: MessageKey; i
 const panelLauncherShortcutCommands: Partial<Record<DesktopPanelType, KeyboardShortcutCommandId>> = {
   browser: 'workspace.openBrowser',
   chat: 'workspace.openSideChat',
+  changes: 'workspace.openChanges',
   'conversation-debug': 'workspace.openConversationDebug',
   files: 'workspace.openFiles',
   review: 'workspace.openReview',
@@ -91,6 +94,7 @@ const PANEL_LAUNCHER_VIEWPORT_INSET = 8;
 const PANEL_TAB_EXIT_ANIMATION_NAME = 'desktop-panel-tab-exit';
 
 export function DesktopPanelHeader({
+  actions,
   activePanel,
   activePanelId,
   availablePanelTypes,
@@ -106,6 +110,7 @@ export function DesktopPanelHeader({
   panels,
   placement,
 }: {
+  actions?: ReactNode;
   activePanel: DesktopPanelType;
   activePanelId?: string | null;
   availablePanelTypes?: DesktopPanelType[];
@@ -151,6 +156,7 @@ export function DesktopPanelHeader({
   const launcherItems = panelLauncherItems.filter(
     (item) => availableTypeSet.has(item.key)
       && (item.key !== 'review' || !hasReviewPanel)
+      && (item.key !== 'changes' || !tabPanels.some((panel) => panel.type === 'changes'))
       && (item.key !== 'files' || !hasFilesPanel),
   );
   const sortable = Boolean(onReorderPanels && tabPanels.length > 1);
@@ -513,6 +519,7 @@ export function DesktopPanelHeader({
           ) : null}
         </span>
         <span className="chat-file-review-panel__heading-actions">
+          {actions}
           {placement === 'side' && onToggleBottomTerminal ? (
             <ShortcutTooltip
               commandId="layout.toggleTerminal"

@@ -59,8 +59,9 @@ describe('WorkspaceFilePreviewContent', () => {
 });
 
 describe('WorkspaceOverviewPanel', () => {
-  it('routes review, side-chat, and browser actions without forwarding click events', () => {
+  it('routes review, changes, side-chat, and browser actions without forwarding click events', () => {
     const onOpenReviewPanel = vi.fn();
+    const onOpenChangesPanel = vi.fn();
     const onOpenSideChat = vi.fn();
     const onOpenBrowser = vi.fn();
     const panel = captureWorkspaceOverviewPanel({
@@ -68,17 +69,17 @@ describe('WorkspaceOverviewPanel', () => {
       onOpenBrowser,
       onOpenFilesPanel: () => undefined,
       onOpenReviewPanel,
+      onOpenChangesPanel,
       onOpenSideChat,
       onOpenTerminalPanel: () => undefined,
     });
     const actions = panel.props.children.props.children;
-    const reviewButton = actions[0];
-
-    reviewButton.props.onClick({ type: 'click' });
-    actions[3].props.onClick();
-    actions[4].props.onClick();
+    for (const key of ['review', 'changes', 'side-chat', 'browser']) {
+      actions.find((action: { props: { 'data-workspace-overview-action': string } }) => action.props['data-workspace-overview-action'] === key).props.onClick({ type: 'click' });
+    }
 
     expect(onOpenReviewPanel).toHaveBeenCalledWith();
+    expect(onOpenChangesPanel).toHaveBeenCalledWith();
     expect(onOpenSideChat).toHaveBeenCalledOnce();
     expect(onOpenBrowser).toHaveBeenCalledOnce();
   });
@@ -115,8 +116,10 @@ describe('WorkspaceOverviewPanel', () => {
     });
     const actions = panel.props.children.props.children;
 
-    expect(actions.slice(0, 3).every((action: { props: { disabled: boolean } }) => !action.props.disabled)).toBe(true);
-    expect(actions[2].props.children[1].props.children).toBe('终端');
+    for (const key of ['review', 'files', 'terminal']) {
+      const action = actions.find((item: { props: { 'data-workspace-overview-action': string } }) => item.props['data-workspace-overview-action'] === key);
+      expect(action.props.disabled).toBe(false);
+    }
   });
 
 });

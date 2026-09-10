@@ -34,7 +34,7 @@ export function persistentOutputScript(label: string): string {
   ].join('\n');
 }
 
-export async function createOpenAiCaptureServer(responseText = 'Captured.'): Promise<{
+export async function createOpenAiCaptureServer(responseText = 'Captured.', beforeFinish?: () => Promise<void>): Promise<{
   baseUrl: string;
   nextBody: Promise<Record<string, unknown>>;
   close(): Promise<void>;
@@ -55,6 +55,7 @@ export async function createOpenAiCaptureServer(responseText = 'Captured.'): Pro
       resolveBody(JSON.parse(await readRequestText(request)) as Record<string, unknown>);
       response.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8' });
       if (responseText) response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: responseText } }] })}\n\n`);
+      await beforeFinish?.();
       response.write(`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\n`);
       response.write('data: [DONE]\n\n');
       response.end();
@@ -141,4 +142,3 @@ export async function withTimeout<T>(promise: Promise<T>, ms: number, message: s
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
-

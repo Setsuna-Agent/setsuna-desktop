@@ -164,6 +164,8 @@ Windows 原生 shell provider 由 `packages/features/windows-sandbox/src/runtime
 
 受限 shell 的 OS sandbox 是写入完整性与网络出口边界，不作为宿主文件的读取保密边界。macOS Seatbelt 与 Windows provider 都允许命令读取宿主账户原本可读、且工具链正常启动所需的文件；写入仍限于 workspace、显式 writable roots 与每次执行的临时目录，工作区 `.git` / `.agents` / `.codex` 等元数据继续只读，网络继续服从 sandbox policy。macOS 仍强制执行显式 `deniedRoots` 与 `deniedGlobPatterns`；直接文件工具则继续受 effective readable roots 约束，不能借 shell 绕过用户声明的敏感路径规则。
 
+交互模式会把执行前已知的 shell 权限不足（例如 `git add` 写入 `.git`）合并进首次命令审批，明确说明本次命令需要无沙箱执行。批准结果携带该次执行授权，PC host 同时调整这条命令的权限预检和 OS sandbox；不会修改全局配置、其他工具或后续命令的默认权限。拒绝时不执行；无需确认但仍受限的模式不会自动提升权限。
+
 `security/shell-command-analysis.ts`：
 
 - 解析 command structure。

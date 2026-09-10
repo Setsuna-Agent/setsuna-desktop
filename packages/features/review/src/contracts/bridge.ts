@@ -1,4 +1,6 @@
-import type { DesktopDiffSummary } from './diff.js';
+import type { RuntimeConfiguredModelReference } from '@setsuna-desktop/contracts';
+import type { DesktopDiffFile, DesktopDiffSummary } from './diff.js';
+import type { DesktopGitCommitDetails, DesktopGitCommitFileInput, DesktopGitHistoryOptions, DesktopGitHistoryPage } from './history.js';
 
 export type DesktopReviewImagePreviewResult =
   | { ok: true; previewId: string; url: string }
@@ -8,7 +10,9 @@ export type DesktopReviewImagePreviewInput = {
   baseRef?: string | null;
   filePath: string;
   side: 'before' | 'after';
-  source: 'unstaged' | 'staged' | 'branch' | 'latest';
+  source: 'unstaged' | 'staged' | 'branch' | 'latest' | 'commit';
+  /** Fixed historical object pair; independent of the current worktree and index. */
+  revisions?: { before: string | null; after: string };
 };
 
 export type DesktopReviewBranch = {
@@ -44,9 +48,21 @@ export type DesktopReviewChangeEvent = {
 };
 
 export type DesktopReviewCommitInput = {
+  /** Stage all working changes only when explicitly requested; defaults to the existing index. */
   includeUnstaged?: boolean;
   message: string;
   push?: boolean;
+  sync?: boolean;
+  /** Amend only the commit and branch whose message the user edited. */
+  amend?: Pick<DesktopReviewCommitMessage, 'oid' | 'branch'>;
+};
+
+export type DesktopReviewCommitMessage = {
+  oid: string;
+  branch: string | null;
+  message: string;
+  /** Author/date and Git's amend preview, rendered as comments in COMMIT_EDITMSG. */
+  context: string;
 };
 
 export type DesktopReviewCreateBranchOptions = {
@@ -64,6 +80,8 @@ export type DesktopReviewCommitResult = {
   commitHash: string;
   pushed: boolean;
   pushError?: string;
+  synced?: boolean;
+  syncError?: string;
   state: DesktopReviewState;
 };
 
@@ -73,17 +91,34 @@ export type DesktopReviewPushResult = {
   state: DesktopReviewState;
 };
 
+export type DesktopReviewPullResult = {
+  ok: true;
+  pulled: true;
+  state: DesktopReviewState;
+};
+
+export type DesktopReviewPullOptions = {
+  /** Explicit rebase pulls always enable Git's autostash. */
+  rebase?: boolean;
+};
+
 export type DesktopReviewGeneratedCommitMessage = {
   message: string;
 };
 
 export type DesktopCommitMessageGenerationSource = {
+  recentMessages?: readonly string[];
+  /** Current conversation model, used when no dedicated generation model is configured. */
+  modelSelection?: RuntimeConfiguredModelReference;
   branch: string | null;
   status: string;
   diff: string;
 };
 
 export interface DesktopReviewBridge {
+  getHistory(workspaceRoot: string, options?: DesktopGitHistoryOptions): Promise<DesktopGitHistoryPage>;
+  getCommitDetails(workspaceRoot: string, oid: string): Promise<DesktopGitCommitDetails>;
+  getCommitFileDiff(workspaceRoot: string, input: DesktopGitCommitFileInput): Promise<DesktopDiffFile>;
   getState(workspaceRoot: string, options?: DesktopReviewStateOptions): Promise<DesktopReviewState>;
   createImagePreview(workspaceRoot: string, input: DesktopReviewImagePreviewInput): Promise<DesktopReviewImagePreviewResult>;
   releaseImagePreview(previewId: string): Promise<boolean>;
@@ -94,8 +129,10 @@ export interface DesktopReviewBridge {
   checkoutBranch(workspaceRoot: string, branchName: string): Promise<DesktopReviewState>;
   createBranch(workspaceRoot: string, branchName: string, options?: DesktopReviewCreateBranchOptions): Promise<DesktopReviewState>;
   commit(workspaceRoot: string, input: DesktopReviewCommitInput): Promise<DesktopReviewCommitResult>;
+  getCommitMessage(workspaceRoot: string): Promise<DesktopReviewCommitMessage>;
   push(workspaceRoot: string): Promise<DesktopReviewPushResult>;
-  generateCommitMessage(workspaceRoot: string, input?: { includeUnstaged?: boolean }): Promise<DesktopReviewGeneratedCommitMessage>;
+  pull(workspaceRoot: string, options?: DesktopReviewPullOptions): Promise<DesktopReviewPullResult>;
+  generateCommitMessage(workspaceRoot: string, input?: { includeUnstaged?: boolean; modelSelection?: RuntimeConfiguredModelReference }, onProgress?: (message: string) => void): Promise<DesktopReviewGeneratedCommitMessage>;
 }
 
 export type ReviewPreloadBridgeContribution = Readonly<{
@@ -103,6 +140,9 @@ export type ReviewPreloadBridgeContribution = Readonly<{
 }>;
 
 export const REVIEW_IPC_CHANNELS = Object.freeze({
+  getHistory: 'desktop-review:get-history',
+  getCommitDetails: 'desktop-review:get-commit-details',
+  getCommitFileDiff: 'desktop-review:get-commit-file-diff',
   getState: 'desktop-review:get-state',
   createImagePreview: 'desktop-review:create-image-preview',
   releaseImagePreview: 'desktop-review:release-image-preview',
@@ -114,7 +154,10 @@ export const REVIEW_IPC_CHANNELS = Object.freeze({
   checkoutBranch: 'desktop-review:checkout-branch',
   createBranch: 'desktop-review:create-branch',
   commit: 'desktop-review:commit',
+  getCommitMessage: 'desktop-review:get-commit-message',
   push: 'desktop-review:push',
+  pull: 'desktop-review:pull',
   generateCommitMessage: 'desktop-review:generate-commit-message',
+  commitMessageProgress: 'desktop-review:commit-message-progress',
   changed: 'desktop-review:changed',
 } as const);

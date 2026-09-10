@@ -1,8 +1,10 @@
 import { getSingularPatch } from '@pierre/diffs';
+import { Dropdown } from 'antd';
 import { FileDiff } from '@pierre/diffs/react';
 import type { DesktopDiffFile, DesktopReviewBridge } from '../../src/contracts/index.js';
 import {
   ReviewRendererHostProvider,
+  type ReviewCommitMessageInputProps,
   type ReviewCodePatchViewProps,
   type ReviewFindingMarkdownProps,
   type ReviewRendererHost,
@@ -10,22 +12,40 @@ import {
 import { translateReviewMessage } from '../../src/renderer/messages.js';
 import { createElement, useMemo, type PropsWithChildren, type ReactNode } from 'react';
 
+const ignoreCopy = async () => undefined;
+const ignoreError = () => undefined;
+const ignoreExternal = async () => false;
+
 export function ReviewRendererTestHost({
   bridge = null,
   children,
   locale = 'zh-CN',
+  copyText = ignoreCopy,
+  notifyError = ignoreError,
+  openExternal = ignoreExternal,
 }: PropsWithChildren<{
   bridge?: DesktopReviewBridge | null;
   locale?: 'en-US' | 'zh-CN';
+  copyText?: ReviewRendererHost['copyText'];
+  notifyError?: ReviewRendererHost['notifyError'];
+  openExternal?: ReviewRendererHost['openExternal'];
 }>) {
   const host = useMemo<ReviewRendererHost>(() => ({
     bridge,
     buildPatch: testDiffPatch,
+    copyText,
+    notifyError,
+    openExternal,
+    locale,
     notifySuccess: () => undefined,
     translate: (key, params) => key === 'common.cancel'
       ? locale === 'en-US' ? 'Cancel' : '取消'
       : translateReviewMessage(locale, key, params),
     ui: {
+      Dialog: ({ children: content, title, subtitle, footer }) => <section role="dialog" aria-label={String(title)}><h2>{title}</h2><p>{subtitle}</p>{content}{footer}</section>,
+      SelectField: ({ onValueChange, value, children: options, ...props }) => <select {...props} value={value} onChange={(event) => onValueChange(event.currentTarget.value)}>{options}</select>,
+      Toggle: ({ checked, disabled, label, description, onChange }) => <label>{label}<small>{description}</small><input type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange(event.currentTarget.checked)} /></label>,
+      ContextMenu: Dropdown,
       Checkbox: ({
         checked,
         children: label,
@@ -44,12 +64,24 @@ export function ReviewRendererTestHost({
         /></label>
       ),
       CodePatchView: TestCodePatchView,
+      CommitMessageInput: TestCommitMessageInput,
+      ConflictTaskProgress: ({ threadId, onBack }) => <section aria-label="Conflict task" data-thread-id={threadId}><button onClick={onBack}>Back to changes</button></section>,
+      ScrollOverlay: () => null,
       FileContextMenu: () => null,
       FileIcon: ({ className }) => <span aria-hidden="true" className={className} />,
       FindingMarkdown: TestFindingMarkdown,
     },
-  }), [bridge, locale]);
+  }), [bridge, locale, copyText, notifyError, openExternal]);
   return <ReviewRendererHostProvider host={host}>{children}</ReviewRendererHostProvider>;
+}
+
+function TestCommitMessageInput({ content, onChange, onSave }: ReviewCommitMessageInputProps) {
+  return <textarea aria-label="COMMIT_EDITMSG" value={content} onChange={(event) => onChange(event.currentTarget.value)} onKeyDown={(event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's' && !event.nativeEvent.isComposing) {
+      event.preventDefault();
+      onSave();
+    }
+  }} />;
 }
 
 function TestCodePatchView({

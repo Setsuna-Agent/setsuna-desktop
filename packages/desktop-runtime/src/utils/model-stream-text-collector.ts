@@ -6,7 +6,7 @@ export type ModelStreamTextCollector = {
 };
 
 /** 从旧版增量流和基于条目的模型流中收集可见代理文本。 */
-export function createModelStreamTextCollector(): ModelStreamTextCollector {
+export function createModelStreamTextCollector(onProgress?: (text: string) => void): ModelStreamTextCollector {
   const itemKinds = new Map<string, RuntimeStreamItemKind>();
   const itemText = new Map<string, string>();
   const pendingDeltas = new Map<string, string>();
@@ -16,6 +16,7 @@ export function createModelStreamTextCollector(): ModelStreamTextCollector {
     if (!text) return;
     itemText.set(itemId, `${itemText.get(itemId) ?? ''}${text}`);
     output += text;
+    onProgress?.(output);
   };
 
   const flushPendingAgentText = (itemId: string) => {
@@ -28,6 +29,7 @@ export function createModelStreamTextCollector(): ModelStreamTextCollector {
     consume(event) {
       if (event.type === 'text_delta') {
         output += event.text;
+        onProgress?.(output);
         return;
       }
       if (event.type === 'item_started') {
