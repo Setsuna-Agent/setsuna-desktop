@@ -121,7 +121,7 @@ function GitChangesWorkspace({ workspaceRoot, editingMessage = false, reviewStat
             <Button variant="ghost" className="git-changes-nav__title" type="button" aria-expanded={changesExpanded} onClick={() => setChangesExpanded((value) => !value)}>
               <ChevronDown size={12} className={changesExpanded ? '' : 'is-collapsed'} />{t('feature.review.history.changes')}
             </Button>
-            <ReviewIconButton tooltip className="app-shell-icon-control" label={t('feature.review.git.commit')} disabled={fileActions.busy || !composer?.available || composer.busy || !composer.message.trim()} onClick={composer?.commit}><Check size={16} /></ReviewIconButton>
+            <ReviewIconButton tooltip className="app-shell-icon-control" label={t('feature.review.git.commit')} onClick={composer?.commit}><Check size={16} /></ReviewIconButton>
             <ReviewIconButton tooltip className="app-shell-icon-control" label={t('feature.review.workspace.refresh')} onClick={refresh} disabled={history.loading || reviewLoading}><RefreshCw size={13} /></ReviewIconButton>
             <GitChangesMenu refs={refs} selectedRef={history.selectedRef} filterVisible={filterVisible} busy={fileActions.busy} onToggleFilter={() => { setFilterVisible((value) => !value); setChangesExpanded(true); }} currentBranch={page?.currentBranch ?? reviewState?.currentBranch ?? null} onSelectRef={selectRef} onSelectHead={() => {
               history.selectRef('');
