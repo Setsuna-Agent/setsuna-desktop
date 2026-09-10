@@ -689,7 +689,9 @@ function sweModelCatalogItem(
     availabilityNux: null,
     displayName: model.name,
     description: provider.name ? `Provider: ${provider.name}` : '',
-    hidden: !provider.enabled || !model.enabled,
+    // `model.enabled` only marks which model of a provider is selected, so it must not decide
+    // catalog visibility; only a disabled provider hides its models.
+    hidden: !provider.enabled,
     supportedReasoningEfforts: reasoningEfforts.map((reasoningEffort) => ({
       reasoningEffort,
       description: sweReasoningEffortDescription(reasoningEffort),

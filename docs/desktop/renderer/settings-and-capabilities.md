@@ -156,7 +156,7 @@ Capabilities 的一级标签默认通过 `AppRouteTopbarPortal` 挂载到 `Shell
 - `packages/features/image-generation/src/renderer/`
 - `packages/features/vision-recognition/src/renderer/`
 
-两个插件都默认不安装，只有用户从市场安装后详情页才显示 contribution。图片生成 Feature 维护自己的 Images API 服务配置；视觉识别 Feature 只列出“模型服务”中已启用且标记为支持图片的模型，在自己的 `model-selection` document 保存 provider/model 引用，并复用 provider 的服务地址、API key、协议和代理设置。组件只调用各自 typed Feature client，不读取根 Config，也不调用统一 `DesktopRuntimeClient` 的业务方法；输入框、文本域、选择器和按钮统一使用宿主注入的 `SettingsViewUi`，测试结果和图片预览仍由 Feature 自己布局。
+两个插件都默认不安装，只有用户从市场安装后详情页才显示 contribution。图片生成 Feature 维护自己的 Images API 服务配置；视觉识别 Feature 只列出“模型服务”中已启用服务下标记为支持图片的模型（不要求该模型是当前对话模型，因为 `model.enabled` 会随聊天模型切换被改写），在自己的 `model-selection` document 保存 provider/model 引用，并复用 provider 的服务地址、API key、协议和代理设置。组件只调用各自 typed Feature client，不读取根 Config，也不调用统一 `DesktopRuntimeClient` 的业务方法；输入框、文本域、选择器和按钮统一使用宿主注入的 `SettingsViewUi`，测试结果和图片预览仍由 Feature 自己布局。
 
 Bundle 规则见 [Plugin Bundle](../../extensions/plugins/bundles.md)。
 
