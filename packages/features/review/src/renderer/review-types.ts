@@ -4,8 +4,9 @@ export type { DesktopReviewSource } from '../contracts/index.js';
 export type DesktopReviewDiffLayout = 'unified' | 'split';
 
 export type ReviewPathContext = {
+  revisions?: { before: string | null; after: string };
   baseRef?: string | null;
-  source: DesktopReviewSource;
+  source: DesktopReviewSource | 'commit';
   workspaceRoot?: string | null;
   gitRoot?: string | null;
 };

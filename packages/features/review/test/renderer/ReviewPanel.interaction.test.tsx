@@ -535,9 +535,9 @@ describe('DesktopReviewPanel interactions', () => {
     expect(screen.getByRole('dialog', { name: 'Commit or push' })).toBeTruthy();
 
     const includeUnstaged = screen.getByRole('checkbox', { name: 'Include unstaged changes' }) as HTMLInputElement;
-    expect(includeUnstaged.checked).toBe(true);
-    await userEvent.click(includeUnstaged);
     expect(includeUnstaged.checked).toBe(false);
+    await userEvent.click(includeUnstaged);
+    expect(includeUnstaged.checked).toBe(true);
   });
 
   it('refreshes a branch review without changing its selected base ref', async () => {

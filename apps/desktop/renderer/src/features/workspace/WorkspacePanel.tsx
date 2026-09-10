@@ -8,7 +8,7 @@ import {
   type RuntimeReviewFinding,
 } from '@setsuna-desktop/contracts';
 import type { DesktopReviewSource } from '@setsuna-desktop/feature-review/contracts';
-import { Bug, ChevronDown, FileDiff, Folder, FolderOpen, MessageSquare, Save, Search, Terminal, X } from 'lucide-react';
+import { Bug, ChevronDown, FileDiff, Folder, FolderOpen, GitBranch, MessageSquare, Save, Search, Terminal, X } from 'lucide-react';
 import {
   lazy,
   Suspense,
@@ -23,7 +23,7 @@ import {
 } from 'react';
 import { BrowserFeatureIcon } from '../../composition/BrowserWorkspaceFeatureBoundary.js';
 import { EditIcon } from '../../shared/ui/EditIcon.js';
-import { ReviewFeaturePanel } from '../../composition/review-feature-panel-adapter.js';
+import { GitChangesFeaturePanel, ReviewFeaturePanel } from '../../composition/review-feature-panel-adapter.js';
 import { CodeFileView } from '../../shared/code/PierreCode.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { KeyboardShortcutCommandId } from '../../shared/shortcuts/keyboardShortcutCommands.js';
@@ -89,6 +89,7 @@ export function WorkspacePanel({
   onOpenBrowser,
   onOpenConversationDebug,
   onOpenReviewPanel,
+  onOpenChangesPanel,
   onOpenSideChat,
   onOpenTerminalPanel,
   onReviewRefresh,
@@ -126,6 +127,7 @@ export function WorkspacePanel({
   onOpenBrowser: () => void;
   onOpenConversationDebug?: () => void;
   onOpenReviewPanel?: () => void;
+  onOpenChangesPanel?: () => void;
   onOpenSideChat: () => void;
   onOpenTerminalPanel: () => void;
   onReviewRefresh: () => void;
@@ -360,8 +362,28 @@ export function WorkspacePanel({
         onOpenBrowser={onOpenBrowser}
         onOpenConversationDebug={onOpenConversationDebug}
         onOpenReviewPanel={onOpenReviewPanel}
+        onOpenChangesPanel={onOpenChangesPanel}
         onOpenSideChat={onOpenSideChat}
         onOpenTerminalPanel={onOpenTerminalPanel}
+      />
+    ) : (activePanel.type === 'changes' || activePanel.type === 'commit-message') && activeProject?.path ? (
+      <GitChangesFeaturePanel
+        editingMessage={activePanel.type === 'commit-message'}
+        workspaceRoot={activeProject.path}
+        reviewState={reviewState}
+        reviewError={reviewError}
+        reviewLoading={reviewLoading}
+        onRefresh={onReviewRefresh}
+        actions={{
+          workspaceApp: selectedWorkspaceApp,
+          workspaceApps,
+          onAddFileToConversation: addReviewFileToConversation,
+          onCopyFilePath,
+          onExternalOpenFile,
+          onOpenFileWithApp,
+          onOpenProjectFile,
+          onRevealFile,
+        }}
       />
     ) : activePanel.type === 'review' ? (
       <ReviewFeaturePanel
@@ -514,6 +536,7 @@ export function WorkspaceOverviewPanel({
   onOpenBrowser,
   onOpenConversationDebug,
   onOpenReviewPanel,
+  onOpenChangesPanel,
   onOpenSideChat,
   onOpenTerminalPanel,
 }: {
@@ -522,6 +545,7 @@ export function WorkspaceOverviewPanel({
   onOpenBrowser: () => void;
   onOpenConversationDebug?: () => void;
   onOpenReviewPanel?: () => void;
+  onOpenChangesPanel?: () => void;
   onOpenSideChat: () => void;
   onOpenTerminalPanel: () => void;
 }) {
@@ -532,7 +556,7 @@ export function WorkspaceOverviewPanel({
     icon: JSX.Element;
     disabled: boolean;
     onClick: () => void;
-    shortcutCommandId: KeyboardShortcutCommandId;
+    shortcutCommandId?: KeyboardShortcutCommandId;
   }> = [
     {
       key: 'review',
@@ -541,6 +565,14 @@ export function WorkspaceOverviewPanel({
       disabled: !activeProject || !onOpenReviewPanel,
       onClick: () => onOpenReviewPanel?.(),
       shortcutCommandId: 'workspace.openReview',
+    },
+    {
+      key: 'changes',
+      label: t('workspace.panel.changes'),
+      icon: <GitBranch size={15} />,
+      disabled: !activeProject?.path || !onOpenChangesPanel,
+      onClick: () => onOpenChangesPanel?.(),
+      shortcutCommandId: 'workspace.openChanges',
     },
     {
       key: 'files',
@@ -598,10 +630,10 @@ export function WorkspaceOverviewPanel({
           >
             <span className="desktop-workspace-overview__action-icon">{action.icon}</span>
             <span className="desktop-workspace-overview__action-label">{action.label}</span>
-            <ShortcutHint
+            {action.shortcutCommandId ? <ShortcutHint
               className="desktop-workspace-overview__action-shortcut"
               commandId={action.shortcutCommandId}
-            />
+            /> : null}
           </button>
         ))}
       </div>

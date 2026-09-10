@@ -53,6 +53,11 @@ export type ToolApprovalCoordinatorEvents =
   & RuntimeToolHookEvents
   & ToolApprovalLifecycleEvents;
 
+type ToolApprovalResult = {
+  decision: RuntimeApprovalDecision;
+  sandboxBypass: boolean;
+};
+
 export type ToolApprovalCoordinatorOptions = {
   toolHost: ToolHost;
   approvalGate?: ApprovalGate;
@@ -101,7 +106,7 @@ export class ToolApprovalCoordinator {
     approvalPolicy: RuntimeConfigState['approvalPolicy'],
     environment: ToolExecutionEnvironment,
     runtimeProfile?: ToolRuntimeProfile | null,
-  ): Promise<RuntimeApprovalDecision> {
+  ): Promise<ToolApprovalResult> {
     const requirement = await this.approvalRequirement(
       toolCall,
       parsedArguments,
@@ -110,14 +115,18 @@ export class ToolApprovalCoordinator {
       environment,
       runtimeProfile,
     );
-    if (requirement.action === 'skip') return 'approve';
+    const result = (decision: RuntimeApprovalDecision): ToolApprovalResult => ({
+      decision,
+      sandboxBypass: decision !== 'reject' && requirement.action === 'ask' && requirement.retryKind === 'sandbox_bypass',
+    });
+    if (requirement.action === 'skip') return result('approve');
     if (requirement.action === 'reject') {
       throw new ToolPolicyRejectedError(requirement.reason);
     }
     const approvalKeys = requirement.approvalKeys ?? [];
     const persistentApprovalKeys = requirement.persistentApprovalKeys ?? [];
-    if (this.options.approvalStore?.hasAll(approvalKeys, context.turnId)) return 'approve_for_session';
-    if (await this.persistentApprovalIsRemembered(persistentApprovalKeys)) return 'approve';
+    if (this.options.approvalStore?.hasAll(approvalKeys, context.turnId)) return result('approve_for_session');
+    if (await this.persistentApprovalIsRemembered(persistentApprovalKeys)) return result('approve');
     const approvalGate = this.options.approvalGate;
     if (!approvalGate) {
       throw new ToolPolicyRejectedError('Interactive approval is required, but no approval gate is available.');
@@ -130,7 +139,7 @@ export class ToolApprovalCoordinator {
       parsedArguments,
       toolCall,
     });
-    if (hookDecision?.decision === 'allow') return 'approve';
+    if (hookDecision?.decision === 'allow') return result('approve');
     if (hookDecision?.decision === 'deny') {
       throw new ToolPolicyRejectedError(hookDecision.message);
     }
@@ -169,7 +178,7 @@ export class ToolApprovalCoordinator {
       await this.options.persistentToolApprovalStore?.approve(persistentApprovalKeys);
       this.options.approvalStore?.approveForSession(approvalKeys);
     }
-    return answer.decision;
+    return result(answer.decision);
   }
 
   async approveNetworkAccessRetry(
@@ -447,14 +456,17 @@ export class ToolApprovalCoordinator {
       parsedArguments,
       context,
     );
-    if (needsUpfrontSandboxBypass) {
+    const needsPermissionBypass = Boolean(hostRequirement?.sandboxBypassReason)
+      && !requestsSandboxBypass && approvalPolicy !== 'full';
+    if (needsUpfrontSandboxBypass || needsPermissionBypass) {
       const additionalRequirement = additionalPermissionRequirement?.action === 'ask'
         ? additionalPermissionRequirement
         : null;
       const reasons = [
         hostRequirement?.reason,
         additionalRequirement?.reason,
-        `The OS sandbox is unavailable on this platform. Approving ${toolCall.name} will run this command without the OS sandbox.`,
+        hostRequirement?.sandboxBypassReason ?? 'The OS sandbox is unavailable on this platform.',
+        `Approving ${toolCall.name} will run this command without the OS sandbox.`,
       ].filter((reason): reason is string => Boolean(reason));
       return {
         action: 'ask',

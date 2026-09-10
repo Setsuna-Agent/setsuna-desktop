@@ -1006,31 +1006,3 @@
   color: var(--app-text);
   background: var(--desktop-agent-control-hover-bg);
 }
-
-.chat-scrollbar-overlay {
-  position: absolute;
-  right: 0;
-  z-index: 7;
-  width: var(--chat-scrollbar-width);
-  pointer-events: none;
-}
-
-.chat-scrollbar-overlay__thumb {
-  box-sizing: border-box;
-  width: var(--chat-scrollbar-width);
-  margin-left: 0;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: var(--chat-scrollbar-thumb);
-  background-clip: content-box;
-  cursor: default;
-  pointer-events: auto;
-  transition: background 120ms ease;
-}
-
-.chat-scrollbar-overlay:hover .chat-scrollbar-overlay__thumb,
-.chat-scrollbar-overlay__thumb:hover,
-.chat-scrollbar-overlay__thumb:active {
-  background: color-mix(in srgb, var(--app-muted) 48%, transparent);
-  background-clip: content-box;
-}

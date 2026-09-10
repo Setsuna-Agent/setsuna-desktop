@@ -37,7 +37,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react';
-import { latestCompletedFeatureReview } from '../../composition/review-feature-adapter.js';
+import { latestCompletedFeatureReview, type CommitMessageEditorLauncher } from '../../composition/review-feature-adapter.js';
 import { SideChatPanel } from '../../features/chat/SideChatPanel.js';
 import { SubagentConversationPanel } from '../../features/chat/SubagentConversationPanel.js';
 import type { ChatModelSelectionHandler } from '../../features/chat/chatModelSelection.js';
@@ -149,6 +149,8 @@ export type DesktopWorkspacePanelModel = Readonly<{
     onOpenBottomPanel(panel: DesktopPanelType): void;
     onOpenBrowser(url?: string): void;
     onOpenConversationDebug(): void;
+    onOpenChangesPanel?(): void;
+    onOpenCommitMessageEditor?: CommitMessageEditorLauncher;
     onOpenEntry(entry: WorkspaceEntry): void;
     onOpenFileReviewPanel?: DesktopReviewOpenHandler;
     onOpenFilesPanel(): void;
@@ -238,6 +240,7 @@ export function DesktopWorkspacePanelLayer({
     onOpenFileWithApp: actions.onOpenFileWithApp,
     onOpenProjectFile: actions.onOpenProjectFile,
     onOpenReviewPanel: actions.onOpenFileReviewPanel,
+    onOpenChangesPanel: actions.onOpenChangesPanel,
     onOpenSideChat: actions.onOpenSideChat,
     onOpenTerminalPanel: actions.onOpenSideTerminalPanel,
     onResizeStart: layout.onWorkspaceResizeStart,

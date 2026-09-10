@@ -6,6 +6,7 @@ export {
   shouldAutoExpandReviewSummary,
   shouldUseReviewFileBrowser,
 } from './ReviewPanel.js';
+export { GitChangesPanel } from './history/GitChangesPanel.js';
 export type {
   BranchCompareRefOption,
   DesktopReviewDiffLayout,

@@ -79,6 +79,8 @@ Feature 管理：
 
 Approval Review Feature 通过目标为 `taskModels` 的 Settings extension Slot 贡献独立 provider/model 选择；值保存在 Feature settings，未配置或引用失效时跟随当前对话模型。自动审查的等待、允许、拒绝和人工降级状态仍由 Core tool run 投影展示，renderer 不持有未截断工具参数，也不能回答标记为 `automatic` 的审批请求。
 
+Review Feature 在“专用模型”中分别贡献“代码审查”和“提交消息生成”，复用相同模型选择控件，配置保存在独立 Feature settings document。提交消息生成默认跟随当前对话模型；AI 按钮与提交时留空自动生成共用此配置。
+
 ### Data root
 
 `data-root/` 展示 main 的迁移/恢复状态：
@@ -234,3 +236,5 @@ Capabilities：
 - Plugin Management Hook runtime/service。
 
 跨层修改还需要 runtime config/MCP/Skill/Plugin store 与 server integration tests。
+
+Git 的提交生成与冲突解决模型同时出现在“专用模型”设置和变更记录的“设置”弹窗中，均默认跟随当前对话模型。两处读取同一个 `desktop-review/git-settings` 文档；选定冲突解决模型不会自动打开解决冲突开关，开关和两种提示词在 Git 弹窗中配置。

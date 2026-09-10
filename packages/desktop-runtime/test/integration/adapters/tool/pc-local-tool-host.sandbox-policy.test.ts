@@ -1,14 +1,76 @@
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { InMemoryApprovalGate } from '../../../../src/adapters/approval/in-memory-approval-gate.js';
+import { RandomIdGenerator } from '../../../../src/adapters/id/random-id-generator.js';
+import { CompositeToolHost } from '../../../../src/adapters/tool/composite-tool-host.js';
+import { ToolOrchestrator } from '../../../../src/loop/tools/tool-orchestrator.js';
+import { systemClock } from '../../../../src/ports/clock.js';
+import type { RuntimeToolExecutionContext } from '../../../../src/ports/tool-host.js';
 import { realPathIfExists } from '../../../../src/adapters/tool/pc-local/pc-local-tool-paths.js';
 import { createShellSandboxExecutionPlan, shellSandboxCapability, shellSandboxProfile, shellSandboxUnavailableReason } from '../../../../src/adapters/tool/pc-local/pc-local-tools.js';
 import { ToolExecutionError } from '../../../../src/ports/tool-host.js';
 import type { ShellSandboxProvider } from '../../../../src/ports/shell-sandbox-provider.js';
-import { restrictedShellExecutionUnavailable, expectRestrictedShellUnavailable, createHost, StaticPolicyAmendmentStore, nodeCommand } from './pc-local-tool-host.support.js';
+import { restrictedShellExecutionUnavailable, expectRestrictedShellUnavailable, createHost, execFileAsync, StaticPolicyAmendmentStore, nodeCommand } from './pc-local-tool-host.support.js';
 
 describe('pc local shell sandbox policy', () => {
+  it.each(['approve', 'reject', 'explicit-escalation', 'no-confirm'] as const)('honors %s when staging a file through the real command approval and execution chain', async (mode) => {
+    const { host, fixtureRoot, projectDir } = await createHost();
+    const approvalGate = new InMemoryApprovalGate(systemClock, new RandomIdGenerator());
+    const context: RuntimeToolExecutionContext = {
+      threadId: 'thread_1', turnId: 'turn_1', permissionProfile: 'workspace-write',
+      environment: { id: 'local', cwd: projectDir, workspaceRoot: projectDir, workspaceRoots: [projectDir] },
+      sandboxWorkspaceWrite: {}, signal: new AbortController().signal,
+    };
+    const runTool = vi.spyOn(host, 'runTool');
+    const orchestrator = new ToolOrchestrator({
+      toolHost: new CompositeToolHost([host]), approvalGate, clock: systemClock,
+      events: {
+        publishToolStarted: async () => undefined,
+        publishToolCompleted: async () => undefined,
+        publishToolOutputDelta: async () => undefined,
+        publishHookStarted: async () => undefined,
+        publishHookCompleted: async () => undefined,
+        publishApprovalRequested: async (approval) => {
+          await approvalGate.answerApproval(approval.id, { decision: mode === 'reject' ? 'reject' : 'approve' });
+        },
+        publishApprovalResolved: async () => undefined,
+      },
+    });
+    const input = {
+      cmd: 'git add -- resolved.txt && git diff --cached --name-only', yield_time_ms: 0,
+      ...(mode === 'explicit-escalation' ? { sandbox_permissions: 'require_escalated', justification: 'Stage the resolved file.' } : {}),
+    };
+    try {
+      await execFileAsync('git', ['init'], { cwd: projectDir });
+      await writeFile(path.join(projectDir, 'resolved.txt'), 'resolved content\n');
+      const result = await orchestrator.runToolCall(
+        { id: 'stage_file', name: 'exec_command', arguments: JSON.stringify(input) },
+        input, context, mode === 'no-confirm' ? 'full' : 'on-request',
+      );
+      const approved = mode === 'approve' || mode === 'explicit-escalation';
+      expect(result.status).toBe(approved ? 'success' : mode === 'reject' ? 'rejected' : 'error');
+      const staged = await execFileAsync('git', ['diff', '--cached', '--name-only'], { cwd: projectDir });
+      expect(staged.stdout.trim()).toBe(approved ? 'resolved.txt' : '');
+      expect(runTool).toHaveBeenCalledTimes(mode === 'reject' ? 0 : 1);
+      const { approvals } = await approvalGate.listApprovals();
+      expect(approvals).toHaveLength(mode === 'no-confirm' ? 0 : 1);
+      if (mode === 'approve') {
+        expect(approvals[0]).toMatchObject({ retryKind: 'sandbox_bypass', reason: expect.stringContaining('.git') });
+        expect(approvals[0].argumentsPreview).toContain(input.cmd);
+      }
+      // Approval belongs to the command, not to later calls or the shared project state.
+      expect(context.permissionProfile).toBe('workspace-write');
+      await writeFile(path.join(projectDir, 'later.txt'), 'unapproved\n');
+      await expect(host.runTool('exec_command', { cmd: 'git add -- later.txt' }, context))
+        .rejects.toMatchObject({ failureKind: 'permission_denied' });
+    } finally {
+      await host.cleanupTurn(context, { status: 'completed' });
+      await rm(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
   it('uses persisted exec policy amendments as local shell allow rules', async () => {
     const { host } = await createHost({
       policyAmendmentStore: new StaticPolicyAmendmentStore({

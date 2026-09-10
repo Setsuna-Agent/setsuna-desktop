@@ -41,8 +41,8 @@ import {
   type RendererAppRouteId,
 } from '@setsuna-desktop/renderer-contracts/shell';
 import {
+  RENDERER_WORKSPACE_PANEL_TYPES,
   workspacePanelSlot,
-  type RendererWorkspacePanelType,
 } from '@setsuna-desktop/renderer-contracts/workspace';
 import { RendererOwnedSlotsProvider } from '../kernel/renderer-plugins/RendererKernelProvider.js';
 import type { RendererPluginRuntime } from '../kernel/renderer-plugins/runtime.js';
@@ -55,18 +55,6 @@ const REQUIRED_APP_ROUTE_IDS: readonly RendererAppRouteId[] = Object.freeze([
   'settings',
   'capabilities',
   'plugin',
-]);
-
-const WORKSPACE_PANEL_TYPES: readonly RendererWorkspacePanelType[] = Object.freeze([
-  'overview',
-  'browser',
-  'chat',
-  'subagent',
-  'conversation-debug',
-  'files',
-  'file',
-  'review',
-  'terminal',
 ]);
 
 const CORE_SETTINGS_PAGES = Object.freeze([
@@ -95,7 +83,7 @@ const CAPABILITIES_FEATURE_ID_BY_SECTION: Readonly<Record<string, string>> = Obj
   skills: 'skills',
 });
 
-const HOST_WORKSPACE_PANEL_TYPES = WORKSPACE_PANEL_TYPES.filter((panelType) => (
+const HOST_WORKSPACE_PANEL_TYPES = RENDERER_WORKSPACE_PANEL_TYPES.filter((panelType) => (
   panelType !== 'browser' && panelType !== 'terminal'
 ));
 
@@ -129,7 +117,7 @@ const routePlugin = defineRendererPlugin({
       declareRendererChildSlot(chatConversationSlot, { required: true }),
       declareRendererChildSlot(chatComposerSlot, { required: true }),
       declareRendererChildSlot(chatDetailsSlot, { required: true }),
-      declareRendererChildSlot(workspacePanelSlot, { requiredKeys: WORKSPACE_PANEL_TYPES }),
+      declareRendererChildSlot(workspacePanelSlot, { requiredKeys: RENDERER_WORKSPACE_PANEL_TYPES }),
     ]);
     registerRoute(ui, 'settings', [
       declareRendererChildSlot(settingsPageSlot, { requiredKeys: REQUIRED_SETTINGS_PAGE_KEYS }),

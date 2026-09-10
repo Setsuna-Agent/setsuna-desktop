@@ -1,8 +1,6 @@
 import type {
   SettingsActionMenuProps,
-  SettingsButtonProps,
   SettingsGroupProps,
-  SettingsIconButtonProps,
   SettingsNavigationRowProps,
   SettingsPageHeadingProps,
   SettingsPageOutletProps,
@@ -51,13 +49,13 @@ import { useI18n } from '../i18n/I18nProvider.js';
  */
 export const settingsViewUi = Object.freeze({
   ActionMenu: SettingsActionMenu,
-  Button: SettingsButton,
+  Button,
   Checkbox,
   Dialog: SettingsDialog,
   DirectoryList: SettingsDirectoryList,
   EmptyState,
   Group: SettingsGroup,
-  IconButton: SettingsIconButton,
+  IconButton,
   NavigationRow: SettingsNavigationRow,
   PageHeader,
   PageHeading: SettingsPageHeading,
@@ -265,14 +263,6 @@ export function SettingsNavigationRow({
       </Button>
     </div>
   );
-}
-
-function SettingsButton(props: SettingsButtonProps) {
-  return <Button {...props} />;
-}
-
-function SettingsIconButton(props: SettingsIconButtonProps) {
-  return <IconButton {...props} />;
 }
 
 function SettingsSelectField(props: SettingsSelectFieldProps) {

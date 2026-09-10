@@ -23,8 +23,9 @@ import { WorkspaceCodeViewScrollbar } from './WorkspaceCodeViewScrollbar.js';
 
 type EditableWorkspaceFileProps = {
   content: string;
-  file: WorkspaceFileRead;
+  file: Pick<WorkspaceFileRead, 'projectId' | 'path' | 'revision'>;
   fileFocusRequest?: WorkspaceFileFocusRequest;
+  language?: string;
   onChange: (content: string) => void;
   onSave: () => Promise<boolean>;
 };
@@ -33,6 +34,7 @@ export function EditableWorkspaceFile({
   content,
   file,
   fileFocusRequest,
+  language,
   onChange,
   onSave,
 }: EditableWorkspaceFileProps) {
@@ -54,6 +56,7 @@ export function EditableWorkspaceFile({
       cacheKey: `${file.projectId}:${file.path}:${file.revision ?? 'unknown'}`,
       contents: content,
       name: file.path,
+      ...(language ? { lang: language } : {}),
     },
   }]);
   const editorOptions = useMemo<Omit<EditorOptions<undefined>, 'onChange'>>(() => ({
@@ -69,7 +72,7 @@ export function EditableWorkspaceFile({
     matchBrackets: true,
   }), []);
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 's') return;
+    if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 's' || event.nativeEvent.isComposing) return;
     event.preventDefault();
     void onSave();
   };

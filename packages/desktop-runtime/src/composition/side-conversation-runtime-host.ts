@@ -11,10 +11,15 @@ export function createSideConversationRuntimeHost(
     now: () => runtime.clock.now(),
     id: (prefix) => runtime.ids.id(prefix),
     flushThread: (threadId) => runtime.eventWriter.flushThread(threadId),
-    listThreads: () => runtime.threadStore.listThreads({
-      includeArchived: true,
-      includeSide: true,
-    }),
+    listThreads: async () => {
+      const [threads, retained] = await Promise.all([
+        runtime.threadStore.listThreads({ includeArchived: true, includeSide: true }),
+        runtime.reviewRuntimeHost.retainedWorkspaceTaskThreadIds(),
+      ]);
+      // Review's hidden task transcripts have a durable owner; only transient
+      // side conversations belong to this Feature's startup cleanup.
+      return threads.filter((thread) => !retained.has(thread.id));
+    },
     getThread: (threadId) => runtime.threadStore.getThread(threadId),
     createThread: (input) => runtime.threadStore.createThread(input),
     retainAttachments: (threadId, attachments) => (

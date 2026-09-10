@@ -5,7 +5,10 @@ import type {
 } from './bridge.js';
 
 export interface ReviewCommitMessageGenerator {
-  generate(source: DesktopCommitMessageGenerationSource): Promise<string>;
+  generate(source: DesktopCommitMessageGenerationSource, options?: {
+    signal?: AbortSignal;
+    onProgress?: (message: string) => void;
+  }): Promise<string>;
 }
 
 export interface ReviewFilePreviewRegistry {

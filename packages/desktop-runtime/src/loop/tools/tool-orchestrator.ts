@@ -52,7 +52,6 @@ import {
   requestPermissionResponseForDecision,
   requestPermissionsApprovalKeys,
   requestPermissionsGrantForTool,
-  requiresUpfrontSandboxBypass,
   ToolPolicyRejectedError,
   toolRunWithCancellationProfile
 } from './tool-orchestrator-policy.js';
@@ -230,15 +229,8 @@ export class ToolOrchestrator {
       const runtimeProfile = runOptions.checkApproval === false
         ? null
         : (await this.options.toolHost.toolRuntimeProfile?.(runToolCall.name, stepContext) ?? null);
-      const upfrontSandboxBypass = runOptions.checkApproval !== false && requiresUpfrontSandboxBypass(
-        runtimeProfile,
-        runToolCall,
-        runArguments,
-        stepContext,
-        approvalPolicy,
-      );
       const approval = runOptions.checkApproval === false
-        ? 'approve'
+        ? { decision: 'approve' as const, sandboxBypass: false }
         : await this.approvals.approveToolCall(
             runToolCall,
             runArguments,
@@ -247,7 +239,7 @@ export class ToolOrchestrator {
             environment,
             runtimeProfile,
           );
-      if (approval === 'reject') {
+      if (approval.decision === 'reject') {
         content = `Tool ${runToolCall.name} was rejected.`;
         await this.options.events.publishToolCompleted(runToolCall, runArguments, 'rejected', content, {
           resultPreview: startResultPreview,
@@ -260,13 +252,13 @@ export class ToolOrchestrator {
       const sandboxWorkspaceWrite = this.sandboxWorkspaceWriteForRun(stepContext, additionalSandboxPermissions?.sandboxWorkspaceWrite);
       const networkAccessApprovedForSession = this.options.approvalStore?.hasAny(networkRetryApprovalKeys(runToolCall, runArguments, stepContext), stepContext.turnId) ?? false;
       const fullAccess = approvalPolicy === 'full' && stepContext.permissionProfile === 'danger-full-access';
-      const firstRunSandbox = fullAccess || requestedSandboxBypass(runToolCall.name, runArguments) || upfrontSandboxBypass
+      const firstRunSandbox = fullAccess || requestedSandboxBypass(runToolCall.name, runArguments) || approval.sandboxBypass
         ? {
             mode: 'bypass' as const,
             retryReason: fullAccess
               ? 'Full access mode disables the OS sandbox.'
-              : upfrontSandboxBypass
-                ? 'The OS sandbox is unavailable on this platform; unsandboxed execution was approved before the first attempt.'
+              : approval.sandboxBypass
+                ? 'Unsandboxed execution of this command was approved before the first attempt.'
                 : 'Command requested escalated sandbox permissions.',
           }
         : { mode: 'default' as const };

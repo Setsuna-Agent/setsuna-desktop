@@ -10,12 +10,13 @@ import type {
   StartReviewInput,
   StartReviewResult,
 } from './agent-review.js';
+import type { DeleteGitConflictTaskInput, DeleteGitConflictTaskResult, WorkspaceGitConflictTask, GitConflictContext, GitConflictTaskRecord, SetGitConflictArchivedInput, WorkspaceTaskTurnRequest } from './conflict-resolution.js';
 import type { ReviewModelSelection } from './settings.js';
 
 export type ReviewTextGenerationRequest = Pick<
   ModelRequest,
   'messages' | 'maxOutputTokens' | 'signal' | 'temperature' | 'toolChoice'
->;
+> & { modelSelection?: RuntimeConfiguredModelReference; onProgress?: (message: string) => void };
 
 export type ReviewModelOption = Readonly<{
   providerId: string;
@@ -38,6 +39,13 @@ export type ReviewSettingsUpdate = Readonly<{
 
 /** Host-owned model access kept deliberately narrower than the runtime model client. */
 export interface ReviewRuntimeHost {
+  readGitConflictContext(threadId: string, workspaceRoot: string): Promise<GitConflictContext>;
+  deleteGitConflictTask(input: DeleteGitConflictTaskInput): Promise<DeleteGitConflictTaskResult>;
+  listArchivedGitConflicts(): Promise<readonly WorkspaceGitConflictTask[]>;
+  listGitConflictTasks(workspaceRoot: string): Promise<readonly GitConflictTaskRecord[]>;
+  setGitConflictArchived(input: SetGitConflictArchivedInput): Promise<GitConflictTaskRecord>;
+  startWorkspaceTask(sourceThreadId: string, workspaceRoot: string, request: WorkspaceTaskTurnRequest): Promise<GitConflictTaskRecord>;
+  isWorkspaceTaskActive(threadId: string, turnId: string): boolean;
   isDefaultModelConfigured(): Promise<boolean>;
   generateText(input: ReviewTextGenerationRequest): Promise<string>;
   hasThread(threadId: string): Promise<boolean>;
@@ -64,7 +72,7 @@ export interface ReviewLegacySettingsAdapter {
 
 export const reviewRuntimeHostCapability: CapabilityToken<ReviewRuntimeHost> = defineCapability({
   id: 'desktop-review.runtime-host',
-  description: 'Host-managed default-model sampling boundary for Review',
+  description: 'Host-managed model sampling boundary for Review',
 });
 
 export const reviewControlCapability: CapabilityToken<ReviewControl> = defineCapability({

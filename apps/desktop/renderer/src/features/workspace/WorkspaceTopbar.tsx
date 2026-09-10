@@ -1,7 +1,9 @@
+import type { ReactNode } from 'react';
 import { DesktopPanelHeader, type DesktopPanelPlacement } from './DesktopPanelHeader.js';
 import type { DesktopPanelDropPlacement, DesktopPanelTab, DesktopPanelType } from './model.js';
 
 export function WorkspaceTopbar({
+  actions,
   activePanelId,
   availablePanelTypes,
   panels,
@@ -12,6 +14,7 @@ export function WorkspaceTopbar({
   onOpenConversationDebug,
   onOpenFilesPanel,
   onOpenReviewPanel,
+  onOpenChangesPanel,
   onOpenSideChat,
   onOpenTerminalPanel,
   onMovePanel,
@@ -20,6 +23,7 @@ export function WorkspaceTopbar({
   onToggleTerminal,
   onToggleWorkspace,
 }: {
+  actions?: ReactNode;
   activePanelId: string | null;
   availablePanelTypes: DesktopPanelType[];
   panels: DesktopPanelTab[];
@@ -30,6 +34,7 @@ export function WorkspaceTopbar({
   onOpenConversationDebug: () => void;
   onOpenFilesPanel: () => void;
   onOpenReviewPanel: () => void;
+  onOpenChangesPanel?: () => void;
   onOpenSideChat: () => void;
   onOpenTerminalPanel: () => void;
   onMovePanel: (
@@ -45,6 +50,10 @@ export function WorkspaceTopbar({
 }) {
   const activePanel = panels.find((panel) => panel.id === activePanelId) ?? panels[0] ?? null;
   const handleOpenPanel = (panel: DesktopPanelType) => {
+    if (panel === 'changes') {
+      onOpenChangesPanel?.();
+      return;
+    }
     if (panel === 'browser') {
       onOpenBrowser();
       return;
@@ -73,6 +82,7 @@ export function WorkspaceTopbar({
   return (
     <div className="desktop-workspace-toolbar">
       <DesktopPanelHeader
+        actions={actions}
         activePanel={activePanel.type}
         activePanelId={activePanel.id}
         availablePanelTypes={availablePanelTypes}

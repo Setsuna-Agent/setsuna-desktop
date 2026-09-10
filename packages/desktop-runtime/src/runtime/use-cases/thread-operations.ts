@@ -24,7 +24,7 @@ export type RuntimeReviewStartResult = {
 const MAX_RUNTIME_GOAL_OBJECTIVE_LENGTH = 4_000;
 
 export async function requireRuntimeThread(
-  runtime: RuntimeContainer,
+  runtime: Pick<RuntimeContainer, 'threadStore'>,
   threadId: string,
 ): Promise<RuntimeThread> {
   const thread = await runtime.threadStore.getThread(threadId);
@@ -46,7 +46,7 @@ export async function requireRuntimeThread(
  * 保证不留下孤儿协作线程；v1 最大深度为 1，递归仅作防御。
  */
 export async function deleteRuntimeThread(
-  runtime: RuntimeContainer,
+  runtime: Pick<RuntimeContainer, 'agentLoop' | 'threadStore' | 'eventBus' | 'mcpControl' | 'attachmentStore' | 'toolResultStore' | 'workspaceProjects'>,
   threadId: string,
 ): Promise<void> {
   await runtime.agentLoop.withThreadDeletionBarrier(threadId, async () => {

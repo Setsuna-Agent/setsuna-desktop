@@ -28,6 +28,7 @@ import { JavaScriptWorkspaceSearchEngine } from '../../search/javascript-workspa
 import { WorkspaceRuntimeEnvironmentResolver } from '../../workspace/workspace-runtime-environment-resolver.js';
 import { TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS } from '../../../loop/tools/tool-output-budget.js';
 import { pcLocalToolPrompt } from './pc-local-tool-prompt.js';
+import { shellPermissionBlockReason } from './pc-local-tool-shell-policy.js';
 import * as pcTools from './pc-local-tools.js';
 
 type PcToolState = Omit<ReturnType<typeof pcTools.createLocalToolState>, 'sandboxWorkspaceWrite'> & {
@@ -323,9 +324,11 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
         stringArg(normalized.args.risk_reason ?? normalized.args.riskReason),
         toolState as never,
       );
-      if (!risk?.needsConfirmation) return null;
+      const sandboxBypassReason = shellPermissionBlockReason(normalized.args.command, toolState);
+      if (!risk?.needsConfirmation && !sandboxBypassReason) return null;
       return {
         reason: risk.reason || `High-risk shell command: ${shortSingleLine(normalized.args.command)}`,
+        ...(sandboxBypassReason ? { sandboxBypassReason } : {}),
         argumentsPreview: previewArguments(normalized.args),
         rejectWhenApprovalDisabled: risk.rejectWhenApprovalDisabled,
       };
@@ -404,6 +407,10 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
     if (EXCLUDED_PC_TOOLS.has(normalized.name)) throw new Error(`Unknown tool: ${name}`);
     const projectState = await this.projectStateFor(context);
     const toolState = this.toolStateForContext(projectState, context);
+    if (normalized.name === 'run_shell_command' && context.sandbox?.mode === 'bypass') {
+      // The orchestrator grants this exact shell attempt; never alter the shared project or turn profile.
+      toolState.permissionProfile = 'danger-full-access';
+    }
     assertLocalFileMutationPolicy(normalized.name, normalized.args, toolState);
     const shellToolchain = normalized.name === 'run_shell_command' && this.workspaceDependencies
       ? await this.workspaceDependencies.prepareShellToolchain({

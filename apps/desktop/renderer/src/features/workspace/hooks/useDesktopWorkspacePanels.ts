@@ -17,6 +17,7 @@ import {
   activePanelInSlot,
   addPanelToSlotState,
   createBrowserPanel,
+  createChangesPanel,
   createConversationDebugPanel,
   createDefaultSidePanelSlot,
   createEmptyPanelSlot,
@@ -49,6 +50,7 @@ import {
   type DesktopWorkspacePanelLayout,
 } from './useDesktopWorkspacePanelSession.js';
 import { readyThreadWorkspacePath, type ThreadWorkspaceStatus } from './useThreadWorkspace.js';
+import { useCommitMessagePanel } from './useCommitMessagePanel.js';
 
 // Keep panel contents mounted for the compositor-only drawer transition. Keep
 // this duration aligned with --app-workspace-motion-duration in shell.css.
@@ -140,6 +142,11 @@ export function useDesktopWorkspacePanels({
       ? 'review'
       : null,
     activeProject?.path
+      && !slotHasPanelType(sidePanelSlot, 'changes')
+      && !slotHasPanelType(bottomPanelSlot, 'changes')
+      ? 'changes'
+      : null,
+    activeProject?.path
       && !slotHasPanelType(sidePanelSlot, 'files')
       && !slotHasPanelType(bottomPanelSlot, 'files')
       ? 'files'
@@ -184,21 +191,6 @@ export function useDesktopWorkspacePanels({
       .filter((panel) => panel.type === 'terminal')
       .forEach((panel) => closeTerminalSessionsForPanel(panel.id));
   }, [closeTerminalSessionsForPanel]);
-
-  const resetPanelSession = useCallback((identity: ChatComposerTargetIdentity) => {
-    closeTerminalSessionsForLayout(layoutForIdentity(identity));
-    resetForIdentity(identity);
-    if (identity === targetIdentity) closeWorkspaceMenus();
-  }, [closeTerminalSessionsForLayout, closeWorkspaceMenus, layoutForIdentity, resetForIdentity, targetIdentity]);
-
-  const resetNewThreadPanelSession = useCallback((projectId: string | null) => {
-    resetPanelSession(chatComposerTargetIdentity(null, projectId));
-    closeWorkspaceMenus();
-  }, [closeWorkspaceMenus, resetPanelSession]);
-
-  const resetThreadPanelSession = useCallback((threadId: string) => {
-    resetPanelSession(chatComposerTargetIdentity(threadId, null));
-  }, [resetPanelSession]);
 
   useEffect(() => {
     if (!activeProject?.path) {
@@ -312,10 +304,10 @@ export function useDesktopWorkspacePanels({
 
   const openDesktopPanel = useCallback(
     (slot: DesktopPanelSlot, type: DesktopPanelType) => {
-      if (type === 'file') return;
+      if (type === 'file' || type === 'commit-message') return;
       if (type === 'conversation-debug' && conversationDebugEnabled !== true) return;
       if (type === 'review' && !activeProject) return;
-      if (type === 'files' && !activeProject?.path) return;
+      if ((type === 'files' || type === 'changes') && !activeProject?.path) return;
       closeWorkspaceMenus();
       if (isSingletonDesktopPanelType(type)) {
         const existing = findDesktopPanelLocationByType(sidePanelSlot, bottomPanelSlot, type);
@@ -341,9 +333,11 @@ export function useDesktopWorkspacePanels({
                 ? createWorkspaceOverviewPanel()
                 : type === 'review'
                   ? createReviewPanel()
-                  : type === 'files'
-                    ? createFilesPanel()
-                    : createTerminalPanel();
+                  : type === 'changes'
+                    ? createChangesPanel()
+                    : type === 'files'
+                      ? createFilesPanel()
+                      : createTerminalPanel();
       addPanelToDesktopSlot(
         type === 'files'
           ? fileWorkspacePanelTargetSlot(slot, sidePanelSlot, bottomPanelSlot)
@@ -482,10 +476,35 @@ export function useDesktopWorkspacePanels({
     });
   }, [reorderDesktopPanel, targetIdentity, updateLayoutForIdentity]);
 
+  const { open: openCommitMessageEditor, close: closeCommitMessageEditor } = useCommitMessagePanel({
+    targetIdentity, addPanel: addPanelToDesktopSlot, updateLayout: updateLayoutForIdentity,
+  });
+
+  const resetPanelSession = useCallback((identity: ChatComposerTargetIdentity) => {
+    const layout = layoutForIdentity(identity);
+    // Resetting within the same project must settle amend without accepting its draft.
+    [...layout.sidePanelSlot.panels, ...layout.bottomPanelSlot.panels]
+      .filter((panel) => panel.type === 'commit-message')
+      .forEach((panel) => closeCommitMessageEditor(panel.id, true));
+    closeTerminalSessionsForLayout(layout);
+    resetForIdentity(identity);
+    if (identity === targetIdentity) closeWorkspaceMenus();
+  }, [closeCommitMessageEditor, closeTerminalSessionsForLayout, closeWorkspaceMenus, layoutForIdentity, resetForIdentity, targetIdentity]);
+
+  const resetNewThreadPanelSession = useCallback((projectId: string | null) => {
+    resetPanelSession(chatComposerTargetIdentity(null, projectId));
+    closeWorkspaceMenus();
+  }, [closeWorkspaceMenus, resetPanelSession]);
+
+  const resetThreadPanelSession = useCallback((threadId: string) => {
+    resetPanelSession(chatComposerTargetIdentity(threadId, null));
+  }, [resetPanelSession]);
+
   const closeDesktopPanelItem = useCallback(
     (slot: DesktopPanelSlot, panelId: string) => {
       const slotState = slot === 'side' ? sidePanelSlot : bottomPanelSlot;
       const panel = slotState.panels.find((item) => item.id === panelId);
+      if (panel?.type === 'commit-message') closeCommitMessageEditor(panelId);
       if (panel?.type === 'terminal') closeTerminalSessionsForPanel(panel.id);
       const updater = (current: DesktopPanelSlotState) => removePanelFromSlotState(current, panelId);
       if (slot === 'side') {
@@ -494,12 +513,13 @@ export function useDesktopWorkspacePanels({
       }
       setBottomPanelSlot(updater);
     },
-    [bottomPanelSlot, closeTerminalSessionsForPanel, setBottomPanelSlot, setSidePanelSlot, sidePanelSlot],
+    [bottomPanelSlot, closeCommitMessageEditor, closeTerminalSessionsForPanel, setBottomPanelSlot, setSidePanelSlot, sidePanelSlot],
   );
 
   const closeDesktopPanelSlot = useCallback(
     (slot: DesktopPanelSlot) => {
       const slotState = slot === 'side' ? sidePanelSlot : bottomPanelSlot;
+      slotState.panels.filter((panel) => panel.type === 'commit-message').forEach((panel) => closeCommitMessageEditor(panel.id, true));
       slotState.panels.filter((panel) => panel.type === 'terminal').forEach((panel) => closeTerminalSessionsForPanel(panel.id));
       if (slot === 'side') {
         setSidePanelExpanded(false);
@@ -508,7 +528,7 @@ export function useDesktopWorkspacePanels({
       }
       setBottomPanelSlot(createEmptyPanelSlot());
     },
-    [bottomPanelSlot, closeTerminalSessionsForPanel, setBottomPanelSlot, setSidePanelExpanded, setSidePanelSlot, sidePanelSlot],
+    [bottomPanelSlot, closeCommitMessageEditor, closeTerminalSessionsForPanel, setBottomPanelSlot, setSidePanelExpanded, setSidePanelSlot, sidePanelSlot],
   );
 
   const toggleSidePanel = useCallback(() => {
@@ -653,6 +673,7 @@ export function useDesktopWorkspacePanels({
       loadReviewState,
       moveDesktopPanel,
       openBrowserPanel,
+      openCommitMessageEditor,
       openDesktopPanel,
       openFileInWorkspaceApp,
       openFileWithWorkspaceApp,
@@ -706,6 +727,7 @@ export function useDesktopWorkspacePanels({
       loadReviewState,
       moveDesktopPanel,
       openBrowserPanel,
+      openCommitMessageEditor,
       openDesktopPanel,
       openFileInWorkspaceApp,
       openFileWithWorkspaceApp,
@@ -791,7 +813,7 @@ function terminalSessionKey(panelId: string, projectKey: string): string {
 }
 
 function isSingletonDesktopPanelType(type: DesktopPanelType): boolean {
-  return type === 'overview' || type === 'conversation-debug' || type === 'review' || type === 'files';
+  return type === 'overview' || type === 'conversation-debug' || type === 'review' || type === 'changes' || type === 'files';
 }
 
 export type DesktopWorkspacePanelsState = ReturnType<typeof useDesktopWorkspacePanels>;

@@ -6,6 +6,7 @@ import {
   ReviewFeatureGitCommitProvider,
 } from '../../composition/review-feature-adapter.js';
 import { useChatImageAttachmentRequest } from '../../features/chat/hooks/useChatImageAttachmentRequest.js';
+import { chatThreadModelSelection } from '../../features/chat/chatModelSelection.js';
 import {
   RuntimePluginNavigationProvider,
   type OpenRuntimePluginHandler,
@@ -59,10 +60,13 @@ export function AppChatSurface({
 
   return (
     <ReviewFeatureGitCommitProvider
+      threadId={conversation.currentThread?.id}
       activeProject={workspace.context.activeWorkspace}
+      conversationModelSelection={chatThreadModelSelection(conversation.config, conversation.currentThread).reference ?? undefined}
       reviewLoading={workspace.context.reviewLoading}
       reviewState={workspace.context.reviewState}
       onReviewRefresh={workspace.actions.onReviewRefresh}
+      onOpenMessageEditor={workspace.actions.onOpenCommitMessageEditor}
     >
       <ChatNavigationBoundaries
         onOpenBrowser={conversation.onOpenBrowser}

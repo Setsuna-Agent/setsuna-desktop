@@ -81,7 +81,9 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     terminalMinHeight,
     threadsByProjectId,
     toolbarTitle,
+    toggleWorkspaceMaximized,
     workspaceMaxWidth,
+    workspaceMaximized,
     workspaceMinWidth,
     workspacePanelReservesLayout,
     workspaceWidth,
@@ -151,6 +153,14 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     }
     void workspacePanels.loadReviewState();
   }, [activeWorkspace, workspacePanels]);
+  const openChangesPanel = useCallback(() => {
+    if (!activeWorkspace?.path) return;
+    workspacePanels.closeWorkspaceMenus();
+    if (!workspacePanels.activateDesktopPanelByType('changes')) {
+      workspacePanels.openDesktopPanel('side', 'changes');
+    }
+    void workspacePanels.loadReviewState();
+  }, [activeWorkspace?.path, workspacePanels]);
   const activeBrowserPanelId = workspacePanels.browserPanelInstances.find((instance) => (
     instance.active && instance.panel.browser?.url !== BROWSER_HOME_URL
   ))?.panel.id ?? null;
@@ -242,6 +252,10 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       enabled: activeView === 'chat' && Boolean(activeWorkspace),
       execute: openReviewPanel,
     },
+    'workspace.openChanges': {
+      enabled: activeView === 'chat' && Boolean(activeWorkspace?.path),
+      execute: openChangesPanel,
+    },
     'workspace.openTerminal': {
       enabled: activeView === 'chat' && Boolean(activeWorkspace?.path),
       execute: () => workspacePanels.openDesktopPanel('side', 'terminal'),
@@ -275,6 +289,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     handleToggleSidebar,
     navigation,
     openCapabilities,
+    openChangesPanel,
     openFilesPanel,
     openReviewPanel,
     reloadBrowserPanel,
@@ -351,7 +366,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
           slot={shellWorkspaceToolbarSlot}
           props={{
             renderDefault: () => activeView === 'chat'
-              ? <AppWorkspaceToolbar projectWorkspace={projectWorkspace} workspacePanels={workspacePanels} />
+              ? <AppWorkspaceToolbar projectWorkspace={projectWorkspace} workspacePanels={workspacePanels} workspaceMaximized={workspaceMaximized} onToggleMaximized={toggleWorkspaceMaximized} />
               : undefined,
           }}
         />

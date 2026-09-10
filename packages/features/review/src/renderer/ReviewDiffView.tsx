@@ -571,6 +571,7 @@ function ReviewImageVersion({
     let previewId: string | null = null;
     void createPreview(pathContext.workspaceRoot, {
       baseRef: pathContext.baseRef,
+      revisions: pathContext.revisions,
       filePath,
       side,
       source: pathContext.source,
@@ -599,6 +600,7 @@ function ReviewImageVersion({
     filePath,
     fileVersion,
     pathContext.baseRef,
+    pathContext.revisions,
     pathContext.source,
     pathContext.workspaceRoot,
     side,

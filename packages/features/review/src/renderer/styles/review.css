@@ -1,16 +1,19 @@
 @import './review-browser.css';
 @import './review-diff.css';
 @import './review-git.css';
+@import './review-history.css';
+@import './review-history-hover.css';
 
 .desktop-review-panel {
   --desktop-review-panel-x-padding: 8px;
   --desktop-review-file-action-edge: 8px;
   --desktop-review-file-content-max-width: 80%;
   --desktop-review-file-info-width: 75%;
-  --desktop-review-focus: #2563eb;
-  --desktop-review-focus-ring: rgba(37, 99, 235, 0.14);
-  --desktop-review-addition-marker: #0fa340;
-  --desktop-review-deletion-marker: #d84a4a;
+  --desktop-review-file-icon-size: 16px;
+  --desktop-review-focus: var(--app-primary);
+  --desktop-review-focus-ring: var(--app-focus);
+  --desktop-review-addition-marker: var(--app-success);
+  --desktop-review-deletion-marker: var(--app-danger);
   --desktop-review-change-marker-width: 3px;
 
   display: flex;
@@ -552,11 +555,11 @@
   --workspace-file-icon-scale: 1.2;
 
   display: inline-flex;
-  flex: 0 0 16px;
+  flex: 0 0 var(--desktop-review-file-icon-size);
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: var(--desktop-review-file-icon-size);
+  height: var(--desktop-review-file-icon-size);
 }
 
 .desktop-review-file-card__meta {

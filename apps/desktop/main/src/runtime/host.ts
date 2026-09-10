@@ -32,6 +32,7 @@ import type { Readable, Writable } from 'node:stream';
 import { desktopProcessEnvironment, prependPathDirectory } from './desktop-environment.js';
 import { RuntimeEventBatcher } from './runtime-event-batcher.js';
 import { fetchRuntimeResponse } from './runtime-request.js';
+import { readRuntimeProgressResponse } from './runtime-progress-response.js';
 
 type RuntimeHostOptions = {
   appRoot: string;
@@ -171,6 +172,11 @@ export class RuntimeHost {
     return true;
   }
 
+  /** Main-only progress callbacks never cross the renderer's generic request bridge. */
+  requestWithProgress(input: RuntimeRequestInput, options: { signal?: AbortSignal; onProgress: (value: unknown) => void }): Promise<unknown> {
+    return this.sendRequest(input, normalizeRuntimePath(input.path), options.signal, options.onProgress);
+  }
+
   /** Installs a native-picker-selected bundle through a main-only runtime route. */
   async installLocalPluginBundle(sourcePath: string): Promise<RuntimePluginInstallResult> {
     if (!path.isAbsolute(sourcePath)) throw new Error('Plugin bundle path must be absolute.');
@@ -187,6 +193,7 @@ export class RuntimeHost {
     input: RuntimeRequestInput,
     safePath: string,
     signal?: AbortSignal,
+    onProgress?: (value: unknown) => void,
   ): Promise<T> {
     const method = input.method ?? 'GET';
     const requestLabel = `${method} ${safePath}`;
@@ -200,6 +207,7 @@ export class RuntimeHost {
           headers: {
             Authorization: `Bearer ${this.token}`,
             'Content-Type': 'application/json',
+            ...(onProgress ? { Accept: 'application/x-ndjson' } : {}),
           },
           body: input.body === undefined ? undefined : JSON.stringify(input.body),
           signal,
@@ -207,7 +215,7 @@ export class RuntimeHost {
         {
           label: requestLabel,
           retryDelayMs: this.options.runtimeRequestRetryDelayMs,
-          retryOnce: method === 'GET',
+          retryOnce: !onProgress && method === 'GET',
           runtimeState: () => this.runtimeProcessState(),
         },
       );
@@ -217,6 +225,7 @@ export class RuntimeHost {
       }
       throw error;
     }
+    if (onProgress) return readRuntimeProgressResponse(response, onProgress) as Promise<T>;
     if (input.responseMode === 'feature-operation') {
       return runtimeFeatureOperationResponse(response) as Promise<T>;
     }

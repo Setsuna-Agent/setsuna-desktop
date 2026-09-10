@@ -8,7 +8,7 @@ import type {
   RuntimeThreadGoal,
   SendTurnInput,
 } from '@setsuna-desktop/contracts';
-import type { ReviewTurnRequest } from '@setsuna-desktop/feature-review/contracts';
+import type { ReviewTurnRequest, WorkspaceTaskTurnRequest } from '@setsuna-desktop/feature-review/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { ConfigStore } from '../../ports/config-store.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
@@ -192,6 +192,28 @@ export class RuntimeTurnRunFactory {
         inputKind: 'subagent_task',
         promptSource: 'collaboration',
         taskKind: 'subagent',
+      },
+    }));
+    return { turnId, done: run.done };
+  }
+
+  async createWorkspaceTask(threadId: string, input: WorkspaceTaskTurnRequest): Promise<{ turnId: string; done: Promise<void> }> {
+    const text = input.displayText.trim();
+    const prompt = input.prompt.trim();
+    if (!text || !prompt) throw new Error('Workspace task text and prompt are required.');
+    await this.options.turnTasks.waitForFinalizingRegularTurn(threadId);
+    const thread = await this.requireThread(threadId);
+    const turnModel = await this.resolveTurnModel(thread, input.modelSelection);
+    const turnId = this.options.ids.id('turn');
+    const run = this.options.turnTasks.run({ turnId, threadId, taskKind: 'regular', acceptingSteers: true }, (task) => this.options.runTurn({
+      attachments: [], signal: task.controller.signal, skillIds: [],
+      text, turnModel, thread, threadId, turnId,
+      options: {
+        taskKind: 'regular', modelInput: prompt,
+        runtimeContextMessages: [{
+          id: 'workspace_task_policy', turnId, role: 'developer', visibility: 'model', status: 'complete',
+          createdAt: this.options.clock.now().toISOString(), content: input.developerInstructions,
+        }],
       },
     }));
     return { turnId, done: run.done };

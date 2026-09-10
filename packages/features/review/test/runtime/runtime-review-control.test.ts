@@ -90,6 +90,13 @@ function settingsHandle(selection: ReviewModelSelection) {
 
 function runtimeHost(overrides: Partial<ReviewRuntimeHost> = {}): ReviewRuntimeHost {
   return {
+    readGitConflictContext: async () => ({ repositoryRoot: '/repo', files: [] }),
+    listGitConflictTasks: async () => [],
+    listArchivedGitConflicts: async () => [],
+    deleteGitConflictTask: async () => ({ deleted: false }),
+    setGitConflictArchived: async () => { throw new Error('No conflict task in this fixture.'); },
+    startWorkspaceTask: async () => ({ threadId: 'repair-thread', turnId: 'conflict-turn', operation: 'pull', createdAt: '2026-09-10T00:00:00Z' }),
+    isWorkspaceTaskActive: () => false,
     isDefaultModelConfigured: async () => true,
     generateText: async () => '',
     hasThread: async () => true,

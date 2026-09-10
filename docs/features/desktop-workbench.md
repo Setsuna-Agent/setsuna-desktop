@@ -45,10 +45,14 @@ Review 是跨四个运行面参与的完整业务闭环：
 
 - Renderer 传入路径必须是 git-root-relative；Main 拒绝绝对路径和 `..` 逃逸。
 - Git command 使用参数数组，不拼接 shell；untracked discard 不递归猜测用户意图。
+- 变更菜单的“拉取”通过 preload/Main 执行 `git pull --no-edit`，遵循仓库的 upstream、`pull.rebase` 和 `pull.ff` 配置。“拉取（变基）”与“提交和同步”的拉取步骤共用 `main/git-pull.ts`：显式保存已跟踪的本地改动，执行 `--rebase --no-autostash`，再以 `stash apply --index` 恢复暂存选择和未暂存内容；恢复成功才删除本次备份，同步随后推送。未跟踪文件留在工作区，原有 stash 不受影响。拉取失败且未进入变基时恢复本地状态；变基暂停或恢复失败时保留备份并报告恢复命令，不将未提交内容混入进行中的变基。两种拉取均保留提交消息草稿，成功或失败后刷新 Review 状态及历史。
 - Branch diff 以 `merge-base(baseRef, HEAD)` 为基线，并单独合并 untracked summary。
 - Diff 文件数、行数、二进制/图片预览和 untracked 大小有明确上限。
 - Main 的受管 preview 由 native bridge registry 生成 opaque ID，renderer 不直接获取任意本地文件 URL。
-- Commit message 生成通过 Feature typed operation；Main 只提供调用接缝，不能读取 provider secret。
+- Commit message 生成通过 Feature typed operation；Main 只提供调用接缝，不能读取 provider secret。生成接口支持请求内的 NDJSON 进度快照，复用结果 codec；Main/preload 按 requestId 将实时正文送回发起窗口，结束或失败后移除监听，断流不自动重试采样。
+- 提交生成模型、提交提示词、自动解决冲突开关、冲突模型与提示词统一保存于 `desktop-review/git-settings`；Git 弹窗与“专用模型”页面投影同一文档，使用 revision 防止旧表单覆盖新配置。首次启动从旧 `commit-message-model-selection` 和 `commit-message-prompt` 文档迁移；代码审查模型仍独立。两种 Git 模型均默认跟随当前对话，提交消息在无对话模型时使用全局默认模型。
+- 提交消息提示词默认使用简体中文生成标题和正文，类型前缀、scope、代码标识和路径保留原样；最近 10 条非合并提交仅用于参考格式。自定义提示词明确指定的语言优先，未指定时跟随提示词本身的主要语言。Main 读取有界历史消息，runtime 将其与 status/diff 一同视为不可信仓库数据，生成结果保留正文段落。Git 设置的 v3 迁移仅替换完整匹配的旧默认提示词，保留用户自定义内容。
+- 自动解决冲突默认关闭。拉取失败或提交同步部分失败后，renderer 请求 Review typed operation；runtime 先检查开关，核对对话与面板的真实 workspace，再读取 Git 未合并文件。只有实际冲突才通过普通 turn 生命周期启动一轮可写任务，保留正常审批、事件和取消流程。任务使用专用模型，存储在独立的隐藏 side thread 中，不复制主对话内容、不进入用户对话列表。Review 在启动任务前，将工作区、操作类型和 thread ID 原子保存到 runtime 数据目录的 `review/conflict-tasks`，转录仍由 thread store 保存。启动清理跳过这些有持久索引的任务；重启前未结束的 turn 按普通恢复流程结算为取消，不静默续跑。renderer 在变更详情区复用消息流、工具与审批展示，支持停止、返回差异和重新查看；侧栏“冲突”分栏通过 typed history operation 按工作区加载持久记录并倒序展示，关闭面板或重启应用后均可重新查看，重复返回同一任务时不新增记录。记录行支持悬停按钮及右键归档，标题栏按钮归档当前工作区全部未归档记录，查看与恢复统一在设置的“归档对话”中进行；归档标记通过工作区范围内的 typed operation 写回持久索引，不删除转录、不停止任务，也不改变其隐藏线程归属。Review 同时通过设置页扩展在“归档对话”中展示跨项目冲突归档，直接读取同一索引，支持查看过程、恢复及二次确认后彻底删除；删除仅允许已归档记录，复用普通对话删除屏障与资源清理，成功后移除索引和面板缓存，不操作项目 Git 文件；恢复后同步更新变更面板缓存，不将隐藏任务恢复到普通对话列表。自动处理启动后仍保留原始拉取或同步错误及 stash 恢复命令；任务启动不代表已完成变基或恢复本地改动。项目切换不取消任务或清空记录。同一仓库只运行一个冲突处理任务。默认提示词要求保留无关工作、验证后继续 merge/rebase、区分 autostash 恢复冲突且不推送；当前对话可同时运行；开关关闭、无冲突或工作区不匹配时不启动修复，不自动重试。
 - Agent Review 经 `/v1/features/desktop-review/threads/:threadId/reviews` typed operation 启动；renderer 不再把该命令放进通用 `DesktopRuntimeClient`。
 - Feature 生成完整的审查 prompt、developer policy 和模型选择后，才通过窄 `ReviewRuntimeHost.startTurn` 交给 Core。Core 保留通用 turn/event 真源与 read-only tool enforcement，不解释 Review target。
 - 专用 Review 模型只控制该轮采样和临时窗口裁剪；线程仍绑定当前对话模型，并按对话模型窗口决定是否持久压缩，避免一次审查缩短后续历史。

@@ -151,7 +151,7 @@ describe('ArchivedThreadsSettings', () => {
   it('hides the delete-all action when the archive is empty', () => {
     const html = renderArchivedThreads([]);
 
-    expect(html).toContain('暂无归档对话');
+    expect(html).toContain('暂无归档的普通对话');
     expect(html).not.toContain('全部删除');
   });
 });

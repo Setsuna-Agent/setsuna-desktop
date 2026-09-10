@@ -94,6 +94,36 @@ describe('RuntimeRouteRegistry', () => {
     });
   });
 
+  it.each([false, true])('delivers progress before the handler settles and frames its terminal outcome (failure=%s)', async (fail) => {
+    const registry = new RuntimeRouteRegistry();
+    scope = featureScope();
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => { release = resolve; });
+    const descriptor = defineFeatureOperation({
+      ...operation('fixture.progress.generate', '/v1/features/fixture/progress'), supportsProgress: true,
+    });
+    registry.register(scope.scope, descriptor, async (_input, context) => {
+      context.reportProgress?.({ message: 'feat: 标题' });
+      await released;
+      if (fail) throw new FeatureOperationFailure({ code: 'PROVIDER_UNAVAILABLE', message: 'Provider disconnected.', retryable: true });
+      return { message: 'feat: 标题\n\n- 具体改动' };
+    });
+    scope.activate();
+    try {
+      const response = await fetch(`${await listen(registry)}${descriptor.path}`, { headers: { Accept: 'application/x-ndjson' } });
+      const reader = response.body!.getReader();
+      const first = await reader.read();
+      expect(JSON.parse(new TextDecoder().decode(first.value))).toEqual({ type: 'progress', value: { message: 'feat: 标题' } });
+      release();
+      const rest = await reader.read();
+      const outcome = JSON.parse(new TextDecoder().decode(rest.value));
+      expect(outcome).toEqual(fail
+        ? { type: 'error', error: { code: 'PROVIDER_UNAVAILABLE', message: 'Provider disconnected.', retryable: true } }
+        : { type: 'result', value: { message: 'feat: 标题\n\n- 具体改动' } });
+      await reader.cancel();
+    } finally { release(); }
+  });
+
   it('prefers literal routes and rejects parameter patterns with the same shape', async () => {
     const registry = new RuntimeRouteRegistry();
     scope = featureScope();

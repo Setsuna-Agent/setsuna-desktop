@@ -5,8 +5,9 @@ import type {
 } from '../operation.js';
 import type { FeatureScope } from '../scope.js';
 
-export type RuntimeFeatureRouteHandlerContext = Readonly<{
+export type RuntimeFeatureRouteHandlerContext<TOutput = unknown> = Readonly<{
   signal: AbortSignal;
+  reportProgress?: (output: TOutput) => void;
 }>;
 
 export interface RuntimeRouteRegistrar {
@@ -15,7 +16,7 @@ export interface RuntimeRouteRegistrar {
     operation: FeatureOperationDescriptor<TInput, TOutput, TErrors>,
     handler: (
       input: TInput,
-      context: RuntimeFeatureRouteHandlerContext,
+      context: RuntimeFeatureRouteHandlerContext<TOutput>,
     ) => TOutput | PromiseLike<TOutput>,
   ): Readonly<{ dispose(): void }>;
 }

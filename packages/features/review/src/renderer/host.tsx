@@ -1,8 +1,9 @@
 import type { FileDiff, PostRenderPhase } from '@pierre/diffs';
 import type { DiffLineAnnotation } from '@pierre/diffs/react';
-import type { CheckboxProps } from '@setsuna-desktop/renderer-contracts/settings';
+import type { CheckboxProps, SettingsDialogProps, SettingsSelectFieldProps, SettingsToggleProps } from '@setsuna-desktop/renderer-contracts/settings';
+import type { DropdownProps } from 'antd';
 import type { DesktopWorkspaceApp } from '@setsuna-desktop/feature-workspace-apps/contracts';
-import { createContext, useContext, type ComponentType, type ReactNode } from 'react';
+import { createContext, useContext, type ComponentType, type ReactNode, type RefObject } from 'react';
 import type {
   DesktopDiffFile,
   DesktopReviewBridge,
@@ -46,15 +47,41 @@ export type ReviewFindingMarkdownProps = {
   onOpenWorkspaceFile: (filePath: string, line?: number) => void;
 };
 
+export type ReviewCommitMessageInputProps = {
+  content: string;
+  onChange(content: string): void;
+  onSave(): void;
+};
+
+export type ReviewConflictTaskProgressProps = {
+  threadId: string;
+  turnId: string;
+  workspaceRoot: string;
+  onBack(): void;
+  onFinished(): void;
+  onOpenWorkspaceFile?(filePath: string, line?: number): void;
+};
+
 export type ReviewRendererHost = Readonly<{
   bridge: DesktopReviewBridge | null;
   buildPatch(file: DesktopDiffFile): string;
+  copyText(value: string): Promise<void>;
+  openExternal(url: string): Promise<boolean>;
+  locale: string;
   notifySuccess(message: string): void;
+  notifyError(message: string): void;
   platform?: string;
   translate: ReviewTranslate;
   ui: Readonly<{
+    Dialog: ComponentType<SettingsDialogProps>;
+    SelectField: ComponentType<SettingsSelectFieldProps>;
+    Toggle: ComponentType<SettingsToggleProps>;
     Checkbox: ComponentType<CheckboxProps>;
+    ContextMenu: ComponentType<Pick<DropdownProps, 'align' | 'children' | 'disabled' | 'menu' | 'onOpenChange' | 'placement' | 'trigger'>>;
     CodePatchView: ComponentType<ReviewCodePatchViewProps>;
+    CommitMessageInput: ComponentType<ReviewCommitMessageInputProps>;
+    ConflictTaskProgress: ComponentType<ReviewConflictTaskProgressProps>;
+    ScrollOverlay: ComponentType<{ scrollRef: RefObject<HTMLDivElement | null> }>;
     FileContextMenu: ComponentType<ReviewFileContextMenuProps>;
     FileIcon: ComponentType<{ className?: string; path: string }>;
     FindingMarkdown: ComponentType<ReviewFindingMarkdownProps>;

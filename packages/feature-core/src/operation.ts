@@ -42,7 +42,13 @@ export type FeatureOperationDescriptor<
   output: RuntimeCodec<TOutput>;
   errors: TErrors;
   idempotency: FeatureOperationIdempotency;
+  /** Opt-in response streaming; progress snapshots use the same output codec as the result. */
+  supportsProgress?: boolean;
 }>;
+
+export type FeatureOperationStreamFrame<TOutput = unknown> =
+  | Readonly<{ type: 'progress' | 'result'; value: TOutput }>
+  | Readonly<{ type: 'error'; error: FeatureOperationError }>;
 
 export type FeatureOperationError<TCode extends string = string, TDetails = unknown> = Readonly<{
   code: TCode | KernelFeatureOperationErrorCode;

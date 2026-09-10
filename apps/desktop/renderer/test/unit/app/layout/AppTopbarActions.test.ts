@@ -74,6 +74,8 @@ describe('AppWorkspaceToolbar', () => {
     const html = renderToStaticMarkup(createElement(AppWorkspaceToolbar, {
       projectWorkspace: {} as ProjectWorkspaceState,
       workspacePanels,
+      workspaceMaximized: false,
+      onToggleMaximized: vi.fn(),
     }));
 
     expect(html).toContain('data-desktop-panel-placement="side"');

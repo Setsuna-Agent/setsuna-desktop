@@ -5,6 +5,7 @@ import { BindableUsageRecorder } from '../adapters/feature/bindable-usage-record
 import { BindableModelClient } from '../adapters/feature/bindable-model-client.js';
 import { BindableReviewControl } from '../adapters/feature/bindable-review-control.js';
 import { DesktopReviewRuntimeHost } from '../adapters/feature/review-runtime-host.js';
+import { deleteRuntimeThread } from './use-cases/thread-operations.js';
 import { DesktopVisionRecognitionRuntimeHost } from '../adapters/feature/vision-recognition-runtime-host.js';
 import { InMemoryAppServerNotificationBus } from '../adapters/event/in-memory-app-server-notification-bus.js';
 import { InMemoryEventBus } from '../adapters/event/in-memory-event-bus.js';
@@ -222,6 +223,13 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     toolResultStore,
   });
   const reviewRuntimeHost = new DesktopReviewRuntimeHost({
+    dataDir: runtimeDataDir,
+    environments: environmentResolver,
+    startWorkspaceTaskTurn: (threadId, request) => agentLoop.startWorkspaceTaskTurn(threadId, request),
+    activeTurnId: (threadId) => agentLoop.activeTurnId(threadId),
+    deleteWorkspaceTask: (threadId): Promise<void> => deleteRuntimeThread({
+      agentLoop, threadStore, eventBus, mcpControl, attachmentStore, toolResultStore, workspaceProjects,
+    }, threadId),
     config: configStore,
     models: providerModelClient,
     startTurn: (threadId, request) => agentLoop.startReviewTurn(threadId, request),

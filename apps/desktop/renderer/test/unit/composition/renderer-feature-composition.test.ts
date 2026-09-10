@@ -84,6 +84,8 @@ describe('renderer feature composition', () => {
       settingsRouteEntry,
     );
     expect(runtimeExtensions.find((entry) => entry.metadata.id === 'layout-preferences')).toBeUndefined();
+    expect(runtimeExtensions.find((entry) => entry.metadata.id === 'desktop-review-conflict-archives')?.metadata)
+      .toMatchObject({ targetSectionId: 'archives' });
     expect(runtimeExtensions.find((entry) => entry.metadata.id === 'renderer-inspector')?.metadata)
       .toMatchObject({ targetSectionId: 'runtime' });
     const artifact = {

@@ -3,20 +3,25 @@ import { randomUUID } from 'node:crypto';
 import { ipcMain, type IpcMainInvokeEvent, type WebContents } from 'electron';
 import {
   REVIEW_IPC_CHANNELS,
+  reviewModelSelectionCodec,
+  type DesktopReviewCommitInput,
   type ReviewCommitMessageGenerator,
   type ReviewFilePreviewRegistry,
   type ReviewRendererSenderPolicy,
 } from '../contracts/index.js';
 import { DesktopReviewChangeMonitor } from './change-monitor.js';
 import { createReviewImagePreviewUrl } from './image-preview.js';
+import { getDesktopGitCommitDetails, getDesktopGitCommitFileDiff, getDesktopGitHistory } from './history.js';
 import {
   checkoutReviewBranch,
   commitReviewChanges,
   createAndCheckoutReviewBranch,
   discardUnstagedReviewFiles,
   getCommitMessageGenerationSource,
+  getReviewCommitMessage,
   getDesktopReviewState,
   pushReviewBranch,
+  pullReviewBranch,
   stageReviewFiles,
   unstageReviewFiles,
 } from './state.js';
@@ -28,6 +33,9 @@ export type ReviewIpcDependencies = Readonly<{
 }>;
 
 const handlerChannels = [
+  REVIEW_IPC_CHANNELS.getHistory,
+  REVIEW_IPC_CHANNELS.getCommitDetails,
+  REVIEW_IPC_CHANNELS.getCommitFileDiff,
   REVIEW_IPC_CHANNELS.getState,
   REVIEW_IPC_CHANNELS.createImagePreview,
   REVIEW_IPC_CHANNELS.releaseImagePreview,
@@ -39,7 +47,9 @@ const handlerChannels = [
   REVIEW_IPC_CHANNELS.checkoutBranch,
   REVIEW_IPC_CHANNELS.createBranch,
   REVIEW_IPC_CHANNELS.commit,
+  REVIEW_IPC_CHANNELS.getCommitMessage,
   REVIEW_IPC_CHANNELS.push,
+  REVIEW_IPC_CHANNELS.pull,
   REVIEW_IPC_CHANNELS.generateCommitMessage,
 ] as const;
 
@@ -53,6 +63,31 @@ export function registerReviewIpc(scope: FeatureScope, dependencies: ReviewIpcDe
   const subscriptionBySender = new Map<WebContents, string>();
   const latestSubscriptionRequestBySender = new Map<WebContents, string>();
   for (const channel of handlerChannels) ipcMain.removeHandler(channel);
+
+  registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.getHistory, (event, value) => {
+    if (!dependencies.rendererSender.isAllowed(event.sender.id)) throw new Error('Desktop renderer is unavailable.');
+    const input = inputRecord(value);
+    const options = inputRecord(input.options);
+    return getDesktopGitHistory(String(input.workspaceRoot ?? ''), {
+      ref: typeof options.ref === 'string' ? options.ref : undefined,
+      skip: options.skip === undefined ? undefined : Number(options.skip),
+      limit: options.limit === undefined ? undefined : Number(options.limit),
+    });
+  });
+  registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.getCommitDetails, (event, value) => {
+    if (!dependencies.rendererSender.isAllowed(event.sender.id)) throw new Error('Desktop renderer is unavailable.');
+    const input = inputRecord(value);
+    return getDesktopGitCommitDetails(String(input.workspaceRoot ?? ''), String(input.oid ?? ''));
+  });
+  registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.getCommitFileDiff, (event, value) => {
+    if (!dependencies.rendererSender.isAllowed(event.sender.id)) throw new Error('Desktop renderer is unavailable.');
+    const input = inputRecord(value);
+    return getDesktopGitCommitFileDiff(String(input.workspaceRoot ?? ''), {
+      oid: String(input.oid ?? ''),
+      filePath: String(input.filePath ?? ''),
+      previousPath: typeof input.previousPath === 'string' ? input.previousPath : undefined,
+    });
+  });
 
   const disposeSubscription = (subscriptionId: string) => {
     const subscription = subscriptions.get(subscriptionId);
@@ -159,17 +194,41 @@ export function registerReviewIpc(scope: FeatureScope, dependencies: ReviewIpcDe
     const input = inputRecord(value);
     return commitReviewChanges(String(input.workspaceRoot ?? ''), normalizeCommitInput(input));
   });
+  registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.getCommitMessage, (event, value) => {
+    if (!dependencies.rendererSender.isAllowed(event.sender.id)) throw new Error('Desktop renderer is unavailable.');
+    return getReviewCommitMessage(String(inputRecord(value).workspaceRoot ?? ''));
+  });
   registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.push, (_event, value) => {
     const input = inputRecord(value);
     return pushReviewBranch(String(input.workspaceRoot ?? ''));
   });
-  registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.generateCommitMessage, async (_event, value) => {
+  registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.pull, (event, value) => {
+    if (!dependencies.rendererSender.isAllowed(event.sender.id)) throw new Error('Desktop renderer is unavailable.');
     const input = inputRecord(value);
+    return pullReviewBranch(String(input.workspaceRoot ?? ''), { rebase: input.rebase === true });
+  });
+  registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.generateCommitMessage, async (event, value, signal) => {
+    if (!dependencies.rendererSender.isAllowed(event.sender.id)) throw new Error('Desktop renderer is unavailable.');
+    const input = inputRecord(value);
+    const modelSelection = reviewModelSelectionCodec.parse(input.modelSelection);
     const source = await getCommitMessageGenerationSource(
       String(input.workspaceRoot ?? ''),
-      input.includeUnstaged !== false,
+      input.includeUnstaged === true,
     );
-    return { message: await dependencies.commitMessages.generate(source) };
+    const requestId = typeof input.requestId === 'string' && input.requestId.length <= 128 ? input.requestId : undefined;
+    const controller = new AbortController();
+    const onDestroyed = () => controller.abort();
+    event.sender.once('destroyed', onDestroyed);
+    try {
+      return { message: await dependencies.commitMessages.generate({ ...source, ...(modelSelection ? { modelSelection } : {}) }, {
+        signal: AbortSignal.any([signal, controller.signal]),
+        ...(requestId ? { onProgress: (message: string) => {
+          if (!event.sender.isDestroyed()) event.sender.send(REVIEW_IPC_CHANNELS.commitMessageProgress, { requestId, message });
+        } } : {}),
+      }) };
+    } finally {
+      event.sender.removeListener('destroyed', onDestroyed);
+    }
   });
 
   return () => {
@@ -206,11 +265,14 @@ function normalizeFilePathList(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 }
 
-function normalizeCommitInput(value: unknown): { includeUnstaged: boolean; message: string; push: boolean } {
+function normalizeCommitInput(value: unknown): DesktopReviewCommitInput {
   const input = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const amend = inputRecord(input.amend);
   return {
-    includeUnstaged: input.includeUnstaged !== false,
+    includeUnstaged: input.includeUnstaged === true,
     message: String(input.message ?? ''),
     push: Boolean(input.push),
+    sync: Boolean(input.sync),
+    ...(input.amend ? { amend: { oid: String(amend.oid ?? ''), branch: typeof amend.branch === 'string' ? amend.branch : null } } : {}),
   };
 }

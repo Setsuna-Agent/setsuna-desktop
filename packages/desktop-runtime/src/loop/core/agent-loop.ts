@@ -27,7 +27,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import { isCoreRuntimeEvent } from '@setsuna-desktop/contracts';
 import type { ApprovalReviewControl } from '@setsuna-desktop/feature-approval-review/contracts';
-import type { ReviewTurnRequest } from '@setsuna-desktop/feature-review/contracts';
+import type { ReviewTurnRequest, WorkspaceTaskTurnRequest } from '@setsuna-desktop/feature-review/contracts';
 import {
   type CollaborationControl,
   type CollaborationRuntimeHost,
@@ -403,12 +403,7 @@ export class AgentLoop {
     threadId: string,
     input: { prompt: string; title?: string },
   ): Promise<StartTurnResponse> {
-    return this.withThreadMutation(threadId, async () => {
-      const run = await this.turnRuns.createSubagent(threadId, input);
-      this.observeRun(threadId, run.turnId, 'subagent', run.done);
-      void run.done.catch(() => undefined);
-      return { accepted: true, turnId: run.turnId };
-    });
+    return this.startPreparedTurn(threadId, 'subagent', () => this.turnRuns.createSubagent(threadId, input));
   }
 
   /**
@@ -427,12 +422,7 @@ export class AgentLoop {
    * @param input 可选的新内容、skill 选择和思考参数。
    */
   async regenerateFromMessage(threadId: string, messageId: string, input: RegenerateMessageInput = {}): Promise<SendTurnResponse> {
-    return this.withThreadMutation(threadId, async () => {
-      const run = await this.turnRuns.createRegenerate(threadId, messageId, input);
-      this.observeRun(threadId, run.turnId, 'regular', run.done);
-      void run.done.catch(() => undefined);
-      return { accepted: true, turnId: run.turnId };
-    });
+    return this.startPreparedTurn(threadId, 'regular', () => this.turnRuns.createRegenerate(threadId, messageId, input));
   }
 
   /**
@@ -469,14 +459,23 @@ export class AgentLoop {
     });
   }
 
-  /** Starts a Review Feature request after its target and policy have been resolved. */
-  async startReviewTurn(threadId: string, input: ReviewTurnRequest): Promise<SendTurnResponse> {
+  /** Starts a writable Feature task through the ordinary turn lifecycle and approval policy. */
+  async startWorkspaceTaskTurn(threadId: string, input: WorkspaceTaskTurnRequest): Promise<SendTurnResponse> {
+    return this.startPreparedTurn(threadId, 'regular', () => this.turnRuns.createWorkspaceTask(threadId, input));
+  }
+
+  private startPreparedTurn(threadId: string, kind: 'regular' | 'review' | 'subagent', prepare: () => Promise<{ turnId: string; done: Promise<void> }>): Promise<SendTurnResponse> {
     return this.withThreadMutation(threadId, async () => {
-      const run = await this.turnRuns.createReview(threadId, input);
-      this.observeRun(threadId, run.turnId, 'review', run.done);
+      const run = await prepare();
+      this.observeRun(threadId, run.turnId, kind, run.done);
       void run.done.catch(() => undefined);
       return { accepted: true, turnId: run.turnId };
     });
+  }
+
+  /** Starts a Review Feature request after its target and policy have been resolved. */
+  async startReviewTurn(threadId: string, input: ReviewTurnRequest): Promise<SendTurnResponse> {
+    return this.startPreparedTurn(threadId, 'review', () => this.turnRuns.createReview(threadId, input));
   }
 
   /**

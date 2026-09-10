@@ -6,6 +6,7 @@ import type {
 } from '../contracts/index.js';
 import { execFile } from 'node:child_process';
 import path from 'node:path';
+import { resolveGitCommit } from './git-command.js';
 import { resolveDesktopReviewRepository } from './state.js';
 
 const MAX_GIT_IMAGE_PREVIEW_BYTES = 24 * 1024 * 1024;
@@ -19,7 +20,7 @@ export async function createReviewImagePreviewUrl(
   if (!input) return { ok: false, error: 'Invalid review image preview request.' };
 
   try {
-    if (reviewImageVersion(input) === 'workspace') {
+    if (!input.revisions && reviewImageVersion(input) === 'workspace') {
       return previews.createWorkspacePreview(String(workspaceRootValue ?? ''), input.filePath);
     }
 
@@ -58,12 +59,22 @@ function normalizePreviewInput(value: unknown): DesktopReviewImagePreviewInput |
   const side = input.side;
   const source = input.source;
   if (!filePath || (side !== 'before' && side !== 'after')) return null;
-  if (source !== 'unstaged' && source !== 'staged' && source !== 'branch' && source !== 'latest') return null;
+  if (source !== 'unstaged' && source !== 'staged' && source !== 'branch' && source !== 'latest' && source !== 'commit') return null;
+  let revisions: DesktopReviewImagePreviewInput['revisions'];
+  if (input.revisions !== undefined) {
+    if (!input.revisions || typeof input.revisions !== 'object') return null;
+    const pair = input.revisions as Record<string, unknown>;
+    const isOid = (candidate: unknown): candidate is string => typeof candidate === 'string' && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/iu.test(candidate);
+    if (!isOid(pair.after) || (pair.before !== null && !isOid(pair.before))) return null;
+    revisions = { before: pair.before, after: pair.after };
+  }
+  if ((source === 'commit') !== Boolean(revisions)) return null;
   return {
     filePath,
     side,
     source,
     baseRef: typeof input.baseRef === 'string' ? input.baseRef : null,
+    ...(revisions ? { revisions } : {}),
   };
 }
 
@@ -81,6 +92,10 @@ async function reviewImageRevision(
   gitRoot: string,
   input: DesktopReviewImagePreviewInput,
 ): Promise<string | null> {
+  if (input.revisions) {
+    const oid = input.revisions[input.side];
+    return oid ? resolveGitCommit(gitRoot, oid) : null;
+  }
   const version = reviewImageVersion(input);
   if (version === 'index') return '';
   if (version === 'head') return 'HEAD';

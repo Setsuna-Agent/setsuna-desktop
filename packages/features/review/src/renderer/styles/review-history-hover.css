@@ -1,0 +1,34 @@
+.git-commit-hover { max-width: calc(100vw - 24px); }
+.git-commit-hover .git-commit-hover__container {
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--app-border);
+  border-radius: 4px;
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-popover);
+}
+.git-commit-card {
+  width: min(480px, calc(100vw - 24px));
+  color: var(--app-text);
+  font-size: 12px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+.git-commit-card__content { padding: 6px 10px 8px; }
+.git-commit-card__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 8px; margin-bottom: 4px; color: var(--app-text-muted); }
+.git-commit-card__author,
+.git-commit-card__date { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.git-commit-card__author strong { color: var(--app-text); font-weight: 600; }
+.git-commit-card svg { flex-shrink: 0; }
+.git-commit-card__message { max-height: 240px; margin: 0; overflow: auto; white-space: pre-wrap; user-select: text; }
+.git-commit-card__stats { display: flex; flex-wrap: wrap; gap: 0 8px; padding: 4px 10px; border-top: 1px solid var(--app-border); font-variant-numeric: tabular-nums; }
+.git-commit-card__additions { color: var(--app-success); }
+.git-commit-card__deletions,
+.git-commit-card__error { color: var(--app-danger); }
+.git-commit-card__loading { color: var(--app-text-muted); }
+.git-commit-card__footer { display: flex; align-items: center; flex-wrap: wrap; padding: 3px 6px; border-top: 1px solid var(--app-border); }
+.git-commit-card button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 1px 5px; border: 0; border-radius: 3px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.git-commit-card button:hover { background: var(--desktop-agent-control-hover-bg); }
+.git-commit-card button:focus-visible { outline: 2px solid var(--app-focus); outline-offset: -2px; }
+.git-commit-card__footer button + button { margin-left: 4px; padding-left: 8px; border-left: 1px solid var(--app-border); border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.git-commit-card code { font: inherit; font-variant-numeric: tabular-nums; }

@@ -1,0 +1,136 @@
+.desktop-file-context-menu {
+  position: fixed;
+  z-index: 1000;
+  display: grid;
+  width: 236px;
+}
+
+/* One skin for workspace menus and portaled dropdowns. The repeated scope outranks Ant Design's injected defaults. */
+.desktop-file-context-menu,
+.sd-context-dropdown.sd-context-dropdown .ant-dropdown-menu {
+  box-sizing: border-box;
+  padding: 6px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-popover);
+}
+
+.desktop-file-context-menu button,
+.sd-context-dropdown.sd-context-dropdown .ant-dropdown-menu :is(.ant-dropdown-menu-item, .ant-dropdown-menu-submenu-title) {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  color: var(--app-text);
+  background: transparent;
+  font-size: 13px;
+  line-height: 20px;
+  text-align: left;
+}
+
+/* The row gap already spaces icons; remove Ant Design's additional icon margin. */
+.sd-context-dropdown.sd-context-dropdown .ant-dropdown-menu .ant-dropdown-menu-item-icon {
+  margin-inline-end: 0;
+}
+
+.desktop-file-context-menu button > span:nth-child(2),
+.sd-context-dropdown.sd-context-dropdown .ant-dropdown-menu .ant-dropdown-menu-title-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-inline-start: 0;
+}
+
+.sd-context-dropdown.sd-context-dropdown .ant-dropdown-menu :is(.ant-dropdown-menu-item-selected, .ant-dropdown-menu-submenu-selected > .ant-dropdown-menu-submenu-title) {
+  color: var(--app-text);
+  background: transparent;
+}
+
+.desktop-file-context-menu button:is(:hover, :focus-visible):not(:disabled),
+.sd-context-dropdown.sd-context-dropdown .ant-dropdown-menu :is(.ant-dropdown-menu-item, .ant-dropdown-menu-submenu-title):is(:hover, :focus-visible):not([aria-disabled='true']),
+.sd-context-dropdown.sd-context-dropdown .ant-dropdown-menu .ant-dropdown-menu-item-active:not(.ant-dropdown-menu-item-disabled),
+.sd-context-dropdown.sd-context-dropdown .ant-dropdown-menu .ant-dropdown-menu-submenu-active:not(.ant-dropdown-menu-submenu-disabled) > .ant-dropdown-menu-submenu-title {
+  background: var(--desktop-agent-control-hover-bg);
+}
+
+.desktop-file-context-menu button:disabled,
+.sd-context-dropdown.sd-context-dropdown .ant-dropdown-menu .ant-dropdown-menu-item-disabled,
+.sd-context-dropdown.sd-context-dropdown .ant-dropdown-menu .ant-dropdown-menu-submenu.ant-dropdown-menu-submenu-disabled > .ant-dropdown-menu-submenu-title {
+  cursor: not-allowed;
+  color: var(--app-text);
+  background: transparent;
+  opacity: 0.5;
+}
+
+.desktop-file-context-menu__divider,
+.sd-context-dropdown.sd-context-dropdown .ant-dropdown-menu .ant-dropdown-menu-item-divider {
+  height: 1px;
+  margin: 4px 5px;
+  border: 0;
+  background: var(--app-border);
+}
+
+.sd-context-dropdown.sd-context-dropdown .ant-dropdown-menu {
+  width: max-content;
+  min-width: 144px;
+  max-width: min(320px, calc(100vw - 16px));
+  max-height: min(360px, calc(100vh - 16px));
+  overflow-y: auto;
+}
+
+.sd-context-dropdown.sd-context-dropdown .ant-dropdown-menu .ant-dropdown-menu-submenu-title {
+  padding-inline-end: 28px;
+}
+
+.sd-context-dropdown.sd-context-dropdown .ant-dropdown-menu .ant-dropdown-menu-item-extra {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding-inline-start: 8px;
+  color: var(--app-text-muted);
+}
+
+/* Ant Design gives disabled arrows their own foreground and elevated background. */
+.sd-context-dropdown.sd-context-dropdown .ant-dropdown-menu .ant-dropdown-menu-submenu.ant-dropdown-menu-submenu-disabled > .ant-dropdown-menu-submenu-title .ant-dropdown-menu-submenu-arrow-icon,
+.sd-context-dropdown.sd-context-dropdown .ant-dropdown-menu .ant-dropdown-menu-submenu-title :is(.ant-dropdown-menu-submenu-arrow, .ant-dropdown-menu-submenu-arrow-icon) {
+  color: var(--app-text-muted);
+  background: transparent;
+}
+
+.desktop-file-context-menu__submenu-host {
+  position: relative;
+}
+
+.desktop-file-context-menu__submenu-trigger .desktop-file-context-menu__submenu-chevron,
+.desktop-file-context-menu__selected {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--app-text-muted);
+}
+
+.desktop-file-context-menu.desktop-file-context-menu--submenu {
+  position: absolute;
+  top: -6px;
+  left: calc(100% + 6px);
+  width: 210px;
+  max-height: min(360px, calc(100vh - 16px));
+  overflow-y: auto;
+}
+
+.desktop-file-context-menu--submenu.opens-left {
+  right: calc(100% + 6px);
+  left: auto;
+}
+
+.desktop-file-context-menu--submenu.opens-up {
+  top: auto;
+  bottom: -6px;
+}

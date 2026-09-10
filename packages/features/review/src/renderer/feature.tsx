@@ -14,6 +14,8 @@ import {
 } from '../contracts/index.js';
 import { createReviewClient } from './client.js';
 import { reviewMessages } from './messages.js';
+import { GitTaskModelSettings } from './GitTaskModelSettings.js';
+import { ArchivedGitConflictsSettings } from './ArchivedGitConflictsSettings.js';
 import { ReviewSettingsView } from './ReviewSettingsView.js';
 import { RendererReviewService } from './service.js';
 import './styles/review.css';
@@ -33,6 +35,13 @@ export const reviewRendererFeature = defineRendererFeature({
     const client = createReviewClient(context.dependencies.transport);
     context.provide(serviceProvider, new RendererReviewService(client));
     registerSettingsPageExtension(context.ui, {
+      entryId: 'review.conflict-archives',
+      id: 'desktop-review-conflict-archives',
+      targetSectionId: 'archives',
+      order: 80,
+      render: ({ translate, ui }) => <ArchivedGitConflictsSettings client={client} translate={translate} ui={ui} />,
+    });
+    registerSettingsPageExtension(context.ui, {
         entryId: 'review.task-model-settings',
         id: 'desktop-review-task-model',
         targetSectionId: 'taskModels',
@@ -44,6 +53,13 @@ export const reviewRendererFeature = defineRendererFeature({
             ui={ui}
           />
         ),
+    });
+    registerSettingsPageExtension(context.ui, {
+      entryId: 'review.git-model-settings',
+      id: 'desktop-review-git-models',
+      targetSectionId: 'taskModels',
+      order: 81,
+      render: ({ translate, ui }) => <GitTaskModelSettings client={client} translate={translate} ui={ui} />,
     });
   },
 });

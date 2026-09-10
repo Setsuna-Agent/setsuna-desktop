@@ -294,6 +294,7 @@ async function createWindow(): Promise<void> {
         },
       }),
       requestRuntime: (input) => requestRuntime(input),
+      requestRuntimeProgress: (input, options) => requireRuntimeHost().requestWithProgress(input, options),
       updaterHost: Object.freeze({
         currentVersion: app.getVersion(),
         repository: process.env.SETSUNA_DESKTOP_UPDATE_REPOSITORY ?? 'Setsuna-Agent/setsuna-desktop',

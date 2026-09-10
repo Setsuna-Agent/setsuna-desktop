@@ -13,6 +13,9 @@ export const reviewPreloadFeature = definePreloadFeature<ReviewPreloadBridgeCont
   bridgeKeys: ['desktopReview'],
   contribute(writer) {
     const desktopReview: DesktopReviewBridge = {
+      getHistory: (workspaceRoot, options) => ipcRenderer.invoke(REVIEW_IPC_CHANNELS.getHistory, { workspaceRoot, options }),
+      getCommitDetails: (workspaceRoot, oid) => ipcRenderer.invoke(REVIEW_IPC_CHANNELS.getCommitDetails, { workspaceRoot, oid }),
+      getCommitFileDiff: (workspaceRoot, input) => ipcRenderer.invoke(REVIEW_IPC_CHANNELS.getCommitFileDiff, { workspaceRoot, ...input }),
       getState: (workspaceRoot, options) => ipcRenderer.invoke(REVIEW_IPC_CHANNELS.getState, {
         workspaceRoot,
         baseRef: options?.baseRef ?? null,
@@ -81,11 +84,25 @@ export const reviewPreloadFeature = definePreloadFeature<ReviewPreloadBridgeCont
         REVIEW_IPC_CHANNELS.commit,
         { workspaceRoot, ...input },
       ),
+      getCommitMessage: (workspaceRoot) => ipcRenderer.invoke(REVIEW_IPC_CHANNELS.getCommitMessage, { workspaceRoot }),
       push: (workspaceRoot) => ipcRenderer.invoke(REVIEW_IPC_CHANNELS.push, { workspaceRoot }),
-      generateCommitMessage: (workspaceRoot, input) => ipcRenderer.invoke(
-        REVIEW_IPC_CHANNELS.generateCommitMessage,
-        { workspaceRoot, includeUnstaged: input?.includeUnstaged ?? true },
-      ),
+      pull: (workspaceRoot, options) => ipcRenderer.invoke(REVIEW_IPC_CHANNELS.pull, { workspaceRoot, rebase: options?.rebase === true }),
+      async generateCommitMessage(workspaceRoot, input, onProgress) {
+        const requestId = globalThis.crypto.randomUUID();
+        const listener = (_event: IpcRendererEvent, payload: { requestId: string; message: string }) => {
+          if (payload.requestId === requestId && typeof payload.message === 'string') onProgress?.(payload.message);
+        };
+        if (onProgress) ipcRenderer.on(REVIEW_IPC_CHANNELS.commitMessageProgress, listener);
+        try {
+          return await ipcRenderer.invoke(REVIEW_IPC_CHANNELS.generateCommitMessage, {
+            workspaceRoot, includeUnstaged: input?.includeUnstaged === true,
+            ...(input?.modelSelection ? { modelSelection: input.modelSelection } : {}),
+            ...(onProgress ? { requestId } : {}),
+          });
+        } finally {
+          if (onProgress) ipcRenderer.removeListener(REVIEW_IPC_CHANNELS.commitMessageProgress, listener);
+        }
+      },
     };
     writer.set('desktopReview', Object.freeze(desktopReview));
   },

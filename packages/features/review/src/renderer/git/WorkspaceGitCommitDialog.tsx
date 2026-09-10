@@ -1,8 +1,10 @@
-import type { WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { RuntimeConfiguredModelReference, WorkspaceProject } from '@setsuna-desktop/contracts';
 import type {
   DesktopDiffSummary,
   DesktopReviewBridge,
+  DesktopReviewCommitInput,
   DesktopReviewCommitResult,
+  DesktopReviewPullOptions,
   DesktopReviewState,
 } from '../../contracts/index.js';
 import {
@@ -20,6 +22,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
   type PropsWithChildren,
@@ -31,18 +34,46 @@ import type { ReviewTranslate } from '../messages.js';
 import { ReviewChangeCounts } from '../ReviewChangeCounts.js';
 import { localReviewChangeStats } from '../reviewChanges.js';
 import { WorkspaceGitBranchCreateControl } from './WorkspaceGitBranchCreateControl.js';
+import { useCommitMessageEditor, type CommitMessageEditorLauncher } from './useCommitMessageEditor.js';
+import { useAutoResolveGitConflicts } from './useAutoResolveGitConflicts.js';
+import { createCommitMessageDocument } from './commit-message-document.js';
+import { GitOperationError } from './GitOperationError.js';
 
-type CommitBusyAction = 'commit' | 'commit-and-push' | 'create' | 'push' | null;
+type CommitBusyAction = 'commit' | 'amend' | 'commit-and-push' | 'commit-and-sync' | 'create' | 'push' | 'pull' | 'generate-message' | null;
 type CommitPhase = 'committing' | 'generating' | null;
 
 type WorkspaceGitCommitDialogContextValue = {
   canOpenCommitDialog: boolean;
   openCommitDialog: () => void;
+  messageEditor: ReturnType<typeof useCommitMessageEditor>['editor'];
+  conflictTasks: ReturnType<typeof useAutoResolveGitConflicts>['conflictTasks'];
+  composer: {
+    message: string;
+    setMessage: (message: string) => void;
+    currentBranch: string;
+    available: boolean;
+    busy: boolean;
+    generating: boolean;
+    committing: boolean;
+    error: string | null;
+    dismissError: () => void;
+    generateMessage: () => void;
+    commit: () => void;
+    commitAndPush: () => void;
+    commitAndSync: () => void;
+    amend: () => void;
+    canAmend: boolean;
+    push: () => void;
+    pull: (options?: DesktopReviewPullOptions) => void;
+  } | null;
 };
 
 const workspaceGitCommitDialogDefaultValue: WorkspaceGitCommitDialogContextValue = {
   canOpenCommitDialog: false,
   openCommitDialog: () => undefined,
+  messageEditor: null,
+  conflictTasks: [],
+  composer: null,
 };
 
 const WorkspaceGitCommitDialogContext = createContext<WorkspaceGitCommitDialogContextValue>(
@@ -55,28 +86,40 @@ export function useWorkspaceGitCommitDialog(): WorkspaceGitCommitDialogContextVa
 
 export function WorkspaceGitCommitProvider({
   activeProject,
+  threadId,
+  conversationModelSelection,
   children,
   reviewLoading,
   reviewState,
   onReviewRefresh,
+  onOpenMessageEditor,
 }: PropsWithChildren<{
   activeProject?: WorkspaceProject;
+  threadId?: string;
+  conversationModelSelection?: RuntimeConfiguredModelReference;
   reviewLoading: boolean;
   reviewState: DesktopReviewState | null;
   onReviewRefresh?: () => void | Promise<void>;
+  onOpenMessageEditor?: CommitMessageEditorLauncher;
 }>) {
   const { bridge, notifySuccess, translate: t, ui: { Checkbox } } = useReviewRendererHost();
   const [open, setOpen] = useState(false);
   const [branchMenuOpen, setBranchMenuOpen] = useState(false);
   const [commitMessage, setCommitMessage] = useState('');
-  const [includeUnstaged, setIncludeUnstaged] = useState(true);
+  const [includeUnstaged, setIncludeUnstaged] = useState(false);
   const [creatingBranch, setCreatingBranch] = useState(false);
   const [branchDraft, setBranchDraft] = useState('');
   const [busyAction, setBusyAction] = useState<CommitBusyAction>(null);
   const [commitPhase, setCommitPhase] = useState<CommitPhase>(null);
   const [error, setError] = useState<string | null>(null);
+  const dismissError = () => setError(null);
   const workspaceRoot = activeProject?.path ?? '';
+  const { resolveConflicts, conflictTasks } = useAutoResolveGitConflicts({ threadId, workspaceRoot, modelSelection: conversationModelSelection });
   const projectStateKey = activeProject ? `${activeProject.id}:${workspaceRoot}` : '';
+  const messageEditor = useCommitMessageEditor(projectStateKey, onOpenMessageEditor);
+  const currentProjectKey = useRef(projectStateKey);
+  const activeAction = useRef<{ projectKey: string } | null>(null);
+  currentProjectKey.current = projectStateKey;
   const currentBranch = reviewState?.currentBranch || 'HEAD';
   const canOpenCommitDialog = Boolean(
     activeProject
@@ -84,15 +127,16 @@ export function WorkspaceGitCommitProvider({
       && !reviewLoading,
   );
   const changeStats = useMemo(() => localReviewChangeStats(reviewState), [reviewState]);
+  const stagedFileCount = reviewFileCount(reviewState?.stagedSummary);
   const commitableFileCount = includeUnstaged
     ? changeStats.fileCount
-    : reviewFileCount(reviewState?.stagedSummary);
+    : stagedFileCount;
 
   const resetDialog = useCallback((nextOpen = false) => {
     setOpen(nextOpen);
     setBranchMenuOpen(false);
     setCommitMessage('');
-    setIncludeUnstaged(true);
+    setIncludeUnstaged(false);
     setCreatingBranch(false);
     setBranchDraft('');
     setBusyAction(null);
@@ -102,16 +146,24 @@ export function WorkspaceGitCommitProvider({
 
   const closeDialog = useCallback(() => {
     if (busyAction) return;
-    resetDialog(false);
-  }, [busyAction, resetDialog]);
+    setOpen(false);
+    setIncludeUnstaged(false);
+    setBranchMenuOpen(false);
+    setCreatingBranch(false);
+    setBranchDraft('');
+    setError(null);
+  }, [busyAction]);
 
   const openCommitDialog = useCallback(() => {
     if (!canOpenCommitDialog) return;
-    resetDialog(true);
-  }, [canOpenCommitDialog, resetDialog]);
+    setOpen(true);
+    setError(null);
+  }, [canOpenCommitDialog]);
 
   useEffect(() => {
+    activeAction.current = null;
     resetDialog(false);
+    return () => { activeAction.current = null; };
   }, [projectStateKey, resetDialog]);
 
   useEffect(() => {
@@ -127,24 +179,40 @@ export function WorkspaceGitCommitProvider({
 
   const runGitAction = async (
     action: CommitBusyAction,
-    task: (api: DesktopReviewBridge) => Promise<void>,
+    task: (api: DesktopReviewBridge, isCurrent: () => boolean) => Promise<void>,
   ) => {
-    if (!workspaceRoot || busyAction) return;
+    if (!workspaceRoot || activeAction.current?.projectKey === projectStateKey) return;
     const api = bridge;
     if (!api) {
       setError(t('feature.review.git.unsupported'));
       return;
     }
+    const request = { projectKey: projectStateKey };
+    activeAction.current = request;
+    // Project navigation must not apply a late AI response or clear a newer action.
+    const isCurrent = () => currentProjectKey.current === projectStateKey && activeAction.current === request;
     setBusyAction(action);
     setError(null);
+    // A failed pull may still update remote refs or leave conflict files to display.
+    let shouldRefresh = action === 'pull';
     try {
-      await task(api);
-      await onReviewRefresh?.();
+      await task(api, isCurrent);
+      shouldRefresh = action !== 'generate-message';
     } catch (unknownError) {
-      setError(gitControlErrorMessage(unknownError, t));
+      if (isCurrent()) setError(gitControlErrorMessage(unknownError, t));
     } finally {
-      setBusyAction(null);
-      if (action === 'commit' || action === 'commit-and-push') setCommitPhase(null);
+      if (isCurrent() && shouldRefresh) {
+        try {
+          await onReviewRefresh?.();
+        } catch (refreshError) {
+          if (isCurrent()) setError((current) => current ?? gitControlErrorMessage(refreshError, t));
+        }
+      }
+      if (isCurrent()) {
+        activeAction.current = null;
+        setBusyAction(null);
+        setCommitPhase(null);
+      }
     }
   };
 
@@ -160,54 +228,138 @@ export function WorkspaceGitCommitProvider({
       setError(t('feature.review.git.branchRequired'));
       return;
     }
-    void runGitAction('create', async (api) => {
+    void runGitAction('create', async (api, isCurrent) => {
       await api.createBranch(workspaceRoot, branchName, {
         allowUnstaged: true,
       });
+      if (!isCurrent()) return;
       setBranchMenuOpen(false);
       closeBranchCreate();
     });
   };
 
-  const commitChanges = (push: boolean) => {
-    const action = push ? 'commit-and-push' : 'commit';
-    void runGitAction(action, async (api) => {
+  // Including working changes is an explicit dialog action, never a shared sidebar preference.
+  const generateDraft = (api: DesktopReviewBridge, includeUnstaged: boolean, isCurrent: () => boolean) => (
+    api.generateCommitMessage(workspaceRoot, {
+      includeUnstaged,
+      ...(conversationModelSelection ? { modelSelection: conversationModelSelection } : {}),
+    }, (message) => { if (isCurrent()) setCommitMessage(message); })
+  );
+
+  const commitChanges = ({ push = false, sync = false, amend = false, includeUnstaged = false }: {
+    push?: boolean;
+    sync?: boolean;
+    amend?: boolean;
+    includeUnstaged?: boolean;
+  } = {}) => {
+    const action = amend ? 'amend' : sync ? 'commit-and-sync' : push ? 'commit-and-push' : 'commit';
+    void runGitAction(action, async (api, isCurrent) => {
       let message = commitMessage.trim();
-      if (!message) {
+      let amendTarget: DesktopReviewCommitInput['amend'];
+      if (amend) {
+        const previous = await api.getCommitMessage(workspaceRoot);
+        if (!isCurrent()) return;
+        // A new commit draft may contain only a subject; amend must start with the full HEAD message.
+        const edited = await messageEditor.edit(createCommitMessageDocument(previous, t));
+        if (!isCurrent() || edited === null) return;
+        message = edited.trim();
+        setCommitMessage(message);
+        amendTarget = { oid: previous.oid, branch: previous.branch };
+      } else if (!message) {
         setCommitPhase('generating');
-        const generated = await api.generateCommitMessage(workspaceRoot, { includeUnstaged });
+        const generated = await generateDraft(api, includeUnstaged, isCurrent);
+        if (!isCurrent()) return;
         message = generated.message.trim();
         if (!message) throw new Error(t('feature.review.git.messageGenerationFailed'));
         setCommitMessage(message);
       }
       setCommitPhase('committing');
-      const result = await api.commit(workspaceRoot, { includeUnstaged, message, push });
+      const result = await api.commit(workspaceRoot, {
+        includeUnstaged, message, push,
+        ...(sync ? { sync: true } : {}),
+        ...(amendTarget ? { amend: amendTarget } : {}),
+      });
+      if (!isCurrent()) return;
       setBranchMenuOpen(false);
-      if (result.pushError) {
+      if (result.pushError || result.syncError) {
         setCommitMessage('');
-        setError(t('feature.review.git.pushAfterCommitFailed', {
+        const failureMessage = t(result.syncError ? 'feature.review.git.syncAfterCommitFailed' : 'feature.review.git.pushAfterCommitFailed', {
           hash: result.commitHash || t('feature.review.git.commitFinished'),
-          error: result.pushError,
-        }));
+          error: result.syncError ?? result.pushError ?? '',
+        });
+        if (result.syncError) {
+          const resolution = await resolveConflicts('sync');
+          if (isCurrent()) {
+            // Starting a repair does not restore saved local work; retain its recovery instructions.
+            setError(resolution.error ? `${failureMessage}\n${resolution.error}` : failureMessage);
+          }
+        } else setError(failureMessage);
         return;
       }
       resetDialog(false);
-      notifySuccess(commitSuccessMessage(result, push, t));
+      notifySuccess(sync ? t('feature.review.git.commitSyncSuccess') : commitSuccessMessage(result, push, t));
     });
   };
 
   const pushBranch = () => {
-    void runGitAction('push', async (api) => {
+    void runGitAction('push', async (api, isCurrent) => {
       await api.push(workspaceRoot);
+      if (!isCurrent()) return;
       resetDialog(false);
       notifySuccess(t('feature.review.git.pushSuccess', { branch: currentBranch }));
     });
   };
 
-  const contextValue = useMemo<WorkspaceGitCommitDialogContextValue>(() => ({
+  const pullBranch = (options: DesktopReviewPullOptions = {}) => {
+    void runGitAction('pull', async (api, isCurrent) => {
+      try {
+        await api.pull(workspaceRoot, options);
+      } catch (pullError) {
+        if (isCurrent()) {
+          const resolution = await resolveConflicts(options.rebase ? 'rebase' : 'pull');
+          if (resolution.error) throw new Error(`${gitControlErrorMessage(pullError, t)}\n${resolution.error}`);
+        }
+        throw pullError;
+      }
+      if (isCurrent()) notifySuccess(t('feature.review.git.pullSuccess', { branch: currentBranch }));
+    });
+  };
+
+  const generateMessage = () => {
+    void runGitAction('generate-message', async (api, isCurrent) => {
+      const generated = await generateDraft(api, false, isCurrent);
+      if (!isCurrent()) return;
+      const message = generated.message.trim();
+      if (!message) throw new Error(t('feature.review.git.messageGenerationFailed'));
+      setCommitMessage(message);
+    });
+  };
+
+  const contextValue: WorkspaceGitCommitDialogContextValue = {
     canOpenCommitDialog,
     openCommitDialog,
-  }), [canOpenCommitDialog, openCommitDialog]);
+    messageEditor: messageEditor.editor,
+    conflictTasks,
+    composer: {
+      message: commitMessage,
+      setMessage: setCommitMessage,
+      currentBranch,
+      available: canOpenCommitDialog && stagedFileCount > 0,
+      busy: Boolean(busyAction),
+      generating: busyAction === 'generate-message' || commitPhase === 'generating',
+      committing: commitPhase === 'committing',
+      error,
+      dismissError,
+      generateMessage,
+      commit: () => commitChanges(),
+      commitAndPush: () => commitChanges({ push: true }),
+      commitAndSync: () => commitChanges({ sync: true }),
+      amend: () => commitChanges({ amend: true }),
+      canAmend: canOpenCommitDialog && messageEditor.available,
+      push: pushBranch,
+      pull: pullBranch,
+    },
+  };
 
   const dialog = open && typeof document !== 'undefined' ? createPortal(
     <div
@@ -247,6 +399,7 @@ export function WorkspaceGitCommitProvider({
                 creatingBranch={creatingBranch}
                 currentBranch={currentBranch}
                 error={error}
+                onDismissError={dismissError}
                 onBranchDraftChange={setBranchDraft}
                 onCancelCreate={closeBranchCreate}
                 onCreate={createBranch}
@@ -285,7 +438,7 @@ export function WorkspaceGitCommitProvider({
             title={busyAction === 'commit'
               ? commitPhase === 'generating' ? t('feature.review.git.generatingMessage') : t('feature.review.git.committing')
               : t('feature.review.git.commit')}
-            onClick={() => commitChanges(false)}
+            onClick={() => commitChanges({ includeUnstaged })}
           />
           <GitActionButton
             disabled={Boolean(busyAction) || commitableFileCount === 0}
@@ -294,7 +447,7 @@ export function WorkspaceGitCommitProvider({
             title={busyAction === 'commit-and-push'
               ? commitPhase === 'generating' ? t('feature.review.git.generatingMessage') : t('feature.review.git.commitAndPushing')
               : t('feature.review.git.commitAndPush')}
-            onClick={() => commitChanges(true)}
+            onClick={() => commitChanges({ push: true, includeUnstaged })}
           />
           <GitActionButton
             disabled={Boolean(busyAction)}
@@ -305,7 +458,7 @@ export function WorkspaceGitCommitProvider({
           />
         </div>
         {error && !branchMenuOpen ? (
-          <div className="chat-git-commit-popover__error">{error}</div>
+          <GitOperationError message={error} onDismiss={dismissError} />
         ) : null}
       </div>
     </div>,
@@ -326,6 +479,7 @@ function CommitBranchMenu({
   creatingBranch,
   currentBranch,
   error,
+  onDismissError,
   onBranchDraftChange,
   onCancelCreate,
   onCreate,
@@ -337,6 +491,7 @@ function CommitBranchMenu({
   creatingBranch: boolean;
   currentBranch: string;
   error: string | null;
+  onDismissError: () => void;
   onBranchDraftChange: (value: string) => void;
   onCancelCreate: () => void;
   onCreate: (event: FormEvent<HTMLFormElement>) => void;
@@ -363,7 +518,7 @@ function CommitBranchMenu({
         onCreateStart={onCreateStart}
         t={t}
       />
-      {error ? <div className="chat-git-branch-menu__error">{error}</div> : null}
+      {error ? <GitOperationError message={error} onDismiss={onDismissError} /> : null}
     </div>
   );
 }

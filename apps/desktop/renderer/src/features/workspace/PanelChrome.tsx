@@ -1,4 +1,4 @@
-import { Bug, FileDiff, FileText, FolderOpen, MessageSquare, PanelRight, Terminal, Users } from 'lucide-react';
+import { Bug, FileDiff, FileText, FolderOpen, GitBranch, MessageSquare, PanelRight, Terminal, Users } from 'lucide-react';
 import { BrowserFavicon as BrowserFeatureFavicon } from '../../composition/BrowserWorkspaceFeatureBoundary.js';
 import { translate, type Translate } from '../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../shared/i18n/messages.js';
@@ -16,6 +16,7 @@ const panelTitleCopy: Partial<Record<DesktopPanelType, { key: MessageKey; knownT
   'conversation-debug': { key: 'workspace.panel.conversationDebug', knownTitles: ['对话调试'] },
   browser: { key: 'workspace.panel.newTab', knownTitles: ['新标签页'] },
   review: { key: 'workspace.panel.review', knownTitles: ['审查'] },
+  changes: { key: 'workspace.panel.changes', knownTitles: ['变更', '变更记录', 'Changes'] },
   terminal: { key: 'workspace.panel.terminal', knownTitles: ['终端'] },
   files: { key: 'workspace.panel.openFile', knownTitles: ['打开文件'] },
 };
@@ -45,6 +46,7 @@ export function DesktopPanelIcon({ panel, type }: { panel?: DesktopPanelTab; typ
   }
   if (panelType === 'terminal') return <Terminal size={14} />;
   if (panelType === 'review') return <FileDiff size={14} />;
-  if (panelType === 'file') return <FileText size={14} />;
+  if (panelType === 'changes') return <GitBranch size={14} />;
+  if (panelType === 'file' || panelType === 'commit-message') return <FileText size={14} />;
   return <FolderOpen size={14} />;
 }

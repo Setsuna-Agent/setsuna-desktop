@@ -117,6 +117,8 @@ export type ToolRuntimeProfile = {
 
 export type ToolApprovalRequirement = {
   reason: string;
+  /** The command cannot run within the current sandbox; include its bypass in the same approval. */
+  sandboxBypassReason?: string;
   argumentsPreview?: string;
   approvalKeys?: string[];
   persistentApprovalKeys?: string[];

@@ -1,24 +1,47 @@
+import { Maximize2, Minimize2 } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { WorkspaceTopbar } from '../../features/workspace/WorkspaceTopbar.js';
 import type { DesktopWorkspacePanelsState } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
 import type { ProjectWorkspaceState } from '../../features/workspace/hooks/useProjectWorkspace.js';
 import { PanelPlacementIcon } from '../../features/workspace/PanelPlacementIcon.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
+import { AppTooltip } from '../../shared/ui/primitives.js';
 
 export function AppWorkspaceToolbar({
   projectWorkspace,
   workspacePanels,
+  workspaceMaximized,
+  onToggleMaximized,
 }: {
   projectWorkspace: ProjectWorkspaceState;
   workspacePanels: DesktopWorkspacePanelsState;
+  workspaceMaximized: boolean;
+  onToggleMaximized: () => void;
 }) {
+  const { t } = useI18n();
   if (!workspacePanels.sidePanelPresent) return null;
 
+  const maximizeLabel = t(workspaceMaximized ? 'workspace.panel.restoreWidth' : 'workspace.panel.maximize');
+  const actions = (
+    <AppTooltip title={maximizeLabel} placement="bottom">
+      <button
+        className={'app-shell-icon-control chat-file-review-panel__close' + (workspaceMaximized ? ' chat-file-review-panel__close--active' : '')}
+        type="button"
+        aria-label={maximizeLabel}
+        aria-pressed={workspaceMaximized}
+        onClick={onToggleMaximized}
+      >
+        {workspaceMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+      </button>
+    </AppTooltip>
+  );
   const sidePanels = workspacePanels.sidePanelSlot.panels;
   const activePanel = sidePanels.find((panel) => panel.id === workspacePanels.sidePanelSlot.active) ?? null;
   if (activePanel?.type === 'overview') {
     return (
       <WorkspaceOverviewToolbar
+        actions={actions}
         bottomPanelOpen={workspacePanels.bottomPanelVisible}
         bottomTerminalActive={workspacePanels.bottomTerminalPanelActive}
         onToggleTerminal={workspacePanels.toggleBottomTerminal}
@@ -29,6 +52,7 @@ export function AppWorkspaceToolbar({
 
   return (
     <WorkspaceTopbar
+      actions={actions}
       activePanelId={workspacePanels.sidePanelSlot.active}
       availablePanelTypes={workspacePanels.panelLauncherTypes}
       panels={workspacePanels.sidePanelSlot.panels}
@@ -52,6 +76,7 @@ export function AppWorkspaceToolbar({
         workspacePanels.openDesktopPanel('side', 'review');
         void workspacePanels.loadReviewState();
       }}
+      onOpenChangesPanel={() => workspacePanels.openDesktopPanel('side', 'changes')}
       onOpenSideChat={() => {
         workspacePanels.closeWorkspaceMenus();
         workspacePanels.openDesktopPanel('side', 'chat');
@@ -82,11 +107,13 @@ export function AppWorkspaceToolbar({
 }
 
 function WorkspaceOverviewToolbar({
+  actions,
   bottomPanelOpen,
   bottomTerminalActive,
   onToggleTerminal,
   onToggleWorkspace,
 }: {
+  actions: ReactNode;
   bottomPanelOpen: boolean;
   bottomTerminalActive: boolean;
   onToggleTerminal: () => void;
@@ -103,6 +130,7 @@ function WorkspaceOverviewToolbar({
         <div className="chat-file-review-panel__heading">
           <span className="chat-file-review-panel__tabs" aria-hidden="true" />
           <span className="chat-file-review-panel__heading-actions">
+            {actions}
             <ShortcutTooltip
               commandId="layout.toggleTerminal"
               label={bottomTerminalActive ? t('topbar.closeTerminal') : t('topbar.openBottomTerminal')}

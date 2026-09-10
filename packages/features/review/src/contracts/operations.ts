@@ -15,13 +15,28 @@ import type {
   StartReviewResult,
 } from './agent-review.js';
 import { reviewModelSelectionCodec } from './settings.js';
+import {
+  commitMessagePromptCodec,
+  COMMIT_MESSAGE_HISTORY_LIMIT,
+  MAX_COMMIT_MESSAGE_EXAMPLE_CHARS,
+  type CommitMessagePromptSettings,
+  type CommitMessagePromptSettingsUpdate,
+} from './commit-message-prompt.js';
 
 const commitMessageSourceCodec = defineRuntimeCodec<DesktopCommitMessageGenerationSource>((value) => {
   const record = objectRecord(value, 'Review commit message source must be an object.');
+  const modelSelection = reviewModelSelectionCodec.parse(record.modelSelection);
+  if (record.recentMessages !== undefined && (!Array.isArray(record.recentMessages)
+    || record.recentMessages.length > COMMIT_MESSAGE_HISTORY_LIMIT
+    || record.recentMessages.some((message) => typeof message !== 'string' || message.length > MAX_COMMIT_MESSAGE_EXAMPLE_CHARS))) {
+    throw new Error('Review recent commit messages are invalid.');
+  }
   if (record.branch !== null && typeof record.branch !== 'string') {
     throw new Error('Review commit message branch must be a string or null.');
   }
   return Object.freeze({
+    ...(modelSelection ? { modelSelection } : {}),
+    ...(record.recentMessages ? { recentMessages: Object.freeze([...(record.recentMessages as string[])]) } : {}),
     branch: record.branch,
     status: text(record.status, 'status'),
     diff: text(record.diff, 'diff'),
@@ -37,6 +52,7 @@ const generatedCommitMessageCodec = defineRuntimeCodec<DesktopReviewGeneratedCom
 
 export const generateReviewCommitMessage = defineFeatureOperation({
   id: 'desktop-review.commit-message.generate',
+  supportsProgress: true,
   method: 'POST',
   path: '/v1/features/desktop-review/commit-message',
   input: commitMessageSourceCodec,
@@ -87,13 +103,13 @@ export const startAgentReview = defineFeatureOperation<
   idempotency: 'non-idempotent',
 });
 
-const emptyInputCodec = defineRuntimeCodec<undefined>((value) => {
+export const emptyInputCodec = defineRuntimeCodec<undefined>((value) => {
   if (value === undefined || value === null) return undefined;
   if (typeof value === 'object' && !Array.isArray(value) && !Object.keys(value).length) return undefined;
   throw new Error('Operation does not accept input.');
 });
 
-const reviewSettingsStateCodec = defineRuntimeCodec<ReviewSettingsState>((value) => {
+export const reviewSettingsStateCodec = defineRuntimeCodec<ReviewSettingsState>((value) => {
   const record = objectRecord(value, 'Review settings state must be an object.');
   if (!Array.isArray(record.availableModels)) {
     throw new Error('Review availableModels must be an array.');
@@ -105,7 +121,7 @@ const reviewSettingsStateCodec = defineRuntimeCodec<ReviewSettingsState>((value)
   });
 });
 
-const reviewSettingsUpdateCodec = defineRuntimeCodec<ReviewSettingsUpdate>((value) => {
+export const reviewSettingsUpdateCodec = defineRuntimeCodec<ReviewSettingsUpdate>((value) => {
   const record = objectRecord(value, 'Review settings update must be an object.');
   return Object.freeze({
     expectedRevision: nonNegativeInteger(record.expectedRevision, 'expectedRevision'),
@@ -113,7 +129,7 @@ const reviewSettingsUpdateCodec = defineRuntimeCodec<ReviewSettingsUpdate>((valu
   });
 });
 
-const reviewSettingsErrors = Object.freeze({
+export const reviewSettingsErrors = Object.freeze({
   SETTINGS_UNAVAILABLE: Object.freeze({ status: 503 }),
   REVISION_CONFLICT: Object.freeze({ status: 409 }),
 });
@@ -134,6 +150,54 @@ export const updateReviewSettings = defineFeatureOperation({
   path: '/v1/features/desktop-review/settings',
   input: reviewSettingsUpdateCodec,
   output: reviewSettingsStateCodec,
+  errors: reviewSettingsErrors,
+  idempotency: 'idempotent',
+});
+
+export const readCommitMessageSettings = defineFeatureOperation({
+  id: 'desktop-review.commit-message.settings.read',
+  method: 'GET',
+  path: '/v1/features/desktop-review/commit-message/settings',
+  input: emptyInputCodec,
+  output: reviewSettingsStateCodec,
+  errors: reviewSettingsErrors,
+  idempotency: 'safe',
+});
+
+export const updateCommitMessageSettings = defineFeatureOperation({
+  id: 'desktop-review.commit-message.settings.update',
+  method: 'PATCH',
+  path: '/v1/features/desktop-review/commit-message/settings',
+  input: reviewSettingsUpdateCodec,
+  output: reviewSettingsStateCodec,
+  errors: reviewSettingsErrors,
+  idempotency: 'idempotent',
+});
+
+const commitMessagePromptSettingsCodec = defineRuntimeCodec<CommitMessagePromptSettings>((value) => {
+  const record = objectRecord(value, 'Commit message prompt settings must be an object.');
+  return Object.freeze({ prompt: commitMessagePromptCodec.parse(record.prompt), revision: nonNegativeInteger(record.revision, 'revision') });
+});
+
+export const readCommitMessagePromptSettings = defineFeatureOperation({
+  id: 'desktop-review.commit-message.prompt.read',
+  method: 'GET',
+  path: '/v1/features/desktop-review/commit-message/prompt',
+  input: emptyInputCodec,
+  output: commitMessagePromptSettingsCodec,
+  errors: reviewSettingsErrors,
+  idempotency: 'safe',
+});
+
+export const updateCommitMessagePromptSettings = defineFeatureOperation({
+  id: 'desktop-review.commit-message.prompt.update',
+  method: 'PATCH',
+  path: '/v1/features/desktop-review/commit-message/prompt',
+  input: defineRuntimeCodec<CommitMessagePromptSettingsUpdate>((value) => {
+    const record = objectRecord(value, 'Commit message prompt update must be an object.');
+    return Object.freeze({ prompt: commitMessagePromptCodec.parse(record.prompt), expectedRevision: nonNegativeInteger(record.expectedRevision, 'expectedRevision') });
+  }),
+  output: commitMessagePromptSettingsCodec,
   errors: reviewSettingsErrors,
   idempotency: 'idempotent',
 });

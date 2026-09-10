@@ -35,7 +35,7 @@ export function obviousHighRiskShellReason(command: unknown): string {
     return '命令会执行内联脚本，可能修改本地环境。';
   }
   if (text.includes('git reset --hard') || text.includes('git clean')) return '命令可能丢弃 Git 改动。';
-  if (/\bgit\s+(?:checkout|switch|restore|rebase|merge|commit|push|pull|stash|tag)\b/.test(text)) return '命令可能改变 Git 状态或远端仓库。';
+  if (splitShellCommandSegments(text).some((segment) => gitCommandWritesMetadata(parseShellCommandSegment(segment).words))) return '命令可能改变 Git 状态或远端仓库。';
   if (hasWord('sudo')) return '命令会提升权限。';
   if (
     /\b(?:pip3?|python(?:3(?:\.\d+)?)?\s+-m\s+pip)\s+install\b/.test(text)
@@ -153,6 +153,26 @@ export function _usesShellApplyPatch(text: string): boolean {
     || /<<[A-Z0-9_'-]*\s*\n?[^|&;]*(?:apply_patch|applypatch)\b/.test(text);
 }
 
+function gitCommandWritesMetadata(words: string[]): boolean {
+  if (shellCommandName(words[0]) !== 'git') return false;
+  for (let index = 1; index < words.length; index += 1) {
+    const word = words[index];
+    if (['-C', '-c', '--git-dir', '--work-tree', '--namespace'].includes(word)) {
+      index += 1;
+      continue;
+    }
+    if (word.startsWith('-')) continue;
+    if (word === 'stash') return !['list', 'show'].includes(words[index + 1]);
+    if (word === 'tag') {
+      const args = words.slice(index + 1);
+      return args.some((arg) => !arg.startsWith('-'))
+        && !args.some((arg) => /^(?:-[lv]|--(?:list|verify)(?:=|$))/u.test(arg));
+    }
+    return /^(?:add|checkout|switch|restore|reset|rebase|merge|commit|push|pull|fetch|cherry-pick|revert)$/u.test(word);
+  }
+  return false;
+}
+
 export function shellWritePathCandidates(command: unknown): string[] {
   const candidates: string[] = [];
   const text = String(command || '');
@@ -161,6 +181,8 @@ export function shellWritePathCandidates(command: unknown): string[] {
     const parsed = parseShellCommandSegment(segment);
     const words = parsed.words;
     candidates.push(...parsed.outputRedirects);
+    // Git writes its index and refs implicitly, even when argv only names workspace files.
+    if (gitCommandWritesMetadata(words)) candidates.push('.git');
     const commandName = shellCommandName(words[0]);
     if (SHELL_MUTATION_COMMANDS_WITH_PATH_ARGS.has(commandName)) {
       const pathArguments = shellPositionalPathArguments(words);

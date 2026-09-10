@@ -2,11 +2,16 @@ import { createFeatureScope } from '@setsuna-desktop/feature-core/scope';
 import { FeatureScopeUnavailableError } from '@setsuna-desktop/feature-core/status';
 import { EventEmitter } from 'node:events';
 import type { WebContents } from 'electron';
+import type { ReviewCommitMessageGenerator } from '../../src/contracts/index.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const reviewIpcMocks = vi.hoisted(() => ({
   close: vi.fn(),
   getState: vi.fn(),
+  getCommitMessage: vi.fn(),
+  getCommitMessageGenerationSource: vi.fn(),
+  commit: vi.fn(),
+  pull: vi.fn(),
   handlers: new Map<string, (...args: unknown[]) => unknown>(),
   subscribe: vi.fn(),
 }));
@@ -31,12 +36,14 @@ vi.mock('../../src/main/change-monitor.js', () => ({
 
 vi.mock('../../src/main/state.js', () => ({
   checkoutReviewBranch: vi.fn(),
-  commitReviewChanges: vi.fn(),
+  commitReviewChanges: reviewIpcMocks.commit,
+  getReviewCommitMessage: reviewIpcMocks.getCommitMessage,
   createAndCheckoutReviewBranch: vi.fn(),
   discardUnstagedReviewFiles: vi.fn(),
-  getCommitMessageGenerationSource: vi.fn(),
+  getCommitMessageGenerationSource: reviewIpcMocks.getCommitMessageGenerationSource,
   getDesktopReviewState: reviewIpcMocks.getState,
   pushReviewBranch: vi.fn(),
+  pullReviewBranch: reviewIpcMocks.pull,
   stageReviewFiles: vi.fn(),
   unstageReviewFiles: vi.fn(),
 }));
@@ -49,6 +56,83 @@ afterEach(() => {
 });
 
 describe('review IPC lifecycle', () => {
+  it('streams progress only to its requesting renderer and cleans up its lifetime listener', async () => {
+    const scope = createFeatureScope({ featureId: 'review', process: 'main', scopeId: 'generation-progress' });
+    const sender = new FakeWebContents();
+    const send = vi.spyOn(sender, 'send');
+    const result = deferred<string>();
+    const generate = vi.fn<ReviewCommitMessageGenerator['generate']>(async (_source, options) => {
+      options?.onProgress?.('feat: streaming');
+      return result.promise;
+    });
+    reviewIpcMocks.getCommitMessageGenerationSource.mockResolvedValue({ branch: 'main', status: 'M  file.txt', diff: '+updated' });
+    scope.scope.add(registerReviewIpc(scope.scope, {
+      commitMessages: { generate },
+      previews: { createWorkspacePreview: vi.fn(), registerContentPreview: vi.fn(), release: vi.fn() },
+      rendererSender: { isAllowed: (id) => id === sender.id },
+    }));
+    scope.activate();
+    try {
+      const pending = ipcHandler('desktop-review:generate-commit-message')({ sender }, { workspaceRoot: '/repo', requestId: 'request-1' });
+      await vi.waitFor(() => expect(send).toHaveBeenCalledWith('desktop-review:commit-message-progress', { requestId: 'request-1', message: 'feat: streaming' }));
+      expect(sender.listenerCount('destroyed')).toBe(1);
+      result.resolve('feat: streaming\n\n- Done');
+      await expect(pending).resolves.toEqual({ message: 'feat: streaming\n\n- Done' });
+      expect(sender.listenerCount('destroyed')).toBe(0);
+    } finally {
+      result.resolve('done');
+      await scope.finishDispose();
+    }
+  });
+
+  it('routes Git actions and preserves amend targets and sync mode across IPC', async () => {
+    const scope = createFeatureScope({ featureId: 'review', process: 'main', scopeId: 'commit-editor-test' });
+    const generate = vi.fn();
+    const source = { branch: 'main', status: 'M  file.txt', diff: '+updated' };
+    reviewIpcMocks.getCommitMessageGenerationSource.mockResolvedValue(source);
+    scope.scope.add(registerReviewIpc(scope.scope, {
+      commitMessages: { generate },
+      previews: { createWorkspacePreview: vi.fn(), registerContentPreview: vi.fn(), release: vi.fn() },
+      rendererSender: { isAllowed: (id) => id === 1 },
+    }));
+    scope.activate();
+    const target = { oid: 'a'.repeat(40), branch: 'main' };
+    const document = { ...target, message: 'Subject\n\nBody', context: 'On branch main\nChanges to be committed:\n\tmodified: file.txt' };
+    reviewIpcMocks.getCommitMessage.mockResolvedValue(document);
+    try {
+      expect(await ipcHandler('desktop-review:get-commit-message')({ sender: { id: 1 } }, { workspaceRoot: '/repo' })).toEqual(document);
+      expect(reviewIpcMocks.getCommitMessage).toHaveBeenCalledWith('/repo');
+      const pullResult = { ok: true, pulled: true, state: { workspaceRoot: '/repo' } };
+      reviewIpcMocks.pull.mockResolvedValue(pullResult);
+      expect(await ipcHandler('desktop-review:pull')({ sender: { id: 1 } }, { workspaceRoot: '/repo' })).toEqual(pullResult);
+      await expect(ipcHandler('desktop-review:pull')({ sender: { id: 2 } }, { workspaceRoot: '/repo' })).rejects.toThrow('Desktop renderer is unavailable');
+      expect(reviewIpcMocks.pull).toHaveBeenCalledExactlyOnceWith('/repo', { rebase: false });
+      for (const rebase of [false, true, 'true']) {
+        await ipcHandler('desktop-review:pull')({ sender: { id: 1 } }, { workspaceRoot: '/repo', rebase });
+        expect(reviewIpcMocks.pull).toHaveBeenLastCalledWith('/repo', { rebase: rebase === true });
+      }
+      await ipcHandler('desktop-review:commit')({}, { workspaceRoot: '/repo', message: 'Edited', includeUnstaged: false, amend: target, sync: true });
+      expect(reviewIpcMocks.commit).toHaveBeenCalledWith('/repo', { message: 'Edited', includeUnstaged: false, push: false, sync: true, amend: target });
+      // Only an explicit boolean true may broaden the default scope at the process boundary.
+      for (const value of [undefined, false, true, 'true']) {
+        const includeUnstaged = value === true;
+        const scopeInput = value === undefined ? {} : { includeUnstaged: value };
+        await ipcHandler('desktop-review:commit')({}, { workspaceRoot: '/repo', message: 'Scoped commit', ...scopeInput });
+        expect(reviewIpcMocks.commit).toHaveBeenLastCalledWith('/repo', { message: 'Scoped commit', includeUnstaged, push: false, sync: false });
+        await ipcHandler('desktop-review:generate-commit-message')({ sender: new FakeWebContents() }, { workspaceRoot: '/repo', ...scopeInput });
+        expect(reviewIpcMocks.getCommitMessageGenerationSource).toHaveBeenLastCalledWith('/repo', includeUnstaged);
+      }
+      const modelSelection = { providerId: 'conversation-provider', modelId: 'conversation-model' };
+      await ipcHandler('desktop-review:generate-commit-message')({ sender: new FakeWebContents() }, { workspaceRoot: '/repo', modelSelection });
+      expect(generate).toHaveBeenLastCalledWith({ ...source, modelSelection }, { signal: expect.any(AbortSignal) });
+      await expect(ipcHandler('desktop-review:generate-commit-message')({ sender: new FakeWebContents() }, {
+        workspaceRoot: '/repo', modelSelection: { providerId: 'invalid' },
+      })).rejects.toThrow('modelId');
+    } finally {
+      await scope.finishDispose();
+    }
+  });
+
   it('keeps the newest watcher when concurrent subscription requests finish out of order', async () => {
     const firstSubscription = deferred<() => void>();
     const secondSubscription = deferred<() => void>();
