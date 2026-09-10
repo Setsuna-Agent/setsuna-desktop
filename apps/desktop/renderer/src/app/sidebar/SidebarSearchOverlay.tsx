@@ -1,3 +1,5 @@
+import { TextField, Dialog, Button } from '@setsuna-desktop/renderer-ui';
+
 import type { DesktopRuntimeClient, RuntimeThreadSummary, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { LoaderCircle, Search } from 'lucide-react';
 import {
@@ -9,7 +11,6 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type RefObject,
 } from 'react';
-import { createPortal } from 'react-dom';
 import { useDebouncedValue } from '../../shared/hooks/useDebouncedValue.js';
 import { useIdentityRequestGuard } from '../../shared/hooks/useIdentityRequestGuard.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
@@ -36,7 +37,6 @@ export function SidebarSearchOverlay({
 }) {
   const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const panelRef = useRef<HTMLDivElement | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [matchingThreads, setMatchingThreads] = useState<RuntimeThreadSummary[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -51,11 +51,6 @@ export function SidebarSearchOverlay({
     query,
     threads: hasKeyword ? matchingThreads : threads,
   }), [hasKeyword, matchingThreads, projectNameById, query, t, threads]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => inputRef.current?.focus(), 0);
-    return () => window.clearTimeout(timer);
-  }, []);
 
   useEffect(() => {
     setActiveIndex(0);
@@ -91,41 +86,6 @@ export function SidebarSearchOverlay({
     setActiveIndex((current) => Math.min(current, Math.max(results.length - 1, 0)));
   }, [results.length]);
 
-  useEffect(() => {
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onClose();
-        returnFocusRef.current?.focus();
-        return;
-      }
-      if (event.key !== 'Tab') return;
-
-      const panel = panelRef.current;
-      if (!panel) return;
-      const focusable = Array.from(
-        panel.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'),
-      ).filter((item) => item.offsetParent !== null || item === document.activeElement);
-      if (!focusable.length) {
-        event.preventDefault();
-        panel.focus();
-        return;
-      }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onClose, returnFocusRef]);
-
   const openResult = useCallback((threadId: string) => {
     onSelect(threadId);
     returnFocusRef.current?.focus();
@@ -151,27 +111,12 @@ export function SidebarSearchOverlay({
   };
 
   const activeResultId = results[activeIndex] ? `desktop-agent-search-result-${activeIndex}` : undefined;
-  return createPortal(
-    <div
-      className="desktop-agent-search-overlay"
-      role="presentation"
-      onMouseDown={() => {
-        onClose();
-        returnFocusRef.current?.focus();
-      }}
-    >
-      <div
-        className="desktop-agent-search-popover"
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('sidebar.searchDialog')}
-        tabIndex={-1}
-        onMouseDown={(event) => event.stopPropagation()}
-      >
+  return (
+    <Dialog aria-label={t('sidebar.searchDialog')} showClose={false} width={600}
+      className="desktop-agent-search-popover" onClose={onClose}>
         <div className="desktop-agent-search-popover__input">
           <Search size={15} />
-          <input
+          <TextField
             ref={inputRef}
             aria-activedescendant={activeResultId}
             aria-autocomplete="list"
@@ -202,7 +147,7 @@ export function SidebarSearchOverlay({
         >
           {results.length ? (
             results.map((result, index) => (
-              <button
+              <Button variant="ghost"
                 className={`desktop-agent-search-result ${index === activeIndex ? 'is-active' : ''}`}
                 id={`desktop-agent-search-result-${index}`}
                 key={result.thread.id}
@@ -222,7 +167,7 @@ export function SidebarSearchOverlay({
                   {result.matchText ? <span className="desktop-agent-search-result__match">{result.matchText}</span> : null}
                 </span>
                 <span className="desktop-agent-search-result__source">{result.sourceLabel}</span>
-              </button>
+              </Button>
             ))
           ) : (
             <div className="desktop-agent-search-popover__empty">
@@ -230,8 +175,6 @@ export function SidebarSearchOverlay({
             </div>
           )}
         </div>
-      </div>
-    </div>,
-    document.body,
+    </Dialog>
   );
 }

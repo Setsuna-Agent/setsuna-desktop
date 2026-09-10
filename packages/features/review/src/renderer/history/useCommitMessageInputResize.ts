@@ -1,4 +1,3 @@
-import type { GetRef, Input } from 'antd';
 import { useRef, useState, type ButtonHTMLAttributes } from 'react';
 
 const MIN_HEIGHT = 26;
@@ -6,10 +5,10 @@ const ROW_HEIGHT = 18;
 
 /** Manual sizing takes precedence over auto-growth until the user resets the grip. */
 export function useCommitMessageInputResize() {
-  const inputRef = useRef<GetRef<typeof Input.TextArea>>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [height, setHeight] = useState<number | null>(null);
   const drag = useRef<{ pointerId: number; y: number; height: number; scale: number } | null>(null);
-  const textarea = () => inputRef.current?.resizableTextArea?.textArea;
+  const textarea = () => inputRef.current;
   const clamp = (value: number) => Math.round(Math.max(MIN_HEIGHT, Math.min(window.innerHeight / 2, value)));
   const stopResize = () => { drag.current = null; };
   const resizeHandleProps: ButtonHTMLAttributes<HTMLButtonElement> = {

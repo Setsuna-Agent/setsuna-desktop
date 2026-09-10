@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import type { RuntimePluginSummary, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import type { ReviewConflictTaskProgressProps } from '@setsuna-desktop/feature-review/renderer/host';
 import { ArrowLeft, Square } from 'lucide-react';
@@ -44,11 +45,11 @@ export function ReviewConflictTaskProgress({ threadId, turnId, workspaceRoot, on
     <div className="git-history-diff git-conflict-task">
       <header className="desktop-review-panel__toolbar">
         <div className="git-history-diff__heading">
-          <button type="button" className="app-shell-icon-control" aria-label={t('feature.review.git.conflictBack')} onClick={onBack}><ArrowLeft size={14} /></button>
+          <Button variant="ghost" type="button" className="app-shell-icon-control" aria-label={t('feature.review.git.conflictBack')} onClick={onBack}><ArrowLeft size={14} /></Button>
           <span className="git-history-diff__title">{t('feature.review.git.conflictSection')}</span>
           {statusLabel ? <span className="git-conflict-task__status" role="status">{statusLabel}</span> : null}
         </div>
-        {!ended ? <button type="button" className="sd-button sd-button--ghost" disabled={stopping} onClick={() => void stop()}><Square size={12} />{t('feature.review.git.conflictStop')}</button> : null}
+        {!ended ? <Button variant="ghost" type="button" disabled={stopping} onClick={() => void stop()}><Square size={12} />{t('feature.review.git.conflictStop')}</Button> : null}
       </header>
       {error ? <p className="git-history-status is-error" role="alert">{error}</p> : null}
       <MarkdownNavigationProvider workspaceRoot={workspaceRoot} onOpenWorkspaceFile={onOpenWorkspaceFile}>

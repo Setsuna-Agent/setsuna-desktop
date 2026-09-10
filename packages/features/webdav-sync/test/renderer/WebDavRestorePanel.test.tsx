@@ -32,7 +32,7 @@ describe('WebDavRestorePanel', () => {
     await user.click(screen.getByRole('button', { name: '检查会覆盖什么' }));
 
     const dialog = await screen.findByRole('dialog', { name: '还原覆盖清单' });
-    expect(dialog.className).toContain('desktop-agent-modal');
+    expect(dialog.className).toContain('sd-dialog');
     expect(await screen.findByText('本地 Agent 偏好')).toBeTruthy();
     expect(screen.getByText('仅本机 Skill')).toBeTruthy();
     expect(screen.getByText('其余 1 个类别不会造成本地覆盖或删除')).toBeTruthy();

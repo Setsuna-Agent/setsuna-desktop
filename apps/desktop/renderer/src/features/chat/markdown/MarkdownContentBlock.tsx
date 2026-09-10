@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import { Globe2 } from 'lucide-react';
 import {
   Children,
@@ -333,14 +334,14 @@ function MarkdownImage({ alt = '', node: _node, src, ...props }: MarkdownElement
 
   if (target.kind === 'workspace' && onOpenWorkspaceFile) {
     return (
-      <button
+      <Button variant="ghost"
         className="chat-markdown__local-image"
         type="button"
         onClick={() => onOpenWorkspaceFile(target.path, target.line)}
       >
         <span aria-hidden="true">{t('chat.markdown.image')}</span>
         <span>{alt || target.path}</span>
-      </button>
+      </Button>
     );
   }
 

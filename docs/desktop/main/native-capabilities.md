@@ -144,7 +144,7 @@ Windows Sandbox Feature 拥有 sidecar 定位和 fail-closed 校验、UAC 状态
 - `packages/features/updater/src/{contracts,main,preload,renderer}/`
 - `apps/desktop/{main,preload,renderer}/src/composition/`
 
-Updater 是纵向 Feature：状态 DTO、IPC channel、main 状态机、preload 子桥、renderer 状态服务、设置扩展、顶栏提示、文案和 scoped CSS 都由同一包拥有。宿主只注入版本、数据/下载路径、网络代理 fetch、主窗口和语言，并控制 `initialize/start/stop` 时点。
+Updater 是纵向 Feature：状态 DTO、IPC channel、main 状态机、preload 子桥、renderer 状态服务、设置扩展、顶栏提示、文案和 scoped CSS 都由同一包拥有。宿主只注入版本、数据/下载路径和网络代理 fetch，并控制 `initialize/start/stop` 时点。更新确认使用 renderer 共享弹窗，确认后再调用安装 IPC。
 
 ### `metadata.ts`
 

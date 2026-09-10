@@ -9,7 +9,7 @@
   min-width: 0;
   padding: 16px;
   border: 1px solid var(--chat-settings-divider);
-  border-radius: 10px;
+  border-radius: var(--app-radius-lg);
   background: var(--app-surface);
 }
 
@@ -90,7 +90,7 @@
   width: 30px;
   height: 30px;
   place-items: center;
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   color: var(--app-primary);
   background: color-mix(in srgb, var(--app-primary) 10%, transparent);
 }
@@ -107,7 +107,7 @@
 .settings-webdav__connected-status {
   margin-left: 4px;
   padding: 3px 7px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-full);
   color: var(--app-success);
   background: color-mix(in srgb, var(--app-success) 12%, transparent);
   font-size: 11px;
@@ -199,10 +199,10 @@
   font-size: 12px;
 }
 
-.settings-webdav__switch > .sd-checkbox__control,
-.settings-webdav__category-list > label > .sd-checkbox__control,
-.settings-webdav__restore-categories > label > .sd-checkbox__control,
-.settings-webdav__restore-confirm > .sd-checkbox__control {
+.settings-webdav__switch > .sd-checkbox__box,
+.settings-webdav__category-list > label > .sd-checkbox__box,
+.settings-webdav__restore-categories > label > .sd-checkbox__box,
+.settings-webdav__restore-confirm > .sd-checkbox__box {
   margin-top: 2px;
 }
 
@@ -210,7 +210,7 @@
   align-items: center;
 }
 
-.settings-webdav__insecure-toggle > span {
+.settings-webdav__insecure-toggle > span:not(.sd-checkbox__box) {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -247,7 +247,7 @@
   gap: 0;
   margin: 0;
   border: 1px solid var(--chat-settings-divider);
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   overflow: hidden;
 }
 
@@ -300,7 +300,7 @@
   gap: 16px;
   padding: 12px;
   border: 1px solid color-mix(in srgb, var(--app-danger) 35%, var(--chat-settings-divider));
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   background: color-mix(in srgb, var(--app-danger) 5%, transparent);
 }
 
@@ -342,7 +342,7 @@
   min-width: 0;
   padding: 11px;
   border: 1px solid var(--chat-settings-divider);
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   background: var(--app-surface-subtle);
 }
 
@@ -359,7 +359,7 @@
   width: 28px;
   height: 28px;
   place-items: center;
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
   color: var(--app-text-secondary);
   background: var(--app-surface-muted);
 }
@@ -403,7 +403,7 @@
   display: grid;
   gap: 3px;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   background: var(--app-surface-subtle);
 }
 
@@ -425,7 +425,7 @@
   gap: 12px;
   padding: 10px 12px;
   border: 1px solid color-mix(in srgb, var(--app-primary) 24%, var(--chat-settings-divider));
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   background: color-mix(in srgb, var(--app-primary) 5%, transparent);
 }
 
@@ -491,7 +491,7 @@
   min-width: 0;
   padding: 10px 11px;
   border: 1px solid var(--chat-settings-divider);
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   background: var(--app-surface-subtle);
 }
 
@@ -524,71 +524,15 @@
 .settings-webdav__empty {
   padding: 24px;
   border: 1px dashed var(--chat-settings-divider);
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   color: var(--app-text-muted);
   font-size: 11px;
   text-align: center;
 }
 
-.desktop-agent-modal-backdrop.settings-webdav-automatic-backdrop {
-  z-index: 150;
-  background: color-mix(in srgb, var(--app-text) 18%, transparent);
-  backdrop-filter: blur(2px);
-}
-
-.desktop-agent-modal.settings-webdav-automatic-dialog {
-  width: min(460px, calc(100vw - 48px));
-  gap: 0;
-  padding: 0;
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.settings-webdav-automatic-dialog > .settings-webdav-automatic-dialog__header {
-  gap: 16px;
-  padding: 16px 18px;
-  border-bottom: 1px solid var(--chat-settings-divider);
-}
-
-.settings-webdav-automatic-dialog__title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.settings-webdav-automatic-dialog__title > span {
-  display: grid;
-  flex: 0 0 auto;
-  width: 32px;
-  height: 32px;
-  place-items: center;
-  border-radius: 8px;
-  color: var(--app-text-secondary);
-  background: var(--app-surface-muted);
-}
-
-.settings-webdav-automatic-dialog__title > div {
-  display: grid;
-  min-width: 0;
-  gap: 1px;
-}
-
-.settings-webdav-automatic-dialog__title strong {
-  font-size: 14px;
-  line-height: 20px;
-}
-
-.settings-webdav-automatic-dialog__title small {
-  color: var(--app-text-muted);
-  font-size: 10px;
-  line-height: 15px;
-}
-
 .settings-webdav-automatic-dialog__body {
   display: grid;
   gap: 13px;
-  padding: 18px;
 }
 
 .settings-webdav-automatic-dialog__body > p {
@@ -604,7 +548,7 @@
   gap: 9px;
   padding: 11px 12px;
   border: 1px solid var(--chat-settings-divider);
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   color: var(--app-text-secondary);
   background: var(--app-surface-subtle);
   font-size: 11px;
@@ -617,77 +561,11 @@
   color: var(--app-warning);
 }
 
-.settings-webdav-automatic-dialog > .settings-webdav-automatic-dialog__footer {
-  padding: 13px 18px 15px;
-  border-top: 1px solid var(--chat-settings-divider);
-}
-
-.desktop-agent-modal-backdrop.settings-webdav-restore-backdrop {
-  z-index: 150;
-  background: color-mix(in srgb, var(--app-text) 18%, transparent);
-  backdrop-filter: blur(2px);
-}
-
-.desktop-agent-modal.settings-webdav-restore-dialog {
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  width: min(800px, calc(100vw - 48px));
-  max-height: min(700px, calc(100vh - 48px));
-  gap: 0;
-  padding: 0;
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.settings-webdav-restore-dialog > .settings-webdav-restore-dialog__header {
-  align-items: center;
-  gap: 16px;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--chat-settings-divider);
-  background: var(--app-surface);
-}
-
-.settings-webdav-restore-dialog__title {
+.settings-webdav-automatic-dialog__footer {
   display: flex;
-  align-items: center;
-  gap: 11px;
-  min-width: 0;
-}
-
-.settings-webdav-restore-dialog__title-icon {
-  display: grid;
-  flex: 0 0 auto;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  border-radius: 9px;
-  color: var(--app-danger);
-  background: color-mix(in srgb, var(--app-danger) 8%, var(--app-surface));
-}
-
-.settings-webdav-restore-dialog__title > div {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-.settings-webdav-restore-dialog__title > div > strong,
-.settings-webdav-restore-dialog__title > div > span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.settings-webdav-restore-dialog__title > div > strong {
-  color: var(--app-text);
-  font-size: 15px;
-  line-height: 21px;
-}
-
-.settings-webdav-restore-dialog__title > div > span {
-  color: var(--app-text-muted);
-  font-size: 11px;
-  line-height: 16px;
+  justify-content: flex-end;
+  gap: 8px;
+  width: 100%;
 }
 
 .settings-webdav-restore-dialog__body {
@@ -696,7 +574,6 @@
   gap: 16px;
   min-width: 0;
   min-height: 0;
-  padding: 18px 20px 20px;
   overflow-y: auto;
 }
 
@@ -720,7 +597,7 @@
   min-width: 0;
   padding: 11px 12px;
   border: 1px solid var(--chat-settings-divider);
-  border-radius: 9px;
+  border-radius: var(--app-radius-sm);
   background: var(--app-surface-subtle);
 }
 
@@ -730,7 +607,7 @@
   width: 28px;
   height: 28px;
   place-items: center;
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
   color: var(--app-text-muted);
   background: var(--app-surface-muted);
 }
@@ -803,7 +680,7 @@
   gap: 9px;
   padding: 10px 11px;
   border: 1px solid var(--chat-settings-divider);
-  border-radius: 9px;
+  border-radius: var(--app-radius-sm);
   background: var(--app-surface-subtle);
 }
 
@@ -813,7 +690,7 @@
   width: 27px;
   height: 27px;
   place-items: center;
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
   color: var(--app-text-secondary);
   background: var(--app-surface-muted);
 }
@@ -877,7 +754,7 @@
 .settings-webdav-restore-changes__heading > span {
   flex: 0 0 auto;
   padding: 3px 7px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-full);
   background: var(--app-surface-muted);
 }
 
@@ -889,7 +766,7 @@
 .settings-webdav-restore-change-group {
   min-width: 0;
   border: 1px solid var(--chat-settings-divider);
-  border-radius: 9px;
+  border-radius: var(--app-radius-sm);
   background: var(--app-surface);
   overflow: hidden;
 }
@@ -926,7 +803,7 @@
   gap: 10px;
   min-width: 0;
   padding: 8px;
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
 }
 
 .settings-webdav-restore-change-item:nth-child(even) {
@@ -938,7 +815,7 @@
   width: 30px;
   height: 30px;
   place-items: center;
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
   color: var(--app-danger);
   background: color-mix(in srgb, var(--app-danger) 9%, var(--app-surface));
 }
@@ -972,7 +849,7 @@
 
 .settings-webdav-restore-change-item__action {
   padding: 4px 7px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-full);
   color: var(--app-danger);
   background: color-mix(in srgb, var(--app-danger) 9%, var(--app-surface));
   font-size: 10px;
@@ -997,7 +874,7 @@
   gap: 10px;
   padding: 12px;
   border: 1px solid var(--chat-settings-divider);
-  border-radius: 9px;
+  border-radius: var(--app-radius-sm);
   color: var(--app-text-muted);
   background: var(--app-surface-subtle);
 }
@@ -1046,7 +923,7 @@
   align-items: center;
   gap: 5px;
   padding: 4px 7px;
-  border-radius: 6px;
+  border-radius: var(--app-radius-xs);
   color: var(--app-text-secondary);
   background: var(--app-surface);
   font-size: 10px;
@@ -1064,7 +941,7 @@
   gap: 8px;
   padding: 11px 12px;
   border: 1px solid color-mix(in srgb, var(--app-danger) 22%, var(--chat-settings-divider));
-  border-radius: 9px;
+  border-radius: var(--app-radius-sm);
   color: var(--app-danger);
   background: color-mix(in srgb, var(--app-danger) 5%, var(--app-surface));
 }
@@ -1084,15 +961,13 @@
   line-height: 16px;
 }
 
-.settings-webdav-restore-dialog > .settings-webdav-restore-dialog__footer {
+.settings-webdav-restore-dialog__footer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   column-gap: 16px;
   row-gap: 10px;
-  padding: 13px 20px 15px;
-  border-top: 1px solid var(--chat-settings-divider);
-  background: var(--app-surface);
+  width: 100%;
 }
 
 .settings-webdav-restore-dialog__feedback {
@@ -1102,7 +977,7 @@
   gap: 8px;
   min-width: 0;
   padding: 8px 10px;
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
   color: var(--app-text-secondary);
   background: var(--app-surface-subtle);
   font-size: 11px;
@@ -1146,7 +1021,7 @@
 .settings-webdav-restore-dialog__progress-track {
   height: 4px;
   overflow: hidden;
-  border-radius: 999px;
+  border-radius: var(--app-radius-full);
   background: color-mix(in srgb, var(--app-primary) 12%, var(--app-surface-muted));
 }
 
@@ -1179,7 +1054,7 @@
 
 .settings-webdav__error {
   padding: 9px 10px;
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
   color: var(--app-danger);
   background: color-mix(in srgb, var(--app-danger) 7%, transparent);
   font-size: 11px;
@@ -1235,12 +1110,7 @@
     grid-column: auto;
   }
 
-  .desktop-agent-modal.settings-webdav-restore-dialog {
-    width: min(100%, calc(100vw - 28px));
-    max-height: calc(100vh - 28px);
-  }
-
-  .settings-webdav-restore-dialog > .settings-webdav-restore-dialog__footer {
+  .settings-webdav-restore-dialog__footer {
     grid-template-columns: minmax(0, 1fr);
   }
 

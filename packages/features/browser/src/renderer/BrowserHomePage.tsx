@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import { ArrowUpRight, History, Star, X, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { BrowserBookmarkEntry } from './browserBookmarks.js';
@@ -98,7 +99,7 @@ function BrowserHomeSection({
         <ol className="desktop-browser-home-section__list">
           {entries.map((entry) => (
             <li className={onRemove ? 'has-action' : undefined} key={entry.url}>
-              <button
+              <Button variant="ghost"
                 aria-label={`${openLabel} ${entry.title}`}
                 className="desktop-browser-home-section__link"
                 type="button"
@@ -115,9 +116,9 @@ function BrowserHomeSection({
                   {formatBrowserPageTime(entry.timestamp)}
                 </time>
                 <ArrowUpRight aria-hidden="true" size={14} />
-              </button>
+              </Button>
               {onRemove && removeLabel ? (
-                <button
+                <Button variant="ghost"
                   aria-label={`${removeLabel} ${entry.title}`}
                   className="desktop-browser-home-section__action"
                   title={removeLabel}
@@ -125,7 +126,7 @@ function BrowserHomeSection({
                   onClick={() => onRemove(entry.url)}
                 >
                   <X aria-hidden="true" size={13} />
-                </button>
+                </Button>
               ) : null}
             </li>
           ))}

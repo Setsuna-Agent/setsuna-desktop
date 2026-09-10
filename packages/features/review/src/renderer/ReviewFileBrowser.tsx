@@ -24,14 +24,16 @@ type ReviewFileBrowserProps = Omit<
 > & {
   selectionKey: string;
   summary: DesktopDiffSummary;
+  navigatorVisible: boolean;
 };
 
 /**
  * Large reviews keep exactly one diff renderer mounted. The adjacent navigator
- * owns its UI state so directory interactions cannot rerender the heavy diff.
+ * owns filter, layout and width state so directory interactions cannot rerender the heavy diff.
  */
 export function ReviewFileBrowser({
   focusRequest,
+  navigatorVisible,
   selectionKey,
   summary,
   ...summarySectionProps
@@ -101,6 +103,7 @@ export function ReviewFileBrowser({
         />
       </Virtualizer>
       <ReviewFileNavigator
+        visible={navigatorVisible}
         files={files}
         selectedPath={selectedFile?.path ?? null}
         onSelect={selectFile}

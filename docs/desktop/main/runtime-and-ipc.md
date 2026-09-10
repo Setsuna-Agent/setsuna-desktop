@@ -104,7 +104,7 @@ Review 的固定 handler、Git 状态和变更监控已由 `packages/features/re
 
 Terminal 的固定 handler 已由 `packages/features/terminal/src/main/ipc.ts` 拥有，并通过 Main Feature scope 注册/撤销；app main 的 composition root 只提供环境与 renderer event 出口。
 
-Updater 的固定 handler、channel contract 和状态机由 `packages/features/updater/{contracts,main}` 拥有。Main composition 只注入版本、路径、代理 fetch、窗口与语言；Feature scope 排空在途检查后撤销全部 handler。
+Updater 的固定 handler、channel contract 和状态机由 `packages/features/updater/{contracts,main}` 拥有。Main composition 只注入版本、路径与代理 fetch；Feature scope 排空在途检查后撤销全部 handler。更新就绪确认由 renderer 共享弹窗显示，确认后才通过安装 IPC 打开安装包或重启。
 
 Network Proxy 的固定 handler 和 channel contract 由 `packages/features/network-proxy/{contracts,main}` 拥有。Main composition 注入配置、凭据、系统 fetch 与 runtime 删除入口；Feature scope 负责撤销 handler、停止 browser proxy 更新并关闭 fetch dispatcher 与通用 relay。
 

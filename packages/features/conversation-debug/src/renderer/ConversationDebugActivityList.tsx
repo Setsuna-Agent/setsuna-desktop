@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import type { CSSProperties } from 'react';
 import { useConversationDebugI18n } from './context.js';
 import {
@@ -57,7 +58,7 @@ export function ConversationDebugActivityList({
               key={node.id}
               style={top}
             >
-              <button
+              <Button variant="ghost"
                 aria-pressed={selected}
                 className={[
                   'conversation-debug-activity__item',
@@ -90,7 +91,7 @@ export function ConversationDebugActivityList({
                     <em>{t('feature.conversationDebug.recordCountShort', { count: recordCount })}</em>
                   </span>
                 </span>
-              </button>
+              </Button>
             </li>
           );
         })}

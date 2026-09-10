@@ -1,4 +1,4 @@
-import { Bug, FileDiff, FileText, FolderOpen, GitBranch, MessageSquare, PanelRight, Terminal, Users } from 'lucide-react';
+import { Bug, FileDiff, FileText, FolderOpen, GitBranch, MessageSquare, PanelRight, SquareTerminal, Users } from 'lucide-react';
 import { BrowserFavicon as BrowserFeatureFavicon } from '../../composition/BrowserWorkspaceFeatureBoundary.js';
 import { translate, type Translate } from '../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../shared/i18n/messages.js';
@@ -44,7 +44,7 @@ export function DesktopPanelIcon({ panel, type }: { panel?: DesktopPanelTab; typ
   if (panelType === 'browser') {
     return <BrowserFeatureFavicon faviconUrl={panel?.browser?.faviconUrl ?? null} loading={panel?.browser?.loading ?? false} />;
   }
-  if (panelType === 'terminal') return <Terminal size={14} />;
+  if (panelType === 'terminal') return <SquareTerminal size={14} />;
   if (panelType === 'review') return <FileDiff size={14} />;
   if (panelType === 'changes') return <GitBranch size={14} />;
   if (panelType === 'file' || panelType === 'commit-message') return <FileText size={14} />;

@@ -25,7 +25,6 @@
 }
 
 .chat-git-branch-menu,
-.chat-git-commit-popover,
 .chat-git-commit-branch-menu {
   border: 1px solid var(--app-border);
   color: var(--app-text);
@@ -43,7 +42,7 @@
   width: min(298px, calc(100vw - 32px));
   box-sizing: border-box;
   padding: 12px;
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
 }
 
 .chat-git-branch-menu__search {
@@ -58,6 +57,7 @@
 .chat-git-branch-menu__search input,
 .chat-git-branch-menu__create-form input,
 .chat-git-commit-popover__message {
+  box-shadow: none;
   min-width: 0;
   border: 0;
   outline: none;
@@ -98,7 +98,7 @@
   min-height: 30px;
   padding: 0 7px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--app-radius-xs);
   color: var(--app-text);
   background: transparent;
   font: inherit;
@@ -272,7 +272,7 @@
   height: 30px;
   padding: 0 8px;
   border: 1px solid var(--app-border);
-  border-radius: 6px;
+  border-radius: var(--app-radius-xs);
   background: var(--app-surface);
 }
 
@@ -288,7 +288,7 @@
   height: 30px;
   padding: 0 8px;
   border: 1px solid var(--app-border);
-  border-radius: 6px;
+  border-radius: var(--app-radius-xs);
   color: var(--app-text);
   background: var(--app-surface);
   font: inherit;
@@ -304,26 +304,16 @@
 .git-commit-message-editor__toolbar { box-sizing: border-box; display: flex; flex-shrink: 0; align-items: center; gap: 4px; height: 34px; padding: 3px var(--app-topbar-item-gap) 3px var(--git-gutter); font-size: 12px; }
 .git-commit-message-editor__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--app-text-muted); }
 
-.chat-git-commit-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 80;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: rgba(15, 23, 42, 0.26);
+.chat-git-commit-popover {
+  --git-commit-control-inset: 6px;
 }
 
-.chat-git-commit-popover {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  gap: 10px;
-  width: min(418px, 100%);
-  max-height: calc(100vh - 48px);
-  padding: 14px;
-  border-radius: 8px;
-  overflow-y: auto;
+/* Extend the hover surface beyond the content edge without moving its baseline. */
+.chat-git-commit-popover__branch,
+.chat-git-commit-popover__action {
+  margin-inline: calc(-1 * var(--git-commit-control-inset));
+  padding: 0 var(--git-commit-control-inset);
+  border-radius: var(--app-radius-sm);
 }
 
 .chat-git-commit-popover__head {
@@ -341,14 +331,12 @@
 
 .chat-git-commit-popover__branch {
   display: inline-grid;
-  grid-template-columns: 16px minmax(0, auto) 14px;
+  grid-template-columns: 17px minmax(0, auto) max-content;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   max-width: 190px;
   min-height: 28px;
-  padding: 0 8px 0 2px;
   border: 0;
-  border-radius: 6px;
   color: var(--app-text-muted);
   background: transparent;
   font: inherit;
@@ -368,7 +356,7 @@
   width: 100%;
   min-height: 54px;
   box-sizing: border-box;
-  padding: 8px 2px;
+  padding: 8px 0;
   resize: vertical;
   line-height: 20px;
 }
@@ -383,6 +371,10 @@
   line-height: 20px;
 }
 
+.chat-git-commit-popover__divider {
+  margin-block: 8px;
+}
+
 .chat-git-commit-popover__actions {
   display: grid;
   gap: 4px;
@@ -390,23 +382,18 @@
 
 .chat-git-commit-popover__action {
   display: grid;
-  grid-template-columns: 20px minmax(0, 1fr);
+  /* Match the checkbox's leading column so every row's label starts together. */
+  grid-template-columns: 17px minmax(0, 1fr);
   align-items: center;
-  gap: 7px;
-  width: 100%;
+  gap: 8px;
+  width: calc(100% + 2 * var(--git-commit-control-inset));
   min-height: 30px;
-  padding: 0 7px;
   border: 0;
-  border-radius: 6px;
   color: var(--app-text);
   background: transparent;
   font: inherit;
   font-size: 13px;
   text-align: left;
-}
-
-.chat-git-commit-popover__action:not(:disabled):hover {
-  background: color-mix(in srgb, var(--app-surface) 88%, var(--app-text) 12%);
 }
 
 .chat-git-commit-popover__action:disabled {
@@ -430,7 +417,7 @@
   gap: 5px;
   width: 224px;
   padding: 9px 8px;
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
 }
 
 .chat-git-commit-branch-menu__item {

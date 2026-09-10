@@ -1,3 +1,4 @@
+import { useConfirm } from '@setsuna-desktop/renderer-ui';
 import type {
   RuntimePluginUiActionInput,
   RuntimePluginUiData,
@@ -31,6 +32,7 @@ export function SandboxedPluginUiView({
   threadId?: string;
 }>) {
   const { t } = useI18n();
+  const confirm = useConfirm();
   const sourceState = useSandboxedPluginUiSource({ contribution, pluginId, revision, service });
   const dataState = useDeclarativePluginUiData({ contribution, pluginId, projectId, service, threadId });
   const actions = useMemo(() => new Map(manifest.actions.map((action) => [action.id, action])), [manifest]);
@@ -48,8 +50,10 @@ export function SandboxedPluginUiView({
     if (!action || !contribution.document.actionIds.includes(actionId)) {
       throw new Error('Plugin page action is not declared.');
     }
-    const prompt = [action.approval.title, action.approval.message].filter(Boolean).join('\n\n');
-    if (!window.confirm(prompt)) throw new Error('Plugin page action was cancelled.');
+    if (!await confirm({
+      title: action.approval.title ?? t('pluginUi.confirmAction'),
+      description: action.approval.message,
+    })) throw new Error('Plugin page action was cancelled.');
     const input: RuntimePluginUiActionInput = Object.freeze({
       pluginId,
       actionId,
@@ -64,7 +68,7 @@ export function SandboxedPluginUiView({
       }),
     });
     await service.runRendererUiAction(input);
-  }, [actions, contribution, cwd, pluginId, projectId, service, threadId]);
+  }, [actions, confirm, contribution, cwd, pluginId, projectId, service, t, threadId]);
 
   if (sourceState.status !== 'ready') {
     return (

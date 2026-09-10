@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeThread } from '@setsuna-desktop/contracts';
 import { Activity, GitBranch, List } from 'lucide-react';
 import {
@@ -118,7 +119,7 @@ export function ConversationDebugPanel({
           <>
             <header className="conversation-debug-toolbar">
               <div className="conversation-debug-toolbar__modes" role="group" aria-label={t('feature.conversationDebug.title')}>
-                <button
+                <Button variant="ghost"
                   aria-pressed={mode === 'flow'}
                   className={mode === 'flow' ? 'is-active' : ''}
                   type="button"
@@ -126,8 +127,8 @@ export function ConversationDebugPanel({
                 >
                   <GitBranch size={13} />
                   {t('feature.conversationDebug.mode.flow')}
-                </button>
-                <button
+                </Button>
+                <Button variant="ghost"
                   aria-pressed={mode === 'events'}
                   className={mode === 'events' ? 'is-active' : ''}
                   type="button"
@@ -135,7 +136,7 @@ export function ConversationDebugPanel({
                 >
                   <List size={13} />
                   {t('feature.conversationDebug.mode.events')}
-                </button>
+                </Button>
               </div>
               <SelectField
                 aria-label={t('feature.conversationDebug.turn.all')}

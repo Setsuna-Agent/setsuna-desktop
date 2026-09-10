@@ -111,7 +111,7 @@ const panelProps = {
   activePanel: createChangesPanel(),
   activeProject: { id: 'project_1', name: 'Fixture', path: '/repo', createdAt: '', updatedAt: '' },
   fileDraft: {
-    canEdit: false, cancelEditing: noop, confirmDiscardChanges: () => true, content: '',
+    canEdit: false, cancelEditing: noop, confirmDiscardChanges: async () => true, content: '',
     dirty: false, editing: false, error: null, errorMessage: null, preparing: false,
     save: async () => false, saving: false, startEditing: async () => undefined, updateContent: noop,
   },

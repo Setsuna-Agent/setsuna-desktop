@@ -1,5 +1,5 @@
 import { getSingularPatch } from '@pierre/diffs';
-import { Dropdown } from 'antd';
+import { Dropdown } from '@setsuna-desktop/renderer-ui';
 import { FileDiff } from '@pierre/diffs/react';
 import type { DesktopDiffFile, DesktopReviewBridge } from '../../src/contracts/index.js';
 import {

@@ -1,11 +1,13 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import { Virtualizer } from '@pierre/diffs/react';
-import { ArrowLeft, Columns2, FileDiff, GitCommitHorizontal, Rows3, WrapText } from 'lucide-react';
+import { ArrowLeft, Columns2, FileDiff, GitCommitHorizontal, WrapText } from 'lucide-react';
 import { memo, useMemo, useState, type ComponentProps } from 'react';
 import type { DesktopDiffFile, DesktopGitCommitDetails } from '../../contracts/index.js';
 import { useReviewRendererHost } from '../host.js';
 import { ReviewIconButton } from '../primitives.js';
 import { ReviewSummarySection } from '../ReviewDiffView.js';
 import type { ReviewPathContext } from '../review-types.js';
+import { GitAuthorAvatar } from './GitAuthorAvatar.js';
 
 export type GitHistoryFileActions = Pick<ComponentProps<typeof ReviewSummarySection>,
   'workspaceApp' | 'workspaceApps' | 'onAddFileToConversation' | 'onCopyFilePath' | 'onExternalOpenFile'
@@ -37,31 +39,39 @@ export const GitHistoryDiff = memo(function GitHistoryDiff({
     deletions: files.reduce((total, file) => total + file.deletions, 0),
   }), [files]);
   const title = details?.commit.subject ?? (files.length > 1 ? t('feature.review.history.files', { count: files.length }) : files[0]?.path) ?? t('feature.review.history.title');
+  // A worktree file already has a header; share it instead of repeating its path above the diff.
+  const useFileToolbar = !details && files.length === 1 && !loading && !error;
+  const backButton = <ReviewIconButton className="app-shell-icon-control git-history-diff__back" label={t('feature.review.history.back')} onClick={onBack}><ArrowLeft size={15} /></ReviewIconButton>;
+  const viewControls = (
+    <>
+      <ReviewIconButton tooltip className={'app-shell-icon-control' + (layout === 'split' ? ' is-active' : '')} label={t(layout === 'split' ? 'feature.review.workspace.layout.split' : 'feature.review.workspace.layout.unified')} aria-pressed={layout === 'split'} onClick={() => setLayout((value) => value === 'split' ? 'unified' : 'split')}>
+        <Columns2 size={15} />
+      </ReviewIconButton>
+      <ReviewIconButton tooltip className={'app-shell-icon-control' + (wrap ? ' is-active' : '')} label={t(wrap ? 'feature.review.workspace.wrap.on' : 'feature.review.workspace.wrap.off')} aria-pressed={wrap} onClick={() => setWrap((value) => !value)}><WrapText size={15} /></ReviewIconButton>
+    </>
+  );
   return (
     <section className="git-history-diff">
-      <div className="desktop-review-panel__toolbar">
+      {!useFileToolbar ? <div className="desktop-review-panel__toolbar">
         <div className="git-history-diff__heading">
-          <ReviewIconButton className="app-shell-icon-control git-history-diff__back" label={t('feature.review.history.back')} onClick={onBack}><ArrowLeft size={15} /></ReviewIconButton>
+          {backButton}
           <span className="git-history-diff__title" title={title}>{title}</span>
         </div>
-        <ReviewIconButton className="app-shell-icon-control" label={t(layout === 'split' ? 'feature.review.workspace.layout.split' : 'feature.review.workspace.layout.unified')} onClick={() => setLayout((value) => value === 'split' ? 'unified' : 'split')}>
-          {layout === 'split' ? <Rows3 size={15} /> : <Columns2 size={15} />}
-        </ReviewIconButton>
-        <ReviewIconButton className={'app-shell-icon-control' + (wrap ? ' is-active' : '')} label={t(wrap ? 'feature.review.workspace.wrap.on' : 'feature.review.workspace.wrap.off')} aria-pressed={wrap} onClick={() => setWrap((value) => !value)}><WrapText size={15} /></ReviewIconButton>
-      </div>
+        {!loading && !error && files.length > 0 ? viewControls : null}
+      </div> : null}
       {details ? (
         <div className="git-history-diff__commit">
           <span className="git-history-diff__author">
-            <span className="git-history-diff__avatar" aria-hidden="true">{details.commit.author.slice(0, 1).toLocaleUpperCase()}</span>
+            <GitAuthorAvatar author={details.commit.author} githubUrl={details.githubUrl} />
             <span>{details.commit.author}<time dateTime={details.commit.authoredAt}>{formatCommitDate(details.commit.authoredAt)}</time></span>
           </span>
           <span className="git-history-diff__revision"><GitCommitHorizontal size={13} /><code>{t('feature.review.history.compare', { base: details.baseOid?.slice(0, 8) ?? t('feature.review.history.root'), commit: details.commit.oid.slice(0, 8) })}</code></span>
           {details.commit.parents.length > 1 ? <span>{t('feature.review.history.firstParent')}</span> : null}
         </div>
       ) : null}
-      {error ? <div className="git-history-status" role="alert">{error}<button type="button" onClick={onRetry}>{t('feature.review.history.retry')}</button></div>
+      {error ? <div className="git-history-status" role="alert">{error}<Button variant="ghost" type="button" onClick={onRetry}>{t('feature.review.history.retry')}</Button></div>
         : loading ? <div className="git-history-diff__empty" role="status">{t('feature.review.history.loading')}</div>
-          : !files.length ? <div className="git-history-diff__empty"><FileDiff size={30} strokeWidth={1.2} /><span>{t(details ? 'feature.review.history.emptyFiles' : 'feature.review.history.choose')}</span></div>
+          : !files.length ? <div className="git-history-diff__empty"><FileDiff size={30} strokeWidth={1.2} /><span>{t('feature.review.history.emptyFiles')}</span></div>
             : (
               <Virtualizer className="desktop-review-panel__sections" contentClassName="desktop-review-panel__sections-content" key={selectionKey}>
                 <ReviewSummarySection
@@ -72,6 +82,7 @@ export const GitHistoryDiff = memo(function GitHistoryDiff({
                   pathContext={pathContext}
                   emptyText={{ title: t('feature.review.history.emptyFiles'), description: '' }}
                   fileExpansionRequest={EXPANSION}
+                  fileHeaderControls={useFileToolbar ? { leading: backButton, actions: viewControls } : undefined}
                   findings={NO_FINDINGS}
                 />
               </Virtualizer>

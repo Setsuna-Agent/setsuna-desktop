@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import type { WorkspaceEntrySearchItem } from '@setsuna-desktop/contracts';
 import { LoaderCircle } from 'lucide-react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
@@ -42,7 +43,7 @@ export function ProjectEntryCommandMenu({
       ) : entries.length ? (
         <>
           {entries.map((entry, index) => (
-            <button
+            <Button variant="ghost"
               ref={index === activeIndex ? activeOptionRef : undefined}
               key={`${entry.kind}-${entry.path}`}
               type="button"
@@ -61,7 +62,7 @@ export function ProjectEntryCommandMenu({
                 {entry.parent ? <span className="chat-command-menu__item-desc">{entry.parent}</span> : null}
               </span>
               <span className="chat-command-menu__item-scope">{entry.kind === 'directory' ? t('chat.command.folder') : t('chat.command.file')}</span>
-            </button>
+            </Button>
           ))}
           {loadError ? <div className="chat-command-menu__state">{loadError}</div> : null}
         </>

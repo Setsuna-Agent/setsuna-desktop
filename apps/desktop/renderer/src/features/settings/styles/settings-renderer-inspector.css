@@ -36,7 +36,7 @@
   overflow: auto;
   overscroll-behavior: contain;
   border: 1px solid var(--app-border);
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   background: var(--app-bg);
 }
 
@@ -80,7 +80,7 @@
 
 .renderer-plugin-inspector__kind {
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-full);
   color: var(--app-text-muted);
   background: var(--app-surface-muted);
   font-size: 10px;
@@ -97,7 +97,7 @@
 .renderer-plugin-inspector__state-dot {
   width: 6px;
   height: 6px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-full);
   background: var(--app-text-subtle);
 }
 

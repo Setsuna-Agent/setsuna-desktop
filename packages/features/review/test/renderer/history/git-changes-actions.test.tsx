@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 
+import { ConfirmationProvider } from '@setsuna-desktop/renderer-ui';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { RuntimeConfiguredModelReference } from '@setsuna-desktop/contracts';
@@ -38,14 +39,14 @@ function surface(bridge: DesktopReviewBridge, { root = '/repo', onRefresh = noop
   onOpenEditor?: CommitMessageEditorLauncher;
 } = {}) {
   return (
-    <ReviewRendererProvider service={service}><ReviewRendererTestHost bridge={bridge}>
+    <ConfirmationProvider><ReviewRendererProvider service={service}><ReviewRendererTestHost bridge={bridge}>
       <WorkspaceGitCommitProvider threadId="thread_1" activeProject={{ id: root, path: root, name: 'Repository', createdAt: '', updatedAt: '' }} reviewState={reviewState} reviewLoading={false} onReviewRefresh={onRefresh} onOpenMessageEditor={onOpenEditor} conversationModelSelection={conversationModelSelection}>
         <GitChangesPanel editingMessage workspaceRoot={root} reviewState={reviewState} reviewError={null} reviewLoading={false} onRefresh={onRefresh} actions={{
           workspaceApps: [], onAddFileToConversation: noop, onCopyFilePath: noop, onExternalOpenFile: noop,
           onOpenFileWithApp: noop, onOpenProjectFile: onOpen, onRevealFile: noop,
         }} />
       </WorkspaceGitCommitProvider>
-    </ReviewRendererTestHost></ReviewRendererProvider>
+    </ReviewRendererTestHost></ReviewRendererProvider></ConfirmationProvider>
   );
 }
 
@@ -63,16 +64,37 @@ it('generates and commits only staged changes by default and preserves edits whe
   await waitFor(() => expect(input.value).toBe(generatedMessage));
   expect(generateCommitMessage).toHaveBeenCalledWith('/repo', { includeUnstaged: false }, expect.any(Function));
   fireEvent.keyDown(input, { key: 'Enter' });
+  fireEvent.keyDown(input, { key: 'Enter', ctrlKey: true });
+  fireEvent.keyDown(input, { key: 'Enter', metaKey: true });
   expect(commit).not.toHaveBeenCalled();
   fireEvent.change(input, { target: { value: editedMessage } });
-  fireEvent.click(within(form).getByRole('button', { name: /^提交 / }));
+  fireEvent.click(within(form).getByRole('button', { name: '提交', exact: true }));
   await screen.findByRole('alert');
   expect(commit).toHaveBeenCalledWith('/repo', { message: editedMessage, includeUnstaged: false, push: false });
   expect(input.value).toBe(editedMessage);
   expect(onRefresh).not.toHaveBeenCalled();
-  fireEvent.keyDown(input, { key: 'Enter', ctrlKey: true });
+  fireEvent.click(within(form).getByRole('button', { name: '提交', exact: true }));
   await waitFor(() => expect(onRefresh).toHaveBeenCalledOnce());
   expect(input.value).toBe('');
+});
+
+it.each(['更多 Git 操作', '提交选项'])('hides the %s tooltip while its menu is open and restores hover after closing', async (label) => {
+  render(surface(createBridge({})));
+  const trigger = screen.getByRole('button', { name: label });
+  fireEvent.pointerMove(trigger, { pointerType: 'mouse' });
+  await screen.findByRole('tooltip', { name: label });
+  fireEvent.pointerDown(trigger, { button: 0, pointerType: 'mouse' });
+  const menu = await screen.findByRole('menu');
+  expect(screen.queryByRole('tooltip', { name: label })).toBeNull();
+  fireEvent.pointerMove(trigger, { pointerType: 'mouse' });
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 220)); });
+  expect(screen.queryByRole('tooltip', { name: label })).toBeNull();
+  expect(screen.getByRole('menu')).toBe(menu);
+  fireEvent.keyDown(menu, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+  fireEvent.pointerLeave(trigger, { pointerType: 'mouse' });
+  fireEvent.pointerMove(trigger, { pointerType: 'mouse' });
+  await screen.findByRole('tooltip', { name: label });
 });
 
 it('retains the manually dragged message height while editing and restores automatic sizing on reset', () => {
@@ -80,7 +102,7 @@ it('retains the manually dragged message height while editing and restores autom
   const input = screen.getByRole('textbox', { name: '提交消息' }) as HTMLTextAreaElement;
   vi.spyOn(input, 'offsetHeight', 'get').mockReturnValue(26);
   vi.spyOn(input, 'getBoundingClientRect').mockReturnValue({ height: 32.5 } as DOMRect);
-  const handle = screen.getByRole('button', { name: '调整提交消息输入框高度' });
+  const handle = screen.getByRole('separator', { name: '调整提交消息输入框高度' });
   handle.setPointerCapture = vi.fn();
   handle.releasePointerCapture = vi.fn();
   fireEvent.pointerDown(handle, { button: 0, pointerId: 1, clientY: 40 });
@@ -111,17 +133,16 @@ it('uses the latest conversation model when generating after switching conversat
   await waitFor(() => expect(generateCommitMessage).toHaveBeenLastCalledWith('/repo', { includeUnstaged: false, modelSelection: second }, expect.any(Function)));
 });
 
-it('does not turn an empty index into a commit-all action through buttons or the shortcut', async () => {
+it('does not turn an empty index into a commit-all action through buttons or form submission', async () => {
   const commit = vi.fn();
   const generateCommitMessage = vi.fn();
   render(surface(createBridge({ commit, generateCommitMessage }), { reviewState: { ...state, stagedSummary: null } }));
   const input = screen.getByRole('textbox', { name: '提交消息' });
   fireEvent.change(input, { target: { value: 'Only staged changes' } });
   const form = screen.getByRole('form', { name: '提交到 main' });
-  expect((within(form).getByRole('button', { name: /^提交 / }) as HTMLButtonElement).disabled).toBe(true);
-  expect((screen.getByRole('button', { name: '提交' }) as HTMLButtonElement).disabled).toBe(true);
+  expect((within(form).getByRole('button', { name: '提交', exact: true }) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.getAllByRole('button', { name: '提交', exact: true }).every((button) => (button as HTMLButtonElement).disabled)).toBe(true);
   expect((screen.getByRole('button', { name: 'AI 生成提交消息' }) as HTMLButtonElement).disabled).toBe(true);
-  fireEvent.keyDown(input, { key: 'Enter', ctrlKey: true });
   fireEvent.submit(form);
   expect(commit).not.toHaveBeenCalled();
   expect(generateCommitMessage).not.toHaveBeenCalled();
@@ -140,7 +161,7 @@ it.each([
   render(surface(createBridge({ pull }), { onRefresh, reviewState: cleanState }));
   const input = screen.getByRole('textbox', { name: '提交消息' }) as HTMLTextAreaElement;
   fireEvent.change(input, { target: { value: 'Keep my draft' } });
-  fireEvent.click(screen.getByRole('button', { name: '更多 Git 操作' }));
+  fireEvent.pointerDown(screen.getByRole('button', { name: '更多 Git 操作' }), { button: 0, pointerType: 'mouse' });
   const item = await screen.findByRole('menuitem', { name: label });
   expect(item.getAttribute('aria-disabled')).not.toBe('true');
   fireEvent.click(item);
@@ -152,7 +173,7 @@ it.each([
   expect(onRefresh).toHaveBeenCalledOnce();
   expect(input.value).toBe('Keep my draft');
 
-  fireEvent.click(screen.getByRole('button', { name: '更多 Git 操作' }));
+  fireEvent.pointerDown(screen.getByRole('button', { name: '更多 Git 操作' }), { button: 0, pointerType: 'mouse' });
   fireEvent.click(await screen.findByRole('menuitem', { name: label }));
   expect((await screen.findByRole('alert')).textContent).toContain('Merge conflict in tracked.txt');
   await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(2));
@@ -166,7 +187,7 @@ it('keeps including unstaged changes an explicit dialog action and resets it whe
   const input = screen.getByRole('textbox', { name: '提交消息' });
   fireEvent.change(input, { target: { value: 'Commit chosen scope' } });
   const openDialog = async () => {
-    fireEvent.click(screen.getByRole('button', { name: '更多 Git 操作' }));
+    fireEvent.pointerDown(screen.getByRole('button', { name: '更多 Git 操作' }), { button: 0, pointerType: 'mouse' });
     expect(screen.queryByRole('menuitem', { name: '包含未暂存的更改' })).toBeNull();
     fireEvent.click(await screen.findByRole('menuitem', { name: '提交或推送…' }));
     return within(await screen.findByRole('dialog', { name: '提交或推送' }));
@@ -177,7 +198,7 @@ it('keeps including unstaged changes an explicit dialog action and resets it whe
   fireEvent.click(checkbox);
   fireEvent.keyDown(document, { key: 'Escape' });
   expect(screen.queryByRole('dialog')).toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: '提交' }));
+  fireEvent.click(within(screen.getByRole('form', { name: '提交到 main' })).getByRole('button', { name: '提交', exact: true }));
   await waitFor(() => expect(commit).toHaveBeenCalledExactlyOnceWith('/repo', { message: 'Commit chosen scope', includeUnstaged: false, push: false }));
   await waitFor(() => expect((input as HTMLTextAreaElement).value).toBe(''));
 
@@ -230,7 +251,7 @@ it.each(['close', 'save', 'shortcut'] as const)('keeps navigation beside the ful
     reviewState: action === 'close' ? { ...state, stagedSummary: null, unstagedSummary: null } : state,
   }));
   fireEvent.change(screen.getByRole('textbox', { name: '提交消息' }), { target: { value: 'Existing subject-only draft' } });
-  fireEvent.click(screen.getByRole('button', { name: '提交选项' }));
+  fireEvent.pointerDown(screen.getByRole('button', { name: '提交选项' }), { button: 0, pointerType: 'mouse' });
   expect((await screen.findAllByRole('menuitem')).map((item) => item.textContent)).toEqual(['提交', '提交（修改）', '提交和推送', '提交和同步']);
   fireEvent.click(screen.getByRole('menuitem', { name: '提交（修改）' }));
   const editor = await screen.findByRole('textbox', { name: 'COMMIT_EDITMSG' }) as HTMLTextAreaElement;
@@ -272,7 +293,7 @@ it.each(['empty', 'comments', 'cancel', 'project'] as const)('does not amend whe
   const commit = vi.fn();
   const bridge = createBridge({ getCommitMessage: vi.fn().mockResolvedValue({ oid: 'a'.repeat(40), branch: 'main', message: 'original', context: 'On branch main' }), commit });
   const view = render(surface(bridge, { onOpenEditor }));
-  fireEvent.click(screen.getByRole('button', { name: '提交选项' }));
+  fireEvent.pointerDown(screen.getByRole('button', { name: '提交选项' }), { button: 0, pointerType: 'mouse' });
   fireEvent.click(await screen.findByRole('menuitem', { name: '提交（修改）' }));
   const editor = await screen.findByRole('textbox', { name: 'COMMIT_EDITMSG' });
   if (reason === 'empty') fireEvent.change(editor, { target: { value: '  \n' } });
@@ -296,7 +317,7 @@ it('reports a missing commit context instead of opening a broken document or com
   const onOpenEditor = vi.fn();
   const bridge = createBridge({ getCommitMessage: vi.fn().mockResolvedValue({ oid: 'a'.repeat(40), branch: 'main', message: 'Subject' }), commit });
   render(surface(bridge, { onOpenEditor }));
-  fireEvent.click(screen.getByRole('button', { name: '提交选项' }));
+  fireEvent.pointerDown(screen.getByRole('button', { name: '提交选项' }), { button: 0, pointerType: 'mouse' });
   fireEvent.click(await screen.findByRole('menuitem', { name: '提交（修改）' }));
   expect((await screen.findByRole('alert')).textContent).toContain('未能读取 Git 提交注释');
   expect(screen.queryByRole('textbox', { name: 'COMMIT_EDITMSG' })).toBeNull();
@@ -309,7 +330,7 @@ it('reports a sync failure after a successful local commit without leaving a dup
   render(surface(createBridge({ commit })));
   const input = screen.getByRole('textbox', { name: '提交消息' }) as HTMLTextAreaElement;
   fireEvent.change(input, { target: { value: 'feat: sync' } });
-  fireEvent.click(screen.getByRole('button', { name: '提交选项' }));
+  fireEvent.pointerDown(screen.getByRole('button', { name: '提交选项' }), { button: 0, pointerType: 'mouse' });
   fireEvent.click(await screen.findByRole('menuitem', { name: '提交和同步' }));
   expect((await screen.findByRole('alert')).textContent).toContain('同步失败');
   expect(commit).toHaveBeenCalledExactlyOnceWith('/repo', { includeUnstaged: false, message: 'feat: sync', push: false, sync: true });
@@ -320,7 +341,6 @@ it('opens files without selecting a diff and scopes stage, unstage, and confirme
   const stageFiles = vi.fn().mockResolvedValue({ ok: true, state });
   const unstageFiles = vi.fn().mockResolvedValue({ ok: true, state });
   const discardUnstaged = vi.fn().mockResolvedValue({ ok: true, state });
-  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
   const onOpen = vi.fn();
   const onRefresh = vi.fn();
   render(surface(createBridge({ stageFiles, unstageFiles, discardUnstaged }), { onOpen, onRefresh }));
@@ -338,10 +358,12 @@ it('opens files without selecting a diff and scopes stage, unstage, and confirme
   await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(2));
   expect(unstageFiles).toHaveBeenCalledWith('/repo', ['staged.txt']);
   fireEvent.click(row.getByRole('button', { name: '丢弃更改' }));
-  expect(confirm).toHaveBeenCalled();
+  const dialog = await screen.findByRole('dialog', { name: /new.txt/ });
   expect(discardUnstaged).not.toHaveBeenCalled();
-  confirm.mockReturnValue(true);
+  fireEvent.click(within(dialog).getByRole('button', { name: '取消' }));
+  await waitFor(() => expect((row.getByRole('button', { name: '丢弃更改' }) as HTMLButtonElement).disabled).toBe(false));
   fireEvent.click(row.getByRole('button', { name: '丢弃更改' }));
+  fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: '丢弃更改' }));
   await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(3));
   expect(discardUnstaged).toHaveBeenCalledWith('/repo', ['old.txt', 'new.txt']);
 });
@@ -353,10 +375,9 @@ it('batches only the selected group, includes filtered files and rename paths, a
   const unstageFiles = vi.fn().mockResolvedValue({ ok: true, state });
   const discardUnstaged = vi.fn().mockResolvedValue({ ok: true, state });
   const onRefresh = vi.fn();
-  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
   render(surface(createBridge({ stageFiles, unstageFiles, discardUnstaged }), { reviewState, onRefresh }));
 
-  fireEvent.click(screen.getByRole('button', { name: '更多 Git 操作' }));
+  fireEvent.pointerDown(screen.getByRole('button', { name: '更多 Git 操作' }), { button: 0, pointerType: 'mouse' });
   fireEvent.click(await screen.findByRole('menuitem', { name: '筛选变更文件' }));
   fireEvent.change(screen.getByRole('textbox', { name: '筛选变更文件' }), { target: { value: 'new.txt' } });
   const group = within(screen.getByRole('button', { name: 'new.txt' }).closest<HTMLElement>('.git-changes-files__group')!);
@@ -371,13 +392,13 @@ it('batches only the selected group, includes filtered files and rename paths, a
   expect(onRefresh).toHaveBeenCalledTimes(1);
 
   fireEvent.click(screen.getByRole('button', { name: '丢弃全部更改' }));
-  expect(confirm).toHaveBeenCalledOnce();
-  expect(confirm.mock.calls[0][0]).toContain('2 个文件');
+  const dialog = await screen.findByRole('dialog', { name: /2 个文件/ });
   expect(discardUnstaged).not.toHaveBeenCalled();
-  confirm.mockClear().mockReturnValue(true);
+  fireEvent.click(within(dialog).getByRole('button', { name: '取消' }));
+  await waitFor(() => expect((screen.getByRole('button', { name: '丢弃全部更改' }) as HTMLButtonElement).disabled).toBe(false));
   fireEvent.click(screen.getByRole('button', { name: '丢弃全部更改' }));
+  fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: '丢弃全部更改' }));
   await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(2));
-  expect(confirm).toHaveBeenCalledOnce();
   expect(discardUnstaged).toHaveBeenCalledExactlyOnceWith('/repo', ['old.txt', 'new.txt', 'hidden.txt']);
 
   fireEvent.change(screen.getByRole('textbox', { name: '筛选变更文件' }), { target: { value: '' } });
@@ -416,7 +437,7 @@ it.each(['pull', 'sync'] as const)('keeps %s recovery details available until di
   render(surface(createBridge(operations), { service: { ...createNoopReviewRendererService(), available: true, resolveGitConflicts } }));
   const input = screen.getByRole('textbox', { name: '提交消息' }) as HTMLTextAreaElement;
   fireEvent.change(input, { target: { value: 'Local draft' } });
-  fireEvent.click(screen.getByRole('button', { name: kind === 'pull' ? '更多 Git 操作' : '提交选项' }));
+  fireEvent.pointerDown(screen.getByRole('button', { name: kind === 'pull' ? '更多 Git 操作' : '提交选项' }), { button: 0, pointerType: 'mouse' });
   fireEvent.click(await screen.findByRole('menuitem', { name: kind === 'pull' ? '拉取' : '提交和同步' }));
   await waitFor(() => expect(resolveGitConflicts).toHaveBeenCalledExactlyOnceWith({ threadId: 'thread_1', workspaceRoot: '/repo', modelSelection: undefined, language: 'zh-CN', operation: kind }));
   const alert = await screen.findByRole('alert');
@@ -443,7 +464,7 @@ it.each(['pull', 'sync'] as const)('keeps %s recovery details available until di
 
   await waitFor(() => expect(input.disabled).toBe(false));
   fireEvent.change(input, { target: { value: 'Next draft' } });
-  fireEvent.click(screen.getByRole('button', { name: kind === 'pull' ? '更多 Git 操作' : '提交选项' }));
+  fireEvent.pointerDown(screen.getByRole('button', { name: kind === 'pull' ? '更多 Git 操作' : '提交选项' }), { button: 0, pointerType: 'mouse' });
   fireEvent.click(await screen.findByRole('menuitem', { name: kind === 'pull' ? '拉取' : '提交和同步' }));
   const nextAlert = await screen.findByRole('alert');
   expect(nextAlert.querySelector('details')?.open).toBe(false);
@@ -461,7 +482,7 @@ it('keeps multiple conflict transcripts per workspace, deduplicates the active t
   const view = render(surface(bridge, { service }));
   const pull = async () => {
     const previousCalls = resolveGitConflicts.mock.calls.length;
-    fireEvent.click(screen.getByRole('button', { name: '更多 Git 操作' }));
+    fireEvent.pointerDown(screen.getByRole('button', { name: '更多 Git 操作' }), { button: 0, pointerType: 'mouse' });
     fireEvent.click(await screen.findByRole('menuitem', { name: '拉取' }));
     await waitFor(() => expect(resolveGitConflicts).toHaveBeenCalledTimes(previousCalls + 1));
     expect((await screen.findByRole('alert')).textContent).toContain('Merge conflict');
@@ -482,9 +503,15 @@ it('keeps multiple conflict transcripts per workspace, deduplicates the active t
   expect(screen.queryByRole('region', { name: '冲突处理记录' })).toBeNull();
   view.rerender(surface(bridge, { service }));
   expect(within(screen.getByRole('region', { name: '冲突处理记录' })).getAllByRole('listitem')).toHaveLength(2);
+  expect(screen.queryByRole('region', { name: 'Conflict task' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'staged.txt' }).getAttribute('aria-pressed')).toBe('true');
 });
 
-it('reloads durable conflict records after the entire review surface has been closed', async () => {
+it.each([
+  { label: 'staged files', reviewState: state, expectedFile: 'staged.txt' },
+  { label: 'only unstaged files', reviewState: { ...state, stagedSummary: null }, expectedFile: 'new.txt' },
+  { label: 'no changed files', reviewState: { ...state, stagedSummary: null, unstagedSummary: null }, expectedFile: null },
+])('opens $label instead of durable conflict records, including after reopening the panel', async ({ reviewState, expectedFile }) => {
   const records = [
     { threadId: 'repair-new', turnId: 'turn-new', createdAt: '2026-09-10T01:00:00Z', operation: 'rebase' as const },
     { threadId: 'repair-old', turnId: 'turn-old', createdAt: '2026-09-09T01:00:00Z', operation: 'pull' as const },
@@ -492,15 +519,26 @@ it('reloads durable conflict records after the entire review surface has been cl
   const readGitConflictHistory = vi.fn<ReviewRendererService['readGitConflictHistory']>(async ({ workspaceRoot }) => workspaceRoot === '/repo' ? records : []);
   const service = { ...createNoopReviewRendererService(), available: true, readGitConflictHistory };
   const bridge = createBridge();
-  const first = render(surface(bridge, { service }));
+  const expectDefaultDetail = (container: HTMLElement) => {
+    expect(screen.queryByRole('region', { name: 'Conflict task' })).toBeNull();
+    expect(container.querySelector('.git-changes-panel__body.has-detail')).toBeTruthy();
+    const detail = within(container.querySelector<HTMLElement>('.git-history-diff')!);
+    expect(detail.getByText(expectedFile ?? '没有变更文件')).toBeTruthy();
+    if (expectedFile) expect(screen.getByRole('button', { name: expectedFile }).getAttribute('aria-pressed')).toBe('true');
+  };
+  const first = render(surface(bridge, { service, reviewState }));
   await screen.findByRole('button', { name: /变基冲突 · 2/ });
+  expectDefaultDetail(first.container);
+  fireEvent.click(screen.getByRole('button', { name: /拉取冲突 · 1/ }));
+  expect(screen.getByRole('region', { name: 'Conflict task' }).getAttribute('data-thread-id')).toBe('repair-old');
   first.unmount();
-  const reopened = render(surface(bridge, { service }));
+  const reopened = render(surface(bridge, { service, reviewState }));
   const older = await screen.findByRole('button', { name: /拉取冲突 · 1/ });
+  expectDefaultDetail(reopened.container);
   fireEvent.click(older);
   expect(screen.getByRole('region', { name: 'Conflict task' }).getAttribute('data-thread-id')).toBe('repair-old');
   expect(readGitConflictHistory).toHaveBeenCalledTimes(2);
-  reopened.rerender(surface(bridge, { service, root: '/another-repo' }));
+  reopened.rerender(surface(bridge, { service, root: '/another-repo', reviewState }));
   expect(screen.queryByRole('region', { name: '冲突处理记录' })).toBeNull();
 });
 
@@ -509,7 +547,7 @@ it.each(['no-conflicts', 'disabled'] as const)('retains pull errors when conflic
   render(surface(createBridge({ pull: vi.fn().mockRejectedValue(new Error('Pull failed')) }), {
     service: { ...createNoopReviewRendererService(), available: true, resolveGitConflicts },
   }));
-  fireEvent.click(screen.getByRole('button', { name: '更多 Git 操作' }));
+  fireEvent.pointerDown(screen.getByRole('button', { name: '更多 Git 操作' }), { button: 0, pointerType: 'mouse' });
   fireEvent.click(await screen.findByRole('menuitem', { name: '拉取' }));
   expect((await screen.findByRole('alert')).textContent).toContain('Pull failed');
   expect(screen.queryByRole('region', { name: '冲突处理记录' })).toBeNull();

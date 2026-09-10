@@ -1,3 +1,4 @@
+import { ResizeHandle } from '@setsuna-desktop/renderer-ui';
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { DesktopPanelHeader } from './DesktopPanelHeader.js';
@@ -50,7 +51,7 @@ export function BottomToolsPanel({
 
   return (
     <section className="bottom-panel" aria-label={t('workspace.bottom.tools')}>
-      <button
+      <ResizeHandle
         className="bottom-panel__resize-handle"
         type="button"
         role="separator"

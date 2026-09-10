@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { Archive, FolderClosed, MoreHorizontal } from 'lucide-react';
 import { useCallback, useRef, useState, type ReactNode } from 'react';
@@ -39,7 +40,7 @@ export function AppProjectToolbarTitle({
       <span className="app-project-toolbar-title__label">{title}</span>
       {hasThreadActions ? (
         <>
-          <button
+          <Button variant="ghost"
             className="app-project-toolbar-title__more"
             ref={triggerRef}
             type="button"
@@ -49,7 +50,7 @@ export function AppProjectToolbarTitle({
             onClick={() => setMenuOpen((open) => !open)}
           >
             <MoreHorizontal size={15} aria-hidden="true" />
-          </button>
+          </Button>
           <SidebarFloatingMenu
             open={menuOpen}
             placement="bottom-right"
@@ -57,16 +58,16 @@ export function AppProjectToolbarTitle({
             onClose={closeMenu}
           >
             {onRenameThread ? (
-              <button type="button" role="menuitem" onClick={renameThread}>
+              <Button variant="ghost" type="button" role="menuitem" onClick={renameThread}>
                 <EditIcon size={13} />
                 <span>{t('sidebar.rename')}</span>
-              </button>
+              </Button>
             ) : null}
             {onArchiveThread ? (
-              <button type="button" role="menuitem" disabled={archiveThreadDisabled} onClick={archiveThread}>
+              <Button variant="ghost" type="button" role="menuitem" disabled={archiveThreadDisabled} onClick={archiveThread}>
                 <Archive size={13} aria-hidden="true" />
                 <span>{t('sidebar.archiveChat')}</span>
-              </button>
+              </Button>
             ) : null}
           </SidebarFloatingMenu>
         </>

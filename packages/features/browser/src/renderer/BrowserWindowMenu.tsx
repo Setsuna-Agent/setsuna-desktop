@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import { EllipsisVertical, Minus, Plus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { BrowserTranslate } from './messages.js';
@@ -66,7 +67,7 @@ export function BrowserWindowMenu({
 
   return (
     <span className="desktop-browser-window-menu" ref={rootRef}>
-      <button
+      <Button variant="ghost"
         aria-expanded={open}
         aria-haspopup="menu"
         aria-label={translate('feature.browser.menu')}
@@ -78,15 +79,15 @@ export function BrowserWindowMenu({
         onClick={() => setOpen((current) => !current)}
       >
         <EllipsisVertical size={16} />
-      </button>
+      </Button>
       <span className="desktop-browser-window-menu__popover" hidden={!open} role="menu" aria-label={translate('feature.browser.menuSettings')}>
-        <button type="button" role="menuitem" onClick={() => runAndClose(onReload)}>
+        <Button variant="ghost" type="button" role="menuitem" onClick={() => runAndClose(onReload)}>
           {translate(loading ? 'feature.browser.stop' : 'feature.browser.reload')}
-        </button>
-        <button type="button" role="menuitem" onClick={() => runAndClose(onPrint)}>
+        </Button>
+        <Button variant="ghost" type="button" role="menuitem" onClick={() => runAndClose(onPrint)}>
           {translate('feature.browser.print')}
-        </button>
-        <button
+        </Button>
+        <Button variant="ghost"
           aria-busy={capturingScreenshot}
           disabled={capturingScreenshot}
           type="button"
@@ -94,15 +95,15 @@ export function BrowserWindowMenu({
           onClick={() => runAndClose(onCaptureScreenshot)}
         >
           {translate(capturingScreenshot ? 'feature.browser.capturingScreenshot' : 'feature.browser.captureScreenshot')}
-        </button>
-        <button type="button" role="menuitem" onClick={() => runAndClose(onToggleDeviceToolbar)}>
+        </Button>
+        <Button variant="ghost" type="button" role="menuitem" onClick={() => runAndClose(onToggleDeviceToolbar)}>
           {translate(deviceToolbarVisible ? 'feature.browser.hideDeviceToolbar' : 'feature.browser.showDeviceToolbar')}
-        </button>
+        </Button>
         <span className="desktop-browser-window-menu__separator" role="separator" />
         <span className="desktop-browser-window-menu__zoom" role="group" aria-label={translate('feature.browser.pageZoom')}>
           <span>{translate('feature.browser.zoom')}</span>
           <span className="desktop-browser-window-menu__zoom-controls">
-            <button
+            <Button variant="ghost"
               aria-label={translate('feature.browser.zoomOut')}
               disabled={zoomFactor <= minimumBrowserZoomFactor}
               role="menuitem"
@@ -110,11 +111,11 @@ export function BrowserWindowMenu({
               onClick={onZoomOut}
             >
               <Minus size={13} />
-            </button>
-            <button aria-label={translate('feature.browser.zoomReset')} role="menuitem" title={translate('feature.browser.zoomReset')} type="button" onClick={onZoomReset}>
+            </Button>
+            <Button variant="ghost" aria-label={translate('feature.browser.zoomReset')} role="menuitem" title={translate('feature.browser.zoomReset')} type="button" onClick={onZoomReset}>
               {Math.round(zoomFactor * 100)}%
-            </button>
-            <button
+            </Button>
+            <Button variant="ghost"
               aria-label={translate('feature.browser.zoomIn')}
               disabled={zoomFactor >= maximumBrowserZoomFactor}
               role="menuitem"
@@ -122,13 +123,13 @@ export function BrowserWindowMenu({
               onClick={onZoomIn}
             >
               <Plus size={13} />
-            </button>
+            </Button>
           </span>
         </span>
         <span className="desktop-browser-window-menu__separator" role="separator" />
-        <button type="button" role="menuitem" onClick={() => runAndClose(onOpenDevTools)}>
+        <Button variant="ghost" type="button" role="menuitem" onClick={() => runAndClose(onOpenDevTools)}>
           {translate('feature.browser.openDevTools')}
-        </button>
+        </Button>
       </span>
     </span>
   );

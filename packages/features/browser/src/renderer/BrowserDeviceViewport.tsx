@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import {
   useEffect,
   useRef,
@@ -162,7 +163,7 @@ export function BrowserDeviceViewport({
     >
       {children}
       {resizable ? browserDeviceResizeHandles.map(({ handle, labelKey }) => (
-        <button
+        <Button variant="ghost"
           aria-label={translate(labelKey)}
           className={`desktop-browser-device-resize-handle desktop-browser-device-resize-handle--${handle}`}
           key={handle}

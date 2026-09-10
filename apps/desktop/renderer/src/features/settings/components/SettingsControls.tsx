@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import type { MouseEvent, ReactNode } from 'react';
 
 export type SettingsChoiceOption<TValue extends string> = {
@@ -22,7 +23,7 @@ export function SettingsChoiceGroup<TValue extends string>({
       {options.map((option) => {
         const selected = value === option.value;
         return (
-          <button
+          <Button variant="ghost"
             key={option.value}
             className={`chat-user-settings__option-button ${selected ? 'is-active' : ''}`}
             type="button"
@@ -32,7 +33,7 @@ export function SettingsChoiceGroup<TValue extends string>({
           >
             <span className="chat-user-settings__option-icon">{option.icon}</span>
             <span>{option.label}</span>
-          </button>
+          </Button>
         );
       })}
     </div>

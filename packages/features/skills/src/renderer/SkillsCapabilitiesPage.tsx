@@ -1,3 +1,6 @@
+import { useConfirm } from '@setsuna-desktop/renderer-ui';
+import { TextField as UiTextField, Button as UiButton, Switch } from '@setsuna-desktop/renderer-ui';
+
 import type {
   RuntimeSkillDetail,
   RuntimeSkillInput,
@@ -68,6 +71,7 @@ export function SkillsCapabilitiesPage({
   capabilitiesRefresh: CapabilitiesRefreshCoordinator;
   service: SkillsRendererService;
 }>) {
+  const confirm = useConfirm();
   const snapshot = useSyncExternalStore(
     (listener) => service.subscribe(listener),
     () => service.getSnapshot(),
@@ -150,7 +154,11 @@ export function SkillsCapabilitiesPage({
     }
   };
   const deleteSkill = async (skill: RuntimeSkillSummary) => {
-    if (!window.confirm(translate('feature.skills.confirmDelete', { name: skill.name }))) return;
+    if (!await confirm({
+      title: translate('feature.skills.confirmDelete', { name: skill.name }),
+      confirmLabel: translate('feature.skills.delete'),
+      danger: true,
+    })) return;
     await service.deleteSkill(skill.id);
     await refreshPluginCatalog(skill);
     closeDetail();
@@ -257,7 +265,7 @@ export function SkillsCapabilitiesPage({
         <div className="desktop-capabilities-search-row">
           <label className="desktop-capabilities-search">
             <Search size={14} />
-            <input
+            <UiTextField
               aria-label={translate('feature.skills.search')}
               placeholder={translate('feature.skills.search')}
               value={query}
@@ -357,15 +365,13 @@ function SkillListItem({
 }>) {
   return (
     <article className="desktop-capability-list-item desktop-capability-list-item--skill">
-      <button className="desktop-capability-list-item__identity" type="button" onClick={onOpen}>
+      <UiButton variant="ghost" className="desktop-capability-list-item__identity" type="button" onClick={onOpen}>
         <ui.SkillIcon skill={skill} variant="list" />
         <span className="desktop-capability-list-item__copy"><strong>{skill.name}</strong><span title={skill.description || skill.id}>{skill.description || skill.id}</span></span>
-      </button>
+      </UiButton>
       <div className="desktop-capability-list-item__aside">
         <div className="desktop-capability-list-item__settings">
-          <label className="sd-check" title={translate('feature.skills.enableHint')}>
-            <input checked={skill.enabled} type="checkbox" onChange={(event) => onToggle(event.currentTarget.checked)} />
-          </label>
+          <span className="sd-toggle-label"><Switch label={translate('feature.skills.enableHint')} checked={skill.enabled} onCheckedChange={(checked) => onToggle(checked)} /></span>
         </div>
       </div>
     </article>
@@ -437,10 +443,7 @@ function SkillDetail({
           <ui.PageHeader
             actions={(
               <>
-                <label className="sd-check" title={translate('feature.skills.enableHint')}>
-                  <input checked={active.enabled} type="checkbox" onChange={(event) => onToggle(event.currentTarget.checked)} />
-                  <span>{translate('feature.skills.enabled')}</span>
-                </label>
+                <span className="sd-toggle-label"><Switch label={translate('feature.skills.enableHint')} checked={active.enabled} onCheckedChange={(checked) => onToggle(checked)} /><span>{translate('feature.skills.enabled')}</span></span>
                 <ui.ActionMenu
                   items={actionItems}
                   label={translate('feature.skills.actions')}
@@ -570,7 +573,7 @@ function SkillEditor({
             <label className="desktop-capabilities-skill-form__full"><span>{translate('feature.skills.editor.description')}</span><ui.TextArea placeholder={translate('feature.skills.editor.descriptionPlaceholder')} value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.currentTarget.value })} /></label>
             <label className="desktop-capabilities-skill-form__full"><span>{translate('feature.skills.editor.content')}</span><ui.TextArea className="desktop-capabilities-skill-form__content" placeholder={translate('feature.skills.editor.contentPlaceholder')} spellCheck={false} value={draft.content} onChange={(event) => setDraft({ ...draft, content: event.currentTarget.value })} /></label>
             <div className="desktop-capabilities-skill-form__checks">
-              <label className="sd-check" title={translate('feature.skills.enableHint')}><input checked={draft.enabled} type="checkbox" onChange={(event) => setDraft({ ...draft, enabled: event.currentTarget.checked })} /><span>{translate('feature.skills.enabled')}</span></label>
+              <span className="sd-toggle-label"><Switch label={translate('feature.skills.enableHint')} checked={draft.enabled} onCheckedChange={(checked) => setDraft({ ...draft, enabled: checked })} /><span>{translate('feature.skills.enabled')}</span></span>
             </div>
           </div>
         </section>

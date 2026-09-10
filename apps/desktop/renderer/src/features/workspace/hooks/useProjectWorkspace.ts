@@ -58,7 +58,7 @@ export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel }
     async (entry: WorkspaceEntry) => {
       if (!activeProjectId) return;
       if (entry.type === 'directory') {
-        if (!confirmDiscardChanges()) return;
+        if (!await confirmDiscardChanges()) return;
         filePreviewRequests.invalidate();
         setFilePreview(null);
         setFileFocusRequest(null);
@@ -69,7 +69,7 @@ export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel }
         onOpenFilePanel(filePreview.path);
         return;
       }
-      if (!confirmDiscardChanges()) return;
+      if (!await confirmDiscardChanges()) return;
       const projectId = activeProjectId;
       const isLatest = filePreviewRequests.begin();
       const file = await client.readProjectFile(projectId, entry.path);
@@ -93,7 +93,7 @@ export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel }
         onOpenFilePanel(filePreview.path);
         return;
       }
-      if (!confirmDiscardChanges()) return;
+      if (!await confirmDiscardChanges()) return;
       const projectId = activeProjectId;
       const isLatest = filePreviewRequests.begin();
       try {
@@ -136,13 +136,14 @@ export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel }
     setSearchResults(result.results);
   }, [activeProjectId, client, contentSearchRequests, searchQuery]);
 
-  const updateFilePreview = useCallback((file: WorkspaceFileRead | null) => {
+  const updateFilePreview = useCallback(async (file: WorkspaceFileRead | null): Promise<boolean> => {
     if (file?.projectId !== filePreview?.projectId || file?.path !== filePreview?.path) {
-      if (!confirmDiscardChanges()) return;
+      if (!await confirmDiscardChanges()) return false;
     }
     filePreviewRequests.invalidate();
     setFilePreview(file);
     setFileFocusRequest(null);
+    return true;
   }, [confirmDiscardChanges, filePreview?.path, filePreview?.projectId, filePreviewRequests]);
 
   return {

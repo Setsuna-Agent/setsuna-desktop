@@ -1,10 +1,11 @@
+import { Button as UiButton, ConfirmDialogTrigger } from '@setsuna-desktop/renderer-ui';
 import type {
   RendererTranslate,
 } from '@setsuna-desktop/feature-core/renderer';
 import type {
   SettingsViewUi,
 } from '@setsuna-desktop/renderer-contracts/settings';
-import { Popconfirm } from 'antd';
+
 import { Info, Monitor, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import type {
@@ -93,14 +94,14 @@ export function UpdaterSettingsView({
                 <span>{translate('feature.updater.settings.package', { name: state.assetName })}</span>
               ) : null}
               {releaseUrl ? (
-                <button
+                <UiButton variant="ghost"
                   className="updater-settings__release-link"
                   type="button"
                   title={releaseUrl}
                   onClick={() => void openExternal(releaseUrl)}
                 >
                   {translate('feature.updater.settings.releaseNotes')}<span>{releaseUrl}</span>
-                </button>
+                </UiButton>
               ) : null}
             </div>
           </div>
@@ -225,14 +226,13 @@ function UpdateDownloadSourceSettings({
               {translate('feature.updater.settings.addSource')}
             </Button>
             {activeSource && !activeSource.builtIn ? (
-              <Popconfirm
+              <ConfirmDialogTrigger
                 title={translate('feature.updater.settings.deleteSourceTitle', { name: activeSource.name })}
                 description={translate('feature.updater.settings.deleteSourceDescription')}
-                placement="topRight"
-                okText={translate('feature.updater.common.delete')}
-                cancelText={translate('feature.updater.common.cancel')}
-                okButtonProps={{ danger: true }}
-                onConfirm={() => void removeActiveSource()}
+                confirmLabel={translate('feature.updater.common.delete')}
+                cancelLabel={translate('feature.updater.common.cancel')}
+                danger
+                onConfirm={removeActiveSource}
               >
                 <IconButton
                   className="updater-settings__compact-action"
@@ -244,7 +244,7 @@ function UpdateDownloadSourceSettings({
                 >
                   <Trash2 size={14} />
                 </IconButton>
-              </Popconfirm>
+              </ConfirmDialogTrigger>
             ) : null}
           </div>
         </div>

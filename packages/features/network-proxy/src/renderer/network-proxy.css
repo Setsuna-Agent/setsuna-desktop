@@ -5,7 +5,7 @@
 .desktop-settings-panel .settings-network-proxy > .settings-form-section {
   min-width: 0;
   border: 1px solid var(--chat-settings-divider);
-  border-radius: 10px;
+  border-radius: var(--app-radius-lg);
   background: var(--app-surface);
   overflow: hidden;
 }
@@ -76,7 +76,7 @@
   min-height: 58px;
   padding: 9px 11px;
   border: 1px solid var(--chat-settings-divider);
-  border-radius: 9px;
+  border-radius: var(--app-radius-sm);
   background: var(--app-surface);
   transition: border-color 140ms ease, background 140ms ease;
 }
@@ -100,7 +100,7 @@
 .desktop-settings-panel .settings-network-proxy__server-card-icon {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
 }
 
 .desktop-settings-panel .settings-network-proxy__server-card-identity {
@@ -146,7 +146,7 @@
 .desktop-settings-panel .settings-network-proxy__server-card-actions .sd-icon-button {
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--app-radius-xs);
 }
 
 .desktop-settings-panel .settings-network-proxy__server-card-edit {
@@ -213,7 +213,7 @@
   width: 38px;
   height: 38px;
   margin-bottom: 3px;
-  border-radius: 10px;
+  border-radius: var(--app-radius-lg);
 }
 
 .desktop-settings-panel .settings-network-proxy__server-empty strong {

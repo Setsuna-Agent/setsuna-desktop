@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import {
   parseRuntimePluginUiManifest,
   type RuntimePluginSummary,
@@ -319,7 +320,7 @@ function DeclarativePluginSidebarEntry({
     ? t(missingContext === 'project' ? 'pluginUi.projectRequired' : 'pluginUi.threadRequired')
     : resolveRuntimePluginUiText(contribution.navigation?.badge, data);
   return (
-    <button
+    <Button variant="ghost"
       className={`desktop-agent-command${active ? ' is-active' : ''}`}
       onClick={onOpen}
       title={missingContext ? badge : undefined}
@@ -333,7 +334,7 @@ function DeclarativePluginSidebarEntry({
       />
       <span className="desktop-agent-command__label">{contribution.navigation?.label}</span>
       {badge ? <span className="declarative-plugin-navigation__badge">{badge}</span> : null}
-    </button>
+    </Button>
   );
 }
 

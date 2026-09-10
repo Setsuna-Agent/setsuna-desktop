@@ -1,3 +1,4 @@
+import { ConfirmationProvider, UiProvider } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeConfigState, RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import {
   composeRendererMessages,
@@ -62,7 +63,7 @@ export function I18nProvider({
 
   useEffect(() => applyLocalePreference(locale), [locale]);
 
-  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+  return <I18nContext.Provider value={value}><UiProvider locale={locale}><ConfirmationProvider>{children}</ConfirmationProvider></UiProvider></I18nContext.Provider>;
 }
 
 export function useI18n(): I18nContextValue {

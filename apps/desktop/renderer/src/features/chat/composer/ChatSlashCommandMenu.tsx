@@ -1,5 +1,6 @@
+import { Button, ProgressRing } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeSkillSummary } from '@setsuna-desktop/contracts';
-import { Progress } from 'antd';
+
 import {
   CheckSquare,
   MessageSquare,
@@ -68,7 +69,7 @@ export function ChatSlashCommandMenu({
             >
               <div className="chat-command-menu__title">{sectionLabel}</div>
               {section.items.map(({ index, item }) => (
-                <button
+                <Button variant="ghost"
                   ref={index === activeIndex ? activeOptionRef : undefined}
                   key={item.key}
                   type="button"
@@ -109,7 +110,7 @@ export function ChatSlashCommandMenu({
                             : t('chat.command.builtIn')}
                     </span>
                   ) : null}
-                </button>
+                </Button>
               ))}
             </div>
           );
@@ -138,14 +139,11 @@ function SlashCommandIcon({ item }: { item: SlashCommandMenuItem }) {
   if (item.type === 'side-chat') return <MessageSquare className="chat-command-menu__item-icon" size={15} />;
   if (item.type === 'compact-context') {
     return (
-      <Progress
+      <ProgressRing
         className="chat-command-progress-icon"
-        type="circle"
         percent={Math.min(100, Math.max(0, Math.round(Number(item.progressPercent || 0))))}
         size={15}
         strokeWidth={18}
-        showInfo={false}
-        status={item.loading ? 'active' : 'normal'}
       />
     );
   }

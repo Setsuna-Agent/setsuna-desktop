@@ -328,7 +328,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   width: 28px;
   height: 28px;
   flex: 0 0 auto;
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
   color: var(--app-text-muted);
   background: color-mix(in srgb, var(--app-text) 4%, transparent);
 }
@@ -363,7 +363,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   height: 28px;
   padding: 0 8px;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--app-radius-xs);
   color: var(--app-text);
   background: transparent;
   font: inherit;
@@ -399,7 +399,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   margin: 0 12px 10px;
   padding: 7px 9px;
   border: 1px solid color-mix(in srgb, var(--app-danger) 26%, var(--app-border));
-  border-radius: 6px;
+  border-radius: var(--app-radius-xs);
   color: var(--app-danger);
   background: color-mix(in srgb, var(--app-danger) 6%, transparent);
   font-size: 12px;
@@ -416,7 +416,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 
 .chat-file-changes__item {
   min-width: 0;
-  border-radius: 6px;
+  border-radius: var(--app-radius-xs);
   overflow: hidden;
   background: transparent;
 }
@@ -429,7 +429,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   min-height: 32px;
   padding: 0 8px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--app-radius-xs);
   color: inherit;
   background: transparent;
   font: inherit;
@@ -479,7 +479,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   margin-top: 1px;
   padding: 0 10px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--app-radius-xs);
   color: var(--app-text);
   background: transparent;
   font: inherit;
@@ -804,7 +804,7 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
   max-height: 220px;
   padding: 8px;
   border: 1px solid var(--app-border);
-  border-radius: 6px;
+  border-radius: var(--app-radius-xs);
   background: var(--chat-code-bg);
   font-family: var(--app-code-font-family);
   overflow: auto;
@@ -1001,7 +1001,7 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
   width: 100%;
   padding: 10px 12px;
   border: 1px solid color-mix(in srgb, var(--app-warning) 34%, var(--app-border));
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   color: color-mix(in srgb, var(--app-warning) 78%, var(--app-text));
   background: color-mix(in srgb, var(--app-warning) 7%, var(--app-surface));
 }
@@ -1030,7 +1030,7 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
   gap: 10px;
   padding: 12px;
   border: 1px solid var(--app-border);
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   background: var(--app-surface-muted);
 }
 
@@ -1065,7 +1065,7 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
 
 .chat-tool-run__user-input .chat-tool-run__elicitation-header > span {
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-full);
   color: var(--app-primary);
   background: var(--app-accent-soft);
   line-height: 18px;
@@ -1128,7 +1128,7 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
   min-height: 30px;
   padding: 4px 8px;
   border: 1px solid var(--app-border);
-  border-radius: 6px;
+  border-radius: var(--app-radius-xs);
   color: var(--app-text);
   background: var(--app-surface);
   font: inherit;
@@ -1145,7 +1145,7 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
   min-width: 0;
   padding: 3px;
   border: 1px solid var(--app-border);
-  border-radius: 6px;
+  border-radius: var(--app-radius-xs);
   background: var(--app-surface);
 }
 
@@ -1170,7 +1170,7 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
   background: var(--app-accent-soft);
 }
 
-.chat-tool-run__elicitation-multi-select-option > .sd-checkbox__control {
+.chat-tool-run__elicitation-multi-select-option > .sd-checkbox__box {
   margin-top: 2px;
 }
 
@@ -1223,7 +1223,7 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
   border-color: var(--app-primary);
   color: var(--app-primary-text);
   background: var(--app-primary);
-  box-shadow: 0 1px 2px color-mix(in srgb, #000000 10%, transparent);
+  box-shadow: var(--app-shadow-card);
 }
 
 .chat-tool-run__actions .chat-tool-run__action--primary:not(.sd-button):not(:disabled):hover {
@@ -1234,7 +1234,7 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
 
 .chat-tool-run__actions .chat-tool-run__action--secondary:not(.sd-button) {
   border-color: var(--app-border-strong);
-  box-shadow: 0 1px 2px color-mix(in srgb, #000000 5%, transparent);
+  box-shadow: var(--app-shadow-card);
 }
 
 .chat-tool-run__actions .chat-tool-run__action--danger:not(.sd-button) {
@@ -1271,7 +1271,7 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
   overflow: hidden;
   color: #374151;
   background: #eceeef;
@@ -1308,7 +1308,7 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
   height: 22px;
   padding: 0;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--app-radius-xs);
   color: color-mix(in srgb, currentColor 56%, transparent);
   background: transparent;
   cursor: pointer;
@@ -1337,7 +1337,7 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
   margin: 4px 10px 3px;
   padding: 8px 10px;
   border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
-  border-radius: 6px;
+  border-radius: var(--app-radius-xs);
   color: color-mix(in srgb, currentColor 82%, transparent);
   background: color-mix(in srgb, var(--app-surface) 88%, transparent);
   overflow: auto;
@@ -1471,7 +1471,7 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
 
 .chat-plan-card__status {
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-full);
   font-size: 11px;
   line-height: 16px;
   color: var(--app-text-secondary);

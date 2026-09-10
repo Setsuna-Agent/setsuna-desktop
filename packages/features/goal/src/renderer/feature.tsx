@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import { requiredCapability } from '@setsuna-desktop/feature-core/capability';
 import {
   defineRendererDependencies,
@@ -36,14 +37,14 @@ export const goalRendererFeature = defineRendererFeature({
         />
       ),
       errorFallback: (_error, props, reset) => (
-        <button
+        <Button variant="ghost"
           type="button"
           className="chat-composer-status-fallback"
           data-composer-status-view="goal.composer-status"
           onClick={reset}
         >
           {props.translate('feature.goal.retry')}
-        </button>
+        </Button>
       ),
     });
   },

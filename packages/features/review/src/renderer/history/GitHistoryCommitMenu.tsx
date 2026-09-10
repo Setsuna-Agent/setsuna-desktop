@@ -1,4 +1,4 @@
-import { Popover } from 'antd';
+import { Popover } from '@setsuna-desktop/renderer-ui';
 import { useState, type ReactElement } from 'react';
 import type { DesktopGitCommit } from '../../contracts/index.js';
 import { useReviewRendererHost } from '../host.js';
@@ -43,19 +43,16 @@ export function GitHistoryCommitMenu({ children, workspaceRoot, commit, onOpenCh
     ] }}>
       <Popover
         placement="rightTop"
-        arrow={false}
-        autoAdjustOverflow
         trigger="hover"
         mouseEnterDelay={0.4}
         mouseLeaveDelay={0.15}
-        destroyOnHidden
         open={hoverOpen && !menuOpen}
         onOpenChange={(open) => {
           if (open && menuOpen) return;
           setHoverOpen(open);
           if (open) setRequested(true);
         }}
-        classNames={{ root: 'git-commit-hover', container: 'git-commit-hover__container' }}
+        className="git-commit-hover"
         content={<GitHistoryCommitCard commit={commit} details={details.data} error={details.error} onRetry={details.retry} onCopyId={() => { void copy('id'); }} />}
       >
         {children}

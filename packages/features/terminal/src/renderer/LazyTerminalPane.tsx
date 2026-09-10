@@ -1,4 +1,4 @@
-import { Terminal } from 'lucide-react';
+import { SquareTerminal } from 'lucide-react';
 import { lazy, Suspense } from 'react';
 import type { TerminalPaneProps } from './TerminalPane.js';
 
@@ -11,7 +11,7 @@ export function LazyTerminalPane(props: TerminalPaneProps) {
   return (
     <Suspense fallback={(
       <div data-feature-id="terminal" className="feature-terminal__placeholder" role="status">
-        <Terminal size={15} />
+        <SquareTerminal size={15} />
         <span>{props.translate('feature.terminal.starting')}</span>
       </div>
     )}>

@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import { ArrowLeft, Check, ChevronDown, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DesktopDiffFile, DesktopGitCommit, DesktopGitRef, DesktopReviewState } from '../../contracts/index.js';
@@ -39,7 +40,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
 
 function GitChangesWorkspace({ workspaceRoot, editingMessage = false, reviewState, reviewError, reviewLoading, onRefresh, actions }: GitChangesPanelProps) {
   const { bridge, translate: t, ui: { ConflictTaskProgress } } = useReviewRendererHost();
-  const { composer, messageEditor, conflictTasks } = useWorkspaceGitCommitDialog();
+  const { composer, messageEditor, conflictTasks, conflictOpenRequest } = useWorkspaceGitCommitDialog();
   const showMessageEditor = editingMessage && Boolean(messageEditor);
   const history = useGitHistory(workspaceRoot, reviewState);
   const fileActions = useGitFileActions(workspaceRoot, onRefresh);
@@ -48,31 +49,33 @@ function GitChangesWorkspace({ workspaceRoot, editingMessage = false, reviewStat
   const [selectedOid, setSelectedOid] = useState<string | null>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [worktreeSelection, setWorktreeSelection] = useState<{ source: 'staged' | 'unstaged'; path: string | null } | null>(null);
-  const [detailOpen, setDetailOpen] = useState(false);
-  const latestConflict = conflictTasks[0];
-  const lastOpenedConflictId = useRef<string | null>(null);
+  const [detailOpen, setDetailOpen] = useState(true);
+  // Opening a panel must not replay a progress request from before it mounted.
+  const lastOpenedConflictId = useRef(conflictOpenRequest);
   const [selectedConflictId, setSelectedConflictId] = useState<string | null>(null);
   const conflictTask = conflictTasks.find((task) => task.turnId === selectedConflictId);
   useEffect(() => {
-    if (!latestConflict || lastOpenedConflictId.current === latestConflict.turnId) return;
-    lastOpenedConflictId.current = latestConflict.turnId;
-    // Only new records open automatically; archiving/restoring must not reopen
-    // a hidden record or replace the user's current file/commit selection.
-    if (!latestConflict.archived) {
-      setSelectedConflictId(latestConflict.turnId); setDetailOpen(true); setSelectedOid(null);
+    if (!conflictOpenRequest || lastOpenedConflictId.current === conflictOpenRequest) return;
+    const requestedTask = conflictTasks.find((task) => task.turnId === conflictOpenRequest);
+    if (!requestedTask) return;
+    lastOpenedConflictId.current = conflictOpenRequest;
+    if (!requestedTask.archived) {
+      setSelectedConflictId(requestedTask.turnId); setDetailOpen(true); setSelectedOid(null);
     }
-  }, [latestConflict]);
+  }, [conflictOpenRequest, conflictTasks]);
   const details = useGitCommitDetails(workspaceRoot, selectedOid);
   const commitFile = details.data?.files.find((file) => file.path === selectedPath) ?? details.data?.files[0] ?? null;
   const diff = useGitCommitFile(workspaceRoot, selectedOid, commitFile);
-  const source = worktreeSelection?.source ?? 'unstaged';
+  // Follow the same staged-then-unstaged order as the file list, including async loads.
+  const source = worktreeSelection?.source ?? (reviewState?.stagedSummary?.files.length ? 'staged' : 'unstaged');
   const worktreeFiles = source === 'staged' ? reviewState?.stagedSummary?.files : reviewState?.unstagedSummary?.files;
-  const worktreeFile = worktreeFiles?.find((file) => file.path === worktreeSelection?.path) ?? null;
+  const worktreeFile = worktreeFiles?.find((file) => file.path === worktreeSelection?.path) ?? worktreeFiles?.[0] ?? null;
+  const worktreePath = worktreeSelection?.path === null ? null : worktreeFile?.path;
   const files = useMemo(() => {
     if (selectedOid) return diff.data ? [diff.data] : EMPTY_FILES;
-    if (worktreeSelection?.path === null) return worktreeFiles ?? EMPTY_FILES;
+    if (worktreePath === null) return worktreeFiles ?? EMPTY_FILES;
     return worktreeFile ? [worktreeFile] : EMPTY_FILES;
-  }, [diff.data, selectedOid, worktreeFile, worktreeFiles, worktreeSelection?.path]);
+  }, [diff.data, selectedOid, worktreeFile, worktreeFiles, worktreePath]);
   const page = history.page;
   const refs = page?.refs ?? EMPTY_REFS;
   const selectCommit = useCallback((oid: string) => {
@@ -115,11 +118,11 @@ function GitChangesWorkspace({ workspaceRoot, editingMessage = false, reviewStat
       <GitChangesSplit detailOpen={detailOpen} editingMessage={showMessageEditor} navigation={
         <nav className={'git-changes-nav' + (changesExpanded ? '' : ' is-collapsed')} aria-label={t('feature.review.history.title')}>
           <div className="git-changes-nav__header">
-            <button className="git-changes-nav__title" type="button" aria-expanded={changesExpanded} onClick={() => setChangesExpanded((value) => !value)}>
+            <Button variant="ghost" className="git-changes-nav__title" type="button" aria-expanded={changesExpanded} onClick={() => setChangesExpanded((value) => !value)}>
               <ChevronDown size={12} className={changesExpanded ? '' : 'is-collapsed'} />{t('feature.review.history.changes')}
-            </button>
-            <ReviewIconButton className="app-shell-icon-control" label={t('feature.review.git.commit')} disabled={fileActions.busy || !composer?.available || composer.busy || !composer.message.trim()} onClick={composer?.commit}><Check size={16} /></ReviewIconButton>
-            <ReviewIconButton className="app-shell-icon-control" label={t('feature.review.workspace.refresh')} onClick={refresh} disabled={history.loading || reviewLoading}><RefreshCw size={13} /></ReviewIconButton>
+            </Button>
+            <ReviewIconButton tooltip className="app-shell-icon-control" label={t('feature.review.git.commit')} disabled={fileActions.busy || !composer?.available || composer.busy || !composer.message.trim()} onClick={composer?.commit}><Check size={16} /></ReviewIconButton>
+            <ReviewIconButton tooltip className="app-shell-icon-control" label={t('feature.review.workspace.refresh')} onClick={refresh} disabled={history.loading || reviewLoading}><RefreshCw size={13} /></ReviewIconButton>
             <GitChangesMenu refs={refs} selectedRef={history.selectedRef} filterVisible={filterVisible} busy={fileActions.busy} onToggleFilter={() => { setFilterVisible((value) => !value); setChangesExpanded(true); }} currentBranch={page?.currentBranch ?? reviewState?.currentBranch ?? null} onSelectRef={selectRef} onSelectHead={() => {
               history.selectRef('');
               if (page?.head) selectCommit(page.head);
@@ -127,9 +130,9 @@ function GitChangesWorkspace({ workspaceRoot, editingMessage = false, reviewStat
           </div>
           {changesExpanded ? <GitChangesCommitComposer blocked={fileActions.busy} /> : null}
           {changesExpanded && selectedOid ? <div className="git-changes-nav__workspace">
-            <button type="button" aria-pressed={!selectedOid} onClick={() => { setSelectedOid(null); setDetailOpen(false); }}>
+            <Button variant="ghost" type="button" aria-pressed={!selectedOid} onClick={() => { setSelectedOid(null); setDetailOpen(false); }}>
               <ArrowLeft size={13} /><span>{t('feature.review.history.workspace')}</span>
-            </button>
+            </Button>
           </div> : null}
           <GitHistorySplit
             files={changesExpanded ? (
@@ -137,7 +140,7 @@ function GitChangesWorkspace({ workspaceRoot, editingMessage = false, reviewStat
                 groups={groups}
                 pathContext={pathContext}
                 filterVisible={filterVisible}
-                selectedKey={selectedOid ? 'commit:' + commitFile?.path : worktreeSelection ? source + ':' + worktreeSelection.path : null}
+                selectedKey={selectedOid ? 'commit:' + commitFile?.path : worktreePath ? source + ':' + worktreePath : null}
                 loading={selectedOid ? details.loading : reviewLoading}
                 error={selectedOid ? details.error : fileActions.error ?? reviewError}
                 busy={fileActions.busy || Boolean(composer?.busy)}
@@ -197,7 +200,7 @@ function GitChangesWorkspace({ workspaceRoot, editingMessage = false, reviewStat
           files={files}
           details={details.data}
           pathContext={pathContext}
-          selectionKey={JSON.stringify([workspaceRoot, selectedOid ?? source, selectedOid ? commitFile?.path : worktreeSelection?.path])}
+          selectionKey={JSON.stringify([workspaceRoot, selectedOid ?? source, selectedOid ? commitFile?.path : worktreePath])}
           loading={selectedOid ? details.loading || diff.loading : reviewLoading && !files.length}
           error={selectedOid ? details.error ?? diff.error : reviewError}
           actions={actions}

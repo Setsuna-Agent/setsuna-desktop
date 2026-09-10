@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import {
   BROWSER_HOME_URL,
   DEFAULT_BROWSER_URL,
@@ -379,16 +380,16 @@ export function BrowserPanel({
         resizeHandle
       ) : null}
       <div className="desktop-browser-navigation">
-        <button className="desktop-browser-navigation__button" type="button" disabled={!tab.canGoBack} aria-label={translate('feature.browser.back')} onClick={() => navigateHistory('back')}>
+        <Button variant="ghost" className="desktop-browser-navigation__button" type="button" disabled={!tab.canGoBack} aria-label={translate('feature.browser.back')} onClick={() => navigateHistory('back')}>
           <ArrowLeft size={14} />
-        </button>
-        <button className="desktop-browser-navigation__button" type="button" disabled={!tab.canGoForward} aria-label={translate('feature.browser.forward')} onClick={() => navigateHistory('forward')}>
+        </Button>
+        <Button variant="ghost" className="desktop-browser-navigation__button" type="button" disabled={!tab.canGoForward} aria-label={translate('feature.browser.forward')} onClick={() => navigateHistory('forward')}>
           <ArrowRight size={14} />
-        </button>
-        <button className="desktop-browser-navigation__button" type="button" disabled={tab.showingHome} aria-label={translate(tab.loading ? 'feature.browser.stop' : 'feature.browser.refresh')} onClick={reload} onContextMenu={showReloadMenu}>
+        </Button>
+        <Button variant="ghost" className="desktop-browser-navigation__button" type="button" disabled={tab.showingHome} aria-label={translate(tab.loading ? 'feature.browser.stop' : 'feature.browser.refresh')} onClick={reload} onContextMenu={showReloadMenu}>
           {tab.loading ? <X size={13} /> : <RefreshCw size={13} />}
-        </button>
-        <button
+        </Button>
+        <Button variant="ghost"
           aria-label={translate('feature.browser.home')}
           aria-pressed={tab.showingHome}
           className={`desktop-browser-navigation__button ${tab.showingHome ? 'is-active' : ''}`}
@@ -397,7 +398,7 @@ export function BrowserPanel({
           onClick={showBrowserHome}
         >
           <House size={13} />
-        </button>
+        </Button>
         <BrowserAddressBar
           externalUrl={tab.showingHome ? null : tab.url}
           value={tab.draftUrl}
@@ -406,7 +407,7 @@ export function BrowserPanel({
           onNavigate={navigate}
           onOpenExternal={(url) => openExternal?.(url)}
         />
-        <button
+        <Button variant="ghost"
           aria-label={translate(activePageBookmarked ? 'feature.browser.removeBookmark' : 'feature.browser.addBookmark')}
           aria-pressed={activePageBookmarked}
           className={`desktop-browser-navigation__button ${activePageBookmarked ? 'is-active' : ''}`}
@@ -416,7 +417,7 @@ export function BrowserPanel({
           onClick={toggleActivePageBookmark}
         >
           <Star fill={activePageBookmarked ? 'currentColor' : 'none'} size={13} />
-        </button>
+        </Button>
         <BrowserWindowMenu
           capturingScreenshot={screenshotCapturing}
           deviceToolbarVisible={tab.deviceEmulation.enabled}

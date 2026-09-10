@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
 import { Archive, LoaderCircle } from 'lucide-react';
 import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
@@ -55,10 +56,10 @@ export function SidebarThreadRow({
   };
   const menu = (
     <SidebarFloatingMenu anchorPoint={menuAnchorPoint} open={menuOpen} triggerRef={rowRef} onClose={() => onToggleMenu(thread.id)}>
-      <button type="button" role="menuitem" onClick={() => onRename(thread)}>
+      <Button variant="ghost" type="button" role="menuitem" onClick={() => onRename(thread)}>
         <EditIcon size={13} />
         <span>{t('sidebar.rename')}</span>
-      </button>
+      </Button>
     </SidebarFloatingMenu>
   );
   const className = ['desktop-agent-session', `desktop-agent-session--${variant}`, selected ? 'is-active' : '', isRunning ? 'is-running' : '']
@@ -75,7 +76,7 @@ export function SidebarThreadRow({
         </ActionTooltip>
       ) : null}
       <ActionTooltip title={t('sidebar.archiveChat')}>
-        <button
+        <Button variant="ghost"
           className="desktop-agent-session__archive-button"
           type="button"
           aria-label={t('sidebar.archiveChat')}
@@ -84,7 +85,7 @@ export function SidebarThreadRow({
           onKeyDown={(event) => event.stopPropagation()}
         >
           <Archive size={14} />
-        </button>
+        </Button>
       </ActionTooltip>
     </span>
   );
@@ -94,7 +95,7 @@ export function SidebarThreadRow({
       className={className}
       onContextMenu={handleContextMenu}
     >
-      <button
+      <Button variant="ghost"
         className="desktop-agent-session__select"
         ref={rowRef}
         type="button"
@@ -103,7 +104,7 @@ export function SidebarThreadRow({
       >
         {/* 将原生标题限制在文本范围内，避免与归档操作提示框重叠。 */}
         <span className="desktop-agent-session__title" title={thread.title}>{thread.title}</span>
-      </button>
+      </Button>
       {meta}
       {menu}
     </div>

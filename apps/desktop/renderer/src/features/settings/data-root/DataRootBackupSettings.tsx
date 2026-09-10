@@ -1,5 +1,5 @@
 import type { DesktopDataRootRetainedBackup } from '@setsuna-desktop/contracts';
-import { Popconfirm } from 'antd';
+import { ConfirmDialogTrigger } from '@setsuna-desktop/renderer-ui';
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useDesktopDataRoot } from '../../../app/providers/DesktopDataRootProvider.js';
@@ -47,14 +47,13 @@ export function DataRootBackupSettings() {
         renderAction={(backup) => {
           const ready = inspections[backup.id]?.status === 'ready';
           return (
-            <Popconfirm
+            <ConfirmDialogTrigger
               title={t('dataRoot.backup.deleteTitle')}
               description={t('dataRoot.backup.deleteDescription')}
-              placement="topRight"
-              okText={t('dataRoot.backup.deletePermanently')}
-              cancelText={t('common.cancel')}
-              okButtonProps={{ danger: true, loading: deletingId === backup.id }}
-              onConfirm={() => void deleteBackup(backup)}
+              confirmLabel={t('dataRoot.backup.deletePermanently')}
+              cancelLabel={t('common.cancel')}
+              danger disabled={deletingId === backup.id}
+              onConfirm={() => deleteBackup(backup)}
             >
               <Button
                 variant="danger"
@@ -63,7 +62,7 @@ export function DataRootBackupSettings() {
               >
                 {t('common.delete')}
               </Button>
-            </Popconfirm>
+            </ConfirmDialogTrigger>
           );
         }}
       />

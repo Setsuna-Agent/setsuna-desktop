@@ -1,3 +1,4 @@
+import { Button as UiButton } from '@setsuna-desktop/renderer-ui';
 import type {
   DesktopNetworkProxyServerState,
   ProviderConfigState } from '@setsuna-desktop/contracts';
@@ -60,7 +61,7 @@ export function ProviderEditor({
     <div className="model-provider-settings__editor">
       <header className="model-provider-settings__editor-head">
         <div className={`model-provider-settings__editor-title${provider.enabled ? '' : ' is-disabled'}`}>
-          <button
+          <UiButton variant="ghost"
             aria-label={translate('feature.modelProvider.configureProviderIcon', { name: provider.name || provider.id })}
             className="model-provider-settings__provider-icon-trigger"
             title={translate('feature.modelProvider.configureProviderIcon', { name: provider.name || provider.id })}
@@ -69,7 +70,7 @@ export function ProviderEditor({
           >
             <BrandIcon provider={provider} size="large" />
             <span aria-hidden="true"><Pencil size={8} /></span>
-          </button>
+          </UiButton>
           <span>
             <strong>{provider.name || provider.id}</strong>
             <small>{protocolLabel(provider.provider)} · {translate('feature.modelProvider.modelCount', { count: provider.models.length })}</small>

@@ -1,3 +1,5 @@
+import { TextField, Button } from '@setsuna-desktop/renderer-ui';
+
 import { Check, Loader2, Plus } from 'lucide-react';
 import type { FormEvent } from 'react';
 import type { ReviewTranslate } from '../messages.js';
@@ -30,7 +32,7 @@ export function WorkspaceGitBranchCreateControl({
   const createDisabled = busy || Boolean(disabledReason);
   if (!creatingBranch) {
     return (
-      <button
+      <Button variant="ghost"
         type="button"
         className={`chat-git-branch-menu__create ${disabledReason ? 'has-detail' : ''}`}
         disabled={createDisabled}
@@ -42,7 +44,7 @@ export function WorkspaceGitBranchCreateControl({
           <span>{t(compact ? 'feature.review.git.newBranch' : 'feature.review.git.createAndCheckout')}</span>
           {disabledReason ? <small>{disabledReason}</small> : null}
         </span>
-      </button>
+      </Button>
     );
   }
   return (
@@ -50,14 +52,14 @@ export function WorkspaceGitBranchCreateControl({
       className={`chat-git-branch-menu__create-form ${compact ? 'chat-git-branch-menu__create-form--compact' : ''}`}
       onSubmit={onCreate}
     >
-      <input
+      <TextField
         autoFocus
         value={branchDraft}
         placeholder={t('feature.review.git.branchNamePlaceholder')}
         disabled={createDisabled}
         onChange={(event) => onBranchDraftChange(event.currentTarget.value)}
       />
-      <button
+      <Button variant="ghost"
         type="submit"
         disabled={createDisabled}
         aria-label={t('feature.review.git.createBranch')}
@@ -66,10 +68,10 @@ export function WorkspaceGitBranchCreateControl({
         {submitting
           ? <Loader2 className="chat-git-loading-icon" size={13} />
           : compact ? t('feature.review.git.create') : <Check size={13} />}
-      </button>
-      <button type="button" disabled={busy} onClick={onCancelCreate}>
+      </Button>
+      <Button variant="ghost" type="button" disabled={busy} onClick={onCancelCreate}>
         {t('common.cancel')}
-      </button>
+      </Button>
     </form>
   );
 }

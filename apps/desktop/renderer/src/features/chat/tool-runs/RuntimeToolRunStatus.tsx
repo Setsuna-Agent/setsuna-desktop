@@ -7,7 +7,7 @@ import {
   Play,
   Search,
   ShieldAlert,
-  TerminalSquare,
+  SquareTerminal,
   Wrench,
   XCircle,
 } from 'lucide-react';
@@ -86,7 +86,7 @@ export function toolRunIcon(run: RuntimeToolRun) {
   if (run.status === 'error' || run.status === 'cancelled') return <XCircle size={14} />;
   if (run.status === 'rejected') return <AlertCircle size={14} />;
   if (run.name.includes('search')) return <Search size={14} />;
-  if (run.name.includes('shell')) return <TerminalSquare size={14} />;
+  if (run.name.includes('shell')) return <SquareTerminal size={14} />;
   if (isRuntimeFileMutationRun(run)) return <EditIcon size={14} />;
   if (run.name.includes('file') || run.name.includes('workspace')) return <FileText size={14} />;
   if (run.name.includes('run')) return <Play size={14} />;
@@ -97,7 +97,7 @@ export function toolRunIcon(run: RuntimeToolRun) {
 export function toolRunKindIcon(kind: ToolRunGroupKind) {
   if (kind === 'inspection') return <FileText size={14} />;
   if (kind === 'search') return <Search size={14} />;
-  if (kind === 'shell') return <TerminalSquare size={14} />;
+  if (kind === 'shell') return <SquareTerminal size={14} />;
   if (kind === 'fileMutation') return <EditIcon size={14} />;
   return <CheckCircle2 size={14} />;
 }

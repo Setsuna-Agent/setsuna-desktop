@@ -1,3 +1,6 @@
+import { useConfirm } from '@setsuna-desktop/renderer-ui';
+import { TextField as UiTextField, Button as UiButton, Switch } from '@setsuna-desktop/renderer-ui';
+
 import type {
   RuntimeMcpServer,
   RuntimeMcpServerInput,
@@ -91,6 +94,7 @@ export function McpCapabilitiesPage({
   translate,
   ui,
 }: SettingsPageSlotProps & Readonly<{ service: McpRendererService }>) {
+  const confirm = useConfirm();
   const snapshot = useSyncExternalStore(
     (listener) => service.subscribe(listener),
     () => service.getSnapshot(),
@@ -183,7 +187,11 @@ export function McpCapabilitiesPage({
         ui={ui}
         onBack={() => setSelectedKey(null)}
         onDelete={async () => {
-          if (!window.confirm(translate('feature.mcp.confirmDelete', { name: selectedServer.label }))) return;
+          if (!await confirm({
+            title: translate('feature.mcp.confirmDelete', { name: selectedServer.label }),
+            confirmLabel: translate('feature.mcp.delete'),
+            danger: true,
+          })) return;
           await service.deleteServer(selectedServer.key);
           setSelectedKey(null);
         }}
@@ -235,7 +243,7 @@ export function McpCapabilitiesPage({
         <div className="desktop-capabilities-search-row">
           <label className="desktop-capabilities-search">
             <Search size={14} />
-            <input
+            <UiTextField
               aria-label={translate('feature.mcp.search')}
               placeholder={translate('feature.mcp.search')}
               value={query}
@@ -286,23 +294,16 @@ function McpServerListItem({
   const description = server.description || endpoint || translate('feature.mcp.noEndpoint');
   return (
     <article className="desktop-capability-list-item desktop-capability-list-item--mcp">
-      <button className="desktop-capability-list-item__identity" type="button" onClick={onOpen}>
+      <UiButton variant="ghost" className="desktop-capability-list-item__identity" type="button" onClick={onOpen}>
         <span aria-hidden="true" className="desktop-capability-list-item__icon" data-kind="mcp"><Plug size={18} /></span>
         <span className="desktop-capability-list-item__copy">
           <strong>{server.label}</strong>
           <span title={description}>{description}</span>
         </span>
-      </button>
+      </UiButton>
       <div className="desktop-capability-list-item__aside">
         <div className="desktop-capability-list-item__settings">
-          <label className="sd-check" title={translate('feature.mcp.enableHint')}>
-            <input
-              checked={server.enabled}
-              disabled={server.readOnly}
-              type="checkbox"
-              onChange={(event) => onUpdate(event.currentTarget.checked)}
-            />
-          </label>
+          <span className="sd-toggle-label"><Switch label={translate('feature.mcp.enableHint')} checked={server.enabled} disabled={server.readOnly} onCheckedChange={(checked) => onUpdate(checked)} /></span>
         </div>
       </div>
     </article>
@@ -472,8 +473,8 @@ function McpServerEditor({
               {draft.tools.length ? (
                 <>
                   <div className="desktop-capabilities-mcp-tools__toolbar">
-                    <button type="button" onClick={() => setAllToolsEnabled(setDraft, true)}>{translate('feature.mcp.selectAll')}</button>
-                    <button type="button" onClick={() => setAllToolsEnabled(setDraft, false)}>{translate('feature.mcp.selectNone')}</button>
+                    <UiButton variant="ghost" type="button" onClick={() => setAllToolsEnabled(setDraft, true)}>{translate('feature.mcp.selectAll')}</UiButton>
+                    <UiButton variant="ghost" type="button" onClick={() => setAllToolsEnabled(setDraft, false)}>{translate('feature.mcp.selectNone')}</UiButton>
                     <span>{translate('feature.mcp.toolsAvailable', {
                       enabled: draft.tools.length - splitList(draft.disabledTools, translate).length,
                       total: draft.tools.length,
@@ -562,10 +563,7 @@ function McpServerDetail({
           <ui.PageHeader
             actions={(
               <>
-                <label className="sd-check">
-                  <input checked={server.enabled} disabled={server.readOnly} type="checkbox" onChange={(event) => void onUpdate(event.currentTarget.checked)} />
-                  <span>{translate('feature.mcp.enabled')}</span>
-                </label>
+                <span className="sd-toggle-label"><Switch label={translate('feature.mcp.enabled')} checked={server.enabled} disabled={server.readOnly} onCheckedChange={(checked) => void onUpdate(checked)} /><span>{translate('feature.mcp.enabled')}</span></span>
                 <ui.ActionMenu
                   items={actionItems}
                   label={translate('feature.mcp.actions')}

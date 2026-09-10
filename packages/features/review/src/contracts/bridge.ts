@@ -118,6 +118,8 @@ export type DesktopCommitMessageGenerationSource = {
 export interface DesktopReviewBridge {
   getHistory(workspaceRoot: string, options?: DesktopGitHistoryOptions): Promise<DesktopGitHistoryPage>;
   getCommitDetails(workspaceRoot: string, oid: string): Promise<DesktopGitCommitDetails>;
+  /** Optional GitHub author image; resolved independently of local commit details. */
+  getCommitAuthorAvatar(githubCommitUrl: string): Promise<string | null>;
   getCommitFileDiff(workspaceRoot: string, input: DesktopGitCommitFileInput): Promise<DesktopDiffFile>;
   getState(workspaceRoot: string, options?: DesktopReviewStateOptions): Promise<DesktopReviewState>;
   createImagePreview(workspaceRoot: string, input: DesktopReviewImagePreviewInput): Promise<DesktopReviewImagePreviewResult>;
@@ -142,6 +144,7 @@ export type ReviewPreloadBridgeContribution = Readonly<{
 export const REVIEW_IPC_CHANNELS = Object.freeze({
   getHistory: 'desktop-review:get-history',
   getCommitDetails: 'desktop-review:get-commit-details',
+  getCommitAuthorAvatar: 'desktop-review:get-commit-author-avatar',
   getCommitFileDiff: 'desktop-review:get-commit-file-diff',
   getState: 'desktop-review:get-state',
   createImagePreview: 'desktop-review:create-image-preview',

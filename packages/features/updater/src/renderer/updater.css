@@ -51,7 +51,7 @@
   justify-content: center;
   width: 38px;
   height: 38px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-full);
   background: conic-gradient(
     var(--sd-color-warning, #ea580c) var(--updater-progress),
     color-mix(in srgb, var(--sd-color-border, GrayText) 72%, transparent) 0
@@ -64,7 +64,7 @@
   justify-content: center;
   width: 30px;
   height: 30px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-full);
   color: var(--sd-color-text-muted, GrayText);
   background: var(--sd-color-surface, Canvas);
   font-size: 10px;
@@ -228,7 +228,7 @@
   height: 22px;
   padding: 0 7px;
   border: 1px solid var(--sd-color-border, GrayText);
-  border-radius: 999px;
+  border-radius: var(--app-radius-full);
   color: var(--sd-color-text-muted, GrayText);
   background: var(--sd-color-surface, Canvas);
   font-size: 12px;
@@ -240,7 +240,7 @@
   content: "";
   width: 6px;
   height: 6px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-full);
   background: currentColor;
 }
 

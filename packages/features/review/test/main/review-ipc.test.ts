@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const reviewIpcMocks = vi.hoisted(() => ({
   close: vi.fn(),
+  fetch: vi.fn(),
   getState: vi.fn(),
   getCommitMessage: vi.fn(),
   getCommitMessageGenerationSource: vi.fn(),
@@ -17,6 +18,7 @@ const reviewIpcMocks = vi.hoisted(() => ({
 }));
 
 vi.mock('electron', () => ({
+  net: { fetch: reviewIpcMocks.fetch },
   ipcMain: {
     handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
       reviewIpcMocks.handlers.set(channel, handler);
@@ -102,6 +104,12 @@ describe('review IPC lifecycle', () => {
     try {
       expect(await ipcHandler('desktop-review:get-commit-message')({ sender: { id: 1 } }, { workspaceRoot: '/repo' })).toEqual(document);
       expect(reviewIpcMocks.getCommitMessage).toHaveBeenCalledWith('/repo');
+      const githubCommitUrl = `https://github.com/owner/repo/commit/${target.oid}`;
+      reviewIpcMocks.fetch.mockResolvedValueOnce(Response.json({ author: { avatar_url: 'https://avatars.githubusercontent.com/u/123' } }));
+      await expect(ipcHandler('desktop-review:get-commit-author-avatar')({ sender: { id: 2 } }, { githubCommitUrl })).rejects.toThrow('Desktop renderer is unavailable');
+      expect(reviewIpcMocks.fetch).not.toHaveBeenCalled();
+      expect(await ipcHandler('desktop-review:get-commit-author-avatar')({ sender: { id: 1 } }, { githubCommitUrl })).toBe('https://avatars.githubusercontent.com/u/123?s=64');
+      expect(reviewIpcMocks.fetch).toHaveBeenCalledExactlyOnceWith(`https://api.github.com/repos/owner/repo/commits/${target.oid}`, expect.any(Object));
       const pullResult = { ok: true, pulled: true, state: { workspaceRoot: '/repo' } };
       reviewIpcMocks.pull.mockResolvedValue(pullResult);
       expect(await ipcHandler('desktop-review:pull')({ sender: { id: 1 } }, { workspaceRoot: '/repo' })).toEqual(pullResult);

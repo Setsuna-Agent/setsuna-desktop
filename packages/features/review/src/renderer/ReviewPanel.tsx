@@ -1,10 +1,11 @@
+import { FileTreeToggle, TextField, Button, Dropdown, type MenuProps } from '@setsuna-desktop/renderer-ui';
+
 import { Virtualizer } from '@pierre/diffs/react';
 import type { RuntimeReviewFinding, WorkspaceProject } from '@setsuna-desktop/contracts';
 import type { DesktopWorkspaceApp } from '@setsuna-desktop/feature-workspace-apps/contracts';
-import { Button, Dropdown, type MenuProps } from 'antd';
+
 import {
   AlignJustify,
-  Check,
   ChevronDown,
   ChevronsDownUp,
   ChevronsUpDown,
@@ -12,7 +13,6 @@ import {
   GitBranch,
   GitCommitHorizontal,
   RefreshCw,
-  Rows3,
   Search,
   WrapText,
 } from 'lucide-react';
@@ -88,6 +88,7 @@ const REVIEW_REFRESH_FEEDBACK_MS = 650;
 const DEFAULT_REVIEW_LINE_WRAP = true;
 const REVIEW_AUTO_EXPAND_MAX_FILES = 24;
 const REVIEW_AUTO_EXPAND_MAX_LINES = 3_000;
+const REVIEW_FILE_TREE_VISIBLE_STORAGE_KEY = 'setsuna-desktop:review-file-browser-visible';
 const EMPTY_REVIEW_FINDINGS: RuntimeReviewFinding[] = [];
 const EMPTY_WORKSPACE_APPS: DesktopWorkspaceApp[] = [];
 const noopWorkspaceFileAction = () => undefined;
@@ -139,6 +140,7 @@ export function DesktopReviewPanel({
   const [reviewLineWrapByKey, setReviewLineWrapByKey] = useState<Record<string, boolean>>({});
   const [fileExpansionRequest, setFileExpansionRequest] = useState<ReviewFileExpansionRequest>({ expanded: true, version: 0 });
   const [refreshFeedbackVisible, setRefreshFeedbackVisible] = useState(false);
+  const [fileTreeVisible, setFileTreeVisible] = useState(() => readReviewPreference(REVIEW_FILE_TREE_VISIBLE_STORAGE_KEY) !== 'false');
   const refreshFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handledFocusRequestKeyRef = useRef<string | null>(null);
   const hasGit = Boolean(reviewState?.isGitRepository);
@@ -281,12 +283,7 @@ export function DesktopReviewPanel({
   const sourceMenuItems: MenuProps['items'] = reviewSourceOptions.map((source) => ({
     disabled: source === 'branch' && !branchComparisonAvailable,
     key: source,
-    label: (
-      <span className="chat-file-review-panel__source-menu-item">
-        <span>{reviewSourceLabel(source, t)}</span>
-        <span className="chat-file-review-panel__source-menu-check">{activeSource === source ? <Check size={13} /> : null}</span>
-      </span>
-    ),
+    label: reviewSourceLabel(source, t),
   }));
   const handleSourceMenuClick: NonNullable<MenuProps['onClick']> = ({ key }) => {
     if (!isDesktopReviewSource(key)) return;
@@ -350,7 +347,7 @@ export function DesktopReviewPanel({
                 onClick: handleSourceMenuClick,
               }}
             >
-              <Button className="chat-file-review-panel__source-button" type="text" size="small">
+              <Button className="chat-file-review-panel__source-button" variant="ghost" size="small">
                 <span>{reviewSourceLabel(activeSource, t)}</span>
                 <ChevronDown className="chat-file-review-panel__source-caret" size={12} />
               </Button>
@@ -380,13 +377,13 @@ export function DesktopReviewPanel({
             <ActionTooltip title={reviewLayoutToggleTip}>
               <IconButton
                 aria-pressed={reviewDiffLayout === 'split'}
-                className="desktop-review-panel__layout-toggle"
+                className={'desktop-review-panel__layout-toggle app-shell-icon-control' + (reviewDiffLayout === 'split' ? ' is-active' : '')}
                 label={reviewLayoutToggleTip}
                 title=""
                 variant="ghost"
                 onClick={handleReviewDiffLayoutToggle}
               >
-                {reviewDiffLayout === 'split' ? <Rows3 size={14} /> : <Columns2 size={14} />}
+                <Columns2 size={14} />
               </IconButton>
             </ActionTooltip>
             <ActionTooltip title={reviewLineWrapToggleTip}>
@@ -416,17 +413,29 @@ export function DesktopReviewPanel({
                 <RefreshCw className="desktop-review-panel__refresh-icon" size={14} />
               </IconButton>
             </ActionTooltip>
+            {fileBrowserVisible ? (
+              <FileTreeToggle
+                className="app-shell-icon-control"
+                expanded={fileTreeVisible}
+                label={t(fileTreeVisible ? 'feature.review.workspace.fileBrowser.collapse' : 'feature.review.workspace.fileBrowser.expand')}
+                onToggle={() => {
+                  const next = !fileTreeVisible;
+                  setFileTreeVisible(next);
+                  writeReviewPreference(REVIEW_FILE_TREE_VISIBLE_STORAGE_KEY, String(next));
+                }}
+              />
+            ) : null}
             {hasGit ? (
-              <button
+              <Button
                 aria-haspopup="dialog"
                 className="desktop-review-panel__commit-action"
+                size="small"
                 disabled={!canOpenCommitDialog}
-                type="button"
                 onClick={openCommitDialog}
               >
                 <GitCommitHorizontal size={14} />
                 <span>{t('feature.review.git.commitOrPush')}</span>
-              </button>
+              </Button>
             ) : null}
           </div>
         </div>
@@ -441,6 +450,7 @@ export function DesktopReviewPanel({
       ) : null}
       {fileBrowserVisible && activeSummary ? (
         <ReviewFileBrowser
+          navigatorVisible={fileTreeVisible}
           emptyText={{
             title: t(reviewEmptyTextKeys[activeSource].title),
             description: t(reviewEmptyTextKeys[activeSource].description),
@@ -666,13 +676,8 @@ function BranchCompareBar({
   const menuItems: MenuProps['items'] = filteredBaseRefs.length
     ? filteredBaseRefs.map((option) => ({
       key: option.value,
-      label: (
-        <span className="desktop-review-branch-menu__item">
-          <GitBranch size={13} />
-          <span>{option.label}</span>
-          <span className="desktop-review-branch-menu__check">{branchCompareRefsMatch(baseRef, option.value) ? <Check size={13} /> : null}</span>
-        </span>
-      ),
+      label: option.label,
+      icon: <GitBranch size={13} />,
     }))
     : [{
       key: '__empty',
@@ -697,7 +702,7 @@ function BranchCompareBar({
           <div className="desktop-review-branch-menu">
             <label className="desktop-review-branch-menu__search">
               <Search size={13} />
-              <input
+              <TextField
                 value={query}
                 placeholder={t('feature.review.workspace.branch.search')}
                 onChange={(event) => setQuery(event.target.value)}
@@ -716,7 +721,7 @@ function BranchCompareBar({
           onClick: handleMenuClick,
         }}
       >
-        <Button className="desktop-review-branch-compare__button" type="text" size="small" disabled={!selectableBaseRefs.length}>
+        <Button className="desktop-review-branch-compare__button" variant="ghost" size="small" disabled={!selectableBaseRefs.length}>
           <span className="desktop-review-branch-compare__current">{currentBranch || 'HEAD'}</span>
           <span className="desktop-review-branch-compare__arrow">→</span>
           <span className="desktop-review-branch-compare__base" title={selectedBaseValue || undefined}>{selectedBaseLabel}</span>
@@ -759,10 +764,6 @@ function shouldPreferBranchCompareRef(
   return !isRemoteCompareRef(current) && isRemoteCompareRef(candidate);
 }
 
-function branchCompareRefsMatch(left?: string | null, right?: string | null): boolean {
-  const leftName = branchCompareLogicalName(left ?? '');
-  return Boolean(leftName && leftName === branchCompareLogicalName(right ?? ''));
-}
 
 function branchCompareLogicalName(ref: string): string {
   const trimmed = ref.trim();

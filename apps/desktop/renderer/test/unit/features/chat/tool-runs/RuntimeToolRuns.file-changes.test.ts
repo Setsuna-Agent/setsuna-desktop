@@ -48,7 +48,7 @@ describe('RuntimeToolRuns final file changes', () => {
 
     expect(html).toContain('<span class="chat-file-changes__title">已编辑 main.css</span><span class="chat-change-counts"');
     expect(html).not.toContain('chat-file-changes__file-icon');
-    expect(html).toContain('<button class="chat-file-changes__row"');
+    expect(html).toMatch(/<button[^>]*class="[^"]*\bchat-file-changes__row\b[^"]*"/);
     expect(html).not.toContain('<details');
     expect(html).not.toContain('chat-file-changes__row-chevron');
     expect(html).not.toContain('chat-file-review__');

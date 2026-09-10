@@ -1,3 +1,4 @@
+import { CheckField } from '@setsuna-desktop/renderer-ui';
 import type {
   RendererTranslate,
 } from '@setsuna-desktop/feature-core/renderer';
@@ -89,7 +90,7 @@ export function CatalogModelPickerDialog({
         <div className="model-provider-settings__catalog-list">
           {visibleModels.length ? visibleModels.map((model) => (
             <label key={model.code} className="model-provider-settings__catalog-row">
-              <input
+              <CheckField
                 checked={selectedCodes.has(model.code)}
                 type="checkbox"
                 onChange={(event) => toggle(model.code, event.currentTarget.checked)}

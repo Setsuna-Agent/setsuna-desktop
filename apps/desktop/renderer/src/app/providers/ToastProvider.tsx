@@ -1,18 +1,15 @@
-import { AlertCircle, AlertTriangle, CheckCircle2, Info, X } from 'lucide-react';
+import { ToastStack, type ToastEntry, type ToastTone } from '@setsuna-desktop/renderer-ui';
+export type { ToastEntry, ToastTone } from '@setsuna-desktop/renderer-ui';
 import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useRef,
   useState,
   type PropsWithChildren,
 } from 'react';
-import { createPortal } from 'react-dom';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
-
-export type ToastTone = 'error' | 'info' | 'success' | 'warning';
 
 export type ToastOptions = {
   durationMs?: number;
@@ -25,13 +22,6 @@ export type ToastApi = {
   show: (message: string, options?: ToastOptions & { tone?: ToastTone }) => number | null;
   success: (message: string, options?: ToastOptions) => number | null;
   warning: (message: string, options?: ToastOptions) => number | null;
-};
-
-export type ToastEntry = {
-  durationMs: number;
-  id: number;
-  message: string;
-  tone: ToastTone;
 };
 
 const DEFAULT_TOAST_DURATION_MS = 3_500;
@@ -72,19 +62,10 @@ export function ToastProvider({ children }: PropsWithChildren) {
     warning: (message, options) => show(message, { ...options, tone: 'warning' }),
   }), [dismiss, show]);
 
-  const viewport = toasts.length && typeof document !== 'undefined'
-    ? createPortal(
-        <div className="app-toast-region" aria-label={t('toast.region')}>
-          {toasts.map((toast) => <ToastItem key={toast.id} toast={toast} onDismiss={dismiss} />)}
-        </div>,
-        document.body,
-      )
-    : null;
-
   return (
     <ToastContext.Provider value={api}>
       {children}
-      {viewport}
+      <ToastStack entries={toasts} label={t('toast.region')} closeLabel={t('toast.close')} onDismiss={dismiss} />
     </ToastContext.Provider>
   );
 }
@@ -98,35 +79,6 @@ export function useToast(): ToastApi {
 export function enqueueToast(current: ToastEntry[], entry: ToastEntry): ToastEntry[] {
   const withoutDuplicate = current.filter((toast) => toast.message !== entry.message || toast.tone !== entry.tone);
   return [...withoutDuplicate, entry].slice(-MAX_VISIBLE_TOASTS);
-}
-
-function ToastItem({ toast, onDismiss }: { toast: ToastEntry; onDismiss: (id: number) => void }) {
-  const { t } = useI18n();
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => onDismiss(toast.id), toast.durationMs);
-    return () => window.clearTimeout(timeoutId);
-  }, [onDismiss, toast.durationMs, toast.id]);
-
-  return (
-    <div
-      className={`app-toast app-toast--${toast.tone}`}
-      role={toast.tone === 'error' ? 'alert' : 'status'}
-    >
-      <span className="app-toast__icon" aria-hidden="true">{toastIcon(toast.tone)}</span>
-      <span className="app-toast__message">{toast.message}</span>
-      <button type="button" aria-label={t('toast.close')} onClick={() => onDismiss(toast.id)}>
-        <X aria-hidden="true" size={14} />
-      </button>
-    </div>
-  );
-}
-
-function toastIcon(tone: ToastTone) {
-  if (tone === 'success') return <CheckCircle2 size={16} />;
-  if (tone === 'warning') return <AlertTriangle size={16} />;
-  if (tone === 'error') return <AlertCircle size={16} />;
-  return <Info size={16} />;
 }
 
 function toastDurationMs(durationMs: number | undefined, tone: ToastTone): number {

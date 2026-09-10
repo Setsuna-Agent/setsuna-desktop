@@ -1,5 +1,5 @@
-import { Sender } from '@ant-design/x';
-import type { SlotConfigType } from '@ant-design/x/es/sender';
+import { ChatPromptInput } from './composer/editor/ChatPromptInput.js';
+import type { ComposerSlot } from './composer/editor/types.js';
 import type {
   DesktopRuntimeClient,
   RuntimeConfiguredModelReference,
@@ -64,7 +64,7 @@ import {
   type ChatModelSelectionHandler,
 } from './chatModelSelection.js';
 
-const EMPTY_SLOT_CONFIG: SlotConfigType[] = [];
+const EMPTY_SLOT_CONFIG: ComposerSlot[] = [];
 const EMPTY_QUEUED_TURN_INPUTS: RuntimeQueuedTurnInput[] = [];
 const SKILL_SELECTION_MAX_INSERT_ATTEMPTS = 8;
 
@@ -178,7 +178,7 @@ export function ChatComposer({
   } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const senderRef = useRef<ComponentRef<typeof Sender>>(null);
+  const senderRef = useRef<ComponentRef<typeof ChatPromptInput>>(null);
   const lastEditorDraftRef = useRef(draft);
   const previousExternalDraftRef = useRef(draft);
   const consumedImageAttachmentRequestIdRef = useRef<number | null>(null);
@@ -186,7 +186,7 @@ export function ChatComposer({
   const consumedWorkspaceMentionRequestIdRef = useRef<number | null>(null);
   const modelSelectionRequestRef = useRef(0);
   const mountedRef = useRef(true);
-  const initialSlotConfigRef = useRef<SlotConfigType[]>(draft ? [createTextSlot(draft)] : EMPTY_SLOT_CONFIG);
+  const initialSlotConfigRef = useRef<ComposerSlot[]>(draft ? [createTextSlot(draft)] : EMPTY_SLOT_CONFIG);
   const addSelectedSkills = useCallback((nextSkills: RuntimeSkillSummary[]) => {
     if (!nextSkills.length) return;
     setSelectedSkills((current) => {
@@ -424,7 +424,7 @@ export function ChatComposer({
       skill,
       onConfirmed: () => {
         if (consumedSkillSelectionRequestIdRef.current === skillSelectionRequest.requestId) return;
-        // Consume only after the tag survives Sender initialization and a full frame.
+        // Consume only after the tag survives ChatPromptInput initialization and a full frame.
         consumedSkillSelectionRequestIdRef.current = skillSelectionRequest.requestId;
         addSelectedSkills([skill]);
         commandController.focusComposer();
@@ -493,7 +493,7 @@ export function ChatComposer({
     addSelectedSkills([skill]);
   };
 
-  const handleChange = (value: string, _event?: unknown, slotConfig?: SlotConfigType[]) => {
+  const handleChange = (value: string, _event?: unknown, slotConfig?: ComposerSlot[]) => {
     commandController.handleDraftValueChange(value);
     setSelectedSkills((current) => filterSelectedSkillsBySlots(current, slotConfig));
     lastEditorDraftRef.current = value;
@@ -520,7 +520,7 @@ export function ChatComposer({
 
     if (syncPlan.type === 'replace') editor.clear();
     if (syncPlan.value) {
-      // 先聚焦，让 Ant Design X 能够创建用于插入槽位的有效选区。
+      // 先聚焦到末尾，确保外部文件引用插入到当前草稿。
       editor.focus({ cursor: 'end', preventScroll: true });
       editor.insert([createTextSlot(syncPlan.value)], 'end', undefined, true);
     }
@@ -559,7 +559,7 @@ export function ChatComposer({
       : nextDraft;
     if (command) {
       // Replace the command with the review prompt in the editor itself. Sending
-      // only an external value update races Sender's delayed command-removal echo.
+      // only an external value update races ChatPromptInput's delayed command-removal echo.
       senderRef.current?.insert?.(
         [createTextSlot(shouldPrefillReview ? selectedDraft : '')],
         'cursor',
@@ -732,7 +732,7 @@ export function ChatComposer({
           }}
         />
       ) : null}
-      <Sender
+      <ChatPromptInput
         ref={senderRef}
         value={draft}
         disabled={submitting || queuedTurnEdit.retrieving}
@@ -742,7 +742,6 @@ export function ChatComposer({
           ? 'chat.composer.projectPlaceholder'
           : 'chat.composer.placeholder')}
         autoSize={{ minRows: 2, maxRows: 6 }}
-        suffix={false}
         onBlur={commandController.handleComposerBlur}
         onChange={handleChange}
         onFocus={commandController.handleComposerFocus}

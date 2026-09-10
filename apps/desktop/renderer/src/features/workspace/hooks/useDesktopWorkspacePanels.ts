@@ -142,6 +142,7 @@ export function useDesktopWorkspacePanels({
       ? 'review'
       : null,
     activeProject?.path
+      && reviewState?.isGitRepository === true
       && !slotHasPanelType(sidePanelSlot, 'changes')
       && !slotHasPanelType(bottomPanelSlot, 'changes')
       ? 'changes'
@@ -152,7 +153,7 @@ export function useDesktopWorkspacePanels({
       ? 'files'
       : null,
     'terminal',
-  ].filter(Boolean) as DesktopPanelType[], [activeProject, bottomPanelSlot, conversationDebugEnabled, sidePanelSlot]);
+  ].filter(Boolean) as DesktopPanelType[], [activeProject, bottomPanelSlot, conversationDebugEnabled, reviewState?.isGitRepository, sidePanelSlot]);
   const terminalProjectKey = activeProject?.id ?? GLOBAL_TERMINAL_PROJECT_KEY;
   const terminalWorkspacePath = readyThreadWorkspacePath(activeProject, workspaceStatus);
   const activeTerminalSessionsByPanelId = useMemo(() => {

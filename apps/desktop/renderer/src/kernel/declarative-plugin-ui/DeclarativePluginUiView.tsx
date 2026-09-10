@@ -1,3 +1,5 @@
+import { TextField as UiTextField, SelectField as UiSelectField, Button as UiButton } from '@setsuna-desktop/renderer-ui';
+
 import type {
   RuntimePluginUiAction,
   RuntimePluginUiActionInput,
@@ -282,7 +284,7 @@ function renderNode(node: RuntimePluginUiNode, path: string, context: RenderCont
     } as const;
     const input = context.settingsUi
       ? <context.settingsUi.TextField {...inputProps} />
-      : <input {...inputProps} />;
+      : <UiTextField {...inputProps} />;
     return (
       <label className="declarative-plugin-ui__field" key={path}>
         <span>{node.label}</span>
@@ -305,13 +307,14 @@ function renderNode(node: RuntimePluginUiNode, path: string, context: RenderCont
         {options}
       </context.settingsUi.SelectField>
     ) : (
-      <select
+      <UiSelectField
+        aria-label={node.label}
         disabled={context.disabled}
-        onChange={(event) => context.updateValue(node.name, event.currentTarget.value)}
+        onValueChange={(value) => context.updateValue(node.name, value)}
         value={value}
       >
         {options}
-      </select>
+      </UiSelectField>
     );
     return (
       <label className="declarative-plugin-ui__field" key={path}>
@@ -340,15 +343,14 @@ function renderNode(node: RuntimePluginUiNode, path: string, context: RenderCont
     );
   }
   return (
-    <button
-      className={`declarative-plugin-ui__button is-${node.variant ?? 'secondary'}`}
+    <UiButton variant={node.variant ?? 'secondary'}
       disabled={context.disabled}
       key={path}
       onClick={() => context.requestAction(action)}
       type="button"
     >
       {label}
-    </button>
+    </UiButton>
   );
 }
 
@@ -378,12 +380,12 @@ function ActionApproval({
     </>
   ) : (
     <>
-      <button className="declarative-plugin-ui__button is-secondary" onClick={onCancel} type="button">
+      <UiButton variant="secondary" onClick={onCancel} type="button">
         {translate('feature.pluginManagement.rendererUi.cancel')}
-      </button>
-      <button className="declarative-plugin-ui__button is-primary" onClick={onConfirm} type="button">
+      </UiButton>
+      <UiButton variant="primary" onClick={onConfirm} type="button">
         {translate('feature.pluginManagement.rendererUi.confirm')}
-      </button>
+      </UiButton>
     </>
   );
   return (

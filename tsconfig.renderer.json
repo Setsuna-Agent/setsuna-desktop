@@ -13,6 +13,7 @@
     "baseUrl": ".",
     "paths": {
       "@renderer/*": ["apps/desktop/renderer/src/*"],
+      "@setsuna-desktop/renderer-ui": ["packages/renderer-ui/src/index.ts"],
       "@setsuna-desktop/contracts": ["packages/contracts/src/index.ts"],
       "@setsuna-desktop/feature-core/*": ["packages/feature-core/src/*"],
       "@setsuna-desktop/renderer-contracts/*": ["packages/renderer-contracts/src/*"],
@@ -48,7 +49,8 @@
     "apps/desktop/renderer/src/**/*.ts",
     "apps/desktop/renderer/src/**/*.tsx",
     "apps/desktop/renderer/test/**/*.ts",
-    "apps/desktop/renderer/test/**/*.tsx"
+    "apps/desktop/renderer/test/**/*.tsx",
+    "packages/renderer-ui/test/**/*.tsx"
   ],
   "references": [
     { "path": "./packages/contracts/tsconfig.build.json" },
@@ -79,6 +81,7 @@
     { "path": "./packages/features/webdav-sync/tsconfig.build.json" },
     { "path": "./packages/features/windows-sandbox/tsconfig.build.json" },
     { "path": "./packages/features/workspace-apps/tsconfig.build.json" },
-    { "path": "./packages/features/workspace-dependencies/tsconfig.build.json" }
+    { "path": "./packages/features/workspace-dependencies/tsconfig.build.json" },
+    { "path": "./packages/renderer-ui/tsconfig.build.json" }
   ]
 }

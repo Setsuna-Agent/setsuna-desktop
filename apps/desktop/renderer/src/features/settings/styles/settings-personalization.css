@@ -5,7 +5,7 @@
 
 .desktop-settings-panel .chat-user-settings__personalization-card {
   border: 1px solid var(--chat-settings-divider);
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   background: var(--app-surface);
   overflow: hidden;
 }
@@ -52,7 +52,7 @@
   min-height: 184px;
   padding-bottom: 28px;
   overflow-x: hidden;
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
 }
 
 .desktop-settings-panel .chat-user-settings__prompt-count {
@@ -85,7 +85,7 @@
 .desktop-settings-panel .chat-user-settings__runtime-error {
   padding: 8px 10px;
   border: 1px solid color-mix(in srgb, var(--app-danger) 28%, transparent);
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
   color: var(--app-danger);
   background: color-mix(in srgb, var(--app-danger) 7%, var(--app-surface));
   font-size: 12px;
@@ -110,7 +110,7 @@
   min-width: 0;
   padding: 11px 12px;
   border: 1px solid var(--chat-settings-divider);
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   background: var(--app-surface);
 }
 
@@ -148,7 +148,7 @@
   min-width: 0;
   padding: 12px;
   border: 1px solid var(--chat-settings-divider);
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   background: var(--app-surface);
 }
 
@@ -188,7 +188,7 @@
   max-width: 100%;
   overflow: hidden;
   padding: 2px 6px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-full);
   color: var(--app-text-muted);
   background: var(--app-bg);
   font-size: 11px;
@@ -202,7 +202,7 @@
   margin: 0;
   overflow: auto;
   padding: 9px 10px;
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
   color: var(--app-text);
   background: var(--app-bg);
   font-size: 12px;

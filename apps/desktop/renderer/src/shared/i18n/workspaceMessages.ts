@@ -1,6 +1,6 @@
 export const workspaceZhCN = {
   'conversation.overview.expand': '展开对话环境信息',
-  'conversation.overview.changes': '变更',
+  'conversation.overview.review': '审查',
   'conversation.overview.environment': '环境',
   'conversation.overview.title': '环境信息',
   'conversation.overview.collapse': '折叠环境信息',
@@ -118,7 +118,7 @@ export const workspaceZhCN = {
 
 export const workspaceEnUS = {
   'conversation.overview.expand': 'Expand conversation environment information',
-  'conversation.overview.changes': 'Changes',
+  'conversation.overview.review': 'Review',
   'conversation.overview.environment': 'Environment',
   'conversation.overview.title': 'Environment information',
   'conversation.overview.collapse': 'Collapse environment information',

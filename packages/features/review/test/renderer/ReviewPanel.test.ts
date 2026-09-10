@@ -1,3 +1,4 @@
+import { Window } from 'happy-dom';
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -490,46 +491,22 @@ function expectSharedReviewVirtualizer(html: string): void {
 }
 
 function withReviewBrowserEnvironment(items: Record<string, string>, callback: () => void): void {
-  const previousDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
-  const previousResizeObserver = Object.getOwnPropertyDescriptor(globalThis, 'ResizeObserver');
-  Object.defineProperty(globalThis, 'document', {
-    configurable: true,
-    value: {},
-  });
-  Object.defineProperty(globalThis, 'ResizeObserver', {
-    configurable: true,
-    value: class {
-      observe(): void {}
-      disconnect(): void {}
-    },
-  });
-  try {
-    withWindowLocalStorage(items, callback);
-  } finally {
-    if (previousDocument) Object.defineProperty(globalThis, 'document', previousDocument);
-    else Reflect.deleteProperty(globalThis, 'document');
-    if (previousResizeObserver) Object.defineProperty(globalThis, 'ResizeObserver', previousResizeObserver);
-    else Reflect.deleteProperty(globalThis, 'ResizeObserver');
-  }
+  withWindowLocalStorage(items, callback, true);
 }
 
-function withWindowLocalStorage(items: Record<string, string>, callback: () => void): void {
-  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
-  Object.defineProperty(globalThis, 'window', {
-    configurable: true,
-    value: {
-      localStorage: {
-        getItem: (key: string) => items[key] ?? null,
-        setItem: (key: string, value: string) => {
-          items[key] = value;
-        },
-      },
-    },
-  });
-  try {
-    callback();
-  } finally {
-    if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow);
-    else Reflect.deleteProperty(globalThis, 'window');
+function withWindowLocalStorage(items: Record<string, string>, callback: () => void, withDocument = false): void {
+  const browser = new Window();
+  for (const [key, value] of Object.entries(items)) browser.localStorage.setItem(key, value);
+  const globals: Record<string, unknown> = withDocument
+    ? { window: browser, document: browser.document, ResizeObserver: browser.ResizeObserver }
+    : { window: browser };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, value });
+  try { callback(); }
+  finally {
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
   }
 }

@@ -36,7 +36,7 @@
   min-height: 34px;
   padding: 0 10px;
   border: 1px solid var(--app-border);
-  border-radius: 999px;
+  border-radius: var(--app-radius-full);
   color: var(--app-text);
   background: var(--app-surface);
   box-shadow:
@@ -73,7 +73,7 @@
   box-sizing: border-box;
   padding: 12px 10px 10px;
   border: 1px solid var(--app-border);
-  border-radius: 14px;
+  border-radius: var(--app-radius-lg);
   color: var(--app-text);
   background: var(--app-surface);
   box-shadow:
@@ -99,7 +99,7 @@
   .chat-delete-bar__inner,
   .chat-scroll-bottom,
   .chat-sender:not(.chat-sender--starter) > .chat-send-queue,
-  .chat-sender:not(.chat-sender--starter) .ant-sender,
+  .chat-sender:not(.chat-sender--starter) .chat-prompt,
   .chat-sender:not(.chat-sender--starter) > .chat-command-menu,
   .chat-sender:not(.chat-sender--starter) .chat-attachments {
     transition: none;
@@ -131,7 +131,7 @@
   height: 24px;
   padding: 0;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
   color: var(--app-text-muted);
   background: transparent;
   cursor: pointer;
@@ -162,7 +162,7 @@
   min-height: 30px;
   padding: 0 6px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
   color: var(--app-text);
   background: transparent;
   font: inherit;
@@ -285,7 +285,7 @@
   min-height: 30px;
   padding: 0 6px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
   background: transparent;
   color: var(--app-text);
   cursor: pointer;
@@ -350,7 +350,7 @@
   max-height: min(260px, calc(100vh - 32px));
   box-sizing: border-box;
   padding: 12px;
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   opacity: 0;
   visibility: hidden;
   pointer-events: none;

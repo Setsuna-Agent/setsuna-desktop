@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import type { DiffLineAnnotation } from '@pierre/diffs/react';
 import type { RuntimeReviewFinding } from '@setsuna-desktop/contracts';
 import type { DesktopWorkspaceApp } from '@setsuna-desktop/feature-workspace-apps/contracts';
@@ -54,10 +55,16 @@ const reviewFilePathCollator = new Intl.Collator('en', {
 });
 const REVIEW_FOCUS_HIGHLIGHT_MS = 1_400;
 
+type ReviewFileHeaderControls = {
+  leading?: ReactNode;
+  actions: ReactNode;
+};
+
 export function ReviewSummarySection({
   diffLayout,
   emptyText,
   fileExpansionRequest,
+  fileHeaderControls,
   findings,
   focusRequest,
   lineWrap,
@@ -75,6 +82,7 @@ export function ReviewSummarySection({
   diffLayout: DesktopReviewDiffLayout;
   emptyText: { title: string; description: string };
   fileExpansionRequest: ReviewFileExpansionRequest;
+  fileHeaderControls?: ReviewFileHeaderControls;
   findings: RuntimeReviewFinding[];
   focusRequest?: DesktopReviewFocusRequest | null;
   lineWrap: boolean;
@@ -164,6 +172,7 @@ export function ReviewSummarySection({
             <ReviewFileCard
               diffLayout={diffLayout}
               fileExpansionRequest={fileExpansionRequest}
+              fileHeaderControls={fileHeaderControls}
               file={file}
               findingTargets={findingTargets}
               fileTargetRef={getTargetRef(
@@ -200,6 +209,7 @@ export function ReviewSummarySection({
 const ReviewFileCard = memo(function ReviewFileCard({
   diffLayout,
   fileExpansionRequest,
+  fileHeaderControls,
   file,
   findingTargets,
   fileTargetRef,
@@ -220,6 +230,7 @@ const ReviewFileCard = memo(function ReviewFileCard({
 }: {
   diffLayout: DesktopReviewDiffLayout;
   fileExpansionRequest: ReviewFileExpansionRequest;
+  fileHeaderControls?: ReviewFileHeaderControls;
   file: DesktopDiffFile;
   findingTargets: ReviewFindingTarget[];
   fileTargetRef: RefCallback<HTMLElement>;
@@ -359,7 +370,7 @@ const ReviewFileCard = memo(function ReviewFileCard({
         ref={fileTargetRef}
       >
         <header
-          className="desktop-review-file-card__summary"
+          className={'desktop-review-file-card__summary' + (fileHeaderControls ? ' desktop-review-file-card__summary--toolbar' : '')}
           onContextMenu={(event) => {
             if (!workspaceFilePath) return;
             event.preventDefault();
@@ -370,7 +381,8 @@ const ReviewFileCard = memo(function ReviewFileCard({
             });
           }}
         >
-          <button
+          {fileHeaderControls?.leading}
+          <Button variant="ghost"
             className="desktop-review-file-card__path-main"
             type="button"
             aria-expanded={expanded}
@@ -392,7 +404,7 @@ const ReviewFileCard = memo(function ReviewFileCard({
                 />
               ) : null}
             </span>
-          </button>
+          </Button>
           <div className="desktop-review-file-card__meta">
             <ActionTooltip title={openPanelLabel}>
               <IconButton
@@ -425,6 +437,7 @@ const ReviewFileCard = memo(function ReviewFileCard({
               </IconButton>
             </ActionTooltip>
           </div>
+          {fileHeaderControls ? <div className="desktop-review-file-card__view-controls">{fileHeaderControls.actions}</div> : null}
         </header>
         {imagePreview ? (
           <ReviewImageDiffPreview
@@ -708,14 +721,14 @@ function ReviewFindingAnnotation({
       <header className="desktop-review-finding__header">
         <strong>[{finding.priority}] {finding.title}</strong>
         {locationAvailable ? (
-          <button
+          <Button variant="ghost"
             className="desktop-review-finding__location"
             title={`${finding.path}:${lineLabel}`}
             type="button"
             onClick={() => onOpenWorkspaceFile(finding.path, finding.startLine)}
           >
             {reviewFilePathParts(finding.path).filename}:{lineLabel}
-          </button>
+          </Button>
         ) : (
           <span
             className="desktop-review-finding__location is-unavailable"

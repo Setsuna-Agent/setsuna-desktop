@@ -1,4 +1,5 @@
-import { Popover } from 'antd';
+import { TextField, Button, Popover } from '@setsuna-desktop/renderer-ui';
+
 import { CalendarDays } from 'lucide-react';
 import { useState } from 'react';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
@@ -46,7 +47,7 @@ export function UsageTimeRangeFilter({
       <div className="settings-usage-time-filter__main">
         <div className="settings-usage-time-filter__presets" role="group" aria-label={t('feature.usage.quickRanges')}>
           {PRESETS.map((preset) => (
-            <button
+            <Button variant="ghost"
               className={activeRange === preset && !customOpen ? 'is-active' : ''}
               key={preset}
               type="button"
@@ -57,7 +58,7 @@ export function UsageTimeRangeFilter({
               }}
             >
               {presetLabel(preset, t)}
-            </button>
+            </Button>
           ))}
           <Popover
             content={(
@@ -70,22 +71,21 @@ export function UsageTimeRangeFilter({
                 onChange={setCustomRange}
               />
             )}
-            destroyOnHidden
             open={customOpen}
             placement="bottomRight"
-            classNames={{ root: 'settings-usage-time-filter-popover' }}
-            styles={{ container: { padding: 0 }, content: { padding: 0 } }}
+            className="settings-usage-time-filter-popover"
+            style={{ padding: 0 }}
             trigger="click"
             onOpenChange={(open) => setCustomOpen(open)}
           >
-            <button
+            <Button variant="ghost"
               className={customOpen || activeRange === 'custom' ? 'is-active' : ''}
               type="button"
               aria-expanded={customOpen}
               aria-pressed={activeRange === 'custom'}
             >
               {t('feature.usage.custom')}
-            </button>
+            </Button>
           </Popover>
         </div>
       </div>
@@ -136,15 +136,15 @@ function UsageCustomRangeEditor({
       </div>
       <footer className="settings-usage-custom-range__footer">
         <div className="settings-usage-custom-range__actions">
-          <button type="button" onClick={onCancel}>{t('feature.usage.cancel')}</button>
-          <button
+          <Button variant="ghost" type="button" onClick={onCancel}>{t('feature.usage.cancel')}</Button>
+          <Button variant="primary"
             className="is-primary"
             disabled={!valid || loading}
             type="button"
             onClick={onApply}
           >
             {t('feature.usage.applyRange')}
-          </button>
+          </Button>
         </div>
       </footer>
     </div>
@@ -165,7 +165,7 @@ function UsageCustomRangeField({
   return (
     <label className="settings-usage-custom-range__field">
       <span>{label}</span>
-      <input
+      <TextField
         aria-invalid={invalid}
         autoComplete="off"
         maxLength={16}

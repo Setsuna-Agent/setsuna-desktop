@@ -21,6 +21,8 @@ export default defineConfig({
       '@setsuna-desktop/contracts': resolve(rootDir, 'packages/contracts/src/index.ts'),
       '@setsuna-desktop/feature-core': resolve(rootDir, 'packages/feature-core/src'),
       '@setsuna-desktop/renderer-contracts': resolve(rootDir, 'packages/renderer-contracts/src'),
+      '@setsuna-desktop/renderer-ui/styles.css': resolve(rootDir, 'packages/renderer-ui/src/styles/index.css'),
+      '@setsuna-desktop/renderer-ui': resolve(rootDir, 'packages/renderer-ui/src/index.ts'),
       ...createFeaturePackageSourceAliases(rootDir),
     },
   },

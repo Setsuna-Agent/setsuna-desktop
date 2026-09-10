@@ -1,3 +1,5 @@
+import { TextArea, Button, Dialog } from '@setsuna-desktop/renderer-ui';
+
 import type { RuntimeConfiguredModelReference, WorkspaceProject } from '@setsuna-desktop/contracts';
 import type {
   DesktopDiffSummary,
@@ -28,7 +30,6 @@ import {
   type PropsWithChildren,
   type ReactNode,
 } from 'react';
-import { createPortal } from 'react-dom';
 import { useReviewRendererHost } from '../host.js';
 import type { ReviewTranslate } from '../messages.js';
 import { ReviewChangeCounts } from '../ReviewChangeCounts.js';
@@ -47,6 +48,7 @@ type WorkspaceGitCommitDialogContextValue = {
   openCommitDialog: () => void;
   messageEditor: ReturnType<typeof useCommitMessageEditor>['editor'];
   conflictTasks: ReturnType<typeof useAutoResolveGitConflicts>['conflictTasks'];
+  conflictOpenRequest: string | null;
   composer: {
     message: string;
     setMessage: (message: string) => void;
@@ -73,6 +75,7 @@ const workspaceGitCommitDialogDefaultValue: WorkspaceGitCommitDialogContextValue
   openCommitDialog: () => undefined,
   messageEditor: null,
   conflictTasks: [],
+  conflictOpenRequest: null,
   composer: null,
 };
 
@@ -114,7 +117,7 @@ export function WorkspaceGitCommitProvider({
   const [error, setError] = useState<string | null>(null);
   const dismissError = () => setError(null);
   const workspaceRoot = activeProject?.path ?? '';
-  const { resolveConflicts, conflictTasks } = useAutoResolveGitConflicts({ threadId, workspaceRoot, modelSelection: conversationModelSelection });
+  const { resolveConflicts, conflictTasks, conflictOpenRequest } = useAutoResolveGitConflicts({ threadId, workspaceRoot, modelSelection: conversationModelSelection });
   const projectStateKey = activeProject ? `${activeProject.id}:${workspaceRoot}` : '';
   const messageEditor = useCommitMessageEditor(projectStateKey, onOpenMessageEditor);
   const currentProjectKey = useRef(projectStateKey);
@@ -165,17 +168,6 @@ export function WorkspaceGitCommitProvider({
     resetDialog(false);
     return () => { activeAction.current = null; };
   }, [projectStateKey, resetDialog]);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      closeDialog();
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [closeDialog, open]);
 
   const runGitAction = async (
     action: CommitBusyAction,
@@ -340,6 +332,7 @@ export function WorkspaceGitCommitProvider({
     openCommitDialog,
     messageEditor: messageEditor.editor,
     conflictTasks,
+    conflictOpenRequest,
     composer: {
       message: commitMessage,
       setMessage: setCommitMessage,
@@ -361,24 +354,12 @@ export function WorkspaceGitCommitProvider({
     },
   };
 
-  const dialog = open && typeof document !== 'undefined' ? createPortal(
-    <div
-      className="chat-git-commit-modal"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target !== event.currentTarget) return;
-        closeDialog();
-      }}
-    >
-      <div
-        aria-label={t('feature.review.git.commitOrPush')}
-        aria-modal="true"
-        className="chat-git-commit-popover"
-        role="dialog"
-      >
+  const dialog = open ? (
+    <Dialog title={t('feature.review.git.commitOrPush')} width={440}
+      className="chat-git-commit-popover" dismissible={!busyAction} onClose={closeDialog}>
         <div className="chat-git-commit-popover__head">
           <div className="chat-git-commit-popover__branch-wrap">
-            <button
+            <Button variant="ghost"
               type="button"
               className={`chat-git-commit-popover__branch ${branchMenuOpen ? 'is-open' : ''}`}
               aria-expanded={branchMenuOpen}
@@ -391,7 +372,7 @@ export function WorkspaceGitCommitProvider({
               <GitBranch size={13} />
               <span>{currentBranch}</span>
               <ChevronDown size={12} />
-            </button>
+            </Button>
             {branchMenuOpen ? (
               <CommitBranchMenu
                 branchDraft={branchDraft}
@@ -413,7 +394,7 @@ export function WorkspaceGitCommitProvider({
           </div>
           <ReviewChangeCounts additions={changeStats.additions} deletions={changeStats.deletions} />
         </div>
-        <textarea
+        <TextArea
           className="chat-git-commit-popover__message"
           value={commitMessage}
           rows={3}
@@ -460,9 +441,7 @@ export function WorkspaceGitCommitProvider({
         {error && !branchMenuOpen ? (
           <GitOperationError message={error} onDismiss={dismissError} />
         ) : null}
-      </div>
-    </div>,
-    document.body,
+    </Dialog>
   ) : null;
 
   return (
@@ -537,7 +516,7 @@ function GitActionButton({
   onClick: () => void;
 }) {
   return (
-    <button
+    <Button variant="ghost"
       type="button"
       className="chat-git-commit-popover__action"
       aria-busy={loading || undefined}
@@ -548,7 +527,7 @@ function GitActionButton({
         {loading ? <Loader2 className="chat-git-loading-icon" size={14} /> : icon}
       </span>
       <span>{title}</span>
-    </button>
+    </Button>
   );
 }
 

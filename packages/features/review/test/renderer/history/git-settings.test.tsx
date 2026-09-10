@@ -25,7 +25,7 @@ async function openMenu(service: ReviewRendererService) {
   return screen.findByRole('textbox', { name: '生成提示词' }) as Promise<HTMLTextAreaElement>;
 }
 async function openSettings() {
-  fireEvent.click(screen.getByRole('button', { name: '更多 Git 操作' }));
+  fireEvent.pointerDown(screen.getByRole('button', { name: '更多 Git 操作' }), { button: 0, pointerType: 'mouse' });
   fireEvent.click(await screen.findByRole('menuitem', { name: '设置' }));
 }
 

@@ -1,0 +1,67 @@
+/* The beUI prompt surface; editing/selection behavior lives in composer/editor. */
+
+.chat-prompt {
+  --chat-composer-control-size: 30px;
+  --chat-composer-footer-inset: 8px;
+  width: min(var(--chat-content-max-width), 100%);
+  overflow: visible;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-xl);
+  background: var(--app-surface);
+  box-shadow: var(--chat-prompt-shadow);
+  transition: box-shadow 160ms ease;
+}
+
+.chat-prompt[data-disabled] {
+  opacity: 0.65;
+}
+
+.chat-prompt__input {
+  display: block;
+  min-width: 0;
+  min-height: calc(var(--prompt-min-rows, 2) * 24px + 16px);
+  max-height: calc(var(--prompt-max-rows, 6) * 24px + 16px);
+  padding: 10px var(--chat-prompt-inline-padding) 6px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--app-text);
+  font: inherit;
+  font-size: 14px;
+  line-height: 24px;
+  caret-color: var(--app-primary);
+  outline: none;
+}
+
+.chat-prompt__input[data-empty]::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  pointer-events: none;
+  color: var(--app-text-muted);
+}
+
+.chat-prompt__tag {
+  display: inline;
+  margin-inline: 2px;
+  vertical-align: baseline;
+  user-select: all;
+}
+
+.chat-prompt__footer {
+  padding: 0 var(--chat-composer-footer-inset) var(--chat-composer-footer-inset);
+}
+
+.chat-prompt__submit {
+  width: var(--chat-composer-control-size);
+  min-height: var(--chat-composer-control-size);
+  height: var(--chat-composer-control-size);
+  padding: 0;
+  border-radius: 50%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-prompt {
+    transition: none;
+  }
+}

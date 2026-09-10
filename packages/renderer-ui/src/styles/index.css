@@ -1,0 +1,65 @@
+@import './toast.css';
+
+@import './select.css';
+
+@import './media.css';
+
+@import './controls.css';
+
+@import './overlays.css';
+
+/* Every shared surface inherits the host's single semantic palette. */
+
+.sd-visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+}
+
+.sd-progress-ring {
+  display: inline-block;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.sd-progress-ring__track {
+  stroke: var(--app-border-strong);
+}
+
+.sd-progress-ring__value {
+  stroke: var(--app-primary);
+  transition: stroke-dasharray 180ms ease;
+}
+
+.sd-spinner {
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: sd-spin 700ms linear infinite;
+}
+
+.sd-control-error {
+  color: var(--app-danger);
+  font-size: 12px;
+}
+
+@keyframes sd-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sd-spinner {
+    animation: none;
+  }
+  .sd-progress-ring__value {
+    transition: none;
+  }
+}

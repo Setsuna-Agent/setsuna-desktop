@@ -51,7 +51,8 @@ describe('RuntimeActiveTaskRows', () => {
 
     expect(activeHtml).toContain('aria-label="终止任务：整理运行中心"');
     expect(activeHtml).toContain('>终止<');
-    expect(stoppingHtml).toContain('class="runtime-activity-row__action" disabled=""');
+    const action = stoppingHtml.match(/<button[^>]*class="[^"]*runtime-activity-row__action[^>]*>/)?.[0];
+    expect(action).toContain('disabled=""');
     expect(stoppingHtml).toContain('is-spinning');
   });
 

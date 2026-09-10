@@ -48,6 +48,29 @@ function deferred<T>() {
 }
 
 describe('Git change navigation', () => {
+  it('selects the first diff after worktree data arrives and preserves an explicit file selection on refresh', () => {
+    const renderPanel = (reviewState: DesktopReviewState | null, reviewLoading: boolean) => (
+      <GitChangesPanel workspaceRoot="/repo" reviewState={reviewState} reviewError={null}
+        reviewLoading={reviewLoading} onRefresh={noop} actions={actions} />
+    );
+    const view = render(renderPanel(null, true), { wrapper: host({ getHistory: vi.fn().mockResolvedValue(page()) }) });
+    view.rerender(renderPanel(state, false));
+    const detail = () => within(view.container.querySelector<HTMLElement>('.git-history-diff')!);
+    const nav = within(screen.getByRole('navigation', { name: '变更' }));
+    expect(detail().getByText('staged.txt')).toBeTruthy();
+    expect(nav.getByRole('button', { name: 'staged.txt' }).getAttribute('aria-pressed')).toBe('true');
+    expect(view.container.querySelector('.git-changes-panel__body.has-detail')).toBeTruthy();
+
+    fireEvent.click(nav.getByRole('button', { name: 'working.txt' }));
+    view.rerender(renderPanel({ ...state }, false));
+    expect(detail().getByText('working.txt')).toBeTruthy();
+    expect(nav.getByRole('button', { name: 'working.txt' }).getAttribute('aria-pressed')).toBe('true');
+    expect(detail().queryByText('staged.txt')).toBeNull();
+
+    view.rerender(renderPanel({ ...state, stagedSummary: null, unstagedSummary: null }, false));
+    expect(detail().getByText('没有变更文件')).toBeTruthy();
+  });
+
   it.each([
     { workspaceRoot: '/repo/packages/app', gitRoot: '/repo' },
     { workspaceRoot: 'C:\\repo\\packages\\app', gitRoot: 'C:\\repo' },
@@ -167,13 +190,13 @@ describe('Git change navigation', () => {
       loading={false} hasMore={false} error={null} onSelect={onSelect} onSelectRef={noop} onLoadMore={noop} onRetry={noop}
     />, { wrapper: host({ getCommitDetails }, { copyText, openExternal }) });
     const row = screen.getByRole('listitem');
-    fireEvent.mouseEnter(row);
-    fireEvent.mouseLeave(row);
+    fireEvent.pointerEnter(row);
+    fireEvent.pointerLeave(row);
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 450)); });
     expect(getCommitDetails).not.toHaveBeenCalled();
     expect(screen.queryByRole('region', { name: '提交详情' })).toBeNull();
 
-    fireEvent.mouseEnter(row);
+    fireEvent.pointerEnter(row);
     await waitFor(() => expect(getCommitDetails).toHaveBeenCalledExactlyOnceWith('/repo', one));
     const card = await screen.findByRole('region', { name: '提交详情' });
     expect(within(card).getByRole('status').textContent).toBe('正在加载…');
@@ -188,8 +211,8 @@ describe('Git change navigation', () => {
     expect(within(card).getByText('1,210 行插入 (+)')).toBeTruthy();
     expect(within(card).getByText('537 行删除 (-)')).toBeTruthy();
 
-    fireEvent.mouseLeave(row);
-    fireEvent.mouseEnter(card.closest('.git-commit-hover')!);
+    fireEvent.pointerLeave(row);
+    fireEvent.pointerEnter(card.closest('.git-commit-hover')!);
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 200)); });
     expect(screen.getByRole('region', { name: '提交详情' })).toBe(card);
     fireEvent.click(within(card).getByRole('button', { name: '复制提交 ID' }));
@@ -200,7 +223,6 @@ describe('Git change navigation', () => {
 
     fireEvent.contextMenu(row);
     expect(await screen.findByRole('menuitem', { name: '打开更改' })).toBeTruthy();
-    // Without CSS animation events, Ant Design removes the popup at its 1s motion deadline.
     await waitFor(() => expect(screen.queryByRole('region', { name: '提交详情' })).toBeNull(), { timeout: 2000 });
     expect(getCommitDetails).toHaveBeenCalledOnce();
   });

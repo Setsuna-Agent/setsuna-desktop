@@ -1,4 +1,4 @@
-import type { SenderRef } from '@ant-design/x/es/sender';
+import type { ComposerEditor } from './editor/types.js';
 import type { RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import { useCallback, type ClipboardEvent as ReactClipboardEvent } from 'react';
 import {
@@ -11,7 +11,7 @@ import {
 
 type ChatComposerClipboardOptions = {
   allowStructuredPaste?: boolean;
-  getEditor: () => SenderRef | null;
+  getEditor: () => ComposerEditor | null;
   onSkillsRestored: (skills: RuntimeSkillSummary[]) => void;
   skills: RuntimeSkillSummary[];
 };

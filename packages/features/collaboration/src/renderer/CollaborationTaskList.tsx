@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import type { CollaborationTask } from '../contracts/index.js';
 import { AgentAvatar } from './AgentAvatar.js';
@@ -29,7 +30,7 @@ export function CollaborationTaskList({
           )}>{tasks.length}</span>
         </div>
         {tasks.map((task) => (
-          <button
+          <Button variant="ghost"
             type="button"
             className="collaboration-overview__task"
             key={task.id}
@@ -40,7 +41,7 @@ export function CollaborationTaskList({
             <AgentAvatar identity={task.identity} size={20} />
             <strong>{task.identity.displayName}</strong>
             <SubagentTaskStatus status={task.status} translate={translate} />
-          </button>
+          </Button>
         ))}
       </div>
     </div>

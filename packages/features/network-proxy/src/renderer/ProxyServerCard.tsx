@@ -5,7 +5,7 @@ import type { RendererTranslate,
 import type {
   SettingsViewUi,
 } from '@setsuna-desktop/renderer-contracts/settings';
-import { Popconfirm } from 'antd';
+import { ConfirmDialogTrigger } from '@setsuna-desktop/renderer-ui';
 import { Server, SquarePen as EditIcon, Trash2 } from 'lucide-react';
 
 type ProxyServerCardProps = {
@@ -61,14 +61,14 @@ export function ProxyServerCard({
         >
           <EditIcon size={13} />
         </IconButton>
-        <Popconfirm
+        <ConfirmDialogTrigger
           title={translate('feature.networkProxy.settings.deleteTitle', { name: server.name })}
           description={referenced
             ? translate('feature.networkProxy.settings.deleteReferenced')
             : translate('feature.networkProxy.settings.deleteDescription')}
-          okText={translate('feature.networkProxy.common.delete')}
-          cancelText={translate('feature.networkProxy.common.cancel')}
-          okButtonProps={{ danger: true }}
+          confirmLabel={translate('feature.networkProxy.common.delete')}
+          cancelLabel={translate('feature.networkProxy.common.cancel')}
+          danger
           onConfirm={onDelete}
         >
           <IconButton
@@ -78,7 +78,7 @@ export function ProxyServerCard({
           >
             <Trash2 size={13} />
           </IconButton>
-        </Popconfirm>
+        </ConfirmDialogTrigger>
       </div>
     </article>
   );

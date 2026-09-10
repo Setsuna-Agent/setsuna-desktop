@@ -1,3 +1,5 @@
+import { TextField, Button } from '@setsuna-desktop/renderer-ui';
+
 import { ExternalLink } from 'lucide-react';
 import type { BrowserTranslate } from './messages.js';
 
@@ -24,7 +26,7 @@ export function BrowserAddressBar({
       }}
     >
       <span className="desktop-browser-address-bar">
-        <input
+        <TextField
           aria-label={translate('feature.browser.address')}
           spellCheck={false}
           value={value}
@@ -32,7 +34,7 @@ export function BrowserAddressBar({
           onFocus={(event) => event.currentTarget.select()}
         />
         {externalUrl ? (
-          <button
+          <Button variant="ghost"
             aria-label={translate('feature.browser.openExternal')}
             className="desktop-browser-address-bar__external"
             title={translate('feature.browser.openExternal')}
@@ -40,7 +42,7 @@ export function BrowserAddressBar({
             onClick={() => onOpenExternal(externalUrl)}
           >
             <ExternalLink size={13} />
-          </button>
+          </Button>
         ) : null}
       </span>
     </form>

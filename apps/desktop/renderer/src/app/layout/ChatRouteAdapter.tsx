@@ -226,13 +226,13 @@ export function ChatRouteAdapter({
     },
     actions: {
       onAccessModeChange: (selection) => { void runtime.saveRuntimePreferences(selection); },
-      onActivateBottomPanel: (panelId) => {
+      onActivateBottomPanel: async (panelId) => {
         const panel = workspacePanels.bottomPanelSlot.panels.find((item) => item.id === panelId);
         if (panel?.type === 'file' && panel.filePath) {
           void projectWorkspace.openProjectFile(panel.filePath);
           return;
         }
-        if (panel?.type === 'files') projectWorkspace.setFilePreview(null);
+        if (panel?.type === 'files' && !await projectWorkspace.setFilePreview(null)) return;
         workspacePanels.activateDesktopPanel('bottom', panelId);
       },
       onCloseBottomSlot: () => workspacePanels.closeDesktopPanelSlot('bottom'),
@@ -243,8 +243,8 @@ export function ChatRouteAdapter({
       onMoveBottomPanel: (panelId, targetPlacement, targetPanelId, placement) => {
         workspacePanels.moveDesktopPanel('bottom', panelId, targetPlacement, targetPanelId, placement);
       },
-      onOpenBottomPanel: (panelType) => {
-        if (panelType === 'files') projectWorkspace.setFilePreview(null);
+      onOpenBottomPanel: async (panelType) => {
+        if (panelType === 'files' && !await projectWorkspace.setFilePreview(null)) return;
         workspacePanels.openDesktopPanel('bottom', panelType);
       },
       onOpenBrowser: workspacePanels.openBrowserPanel,
@@ -252,8 +252,8 @@ export function ChatRouteAdapter({
       onOpenChangesPanel: () => workspacePanels.openDesktopPanel('side', 'changes'),
       onOpenEntry: (entry) => { void projectWorkspace.openEntry(entry); },
       onOpenFileReviewPanel: openFileReviewPanel,
-      onOpenFilesPanel: () => {
-        projectWorkspace.setFilePreview(null);
+      onOpenFilesPanel: async () => {
+        if (!await projectWorkspace.setFilePreview(null)) return;
         workspacePanels.openDesktopPanel('side', 'files');
       },
       onOpenFileWithApp: workspacePanels.openFileWithWorkspaceApp,

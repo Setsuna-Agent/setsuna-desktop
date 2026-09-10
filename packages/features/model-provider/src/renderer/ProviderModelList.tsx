@@ -1,3 +1,4 @@
+import { Button as UiButton } from '@setsuna-desktop/renderer-ui';
 import type {
   ProviderConfigState,
   ProviderModelConfig } from '@setsuna-desktop/contracts';
@@ -332,7 +333,7 @@ function ModelRow({
               onChange={onSelectedChange}
             />
           ) : null}
-          <button
+          <UiButton variant="ghost"
             aria-label={translate('feature.modelProvider.configureModelIcon', { name: displayName })}
             className="model-provider-settings__model-icon-trigger"
             title={translate('feature.modelProvider.configureModelIcon', { name: displayName })}
@@ -342,7 +343,7 @@ function ModelRow({
           >
             <BrandIcon model={model} provider={provider} />
             <span aria-hidden="true"><Pencil size={7} /></span>
-          </button>
+          </UiButton>
           <span>
             <strong>{displayName}</strong>
             <code>{model.code || '—'}</code>

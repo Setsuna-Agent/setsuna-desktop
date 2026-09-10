@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import type {
   RuntimeMessage,
   RuntimePluginSummary,
@@ -332,9 +333,9 @@ export function ChatTranscript({
       <ScrollOverlay disabled={showEmptyStarter} scrollRef={scrollRefInternal} scrollSignal={scrollSignal} />
       {showScrollBottom && !showEmptyStarter ? (
         <div className="chat-scroll-bottom-anchor">
-          <button className="chat-scroll-bottom" type="button" aria-label={t('chat.scrollBottom')} onClick={() => scrollToBottom()}>
+          <Button variant="ghost" className="chat-scroll-bottom" type="button" aria-label={t('chat.scrollBottom')} onClick={() => scrollToBottom()}>
             <ArrowDown size={16} />
-          </button>
+          </Button>
         </div>
       ) : null}
       {actionError || messageHistory.error ? (

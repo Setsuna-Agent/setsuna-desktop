@@ -77,6 +77,44 @@ it.each(['side', 'bottom'] as const)('cancels amend in the %s slot when resettin
   expect(setError).not.toHaveBeenCalled();
 });
 
+it('updates the shared panel launcher when Git repository detection changes', async () => {
+  const project = { id: 'launcher-project', path: '/launcher-repo', name: 'Repository', createdAt: '', updatedAt: '' };
+  const state: DesktopReviewState = {
+    isGitRepository: true, workspaceRoot: project.path, gitRoot: project.path, currentBranch: 'main',
+    currentRemoteRef: null, baseRef: null, baseRefs: [], branches: [],
+    currentRemoteSummary: null, branchSummary: null, stagedSummary: null, unstagedSummary: null,
+  };
+  const getState = vi.fn().mockResolvedValue(state);
+  Object.defineProperty(window, 'setsunaDesktop', {
+    configurable: true,
+    value: {
+      desktopReview: { getState, watchChanges: vi.fn(() => () => undefined) },
+      desktop: { platform: 'darwin' },
+      workspaceApps: { list: vi.fn().mockResolvedValue([]) },
+    },
+  });
+  const view = renderHook(() => useDesktopWorkspacePanels({
+    activeProject: project, activeView: 'chat', conversationDebugEnabled: false,
+    targetIdentity: 'new-thread-slot:launcher-project', workspaceStatus: 'ready', setError: vi.fn(),
+  }), {
+    wrapper: ({ children }) => <I18nProvider initialLocale="zh-CN" messageCatalog={messageCatalog}>
+      <ToastProvider><ReviewFeatureHostBoundary>{children}</ReviewFeatureHostBoundary></ToastProvider>
+    </I18nProvider>,
+  });
+
+  expect(view.result.current.panelLauncherTypes).not.toContain('changes');
+  await waitFor(() => expect(view.result.current.panelLauncherTypes).toContain('changes'));
+
+  getState.mockResolvedValue({ ...state, isGitRepository: false, gitRoot: null, currentBranch: null });
+  await act(async () => { await view.result.current.loadReviewState(); });
+  expect(view.result.current.panelLauncherTypes).not.toContain('changes');
+  expect(view.result.current.panelLauncherTypes).toEqual(expect.arrayContaining(['review', 'files', 'terminal']));
+
+  getState.mockResolvedValue(state);
+  await act(async () => { await view.result.current.loadReviewState(); });
+  expect(view.result.current.panelLauncherTypes).toContain('changes');
+});
+
 describe('useSidePanelTransition', () => {
   it('keeps the panel mounted until a reversed closing transition settles', () => {
     vi.useFakeTimers();

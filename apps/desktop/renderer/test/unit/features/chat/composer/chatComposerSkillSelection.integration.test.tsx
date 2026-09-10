@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { Sender } from '@ant-design/x';
+import { ChatPromptInput } from '../../../../../src/features/chat/composer/editor/ChatPromptInput.js';
 import type { RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { StrictMode, useCallback, useEffect, useRef, useState, type ComponentRef } from 'react';
@@ -30,8 +30,8 @@ const workspaceMentionPaths = ['package.json', 'README.md', 'Tree.md', 'tsconfig
 
 afterEach(cleanup);
 
-describe('chat composer Skill selection with the real Sender', () => {
-  it('renders the inserted Skill tag after a fresh Sender mount', async () => {
+describe('chat composer Skill selection with the real ChatPromptInput', () => {
+  it('renders the inserted Skill tag after a fresh ChatPromptInput mount', async () => {
     render(<SkillSelectionHarness />);
 
     await waitFor(() => expect(screen.getByTestId('inserted').textContent).toBe('true'));
@@ -47,7 +47,7 @@ describe('chat composer Skill selection with the real Sender', () => {
 
     await waitFor(() => expect(screen.getByTestId('confirmed').textContent).toBe('true'));
     expect(screen.getByRole('textbox').querySelectorAll('[data-slot-key^="skill:"]')).toHaveLength(1);
-    expect(screen.getByRole('textbox').getAttribute('value')).toBe('对话创建插件 对话创建插件 existing draft');
+    expect(screen.getByTestId('serialized-draft').textContent).toBe('对话创建插件 对话创建插件 existing draft');
   });
 
   it('retains the inserted Skill tag while its delayed value change reaches the parent', async () => {
@@ -154,7 +154,7 @@ describe('chat composer Skill selection with the real Sender', () => {
     fireEvent.paste(editor, { clipboardData });
 
     await waitFor(() => {
-      expect(editor.getAttribute('value')).toBe(expectedDraft);
+      expect(screen.getByTestId('serialized-draft').textContent).toBe(expectedDraft);
       expect(editor.querySelectorAll('[data-slot-key^="skill:"]')).toHaveLength(1);
       expect(editor.querySelectorAll('[data-slot-key^="workspace:"]')).toHaveLength(1);
     });
@@ -162,7 +162,7 @@ describe('chat composer Skill selection with the real Sender', () => {
 });
 
 function SkillSelectionHarness({ draft = '' }: { draft?: string }) {
-  const editorRef = useRef<ComponentRef<typeof Sender>>(null);
+  const editorRef = useRef<ComponentRef<typeof ChatPromptInput>>(null);
   const initialSlotConfigRef = useRef(draft ? [{ type: 'text' as const, value: draft }] : []);
   const [inserted, setInserted] = useState(false);
 
@@ -172,7 +172,7 @@ function SkillSelectionHarness({ draft = '' }: { draft?: string }) {
 
   return (
     <>
-      <Sender
+      <ChatPromptInput
         ref={editorRef}
         slotConfig={initialSlotConfigRef.current}
         value={draft}
@@ -183,7 +183,7 @@ function SkillSelectionHarness({ draft = '' }: { draft?: string }) {
 }
 
 function ScheduledSkillSelectionHarness({ draft: initialDraft }: { draft: string }) {
-  const editorRef = useRef<ComponentRef<typeof Sender>>(null);
+  const editorRef = useRef<ComponentRef<typeof ChatPromptInput>>(null);
   const initialSlotConfigRef = useRef([{ type: 'text' as const, value: initialDraft }]);
   const [confirmed, setConfirmed] = useState(false);
   const [draft, setDraft] = useState(initialDraft);
@@ -197,19 +197,20 @@ function ScheduledSkillSelectionHarness({ draft: initialDraft }: { draft: string
 
   return (
     <>
-      <Sender
+      <ChatPromptInput
         ref={editorRef}
         slotConfig={initialSlotConfigRef.current}
         value={draft}
         onChange={setDraft}
       />
+      <output data-testid="serialized-draft">{draft}</output>
       <output data-testid="confirmed">{String(confirmed)}</output>
     </>
   );
 }
 
 function SkillSelectionDraftSyncHarness() {
-  const editorRef = useRef<ComponentRef<typeof Sender>>(null);
+  const editorRef = useRef<ComponentRef<typeof ChatPromptInput>>(null);
   const initialSlotConfigRef = useRef([]);
   const [draft, setDraft] = useState('');
   const lastEditorDraftRef = useRef(draft);
@@ -241,7 +242,7 @@ function SkillSelectionDraftSyncHarness() {
 
   return (
     <>
-      <Sender
+      <ChatPromptInput
         ref={editorRef}
         slotConfig={initialSlotConfigRef.current}
         value={draft}
@@ -262,7 +263,7 @@ function StructuredClipboardHarness({
   leadingText?: string;
   trailingText?: string;
 }) {
-  const editorRef = useRef<ComponentRef<typeof Sender>>(null);
+  const editorRef = useRef<ComponentRef<typeof ChatPromptInput>>(null);
   const initialSlotsRef = useRef([
     ...(leadingText ? [createTextSlot(leadingText)] : []),
     createSelectedSkillSlot(skill),
@@ -292,7 +293,7 @@ function StructuredClipboardHarness({
 
   return (
     <div {...clipboardHandlers}>
-      <Sender
+      <ChatPromptInput
         ref={editorRef}
         slotConfig={initialSlotsRef.current}
         value={draft}
@@ -301,13 +302,14 @@ function StructuredClipboardHarness({
           setSelectedSkills((current) => filterSelectedSkillsBySlots(current, slotConfig));
         }}
       />
+      <output data-testid="serialized-draft">{draft}</output>
       <output data-testid="selected-skills">{selectedSkills.map((item) => item.id).join(',')}</output>
     </div>
   );
 }
 
 function WorkspaceMentionRequestHarness() {
-  const editorRef = useRef<ComponentRef<typeof Sender>>(null);
+  const editorRef = useRef<ComponentRef<typeof ChatPromptInput>>(null);
   const initialSlotsRef = useRef([]);
   const [draft, setDraft] = useState('');
 
@@ -328,7 +330,7 @@ function WorkspaceMentionRequestHarness() {
 
   return (
     <>
-      <Sender
+      <ChatPromptInput
         ref={editorRef}
         slotConfig={initialSlotsRef.current}
         value={draft}

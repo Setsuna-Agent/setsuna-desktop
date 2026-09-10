@@ -1,3 +1,4 @@
+import { useConfirm } from '@setsuna-desktop/renderer-ui';
 import type {
   RendererTranslate,
 } from '@setsuna-desktop/feature-core/renderer';
@@ -32,13 +33,19 @@ export function WindowsSandboxSettingsView({
   ui,
 }: WindowsSandboxSettingsViewProps) {
   const sandbox = useWindowsSandbox(bridge);
+  const confirm = useConfirm();
   const busy = sandbox.busyAction !== null;
   const status = sandbox.status;
   const description = statusDescription(status?.state, status?.reason, translate);
   const { Button, Group, Row, Section } = ui;
 
-  const uninstall = () => {
-    if (window.confirm(translate('feature.windowsSandbox.settings.uninstallConfirm'))) {
+  const uninstall = async () => {
+    if (await confirm({
+      title: translate('feature.windowsSandbox.settings.uninstall'),
+      description: translate('feature.windowsSandbox.settings.uninstallConfirm'),
+      confirmLabel: translate('feature.windowsSandbox.settings.uninstall'),
+      danger: true,
+    })) {
       void sandbox.runAction('uninstall');
     }
   };

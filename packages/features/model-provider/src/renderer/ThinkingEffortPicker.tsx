@@ -1,3 +1,4 @@
+import { Button as UiButton } from '@setsuna-desktop/renderer-ui';
 import type {
   RendererTranslate,
 } from '@setsuna-desktop/feature-core/renderer';
@@ -67,7 +68,7 @@ export function ThinkingEffortPicker({
         {options.map((effort) => {
           const active = selected.includes(effort);
           return (
-            <button
+            <UiButton variant="ghost"
               key={effort}
               aria-pressed={active}
               className={active ? 'is-active' : ''}
@@ -77,7 +78,7 @@ export function ThinkingEffortPicker({
                 : [...selected, effort])}
             >
               {effort}
-            </button>
+            </UiButton>
           );
         })}
       </div>

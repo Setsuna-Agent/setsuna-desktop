@@ -5,6 +5,11 @@ export const updaterMessages = defineRendererMessageBundle({
   fallbackLocale: 'zh-CN',
   messages: {
     'zh-CN': {
+      'feature.updater.ready.later': '稍后',
+      'feature.updater.ready.package': '新的安装包',
+      'feature.updater.ready.macDetail': '已下载 {name}。打开访达后请手动安装。',
+      'feature.updater.ready.windowsDetail': '已下载 {name}。继续后会打开安装程序并退出当前版本。',
+      'feature.updater.ready.detail': '已下载 {name}。',
       'feature.updater.settings.appInfo': '应用信息',
       'feature.updater.settings.currentVersion': '当前版本',
       'feature.updater.settings.platform': '平台',
@@ -65,6 +70,11 @@ export const updaterMessages = defineRendererMessageBundle({
       'feature.updater.topbar.restartUpdate': '重启安装更新',
     },
     'en-US': {
+      'feature.updater.ready.later': 'Later',
+      'feature.updater.ready.package': 'new installer',
+      'feature.updater.ready.macDetail': '{name} has been downloaded. Open Finder and install it manually.',
+      'feature.updater.ready.windowsDetail': '{name} has been downloaded. Continuing opens the installer and exits the current version.',
+      'feature.updater.ready.detail': '{name} has been downloaded.',
       'feature.updater.settings.appInfo': 'App information',
       'feature.updater.settings.currentVersion': 'Current version',
       'feature.updater.settings.platform': 'Platform',

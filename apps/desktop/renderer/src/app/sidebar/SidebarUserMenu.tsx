@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import { MoreHorizontal, Settings } from 'lucide-react';
 import { useCallback, useState, type RefObject } from 'react';
 import { RuntimeActivityFeatureMenuItem } from '../../composition/RuntimeActivityFeatureBoundary.js';
@@ -21,7 +22,7 @@ export function SidebarUserMenu({
   return (
     <div className={`chat-sidebar-user ${menuOpen ? 'is-menu-open' : ''}`}>
       <ShortcutTooltip commandId="app.openSettings" label={t('sidebar.openSettings')} placement="top">
-        <button
+        <Button variant="ghost"
           className="chat-sidebar-user__trigger"
           type="button"
           aria-label={t('sidebar.openSettings')}
@@ -29,9 +30,9 @@ export function SidebarUserMenu({
         >
           <Settings className="chat-sidebar-user__icon" size={15} />
           <span className="chat-sidebar-user__name">{t('settings.title')}</span>
-        </button>
+        </Button>
       </ShortcutTooltip>
-      <button
+      <Button variant="ghost"
         ref={runtimeActivityTriggerRef}
         className={`chat-sidebar-user__more ${menuOpen ? 'is-active' : ''}`}
         type="button"
@@ -41,7 +42,7 @@ export function SidebarUserMenu({
         onClick={() => setMenuOpen((open) => !open)}
       >
         <MoreHorizontal size={15} />
-      </button>
+      </Button>
       <SidebarFloatingMenu
         open={menuOpen}
         placement="top-left"

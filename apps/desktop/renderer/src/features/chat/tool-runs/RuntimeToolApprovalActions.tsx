@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import type {
   AnswerRuntimeApprovalInput,
   RuntimeApprovalAvailableDecision,
@@ -214,7 +215,7 @@ export function ApprovalActions({
           const decisionKey = approvalDecisionKey(decision);
           const decisionLabel = approvalDecisionLabel(decision, t, manualRiskOverride);
           return (
-            <button
+            <Button variant="ghost"
               className={`chat-tool-run__action chat-tool-run__action--${approvalDecisionTone(decision)}`}
               key={decisionKey}
               type="button"
@@ -226,7 +227,7 @@ export function ApprovalActions({
                   decision: decisionLabel,
                 })
                 : decisionLabel}
-            </button>
+            </Button>
           );
         })}
       </div>
@@ -336,7 +337,7 @@ export function McpElicitationActions({
         </code>
       )}
       <div className="chat-tool-run__actions">
-        <button className="chat-tool-run__action chat-tool-run__action--primary" type="submit" disabled={Boolean(submittingAction)}>
+        <Button variant="primary" className="chat-tool-run__action chat-tool-run__action--primary" type="submit" disabled={Boolean(submittingAction)}>
           {t(
             submittingAction === 'accept'
               ? 'toolRun.elicitation.submitting'
@@ -344,8 +345,8 @@ export function McpElicitationActions({
                 ? 'toolRun.elicitation.submit'
                 : 'toolRun.elicitation.opening',
           )}
-        </button>
-        <button
+        </Button>
+        <Button variant="ghost"
           className="chat-tool-run__action chat-tool-run__action--secondary"
           type="button"
           disabled={Boolean(submittingAction)}
@@ -356,8 +357,8 @@ export function McpElicitationActions({
               ? 'toolRun.elicitation.declining'
               : 'toolRun.elicitation.decline',
           )}
-        </button>
-        <button
+        </Button>
+        <Button variant="danger"
           className="chat-tool-run__action chat-tool-run__action--danger"
           type="button"
           disabled={Boolean(submittingAction)}
@@ -368,7 +369,7 @@ export function McpElicitationActions({
               ? 'toolRun.elicitation.cancelling'
               : 'toolRun.elicitation.cancelTurn',
           )}
-        </button>
+        </Button>
       </div>
       {error
         ? <div className="chat-tool-run__action-error">{error}</div>

@@ -1,6 +1,8 @@
-import { CircleUserRound, Clipboard, Clock3, GitCommitHorizontal, Github } from 'lucide-react';
+import { Button } from '@setsuna-desktop/renderer-ui';
+import { Clipboard, Clock3, GitCommitHorizontal, Github } from 'lucide-react';
 import type { DesktopGitCommit, DesktopGitCommitDetails } from '../../contracts/index.js';
 import { useReviewRendererHost } from '../host.js';
+import { GitAuthorAvatar } from './GitAuthorAvatar.js';
 
 export function GitHistoryCommitCard({ commit, details, error, onRetry, onCopyId }: {
   commit: DesktopGitCommit;
@@ -26,7 +28,7 @@ export function GitHistoryCommitCard({ commit, details, error, onRetry, onCopyId
     <section className="git-commit-card" aria-label={t('feature.review.history.commitDetails')}>
       <div className="git-commit-card__content">
         <div className="git-commit-card__meta">
-          <span className="git-commit-card__author"><CircleUserRound size={12} /><strong>{commit.author}</strong></span>
+          <span className="git-commit-card__author"><GitAuthorAvatar author={commit.author} githubUrl={details?.githubUrl} compact /><strong>{commit.author}</strong></span>
           <span className="git-commit-card__date"><Clock3 size={12} /><time dateTime={commit.authoredAt}>{date.relative} ({date.absolute})</time></span>
         </div>
         <p className="git-commit-card__message">{details?.message || commit.subject}</p>
@@ -36,14 +38,14 @@ export function GitHistoryCommitCard({ commit, details, error, onRetry, onCopyId
           <span>{t('feature.review.history.changedFiles', { count: numbers.format(details.files.length) })}</span>
           <span className="git-commit-card__additions">{t('feature.review.history.addedLines', { count: numbers.format(additions) })}</span>
           <span className="git-commit-card__deletions">{t('feature.review.history.deletedLines', { count: numbers.format(deletions) })}</span>
-        </> : error ? <span className="git-commit-card__error" role="alert">{error} <button type="button" onClick={onRetry}>{t('feature.review.history.retry')}</button></span>
+        </> : error ? <span className="git-commit-card__error" role="alert">{error} <Button variant="ghost" type="button" onClick={onRetry}>{t('feature.review.history.retry')}</Button></span>
           : <span className="git-commit-card__loading" role="status">{t('feature.review.history.loading')}</span>}
       </div>
       <footer className="git-commit-card__footer">
-        <button type="button" title={t('feature.review.history.copyCommitId')} aria-label={t('feature.review.history.copyCommitId')} onClick={onCopyId}>
+        <Button variant="ghost" type="button" title={t('feature.review.history.copyCommitId')} aria-label={t('feature.review.history.copyCommitId')} onClick={onCopyId}>
           <GitCommitHorizontal size={13} /><code>{commit.oid.slice(0, 8)}</code><Clipboard size={12} />
-        </button>
-        {details?.githubUrl ? <button type="button" onClick={() => { void openGitHub(); }}><Github size={13} />{t('feature.review.history.openGitHub')}</button> : null}
+        </Button>
+        {details?.githubUrl ? <Button variant="ghost" type="button" onClick={() => { void openGitHub(); }}><Github size={13} />{t('feature.review.history.openGitHub')}</Button> : null}
       </footer>
     </section>
   );

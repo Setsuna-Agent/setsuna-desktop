@@ -32,7 +32,6 @@ describe('updater IPC lifecycle', () => {
       checkAndDownload: vi.fn(() => checked.promise),
       getState: vi.fn(),
       installReady: vi.fn(),
-      promptReady: vi.fn(),
       removeDownloadSource: vi.fn(),
       selectDownloadSource: vi.fn(),
     } as unknown as Parameters<typeof registerUpdaterIpc>[1];
@@ -44,8 +43,6 @@ describe('updater IPC lifecycle', () => {
     scope.scope.add(registerUpdaterIpc(
       scope.scope,
       updater,
-      {} as Parameters<typeof registerUpdaterIpc>[2],
-      () => 'zh-CN',
     ));
     scope.activate();
     const check = ipcHandler('desktop-updater:check');

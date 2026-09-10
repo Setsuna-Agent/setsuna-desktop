@@ -1,5 +1,6 @@
-import { Input, Modal } from 'antd';
-import { Pause, Play, RefreshCw, SquarePen as EditIcon, Target, Trash2, X } from 'lucide-react';
+import { Button, TextArea, Dialog } from '@setsuna-desktop/renderer-ui';
+
+import { Pause, Play, RefreshCw, SquarePen as EditIcon, Target, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type {
   RendererFeatureEventFeed,
@@ -175,8 +176,7 @@ function GoalStatus({
           </span>
         ) : null}
       </div>
-      <Modal
-        centered
+      <Dialog
         className={styles.editorModal}
         width={440}
         open={editOpen}
@@ -186,31 +186,27 @@ function GoalStatus({
             {translate('feature.goal.editTitle')}
           </span>
         )}
-        closeIcon={<X size={15} />}
-        mask={{ closable: !pendingAction }}
-        keyboard={!pendingAction}
-        closable={!pendingAction}
-        onCancel={() => setEditOpen(false)}
+        dismissible={!pendingAction}
+        onClose={() => setEditOpen(false)}
         footer={(
           <div className={styles.editorActions}>
-            <button type="button" disabled={Boolean(pendingAction)} onClick={() => setEditOpen(false)}>
+            <Button variant="ghost" type="button" disabled={Boolean(pendingAction)} onClick={() => setEditOpen(false)}>
               {translate('feature.goal.cancel')}
-            </button>
-            <button
+            </Button>
+            <Button variant="primary"
               type="button"
-              className={styles.primaryButton}
               disabled={Boolean(pendingAction) || !editable || editable === goal.objective}
               onClick={() => void runAction('edit', (active) => active.update({ objective: editable }))}
             >
               {pendingAction === 'edit'
                 ? translate('feature.goal.processing')
                 : translate('feature.goal.save')}
-            </button>
+            </Button>
           </div>
         )}
       >
         <div className={styles.editorInputShell}>
-          <Input.TextArea
+          <TextArea
             autoFocus
             className={styles.editorInput}
             value={draft}
@@ -224,7 +220,7 @@ function GoalStatus({
           </span>
         </div>
         {actionError ? <p className={styles.editorError}>{actionError}</p> : null}
-      </Modal>
+      </Dialog>
     </>
   );
 }
@@ -268,7 +264,7 @@ function GoalIconButton({
   onClick(): void;
 }>) {
   return (
-    <button
+    <Button variant="danger"
       type="button"
       className={`${styles.action} ${danger ? styles.danger : ''}`}
       aria-label={label}
@@ -277,7 +273,7 @@ function GoalIconButton({
       onClick={onClick}
     >
       {children}
-    </button>
+    </Button>
   );
 }
 

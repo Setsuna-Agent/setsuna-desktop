@@ -21,7 +21,7 @@ describe('Feature Settings UI', () => {
 
     expect(html).toContain('data-feature-id="memory"');
     expect(html).toContain('chat-user-settings__section');
-    expect(html.match(/class="sd-check"/g)).toHaveLength(3);
+    expect(html.match(/role="switch"/g)).toHaveLength(3);
     expect(html).not.toContain('sd-select-field');
     expect(html).toContain('sd-button');
     expect(html).toContain('sd-settings-navigation-row');
@@ -38,7 +38,7 @@ describe('Feature Settings UI', () => {
 
     expect(html).toContain('data-feature-id="memory"');
     expect(html.match(/\bsd-select-field\b/g)).toHaveLength(2);
-    expect(html).not.toContain('class="sd-check"');
+    expect(html).not.toContain('role="switch"');
     expect(html).toContain('feature.memory.settings.title');
     expect(html).toContain('feature.memory.settings.extractionModelDescription');
     expect(html).toContain('feature.memory.settings.consolidationModelDescription');

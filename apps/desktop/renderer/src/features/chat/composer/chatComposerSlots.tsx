@@ -1,4 +1,4 @@
-import type { SlotConfigType } from '@ant-design/x/es/sender';
+import type { ComposerSlot } from './editor/types.js';
 import type {
   RuntimeSkillReference,
   RuntimeSkillSummary,
@@ -15,16 +15,16 @@ export type ChatComposerSlotReference =
   | { type: 'skill'; skillId: string }
   | { type: 'workspace'; entry: WorkspaceEntrySearchItem };
 
-export type ChatComposerReferenceSlot = Extract<SlotConfigType, { type: 'tag' }> & {
+export type ChatComposerReferenceSlot = Extract<ComposerSlot, { type: 'tag' }> & {
   composerReference: ChatComposerSlotReference;
 };
 
 export type WorkspaceMentionInsertion = {
   replaceCharacters?: string;
-  slots: SlotConfigType[];
+  slots: ComposerSlot[];
 };
 
-export function createTextSlot(value: string): SlotConfigType {
+export function createTextSlot(value: string): ComposerSlot {
   return { type: 'text', value };
 }
 
@@ -38,13 +38,12 @@ export function createSelectedSkillSlot(skill: RuntimeSkillSummary): ChatCompose
       label: <SkillReferenceLabel skill={skill} />,
       value: tokenText,
     },
-    formatResult: () => tokenText,
   };
 }
 
 export function filterSelectedSkillsBySlots(
   skills: RuntimeSkillSummary[],
-  slotConfig: SlotConfigType[] | undefined,
+  slotConfig: ComposerSlot[] | undefined,
 ): RuntimeSkillSummary[] {
   const selectedSkillIds = new Set(
     (slotConfig ?? [])
@@ -57,14 +56,14 @@ export function filterSelectedSkillsBySlots(
 
 export function hasSelectedSkillSlot(
   skillId: string,
-  slotConfig: SlotConfigType[] | undefined,
+  slotConfig: ComposerSlot[] | undefined,
 ): boolean {
   return (slotConfig ?? []).some((slot) => selectedSkillIdForSlot(slot) === skillId);
 }
 
 /** Serialize exact Skill slot offsets after the same outer whitespace trim used by sendTurn. */
 export function createSelectedSkillReferences(
-  slotConfig: SlotConfigType[] | undefined,
+  slotConfig: ComposerSlot[] | undefined,
 ): RuntimeSkillReference[] {
   const slots = slotConfig ?? [];
   const serializedContent = slots.map(serializedSlotValue).join('');
@@ -85,7 +84,7 @@ export function createSelectedSkillReferences(
   return references;
 }
 
-export function createWorkspaceMentionSlots(entry: WorkspaceEntrySearchItem, leadingText = ''): SlotConfigType[] {
+export function createWorkspaceMentionSlots(entry: WorkspaceEntrySearchItem, leadingText = ''): ComposerSlot[] {
   return [
     ...(leadingText ? [createTextSlot(leadingText)] : []),
     createWorkspaceMentionReferenceSlot(entry),
@@ -112,12 +111,11 @@ export function createWorkspaceMentionReferenceSlot(
       ),
       value: resultText,
     },
-    formatResult: () => resultText,
   };
 }
 
 export function getChatComposerSlotReference(
-  slot: SlotConfigType,
+  slot: ComposerSlot,
 ): ChatComposerSlotReference | null {
   return (slot as Partial<ChatComposerReferenceSlot>).composerReference ?? null;
 }
@@ -125,19 +123,19 @@ export function getChatComposerSlotReference(
 export function createWorkspaceMentionInsertion(
   entry: WorkspaceEntrySearchItem,
   currentValue: string,
-  currentSlots: SlotConfigType[],
+  currentSlots: ComposerSlot[],
 ): WorkspaceMentionInsertion | null {
   if (hasWorkspaceMentionSlot(currentSlots, entry)) return null;
 
   const needsLeadingSpace = Boolean(currentValue) && !/\s$/u.test(currentValue);
   return {
-    // Sender cannot reliably replace a trailing text node after multiple imperative
+    // ChatPromptInput cannot reliably replace a trailing text node after multiple imperative
     // insertions. Preserve existing whitespace and only add a separator when needed.
     slots: createWorkspaceMentionSlots(entry, needsLeadingSpace ? ' ' : ''),
   };
 }
 
-function selectedSkillIdForSlot(slot: SlotConfigType): string | null {
+function selectedSkillIdForSlot(slot: ComposerSlot): string | null {
   const reference = getChatComposerSlotReference(slot);
   return reference?.type === 'skill' ? reference.skillId : null;
 }
@@ -146,7 +144,7 @@ function createReferenceSlotKey(prefix: string): string {
   return `${prefix}${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function serializedSlotValue(slot: SlotConfigType): string {
+function serializedSlotValue(slot: ComposerSlot): string {
   if (slot.type === 'text') return slot.value ?? '';
   if (
     slot.type === 'tag'
@@ -157,7 +155,7 @@ function serializedSlotValue(slot: SlotConfigType): string {
   return '';
 }
 
-function hasWorkspaceMentionSlot(slots: SlotConfigType[], entry: WorkspaceEntrySearchItem): boolean {
+function hasWorkspaceMentionSlot(slots: ComposerSlot[], entry: WorkspaceEntrySearchItem): boolean {
   const resultText = `@${entryLabel(entry)}`;
   return slots.some((slot) => (
     slot.type === 'tag'

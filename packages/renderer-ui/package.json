@@ -1,0 +1,30 @@
+{
+  "name": "@setsuna-desktop/renderer-ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Shared beUI components and styles for the Setsuna renderer.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./styles.css": "./src/styles/index.css"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "typecheck": "tsc -b --pretty false"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "motion": "^12.23.24",
+    "radix-ui": "^1.4.3",
+    "tailwind-merge": "^3.3.1",
+    "lucide-react": "^0.468.0"
+  },
+  "peerDependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}

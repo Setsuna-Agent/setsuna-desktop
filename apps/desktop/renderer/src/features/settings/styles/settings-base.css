@@ -26,7 +26,7 @@
   width: 100%;
   height: 32px;
   margin: 0 0 14px;
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
 }
 
 .desktop-settings-sidebar .chat-user-settings__page-back.sd-page-back:hover,
@@ -75,7 +75,7 @@
   height: 32px;
   padding: 0 8px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
   color: var(--app-sidebar-text-secondary);
   background: transparent;
   font-size: 13px;
@@ -201,7 +201,7 @@
 .desktop-settings-panel .settings-archives-list {
   display: grid;
   border: 1px solid var(--chat-settings-divider);
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   background: var(--app-surface);
   overflow: hidden;
 }
@@ -231,7 +231,7 @@
   width: 28px;
   height: 28px;
   place-items: center;
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
   background: var(--app-surface-muted);
   color: var(--app-text-secondary);
 }
@@ -282,7 +282,7 @@
 .desktop-settings-panel .chat-user-settings__general-section,
 .desktop-settings-panel .chat-user-settings__runtime-card {
   border: 1px solid var(--chat-settings-divider);
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   background: var(--app-surface);
   overflow: hidden;
 }
@@ -376,7 +376,7 @@
   line-height: 18px;
 }
 
-.desktop-settings-panel .chat-user-settings__row > .sd-check {
+.desktop-settings-panel .chat-user-settings__row > .sd-switch {
   justify-self: end;
 }
 
@@ -460,71 +460,10 @@
   padding-left: 8px;
 }
 
-.desktop-settings-panel .chat-user-settings__slider input {
-  appearance: none;
-  width: 100%;
-  height: 20px;
-  margin: 0;
-  background: transparent;
-  cursor: pointer;
-}
-
 .desktop-settings-panel .settings-scale-control__range {
   display: grid;
   min-width: 0;
   gap: 2px;
-}
-
-.desktop-settings-panel .chat-user-settings__slider input::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 999px;
-  background: linear-gradient(
-    90deg,
-    var(--app-primary) 0,
-    var(--app-primary) var(--settings-scale-progress),
-    color-mix(in srgb, var(--app-border) 72%, transparent) var(--settings-scale-progress),
-    color-mix(in srgb, var(--app-border) 72%, transparent) 100%
-  );
-}
-
-.desktop-settings-panel .chat-user-settings__slider input::-webkit-slider-thumb {
-  appearance: none;
-  width: 16px;
-  height: 16px;
-  margin-top: -6px;
-  border: 3px solid var(--app-surface);
-  border-radius: 999px;
-  background: var(--app-primary);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-text) 14%, transparent), 0 2px 5px rgb(0 0 0 / 14%);
-}
-
-.desktop-settings-panel .chat-user-settings__slider input::-moz-range-track {
-  height: 4px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--app-border) 72%, transparent);
-}
-
-.desktop-settings-panel .chat-user-settings__slider input::-moz-range-progress {
-  height: 4px;
-  border-radius: 999px;
-  background: var(--app-primary);
-}
-
-.desktop-settings-panel .chat-user-settings__slider input::-moz-range-thumb {
-  width: 10px;
-  height: 10px;
-  border: 3px solid var(--app-surface);
-  border-radius: 999px;
-  background: var(--app-text);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-text) 14%, transparent), 0 2px 5px rgb(0 0 0 / 14%);
-}
-
-.desktop-settings-panel .chat-user-settings__slider input:focus-visible {
-  outline: none;
-}
-
-.desktop-settings-panel .chat-user-settings__slider input:focus-visible::-webkit-slider-thumb {
-  box-shadow: var(--app-focus-ring), 0 2px 5px rgb(0 0 0 / 14%);
 }
 
 .desktop-settings-panel .settings-scale-control__marks {
@@ -589,7 +528,7 @@
   height: 30px;
   place-items: center;
   border: 1px solid var(--chat-settings-divider);
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   color: var(--app-text-secondary);
   background: color-mix(in srgb, var(--app-surface-muted) 64%, var(--app-surface));
   font-size: 12px;
@@ -673,7 +612,7 @@
   height: 28px;
   padding: 0 9px;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--app-radius-full);
   color: var(--app-text-muted);
   background: transparent;
   font-size: 13px;
@@ -702,7 +641,7 @@
   width: 11px;
   height: 11px;
   border: 1px solid color-mix(in srgb, var(--app-text) 14%, transparent);
-  border-radius: 999px;
+  border-radius: var(--app-radius-full);
   background: var(--settings-accent-swatch-light);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-surface) 84%, transparent);
 }
@@ -804,7 +743,7 @@
 .desktop-settings-panel .chat-user-settings__code-preview-frame {
   min-width: 0;
   border: 1px solid var(--app-border);
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   overflow: hidden;
 }
 

@@ -80,6 +80,11 @@ button.desktop-capability-list-item__identity {
   cursor: pointer;
 }
 
+/* The card owns hover feedback; its content button must not paint a second layer. */
+button.desktop-capability-list-item__identity:is(:hover, :active):not(:disabled) {
+  background: transparent;
+}
+
 .desktop-capability-list-item__identity:focus-visible {
   outline: 0;
   border-radius: var(--app-radius-sm);
@@ -93,12 +98,11 @@ button.desktop-capability-list-item__identity {
   width: 40px;
   height: 40px;
   border: 1px solid color-mix(in srgb, var(--app-border) 80%, transparent);
-  border-radius: 11px;
+  border-radius: var(--app-radius-lg);
   color: var(--app-text-muted);
   background: color-mix(in srgb, var(--app-surface) 94%, #ffffff);
   box-shadow:
-    0 1px 2px color-mix(in srgb, #000000 8%, transparent),
-    0 3px 10px color-mix(in srgb, #000000 4%, transparent);
+    var(--app-shadow-card);
 }
 
 .desktop-capability-list-item__icon > svg {
@@ -130,17 +134,12 @@ button.desktop-capability-list-item__identity {
   font-size: 13px;
   font-weight: 600;
   line-height: 19px;
-  transition: color 140ms ease;
 }
 
 .desktop-capability-list-item__copy > span {
   color: var(--app-text-muted);
   font-size: 12px;
   line-height: 18px;
-}
-
-button.desktop-capability-list-item__identity:hover .desktop-capability-list-item__copy strong {
-  color: var(--app-primary);
 }
 
 .desktop-capability-list-item__aside {
@@ -167,7 +166,7 @@ button.desktop-capability-list-item__identity:hover .desktop-capability-list-ite
   height: 26px;
 }
 
-.desktop-capability-list-item__settings .sd-check {
+.desktop-capability-list-item__settings .sd-switch {
   font-size: 11px;
 }
 
@@ -192,9 +191,6 @@ button.desktop-capability-list-item__identity:hover .desktop-capability-list-ite
   height: 26px;
   padding: 0 7px;
   font-size: 11px;
-}
-
-.desktop-capability-list-item__text-action .sd-button__label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

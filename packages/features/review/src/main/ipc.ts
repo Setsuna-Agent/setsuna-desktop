@@ -1,6 +1,6 @@
 import type { Awaitable, FeatureScope } from '@setsuna-desktop/feature-core/scope';
 import { randomUUID } from 'node:crypto';
-import { ipcMain, type IpcMainInvokeEvent, type WebContents } from 'electron';
+import { ipcMain, net, type IpcMainInvokeEvent, type WebContents } from 'electron';
 import {
   REVIEW_IPC_CHANNELS,
   reviewModelSelectionCodec,
@@ -10,6 +10,7 @@ import {
   type ReviewRendererSenderPolicy,
 } from '../contracts/index.js';
 import { DesktopReviewChangeMonitor } from './change-monitor.js';
+import { createGitHubCommitAvatarLoader } from './github-commit-avatar.js';
 import { createReviewImagePreviewUrl } from './image-preview.js';
 import { getDesktopGitCommitDetails, getDesktopGitCommitFileDiff, getDesktopGitHistory } from './history.js';
 import {
@@ -35,6 +36,7 @@ export type ReviewIpcDependencies = Readonly<{
 const handlerChannels = [
   REVIEW_IPC_CHANNELS.getHistory,
   REVIEW_IPC_CHANNELS.getCommitDetails,
+  REVIEW_IPC_CHANNELS.getCommitAuthorAvatar,
   REVIEW_IPC_CHANNELS.getCommitFileDiff,
   REVIEW_IPC_CHANNELS.getState,
   REVIEW_IPC_CHANNELS.createImagePreview,
@@ -55,6 +57,7 @@ const handlerChannels = [
 
 export function registerReviewIpc(scope: FeatureScope, dependencies: ReviewIpcDependencies): () => void {
   const monitor = new DesktopReviewChangeMonitor();
+  const getCommitAuthorAvatar = createGitHubCommitAvatarLoader((url, init) => net.fetch(url, init));
   const subscriptions = new Map<string, {
     dispose: () => void;
     handleDestroyed: () => void;
@@ -87,6 +90,11 @@ export function registerReviewIpc(scope: FeatureScope, dependencies: ReviewIpcDe
       filePath: String(input.filePath ?? ''),
       previousPath: typeof input.previousPath === 'string' ? input.previousPath : undefined,
     });
+  });
+
+  registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.getCommitAuthorAvatar, (event, value) => {
+    if (!dependencies.rendererSender.isAllowed(event.sender.id)) throw new Error('Desktop renderer is unavailable.');
+    return getCommitAuthorAvatar(String(inputRecord(value).githubCommitUrl ?? ''));
   });
 
   const disposeSubscription = (subscriptionId: string) => {

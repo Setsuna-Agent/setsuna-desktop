@@ -1,3 +1,4 @@
+import { Dialog } from '@setsuna-desktop/renderer-ui';
 import type {
   DesktopWebDavSyncOperationState,
   DesktopWebDavSyncRestorePlan,
@@ -10,10 +11,8 @@ import {
   RefreshCw,
   ShieldCheck,
   Trash2,
-  X,
 } from 'lucide-react';
-import { useEffect, useId, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import type { ReactNode } from 'react';
 import { useWebDavSyncView } from './context.js';
 import { formatSyncBytes, webDavCategoryCopy } from './webDavSyncCopy.js';
 
@@ -42,9 +41,7 @@ export function WebDavRestorePlanDialog({
   onConfirm,
   onRestore,
 }: WebDavRestorePlanDialogProps) {
-  const { locale, t, ui: { Button, Checkbox, IconButton } } = useWebDavSyncView();
-  const titleId = useId();
-  const descriptionId = useId();
+  const { locale, t, ui: { Button, Checkbox } } = useWebDavSyncView();
   const addedCount = plan.diffs.reduce((sum, diff) => sum + diff.addedCount, 0)
     + plan.projectActions.filter((action) => action.action === 'create').length;
   const preservedCount = plan.diffs.reduce((sum, diff) => sum + diff.preservedCount, 0)
@@ -57,55 +54,68 @@ export function WebDavRestorePlanDialog({
   ));
   const downloadProgress = restoreDownloadProgress(restoreOperation);
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !busy) onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [busy, onClose]);
-
-  const dialog = (
-    <div
-      className="desktop-agent-modal-backdrop settings-webdav-restore-backdrop"
-      role="presentation"
-      onMouseDown={() => {
-        if (!busy) onClose();
-      }}
-    >
-      <section
-        className="desktop-agent-modal settings-webdav-restore-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={descriptionId}
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <header className="settings-webdav-restore-dialog__header">
-          <div className="settings-webdav-restore-dialog__title">
-            <span className="settings-webdav-restore-dialog__title-icon">
-              <AlertTriangle size={17} aria-hidden="true" />
-            </span>
-            <div>
-              <strong id={titleId}>{t('feature.webdavSync.restore.planTitle')}</strong>
-              <span>{t('feature.webdavSync.restore.planSource', {
-                device: plan.snapshot.deviceName,
-                time: new Date(plan.snapshot.createdAt).toLocaleString(locale),
-                version: plan.snapshot.appVersion,
-              })}</span>
+  return (
+    <Dialog title={t('feature.webdavSync.restore.planTitle')}
+      description={t('feature.webdavSync.restore.planSource', {
+        device: plan.snapshot.deviceName,
+        time: new Date(plan.snapshot.createdAt).toLocaleString(locale),
+        version: plan.snapshot.appVersion,
+      })} width={760} className="settings-webdav-restore-dialog" dismissible={!busy} onClose={onClose}
+      footer={(<div className="settings-webdav-restore-dialog__footer">
+          {restoring ? (
+            <div
+              className={`settings-webdav-restore-dialog__feedback${downloadProgress ? ' has-progress' : ''}`}
+              role="status"
+            >
+              <span className="settings-webdav__spinner" aria-hidden="true" />
+              {downloadProgress ? (
+                <div className="settings-webdav-restore-dialog__progress">
+                  <div className="settings-webdav-restore-dialog__progress-heading">
+                    <span>{restoreStatus}</span>
+                    <strong>{downloadProgress.percent}%</strong>
+                  </div>
+                  <div
+                    className="settings-webdav-restore-dialog__progress-track"
+                    role="progressbar"
+                    aria-label={restoreStatus}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={downloadProgress.percent}
+                  >
+                    <span style={{ width: `${downloadProgress.percent}%` }} />
+                  </div>
+                  <small>
+                    {formatSyncBytes(downloadProgress.completedBytes, locale)} /{' '}
+                    {formatSyncBytes(downloadProgress.totalBytes, locale)}
+                  </small>
+                </div>
+              ) : <span>{restoreStatus}</span>}
             </div>
-          </div>
-          <IconButton
+          ) : error ? (
+            <div className="settings-webdav-restore-dialog__feedback is-error" role="alert">
+              <AlertTriangle size={14} aria-hidden="true" />
+              <span>{error}</span>
+            </div>
+          ) : null}
+          <Checkbox
+            checked={confirmed}
+            className="settings-webdav__restore-confirm"
             disabled={busy}
-            label={t('feature.webdavSync.restore.closePlan')}
-            onClick={onClose}
+            onChange={onConfirm}
           >
-            <X size={15} />
-          </IconButton>
-        </header>
-
+            <span>{t('feature.webdavSync.restore.confirm')}</span>
+          </Checkbox>
+          <div className="settings-webdav-restore-dialog__actions">
+            <Button disabled={busy} onClick={onClose}>
+              {t('feature.webdavSync.restore.closePlan')}
+            </Button>
+            <Button disabled={busy || !confirmed} variant="danger" onClick={onRestore}>
+              {t(restoring ? 'feature.webdavSync.restore.inProgress' : 'feature.webdavSync.restore.action')}
+            </Button>
+          </div>
+        </div>)}>
         <div className="settings-webdav-restore-dialog__body">
-          <p id={descriptionId}>{t('feature.webdavSync.restore.planDescription')}</p>
+          <p>{t('feature.webdavSync.restore.planDescription')}</p>
           <div className="settings-webdav-restore-metrics" aria-label={t('feature.webdavSync.restore.planTitle')}>
             <RestoreMetric
               icon={<CirclePlus size={15} />}
@@ -247,64 +257,8 @@ export function WebDavRestorePlanDialog({
           </div>
         </div>
 
-        <footer className="settings-webdav-restore-dialog__footer">
-          {restoring ? (
-            <div
-              className={`settings-webdav-restore-dialog__feedback${downloadProgress ? ' has-progress' : ''}`}
-              role="status"
-            >
-              <span className="settings-webdav__spinner" aria-hidden="true" />
-              {downloadProgress ? (
-                <div className="settings-webdav-restore-dialog__progress">
-                  <div className="settings-webdav-restore-dialog__progress-heading">
-                    <span>{restoreStatus}</span>
-                    <strong>{downloadProgress.percent}%</strong>
-                  </div>
-                  <div
-                    className="settings-webdav-restore-dialog__progress-track"
-                    role="progressbar"
-                    aria-label={restoreStatus}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={downloadProgress.percent}
-                  >
-                    <span style={{ width: `${downloadProgress.percent}%` }} />
-                  </div>
-                  <small>
-                    {formatSyncBytes(downloadProgress.completedBytes, locale)} /{' '}
-                    {formatSyncBytes(downloadProgress.totalBytes, locale)}
-                  </small>
-                </div>
-              ) : <span>{restoreStatus}</span>}
-            </div>
-          ) : error ? (
-            <div className="settings-webdav-restore-dialog__feedback is-error" role="alert">
-              <AlertTriangle size={14} aria-hidden="true" />
-              <span>{error}</span>
-            </div>
-          ) : null}
-          <Checkbox
-            checked={confirmed}
-            className="settings-webdav__restore-confirm"
-            disabled={busy}
-            onChange={onConfirm}
-          >
-            <span>{t('feature.webdavSync.restore.confirm')}</span>
-          </Checkbox>
-          <div className="settings-webdav-restore-dialog__actions">
-            <Button autoFocus disabled={busy} onClick={onClose}>
-              {t('feature.webdavSync.restore.closePlan')}
-            </Button>
-            <Button disabled={busy || !confirmed} variant="danger" onClick={onRestore}>
-              {t(restoring ? 'feature.webdavSync.restore.inProgress' : 'feature.webdavSync.restore.action')}
-            </Button>
-          </div>
-        </footer>
-      </section>
-    </div>
+    </Dialog>
   );
-
-  return typeof document === 'undefined' ? dialog : createPortal(dialog, document.body);
 }
 
 function restoreDownloadProgress(operation?: DesktopWebDavSyncOperationState): {

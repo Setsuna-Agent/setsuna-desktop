@@ -1,8 +1,9 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal as XTermTerminal, type ILink, type ILinkProvider, type ITheme } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
-import { Terminal } from 'lucide-react';
+import { SquareTerminal } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type {
   DesktopTerminalEvent,
@@ -176,7 +177,7 @@ export function TerminalPane({
   if (!session || !bridge) {
     return (
       <div data-feature-id="terminal" className="feature-terminal__placeholder">
-        <Terminal size={15} />
+        <SquareTerminal size={15} />
         <span>{translate(bridge ? 'feature.terminal.starting' : 'feature.terminal.unavailable')}</span>
       </div>
     );
@@ -188,9 +189,9 @@ export function TerminalPane({
       {exited ? (
         <div className="feature-terminal__restart" role="status">
           <span>{restartError ?? translate('feature.terminal.shellExited')}</span>
-          <button type="button" disabled={restarting} onClick={() => void restartTerminal()}>
+          <Button variant="ghost" type="button" disabled={restarting} onClick={() => void restartTerminal()}>
             {translate(restarting ? 'feature.terminal.restarting' : 'feature.terminal.restart')}
-          </button>
+          </Button>
         </div>
       ) : null}
     </div>

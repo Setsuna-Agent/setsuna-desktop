@@ -1,3 +1,4 @@
+import { Button as UiButton } from '@setsuna-desktop/renderer-ui';
 import {
   CAPABILITIES_CATALOG_NAVIGATION_GROUP_ID,
   settingsPageKey,
@@ -55,7 +56,7 @@ export function CapabilitiesShell({
   const tabs = useMemo(() => (
     <nav className="desktop-capabilities-tabs" aria-label={t('capabilities.title.capabilities')}>
       {catalogEntries.map((entry) => (
-        <button
+        <UiButton variant="ghost"
           className={activeSectionId === entry.metadata.sectionId ? 'is-active' : undefined}
           key={entry.key}
           type="button"
@@ -65,7 +66,7 @@ export function CapabilitiesShell({
           }}
         >
           {(t as (key: string) => string)(entry.metadata.titleKey)}
-        </button>
+        </UiButton>
       ))}
     </nav>
   ), [activeSectionId, catalogEntries, onSelectedPluginIdChange, t]);
@@ -79,7 +80,7 @@ export function CapabilitiesShell({
   }: CapabilitiesBreadcrumbProps) => {
     const breadcrumb = (
       <nav className="desktop-capabilities-breadcrumb" aria-label={`${parentLabel} / ${currentLabel}`}>
-        <button type="button" onClick={onBack}>{parentLabel}</button>
+        <UiButton variant="ghost" type="button" onClick={onBack}>{parentLabel}</UiButton>
         <ChevronRight aria-hidden="true" />
         <span title={currentLabel}>{currentLabel}</span>
       </nav>
@@ -149,7 +150,7 @@ function CapabilitiesCreateMenu({
       {open ? (
         <div className="desktop-capabilities-create-menu" role="menu">
           {items.map((item) => (
-            <button
+            <UiButton variant="ghost"
               className="desktop-capabilities-create-menu__item"
               disabled={item.disabled}
               key={item.id}
@@ -165,7 +166,7 @@ function CapabilitiesCreateMenu({
                 <strong>{item.title}</strong>
                 <span>{item.description}</span>
               </span>
-            </button>
+            </UiButton>
           ))}
         </div>
       ) : null}

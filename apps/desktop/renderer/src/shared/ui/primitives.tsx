@@ -1,83 +1,15 @@
-import { Tooltip as AntTooltip, type TooltipProps } from 'antd';
-import type {
-  CheckboxProps,
-} from '@setsuna-desktop/renderer-contracts/settings';
+import { Button as UiButton, Tooltip as AppTooltip } from '@setsuna-desktop/renderer-ui';
+
 import { ArrowLeft } from 'lucide-react';
 import {
-  forwardRef,
-  useCallback,
   type ButtonHTMLAttributes,
-  type InputHTMLAttributes,
-  type ReactElement,
   type ReactNode,
-  type TextareaHTMLAttributes,
 } from 'react';
 import { useI18n } from '../i18n/I18nProvider.js';
 export { SelectField } from './SelectField.js';
 
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
-  icon?: ReactNode;
-};
-
-export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button({ className = '', variant = 'secondary', icon, children, type = 'button', ...props }, ref) {
-  return (
-    <button ref={ref} className={`sd-button sd-button--${variant} ${className}`} type={type} {...props}>
-      {icon ? <span className="sd-button__icon">{icon}</span> : null}
-      {children ? <span className="sd-button__label">{children}</span> : null}
-    </button>
-  );
-});
-
-type IconButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  label: string;
-  children: ReactNode;
-  variant?: 'secondary' | 'ghost' | 'danger';
-};
-
-export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton({ label, children, className = '', variant = 'ghost', type = 'button', ...props }, ref) {
-  return (
-    <button ref={ref} aria-label={label} title={label} className={`sd-icon-button sd-icon-button--${variant} ${className}`} type={type} {...props}>
-      {children}
-    </button>
-  );
-});
-
-const appTooltipClassNames = {
-  root: 'sd-tooltip',
-  container: 'sd-tooltip__container',
-} as const;
-
-type AppTooltipProps = {
-  children: ReactElement;
-  mouseEnterDelay?: number;
-  open?: boolean;
-  placement?: TooltipProps['placement'];
-  title: ReactNode;
-};
-
-export function AppTooltip({
-  children,
-  mouseEnterDelay = 0.18,
-  open,
-  placement = 'top',
-  title,
-}: AppTooltipProps) {
-  return (
-    <AntTooltip
-      arrow={false}
-      autoAdjustOverflow
-      classNames={appTooltipClassNames}
-      destroyOnHidden
-      mouseEnterDelay={mouseEnterDelay}
-      open={open}
-      placement={placement}
-      title={title}
-    >
-      {children}
-    </AntTooltip>
-  );
-}
+export { Button, IconButton, TextField, TextArea, Checkbox } from '@setsuna-desktop/renderer-ui';
+export { Tooltip as AppTooltip } from '@setsuna-desktop/renderer-ui';
 
 export function ActionTooltip({ children, placement = 'bottom-end', title }: { children: ReactNode; placement?: 'bottom-end' | 'top'; title: string }) {
   return (
@@ -86,45 +18,6 @@ export function ActionTooltip({ children, placement = 'bottom-end', title }: { c
         {children}
       </span>
     </AppTooltip>
-  );
-}
-
-export function TextField({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={`sd-field ${className}`} {...props} />;
-}
-
-export function TextArea({ className = '', ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea className={`sd-textarea ${className}`} {...props} />;
-}
-
-export function Checkbox({
-  checked,
-  children,
-  className = '',
-  indeterminate = false,
-  onChange,
-  onClick,
-  ...props
-}: CheckboxProps) {
-  const controlRef = useCallback((control: HTMLInputElement | null) => {
-    if (control) control.indeterminate = indeterminate;
-  }, [indeterminate]);
-
-  return (
-    <label
-      className={`sd-checkbox ${props.disabled ? 'is-disabled' : ''} ${className}`.trim()}
-      onClick={onClick}
-    >
-      <input
-        {...props}
-        ref={controlRef}
-        className="sd-checkbox__control"
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.currentTarget.checked)}
-      />
-      {children}
-    </label>
   );
 }
 
@@ -160,10 +53,10 @@ export function PageBackButton({
   const { t } = useI18n();
   const classes = ['sd-page-back', block ? 'sd-page-back--block' : '', className].filter(Boolean).join(' ');
   return (
-    <button className={classes} type={type} {...props}>
+    <UiButton variant="ghost" className={classes} type={type} {...props}>
       {icon ? <span className="sd-page-back__icon">{icon}</span> : null}
       <span className="sd-page-back__label">{label ?? t('common.back')}</span>
-    </button>
+    </UiButton>
   );
 }
 

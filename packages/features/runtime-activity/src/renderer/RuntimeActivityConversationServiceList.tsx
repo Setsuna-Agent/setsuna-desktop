@@ -1,6 +1,7 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeBackgroundShellProcess } from '@setsuna-desktop/contracts';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
-import { LoaderCircle, Square, Terminal } from 'lucide-react';
+import { LoaderCircle, Square, SquareTerminal } from 'lucide-react';
 import { singleLineActivityCommand } from './runtime-activity-model.js';
 
 export type RuntimeActivityConversationServiceListProps = Readonly<{
@@ -37,10 +38,10 @@ export function RuntimeActivityConversationServiceList({
           return (
             <div className="runtime-activity-conversation-service" key={service.id}>
               <span className="runtime-activity-conversation-service__icon" aria-hidden="true">
-                <Terminal size={13} />
+                <SquareTerminal size={13} />
               </span>
               <strong title={service.command}>{command}</strong>
-              <button
+              <Button variant="ghost"
                 aria-label={t('feature.runtimeActivity.conversationServices.stopService', { command })}
                 disabled={stopping}
                 title={t(stopping
@@ -52,7 +53,7 @@ export function RuntimeActivityConversationServiceList({
                 {stopping
                   ? <LoaderCircle className="is-spinning" size={13} />
                   : <Square size={11} fill="currentColor" />}
-              </button>
+              </Button>
             </div>
           );
         })}

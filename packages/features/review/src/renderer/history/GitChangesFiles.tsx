@@ -1,3 +1,5 @@
+import { TextField, Button } from '@setsuna-desktop/renderer-ui';
+
 import { Search } from 'lucide-react';
 import { useState } from 'react';
 import type { DesktopGitChangedFile } from '../../contracts/index.js';
@@ -39,11 +41,11 @@ export function GitChangesFiles({ groups, pathContext, selectedKey, loading, err
       {filterVisible ? (
         <label className="git-changes-files__search">
           <Search size={13} />
-          <input aria-label={t('feature.review.history.filterFiles')} placeholder={t('feature.review.history.filterFiles')} value={query} onChange={(event) => setQuery(event.target.value)} />
+          <TextField aria-label={t('feature.review.history.filterFiles')} placeholder={t('feature.review.history.filterFiles')} value={query} onChange={(event) => setQuery(event.target.value)} />
         </label>
       ) : null}
       <GitHistoryScrollArea className="git-changes-files__scroll">
-        {error ? <div className="git-history-status" role="alert">{error}<button type="button" onClick={onRetry}>{t('feature.review.history.retry')}</button></div> : null}
+        {error ? <div className="git-history-status" role="alert">{error}<Button variant="ghost" type="button" onClick={onRetry}>{t('feature.review.history.retry')}</Button></div> : null}
         {loading && !hasFiles ? <p className="git-history-status">{t('feature.review.history.loading')}</p> : null}
         {visibleGroups.map(({ group, visibleFiles }) => (
           <div className="git-changes-files__group" key={group.id}>

@@ -1,4 +1,4 @@
-import type { SlotConfigType } from '@ant-design/x/es/sender';
+import type { ComposerSlot } from '../../../../../src/features/chat/composer/editor/types.js';
 import type { WorkspaceEntrySearchItem } from '@setsuna-desktop/contracts';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -27,7 +27,6 @@ describe('workspace mention slots', () => {
     if (!mention || mention.type !== 'tag') throw new Error('Expected a workspace mention tag');
     expect(mention.key).toMatch(/^workspace:/);
     expect(mention.props?.value).toBe('@vite.config.ts');
-    expect(mention.formatResult?.(mention.props?.value)).toBe('@vite.config.ts');
     expect(slots[1]).toEqual({ type: 'text', value: ' ' });
   });
 
@@ -54,7 +53,7 @@ describe('workspace mention slots', () => {
   it('supports nested paths while displaying the file name', () => {
     const nestedEntry = { ...entry, name: 'Tile.tsx', parent: 'src/components', path: 'src/components/Tile.tsx' };
     const mention = createWorkspaceMentionSlots(nestedEntry).find(
-      (slot): slot is Extract<SlotConfigType, { type: 'tag' }> => slot.type === 'tag',
+      (slot): slot is Extract<ComposerSlot, { type: 'tag' }> => slot.type === 'tag',
     );
 
     expect(mention?.props?.value).toBe('@src/components/Tile.tsx');
@@ -74,12 +73,11 @@ describe('workspace mention slots', () => {
       path: '.trae',
     };
     const mention = createWorkspaceMentionSlots(directoryEntry).find(
-      (slot): slot is Extract<SlotConfigType, { type: 'tag' }> => slot.type === 'tag',
+      (slot): slot is Extract<ComposerSlot, { type: 'tag' }> => slot.type === 'tag',
     );
 
     if (!mention) throw new Error('Expected a workspace mention tag');
     expect(mention.props?.value).toBe('@.trae/');
-    expect(mention.formatResult?.(mention.props?.value)).toBe('@.trae/');
     const labelHtml = renderToStaticMarkup(mention.props?.label);
     expect(labelHtml).toContain('data-composer-cursor-offset-adjustment="2"');
     expect(labelHtml).toContain('>.trae</span>');

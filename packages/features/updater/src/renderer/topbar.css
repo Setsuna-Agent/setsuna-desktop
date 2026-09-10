@@ -1,7 +1,7 @@
 .app-topbar-update-alert {
   position: relative;
-  color: #9a6700;
-  background: color-mix(in srgb, #f2b705 14%, transparent);
+  color: var(--app-warning);
+  background: color-mix(in srgb, var(--app-warning) 14%, transparent);
 }
 
 .app-topbar-update-alert__badge {
@@ -11,7 +11,7 @@
   width: 7px;
   height: 7px;
   border: 1px solid var(--app-bg);
-  border-radius: 999px;
-  background: #f2b705;
-  box-shadow: 0 0 0 2px color-mix(in srgb, #f2b705 18%, transparent);
+  border-radius: var(--app-radius-full);
+  background: var(--app-warning);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--app-warning) 18%, transparent);
 }

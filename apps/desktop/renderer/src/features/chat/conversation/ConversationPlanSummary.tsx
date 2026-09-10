@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import { CheckCircle2, Circle, ListChecks, LoaderCircle } from 'lucide-react';
 import { useId } from 'react';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
@@ -12,7 +13,7 @@ export function ConversationPlanSummary({ items }: { items: ConversationPlanItem
 
   return (
     <div className="chat-conversation-overview-panel__plan">
-      <button
+      <Button variant="ghost"
         type="button"
         className="chat-conversation-overview-panel__row chat-conversation-overview-panel__plan-trigger"
         aria-label={t('conversation.overview.plan.aria', {
@@ -28,7 +29,7 @@ export function ConversationPlanSummary({ items }: { items: ConversationPlanItem
         </span>
         <span className="chat-conversation-overview-panel__label">{t('conversation.overview.plan.title')}</span>
         <span className="chat-conversation-overview-panel__meta chat-conversation-overview-panel__plan-progress">{progressLabel}</span>
-      </button>
+      </Button>
       <div className="chat-conversation-overview-panel__plan-popover" id={popoverId} role="tooltip">
         <div className="chat-conversation-overview-panel__plan-popover-head">
           <ListChecks size={14} />

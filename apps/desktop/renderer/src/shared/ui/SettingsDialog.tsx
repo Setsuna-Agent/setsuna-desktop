@@ -1,52 +1,13 @@
-import type {
-  SettingsDialogProps,
-} from '@setsuna-desktop/renderer-contracts/settings';
-import { Modal } from 'antd';
-import { X } from 'lucide-react';
+import type { SettingsDialogProps } from '@setsuna-desktop/renderer-contracts/settings';
+import { Dialog } from '@setsuna-desktop/renderer-ui';
 
-const dialogWidths = Object.freeze({
-  small: 420,
-  medium: 640,
-  large: 720,
-});
+const dialogWidths = { small: 420, medium: 640, large: 720 } as const;
 
-/**
- * Canonical shell for settings dialogs. Feature content owns its internal
- * layout; the host owns modal structure, density, focus handling and theme.
- */
-export function SettingsDialog({
-  children,
-  className = '',
-  closeLabel,
-  footer,
-  onClose,
-  size = 'medium',
-  subtitle,
-  title,
-  titleIcon,
-}: SettingsDialogProps) {
-  return (
-    <Modal
-      centered
-      className={['sd-settings-dialog', className].filter(Boolean).join(' ')}
-      closable={{ 'aria-label': closeLabel }}
-      closeIcon={<X aria-hidden="true" size={15} />}
-      footer={footer ?? null}
-      open
-      styles={{ container: { padding: 0 } }}
-      title={(
-        <div className="sd-settings-dialog__title">
-          {titleIcon ? <span className="sd-settings-dialog__title-icon">{titleIcon}</span> : null}
-          <span className="sd-settings-dialog__title-copy">
-            <strong>{title}</strong>
-            {subtitle ? <small>{subtitle}</small> : null}
-          </span>
-        </div>
-      )}
-      width={dialogWidths[size]}
-      onCancel={onClose}
-    >
-      <div className="sd-settings-dialog__body">{children}</div>
-    </Modal>
-  );
+/** Feature content owns its layout; the shared dialog owns its surface and focus. */
+export function SettingsDialog({ children, className, closeLabel, footer, onClose, size = 'medium', subtitle, title, titleIcon }: SettingsDialogProps) {
+  return <Dialog className={className} closeLabel={closeLabel} footer={footer} onClose={onClose} width={dialogWidths[size]}
+    title={<span className="sd-settings-dialog__title">{titleIcon ? <span className="sd-settings-dialog__title-icon">{titleIcon}</span> : null}{title}</span>}
+    description={subtitle}>
+    <div className="sd-settings-dialog__body">{children}</div>
+  </Dialog>;
 }

@@ -100,11 +100,11 @@
 .app-shell-icon-control:hover:not(:disabled),
 .app-shell-icon-control:active:not(:disabled),
 .app-shell-icon-control.is-active,
-.app-shell-icon-control.ant-dropdown-open:not(:disabled),
+.app-shell-icon-control[data-state='open']:not(:disabled),
 .sd-icon-button.app-shell-icon-control:hover:not(:disabled),
 .sd-icon-button.app-shell-icon-control:active:not(:disabled),
 .sd-icon-button.app-shell-icon-control.is-active,
-.sd-icon-button.app-shell-icon-control.ant-dropdown-open:not(:disabled) {
+.sd-icon-button.app-shell-icon-control[data-state='open']:not(:disabled) {
   border: 0;
   color: var(--app-text);
   background: var(--desktop-agent-control-hover-bg);
@@ -238,6 +238,12 @@
   overflow: hidden;
   container-name: app-main-header;
   container-type: inline-size;
+}
+
+/* Keep tooltip wrappers as wide as their fixed-size controls when the title shrinks. */
+.app-topbar__right > .sd-shortcut-tooltip-target,
+.app-workbench__main-actions > .sd-shortcut-tooltip-target {
+  flex: 0 0 auto;
 }
 
 .app-topbar__workspace {
@@ -911,9 +917,6 @@ body.desktop-agent-sidebar-resizing .app-workbench::after {
 .bottom-panel__resize-handle {
   position: absolute;
   z-index: 12;
-  border: 0;
-  background: transparent;
-  touch-action: none;
 }
 
 .desktop-agent-sidebar__resize-handle {
@@ -942,11 +945,9 @@ body.desktop-agent-sidebar-resizing .app-workbench::after {
   left: 4px;
 }
 
-.desktop-agent-sidebar__resize-handle:hover::after,
-.desktop-workspace-panel__resize-handle:hover::after,
 body.desktop-agent-sidebar-resizing .desktop-agent-sidebar__resize-handle::after,
 body.desktop-agent-workspace-resizing .desktop-workspace-panel__resize-handle::after {
-  background: var(--app-text-muted);
+  background: var(--app-border-strong);
 }
 
 body.desktop-agent-sidebar-resizing,

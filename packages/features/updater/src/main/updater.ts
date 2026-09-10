@@ -1,4 +1,3 @@
-import type { RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import type {
   DesktopUpdateActionResult,
   DesktopUpdateDownloadSource,
@@ -9,11 +8,10 @@ import type {
   DesktopUpdateState,
 } from '../contracts/index.js';
 import { UPDATER_IPC_CHANNELS } from '../contracts/index.js';
-import { app, BrowserWindow, dialog, shell } from 'electron';
+import { app, BrowserWindow, shell } from 'electron';
 import { createHash } from 'node:crypto';
 import { mkdir, open, readFile, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
-import { createUpdaterNativeTranslate } from './messages.js';
 import {
   GITHUB_DIRECT_DOWNLOAD_SOURCE,
   resolveUpdateDownloadUrl,
@@ -131,24 +129,6 @@ export class DesktopUpdater {
     const config = await this.sourceStore.remove(sourceId);
     this.applySourceConfig(config, true);
     return this.getState();
-  }
-
-  async promptReady(
-    window: BrowserWindow | null,
-    locale: RuntimeInterfaceLanguage = 'zh-CN',
-  ): Promise<DesktopUpdateActionResult> {
-    if (this.state.status !== 'downloaded' || !this.state.downloadedFilePath) {
-      return { ok: false, action: 'none', state: this.getState(), error: 'No downloaded update is ready.' };
-    }
-
-    const prompt = promptOptionsForState(this.state, locale);
-    const result = window ? await dialog.showMessageBox(window, prompt) : await dialog.showMessageBox(prompt);
-
-    if (result.response !== 0) {
-      return { ok: true, action: 'none', state: this.getState() };
-    }
-
-    return this.openReadyUpdate();
   }
 
   async installReady(): Promise<DesktopUpdateActionResult> {
@@ -382,46 +362,6 @@ function updateInfoFromRelease(release: ReleaseInfo): DesktopUpdateInfo {
   return {
     version: release.tag_name,
     releaseName: release.name ?? release.tag_name,
-  };
-}
-
-function promptOptionsForState(
-  state: DesktopUpdateState,
-  locale: RuntimeInterfaceLanguage,
-): Electron.MessageBoxOptions {
-  const t = createUpdaterNativeTranslate(locale);
-  if (state.platform === 'darwin') {
-    const packageName = state.assetName ?? t('ready.macPackage');
-    return {
-      type: 'info',
-      buttons: [t('ready.openFinder'), t('ready.later')],
-      defaultId: 0,
-      cancelId: 1,
-      message: t('ready.title'),
-      detail: t('ready.macDetail', { name: packageName }),
-    };
-  }
-
-  if (state.platform === 'win32') {
-    const packageName = state.assetName ?? t('ready.windowsPackage');
-    return {
-      type: 'info',
-      buttons: [t('ready.restart'), t('ready.later')],
-      defaultId: 0,
-      cancelId: 1,
-      message: t('ready.title'),
-      detail: t('ready.windowsDetail', { name: packageName }),
-    };
-  }
-
-  const packageName = state.assetName ?? t('ready.package');
-  return {
-    type: 'info',
-    buttons: [t('ready.openDownloads'), t('ready.later')],
-    defaultId: 0,
-    cancelId: 1,
-    message: t('ready.title'),
-    detail: t('ready.detail', { name: packageName }),
   };
 }
 

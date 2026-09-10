@@ -49,7 +49,7 @@
   min-width: 0;
   margin: 4px 0 6px;
   border: 1px solid color-mix(in srgb, var(--app-border) 78%, transparent);
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
   background: var(--app-surface);
   box-shadow: 0 1px 2px color-mix(in srgb, var(--app-text) 4%, transparent);
   overflow: hidden;

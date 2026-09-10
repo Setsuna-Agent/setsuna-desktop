@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { ConfigProvider } from 'antd';
 import { forwardRef, useEffect, type ComponentProps } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createNoopReviewRendererService, type WorkspaceGitConflictTask } from '../../src/contracts/index.js';
@@ -93,9 +92,9 @@ it('requires delete confirmation, keeps failed records for retry, and evicts del
   const deleteGitConflictTask = vi.fn<Props['client']['deleteGitConflictTask']>()
     .mockRejectedValueOnce(new Error('Delete failed')).mockResolvedValue({ deleted: true });
   const client: Props['client'] = { readArchivedGitConflicts: async () => [cached], setGitConflictArchived: vi.fn(), deleteGitConflictTask };
-  render(<ConfigProvider theme={{ token: { motion: false } }}><ReviewRendererProvider service={createNoopReviewRendererService()}><ReviewRendererTestHost>
+  render(<><ReviewRendererProvider service={createNoopReviewRendererService()}><ReviewRendererTestHost>
     <CachedPanel /><ArchivedGitConflictsSettings client={client} translate={translate} ui={ui} />
-  </ReviewRendererTestHost></ReviewRendererProvider></ConfigProvider>);
+  </ReviewRendererTestHost></ReviewRendererProvider></>);
   const deleteButton = await screen.findByRole('button', { name: '彻底删除' });
   fireEvent.click(deleteButton);
   fireEvent.click(await screen.findByRole('button', { name: /取\s*消/u }));
@@ -103,13 +102,13 @@ it('requires delete confirmation, keeps failed records for retry, and evicts del
   expect(screen.getByLabelText('Existing panel archive state').textContent).toBe('true');
 
   fireEvent.click(deleteButton);
-  fireEvent.click(within(await screen.findByRole('tooltip')).getByRole('button', { name: '彻底删除' }));
+  fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: '彻底删除' }));
   expect((await screen.findByRole('alert')).textContent).toContain('Delete failed');
   expect(screen.getByText('/real/repo')).toBeTruthy();
   expect(screen.getByLabelText('Existing panel archive state').textContent).toBe('true');
-  await waitFor(() => expect(screen.queryByRole('tooltip')).toBeNull());
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   fireEvent.click(deleteButton);
-  fireEvent.click(within(await screen.findByRole('tooltip')).getByRole('button', { name: '彻底删除' }));
+  fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: '彻底删除' }));
   await screen.findByText('暂无已归档记录');
   expect(deleteGitConflictTask).toHaveBeenLastCalledWith({ workspaceRoot: '/real/repo', threadId: 'repair' });
   expect(screen.getByLabelText('Existing panel archive state').textContent).toBe('undefined');

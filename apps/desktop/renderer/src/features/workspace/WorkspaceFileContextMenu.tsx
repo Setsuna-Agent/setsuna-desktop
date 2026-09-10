@@ -1,9 +1,7 @@
+import { PointMenu, type MenuItem } from '@setsuna-desktop/renderer-ui';
 import type { WorkspaceEntry } from '@setsuna-desktop/contracts';
-import { Check, ChevronRight, Code2, Copy, FolderOpen, MessageSquare } from 'lucide-react';
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { createPortal } from 'react-dom';
+import { Code2, Copy, FolderOpen, MessageSquare } from 'lucide-react';
 import { translate, useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
-import { pageScaleInverse, zoomedPortalPosition } from '../../shared/lib/zoomedPortalPosition.js';
 import { WorkspaceAppGlyph } from '../../composition/WorkspaceAppsFeatureBoundary.js';
 import type { DesktopWorkspaceApp } from './model.js';
 
@@ -37,146 +35,33 @@ export function WorkspaceFileContextMenu({
   onReveal: (filePath: string) => void;
 }) {
   const { t } = useI18n();
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const [openWithMenuVisible, setOpenWithMenuVisible] = useState(false);
-
-  useEffect(() => {
-    setOpenWithMenuVisible(false);
-  }, [target?.filePath, target?.line, target?.type, target?.x, target?.y]);
-
-  useEffect(() => {
-    if (!target) return undefined;
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) onClose();
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('pointerdown', handlePointerDown);
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('resize', onClose);
-    window.addEventListener('scroll', onClose, true);
-    return () => {
-      window.removeEventListener('pointerdown', handlePointerDown);
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('resize', onClose);
-      window.removeEventListener('scroll', onClose, true);
-    };
-  }, [onClose, target]);
-
-  useEffect(() => {
-    if (!target) return undefined;
-    const frame = window.requestAnimationFrame(() => {
-      menuRef.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [target]);
-
-  if (!target || typeof document === 'undefined') return null;
-
+  if (!target) return null;
   const directory = target.type === 'directory';
-  const style: CSSProperties = zoomedPortalPosition({
-    anchorX: target.x,
-    anchorY: target.y,
-    menuHeight: directory ? 108 : 180,
-    menuWidth: 236,
-    scaleInverse: pageScaleInverse(),
-    viewportHeight: window.innerHeight,
-    viewportWidth: window.innerWidth,
-  });
-  const submenuClasses = [
-    'desktop-file-context-menu desktop-file-context-menu--submenu',
-    target.x > window.innerWidth / 2 ? 'opens-left' : '',
-    target.y > window.innerHeight / 2 ? 'opens-up' : '',
-  ].filter(Boolean).join(' ');
-  const runAndClose = (action: () => void) => {
-    onClose();
-    action();
-  };
-
-  return createPortal(
-    <div
-      className="desktop-file-context-menu"
-      ref={menuRef}
-      role="menu"
-      style={style}
-      onContextMenu={(event) => event.preventDefault()}
-    >
-      {!directory ? (
-        <>
-          <button
-            type="button"
-            role="menuitem"
-            disabled={!selectedWorkspaceApp}
-            onClick={() => {
-              if (!selectedWorkspaceApp) return;
-              runAndClose(() => onOpenWithApp(selectedWorkspaceApp.id, target.filePath, target.line));
-            }}
-          >
-            {selectedWorkspaceApp ? <WorkspaceAppGlyph app={selectedWorkspaceApp} /> : <Code2 size={14} />}
-            <span>{selectedWorkspaceApp ? openInAppLabel(selectedWorkspaceApp, target.line, t) : t('workspace.fileMenu.noApp')}</span>
-          </button>
-          <div
-            className="desktop-file-context-menu__submenu-host"
-            onMouseEnter={() => setOpenWithMenuVisible(true)}
-            onMouseLeave={() => setOpenWithMenuVisible(false)}
-          >
-            <button
-              className="desktop-file-context-menu__submenu-trigger"
-              type="button"
-              role="menuitem"
-              aria-expanded={openWithMenuVisible}
-              aria-haspopup="menu"
-              disabled={!workspaceApps.length}
-              onClick={() => setOpenWithMenuVisible((visible) => !visible)}
-              onFocus={() => setOpenWithMenuVisible(true)}
-              onKeyDown={(event) => {
-                if (event.key === 'ArrowRight') setOpenWithMenuVisible(true);
-              }}
-            >
-              <Code2 size={14} />
-              <span>{t('workspace.fileMenu.openWith')}</span>
-              <ChevronRight className="desktop-file-context-menu__submenu-chevron" size={13} />
-            </button>
-            {openWithMenuVisible ? (
-              <div className={submenuClasses} role="menu" aria-label={t('workspace.fileMenu.chooseApp')}>
-                {workspaceApps.map((app) => (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    key={app.id}
-                    onClick={() => runAndClose(() => onOpenWithApp(app.id, target.filePath, target.line))}
-                  >
-                    <WorkspaceAppGlyph app={app} />
-                    <span>{app.label}</span>
-                    {selectedWorkspaceApp?.id === app.id ? <Check className="desktop-file-context-menu__selected" size={13} /> : null}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-          <div className="desktop-file-context-menu__divider" role="separator" />
-        </>
-      ) : null}
-      <button type="button" role="menuitem" onClick={() => runAndClose(() => onCopyPath(target.filePath))}>
-        <Copy size={14} />
-        <span>{t(directory ? 'workspace.fileMenu.copyDirectoryPath' : 'workspace.fileMenu.copyPath')}</span>
-      </button>
-      <button type="button" role="menuitem" onClick={() => runAndClose(() => onReveal(target.filePath))}>
-        <FolderOpen size={14} />
-        <span>{workspaceFileRevealLabel(window.setsunaDesktop?.desktop.platform, t)}</span>
-      </button>
-      <button
-        type="button"
-        role="menuitem"
-        onClick={() => runAndClose(() => onAddToConversation(target.filePath, target.type ?? 'file'))}
-      >
-        <MessageSquare size={14} />
-        <span>{t('workspace.fileMenu.addToChat')}</span>
-      </button>
-    </div>,
-    document.body,
-  );
+  const items: MenuItem[] = [
+    ...(!directory ? [
+      {
+        key: 'open',
+        label: selectedWorkspaceApp ? openInAppLabel(selectedWorkspaceApp, target.line, t) : t('workspace.fileMenu.noApp'),
+        icon: selectedWorkspaceApp ? <WorkspaceAppGlyph app={selectedWorkspaceApp} /> : <Code2 size={14} />,
+        disabled: !selectedWorkspaceApp,
+        onClick: () => { if (selectedWorkspaceApp) onOpenWithApp(selectedWorkspaceApp.id, target.filePath, target.line); },
+      },
+      {
+        key: 'open-with', label: t('workspace.fileMenu.openWith'), icon: <Code2 size={14} />,
+        disabled: !workspaceApps.length,
+        children: workspaceApps.map((app) => ({
+          key: app.id, label: app.label, icon: <WorkspaceAppGlyph app={app} />,
+          onClick: () => onOpenWithApp(app.id, target.filePath, target.line),
+        })),
+      },
+      { type: 'divider' as const },
+    ] : []),
+    { key: 'copy', label: t(directory ? 'workspace.fileMenu.copyDirectoryPath' : 'workspace.fileMenu.copyPath'), icon: <Copy size={14} />, onClick: () => onCopyPath(target.filePath) },
+    { key: 'reveal', label: workspaceFileRevealLabel(window.setsunaDesktop?.desktop.platform, t), icon: <FolderOpen size={14} />, onClick: () => onReveal(target.filePath) },
+    { key: 'add', label: t('workspace.fileMenu.addToChat'), icon: <MessageSquare size={14} />, onClick: () => onAddToConversation(target.filePath, target.type ?? 'file') },
+  ];
+  return <PointMenu key={`${target.filePath}:${target.x}:${target.y}`} x={target.x} y={target.y}
+    menu={{ items, selectedKeys: selectedWorkspaceApp ? [selectedWorkspaceApp.id] : [], onClick: onClose }} onClose={onClose} />;
 }
 
 export function workspaceFileRevealLabel(platform?: string, t: Translate = defaultTranslate): string {

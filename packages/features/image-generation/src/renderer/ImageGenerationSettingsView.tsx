@@ -5,7 +5,7 @@ import type { RendererTranslate,
 import type {
   SettingsViewUi,
 } from '@setsuna-desktop/renderer-contracts/settings';
-import { Image } from 'antd';
+import { ImagePreview, ImagePreviewGroup } from '@setsuna-desktop/renderer-ui';
 import { Copy, FolderOpen, KeyRound, Loader2, Play, Save, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import {
@@ -251,7 +251,7 @@ function ImageGenerationConnectionTest({
           {translate('feature.imageGeneration.test.generate')}
         </Button>
       </div>
-      {result?.images.length ? <Image.PreviewGroup><div className="feature-image-generation-test__results">{result.images.map((attachment) => <QuickTestImage assets={assets} attachment={attachment} key={attachment.assetId} translate={translate} ui={ui} />)}</div></Image.PreviewGroup> : null}
+      {result?.images.length ? <ImagePreviewGroup><div className="feature-image-generation-test__results">{result.images.map((attachment) => <QuickTestImage assets={assets} attachment={attachment} key={attachment.assetId} translate={translate} ui={ui} />)}</div></ImagePreviewGroup> : null}
     </section>
   );
 }
@@ -282,7 +282,7 @@ function QuickTestImage({ assets, attachment, translate, ui }: Readonly<{
   }
   return (
     <article className="feature-image-generation-test__image">
-      <div className="feature-image-generation-test__preview">{source ? <Image src={source} alt={attachment.name} /> : <div role={error ? 'alert' : 'status'}>{error ?? translate('feature.imageGeneration.test.loading')}</div>}</div>
+      <div className="feature-image-generation-test__preview">{source ? <ImagePreview src={source} alt={attachment.name} /> : <div role={error ? 'alert' : 'status'}>{error ?? translate('feature.imageGeneration.test.loading')}</div>}</div>
       <div className="feature-image-generation-test__image-footer">
         <span>{attachment.name}</span>
         <div>

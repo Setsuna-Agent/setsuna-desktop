@@ -1,4 +1,5 @@
 .desktop-workspace-launcher {
+  --workspace-launcher-trigger-width: 24px;
   position: relative;
   display: inline-flex;
   flex: 0 0 auto;
@@ -15,6 +16,23 @@
   line-height: 1;
 }
 
+/* The group owns the outline and divider; inner button hover/press stays inside it. */
+.desktop-workspace-launcher::after {
+  position: absolute;
+  top: 0;
+  right: var(--workspace-launcher-trigger-width);
+  bottom: 0;
+  width: 1px;
+  background: var(--app-border);
+  content: '';
+  pointer-events: none;
+}
+
+.desktop-workspace-launcher > button {
+  border: 0;
+  border-radius: 0;
+}
+
 .desktop-workspace-launcher:hover {
   border-color: color-mix(in srgb, var(--app-text) 24%, var(--app-border));
 }
@@ -25,7 +43,6 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  border: 0;
   padding: 0;
   color: inherit;
   background: transparent;
@@ -47,8 +64,7 @@
 }
 
 .desktop-workspace-launcher__trigger {
-  width: 24px;
-  border-left: 1px solid color-mix(in srgb, var(--app-border) 74%, transparent);
+  width: var(--workspace-launcher-trigger-width);
   color: color-mix(in srgb, var(--app-text-muted) 90%, transparent);
 }
 
@@ -75,7 +91,7 @@
   max-height: min(520px, calc(100vh - 72px));
   padding: 8px;
   border: 1px solid var(--app-border);
-  border-radius: 10px;
+  border-radius: var(--app-radius-lg);
   background: var(--app-surface);
   overflow-y: auto;
   box-shadow: var(--app-shadow-popover);
@@ -91,7 +107,7 @@
   min-height: 32px;
   padding: 0 10px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
   color: var(--app-text);
   background: transparent;
   font-size: 13px;

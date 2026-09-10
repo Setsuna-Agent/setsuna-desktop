@@ -1,41 +1,6 @@
-.desktop-project-editor-backdrop {
-  z-index: 130;
-}
-
-.desktop-project-editor.desktop-agent-modal {
-  width: min(520px, 100%);
-  gap: 0;
-  padding: 0;
-  border-radius: 14px;
-  overflow: hidden;
-}
-
-.desktop-project-editor__header {
-  gap: 16px;
-  padding: 18px 20px 14px;
-}
-
-.desktop-project-editor__header > div:first-child {
-  display: grid;
-  min-width: 0;
-  gap: 3px;
-}
-
-.desktop-project-editor__header strong {
-  font-size: 16px;
-  line-height: 22px;
-}
-
-.desktop-project-editor__header small {
-  color: var(--app-text-muted);
-  font-size: 11px;
-  line-height: 16px;
-}
-
 .desktop-project-editor__body {
   display: grid;
   gap: 18px;
-  padding: 4px 20px 20px;
 }
 
 .desktop-project-editor__field {
@@ -74,7 +39,7 @@
 .desktop-project-editor__directory {
   overflow: hidden;
   border: 1px solid var(--desktop-agent-subtle-divider);
-  border-radius: 10px;
+  border-radius: var(--app-radius-lg);
   background: var(--app-surface-subtle);
 }
 
@@ -119,6 +84,7 @@
 .desktop-project-editor__choose-directory {
   width: 100%;
   border: 0;
+  border-radius: 0;
   background: transparent;
   cursor: pointer;
   text-align: left;
@@ -140,29 +106,22 @@
 
 .desktop-project-editor__error {
   padding: 9px 10px;
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   color: var(--app-danger);
   background: color-mix(in srgb, var(--app-danger) 7%, transparent);
   font-size: 11px;
   line-height: 16px;
 }
 
-.desktop-project-editor__footer.desktop-project-editor__footer {
+.desktop-project-editor__footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 13px 20px;
-  border-top: 1px solid var(--desktop-agent-subtle-divider);
+  width: 100%;
 }
 
 .desktop-project-editor__footer > span {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-@media (max-width: 620px) {
-  .desktop-project-editor-backdrop {
-    padding: 14px;
-  }
 }

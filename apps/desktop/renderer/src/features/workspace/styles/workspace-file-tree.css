@@ -28,8 +28,6 @@
   left: -5px;
   z-index: 4;
   width: 10px;
-  border: 0;
-  background: transparent;
   cursor: col-resize;
 }
 
@@ -43,9 +41,8 @@
   content: "";
 }
 
-.desktop-file-tree__resize-handle:hover::after,
 body.desktop-file-tree-resizing .desktop-file-tree__resize-handle::after {
-  background: var(--app-text-muted);
+  background: var(--app-border-strong);
 }
 
 .desktop-file-search {
@@ -55,7 +52,7 @@ body.desktop-file-tree-resizing .desktop-file-tree__resize-handle::after {
   align-items: center;
   gap: 6px;
   height: 30px;
-  margin: 4px 8px;
+  margin: 8px;
   padding: 0 9px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-md);
@@ -64,13 +61,18 @@ body.desktop-file-tree-resizing .desktop-file-tree__resize-handle::after {
 }
 
 .desktop-file-search input {
+  box-shadow: none;
   width: 100%;
   min-width: 0;
+  min-height: 0;
+  height: 100%;
+  padding: 0;
   border: 0;
   outline: 0;
   color: var(--app-text);
   background: transparent;
   font-size: 12px;
+  line-height: 20px;
 }
 
 .desktop-file-list {

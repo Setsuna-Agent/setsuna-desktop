@@ -19,6 +19,7 @@
     { "path": "../../contracts/tsconfig.build.json" },
     { "path": "../../feature-core/tsconfig.build.json" },
     { "path": "../../renderer-contracts/tsconfig.build.json" },
-    { "path": "../network-proxy/tsconfig.build.json" }
+    { "path": "../network-proxy/tsconfig.build.json" },
+    { "path": "../../renderer-ui/tsconfig.build.json" }
   ]
 }

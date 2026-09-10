@@ -1,4 +1,4 @@
-import type { SlotConfigType } from '@ant-design/x/es/sender';
+import type { ComposerSlot } from './editor/types.js';
 import type { RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import {
   createSelectedSkillSlot,
@@ -27,12 +27,12 @@ export type ChatComposerClipboardSelection = {
 
 export type ChatComposerClipboardPastePlan = {
   selectedSkills: RuntimeSkillSummary[];
-  slots: SlotConfigType[];
+  slots: ComposerSlot[];
 };
 
 export function createChatComposerClipboardSelection(
   editor: HTMLDivElement,
-  slotConfig: SlotConfigType[],
+  slotConfig: ComposerSlot[],
   selection: Selection | null = window.getSelection(),
 ): ChatComposerClipboardSelection | null {
   const range = selectedRangeWithin(editor, selection);
@@ -60,7 +60,7 @@ export function createChatComposerClipboardPastePlan(
   const skillsById = new Map(skills.map((skill) => [skill.id, skill]));
   const selectedSkills: RuntimeSkillSummary[] = [];
   const selectedSkillIds = new Set<string>();
-  const slots: SlotConfigType[] = [];
+  const slots: ComposerSlot[] = [];
 
   for (const part of payload.parts) {
     if (part.type === 'text') {
@@ -86,7 +86,7 @@ export function createChatComposerClipboardPastePlan(
 
 export function setNormalizedChatComposerSelection(
   editor: HTMLDivElement,
-  slotConfig: SlotConfigType[],
+  slotConfig: ComposerSlot[],
   selection: Selection | null = window.getSelection(),
 ): void {
   const range = selectedRangeWithin(editor, selection);
@@ -127,8 +127,8 @@ function containsNode(editor: HTMLDivElement, node: Node): boolean {
   return node === editor || editor.contains(node);
 }
 
-function keyedSlots(slotConfig: SlotConfigType[]): Map<string, SlotConfigType> {
-  const slots = new Map<string, SlotConfigType>();
+function keyedSlots(slotConfig: ComposerSlot[]): Map<string, ComposerSlot> {
+  const slots = new Map<string, ComposerSlot>();
   for (const slot of slotConfig) {
     if (slot.key) slots.set(slot.key, slot);
   }
@@ -138,7 +138,7 @@ function keyedSlots(slotConfig: SlotConfigType[]): Map<string, SlotConfigType> {
 function normalizeReferenceBoundaries(
   sourceRange: Range,
   editor: HTMLDivElement,
-  slotsByKey: Map<string, SlotConfigType>,
+  slotsByKey: Map<string, ComposerSlot>,
 ): Range {
   const range = sourceRange.cloneRange();
   const startSlot = referenceSlotContaining(range.startContainer, editor, slotsByKey);
@@ -151,7 +151,7 @@ function normalizeReferenceBoundaries(
 function referenceSlotContaining(
   node: Node,
   editor: HTMLDivElement,
-  slotsByKey: Map<string, SlotConfigType>,
+  slotsByKey: Map<string, ComposerSlot>,
 ): HTMLElement | null {
   const element = node instanceof Element ? node : node.parentElement;
   const slotElement = element?.closest<HTMLElement>('[data-slot-key]') ?? null;
@@ -162,7 +162,7 @@ function referenceSlotContaining(
 
 function serializeSelectedParts(
   range: Range,
-  slotsByKey: Map<string, SlotConfigType>,
+  slotsByKey: Map<string, ComposerSlot>,
 ): ChatComposerClipboardPart[] {
   const parts: ChatComposerClipboardPart[] = [];
   const fragment = range.cloneContents();
@@ -197,7 +197,7 @@ function appendTextPart(parts: ChatComposerClipboardPart[], value: string): void
   }
 }
 
-function appendTextSlot(slots: SlotConfigType[], value: string): void {
+function appendTextSlot(slots: ComposerSlot[], value: string): void {
   if (!value) return;
   const previous = slots.at(-1);
   if (previous?.type === 'text') {

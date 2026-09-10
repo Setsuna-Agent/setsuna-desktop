@@ -1,10 +1,11 @@
+import { Button as UiButton, Button, TextField, ProgressRing } from '@setsuna-desktop/renderer-ui';
 import type {
   ProviderConfigState,
   ProviderModelConfig,
   RuntimeConfigState,
 } from '@setsuna-desktop/contracts';
-import { Button, Input, Progress } from 'antd';
-import { Check, Image as ImageIcon, Sparkles, Zap } from 'lucide-react';
+
+import { Check, LoaderCircle, Image as ImageIcon, Sparkles, Zap } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BrandIconMark } from '../../../shared/branding/BrandIconMark.js';
 import { resolveModelBrand } from '../../../shared/branding/providerBranding.js';
@@ -140,12 +141,10 @@ export function ChatModelPicker({
           aria-label={t('chat.model.dialog')}
         >
           <div className="chat-skill-command-menu__header chat-model-command-menu__header">
-            <Input
-              allowClear
+            <TextField
               autoFocus
               className="chat-model-command-menu__search"
               placeholder={t('chat.model.search')}
-              size="small"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
@@ -157,7 +156,7 @@ export function ChatModelPicker({
                 const selected = option.key === selectedKey;
                 const focused = index === activeIndex;
                 return (
-                  <button
+                  <UiButton variant="ghost"
                     ref={focused ? activeOptionRef : undefined}
                     key={option.key}
                     className={`chat-command-menu__item chat-model-command-menu__item ${focused ? 'is-active' : ''}`}
@@ -187,7 +186,7 @@ export function ChatModelPicker({
                       {option.provider.name || t('chat.model.unnamedProvider')}
                     </span>
                     <span className="chat-model-command-menu__check">{selected ? <Check size={13} /> : null}</span>
-                  </button>
+                  </UiButton>
                 );
               })
             ) : (
@@ -202,7 +201,7 @@ export function ChatModelPicker({
         open={open ? false : undefined}
       >
         <Button
-          type="text"
+          variant="ghost"
           size="small"
           className="chat-model-selector"
           disabled={disabled || !config}
@@ -219,20 +218,20 @@ export function ChatModelPicker({
                 size="compact"
               />
             ) : (
-              <Zap className="chat-model-selector__placeholder-icon" fill="currentColor" size={13} strokeWidth={0} />
+              <Zap className="chat-model-selector__placeholder-icon" size={13} />
             )}
           </span>
           <span className="chat-model-selector__name">{activeModel?.name ?? fallbackModelCode ?? t('chat.model.noneSelected')}</span>
           {modelUsage.visible ? (
-            <Progress
+            contextCompacting ? <LoaderCircle size={14} className="is-spinning" aria-hidden="true" /> : <ProgressRing
               aria-label={t('chat.model.contextUsage', { usage: modelUsage.percentLabel })}
               className="chat-token-progress chat-model-selector__progress"
               percent={modelUsage.percentValue}
-              showInfo={false}
+
               size={14}
-              status={contextCompacting ? 'active' : 'normal'}
+
               strokeWidth={18}
-              type="circle"
+
             />
           ) : null}
         </Button>

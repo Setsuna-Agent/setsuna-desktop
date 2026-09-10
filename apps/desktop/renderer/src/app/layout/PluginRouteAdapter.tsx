@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import { shellPluginPageSlot } from '@setsuna-desktop/renderer-contracts/shell';
 import { RendererOwnedKeyedSlot } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
@@ -19,9 +20,9 @@ export function PluginRouteAdapter({
   const unavailable = () => (
     <main className="declarative-plugin-page declarative-plugin-page--unavailable">
       <p>{t('pluginUi.pageUnavailable')}</p>
-      <button className="declarative-plugin-ui__button" onClick={onBack} type="button">
+      <Button variant="ghost" className="declarative-plugin-ui__button" onClick={onBack} type="button">
         {t('common.back')}
-      </button>
+      </Button>
     </main>
   );
 

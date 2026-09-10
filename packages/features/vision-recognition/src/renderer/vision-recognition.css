@@ -97,7 +97,7 @@
 .feature-vision-recognition-test > header > span {
   flex: 0 0 auto;
   padding: 3px 8px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-full);
   color: var(--app-primary);
   background: color-mix(in srgb, var(--app-primary) 10%, transparent);
   font-size: 11px;

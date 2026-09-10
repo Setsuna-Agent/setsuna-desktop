@@ -52,14 +52,14 @@
 .declarative-plugin-ui__badge {
   background: var(--sd-color-surface-muted);
   border: 1px solid var(--sd-color-border);
-  border-radius: 999px;
+  border-radius: var(--app-radius-full);
   padding: 2px 8px;
 }
 
 .declarative-plugin-ui__notice {
   background: var(--sd-color-surface-muted);
   border: 1px solid var(--sd-color-border);
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -72,40 +72,10 @@
   gap: 6px;
 }
 
-.declarative-plugin-ui__field input,
-.declarative-plugin-ui__field select {
-  background: var(--sd-color-input);
-  border: 1px solid var(--sd-color-border);
-  border-radius: 7px;
-  color: var(--sd-color-text);
-  min-height: 34px;
-  padding: 6px 9px;
-}
-
-.declarative-plugin-ui__button {
-  background: var(--sd-color-surface-muted);
-  border: 1px solid var(--sd-color-border);
-  border-radius: 7px;
-  color: var(--sd-color-text);
-  cursor: pointer;
-  min-height: 28px;
-  padding: 4px 9px;
-}
-
-.declarative-plugin-ui__button:disabled {
-  cursor: default;
-  opacity: 0.55;
-}
-
-.declarative-plugin-ui__button.is-primary {
-  background: var(--sd-color-accent);
-  color: var(--sd-color-accent-text);
-}
-
 .declarative-plugin-ui__approval {
   background: var(--sd-color-surface-muted);
   border: 1px solid var(--sd-color-border);
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   color: var(--sd-color-text);
   display: flex;
   flex-direction: column;
@@ -140,7 +110,7 @@
 .declarative-plugin-navigation__icon {
   width: var(--desktop-agent-icon-size);
   height: var(--desktop-agent-icon-size);
-  border-radius: 5px;
+  border-radius: var(--app-radius-xs);
   font-size: var(--desktop-agent-icon-size);
 }
 
@@ -148,7 +118,7 @@
   flex: 0 0 auto;
   max-width: 72px;
   overflow: hidden;
-  border-radius: 999px;
+  border-radius: var(--app-radius-full);
   padding: 1px 6px;
   color: var(--app-sidebar-text-secondary);
   background: var(--desktop-agent-sidebar-hover-bg);
@@ -205,7 +175,7 @@
 
 .declarative-plugin-page__content {
   border: 1px solid var(--sd-color-border);
-  border-radius: 12px;
+  border-radius: var(--app-radius-lg);
   padding: 18px;
   background: var(--sd-color-surface-muted);
 }

@@ -7,7 +7,7 @@
   gap: 16px;
   padding: 16px;
   border: 1px solid color-mix(in srgb, var(--sd-color-accent, Highlight) 22%, var(--sd-color-border, CanvasText));
-  border-radius: 9px;
+  border-radius: var(--app-radius-sm);
 }
 
 .feature-image-generation-settings > header {
@@ -45,7 +45,7 @@
   justify-content: center;
   width: 34px;
   height: 34px;
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
   color: var(--sd-color-accent, Highlight);
   background: color-mix(in srgb, var(--sd-color-accent, Highlight) 11%, transparent);
 }
@@ -77,7 +77,7 @@
 .feature-image-generation-settings__warning {
   padding: 9px 11px;
   border: 1px solid color-mix(in srgb, var(--sd-color-warning, #f97316) 34%, var(--sd-color-border, CanvasText));
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
   color: var(--sd-color-warning, #f97316);
   background: color-mix(in srgb, var(--sd-color-warning, #f97316) 7%, transparent);
   font-size: 12px;
@@ -134,7 +134,7 @@
 .feature-image-generation-test > header > span {
   flex: 0 0 auto;
   padding: 3px 8px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-full);
   color: var(--sd-color-accent, Highlight);
   background: color-mix(in srgb, var(--sd-color-accent, Highlight) 10%, transparent);
   font-size: 11px;
@@ -156,7 +156,7 @@
   min-width: 0;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--sd-color-border, CanvasText) 88%, transparent);
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
   background: var(--sd-color-surface, Canvas);
 }
 
@@ -169,19 +169,19 @@
   background: color-mix(in srgb, var(--sd-color-surface, Canvas) 94%, var(--sd-color-text, CanvasText) 4%);
 }
 
-.feature-image-generation-test__preview > div:not(.ant-image) {
+.feature-image-generation-test__preview > div:not(.sd-image) {
   padding: 24px;
   color: var(--sd-color-text-muted, GrayText);
   font-size: 12px;
   text-align: center;
 }
 
-.feature-image-generation-test__preview .ant-image {
+.feature-image-generation-test__preview .sd-image {
   display: block;
   width: 100%;
 }
 
-.feature-image-generation-test__preview .ant-image-img {
+.feature-image-generation-test__preview .sd-image__content {
   display: block;
   width: 100%;
   max-height: 520px;

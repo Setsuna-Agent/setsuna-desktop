@@ -66,6 +66,7 @@ describe('WorkspaceOverviewPanel', () => {
     const onOpenBrowser = vi.fn();
     const panel = captureWorkspaceOverviewPanel({
       activeProject: project,
+      isGitRepository: true,
       onOpenBrowser,
       onOpenFilesPanel: () => undefined,
       onOpenReviewPanel,
@@ -87,6 +88,7 @@ describe('WorkspaceOverviewPanel', () => {
   it('shows conversation debug only when the developer action is provided', () => {
     const baseProps: WorkspaceOverviewProps = {
       activeProject: project,
+      isGitRepository: false,
       onOpenBrowser: () => undefined,
       onOpenFilesPanel: () => undefined,
       onOpenReviewPanel: () => undefined,
@@ -101,8 +103,27 @@ describe('WorkspaceOverviewPanel', () => {
     })).toContain('对话调试');
   });
 
+  it.each([false, true])('shows the changes entry only for a Git repository (isGitRepository=%s)', (isGitRepository) => {
+    const html = renderWorkspaceOverviewPanel({
+      activeProject: project,
+      isGitRepository,
+      onOpenBrowser: () => undefined,
+      onOpenFilesPanel: () => undefined,
+      onOpenReviewPanel: () => undefined,
+      onOpenChangesPanel: () => undefined,
+      onOpenSideChat: () => undefined,
+      onOpenTerminalPanel: () => undefined,
+    });
+
+    expect(html.includes('data-workspace-overview-action="changes"')).toBe(isGitRepository);
+    for (const action of ['review', 'files', 'terminal']) {
+      expect(html).toContain(`data-workspace-overview-action="${action}"`);
+    }
+  });
+
   it('在普通对话的临时目录中开放工作区操作', () => {
     const panel = captureWorkspaceOverviewPanel({
+      isGitRepository: false,
       activeProject: {
         ...project,
         id: temporaryWorkspaceProjectId({ date: '2026-07-18', threadId: 'thread_1' }),

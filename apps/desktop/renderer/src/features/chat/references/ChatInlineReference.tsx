@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import type { ReactNode } from 'react';
 
 export function ChatInlineReference({
@@ -31,7 +32,7 @@ export function ChatInlineReference({
 
   if (onActivate) {
     return (
-      <button
+      <Button variant="ghost"
         aria-label={actionLabel}
         className={classes}
         title={title}
@@ -39,7 +40,7 @@ export function ChatInlineReference({
         onClick={onActivate}
       >
         {content}
-      </button>
+      </Button>
     );
   }
 

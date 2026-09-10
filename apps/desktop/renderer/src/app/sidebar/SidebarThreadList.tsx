@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
 import { useState } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
@@ -83,7 +84,7 @@ export function SidebarThreadList({
         />
       ))}
       {remainingCount > 0 ? (
-        <button
+        <Button variant="ghost"
           className="desktop-agent-thread-list__show-more"
           type="button"
           aria-label={t('sidebar.showMoreLabel', { count: Math.min(batchSize, remainingCount) })}
@@ -98,7 +99,7 @@ export function SidebarThreadList({
           }))}
         >
           {t('sidebar.showMore')}
-        </button>
+        </Button>
       ) : null}
     </div>
   );

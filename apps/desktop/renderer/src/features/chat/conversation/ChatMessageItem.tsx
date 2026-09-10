@@ -1,4 +1,5 @@
-import { Bubble } from '@ant-design/x';
+import { TextArea, Button, MessageBubble } from '@setsuna-desktop/renderer-ui';
+
 import {
   normalizeRuntimeReviewNotice,
   type RuntimeMessage,
@@ -165,12 +166,12 @@ export const MessageItem = memo(function MessageItem({
     <article className={['chat-bubble-item', 'chat-bubble-item--user', deleteMode ? 'chat-bubble-item--selecting' : '', selectedForDelete ? 'is-selected-for-delete' : ''].filter(Boolean).join(' ')}>
       {deleteMode && onToggleDelete ? <MessageSelectionControl checked={selectedForDelete} label={t('chat.delete.selectMessage')} onChange={(checked) => onToggleDelete(item.id, checked)} /> : null}
       <div className="chat-user-turn">
-        <Bubble
+        <MessageBubble
           className={`chat-user-bubble ${hasAttachments ? 'chat-user-bubble--with-attachments' : ''}`}
           content={<UserMessageContent message={message} streaming={streaming} />}
           footer={<ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} align="end" message={message} onDelete={steered || !onStartDelete ? undefined : () => onStartDelete(item.id)} onEdit={steered || !onStartEdit || message.inputKind === 'goal' || message.inputKind === 'review' || message.inputKind === 'subagent_task' ? undefined : () => onStartEdit(message)} timePosition={steered ? 'none' : 'before-actions'} />}
-          placement="end"
-          variant="filled"
+          align="end"
+          variant="soft"
         />
         <RuntimeHookRuns runs={message.hookRuns} />
         {showExtractedGuidance ? <GuidanceMessageList handledMessageIds={new Set(item.handledSteerMessageIds)} messages={fallbackGuidanceMessages} /> : null}
@@ -274,13 +275,12 @@ function AssistantRunItem({
   return (
     <article className={['chat-bubble-item', 'chat-bubble-item--assistant', streaming ? 'chat-bubble-item--active' : '', deleteMode ? 'chat-bubble-item--selecting' : '', selectedForDelete ? 'is-selected-for-delete' : ''].filter(Boolean).join(' ')}>
       {deleteMode && onToggleDelete ? <MessageSelectionControl checked={selectedForDelete} label={t('chat.delete.selectReply')} onChange={(checked) => onToggleDelete(item.id, checked)} /> : null}
-      <Bubble
+      <MessageBubble
         className="chat-ai-bubble"
         content={<AssistantRunContent active={active} contextCompactionActive={contextCompactionActive} item={item} onAnswerApproval={onAnswerApproval} onDiscardFileChanges={onDiscardFileChanges} onOpenFileReview={onOpenFileReview} onWorkHistoryExpandedChange={onWorkHistoryExpandedChange} pluginUses={pluginUses} showThinkingInTranscript={showThinkingInTranscript} />}
         footer={belongsToActiveTurn ? undefined : <ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} message={footerMessage} onDelete={onStartDelete ? () => onStartDelete(item.id) : undefined} timePosition="after-actions" />}
-        placement="start"
-        streaming={streaming}
-        variant="borderless"
+        align="start"
+        variant="ghost"
       />
     </article>
   );
@@ -297,15 +297,15 @@ function UserMessageEditor({ disabled, onCancel, onChange, onSubmit, submitting,
   return (
     <article className="chat-bubble-item chat-bubble-item--user">
       <form className="chat-user-edit" onSubmit={submit}>
-        <textarea autoFocus disabled={disabled} value={value} rows={Math.min(8, Math.max(2, value.split('\n').length))} onChange={(event) => onChange(event.currentTarget.value)} />
+        <TextArea autoFocus disabled={disabled} value={value} rows={Math.min(8, Math.max(2, value.split('\n').length))} onChange={(event) => onChange(event.currentTarget.value)} />
         <div className="chat-user-edit__footer">
           <span className="chat-user-edit__actions">
-            <button type="button" disabled={disabled} onClick={onCancel}>
+            <Button variant="ghost" type="button" disabled={disabled} onClick={onCancel}>
               {t('common.cancel')}
-            </button>
-            <button type="submit" disabled={disabled || !value.trim()}>
+            </Button>
+            <Button variant="ghost" type="submit" disabled={disabled || !value.trim()}>
               {submitting ? t('chat.message.sending') : t('chat.composer.send')}
-            </button>
+            </Button>
           </span>
         </div>
       </form>
@@ -682,7 +682,7 @@ function ReviewSummaryCard({
               );
               const key = `${finding.path}:${finding.startLine}:${index}`;
               return onOpenFile ? (
-                <button
+                <Button variant="ghost"
                   className="chat-review-summary-card__finding"
                   key={key}
                   type="button"
@@ -693,7 +693,7 @@ function ReviewSummaryCard({
                   )}
                 >
                   {content}
-                </button>
+                </Button>
               ) : (
                 <div
                   className="chat-review-summary-card__finding chat-review-summary-card__finding--static"

@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeThread } from '@setsuna-desktop/contracts';
 import { AlertTriangle, X } from 'lucide-react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
@@ -12,9 +13,9 @@ export function RuntimeErrorNotice({ message, onDismiss }: { message: string; on
         <strong>{t('app.error.runtime')}</strong>
         <span>{message}</span>
       </div>
-      <button aria-label={t('runtimeError.close')} type="button" onClick={onDismiss}>
+      <Button variant="ghost" aria-label={t('runtimeError.close')} type="button" onClick={onDismiss}>
         <X aria-hidden="true" size={15} />
-      </button>
+      </Button>
     </div>
   );
 }

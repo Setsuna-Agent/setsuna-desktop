@@ -1,3 +1,4 @@
+import { Button } from '@setsuna-desktop/renderer-ui';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { PluginIcon } from '../../../shared/ui/PluginIcon.js';
 import { useRuntimePluginNavigation } from './RuntimePluginNavigation.js';
@@ -29,14 +30,14 @@ export function RuntimePluginUses({
           <div className="chat-plugin-use-record" key={plugin.id}>
             <span className="chat-plugin-uses__status">{status}</span>
             {onOpenPlugin ? (
-              <button
+              <Button variant="ghost"
                 className="chat-plugin-use"
                 type="button"
                 title={title}
                 onClick={() => onOpenPlugin(plugin.id)}
               >
                 {content}
-              </button>
+              </Button>
             ) : (
               <span className="chat-plugin-use" title={title}>
                 {content}
