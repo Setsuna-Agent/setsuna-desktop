@@ -6,6 +6,7 @@ import type {
   ShellToolchainCommand,
 } from '@setsuna-desktop/feature-workspace-dependencies/contracts';
 import type { ShellPolicyState } from './pc-local-tool-shell-policy.js';
+import type { ShellOutputBuffer } from './pc-local-tool-shell-output.js';
 
 export type ToolArguments = Record<string, unknown>;
 
@@ -89,6 +90,7 @@ export type ShellSession = {
   persist: boolean;
   persistTtlMs: number;
   expiresAt: number;
+  unreadOutput: ShellOutputBuffer;
   stdout: string;
   stderr: string;
   stdoutOmittedChars: number;

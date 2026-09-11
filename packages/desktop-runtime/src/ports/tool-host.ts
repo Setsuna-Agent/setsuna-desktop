@@ -21,6 +21,8 @@ export type ToolExecutionContext = {
   };
   environment?: ToolExecutionEnvironment;
   permissionProfile?: RuntimePermissionProfile;
+  /** Core review/subagent turns cannot gain write access through session grants or sandbox retries. */
+  readOnly?: boolean;
   sandboxWorkspaceWrite?: RuntimeSandboxWorkspaceWrite;
   /** Per-turn roots available to host file-reading tools but never delegated to a shell sandbox. */
   directToolReadableRoots?: string[];

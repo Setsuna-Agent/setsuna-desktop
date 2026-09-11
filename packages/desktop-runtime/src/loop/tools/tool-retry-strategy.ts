@@ -85,6 +85,7 @@ export class ToolRetryStrategy {
   constructor(private readonly options: ToolRetryStrategyOptions) {}
 
   async retryAfterNetworkDenied(input: ToolRetryInput): Promise<ToolRetryOutcome> {
+    if (input.context.readOnly) return readOnlyRetryFailure(input);
     const {
       approvalPolicy,
       context,
@@ -176,6 +177,7 @@ export class ToolRetryStrategy {
   }
 
   async retryAfterSandboxDenied(input: ToolRetryInput): Promise<ToolRetryOutcome> {
+    if (input.context.readOnly) return readOnlyRetryFailure(input);
     const {
       approvalPolicy,
       context,
@@ -344,6 +346,15 @@ export class ToolRetryStrategy {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function readOnlyRetryFailure(input: ToolRetryInput): ToolRetryOutcome {
+  return {
+    kind: 'terminal',
+    content: `Tool ${input.toolCall.name} failed in a read-only turn; permissions cannot be expanded: ${input.toolError.message}`,
+    processed: true,
+    status: 'error',
+  };
 }
 
 function rejectionMessage(fallback: string, rationale: string | undefined): string {

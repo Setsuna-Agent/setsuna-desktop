@@ -692,8 +692,8 @@ describe('agent loop turn execution', () => {
       const modelClient = new MemoryCapturingModelClient();
       const toolHost = new CapturingToolHost([
         WORKSPACE_READ_FILE_TOOL,
-        { name: 'git_log', description: 'Read Git history', inputSchema: {} },
-        { name: 'git_show', description: 'Read a Git revision', inputSchema: {} },
+        { name: 'exec_command', description: 'Run shell commands', inputSchema: {} },
+        { name: 'read_shell_process', description: 'Poll shell output', inputSchema: {} },
         { name: 'write_file', description: 'Write a file', inputSchema: {} },
       ]);
       const loop = new AgentLoop({
@@ -713,7 +713,7 @@ describe('agent loop turn execution', () => {
       });
       await waitForTurnCompleted(threadStore, thread.id, started.turnId);
   
-      expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(['workspace_read_file', 'git_log', 'git_show', 'read_tool_result']);
+      expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(['workspace_read_file', 'exec_command', 'read_shell_process', 'read_tool_result']);
       expect(modelClient.requests[0].messages.find((message) => message.id === 'desktop_review_policy')).toMatchObject({
         role: 'developer',
         content: expect.stringContaining('do not modify files'),

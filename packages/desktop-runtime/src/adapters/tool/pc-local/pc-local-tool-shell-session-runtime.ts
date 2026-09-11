@@ -13,7 +13,6 @@ import type { ShellSandboxProvider } from '../../../ports/shell-sandbox-provider
 import {
   MAX_SHELL_BUFFER_CHARS,
   MAX_SHELL_PROGRESS_CHARS,
-  MAX_TEXT_BYTES,
   SAFE_SHELL_ENV_KEYS,
   SENSITIVE_SHELL_ENV_KEY,
   SHELL_GRACEFUL_KILL_MS,
@@ -34,7 +33,6 @@ import type {
 import {
   sleep,
   truncateMiddle,
-  truncateText,
 } from './pc-local-tool-utils.js';
 
 export function isExpiredShellSession(session: ShellSession): boolean {
@@ -93,7 +91,7 @@ export function runningShellResult(session: ShellSession, root: string) {
   return {
     ok: true,
     content: [
-      formatShellSessionOutput(session, root),
+      takeShellSessionOutput(session, root),
       '',
       `Process is still running. Use read_shell_process with process_id ${session.id} to read more output or completion status.`,
       session.persist
@@ -117,9 +115,12 @@ export function completedShellResult(session: ShellSession, root: string) {
   const failure = classifyShellSessionFailure(session);
   return {
     ok: session.exitCode === 0 && !session.timedOut && !session.aborted,
-    content: truncateText(formatShellSessionOutput(session, root), MAX_TEXT_BYTES),
+    content: takeShellSessionOutput(session, root),
     display: `${status}: ${session.command}`,
     process_id: session.id,
+    running: false,
+    exit_code: session.exitCode,
+    signal: session.signal,
     persisted: Boolean(session.persist),
     expires_at_ms: session.persist ? session.expiresAt : null,
     ...(failure ? failure : {}),
@@ -351,8 +352,12 @@ export function shellProcessSnapshot(session: ShellSession, root: string) {
   };
 }
 
-export function formatShellSessionOutput(session: ShellSession, root: string): string {
+export function takeShellSessionOutput(session: ShellSession, root: string): string {
+  const output = session.unreadOutput.take();
   return [
+    ...(output.omittedBytes ? [
+      `Warning: shell output collection exceeded its local limit; ${output.omittedBytes} earlier UTF-8 bytes were discarded and cannot be recovered with read_tool_result.`,
+    ] : []),
     `Process Id: ${session.id}`,
     `Command: ${session.command}`,
     `Directory: ${formatPath(session.cwd, root)}`,
@@ -363,16 +368,9 @@ export function formatShellSessionOutput(session: ShellSession, root: string): s
     `Elapsed Ms: ${Math.max(0, (session.finishedAt || Date.now()) - session.startedAt)}`,
     `Exit Code: ${session.exitCode ?? '(none)'}`,
     `Signal: ${session.signal ?? '(none)'}`,
-    `Stdout:\n${formatShellOutputChannel(session.stdout, session.stdoutOmittedChars)}`,
-    `Stderr:\n${formatShellOutputChannel(session.stderr, session.stderrOmittedChars)}`,
+    `Stdout:\n${output.stdout || '(no new output)'}`,
+    `Stderr:\n${output.stderr || '(no new output)'}`,
   ].join('\n');
-}
-
-function formatShellOutputChannel(value: unknown, omittedChars: number): string {
-  const text = String(value || '');
-  if (!text && !omittedChars) return '(empty)';
-  const prefix = omittedChars > 0 ? `[output truncated; omitted ${omittedChars} earlier chars]\n` : '';
-  return `${prefix}${text || '(empty)'}`;
 }
 
 export function appendShellOutput(
@@ -382,6 +380,7 @@ export function appendShellOutput(
   root: string,
 ): void {
   const text = String(chunk || '');
+  session.unreadOutput.append(stream, text);
   const current = stream === 'stdout' ? session.stdout : session.stderr;
   const next = `${current}${text}`;
   if (next.length > MAX_SHELL_BUFFER_CHARS) {

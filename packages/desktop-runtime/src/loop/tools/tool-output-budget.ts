@@ -7,8 +7,24 @@
  */
 
 export const TOOL_OUTPUT_BUDGET_DEFAULT_TOKENS = 10_000;
-export const TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS = 8_000;
+export const TOOL_OUTPUT_BUDGET_SHELL_MCP_TOKENS = 8_000;
 export const TOOL_OUTPUT_BUDGET_READ_TOOL_RESULT_TOKENS = 8_000;
+/** 为结果引用和分页提示保留最小空间。 */
+export const TOOL_OUTPUT_MIN_REQUEST_TOKENS = 256;
+
+const SHELL_OUTPUT_BUDGET_TOOLS = new Set([
+  'git_inspect',
+  'exec_command', 'run_shell_command', 'write_stdin', 'write_shell_process',
+  'read_shell_process', 'terminate_shell_process',
+]);
+
+/** 模型可缩小本次 shell 输出，但不能突破宿主的策略上限。 */
+export function requestedToolOutputTokenLimit(name: string, input: unknown, policyLimit: number): number {
+  if (!SHELL_OUTPUT_BUDGET_TOOLS.has(name) || !input || typeof input !== 'object') return policyLimit;
+  const requested = (input as Record<string, unknown>).max_output_tokens;
+  if (typeof requested !== 'number' || !Number.isFinite(requested) || requested <= 0) return policyLimit;
+  return Math.min(policyLimit, Math.max(TOOL_OUTPUT_MIN_REQUEST_TOKENS, Math.floor(requested)));
+}
 
 /** 单个结果本地存储硬上限;超过则本地存储本身也裁剪。 */
 export const TOOL_OUTPUT_LOCAL_HARD_CAP_BYTES = 16 * 1024 * 1024;

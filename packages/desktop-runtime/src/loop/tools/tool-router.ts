@@ -22,7 +22,7 @@ import type {
 import {
   TOOL_OUTPUT_BUDGET_DEFAULT_TOKENS,
   TOOL_OUTPUT_BUDGET_READ_TOOL_RESULT_TOKENS,
-  TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS,
+  TOOL_OUTPUT_BUDGET_SHELL_MCP_TOKENS,
 } from './tool-output-budget.js';
 
 // 默认只让确定性的本地只读工具进入并行批处理；其它 runtime 可通过 profile 显式覆盖。
@@ -31,10 +31,6 @@ export const LOCAL_PARALLEL_READ_ONLY_TOOL_NAMES = new Set([
   'find_files',
   'search_text',
   'read_file',
-  'git_status',
-  'git_log',
-  'git_show',
-  'read_diff',
   'workspace_list_directory',
   'workspace_search_text',
   'workspace_read_file',
@@ -66,20 +62,16 @@ const READ_TOOL_RESULT_TOOL: RuntimeToolDefinition = {
 
 /** 未在 profile 声明 modelOutputTokenLimit 时的名称回退预算。 */
 const DEFAULT_BOUNDED_OUTPUT_TOOL_LIMITS = new Map<string, number>([
-  ['run_shell_command', TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS],
-  ['exec_command', TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS],
-  ['write_shell_process', TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS],
-  ['write_stdin', TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS],
-  ['read_shell_process', TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS],
-  ['list_shell_processes', TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS],
-  ['terminate_shell_process', TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS],
-  ['git_status', TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS],
-  ['git_log', TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS],
-  ['git_show', TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS],
-  ['read_diff', TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS],
-  ['list_mcp_resources', TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS],
-  ['list_mcp_resource_templates', TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS],
-  ['read_mcp_resource', TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS],
+  ['run_shell_command', TOOL_OUTPUT_BUDGET_SHELL_MCP_TOKENS],
+  ['exec_command', TOOL_OUTPUT_BUDGET_SHELL_MCP_TOKENS],
+  ['write_shell_process', TOOL_OUTPUT_BUDGET_SHELL_MCP_TOKENS],
+  ['write_stdin', TOOL_OUTPUT_BUDGET_SHELL_MCP_TOKENS],
+  ['read_shell_process', TOOL_OUTPUT_BUDGET_SHELL_MCP_TOKENS],
+  ['list_shell_processes', TOOL_OUTPUT_BUDGET_SHELL_MCP_TOKENS],
+  ['terminate_shell_process', TOOL_OUTPUT_BUDGET_SHELL_MCP_TOKENS],
+  ['list_mcp_resources', TOOL_OUTPUT_BUDGET_SHELL_MCP_TOKENS],
+  ['list_mcp_resource_templates', TOOL_OUTPUT_BUDGET_SHELL_MCP_TOKENS],
+  ['read_mcp_resource', TOOL_OUTPUT_BUDGET_SHELL_MCP_TOKENS],
 ]);
 
 export type RuntimeToolRouterOptions = {
@@ -266,7 +258,7 @@ export class RuntimeToolRouter {
     }
     const nameLimit = DEFAULT_BOUNDED_OUTPUT_TOOL_LIMITS.get(name);
     if (nameLimit !== undefined) return nameLimit;
-    if (name.startsWith('mcp__')) return TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS;
+    if (name.startsWith('mcp__')) return TOOL_OUTPUT_BUDGET_SHELL_MCP_TOKENS;
     return TOOL_OUTPUT_BUDGET_DEFAULT_TOKENS;
   }
 

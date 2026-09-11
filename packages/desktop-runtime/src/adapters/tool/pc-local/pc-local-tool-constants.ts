@@ -38,12 +38,11 @@ export const SHELL_PROGRESS_THROTTLE_MS = 120;
 
 export const SHELL_GRACEFUL_KILL_MS = 2000;
 
+/** 仅用于进程统计和错误分类的诊断尾部；模型输出由 ShellOutputBuffer 独立保存。 */
 export const MAX_SHELL_BUFFER_CHARS = 240000;
 
 export const MAX_SHELL_PROGRESS_CHARS = 12000;
 export const MAX_FILE_READ_STATE_ENTRIES = 2048;
-
-export const DEFAULT_READONLY_TIMEOUT_MS = 30000;
 
 export const MAX_TOOL_SUMMARY_CHARS = 120;
 

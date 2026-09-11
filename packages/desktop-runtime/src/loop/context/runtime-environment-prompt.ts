@@ -28,9 +28,6 @@ export function runtimeEnvironmentPrompt(environment: RuntimeEnvironment): strin
       ? '    Run Git from cwd; Git discovers the parent repository automatically. Do not cd to repository root or request broader access merely to inspect workspace history.'
       : '',
     repository
-      ? '    When available, built-in git_status, read_diff, git_log, and git_show stay workspace-scoped and return workspace-relative paths.'
-      : '',
-    repository
       ? '    Git commands run through the shell are command-dependent and may emit repository-relative paths.'
       : '',
     repository && repository.workspacePrefix !== '.'

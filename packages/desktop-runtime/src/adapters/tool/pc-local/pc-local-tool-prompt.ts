@@ -1,15 +1,13 @@
 import type { RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 
 export type PcLocalToolPromptOptions = {
+  readOnly?: boolean;
   workspaceDependencies?: {
     enabled: boolean;
   };
 };
 
-const WORKTREE_GIT_TOOL_NAMES = ['git_status', 'read_diff'] as const;
-const HISTORY_GIT_TOOL_NAMES = ['git_log', 'git_show'] as const;
-const GIT_TOOL_NAMES = [...WORKTREE_GIT_TOOL_NAMES, ...HISTORY_GIT_TOOL_NAMES] as const;
-const READ_TOOL_NAMES = ['list_directory', 'find_files', 'search_text', 'read_file', ...GIT_TOOL_NAMES] as const;
+const READ_TOOL_NAMES = ['list_directory', 'find_files', 'search_text', 'read_file'] as const;
 const FILE_MUTATION_TOOL_NAMES = ['apply_patch', 'edit', 'write_file', 'append_file', 'delete_file'] as const;
 const SHELL_PROCESS_TOOL_NAMES = ['read_shell_process', 'list_shell_processes', 'write_shell_process', 'terminate_shell_process'] as const;
 const COMPAT_TOOL_NAMES = ['request_permissions', 'exec_command', 'write_stdin'] as const;
@@ -54,18 +52,6 @@ export function pcLocalToolPrompt(
     );
   }
 
-  if (hasAny(advertised, GIT_TOOL_NAMES)) {
-    const worktreeTools = advertisedNames(advertised, WORKTREE_GIT_TOOL_NAMES);
-    const historyTools = advertisedNames(advertised, HISTORY_GIT_TOOL_NAMES);
-    if (worktreeTools.length) lines.push(`- ${worktreeTools.join('/')} inspect working-tree changes.`);
-    if (historyTools.length) {
-      lines.push(
-        `- ${historyTools.join('/')} inspect committed history. Prefer ${historyTools.join('/')} over reconstructing repository-relative pathspecs with shell commands.`,
-        '- The Git history tools stay scoped to the selected workspace and return workspace-relative paths.',
-      );
-    }
-  }
-
   if (hasAny(advertised, FILE_MUTATION_TOOL_NAMES)) {
     if (advertised.has('apply_patch')) {
       lines.push(
@@ -87,9 +73,14 @@ export function pcLocalToolPrompt(
     lines.push('- Reuse conversation context when it already contains enough of the target file; avoid ritual re-reads.');
   }
 
+  if (advertised.has('git_inspect')) {
+    lines.push('- Shell execution is unavailable in this read-only turn. Use git_inspect for status/diff/log/show, narrow by path or revision, and use read_tool_result for missing output ranges.');
+  }
   if (advertised.has('run_shell_command')) {
     lines.push(
-      '- Use run_shell_command for builds, tests, package-manager commands, and work that depends on command output.',
+      '- Use run_shell_command for Git inspection, builds, tests, package-manager commands, and work that depends on command output.',
+    );
+    if (!options.readOnly) lines.push(
       '- Mark installs, destructive or high-impact commands, permission changes, sudo, remote scripts, publish/deploy, and shell redirection as high risk. If uncertain, use high risk.',
       '- Low-risk shell commands normally run directly; high-risk commands go through runtime approval.',
       '- For an explicitly requested directory removal, inspect it first. Use rmdir only for an empty directory and rm -r only when removal of its contents was explicit; classify either destructive case as high risk.',
@@ -100,7 +91,10 @@ export function pcLocalToolPrompt(
   }
 
   if (hasAny(advertised, COMMAND_TOOL_NAMES)) {
+    if (options.readOnly) lines.push('- This turn permits read-only inspection. Shell commands have no write or network access; permission expansion and unsandboxed retries are unavailable.');
     lines.push(
+      '- Inspect Git through the shell. Start with status, --stat, or --name-only when useful, then request the relevant paths or revisions; avoid dumping a whole large patch by default.',
+      '- max_output_tokens controls the visible shell output within the runtime policy limit. When a result includes result_id, use read_tool_result for missing ranges instead of rerunning the command.',
       '- Before the first build, test, lint, or typecheck command, use the injected project workflow. If it is unavailable or insufficient, inspect project instructions, the nearest relevant manifest, lockfile, and workspace configuration with read-only tools first.',
       '- Never use npm, npx, or another package-manager command as a probe when repository evidence selects a different manager. Prefer declared scripts; invoke a runner directly only when no declared script covers the check.',
       '- When deriving a narrower validation command from a declared script, preserve its package manager, working directory, runner flags, and configuration.',
@@ -119,14 +113,15 @@ export function pcLocalToolPrompt(
   }
 
   if (hasAny(advertised, SHELL_PROCESS_TOOL_NAMES)) {
-    lines.push('- A long-running shell command may return a process id. Use the advertised shell-process tools to poll, write interactive input, or terminate it as needed.');
+    lines.push('- A long-running shell command may return a process id. Use the advertised shell-process tools to poll, write interactive input, or terminate it as needed. Polls return only output not already returned by an earlier tool call.');
   }
   if (advertised.has('update_plan')) {
     lines.push('- For multi-step tasks, keep a concise plan with exactly one step in progress and update it as work completes.');
   }
   if (advertised.has('exec_command')) {
-    lines.push(
-      '- exec_command is the shell execution surface. Request only the narrowest per-command sandbox override when broader access is necessary.',
+    lines.push('- exec_command is the shell execution surface.');
+    if (!options.readOnly) lines.push(
+      '- Request only the narrowest per-command sandbox override when broader access is necessary.',
       '- If an important exec_command fails with a likely sandbox or permission error and narrow filesystem or network grants are insufficient, retry the same command with sandbox_permissions set to require_escalated and a concise justification so the runtime can request unsandboxed execution. Do not skip required build, test, lint, or typecheck validation solely because the sandboxed attempt failed.',
     );
   }
