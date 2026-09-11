@@ -48,7 +48,7 @@ describe('RuntimeReviewControl', () => {
       language: 'zh-CN',
       modelSelection: selection,
       prompt: expect.stringContaining('审查当前分支与“main”之间的更改。'),
-      developerInstructions: expect.stringContaining('do not modify files'),
+      developerInstructions: expect.stringContaining('不修改文件或实现修复'),
     }));
     expect(started.response).toEqual({ accepted: true, turnId: 'turn_review' });
   });

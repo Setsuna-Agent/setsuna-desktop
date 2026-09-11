@@ -10,7 +10,7 @@ describe('createReviewTurnRequest', () => {
     expect(zhRequest).toMatchObject({
       displayText: '请审查当前项目中尚未提交的代码更改',
       language: 'zh-CN',
-      prompt: expect.stringContaining('所有面向用户的内容必须使用简体中文'),
+      prompt: expect.stringContaining('进度说明和最终结果均遵循用户请求的回复语言'),
       developerInstructions: expect.stringContaining('“审查开始”'),
     });
 
@@ -21,7 +21,7 @@ describe('createReviewTurnRequest', () => {
     expect(enRequest).toMatchObject({
       displayText: "Please review the current branch's code changes against 'main'",
       language: 'en-US',
-      prompt: expect.stringContaining('All user-facing content must be in English'),
+      prompt: expect.stringContaining("Follow the user's requested response language"),
       developerInstructions: expect.stringContaining('[P0-P3] Short title — path:line'),
     });
     expect(enRequest.developerInstructions).toContain('“Review started”');

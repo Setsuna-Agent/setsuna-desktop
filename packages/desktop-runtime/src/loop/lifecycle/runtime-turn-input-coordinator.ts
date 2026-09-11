@@ -13,7 +13,7 @@ import type { ThreadStore } from '../../ports/thread-store.js';
 import { escapeSkillAttribute, neutralizeMailboxTags } from '../context/prompt-utils.js';
 import type { RuntimeModelInputGuard } from '../core/runtime-model-input-guard.js';
 import type { RuntimeQueuedSteer } from './turn-input-queue.js';
-import { RuntimeTurnTaskRegistry, type RuntimeTurnTask } from './turn-task-registry.js';
+import { RuntimeTurnTaskRegistry, runtimeTaskSupportsSteering, type RuntimeTurnTask } from './turn-task-registry.js';
 
 export type DeliverMailboxInput = {
   content: string;
@@ -91,7 +91,7 @@ export class RuntimeTurnInputCoordinator {
     if (!text && !attachments.length) throw new Error('input must not be empty');
     const active = this.options.turnTasks.activeForThread(threadId);
     if (!active || active.controller.signal.aborted) throw new Error('no active turn to steer');
-    if (!turnTaskAcceptsInteractiveInput(active)) throw new Error(`cannot steer a ${active.taskKind} turn`);
+    if (!runtimeTaskSupportsSteering(active.taskKind)) throw new Error(`cannot steer a ${active.taskKind} turn`);
     if (active.turnId !== input.expectedTurnId) {
       throw new Error(`expected active turn id \`${input.expectedTurnId}\` but found \`${active.turnId}\``);
     }
@@ -264,9 +264,6 @@ export class RuntimeTurnInputCoordinator {
 }
 
 function turnTaskCanReceiveMailbox(task: RuntimeTurnTask): boolean {
-  return turnTaskAcceptsInteractiveInput(task) && task.acceptingSteers && !task.controller.signal.aborted;
-}
-
-function turnTaskAcceptsInteractiveInput(task: RuntimeTurnTask): boolean {
-  return task.taskKind === 'regular' || task.taskKind === 'goal';
+  return (task.taskKind === 'regular' || task.taskKind === 'goal')
+    && task.acceptingSteers && !task.controller.signal.aborted;
 }

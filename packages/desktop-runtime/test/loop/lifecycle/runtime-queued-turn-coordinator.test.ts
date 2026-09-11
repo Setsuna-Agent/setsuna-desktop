@@ -5,9 +5,34 @@ import { describe, expect, it, vi } from 'vitest';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
 import { createTestThreadStore } from '../../support/thread-store.js';
 import { RuntimeQueuedTurnCoordinator } from '../../../src/loop/lifecycle/runtime-queued-turn-coordinator.js';
+import { RuntimeTurnTaskRegistry } from '../../../src/loop/lifecycle/turn-task-registry.js';
 import { systemClock } from '../../../src/ports/clock.js';
 
 describe('runtime queued turn coordinator', () => {
+  it('keeps send-now durable while a review is finalizing and dispatches after it settles', async () => {
+    const harness = await createHarness();
+    const task = harness.turnTasks.start({
+      threadId: harness.threadId, turnId: 'turn_review', taskKind: 'review', acceptingSteers: false,
+    });
+    await appendQueuedInput(harness, 'queued_late', 'Late guidance');
+    harness.steerQueuedInput.mockRejectedValueOnce(new Error('active turn is finishing and can no longer be steered'));
+
+    await expect(harness.coordinator.sendNow(harness.threadId, 'queued_late')).resolves.toMatchObject({
+      disposition: 'queued', queuedInputId: 'queued_late', turnId: null,
+    });
+    expect(harness.startRegularTurn).not.toHaveBeenCalled();
+    expect((await harness.threadStore.getThread(harness.threadId))?.queuedTurnInputs)
+      .toEqual([expect.objectContaining({ id: 'queued_late' })]);
+
+    harness.turnTasks.finish(task);
+    await appendTerminalEvent(harness, task.turnId, 'turn.completed');
+    harness.coordinator.observeRun(harness.threadId, task.turnId, 'review', Promise.resolve());
+    await vi.waitFor(() => expect(harness.startRegularTurn).toHaveBeenCalledOnce());
+    expect(harness.startRegularTurn).toHaveBeenCalledWith(
+      harness.threadId, expect.objectContaining({ input: 'Late guidance' }), 'queued_late',
+    );
+  });
+
   it('treats cancellation as authoritative when a completed event is written later', async () => {
     const harness = await createHarness();
     await appendQueuedInput(harness, 'queued_1', 'Keep this queued');
@@ -114,6 +139,10 @@ async function createHarness() {
     ids,
   );
   const thread = await threadStore.createThread({ title: 'Queued turn coordinator' });
+  const turnTasks = new RuntimeTurnTaskRegistry();
+  const steerQueuedInput = vi.fn(async () => {
+    throw new Error('Unexpected steer in coordinator unit test.');
+  });
   const startedRuns: Array<ReturnType<typeof deferred<void>>> = [];
   const startRegularTurn = vi.fn(async () => {
     const run = deferred<void>();
@@ -131,9 +160,7 @@ async function createHarness() {
       resolveNextTurnModel: async () => undefined,
     },
     threadStore,
-    turnTasks: {
-      activeForThread: () => null,
-    },
+    turnTasks,
     appendEvent: async (threadId, event) => {
       await threadStore.appendEvent(threadId, event);
     },
@@ -144,16 +171,16 @@ async function createHarness() {
     startGoalTurn: async () => {
       throw new Error('Unexpected goal dispatch in coordinator unit test.');
     },
-    steerQueuedInput: async () => {
-      throw new Error('Unexpected steer in coordinator unit test.');
-    },
+    steerQueuedInput,
     onRunCreated: () => undefined,
   });
   return {
     coordinator,
     startRegularTurn,
+    steerQueuedInput,
     threadId: thread.id,
     threadStore,
+    turnTasks,
   };
 }
 

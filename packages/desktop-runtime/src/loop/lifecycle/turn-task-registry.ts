@@ -24,6 +24,11 @@ export type RuntimeTurnTaskRun<T = void> = {
   turnId: string;
 };
 
+/** 用户补充可进入审查轮次，但不会改变该轮次的只读工具权限。 */
+export function runtimeTaskSupportsSteering(kind: RuntimeTaskKind): boolean {
+  return kind === 'regular' || kind === 'goal' || kind === 'review';
+}
+
 export class RuntimeTurnTaskRegistry {
   private readonly tasksByKey = new Map<string, RuntimeTurnTask>();
   private readonly tasksByThread = new Map<string, RuntimeTurnTask>();
