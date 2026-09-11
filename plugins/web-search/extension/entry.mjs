@@ -70,10 +70,10 @@ export default function activate(api) {
       const request = webSearchRequest(withPreferenceDefaults(input, savedPreferences));
       const response = await search(request, context.network);
       return {
-        content: formatSearchResults(response.query, response.results),
-        preview: response.results.length
-          ? `已找到 ${response.results.length} 个网络来源`
-          : '未找到匹配的网络来源',
+        content: formatSearchResults(response.query, response.results, context.interfaceLanguage),
+        preview: context.interfaceLanguage === 'en-US'
+          ? (response.results.length ? `Found ${response.results.length} web sources` : 'No matching web sources')
+          : (response.results.length ? `已找到 ${response.results.length} 个网络来源` : '未找到匹配的网络来源'),
         data: {
           pluginId: 'web-search',
           provider: response.provider,

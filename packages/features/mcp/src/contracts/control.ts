@@ -1,4 +1,5 @@
 import type {
+  RuntimeInterfaceLanguage,
   RuntimeMcpAuthStatus,
   RuntimeMcpResource,
   RuntimeMcpResourceTemplate,
@@ -29,6 +30,7 @@ export type McpOperationOptions = {
 };
 
 export type McpOperationContext = McpOperationOptions & {
+  interfaceLanguage?: RuntimeInterfaceLanguage;
   /** 存在时使用线程级逻辑会话；缺省 scope 由具体 control 操作内部决定。 */
   threadId?: string;
   turnId?: string;

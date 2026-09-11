@@ -20,6 +20,7 @@ import type {
 import { HookStoppedTurnError } from '../context/runtime-context-compactor.js';
 import {
   inferRuntimeResponseLanguage,
+  requestedRuntimeResponseLanguage,
   resolveRuntimeResponseLanguage,
 } from '../context/runtime-response-language.js';
 import type { RuntimeHookCoordinator } from '../lifecycle/runtime-hook-coordinator.js';
@@ -130,8 +131,9 @@ export class RuntimeAgentTurnRunner {
           ? userMessage.content
           : undefined,
       conversationMessages: thread.messages,
-      // Review 的 language 来自界面设置，只作为兜底，不能覆盖用户实际请求的语言。
-      fallback: options.review?.language ?? runtimeConfig?.desktopSettings?.interfaceLanguage ?? 'zh-CN',
+      // 审查沿用用户请求的语言，界面语言只作为兜底；普通对话跟随已选界面语言。
+      fallback: options.review?.language ?? 'zh-CN',
+      interfaceLanguage: taskKind === 'review' ? undefined : runtimeConfig?.desktopSettings?.interfaceLanguage,
     });
     let activeSkillIds = [...selectedSkillIds];
     let activeThinkingOptions = thinkingOptions;
@@ -225,7 +227,9 @@ export class RuntimeAgentTurnRunner {
         // 不在 runtime 侧改写成额外提示词，只在下一个 sampling step 并入上下文。
         conversationMessages.push(...messages);
         for (const message of messages) {
-          responseLanguage = inferRuntimeResponseLanguage(message.content) ?? responseLanguage;
+          responseLanguage = (taskKind !== 'review' && runtimeConfig?.desktopSettings?.interfaceLanguage
+            ? requestedRuntimeResponseLanguage(message.content)
+            : inferRuntimeResponseLanguage(message.content)) ?? responseLanguage;
         }
         activeSkillIds = [...new Set([...activeSkillIds, ...steers.flatMap((steer) => steer.skillIds)])];
         const thinkingSteer = [...steers].reverse().find((steer) => typeof steer.thinking === 'boolean');
@@ -276,6 +280,7 @@ export class RuntimeAgentTurnRunner {
         });
         cleanupEnvironment = stepContext.toolContext.environment;
         conversationMessages = stepContext.conversationMessages;
+        responseLanguage = stepContext.responseLanguage;
         runtimeConfig = stepContext.runtimeConfig;
         const newModelHistoryWarnings = (stepContext.modelHistoryWarnings ?? [])
           .filter((warning) => !publishedModelHistoryWarnings.has(warning));

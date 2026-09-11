@@ -9,6 +9,7 @@ export * from './event-projections/dispositions.js';
 export * from './event-projections/assistant-phase.js';
 export * from './events.js';
 export * from './http.js';
+export * from './localization/runtime-text.js';
 export * from './mcp.js';
 export * from './memory.js';
 export * from './message-metadata.js';

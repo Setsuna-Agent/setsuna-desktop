@@ -1,3 +1,4 @@
+import { runtimeText, type RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import {
   PLUGIN_UI_CARD_RESULT_KIND,
   parseRuntimePluginUiData,
@@ -32,48 +33,51 @@ export function pluginRequiresFunctionalVerification(plugin: PluginVerificationS
   return Boolean(plugin.extension) && requiredVerificationPaths(plugin).size > 0;
 }
 
-const verifyPluginTool: RuntimeToolDefinition = {
-  name: VERIFY_PLUGIN_TOOL,
-  description: [
-    'Functionally verify an installed Setsuna Plugin before claiming it is usable.',
-    'Runs one approved check for every declared tool and visible Renderer UI action path through the real host-managed network/state path.',
-    'Use after configure_plugin for every user-visible executable path; this requires explicit approval.',
-  ].join(' '),
-  inputSchema: {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
-      pluginId: { type: 'string', description: 'Installed Plugin id returned by configure_plugin.' },
-      checks: {
-        type: 'array',
-        minItems: 1,
-        maxItems: MAX_VERIFICATION_CHECKS,
-        description: 'Complete set of read-only or explicitly approved checks for every declared tool and visible Renderer UI action path.',
-        items: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            kind: { type: 'string', enum: ['tool', 'ui-action'] },
-            name: { type: 'string', description: 'Local extension tool name or Renderer UI action id.' },
-            input: { type: 'object', description: 'Tool arguments when kind is tool.' },
-            expectUiCard: { type: 'boolean', description: 'Require a plugin.ui-card result. Automatically true for declared uiCards tools.' },
-            contributionId: { type: 'string', description: 'Renderer UI contribution that exposes the action.' },
-            values: { type: 'object', description: 'String form values supplied to a Renderer UI action.' },
-            payload: { type: 'object', description: 'Bounded JSON payload supplied by a sandboxed document.' },
-            expectStatePaths: {
-              type: 'array',
-              maxItems: 16,
-              items: { type: 'string' },
-              description: 'Dot-separated state paths that must exist after a UI action.',
+function verifyPluginDefinition(language?: RuntimeInterfaceLanguage): RuntimeToolDefinition {
+  const text = runtimeText(language);
+  return {
+    name: VERIFY_PLUGIN_TOOL,
+    description: [
+      text('Functionally verify an installed Setsuna Plugin before claiming it is usable.', "声称已安装 Setsuna 插件可用前，对其进行功能验证。"),
+      text('Runs one approved check for every declared tool and visible Renderer UI action path through the real host-managed network/state path.', "通过真实的宿主管理网络和状态通道，为每个声明工具及可见 Renderer UI 操作执行一次已批准的检查。"),
+      text('Use after configure_plugin for every user-visible executable path; this requires explicit approval.', "configure_plugin 后对每条用户可见的可执行路径使用此工具；需要明确审批。"),
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        pluginId: { type: 'string', description: text('Installed Plugin id returned by configure_plugin.', "configure_plugin 返回的已安装插件 ID。") },
+        checks: {
+          type: 'array',
+          minItems: 1,
+          maxItems: MAX_VERIFICATION_CHECKS,
+          description: text('Complete set of read-only or explicitly approved checks for every declared tool and visible Renderer UI action path.', "覆盖每个声明工具和可见 Renderer UI 操作的完整只读或已明确批准的检查集。"),
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              kind: { type: 'string', enum: ['tool', 'ui-action'] },
+              name: { type: 'string', description: text('Local extension tool name or Renderer UI action id.', "本地扩展工具名称或 Renderer UI 操作 ID。") },
+              input: { type: 'object', description: text('Tool arguments when kind is tool.', "kind 为 tool 时的工具参数。") },
+              expectUiCard: { type: 'boolean', description: text('Require a plugin.ui-card result. Automatically true for declared uiCards tools.', "要求返回 plugin.ui-card；对声明为 uiCards 的工具自动启用。") },
+              contributionId: { type: 'string', description: text('Renderer UI contribution that exposes the action.', "公开该操作的 Renderer UI contribution。") },
+              values: { type: 'object', description: text('String form values supplied to a Renderer UI action.', "提供给 Renderer UI 操作的字符串表单值。") },
+              payload: { type: 'object', description: text('Bounded JSON payload supplied by a sandboxed document.', "沙箱文档提供的有大小限制的 JSON 数据。") },
+              expectStatePaths: {
+                type: 'array',
+                maxItems: 16,
+                items: { type: 'string' },
+                description: text('Dot-separated state paths that must exist after a UI action.', "UI 操作后必须存在的状态路径，以点分隔。"),
+              },
             },
+            required: ['kind', 'name'],
           },
-          required: ['kind', 'name'],
         },
       },
+      required: ['pluginId', 'checks'],
     },
-    required: ['pluginId', 'checks'],
-  },
-};
+  };
+}
 
 type ToolVerificationCheck = Readonly<{
   kind: 'tool';
@@ -114,14 +118,15 @@ export class PluginVerificationToolHost implements ToolHost {
   ) {}
 
   async listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
-    return context.features?.plugins === false ? [] : [verifyPluginTool];
+    return context.features?.plugins === false ? [] : [verifyPluginDefinition(context.interfaceLanguage)];
   }
 
-  systemPrompt(): string {
+  systemPrompt(context: ToolExecutionContext): string {
+    const text = runtimeText(context.interfaceLanguage);
     return [
-      'Installing and activating an executable Plugin does not prove its handlers work.',
-      'After configure_plugin, call verify_plugin with representative checks for every user-visible extension tool and Renderer UI action.',
-      'Do not report the Plugin as usable unless verify_plugin returns "Verified and usable: true"; repair the complete bundle and verify again on failure.',
+      text('Installing and activating an executable Plugin does not prove its handlers work.', "安装并激活可执行插件不能证明其处理函数正常工作。"),
+      text('After configure_plugin, call verify_plugin with representative checks for every user-visible extension tool and Renderer UI action.', "configure_plugin 后，使用 verify_plugin 为每个用户可见的扩展工具和 Renderer UI 操作执行有代表性的检查。"),
+      text('Do not report the Plugin as usable unless verify_plugin returns "Verified and usable: true"; repair the complete bundle and verify again on failure.', "只有 verify_plugin 返回 \"Verified and usable: true\" 才能报告插件可用；失败时修复完整插件包后重新验证。"),
     ].join(' ');
   }
 

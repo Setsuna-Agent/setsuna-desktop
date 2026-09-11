@@ -1,0 +1,20 @@
+{
+  "en-US": {
+    "文件改动审计提示": "Review File Changes",
+    "文件写入或修改完成后留下 review 提醒，不阻断后续流程。": "Leave a review reminder after file writes or edits without blocking subsequent work.",
+    "审计": "Audit",
+    "Review": "Review",
+    "文件": "Files",
+    "在每次文件改动工具成功后提醒 review diff 并运行必要验证。": "Remind the agent to review the diff and run relevant checks after each successful file mutation.",
+    "记录文件改动": "Record file changes"
+  },
+  "zh-CN": {
+    "文件改动审计提示": "文件改动审计提示",
+    "文件写入或修改完成后留下 review 提醒，不阻断后续流程。": "文件写入或修改完成后留下 review 提醒，不阻断后续流程。",
+    "审计": "审计",
+    "Review": "Review",
+    "文件": "文件",
+    "在每次文件改动工具成功后提醒 review diff 并运行必要验证。": "在每次文件改动工具成功后提醒 review diff 并运行必要验证。",
+    "记录文件改动": "记录文件改动"
+  }
+}

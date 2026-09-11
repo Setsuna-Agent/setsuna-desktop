@@ -178,6 +178,7 @@ export class MultiAgentConfigStore implements ConfigStore {
       activeProviderId: 'test',
       providers: [],
       globalPrompt: '',
+      desktopSettings: { interfaceLanguage: 'en-US' as const },
       memory: {
         useMemories: false,
         generateMemories: false,

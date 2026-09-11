@@ -1,0 +1,20 @@
+{
+  "en-US": {
+    "压缩前状态提示": "Compaction Status",
+    "上下文自动或手动压缩时，在 Hook 记录里标记触发来源。": "Record whether context compaction was triggered automatically or manually in the Hook log.",
+    "上下文": "Context",
+    "压缩": "Compaction",
+    "调试": "Debugging",
+    "在执行 context compaction 前显示 manual 或 auto 触发来源。": "Show the manual or auto trigger before context compaction runs.",
+    "记录压缩触发": "Record compaction trigger"
+  },
+  "zh-CN": {
+    "压缩前状态提示": "压缩前状态提示",
+    "上下文自动或手动压缩时，在 Hook 记录里标记触发来源。": "上下文自动或手动压缩时，在 Hook 记录里标记触发来源。",
+    "上下文": "上下文",
+    "压缩": "压缩",
+    "调试": "调试",
+    "在执行 context compaction 前显示 manual 或 auto 触发来源。": "在执行 context compaction 前显示 manual 或 auto 触发来源。",
+    "记录压缩触发": "记录压缩触发"
+  }
+}

@@ -42,6 +42,7 @@ export class MemoryToolHost implements ToolHost {
 function memoryContext(context: ToolExecutionContext): MemoryToolContext {
   return Object.freeze({
     threadId: context.threadId,
+    interfaceLanguage: context.interfaceLanguage,
     ...(context.projectId ? { projectId: context.projectId } : {}),
     ...(context.turnId ? { turnId: context.turnId } : {}),
     ...(context.features ? { features: context.features } : {}),

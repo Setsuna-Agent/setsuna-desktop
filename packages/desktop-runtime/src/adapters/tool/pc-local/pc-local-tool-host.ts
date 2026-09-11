@@ -28,10 +28,11 @@ import { JavaScriptWorkspaceSearchEngine } from '../../search/javascript-workspa
 import { WorkspaceRuntimeEnvironmentResolver } from '../../workspace/workspace-runtime-environment-resolver.js';
 import { TOOL_OUTPUT_BUDGET_SHELL_MCP_TOKENS } from '../../../loop/tools/tool-output-budget.js';
 import { pcLocalToolPrompt } from './pc-local-tool-prompt.js';
-import { SHELL_OUTPUT_TOKEN_BUDGET_SCHEMA } from './pc-local-tool-definitions.js';
+import { localToolDefinitions } from './pc-local-tool-definitions.js';
+import { compatToolDefinitions } from './pc-local-tool-compat-definitions.js';
 import { shellPermissionBlockReason } from './pc-local-tool-shell-policy.js';
 import { shellResultMetadata } from './pc-local-tool-shell-output.js';
-import { GIT_INSPECT_TOOL, inspectGit } from './pc-local-tool-git-inspect.js';
+import { gitInspectDefinition, inspectGit } from './pc-local-tool-git-inspect.js';
 import * as pcTools from './pc-local-tools.js';
 
 type PcToolState = Omit<ReturnType<typeof pcTools.createLocalToolState>, 'sandboxWorkspaceWrite'> & {
@@ -68,127 +69,12 @@ const BOUNDED_OUTPUT_PC_TOOL_NAMES = new Set([
   'list_shell_processes',
   'terminate_shell_process',
 ]);
-const MAX_PERSISTENT_SHELL_TTL_MS = 6 * 60 * 60 * 1_000;
 const MAX_PROJECT_TOOL_STATES = 32;
 const PROJECT_TOOL_STATE_TTL_MS = 30 * 60 * 1_000;
 const MAX_TURN_FILE_STATES_PER_PROJECT = 64;
 const TURN_FILE_STATE_TTL_MS = 30 * 60 * 1_000;
 const FILE_MUTATION_TOOL_NAMES = new Set(['apply_patch', 'write_file', 'append_file', 'delete_file', 'edit', 'edit_file']);
 const FILE_PATH_ARGUMENT_TOOLS = new Set(['read_file', 'write_file', 'append_file', 'delete_file', 'edit', 'edit_file']);
-const COMPAT_TOOL_DEFINITIONS: RuntimeToolDefinition[] = [
-  {
-    name: 'request_permissions',
-    description: 'Request additional sandbox permissions for later tool calls in this turn or session.',
-    inputSchema: {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        environment_id: { type: 'string', description: 'Optional active environment id. The desktop runtime currently supports the active local environment only.' },
-        environmentId: { type: 'string', description: 'Camel-case alias for environment_id.' },
-        reason: { type: 'string', description: 'User-facing reason for requesting broader permissions.' },
-        permissions: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            network: {
-              type: 'object',
-              additionalProperties: false,
-              properties: {
-                enabled: { type: 'boolean', description: 'True requests network access.' },
-              },
-            },
-            file_system: {
-              type: 'object',
-              additionalProperties: false,
-              properties: {
-                write: { type: 'array', items: { type: 'string' }, description: 'Absolute or workspace-relative paths to grant write access.' },
-                read: { type: 'array', items: { type: 'string' }, description: 'Absolute or workspace-relative paths to grant read access.' },
-                entries: {
-                  type: 'array',
-                  description: 'Canonical filesystem permission entries.',
-                  items: {
-                    type: 'object',
-                    additionalProperties: true,
-                    properties: {
-                      access: { type: 'string', enum: ['read', 'write', 'deny'] },
-                      path: {},
-                    },
-                  },
-                },
-              },
-            },
-            fileSystem: {
-              type: 'object',
-              description: 'Camel-case alias for file_system.',
-              additionalProperties: true,
-            },
-          },
-        },
-      },
-      required: ['permissions'],
-    },
-  },
-  {
-    name: 'exec_command',
-    description: 'Run a shell command in the active local project.',
-    inputSchema: {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        shell: { type: 'string', description: 'Optional shell path accepted for caller compatibility; execution uses the platform shell.' },
-        cmd: { type: 'string', description: 'The shell command to run.' },
-        cwd: { type: 'string', description: 'Optional working directory, absolute or relative to the project root.' },
-        yield_time_ms: { type: 'integer', description: 'Milliseconds to wait before returning while the command keeps running.', minimum: 0, maximum: 30000 },
-        timeout_ms: { type: 'integer', description: 'Optional timeout in milliseconds.', minimum: 1, maximum: 600000 },
-        max_output_tokens: SHELL_OUTPUT_TOKEN_BUDGET_SCHEMA,
-        persist: { type: 'boolean', description: 'Keep a still-running dev server or watcher available after the current turn completes.' },
-        persist_ttl_ms: { type: 'integer', description: 'Optional lifetime for a persisted process in milliseconds.', minimum: 1000, maximum: MAX_PERSISTENT_SHELL_TTL_MS },
-        sandbox_permissions: { type: 'string', enum: ['use_default', 'with_additional_permissions', 'require_escalated'], description: 'Per-command sandbox override. Use with_additional_permissions only together with a non-empty additional_permissions request; otherwise omit this field or use use_default. require_escalated asks for unsandboxed execution.' },
-        additional_permissions: {
-          type: 'object',
-          description: 'Additional sandboxed filesystem or network access for this command. Only used with sandbox_permissions set to with_additional_permissions.',
-          additionalProperties: false,
-          properties: {
-            network: {
-              type: 'object',
-              additionalProperties: false,
-              properties: {
-                enabled: { type: 'boolean', description: 'True requests network access for this command.' },
-              },
-            },
-            file_system: {
-              type: 'object',
-              additionalProperties: false,
-              properties: {
-                write: { type: 'array', items: { type: 'string' }, description: 'Absolute or workspace-relative paths to grant write access for this command.' },
-                read: { type: 'array', items: { type: 'string' }, description: 'Absolute or workspace-relative paths to grant read access for this command.' },
-              },
-            },
-          },
-        },
-        justification: { type: 'string', description: 'User-facing approval reason for require_escalated.' },
-        prefix_rule: { type: 'array', items: { type: 'string' }, description: 'Reusable approval prefix accepted for caller compatibility.' },
-      },
-      required: ['cmd'],
-    },
-  },
-  {
-    name: 'write_stdin',
-    description: 'Write characters to an existing shell session. Empty input polls the session.',
-    inputSchema: {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        session_id: { type: ['string', 'number'], description: 'Session identifier returned by exec_command.' },
-        chars: { type: 'string', description: 'Characters to write to stdin. Empty string polls for output.' },
-        yield_time_ms: { type: 'integer', description: 'Milliseconds to wait for output after polling.', minimum: 0, maximum: 30000 },
-        max_output_tokens: SHELL_OUTPUT_TOKEN_BUDGET_SCHEMA,
-      },
-      required: ['session_id'],
-    },
-  },
-];
-
 const TOOL_ALIASES: Record<string, { name: string; args: (input: Record<string, unknown>) => Record<string, unknown> }> = {
   // workspace_* 名称兼容上层调用习惯，真正执行仍落到 PC local tools 的原始工具名。
   workspace_list_directory: { name: 'list_directory', args: (input) => ({ path: input.path ?? '.' }) },
@@ -263,15 +149,15 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
    */
   async listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
     const gitFallback = context.readOnly && !this.shellSandboxCapability().supported;
-    const localTools = pcTools.LOCAL_TOOL_DEFINITIONS
+    const localTools = localToolDefinitions(context.interfaceLanguage)
       .map(toRuntimeToolDefinition)
       .filter((tool): tool is RuntimeToolDefinition => Boolean(tool && !EXCLUDED_PC_TOOLS.has(tool.name)
         && !(gitFallback && tool.name === 'run_shell_command')));
     const names = new Set(localTools.map((tool) => tool.name));
     return [
       ...localTools,
-      ...(gitFallback ? [GIT_INSPECT_TOOL] : []),
-      ...COMPAT_TOOL_DEFINITIONS.filter((tool) => !names.has(tool.name) && toolEnabledForContext(tool.name, context)
+      ...(gitFallback ? [gitInspectDefinition(context.interfaceLanguage)] : []),
+      ...compatToolDefinitions(context.interfaceLanguage).filter((tool) => !names.has(tool.name) && toolEnabledForContext(tool.name, context)
         && !(gitFallback && tool.name === 'exec_command')),
     ];
   }
@@ -289,7 +175,7 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
    */
   async systemPrompt(context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): Promise<string | null> {
     const workspaceDependencies = await this.workspaceDependencies?.getPromptContext();
-    return pcLocalToolPrompt(request?.tools, { workspaceDependencies, readOnly: context.readOnly });
+    return pcLocalToolPrompt(request?.tools, { workspaceDependencies, readOnly: context.readOnly, interfaceLanguage: context.interfaceLanguage });
   }
 
   toolRuntimeProfile(name: string, context: ToolExecutionContext): ToolRuntimeProfile | null {

@@ -75,7 +75,7 @@ describe('bundled media extensions', () => {
       }, context)).resolves.toMatchObject({
         content: expect.stringContaining('Workspace files ready for publish_artifact'),
         attachments: [{ source: 'generated', assetId: 'generated_image_asset_1' }],
-        preview: '已生成 1 张图片',
+        preview: 'Generated 1 image',
         data: {
           resultKind: 'image-generation.result',
           resultMajor: 1,

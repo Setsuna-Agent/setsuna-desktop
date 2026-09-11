@@ -16,10 +16,11 @@ export default function activate(api) {
       additionalProperties: false,
     },
     async execute(input, context) {
+      const chinese = context.interfaceLanguage === 'zh-CN';
       const state = await readState(context);
       switch (input?.action) {
         case 'list':
-          return result('list', state, formatTodos(state.todos));
+          return result('list', state, formatTodos(state.todos, chinese));
         case 'add': {
           const text = requiredText(input.text, 'text');
           if (state.todos.length >= MAX_TODOS) throw new Error(`Todo list is limited to ${MAX_TODOS} items.`);
@@ -27,7 +28,7 @@ export default function activate(api) {
           state.todos.push(todo);
           state.nextId += 1;
           await writeState(context, state);
-          return result('add', state, `Added todo #${todo.id}: ${todo.text}`, `#${todo.id} ${todo.text}`);
+          return result('add', state, chinese ? `已添加任务 #${todo.id}：${todo.text}` : `Added todo #${todo.id}: ${todo.text}`, `#${todo.id} ${todo.text}`);
         }
         case 'toggle': {
           const id = positiveInteger(input.id, 'id');
@@ -35,13 +36,13 @@ export default function activate(api) {
           if (!todo) throw new Error(`Todo #${id} not found.`);
           todo.done = !todo.done;
           await writeState(context, state);
-          return result('toggle', state, `Todo #${id} ${todo.done ? 'completed' : 'reopened'}.`, `#${id} ${todo.done ? 'done' : 'open'}`);
+          return result('toggle', state, chinese ? `任务 #${id} ${todo.done ? '已完成' : '已重新打开'}。` : `Todo #${id} ${todo.done ? 'completed' : 'reopened'}.`, chinese ? `#${id} ${todo.done ? '已完成' : '未完成'}` : `#${id} ${todo.done ? 'done' : 'open'}`);
         }
         case 'clear': {
           const count = state.todos.length;
           const cleared = { todos: [], nextId: 1 };
           await writeState(context, cleared);
-          return result('clear', cleared, `Cleared ${count} todos.`, `Cleared ${count}`);
+          return result('clear', cleared, chinese ? `已清空 ${count} 项任务。` : `Cleared ${count} todos.`, chinese ? `已清空 ${count} 项` : `Cleared ${count}`);
         }
         default:
           throw new Error('action must be one of: list, add, toggle, clear.');
@@ -79,10 +80,10 @@ function result(action, state, content, preview = content) {
   };
 }
 
-function formatTodos(todos) {
+function formatTodos(todos, chinese) {
   return todos.length
     ? todos.map((todo) => `[${todo.done ? 'x' : ' '}] #${todo.id}: ${todo.text}`).join('\n')
-    : 'No todos.';
+    : chinese ? '没有待办任务。' : 'No todos.';
 }
 
 function requiredText(value, label) {

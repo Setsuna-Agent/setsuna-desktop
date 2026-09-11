@@ -1,3 +1,4 @@
+import { runtimeText, type RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import type { RuntimeToolDefinition, WorkspaceProject } from '@setsuna-desktop/contracts';
 import path from 'node:path';
 import type { ToolExecutionContext, ToolExecutionResult, ToolHost } from '../../ports/tool-host.js';
@@ -7,32 +8,36 @@ import { workspaceProjectIdForToolContext } from './workspace-tool-context.js';
 
 export const VIEW_IMAGE_TOOL_NAME = 'view_image';
 
-const VIEW_IMAGE_TOOL: RuntimeToolDefinition = {
-  name: VIEW_IMAGE_TOOL_NAME,
-  description: 'Read a PNG, JPEG, GIF, or WebP image inside the active project workspace so you can inspect its visual content.',
-  inputSchema: {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
-      projectId: { type: 'string', description: 'Optional registered project id. Defaults to the current project thread, then the temporary workspace.' },
-      path: { type: 'string', description: 'Image path relative to the project root.' },
+function viewImageTool(language?: RuntimeInterfaceLanguage): RuntimeToolDefinition {
+  const text = runtimeText(language);
+  return {
+    name: VIEW_IMAGE_TOOL_NAME,
+    description: text('Read a PNG, JPEG, GIF, or WebP image inside the active project workspace so you can inspect its visual content.', "读取当前项目工作区内的 PNG、JPEG、GIF 或 WebP 图片，以检查其视觉内容。"),
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        projectId: { type: 'string', description: text('Optional registered project id. Defaults to the current project thread, then the temporary workspace.', "可选已注册项目 ID，默认当前项目任务，其次使用临时工作区。") },
+        path: { type: 'string', description: text('Image path relative to the project root.', "相对于项目根目录的图片路径。") },
+      },
+      required: ['path'],
     },
-    required: ['path'],
-  },
-};
+  };
+}
 
 /** 提供本地图像感知能力，同时不授予任意文件系统读取权限。 */
 export class WorkspaceImageToolHost implements ToolHost {
   constructor(private readonly projects: WorkspaceProjectStore) {}
 
   async listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
-    return context.modelCapabilities?.supportsImages === true ? [VIEW_IMAGE_TOOL] : [];
+    return context.modelCapabilities?.supportsImages === true ? [viewImageTool(context.interfaceLanguage)] : [];
   }
 
   systemPrompt(context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): string | null {
+    const text = runtimeText(context.interfaceLanguage);
     if (context.modelCapabilities?.supportsImages !== true
       || (request && !request.tools.some((tool) => tool.name === VIEW_IMAGE_TOOL_NAME))) return null;
-    return 'Use view_image for workspace screenshots, design references, and image assets when their visual content matters. Do not use text file tools to read image bytes.';
+    return text('Use view_image for workspace screenshots, design references, and image assets when their visual content matters. Do not use text file tools to read image bytes.', "需要理解工作区截图、设计参考或图像资源的视觉内容时，使用 view_image。不要用文本文件工具读取图片字节。");
   }
 
   async runTool(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult> {

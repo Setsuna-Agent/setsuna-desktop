@@ -1,0 +1,20 @@
+{
+  "en-US": {
+    "用户消息密钥提醒": "Detect Secrets in Messages",
+    "提交消息里疑似包含 API key、token 或私钥片段时停止本轮并提醒脱敏。": "Stop the turn and request redaction when a submitted message appears to contain an API key, token, or private key.",
+    "安全": "Security",
+    "密钥": "Secrets",
+    "消息": "Messages",
+    "检查常见 OpenAI、GitHub、AWS 密钥格式和私钥头部。": "Check common OpenAI, GitHub, and AWS key formats and private key headers.",
+    "检查消息密钥": "Check message for secrets"
+  },
+  "zh-CN": {
+    "用户消息密钥提醒": "用户消息密钥提醒",
+    "提交消息里疑似包含 API key、token 或私钥片段时停止本轮并提醒脱敏。": "提交消息里疑似包含 API key、token 或私钥片段时停止本轮并提醒脱敏。",
+    "安全": "安全",
+    "密钥": "密钥",
+    "消息": "消息",
+    "检查常见 OpenAI、GitHub、AWS 密钥格式和私钥头部。": "检查常见 OpenAI、GitHub、AWS 密钥格式和私钥头部。",
+    "检查消息密钥": "检查消息密钥"
+  }
+}

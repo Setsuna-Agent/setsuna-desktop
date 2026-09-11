@@ -8,6 +8,6 @@ process.stdin.on('end', () => {
   if (!secretLike.test(prompt)) return;
   process.stdout.write(JSON.stringify({
     continue: false,
-    stopReason: '这条消息看起来包含密钥或私钥片段。请先脱敏，再重新发送。',
+    stopReason: (payload.interface_language === 'en-US' ? 'This message appears to contain a secret or private key. Redact it before sending again.' : '这条消息看起来包含密钥或私钥片段。请先脱敏，再重新发送。'),
   }));
 });

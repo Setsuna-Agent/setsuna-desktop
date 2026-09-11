@@ -1,4 +1,5 @@
 import type {
+  RuntimeInterfaceLanguage,
   RuntimePluginReference,
   RuntimeSkillDetail,
   RuntimeSkillInput,
@@ -27,6 +28,9 @@ import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, writeJsonFile, writeTextFile } from '../store/json-file.js';
 import { PluginSkillOverrideStore } from './plugin-skill-override-store.js';
 import { mergeSkillManifest, readOptionalSkillManifest } from './skill-manifest-editor.js';
+import { inferredPluginActivationKeywords, pluginSkillMatchesActivation, uniqueStrings, type PluginSkillOrigin } from './skill-activation.js';
+import { readLocalizedSkillDocument } from './localized-skill-document.js';
+import { installedPluginMessages, localizePluginDisplayFields, pluginText } from '../plugin/bundled-plugin-localization.js';
 
 type SkillStateFile = {
   version: 1;
@@ -48,12 +52,6 @@ type ParsedSkill = {
   plugin?: RuntimePluginReference;
 };
 
-type PluginSkillOrigin = {
-  reference: RuntimePluginReference;
-  description?: string;
-  tags: string[];
-};
-
 type PluginIndexFile = { version: 1; plugins: InstalledPluginRecord[] };
 
 const SKILL_CHANGE_DEBOUNCE_MS = 200;
@@ -73,6 +71,10 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
   constructor(
     private readonly builtinSkillsDir: string,
     dataDir: string,
+    private readonly localization?: {
+      getLanguage(): Promise<RuntimeInterfaceLanguage>;
+      bundledPluginsDir: string;
+    },
   ) {
     this.statePath = path.join(dataDir, 'skills.json');
     this.pluginIndexPath = path.join(dataDir, 'plugins.json');
@@ -193,7 +195,7 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
     skillIds: string[] = [],
     activation?: SkillActivationContext,
   ): Promise<SkillPromptContextSnapshot> {
-    const [skills, state] = await Promise.all([this.readSkills(), this.readState()]);
+    const [skills, state] = await Promise.all([this.readSkills(activation?.interfaceLanguage), this.readState()]);
     const explicitSkillIds = new Set(skillIds.filter(Boolean));
     const allowAutomaticPluginActivation = explicitSkillIds.size === 0 && Boolean(activation?.text.trim());
     const resolvedSkills = skills.map((parsed) => ({ parsed, detail: toDetail(parsed, state) }));
@@ -254,17 +256,18 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
     };
   }
 
-  private async readSkills(): Promise<ParsedSkill[]> {
+  private async readSkills(language?: RuntimeInterfaceLanguage): Promise<ParsedSkill[]> {
+    language ??= await this.localization?.getLanguage();
     const [builtinSkills, userSkills, extraSkills, pluginSkills] = await Promise.all([
-      this.readSkillDirectory(this.builtinSkillsDir, 'builtin'),
+      this.readSkillDirectory(this.builtinSkillsDir, 'builtin', language),
       this.readSkillDirectory(this.userSkillsDir, 'user'),
       Promise.all(this.extraSkillRoots.map((root) => this.readSkillDirectory(root, 'user'))).then((groups) => groups.flat()),
-      this.readPluginSkills(),
+      this.readPluginSkills(language),
     ]);
     return [...builtinSkills, ...userSkills, ...extraSkills, ...pluginSkills].sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  private async readPluginSkills(): Promise<ParsedSkill[]> {
+  private async readPluginSkills(language?: RuntimeInterfaceLanguage): Promise<ParsedSkill[]> {
     const index = await readJsonFile<PluginIndexFile>(this.pluginIndexPath, { version: 1, plugins: [] });
     const skills = await Promise.all(index.plugins.flatMap((plugin) => plugin.skillEntries.map(async (entry) => {
       const pluginRoot = path.resolve(plugin.installPath);
@@ -273,32 +276,46 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
       const override = await this.pluginSkillOverrides.read(plugin, entry.id);
       if (override?.deleted) return null;
       const skillPath = override?.skillPath ?? sourceSkillPath;
-      const content = await readFile(skillPath, 'utf8').catch(() => '');
-      if (!content) return null;
+      const bundled = plugin.installationSource === 'marketplace';
+      const document = await readLocalizedSkillDocument(skillPath, bundled && !override ? language : undefined);
+      if (!document.content) return null;
       const dependencyManifest = await readSkillDependencyManifest(skillPath);
-      return parseSkill(entry.id, 'plugin', skillPath, content, dependencyManifest, {
+      const messages = bundled && language
+        ? await installedPluginMessages(plugin, language, this.localization?.bundledPluginsDir)
+        : {};
+      const parsed = parseSkill(entry.id, 'plugin', document.path, document.content, {
+        ...dependencyManifest,
+        ...(document.localized ? { displayName: undefined } : {}),
+      }, {
         reference: {
           id: plugin.id,
-          name: plugin.name,
+          name: pluginText(messages, plugin.name),
           ...(plugin.icon ? { icon: plugin.icon } : {}),
         },
         description: plugin.description,
         tags: plugin.tags ?? [],
       });
+      return override ? parsed : {
+        ...localizePluginDisplayFields(parsed, messages),
+        name: pluginText(messages, parsed.name),
+      };
     })));
     return skills.filter((skill): skill is ParsedSkill => Boolean(skill));
   }
 
-  private async readSkillDirectory(directory: string, kind: RuntimeSkillKind): Promise<ParsedSkill[]> {
+  private async readSkillDirectory(directory: string, kind: RuntimeSkillKind, language?: RuntimeInterfaceLanguage): Promise<ParsedSkill[]> {
     const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
     const skills = await Promise.all(
       entries
         .filter((entry) => entry.isDirectory())
         .map(async (entry) => {
           const skillPath = path.join(directory, entry.name, 'SKILL.md');
-          const content = await readFile(skillPath, 'utf8').catch(() => '');
-          const dependencyManifest = content ? await readSkillDependencyManifest(skillPath) : emptyDependencyManifest();
-          return content ? parseSkill(entry.name, kind, skillPath, content, dependencyManifest) : null;
+          const document = await readLocalizedSkillDocument(skillPath, language);
+          const dependencyManifest = document.content ? await readSkillDependencyManifest(skillPath) : emptyDependencyManifest();
+          return document.content ? parseSkill(entry.name, kind, document.path, document.content, {
+            ...dependencyManifest,
+            ...(document.localized ? { displayName: undefined } : {}),
+          }) : null;
         }),
     );
     return skills.filter((skill): skill is ParsedSkill => Boolean(skill));
@@ -537,80 +554,6 @@ function frontmatterStringArray(value: unknown): string[] {
   if (typeof value === 'string') return value.trim() ? [value.trim()] : [];
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean);
-}
-
-function inferredPluginActivationKeywords(
-  skillId: string,
-  skillName: string,
-  description: string | undefined,
-  pluginOrigin: PluginSkillOrigin,
-): string[] {
-  const plugin = pluginOrigin.reference;
-  const metadataPhrases = [skillName, plugin.name, ...pluginOrigin.tags]
-    .filter(meaningfulActivationPhrase);
-  const identityPhrases = [skillId.split('.').at(-1), plugin.id];
-  const highSignalNameTerms = latinTerms(`${skillName} ${plugin.name}`).filter((term) =>
-    highSignalLatinTerm(term, 3),
-  );
-  const highSignalDescriptionTerms = latinTerms(
-    [description, pluginOrigin.description].filter(Boolean).join(' '),
-  ).filter((term) => highSignalLatinTerm(term, 4));
-  return uniqueStrings([
-    ...metadataPhrases,
-    ...identityPhrases,
-    ...highSignalNameTerms,
-    ...highSignalDescriptionTerms,
-  ]);
-}
-
-function highSignalLatinTerm(term: string, acronymMinLength: number): boolean {
-  return /\d/u.test(term)
-    || (term.length >= acronymMinLength && term === term.toUpperCase())
-    || (term.length >= 4 && /[A-Z].*[A-Z]/u.test(term));
-}
-
-function meaningfulActivationPhrase(value: string | undefined): value is string {
-  const normalized = value?.normalize('NFKC').trim();
-  if (!normalized) return false;
-  const cjkLength = [...normalized].filter((character) => /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(character)).length;
-  return cjkLength === 0 ? normalized.replace(/\s+/gu, '').length >= 3 : cjkLength >= 3;
-}
-
-function latinTerms(value: string): string[] {
-  return value.match(/[A-Za-z][A-Za-z0-9.+#_-]{1,}/g) ?? [];
-}
-
-function uniqueStrings(values: Array<string | undefined>): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const value of values) {
-    const normalized = value?.normalize('NFKC').trim();
-    const key = normalized?.toLocaleLowerCase('en-US');
-    if (!normalized || !key || seen.has(key)) continue;
-    seen.add(key);
-    result.push(normalized);
-  }
-  return result;
-}
-
-function pluginSkillMatchesActivation(skill: ParsedSkill, activationText: string): boolean {
-  if (skill.kind !== 'plugin' || !skill.autoActivate.length) return false;
-  const text = activationText.normalize('NFKC').toLocaleLowerCase('en-US');
-  return skill.autoActivate.some((keyword) => activationKeywordMatches(text, keyword));
-}
-
-function activationKeywordMatches(normalizedText: string, keyword: string): boolean {
-  const normalizedKeyword = keyword.normalize('NFKC').trim().toLocaleLowerCase('en-US');
-  if (!normalizedKeyword) return false;
-  if (!/^[a-z0-9][a-z0-9.+#_-]*$/u.test(normalizedKeyword)) return normalizedText.includes(normalizedKeyword);
-  let index = normalizedText.indexOf(normalizedKeyword);
-  while (index !== -1) {
-    const before = normalizedText[index - 1] ?? '';
-    const after = normalizedText[index + normalizedKeyword.length] ?? '';
-    if (!/[a-z0-9]/u.test(before) && !/[a-z0-9]/u.test(after)) return true;
-    index = normalizedText.indexOf(normalizedKeyword, index + normalizedKeyword.length);
-  }
-  return false;
 }
 
 function referencePaths(content: string): string[] {

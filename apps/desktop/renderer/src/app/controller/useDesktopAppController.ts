@@ -80,6 +80,14 @@ export function useDesktopAppController() {
     if (loadState !== 'ready') return;
     void capabilitiesRefresh.refreshAll();
   }, [capabilitiesRefresh, loadState]);
+  const savedLanguage = runtime.config?.desktopSettings?.interfaceLanguage;
+  const previousLanguage = useRef(savedLanguage);
+  useEffect(() => {
+    if (savedLanguage === previousLanguage.current) return;
+    previousLanguage.current = savedLanguage;
+    // 等保存后的配置到达再刷新，避免用乐观更新的 UI 语言读取旧的 runtime 文案。
+    if (loadState === 'ready') void capabilitiesRefresh.refresh(['skills', 'plugin-management']);
+  }, [capabilitiesRefresh, loadState, savedLanguage]);
   const chatTargetIdentity = chatComposerTargetIdentity(
     currentThread?.id,
     currentThread ? null : activeProjectId,

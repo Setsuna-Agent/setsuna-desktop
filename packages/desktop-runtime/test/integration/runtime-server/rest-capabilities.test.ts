@@ -35,6 +35,16 @@ describe('runtime server REST skills and capabilities', () => {
       id: 'create-skill-in-chat',
       enabled: false,
     });
+    for (const [interfaceLanguage, skillName, pluginName] of [
+      ['en-US', 'Create Skill in Chat', 'Structured Questions'],
+      ['zh-CN', '对话创建Skill', '结构化提问'],
+    ]) {
+      await harness.runtimeFetch('/v1/config', { method: 'PUT', body: JSON.stringify({ desktopSettings: { interfaceLanguage } }) });
+      await expect(harness.runtimeFetch('/v1/features/skills/create-skill-in-chat')).resolves.toMatchObject({ name: skillName, enabled: false });
+      await expect(harness.runtimeFetch('/v1/features/plugin-management')).resolves.toMatchObject({
+        marketplace: expect.arrayContaining([expect.objectContaining({ id: 'question', name: pluginName })]),
+      });
+    }
   });
 
   it('lists the default marketplace and installs a selected plugin by id', async () => {
@@ -108,7 +118,7 @@ describe('runtime server REST skills and capabilities', () => {
             icon: 'pdf',
             featured: true,
             installed: false,
-            skills: [expect.objectContaining({ id: 'pdf.pdf', name: 'pdf' })],
+            skills: [expect.objectContaining({ id: 'pdf.pdf', name: 'PDF 文档处理' })],
             mcpServers: [],
             capabilities: { skills: 1, mcpServers: 0, hooks: 0, resources: 0 },
           }),
@@ -215,7 +225,7 @@ describe('runtime server REST skills and capabilities', () => {
         pluginId: 'documents',
         kind: 'skill',
         files: [expect.objectContaining({
-          path: path.join('skills', 'documents', 'SKILL.md'),
+          path: path.join('skills', 'documents', 'SKILL.zh-CN.md'),
           mimeType: 'text/markdown',
           text: expect.stringContaining('Word'),
         })],
@@ -361,6 +371,7 @@ describe('runtime server REST skills and capabilities', () => {
       };
       const context7Record = pluginIndex.plugins.find((plugin) => plugin.id === 'context7-docs');
       if (!context7Record) throw new Error('Expected the Context7 plugin to be installed');
+      const marketplaceVersion = context7Record.version;
       context7Record.version = '0.9.0';
       await writeFile(pluginIndexPath, JSON.stringify(pluginIndex, null, 2));
   
@@ -372,12 +383,12 @@ describe('runtime server REST skills and capabilities', () => {
         })]),
       });
       await expect(harness.runtimeFetch('/v1/features/plugin-management/marketplace/context7-docs/update', { method: 'POST' })).resolves.toMatchObject({
-        plugin: { id: 'context7-docs', version: '1.0.1' },
+        plugin: { id: 'context7-docs', version: marketplaceVersion },
       });
       await expect(harness.runtimeFetch('/v1/features/plugin-management')).resolves.toMatchObject({
         marketplace: expect.arrayContaining([expect.objectContaining({
           id: 'context7-docs',
-          installedVersion: '1.0.1',
+          installedVersion: marketplaceVersion,
           updateAvailable: false,
         })]),
       });

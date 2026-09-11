@@ -13,7 +13,9 @@ process.stdin.on('end', () => {
   process.stdout.write(JSON.stringify({
     hookSpecificOutput: {
       hookEventName: 'SessionStart',
-      additionalContext: `Project guidance files in cwd: ${existing.join(', ')}. Read and follow them before making code changes. Session source: ${String(payload.source || 'unknown')}.`,
+      additionalContext: payload.interface_language === 'zh-CN'
+        ? `当前目录的项目说明文件：${existing.join('、')}。修改代码前先读取并遵守这些文件。会话来源：${String(payload.source || 'unknown')}。`
+        : `Project guidance files in cwd: ${existing.join(', ')}. Read and follow them before making code changes. Session source: ${String(payload.source || 'unknown')}.`,
     },
   }));
 });

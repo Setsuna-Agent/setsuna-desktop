@@ -1,0 +1,20 @@
+{
+  "en-US": {
+    "PDF 文档处理": "PDF Documents",
+    "读取、创建、检查、渲染并验证 PDF 文件，适用于版式和视觉质量重要的文档任务。": "Read, create, inspect, render, and verify PDF files for tasks where layout and visual quality matter.",
+    "PDF": "PDF",
+    "文档": "Documents",
+    "文件处理": "File processing",
+    "pdf": "pdf",
+    "Read, create, inspect, render, and verify PDF files where visual layout matters. Use Poppler rendering plus Python tools such as reportlab, pdfplumber, and pypdf for generation and extraction.": "Read, create, inspect, render, and verify PDF files where visual layout matters. Use Poppler rendering plus Python tools such as reportlab, pdfplumber, and pypdf for generation and extraction."
+  },
+  "zh-CN": {
+    "PDF 文档处理": "PDF 文档处理",
+    "读取、创建、检查、渲染并验证 PDF 文件，适用于版式和视觉质量重要的文档任务。": "读取、创建、检查、渲染并验证 PDF 文件，适用于版式和视觉质量重要的文档任务。",
+    "PDF": "PDF 文档处理",
+    "文档": "文档",
+    "文件处理": "文件处理",
+    "pdf": "PDF 文档处理",
+    "Read, create, inspect, render, and verify PDF files where visual layout matters. Use Poppler rendering plus Python tools such as reportlab, pdfplumber, and pypdf for generation and extraction.": "读取、创建、检查、渲染并验证重视视觉版式的 PDF 文件。使用 Poppler 渲染，并通过 reportlab、pdfplumber、pypdf 等 Python 工具生成与提取内容。"
+  }
+}

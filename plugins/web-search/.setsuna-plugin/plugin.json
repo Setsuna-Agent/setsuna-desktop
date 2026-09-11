@@ -3,7 +3,7 @@
   "id": "web-search",
   "name": "网络搜索",
   "icon": "web-search",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "搜索公开网络并返回可引用的来源链接与内容片段；无需配置 API Key，匿名额度受 Tavily keyless 服务限流约束。",
   "publisher": "Setsuna",
   "tags": ["搜索", "联网", "实时信息"],

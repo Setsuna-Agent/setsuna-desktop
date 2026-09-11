@@ -1,3 +1,4 @@
+import { runtimeText, type RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import { isTemporaryWorkspaceProjectId, type RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 import path from 'node:path';
 import {
@@ -9,19 +10,22 @@ import {
   type RuntimeArtifact,
 } from '../contracts/index.js';
 
-const PUBLISH_ARTIFACT_TOOL: RuntimeToolDefinition = {
-  name: PUBLISH_ARTIFACT_TOOL_NAME,
-  description: 'Publish an existing final deliverable from the active workspace so the user can open it directly from the chat response.',
-  inputSchema: {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
-      projectId: { type: 'string', description: 'Optional registered project id. Defaults to the current thread workspace, then the temporary workspace.' },
-      path: { type: 'string', description: 'Existing deliverable path, relative to the project root or absolute inside that root.' },
+function publishArtifactDefinition(language?: RuntimeInterfaceLanguage): RuntimeToolDefinition {
+  const text = runtimeText(language);
+  return {
+    name: PUBLISH_ARTIFACT_TOOL_NAME,
+    description: text('Publish an existing final deliverable from the active workspace so the user can open it directly from the chat response.', "发布工作区中已有的最终交付文件，让用户可以直接从聊天回复打开。"),
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        projectId: { type: 'string', description: text('Optional registered project id. Defaults to the current thread workspace, then the temporary workspace.', "可选已注册项目 ID；默认当前任务工作区，其次使用临时工作区。") },
+        path: { type: 'string', description: text('Existing deliverable path, relative to the project root or absolute inside that root.', "已有交付文件的路径，可为相对于项目根目录的路径或该根目录内的绝对路径。") },
+      },
+      required: ['path'],
     },
-    required: ['path'],
-  },
-};
+  };
+}
 
 const artifactMimeTypes: Readonly<Record<string, string>> = {
   '.csv': 'text/csv',
@@ -60,8 +64,8 @@ const artifactMimeTypes: Readonly<Record<string, string>> = {
 export class ArtifactRuntimeTools implements ArtifactRuntimeToolService {
   constructor(private readonly projects: ArtifactWorkspaceFiles) {}
 
-  async listTools(_context: ArtifactToolExecutionContext): Promise<RuntimeToolDefinition[]> {
-    return [PUBLISH_ARTIFACT_TOOL];
+  async listTools(context: ArtifactToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+    return [publishArtifactDefinition(context.interfaceLanguage)];
   }
 
   toolRuntimeProfile(name: string) {
@@ -71,14 +75,15 @@ export class ArtifactRuntimeTools implements ArtifactRuntimeToolService {
   }
 
   systemPrompt(
-    _context: ArtifactToolExecutionContext,
+    context: ArtifactToolExecutionContext,
     request?: Readonly<{ tools: RuntimeToolDefinition[] }>,
   ): string | null {
+    const text = runtimeText(context.interfaceLanguage);
     if (request && !request.tools.some((tool) => tool.name === PUBLISH_ARTIFACT_TOOL_NAME)) return null;
     return [
-      'After creating and verifying a user-facing deliverable file, call publish_artifact once for each final deliverable so it appears as an openable card in the chat.',
-      'Deliverables include reports, web pages, PDFs, documents, spreadsheets, presentations, images, archives, and media files.',
-      'Do not publish source code, helper scripts, caches, or intermediate build files unless the user explicitly requested that file itself as the deliverable.',
+      text('After creating and verifying a user-facing deliverable file, call publish_artifact once for each final deliverable so it appears as an openable card in the chat.', "创建并验证面向用户的交付文件后，为每个最终交付文件调用一次 publish_artifact，使其在聊天中显示为可打开的卡片。"),
+      text('Deliverables include reports, web pages, PDFs, documents, spreadsheets, presentations, images, archives, and media files.', "交付物包括报告、网页、PDF、文档、电子表格、演示文稿、图片、压缩包和媒体文件。"),
+      text('Do not publish source code, helper scripts, caches, or intermediate build files unless the user explicitly requested that file itself as the deliverable.', "不要发布源代码、辅助脚本、缓存或中间构建文件，除非用户明确要求该文件本身作为交付物。"),
     ].join(' ');
   }
 

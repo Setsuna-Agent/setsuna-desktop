@@ -366,6 +366,7 @@ function hookToolPayload(eventName: 'PreToolUse' | 'PermissionRequest' | 'PostTo
     cwd: input.environment.cwd,
     hook_event_name: eventName,
     model: config.activeProviderId ?? '',
+    interface_language: config.desktopSettings?.interfaceLanguage ?? 'zh-CN',
     permission_mode: input.approvalPolicy,
     tool_name: toolUse.toolName,
     tool_input: toHookJson(toolUse.toolInput),
@@ -432,6 +433,7 @@ function hookUserPromptSubmitPayload(config: RuntimeConfigState, input: RuntimeU
     cwd: input.environment.cwd,
     hook_event_name: 'UserPromptSubmit',
     model: config.activeProviderId ?? '',
+    interface_language: config.desktopSettings?.interfaceLanguage ?? 'zh-CN',
     permission_mode: input.approvalPolicy,
     prompt: input.prompt,
   };
@@ -445,6 +447,7 @@ function hookSessionStartPayload(config: RuntimeConfigState, input: RuntimeSessi
     cwd: input.environment.cwd,
     hook_event_name: 'SessionStart',
     model: config.activeProviderId ?? '',
+    interface_language: config.desktopSettings?.interfaceLanguage ?? 'zh-CN',
     permission_mode: input.approvalPolicy,
     source: input.source,
   };
@@ -458,6 +461,7 @@ function hookSubagentStartPayload(config: RuntimeConfigState, input: RuntimeSuba
     cwd: input.environment.cwd,
     hook_event_name: 'SubagentStart',
     model: config.activeProviderId ?? '',
+    interface_language: config.desktopSettings?.interfaceLanguage ?? 'zh-CN',
     permission_mode: input.approvalPolicy,
     agent_id: input.agentId,
     agent_type: input.agentType,
@@ -472,6 +476,7 @@ function hookCompactPayload(eventName: 'PreCompact' | 'PostCompact', config: Run
     cwd: input.environment.cwd,
     hook_event_name: eventName,
     model: config.activeProviderId ?? '',
+    interface_language: config.desktopSettings?.interfaceLanguage ?? 'zh-CN',
     trigger: input.trigger,
   };
 }
@@ -485,6 +490,7 @@ function hookSubagentStopPayload(config: RuntimeConfigState, input: RuntimeSubag
     cwd: input.environment.cwd,
     hook_event_name: 'SubagentStop',
     model: config.activeProviderId ?? '',
+    interface_language: config.desktopSettings?.interfaceLanguage ?? 'zh-CN',
     permission_mode: input.approvalPolicy,
     stop_hook_active: input.stopHookActive,
     agent_id: input.agentId,
@@ -501,6 +507,7 @@ function hookStopPayload(config: RuntimeConfigState, input: RuntimeStopHookInput
     cwd: input.environment.cwd,
     hook_event_name: 'Stop',
     model: config.activeProviderId ?? '',
+    interface_language: config.desktopSettings?.interfaceLanguage ?? 'zh-CN',
     permission_mode: input.approvalPolicy,
     stop_hook_active: input.stopHookActive,
     last_assistant_message: input.lastAssistantMessage ?? null,

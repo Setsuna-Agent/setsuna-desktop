@@ -6,18 +6,19 @@ const MAX_RULE_FILES = 100;
 
 export default function activate(api) {
   api.on('session.start', async (_payload, context) => {
+    const chinese = context.interfaceLanguage === 'zh-CN';
     if (typeof context.cwd !== 'string' || !context.cwd) return {};
     const rulesRoot = path.join(context.cwd, '.claude', 'rules');
     const files = await findMarkdownFiles(rulesRoot);
     if (!files.length) return {};
-    const suffix = files.length === MAX_RULE_FILES ? '\n- …更多规则未列出' : '';
+    const suffix = files.length === MAX_RULE_FILES ? (chinese ? '\n- …更多规则未列出' : '\n- …additional rules omitted') : '';
     return {
       context: [
         [
-          'Project rules are available under .claude/rules:',
+          chinese ? '项目规则位于 .claude/rules：' : 'Project rules are available under .claude/rules:',
           ...files.map((file) => `- .claude/rules/${file}`),
           suffix,
-          'Read the relevant rule files before changing code covered by them.',
+          chinese ? '修改规则覆盖的代码前，先读取相关规则文件。' : 'Read the relevant rule files before changing code covered by them.',
         ].filter(Boolean).join('\n'),
       ],
     };

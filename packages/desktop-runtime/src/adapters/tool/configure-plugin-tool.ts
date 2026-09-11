@@ -1,3 +1,4 @@
+import { runtimeText, type RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import {
   PLUGIN_UI_CARD_DECLARATION_LIMITS,
   type RuntimeToolDefinition,
@@ -18,309 +19,321 @@ export const MAX_CONFIGURE_PLUGIN_TEXT_BYTES = 512 * 1024;
 
 export type ConfigurePluginAction = 'create' | 'update';
 
-const rendererUiTextSourceSchema = {
-  anyOf: [
-    { type: 'string' },
-    {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        path: { type: 'string', description: 'Dot-separated path inside the declared contribution data.' },
-        fallback: { type: 'string' },
-      },
-      required: ['path'],
-    },
-  ],
-};
-
-const rendererUiTreeSchema = {
-  type: 'object',
-  description: [
-    'Recursive host-rendered node. Allowed exact shapes are:',
-    'stack {type,direction?,gap?,children}; text/badge {type,text,tone?};',
-    'notice {type,title?,text,tone?}; field {type,name,label,defaultValue?,placeholder?,required?,maxLength?};',
-    'select {type,name,label,defaultValue?,options}; button {type,actionId,label,variant?}.',
-    'Text, badge, notice text/title, and field/select defaults may use a {path,fallback?} binding.',
-  ].join(' '),
-};
-
-/** Kept explicit because this schema is the model's primary source of truth. */
-export const configurePluginRendererUiSchema: Record<string, unknown> = {
-  type: 'object',
-  additionalProperties: false,
-  description: [
-    'Renderer UI v2 supports two modes.',
-    'tree is a bounded host-rendered UI.',
-    'document is a standalone sandboxed Plugin page backed by declared HTML/CSS/JS resources.',
-    'A contribution must declare exactly one mode.',
-  ].join(' '),
-  properties: {
-    schemaVersion: { type: 'integer', enum: [2] },
-    actions: {
-      type: 'array',
-      maxItems: 32,
-      items: {
+function rendererUiSchema(language?: RuntimeInterfaceLanguage): Record<string, unknown> {
+  const text = runtimeText(language);
+  const rendererUiTextSourceSchema = {
+    anyOf: [
+      { type: 'string' },
+      {
         type: 'object',
         additionalProperties: false,
         properties: {
-          id: { type: 'string' },
-          approval: {
-            type: 'object',
-            additionalProperties: false,
-            properties: { title: { type: 'string' }, message: { type: 'string' } },
-            required: ['message'],
-          },
+          path: { type: 'string', description: text('Dot-separated path inside the declared contribution data.', "声明的 contribution 数据内以点分隔的路径。") },
+          fallback: { type: 'string' },
         },
-        required: ['id', 'approval'],
+        required: ['path'],
       },
-    },
-    contributions: {
-      type: 'array',
-      maxItems: 16,
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        description: [
-          'renderer.plugin.page requires navigation.',
-          'renderer.settings.page.extensions requires target general or about.',
-          'renderer.capabilities.plugin.details adds one contribution to the Plugin details page.',
-          'Settings and Plugin details data must use global scope.',
-          'Put stateKey and scope inside data, never at this contribution root.',
-        ].join(' '),
-        properties: {
-          id: { type: 'string' },
-          slot: {
-            type: 'string',
-            enum: [
-              'renderer.plugin.page',
-              'renderer.settings.page.extensions',
-              'renderer.chat.composer.status',
-              'renderer.capabilities.plugin.details',
-            ],
-          },
-          target: { type: 'string', enum: ['general', 'about'] },
-          order: { type: 'number' },
-          navigation: {
-            type: 'object',
-            additionalProperties: false,
-            properties: {
-              label: { type: 'string' },
-              badge: rendererUiTextSourceSchema,
-            },
-            required: ['label'],
-          },
-          data: {
-            type: 'object',
-            additionalProperties: false,
-            description: 'Required for state bindings. Project scope requires an active project; thread scope requires a conversation.',
-            properties: {
-              stateKey: { type: 'string' },
-              scope: { type: 'string', enum: ['global', 'project', 'thread'] },
-            },
-            required: ['stateKey', 'scope'],
-          },
-          tree: rendererUiTreeSchema,
-          document: {
-            type: 'object',
-            additionalProperties: false,
-            description: [
-              'Free-form standalone UI loaded in an opaque-origin iframe.',
-              'Network, Node, Electron, host DOM, forms, popups, downloads, and top navigation remain unavailable.',
-              'JavaScript uses window.setsunaUI for state snapshots and declared host actions.',
-            ].join(' '),
-            properties: {
-              htmlResourceId: { type: 'string' },
-              cssResourceId: { type: 'string' },
-              jsResourceId: { type: 'string' },
-              actionIds: { type: 'array', maxItems: 32, items: { type: 'string' } },
-            },
-            required: ['htmlResourceId', 'actionIds'],
-          },
-        },
-        required: ['id', 'slot'],
-        anyOf: [
-          { required: ['tree'] },
-          { required: ['document'] },
-        ],
-      },
-    },
-  },
-  required: ['schemaVersion', 'actions', 'contributions'],
-};
+    ],
+  };
 
-export const configurePluginTool: RuntimeToolDefinition = {
-  name: CONFIGURE_PLUGIN_TOOL,
-  description: 'Create or update a managed local Setsuna Plugin Bundle from a complete manifest and UTF-8 text files. Requires user approval.',
-  inputSchema: {
+  const rendererUiTreeSchema = {
+    type: 'object',
+    description: [
+      text('Recursive host-rendered node. Allowed exact shapes are:', "递归的宿主渲染节点。允许的准确结构为："),
+      'stack {type,direction?,gap?,children}; text/badge {type,text,tone?};',
+      'notice {type,title?,text,tone?}; field {type,name,label,defaultValue?,placeholder?,required?,maxLength?};',
+      'select {type,name,label,defaultValue?,options}; button {type,actionId,label,variant?}.',
+      text('Text, badge, notice text/title, and field/select defaults may use a {path,fallback?} binding.', "text、badge、notice 的 text/title，以及 field/select 默认值可以使用 {path,fallback?} 绑定。"),
+    ].join(' '),
+  };
+
+  /** Kept explicit because this schema is the model's primary source of truth. */
+  const configurePluginRendererUiSchema: Record<string, unknown> = {
     type: 'object',
     additionalProperties: false,
+    description: [
+      text('Renderer UI v2 supports two modes.', "Renderer UI v2 支持两种模式。"),
+      text('tree is a bounded host-rendered UI.', "tree 是由宿主渲染的受限 UI。"),
+      text('document is a standalone sandboxed Plugin page backed by declared HTML/CSS/JS resources.', "document 是独立的沙箱插件页面，使用声明的 HTML/CSS/JS 资源。"),
+      text('A contribution must declare exactly one mode.', "每个 contribution 必须且只能声明一种模式。"),
+    ].join(' '),
     properties: {
-      manifest: {
-        type: 'object',
-        additionalProperties: false,
-        description: 'Complete Plugin Bundle v2 manifest. schemaVersion is normalized to 2; featured marketplace fields are ignored.',
-        properties: {
-          schemaVersion: { type: 'integer', enum: [2] },
-          id: { type: 'string', description: 'Stable lowercase plugin id.' },
-          name: { type: 'string', description: 'User-facing plugin name.' },
-          icon: { type: 'string', description: 'Optional built-in renderer icon token.' },
-          version: { type: 'string', description: 'Plugin version. Defaults to 1.0.0.' },
-          description: { type: 'string' },
-          publisher: { type: 'string', description: 'Publisher label. Defaults to Local.' },
-          tags: { type: 'array', items: { type: 'string' } },
-          tools: {
-            type: 'array',
-            description: 'Optional display metadata for tools supplied by the plugin.',
-            items: {
-              type: 'object',
-              additionalProperties: false,
-              properties: { name: { type: 'string' }, description: { type: 'string' } },
-              required: ['name'],
-            },
-          },
-          skills: {
-            type: 'array',
-            description: 'Relative Skill directories. Each directory must have a SKILL.md in files.',
-            items: { type: 'string' },
-          },
-          mcpServers: {
-            type: 'array',
-            description: 'MCP servers without embedded credentials or environment values.',
-            items: {
-              type: 'object',
-              additionalProperties: false,
-              properties: {
-                key: { type: 'string' },
-                label: { type: 'string' },
-                description: { type: 'string' },
-                transport: { type: 'string', enum: ['stdio', 'streamableHttp', 'streamable_http'] },
-                command: { type: 'string' },
-                args: { type: 'array', items: { type: 'string' } },
-                cwd: { type: 'string' },
-                url: { type: 'string' },
-                timeoutMs: { type: 'integer' },
-                startupTimeoutMs: { type: 'integer' },
-                toolTimeoutMs: { type: 'integer' },
-                allowedTools: { type: 'array', items: { type: 'string' } },
-                disabledTools: { type: 'array', items: { type: 'string' } },
-                oauthClientId: { type: 'string' },
-                oauthResource: { type: 'string' },
-              },
-              required: ['key'],
-            },
-          },
-          hooks: {
-            type: 'array',
-            description: 'Command Hooks. Bundle files should be referenced with {{pluginRoot}}.',
-            items: {
-              type: 'object',
-              additionalProperties: false,
-              properties: {
-                id: { type: 'string' },
-                name: { type: 'string' },
-                description: { type: 'string' },
-                eventName: { type: 'string' },
-                matcher: { type: 'string' },
-                command: { type: 'string' },
-                commandWindows: { type: 'string' },
-                timeoutSec: { type: 'integer' },
-                statusMessage: { type: 'string' },
-              },
-              required: ['eventName', 'command'],
-            },
-          },
-          resources: {
-            type: 'array',
-            description: 'Declared text resources present in files, including sandboxed Plugin page HTML/CSS/JS.',
-            items: {
-              type: 'object',
-              additionalProperties: false,
-              properties: { id: { type: 'string' }, label: { type: 'string' }, path: { type: 'string' } },
-              required: ['id', 'path'],
-            },
-          },
-          extension: {
-            type: 'object',
-            additionalProperties: false,
-            description: [
-              'Optional executable Node worker extension.',
-              'A Plugin tool may return a sandboxed chat card in data using resultKind plugin.ui-card,',
-              'resultMajor 1, and payload {id,title?,html,css?,js?,data?,permissions:{network:false,hostActions:[]}}.',
-              'Declare each card in uiCards with a static sandbox preview so Plugin details can show it before execution.',
-              'This requires the ui capability. The host injects pluginId and validates source limits before persistence.',
-            ].join(' '),
-            properties: {
-              apiVersion: { type: 'integer', enum: [1] },
-              runtime: { type: 'string', enum: ['node-worker'] },
-              entry: { type: 'string', description: 'Relative JavaScript entry file present in files.' },
-              capabilities: {
-                type: 'array',
-                items: { type: 'string', enum: ['tools', 'events', 'ui', 'state', 'network'] },
-              },
-              network: {
-                type: 'object',
-                additionalProperties: false,
-                description: 'Required when network is declared. Requests use the runtime proxy and exact origin allowlist.',
-                properties: {
-                  allowedOrigins: {
-                    type: 'array',
-                    items: { type: 'string', description: 'Exact HTTP(S) origin, without a path.' },
-                  },
-                },
-                required: ['allowedOrigins'],
-              },
-              uiCards: {
-                type: 'array',
-                maxItems: PLUGIN_UI_CARD_DECLARATION_LIMITS.entries,
-                description: 'Install-time catalog metadata and a static sandbox preview for cards returned dynamically by declared tools.',
-                items: {
-                  type: 'object',
-                  additionalProperties: false,
-                  properties: {
-                    id: { type: 'string', description: 'Stable card template id.' },
-                    label: { type: 'string', description: 'User-facing card name.' },
-                    description: { type: 'string' },
-                    toolName: { type: 'string', description: 'Name of the declared tool that returns this card.' },
-                    preview: {
-                      type: 'object',
-                      additionalProperties: false,
-                      description: 'Static sample rendered without executing the tool, making network requests, or exposing host actions.',
-                      properties: {
-                        html: { type: 'string' },
-                        css: { type: 'string' },
-                        js: { type: 'string' },
-                        data: { type: 'object', description: 'Bounded JSON sample data for window.setsunaUI.ready.' },
-                      },
-                      anyOf: [{ required: ['html'] }, { required: ['js'] }],
-                    },
-                  },
-                  required: ['id', 'label', 'toolName', 'preview'],
-                },
-              },
-              rendererUi: configurePluginRendererUiSchema,
-            },
-            required: ['apiVersion', 'runtime', 'entry', 'capabilities'],
-          },
-        },
-        required: ['id', 'name'],
-      },
-      files: {
+      schemaVersion: { type: 'integer', enum: [2] },
+      actions: {
         type: 'array',
-        description: `Complete UTF-8 text-file snapshot. Omitted files are removed on update; maximum ${MAX_CONFIGURE_PLUGIN_FILES} files and ${MAX_CONFIGURE_PLUGIN_TEXT_BYTES} bytes.`,
+        maxItems: 32,
         items: {
           type: 'object',
           additionalProperties: false,
           properties: {
-            path: { type: 'string', description: 'Bundle-relative file path. The manifest file is generated automatically.' },
-            content: { type: 'string', description: 'Complete UTF-8 text content.' },
+            id: { type: 'string' },
+            approval: {
+              type: 'object',
+              additionalProperties: false,
+              properties: { title: { type: 'string' }, message: { type: 'string' } },
+              required: ['message'],
+            },
           },
-          required: ['path', 'content'],
+          required: ['id', 'approval'],
+        },
+      },
+      contributions: {
+        type: 'array',
+        maxItems: 16,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          description: [
+            text('renderer.plugin.page requires navigation.', "renderer.plugin.page 需要 navigation。"),
+            text('renderer.settings.page.extensions requires target general or about.', "renderer.settings.page.extensions 的 target 必须为 general 或 about。"),
+            text('renderer.capabilities.plugin.details adds one contribution to the Plugin details page.', "renderer.capabilities.plugin.details 向插件详情页添加一个 contribution。"),
+            text('Settings and Plugin details data must use global scope.', "设置及插件详情数据必须使用 global scope。"),
+            text('Put stateKey and scope inside data, never at this contribution root.', "stateKey 和 scope 应放在 data 内，不要放在 contribution 根层级。"),
+          ].join(' '),
+          properties: {
+            id: { type: 'string' },
+            slot: {
+              type: 'string',
+              enum: [
+                'renderer.plugin.page',
+                'renderer.settings.page.extensions',
+                'renderer.chat.composer.status',
+                'renderer.capabilities.plugin.details',
+              ],
+            },
+            target: { type: 'string', enum: ['general', 'about'] },
+            order: { type: 'number' },
+            navigation: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                label: { type: 'string' },
+                badge: rendererUiTextSourceSchema,
+              },
+              required: ['label'],
+            },
+            data: {
+              type: 'object',
+              additionalProperties: false,
+              description: text('Required for state bindings. Project scope requires an active project; thread scope requires a conversation.', "状态绑定必填。project scope 需要当前项目；thread scope 需要对话。"),
+              properties: {
+                stateKey: { type: 'string' },
+                scope: { type: 'string', enum: ['global', 'project', 'thread'] },
+              },
+              required: ['stateKey', 'scope'],
+            },
+            tree: rendererUiTreeSchema,
+            document: {
+              type: 'object',
+              additionalProperties: false,
+              description: [
+                text('Free-form standalone UI loaded in an opaque-origin iframe.', "在不透明来源的 iframe 中加载的自由形式独立 UI。"),
+                text('Network, Node, Electron, host DOM, forms, popups, downloads, and top navigation remain unavailable.', "无法使用网络、Node、Electron、宿主 DOM、表单、弹窗、下载或顶层导航。"),
+                text('JavaScript uses window.setsunaUI for state snapshots and declared host actions.', "JavaScript 通过 window.setsunaUI 读取状态快照和调用已声明的宿主操作。"),
+              ].join(' '),
+              properties: {
+                htmlResourceId: { type: 'string' },
+                cssResourceId: { type: 'string' },
+                jsResourceId: { type: 'string' },
+                actionIds: { type: 'array', maxItems: 32, items: { type: 'string' } },
+              },
+              required: ['htmlResourceId', 'actionIds'],
+            },
+          },
+          required: ['id', 'slot'],
+          anyOf: [
+            { required: ['tree'] },
+            { required: ['document'] },
+          ],
         },
       },
     },
-    required: ['manifest', 'files'],
-  },
-};
+    required: ['schemaVersion', 'actions', 'contributions'],
+  };
+
+  return configurePluginRendererUiSchema;
+}
+
+export const configurePluginRendererUiSchema = rendererUiSchema();
+
+export function configurePluginDefinition(language?: RuntimeInterfaceLanguage): RuntimeToolDefinition {
+  const text = runtimeText(language);
+  return {
+    name: CONFIGURE_PLUGIN_TOOL,
+    description: text('Create or update a managed local Setsuna Plugin Bundle from a complete manifest and UTF-8 text files. Requires user approval.', "用完整清单及 UTF-8 文本文件创建或更新受管理的本地 Setsuna 插件包。需要用户审批。"),
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        manifest: {
+          type: 'object',
+          additionalProperties: false,
+          description: text('Complete Plugin Bundle v2 manifest. schemaVersion is normalized to 2; featured marketplace fields are ignored.', "完整的 Plugin Bundle v2 清单。schemaVersion 会规范化为 2；精选市场字段会被忽略。"),
+          properties: {
+            schemaVersion: { type: 'integer', enum: [2] },
+            id: { type: 'string', description: text('Stable lowercase plugin id.', "稳定的小写插件 ID。") },
+            name: { type: 'string', description: text('User-facing plugin name.', "面向用户的插件名称。") },
+            icon: { type: 'string', description: text('Optional built-in renderer icon token.', "可选内置 renderer 图标标识。") },
+            version: { type: 'string', description: text('Plugin version. Defaults to 1.0.0.', "插件版本。默认 1.0.0。") },
+            description: { type: 'string' },
+            publisher: { type: 'string', description: text('Publisher label. Defaults to Local.', "发布者标签。默认 Local。") },
+            tags: { type: 'array', items: { type: 'string' } },
+            tools: {
+              type: 'array',
+              description: text('Optional display metadata for tools supplied by the plugin.', "可选插件工具的显示元数据。"),
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                properties: { name: { type: 'string' }, description: { type: 'string' } },
+                required: ['name'],
+              },
+            },
+            skills: {
+              type: 'array',
+              description: text('Relative Skill directories. Each directory must have a SKILL.md in files.', "Skill 相对目录。每个目录都必须在 files 中提供 SKILL.md。"),
+              items: { type: 'string' },
+            },
+            mcpServers: {
+              type: 'array',
+              description: text('MCP servers without embedded credentials or environment values.', "不内嵌凭据或环境变量值的 MCP 服务。"),
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  key: { type: 'string' },
+                  label: { type: 'string' },
+                  description: { type: 'string' },
+                  transport: { type: 'string', enum: ['stdio', 'streamableHttp', 'streamable_http'] },
+                  command: { type: 'string' },
+                  args: { type: 'array', items: { type: 'string' } },
+                  cwd: { type: 'string' },
+                  url: { type: 'string' },
+                  timeoutMs: { type: 'integer' },
+                  startupTimeoutMs: { type: 'integer' },
+                  toolTimeoutMs: { type: 'integer' },
+                  allowedTools: { type: 'array', items: { type: 'string' } },
+                  disabledTools: { type: 'array', items: { type: 'string' } },
+                  oauthClientId: { type: 'string' },
+                  oauthResource: { type: 'string' },
+                },
+                required: ['key'],
+              },
+            },
+            hooks: {
+              type: 'array',
+              description: text('Command Hooks. Bundle files should be referenced with {{pluginRoot}}.', "命令 Hook。通过 {{pluginRoot}} 引用包内文件。"),
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  id: { type: 'string' },
+                  name: { type: 'string' },
+                  description: { type: 'string' },
+                  eventName: { type: 'string' },
+                  matcher: { type: 'string' },
+                  command: { type: 'string' },
+                  commandWindows: { type: 'string' },
+                  timeoutSec: { type: 'integer' },
+                  statusMessage: { type: 'string' },
+                },
+                required: ['eventName', 'command'],
+              },
+            },
+            resources: {
+              type: 'array',
+              description: text('Declared text resources present in files, including sandboxed Plugin page HTML/CSS/JS.', "声明且存在于 files 中的文本资源，包括沙箱插件页面的 HTML/CSS/JS。"),
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                properties: { id: { type: 'string' }, label: { type: 'string' }, path: { type: 'string' } },
+                required: ['id', 'path'],
+              },
+            },
+            extension: {
+              type: 'object',
+              additionalProperties: false,
+              description: [
+                text('Optional executable Node worker extension.', "可选的可执行 Node worker 扩展。"),
+                text('A Plugin tool may return a sandboxed chat card in data using resultKind plugin.ui-card,', "插件工具可以在 data 中返回沙箱聊天卡片，使用 resultKind plugin.ui-card，"),
+                text('resultMajor 1, and payload {id,title?,html,css?,js?,data?,permissions:{network:false,hostActions:[]}}.', "resultMajor 为 1，payload 为 {id,title?,html,css?,js?,data?,permissions:{network:false,hostActions:[]}}。"),
+                text('Declare each card in uiCards with a static sandbox preview so Plugin details can show it before execution.', "在 uiCards 中声明每个卡片及其静态沙箱预览，以便插件详情页在执行前展示。"),
+                text('This requires the ui capability. The host injects pluginId and validates source limits before persistence.', "需要 ui 能力。宿主会注入 pluginId，并在持久化前验证源码限制。"),
+              ].join(' '),
+              properties: {
+                apiVersion: { type: 'integer', enum: [1] },
+                runtime: { type: 'string', enum: ['node-worker'] },
+                entry: { type: 'string', description: text('Relative JavaScript entry file present in files.', "存在于 files 中的相对 JavaScript 入口文件。") },
+                capabilities: {
+                  type: 'array',
+                  items: { type: 'string', enum: ['tools', 'events', 'ui', 'state', 'network'] },
+                },
+                network: {
+                  type: 'object',
+                  additionalProperties: false,
+                  description: text('Required when network is declared. Requests use the runtime proxy and exact origin allowlist.', "声明 network 时必填。请求使用运行时代理及精确 origin 白名单。"),
+                  properties: {
+                    allowedOrigins: {
+                      type: 'array',
+                      items: { type: 'string', description: text('Exact HTTP(S) origin, without a path.', "准确的 HTTP(S) origin，不含路径。") },
+                    },
+                  },
+                  required: ['allowedOrigins'],
+                },
+                uiCards: {
+                  type: 'array',
+                  maxItems: PLUGIN_UI_CARD_DECLARATION_LIMITS.entries,
+                  description: text('Install-time catalog metadata and a static sandbox preview for cards returned dynamically by declared tools.', "安装时使用的目录元数据及静态沙箱预览，对应声明工具动态返回的卡片。"),
+                  items: {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                      id: { type: 'string', description: text('Stable card template id.', "稳定的卡片模板 ID。") },
+                      label: { type: 'string', description: text('User-facing card name.', "面向用户的卡片名称。") },
+                      description: { type: 'string' },
+                      toolName: { type: 'string', description: text('Name of the declared tool that returns this card.', "返回此卡片的已声明工具名称。") },
+                      preview: {
+                        type: 'object',
+                        additionalProperties: false,
+                        description: text('Static sample rendered without executing the tool, making network requests, or exposing host actions.', "静态渲染示例，不执行工具、不发网络请求、不暴露宿主操作。"),
+                        properties: {
+                          html: { type: 'string' },
+                          css: { type: 'string' },
+                          js: { type: 'string' },
+                          data: { type: 'object', description: text('Bounded JSON sample data for window.setsunaUI.ready.', "提供给 window.setsunaUI.ready 的有大小限制的 JSON 示例数据。") },
+                        },
+                        anyOf: [{ required: ['html'] }, { required: ['js'] }],
+                      },
+                    },
+                    required: ['id', 'label', 'toolName', 'preview'],
+                  },
+                },
+                rendererUi: rendererUiSchema(language),
+              },
+              required: ['apiVersion', 'runtime', 'entry', 'capabilities'],
+            },
+          },
+          required: ['id', 'name'],
+        },
+        files: {
+          type: 'array',
+          description: text(`Complete UTF-8 text-file snapshot. Omitted files are removed on update; maximum ${MAX_CONFIGURE_PLUGIN_FILES} files and ${MAX_CONFIGURE_PLUGIN_TEXT_BYTES} bytes.`, `完整的 UTF-8 文本文件快照。更新时省略的文件会被删除；最多 ${MAX_CONFIGURE_PLUGIN_FILES} 个文件、${MAX_CONFIGURE_PLUGIN_TEXT_BYTES} 字节。`),
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              path: { type: 'string', description: text('Bundle-relative file path. The manifest file is generated automatically.', "相对于插件包的文件路径。清单文件会自动生成。") },
+              content: { type: 'string', description: text('Complete UTF-8 text content.', "完整的 UTF-8 文本内容。") },
+            },
+            required: ['path', 'content'],
+          },
+        },
+      },
+      required: ['manifest', 'files'],
+    },
+  };
+}
+
+export const configurePluginTool = configurePluginDefinition();
 
 export function normalizeConfigurePluginInput(input: unknown): PluginDraftInput {
   const args = objectInput(input);

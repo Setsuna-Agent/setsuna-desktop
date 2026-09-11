@@ -170,9 +170,10 @@ apps/desktop/renderer/ — 0 direct / 574 total files
 ### `packages/contracts/`
 
 ```text
-packages/contracts/ — 4 direct / 76 total files
-├── src/ — 33 direct / 48 total files
+packages/contracts/ — 4 direct / 77 total files
+├── src/ — 33 direct / 49 total files
 │   ├── event-projections/ — 3 direct / 3 total files
+│   ├── localization/ — 1 direct / 1 total files
 │   ├── network-proxy/ — 1 direct / 1 total files
 │   ├── review/ — 1 direct / 1 total files
 │   └── swe/ — 10 direct / 10 total files
@@ -461,9 +462,9 @@ packages/features/ — 0 direct / 963 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 528 total files
-├── src/ — 2 direct / 304 total files
-│   ├── adapters/ — 116 files
+packages/desktop-runtime/ — 4 direct / 535 total files
+├── src/ — 2 direct / 310 total files
+│   ├── adapters/ — 121 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── event/ — 2 direct / 2 total files
 │   │   ├── feature/ — 8 direct / 8 total files
@@ -472,15 +473,15 @@ packages/desktop-runtime/ — 4 direct / 528 total files
 │   │   ├── model/ — 2 direct / 2 total files
 │   │   ├── native/ — 1 direct / 1 total files
 │   │   ├── network/ — 2 direct / 2 total files
-│   │   ├── plugin/ — 8 direct / 8 total files
+│   │   ├── plugin/ — 10 direct / 10 total files
 │   │   ├── search/ — 5 direct / 5 total files
-│   │   ├── skill/ — 4 direct / 4 total files
+│   │   ├── skill/ — 6 direct / 6 total files
 │   │   ├── store/ — 35 direct / 35 total files
-│   │   ├── tool/ — 15 direct / 38 total files
-│   │   │   └── pc-local/ — 23 direct / 23 total files
+│   │   ├── tool/ — 15 direct / 39 total files
+│   │   │   └── pc-local/ — 24 direct / 24 total files
 │   │   └── workspace/ — 5 direct / 5 total files
 │   ├── composition/ — 3 direct / 3 total files
-│   ├── extensions/ — 13 direct / 13 total files
+│   ├── extensions/ — 14 direct / 14 total files
 │   ├── features/ — 6 files
 │   │   ├── events/ — 1 direct / 1 total files
 │   │   ├── management/ — 1 direct / 1 total files
@@ -500,15 +501,15 @@ packages/desktop-runtime/ — 4 direct / 528 total files
 │   │   └── app-server/ — 23 direct / 23 total files
 │   ├── shared/ — 3 direct / 3 total files
 │   └── utils/ — 6 direct / 6 total files
-└── test/ — 220 files
-    ├── adapters/ — 52 files
+└── test/ — 221 files
+    ├── adapters/ — 53 files
     │   ├── approval/ — 1 direct / 1 total files
     │   ├── feature/ — 1 direct / 1 total files
     │   ├── mcp/ — 2 direct / 2 total files
     │   ├── model/ — 1 direct / 1 total files
     │   ├── native/ — 1 direct / 1 total files
     │   ├── network/ — 1 direct / 1 total files
-    │   ├── plugin/ — 5 direct / 6 total files
+    │   ├── plugin/ — 6 direct / 7 total files
     │   │   └── support/ — 1 direct / 1 total files
     │   ├── search/ — 4 direct / 4 total files
     │   ├── skill/ — 1 direct / 1 total files
@@ -565,87 +566,87 @@ scripts/ — 21 direct / 34 total files
 ### `skills/`
 
 ```text
-skills/ — 0 direct / 6 total files
-├── create-mcp-in-chat/ — 1 direct / 1 total files
-├── create-plugin-in-chat/ — 1 direct / 2 total files
+skills/ — 0 direct / 10 total files
+├── create-mcp-in-chat/ — 2 direct / 2 total files
+├── create-plugin-in-chat/ — 2 direct / 3 total files
 │   └── agents/ — 1 direct / 1 total files
-├── create-skill-in-chat/ — 1 direct / 1 total files
-└── goal-writer/ — 1 direct / 2 total files
+├── create-skill-in-chat/ — 2 direct / 2 total files
+└── goal-writer/ — 2 direct / 3 total files
     └── agents/ — 1 direct / 1 total files
 ```
 
 ### `plugins/`
 
 ```text
-plugins/ — 1 direct / 61 total files
-├── audit-file-mutations/ — 2 files
-│   ├── .setsuna-plugin/ — 1 direct / 1 total files
+plugins/ — 1 direct / 90 total files
+├── audit-file-mutations/ — 3 files
+│   ├── .setsuna-plugin/ — 2 direct / 2 total files
 │   └── hooks/ — 1 direct / 1 total files
-├── claude-rules/ — 2 files
-│   ├── .setsuna-plugin/ — 1 direct / 1 total files
+├── claude-rules/ — 3 files
+│   ├── .setsuna-plugin/ — 2 direct / 2 total files
 │   └── extension/ — 1 direct / 1 total files
-├── compact-warning/ — 2 files
-│   ├── .setsuna-plugin/ — 1 direct / 1 total files
+├── compact-warning/ — 3 files
+│   ├── .setsuna-plugin/ — 2 direct / 2 total files
 │   └── hooks/ — 1 direct / 1 total files
-├── context7-docs/ — 3 files
-│   ├── .setsuna-plugin/ — 1 direct / 1 total files
-│   └── skills/ — 2 files
-│       └── context7-docs/ — 1 direct / 2 total files
+├── context7-docs/ — 5 files
+│   ├── .setsuna-plugin/ — 2 direct / 2 total files
+│   └── skills/ — 3 files
+│       └── context7-docs/ — 2 direct / 3 total files
 │           └── agents/ — 1 direct / 1 total files
-├── documents/ — 17 files
-│   ├── .setsuna-plugin/ — 1 direct / 1 total files
-│   └── skills/ — 16 files
-│       └── documents/ — 3 direct / 16 total files
+├── documents/ — 24 files
+│   ├── .setsuna-plugin/ — 2 direct / 2 total files
+│   └── skills/ — 22 files
+│       └── documents/ — 4 direct / 22 total files
 │           ├── examples/ — 2 direct / 2 total files
-│           ├── references/ — 2 direct / 2 total files
+│           ├── references/ — 4 direct / 4 total files
 │           ├── scripts/ — 6 direct / 6 total files
-│           └── tasks/ — 3 direct / 3 total files
-├── guard-dangerous-shell/ — 2 files
-│   ├── .setsuna-plugin/ — 1 direct / 1 total files
+│           └── tasks/ — 6 direct / 6 total files
+├── guard-dangerous-shell/ — 3 files
+│   ├── .setsuna-plugin/ — 2 direct / 2 total files
 │   └── hooks/ — 1 direct / 1 total files
-├── openai-docs/ — 3 files
-│   ├── .setsuna-plugin/ — 1 direct / 1 total files
-│   └── skills/ — 2 files
-│       └── openai-docs/ — 1 direct / 2 total files
+├── openai-docs/ — 5 files
+│   ├── .setsuna-plugin/ — 2 direct / 2 total files
+│   └── skills/ — 3 files
+│       └── openai-docs/ — 2 direct / 3 total files
 │           └── agents/ — 1 direct / 1 total files
-├── openai-image-generation/ — 4 files
-│   ├── .setsuna-plugin/ — 1 direct / 1 total files
+├── openai-image-generation/ — 6 files
+│   ├── .setsuna-plugin/ — 2 direct / 2 total files
 │   ├── extension/ — 2 direct / 2 total files
-│   └── skills/ — 1 files
-│       └── image-generation/ — 1 direct / 1 total files
-├── openai-vision-recognition/ — 4 files
-│   ├── .setsuna-plugin/ — 1 direct / 1 total files
-│   ├── extension/ — 2 direct / 2 total files
-│   └── skills/ — 1 files
-│       └── vision-recognition/ — 1 direct / 1 total files
-├── pdf/ — 3 files
-│   ├── .setsuna-plugin/ — 1 direct / 1 total files
 │   └── skills/ — 2 files
-│       └── pdf/ — 1 direct / 2 total files
+│       └── image-generation/ — 2 direct / 2 total files
+├── openai-vision-recognition/ — 6 files
+│   ├── .setsuna-plugin/ — 2 direct / 2 total files
+│   ├── extension/ — 2 direct / 2 total files
+│   └── skills/ — 2 files
+│       └── vision-recognition/ — 2 direct / 2 total files
+├── pdf/ — 5 files
+│   ├── .setsuna-plugin/ — 2 direct / 2 total files
+│   └── skills/ — 3 files
+│       └── pdf/ — 2 direct / 3 total files
 │           └── agents/ — 1 direct / 1 total files
-├── prompt-secret-detector/ — 2 files
-│   ├── .setsuna-plugin/ — 1 direct / 1 total files
+├── prompt-secret-detector/ — 3 files
+│   ├── .setsuna-plugin/ — 2 direct / 2 total files
 │   └── hooks/ — 1 direct / 1 total files
-├── protect-generated-folders/ — 2 files
-│   ├── .setsuna-plugin/ — 1 direct / 1 total files
+├── protect-generated-folders/ — 3 files
+│   ├── .setsuna-plugin/ — 2 direct / 2 total files
 │   └── hooks/ — 1 direct / 1 total files
-├── protect-secret-paths/ — 2 files
-│   ├── .setsuna-plugin/ — 1 direct / 1 total files
+├── protect-secret-paths/ — 3 files
+│   ├── .setsuna-plugin/ — 2 direct / 2 total files
 │   └── hooks/ — 1 direct / 1 total files
-├── question/ — 2 files
-│   ├── .setsuna-plugin/ — 1 direct / 1 total files
+├── question/ — 3 files
+│   ├── .setsuna-plugin/ — 2 direct / 2 total files
 │   └── extension/ — 1 direct / 1 total files
-├── session-start-project-guidance/ — 2 files
-│   ├── .setsuna-plugin/ — 1 direct / 1 total files
+├── session-start-project-guidance/ — 3 files
+│   ├── .setsuna-plugin/ — 2 direct / 2 total files
 │   └── hooks/ — 1 direct / 1 total files
-├── stop-todo-continuation/ — 2 files
-│   ├── .setsuna-plugin/ — 1 direct / 1 total files
+├── stop-todo-continuation/ — 3 files
+│   ├── .setsuna-plugin/ — 2 direct / 2 total files
 │   └── hooks/ — 1 direct / 1 total files
-├── todo/ — 2 files
-│   ├── .setsuna-plugin/ — 1 direct / 1 total files
+├── todo/ — 3 files
+│   ├── .setsuna-plugin/ — 2 direct / 2 total files
 │   └── extension/ — 1 direct / 1 total files
-└── web-search/ — 4 files
-    ├── .setsuna-plugin/ — 1 direct / 1 total files
+└── web-search/ — 5 files
+    ├── .setsuna-plugin/ — 2 direct / 2 total files
     └── extension/ — 3 direct / 3 total files
 ```
 

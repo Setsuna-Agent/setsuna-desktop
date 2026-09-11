@@ -1,10 +1,12 @@
 import type {
+  RuntimeInterfaceLanguage,
   RuntimeMessageAttachment,
   RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
 import { defineCapability, type CapabilityToken } from '@setsuna-desktop/feature-core/capability';
 
 export type BrowserToolExecutionContext = Readonly<{
+  interfaceLanguage?: RuntimeInterfaceLanguage;
   modelCapabilities?: Readonly<{ supportsImages: boolean }>;
   signal?: AbortSignal;
   toolCallId?: string;

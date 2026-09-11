@@ -89,7 +89,7 @@ describe('bundled web-search extension', () => {
       await expect(host.toolRuntimeProfile(WEB_SEARCH_TOOL_NAME, context)).resolves.toMatchObject({
         supportsParallel: true,
         requiresSandboxBypassApproval: false,
-        plugin: { id: WEB_SEARCH_PLUGIN_ID, name: '网络搜索' },
+        plugin: { id: WEB_SEARCH_PLUGIN_ID, name: 'Web Search' },
       });
       await expect(host.approvalForTool(WEB_SEARCH_TOOL_NAME, {}, context)).resolves.toBeNull();
 
@@ -124,7 +124,7 @@ describe('bundled web-search extension', () => {
         exclude_domains: ['spam.example'],
       });
       expect(result).toMatchObject({
-        preview: '已找到 1 个网络来源',
+        preview: 'Found 1 web sources',
         containsExternalContext: true,
         data: {
           pluginId: WEB_SEARCH_PLUGIN_ID,

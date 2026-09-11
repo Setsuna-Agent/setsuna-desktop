@@ -37,13 +37,13 @@ export function visionRecognitionRequest(value) {
   };
 }
 
-export function visionRecognitionToolResult(value) {
+export function visionRecognitionToolResult(value, language = 'en-US') {
   const result = objectRecord(value, 'The vision recognition bridge returned an invalid result.');
   const content = requiredString(result.content, 'content');
   const attachmentId = requiredString(result.attachmentId, 'attachmentId');
   const attachmentName = requiredString(result.attachmentName, 'attachmentName');
   return {
-    content: `Vision model analysis for ${attachmentName}:\n${content}`,
+    content: language === 'zh-CN' ? `视觉模型对 ${attachmentName} 的分析：\n${content}` : `Vision model analysis for ${attachmentName}:\n${content}`,
     preview: content.slice(0, 240),
     data: {
       pluginId: 'openai-vision-recognition',

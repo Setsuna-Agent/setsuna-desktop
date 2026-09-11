@@ -12,7 +12,7 @@ export default function activate(api) {
         throw new Error('The image-generation plugin requires the host-managed image generation bridge.');
       }
       const result = await context.imageGeneration.generate(imageGenerationRequest(input));
-      return imageGenerationToolResult(result);
+      return imageGenerationToolResult(result, context.interfaceLanguage);
     },
   });
 }

@@ -1,0 +1,22 @@
+{
+  "en-US": {
+    "OpenAI 官方文档": "OpenAI Documentation",
+    "查询 OpenAI API、模型、SDK 和 Codex 的最新官方开发文档。": "Look up current official developer documentation for OpenAI APIs, models, SDKs, and Codex.",
+    "官方": "Official",
+    "开发文档": "Developer docs",
+    "OpenAI": "OpenAI",
+    "OpenAI 官方开发文档服务": "Official OpenAI developer documentation service",
+    "查询 OpenAI 平台、API、模型与 Codex 的最新官方开发文档。": "Look up current official developer documentation for the OpenAI platform, APIs, models, and Codex.",
+    "Official OpenAI developer documentation MCP server.": "Official OpenAI developer documentation MCP server."
+  },
+  "zh-CN": {
+    "OpenAI 官方文档": "OpenAI 官方文档",
+    "查询 OpenAI API、模型、SDK 和 Codex 的最新官方开发文档。": "查询 OpenAI API、模型、SDK 和 Codex 的最新官方开发文档。",
+    "官方": "官方",
+    "开发文档": "开发文档",
+    "OpenAI": "OpenAI",
+    "OpenAI 官方开发文档服务": "OpenAI 官方开发文档服务",
+    "查询 OpenAI 平台、API、模型与 Codex 的最新官方开发文档。": "查询 OpenAI 平台、API、模型与 Codex 的最新官方开发文档。",
+    "Official OpenAI developer documentation MCP server.": "OpenAI 官方开发文档 MCP 服务。"
+  }
+}

@@ -47,23 +47,23 @@ metadata:
 推荐正文结构：
 
 ```markdown
-# Skill Name
+# Skill 名称
 
-Use this skill when the user asks for a clearly scoped task that matches this capability.
+当用户提出与本能力匹配且范围明确的任务时，使用此 Skill。
 
-## Workflow
+## 工作流
 
-1. Identify the concrete user goal and required inputs.
-2. Inspect only the source files, APIs, documents, or runtime state needed for the task.
-3. Apply the established project or product flow for this capability.
-4. Validate the result with the relevant command, preview, or consistency check.
-5. Report what changed, what was verified, and any remaining limitation.
+1. 明确用户的具体目标和必要输入。
+2. 只检查任务所需的源文件、API、文档或 runtime 状态。
+3. 沿用该能力既有的项目或产品链路。
+4. 使用相关命令、预览或一致性检查验证结果。
+5. 报告修改内容、验证结果和剩余限制。
 
-## Constraints
+## 约束
 
-- Keep edits scoped to the requested capability.
-- Prefer existing project conventions over new abstractions.
-- Ask for missing required inputs only when they cannot be inferred safely.
+- 修改范围限于用户请求的能力。
+- 优先遵循项目现有约定，不另造抽象。
+- 只有无法安全推断必需输入时才向用户询问。
 ```
 
 你可以把上面的结构改成更适合用户目标的具体内容，但不能保留泛化占位。

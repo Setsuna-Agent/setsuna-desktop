@@ -168,7 +168,7 @@ export function GeneralSettings({
       <div className="chat-user-settings__section-block">
         <div className="chat-user-settings__group-title">{t('settings.general.language')}</div>
         <div className="chat-user-settings__group chat-user-settings__general-section">
-          <label className="chat-user-settings__row">
+          <label className="chat-user-settings__row sd-settings-field-row">
             <span className="chat-user-settings__row-label">
               <Languages size={14} />
               <span>{t('settings.general.interfaceLanguage')}</span>
@@ -191,7 +191,7 @@ export function GeneralSettings({
         <div className="chat-user-settings__section-block">
           <div className="chat-user-settings__group-title">{t('settings.general.window')}</div>
           <div className="chat-user-settings__group chat-user-settings__general-section">
-            <label className="chat-user-settings__row">
+            <label className="chat-user-settings__row sd-settings-field-row">
               <span className="chat-user-settings__row-label">
                 <Power size={14} />
                 <span>{t('settings.general.closeBehavior')}</span>
@@ -224,7 +224,7 @@ export function GeneralSettings({
       <div className="chat-user-settings__section-block">
         <div className="chat-user-settings__group-title">{t('settings.general.font')}</div>
         <div className="chat-user-settings__group chat-user-settings__general-section">
-          <label className="chat-user-settings__row">
+          <label className="chat-user-settings__row sd-settings-field-row">
             <span className="chat-user-settings__row-label">
               <Type size={14} />
               <span>{t('settings.general.interfaceFont')}</span>
@@ -237,7 +237,7 @@ export function GeneralSettings({
               ))}
             </SelectField>
           </label>
-          <label className="chat-user-settings__row">
+          <label className="chat-user-settings__row sd-settings-field-row">
             <span className="chat-user-settings__row-label">
               <Bold size={14} />
               <span>{t('settings.general.interfaceFontWeight')}</span>
@@ -280,7 +280,7 @@ export function GeneralSettings({
       <div className="chat-user-settings__section-block">
         <div className="chat-user-settings__group-title">{t('settings.general.code')}</div>
         <div className="chat-user-settings__group chat-user-settings__general-section">
-          <label className="chat-user-settings__row">
+          <label className="chat-user-settings__row sd-settings-field-row">
             <span className="chat-user-settings__row-label">
               <Code2 size={14} />
               <span>{t('settings.general.codeFont')}</span>
@@ -293,7 +293,7 @@ export function GeneralSettings({
               ))}
             </SelectField>
           </label>
-          <label className="chat-user-settings__row">
+          <label className="chat-user-settings__row sd-settings-field-row">
             <span className="chat-user-settings__row-label">
               <Paintbrush size={14} />
               <span>{t('settings.general.codeTheme')}</span>
@@ -371,7 +371,7 @@ export function GeneralSettings({
       <div className="chat-user-settings__section-block">
         <div className="chat-user-settings__group-title">{t('settings.general.links')}</div>
         <div className="chat-user-settings__group chat-user-settings__general-section">
-          <label className="chat-user-settings__row">
+          <label className="chat-user-settings__row sd-settings-field-row">
             <span className="chat-user-settings__row-label">
               <Globe2 size={14} />
               <span>{t('settings.general.markdownLinks')}</span>

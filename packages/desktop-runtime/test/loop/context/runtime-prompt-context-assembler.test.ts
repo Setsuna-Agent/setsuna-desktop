@@ -54,6 +54,7 @@ describe('RuntimePromptContextAssembler', () => {
       skillIds: ['explicit'],
       thread: { id: 'thread_1', projectId: 'project_1' } as RuntimeThread,
       toolContext: {
+        interfaceLanguage: 'en-US',
         environment,
         threadId: 'thread_1',
         projectId: 'project_1',
@@ -134,6 +135,7 @@ describe('RuntimePromptContextAssembler', () => {
       skillIds: [],
       thread: { id: 'thread_1', projectId: 'project_1' } as RuntimeThread,
       toolContext: {
+        interfaceLanguage: 'en-US',
         environment,
         threadId: 'thread_1',
         projectId: 'project_1',
@@ -187,6 +189,7 @@ describe('RuntimePromptContextAssembler', () => {
       skillIds: [],
       thread: { id: 'thread_1', projectId: 'project_1' } as RuntimeThread,
       toolContext: {
+        interfaceLanguage: 'en-US',
         environment,
         threadId: 'thread_1',
         projectId: 'project_1',
@@ -219,6 +222,7 @@ describe('RuntimePromptContextAssembler', () => {
     });
     const thread = { id: 'thread_1', projectId: 'project_1' } as RuntimeThread;
     const toolContext = {
+      interfaceLanguage: 'en-US' as const,
       environment: {
         id: 'project_1',
         cwd: '/workspace',
@@ -282,6 +286,7 @@ describe('RuntimePromptContextAssembler', () => {
       skillIds: [],
       thread: { id: 'thread_1', projectId: 'project_1' } as RuntimeThread,
       toolContext: {
+        interfaceLanguage: 'en-US',
         environment: {
           id: 'project_1',
           cwd: '/workspace',

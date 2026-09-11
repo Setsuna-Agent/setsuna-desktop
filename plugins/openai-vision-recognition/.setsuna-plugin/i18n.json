@@ -1,0 +1,26 @@
+{
+  "en-US": {
+    "视觉识别": "Vision Recognition",
+    "复用模型服务中已配置且支持图片的模型分析会话图片，让非视觉主模型也能获得识图结果。": "Analyze conversation images with an image-capable model already configured in Model Providers, so a non-vision primary model can use the findings.",
+    "图片": "Images",
+    "视觉模型": "Vision models",
+    "模型服务": "Model providers",
+    "使用用户选定的已配置视觉模型分析当前会话中的图片附件。": "Analyze image attachments in the current conversation with the user-selected configured vision model.",
+    "使用用户配置的外部视觉模型分析当前会话里的图片附件。用户要求识图、描述图片、读取截图内容、比较图片或回答图片相关问题，且需要通过 analyze_image 获取视觉信息时使用。": "Analyze image attachments in the current conversation with the user-configured external vision model. Use for recognition, descriptions, screenshot reading, image comparisons, or image questions that require analyze_image to obtain visual information.",
+    "Analyze a runtime-managed image attachment with the separately configured vision model. If you can inspect image attachments directly, do that instead and call this tool only when the user explicitly asks to use the configured vision model. If you cannot inspect images directly, call this tool before making claims about the image.": "Analyze a runtime-managed image attachment with the separately configured vision model. If you can inspect image attachments directly, do that instead and call this tool only when the user explicitly asks to use the configured vision model. If you cannot inspect images directly, call this tool before making claims about the image.",
+    "The attachment id from the runtime-managed attachment list for this thread.": "The attachment id from the runtime-managed attachment list for this thread.",
+    "The question or visual analysis task to send with the image.": "The question or visual analysis task to send with the image."
+  },
+  "zh-CN": {
+    "视觉识别": "视觉识别",
+    "复用模型服务中已配置且支持图片的模型分析会话图片，让非视觉主模型也能获得识图结果。": "复用模型服务中已配置且支持图片的模型分析会话图片，让非视觉主模型也能获得识图结果。",
+    "图片": "图片",
+    "视觉模型": "视觉模型",
+    "模型服务": "模型服务",
+    "使用用户选定的已配置视觉模型分析当前会话中的图片附件。": "使用用户选定的已配置视觉模型分析当前会话中的图片附件。",
+    "使用用户配置的外部视觉模型分析当前会话里的图片附件。用户要求识图、描述图片、读取截图内容、比较图片或回答图片相关问题，且需要通过 analyze_image 获取视觉信息时使用。": "使用用户配置的外部视觉模型分析当前会话里的图片附件。用户要求识图、描述图片、读取截图内容、比较图片或回答图片相关问题，且需要通过 analyze_image 获取视觉信息时使用。",
+    "Analyze a runtime-managed image attachment with the separately configured vision model. If you can inspect image attachments directly, do that instead and call this tool only when the user explicitly asks to use the configured vision model. If you cannot inspect images directly, call this tool before making claims about the image.": "使用单独配置的视觉模型分析 runtime 管理的图片附件。当前模型能直接查看图片时应自行处理，仅在用户明确要求使用配置的视觉模型时调用本工具。无法直接查看图片时，先调用此工具再对图片内容作出判断。",
+    "The attachment id from the runtime-managed attachment list for this thread.": "当前任务的 runtime 附件列表中的附件 ID。",
+    "The question or visual analysis task to send with the image.": "与图片一起发送的问题或视觉分析任务。"
+  }
+}

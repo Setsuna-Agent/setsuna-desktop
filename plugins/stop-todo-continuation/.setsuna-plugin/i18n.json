@@ -1,0 +1,20 @@
+{
+  "en-US": {
+    "结束前检查未完成 TODO": "Check Unfinished TODOs",
+    "助手最后一条回复仍包含 TODO、FIXME 或 XXX 时要求继续处理。": "Require continued work when the assistant’s final response still contains TODO, FIXME, or XXX markers.",
+    "流程": "Workflow",
+    "TODO": "TODO",
+    "完成度": "Completion",
+    "防止代理带着显眼的 TODO、FIXME 或 XXX 标记直接结束回合。": "Prevent the agent from ending a turn with conspicuous TODO, FIXME, or XXX markers.",
+    "检查未完成事项": "Check unfinished work"
+  },
+  "zh-CN": {
+    "结束前检查未完成 TODO": "结束前检查未完成 TODO",
+    "助手最后一条回复仍包含 TODO、FIXME 或 XXX 时要求继续处理。": "助手最后一条回复仍包含 TODO、FIXME 或 XXX 时要求继续处理。",
+    "流程": "流程",
+    "TODO": "TODO",
+    "完成度": "完成度",
+    "防止代理带着显眼的 TODO、FIXME 或 XXX 标记直接结束回合。": "防止代理带着显眼的 TODO、FIXME 或 XXX 标记直接结束回合。",
+    "检查未完成事项": "检查未完成事项"
+  }
+}

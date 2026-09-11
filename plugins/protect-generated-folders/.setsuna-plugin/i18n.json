@@ -1,0 +1,20 @@
+{
+  "en-US": {
+    "避免写入生成目录": "Protect Generated Folders",
+    "阻止直接改动依赖目录和常见构建产物，降低误写文件的概率。": "Prevent direct edits to dependency directories and common build outputs.",
+    "安全": "Security",
+    "构建产物": "Build outputs",
+    "文件": "Files",
+    "保护 node_modules、dist、build、coverage、target、.next 和 .turbo。": "Protect node_modules, dist, build, coverage, target, .next, and .turbo.",
+    "检查生成目录": "Check generated folders"
+  },
+  "zh-CN": {
+    "避免写入生成目录": "避免写入生成目录",
+    "阻止直接改动依赖目录和常见构建产物，降低误写文件的概率。": "阻止直接改动依赖目录和常见构建产物，降低误写文件的概率。",
+    "安全": "安全",
+    "构建产物": "构建产物",
+    "文件": "文件",
+    "保护 node_modules、dist、build、coverage、target、.next 和 .turbo。": "保护 node_modules、dist、build、coverage、target、.next 和 .turbo。",
+    "检查生成目录": "检查生成目录"
+  }
+}

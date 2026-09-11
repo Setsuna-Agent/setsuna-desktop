@@ -1,3 +1,4 @@
+import { runtimeText, type RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import type {
   RuntimeConfigState,
   RuntimeEvent,
@@ -36,69 +37,74 @@ const COLLABORATION_TOOL_NAMES = new Set(['spawn_agent', 'send_input', 'resume_a
 /** 第一版最多三个并行活跃 child；deep-nested spawn 由“调用者必须是根线程”校验禁止。 */
 export const MAX_ACTIVE_COLLABORATION_CHILDREN = 3;
 
-export const COLLABORATION_TOOL_DEFINITIONS: readonly RuntimeToolDefinition[] = Object.freeze([
-  {
-    name: 'spawn_agent',
-    description: `Start one of up to ${MAX_ACTIVE_COLLABORATION_CHILDREN} active child agent threads for a concrete, bounded, read-only subtask that can run independently alongside useful parent work. Only the root thread can call this tool; returns the child thread and turn identifiers.`,
-    inputSchema: {
-      type: 'object',
-      properties: {
-        prompt: { type: 'string', description: 'Task prompt for the child agent.' },
-        title: { type: 'string', description: 'Optional child thread title.' },
-        name: { type: 'string', description: 'Optional short display name for the child agent.' },
+export function collaborationToolDefinitions(language?: RuntimeInterfaceLanguage): readonly RuntimeToolDefinition[] {
+  const text = runtimeText(language);
+  return [
+    {
+      name: 'spawn_agent',
+      description: text(`Start one of up to ${MAX_ACTIVE_COLLABORATION_CHILDREN} active child agent threads for a concrete, bounded, read-only subtask that can run independently alongside useful parent work. Only the root thread can call this tool; returns the child thread and turn identifiers.`, `创建子代理处理具体、边界清晰、只读且能与主代理有效工作独立并行的子任务，最多同时有 ${MAX_ACTIVE_COLLABORATION_CHILDREN} 个活动子代理。仅根任务可以调用；返回子任务和轮次标识。`),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          prompt: { type: 'string', description: text('Task prompt for the child agent.', "交给子代理的任务提示词。") },
+          title: { type: 'string', description: text('Optional child thread title.', "可选子任务标题。") },
+          name: { type: 'string', description: text('Optional short display name for the child agent.', "可选子代理的简短显示名称。") },
+        },
+        required: ['prompt'],
       },
-      required: ['prompt'],
     },
-  },
-  {
-    name: 'send_input',
-    description: 'Queue a mailbox message for another agent thread without forcing it to resume immediately.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        thread_id: { type: 'string', description: 'Receiver thread id.' },
-        content: { type: 'string', description: 'Mailbox message content.' },
+    {
+      name: 'send_input',
+      description: text('Queue a mailbox message for another agent thread without forcing it to resume immediately.', "向另一个代理任务的邮箱发送消息，不强制它立即恢复运行。"),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          thread_id: { type: 'string', description: text('Receiver thread id.', "接收方任务 ID。") },
+          content: { type: 'string', description: text('Mailbox message content.', "邮箱消息内容。") },
+        },
+        required: ['thread_id', 'content'],
       },
-      required: ['thread_id', 'content'],
     },
-  },
-  {
-    name: 'resume_agent',
-    description: 'Deliver a mailbox message and start the receiver agent if it is idle.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        thread_id: { type: 'string', description: 'Receiver thread id.' },
-        content: { type: 'string', description: 'Resume prompt or mailbox message content.' },
+    {
+      name: 'resume_agent',
+      description: text('Deliver a mailbox message and start the receiver agent if it is idle.', "发送邮箱消息，若接收方代理空闲则启动它。"),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          thread_id: { type: 'string', description: text('Receiver thread id.', "接收方任务 ID。") },
+          content: { type: 'string', description: text('Resume prompt or mailbox message content.', "恢复提示词或邮箱消息内容。") },
+        },
+        required: ['thread_id', 'content'],
       },
-      required: ['thread_id', 'content'],
     },
-  },
-  {
-    name: 'wait',
-    description: 'Wait briefly for a child agent only when its result blocks the parent\'s next step. When it finishes, the tool returns the complete assistant output in `output`; when still running, continue useful non-overlapping work and avoid repeated polling.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        thread_id: { type: 'string', description: 'Thread id to wait on.' },
-        timeout_ms: { type: 'number', description: 'Maximum wait time in milliseconds, capped by the runtime.' },
+    {
+      name: 'wait',
+      description: text('Wait briefly for a child agent only when its result blocks the parent\'s next step. When it finishes, the tool returns the complete assistant output in `output`; when still running, continue useful non-overlapping work and avoid repeated polling.', "仅在子代理结果阻碍主代理下一步时短暂等待。完成后，工具在 output 中返回完整的助手输出；仍在运行时，继续有用且不重叠的工作，避免反复轮询。"),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          thread_id: { type: 'string', description: text('Thread id to wait on.', "要等待的任务 ID。") },
+          timeout_ms: { type: 'number', description: text('Maximum wait time in milliseconds, capped by the runtime.', "最长等待时间（毫秒），受运行时上限限制。") },
+        },
+        required: ['thread_id'],
       },
-      required: ['thread_id'],
     },
-  },
-  {
-    name: 'close_agent',
-    description: 'Stop tracking a child agent thread; cancels its active turn if one is still running.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        thread_id: { type: 'string', description: 'Child thread id to close.' },
-        reason: { type: 'string', description: 'Optional close reason.' },
+    {
+      name: 'close_agent',
+      description: text('Stop tracking a child agent thread; cancels its active turn if one is still running.', "停止跟踪一个子代理任务；若其仍在运行，会取消活动轮次。"),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          thread_id: { type: 'string', description: text('Child thread id to close.', "要关闭的子任务 ID。") },
+          reason: { type: 'string', description: text('Optional close reason.', "可选关闭原因。") },
+        },
+        required: ['thread_id'],
       },
-      required: ['thread_id'],
     },
-  },
-]);
+  ];
+}
+
+export const COLLABORATION_TOOL_DEFINITIONS = Object.freeze(collaborationToolDefinitions());
 
 export function collaborationToolsEnabled(config: RuntimeConfigState | null | undefined): boolean {
   return config?.features?.multi_agent === true || config?.features?.multi_agent_v2 === true;
@@ -157,7 +163,7 @@ export class RuntimeCollaborationCoordinator implements CollaborationControl {
   }
 
   toolDefinitions(config: RuntimeConfigState | null | undefined): readonly RuntimeToolDefinition[] {
-    return this.enabled(config) ? COLLABORATION_TOOL_DEFINITIONS : [];
+    return this.enabled(config) ? collaborationToolDefinitions(config?.desktopSettings?.interfaceLanguage ?? 'zh-CN') : [];
   }
 
   isToolName(name: string): boolean {
