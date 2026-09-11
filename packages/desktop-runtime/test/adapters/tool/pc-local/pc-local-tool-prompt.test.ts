@@ -23,11 +23,14 @@ describe('pcLocalToolPrompt', () => {
     expect(searchOnly).toContain('runtime-managed ripgrep path');
     expect(searchOnly).toContain('instead of shell grep/find');
     expect(searchOnly).toContain('issue all of them together in the same response');
+    const review = pcLocalToolPrompt([tool('exec_command'), tool('run_shell_command')], { readOnly: true });
+    expect(review).toContain('unsandboxed retries are unavailable');
+    expect(review).not.toContain('require_escalated');
+    expect(review).not.toContain('high-risk commands go through runtime approval');
   });
 
   it.each([
-    [['search_text'], 'search_text', 'git_log'],
-    [['git_log', 'git_show'], 'git_log/git_show', 'search_text'],
+    [['search_text'], 'search_text', 'exec_command'],
     [['exec_command'], 'exec_command', 'run_shell_command'],
     [['edit', 'write_file'], 'edit/write_file', 'apply_patch'],
   ])('isolates %s guidance from unrelated tool branches', (names, included, excluded) => {

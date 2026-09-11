@@ -57,7 +57,7 @@ describe('RuntimeToolRouter', () => {
       'recall_memory',
       'browser_snapshot',
       'run_shell_command',
-      'git_status',
+      'find_files',
       ...RUNTIME_PROVIDED_NAMES,
     ]);
     await expect(router.toolRuntimeMetadata()).resolves.toEqual([
@@ -65,7 +65,7 @@ describe('RuntimeToolRouter', () => {
       expect.objectContaining({ name: 'recall_memory' }),
       expect.objectContaining({ name: 'browser_snapshot' }),
       expect.objectContaining({ name: 'run_shell_command' }),
-      expect.objectContaining({ name: 'git_status' }),
+      expect.objectContaining({ name: 'find_files' }),
       expect.objectContaining({ name: READ_TOOL_RESULT_TOOL_NAME }),
     ]);
   });
@@ -97,12 +97,12 @@ describe('RuntimeToolRouter', () => {
       context: runtimeToolContext(),
       orchestrator: null,
       toolHost: catalogToolHost(),
-      allowTool: (tool) => tool.name === 'read_file' || tool.name === 'git_status',
+      allowTool: (tool) => tool.name === 'read_file' || tool.name === 'find_files',
     });
 
-    expect(router.tools.map((tool) => tool.name)).toEqual(['read_file', 'git_status', READ_TOOL_RESULT_TOOL_NAME]);
+    expect(router.tools.map((tool) => tool.name)).toEqual(['read_file', 'find_files', READ_TOOL_RESULT_TOOL_NAME]);
     expect(router.canRouteTool('run_shell_command')).toBe(false);
-    expect(router.canRouteTool('git_status')).toBe(true);
+    expect(router.canRouteTool('find_files')).toBe(true);
   });
 
   it('reads tool results through the result store with thread authorization', async () => {
@@ -239,7 +239,7 @@ function catalogToolHost(): ToolHost {
     { name: 'recall_memory', description: 'Recall durable local memories.', inputSchema: { type: 'object' } },
     { name: 'browser_snapshot', description: 'Read visible page text and interactive elements.', inputSchema: { type: 'object' } },
     { name: 'run_shell_command', description: 'Run a foreground shell command.', inputSchema: { type: 'object' } },
-    { name: 'git_status', description: 'Show Git status for the workspace.', inputSchema: { type: 'object' } },
+    { name: 'find_files', description: 'Find workspace files.', inputSchema: { type: 'object' } },
   ];
   return {
     listTools: async () => tools,

@@ -26,9 +26,12 @@ import type { ShellSandboxProvider } from '../../../ports/shell-sandbox-provider
 import { recordInput } from '../../../shared/unknown.js';
 import { JavaScriptWorkspaceSearchEngine } from '../../search/javascript-workspace-search-engine.js';
 import { WorkspaceRuntimeEnvironmentResolver } from '../../workspace/workspace-runtime-environment-resolver.js';
-import { TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS } from '../../../loop/tools/tool-output-budget.js';
+import { TOOL_OUTPUT_BUDGET_SHELL_MCP_TOKENS } from '../../../loop/tools/tool-output-budget.js';
 import { pcLocalToolPrompt } from './pc-local-tool-prompt.js';
+import { SHELL_OUTPUT_TOKEN_BUDGET_SCHEMA } from './pc-local-tool-definitions.js';
 import { shellPermissionBlockReason } from './pc-local-tool-shell-policy.js';
+import { shellResultMetadata } from './pc-local-tool-shell-output.js';
+import { GIT_INSPECT_TOOL, inspectGit } from './pc-local-tool-git-inspect.js';
 import * as pcTools from './pc-local-tools.js';
 
 type PcToolState = Omit<ReturnType<typeof pcTools.createLocalToolState>, 'sandboxWorkspaceWrite'> & {
@@ -54,8 +57,9 @@ type PcLocalToolHostOptions = {
 
 const EXCLUDED_PC_TOOLS = new Set(['configure_mcp_server']);
 const REQUEST_PERMISSIONS_TOOL_NAME = 'request_permissions';
-/** Shell、后台进程和 Git 工具使用更严格的模型输出上限。 */
+/** 命令输出使用更严格的模型输出上限。 */
 const BOUNDED_OUTPUT_PC_TOOL_NAMES = new Set([
+  'git_inspect',
   'exec_command',
   'run_shell_command',
   'write_stdin',
@@ -63,10 +67,6 @@ const BOUNDED_OUTPUT_PC_TOOL_NAMES = new Set([
   'read_shell_process',
   'list_shell_processes',
   'terminate_shell_process',
-  'git_status',
-  'git_log',
-  'git_show',
-  'read_diff',
 ]);
 const MAX_PERSISTENT_SHELL_TTL_MS = 6 * 60 * 60 * 1_000;
 const MAX_PROJECT_TOOL_STATES = 32;
@@ -140,7 +140,7 @@ const COMPAT_TOOL_DEFINITIONS: RuntimeToolDefinition[] = [
         cwd: { type: 'string', description: 'Optional working directory, absolute or relative to the project root.' },
         yield_time_ms: { type: 'integer', description: 'Milliseconds to wait before returning while the command keeps running.', minimum: 0, maximum: 30000 },
         timeout_ms: { type: 'integer', description: 'Optional timeout in milliseconds.', minimum: 1, maximum: 600000 },
-        max_output_tokens: { type: 'integer', description: 'Optional output token hint; output truncation is handled by the runtime.' },
+        max_output_tokens: SHELL_OUTPUT_TOKEN_BUDGET_SCHEMA,
         persist: { type: 'boolean', description: 'Keep a still-running dev server or watcher available after the current turn completes.' },
         persist_ttl_ms: { type: 'integer', description: 'Optional lifetime for a persisted process in milliseconds.', minimum: 1000, maximum: MAX_PERSISTENT_SHELL_TTL_MS },
         sandbox_permissions: { type: 'string', enum: ['use_default', 'with_additional_permissions', 'require_escalated'], description: 'Per-command sandbox override. Use with_additional_permissions only together with a non-empty additional_permissions request; otherwise omit this field or use use_default. require_escalated asks for unsandboxed execution.' },
@@ -182,7 +182,7 @@ const COMPAT_TOOL_DEFINITIONS: RuntimeToolDefinition[] = [
         session_id: { type: ['string', 'number'], description: 'Session identifier returned by exec_command.' },
         chars: { type: 'string', description: 'Characters to write to stdin. Empty string polls for output.' },
         yield_time_ms: { type: 'integer', description: 'Milliseconds to wait for output after polling.', minimum: 0, maximum: 30000 },
-        max_output_tokens: { type: 'integer', description: 'Optional output token hint; output truncation is handled by the runtime.' },
+        max_output_tokens: SHELL_OUTPUT_TOKEN_BUDGET_SCHEMA,
       },
       required: ['session_id'],
     },
@@ -259,16 +259,20 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
   /**
    * 暴露 PC local tools 中允许模型调用的工具定义。
    *
-   * @param _context ToolHost 协议参数；列工具阶段不依赖上下文。
+   * @param context 用于选择任务权限和宿主能力允许的工具入口。
    */
   async listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+    const gitFallback = context.readOnly && !this.shellSandboxCapability().supported;
     const localTools = pcTools.LOCAL_TOOL_DEFINITIONS
       .map(toRuntimeToolDefinition)
-      .filter((tool): tool is RuntimeToolDefinition => Boolean(tool && !EXCLUDED_PC_TOOLS.has(tool.name)));
+      .filter((tool): tool is RuntimeToolDefinition => Boolean(tool && !EXCLUDED_PC_TOOLS.has(tool.name)
+        && !(gitFallback && tool.name === 'run_shell_command')));
     const names = new Set(localTools.map((tool) => tool.name));
     return [
       ...localTools,
-      ...COMPAT_TOOL_DEFINITIONS.filter((tool) => !names.has(tool.name) && toolEnabledForContext(tool.name, context)),
+      ...(gitFallback ? [GIT_INSPECT_TOOL] : []),
+      ...COMPAT_TOOL_DEFINITIONS.filter((tool) => !names.has(tool.name) && toolEnabledForContext(tool.name, context)
+        && !(gitFallback && tool.name === 'exec_command')),
     ];
   }
 
@@ -283,25 +287,27 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
   /**
    * 返回 PC local tools 的系统提示规则。
    */
-  async systemPrompt(_context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): Promise<string | null> {
+  async systemPrompt(context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): Promise<string | null> {
     const workspaceDependencies = await this.workspaceDependencies?.getPromptContext();
-    return pcLocalToolPrompt(request?.tools, { workspaceDependencies });
+    return pcLocalToolPrompt(request?.tools, { workspaceDependencies, readOnly: context.readOnly });
   }
 
   toolRuntimeProfile(name: string, context: ToolExecutionContext): ToolRuntimeProfile | null {
     const profile: ToolRuntimeProfile = {};
     if (BOUNDED_OUTPUT_PC_TOOL_NAMES.has(name)) {
-      profile.modelOutputTokenLimit = TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS;
+      profile.modelOutputTokenLimit = TOOL_OUTPUT_BUDGET_SHELL_MCP_TOKENS;
     }
-    if (this.normalizeToolName(name) === 'run_shell_command' && context.permissionProfile !== 'danger-full-access') {
-      const boundCapability = this.shellSandboxProvider?.capability();
-      const capability = this.options.shellSandboxCapability?.()
-        ?? (boundCapability && (boundCapability.supported || process.platform === 'win32')
-          ? boundCapability
-          : pcTools.shellSandboxCapability());
+    if (!context.readOnly && this.normalizeToolName(name) === 'run_shell_command' && context.permissionProfile !== 'danger-full-access') {
+      const capability = this.shellSandboxCapability();
       if (!capability.supported) profile.requiresSandboxBypassApproval = true;
     }
     return Object.keys(profile).length ? profile : null;
+  }
+
+  private shellSandboxCapability() {
+    const bound = this.shellSandboxProvider?.capability();
+    return this.options.shellSandboxCapability?.()
+      ?? (bound && (bound.supported || process.platform === 'win32') ? bound : pcTools.shellSandboxCapability());
   }
 
   /**
@@ -312,6 +318,7 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
    * @param context 当前工具执行上下文。
    */
   async approvalForTool(name: string, input: unknown, context: ToolExecutionContext) {
+    if (context.readOnly) return null;
     const normalized = this.normalizeToolCall(name, input);
     if (EXCLUDED_PC_TOOLS.has(normalized.name)) return null;
     const projectState = await this.projectStateFor(context);
@@ -407,7 +414,11 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
     if (EXCLUDED_PC_TOOLS.has(normalized.name)) throw new Error(`Unknown tool: ${name}`);
     const projectState = await this.projectStateFor(context);
     const toolState = this.toolStateForContext(projectState, context);
-    if (normalized.name === 'run_shell_command' && context.sandbox?.mode === 'bypass') {
+    if (normalized.name === 'git_inspect') {
+      if (!context.readOnly || this.shellSandboxCapability().supported) throw new Error(`Unknown tool: ${name}`);
+      return inspectGit(normalized.args, toolState.root, context.signal);
+    }
+    if (!context.readOnly && normalized.name === 'run_shell_command' && context.sandbox?.mode === 'bypass') {
       // The orchestrator grants this exact shell attempt; never alter the shared project or turn profile.
       toolState.permissionProfile = 'danger-full-access';
     }
@@ -465,6 +476,13 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
         environmentPatch,
       );
     }
+    if (context.readOnly) {
+      // Task-level read-only access is stricter than user permissions. Inherited
+      // grants and toolchain cache roots must not turn a review shell writable.
+      toolState.permissionProfile = 'read-only';
+      toolState.osSandbox = true;
+      toolState.sandboxWorkspaceWrite = { ...toolState.sandboxWorkspaceWrite, writableRoots: [], networkAccess: false };
+    }
     const preview = await previewForTool(normalized.name, normalized.args, toolState);
     const previewIntegrityToken = stringArg(recordInput(preview).integrityToken);
     if (context.expectedPreviewIntegrityToken && previewIntegrityToken !== context.expectedPreviewIntegrityToken) {
@@ -489,6 +507,7 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
           }
         : undefined,
     }) as Record<string, unknown>;
+    const data = BOUNDED_OUTPUT_PC_TOOL_NAMES.has(normalized.name) ? shellResultMetadata(result) : result;
     if (!result?.ok) {
       if (stringArg(result.failure_kind) === 'cancelled') {
         const cancellation = context.signal?.reason instanceof Error
@@ -500,7 +519,7 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
       // 面向界面的显示字符串有意保持简短。模型需要格式化后的命令输出，
       // 才能根据真实标准错误作出响应，而不是仅凭退出码猜测。
       throw new ToolExecutionError(stringArg(result?.content || result?.display || `Local tool failed: ${normalized.name}`), {
-        data: result,
+        data,
         failureKind: stringArg(result.failure_kind),
         failureStage: stringArg(result.failure_stage),
       });
@@ -509,7 +528,7 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
     return {
       content: stringArg(result.content || result.display),
       preview: result.diff ? previewPayload(result) : preview ? previewPayload(preview) : undefined,
-      data: result,
+      data,
     };
   }
 
@@ -612,10 +631,10 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
       ...projectState.toolState,
       reads: turnFileState.reads,
       environmentId: context.environment?.id ?? projectState.toolState.environmentId,
-      permissionProfile: context.permissionProfile ?? 'workspace-write',
+      permissionProfile: context.readOnly ? 'read-only' : context.permissionProfile ?? 'workspace-write',
       sandboxWorkspaceWrite: cloneSandboxWorkspaceWrite(context.sandboxWorkspaceWrite),
       directToolReadableRoots: [...(context.directToolReadableRoots ?? [])],
-      osSandbox: context.sandbox?.mode !== 'bypass',
+      osSandbox: context.readOnly || context.sandbox?.mode !== 'bypass',
       shellPolicyRules: [...(projectState.toolState.shellPolicyRules ?? [])],
       networkPolicyAmendments: [...(projectState.toolState.networkPolicyAmendments ?? [])],
       shellSandboxProvider: this.shellSandboxProvider,

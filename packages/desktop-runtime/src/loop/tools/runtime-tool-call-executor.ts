@@ -46,7 +46,7 @@ import {
 import { isAbortError, throwIfAborted, TurnCancelledError } from '../core/runtime-turn-errors.js';
 import { externalizeToolImageAttachments } from './runtime-tool-image-assets.js';
 import { FILE_MUTATION_TOOL_NAMES, ToolApprovalStore, ToolOrchestrator } from './tool-orchestrator.js';
-import { boundToolOutput, TOOL_OUTPUT_BUDGET_DEFAULT_TOKENS } from './tool-output-budget.js';
+import { boundToolOutput, requestedToolOutputTokenLimit, TOOL_OUTPUT_BUDGET_DEFAULT_TOKENS } from './tool-output-budget.js';
 import {
   READ_TOOL_RESULT_TOOL_NAME,
   RuntimeToolRouter,
@@ -464,9 +464,10 @@ export class RuntimeToolCallExecutor {
     content: string,
     toolRouter: RuntimeToolRouter | null,
   ): Promise<{ content: string; toolResultRef?: NonNullable<RuntimeMessage['toolResultRef']> }> {
-    const tokenLimit = toolRouter
+    const policyLimit = toolRouter
       ? await toolRouter.modelOutputTokenLimitFor(toolCall.name)
       : TOOL_OUTPUT_BUDGET_DEFAULT_TOKENS;
+    const tokenLimit = requestedToolOutputTokenLimit(toolCall.name, parseToolArguments(toolCall.arguments), policyLimit);
     const bounded = boundToolOutput({ content, tokenLimit });
     if (!bounded.truncated) return { content };
     if (!this.options.toolResultStore) return { content: bounded.content };

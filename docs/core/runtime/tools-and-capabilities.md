@@ -134,7 +134,6 @@ runtime 只额外追加用于读取超限结果的 `read_tool_result`；工具�
 | `*-files.ts` | List/read/write/edit/append/delete |
 | `*-file-transaction.ts` | Staging、backup、rename、rollback |
 | `*-patch.ts` / `*-diff.ts` | Apply patch 与 diff |
-| `*-git.ts` | Workspace-scoped Git |
 | `*-shell-policy.ts` | Shell risk/allow policy |
 | `*-shell-process.ts` | Foreground/background process |
 | `*-mcp.ts` / `*-memory.ts` | 兼容工具入口 |
@@ -155,6 +154,26 @@ runtime 只额外追加用于读取超限结果的 `read_tool_result`；工具�
 - 写后再次校验。
 
 允许 workspace 内 symlink，但真实目标越界时拒绝。
+
+Git 检查默认通过 shell 执行，模型工具目录不再提供单独的 status/log/show/diff 包装。
+优先查询状态、文件列表和统计，再按路径或 revision 读取需要的 patch。
+
+Shell 的 `max_output_tokens` 控制本次模型可见预算，默认和策略上限为 8k tokens，
+最小请求为 256 tokens；超限文本经 hooks/extensions 处理后由统一结果层保存，再返回
+首尾摘要和 `result_id`。`read_tool_result` 可按范围恢复已保存内容。
+
+进程输出在调用之间保留未读内容（共享 16 MiB UTF-8 硬上限），每次轮询取走本次内容，
+不重复返回旧正文。仅诊断尾部使用较小缓冲，供沙箱错误识别和进程统计使用。收集硬上限
+导致的丢失会在结果开头明确提示，存储硬上限导致的丢失由 `locally_truncated` 标记。
+Shell 结果的 `data` 只保留进程元数据与失败诊断，不包含 `content` / `display` 正文副本；
+完成事件和会话快照仅持有有界预览，超限正文通过统一结果存储分页读取。
+
+Review/subagent turn 可使用 shell 检查 Git；Core 的任务只读标记强制宿主使用无写入、
+无网络的沙箱，不继承可写授权，也不通过失败重试扩大权限。
+Linux 等缺少沙箱的平台在只读任务中用 `git_inspect` 替代 shell 执行入口。
+该工具直接启动 Git，仅接受 status/diff/log/show 的结构化参数和工作区路径，
+禁用可执行 helpers、可选 index 写入与网络协议；输出共用 16 MiB 收集上限和结果分页，
+普通任务仍只提供 shell Git 路径。
 
 ## Shell 与 network
 

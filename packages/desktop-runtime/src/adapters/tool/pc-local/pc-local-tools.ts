@@ -51,12 +51,6 @@ import {
   configureMcpServer,
   isLocalMcpConfigPath,
 } from './pc-local-tool-mcp.js';
-import {
-  gitLog,
-  gitShow,
-  gitStatus,
-  readDiff,
-} from './pc-local-tool-git.js';
 import { updatePlan } from './pc-local-tool-plan.js';
 import {
   deniedRootPathForFileMutationTool,
@@ -357,10 +351,6 @@ export async function executeLocalTool(
     if (name === 'find_files') return await findFiles(args, state);
     if (name === 'search_text') return await searchText(args, state, options.signal);
     if (name === 'read_file') return await readLocalFile(args, state);
-    if (name === 'git_status') return await gitStatus(state, options.signal);
-    if (name === 'git_log') return await gitLog(args, state, options.signal);
-    if (name === 'git_show') return await gitShow(args, state, options.signal);
-    if (name === 'read_diff') return await readDiff(args, state, options.signal);
     if (name === 'update_plan') return updatePlan(args);
     if (name === 'configure_mcp_server') return await configureMcpServer(args, state);
     if (name === 'apply_patch') return await applyLocalPatch(args, state);

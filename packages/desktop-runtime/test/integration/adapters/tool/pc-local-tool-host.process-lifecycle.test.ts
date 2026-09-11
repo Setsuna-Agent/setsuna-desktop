@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS } from '../../../../src/loop/tools/tool-output-budget.js';
+import { TOOL_OUTPUT_BUDGET_SHELL_MCP_TOKENS } from '../../../../src/loop/tools/tool-output-budget.js';
 import { createHost, nodeCommand } from './pc-local-tool-host.support.js';
 
 describe('pc local process lifecycle', () => {
@@ -20,11 +20,11 @@ describe('pc local process lifecycle', () => {
     };
 
     expect(host.toolRuntimeProfile('exec_command', restrictedContext)).toEqual({
-      modelOutputTokenLimit: TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS,
+      modelOutputTokenLimit: TOOL_OUTPUT_BUDGET_SHELL_MCP_TOKENS,
       requiresSandboxBypassApproval: true,
     });
     expect(host.toolRuntimeProfile('run_shell_command', restrictedContext)).toEqual({
-      modelOutputTokenLimit: TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS,
+      modelOutputTokenLimit: TOOL_OUTPUT_BUDGET_SHELL_MCP_TOKENS,
       requiresSandboxBypassApproval: true,
     });
     expect(host.toolRuntimeProfile('read_file', restrictedContext)).toBeNull();
@@ -32,7 +32,7 @@ describe('pc local process lifecycle', () => {
       ...restrictedContext,
       permissionProfile: 'danger-full-access',
     })).toEqual({
-      modelOutputTokenLimit: TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS,
+      modelOutputTokenLimit: TOOL_OUTPUT_BUDGET_SHELL_MCP_TOKENS,
     });
   });
 

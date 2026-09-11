@@ -20,10 +20,6 @@ describe('pc local file tools and previews', () => {
       'delete_file',
       'edit',
       'read_file',
-      'read_diff',
-      'git_status',
-      'git_log',
-      'git_show',
       'run_shell_command',
       'request_permissions',
       'exec_command',
@@ -32,6 +28,7 @@ describe('pc local file tools and previews', () => {
     expect(tools.map((tool) => tool.name)).not.toContain('workspace_write_file');
     expect(tools.map((tool) => tool.name)).not.toContain('remember_memory');
     expect(tools.map((tool) => tool.name)).not.toContain('configure_mcp_server');
+    expect(tools.some((tool) => ['git_status', 'git_log', 'git_show', 'read_diff'].includes(tool.name))).toBe(false);
     const execTool = tools.find((tool) => tool.name === 'exec_command');
     expect((execTool?.inputSchema?.properties as Record<string, unknown>)?.sandbox_permissions).toMatchObject({
       enum: expect.arrayContaining(['with_additional_permissions', 'require_escalated']),
@@ -77,7 +74,7 @@ describe('pc local file tools and previews', () => {
       .resolves.toBe(`prefix\n${replacement}\nsuffix\n`);
   });
 
-  it('keeps built-in Git output scoped and relative to a selected repository subdirectory', async () => {
+  it('inspects workspace-scoped Git state and history through shell commands', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-pc-git-paths-'));
     const repositoryRoot = path.join(root, 'repo');
     const projectDir = path.join(repositoryRoot, 'packages', 'app');
@@ -98,12 +95,13 @@ describe('pc local file tools and previews', () => {
     const project = await store.addProject({ path: projectDir });
     const host = new PcLocalToolHost(store);
     const environment = await host.environmentForToolContext({ threadId: 'thread_1', projectId: project.id });
-    const context = { environment, threadId: 'thread_1', turnId: 'turn_1', projectId: project.id };
+    const context = { environment, threadId: 'thread_1', turnId: 'turn_1', projectId: project.id, permissionProfile: 'danger-full-access' as const };
 
-    const status = await host.runTool('git_status', {}, context);
-    const diff = await host.runTool('read_diff', {}, context);
-    const log = await host.runTool('git_log', { max_count: 5 }, context);
-    const show = await host.runTool('git_show', { revision: initialRevision }, context);
+    const git = (cmd: string) => host.runTool('exec_command', { cmd, yield_time_ms: 0 }, context);
+    const status = await git('git -c status.relativePaths=true status --short --branch -- .');
+    const diff = await git('git --no-pager diff --no-ext-diff --no-textconv --relative -- .');
+    const log = await git('git --no-pager log --max-count=5 --oneline -- .');
+    const show = await git(`git --no-pager show --no-ext-diff --no-textconv --relative ${initialRevision} -- .`);
     const canonicalRepositoryRoot = await realpath(repositoryRoot);
 
     expect(environment.repository).toMatchObject({

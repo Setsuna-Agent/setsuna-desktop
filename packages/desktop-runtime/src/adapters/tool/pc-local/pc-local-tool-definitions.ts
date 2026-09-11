@@ -1,5 +1,13 @@
 /** Model-facing definitions for the built-in PC local tools. */
 
+import { TOOL_OUTPUT_MIN_REQUEST_TOKENS } from '../../../loop/tools/tool-output-budget.js';
+
+export const SHELL_OUTPUT_TOKEN_BUDGET_SCHEMA = {
+  type: 'integer',
+  minimum: TOOL_OUTPUT_MIN_REQUEST_TOKENS,
+  description: 'Visible output token budget, including metadata. Defaults to 8000; requests are capped by runtime policy. Larger results can be read with read_tool_result.',
+};
+
 import {
   MAX_FIND_RESULTS,
   MAX_MCP_TIMEOUT_MS,
@@ -166,72 +174,6 @@ export const LOCAL_TOOL_DEFINITIONS: LocalToolDefinition[] = [
       },
     },
     ['patch'],
-  ),
-  localTool(
-    'git_status',
-    'Show read-only Git branch and status information for the workspace.',
-    {},
-  ),
-  localTool(
-    'git_log',
-    'List commits that affect the selected workspace. Runs from the workspace and safely scopes history to it.',
-    {
-      revision: {
-        type: 'string',
-        description: 'Optional Git revision or range to start from. Defaults to HEAD.',
-      },
-      path: {
-        type: 'string',
-        description: 'Optional file or directory path, absolute or relative to the workspace root.',
-      },
-      max_count: {
-        type: 'integer',
-        description: 'Maximum number of commits. Defaults to 20 and is capped at 100.',
-        minimum: 1,
-        maximum: 100,
-      },
-    },
-  ),
-  localTool(
-    'git_show',
-    'Show one committed Git revision, including its patch, scoped to the selected workspace with workspace-relative paths.',
-    {
-      revision: {
-        type: 'string',
-        description: 'Git revision to show, such as HEAD, HEAD~1, or a commit hash.',
-      },
-      path: {
-        type: 'string',
-        description: 'Optional file or directory path, absolute or relative to the workspace root.',
-      },
-      context_lines: {
-        type: 'integer',
-        description: 'Optional number of unified diff context lines. Defaults to 3 and is capped at 20.',
-        minimum: 0,
-        maximum: 20,
-      },
-    },
-    ['revision'],
-  ),
-  localTool(
-    'read_diff',
-    'Read the workspace Git diff without modifying files.',
-    {
-      staged: {
-        type: 'boolean',
-        description: 'Read the staged diff instead of the unstaged diff. Defaults to false.',
-      },
-      path: {
-        type: 'string',
-        description: 'Optional file or directory path to limit the diff to, absolute or relative to the workspace root.',
-      },
-      context_lines: {
-        type: 'integer',
-        description: 'Optional number of unified diff context lines. Defaults to 3 and is capped at 20.',
-        minimum: 0,
-        maximum: 20,
-      },
-    },
   ),
   localTool(
     'update_plan',
@@ -409,6 +351,7 @@ export const LOCAL_TOOL_DEFINITIONS: LocalToolDefinition[] = [
     'run_shell_command',
     'Run a foreground shell command inside the local workspace. Include risk_level so the desktop runtime can decide whether user authorization is needed. Do not use this to modify files when edit or write_file can express the change.',
     {
+      max_output_tokens: SHELL_OUTPUT_TOKEN_BUDGET_SCHEMA,
       command: {
         type: 'string',
         description: 'The shell command to run.',
@@ -453,8 +396,9 @@ export const LOCAL_TOOL_DEFINITIONS: LocalToolDefinition[] = [
   ),
   localTool(
     'read_shell_process',
-    'Read buffered output and status for a still-running shell process returned by run_shell_command.',
+    'Read new output and status for a shell process returned by run_shell_command. Previously returned output is not repeated.',
     {
+      max_output_tokens: SHELL_OUTPUT_TOKEN_BUDGET_SCHEMA,
       process_id: {
         type: 'string',
         description: 'The process_id returned by run_shell_command.',
@@ -482,6 +426,7 @@ export const LOCAL_TOOL_DEFINITIONS: LocalToolDefinition[] = [
     'write_shell_process',
     'Write stdin to a still-running shell process returned by run_shell_command.',
     {
+      max_output_tokens: SHELL_OUTPUT_TOKEN_BUDGET_SCHEMA,
       process_id: {
         type: 'string',
         description: 'The process_id returned by run_shell_command.',
@@ -497,6 +442,7 @@ export const LOCAL_TOOL_DEFINITIONS: LocalToolDefinition[] = [
     'terminate_shell_process',
     'Terminate a still-running shell process returned by run_shell_command.',
     {
+      max_output_tokens: SHELL_OUTPUT_TOKEN_BUDGET_SCHEMA,
       process_id: {
         type: 'string',
         description: 'The process_id returned by run_shell_command.',

@@ -144,9 +144,8 @@ Workflow 以 user/external fragment 注入，项目 script 不能提升为 runti
 
 当 workspace 是更大 worktree 的子目录：
 
-- Builtin `git_status` / `read_diff` / `git_log` / `git_show` 用 pathspec 限制到 workspace。
-- 输出统一为 workspace-relative。
-- Shell 中其他 Git 命令可能返回 repository-relative path。
+- Git 通过 shell 从 cwd 执行；查询 workspace 时用 `-- .` 或具体文件 pathspec 限定范围。
+- Diff/show 可用 `--relative` 返回 workspace-relative 路径，其他 Git 命令的路径语义取决于参数。
 - 从 cwd 复用路径时去掉一次 `workspacePrefix`，或使用 Git `:(top)` pathspec。
 - 不能把带 prefix 路径直接当 cwd-relative 再拼一次。
 

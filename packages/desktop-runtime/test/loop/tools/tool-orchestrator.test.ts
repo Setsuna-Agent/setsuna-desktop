@@ -415,14 +415,14 @@ describe('ToolOrchestrator terminal and retry handling', () => {
     ]);
   });
 
-  it('keeps no-confirm workspace mode sandboxed instead of silently bypassing', async () => {
+  it.each([undefined, 'sandbox_denied', 'sandbox_unavailable', 'network_denied'] as const)('keeps no-confirm workspace and task read-only restrictions on failure %s', async (failureKind) => {
     let attempts = 0;
     const contexts: Array<Parameters<ToolHost['runTool']>[2]> = [];
     const toolHost = stubToolHost(
       async (_name, _input, context) => {
         contexts.push(context);
         attempts += 1;
-        throw new ToolExecutionError('sandbox denied', { failureKind: 'sandbox_denied' });
+        throw new ToolExecutionError('access denied', { failureKind: failureKind ?? 'sandbox_denied' });
       },
       {
         toolRuntimeProfile: async () => ({ requiresSandboxBypassApproval: true }),
@@ -433,13 +433,14 @@ describe('ToolOrchestrator terminal and retry handling', () => {
     const execution = await fixture.orchestrator.runToolCall(
       { id: 'call_no_confirm', name: 'run_shell_command', arguments: '{}' },
       {},
-      executionContext(),
+      { ...executionContext(), ...(failureKind ? { readOnly: true, permissionProfile: 'read-only' as const } : {}) },
       'full',
     );
 
     expect(attempts).toBe(1);
     expect(contexts[0]?.sandbox).toMatchObject({ mode: 'default' });
-    expect(execution).toMatchObject({ status: 'error', content: expect.stringContaining('No unsandboxed retry') });
+    expect(execution).toMatchObject({ status: 'error', content: expect.stringContaining(failureKind ? 'permissions cannot be expanded' : 'No unsandboxed retry') });
+    expect(fixture.approvalRequests).toEqual([]);
   });
 
   it('requests a narrow readable root and retries inside the sandbox before bypassing', async () => {

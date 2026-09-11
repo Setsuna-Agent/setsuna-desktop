@@ -185,7 +185,9 @@ export class RuntimeSamplingContextBuilder {
     });
     const activeModelSupportsImages = modelForSampling.model?.supportsImages === true;
     const configuredSandbox = stepRuntimeConfig?.sandboxWorkspaceWrite ?? {};
-    const sandboxWorkspaceWrite = configuredSandbox;
+    const sandboxWorkspaceWrite = toolAccess === 'read-only'
+      ? { ...configuredSandbox, writableRoots: [], networkAccess: false }
+      : configuredSandbox;
     const goalExecution = goalExecutionForTurn({
       messages: [...(snapshotThread?.messages ?? thread.messages), ...orderedConversationMessages],
       skillIds,
@@ -207,7 +209,8 @@ export class RuntimeSamplingContextBuilder {
       modelCapabilities: {
         supportsImages: activeModelSupportsImages,
       },
-      permissionProfile: stepRuntimeConfig?.permissionProfile ?? 'workspace-write',
+      permissionProfile: toolAccess === 'read-only' ? 'read-only' : stepRuntimeConfig?.permissionProfile ?? 'workspace-write',
+      ...(toolAccess === 'read-only' ? { readOnly: true } : {}),
       sandboxWorkspaceWrite,
       ...(attachmentContext.readableRoots.length
         ? { directToolReadableRoots: attachmentContext.readableRoots }

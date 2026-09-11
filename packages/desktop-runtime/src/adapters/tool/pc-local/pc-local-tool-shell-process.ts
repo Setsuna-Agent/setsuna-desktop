@@ -7,6 +7,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { mkdir, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { ShellOutputBuffer } from './pc-local-tool-shell-output.js';
 import {
   errorMessage,
   isNodeError,
@@ -60,7 +61,7 @@ import {
   completedShellResult,
   createShellSessionTempDirectory,
   flushShellProgress,
-  formatShellSessionOutput,
+  takeShellSessionOutput,
   isExpiredShellSession,
   isShellSessionVisibleToState,
   removeShellSessionTempDirectory,
@@ -481,7 +482,7 @@ export async function terminateShellProcess(
   if (session.closed) removeShellSession(state, session.id);
   return {
     ok: true,
-    content: formatShellSessionOutput(session, state.root),
+    content: takeShellSessionOutput(session, state.root),
     display: session.closed ? `terminated shell process ${processId}` : `terminating shell process ${processId}`,
   };
 }
@@ -527,6 +528,7 @@ async function startShellSession({
     persist: false,
     persistTtlMs: 0,
     expiresAt: 0,
+    unreadOutput: new ShellOutputBuffer(),
     stdout: '',
     stderr: '',
     stdoutOmittedChars: 0,
@@ -625,6 +627,8 @@ async function startShellSession({
 
   signal?.addEventListener('abort', abort, { once: true });
   if (signal?.aborted) abort();
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
   child.stdout.on('data', (chunk) => appendShellOutput(session, 'stdout', chunk, root));
   child.stderr.on('data', (chunk) => appendShellOutput(session, 'stderr', chunk, root));
   child.on('error', (error) => {

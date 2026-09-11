@@ -10,6 +10,40 @@ import { shellCommandHiddenBySandbox } from '../../../../src/adapters/tool/pc-lo
 import { createHost, stubWorkspaceDependencyManager, commandAvailableOnPath, nodeCommand } from './pc-local-tool-host.support.js';
 
 describe('pc local shell execution', () => {
+  it('returns each stdout and stderr segment once across writes, polls, and completion', async () => {
+    const { host, fixtureRoot, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'incremental', permissionProfile: 'danger-full-access' as const };
+    await writeFile(path.join(projectDir, 'incremental.cjs'), [
+      "process.stdin.setEncoding('utf8');",
+      "process.stdin.on('data', (input) => {",
+      "  if (input.trim() === 'done') { process.stdout.write('final-segment\\n'); process.stdin.destroy(); }",
+      "  else { process.stdout.write('stdout-segment\\n'); process.stderr.write('stderr-segment\\n'); }",
+      '});',
+    ].join('\n'));
+    try {
+      const running = await host.runTool('exec_command', {
+        cmd: `${nodeCommand()} incremental.cjs`, yield_time_ms: 1,
+      }, context);
+      const sessionId = (running.data as { process_id: string }).process_id;
+      await host.runTool('write_stdin', { session_id: sessionId, chars: 'next\n' }, context);
+      const first = await host.runTool('write_stdin', { session_id: sessionId, chars: '', yield_time_ms: 500 }, context);
+      expect(first.content).toContain('stdout-segment');
+      expect(first.content).toContain('stderr-segment');
+      const empty = await host.runTool('read_shell_process', { process_id: sessionId }, context);
+      expect(empty.content).not.toContain('stdout-segment');
+      expect(empty.content).not.toContain('stderr-segment');
+      await host.runTool('write_stdin', { session_id: sessionId, chars: 'done\n' }, context);
+      const completed = await host.runTool('write_stdin', { session_id: sessionId, chars: '', yield_time_ms: 500 }, context);
+      expect(completed.content).toContain('Status: completed');
+      expect(completed.content).toContain('final-segment');
+      expect(completed.content).not.toContain('stdout-segment');
+      expect(completed.content).not.toContain('stderr-segment');
+    } finally {
+      await host.shutdown();
+      await rm(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
   it('does not execute MCP configuration through the pc tool path', async () => {
     const { host } = await createHost();
     const context = { threadId: 'thread_1', turnId: 'turn_1' };
@@ -89,18 +123,6 @@ describe('pc local shell execution', () => {
       permissionProfile: 'danger-full-access',
       signal: controller.signal,
     })).rejects.toMatchObject({ name: 'AbortError', message: 'cancel before spawn' });
-  });
-
-  it('propagates a pre-aborted Git invocation as cancellation', async () => {
-    const { host } = await createHost();
-    const controller = new AbortController();
-    controller.abort('cancel git');
-
-    await expect(host.runTool('git_status', {}, {
-      threadId: 'thread_1',
-      turnId: 'turn_1',
-      signal: controller.signal,
-    })).rejects.toMatchObject({ name: 'AbortError', message: 'cancel git' });
   });
 
   it('returns complete shell output when a command fails', async () => {

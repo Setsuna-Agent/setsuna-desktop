@@ -9,10 +9,6 @@ import {
 } from '../../../../src/adapters/tool/pc-local/pc-local-tool-files.js';
 import { openValidatedReadableFile } from '../../../../src/adapters/tool/pc-local/pc-local-tool-secure-read.js';
 import {
-  appendBoundedProcessText,
-  collectProcess,
-} from '../../../../src/adapters/tool/pc-local/pc-local-tool-git.js';
-import {
   windowsProcessTreeKillArgs,
 } from '../../../../src/adapters/tool/pc-local/pc-local-tool-shell-process.js';
 
@@ -59,35 +55,6 @@ describe('PC local tool resource bounds', () => {
   it('uses Windows taskkill process-tree arguments for graceful and forced termination', () => {
     expect(windowsProcessTreeKillArgs(42, 'SIGTERM')).toEqual(['/pid', '42', '/t', '/f']);
     expect(windowsProcessTreeKillArgs(42, 'SIGKILL')).toEqual(['/pid', '42', '/t', '/f']);
-  });
-
-  it('bounds collected Git stdout before result formatting', () => {
-    const first = appendBoundedProcessText('', 0, 'a'.repeat(200_000));
-    const second = appendBoundedProcessText(first.text, first.omittedChars, 'b'.repeat(200_000));
-
-    expect(second.text).toHaveLength(240_000);
-    expect(second.omittedChars).toBe(160_000);
-  });
-
-  it('does not spawn a Git process when collection is already cancelled', async () => {
-    const controller = new AbortController();
-    controller.abort('cancelled before spawn');
-    let spawnCalls = 0;
-
-    const result = await collectProcess(
-      'git',
-      ['status'],
-      process.cwd(),
-      1_000,
-      controller.signal,
-      () => {
-        spawnCalls += 1;
-        throw new Error('spawn must not be called');
-      },
-    );
-
-    expect(spawnCalls).toBe(0);
-    expect(result).toMatchObject({ aborted: true, exitCode: null });
   });
 
   it('reports a directory target as a write validation error', async () => {
