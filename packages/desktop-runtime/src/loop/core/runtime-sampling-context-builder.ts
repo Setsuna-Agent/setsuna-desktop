@@ -58,6 +58,7 @@ const OUTPUT_RESERVE_CONTEXT_RATIO = 0.15;
 
 export type RuntimeSamplingStepContext = {
   conversationMessages: RuntimeMessage[];
+  responseLanguage: RuntimeInterfaceLanguage;
   messages: RuntimeMessage[];
   modelRequest: Pick<ModelRequest, 'model' | 'providerId'>;
   modelHistoryWarnings?: string[];
@@ -149,6 +150,11 @@ export class RuntimeSamplingContextBuilder {
     const orderedConversationMessages = normalizedConversation.messages;
     const latestRuntimeConfig = await this.options.configStore?.getConfig().catch(() => null);
     const stepRuntimeConfig = latestRuntimeConfig ?? runtimeConfig ?? null;
+    const interfaceLanguage = stepRuntimeConfig?.desktopSettings?.interfaceLanguage;
+    // 设置修改在下一次采样生效，回复约束与内置文案一起切换；专用 review 保持按用户请求确定的语言。
+    if (taskKind !== 'review' && interfaceLanguage && interfaceLanguage !== runtimeConfig?.desktopSettings?.interfaceLanguage) {
+      responseLanguage = interfaceLanguage;
+    }
     const modelForSampling = samplingModelForTurn(stepRuntimeConfig, samplingModel ?? turnModel);
     const debugTraceEnabled = runtimeDebugTraceEnabled(this.options.debugTrace);
     const snapshotThread = await this.options.threadStore.getThread(threadId).catch(() => null);
@@ -202,6 +208,7 @@ export class RuntimeSamplingContextBuilder {
     });
     const toolContext: RuntimeToolExecutionContext = {
       environment,
+      interfaceLanguage: stepRuntimeConfig?.desktopSettings?.interfaceLanguage ?? 'zh-CN',
       ...(goalExecution ? { goalExecution } : {}),
       threadId,
       projectId: thread.projectId,
@@ -231,7 +238,7 @@ export class RuntimeSamplingContextBuilder {
       stepGoal
       && goalControl.isCompletionPending(turnId, stepGoal.id),
     );
-    const goalTools = goalControl.toolDefinitions(stepGoal, goalCompletionPending);
+    const goalTools = goalControl.toolDefinitions(stepGoal, goalCompletionPending, toolContext.interfaceLanguage);
     const collaborationControl = this.options.collaborationControl();
     const collaborationTools = collaborationControl.toolDefinitions(stepRuntimeConfig);
     const toolRouter = this.options.toolHost && toolAccess !== 'none'
@@ -281,7 +288,7 @@ export class RuntimeSamplingContextBuilder {
       config: stepRuntimeConfig,
       hookContextMessages: [
         ...(taskKind === 'goal' && stepGoal?.status === 'active' && !goalCompletionPending
-          ? goalControl.continuationContextMessages(stepGoal)
+          ? goalControl.continuationContextMessages(stepGoal, toolContext.interfaceLanguage)
           : []),
         ...hookContextMessages,
         ...(attachmentContext.contextMessage ? [attachmentContext.contextMessage] : []),
@@ -376,6 +383,7 @@ export class RuntimeSamplingContextBuilder {
     };
     return {
       conversationMessages: compactedConversationMessages,
+      responseLanguage,
       messages,
       modelRequest: modelForSampling.request,
       ...(normalizedConversation.warnings.length

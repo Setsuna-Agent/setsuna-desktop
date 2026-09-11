@@ -1,0 +1,20 @@
+{
+  "en-US": {
+    "阻止危险 Shell 命令": "Block Dangerous Shell Commands",
+    "拦截删除根目录、格式化磁盘、强制清理 Git 工作区等高危命令。": "Block high-risk commands such as deleting the root directory, formatting disks, or forcibly cleaning a Git workspace.",
+    "安全": "Security",
+    "Shell": "Shell",
+    "防护": "Protection",
+    "在 Shell 工具执行前识别破坏性命令，命中后阻止本次调用。": "Detect destructive commands before shell tools execute and block matching calls.",
+    "检查危险命令": "Check dangerous commands"
+  },
+  "zh-CN": {
+    "阻止危险 Shell 命令": "阻止危险 Shell 命令",
+    "拦截删除根目录、格式化磁盘、强制清理 Git 工作区等高危命令。": "拦截删除根目录、格式化磁盘、强制清理 Git 工作区等高危命令。",
+    "安全": "安全",
+    "Shell": "Shell",
+    "防护": "防护",
+    "在 Shell 工具执行前识别破坏性命令，命中后阻止本次调用。": "在 Shell 工具执行前识别破坏性命令，命中后阻止本次调用。",
+    "检查危险命令": "检查危险命令"
+  }
+}

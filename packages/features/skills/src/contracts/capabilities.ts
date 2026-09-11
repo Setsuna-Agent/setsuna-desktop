@@ -1,4 +1,5 @@
 import type {
+  RuntimeInterfaceLanguage,
   RuntimePluginReference,
   RuntimeSkillDetail,
   RuntimeSkillInput,
@@ -25,6 +26,8 @@ export type SkillInjection = {
 export type SkillActivationContext = {
   /** Current user text used only for declarative Plugin Skill activation. */
   text: string;
+  /** 与当前采样步骤使用同一语言，避免配置在异步加载中切换。 */
+  interfaceLanguage?: RuntimeInterfaceLanguage;
 };
 
 export type SkillPromptContextSnapshot = {

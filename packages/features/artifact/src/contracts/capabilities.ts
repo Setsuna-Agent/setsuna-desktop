@@ -1,4 +1,5 @@
 import type {
+  RuntimeInterfaceLanguage,
   DesktopOpenPathResult,
   DesktopWorkspaceFilePreviewResult,
   RuntimeEnvironment,
@@ -7,6 +8,7 @@ import type {
 import { defineCapability, type CapabilityToken } from '@setsuna-desktop/feature-core/capability';
 
 export type ArtifactToolExecutionContext = Readonly<{
+  interfaceLanguage?: RuntimeInterfaceLanguage;
   threadId: string;
   projectId?: string;
   turnId?: string;

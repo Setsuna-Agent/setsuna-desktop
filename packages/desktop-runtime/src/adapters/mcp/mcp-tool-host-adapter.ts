@@ -84,6 +84,7 @@ export class McpToolHostAdapter implements ToolHost {
 function toMcpRunContext(context: ToolExecutionContext): McpToolRunContext {
   return {
     threadId: context.threadId,
+    interfaceLanguage: context.interfaceLanguage,
     ...(context.turnId ? { turnId: context.turnId } : {}),
     ...(context.toolCallId ? { toolCallId: context.toolCallId } : {}),
     ...(context.signal ? { signal: context.signal } : {}),

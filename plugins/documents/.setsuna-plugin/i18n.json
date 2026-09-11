@@ -1,0 +1,34 @@
+{
+  "en-US": {
+    "Word 文档处理": "Word Documents",
+    "创建、编辑、检查并通过页面渲染验证 DOCX 文档，适用于报告、方案、备忘录和操作手册。": "Create, edit, inspect, and verify DOCX files through page rendering for reports, proposals, memos, and handbooks.",
+    "Word": "Word",
+    "DOCX": "DOCX",
+    "文档": "Documents",
+    "文件处理": "File processing",
+    "DOCX 内容模型": "DOCX Content Model",
+    "文档设计预设": "Document Design Presets",
+    "创建与编辑工作流": "Create and Edit Workflow",
+    "读取与审阅工作流": "Read and Review Workflow",
+    "渲染验证工作流": "Render Verification Workflow",
+    "示例文档内容": "Sample Document Content",
+    "示例编辑操作": "Sample Edit Operations",
+    "Create, edit, inspect, sanitize, render, and verify DOCX files. Use for Word documents, reports, proposals, memos, handbooks, templates, comments, tracked changes, and layout-sensitive document work.": "Create, edit, inspect, sanitize, render, and verify DOCX files. Use for Word documents, reports, proposals, memos, handbooks, templates, comments, tracked changes, and layout-sensitive document work."
+  },
+  "zh-CN": {
+    "Word 文档处理": "Word 文档处理",
+    "创建、编辑、检查并通过页面渲染验证 DOCX 文档，适用于报告、方案、备忘录和操作手册。": "创建、编辑、检查并通过页面渲染验证 DOCX 文档，适用于报告、方案、备忘录和操作手册。",
+    "Word": "Word",
+    "DOCX": "DOCX",
+    "文档": "文档",
+    "文件处理": "文件处理",
+    "DOCX 内容模型": "DOCX 内容模型",
+    "文档设计预设": "文档设计预设",
+    "创建与编辑工作流": "创建与编辑工作流",
+    "读取与审阅工作流": "读取与审阅工作流",
+    "渲染验证工作流": "渲染验证工作流",
+    "示例文档内容": "示例文档内容",
+    "示例编辑操作": "示例编辑操作",
+    "Create, edit, inspect, sanitize, render, and verify DOCX files. Use for Word documents, reports, proposals, memos, handbooks, templates, comments, tracked changes, and layout-sensitive document work.": "创建、编辑、检查、清理隐私信息、渲染并验证 DOCX 文件。用于 Word 文档、报告、方案、备忘录、手册、模板、批注、修订以及对版式有要求的文档工作。"
+  }
+}

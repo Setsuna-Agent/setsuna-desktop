@@ -1,0 +1,20 @@
+{
+  "en-US": {
+    "保护密钥文件路径": "Protect Secret Files",
+    "读取、写入或修改参数中出现密钥与凭证文件路径时直接拦截。": "Block reads, writes, and edits whose arguments reference secret or credential files.",
+    "安全": "Security",
+    "密钥": "Secrets",
+    "文件": "Files",
+    "保护 .env、SSH 私钥、npm/pypi 凭证和服务账号文件。": "Protect .env files, SSH private keys, npm/PyPI credentials, and service account files.",
+    "检查敏感文件": "Check sensitive files"
+  },
+  "zh-CN": {
+    "保护密钥文件路径": "保护密钥文件路径",
+    "读取、写入或修改参数中出现密钥与凭证文件路径时直接拦截。": "读取、写入或修改参数中出现密钥与凭证文件路径时直接拦截。",
+    "安全": "安全",
+    "密钥": "密钥",
+    "文件": "文件",
+    "保护 .env、SSH 私钥、npm/pypi 凭证和服务账号文件。": "保护 .env、SSH 私钥、npm/pypi 凭证和服务账号文件。",
+    "检查敏感文件": "检查敏感文件"
+  }
+}

@@ -37,7 +37,7 @@ describe('bundled Hook plugins', () => {
       systemMessage: expect.stringContaining('apply_patch'),
       hookSpecificOutput: {
         hookEventName: 'PostToolUse',
-        additionalContext: expect.stringContaining('审查/Review'),
+        additionalContext: expect.stringContaining('审查'),
       },
     });
   });
@@ -71,7 +71,7 @@ describe('bundled Hook plugins', () => {
 
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({
-      systemMessage: '即将执行 auto context compaction。',
+      systemMessage: '即将执行上下文压缩（触发方式：auto）。',
     });
   });
 

@@ -1,3 +1,4 @@
+import { runtimeText, type RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import type {
   AnswerRuntimeApprovalInput,
   RuntimeStructuredInputField,
@@ -25,66 +26,69 @@ const MAX_OPTIONS = 20;
 const MIN_AUTO_RESOLUTION_MS = 60_000;
 const MAX_AUTO_RESOLUTION_MS = 240_000;
 
-const REQUEST_USER_INPUT_TOOL: RuntimeToolDefinition = {
-  name: REQUEST_USER_INPUT_TOOL_NAME,
-  description: 'Pause and ask the user for structured choices or form values. Use only when the answer materially changes the result. Never request passwords, API keys, tokens, or other secrets.',
-  inputSchema: {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
-      title: { type: 'string', description: 'Short form title.' },
-      message: { type: 'string', description: 'Why this input is needed.' },
-      fields: {
-        type: 'array',
-        minItems: 1,
-        maxItems: MAX_FIELDS,
-        items: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            id: { type: 'string', description: 'Stable field id using letters, digits, underscore, or hyphen.' },
-            label: { type: 'string' },
-            description: { type: 'string' },
-            type: { type: 'string', enum: ['text', 'textarea', 'number', 'integer', 'boolean', 'select', 'multiselect'] },
-            required: { type: 'boolean' },
-            default: {},
-            placeholder: { type: 'string' },
-            format: { type: 'string', enum: ['date', 'date-time', 'email', 'uri'] },
-            minimum: { type: 'number' },
-            maximum: { type: 'number' },
-            min_length: { type: 'integer', minimum: 0 },
-            max_length: { type: 'integer', minimum: 1 },
-            min_items: { type: 'integer', minimum: 0 },
-            max_items: { type: 'integer', minimum: 1 },
-            options: {
-              type: 'array',
-              minItems: 2,
-              maxItems: MAX_OPTIONS,
-              items: {
-                type: 'object',
-                additionalProperties: false,
-                properties: {
-                  value: { type: 'string' },
-                  label: { type: 'string' },
-                  description: { type: 'string' },
+function requestUserInputTool(language?: RuntimeInterfaceLanguage): RuntimeToolDefinition {
+  const text = runtimeText(language);
+  return {
+    name: REQUEST_USER_INPUT_TOOL_NAME,
+    description: text('Pause and ask the user for structured choices or form values. Use only when the answer materially changes the result. Never request passwords, API keys, tokens, or other secrets.', "暂停并请用户提供结构化选项或表单值。仅在答案会实质影响结果时使用。不得索要密码、API key、token 或其他秘密。"),
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        title: { type: 'string', description: text('Short form title.', "简短的表单标题。") },
+        message: { type: 'string', description: text('Why this input is needed.', "说明为何需要这些信息。") },
+        fields: {
+          type: 'array',
+          minItems: 1,
+          maxItems: MAX_FIELDS,
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              id: { type: 'string', description: text('Stable field id using letters, digits, underscore, or hyphen.', "稳定的字段 ID，只使用字母、数字、下划线或连字符。") },
+              label: { type: 'string' },
+              description: { type: 'string' },
+              type: { type: 'string', enum: ['text', 'textarea', 'number', 'integer', 'boolean', 'select', 'multiselect'] },
+              required: { type: 'boolean' },
+              default: {},
+              placeholder: { type: 'string' },
+              format: { type: 'string', enum: ['date', 'date-time', 'email', 'uri'] },
+              minimum: { type: 'number' },
+              maximum: { type: 'number' },
+              min_length: { type: 'integer', minimum: 0 },
+              max_length: { type: 'integer', minimum: 1 },
+              min_items: { type: 'integer', minimum: 0 },
+              max_items: { type: 'integer', minimum: 1 },
+              options: {
+                type: 'array',
+                minItems: 2,
+                maxItems: MAX_OPTIONS,
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    value: { type: 'string' },
+                    label: { type: 'string' },
+                    description: { type: 'string' },
+                  },
+                  required: ['value', 'label'],
                 },
-                required: ['value', 'label'],
               },
             },
+            required: ['id', 'label', 'type'],
           },
-          required: ['id', 'label', 'type'],
+        },
+        auto_resolution_ms: {
+          type: 'integer',
+          minimum: MIN_AUTO_RESOLUTION_MS,
+          maximum: MAX_AUTO_RESOLUTION_MS,
+          description: text('Optional 60-240 second timeout. On timeout, explicit field defaults are returned and work continues.', "可选 60 至 240 秒超时。超时后返回明确设置的字段默认值并继续工作。"),
         },
       },
-      auto_resolution_ms: {
-        type: 'integer',
-        minimum: MIN_AUTO_RESOLUTION_MS,
-        maximum: MAX_AUTO_RESOLUTION_MS,
-        description: 'Optional 60-240 second timeout. On timeout, explicit field defaults are returned and work continues.',
-      },
+      required: ['message', 'fields'],
     },
-    required: ['message', 'fields'],
-  },
-};
+  };
+}
 
 type WaitOutcome =
   | { type: 'answer'; answer: AnswerRuntimeApprovalInput }
@@ -100,7 +104,7 @@ export class UserInputToolHost implements ToolHost {
   ) {}
 
   async listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
-    return context.features?.default_mode_request_user_input === false ? [] : [REQUEST_USER_INPUT_TOOL];
+    return context.features?.default_mode_request_user_input === false ? [] : [requestUserInputTool(context.interfaceLanguage)];
   }
 
   toolRuntimeProfile(name: string) {
@@ -112,12 +116,13 @@ export class UserInputToolHost implements ToolHost {
     };
   }
 
-  systemPrompt(_context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): string | null {
+  systemPrompt(context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): string | null {
+    const text = runtimeText(context.interfaceLanguage);
     if (!request?.tools.some((tool) => tool.name === REQUEST_USER_INPUT_TOOL_NAME)) return null;
     return [
-      'Use request_user_input only when missing user input materially changes the result and cannot be safely inferred.',
-      'Keep forms short, provide concrete options when possible, and never ask for passwords, API keys, tokens, or other secrets.',
-      'Set auto_resolution_ms only for non-blocking questions where continuing with explicit defaults is acceptable.',
+      text('Use request_user_input only when missing user input materially changes the result and cannot be safely inferred.', "仅在缺失信息会实质影响结果且无法合理推断时，才使用 request_user_input。"),
+      text('Keep forms short, provide concrete options when possible, and never ask for passwords, API keys, tokens, or other secrets.', "保持表单简短，尽可能提供具体选项，不得索要密码、API key、token 或其他秘密。"),
+      text('Set auto_resolution_ms only for non-blocking questions where continuing with explicit defaults is acceptable.', "仅对可以按明确默认值继续工作的非阻塞问题设置 auto_resolution_ms。"),
     ].join(' ');
   }
 

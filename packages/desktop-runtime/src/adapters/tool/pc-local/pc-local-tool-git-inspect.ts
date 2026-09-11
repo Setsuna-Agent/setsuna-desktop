@@ -1,29 +1,33 @@
+import { runtimeText, type RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import type { RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 import { spawn } from 'node:child_process';
 import { ToolExecutionError, type ToolExecutionResult } from '../../../ports/tool-host.js';
-import { SHELL_OUTPUT_TOKEN_BUDGET_SCHEMA } from './pc-local-tool-definitions.js';
+import { shellOutputTokenBudgetSchema } from './pc-local-tool-definitions.js';
 import { resolveWorkspacePath, workspaceRelativePath } from './pc-local-tool-paths.js';
 import { ShellOutputBuffer } from './pc-local-tool-shell-output.js';
 import { killChildProcess, shellEnvironment } from './pc-local-tool-shell-session-runtime.js';
 import { boundedInteger } from './pc-local-tool-utils.js';
 
 /** Only advertised in read-only turns when an OS shell sandbox is unavailable. */
-export const GIT_INSPECT_TOOL: RuntimeToolDefinition = {
-  name: 'git_inspect',
-  description: 'Inspect workspace Git status, diff, history, or a commit without a shell. Available when read-only shell execution is unavailable. Large results can be paged with read_tool_result.',
-  inputSchema: {
-    type: 'object', additionalProperties: false, required: ['operation'],
-    properties: {
-      operation: { type: 'string', enum: ['status', 'diff', 'log', 'show'] },
-      path: { type: 'string', description: 'Literal workspace path; defaults to the whole workspace.' },
-      revision: { type: 'string', description: 'Commit/ref or range for diff/log/show. Defaults to HEAD for log/show; omitted for working tree diff.' },
-      staged: { type: 'boolean', description: 'Compare the index for diff.' },
-      format: { type: 'string', enum: ['patch', 'stat', 'name-only'], description: 'Diff/show output; defaults to patch.' },
-      max_count: { type: 'integer', minimum: 1, maximum: 100, description: 'Maximum log commits; defaults to 20.' },
-      max_output_tokens: SHELL_OUTPUT_TOKEN_BUDGET_SCHEMA,
+export function gitInspectDefinition(language?: RuntimeInterfaceLanguage): RuntimeToolDefinition {
+  const text = runtimeText(language);
+  return {
+    name: 'git_inspect',
+    description: text('Inspect workspace Git status, diff, history, or a commit without a shell. Available when read-only shell execution is unavailable. Large results can be paged with read_tool_result.', "无需 shell 即可检查工作区 Git 状态、差异、历史或提交；仅在只读 shell 不可用时提供。较长结果可用 read_tool_result 分页读取。"),
+    inputSchema: {
+      type: 'object', additionalProperties: false, required: ['operation'],
+      properties: {
+        operation: { type: 'string', enum: ['status', 'diff', 'log', 'show'] },
+        path: { type: 'string', description: text('Literal workspace path; defaults to the whole workspace.', "工作区内的字面量路径；默认整个工作区。") },
+        revision: { type: 'string', description: text('Commit/ref or range for diff/log/show. Defaults to HEAD for log/show; omitted for working tree diff.', "diff/log/show 使用的提交、引用或范围。log/show 默认 HEAD；工作区差异省略此项。") },
+        staged: { type: 'boolean', description: text('Compare the index for diff.', "diff 是否比较暂存区。") },
+        format: { type: 'string', enum: ['patch', 'stat', 'name-only'], description: text('Diff/show output; defaults to patch.', "diff/show 输出格式；默认 patch。") },
+        max_count: { type: 'integer', minimum: 1, maximum: 100, description: text('Maximum log commits; defaults to 20.', "最多返回的日志提交数；默认 20。") },
+        max_output_tokens: shellOutputTokenBudgetSchema(language),
+      },
     },
-  },
-};
+  };
+}
 
 const SAFE_GIT_ARGS = [
   '--no-pager', '--no-optional-locks', '--literal-pathspecs',

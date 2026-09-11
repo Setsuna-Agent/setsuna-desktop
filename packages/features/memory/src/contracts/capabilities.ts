@@ -1,4 +1,5 @@
 import type {
+  RuntimeInterfaceLanguage,
   ModelRequest,
   ModelStreamEvent,
   PendingRuntimeEvent,
@@ -37,6 +38,7 @@ export type MemorySettingsUpdate = Readonly<{
 }>;
 
 export type MemoryToolContext = Readonly<{
+  interfaceLanguage?: RuntimeInterfaceLanguage;
   threadId: string;
   projectId?: string;
   turnId?: string;

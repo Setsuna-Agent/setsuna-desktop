@@ -8,6 +8,6 @@ process.stdin.on('end', () => {
   if (!/\b(?:TODO|FIXME|XXX)\b/.test(message)) return;
   process.stdout.write(JSON.stringify({
     decision: 'block',
-    reason: '最后回复仍包含 TODO/FIXME 标记。请继续完成或明确解释为什么保留。',
+    reason: (payload.interface_language === 'en-US' ? 'The final response still contains TODO/FIXME markers. Continue the work or clearly explain why they remain.' : '最后回复仍包含 TODO/FIXME 标记。请继续完成或明确解释为什么保留。'),
   }));
 });

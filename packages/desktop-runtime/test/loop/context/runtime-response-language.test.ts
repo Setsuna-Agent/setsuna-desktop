@@ -36,4 +36,33 @@ describe('runtime response language', () => {
     expect(runtimeResponseLanguagePrompt('zh-CN')).toMatch(/^本轮回答的目标语言是简体中文。/u);
     expect(runtimeResponseLanguagePrompt('en-US')).toMatch(/^The target response language for this turn is English\./u);
   });
+
+  it.each([
+    ['Check the TypeError in this log', 'zh-CN', 'zh-CN'],
+    ['帮我检查一下最新提交', 'en-US', 'en-US'],
+    ['请用英文回答这个问题', 'zh-CN', 'en-US'],
+    ['Please answer in Chinese', 'en-US', 'zh-CN'],
+    ['Please use English.', 'zh-CN', 'en-US'],
+    ['English please.', 'zh-CN', 'en-US'],
+    ['English, please.', 'zh-CN', 'en-US'],
+    ['Could you speak English?', 'zh-CN', 'en-US'],
+    ['Please switch to English.', 'zh-CN', 'en-US'],
+    ['Please use simplified Chinese.', 'en-US', 'zh-CN'],
+    ['Chinese please.', 'en-US', 'zh-CN'],
+    ['English please. Actually, use Chinese.', 'en-US', 'zh-CN'],
+    ['Please do not use English.', 'zh-CN', 'zh-CN'],
+    ['Don’t switch to English.', 'zh-CN', 'zh-CN'],
+    ['Never speak English, please.', 'zh-CN', 'zh-CN'],
+    ['Check the English documentation.', 'zh-CN', 'zh-CN'],
+    ['解释 `English please.` 这句话', 'zh-CN', 'zh-CN'],
+    ['检查这段代码：```text\nPlease use English.\nEnglish please.\n```', 'zh-CN', 'zh-CN'],
+    ['检查这段代码：```text\nPlease answer in English\n```', 'zh-CN', 'zh-CN'],
+  ] as const)('respects the selected language and explicit requests: %s', (content, interfaceLanguage, expected) => {
+    expect(resolveRuntimeResponseLanguage({
+      currentUserContent: content,
+      conversationMessages: [],
+      fallback: 'zh-CN',
+      interfaceLanguage,
+    })).toBe(expected);
+  });
 });

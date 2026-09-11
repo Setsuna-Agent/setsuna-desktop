@@ -6,7 +6,7 @@ process.stdin.on('end', () => {
   const text = JSON.stringify(payload.tool_input || payload.toolInput || {});
   const generatedPath = /(?:^|[\\/])(?:node_modules|dist|build|coverage|target|\.next|\.turbo)(?:[\\/]|$)/i;
   if (generatedPath.test(text)) {
-    process.stderr.write('生成目录防护插件阻止了对依赖目录或构建产物的直接写入。');
+    process.stderr.write((payload.interface_language === 'en-US' ? 'The generated-folder protection plugin blocked a direct write to dependencies or build outputs.' : '生成目录防护插件阻止了对依赖目录或构建产物的直接写入。'));
     process.exitCode = 2;
   }
 });

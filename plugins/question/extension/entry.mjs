@@ -29,12 +29,13 @@ export default function activate(api) {
       additionalProperties: false,
     },
     async execute(input, context) {
+      const text = (en, zh) => context.interfaceLanguage === 'zh-CN' ? zh : en;
       const question = requiredText(input?.question, 'question');
       const options = normalizeOptions(input?.options);
       const selected = await context.ui.select({
-        title: 'Structured Question',
+        title: text('Structured Question', '结构化提问'),
         message: question,
-        label: 'Choose an answer',
+        label: text('Choose an answer', '请选择回答'),
         options: [
           ...options.map((option, index) => ({
             value: String(index),
@@ -43,36 +44,36 @@ export default function activate(api) {
           })),
           {
             value: CUSTOM_ANSWER,
-            label: '其他 / Other',
-            description: '输入一个不在选项中的回答。',
+            label: text('Other', '其他'),
+            description: text('Enter an answer that is not listed.', '输入一个不在选项中的回答。'),
           },
         ],
       });
 
       if (selected === null) {
         return {
-          content: 'User cancelled the question.',
-          preview: 'Question cancelled',
+          content: text('User cancelled the question.', '用户取消了本次提问。'),
+          preview: text('Question cancelled', '提问已取消'),
           data: { question, answer: null, custom: false },
         };
       }
 
       if (selected === CUSTOM_ANSWER) {
         const answer = await context.ui.input({
-          title: 'Structured Question',
+          title: text('Structured Question', '结构化提问'),
           message: question,
-          label: 'Your answer',
-          placeholder: '输入你的回答',
+          label: text('Your answer', '你的回答'),
+          placeholder: text('Enter your answer', '输入你的回答'),
         });
         if (answer === null) {
           return {
-            content: 'User cancelled the question.',
-            preview: 'Question cancelled',
+            content: text('User cancelled the question.', '用户取消了本次提问。'),
+            preview: text('Question cancelled', '提问已取消'),
             data: { question, answer: null, custom: true },
           };
         }
         return {
-          content: `User wrote: ${answer}`,
+          content: text(`User wrote: ${answer}`, `用户输入：${answer}`),
           preview: answer,
           data: { question, answer, custom: true },
         };
@@ -82,7 +83,7 @@ export default function activate(api) {
       const option = Number.isInteger(index) ? options[index] : undefined;
       if (!option) throw new Error('The selected question option is invalid.');
       return {
-        content: `User selected ${index + 1}: ${option.label}`,
+        content: text(`User selected ${index + 1}: ${option.label}`, `用户选择了第 ${index + 1} 项：${option.label}`),
         preview: option.label,
         data: { question, answer: option.label, index, custom: false },
       };

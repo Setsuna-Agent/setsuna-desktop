@@ -40,7 +40,7 @@ description: "通过对话创建或更新 Setsuna Plugin Bundle，生成完整 m
 export default function activate(api) {
   api.registerTool({
     name: 'example',
-    description: 'Explain exactly when the model should call this tool.',
+    description: '明确说明模型应在什么情况下调用此工具。',
     inputSchema: {
       type: 'object',
       properties: { value: { type: 'string' } },

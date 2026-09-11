@@ -42,6 +42,16 @@ Renderer 看不到：
 
 目录内容以 `plugins/` 实际文件和各 Bundle manifest 为准，生成索引见根 [Tree.md](../../../Tree.md)。
 
+## 内置插件语言
+
+每个随应用发布的 Bundle 在 `.setsuna-plugin/i18n.json` 维护 `zh-CN`、`en-US` 两份文案表，以源展示文本为键。runtime 在投影市场、已安装列表、工具注册说明和 Renderer UI 时选择当前语言，未声明的文本回退原文。只替换名称、描述、标签及明确的展示字段；ID、工具名、参数名、枚举、默认值、路径、命令和权限保持原值。新增或修改源文案时同步维护这两份表。
+
+Skill 入口和 Markdown 参考资源可在同目录提供 `SKILL.<locale>.md`、`<name>.<locale>.md`。详情预览、`read_skill`、资源读取和模型注入会使用对应语言的文件。用户 override 及本地导入插件不使用内置翻译，即使它们复用了内置插件 ID。
+
+每次工具执行、事件和 UI Action 的 worker `context.interfaceLanguage` 提供当前语言；命令 Hook 的 stdin JSON 使用 `interface_language`。固定交互文案、结果摘要和 Hook 提示由 Bundle 根据这些字段选择；用户输入和外部结果原文不翻译。
+
+语言切换只更新读取投影和目录 revision，不修改安装副本、执行清单或信任哈希。旧安装副本缺少文案表时可使用当前应用的展示文案；新 Skill 正文和执行时提示需要通过插件更新取得。Renderer 在语言配置保存成功后刷新 Skill 与插件目录。
+
 ## 目录要求
 
 每个 Plugin 至少包含：

@@ -1,3 +1,4 @@
+import type { RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 /** Runtime lifecycle owner for the Goal Feature. */
 import {
   cloneRuntimeSkillReferences,
@@ -493,21 +494,17 @@ export class RuntimeGoalCoordinator implements GoalControl {
 
   toolDefinitions(
     goal: RuntimeThreadGoal | null | undefined,
-    completionPending = false,
+    completionPending = false, language?: RuntimeInterfaceLanguage,
   ) {
-    return goalToolDefinitions(goal, completionPending);
+    return goalToolDefinitions(goal, completionPending, language);
   }
 
   isToolName(name: string): boolean {
     return isGoalToolName(name);
   }
 
-  continuationContextMessages(goal: RuntimeThreadGoal): RuntimeMessage[] {
-    return goalContinuationContextMessages(
-      goal,
-      this.options.host,
-      this.options.host,
-    );
+  continuationContextMessages(goal: RuntimeThreadGoal, language?: RuntimeInterfaceLanguage): RuntimeMessage[] {
+    return goalContinuationContextMessages(goal, this.options.host, this.options.host, language);
   }
 
   /** Recovers terminal turns that are newer than the Goal's explicit accounting watermark. */

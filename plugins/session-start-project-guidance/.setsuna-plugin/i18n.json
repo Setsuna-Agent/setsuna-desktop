@@ -1,0 +1,20 @@
+{
+  "en-US": {
+    "会话开始读取项目提示": "Project Guidance at Session Start",
+    "会话启动、恢复、清空或压缩后，提醒模型优先遵守工作区约定。": "Remind the model to follow workspace conventions when a session starts, resumes, clears, or compacts.",
+    "上下文": "Context",
+    "AGENTS.md": "AGENTS.md",
+    "项目规范": "Project conventions",
+    "发现 AGENTS.md、CONTRIBUTING.md 或 README.md 后，将文件列表加入会话上下文。": "Add discovered AGENTS.md, CONTRIBUTING.md, and README.md paths to the session context.",
+    "注入项目提示": "Inject project guidance"
+  },
+  "zh-CN": {
+    "会话开始读取项目提示": "会话开始读取项目提示",
+    "会话启动、恢复、清空或压缩后，提醒模型优先遵守工作区约定。": "会话启动、恢复、清空或压缩后，提醒模型优先遵守工作区约定。",
+    "上下文": "上下文",
+    "AGENTS.md": "AGENTS.md",
+    "项目规范": "项目规范",
+    "发现 AGENTS.md、CONTRIBUTING.md 或 README.md 后，将文件列表加入会话上下文。": "发现 AGENTS.md、CONTRIBUTING.md 或 README.md 后，将文件列表加入会话上下文。",
+    "注入项目提示": "注入项目提示"
+  }
+}

@@ -1,5 +1,6 @@
 import type {
   RuntimeEnvironment,
+  RuntimeInterfaceLanguage,
   RuntimeMessage,
   RuntimePermissionProfile,
   RuntimePluginReference,
@@ -13,6 +14,8 @@ export type ToolExecutionEnvironment = RuntimeEnvironment;
 
 export type ToolExecutionContext = {
   threadId: string;
+  /** 当前设置中的语言，仅用于内置提示词和工具说明，不改写外部工具内容。 */
+  interfaceLanguage?: RuntimeInterfaceLanguage;
   projectId?: string;
   turnId?: string;
   toolCallId?: string;

@@ -1,4 +1,5 @@
 import type {
+  RuntimeInterfaceLanguage,
   RuntimeExtensionCapability,
   RuntimeExtensionEventName,
   RuntimeExtensionStatus,
@@ -63,7 +64,9 @@ import {
   type ExtensionWorkerReady,
   type ExtensionWorkerRequestContext,
 } from './extension-worker-client.js';
+import { safeWorkerContext, workerRequestContext, safeEventContext, eventWorkerRequestContext } from './extension-request-context.js';
 import { protocolRecord } from './extension-worker-protocol.js';
+import { installedPluginMessages, localizePluginDisplayFields, pluginText } from '../adapters/plugin/bundled-plugin-localization.js';
 
 type ActiveExtension = {
   client: ExtensionWorkerClient;
@@ -74,6 +77,8 @@ type ActiveExtension = {
 };
 
 type ExtensionManagerOptions = {
+  bundledPluginsDir?: string;
+  getLanguage?(): Promise<RuntimeInterfaceLanguage>;
   workerEntryPath?: string;
   workerExecArgv?: string[];
   toolTimeoutMs?: number;
@@ -128,7 +133,7 @@ export class ExtensionManager implements ExtensionRuntime {
     private readonly plugins: Pick<PluginBundleStore, 'listInstalledRecords'>,
     private readonly state: Pick<ExtensionStateStore, 'delete' | 'get' | 'set'>,
     private readonly ui: Pick<ExtensionUiCoordinator, 'handle'>,
-    options: ExtensionManagerOptions = {},
+    private readonly options: ExtensionManagerOptions = {},
   ) {
     this.workerEntryPath = options.workerEntryPath
       ?? fileURLToPath(new URL('./extension-worker-entry.js', import.meta.url));
@@ -176,19 +181,31 @@ export class ExtensionManager implements ExtensionRuntime {
   async listTools(context: ToolExecutionContext): Promise<ExtensionRegisteredTool[]> {
     if (this.shuttingDown || context.features?.plugins === false) return [];
     const tools: ExtensionRegisteredTool[] = [];
+    const language = context.interfaceLanguage ?? await this.options.getLanguage?.() ?? 'en-US';
     const records = (await this.plugins.listInstalledRecords()).sort((left, right) => left.id.localeCompare(right.id));
     for (const plugin of records) {
       if (!plugin.extension?.capabilities.includes('tools')) continue;
       try {
         if (!await this.hostCapabilitiesAvailable(plugin)) continue;
         const active = await this.ensureActive(plugin);
-        if (active) tools.push(...active.tools.map((tool) => ({ ...tool, inputSchema: { ...tool.inputSchema } })));
+        if (active) tools.push(...await this.localizedTools(active, language));
       } catch (error) {
         await this.markFailed(plugin.id, error);
       }
     }
     assertUniqueToolNames(tools);
     return tools;
+  }
+
+  private async localizedTools(active: ActiveExtension, language: RuntimeInterfaceLanguage) {
+    const messages = await installedPluginMessages(active.plugin, language, this.options.bundledPluginsDir);
+    const name = pluginText(messages, active.plugin.name);
+    return active.tools.map((tool, index) => ({
+      ...localizePluginDisplayFields(tool, messages),
+      // 从原始注册文案重新组装，不能翻译带插件名称前缀的缓存字符串。
+      description: `${name}: ${pluginText(messages, active.ready.tools[index].description)}`,
+      plugin: { ...tool.plugin, name },
+    }));
   }
 
   async runTool(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult> {
@@ -221,7 +238,10 @@ export class ExtensionManager implements ExtensionRuntime {
         {
           name: tool.localName,
           input,
-          context: safeWorkerContext(context),
+          context: safeWorkerContext({
+            ...context,
+            interfaceLanguage: context.interfaceLanguage ?? await this.options.getLanguage?.() ?? 'en-US',
+          }),
         },
         workerRequestContext(context),
         this.toolTimeoutFor(active.plugin),
@@ -262,7 +282,7 @@ export class ExtensionManager implements ExtensionRuntime {
               ...context.payload,
               ...(aggregate.input !== undefined ? { input: aggregate.input } : {}),
             },
-            context: safeEventContext(context),
+            context: { ...safeEventContext(context), interfaceLanguage: await this.options.getLanguage?.() ?? 'en-US' },
           },
           eventWorkerRequestContext(context),
           this.eventTimeoutMs,
@@ -336,6 +356,7 @@ export class ExtensionManager implements ExtensionRuntime {
           },
           context: {
             contributionId: contribution.id,
+            interfaceLanguage: await this.options.getLanguage?.() ?? 'en-US',
             ...(input.context.cwd ? { cwd: input.context.cwd } : {}),
             surface: input.context.surface,
             stateScope: actionStateScope,
@@ -440,6 +461,7 @@ export class ExtensionManager implements ExtensionRuntime {
 
   async listStatuses(): Promise<RuntimeExtensionStatusList> {
     const records = (await this.plugins.listInstalledRecords()).filter((plugin) => plugin.extension);
+    const language = await this.options.getLanguage?.() ?? 'en-US';
     for (const plugin of records) {
       const active = this.active.get(plugin.id);
       if (!active) continue;
@@ -457,11 +479,11 @@ export class ExtensionManager implements ExtensionRuntime {
       }
     }
     return {
-      extensions: records.map((plugin) => cloneStatus(this.statuses.get(plugin.id) ?? {
-        pluginId: plugin.id,
-        state: 'stopped',
-        tools: [],
-        events: [],
+      extensions: await Promise.all(records.map(async (plugin) => {
+        const status = cloneStatus(this.statuses.get(plugin.id) ?? { pluginId: plugin.id, state: 'stopped', tools: [], events: [] });
+        const active = this.active.get(plugin.id);
+        if (active) status.tools = (await this.localizedTools(active, language)).map(({ name, description }) => ({ name, description }));
+        return status;
       })),
     };
   }
@@ -762,51 +784,6 @@ function assertUniqueToolNames(tools: ExtensionRegisteredTool[]): void {
 
 function pluginReference(plugin: InstalledPluginRecord): RuntimePluginReference {
   return { id: plugin.id, name: plugin.name, ...(plugin.icon ? { icon: plugin.icon } : {}) };
-}
-
-function safeWorkerContext(context: ToolExecutionContext): Record<string, unknown> {
-  return {
-    threadId: context.threadId,
-    ...(context.turnId ? { turnId: context.turnId } : {}),
-    ...(context.projectId ? { projectId: context.projectId } : {}),
-    ...(context.toolCallId ? { toolCallId: context.toolCallId } : {}),
-    ...(context.environment?.cwd ? { cwd: context.environment.cwd } : {}),
-  };
-}
-
-function workerRequestContext(context: ToolExecutionContext): ExtensionWorkerRequestContext {
-  return {
-    threadId: context.threadId,
-    ...(context.turnId ? { turnId: context.turnId } : {}),
-    ...(context.projectId ? { projectId: context.projectId } : {}),
-    ...(context.toolCallId ? { toolCallId: context.toolCallId } : {}),
-    ...(context.environment?.cwd ? { cwd: context.environment.cwd } : {}),
-    ...(context.environment ? { environment: context.environment } : {}),
-    ...(context.permissionProfile ? { permissionProfile: context.permissionProfile } : {}),
-    ...(context.signal ? { signal: context.signal } : {}),
-    ...(context.onToolOutputDelta ? { onOutput: (message: string) => context.onToolOutputDelta?.({ delta: message }) } : {}),
-  };
-}
-
-function safeEventContext(context: ExtensionEventContext): Record<string, unknown> {
-  return {
-    threadId: context.threadId,
-    ...(context.turnId ? { turnId: context.turnId } : {}),
-    ...(context.projectId ? { projectId: context.projectId } : {}),
-    ...(context.toolCallId ? { toolCallId: context.toolCallId } : {}),
-    ...(context.cwd ? { cwd: context.cwd } : {}),
-  };
-}
-
-function eventWorkerRequestContext(context: ExtensionEventContext): ExtensionWorkerRequestContext {
-  return {
-    threadId: context.threadId,
-    ...(context.turnId ? { turnId: context.turnId } : {}),
-    ...(context.projectId ? { projectId: context.projectId } : {}),
-    ...(context.toolCallId ? { toolCallId: context.toolCallId } : {}),
-    ...(context.cwd ? { cwd: context.cwd } : {}),
-    ...(context.signal ? { signal: context.signal } : {}),
-  };
 }
 
 function throwIfExtensionCancelled(signal?: AbortSignal): void {

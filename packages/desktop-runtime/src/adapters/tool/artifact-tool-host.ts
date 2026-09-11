@@ -42,6 +42,7 @@ export class ArtifactToolHost implements ToolHost {
 function artifactContext(context: ToolExecutionContext): ArtifactToolExecutionContext {
   return Object.freeze({
     threadId: context.threadId,
+    interfaceLanguage: context.interfaceLanguage,
     ...(context.projectId ? { projectId: context.projectId } : {}),
     ...(context.turnId ? { turnId: context.turnId } : {}),
     ...(context.toolCallId ? { toolCallId: context.toolCallId } : {}),

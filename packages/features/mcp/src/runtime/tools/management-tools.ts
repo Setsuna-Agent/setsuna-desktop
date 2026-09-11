@@ -1,3 +1,4 @@
+import { runtimeText, type RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import {
   type RuntimeMcpServer,
   type RuntimeMcpServerInput,
@@ -12,169 +13,173 @@ const configureMcpToolName = 'configure_mcp_server';
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_TIMEOUT_MS = 30 * 60 * 1000;
 
-const configureMcpTool: RuntimeToolDefinition = {
-  name: configureMcpToolName,
-  description: 'Create or update a Setsuna Desktop MCP server in the current runtime MCP configuration. Requires user authorization.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      key: {
-        type: 'string',
-        description: 'Stable server key. Spaces are normalized to underscores.',
+function configureMcpDefinition(language?: RuntimeInterfaceLanguage): RuntimeToolDefinition {
+  const text = runtimeText(language);
+  return {
+    name: configureMcpToolName,
+    description: text('Create or update a Setsuna Desktop MCP server in the current runtime MCP configuration. Requires user authorization.', "创建或更新当前运行时 MCP 配置中的 Setsuna Desktop MCP 服务。需要用户授权。"),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        key: {
+          type: 'string',
+          description: text('Stable server key. Spaces are normalized to underscores.', "稳定的服务标识；空格会规范化为下划线。"),
+        },
+        label: {
+          type: 'string',
+          description: text('Optional display name for the MCP server.', "可选 MCP 服务显示名称。"),
+        },
+        description: {
+          type: 'string',
+          description: text('Optional description of the server.', "可选服务描述。"),
+        },
+        transport: {
+          type: 'string',
+          enum: ['stdio', 'streamableHttp'],
+          description: text('Transport type. Use stdio for command-based servers and streamableHttp for URL-based servers.', "传输类型。命令启动的服务用 stdio，URL 服务用 streamableHttp。"),
+        },
+        command: {
+          type: 'string',
+          description: text('Command for stdio servers, such as npx, node, uvx, or an absolute executable path.', "stdio 服务的命令，例如 npx、node、uvx 或可执行文件绝对路径。"),
+        },
+        args: {
+          type: 'array',
+          items: { type: 'string' },
+          description: text('Command arguments for stdio servers.', "stdio 服务的命令参数。"),
+        },
+        cwd: {
+          type: 'string',
+          description: text('Optional working directory for stdio servers.', "可选 stdio 服务工作目录。"),
+        },
+        url: {
+          type: 'string',
+          description: text('URL for streamable HTTP MCP servers.', "流式 HTTP MCP 服务的 URL。"),
+        },
+        headers: {
+          type: 'object',
+          additionalProperties: { type: 'string' },
+          description: text('Optional HTTP headers for streamable HTTP servers.', "可选流式 HTTP 服务请求头。"),
+        },
+        env_http_headers: {
+          type: 'object',
+          additionalProperties: { type: 'string' },
+          description: text('Optional HTTP header names mapped to environment variable names for streamable HTTP servers.', "可选流式 HTTP 服务的请求头名称到环境变量名称的映射。"),
+        },
+        envHttpHeaders: {
+          type: 'object',
+          additionalProperties: { type: 'string' },
+          description: text('Optional HTTP header names mapped to environment variable names for streamable HTTP servers.', "可选流式 HTTP 服务的请求头名称到环境变量名称的映射。"),
+        },
+        bearer_token_env_var: {
+          type: 'string',
+          description: text('Optional environment variable that contains the bearer token for streamable HTTP servers.', "可选包含流式 HTTP 服务 bearer token 的环境变量名。"),
+        },
+        bearerTokenEnvVar: {
+          type: 'string',
+          description: text('Optional environment variable that contains the bearer token for streamable HTTP servers.', "可选包含流式 HTTP 服务 bearer token 的环境变量名。"),
+        },
+        oauth_client_id: {
+          type: 'string',
+          description: text('Optional OAuth client ID for streamable HTTP MCP login.', "可选流式 HTTP MCP 登录所用的 OAuth client ID。"),
+        },
+        oauthClientId: {
+          type: 'string',
+          description: text('Optional OAuth client ID for streamable HTTP MCP login.', "可选流式 HTTP MCP 登录所用的 OAuth client ID。"),
+        },
+        oauth_resource: {
+          type: 'string',
+          description: text('Optional OAuth resource parameter for streamable HTTP MCP login.', "可选流式 HTTP MCP 登录所用的 OAuth resource 参数。"),
+        },
+        oauthResource: {
+          type: 'string',
+          description: text('Optional OAuth resource parameter for streamable HTTP MCP login.', "可选流式 HTTP MCP 登录所用的 OAuth resource 参数。"),
+        },
+        env: {
+          type: 'object',
+          additionalProperties: { type: 'string' },
+          description: text('Optional environment variables for stdio servers.', "可选 stdio 服务环境变量。"),
+        },
+        timeout_ms: {
+          type: 'integer',
+          description: text('Optional request timeout in milliseconds.', "可选请求超时（毫秒）。"),
+          minimum: 1000,
+          maximum: MAX_TIMEOUT_MS,
+        },
+        timeoutMs: {
+          type: 'integer',
+          description: text('Optional request timeout in milliseconds.', "可选请求超时（毫秒）。"),
+          minimum: 1000,
+          maximum: MAX_TIMEOUT_MS,
+        },
+        startup_timeout_ms: {
+          type: 'integer',
+          description: text('Optional stdio startup timeout in milliseconds.', "可选 stdio 启动超时（毫秒）。"),
+          minimum: 1000,
+          maximum: MAX_TIMEOUT_MS,
+        },
+        startupTimeoutMs: {
+          type: 'integer',
+          description: text('Optional stdio startup timeout in milliseconds.', "可选 stdio 启动超时（毫秒）。"),
+          minimum: 1000,
+          maximum: MAX_TIMEOUT_MS,
+        },
+        tool_timeout_ms: {
+          type: 'integer',
+          description: text('Optional per-tool timeout in milliseconds.', "可选每个工具调用的超时（毫秒）。"),
+          minimum: 1000,
+          maximum: MAX_TIMEOUT_MS,
+        },
+        toolTimeoutMs: {
+          type: 'integer',
+          description: text('Optional per-tool timeout in milliseconds.', "可选每个工具调用的超时（毫秒）。"),
+          minimum: 1000,
+          maximum: MAX_TIMEOUT_MS,
+        },
+        enabled: {
+          type: 'boolean',
+          description: text('Whether the server is enabled. Defaults to true.', "是否启用服务。默认 true。"),
+        },
+        allowed_tools: {
+          type: 'array',
+          items: { type: 'string' },
+          description: text('Optional allow-list of tool names exposed from this server.', "可选该服务公开的工具名称白名单。"),
+        },
+        allowedTools: {
+          type: 'array',
+          items: { type: 'string' },
+          description: text('Optional allow-list of tool names exposed from this server.', "可选该服务公开的工具名称白名单。"),
+        },
+        disabled_tools: {
+          type: 'array',
+          items: { type: 'string' },
+          description: text('Optional block-list of tool names hidden from this server.', "可选该服务隐藏的工具名称黑名单。"),
+        },
+        disabledTools: {
+          type: 'array',
+          items: { type: 'string' },
+          description: text('Optional block-list of tool names hidden from this server.', "可选该服务隐藏的工具名称黑名单。"),
+        },
       },
-      label: {
-        type: 'string',
-        description: 'Optional display name for the MCP server.',
-      },
-      description: {
-        type: 'string',
-        description: 'Optional description of the server.',
-      },
-      transport: {
-        type: 'string',
-        enum: ['stdio', 'streamableHttp'],
-        description: 'Transport type. Use stdio for command-based servers and streamableHttp for URL-based servers.',
-      },
-      command: {
-        type: 'string',
-        description: 'Command for stdio servers, such as npx, node, uvx, or an absolute executable path.',
-      },
-      args: {
-        type: 'array',
-        items: { type: 'string' },
-        description: 'Command arguments for stdio servers.',
-      },
-      cwd: {
-        type: 'string',
-        description: 'Optional working directory for stdio servers.',
-      },
-      url: {
-        type: 'string',
-        description: 'URL for streamable HTTP MCP servers.',
-      },
-      headers: {
-        type: 'object',
-        additionalProperties: { type: 'string' },
-        description: 'Optional HTTP headers for streamable HTTP servers.',
-      },
-      env_http_headers: {
-        type: 'object',
-        additionalProperties: { type: 'string' },
-        description: 'Optional HTTP header names mapped to environment variable names for streamable HTTP servers.',
-      },
-      envHttpHeaders: {
-        type: 'object',
-        additionalProperties: { type: 'string' },
-        description: 'Optional HTTP header names mapped to environment variable names for streamable HTTP servers.',
-      },
-      bearer_token_env_var: {
-        type: 'string',
-        description: 'Optional environment variable that contains the bearer token for streamable HTTP servers.',
-      },
-      bearerTokenEnvVar: {
-        type: 'string',
-        description: 'Optional environment variable that contains the bearer token for streamable HTTP servers.',
-      },
-      oauth_client_id: {
-        type: 'string',
-        description: 'Optional OAuth client ID for streamable HTTP MCP login.',
-      },
-      oauthClientId: {
-        type: 'string',
-        description: 'Optional OAuth client ID for streamable HTTP MCP login.',
-      },
-      oauth_resource: {
-        type: 'string',
-        description: 'Optional OAuth resource parameter for streamable HTTP MCP login.',
-      },
-      oauthResource: {
-        type: 'string',
-        description: 'Optional OAuth resource parameter for streamable HTTP MCP login.',
-      },
-      env: {
-        type: 'object',
-        additionalProperties: { type: 'string' },
-        description: 'Optional environment variables for stdio servers.',
-      },
-      timeout_ms: {
-        type: 'integer',
-        description: 'Optional request timeout in milliseconds.',
-        minimum: 1000,
-        maximum: MAX_TIMEOUT_MS,
-      },
-      timeoutMs: {
-        type: 'integer',
-        description: 'Optional request timeout in milliseconds.',
-        minimum: 1000,
-        maximum: MAX_TIMEOUT_MS,
-      },
-      startup_timeout_ms: {
-        type: 'integer',
-        description: 'Optional stdio startup timeout in milliseconds.',
-        minimum: 1000,
-        maximum: MAX_TIMEOUT_MS,
-      },
-      startupTimeoutMs: {
-        type: 'integer',
-        description: 'Optional stdio startup timeout in milliseconds.',
-        minimum: 1000,
-        maximum: MAX_TIMEOUT_MS,
-      },
-      tool_timeout_ms: {
-        type: 'integer',
-        description: 'Optional per-tool timeout in milliseconds.',
-        minimum: 1000,
-        maximum: MAX_TIMEOUT_MS,
-      },
-      toolTimeoutMs: {
-        type: 'integer',
-        description: 'Optional per-tool timeout in milliseconds.',
-        minimum: 1000,
-        maximum: MAX_TIMEOUT_MS,
-      },
-      enabled: {
-        type: 'boolean',
-        description: 'Whether the server is enabled. Defaults to true.',
-      },
-      allowed_tools: {
-        type: 'array',
-        items: { type: 'string' },
-        description: 'Optional allow-list of tool names exposed from this server.',
-      },
-      allowedTools: {
-        type: 'array',
-        items: { type: 'string' },
-        description: 'Optional allow-list of tool names exposed from this server.',
-      },
-      disabled_tools: {
-        type: 'array',
-        items: { type: 'string' },
-        description: 'Optional block-list of tool names hidden from this server.',
-      },
-      disabledTools: {
-        type: 'array',
-        items: { type: 'string' },
-        description: 'Optional block-list of tool names hidden from this server.',
-      },
+      required: ['key'],
     },
-    required: ['key'],
-  },
-};
+  };
+}
 
 export const configureMcpServerToolName = configureMcpToolName;
 
 export class McpManagementTools {
   constructor(private readonly mcpControl: McpControl) {}
 
-  listTools(): RuntimeToolDefinition[] {
-    return [configureMcpTool];
+  listTools(language?: RuntimeInterfaceLanguage): RuntimeToolDefinition[] {
+    return [configureMcpDefinition(language)];
   }
 
-  systemPrompt(): string {
+  systemPrompt(language?: RuntimeInterfaceLanguage): string {
+    const text = runtimeText(language);
     return [
-      'When the user asks to create, update, enable, disable, or configure a Setsuna Desktop MCP server from chat, use configure_mcp_server.',
-      'This tool writes the current desktop runtime MCP configuration used by the Capabilities page.',
-      'Do not write MCP JSON files directly.',
+      text('When the user asks to create, update, enable, disable, or configure a Setsuna Desktop MCP server from chat, use configure_mcp_server.', "用户通过对话要求创建、更新、启用、禁用或配置 Setsuna Desktop MCP 服务时，使用 configure_mcp_server。"),
+      text('This tool writes the current desktop runtime MCP configuration used by the Capabilities page.', "此工具写入能力管理页面使用的当前桌面运行时 MCP 配置。"),
+      text('Do not write MCP JSON files directly.', "不要直接写入 MCP JSON 文件。"),
     ].join('\n');
   }
 

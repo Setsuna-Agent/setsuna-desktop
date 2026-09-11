@@ -3,6 +3,8 @@ name: "Context7 文档查询"
 description: 查询第三方库和框架的最新、版本相关文档与代码示例。
 auto-activate:
   - Context7
+  - library documentation
+  - framework documentation
   - 第三方库文档
   - 第三方框架文档
   - 依赖库文档

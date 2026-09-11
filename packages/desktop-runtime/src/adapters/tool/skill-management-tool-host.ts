@@ -1,3 +1,4 @@
+import { runtimeText, type RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import type {
   RuntimeSkillDetail,
   RuntimeSkillInput,
@@ -24,99 +25,111 @@ const authenticateSkillMcpDependencyToolName = 'authenticate_skill_mcp_dependenc
 const READ_SKILL_RESULT_MAX_BYTES = 16 * 1024;
 const READ_SKILL_RESULT_CONTROL_RESERVE_BYTES = 512;
 
-const configureSkillTool: RuntimeToolDefinition = {
-  name: configureSkillToolName,
-  description: 'Create or update a local desktop Skill. Use this for chat-driven Skill creation instead of writing runtime files directly.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      id: {
-        type: 'string',
-        description: 'Optional stable skill id. If omitted, the id is generated from the name.',
-      },
-      name: {
-        type: 'string',
-        description: 'Display name for the Skill.',
-      },
-      description: {
-        type: 'string',
-        description: 'One-sentence description of when to use this Skill.',
-      },
-      content: {
-        type: 'string',
-        description: 'SKILL.md body content without YAML frontmatter.',
-      },
-      enabled: {
-        type: 'boolean',
-        description: 'Whether the Skill is enabled. Defaults to true.',
-      },
-      mcp_dependencies: {
-        type: 'array',
-        description: 'Optional MCP dependencies stored in agents/openai.yaml. Do not include tokens or plaintext secrets.',
-        items: {
-          type: 'object',
-          properties: {
-            type: { type: 'string', enum: ['mcp'] },
-            value: { type: 'string', description: 'Stable MCP server key.' },
-            transport: { type: 'string', enum: ['stdio', 'streamable_http'] },
-            label: { type: 'string' },
-            description: { type: 'string' },
-            url: { type: 'string' },
-            command: { type: 'string' },
-            args: { type: 'array', items: { type: 'string' } },
-            oauth_client_id: { type: 'string' },
-            oauth_resource: { type: 'string' },
+function configureSkillDefinition(language?: RuntimeInterfaceLanguage): RuntimeToolDefinition {
+  const text = runtimeText(language);
+  return {
+    name: configureSkillToolName,
+    description: text('Create or update a local desktop Skill. Use this for chat-driven Skill creation instead of writing runtime files directly.', "创建或更新本地桌面 Skill。通过对话创建 Skill 时使用此工具，不要直接写入运行时文件。"),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: text('Optional stable skill id. If omitted, the id is generated from the name.', "可选稳定的 Skill ID；省略时根据名称生成。"),
+        },
+        name: {
+          type: 'string',
+          description: text('Display name for the Skill.', "Skill 显示名称。"),
+        },
+        description: {
+          type: 'string',
+          description: text('One-sentence description of when to use this Skill.', "用一句话描述何时使用此 Skill。"),
+        },
+        content: {
+          type: 'string',
+          description: text('SKILL.md body content without YAML frontmatter.', "不含 YAML frontmatter 的 SKILL.md 正文。"),
+        },
+        enabled: {
+          type: 'boolean',
+          description: text('Whether the Skill is enabled. Defaults to true.', "是否启用 Skill。默认 true。"),
+        },
+        mcp_dependencies: {
+          type: 'array',
+          description: text('Optional MCP dependencies stored in agents/openai.yaml. Do not include tokens or plaintext secrets.', "可选存储于 agents/openai.yaml 的 MCP 依赖。不得包含 token 或明文秘密。"),
+          items: {
+            type: 'object',
+            properties: {
+              type: { type: 'string', enum: ['mcp'] },
+              value: { type: 'string', description: text('Stable MCP server key.', "稳定的 MCP 服务标识。") },
+              transport: { type: 'string', enum: ['stdio', 'streamable_http'] },
+              label: { type: 'string' },
+              description: { type: 'string' },
+              url: { type: 'string' },
+              command: { type: 'string' },
+              args: { type: 'array', items: { type: 'string' } },
+              oauth_client_id: { type: 'string' },
+              oauth_resource: { type: 'string' },
+            },
+            required: ['type', 'value', 'transport'],
+            additionalProperties: false,
           },
-          required: ['type', 'value', 'transport'],
-          additionalProperties: false,
         },
       },
+      required: ['name', 'content'],
     },
-    required: ['name', 'content'],
-  },
-};
+  };
+}
 
-const readSkillTool: RuntimeToolDefinition = {
-  name: readSkillToolName,
-  description: 'Read one bounded chunk of the current instructions for an enabled Skill. Continue from next_offset until complete before applying a Skill that was not injected for this turn, and restart at offset 0 when content_version changes.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      skill_id: { type: 'string', description: 'Stable id from the enabled Skills metadata catalog.' },
-      content_version: { type: 'string', description: 'Content version from the current Skills metadata catalog. Prevents mixing chunks from different revisions.' },
-      offset: { type: 'integer', minimum: 0, description: 'Optional UTF-16 character offset returned as next_offset by the previous chunk. Defaults to 0.' },
+function readSkillDefinition(language?: RuntimeInterfaceLanguage): RuntimeToolDefinition {
+  const text = runtimeText(language);
+  return {
+    name: readSkillToolName,
+    description: text('Read one bounded chunk of the current instructions for an enabled Skill. Continue from next_offset until complete before applying a Skill that was not injected for this turn, and restart at offset 0 when content_version changes.', "分块读取已启用 Skill 的当前指令。应用本轮未注入的 Skill 前，按 next_offset 读到 complete；content_version 变化时从 offset 0 重新读取。"),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        skill_id: { type: 'string', description: text('Stable id from the enabled Skills metadata catalog.', "已启用 Skill 元数据目录中的稳定 ID。") },
+        content_version: { type: 'string', description: text('Content version from the current Skills metadata catalog. Prevents mixing chunks from different revisions.', "当前 Skill 元数据目录中的内容版本，防止混用不同版本的分块。") },
+        offset: { type: 'integer', minimum: 0, description: text('Optional UTF-16 character offset returned as next_offset by the previous chunk. Defaults to 0.', "可选 UTF-16 字符偏移，由上一块的 next_offset 返回。默认 0。") },
+      },
+      required: ['skill_id', 'content_version'],
+      additionalProperties: false,
     },
-    required: ['skill_id', 'content_version'],
-    additionalProperties: false,
-  },
-};
+  };
+}
 
-const installSkillMcpDependenciesTool: RuntimeToolDefinition = {
-  name: installSkillMcpDependenciesToolName,
-  description: 'Install or enable the MCP servers declared by a local Skill agents/openai.yaml manifest.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      skill_id: { type: 'string', description: 'Skill id declaring the MCP dependencies.' },
+function installSkillMcpDependenciesDefinition(language?: RuntimeInterfaceLanguage): RuntimeToolDefinition {
+  const text = runtimeText(language);
+  return {
+    name: installSkillMcpDependenciesToolName,
+    description: text('Install or enable the MCP servers declared by a local Skill agents/openai.yaml manifest.', "安装或启用本地 Skill 的 agents/openai.yaml 声明的 MCP 服务。"),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        skill_id: { type: 'string', description: text('Skill id declaring the MCP dependencies.', "声明这些 MCP 依赖的 Skill ID。") },
+      },
+      required: ['skill_id'],
+      additionalProperties: false,
     },
-    required: ['skill_id'],
-    additionalProperties: false,
-  },
-};
+  };
+}
 
-const authenticateSkillMcpDependencyTool: RuntimeToolDefinition = {
-  name: authenticateSkillMcpDependencyToolName,
-  description: 'Start OAuth login for one installed MCP server declared by a Skill.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      skill_id: { type: 'string', description: 'Skill id declaring the MCP dependency.' },
-      server_key: { type: 'string', description: 'Declared MCP server key requiring authentication.' },
+function authenticateSkillMcpDependencyDefinition(language?: RuntimeInterfaceLanguage): RuntimeToolDefinition {
+  const text = runtimeText(language);
+  return {
+    name: authenticateSkillMcpDependencyToolName,
+    description: text('Start OAuth login for one installed MCP server declared by a Skill.', "为 Skill 声明且已安装的一个 MCP 服务启动 OAuth 登录。"),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        skill_id: { type: 'string', description: text('Skill id declaring the MCP dependency.', "声明该 MCP 依赖的 Skill ID。") },
+        server_key: { type: 'string', description: text('Declared MCP server key requiring authentication.', "声明中需要认证的 MCP 服务标识。") },
+      },
+      required: ['skill_id', 'server_key'],
+      additionalProperties: false,
     },
-    required: ['skill_id', 'server_key'],
-    additionalProperties: false,
-  },
-};
+  };
+}
 
 export class SkillManagementToolHost implements ToolHost {
   constructor(
@@ -126,32 +139,33 @@ export class SkillManagementToolHost implements ToolHost {
 
   async listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
     return [
-      readSkillTool,
-      configureSkillTool,
+      readSkillDefinition(context.interfaceLanguage),
+      configureSkillDefinition(context.interfaceLanguage),
       ...(this.dependencyManager && context.features?.skill_mcp_dependency_install !== false
-        ? [installSkillMcpDependenciesTool, authenticateSkillMcpDependencyTool]
+        ? [installSkillMcpDependenciesDefinition(context.interfaceLanguage), authenticateSkillMcpDependencyDefinition(context.interfaceLanguage)]
         : []),
     ];
   }
 
   systemPrompt(
-    _context: ToolExecutionContext,
+    context: ToolExecutionContext,
     request?: { tools: RuntimeToolDefinition[] },
   ): string | null {
+    const text = runtimeText(context.interfaceLanguage);
     const advertised = request ? new Set(request.tools.map((tool) => tool.name)) : null;
     const lines: string[] = [];
     if (toolIsAdvertised(advertised, readSkillToolName)) {
       lines.push(
-        'Every enabled Skill is advertised separately as routing metadata. Metadata visibility does not mean the full Skill instructions have been loaded.',
-        'When a request matches a Skill that was not injected for the current turn, call read_skill with its skill_id and current content_version. Read every chunk through complete=true before acting, and restart from offset 0 if the catalog version changes.',
+        text('Every enabled Skill is advertised separately as routing metadata. Metadata visibility does not mean the full Skill instructions have been loaded.', "所有已启用 Skill 都会单独公布路由元数据。能看到元数据不代表已加载完整指令。"),
+        text('When a request matches a Skill that was not injected for the current turn, call read_skill with its skill_id and current content_version. Read every chunk through complete=true before acting, and restart from offset 0 if the catalog version changes.', "请求匹配本轮未注入的 Skill 时，调用 read_skill，提供 skill_id 和当前 content_version。行动前读取所有分块直到 complete=true；目录版本变化后从 offset 0 重读。"),
       );
     }
     if (toolIsAdvertised(advertised, configureSkillToolName)) {
       lines.push(
-        'When the user asks to create, update, or save a Setsuna Desktop Skill from chat, use configure_skill.',
-        'Do not write directly into runtime user-skills directories.',
-        'Pass SKILL.md body content without YAML frontmatter; the runtime stores name and description metadata separately.',
-        'Pass optional mcp_dependencies for non-secret MCP configuration that should be written to agents/openai.yaml.',
+        text('When the user asks to create, update, or save a Setsuna Desktop Skill from chat, use configure_skill.', "用户通过对话要求创建、更新或保存 Setsuna Desktop Skill 时，使用 configure_skill。"),
+        text('Do not write directly into runtime user-skills directories.', "不要直接写入运行时的 user-skills 目录。"),
+        text('Pass SKILL.md body content without YAML frontmatter; the runtime stores name and description metadata separately.', "传入不含 YAML frontmatter 的 SKILL.md 正文；运行时会单独存储名称和描述元数据。"),
+        text('Pass optional mcp_dependencies for non-secret MCP configuration that should be written to agents/openai.yaml.', "需要将非秘密 MCP 配置写入 agents/openai.yaml 时，传入可选的 mcp_dependencies。"),
       );
     }
     const canInstall = toolIsAdvertised(advertised, installSkillMcpDependenciesToolName);
@@ -159,11 +173,11 @@ export class SkillManagementToolHost implements ToolHost {
     if (canInstall || canAuthenticate) {
       lines.push(
         [
-          'An injected Skill can declare MCP dependencies in agents/openai.yaml.',
-          ...(canInstall ? ['Use install_skill_mcp_dependencies when an injected dependency is missing or disabled.'] : []),
-          ...(canAuthenticate ? ['Use authenticate_skill_mcp_dependency when an injected dependency is authRequired.'] : []),
+          text('An injected Skill can declare MCP dependencies in agents/openai.yaml.', "注入的 Skill 可以在 agents/openai.yaml 中声明 MCP 依赖。"),
+          ...(canInstall ? [text('Use install_skill_mcp_dependencies when an injected dependency is missing or disabled.', "注入的依赖缺失或被禁用时，使用 install_skill_mcp_dependencies。")] : []),
+          ...(canAuthenticate ? [text('Use authenticate_skill_mcp_dependency when an injected dependency is authRequired.', "注入的依赖状态为 authRequired 时，使用 authenticate_skill_mcp_dependency。")] : []),
         ].join(' '),
-        'Advertised dependency actions require explicit user approval. Do not edit MCP config files directly.',
+        text('Advertised dependency actions require explicit user approval. Do not edit MCP config files directly.', "公布的依赖操作需要明确的用户审批。不要直接编辑 MCP 配置文件。"),
       );
     }
     return lines.join('\n') || null;

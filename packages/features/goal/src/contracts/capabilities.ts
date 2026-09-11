@@ -1,4 +1,5 @@
 import type {
+  RuntimeInterfaceLanguage,
   PendingStoredThreadEvent,
   RuntimeMessage,
   RuntimeQueuedTurnInput,
@@ -89,9 +90,9 @@ export interface GoalControl {
     parsedArguments: unknown,
     context: GoalToolExecutionContext,
   ): Promise<GoalToolExecutionResult>;
-  toolDefinitions(goal: Goal | null | undefined, completionPending?: boolean): RuntimeToolDefinition[];
+  toolDefinitions(goal: Goal | null | undefined, completionPending?: boolean, language?: RuntimeInterfaceLanguage): RuntimeToolDefinition[];
   isToolName(name: string): boolean;
-  continuationContextMessages(goal: Goal): RuntimeMessage[];
+  continuationContextMessages(goal: Goal, language?: RuntimeInterfaceLanguage): RuntimeMessage[];
 }
 
 export const goalControlCapability: CapabilityToken<GoalControl> = defineCapability({

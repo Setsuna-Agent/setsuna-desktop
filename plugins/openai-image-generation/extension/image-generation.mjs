@@ -41,7 +41,8 @@ export function imageGenerationRequest(value) {
   });
 }
 
-export function imageGenerationToolResult(value) {
+export function imageGenerationToolResult(value, language = 'en-US') {
+  const chinese = language === 'zh-CN';
   const result = objectRecord(value, 'The image generation bridge returned an invalid result.');
   const attachments = Array.isArray(result.attachments) ? result.attachments : [];
   if (!attachments.length) throw new Error('图片生成服务未返回可用的图片。');
@@ -55,17 +56,17 @@ export function imageGenerationToolResult(value) {
   const size = optionalString(result.size, 'size');
   return {
     content: [
-      `Generated ${attachments.length} image${attachments.length === 1 ? '' : 's'} successfully.`,
+      chinese ? `已成功生成 ${attachments.length} 张图片。` : `Generated ${attachments.length} image${attachments.length === 1 ? '' : 's'} successfully.`,
       ...(workspaceFiles.length
         ? [
-            'Workspace files ready for publish_artifact (use these exact paths):',
+            chinese ? '以下工作区文件可通过 publish_artifact 发布（使用这些准确路径）：' : 'Workspace files ready for publish_artifact (use these exact paths):',
             ...workspaceFiles.map((file) => `- ${file.path}`),
           ]
         : []),
-      ...(revisedPrompts.length ? [`Revised prompt: ${revisedPrompts.join('\n')}`] : []),
+      ...(revisedPrompts.length ? [chinese ? `调整后的提示词：${revisedPrompts.join('\n')}` : `Revised prompt: ${revisedPrompts.join('\n')}`] : []),
     ].join('\n'),
     attachments,
-    preview: `已生成 ${attachments.length} 张图片`,
+    preview: chinese ? `已生成 ${attachments.length} 张图片` : `Generated ${attachments.length} image${attachments.length === 1 ? '' : 's'}`,
     data: {
       resultKind: 'image-generation.result',
       resultMajor: 1,

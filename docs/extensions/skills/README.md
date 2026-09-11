@@ -15,6 +15,14 @@
 
 具体行为以各目录的 `SKILL.md` 为准。
 
+## 内置内容的语言
+
+`FileSkillRegistry` 按已保存的 `desktopSettings.interfaceLanguage` 加载内置内容。采样步骤可显式传入本步语言，让 Skill 目录与系统提示词使用同一份语言快照。优先读取同目录的 `SKILL.zh-CN.md` 或 `SKILL.en-US.md`，没有对应变体时读取 `SKILL.md`。每个内置 Skill 只维护原文和另一语言的变体；脚本和依赖共享同一目录。
+
+名称、描述、详情正文和模型注入使用同一份文档。语言变体的 frontmatter 名称优先于原始 `agents/openai.yaml` 的展示名；正文哈希会随翻译变化，已展开的 Skill 上下文因此可以重新注入。ID 和启用状态不随语言变化。
+
+用户 Skill、额外目录中的 Skill 和本地导入的插件保持原文。市场插件可提供同样的 Markdown 变体；用户编辑形成的独立 override 始终优先，并且不再套用内置翻译。新增语言文件时同时更新插件版本，旧安装副本通过既有市场更新流程取得完整资源。
+
 ## 三种 Skill 来源
 
 | Kind | 来源 | 正文是否可编辑 |

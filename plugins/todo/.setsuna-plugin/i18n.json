@@ -1,0 +1,22 @@
+{
+  "en-US": {
+    "任务清单": "Todo List",
+    "让模型在当前会话中添加、查看、完成和清空任务。": "Let the model add, list, complete, and clear tasks in the current conversation.",
+    "任务": "Tasks",
+    "状态": "State",
+    "Manage a conversation todo list: list, add, toggle, or clear tasks.": "Manage a conversation todo list: list, add, toggle, or clear tasks.",
+    "Manage a conversation todo list. Actions: list, add (text), toggle (id), clear.": "Manage a conversation todo list. Actions: list, add (text), toggle (id), clear.",
+    "Todo text; required when action is add.": "Todo text; required when action is add.",
+    "Todo id; required when action is toggle.": "Todo id; required when action is toggle."
+  },
+  "zh-CN": {
+    "任务清单": "任务清单",
+    "让模型在当前会话中添加、查看、完成和清空任务。": "让模型在当前会话中添加、查看、完成和清空任务。",
+    "任务": "任务",
+    "状态": "状态",
+    "Manage a conversation todo list: list, add, toggle, or clear tasks.": "管理当前对话的任务清单：查看、添加、切换完成状态或清空任务。",
+    "Manage a conversation todo list. Actions: list, add (text), toggle (id), clear.": "管理当前对话的任务清单。操作：list 查看、add 添加（text）、toggle 切换状态（id）、clear 清空。",
+    "Todo text; required when action is add.": "任务内容；action 为 add 时必填。",
+    "Todo id; required when action is toggle.": "任务 ID；action 为 toggle 时必填。"
+  }
+}

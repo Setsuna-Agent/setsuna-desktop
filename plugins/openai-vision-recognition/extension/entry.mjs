@@ -12,7 +12,7 @@ export default function activate(api) {
         throw new Error('The vision-recognition plugin requires the host-managed vision bridge.');
       }
       const result = await context.visionRecognition.analyze(visionRecognitionRequest(input));
-      return visionRecognitionToolResult(result);
+      return visionRecognitionToolResult(result, context.interfaceLanguage);
     },
   });
 }

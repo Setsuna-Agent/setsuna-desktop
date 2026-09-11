@@ -34,7 +34,7 @@ export class McpRuntimeToolServiceImpl implements McpRuntimeToolService {
   }
 
   async listTools(context: McpToolExecutionContext): Promise<RuntimeToolDefinition[]> {
-    const management = this.management.listTools();
+    const management = this.management.listTools(context.interfaceLanguage);
     const runtime = await this.runtime.listTools(context);
     return [...management, ...runtime];
   }
@@ -49,10 +49,10 @@ export class McpRuntimeToolServiceImpl implements McpRuntimeToolService {
       const hasManagement = request.tools.some((tool) => tool.name === 'configure_mcp_server');
       const runtimePrompt = this.runtime.systemPrompt(context, request);
       if (!hasManagement) return runtimePrompt;
-      if (!runtimePrompt) return this.managementPrompt();
-      return `${this.managementPrompt()}\n\n${runtimePrompt}`;
+      if (!runtimePrompt) return this.managementPrompt(context);
+      return `${this.managementPrompt(context)}\n\n${runtimePrompt}`;
     }
-    return `${this.managementPrompt()}\n\n${this.runtime.systemPrompt(context, undefined) ?? ''}`.trim() || null;
+    return `${this.managementPrompt(context)}\n\n${this.runtime.systemPrompt(context, undefined) ?? ''}`.trim() || null;
   }
 
   async externalContext(
@@ -94,7 +94,7 @@ export class McpRuntimeToolServiceImpl implements McpRuntimeToolService {
     return this.runtime.runTool(name, input, context);
   }
 
-  private managementPrompt(): string {
-    return this.management.systemPrompt();
+  private managementPrompt(context: McpToolExecutionContext): string {
+    return this.management.systemPrompt(context.interfaceLanguage);
   }
 }

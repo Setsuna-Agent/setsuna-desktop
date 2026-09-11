@@ -1,0 +1,24 @@
+{
+  "en-US": {
+    "结构化提问": "Structured Questions",
+    "让模型通过选项和自由输入向用户提出单个结构化问题。": "Let the model ask one structured question with choices and free-form input.",
+    "交互": "Interaction",
+    "工具": "Tools",
+    "Ask the user one structured question with choices and an optional free-form answer.": "Ask the user one structured question with choices and an optional free-form answer.",
+    "The question to ask the user.": "The question to ask the user.",
+    "Two to nineteen choices for the user.": "Two to nineteen choices for the user.",
+    "Short choice label.": "Short choice label.",
+    "Optional explanation of the choice.": "Optional explanation of the choice."
+  },
+  "zh-CN": {
+    "结构化提问": "结构化提问",
+    "让模型通过选项和自由输入向用户提出单个结构化问题。": "让模型通过选项和自由输入向用户提出单个结构化问题。",
+    "交互": "交互",
+    "工具": "工具",
+    "Ask the user one structured question with choices and an optional free-form answer.": "向用户提出一个结构化问题，提供选项并允许自由输入回答。",
+    "The question to ask the user.": "要向用户提出的问题。",
+    "Two to nineteen choices for the user.": "提供给用户的 2 至 19 个选项。",
+    "Short choice label.": "简短的选项标签。",
+    "Optional explanation of the choice.": "可选的选项说明。"
+  }
+}

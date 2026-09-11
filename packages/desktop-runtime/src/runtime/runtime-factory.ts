@@ -121,10 +121,13 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const memoryStore = new FileMemoryStore(runtimeDataDir, clock, ids);
   const builtinSkillsDir =
     options.builtinSkillsDir ?? process.env.SETSUNA_DESKTOP_BUILTIN_SKILLS_DIR ?? path.join(process.cwd(), 'skills');
-  const fileSkillRegistry = new FileSkillRegistry(builtinSkillsDir, runtimeDataDir);
-  const skillRegistry = new SkillMcpDependencyCoordinator(fileSkillRegistry, mcpStore, mcpControl);
   const builtinPluginsDir =
     options.builtinPluginsDir ?? process.env.SETSUNA_DESKTOP_BUILTIN_PLUGINS_DIR ?? path.join(process.cwd(), 'plugins');
+  const fileSkillRegistry = new FileSkillRegistry(builtinSkillsDir, runtimeDataDir, {
+    getLanguage: async () => (await configStore.getConfig()).desktopSettings?.interfaceLanguage ?? 'zh-CN',
+    bundledPluginsDir: builtinPluginsDir,
+  });
+  const skillRegistry = new SkillMcpDependencyCoordinator(fileSkillRegistry, mcpStore, mcpControl);
   const extensionState = new FileExtensionStateStore(runtimeDataDir);
   const pluginStore = new FilePluginBundleStore(
     runtimeDataDir,
@@ -160,6 +163,8 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   });
   const extensionUi = new ExtensionUiCoordinator(approvalGate, eventWriter, clock, ids);
   const extensionManager = new ExtensionManager(pluginStore, extensionState, extensionUi, {
+    bundledPluginsDir: builtinPluginsDir,
+    getLanguage: async () => (await configStore.getConfig()).desktopSettings?.interfaceLanguage ?? 'zh-CN',
     networkFetch: networkProxyFetch.forRoute(),
     ...(options.extensionWorkerEntryPath ? { workerEntryPath: options.extensionWorkerEntryPath } : {}),
     ...(options.extensionWorkerExecArgv ? { workerExecArgv: options.extensionWorkerExecArgv } : {}),

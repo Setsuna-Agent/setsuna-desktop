@@ -599,6 +599,7 @@ export class PersonalizationConfigStore extends TestConfigStore {
     super(testRuntimeConfig({
       globalPrompt: 'Prefer crisp context before the answer.',
       setsunaStyle: 'daily',
+      desktopSettings: { interfaceLanguage: 'en-US' },
     }), null, {
       ...DEFAULT_MEMORY_PREFERENCES,
       useMemories: false,
@@ -639,6 +640,7 @@ export class ContextWindowConfigStore extends TestConfigStore {
     super(
       testRuntimeConfig({
         providers: [provider],
+        desktopSettings: { interfaceLanguage: 'en-US' },
       }),
       { ...provider, apiKey: 'secret', activeModel: model },
     );

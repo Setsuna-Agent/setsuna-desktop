@@ -1,3 +1,4 @@
+import { runtimeText, type RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import {
   type ModelRequest,
   type RuntimeConfigState,
@@ -45,20 +46,23 @@ const READ_TOOL_RESULT_METADATA_RESERVE_BYTES = 512;
 export const READ_TOOL_RESULT_PAGE_BYTES = READ_TOOL_RESULT_OUTPUT_BYTES
   - READ_TOOL_RESULT_METADATA_RESERVE_BYTES;
 
-const READ_TOOL_RESULT_TOOL: RuntimeToolDefinition = {
-  name: READ_TOOL_RESULT_TOOL_NAME,
-  description: 'Read a truncated tool result stored under result_id. Each page returns up to 8k tokens; pass the returned offset as the next offset to continue reading.',
-  inputSchema: {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
-      result_id: { type: 'string', description: 'result_id from the truncation envelope of a tool result.' },
-      offset: { type: 'integer', minimum: 0, description: 'Byte offset to start reading from. Defaults to 0.' },
-      limit: { type: 'integer', minimum: 1, maximum: 32000, description: 'Requested content bytes for this page. The runtime reserves space for pagination metadata.' },
+function readToolResultDefinition(language?: RuntimeInterfaceLanguage): RuntimeToolDefinition {
+  const text = runtimeText(language);
+  return {
+    name: READ_TOOL_RESULT_TOOL_NAME,
+    description: text('Read a truncated tool result stored under result_id. Each page returns up to 8k tokens; pass the returned offset as the next offset to continue reading.', "读取按 result_id 保存的被截断工具结果。每页最多返回约 8k tokens；继续读取时把返回的 offset 作为下一次的 offset。"),
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        result_id: { type: 'string', description: text('result_id from the truncation envelope of a tool result.', "工具结果截断信息中的 result_id。") },
+        offset: { type: 'integer', minimum: 0, description: text('Byte offset to start reading from. Defaults to 0.', "读取的起始字节偏移。默认 0。") },
+        limit: { type: 'integer', minimum: 1, maximum: 32000, description: text('Requested content bytes for this page. The runtime reserves space for pagination metadata.', "本页请求的内容字节数；运行时会为分页元数据预留空间。") },
+      },
+      required: ['result_id'],
     },
-    required: ['result_id'],
-  },
-};
+  };
+}
 
 /** 未在 profile 声明 modelOutputTokenLimit 时的名称回退预算。 */
 const DEFAULT_BOUNDED_OUTPUT_TOOL_LIMITS = new Map<string, number>([
@@ -132,7 +136,7 @@ export class RuntimeToolRouter {
   private advertisedTools(): RuntimeToolDefinition[] {
     return [
       ...this.catalogTools,
-      READ_TOOL_RESULT_TOOL,
+      readToolResultDefinition(this.options.context.interfaceLanguage),
     ];
   }
 

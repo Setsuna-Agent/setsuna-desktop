@@ -1,4 +1,5 @@
 import type {
+  RuntimeInterfaceLanguage,
   RuntimeMcpServerInput,
   RuntimePluginInstallInput,
   RuntimePluginInstallResult,
@@ -49,10 +50,10 @@ import {
   normalizeResourceId,
   pathsOverlap,
   pluginHookDescriptor,
-  pluginItemFilePaths,
   pluginMcpServerDescriptor,
   pluginMcpServerUnmodified,
   publicPluginSummary,
+  pathIsInside,
   publicManifestExtension,
   readBundleFileSnapshot,
   readPluginFilePreview,
@@ -63,7 +64,9 @@ import {
   stagedPluginRecord,
   trustPluginHooks
 } from './file-plugin-bundle-model.js';
+import { decodePluginUiText, readManifestItemContent } from './file-plugin-item-content.js';
 import { sameLegacyMarketplaceSource, samePath } from './legacy-marketplace-source.js';
+import { installedPluginMessages, localizeBundledPlugin, localizedPluginMarkdownPath, pluginText, readBundledPluginMessages } from './bundled-plugin-localization.js';
 import { projectLegacyRootUiCards } from './legacy-plugin-ui-card-metadata.js';
 
 export class FilePluginBundleStore implements PluginBundleStore {
@@ -93,23 +96,25 @@ export class FilePluginBundleStore implements PluginBundleStore {
 
   async catalogRevision(): Promise<string> {
     const index = await this.readIndex();
-    return createHash('sha256').update(JSON.stringify(index)).digest('hex');
+    const language = (await this.configStore.getConfig()).desktopSettings?.interfaceLanguage ?? 'zh-CN';
+    return createHash('sha256').update(JSON.stringify({ index, language })).digest('hex');
   }
 
   async listPlugins(): Promise<RuntimePluginList> {
     await this.migrateConfiguredLegacyMarketplaceInstallations();
     const index = await this.readIndex();
+    const language = (await this.configStore.getConfig()).desktopSettings?.interfaceLanguage ?? 'zh-CN';
     return {
       plugins: await Promise.all(index.plugins.map(async (indexedPlugin) => {
         const plugin = await projectLegacyRootUiCards(indexedPlugin);
-        if (!plugin.extension) return publicPluginSummary(plugin);
+        if (!plugin.extension) return this.localizedSummary(plugin, language);
         const currentHash = await inspectBundleTree(plugin.installPath)
           .then((result) => result.bundleHash)
           .catch(() => '__invalid_bundle__');
-        return publicPluginSummary({
+        return this.localizedSummary({
           ...plugin,
           extension: { ...plugin.extension, bundleHash: currentHash },
-        });
+        }, language);
       })),
     };
   }
@@ -164,7 +169,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
     const sourcePath = await requiredBundleDirectory(input.path);
     const manifest = await readPluginManifest(sourcePath);
     await inspectBundleTree(sourcePath);
-    return {
+    const inspection: PluginBundleInspection = {
       id: manifest.id,
       name: manifest.name,
       ...(manifest.icon ? { icon: manifest.icon } : {}),
@@ -194,6 +199,10 @@ export class FilePluginBundleStore implements PluginBundleStore {
       ...(manifest.extension ? { extension: publicManifestExtension(manifest.extension) } : {}),
       sourcePath,
     };
+    const catalogRoot = this.bundledPluginsDir ? await realpath(this.bundledPluginsDir).catch(() => null) : null;
+    if (!catalogRoot || !pathIsInside(catalogRoot, sourcePath)) return inspection;
+    const language = (await this.configStore.getConfig()).desktopSettings?.interfaceLanguage ?? 'zh-CN';
+    return localizeBundledPlugin(inspection, await readBundledPluginMessages(sourcePath, language));
   }
 
   async installPlugin(
@@ -314,7 +323,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
       }
       await Promise.allSettled(mcpOwnership.map(({ key }) => this.mcpClient.invalidateServer(key)));
       return {
-        plugin: publicPluginSummary(record),
+        plugin: await this.localizedSummary(record),
         installedMcpServers,
         reusedMcpServers: mcpOwnership.filter((item) => !item.owned).map((item) => item.key),
       };
@@ -569,7 +578,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
             .map((key) => this.mcpClient.invalidateServer(key)),
         );
         return {
-          plugin: publicPluginSummary(record),
+          plugin: await this.localizedSummary(record),
           installedMcpServers,
           reusedMcpServers,
         };
@@ -738,11 +747,15 @@ export class FilePluginBundleStore implements PluginBundleStore {
     if (!plugin) throw new Error(`Plugin not found: ${pluginId}`);
     const resource = plugin.resources.find((item) => item.id === normalizeResourceId(resourceId));
     if (!resource) throw new Error(`Plugin resource not found: ${plugin.id}/${resourceId}`);
-    const file = await readPluginFilePreview(plugin.installPath, resource.path);
+    const language = plugin.installationSource === 'marketplace'
+      ? (await this.configStore.getConfig()).desktopSettings?.interfaceLanguage ?? 'zh-CN' : undefined;
+    const messages = language ? await installedPluginMessages(plugin, language, this.bundledPluginsDir) : {};
+    const relativePath = await localizedPluginMarkdownPath(plugin.installPath, resource.path, language);
+    const file = await readPluginFilePreview(plugin.installPath, relativePath);
     return {
       pluginId: plugin.id,
       resourceId: resource.id,
-      label: resource.label,
+      label: pluginText(messages, resource.label),
       ...file,
     };
   }
@@ -808,7 +821,9 @@ export class FilePluginBundleStore implements PluginBundleStore {
     if (!plugin) throw new Error(`Plugin not found: ${pluginId}`);
     const manifest = await readPluginManifest(await realpath(plugin.installPath));
     if (manifest.id !== plugin.id) throw new Error('Installed plugin manifest id does not match its index.');
-    return readManifestItemContent(manifest, kind, itemId);
+    const language = plugin.installationSource === 'marketplace'
+      ? (await this.configStore.getConfig()).desktopSettings?.interfaceLanguage ?? 'zh-CN' : undefined;
+    return readManifestItemContent(manifest, kind, itemId, language);
   }
 
   async readBundleItemContent(
@@ -819,22 +834,23 @@ export class FilePluginBundleStore implements PluginBundleStore {
     const sourcePath = await requiredBundleDirectory(input.path);
     const manifest = await readPluginManifest(sourcePath);
     await inspectBundleTree(sourcePath);
-    return readManifestItemContent(manifest, kind, itemId);
+    const catalogRoot = this.bundledPluginsDir ? await realpath(this.bundledPluginsDir).catch(() => null) : null;
+    const language = catalogRoot && pathIsInside(catalogRoot, sourcePath)
+      ? (await this.configStore.getConfig()).desktopSettings?.interfaceLanguage ?? 'zh-CN' : undefined;
+    return readManifestItemContent(manifest, kind, itemId, language);
   }
 
   private async readIndex(): Promise<PluginIndexFile> {
     const index = await readJsonFile<PluginIndexFile>(this.indexPath, { version: 1, plugins: [] });
     return { version: 1, plugins: Array.isArray(index.plugins) ? index.plugins : [] };
   }
-}
 
-function decodePluginUiText(content: Buffer, resourceId: string): string {
-  try {
-    return new TextDecoder('utf-8', { fatal: true }).decode(content);
-  } catch {
-    throw new Error(`Plugin UI resource must be UTF-8 text: ${resourceId}`);
+  private async localizedSummary(plugin: InstalledPluginRecord, language?: RuntimeInterfaceLanguage) {
+    language ??= (await this.configStore.getConfig()).desktopSettings?.interfaceLanguage ?? 'zh-CN';
+    return localizeBundledPlugin(publicPluginSummary(plugin), await installedPluginMessages(plugin, language, this.bundledPluginsDir));
   }
 }
+
 
 const MARKETPLACE_ONLY_EXTENSION_CAPABILITIES = new Set([
   'image-generation',
@@ -868,15 +884,4 @@ function strictPluginInstallPath(pluginsDir: string, pluginId: string): string {
     throw new Error(`Plugin install path must be inside the plugin directory: ${pluginId}`);
   }
   return installPath;
-}
-
-async function readManifestItemContent(
-  manifest: ParsedPluginManifest,
-  kind: RuntimePluginItemKind,
-  itemId: string,
-): Promise<RuntimePluginItemContent> {
-  const files = await Promise.all(
-    pluginItemFilePaths(manifest, kind, itemId).map((filePath) => readPluginFilePreview(manifest.sourcePath, filePath, true)),
-  );
-  return { pluginId: manifest.id, itemId, kind, files };
 }
