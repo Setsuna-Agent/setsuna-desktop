@@ -10,6 +10,10 @@ publish = false
 name = "setsuna-sandbox-win"
 path = "src/main.rs"
 
+[[test]]
+name = "background-process"
+path = "test/background-process.rs"
+
 [dependencies]
 anyhow = "1.0"
 base64 = "0.22"

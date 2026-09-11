@@ -12,7 +12,7 @@ import {
 } from 'react';
 import type { Translate } from '../../../shared/i18n/I18nProvider.js';
 import type { ChatContextTokenUsage } from './chatContextUsage.js';
-import { shouldShiftConversationOverviewContent } from './conversationOverviewLayout.js';
+import { conversationOverviewLayout, type ConversationOverviewLayout } from './conversationOverviewLayout.js';
 
 const scrollBottomThresholdPx = 56;
 const followScrollTimeConstantMs = 80;
@@ -261,19 +261,22 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
   };
 }
 
-export function useConversationOverviewContentShift(
+export function useConversationOverviewLayout(
   conversationRef: RefObject<HTMLElement | null>,
   contentNode: HTMLElement | null,
-): boolean {
-  const [needsContentShift, setNeedsContentShift] = useState(false);
+): ConversationOverviewLayout {
+  const [layout, setLayout] = useState<ConversationOverviewLayout>('hidden');
 
   useLayoutEffect(() => {
     const conversationNode = conversationRef.current;
-    if (!conversationNode || !contentNode || typeof window === 'undefined') return undefined;
+    if (!conversationNode || !contentNode || typeof window === 'undefined') {
+      setLayout('hidden');
+      return undefined;
+    }
 
     const sync = () => {
       // Match the panel's CSS-pixel dimensions even when the app is zoomed.
-      setNeedsContentShift(shouldShiftConversationOverviewContent({
+      setLayout(conversationOverviewLayout({
         conversationWidth: conversationNode.clientWidth,
         contentWidth: contentNode.offsetWidth,
       }));
@@ -290,7 +293,7 @@ export function useConversationOverviewContentShift(
     };
   }, [conversationRef, contentNode]);
 
-  return needsContentShift;
+  return layout;
 }
 
 export function conversationOverviewContextLabel(

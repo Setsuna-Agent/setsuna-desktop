@@ -489,6 +489,7 @@ export async function activateBuiltinRuntimeFeatures(
     host.bind({
       windowsSandbox: requiredCapability(windowsSandboxRuntimeServiceCapability),
     }, ({ windowsSandbox }) => runtime.backgroundShellProcesses.bindShellSandboxProvider({
+      backgroundCommand: (command) => windowsSandbox.backgroundCommand(command),
       capability: () => windowsSandbox.capability(),
       controlRoot: () => windowsSandbox.controlRoot(),
       networkEnvironment: () => runtime.networkProxyFetch.environmentForSandboxRoute(),

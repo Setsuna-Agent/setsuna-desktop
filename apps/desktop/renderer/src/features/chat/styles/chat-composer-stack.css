@@ -21,6 +21,5 @@
 }
 
 .chat-composer-stack + .chat-prompt {
-  position: relative;
   z-index: 1;
 }

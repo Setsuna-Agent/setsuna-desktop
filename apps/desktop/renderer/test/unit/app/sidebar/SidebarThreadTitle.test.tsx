@@ -89,7 +89,7 @@ function rowElement(title: string, onSelect = vi.fn()) {
   };
   return <SidebarThreadRow
     menuOpen={false} selected={false} thread={thread} variant="project"
-    onArchive={vi.fn()} onRename={vi.fn()} onSelect={onSelect} onToggleMenu={vi.fn()}
+    onArchive={vi.fn()} onRename={vi.fn()} onSelect={onSelect} onToggleMenu={vi.fn()} onTogglePin={vi.fn()}
   />;
 }
 

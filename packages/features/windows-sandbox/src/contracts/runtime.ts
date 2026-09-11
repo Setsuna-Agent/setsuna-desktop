@@ -32,6 +32,7 @@ export type WindowsSandboxCommandRequest = Readonly<{
 }>;
 
 export interface WindowsSandboxRuntimeService {
+  backgroundCommand(command: string): { command: string; args: string[] } | null;
   capability(): WindowsNativeSandboxCapability;
   controlRoot(): string;
   prepareEnvironment(environment: Record<string, string>): Readonly<{

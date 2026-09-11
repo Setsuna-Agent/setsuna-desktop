@@ -82,6 +82,10 @@ Updater 不再进入 App controller。Renderer composition 解析 Feature 提供
 
 Layout 只组合已经定义清楚的状态和 callback，不在 render 中发起 runtime 请求。
 
+`AppSidebarSurface` 通过 `sidebar/usePinnedThreads.ts` 保存本机置顶偏好（`setsuna-pinned-threads-v1`）。会话行的图钉将会话移入项目分组上方的 `PinnedThreadSection`，按最近置顶排序；取消置顶后按原排序回到项目或全局列表。置顶只改变侧栏投影，保留原始 `projectId`、项目会话总数和导航/归档使用的完整分组。已归档、删除或不在当前快照中的会话不会出现在置顶列表；加载期间不清除保存的 ID。
+
+置顶分组标题与项目分组一样支持折叠。置顶会话复用普通会话行的悬停、键盘聚焦和选中效果；图钉只在悬停或键盘聚焦时显示，以实心表示已置顶，不因置顶而常亮或高亮整行。
+
 `packages/features/runtime-activity/src/renderer/` 同时实现全局运行中心和当前对话的后台服务列表。全局入口位于侧栏开关旁且不显示计数角标；两个视图都每两秒通过 typed Feature operation 拉取各自的投影。Feature 自己拥有 DTO、聚合/按对话查询、终止操作、轮询、乐观移除、文案和样式；Core 继续拥有 turn、approval、thread 与后台进程生命周期。宿主 `composition/RuntimeActivityFeatureBoundary.tsx` 只注入标准按钮、i18n、项目名称和线程导航，layout 只持有开关状态与入口位置。
 
 ## Sidebar

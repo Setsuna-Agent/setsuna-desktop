@@ -5,7 +5,7 @@ import { clearTerminalWorkspaceRestoreBuffer } from '../../../composition/Termin
 import {
   readPreferredWorkspaceAppId,
   writePreferredWorkspaceAppId,
-} from '../../../composition/WorkspaceAppsFeatureBoundary.js';
+} from '../../../composition/workspace-apps-feature-adapter.js';
 import { useReviewFeatureState } from '../../../composition/review-feature-adapter.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import {
@@ -103,7 +103,6 @@ export function useDesktopWorkspacePanels({
   // These dispatchers are scoped to targetIdentity, so callbacks using them must
   // include them in their dependency list instead of treating them like useState setters.
   const [terminalSessionsByPanelId, setTerminalSessionsByPanelId] = useState<TerminalSessionsByPanelId>({});
-  const [workspaceAppMenuOpen, setWorkspaceAppMenuOpen] = useState(false);
   const [panelLauncherMenuOpen, setPanelLauncherMenuOpen] = useState(false);
   const [workspaceApps, setWorkspaceApps] = useState<DesktopWorkspaceApp[]>([]);
   const [selectedWorkspaceAppId, setSelectedWorkspaceAppId] = useState<string | null>(() => readPreferredWorkspaceAppId() || null);
@@ -166,7 +165,6 @@ export function useDesktopWorkspacePanels({
   }, [terminalProjectKey, terminalSessionsByPanelId]);
 
   const closeWorkspaceMenus = useCallback(() => {
-    setWorkspaceAppMenuOpen(false);
     setPanelLauncherMenuOpen(false);
   }, []);
 
@@ -517,6 +515,11 @@ export function useDesktopWorkspacePanels({
     [bottomPanelSlot, closeCommitMessageEditor, closeTerminalSessionsForPanel, setBottomPanelSlot, setSidePanelSlot, sidePanelSlot],
   );
 
+  const closeActiveSidePanel = useCallback(() => {
+    if (!sidePanelVisible || !sideActivePanel) return;
+    closeDesktopPanelItem('side', sideActivePanel.id);
+  }, [closeDesktopPanelItem, sideActivePanel, sidePanelVisible]);
+
   const closeDesktopPanelSlot = useCallback(
     (slot: DesktopPanelSlot) => {
       const slotState = slot === 'side' ? sidePanelSlot : bottomPanelSlot;
@@ -632,27 +635,19 @@ export function useDesktopWorkspacePanels({
     }
   }, [activeProject?.path, setError, t]);
 
-  const openSelectedWorkspaceApp = useCallback(async () => {
-    await openFileInWorkspaceApp(null);
-  }, [openFileInWorkspaceApp]);
-
-  const toggleWorkspaceAppMenu = useCallback(() => {
-    setPanelLauncherMenuOpen(false);
-    setWorkspaceAppMenuOpen((value) => !value);
-  }, []);
-
   const togglePanelLauncherMenu = useCallback(() => {
-    setWorkspaceAppMenuOpen(false);
     setPanelLauncherMenuOpen((value) => !value);
   }, []);
 
-  const selectWorkspaceApp = useCallback(
-    (app: DesktopWorkspaceApp) => {
-      setSelectedWorkspaceAppId(app.id);
-      writePreferredWorkspaceAppId(app.id);
+  const openWorkspaceInApp = useCallback(
+    async (appId: string) => {
+      if (!activeProject?.path || !workspaceApps.some((app) => app.id === appId)) return;
+      setSelectedWorkspaceAppId(appId);
+      writePreferredWorkspaceAppId(appId);
       closeWorkspaceMenus();
+      await openFileWithWorkspaceApp(appId);
     },
-    [closeWorkspaceMenus],
+    [activeProject?.path, closeWorkspaceMenus, openFileWithWorkspaceApp, workspaceApps],
   );
 
   return useMemo(
@@ -666,6 +661,7 @@ export function useDesktopWorkspacePanels({
       bottomTerminalPanelOpen,
       browserPanelInstances,
       claimForThread,
+      closeActiveSidePanel,
       closeDesktopPanelItem,
       closeDesktopPanelSlot,
       closeWorkspaceMenus,
@@ -681,7 +677,7 @@ export function useDesktopWorkspacePanels({
       openFilePanel,
       openSubagentPanel,
       openWorkspaceDirectory,
-      openSelectedWorkspaceApp,
+      openWorkspaceInApp,
       panelLauncherTypes,
       panelLauncherMenuOpen,
       resetNewThreadPanelSession,
@@ -691,7 +687,6 @@ export function useDesktopWorkspacePanels({
       reviewState,
       revealWorkspaceFile,
       reorderDesktopPanel,
-      selectWorkspaceApp,
       selectedWorkspaceApp,
       selectReviewBaseRef,
       setReviewSource,
@@ -704,10 +699,8 @@ export function useDesktopWorkspacePanels({
       toggleBottomTerminal,
       togglePanelLauncherMenu,
       toggleSidePanel,
-      toggleWorkspaceAppMenu,
       updateBrowserPanel,
       updateDesktopPanel,
-      workspaceAppMenuOpen,
       workspaceApps,
     }),
     [
@@ -720,6 +713,7 @@ export function useDesktopWorkspacePanels({
       bottomTerminalPanelOpen,
       browserPanelInstances,
       claimForThread,
+      closeActiveSidePanel,
       closeDesktopPanelItem,
       closeDesktopPanelSlot,
       closeWorkspaceMenus,
@@ -735,7 +729,7 @@ export function useDesktopWorkspacePanels({
       openFilePanel,
       openSubagentPanel,
       openWorkspaceDirectory,
-      openSelectedWorkspaceApp,
+      openWorkspaceInApp,
       panelLauncherTypes,
       panelLauncherMenuOpen,
       resetNewThreadPanelSession,
@@ -745,7 +739,6 @@ export function useDesktopWorkspacePanels({
       reviewState,
       revealWorkspaceFile,
       reorderDesktopPanel,
-      selectWorkspaceApp,
       selectedWorkspaceApp,
       selectReviewBaseRef,
       setReviewSource,
@@ -758,10 +751,8 @@ export function useDesktopWorkspacePanels({
       toggleBottomTerminal,
       togglePanelLauncherMenu,
       toggleSidePanel,
-      toggleWorkspaceAppMenu,
       updateBrowserPanel,
       updateDesktopPanel,
-      workspaceAppMenuOpen,
       workspaceApps,
     ],
   );

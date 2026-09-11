@@ -5,12 +5,4 @@ export {
   writePreferredWorkspaceAppId,
 } from './preference.js';
 export { WorkspaceAppGlyph } from './WorkspaceAppGlyph.js';
-export {
-  WorkspaceAppLauncher,
-  workspaceAppLauncherMenuPosition,
-} from './WorkspaceAppLauncher.js';
-export {
-  WorkspaceAppsTopbarAction,
-  WorkspaceAppsTopbarHostProvider,
-  type WorkspaceAppsTopbarHost,
-} from './WorkspaceAppsTopbarAction.js';
+export { workspaceOpenWithMenu } from './workspaceOpenWithMenu.js';

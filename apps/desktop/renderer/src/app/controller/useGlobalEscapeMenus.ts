@@ -6,17 +6,15 @@ export function useGlobalEscapeMenus({
   panelLauncherMenuOpen,
   projectActionMenuId,
   threadActionMenuId,
-  workspaceAppMenuOpen,
 }: {
   closeNavigationMenus: () => void;
   closeWorkspaceMenus: () => void;
   panelLauncherMenuOpen: boolean;
   projectActionMenuId: string | null;
   threadActionMenuId: string | null;
-  workspaceAppMenuOpen: boolean;
 }) {
   useEffect(() => {
-    if (!projectActionMenuId && !threadActionMenuId && !workspaceAppMenuOpen && !panelLauncherMenuOpen) return undefined;
+    if (!projectActionMenuId && !threadActionMenuId && !panelLauncherMenuOpen) return undefined;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       closeNavigationMenus();
@@ -24,5 +22,5 @@ export function useGlobalEscapeMenus({
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [closeNavigationMenus, closeWorkspaceMenus, panelLauncherMenuOpen, projectActionMenuId, threadActionMenuId, workspaceAppMenuOpen]);
+  }, [closeNavigationMenus, closeWorkspaceMenus, panelLauncherMenuOpen, projectActionMenuId, threadActionMenuId]);
 }

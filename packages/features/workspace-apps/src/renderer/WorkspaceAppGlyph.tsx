@@ -8,7 +8,7 @@ export function WorkspaceAppGlyph({ app }: Readonly<{ app: DesktopWorkspaceApp |
   const iconAsset = workspaceAppIconAssets[icon];
   return (
     <span
-      className={`desktop-workspace-launcher__glyph desktop-workspace-launcher__glyph--${icon} ${iconAsset?.monochrome ? 'desktop-workspace-launcher__glyph--monochrome' : ''}`}
+      className={`workspace-app-glyph workspace-app-glyph--${icon} ${iconAsset?.monochrome ? 'workspace-app-glyph--monochrome' : ''}`}
       aria-hidden="true"
     >
       {iconAsset ? <img src={iconAsset.src} alt="" draggable={false} /> : workspaceAppSystemIcon(icon)}

@@ -70,6 +70,7 @@ describe('SidebarThreadList', () => {
       onRename: () => undefined,
       onSelect: () => undefined,
       onToggleMenu: () => undefined,
+      onTogglePin: () => undefined,
     }));
 
     expect(html.indexOf('conversation-3')).toBeLessThan(html.indexOf('conversation-2'));
@@ -92,6 +93,7 @@ function renderThreadList(
     onRename: () => undefined,
     onSelect: () => undefined,
     onToggleMenu: () => undefined,
+    onTogglePin: () => undefined,
   }));
 }
 

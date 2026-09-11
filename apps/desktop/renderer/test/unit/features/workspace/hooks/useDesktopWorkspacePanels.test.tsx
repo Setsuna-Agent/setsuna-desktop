@@ -4,6 +4,7 @@ import { composeRendererMessages } from '@setsuna-desktop/feature-core/renderer'
 import type { DesktopReviewBridge, DesktopReviewState } from '@setsuna-desktop/feature-review/contracts';
 import { reviewRendererFeature } from '@setsuna-desktop/feature-review/renderer';
 import { WorkspaceGitCommitProvider, useWorkspaceGitCommitDialog } from '@setsuna-desktop/feature-review/renderer/git';
+import { DESKTOP_WORKSPACE_APP_STORAGE_KEY } from '@setsuna-desktop/feature-workspace-apps/renderer';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import type { PropsWithChildren } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -18,6 +19,7 @@ const messageCatalog = composeRendererMessages(hostMessages, [{ module: reviewRe
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  localStorage.removeItem(DESKTOP_WORKSPACE_APP_STORAGE_KEY);
   Object.defineProperty(window, 'setsunaDesktop', { configurable: true, value: undefined });
 });
 
@@ -77,6 +79,36 @@ it.each(['side', 'bottom'] as const)('cancels amend in the %s slot when resettin
   expect(setError).not.toHaveBeenCalled();
 });
 
+it('opens the selected app at the current conversation workspace and remembers the choice', async () => {
+  const workspace = { id: 'worktree-a', path: '/repo/.worktrees/a', name: 'Repository', createdAt: '', updatedAt: '' };
+  const apps = [{ id: 'vscode', label: 'VS Code', icon: 'vscode' }, { id: 'cursor', label: 'Cursor', icon: 'cursor' }];
+  const open = vi.fn().mockResolvedValue(true);
+  const list = vi.fn().mockResolvedValue(apps);
+  Object.defineProperty(window, 'setsunaDesktop', {
+    configurable: true,
+    value: { desktop: { platform: 'win32' }, workspaceApps: { list, open } },
+  });
+  const view = renderHook(({ activeProject }) => useDesktopWorkspacePanels({
+    activeProject, activeView: 'chat', conversationDebugEnabled: false,
+    targetIdentity: `new-thread-slot:${activeProject.id}`, workspaceStatus: 'ready', setError: vi.fn(),
+  }), {
+    initialProps: { activeProject: workspace },
+    wrapper: ({ children }) => <I18nProvider initialLocale="zh-CN" messageCatalog={messageCatalog}>
+      <ToastProvider><ReviewFeatureHostBoundary>{children}</ReviewFeatureHostBoundary></ToastProvider>
+    </I18nProvider>,
+  });
+  await waitFor(() => expect(view.result.current.workspaceApps).toHaveLength(2));
+  await act(async () => view.result.current.openWorkspaceInApp('cursor'));
+  expect(open).toHaveBeenCalledExactlyOnceWith(workspace.path, 'cursor', null, null);
+  expect(view.result.current.selectedWorkspaceApp?.id).toBe('cursor');
+  expect(localStorage.getItem(DESKTOP_WORKSPACE_APP_STORAGE_KEY)).toBe('cursor');
+
+  view.rerender({ activeProject: { ...workspace, id: 'worktree-b', path: '/repo/.worktrees/b' } });
+  await waitFor(() => expect(list).toHaveBeenLastCalledWith('/repo/.worktrees/b'));
+  await act(async () => view.result.current.openWorkspaceInApp('vscode'));
+  expect(open).toHaveBeenLastCalledWith('/repo/.worktrees/b', 'vscode', null, null);
+});
+
 it('updates the shared panel launcher when Git repository detection changes', async () => {
   const project = { id: 'launcher-project', path: '/launcher-repo', name: 'Repository', createdAt: '', updatedAt: '' };
   const state: DesktopReviewState = {
@@ -113,6 +145,45 @@ it('updates the shared panel launcher when Git repository detection changes', as
   getState.mockResolvedValue(state);
   await act(async () => { await view.result.current.loadReviewState(); });
   expect(view.result.current.panelLauncherTypes).toContain('changes');
+});
+
+it('closes only the visible active side tab, leaving bottom and collapsed tabs intact', () => {
+  const view = renderHook(({ activeView }) => useDesktopWorkspacePanels({
+    activeProject: null, activeView, conversationDebugEnabled: false,
+    targetIdentity: 'new-thread-slot:global', workspaceStatus: 'ready', setError: vi.fn(),
+  }), {
+    initialProps: { activeView: 'chat' },
+    wrapper: ({ children }) => <I18nProvider initialLocale="zh-CN" messageCatalog={messageCatalog}>
+      <ToastProvider><ReviewFeatureHostBoundary>{children}</ReviewFeatureHostBoundary></ToastProvider>
+    </I18nProvider>,
+  });
+
+  act(() => view.result.current.openDesktopPanel('side', 'chat'));
+  const firstTabId = view.result.current.sideActivePanel!.id;
+  act(() => view.result.current.openDesktopPanel('side', 'chat'));
+  const secondTabId = view.result.current.sideActivePanel!.id;
+  act(() => view.result.current.openDesktopPanel('bottom', 'chat'));
+  const bottomTabs = view.result.current.bottomPanelSlot;
+
+  act(() => view.result.current.closeActiveSidePanel());
+  expect(view.result.current.sidePanelSlot.panels.map((panel) => panel.id)).not.toContain(secondTabId);
+  expect(view.result.current.sideActivePanel?.id).toBe(firstTabId);
+  expect(view.result.current.bottomPanelSlot).toEqual(bottomTabs);
+
+  act(() => view.result.current.toggleSidePanel());
+  act(() => view.result.current.closeActiveSidePanel());
+  expect(view.result.current.sideActivePanel?.id).toBe(firstTabId);
+  act(() => view.result.current.toggleSidePanel());
+
+  view.rerender({ activeView: 'settings' });
+  act(() => view.result.current.closeActiveSidePanel());
+  expect(view.result.current.sideActivePanel?.id).toBe(firstTabId);
+  view.rerender({ activeView: 'chat' });
+
+  act(() => view.result.current.closeActiveSidePanel());
+  expect(view.result.current.sideActivePanel).toBeNull();
+  act(() => view.result.current.closeActiveSidePanel());
+  expect(view.result.current.bottomPanelSlot).toEqual(bottomTabs);
 });
 
 describe('useSidePanelTransition', () => {

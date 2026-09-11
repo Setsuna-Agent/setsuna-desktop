@@ -39,24 +39,24 @@
 ### `apps/desktop/main/`
 
 ```text
-apps/desktop/main/ — 0 direct / 75 total files
-├── src/ — 2 direct / 46 total files
+apps/desktop/main/ — 0 direct / 77 total files
+├── src/ — 2 direct / 47 total files
 │   ├── composition/ — 3 direct / 3 total files
 │   ├── data-root/ — 14 direct / 14 total files
 │   ├── i18n/ — 1 direct / 1 total files
 │   ├── ipc/ — 5 direct / 5 total files
 │   ├── runtime/ — 8 direct / 8 total files
 │   ├── security/ — 2 direct / 2 total files
-│   ├── window/ — 7 direct / 9 total files
+│   ├── window/ — 8 direct / 10 total files
 │   │   └── splash/ — 2 direct / 2 total files
 │   └── workspace/ — 2 direct / 2 total files
-└── test/ — 29 files
+└── test/ — 30 files
     ├── support/ — 2 direct / 2 total files
-    └── unit/ — 1 direct / 27 total files
+    └── unit/ — 1 direct / 28 total files
         ├── data-root/ — 8 direct / 8 total files
         ├── runtime/ — 7 direct / 7 total files
         ├── security/ — 2 direct / 2 total files
-        ├── window/ — 5 direct / 7 total files
+        ├── window/ — 6 direct / 8 total files
         │   └── splash/ — 2 direct / 2 total files
         └── workspace/ — 2 direct / 2 total files
 ```
@@ -72,13 +72,13 @@ apps/desktop/preload/ — 0 direct / 2 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 587 total files
-├── src/ — 2 direct / 416 total files
-│   ├── app/ — 3 direct / 51 total files
+apps/desktop/renderer/ — 0 direct / 589 total files
+├── src/ — 2 direct / 418 total files
+│   ├── app/ — 3 direct / 53 total files
 │   │   ├── controller/ — 6 direct / 6 total files
 │   │   ├── layout/ — 23 direct / 23 total files
 │   │   ├── providers/ — 2 direct / 2 total files
-│   │   ├── sidebar/ — 12 direct / 12 total files
+│   │   ├── sidebar/ — 14 direct / 14 total files
 │   │   └── styles/ — 5 direct / 5 total files
 │   ├── composition/ — 32 direct / 33 total files
 │   │   └── renderer-plugins/ — 1 direct / 1 total files
@@ -213,7 +213,7 @@ packages/renderer-ui/ — 3 direct / 32 total files
 ### `packages/features/`
 
 ```text
-packages/features/ — 0 direct / 963 total files
+packages/features/ — 0 direct / 960 total files
 ├── approval-review/ — 2 direct / 20 total files
 │   ├── src/ — 17 files
 │   │   ├── contracts/ — 5 direct / 5 total files
@@ -440,16 +440,16 @@ packages/features/ — 0 direct / 963 total files
 │       ├── main/ — 4 direct / 4 total files
 │       ├── renderer/ — 1 direct / 1 total files
 │       └── runtime/ — 1 direct / 1 total files
-├── workspace-apps/ — 2 direct / 46 total files
-│   ├── src/ — 40 files
+├── workspace-apps/ — 2 direct / 43 total files
+│   ├── src/ — 38 files
 │   │   ├── contracts/ — 3 direct / 3 total files
 │   │   ├── main/ — 4 direct / 4 total files
 │   │   ├── preload/ — 2 direct / 2 total files
-│   │   └── renderer/ — 10 direct / 31 total files
+│   │   └── renderer/ — 8 direct / 29 total files
 │   │       └── assets/ — 21 direct / 21 total files
-│   └── test/ — 4 files
+│   └── test/ — 3 files
 │       ├── main/ — 2 direct / 2 total files
-│       └── renderer/ — 2 direct / 2 total files
+│       └── renderer/ — 1 direct / 1 total files
 └── workspace-dependencies/ — 2 direct / 26 total files
     ├── src/ — 21 files
     │   ├── contracts/ — 6 direct / 6 total files

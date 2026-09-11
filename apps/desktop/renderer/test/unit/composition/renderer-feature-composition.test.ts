@@ -61,7 +61,6 @@ describe('renderer feature composition', () => {
       activeEntryIds: ['goal.composer-status'],
     });
     expect(findSlot(inspection.roots, 'renderer.shell.topbar.action')?.activeEntryIds).toEqual([
-      'workspace-apps.launcher',
       'updater.ready-action',
     ]);
     expect(findSlot(inspection.roots, 'renderer.workspace.panel')?.activeEntryIds).toEqual(

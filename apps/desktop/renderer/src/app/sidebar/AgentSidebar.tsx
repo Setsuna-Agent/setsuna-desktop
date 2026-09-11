@@ -28,6 +28,7 @@ import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
 import { SidebarFloatingMenu } from './SidebarFloatingMenu.js';
 import { SidebarProjectHoverCard } from './SidebarProjectHoverCard.js';
 import { SidebarThreadList } from './SidebarThreadList.js';
+import { PinnedThreadSection } from './PinnedThreadSection.js';
 import { SidebarUserMenu } from './SidebarUserMenu.js';
 
 const isProjectActionTarget = (target: EventTarget | null) =>
@@ -42,6 +43,8 @@ export function AgentSidebar({
   collapsedProjectIds,
   forceExpandedProjectIds,
   globalThreads,
+  pinnedThreadIds,
+  pinnedThreads,
   projectActionMenuId,
   pluginEntries,
   projects,
@@ -75,6 +78,7 @@ export function AgentSidebar({
   onToggleSearch,
   onToggleSessionsCollapsed,
   onToggleThreadActions,
+  onToggleThreadPin,
   onRenameThread,
   runtimeActivityTriggerRef,
 }: {
@@ -86,6 +90,8 @@ export function AgentSidebar({
   collapsedProjectIds: Set<string>;
   forceExpandedProjectIds: Set<string>;
   globalThreads: RuntimeThreadSummary[];
+  pinnedThreadIds: ReadonlySet<string>;
+  pinnedThreads: RuntimeThreadSummary[];
   projectActionMenuId: string | null;
   pluginEntries?: ReactNode;
   projects: WorkspaceProject[];
@@ -119,6 +125,7 @@ export function AgentSidebar({
   onToggleSearch: () => void;
   onToggleSessionsCollapsed: () => void;
   onToggleThreadActions: (threadId: string) => void;
+  onToggleThreadPin: (thread: RuntimeThreadSummary) => void;
   onRenameThread: (thread: RuntimeThreadSummary) => void;
   runtimeActivityTriggerRef: RefObject<HTMLButtonElement>;
 }) {
@@ -150,7 +157,20 @@ export function AgentSidebar({
         <nav className="desktop-agent-sidebar__plugin-entries" aria-label={t('sidebar.pluginFeatures')}>
           {pluginEntries}
         </nav>
+        <PinnedThreadSection
+          menuThreadId={threadActionMenuId}
+          projects={projects}
+          runningThreadId={runningThreadId}
+          selectedThreadId={activeThreadId}
+          threads={pinnedThreads}
+          onArchive={onArchiveThread}
+          onRename={onRenameThread}
+          onSelect={onSelectThread}
+          onToggleMenu={onToggleThreadActions}
+          onTogglePin={onToggleThreadPin}
+        />
         <ProjectSection
+          pinnedThreadIds={pinnedThreadIds}
           activeProjectId={activeProjectId}
           activeThreadId={activeThreadId}
           runningThreadId={runningThreadId}
@@ -173,8 +193,10 @@ export function AgentSidebar({
           onToggleProjectActions={onToggleProjectActions}
           onToggleProjectsCollapsed={onToggleProjectsCollapsed}
           onToggleThreadActions={onToggleThreadActions}
+          onToggleThreadPin={onToggleThreadPin}
         />
         <GlobalThreadSection
+          pinnedThreadIds={pinnedThreadIds}
           activeProjectId={activeProjectId}
           activeThreadId={activeThreadId}
           runningThreadId={runningThreadId}
@@ -188,6 +210,7 @@ export function AgentSidebar({
           onSelectThread={onSelectThread}
           onToggleSessionsCollapsed={onToggleSessionsCollapsed}
           onToggleThreadActions={onToggleThreadActions}
+          onToggleThreadPin={onToggleThreadPin}
         />
       </div>
       <SidebarUserMenu
@@ -221,6 +244,7 @@ export function AgentSidebar({
 }
 
 function ProjectSection({
+  pinnedThreadIds,
   activeProjectId,
   activeThreadId,
   runningThreadId,
@@ -243,7 +267,9 @@ function ProjectSection({
   onToggleProjectActions,
   onToggleProjectsCollapsed,
   onToggleThreadActions,
+  onToggleThreadPin,
 }: {
+  pinnedThreadIds: ReadonlySet<string>;
   activeProjectId: string | null;
   activeThreadId?: string | null;
   runningThreadId?: string | null;
@@ -266,6 +292,7 @@ function ProjectSection({
   onToggleProjectActions: (projectId: string) => void;
   onToggleProjectsCollapsed: () => void;
   onToggleThreadActions: (threadId: string) => void;
+  onToggleThreadPin: (thread: RuntimeThreadSummary) => void;
 }) {
   const { t } = useI18n();
 
@@ -295,6 +322,7 @@ function ProjectSection({
             {projects.length ? (
               projects.map((project) => {
                 const projectThreads = threadsByProjectId.get(project.id) ?? [];
+                const unpinnedThreads = projectThreads.filter((thread) => !pinnedThreadIds.has(thread.id));
                 const isActiveProject = project.id === activeProjectId;
                 const isForceExpandedProject = forceExpandedProjectIds.has(project.id);
                 const isProjectCollapsed = collapsedProjectIds.has(project.id) && !isForceExpandedProject;
@@ -353,12 +381,13 @@ function ProjectSection({
                           projectName={project.name}
                           runningThreadId={runningThreadId}
                           selectedThreadId={isActiveProject ? activeThreadId : null}
-                          threads={projectThreads}
+                          threads={unpinnedThreads}
                           variant="project"
                           onArchive={onArchiveThread}
                           onRename={onRenameThread}
                           onSelect={onSelectThread}
                           onToggleMenu={onToggleThreadActions}
+                          onTogglePin={onToggleThreadPin}
                         />
                       ) : (
                         <div className="desktop-agent-sidebar__empty-session">{t('sidebar.emptyChats')}</div>
@@ -492,6 +521,7 @@ function ProjectActionMenu({
 }
 
 function GlobalThreadSection({
+  pinnedThreadIds,
   activeProjectId,
   activeThreadId,
   runningThreadId,
@@ -505,7 +535,9 @@ function GlobalThreadSection({
   onSelectThread,
   onToggleSessionsCollapsed,
   onToggleThreadActions,
+  onToggleThreadPin,
 }: {
+  pinnedThreadIds: ReadonlySet<string>;
   activeProjectId: string | null;
   activeThreadId?: string | null;
   runningThreadId?: string | null;
@@ -519,6 +551,7 @@ function GlobalThreadSection({
   onSelectThread: (threadId: string) => void;
   onToggleSessionsCollapsed: () => void;
   onToggleThreadActions: (threadId: string) => void;
+  onToggleThreadPin: (thread: RuntimeThreadSummary) => void;
 }) {
   const { t } = useI18n();
 
@@ -545,12 +578,13 @@ function GlobalThreadSection({
             menuThreadId={threadActionMenuId}
             runningThreadId={runningThreadId}
             selectedThreadId={!activeProjectId ? activeThreadId : null}
-            threads={globalThreads}
+            threads={globalThreads.filter((thread) => !pinnedThreadIds.has(thread.id))}
             variant="global"
             onArchive={onArchiveThread}
             onRename={onRenameThread}
             onSelect={onSelectThread}
             onToggleMenu={onToggleThreadActions}
+            onTogglePin={onToggleThreadPin}
           />
         ) : (
           <div className="app-sidebar__list">

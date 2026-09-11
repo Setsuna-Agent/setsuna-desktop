@@ -4,6 +4,7 @@ import { shellSidebarPluginEntrySlot } from '@setsuna-desktop/renderer-contracts
 import { RendererOwnedListSlot } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
 import type { DesktopNavigationState } from '../controller/useDesktopNavigation.js';
 import { AgentSidebar } from '../sidebar/AgentSidebar.js';
+import { usePinnedThreads } from '../sidebar/usePinnedThreads.js';
 import type { MainView } from '../types.js';
 
 export function AppSidebarSurface({
@@ -53,6 +54,7 @@ export function AppSidebarSurface({
   onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   runtimeActivityTriggerRef: RefObject<HTMLButtonElement>;
 }) {
+  const { pinnedThreadIds, pinnedThreads, togglePinnedThread } = usePinnedThreads(projects, threadsByProjectId, globalThreads);
   if (activeView === 'settings') return null;
 
   return (
@@ -65,6 +67,9 @@ export function AppSidebarSurface({
       collapsedProjectIds={navigation.collapsedProjectIds}
       forceExpandedProjectIds={navigation.forceExpandedProjectIds}
       globalThreads={globalThreads}
+      pinnedThreadIds={pinnedThreadIds}
+      pinnedThreads={pinnedThreads}
+      onToggleThreadPin={togglePinnedThread}
       projectActionMenuId={navigation.projectActionMenuId}
       pluginEntries={(
         <RendererOwnedListSlot

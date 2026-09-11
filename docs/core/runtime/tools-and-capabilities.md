@@ -179,7 +179,9 @@ Linux 等缺少沙箱的平台在只读任务中用 `git_inspect` 替代 shell �
 
 工作区 Node.js/Python/uv 工具链由 `packages/features/workspace-dependencies/` 纵向拥有：contracts 定义包源、状态、typed operations 与 `workspace-dependencies.control` Capability，runtime 负责发现、下载、校验、原子安装和缓存。`PcLocalToolHost` 只在 runtime composition 中绑定该窄 Capability；Feature 不可用时 shell 仍可使用宿主 PATH，不在通用 ToolHost 内复制一套安装逻辑。
 
-Windows 原生 shell provider 由 `packages/features/windows-sandbox/src/runtime` 拥有，并在 runtime composition 中绑定到通用 `ShellSandboxProvider` port。`PcLocalToolHost` 只消费 capability、control root、sandbox-only 网络环境、curl 环境补丁和 request writer；Windows sidecar 探测、环境变量与请求协议不进入 Core adapter。
+Windows 原生 shell provider 由 `packages/features/windows-sandbox/src/runtime` 拥有，并在 runtime composition 中绑定到通用 `ShellSandboxProvider` port。`PcLocalToolHost` 只消费 background command、capability、control root、sandbox-only 网络环境、curl 环境补丁和 request writer；Windows sidecar 探测、环境变量与请求协议不进入 Core adapter。
+
+Windows 的 bypass/完全访问命令通过同一 provider 提供的 `backgroundCommand` 使用原生 `run-background` 入口。它以调用者身份和环境创建隐藏且可继承的控制台，避免 pnpm 等工具再次启动 cmd 时弹出窗口；标准输入、输出和错误仍走独立管道，进程树归入随启动程序关闭的 Job。此入口不需要安装沙箱账户或提权，也不改变命令权限；未提供原生启动程序的宿主保留普通 shell 路径。
 
 受限 shell 的 OS sandbox 是写入完整性与网络出口边界，不作为宿主文件的读取保密边界。macOS Seatbelt 与 Windows provider 都允许命令读取宿主账户原本可读、且工具链正常启动所需的文件；写入仍限于 workspace、显式 writable roots 与每次执行的临时目录，工作区 `.git` / `.agents` / `.codex` 等元数据继续只读，网络继续服从 sandbox policy。macOS 仍强制执行显式 `deniedRoots` 与 `deniedGlobPatterns`；直接文件工具则继续受 effective readable roots 约束，不能借 shell 绕过用户声明的敏感路径规则。
 

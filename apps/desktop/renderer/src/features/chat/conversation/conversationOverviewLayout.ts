@@ -5,17 +5,21 @@ const overviewRightLaneWidthPx = overviewPanelWidthPx + overviewPanelRightInsetP
 const overviewRequiredGutterPx = overviewRightLaneWidthPx + overviewContentGapPx;
 const overviewContentCenterShiftPx = overviewRightLaneWidthPx / 2;
 
-/** Shift only when both the card and the opposite content inset still fit. */
-export function shouldShiftConversationOverviewContent({
+export type ConversationOverviewLayout = 'hidden' | 'centered' | 'shifted';
+
+/** Keep the card visible only when it fits beside the content, with or without a shift. */
+export function conversationOverviewLayout({
   conversationWidth,
   contentWidth,
 }: {
   conversationWidth: number;
   contentWidth: number;
-}): boolean {
-  if (conversationWidth <= 0 || contentWidth <= 0) return false;
+}): ConversationOverviewLayout {
+  if (conversationWidth <= 0 || contentWidth <= 0) return 'hidden';
   const rightGutter = Math.max(0, (conversationWidth - contentWidth) / 2);
-  return rightGutter < overviewRequiredGutterPx
-    && rightGutter + overviewContentCenterShiftPx >= overviewRequiredGutterPx
-    && rightGutter - overviewContentCenterShiftPx >= overviewContentGapPx;
+  if (rightGutter >= overviewRequiredGutterPx) return 'centered';
+  return rightGutter + overviewContentCenterShiftPx >= overviewRequiredGutterPx
+    && rightGutter - overviewContentCenterShiftPx >= overviewContentGapPx
+    ? 'shifted'
+    : 'hidden';
 }

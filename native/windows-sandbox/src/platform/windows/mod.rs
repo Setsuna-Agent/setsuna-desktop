@@ -213,6 +213,11 @@ pub fn uninstall_elevated() -> Result<CommandOutput, SandboxError> {
     Ok(CommandOutput::success())
 }
 
+/// Runs with the caller's identity and environment, without sandbox setup or elevation.
+pub fn run_background(command: &str) -> Result<CommandOutput, SandboxError> {
+    process::spawn_background_shell(command).map(CommandOutput::process_exit)
+}
+
 pub fn run(request_path: &Path) -> Result<CommandOutput, SandboxError> {
     let request = SandboxRunRequest::from_file(request_path)?;
     paths::validate_request_paths(&request, request_path)?;

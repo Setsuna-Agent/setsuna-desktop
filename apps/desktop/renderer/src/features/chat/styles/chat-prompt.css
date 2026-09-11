@@ -3,6 +3,7 @@
 .chat-prompt {
   --chat-composer-control-size: 30px;
   --chat-composer-footer-inset: 8px;
+  position: relative;
   width: min(var(--chat-content-max-width), 100%);
   overflow: visible;
   border: 1px solid var(--app-border);

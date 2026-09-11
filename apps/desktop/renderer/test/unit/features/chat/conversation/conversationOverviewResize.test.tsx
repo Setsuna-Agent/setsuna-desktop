@@ -3,7 +3,7 @@
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { useRef, useState } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { useConversationOverviewContentShift } from '../../../../../src/features/chat/conversation/ChatWorkspaceScroll.js';
+import { useConversationOverviewLayout } from '../../../../../src/features/chat/conversation/ChatWorkspaceScroll.js';
 
 const observers = new Set<{ nodes: Set<Element>; notify(): void }>();
 
@@ -34,10 +34,11 @@ afterEach(() => {
 it('starts observing late content, follows window and panel resizing, and rebinds when the content node changes', () => {
   const view = render(<Harness contentKey={null} />);
   expect(observers.size).toBe(0);
+  expect(layout()).toBe('hidden');
 
   view.rerender(<Harness contentKey="starter" />);
   expect(observers.size).toBe(1);
-  expect(needsShift()).toBe(true);
+  expect(layout()).toBe('shifted');
   const container = screen.getByTestId('conversation');
   const originalContent = screen.getByTestId('content');
   expect([...observers].every((observer) => observer.nodes.has(originalContent))).toBe(true);
@@ -46,13 +47,13 @@ it('starts observing late content, follows window and panel resizing, and rebind
     container.dataset.width = '1163';
     window.dispatchEvent(new Event('resize'));
   });
-  expect(needsShift()).toBe(false);
+  expect(layout()).toBe('hidden');
 
   act(() => {
     container.dataset.width = '900';
     for (const observer of observers) observer.notify();
   });
-  expect(needsShift()).toBe(false);
+  expect(layout()).toBe('hidden');
 
   view.rerender(<Harness contentKey="transcript" />);
   const replacement = screen.getByTestId('content');
@@ -62,12 +63,14 @@ it('starts observing late content, follows window and panel resizing, and rebind
     container.dataset.width = '1300';
     for (const observer of observers) observer.notify();
   });
-  expect(needsShift()).toBe(true);
+  expect(layout()).toBe('shifted');
   act(() => {
     container.dataset.width = '1600';
     for (const observer of observers) observer.notify();
   });
-  expect(needsShift()).toBe(false);
+  expect(layout()).toBe('centered');
+  view.rerender(<Harness contentKey={null} />);
+  expect(layout()).toBe('hidden');
   view.unmount();
   expect(observers.size).toBe(0);
 });
@@ -75,13 +78,13 @@ it('starts observing late content, follows window and panel resizing, and rebind
 function Harness({ contentKey }: { contentKey: string | null }) {
   const conversationRef = useRef<HTMLDivElement>(null);
   const [content, setContent] = useState<HTMLDivElement | null>(null);
-  const needsContentShift = useConversationOverviewContentShift(conversationRef, content);
+  const overviewLayout = useConversationOverviewLayout(conversationRef, content);
   return <div ref={conversationRef} data-testid="conversation" data-width="1300">
     {contentKey ? <div key={contentKey} ref={setContent} data-testid="content" data-width="750" /> : null}
-    <output>{JSON.stringify(needsContentShift)}</output>
+    <output>{overviewLayout}</output>
   </div>;
 }
 
-function needsShift() {
-  return screen.getByRole('status').textContent === 'true';
+function layout() {
+  return screen.getByRole('status').textContent;
 }

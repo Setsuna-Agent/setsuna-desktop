@@ -13,16 +13,16 @@ const project: WorkspaceProject = {
   updatedAt: '2026-08-25T00:00:00.000Z',
 };
 
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+
 describe.each([
   { scope: 'project', activeProject: project },
   { scope: 'projectless', activeProject: null },
 ])('AppChatToolbarTitle ($scope)', ({ activeProject }) => {
-  afterEach(() => {
-    cleanup();
-    vi.restoreAllMocks();
-  });
-
-  it('offers rename and archive actions for the active thread', () => {
+  it('offers rename and archive actions for the active thread', async () => {
     const onArchiveThread = vi.fn();
     const onRenameThread = vi.fn();
     const view = render(
@@ -37,18 +37,18 @@ describe.each([
     expect(Boolean(view.container.querySelector('.app-chat-toolbar-title__project-icon'))).toBe(Boolean(activeProject));
     expect(screen.getByText('Current thread')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: '对话操作' }));
-    fireEvent.click(screen.getByRole('menuitem', { name: '重命名' }));
+    fireEvent.keyDown(screen.getByRole('button', { name: '对话操作' }), { key: 'ArrowDown' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: '重命名' }));
     expect(onRenameThread).toHaveBeenCalledOnce();
     expect(screen.queryByRole('menu')).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: '对话操作' }));
-    fireEvent.click(screen.getByRole('menuitem', { name: '归档对话' }));
+    fireEvent.keyDown(screen.getByRole('button', { name: '对话操作' }), { key: 'ArrowDown' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: '归档对话' }));
     expect(onArchiveThread).toHaveBeenCalledOnce();
     expect(screen.queryByRole('menu')).toBeNull();
   });
 
-  it('hides unavailable thread actions and disables archive while the thread is running', () => {
+  it('hides unavailable thread actions and disables archive while the thread is running', async () => {
     const onArchiveThread = vi.fn();
     const view = render(
       <AppChatToolbarTitle project={activeProject} title="New thread" />,
@@ -64,10 +64,38 @@ describe.each([
         onArchiveThread={onArchiveThread}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: '对话操作' }));
-    const archiveAction = screen.getByRole('menuitem', { name: '归档对话' });
-    expect(archiveAction.hasAttribute('disabled')).toBe(true);
+    fireEvent.keyDown(screen.getByRole('button', { name: '对话操作' }), { key: 'ArrowDown' });
+    const archiveAction = await screen.findByRole('menuitem', { name: '归档对话' });
+    expect(archiveAction.getAttribute('aria-disabled')).toBe('true');
     fireEvent.click(archiveAction);
     expect(onArchiveThread).not.toHaveBeenCalled();
   });
+});
+
+it('opens a workspace app from the nested conversation menu and closes both menus', async () => {
+  const onOpenWorkspaceInApp = vi.fn();
+  const apps = [{ id: 'vscode', label: 'VS Code', icon: 'vscode' }, { id: 'cursor', label: 'Cursor', icon: 'cursor' }];
+  render(<AppChatToolbarTitle project={project} title="Current thread" workspaceApps={apps}
+    selectedWorkspaceApp={apps[0]} onOpenWorkspaceInApp={onOpenWorkspaceInApp} />);
+
+  fireEvent.keyDown(screen.getByRole('button', { name: '对话操作' }), { key: 'ArrowDown' });
+  const openWith = await screen.findByRole('menuitem', { name: '打开方式' });
+  fireEvent.keyDown(openWith, { key: 'ArrowRight' });
+  const selectedApp = await screen.findByRole('menuitem', { name: 'VS Code' });
+  expect(selectedApp.classList.contains('is-selected')).toBe(true);
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Cursor' }));
+  expect(onOpenWorkspaceInApp).toHaveBeenCalledExactlyOnceWith('cursor');
+  expect(screen.queryByRole('menu')).toBeNull();
+});
+
+it('disables open-with without installed apps and hides it without a workspace action', async () => {
+  const onOpenWorkspaceInApp = vi.fn();
+  const view = render(<AppChatToolbarTitle title="New thread" onOpenWorkspaceInApp={onOpenWorkspaceInApp} />);
+  fireEvent.keyDown(screen.getByRole('button', { name: '对话操作' }), { key: 'ArrowDown' });
+  const openWith = await screen.findByRole('menuitem', { name: '打开方式' });
+  expect(openWith.getAttribute('aria-disabled')).toBe('true');
+  fireEvent.click(openWith);
+  expect(onOpenWorkspaceInApp).not.toHaveBeenCalled();
+  view.rerender(<AppChatToolbarTitle title="Global thread" onRenameThread={vi.fn()} />);
+  expect(screen.queryByRole('menuitem', { name: '打开方式' })).toBeNull();
 });

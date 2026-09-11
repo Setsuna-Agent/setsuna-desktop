@@ -4,6 +4,7 @@ import { hostname, userInfo } from 'node:os';
 import path from 'node:path';
 import type { DesktopNativeBridgeServer } from '../runtime/native-bridge-server.js';
 import { normalizeNativeInterfaceLanguage } from '../i18n/native-messages.js';
+import { registerWindowKeyboardShortcuts } from '../window/keyboard-shortcuts.js';
 import {
   copyWorkspaceFilePath,
   createWorkspaceFilePreviewUrl,
@@ -47,12 +48,14 @@ export function registerDesktopIpc({
     'desktop:create-workspace-file-preview',
   ];
   for (const channel of channels) ipcMain.removeHandler(channel);
+  const keyboardShortcuts = registerWindowKeyboardShortcuts(mainWindow.webContents);
 
   ipcMain.handle('desktop:set-active-keyboard-shortcut-bindings', (event, value) => {
     if (!isDesktopRendererSender(event.sender, mainWindow)) return false;
     const bindings = Array.isArray(value)
       ? [...new Set(value.filter((item): item is string => typeof item === 'string' && item.length <= 80))].slice(0, 256)
       : [];
+    keyboardShortcuts.setActiveBindings(bindings);
     onActiveKeyboardShortcutBindingsChange(bindings);
     return true;
   });
@@ -68,7 +71,7 @@ export function registerDesktopIpc({
     if (!isDesktopRendererSender(event.sender, mainWindow)) return false;
     // Native application-menu accelerators (for example Command+Q) must not win
     // while the renderer is inspecting a candidate shortcut.
-    mainWindow.webContents.setIgnoreMenuShortcuts(Boolean(value));
+    keyboardShortcuts.setRecording(Boolean(value));
     return true;
   });
   ipcMain.handle('desktop:select-directory', async (event, input) => {

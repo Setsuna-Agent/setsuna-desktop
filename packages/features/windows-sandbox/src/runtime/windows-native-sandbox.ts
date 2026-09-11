@@ -102,6 +102,13 @@ export function clearWindowsNativeSandboxCapabilityCache(): void {
 }
 
 export class WindowsNativeSandboxService implements WindowsSandboxRuntimeService {
+  backgroundCommand(command: string): { command: string; args: string[] } | null {
+    if (process.platform !== 'win32') return null;
+    // Window hosting needs only the bundled executable, not installed sandbox accounts.
+    const executable = existingAbsoluteFile(process.env[WINDOWS_SANDBOX_EXECUTABLE_ENV]);
+    return executable ? { command: executable, args: ['run-background', '--command', command] } : null;
+  }
+
   capability(): WindowsNativeSandboxCapability {
     return windowsNativeSandboxCapability();
   }

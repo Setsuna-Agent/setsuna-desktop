@@ -49,6 +49,7 @@ function renderRow(value: RuntimeThreadSummary, running = false): string {
     onRename: () => undefined,
     onSelect: () => undefined,
     onToggleMenu: () => undefined,
+    onTogglePin: () => undefined,
   }));
 }
 
