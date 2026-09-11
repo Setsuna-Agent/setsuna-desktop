@@ -1,5 +1,5 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
-import { ArrowLeft, Check, ChevronDown, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Check, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DesktopDiffFile, DesktopGitCommit, DesktopGitRef, DesktopReviewState } from '../../contracts/index.js';
 import { useReviewRendererHost } from '../host.js';
@@ -44,7 +44,6 @@ function GitChangesWorkspace({ workspaceRoot, editingMessage = false, reviewStat
   const showMessageEditor = editingMessage && Boolean(messageEditor);
   const history = useGitHistory(workspaceRoot, reviewState);
   const fileActions = useGitFileActions(workspaceRoot, onRefresh);
-  const [changesExpanded, setChangesExpanded] = useState(true);
   const [filterVisible, setFilterVisible] = useState(false);
   const [selectedOid, setSelectedOid] = useState<string | null>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -116,26 +115,24 @@ function GitChangesWorkspace({ workspaceRoot, editingMessage = false, reviewStat
   return (
     <section className="desktop-review-panel git-changes-panel" aria-label={t('feature.review.history.title')}>
       <GitChangesSplit detailOpen={detailOpen} editingMessage={showMessageEditor} navigation={
-        <nav className={'git-changes-nav' + (changesExpanded ? '' : ' is-collapsed')} aria-label={t('feature.review.history.title')}>
+        <nav className="git-changes-nav" aria-label={t('feature.review.history.title')}>
           <div className="git-changes-nav__header">
-            <Button variant="ghost" className="git-changes-nav__title" type="button" aria-expanded={changesExpanded} onClick={() => setChangesExpanded((value) => !value)}>
-              <ChevronDown size={12} className={changesExpanded ? '' : 'is-collapsed'} />{t('feature.review.history.changes')}
-            </Button>
+            <h2 className="git-changes-nav__title">{t('feature.review.history.title')}</h2>
             <ReviewIconButton tooltip className="app-shell-icon-control" label={t('feature.review.git.commit')} onClick={composer?.commit}><Check size={16} /></ReviewIconButton>
             <ReviewIconButton tooltip className="app-shell-icon-control" label={t('feature.review.workspace.refresh')} onClick={refresh} disabled={history.loading || reviewLoading}><RefreshCw size={13} /></ReviewIconButton>
-            <GitChangesMenu refs={refs} selectedRef={history.selectedRef} filterVisible={filterVisible} busy={fileActions.busy} onToggleFilter={() => { setFilterVisible((value) => !value); setChangesExpanded(true); }} currentBranch={page?.currentBranch ?? reviewState?.currentBranch ?? null} onSelectRef={selectRef} onSelectHead={() => {
+            <GitChangesMenu refs={refs} selectedRef={history.selectedRef} filterVisible={filterVisible} busy={fileActions.busy} onToggleFilter={() => setFilterVisible((value) => !value)} currentBranch={page?.currentBranch ?? reviewState?.currentBranch ?? null} onSelectRef={selectRef} onSelectHead={() => {
               history.selectRef('');
               if (page?.head) selectCommit(page.head);
             }} />
           </div>
-          {changesExpanded ? <GitChangesCommitComposer blocked={fileActions.busy} /> : null}
-          {changesExpanded && selectedOid ? <div className="git-changes-nav__workspace">
+          <GitChangesCommitComposer blocked={fileActions.busy} />
+          {selectedOid ? <div className="git-changes-nav__workspace">
             <Button variant="ghost" type="button" aria-pressed={!selectedOid} onClick={() => { setSelectedOid(null); setDetailOpen(false); }}>
               <ArrowLeft size={13} /><span>{t('feature.review.history.workspace')}</span>
             </Button>
           </div> : null}
           <GitHistorySplit
-            files={changesExpanded ? (
+            files={(
               <GitChangesFiles
                 groups={groups}
                 pathContext={pathContext}
@@ -166,7 +163,7 @@ function GitChangesWorkspace({ workspaceRoot, editingMessage = false, reviewStat
                   setDetailOpen(true);
                 }}
               />
-            ) : null}
+            )}
             conflicts={conflictTasks.length ? <GitConflictHistory workspaceRoot={workspaceRoot} tasks={conflictTasks} selectedTurnId={selectedConflictId} onSelect={(turnId) => {
               setSelectedConflictId(turnId); setSelectedOid(null); setDetailOpen(Boolean(turnId));
             }} /> : null}

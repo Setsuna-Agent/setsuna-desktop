@@ -2,18 +2,16 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  z-index: 2;
-  width: min(var(--chat-content-max-width), 100%);
+  width: 100%;
   min-width: 0;
-  height: 34px;
-  margin-bottom: -5px;
-  padding: 0 10px;
-  border: 1px solid var(--desktop-agent-panel-border);
-  border-radius: var(--app-radius-lg);
+  min-height: 32px;
+  padding: 3px 7px 3px 11px;
   color: var(--app-text-secondary);
-  background: color-mix(in srgb, var(--desktop-agent-main-surface) 94%, transparent);
-  box-shadow: var(--app-shadow-card);
-  font-size: 12px;
+  font-size: 13px;
+}
+
+.status:hover {
+  background: var(--desktop-agent-control-hover-bg);
 }
 
 .target {
@@ -24,14 +22,14 @@
 .status strong {
   flex: 0 0 auto;
   color: var(--app-text);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .objective {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
-  color: var(--app-text-muted);
+  color: var(--app-text);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -39,33 +37,30 @@
 .elapsed {
   flex: 0 0 auto;
   color: var(--app-text-muted);
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
+.status .action {
   width: 24px;
   height: 24px;
-  padding: 0;
   border: 0;
-  border-radius: 50%;
+  border-radius: var(--app-radius-xs);
   color: var(--app-text-muted);
   background: transparent;
 }
 
-.action:hover:not(:disabled),
-.action:focus-visible {
+.status .action:hover:not(:disabled),
+.status .action:focus-visible {
   color: var(--app-text);
   background: var(--desktop-agent-control-hover-bg);
 }
 
-.action.danger:hover:not(:disabled),
-.action.danger:focus-visible {
+.status .action.danger:hover:not(:disabled),
+.status .action.danger:focus-visible {
   color: var(--app-danger);
+  background: color-mix(in srgb, var(--app-danger) 9%, transparent);
 }
 
 .action:disabled {
@@ -80,8 +75,8 @@
   white-space: nowrap;
 }
 
-.unavailable {
-  border-color: color-mix(in srgb, var(--app-warning) 35%, var(--desktop-agent-panel-border));
+.unavailable .target {
+  color: var(--app-warning);
 }
 
 .editorTitle {

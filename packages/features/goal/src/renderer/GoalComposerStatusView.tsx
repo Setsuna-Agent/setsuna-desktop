@@ -1,6 +1,6 @@
-import { Button, TextArea, Dialog } from '@setsuna-desktop/renderer-ui';
+import { Button, IconButton, TextArea, Dialog } from '@setsuna-desktop/renderer-ui';
 
-import { Pause, Play, RefreshCw, SquarePen as EditIcon, Target, Trash2 } from 'lucide-react';
+import { Goal as GoalIcon, Pause, Play, RefreshCw, SquarePen as EditIcon, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type {
   RendererFeatureEventFeed,
@@ -125,7 +125,7 @@ function GoalStatus({
         data-composer-status-view="goal"
         data-feature-id="goal"
       >
-        <Target className={styles.target} size={14} strokeWidth={2} aria-hidden="true" />
+        <GoalIcon className={styles.target} size={14} strokeWidth={2} aria-hidden="true" />
         <strong>{translate(`feature.goal.status.${goal.status}`)}</strong>
         <span className={styles.objective} title={goal.objective}>{goal.objective}</span>
         <time
@@ -182,7 +182,7 @@ function GoalStatus({
         open={editOpen}
         title={(
           <span className={styles.editorTitle}>
-            <Target size={15} aria-hidden="true" />
+            <GoalIcon size={15} aria-hidden="true" />
             {translate('feature.goal.editTitle')}
           </span>
         )}
@@ -241,7 +241,7 @@ function GoalUnavailableStatus({
       data-feature-id="goal"
       role="status"
     >
-      <Target className={styles.target} size={14} aria-hidden="true" />
+      <GoalIcon className={styles.target} size={14} aria-hidden="true" />
       <span className={styles.objective} title={error}>{translate('feature.goal.projectionUnavailable')}</span>
       <GoalIconButton label={translate('feature.goal.retry')} disabled={false} onClick={onRetry}>
         <RefreshCw size={13} />
@@ -264,16 +264,15 @@ function GoalIconButton({
   onClick(): void;
 }>) {
   return (
-    <Button variant="danger"
+    <IconButton
       type="button"
       className={`${styles.action} ${danger ? styles.danger : ''}`}
-      aria-label={label}
-      title={label}
+      label={label}
       disabled={disabled}
       onClick={onClick}
     >
       {children}
-    </Button>
+    </IconButton>
   );
 }
 

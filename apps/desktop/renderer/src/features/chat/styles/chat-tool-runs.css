@@ -812,6 +812,84 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
   overflow-wrap: anywhere;
 }
 
+/* Style the disclosure that owns these scopes, including a focused grouped run.
+   Direct-child matching keeps surrounding mixed tool groups out of the card. */
+.chat-tool-run:has(> .chat-tool-run__body > .chat-tool-run__permission-details) {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-surface);
+}
+
+.chat-tool-run:has(> .chat-tool-run__body > .chat-tool-run__permission-details) > .chat-tool-run__summary {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 12px 14px;
+}
+
+.chat-tool-run:has(> .chat-tool-run__body > .chat-tool-run__permission-details) > .chat-tool-run__summary > .chat-tool-run__icon {
+  display: none;
+}
+
+.chat-tool-run:has(> .chat-tool-run__body > .chat-tool-run__permission-details) > .chat-tool-run__summary .chat-tool-run__title {
+  color: var(--app-text);
+  background: none;
+  font-weight: 500;
+  animation: none;
+}
+
+.chat-tool-run:has(> .chat-tool-run__body > .chat-tool-run__permission-details) > .chat-tool-run__summary > .chat-tool-run__chevron {
+  margin-left: auto;
+  opacity: 1;
+}
+
+.chat-tool-run:has(> .chat-tool-run__body > .chat-tool-run__permission-details) > .chat-tool-run__body {
+  gap: 12px;
+  margin: 0;
+  padding: 0 14px 14px;
+}
+
+.chat-tool-run__permission-details {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: start;
+  gap: 8px 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--app-border);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.chat-tool-run__permission-details ~ .chat-tool-run__approval:has(> .chat-tool-run__actions) {
+  padding-top: 12px;
+  border-top: 1px solid var(--app-border);
+}
+
+.chat-tool-run__permission-details dt {
+  padding-top: 3px;
+  color: var(--app-text);
+  font-weight: 500;
+}
+
+.chat-tool-run__permission-details dd {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  color: var(--app-text);
+  font-family: var(--app-code-font-family);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-tool-run__permission-details dd > span {
+  padding: 3px 0;
+}
+
 .chat-tool-run__hook-groups {
   display: grid;
   gap: 8px;
@@ -958,8 +1036,10 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
 
 .chat-tool-run__actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  max-width: 100%;
 }
 
 .chat-tool-run__approval {
@@ -967,6 +1047,11 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
+}
+
+/* Authorization choices need a visible outline before hover, including broader scopes. */
+.chat-tool-run__approval .sd-button--secondary {
+  border-color: var(--app-border-strong);
 }
 
 .chat-tool-run__approval-review {
@@ -1035,6 +1120,7 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
 }
 
 .chat-tool-run__user-input {
+  width: 100%;
   gap: 12px;
   padding: 14px;
   border-color: color-mix(in srgb, var(--app-primary) 20%, var(--app-border));
@@ -1201,8 +1287,6 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
 }
 
 .chat-tool-run__user-input-note {
-  padding-top: 10px;
-  border-top: 1px solid var(--app-border);
   color: var(--app-text-muted);
   font-size: 11px;
   line-height: 17px;

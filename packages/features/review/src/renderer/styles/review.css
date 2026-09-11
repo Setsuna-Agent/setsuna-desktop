@@ -335,6 +335,8 @@
 
 .desktop-review-file-card {
   display: grid;
+  /* Long paths must shrink inside the card instead of widening its toolbar. */
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
   overflow: visible;
   border: 0;
@@ -449,18 +451,29 @@
   padding: 0;
 }
 
+.desktop-review-file-card__summary--toolbar .desktop-review-file-card__file-info {
+  flex: 1;
+  width: auto;
+}
+
 .desktop-review-file-card__summary--toolbar .desktop-review-file-card__meta {
   position: static;
   flex-shrink: 0;
+  gap: inherit;
   padding: 0;
   background: transparent;
+}
+
+.desktop-review-file-card__summary--toolbar .desktop-review-file-card__meta .sd-icon-button {
+  width: var(--app-topbar-navigation-control-size);
+  height: var(--app-topbar-navigation-control-size);
 }
 
 .desktop-review-file-card__view-controls {
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
-  gap: 4px;
+  gap: inherit;
 }
 
 .desktop-review-file-card__file-info {

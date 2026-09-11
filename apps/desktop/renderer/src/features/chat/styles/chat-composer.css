@@ -1,12 +1,14 @@
 @import './chat-prompt.css';
+@import './chat-composer-stack.css';
 
 .chat-sender {
+  --chat-composer-stack-gap: 8px;
   display: flex;
   position: relative;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: var(--chat-composer-stack-gap);
   padding: 0 var(--chat-content-inline-padding) var(--chat-composer-bottom-inset);
   border-top: 0;
   background: var(--desktop-agent-main-bg);
@@ -1048,12 +1050,12 @@
   }
 }
 .chat-composer-status-fallback {
-  width: min(var(--chat-content-max-width), 100%);
+  width: 100%;
   min-height: 32px;
-  margin-bottom: -5px;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-lg);
+  padding: 3px 9px;
+  border: 0;
+  border-radius: 0;
   color: var(--app-text-muted);
-  background: var(--desktop-agent-main-surface);
+  background: transparent;
   font-size: 12px;
 }

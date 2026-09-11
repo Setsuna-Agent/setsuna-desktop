@@ -18,6 +18,7 @@ import {
   isWebContentRun,
   recordFromJson,
   stringField,
+  toolRunDisplayName,
   toolRunTarget,
 } from './runtimeToolRunPresentationUtils.js';
 import {
@@ -61,6 +62,7 @@ export {
   optionalNumber,
   recordFromJson,
   stringField,
+  toolDisplayName,
   toolRunTarget,
 } from './runtimeToolRunPresentationUtils.js';
 export {
@@ -882,19 +884,4 @@ export function inspectionEntryIcon(kind: InspectionEntryKind) {
   if (kind === 'fileSearch') return <Search size={14} />;
   if (kind === 'gitStatus') return <SquareTerminal size={14} />;
   return <FileText size={14} />;
-}
-
-export function toolDisplayName(name: string, t: Translate = defaultTranslate): string {
-  return name.replace(/^mcp\s+\S+\s+/iu, '').replace(/_/g, ' ').trim() || t('toolRun.tool');
-}
-
-function toolRunDisplayName(run: RuntimeToolRun, t: Translate): string {
-  const pluginName = run.plugin?.name.trim();
-  if (!pluginName) return toolDisplayName(run.name, t);
-  const extensionPrefix = 'extension__';
-  const separatorIndex = run.name.indexOf('__', extensionPrefix.length);
-  const localName = run.name.startsWith(extensionPrefix) && separatorIndex >= 0
-    ? run.name.slice(separatorIndex + 2).trim()
-    : run.name.trim();
-  return localName ? `${pluginName} / ${localName}` : pluginName;
 }

@@ -9,22 +9,6 @@ export const SPRING_PRESS = {
   mass: 0.6,
 } as const;
 
-/** Content swaps — label/icon slots trading places inside a control. */
-export const SPRING_SWAP = {
-  type: "spring",
-  stiffness: 460,
-  damping: 30,
-  mass: 0.55,
-} as const;
-
-/** Overlay panel entrances — modals and sheets summoned by pointer. */
-export const SPRING_PANEL = {
-  type: "spring",
-  stiffness: 420,
-  damping: 40,
-  mass: 0.5,
-} as const;
-
 /** Shared-layout glides — pills, indicators and panels morphing between positions. */
 export const SPRING_LAYOUT = {
   type: "spring",

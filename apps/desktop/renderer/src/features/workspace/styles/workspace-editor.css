@@ -55,6 +55,8 @@
 }
 
 .desktop-workspace-terminal-panel {
+  /* Mounted directly in a side/bottom slot: fit xterm to the slot, not its content. */
+  height: 100%;
   background: var(--app-bg);
 }
 

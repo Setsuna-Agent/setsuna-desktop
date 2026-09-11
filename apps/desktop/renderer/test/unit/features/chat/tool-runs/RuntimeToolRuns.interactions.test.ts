@@ -119,7 +119,7 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
     }]);
     const rejected = renderedTextFromHtml(rejectedHtml);
 
-    expect(rejected).toContain('已拒绝 request permissions');
+    expect(rejected).toContain('已拒绝 访问权限');
     expect(rejectedHtml).toContain('<details');
     expect(rejected).toContain('network access is disabled for this workspace.');
   });

@@ -26,7 +26,7 @@ import {
 } from '../controller/useAppKeyboardShortcuts.js';
 import { useThreadNavigationHistory } from '../controller/useThreadNavigationHistory.js';
 import { AppOverlays } from './AppOverlays.js';
-import { AppProjectToolbarTitle } from './AppProjectToolbarTitle.js';
+import { AppChatToolbarTitle } from './AppChatToolbarTitle.js';
 import { AppRouteContent } from './AppRouteContent.js';
 import { AppSidebarSurface } from './AppSidebarSurface.js';
 import { AppTopbarActions } from './AppTopbarActions.js';
@@ -91,7 +91,6 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   } = controller;
   const [conversationOverviewVisibility, setConversationOverviewVisibility] = useState<ConversationOverviewVisibility>('auto');
   const [conversationOverviewRendered, setConversationOverviewRendered] = useState(false);
-  const [conversationOverviewShowRequest, setConversationOverviewShowRequest] = useState(0);
   const [selectedCapabilitiesPluginId, setSelectedCapabilitiesPluginId] = useState<string | null>(null);
   const [selectedPluginViewKey, setSelectedPluginViewKey] = useState<string | null>(null);
   // 记录下一次进入设置页时应定位到的分区；普通入口会先清空，避免上一次的直达请求残留。
@@ -115,7 +114,6 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       return;
     }
     setConversationOverviewVisibility('shown');
-    setConversationOverviewShowRequest((value) => value + 1);
   }, [conversationOverviewRendered]);
   const openCapabilities = useCallback(() => {
     setSelectedCapabilitiesPluginId(null);
@@ -344,11 +342,11 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         <RendererOwnedSingleSlot
           slot={shellTopbarTitleSlot}
           props={{
-            renderDefault: () => activeView === 'chat' && activeProject ? (
-              <AppProjectToolbarTitle
-                key={activeProject.id}
+            renderDefault: () => activeView === 'chat' && (activeProject || currentThread) ? (
+              <AppChatToolbarTitle
+                key={currentThread?.id ?? activeProject?.id}
                 project={activeProject}
-                title={toolbarTitle ?? activeProject.name}
+                title={toolbarTitle ?? activeProject?.name}
                 archiveThreadDisabled={Boolean(currentThread?.activeTurnId)}
                 onArchiveThread={currentThread
                   ? () => void navigation.archiveThread(currentThread)
@@ -439,7 +437,6 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         chatActions={chatActions}
         composerKey={composerKey}
         focusComposerRequest={focusComposerRequest}
-        conversationOverviewShowRequest={conversationOverviewShowRequest}
         conversationOverviewVisibility={conversationOverviewVisibility}
         draft={draft}
         projectWorkspace={projectWorkspace}

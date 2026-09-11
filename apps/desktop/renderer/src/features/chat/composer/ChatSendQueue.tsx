@@ -4,10 +4,10 @@ import {
   type RuntimeQueuedTurnInput,
 } from '@setsuna-desktop/contracts';
 import {
+  Forward,
+  Goal as GoalIcon,
   MessageSquareText,
   Paperclip,
-  SendHorizontal,
-  Target,
   Trash2,
 } from 'lucide-react';
 import { memo, useState } from 'react';
@@ -57,7 +57,7 @@ export const ChatSendQueue = memo(function ChatSendQueue({
       <ol className="chat-send-queue__list">
         {items.map((item) => {
           const kind = normalizeRuntimeQueuedTurnInputKind(item.kind);
-          const MarkerIcon = kind === 'goal' ? Target : MessageSquareText;
+          const MarkerIcon = kind === 'goal' ? GoalIcon : MessageSquareText;
           const kindLabel = kind === 'goal'
             ? t('chat.queue.kind.goal')
             : t('chat.queue.kind.message');
@@ -108,7 +108,7 @@ export const ChatSendQueue = memo(function ChatSendQueue({
                   title={sendNowLabel}
                   onClick={() => void runItemAction(item.id, 'send', () => onSendNow(item.id))}
                 >
-                  <SendHorizontal size={13} aria-hidden="true" />
+                  <Forward size={13} aria-hidden="true" />
                   <span>{pendingAction?.type === 'send' && itemPending
                     ? t('chat.queue.sending')
                     : t('chat.queue.sendNow')}</span>

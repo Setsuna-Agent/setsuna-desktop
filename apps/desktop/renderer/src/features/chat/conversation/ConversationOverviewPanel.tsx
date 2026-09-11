@@ -11,7 +11,7 @@ import { RuntimeActivityFeatureConversationServices } from '../../../composition
 import { UsageFeatureConversationSummary } from '../../../composition/UsageFeatureBoundary.js';
 import { localFeatureReviewChangeStats } from '../../../composition/review-feature-adapter.js';
 import type { DesktopReviewState } from '@setsuna-desktop/feature-review/contracts';
-import { ChevronUp, FileDiff } from 'lucide-react';
+import { FileDiff } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { ChangeCountText } from './ChangeCountText.js';
@@ -20,28 +20,22 @@ import { ConversationPlanSummary } from './ConversationPlanSummary.js';
 
 export function ConversationOverviewPanel({
   activeProject,
-  compact,
   contextLabel,
   contextPercent,
   currentThread,
   overview,
   reviewControls,
   reviewState,
-  onCollapse,
-  onExpand,
   onOpenReview,
   reviewError,
 }: {
   activeProject?: WorkspaceProject;
-  compact: boolean;
   contextLabel: string;
   contextPercent: number;
   currentThread: RuntimeThread;
   overview: ConversationOverviewState;
   reviewControls?: ReactNode;
   reviewState: DesktopReviewState | null;
-  onCollapse: () => void;
-  onExpand: () => void;
   onOpenReview?: () => void;
   reviewError: string | null;
 }) {
@@ -59,27 +53,10 @@ export function ConversationOverviewPanel({
   const reviewFailed = Boolean(activeProject && !reviewState && reviewError);
   const collaboration = useCollaborationFeatureState(currentThread.id);
 
-  if (compact) {
-    return (
-      <Button variant="ghost" className="chat-conversation-overview-chip" type="button" aria-label={t('conversation.overview.expand')} onClick={onExpand}>
-        <FileDiff size={13} />
-        <span>{hasFileChanges ? t('conversation.overview.review') : t('conversation.overview.environment')}</span>
-        {hasFileChanges ? (
-          <ChangeCountText additions={changeStats.additions} deletions={changeStats.deletions} />
-        ) : (
-          <span className="chat-conversation-overview-chip__meta">{contextLabel}</span>
-        )}
-      </Button>
-    );
-  }
-
   return (
     <section className="chat-conversation-overview-panel" aria-label={t('conversation.overview.title')}>
       <div className="chat-conversation-overview-panel__header">
         <span>{t('conversation.overview.title')}</span>
-        <Button variant="ghost" type="button" aria-label={t('conversation.overview.collapse')} title={t('conversation.overview.collapse')} onClick={onCollapse}>
-          <ChevronUp aria-hidden="true" size={15} />
-        </Button>
       </div>
       <div className="chat-conversation-overview-panel__actions">
         <Button variant="ghost"

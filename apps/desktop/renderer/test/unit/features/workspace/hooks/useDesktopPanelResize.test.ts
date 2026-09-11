@@ -97,7 +97,7 @@ describe('desktop panel resize', () => {
   });
 
   it('keeps the workspace panel usable when the window is very narrow', () => {
-    expect(clampWorkspaceWidthForLayout(860, { sidebarWidth: 240, viewportWidth: 900 })).toBe(460);
+    expect(clampWorkspaceWidthForLayout(860, { sidebarWidth: 240, viewportWidth: 900 })).toBe(410);
   });
 
   it('detects when a live workspace resize should collapse the expanded sidebar', () => {

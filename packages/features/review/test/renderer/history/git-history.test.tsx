@@ -190,6 +190,10 @@ describe('Git change navigation', () => {
       loading={false} hasMore={false} error={null} onSelect={onSelect} onSelectRef={noop} onLoadMore={noop} onRetry={noop}
     />, { wrapper: host({ getCommitDetails }, { copyText, openExternal }) });
     const row = screen.getByRole('listitem');
+    // happy-dom has no layout; supply a visible anchor for detached-hover detection.
+    vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(1200);
+    vi.spyOn(document.documentElement, 'clientHeight', 'get').mockReturnValue(800);
+    vi.spyOn(row, 'getBoundingClientRect').mockReturnValue(new DOMRect(600, 100, 300, GIT_GRAPH_ROW_HEIGHT));
     fireEvent.pointerEnter(row);
     fireEvent.pointerLeave(row);
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 450)); });
@@ -225,6 +229,37 @@ describe('Git change navigation', () => {
     expect(await screen.findByRole('menuitem', { name: '打开更改' })).toBeTruthy();
     await waitFor(() => expect(screen.queryByRole('region', { name: '提交详情' })).toBeNull(), { timeout: 2000 });
     expect(getCommitDetails).toHaveBeenCalledOnce();
+  });
+
+  it.each([0, 450])('dismisses a commit preview on activation after %i ms and ignores pending focus delays', async (hoverTime) => {
+    const getCommitDetails = vi.fn().mockResolvedValue({ commit: commit(one), message: 'Preview', baseOid: null, files: [] });
+    const onSelect = vi.fn();
+    render(<GitHistoryGraph workspaceRoot="/repo" commits={[commit(one), commit(two)]} refs={[]} head={one} selectedOid={null}
+      loading={false} hasMore={false} error={null} onSelect={onSelect} onSelectRef={noop} onLoadMore={noop} onRetry={noop}
+    />, { wrapper: host({ getCommitDetails }) });
+    const target = screen.getByRole('button', { name: /Commit aaaaaaaa/ });
+    const row = target.closest<HTMLElement>('[role="listitem"]')!;
+    const preview = () => document.querySelector('.git-commit-card');
+    fireEvent.pointerEnter(row, { pointerType: 'mouse' });
+    if (hoverTime) {
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, hoverTime)); });
+      expect(preview()).not.toBeNull();
+    }
+    // Pointer activation also focuses the trigger, queuing another delayed open.
+    fireEvent.focus(target);
+    fireEvent.click(target);
+    expect(onSelect).toHaveBeenLastCalledWith(one);
+    expect(preview()).toBeNull();
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 450)); });
+    expect(preview()).toBeNull();
+    expect(getCommitDetails).toHaveBeenCalledTimes(hoverTime ? 1 : 0);
+
+    fireEvent.pointerLeave(row, { pointerType: 'mouse' });
+    fireEvent.pointerEnter(row, { pointerType: 'mouse' });
+    await waitFor(() => expect(preview()).not.toBeNull());
+    fireEvent.keyDown(target, { key: 'ArrowDown' });
+    expect(onSelect).toHaveBeenLastCalledWith(two);
+    expect(preview()).toBeNull();
   });
 
   it('discards late file responses when the selected file or project changes', async () => {

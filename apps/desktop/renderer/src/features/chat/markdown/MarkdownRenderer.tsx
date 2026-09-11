@@ -74,7 +74,7 @@ function MarkdownSegment({
   const virtualized = shouldVirtualizeMarkdownBlocks(blocks);
 
   return (
-    <div className="chat-markdown">
+    <div className="chat-markdown" aria-busy={streaming}>
       {/* Stable positions only append while streaming, preserving mounted expensive blocks. */}
       {blocks.map((block, index) => (
         <MarkdownVirtualBlock

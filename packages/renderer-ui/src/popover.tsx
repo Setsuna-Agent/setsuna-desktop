@@ -12,7 +12,7 @@ export const Popover = forwardRef<HTMLElement, PopoverProps>(function Popover({ 
   const panel = { ...floatingPlacement(placement), className: cn('sd-popover', className), style, sideOffset: 6, collisionPadding: 8 };
   if (trigger === 'hover') return <HoverCard.Root open={open} onOpenChange={onOpenChange} openDelay={mouseEnterDelay * 1000} closeDelay={mouseLeaveDelay * 1000}>
     <HoverCard.Trigger asChild><Slot.Root {...triggerProps} ref={ref}>{children}</Slot.Root></HoverCard.Trigger>
-    <HoverCard.Portal container={overlayContainer()}><HoverCard.Content {...panel}>{content}</HoverCard.Content></HoverCard.Portal>
+    <HoverCard.Portal container={overlayContainer()}><HoverCard.Content {...panel} hideWhenDetached>{content}</HoverCard.Content></HoverCard.Portal>
   </HoverCard.Root>;
   return <Primitive.Root open={open} onOpenChange={onOpenChange}>
     <Primitive.Trigger asChild><Slot.Root {...triggerProps} ref={ref}>{children}</Slot.Root></Primitive.Trigger>

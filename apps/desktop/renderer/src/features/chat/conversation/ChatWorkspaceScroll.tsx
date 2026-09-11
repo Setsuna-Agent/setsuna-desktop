@@ -6,22 +6,16 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
   type TouchEvent as ReactTouchEvent,
   type WheelEvent as ReactWheelEvent,
   type RefObject,
 } from 'react';
 import type { Translate } from '../../../shared/i18n/I18nProvider.js';
 import type { ChatContextTokenUsage } from './chatContextUsage.js';
-import {
-  canFitConversationOverviewPanel,
-  doesConversationOverviewOverlapContent,
-  needsConversationOverviewContentShift,
-} from './conversationOverviewLayout.js';
+import { shouldShiftConversationOverviewContent } from './conversationOverviewLayout.js';
 
-const scrollBottomThresholdPx = 96;
-const stickyBottomThresholdPx = 4;
-const pinnedScrollSettleFrameCount = 1;
+const scrollBottomThresholdPx = 56;
+const followScrollTimeConstantMs = 80;
 const keyboardScrollIntentKeys = new Set([
   'ArrowDown',
   'ArrowUp',
@@ -60,40 +54,40 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
     }
     scrollFrameRef.current = null;
   }, []);
-  const scrollToBottomNow = useCallback(() => {
-    const node = scrollRef.current;
-    if (!node) return;
-    node.scrollTop = node.scrollHeight;
-    lastScrollTopRef.current = node.scrollTop;
-    setShowScrollBottom(false);
-  }, []);
-  const schedulePinnedScroll = useCallback(
-    (frameCount = pinnedScrollSettleFrameCount) => {
-      if (showEmptyStarter || !shouldStickToBottomRef.current) return;
-      if (typeof window === 'undefined') {
-        scrollToBottomNow();
-        return;
+  const schedulePinnedScroll = useCallback((immediate = false) => {
+    if (showEmptyStarter || !shouldStickToBottomRef.current) return;
+    // Streaming updates move the destination; they must not restart an in-flight glide.
+    if (scrollFrameRef.current !== null) {
+      if (!immediate) return;
+      cancelScheduledScroll();
+    }
+    const token = ++scrollScheduleTokenRef.current;
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let previousTime = performance.now();
+    const tick = (now: number) => {
+      if (token !== scrollScheduleTokenRef.current) return;
+      scrollFrameRef.current = null;
+      const node = scrollRef.current;
+      if (!node || !shouldStickToBottomRef.current) return;
+      const target = Math.max(0, node.scrollHeight - node.clientHeight);
+      const distance = target - node.scrollTop;
+      const elapsed = Math.max(1, now - previousTime);
+      previousTime = now;
+      const progress = 1 - Math.exp(-elapsed / followScrollTimeConstantMs);
+      node.scrollTop = immediate || reducedMotion.matches || Math.abs(distance) <= 1
+        ? target
+        : node.scrollTop + Math.sign(distance) * Math.max(1, Math.abs(distance) * progress);
+      lastScrollTopRef.current = node.scrollTop;
+      setShowScrollBottom(false);
+      if (Math.abs(target - node.scrollTop) > 1) {
+        scrollFrameRef.current = window.requestAnimationFrame(tick);
+      } else {
+        node.scrollTop = target;
+        lastScrollTopRef.current = node.scrollTop;
       }
-
-      // 后续异步增高由下方 ResizeObserver 接管；每次内容提交只排一个 frame。
-      const token = scrollScheduleTokenRef.current + 1;
-      scrollScheduleTokenRef.current = token;
-      if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current);
-
-      const tick = (remainingFrames: number) => {
-        scrollFrameRef.current = window.requestAnimationFrame(() => {
-          if (token !== scrollScheduleTokenRef.current) return;
-          scrollFrameRef.current = null;
-          if (!shouldStickToBottomRef.current) return;
-          scrollToBottomNow();
-          if (remainingFrames > 1) tick(remainingFrames - 1);
-        });
-      };
-
-      tick(Math.max(1, frameCount));
-    },
-    [scrollToBottomNow, showEmptyStarter],
-  );
+    };
+    scrollFrameRef.current = window.requestAnimationFrame(tick);
+  }, [cancelScheduledScroll, showEmptyStarter]);
 
   const syncScrollBottomState = useCallback((movingTowardBottom = false) => {
     const node = scrollRef.current;
@@ -103,8 +97,8 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
     }
 
     const distanceToBottom = scrollDistanceToBottom(node);
-    const atBottom = distanceToBottom <= stickyBottomThresholdPx;
-    if (atBottom && (shouldStickToBottomRef.current || movingTowardBottom)) {
+    const atBottom = distanceToBottom <= scrollBottomThresholdPx;
+    if (atBottom && (shouldStickToBottomRef.current || (userScrollIntentRef.current && movingTowardBottom))) {
       // 向上滚动时即使仍在底部容差内也不能重新吸附；尺寸通知同样不能恢复跟随。
       userScrollIntentRef.current = false;
       shouldStickToBottomRef.current = true;
@@ -122,7 +116,7 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
 
     if (shouldStickToBottomRef.current) {
       setShowScrollBottom(false);
-      schedulePinnedScroll(1);
+      schedulePinnedScroll();
       return;
     }
 
@@ -137,18 +131,24 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
     syncScrollBottomState(movingTowardBottom);
   }, [syncScrollBottomState]);
 
-  const scrollToBottom = useCallback(
-    (behavior: ScrollBehavior = 'auto') => {
-      const node = scrollRef.current;
-      if (!node) return;
-      userScrollIntentRef.current = false;
-      shouldStickToBottomRef.current = true;
-      setShowScrollBottom(false);
-      node.scrollTo({ top: node.scrollHeight, behavior });
-      if (behavior === 'auto') schedulePinnedScroll(2);
-    },
-    [schedulePinnedScroll],
-  );
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    userScrollIntentRef.current = false;
+    shouldStickToBottomRef.current = true;
+    setShowScrollBottom(false);
+    schedulePinnedScroll(behavior !== 'smooth');
+  }, [schedulePinnedScroll]);
+
+  const scrollToOffset = useCallback((top: number, behavior: ScrollBehavior = 'smooth') => {
+    cancelScheduledScroll();
+    shouldStickToBottomRef.current = false;
+    // A rail jump is not a downward user gesture and must not silently re-enable follow.
+    userScrollIntentRef.current = false;
+    const node = scrollRef.current;
+    if (!node) return;
+    node.scrollTo({ top, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : behavior });
+    lastScrollTopRef.current = node.scrollTop;
+    setShowScrollBottom(scrollDistanceToBottom(node) > scrollBottomThresholdPx);
+  }, [cancelScheduledScroll, scrollDistanceToBottom]);
 
   const markUserScrollIntent = useCallback(() => {
     if (!showEmptyStarter) userScrollIntentRef.current = true;
@@ -172,7 +172,7 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
       const node = scrollRef.current;
       if (!node) return;
       const distanceToBottom = scrollDistanceToBottom(node);
-      if (event.deltaY < 0 || distanceToBottom > stickyBottomThresholdPx) {
+      if (event.deltaY < 0 || distanceToBottom > scrollBottomThresholdPx) {
         releasePinnedScrollForUser();
         return;
       }
@@ -191,6 +191,7 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
   const handleScrollKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
       if (!keyboardScrollIntentKeys.has(event.key)) return;
+      if (event.target instanceof Element && event.target.closest('input, textarea, select, button, [contenteditable="true"], [role="combobox"]')) return;
       if (event.key === 'End') {
         markUserScrollIntent();
         return;
@@ -198,20 +199,6 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
       releasePinnedScrollForUser();
     },
     [markUserScrollIntent, releasePinnedScrollForUser],
-  );
-
-  const markScrollbarDragIntent = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      const node = scrollRef.current;
-      if (!node || node.scrollHeight <= node.clientHeight || showEmptyStarter) return;
-      const scrollbarHitWidth = Math.max(12, node.offsetWidth - node.clientWidth);
-      const { right } = node.getBoundingClientRect();
-      // 只在点击滚动条轨道区域时认为是拖拽意图，普通内容点击不解除 sticky。
-      if (event.clientX >= right - scrollbarHitWidth) {
-        releasePinnedScrollForUser();
-      }
-    },
-    [releasePinnedScrollForUser, showEmptyStarter],
   );
 
   useLayoutEffect(() => {
@@ -227,7 +214,7 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
       return;
     }
     shouldStickToBottomRef.current = true;
-    schedulePinnedScroll();
+    schedulePinnedScroll(true);
   }, [cancelScheduledScroll, schedulePinnedScroll, showEmptyStarter, threadId]);
 
   useLayoutEffect(() => {
@@ -256,7 +243,7 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
     if (listNode && listNode !== contentNode) observer.observe(listNode);
     observer.observe(scrollNode);
     return () => observer.disconnect();
-  }, [schedulePinnedScroll, scrollSignal, showEmptyStarter, syncScrollBottomState]);
+  }, [contentRef, schedulePinnedScroll, showEmptyStarter, syncScrollBottomState, threadId]);
 
   useEffect(() => cancelScheduledScroll, [cancelScheduledScroll]);
 
@@ -267,91 +254,43 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
     handleScrollTouchMove,
     handleScrollWheel,
     listRef,
-    markScrollbarDragIntent,
     scrollRef,
     scrollToBottom,
+    scrollToOffset,
     showScrollBottom,
   };
 }
 
-export function useConversationOverviewAutoExpand(conversationRef: RefObject<HTMLElement | null>, contentRef: RefObject<HTMLElement | null>): { canExpand: boolean; needsContentShift: boolean } {
-  const [layout, setLayout] = useState(() => ({ canExpand: false, needsContentShift: false }));
+export function useConversationOverviewContentShift(
+  conversationRef: RefObject<HTMLElement | null>,
+  contentNode: HTMLElement | null,
+): boolean {
+  const [needsContentShift, setNeedsContentShift] = useState(false);
 
   useLayoutEffect(() => {
     const conversationNode = conversationRef.current;
-    const contentNode = contentRef.current;
     if (!conversationNode || !contentNode || typeof window === 'undefined') return undefined;
 
     const sync = () => {
-      const conversationWidth = conversationNode.getBoundingClientRect().width;
-      const contentWidth = contentNode.getBoundingClientRect().width;
-      const nextLayout = {
-        canExpand: canFitConversationOverviewPanel({ conversationWidth, contentWidth }),
-        needsContentShift: needsConversationOverviewContentShift({ conversationWidth, contentWidth }),
-      };
-      setLayout((current) => (current.canExpand === nextLayout.canExpand && current.needsContentShift === nextLayout.needsContentShift ? current : nextLayout));
+      // Match the panel's CSS-pixel dimensions even when the app is zoomed.
+      setNeedsContentShift(shouldShiftConversationOverviewContent({
+        conversationWidth: conversationNode.clientWidth,
+        contentWidth: contentNode.offsetWidth,
+      }));
     };
     sync();
 
-    if (typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', sync);
-      return () => window.removeEventListener('resize', sync);
-    }
-
-    const observer = new ResizeObserver(sync);
-    observer.observe(conversationNode);
-    observer.observe(contentNode);
-    return () => observer.disconnect();
-  }, [conversationRef, contentRef]);
-
-  return layout;
-}
-
-export function useConversationOverviewContentCollision(
-  conversationRef: RefObject<HTMLElement | null>,
-  contentRef: RefObject<HTMLElement | null>,
-  overviewRef: RefObject<HTMLElement | null>,
-  active: boolean,
-): boolean {
-  const [overlapsContent, setOverlapsContent] = useState(false);
-
-  useLayoutEffect(() => {
-    if (!active) {
-      setOverlapsContent(false);
-      return undefined;
-    }
-
-    const conversationNode = conversationRef.current;
-    const contentNode = contentRef.current;
-    const overviewNode = overviewRef.current;
-    if (!conversationNode || !contentNode || !overviewNode || typeof window === 'undefined') {
-      setOverlapsContent(false);
-      return undefined;
-    }
-
-    const sync = () => {
-      const nextValue = doesConversationOverviewOverlapContent({
-        conversationWidth: conversationNode.getBoundingClientRect().width,
-        contentWidth: contentNode.getBoundingClientRect().width,
-        overviewWidth: overviewNode.getBoundingClientRect().width,
-      });
-      setOverlapsContent((current) => (current === nextValue ? current : nextValue));
+    window.addEventListener('resize', sync);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(sync);
+    observer?.observe(conversationNode);
+    observer?.observe(contentNode);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', sync);
     };
-    sync();
+  }, [conversationRef, contentNode]);
 
-    if (typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', sync);
-      return () => window.removeEventListener('resize', sync);
-    }
-
-    const observer = new ResizeObserver(sync);
-    observer.observe(conversationNode);
-    observer.observe(contentNode);
-    observer.observe(overviewNode);
-    return () => observer.disconnect();
-  }, [active, contentRef, conversationRef, overviewRef]);
-
-  return overlapsContent;
+  return needsContentShift;
 }
 
 export function conversationOverviewContextLabel(

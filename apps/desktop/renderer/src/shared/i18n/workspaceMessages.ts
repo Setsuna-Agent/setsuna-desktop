@@ -1,9 +1,6 @@
 export const workspaceZhCN = {
-  'conversation.overview.expand': '展开对话环境信息',
   'conversation.overview.review': '审查',
-  'conversation.overview.environment': '环境',
   'conversation.overview.title': '环境信息',
-  'conversation.overview.collapse': '折叠环境信息',
   'conversation.overview.loading': '加载中',
   'conversation.overview.loadFailed': '加载失败',
   'conversation.overview.noChanges': '无变更',
@@ -117,11 +114,8 @@ export const workspaceZhCN = {
 } as const;
 
 export const workspaceEnUS = {
-  'conversation.overview.expand': 'Expand conversation environment information',
   'conversation.overview.review': 'Review',
-  'conversation.overview.environment': 'Environment',
   'conversation.overview.title': 'Environment information',
-  'conversation.overview.collapse': 'Collapse environment information',
   'conversation.overview.loading': 'Loading',
   'conversation.overview.loadFailed': 'Failed to load',
   'conversation.overview.noChanges': 'No changes',

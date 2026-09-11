@@ -48,7 +48,7 @@ Composer state 由 `useChatComposerSession` 和专用 hooks 管理，避免页�
 
 Renderer Slot 的实例身份沿用这套 session 语义：Conversation/Details 跟随具体 thread surface，Composer 则使用 `variant + composerKey`。首次发送把 new-thread slot claim 为新 thread 时，Composer Slot 不会因 threadId 出现而中途 remount。空白 starter 的可替换 Conversation 内容与宿主 Composer 是同级所有权；Conversation winner 即使完全替换默认内容，也不能让发送入口消失。
 
-侧边对话的创建事务、异常退出清理和 owner 竞争由 `packages/features/side-conversation/` 持有；宿主 `SideChatPanel -> ChatWorkspace -> ChatComposer` 只组合通用 thread surface 并传递可见性聚焦信号。只有面板从隐藏变为当前可见面板时才聚焦 Sender，并把光标放到草稿末尾；普通重渲染不会持续抢占焦点。
+侧边对话的创建事务、异常退出清理和 owner 竞争由 `packages/features/side-conversation/` 持有；宿主 `SideChatPanel -> ChatWorkspace -> ChatComposer` 只组合通用 thread surface 并传递可见性聚焦信号。只有面板从隐藏变为当前可见面板时才聚焦 Sender，并把光标放到草稿末尾；普通重渲染不会持续抢占焦点。发送入口在提交前把焦点交回编辑器，提交期间的 `contentEditable` 锁通过显式 `tabIndex` 保留可聚焦性；清空草稿只修复仍在编辑器内的光标，不在异步完成后重新抢焦点。
 
 ## Turn actions
 
@@ -90,6 +90,8 @@ Active turn 时普通提交默认排队；显式立即发送才尝试 steer。Go
 - `chatComposerCursorOffset.ts`：菜单定位需要的光标偏移。
 - `chatComposerSlots.tsx`：workspace mention、Skill 和文本输入 slots。
 - `useQueuedTurnComposerEdit.ts`：带 token 的队列项取回编辑。
+
+输入框上方的 `chat-composer-stack` 统一承载状态贡献和 `ChatSendQueue`：目标状态与单条、多条队列共享一张向内收窄的卡片，底部留白与输入框重叠，呈现从后方露出的层次。状态贡献只绘制行内容，不再持有独立边框、阴影和外部间距；目标在队列上方，队列限高后内部滚动。两者都无内容时容器不占空间，主对话、侧边对话与概览偏移共用这套布局。
 
 取回队列项不会先删除持久化数据。Runtime 返回 edit token，renderer 暂时把内容接管到 composer；提交、取消、卸载和失败路径都要 release 或携 token 更新。
 
@@ -136,7 +138,11 @@ Runtime 一轮可能包含：
 - 新消息、delta、工具卡高度变化后的锚点。
 - Thread 切换后的重置。
 
-`ChatWorkspaceScroll` 负责滚动容器，而不是让每个消息组件自己滚动。
+`ChatWorkspaceScroll` 负责主滚动容器：流式增长由持续的 animation frame 平滑追踪，新的 delta 只更新终点。用户上滚立即停止跟随，向下回到距离底部 56px 内或点击回到底部才恢复；减少动态效果偏好和线程初始定位直接到达目标。加载更早的历史先退出跟随，再恢复 prepend 前的锚点。
+
+环境信息始终使用完整卡片，不再提供折叠入口或维护展开状态。卡片宽度受聊天区可用宽度约束；空白页与正文通过节点回调绑定尺寸监听，正文挂载或替换后重新观察。窗口变化和面板拖动都会触发测量，以 CSS 像素计算正文与卡片之间的留白和偏移，避免页面缩放影响阈值。
+
+消息导航参考 [beUI Message Scroller](https://beui.dev/components/agents/message-scroller)，放在聊天区左侧，避开右侧环境信息面板。`ChatMessageRail` 展示当前已渲染消息的刻度和向右展开的悬停/键盘焦点预览；阅读位置显示为一段连续的主题色刻度，按视口边界在消息间插值，边缘深浅随滚动平滑变化，长回复也保留至少三个刻度宽的标记（消息不足三条时覆盖现有刻度）。默认刻度等长，仅 hover 时展开长度层次；点击历史刻度定位消息，点击最后一条回到底部并恢复跟随。`chatMessageNavigation` 从 transcript 数据生成摘要，`useChatMessageRail` 按稳定的 `data-message-id` 测量位置并换算页面缩放，不随每个文本 delta 重建观察器。
 
 SSE 丢帧或组件重挂载时依赖 thread snapshot 恢复；局部 streaming state 不能成为唯一数据源。
 Thread 首屏只携带最新 160 条 message，`useThreadMessageHistory` 通过 SQLite-backed
@@ -182,6 +188,8 @@ Thread 首屏只携带最新 160 条 message，`useThreadMessageHistory` 通过 
 - 外链与本地链接的不同打开策略。
 
 流式正文按 parser block 分成已提交稳定区和可变尾部。追加 delta 只对尾部执行修复与词法分析；表格、setext heading、列表、fenced code 和未闭合 display math 在后续 block 证明边界前不能提交。引用式链接、引用定义和脚注从首次出现处起保留在同一个可变 Markdown tree，确保稍后到达的定义仍能解析前面的引用。消息进入终态时必须丢弃流式补全字符，并用持久化原文做一次 canonical full parse。
+
+正文呈现参考 [beUI Streaming Response](https://beui.dev/components/agents/streaming-response)：`useSmoothedStreamingContent` 使用持续的 `requestAnimationFrame` 按约 110 个字素/秒追加内容，网络突发积压时提高推进速度。新的 delta 只更新目标文本，不重启正在运行的帧循环。普通文本节点直接更新，不再给每个词添加模糊、位移或延迟动画；历史内容、终态、正文改写和减少动态效果偏好直接显示原文。流式容器通过 `aria-busy` 标记状态，已有 Markdown 块继续复用。
 
 `MarkdownNavigationProvider` 统一导航，`WorkspaceFileLink` 走 workspace 能力，不能让 Markdown 任意调用 `window.open` 或本地 shell。
 

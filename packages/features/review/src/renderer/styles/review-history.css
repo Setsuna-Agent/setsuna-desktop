@@ -16,6 +16,16 @@
   --git-nav-bg: var(--app-surface);
 }
 
+/* These ghost buttons carry primary content; keep it readable regardless of stylesheet order. */
+.git-changes-panel .git-history-section-heading,
+.git-changes-panel .git-changes-files__group-toggle,
+.git-changes-panel .git-changes-file__select,
+.git-changes-panel .git-history-row__commit,
+.git-changes-panel .git-history-ref,
+.git-changes-panel .git-conflict-history__entry {
+  color: var(--app-text);
+}
+
 .git-changes-panel__body {
   position: relative;
   display: flex;
@@ -57,25 +67,16 @@
 }
 
 .git-changes-nav__title {
-  display: flex;
   flex: 1;
-  align-items: center;
-  gap: 6px;
   min-width: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+  margin: 0;
   color: var(--app-text);
-  cursor: pointer;
   font-size: 12px;
   font-weight: 600;
   line-height: 22px;
   text-align: left;
 }
 
-.git-changes-nav__title svg.is-collapsed { transform: rotate(-90deg); }
-.git-changes-nav__title > svg,
 .git-changes-files__group-toggle > svg,
 .git-history-section-heading > svg:first-child,
 .git-changes-file__select > :first-child {
@@ -243,9 +244,6 @@
   display: none;
 }
 
-.git-changes-nav.is-collapsed .git-history-split > .git-history-split__handle { display: none; }
-.git-changes-nav.is-collapsed .git-history-split__graph { flex: 1; height: auto !important; }
-
 .git-history-split__commits {
   display: flex;
   /* Collapsed sections use their flex basis for height, not width. */
@@ -279,7 +277,6 @@
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--app-text-muted);
   font-size: 11px;
   font-weight: 600;
   line-height: 20px;
@@ -310,7 +307,6 @@ button.git-history-section-heading { cursor: pointer; }
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
@@ -386,7 +382,7 @@ button.git-history-section-heading { cursor: pointer; }
   contain-intrinsic-size: auto var(--git-file-row-height);
 }
 
-.git-changes-file__select { display: flex; flex: 1; align-items: center; gap: 6px; min-width: 0; height: var(--git-file-row-height); padding: 0; border: 0; border-radius: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; line-height: var(--git-file-row-height); text-align: left; }
+.git-changes-file__select { display: flex; flex: 1; align-items: center; gap: 6px; min-width: 0; height: var(--git-file-row-height); padding: 0; border: 0; border-radius: 0; background: transparent; cursor: pointer; font: inherit; line-height: var(--git-file-row-height); text-align: left; }
 .git-changes-file__path { display: flex; align-items: baseline; gap: 7px; min-width: 0; overflow: hidden; }
 .git-changes-file__name,
 .git-changes-file__directory { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -437,7 +433,6 @@ button.git-history-section-heading { cursor: pointer; }
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--app-text);
   cursor: pointer;
   text-align: left;
   font-size: 13px;
@@ -463,7 +458,6 @@ button.git-history-section-heading { cursor: pointer; }
   border: 0;
   border-radius: var(--app-radius-sm);
   background: color-mix(in srgb, var(--git-ref-color) 8%, var(--git-nav-bg));
-  color: color-mix(in srgb, var(--git-ref-color) 75%, var(--app-text));
   cursor: pointer;
   font-size: 10px;
   line-height: 16px;
@@ -576,7 +570,6 @@ button.git-history-section-heading { cursor: pointer; }
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--app-text);
   text-align: left;
   font-size: 12px;
   cursor: pointer;

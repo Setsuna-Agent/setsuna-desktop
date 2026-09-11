@@ -1,21 +1,18 @@
 import { Check, ChevronDown } from 'lucide-react';
+import { Select as Primitive } from 'radix-ui';
 import {
   Children,
   Fragment,
   isValidElement,
-  useCallback,
-  useEffect,
-  useId,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
-  type KeyboardEvent,
   type OptionHTMLAttributes,
   type ReactElement,
   type ReactNode,
 } from 'react';
-import { createPortal } from 'react-dom';
+import { overlayContainer } from './portal.js';
 
 type SelectOption = {
   disabled: boolean;
@@ -41,23 +38,9 @@ type SelectFieldProps = {
   valueContent?: ReactNode;
 };
 
-export type SelectMenuPosition = {
-  left: number;
-  maxHeight: number;
-  top: number;
-  width: number;
-};
-
-type SelectMenuViewport = {
-  height: number;
-  minWidth?: number;
-  scaleInverse?: number;
-  width: number;
-};
-
-const MENU_GAP = 6;
-const MENU_MAX_HEIGHT = 280;
-const VIEWPORT_GUTTER = 8;
+// Radix reserves an empty value for its placeholder; prefix every value so that
+// domain options such as “follow the current model” can still use an empty string.
+const OPTION_VALUE_PREFIX = 'option:';
 
 export function SelectField({
   'aria-label': ariaLabel,
@@ -77,120 +60,58 @@ export function SelectField({
   valueContent,
 }: SelectFieldProps) {
   const options = useMemo(() => optionElements(children), [children]);
-  const selectedIndex = options.findIndex((option) => option.value === value);
-  const selectedOption = options[selectedIndex] ?? options.find((option) => !option.disabled) ?? null;
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const listboxId = useId();
+  const selectedOption = options.find((option) => option.value === value) ?? options.find((option) => !option.disabled) ?? null;
+  const restoreFocus = useRef(true);
   const [open, setOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(selectedIndex);
-  const [menuPosition, setMenuPosition] = useState<SelectMenuPosition | null>(null);
-
-  const updateMenuPosition = useCallback(() => {
-    const trigger = triggerRef.current;
-    if (!trigger) return;
-    setMenuPosition(selectMenuPosition(trigger.getBoundingClientRect(), options.length, {
-      height: window.innerHeight,
-      minWidth: menuMinWidth,
-      scaleInverse: pageScaleInverse(),
-      width: window.innerWidth,
-    }));
-  }, [menuMinWidth, options.length]);
-
-  const openMenu = useCallback((preferredIndex = selectedIndex) => {
-    if (disabled || options.length === 0) return;
-    const nextIndex = enabledOptionIndex(options, preferredIndex, 1);
-    setActiveIndex(nextIndex);
-    setOpen(true);
-  }, [disabled, options, selectedIndex]);
-
-  const closeMenu = useCallback((restoreFocus = false) => {
-    setOpen(false);
-    if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus());
-  }, []);
-
-  const selectOption = useCallback((option: SelectOption) => {
-    if (option.disabled) return;
-    const restoreFocus = option.value === value || onValueChange(option.value) !== false;
-    closeMenu(restoreFocus);
-  }, [closeMenu, onValueChange, value]);
-
-  useEffect(() => {
-    if (!open) {
-      setMenuPosition(null);
-      return;
-    }
-    updateMenuPosition();
-    const update = () => updateMenuPosition();
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) return;
-      closeMenu();
-    };
-    window.addEventListener('resize', update);
-    window.addEventListener('scroll', update, true);
-    document.addEventListener('pointerdown', onPointerDown, true);
-    return () => {
-      window.removeEventListener('resize', update);
-      window.removeEventListener('scroll', update, true);
-      document.removeEventListener('pointerdown', onPointerDown, true);
-    };
-  }, [closeMenu, open, updateMenuPosition]);
-
-  useEffect(() => {
-    if (!open || activeIndex < 0) return;
-    menuRef.current?.querySelector<HTMLElement>(`[data-option-index="${activeIndex}"]`)?.scrollIntoView({ block: 'nearest' });
-  }, [activeIndex, open]);
-
-  const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-    if (event.key === 'Escape' && open) {
-      event.preventDefault();
-      closeMenu(true);
-      return;
-    }
-    if (event.key === 'Tab') {
-      closeMenu();
-      return;
-    }
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      if (!open) openMenu();
-      else if (activeIndex >= 0) selectOption(options[activeIndex]);
-      return;
-    }
-    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Home' && event.key !== 'End') return;
-    event.preventDefault();
-    if (!open) {
-      openMenu(event.key === 'ArrowUp' || event.key === 'End' ? options.length - 1 : selectedIndex);
-      return;
-    }
-    const direction = event.key === 'ArrowUp' ? -1 : 1;
-    const start = event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1 : activeIndex + direction;
-    setActiveIndex(enabledOptionIndex(options, start, direction));
+  const onOpenChange = (next: boolean) => {
+    if (next && (disabled || options.length === 0)) return;
+    if (next) restoreFocus.current = true;
+    setOpen(next);
   };
 
   return (
     <>
-      <button
-        ref={triggerRef}
-        id={id}
-        type="button"
-        className={['sd-field', 'sd-select-field', open ? 'is-open' : '', className].filter(Boolean).join(' ')}
-        aria-activedescendant={open && activeIndex >= 0 ? `${listboxId}-option-${activeIndex}` : undefined}
-        aria-controls={open ? listboxId : undefined}
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        aria-label={ariaLabel}
-        aria-labelledby={ariaLabelledBy}
-        disabled={disabled}
-        style={style}
-        title={title}
-        onClick={() => open ? closeMenu() : openMenu()}
-        onKeyDown={onKeyDown}
-      >
-        <span className="sd-select-field__value">{valueContent ?? selectedOption?.label ?? ''}</span>
-        <ChevronDown className="sd-select-field__chevron" size={15} aria-hidden="true" />
-      </button>
+      <Primitive.Root open={open} onOpenChange={onOpenChange} disabled={disabled}
+        value={`${OPTION_VALUE_PREFIX}${value}`} onValueChange={(next) => {
+          restoreFocus.current = onValueChange(next.slice(OPTION_VALUE_PREFIX.length)) !== false;
+        }}>
+        <Primitive.Trigger
+          id={id}
+          type="button"
+          className={['sd-field', 'sd-select-field', open ? 'is-open' : '', className].filter(Boolean).join(' ')}
+          aria-haspopup="listbox"
+          aria-label={ariaLabel}
+          aria-labelledby={ariaLabelledBy}
+          aria-required={required || undefined}
+          disabled={disabled}
+          style={style}
+          title={title}
+        >
+          <span className="sd-select-field__value">{valueContent ?? selectedOption?.label ?? ''}</span>
+          <ChevronDown className="sd-select-field__chevron" size={15} aria-hidden="true" />
+        </Primitive.Trigger>
+        <Primitive.Portal container={overlayContainer()}>
+          {/* Radix coordinates the nested modal's pointer, scroll and focus scopes. */}
+          <Primitive.Content className={`sd-select-menu${menuClassName ? ` ${menuClassName}` : ''}`}
+            position="popper" align="start" sideOffset={6} collisionPadding={8}
+            aria-label={ariaLabel} aria-labelledby={ariaLabelledBy}
+            style={{ ...style, '--sd-select-menu-min-width': `${menuMinWidth ?? 160}px` } as CSSProperties}
+            onCloseAutoFocus={(event) => {
+              // A selection may open a confirmation dialog that should retain focus.
+              if (!restoreFocus.current) event.preventDefault();
+            }}>
+            <Primitive.Viewport className="sd-select-menu__viewport">
+              {options.map((option, index) => (
+                <Primitive.Item key={`${option.value}:${index}`} value={`${OPTION_VALUE_PREFIX}${option.value}`}
+                  className="sd-select-menu__option" disabled={option.disabled}>
+                  <Primitive.ItemText>{option.label}</Primitive.ItemText>
+                  <Primitive.ItemIndicator asChild><Check size={15} aria-hidden="true" /></Primitive.ItemIndicator>
+                </Primitive.Item>
+              ))}
+            </Primitive.Viewport>
+          </Primitive.Content>
+        </Primitive.Portal>
+      </Primitive.Root>
       {name || required ? (
         <select
           className="sd-select-field__form-control"
@@ -206,8 +127,7 @@ export function SelectField({
             event.preventDefault();
             const firstInvalidControl = event.currentTarget.form?.querySelector(':invalid');
             if (firstInvalidControl !== event.currentTarget) return;
-            openMenu();
-            requestAnimationFrame(() => triggerRef.current?.focus());
+            onOpenChange(true);
           }}
         >
           {options.map((option, index) => (
@@ -217,88 +137,8 @@ export function SelectField({
           ))}
         </select>
       ) : null}
-      {open && menuPosition && typeof document !== 'undefined'
-        ? createPortal(
-          <div
-            ref={menuRef}
-            id={listboxId}
-            className={`sd-select-menu${menuClassName ? ` ${menuClassName}` : ''}`}
-            role="listbox"
-            aria-label={ariaLabel}
-            aria-labelledby={ariaLabelledBy}
-            style={{
-              ...style,
-              left: menuPosition.left,
-              maxHeight: menuPosition.maxHeight,
-              top: menuPosition.top,
-              width: menuPosition.width,
-            }}
-          >
-            {options.map((option, index) => {
-              const selected = option.value === value;
-              return (
-                <button
-                  key={`${option.value}:${index}`}
-                  id={`${listboxId}-option-${index}`}
-                  type="button"
-                  role="option"
-                  className={`sd-select-menu__option ${index === activeIndex ? 'is-active' : ''}`}
-                  aria-selected={selected}
-                  data-option-index={index}
-                  disabled={option.disabled}
-                  onClick={() => selectOption(option)}
-                  onPointerMove={() => !option.disabled && setActiveIndex(index)}
-                >
-                  <span>{option.label}</span>
-                  {selected ? <Check size={15} aria-hidden="true" /> : null}
-                </button>
-              );
-            })}
-          </div>,
-          document.body,
-        )
-        : null}
     </>
   );
-}
-
-export function selectMenuPosition(
-  rect: Pick<DOMRect, 'bottom' | 'left' | 'top' | 'width'>,
-  optionCount: number,
-  viewport: SelectMenuViewport,
-): SelectMenuPosition {
-  const scaleInverse = viewport.scaleInverse && viewport.scaleInverse > 0 ? viewport.scaleInverse : 1;
-  // getBoundingClientRect 返回视觉像素，而缩放 body 内的固定定位门户使用缩放前的 CSS 像素。
-  const viewportWidth = viewport.width * scaleInverse;
-  const viewportHeight = viewport.height * scaleInverse;
-  const rectLeft = rect.left * scaleInverse;
-  const rectTop = rect.top * scaleInverse;
-  const rectBottom = rect.bottom * scaleInverse;
-  const rectWidth = rect.width * scaleInverse;
-  const desiredHeight = Math.min(MENU_MAX_HEIGHT, optionCount * 36 + 12);
-  const spaceBelow = viewportHeight - rectBottom - VIEWPORT_GUTTER;
-  const spaceAbove = rectTop - VIEWPORT_GUTTER;
-  const opensAbove = spaceBelow < Math.min(desiredHeight, 160) && spaceAbove > spaceBelow;
-  const availableHeight = Math.max(88, (opensAbove ? spaceAbove : spaceBelow) - MENU_GAP);
-  const maxHeight = Math.min(MENU_MAX_HEIGHT, availableHeight);
-  const width = Math.min(Math.max(rectWidth, viewport.minWidth ?? 160), viewportWidth - VIEWPORT_GUTTER * 2);
-  const left = Math.min(
-    Math.max(VIEWPORT_GUTTER, rectLeft),
-    viewportWidth - width - VIEWPORT_GUTTER,
-  );
-  const menuHeight = Math.min(desiredHeight, maxHeight);
-
-  return {
-    left,
-    maxHeight,
-    top: opensAbove ? Math.max(VIEWPORT_GUTTER, rectTop - MENU_GAP - menuHeight) : rectBottom + MENU_GAP,
-    width,
-  };
-}
-
-function pageScaleInverse(): number {
-  const value = Number.parseFloat(window.getComputedStyle(document.documentElement).getPropertyValue('--app-page-scale-inverse'));
-  return Number.isFinite(value) && value > 0 ? value : 1;
 }
 
 function optionElements(children: ReactNode): SelectOption[] {
@@ -313,14 +153,4 @@ function optionElements(children: ReactNode): SelectOption[] {
       value: String(option.props.value ?? ''),
     }];
   });
-}
-
-function enabledOptionIndex(options: SelectOption[], start: number, direction: 1 | -1): number {
-  if (options.length === 0) return -1;
-  let index = Math.min(Math.max(start, 0), options.length - 1);
-  for (let checked = 0; checked < options.length; checked += 1) {
-    if (!options[index]?.disabled) return index;
-    index = (index + direction + options.length) % options.length;
-  }
-  return -1;
 }

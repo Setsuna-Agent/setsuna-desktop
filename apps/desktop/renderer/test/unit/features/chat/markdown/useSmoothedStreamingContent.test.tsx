@@ -2,89 +2,147 @@
 
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  nextStreamingChunkLength,
-  useSmoothedStreamingContent,
-} from '../../../../../src/features/chat/markdown/useSmoothedStreamingContent.js';
+import { useSmoothedStreamingContent } from '../../../../../src/features/chat/markdown/useSmoothedStreamingContent.js';
+
+function mockFrames() {
+  let now = 0;
+  let nextId = 0;
+  let reducedMotion = false;
+  const callbacks = new Map<number, FrameRequestCallback>();
+  vi.spyOn(performance, 'now').mockImplementation(() => now);
+  vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+    const id = ++nextId;
+    callbacks.set(id, callback);
+    return id;
+  });
+  vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((id) => { callbacks.delete(id); });
+  vi.spyOn(window, 'matchMedia').mockReturnValue({
+    get matches() { return reducedMotion; },
+  } as MediaQueryList);
+  return {
+    callbacks,
+    elapse(ms: number) { now += ms; },
+    reduce() { reducedMotion = true; },
+    frame(ms = 16) {
+      now += ms;
+      const pending = [...callbacks.values()];
+      callbacks.clear();
+      act(() => { pending.forEach((callback) => callback(now)); });
+    },
+  };
+}
 
 afterEach(() => {
   cleanup();
-  vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe('useSmoothedStreamingContent', () => {
-  it('briefly holds isolated characters instead of revealing each transport delta', () => {
-    vi.useFakeTimers();
+  it('keeps progressing on frames even when new deltas arrive more frequently', () => {
+    const frames = mockFrames();
     const view = renderHook(
       ({ content }) => useSmoothedStreamingContent(content, true),
-      { initialProps: { content: '这' } },
+      { initialProps: { content: '' } },
     );
-
-    view.rerender({ content: '这是' });
-    act(() => vi.advanceTimersByTime(48));
-    expect(view.result.current).toBe('这');
-
-    view.rerender({ content: '这是一段' });
-    act(() => vi.advanceTimersByTime(56));
-    expect(view.result.current).toBe('这是一段');
+    const content = '连续输出的文字不会因为网络不断追加而重置等待时间';
+    for (let length = 1; length <= 4; length += 1) {
+      view.rerender({ content: content.slice(0, length) });
+      frames.elapse(4);
+    }
+    expect(view.result.current).toBe('');
+    expect(frames.callbacks.size).toBe(1);
+    frames.frame(0);
+    expect(view.result.current).toBe('连');
+    frames.frame();
+    expect(view.result.current).toBe('连续输');
+    frames.frame();
+    expect(view.result.current).toBe('连续输出');
+    expect(frames.callbacks.size).toBe(0);
   });
 
-  it('coalesces high-frequency character deltas into readable chunks', () => {
-    vi.useFakeTimers();
+  it('spreads a large burst across frames and catches up without a long replay', () => {
+    const frames = mockFrames();
     const view = renderHook(
       ({ content }) => useSmoothedStreamingContent(content, true),
-      { initialProps: { content: '这' } },
+      { initialProps: { content: 'Intro. ' } },
     );
-    const completeContent = '这是一段会被平滑分批显示的中文回复，而不是逐字跳出来。';
-
-    for (let index = 2; index <= completeContent.length; index += 1) {
-      view.rerender({ content: completeContent.slice(0, index) });
+    const content = `Intro. ${'流式正文'.repeat(250)}`;
+    view.rerender({ content });
+    frames.frame();
+    expect(view.result.current.length).toBeGreaterThan('Intro. '.length);
+    expect(view.result.current.length).toBeLessThan(content.length / 10);
+    let previous = view.result.current;
+    for (let index = 0; index < 125; index += 1) {
+      frames.frame();
+      expect(view.result.current.startsWith(previous)).toBe(true);
+      previous = view.result.current;
     }
-
-    expect(view.result.current).toBe('这');
-    act(() => vi.advanceTimersByTime(44));
-    expect(view.result.current.length).toBeGreaterThan(2);
-    expect(view.result.current.length).toBeLessThan(completeContent.length);
-
-    for (let index = 0; index < 16; index += 1) {
-      act(() => vi.advanceTimersByTime(48));
-    }
-    expect(view.result.current).toBe(completeContent);
+    expect(view.result.current).toBe(content);
+    expect(frames.callbacks.size).toBe(0);
   });
 
-  it('flushes the exact content immediately when streaming completes', () => {
-    vi.useFakeTimers();
+  it('preserves grapheme boundaries while revealing mixed Chinese and emoji text', () => {
+    const frames = mockFrames();
+    const view = renderHook(
+      ({ content }) => useSmoothedStreamingContent(content, true),
+      { initialProps: { content: '' } },
+    );
+    const graphemes = ['中', '文', '👩🏽‍💻', 'e\u0301', '🇨🇳', '结', '束'];
+    const content = graphemes.join('');
+    const prefixes = new Set(graphemes.map((_, index) => graphemes.slice(0, index + 1).join('')));
+    view.rerender({ content });
+    for (let index = 0; index < 8; index += 1) {
+      frames.frame();
+      expect(prefixes.has(view.result.current)).toBe(true);
+    }
+    expect(view.result.current).toBe(content);
+  });
+
+  it('shows history and completion immediately and cancels pending frames', () => {
+    const frames = mockFrames();
     const view = renderHook(
       ({ content, streaming }) => useSmoothedStreamingContent(content, streaming),
-      { initialProps: { content: '开', streaming: true } },
+      { initialProps: { content: '已有内容', streaming: true } },
     );
-
-    view.rerender({ content: '开始输出一段还未显示完成的内容', streaming: true });
-    expect(view.result.current).toBe('开');
-
-    view.rerender({ content: '开始输出一段还未显示完成的内容', streaming: false });
-    expect(view.result.current).toBe('开始输出一段还未显示完成的内容');
+    expect(view.result.current).toBe('已有内容');
+    expect(frames.callbacks.size).toBe(0);
+    view.rerender({ content: '已有内容以及尚未显示的追加正文', streaming: true });
+    expect(frames.callbacks.size).toBe(1);
+    view.rerender({ content: '已有内容以及尚未显示的追加正文', streaming: false });
+    expect(view.result.current).toBe('已有内容以及尚未显示的追加正文');
+    expect(frames.callbacks.size).toBe(0);
   });
 
-  it('shows non-append rewrites without waiting for a timer', () => {
-    vi.useFakeTimers();
+  it('drops old queued text on correction and cancels work on unmount', () => {
+    const frames = mockFrames();
     const view = renderHook(
       ({ content }) => useSmoothedStreamingContent(content, true),
-      { initialProps: { content: 'old content' } },
+      { initialProps: { content: 'old' } },
     );
-
-    view.rerender({ content: 'rewritten content' });
-
-    expect(view.result.current).toBe('rewritten content');
+    view.rerender({ content: 'old queued response' });
+    view.rerender({ content: 'corrected response' });
+    frames.frame();
+    expect(view.result.current).toBe('corrected response');
+    expect(frames.callbacks.size).toBe(0);
+    view.rerender({ content: 'corrected response with new text' });
+    expect(frames.callbacks.size).toBe(1);
+    view.unmount();
+    expect(frames.callbacks.size).toBe(0);
   });
-});
 
-describe('nextStreamingChunkLength', () => {
-  it('prefers nearby phrase boundaries and never splits surrogate pairs', () => {
-    expect(nextStreamingChunkLength('one two three four five')).toBe(14);
-
-    const emojiContent = '😀'.repeat(20);
-    const chunkLength = nextStreamingChunkLength(emojiContent);
-    expect(emojiContent.slice(0, chunkLength)).toBe(emojiContent);
+  it('honors reduced motion during a stream and on subsequent updates', () => {
+    const frames = mockFrames();
+    const view = renderHook(
+      ({ content }) => useSmoothedStreamingContent(content, true),
+      { initialProps: { content: '' } },
+    );
+    view.rerender({ content: '正在输出一段文字' });
+    frames.reduce();
+    frames.frame();
+    expect(view.result.current).toBe('正在输出一段文字');
+    expect(frames.callbacks.size).toBe(0);
+    view.rerender({ content: '正在输出一段文字，直接显示后续内容' });
+    expect(view.result.current).toBe('正在输出一段文字，直接显示后续内容');
+    expect(frames.callbacks.size).toBe(0);
   });
 });

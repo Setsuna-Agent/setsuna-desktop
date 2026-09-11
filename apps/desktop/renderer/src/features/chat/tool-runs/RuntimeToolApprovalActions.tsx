@@ -5,17 +5,43 @@ import type {
   RuntimeStructuredInputValue,
   RuntimeToolRun,
 } from '@setsuna-desktop/contracts';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import {
   useI18n,
   type Translate,
 } from '../../../shared/i18n/I18nProvider.js';
 import type { AnswerApprovalHandler } from './runtime-tool-run-types.js';
+import { permissionApprovalDetails } from './runtimeApprovalSummaries.js';
 import {
   compactStructuredInputValues,
   RuntimeStructuredInputField,
   structuredInputDefaults,
 } from './RuntimeStructuredInputField.js';
+
+export function PermissionApprovalDetails({ run }: { run: RuntimeToolRun }) {
+  const { t } = useI18n();
+  const permissions = permissionApprovalDetails(run);
+  if (!permissions) return null;
+  const rows = [
+    { label: t('toolRun.permission.cwd'), values: permissions.cwd ? [permissions.cwd] : [] },
+    { label: t('toolRun.permission.read'), values: permissions.readRoots },
+    { label: t('toolRun.permission.write'), values: permissions.writeRoots },
+    { label: t('toolRun.permission.network'), values: permissions.network ? [t('toolRun.permission.enabled')] : [] },
+  ].filter(({ values }) => values.length > 0);
+  if (!rows.length) return null;
+
+  // The tool summary already names the request; details only describe its scope.
+  return (
+    <dl className="chat-tool-run__permission-details">
+      {rows.map(({ label, values }) => (
+        <Fragment key={label}>
+          <dt>{label}</dt>
+          <dd>{values.map((value) => <span key={value}>{value}</span>)}</dd>
+        </Fragment>
+      ))}
+    </dl>
+  );
+}
 
 export function RuntimeToolApprovalControl({
   approvalId,
@@ -215,7 +241,7 @@ export function ApprovalActions({
           const decisionKey = approvalDecisionKey(decision);
           const decisionLabel = approvalDecisionLabel(decision, t, manualRiskOverride);
           return (
-            <Button variant="ghost"
+            <Button variant={approvalDecisionTone(decision)}
               className={`chat-tool-run__action chat-tool-run__action--${approvalDecisionTone(decision)}`}
               key={decisionKey}
               type="button"

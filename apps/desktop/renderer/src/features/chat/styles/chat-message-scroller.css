@@ -1,0 +1,99 @@
+.chat-messages {
+  /* Follow and history prepends have explicit anchors; native anchoring must not compete. */
+  overflow-anchor: none;
+}
+
+.chat-messages:has(~ .chat-message-rail) {
+  padding-inline: max(var(--chat-content-inline-padding), 44px);
+}
+
+.chat-messages:focus-visible {
+  outline: 1px solid var(--app-border);
+  outline-offset: -1px;
+}
+
+.chat-message-rail {
+  position: absolute;
+  left: 4px;
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  width: 36px;
+  pointer-events: none;
+}
+
+.chat-message-rail__ticks {
+  display: grid;
+  width: 100%;
+  pointer-events: auto;
+}
+
+.chat-message-rail__tick {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 0;
+  width: 100%;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--app-text);
+  cursor: pointer;
+}
+
+.chat-message-rail__tick:focus-visible {
+  outline: 1px solid var(--app-primary);
+  outline-offset: 1px;
+}
+
+.chat-message-rail__tick > span {
+  display: block;
+  width: 24px;
+  height: 2px;
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--app-primary) var(--chat-rail-highlight, 0%), var(--app-text));
+  background: currentColor;
+  transform-origin: left center;
+  transition: transform 150ms ease-out, opacity 80ms linear, color 80ms linear;
+}
+
+.chat-message-rail__preview {
+  position: absolute;
+  left: 42px;
+  box-sizing: border-box;
+  height: 80px;
+  padding: 11px 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  background: var(--app-surface);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 8%);
+  color: var(--app-text);
+  font-size: 12px;
+  line-height: 18px;
+  overflow: hidden;
+}
+
+.chat-message-rail__preview > strong {
+  display: block;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-message-rail__preview > p {
+  display: -webkit-box;
+  margin: 2px 0 0;
+  overflow: hidden;
+  color: var(--app-text-secondary);
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-message-rail__tick > span {
+    transition: none;
+  }
+}

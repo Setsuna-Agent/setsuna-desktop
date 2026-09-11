@@ -1,11 +1,9 @@
-// beUI's center-modal surface and spring, with Radix owning focus and dismissal.
+// beUI's center-modal surface, with Radix owning focus and dismissal.
 import { Dialog as Primitive } from 'radix-ui';
-import { motion, useReducedMotion } from 'motion/react';
 import { X } from 'lucide-react';
 import { useRef, type ReactNode } from 'react';
 import { overlayContainer } from './portal.js';
 import { IconButton } from './button.js';
-import { SPRING_PANEL } from './motion.js';
 import { useUiLabels } from './locale.js';
 import { cn } from './utils.js';
 
@@ -26,7 +24,6 @@ export type DialogProps = {
 export function Dialog({ open = true, title, description, children, footer, className, width = 640, closeLabel, dismissible = true, showClose = true, onClose, 'aria-label': label }: DialogProps) {
   const labels = useUiLabels();
   const closeText = closeLabel ?? labels.close;
-  const reduce = useReducedMotion();
   const contentRef = useRef<HTMLElement | null>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
   const wasOpen = useRef(false);
@@ -45,8 +42,7 @@ export function Dialog({ open = true, title, description, children, footer, clas
         onCloseAutoFocus={(event) => { event.preventDefault(); previousFocus.current?.focus({ preventScroll: true }); }}
         onEscapeKeyDown={(event) => { if (!dismissible) event.preventDefault(); }}
         onPointerDownOutside={(event) => { if (!dismissible) event.preventDefault(); }}>
-        <motion.section ref={contentRef} className={cn('sd-dialog', className)} style={{ width }}
-          initial={reduce ? false : { opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={SPRING_PANEL}>
+        <section ref={contentRef} className={cn('sd-dialog', className)} style={{ width }}>
           <header className={cn('sd-dialog__header', !title && 'sd-visually-hidden')}>
             <Primitive.Title asChild><div className="sd-dialog__title">{title ?? label ?? closeText}</div></Primitive.Title>
             {description ? <Primitive.Description asChild><div className="sd-dialog__description">{description}</div></Primitive.Description> : null}
@@ -54,7 +50,7 @@ export function Dialog({ open = true, title, description, children, footer, clas
           {showClose ? <Primitive.Close asChild><IconButton className="sd-dialog__close" label={closeText} disabled={!dismissible}><X size={16} /></IconButton></Primitive.Close> : null}
           <div className="sd-dialog__body">{children}</div>
           {footer ? <footer className="sd-dialog__footer">{footer}</footer> : null}
-        </motion.section>
+        </section>
       </Primitive.Content>
     </Primitive.Portal>
   </Primitive.Root>;

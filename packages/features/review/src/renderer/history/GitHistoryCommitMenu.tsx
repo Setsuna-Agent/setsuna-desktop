@@ -1,5 +1,5 @@
 import { Popover } from '@setsuna-desktop/renderer-ui';
-import { useState, type ReactElement } from 'react';
+import { useRef, useState, type ReactElement } from 'react';
 import type { DesktopGitCommit } from '../../contracts/index.js';
 import { useReviewRendererHost } from '../host.js';
 import { GitHistoryCommitCard } from './GitHistoryCommitCard.js';
@@ -18,6 +18,12 @@ export function GitHistoryCommitMenu({ children, workspaceRoot, commit, onOpenCh
   const [hoverOpen, setHoverOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [requested, setRequested] = useState(false);
+  const hoverDismissed = useRef(false);
+  const dismissHover = () => {
+    // Activation can hide the row before HoverCard's pending focus/hover delay expires.
+    hoverDismissed.current = true;
+    setHoverOpen(false);
+  };
   // Wait for the hover delay before loading, then retain details for this virtual row's lifetime.
   const details = useGitCommitDetails(workspaceRoot, requested ? oid : null);
   const copy = async (field: 'id' | 'message') => {
@@ -35,7 +41,7 @@ export function GitHistoryCommitMenu({ children, workspaceRoot, commit, onOpenCh
   return (
     <ContextMenu trigger={['contextMenu']} onOpenChange={(open) => {
       setMenuOpen(open);
-      if (open) setHoverOpen(false);
+      if (open) dismissHover();
     }} menu={{ items: [
       { key: 'open', label: t('feature.review.history.openCommitChanges'), onClick: () => onOpenChanges(oid) },
       { key: 'copy-id', label: t('feature.review.history.copyCommitId'), onClick: () => { void copy('id'); } },
@@ -47,8 +53,12 @@ export function GitHistoryCommitMenu({ children, workspaceRoot, commit, onOpenCh
         mouseEnterDelay={0.4}
         mouseLeaveDelay={0.15}
         open={hoverOpen && !menuOpen}
+        onPointerEnter={() => { hoverDismissed.current = false; }}
+        onFocusCapture={() => { hoverDismissed.current = false; }}
+        onClickCapture={dismissHover}
+        onKeyDownCapture={dismissHover}
         onOpenChange={(open) => {
-          if (open && menuOpen) return;
+          if (open && (menuOpen || hoverDismissed.current)) return;
           setHoverOpen(open);
           if (open) setRequested(true);
         }}

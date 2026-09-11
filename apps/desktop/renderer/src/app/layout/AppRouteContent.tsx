@@ -29,7 +29,6 @@ export type AppRouteContentProps = Readonly<{
   activeView: MainView;
   chatActions: ChatTurnActions;
   composerKey: string;
-  conversationOverviewShowRequest: number;
   conversationOverviewVisibility: ConversationOverviewVisibility;
   draft: string;
   focusComposerRequest: number;
