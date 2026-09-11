@@ -6,7 +6,7 @@ import {
   MessageSquare,
   Paperclip,
   ShieldCheck,
-  Target,
+  Goal as GoalIcon,
   Trash2,
   Users,
   Zap,
@@ -134,7 +134,7 @@ function SlashCommandIcon({ item }: { item: SlashCommandMenuItem }) {
   if (item.kind === 'model') return <Zap className="chat-command-menu__item-icon" fill="currentColor" size={15} strokeWidth={0} />;
   if (item.type === 'attachment') return <Paperclip className="chat-command-menu__item-icon" size={15} />;
   if (item.type === 'collaboration') return <Users className="chat-command-menu__item-icon" size={15} />;
-  if (item.type === 'goal') return <Target className="chat-command-menu__item-icon" size={15} />;
+  if (item.type === 'goal') return <GoalIcon className="chat-command-menu__item-icon" size={15} />;
   if (item.type === 'review') return <ShieldCheck className="chat-command-menu__item-icon" size={15} />;
   if (item.type === 'side-chat') return <MessageSquare className="chat-command-menu__item-icon" size={15} />;
   if (item.type === 'compact-context') {

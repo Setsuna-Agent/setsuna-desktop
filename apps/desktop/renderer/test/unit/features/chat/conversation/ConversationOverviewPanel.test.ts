@@ -28,31 +28,20 @@ describe('ConversationOverviewPanel', () => {
         files: [{ ...gitSummary.files[0], path: 'README.md', additions: 3, deletions: 5 }],
       },
     };
-    const compactHtml = renderOverviewPanel({
+    const html = renderOverviewPanel({
       ...baseProps,
-      compact: true,
-      reviewState: localReviewState,
-    });
-    const expandedHtml = renderOverviewPanel({
-      ...baseProps,
-      compact: false,
       reviewState: localReviewState,
     });
 
-    expect(compactHtml).toContain('审查');
-    expect(compactHtml).toContain('aria-label="展开对话环境信息"');
-    expect(compactHtml).toContain('+74');
-    expect(compactHtml).toContain('-252');
-    expect(compactHtml).not.toContain('2 个文件');
-    expect(expandedHtml).toContain('审查');
-    expect(expandedHtml).toContain('+74');
-    expect(expandedHtml).toContain('-252');
-    expect(expandedHtml).not.toContain('2 个文件');
-    expect(expandedHtml).not.toContain('无变更');
-    expect(expandedHtml).not.toContain('打开文件');
+    expect(html).toContain('审查');
+    expect(html).toContain('+74');
+    expect(html).toContain('-252');
+    expect(html).not.toContain('2 个文件');
+    expect(html).not.toContain('无变更');
+    expect(html).not.toContain('打开文件');
 
     const onOpenReview = vi.fn();
-    const panel = captureOverviewPanel({ ...baseProps, compact: false, onOpenReview });
+    const panel = captureOverviewPanel({ ...baseProps, onOpenReview });
     const reviewButton = panel.props.children[1].props.children[0];
     reviewButton.props.onClick({ type: 'click' });
     expect(onOpenReview).toHaveBeenCalledWith();
@@ -71,7 +60,6 @@ describe('ConversationOverviewPanel', () => {
     };
     const html = renderOverviewPanel({
       ...baseProps,
-      compact: false,
       reviewState: unbornReviewState,
     });
 
@@ -84,7 +72,6 @@ describe('ConversationOverviewPanel', () => {
   it('does not report a clean worktree or HEAD while git status is still loading', () => {
     const html = renderOverviewPanel({
       ...baseProps,
-      compact: false,
       reviewControls: createElement('span', null, '加载中'),
       reviewState: null,
     });
@@ -97,7 +84,6 @@ describe('ConversationOverviewPanel', () => {
   it('shows the review failure instead of reporting no changes', () => {
     const html = renderOverviewPanel({
       ...baseProps,
-      compact: false,
       reviewControls: createElement('span', null, '加载失败'),
       reviewError: 'git status failed',
       reviewState: null,
@@ -111,7 +97,6 @@ describe('ConversationOverviewPanel', () => {
   it('renders active plan progress with its detail popover', () => {
     const html = renderOverviewPanel({
       ...baseProps,
-      compact: false,
       overview: {
         ...overview,
         planItems: [
@@ -127,7 +112,7 @@ describe('ConversationOverviewPanel', () => {
   });
 
   it('omits usage diagnostics when the optional Usage feature is unavailable', () => {
-    const html = renderOverviewPanel({ ...baseProps, compact: false });
+    const html = renderOverviewPanel({ ...baseProps });
 
     expect(html).not.toContain('用量与诊断');
     expect(html).not.toContain('0 · 0% · 0 次');
@@ -252,8 +237,6 @@ const baseProps = {
   reviewControls: createElement('span'),
   reviewError: null,
   reviewState,
-  onCollapse: () => undefined,
-  onExpand: () => undefined,
   onOpenReview: () => undefined,
   onOpenThread: () => undefined,
 };

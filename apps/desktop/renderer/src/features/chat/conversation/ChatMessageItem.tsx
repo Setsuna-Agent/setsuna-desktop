@@ -6,7 +6,7 @@ import {
   type RuntimeReviewModeNotice,
   type RuntimeToolRun,
 } from '@setsuna-desktop/contracts';
-import { BookOpen, MessageSquare, ShieldCheck, Target, Users } from 'lucide-react';
+import { BookOpen, Goal as GoalIcon, MessageSquare, ShieldCheck, Users } from 'lucide-react';
 import { memo, useMemo, type FormEvent, type ReactNode } from 'react';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { Checkbox } from '../../../shared/ui/primitives.js';
@@ -163,7 +163,7 @@ export const MessageItem = memo(function MessageItem({
   }
   const hasAttachments = Boolean(message.attachments?.length);
   return (
-    <article className={['chat-bubble-item', 'chat-bubble-item--user', deleteMode ? 'chat-bubble-item--selecting' : '', selectedForDelete ? 'is-selected-for-delete' : ''].filter(Boolean).join(' ')}>
+    <article data-message-id={chatDisplayItemRenderKey(item)} className={['chat-bubble-item', 'chat-bubble-item--user', deleteMode ? 'chat-bubble-item--selecting' : '', selectedForDelete ? 'is-selected-for-delete' : ''].filter(Boolean).join(' ')}>
       {deleteMode && onToggleDelete ? <MessageSelectionControl checked={selectedForDelete} label={t('chat.delete.selectMessage')} onChange={(checked) => onToggleDelete(item.id, checked)} /> : null}
       <div className="chat-user-turn">
         <MessageBubble
@@ -222,7 +222,7 @@ function UserMessageKindBadge({ kind }: { kind: RuntimeMessage['inputKind'] }) {
     : kind === 'review'
       ? 'chat.message.kind.review'
       : 'chat.message.kind.subagentTask');
-  const Icon = kind === 'goal' ? Target : kind === 'review' ? ShieldCheck : Users;
+  const Icon = kind === 'goal' ? GoalIcon : kind === 'review' ? ShieldCheck : Users;
   return (
     <span className={`chat-user-message-kind chat-user-message-kind--${kind}`} aria-label={label}>
       <Icon size={13} strokeWidth={1.9} aria-hidden="true" />
@@ -273,7 +273,7 @@ function AssistantRunItem({
     content: assistantRunCopyText(item, t, locale),
   } as RuntimeMessage;
   return (
-    <article className={['chat-bubble-item', 'chat-bubble-item--assistant', streaming ? 'chat-bubble-item--active' : '', deleteMode ? 'chat-bubble-item--selecting' : '', selectedForDelete ? 'is-selected-for-delete' : ''].filter(Boolean).join(' ')}>
+    <article data-message-id={chatDisplayItemRenderKey(item)} className={['chat-bubble-item', 'chat-bubble-item--assistant', streaming ? 'chat-bubble-item--active' : '', deleteMode ? 'chat-bubble-item--selecting' : '', selectedForDelete ? 'is-selected-for-delete' : ''].filter(Boolean).join(' ')}>
       {deleteMode && onToggleDelete ? <MessageSelectionControl checked={selectedForDelete} label={t('chat.delete.selectReply')} onChange={(checked) => onToggleDelete(item.id, checked)} /> : null}
       <MessageBubble
         className="chat-ai-bubble"

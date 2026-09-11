@@ -49,22 +49,39 @@
 }
 
 .sd-select-menu {
-  position: fixed;
+  zoom: var(--app-page-scale, 1);
   z-index: var(--app-z-popover);
-  display: grid;
-  gap: 2px;
-  padding: 6px;
+  /* Radix measures viewport pixels; menu dimensions use the app's density. */
+  width: min(
+    calc(var(--radix-select-content-available-width) * var(--app-page-scale-inverse, 1)),
+    max(calc(var(--radix-select-trigger-width) * var(--app-page-scale-inverse, 1)), var(--sd-select-menu-min-width, 160px))
+  );
+  max-height: min(280px, calc(var(--radix-select-content-available-height) * var(--app-page-scale-inverse, 1)));
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-lg);
   color: var(--app-text);
   background: var(--app-surface);
   box-shadow: var(--app-shadow-popover);
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
-  transform-origin: top center;
+  overflow: hidden;
+  transform-origin: var(--radix-select-content-transform-origin);
   animation: sd-select-menu-in 120ms ease-out;
+}
+
+.sd-select-menu__viewport {
+  display: grid;
+  grid-auto-rows: min-content;
+  min-height: 0;
+  gap: 2px;
+  padding: 6px;
+  overscroll-behavior: contain;
+}
+
+.sd-select-menu .sd-select-menu__viewport {
+  scrollbar-width: thin;
+}
+
+.sd-select-menu .sd-select-menu__viewport::-webkit-scrollbar {
+  display: block;
 }
 
 .sd-select-menu__option {
@@ -82,6 +99,7 @@
   font: inherit;
   line-height: 20px;
   text-align: left;
+  outline: none;
   cursor: pointer;
 }
 
@@ -96,20 +114,20 @@
   color: var(--app-text-secondary);
 }
 
-.sd-select-menu__option:hover:not(:disabled) {
+.sd-select-menu__option:hover:not([data-disabled]) {
   background: var(--desktop-agent-control-hover-bg);
 }
 
-.sd-select-menu__option.is-active {
+.sd-select-menu__option[data-highlighted] {
   background: var(--desktop-agent-control-active-bg);
 }
 
-.sd-select-menu__option[aria-selected="true"] {
+.sd-select-menu__option[data-state="checked"] {
   background: var(--desktop-agent-control-active-bg);
   font-weight: 500;
 }
 
-.sd-select-menu__option:disabled {
+.sd-select-menu__option[data-disabled] {
   color: var(--app-text-subtle);
   cursor: default;
 }

@@ -33,7 +33,8 @@ import {
 } from './ChatMessageItem.js';
 import { TranscriptWindowDivider } from './TranscriptWindowDivider.js';
 import { usePinnedChatScroll } from './ChatWorkspaceScroll.js';
-import { ScrollOverlay } from '../../../shared/ui/ScrollOverlay.js';
+import { ChatMessageRail } from './navigation/ChatMessageRail.js';
+import { createChatMessageNavigation } from './navigation/chatMessageNavigation.js';
 import { ContextCompactionStatus } from './ContextCompactionStatus.js';
 import { StreamingScrollPinProvider } from './StreamingScrollPinProvider.js';
 import { ChatThreadProvider } from './ChatThreadProvider.js';
@@ -68,7 +69,8 @@ type ChatTranscriptMutationProps =
 type ChatTranscriptProps = ChatTranscriptMutationProps & {
   activeTurnId: string | null;
   contextCompactionRunning: boolean;
-  contentRef: React.RefObject<HTMLDivElement>;
+  contentRef: React.MutableRefObject<HTMLDivElement | null>;
+  onContentNodeChange?: (node: HTMLDivElement | null) => void;
   currentThread: RuntimeThread | null;
   messageHistory: ChatTranscriptMessageHistory;
   messages: RuntimeMessage[];
@@ -89,12 +91,13 @@ type ChatTranscriptProps = ChatTranscriptMutationProps & {
  * 审批按钮与删除/编辑交互。Subagent 面板通过 readOnly 关闭删除/编辑入口。
  *
  * 组件不拥有数据 hook；messages 与 messageHistory 由父级提供，滚动锚定所需的
- * contentRef 也由父级注入，以便外层 conversation overview 复用同一 DOM 节点。
+ * contentRef 由父级注入；节点挂载/替换通过回调通知外层环境面板重绑尺寸监听。
  */
 export function ChatTranscript({
   activeTurnId,
   contextCompactionRunning,
   contentRef,
+  onContentNodeChange,
   currentThread,
   messageHistory,
   messages,
@@ -114,6 +117,10 @@ export function ChatTranscript({
   scrollToBottomRef,
 }: ChatTranscriptProps) {
   const { t } = useI18n();
+  const attachContent = useCallback((node: HTMLDivElement | null) => {
+    contentRef.current = node;
+    onContentNodeChange?.(node);
+  }, [contentRef, onContentNodeChange]);
   const historyThread = useMemo(
     () => currentThread ? { ...currentThread, messages } : null,
     [currentThread, messages],
@@ -218,6 +225,7 @@ export function ChatTranscript({
       };
   const renderWindow = useMemo(() => createChatRenderWindow(displayItems, { activeTurnId, enabled: !deleteMode && !showFullHistory }), [activeTurnId, deleteMode, displayItems, showFullHistory]);
   const renderedDisplayItems = renderWindow.items;
+  const navigationItems = useMemo(() => createChatMessageNavigation(renderedDisplayItems), [renderedDisplayItems]);
   const activeAssistantItemId = useMemo(() => activeAssistantRunItemId(renderedDisplayItems, activeTurnId), [activeTurnId, renderedDisplayItems]);
   const activeAssistantVisible = Boolean(activeAssistantItemId);
   const activeUserVisible = useMemo(() => Boolean(activeTurnId && renderedDisplayItems.some((item) => item.type === 'user' && item.message.turnId === activeTurnId)), [activeTurnId, renderedDisplayItems]);
@@ -234,7 +242,7 @@ export function ChatTranscript({
     () => `${createChatScrollSignal(renderWindow, { activeTurnId, contextCompactionRunning, threadId: currentThread?.id })}:plugins:${pluginUseScrollSignal}`,
     [activeTurnId, contextCompactionRunning, currentThread?.id, pluginUseScrollSignal, renderWindow],
   );
-  const { handleScroll, handleScrollKeyDown, handleScrollTouchMove, handleScrollWheel, listRef, markScrollbarDragIntent, scrollRef: scrollRefInternal, scrollToBottom, showScrollBottom } = usePinnedChatScroll({
+  const { handleScroll, handleScrollKeyDown, handleScrollTouchMove, handleScrollWheel, listRef, scrollRef: scrollRefInternal, scrollToBottom, scrollToOffset, showScrollBottom } = usePinnedChatScroll({
     contentRef,
     scrollSignal,
     showEmptyStarter,
@@ -249,6 +257,7 @@ export function ChatTranscript({
   const showEarlierMessages = useCallback(() => {
     const scrollNode = scrollRefInternal.current;
     if (scrollNode) {
+      scrollToOffset(scrollNode.scrollTop, 'auto');
       historyScrollAnchorRef.current = {
         height: scrollNode.scrollHeight,
         top: scrollNode.scrollTop,
@@ -256,7 +265,7 @@ export function ChatTranscript({
     }
     setShowFullHistory(true);
     if (messageHistory.hasMore) void messageHistory.loadOlder();
-  }, [messageHistory.hasMore, messageHistory.loadOlder, scrollRefInternal]);
+  }, [messageHistory.hasMore, messageHistory.loadOlder, scrollRefInternal, scrollToOffset]);
 
   useLayoutEffect(() => {
     const anchor = historyScrollAnchorRef.current;
@@ -269,9 +278,9 @@ export function ChatTranscript({
 
   return (
     <>
-      <div className={`chat-messages ${showEmptyStarter ? 'chat-messages--starter' : ''}`} ref={scrollRefInternal} onKeyDownCapture={handleScrollKeyDown} onPointerDownCapture={markScrollbarDragIntent} onScroll={handleScroll} onTouchMoveCapture={handleScrollTouchMove} onWheelCapture={handleScrollWheel}>
+      <div className={`chat-messages ${showEmptyStarter ? 'chat-messages--starter' : ''}`} ref={scrollRefInternal} tabIndex={0} aria-label={t('chat.navigation.messages')} onKeyDownCapture={handleScrollKeyDown} onScroll={handleScroll} onTouchMoveCapture={handleScrollTouchMove} onWheelCapture={handleScrollWheel}>
         <MarkdownViewportProvider scrollRef={scrollRefInternal}>
-          <div className="chat-content-frame" ref={contentRef}>
+          <div className="chat-content-frame" ref={attachContent}>
             {showEmptyStarter ? (
               starterContent
             ) : (
@@ -330,7 +339,16 @@ export function ChatTranscript({
           </div>
         </MarkdownViewportProvider>
       </div>
-      <ScrollOverlay disabled={showEmptyStarter} scrollRef={scrollRefInternal} scrollSignal={scrollSignal} />
+      {!showEmptyStarter && !deleteMode && !editingMessageId ? (
+        <ChatMessageRail
+          key={currentThread?.id ?? 'no-thread'}
+          items={navigationItems}
+          scrollRef={scrollRefInternal}
+          contentRef={contentRef}
+          onScrollToOffset={scrollToOffset}
+          onScrollToBottom={scrollToBottom}
+        />
+      ) : null}
       {showScrollBottom && !showEmptyStarter ? (
         <div className="chat-scroll-bottom-anchor">
           <Button variant="ghost" className="chat-scroll-bottom" type="button" aria-label={t('chat.scrollBottom')} onClick={() => scrollToBottom()}>

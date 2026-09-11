@@ -30,7 +30,7 @@ it.each(['chat', 'settings'] as const)('requires explicit confirmation before en
   const user = userEvent.setup();
   const onChange = vi.fn();
   render(<RuntimeAccessModeMenu mode="agent-approval" variant={variant} onChange={onChange} />);
-  const trigger = screen.getByRole('button');
+  const trigger = screen.getByRole(variant === 'chat' ? 'button' : 'combobox');
   const openConfirmation = async () => {
     await user.click(trigger);
     await user.click(await screen.findByRole(variant === 'chat' ? 'menuitem' : 'option', { name: /^完全访问/ }));

@@ -26,6 +26,7 @@ import {
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
 import { SidebarFloatingMenu } from './SidebarFloatingMenu.js';
+import { SidebarProjectHoverCard } from './SidebarProjectHoverCard.js';
 import { SidebarThreadList } from './SidebarThreadList.js';
 import { SidebarUserMenu } from './SidebarUserMenu.js';
 
@@ -301,48 +302,55 @@ function ProjectSection({
 
                 return (
                   <div className="desktop-agent-project-node" key={project.id}>
-                    <div
-                      className={`desktop-agent-project${projectActionMenuId === project.id ? ' is-menu-open' : ''}`}
-                      title={project.path ?? t('sidebar.projectDirectoryUnbound')}
-                      onContextMenu={(event) => {
-                        if (isProjectActionTarget(event.target)) return;
-                        event.preventDefault();
-                        event.stopPropagation();
-                        if (projectActionMenuId !== project.id) onToggleProjectActions(project.id);
-                      }}
+                    <SidebarProjectHoverCard
+                      disabled={projectActionMenuId === project.id}
+                      project={project}
+                      threadCount={projectThreads.length}
+                      onEditProject={onEditProject}
                     >
-                      <Button variant="ghost"
-                        className="desktop-agent-project__select"
-                        type="button"
-                        onClick={() => onSelectProject(project)}
-                        onKeyDown={(event) => {
-                          if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
+                      <div
+                        className={`desktop-agent-project${projectActionMenuId === project.id ? ' is-menu-open' : ''}`}
+                        onContextMenu={(event) => {
+                          if (isProjectActionTarget(event.target)) return;
                           event.preventDefault();
+                          event.stopPropagation();
                           if (projectActionMenuId !== project.id) onToggleProjectActions(project.id);
                         }}
                       >
-                        {project.path && !isProjectCollapsed
-                          ? <FolderOpen className="desktop-agent-project__icon" size={14} />
-                          : <FolderClosed className="desktop-agent-project__icon" size={14} />}
-                        <span className="desktop-agent-project__text">
-                          <span className="desktop-agent-project__name">{project.name}</span>
-                          {!project.path ? <small>{t('sidebar.projectUnbound')}</small> : null}
-                        </span>
-                      </Button>
-                      <ProjectActionMenu
-                        open={projectActionMenuId === project.id}
-                        project={project}
-                        onArchiveProject={onArchiveProject}
-                        onCreateProjectThread={onCreateProjectThread}
-                        onEditProject={onEditProject}
-                        onRemoveProject={onRemoveProject}
-                        onToggleProjectActions={onToggleProjectActions}
-                      />
-                    </div>
+                        <Button variant="ghost"
+                          className="desktop-agent-project__select"
+                          type="button"
+                          onClick={() => onSelectProject(project)}
+                          onKeyDown={(event) => {
+                            if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
+                            event.preventDefault();
+                            if (projectActionMenuId !== project.id) onToggleProjectActions(project.id);
+                          }}
+                        >
+                          {project.path && !isProjectCollapsed
+                            ? <FolderOpen className="desktop-agent-project__icon" size={14} />
+                            : <FolderClosed className="desktop-agent-project__icon" size={14} />}
+                          <span className="desktop-agent-project__text">
+                            <span className="desktop-agent-project__name">{project.name}</span>
+                            {!project.path ? <small>{t('sidebar.projectUnbound')}</small> : null}
+                          </span>
+                        </Button>
+                        <ProjectActionMenu
+                          open={projectActionMenuId === project.id}
+                          project={project}
+                          onArchiveProject={onArchiveProject}
+                          onCreateProjectThread={onCreateProjectThread}
+                          onEditProject={onEditProject}
+                          onRemoveProject={onRemoveProject}
+                          onToggleProjectActions={onToggleProjectActions}
+                        />
+                      </div>
+                    </SidebarProjectHoverCard>
                     {shouldShowChildren ? (
                       projectThreads.length ? (
                         <SidebarThreadList
                           menuThreadId={threadActionMenuId}
+                          projectName={project.name}
                           runningThreadId={runningThreadId}
                           selectedThreadId={isActiveProject ? activeThreadId : null}
                           threads={projectThreads}

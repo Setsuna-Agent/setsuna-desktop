@@ -7,9 +7,12 @@ import { usePinnedChatScroll } from '../../../../../src/features/chat/conversati
 
 const frames = new Map<number, FrameRequestCallback>();
 const resizeCallbacks = new Set<() => void>();
+let clock = 0;
 
 beforeEach(() => {
   let frameId = 0;
+  clock = 0;
+  vi.spyOn(performance, 'now').mockImplementation(() => clock);
   vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
     frames.set(++frameId, callback);
     return frameId;
@@ -60,6 +63,67 @@ describe('pinned chat scrolling', () => {
     expect(viewport.scrollTop).toBe(498);
   });
 
+  it('glides toward a growing stream without restarting the pending frame', () => {
+    const view = render(<ScrollHarness signal="initial" />);
+    const viewport = screen.getByTestId('viewport');
+    const metrics = mockScrollMetrics(viewport);
+    flushFrames();
+    metrics.scrollHeight += 200;
+    notifyResize();
+    flushOneFrame();
+    expect(viewport.scrollTop).toBeGreaterThan(500);
+    expect(viewport.scrollTop).toBeLessThan(700);
+    const pendingFrame = [...frames.keys()];
+    metrics.scrollHeight += 100;
+    view.rerender(<ScrollHarness signal="more-text" />);
+    notifyResize();
+    expect([...frames.keys()]).toEqual(pendingFrame);
+    flushFrames();
+    expect(viewport.scrollTop).toBe(800);
+  });
+
+  it('keeps a programmatic message jump detached even inside the bottom threshold', () => {
+    render(<ScrollHarness signal="initial" />);
+    const viewport = screen.getByTestId('viewport');
+    const metrics = mockScrollMetrics(viewport);
+    flushFrames();
+    fireEvent.click(screen.getByRole('button', { name: 'Jump to message' }));
+    fireEvent.scroll(viewport);
+    expect(viewport.scrollTop).toBe(450);
+    metrics.scrollHeight += 100;
+    notifyResize();
+    flushFrames();
+    expect(viewport.scrollTop).toBe(450);
+    fireEvent.click(screen.getByRole('button', { name: 'Scroll to bottom' }));
+    flushFrames();
+    expect(viewport.scrollTop).toBe(600);
+  });
+
+  it('snaps without a glide when reduced motion is enabled', () => {
+    vi.spyOn(window, 'matchMedia').mockReturnValue({ matches: true } as MediaQueryList);
+    render(<ScrollHarness signal="initial" />);
+    const viewport = screen.getByTestId('viewport');
+    const metrics = mockScrollMetrics(viewport);
+    flushFrames();
+    metrics.scrollHeight += 200;
+    notifyResize();
+    flushOneFrame();
+    expect(viewport.scrollTop).toBe(700);
+    expect(frames.size).toBe(0);
+  });
+
+  it('does not release follow for arrow keys used inside an input', () => {
+    render(<ScrollHarness signal="initial" />);
+    const viewport = screen.getByTestId('viewport');
+    const metrics = mockScrollMetrics(viewport);
+    flushFrames();
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'ArrowUp' });
+    metrics.scrollHeight += 100;
+    notifyResize();
+    flushFrames();
+    expect(viewport.scrollTop).toBe(600);
+  });
+
   it('resumes following after scrolling down to the bottom or explicitly returning to it', () => {
     render(<ScrollHarness signal="initial" />);
     const viewport = screen.getByTestId('viewport');
@@ -99,9 +163,10 @@ function ScrollHarness({ signal }: { signal: string }) {
   const scroll = usePinnedChatScroll({ contentRef, scrollSignal: signal, showEmptyStarter: false, threadId: 'thread-1' });
   return (
     <>
-      <div ref={scroll.scrollRef} data-testid="viewport" onScroll={scroll.handleScroll} onWheelCapture={scroll.handleScrollWheel}>
-        <div ref={contentRef}><div ref={scroll.listRef} /></div>
+      <div ref={scroll.scrollRef} data-testid="viewport" onScroll={scroll.handleScroll} onKeyDownCapture={scroll.handleScrollKeyDown} onWheelCapture={scroll.handleScrollWheel}>
+        <div ref={contentRef}><div ref={scroll.listRef}><input /></div></div>
       </div>
+      <button onClick={() => scroll.scrollToOffset(450)}>Jump to message</button>
       {scroll.showScrollBottom ? <button onClick={() => scroll.scrollToBottom()}>Scroll to bottom</button> : null}
     </>
   );
@@ -133,7 +198,17 @@ function flushFrames() {
     while (frames.size) {
       const pending = [...frames.values()];
       frames.clear();
-      for (const callback of pending) callback(0);
+      clock += 16;
+      for (const callback of pending) callback(clock);
     }
+  });
+}
+
+function flushOneFrame() {
+  act(() => {
+    const pending = [...frames.values()];
+    frames.clear();
+    clock += 16;
+    for (const callback of pending) callback(clock);
   });
 }

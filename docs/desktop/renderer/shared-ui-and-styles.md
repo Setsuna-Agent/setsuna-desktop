@@ -21,7 +21,8 @@
 
 `@setsuna-desktop/renderer-ui` 是宿主和 Feature 共用的控件入口，源码按 [beUI](https://beui.dev) 的可复制组件方式维护。按钮、字段、复选框、开关、滑块、选择器、菜单、Popover、Tooltip、Dialog、图片预览、消息气泡和通知栈均由这个包持有；React 版本继续保持 18。
 
-- Motion 负责复选框、开关、弹窗和通知动画；物理参数收敛在 `motion.ts`。
+- Motion 负责复选框、开关和通知动画；`motion.ts` 提供复选框与通知使用的 spring 参数，开关的参数随组件维护。
+- Dialog 的入场动画由 `overlays.css` 持有：弹窗上移 12px 并淡入（180ms ease-out），遮罩淡入（160ms ease）。弹窗已去掉 scale 动画，居中与入场位移统一使用 `translate`；12px 按应用密度缩放，减少动态效果偏好下禁用入场动画。
 - Radix 提供浮层定位、焦点约束、嵌套子菜单、键盘操作和关闭行为。控件遵循本项目的窄 API，不提供 Ant Design 兼容层。
 - `ui/primitives.tsx` / `SelectField.tsx` 保留宿主导出；`SettingsViewUi.tsx` 将同一实现注入 Feature 的 Settings UI contract。
 - `I18nProvider` 同步共享控件的中英文标签；外观和字体继续由宿主偏好控制。
@@ -121,7 +122,7 @@
 - 业务 selector 留在所属 feature。
 - 布局尺寸使用 CSS variables、min/max 和稳定 grid track。
 - 菜单、Tooltip、Dialog、图片预览和通知统一使用 `#setsuna-ui-overlays`。该容器抵消 body 的页面缩放，浮层内容再应用密度缩放，定位层使用视口坐标。
-- Electron 上报的文件坐标菜单使用 `PointMenu`；`SelectField` 保留 `selectMenuPosition` 的缩放和边界计算。不要给业务浮层再叠加另一套 zoom 补偿。
+- Electron 上报的文件坐标菜单使用 `PointMenu`；`SelectField` 使用 Radix Select 统一处理边界定位、嵌套弹窗的焦点与滚动，菜单尺寸将视口像素换算为应用密度。不要给业务浮层再叠加另一套 zoom 补偿。
 - Feature CSS 可以控制布局、宽度和业务状态，不复制 `.sd-button` / `.sd-field` 的颜色、边框、禁用态和焦点样式。圆角和阴影统一引用 `--app-radius-*` / `--app-shadow-*`。
 - 共享按钮的布局默认值使用 `:where()` 保持低优先级，避免 CSS 加载顺序覆盖 Feature 的 flex/grid 和尺寸。Ghost 与菜单行默认从起始边对齐，普通操作按钮和图标按钮默认居中。
 - Ghost 按钮默认使用 `--app-radius-xs` 小圆角；整行标题、列表点击区与卡片内操作由所属 Feature 设置直角或交给外层裁切，不通过 Ghost 类型统一清零圆角。

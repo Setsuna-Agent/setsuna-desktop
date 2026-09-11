@@ -23,24 +23,16 @@ export function networkApprovalSummary(run: RuntimeToolRun): string {
   ].filter(Boolean).join('\n');
 }
 
-export function permissionApprovalSummary(run: RuntimeToolRun): string {
+export function permissionApprovalDetails(run: RuntimeToolRun) {
   const context = run.permissionApprovalContext;
-  if (!context) return '';
+  if (!context) return null;
   const granted = isRecord(context.grantedPermissions) ? context.grantedPermissions : {};
-  const network = isRecord(granted.network) && granted.network.enabled === true;
-  const readRoots = permissionFileRoots(granted.file_system ?? granted.fileSystem, 'read');
-  const writeRoots = permissionWriteRoots(granted.file_system ?? granted.fileSystem);
-  const lines = [
-    context.cwd ? `cwd: ${context.cwd}` : '',
-    network ? 'network: enabled' : '',
-    readRoots.length ? `read: ${readRoots.slice(0, 5).join(', ')}${readRoots.length > 5 ? ` +${readRoots.length - 5}` : ''}` : '',
-    writeRoots.length ? `write: ${writeRoots.slice(0, 5).join(', ')}${writeRoots.length > 5 ? ` +${writeRoots.length - 5}` : ''}` : '',
-  ].filter(Boolean);
-  return lines.join('\n');
-}
-
-function permissionWriteRoots(value: unknown): string[] {
-  return permissionFileRoots(value, 'write');
+  return {
+    cwd: context.cwd,
+    network: isRecord(granted.network) && granted.network.enabled === true,
+    readRoots: permissionFileRoots(granted.file_system ?? granted.fileSystem, 'read'),
+    writeRoots: permissionFileRoots(granted.file_system ?? granted.fileSystem, 'write'),
+  };
 }
 
 function permissionFileRoots(value: unknown, access: 'read' | 'write'): string[] {

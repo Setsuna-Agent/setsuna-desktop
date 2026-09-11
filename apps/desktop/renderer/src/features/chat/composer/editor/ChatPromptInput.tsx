@@ -100,7 +100,14 @@ export const ChatPromptInput = forwardRef<ComposerEditor, Props>(function ChatPr
       if (options.cursor === 'all') range.selectNodeContents(element);
       applyComposerRange(range);
     },
-    clear() { elementRef.current?.replaceChildren(); synchronize(); },
+    clear() {
+      const element = elementRef.current;
+      if (!element) return;
+      const focused = element.ownerDocument.activeElement === element;
+      element.replaceChildren();
+      if (focused) applyComposerRange(composerRange(element, 'end'));
+      synchronize();
+    },
     insert,
   }), [insert, synchronize]);
 
@@ -110,15 +117,19 @@ export const ChatPromptInput = forwardRef<ComposerEditor, Props>(function ChatPr
   </Button>;
   return <div className="chat-prompt" data-disabled={disabled || undefined}>
     {header}
+    {/* Keep the editor focusable during the temporary contentEditable lock used for sending. */}
     <div {...props} ref={elementRef} className="chat-prompt__input" contentEditable={!disabled} suppressContentEditableWarning role="textbox" aria-multiline="true" aria-label={placeholder} aria-disabled={disabled}
+      tabIndex={disabled ? -1 : 0}
       data-placeholder={placeholder} data-empty={empty || undefined} style={{ '--prompt-min-rows': autoSize.minRows, '--prompt-max-rows': autoSize.maxRows } as CSSProperties}
       onInput={synchronize} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; synchronize(); }}
       onPaste={(event) => {
         if (event.defaultPrevented) return;
+        if (disabled) { event.preventDefault(); return; }
         if (event.clipboardData.files.length) { event.preventDefault(); onPasteFile?.(event.clipboardData.files); return; }
         event.preventDefault(); insert([{ type: 'text', value: event.clipboardData.getData('text/plain') }]);
       }}
       onKeyDown={(event) => {
+        if (disabled) return;
         onKeyDown?.(event);
         if (event.defaultPrevented || composing.current || event.nativeEvent.isComposing || event.key !== 'Enter') return;
         if (event.shiftKey) { event.preventDefault(); insert([{ type: 'text', value: '\n' }]); return; }

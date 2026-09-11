@@ -1,11 +1,6 @@
-.chat-sender:has(> .chat-send-queue) {
-  gap: 4px;
-}
-
 .chat-send-queue {
-  width: min(var(--chat-content-max-width), 100%);
+  width: 100%;
   min-height: 0;
-  max-height: 116px;
 }
 
 .chat-send-queue__list {
@@ -17,9 +12,6 @@
   padding: 0;
   flex-direction: column;
   overflow-y: auto;
-  border: 1px solid color-mix(in srgb, var(--desktop-agent-panel-border) 72%, transparent);
-  border-radius: var(--app-radius-lg);
-  background: var(--desktop-agent-main-surface);
   overscroll-behavior: contain;
 }
 
@@ -27,15 +19,11 @@
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr) auto;
   align-items: center;
-  min-height: 34px;
+  min-height: 32px;
   gap: 6px;
   padding: 3px 7px 3px 9px;
   list-style: none;
   transition: background-color 120ms ease, opacity 120ms ease;
-}
-
-.chat-send-queue__item + .chat-send-queue__item {
-  border-top: 1px solid color-mix(in srgb, var(--desktop-agent-panel-border) 58%, transparent);
 }
 
 .chat-send-queue__item:hover {
@@ -77,7 +65,7 @@
   margin: 0;
   overflow: hidden;
   color: var(--app-text);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   line-height: 18px;
   text-overflow: ellipsis;
@@ -92,7 +80,7 @@
   max-width: 34%;
   gap: 3px;
   color: var(--app-text-muted);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 14px;
   white-space: nowrap;
 }
@@ -120,6 +108,8 @@
   align-items: center;
   justify-content: center;
   height: 24px;
+  /* Compact queue actions must override the shared button's minimum height. */
+  min-height: 0;
   padding: 0;
   border: 0;
   border-radius: var(--app-radius-xs);
@@ -127,7 +117,7 @@
   background: transparent;
   cursor: pointer;
   font: inherit;
-  font-size: 10px;
+  font-size: 12px;
   white-space: nowrap;
   transition: color 120ms ease, background-color 120ms ease, opacity 120ms ease;
 }
@@ -148,15 +138,9 @@
   opacity: 0.38;
 }
 
-.chat-send-queue__send-now {
+.chat-send-queue__actions .chat-send-queue__send-now {
   gap: 4px;
-  padding: 0 6px !important;
-  color: var(--app-primary) !important;
-}
-
-.chat-send-queue__send-now:hover:not(:disabled),
-.chat-send-queue__send-now:focus-visible {
-  background: color-mix(in srgb, var(--app-primary) 9%, transparent) !important;
+  padding: 0 6px;
 }
 
 .chat-send-queue__icon-action {
@@ -170,9 +154,9 @@
 }
 
 @container (max-width: 520px) {
-  .chat-send-queue__send-now {
+  .chat-send-queue__actions .chat-send-queue__send-now {
     width: 26px;
-    padding: 0 !important;
+    padding: 0;
   }
 
   .chat-send-queue__send-now span {

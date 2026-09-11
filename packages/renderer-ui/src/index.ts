@@ -9,7 +9,7 @@ export { ConfirmationProvider, useConfirm } from './confirmation-provider.js';
 export { ProgressRing } from './progress.js';
 export { ImagePreview, ImagePreviewGroup } from './image-preview.js';
 export { MessageBubble } from './message.js';
-export { SelectField, selectMenuPosition, type SelectMenuPosition } from './select.js';
+export { SelectField } from './select.js';
 export { UiProvider } from './locale.js';
 export { ToastStack, type ToastEntry, type ToastTone } from './toast.js';
 export { Slider } from './slider.js';

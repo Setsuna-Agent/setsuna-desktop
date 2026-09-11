@@ -3,7 +3,7 @@
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AppProjectToolbarTitle } from '../../../../src/app/layout/AppProjectToolbarTitle.js';
+import { AppChatToolbarTitle } from '../../../../src/app/layout/AppChatToolbarTitle.js';
 
 const project: WorkspaceProject = {
   id: 'project_test',
@@ -13,7 +13,10 @@ const project: WorkspaceProject = {
   updatedAt: '2026-08-25T00:00:00.000Z',
 };
 
-describe('AppProjectToolbarTitle', () => {
+describe.each([
+  { scope: 'project', activeProject: project },
+  { scope: 'projectless', activeProject: null },
+])('AppChatToolbarTitle ($scope)', ({ activeProject }) => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
@@ -23,37 +26,39 @@ describe('AppProjectToolbarTitle', () => {
     const onArchiveThread = vi.fn();
     const onRenameThread = vi.fn();
     const view = render(
-      <AppProjectToolbarTitle
-        project={project}
+      <AppChatToolbarTitle
+        project={activeProject}
         title="Current thread"
         onArchiveThread={onArchiveThread}
         onRenameThread={onRenameThread}
       />,
     );
 
-    expect(view.container.querySelector('.app-project-toolbar-title__project-icon')).toBeTruthy();
+    expect(Boolean(view.container.querySelector('.app-chat-toolbar-title__project-icon'))).toBe(Boolean(activeProject));
     expect(screen.getByText('Current thread')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: '对话操作' }));
     fireEvent.click(screen.getByRole('menuitem', { name: '重命名' }));
     expect(onRenameThread).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('menu')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: '对话操作' }));
     fireEvent.click(screen.getByRole('menuitem', { name: '归档对话' }));
     expect(onArchiveThread).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('menu')).toBeNull();
   });
 
   it('hides unavailable thread actions and disables archive while the thread is running', () => {
     const onArchiveThread = vi.fn();
     const view = render(
-      <AppProjectToolbarTitle project={project} title="New thread" />,
+      <AppChatToolbarTitle project={activeProject} title="New thread" />,
     );
 
     expect(screen.queryByRole('button', { name: '对话操作' })).toBeNull();
 
     view.rerender(
-      <AppProjectToolbarTitle
-        project={project}
+      <AppChatToolbarTitle
+        project={activeProject}
         title="Running thread"
         archiveThreadDisabled
         onArchiveThread={onArchiveThread}

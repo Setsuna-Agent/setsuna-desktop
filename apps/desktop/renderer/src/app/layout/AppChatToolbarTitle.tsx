@@ -6,14 +6,14 @@ import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { EditIcon } from '../../shared/ui/EditIcon.js';
 import { SidebarFloatingMenu } from '../sidebar/SidebarFloatingMenu.js';
 
-export function AppProjectToolbarTitle({
+export function AppChatToolbarTitle({
   project,
   title,
   archiveThreadDisabled = false,
   onArchiveThread,
   onRenameThread,
 }: {
-  project: WorkspaceProject;
+  project?: WorkspaceProject | null;
   title: ReactNode;
   archiveThreadDisabled?: boolean;
   onArchiveThread?: () => void;
@@ -35,13 +35,13 @@ export function AppProjectToolbarTitle({
   };
 
   return (
-    <span className="app-project-toolbar-title" title={project.path ?? project.name}>
-      <FolderClosed className="app-project-toolbar-title__project-icon" size={15} aria-hidden="true" />
-      <span className="app-project-toolbar-title__label">{title}</span>
+    <span className="app-chat-toolbar-title" title={project?.path ?? project?.name}>
+      {project ? <FolderClosed className="app-chat-toolbar-title__project-icon" size={15} aria-hidden="true" /> : null}
+      <span className="app-chat-toolbar-title__label">{title}</span>
       {hasThreadActions ? (
         <>
           <Button variant="ghost"
-            className="app-project-toolbar-title__more"
+            className="app-chat-toolbar-title__more"
             ref={triggerRef}
             type="button"
             aria-expanded={menuOpen}

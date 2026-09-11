@@ -6,9 +6,12 @@ import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { EditIcon } from '../../shared/ui/EditIcon.js';
 import { ActionTooltip } from '../../shared/ui/primitives.js';
 import { SidebarFloatingMenu } from './SidebarFloatingMenu.js';
+import { SidebarThreadHoverCard } from './SidebarThreadHoverCard.js';
+import { SidebarThreadTitle } from './SidebarThreadTitle.js';
 
 export function SidebarThreadRow({
   menuOpen,
+  projectName,
   running = false,
   selected,
   thread,
@@ -19,6 +22,7 @@ export function SidebarThreadRow({
   onToggleMenu,
 }: {
   menuOpen: boolean;
+  projectName?: string;
   running?: boolean;
   selected: boolean;
   thread: RuntimeThreadSummary;
@@ -33,6 +37,7 @@ export function SidebarThreadRow({
   // 当前打开线程仍可回退使用显式属性。
   const isRunning = running || Boolean(thread.activeTurnId);
   const rowRef = useRef<HTMLButtonElement | null>(null);
+  const [hovered, setHovered] = useState(false);
   const [menuAnchorPoint, setMenuAnchorPoint] = useState<{ x: number; y: number }>();
   const openContextMenu = (x: number, y: number) => {
     setMenuAnchorPoint({ x, y });
@@ -94,17 +99,20 @@ export function SidebarThreadRow({
     <div
       className={className}
       onContextMenu={handleContextMenu}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
-      <Button variant="ghost"
-        className="desktop-agent-session__select"
-        ref={rowRef}
-        type="button"
-        onClick={() => onSelect(thread.id)}
-        onKeyDown={handleSelectKeyDown}
-      >
-        {/* 将原生标题限制在文本范围内，避免与归档操作提示框重叠。 */}
-        <span className="desktop-agent-session__title" title={thread.title}>{thread.title}</span>
-      </Button>
+      <SidebarThreadHoverCard disabled={menuOpen} projectName={projectName} thread={thread}>
+        <Button variant="ghost"
+          className="desktop-agent-session__select"
+          ref={rowRef}
+          type="button"
+          onClick={() => onSelect(thread.id)}
+          onKeyDown={handleSelectKeyDown}
+        >
+          <SidebarThreadTitle hovered={hovered && !menuOpen} title={thread.title} />
+        </Button>
+      </SidebarThreadHoverCard>
       {meta}
       {menu}
     </div>

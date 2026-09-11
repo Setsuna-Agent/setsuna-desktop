@@ -30,6 +30,7 @@ export function nextSidebarVisibleCount(
 
 export function SidebarThreadList({
   menuThreadId,
+  projectName,
   runningThreadId,
   selectedThreadId,
   threads,
@@ -40,6 +41,7 @@ export function SidebarThreadList({
   onToggleMenu,
 }: {
   menuThreadId: string | null;
+  projectName?: string;
   runningThreadId?: string | null;
   selectedThreadId?: string | null;
   threads: RuntimeThreadSummary[];
@@ -73,6 +75,7 @@ export function SidebarThreadList({
         <SidebarThreadRow
           key={thread.id}
           menuOpen={menuThreadId === thread.id}
+          projectName={projectName}
           running={runningThreadId === thread.id}
           selected={selectedThreadId === thread.id}
           thread={thread}

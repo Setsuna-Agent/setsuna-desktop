@@ -34,8 +34,7 @@ import { ChatModelSetupNotice } from './ChatModelSetupNotice.js';
 import type { ChatModelSelectionHandler } from './chatModelSelection.js';
 import {
   conversationOverviewContextLabel,
-  useConversationOverviewAutoExpand,
-  useConversationOverviewContentCollision,
+  useConversationOverviewContentShift,
 } from './conversation/ChatWorkspaceScroll.js';
 import { ConversationOverviewPanel } from './conversation/ConversationOverviewPanel.js';
 import type { AnswerApprovalHandler } from './conversation/chat-workspace-types.js';
@@ -43,11 +42,6 @@ import { ChatStarter, ChatStarterContent } from './conversation/ChatStarter.js';
 import { activeModelContextWindowTokens, contextTokenUsageFromThread } from './conversation/chatContextUsage.js';
 import { conversationOverviewFromMessages } from './conversation/chatConversationOverview.js';
 import { ChatTranscript } from './conversation/ChatTranscript.js';
-import {
-  shouldAutoHideConversationOverview,
-  shouldCompactConversationOverview,
-  shouldShiftConversationOverviewContent,
-} from './conversation/conversationOverviewLayout.js';
 import type { ChatQueuedTurnActions } from './hooks/useQueuedTurnInputActions.js';
 import { useModelSetupNotice } from './hooks/useModelSetupNotice.js';
 import { useChatStarterTransition } from './hooks/useChatStarterTransition.js';
@@ -61,7 +55,6 @@ export function ChatWorkspace({
   client,
   composerKey,
   config,
-  conversationOverviewShowRequest = 0,
   conversationOverviewVisibility = 'auto',
   contextCompacting = false,
   currentThread,
@@ -107,7 +100,6 @@ export function ChatWorkspace({
   client: DesktopRuntimeClient;
   composerKey: string;
   config: RuntimeConfigState | null;
-  conversationOverviewShowRequest?: number;
   conversationOverviewVisibility?: ConversationOverviewVisibility;
   contextCompacting?: boolean;
   currentThread: RuntimeThread | null;
@@ -159,7 +151,7 @@ export function ChatWorkspace({
   );
   const conversationRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
-  const overviewRef = useRef<HTMLDivElement | null>(null);
+  const [contentNode, setContentNode] = useState<HTMLDivElement | null>(null);
   const scrollToBottomRef = useRef<(() => void) | null>(null);
   const [deleteModeActive, setDeleteModeActive] = useState(false);
   const showThinkingInTranscript = config?.desktopSettings?.showThinkingInTranscript === true;
@@ -169,33 +161,9 @@ export function ChatWorkspace({
   ), [config, historyThread]);
   const contextCompactionRunning = contextCompacting || currentThread?.contextCompaction?.status === 'running';
   const conversationOverview = useMemo(() => (variant === 'main' && currentThread ? conversationOverviewFromMessages(messages) : null), [currentThread, messages, variant]);
-  const overviewLayout = useConversationOverviewAutoExpand(conversationRef, contentRef);
-  const overviewCanExpand = overviewLayout.canExpand;
-  const [overviewManuallyCollapsed, setOverviewManuallyCollapsed] = useState(false);
-  const [overviewManuallyExpanded, setOverviewManuallyExpanded] = useState(false);
-  const overviewCompact = shouldCompactConversationOverview({
-    canExpand: overviewCanExpand,
-    manuallyCollapsed: overviewManuallyCollapsed,
-    manuallyExpanded: overviewManuallyExpanded,
-  });
-  const overviewRequested = conversationOverviewVisibility !== 'hidden';
-  const overviewOverlapsContent = useConversationOverviewContentCollision(
-    conversationRef,
-    contentRef,
-    overviewRef,
-    overviewCompact && overviewRequested && Boolean(conversationOverview && currentThread),
-  );
-  const overviewAutoHidden = shouldAutoHideConversationOverview({
-    compact: overviewCompact,
-    explicitlyShown: conversationOverviewVisibility === 'shown',
-    overlapsContent: overviewOverlapsContent,
-  });
-  const overviewVisible = overviewRequested && !overviewAutoHidden;
-  const overviewShiftsContent = overviewVisible && shouldShiftConversationOverviewContent({
-    canExpand: overviewCanExpand,
-    compact: overviewCompact,
-    needsShift: overviewLayout.needsContentShift,
-  });
+  const overviewVisible = conversationOverviewVisibility !== 'hidden';
+  const overviewNeedsContentShift = useConversationOverviewContentShift(conversationRef, contentNode);
+  const overviewShiftsContent = overviewVisible && overviewNeedsContentShift;
   const overviewContextLabel = useMemo(
     () => conversationOverviewContextLabel(contextUsage, currentThread?.contextCompaction?.status, t),
     [contextUsage, currentThread?.contextCompaction?.status, t],
@@ -221,10 +189,6 @@ export function ChatWorkspace({
     <ChatModelSetupNotice onConfigure={onOpenModelSettings} onDismiss={dismissModelSetupNotice} />
   ) : null;
   const conversationClassName = ['chat-main-conversation', showEmptyStarter || deleteModeActive ? '' : 'chat-main-conversation--with-bottom-sender', conversationOverview && overviewShiftsContent ? 'chat-main-conversation--overview-shifted' : ''].filter(Boolean).join(' ');
-  useEffect(() => {
-    setOverviewManuallyCollapsed(false);
-    setOverviewManuallyExpanded(false);
-  }, [activeProject?.id, conversationOverviewShowRequest, conversationOverviewVisibility, currentThread?.id]);
   useEffect(() => {
     onConversationOverviewRenderedChange?.(Boolean(conversationOverview && currentThread && overviewVisible));
   }, [conversationOverview, currentThread, onConversationOverviewRenderedChange, overviewVisible]);
@@ -306,7 +270,7 @@ export function ChatWorkspace({
         <div className={conversationClassName} ref={conversationRef}>
           {showEmptyStarter ? (
             <div className="chat-messages chat-messages--starter">
-              <div className="chat-content-frame">
+              <div className="chat-content-frame" ref={setContentNode}>
                 <ChatStarter
                   key={starterKey}
                   composer={composer(true)}
@@ -329,6 +293,7 @@ export function ChatWorkspace({
               activeTurnId={activeTurnId}
               contextCompactionRunning={contextCompactionRunning}
               contentRef={contentRef}
+              onContentNodeChange={setContentNode}
               currentThread={currentThread}
               messageHistory={messageHistory}
               messages={messages}
@@ -345,12 +310,8 @@ export function ChatWorkspace({
               onOpenFileReview={onOpenFileReview}
             />
           ))}
-          {overviewRequested && conversationOverview && currentThread ? (
-            <div
-              aria-hidden={overviewAutoHidden || undefined}
-              className={`chat-conversation-overview ${overviewAutoHidden ? 'is-auto-hidden' : ''}`}
-              ref={overviewRef}
-            >
+          {overviewVisible && conversationOverview && currentThread ? (
+            <div className="chat-conversation-overview">
               <RendererOwnedSingleSlot
                 instanceKey={surfaceInstanceId}
                 slot={chatDetailsSlot}
@@ -359,21 +320,12 @@ export function ChatWorkspace({
                   renderDefault: () => (
                     <ConversationOverviewPanel
                       activeProject={activeProject}
-                      compact={overviewCompact}
                       contextLabel={overviewContextLabel}
                       contextPercent={contextUsage.visiblePercent || contextUsage.percent}
                       overview={conversationOverview}
                       reviewControls={reviewControls}
                       reviewError={reviewError}
                       reviewState={reviewState}
-                      onCollapse={() => {
-                        setOverviewManuallyCollapsed(true);
-                        setOverviewManuallyExpanded(false);
-                      }}
-                      onExpand={() => {
-                        setOverviewManuallyCollapsed(false);
-                        setOverviewManuallyExpanded(!overviewCanExpand);
-                      }}
                       onOpenReview={onOpenFileReview}
                       currentThread={currentThread}
                     />

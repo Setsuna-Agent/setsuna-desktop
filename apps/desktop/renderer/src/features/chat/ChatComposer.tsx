@@ -606,6 +606,8 @@ export function ChatComposer({
 
   const submitDraft = async (value?: string) => {
     if (attachmentsBusy || submitting) return;
+    // Send buttons hand focus back before locking the editor, never after an async response.
+    senderRef.current?.focus({ preventScroll: true });
     if (queuedTurnEdit.editing) {
       await queuedTurnEdit.submit(value ?? draft);
       return;
@@ -713,25 +715,27 @@ export function ChatComposer({
           onSelect: selectSlashEntry,
         }}
       />
-      <ChatSendQueue
-        disabled={submitting || queuedTurnEdit.editing}
-        editDisabled={queuedTurnEdit.editDisabled}
-        hasActiveTurn={Boolean(activeTurnId)}
-        items={queuedTurnEdit.visibleQueuedTurnInputs}
-        onDelete={deleteQueuedTurnInput}
-        onEdit={queuedTurnEdit.edit}
-        onSendNow={sendQueuedTurnInputNow}
-      />
-      {currentThread ? (
-        <RendererOwnedListSlot
-          slot={chatComposerStatusSlot}
-          props={{
-            activeTurn: activeComposerTurn,
-            threadId: currentThread.id,
-            translate: t,
-          }}
+      <div className="chat-composer-stack">
+        {currentThread ? (
+          <RendererOwnedListSlot
+            slot={chatComposerStatusSlot}
+            props={{
+              activeTurn: activeComposerTurn,
+              threadId: currentThread.id,
+              translate: t,
+            }}
+          />
+        ) : null}
+        <ChatSendQueue
+          disabled={submitting || queuedTurnEdit.editing}
+          editDisabled={queuedTurnEdit.editDisabled}
+          hasActiveTurn={Boolean(activeTurnId)}
+          items={queuedTurnEdit.visibleQueuedTurnInputs}
+          onDelete={deleteQueuedTurnInput}
+          onEdit={queuedTurnEdit.edit}
+          onSendNow={sendQueuedTurnInputNow}
         />
-      ) : null}
+      </div>
       <ChatPromptInput
         ref={senderRef}
         value={draft}

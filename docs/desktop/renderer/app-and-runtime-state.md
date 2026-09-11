@@ -74,6 +74,7 @@ Updater 不再进入 App controller。Renderer composition 解析 Feature 提供
 | `AppChatSurface.tsx` | Chat surface 组合 |
 | `AppSidebarSurface.tsx` | Sidebar surface 组合 |
 | `AppWorkspaceToolbar.tsx` | Workspace toolbar |
+| `AppChatToolbarTitle.tsx` | 项目内外的对话标题及重命名、归档菜单 |
 | `AppTopbarActions.tsx` | Chat 顶部右侧动作 |
 | `AppOverlays.tsx` | Dialog、toast、全局 overlay |
 | `RuntimeErrorNotice.tsx` | 可恢复 runtime 错误 |
@@ -89,6 +90,10 @@ Layout 只组合已经定义清楚的状态和 callback，不在 render 中发�
 
 - `AgentSidebar.tsx`：侧栏总装。
 - `SidebarThreadList.tsx` / `SidebarThreadRow.tsx`：线程列表和操作。
+- `SidebarThreadTitle.tsx`：溢出的长标题在整行 hover 时匀速循环滚动，副本间隔 100px；移开后恢复省略显示，仅悬停行测量宽度并监听尺寸变化，尊重减少动态效果偏好。
+- `SidebarHoverCard.tsx`：统一侧栏预览的 350ms 悬停延迟、向右定位和导航时关闭行为，复用共享 Popover；点击或打开右键菜单会取消待显示的卡片，避免导航后残留。
+- `SidebarThreadHoverCard.tsx`：展示完整标题、项目名与最近更新时间，只使用列表 summary 和父级项目名称，不额外加载消息。
+- `SidebarProjectHoverCard.tsx`：展示项目名、侧栏对话数量和绑定目录，提供编辑项目入口；鼠标可移入卡片操作。
 - `useThreadGroups.ts`：按时间/状态分组的纯投影。
 - `SidebarSearchOverlay.tsx`：本地线程查找。
 - `SidebarUserMenu.tsx` / `SidebarFloatingMenu.tsx`：入口菜单。

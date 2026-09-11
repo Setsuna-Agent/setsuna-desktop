@@ -35,7 +35,6 @@ export type ChatConversationSurfaceModel = Readonly<{
   canClearContext: boolean;
   composerKey: string;
   config: RuntimeConfigState | null;
-  conversationOverviewShowRequest: number;
   conversationOverviewVisibility: ConversationOverviewVisibility;
   contextCompacting: boolean;
   currentThread: RuntimeThread | null;
@@ -118,7 +117,6 @@ export function ChatConversationSurface({
         composerKey={model.composerKey}
         config={model.config}
         contextCompacting={model.contextCompacting}
-        conversationOverviewShowRequest={model.conversationOverviewShowRequest}
         conversationOverviewVisibility={model.conversationOverviewVisibility}
         currentThread={model.currentThread}
         draft={model.draft}

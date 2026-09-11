@@ -49,6 +49,7 @@ import {
 } from './RuntimeHookRunDetails.js';
 import {
   McpElicitationActions,
+  PermissionApprovalDetails,
   RuntimeToolApprovalControl,
 } from './RuntimeToolApprovalActions.js';
 import {
@@ -100,7 +101,6 @@ import { RuntimeUserInputActions } from './RuntimeUserInputActions.js';
 import {
   execPolicyApprovalSummary,
   networkApprovalSummary,
-  permissionApprovalSummary,
 } from './runtimeApprovalSummaries.js';
 import { ToolPreview } from './ToolPreview.js';
 
@@ -783,7 +783,7 @@ function ToolRunDetails({
 }) {
   const { t } = useI18n();
   const execPolicySummary = execPolicyApprovalSummary(run);
-  const permissionSummary = permissionApprovalSummary(run);
+  const permissionDetails = <PermissionApprovalDetails run={run} />;
   const networkSummary = networkApprovalSummary(run);
   const hookRuns = <HookRunList runs={run.hookRuns} />;
   const approvalActions = run.userInput && pendingApprovalId
@@ -803,7 +803,7 @@ function ToolRunDetails({
         <ShellTerminalResult run={run} />
         {execPolicySummary ? <ToolPreview label={t('toolRun.preview.execPolicy')} value={execPolicySummary} /> : null}
         {networkSummary ? <ToolPreview label={t('toolRun.preview.network')} value={networkSummary} /> : null}
-        {permissionSummary ? <ToolPreview label={t('toolRun.preview.permission')} value={permissionSummary} /> : null}
+        {permissionDetails}
         {hookRuns}
         {approvalActions}
       </>
@@ -814,7 +814,7 @@ function ToolRunDetails({
       <>
         {execPolicySummary ? <ToolPreview label={t('toolRun.preview.execPolicy')} value={execPolicySummary} /> : null}
         {networkSummary ? <ToolPreview label={t('toolRun.preview.network')} value={networkSummary} /> : null}
-        {permissionSummary ? <ToolPreview label={t('toolRun.preview.permission')} value={permissionSummary} /> : null}
+        {permissionDetails}
         {hookRuns}
         {approvalActions}
       </>
@@ -833,7 +833,7 @@ function ToolRunDetails({
         {run.status === 'error' && run.resultPreview ? <div className="chat-tool-run__file-error">{formatPreview(run.resultPreview)}</div> : null}
         {execPolicySummary ? <ToolPreview label={t('toolRun.preview.execPolicy')} value={execPolicySummary} /> : null}
         {networkSummary ? <ToolPreview label={t('toolRun.preview.network')} value={networkSummary} /> : null}
-        {permissionSummary ? <ToolPreview label={t('toolRun.preview.permission')} value={permissionSummary} /> : null}
+        {permissionDetails}
         {hookRuns}
         {approvalActions}
       </>
@@ -844,7 +844,7 @@ function ToolRunDetails({
     <>
       {execPolicySummary ? <ToolPreview label={t('toolRun.preview.execPolicy')} value={execPolicySummary} /> : null}
       {networkSummary ? <ToolPreview label={t('toolRun.preview.network')} value={networkSummary} /> : null}
-      {permissionSummary ? <ToolPreview label={t('toolRun.preview.permission')} value={permissionSummary} /> : null}
+      {permissionDetails}
       {diagnostic ? <ToolPreview label={t(run.status === 'cancelled'
         ? 'toolRun.preview.cancelled'
         : run.status === 'rejected'
