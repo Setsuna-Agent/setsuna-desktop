@@ -233,7 +233,7 @@ export class RuntimeTurnRunFactory {
       turnId,
       threadId,
       taskKind: 'review',
-      acceptingSteers: false,
+      acceptingSteers: true,
     }, (task) => this.options.runTurn({
       attachments: [],
       samplingModel,

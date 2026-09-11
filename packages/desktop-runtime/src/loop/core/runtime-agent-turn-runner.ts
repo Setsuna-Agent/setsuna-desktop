@@ -123,14 +123,15 @@ export class RuntimeAgentTurnRunner {
     let modelUserMessage: RuntimeMessage = options.modelInput ? { ...userMessage, content: options.modelInput } : userMessage;
     const includeUserMessageInConversation = publishUserMessage || options.includeUserMessageInModel === true;
     let runtimeConfig = await this.options.configStore?.getConfig().catch(() => null);
-    let responseLanguage = options.review?.language ?? resolveRuntimeResponseLanguage({
+    let responseLanguage = resolveRuntimeResponseLanguage({
       currentUserContent: publishUserMessage && !userMessage.promptSource
         ? userMessage.content
         : taskKind === 'subagent'
           ? userMessage.content
           : undefined,
       conversationMessages: thread.messages,
-      fallback: runtimeConfig?.desktopSettings?.interfaceLanguage ?? 'zh-CN',
+      // Review 的 language 来自界面设置，只作为兜底，不能覆盖用户实际请求的语言。
+      fallback: options.review?.language ?? runtimeConfig?.desktopSettings?.interfaceLanguage ?? 'zh-CN',
     });
     let activeSkillIds = [...selectedSkillIds];
     let activeThinkingOptions = thinkingOptions;
@@ -422,7 +423,7 @@ export class RuntimeAgentTurnRunner {
             content: roundText,
             review: options.review ? {
               content: roundText,
-              language: options.review.language,
+              language: responseLanguage,
             } : undefined,
             taskKind,
             threadTitle: threadTitleGeneration,

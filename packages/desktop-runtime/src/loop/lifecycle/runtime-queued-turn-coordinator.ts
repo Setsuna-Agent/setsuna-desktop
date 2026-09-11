@@ -22,7 +22,7 @@ import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { RuntimeModelInputGuard } from '../core/runtime-model-input-guard.js';
-import type { RuntimeTurnTask, RuntimeTurnTaskRegistry } from './turn-task-registry.js';
+import { runtimeTaskSupportsSteering, type RuntimeTurnTaskRegistry } from './turn-task-registry.js';
 
 type QueuedTurnRun = {
   done: Promise<void>;
@@ -333,7 +333,7 @@ export class RuntimeQueuedTurnCoordinator {
       if (active && kind !== 'message') {
         throw new Error(`Queued ${kind} input must wait for the active turn to finish.`);
       }
-      if (active && !canSteer(active)) {
+      if (active && !runtimeTaskSupportsSteering(active.taskKind)) {
         throw new Error(`Active ${active.taskKind} turn cannot receive queued input now.`);
       }
       this.pausedThreads.delete(threadId);
@@ -525,15 +525,6 @@ function terminalOutcome(
     if (event.type === 'turn.completed') completed = true;
   }
   return completed ? 'completed' : 'missing';
-}
-
-function canSteer(task: RuntimeTurnTask | null): boolean {
-  return Boolean(
-    task
-    && (task.taskKind === 'regular' || task.taskKind === 'goal')
-    && task.acceptingSteers
-    && !task.controller.signal.aborted,
-  );
 }
 
 function queuedInputAsTurnInput(input: RuntimeQueuedTurnInput): SendTurnInput {

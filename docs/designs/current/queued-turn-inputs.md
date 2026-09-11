@@ -154,7 +154,7 @@ POST /v1/threads/:threadId/turns/:turnId/steer
 
 ### 立即发送
 
-如果队列项是普通消息，且 active task 是仍可接收 steer 的普通或 goal turn，send-now 调用 `RuntimeTurnInputCoordinator.steerQueuedInput()`：
+如果队列项是普通消息，且 active task 是仍可接收 steer 的普通、goal 或 review turn，send-now 调用 `RuntimeTurnInputCoordinator.steerQueuedInput()`：
 
 1. 校验 active turn 仍匹配且可接收输入。
 2. 先落盘带 `queuedInputId` 的用户消息。
@@ -162,7 +162,9 @@ POST /v1/threads/:threadId/turns/:turnId/steer
 4. 把消息放入 active turn 内部的 steer 队列。
 5. 模型在当前模型段或工具链路后的安全检查点消费它。
 
-如果点击期间 active turn 恰好结束，协调器重新检查状态，并把该项作为独立 turn 启动。调度中的项会被标记，删除或重复发送都会拒绝。
+审查中的补充沿用当前 review turn 的只读权限和审查策略；语言更正等要求从下一个模型检查点生效，不退出审查或创建普通轮次。
+
+如果点击期间 active turn 恰好结束，协调器重新检查状态，并把该项作为独立 turn 启动；仍在收尾时保留队列，等待正常结算后自动发送。调度中的项会被标记，删除或重复发送都会拒绝。
 
 Goal 不能被改写为当前 turn 的 steer；active turn 存在时 UI 禁用它的“立即发送”，runtime 也会拒绝绕过 UI 的请求。
 
@@ -224,7 +226,7 @@ active turn 期间：
 - 编辑期间当前 turn 结束：原队列项保持持久化和暂停，直到用户提交或显式取消。
 - 另一窗口删除正在编辑的项：清除编辑占用并尝试恢复剩余队首。
 - 旧编辑会话迟到释放：令牌不匹配，不影响当前编辑会话。
-- review、compact 或 user-shell active：不能 steer，但可以排队，正常完成后自动发送。
+- review active：普通补充支持 steer，且保持审查只读权限；compact 或 user-shell active 不能 steer，但可以排队，正常完成后自动发送。
 - 取消或错误：队列保留且不自动发送。
 - runtime 重启：队列从事件投影恢复；不会在没有新用户动作时擅自恢复失败前的自动发送。
 - 普通 start 与 active turn 竞态：服务端转为排队。
