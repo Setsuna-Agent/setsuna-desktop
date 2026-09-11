@@ -2,7 +2,7 @@ import { PointMenu, type MenuItem } from '@setsuna-desktop/renderer-ui';
 import type { WorkspaceEntry } from '@setsuna-desktop/contracts';
 import { Code2, Copy, FolderOpen, MessageSquare } from 'lucide-react';
 import { translate, useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
-import { WorkspaceAppGlyph } from '../../composition/WorkspaceAppsFeatureBoundary.js';
+import { WorkspaceAppGlyph, workspaceOpenWithMenu } from '../../composition/workspace-apps-feature-adapter.js';
 import type { DesktopWorkspaceApp } from './model.js';
 
 export type WorkspaceFileContextTarget = {
@@ -46,14 +46,10 @@ export function WorkspaceFileContextMenu({
         disabled: !selectedWorkspaceApp,
         onClick: () => { if (selectedWorkspaceApp) onOpenWithApp(selectedWorkspaceApp.id, target.filePath, target.line); },
       },
-      {
-        key: 'open-with', label: t('workspace.fileMenu.openWith'), icon: <Code2 size={14} />,
-        disabled: !workspaceApps.length,
-        children: workspaceApps.map((app) => ({
-          key: app.id, label: app.label, icon: <WorkspaceAppGlyph app={app} />,
-          onClick: () => onOpenWithApp(app.id, target.filePath, target.line),
-        })),
-      },
+      workspaceOpenWithMenu({
+        label: t('workspace.fileMenu.openWith'), apps: workspaceApps,
+        onOpen: (appId) => onOpenWithApp(appId, target.filePath, target.line),
+      }),
       { type: 'divider' as const },
     ] : []),
     { key: 'copy', label: t(directory ? 'workspace.fileMenu.copyDirectoryPath' : 'workspace.fileMenu.copyPath'), icon: <Copy size={14} />, onClick: () => onCopyPath(target.filePath) },

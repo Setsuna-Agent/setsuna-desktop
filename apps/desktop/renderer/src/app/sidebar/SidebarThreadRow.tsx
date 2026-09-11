@@ -1,6 +1,6 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
-import { Archive, LoaderCircle } from 'lucide-react';
+import { Archive, LoaderCircle, Pin } from 'lucide-react';
 import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { EditIcon } from '../../shared/ui/EditIcon.js';
@@ -11,6 +11,7 @@ import { SidebarThreadTitle } from './SidebarThreadTitle.js';
 
 export function SidebarThreadRow({
   menuOpen,
+  pinned = false,
   projectName,
   running = false,
   selected,
@@ -20,17 +21,20 @@ export function SidebarThreadRow({
   onRename,
   onSelect,
   onToggleMenu,
+  onTogglePin,
 }: {
   menuOpen: boolean;
+  pinned?: boolean;
   projectName?: string;
   running?: boolean;
   selected: boolean;
   thread: RuntimeThreadSummary;
-  variant: 'global' | 'project';
+  variant: 'global' | 'project' | 'pinned';
   onArchive: (thread: RuntimeThreadSummary) => void;
   onRename: (thread: RuntimeThreadSummary) => void;
   onSelect: (threadId: string) => void;
   onToggleMenu: (threadId: string) => void;
+  onTogglePin: (thread: RuntimeThreadSummary) => void;
 }) {
   const { t } = useI18n();
   // 线程列表快照包含整个 runtime 的活动状态；在经过防抖的侧边栏快照尚未更新时，
@@ -72,6 +76,21 @@ export function SidebarThreadRow({
     .join(' ');
   const meta = (
     <span className="desktop-agent-session__meta">
+      <ActionTooltip title={t(pinned ? 'sidebar.unpinChat' : 'sidebar.pinChat')}>
+        <Button variant="ghost"
+          className="desktop-agent-session__pin-button"
+          type="button"
+          aria-label={t(pinned ? 'sidebar.unpinChat' : 'sidebar.pinChat')}
+          aria-pressed={pinned}
+          onClick={(event) => {
+            event.stopPropagation();
+            onTogglePin(thread);
+          }}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          <Pin className="desktop-agent-session__pin-icon" size={14} strokeWidth={1.5} fill={pinned ? 'currentColor' : 'none'} />
+        </Button>
+      </ActionTooltip>
       {isRunning ? (
         <ActionTooltip title={t('sidebar.chatRunning')}>
           {/* 进行中的对话不允许归档，hover 时同样保持 loading 指示。 */}

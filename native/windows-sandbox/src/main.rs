@@ -50,6 +50,10 @@ fn run() -> Result<CommandOutput, SandboxError> {
             let request_path = option_path(&remaining, "--request")?;
             platform::run(&request_path)
         }
+        "run-background" => {
+            let command = option_string(&remaining, "--command")?;
+            platform::run_background(&command)
+        }
         "internal-child" => {
             let request_path = option_path(&remaining, "--request")?;
             let capability_sid = option_string(&remaining, "--capability-sid")?;

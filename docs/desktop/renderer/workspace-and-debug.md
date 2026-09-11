@@ -24,6 +24,8 @@ Workspace host 管理右侧/底部工作区 surface 和项目文件；Review、T
 
 Panel 选择和 session 生命周期在 hooks，不应由各 tab 各自维护一份打开状态。
 
+`Ctrl+W`（macOS 为 `⌘W`）关闭右侧工作区当前显示的标签页，复用 `closeDesktopPanelItem` 的关闭与资源清理逻辑。右侧栏收起、存在模态窗口或焦点位于终端输入区时不执行；可在设置的“键盘快捷键”中修改绑定。Main 在原生菜单处理前将已启用的应用快捷键交给 renderer，避免 `⌘W` 直接关闭窗口。
+
 ## Workspace hooks
 
 | Hook/helper | 职责 |
@@ -133,7 +135,7 @@ Browser Renderer Feature 通过 `BrowserWorkspacePanel.tsx` 注册 `renderer.wor
 
 ## 外部 Workspace apps
 
-`packages/features/workspace-apps/src/renderer/` 拥有 launcher、glyph、应用图标、用户偏好、文案和作用域样式，并向 `renderer.shell.topbar.action` 注册自己的 action。宿主 `composition/WorkspaceAppsFeatureBoundary.tsx` 只提供当前 workspace、打开动作和偏好存取；Workspace hook 继续拥有 project/panel 状态和打开动作编排。
+`packages/features/workspace-apps/src/renderer/` 拥有「打开方式」子菜单、glyph、应用图标、用户偏好和作用域样式。对话标题旁的三个点菜单与文件右键菜单通过 `composition/workspace-apps-feature-adapter.ts` 共用该子菜单；顶部不再单独显示应用打开按钮。Workspace hook 继续拥有 project/panel 状态和打开动作编排；选择对话菜单中的应用会打开当前对话工作区并保存应用偏好。
 
 打开 workspace/file 时只传结构化 app ID、workspace root、relative path 和可选 line；平台命令由 main 构造。
 

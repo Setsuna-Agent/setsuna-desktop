@@ -1,5 +1,5 @@
 import { realpathSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, realpath, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -17,6 +17,27 @@ afterEach(() => {
 });
 
 describe('Windows native sandbox adapter', () => {
+  it.skipIf(process.platform !== 'win32')('hosts background commands without requiring installed sandbox accounts', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-background-host-'));
+    try {
+      const executable = path.join(root, 'sidecar with spaces.exe');
+      await writeFile(executable, 'sidecar');
+      vi.stubEnv('SETSUNA_DESKTOP_WINDOWS_SANDBOX_PATH', executable);
+      const service = new WindowsNativeSandboxService();
+      const command = 'node "文件 with spaces.cjs" && echo "done"';
+      expect(service.backgroundCommand(command)).toEqual({
+        command: executable,
+        args: ['run-background', '--command', command],
+      });
+      vi.stubEnv('SETSUNA_DESKTOP_WINDOWS_SANDBOX_PATH', 'relative-sidecar.exe');
+      expect(service.backgroundCommand(command)).toBeNull();
+      vi.stubEnv('SETSUNA_DESKTOP_WINDOWS_SANDBOX_PATH', path.join(root, 'missing.exe'));
+      expect(service.backgroundCommand(command)).toBeNull();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('accepts only a ready matching sidecar and caches the short status probe', () => {
     const probe = vi.fn(() => ({
       executablePath: 'C:\\setsuna-sandbox-win.exe',

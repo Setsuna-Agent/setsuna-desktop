@@ -192,7 +192,6 @@ function isReservedKeyboardShortcut(binding: string, platform: KeyboardShortcutP
       'Meta+KeyQ',
       'Meta+KeyR',
       'Meta+KeyV',
-      'Meta+KeyW',
       'Meta+KeyX',
       'Meta+KeyZ',
       'Meta+Backquote',

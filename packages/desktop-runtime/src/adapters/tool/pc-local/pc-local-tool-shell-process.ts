@@ -578,7 +578,12 @@ async function startShellSession({
     const windowsRequestPath = sandboxPlan.provider === 'windows-native'
       ? await writeNativeSandboxRequest(state, command, sandboxPlan, session.id, temporaryRoot)
       : '';
-    const spawnSpec = shellSpawnSpec(command, sandboxPlan, windowsRequestPath);
+    const backgroundCommand = process.platform === 'win32' && sandboxPlan.provider === 'bypass'
+      ? state.shellSandboxProvider?.backgroundCommand?.(command)
+      : null;
+    const spawnSpec = backgroundCommand
+      ? { ...backgroundCommand, shell: false, sandboxed: false, sandboxProvider: 'bypass' }
+      : shellSpawnSpec(command, sandboxPlan, windowsRequestPath);
     session.sandboxed = Boolean(spawnSpec.sandboxed);
     session.sandboxProvider = spawnSpec.sandboxProvider;
     session.environment = environment;

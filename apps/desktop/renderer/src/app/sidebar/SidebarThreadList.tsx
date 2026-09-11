@@ -31,6 +31,7 @@ export function nextSidebarVisibleCount(
 export function SidebarThreadList({
   menuThreadId,
   projectName,
+  projectNamesById,
   runningThreadId,
   selectedThreadId,
   threads,
@@ -39,17 +40,20 @@ export function SidebarThreadList({
   onRename,
   onSelect,
   onToggleMenu,
+  onTogglePin,
 }: {
   menuThreadId: string | null;
   projectName?: string;
+  projectNamesById?: ReadonlyMap<string, string>;
   runningThreadId?: string | null;
   selectedThreadId?: string | null;
   threads: RuntimeThreadSummary[];
-  variant: 'global' | 'project';
+  variant: 'global' | 'project' | 'pinned';
   onArchive: (thread: RuntimeThreadSummary) => void;
   onRename: (thread: RuntimeThreadSummary) => void;
   onSelect: (threadId: string) => void;
   onToggleMenu: (threadId: string) => void;
+  onTogglePin: (thread: RuntimeThreadSummary) => void;
 }) {
   const { t } = useI18n();
   const batchSize = variant === 'project'
@@ -57,9 +61,11 @@ export function SidebarThreadList({
     : GLOBAL_CONVERSATION_BATCH_SIZE;
   // 侧栏按创建时间倒序展示；显式重排，避免依赖 listThreads 的全局顺序保持不变。
   // 稳定排序：创建时间相同时保留上游顺序（store 已按 id 做 tie-break）。
-  const orderedThreads = [...threads].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  const orderedThreads = variant === 'pinned'
+    ? threads
+    : [...threads].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   const minimumVisibleCount = minimumSidebarVisibleCount(
-    threads,
+    orderedThreads,
     batchSize,
     [selectedThreadId, runningThreadId],
   );
@@ -75,7 +81,8 @@ export function SidebarThreadList({
         <SidebarThreadRow
           key={thread.id}
           menuOpen={menuThreadId === thread.id}
-          projectName={projectName}
+          projectName={projectName ?? (thread.projectId ? projectNamesById?.get(thread.projectId) : undefined)}
+          pinned={variant === 'pinned'}
           running={runningThreadId === thread.id}
           selected={selectedThreadId === thread.id}
           thread={thread}
@@ -84,6 +91,7 @@ export function SidebarThreadList({
           onRename={onRename}
           onSelect={onSelect}
           onToggleMenu={onToggleMenu}
+          onTogglePin={onTogglePin}
         />
       ))}
       {remainingCount > 0 ? (

@@ -23,6 +23,10 @@ pub fn run(_request_path: &Path) -> Result<CommandOutput, SandboxError> {
     unsupported()
 }
 
+pub fn run_background(_command: &str) -> Result<CommandOutput, SandboxError> {
+    unsupported()
+}
+
 pub fn internal_child(
     _request_path: &Path,
     _capability_sid: &str,

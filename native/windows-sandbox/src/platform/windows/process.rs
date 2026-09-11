@@ -27,11 +27,12 @@ use windows_sys::Win32::System::StationsAndDesktops::{
 };
 use windows_sys::Win32::System::SystemInformation::GetSystemDirectoryW;
 use windows_sys::Win32::System::Threading::{
-    CreateProcessAsUserW, CreateProcessWithLogonW, GetCurrentProcess, GetCurrentProcessId,
-    GetExitCodeProcess, OpenProcess, ResumeThread, TerminateProcess, WaitForMultipleObjects,
-    WaitForSingleObject, CREATE_NO_WINDOW, CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, INFINITE,
-    PROCESS_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
-    STARTF_USESHOWWINDOW, STARTF_USESTDHANDLES, STARTUPINFOW,
+    CreateProcessAsUserW, CreateProcessW, CreateProcessWithLogonW, GetCurrentProcess,
+    GetCurrentProcessId, GetExitCodeProcess, OpenProcess, ResumeThread, TerminateProcess,
+    WaitForMultipleObjects, WaitForSingleObject, CREATE_NEW_CONSOLE, CREATE_NO_WINDOW,
+    CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, INFINITE, PROCESS_INFORMATION,
+    PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, STARTF_USESHOWWINDOW,
+    STARTF_USESTDHANDLES, STARTUPINFOW,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::SW_HIDE;
 use zeroize::{Zeroize, Zeroizing};
@@ -44,6 +45,68 @@ pub struct AccountRunnerContext<'a> {
     pub group_sid: &'a str,
     pub password: &'a Zeroizing<String>,
     pub acl_lock_path: &'a Path,
+}
+
+pub fn spawn_background_shell(command: &str) -> Result<i32, SandboxError> {
+    let executable = system_command_processor()?;
+    let executable_wide = to_wide(executable.as_os_str());
+    let mut command_line = to_wide(format!(
+        "{} /d /s /c \"{}\"",
+        quote_windows_argument(&executable.to_string_lossy()),
+        command
+    ));
+    let (stdin, stdout, stderr) = inheritable_standard_handles()?;
+    let mut startup: STARTUPINFOW = unsafe { std::mem::zeroed() };
+    startup.cb = std::mem::size_of::<STARTUPINFOW>() as u32;
+    startup.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+    startup.wShowWindow = SW_HIDE as u16;
+    startup.hStdInput = stdin;
+    startup.hStdOutput = stdout;
+    startup.hStdError = stderr;
+    let mut process_info: PROCESS_INFORMATION = unsafe { std::mem::zeroed() };
+    let job = JobObject::create()?;
+    // CREATE_NO_WINDOW leaves descendants such as pnpm's cmd without a console
+    // to inherit. Create a hidden console instead, while keeping I/O on the pipes.
+    // Suspend before assigning the job so cancellation cannot orphan descendants.
+    let created = unsafe {
+        CreateProcessW(
+            executable_wide.as_ptr(),
+            command_line.as_mut_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            1,
+            CREATE_NEW_CONSOLE | CREATE_SUSPENDED,
+            std::ptr::null(),
+            std::ptr::null(),
+            &startup,
+            &mut process_info,
+        )
+    };
+    if created == 0 {
+        return Err(SandboxError::with_source(
+            SandboxErrorCode::SpawnFailed,
+            "CreateProcessW failed for background shell",
+            std::io::Error::last_os_error(),
+        ));
+    }
+    let process = OwnedHandle::new(process_info.hProcess).map_err(|error| {
+        SandboxError::with_source(
+            SandboxErrorCode::SpawnFailed,
+            "invalid background process handle",
+            error,
+        )
+    })?;
+    let thread = OwnedHandle::new(process_info.hThread).map_err(|error| {
+        unsafe {
+            TerminateProcess(process.raw(), 1);
+        }
+        SandboxError::with_source(
+            SandboxErrorCode::SpawnFailed,
+            "invalid background thread handle",
+            error,
+        )
+    })?;
+    wait_for_contained_process(process, thread, &job, &[])
 }
 
 pub fn spawn_account_runner(

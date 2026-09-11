@@ -474,7 +474,7 @@
 }
 
 .desktop-agent-session:hover,
-.desktop-agent-session:focus-within {
+.desktop-agent-session:has(:focus-visible) {
   color: var(--desktop-agent-sidebar-active-text);
   border-color: transparent;
   background: var(--desktop-agent-sidebar-hover-bg);
@@ -482,7 +482,7 @@
 
 /* 经过位移的操作槽会创建层叠上下文；提升整行层级，避免其提示框被后续会话行遮盖。 */
 .desktop-agent-session:hover,
-.desktop-agent-session:focus-within {
+.desktop-agent-session:has(:focus-visible) {
   z-index: 1;
 }
 
@@ -531,7 +531,7 @@
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: var(--desktop-agent-row-action-size);
+  width: calc(var(--desktop-agent-row-action-size) * 2);
   height: var(--desktop-agent-row-action-size);
   overflow: visible;
   color: var(--app-sidebar-text-secondary);
@@ -551,6 +551,7 @@
   transition: opacity 160ms ease;
 }
 
+.desktop-agent-session__pin-button,
 .desktop-agent-session__archive-button {
   display: inline-flex;
   align-items: center;
@@ -571,23 +572,37 @@
     color 160ms ease;
 }
 
-.desktop-agent-session:hover .desktop-agent-session__select,
-.desktop-agent-session:focus-within .desktop-agent-session__select,
 .desktop-agent-session.is-running .desktop-agent-session__select {
   padding-right: calc(var(--desktop-agent-row-action-size) + 8px);
 }
 
+.desktop-agent-session:hover .desktop-agent-session__select,
+.desktop-agent-session:has(:focus-visible) .desktop-agent-session__select {
+  padding-right: calc(var(--desktop-agent-row-action-size) * 2 + 8px);
+}
+
+.desktop-agent-session:hover .desktop-agent-session__pin-button,
+.desktop-agent-session:has(:focus-visible) .desktop-agent-session__pin-button {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 /* 进行中的行禁用归档：hover/focus 时保持 loading 指示，而不是替换成归档按钮。 */
 .desktop-agent-session:not(.is-running):hover .desktop-agent-session__archive-button,
-.desktop-agent-session:not(.is-running):focus-within .desktop-agent-session__archive-button,
+.desktop-agent-session:not(.is-running):has(:focus-visible) .desktop-agent-session__archive-button,
 .desktop-agent-session__archive-button:focus-visible {
   opacity: 1;
   pointer-events: auto;
 }
 
+.desktop-agent-session__pin-button:hover,
 .desktop-agent-session__archive-button:hover {
   color: var(--app-text);
   background: var(--desktop-agent-control-hover-bg);
+}
+
+.desktop-agent-session__pin-icon {
+  transform: rotate(45deg);
 }
 
 .desktop-agent-project {

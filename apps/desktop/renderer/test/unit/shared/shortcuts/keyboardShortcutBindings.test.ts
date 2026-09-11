@@ -22,6 +22,8 @@ describe('keyboard shortcut bindings', () => {
   it('captures physical key combinations and keeps platform-reserved keys unavailable', () => {
     expect(captureKeyboardShortcut(keyEvent({ code: 'KeyB', metaKey: true, shiftKey: true }), 'darwin'))
       .toEqual({ status: 'captured', binding: 'Shift+Meta+KeyB' });
+    expect(captureKeyboardShortcut(keyEvent({ code: 'KeyW', metaKey: true }), 'darwin'))
+      .toEqual({ status: 'captured', binding: 'Meta+KeyW' });
     expect(captureKeyboardShortcut(keyEvent({ code: 'KeyQ', metaKey: true }), 'darwin'))
       .toEqual({ status: 'invalid', reason: 'reserved' });
     expect(captureKeyboardShortcut(keyEvent({ altKey: true, code: 'F4' }), 'win32'))
@@ -79,6 +81,11 @@ describe('keyboard shortcut bindings', () => {
     expect(newChat.defaultBindings.darwin).toEqual(['Meta+KeyN']);
     expect(newChat.defaultBindings.win32).toEqual(['Control+KeyN']);
     expect(newChat.defaultBindings.linux).toEqual(['Control+KeyN']);
+    expect(keyboardShortcutCommand('workspace.closeActiveSidePanel').defaultBindings).toEqual({
+      darwin: ['Meta+KeyW'],
+      linux: ['Control+KeyW'],
+      win32: ['Control+KeyW'],
+    });
     expect(keyboardShortcutCommand('browser.reload').defaultBindings).toEqual({
       darwin: ['Meta+KeyR'],
       linux: ['Control+KeyR'],

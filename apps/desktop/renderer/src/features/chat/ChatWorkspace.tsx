@@ -34,7 +34,7 @@ import { ChatModelSetupNotice } from './ChatModelSetupNotice.js';
 import type { ChatModelSelectionHandler } from './chatModelSelection.js';
 import {
   conversationOverviewContextLabel,
-  useConversationOverviewContentShift,
+  useConversationOverviewLayout,
 } from './conversation/ChatWorkspaceScroll.js';
 import { ConversationOverviewPanel } from './conversation/ConversationOverviewPanel.js';
 import type { AnswerApprovalHandler } from './conversation/chat-workspace-types.js';
@@ -161,9 +161,10 @@ export function ChatWorkspace({
   ), [config, historyThread]);
   const contextCompactionRunning = contextCompacting || currentThread?.contextCompaction?.status === 'running';
   const conversationOverview = useMemo(() => (variant === 'main' && currentThread ? conversationOverviewFromMessages(messages) : null), [currentThread, messages, variant]);
-  const overviewVisible = conversationOverviewVisibility !== 'hidden';
-  const overviewNeedsContentShift = useConversationOverviewContentShift(conversationRef, contentNode);
-  const overviewShiftsContent = overviewVisible && overviewNeedsContentShift;
+  const overviewLayout = useConversationOverviewLayout(conversationRef, contentNode);
+  const overviewVisible = conversationOverviewVisibility === 'shown'
+    || (conversationOverviewVisibility === 'auto' && overviewLayout !== 'hidden');
+  const overviewShiftsContent = overviewVisible && overviewLayout === 'shifted';
   const overviewContextLabel = useMemo(
     () => conversationOverviewContextLabel(contextUsage, currentThread?.contextCompaction?.status, t),
     [contextUsage, currentThread?.contextCompaction?.status, t],

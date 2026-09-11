@@ -12,10 +12,6 @@ import {
   type BrowserReloadMode,
 } from '@setsuna-desktop/feature-browser/contracts';
 import type { SettingsSectionId } from '../../features/settings/settings-types.js';
-import {
-  WorkspaceAppsFeatureBoundary,
-  type WorkspaceAppsTopbarHost,
-} from '../../composition/WorkspaceAppsFeatureBoundary.js';
 import type { DesktopAppController } from '../controller/useDesktopAppController.js';
 import type { ConversationOverviewVisibility } from '../types.js';
 import {
@@ -270,6 +266,10 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       enabled: activeView === 'chat' && workspacePanels.conversationDebugEnabled,
       execute: () => workspacePanels.openDesktopPanel('side', 'conversation-debug'),
     },
+    'workspace.closeActiveSidePanel': {
+      enabled: activeView === 'chat',
+      execute: workspacePanels.closeActiveSidePanel,
+    },
     'browser.reload': {
       enabled: activeView === 'chat' && Boolean(activeBrowserPanelId),
       execute: (event) => reloadBrowserPanel('normal', event),
@@ -301,6 +301,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     threadHistory.goForward,
     windowMenuActions,
     workspacePanels.toggleBottomTerminal,
+    workspacePanels.closeActiveSidePanel,
     workspacePanels.conversationDebugEnabled,
     workspacePanels.openBrowserPanel,
     workspacePanels.openDesktopPanel,
@@ -308,19 +309,6 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   ]);
   useAppKeyboardShortcuts(shortcutHandlers);
   useSecondaryRoutePrefetch();
-  const workspaceAppsTopbarHost = useMemo<WorkspaceAppsTopbarHost | null>(() => (
-    activeWorkspace?.path ? {
-      selectedWorkspaceApp: workspacePanels.selectedWorkspaceApp,
-      workspaceAppMenuOpen: workspacePanels.workspaceAppMenuOpen,
-      workspaceApps: workspacePanels.workspaceApps,
-      openCurrentWorkspaceApp: () => {
-        workspacePanels.closeWorkspaceMenus();
-        void workspacePanels.openSelectedWorkspaceApp();
-      },
-      selectWorkspaceApp: workspacePanels.selectWorkspaceApp,
-      toggleWorkspaceAppMenu: workspacePanels.toggleWorkspaceAppMenu,
-    } : null
-  ), [activeWorkspace?.path, workspacePanels]);
 
   return (
     <ShellFrame
@@ -348,6 +336,9 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
                 project={activeProject}
                 title={toolbarTitle ?? activeProject?.name}
                 archiveThreadDisabled={Boolean(currentThread?.activeTurnId)}
+                selectedWorkspaceApp={workspacePanels.selectedWorkspaceApp}
+                workspaceApps={workspacePanels.workspaceApps}
+                onOpenWorkspaceInApp={activeWorkspace?.path ? workspacePanels.openWorkspaceInApp : undefined}
                 onArchiveThread={currentThread
                   ? () => void navigation.archiveThread(currentThread)
                   : undefined}
@@ -372,26 +363,24 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       menuActions={windowMenuActions}
       className={shellClassName}
       actions={(
-        <WorkspaceAppsFeatureBoundary host={workspaceAppsTopbarHost}>
-          <RendererOwnedSingleSlot
-            slot={shellTopbarActionsSlot}
-            props={{
-              renderDefault: () => activeView === 'chat' ? (
-                <AppTopbarActions
-                  activeView={activeView}
-                  bottomPanelVisible={workspacePanels.bottomPanelVisible}
-                  bottomTerminalPanelActive={workspacePanels.bottomTerminalPanelActive}
-                  conversationOverviewAvailable={Boolean(runtime.currentThread)}
-                  conversationOverviewVisible={conversationOverviewRendered}
-                  sidePanelVisible={workspacePanels.sidePanelVisible}
-                  onToggleConversationOverview={handleToggleConversationOverview}
-                  onToggleSidePanel={workspacePanels.toggleSidePanel}
-                  onToggleBottomTerminal={workspacePanels.toggleBottomTerminal}
-                />
-              ) : undefined,
-            }}
-          />
-        </WorkspaceAppsFeatureBoundary>
+        <RendererOwnedSingleSlot
+          slot={shellTopbarActionsSlot}
+          props={{
+            renderDefault: () => activeView === 'chat' ? (
+              <AppTopbarActions
+                activeView={activeView}
+                bottomPanelVisible={workspacePanels.bottomPanelVisible}
+                bottomTerminalPanelActive={workspacePanels.bottomTerminalPanelActive}
+                conversationOverviewAvailable={Boolean(runtime.currentThread)}
+                conversationOverviewVisible={conversationOverviewRendered}
+                sidePanelVisible={workspacePanels.sidePanelVisible}
+                onToggleConversationOverview={handleToggleConversationOverview}
+                onToggleSidePanel={workspacePanels.toggleSidePanel}
+                onToggleBottomTerminal={workspacePanels.toggleBottomTerminal}
+              />
+            ) : undefined,
+          }}
+        />
       )}
     >
       <RendererOwnedSingleSlot
