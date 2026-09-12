@@ -34,7 +34,7 @@ describe('shell output across the model and result store', () => {
     const fallback = capability === 'linux' || restrictedShellExecutionUnavailable;
     const modelClient = new ShellModelClient(`${nodeCommand()} review.cjs`, fallback
       ? { name: 'git_inspect', input: { operation: 'diff', path: 'tracked.txt' } } : undefined);
-    const config = await new FullApprovalConfigStore('danger-full-access').getConfig();
+    const config = await new FullApprovalConfigStore('workspace-write').getConfig();
     const loop = new AgentLoop({
       threadStore, modelClient, toolHost: host, eventBus: new InMemoryEventBus(), clock: systemClock, ids,
       configStore: new TestConfigStore({
@@ -60,6 +60,7 @@ describe('shell output across the model and result store', () => {
       expect(await readFile(path.join(projectDir, 'tracked.txt'), 'utf8')).toBe('after\n');
     } finally {
       await host.shutdown();
+      await threadStore.close();
       await rm(fixtureRoot, { recursive: true, force: true });
     }
   });
@@ -127,6 +128,7 @@ describe('shell output across the model and result store', () => {
       expect(modelClient.requests).toHaveLength(2);
     } finally {
       await host.shutdown();
+      await threadStore.close();
       await rm(fixtureRoot, { recursive: true, force: true });
     }
   });
