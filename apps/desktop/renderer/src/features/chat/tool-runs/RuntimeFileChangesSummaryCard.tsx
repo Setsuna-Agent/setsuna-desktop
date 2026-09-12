@@ -1,4 +1,4 @@
-import type { WorkspaceFileChangeAction } from '@setsuna-desktop/contracts';
+import type { ThreadFileChangesResult, WorkspaceFileChangeAction } from '@setsuna-desktop/contracts';
 import { Button, useConfirm } from '@setsuna-desktop/renderer-ui';
 import { ChevronDown, FileDiff, Redo2, Undo2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -23,7 +23,7 @@ export function FileChangesSummaryCard({
 }: {
   summary: RuntimeFileChangeSummary;
   toolCallIds?: readonly string[];
-  onApplyChanges?: (action: WorkspaceFileChangeAction) => void | Promise<void>;
+  onApplyChanges?: (action: WorkspaceFileChangeAction) => void | Promise<void | ThreadFileChangesResult>;
   onOpenReview?: DesktopReviewOpenHandler;
 }) {
   const { t } = useI18n();

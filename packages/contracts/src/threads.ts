@@ -32,6 +32,7 @@ import type {
 } from './provider.js';
 import { reviewMarkdownLinksByLabelStart } from './review/markdown-link-scanner.js';
 import type { RuntimeUsage } from './usage.js';
+import type { ThreadFileChangeState } from './workspace.js';
 import { visibleTextOutsideThinkTags } from './swe/think-tag-scanner.js';
 
 export type * from './message-metadata.js';
@@ -744,6 +745,8 @@ export type RuntimeThreadSummary = {
   searchMatchPreview?: string;
 };
 export type RuntimeThread = RuntimeThreadSummary & {
+  /** Last successful undo/reapply for each tool-call batch, projected from runtime events. */
+  fileChangeStates?: Record<string, ThreadFileChangeState>;
   activeTurnId?: string | null;
   contextCompaction?: RuntimeThreadContextCompactionState;
   mailboxDeliveries?: RuntimeMailboxDeliveryRecord[];

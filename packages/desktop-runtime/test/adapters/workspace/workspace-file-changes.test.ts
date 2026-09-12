@@ -1,5 +1,5 @@
 import type { WorkspaceFileChange } from '@setsuna-desktop/contracts';
-import { chmod, lstat, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -49,6 +49,41 @@ describe('workspace operation undo', () => {
     expect(await readFile(path.join(root, 'moved.txt'), 'utf8')).toBe('changed\ntwo\n');
     await expect(lstat(path.join(root, 'note.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(lstat(path.join(root, 'empty.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('groups casing aliases on insensitive volumes while preserving independent files on sensitive volumes', async () => {
+    const original = '# Before\n';
+    await writeFile(path.join(root, 'README.md'), original);
+    const aliasExists = await lstat(path.join(root, 'readme.md')).then(() => true).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') return false;
+      throw error;
+    });
+    if (!aliasExists) await writeFile(path.join(root, 'readme.md'), 'Independent file\n');
+    const edit = capturedChanges(await editLocalFile({ file_path: 'README.md', old_string: '# Before', new_string: '# After' }, state));
+    const deletion = capturedChanges(await deleteLocalFile({ file_path: 'readme.md' }, state));
+    const changes = [...edit, ...deletion];
+    await applyWorkspaceFileChanges(root, changes, 'undo');
+    expect(await readFile(path.join(root, 'README.md'), 'utf8')).toBe(original);
+    expect(await readFile(path.join(root, 'readme.md'), 'utf8')).toBe(aliasExists ? original : 'Independent file\n');
+    expect((await readdir(root)).sort()).toEqual(aliasExists ? ['README.md'] : ['README.md', 'readme.md']);
+    await applyWorkspaceFileChanges(root, changes, 'redo');
+    await expect(lstat(path.join(root, 'readme.md'))).rejects.toMatchObject({ code: 'ENOENT' });
+    if (!aliasExists) expect(await readFile(path.join(root, 'README.md'), 'utf8')).toBe('# After\n');
+    expect((await readdir(root)).sort()).toEqual(aliasExists ? [] : ['README.md']);
+  });
+
+  it('rolls back the disk transaction if its durable operation record cannot be saved', async () => {
+    const created = capturedChanges(await writeLocalFile({ file_path: 'new.txt', content: 'generated' }, state));
+    await writeFile(path.join(root, 'old.txt'), 'original');
+    const deleted = capturedChanges(await deleteLocalFile({ file_path: 'old.txt' }, state));
+    const changes = [...created, ...deleted];
+    await expect(applyWorkspaceFileChanges(root, changes, 'undo', async () => { throw new Error('storage failed'); }))
+      .rejects.toThrow('storage failed');
+    expect(await readFile(path.join(root, 'new.txt'), 'utf8')).toBe('generated');
+    await expect(lstat(path.join(root, 'old.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await readdir(root)).toEqual(['new.txt']);
+    await applyWorkspaceFileChanges(root, changes, 'undo');
+    expect(await readFile(path.join(root, 'old.txt'), 'utf8')).toBe('original');
   });
 
   it('checks the entire batch before restoring or deleting anything when one file has newer edits', async () => {

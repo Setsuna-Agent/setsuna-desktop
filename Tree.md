@@ -176,14 +176,14 @@ apps/desktop/renderer/ — 0 direct / 608 total files
 ### `packages/contracts/`
 
 ```text
-packages/contracts/ — 4 direct / 77 total files
+packages/contracts/ — 4 direct / 78 total files
 ├── src/ — 33 direct / 49 total files
 │   ├── event-projections/ — 3 direct / 3 total files
 │   ├── localization/ — 1 direct / 1 total files
 │   ├── network-proxy/ — 1 direct / 1 total files
 │   ├── review/ — 1 direct / 1 total files
 │   └── swe/ — 10 direct / 10 total files
-└── test/ — 15 direct / 24 total files
+└── test/ — 16 direct / 25 total files
     ├── support/ — 1 direct / 1 total files
     ├── swe/ — 1 direct / 1 total files
     └── swe-events/ — 7 direct / 7 total files
@@ -468,9 +468,9 @@ packages/features/ — 0 direct / 960 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 543 total files
-├── src/ — 2 direct / 314 total files
-│   ├── adapters/ — 123 files
+packages/desktop-runtime/ — 4 direct / 544 total files
+├── src/ — 2 direct / 315 total files
+│   ├── adapters/ — 124 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── event/ — 2 direct / 2 total files
 │   │   ├── feature/ — 8 direct / 8 total files
@@ -485,7 +485,7 @@ packages/desktop-runtime/ — 4 direct / 543 total files
 │   │   ├── store/ — 35 direct / 35 total files
 │   │   ├── tool/ — 15 direct / 39 total files
 │   │   │   └── pc-local/ — 24 direct / 24 total files
-│   │   └── workspace/ — 7 direct / 7 total files
+│   │   └── workspace/ — 8 direct / 8 total files
 │   ├── composition/ — 3 direct / 3 total files
 │   ├── extensions/ — 14 direct / 14 total files
 │   ├── features/ — 6 files

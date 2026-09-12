@@ -768,10 +768,11 @@
 
 .chat-user-edit__actions button {
   height: 28px;
+  min-height: 28px;
   min-width: 0;
   padding: 0 10px;
   border: 0;
-  border-radius: var(--app-radius-sm);
+  border-radius: var(--app-radius-full);
   color: var(--app-text);
   background: var(--app-surface);
   font-size: 13px;
@@ -783,7 +784,6 @@
 }
 
 .chat-user-edit__actions button[type='submit'] {
-  border-radius: var(--app-radius-full);
   color: var(--app-primary-text);
   background: var(--chat-send-bg);
 }
