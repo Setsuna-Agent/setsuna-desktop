@@ -3,7 +3,9 @@ import {
   type RuntimeConfigState,
   type RuntimeContextCompactionNotice,
   type RuntimeMessage,
+  type RuntimeModelRequestContextWindow,
   type RuntimeThread,
+  type RuntimeThreadTurnStepSnapshot,
 } from '@setsuna-desktop/contracts';
 import { chatThreadModelSelection } from '../chatModelSelection.js';
 
@@ -24,16 +26,20 @@ export type ChatContextTokenUsage = {
 export function contextTokenUsageFromThread(thread: RuntimeThread | null, configuredMaxContextTokens?: number): ChatContextTokenUsage {
   const notice = latestContextCompactionNotice(thread);
   const state = thread?.contextCompaction;
-  const totalTokens = Math.max(
-    0,
-    Math.round(Number(positiveTokenLimit(configuredMaxContextTokens) ?? notice?.maxContextTokens ?? state?.maxContextTokens ?? DEFAULT_CONTEXT_TOKENS)),
+  const budget = runtimeContextBudget(thread, notice);
+  const compactionBudgetValid = hasCurrentCompactionBudget(thread);
+  const configuredLimit = positiveTokenLimit(configuredMaxContextTokens);
+  // An in-flight request owns its budget even if model settings change while it runs.
+  const totalTokens = (thread?.activeTurnId ? budget?.maxContextTokens : undefined)
+    ?? configuredLimit ?? budget?.maxContextTokens
+    ?? notice?.maxContextTokens ?? state?.maxContextTokens ?? DEFAULT_CONTEXT_TOKENS;
+  // Request snapshots include prompts, tool schemas, replay metadata and output reserve.
+  // Recounting the paged transcript loses that budget and makes compaction look like a jump.
+  const usedTokens = budget?.estimatedTokens ?? positiveNumber(
+    estimateRuntimeMessagesTokens(thread?.messages ?? []),
+    compactionBudgetValid ? notice?.compactedTokens ?? 0 : 0,
+    compactionBudgetValid ? state?.usedTokens ?? 0 : 0,
   );
-  const recomputedTokens = estimateRuntimeMessagesTokens(thread?.messages ?? []);
-  const stateTokens = Math.round(Number(state?.usedTokens || 0));
-  const noticeTokens = Math.round(Number(notice?.compactedTokens || 0));
-  const usedTokens = state?.status === 'running'
-    ? positiveNumber(stateTokens, recomputedTokens)
-    : positiveNumber(recomputedTokens, noticeTokens, stateTokens);
   const rawPercent = totalTokens > 0 && usedTokens > 0 ? Math.min(100, (usedTokens / totalTokens) * 100) : 0;
   const percent = Math.round(rawPercent);
 
@@ -46,6 +52,59 @@ export function contextTokenUsageFromThread(thread: RuntimeThread | null, config
     usedTokens,
     visiblePercent: rawPercent > 0 && rawPercent < 0.1 ? 0.1 : rawPercent,
   };
+}
+
+type ContextBudget = Pick<RuntimeModelRequestContextWindow, 'estimatedTokens' | 'maxContextTokens'>;
+
+function runtimeContextBudget(
+  thread: RuntimeThread | null,
+  notice: RuntimeContextCompactionNotice | undefined,
+): ContextBudget | undefined {
+  const step = latestContextStep(thread);
+  const window = step?.snapshot.contextWindow;
+  const state = thread?.contextCompaction;
+  if (!hasCurrentCompactionBudget(thread)) return window;
+  if (state?.status === 'running' && state.usedTokens !== undefined) {
+    const maxContextTokens = state.maxContextTokens ?? window?.maxContextTokens ?? DEFAULT_CONTEXT_TOKENS;
+    return {
+      estimatedTokens: state.usedTokens,
+      maxContextTokens,
+    };
+  }
+
+  const completedAt = state?.completedAt
+    ?? [...(thread?.messages ?? [])].reverse().find((message) => message.contextCompaction)?.createdAt;
+  // Compaction commits before the next sampling snapshot. Use its complete request
+  // budget immediately, then let the next request take over as context grows again.
+  if (notice?.compactedRequestTokens !== undefined && (!step || (completedAt && completedAt > step.createdAt))) {
+    return {
+      estimatedTokens: notice.compactedRequestTokens,
+      maxContextTokens: notice.maxContextTokens ?? notice.maxContextTokensK * 1000,
+    };
+  }
+  return window;
+}
+
+function latestContextStep(thread: RuntimeThread | null): RuntimeThreadTurnStepSnapshot | undefined {
+  let latest: RuntimeThreadTurnStepSnapshot | undefined;
+  for (const turn of thread?.turns ?? []) {
+    const steps = turn.stepSnapshots ?? [];
+    for (let index = steps.length - 1; index >= 0; index -= 1) {
+      const step = steps[index];
+      if (!step.snapshot.contextWindow) continue;
+      // History is paged independently of request snapshots; only a projected
+      // mutation boundary can distinguish deleted context from unloaded messages.
+      if (step.snapshot.threadLastSeq < (thread?.contextBudgetInvalidatedAtSeq ?? 0)) continue;
+      if (!latest || step.createdAt >= latest.createdAt) latest = step;
+      break;
+    }
+  }
+  return latest;
+}
+
+function hasCurrentCompactionBudget(thread: RuntimeThread | null): boolean {
+  return thread?.contextBudgetInvalidatedAtSeq === undefined
+    || (thread.contextCompaction?.seq ?? 0) > thread.contextBudgetInvalidatedAtSeq;
 }
 
 export function activeModelContextWindowTokens(

@@ -341,7 +341,7 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
     expect(manualFallback).toContain('拒绝');
   });
 
-  it('shows a single pending approval summary only once inside grouped tool history', () => {
+  it('keeps pending approval actions available alongside completed tool history', () => {
     const pendingRun: RuntimeToolRun = {
       id: 'exec_pending',
       name: 'exec_command',
@@ -360,14 +360,14 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
     ], 'latest');
 
     const mixedHistoryText = renderedTextFromHtml(mixedHistoryHtml);
-    expect(mixedHistoryText.split('等待授权：运行')).toHaveLength(2);
+    expect(mixedHistoryText).toContain('App.tsx');
+    expect(renderedTextFromHtml(groupedShellHtml)).toContain('pnpm typecheck');
     expect(mixedHistoryText).not.toContain('待确认');
     for (const html of [groupedShellHtml, mixedHistoryHtml]) {
       const text = renderedTextFromHtml(html);
-      expect(html.match(/<summary/gu)).toHaveLength(1);
       expect(text).toContain('cd /Users/dev/project &amp;&amp; pnpm dev');
-      expect(text).toContain('允许');
-      expect(text).toContain('拒绝');
+      expect(html.match(/>允许<\/button>/gu)).toHaveLength(1);
+      expect(html.match(/>拒绝<\/button>/gu)).toHaveLength(1);
     }
   });
 

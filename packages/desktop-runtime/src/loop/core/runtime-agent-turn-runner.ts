@@ -1,3 +1,4 @@
+import { ContextTokenCalibration } from '../context/context-token-calibration.js';
 import {
   normalizeRuntimeSkillReferences,
   type RuntimeEnvironment,
@@ -133,7 +134,7 @@ export class RuntimeAgentTurnRunner {
       conversationMessages: thread.messages,
       // 审查沿用用户请求的语言，界面语言只作为兜底；普通对话跟随已选界面语言。
       fallback: options.review?.language ?? 'zh-CN',
-      interfaceLanguage: taskKind === 'review' ? undefined : runtimeConfig?.desktopSettings?.interfaceLanguage,
+      interfaceLanguage: taskKind === 'review' ? undefined : runtimeConfig?.desktopSettings?.interfaceLanguage ?? 'zh-CN',
     });
     let activeSkillIds = [...selectedSkillIds];
     let activeThinkingOptions = thinkingOptions;
@@ -256,6 +257,8 @@ export class RuntimeAgentTurnRunner {
       let memorySavedByTool = false;
       let stopHookActive = false;
       const publishedModelHistoryWarnings = new Set<string>();
+      const loadedToolNames = new Set<string>();
+      const contextTokenCalibration = new ContextTokenCalibration();
 
       // 一个 turn 可能包含多段 assistant：工具调用会结束当前段，把 tool 消息补回上下文后再问模型。
       while (true) {
@@ -263,6 +266,8 @@ export class RuntimeAgentTurnRunner {
         appendMailboxMessagesToConversation(await this.options.turnInputs.drainMailboxMessages(threadId, turnId));
         appendSteersToConversation(await this.options.turnInputs.drainSteers(threadId, turnId));
         const stepContext = await this.options.samplingContexts.build({
+          loadedToolNames,
+          contextTokenCalibration,
           conversationMessages,
           hookContextMessages: additionalContextMessages,
           responseLanguage,
@@ -318,6 +323,7 @@ export class RuntimeAgentTurnRunner {
           toolCalls,
         } = sampled;
         usage = addRuntimeUsage(usage, sampled.usage);
+        contextTokenCalibration.record(stepContext.modelRequest, stepContext.messages, stepContext.tools, sampled.usage);
         let roundText = sampled.text;
 
         if (toolCalls.length) {

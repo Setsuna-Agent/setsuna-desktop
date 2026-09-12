@@ -1,8 +1,75 @@
 import type { RuntimeToolRun } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
+import { translate } from '../../../../../src/shared/i18n/I18nProvider.js';
+import { toolRunSummary } from '../../../../../src/features/chat/tool-runs/RuntimeToolRunPresentation.js';
 import { toolRun, fileRun, preparingFileRun, renderedText, renderedTextFromHtml, firstToolRunSummaryHtml, renderedHtml } from './RuntimeToolRuns.support.js';
 
 describe('RuntimeToolRuns compact summaries', () => {
+  it('shows readable output-read activity before and after the command result arrives', () => {
+    const processId = 'e8ff5269-24f6-4540-99a9-c53b6ff5c730';
+    const previous = toolRun('search', 'search_text', { path: 'src', query: 'needle' });
+    for (const args of [{ process_id: processId }, { processId }]) {
+      const pending = toolRun('read-output', 'read_shell_process', args, 'running');
+      const completed = {
+        ...pending,
+        status: 'success' as const,
+        resultPreview: `Process Id: ${processId}\nCommand: pnpm test\nStatus: completed\nStdout:\ntests passed\nStderr:\n(empty)`,
+      };
+      for (const prefix of [[], [previous]]) {
+        const pendingHtml = renderedHtml([...prefix, pending], 'latest');
+        expect(renderedTextFromHtml(firstToolRunSummaryHtml(pendingHtml))).toContain('正在读取命令输出');
+        expect(pendingHtml).not.toContain(processId);
+        expect(pendingHtml).toContain('<code>读取命令输出</code>');
+
+        const completedHtml = renderedHtml([...prefix, completed], 'latest');
+        const summary = renderedTextFromHtml(firstToolRunSummaryHtml(completedHtml));
+        expect(summary).toContain('已读取命令输出pnpm test');
+        expect(summary).not.toContain(processId);
+        expect(completedHtml).toContain('<code>pnpm test</code>');
+        expect(completedHtml).toContain('tests passed');
+      }
+    }
+  });
+
+  it('keeps process handles out of grouped command activity while preserving real command arguments', () => {
+    const processId = '6fce2e19-82f1-4bdf-943b-a7b1e3319cf0';
+    const previous = toolRun('exec', 'exec_command', { cmd: 'pnpm test' });
+    for (const [name, args] of [
+      ['read_shell_process', { process_id: processId }],
+      ['write_stdin', { session_id: processId, chars: '' }],
+      ['terminate_shell_process', { process_id: processId }],
+    ] as const) {
+      const active = toolRun('active', name, args, 'running');
+      const html = renderedHtml([previous, active]);
+      expect(renderedTextFromHtml(firstToolRunSummaryHtml(html))).toContain('正在运行命令');
+      expect(html).not.toContain(processId);
+    }
+
+    const command = `echo ${processId}`;
+    const html = renderedHtml([toolRun('echo', 'exec_command', { cmd: command })]);
+    expect(renderedTextFromHtml(firstToolRunSummaryHtml(html))).toContain(`已运行 ${command}`);
+  });
+
+  it('localizes built-in names in single and grouped runs while preserving extension names', () => {
+    for (const [name, label] of [
+      ['get_goal', '查看目标'], ['browser_click', '点击网页元素'],
+      ['read_skill', '读取技能'], ['configure_mcp_server', '配置 MCP 服务'],
+      ['git_inspect', '检查 Git 仓库'], ['read_tool_result', '读取工具结果'],
+    ]) {
+      const run = toolRun(name, name, {});
+      expect(renderedText([run])).toContain(`已使用 ${label}`);
+      expect(renderedText([{ ...run, status: 'running' }])).toContain(`正在${label}`);
+      expect(renderedText([run, { ...run, id: `${name}-2` }])).toContain(`已使用 2 次 ${label}`);
+      expect(toolRunSummary(run, (key, params) => translate('en-US', key, params)).title)
+        .toBe(`Used ${name.replaceAll('_', ' ')}`);
+    }
+    expect(toolRunSummary(toolRun('external', 'mcp Demo read_skill', {})).title).toBe('已使用 read skill');
+    expect(toolRunSummary({
+      ...toolRun('plugin', 'extension__demo__get_goal', {}),
+      plugin: { id: 'demo', name: 'Demo' },
+    }).title).toBe('已使用 Demo / get_goal');
+  });
+
   it('shows an empty rg result as a completed search and keeps the original exit code visible', () => {
     const run = {
       ...toolRun('rg_empty', 'exec_command', { cmd: 'rg absent src' }),
@@ -12,8 +79,8 @@ describe('RuntimeToolRuns compact summaries', () => {
     const html = renderedHtml([run]);
     expect(renderedTextFromHtml(firstToolRunSummaryHtml(html))).toContain('已在 src 中搜索“absent”');
     expect(html).toContain('chat-mcp-terminal--completed');
-    expect(renderedTextFromHtml(html)).toContain('No matches found.');
-    expect(renderedTextFromHtml(html)).toContain('成功 · exit 1');
+    expect(renderedTextFromHtml(html)).toContain('未找到匹配结果。');
+    expect(renderedTextFromHtml(html)).toContain('成功 · 退出码 1');
     expect(html).not.toContain('chat-mcp-terminal--error');
   });
 

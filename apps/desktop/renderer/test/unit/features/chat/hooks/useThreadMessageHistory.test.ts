@@ -1,9 +1,15 @@
+// @vitest-environment happy-dom
+
 import type { RuntimeMessage, RuntimeThread } from '@setsuna-desktop/contracts';
-import { describe, expect, it } from 'vitest';
+import { act, cleanup, renderHook } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   mergeMessages,
   reconcileThreadSnapshot,
+  useThreadMessageHistory,
 } from '../../../../../src/features/chat/hooks/useThreadMessageHistory.js';
+
+afterEach(cleanup);
 
 describe('thread message history', () => {
   it('retains rows displaced when the server tail window advances', () => {
@@ -29,7 +35,52 @@ describe('thread message history', () => {
       ['msg_4', 'updated 4'],
       ['msg_5', 'new 5'],
     ]);
-    expect(reconciled.windowRevision).toBe(1);
+    expect(reconciled.windowRevision).toBe(0);
+  });
+
+  it('keeps loaded history exhausted when SSE carries the cached prefix with an older page cursor', () => {
+    const messages = [message('msg_1', 'prompt'), message('msg_2', 'work')];
+    const client = { listThreadMessages: vi.fn() };
+    const view = renderHook(({ snapshot }) => useThreadMessageHistory(client, snapshot), {
+      initialProps: { snapshot: thread(messages, { nextBefore: null, total: 2 }) },
+    });
+    const tail = [...messages.slice(1), message('msg_3', 'compacted work')];
+    view.rerender({ snapshot: thread(tail, { nextBefore: 1, total: 3 }) });
+    expect(view.result.current.hasMore).toBe(false);
+    // Live projection can contain the prefix even though its snapshot page metadata
+    // still describes the old tail. Repeated events must not revive that cursor.
+    for (const content of ['next tool', 'next tool completed']) {
+      view.rerender({ snapshot: thread([
+        ...messages, message('msg_3', 'compacted work'),
+        message('msg_4', content),
+      ], { nextBefore: 1, total: 4 }) });
+      expect(view.result.current.hasMore).toBe(false);
+      expect(view.result.current.messages[0]?.id).toBe('msg_1');
+    }
+  });
+
+  it('finishes loading older history while new assistant messages continue arriving', async () => {
+    const older = [message('msg_1', 'older prompt'), message('msg_2', 'older reply')];
+    const tail = [message('msg_3', 'current prompt'), message('msg_4', 'current work')];
+    let resolvePage!: (page: { messages: RuntimeMessage[]; nextBefore: null; total: number }) => void;
+    const client = { listThreadMessages: vi.fn(() => new Promise<{
+      messages: RuntimeMessage[]; nextBefore: null; total: number;
+    }>((resolve) => { resolvePage = resolve; })) };
+    const view = renderHook(({ snapshot }) => useThreadMessageHistory(client, snapshot), {
+      initialProps: { snapshot: thread(tail, { nextBefore: 2, total: 4 }) },
+    });
+    let loading!: Promise<void>;
+    act(() => { loading = view.result.current.loadOlder(); });
+    view.rerender({ snapshot: thread([...tail, message('msg_5', 'next tool')], { nextBefore: 2, total: 5 }) });
+    expect(view.result.current.loading).toBe(true);
+    await act(async () => {
+      resolvePage({ messages: older, nextBefore: null, total: 4 });
+      await loading;
+    });
+    expect(view.result.current.messages.map((row) => row.id)).toEqual(['msg_1', 'msg_2', 'msg_3', 'msg_4', 'msg_5']);
+    expect(view.result.current.hasMore).toBe(false);
+    expect(view.result.current.total).toBe(5);
+    expect(client.listThreadMessages).toHaveBeenCalledExactlyOnceWith('thread_1', { before: 2, limit: 160 });
   });
 
   it('drops the cached suffix replaced by an edited-message regeneration', () => {

@@ -130,6 +130,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
   if (event.type === 'thread.context_cleared') {
     delete next.fileChangeStates;
     next.contextCompaction = undefined;
+    next.contextBudgetInvalidatedAtSeq = event.seq;
     delete next.pendingHookRuns;
     next.turns = [];
     next.messages = [];
@@ -140,6 +141,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
 
   if (event.type === 'thread.context_compacting') {
     next.contextCompaction = {
+      seq: event.seq,
       turnId: event.turnId,
       forced: event.payload.forced,
       maxContextTokens: event.payload.maxContextTokens,
@@ -155,6 +157,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
   if (event.type === 'thread.context_compacted') {
     const pendingHookRuns = next.pendingHookRuns;
     next.contextCompaction = {
+      seq: event.seq,
       turnId: event.turnId,
       completedAt: event.createdAt,
       forced: event.payload.notice.forced,
@@ -396,6 +399,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
   }
 
   if (event.type === 'messages.deleted') {
+    next.contextBudgetInvalidatedAtSeq = event.seq;
     const ids = new Set(event.payload.messageIds);
     const removedTurnIds = new Set(next.messages.filter((message) => message.turnId && ids.has(message.id)).map((message) => message.turnId!));
     next.messages = next.messages.filter((message) => !ids.has(message.id));
@@ -405,6 +409,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
   }
 
   if (event.type === 'messages.truncated') {
+    next.contextBudgetInvalidatedAtSeq = event.seq;
     const index = next.messages.findIndex((message) => message.id === event.payload.messageId);
     if (index >= 0) {
       const removedMessageIds = new Set(event.payload.removedMessageIds);

@@ -111,41 +111,22 @@ export function estimateMarkdownBlockHeight(content: string): number {
 }
 
 export function normalizeMarkdownBlockHeight({
-  marginBottom = 0,
-  marginTop = 0,
   rectHeight,
   scaleInverse = 1,
 }: {
-  marginBottom?: number;
-  marginTop?: number;
   rectHeight: number;
   scaleInverse?: number;
 }): number {
   const safeScaleInverse = Number.isFinite(scaleInverse) && scaleInverse > 0 ? scaleInverse : 1;
-  return (rectHeight * safeScaleInverse) + marginTop + marginBottom;
+  return rectHeight * safeScaleInverse;
 }
 
 function measureMarkdownBlockHeight(block: HTMLDivElement): number {
-  const rectHeight = block.getBoundingClientRect().height;
-  const scaleInverse = pageScaleInverse();
-  const firstChild = block.firstElementChild;
-  const lastChild = block.lastElementChild;
-  if (!firstChild || !lastChild || typeof window === 'undefined') {
-    return normalizeMarkdownBlockHeight({ rectHeight, scaleInverse });
-  }
-
-  // Markdown 子元素的外边距可能穿透包装元素发生折叠。将其外部占用空间计入测量，
-  // 避免替换已测量块时移动滚动锚点。
-  const firstStyle = window.getComputedStyle(firstChild);
-  const lastStyle = firstChild === lastChild ? firstStyle : window.getComputedStyle(lastChild);
-  const marginTop = Number.parseFloat(firstStyle.marginTop) || 0;
-  const marginBottom = Number.parseFloat(lastStyle.marginBottom) || 0;
-  // DOMRect 返回 zoom 后的视觉像素，而占位高度使用 zoom 前的 CSS 像素。
-  // 先还原坐标空间并保留小数，避免虚拟块反复切换时改变列表总高度。
+  // flow-root contains child margins, so the border box is the entire block's
+  // footprint. Adding margins again would change scroll height on every swap.
+  // Keep fractional CSS pixels when converting the zoomed DOMRect to a placeholder.
   return normalizeMarkdownBlockHeight({
-    marginBottom,
-    marginTop,
-    rectHeight,
-    scaleInverse,
+    rectHeight: block.getBoundingClientRect().height,
+    scaleInverse: pageScaleInverse(),
   });
 }

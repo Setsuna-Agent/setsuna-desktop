@@ -795,6 +795,19 @@ describe('createChatDisplayItems', () => {
     ]);
   });
 
+  it('counts collapsed transcript rows independently of their internal tool messages', () => {
+    const messages: RuntimeMessage[] = [
+      { id: 'user_1', role: 'user' as const, content: 'First prompt', turnId: 'turn_1' },
+      { id: 'assistant_1', role: 'assistant' as const, content: 'Working', turnId: 'turn_1' },
+      ...Array.from({ length: 23 }, (_, index) => ({ id: `tool_${index}`, role: 'tool' as const, content: 'output', turnId: 'turn_1' })),
+      { id: 'assistant_2', role: 'assistant' as const, content: 'Done', turnId: 'turn_1' },
+      { id: 'user_2', role: 'user' as const, content: 'Next prompt', turnId: 'turn_2' },
+    ].map((message) => ({ ...message, createdAt: '2026-09-12T00:00:00.000Z', status: 'complete' as const }));
+    const windowed = createChatRenderWindow(createChatDisplayItems(messages), { tailItemLimit: 1 });
+    expect(windowed.hiddenMessageCount).toBe(2);
+    expect(windowed.items.map((item) => item.id)).toEqual(['user_2']);
+  });
+
   it('does not window the transcript while disabled', () => {
     const messages: RuntimeMessage[] = Array.from({ length: 4 }, (_, index) => ({
       id: `user_${index + 1}`,

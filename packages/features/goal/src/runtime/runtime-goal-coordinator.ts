@@ -37,7 +37,7 @@ import {
   goalContinuationContextMessages,
   goalExitMessage,
 } from './runtime-goal-prompts.js';
-import { goalToolDefinitions, isGoalToolName } from './runtime-goal-tools.js';
+import { goalToolDefinitions, goalToolResult, isGoalToolName } from './runtime-goal-tools.js';
 import {
   accountGoalTurn,
   epochSeconds,
@@ -443,7 +443,7 @@ export class RuntimeGoalCoordinator implements GoalControl {
     const input = recordInput(parsedArguments);
     if (name === 'get_goal') {
       const goal = await this.getGoal(context.threadId);
-      return goalToolResult(name, { goal }, goal ? `Goal is ${goal.status}.` : 'No goal is set.');
+      return goalToolResult(name, { goal }, context.interfaceLanguage);
     }
     if (name === 'create_goal') {
       const objective = normalizeGoalObjective(input.objective);
@@ -466,7 +466,7 @@ export class RuntimeGoalCoordinator implements GoalControl {
         );
         this.goalIdByTurnId.set(context.turnId, goal.id);
         this.goalObjectiveByTurnId.set(context.turnId, goal.objective);
-        return goalToolResult(name, { goal }, 'Goal created.');
+        return goalToolResult(name, { goal }, context.interfaceLanguage);
       });
     }
     if (name === 'update_goal') {
@@ -485,7 +485,7 @@ export class RuntimeGoalCoordinator implements GoalControl {
         return goalToolResult(
           name,
           { goal, completionPending: true },
-          'Goal completion will be finalized when this turn completes successfully.',
+          context.interfaceLanguage,
         );
       });
     }
@@ -907,12 +907,4 @@ function recordInput(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
-}
-
-function goalToolResult(
-  name: string,
-  data: Record<string, unknown>,
-  preview: string,
-): GoalToolExecutionResult {
-  return { content: JSON.stringify({ tool: name, ...data }), data, preview };
 }

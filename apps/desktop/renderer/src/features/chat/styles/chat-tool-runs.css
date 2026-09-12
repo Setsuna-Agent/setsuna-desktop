@@ -27,11 +27,6 @@
   transition: color 220ms ease;
 }
 
-.chat-tool-run__icon {
-  transform-origin: center;
-  animation: chat-tool-run-icon-reveal 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
 .chat-tool-run--pending_approval {
   color: color-mix(in srgb, var(--app-warning) 72%, var(--app-text));
   --chat-tool-run-title-color: color-mix(in srgb, var(--app-warning) 72%, var(--app-text));
@@ -75,12 +70,14 @@
   display: none;
 }
 
+details.chat-tool-run[open] > .chat-tool-run__summary,
 details.chat-tool-run > .chat-tool-run__summary:hover {
   --chat-tool-run-title-color: var(--app-text);
   color: var(--app-text);
   background: transparent;
 }
 
+details.chat-tool-run[open] > .chat-tool-run__summary > .chat-tool-run__icon,
 details.chat-tool-run > .chat-tool-run__summary:hover > .chat-tool-run__icon {
   color: var(--app-text);
 }
@@ -100,6 +97,7 @@ details.chat-tool-run > .chat-tool-run__summary:hover > .chat-tool-run__icon {
 }
 
 details.chat-tool-run[open] > .chat-tool-run__summary > .chat-tool-run__chevron {
+  opacity: 1;
   transform: rotate(0);
 }
 
@@ -565,8 +563,9 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   white-space: nowrap;
 }
 
-.chat-tool-run--running .chat-tool-run__title,
-.chat-tool-run--pending_approval .chat-tool-run__title {
+/* Activity belongs to this row's summary, never its completed descendants. */
+.chat-tool-run--running:not([open]) > .chat-tool-run__summary > .chat-tool-run__summary-text > .chat-tool-run__title,
+.chat-tool-run--pending_approval:not([open]) > .chat-tool-run__summary > .chat-tool-run__summary-text > .chat-tool-run__title {
   color: transparent;
   background: linear-gradient(
     90deg,
@@ -602,46 +601,32 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   padding: 0;
 }
 
-details.chat-tool-run[open] > .chat-tool-run__body,
-.chat-tool-run__body--mixed-list > .chat-tool-run,
-.chat-tool-run__inspection-list > li,
-.chat-tool-run__hook {
-  transform-origin: top left;
-  animation: chat-tool-run-detail-reveal 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+/* 只限制最外层工具汇总，保留顶部摘要，避免子分组各自产生滚动区域。 */
+.chat-tool-runs > .chat-tool-run--group > .chat-tool-run__body {
+  max-height: min(360px, 50vh);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  /* 聊天正文默认隐藏内部滚动条；长工具记录需要可拖动的滚动提示。 */
+  scrollbar-width: thin !important;
+  scrollbar-color: var(--chat-scrollbar-thumb) transparent;
 }
 
-@keyframes chat-tool-run-icon-reveal {
-  from {
-    opacity: 0;
-    transform: scale(0.72) rotate(-10deg);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1) rotate(0);
-  }
+.chat-tool-runs > .chat-tool-run--group > .chat-tool-run__body::-webkit-scrollbar {
+  display: block !important;
+  width: var(--chat-scrollbar-width) !important;
 }
 
-@keyframes chat-tool-run-detail-reveal {
-  from {
-    opacity: 0;
-    filter: blur(1px);
-    transform: translateY(4px);
-  }
-
-  to {
-    opacity: 1;
-    filter: blur(0);
-    transform: translateY(0);
-  }
+.chat-tool-runs > .chat-tool-run--group > .chat-tool-run__body::-webkit-scrollbar-thumb {
+  border: 2px solid transparent !important;
+  border-radius: var(--app-radius-full);
+  background: var(--chat-scrollbar-thumb) !important;
+  background-clip: content-box !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chat-tool-run__icon,
-  details.chat-tool-run[open] > .chat-tool-run__body,
-  .chat-tool-run__body--mixed-list > .chat-tool-run,
-  .chat-tool-run__inspection-list > li,
-  .chat-tool-run__hook {
+  .chat-tool-run:not([open]) > .chat-tool-run__summary > .chat-tool-run__summary-text > .chat-tool-run__title {
     animation: none;
   }
 }

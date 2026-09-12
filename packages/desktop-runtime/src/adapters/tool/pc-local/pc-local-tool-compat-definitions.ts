@@ -1,6 +1,6 @@
 import { runtimeText, type RuntimeInterfaceLanguage, type RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 import { MAX_PERSISTENT_SHELL_TTL_MS } from './pc-local-tool-constants.js';
-import { shellOutputTokenBudgetSchema } from './pc-local-tool-definitions.js';
+import { shellCommandDescription, shellOutputTokenBudgetSchema } from './pc-local-tool-definitions.js';
 
 export function compatToolDefinitions(language?: RuntimeInterfaceLanguage): RuntimeToolDefinition[] {
   const text = runtimeText(language);
@@ -65,7 +65,7 @@ export function compatToolDefinitions(language?: RuntimeInterfaceLanguage): Runt
         additionalProperties: false,
         properties: {
           shell: { type: 'string', description: text('Optional shell path accepted for caller compatibility; execution uses the platform shell.', "可选 shell 路径，供调用方兼容使用；实际执行使用平台 shell。") },
-          cmd: { type: 'string', description: text('The shell command to run.', "要运行的 shell 命令。") },
+          cmd: { type: 'string', description: shellCommandDescription(language) },
           cwd: { type: 'string', description: text('Optional working directory, absolute or relative to the project root.', "可选工作目录，可为绝对路径或相对于项目根目录的路径。") },
           yield_time_ms: { type: 'integer', description: text('Milliseconds to wait before returning while the command keeps running.', "等待多少毫秒后返回，命令仍继续运行。"), minimum: 0, maximum: 30000 },
           timeout_ms: { type: 'integer', description: text('Optional timeout in milliseconds.', "可选超时（毫秒）。"), minimum: 1, maximum: 600000 },

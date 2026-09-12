@@ -1,4 +1,6 @@
 import {
+  type ModelRequest,
+  type ModelStreamEvent,
   type RuntimeConfigState,
   type RuntimeEvent,
 } from '@setsuna-desktop/contracts';
@@ -734,7 +736,7 @@ describe('agent loop turn execution', () => {
       }));
     });
 
-  it('routes review sampling through its dedicated model without persisting its smaller context window', async () => {
+  it('compacts for the dedicated review model while preserving the conversation binding and original transcript', async () => {
       const ids = new RandomIdGenerator();
       const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Dedicated review model' });
@@ -748,7 +750,15 @@ describe('agent loop turn execution', () => {
         `${olderContextMarker}\n${'x'.repeat(160_000)}`,
         'Earlier assistant response.',
       );
-      const modelClient = new MemoryCapturingModelClient();
+      const modelClient = {
+        requests: [] as ModelRequest[],
+        async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+          this.requests.push(request);
+          yield { type: 'text_delta', text: request.messages.some((message) => message.id === 'context_compaction_system')
+            ? JSON.stringify({ summary: olderContextMarker }) : 'Review complete.' };
+          yield { type: 'done', finishReason: 'stop' };
+        },
+      };
       const loop = new AgentLoop({
         threadStore,
         modelClient,
@@ -779,23 +789,31 @@ describe('agent loop turn execution', () => {
       expect(modelClient.requests[0]).toMatchObject({
         model: 'review-model-code',
         providerId: 'review-provider',
+      });
+      const reviewRequest = modelClient.requests.find((request) => request.stepSnapshot);
+      expect(reviewRequest).toMatchObject({
+        model: 'review-model-code',
+        providerId: 'review-provider',
         stepSnapshot: {
           contextWindow: {
             maxContextTokens: 32_000,
           },
         },
       });
-      expect(modelClient.requests[0].messages.some((message) => (
-        message.content.includes(olderContextMarker)
-      ))).toBe(false);
-      expect(events.some((event) => event.type === 'thread.context_compacted')).toBe(false);
+      expect(reviewRequest?.messages.some((message) => (
+        message.contextCompaction && message.content.includes(olderContextMarker)
+      ))).toBe(true);
+      expect(reviewRequest?.messages).toContainEqual(expect.objectContaining({
+        role: 'user', content: 'Review the current uncommitted changes.',
+      }));
+      expect(events.some((event) => event.type === 'thread.context_compacted')).toBe(true);
       expect(saved?.modelBinding).toEqual({
         providerId: 'chat-provider',
         modelId: 'chat-model',
         modelCode: 'chat-model-code',
       });
       expect(saved?.messages.some((message) => (
-        message.content.includes(olderContextMarker)
+        message.visibility === 'transcript' && message.content.includes(olderContextMarker)
       ))).toBe(true);
     });
   

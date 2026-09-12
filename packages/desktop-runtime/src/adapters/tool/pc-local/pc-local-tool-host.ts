@@ -383,6 +383,7 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
     }
     toolState.expectedMutationIntegrityToken = context.expectedPreviewIntegrityToken || previewIntegrityToken;
     const result = await pcTools.executeLocalTool(normalized.name, normalized.args, toolState, {
+      interfaceLanguage: context.interfaceLanguage,
       signal: context.signal,
       threadId: context.threadId,
       turnId: context.turnId,

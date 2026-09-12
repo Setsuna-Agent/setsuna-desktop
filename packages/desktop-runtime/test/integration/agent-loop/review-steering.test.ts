@@ -1,4 +1,6 @@
 import { createReviewTurnRequest } from '@setsuna-desktop/feature-review/runtime';
+import { readFile, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
@@ -7,14 +9,65 @@ import { RUNTIME_RESPONSE_LANGUAGE_PROMPT_ID } from '../../../src/loop/context/r
 import { systemClock } from '../../../src/ports/clock.js';
 import { createTestThreadStore } from '../../support/thread-store.js';
 import { BlockingToolHost } from '../../support/agent-loop/steering-mailbox.js';
+import { createHost, execFileAsync } from '../adapters/tool/pc-local-tool-host.support.js';
 import {
+  FullApprovalConfigStore,
   mkDataDir,
+  SingleToolCallModelClient,
   ToolCallingModelClient,
   waitForTurnCompleted,
   WORKSPACE_READ_FILE_TOOL,
 } from '../../support/agent-loop/shared.js';
 
 describe('review steering', () => {
+  it('executes a full-access review diff without a sandbox while keeping the inspection-only catalog', async () => {
+    const { host, fixtureRoot, projectDir, projectId } = await createHost({
+      shellSandboxCapability: () => ({ supported: false, provider: 'none', reason: 'Sandbox unavailable' }),
+    });
+    const ids = new RandomIdGenerator();
+    const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Full-access review', projectId });
+    const modelClient = new SingleToolCallModelClient({
+      id: 'inspect_diff', name: 'run_shell_command',
+      arguments: JSON.stringify({ command: 'git diff -- README.md', risk_level: 'low', yield_time_ms: 0 }),
+    });
+    const runTool = vi.spyOn(host, 'runTool');
+    const loop = new AgentLoop({
+      threadStore, modelClient, toolHost: host, ids, clock: systemClock,
+      configStore: new FullApprovalConfigStore('danger-full-access'),
+      eventBus: new InMemoryEventBus(),
+    });
+    try {
+      await execFileAsync('git', ['init'], { cwd: projectDir });
+      await writeFile(path.join(projectDir, 'README.md'), 'before\n');
+      await execFileAsync('git', ['add', 'README.md'], { cwd: projectDir });
+      await writeFile(path.join(projectDir, 'README.md'), 'after\n');
+      const started = await loop.startReviewTurn(thread.id, createReviewTurnRequest(
+        { type: 'uncommittedChanges' }, 'en-US',
+      ));
+      await waitForTurnCompleted(threadStore, thread.id, started.turnId);
+
+      expect(modelClient.requests).toHaveLength(2);
+      const toolResult = modelClient.requests[1].messages.find((message) => message.role === 'tool');
+      expect(toolResult?.content).toContain('Sandbox: bypass');
+      expect(toolResult?.content).toContain('-before');
+      expect(toolResult?.content).toContain('+after');
+      expect(runTool).toHaveBeenCalledOnce();
+      expect(runTool.mock.calls[0][2].permissionProfile).toBe('danger-full-access');
+      expect(runTool.mock.calls[0][2].readOnly).not.toBe(true);
+      for (const request of modelClient.requests) {
+        expect(request.tools?.map((tool) => tool.name)).toContain('run_shell_command');
+        expect(request.tools?.map((tool) => tool.name)).not.toContain('write_file');
+        expect(request.tools?.map((tool) => tool.name)).not.toContain('apply_patch');
+        expect(request.messages.find((message) => message.id === 'desktop_review_policy')?.content)
+          .toContain('do not modify files');
+      }
+      expect(await readFile(path.join(projectDir, 'README.md'), 'utf8')).toBe('after\n');
+    } finally {
+      await rm(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
   it.each(['send-now', 'steer'] as const)('applies %s guidance in the same review after a tool, preserving read-only access', async (route) => {
     const ids = new RandomIdGenerator();
     const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);

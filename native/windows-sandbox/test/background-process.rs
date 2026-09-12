@@ -4,14 +4,16 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::windows::process::CommandExt;
 use std::process::{Child, Command, Stdio};
 use windows_sys::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
-use windows_sys::Win32::System::Console::GetConsoleWindow;
-use windows_sys::Win32::System::Threading::{
-    OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE,
+use windows_sys::Win32::System::StationsAndDesktops::{
+    GetThreadDesktop, GetUserObjectInformationW, UOI_NAME,
 };
-use windows_sys::Win32::UI::WindowsAndMessaging::IsWindowVisible;
+use windows_sys::Win32::System::Threading::{
+    GetCurrentThreadId, OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE,
+};
 
 const PROBE_MODE: &str = "SETSUNA_TEST_BACKGROUND_PROBE";
-const EXPECTED_CONSOLE: &str = "SETSUNA_TEST_BACKGROUND_CONSOLE";
+const CALLER_DESKTOP: &str = "SETSUNA_TEST_CALLER_DESKTOP";
+const EXPECTED_DESKTOP: &str = "SETSUNA_TEST_BACKGROUND_DESKTOP";
 
 fn probe_command() -> String {
     format!(
@@ -25,6 +27,7 @@ fn launcher(mode: &str) -> Command {
     command
         .args(["run-background", "--command", &probe_command()])
         .env(PROBE_MODE, mode)
+        .env(CALLER_DESKTOP, current_desktop_name())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -32,7 +35,7 @@ fn launcher(mode: &str) -> Command {
 }
 
 #[test]
-fn nested_commands_keep_a_hidden_console_and_preserve_io_and_exit_code() {
+fn nested_commands_stay_on_a_separate_desktop_and_preserve_io_and_exit_code() {
     let root = tempfile::tempdir().unwrap();
     let cwd = root.path().join("工作目录 with spaces");
     std::fs::create_dir(&cwd).unwrap();
@@ -99,21 +102,16 @@ fn background_probe() {
     let Ok(mode) = std::env::var(PROBE_MODE) else {
         return;
     };
-    let console = unsafe { GetConsoleWindow() };
+    let desktop = current_desktop_name();
     assert_ne!(
-        console, 0,
-        "background commands need an inheritable console"
+        desktop,
+        std::env::var(CALLER_DESKTOP).unwrap(),
+        "background command can create windows on the caller's desktop"
     );
-    assert_eq!(
-        unsafe { IsWindowVisible(console) },
-        0,
-        "console became visible"
-    );
-    if let Ok(expected) = std::env::var(EXPECTED_CONSOLE) {
+    if let Ok(expected) = std::env::var(EXPECTED_DESKTOP) {
         assert_eq!(
-            console.to_string(),
-            expected,
-            "nested cmd allocated another console"
+            desktop, expected,
+            "nested cmd did not inherit the background desktop"
         );
     }
     if mode == "parent" {
@@ -121,7 +119,7 @@ fn background_probe() {
             .args(["/d", "/s", "/c"])
             .raw_arg(format!("\"{}\"", probe_command()))
             .env(PROBE_MODE, "io")
-            .env(EXPECTED_CONSOLE, console.to_string())
+            .env(EXPECTED_DESKTOP, desktop)
             .status()
             .unwrap();
         std::process::exit(status.code().unwrap_or(1));
@@ -138,4 +136,26 @@ fn background_probe() {
     println!("cwd:{}", std::env::current_dir().unwrap().display());
     eprintln!("stderr:separate");
     std::process::exit(23);
+}
+
+fn current_desktop_name() -> String {
+    let desktop = unsafe { GetThreadDesktop(GetCurrentThreadId()) };
+    assert_ne!(desktop, 0);
+    let mut name = [0_u16; 256];
+    let mut needed = 0;
+    let result = unsafe {
+        GetUserObjectInformationW(
+            desktop,
+            UOI_NAME,
+            name.as_mut_ptr().cast(),
+            std::mem::size_of_val(&name) as u32,
+            &mut needed,
+        )
+    };
+    assert_ne!(result, 0, "{}", std::io::Error::last_os_error());
+    let end = name
+        .iter()
+        .position(|value| *value == 0)
+        .unwrap_or(name.len());
+    String::from_utf16(&name[..end]).unwrap()
 }

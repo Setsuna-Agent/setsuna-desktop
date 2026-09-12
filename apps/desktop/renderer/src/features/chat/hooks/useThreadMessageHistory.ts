@@ -81,7 +81,6 @@ export function useThreadMessageHistory(
     loadOlder,
     loading: visibleState.loading,
     messages: visibleState.messages,
-    remainingCount: visibleState.nextBefore ?? 0,
     total: visibleState.total,
   };
 }
@@ -97,10 +96,12 @@ export function reconcileThreadSnapshot(
 
   const reconciled = thread.messagePage
     ? reconcilePagedMessageWindow(current.messages, thread.messages, thread.messagePage.nextBefore)
-    : { messages: thread.messages, retainedPrefix: false };
-  const windowChanged = !sameMessageOrder(current.messages, reconciled.messages);
+    : { messages: thread.messages, overlaps: false };
+  // Appending live messages does not invalidate an older-page request. Only a
+  // replacement/reordering (edit, deletion, compaction) changes its cursor domain.
+  const windowChanged = !isMessagePrefix(current.messages, reconciled.messages);
   const nextBefore = thread.messagePage
-    ? reconciled.retainedPrefix
+    ? reconciled.overlaps
       ? minimumMessageCursor(current.nextBefore, thread.messagePage.nextBefore)
       : thread.messagePage.nextBefore
     : null;
@@ -122,10 +123,10 @@ function reconcilePagedMessageWindow(
   cached: RuntimeMessage[],
   authoritativeTail: RuntimeMessage[],
   nextBefore: number | null,
-): { messages: RuntimeMessage[]; retainedPrefix: boolean } {
+): { messages: RuntimeMessage[]; overlaps: boolean } {
   // A null cursor means the server supplied the complete transcript.
   if (nextBefore === null || !cached.length || !authoritativeTail.length) {
-    return { messages: authoritativeTail, retainedPrefix: false };
+    return { messages: authoritativeTail, overlaps: false };
   }
   const cachedIndexById = new Map(cached.map((message, index) => [message.id, index]));
   for (const message of authoritativeTail) {
@@ -133,11 +134,14 @@ function reconcilePagedMessageWindow(
     if (overlapIndex === undefined) continue;
     return {
       messages: mergeMessages(cached.slice(0, overlapIndex), authoritativeTail),
-      retainedPrefix: overlapIndex > 0,
+      // SSE can already contain our entire loaded window. An overlap at index 0
+      // still preserves the exhausted cursor; otherwise a stale page cursor
+      // invents hidden history as soon as the next event arrives.
+      overlaps: true,
     };
   }
   // Without an overlap there is no safe ordering boundary for cached rows.
-  return { messages: authoritativeTail, retainedPrefix: false };
+  return { messages: authoritativeTail, overlaps: false };
 }
 
 function minimumMessageCursor(
@@ -148,8 +152,8 @@ function minimumMessageCursor(
   return Math.min(current, incoming);
 }
 
-function sameMessageOrder(left: RuntimeMessage[], right: RuntimeMessage[]): boolean {
-  return left.length === right.length
+function isMessagePrefix(left: RuntimeMessage[], right: RuntimeMessage[]): boolean {
+  return left.length <= right.length
     && left.every((message, index) => message.id === right[index]?.id);
 }
 

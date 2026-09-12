@@ -107,7 +107,9 @@ Input 中未提供 key 表示不覆盖；不能把 UI 空输入误解释为删�
 
 只有 commit 成功后 `RuntimeEventWriter` 才发布 SSE。
 
-高频 delta 可以延迟完整 checkpoint；恢复时重放 `snapshot_seq` 之后的短 tail。
+消息、工具、用量与采样步骤事件立即提交，完整 checkpoint 默认按 1 秒窗口合并；
+turn 开始/终止、runtime 错误及历史修改立即 checkpoint，flush/close 排空待写状态。
+恢复时重放 `snapshot_seq` 之后的短 tail。
 `message.delta`、reasoning/item/plan delta、tool preview/output delta 可以在检查点后从热表移入
 gzip archive；完整事件仍可无损重放，turn、approval、error、completion 等生命周期/审计事件
 持续留在热表。请求序号早于归档边界时，store 返回 retention gap，由 Thread SSE 发送
@@ -115,6 +117,10 @@ canonical snapshot resync。
 
 消息分页使用稳定的 `message_index < before` 游标。追加消息只插入一行，普通 delta
 只更新 copy-on-write 改变的行；删除、截断和清空才重建索引。
+
+事件写入使用内部 copy-on-write 投影，已保存的不可变 step snapshot 不随每个事件深拷贝。
+采样通过 `getSamplingState` 只读取消息及必要线程状态，避免复制全部诊断历史；
+公开完整线程读取仍返回独立副本，SWE、插件用量和诊断所需的历史步骤保持完整。
 
 ### Recovery
 

@@ -75,7 +75,9 @@ export class RuntimeThreadEventDraft {
     }
     const current = turns[index];
     if (!current || this.mutableTurns.has(current)) return current ?? null;
-    const mutable = cloneThreadTurn(current);
+    // Step snapshots are immutable: reducers only append a newly cloned snapshot.
+    // Sharing prior entries avoids copying the entire request history on every stream event.
+    const mutable = cloneThreadTurn(current, { shareStepSnapshots: true });
     turns[index] = mutable;
     this.mutableTurns.add(mutable);
     return mutable;

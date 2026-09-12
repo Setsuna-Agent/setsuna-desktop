@@ -19,6 +19,11 @@
   margin-top: 0.9em;
 }
 
+.chat-markdown__block {
+  /* Keep child margins inside the measured box, including beside placeholders. */
+  display: flow-root;
+}
+
 .chat-markdown__block:empty {
   display: none;
 }

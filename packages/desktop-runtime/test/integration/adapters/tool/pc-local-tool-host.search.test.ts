@@ -31,9 +31,9 @@ describe('model-driven workspace search', () => {
     }
   });
 
-  it.skipIf(!commandAvailableOnPath(process.platform === 'win32' ? 'rg.exe' : 'rg'))('returns empty rg searches successfully while preserving real errors and exit codes', async () => {
+  it.skipIf(!commandAvailableOnPath(process.platform === 'win32' ? 'rg.exe' : 'rg')).each(['zh-CN', 'en-US'] as const)('returns empty rg searches in %s while preserving real errors and exit codes', async (interfaceLanguage) => {
     const { host, fixtureRoot, projectDir } = await createHost();
-    const context = { threadId: 'thread_1', turnId: 'search', permissionProfile: 'danger-full-access' as const };
+    const context = { threadId: 'thread_1', turnId: 'search', permissionProfile: 'danger-full-access' as const, interfaceLanguage };
     try {
       await writeFile(path.join(projectDir, 'source.txt'), 'needle\n');
       for (const cmd of [
@@ -44,12 +44,14 @@ describe('model-driven workspace search', () => {
         const result = await host.runTool('exec_command', { cmd, yield_time_ms: 0, persist: true }, context);
         expect(result.data).toMatchObject({ ok: true, running: false, exit_code: 1 });
         expect(result.data).not.toHaveProperty('failure_kind');
-        expect(result.content).toContain('No matches found.');
+        expect(result.content).toContain(interfaceLanguage === 'zh-CN' ? '未找到匹配结果。' : 'No matches found.');
         expect(result.content).toContain('Exit Code: 1');
         const processId = (result.data as { process_id: string }).process_id;
-        const polled = await host.runTool('write_stdin', { session_id: processId }, context);
+        const polled = await host.runTool('write_stdin', { session_id: processId }, {
+          ...context, interfaceLanguage: interfaceLanguage === 'zh-CN' ? 'en-US' : 'zh-CN',
+        });
         expect(polled.data).toMatchObject({ ok: true, running: false, exit_code: 1 });
-        expect(polled.content).toContain('No matches found.');
+        expect(polled.content).toContain(interfaceLanguage === 'zh-CN' ? 'No matches found.' : '未找到匹配结果。');
       }
       for (const [cmd, exitCode] of [
         ['rg --no-config "[" source.txt', 2],

@@ -1,6 +1,7 @@
 /** Public facade and dispatcher for the modular PC local-tool implementation. */
 
 import type {
+  RuntimeInterfaceLanguage,
   RuntimeNetworkPolicyAmendment,
   RuntimePermissionProfile,
   RuntimeSandboxWorkspaceWrite,
@@ -129,6 +130,7 @@ export {
 type ToolArguments = Record<string, unknown>;
 
 export type LocalToolExecutionOptions = {
+  interfaceLanguage?: RuntimeInterfaceLanguage;
   signal?: AbortSignal;
   threadId?: string;
   turnId?: string;
@@ -359,7 +361,7 @@ export async function executeLocalTool(
     if (name === 'delete_file') return await deleteLocalFile(args, state);
     if (isEditToolName(name)) return await editLocalFile(args, state);
     if (name === 'run_shell_command') return await runShellCommand(args, state, options);
-    if (name === 'read_shell_process') return await readShellProcess(args, state);
+    if (name === 'read_shell_process') return await readShellProcess(args, state, options);
     if (name === 'list_shell_processes') return listShellProcesses(args, state);
     if (name === 'write_shell_process') return await writeShellProcess(args, state);
     if (name === 'terminate_shell_process') return await terminateShellProcess(args, state);

@@ -20,6 +20,14 @@ export function shellOutputTokenBudgetSchema(language?: RuntimeInterfaceLanguage
   };
 }
 
+/** Keep both shell entry points aligned with the model-facing search and shell policy. */
+export function shellCommandDescription(language?: RuntimeInterfaceLanguage): string {
+  return runtimeText(language)(
+    'Command in the shell reported by environment_context. For file discovery use rg --files with -g filters; for content search use rg -n. Match that shell\'s quoting and command syntax.',
+    '使用 environment_context 指定 shell 的命令。查找文件用 rg --files 配合 -g 筛选，搜索内容用 rg -n。引号和命令语法须符合当前 shell。',
+  );
+}
+
 export type LocalToolDefinition = {
   type: 'function';
   function: {
@@ -358,7 +366,7 @@ export function localToolDefinitions(language?: RuntimeInterfaceLanguage): Local
         max_output_tokens: shellOutputTokenBudgetSchema(language),
         command: {
           type: 'string',
-          description: text('The shell command to run.', "要运行的 shell 命令。"),
+          description: shellCommandDescription(language),
         },
         directory: {
           type: 'string',

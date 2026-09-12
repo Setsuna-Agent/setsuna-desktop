@@ -429,7 +429,7 @@ export function createChatRenderWindow(
   const hiddenItems = items.slice(0, start);
   return {
     hiddenItemCount: hiddenItems.length,
-    hiddenMessageCount: hiddenItems.reduce((count, item) => count + transcriptItemMessageCount(item), 0),
+    hiddenMessageCount: hiddenItems.length,
     items: items.slice(start),
   };
 }
@@ -576,15 +576,6 @@ function lastAssistantItemForTurn(
 
 function assistantHasProcessingEvidence(message: RuntimeMessage): boolean {
   return Boolean(message.content.trim() || message.toolCalls?.length || message.toolRuns?.length || message.error);
-}
-
-function transcriptItemMessageCount(item: ChatTranscriptItem): number {
-  if (item.type === 'assistant') {
-    const steerMessageIds = new Set(item.steerMessages.map((message) => message.id));
-    return item.messageIds.filter((id) => !steerMessageIds.has(id)).length || item.segments.length;
-  }
-  if (item.type === 'user') return item.messageIds.length || 1;
-  return 1;
 }
 
 function transcriptItemScrollSignal(item: ChatTranscriptItem): string {

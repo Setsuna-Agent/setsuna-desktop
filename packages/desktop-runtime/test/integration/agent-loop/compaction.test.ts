@@ -1,4 +1,4 @@
-import type { RuntimeConfigState, RuntimeMessage } from '@setsuna-desktop/contracts';
+import type { ModelRequest, ModelStreamEvent, RuntimeConfigState, RuntimeMessage } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
@@ -25,6 +25,95 @@ import {
 } from '../../support/agent-loop/shared.js';
 
 describe('agent loop context compaction', () => {
+  it.each(['manual', 'automatic'] as const)('records both failed summary attempts during %s compaction', async (mode) => {
+    const ids = new RandomIdGenerator();
+    const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Failed compaction usage' });
+    const messages: RuntimeMessage[] = ['older context '.repeat(10_000), 'Recent reply', 'Continue'].map((content, index) => ({
+      id: `history_${index}`, role: index === 1 ? 'assistant' : 'user', content,
+      createdAt: thread.createdAt, status: 'complete', turnId: 'history_turn',
+    }));
+    for (const message of messages) {
+      await threadStore.appendEvent(thread.id, {
+        id: ids.id('event'), threadId: thread.id, type: 'message.created',
+        createdAt: message.createdAt, payload: { message },
+      });
+    }
+    const usageStore = new CapturingUsageStore();
+    const usages = [
+      { inputTokens: 8_000, outputTokens: 4_096, totalTokens: 12_096 },
+      { inputTokens: 7_904, outputTokens: 8_192, totalTokens: 16_096 },
+    ];
+    let attempts = 0;
+    const loop = new AgentLoop({
+      threadStore, ids, clock: systemClock, eventBus: new InMemoryEventBus(), usageStore,
+      configStore: new ContextWindowConfigStore(16_000),
+      modelClient: { stream: async function* (request): AsyncGenerator<ModelStreamEvent> {
+        expect(request.messages.some((message) => message.id === 'context_compaction_system')).toBe(true);
+        const usage = usages[attempts++]!;
+        yield { type: 'text_delta', text: '{"summary":"Truncated summary' };
+        yield { type: 'usage', usage };
+        yield { type: 'token_count', usage };
+        yield { type: 'done', finishReason: 'length' };
+      } },
+    });
+
+    await expect(mode === 'manual'
+      ? loop.compactThreadContext(thread.id)
+      : loop.sendTurn(thread.id, { input: 'Continue after old history' }))
+      .rejects.toThrow('original history was retained');
+
+    const events = await threadStore.listEvents(thread.id, 0);
+    const counts = events.filter((event) => event.type === 'token.count');
+    const turnId = events.find((event) => event.type === 'thread.context_compacting')?.turnId;
+    expect(attempts).toBe(2);
+    expect(counts.map((event) => event.payload.usage)).toEqual(usages);
+    expect(usageStore.records).toMatchObject(usages.map((usage) => ({ ...usage, threadId: thread.id, turnId, createdAt: expect.any(String) })));
+    expect(counts.reduce((total, event) => total + (event.payload.usage.totalTokens ?? 0), 0)).toBe(28_192);
+    expect(events.some((event) => event.type === 'thread.context_compacted')).toBe(false);
+    const saved = await threadStore.getThread(thread.id);
+    expect(saved?.messages.filter((message) => message.id.startsWith('history_'))).toEqual(messages);
+    expect(saved?.turns?.find((turn) => turn.id === turnId)?.tokenCounts?.map((count) => count.usage)).toEqual(usages);
+  });
+
+  it('carries the original request through repeated mid-turn compactions and completes the tool chain', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Repeated compaction handoff' });
+    const input = 'Evaluate Feature architecture and keep the existing UI copy.';
+    let compactions = 0;
+    const requests: ModelRequest[] = [];
+    const loop = new AgentLoop({
+      threadStore, eventBus: new InMemoryEventBus(), clock: systemClock, ids,
+      configStore: new ContextWindowConfigStore(32_000),
+      modelClient: { stream: async function* (request): AsyncGenerator<ModelStreamEvent> {
+        if (request.messages.some((message) => message.id === 'context_compaction_system')) {
+          compactions += 1;
+          yield { type: 'text_delta', text: JSON.stringify({ summary: 'Completed evidence remains verified.', decisions: ['Keep existing UI copy.'], open_items: ['Finish the architecture evaluation after remaining evidence.'] }) };
+          yield { type: 'done', finishReason: 'stop' };
+          return;
+        }
+        requests.push(request);
+        if (requests.length <= 12) {
+          yield { type: 'tool_calls', toolCalls: [{ id: `call_${requests.length}`, name: 'workspace_read_file', arguments: '{"path":"scope.ts"}' }] };
+          yield { type: 'done', finishReason: 'tool_calls' };
+        } else {
+          yield { type: 'text_delta', text: 'Architecture evaluation completed from the collected evidence.' };
+          yield { type: 'done', finishReason: 'stop' };
+        }
+      } },
+      toolHost: { listTools: async () => [{ name: 'workspace_read_file', description: 'Read a file', inputSchema: { type: 'object' } }], runTool: async () => ({ content: 'evidence '.repeat(3000) }) },
+    });
+    await loop.sendTurn(thread.id, { input });
+    expect(compactions).toBeGreaterThanOrEqual(2);
+    expect(requests).toHaveLength(13);
+    expect(requests.every((request) => request.messages.some((message) => message.role === 'user' && message.content === input))).toBe(true);
+    expect(requests.filter((request) => request.messages.some((message) => message.contextCompaction)).every((request) =>
+      request.stepSnapshot!.contextWindow!.estimatedTokens < request.stepSnapshot!.contextWindow!.autoCompactTokenLimit)).toBe(true);
+    const saved = await threadStore.getThread(thread.id);
+    expect(saved?.turns?.at(-1)?.status).toBe('completed');
+    expect(saved?.messages.at(-1)?.content).toContain('Architecture evaluation completed');
+  });
   it('uses the model client to compact context manually', async () => {
       const ids = new RandomIdGenerator();
       const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
@@ -91,7 +180,7 @@ describe('agent loop context compaction', () => {
       expect(modelClient.requests[0]).toMatchObject({
         model: 'background-summary-model',
         providerId: 'background-provider',
-        maxOutputTokens: 1600,
+        maxOutputTokens: 4096,
         temperature: 0,
         toolChoice: 'none',
       });
@@ -399,7 +488,7 @@ describe('agent loop context compaction', () => {
       const ids = new RandomIdGenerator();
       const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Small window automatic context compaction' });
-      const smallWindowHistory = 'older context '.repeat(600);
+      const smallWindowHistory = 'older context '.repeat(6000);
       for (let index = 0; index < 3; index += 1) {
         await threadStore.appendEvent(thread.id, {
           id: ids.id('event'),
@@ -424,7 +513,7 @@ describe('agent loop context compaction', () => {
         eventBus: new InMemoryEventBus(),
         clock: systemClock,
         ids,
-        configStore: new DedicatedCompactionContextWindowConfigStore(1_000),
+        configStore: new DedicatedCompactionContextWindowConfigStore(16_000),
       });
   
       await loop.sendTurn(thread.id, { input: 'continue after small-window history' });
@@ -438,21 +527,21 @@ describe('agent loop context compaction', () => {
         providerId: 'background-provider',
       });
       expect(compactingEvent?.payload).toMatchObject({
-        maxContextTokens: 1_000,
-        maxContextTokensK: 1,
+        maxContextTokens: 16_000,
+        maxContextTokensK: 16,
       });
       expect(saved?.messages.find((message) => message.contextCompaction)?.contextCompaction).toMatchObject({
-        autoCompactTokenLimit: 850,
-        maxContextTokens: 1_000,
-        maxContextTokensK: 1,
+        autoCompactTokenLimit: 13600,
+        maxContextTokens: 16_000,
+        maxContextTokensK: 16,
         tokensUntilCompaction: expect.any(Number),
-        triggerScopes: ['total', 'latest_input'],
+        triggerScopes: ['total'],
       });
-      expect(mainRequest?.messages.some((message) => message.contextCompaction?.maxContextTokens === 1_000)).toBe(true);
+      expect(mainRequest?.messages.some((message) => message.contextCompaction?.maxContextTokens === 16_000)).toBe(true);
       expect(mainRequest?.stepSnapshot?.contextWindow).toMatchObject({
-        autoCompactTokenLimit: 850,
-        maxContextTokens: 1_000,
-        maxContextTokensK: 1,
+        autoCompactTokenLimit: 13600,
+        maxContextTokens: 16_000,
+        maxContextTokensK: 16,
         compactionHash: expect.stringMatching(/^sha256:/),
       });
       expect(mainRequest?.messages.map((message) => message.content).join('\n')).not.toContain(smallWindowHistory.slice(0, 200));
@@ -462,7 +551,7 @@ describe('agent loop context compaction', () => {
       const ids = new RandomIdGenerator();
       const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Remote automatic context compaction' });
-      const smallWindowHistory = 'remote older context '.repeat(600);
+      const smallWindowHistory = 'remote older context '.repeat(6000);
       for (let index = 0; index < 3; index += 1) {
         await threadStore.appendEvent(thread.id, {
           id: ids.id('event'),
@@ -488,7 +577,7 @@ describe('agent loop context compaction', () => {
         eventBus: new InMemoryEventBus(),
         clock: systemClock,
         ids,
-        configStore: new ContextWindowConfigStore(1_000),
+        configStore: new ContextWindowConfigStore(16_000),
         usageStore,
       });
   
@@ -506,7 +595,7 @@ describe('agent loop context compaction', () => {
       expect(modelClient.requests.map((request) => request.model)).toEqual(['local-runtime-smoke', 'local-runtime-smoke']);
       expect(saved?.messages.find((message) => message.contextCompaction)?.contextCompaction).toMatchObject({
         source: 'remote',
-        triggerScopes: ['total', 'latest_input'],
+        triggerScopes: ['total'],
       });
       expect(mainRequest?.stepSnapshot?.contextWindow).toMatchObject({
         compactionHash: expect.stringMatching(/^sha256:/),

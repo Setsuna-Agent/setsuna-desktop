@@ -1,5 +1,6 @@
 import type { RuntimeToolRun } from '@setsuna-desktop/contracts';
 import { translate, type Translate } from '../../../shared/i18n/I18nProvider.js';
+import { builtinToolNameKey } from '../../../shared/i18n/toolNameMessages.js';
 
 const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
@@ -72,9 +73,7 @@ export function toolRunTarget(run: RuntimeToolRun): string {
       ?? args.path
       ?? args.file_path
       ?? args.target_path
-      ?? args.file
-      ?? args.process_id
-      ?? args.processId,
+      ?? args.file,
   );
 }
 
@@ -110,6 +109,8 @@ export function concisePreview(value: string): string {
 }
 
 export function toolDisplayName(name: string, t: Translate = defaultTranslate): string {
+  const key = builtinToolNameKey(name);
+  if (key) return t(key);
   return name.replace(/^mcp\s+\S+\s+/iu, '').replace(/_/g, ' ').trim() || t('toolRun.tool');
 }
 

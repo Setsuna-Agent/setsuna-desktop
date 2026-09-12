@@ -1,6 +1,7 @@
 /** Shared contracts for shell process state and session lifecycle. */
 
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
+import type { RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import type {
   ShellToolchain,
   ShellToolchainCommand,
@@ -33,6 +34,7 @@ export type ShellProcessState = ShellPolicyState & {
 };
 
 export type ShellCommandExecutionOptions = {
+  interfaceLanguage?: RuntimeInterfaceLanguage;
   signal?: AbortSignal;
   onProgress?: ShellProgressHandler;
   threadId?: string;

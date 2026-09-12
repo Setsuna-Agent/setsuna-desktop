@@ -4,6 +4,7 @@ import type {
   RuntimeThreadGoal,
   RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
+import type { GoalToolExecutionResult } from '../contracts/index.js';
 
 const GOAL_TOOL_NAMES = new Set(['get_goal', 'create_goal', 'update_goal']);
 
@@ -65,4 +66,24 @@ export function goalToolDefinitions(
 
 export function isGoalToolName(name: string): boolean {
   return GOAL_TOOL_NAMES.has(name);
+}
+
+export function goalToolResult(
+  name: string,
+  data: { goal: RuntimeThreadGoal | null; completionPending?: boolean },
+  language?: RuntimeInterfaceLanguage,
+): GoalToolExecutionResult {
+  const text = runtimeText(language);
+  const statusLabels = {
+    active: '进行中', paused: '已暂停', blocked: '受阻',
+    usageLimited: '用量受限', budgetLimited: '预算受限', complete: '已完成',
+  };
+  const preview = name === 'create_goal'
+    ? text('Goal created.', '目标已创建。')
+    : data.completionPending
+      ? text('Goal completion will be finalized when this turn completes successfully.', '本轮成功结束后，目标将被标记为完成。')
+      : data.goal
+        ? text(`Goal is ${data.goal.status}.`, `目标状态：${statusLabels[data.goal.status]}。`)
+        : text('No goal is set.', '尚未设置目标。');
+  return { content: JSON.stringify({ tool: name, ...data }), data, preview };
 }
