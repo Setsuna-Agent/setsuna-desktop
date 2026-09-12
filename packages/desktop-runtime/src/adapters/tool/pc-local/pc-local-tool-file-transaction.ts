@@ -91,6 +91,7 @@ export async function mutationIntegrityToken(
 export async function commitFileChanges(
   changes: LocalFileChange[],
   state: FileMutationState,
+  persist?: () => Promise<void>,
 ): Promise<void> {
   await withMutationLock(state, async () => {
     const root = realWorkspaceRoot(state.root);
@@ -155,6 +156,8 @@ export async function commitFileChanges(
         await rename(entry.stagePath, entry.change.filePath);
         entry.installed = true;
       }
+      // Retain rollback copies until the caller's durable operation record succeeds.
+      await persist?.();
       committed = true;
     } catch (error) {
       const rollbackErrors = await rollbackEntries(entries);

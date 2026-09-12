@@ -176,7 +176,9 @@ Thread 首屏只携带最新 160 条 message，`useThreadMessageHistory` 通过 
 
 文件改动卡片的按钮在“撤销”和“重新应用”之间切换，传递本卡片对应的 tool-call IDs 和方向，经 `applyThreadFileChanges` 由 runtime 读取持久化工具结果和所属项目。工具 diff 单独保存原始文本的逆向修改、被替换的文本及修改前后内容 hash；折叠/截断后的展示 diff 不参与文件还原。撤销按操作逆序执行，重新应用按原顺序执行；Runtime 先校验全部文件，再通过同一个文件事务写入。任意文件在撤销后发生变化时，整批重新应用失败并弹窗报错，按钮保留原状态；活动回合和缺少所需文本的旧记录同样拒绝操作。该链路与 Review 的 Git“丢弃未暂存修改”独立，不能把文件路径交给 `discardUnstaged` 实现卡片撤销。
 
-`ThreadFileChangesProvider` 在应用层持有按 thread ID 和 tool-call IDs 隔离的撤销状态及进行中的请求；卡片通过 `useThreadFileChanges` 订阅，切换会话、页面或请求结束前卸载卡片都不会丢失“重新应用”入口。删除记录在生成时校验原始字节可无损转换为 UTF-8，并记录文件权限；非 UTF-8、符号链接及缺少删除元数据的旧记录不允许还原。还原事务保留原权限，不受当前 umask 影响。
+成功的撤销和重新应用通过 `thread.file_changes_applied` 事件持久化，投影到线程的 `fileChangeStates`，按 tool-call IDs 分组；重新加载会话或重启应用后都能恢复按钮方向。`ThreadFileChangesProvider` 在应用层共享进行中的请求与响应，卡片通过 `useThreadFileChanges` 订阅，并按事件序号合并 HTTP 响应与线程投影，避免较晚到达的旧状态覆盖操作结果。事件写入失败时，文件事务一起回滚。
+
+还原时按父目录的文件身份及实际文件系统大小写规则合并同一文件的路径别名，保留大小写敏感目录中不同文件的语义。删除记录在生成时校验原始字节可无损转换为 UTF-8，并记录文件权限；非 UTF-8、符号链接及缺少删除元数据的旧记录不允许还原。还原事务保留原权限，不受当前 umask 影响。
 
 结构化用户输入的 schema 可以持久化，用户答案不写 approval event；答案只在 normal tool result 中回到模型上下文。UI 和 runtime 都要验证字段。
 

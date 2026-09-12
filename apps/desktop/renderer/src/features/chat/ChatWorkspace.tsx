@@ -1,5 +1,6 @@
 import type {
   WorkspaceFileChangeAction,
+  ThreadFileChangesResult,
   DesktopRuntimeClient,
   RuntimeConfiguredModelReference,
   RuntimeConfigState,
@@ -119,7 +120,7 @@ export function ChatWorkspace({
   onCompactContext: () => void;
   onClearContext: () => void;
   onDeleteMessages: (messageIds: string[]) => void | Promise<void>;
-  onFileChangesAction?: (toolCallIds: string[], action: WorkspaceFileChangeAction) => void | Promise<void>;
+  onFileChangesAction?: (toolCallIds: string[], action: WorkspaceFileChangeAction) => void | Promise<void | ThreadFileChangesResult>;
   onDraftChange: (value: string) => void;
   onEditUserMessage: (messageId: string, content: string) => void | Promise<void>;
   onOpenSideChat?: () => void;

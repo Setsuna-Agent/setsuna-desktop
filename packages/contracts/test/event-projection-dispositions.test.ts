@@ -22,6 +22,7 @@ const THREAD_IGNORED_EVENT_TYPES = [
 const SWE_IGNORED_EVENT_TYPES = [
   'thread.metadata_updated',
   'thread.memory_mode_updated',
+  'thread.file_changes_applied',
   'thread.context_cleared',
   'turn.input_queued',
   'turn.input_updated',
@@ -53,7 +54,7 @@ const ACTIVITY_INCLUDED_EVENT_TYPES = [
 
 describe('runtime event projection dispositions', () => {
   it('classifies every runtime event exactly once for each consumer', () => {
-    expect(RUNTIME_EVENT_TYPES).toHaveLength(44);
+    expect(RUNTIME_EVENT_TYPES).toHaveLength(45);
 
     for (const dispositions of [
       RUNTIME_THREAD_EVENT_DISPOSITIONS,

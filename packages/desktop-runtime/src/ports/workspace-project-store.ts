@@ -74,6 +74,6 @@ export type WorkspaceProjectStore = {
   writeFile(projectId: string, relativePath: string, content: string): Promise<WorkspaceFileWrite>;
   writeBinaryFile(projectId: string, relativePath: string, content: Uint8Array): Promise<WorkspaceFileWrite>;
   deleteFile(projectId: string, relativePath: string): Promise<void>;
-  applyFileChanges(projectId: string, changes: WorkspaceFileChange[], action: WorkspaceFileChangeAction): Promise<void>;
+  applyFileChanges(projectId: string, changes: WorkspaceFileChange[], action: WorkspaceFileChangeAction, persist?: () => Promise<void>): Promise<void>;
   search(projectId: string, query: string, options?: WorkspaceProjectSearchOptions): Promise<WorkspaceSearchResponse>;
 };

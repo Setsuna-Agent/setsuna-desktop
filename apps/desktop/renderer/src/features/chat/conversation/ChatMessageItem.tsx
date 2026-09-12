@@ -4,6 +4,7 @@ import {
   normalizeRuntimeReviewNotice,
   type RuntimeMessage,
   type WorkspaceFileChangeAction,
+  type ThreadFileChangesResult,
   type RuntimeReviewModeNotice,
   type RuntimeToolRun,
 } from '@setsuna-desktop/contracts';
@@ -101,7 +102,7 @@ export const MessageItem = memo(function MessageItem({
   item: ChatDisplayItem;
   onAnswerApproval: AnswerApprovalHandler;
   onCancelEdit: () => void;
-  onFileChangesAction?: (toolCallIds: string[], action: WorkspaceFileChangeAction) => void | Promise<void>;
+  onFileChangesAction?: (toolCallIds: string[], action: WorkspaceFileChangeAction) => void | Promise<void | ThreadFileChangesResult>;
   onEditDraftChange: (value: string) => void;
   onOpenFileReview?: DesktopReviewOpenHandler;
   onStartEdit?: (message: RuntimeMessage) => void;
@@ -254,7 +255,7 @@ function AssistantRunItem({
   deleteMode: boolean;
   item: Extract<ChatDisplayItem, { type: 'assistant' }>;
   onAnswerApproval: AnswerApprovalHandler;
-  onFileChangesAction?: (toolCallIds: string[], action: WorkspaceFileChangeAction) => void | Promise<void>;
+  onFileChangesAction?: (toolCallIds: string[], action: WorkspaceFileChangeAction) => void | Promise<void | ThreadFileChangesResult>;
   onOpenFileReview?: DesktopReviewOpenHandler;
   onStartDelete?: (itemId: string) => void;
   onToggleDelete?: (itemId: string, checked: boolean) => void;
@@ -304,7 +305,7 @@ function UserMessageEditor({ disabled, onCancel, onChange, onSubmit, submitting,
             <Button variant="ghost" type="button" disabled={disabled} onClick={onCancel}>
               {t('common.cancel')}
             </Button>
-            <Button variant="ghost" type="submit" disabled={disabled || !value.trim()}>
+            <Button variant="primary" type="submit" disabled={disabled || !value.trim()}>
               {submitting ? t('chat.message.sending') : t('chat.composer.send')}
             </Button>
           </span>
@@ -354,7 +355,7 @@ function AssistantRunContent({
   contextCompactionActive: boolean;
   item: Extract<ChatDisplayItem, { type: 'assistant' }>;
   onAnswerApproval: AnswerApprovalHandler;
-  onFileChangesAction?: (toolCallIds: string[], action: WorkspaceFileChangeAction) => void | Promise<void>;
+  onFileChangesAction?: (toolCallIds: string[], action: WorkspaceFileChangeAction) => void | Promise<void | ThreadFileChangesResult>;
   onOpenFileReview?: DesktopReviewOpenHandler;
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
   pluginUses: RuntimePluginUse[];

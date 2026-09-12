@@ -134,9 +134,10 @@ export function ChatRouteAdapter({
       )));
       if (affectsDraft) throw new Error(t('toolRun.changes.unsavedConflict'));
     }
-    await runtime.client.applyThreadFileChanges(thread.id, { toolCallIds }, action);
+    const result = await runtime.client.applyThreadFileChanges(thread.id, { toolCallIds }, action);
     void workspacePanels.loadReviewState();
     void projectWorkspace.refreshFilePreview(() => true);
+    return result;
   };
   const setMultiAgentEnabled = (enabled: boolean) => runtime.saveRuntimePreferences({
     features: {

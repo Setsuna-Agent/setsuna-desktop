@@ -2,6 +2,7 @@ import { Button } from '@setsuna-desktop/renderer-ui';
 import type {
   RuntimeMessage,
   WorkspaceFileChangeAction,
+  ThreadFileChangesResult,
   RuntimePluginSummary,
   RuntimeSkillSummary,
   RuntimeThread,
@@ -76,7 +77,7 @@ type ChatTranscriptProps = ChatTranscriptMutationProps & {
   messageHistory: ChatTranscriptMessageHistory;
   messages: RuntimeMessage[];
   onAnswerApproval: AnswerApprovalHandler;
-  onFileChangesAction?: (toolCallIds: string[], action: WorkspaceFileChangeAction) => void | Promise<void>;
+  onFileChangesAction?: (toolCallIds: string[], action: WorkspaceFileChangeAction) => void | Promise<void | ThreadFileChangesResult>;
   onOpenFileReview?: DesktopReviewOpenHandler;
   plugins: RuntimePluginSummary[];
   scrollToBottomRef?: React.MutableRefObject<(() => void) | null>;
@@ -294,7 +295,7 @@ export function ChatTranscript({
                       />
                     ) : null}
                     {renderedDisplayItems.map((item) => (
-                      <ChatThreadProvider key={chatDisplayItemRenderKey(item)} threadId={currentThread?.id ?? null}>
+                      <ChatThreadProvider key={chatDisplayItemRenderKey(item)} threadId={currentThread?.id ?? null} fileChangeStates={currentThread?.fileChangeStates}>
                         <MessageItem
                           {...messageMutationHandlers}
                           activeAssistantItemId={activeAssistantItemId}

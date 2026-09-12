@@ -1,4 +1,4 @@
-import type { WorkspaceProject } from '@setsuna-desktop/contracts';
+import { threadFileChangeKey, type RuntimeThread, type ThreadFileChangesResult, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import { chmod, lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { expect, it } from 'vitest';
@@ -63,20 +63,32 @@ it('restores persisted file edits and script deletions through REST, rejecting b
     await harness.startRuntimeServer(harness.runtimeDataDir);
 
     const input = { method: 'POST', body: JSON.stringify({ toolCallIds: ['call_edit', 'call_delete'] }) };
-    await expect(harness.runtimeFetch(`/v1/threads/${threadId}/file-changes/undo`, input))
-      .resolves.toEqual({ files: ['README.md', 'run.sh'] });
+    const undone: ThreadFileChangesResult = await harness.runtimeFetch(`/v1/threads/${threadId}/file-changes/undo`, input);
+    expect(undone).toEqual({ files: ['README.md', 'run.sh'], state: { action: 'undo', seq: expect.any(Number) } });
+    const batchKey = threadFileChangeKey(['call_edit', 'call_delete']);
+    await harness.server.close();
+    await harness.startRuntimeServer(harness.runtimeDataDir);
+    const restarted: RuntimeThread = await harness.runtimeFetch(`/v1/threads/${threadId}`);
+    expect(restarted.fileChangeStates?.[batchKey]).toEqual(undone.state);
     expect(await readFile(path.join(projectRoot, 'README.md'), 'utf8')).toBe(original);
     expect(await readFile(scriptPath, 'utf8')).toBe(script);
     if (process.platform !== 'win32') expect((await lstat(scriptPath)).mode & 0o777).toBe(0o755);
     await expect(harness.runtimeFetch(`/v1/threads/${threadId}/file-changes/undo`, input)).rejects.toThrow('conflict');
     expect(await readFile(path.join(projectRoot, 'README.md'), 'utf8')).toBe(original);
-    await expect(harness.runtimeFetch(`/v1/threads/${threadId}/file-changes/redo`, input))
-      .resolves.toEqual({ files: ['README.md', 'run.sh'] });
+    const reapplied: ThreadFileChangesResult = await harness.runtimeFetch(`/v1/threads/${threadId}/file-changes/redo`, input);
+    expect(reapplied).toEqual({ files: ['README.md', 'run.sh'], state: { action: 'redo', seq: expect.any(Number) } });
+    expect(reapplied.state.seq).toBeGreaterThan(undone.state.seq);
+    await harness.server.close();
+    await harness.startRuntimeServer(harness.runtimeDataDir);
+    const restartedAgain: RuntimeThread = await harness.runtimeFetch(`/v1/threads/${threadId}`);
+    expect(restartedAgain.fileChangeStates?.[batchKey]).toEqual(reapplied.state);
     expect(await readFile(path.join(projectRoot, 'README.md'), 'utf8')).toBe(original.replace(' · 本地小游戏合集', ''));
     await expect(lstat(scriptPath)).rejects.toMatchObject({ code: 'ENOENT' });
-    await harness.runtimeFetch(`/v1/threads/${threadId}/file-changes/undo`, input);
+    const undoneAgain: ThreadFileChangesResult = await harness.runtimeFetch(`/v1/threads/${threadId}/file-changes/undo`, input);
     await writeFile(path.join(projectRoot, 'README.md'), 'user edit after undo\n');
     await expect(harness.runtimeFetch(`/v1/threads/${threadId}/file-changes/redo`, input)).rejects.toThrow('conflict');
+    const conflicted: RuntimeThread = await harness.runtimeFetch(`/v1/threads/${threadId}`);
+    expect(conflicted.fileChangeStates?.[batchKey]).toEqual(undoneAgain.state);
     expect(await readFile(path.join(projectRoot, 'README.md'), 'utf8')).toBe('user edit after undo\n');
     expect(await readFile(scriptPath, 'utf8')).toBe(script);
     if (process.platform !== 'win32') expect((await lstat(scriptPath)).mode & 0o777).toBe(0o755);

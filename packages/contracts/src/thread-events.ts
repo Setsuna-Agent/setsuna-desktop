@@ -1,4 +1,5 @@
 import type { StoredThreadEvent } from './events.js';
+import { threadFileChangeKey } from './workspace.js';
 import { normalizeLegacyAssistantPhasesForTurn } from './event-projections/assistant-phase.js';
 import { isRuntimeThreadProjectionIgnoredEvent } from './event-projections/dispositions.js';
 import {
@@ -91,6 +92,14 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
     return next;
   }
 
+  if (event.type === 'thread.file_changes_applied') {
+    next.fileChangeStates = {
+      ...next.fileChangeStates,
+      [threadFileChangeKey(event.payload.toolCallIds)]: { action: event.payload.action, seq: event.seq },
+    };
+    return next;
+  }
+
   if (event.type === 'thread.goal_updated') {
     // Legacy Goal records bundled Core queue/message effects with private Goal
     // state. Replay only those Core effects; Goal state belongs to its Feature projection.
@@ -119,6 +128,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
   }
 
   if (event.type === 'thread.context_cleared') {
+    delete next.fileChangeStates;
     next.contextCompaction = undefined;
     delete next.pendingHookRuns;
     next.turns = [];

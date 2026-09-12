@@ -333,9 +333,9 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     };
   }
 
-  async applyFileChanges(projectId: string, changes: WorkspaceFileChange[], action: WorkspaceFileChangeAction): Promise<void> {
+  async applyFileChanges(projectId: string, changes: WorkspaceFileChange[], action: WorkspaceFileChangeAction, persist?: () => Promise<void>): Promise<void> {
     const project = await this.requireProject(projectId);
-    await applyWorkspaceFileChanges(project.path, changes, action);
+    await applyWorkspaceFileChanges(project.path, changes, action, persist);
   }
 
   async searchEntries(projectId: string, query = '', parent?: string | null): Promise<WorkspaceEntrySearchResponse> {

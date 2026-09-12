@@ -7,6 +7,7 @@ import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { invalidateFileMentionIndex } from '../tool/file-mentions.js';
 import { commitFileChanges, type LocalFileChange } from '../tool/pc-local/pc-local-tool-file-transaction.js';
 import { realWorkspaceRoot, resolveWorkspaceDeletionPath } from '../tool/pc-local/pc-local-tool-paths.js';
+import { groupFileChangePaths } from './workspace-file-change-paths.js';
 
 type ChangeSource = { content: string; mode?: number } | null;
 
@@ -15,13 +16,16 @@ export async function applyWorkspaceFileChanges(
   workspaceRoot: string,
   changes: WorkspaceFileChange[],
   action: WorkspaceFileChangeAction,
+  persist?: () => Promise<void>,
 ): Promise<void> {
   const root = realWorkspaceRoot(workspaceRoot);
   await withFileStateUpdate(root, async () => {
+    const paths = changes.map((change) => resolveChangePath(root, change.path));
+    const groupedPaths = await groupFileChangePaths(paths);
     const files = new Map<string, { original: ChangeSource; restored: ChangeSource }>();
     // Undo walks back through the operations; reapply restores their original order.
     for (const change of action === 'undo' ? [...changes].reverse() : changes) {
-      const filePath = resolveChangePath(root, change.path);
+      const filePath = groupedPaths.get(resolveChangePath(root, change.path))!;
       let file = files.get(filePath);
       if (!file) {
         const original = await readChangeSource(filePath);
@@ -55,7 +59,7 @@ export async function applyWorkspaceFileChanges(
     }
     // The existing transaction rechecks file contents and identities after staging,
     // then rolls back the entire set if a write fails or another process races it.
-    await commitFileChanges(mutations, { root });
+    await commitFileChanges(mutations, { root }, persist);
     invalidateFileMentionIndex(root);
   });
 }

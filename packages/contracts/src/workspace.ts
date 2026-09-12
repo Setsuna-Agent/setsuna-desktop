@@ -305,6 +305,13 @@ export type WorkspaceFileSaveInput = {
 
 export type WorkspaceFileChangeAction = 'undo' | 'redo';
 
+export type ThreadFileChangeState = { action: WorkspaceFileChangeAction; seq: number };
+
+/** Card identity is independent of tool display order or repeated ids. */
+export function threadFileChangeKey(toolCallIds: readonly string[]): string {
+  return JSON.stringify([...new Set(toolCallIds)].sort());
+}
+
 /** Exact inverse of one text mutation; null hashes represent a missing file. */
 export type WorkspaceFileChangePatch = {
   beforeHash: string | null;
@@ -330,6 +337,7 @@ export type ThreadFileChangesInput = {
 
 export type ThreadFileChangesResult = {
   files: string[];
+  state: ThreadFileChangeState;
 };
 
 export type WorkspaceFileWrite = {

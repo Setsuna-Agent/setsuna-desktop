@@ -1,11 +1,13 @@
-import type { ThreadFileChangesInput, ThreadFileChangesResult, WorkspaceFileChange, WorkspaceFileChangeAction } from '@setsuna-desktop/contracts';
+import type { StoredThreadEvent, ThreadFileChangesInput, ThreadFileChangesResult, WorkspaceFileChange, WorkspaceFileChangeAction } from '@setsuna-desktop/contracts';
 import { isFileChangePatch } from '../../utils/file-change-patch.js';
 import type { RuntimeContainer } from '../runtime-factory.js';
 import { RuntimeUseCaseError } from './errors.js';
+import { randomRuntimeId } from '../runtime-id.js';
 
 type FileChangesRuntime = {
   agentLoop: Pick<RuntimeContainer['agentLoop'], 'withThreadMutation' | 'activeTurnId'>;
-  threadStore: Pick<RuntimeContainer['threadStore'], 'getThread'>;
+  threadStore: Pick<RuntimeContainer['threadStore'], 'getThread' | 'appendEvent'>;
+  eventBus: Pick<RuntimeContainer['eventBus'], 'publish'>;
   workspaceProjects: Pick<RuntimeContainer['workspaceProjects'], 'ensureTemporaryWorkspace' | 'applyFileChanges'>;
 };
 
@@ -51,8 +53,15 @@ export async function applyThreadFileChanges(
     const projectId = thread.projectId ?? (await runtime.workspaceProjects.ensureTemporaryWorkspace({
       threadId, createdAt: thread.createdAt,
     })).id;
-    await runtime.workspaceProjects.applyFileChanges(projectId, changes, action);
-    return { files: [...new Set(changes.map((change) => change.path))] };
+    let event!: StoredThreadEvent;
+    await runtime.workspaceProjects.applyFileChanges(projectId, changes, action, async () => {
+      event = await runtime.threadStore.appendEvent(threadId, {
+        id: randomRuntimeId('event_file_changes'), threadId, type: 'thread.file_changes_applied',
+        createdAt: new Date().toISOString(), payload: { toolCallIds: [...requested], action },
+      });
+    });
+    runtime.eventBus.publish(event);
+    return { files: [...new Set(changes.map((change) => change.path))], state: { action, seq: event.seq } };
   });
 }
 

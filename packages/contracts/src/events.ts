@@ -23,6 +23,7 @@ import type {
   RuntimeThreadMemoryMode,
 } from './threads.js';
 import type { RuntimeUsage } from './usage.js';
+import type { WorkspaceFileChangeAction } from './workspace.js';
 
 export type RuntimeTaskKind = 'regular' | 'compact' | 'review' | 'goal' | 'user_shell' | 'subagent';
 
@@ -42,6 +43,7 @@ export const RUNTIME_EVENT_TYPES = [
   'thread.deleted',
   'thread.metadata_updated',
   'thread.memory_mode_updated',
+  'thread.file_changes_applied',
   'thread.context_cleared',
   'thread.context_compacting',
   'thread.context_compacted',
@@ -121,6 +123,7 @@ export type CoreRuntimeEvent =
   | RuntimeEventBase<'thread.deleted', Record<string, never>>
   | RuntimeEventBase<'thread.metadata_updated', { gitInfo: RuntimeGitInfo | null }>
   | RuntimeEventBase<'thread.memory_mode_updated', { mode: RuntimeThreadMemoryMode; reason?: string }>
+  | RuntimeEventBase<'thread.file_changes_applied', { toolCallIds: string[]; action: WorkspaceFileChangeAction }>
   | RuntimeEventBase<'thread.context_cleared', { clearedMessageCount: number }>
   | RuntimeEventBase<
       'thread.context_compacting',

@@ -1,5 +1,6 @@
 import type {
   WorkspaceFileChangeAction,
+  ThreadFileChangesResult,
   AnswerRuntimeApprovalInput,
   DesktopRuntimeClient,
   RuntimeConfiguredModelReference,
@@ -55,7 +56,7 @@ export type ChatConversationSurfaceModel = Readonly<{
   onClearContext(): void;
   onConversationOverviewRenderedChange(visible: boolean): void;
   onDeleteMessages(messageIds: string[]): void | Promise<void>;
-  onFileChangesAction?(toolCallIds: string[], action: WorkspaceFileChangeAction): void | Promise<void>;
+  onFileChangesAction?(toolCallIds: string[], action: WorkspaceFileChangeAction): void | Promise<void | ThreadFileChangesResult>;
   onDraftChange(value: string): void;
   onEditUserMessage(messageId: string, content: string): void | Promise<void>;
   onFocusComposerRequestConsumed(requestId: number): void;

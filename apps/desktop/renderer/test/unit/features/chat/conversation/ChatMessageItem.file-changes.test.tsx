@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import type { RuntimeMessage, WorkspaceFileChangeAction } from '@setsuna-desktop/contracts';
+import { threadFileChangeKey, type RuntimeMessage, type RuntimeThread, type ThreadFileChangesResult, type WorkspaceFileChangeAction } from '@setsuna-desktop/contracts';
 import { ConfirmationProvider } from '@setsuna-desktop/renderer-ui';
 import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -82,10 +82,33 @@ it('restores reapply after a card remount and isolates conversation/batch state 
   ]);
 });
 
-function TestConversation({ threadId, toolCallIds = ['edit_title', 'edit_body'], onApplyChanges }: {
+it('restores the action after an app remount and ignores older persisted state until a newer event arrives', async () => {
+  const key = threadFileChangeKey(['edit_title', 'edit_body']);
+  const onApplyChanges = vi.fn().mockResolvedValueOnce({ files: ['README.md'], state: { action: 'undo', seq: 20 } })
+    .mockResolvedValueOnce({ files: ['README.md'], state: { action: 'redo', seq: 21 } });
+  const first = render(<TestConversation threadId="thread_1" onApplyChanges={onApplyChanges} />);
+  fireEvent.click(first.getByRole('button', { name: '撤销' }));
+  await first.findByRole('button', { name: '重新应用' });
+  first.unmount();
+
+  const saved: RuntimeThread['fileChangeStates'] = JSON.parse(JSON.stringify({ [key]: { action: 'undo', seq: 20 } }));
+  const restarted = render(<TestConversation threadId="thread_1" fileChangeStates={saved} onApplyChanges={onApplyChanges} />);
+  expect(restarted.getByRole('button', { name: '重新应用' })).toBeTruthy();
+  expect(onApplyChanges).toHaveBeenCalledTimes(1);
+  fireEvent.click(restarted.getByRole('button', { name: '重新应用' }));
+  await restarted.findByRole('button', { name: '撤销' });
+  restarted.rerender(<TestConversation threadId="thread_1" fileChangeStates={saved} onApplyChanges={onApplyChanges} />);
+  expect(restarted.getByRole('button', { name: '撤销' })).toBeTruthy();
+  restarted.rerender(<TestConversation threadId="thread_1" fileChangeStates={{ [key]: { action: 'undo', seq: 22 } }} onApplyChanges={onApplyChanges} />);
+  expect(restarted.getByRole('button', { name: '重新应用' })).toBeTruthy();
+  expect(onApplyChanges.mock.calls.map((call) => call[2])).toEqual(['undo', 'redo']);
+});
+
+function TestConversation({ threadId, toolCallIds = ['edit_title', 'edit_body'], fileChangeStates, onApplyChanges }: {
   threadId: string;
   toolCallIds?: string[];
-  onApplyChanges: (threadId: string, toolCallIds: string[], action: WorkspaceFileChangeAction) => Promise<void>;
+  fileChangeStates?: RuntimeThread['fileChangeStates'];
+  onApplyChanges: (threadId: string, toolCallIds: string[], action: WorkspaceFileChangeAction) => Promise<void | ThreadFileChangesResult>;
 }) {
   const message: RuntimeMessage = {
     id: 'assistant_1', turnId: 'turn_1', role: 'assistant', status: 'complete', phase: 'final_answer',
@@ -95,7 +118,7 @@ function TestConversation({ threadId, toolCallIds = ['edit_title', 'edit_body'],
     ],
   };
   return <RendererPluginTestHost><ConfirmationProvider><ThreadFileChangesProvider>
-    <ChatThreadProvider key={threadId} threadId={threadId}>
+    <ChatThreadProvider key={threadId} threadId={threadId} fileChangeStates={fileChangeStates}>
       <MessageItem
         activeAssistantItemId={null} activeTurnId={null} assistantItemIdByTurnId={new Map()}
         deleteMode={false} editingDraft="" editingMessageId={null} editingSubmitting={false}
