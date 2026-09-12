@@ -1,6 +1,9 @@
 import type {
+  WorkspaceFileChangeAction,
   AddWorkspaceProjectInput,
   UpdateWorkspaceProjectInput,
+  ThreadFileChangesInput,
+  ThreadFileChangesResult,
   AnswerRuntimeApprovalInput,
   CreateThreadInput,
   DesktopRuntimeClient,
@@ -28,6 +31,10 @@ import type {
   ThreadList,
   ThreadPatch,
   ThreadQuery,
+  WorkspaceEntry,
+  WorkspaceEntryCreateInput,
+  WorkspaceEntryRenameInput,
+  WorkspaceEntryMoveInput,
   WorkspaceEntryList,
   WorkspaceEntrySearchResponse,
   WorkspaceFileRead,
@@ -49,6 +56,13 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
   const request = <T = unknown>(input: RuntimeRequestInput): Promise<T> => bridge.request<T>(input);
 
   return {
+    applyThreadFileChanges(threadId: string, input: ThreadFileChangesInput, action: WorkspaceFileChangeAction) {
+      return request<ThreadFileChangesResult>({
+        path: `/v1/threads/${encodeURIComponent(threadId)}/file-changes/${action}`,
+        method: 'POST',
+        body: input,
+      });
+    },
     linkAttachment(file) {
       return bridge.linkAttachment(file);
     },
@@ -245,6 +259,29 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     readProjectFile(projectId: string, path: string) {
       return request<WorkspaceFileRead>({
         path: `/v1/projects/${encodeURIComponent(projectId)}/read?path=${encodeURIComponent(path)}`,
+      });
+    },
+    createProjectEntry(projectId: string, input: WorkspaceEntryCreateInput) {
+      return request<WorkspaceEntry>({
+        path: `/v1/projects/${encodeURIComponent(projectId)}/entries`, method: 'POST', body: input,
+      });
+    },
+    renameProjectEntry(projectId: string, path: string, input: WorkspaceEntryRenameInput) {
+      return request<WorkspaceEntry>({
+        path: `/v1/projects/${encodeURIComponent(projectId)}/entries?path=${encodeURIComponent(path)}`,
+        method: 'PATCH', body: input,
+      });
+    },
+    moveProjectEntry(projectId: string, path: string, input: WorkspaceEntryMoveInput) {
+      return request<WorkspaceEntry>({
+        path: `/v1/projects/${encodeURIComponent(projectId)}/entries/move?path=${encodeURIComponent(path)}`,
+        method: 'POST', body: input,
+      });
+    },
+    deleteProjectEntry(projectId: string, path: string) {
+      return request<void>({
+        path: `/v1/projects/${encodeURIComponent(projectId)}/entries?path=${encodeURIComponent(path)}`,
+        method: 'DELETE',
       });
     },
     readProjectFileForEdit(projectId: string, path: string) {

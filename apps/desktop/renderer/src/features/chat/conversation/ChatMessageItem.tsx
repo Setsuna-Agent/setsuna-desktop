@@ -3,6 +3,7 @@ import { TextArea, Button, MessageBubble } from '@setsuna-desktop/renderer-ui';
 import {
   normalizeRuntimeReviewNotice,
   type RuntimeMessage,
+  type WorkspaceFileChangeAction,
   type RuntimeReviewModeNotice,
   type RuntimeToolRun,
 } from '@setsuna-desktop/contracts';
@@ -15,7 +16,7 @@ import type { RuntimePluginUse } from '../plugin-usage/runtimePluginUsage.js';
 import { RuntimePluginUses } from '../plugin-usage/RuntimePluginUses.js';
 import { MarkdownRenderer } from '../markdown/MarkdownRenderer.js';
 import { SkillReferenceText } from '../skills/SkillReference.js';
-import { fileChangeSummaryFromRuns } from '../tool-runs/runtimeFileChanges.js';
+import { fileChangeSummaryFromRuns, fileChangeToolCallIds } from '../tool-runs/runtimeFileChanges.js';
 import {
   resolveRuntimeFeatureToolResult,
   useRuntimeFeatureToolResultResolver,
@@ -76,7 +77,7 @@ export const MessageItem = memo(function MessageItem({
   item,
   onAnswerApproval,
   onCancelEdit,
-  onDiscardFileChanges,
+  onFileChangesAction,
   onEditDraftChange,
   onOpenFileReview,
   onStartEdit,
@@ -100,7 +101,7 @@ export const MessageItem = memo(function MessageItem({
   item: ChatDisplayItem;
   onAnswerApproval: AnswerApprovalHandler;
   onCancelEdit: () => void;
-  onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
+  onFileChangesAction?: (toolCallIds: string[], action: WorkspaceFileChangeAction) => void | Promise<void>;
   onEditDraftChange: (value: string) => void;
   onOpenFileReview?: DesktopReviewOpenHandler;
   onStartEdit?: (message: RuntimeMessage) => void;
@@ -122,7 +123,7 @@ export const MessageItem = memo(function MessageItem({
         deleteMode={deleteMode}
         item={item}
         onAnswerApproval={onAnswerApproval}
-        onDiscardFileChanges={onDiscardFileChanges}
+        onFileChangesAction={onFileChangesAction}
         onOpenFileReview={onOpenFileReview}
         onStartDelete={onStartDelete}
         onToggleDelete={onToggleDelete}
@@ -238,7 +239,7 @@ function AssistantRunItem({
   deleteMode,
   item,
   onAnswerApproval,
-  onDiscardFileChanges,
+  onFileChangesAction,
   onOpenFileReview,
   onStartDelete,
   onToggleDelete,
@@ -253,7 +254,7 @@ function AssistantRunItem({
   deleteMode: boolean;
   item: Extract<ChatDisplayItem, { type: 'assistant' }>;
   onAnswerApproval: AnswerApprovalHandler;
-  onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
+  onFileChangesAction?: (toolCallIds: string[], action: WorkspaceFileChangeAction) => void | Promise<void>;
   onOpenFileReview?: DesktopReviewOpenHandler;
   onStartDelete?: (itemId: string) => void;
   onToggleDelete?: (itemId: string, checked: boolean) => void;
@@ -277,7 +278,7 @@ function AssistantRunItem({
       {deleteMode && onToggleDelete ? <MessageSelectionControl checked={selectedForDelete} label={t('chat.delete.selectReply')} onChange={(checked) => onToggleDelete(item.id, checked)} /> : null}
       <MessageBubble
         className="chat-ai-bubble"
-        content={<AssistantRunContent active={active} contextCompactionActive={contextCompactionActive} item={item} onAnswerApproval={onAnswerApproval} onDiscardFileChanges={onDiscardFileChanges} onOpenFileReview={onOpenFileReview} onWorkHistoryExpandedChange={onWorkHistoryExpandedChange} pluginUses={pluginUses} showThinkingInTranscript={showThinkingInTranscript} />}
+        content={<AssistantRunContent active={active} contextCompactionActive={contextCompactionActive} item={item} onAnswerApproval={onAnswerApproval} onFileChangesAction={onFileChangesAction} onOpenFileReview={onOpenFileReview} onWorkHistoryExpandedChange={onWorkHistoryExpandedChange} pluginUses={pluginUses} showThinkingInTranscript={showThinkingInTranscript} />}
         footer={belongsToActiveTurn ? undefined : <ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} message={footerMessage} onDelete={onStartDelete ? () => onStartDelete(item.id) : undefined} timePosition="after-actions" />}
         align="start"
         variant="ghost"
@@ -343,7 +344,7 @@ function AssistantRunContent({
   contextCompactionActive,
   item,
   onAnswerApproval,
-  onDiscardFileChanges,
+  onFileChangesAction,
   onOpenFileReview,
   onWorkHistoryExpandedChange,
   pluginUses,
@@ -353,7 +354,7 @@ function AssistantRunContent({
   contextCompactionActive: boolean;
   item: Extract<ChatDisplayItem, { type: 'assistant' }>;
   onAnswerApproval: AnswerApprovalHandler;
-  onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
+  onFileChangesAction?: (toolCallIds: string[], action: WorkspaceFileChangeAction) => void | Promise<void>;
   onOpenFileReview?: DesktopReviewOpenHandler;
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
   pluginUses: RuntimePluginUse[];
@@ -483,7 +484,13 @@ function AssistantRunContent({
       {showTrailingLoading ? <AssistantLoadingIndicator label={t('chat.assistant.processing')} showLabel={false} /> : null}
       {fileChangeSummary ? (
         <div className="chat-assistant-run__segment">
-          <FileChangesSummaryCard summary={fileChangeSummary} onDiscardChanges={onDiscardFileChanges} onOpenReview={onOpenFileReview} />
+          <FileChangesSummaryCard
+            key={fileChangeToolCallIds(toolRuns).join('\0')}
+            summary={fileChangeSummary}
+            toolCallIds={fileChangeToolCallIds(toolRuns)}
+            onApplyChanges={onFileChangesAction ? (action) => onFileChangesAction(fileChangeToolCallIds(toolRuns), action) : undefined}
+            onOpenReview={onOpenFileReview}
+          />
         </div>
       ) : null}
       {!active && memoryCitations.length ? <MemoryCitationCard entries={memoryCitations} /> : null}

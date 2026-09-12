@@ -35,6 +35,13 @@ import type {
 import type {
   AddWorkspaceProjectInput,
   UpdateWorkspaceProjectInput,
+  ThreadFileChangesInput,
+  ThreadFileChangesResult,
+  WorkspaceFileChangeAction,
+  WorkspaceEntry,
+  WorkspaceEntryCreateInput,
+  WorkspaceEntryRenameInput,
+  WorkspaceEntryMoveInput,
   WorkspaceEntryList,
   WorkspaceEntrySearchResponse,
   WorkspaceFileRead,
@@ -114,10 +121,15 @@ export type DesktopRuntimeClient = {
   removeProject(projectId: string): Promise<void>;
   getWorkspaceStatus(query?: WorkspaceStatusQuery): Promise<WorkspaceStatus>;
   listProjectEntries(projectId: string, path?: string): Promise<WorkspaceEntryList>;
+  createProjectEntry(projectId: string, input: WorkspaceEntryCreateInput): Promise<WorkspaceEntry>;
+  renameProjectEntry(projectId: string, path: string, input: WorkspaceEntryRenameInput): Promise<WorkspaceEntry>;
+  moveProjectEntry(projectId: string, path: string, input: WorkspaceEntryMoveInput): Promise<WorkspaceEntry>;
+  deleteProjectEntry(projectId: string, path: string): Promise<void>;
   searchProjectEntries(projectId: string, query?: string, parent?: string | null): Promise<WorkspaceEntrySearchResponse>;
   readProjectFile(projectId: string, path: string): Promise<WorkspaceFileRead>;
   readProjectFileForEdit(projectId: string, path: string): Promise<WorkspaceFileRead>;
   saveProjectFile(projectId: string, path: string, input: WorkspaceFileSaveInput): Promise<WorkspaceFileRead>;
+  applyThreadFileChanges(threadId: string, input: ThreadFileChangesInput, action: WorkspaceFileChangeAction): Promise<ThreadFileChangesResult>;
   searchProject(projectId: string, query: string): Promise<WorkspaceSearchResponse>;
   listApprovals(): Promise<RuntimeApprovalList>;
   answerApproval(approvalId: string, input: AnswerRuntimeApprovalInput): Promise<void>;

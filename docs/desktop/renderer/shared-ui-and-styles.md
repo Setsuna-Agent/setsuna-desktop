@@ -22,6 +22,7 @@
 `@setsuna-desktop/renderer-ui` 是宿主和 Feature 共用的控件入口，源码按 [beUI](https://beui.dev) 的可复制组件方式维护。按钮、字段、复选框、开关、滑块、选择器、菜单、Popover、Tooltip、Dialog、图片预览、消息气泡和通知栈均由这个包持有；React 版本继续保持 18。
 
 - Motion 负责复选框、开关和通知动画；`motion.ts` 提供复选框与通知使用的 spring 参数，开关的参数随组件维护。
+- `FileIcon` 使用 Symbols，统一按跨平台路径的文件名选择文件类型图标；workspace、artifact 和插件卡片复用这个入口，尺寸由各自样式控制。
 - Dialog 的入场动画由 `overlays.css` 持有：弹窗上移 12px 并淡入（180ms ease-out），遮罩淡入（160ms ease）。弹窗已去掉 scale 动画，居中与入场位移统一使用 `translate`；12px 按应用密度缩放，减少动态效果偏好下禁用入场动画。
 - Radix 提供浮层定位、焦点约束、嵌套子菜单、键盘操作和关闭行为。控件遵循本项目的窄 API，不提供 Ant Design 兼容层。
 - `ui/primitives.tsx` / `SelectField.tsx` 保留宿主导出；`SettingsViewUi.tsx` 将同一实现注入 Feature 的 Settings UI contract。

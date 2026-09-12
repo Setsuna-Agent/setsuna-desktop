@@ -8,10 +8,13 @@ import type {
   ThreadMemoryModePatch,
   ThreadPatch,
   ThreadQuery,
+  ThreadFileChangesInput,
+  WorkspaceFileChangeAction,
 } from '@setsuna-desktop/contracts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { URL } from 'node:url';
 import type { ThreadStorePatch } from '../ports/thread-store.js';
+import { applyThreadFileChanges } from '../runtime/use-cases/thread-file-changes.js';
 import { stringInput } from './app-server/input.js';
 import { runtimeSkillReferenceList } from './runtime-skill-reference-input.js';
 import {
@@ -60,6 +63,14 @@ export async function handleRuntimeThreadRequest(
   }
 
   const threadMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)$/u);
+  const fileChangesMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/file-changes\/(undo|redo)$/u);
+  if (fileChangesMatch && request.method === 'POST') {
+    sendJson(response, 200, await applyThreadFileChanges(
+      runtime, decodeRuntimeId(fileChangesMatch[1], 'Thread id'), await readBody<ThreadFileChangesInput>(request),
+      fileChangesMatch[2] as WorkspaceFileChangeAction,
+    ));
+    return true;
+  }
   if (threadMatch && request.method === 'GET') {
     const threadId = decodeRuntimeId(threadMatch[1], 'Thread id');
     const messageLimit = optionalNumber(url.searchParams.get('messageLimit'));

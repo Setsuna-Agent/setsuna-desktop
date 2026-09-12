@@ -737,7 +737,7 @@ export function InspectionTarget({ className, entry }: { className: string; entr
       </WorkspacePathLabel>
     );
   }
-  return <code title={entry.target}>{entry.target}</code>;
+  return <span className="chat-tool-run__target" title={entry.target}>{entry.target}</span>;
 }
 
 export function fileOperationActionLabel(action: FileOperationAction, t: Translate = defaultTranslate): string {

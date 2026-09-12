@@ -30,7 +30,7 @@ describe('workspace file link opening', () => {
     expect(openWithSystemDefault).not.toHaveBeenCalled();
   });
 
-  it('opens the shared workspace file menu with the resolved file and line', () => {
+  it('opens the shared workspace file menu with the verified file and line', async () => {
     const onOpenWorkspaceFileContextMenu = vi.fn();
     render(createElement(
       MarkdownNavigationProvider,
@@ -40,11 +40,15 @@ describe('workspace file link opening', () => {
           linkKind: 'workspace',
         }, 'main.ts'),
         onOpenWorkspaceFileContextMenu,
+        onSearchWorkspaceEntries: async () => ({
+          entries: [{ kind: 'file' as const, path: 'src/main.ts', name: 'main.ts', parent: 'src' }],
+          query: '', scanned: 1, truncated: false, workspaceRoot: '/workspace',
+        }),
         workspaceRoot: '/workspace',
       },
     ));
 
-    const defaultAllowed = fireEvent.contextMenu(screen.getByRole('link', { name: /main\.ts/u }), {
+    const defaultAllowed = fireEvent.contextMenu(await screen.findByRole('link', { name: /main\.ts/u }), {
       clientX: 120,
       clientY: 240,
     });

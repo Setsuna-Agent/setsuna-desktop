@@ -1,6 +1,7 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
 import type {
   RuntimeMessage,
+  WorkspaceFileChangeAction,
   RuntimePluginSummary,
   RuntimeSkillSummary,
   RuntimeThread,
@@ -16,7 +17,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
-import type { DesktopReviewOpenHandler, DesktopReviewState } from '../../workspace/model.js';
+import type { DesktopReviewOpenHandler } from '../../workspace/model.js';
 import {
   reconcileRuntimePluginUsesByTurn,
   runtimePluginUsesByTurn,
@@ -75,10 +76,9 @@ type ChatTranscriptProps = ChatTranscriptMutationProps & {
   messageHistory: ChatTranscriptMessageHistory;
   messages: RuntimeMessage[];
   onAnswerApproval: AnswerApprovalHandler;
-  onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
+  onFileChangesAction?: (toolCallIds: string[], action: WorkspaceFileChangeAction) => void | Promise<void>;
   onOpenFileReview?: DesktopReviewOpenHandler;
   plugins: RuntimePluginSummary[];
-  reviewState?: DesktopReviewState | null;
   scrollToBottomRef?: React.MutableRefObject<(() => void) | null>;
   showEmptyStarter?: boolean;
   showThinkingInTranscript: boolean;
@@ -104,12 +104,11 @@ export function ChatTranscript({
   onAnswerApproval,
   onDeleteMessages,
   onDeleteModeChange,
-  onDiscardFileChanges,
+  onFileChangesAction,
   onEditUserMessage,
   onOpenFileReview,
   plugins,
   readOnly = false,
-  reviewState = null,
   showEmptyStarter = false,
   showThinkingInTranscript,
   skills,
@@ -310,7 +309,7 @@ export function ChatTranscript({
                           item={item}
                           onAnswerApproval={onAnswerApproval}
                           onCancelEdit={cancelEditingMessage}
-                          onDiscardFileChanges={reviewState?.isGitRepository ? onDiscardFileChanges : undefined}
+                          onFileChangesAction={readOnly ? undefined : onFileChangesAction}
                           onEditDraftChange={setEditingDraft}
                           onOpenFileReview={onOpenFileReview}
                           onWorkHistoryExpandedChange={handleWorkHistoryExpandedChange}

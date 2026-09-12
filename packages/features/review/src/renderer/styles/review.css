@@ -384,8 +384,6 @@
 }
 
 .desktop-review-file-card__icon {
-  --workspace-file-icon-scale: 1.2;
-
   display: inline-flex;
   flex: 0 0 var(--desktop-review-file-icon-size);
   align-items: center;

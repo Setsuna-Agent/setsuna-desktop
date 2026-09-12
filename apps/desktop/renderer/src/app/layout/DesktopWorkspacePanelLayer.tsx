@@ -8,6 +8,7 @@ import type {
   RuntimeThread,
   RuntimeThreadSummary,
   WorkspaceEntry,
+  WorkspaceEntryCreateInput,
   WorkspaceEntrySearchItem,
   WorkspaceEntrySearchResponse,
   WorkspaceFileRead,
@@ -44,6 +45,8 @@ import type { ChatModelSelectionHandler } from '../../features/chat/chatModelSel
 import type { DesktopBrowserPanelInstance } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
 import { desktopWorkspacePanelTargetContext } from '../../features/workspace/hooks/useDesktopWorkspacePanelSession.js';
 import type { WorkspaceFileDraftState } from '../../features/workspace/hooks/useWorkspaceFileDraft.js';
+import { useWorkspaceFileTree } from '../../features/workspace/hooks/useWorkspaceFileTree.js';
+import { isFileWorkspacePanel } from '../../features/workspace/model.js';
 import type {
   DesktopPanelDropPlacement,
   DesktopPanelSlot,
@@ -100,6 +103,7 @@ export type DesktopWorkspacePanelModel = Readonly<{
     activeWorkspace?: WorkspaceProject;
     config: RuntimeConfigState | null;
     currentThread: RuntimeThread | null;
+    entryOperationPending: boolean;
     fileDraft: WorkspaceFileDraftState;
     fileFocusRequest: WorkspaceFileFocusRequest | null;
     filePreview: WorkspaceFileRead | null;
@@ -144,6 +148,10 @@ export type DesktopWorkspacePanelModel = Readonly<{
     onCloseBottomSlot(): void;
     onClosePanel(placement: DesktopPanelSlot, panelId: string): void;
     onCopyFilePath(filePath: string): void;
+    onCreateEntry(input: WorkspaceEntryCreateInput): Promise<WorkspaceEntry | null>;
+    onRenameEntry(entryPath: string, name: string): Promise<WorkspaceEntry | null>;
+    onMoveEntry(entryPath: string, parentPath: string): Promise<WorkspaceEntry | null>;
+    onDeleteEntry(entryPath: string): Promise<boolean>;
     onExternalOpenFile(filePath?: string | null, line?: number): void;
     onMoveBottomPanel(panelId: string, targetPlacement: DesktopPanelSlot, targetPanelId: string | null, placement: DesktopPanelDropPlacement): void;
     onOpenBottomPanel(panel: DesktopPanelType): void;
@@ -190,6 +198,22 @@ export function DesktopWorkspacePanelLayer({
   workspaceFileContextTarget: WorkspaceFileContextTarget | null;
 }>) {
   const { actions, context, layout, panels } = model;
+  const workspaceRoot = context.activeWorkspace?.path;
+  const watchEntries = useCallback((directoryPaths: string[], callback: () => void) => {
+    if (!workspaceRoot) return () => undefined;
+    return window.setsunaDesktop?.desktop.watchWorkspaceEntries?.(workspaceRoot, directoryPaths, callback)
+      ?? (() => undefined);
+  }, [workspaceRoot]);
+  const fileTree = useWorkspaceFileTree({
+    workspaceKey: context.activeWorkspace
+      ? JSON.stringify([context.activeWorkspace.id, context.activeWorkspace.path])
+      : null,
+    enabled: panels.sidePanelSlot.panels.some(isFileWorkspacePanel)
+      || panels.bottomPanelSlot.panels.some(isFileWorkspacePanel),
+    searchEntries: actions.onSearchProjectEntries,
+    watchEntries,
+    paused: context.entryOperationPending,
+  });
   const toast = useToast();
   const { bindingsFor } = useKeyboardShortcuts();
   const latestReviewSummary = useMemo(
@@ -219,7 +243,9 @@ export function DesktopWorkspacePanelLayer({
       : null;
   const workspacePanelProps = {
     activeProject: context.activeWorkspace,
+    entryOperationPending: context.entryOperationPending,
     fileDraft: context.fileDraft,
+    fileTree,
     fileFocusRequest: context.fileFocusRequest,
     filePreview: context.filePreview,
     latestReviewFindings,
@@ -232,6 +258,10 @@ export function DesktopWorkspacePanelLayer({
     workspaceApps: context.workspaceApps,
     onAddFileToConversation: onAddWorkspaceMention,
     onCopyFilePath: actions.onCopyFilePath,
+    onCreateEntry: actions.onCreateEntry,
+    onRenameEntry: actions.onRenameEntry,
+    onMoveEntry: actions.onMoveEntry,
+    onDeleteEntry: actions.onDeleteEntry,
     onExternalOpenFile: actions.onExternalOpenFile,
     onOpenBrowser: actions.onOpenBrowser,
     onOpenConversationDebug: panels.conversationDebugEnabled ? actions.onOpenConversationDebug : undefined,
@@ -249,7 +279,6 @@ export function DesktopWorkspacePanelLayer({
     onReviewRefresh: actions.onReviewRefresh,
     onReviewSourceChange: actions.onReviewSourceChange,
     onRevealFile: actions.onRevealFile,
-    onSearchProjectEntries: actions.onSearchProjectEntries,
     resizeMax: layout.workspaceMaxWidth,
     resizeMin: layout.workspaceMinWidth,
     resizeValue: layout.workspaceWidth,
@@ -322,6 +351,7 @@ export function DesktopWorkspacePanelLayer({
               activePanel={panels.bottomActivePanel}
               availablePanelTypes={panels.panelLauncherTypes}
               panels={panels.bottomPanelSlot.panels}
+              unsavedFilePath={context.fileDraft.dirty ? context.filePreview?.path : null}
               resizeMax={layout.terminalMaxHeight}
               resizeMin={layout.terminalMinHeight}
               resizeValue={layout.terminalHeight}
@@ -399,6 +429,7 @@ export function DesktopWorkspacePanelLayer({
                     workspaceMaxWidth={layout.workspaceMaxWidth}
                     workspaceMinWidth={layout.workspaceMinWidth}
                     workspaceRoot={context.activeWorkspace?.path}
+                    onSearchWorkspaceEntries={actions.onSearchProjectEntries}
                     workspaceWidth={layout.workspaceWidth}
                     onClose={() => actions.onClosePanel(placement, panel.id)}
                     onError={actions.onSideChatError}

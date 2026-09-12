@@ -141,6 +141,12 @@ export function fileChangeSummaryFromRuns(runs: RuntimeToolRun[]): RuntimeFileCh
   };
 }
 
+/** Keep operation identities separate from the merged, truncated display diff. */
+export function fileChangeToolCallIds(runs: RuntimeToolRun[]): string[] {
+  return [...new Set(runs.filter((run) => isRuntimeFileMutationRun(run)
+    && run.status === 'success' && fileChangesFromToolRun(run).length > 0).map((run) => run.id))];
+}
+
 export function latestFileChangeSummaryFromMessages(messages: RuntimeMessage[]): RuntimeFileChangeSummary | null {
   const transcript = buildChatTranscript(messages);
   for (let index = transcript.length - 1; index >= 0; index -= 1) {

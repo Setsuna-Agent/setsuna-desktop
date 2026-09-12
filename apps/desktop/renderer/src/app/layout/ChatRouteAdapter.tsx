@@ -1,8 +1,10 @@
+import type { WorkspaceFileChangeAction } from '@setsuna-desktop/contracts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { latestBrowserFeatureOpenRequest } from '../../composition/BrowserWorkspaceFeatureBoundary.js';
 import { usePluginManagementFeatureSnapshot } from '../../composition/PluginManagementFeatureBoundary.js';
 import { useSkillsFeatureSnapshot } from '../../composition/SkillsFeatureBoundary.js';
 import { markdownLinkOpenModeFromConfig } from '../../features/chat/markdown/markdownLinkPreference.js';
+import { fileChangesFromToolRun } from '../../features/chat/tool-runs/runtimeFileChanges.js';
 import type {
   DesktopReviewFocusRequest,
   DesktopReviewOpenHandler,
@@ -119,13 +121,22 @@ export function ChatRouteAdapter({
     }
     void workspacePanels.loadReviewState();
   };
-  const discardFileChanges = async (filePaths: string[]) => {
-    const workspaceRoot = activeWorkspace?.path;
-    if (!workspaceRoot) throw new Error(t('workspace.error.unavailable'));
-    const reviewApi = window.setsunaDesktop?.desktopReview;
-    if (!reviewApi) throw new Error(t('workspace.error.discardUnsupported'));
-    await reviewApi.discardUnstaged(workspaceRoot, filePaths);
-    await workspacePanels.loadReviewState();
+  const applyFileChanges = async (toolCallIds: string[], action: WorkspaceFileChangeAction) => {
+    const thread = runtime.currentThread;
+    if (!thread) throw new Error(t('workspace.error.unavailable'));
+    const file = projectWorkspace.filePreview;
+    // Disk hashes cannot see an unsaved editor buffer for one of the affected files.
+    if (action === 'redo' && file && file.projectId === activeWorkspace?.id
+      && (projectWorkspace.fileDraft.dirty || projectWorkspace.fileDraft.saving)) {
+      const requested = new Set(toolCallIds);
+      const affectsDraft = thread.messages.some((message) => message.toolRuns?.some((run) => (
+        requested.has(run.id) && fileChangesFromToolRun(run).some((change) => change.path === file.path)
+      )));
+      if (affectsDraft) throw new Error(t('toolRun.changes.unsavedConflict'));
+    }
+    await runtime.client.applyThreadFileChanges(thread.id, { toolCallIds }, action);
+    void workspacePanels.loadReviewState();
+    void projectWorkspace.refreshFilePreview(() => true);
   };
   const setMultiAgentEnabled = (enabled: boolean) => runtime.saveRuntimePreferences({
     features: {
@@ -159,7 +170,7 @@ export function ChatRouteAdapter({
     onCompactContext: () => { void runtime.compactCurrentThreadContext(); },
     onConversationOverviewRenderedChange,
     onDeleteMessages: chatActions.deleteMessages,
-    onDiscardFileChanges: discardFileChanges,
+    onFileChangesAction: applyFileChanges,
     onDraftChange: setDraft,
     onEditUserMessage: chatActions.editUserMessage,
     onFocusComposerRequestConsumed,
@@ -184,6 +195,7 @@ export function ChatRouteAdapter({
       activeWorkspace,
       config: runtime.config,
       currentThread: runtime.currentThread,
+      entryOperationPending: projectWorkspace.entryOperationPending,
       fileDraft: projectWorkspace.fileDraft,
       fileFocusRequest: projectWorkspace.fileFocusRequest,
       filePreview: projectWorkspace.filePreview,
@@ -237,6 +249,10 @@ export function ChatRouteAdapter({
       onClosePanel: workspacePanels.closeDesktopPanelItem,
       onOpenCommitMessageEditor: workspacePanels.openCommitMessageEditor,
       onCopyFilePath: workspacePanels.copyWorkspaceFilePath,
+      onCreateEntry: projectWorkspace.createEntry,
+      onRenameEntry: projectWorkspace.renameEntry,
+      onMoveEntry: projectWorkspace.moveEntry,
+      onDeleteEntry: projectWorkspace.deleteEntry,
       onExternalOpenFile: workspacePanels.openFileInWorkspaceApp,
       onMoveBottomPanel: (panelId, targetPlacement, targetPanelId, placement) => {
         workspacePanels.moveDesktopPanel('bottom', panelId, targetPlacement, targetPanelId, placement);

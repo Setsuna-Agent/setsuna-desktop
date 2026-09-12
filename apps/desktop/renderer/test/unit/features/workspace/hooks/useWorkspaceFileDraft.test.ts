@@ -5,11 +5,10 @@ import {
   type WorkspaceFileRead,
 } from '@setsuna-desktop/contracts';
 import { ConfirmationProvider } from '@setsuna-desktop/renderer-ui';
-import { act, cleanup, fireEvent, renderHook, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, renderHook, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   canEditWorkspaceFile,
-  reconcileWorkspaceFileDraftAfterSave,
   useWorkspaceFileDraft,
 } from '../../../../../src/features/workspace/hooks/useWorkspaceFileDraft.js';
 
@@ -24,7 +23,7 @@ it('retains an unsaved draft until confirmation and rejects a decision for a fil
   const view = renderHook(({ currentFile }) => useWorkspaceFileDraft({
     client, file: currentFile, onFilePrepared: vi.fn(), onFileSaved: vi.fn(),
   }), { initialProps: { currentFile: file }, wrapper: ConfirmationProvider });
-  await act(async () => { await view.result.current.startEditing(); });
+  expect(view.result.current.editing).toBe(true);
   act(() => view.result.current.updateContent('unsaved edit'));
   let decision!: Promise<boolean>;
   act(() => { decision = view.result.current.confirmDiscardChanges(); });
@@ -62,47 +61,80 @@ describe('canEditWorkspaceFile', () => {
   });
 });
 
-describe('reconcileWorkspaceFileDraftAfterSave', () => {
-  const savedFile: WorkspaceFileRead = {
-    projectId: 'project-1',
-    path: 'src/example.ts',
-    content: 'saved content',
-    size: 13,
-    preview: { kind: 'text' },
-    revision: 'revision-2',
-    truncated: false,
+it('keeps editing through saves, preserves newer input and retries a failed save against the latest revision', async () => {
+  const file: WorkspaceFileRead = {
+    projectId: 'project-1', path: 'notes.txt', content: 'original', size: 8,
+    revision: 'revision-1', preview: { kind: 'text' }, truncated: false,
   };
-  const savingSession = {
-    content: 'saved content',
-    error: null,
-    expectedRevision: 'revision-1',
-    fileKey: 'project-1:src/example.ts',
-    originalContent: 'original content',
-    saving: true,
+  let finishSave!: (file: WorkspaceFileRead) => void;
+  const client = {
+    readProjectFileForEdit: vi.fn(),
+    saveProjectFile: vi.fn().mockReturnValueOnce(new Promise<WorkspaceFileRead>((resolve) => { finishSave = resolve; })),
   };
-
-  it('closes the editor when its content still matches the saved snapshot', () => {
-    expect(reconcileWorkspaceFileDraftAfterSave(savingSession, {
-      saved: savedFile,
-      savingContent: 'saved content',
-      savingFileKey: savingSession.fileKey,
-    })).toBeNull();
+  const onFileSaved = vi.fn();
+  const view = renderHook(({ currentFile }) => useWorkspaceFileDraft({
+    client, file: currentFile, onFilePrepared: vi.fn(), onFileSaved,
+  }), { initialProps: { currentFile: file }, wrapper: ConfirmationProvider });
+  expect(view.result.current.editing).toBe(true);
+  act(() => view.result.current.updateContent('first edit'));
+  let saving!: Promise<boolean>;
+  await act(async () => {
+    saving = view.result.current.save();
+    expect(await view.result.current.save()).toBe(false);
   });
-
-  it('preserves edits made while the save was pending and advances their base revision', () => {
-    expect(reconcileWorkspaceFileDraftAfterSave({
-      ...savingSession,
-      content: 'newer editor content',
-    }, {
-      saved: savedFile,
-      savingContent: 'saved content',
-      savingFileKey: savingSession.fileKey,
-    })).toEqual({
-      ...savingSession,
-      content: 'newer editor content',
-      expectedRevision: 'revision-2',
-      originalContent: 'saved content',
-      saving: false,
-    });
+  expect(client.saveProjectFile).toHaveBeenCalledTimes(1);
+  expect(client.saveProjectFile).toHaveBeenLastCalledWith('project-1', 'notes.txt', {
+    content: 'first edit', expectedRevision: 'revision-1',
   });
+  act(() => view.result.current.updateContent('second edit'));
+  const savedFile = { ...file, content: 'first edit', revision: 'revision-2' };
+  await act(async () => {
+    finishSave(savedFile);
+    expect(await saving).toBe(true);
+  });
+  view.rerender({ currentFile: savedFile });
+  expect(onFileSaved).toHaveBeenCalledWith(savedFile);
+  expect(view.result.current).toMatchObject({ editing: true, dirty: true, saving: false, content: 'second edit' });
+
+  client.saveProjectFile.mockRejectedValueOnce(new Error('write failed'));
+  await act(async () => { expect(await view.result.current.save()).toBe(false); });
+  expect(view.result.current).toMatchObject({ editing: true, dirty: true, saving: false, content: 'second edit', error: 'write failed' });
+  expect(view.result.current.errorMessage).toContain('write failed');
+  client.saveProjectFile.mockResolvedValueOnce({ ...file, content: 'second edit', revision: 'revision-3' });
+  await act(async () => { expect(await view.result.current.save()).toBe(true); });
+  expect(client.saveProjectFile).toHaveBeenLastCalledWith('project-1', 'notes.txt', {
+    content: 'second edit', expectedRevision: 'revision-2',
+  });
+  expect(view.result.current).toMatchObject({ editing: true, dirty: false, saving: false, content: 'second edit', error: null });
+  await act(async () => { expect(await view.result.current.save()).toBe(true); });
+  expect(client.saveProjectFile).toHaveBeenCalledTimes(3);
+});
+
+it('loads truncated files before editing and ignores preparation results after navigation', async () => {
+  const file: WorkspaceFileRead = {
+    projectId: 'project-1', path: 'notes.txt', content: 'partial', size: 14,
+    revision: 'revision-1', preview: { kind: 'text' }, truncated: true,
+  };
+  let finishRead!: (file: WorkspaceFileRead) => void;
+  const fullFile = { ...file, content: 'complete text', truncated: false };
+  const client = {
+    readProjectFileForEdit: vi.fn().mockReturnValueOnce(new Promise<WorkspaceFileRead>((resolve) => { finishRead = resolve; }))
+      .mockResolvedValueOnce(fullFile),
+    saveProjectFile: vi.fn(),
+  };
+  const onFilePrepared = vi.fn();
+  const view = renderHook(({ currentFile }) => useWorkspaceFileDraft({
+    client, file: currentFile, onFilePrepared, onFileSaved: vi.fn(),
+  }), { initialProps: { currentFile: file }, wrapper: ConfirmationProvider });
+  expect(view.result.current).toMatchObject({ editing: false, preparing: true });
+  expect(client.readProjectFileForEdit).toHaveBeenCalledWith(file.projectId, file.path);
+  view.rerender({ currentFile: { ...file, path: 'other.txt', content: 'other text', truncated: false } });
+  await act(async () => { finishRead(fullFile); });
+  expect(onFilePrepared).not.toHaveBeenCalled();
+  expect(view.result.current).toMatchObject({ editing: true, content: 'other text', preparing: false });
+
+  view.rerender({ currentFile: file });
+  await waitFor(() => expect(view.result.current.editing).toBe(true));
+  expect(onFilePrepared).toHaveBeenCalledWith(fullFile);
+  expect(view.result.current.content).toBe('complete text');
 });

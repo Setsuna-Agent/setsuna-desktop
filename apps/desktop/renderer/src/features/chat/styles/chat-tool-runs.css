@@ -395,17 +395,6 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   opacity: 0.48;
 }
 
-.chat-file-changes__error {
-  margin: 0 12px 10px;
-  padding: 7px 9px;
-  border: 1px solid color-mix(in srgb, var(--app-danger) 26%, var(--app-border));
-  border-radius: var(--app-radius-xs);
-  color: var(--app-danger);
-  background: color-mix(in srgb, var(--app-danger) 6%, transparent);
-  font-size: 12px;
-  line-height: 18px;
-}
-
 .chat-file-changes__list {
   display: grid;
   gap: 2px;
@@ -562,13 +551,10 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 
 .chat-tool-run__target {
   flex: 0 1 auto;
-  padding: 1px 7px;
-  border-radius: var(--app-mono-chip-radius);
-  color: var(--app-text-muted);
-  background: var(--app-mono-chip-bg);
-  font-family: var(--app-code-font-family);
-  font-size: 12px;
-  line-height: 18px;
+  max-width: 100%;
+  color: var(--chat-tool-run-title-color);
+  font-size: var(--chat-tool-run-font-size);
+  line-height: var(--chat-tool-run-line-height);
 }
 
 .chat-tool-run__status {
@@ -711,21 +697,6 @@ details.chat-tool-run[open] > .chat-tool-run__body,
   line-height: var(--chat-tool-run-line-height);
 }
 
-.chat-tool-run__group-title code {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  color: var(--app-text-muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chat-tool-run__group-title > span:not(.chat-tool-run__icon) {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-
 .chat-tool-run__inspection-list {
   display: grid;
   gap: var(--chat-tool-run-row-gap);
@@ -764,16 +735,6 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
 .chat-file-diff__summary:hover .chat-tool-run__file-list-target {
   color: var(--app-text);
   text-decoration: none;
-}
-
-.chat-tool-run__inspection-item code {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  color: var(--app-text);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .chat-tool-run__inspection-item .chat-tool-run__file-list-target .chat-markdown__file-icon {

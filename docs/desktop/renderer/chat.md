@@ -174,6 +174,10 @@ Thread 首屏只携带最新 160 条 message，`useThreadMessageHistory` 通过 
 
 展示组件不解析任意工具原始 payload；审批、撤销和 Hook 等不同交互状态也不再共居于同一个协调组件。
 
+文件改动卡片的按钮在“撤销”和“重新应用”之间切换，传递本卡片对应的 tool-call IDs 和方向，经 `applyThreadFileChanges` 由 runtime 读取持久化工具结果和所属项目。工具 diff 单独保存原始文本的逆向修改、被替换的文本及修改前后内容 hash；折叠/截断后的展示 diff 不参与文件还原。撤销按操作逆序执行，重新应用按原顺序执行；Runtime 先校验全部文件，再通过同一个文件事务写入。任意文件在撤销后发生变化时，整批重新应用失败并弹窗报错，按钮保留原状态；活动回合和缺少所需文本的旧记录同样拒绝操作。该链路与 Review 的 Git“丢弃未暂存修改”独立，不能把文件路径交给 `discardUnstaged` 实现卡片撤销。
+
+`ThreadFileChangesProvider` 在应用层持有按 thread ID 和 tool-call IDs 隔离的撤销状态及进行中的请求；卡片通过 `useThreadFileChanges` 订阅，切换会话、页面或请求结束前卸载卡片都不会丢失“重新应用”入口。删除记录在生成时校验原始字节可无损转换为 UTF-8，并记录文件权限；非 UTF-8、符号链接及缺少删除元数据的旧记录不允许还原。还原事务保留原权限，不受当前 umask 影响。
+
 结构化用户输入的 schema 可以持久化，用户答案不写 approval event；答案只在 normal tool result 中回到模型上下文。UI 和 runtime 都要验证字段。
 
 ## Markdown
@@ -192,6 +196,8 @@ Thread 首屏只携带最新 160 条 message，`useThreadMessageHistory` 通过 
 正文呈现参考 [beUI Streaming Response](https://beui.dev/components/agents/streaming-response)：`useSmoothedStreamingContent` 使用持续的 `requestAnimationFrame` 按约 110 个字素/秒追加内容，网络突发积压时提高推进速度。新的 delta 只更新目标文本，不重启正在运行的帧循环。普通文本节点直接更新，不再给每个词添加模糊、位移或延迟动画；历史内容、终态、正文改写和减少动态效果偏好直接显示原文。流式容器通过 `aria-busy` 标记状态，已有 Markdown 块继续复用。
 
 `MarkdownNavigationProvider` 统一导航，`WorkspaceFileLink` 走 workspace 能力，不能让 Markdown 任意调用 `window.open` 或本地 shell。
+
+Markdown 内联代码只将单一路径作为文件候选，命令、Git 状态、通配符和表达式保留代码；含空格的路径可以使用显式 Markdown 链接。候选文件、显式本地链接和本地图片都由 `useMarkdownWorkspaceFiles` 通过现有目录 API 确认是当前工作区的文件后才可点击，目录和不存在的路径保留原文，不猜测同名文件的位置。目录读取和监听由同目录内的引用共享，引用卸载时释放，目录变动和窗口聚焦时重新校验；切换工作区会隔离旧请求。显式链接的标签内不再自动生成嵌套文件链接，行号仍传给文件打开入口。
 
 ## Mentions 与附件
 

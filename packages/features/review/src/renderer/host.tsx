@@ -43,6 +43,7 @@ export type ReviewFileContextMenuProps = {
 
 export type ReviewFindingMarkdownProps = {
   content: string;
+  projectId?: string;
   workspaceRoot?: string;
   onOpenWorkspaceFile: (filePath: string, line?: number) => void;
 };

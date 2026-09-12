@@ -17,11 +17,12 @@
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
+    "@react-symbols/icons": "^1.4.1",
     "clsx": "^2.1.1",
+    "lucide-react": "^0.468.0",
     "motion": "^12.23.24",
     "radix-ui": "^1.4.3",
-    "tailwind-merge": "^3.3.1",
-    "lucide-react": "^0.468.0"
+    "tailwind-merge": "^3.3.1"
   },
   "peerDependencies": {
     "react": "^18.3.1",

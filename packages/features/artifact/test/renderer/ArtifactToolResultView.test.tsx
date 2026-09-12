@@ -25,8 +25,8 @@ describe('ArtifactToolResultView', () => {
       />,
     );
 
-    expect(html).toContain('data-file-icon-theme="seti"');
-    expect(html).toContain('data-file-icon-color=');
+    expect(html).toContain('data-file-icon-theme="symbols"');
+    expect(html).toContain('<svg');
     expect(html).toContain('report.pdf');
   });
 });

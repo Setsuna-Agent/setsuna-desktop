@@ -57,6 +57,7 @@ export function AppWorkspaceToolbar({
       activePanelId={workspacePanels.sidePanelSlot.active}
       availablePanelTypes={workspacePanels.panelLauncherTypes}
       panels={workspacePanels.sidePanelSlot.panels}
+      unsavedFilePath={projectWorkspace.fileDraft.dirty ? projectWorkspace.filePreview?.path : null}
       bottomPanelOpen={workspacePanels.bottomPanelVisible}
       bottomTerminalActive={workspacePanels.bottomTerminalPanelActive}
       onClosePanel={(panelId) => workspacePanels.closeDesktopPanelItem('side', panelId)}

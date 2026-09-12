@@ -66,10 +66,22 @@ export async function readValidatedFileText(
   filePath: string,
   state: ReadPolicyState,
 ): Promise<string> {
+  const bytes = await readValidatedFileBytes(filePath, state);
+  const content = bytes.toString('utf8');
+  if (!Buffer.from(content, 'utf8').equals(bytes)) {
+    throw new Error(`Only UTF-8 text files can be edited: ${filePath}`);
+  }
+  return content;
+}
+
+export async function readValidatedFileBytes(
+  filePath: string,
+  state: ReadPolicyState,
+): Promise<Buffer> {
   const opened = await openValidatedReadableFile(filePath, state);
   try {
     if (!opened.info.isFile()) throw new Error(`Path is not a file: ${filePath}`);
-    return await opened.handle.readFile({ encoding: 'utf8' });
+    return await opened.handle.readFile();
   } finally {
     await opened.handle.close().catch(() => undefined);
   }

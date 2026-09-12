@@ -3,6 +3,7 @@ import type { AnchorHTMLAttributes, HTMLAttributes, MouseEvent, ReactNode } from
 import { WorkspaceFileIcon } from '../../workspace/WorkspaceFileIcon.js';
 import { useMarkdownNavigation } from './MarkdownNavigationProvider.js';
 import { resolveMarkdownLinkTarget } from './markdownLinks.js';
+import { useAvailableMarkdownFile } from './useMarkdownWorkspaceFiles.js';
 
 type WorkspaceFileLinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, 'children' | 'href'> & {
   children?: ReactNode;
@@ -11,6 +12,7 @@ type WorkspaceFileLinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, 'chi
   line?: number;
   linkKind: 'workspace' | 'workspace-inline' | 'workspace-tool';
   unavailableClassName?: string;
+  unavailableContent?: ReactNode;
 };
 
 type WorkspacePathLabelProps = Omit<HTMLAttributes<HTMLSpanElement>, 'children'> & {
@@ -30,32 +32,40 @@ export function WorkspaceFileLink({
   onClick,
   onContextMenu,
   unavailableClassName = 'chat-markdown__unavailable-link',
+  unavailableContent,
   ...props
 }: WorkspaceFileLinkProps) {
   const {
     onOpenWorkspaceFile,
     onOpenWorkspaceFileContextMenu,
     workspaceRoot,
+    workspaceFiles,
   } = useMarkdownNavigation();
   const target = resolveMarkdownLinkTarget(filePath, workspaceRoot);
+  const candidate = target.kind === 'workspace' ? target.path : null;
+  // Structured tool paths already come from tool results; Markdown references
+  // must be checked against directory entries before they become interactive.
+  const checkFile = linkKind !== 'workspace-tool';
+  const verifiedPath = useAvailableMarkdownFile(checkFile ? candidate : null, workspaceFiles);
+  const availablePath = checkFile ? verifiedPath : candidate;
   const label = children ?? (target.kind === 'workspace' ? target.path : filePath);
 
-  if (target.kind !== 'workspace' || (!workspaceRoot && !onOpenWorkspaceFile)) {
-    return <span className={[unavailableClassName, className].filter(Boolean).join(' ') || undefined}>{label}</span>;
+  if (target.kind !== 'workspace' || !availablePath || (!workspaceRoot && !onOpenWorkspaceFile)) {
+    return <span className={[unavailableClassName, className].filter(Boolean).join(' ') || undefined}>{unavailableContent ?? label}</span>;
   }
 
   const handleWorkspaceClick = (event: MouseEvent<HTMLAnchorElement>) => {
     onClick?.(event);
     if (event.defaultPrevented) return;
     event.preventDefault();
-    openWorkspaceFileReference(workspaceRoot, target.path, line ?? target.line, onOpenWorkspaceFile);
+    openWorkspaceFileReference(workspaceRoot, availablePath, line ?? target.line, onOpenWorkspaceFile);
   };
   const handleWorkspaceContextMenu = (event: MouseEvent<HTMLAnchorElement>) => {
     onContextMenu?.(event);
     if (event.defaultPrevented || !onOpenWorkspaceFileContextMenu) return;
     event.preventDefault();
     onOpenWorkspaceFileContextMenu({
-      filePath: target.path,
+      filePath: availablePath,
       line: line ?? target.line,
       x: event.clientX,
       y: event.clientY,
@@ -68,11 +78,11 @@ export function WorkspaceFileLink({
       className={['chat-markdown__file-link', className].filter(Boolean).join(' ')}
       data-markdown-link={linkKind}
       href={href ?? filePath}
-      title={target.path}
+      title={availablePath}
       onClick={handleWorkspaceClick}
       onContextMenu={handleWorkspaceContextMenu}
     >
-      <WorkspaceFileIcon className="chat-markdown__file-icon" path={target.path} type="file" />
+      <WorkspaceFileIcon className="chat-markdown__file-icon" path={availablePath} type="file" />
       <span>{label}</span>
     </a>
   );

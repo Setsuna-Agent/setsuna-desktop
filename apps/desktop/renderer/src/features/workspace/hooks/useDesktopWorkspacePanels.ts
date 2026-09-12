@@ -32,6 +32,8 @@ import {
   movePanelBetweenSlotStates,
   removePanelFromSlotState,
   reorderPanelInSlotState,
+  renameFilePanelsInSlot,
+  deleteFilePanelsInSlot,
   slotHasPanelType,
   updatePanelInSlotState,
   type DesktopPanelDropPlacement,
@@ -385,6 +387,16 @@ export function useDesktopWorkspacePanels({
     addPanelToDesktopSlot(fileWorkspacePanelTargetSlot('side', sidePanelSlot, bottomPanelSlot), panel);
   }, [addPanelToDesktopSlot, bottomPanelSlot.panels, closeWorkspaceMenus, setBottomPanelSlot, setSidePanelExpanded, setSidePanelSlot, sidePanelSlot.panels]);
 
+  const renameFilePanels = useCallback((previousPath: string, nextPath: string) => {
+    setSidePanelSlot((slot) => renameFilePanelsInSlot(slot, previousPath, nextPath));
+    setBottomPanelSlot((slot) => renameFilePanelsInSlot(slot, previousPath, nextPath));
+  }, [setBottomPanelSlot, setSidePanelSlot]);
+
+  const deleteFilePanels = useCallback((entryPath: string) => {
+    setSidePanelSlot((slot) => deleteFilePanelsInSlot(slot, entryPath));
+    setBottomPanelSlot((slot) => deleteFilePanelsInSlot(slot, entryPath));
+  }, [setBottomPanelSlot, setSidePanelSlot]);
+
   /**
    * 打开子代理只读面板。面板 id 固定为 subagent:<childThreadId>，因此正文卡片和
    * 环境面板反复点击只会激活同一个 tab；关闭面板不影响 child 线程本身。
@@ -675,6 +687,8 @@ export function useDesktopWorkspacePanels({
       openFileInWorkspaceApp,
       openFileWithWorkspaceApp,
       openFilePanel,
+      renameFilePanels,
+      deleteFilePanels,
       openSubagentPanel,
       openWorkspaceDirectory,
       openWorkspaceInApp,
@@ -727,6 +741,8 @@ export function useDesktopWorkspacePanels({
       openFileInWorkspaceApp,
       openFileWithWorkspaceApp,
       openFilePanel,
+      renameFilePanels,
+      deleteFilePanels,
       openSubagentPanel,
       openWorkspaceDirectory,
       openWorkspaceInApp,

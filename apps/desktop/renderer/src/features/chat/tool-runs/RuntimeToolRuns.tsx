@@ -436,8 +436,8 @@ function toolRunGroupPanelNode(
                     <span aria-hidden="true" className="chat-tool-run__icon chat-tool-run__detail-icon">
                       {toolRunIcon(run)}
                     </span>
-                    <span>{runSummary.title}</span>
-                    {runSummary.target ? <code>{runSummary.target}</code> : null}
+                    <span className="chat-tool-run__title">{runSummary.title}</span>
+                    <ToolRunSummaryTarget kind={group.kind} target={runSummary.target} />
                   </div>
                 ) : null}
                 <ToolRunDetails run={run} onAnswerApproval={onAnswerApproval} pendingApprovalId={pendingApprovalId} />

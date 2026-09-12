@@ -163,6 +163,7 @@ export function ReviewSummarySection({
               reviewFindingNavigationTargetKey(unanchoredFindingTarget),
             )}
             workspaceRoot={pathContext.workspaceRoot}
+            projectId={pathContext.projectId}
           />
         </div>
       ) : null}
@@ -306,6 +307,7 @@ const ReviewFileCard = memo(function ReviewFileCard({
               reviewFindingNavigationTargetKey(target),
             )}
             workspaceRoot={pathContext.workspaceRoot}
+            projectId={pathContext.projectId}
           />
         ),
       }];
@@ -317,6 +319,7 @@ const ReviewFileCard = memo(function ReviewFileCard({
     getNavigationTargetRef,
     onOpenWorkspaceFile,
     pathContext.workspaceRoot,
+    pathContext.projectId,
   ]);
   // Keep collapsed files cheap; Pierre/Shiki only receives a patch after expansion.
   const patch = useMemo(() => {
@@ -660,6 +663,7 @@ function ReviewUnanchoredFindingCard({
   focusRequest,
   locationAvailable,
   onOpenWorkspaceFile,
+  projectId,
   target,
   targetRef,
   workspaceRoot,
@@ -667,6 +671,7 @@ function ReviewUnanchoredFindingCard({
   focusRequest?: DesktopReviewFocusRequest | null;
   locationAvailable: boolean;
   onOpenWorkspaceFile: (filePath: string, line?: number) => void;
+  projectId?: string;
   target: ReviewFindingTarget;
   targetRef: RefCallback<HTMLElement>;
   workspaceRoot?: string | null;
@@ -678,6 +683,7 @@ function ReviewUnanchoredFindingCard({
         focusVersion={focusRequest?.version}
         locationAvailable={locationAvailable}
         onOpenWorkspaceFile={onOpenWorkspaceFile}
+        projectId={projectId}
         targetRef={targetRef}
         workspaceRoot={workspaceRoot}
       />
@@ -690,6 +696,7 @@ function ReviewFindingAnnotation({
   focusVersion,
   locationAvailable,
   onOpenWorkspaceFile,
+  projectId,
   targetRef,
   workspaceRoot,
 }: {
@@ -697,6 +704,7 @@ function ReviewFindingAnnotation({
   focusVersion?: number;
   locationAvailable: boolean;
   onOpenWorkspaceFile: (filePath: string, line?: number) => void;
+  projectId?: string;
   targetRef: RefCallback<HTMLElement>;
   workspaceRoot?: string | null;
 }) {
@@ -742,6 +750,7 @@ function ReviewFindingAnnotation({
         <div className="desktop-review-finding__body">
           <FindingMarkdown
             content={finding.body}
+            projectId={projectId}
             workspaceRoot={workspaceRoot ?? undefined}
             onOpenWorkspaceFile={onOpenWorkspaceFile}
           />

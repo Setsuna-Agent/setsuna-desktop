@@ -1,9 +1,10 @@
 import { PointMenu, type MenuItem } from '@setsuna-desktop/renderer-ui';
 import type { WorkspaceEntry } from '@setsuna-desktop/contracts';
-import { Code2, Copy, FolderOpen, MessageSquare } from 'lucide-react';
+import { Code2, Copy, FilePlus2, FolderOpen, FolderPlus, MessageSquare, Pencil, Trash2 } from 'lucide-react';
 import { translate, useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
 import { WorkspaceAppGlyph, workspaceOpenWithMenu } from '../../composition/workspace-apps-feature-adapter.js';
 import type { DesktopWorkspaceApp } from './model.js';
+import { workspaceEntryParent } from './workspaceEntryPaths.js';
 
 export type WorkspaceFileContextTarget = {
   filePath: string;
@@ -22,6 +23,10 @@ export function WorkspaceFileContextMenu({
   onAddToConversation,
   onClose,
   onCopyPath,
+  onCreateEntry,
+  onRenameEntry,
+  onDeleteEntry,
+  entryActionsDisabled,
   onOpenWithApp,
   onReveal,
 }: {
@@ -31,13 +36,30 @@ export function WorkspaceFileContextMenu({
   onAddToConversation: (filePath: string, type: WorkspaceEntry['type']) => void;
   onClose: () => void;
   onCopyPath: (filePath: string) => void;
+  onCreateEntry?: (parentPath: string, type: WorkspaceEntry['type']) => void;
+  onRenameEntry?: (entryPath: string, type: WorkspaceEntry['type']) => void;
+  onDeleteEntry?: (entryPath: string) => void;
+  entryActionsDisabled?: boolean;
   onOpenWithApp: (appId: string, filePath: string, line?: number) => void;
   onReveal: (filePath: string) => void;
 }) {
   const { t } = useI18n();
   if (!target) return null;
   const directory = target.type === 'directory';
+  const workspaceRoot = directory && !target.filePath;
   const items: MenuItem[] = [
+    ...(onCreateEntry ? [
+      { key: 'new-file', label: t('workspace.fileMenu.newFile'), icon: <FilePlus2 size={14} />, disabled: entryActionsDisabled,
+        onClick: () => onCreateEntry(directory ? target.filePath : workspaceEntryParent(target.filePath), 'file') },
+      { key: 'new-folder', label: t('workspace.fileMenu.newFolder'), icon: <FolderPlus size={14} />, disabled: entryActionsDisabled,
+        onClick: () => onCreateEntry(directory ? target.filePath : workspaceEntryParent(target.filePath), 'directory') },
+      ...(!workspaceRoot ? [{ type: 'divider' as const }] : []),
+    ] : []),
+    ...(onRenameEntry && target.filePath ? [
+      { key: 'rename', label: t('workspace.fileMenu.rename'), icon: <Pencil size={14} />, disabled: entryActionsDisabled,
+        onClick: () => onRenameEntry(target.filePath, target.type ?? 'file') },
+      { type: 'divider' as const },
+    ] : []),
     ...(!directory ? [
       {
         key: 'open',
@@ -52,9 +74,16 @@ export function WorkspaceFileContextMenu({
       }),
       { type: 'divider' as const },
     ] : []),
-    { key: 'copy', label: t(directory ? 'workspace.fileMenu.copyDirectoryPath' : 'workspace.fileMenu.copyPath'), icon: <Copy size={14} />, onClick: () => onCopyPath(target.filePath) },
-    { key: 'reveal', label: workspaceFileRevealLabel(window.setsunaDesktop?.desktop.platform, t), icon: <FolderOpen size={14} />, onClick: () => onReveal(target.filePath) },
-    { key: 'add', label: t('workspace.fileMenu.addToChat'), icon: <MessageSquare size={14} />, onClick: () => onAddToConversation(target.filePath, target.type ?? 'file') },
+    ...(!workspaceRoot ? [
+      { key: 'copy', label: t(directory ? 'workspace.fileMenu.copyDirectoryPath' : 'workspace.fileMenu.copyPath'), icon: <Copy size={14} />, onClick: () => onCopyPath(target.filePath) },
+      { key: 'reveal', label: workspaceFileRevealLabel(window.setsunaDesktop?.desktop.platform, t), icon: <FolderOpen size={14} />, onClick: () => onReveal(target.filePath) },
+      { key: 'add', label: t('workspace.fileMenu.addToChat'), icon: <MessageSquare size={14} />, onClick: () => onAddToConversation(target.filePath, target.type ?? 'file') },
+    ] : []),
+    ...(onDeleteEntry && !workspaceRoot ? [
+      { type: 'divider' as const },
+      { key: 'delete', label: t('workspace.fileMenu.delete'), icon: <Trash2 size={14} />, danger: true,
+        disabled: entryActionsDisabled, onClick: () => onDeleteEntry(target.filePath) },
+    ] : []),
   ];
   return <PointMenu key={`${target.filePath}:${target.x}:${target.y}`} x={target.x} y={target.y}
     menu={{ items, selectedKeys: selectedWorkspaceApp ? [selectedWorkspaceApp.id] : [], onClick: onClose }} onClose={onClose} />;

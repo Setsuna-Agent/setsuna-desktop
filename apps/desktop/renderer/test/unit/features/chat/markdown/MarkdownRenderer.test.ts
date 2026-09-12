@@ -95,12 +95,12 @@ describe('MarkdownRenderer', () => {
     expect(html).not.toContain('$$');
   });
 
-  it('maps workspace links and does not render raw HTML', () => {
+  it('keeps unverified workspace links non-interactive and does not render raw HTML', () => {
     const html = renderMarkdown('[source](./src/main.ts:12)\n\n<script>alert(1)</script>');
 
-    expect(html).toContain('data-markdown-link="workspace"');
-    expect(html).toContain('class="chat-markdown__file-link"');
-    expect(html).toContain('class="chat-markdown__file-icon"');
+    expect(html).toContain('class="chat-markdown__unavailable-link">source</span>');
+    expect(html).not.toContain('data-markdown-link="workspace"');
+    expect(html).not.toContain('class="chat-markdown__file-icon"');
     expect(html).not.toContain('<script>');
     expect(html).not.toContain('alert(1)');
   });
@@ -127,11 +127,11 @@ describe('MarkdownRenderer', () => {
     expect(html).toContain('<code>streamParts</code>');
   });
 
-  it('promotes inline code file references without changing identifiers', () => {
+  it('keeps inline file references as code until their existence is verified', () => {
     const html = renderMarkdown('Update `help.ts` and keep `invoice_status` unchanged.');
 
-    expect(html).toContain('data-markdown-link="workspace-inline"');
-    expect(html).toContain('>help.ts</span>');
+    expect(html).not.toContain('data-markdown-link="workspace-inline"');
+    expect(html).toContain('<code>help.ts</code>');
     expect(html).toContain('<code>invoice_status</code>');
   });
 
@@ -161,7 +161,7 @@ describe('MarkdownRenderer', () => {
       'en-US',
     );
 
-    expect(html).toContain('<span aria-hidden="true">Image</span>');
+    expect(html).toContain('class="chat-markdown__image-alt">diagram</span>');
     expect(html).toContain('aria-label="Markdown table"');
     expect(html).toContain('aria-label="Copy code"');
   });

@@ -1,9 +1,15 @@
 import type {
   AddWorkspaceProjectInput,
   UpdateWorkspaceProjectInput,
+  WorkspaceEntry,
+  WorkspaceEntryCreateInput,
+  WorkspaceEntryRenameInput,
+  WorkspaceEntryMoveInput,
   WorkspaceEntryList,
   WorkspaceEntrySearchResponse,
   WorkspaceFileRead,
+  WorkspaceFileChange,
+  WorkspaceFileChangeAction,
   WorkspaceFileWrite,
   WorkspaceProject,
   WorkspaceProjectList,
@@ -53,6 +59,10 @@ export type WorkspaceProjectStore = {
   removeTemporaryWorkspace(input: TemporaryWorkspaceInput): Promise<void>;
   getStatus(projectId?: string): Promise<WorkspaceStatus>;
   listEntries(projectId: string, relativePath?: string): Promise<WorkspaceEntryList>;
+  createEntry(projectId: string, input: WorkspaceEntryCreateInput): Promise<WorkspaceEntry>;
+  renameEntry(projectId: string, relativePath: string, input: WorkspaceEntryRenameInput): Promise<WorkspaceEntry>;
+  moveEntry(projectId: string, relativePath: string, input: WorkspaceEntryMoveInput): Promise<WorkspaceEntry>;
+  deleteEntry(projectId: string, relativePath: string): Promise<void>;
   searchEntries(projectId: string, query?: string, parent?: string | null): Promise<WorkspaceEntrySearchResponse>;
   inspectFile(projectId: string, relativePath: string): Promise<WorkspaceFileMetadata>;
   readFile(
@@ -64,5 +74,6 @@ export type WorkspaceProjectStore = {
   writeFile(projectId: string, relativePath: string, content: string): Promise<WorkspaceFileWrite>;
   writeBinaryFile(projectId: string, relativePath: string, content: Uint8Array): Promise<WorkspaceFileWrite>;
   deleteFile(projectId: string, relativePath: string): Promise<void>;
+  applyFileChanges(projectId: string, changes: WorkspaceFileChange[], action: WorkspaceFileChangeAction): Promise<void>;
   search(projectId: string, query: string, options?: WorkspaceProjectSearchOptions): Promise<WorkspaceSearchResponse>;
 };

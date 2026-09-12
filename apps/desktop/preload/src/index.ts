@@ -6,6 +6,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { composeBuiltinPreloadBridge } from './composition/builtin-preload-features.js';
+import { watchWorkspaceEntries } from './workspace-entry-watch.js';
 
 const runtime: DesktopRuntimeBridge = {
   request: <T = unknown>(input: RuntimeRequestInput): Promise<T> => ipcRenderer.invoke('runtime:request', input),
@@ -57,6 +58,7 @@ const runtime: DesktopRuntimeBridge = {
 
 const desktop: SetsunaDesktopBridge['desktop'] = {
   platform: process.platform,
+  watchWorkspaceEntries,
   setInterfaceLanguage: (locale) => ipcRenderer.invoke('desktop:set-interface-language', locale),
   setActiveKeyboardShortcutBindings: (bindings) =>
     ipcRenderer.invoke('desktop:set-active-keyboard-shortcut-bindings', bindings),

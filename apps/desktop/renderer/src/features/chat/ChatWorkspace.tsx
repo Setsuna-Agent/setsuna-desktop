@@ -1,4 +1,5 @@
 import type {
+  WorkspaceFileChangeAction,
   DesktopRuntimeClient,
   RuntimeConfiguredModelReference,
   RuntimeConfigState,
@@ -73,7 +74,7 @@ export function ChatWorkspace({
   onCompactContext,
   onClearContext,
   onDeleteMessages,
-  onDiscardFileChanges,
+  onFileChangesAction,
   onDraftChange,
   onEditUserMessage,
   onOpenSideChat,
@@ -118,7 +119,7 @@ export function ChatWorkspace({
   onCompactContext: () => void;
   onClearContext: () => void;
   onDeleteMessages: (messageIds: string[]) => void | Promise<void>;
-  onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
+  onFileChangesAction?: (toolCallIds: string[], action: WorkspaceFileChangeAction) => void | Promise<void>;
   onDraftChange: (value: string) => void;
   onEditUserMessage: (messageId: string, content: string) => void | Promise<void>;
   onOpenSideChat?: () => void;
@@ -299,14 +300,13 @@ export function ChatWorkspace({
               messageHistory={messageHistory}
               messages={messages}
               plugins={plugins}
-              reviewState={reviewState}
               scrollToBottomRef={scrollToBottomRef}
               showThinkingInTranscript={showThinkingInTranscript}
               skills={skills}
               onAnswerApproval={onAnswerApproval}
               onDeleteMessages={onDeleteMessages}
               onDeleteModeChange={setDeleteModeActive}
-              onDiscardFileChanges={onDiscardFileChanges}
+              onFileChangesAction={onFileChangesAction}
               onEditUserMessage={onEditUserMessage}
               onOpenFileReview={onOpenFileReview}
             />

@@ -12,7 +12,7 @@ import {
 } from '@setsuna-desktop/feature-review/renderer/model';
 import { useDesktopReviewState } from '@setsuna-desktop/feature-review/renderer/state';
 export type { CommitMessageEditorLauncher } from '@setsuna-desktop/feature-review/renderer/git';
-import { useMemo, type ComponentProps, type PropsWithChildren } from 'react';
+import { useMemo, useState, type ComponentProps, type PropsWithChildren } from 'react';
 import { useToast } from '../app/providers/ToastProvider.js';
 import { MarkdownNavigationProvider } from '../features/chat/markdown/MarkdownNavigationProvider.js';
 import { MarkdownRenderer } from '../features/chat/markdown/MarkdownRenderer.js';
@@ -29,6 +29,8 @@ import { ReviewConflictTaskProgress } from './ReviewConflictTaskProgress.js';
 import { ScrollOverlay } from '../shared/ui/ScrollOverlay.js';
 import { ContextMenu } from '../shared/ui/ContextMenu.js';
 import { SettingsDialog } from '../shared/ui/SettingsDialog.js';
+import { createDesktopRuntimeClient } from '../services/runtime-client/client.js';
+import { useReviewWorkspaceEntries } from './useReviewWorkspaceEntries.js';
 
 const reviewUi: ReviewRendererHost['ui'] = Object.freeze({
   Dialog: SettingsDialog,
@@ -87,13 +89,17 @@ function ReviewFileIcon(props: ComponentProps<ReviewRendererHost['ui']['FileIcon
 
 function ReviewFindingMarkdown({
   content,
+  projectId,
   onOpenWorkspaceFile,
   workspaceRoot,
 }: ComponentProps<ReviewRendererHost['ui']['FindingMarkdown']>) {
+  const [client] = useState(createDesktopRuntimeClient);
+  const searchEntries = useReviewWorkspaceEntries(client, { projectId });
   return (
     <MarkdownNavigationProvider
       workspaceRoot={workspaceRoot}
       onOpenWorkspaceFile={onOpenWorkspaceFile}
+      onSearchWorkspaceEntries={searchEntries}
     >
       <MarkdownRenderer content={content} streaming={false} />
     </MarkdownNavigationProvider>

@@ -165,8 +165,6 @@ a.chat-markdown__file-link:focus-visible {
 }
 
 .chat-markdown__file-icon {
-  --workspace-file-icon-scale: 1.2;
-
   display: inline-block;
   width: 1.2em;
   height: 1.2em;

@@ -7,6 +7,22 @@ describe('desktop runtime client advanced thread methods', () => {
     vi.unstubAllGlobals();
   });
 
+  it('routes workspace entry mutations through the runtime bridge with encoded paths', async () => {
+    const entry = { path: 'src/new #.ts', name: 'new #.ts', type: 'file' };
+    const request = installRuntimeBridge(() => entry);
+    const client = createDesktopRuntimeClient();
+    await expect(client.createProjectEntry('project 1', { parentPath: 'src', name: 'new #.ts', type: 'file' })).resolves.toEqual(entry);
+    await client.renameProjectEntry('project 1', 'src/new #.ts', { name: 'renamed.ts' });
+    await client.moveProjectEntry('project 1', 'src/new #.ts', { parentPath: 'dest #1' });
+    await client.deleteProjectEntry('project 1', 'src/new #.ts');
+    expect(request.mock.calls.map(([input]) => input)).toEqual([
+      { path: '/v1/projects/project%201/entries', method: 'POST', body: { parentPath: 'src', name: 'new #.ts', type: 'file' } },
+      { path: '/v1/projects/project%201/entries?path=src%2Fnew%20%23.ts', method: 'PATCH', body: { name: 'renamed.ts' } },
+      { path: '/v1/projects/project%201/entries/move?path=src%2Fnew%20%23.ts', method: 'POST', body: { parentPath: 'dest #1' } },
+      { path: '/v1/projects/project%201/entries?path=src%2Fnew%20%23.ts', method: 'DELETE' },
+    ]);
+  });
+
   it('keeps the raw request bridge private to the renderer adapter', () => {
     installRuntimeBridge(() => ({}));
 

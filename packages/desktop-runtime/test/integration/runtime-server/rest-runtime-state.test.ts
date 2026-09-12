@@ -20,6 +20,49 @@ describe('runtime server REST runtime state', () => {
     await harness.close();
   });
 
+  it('creates, renames, moves and deletes workspace entries through REST', async () => {
+    const projectPath = path.join(harness.runtimeDataDir, 'entry-project');
+    await mkdir(projectPath);
+    const project = await harness.runtimeFetch('/v1/projects', {
+      method: 'POST', body: JSON.stringify({ path: projectPath }),
+    });
+    const base = `/v1/projects/${encodeURIComponent(project.id)}`;
+    await harness.runtimeFetch(`${base}/entries`, {
+      method: 'POST', body: JSON.stringify({ parentPath: '', name: 'src', type: 'directory' }),
+    });
+    const created = await harness.runtimeFetch(`${base}/entries`, {
+      method: 'POST', body: JSON.stringify({ parentPath: 'src', name: 'note #.txt', type: 'file' }),
+    });
+    const file = await harness.runtimeFetch(`${base}/read?path=${encodeURIComponent(created.path)}`);
+    expect(file).toMatchObject({ content: '', preview: { kind: 'text' }, truncated: false });
+    await harness.runtimeFetch(`${base}/write?path=${encodeURIComponent(created.path)}`, {
+      method: 'PUT', body: JSON.stringify({ content: 'saved text', expectedRevision: file.revision }),
+    });
+    expect(await harness.runtimeFetch(`${base}/entries?path=${encodeURIComponent(created.path)}`, {
+      method: 'PATCH', body: JSON.stringify({ name: 'renamed.txt' }),
+    })).toMatchObject({ path: 'src/renamed.txt', type: 'file' });
+    expect(await harness.runtimeFetch(`${base}/entries?path=src`, {
+      method: 'PATCH', body: JSON.stringify({ name: 'source' }),
+    })).toMatchObject({ path: 'source', type: 'directory' });
+    expect(await readFile(path.join(projectPath, 'source', 'renamed.txt'), 'utf8')).toBe('saved text');
+    const listing = await harness.runtimeFetch(`${base}/entries/search?q=&parent=source`);
+    expect(listing.entries).toMatchObject([{ name: 'renamed.txt', path: 'source/renamed.txt', kind: 'file' }]);
+    expect(await harness.runtimeFetch(`${base}/entries/move?path=source%2Frenamed.txt`, {
+      method: 'POST', body: JSON.stringify({ parentPath: '' }),
+    })).toMatchObject({ path: 'renamed.txt', type: 'file' });
+    expect(await readFile(path.join(projectPath, 'renamed.txt'), 'utf8')).toBe('saved text');
+    await harness.runtimeFetch(`${base}/entries/move?path=renamed.txt`, {
+      method: 'POST', body: JSON.stringify({ parentPath: 'source' }),
+    });
+    await harness.runtimeFetch(`${base}/entries?path=source%2Frenamed.txt`, { method: 'DELETE' });
+    expect((await harness.runtimeFetch(`${base}/entries/search?q=&parent=source`)).entries).toEqual([]);
+    await harness.runtimeFetch(`${base}/entries`, {
+      method: 'POST', body: JSON.stringify({ parentPath: 'source', name: 'child.txt', type: 'file' }),
+    });
+    await harness.runtimeFetch(`${base}/entries?path=source`, { method: 'DELETE' });
+    expect((await harness.runtimeFetch(`${base}/entries/search?q=&parent=`)).entries).toEqual([]);
+  });
+
   it('freezes every REST mutation while a WebDAV snapshot is being staged', async () => {
     const project = await harness.runtimeFetch('/v1/projects', {
       method: 'POST',

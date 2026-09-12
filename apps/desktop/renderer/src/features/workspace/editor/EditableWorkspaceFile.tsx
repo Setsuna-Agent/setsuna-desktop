@@ -4,10 +4,8 @@ import {
   CodeView,
   EditProvider,
   type CodeViewHandle,
-  type CodeViewItem,
-  type FileContents,
 } from '@pierre/diffs/react';
-import { useCallback, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useMemo, useRef, type KeyboardEvent } from 'react';
 import {
   pierreSurfaceStyle,
   useCodeViewLineFocus,
@@ -20,6 +18,7 @@ import {
   workspaceCodeViewUnsafeCSS,
 } from './useWorkspaceCodeViewSurface.js';
 import { WorkspaceCodeViewScrollbar } from './WorkspaceCodeViewScrollbar.js';
+import { useWorkspaceEditorDocument } from './useWorkspaceEditorDocument.js';
 
 type EditableWorkspaceFileProps = {
   content: string;
@@ -44,21 +43,8 @@ export function EditableWorkspaceFile({
     layout: workspaceCodeViewLayout,
     unsafeCSS: workspaceCodeViewUnsafeCSS,
   });
-  // CodeView owns the live editor document. Keep its controlled item stable
-  // while parent state receives changes, otherwise each keystroke reconciles
-  // and replaces the virtualized file.
   const itemId = `${file.projectId}:${file.path}`;
-  const [items] = useState<readonly CodeViewItem<undefined>[]>(() => [{
-    id: itemId,
-    type: 'file',
-    edit: true,
-    file: {
-      cacheKey: `${file.projectId}:${file.path}:${file.revision ?? 'unknown'}`,
-      contents: content,
-      name: file.path,
-      ...(language ? { lang: language } : {}),
-    },
-  }]);
+  const { items, onEditorChange } = useWorkspaceEditorDocument({ content, file, language, onChange });
   const editorOptions = useMemo<Omit<EditorOptions<undefined>, 'onChange'>>(() => ({
     onAttach: (editor) => {
       window.requestAnimationFrame(() => editor.focus({
@@ -76,10 +62,6 @@ export function EditableWorkspaceFile({
     event.preventDefault();
     void onSave();
   };
-  const handleEditorChange = useCallback((
-    _item: CodeViewItem<undefined>,
-    nextFile: FileContents,
-  ) => onChange(nextFile.contents), [onChange]);
   useCodeViewLineFocus(codeViewRef, itemId, fileFocusRequest);
 
   return (
@@ -95,7 +77,7 @@ export function EditableWorkspaceFile({
             disableWorkerPool
             editorOptions={editorOptions}
             items={items}
-            onItemEditChange={handleEditorChange}
+            onItemEditChange={onEditorChange}
             options={options}
             ref={codeViewRef}
             style={pierreSurfaceStyle}

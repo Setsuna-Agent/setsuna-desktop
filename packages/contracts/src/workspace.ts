@@ -93,6 +93,32 @@ export type WorkspaceEntryList = {
   entries: WorkspaceEntry[];
 };
 
+export type WorkspaceEntryCreateInput = {
+  parentPath: string;
+  name: string;
+  type: WorkspaceEntry['type'];
+};
+
+export type WorkspaceEntryRenameInput = {
+  name: string;
+};
+
+export type WorkspaceEntryMoveInput = {
+  parentPath: string;
+};
+
+/** Entry names are single path components that remain usable on every desktop platform. */
+export function isValidWorkspaceEntryName(name: unknown): name is string {
+  return typeof name === 'string'
+    && name.length > 0
+    && name.trim() === name
+    && name !== '.' && name !== '..'
+    && !/[<>:"/\\|?*]/u.test(name)
+    && [...name].every((character) => character.charCodeAt(0) >= 32)
+    && !name.endsWith('.')
+    && !/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/iu.test(name);
+}
+
 export type WorkspaceEntrySearchItem = {
   kind: WorkspaceEntry['type'];
   name: string;
@@ -275,6 +301,35 @@ export type WorkspaceFileRead = {
 export type WorkspaceFileSaveInput = {
   content: string;
   expectedRevision: string;
+};
+
+export type WorkspaceFileChangeAction = 'undo' | 'redo';
+
+/** Exact inverse of one text mutation; null hashes represent a missing file. */
+export type WorkspaceFileChangePatch = {
+  beforeHash: string | null;
+  afterHash: string | null;
+  start: number;
+  deleteCount: number;
+  insert: string;
+  /** Text removed by undo, needed to reapply. Absent in older undo-only records. */
+  removed?: string;
+  /** Permission bits captured before deletion / when a move creates its destination. */
+  beforeMode?: number;
+  afterMode?: number;
+};
+
+export type WorkspaceFileChange = {
+  path: string;
+  patch: WorkspaceFileChangePatch;
+};
+
+export type ThreadFileChangesInput = {
+  toolCallIds: string[];
+};
+
+export type ThreadFileChangesResult = {
+  files: string[];
 };
 
 export type WorkspaceFileWrite = {

@@ -14,6 +14,7 @@ export function BottomToolsPanel({
   availablePanelTypes,
   children,
   panels,
+  unsavedFilePath,
   onActivatePanel,
   onClosePanel,
   onCloseSlot,
@@ -30,6 +31,7 @@ export function BottomToolsPanel({
   availablePanelTypes: DesktopPanelType[];
   children?: ReactNode;
   panels: DesktopPanelTab[];
+  unsavedFilePath?: string | null;
   onActivatePanel: (panelId: string) => void;
   onClosePanel: (panelId: string) => void;
   onCloseSlot: () => void;
@@ -78,6 +80,7 @@ export function BottomToolsPanel({
         availablePanelTypes={availablePanelTypes}
         panels={panels}
         placement="bottom"
+        unsavedFilePath={unsavedFilePath}
         onClose={onCloseSlot}
         onClosePanel={onClosePanel}
         onMovePanel={onMovePanel}

@@ -3,20 +3,18 @@ import { FileTreeToggle, ResizeHandle, TextField, Button } from '@setsuna-deskto
 import {
   WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES,
   type WorkspaceEntry,
+  type WorkspaceEntryCreateInput,
   type WorkspaceEntrySearchItem,
-  type WorkspaceEntrySearchResponse,
   type WorkspaceFileRead,
   type WorkspaceProject,
   type RuntimeReviewFinding,
 } from '@setsuna-desktop/contracts';
 import type { DesktopReviewSource } from '@setsuna-desktop/feature-review/contracts';
-import { Bug, ChevronDown, FileDiff, FolderOpen, GitBranch, MessageSquare, Save, Search, SquareTerminal, X } from 'lucide-react';
+import { Bug, ChevronDown, FileDiff, FolderOpen, GitBranch, MessageSquare, Search, SquareTerminal } from 'lucide-react';
 import {
   lazy,
   Suspense,
   useCallback,
-  useEffect,
-  useMemo,
   useState,
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
@@ -24,19 +22,22 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { BrowserFeatureIcon } from '../../composition/BrowserWorkspaceFeatureBoundary.js';
-import { EditIcon } from '../../shared/ui/EditIcon.js';
 import { GitChangesFeaturePanel, ReviewFeaturePanel } from '../../composition/review-feature-panel-adapter.js';
 import { CodeFileView } from '../../shared/code/PierreCode.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { KeyboardShortcutCommandId } from '../../shared/shortcuts/keyboardShortcutCommands.js';
 import { ShortcutHint } from '../../shared/ui/ShortcutTooltip.js';
-import { EmptyState, IconButton } from '../../shared/ui/primitives.js';
+import { EmptyState } from '../../shared/ui/primitives.js';
 import {
   useWorkspaceCodeViewSurface,
   workspaceCodeViewLayout,
   workspaceCodeViewUnsafeCSS,
 } from './editor/useWorkspaceCodeViewSurface.js';
 import { WorkspaceCodeViewScrollbar } from './editor/WorkspaceCodeViewScrollbar.js';
+import type { WorkspaceFileTreeState } from './hooks/useWorkspaceFileTree.js';
+import { useWorkspaceEntryDrag } from './hooks/useWorkspaceEntryDrag.js';
+import { workspaceEntryParent } from './workspaceEntryPaths.js';
+import { FILE_TREE_MIN_WIDTH, FILE_TREE_MAX_WIDTH, normalizeProjectTreePath } from './workspaceFileTree.js';
 import type { WorkspaceFileDraftState } from './hooks/useWorkspaceFileDraft.js';
 import type {
   DesktopDiffSummary,
@@ -53,6 +54,7 @@ import {
   type WorkspaceFileContextTarget,
 } from './WorkspaceFileContextMenu.js';
 import { WorkspaceFileIcon, WorkspaceFilePath } from './WorkspaceFileIcon.js';
+import { WorkspaceEntryDialog, type WorkspaceEntryDialogRequest } from './WorkspaceEntryDialog.js';
 import { WorkspaceResizeHandle } from './WorkspaceResizeHandle.js';
 import {
   workspaceDirectoryMentionEntry,
@@ -69,9 +71,11 @@ export function WorkspacePanel({
   activePanel,
   placement = 'side',
   activeProject,
+  entryOperationPending,
   fileDraft,
+  fileTree,
   fileFocusRequest,
-  filePreview,
+  filePreview: workspaceFilePreview,
   latestReviewSummary,
   latestReviewFindings,
   reviewError,
@@ -82,9 +86,12 @@ export function WorkspacePanel({
   workspaceApps,
   onAddFileToConversation,
   onCopyFilePath,
+  onCreateEntry,
+  onRenameEntry,
+  onMoveEntry,
+  onDeleteEntry,
   onExternalOpenFile,
   onOpenFileWithApp,
-  onSearchProjectEntries,
   onOpenEntry,
   onOpenProjectFile,
   onOpenFilesPanel,
@@ -107,7 +114,9 @@ export function WorkspacePanel({
   activePanel: DesktopPanelTab;
   placement?: DesktopPanelSlot;
   activeProject?: WorkspaceProject;
+  entryOperationPending: boolean;
   fileDraft: WorkspaceFileDraftState;
+  fileTree: WorkspaceFileTreeState;
   fileFocusRequest: WorkspaceFileFocusRequest | null;
   filePreview: WorkspaceFileRead | null;
   latestReviewSummary: DesktopDiffSummary | null;
@@ -120,9 +129,12 @@ export function WorkspacePanel({
   workspaceApps: DesktopWorkspaceApp[];
   onAddFileToConversation: (entry: WorkspaceEntrySearchItem) => void;
   onCopyFilePath: (filePath: string) => void;
+  onCreateEntry: (input: WorkspaceEntryCreateInput) => Promise<WorkspaceEntry | null>;
+  onRenameEntry: (entryPath: string, name: string) => Promise<WorkspaceEntry | null>;
+  onMoveEntry: (entryPath: string, parentPath: string) => Promise<WorkspaceEntry | null>;
+  onDeleteEntry: (entryPath: string) => Promise<boolean>;
   onExternalOpenFile: (filePath?: string | null, line?: number) => void;
   onOpenFileWithApp: (appId: string, filePath: string, line?: number) => void;
-  onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
   onOpenEntry: (entry: WorkspaceEntry) => void;
   onOpenProjectFile: (filePath: string, line?: number) => void;
   onOpenFilesPanel: () => void;
@@ -143,113 +155,31 @@ export function WorkspacePanel({
   resizeValue: number;
 }) {
   const { t } = useI18n();
-  const [treeEntries, setTreeEntries] = useState<WorkspaceEntry[]>([]);
-  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set());
-  const [loadedDirectoryPaths, setLoadedDirectoryPaths] = useState<Set<string>>(() => new Set(['']));
-  const [loadingDirectoryPaths, setLoadingDirectoryPaths] = useState<Set<string>>(() => new Set());
-  const [treeError, setTreeError] = useState<string | null>(null);
-  const [treeQuery, setTreeQuery] = useState('');
-  const [treeSearching, setTreeSearching] = useState(false);
-  const [treeTruncated, setTreeTruncated] = useState(false);
-  const [treeVisible, setTreeVisible] = useState(true);
-  const [treeWidth, setTreeWidth] = useState(248);
+  const {
+    tree, expandedPaths, loadingDirectoryPaths, treeError, treeQuery, treeSearching,
+    treeTruncated, treeVisible, treeWidth, query, toggleDirectory, updateTreeQuery,
+    toggleTreeVisible, setTreeWidth, fileListRef, onFileListScroll,
+  } = fileTree;
   const [contextMenu, setContextMenu] = useState<WorkspaceFileContextTarget | null>(null);
+  const [entryDialog, setEntryDialog] = useState<WorkspaceEntryDialogRequest | null>(null);
+  const entryDrag = useWorkspaceEntryDrag({
+    projectId: activeProject?.id,
+    disabled: entryOperationPending || treeSearching || !activeProject,
+    entries: fileTree.treeEntries,
+    moveEntry: onMoveEntry,
+    onMoved: fileTree.applyEntryChange,
+  });
   const showsFileExplorer = activePanel.type === 'files' || activePanel.type === 'file';
-  const tree = useMemo(() => buildProjectEntryTree(treeEntries), [treeEntries]);
-  const query = treeQuery.trim().toLowerCase();
+  // Selection can change before its file read settles. Never render another tab's document or draft here.
+  const filePreview = workspaceFilePreview && activePanel.type === 'file' && activePanel.filePath === workspaceFilePreview.path
+    && activeProject?.id === workspaceFilePreview.projectId ? workspaceFilePreview : null;
   const activeProjectLabel = activeProject?.name ?? t('workspace.files.noProject');
-  const editorPath = filePreview ? `${activeProjectLabel}/${filePreview.path}` : activeProjectLabel;
+  const editorPath = activePanel.type === 'file' && activePanel.filePath
+    ? `${activeProjectLabel}/${activePanel.filePath}` : activeProjectLabel;
   const addReviewFileToConversation = useCallback(
     (filePath: string) => onAddFileToConversation(workspaceFileMentionEntry(filePath)),
     [onAddFileToConversation],
   );
-
-  useEffect(() => {
-    if (!activeProject) {
-      setTreeSearching(false);
-      setTreeEntries([]);
-      setExpandedPaths(new Set());
-      setLoadedDirectoryPaths(new Set());
-      setLoadingDirectoryPaths(new Set());
-      setTreeError(null);
-      setTreeTruncated(false);
-      setTreeQuery('');
-      return undefined;
-    }
-    if (!showsFileExplorer) {
-      setTreeSearching(false);
-      setTreeError(null);
-      setTreeTruncated(false);
-      return undefined;
-    }
-
-    let cancelled = false;
-    const parent = query ? undefined : '';
-    setTreeSearching(true);
-    setTreeError(null);
-    setTreeTruncated(false);
-    onSearchProjectEntries(query, parent)
-      .then((result) => {
-        if (cancelled) return;
-        setTreeEntries(result.entries.map(searchItemToWorkspaceEntry));
-        setTreeTruncated(result.truncated);
-        setLoadedDirectoryPaths(query ? new Set() : new Set(['']));
-        setLoadingDirectoryPaths(new Set());
-      })
-      .catch((unknownError) => {
-        if (cancelled) return;
-        setTreeEntries([]);
-        setTreeTruncated(false);
-        setTreeError(unknownError instanceof Error ? unknownError.message : String(unknownError));
-      })
-      .finally(() => {
-        if (!cancelled) setTreeSearching(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeProject, onSearchProjectEntries, query, showsFileExplorer]);
-
-  const loadDirectory = async (pathValue: string) => {
-    const normalizedPath = normalizeProjectTreePath(pathValue);
-    if (!activeProject || query || loadedDirectoryPaths.has(normalizedPath) || loadingDirectoryPaths.has(normalizedPath)) return;
-    setLoadingDirectoryPaths((current) => new Set(current).add(normalizedPath));
-    setTreeError(null);
-    try {
-      const incoming = await onSearchProjectEntries('', normalizedPath);
-      setTreeEntries((current) => mergeProjectEntries(current, incoming.entries.map(searchItemToWorkspaceEntry)));
-      if (incoming.truncated) setTreeTruncated(true);
-      setLoadedDirectoryPaths((current) => new Set(current).add(normalizedPath));
-    } catch (unknownError) {
-      setTreeError(unknownError instanceof Error ? unknownError.message : String(unknownError));
-    } finally {
-      setLoadingDirectoryPaths((current) => {
-        const next = new Set(current);
-        next.delete(normalizedPath);
-        return next;
-      });
-    }
-  };
-
-  const toggleDirectory = (pathValue: string) => {
-    const normalizedPath = normalizeProjectTreePath(pathValue);
-    const expanding = !expandedPaths.has(normalizedPath);
-    setExpandedPaths((current) => {
-      const next = new Set(current);
-      if (next.has(normalizedPath)) {
-        next.delete(normalizedPath);
-      } else {
-        next.add(normalizedPath);
-      }
-      return next;
-    });
-    if (expanding) void loadDirectory(pathValue);
-  };
-
-  const updateTreeQuery = (value: string) => {
-    setTreeQuery(value);
-  };
 
   const startTreeResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -257,7 +187,7 @@ export function WorkspacePanel({
     const startX = event.clientX;
     const startWidth = treeWidth;
     const handlePointerMove = (moveEvent: PointerEvent) => {
-      setTreeWidth(clampFileTreeWidth(startWidth + startX - moveEvent.clientX));
+      setTreeWidth(startWidth + startX - moveEvent.clientX);
     };
     const stopResize = () => {
       document.body.classList.remove('desktop-file-tree-resizing');
@@ -276,14 +206,21 @@ export function WorkspacePanel({
     const normalizedPath = normalizeProjectTreePath(node.path);
     const expanded = Boolean(query) || expandedPaths.has(normalizedPath);
     const loading = loadingDirectoryPaths.has(normalizedPath);
-    const selected = filePreview?.path === node.path;
+    const selected = activePanel.type === 'file' && activePanel.filePath === node.path;
     return (
-      <div className="desktop-file-tree-node" key={node.path}>
-        <div className={`desktop-file-row-shell ${selected ? 'is-active' : ''}`} style={{ '--desktop-file-tree-indent': `${level * FILE_TREE_INDENT_STEP_PX}px` } as CSSProperties}>
+      <div className={`desktop-file-tree-node ${directory && entryDrag.dropPath === node.path ? 'is-drop-target' : ''}`} key={node.path}>
+        <div className={`desktop-file-row-shell ${selected ? 'is-active' : ''} ${entryDrag.draggingPath === node.path ? 'is-dragging' : ''}`} style={{ '--desktop-file-tree-indent': `${level * FILE_TREE_INDENT_STEP_PX}px` } as CSSProperties}>
           <Button variant="ghost"
             className={`desktop-file-row desktop-file-row--${node.type}`}
             type="button"
             title={node.path}
+            disabled={entryOperationPending}
+            draggable={!entryOperationPending && !treeSearching}
+            onDragStart={(event) => entryDrag.startDrag(event, node.entry)}
+            onDragEnd={entryDrag.endDrag}
+            onDragOver={(event) => entryDrag.dragOver(event, directory ? node.path : workspaceEntryParent(node.path))}
+            onDragLeave={entryDrag.clearDropTarget}
+            onDrop={(event) => entryDrag.drop(event, directory ? node.path : workspaceEntryParent(node.path))}
             onContextMenu={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -293,7 +230,7 @@ export function WorkspacePanel({
           >
             {directory ? <ChevronDown className={expanded ? '' : 'is-collapsed'} size={12} /> : <span className="desktop-file-row__spacer" />}
             <WorkspaceFileIcon path={node.path} type={node.type} />
-            <span title={node.path}>{node.name}</span>
+            <span className="desktop-file-row__name" title={node.path}>{node.name}</span>
             {loading ? <span className="desktop-file-row__loading">...</span> : null}
           </Button>
         </div>
@@ -306,49 +243,13 @@ export function WorkspacePanel({
     <div className="desktop-editor__crumb">
       <span className="desktop-editor__crumb-path">
         <WorkspaceFilePath path={editorPath} />
-        {fileDraft.dirty ? <i aria-label={t('workspace.files.unsaved')}>●</i> : null}
       </span>
       <span className="desktop-editor__crumb-actions">
-        {filePreview?.preview?.kind === 'text' ? (
-          fileDraft.editing ? (
-            <>
-              <IconButton
-                className="app-shell-icon-control"
-                disabled={fileDraft.saving}
-                label={t('workspace.files.cancelEdit')}
-                onClick={fileDraft.cancelEditing}
-              >
-                <X size={15} />
-              </IconButton>
-              <IconButton
-                className="app-shell-icon-control"
-                disabled={!fileDraft.dirty || fileDraft.saving}
-                label={t(fileDraft.saving ? 'workspace.files.saving' : 'workspace.files.save')}
-                onClick={() => void fileDraft.save()}
-              >
-                <Save size={15} />
-              </IconButton>
-            </>
-          ) : (
-            <IconButton
-              className="app-shell-icon-control"
-              disabled={!fileDraft.canEdit || fileDraft.preparing}
-              label={t(fileDraft.preparing
-                ? 'workspace.files.loadingEditor'
-                : fileDraft.canEdit
-                  ? 'workspace.files.edit'
-                  : 'workspace.files.editUnavailable')}
-              onClick={() => void fileDraft.startEditing()}
-            >
-              <EditIcon size={14} />
-            </IconButton>
-          )
-        ) : null}
         <FileTreeToggle
           className="app-shell-icon-control"
           label={t(treeVisible ? 'workspace.files.collapseTree' : 'workspace.files.expandTree')}
           expanded={treeVisible}
-          onToggle={() => setTreeVisible((current) => !current)}
+          onToggle={toggleTreeVisible}
         />
       </span>
     </div>
@@ -409,7 +310,7 @@ export function WorkspacePanel({
       />
     ) : (
       <section
-        className={`desktop-editor ${fileDraft.errorMessage ? 'has-save-error' : ''}`}
+        className={`desktop-editor ${filePreview && fileDraft.errorMessage ? 'has-save-error' : ''}`}
         onContextMenu={filePreview ? (event) => {
           event.preventDefault();
           const line = workspaceFileLineNumberFromEvent(event);
@@ -421,7 +322,7 @@ export function WorkspacePanel({
           });
         } : undefined}
       >
-        {fileDraft.errorMessage ? (
+        {filePreview && fileDraft.errorMessage ? (
           <div className="desktop-editor__save-error" role="alert">
             {fileDraft.errorMessage}
           </div>
@@ -458,7 +359,7 @@ export function WorkspacePanel({
           {mainPanel}
           {showsFileExplorer ? (
             <section className={`desktop-file-explorer ${treeVisible ? '' : 'desktop-file-explorer--tree-collapsed'}`}>
-              <div className="desktop-file-tree" aria-hidden={!treeVisible}>
+              <div className="desktop-file-tree" aria-hidden={!treeVisible} aria-busy={entryOperationPending}>
                 <ResizeHandle
                   className="desktop-file-tree__resize-handle"
                   type="button"
@@ -473,10 +374,10 @@ export function WorkspacePanel({
                   onKeyDown={(event) => {
                     if (event.key === 'ArrowLeft') {
                       event.preventDefault();
-                      setTreeWidth((current) => clampFileTreeWidth(current - 16));
+                      setTreeWidth(treeWidth - 16);
                     } else if (event.key === 'ArrowRight') {
                       event.preventDefault();
-                      setTreeWidth((current) => clampFileTreeWidth(current + 16));
+                      setTreeWidth(treeWidth + 16);
                     }
                   }}
                 />
@@ -484,12 +385,21 @@ export function WorkspacePanel({
                   <Search size={13} />
                   <TextField
                     value={treeQuery}
+                    disabled={entryOperationPending}
                     onChange={(event) => updateTreeQuery(event.target.value)}
                     placeholder={t('workspace.files.filter')}
                   />
                 </div>
                 {activeProject ? (
-                  <div className="desktop-file-list">
+                  <div className={`desktop-file-list ${entryDrag.dropPath === '' ? 'is-drop-target' : ''}`} ref={fileListRef} onScroll={onFileListScroll}
+                    onDragOver={(event) => entryDrag.dragOver(event, '')}
+                    onDragLeave={entryDrag.clearDropTarget}
+                    onDrop={(event) => entryDrag.drop(event, '')}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      setContextMenu({ filePath: '', type: 'directory', x: event.clientX, y: event.clientY });
+                    }}
+                  >
                     {treeSearching ? <div className="desktop-file-tree__empty">{t('workspace.files.searching')}</div> : null}
                     {treeError ? <div className="desktop-file-tree__empty">{treeError}</div> : null}
                     {!treeSearching && !treeError && tree.length ? (
@@ -524,9 +434,30 @@ export function WorkspacePanel({
         )}
         onClose={() => setContextMenu(null)}
         onCopyPath={onCopyFilePath}
+        entryActionsDisabled={treeSearching || entryOperationPending || !activeProject}
+        onCreateEntry={(parentPath, type) => setEntryDialog({ mode: 'create', parentPath, type })}
+        onRenameEntry={(entryPath, type) => setEntryDialog({ mode: 'rename', entry: {
+          name: entryPath.split('/').pop() ?? entryPath, path: entryPath, type,
+        } })}
+        onDeleteEntry={async (entryPath) => {
+          if (await onDeleteEntry(entryPath)) fileTree.applyEntryDeletion(entryPath);
+        }}
         onOpenWithApp={onOpenFileWithApp}
         onReveal={onRevealFile}
       />
+      {entryDialog ? (
+        <WorkspaceEntryDialog request={entryDialog} onClose={() => setEntryDialog(null)}
+          onSubmit={async (name) => {
+            const entry = entryDialog.mode === 'create'
+              ? await onCreateEntry({ parentPath: entryDialog.parentPath, type: entryDialog.type, name })
+              : await onRenameEntry(entryDialog.entry.path, name);
+            if (!entry) return;
+            fileTree.applyEntryChange(entry, entryDialog.mode === 'rename' ? entryDialog.entry.path : undefined);
+            setEntryDialog(null);
+            if (entryDialog.mode === 'create' && entry.type === 'file') onOpenProjectFile(entry.path);
+          }}
+        />
+      ) : null}
     </>
   );
 }
@@ -686,6 +617,7 @@ export function WorkspaceFilePreviewContent({
         <CodeEditorPreview file={file} fileFocusRequest={activeFocusRequest} />
       )}>
         <LazyEditableWorkspaceFile
+          key={`${file.projectId}:${file.path}`}
           content={fileDraft.content}
           file={file}
           fileFocusRequest={activeFocusRequest}
@@ -745,77 +677,4 @@ function workspaceFileLineNumberFromEvent(event: ReactMouseEvent<HTMLElement>): 
     if (Number.isSafeInteger(line) && line > 0) return line;
   }
   return undefined;
-}
-
-const FILE_TREE_MIN_WIDTH = 190;
-const FILE_TREE_MAX_WIDTH = 360;
-
-function clampFileTreeWidth(value: number): number {
-  return Math.min(FILE_TREE_MAX_WIDTH, Math.max(FILE_TREE_MIN_WIDTH, Math.round(value)));
-}
-
-function normalizeProjectTreePath(path: string): string {
-  return path.replace(/\\/g, '/').replace(/^\.\/?$/, '').replace(/\/+$/, '');
-}
-
-function searchItemToWorkspaceEntry(item: WorkspaceEntrySearchItem): WorkspaceEntry {
-  return {
-    name: item.name,
-    path: item.path,
-    type: item.kind,
-  };
-}
-
-function mergeProjectEntries(current: WorkspaceEntry[], incoming: WorkspaceEntry[]): WorkspaceEntry[] {
-  const byPath = new Map(current.map((entry) => [entry.path, entry]));
-  incoming.forEach((entry) => byPath.set(entry.path, entry));
-  return [...byPath.values()].sort(compareWorkspaceEntry);
-}
-
-function compareWorkspaceEntry(left: WorkspaceEntry, right: WorkspaceEntry): number {
-  if (left.type !== right.type) return left.type === 'directory' ? -1 : 1;
-  return left.name.localeCompare(right.name);
-}
-
-function buildProjectEntryTree(entries: WorkspaceEntry[]): ProjectTreeNode[] {
-  const root: ProjectTreeNode = {
-    children: [],
-    entry: { name: '', path: '', type: 'directory' },
-    name: '',
-    path: '',
-    type: 'directory',
-  };
-  [...entries].sort(compareWorkspaceEntry).forEach((entry) => {
-    const parts = normalizeProjectTreePath(entry.path).split('/').filter(Boolean);
-    let parent = root;
-    let currentPath = '';
-    parts.forEach((part, index) => {
-      currentPath = currentPath ? `${currentPath}/${part}` : part;
-      const last = index === parts.length - 1;
-      const type = last ? entry.type : 'directory';
-      let node = parent.children.find((item) => item.path === currentPath);
-      if (!node) {
-        node = {
-          children: [],
-          entry: last ? entry : { name: part, path: currentPath, type: 'directory' },
-          name: last ? entry.name : part,
-          path: currentPath,
-          type,
-        };
-        parent.children.push(node);
-      } else if (last) {
-        node.entry = entry;
-        node.name = entry.name;
-        node.type = entry.type;
-      }
-      if (node.type === 'directory') parent = node;
-    });
-  });
-
-  const sortNode = (node: ProjectTreeNode) => {
-    node.children.sort((left, right) => compareWorkspaceEntry(left.entry, right.entry));
-    node.children.forEach(sortNode);
-  };
-  sortNode(root);
-  return root.children;
 }

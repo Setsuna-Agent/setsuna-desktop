@@ -17,6 +17,18 @@ export type DesktopWorkspaceFilePreviewResult =
   | { ok: true; url: string }
   | { ok: false; error: string };
 
+export type DesktopWorkspaceEntriesWatchInput = {
+  subscriptionId: string;
+  workspaceRoot: string;
+  directoryPaths: string[];
+};
+
+export const WORKSPACE_ENTRIES_WATCH_CHANNELS = {
+  subscribe: 'desktop:watch-workspace-entries',
+  unsubscribe: 'desktop:unwatch-workspace-entries',
+  changed: 'desktop:workspace-entries-changed',
+} as const;
+
 export type DesktopImageActionResult =
   | { ok: true }
   | { ok: false; error: string };
@@ -97,6 +109,7 @@ export type SetsunaDesktopBridge = {
     copyWorkspaceFilePath(workspaceRoot: string, filePath: string): Promise<DesktopOpenPathResult>;
     revealWorkspaceFile(workspaceRoot: string, filePath: string): Promise<DesktopOpenPathResult>;
     createWorkspaceFilePreview(workspaceRoot: string, filePath: string): Promise<DesktopWorkspaceFilePreviewResult>;
+    watchWorkspaceEntries(workspaceRoot: string, directoryPaths: string[], callback: () => void): () => void;
   };
   dataRoot: {
     getState(): Promise<DesktopDataRootState>;

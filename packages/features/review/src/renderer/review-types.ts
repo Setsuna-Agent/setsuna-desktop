@@ -4,6 +4,7 @@ export type { DesktopReviewSource } from '../contracts/index.js';
 export type DesktopReviewDiffLayout = 'unified' | 'split';
 
 export type ReviewPathContext = {
+  projectId?: string;
   revisions?: { before: string | null; after: string };
   baseRef?: string | null;
   source: DesktopReviewSource | 'commit';

@@ -57,7 +57,7 @@ import {
   resolveWorkspacePathFromBase,
   workspaceRelativePath,
 } from './pc-local-tool-paths.js';
-import { openValidatedReadableFile, readValidatedFileText } from './pc-local-tool-secure-read.js';
+import { openValidatedReadableFile, readValidatedFileBytes, readValidatedFileText } from './pc-local-tool-secure-read.js';
 import {
   boundedInteger,
   countOccurrences,
@@ -109,7 +109,8 @@ type FileMutationCalculation = {
 type FileDeleteCalculation = {
   ok: true;
   filePath: string;
-  previousContent: string;
+  previousContent: string | Buffer;
+  previousMode: number;
   symbolicLink: boolean;
   diff: FileDiff;
 };
@@ -126,7 +127,8 @@ type CalculatedMutationForIntegrity = {
   changes?: LocalFileChange[];
   filePath?: string;
   existed?: boolean;
-  previousContent?: string;
+  previousContent?: string | Buffer;
+  previousMode?: number;
   nextContent?: string;
   symbolicLink?: boolean;
   diff?: LocalToolDiff | null;
@@ -467,7 +469,10 @@ export async function calculateApplyPatch(
 
     const previousContent = info.isSymbolicLink()
       ? `[symbolic link -> ${await readlink(filePath)}]`
-      : await readValidatedFileText(filePath, state);
+      : operation.type === 'delete'
+        ? await readValidatedFileBytes(filePath, state)
+        : await readValidatedFileText(filePath, state);
+    const previousMode = info.mode & 0o777;
     if (operation.type === 'delete') {
       changes.push({
         action: 'delete',
@@ -476,11 +481,12 @@ export async function calculateApplyPatch(
         previousContent,
         nextContent: '',
         symbolicLink: info.isSymbolicLink(),
+        previousMode,
       });
       continue;
     }
 
-    const update = applyPatchHunks(previousContent, operation.chunks, formatPath(filePath, state.root));
+    const update = applyPatchHunks(String(previousContent), operation.chunks, formatPath(filePath, state.root));
     if (!update.ok) return update;
     if (!moveToPath && update.content === previousContent) return { ok: false, error: `补丁没有改变文件：${formatPath(filePath, state.root)}` };
     if (moveToPath) {
@@ -490,6 +496,7 @@ export async function calculateApplyPatch(
         existed: true,
         previousContent,
         nextContent: '',
+        previousMode,
       });
       changes.push({
         action: 'write',
@@ -497,6 +504,7 @@ export async function calculateApplyPatch(
         existed: false,
         previousContent: '',
         nextContent: update.content,
+        nextMode: previousMode,
       });
       continue;
     }
@@ -506,6 +514,7 @@ export async function calculateApplyPatch(
       existed: true,
       previousContent,
       nextContent: update.content,
+      previousMode,
     });
   }
 
@@ -517,6 +526,8 @@ export async function calculateApplyPatch(
           filePath: change.filePath,
           root: state.root,
           previousContent: change.previousContent,
+          beforeMode: change.previousMode,
+          symbolicLink: change.symbolicLink,
         })
       : buildFileDiff({
           filePath: change.filePath,
@@ -524,6 +535,8 @@ export async function calculateApplyPatch(
           existed: change.existed,
           previousContent: change.previousContent,
           nextContent: change.nextContent,
+          beforeMode: change.previousMode,
+          afterMode: change.nextMode ?? change.previousMode,
         })
   );
   return {
@@ -568,6 +581,7 @@ export async function deleteLocalFile(args: ToolArguments, state: PcLocalFileSta
     previousContent: result.previousContent,
     nextContent: '',
     symbolicLink: result.symbolicLink,
+    previousMode: result.previousMode,
   }], state);
   invalidateFileMentionIndex(state.root);
   state.reads.delete(result.filePath);
@@ -728,6 +742,7 @@ export async function integrityTokenForCalculatedMutation(
     previousContent: result.previousContent ?? '',
     nextContent: result.nextContent ?? '',
     symbolicLink: result.symbolicLink,
+    previousMode: result.previousMode,
   }], state?.root);
 }
 
@@ -759,13 +774,16 @@ export async function calculateDeleteFile(
 
   const previousContent = existingStats.isSymbolicLink()
     ? `[symbolic link -> ${await readlink(filePath)}]`
-    : await readValidatedFileText(filePath, state);
+    : await readValidatedFileBytes(filePath, state);
+  const previousMode = existingStats.mode & 0o777;
   const diff = buildDeletedFileDiff({
     filePath,
     root: state.root,
     previousContent,
+    symbolicLink: existingStats.isSymbolicLink(),
+    beforeMode: previousMode,
   });
-  return { ok: true, filePath, diff, previousContent, symbolicLink: existingStats.isSymbolicLink() };
+  return { ok: true, filePath, diff, previousContent, previousMode, symbolicLink: existingStats.isSymbolicLink() };
 }
 
 function filterFilesByScope(

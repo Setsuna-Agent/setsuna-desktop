@@ -11,10 +11,10 @@ const unsafeProtocolPattern = /^(?:data:|javascript:|vbscript:)/i;
 const windowsAbsolutePathPattern = /^[a-z]:\//i;
 const markdownLocationSuffixPattern = /(?::(\d+)(?::\d+)?(?:[-–]\d+(?::\d+)?)?|#L(\d+)(?:C\d+)?(?:-L\d+(?:C\d+)?)?)$/i;
 const commonWorkspaceFileExtensions = new Set([
-  'bash', 'c', 'cc', 'conf', 'cpp', 'cs', 'css', 'csv', 'cxx', 'doc', 'docx', 'env', 'fish',
+  'bash', 'c', 'cc', 'cjs', 'conf', 'cpp', 'cs', 'css', 'csv', 'cts', 'cxx', 'doc', 'docx', 'env', 'fish',
   'fs', 'fsx', 'gif', 'gitignore', 'go', 'gql', 'gradle', 'graphql', 'h', 'hpp', 'htm', 'html',
   'ini', 'java', 'jpeg', 'jpg', 'js', 'json', 'jsonc', 'jsx', 'kt', 'kts', 'less', 'lock', 'md',
-  'mdx', 'pdf', 'php', 'png', 'properties', 'proto', 'ps1', 'py', 'pyi', 'rb', 'rs', 'sass',
+  'mdx', 'mjs', 'mts', 'pdf', 'php', 'png', 'properties', 'proto', 'ps1', 'py', 'pyi', 'rb', 'rs', 'sass',
   'scss', 'sh', 'sql', 'svelte', 'svg', 'swift', 'toml', 'ts', 'tsv', 'tsx', 'txt', 'vue',
   'webp', 'xls', 'xlsx', 'xml', 'yaml', 'yml', 'zsh',
 ]);
@@ -30,18 +30,18 @@ export function markdownUrlTransform(url: string): string {
 
 export function resolveMarkdownLinkTarget(href: string | undefined, workspaceRoot?: string): MarkdownLinkTarget {
   const rawValue = safeDecodeURIComponent(href?.trim() ?? '');
-  if (!rawValue || unsafeProtocolPattern.test(rawValue)) return { kind: 'invalid' };
+  if (!rawValue || rawValue.includes('\0') || /[\r\n]/u.test(rawValue) || unsafeProtocolPattern.test(rawValue)) return { kind: 'invalid' };
   if (rawValue.startsWith('#')) return { kind: 'anchor', href: rawValue };
   if (externalProtocolPattern.test(rawValue)) return { kind: 'external', href: rawValue };
 
   const localValue = fileUrlPath(rawValue);
   if (localValue === null) return { kind: 'invalid' };
   const normalizedLocalValue = normalizeSlashes(localValue);
-  if (/^[a-z][a-z\d+.-]*:/i.test(normalizedLocalValue) && !windowsAbsolutePathPattern.test(normalizedLocalValue)) {
+  const { line, path: normalizedPath } = stripMarkdownLocation(normalizedLocalValue);
+  if (/^[a-z][a-z\d+.-]*:/i.test(normalizedPath) && !windowsAbsolutePathPattern.test(normalizedPath)) {
     return { kind: 'invalid' };
   }
 
-  const { line, path: normalizedPath } = stripMarkdownLocation(normalizedLocalValue);
   const normalizedRoot = workspaceRoot ? trimTrailingSlash(normalizeSlashes(workspaceRoot)) : '';
   const absolute = normalizedPath.startsWith('/') || windowsAbsolutePathPattern.test(normalizedPath);
 
@@ -60,7 +60,9 @@ export function resolveMarkdownFileReference(
   workspaceRoot?: string,
 ): MarkdownWorkspaceLinkTarget | null {
   const reference = value.trim();
-  if (!reference || reference.includes('\n')) return null;
+  // Auto-link only a single path. Commands, git status, globs and expressions
+  // remain code; paths containing spaces can still use explicit Markdown links.
+  if (!reference || /[\s`"'<>|;&$*?{}=]/u.test(reference)) return null;
   const target = resolveMarkdownLinkTarget(reference, workspaceRoot);
   if (target.kind !== 'workspace' || !looksLikeWorkspaceFile(target.path)) return null;
   return target;

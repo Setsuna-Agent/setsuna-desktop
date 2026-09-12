@@ -18,6 +18,7 @@ import { useChatTurnActions } from '../../features/chat/hooks/useChatTurnActions
 import { useDesktopPanelResize } from '../../features/workspace/hooks/useDesktopPanelResize.js';
 import { useDesktopWorkspacePanels } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
 import { useProjectWorkspace } from '../../features/workspace/hooks/useProjectWorkspace.js';
+import { useWorkspaceFilePanelLifecycle } from '../../features/workspace/hooks/useWorkspaceFilePanelLifecycle.js';
 import { useThreadWorkspace } from '../../features/workspace/hooks/useThreadWorkspace.js';
 import { useRuntimeClientState } from '../../services/runtime-client/useRuntimeClientState.js';
 import { useIdentityRequestGuard } from '../../shared/hooks/useIdentityRequestGuard.js';
@@ -190,6 +191,15 @@ export function useDesktopAppController() {
     activeProjectId: activeWorkspace?.id ?? null,
     client,
     onOpenFilePanel: openFilePanel,
+    onEntryRenamed: workspacePanels.renameFilePanels,
+    onEntryDeleted: workspacePanels.deleteFilePanels,
+  });
+  const filePanelActions = useWorkspaceFilePanelLifecycle({
+    panels: workspacePanels,
+    workspace: projectWorkspace,
+    projectId: activeWorkspace?.id ?? null,
+    workspaceRoot: activeWorkspace?.path,
+    targetIdentity: chatTargetIdentity,
   });
   const { globalThreads, threadsByProjectId } = useThreadGroups(threads);
 
@@ -341,7 +351,7 @@ export function useDesktopAppController() {
     workspaceMaxWidth,
     workspaceMaximized,
     workspaceMinWidth,
-    workspacePanels,
+    workspacePanels: { ...workspacePanels, ...filePanelActions },
     workspaceWidth,
   };
 }

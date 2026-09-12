@@ -7,6 +7,7 @@ export function WorkspaceTopbar({
   activePanelId,
   availablePanelTypes,
   panels,
+  unsavedFilePath,
   bottomPanelOpen,
   bottomTerminalActive,
   onClosePanel,
@@ -27,6 +28,7 @@ export function WorkspaceTopbar({
   activePanelId: string | null;
   availablePanelTypes: DesktopPanelType[];
   panels: DesktopPanelTab[];
+  unsavedFilePath?: string | null;
   bottomPanelOpen: boolean;
   bottomTerminalActive: boolean;
   onClosePanel: (panelId: string) => void;
@@ -97,6 +99,7 @@ export function WorkspaceTopbar({
         onToggleBottomTerminal={onToggleTerminal}
         panels={panels}
         placement="side"
+        unsavedFilePath={unsavedFilePath}
       />
     </div>
   );
