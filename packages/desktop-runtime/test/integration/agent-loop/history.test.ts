@@ -50,7 +50,11 @@ describe('agent loop stream history and regeneration', () => {
       for (const event of fixtureEvents) {
         replayedFixture = applyRuntimeEventToThread(replayedFixture, event);
       }
-      expect(JSON.parse(JSON.stringify(replayedFixture))).toEqual(fixtureSnapshot);
+      // Replaying old events adds the budget's sequence without changing the N-1 fixture.
+      expect(JSON.parse(JSON.stringify(replayedFixture))).toEqual({
+        ...fixtureSnapshot,
+        contextCompaction: { ...fixtureSnapshot.contextCompaction, seq: 10 },
+      });
 
       await mkdir(path.join(dataDir, 'threads'), { recursive: true });
       await Promise.all([
