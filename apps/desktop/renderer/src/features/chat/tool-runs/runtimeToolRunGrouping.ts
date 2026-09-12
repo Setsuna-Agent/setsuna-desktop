@@ -2,12 +2,13 @@ import type { RuntimeToolRun } from '@setsuna-desktop/contracts';
 import type { ToolRunGroupKind } from './runtime-tool-run-types.js';
 import { isRuntimeFileMutationRun } from './runtimeFileChanges.js';
 import { isPendingRuntimeToolApproval } from './runtimeToolRunState.js';
+import { isShellToolRun, shellSearchForRun } from './runtimeShellSearch.js';
 
 export function toolRunGroupKind(run: RuntimeToolRun): ToolRunGroupKind {
   if (run.name === 'workspace_read_file' || run.name === 'workspace_list_directory' || run.name === 'read_file' || run.name === 'list_directory' || run.name === 'find_files' || run.name === 'read_diff' || run.name === 'git_status') return 'inspection';
   if (isRuntimeFileMutationRun(run)) return 'fileMutation';
-  if (run.name === 'workspace_search_text' || run.name === 'search_text') return 'search';
-  if (run.name.includes('shell') || run.name === 'run_shell_command' || run.name === 'read_shell_process' || run.name === 'exec_command' || run.name === 'write_stdin') return 'shell';
+  if (run.name === 'workspace_search_text' || run.name === 'search_text' || shellSearchForRun(run)) return 'search';
+  if (isShellToolRun(run)) return 'shell';
   return 'generic';
 }
 

@@ -61,6 +61,20 @@ Factory 当前按顺序组合：
 runtime 只额外追加用于读取超限结果的 `read_tool_result`；工具是否需要审批、能否并行
 以及输出上限仍由 runtime profile 和 orchestrator 决定。
 
+普通任务和可运行沙箱 shell 的只读任务通过 `exec_command` / `run_shell_command`
+调用 `rg` 搜索内容、`rg --files` 查找文件，模型目录不再公布 `find_files` 和
+`search_text`。只有无法提供沙箱 shell 的内部只读任务使用这两个直接搜索工具兜底。
+工作区 UI 搜索仍由 `WorkspaceSearchEngine` 提供结构化结果。
+
+命令搜索遵循 rg 原生忽略规则，`.setsunaignore` 等额外规则通过 `--ignore-file`
+传入；输出由通用 shell 预算和 `read_tool_result` 控制。共享的 literal/rg 参数解析
+只识别明确的搜索命令：runtime 据此区分搜索词与路径，renderer 生成搜索摘要并保留
+命令终端详情。未知选项、重定向、动态表达式或复合命令不参与展示分类；权限和审批
+仍由 exec policy、风险检查及 OS sandbox 独立执行。
+
+明确的单条 rg 命令退出码为 1 且没有错误诊断时，runtime 返回正常空结果并保留原始
+退出码；聊天终端以 runtime 的成功状态为准。复合命令、搜索错误、超时和取消仍按原有失败语义处理。
+
 ### `tool-orchestrator-policy.ts`
 
 保存不依赖事件发布或审批等待的纯策略与参数转换：

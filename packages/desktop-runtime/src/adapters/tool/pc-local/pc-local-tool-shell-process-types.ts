@@ -106,6 +106,7 @@ export type ShellSession = {
 };
 
 export type ShellFailureSession = {
+  command?: string;
   timedOut?: boolean;
   aborted?: boolean;
   exitCode?: number | null;

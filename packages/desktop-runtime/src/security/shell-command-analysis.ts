@@ -1,3 +1,5 @@
+import { parseLiteralShellCommand } from '@setsuna-desktop/contracts';
+
 export type ReusableShellCommand = {
   words: string[];
 };
@@ -65,77 +67,8 @@ export function analyzeShellCommandStructure(command: string): ShellCommandStruc
  * syntax must fail closed instead of being approximated.
  */
 export function parseReusableShellCommand(command: string): ReusableShellCommand | null {
-  const words: string[] = [];
-  let current = '';
-  let quote: '' | "'" | '"' = '';
-  let escaped = false;
-
-  const pushCurrent = () => {
-    if (!current) return;
-    words.push(current);
-    current = '';
-  };
-
-  const text = String(command || '');
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index]!;
-
-    if (escaped) {
-      if (char === '\n' || char === '\r') return null;
-      current += char;
-      escaped = false;
-      continue;
-    }
-
-    if (quote === "'") {
-      if (char === "'") quote = '';
-      else current += char;
-      continue;
-    }
-
-    if (quote === '"') {
-      if (char === '"') {
-        quote = '';
-        continue;
-      }
-      // Expansion and command substitution make the approved argv unstable.
-      if (char === '$' || char === '`') return null;
-      if (char === '\\') {
-        const next = text[index + 1] ?? '';
-        if (next === '\n' || next === '\r') return null;
-        // POSIX double quotes only consume a backslash before these four
-        // characters. Preserve it otherwise so the approved argv stays exact.
-        if ('$`"\\'.includes(next)) escaped = true;
-        else current += '\\';
-        continue;
-      }
-      current += char;
-      continue;
-    }
-
-    if (char === '\\') {
-      escaped = true;
-      continue;
-    }
-    if (char === "'" || char === '"') {
-      quote = char;
-      continue;
-    }
-    if (/\s/u.test(char)) {
-      if (char === '\n' || char === '\r') return null;
-      pushCurrent();
-      continue;
-    }
-    if (';&|<>(){}!`$'.includes(char)) return null;
-    if (char === '#' && current.length === 0) return null;
-    // Globbing can synthesize options or additional operands after approval.
-    if (char === '*' || char === '?' || char === '[' || char === ']') return null;
-    current += char;
-  }
-
-  if (escaped || quote) return null;
-  pushCurrent();
-  return words.length ? { words } : null;
+  const words = parseLiteralShellCommand(command);
+  return words ? { words } : null;
 }
 
 export function reusableShellCommandWords(command: string): string[] {

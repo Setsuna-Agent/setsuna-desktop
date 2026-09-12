@@ -9,6 +9,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { applyShellEnvironmentPatch } from '../../../../src/adapters/tool/pc-local/pc-local-tool-host.js';
 import { classifyShellSessionFailure } from '../../../../src/adapters/tool/pc-local/pc-local-tool-shell-process.js';
+import type { ShellFailureSession } from '../../../../src/adapters/tool/pc-local/pc-local-tool-shell-process-types.js';
 import { createShellSandboxExecutionPlan } from '../../../../src/adapters/tool/pc-local/pc-local-tool-shell-policy.js';
 import {
   createShellSessionTempDirectory,
@@ -23,6 +24,33 @@ afterEach(async () => {
 });
 
 describe('classifyShellSessionFailure', () => {
+  it('accepts rg exit 1 as an empty search, including searches that print statistics', () => {
+    for (const command of ['rg absent src', 'rg --files -g "*.absent"', 'rg --stats absent src']) {
+      expect(classifyShellSessionFailure(shellSession({
+        command, stdout: command.includes('--stats') ? '0 matches\n' : '',
+      })), command).toBeNull();
+    }
+  });
+
+  it('keeps actual rg errors, compound exits and interrupted searches as failures', () => {
+    const cases: Array<[ShellFailureSession, string]> = [
+      [{ command: 'rg absent src && exit 1' }, 'process_exit'],
+      [{ command: 'rg absent src | cat' }, 'process_exit'],
+      [{ command: 'exit 1' }, 'process_exit'],
+      [{ exitCode: 2, stderr: 'regex parse error' }, 'process_exit'],
+      [{ stderr: 'search diagnostic' }, 'process_exit'],
+      [{ errorCode: 'ENOENT' }, 'process_exit'],
+      [{ stderr: 'Permission denied' }, 'sandbox_denied'],
+      [{ signal: 'SIGTERM' }, 'process_exit'],
+      [{ aborted: true }, 'cancelled'],
+      [{ timedOut: true }, 'timeout'],
+    ];
+    for (const [overrides, failureKind] of cases) {
+      expect(classifyShellSessionFailure(shellSession({ command: 'rg absent src', ...overrides })))
+        .toMatchObject({ failure_kind: failureKind });
+    }
+  });
+
   it.each([
     'Error: spawn EPERM',
     'Error: spawn /opt/toolchain/bin/esbuild EACCES',

@@ -23,7 +23,6 @@ import {
 } from './pc-local-tool-constants.js';
 import {
   _usesShellApplyPatch,
-  normalizeShellCommandForRisk,
   obviousHighRiskShellReason,
   shellCandidateToPath,
   shellPathCandidates,
@@ -266,19 +265,19 @@ function shellPolicyRuleMatches(
 export function shellPermissionBlockReason(command: unknown, state: ShellPolicyState): string {
   const profile = normalizePermissionProfile(state?.permissionProfile);
   if (profile === 'danger-full-access') return '';
-  const normalized = normalizeShellCommandForRisk(command);
-  const highRiskReason = obviousHighRiskShellReason(normalized);
+  const rawCommand = String(command || '');
+  const highRiskReason = obviousHighRiskShellReason(rawCommand);
   const mutatesViaShell = Boolean(highRiskReason);
-  const deniedAccessPath = firstDeniedShellAccessPath(normalized, state);
+  const deniedAccessPath = firstDeniedShellAccessPath(rawCommand, state);
   if (deniedAccessPath) {
     return `当前权限配置不能通过 shell 访问 sandbox filesystem deny 规则覆盖的路径：${deniedAccessPath}。`;
   }
   if (profile === 'read-only' && mutatesViaShell) {
-    const protectedPath = firstProtectedWorkspaceMetadataShellPath(normalized, state);
+    const protectedPath = firstProtectedWorkspaceMetadataShellPath(rawCommand, state);
     if (protectedPath) {
       return `当前权限配置不能通过 shell 修改受保护的工作区元数据：${protectedPath}。需要 danger-full-access 权限才能执行。`;
     }
-    const deniedPath = firstDeniedShellWritePath(normalized, state);
+    const deniedPath = firstDeniedShellWritePath(rawCommand, state);
     if (deniedPath) {
       return `当前权限配置不能通过 shell 修改 sandbox filesystem deny 规则覆盖的路径：${deniedPath}。`;
     }
@@ -289,8 +288,8 @@ export function shellPermissionBlockReason(command: unknown, state: ShellPolicyS
       return '';
     }
     if (state?.sandboxWorkspaceWrite?.writableRoots?.length) {
-      const outsidePath = firstPathOutsideWorkspaceWriteRoots(normalized, state, { includeWorkspaceRoot: false });
-      if (!outsidePath && shellWritePathCandidates(normalized).length) return '';
+      const outsidePath = firstPathOutsideWorkspaceWriteRoots(rawCommand, state, { includeWorkspaceRoot: false });
+      if (!outsidePath && shellWritePathCandidates(rawCommand).length) return '';
       if (outsidePath) {
         return `当前权限配置为 read-only，仅允许修改已批准的 writable_roots，命令包含未授权路径：${outsidePath}。`;
       }
@@ -298,15 +297,15 @@ export function shellPermissionBlockReason(command: unknown, state: ShellPolicyS
     return `当前权限配置为 read-only，不能执行会修改本地环境的命令：${highRiskReason}`;
   }
   if (profile !== 'workspace-write' || !mutatesViaShell) return '';
-  const protectedPath = firstProtectedWorkspaceMetadataShellPath(normalized, state);
+  const protectedPath = firstProtectedWorkspaceMetadataShellPath(rawCommand, state);
   if (protectedPath) {
     return `当前权限配置不能通过 shell 修改受保护的工作区元数据：${protectedPath}。需要 danger-full-access 权限才能执行。`;
   }
-  const deniedPath = firstDeniedShellWritePath(normalized, state);
+  const deniedPath = firstDeniedShellWritePath(rawCommand, state);
   if (deniedPath) {
     return `当前权限配置不能通过 shell 修改 sandbox filesystem deny 规则覆盖的路径：${deniedPath}。`;
   }
-  const outsidePath = firstPathOutsideWorkspaceWriteRoots(normalized, state);
+  const outsidePath = firstPathOutsideWorkspaceWriteRoots(rawCommand, state);
   if (!outsidePath) return '';
   return `当前权限配置只允许修改工作区或 sandbox_workspace_write.writable_roots，命令包含未授权路径：${outsidePath}。需要 danger-full-access 权限才能执行。`;
 }

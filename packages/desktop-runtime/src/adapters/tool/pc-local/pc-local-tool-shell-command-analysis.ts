@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { parseRipgrepCommand } from '@setsuna-desktop/contracts';
 import {
   SHELL_MUTATION_COMMANDS_WITH_PATH_ARGS,
   SHELL_READ_COMMANDS_WITH_PATH_ARGS,
@@ -18,7 +19,7 @@ export function normalizeShellCommandForRisk(command: unknown): string {
 }
 
 export function obviousHighRiskShellReason(command: unknown): string {
-  const text = String(command || '').toLowerCase();
+  const text = shellRiskAnalysisText(command).toLowerCase();
   const words = text.split(/[^a-z0-9_.-]+/).filter(Boolean);
   const hasWord = (value: string) => words.includes(value);
 
@@ -93,7 +94,7 @@ function hasWindowsForceDeleteCommand(command: string): boolean {
  * are disabled. Broader mutation heuristics still only request approval.
  */
 export function approvalDisabledDestructiveCommandReason(command: unknown): string {
-  const text = String(command || '');
+  const text = shellRiskAnalysisText(command);
   if (hasWindowsForceDeleteCommand(text)) {
     return '命令可能通过 Windows Shell 强制删除文件。';
   }
@@ -200,6 +201,11 @@ export function shellWritePathCandidates(command: unknown): string[] {
 export function shellPathCandidates(command: unknown): string[] {
   const candidates = [...shellWritePathCandidates(command)];
   for (const segment of splitShellCommandSegments(command)) {
+    const search = parseRipgrepCommand(segment, process.platform === 'win32' ? 'cmd' : 'posix');
+    if (search) {
+      candidates.push(...search.readPaths);
+      continue;
+    }
     const parsed = parseShellCommandSegment(segment);
     const words = parsed.words;
     candidates.push(...parsed.inputRedirects);
@@ -215,19 +221,35 @@ export function shellPathCandidates(command: unknown): string[] {
   return [...new Set(candidates.map((item) => String(item || '').trim()).filter((item) => item && !isShellNonPathToken(item)))];
 }
 
-// 路径策略只需要识别简单命令边界；保留引号和转义，交给下面的词法扫描处理。
+function shellRiskAnalysisText(command: unknown): string {
+  // Only remove literal search operands from heuristic scanning. Redirection,
+  // substitutions and separators retain their structure, including curl | sh.
+  return shellCommandSegments(command).map(({ text, separator }) => (
+    (parseRipgrepCommand(text, process.platform === 'win32' ? 'cmd' : 'posix') ? 'rg' : text) + separator
+  )).join('');
+}
+
 function splitShellCommandSegments(command: unknown): string[] {
-  const segments: string[] = [];
+  return shellCommandSegments(command).map(({ text }) => text.trim()).filter(Boolean);
+}
+
+// Keep each original separator so risk analysis can distinguish pipelines from
+// independent commands. Resolve POSIX continuations for both risk and path analysis.
+function shellCommandSegments(command: unknown): Array<{ text: string; separator: string }> {
+  const segments: Array<{ text: string; separator: string }> = [];
   let current = '';
   let quote = '';
   let escaped = false;
   for (const char of String(command || '')) {
     if (escaped) {
-      current += char;
+      // The shell removes an escaped newline without inserting whitespace, even
+      // inside a word. Single-quoted and already-escaped backslashes stay literal.
+      if (char === '\n' && process.platform !== 'win32') current = current.slice(0, -1);
+      else current += char;
       escaped = false;
       continue;
     }
-    if (char === '\\') {
+    if (char === '\\' && quote !== "'") {
       current += char;
       escaped = true;
       continue;
@@ -247,13 +269,13 @@ function splitShellCommandSegments(command: unknown): string[] {
       continue;
     }
     if (char === ';' || char === '&' || char === '|' || char === '\n') {
-      if (current.trim()) segments.push(current.trim());
+      segments.push({ text: current, separator: char });
       current = '';
       continue;
     }
     current += char;
   }
-  if (current.trim()) segments.push(current.trim());
+  segments.push({ text: current, separator: '' });
   return segments;
 }
 

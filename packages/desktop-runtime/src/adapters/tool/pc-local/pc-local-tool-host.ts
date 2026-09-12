@@ -57,6 +57,7 @@ type PcLocalToolHostOptions = {
 };
 
 const EXCLUDED_PC_TOOLS = new Set(['configure_mcp_server']);
+const SEARCH_FALLBACK_TOOLS = new Set(['find_files', 'search_text']);
 const REQUEST_PERMISSIONS_TOOL_NAME = 'request_permissions';
 /** 命令输出使用更严格的模型输出上限。 */
 const BOUNDED_OUTPUT_PC_TOOL_NAMES = new Set([
@@ -152,6 +153,9 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
     const localTools = localToolDefinitions(context.interfaceLanguage)
       .map(toRuntimeToolDefinition)
       .filter((tool): tool is RuntimeToolDefinition => Boolean(tool && !EXCLUDED_PC_TOOLS.has(tool.name)
+        // Shell owns model-driven search; direct search remains available when
+        // a read-only task cannot be isolated by an OS sandbox.
+        && (gitFallback || !SEARCH_FALLBACK_TOOLS.has(tool.name))
         && !(gitFallback && tool.name === 'run_shell_command')));
     const names = new Set(localTools.map((tool) => tool.name));
     return [

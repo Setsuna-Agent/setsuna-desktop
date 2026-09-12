@@ -6,6 +6,7 @@ import {
   type Translate,
 } from '../../../shared/i18n/I18nProvider.js';
 import {
+  isRecord,
   recordFromJson,
   stringField,
   toolRunTarget,
@@ -129,14 +130,13 @@ export function shellStatusLabel(
   if (run.status === 'error') return t('toolRun.shell.status.failed');
   if (run.status === 'cancelled') return t('toolRun.shell.status.cancelled');
   if (run.status === 'rejected') return t('toolRun.shell.status.rejected');
-  const exit = shellExitCode(run.resultPreview ?? '');
-  if (isFailedShellExit(exit)) return t('toolRun.shell.status.failed');
+  if (shellExitIsFailure(run)) return t('toolRun.shell.status.failed');
   return t('toolRun.shell.status.success');
 }
 
 export function shellTerminalStatus(run: RuntimeToolRun): string {
   if (run.status === 'success') {
-    return isFailedShellExit(shellExitCode(run.resultPreview ?? ''))
+    return shellExitIsFailure(run)
       ? 'error'
       : 'completed';
   }
@@ -268,6 +268,13 @@ function runtimeShellMetadataLine(line: string): boolean {
 
 function shellExitCode(content: string): string {
   return shellContentLine(content, /^(?:exit|Exit Code):\s*(.+)$/im);
+}
+
+function shellExitIsFailure(run: RuntimeToolRun): boolean {
+  // Runtime owns command exit semantics (for example, rg exit 1 is no matches).
+  // Keep the preview fallback for older results without structured metadata.
+  if (run.status === 'success' && isRecord(run.data) && run.data.ok === true) return false;
+  return isFailedShellExit(shellExitCode(run.resultPreview ?? ''));
 }
 
 function isFailedShellExit(exit: string): boolean {

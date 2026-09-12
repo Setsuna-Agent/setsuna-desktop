@@ -8,6 +8,7 @@ import {
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
+import { parseRipgrepCommand } from '@setsuna-desktop/contracts';
 import type { SandboxExecutionPlan } from '../../../ports/sandbox-execution-plan.js';
 import type { ShellSandboxProvider } from '../../../ports/shell-sandbox-provider.js';
 import {
@@ -107,15 +108,18 @@ export function runningShellResult(session: ShellSession, root: string) {
 }
 
 export function completedShellResult(session: ShellSession, root: string) {
+  const failure = classifyShellSessionFailure(session);
+  const noMatches = !failure && session.exitCode === 1;
   const status = session.timedOut
     ? `command timed out after ${session.timeout}ms`
-    : session.exitCode === 0
-      ? 'command completed'
-      : `command exited ${session.exitCode ?? session.signal}`;
-  const failure = classifyShellSessionFailure(session);
+    : noMatches
+      ? 'command completed (no matches)'
+      : session.exitCode === 0
+        ? 'command completed'
+        : `command exited ${session.exitCode ?? session.signal}`;
   return {
-    ok: session.exitCode === 0 && !session.timedOut && !session.aborted,
-    content: takeShellSessionOutput(session, root),
+    ok: !failure,
+    content: (noMatches ? 'No matches found.\n' : '') + takeShellSessionOutput(session, root),
     display: `${status}: ${session.command}`,
     process_id: session.id,
     running: false,
@@ -162,6 +166,12 @@ export function classifyShellSessionFailure(session: ShellFailureSession) {
       ...(suggestedReadableRoots.length ? { suggested_readable_roots: suggestedReadableRoots } : {}),
     };
   }
+  // rg uses exit 1 for an empty search. Only accept a literal, standalone rg
+  // invocation without diagnostics; a compound shell command owns its exit code.
+  if (
+    session.exitCode === 1 && !session.signal && !session.errorCode && !session.stderr
+    && parseRipgrepCommand(session.command ?? '', process.platform === 'win32' ? 'cmd' : 'posix')
+  ) return null;
   return {
     failure_kind: 'process_exit',
     failure_stage: 'execution',
