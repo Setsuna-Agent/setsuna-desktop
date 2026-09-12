@@ -22,6 +22,8 @@ export * from './provider.js';
 export * from './responses-items.js';
 export * from './runtime-process.js';
 export * from './skills.js';
+export * from './shell/literal-command.js';
+export * from './shell/ripgrep-command.js';
 export {
   splitThinkTaggedText,
   thinkTagMatches,

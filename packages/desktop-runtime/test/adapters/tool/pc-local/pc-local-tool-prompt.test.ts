@@ -21,12 +21,15 @@ describe('pcLocalToolPrompt', () => {
     const searchOnly = pcLocalToolPrompt([tool('search_text')]);
     expect(searchOnly).toContain('regular expression by default');
     expect(searchOnly).toContain('runtime-managed ripgrep path');
-    expect(searchOnly).toContain('instead of shell grep/find');
+    expect(searchOnly).toContain('Shell execution is unavailable');
     expect(searchOnly).toContain('issue all of them together in the same response');
     const review = pcLocalToolPrompt([tool('exec_command'), tool('run_shell_command')], { readOnly: true });
     expect(review).toContain('unsandboxed retries are unavailable');
     expect(review).not.toContain('require_escalated');
     expect(review).not.toContain('high-risk commands go through runtime approval');
+    expect(review).toContain('rg --files');
+    expect(review).toContain('Exit code 1 means no matches');
+    expect(review).not.toContain('Prefer search_text');
   });
 
   it.each([

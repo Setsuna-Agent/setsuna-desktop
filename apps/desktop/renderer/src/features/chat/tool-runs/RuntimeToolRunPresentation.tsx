@@ -1,4 +1,5 @@
 import type { RuntimeToolRun } from '@setsuna-desktop/contracts';
+import { isShellToolRun, shellSearchForRun } from './runtimeShellSearch.js';
 import { FileText, Search, SquareTerminal } from 'lucide-react';
 import { translate, useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { WorkspaceFileLink, WorkspacePathLabel } from '../markdown/WorkspaceFileLink.js';
@@ -294,7 +295,7 @@ export function searchCountSummary(runs: RuntimeToolRun[], status: RuntimeToolRu
 }
 
 export function isShellRun(run: RuntimeToolRun): boolean {
-  return toolRunGroupKind(run) === 'shell';
+  return isShellToolRun(run);
 }
 
 export function isFileOperationRun(run: RuntimeToolRun): boolean {
@@ -377,7 +378,7 @@ export function shellGroupSummary(runs: RuntimeToolRun[], t: Translate = default
 export function searchGroupSummary(runs: RuntimeToolRun[], t: Translate = defaultTranslate): { title: string; target?: string } {
   const status = toolRunGroupStatus(runs);
   const active = activeToolRunOrLast(runs);
-  const query = active ? toolRunTarget(active) : '';
+  const query = active ? shellSearchForRun(active)?.target ?? toolRunTarget(active) : '';
   if (status === 'running' || status === 'pending_approval') return { title: t(active && isPreparingToolRun(active) ? 'toolRun.search.preparing' : 'toolRun.search.running'), target: query };
   if (status === 'error') return { title: t('toolRun.search.failed'), target: query };
   if (status === 'cancelled') return { title: t('toolRun.search.cancelled'), target: query };
@@ -763,6 +764,9 @@ export function fileMutationPathFromReason(value: string | undefined): string {
 }
 
 export function toolRunSummary(run: RuntimeToolRun, t: Translate = defaultTranslate): { title: string; target?: string } {
+  const search = shellSearchForRun(run);
+  if (search?.kind === 'files') return { title: runningAware(run, t('toolRun.action.findFiles'), t('toolRun.action.findFilesDone'), t), target: search.target };
+  if (search) return searchRunSummary(run, search.scope, search.query, t, search.paths.length > 1 ? search.scope : undefined);
   const args = recordFromJson(run.argumentsPreview);
   const name = run.name;
   const path = stringField(args.path ?? args.file_path ?? args.target_path ?? args.file);
@@ -789,10 +793,11 @@ export function searchRunSummary(
   path: string,
   query: string,
   t: Translate = defaultTranslate,
+  scopeLabel?: string,
 ): { title: string; target?: string } {
   if (!path) return { title: runningAware(run, t('toolRun.action.searchCode'), t('toolRun.action.searchCodeDone'), t), target: query };
 
-  const scope = pathBaseName(path, t);
+  const scope = scopeLabel ?? pathBaseName(path, t);
   const target = query ? `“${query}”` : undefined;
   if (run.status === 'pending_approval') {
     return {

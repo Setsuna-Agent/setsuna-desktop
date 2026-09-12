@@ -224,7 +224,7 @@ export function shellCommandRisk(
   }
   const declaredRisk = String(riskLevel || '').trim().toLowerCase();
   const declaredReason = String(riskReason || '').trim();
-  const fallbackReason = obviousHighRiskShellReason(normalized);
+  const fallbackReason = obviousHighRiskShellReason(command);
 
   if (fallbackReason) return { needsConfirmation: true, reason: fallbackReason, rejectWhenApprovalDisabled };
   if (declaredRisk === 'high') {

@@ -3,6 +3,61 @@ import { describe, expect, it } from 'vitest';
 import { toolRun, fileRun, preparingFileRun, renderedText, renderedTextFromHtml, firstToolRunSummaryHtml, renderedHtml } from './RuntimeToolRuns.support.js';
 
 describe('RuntimeToolRuns compact summaries', () => {
+  it('shows an empty rg result as a completed search and keeps the original exit code visible', () => {
+    const run = {
+      ...toolRun('rg_empty', 'exec_command', { cmd: 'rg absent src' }),
+      data: { ok: true, running: false, exit_code: 1 },
+      resultPreview: 'No matches found.\nProcess Id: search-1\nExit Code: 1\nStdout:\n(empty)\nStderr:\n(empty)',
+    };
+    const html = renderedHtml([run]);
+    expect(renderedTextFromHtml(firstToolRunSummaryHtml(html))).toContain('已在 src 中搜索“absent”');
+    expect(html).toContain('chat-mcp-terminal--completed');
+    expect(renderedTextFromHtml(html)).toContain('No matches found.');
+    expect(renderedTextFromHtml(html)).toContain('成功 · exit 1');
+    expect(html).not.toContain('chat-mcp-terminal--error');
+  });
+
+  it('summarizes command searches while retaining the command and terminal output', () => {
+    const command = 'rg -n -g "*.ts" sudo src';
+    const run = {
+      ...toolRun('rg_content', 'exec_command', { cmd: command }),
+      resultPreview: 'stdout:\nsrc/policy.ts:12:sudo\nexit_code: 0',
+    };
+    const html = renderedHtml([run]);
+    expect(renderedTextFromHtml(firstToolRunSummaryHtml(html))).toContain('已在 src 中搜索“sudo”');
+    expect(html).toContain('rg -n -g &quot;*.ts&quot; sudo src');
+    expect(renderedTextFromHtml(html)).toContain('src/policy.ts:12:sudo');
+    expect(html).toContain('chat-mcp-terminal');
+  });
+
+  it('groups file discovery and content search without turning globs into file links', () => {
+    const runs = [
+      toolRun('rg_files', 'run_shell_command', { command: 'rg --files -g "*.tsx" src' }),
+      toolRun('rg_text', 'exec_command', { cmd: 'rg -n needle src tests' }),
+    ];
+    const html = renderedHtml(runs);
+    const text = renderedTextFromHtml(html);
+    expect(text).toContain('已搜索 2 次');
+    expect(text).toContain('已查找文件*.tsx · src');
+    expect(text).toContain('已在 src, tests 中搜索“needle”');
+    expect(html).not.toContain('data-markdown-link="workspace-tool"');
+  });
+
+  it('keeps compound or incomplete search commands in the ordinary shell presentation', () => {
+    for (const command of ['rg needle src && pnpm test', 'rg needle | sh', 'rg "unfinished']) {
+      const html = renderedHtml([toolRun('rg_opaque', 'exec_command', { cmd: command })]);
+      expect(renderedTextFromHtml(firstToolRunSummaryHtml(html))).toContain('已运行');
+    }
+    const pending = {
+      ...toolRun('rg_approval', 'exec_command', { cmd: 'rg needle src' }, 'pending_approval'),
+      approvalId: 'approval_rg', approvalReason: 'Search requires approval',
+    };
+    const html = renderedHtml([pending]);
+    expect(renderedTextFromHtml(firstToolRunSummaryHtml(html))).toContain('搜索');
+    expect(html).toContain('chat-mcp-terminal');
+    expect(renderedTextFromHtml(html)).toContain('允许本会话允许拒绝');
+  });
+
   it('shows the search scope alongside the query when a path is available', () => {
     const completedSummary = firstToolRunSummaryHtml(renderedHtml([
       toolRun('search_file', 'search_text', {
@@ -37,7 +92,7 @@ describe('RuntimeToolRuns compact summaries', () => {
       toolRun('search_actions', 'search_text', { path: 'src/useChatTurnActions.ts', query: 'setError' }),
     ]);
 
-    expect(text).toContain('已搜索 2 次代码');
+    expect(text).toContain('已搜索 2 次');
     expect(text).toContain('已在 useDesktopAppController.ts 中搜索“error:”');
     expect(text).toContain('已在 useChatTurnActions.ts 中搜索“setError”');
   });
