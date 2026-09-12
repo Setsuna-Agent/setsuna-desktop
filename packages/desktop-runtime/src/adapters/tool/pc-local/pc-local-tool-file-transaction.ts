@@ -20,9 +20,11 @@ export type LocalFileChange = {
   action: 'write' | 'delete';
   filePath: string;
   existed: boolean;
-  previousContent: string;
+  previousContent: string | Buffer;
   nextContent: string;
   symbolicLink?: boolean;
+  previousMode?: number;
+  nextMode?: number;
 };
 
 export type FileMutationCoordinator = {
@@ -176,9 +178,9 @@ async function stageWrite(entry: TransactionEntry, root: string): Promise<void> 
   assertMutationPath(entry.change, root);
 
   entry.stagePath = transactionSiblingPath(entry.change.filePath, 'stage');
-  const mode = entry.snapshot.mode === null
+  const mode = entry.change.nextMode ?? (entry.snapshot.mode === null
     ? 0o666
-    : Number(BigInt(entry.snapshot.mode) & 0o777n);
+    : Number(BigInt(entry.snapshot.mode) & 0o777n));
   const handle = await open(entry.stagePath, 'wx', mode);
   try {
     await handle.writeFile(entry.change.nextContent, 'utf8');
@@ -186,7 +188,8 @@ async function stageWrite(entry: TransactionEntry, root: string): Promise<void> 
   } finally {
     await handle.close();
   }
-  if (entry.snapshot.mode !== null) await chmod(entry.stagePath, mode);
+  // chmod restores captured permissions exactly, independently of the current umask.
+  if (entry.change.nextMode !== undefined || entry.snapshot.mode !== null) await chmod(entry.stagePath, mode);
   entry.stageIdentity = identityFromStat(await bigintFileStat(entry.stagePath));
 }
 
@@ -262,6 +265,10 @@ function assertChangesMatchSnapshots(changes: LocalFileChange[], snapshots: File
     if (Boolean(change.symbolicLink) !== snapshot.symbolicLink) {
       throw new Error(`File type changed after preview: ${change.filePath}`);
     }
+    if (change.previousMode !== undefined && snapshot.mode !== null
+      && change.previousMode !== Number(BigInt(snapshot.mode) & 0o777n)) {
+      throw new Error(`File permissions changed after preview: ${change.filePath}`);
+    }
   });
 }
 
@@ -293,7 +300,7 @@ async function mutationSnapshot(change: LocalFileChange): Promise<FileSnapshot> 
     ? info.isSymbolicLink()
       ? `[symbolic link -> ${await readlink(change.filePath)}]`
       : info.isFile()
-        ? await readFile(change.filePath, 'utf8')
+        ? await readFile(change.filePath)
         : ''
     : null;
   return {
@@ -356,7 +363,7 @@ function transactionSiblingPath(filePath: string, kind: 'stage' | 'backup'): str
   );
 }
 
-function contentHash(value: string): string {
+function contentHash(value: string | Buffer): string {
   return createHash('sha256').update(value).digest('hex');
 }
 

@@ -105,6 +105,18 @@ body.desktop-file-tree-resizing .desktop-file-tree__resize-handle::after {
   background: var(--desktop-agent-control-active-bg);
 }
 
+.desktop-file-tree-node.is-drop-target,
+.desktop-file-list.is-drop-target {
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface-muted);
+  outline: 1px solid var(--app-border-strong);
+  outline-offset: -1px;
+}
+
+.desktop-file-row-shell.is-dragging {
+  opacity: 0.5;
+}
+
 .desktop-file-row-shell.is-active .desktop-file-row {
   font-weight: 500;
 }
@@ -126,7 +138,8 @@ body.desktop-file-tree-resizing .desktop-file-tree__resize-handle::after {
 }
 
 .desktop-file-row--directory {
-  grid-template-columns: 14px minmax(0, 1fr);
+  /* Reserve the loading slot so the first fetch cannot create a second row. */
+  grid-template-columns: 14px minmax(0, 1fr) 14px;
 }
 
 .desktop-file-row .is-collapsed {
@@ -146,7 +159,7 @@ body.desktop-file-tree-resizing .desktop-file-tree__resize-handle::after {
   color: var(--app-text-muted);
 }
 
-.desktop-file-row span:last-child,
+.desktop-file-row__name,
 .desktop-file-row__loading {
   min-width: 0;
   overflow: hidden;
@@ -166,4 +179,16 @@ body.desktop-file-tree-resizing .desktop-file-tree__resize-handle::after {
   padding: 8px 10px;
   color: var(--app-text-muted);
   font-size: 12px;
+}
+
+.desktop-entry-form {
+  display: grid;
+  gap: 8px;
+}
+
+.desktop-entry-form__error {
+  margin: 0;
+  color: var(--app-danger);
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }

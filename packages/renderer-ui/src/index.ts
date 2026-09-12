@@ -15,3 +15,4 @@ export { ToastStack, type ToastEntry, type ToastTone } from './toast.js';
 export { Slider } from './slider.js';
 export { ResizeHandle } from './resize-handle.js';
 export { FileTreeToggle } from './file-tree-toggle.js';
+export { FileIcon } from './file-icon.js';

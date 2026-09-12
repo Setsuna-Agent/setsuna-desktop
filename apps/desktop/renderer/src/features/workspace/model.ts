@@ -17,6 +17,7 @@ import type {
 } from '@setsuna-desktop/feature-terminal/contracts';
 import type { DesktopWorkspaceApp } from '@setsuna-desktop/feature-workspace-apps/contracts';
 import type { RendererWorkspacePanelType } from '@setsuna-desktop/renderer-contracts/workspace';
+import { isWorkspaceEntryWithin, renamedWorkspaceEntryPath } from './workspaceEntryPaths.js';
 
 export type {
   DesktopDiffFile,
@@ -174,6 +175,30 @@ export const updatePanelInSlotState = (
   panels[panelIndex] = { ...panel, ...patch };
   return { ...slot, panels };
 };
+
+export function renameFilePanelsInSlot(slot: DesktopPanelSlotState, previousPath: string, nextPath: string): DesktopPanelSlotState {
+  let active = slot.active;
+  const panels = slot.panels.map((panel) => {
+    if (panel.type !== 'file' || !panel.filePath) return panel;
+    const filePath = renamedWorkspaceEntryPath(panel.filePath, previousPath, nextPath);
+    if (filePath === panel.filePath) return panel;
+    const renamed = { ...panel, ...createFilePanel(filePath) };
+    if (active === panel.id) active = renamed.id;
+    return renamed;
+  });
+  return panels.every((panel, index) => panel === slot.panels[index]) ? slot : {
+    active, panels: [...new Map(panels.map((panel) => [panel.id, panel])).values()],
+  };
+}
+
+export function deleteFilePanelsInSlot(slot: DesktopPanelSlotState, entryPath: string): DesktopPanelSlotState {
+  const panels = slot.panels.filter((panel) => panel.type !== 'file'
+    || !panel.filePath || !isWorkspaceEntryWithin(panel.filePath, entryPath));
+  if (panels.length === slot.panels.length) return slot;
+  if (panels.some((panel) => panel.id === slot.active)) return { ...slot, panels };
+  // Return to the directory navigator when the displayed file was removed.
+  return addPanelToSlotState({ active: null, panels }, createFilesPanel());
+}
 export const activatePanelInSlotState = (slot: DesktopPanelSlotState, panelId: string): DesktopPanelSlotState =>
   slot.panels.some((panel) => panel.id === panelId) ? { ...slot, active: panelId } : slot;
 export const reorderPanelInSlotState = (

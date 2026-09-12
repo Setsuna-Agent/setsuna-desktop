@@ -8,9 +8,14 @@ import {
   type AddWorkspaceProjectInput,
   type UpdateWorkspaceProjectInput,
   type WorkspaceEntry,
+  type WorkspaceEntryCreateInput,
+  type WorkspaceEntryRenameInput,
+  type WorkspaceEntryMoveInput,
   type WorkspaceEntryList,
   type WorkspaceEntrySearchResponse,
   type WorkspaceFileRead,
+  type WorkspaceFileChange,
+  type WorkspaceFileChangeAction,
   type WorkspaceFileWrite,
   type WorkspaceProject,
   type WorkspaceProjectList,
@@ -49,6 +54,8 @@ import {
 import { JavaScriptWorkspaceSearchEngine } from '../search/javascript-workspace-search-engine.js';
 import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from '../store/json-file.js';
+import { createWorkspaceEntry, deleteWorkspaceEntry, moveWorkspaceEntry, renameWorkspaceEntry } from './workspace-entry-mutations.js';
+import { applyWorkspaceFileChanges } from './workspace-file-changes.js';
 
 const MAX_LIST_ENTRIES = 200;
 export const MAX_WORKSPACE_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -326,6 +333,11 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     };
   }
 
+  async applyFileChanges(projectId: string, changes: WorkspaceFileChange[], action: WorkspaceFileChangeAction): Promise<void> {
+    const project = await this.requireProject(projectId);
+    await applyWorkspaceFileChanges(project.path, changes, action);
+  }
+
   async searchEntries(projectId: string, query = '', parent?: string | null): Promise<WorkspaceEntrySearchResponse> {
     const project = await this.requireProject(projectId);
     const search = normalizeEntrySearchText(query);
@@ -489,6 +501,26 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
 
   async writeFile(projectId: string, relativePath: string, content: string): Promise<WorkspaceFileWrite> {
     return this.writeWorkspaceFile(projectId, relativePath, content);
+  }
+
+  async createEntry(projectId: string, input: WorkspaceEntryCreateInput): Promise<WorkspaceEntry> {
+    const project = await this.requireProject(projectId);
+    return createWorkspaceEntry(project.path, input);
+  }
+
+  async renameEntry(projectId: string, relativePath: string, input: WorkspaceEntryRenameInput): Promise<WorkspaceEntry> {
+    const project = await this.requireProject(projectId);
+    return renameWorkspaceEntry(project.path, relativePath, input);
+  }
+
+  async deleteEntry(projectId: string, relativePath: string): Promise<void> {
+    const project = await this.requireProject(projectId);
+    return deleteWorkspaceEntry(project.path, relativePath);
+  }
+
+  async moveEntry(projectId: string, relativePath: string, input: WorkspaceEntryMoveInput): Promise<WorkspaceEntry> {
+    const project = await this.requireProject(projectId);
+    return moveWorkspaceEntry(project.path, relativePath, input);
   }
 
   async writeBinaryFile(projectId: string, relativePath: string, content: Uint8Array): Promise<WorkspaceFileWrite> {

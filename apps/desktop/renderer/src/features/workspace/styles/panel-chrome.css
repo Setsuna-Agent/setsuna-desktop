@@ -143,6 +143,15 @@
   white-space: nowrap;
 }
 
+.desktop-panel-chrome .chat-file-review-panel__tab-unsaved {
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: currentColor;
+}
+
 .desktop-panel-chrome .chat-file-review-panel__tab-close {
   position: absolute;
   top: 50%;

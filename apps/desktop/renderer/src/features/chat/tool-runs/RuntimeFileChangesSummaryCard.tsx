@@ -1,8 +1,11 @@
-import { Button } from '@setsuna-desktop/renderer-ui';
-import { ChevronDown, FileDiff, Undo2 } from 'lucide-react';
+import type { WorkspaceFileChangeAction } from '@setsuna-desktop/contracts';
+import { Button, useConfirm } from '@setsuna-desktop/renderer-ui';
+import { ChevronDown, FileDiff, Redo2, Undo2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import type { DesktopReviewOpenHandler } from '../../workspace/model.js';
+import { useChatThreadId } from '../conversation/ChatThreadProvider.js';
+import { useThreadFileChanges } from '../hooks/ThreadFileChangesProvider.js';
 import type { RuntimeFileChangeSummary } from './runtimeFileChanges.js';
 import {
   completedFileOperationActionLabel,
@@ -14,17 +17,18 @@ const fileChangePreviewLimit = 3;
 
 export function FileChangesSummaryCard({
   summary,
-  onDiscardChanges,
+  toolCallIds = [],
+  onApplyChanges,
   onOpenReview,
 }: {
   summary: RuntimeFileChangeSummary;
-  onDiscardChanges?: (filePaths: string[]) => void | Promise<void>;
+  toolCallIds?: readonly string[];
+  onApplyChanges?: (action: WorkspaceFileChangeAction) => void | Promise<void>;
   onOpenReview?: DesktopReviewOpenHandler;
 }) {
   const { t } = useI18n();
-  const [discarding, setDiscarding] = useState(false);
-  const [discarded, setDiscarded] = useState(false);
-  const [discardError, setDiscardError] = useState<string | null>(null);
+  const confirm = useConfirm();
+  const { pendingAction, undone, available, apply } = useThreadFileChanges(useChatThreadId(), toolCallIds);
   const fileCount = summary.files.length;
   const singleFile = fileCount === 1 ? summary.files[0] : undefined;
   const filePaths = useMemo(
@@ -47,7 +51,7 @@ export function FileChangesSummaryCard({
   }, [singleFile, summary.files]);
   const filePathKey = useMemo(() => filePaths.join('\0'), [filePaths]);
   const [showAllFiles, setShowAllFiles] = useState(false);
-  const canDiscard = Boolean(onDiscardChanges && filePaths.length && !discarded);
+  const canApply = Boolean(available && onApplyChanges && filePaths.length);
   const hasMoreFiles = fileCount > fileChangePreviewLimit;
   const visibleFiles = showAllFiles || !hasMoreFiles
     ? summary.files
@@ -58,17 +62,18 @@ export function FileChangesSummaryCard({
     setShowAllFiles(false);
   }, [filePathKey]);
 
-  const discardChanges = async () => {
-    if (!canDiscard || discarding || !onDiscardChanges) return;
-    setDiscarding(true);
-    setDiscardError(null);
+  const applyChanges = async () => {
+    if (!canApply || pendingAction || !onApplyChanges) return;
+    const action = undone ? 'redo' : 'undo';
     try {
-      await onDiscardChanges(filePaths);
-      setDiscarded(true);
+      await apply(onApplyChanges);
     } catch (error) {
-      setDiscardError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setDiscarding(false);
+      await confirm({
+        title: t(action === 'undo' ? 'toolRun.changes.undoFailed' : 'toolRun.changes.redoFailed'),
+        description: error instanceof Error ? error.message : String(error),
+        acknowledgement: true,
+        confirmLabel: t('common.close'),
+      });
     }
   };
 
@@ -101,25 +106,25 @@ export function FileChangesSummaryCard({
             />
           ) : null}
         </span>
-        {onOpenReview || onDiscardChanges ? (
+        {onOpenReview || onApplyChanges ? (
           <span className="chat-file-changes__actions">
-            {onDiscardChanges ? (
-              <Button variant="danger"
-                className="chat-file-changes__action chat-file-changes__action--danger"
+            {onApplyChanges ? (
+              <Button variant={undone ? 'ghost' : 'danger'}
+                className={`chat-file-changes__action${undone ? '' : ' chat-file-changes__action--danger'}`}
                 type="button"
-                disabled={!canDiscard || discarding}
-                onClick={() => void discardChanges()}
+                disabled={!canApply || pendingAction !== null}
+                onClick={() => void applyChanges()}
               >
                 <span>
                   {t(
-                    discarding
-                      ? 'toolRun.changes.undoing'
-                      : discarded
-                        ? 'toolRun.changes.undone'
+                    pendingAction
+                      ? pendingAction === 'undo' ? 'toolRun.changes.undoing' : 'toolRun.changes.redoing'
+                      : undone
+                        ? 'toolRun.changes.redo'
                         : 'toolRun.changes.undo',
                   )}
                 </span>
-                <Undo2 size={13} />
+                {undone ? <Redo2 size={13} /> : <Undo2 size={13} />}
               </Button>
             ) : null}
             {onOpenReview ? (
@@ -134,9 +139,6 @@ export function FileChangesSummaryCard({
           </span>
         ) : null}
       </div>
-      {discardError
-        ? <div className="chat-file-changes__error">{discardError}</div>
-        : null}
       <div className="chat-file-changes__list">
         {visibleFiles.map((file) => (
           <div className="chat-file-changes__item" key={file.path}>

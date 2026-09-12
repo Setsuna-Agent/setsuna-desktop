@@ -19,6 +19,7 @@ import { WorkspaceResizeHandle } from '../workspace/WorkspaceResizeHandle.js';
 import { useThreadMessageHistory } from './hooks/useThreadMessageHistory.js';
 import { useObservedRuntimeThread } from './hooks/useObservedRuntimeThread.js';
 import { MarkdownNavigationProvider } from './markdown/MarkdownNavigationProvider.js';
+import type { SearchMarkdownWorkspaceEntries } from './markdown/useMarkdownWorkspaceFiles.js';
 import { ChatTranscript } from './conversation/ChatTranscript.js';
 
 /**
@@ -41,6 +42,7 @@ export function SubagentConversationPanel({
   onOpenFileReview,
   onOpenMarkdownWebLink,
   onOpenInAppBrowser,
+  onSearchWorkspaceEntries,
   onResizeStep,
   onResizeStart,
   workspaceMaxWidth,
@@ -62,6 +64,7 @@ export function SubagentConversationPanel({
   onOpenFileReview?: DesktopReviewOpenHandler;
   onOpenMarkdownWebLink: (url: string) => void;
   onOpenInAppBrowser: (url: string) => void;
+  onSearchWorkspaceEntries?: SearchMarkdownWorkspaceEntries;
   onResizeStep: (delta: number) => void;
   onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   workspaceMaxWidth: number;
@@ -106,6 +109,7 @@ export function SubagentConversationPanel({
         onOpenInAppBrowser={onOpenInAppBrowser}
         onOpenWebLink={onOpenMarkdownWebLink}
         workspaceRoot={workspaceRoot}
+        onSearchWorkspaceEntries={onSearchWorkspaceEntries}
         onOpenWorkspaceFile={(filePath, line) => {
           onOpenFileReview?.(filePath, line);
         }}

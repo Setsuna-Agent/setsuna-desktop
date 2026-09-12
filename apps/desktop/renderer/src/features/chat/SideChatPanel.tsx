@@ -171,6 +171,7 @@ export function SideChatPanel({
         workspaceRoot={sideWorkspace?.path}
         onOpenWorkspaceDirectory={openSideWorkspaceDirectory}
         onOpenWorkspaceFile={openSideWorkspaceFile}
+        onSearchWorkspaceEntries={searchSideWorkspaceEntries}
       >
         <ChatWorkspace
           activeProject={sideWorkspace}

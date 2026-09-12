@@ -1,6 +1,6 @@
 import type { WorkspaceEntry } from '@setsuna-desktop/contracts';
+import { FileIcon } from '@setsuna-desktop/renderer-ui';
 import { memo } from 'react';
-import { getIcon } from 'seti-file-icons';
 
 type WorkspaceFileIconProps = {
   className?: string;
@@ -15,19 +15,7 @@ export const WorkspaceFileIcon = memo(function WorkspaceFileIcon({
 }: WorkspaceFileIconProps) {
   if (type === 'directory') return null;
 
-  const icon = getIcon(fileName(path));
-  const svgMarkup = { __html: icon.svg };
-
-  return (
-    <span
-      className={className}
-      data-file-icon-theme="seti"
-      data-file-icon-color={icon.color}
-      aria-hidden="true"
-      // 文件名只用于选择内置 Seti 资源，用户可控文本绝不会插入 SVG。
-      dangerouslySetInnerHTML={svgMarkup}
-    />
-  );
+  return <FileIcon className={className} path={path} />;
 });
 
 /** 从路径开头压缩目录，并尽量完整保留末尾文件名。 */
@@ -64,8 +52,4 @@ function workspaceFilePathParts(path: string): { directory: string; filename: st
         directory: normalized.slice(0, separatorIndex + 1),
         filename: normalized.slice(separatorIndex + 1),
       };
-}
-
-function fileName(path: string): string {
-  return path.split(/[\\/]/u).filter(Boolean).at(-1) ?? path;
 }

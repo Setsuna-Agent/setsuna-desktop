@@ -180,14 +180,6 @@
   overflow: hidden;
 }
 
-.desktop-editor__crumb-path i {
-  flex: 0 0 auto;
-  color: var(--app-warning);
-  font-size: 8px;
-  font-style: normal;
-  vertical-align: 1px;
-}
-
 .desktop-editor__crumb-actions {
   display: inline-flex;
   flex: 0 0 auto;

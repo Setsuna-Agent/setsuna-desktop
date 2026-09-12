@@ -1,4 +1,5 @@
 import type {
+  WorkspaceFileChangeAction,
   AnswerRuntimeApprovalInput,
   DesktopRuntimeClient,
   RuntimeConfiguredModelReference,
@@ -54,7 +55,7 @@ export type ChatConversationSurfaceModel = Readonly<{
   onClearContext(): void;
   onConversationOverviewRenderedChange(visible: boolean): void;
   onDeleteMessages(messageIds: string[]): void | Promise<void>;
-  onDiscardFileChanges?(filePaths: string[]): void | Promise<void>;
+  onFileChangesAction?(toolCallIds: string[], action: WorkspaceFileChangeAction): void | Promise<void>;
   onDraftChange(value: string): void;
   onEditUserMessage(messageId: string, content: string): void | Promise<void>;
   onFocusComposerRequestConsumed(requestId: number): void;
@@ -108,6 +109,7 @@ export function ChatConversationSurface({
       onOpenWorkspaceDirectory={model.onOpenWorkspaceDirectory}
       onOpenWorkspaceFile={model.onOpenProjectFile}
       onOpenWorkspaceFileContextMenu={onOpenWorkspaceFileContextMenu}
+      onSearchWorkspaceEntries={model.onSearchProjectEntries}
     >
       <ChatWorkspace
         activeProject={model.activeWorkspace}
@@ -138,7 +140,7 @@ export function ChatConversationSurface({
         onCompactContext={model.onCompactContext}
         onConversationOverviewRenderedChange={model.onConversationOverviewRenderedChange}
         onDeleteMessages={model.onDeleteMessages}
-        onDiscardFileChanges={model.onDiscardFileChanges}
+        onFileChangesAction={model.onFileChangesAction}
         onDraftChange={model.onDraftChange}
         onEditUserMessage={model.onEditUserMessage}
         onFocusComposerRequestConsumed={model.onFocusComposerRequestConsumed}

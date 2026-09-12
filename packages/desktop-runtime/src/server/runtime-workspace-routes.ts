@@ -1,6 +1,9 @@
 import {
   WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES,
   type WorkspaceFileSaveInput,
+  type WorkspaceEntryCreateInput,
+  type WorkspaceEntryRenameInput,
+  type WorkspaceEntryMoveInput,
   type WorkspaceSearchResponse,
 } from '@setsuna-desktop/contracts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -116,6 +119,35 @@ export async function handleRuntimeWorkspaceRequest(
     return true;
   }
 
+  const projectEntriesMatch = url.pathname.match(/^\/v1\/projects\/([^/]+)\/entries$/u);
+  if (projectEntriesMatch && request.method === 'POST') {
+    sendJson(response, 201, await runtime.workspaceProjects.createEntry(
+      decodeURIComponent(projectEntriesMatch[1]), await readBody<WorkspaceEntryCreateInput>(request),
+    ));
+    return true;
+  }
+  if (projectEntriesMatch && request.method === 'PATCH') {
+    sendJson(response, 200, await runtime.workspaceProjects.renameEntry(
+      decodeURIComponent(projectEntriesMatch[1]), url.searchParams.get('path') ?? '',
+      await readBody<WorkspaceEntryRenameInput>(request),
+    ));
+    return true;
+  }
+  if (projectEntriesMatch && request.method === 'DELETE') {
+    await runtime.workspaceProjects.deleteEntry(
+      decodeURIComponent(projectEntriesMatch[1]), url.searchParams.get('path') ?? '',
+    );
+    sendJson(response, 200, { ok: true });
+    return true;
+  }
+  const projectEntryMoveMatch = url.pathname.match(/^\/v1\/projects\/([^/]+)\/entries\/move$/u);
+  if (projectEntryMoveMatch && request.method === 'POST') {
+    sendJson(response, 200, await runtime.workspaceProjects.moveEntry(
+      decodeURIComponent(projectEntryMoveMatch[1]), url.searchParams.get('path') ?? '',
+      await readBody<WorkspaceEntryMoveInput>(request),
+    ));
+    return true;
+  }
   const projectEntriesSearchMatch = url.pathname.match(
     /^\/v1\/projects\/([^/]+)\/entries\/search$/u,
   );

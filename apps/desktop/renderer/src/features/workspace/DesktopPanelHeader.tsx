@@ -110,6 +110,7 @@ export function DesktopPanelHeader({
   onToggleBottomTerminal,
   panels,
   placement,
+  unsavedFilePath,
 }: {
   actions?: ReactNode;
   activePanel: DesktopPanelType;
@@ -131,6 +132,7 @@ export function DesktopPanelHeader({
   onToggleBottomTerminal?: () => void;
   panels?: DesktopPanelTab[];
   placement: DesktopPanelPlacement;
+  unsavedFilePath?: string | null;
 }) {
   const { t } = useI18n();
   const [launcherOpen, setLauncherOpen] = useState(false);
@@ -397,6 +399,14 @@ export function DesktopPanelHeader({
     <>
       <DesktopPanelIcon panel={panel} />
       <span className="chat-file-review-panel__tab-label">{desktopPanelTitle(panel, t)}</span>
+      {unsavedFilePath && panel.type === 'file' && panel.filePath === unsavedFilePath ? (
+        <span
+          className="chat-file-review-panel__tab-unsaved"
+          role="img"
+          aria-label={t('workspace.files.unsaved')}
+          title={t('workspace.files.unsaved')}
+        />
+      ) : null}
     </>
   );
 

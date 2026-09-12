@@ -2,8 +2,10 @@ import { Button } from '@setsuna-desktop/renderer-ui';
 import { Globe2 } from 'lucide-react';
 import {
   Children,
+  createContext,
   isValidElement,
   memo,
+  useContext,
   type MouseEvent,
   type ReactNode,
 } from 'react';
@@ -17,12 +19,14 @@ import { useMarkdownNavigation } from './MarkdownNavigationProvider.js';
 import { WorkspaceFileLink } from './WorkspaceFileLink.js';
 import { markdownUrlTransform, resolveMarkdownFileReference, resolveMarkdownLinkTarget } from './markdownLinks.js';
 import { remarkAutolinkBoundaries } from './remarkAutolinkBoundaries.js';
+import { useAvailableMarkdownFile } from './useMarkdownWorkspaceFiles.js';
 
 type MarkdownElementProps<Tag extends keyof JSX.IntrinsicElements> = JSX.IntrinsicElements[Tag] & ExtraProps;
 type MarkdownCodeChildProps = { children?: ReactNode; className?: string };
 
 const rehypePlugins = [rehypeKatex];
 const remarkPlugins = [remarkGfm, remarkAutolinkBoundaries, remarkMath];
+const MarkdownLinkLabelContext = createContext(false);
 
 export const MarkdownContentBlock = memo(function MarkdownContentBlock({ content }: { content: string }) {
   return (
@@ -55,18 +59,19 @@ function MarkdownTaskInput() {
 function MarkdownLink({ children, href, node: _node, onClick, ...props }: MarkdownElementProps<'a'>) {
   const { onOpenWebLink, workspaceRoot } = useMarkdownNavigation();
   const target = resolveMarkdownLinkTarget(href, workspaceRoot);
+  const label = <MarkdownLinkLabelContext.Provider value>{children}</MarkdownLinkLabelContext.Provider>;
 
   if (target.kind === 'workspace') {
     return (
       <WorkspaceFileLink
         {...props}
-        filePath={target.path}
+        filePath={href ?? target.path}
         href={href}
         line={target.line}
         linkKind="workspace"
         onClick={onClick}
       >
-        {children}
+        {label}
       </WorkspaceFileLink>
     );
   }
@@ -93,23 +98,24 @@ function MarkdownLink({ children, href, node: _node, onClick, ...props }: Markdo
         rel="noreferrer"
         target="_blank"
       >
-        {children}
+        {label}
         {webLink ? <Globe2 className="chat-markdown__web-link-icon" size={12} aria-hidden="true" /> : null}
       </a>
     );
   }
 
   if (target.kind === 'anchor') {
-    return <a {...props} href={target.href}>{children}</a>;
+    return <a {...props} href={target.href}>{label}</a>;
   }
 
-  return <span className="chat-markdown__unavailable-link">{children}</span>;
+  return <span className="chat-markdown__unavailable-link">{label}</span>;
 }
 
 function MarkdownImage({ alt = '', node: _node, src, ...props }: MarkdownElementProps<'img'>) {
   const { t } = useI18n();
-  const { onOpenWorkspaceFile, workspaceRoot } = useMarkdownNavigation();
+  const { onOpenWorkspaceFile, workspaceRoot, workspaceFiles } = useMarkdownNavigation();
   const target = resolveMarkdownLinkTarget(src, workspaceRoot);
+  const availablePath = useAvailableMarkdownFile(target.kind === 'workspace' ? target.path : null, workspaceFiles);
 
   if (target.kind === 'external' && /^https?:/i.test(target.href)) {
     return (
@@ -124,12 +130,12 @@ function MarkdownImage({ alt = '', node: _node, src, ...props }: MarkdownElement
     );
   }
 
-  if (target.kind === 'workspace' && onOpenWorkspaceFile) {
+  if (target.kind === 'workspace' && availablePath && onOpenWorkspaceFile) {
     return (
       <Button variant="ghost"
         className="chat-markdown__local-image"
         type="button"
-        onClick={() => onOpenWorkspaceFile(target.path, target.line)}
+        onClick={() => onOpenWorkspaceFile(availablePath, target.line)}
       >
         <span aria-hidden="true">{t('chat.markdown.image')}</span>
         <span>{alt || target.path}</span>
@@ -142,19 +148,21 @@ function MarkdownImage({ alt = '', node: _node, src, ...props }: MarkdownElement
 
 function MarkdownInlineCode({ children, node: _node, ...props }: MarkdownElementProps<'code'>) {
   const { onOpenWorkspaceFile, workspaceRoot } = useMarkdownNavigation();
+  const isLinkLabel = useContext(MarkdownLinkLabelContext);
   const childParts = Children.toArray(children);
   const referenceText = childParts.every((child) => typeof child === 'string' || typeof child === 'number')
     ? childParts.join('')
     : '';
-  const target = resolveMarkdownFileReference(referenceText, workspaceRoot);
+  const target = isLinkLabel ? null : resolveMarkdownFileReference(referenceText, workspaceRoot);
 
   if (target && (workspaceRoot || onOpenWorkspaceFile)) {
     return (
       <WorkspaceFileLink
-        filePath={target.path}
+        filePath={referenceText}
         href={referenceText}
         line={target.line}
         linkKind="workspace-inline"
+        unavailableContent={<code {...props}>{children}</code>}
       >
         {children}
       </WorkspaceFileLink>

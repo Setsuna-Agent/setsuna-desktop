@@ -14,6 +14,7 @@ import {
 } from '../workspace/file-opening.js';
 import { copyChatImage, readGeneratedImageAsset, revealChatImage } from '../workspace/generated-image-actions.js';
 import { isDesktopRendererSender } from './sender.js';
+import { registerWorkspaceEntryWatchIpc } from './workspace-entry-watch-ipc.js';
 
 type DesktopIpcOptions = {
   mainWindow: BrowserWindow;
@@ -49,6 +50,7 @@ export function registerDesktopIpc({
   ];
   for (const channel of channels) ipcMain.removeHandler(channel);
   const keyboardShortcuts = registerWindowKeyboardShortcuts(mainWindow.webContents);
+  registerWorkspaceEntryWatchIpc(mainWindow);
 
   ipcMain.handle('desktop:set-active-keyboard-shortcut-bindings', (event, value) => {
     if (!isDesktopRendererSender(event.sender, mainWindow)) return false;

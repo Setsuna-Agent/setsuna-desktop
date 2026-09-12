@@ -1,5 +1,7 @@
 /** Line-oriented file diff generation and compaction. */
 
+import type { WorkspaceFileChangePatch } from '@setsuna-desktop/contracts';
+import { createFileChangePatch } from '../../../utils/file-change-patch.js';
 import {
   DIFF_CONTEXT_LINES,
   DIFF_FOLD_THRESHOLD_LINES,
@@ -26,6 +28,7 @@ export type FileDiff = {
   truncated: boolean;
   lines: FileDiffLine[];
   partial?: boolean;
+  undo?: WorkspaceFileChangePatch;
 };
 
 export type PatchDiff = {
@@ -47,9 +50,11 @@ type FileDiffInput = {
   existed: boolean;
   previousContent: unknown;
   nextContent: unknown;
+  beforeMode?: number;
+  afterMode?: number;
 };
 
-type DeletedFileDiffInput = Omit<FileDiffInput, 'existed' | 'nextContent'>;
+type DeletedFileDiffInput = Omit<FileDiffInput, 'existed' | 'nextContent'> & { symbolicLink?: boolean };
 
 export function patchDiffFromDiffs(diffs: FileDiff[]): LocalToolDiff | null {
   if (!diffs.length) return null;
@@ -71,6 +76,8 @@ export function buildFileDiff({
   existed,
   previousContent,
   nextContent,
+  beforeMode,
+  afterMode,
 }: FileDiffInput): FileDiff {
   const previousLines = splitContentLines(previousContent);
   const nextLines = splitContentLines(nextContent);
@@ -87,6 +94,7 @@ export function buildFileDiff({
     deletions,
     truncated: false,
     lines: compacted,
+    undo: { ...createFileChangePatch(existed ? String(previousContent ?? '') : null, String(nextContent ?? '')), beforeMode, afterMode },
   };
 }
 
@@ -94,7 +102,13 @@ export function buildDeletedFileDiff({
   filePath,
   root,
   previousContent,
+  symbolicLink,
+  beforeMode,
 }: DeletedFileDiffInput): FileDiff {
+  const text = String(previousContent ?? '');
+  // Deletion must keep the original bytes until encoding is checked; the missing
+  // destination cannot protect a later undo from a lossy UTF-8 decode.
+  const lossless = !Buffer.isBuffer(previousContent) || Buffer.from(text, 'utf8').equals(previousContent);
   return {
     ...buildFileDiff({
       filePath,
@@ -104,6 +118,9 @@ export function buildDeletedFileDiff({
       nextContent: '',
     }),
     action: 'Deleted',
+    undo: symbolicLink || !lossless || beforeMode === undefined
+      ? undefined
+      : { ...createFileChangePatch(text, null), beforeMode },
   };
 }
 

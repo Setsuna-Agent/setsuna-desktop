@@ -11,6 +11,7 @@ import { ShellFrame } from './layout/ShellFrame.js';
 import { DesktopDataRootProvider } from './providers/DesktopDataRootProvider.js';
 import { ToastProvider } from './providers/ToastProvider.js';
 import { RendererRootSingleSlot } from '../kernel/renderer-plugins/RendererKernelProvider.js';
+import { ThreadFileChangesProvider } from '../features/chat/hooks/ThreadFileChangesProvider.js';
 
 export function App() {
   // 沙箱化的浏览器预览不会注入桌面 preload bridge；误打开 renderer 开发地址时只显示中性底色。
@@ -22,7 +23,9 @@ export function App() {
         <AppErrorBoundary>
           <DesktopDataRootProvider>
             <DesktopDataRootGate>
-              <AppContent />
+              <ThreadFileChangesProvider>
+                <AppContent />
+              </ThreadFileChangesProvider>
             </DesktopDataRootGate>
           </DesktopDataRootProvider>
         </AppErrorBoundary>

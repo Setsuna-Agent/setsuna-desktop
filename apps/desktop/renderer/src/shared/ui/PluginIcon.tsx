@@ -1,3 +1,4 @@
+import { FileIcon } from '@setsuna-desktop/renderer-ui';
 import type { LucideIcon } from 'lucide-react';
 import {
   BookOpenText,
@@ -17,7 +18,6 @@ import {
   Shrink,
   Sparkles,
 } from 'lucide-react';
-import { getIcon } from 'seti-file-icons';
 import openaiLogoUrl from '../assets/provider-logos/openai.svg';
 
 const pluginIconNames = [
@@ -97,7 +97,6 @@ export function PluginIcon({
   const monogram = icon ? pluginIconMonograms[icon] : pluginInitials(pluginId ?? name ?? 'Plugin');
   const brandSource = icon ? pluginIconBrandSources[icon] : undefined;
   const fileName = icon ? pluginIconFileNames[icon] : undefined;
-  const fileIcon = fileName ? getIcon(fileName) : null;
 
   return (
     <span
@@ -109,14 +108,8 @@ export function PluginIcon({
       data-plugin-icon={icon ?? 'plugin'}
       aria-hidden="true"
     >
-      {fileIcon ? (
-        <span
-          className="desktop-plugin-icon__file-type"
-          data-file-icon-theme="seti"
-          data-file-icon-color={fileIcon.color}
-          // 文件名来自上方静态映射，只用于选择内置 Seti 图标资源。
-          dangerouslySetInnerHTML={{ __html: fileIcon.svg }}
-        />
+      {fileName ? (
+        <FileIcon className="desktop-plugin-icon__file-type" path={fileName} />
       ) : brandSource ? (
         <img alt="" className="desktop-plugin-icon__brand" draggable={false} src={brandSource} />
       ) : monogram ? (

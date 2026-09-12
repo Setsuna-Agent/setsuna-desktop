@@ -9,6 +9,7 @@ import { useThreadMessageHistory } from '../features/chat/hooks/useThreadMessage
 import { MarkdownNavigationProvider } from '../features/chat/markdown/MarkdownNavigationProvider.js';
 import { createDesktopRuntimeClient } from '../services/runtime-client/client.js';
 import { useI18n } from '../shared/i18n/I18nProvider.js';
+import { useReviewWorkspaceEntries } from './useReviewWorkspaceEntries.js';
 
 const noPlugins: RuntimePluginSummary[] = [];
 const noSkills: RuntimeSkillSummary[] = [];
@@ -17,6 +18,7 @@ const noSkills: RuntimeSkillSummary[] = [];
 export function ReviewConflictTaskProgress({ threadId, turnId, workspaceRoot, onBack, onFinished, onOpenWorkspaceFile }: ReviewConflictTaskProgressProps) {
   const { t } = useI18n();
   const [client] = useState(createDesktopRuntimeClient);
+  const searchEntries = useReviewWorkspaceEntries(client, { threadId });
   const [error, setError] = useState<string | null>(null);
   const [stopping, setStopping] = useState(false);
   const task = useObservedRuntimeThread({ client, threadId, onError: setError });
@@ -52,7 +54,7 @@ export function ReviewConflictTaskProgress({ threadId, turnId, workspaceRoot, on
         {!ended ? <Button variant="ghost" type="button" disabled={stopping} onClick={() => void stop()}><Square size={12} />{t('feature.review.git.conflictStop')}</Button> : null}
       </header>
       {error ? <p className="git-history-status is-error" role="alert">{error}</p> : null}
-      <MarkdownNavigationProvider workspaceRoot={workspaceRoot} onOpenWorkspaceFile={onOpenWorkspaceFile}>
+      <MarkdownNavigationProvider workspaceRoot={workspaceRoot} onOpenWorkspaceFile={onOpenWorkspaceFile} onSearchWorkspaceEntries={searchEntries}>
         <ChatTranscript
           activeTurnId={task.activeTurnId}
           contextCompactionRunning={task.currentThread?.contextCompaction?.status === 'running'}

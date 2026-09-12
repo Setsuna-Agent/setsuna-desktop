@@ -10,6 +10,7 @@ import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 type WorkspaceFileDraftOptions = {
   client: Pick<DesktopRuntimeClient, 'readProjectFileForEdit' | 'saveProjectFile'>;
   file: WorkspaceFileRead | null;
+  isSaveBlocked?: () => boolean;
   onFilePrepared: (file: WorkspaceFileRead) => void;
   onFileSaved: (file: WorkspaceFileRead) => void;
 };
@@ -26,6 +27,7 @@ type WorkspaceFileDraftSession = {
 export function useWorkspaceFileDraft({
   client,
   file,
+  isSaveBlocked,
   onFilePrepared,
   onFileSaved,
 }: WorkspaceFileDraftOptions) {
@@ -44,7 +46,7 @@ export function useWorkspaceFileDraft({
   const editing = Boolean(activeSession);
   const dirty = Boolean(activeSession && activeSession.content !== activeSession.originalContent);
   const canEdit = canEditWorkspaceFile(file);
-  const preparing = preparingFileKey === fileKey;
+  const preparing = fileKey !== null && preparingFileKey === fileKey;
 
   useEffect(() => {
     if (previousFileKeyRef.current === fileKey) return;
@@ -56,6 +58,23 @@ export function useWorkspaceFileDraft({
     setSession(null);
   }, [fileKey]);
 
+  useEffect(() => () => {
+    editRequestRef.current = null;
+    saveRequestRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    if (!file) return;
+    setSession((current) => {
+      if (!current || current.fileKey !== fileKey || current.saving
+        || current.content !== current.originalContent || current.expectedRevision === file.revision) return current;
+      // External changes update a clean editor in place; local edits keep their original revision for conflict checks.
+      return isCompleteEditableWorkspaceFile(file) ? {
+        ...current, content: file.content, originalContent: file.content, expectedRevision: file.revision, error: null,
+      } : null;
+    });
+  }, [file, fileKey]);
+
   useEffect(() => {
     if (!dirty) return undefined;
     const preventCloseWithUnsavedChanges = (event: BeforeUnloadEvent) => {
@@ -66,7 +85,7 @@ export function useWorkspaceFileDraft({
     return () => window.removeEventListener('beforeunload', preventCloseWithUnsavedChanges);
   }, [dirty]);
 
-  const startEditing = useCallback(async (): Promise<void> => {
+  const prepareEditing = useCallback(async (): Promise<void> => {
     if (!file || !canEditWorkspaceFile(file) || editRequestRef.current) return;
     const editingFileKey = workspaceFileKey(file);
     const editRequest = {};
@@ -101,8 +120,27 @@ export function useWorkspaceFileDraft({
     }
   }, [client, file, onFilePrepared, t]);
 
+  useEffect(() => {
+    if (canEdit && !editing && !preparing && !prepareError) void prepareEditing();
+  }, [canEdit, editing, preparing, prepareError, prepareEditing]);
+
   const updateContent = useCallback((content: string) => {
     setSession((current) => current ? { ...current, content, error: null } : current);
+  }, []);
+
+  // Mutations also check the request ref, because React may not have rendered saving=true yet.
+  const isSaving = useCallback(() => saveRequestRef.current !== null, []);
+
+  const relocateFile = useCallback((nextFile: WorkspaceFileRead) => {
+    const previousKey = currentFileKeyRef.current;
+    const nextKey = workspaceFileKey(nextFile);
+    editRequestRef.current = null;
+    currentFileKeyRef.current = nextKey;
+    previousFileKeyRef.current = nextKey;
+    setPrepareError(null);
+    setPreparingFileKey(null);
+    // A filesystem rename changes identity, not the document or its saved revision.
+    setSession((current) => current?.fileKey === previousKey ? { ...current, fileKey: nextKey } : current);
   }, []);
 
   const confirmDiscardChanges = useCallback(async (): Promise<boolean> => {
@@ -126,12 +164,10 @@ export function useWorkspaceFileDraft({
     return true;
   }, [confirm, dirty, editing, fileKey, t]);
 
-  const cancelEditing = useCallback(() => {
-    void confirmDiscardChanges();
-  }, [confirmDiscardChanges]);
-
   const save = useCallback(async (): Promise<boolean> => {
-    if (!file || !activeSession || activeSession.saving) return false;
+    if (!file || !activeSession || activeSession.saving || saveRequestRef.current
+      || isSaveBlocked?.() || currentFileKeyRef.current !== activeSession.fileKey) return false;
+    if (!dirty) return true;
     const savingFileKey = activeSession.fileKey;
     const savingContent = activeSession.content;
     const saveRequest = {};
@@ -171,7 +207,7 @@ export function useWorkspaceFileDraft({
       } : current);
       return false;
     }
-  }, [activeSession, client, file, onFileSaved]);
+  }, [activeSession, client, dirty, file, isSaveBlocked, onFileSaved]);
 
   const saveError = activeSession?.error ?? null;
   const error = prepareError ?? saveError;
@@ -183,31 +219,31 @@ export function useWorkspaceFileDraft({
 
   return useMemo(() => ({
     canEdit,
-    cancelEditing,
     confirmDiscardChanges,
     content: activeSession?.content ?? file?.content ?? '',
     dirty,
     editing,
     error,
     errorMessage,
+    isSaving,
     preparing,
+    relocateFile,
     save,
     saving: activeSession?.saving ?? false,
-    startEditing,
     updateContent,
   }), [
     activeSession,
     canEdit,
-    cancelEditing,
     confirmDiscardChanges,
     dirty,
     editing,
     error,
     errorMessage,
+    isSaving,
     file?.content,
     preparing,
+    relocateFile,
     save,
-    startEditing,
     updateContent,
   ]);
 }
@@ -244,12 +280,11 @@ export function reconcileWorkspaceFileDraftAfterSave(
   },
 ): WorkspaceFileDraftSession | null {
   if (!current || current.fileKey !== savingFileKey) return current;
-  if (current.content === savingContent || current.content === saved.content) return null;
-
-  // The persisted snapshot succeeded, but the editor has moved on. Keep those
-  // newer edits and rebase the next save onto the revision that just landed.
+  // Keep the editor mounted after saving, including any input made while the
+  // write was pending. The next save uses the revision that just landed.
   return {
     ...current,
+    content: current.content === savingContent ? saved.content : current.content,
     error: null,
     expectedRevision: saved.revision ?? current.expectedRevision,
     originalContent: saved.content,

@@ -58,7 +58,7 @@ describe('workspace mention slots', () => {
 
     expect(mention?.props?.value).toBe('@src/components/Tile.tsx');
     const labelHtml = renderToStaticMarkup(mention?.props?.label);
-    expect(labelHtml).toContain('data-file-icon-theme="seti"');
+    expect(labelHtml).toContain('data-file-icon-theme="symbols"');
     expect(labelHtml).toContain('chat-inline-reference');
     expect(labelHtml).toContain('data-composer-cursor-offset-adjustment=');
     expect(labelHtml).toContain('>Tile.tsx</span>');

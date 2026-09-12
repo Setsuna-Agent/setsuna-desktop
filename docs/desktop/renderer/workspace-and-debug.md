@@ -24,6 +24,24 @@ Workspace host 管理右侧/底部工作区 surface 和项目文件；Review、T
 
 Panel 选择和 session 生命周期在 hooks，不应由各 tab 各自维护一份打开状态。
 
+文件详情与「打开文件」标签共用工作区层的 `useWorkspaceFileTree`：目录加载结果、展开状态、筛选、宽度、显隐和滚动位置不随标签重建。切换工作区时重置目录，并丢弃旧工作区或旧筛选条件下的异步响应。
+
+文件目录通过 `desktop.watchWorkspaceEntries` 订阅 Main 的目录变更；`entry-watcher.ts` 只非递归监听根目录及已加载的目录，筛选时包含结果的祖先目录，不依赖 Git。每次通知前会校验订阅路径及目录 inode，为后来创建或重建的目录补建监听。工具、终端或外部编辑器的写入会触发后台重新读取，监听就绪及窗口重新聚焦时也会校正缓存。`useWorkspaceEntriesSync` 合并读取期间的重复通知，操作对话框提交期间暂停同步。目录快照按父子顺序替换，清理已删除/重命名的旧节点及后代，保留现存目录的展开状态、宽度和滚动位置；刷新失败保留最后可用的目录，不清空文件树或覆盖编辑草稿。切换工作区、窗口导航或 renderer 退出会释放旧监听。
+
+可编辑的文本文件打开后自动进入编辑状态；预览内容被截断时，`useWorkspaceFileDraft` 先读取完整内容。`Ctrl+S` / `⌘S` 保存当前草稿，保存后继续编辑，保存期间新增的输入仍保留为未保存内容。对应侧栏或底栏标签在关闭按钮旁显示未保存小点；保存失败保留草稿与错误提示。文件页不再提供进入编辑、取消或保存按钮。
+
+`useWorkspaceFilePanelLifecycle` 按当前文件标签的路径同步共享文档，覆盖点击、关闭后的回退和会话恢复。关闭按钮、快捷键与关闭整个槽位共用未保存确认；取消时保留标签和草稿。标签切换会使旧读取失效，文件页在路径匹配前不会展示上一份内容，因此连续关闭也不会让延迟响应重新打开已关闭的文件。
+
+打开的文件单独监听其父目录，即使目录树折叠也能接收外部修改。无本地改动时，后台刷新同时更新预览、编辑内容和保存 revision；revision 未变化时保持编辑状态。`useWorkspaceEditorDocument` 只为外部内容替换递增 CodeView item version，普通输入和保存回传继续复用当前编辑文档，保留光标与撤销记录。存在未保存修改或正在保存时暂停同步，恢复后重新校正磁盘内容；已经发出的读取也不能覆盖期间新增的本地编辑。文件临时不可读时保留最后可用内容，等待下一次通知或窗口聚焦重试。
+
+Main 按 `subscriptionId` 独立管理文件树和编辑器的监听。替换或取消订阅只释放对应消费者；窗口导航、renderer 退出则释放全部监听，并清理异步初始化期间失效的订阅。
+
+文件树右键菜单支持新建、重命名和删除文件及文件夹；空白处在工作区根目录新建，文件夹上在其内部新建，文件上在同级目录新建。`WorkspaceEntryDialog` 复用共享对话框与名称校验，失败保留输入。`useProjectWorkspace` 经 runtime client 的 `POST/PATCH/DELETE /v1/projects/:id/entries` 调用 workspace store；runtime 检查路径边界和名称，并拒绝覆盖同名条目。同一工作区的条目操作完成前不接受重复操作，避免磁盘操作成功后丢失界面更新。成功后文件树更新缓存、展开路径及未完成的目录读取；侧栏与底栏标签同步重命名路径，当前草稿保留内容和 revision，继续在新路径保存。
+
+`useWorkspaceEntryDrag` 处理文件/文件夹拖拽：文件夹行接收移入，目录空白处接收移回根目录，文件行接收移至同级目录。仅接收当前工作区目录项；目标使用淡灰背景和边框提示，覆盖文件夹及其展开的子项，移回根目录时提示整个文件列表，不额外显示根目录行。同级移动不执行，文件夹移入自身/后代会提示。移动通过 `POST /v1/projects/:id/entries/move`，与重命名共享 runtime 路径迁移实现，校验目标目录与同名冲突。成功后复用目录、标签和草稿路径迁移；失败保留原状态并显示错误。
+
+删除前确认具体路径，并明确提示永久删除及文件夹内的全部内容，当前文件有未保存修改时额外提醒。取消或失败保留文件树、标签和草稿；成功才移除目录项及后代标签，删除当前文件时返回目录标签。Runtime 禁止删除工作区根目录、越界路径和直接符号链接；递归删除目录不跟随内部符号链接。
+
 `Ctrl+W`（macOS 为 `⌘W`）关闭右侧工作区当前显示的标签页，复用 `closeDesktopPanelItem` 的关闭与资源清理逻辑。右侧栏收起、存在模态窗口或焦点位于终端输入区时不执行；可在设置的“键盘快捷键”中修改绑定。Main 在原生菜单处理前将已启用的应用快捷键交给 renderer，避免 `⌘W` 直接关闭窗口。
 
 ## Workspace hooks
@@ -34,6 +52,8 @@ Panel 选择和 session 生命周期在 hooks，不应由各 tab 各自维护一
 | `useDesktopWorkspacePanelSession.ts` | Panel 对当前 thread/project 的 session |
 | `useDesktopPanelResize.ts` | Sidebar/workspace/bottom 尺寸与边界 |
 | `useProjectWorkspace.ts` | 项目目录、搜索、文件读取 |
+| `useWorkspaceFilePanelLifecycle.ts` | 文件标签切换、关闭确认和当前文档订阅 |
+| `useWorkspaceEntriesSync.ts` | 目录与文档共用的变动通知合并及订阅清理 |
 | `useThreadWorkspace.ts` | Thread 与 project/workspace 关系 |
 | `usePanelTabCloseTransition.ts` | Tab 关闭动画/状态收敛 |
 | `startThreadReview.ts` | 从 UI 目标创建 review turn |
