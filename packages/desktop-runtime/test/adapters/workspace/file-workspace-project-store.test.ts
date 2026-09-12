@@ -2,7 +2,7 @@ import {
   WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES,
   WORKSPACE_TEXT_FILE_MAX_BYTES,
 } from '@setsuna-desktop/contracts';
-import { access, lstat, mkdir, mkdtemp, readFile, realpath, symlink, truncate, writeFile } from 'node:fs/promises';
+import { access, lstat, mkdir, mkdtemp, readFile, realpath, rename, symlink, truncate, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -354,6 +354,36 @@ describe('file workspace project store', () => {
     expect(directory.truncated).toBe(false);
     expect(search.entries).toHaveLength(80);
     expect(search.truncated).toBe(true);
+  });
+
+  it('treats missing or non-directory search parents as empty and discovers them when created', async () => {
+    const fixture = await createWorkspaceFixture();
+    const store = new FileWorkspaceProjectStore(fixture.dataDir, systemClock);
+    const project = await store.addProject({ path: fixture.projectDir });
+
+    for (const parent of ['services/runtime-client', 'README.md', 'README.md/child']) {
+      await expect(store.searchEntries(project.id, ' Client ', parent)).resolves.toEqual({
+        entries: [], query: 'client', scanned: 0, truncated: false, workspaceRoot: project.path,
+      });
+    }
+    await mkdir(path.join(fixture.projectDir, 'services', 'runtime-client'), { recursive: true });
+    await writeFile(path.join(fixture.projectDir, 'services', 'runtime-client', 'client.ts'), 'export {};');
+    await expect(store.searchEntries(project.id, '', 'services/runtime-client')).resolves.toMatchObject({
+      entries: [{ kind: 'file', path: 'services/runtime-client/client.ts' }],
+    });
+  });
+
+  it('still rejects escaped search scopes and unavailable workspaces', async () => {
+    const fixture = await createWorkspaceFixture();
+    const store = new FileWorkspaceProjectStore(fixture.dataDir, systemClock);
+    const project = await store.addProject({ path: fixture.projectDir });
+    await symlink(fixture.dataDir, path.join(fixture.projectDir, 'external'), process.platform === 'win32' ? 'junction' : 'dir');
+
+    for (const parent of ['..', '../missing', 'external']) {
+      await expect(store.searchEntries(project.id, '', parent)).rejects.toThrow('escapes');
+    }
+    await rename(fixture.projectDir, `${fixture.projectDir}-moved`);
+    await expect(store.searchEntries(project.id, '', 'services/runtime-client')).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('propagates an early-stop signal out of nested directories', async () => {

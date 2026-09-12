@@ -956,7 +956,7 @@ function assistantWorkItemNodes(
       : [];
   }
   if (item.type === 'contextCompaction') {
-    return [<ContextCompactionStatus active={item.active} key={item.id} message={item.message} presentation="tool" />];
+    return [<ContextCompactionStatus active={item.active} key={item.id} message={item.message} />];
   }
   const visibleToolRuns = item.toolRuns.filter(isDisplayableRuntimeToolRun);
   // 流式传输期间，连续工具片段会合并到此项目中，但首个片段保持稳定，

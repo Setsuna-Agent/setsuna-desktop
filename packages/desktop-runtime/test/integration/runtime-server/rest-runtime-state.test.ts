@@ -20,6 +20,20 @@ describe('runtime server REST runtime state', () => {
     await harness.close();
   });
 
+  it('returns successful empty entry searches for missing Markdown reference directories', async () => {
+    const projectPath = path.join(harness.runtimeDataDir, 'reference-project');
+    await mkdir(projectPath);
+    const project = await harness.runtimeFetch('/v1/projects', {
+      method: 'POST', body: JSON.stringify({ path: projectPath }),
+    });
+    for (const parent of ['services/runtime-client', 'mcp/src/runtime/adapters/sdk']) {
+      const result = await harness.runtimeFetch(
+        `/v1/projects/${encodeURIComponent(project.id)}/entries/search?q=&parent=${encodeURIComponent(parent)}`,
+      );
+      expect(result).toEqual({ entries: [], query: '', scanned: 0, truncated: false, workspaceRoot: project.path });
+    }
+  });
+
   it('creates, renames, moves and deletes workspace entries through REST', async () => {
     const projectPath = path.join(harness.runtimeDataDir, 'entry-project');
     await mkdir(projectPath);

@@ -51,9 +51,13 @@ export type RuntimeTurnActivityProjection = {
   updatedAt: string;
 };
 
+/** Sampling needs message/attachment state, not the diagnostic history of every prior request. */
+export type RuntimeThreadSamplingState = Pick<RuntimeThread, 'messages' | 'kind' | 'lastSeq' | 'messageCount' | 'updatedAt'>;
+
 export type ThreadStore = {
   listThreads(query?: ThreadStoreQuery): Promise<RuntimeThreadSummary[]>;
   getThread(threadId: string): Promise<RuntimeThread | null>;
+  getSamplingState?(threadId: string): Promise<RuntimeThreadSamplingState | null>;
   getTurnActivity(threadId: string, turnId: string): Promise<RuntimeTurnActivityProjection | null>;
   getThreadPage(threadId: string, query?: RuntimeMessagePageQuery): Promise<RuntimeThread | null>;
   listMessages(threadId: string, query?: RuntimeMessagePageQuery): Promise<RuntimeMessagePage>;

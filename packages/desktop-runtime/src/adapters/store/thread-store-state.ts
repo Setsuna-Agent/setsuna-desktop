@@ -57,13 +57,15 @@ export function projectRuntimeTurnActivity(
 }
 
 export function eventCanUseDelayedCheckpoint(event: StoredThreadEvent): boolean {
-  return event.type === 'message.delta'
-    || event.type === 'item.delta'
-    || event.type === 'reasoning.summary_delta'
-    || event.type === 'reasoning.raw_delta'
-    || event.type === 'plan.delta'
-    || event.type === 'tool.preview'
-    || event.type === 'tool.output_delta';
+  // Every event is committed immediately. Only the rebuildable full snapshot is batched;
+  // lifecycle boundaries and history mutations still establish an immediate checkpoint.
+  return !event.type.startsWith('thread.')
+    && !event.type.startsWith('messages.')
+    && event.type !== 'message.updated'
+    && event.type !== 'turn.started'
+    && event.type !== 'turn.completed'
+    && event.type !== 'turn.cancelled'
+    && event.type !== 'runtime.error';
 }
 
 export function toSummary(thread: RuntimeThread): RuntimeThreadSummary {

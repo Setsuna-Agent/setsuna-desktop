@@ -8,7 +8,7 @@ import {
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
-import { parseRipgrepCommand } from '@setsuna-desktop/contracts';
+import { parseRipgrepCommand, runtimeText, type RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import type { SandboxExecutionPlan } from '../../../ports/sandbox-execution-plan.js';
 import type { ShellSandboxProvider } from '../../../ports/shell-sandbox-provider.js';
 import {
@@ -88,18 +88,19 @@ export function waitForShellSession(
   ]);
 }
 
-export function runningShellResult(session: ShellSession, root: string) {
+export function runningShellResult(session: ShellSession, root: string, language?: RuntimeInterfaceLanguage) {
+  const text = runtimeText(language);
   return {
     ok: true,
     content: [
       takeShellSessionOutput(session, root),
       '',
-      `Process is still running. Use read_shell_process with process_id ${session.id} to read more output or completion status.`,
+      text(`Process is still running. Use read_shell_process with process_id ${session.id} to read more output or completion status.`, `进程仍在运行。使用 read_shell_process 并传入 process_id ${session.id}，读取后续输出或完成状态。`),
       session.persist
-        ? `This process is persisted for future turns until ${new Date(session.expiresAt).toISOString()} or until terminate_shell_process is called.`
+        ? text(`This process is persisted for future turns until ${new Date(session.expiresAt).toISOString()} or until terminate_shell_process is called.`, `此进程会保留至 ${new Date(session.expiresAt).toISOString()}，可在后续轮次继续使用，或调用 terminate_shell_process 终止。`)
         : '',
     ].join('\n'),
-    display: `command still running: ${session.command}`,
+    display: text(`command still running: ${session.command}`, `命令仍在运行：${session.command}`),
     process_id: session.id,
     running: true,
     persisted: Boolean(session.persist),
@@ -107,19 +108,20 @@ export function runningShellResult(session: ShellSession, root: string) {
   };
 }
 
-export function completedShellResult(session: ShellSession, root: string) {
+export function completedShellResult(session: ShellSession, root: string, language?: RuntimeInterfaceLanguage) {
+  const text = runtimeText(language);
   const failure = classifyShellSessionFailure(session);
   const noMatches = !failure && session.exitCode === 1;
   const status = session.timedOut
-    ? `command timed out after ${session.timeout}ms`
+    ? text(`command timed out after ${session.timeout}ms`, `命令在 ${session.timeout} 毫秒后超时`)
     : noMatches
-      ? 'command completed (no matches)'
+      ? text('command completed (no matches)', '命令已完成（无匹配结果）')
       : session.exitCode === 0
-        ? 'command completed'
-        : `command exited ${session.exitCode ?? session.signal}`;
+        ? text('command completed', '命令已完成')
+        : text(`command exited ${session.exitCode ?? session.signal}`, `命令已退出，退出码或信号：${session.exitCode ?? session.signal}`);
   return {
     ok: !failure,
-    content: (noMatches ? 'No matches found.\n' : '') + takeShellSessionOutput(session, root),
+    content: (noMatches ? text('No matches found.\n', '未找到匹配结果。\n') : '') + takeShellSessionOutput(session, root),
     display: `${status}: ${session.command}`,
     process_id: session.id,
     running: false,

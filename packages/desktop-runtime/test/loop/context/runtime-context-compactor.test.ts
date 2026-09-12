@@ -9,7 +9,7 @@ import {
   type RuntimeUsage,
 } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
-import type { RuntimeContextCompactionCandidate } from '../../../src/loop/context/context-compaction.js';
+import { estimateRuntimeMessageTokens, type RuntimeContextCompactionCandidate } from '../../../src/loop/context/context-compaction.js';
 import { RuntimeContextCompactor } from '../../../src/loop/context/runtime-context-compactor.js';
 import type { ModelClient, ModelCompactionRequest } from '../../../src/ports/model-client.js';
 import type { RuntimeDebugTraceSink } from '../../../src/ports/runtime-debug-trace.js';
@@ -18,6 +18,53 @@ import { InMemoryConversationDebugTraceStore } from '@setsuna-desktop/feature-co
 import { CapturingUsageStore } from '../../support/agent-loop/shared.js';
 
 describe('RuntimeContextCompactor', () => {
+  it.each(['automatic', 'manual'] as const)('reserves a usable summary budget near the 16k limit during %s compaction', async (mode) => {
+    const messages: RuntimeMessage[] = [
+      { id: 'older', role: 'assistant', content: 'x'.repeat(2_003 * 4 - 'assistant\n'.length), createdAt: '2026-07-11T00:00:00.000Z' },
+      { id: 'latest', role: 'user', content: 'y'.repeat(11_518 * 4 - 'user\n'.length), turnId: 'turn_1', createdAt: '2026-07-11T00:00:01.000Z' },
+    ];
+    const thread = compactionThread(messages);
+    const requests: ModelRequest[] = [];
+    const events: Array<Omit<RuntimeEvent, 'seq'>> = [];
+    const client: ModelClient = { stream: async function* (request) {
+      requests.push(request);
+      yield { type: 'text_delta', text: '{"summary":"Completed the earlier work; continue with the latest user request."}' };
+      yield { type: 'done', finishReason: requests.length === 1 ? 'length' : 'stop' };
+    } };
+
+    expect(estimateRuntimeMessageTokens(messages) + 2_000).toBe(15_521);
+    const compacted = await createCompactor(client, events).compactMessagesBeforeModelRequest({
+      force: mode === 'manual', messages, thread, threadId: thread.id, turnId: 'turn_1',
+      contextBudget: { maxContextTokens: 16_000 }, reservedTokens: 2_000,
+      runtimeConfig: null, signal: new AbortController().signal,
+    });
+
+    expect(requests.map((request) => request.maxOutputTokens)).toEqual([4_096, 8_192]);
+    expect(compacted.find((message) => message.id === 'latest')).toMatchObject({ content: messages[1]!.content, visibility: 'transcript' });
+    expect(compacted.some((message) => message.contextCompaction)).toBe(true);
+    expect(estimateRuntimeMessageTokens(compacted) + 2_000).toBeLessThan(13_600);
+    expect(events.filter((event) => event.type === 'thread.context_compacted')).toHaveLength(1);
+  });
+
+  it.each(['fixed context', 'provider limit'] as const)('does not sample or retry when %s prevents a usable summary', async (reason) => {
+    const candidate = compactionCandidate();
+    const runtimeConfig = contextCompactionTaskModelConfig();
+    if (reason === 'fixed context') {
+      candidate.pinnedMessages = [{ ...candidate.olderMessages[0]!, role: 'developer', content: 'policy '.repeat(400) }];
+    } else {
+      runtimeConfig.providers[1]!.models[0]!.maxOutputTokens = 1;
+    }
+    const requests: ModelRequest[] = [];
+    const client: ModelClient = { stream: async function* (request) {
+      requests.push(request);
+      yield { type: 'done', finishReason: 'length' };
+    } };
+
+    await expect(createCompactor(client).generateContextCompactionSummary({ ...summaryInput(candidate), runtimeConfig }))
+      .rejects.toThrow('insufficient output budget');
+    expect(requests).toHaveLength(0);
+  });
+
   it('reads item-based agent output from current provider adapters', async () => {
     const modelClient = new CompactionModelClient([
       { type: 'item_started', item: { id: 'summary_1', kind: 'agent_message', status: 'in_progress' } },
@@ -26,19 +73,17 @@ describe('RuntimeContextCompactor', () => {
       { type: 'done', finishReason: 'stop' },
     ]);
 
-    const result = await createCompactor(modelClient).generateContextCompactionSummary(compactionCandidate());
+    const result = await createCompactor(modelClient).generateContextCompactionSummary(summaryInput());
 
     expect(result.text).toBe('摘要：\n保留当前目标');
     expect(modelClient.request).toMatchObject({ model: 'context-compaction', thinking: false, toolChoice: 'none' });
   });
 
-  it('uses a bounded source fallback when a provider returns no visible agent text', async () => {
+  it('rejects an empty summary instead of replacing history with a raw excerpt', async () => {
     const modelClient = new CompactionModelClient([{ type: 'done', finishReason: 'stop' }]);
 
-    const result = await createCompactor(modelClient).generateContextCompactionSummary(compactionCandidate());
-
-    expect(result.text).toContain('不可信摘录');
-    expect(result.text).toContain('需要保留的用户目标');
+    await expect(createCompactor(modelClient).generateContextCompactionSummary(summaryInput()))
+      .rejects.toThrow('original history was retained');
   });
 
   it('passes through bounded native compaction metadata with the portable summary', async () => {
@@ -71,7 +116,7 @@ describe('RuntimeContextCompactor', () => {
       },
     });
 
-    const result = await createCompactor(modelClient).generateContextCompactionSummary(candidate);
+    const result = await createCompactor(modelClient).generateContextCompactionSummary(summaryInput(candidate));
 
     expect(result).toMatchObject({
       source: 'remote',
@@ -87,12 +132,9 @@ describe('RuntimeContextCompactor', () => {
   it('routes the portable summary through its task model without rebinding native metadata', async () => {
     const modelClient = new NativeCompactionModelClient(nativeCompactionMetadata('encrypted-compaction'));
 
-    await createCompactor(modelClient).generateContextCompactionSummary(
-      compactionCandidate(),
-      undefined,
-      undefined,
-      contextCompactionTaskModelConfig(),
-    );
+    await createCompactor(modelClient).generateContextCompactionSummary({
+      ...summaryInput(), runtimeConfig: contextCompactionTaskModelConfig(),
+    });
 
     expect(modelClient.summaryRequest).toMatchObject({
       model: 'background-summary-model',
@@ -106,13 +148,7 @@ describe('RuntimeContextCompactor', () => {
     const modelClient = new NativeCompactionModelClient(nativeCompactionMetadata('encrypted-compaction'));
     const conversationModel = { providerId: 'chat-provider', model: 'chat-model' };
 
-    await createCompactor(modelClient).generateContextCompactionSummary(
-      compactionCandidate(),
-      undefined,
-      undefined,
-      undefined,
-      conversationModel,
-    );
+    await createCompactor(modelClient).generateContextCompactionSummary({ ...summaryInput(), conversationModel });
 
     expect(modelClient.summaryRequest).toMatchObject(conversationModel);
     expect(modelClient.compactRequest).toMatchObject(conversationModel);
@@ -144,15 +180,10 @@ describe('RuntimeContextCompactor', () => {
     );
     const compactor = createCompactor(modelClient, events, undefined, usageStore);
 
-    const result = await compactor.generateContextCompactionSummary(
-      compactionCandidate(),
-      undefined,
-      undefined,
-      contextCompactionTaskModelConfig(),
-    );
-    await compactor.publishContextCompactionUsages('thread_1', 'turn_1', result.usages);
+    await compactor.generateContextCompactionSummary({
+      ...summaryInput(), runtimeConfig: contextCompactionTaskModelConfig(),
+    });
 
-    expect(result.usages).toEqual([portableUsage, nativeUsage]);
     expect(events.filter((event) => event.type === 'token.count')).toMatchObject([
       { payload: { usage: portableUsage } },
       { payload: { usage: nativeUsage } },
@@ -169,7 +200,7 @@ describe('RuntimeContextCompactor', () => {
     const modelClient = new NativeCompactionModelClient(providerMetadata);
     const compactor = createCompactor(modelClient, events);
 
-    const result = await compactor.generateContextCompactionSummary(compactionCandidate());
+    const result = await compactor.generateContextCompactionSummary(summaryInput());
     await compactor.publishProviderMetadataWarning('thread_1', 'turn_1', result.omittedProviderMetadata);
 
     expect(result.providerMetadata).toBeUndefined();
@@ -186,7 +217,7 @@ describe('RuntimeContextCompactor', () => {
     }));
   });
 
-  it('keeps a deterministic portable fallback when summary sampling fails', async () => {
+  it('keeps history intact when the summary provider fails', async () => {
     const providerMetadata = nativeCompactionMetadata('encrypted-compaction');
     const modelClient: ModelClient = {
       compactConversation: async () => ({
@@ -198,11 +229,83 @@ describe('RuntimeContextCompactor', () => {
       },
     };
 
-    const result = await createCompactor(modelClient).generateContextCompactionSummary(compactionCandidate());
+    const events: Array<Omit<RuntimeEvent, 'seq'>> = [];
+    const messages = compactionMessages();
+    const thread = compactionThread(messages);
+    await expect(createCompactor(modelClient, events).compactMessagesBeforeModelRequest({
+      force: true, messages, thread, threadId: thread.id, turnId: 'turn_1', runtimeConfig: null,
+      signal: new AbortController().signal,
+    })).rejects.toThrow('original history was retained');
+    expect(events.map((event) => event.type)).toEqual(['thread.context_compacting']);
+    expect(thread.messages).toEqual(messages);
+  });
 
-    expect(result.text).toContain('自动摘要不可用');
-    expect(result.text).toContain('需要保留的用户目标');
-    expect(result.providerMetadata).toBe(providerMetadata);
+  it('retries a length-limited response once, preserving usage and array-valued progress', async () => {
+    const requests: ModelRequest[] = [];
+    const usage: RuntimeUsage = { inputTokens: 100, outputTokens: 10, totalTokens: 110 };
+    const client: ModelClient = { stream: async function* (request) {
+      requests.push(request);
+      yield { type: 'text_delta', text: JSON.stringify({ summary: 'Reviewed architecture.', already_said: ['Boundary verified.'], tool_context: ['scope.ts checked.'], open_items: ['Write the evaluation.'] }) };
+      yield { type: 'usage', usage };
+      yield { type: 'done', finishReason: requests.length === 1 ? 'length' : 'stop' };
+    } };
+    const candidate = { ...compactionCandidate(), autoCompactTokenLimit: 20_000 };
+    const events: Array<Omit<RuntimeEvent, 'seq'>> = [];
+    const usageStore = new CapturingUsageStore();
+    const result = await createCompactor(client, events, undefined, usageStore).generateContextCompactionSummary(summaryInput(candidate));
+    expect(requests.map((request) => request.maxOutputTokens)).toEqual([4096, 8192]);
+    expect(events.filter((event) => event.type === 'token.count')).toMatchObject([
+      { payload: { usage } }, { payload: { usage } },
+    ]);
+    expect(usageStore.records).toMatchObject([usage, usage]);
+    expect(result.text).toContain('Boundary verified.');
+    expect(result.text).toContain('scope.ts checked.');
+    expect(result.text).toContain('Write the evaluation.');
+  });
+
+  it.each([
+    [{ type: 'text_delta', text: '{"summary":"unfinished' }, { type: 'done', finishReason: 'stop' }],
+    [{ type: 'text_delta', text: '{"summary":"valid but the stream never completed"}' }],
+  ] as ModelStreamEvent[][])('rejects incomplete compaction streams after one retry (%j)', async (...events) => {
+    let attempts = 0;
+    const client: ModelClient = { stream: async function* () { attempts += 1; yield* events; } };
+    await expect(createCompactor(client).generateContextCompactionSummary(summaryInput())).rejects.toThrow('original history was retained');
+    expect(attempts).toBe(2);
+  });
+
+  it('passes the complete prior handoff into the next compaction', async () => {
+    const client = new CompactionModelClient([{ type: 'text_delta', text: '{"summary":"continued progress"}' }, { type: 'done', finishReason: 'stop' }]);
+    const candidate = compactionCandidate();
+    candidate.olderMessages[0] = {
+      ...candidate.olderMessages[0]!,
+      content: 'a'.repeat(4000) + '\nCritical verified decision in the middle.\n' + 'b'.repeat(4000),
+      contextCompaction: { compactedMessageCount: 10 } as RuntimeMessage['contextCompaction'],
+    };
+    await createCompactor(client).generateContextCompactionSummary(summaryInput(candidate));
+    expect(client.request?.messages.map((message) => message.content).join('\n')).toContain(candidate.olderMessages[0].content);
+  });
+
+  it('records usage without committing a handoff when cancelled at stream completion', async () => {
+    const controller = new AbortController();
+    const usage: RuntimeUsage = { inputTokens: 100, outputTokens: 10, totalTokens: 110 };
+    const usageStore = new CapturingUsageStore();
+    let attempts = 0;
+    const client: ModelClient = { stream: async function* () {
+      attempts += 1;
+      yield { type: 'text_delta', text: '{"summary":"Complete summary"}' };
+      yield { type: 'usage', usage };
+      yield { type: 'done', finishReason: 'stop' };
+      controller.abort(new Error('Cancelled at stream completion'));
+    } };
+    const events: Array<Omit<RuntimeEvent, 'seq'>> = [];
+    const messages = compactionMessages();
+    const thread = compactionThread(messages);
+    await expect(createCompactor(client, events, undefined, usageStore).compactMessagesBeforeModelRequest({
+      force: true, messages, thread, threadId: thread.id, turnId: 'turn_1', runtimeConfig: null, signal: controller.signal,
+    })).rejects.toThrow('Cancelled at stream completion');
+    expect(attempts).toBe(1);
+    expect(events.map((event) => event.type)).toEqual(['thread.context_compacting', 'token.count']);
+    expect(usageStore.records).toMatchObject([{ ...usage, threadId: thread.id, turnId: 'turn_1' }]);
   });
 
   it('records portable and native summary decisions on the debug channel', async () => {
@@ -217,16 +320,15 @@ describe('RuntimeContextCompactor', () => {
     ]);
     const compactor = createCompactor(modelClient, [], traces);
 
-    await compactor.generateContextCompactionSummary(
-      compactionCandidate(),
-      undefined,
-      {
+    await compactor.generateContextCompactionSummary({
+      ...summaryInput(),
+      debugContext: {
         afterEventSeq: 7,
         spanId: 'span_1',
         threadId: 'thread_1',
         turnId: 'turn_1',
       },
-    );
+    });
 
     expect(traces.list('thread_1').traces.map((trace) => ({
       kind: trace.kind,
@@ -284,18 +386,21 @@ describe('RuntimeContextCompactor', () => {
       },
     };
 
-    await expect(createCompactor(modelClient, [], failingTrace).generateContextCompactionSummary(
-      compactionCandidate(),
-      undefined,
-      {
+    await expect(createCompactor(modelClient, [], failingTrace).generateContextCompactionSummary({
+      ...summaryInput(),
+      debugContext: {
         afterEventSeq: 7,
         spanId: 'span_1',
         threadId: 'thread_1',
         turnId: 'turn_1',
       },
-    )).resolves.toMatchObject({ text: '摘要：\nPortable summary.' });
+    })).resolves.toMatchObject({ text: '摘要：\nPortable summary.' });
   });
 });
+
+function summaryInput(candidate = compactionCandidate()) {
+  return { candidate, threadId: 'thread_1', turnId: 'turn_1' };
+}
 
 function createCompactor(
   modelClient: ModelClient,

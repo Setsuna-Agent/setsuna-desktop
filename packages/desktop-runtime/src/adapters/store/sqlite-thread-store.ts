@@ -41,6 +41,7 @@ import {
   listIndexedMessages,
   replaceMessageIndex,
   syncMessageIndex,
+  threadTranscriptPage,
   updateThreadProjection,
 } from './sqlite-thread-projections.js';
 import { ensureSqliteThreadSchema } from './sqlite-thread-schema.js';
@@ -72,7 +73,7 @@ import {
 } from './thread-search.js';
 import { registerSqliteThreadSearch, searchSqliteThreadMessagePreviews } from './sqlite-thread-search.js';
 
-const DEFAULT_CHECKPOINT_DELAY_MS = 250;
+const DEFAULT_CHECKPOINT_DELAY_MS = 1000;
 const DEFAULT_EVENT_RETENTION_LIMIT = 4_096;
 const DEFAULT_LEASE_TTL_MS = 15_000;
 const DEFAULT_LEASE_HEARTBEAT_MS = 5_000;
@@ -224,6 +225,13 @@ export class SqliteThreadStore implements ThreadStore {
     return thread ? cloneThread(thread) : null;
   }
 
+  async getSamplingState(threadId: string) {
+    const { thread } = await this.readThread(threadId);
+    if (!thread) return null;
+    const { messages, kind, lastSeq, messageCount, updatedAt } = thread;
+    return structuredClone({ messages, kind, lastSeq, messageCount, updatedAt });
+  }
+
   async getThreadLastSeq(threadId: string): Promise<number> {
     const safeThreadId = assertSafeRuntimeId(threadId, 'Thread id');
     await this.ensureReady();
@@ -250,10 +258,11 @@ export class SqliteThreadStore implements ThreadStore {
     threadId: string,
     query: RuntimeMessagePageQuery = {},
   ): Promise<RuntimeThread | null> {
-    const { safeThreadId, thread } = await this.readThread(threadId);
+    const { thread } = await this.readThread(threadId);
     if (!thread) return null;
-    const page = listIndexedMessages(this.requireDatabase(), safeThreadId, query);
-    // Overwrite the full message array before cloning so REST pagination also bounds clone cost.
+    // The cached SQLite projection is already available. Slice at prompt boundaries
+    // before cloning; raw listMessages retains its strict indexed-record pagination.
+    const page = threadTranscriptPage(thread.messages, query);
     return cloneThread({
       ...thread,
       messages: page.messages,
@@ -558,7 +567,9 @@ export class SqliteThreadStore implements ThreadStore {
   ): Promise<StoredThreadEvent[]> {
     this.throwIfFailed();
     if (!eventsWithoutSeq.length) return [];
-    const current = await this.requireThread(threadId);
+    // Event reducers use copy-on-write. Keep the internal projection here; public reads still clone.
+    const current = this.threadCache.get(threadId) ?? this.loadThread(threadId);
+    if (!current) throw new Error(`Thread not found: ${threadId}`);
     const delayedCheckpoint = eventsWithoutSeq.every((event) => eventCanUseDelayedCheckpoint(
       { ...event, seq: current.lastSeq + 1 } as StoredThreadEvent,
     ));
@@ -703,6 +714,11 @@ export class SqliteThreadStore implements ThreadStore {
     const thread = this.threadCache.get(threadId);
     if (!thread) return;
     this.withWriteTransaction(() => {
+      const row = this.requireDatabase().prepare('SELECT snapshot_seq FROM threads WHERE id = ?').get(threadId);
+      if (row && numberColumn(row, 'snapshot_seq') === thread.lastSeq) {
+        this.archiveTransientEvents(thread);
+        return;
+      }
       const summary = toSummary(thread);
       const result = this.requireDatabase().prepare(`
         UPDATE threads SET kind = ?, active_turn_id = ?, forked_from_id = ?, parent_thread_id = ?, project_id = ?, title = ?,

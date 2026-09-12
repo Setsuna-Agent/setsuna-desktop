@@ -5,8 +5,44 @@ import {
   estimateRuntimeMessageTokens,
   materializeRuntimeContextCompaction,
 } from '../../../src/loop/context/context-compaction.js';
+import { compactionSummaryOutputBudget } from '../../../src/loop/context/context-compaction-summary.js';
 
 describe('runtime context compaction', () => {
+  it('includes pinned context when deciding whether the latest input leaves room for a summary', () => {
+    const request: RuntimeMessage = {
+      id: 'request', turnId: 'active', role: 'user', content: 'task '.repeat(200),
+      createdAt: '2026-09-12T00:00:00Z', status: 'complete',
+    };
+    const policy: RuntimeMessage = { ...request, id: 'policy', role: 'developer', content: 'policy '.repeat(200) };
+    const latest: RuntimeMessage = { ...request, id: 'latest', content: 'latest '.repeat(1150) };
+    const candidate = createRuntimeContextCompactionCandidate({
+      force: true, activeTurnId: 'active', budget: { maxContextTokens: 4_000 },
+      messages: [policy, request, { ...request, id: 'history', role: 'assistant', content: 'evidence '.repeat(200) }, latest],
+    })!;
+
+    expect(candidate.pinnedMessages.map((message) => message.id)).toEqual(['policy', 'request']);
+    expect(candidate.olderMessages).toContainEqual(latest);
+    expect(candidate.recentMessages).toEqual([]);
+    expect(compactionSummaryOutputBudget(candidate, 0)).toBeGreaterThanOrEqual(850);
+    const result = materializeRuntimeContextCompaction({ candidate, id: 'summary', createdAt: latest.createdAt, summary: 'Continue the current task.' });
+    expect(result.messages.find((message) => message.id === 'request')).toEqual(request);
+    expect(result.messages.find((message) => message.id === 'policy')).toEqual(policy);
+  });
+
+  it('retains the active request and corrections across successive compactions without changing transcript order', () => {
+    const request: RuntimeMessage = { id: 'request', turnId: 'active', role: 'user', content: 'Evaluate Feature architecture.', createdAt: '2026-09-12T00:00:00Z', status: 'complete' };
+    const correction: RuntimeMessage = { ...request, id: 'correction', content: 'Keep the current UI copy.' };
+    let messages: RuntimeMessage[] = [request, correction];
+    for (let round = 0; round < 2; round += 1) {
+      messages.push(...Array.from({ length: 12 }, (_, i): RuntimeMessage => ({ ...request, id: `read_${round}_${i}`, role: 'assistant', content: `Verified evidence ${i}` })));
+      const candidate = createRuntimeContextCompactionCandidate({ force: true, activeTurnId: 'active', messages })!;
+      const result = materializeRuntimeContextCompaction({ candidate, id: `summary_${round}`, createdAt: '2026-09-12T00:01:00Z', summary: 'Boundary verified; write evaluation.' });
+      expect(result.messages.slice(0, 2)).toEqual([request, correction]);
+      expect(candidate.olderMessages).not.toContainEqual(request);
+      expect(result.messages.filter((message) => message.id === 'request')).toHaveLength(1);
+      messages = result.messages;
+    }
+  });
   it('creates a user-context summary and keeps recent messages when forced', () => {
     const messages = Array.from({ length: 12 }, (_, index): RuntimeMessage => ({
       id: `msg_${index}`,

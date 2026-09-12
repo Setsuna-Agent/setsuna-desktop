@@ -57,14 +57,21 @@ Factory 当前按顺序组合：
 ### `tool-router.ts`
 
 每个采样步骤从 `ToolHost` 获取最新目录，先应用任务级 `allowTool` 与显式
-`visibleToModel: false` 过滤，再按 catalog 顺序把所有可见工具 schema 下发给模型。
-runtime 只额外追加用于读取超限结果的 `read_tool_result`；工具是否需要审批、能否并行
+`visibleToModel: false` 过滤。核心工具 schema 常驻；`mcp__` 工具通过 `search_tools`
+按能力关键词或名称搜索后加载，在下一次采样时下发 schema。已加载名称由 turn 持有，
+跨 router 重建和上下文压缩保留，但每步仍重新应用权限过滤。搜索只加载定义，不授予执行权限。
+runtime 还追加用于读取超限结果的 `read_tool_result`；工具是否需要审批、能否并行
 以及输出上限仍由 runtime profile 和 orchestrator 决定。
 
 普通任务和可运行沙箱 shell 的只读任务通过 `exec_command` / `run_shell_command`
 调用 `rg` 搜索内容、`rg --files` 查找文件，模型目录不再公布 `find_files` 和
 `search_text`。只有无法提供沙箱 shell 的内部只读任务使用这两个直接搜索工具兜底。
 工作区 UI 搜索仍由 `WorkspaceSearchEngine` 提供结构化结果。
+
+模型侧说明区分文件发现与目录列举：`rg --files` 搭配 `-g` 定位源码，直接子目录或空目录
+可用目录工具；只有确认 rg 缺失或无法启动时才回退。两个 shell 入口的命令参数说明保持一致。
+环境声明为 `cmd.exe` 时额外说明 CMD 语法、双引号、独立命令分开调用，以及如何避免
+误用 `ls`、`head`、`tail`、分号和通配符路径。此指导不改写或拦截模型生成的命令。
 
 命令搜索遵循 rg 原生忽略规则，`.setsunaignore` 等额外规则通过 `--ignore-file`
 传入；输出由通用 shell 预算和 `read_tool_result` 控制。共享的 literal/rg 参数解析
@@ -195,7 +202,7 @@ Linux 等缺少沙箱的平台在只读任务中用 `git_inspect` 替代 shell �
 
 Windows 原生 shell provider 由 `packages/features/windows-sandbox/src/runtime` 拥有，并在 runtime composition 中绑定到通用 `ShellSandboxProvider` port。`PcLocalToolHost` 只消费 background command、capability、control root、sandbox-only 网络环境、curl 环境补丁和 request writer；Windows sidecar 探测、环境变量与请求协议不进入 Core adapter。
 
-Windows 的 bypass/完全访问命令通过同一 provider 提供的 `backgroundCommand` 使用原生 `run-background` 入口。它以调用者身份和环境创建隐藏且可继承的控制台，避免 pnpm 等工具再次启动 cmd 时弹出窗口；标准输入、输出和错误仍走独立管道，进程树归入随启动程序关闭的 Job。此入口不需要安装沙箱账户或提权，也不改变命令权限；未提供原生启动程序的宿主保留普通 shell 路径。
+Windows 的 bypass/完全访问命令通过同一 provider 提供的 `backgroundCommand` 使用原生 `run-background` 入口。它以调用者身份和环境在独立的隐藏桌面启动命令，后代进程继承该桌面，避免 pnpm、Electron 或测试进程重新创建控制台时弹窗；仅隐藏最外层控制台不足以覆盖这些后代。标准输入、输出和错误仍走独立管道，进程树归入随启动程序关闭的 Job。此入口不需要安装沙箱账户或提权，也不改变命令权限；未提供原生启动程序的宿主保留普通 shell 路径。
 
 受限 shell 的 OS sandbox 是写入完整性与网络出口边界，不作为宿主文件的读取保密边界。macOS Seatbelt 与 Windows provider 都允许命令读取宿主账户原本可读、且工具链正常启动所需的文件；写入仍限于 workspace、显式 writable roots 与每次执行的临时目录，工作区 `.git` / `.agents` / `.codex` 等元数据继续只读，网络继续服从 sandbox policy。macOS 仍强制执行显式 `deniedRoots` 与 `deniedGlobPatterns`；直接文件工具则继续受 effective readable roots 约束，不能借 shell 绕过用户声明的敏感路径规则。
 

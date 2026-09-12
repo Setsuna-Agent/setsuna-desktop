@@ -1,3 +1,4 @@
+import { SEARCH_TOOLS_TOOL_NAME } from './deferred-tools.js';
 import type {
   RuntimeApprovalDecision,
   RuntimeApprovalRequest,
@@ -244,14 +245,16 @@ export class RuntimeToolCallExecutor {
         await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
         return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, undefined, toolRouter);
       }
-      // read_tool_result 由 router 直接实现，不经过宿主工具审批链。
-      if (toolCall.name === READ_TOOL_RESULT_TOOL_NAME) {
+      // Runtime catalog discovery and authorized stored-result reads do not execute host tools.
+      if (toolCall.name === READ_TOOL_RESULT_TOOL_NAME || toolCall.name === SEARCH_TOOLS_TOOL_NAME) {
         if (!toolRouter) {
           content = `Tool ${toolCall.name} failed: no tool host is available.`;
           await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
           return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, undefined, toolRouter);
         }
-        content = await toolRouter.runReadToolResult(parsedArguments, context.threadId);
+        content = toolCall.name === SEARCH_TOOLS_TOOL_NAME
+          ? toolRouter.searchTools(parsedArguments)
+          : await toolRouter.runReadToolResult(parsedArguments, context.threadId);
         await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'success', content);
         return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, undefined, toolRouter);
       }

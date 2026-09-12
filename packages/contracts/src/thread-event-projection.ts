@@ -61,7 +61,7 @@ export function cloneJsonValue<T>(value: T): T {
   return value;
 }
 
-export function cloneThreadTurn(turn: RuntimeThreadTurn): RuntimeThreadTurn {
+export function cloneThreadTurn(turn: RuntimeThreadTurn, options: { shareStepSnapshots?: boolean } = {}): RuntimeThreadTurn {
   return {
     ...turn,
     modelBinding: turn.modelBinding ? { ...turn.modelBinding } : undefined,
@@ -78,7 +78,7 @@ export function cloneThreadTurn(turn: RuntimeThreadTurn): RuntimeThreadTurn {
       ...count,
       usage: { ...count.usage },
     })),
-    stepSnapshots: turn.stepSnapshots?.map((step) => ({
+    stepSnapshots: options.shareStepSnapshots ? turn.stepSnapshots : turn.stepSnapshots?.map((step) => ({
       createdAt: step.createdAt,
       snapshot: cloneStepSnapshot(step.snapshot),
     })),

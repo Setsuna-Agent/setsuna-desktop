@@ -1,4 +1,4 @@
-import type { RuntimeEvent, RuntimeMessage, RuntimeThread } from '@setsuna-desktop/contracts';
+import { applyRuntimeEventToThread, type RuntimeEvent, type RuntimeMessage, type RuntimeThread } from '@setsuna-desktop/contracts';
 import { appendFile, cp, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
 import { RuntimeStorageInUseError, SqliteThreadStore } from '../../../src/adapters/store/sqlite-thread-store.js';
 import { systemClock } from '../../../src/ports/clock.js';
+import { createRuntimeContextCompactionCandidate, materializeRuntimeContextCompaction } from '../../../src/loop/context/context-compaction.js';
 
 const { DatabaseSync } = process.getBuiltinModule('node:sqlite') as typeof import('node:sqlite');
 
@@ -21,6 +22,47 @@ afterEach(async () => {
 });
 
 describe('sqlite thread store', () => {
+  it('commits step history before checkpointing and reconstructs it without copying diagnostics into sampling reads', async () => {
+    const dataDir = await temporaryDirectory();
+    const store = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator(), { checkpointDelayMs: 60_000 });
+    const thread = await store.createThread({ title: 'Batched request history' });
+    const database = new DatabaseSync(path.join(dataDir, 'threads.sqlite'), { readOnly: true });
+    try {
+      for (let i = 0; i < 40; i += 1) {
+        await store.appendEvent(thread.id, {
+          id: `event_step_${i}`, type: 'turn.step_snapshot', threadId: thread.id, turnId: 'turn_steps', createdAt: thread.createdAt,
+          payload: { snapshot: {
+            threadId: thread.id, turnId: 'turn_steps', threadLastSeq: i + 1,
+            conversationMessageIds: [], messageIds: [], toolNames: [], selectedSkills: [],
+            mcpServerKeys: [], mcpServerCount: 0, permissionProfile: 'workspace-write', featureKeys: [],
+            worldState: { threadMessageCount: 0, threadUpdatedAt: thread.updatedAt },
+          } },
+        });
+      }
+      const row = database.prepare('SELECT snapshot_json, snapshot_seq, last_seq FROM threads WHERE id = ?').get(thread.id)!;
+      expect(row.snapshot_seq).toBe(1);
+      expect(row.last_seq).toBe(41);
+      const events = await store.listEvents(thread.id, 1);
+      const replayed = events.reduce(applyRuntimeEventToThread, JSON.parse(String(row.snapshot_json)) as RuntimeThread);
+      const full = await store.getThread(thread.id);
+      expect(replayed).toEqual(full);
+      expect(full?.turns?.[0]?.stepSnapshots).toHaveLength(40);
+      const sampling = await store.getSamplingState(thread.id);
+      expect(sampling).not.toHaveProperty('turns');
+      expect(sampling?.lastSeq).toBe(41);
+      full!.turns![0]!.stepSnapshots!.length = 0;
+      expect((await store.getThread(thread.id))?.turns?.[0]?.stepSnapshots).toHaveLength(40);
+      await store.flush();
+      expect(database.prepare('SELECT snapshot_seq FROM threads WHERE id = ?').get(thread.id)?.snapshot_seq).toBe(41);
+    } finally {
+      database.close();
+      await store.close();
+    }
+    const reopened = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    try {
+      expect((await reopened.getThread(thread.id))?.turns?.[0]?.stepSnapshots).toHaveLength(40);
+    } finally { await reopened.close(); }
+  });
   it('projects cached turn activity without cloning message history', async () => {
     const dataDir = await temporaryDirectory();
     const store = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
@@ -351,6 +393,49 @@ describe('sqlite thread store', () => {
     expect(oldest).toMatchObject({ nextBefore: null, total: 3 });
     expect(oldest.messages.map((message) => message.id)).toEqual(['msg_visible_1']);
     await store.close();
+  });
+
+  it('keeps a long question intact through repeated compactions and pages only earlier questions', async () => {
+    const dataDir = await temporaryDirectory();
+    const store = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    await store.recover();
+    const thread = await store.createThread({ title: 'One long question' });
+    try {
+      await store.appendEvent(thread.id, messageCreatedEvent(thread.id, 'model_input', 'internal context', { visibility: 'model' }));
+      await store.appendEvent(thread.id, messageCreatedEvent(thread.id, 'prompt', 'Evaluate the architecture', { turnId: 'turn_1' }));
+      for (let round = 0; round < 2; round += 1) {
+        for (let index = 0; index < 90; index += 1) {
+          await store.appendEvent(thread.id, messageCreatedEvent(thread.id, `work_${round}_${index}`, 'Inspecting the architecture', {
+            role: index % 2 ? 'tool' : 'assistant', turnId: 'turn_1',
+          }));
+        }
+        await store.appendEvent(thread.id, messageCreatedEvent(thread.id, `steer_${round}`, 'Continue checking', { turnId: 'turn_1' }));
+        const full = (await store.getThread(thread.id))!;
+        const candidate = createRuntimeContextCompactionCandidate({ force: true, messages: full.messages })!;
+        const createdAt = systemClock.now().toISOString();
+        await store.appendEvent(thread.id, {
+          id: `compaction_${round}`, threadId: thread.id, turnId: 'turn_1', createdAt,
+          type: 'thread.context_compacted',
+          payload: materializeRuntimeContextCompaction({ candidate, createdAt, id: `summary_${round}`, summary: 'Architecture context', turnId: 'turn_1' }),
+        });
+      }
+      const complete = (await store.getThread(thread.id))!;
+      expect(complete.messages.length).toBeGreaterThan(160);
+      const firstPage = (await store.getThreadPage(thread.id, { limit: 160 }))!;
+      expect(firstPage.messages.map((message) => message.id)).toEqual(complete.messages.map((message) => message.id));
+      expect(firstPage.messagePage?.nextBefore).toBeNull();
+
+      await store.appendEvent(thread.id, messageCreatedEvent(thread.id, 'next_prompt', 'A different question', { turnId: 'turn_2' }));
+      await store.appendEvent(thread.id, messageCreatedEvent(thread.id, 'next_work', 'Reading', { role: 'assistant', turnId: 'turn_2' }));
+      await store.appendEvent(thread.id, messageCreatedEvent(thread.id, 'next_result', 'Result', { role: 'tool', turnId: 'turn_2' }));
+      const latest = (await store.getThreadPage(thread.id, { limit: 2 }))!;
+      expect(latest.messages.map((message) => message.id)).toEqual(['next_prompt', 'next_work', 'next_result']);
+      const older = (await store.getThreadPage(thread.id, { before: latest.messagePage!.nextBefore!, limit: 2 }))!;
+      expect(older.messages.map((message) => message.id)).toEqual(complete.messages.map((message) => message.id));
+      expect(older.messagePage?.nextBefore).toBeNull();
+    } finally {
+      await store.close();
+    }
   });
 
   it('archives checkpointed stream deltas and reports a hot-replay retention gap', async () => {

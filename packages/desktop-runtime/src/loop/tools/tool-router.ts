@@ -15,6 +15,7 @@ import type {
 } from '../../ports/tool-host.js';
 import type { ToolResultStore } from '../../ports/tool-result-store.js';
 import { assertSafeRuntimeId } from '../../security/runtime-id.js';
+import { DeferredTools, SEARCH_TOOLS_TOOL_NAME } from './deferred-tools.js';
 import type {
   ToolOrchestrator,
   ToolOrchestratorRunOptions,
@@ -86,16 +87,19 @@ export type RuntimeToolRouterOptions = {
   allowTool?(tool: RuntimeToolDefinition): boolean;
   strictApprovalRequiresSerial?: boolean;
   toolResultStore?: ToolResultStore;
+  /** Turn-owned state survives router rebuilds and context compaction, but not permission filtering. */
+  loadedToolNames?: Set<string>;
 };
 
 /**
  * 维护经过权限与可见性过滤的 host catalog，并追加 runtime 自带工具。
- * catalog 中的工具默认全部随每次模型请求下发。
+ * Core tools remain visible; MCP schemas are loaded on demand from this allowed catalog.
  */
 export class RuntimeToolRouter {
   private readonly catalogTools: RuntimeToolDefinition[];
   private readonly catalogToolNames: ReadonlySet<string>;
   private readonly profiles: Map<string, ToolRuntimeProfile>;
+  private readonly deferredTools: DeferredTools;
 
   private constructor(
     private readonly options: RuntimeToolRouterOptions,
@@ -105,6 +109,7 @@ export class RuntimeToolRouter {
     this.catalogTools = catalogTools;
     this.catalogToolNames = new Set(catalogTools.map((tool) => tool.name));
     this.profiles = profiles;
+    this.deferredTools = new DeferredTools(catalogTools, options.loadedToolNames ?? new Set());
   }
 
   static async create(options: RuntimeToolRouterOptions): Promise<RuntimeToolRouter> {
@@ -135,7 +140,8 @@ export class RuntimeToolRouter {
 
   private advertisedTools(): RuntimeToolDefinition[] {
     return [
-      ...this.catalogTools,
+      ...this.catalogTools.filter((tool) => this.deferredTools.isVisible(tool)),
+      ...this.deferredTools.definition(),
       readToolResultDefinition(this.options.context.interfaceLanguage),
     ];
   }
@@ -145,12 +151,12 @@ export class RuntimeToolRouter {
    * Schema，不是执行权限；真正的权限与审批仍由 catalog 过滤和 orchestrator 负责。
    */
   canRouteTool(name: string): boolean {
-    return this.catalogToolNames.has(name) || name === READ_TOOL_RESULT_TOOL_NAME;
+    return this.catalogToolNames.has(name) || name === READ_TOOL_RESULT_TOOL_NAME || name === SEARCH_TOOLS_TOOL_NAME;
   }
 
   /** host catalog 与 runtime 自带工具始终阻止同名动态工具接管。 */
   reservesDynamicToolName(name: string): boolean {
-    return this.catalogToolNames.has(name) || name === READ_TOOL_RESULT_TOOL_NAME;
+    return this.catalogToolNames.has(name) || name === READ_TOOL_RESULT_TOOL_NAME || name === SEARCH_TOOLS_TOOL_NAME;
   }
 
   async toolRuntimeMetadata(): Promise<RuntimeModelRequestToolRuntime[]> {
@@ -250,6 +256,10 @@ export class RuntimeToolRouter {
       '',
       page.content,
     ].join('\n');
+  }
+
+  searchTools(input: unknown): string {
+    return this.deferredTools.search(input);
   }
 
   /** 该工具结果进入模型上下文的上限 token 数。 */

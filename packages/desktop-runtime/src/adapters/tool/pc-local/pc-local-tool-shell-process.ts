@@ -330,11 +330,11 @@ export async function runShellCommand(
   if (!wait.completed) {
     flushShellProgress(session, state.root);
     session.onProgress = null;
-    return runningShellResult(session, state.root);
+    return runningShellResult(session, state.root, options.interfaceLanguage);
   }
 
   if (!persist) removeShellSession(state, session.id);
-  return completedShellResult(session, state.root);
+  return completedShellResult(session, state.root, options.interfaceLanguage);
 }
 
 function resolveShellDirectoryPath(value: unknown, state: ShellProcessState): string {
@@ -366,6 +366,7 @@ function shellCommandTimeoutMs(
 export async function readShellProcess(
   args: ToolArguments,
   state: ShellProcessState,
+  options: ShellCommandExecutionOptions = {},
 ) {
   const processId = String(args?.process_id || '').trim();
   if (!processId) {
@@ -384,10 +385,10 @@ export async function readShellProcess(
 
   const waitMs = boundedInteger(args?.wait_ms, 0, 0, MAX_SHELL_YIELD_MS);
   if (waitMs > 0 && !session.closed) await waitForShellSession(session, waitMs);
-  if (!session.closed) return runningShellResult(session, state.root);
+  if (!session.closed) return runningShellResult(session, state.root, options.interfaceLanguage);
 
   if (!session.persist) removeShellSession(state, session.id);
-  return completedShellResult(session, state.root);
+  return completedShellResult(session, state.root, options.interfaceLanguage);
 }
 
 export function listShellProcesses(args: ToolArguments, state: ShellProcessState) {

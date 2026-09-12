@@ -1,5 +1,6 @@
 import type {
   StoredThreadEvent,
+  RuntimeMessage,
   RuntimeMessagePage,
   RuntimeMessagePageQuery,
   RuntimeThread,
@@ -8,6 +9,36 @@ import type { DatabaseSync, StatementResultingChanges } from 'node:sqlite';
 import { normalizeThreadKind, normalizeThreadMemoryMode, toSummary } from './thread-store-state.js';
 
 type SqliteRow = Record<string, string | number | bigint | Uint8Array | null>;
+
+/** Keep a prompt and all of its work together, even after repeated compactions. */
+export function threadTranscriptPage(
+  messages: RuntimeMessage[],
+  query: RuntimeMessagePageQuery,
+): RuntimeMessagePage {
+  const total = messages.length;
+  const before = normalizedMessageBefore(query.before, total);
+  const targetStart = Math.max(0, before - normalizedMessageLimit(query.limit));
+  const seenTurns = new Set<string>();
+  let firstPromptSeen = false;
+  let start = 0;
+  for (let index = 0; index <= targetStart && index < before; index += 1) {
+    const message = messages[index]!;
+    if (message.visibility === 'model' || message.contextCompaction) continue;
+    if (message.role !== 'user' && message.role !== 'assistant') continue;
+    const continuesTurn = message.turnId ? seenTurns.has(message.turnId) : false;
+    if (message.turnId) seenTurns.add(message.turnId);
+    if (message.role !== 'user' || continuesTurn) continue;
+    // Initial system/model records belong to the first page, not a separate
+    // clickable history page. Later prompts are the only pagination boundaries.
+    if (firstPromptSeen) start = index;
+    firstPromptSeen = true;
+  }
+  return {
+    messages: messages.slice(start, before),
+    nextBefore: start > 0 ? start : null,
+    total,
+  };
+}
 
 export function listIndexedMessages(
   database: DatabaseSync,

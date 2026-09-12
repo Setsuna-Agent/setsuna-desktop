@@ -52,6 +52,7 @@ import {
   isProbablyBinaryWorkspaceFile,
 } from '../../utils/workspace-file-preview.js';
 import { JavaScriptWorkspaceSearchEngine } from '../search/javascript-workspace-search-engine.js';
+import { isPathWithin } from '../search/workspace-search-policy.js';
 import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from '../store/json-file.js';
 import { createWorkspaceEntry, deleteWorkspaceEntry, moveWorkspaceEntry, renameWorkspaceEntry } from './workspace-entry-mutations.js';
@@ -342,9 +343,25 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     const project = await this.requireProject(projectId);
     const search = normalizeEntrySearchText(query);
     const parentScoped = parent !== undefined && parent !== null;
-    const startDirectory = parentScoped ? await safeResolve(project.path, parent || '.') : project.path;
-    const startStat = await stat(startDirectory);
-    if (!startStat.isDirectory()) throw new Error('Path is not a directory.');
+    const emptyResult: WorkspaceEntrySearchResponse = {
+      entries: [], query: search, scanned: 0, truncated: false, workspaceRoot: project.path,
+    };
+    let startDirectory: string;
+    try {
+      startDirectory = parentScoped ? await safeResolve(project.path, parent || '.') : project.path;
+      const startStat = await stat(startDirectory);
+      if (!startStat.isDirectory()) {
+        if (parentScoped && startDirectory !== project.path) return emptyResult;
+        throw new Error('Path is not a directory.');
+      }
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException | null)?.code;
+      if (!parentScoped || (code !== 'ENOENT' && code !== 'ENOTDIR')) throw error;
+      // Markdown references and stale file-picker paths may name missing parents.
+      // An absent search scope is empty; an unavailable workspace is still an error.
+      await assertProjectDirectory(project.path);
+      return emptyResult;
+    }
 
     const entries: WorkspaceEntrySearchResponse['entries'] = [];
     const stack = [startDirectory];
@@ -704,9 +721,14 @@ function sameResolvedPath(left: string, right: string): boolean {
 }
 
 async function safeResolve(projectRoot: string, relativePath: string): Promise<string> {
-  const target = await realpath(path.resolve(projectRoot, normalizeRelativePath(relativePath)));
-  const relative = path.relative(projectRoot, target);
-  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+  const candidate = path.resolve(projectRoot, normalizeRelativePath(relativePath));
+  // Validate before realpath too, so a missing escaped path is never treated as
+  // an ordinary empty search result. The second check still rejects symlink escapes.
+  if (!isPathWithin(projectRoot, candidate)) {
+    throw new Error('Path escapes the project workspace.');
+  }
+  const target = await realpath(candidate);
+  if (!isPathWithin(projectRoot, target)) {
     throw new Error('Path escapes the project workspace.');
   }
   return target;

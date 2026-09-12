@@ -5,6 +5,7 @@ export function runtimeEnvironmentPrompt(environment: RuntimeEnvironment, langua
   const text = runtimeText(language);
   const roots = environment.workspaceRoots.length ? environment.workspaceRoots : [environment.workspaceRoot];
   const repository = environment.repository;
+  const usesCmd = /(?:^|[\\/])cmd(?:\.exe)?$/iu.test(environment.shell ?? '');
   return [
     '<environment_context>',
     `  <environment_id>${xmlText(environment.id)}</environment_id>`,
@@ -14,6 +15,13 @@ export function runtimeEnvironmentPrompt(environment: RuntimeEnvironment, langua
     ...roots.map((root) => `    <root>${xmlText(root)}</root>`),
     '  </workspace_roots>',
     environment.shell ? `  <shell>${xmlText(environment.shell)}</shell>` : '',
+    ...(usesCmd ? [
+      '  <shell_syntax>',
+      text('    Use CMD syntax for this shell, not PowerShell or Bash syntax. Semicolons do not separate commands; issue independent commands as separate tool calls.', "    当前 shell 使用 CMD 语法，不是 PowerShell 或 Bash。分号不是命令分隔符；独立命令分开调用工具。"),
+      text('    Do not assume ls, head, or tail is installed. For direct child directory names use dir /b /ad .; for source file discovery use rg --files . with appropriate -g filters.', "    不要假定已安装 ls、head 或 tail。查看直接子目录名称可用 dir /b /ad .；定位源码文件使用 rg --files . 并添加合适的 -g 筛选。"),
+      text('    Use double quotes for search patterns and globs. Narrow searches and use the shell tool output budget instead of piping to head, tail, or more merely to limit output. A missing pipeline utility is not evidence that rg is missing.', "    搜索词和 glob 使用双引号。通过缩小搜索范围和 shell 工具的输出预算控制结果，不要仅为截短输出就拼接 head、tail 或 more 管道。管道工具缺失不代表 rg 缺失。"),
+      '  </shell_syntax>',
+    ] : []),
     repository
       ? [
           '  <repository type="git">',

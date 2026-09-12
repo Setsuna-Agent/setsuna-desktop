@@ -29,10 +29,9 @@ use windows_sys::Win32::System::SystemInformation::GetSystemDirectoryW;
 use windows_sys::Win32::System::Threading::{
     CreateProcessAsUserW, CreateProcessW, CreateProcessWithLogonW, GetCurrentProcess,
     GetCurrentProcessId, GetExitCodeProcess, OpenProcess, ResumeThread, TerminateProcess,
-    WaitForMultipleObjects, WaitForSingleObject, CREATE_NEW_CONSOLE, CREATE_NO_WINDOW,
-    CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, INFINITE, PROCESS_INFORMATION,
-    PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, STARTF_USESHOWWINDOW,
-    STARTF_USESTDHANDLES, STARTUPINFOW,
+    WaitForMultipleObjects, WaitForSingleObject, CREATE_NO_WINDOW, CREATE_SUSPENDED,
+    CREATE_UNICODE_ENVIRONMENT, INFINITE, PROCESS_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION,
+    PROCESS_SYNCHRONIZE, STARTF_USESHOWWINDOW, STARTF_USESTDHANDLES, STARTUPINFOW,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::SW_HIDE;
 use zeroize::{Zeroize, Zeroizing};
@@ -56,6 +55,9 @@ pub fn spawn_background_shell(command: &str) -> Result<i32, SandboxError> {
         command
     ));
     let (stdin, stdout, stderr) = inheritable_standard_handles()?;
+    // Hiding the initial console does not cover consoles created later by GUI
+    // runtimes or package managers. Descendants must inherit a non-interactive desktop.
+    let (_desktop, mut desktop_wide) = create_execution_desktop()?;
     let mut startup: STARTUPINFOW = unsafe { std::mem::zeroed() };
     startup.cb = std::mem::size_of::<STARTUPINFOW>() as u32;
     startup.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
@@ -63,10 +65,9 @@ pub fn spawn_background_shell(command: &str) -> Result<i32, SandboxError> {
     startup.hStdInput = stdin;
     startup.hStdOutput = stdout;
     startup.hStdError = stderr;
+    startup.lpDesktop = desktop_wide.as_mut_ptr();
     let mut process_info: PROCESS_INFORMATION = unsafe { std::mem::zeroed() };
     let job = JobObject::create()?;
-    // CREATE_NO_WINDOW leaves descendants such as pnpm's cmd without a console
-    // to inherit. Create a hidden console instead, while keeping I/O on the pipes.
     // Suspend before assigning the job so cancellation cannot orphan descendants.
     let created = unsafe {
         CreateProcessW(
@@ -75,7 +76,7 @@ pub fn spawn_background_shell(command: &str) -> Result<i32, SandboxError> {
             std::ptr::null(),
             std::ptr::null(),
             1,
-            CREATE_NEW_CONSOLE | CREATE_SUSPENDED,
+            CREATE_NO_WINDOW | CREATE_SUSPENDED,
             std::ptr::null(),
             std::ptr::null(),
             &startup,
@@ -370,7 +371,7 @@ fn create_execution_desktop() -> Result<(OwnedDesktop, Vec<u16>), SandboxError> 
     if desktop == 0 {
         return Err(SandboxError::with_source(
             SandboxErrorCode::SpawnFailed,
-            "cannot create hidden desktop for sandboxed command",
+            "cannot create hidden desktop for background command",
             std::io::Error::last_os_error(),
         ));
     }

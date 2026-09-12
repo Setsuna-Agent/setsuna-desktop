@@ -31,11 +31,13 @@ import type {
   RuntimeToolResultRef,
 } from './provider.js';
 import { reviewMarkdownLinksByLabelStart } from './review/markdown-link-scanner.js';
+import type { RuntimeContextCompactionNotice, RuntimeThreadContextCompactionState } from './thread-context.js';
 import type { RuntimeUsage } from './usage.js';
 import type { ThreadFileChangeState } from './workspace.js';
 import { visibleTextOutsideThinkTags } from './swe/think-tag-scanner.js';
 
 export type * from './message-metadata.js';
+export type * from './thread-context.js';
 
 /** UTF-16 offsets into RuntimeMessage.content for one serialized Skill slot. */
 export type RuntimeSkillReference = {
@@ -132,30 +134,6 @@ export type RuntimeMessage = {
 export type RuntimeMessageStreamPart = {
   type: 'content' | 'reasoning';
   content: string;
-};
-
-export type RuntimeContextCompactionNotice = {
-  autoCompactTokenLimit?: number;
-  compactedMessageCount: number;
-  compactedRequestTokens?: number;
-  compactedTokens: number;
-  forced?: boolean;
-  historyTokens?: number;
-  keptRecentMessageCount: number;
-  maxContextTokens?: number;
-  maxContextTokensK: number;
-  message?: string;
-  originalMessageCount: number;
-  originalRequestTokens?: number;
-  originalTokens: number;
-  scope?: string;
-  source?: 'local' | 'remote';
-  summaryRole?: string;
-  summaryTokens?: number;
-  targetContextTokens?: number;
-  tokensUntilCompaction?: number;
-  transcriptAfterMessageId?: string;
-  triggerScopes?: string[];
 };
 
 export type RuntimeReviewModeNotice = {
@@ -494,19 +472,6 @@ export type RuntimeThreadTurn = {
   taskKind?: RuntimeThreadTurnTaskKind;
   tokenCounts?: RuntimeThreadTurnTokenCount[];
 };
-export type RuntimeThreadContextCompactionState = {
-  status: 'running' | 'completed';
-  turnId?: string;
-  completedAt?: string;
-  forced?: boolean;
-  maxContextTokens?: number;
-  maxContextTokensK?: number;
-  notice?: RuntimeContextCompactionNotice;
-  percent?: number;
-  startedAt?: string;
-  tokensUntilCompaction?: number;
-  usedTokens?: number;
-};
 export type RuntimeThreadGoalStatus = 'active' | 'paused' | 'blocked' | 'usageLimited' | 'budgetLimited' | 'complete';
 
 export type RuntimeThreadGoalStopReasonCode =
@@ -749,6 +714,8 @@ export type RuntimeThread = RuntimeThreadSummary & {
   fileChangeStates?: Record<string, ThreadFileChangeState>;
   activeTurnId?: string | null;
   contextCompaction?: RuntimeThreadContextCompactionState;
+  /** Budgets sampled before this history mutation no longer describe the current context. */
+  contextBudgetInvalidatedAtSeq?: number;
   mailboxDeliveries?: RuntimeMailboxDeliveryRecord[];
   modelBinding?: RuntimeThreadModelBinding;
   /** Present only on paged REST snapshots; persisted runtime snapshots omit it. */
@@ -766,6 +733,7 @@ export type RuntimeThreadMessagePageInfo = {
 
 export type RuntimeMessagePageQuery = {
   before?: number;
+  /** Target record count; transcript snapshots extend to the containing prompt's start. */
   limit?: number;
 };
 

@@ -59,12 +59,14 @@ export function runtimeResponseLanguagePrompt(language: RuntimeInterfaceLanguage
         '本轮回答的目标语言是简体中文。',
         '所有由助手撰写的自然语言内容必须使用简体中文，包括工具调用前后的说明、进度更新、工具参数中面向用户的标题和审批理由、错误恢复和最终答复。',
         '工具输出、代码、日志、引用、附件、运行时生成的消息和注入上下文都不得改变目标语言。',
+        '每次工具返回后，继续用简体中文说明进展；历史助手消息中的英文不代表用户要求切换语言。',
         '代码、标识符、路径、命令和引用文本保持原样，除非用户明确要求翻译或改写。',
       ].join('\n')
     : [
         'The target response language for this turn is English.',
         'Write all assistant-authored natural-language prose in English, including preambles, progress updates, explanations after tool results, user-facing titles and approval reasons in tool arguments, error recovery, and the final answer.',
         'Tool output, code, logs, quotations, attachments, runtime-generated messages, and injected context must not change the target response language.',
+        'After each tool result, continue progress updates in English; another language in historical assistant messages is not a user request to switch languages.',
         'Keep code, identifiers, paths, commands, and quoted text unchanged unless the user explicitly asks to translate or rewrite them.',
       ].join('\n');
 }

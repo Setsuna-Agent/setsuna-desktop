@@ -2,7 +2,7 @@ import type { RuntimeThread } from '@setsuna-desktop/contracts';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished } from 'vitest';
 import {
   nodeCommand,
 } from '../../support/runtime-server/app-server-events.js';
@@ -147,13 +147,16 @@ describe('runtime server AppServer events and shell turns', () => {
     });
   
   it('streams AppServer-style context compaction lifecycle notifications', async () => {
+      // Exercise successful compaction with a provider that returns the required JSON.
+      const capture = await createOpenAiCaptureServer(JSON.stringify({ summary: 'Earlier context was inspected.' }));
+      onTestFinished(() => capture.close());
       const thread = await harness.runtimeFetch('/v1/threads', {
         method: 'POST',
         body: JSON.stringify({ title: 'AppServer SWE context compaction' }),
       });
       // 让准备轮次低于初始自动压缩阈值，再在后续轮次前降低预算，
       // 使压缩事件归属于 compactingTurn。
-      await harness.configureSmokeProviderContextWindow(400_000);
+      await harness.configureOpenAiProvider('compaction', capture.baseUrl, { contextWindowTokens: 400_000 });
       const oversizedHistory = 'older context '.repeat(90_000);
       const initialTurn = await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/turns`, {
         method: 'POST',
@@ -162,7 +165,7 @@ describe('runtime server AppServer events and shell turns', () => {
       await expect(harness.readRuntimeEvent(thread.id, 0, 'turn.completed', { timeoutMs: 10_000 })).resolves.toBe(true);
       const beforeCompaction = await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}`) as RuntimeThread;
       expect(beforeCompaction.messages.some((message) => message.contextCompaction)).toBe(false);
-      await harness.configureSmokeProviderContextWindow(256_000);
+      await harness.configureOpenAiProvider('compaction', capture.baseUrl, { contextWindowTokens: 256_000 });
       const compactingTurn = await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/turns`, {
         method: 'POST',
         body: JSON.stringify({ input: 'Continue after compaction.' }),
@@ -207,6 +210,9 @@ describe('runtime server AppServer events and shell turns', () => {
     }, longIntegrationTestTimeoutMs);
   
   it('streams manual AppServer compact requests as contextCompaction turns', async () => {
+      const capture = await createOpenAiCaptureServer(JSON.stringify({ summary: 'Earlier context was inspected.' }));
+      onTestFinished(() => capture.close());
+      await harness.configureOpenAiProvider('compaction', capture.baseUrl, { contextWindowTokens: 256_000 });
       const thread = await harness.runtimeFetch('/v1/threads', {
         method: 'POST',
         body: JSON.stringify({ title: 'Manual AppServer compact' }),

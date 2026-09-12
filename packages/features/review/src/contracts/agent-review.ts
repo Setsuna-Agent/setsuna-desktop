@@ -23,7 +23,7 @@ export type StartReviewResult = Readonly<{
 
 /** Feature-owned request passed through the narrow runtime host into Core turn scheduling. */
 export type ReviewTurnRequest = Readonly<{
-  /** Conversation model retained for thread binding and persistent context compaction. */
+  /** Conversation model retained for thread binding; review sampling uses its own context budget. */
   conversationModelSelection?: RuntimeConfiguredModelReference;
   developerInstructions: string;
   displayText: string;

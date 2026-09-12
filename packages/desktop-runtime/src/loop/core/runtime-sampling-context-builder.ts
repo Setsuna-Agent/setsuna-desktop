@@ -1,3 +1,5 @@
+import type { ContextTokenCalibration } from '../context/context-token-calibration.js';
+import { SEARCH_TOOLS_TOOL_NAME } from '../tools/deferred-tools.js';
 import {
   cloneRuntimeSkillReferences,
   isRuntimeInputMessageAttachment,
@@ -36,7 +38,6 @@ import {
   CONTEXT_COMPACTION_MAX_TOKENS,
   estimateRuntimeMessageTokens,
   estimateRuntimeToolDefinitionTokens,
-  fitRuntimeMessagesToContextBudget,
 } from '../context/context-compaction.js';
 import { compileRuntimePrompt } from '../context/prompt-compiler.js';
 import { buildRuntimeAttachmentContext, messagesForModel } from '../context/runtime-attachment-context.js';
@@ -116,6 +117,8 @@ export class RuntimeSamplingContextBuilder {
   }
 
   async build({
+    contextTokenCalibration,
+    loadedToolNames,
     conversationMessages,
     hookContextMessages,
     responseLanguage,
@@ -131,6 +134,8 @@ export class RuntimeSamplingContextBuilder {
     turnModel,
     toolAccess = 'all',
   }: {
+    loadedToolNames?: Set<string>;
+    contextTokenCalibration?: ContextTokenCalibration;
     conversationMessages: RuntimeMessage[];
     hookContextMessages: RuntimeMessage[];
     responseLanguage: RuntimeInterfaceLanguage;
@@ -157,7 +162,9 @@ export class RuntimeSamplingContextBuilder {
     }
     const modelForSampling = samplingModelForTurn(stepRuntimeConfig, samplingModel ?? turnModel);
     const debugTraceEnabled = runtimeDebugTraceEnabled(this.options.debugTrace);
-    const snapshotThread = await this.options.threadStore.getThread(threadId).catch(() => null);
+    const snapshotThread = await (this.options.threadStore.getSamplingState
+      ? this.options.threadStore.getSamplingState(threadId)
+      : this.options.threadStore.getThread(threadId)).catch(() => null);
     if (debugTraceEnabled) {
       appendRuntimeDebugTraceSafely(this.options.debugTrace, {
         afterEventSeq: snapshotThread?.lastSeq ?? thread.lastSeq,
@@ -190,8 +197,13 @@ export class RuntimeSamplingContextBuilder {
       turnId,
     });
     const activeModelSupportsImages = modelForSampling.model?.supportsImages === true;
+    const configuredPermissionProfile = stepRuntimeConfig?.permissionProfile ?? 'workspace-write';
+    // Review keeps its inspection-only tool catalog and policy, but an explicit
+    // full-access selection must not silently become an OS read-only sandbox.
+    const enforceReadOnly = toolAccess === 'read-only'
+      && !(taskKind === 'review' && configuredPermissionProfile === 'danger-full-access');
     const configuredSandbox = stepRuntimeConfig?.sandboxWorkspaceWrite ?? {};
-    const sandboxWorkspaceWrite = toolAccess === 'read-only'
+    const sandboxWorkspaceWrite = enforceReadOnly
       ? { ...configuredSandbox, writableRoots: [], networkAccess: false }
       : configuredSandbox;
     const goalExecution = goalExecutionForTurn({
@@ -216,8 +228,8 @@ export class RuntimeSamplingContextBuilder {
       modelCapabilities: {
         supportsImages: activeModelSupportsImages,
       },
-      permissionProfile: toolAccess === 'read-only' ? 'read-only' : stepRuntimeConfig?.permissionProfile ?? 'workspace-write',
-      ...(toolAccess === 'read-only' ? { readOnly: true } : {}),
+      permissionProfile: enforceReadOnly ? 'read-only' : configuredPermissionProfile,
+      ...(enforceReadOnly ? { readOnly: true } : {}),
       sandboxWorkspaceWrite,
       ...(attachmentContext.readableRoots.length
         ? { directToolReadableRoots: attachmentContext.readableRoots }
@@ -244,6 +256,7 @@ export class RuntimeSamplingContextBuilder {
     const toolRouter = this.options.toolHost && toolAccess !== 'none'
       ? await RuntimeToolRouter.create({
           toolHost: this.options.toolHost,
+          loadedToolNames,
           orchestrator: this.options.toolExecutor.toolOrchestratorFor(toolContext, stepRuntimeConfig),
           context: toolContext,
           approvalPolicy: stepRuntimeConfig?.approvalPolicy ?? 'on-request',
@@ -269,7 +282,7 @@ export class RuntimeSamplingContextBuilder {
       : availableTools;
     const tools = toolAccess === 'read-only'
       ? scopedTools?.filter((tool) => (
-          isRuntimeReadOnlyTool(tool.name) || tool.name === READ_TOOL_RESULT_TOOL_NAME
+          isRuntimeReadOnlyTool(tool.name) || tool.name === READ_TOOL_RESULT_TOOL_NAME || tool.name === SEARCH_TOOLS_TOOL_NAME
         ))
       : scopedTools;
     const advertisedToolNames = tools?.map((tool) => tool.name) ?? [];
@@ -280,10 +293,10 @@ export class RuntimeSamplingContextBuilder {
       collaborationTools,
       goalTools,
     );
-    const contextBudget = contextCompactionBudgetForConfig(stepRuntimeConfig, modelForSampling.model);
-    const persistentContextBudget = taskKind === 'review'
-      ? contextCompactionBudgetForConfig(stepRuntimeConfig, turnModel?.model)
-      : contextBudget;
+    const contextBudget = {
+      ...contextCompactionBudgetForConfig(stepRuntimeConfig, modelForSampling.model),
+      inputTokenAdjustment: contextTokenCalibration?.adjustment(modelForSampling.request, orderedConversationMessages) ?? 0,
+    };
     const promptContext = await this.promptContexts.build({
       config: stepRuntimeConfig,
       hookContextMessages: [
@@ -309,14 +322,11 @@ export class RuntimeSamplingContextBuilder {
     const reservedTokens = estimateRuntimeMessageTokens(transientPrompt.messages)
       + estimateRuntimeToolDefinitionTokens(tools)
       + reservedOutputTokens;
-    const persistentConversationMessages = await this.options.contextCompactor.compactMessagesBeforeModelRequest({
-      contextBudget: persistentContextBudget,
-      conversationModel: turnModel
-        ? {
-            providerId: turnModel.binding.providerId,
-            model: turnModel.binding.modelCode,
-          }
-        : modelForSampling.request,
+    // Every task uses the actual sampling model's budget and usage correction.
+    // A request-only tail trim would become the next step's history without a handoff.
+    const compactedConversationMessages = await this.options.contextCompactor.compactMessagesBeforeModelRequest({
+      contextBudget,
+      conversationModel: modelForSampling.request,
       force: false,
       messages: orderedConversationMessages,
       reservedTokens,
@@ -326,13 +336,6 @@ export class RuntimeSamplingContextBuilder {
       threadId,
       turnId,
     });
-    const compactedConversationMessages = taskKind === 'review'
-      ? fitRuntimeMessagesToContextBudget({
-          budget: contextBudget,
-          messages: persistentConversationMessages,
-          reservedTokens,
-        })
-      : persistentConversationMessages;
     const providerConversationMessages = await messagesForModel(compactedConversationMessages, {
       resolvedAttachments: attachmentContext.resolvedAttachments,
       supportsImages: activeModelSupportsImages,
@@ -369,7 +372,11 @@ export class RuntimeSamplingContextBuilder {
         messages: modelRequestMessages(messages),
         tools,
         reservedOutputTokens,
-        budget: contextBudget,
+        budget: {
+          ...contextBudget,
+          // A new summary starts a new estimation baseline; the previous request's correction no longer applies.
+          inputTokenAdjustment: contextTokenCalibration?.adjustment(modelForSampling.request, compactedConversationMessages) ?? 0,
+        },
       }),
       promptManifest: compiledPrompt.manifest,
       featureKeys: Object.keys(toolContext.features ?? {}).sort(),

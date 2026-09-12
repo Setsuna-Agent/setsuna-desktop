@@ -289,7 +289,8 @@ export function ChatTranscript({
                   <div className="chat-bubble-list" ref={listRef}>
                     {renderWindow.hiddenItemCount || messageHistory.hasMore ? (
                       <TranscriptWindowDivider
-                        hiddenMessageCount={renderWindow.hiddenMessageCount + messageHistory.remainingCount}
+                        hiddenMessageCount={renderWindow.hiddenMessageCount}
+                        hasMore={messageHistory.hasMore}
                         loading={messageHistory.loading}
                         onShowAll={showEarlierMessages}
                       />

@@ -26,6 +26,7 @@ export type GoalContinuationRun = Readonly<{
 }>;
 
 export type GoalToolExecutionContext = Readonly<{
+  interfaceLanguage?: RuntimeInterfaceLanguage;
   goalExecution?: RuntimeThreadGoalExecutionOptions;
   threadId: string;
   turnId: string;

@@ -98,6 +98,7 @@ describe('agent loop response language', () => {
   });
 
   it.each([
+    { mode: 'regular-default', locale: undefined },
     { mode: 'regular', locale: 'zh-CN' },
     { mode: 'review', locale: 'zh-CN' },
     { mode: 'review', locale: 'en-US' },
@@ -118,7 +119,7 @@ describe('agent loop response language', () => {
       configStore: new TestConfigStore(config),
     });
 
-    const input = '帮我检查一下最新的提交';
+    const input = mode === 'regular-default' ? 'review' : 'review一下我最新的一个提交';
     if (mode === 'review') {
       // 中文自定义审查应跟随原始用户输入，而不是界面语言或英文工具输出。
       const started = await loop.startReviewTurn(thread.id, createReviewTurnRequest(

@@ -12,6 +12,33 @@ import type { RuntimeToolExecutionContext, ToolHost } from '../../../src/ports/t
 const RUNTIME_PROVIDED_NAMES = [READ_TOOL_RESULT_TOOL_NAME];
 
 describe('RuntimeToolRouter', () => {
+  it('loads MCP schemas on demand across router rebuilds while preserving permissions and execution approval', async () => {
+    const loadedToolNames = new Set<string>();
+    const runToolCall = vi.fn(async () => ({ content: 'done', processed: true, status: 'success' as const }));
+    const tools: RuntimeToolDefinition[] = [
+      { name: 'read_file', description: 'Read files', inputSchema: { type: 'object' } },
+      { name: 'mcp__docs__search', description: 'Search documents', inputSchema: { type: 'object', description: 'Large schema '.repeat(2000) } },
+      { name: 'mcp__docs__delete', description: 'Delete documents', inputSchema: { type: 'object' } },
+    ];
+    const options = {
+      approvalPolicy: 'on-request' as const, context: runtimeToolContext(), loadedToolNames,
+      orchestrator: { runToolCall } as unknown as ToolOrchestrator,
+      toolHost: { listTools: async () => tools, runTool: async () => ({ content: 'unused' }) },
+      allowTool: (tool: RuntimeToolDefinition) => tool.name !== 'mcp__docs__delete',
+    };
+    const router = await RuntimeToolRouter.create(options);
+    expect(router.tools.map((tool) => tool.name)).toEqual(['read_file', 'search_tools', READ_TOOL_RESULT_TOOL_NAME]);
+    expect(JSON.stringify(router.tools).length).toBeLessThan(JSON.stringify(tools).length / 5);
+    expect(router.searchTools({ query: 'documents search' })).toContain('mcp__docs__search');
+    expect(router.searchTools({ query: 'delete' })).not.toContain('mcp__docs__delete');
+    const rebuilt = await RuntimeToolRouter.create(options);
+    expect(rebuilt.tools).toContainEqual(tools[1]);
+    await rebuilt.runToolCall({ id: 'call_search', name: tools[1]!.name, arguments: '{}' }, {});
+    expect(runToolCall).toHaveBeenCalledWith(expect.objectContaining({ name: tools[1]!.name }), {}, expect.anything(), 'on-request', expect.anything());
+    const revoked = await RuntimeToolRouter.create({ ...options, allowTool: (tool) => tool.name === 'read_file' });
+    expect(revoked.tools.map((tool) => tool.name)).toEqual(['read_file', READ_TOOL_RESULT_TOOL_NAME]);
+    expect(revoked.canRouteTool(tools[1]!.name)).toBe(false);
+  });
   it('advertises direct host tools plus the runtime-provided tools', async () => {
     const router = await RuntimeToolRouter.create({
       approvalPolicy: 'on-request',

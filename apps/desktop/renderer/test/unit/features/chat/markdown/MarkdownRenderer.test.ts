@@ -196,9 +196,8 @@ describe('MarkdownRenderer', () => {
 
   it('converts zoomed Markdown measurements back to layout pixels', () => {
     expect(normalizeMarkdownBlockHeight({
-      marginBottom: 12,
       rectHeight: 210,
       scaleInverse: 1 / 1.05,
-    })).toBeCloseTo(212);
+    })).toBeCloseTo(200);
   });
 });

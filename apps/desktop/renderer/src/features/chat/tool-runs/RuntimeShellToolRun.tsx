@@ -9,7 +9,7 @@ import {
   isRecord,
   recordFromJson,
   stringField,
-  toolRunTarget,
+  toolDisplayName,
 } from './runtimeToolRunPresentationUtils.js';
 
 const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
@@ -18,14 +18,14 @@ export function ShellTerminalResult({ run }: { run: RuntimeToolRun }) {
   const { t } = useI18n();
   const command = shellCommand(run);
   const resultPreview = shellResultPreviewForDisplay(run);
-  const segments = shellOutputSegments(resultPreview);
-  const runtimeDetails = shellRuntimeDetailLines(resultPreview);
+  const segments = shellOutputSegments(resultPreview, t);
+  const runtimeDetails = shellRuntimeDetailLines(resultPreview, t);
   const status = shellStatusLabel(run, t);
-  const diagnostic = shellDiagnosticText(run);
+  const diagnostic = shellDiagnosticText(run, t);
   const runtimeDetailsLabel = t('toolRun.shell.runtimeDetails');
   return (
     <div className={`chat-mcp-terminal chat-mcp-terminal--${shellTerminalStatus(run)}`}>
-      <div className="chat-mcp-terminal__header">Shell</div>
+      <div className="chat-mcp-terminal__header">{t('toolRun.shell.title')}</div>
       {runtimeDetails.length ? (
         <details className="chat-mcp-terminal__metadata">
           <summary
@@ -46,7 +46,7 @@ export function ShellTerminalResult({ run }: { run: RuntimeToolRun }) {
       <div className="chat-mcp-terminal__body">
         <div className="chat-mcp-terminal__command">
           <span>$</span>
-          <code>{command || 'shell'}</code>
+          <code>{command || toolDisplayName(run.name, t)}</code>
         </div>
         {segments.length ? (
           <div className="chat-mcp-terminal__output">
@@ -75,10 +75,10 @@ export function ShellTerminalResult({ run }: { run: RuntimeToolRun }) {
 export function shellCommand(run: RuntimeToolRun): string {
   const args = recordFromJson(run.argumentsPreview);
   const content = run.resultPreview ?? '';
+  // Process/session handles identify a continuation, never the command shown to users.
   return stringField(args.command ?? args.cmd)
     || shellContentLine(content, /^\$\s+(.+)$/m)
-    || shellContentLine(content, /^command:\s*(.+)$/im)
-    || toolRunTarget(run);
+    || shellContentLine(content, /^command:\s*(.+)$/im);
 }
 
 export function shellResultPreviewForDisplay(
@@ -147,12 +147,12 @@ export function shellTerminalStatus(run: RuntimeToolRun): string {
     : run.status;
 }
 
-export function shellDiagnosticText(run: RuntimeToolRun): string {
+export function shellDiagnosticText(run: RuntimeToolRun, t: Translate = defaultTranslate): string {
   const content = run.resultPreview ?? '';
   const exit = shellExitCode(content);
-  if (isFailedShellExit(exit)) return `exit ${exit}`;
+  if (isFailedShellExit(exit)) return t('toolRun.shell.exit', { code: exit });
   const signal = shellContentLine(content, /^signal:\s*(.+)$/im);
-  return signal && signal !== '(none)' ? `signal ${signal}` : '';
+  return signal && signal !== '(none)' ? t('toolRun.shell.signal', { signal }) : '';
 }
 
 export function shellContentLine(content: string, pattern: RegExp): string {
@@ -161,10 +161,11 @@ export function shellContentLine(content: string, pattern: RegExp): string {
 
 export function shellOutputSegments(
   value: string | undefined,
+  t: Translate = defaultTranslate,
 ): Array<{ kind: 'stdout' | 'stderr' | 'message'; text: string }> {
   const normalized = String(value || '')
     .replace(/\r\n/g, '\n')
-    .replace(/\n\nProcess is still running\.[\s\S]*$/u, '')
+    .replace(/\n\n(?:Process is still running\.|进程仍在运行。)[\s\S]*$/u, '')
     .trimEnd();
   if (!normalized) return [];
   const lines = normalized.split('\n');
@@ -178,7 +179,13 @@ export function shellOutputSegments(
   let streamStarted = false;
   let buffer: string[] = [];
   const flush = () => {
-    const text = normalizeShellStreamText(buffer.join('\n'));
+    let text = normalizeShellStreamText(buffer.join('\n'));
+    // Only localize runtime-owned notices outside the command's output streams.
+    if (hasRuntimePreamble && active === 'message' && /^(?:No matches found\.|未找到匹配结果。)$/u.test(text)) {
+      text = t('toolRun.shell.noMatches');
+    }
+    // Empty runtime streams carry a sentinel, not command output or an error.
+    if (hasRuntimePreamble && (active === 'stdout' || active === 'stderr') && text.trim() === '(no new output)') text = '';
     if (active && text) segments.push({ kind: active, text });
     buffer = [];
   };
@@ -221,7 +228,7 @@ export function normalizeShellStreamText(value: string): string {
   return !text || text.trim() === '(empty)' ? '' : text;
 }
 
-export function shellRuntimeDetailLines(value: string | undefined): string[] {
+export function shellRuntimeDetailLines(value: string | undefined, t: Translate = defaultTranslate): string[] {
   const lines = String(value || '').replace(/\r\n/g, '\n').split('\n');
   const hasRuntimePreamble = lines.some((line) => /^Process Id:\s*/i.test(line));
   let streamStarted = false;
@@ -233,11 +240,11 @@ export function shellRuntimeDetailLines(value: string | undefined): string[] {
       continue;
     }
     if (legacyShellMetadataLine(line)) {
-      details.push(line.trim());
+      details.push(localizedShellMetadataLine(line, t));
       continue;
     }
     if (hasRuntimePreamble && !streamStarted && runtimeShellMetadataLine(line)) {
-      details.push(line.trim());
+      details.push(localizedShellMetadataLine(line, t));
     }
   }
   return details;
@@ -252,7 +259,7 @@ export function shellMetadataLine(
     /^\$\s+/.test(line)
     || legacyShellMetadataLine(line)
     || (hasRuntimePreamble && !streamStarted && runtimeShellMetadataLine(line))
-    || /^Process is still running\./.test(line)
+    || /^(?:Process is still running\.|进程仍在运行。)/.test(line)
     || /^Persisted until /.test(line)
   );
 }
@@ -264,6 +271,26 @@ function legacyShellMetadataLine(line: string): boolean {
 function runtimeShellMetadataLine(line: string): boolean {
   return /^(?:Process Id|Command|Directory|Status|Sandbox|Persisted|Expires At|Elapsed Ms|Exit Code|Signal):/i
     .test(line);
+}
+
+const shellMetadataKeys = {
+  'process id': 'processId', command: 'command', directory: 'directory', cwd: 'directory',
+  status: 'status', sandbox: 'sandbox', persisted: 'persisted', 'expires at': 'expiresAt',
+  'elapsed ms': 'elapsedMs', 'exit code': 'exitCode', exit: 'exitCode', signal: 'signal',
+} as const;
+
+function localizedShellMetadataLine(line: string, t: Translate): string {
+  const separator = line.indexOf(':');
+  const label = line.slice(0, separator).trim().toLowerCase();
+  if (!Object.hasOwn(shellMetadataKeys, label)) return line.trim();
+  const key = shellMetadataKeys[label as keyof typeof shellMetadataKeys];
+  let value = line.slice(separator + 1).trim();
+  if ((key === 'exitCode' || key === 'signal') && value === '(none)') value = t('toolRun.shell.none');
+  else if (key === 'status' && value === 'completed') value = t('toolRun.shell.metadata.completed');
+  else if (key === 'status' && value === 'running') value = t('toolRun.shell.status.running');
+  else if (key === 'persisted' && value === 'yes') value = t('toolRun.shell.yes');
+  else if (key === 'persisted' && value === 'no') value = t('toolRun.shell.no');
+  return t('toolRun.shell.metadata.line', { label: t(`toolRun.shell.metadata.${key}`), value });
 }
 
 function shellExitCode(content: string): string {

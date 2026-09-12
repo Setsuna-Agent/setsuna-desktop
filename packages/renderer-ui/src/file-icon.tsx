@@ -1,8 +1,28 @@
 import { Vue } from '@react-symbols/icons/files';
 import { FileIcon as SymbolsFileIcon } from '@react-symbols/icons/utils';
+import type { ComponentProps } from 'react';
 
-// Symbols includes the Vue glyph but omits it from its default extension map.
-const fileIconExtensions = { vue: Vue };
+// Symbols omits Vue's extension mapping and has no Word document glyph.
+const fileIconExtensions = {
+  vue: Vue,
+  doc: WordDocumentIcon,
+  docx: WordDocumentIcon,
+  docm: WordDocumentIcon,
+  dot: WordDocumentIcon,
+  dotx: WordDocumentIcon,
+  dotm: WordDocumentIcon,
+};
+
+function WordDocumentIcon(props: ComponentProps<'svg'>) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" {...props}>
+      <rect x="7" y="2" width="14" height="20" rx="1.5" fill="#2B7CD3" />
+      <path d="M14 7h5M14 11h5M14 15h5" stroke="#FFFFFF" strokeWidth="1.5" />
+      <rect x="1" y="6" width="13" height="13" rx="1.5" fill="#185ABD" />
+      <path d="m3.5 9 1.6 7 2.4-5 2.4 5 1.6-7" stroke="#FFFFFF" strokeWidth="1.4" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 /** Shared file-type icons for workspace entries, artifacts, and plugin cards. */
 export function FileIcon({ path, className }: { path: string; className?: string }) {

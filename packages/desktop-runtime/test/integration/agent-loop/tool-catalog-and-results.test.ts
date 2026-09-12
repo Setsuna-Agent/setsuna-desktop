@@ -18,6 +18,34 @@ import { CapturingToolHost, mkDataDir } from '../../support/agent-loop/shared.js
 import { createTestThreadStore } from '../../support/thread-store.js';
 
 describe('agent loop tool catalog and stored results', () => {
+  it('discovers an MCP tool, advertises its schema on the next step, and executes through the host', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'MCP discovery' });
+    const requests: ModelRequest[] = [];
+    const hostCalls: string[] = [];
+    const tool: RuntimeToolDefinition = { name: 'mcp__docs__search', description: 'Search documents', inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] } };
+    const modelClient: ModelClient = { stream: async function* (request) {
+      requests.push(request);
+      if (requests.length <= 2) {
+        yield { type: 'tool_calls', toolCalls: [{ id: `call_${requests.length}`, name: requests.length === 1 ? 'search_tools' : tool.name, arguments: '{"query":"documents"}' }] };
+        yield { type: 'done', finishReason: 'tool_calls' };
+      } else {
+        yield { type: 'text_delta', text: 'Found the requested document.' };
+        yield { type: 'done', finishReason: 'stop' };
+      }
+    } };
+    const loop = new AgentLoop({ threadStore, modelClient, eventBus: new InMemoryEventBus(), clock: systemClock, ids,
+      toolHost: { listTools: async () => [tool], runTool: async (name) => { hostCalls.push(name); return { content: 'Requested document.' }; } },
+    });
+    await loop.sendTurn(thread.id, { input: 'Find my document.' });
+    expect(requests[0]?.tools?.map((item) => item.name)).toContain('search_tools');
+    expect(requests[0]?.tools?.map((item) => item.name)).not.toContain(tool.name);
+    expect(requests[1]?.tools).toContainEqual(tool);
+    expect(requests[2]?.tools).toContainEqual(tool);
+    expect(hostCalls).toEqual([tool.name]);
+    expect((await threadStore.getThread(thread.id))?.messages.at(-1)?.content).toBe('Found the requested document.');
+  });
   it('advertises and executes a host tool while preserving host name ownership', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);

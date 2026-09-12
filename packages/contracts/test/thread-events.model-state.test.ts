@@ -365,6 +365,9 @@ describe('thread event model-state projection', () => {
     expect(extended.turns?.[0]).not.toBe(projected.turns?.[0]);
     expect(extended.turns?.[0]?.stepSnapshots).toHaveLength(2);
     expect(projected.turns?.[0]?.stepSnapshots).toHaveLength(1);
+    expect(extended.turns?.[0]?.stepSnapshots?.[0]).toBe(projected.turns?.[0]?.stepSnapshots?.[0]);
+    snapshot.messageIds.push('mutated_original_input');
+    expect(extended.turns?.[0]?.stepSnapshots?.[1]?.snapshot.messageIds).not.toContain('mutated_original_input');
   });
 
   it('projects item-based model stream state into the owning turn', () => {

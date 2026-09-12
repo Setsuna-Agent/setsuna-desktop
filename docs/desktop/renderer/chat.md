@@ -112,6 +112,8 @@ Runtime 一轮可能包含：
 - 多次 tool call 和 tool result。
 - Steer user message。
 - Context compaction / review marker。
+
+压缩提示的产品边界：压缩中和压缩完成都在正文流中显示为前置 icon 的紧凑状态行；首条助手消息出现前、正文内部和独立压缩记录使用同一展示，不使用横跨正文的时间线分隔线。
 - Feature-owned persistent tool result / Plugin use。
 
 因此 UI 不能假设“一轮等于一条 assistant message”。
@@ -123,6 +125,8 @@ Runtime 一轮可能包含：
 - `chatAssistantGuidanceTimeline.ts` / `chatGuidanceTimeline.ts`：同 turn steer 引导展示。
 - `chatThinkingContent.ts`：reasoning 内容解析；`ChatThinkingDisclosure.tsx` 使用轻量原生 disclosure 渲染工作记录内的思考详情。
 - `chatContextUsage.ts`：会话上下文占用；thread usage 投影已归 `packages/features/usage/src/renderer/thread-usage.ts`。
+  删除、截断或清空历史会投影预算失效序号；旧请求快照和压缩预算仍保留作诊断，界面改用剩余
+  消息估算，直到出现基于新历史的请求预算或新的压缩预算。分页加载本身不使预算失效。
 - `chatConversationOverview.ts`：overview 数据。
 - `chatWorkHistoryState.ts`：工作历史状态。
 - `chatWorkspaceOperationScope.ts`：workspace 操作归属。
@@ -145,9 +149,12 @@ Runtime 一轮可能包含：
 消息导航参考 [beUI Message Scroller](https://beui.dev/components/agents/message-scroller)，放在聊天区左侧，避开右侧环境信息面板。`ChatMessageRail` 展示当前已渲染消息的刻度和向右展开的悬停/键盘焦点预览；阅读位置显示为一段连续的主题色刻度，按视口边界在消息间插值，边缘深浅随滚动平滑变化，长回复也保留至少三个刻度宽的标记（消息不足三条时覆盖现有刻度）。默认刻度等长，仅 hover 时展开长度层次；点击历史刻度定位消息，点击最后一条回到底部并恢复跟随。`chatMessageNavigation` 从 transcript 数据生成摘要，`useChatMessageRail` 按稳定的 `data-message-id` 测量位置并换算页面缩放，不随每个文本 delta 重建观察器。
 
 SSE 丢帧或组件重挂载时依赖 thread snapshot 恢复；局部 streaming state 不能成为唯一数据源。
-Thread 首屏只携带最新 160 条 message，`useThreadMessageHistory` 通过 SQLite-backed
-`before` 游标按需向前加载，并在 prepend 后保持当前滚动锚点。已加载 transcript 仍使用
-尾部 display-item window 控制 DOM 数量；服务端分页与 renderer 窗口化是两层独立边界。
+Thread 首屏以最新 160 条底层记录为目标，`getThreadPage` 会向前扩到完整用户轮次的起点；
+同一问题的工具输出、同轮引导和压缩摘要不产生分页边界。`useThreadMessageHistory` 通过
+SQLite 投影的 `before` 游标按需加载更早轮次，并在 prepend 后保持当前滚动锚点。
+新消息追加不会丢弃在途历史请求，已加载的前缀也不会被 SSE 的旧游标重新标记成未加载。
+已加载 transcript 仍使用尾部 display-item window 控制 DOM 数量；折叠计数只统计可见行，
+未加载历史显示加载入口，不把底层游标当作聊天消息数。上下文压缩不删除用户可查看的历史。
 
 ## Tool runs
 
@@ -171,6 +178,10 @@ Thread 首屏只携带最新 160 条 message，`useThreadMessageHistory` 通过 
 - `RuntimeHookRunDetails.tsx`：Hook lifecycle 展示。
 - `RuntimeToolApprovalActions.tsx`：普通审批与 MCP elicitation。
 - `RuntimeShellToolRun.tsx`：Shell result 展示。
+
+工具历史展开后持续保留全部记录，新工具仅追加或更新对应条目。展开时分组标题显示整体统计，收起时才显示最新活动摘要，避免标题重复列表末尾的命令和目标。运行状态不能替换整段历史。分组和审批状态变化不重建 disclosure；只有新的待授权请求自动展开，普通输出更新保留用户的展开或收起选择。
+
+工具摘要与命令标题只展示实际命令、文件等可读目标；读取命令输出时，没有命令信息就展示动作状态，不使用进程或会话 ID 补位。内部编号仅保留在按需展开的运行详情中。
 
 展示组件不解析任意工具原始 payload；审批、撤销和 Hook 等不同交互状态也不再共居于同一个协调组件。
 

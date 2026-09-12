@@ -209,9 +209,10 @@ describe('agent loop turn steering and mailbox input', () => {
         eventBus: new InMemoryEventBus(),
         clock: systemClock,
         ids,
-        configStore: new ContextWindowConfigStore(1_000),
+        // Keep room for runtime policy and a usable summary; only the steer should overflow.
+        configStore: new ContextWindowConfigStore(32_000),
       });
-      const oversizedSteer = 'OVERSIZED_STEER_DETAIL '.repeat(800);
+      const oversizedSteer = 'OVERSIZED_STEER_DETAIL '.repeat(8_000);
       const storedOversizedSteer = oversizedSteer.trim();
   
       const started = await loop.startTurn(thread.id, { input: 'initial prompt' });
@@ -241,11 +242,11 @@ describe('agent loop turn steering and mailbox input', () => {
         model: request.model,
         toolChoice: request.toolChoice,
       }))).toEqual([
-        { model: 'local-runtime-smoke', toolChoice: 'none' },
         { model: 'local-runtime-smoke', toolChoice: undefined },
         { model: 'local-runtime-smoke', toolChoice: 'none' },
         { model: 'local-runtime-smoke', toolChoice: undefined },
       ]);
+      expect(compactRequest?.maxOutputTokens).toBeGreaterThanOrEqual(256);
       expect(compactRequest?.messages.map((message) => message.content).join('\n')).toContain(oversizedSteer.slice(0, 200));
       expect(savedSteer).toMatchObject({
         content: storedOversizedSteer,
@@ -258,7 +259,7 @@ describe('agent loop turn steering and mailbox input', () => {
       expect(followUpRequest?.stepSnapshot?.inputMessageIds).toContain(savedSteer?.id);
       expect(followUpRequest?.stepSnapshot?.conversationMessageIds).toContain(savedSteer?.id);
       expect(followUpRequest?.stepSnapshot?.contextWindow).toMatchObject({
-        autoCompactTokenLimit: 850,
+        autoCompactTokenLimit: 27_200,
         compactionHash: expect.stringMatching(/^sha256:/),
         tokensUntilCompaction: expect.any(Number),
       });

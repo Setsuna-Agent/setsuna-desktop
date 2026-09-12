@@ -781,7 +781,7 @@ export function toolRunSummary(run: RuntimeToolRun, t: Translate = defaultTransl
   if (name === 'workspace_search_text' || name === 'search_text') return searchRunSummary(run, path, query, t);
   if (isFileOperationRun(run)) return { title: fileOperationVerb(run, t), target: fileOperationTarget(run, t) || path };
   if (name === 'run_shell_command' || name === 'exec_command') return shellRunSummary(run, command, t);
-  if (name === 'read_shell_process') return { title: runningAware(run, t('toolRun.action.readShell'), t('toolRun.action.readShellDone'), t), target: stringField(args.process_id ?? args.processId) };
+  if (name === 'read_shell_process') return { title: runningAware(run, t('toolRun.action.readShell'), t('toolRun.action.readShellDone'), t), target: shellCommand(run) };
   if (name === 'remember_memory') return { title: runningAware(run, t('toolRun.action.saveMemory'), t('toolRun.action.saveMemoryDone'), t) };
   if (name === 'recall_memory') return { title: runningAware(run, t('toolRun.action.recallMemory'), t('toolRun.action.recallMemoryDone'), t), target: query };
   const displayName = toolRunDisplayName(run, t);
