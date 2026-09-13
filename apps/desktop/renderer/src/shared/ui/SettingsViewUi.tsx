@@ -33,6 +33,7 @@ import {
   TextField,
 } from './primitives.js';
 import { SettingsDialog } from './SettingsDialog.js';
+import { SettingsMarkdownDocument } from './SettingsMarkdownDocument.js';
 import { SettingsDirectoryList } from './SettingsListFields.js';
 import { PluginIcon } from './PluginIcon.js';
 import { SkillIcon } from './SkillIcon.js';
@@ -56,6 +57,7 @@ export const settingsViewUi = Object.freeze({
   EmptyState,
   Group: SettingsGroup,
   IconButton,
+  MarkdownDocument: SettingsMarkdownDocument,
   NavigationRow: SettingsNavigationRow,
   PageHeader,
   PageHeading: SettingsPageHeading,

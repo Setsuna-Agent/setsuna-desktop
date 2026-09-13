@@ -28,6 +28,7 @@ import { useChatMessageOperations } from '../hooks/useChatMessageOperations.js';
 import { useThreadMessageHistory } from '../hooks/useThreadMessageHistory.js';
 import { MarkdownViewportProvider } from '../markdown/MarkdownViewportProvider.js';
 import { SkillReferenceCatalogProvider } from '../skills/SkillReference.js';
+import { PluginReferenceCatalogProvider } from '../references/PluginReference.js';
 import {
   ActiveWorkPlaceholder,
   DeleteSelectionBar,
@@ -285,7 +286,7 @@ export function ChatTranscript({
               starterContent
             ) : (
               <StreamingScrollPinProvider key={currentThread?.id ?? 'no-thread'}>
-                <SkillReferenceCatalogProvider skills={skills}>
+                <PluginReferenceCatalogProvider plugins={plugins}><SkillReferenceCatalogProvider skills={skills}>
                   <div className="chat-bubble-list" ref={listRef}>
                     {renderWindow.hiddenItemCount || messageHistory.hasMore ? (
                       <TranscriptWindowDivider
@@ -334,7 +335,7 @@ export function ChatTranscript({
                     {contextCompactionRunning && !activeAssistantVisible ? <ContextCompactionStatus active /> : null}
                     <div className="chat-bubble-list__bottom-spacer" aria-hidden="true" />
                   </div>
-                </SkillReferenceCatalogProvider>
+                </SkillReferenceCatalogProvider></PluginReferenceCatalogProvider>
               </StreamingScrollPinProvider>
             )}
           </div>

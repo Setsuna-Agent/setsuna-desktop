@@ -6,6 +6,18 @@ import { McpManagementTools } from '../src/runtime/tools/management-tools.js';
 import { InMemoryMcpStore } from './support/in-memory-mcp-host.js';
 
 describe('McpControlService', () => {
+  it('syncs all tools after login without resetting permissions, and preserves them if sync fails', async () => {
+    const store = new InMemoryMcpStore([{ ...storedServer(), allowedTools: ['read'], disabledTools: ['write'], tools: [{ name: 'old' }] }]);
+    const protocol = protocolService({ discoverTools: vi.fn(async () => ({ tools: [{ name: 'read' }, { name: 'write' }], errors: [] })) });
+    const control = new McpControlService(store, protocol);
+    await control.login('docs');
+    expect(vi.mocked(protocol.login).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(protocol.discoverTools).mock.invocationCallOrder[0]!);
+    expect((await store.listServerInputs())[0]).toMatchObject({ tools: [{ name: 'read' }, { name: 'write' }], allowedTools: ['read'], disabledTools: ['write'] });
+    vi.mocked(protocol.discoverTools).mockResolvedValueOnce({ tools: [], errors: ['network unavailable'] });
+    await expect(control.login('docs')).rejects.toMatchObject({ code: 'MCP_TOOL_SYNC_FAILED', retryable: true });
+    expect((await control.listServers({ includeAuthStatus: true })).servers[0]).toMatchObject({ authStatus: 'oAuth', tools: [{ name: 'read' }, { name: 'write' }] });
+  });
+
   it('discovers an update with the complete stored connection configuration', async () => {
     const store = new InMemoryMcpStore([storedServer()]);
     const protocol = protocolService();

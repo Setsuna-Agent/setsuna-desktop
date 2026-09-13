@@ -1,6 +1,7 @@
 import type {
   RuntimeExtensionStatusList,
   RuntimePluginInstallResult,
+  RuntimePluginConnectorStatus,
   RuntimePluginItemContent,
   RuntimePluginList,
   RuntimePluginMarketplaceList,
@@ -37,13 +38,14 @@ export type PluginManagementHookMutationResult =
 /** Existing runtime adapters exposed through one management-only seam. */
 export interface PluginManagementRuntimeHost {
   catalogRevision(): Promise<string>;
+  readConnectorStatuses(input: PluginManagementPluginTarget): Promise<RuntimePluginConnectorStatus[]>;
   getInstalledItem(input: PluginManagementItemTarget): Promise<RuntimePluginItemContent>;
   getMarketplaceItem(input: PluginManagementItemTarget): Promise<RuntimePluginItemContent>;
   installLocal(input: PluginManagementLocalInstallInput): Promise<RuntimePluginInstallResult>;
   installMarketplace(input: PluginManagementPluginTarget): Promise<RuntimePluginInstallResult>;
   listExtensions(): Promise<RuntimeExtensionStatusList>;
   listHooks(input: PluginManagementHookQuery): Promise<PluginManagementHookSnapshot>;
-  listMarketplace(): Promise<RuntimePluginMarketplaceList>;
+  listMarketplace(options?: Readonly<{ refreshRepositories?: boolean }>): Promise<RuntimePluginMarketplaceList>;
   listPlugins(): Promise<RuntimePluginList>;
   runRendererUiAction(
     input: RuntimePluginUiActionInput,
@@ -81,11 +83,12 @@ export type PluginManagementRendererListener = () => void;
 
 export interface PluginManagementRendererService {
   getSnapshot(): PluginManagementSnapshot;
+  readConnectorStatuses(input: PluginManagementPluginTarget, options?: Readonly<{ signal?: AbortSignal }>): Promise<RuntimePluginConnectorStatus[]>;
   getHookSnapshot(): PluginManagementHookSnapshot;
   subscribe(listener: PluginManagementRendererListener): () => void;
   /** Subscribes only to Renderer UI data invalidations for one Plugin. */
   subscribeRendererUiData(pluginId: string, listener: PluginManagementRendererListener): () => void;
-  refresh(options?: Readonly<{ signal?: AbortSignal }>): Promise<PluginManagementSnapshot>;
+  refresh(options?: Readonly<{ signal?: AbortSignal; refreshRepositories?: boolean }>): Promise<PluginManagementSnapshot>;
   refreshExtensions(options?: Readonly<{ signal?: AbortSignal }>): Promise<PluginManagementExtensionSnapshot>;
   refreshInstalled(options?: Readonly<{ signal?: AbortSignal }>): Promise<RuntimePluginList>;
   getInstalledItem(

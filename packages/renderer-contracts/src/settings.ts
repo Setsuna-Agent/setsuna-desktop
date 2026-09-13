@@ -52,6 +52,9 @@ export type CapabilitiesPageNavigation = Readonly<{
   catalogNavigationInPage: boolean;
   workspacePath: string | null;
   openChat(skillId: string): void;
+  openPluginChat(pluginId: string): void;
+  /** Navigate to a capability and optionally select its item. */
+  openSection?(sectionId: string, itemId?: string): void;
   renderBreadcrumb(props: CapabilitiesBreadcrumbProps): ReactNode;
   renderCreateMenu(props: CapabilitiesCreateMenuProps): ReactNode;
   setActiveItemId(itemId: string | null): void;
@@ -211,6 +214,7 @@ export type SettingsSandboxedUiFrameProps = Readonly<{
 export type SettingsPluginIconProps = Readonly<{
   className?: string;
   name?: string;
+  iconImage?: Readonly<{ light: string; dark?: string }>;
   pluginId?: string;
   variant?: 'card' | 'detail' | 'inline' | 'installed' | 'list' | 'menu';
 }>;
@@ -237,6 +241,14 @@ export type SettingsDialogProps = Readonly<{
   titleIcon?: ReactNode;
 }>;
 
+/** Read-only document surface; Markdown preview is the default view. */
+export type SettingsMarkdownDocumentProps = Readonly<{
+  content: string;
+  name: string;
+  previewLabel: string;
+  sourceLabel: string;
+}>;
+
 /** Host-owned controls keep Feature settings consistent and accessible. */
 export type SettingsViewUi = Readonly<{
   ActionMenu: ComponentType<SettingsActionMenuProps>;
@@ -247,6 +259,7 @@ export type SettingsViewUi = Readonly<{
   EmptyState: ComponentType<Readonly<{ action?: ReactNode; body?: string; title: string }>>;
   Group: ComponentType<SettingsGroupProps>;
   IconButton: ComponentType<SettingsIconButtonProps>;
+  MarkdownDocument: ComponentType<SettingsMarkdownDocumentProps>;
   NavigationRow: ComponentType<SettingsNavigationRowProps>;
   PageHeader: ComponentType<SettingsPageHeaderProps>;
   PageHeading: ComponentType<SettingsPageHeadingProps>;

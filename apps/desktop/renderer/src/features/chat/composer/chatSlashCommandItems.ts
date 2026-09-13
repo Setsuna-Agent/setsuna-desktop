@@ -1,10 +1,11 @@
 import type {
   RuntimeSkillSummary,
+  RuntimePluginSummary,
 } from '@setsuna-desktop/contracts';
 import type { Translate } from '../../../shared/i18n/I18nProvider.js';
 import type { SlashCommandMenuItem } from './ChatSlashCommandMenu.js';
 
-type SlashQuickAction = Exclude<SlashCommandMenuItem, { kind: 'skill' }>;
+type SlashQuickAction = Extract<SlashCommandMenuItem, { kind: 'action' | 'model' }>;
 
 const MAX_VISIBLE_SKILLS = 8;
 
@@ -20,6 +21,8 @@ export type ChatSlashCommandItemsOptions = {
   hasReviewIncompatibleContent: boolean;
   multiAgentEnabled: boolean;
   query: string;
+  plugins?: readonly RuntimePluginSummary[];
+  selectedPluginIds?: readonly string[];
   selectedSkills: RuntimeSkillSummary[];
   sideChatAvailable: boolean;
   sideConversation?: boolean;
@@ -39,6 +42,8 @@ export function createChatSlashCommandItems({
   hasReviewIncompatibleContent,
   multiAgentEnabled,
   query,
+  plugins = [],
+  selectedPluginIds = [],
   selectedSkills,
   sideChatAvailable,
   sideConversation = false,
@@ -160,7 +165,13 @@ export function createChatSlashCommandItems({
       skill,
     }));
 
-  return [...visibleActions, ...visibleSkills];
+  const selectedPlugins = new Set(selectedPluginIds);
+  const visiblePlugins = plugins
+    .filter((plugin) => !selectedPlugins.has(plugin.id))
+    .filter((plugin) => !normalizedQuery || `${plugin.id} ${plugin.name} ${plugin.description ?? ''} ${(plugin.tags ?? []).join(' ')}`.toLowerCase().includes(normalizedQuery))
+    .map<SlashCommandMenuItem>((plugin) => ({ key: `plugin:${plugin.id}`, kind: 'plugin', plugin }));
+
+  return [...visibleActions, ...visiblePlugins, ...visibleSkills];
 }
 
 const SIDE_CONVERSATION_HIDDEN_ACTIONS = new Set([

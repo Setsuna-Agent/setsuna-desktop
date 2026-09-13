@@ -163,6 +163,7 @@ export class AgentLoop {
       projectInstructions: options.projectInstructions,
       projectWorkflow: options.projectWorkflow,
       skillRegistry: options.skillRegistry,
+      pluginStore: options.pluginStore,
       threadStore: options.threadStore,
       toolExecutor: this.toolExecutor,
       toolHost: options.toolHost,

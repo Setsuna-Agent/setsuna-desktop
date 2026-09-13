@@ -1,4 +1,5 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
+import { Blocks } from 'lucide-react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { PluginIcon } from '../../../shared/ui/PluginIcon.js';
 import { useRuntimePluginNavigation } from './RuntimePluginNavigation.js';
@@ -21,13 +22,14 @@ export function RuntimePluginUses({
       {plugins.map((plugin) => {
         const content = (
           <>
-            <PluginIcon name={plugin.icon} pluginId={plugin.id} variant="inline" />
+            <PluginIcon name={plugin.icon} iconImage={plugin.iconImage} pluginId={plugin.id} variant="inline" />
             <span className="chat-plugin-use__name">{plugin.name}</span>
           </>
         );
         const title = t('chat.plugin.title', { name: plugin.name });
         return (
           <div className="chat-plugin-use-record" key={plugin.id}>
+            <Blocks className="chat-plugin-uses__icon" size={14} strokeWidth={1.75} aria-hidden="true" />
             <span className="chat-plugin-uses__status">{status}</span>
             {onOpenPlugin ? (
               <Button variant="ghost"

@@ -2,6 +2,8 @@
 
 源码目录：`plugins/`
 
+第三方平台接入依据见 [OAuth 应用注册与 MCP 准入调研记录](./oauth-registration-checklist.md)，包含默认市场排除范围、直接授权路线和当前 Setsuna 认证适配边界。
+
 仓库根 `plugins/` 是随应用打包的只读精选市场源。每个子目录是一个 Plugin Bundle；runtime 安装时会完整校验并复制到用户数据根，不从源码/应用目录原地运行可变状态。
 
 ## 与 Runtime 的关系

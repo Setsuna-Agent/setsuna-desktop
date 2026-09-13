@@ -24,7 +24,7 @@ import { useRuntimeClientState } from '../../services/runtime-client/useRuntimeC
 import { useIdentityRequestGuard } from '../../shared/hooks/useIdentityRequestGuard.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { useThreadGroups } from '../sidebar/useThreadGroups.js';
-import type { ChatSkillSelectionRequest, MainView } from '../types.js';
+import type { ChatCapabilitySelectionRequest, MainView } from '../types.js';
 import { useNetworkProxyFeatureView } from '../../composition/NetworkProxyFeatureBoundary.js';
 import { useModelProviderFeatureService } from '../../composition/ModelProviderFeatureBoundary.js';
 import { useConversationDebugFeatureEnabled } from '../../composition/ConversationDebugFeatureBoundary.js';
@@ -42,8 +42,8 @@ export function useDesktopAppController() {
   const [activeView, setActiveView] = useState<MainView>('chat');
   const [sidebarManuallyCollapsed, setSidebarManuallyCollapsed] = useState(false);
   const [sidebarManuallyExpanded, setSidebarManuallyExpanded] = useState(false);
-  const [skillSelectionRequest, setSkillSelectionRequest] = useState<ChatSkillSelectionRequest | null>(null);
-  const skillSelectionRequestIdRef = useRef(0);
+  const [capabilitySelectionRequest, setCapabilitySelectionRequest] = useState<ChatCapabilitySelectionRequest | null>(null);
+  const capabilitySelectionRequestIdRef = useRef(0);
 
   const networkProxy = useNetworkProxyFeatureView();
   const modelProvider = useModelProviderFeatureService();
@@ -252,16 +252,25 @@ export function useDesktopAppController() {
   });
 
   const selectSkillForChat = useCallback((skillId: string) => {
-    skillSelectionRequestIdRef.current += 1;
+    capabilitySelectionRequestIdRef.current += 1;
     setActiveView('chat');
-    setSkillSelectionRequest(createChatSkillSelectionRequest(
-      skillId,
-      skillSelectionRequestIdRef.current,
+    setCapabilitySelectionRequest(createChatCapabilitySelectionRequest(
+      { kind: 'skill', id: skillId },
+      capabilitySelectionRequestIdRef.current,
     ));
   }, []);
 
-  const clearSkillSelectionRequest = useCallback((requestId: number) => {
-    setSkillSelectionRequest((current) => (current?.requestId === requestId ? null : current));
+  const selectPluginForChat = useCallback((pluginId: string) => {
+    capabilitySelectionRequestIdRef.current += 1;
+    setActiveView('chat');
+    setCapabilitySelectionRequest(createChatCapabilitySelectionRequest(
+      { kind: 'plugin', id: pluginId },
+      capabilitySelectionRequestIdRef.current,
+    ));
+  }, []);
+
+  const clearCapabilitySelectionRequest = useCallback((requestId: number) => {
+    setCapabilitySelectionRequest((current) => (current?.requestId === requestId ? null : current));
   }, []);
 
   const startCurrentThreadReview = useCallback((
@@ -311,7 +320,7 @@ export function useDesktopAppController() {
     activeProjectId,
     activeView,
     chatActions,
-    clearSkillSelectionRequest,
+    clearCapabilitySelectionRequest,
     composerKey,
     draft,
     globalThreads,
@@ -329,6 +338,7 @@ export function useDesktopAppController() {
     runtime,
     searchTriggerRef,
     selectSkillForChat,
+    selectPluginForChat,
     setActiveView,
     setDraft,
     setSidebarCollapsed,
@@ -339,7 +349,7 @@ export function useDesktopAppController() {
     sidebarMaxWidth,
     sidebarMinWidth,
     sidebarWidth,
-    skillSelectionRequest,
+    capabilitySelectionRequest,
     startCurrentThreadReview,
     terminalMaxHeight,
     terminalHeight,
@@ -365,13 +375,13 @@ export function resolveShellSidebarState(activeView: MainView, sidebarCollapsed:
   };
 }
 
-export function createChatSkillSelectionRequest(
-  skillId: string,
+export function createChatCapabilitySelectionRequest(
+  selection: Pick<ChatCapabilitySelectionRequest, 'kind' | 'id'>,
   requestId: number,
-): ChatSkillSelectionRequest {
+): ChatCapabilitySelectionRequest {
   // Capability navigation can remount the composer, so the request belongs to
   // the next active main composer instead of one ephemeral composer identity.
-  return { skillId, requestId };
+  return { ...selection, requestId };
 }
 
 export type DesktopAppController = ReturnType<typeof useDesktopAppController>;

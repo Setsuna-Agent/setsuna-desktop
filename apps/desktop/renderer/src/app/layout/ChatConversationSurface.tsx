@@ -26,7 +26,7 @@ import type { RuntimeAccessModeSelection } from '../../shared/lib/runtimeAccessM
 import type {
   ChatImageAttachmentOutcome,
   ChatImageAttachmentRequest,
-  ChatSkillSelectionRequest,
+  ChatCapabilitySelectionRequest,
   ChatWorkspaceMentionRequest,
   ConversationOverviewVisibility,
 } from '../types.js';
@@ -47,7 +47,7 @@ export type ChatConversationSurfaceModel = Readonly<{
   reviewError: string | null;
   reviewState: DesktopReviewState | null;
   runtimeClient: DesktopRuntimeClient;
-  skillSelectionRequest: ChatSkillSelectionRequest | null;
+  capabilitySelectionRequest: ChatCapabilitySelectionRequest | null;
   skills: RuntimeSkillSummary[];
   onAccessModeChange(selection: RuntimeAccessModeSelection): void;
   onAnswerApproval(approvalId: string, input: AnswerRuntimeApprovalInput): void | Promise<void>;
@@ -78,7 +78,7 @@ export type ChatConversationSurfaceModel = Readonly<{
     thinkingEffort?: string;
   }): Promise<boolean>;
   onSetMultiAgentEnabled(enabled: boolean): void | Promise<unknown>;
-  onSkillSelectionRequestConsumed(requestId: number): void;
+  onCapabilitySelectionRequestConsumed(requestId: number): void;
   onStartThreadReview(
     target: ReviewTarget,
     modelSelection?: RuntimeConfiguredModelReference,
@@ -131,7 +131,7 @@ export function ChatConversationSurface({
         reviewControls={reviewControls}
         reviewError={model.reviewError}
         reviewState={model.reviewState}
-        skillSelectionRequest={model.skillSelectionRequest}
+        capabilitySelectionRequest={model.capabilitySelectionRequest}
         skills={model.skills}
         workspaceMentionRequest={workspaceMentionRequest}
         onAccessModeChange={model.onAccessModeChange}
@@ -153,7 +153,7 @@ export function ChatConversationSurface({
         onSelectModel={model.onSelectModel}
         onSend={model.onSend}
         onSetMultiAgentEnabled={model.onSetMultiAgentEnabled}
-        onSkillSelectionRequestConsumed={model.onSkillSelectionRequestConsumed}
+        onCapabilitySelectionRequestConsumed={model.onCapabilitySelectionRequestConsumed}
         onStartThreadReview={model.onStartThreadReview}
         onWorkspaceMentionRequestConsumed={onWorkspaceMentionRequestConsumed}
       />

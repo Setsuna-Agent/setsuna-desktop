@@ -276,7 +276,86 @@ Bundle 是否执行代码由 `extension` 字段决定，而不是由 schema 版�
 
 ## 安装和卸载
 
-应用根目录的 `plugins/` 是默认精选市场源，打包时随应用发布。Plugin Management renderer service 通过 `GET /v1/features/plugin-management` 获取不含本地路径、命令或凭据的聚合投影；投影包含已安装插件、市场、extension 状态，以及详情页需要的 Tool、Skill、MCP、Hook 和 resource 描述。点击安装后只向 `POST /v1/features/plugin-management/marketplace/:pluginId/install` 提交插件 ID。runtime 根据可信目录找到 Bundle，并复制到 Electron `userData/runtime/plugins/<plugin-id>`；安装目录完全由 Setsuna 管理。
+### 从 OpenAI 仓库安装
+
+插件页默认接入 [openai/plugins](https://github.com/openai/plugins)，以仓库的 `.agents/plugins/marketplace.json` 为目录索引。打开页面先显示已安装插件、内置目录和内存中已有的仓库目录，后台独立读取磁盘缓存并同步仓库；标题栏的刷新按钮会重新检查上游。仓库的扫描、下载或失败不阻塞本地目录读取与安装等操作；首次加载时仅 OpenAI 分区显示加载提示，单一来源异常也不会丢弃其他来源的列表。搜索、查看详情、安装、更新和卸载均在现有插件页完成，无需手动下载或选择仓库目录。
+
+- runtime 通过应用的网络代理设置解析 `main` 的 commit SHA，并获取固定 SHA 的归档。下载、解压和兼容检查成功后才切换缓存；失败时保留上次成功目录并显示错误。
+- 缓存位于 runtime 数据目录的 `plugin-repositories/openai-plugins/`，已安装副本仍写入 `plugins/<plugin-id>`。renderer 只接收公开仓库地址、插件相对路径、revision 和能力元数据。
+- 仓库目录项使用 `openai-plugins:<name>` 作为市场 ID，安装后保留原 Bundle ID。索引记录 `installationSource: repository` 和来源信息；同名插件若已从其他来源安装，会明确提示冲突，不能直接覆盖。
+- 更新根据插件文件内容哈希判断，因此上游未提升 manifest 版本号的 Skill/MCP 改动也能发现。更新由用户点击执行，沿用 Bundle 事务和用户 MCP 配置保留规则。
+- 默认市场排除尚需为 Setsuna 注册应用或申请客户端准入的 10 个条目：Figma、Canva、Vercel、monday.com、Gmail、Google Calendar、Google Drive、Slack、Dropbox、Zoom。读取旧缓存和刷新仓库时使用同一筛选，预览、安装和更新也只能访问筛选后的目录。已注册的 GitHub 和可直接授权的服务继续保留；已有安装仍可管理、卸载，本地导入保持现有流程。平台核对依据见 [注册与准入调研记录](oauth-registration-checklist.md)。
+- 市场仅显示当前可安装的条目；兼容检查失败、来源不受支持、配置无效或同名来源冲突的条目不展示，内部保留原因并拒绝直接安装请求。当前只安装索引中位于该仓库 `plugins/` 下、通过 Skill/MCP 兼容检查的包；没有对应 MCP 的必需 OpenAI App、可执行扩展及指向其他仓库的条目不会自动安装。附带的 Codex Hooks、agents、commands 不注册，详情单独提示这些未接入的能力，不阻止独立 Skill/MCP 安装。
+- 归档在写入插件目录前校验路径、重复条目、链接和体积；压缩下载上限 64 MiB，解压上限 192 MiB。仓库插件不会获得仅应用内置插件拥有的 Hook/extension 信任或模型宿主权限。
+
+`GET /v1/features/plugin-management` 只读取本地状态；显式 `POST /v1/features/plugin-management/marketplace/refresh` 同步仓库后返回聚合投影。普通启动、对话中的状态刷新和插件详情导航不会自行下载仓库。
+
+### 本地 Codex 插件兼容
+
+“导入本地插件”也支持包含 `.codex-plugin/plugin.json` 的目录。选择插件本身的根目录，例如 `openai/plugins` 仓库下的 `plugins/github`，不是整个仓库或 `.codex-plugin` 子目录。
+
+格式差异集中在 `file-plugin-manifest-source.ts`、`codex-plugin-manifest.ts` 和 `codex-plugin-mcp.ts`：读取时转换成现有 Bundle 模型，安装副本保留原文件，安装索引保存真实 manifest 路径。安装、更新、卸载、Skill 注册与 MCP 归属沿用同一套事务；同目录同时有 Setsuna manifest 时优先使用原生格式。
+
+当前兼容范围：
+
+- 插件名称、版本、描述、作者和关键词。`interface.displayName` 用作展示名；`interface.logo`、`logoDark` 和 `composerIcon` 从包内读取为受限图片数据，支持 PNG/JPEG/GIF/WebP/SVG 与深浅色图标。SVG 仅作为 `<img>` 图片显示，不注入 DOM；不加载外部图标 URL。缺失或超过 96 KiB 的图标回退为插件自身的缩写。
+- Skills 默认发现 `skills/`；显式 `skills` 可为一个目录或目录数组，支持 Skill 本身的目录和包含多个 Skill 的目录。引用文件仍受路径、大小写、符号链接和包体积检查约束。Skill 正文不会改写，依赖 Codex 专属工具的流程需要另行适配。
+- MCP 默认读取 `.mcp.json` 的 `mcpServers` 对象，也可由 manifest 的 `mcpServers` 指定配置文件或内联服务对象。支持 `http`/streamable HTTP 和 `stdio`，保留启停、工具范围和超时（兼容 `startup_timeout_sec`、`tool_timeout_sec`）。`oauth.client_id`、`oauth.resource` 转为原生 OAuth 字段；`title`、`note` 作为名称和描述的备选值，`icons` 仅为展示信息，不改变服务能力。stdio 默认工作目录为受管安装目录，command/args/cwd 中的 `${CODEX_PLUGIN_ROOT}` 转为安装路径。
+- `bearer_token_env_var` / `bearerTokenEnvVar` 只声明环境变量名称，不在导入时读取或保存 token。非空 `env`、`headers`、环境变量 header 映射和未知 MCP 字段暂不支持，导入会给出错误；实际凭据通过现有 MCP 设置保存到系统安全存储。
+- `.app.json` 或 manifest `apps` 中省略 `required` 的服务，可由同名 MCP 替代；单个 `app-…` 不透明键也可匹配插件同名 MCP。这是直连入口兼容，不模拟 OpenAI 托管 App 的工具协议。显式 `required: true` 的托管 App 仍拒绝；`required: false` 的已适配 App 映射为连接器，其余可选 App 显示不可用提示。无匹配入口的隐式依赖、可执行扩展、无可用 Skill/MCP/连接器的包仍拒绝。
+- `agents/openai.yaml` 是展示元数据，不视为自定义 Agent。其他 Agent、Hooks 和 commands 文件原样保留但不注册，通过 `unsupportedComponents` 在市场、安装记录、详情和插件选择上下文中提示。Skills 正文保持原样，实际调用必须使用 Setsuna 当前可用的工具目录。
+- OAuth 配置中只有占位符的 Client ID，以及未支持的 scopes、Client Secret 或固定回调端口要求，仍会明确报错，不能静默丢弃后假定认证可用。导入成功只代表声明可接入；远程服务登录、账号权限和平台工具依赖仍需在使用时满足。
+
+GitHub 插件声明的 `GITHUB_PAT_TOKEN` 是可选的手动认证方式。官方远程端点 `https://api.githubcopilot.com/mcp/` 在没有 Token 时使用 Setsuna 已注册的 GitHub OAuth App，通过 Device Flow 登录：用户点击“连接”后，Setsuna 在弹窗中展示验证码；只有用户点击“复制并打开 GitHub”时才复制验证码并打开授权页。只有用户完成授权后才保存凭据，随后自动获取并保存完整工具列表，保留已有工具权限；若同步失败则保留登录状态与旧工具列表，并提示重试。Client ID 是可公开分发的应用标识，不需要在桌面端配置 Client Secret，也不依赖本机安装 gh。
+
+Device Flow 的提供方配置由 MCP runtime 宿主持有；插件不能指定授权/Token 端点。公开状态仅包含用户验证码、GitHub 验证地址和过期时间，私有 device code 留在运行中的登录操作内，Token 保存到现有安全凭据存储。轮询遵守 GitHub 的间隔和退避响应，支持取消及过期提示；带 refresh token 的凭据在请求前续期，退出登录会终止待处理认证并删除本地凭据。授权弹窗保留验证码复制和“复制并打开 GitHub”入口；复制成功通过图标反馈，复制失败会提示手动复制。关闭弹窗会取消当前登录操作。工具列表随窗口剩余高度伸展，内容超出后在列表内滚动。参见 [GitHub Device Flow 文档](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#device-flow) 与 [MCP 宿主接入说明](https://github.com/github/github-mcp-server/blob/main/docs/host-integration.md)。
+
+用户仍可在启动 Setsuna 前设置 Token 环境变量，或在“能力 → MCP”编辑 github 的请求头，填写 `Authorization=Bearer <PAT>`。非空的手动 Authorization 优先于环境变量，两者均优先于 OAuth。修改过的 MCP 配置在插件更新、卸载时按现有规则保留。自定义 OAuth Client ID 保留通用 OAuth 流程；其他未注册提供方的缺失/空白 Token 环境变量仍属于 `configurationError`，详情页提供“配置凭据”。编辑页只回显变量名称，清空可移除引用；已有 Token 配置时，需要先移除该配置再切换 OAuth 登录。
+
+首期支持 `.codex-plugin/plugin.json` 兼容格式；根目录 `plugin.json` / `mcp.json` 的 Agent Plugins 可移植格式，以及 OpenAI Connector 登录和专属 UI，不在此兼容范围内。参考 [GitHub 插件](https://github.com/openai/plugins/tree/main/plugins/github) 与 [OpenAI 插件打包说明](https://developers.openai.com/plugins/build/plugins)。
+
+### 插件连接器配置
+
+连接器是随插件分发的声明；检测结果、服务地址的用户覆盖和凭据属于每个用户的运行环境。原生 manifest 可写 `connectors` 数组；Codex 包可在 `.setsuna-plugin/connectors.json` 中增加同名数组，无需改写上游 manifest。若 manifest 已显式声明，以 manifest 为准。
+
+```json
+{
+  "connectors": [
+    {
+      "id": "github-cli",
+      "name": "GitHub CLI",
+      "kind": "cli",
+      "required": false,
+      "command": "gh",
+      "installUrl": "https://cli.github.com/",
+      "documentationUrl": "https://cli.github.com/manual/gh_auth_login",
+      "setupCommands": [
+        "gh auth login --hostname github.com --web",
+        "gh auth status --hostname github.com"
+      ]
+    },
+    {
+      "id": "github-mcp",
+      "name": "GitHub MCP",
+      "kind": "mcp",
+      "required": false,
+      "serverKey": "github"
+    }
+  ]
+}
+```
+
+- `cli` 的 `command` 是跨机器的可执行文件名，禁止绝对路径和 shell 表达式。Setsuna 在当前 runtime 的 PATH 中检测文件，不执行插件提供的命令；“已安装”不代表已经登录。安装按钮打开声明的 HTTPS 安装说明，用户按终端指引登录并验证。Windows、macOS、Linux 走同一声明；新安装未进入当前进程 PATH 时需重启应用。
+- `mcp` 的 `serverKey` 必须引用插件已声明的 MCP。未显式配置连接器的 MCP 会自动生成设置入口。按钮定位到对应 MCP 服务，复用现有服务器编辑、凭据存储和 OAuth 登录；不另建账号或 token 存储。
+- `required` 默认 true，作为设置页的依赖提示；false 表示可选接入方式。连接器最多 32 个，id 唯一；安装和说明链接只接受无用户名/密码的 HTTPS 地址。配置命令只作指引，导入、打开页面和检测不会执行。
+- `GET /v1/features/plugin-management/installed/:pluginId/connectors` 读取该用户的安装/认证配置状态，不向 renderer 返回命令路径、凭据或原始认证错误。“已配置”只代表 MCP 配置已存在，实际可用性通过 MCP 页测试。某个 MCP 查询失败不会遮蔽 CLI 检测结果。
+- 已安装的旧插件索引在读取时补充连接器元数据，无需重装，不修改用户 MCP 配置。Agent 通过 `list_plugin_connectors` 读取接入方式与指引；返回值标记为外部不可信上下文，实际 CLI 调用仍走现有 `exec_command` 权限链路。
+
+GitHub / GitHub Enterprise 的可选 OpenAI App ID 通过兼容数据映射为 gh 的安装和登录声明，MCP 声明同时保留。Enterprise 登录时由用户选择自己的域名。这里提供 CLI/MCP 的接入方法，并不模拟 OpenAI 云端 App 的专属工具协议；其他服务可直接声明连接器，页面无需增加对应服务的分支。
+
+### 安装事务
+
+应用根目录的 `plugins/` 是内置精选市场源，打包时随应用发布，与 OpenAI 仓库目录一起显示。Plugin Management renderer service 通过 `GET /v1/features/plugin-management` 获取不含本地路径、Hook 可执行命令或凭据的聚合投影；投影包含已安装插件、市场、extension 状态，以及详情页需要的 Tool、Skill、MCP、Hook、连接器和 resource 描述。点击安装后只向 `POST /v1/features/plugin-management/marketplace/:pluginId/install` 提交市场 ID。runtime 区分内置目录和仓库缓存后找到 Bundle，并复制到 Electron `userData/runtime/plugins/<plugin-id>`；安装目录完全由 Setsuna 管理。
 
 普通用户从随应用发布的市场卡片一键安装，不需要下载或解压 Bundle。页面标题栏提供“用对话创建插件”和“导入本地插件”：前者会选中内置 `create-plugin-in-chat` Skill，由模型调用 `configure_plugin` 创建或更新受管 Plugin；后者用于导入已经准备好的开发 Bundle 目录。能力页使用 Electron 原生目录选择器，主进程把用户选中的路径提交给 runtime 的受保护 Plugin Management operation；通用 renderer runtime proxy 明确拒绝该路径。内部开发工具 `install_plugin_bundle` 仍可执行目录侧载。模型发起的创建、更新、侧载和卸载始终需要审批。安装后：
 
@@ -308,7 +387,7 @@ Bundle 是否执行代码由 `extension` 字段决定，而不是由 schema 版�
 
 - 拒绝符号链接、特殊文件、路径越界和源目录/runtime 安装目录重叠。
 - 最多 1,000 个文件、总计 32 MiB，manifest 最多 256 KiB。
-- Manifest 不允许 `env`、HTTP headers、bearer token 环境变量或 URL 用户名/密码，凭据必须在安装后通过 Setsuna 的安全凭据/OAuth 链路配置。
+- Manifest 不允许 `env`、HTTP headers 或 URL 用户名/密码。HTTP MCP 可通过 `bearerTokenEnvVar` 声明 token 的环境变量名称；实际凭据由 runtime 读取环境变量，或在安装后通过 Setsuna 的安全凭据/OAuth 链路配置。
 - Bundle MCP 的网络地址和本地命令仍需通过 Bundle 校验，凭据继续走安全存储或 OAuth 链路。
 - 可执行扩展的源目录、staged 副本、启动和调用都会校验确定性的完整 Bundle 哈希；内容变化、信任切换、更新和卸载先停止 worker。
 - worker 使用环境变量 allowlist，不继承 runtime/native bridge token；但被信任代码仍拥有当前用户的文件系统和网络权限，不宣称 OS 沙箱隔离。
@@ -316,7 +395,13 @@ Bundle 是否执行代码由 `extension` 字段决定，而不是由 schema 版�
 
 能力页不再提供独立 Hooks 目录或手动 Hook 表单。原先的 8 个推荐模板已分别迁移为独立插件；新的 Hook 通过“用对话创建插件”生成，或随本地 Bundle 导入。已有 runtime Hook 配置不会因为入口移除而被删除，执行链仍由 runtime 兼容处理。
 
-当前默认市场是随应用发布的精选目录，已包含网络搜索、图片生成、视觉识别、OpenAI 官方文档、Context7 文档查询、PDF 文档处理、Word 文档处理、结构化提问、任务清单、Claude Rules 兼容，以及危险命令防护、敏感路径防护、生成目录防护、文件改动审计、项目提示、消息密钥提醒、压缩提示和 TODO 续作 8 个 Hook 插件。结构化提问、任务清单和 Claude Rules 兼容由 Setsuna 使用原生扩展 API 实现；其行为设计参考与许可记录保留在 Bundle 源码内部，不作为用户侧品牌或能力资源。网络搜索插件使用 Tavily keyless 搜索并受匿名额度限制；图片生成插件调用用户配置的 OpenAI 兼容 `POST /v1/images/generations` 服务；视觉识别插件通过现有模型 adapter 调用用户选定的视觉模型，并使用当前会话受管图片，因此实际协议和端点跟随该模型的 provider 配置；Word 文档插件复用 runtime 的 Python/uv、工作区图片读取和成品发布能力。LibreOffice 仍是可选的外部渲染依赖，缺失时只能进行结构检查。市场暂不包含远程源、自动更新、签名验证或自动执行安装脚本；这些能力加入前仍保持“可信应用目录 + 完整本地校验”的边界。
+内置市场是随应用发布的精选目录，已包含网络搜索、图片生成、视觉识别、OpenAI 官方文档、Context7 文档查询、PDF 文档处理、Word 文档处理、结构化提问、任务清单、Claude Rules 兼容，以及危险命令防护、敏感路径防护、生成目录防护、文件改动审计、项目提示、消息密钥提醒、压缩提示和 TODO 续作 8 个 Hook 插件。结构化提问、任务清单和 Claude Rules 兼容由 Setsuna 使用原生扩展 API 实现；其行为设计参考与许可记录保留在 Bundle 源码内部，不作为用户侧品牌或能力资源。网络搜索插件使用 Tavily keyless 搜索并受匿名额度限制；图片生成插件调用用户配置的 OpenAI 兼容 `POST /v1/images/generations` 服务；视觉识别插件通过现有模型 adapter 调用用户选定的视觉模型，并使用当前会话受管图片，因此实际协议和端点跟随该模型的 provider 配置；Word 文档插件复用 runtime 的 Python/uv、工作区图片读取和成品发布能力。LibreOffice 仍是可选的外部渲染依赖，缺失时只能进行结构检查。远程来源目前固定为 openai/plugins；不提供任意仓库管理、后台自动升级、签名验证或安装脚本执行。内置可信目录和仓库 Skill/MCP 来源保持各自的权限边界。
+
+## 在对话中选择插件
+
+已安装插件详情中的“在对话中使用”和输入框 `/` 菜单都按 Plugin 本身选择，不依赖插件是否包含 Skill。菜单展示全部已安装插件，支持按名称、描述、标识和标签搜索；选择后显示带图标的插件标签，可与 Skill、文件引用一起使用。
+
+插件引用通过 `plugin-reference.ts` 序列化为 `[$名称](plugin://插件标识)` 并保存在消息正文中，随草稿、排队、重试和侧边对话继续传递。输入框恢复草稿时重新显示标签；代码示例中的引用不作为插件选择。Runtime 仅解析当前轮用户输入，并按真实安装记录查找插件，注入其工具、MCP、连接器和资源摘要；插件包含的 Skill 交由现有 SkillRegistry 解析与加载。插件元数据属于外部上下文，选择本身不改变启用、登录、信任和审批设置。
 
 ## 实现入口
 
@@ -326,7 +411,8 @@ Bundle 是否执行代码由 `extension` 字段决定，而不是由 schema 版�
 | Bundle model | `packages/desktop-runtime/src/adapters/plugin/file-plugin-bundle-model.ts` |
 | 安装/卸载 | `file-plugin-bundle-store.ts` |
 | Agent 受管草稿 | `file-plugin-draft-store.ts` |
-| 默认市场 | `file-plugin-marketplace.ts` |
+| 市场与仓库来源 | `composite-plugin-marketplace.ts`、`file-plugin-marketplace.ts`、`repository-plugin-marketplace.ts` |
+| 仓库索引与归档 | `repository-plugin-catalog.ts`、`repository-plugin-archive.ts` |
 | Agent 工具 | `adapters/tool/configure-plugin-tool.ts`、`plugin-bundle-tool-host.ts` |
 | 可执行扩展 | `extensions/extension-manager.ts`、`extension-worker-{client,entry}.ts`、`adapters/tool/extension-tool-host.ts` |
 | Skill 投影 | `adapters/skill/file-skill-registry.ts` |

@@ -80,6 +80,8 @@ export type RuntimePluginMcpServerDescriptor = {
   label: string;
   description?: string;
   transport: RuntimeMcpTransport;
+  /** Credential variable name only; its value stays in the runtime. */
+  bearerTokenEnvVar?: string;
 };
 
 export type RuntimePluginMcpServer = RuntimePluginMcpServerDescriptor & {
@@ -121,18 +123,42 @@ export type RuntimePluginItemContent = {
   files: RuntimePluginFilePreview[];
 };
 
+/** Repository provenance contains public source coordinates, never local cache paths. */
+export type RuntimePluginRepositorySource = {
+  marketplaceId: string;
+  url: string;
+  path: string;
+  revision: string;
+  bundleHash?: string;
+};
+
+/** Inert image data for img elements only; never inject SVG markup into the DOM. */
+export type RuntimePluginIconImage = { light: string; dark?: string };
+
+export function isRuntimePluginIconDataUrl(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= 132 * 1024
+    && /^data:image\/(?:png|jpeg|gif|webp|svg\+xml);base64,[A-Za-z0-9+/]+={0,2}$/u.test(value);
+}
+
 export type RuntimePluginSummary = {
   id: string;
   name: string;
   /** 由渲染进程管理的图标令牌；插件包不能提供标记或文件系统路径。 */
   icon?: string;
+  iconImage?: RuntimePluginIconImage;
   version?: string;
   description?: string;
   publisher?: string;
+  /** Optional OpenAI Apps that the imported plugin declares but Setsuna cannot provide. */
+  unsupportedApps?: string[];
+  /** Supplemental definitions retained in the bundle but not registered by this host. */
+  unsupportedComponents?: string[];
+  connectors?: import('./plugin-connectors.js').RuntimePluginConnector[];
   tags?: string[];
   installedAt: string;
   /** Missing only on indexes written before installation provenance was recorded. */
-  installationSource?: 'local' | 'marketplace';
+  installationSource?: 'local' | 'marketplace' | 'repository';
+  repository?: RuntimePluginRepositorySource;
   tools?: RuntimePluginTool[];
   skills: RuntimePluginSkill[];
   mcpServers: RuntimePluginMcpServer[];
@@ -148,11 +174,19 @@ export type RuntimePluginList = {
 
 export type RuntimePluginMarketplaceItem = {
   id: string;
+  /** The bundle keeps its own id; the marketplace id is qualified by its source. */
+  bundleId?: string;
+  repository?: RuntimePluginRepositorySource;
+  unavailableReason?: string;
   name: string;
   icon?: string;
+  iconImage?: RuntimePluginIconImage;
   version?: string;
   description?: string;
   publisher?: string;
+  unsupportedApps?: string[];
+  unsupportedComponents?: string[];
+  connectors?: import('./plugin-connectors.js').RuntimePluginConnector[];
   tags: string[];
   featured: boolean;
   tools?: RuntimePluginTool[];
@@ -180,7 +214,7 @@ export type RuntimePluginMarketplaceList = {
 };
 
 export type RuntimePluginInstallInput = {
-  /** 包含 .setsuna-plugin/plugin.json 的本地插件包绝对路径。 */
+  /** 包含 .setsuna-plugin/plugin.json 或 .codex-plugin/plugin.json 的本地插件包绝对路径。 */
   path: string;
 };
 

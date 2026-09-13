@@ -24,6 +24,7 @@ import type { Clock } from '../../ports/clock.js';
 import type { ConfigStore } from '../../ports/config-store.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ProjectInstructionLoader } from '../../ports/project-instruction-loader.js';
+import type { PluginBundleStore } from '../../ports/plugin-bundle-store.js';
 import type { ProjectWorkflowResolver } from '../../ports/project-workflow-resolver.js';
 import type { RuntimeEnvironmentResolver } from '../../ports/runtime-environment-resolver.js';
 import {
@@ -87,6 +88,7 @@ type RuntimeSamplingContextBuilderOptions = {
   projectInstructions?: ProjectInstructionLoader;
   projectWorkflow?: ProjectWorkflowResolver;
   skillRegistry?: SkillRegistry;
+  pluginStore?: Pick<PluginBundleStore, 'listPlugins'>;
   threadStore: ThreadStore;
   toolExecutor: Pick<
     RuntimeToolCallExecutor,
@@ -112,6 +114,7 @@ export class RuntimeSamplingContextBuilder {
       projectInstructions: options.projectInstructions,
       projectWorkflow: options.projectWorkflow,
       skillRegistry: options.skillRegistry,
+      pluginStore: options.pluginStore,
       toolHost: options.toolHost,
     });
   }

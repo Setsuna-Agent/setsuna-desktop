@@ -30,13 +30,19 @@ export type PluginUiSurface = Readonly<{
   sidebarEntry?: boolean;
 }>;
 
+export function installedPluginCatalogId(plugin: RuntimePluginSummary): string {
+  return plugin.installationSource === 'repository' && plugin.repository
+    ? plugin.repository.marketplaceId : plugin.id;
+}
+
 export function installedPluginsOutsideCatalog(
   installed: readonly RuntimePluginSummary[],
   marketplace: readonly RuntimePluginMarketplaceItem[],
 ): RuntimePluginSummary[] {
   const catalogIds = new Set(marketplace.map((plugin) => plugin.id));
   return installed.filter((plugin) => (
-    plugin.installationSource !== 'marketplace' || !catalogIds.has(plugin.id)
+    (plugin.installationSource !== 'marketplace' && plugin.installationSource !== 'repository')
+      || !catalogIds.has(installedPluginCatalogId(plugin))
   ));
 }
 

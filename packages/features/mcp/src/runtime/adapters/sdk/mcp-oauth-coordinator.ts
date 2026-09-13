@@ -4,9 +4,11 @@ import type {
   OAuthClientMetadata,
   OAuthTokens,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
-import type { RuntimeMcpAuthStatus, RuntimeMcpServerInput } from '@setsuna-desktop/contracts';
+import type { RuntimeMcpServerInput } from '@setsuna-desktop/contracts';
 import { createHash } from 'node:crypto';
-import type { McpCredentialStore } from '../../../contracts/control.js';
+import { mcpDeviceOAuthProvider } from './mcp-device-oauth-provider.js';
+import { McpDeviceOAuthSession } from './mcp-device-oauth-session.js';
+import type { McpAuthStatusResult, McpCredentialStore } from '../../../contracts/control.js';
 import { errorMessage } from '../../shared.js';
 import { McpOAuthCallbackServer } from './mcp-oauth-callback-server.js';
 
@@ -41,13 +43,14 @@ export class McpOAuthCoordinator {
   private readonly loginControllers = new Map<string, AbortController>();
   private readonly refreshes = new Map<string, Promise<SerializedResponse>>();
   private readonly errors = new Map<string, string>();
+  private readonly device: McpDeviceOAuthSession;
 
   constructor(
     private readonly credentials: McpCredentialStore,
     private readonly openExternal: (url: string) => Promise<void>,
     private readonly now: () => number = Date.now,
     private readonly fetchImpl: FetchImpl = globalThis.fetch,
-  ) {}
+  ) { this.device = new McpDeviceOAuthSession(credentials, fetchImpl, now); }
 
   providerFor(server: RuntimeMcpServerInput): OAuthClientProvider {
     return new SecureMcpOAuthProvider({
@@ -76,6 +79,7 @@ export class McpOAuthCoordinator {
   }
 
   async login(server: RuntimeMcpServerInput, options: LoginOptions = {}): Promise<void> {
+    if (mcpDeviceOAuthProvider(server)) return this.device.login(server, options);
     const existing = this.logins.get(server.key);
     if (existing) return existing;
     const controller = new AbortController();
@@ -90,6 +94,7 @@ export class McpOAuthCoordinator {
   }
 
   async logout(server: RuntimeMcpServerInput): Promise<void> {
+    if (mcpDeviceOAuthProvider(server)) return this.device.logout(server);
     this.loginControllers.get(server.key)?.abort(new Error(`MCP OAuth login for '${server.key}' was cancelled by logout.`));
     const keys = oauthCredentialKeys(server);
     await Promise.allSettled([
@@ -102,6 +107,7 @@ export class McpOAuthCoordinator {
   }
 
   async shutdown(): Promise<void> {
+    await this.device.shutdown();
     for (const controller of this.loginControllers.values()) {
       controller.abort(new Error('MCP OAuth runtime is shutting down.'));
     }
@@ -109,7 +115,8 @@ export class McpOAuthCoordinator {
     this.loginControllers.clear();
   }
 
-  async authStatus(server: RuntimeMcpServerInput): Promise<{ status: RuntimeMcpAuthStatus; error?: string }> {
+  async authStatus(server: RuntimeMcpServerInput): Promise<McpAuthStatusResult> {
+    if (mcpDeviceOAuthProvider(server)) return this.device.status(server);
     if (this.logins.has(server.key)) return { status: 'oAuthLoggingIn' };
     const error = this.errors.get(server.key);
     if (error) return { status: 'oAuthError', error };
@@ -131,7 +138,10 @@ export class McpOAuthCoordinator {
     this.errors.set(serverKey, errorMessage(error));
   }
 
+  deviceFetchFor(server: RuntimeMcpServerInput): FetchImpl { return this.device.fetchFor(server); }
+
   clearAuthError(serverKey: string): void {
+    this.device.clearError(serverKey);
     this.errors.delete(serverKey);
   }
 
@@ -273,6 +283,7 @@ class SecureMcpOAuthProvider implements OAuthClientProvider {
 }
 
 function oauthCredentialKeys(server: RuntimeMcpServerInput) {
+  // Hash public server coordinates into vault lookup keys; tokens remain in secure storage.
   const identity = createHash('sha256').update(`${server.key}\0${server.url ?? ''}`).digest('hex');
   const prefix = `mcp.oauth.${identity}`;
   return {

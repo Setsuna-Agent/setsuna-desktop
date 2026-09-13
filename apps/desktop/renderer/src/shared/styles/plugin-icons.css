@@ -38,6 +38,24 @@
   object-fit: contain;
 }
 
+.desktop-plugin-icon__artwork {
+  width: 72%;
+  height: 72%;
+  object-fit: contain;
+}
+
+.desktop-plugin-icon__artwork.is-dark-variant {
+  display: none;
+}
+
+:root[data-theme='dark'] .desktop-plugin-icon__artwork.is-light-variant {
+  display: none;
+}
+
+:root[data-theme='dark'] .desktop-plugin-icon__artwork.is-dark-variant {
+  display: block;
+}
+
 .desktop-plugin-icon__monogram {
   position: relative;
   z-index: 1;

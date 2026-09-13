@@ -20,6 +20,7 @@ import type {
   McpToolCallResponse,
 } from '../contracts/control.js';
 import type { McpStore } from '../contracts/store.js';
+import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
 
 /** SDK manager 提供的仅协议操作面；配置事务由 McpControlService 收口。 */
 export type McpProtocolService = {
@@ -86,6 +87,24 @@ export class McpControlService implements McpControl {
   async login(serverKey: string, options?: McpLoginOptions): Promise<void> {
     const server = await this.requireServer(serverKey);
     await this.protocol.login(server, options);
+    try {
+      const inventory = await this.protocol.discoverTools(server, options);
+      options?.signal?.throwIfAborted();
+      if (inventory.errors.length) throw new Error('MCP tool discovery failed.');
+      // Only inventory belongs to this step; retain current credentials and tool permissions.
+      const current = await this.requireServer(serverKey);
+      if (current.url !== server.url || current.oauthClientId !== server.oauthClientId) {
+        throw new Error('MCP connection changed during sign-in.');
+      }
+      await this.store.updateServer(serverKey, { tools: inventory.tools });
+    } catch {
+      options?.signal?.throwIfAborted();
+      throw new FeatureOperationFailure({
+        code: 'MCP_TOOL_SYNC_FAILED',
+        message: 'Signed in successfully, but tools could not be synced. Retry fetching tools.',
+        retryable: true,
+      });
+    }
   }
 
   async logout(serverKey: string): Promise<void> {
@@ -148,6 +167,7 @@ export class McpControlService implements McpControl {
         ...server,
         ...(auth.status ? { authStatus: auth.status } : {}),
         ...(auth.error ? { authError: auth.error } : {}),
+        ...(auth.deviceAuthorization ? { deviceAuthorization: auth.deviceAuthorization } : {}),
       };
     }));
     return { ...list, servers };

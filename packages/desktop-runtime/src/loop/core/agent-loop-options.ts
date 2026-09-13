@@ -36,6 +36,7 @@ export type AgentLoopOptions = {
   configStore?: ConfigStore;
   debugTrace?: RuntimeDebugTraceSink;
   skillRegistry?: SkillRegistry;
+  pluginStore?: Pick<import('../../ports/plugin-bundle-store.js').PluginBundleStore, 'listPlugins'>;
   toolHost?: ToolHost;
   usageStore?: UsageRecorder;
   memoryStore?: MemoryStore;

@@ -1,5 +1,6 @@
 import type { RuntimeMessage, RuntimeToolRun } from '@setsuna-desktop/contracts';
 import type { RuntimePluginUse } from '../plugin-usage/runtimePluginUsage.js';
+import { interleaveRuntimePluginUses } from '../plugin-usage/runtimePluginUsageTimeline.js';
 import { isTranscriptHiddenRuntimeToolRun } from '../tool-runs/runtimeToolRunVisibility.js';
 import { isActiveRuntimeToolRun } from '../tool-runs/runtimeToolRunState.js';
 import { hasRenderableThinkingContent, splitThinkingContent } from './chatThinkingContent.js';
@@ -37,7 +38,7 @@ export type AssistantWorkItem =
   | { type: 'content'; segment: AssistantWorkContentSegment }
   | { type: 'contextCompaction'; active: boolean; id: string; message?: RuntimeMessage }
   | { type: 'thinking'; segment: AssistantWorkThinkingSegment }
-  | { type: 'pluginUses'; id: string; plugins: RuntimePluginUse[] }
+  | { type: 'pluginUses'; id: string; messageId: string; plugins: RuntimePluginUse[] }
   | { type: 'toolRuns'; id: string; segment: RuntimeMessage; toolRuns: NonNullable<RuntimeMessage['toolRuns']> };
 
 export function createAssistantRunTimeline(
@@ -51,9 +52,11 @@ export function createAssistantRunTimeline(
     showThinkingInTranscript?: boolean;
   } = {},
 ): AssistantRunTimelineBlock[] {
-  const parsedSegments = segments.map((segment) => parseAssistantSegment(
+  const parsedSegments = segments.map((segment, index) => parseAssistantSegment(
     segment,
     options.showThinkingInTranscript === true,
+    pluginUses,
+    index === 0,
   ));
   const finalStartIndex = assistantFinalStartIndex(parsedSegments);
   const finalStarted = finalStartIndex >= 0;
@@ -110,14 +113,6 @@ export function createAssistantRunTimeline(
     });
     workBlock = null;
   };
-
-  // 插件提供的 Skill 会在首个模型令牌前注入。预先创建工作块，
-  // 使其归属信息与工具保持在同一条流式时间线中。
-  if (pluginUses.length && segments[0]) {
-    appendWork(segments[0], {
-      items: [{ type: 'pluginUses', id: `${segments[0].id}:plugins`, plugins: pluginUses }],
-    });
-  }
 
   const parsedSegmentById = new Map(parsedSegments.map((parsed, index) => [parsed.segment.id, { index, parsed }]));
   const timelineMessages = orderedAssistantTimelineMessages(
@@ -280,6 +275,8 @@ type ParsedAssistantSegment = {
 function parseAssistantSegment(
   segment: RuntimeMessage,
   showThinkingInTranscript: boolean,
+  pluginUses: RuntimePluginUse[],
+  includeUnanchoredPlugins: boolean,
 ): ParsedAssistantSegment {
   const contentSegments: AssistantWorkContentSegment[] = [];
   const items: AssistantWorkItem[] = [];
@@ -351,14 +348,10 @@ function parseAssistantSegment(
   }
 
   const toolRuns = (segment.toolRuns ?? []).filter((run) => !isTranscriptHiddenRuntimeToolRun(run));
-  if (toolRuns.length) {
-    items.push({ type: 'toolRuns', id: `${segment.id}:tools`, segment, toolRuns });
-  }
-
   return {
     segment,
     contentSegments,
-    items,
+    items: interleaveRuntimePluginUses(segment, items, pluginUses, includeUnanchoredPlugins),
     thinkingSegments,
     toolRuns,
   };

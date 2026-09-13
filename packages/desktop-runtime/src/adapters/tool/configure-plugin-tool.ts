@@ -178,6 +178,23 @@ export function configurePluginDefinition(language?: RuntimeInterfaceLanguage): 
             description: { type: 'string' },
             publisher: { type: 'string', description: text('Publisher label. Defaults to Local.', "发布者标签。默认 Local。") },
             tags: { type: 'array', items: { type: 'string' } },
+            connectors: {
+              type: 'array', maxItems: 32,
+              description: text('Portable connector setup declarations. CLI commands are user instructions, never auto-executed. MCP entries reference mcpServers by key.', '可移植的连接器配置声明。CLI 配置命令仅作用户指引，不自动执行；MCP 通过 key 引用 mcpServers。'),
+              items: {
+                type: 'object', additionalProperties: false,
+                properties: {
+                  id: { type: 'string' }, name: { type: 'string' }, description: { type: 'string' },
+                  kind: { type: 'string', enum: ['cli', 'mcp'] }, required: { type: 'boolean' },
+                  command: { type: 'string', description: text('CLI executable name on PATH, never an absolute path.', 'PATH 中的 CLI 可执行文件名，不能是绝对路径。') },
+                  installUrl: { type: 'string', description: text('HTTPS installation instructions; required for CLI connectors.', 'HTTPS 安装说明地址，CLI 连接器必填。') },
+                  documentationUrl: { type: 'string' },
+                  setupCommands: { type: 'array', maxItems: 8, items: { type: 'string' } },
+                  serverKey: { type: 'string', description: text('Declared MCP server key; required for MCP connectors.', '已声明的 MCP 服务 key，MCP 连接器必填。') },
+                },
+                required: ['id', 'name', 'kind'],
+              },
+            },
             tools: {
               type: 'array',
               description: text('Optional display metadata for tools supplied by the plugin.', "可选插件工具的显示元数据。"),

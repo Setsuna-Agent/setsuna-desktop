@@ -1,5 +1,5 @@
 import type { ComposerEditor } from './editor/types.js';
-import type { RuntimeSkillSummary } from '@setsuna-desktop/contracts';
+import type { RuntimePluginSummary, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import { useCallback, type ClipboardEvent as ReactClipboardEvent } from 'react';
 import {
   CHAT_COMPOSER_CLIPBOARD_TYPE,
@@ -14,6 +14,7 @@ type ChatComposerClipboardOptions = {
   getEditor: () => ComposerEditor | null;
   onSkillsRestored: (skills: RuntimeSkillSummary[]) => void;
   skills: RuntimeSkillSummary[];
+  plugins?: readonly RuntimePluginSummary[];
 };
 
 export function useChatComposerClipboard({
@@ -21,6 +22,7 @@ export function useChatComposerClipboard({
   getEditor,
   onSkillsRestored,
   skills,
+  plugins,
 }: ChatComposerClipboardOptions) {
   const handleClipboardWrite = useCallback((
     event: ReactClipboardEvent<HTMLDivElement>,
@@ -63,7 +65,7 @@ export function useChatComposerClipboard({
     if (!editor || !(editor.inputElement instanceof HTMLDivElement)) return;
     const input = editor.inputElement;
     if (!eventTargetsEditor(event, input)) return;
-    const pastePlan = createChatComposerClipboardPastePlan(serializedPayload, skills);
+    const pastePlan = createChatComposerClipboardPastePlan(serializedPayload, skills, plugins);
     if (!pastePlan) return;
 
     event.preventDefault();
@@ -71,7 +73,7 @@ export function useChatComposerClipboard({
     setNormalizedChatComposerSelection(input, editor.getValue().slotConfig);
     editor.insert(pastePlan.slots, 'cursor', undefined, true);
     onSkillsRestored(pastePlan.selectedSkills);
-  }, [allowStructuredPaste, getEditor, onSkillsRestored, skills]);
+  }, [allowStructuredPaste, getEditor, onSkillsRestored, skills, plugins]);
 
   return {
     onCopyCapture: handleCopyCapture,

@@ -319,6 +319,7 @@ function mcpAuthStatus(value: unknown): RuntimeMcpAuthStatus {
     || value === 'oAuthLoggingIn'
     || value === 'oAuthExpired'
     || value === 'oAuthError'
+    || value === 'configurationError'
   ) return value;
   throw new Error('Skill dependency auth status is invalid.');
 }

@@ -172,7 +172,7 @@ export class SkillMcpDependencyCoordinator implements SkillRegistry, SkillMcpDep
       if (auth.status === 'notLoggedIn' || auth.status === 'oAuthExpired' || auth.status === 'oAuthLoggingIn') {
         return { ...dependency, status: 'authRequired', authStatus: auth.status, ...(auth.error ? { error: auth.error } : {}) };
       }
-      if (auth.status === 'oAuthError') {
+      if (auth.status === 'oAuthError' || auth.status === 'configurationError') {
         return { ...dependency, status: 'error', authStatus: auth.status, error: auth.error ?? 'MCP OAuth failed.' };
       }
       return { ...dependency, status: 'ready', authStatus: auth.status };

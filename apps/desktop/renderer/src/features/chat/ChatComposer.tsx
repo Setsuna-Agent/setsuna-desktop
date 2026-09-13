@@ -28,7 +28,7 @@ import {
 import type {
   ChatImageAttachmentOutcome,
   ChatImageAttachmentRequest,
-  ChatSkillSelectionRequest,
+  ChatCapabilitySelectionRequest,
   ChatWorkspaceMentionRequest,
 } from '../../app/types.js';
 import { RendererOwnedListSlot } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
@@ -42,10 +42,13 @@ import type { SlashCommandMenuItem } from './composer/ChatSlashCommandMenu.js';
 import { parseMentionCommand, parseSlashCommand } from './composer/chatCommandUtils.js';
 import { createComposerDraftSyncPlan } from './composer/chatComposerDraftSync.js';
 import type { ChatComposerSendOptions } from './composer/chatComposerSendOptions.js';
-import { startChatComposerSkillSelection } from './composer/chatComposerSkillSelection.js';
+import { startChatComposerCapabilitySelection, type ChatComposerCapabilitySelection } from './composer/chatComposerCapabilitySelection.js';
+import { parsePluginMentions, type RuntimePluginSummary } from '@setsuna-desktop/contracts';
 import {
   createSelectedSkillReferences,
   createSelectedSkillSlot,
+  createSelectedPluginSlot,
+  createPluginDraftSlots,
   createTextSlot,
   createWorkspaceMentionInsertion,
   createWorkspaceMentionSlots,
@@ -64,9 +67,9 @@ import {
   type ChatModelSelectionHandler,
 } from './chatModelSelection.js';
 
-const EMPTY_SLOT_CONFIG: ComposerSlot[] = [];
+const EMPTY_PLUGINS: RuntimePluginSummary[] = [];
 const EMPTY_QUEUED_TURN_INPUTS: RuntimeQueuedTurnInput[] = [];
-const SKILL_SELECTION_MAX_INSERT_ATTEMPTS = 8;
+const CAPABILITY_SELECTION_MAX_INSERT_ATTEMPTS = 8;
 
 type ComposerFocusTarget = {
   focus?: (options: { cursor?: 'start' | 'end' | 'all'; preventScroll?: boolean }) => void;
@@ -109,9 +112,10 @@ export function ChatComposer({
   focusOnReveal = false,
   focusRequest = 0,
   imageAttachmentRequest,
-  skillSelectionRequest,
+  capabilitySelectionRequest,
   workspaceMentionRequest,
   skills,
+  plugins = EMPTY_PLUGINS,
   sideConversation = false,
   starter = false,
   placeholder,
@@ -129,7 +133,7 @@ export function ChatComposer({
   queuedTurnActions,
   onStartThreadReview,
   onImageAttachmentRequestConsumed,
-  onSkillSelectionRequestConsumed,
+  onCapabilitySelectionRequestConsumed,
   onWorkspaceMentionRequestConsumed,
 }: {
   activeTurnId: string | null;
@@ -144,9 +148,10 @@ export function ChatComposer({
   focusOnReveal?: boolean;
   focusRequest?: number;
   imageAttachmentRequest?: ChatImageAttachmentRequest | null;
-  skillSelectionRequest?: ChatSkillSelectionRequest | null;
+  capabilitySelectionRequest?: ChatCapabilitySelectionRequest | null;
   workspaceMentionRequest?: ChatWorkspaceMentionRequest | null;
   skills: RuntimeSkillSummary[];
+  plugins?: RuntimePluginSummary[];
   sideConversation?: boolean;
   starter?: boolean;
   placeholder?: string;
@@ -167,11 +172,12 @@ export function ChatComposer({
     modelSelection?: RuntimeConfiguredModelReference,
   ) => Promise<unknown>;
   onImageAttachmentRequestConsumed?: (requestId: number, outcome: ChatImageAttachmentOutcome) => void;
-  onSkillSelectionRequestConsumed?: (requestId: number) => void;
+  onCapabilitySelectionRequestConsumed?: (requestId: number) => void;
   onWorkspaceMentionRequestConsumed?: (requestId: number) => void;
 }) {
   const { t } = useI18n();
   const [selectedSkills, setSelectedSkills] = useState<RuntimeSkillSummary[]>([]);
+  const selectedPluginIds = useMemo(() => [...new Set(parsePluginMentions(draft).map((mention) => mention.pluginId))], [draft]);
   const [pendingModelSelection, setPendingModelSelection] = useState<{
     reference: RuntimeConfiguredModelReference;
     threadId: string | null;
@@ -182,11 +188,12 @@ export function ChatComposer({
   const lastEditorDraftRef = useRef(draft);
   const previousExternalDraftRef = useRef(draft);
   const consumedImageAttachmentRequestIdRef = useRef<number | null>(null);
-  const consumedSkillSelectionRequestIdRef = useRef<number | null>(null);
+  const consumedCapabilitySelectionRequestIdRef = useRef<number | null>(null);
   const consumedWorkspaceMentionRequestIdRef = useRef<number | null>(null);
   const modelSelectionRequestRef = useRef(0);
   const mountedRef = useRef(true);
-  const initialSlotConfigRef = useRef<ComposerSlot[]>(draft ? [createTextSlot(draft)] : EMPTY_SLOT_CONFIG);
+  const initialSlotConfigRef = useRef<ComposerSlot[] | null>(null);
+  if (initialSlotConfigRef.current === null) initialSlotConfigRef.current = createPluginDraftSlots(draft, plugins);
   const addSelectedSkills = useCallback((nextSkills: RuntimeSkillSummary[]) => {
     if (!nextSkills.length) return;
     setSelectedSkills((current) => {
@@ -245,6 +252,7 @@ export function ChatComposer({
     allowStructuredPaste: !modeController.reviewModeEnabled,
     getEditor: getComposerEditor,
     onSkillsRestored: addSelectedSkills,
+    plugins,
     skills,
   });
 
@@ -337,9 +345,11 @@ export function ChatComposer({
     contextCompactPercent,
     contextCompacting,
     goalModeEnabled: modeController.goalModeEnabled,
-    hasReviewIncompatibleContent: Boolean(attachmentItems.length || selectedSkills.length),
+    hasReviewIncompatibleContent: Boolean(attachmentItems.length || selectedSkills.length || selectedPluginIds.length),
     multiAgentEnabled,
     query: commandController.slashQuery,
+    plugins,
+    selectedPluginIds,
     selectedSkills,
     sideChatAvailable: Boolean(onOpenSideChat),
     sideConversation,
@@ -361,6 +371,8 @@ export function ChatComposer({
     sideConversation,
     selectedSkills,
     skills,
+    plugins,
+    selectedPluginIds,
     t,
   ]);
 
@@ -405,39 +417,42 @@ export function ChatComposer({
   ]);
 
   useEffect(() => {
-    if (!skillSelectionRequest || consumedSkillSelectionRequestIdRef.current === skillSelectionRequest.requestId) return;
+    if (!capabilitySelectionRequest || consumedCapabilitySelectionRequestIdRef.current === capabilitySelectionRequest.requestId) return;
     if (modeController.reviewModeEnabled) {
-      consumedSkillSelectionRequestIdRef.current = skillSelectionRequest.requestId;
-      onSkillSelectionRequestConsumed?.(skillSelectionRequest.requestId);
+      consumedCapabilitySelectionRequestIdRef.current = capabilitySelectionRequest.requestId;
+      onCapabilitySelectionRequestConsumed?.(capabilitySelectionRequest.requestId);
       return;
     }
-    const skill = skills.find((item) => item.id === skillSelectionRequest.skillId);
-    if (!skill || !skill.enabled) return;
+    const skill = capabilitySelectionRequest.kind === 'skill' ? skills.find((item) => item.id === capabilitySelectionRequest.id && item.enabled) : undefined;
+    const plugin = capabilitySelectionRequest.kind === 'plugin' ? plugins.find((item) => item.id === capabilitySelectionRequest.id) : undefined;
+    const selection: ChatComposerCapabilitySelection | undefined = skill ? { kind: 'skill', value: skill } : plugin ? { kind: 'plugin', value: plugin } : undefined;
+    if (!selection) return;
 
-    return startChatComposerSkillSelection({
+    return startChatComposerCapabilitySelection({
       getEditor: () => senderRef.current,
-      maxAttempts: SKILL_SELECTION_MAX_INSERT_ATTEMPTS,
+      maxAttempts: CAPABILITY_SELECTION_MAX_INSERT_ATTEMPTS,
       scheduler: {
         cancelFrame: window.cancelAnimationFrame.bind(window),
         requestFrame: window.requestAnimationFrame.bind(window),
       },
-      skill,
+      selection,
       onConfirmed: () => {
-        if (consumedSkillSelectionRequestIdRef.current === skillSelectionRequest.requestId) return;
+        if (consumedCapabilitySelectionRequestIdRef.current === capabilitySelectionRequest.requestId) return;
         // Consume only after the tag survives ChatPromptInput initialization and a full frame.
-        consumedSkillSelectionRequestIdRef.current = skillSelectionRequest.requestId;
-        addSelectedSkills([skill]);
+        consumedCapabilitySelectionRequestIdRef.current = capabilitySelectionRequest.requestId;
+        if (skill) addSelectedSkills([skill]);
         commandController.focusComposer();
-        onSkillSelectionRequestConsumed?.(skillSelectionRequest.requestId);
+        onCapabilitySelectionRequestConsumed?.(capabilitySelectionRequest.requestId);
       },
     });
   }, [
     addSelectedSkills,
     commandController.focusComposer,
     modeController.reviewModeEnabled,
-    onSkillSelectionRequestConsumed,
-    skillSelectionRequest,
+    onCapabilitySelectionRequestConsumed,
+    capabilitySelectionRequest,
     skills,
+    plugins,
   ]);
 
   useEffect(() => {
@@ -474,7 +489,7 @@ export function ChatComposer({
     commandController.acceptMentionSelection();
   };
 
-  const selectSkill = (skill?: RuntimeSkillSummary) => {
+  const selectCapability = (selection: ChatComposerCapabilitySelection) => {
     if (modeController.reviewModeEnabled) {
       commandController.closeSlashMenu();
       commandController.focusComposer();
@@ -482,15 +497,15 @@ export function ChatComposer({
     }
     const command = commandController.slashCommand
       ?? parseSlashCommand(draft, commandController.commandCursorOffset);
-    if (!skill || (!command && !commandController.forcedSlashMenuOpen)) return;
+    if (!command && !commandController.forcedSlashMenuOpen) return;
     senderRef.current?.insert?.(
-      [createSelectedSkillSlot(skill), createTextSlot(' ')],
+      [selection.kind === 'skill' ? createSelectedSkillSlot(selection.value) : createSelectedPluginSlot(selection.value), createTextSlot(' ')],
       'cursor',
       command ? draft.slice(command.start, command.end) : undefined,
       true,
     );
     commandController.acceptSlashSelection();
-    addSelectedSkills([skill]);
+    if (selection.kind === 'skill') addSelectedSkills([selection.value]);
   };
 
   const handleChange = (value: string, _event?: unknown, slotConfig?: ComposerSlot[]) => {
@@ -522,9 +537,9 @@ export function ChatComposer({
     if (syncPlan.value) {
       // 先聚焦到末尾，确保外部文件引用插入到当前草稿。
       editor.focus({ cursor: 'end', preventScroll: true });
-      editor.insert([createTextSlot(syncPlan.value)], 'end', undefined, true);
+      editor.insert(createPluginDraftSlots(syncPlan.value, plugins), 'end', undefined, true);
     }
-  }, [draft]);
+  }, [draft, plugins]);
 
   const handleKeyDown = (event: ReactKeyboardEvent) => {
     if (commandController.slashMenuOpen) {
@@ -539,7 +554,11 @@ export function ChatComposer({
   const selectSlashEntry = (item?: SlashCommandMenuItem) => {
     if (!item) return;
     if (item.kind === 'skill') {
-      selectSkill(item.skill);
+      selectCapability({ kind: 'skill', value: item.skill });
+      return;
+    }
+    if (item.kind === 'plugin') {
+      selectCapability({ kind: 'plugin', value: item.plugin });
       return;
     }
     commandController.closeSlashMenu();

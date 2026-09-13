@@ -5,6 +5,7 @@ import type {
   RuntimeHookTrustStatus,
   RuntimePluginFilePreview,
   RuntimePluginInstallResult,
+  RuntimePluginConnectorStatus,
   RuntimePluginItemContent,
   RuntimePluginItemKind,
   RuntimePluginList,
@@ -22,6 +23,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import {
   parseRuntimePluginUiData,
+  parseRuntimePluginConnectors,
   parseSandboxedUiSource,
   RUNTIME_PLUGIN_UI_LIMITS,
 } from '@setsuna-desktop/contracts';
@@ -249,6 +251,26 @@ const pluginHookOperationErrors = Object.freeze({
   PLUGIN_HOOK_NOT_STANDALONE: Object.freeze({ status: 409 }),
 });
 
+const connectorStatusesCodec = defineRuntimeCodec<RuntimePluginConnectorStatus[]>((value) => (
+  arrayValue(value, 'connector statuses').map((item) => {
+    const record = objectRecord(item, 'Invalid connector status.');
+    const state = record.state;
+    if (state !== 'missing' && state !== 'installed' && state !== 'configured'
+      && state !== 'needs-auth' && state !== 'disabled' && state !== 'error') throw new Error('Invalid connector state.');
+    return { connectorId: nonEmptyText(record.connectorId, 'connectorId'), state };
+  })
+));
+
+export const readPluginConnectorStatuses = defineFeatureOperation({
+  id: 'plugin-management.connectors.read',
+  method: 'GET',
+  path: '/v1/features/plugin-management/installed/:pluginId/connectors',
+  input: pluginTargetCodec,
+  output: connectorStatusesCodec,
+  errors: pluginOperationErrors,
+  idempotency: 'safe',
+});
+
 export const readPluginManagementSnapshot = defineFeatureOperation({
   id: 'plugin-management.snapshot.read',
   method: 'GET',
@@ -257,6 +279,16 @@ export const readPluginManagementSnapshot = defineFeatureOperation({
   output: snapshotCodec,
   errors: Object.freeze({}),
   idempotency: 'safe',
+});
+
+export const refreshPluginMarketplace = defineFeatureOperation({
+  id: 'plugin-management.marketplace.refresh',
+  method: 'POST',
+  path: '/v1/features/plugin-management/marketplace/refresh',
+  input: emptyInputCodec,
+  output: snapshotCodec,
+  errors: pluginOperationErrors,
+  idempotency: 'idempotent',
 });
 
 export const readPluginExtensionStatuses = defineFeatureOperation({
@@ -452,7 +484,7 @@ function pluginSummary(value: unknown): RuntimePluginSummary {
   if (!Number.isSafeInteger(record.hookCount) || (record.hookCount as number) < 0) {
     throw new Error('Plugin hookCount is invalid.');
   }
-  return Object.freeze({ ...record }) as RuntimePluginSummary;
+  return Object.freeze({ ...record, ...(record.connectors === undefined ? {} : { connectors: parseRuntimePluginConnectors(record.connectors) }) }) as RuntimePluginSummary;
 }
 
 function marketplaceItem(value: unknown): RuntimePluginMarketplaceItem {
@@ -468,7 +500,7 @@ function marketplaceItem(value: unknown): RuntimePluginMarketplaceItem {
   if (typeof record.featured !== 'boolean' || typeof record.installed !== 'boolean' || typeof record.updateAvailable !== 'boolean') {
     throw new Error('Marketplace plugin state is invalid.');
   }
-  return Object.freeze({ ...record }) as RuntimePluginMarketplaceItem;
+  return Object.freeze({ ...record, ...(record.connectors === undefined ? {} : { connectors: parseRuntimePluginConnectors(record.connectors) }) }) as RuntimePluginMarketplaceItem;
 }
 
 function extensionStatus(value: unknown): RuntimeExtensionStatus {

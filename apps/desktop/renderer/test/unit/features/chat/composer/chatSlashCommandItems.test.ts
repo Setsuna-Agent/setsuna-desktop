@@ -1,4 +1,4 @@
-import type { RuntimeSkillSummary } from '@setsuna-desktop/contracts';
+import type { RuntimePluginSummary, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import type { Translate } from '../../../../../src/shared/i18n/I18nProvider.js';
 import {
@@ -9,6 +9,22 @@ import {
 const t = ((key: string) => key) as Translate;
 
 describe('chat slash command items', () => {
+  it('lists every installed plugin, including bundles without Skills, and searches the full list', () => {
+    const plugins = Array.from({ length: 12 }, (_, index): RuntimePluginSummary => ({
+      id: `connector-${index}`, name: `Connector ${index}`, installedAt: '2026-09-13',
+      skills: [], hooks: [], hookCount: 0, resources: [],
+      mcpServers: [{ key: `mcp-${index}`, label: 'MCP', transport: 'streamableHttp', owned: true }],
+      ...(index === 11 ? { tags: ['GitHub'] } : {}),
+    }));
+    const entries = createChatSlashCommandItems(options({ plugins }));
+    expect(entries.filter((item) => item.kind === 'plugin').map((item) => item.key))
+      .toEqual(plugins.map((plugin) => `plugin:${plugin.id}`));
+    expect(createChatSlashCommandItems(options({ plugins, query: '  GITHUB  ' })).map((item) => item.key))
+      .toEqual(['plugin:connector-11']);
+    expect(createChatSlashCommandItems(options({ plugins, query: 'connector', selectedPluginIds: ['connector-11'] })))
+      .toHaveLength(11);
+  });
+
   it('retains the action order and contextual disabled states', () => {
     const items = createChatSlashCommandItems(options({
       activeProjectSelected: false,

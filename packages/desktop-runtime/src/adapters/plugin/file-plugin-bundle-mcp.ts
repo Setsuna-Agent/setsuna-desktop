@@ -20,8 +20,11 @@ export function normalizePluginMcpServers(value: unknown): RuntimeMcpServerInput
   return value.map((item, index) => {
     const record = objectRecord(item, `Plugin mcpServers[${index}] must be an object.`);
     if (record.env !== undefined || record.headers !== undefined || record.envHttpHeaders !== undefined
-      || record.env_http_headers !== undefined || record.bearerTokenEnvVar !== undefined || record.bearer_token_env_var !== undefined) {
+      || record.env_http_headers !== undefined) {
       throw new Error(`Plugin mcpServers[${index}] cannot embed credentials or environment values.`);
+    }
+    if (record.enabled !== undefined && typeof record.enabled !== 'boolean') {
+      throw new Error(`Plugin mcpServers[${index}].enabled must be a boolean.`);
     }
     const key = normalizeMcpKey(requiredString(record.key, `Plugin mcpServers[${index}].key`));
     if (seen.has(key)) throw new Error(`Duplicate plugin MCP key: ${key}`);
@@ -40,16 +43,27 @@ export function normalizePluginMcpServers(value: unknown): RuntimeMcpServerInput
       disabledTools: stringArray(record.disabledTools ?? record.disabled_tools, `Plugin mcpServers[${index}].disabledTools`),
       oauthClientId: optionalString(record.oauthClientId ?? record.oauth_client_id),
       oauthResource: optionalString(record.oauthResource ?? record.oauth_resource),
-      enabled: true,
+      bearerTokenEnvVar: pluginCredentialVariable(record.bearerTokenEnvVar ?? record.bearer_token_env_var),
+      enabled: record.enabled !== false,
     };
     if (transport === 'streamableHttp') {
       server.url = safeHttpUrl(requiredString(record.url, `Plugin mcpServers[${index}].url`));
     } else {
+      if (server.bearerTokenEnvVar) throw new Error('Plugin bearerTokenEnvVar requires an HTTP MCP server.');
       server.command = requiredString(record.command, `Plugin mcpServers[${index}].command`);
       server.cwd = optionalString(record.cwd);
     }
     return removeUndefined(server);
   });
+}
+
+function pluginCredentialVariable(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  const name = requiredString(value, 'Plugin MCP bearerTokenEnvVar');
+  if (!/^[A-Za-z_][A-Za-z0-9_]{0,255}$/u.test(name)) {
+    throw new Error('Plugin MCP bearerTokenEnvVar must be an environment variable name.');
+  }
+  return name;
 }
 
 export function pluginMcpServerDescriptor(server: RuntimeMcpServerInput): RuntimePluginMcpServerDescriptor {
@@ -58,6 +72,7 @@ export function pluginMcpServerDescriptor(server: RuntimeMcpServerInput): Runtim
     label: server.label ?? server.key,
     ...(server.description ? { description: server.description } : {}),
     transport: normalizeMcpTransport(server.transport, server.command, server.url),
+    ...(server.bearerTokenEnvVar ? { bearerTokenEnvVar: server.bearerTokenEnvVar } : {}),
   };
 }
 
@@ -85,6 +100,7 @@ export function pluginMcpServerUnmodified(current: RuntimeMcpServerInput, expect
 }
 
 export function comparablePluginMcpServer(server: RuntimeMcpServerInput): Record<string, unknown> {
+  // Discovered inventory is runtime metadata, not a user change to plugin configuration.
   const transport = normalizeMcpTransport(server.transport, server.command, server.url);
   const timeoutMs = normalizedMcpTimeout(server.timeoutMs, 120_000);
   return {
@@ -102,7 +118,6 @@ export function comparablePluginMcpServer(server: RuntimeMcpServerInput): Record
     enabled: server.enabled !== false,
     allowedTools: normalizedStringSet(server.allowedTools),
     disabledTools: normalizedStringSet(server.disabledTools),
-    tools: canonicalValue(server.tools ?? []),
     env: canonicalStringMap(server.env),
     headers: canonicalStringMap(server.headers),
     envHttpHeaders: canonicalStringMap(server.envHttpHeaders),
@@ -132,16 +147,6 @@ export function canonicalStringMap(value: Record<string, string> | undefined): R
     .filter(([key, item]) => key && item)
     .sort(([left], [right]) => left.localeCompare(right));
   return entries.length ? Object.fromEntries(entries) : null;
-}
-
-export function canonicalValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalValue);
-  if (!value || typeof value !== 'object') return value;
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, item]) => [key, canonicalValue(item)]),
-  );
 }
 
 export function comparableUrl(value: string | undefined): string {

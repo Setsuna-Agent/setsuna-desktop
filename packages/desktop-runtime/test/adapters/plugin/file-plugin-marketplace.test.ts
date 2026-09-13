@@ -29,6 +29,7 @@ describe('file plugin marketplace', () => {
       errors: [],
       plugins: [{
         id: 'docs',
+        connectors: [{ id: 'mcp-1', name: 'Docs MCP', description: 'Current documentation service.', kind: 'mcp', serverKey: 'docs_mcp', required: false }],
         name: 'Docs Helper',
         icon: 'openai-docs',
         version: '1.0.0',

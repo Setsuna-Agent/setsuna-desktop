@@ -15,6 +15,7 @@ import { capabilitiesRefreshCoordinatorCapability } from '@setsuna-desktop/rende
 import { lazy } from 'react';
 import {
   mcpFeature,
+  mcpRendererHostCapability,
   mcpRendererServiceCapability,
 } from '../contracts/index.js';
 import { createMcpRendererClient } from './client.js';
@@ -27,6 +28,7 @@ const McpCapabilitiesPage = lazy(async () => {
 });
 
 const dependencies = defineRendererDependencies({
+  host: requiredCapability(mcpRendererHostCapability),
   capabilitiesRefresh: requiredCapability(capabilitiesRefreshCoordinatorCapability),
   transport: requiredCapability(rendererFeatureOperationTransportCapability),
 });
@@ -53,7 +55,7 @@ export const mcpRendererFeature = defineRendererFeature({
       pageHeading: 'view',
       sectionId: 'mcp',
       titleKey: 'feature.mcp.title',
-      render: (props) => <McpCapabilitiesPage {...props} service={service} />,
+      render: (props) => <McpCapabilitiesPage {...props} service={service} openExternal={context.dependencies.host.openExternal} />,
     });
   },
 });

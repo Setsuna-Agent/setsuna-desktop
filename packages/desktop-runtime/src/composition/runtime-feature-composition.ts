@@ -1,3 +1,4 @@
+import { readPluginConnectorStatuses } from '../adapters/plugin/plugin-connector-status.js';
 import {
   completeFeatureHostActivation,
   defineRuntimeFeatureHost,
@@ -283,6 +284,7 @@ export async function activateBuiltinRuntimeFeatures(
         pluginManagementRuntimeHostCapability,
         Object.freeze({
           catalogRevision: () => runtime.pluginStore.catalogRevision(),
+          readConnectorStatuses: ({ pluginId }) => readPluginConnectorStatuses(pluginId, runtime.pluginStore, runtime.mcpControl),
           getInstalledItem: ({ itemId, kind, pluginId }) => (
             runtime.pluginStore.readItemContent(pluginId, kind, itemId)
           ),
@@ -293,7 +295,7 @@ export async function activateBuiltinRuntimeFeatures(
           installMarketplace: ({ pluginId }) => runtime.pluginMarketplace.installPlugin(pluginId),
           listExtensions: () => runtime.extensionManager.listStatuses(),
           listHooks: (input) => runtime.hookManagement.list(input),
-          listMarketplace: () => runtime.pluginMarketplace.listPlugins(),
+          listMarketplace: (options) => runtime.pluginMarketplace.listPlugins(options),
           listPlugins: () => runtime.pluginStore.listPlugins(),
           readRendererUiState: (input) => runtime.extensionManager.readRendererUiState(input),
           runRendererUiAction: (input, signal) => (
