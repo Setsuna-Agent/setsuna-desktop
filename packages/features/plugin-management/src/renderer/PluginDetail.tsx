@@ -1,3 +1,4 @@
+import { PluginConnectors } from './PluginConnectors.js';
 import type {
   RuntimeExtensionStatus,
   RuntimePluginMarketplaceItem,
@@ -36,6 +37,7 @@ import {
   PluginDetailItem,
   PluginDetailItemIcon,
   PluginDetailSection,
+  PluginRepositoryLink,
 } from './PluginDetailPrimitives.js';
 import { PluginItemDialog, type PluginDetailItem as SelectedPluginItem } from './PluginItemDialog.js';
 import { PluginUiPreviewDialog } from './PluginUiPreviewDialog.js';
@@ -49,6 +51,12 @@ import {
   type PluginUiSurface,
   type PluginUiSurfaceKind,
 } from './pluginPresentation.js';
+
+const componentLabels: Record<string, PluginManagementMessageKey> = {
+  hooks: 'feature.pluginManagement.component.hooks',
+  agents: 'feature.pluginManagement.component.agents',
+  commands: 'feature.pluginManagement.component.commands',
+};
 
 export function PluginDetail({
   capabilities,
@@ -67,7 +75,7 @@ export function PluginDetail({
   service,
   translate,
   ui,
-  useSkill,
+  usePlugin,
 }: Readonly<{
   capabilities?: CapabilitiesPageNavigation;
   extensionStatus?: RuntimeExtensionStatus;
@@ -85,12 +93,13 @@ export function PluginDetail({
   service: PluginManagementRendererService;
   translate: PluginManagementTranslate;
   ui: SettingsViewUi;
-  useSkill?(skillId: string): void;
+  usePlugin?(pluginId: string): void;
 }>) {
   const [selectedItem, setSelectedItem] = useState<SelectedPluginItem | null>(null);
   const [selectedSurface, setSelectedSurface] = useState<PluginUiSurface | null>(null);
   const plugin = installedPlugin ?? marketplacePlugin;
   if (!plugin) return null;
+  const repository = plugin.repository;
   const includeCatalogOnly = !installedPlugin;
   const tools = mergePluginTools(marketplacePlugin?.tools ?? [], installedPlugin?.tools ?? [], includeCatalogOnly);
   const skills = mergePluginSkills(marketplacePlugin?.skills ?? [], installedPlugin?.skills ?? [], includeCatalogOnly);
@@ -106,7 +115,7 @@ export function PluginDetail({
   const resourceCount = installedPlugin
     ? resources.length
     : Math.max(resources.length, marketplacePlugin?.capabilities.resources ?? 0);
-  const pending = pendingAction?.endsWith(`:${plugin.id}`) ?? false;
+  const pending = Boolean(pendingAction && [installedPlugin?.id, marketplacePlugin?.id].some((id) => id && pendingAction.endsWith(`:${id}`)));
   const localExtension = installedPlugin?.installationSource !== 'marketplace'
     ? installedPlugin?.extension
     : undefined;
@@ -119,7 +128,7 @@ export function PluginDetail({
     || hasDeclarativeSettings;
   const subtitle = [plugin.publisher, plugin.version ? `v${plugin.version}` : null].filter(Boolean).join(' · ');
   const actionItems = [
-    ...(marketplacePlugin?.updateAvailable ? [{
+    ...(marketplacePlugin?.updateAvailable && !marketplacePlugin.unavailableReason ? [{
       disabled: pending,
       icon: pending ? <Loader2 className="is-spinning" size={14} /> : <Download size={14} />,
       id: 'update',
@@ -137,7 +146,7 @@ export function PluginDetail({
         : 'feature.pluginManagement.uninstall'),
     },
     {
-      disabled: !skills[0] || !useSkill,
+      disabled: !installedPlugin || !usePlugin,
       icon: <MessageSquare size={14} />,
       id: 'use-in-conversation',
       label: translate('feature.pluginManagement.useSkill'),
@@ -146,7 +155,7 @@ export function PluginDetail({
   const selectAction = (actionId: string) => {
     if (actionId === 'update' && marketplacePlugin) void onInstall(marketplacePlugin);
     if (actionId === 'uninstall' && installedPlugin) void onRemove(installedPlugin);
-    if (actionId === 'use-in-conversation' && skills[0]) useSkill?.(skills[0].id);
+    if (actionId === 'use-in-conversation' && installedPlugin) usePlugin?.(installedPlugin.id);
   };
 
   return (
@@ -160,19 +169,18 @@ export function PluginDetail({
         <section className="desktop-capabilities-detail desktop-capabilities-plugin-detail">
           <ui.PageHeader
             actions={installedPlugin ? (
-              <ui.ActionMenu
-                items={actionItems}
-                label={translate('feature.pluginManagement.actions')}
-                onSelect={selectAction}
-              />
+              <>
+                <span className="desktop-capabilities-detail__status"><Check size={14} />{translate('feature.pluginManagement.installed')}</span>
+                <ui.ActionMenu items={actionItems} label={translate('feature.pluginManagement.actions')} onSelect={selectAction} />
+              </>
             ) : marketplacePlugin ? (
               <ui.Button
-                disabled={pending}
+                disabled={pending || Boolean(marketplacePlugin.unavailableReason)}
                 icon={pending ? <Loader2 className="is-spinning" size={14} /> : <Download size={14} />}
                 variant="primary"
                 onClick={() => void onInstall(marketplacePlugin)}
               >
-                {translate(pending
+                {translate(marketplacePlugin.unavailableReason ? 'feature.pluginManagement.unavailable' : pending
                   ? 'feature.pluginManagement.installing'
                   : 'feature.pluginManagement.detailInstall')}
               </ui.Button>
@@ -181,13 +189,48 @@ export function PluginDetail({
                 {translate('feature.pluginManagement.installed')}
               </ui.Button>
             )}
-            className="desktop-capabilities-plugin-detail__header"
-            leading={<ui.PluginIcon name={plugin.icon} pluginId={plugin.id} variant="list" />}
+            className="desktop-capabilities-detail__header"
+            leading={<ui.PluginIcon iconImage={plugin.iconImage ?? marketplacePlugin?.iconImage} name={plugin.icon} pluginId={plugin.id} variant="list" />}
             subtitle={subtitle}
             title={plugin.name}
           />
 
           <p className="desktop-capabilities-plugin-detail__description">{plugin.description ?? plugin.id}</p>
+          {repository ? (
+            <PluginRepositoryLink className="desktop-capabilities-plugin-detail__repository"
+              onClick={() => void openExternal(`${repository.url}/tree/${repository.revision}/${repository.path}`)}>
+              {translate('feature.pluginManagement.repositorySource')} · {repository.revision.slice(0, 7)}
+            </PluginRepositoryLink>
+          ) : null}
+          {marketplacePlugin?.unavailableReason ? (
+            <p className="desktop-capabilities-plugin-detail__description" role="note">
+              {marketplacePlugin.unavailableReason}
+            </p>
+          ) : null}
+          {plugin.unsupportedApps?.length ? (
+            <p className="desktop-capabilities-plugin-detail__description" role="note">
+              {translate('feature.pluginManagement.unsupportedApps', { apps: plugin.unsupportedApps.join(', ') })}
+            </p>
+          ) : null}
+          {plugin.unsupportedComponents?.length ? (
+            <p className="desktop-capabilities-plugin-detail__description" role="note">
+              {translate('feature.pluginManagement.unsupportedComponents', {
+                components: plugin.unsupportedComponents.map((component) => componentLabels[component]
+                  ? translate(componentLabels[component]) : component).join(', '),
+              })}
+            </p>
+          ) : null}
+
+          {plugin.connectors?.length ? <PluginConnectors
+            key={plugin.id}
+            connectors={plugin.connectors}
+            pluginId={installedPlugin?.id}
+            service={service}
+            capabilities={capabilities}
+            openExternal={openExternal}
+            translate={translate}
+            ui={ui}
+          /> : null}
 
           {localExtension ? (
             <section className="desktop-capabilities-plugin-detail__extension">
@@ -253,7 +296,7 @@ export function PluginDetail({
             {skills.map((skill) => (
               <PluginDetailItem
                 description={skill.description ?? skill.id}
-                icon={<ui.PluginIcon name={plugin.icon} pluginId={plugin.id} variant="list" />}
+                icon={<ui.PluginIcon iconImage={plugin.iconImage ?? marketplacePlugin?.iconImage} name={plugin.icon} pluginId={plugin.id} variant="list" />}
                 key={skill.id}
                 title={skill.name}
                 viewLabel={translate('feature.pluginManagement.viewItem', { title: skill.name })}
@@ -270,7 +313,12 @@ export function PluginDetail({
                     : 'feature.pluginManagement.mcp.local'),
                   ...(server.owned === false ? [translate('feature.pluginManagement.mcp.reuse')] : []),
                 ]}
-                description={server.description ?? server.key}
+                description={[
+                  server.description ?? server.key,
+                  ...(server.bearerTokenEnvVar ? [translate('feature.pluginManagement.mcp.bearerSetup', {
+                    name: server.bearerTokenEnvVar,
+                  })] : []),
+                ].join(' · ')}
                 icon={<PluginDetailItemIcon kind="mcp"><Plug size={16} /></PluginDetailItemIcon>}
                 key={server.key}
                 title={server.label}
@@ -321,7 +369,6 @@ export function PluginDetail({
           hooks={hooks}
           installed={Boolean(installedPlugin)}
           item={selectedItem}
-          openExternal={openExternal}
           pluginId={plugin.id}
           service={service}
           translate={translate}

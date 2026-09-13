@@ -53,6 +53,10 @@ export class RendererPluginManagementService implements PluginManagementRenderer
     scope: FeatureScope;
   }>) {}
 
+  readConnectorStatuses(input: PluginManagementPluginTarget, options?: Readonly<{ signal?: AbortSignal }>) {
+    return this.options.client.readConnectorStatuses(input, options);
+  }
+
   getSnapshot(): PluginManagementSnapshot {
     return this.snapshot;
   }
@@ -79,7 +83,17 @@ export class RendererPluginManagementService implements PluginManagementRenderer
     };
   }
 
-  async refresh(options?: Readonly<{ signal?: AbortSignal }>): Promise<PluginManagementSnapshot> {
+  async refresh(options?: Readonly<{ signal?: AbortSignal; refreshRepositories?: boolean }>): Promise<PluginManagementSnapshot> {
+    if (options?.refreshRepositories) {
+      // Publish local plugins immediately, even on a cold start or failed download.
+      await Promise.all([
+        this.refresh({ signal: options.signal }),
+        this.options.scope.runOperation((signal) => this.options.client.refreshMarketplace({ signal }), options),
+      ]);
+      // Item navigation can read the old cache while a download is pending. Start
+      // the final read afterwards so those reads cannot suppress the new catalog.
+      return this.refresh({ signal: options.signal });
+    }
     const snapshotSequence = ++this.snapshotRefreshSequence;
     const extensionSequence = ++this.extensionRefreshSequence;
     const installedSequence = ++this.installedRefreshSequence;

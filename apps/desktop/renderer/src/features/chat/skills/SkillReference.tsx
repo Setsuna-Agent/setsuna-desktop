@@ -1,7 +1,7 @@
 import type { RuntimeSkillReference, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import { createContext, Fragment, memo, useContext, type ReactNode } from 'react';
 import { SkillIcon } from '../../../shared/ui/SkillIcon.js';
-import { WorkspaceMentionText } from '../mentions/WorkspaceMentionText.js';
+import { PluginReferenceText } from '../references/PluginReference.js';
 import { ChatInlineReference } from '../references/ChatInlineReference.js';
 import { parseSkillReferenceText, skillDisplayText } from './skillReferenceParser.js';
 
@@ -50,7 +50,7 @@ export const SkillReferenceText = memo(function SkillReferenceText({
       {parseSkillReferenceText(content, skillReferences, skills).map((part) => (
         part.type === 'text' ? (
           <Fragment key={`text:${part.start}`}>
-            <WorkspaceMentionText content={part.value} />
+            <PluginReferenceText content={part.value} />
           </Fragment>
         ) : (
           <SkillReferencePresentation

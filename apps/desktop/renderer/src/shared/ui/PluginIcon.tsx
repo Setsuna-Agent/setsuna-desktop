@@ -1,4 +1,6 @@
 import { FileIcon } from '@setsuna-desktop/renderer-ui';
+import { isRuntimePluginIconDataUrl, type RuntimePluginIconImage } from '@setsuna-desktop/contracts';
+import { useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
   BookOpenText,
@@ -80,23 +82,29 @@ const pluginIconFileNames: Partial<Record<PluginIconName, string>> = {
   pdf: 'document.pdf',
 };
 
-/** Renders the same safe icon-token mapping in the marketplace and chat history. */
+/** Displays bundled tokens or repository artwork exclusively as inert images. */
 export function PluginIcon({
   className,
   name,
+  iconImage,
   pluginId,
   variant = 'card',
 }: {
   className?: string;
   name?: string;
+  iconImage?: RuntimePluginIconImage;
   pluginId?: string;
   variant?: PluginIconVariant;
 }) {
   const icon = pluginIconName(name) ?? pluginIconName(pluginId) ?? pluginIconById[pluginId ?? ''] ?? null;
   const Glyph = icon ? pluginGlyphs[icon] : null;
-  const monogram = icon ? pluginIconMonograms[icon] : pluginInitials(pluginId ?? name ?? 'Plugin');
+  const monogram = icon ? pluginIconMonograms[icon] : pluginInitials(pluginId?.split(':').at(-1) ?? name ?? 'Plugin');
   const brandSource = icon ? pluginIconBrandSources[icon] : undefined;
   const fileName = icon ? pluginIconFileNames[icon] : undefined;
+  const [failedImages, setFailedImages] = useState<readonly string[]>([]);
+  const light = isRuntimePluginIconDataUrl(iconImage?.light) && !failedImages.includes(iconImage.light) ? iconImage.light : undefined;
+  const dark = isRuntimePluginIconDataUrl(iconImage?.dark) && !failedImages.includes(iconImage.dark) ? iconImage.dark : undefined;
+  const imageSource = light ?? dark;
 
   return (
     <span
@@ -108,7 +116,26 @@ export function PluginIcon({
       data-plugin-icon={icon ?? 'plugin'}
       aria-hidden="true"
     >
-      {fileName ? (
+      {imageSource ? (
+        <>
+          <img
+            alt=""
+            className={`desktop-plugin-icon__artwork${light && dark ? ' is-light-variant' : ''}`}
+            draggable={false}
+            src={imageSource}
+            onError={() => setFailedImages((failed) => [...failed, imageSource])}
+          />
+          {light && dark ? (
+            <img
+              alt=""
+              className="desktop-plugin-icon__artwork is-dark-variant"
+              draggable={false}
+              src={dark}
+              onError={() => setFailedImages((failed) => [...failed, dark])}
+            />
+          ) : null}
+        </>
+      ) : fileName ? (
         <FileIcon className="desktop-plugin-icon__file-type" path={fileName} />
       ) : brandSource ? (
         <img alt="" className="desktop-plugin-icon__brand" draggable={false} src={brandSource} />

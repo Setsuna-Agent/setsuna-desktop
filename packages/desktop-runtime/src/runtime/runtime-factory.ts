@@ -19,6 +19,8 @@ import { NativeBridgeProxyFetch } from '../adapters/network/native-bridge-proxy-
 import { FilePluginBundleStore } from '../adapters/plugin/file-plugin-bundle-store.js';
 import { FilePluginDraftStore } from '../adapters/plugin/file-plugin-draft-store.js';
 import { FilePluginMarketplace } from '../adapters/plugin/file-plugin-marketplace.js';
+import { CompositePluginMarketplace } from '../adapters/plugin/composite-plugin-marketplace.js';
+import { RepositoryPluginMarketplace } from '../adapters/plugin/repository-plugin-marketplace.js';
 import { createWorkspaceSearchEngine } from '../adapters/search/create-workspace-search-engine.js';
 import { FileSkillRegistry } from '../adapters/skill/file-skill-registry.js';
 import { SkillMcpDependencyCoordinator } from '../adapters/skill/skill-mcp-dependency-coordinator.js';
@@ -140,7 +142,10 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     builtinPluginsDir,
   );
   const pluginDraftStore = new FilePluginDraftStore(path.join(runtimeDataDir, 'plugin-drafts'));
-  const pluginMarketplace = new FilePluginMarketplace(builtinPluginsDir, pluginStore);
+  const pluginMarketplace = new CompositePluginMarketplace(
+    new FilePluginMarketplace(builtinPluginsDir, pluginStore),
+    new RepositoryPluginMarketplace(path.join(runtimeDataDir, 'plugin-repositories', 'openai-plugins'), pluginStore, networkProxyFetch.forRoute()),
+  );
   const workspaceSearchEngine = createWorkspaceSearchEngine({
     ripgrepPath: options.ripgrepPath,
     requireBundledRipgrep: options.requireBundledRipgrep,
@@ -216,6 +221,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     configStore,
     debugTrace: conversationDebugTraceSink,
     skillRegistry,
+    pluginStore,
     toolHost,
     usageStore: usageRecorder,
     memoryStore,

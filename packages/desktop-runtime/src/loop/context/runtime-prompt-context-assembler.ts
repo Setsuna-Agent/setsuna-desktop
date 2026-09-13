@@ -36,6 +36,8 @@ import {
   runtimeResponseLanguagePrompt,
 } from './runtime-response-language.js';
 import { runtimeSkillCatalogPrompt } from './runtime-skill-catalog-prompt.js';
+import { runtimePluginSelectionContext } from './runtime-plugin-selection-context.js';
+import type { PluginBundleStore } from '../../ports/plugin-bundle-store.js';
 
 const DEFAULT_SKILL_PROMPT_MAX_BYTES = 48 * 1024;
 const DEFAULT_TOOL_EXTERNAL_CONTEXT_MAX_BYTES = 64 * 1024;
@@ -45,6 +47,7 @@ type RuntimePromptContextAssemblerOptions = {
   projectInstructions?: ProjectInstructionLoader;
   projectWorkflow?: ProjectWorkflowResolver;
   skillRegistry?: Pick<SkillRegistry, 'resolvePromptContext'>;
+  pluginStore?: Pick<PluginBundleStore, 'listPlugins'>;
   toolHost?: ToolHost;
 };
 
@@ -86,9 +89,11 @@ export class RuntimePromptContextAssembler {
     const language = config?.desktopSettings?.interfaceLanguage ?? toolContext.interfaceLanguage ?? 'zh-CN';
     const environment = toolContext.environment;
     const permissionToolNames = catalogTools ?? tools;
+    const pluginContext = await runtimePluginSelectionContext(skillActivationText,
+      config?.features?.plugins === false ? undefined : this.options.pluginStore, language);
     const [skillContext, memoryMessages, projectInstructions, projectWorkflow, toolPrompt, toolExternalContext] = await Promise.all([
       this.skillContext(
-        skillIds,
+        [...new Set([...skillIds, ...pluginContext.skillIds])],
         config,
         language,
         skillActivationText,
@@ -119,6 +124,7 @@ export class RuntimePromptContextAssembler {
         ...memoryMessages.map(memoryFragment),
         ...toolExternalContextFragments(toolExternalContext, config, language),
         ...skillContext.fragments,
+        ...pluginContext.fragments,
         // 目标或邮箱式轮次上下文与当前请求最接近，因此应排在项目规则或 Skill 等
         // 可复用用户上下文之后。
         ...runtimeContextFragments(hookContextMessages),

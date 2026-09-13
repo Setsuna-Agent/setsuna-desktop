@@ -1,4 +1,5 @@
 import type { ComposerSlot } from './editor/types.js';
+import { parsePluginMentions, pluginMentionText, type RuntimePluginSummary } from '@setsuna-desktop/contracts';
 import type {
   RuntimeSkillReference,
   RuntimeSkillSummary,
@@ -6,6 +7,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import { WorkspaceMentionLabel } from '../mentions/WorkspaceMentionLabel.js';
 import { SkillReferenceLabel } from '../skills/SkillReference.js';
+import { PluginReferenceLabel } from '../references/PluginReference.js';
 import { entryLabel, skillDisplayText } from './chatCommandUtils.js';
 
 const workspaceMentionSlotKeyPrefix = 'workspace:';
@@ -13,6 +15,7 @@ const selectedSkillSlotKeyPrefix = 'skill:';
 
 export type ChatComposerSlotReference =
   | { type: 'skill'; skillId: string }
+  | { type: 'plugin'; pluginId: string }
   | { type: 'workspace'; entry: WorkspaceEntrySearchItem };
 
 export type ChatComposerReferenceSlot = Extract<ComposerSlot, { type: 'tag' }> & {
@@ -39,6 +42,33 @@ export function createSelectedSkillSlot(skill: RuntimeSkillSummary): ChatCompose
       value: tokenText,
     },
   };
+}
+
+export function createSelectedPluginSlot(plugin: RuntimePluginSummary): ChatComposerReferenceSlot {
+  return {
+    type: 'tag',
+    key: createReferenceSlotKey('plugin:'),
+    composerReference: { type: 'plugin', pluginId: plugin.id },
+    props: { label: <PluginReferenceLabel plugin={plugin} label={plugin.name} />, value: pluginMentionText(plugin) },
+  };
+}
+
+/** Rehydrate plugin tags when a saved draft or queued message returns to the composer. */
+export function createPluginDraftSlots(value: string, plugins: readonly RuntimePluginSummary[]): ComposerSlot[] {
+  const slots: ComposerSlot[] = [];
+  let offset = 0;
+  for (const mention of parsePluginMentions(value)) {
+    const plugin = plugins.find((item) => item.id === mention.pluginId);
+    if (!plugin) continue;
+    if (mention.start > offset) slots.push(createTextSlot(value.slice(offset, mention.start)));
+    const slot = createSelectedPluginSlot(plugin);
+    // Keep the exact serialized text so rehydration does not change the draft or other slot offsets.
+    slot.props.value = value.slice(mention.start, mention.end);
+    slots.push(slot);
+    offset = mention.end;
+  }
+  if (offset < value.length) slots.push(createTextSlot(value.slice(offset)));
+  return slots;
 }
 
 export function filterSelectedSkillsBySlots(

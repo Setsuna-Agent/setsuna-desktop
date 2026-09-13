@@ -45,7 +45,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     activeWorkspace,
     activeView,
     chatActions,
-    clearSkillSelectionRequest,
+    clearCapabilitySelectionRequest,
     composerKey,
     draft,
     globalThreads,
@@ -61,6 +61,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     runtime,
     searchTriggerRef,
     selectSkillForChat,
+    selectPluginForChat,
     setActiveView,
     setDraft,
     setSidebarCollapsed,
@@ -71,7 +72,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     sidebarMaxWidth,
     sidebarMinWidth,
     sidebarWidth,
-    skillSelectionRequest,
+    capabilitySelectionRequest,
     startCurrentThreadReview,
     terminalMaxHeight,
     terminalHeight,
@@ -449,16 +450,17 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         runtime={runtime}
         setActiveView={setActiveView}
         setDraft={setDraft}
-        skillSelectionRequest={skillSelectionRequest}
+        capabilitySelectionRequest={capabilitySelectionRequest}
         startCurrentThreadReview={startCurrentThreadReview}
         workspacePanels={workspacePanels}
         onSelectSkillForChat={selectSkillForChat}
+        onSelectPluginForChat={selectPluginForChat}
         onOpenPlugin={openCapabilitiesPlugin}
         onSelectedCapabilitiesPluginIdChange={setSelectedCapabilitiesPluginId}
         onConversationOverviewRenderedChange={setConversationOverviewRendered}
         onFocusComposerRequestConsumed={consumeFocusComposerRequest}
         onOpenModelSettings={openModelSettings}
-        onSkillSelectionRequestConsumed={clearSkillSelectionRequest}
+        onCapabilitySelectionRequestConsumed={clearCapabilitySelectionRequest}
         onTerminalResizeStart={handleTerminalResizeStart}
         onTerminalResizeStep={handleTerminalResizeStep}
         terminalHeight={terminalHeight}

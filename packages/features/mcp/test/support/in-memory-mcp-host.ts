@@ -60,6 +60,7 @@ export class InMemoryMcpStore implements McpStore {
         enabled: server.enabled !== false,
         allowedTools: server.allowedTools ?? [],
         disabledTools: server.disabledTools ?? [],
+        bearerTokenEnvVar: server.bearerTokenEnvVar,
         oauthClientId: server.oauthClientId,
         oauthResource: server.oauthResource,
         tools: server.tools ?? [],

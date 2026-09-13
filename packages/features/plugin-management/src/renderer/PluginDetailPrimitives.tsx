@@ -1,6 +1,19 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, Github } from 'lucide-react';
 import { useId, useState, type ReactNode } from 'react';
+
+export function PluginRepositoryLink({ children, className = '', onClick }: Readonly<{
+  children: ReactNode;
+  className?: string;
+  onClick(): void;
+}>) {
+  return (
+    <Button variant="ghost" className={`desktop-plugin-repository-link ${className}`} onClick={onClick}>
+      <Github aria-hidden="true" size={14} />
+      <span>{children}</span>
+    </Button>
+  );
+}
 
 export function PluginDetailSection({
   children,

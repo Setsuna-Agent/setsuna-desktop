@@ -12,13 +12,26 @@ import {
 
 describe('runtimePluginUsesByTurn', () => {
   it('retains unchanged per-turn references across streamed thread projections', () => {
-    const previous = new Map([['turn_1', [{ id: 'documents', installed: true, name: 'Documents' }]]]);
-    const next = new Map([['turn_1', [{ id: 'documents', installed: true, name: 'Documents' }]]]);
+    const use = {
+      id: 'documents', installed: true, name: 'Documents',
+      iconImage: { light: 'light-artwork', dark: 'dark-artwork' },
+    };
+    const previous = new Map([['turn_1', [use]]]);
+    const next = new Map([['turn_1', [{ ...use, iconImage: { ...use.iconImage } }]]]);
 
     const reconciled = reconcileRuntimePluginUsesByTurn(previous, next);
 
     expect(reconciled).toBe(previous);
     expect(reconciled.get('turn_1')).toBe(previous.get('turn_1'));
+
+    for (const iconImage of [
+      { ...use.iconImage, light: 'updated-light-artwork' },
+      { ...use.iconImage, dark: 'updated-dark-artwork' },
+      undefined,
+    ]) {
+      const updated = new Map([['turn_1', [{ ...use, iconImage }]]]);
+      expect(reconcileRuntimePluginUsesByTurn(previous, updated).get('turn_1')).toBe(updated.get('turn_1'));
+    }
   });
 
   it('keeps persisted Plugin Skill attribution without the installed Plugin list', () => {
@@ -71,14 +84,15 @@ describe('runtimePluginUsesByTurn', () => {
       enabled: true,
       pluginId: 'documents',
     }];
+    const iconImage = { light: 'plugin-artwork' };
     const plugins = [
-      plugin('documents', 'Word 文档处理'),
+      { ...plugin('documents', 'Word 文档处理'), iconImage },
       plugin('guard-dangerous-shell', '危险命令防护'),
       plugin('docs-mcp', '文档搜索', 'docs-server'),
     ];
 
     expect(runtimePluginUsesByTurn(thread, skills, plugins).get('turn_1')).toEqual([
-      expect.objectContaining({ id: 'documents', installed: true, name: 'Word 文档处理' }),
+      expect.objectContaining({ id: 'documents', installed: true, name: 'Word 文档处理', iconImage }),
       expect.objectContaining({ id: 'guard-dangerous-shell', installed: true, name: '危险命令防护' }),
       expect.objectContaining({ id: 'docs-mcp', installed: true, name: '文档搜索' }),
     ]);
@@ -125,6 +139,7 @@ describe('runtimePluginUsesByTurn', () => {
       installed: false,
       name: '图片生成',
       icon: 'image-generation',
+      anchor: { messageId: 'assistant_image', toolRunId: 'image_1', placement: 'before' },
     }]);
   });
 });

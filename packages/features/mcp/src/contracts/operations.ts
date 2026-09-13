@@ -64,6 +64,7 @@ const toolListCodec = defineRuntimeCodec<RuntimeMcpToolList>((value) => {
 
 const mcpOperationErrors = Object.freeze({
   MCP_OPERATION_FAILED: Object.freeze({ status: 500 }),
+  MCP_TOOL_SYNC_FAILED: Object.freeze({ status: 502 }),
   MCP_SERVER_NOT_FOUND: Object.freeze({ status: 404 }),
 });
 
@@ -208,7 +209,9 @@ function mcpServer(value: unknown): RuntimeMcpServer {
     ...optionalTextProperty(record, 'oauthClientId'),
     ...optionalTextProperty(record, 'oauthResource'),
     ...optionalAuthStatusProperty(record),
+    ...(record.deviceAuthorization === undefined ? {} : { deviceAuthorization: deviceAuthorization(record.deviceAuthorization) }),
     ...optionalTextProperty(record, 'authError'),
+    ...optionalTextProperty(record, 'bearerTokenEnvVar'),
     tools: arrayValue(record.tools, 'tools').map(mcpTool),
     envKeys: stringArray(record.envKeys, 'envKeys'),
     headerKeys: stringArray(record.headerKeys, 'headerKeys'),
@@ -244,6 +247,16 @@ function mcpServerSource(value: unknown): RuntimeMcpServerSource {
   throw new Error('MCP server source is invalid.');
 }
 
+function deviceAuthorization(value: unknown) {
+  const record = objectRecord(value, 'Invalid device authorization.');
+  const userCode = requiredText(record.userCode, 'userCode');
+  const verificationUri = requiredText(record.verificationUri, 'verificationUri');
+  const expiresAt = requiredText(record.expiresAt, 'expiresAt');
+  if (!/^[A-Z0-9-]{4,32}$/u.test(userCode) || !Number.isFinite(Date.parse(expiresAt))
+    || new URL(verificationUri).protocol !== 'https:') throw new Error('Invalid device authorization.');
+  return { userCode, verificationUri, expiresAt };
+}
+
 function mcpAuthStatus(value: unknown): RuntimeMcpAuthStatus {
   if (
     value === 'unsupported'
@@ -253,6 +266,7 @@ function mcpAuthStatus(value: unknown): RuntimeMcpAuthStatus {
     || value === 'oAuthLoggingIn'
     || value === 'oAuthExpired'
     || value === 'oAuthError'
+    || value === 'configurationError'
   ) return value;
   throw new Error('MCP auth status is invalid.');
 }

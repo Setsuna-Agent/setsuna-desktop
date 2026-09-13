@@ -11,6 +11,7 @@ import {
   readPluginExtensionStatuses,
   readPluginHooks,
   readPluginManagementSnapshot,
+  refreshPluginMarketplace,
   runInstalledPluginRendererUiAction,
   setPluginHookState,
   updateMarketplacePlugin,
@@ -84,6 +85,9 @@ describe('plugin management runtime feature', () => {
       marketplaceErrors: ['catalog warning'],
       plugins: [],
     });
+    expect(host.listMarketplace).toHaveBeenLastCalledWith({ refreshRepositories: false });
+    await routes.get(refreshPluginMarketplace.id)?.(undefined);
+    expect(host.listMarketplace).toHaveBeenLastCalledWith({ refreshRepositories: true });
     await expect(routes.get(readPluginExtensionStatuses.id)?.(undefined)).resolves.toEqual({
       catalogRevision: 'catalog-1',
       extensions: [],

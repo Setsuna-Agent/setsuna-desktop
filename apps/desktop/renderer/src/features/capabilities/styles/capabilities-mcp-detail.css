@@ -1,0 +1,218 @@
+.desktop-mcp-detail__settings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.desktop-mcp-detail__summary,
+.desktop-mcp-detail__tool-section {
+  min-width: 0;
+  border-radius: 12px;
+  background: var(--app-surface-muted);
+}
+
+.desktop-mcp-detail__summary {
+  padding: 16px;
+}
+
+.desktop-mcp-detail h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.desktop-mcp-detail__summary dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 14px 0 0;
+}
+
+.desktop-mcp-detail__summary dt {
+  margin: 0 0 5px;
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.desktop-mcp-detail__summary dd {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.desktop-mcp-detail > .desktop-mcp-detail__tool-section {
+  display: flex;
+  flex-direction: column;
+  /* The list takes the remaining viewport. Small windows retain a useful scroll area. */
+  flex: 1 1 200px;
+  min-height: 200px;
+  overflow: hidden;
+}
+
+.desktop-mcp-detail__tool-section > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.desktop-mcp-detail__tool-section > header > div {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.desktop-mcp-detail__tool-section > header > div > span {
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.desktop-mcp-detail__search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 180px;
+  min-height: 30px;
+  padding: 4px 9px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-surface);
+  color: var(--app-text-muted);
+}
+
+.desktop-mcp-detail__search input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--app-text);
+  font: inherit;
+  font-size: 12px;
+  box-shadow: none;
+}
+
+.desktop-mcp-detail__search:focus-within {
+  box-shadow: var(--app-focus-ring);
+}
+
+.desktop-mcp-detail__tools {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0 6px 6px;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.desktop-mcp-detail__tools:focus-visible,
+.desktop-mcp-detail__tool > summary:focus-visible {
+  outline: 2px solid var(--app-border-strong);
+  outline-offset: -2px;
+  border-radius: 8px;
+}
+
+.desktop-mcp-detail__tool {
+  border-radius: 8px;
+}
+
+.desktop-mcp-detail__tool:hover,
+.desktop-mcp-detail__tool[open] {
+  background: var(--app-surface);
+}
+
+.desktop-mcp-detail__tool + .desktop-mcp-detail__tool {
+  border-top: 1px solid var(--app-border);
+}
+
+.desktop-mcp-detail__tool > summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 10px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.desktop-mcp-detail__tool > summary::-webkit-details-marker {
+  display: none;
+}
+
+.desktop-mcp-detail__tool > summary > div {
+  min-width: 0;
+}
+
+.desktop-mcp-detail__tool strong {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.desktop-mcp-detail__tool p {
+  margin: 4px 0 0;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 19px;
+  overflow-wrap: anywhere;
+}
+
+.desktop-mcp-detail__tool:not([open]) p {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.desktop-mcp-detail__tool > summary > svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+  color: var(--app-text-subtle);
+}
+
+.desktop-mcp-detail__tool[open] > summary > svg {
+  transform: rotate(180deg);
+}
+
+.desktop-mcp-detail__tool[data-disabled] > summary {
+  opacity: 0.55;
+}
+
+.desktop-mcp-detail__tool-id {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding: 0 10px 12px;
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.desktop-mcp-detail__tool-id code {
+  font-family: var(--app-code-font-family);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.desktop-mcp-detail__empty {
+  margin: 0;
+  padding: 32px 16px;
+  color: var(--app-text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .desktop-mcp-detail__settings {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

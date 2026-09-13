@@ -5,6 +5,52 @@
   margin: 0 auto;
 }
 
+.desktop-plugin-market__search {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.desktop-plugin-market__search .desktop-capabilities-search {
+  flex: 1 1 100%;
+  max-width: none;
+}
+
+.desktop-plugin-market__source {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-inline-start: auto;
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
+.desktop-plugin-repository-link {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 20px;
+  white-space: normal;
+}
+
+.desktop-plugin-repository-link > svg {
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.desktop-plugin-market__sync {
+  display: inline-flex;
+  align-self: center;
+}
+
 .desktop-plugin-market__installed {
   display: grid;
   gap: 10px;
@@ -167,7 +213,9 @@
 .desktop-plugin-market__section > header {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
   min-width: 0;
   padding-bottom: 8px;
   border-bottom: 1px solid color-mix(in srgb, var(--app-border) 68%, transparent);
@@ -183,14 +231,7 @@
 
 .desktop-capabilities-plugin-detail {
   align-self: start;
-  width: min(var(--desktop-capabilities-content-width), 100%);
-  margin-right: auto;
-  margin-left: auto;
   padding-bottom: 18px;
-}
-
-.desktop-capabilities-plugin-detail > * {
-  flex: 0 0 auto;
 }
 
 .desktop-capabilities-plugin-detail__description {
@@ -202,21 +243,21 @@
 }
 
 .desktop-capabilities-plugin-detail > .declarative-plugin-ui--settings {
-  padding: 14px 16px;
-  border: 1px solid color-mix(in srgb, var(--app-border) 84%, transparent);
-  border-radius: var(--app-radius-md);
-  background: var(--app-surface);
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--app-surface-muted);
 }
 
 .desktop-capabilities-plugin-detail__item-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid color-mix(in srgb, var(--app-border) 80%, transparent);
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
   color: var(--app-text-muted);
-  background: color-mix(in srgb, var(--app-surface) 94%, #ffffff);
-  box-shadow:
-    var(--app-shadow-card);
+  background: var(--app-surface);
 }
 
 .desktop-capabilities-plugin-detail__item-icon > svg {
@@ -230,27 +271,27 @@
 }
 
 .desktop-capabilities-plugin-detail__item-badges span {
-  display: inline-flex;
-  align-items: center;
-  min-height: 22px;
+  min-width: 0;
+  max-width: 140px;
   padding: 2px 7px;
-  border: 1px solid color-mix(in srgb, var(--app-border) 78%, transparent);
-  border-radius: var(--app-radius-xs);
+  overflow: hidden;
+  border-radius: 6px;
   color: var(--app-text-muted);
-  background: color-mix(in srgb, var(--app-bg) 86%, var(--app-text) 4%);
+  background: var(--app-accent-subtle);
   font-size: 11px;
-  line-height: 16px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .desktop-capabilities-plugin-detail__extension {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
-  padding: 14px 16px;
-  border: 1px solid color-mix(in srgb, var(--app-warning) 34%, var(--app-border));
-  border-radius: var(--app-radius-md);
-  background: color-mix(in srgb, var(--app-surface) 94%, var(--app-warning) 4%);
+  gap: 16px;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--app-surface-muted);
 }
 
 .desktop-capabilities-plugin-detail__extension-copy {
@@ -315,20 +356,14 @@
 }
 
 .desktop-capabilities-plugin-detail__section {
-  display: grid;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--app-border) 84%, transparent);
-  border-radius: var(--app-radius-md);
-  background: var(--app-surface);
+  border-radius: 12px;
+  background: var(--app-surface-muted);
 }
 
 .desktop-capabilities-plugin-detail__section > header {
   min-width: 0;
-}
-
-.desktop-capabilities-plugin-detail__section.is-expanded > header {
-  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 72%, transparent);
 }
 
 .desktop-capabilities-plugin-detail__section > header h3 {
@@ -336,7 +371,6 @@
 }
 
 .desktop-capabilities-plugin-detail__section-toggle {
-  appearance: none;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -344,17 +378,16 @@
   width: 100%;
   min-width: 0;
   min-height: 48px;
-  padding: 0 12px;
+  padding: 14px 16px;
   border: 0;
+  border-radius: 12px;
   color: inherit;
   background: transparent;
-  font: inherit;
   text-align: left;
-  cursor: pointer;
 }
 
 .desktop-capabilities-plugin-detail__section-toggle:hover {
-  background: color-mix(in srgb, var(--app-primary) 3%, transparent);
+  background: var(--app-accent-subtle);
 }
 
 .desktop-capabilities-plugin-detail__section-toggle:focus-visible {
@@ -368,13 +401,11 @@
 }
 
 .desktop-capabilities-plugin-detail__section-title {
-  overflow: hidden;
+  min-width: 0;
   color: var(--app-text);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
   line-height: 20px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .desktop-capabilities-plugin-detail__section-toggle small {
@@ -411,56 +442,40 @@
 }
 
 .desktop-capabilities-plugin-detail__section-content {
-  display: grid;
-  min-height: 52px;
-  max-height: none;
-  overflow: visible;
+  min-width: 0;
 }
 
 .desktop-capabilities-plugin-detail__section-content[hidden] {
   display: none;
 }
 
-.desktop-capabilities-plugin-detail__section-content > .desktop-capabilities-plugin-detail__empty {
-  display: flex;
-  align-items: center;
-  min-height: 52px;
-}
-
 .desktop-capabilities-plugin-detail__list {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  align-content: start;
-  gap: 10px;
   min-width: 0;
-  min-height: 52px;
-  padding: 12px;
+  padding: 0 6px 6px;
 }
 
 .desktop-capabilities-plugin-detail__item {
-  appearance: none;
-  position: relative;
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) auto;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
-  height: 72px;
   min-width: 0;
-  overflow: hidden;
-  padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--app-border) 72%, transparent);
-  border-radius: var(--app-radius-sm);
+  min-height: 64px;
+  padding: 12px 10px;
+  border: 0;
+  border-radius: 8px;
   color: inherit;
-  background: color-mix(in srgb, var(--app-bg) 92%, var(--app-text) 2%);
-  font: inherit;
+  background: transparent;
   text-align: left;
-  cursor: pointer;
+  white-space: normal;
   transition: background 140ms ease;
 }
 
 .desktop-capabilities-plugin-detail__item:hover {
-  background: color-mix(in srgb, var(--app-primary) 5%, var(--app-surface));
+  background: var(--app-surface);
 }
 
 .desktop-capabilities-plugin-detail__item.is-static {
@@ -468,7 +483,7 @@
 }
 
 .desktop-capabilities-plugin-detail__item.is-static:hover {
-  background: color-mix(in srgb, var(--app-bg) 92%, var(--app-text) 2%);
+  background: transparent;
 }
 
 .desktop-capabilities-plugin-detail__item:focus-visible {
@@ -476,49 +491,6 @@
   z-index: 1;
   outline: 0;
   box-shadow: inset var(--app-focus-ring);
-}
-
-.desktop-capabilities-plugin-detail__skill-item {
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 4px;
-  padding: 0 12px 0 0;
-  cursor: default;
-}
-
-.desktop-capabilities-plugin-detail__skill-open {
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  height: 70px;
-  min-width: 0;
-  padding: 12px;
-  border: 0;
-  color: inherit;
-  background: transparent;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.desktop-capabilities-plugin-detail__skill-open:disabled {
-  cursor: default;
-}
-
-.desktop-capabilities-plugin-detail__skill-open:focus-visible {
-  outline: 0;
-  box-shadow: inset var(--app-focus-ring);
-}
-
-.desktop-capabilities-plugin-detail__skill-item.is-removed {
-  opacity: 0.62;
-}
-
-.desktop-capabilities-plugin-detail__item-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--app-radius-lg);
 }
 
 .desktop-capabilities-plugin-detail__item-body {
@@ -536,23 +508,20 @@
 }
 
 .desktop-capabilities-plugin-detail__item-body strong {
-  overflow: hidden;
   color: var(--app-text);
   font-size: 13px;
   font-weight: 500;
-  line-height: 19px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 20px;
 }
 
 .desktop-capabilities-plugin-detail__item-body small {
-  display: block;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
   color: var(--app-text-muted);
   font-size: 12px;
-  line-height: 18px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 19px;
 }
 
 .desktop-capabilities-plugin-detail__item-badges {
@@ -564,14 +533,6 @@
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
-}
-
-.desktop-capabilities-plugin-detail__item-badges span {
-  min-width: 0;
-  max-width: 140px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .desktop-capabilities-plugin-detail__item-trailing {
@@ -602,8 +563,7 @@
   transition: color 140ms ease, transform 140ms ease;
 }
 
-.desktop-capabilities-plugin-detail__item:hover .desktop-capabilities-plugin-detail__item-chevron,
-.desktop-capabilities-plugin-detail__skill-open:hover .desktop-capabilities-plugin-detail__item-chevron {
+.desktop-capabilities-plugin-detail__item:hover .desktop-capabilities-plugin-detail__item-chevron {
   color: var(--app-primary);
   transform: translateX(1px);
 }
@@ -619,4 +579,57 @@
 .desktop-capabilities-plugin-detail__list > .desktop-capabilities-plugin-detail__empty:not(:first-child) {
   grid-column: 1 / -1;
   border-top: 1px solid color-mix(in srgb, var(--app-border) 64%, transparent);
+}
+
+.desktop-plugin-connector-setup {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.desktop-plugin-connector-setup p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.desktop-plugin-connector-setup pre {
+  align-self: stretch;
+  margin: 0;
+  padding: 12px;
+  overflow-x: auto;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  user-select: text;
+}
+
+.desktop-capabilities-plugin-detail__item + .desktop-capabilities-plugin-detail__item {
+  border-top: 1px solid var(--app-border);
+}
+
+.desktop-capabilities-plugin-detail__item > .desktop-plugin-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.desktop-capabilities-plugin-detail__repository {
+  align-self: flex-start;
+}
+
+@media (max-width: 620px) {
+  .desktop-capabilities-plugin-detail__item {
+    grid-template-columns: 36px minmax(0, 1fr);
+  }
+
+  .desktop-capabilities-plugin-detail__item-trailing {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+
+  .desktop-capabilities-plugin-detail__item-badges {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
 }

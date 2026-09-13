@@ -8,6 +8,7 @@ type CapabilitiesRouteAdapterProps = Pick<
   AppRouteContentProps,
   | 'activeProject'
   | 'onSelectSkillForChat'
+  | 'onSelectPluginForChat'
   | 'onSelectedCapabilitiesPluginIdChange'
   | 'selectedCapabilitiesPluginId'
 >;
@@ -15,6 +16,7 @@ type CapabilitiesRouteAdapterProps = Pick<
 export function CapabilitiesRouteAdapter({
   activeProject,
   onSelectSkillForChat,
+  onSelectPluginForChat,
   onSelectedCapabilitiesPluginIdChange,
   selectedCapabilitiesPluginId,
 }: CapabilitiesRouteAdapterProps) {
@@ -26,6 +28,7 @@ export function CapabilitiesRouteAdapter({
         activeProjectPath={activeProject?.path}
         selectedPluginId={selectedCapabilitiesPluginId}
         onCreateInConversation={onSelectSkillForChat}
+        onUsePluginInConversation={onSelectPluginForChat}
         onSelectedPluginIdChange={onSelectedCapabilitiesPluginIdChange}
       />
     </Suspense>

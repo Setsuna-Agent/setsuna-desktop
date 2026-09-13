@@ -33,6 +33,12 @@
 
 Enable 状态统一保存在 `runtime/skills.json`。
 
+## 详情预览
+
+独立 Skill 详情和插件内的 Markdown 文档通过宿主 `SettingsViewUi.MarkdownDocument` 共用阅读界面，默认预览正文，源码按需切换。预览隐藏开头的 YAML frontmatter，支持 GFM 表格、任务列表和经过清理的 HTML；源码视图保留原始内容。外部链接只在点击后通过桌面桥打开，标题锚点在文档内定位，长文档由所在页面或弹窗滚动。
+
+Plugin、Skill 和 MCP 详情共用标题与页面间距样式；Skill 元信息、依赖和引用文件使用同一套灰底卡片。
+
 ## Runtime 加载链路
 
 ```text

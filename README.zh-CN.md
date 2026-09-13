@@ -61,6 +61,23 @@
 
 ## 从源码运行
 
+### 环境要求
+
+- Git、Node.js `>=22.19.0`、pnpm `7.33.7`（`package.json` 固定版本）。
+- **Windows x64：** Rust/Cargo `>=1.85`，使用 `x86_64-pc-windows-msvc` 工具链，并安装 Visual Studio C++ 构建工具和 Windows SDK。
+
+Windows 请先按 [Rust MSVC 环境说明](https://rust-lang.github.io/rustup/installation/windows-msvc.html)安装“**使用 C++ 的桌面开发**”工作负载，包含 MSVC x64/x86 工具和 Windows SDK；再通过 [Windows x64 rustup 安装程序](https://rust-lang.org/tools/install/)安装 Rust，选择 MSVC 工具链。安装后重新打开终端并检查：
+
+```powershell
+rustup target add x86_64-pc-windows-msvc
+rustc --version
+cargo --version
+```
+
+Windows x64 下，`pnpm dev` 和 `pnpm dev:electron` 会先编译原生 Windows 沙箱，再启动 Electron。缺少 Cargo 或 MSVC/SDK 时会在启动阶段失败，只有 JavaScript 依赖是不够的；Windows 打包同样需要这些工具。
+
+macOS 和 Linux 的开发启动不会编译此 Windows 组件。**下载安装好的发布版不需要配置 Rust**，Windows 发布包已包含编译后的沙箱程序。故障排查见 [Windows 开发环境](docs/development/README.md#windows-x64)。
+
 ### 开发环境
 
 ```bash
@@ -72,6 +89,8 @@ pnpm dev
 ```
 
 `pnpm dev` 会同时启动 Vite renderer 和 Electron desktop shell。如果还没有配置模型供应商，可以使用本地 smoke fallback 验证 runtime 链路；要连接真实模型，请前往**设置 → 模型服务**添加供应商。
+
+Renderer 修改可通过 Vite 热更新生效；修改 runtime、Electron main/preload 或原生代码后，需要停止并重新运行 `pnpm dev`，重新编译和启动后台。仅刷新窗口仍会使用旧的后台进程。
 
 ## 开发命令
 

@@ -10,6 +10,53 @@ import type { PluginManagementClient } from '../../src/renderer/client.js';
 import { RendererPluginManagementService } from '../../src/renderer/index.js';
 
 describe('RendererPluginManagementService', () => {
+  it('publishes a refreshed repository even when navigation reads the old cache during the download', async () => {
+    const downloaded = deferred<PluginManagementSnapshot>();
+    const cached = snapshot('cached');
+    const refreshed = snapshot('refreshed');
+    const readSnapshot = vi.fn().mockResolvedValueOnce(cached).mockResolvedValueOnce(cached).mockResolvedValueOnce(refreshed);
+    const client = { readSnapshot, refreshMarketplace: vi.fn(() => downloaded.promise) } as unknown as PluginManagementClient;
+    const scope = createFeatureScope({ featureId: 'plugin-management', process: 'renderer', scopeId: 'repository-refresh-test' });
+    scope.activate();
+    const service = new RendererPluginManagementService({ bridge: null, client, scope: scope.scope });
+    const refresh = service.refresh({ refreshRepositories: true });
+    await service.refresh();
+    expect(service.getSnapshot()).toEqual(cached);
+    downloaded.resolve(refreshed);
+    await refresh;
+    expect(service.getSnapshot()).toEqual(refreshed);
+    await scope.finishDispose();
+  });
+
+  it('publishes local plugins and completes their installation while a repository refresh is pending or fails', async () => {
+    const downloaded = deferred<PluginManagementSnapshot>();
+    const published = deferred<void>();
+    const cached = { ...snapshot('local'), marketplace: [{ id: 'bundled' }] as PluginManagementSnapshot['marketplace'] };
+    const installed = { ...cached, plugins: [{ id: 'installed-locally' }] as PluginManagementSnapshot['plugins'] };
+    const result = { plugin: { id: 'installed-locally' } } as RuntimePluginInstallResult;
+    const client = {
+      readSnapshot: vi.fn().mockResolvedValueOnce(cached).mockResolvedValueOnce(installed),
+      refreshMarketplace: vi.fn(() => downloaded.promise),
+      installMarketplace: vi.fn(async () => result),
+      readHooks: vi.fn(async () => ({ hooks: [] })),
+    } as unknown as PluginManagementClient;
+    const scope = createFeatureScope({ featureId: 'plugin-management', process: 'renderer', scopeId: 'independent-repository-test' });
+    scope.activate();
+    const service = new RendererPluginManagementService({ bridge: null, client, scope: scope.scope });
+    const unsubscribe = service.subscribe(() => published.resolve());
+    const refresh = service.refresh({ refreshRepositories: true });
+    const failed = expect(refresh).rejects.toThrow('Repository offline');
+    await published.promise;
+    unsubscribe();
+    expect(service.getSnapshot()).toEqual(cached);
+    await expect(service.installMarketplace({ pluginId: 'bundled' })).resolves.toBe(result);
+    expect(service.getSnapshot()).toEqual(installed);
+    downloaded.reject(new Error('Repository offline'));
+    await failed;
+    expect(service.getSnapshot()).toEqual(installed);
+    await scope.finishDispose();
+  });
+
   it('keeps the newest overlapping refresh and refreshes after native installation', async () => {
     const first = deferred<PluginManagementSnapshot>();
     const second = deferred<PluginManagementSnapshot>();
@@ -239,12 +286,14 @@ function snapshot(pluginId: string, catalogRevision = `revision:${pluginId}`): P
   };
 }
 
-function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
+function deferred<T>(): { promise: Promise<T>; resolve(value: T): void; reject(reason: unknown): void } {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((complete) => {
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((complete, fail) => {
     resolve = complete;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 function pluginHook(patch: Partial<PluginManagementHook> = {}): PluginManagementHook {

@@ -17,6 +17,7 @@ import { parseSandboxedUiSource } from '@setsuna-desktop/contracts';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, realpath, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { assertExtensionCapabilitySource, assertRepositorySnapshot, assertStagedBundleUnchanged } from './file-plugin-bundle-policy.js';
 import type { Clock } from '../../ports/clock.js';
 import type { ConfigStore } from '../../ports/config-store.js';
 import type { ExtensionStateStore } from '../../ports/extension-runtime.js';
@@ -32,13 +33,11 @@ import type { PluginSkillRegistry } from '@setsuna-desktop/feature-skills/contra
 import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, renameWithRetry, writeJsonFile } from '../store/json-file.js';
 import type {
-  ParsedPluginManifest,
   PluginIndexFile,
   PluginMcpClient,
   PluginMcpUpdateAction
 } from './file-plugin-bundle-model.js';
 import {
-  PLUGIN_MANIFEST_RELATIVE_PATH,
   addPluginHooks,
   cloneInstalledRecord,
   compatibleMcpServer,
@@ -107,6 +106,15 @@ export class FilePluginBundleStore implements PluginBundleStore {
     return {
       plugins: await Promise.all(index.plugins.map(async (indexedPlugin) => {
         const plugin = await projectLegacyRootUiCards(indexedPlugin);
+        if (plugin.connectors === undefined) {
+          // Old indexes gain declarative setup metadata without reinstalling or touching user MCP settings.
+          const manifest = await readPluginManifest(plugin.installPath).catch(() => undefined);
+          if (manifest) {
+            plugin.connectors = manifest.connectors;
+            plugin.unsupportedApps = manifest.unsupportedApps;
+            plugin.unsupportedComponents = manifest.unsupportedComponents;
+          }
+        }
         if (!plugin.extension) return this.localizedSummary(plugin, language);
         const currentHash = await inspectBundleTree(plugin.installPath)
           .then((result) => result.bundleHash)
@@ -173,9 +181,13 @@ export class FilePluginBundleStore implements PluginBundleStore {
       id: manifest.id,
       name: manifest.name,
       ...(manifest.icon ? { icon: manifest.icon } : {}),
+      ...(manifest.iconImage ? { iconImage: { ...manifest.iconImage } } : {}),
       ...(manifest.version ? { version: manifest.version } : {}),
       ...(manifest.description ? { description: manifest.description } : {}),
       ...(manifest.publisher ? { publisher: manifest.publisher } : {}),
+      ...(manifest.unsupportedApps ? { unsupportedApps: [...manifest.unsupportedApps] } : {}),
+      ...(manifest.unsupportedComponents ? { unsupportedComponents: [...manifest.unsupportedComponents] } : {}),
+      connectors: structuredClone(manifest.connectors),
       tags: [...manifest.tags],
       featured: manifest.featured,
       ...(manifest.featuredOrder !== undefined ? { featuredOrder: manifest.featuredOrder } : {}),
@@ -217,6 +229,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
       const manifest = await readPluginManifest(sourcePath);
       assertExtensionCapabilitySource(manifest, options);
       const sourceBundle = await inspectBundleTree(sourcePath);
+      assertRepositorySnapshot(options, sourceBundle.bundleHash);
       const index = await this.readIndex();
       if (index.plugins.some((plugin) => plugin.id === manifest.id)) {
         throw new Error(`Plugin is already installed: ${manifest.id}`);
@@ -226,7 +239,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
       if (conflictingSkill) throw new Error(`Plugin skill id conflicts with an existing skill: ${conflictingSkill.id}`);
 
       const installPath = strictPluginInstallPath(this.pluginsDir, manifest.id);
-      const installedManifestPath = path.join(installPath, PLUGIN_MANIFEST_RELATIVE_PATH);
+      const installedManifestPath = path.join(installPath, path.relative(sourcePath, manifest.manifestPath));
       const mcpInputs = manifest.mcpServers.map((server) => materializePluginMcpServer(server, installPath));
       const existingServers = await this.mcpStore.listServerInputs();
       const mcpOwnership = mcpInputs.map((server) => {
@@ -242,14 +255,19 @@ export class FilePluginBundleStore implements PluginBundleStore {
         id: manifest.id,
         name: manifest.name,
         ...(manifest.icon ? { icon: manifest.icon } : {}),
+        ...(manifest.iconImage ? { iconImage: { ...manifest.iconImage } } : {}),
         ...(manifest.version ? { version: manifest.version } : {}),
         ...(manifest.description ? { description: manifest.description } : {}),
         ...(manifest.publisher ? { publisher: manifest.publisher } : {}),
+        ...(manifest.unsupportedApps ? { unsupportedApps: [...manifest.unsupportedApps] } : {}),
+        ...(manifest.unsupportedComponents ? { unsupportedComponents: [...manifest.unsupportedComponents] } : {}),
+        connectors: structuredClone(manifest.connectors),
         ...(manifest.tags.length ? { tags: [...manifest.tags] } : {}),
         sourcePath,
         installPath,
         installedAt: this.clock.now().toISOString(),
         installationSource: options.installationSource ?? 'local',
+        ...(options.repository ? { repository: { ...options.repository } } : {}),
         manifestPath: installedManifestPath,
         ...(manifest.tools.length ? { tools: manifest.tools.map((tool) => ({ ...tool })) } : {}),
         skills: manifest.skillEntries.map((skill): RuntimePluginSkill => ({
@@ -284,6 +302,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
         await mkdir(this.pluginsDir, { recursive: true });
         await copyBundleTree(sourcePath, stagingPath);
         const stagedBundle = await inspectBundleTree(stagingPath);
+        assertRepositorySnapshot(options, stagedBundle.bundleHash);
         if (stagedBundle.bundleHash !== sourceBundle.bundleHash) {
           throw new Error('Plugin bundle changed while staging the install.');
         }
@@ -369,6 +388,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
         await copyBundleTree(sourcePath, stagingPath);
         const stagedBundle = await inspectBundleTree(stagingPath);
         const manifest = await readPluginManifest(await realpath(stagingPath));
+        assertRepositorySnapshot(options, stagedBundle.bundleHash);
         assertExtensionCapabilitySource(manifest, options);
         if (manifest.id !== sourceManifest.id) {
           throw new Error('Plugin manifest id changed while staging the update.');
@@ -386,7 +406,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
         }
 
         const installPath = plugin.installPath;
-        const installedManifestPath = path.join(installPath, PLUGIN_MANIFEST_RELATIVE_PATH);
+        const installedManifestPath = path.join(installPath, path.relative(manifest.sourcePath, manifest.manifestPath));
         const nextMcpInputs = manifest.mcpServers.map((server) => materializePluginMcpServer(server, installPath));
         const currentServers = await this.mcpStore.listServerInputs();
         const currentServerByKey = new Map(currentServers.map((server) => [server.key, server]));
@@ -455,14 +475,19 @@ export class FilePluginBundleStore implements PluginBundleStore {
           id: manifest.id,
           name: manifest.name,
           ...(manifest.icon ? { icon: manifest.icon } : {}),
+          ...(manifest.iconImage ? { iconImage: { ...manifest.iconImage } } : {}),
           ...(manifest.version ? { version: manifest.version } : {}),
           ...(manifest.description ? { description: manifest.description } : {}),
           ...(manifest.publisher ? { publisher: manifest.publisher } : {}),
+          ...(manifest.unsupportedApps ? { unsupportedApps: [...manifest.unsupportedApps] } : {}),
+          unsupportedComponents: manifest.unsupportedComponents ? [...manifest.unsupportedComponents] : undefined,
+          connectors: structuredClone(manifest.connectors),
           ...(manifest.tags.length ? { tags: [...manifest.tags] } : {}),
           sourcePath,
           installPath,
           installedAt: plugin.installedAt,
           installationSource: options.installationSource ?? 'local',
+          ...(options.repository ? { repository: { ...options.repository } } : {}),
           manifestPath: installedManifestPath,
           ...(manifest.tools.length ? { tools: manifest.tools.map((tool) => ({ ...tool })) } : {}),
           skills: manifest.skillEntries.map((skill): RuntimePluginSkill => ({
@@ -499,6 +524,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
         let indexSaveStarted = false;
         const mcpActionsStarted: PluginMcpUpdateAction[] = [];
         try {
+          await this.stopPluginMcpServers(plugin);
           await renameWithRetry(installPath, backupPath);
           oldDirectoryMoved = true;
           await renameWithRetry(stagingPath, installPath);
@@ -627,6 +653,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
       const removedMcpServers: string[] = [];
       try {
         finishPluginDirectoryMutation = this.skills.beginPluginDirectoryMutation(plugin.installPath);
+        await this.stopPluginMcpServers(plugin);
         if (installExists) {
           await renameWithRetry(plugin.installPath, removalPath);
           directoryMoved = true;
@@ -840,6 +867,12 @@ export class FilePluginBundleStore implements PluginBundleStore {
     return readManifestItemContent(manifest, kind, itemId, language);
   }
 
+  private async stopPluginMcpServers(plugin: InstalledPluginRecord): Promise<void> {
+    // Windows holds a stdio child's working directory open. Close connections before
+    // moving the bundle; unchanged or rolled-back servers reconnect on their next use.
+    await Promise.all(plugin.mcpServers.map(({ key }) => this.mcpClient.invalidateServer(key)));
+  }
+
   private async readIndex(): Promise<PluginIndexFile> {
     const index = await readJsonFile<PluginIndexFile>(this.indexPath, { version: 1, plugins: [] });
     return { version: 1, plugins: Array.isArray(index.plugins) ? index.plugins : [] };
@@ -851,30 +884,6 @@ export class FilePluginBundleStore implements PluginBundleStore {
   }
 }
 
-
-const MARKETPLACE_ONLY_EXTENSION_CAPABILITIES = new Set([
-  'image-generation',
-  'vision-recognition',
-]);
-
-function assertExtensionCapabilitySource(
-  manifest: ParsedPluginManifest,
-  options: PluginBundleMutationOptions,
-): void {
-  const restricted = manifest.extension?.capabilities.find((capability) => (
-    MARKETPLACE_ONLY_EXTENSION_CAPABILITIES.has(capability)
-  ));
-  if (restricted && options.installationSource !== 'marketplace') {
-    throw new Error(`Plugin extension capability is reserved for the bundled marketplace: ${restricted}`);
-  }
-}
-
-async function assertStagedBundleUnchanged(stagingPath: string, expectedHash: string): Promise<void> {
-  const validatedBundle = await inspectBundleTree(stagingPath);
-  if (validatedBundle.bundleHash !== expectedHash) {
-    throw new Error('Plugin bundle changed during activation validation.');
-  }
-}
 
 function strictPluginInstallPath(pluginsDir: string, pluginId: string): string {
   const resolvedRoot = path.resolve(pluginsDir);

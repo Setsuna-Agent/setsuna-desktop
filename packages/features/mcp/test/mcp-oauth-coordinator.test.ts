@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage } from 'node:http';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { McpOAuthCoordinator, McpOAuthLoginRequiredError } from '../src/runtime/adapters/sdk/mcp-oauth-coordinator.js';
 import { SdkMcpConnectionManager } from '../src/runtime/adapters/sdk/sdk-mcp-connection-manager.js';
 import { InMemoryMcpHost } from './support/in-memory-mcp-host.js';
@@ -21,6 +21,34 @@ function createManager(host: InMemoryMcpHost): SdkMcpConnectionManager {
 }
 
 describe('McpOAuthCoordinator', () => {
+  it('keeps token configuration failures out of OAuth and permits OAuth after removing the reference', async () => {
+    const oauthServer = await createOAuthServer();
+    const nativeBridge = new AutoCallbackNativeBridge();
+    const manager = createManager(nativeBridge);
+    const server = {
+      key: 'docs', transport: 'streamableHttp' as const, url: `${oauthServer.baseUrl}/mcp`,
+      oauthClientId: 'setsuna-test-client', bearerTokenEnvVar: 'SETSUNA_TEST_MISSING_MCP_TOKEN',
+    };
+    vi.stubEnv(server.bearerTokenEnvVar, undefined);
+    try {
+      await expect(manager.authStatus(server)).resolves.toMatchObject({ status: 'configurationError' });
+      await expect(manager.login(server)).rejects.toThrow('SETSUNA_TEST_MISSING_MCP_TOKEN');
+      expect(nativeBridge.openedUrls).toEqual([]);
+      const withToken = { ...server, headers: { authorization: 'Bearer access-token' } };
+      await expect(manager.authStatus(withToken)).resolves.toEqual({ status: 'bearerToken' });
+      await expect(manager.login(withToken)).rejects.toThrow('configured token credentials');
+      expect(nativeBridge.openedUrls).toEqual([]);
+      const withOAuth = { ...server, bearerTokenEnvVar: '' };
+      await manager.login(withOAuth);
+      await expect(manager.authStatus(withOAuth)).resolves.toEqual({ status: 'oAuth' });
+      await expect(manager.listTools(withOAuth, { scopeId: 'thread:switch-auth' })).resolves.toMatchObject([{ name: 'search_docs' }]);
+    } finally {
+      vi.unstubAllEnvs();
+      await manager.shutdown();
+      await oauthServer.close();
+    }
+  });
+
   it('opens the system authorization URL, validates callback state, and persists tokens', async () => {
     const oauthServer = await createOAuthServer();
     const nativeBridge = new AutoCallbackNativeBridge();

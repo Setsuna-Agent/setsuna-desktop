@@ -185,7 +185,7 @@ export function SideChatPanel({
           draft={sideChat.draft}
           focusComposerOnReveal={!hidden}
           plugins={plugins}
-          skillSelectionRequest={null}
+          capabilitySelectionRequest={null}
           skills={skills}
           variant="side"
           onAnswerApproval={sideChat.answerApproval}
@@ -204,7 +204,7 @@ export function SideChatPanel({
           queuedTurnActions={sideChat.actions}
           onSetMultiAgentEnabled={onSetMultiAgentEnabled}
           onStartThreadReview={sideChat.startReview}
-          onSkillSelectionRequestConsumed={() => undefined}
+          onCapabilitySelectionRequestConsumed={() => undefined}
         />
       </MarkdownNavigationProvider>
     </aside>

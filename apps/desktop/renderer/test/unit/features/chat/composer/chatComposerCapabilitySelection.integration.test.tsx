@@ -1,18 +1,21 @@
 // @vitest-environment happy-dom
 
 import { ChatPromptInput } from '../../../../../src/features/chat/composer/editor/ChatPromptInput.js';
-import type { RuntimeSkillSummary } from '@setsuna-desktop/contracts';
+import { pluginMentionText, type RuntimePluginSummary, type RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { StrictMode, useCallback, useEffect, useRef, useState, type ComponentRef } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { CHAT_COMPOSER_CLIPBOARD_TYPE } from '../../../../../src/features/chat/composer/chatComposerClipboard.js';
 import { createComposerDraftSyncPlan } from '../../../../../src/features/chat/composer/chatComposerDraftSync.js';
 import {
-  ensureChatComposerSkillSlot,
-  startChatComposerSkillSelection,
-} from '../../../../../src/features/chat/composer/chatComposerSkillSelection.js';
+  ensureChatComposerCapabilitySlot,
+  startChatComposerCapabilitySelection,
+  type ChatComposerCapabilitySelection,
+} from '../../../../../src/features/chat/composer/chatComposerCapabilitySelection.js';
 import {
   createSelectedSkillSlot,
+  createSelectedPluginSlot,
+  createPluginDraftSlots,
   createTextSlot,
   createWorkspaceMentionInsertion,
   createWorkspaceMentionReferenceSlot,
@@ -27,10 +30,48 @@ const skill: RuntimeSkillSummary = {
   enabled: true,
 };
 const workspaceMentionPaths = ['package.json', 'README.md', 'Tree.md', 'tsconfig.json', 'pnpm-lock.yaml'];
+const plugin: RuntimePluginSummary = {
+  id: 'github', name: 'GitHub', installedAt: '2026-09-13',
+  skills: [], mcpServers: [], hooks: [], hookCount: 0, resources: [],
+};
 
 afterEach(cleanup);
 
-describe('chat composer Skill selection with the real ChatPromptInput', () => {
+describe('chat composer capability selection with the real ChatPromptInput', () => {
+  it('serializes a plugin without Skills and restores its tag without duplication after remounting', async () => {
+    const selection: ChatComposerCapabilitySelection = { kind: 'plugin', value: plugin };
+    const view = render(<ScheduledSkillSelectionHarness draft="查看仓库" selection={selection} />);
+    const serialized = `${pluginMentionText(plugin)} 查看仓库`;
+    await waitFor(() => expect(screen.getByTestId('serialized-draft').textContent).toBe(serialized));
+    expect(screen.getByRole('textbox').textContent).toContain('GitHub');
+    expect(screen.getByRole('textbox').textContent).not.toContain('$GitHub');
+    expect(screen.getByRole('textbox').textContent).not.toContain('plugin://');
+    view.unmount();
+    render(<ScheduledSkillSelectionHarness draft={serialized} selection={selection} />);
+    await waitFor(() => expect(screen.getByTestId('confirmed').textContent).toBe('true'));
+    expect(screen.getByRole('textbox').querySelectorAll('[data-slot-key^="plugin:"]')).toHaveLength(1);
+    expect(screen.getByTestId('serialized-draft').textContent).toBe(serialized);
+  });
+
+  it('keeps plugin identity together with Skill and file references when cutting and pasting', async () => {
+    render(<StructuredClipboardHarness includePlugin />);
+    const editor = screen.getByRole('textbox');
+    const clipboardData = createClipboardData();
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    fireEvent.cut(editor, { clipboardData });
+    await waitFor(() => expect(editor.querySelector('[data-slot-key^="plugin:"]')).toBeNull());
+    fireEvent.paste(editor, { clipboardData });
+    await waitFor(() => {
+      expect(editor.querySelectorAll('[data-slot-key^="plugin:"]')).toHaveLength(1);
+      expect(editor.querySelectorAll('[data-slot-key^="skill:"]')).toHaveLength(1);
+      expect(editor.querySelectorAll('[data-slot-key^="workspace:"]')).toHaveLength(1);
+      expect(screen.getByTestId('serialized-draft').textContent).toBe(`${pluginMentionText(plugin)} 对话创建插件 @package.json`);
+    });
+  });
+
   it('renders the inserted Skill tag after a fresh ChatPromptInput mount', async () => {
     render(<SkillSelectionHarness />);
 
@@ -167,7 +208,7 @@ function SkillSelectionHarness({ draft = '' }: { draft?: string }) {
   const [inserted, setInserted] = useState(false);
 
   useEffect(() => {
-    setInserted(ensureChatComposerSkillSlot(editorRef.current, skill));
+    setInserted(ensureChatComposerCapabilitySlot(editorRef.current, { kind: 'skill', value: skill }));
   }, []);
 
   return (
@@ -182,18 +223,21 @@ function SkillSelectionHarness({ draft = '' }: { draft?: string }) {
   );
 }
 
-function ScheduledSkillSelectionHarness({ draft: initialDraft }: { draft: string }) {
+function ScheduledSkillSelectionHarness({ draft: initialDraft, selection = { kind: 'skill', value: skill } }: {
+  draft: string;
+  selection?: ChatComposerCapabilitySelection;
+}) {
   const editorRef = useRef<ComponentRef<typeof ChatPromptInput>>(null);
-  const initialSlotConfigRef = useRef([{ type: 'text' as const, value: initialDraft }]);
+  const initialSlotConfigRef = useRef(createPluginDraftSlots(initialDraft, [plugin]));
   const [confirmed, setConfirmed] = useState(false);
   const [draft, setDraft] = useState(initialDraft);
 
-  useEffect(() => startChatComposerSkillSelection({
+  useEffect(() => startChatComposerCapabilitySelection({
     getEditor: () => editorRef.current,
     onConfirmed: () => setConfirmed(true),
     scheduler: timerFrameScheduler,
-    skill,
-  }), []);
+    selection,
+  }), [selection]);
 
   return (
     <>
@@ -217,7 +261,7 @@ function SkillSelectionDraftSyncHarness() {
   const previousExternalDraftRef = useRef(draft);
 
   useEffect(() => {
-    ensureChatComposerSkillSlot(editorRef.current, skill);
+    ensureChatComposerCapabilitySlot(editorRef.current, { kind: 'skill', value: skill });
   }, []);
 
   useEffect(() => {
@@ -259,13 +303,16 @@ function SkillSelectionDraftSyncHarness() {
 function StructuredClipboardHarness({
   leadingText = '',
   trailingText = '',
+  includePlugin = false,
 }: {
   leadingText?: string;
   trailingText?: string;
+  includePlugin?: boolean;
 }) {
   const editorRef = useRef<ComponentRef<typeof ChatPromptInput>>(null);
   const initialSlotsRef = useRef([
     ...(leadingText ? [createTextSlot(leadingText)] : []),
+    ...(includePlugin ? [createSelectedPluginSlot(plugin), createTextSlot(' ')] : []),
     createSelectedSkillSlot(skill),
     createTextSlot(' '),
     createWorkspaceMentionReferenceSlot({
@@ -276,7 +323,7 @@ function StructuredClipboardHarness({
     }),
     ...(trailingText ? [createTextSlot(trailingText)] : []),
   ]);
-  const [draft, setDraft] = useState(`${leadingText}对话创建插件 @package.json${trailingText}`);
+  const [draft, setDraft] = useState(`${leadingText}${includePlugin ? `${pluginMentionText(plugin)} ` : ''}对话创建插件 @package.json${trailingText}`);
   const [selectedSkills, setSelectedSkills] = useState([skill]);
   const getEditor = useCallback(() => editorRef.current, []);
   const addSelectedSkills = useCallback((restoredSkills: RuntimeSkillSummary[]) => {
@@ -289,6 +336,7 @@ function StructuredClipboardHarness({
     getEditor,
     onSkillsRestored: addSelectedSkills,
     skills: [skill],
+    plugins: [plugin],
   });
 
   return (

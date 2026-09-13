@@ -27,6 +27,13 @@ export const mcpRuntimeHostCapability: CapabilityToken<McpRuntimeHost> = defineC
 
 export type McpRendererListener = () => void;
 
+export const mcpRendererHostCapability = defineCapability<{
+  openExternal(url: string): Promise<boolean>;
+}>({
+  id: 'mcp.renderer-host',
+  description: 'Open MCP authorization pages through the desktop host',
+});
+
 export interface McpRendererService {
   getSnapshot(): RuntimeMcpServerList | null;
   subscribe(listener: McpRendererListener): () => void;

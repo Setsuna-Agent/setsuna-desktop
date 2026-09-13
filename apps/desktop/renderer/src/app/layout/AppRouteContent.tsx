@@ -14,7 +14,7 @@ import type { DesktopWorkspacePanelsState } from '../../features/workspace/hooks
 import type { ProjectWorkspaceState } from '../../features/workspace/hooks/useProjectWorkspace.js';
 import type { RuntimeClientState } from '../../services/runtime-client/useRuntimeClientState.js';
 import type {
-  ChatSkillSelectionRequest,
+  ChatCapabilitySelectionRequest,
   ConversationOverviewVisibility,
   MainView,
 } from '../types.js';
@@ -39,19 +39,20 @@ export type AppRouteContentProps = Readonly<{
   settingsInitialSection?: SettingsSectionId | null;
   setActiveView: Dispatch<SetStateAction<MainView>>;
   setDraft: Dispatch<SetStateAction<string>>;
-  skillSelectionRequest: ChatSkillSelectionRequest | null;
+  capabilitySelectionRequest: ChatCapabilitySelectionRequest | null;
   startCurrentThreadReview: (
     target: ReviewTarget,
     modelSelection?: RuntimeConfiguredModelReference,
   ) => Promise<unknown>;
   workspacePanels: DesktopWorkspacePanelsState;
   onSelectSkillForChat(skillId: string): void;
+  onSelectPluginForChat(pluginId: string): void;
   onConversationOverviewRenderedChange(visible: boolean): void;
   onFocusComposerRequestConsumed(requestId: number): void;
   onOpenPlugin(pluginId: string): void;
   onOpenModelSettings(): void;
   onSelectedCapabilitiesPluginIdChange(pluginId: string | null): void;
-  onSkillSelectionRequestConsumed(requestId: number): void;
+  onCapabilitySelectionRequestConsumed(requestId: number): void;
   onTerminalResizeStep(delta: number): void;
   onTerminalResizeStart(event: ReactPointerEvent<HTMLButtonElement>): void;
   terminalHeight: number;

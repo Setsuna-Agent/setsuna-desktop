@@ -333,6 +333,7 @@ function normalizeServer(
       enabled: rawServer.enabled !== false && rawServer.disabled !== true,
       allowedTools: stringList(rawServer.allowedTools ?? rawServer.allowed_tools ?? rawServer.enabledTools ?? rawServer.enabled_tools),
       disabledTools: stringList(rawServer.disabledTools ?? rawServer.disabled_tools),
+      bearerTokenEnvVar: nonEmpty(rawServer.bearerTokenEnvVar ?? rawServer.bearer_token_env_var),
       oauthClientId: serverOauthClientId(rawServer),
       oauthResource: serverOauthResource(rawServer),
       tools: mcpToolList(rawServer.tools),

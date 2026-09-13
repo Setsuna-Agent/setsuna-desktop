@@ -1,5 +1,5 @@
 import { Button, ProgressRing } from '@setsuna-desktop/renderer-ui';
-import type { RuntimeSkillSummary } from '@setsuna-desktop/contracts';
+import type { RuntimePluginSummary, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 
 import {
   CheckSquare,
@@ -13,10 +13,12 @@ import {
 } from 'lucide-react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { SkillIcon } from '../../../shared/ui/SkillIcon.js';
+import { PluginIcon } from '../../../shared/ui/PluginIcon.js';
 import { createSlashCommandMenuSections } from './chatSlashCommandSections.js';
 import { useActiveOptionScroll } from './useActiveOptionScroll.js';
 
 export type SlashCommandMenuItem =
+  | { key: string; kind: 'plugin'; plugin: RuntimePluginSummary }
   | {
       description?: string;
       disabled?: boolean;
@@ -59,7 +61,7 @@ export function ChatSlashCommandMenu({
       <div ref={floatingCursorRef} className="chat-command-menu__cursor" aria-hidden="true" />
       {items.length ? (
         sections.map((section) => {
-          const sectionLabel = section.id === 'skills' ? t('chat.command.skill') : t('chat.command.label');
+          const sectionLabel = section.id === 'skills' ? t('chat.command.skill') : section.id === 'plugins' ? t('chat.command.installedPlugins') : t('chat.command.label');
           return (
             <div
               key={`${section.id}:${section.items[0]?.item.key ?? 'empty'}`}
@@ -86,8 +88,8 @@ export function ChatSlashCommandMenu({
                 >
                   <SlashCommandIcon item={item} />
                   <span className="chat-command-menu__item-main">
-                    <span className="chat-command-menu__item-title">{item.kind === 'skill' ? item.skill.name : item.title}</span>
-                    {item.kind === 'skill' ? (
+                    <span className="chat-command-menu__item-title">{item.kind === 'skill' ? item.skill.name : item.kind === 'plugin' ? item.plugin.name : item.title}</span>
+                    {item.kind === 'plugin' ? <span className="chat-command-menu__item-desc">{item.plugin.description ?? item.plugin.id}</span> : item.kind === 'skill' ? (
                       (item.skill.description || unresolvedSkillMcpDependencyCount(item.skill)) ? (
                         <span className="chat-command-menu__item-desc">
                           {unresolvedSkillMcpDependencyCount(item.skill)
@@ -128,6 +130,7 @@ function unresolvedSkillMcpDependencyCount(skill: Extract<SlashCommandMenuItem, 
 }
 
 function SlashCommandIcon({ item }: { item: SlashCommandMenuItem }) {
+  if (item.kind === 'plugin') return <PluginIcon name={item.plugin.icon} iconImage={item.plugin.iconImage} pluginId={item.plugin.id} variant="menu" />;
   if (item.kind === 'skill') {
     return <SkillIcon skill={item.skill} variant="menu" />;
   }

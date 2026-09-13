@@ -11,6 +11,8 @@ import type {
   RuntimePluginItemKind,
   RuntimePluginResource,
   RuntimePluginSummary,
+  RuntimePluginIconImage,
+  RuntimePluginConnector,
   RuntimePluginTool,
 } from '@setsuna-desktop/contracts';
 import {
@@ -29,6 +31,10 @@ import type {
   InstalledPluginRecord,
 } from '../../ports/plugin-bundle-store.js';
 import { detectSafeImageMimeType } from '../../utils/safe-image.js';
+import { pathIsInside, safeExistingPath, safeRelativePath } from './file-plugin-bundle-paths.js';
+import { readPluginManifestSource } from './file-plugin-manifest-source.js';
+import { completePluginConnectors, readPluginConnectors } from './plugin-connectors.js';
+import { normalizePluginIconImage } from './codex-plugin-icon.js';
 import {
   normalizePluginMcpServers,
   pluginMcpServerDescriptor,
@@ -48,11 +54,14 @@ import {
   removeUndefined,
   requiredString,
   skillMetadata,
+  stringArray,
   textMimeType,
 } from './file-plugin-bundle-values.js';
 
 export * from './file-plugin-bundle-values.js';
 export * from './file-plugin-bundle-mcp.js';
+export * from './file-plugin-bundle-paths.js';
+export { PLUGIN_MANIFEST_RELATIVE_PATH } from './file-plugin-manifest-source.js';
 
 export type PluginIndexFile = { version: 1; plugins: InstalledPluginRecord[] };
 
@@ -60,9 +69,13 @@ export type ParsedPluginManifest = {
   id: string;
   name: string;
   icon?: string;
+  iconImage?: RuntimePluginIconImage;
   version?: string;
   description?: string;
   publisher?: string;
+  unsupportedApps?: string[];
+  unsupportedComponents?: string[];
+  connectors: RuntimePluginConnector[];
   tags: string[];
   featured: boolean;
   featuredOrder?: number;
@@ -78,8 +91,6 @@ export type ParsedPluginManifest = {
 
 export type ParsedPluginHook = RuntimeHookInput & Pick<RuntimePluginHook, 'id' | 'name' | 'description'>;
 
-export const PLUGIN_MANIFEST_RELATIVE_PATH = path.join('.setsuna-plugin', 'plugin.json');
-export const MAX_PLUGIN_MANIFEST_BYTES = 256 * 1024;
 export const MAX_PLUGIN_FILES = 1_000;
 export const MAX_PLUGIN_TOTAL_BYTES = 32 * 1024 * 1024;
 export const MAX_PLUGIN_RESOURCE_BYTES = 8 * 1024 * 1024;
@@ -193,12 +204,7 @@ export async function readPluginFilePreview(
   };
 }
 export async function readPluginManifest(sourcePath: string): Promise<ParsedPluginManifest> {
-  const manifestPath = path.join(sourcePath, PLUGIN_MANIFEST_RELATIVE_PATH);
-  const manifestStat = await stat(manifestPath).catch(() => null);
-  if (!manifestStat?.isFile()) throw new Error(`Plugin manifest not found: ${PLUGIN_MANIFEST_RELATIVE_PATH}`);
-  if (manifestStat.size > MAX_PLUGIN_MANIFEST_BYTES) throw new Error('Plugin manifest is too large.');
-  const raw = JSON.parse(await readFile(manifestPath, 'utf8')) as unknown;
-  const record = objectRecord(raw, 'Plugin manifest must be a JSON object.');
+  const { manifestPath, record } = await readPluginManifestSource(sourcePath);
   const schemaVersion = record.schemaVersion ?? record.schema_version;
   if (schemaVersion !== 1 && schemaVersion !== 2) throw new Error('Plugin schemaVersion must be 1 or 2.');
   const id = normalizePluginId(requiredString(record.id, 'Plugin id'));
@@ -206,16 +212,24 @@ export async function readPluginManifest(sourcePath: string): Promise<ParsedPlug
   const skills = await normalizePluginSkills(sourcePath, id, record.skills);
   const resources = await normalizePluginResources(sourcePath, record.resources);
   const tools = normalizePluginTools(record.tools);
+  const unsupportedApps = stringArray(record.unsupportedApps, 'Plugin unsupportedApps');
+  const unsupportedComponents = stringArray(record.unsupportedComponents, 'Plugin unsupportedComponents');
+  const mcpServers = normalizePluginMcpServers(record.mcpServers ?? record.mcp_servers);
+  const connectors = completePluginConnectors(await readPluginConnectors(sourcePath, record.connectors), mcpServers.map(pluginMcpServerDescriptor));
   return {
     id,
     name,
     ...optionalTextFields(record),
+    iconImage: normalizePluginIconImage(record.iconImage),
     ...optionalMarketplaceFields(record),
+    ...(unsupportedApps.length ? { unsupportedApps } : {}),
+    ...(unsupportedComponents.length ? { unsupportedComponents } : {}),
     sourcePath,
     manifestPath,
     tools,
     skillEntries: skills,
-    mcpServers: normalizePluginMcpServers(record.mcpServers ?? record.mcp_servers),
+    mcpServers,
+    connectors,
     hooks: normalizePluginHooks(record.hooks),
     resources,
     ...await normalizePluginExtension(sourcePath, schemaVersion, record.extension, resources, tools),
@@ -685,46 +699,6 @@ export async function requiredBundleDirectory(value: unknown): Promise<string> {
   return resolved;
 }
 
-export async function safeExistingPath(root: string, relativePath: string): Promise<string> {
-  // macOS commonly exposes /var through a /private/var symlink. Compare real
-  // paths on both sides so a valid file is not mistaken for a bundle escape.
-  const resolvedRoot = await realpath(root);
-  const normalizedRelativePath = safeRelativePath(relativePath, 'Plugin path');
-  let exactPath = resolvedRoot;
-  for (const segment of normalizedRelativePath.split(path.sep)) {
-    const entries = await readdir(exactPath);
-    if (!entries.includes(segment)) {
-      const caseVariant = entries.find((entry) => entry.toLowerCase() === segment.toLowerCase());
-      if (caseVariant) {
-        throw new Error(`Plugin path casing does not match the bundle: ${relativePath}`);
-      }
-      throw new Error(`Plugin path does not exist: ${relativePath}`);
-    }
-    exactPath = path.join(exactPath, segment);
-  }
-  const target = await realpath(exactPath);
-  if (!pathIsInside(resolvedRoot, target)) throw new Error(`Plugin path escapes the bundle: ${relativePath}`);
-  return target;
-}
-
-export function safeRelativePath(value: string, label: string): string {
-  if (!value || path.isAbsolute(value)) throw new Error(`${label} must be relative.`);
-  const normalized = path.normalize(value);
-  if (normalized === '..' || normalized.startsWith(`..${path.sep}`)) throw new Error(`${label} escapes the bundle.`);
-  return normalized;
-}
-
-export function pathsOverlap(left: string, right: string): boolean {
-  const resolvedLeft = path.resolve(left);
-  const resolvedRight = path.resolve(right);
-  return pathIsInside(resolvedLeft, resolvedRight) || pathIsInside(resolvedRight, resolvedLeft);
-}
-
-export function pathIsInside(root: string, target: string): boolean {
-  const relative = path.relative(path.resolve(root), path.resolve(target));
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
-}
-
 export function publicPluginSummary(plugin: InstalledPluginRecord): RuntimePluginSummary {
   const {
     installPath: _installPath,
@@ -741,6 +715,9 @@ export function publicPluginSummary(plugin: InstalledPluginRecord): RuntimePlugi
     ...(extension ? { extension: publicPluginExtension(extension) } : {}),
     ...(summary.tools?.length ? { tools: summary.tools.map((tool) => ({ ...tool })) } : {}),
     ...(summary.tags ? { tags: [...summary.tags] } : {}),
+    ...(summary.unsupportedApps ? { unsupportedApps: [...summary.unsupportedApps] } : {}),
+    ...(summary.unsupportedComponents ? { unsupportedComponents: [...summary.unsupportedComponents] } : {}),
+    ...(summary.connectors ? { connectors: structuredClone(summary.connectors) } : {}),
     skills: summary.skills.map((skill) => ({
       id: skill.id,
       name: skill.name,
@@ -789,6 +766,9 @@ export function cloneInstalledRecord(plugin: InstalledPluginRecord): InstalledPl
     ...plugin,
     ...(plugin.tools?.length ? { tools: plugin.tools.map((tool) => ({ ...tool })) } : {}),
     ...(plugin.tags ? { tags: [...plugin.tags] } : {}),
+    ...(plugin.unsupportedApps ? { unsupportedApps: [...plugin.unsupportedApps] } : {}),
+    ...(plugin.unsupportedComponents ? { unsupportedComponents: [...plugin.unsupportedComponents] } : {}),
+    ...(plugin.connectors ? { connectors: structuredClone(plugin.connectors) } : {}),
     skills: plugin.skills.map((skill) => ({
       id: skill.id,
       name: skill.name,
@@ -810,7 +790,7 @@ export function stagedPluginRecord(
   return {
     ...plugin,
     installPath: stagingPath,
-    manifestPath: path.join(stagingPath, PLUGIN_MANIFEST_RELATIVE_PATH),
+    manifestPath: path.join(stagingPath, path.relative(plugin.installPath, plugin.manifestPath)),
   };
 }
 

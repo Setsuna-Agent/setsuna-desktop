@@ -1,7 +1,8 @@
 import type { ComposerSlot } from './editor/types.js';
-import type { RuntimeSkillSummary } from '@setsuna-desktop/contracts';
+import type { RuntimePluginSummary, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import {
   createSelectedSkillSlot,
+  createSelectedPluginSlot,
   createTextSlot,
   createWorkspaceMentionReferenceSlot,
   getChatComposerSlotReference,
@@ -53,6 +54,7 @@ export function createChatComposerClipboardSelection(
 export function createChatComposerClipboardPastePlan(
   serializedPayload: string,
   skills: RuntimeSkillSummary[],
+  plugins: readonly RuntimePluginSummary[] = [],
 ): ChatComposerClipboardPastePlan | null {
   const payload = parseClipboardPayload(serializedPayload);
   if (!payload) return null;
@@ -69,6 +71,12 @@ export function createChatComposerClipboardPastePlan(
     }
     if (part.type === 'workspace') {
       slots.push(createWorkspaceMentionReferenceSlot(part.entry));
+      continue;
+    }
+    if (part.type === 'plugin') {
+      const plugin = plugins.find((item) => item.id === part.pluginId);
+      if (!plugin) return null;
+      slots.push(createSelectedPluginSlot(plugin));
       continue;
     }
 
@@ -226,6 +234,7 @@ function isClipboardPart(value: unknown): value is ChatComposerClipboardPart {
   if (!isRecord(value) || typeof value.type !== 'string') return false;
   if (value.type === 'text') return typeof value.value === 'string';
   if (value.type === 'skill') return typeof value.skillId === 'string' && Boolean(value.skillId);
+  if (value.type === 'plugin') return typeof value.pluginId === 'string' && Boolean(value.pluginId);
   if (value.type !== 'workspace' || !isRecord(value.entry)) return false;
   return (value.entry.kind === 'file' || value.entry.kind === 'directory')
     && typeof value.entry.name === 'string'

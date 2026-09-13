@@ -1,4 +1,8 @@
 @import './capabilities-core.css';
+@import './capabilities-detail.css';
 @import './capabilities-catalog.css';
 @import './capabilities-market.css';
 @import './capabilities-plugin-detail.css';
+@import './capabilities-skill-detail.css';
+@import './capabilities-mcp-auth.css';
+@import './capabilities-mcp-detail.css';

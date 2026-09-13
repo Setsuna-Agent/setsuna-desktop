@@ -279,6 +279,9 @@ export class SdkMcpConnectionManager {
     if (normalizedMcpTransport(server) !== 'streamableHttp') {
       throw new Error('OAuth login is only supported for streamable HTTP MCP servers.');
     }
+    if (Object.entries(resolvedMcpHttpHeaders(server)).some(([name, value]) => name.toLowerCase() === 'authorization' && value.trim())) {
+      throw new Error('This MCP server uses configured token credentials. Edit its credentials before switching to OAuth.');
+    }
     await this.invalidateServer(server.key);
     await this.oauth.login(server, options);
     await this.invalidateServer(server.key);
@@ -297,7 +300,7 @@ export class SdkMcpConnectionManager {
         ? { status: 'bearerToken' as const }
         : this.oauth.authStatus(server);
     } catch (error) {
-      return { status: 'oAuthError' as const, error: errorMessage(error) };
+      return { status: 'configurationError' as const, error: errorMessage(error) };
     }
   }
 
