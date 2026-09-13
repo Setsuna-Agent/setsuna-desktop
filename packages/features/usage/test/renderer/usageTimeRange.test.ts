@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   defaultUsageCustomTimeRange,
   formatUsageCustomTimeValue,
+  inspectUsageCustomRange,
   usageQueryForCustomRange,
   usageQueryForPreset,
 } from '../../src/renderer/usage/usageTimeRange.js';
@@ -45,6 +46,32 @@ describe('usage time ranges', () => {
     expect(usageQueryForCustomRange({
       from: '2026-02-30T10:00',
       to: '2026-03-01T10:00',
+    })).toBeNull();
+    // 滚轮写入的就是分精度，带秒的输入不属于这个形状，按无效处理。
+    expect(usageQueryForCustomRange({
+      from: '2026-08-13T09:05:00',
+      to: '2026-08-13T10:30',
+    })).toBeNull();
+  });
+
+  it('reports why a custom range is unusable so the UI can explain it', () => {
+    expect(inspectUsageCustomRange({
+      from: '2026-08-13T10:31',
+      to: '2026-08-13T10:30',
+    })).toBe('end-before-start');
+    expect(inspectUsageCustomRange({ from: '', to: '2026-08-13T10:30' })).toBe('invalid-from');
+    expect(inspectUsageCustomRange({
+      from: '2026-08-13T09:05',
+      to: '2026-02-30T10:00',
+    })).toBe('invalid-to');
+    expect(inspectUsageCustomRange({
+      from: '2026-08-13T09:05',
+      to: '2026-08-13T10:30',
+    })).toBeNull();
+    // 同一时刻视为合法：查询上界已包含所选的整分钟。
+    expect(inspectUsageCustomRange({
+      from: '2026-08-13T10:30',
+      to: '2026-08-13T10:30',
     })).toBeNull();
   });
 });

@@ -213,16 +213,16 @@ packages/feature-core/ — 4 direct / 32 total files
 ### `packages/renderer-ui/`
 
 ```text
-packages/renderer-ui/ — 3 direct / 38 total files
-├── src/ — 24 direct / 32 total files
-│   └── styles/ — 8 direct / 8 total files
-└── test/ — 3 direct / 3 total files
+packages/renderer-ui/ — 3 direct / 41 total files
+├── src/ — 25 direct / 34 total files
+│   └── styles/ — 9 direct / 9 total files
+└── test/ — 4 direct / 4 total files
 ```
 
 ### `packages/features/`
 
 ```text
-packages/features/ — 0 direct / 982 total files
+packages/features/ — 0 direct / 983 total files
 ├── approval-review/ — 2 direct / 20 total files
 │   ├── src/ — 17 files
 │   │   ├── contracts/ — 5 direct / 5 total files
@@ -412,14 +412,14 @@ packages/features/ — 0 direct / 982 total files
 │   └── test/ — 4 files
 │       ├── main/ — 3 direct / 3 total files
 │       └── renderer/ — 1 direct / 1 total files
-├── usage/ — 2 direct / 45 total files
+├── usage/ — 2 direct / 46 total files
 │   ├── src/ — 33 files
 │   │   ├── contracts/ — 5 direct / 5 total files
 │   │   ├── renderer/ — 15 direct / 25 total files
 │   │   │   └── usage/ — 10 direct / 10 total files
 │   │   └── runtime/ — 3 direct / 3 total files
-│   └── test/ — 10 files
-│       ├── renderer/ — 8 direct / 8 total files
+│   └── test/ — 11 files
+│       ├── renderer/ — 9 direct / 9 total files
 │       └── runtime/ — 2 direct / 2 total files
 ├── vision-recognition/ — 2 direct / 18 total files
 │   ├── src/ — 14 files

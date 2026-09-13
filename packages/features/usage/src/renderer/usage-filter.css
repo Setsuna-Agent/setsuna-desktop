@@ -40,11 +40,17 @@
 
 .settings-usage-custom-range__fields {
   display: grid;
+  /* 两个时间点并排；列宽由内部滚轮的 min-inline-size 撑开，避免被压扁。 */
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  padding: 10px 14px;
+  gap: 12px;
+  padding: 12px 18px;
+}
+
+/* 弹窗整体放宽，容纳并排的两组滚轮而不显拥挤。单轮下限在此统一声明，
+   内层网格继承后即可把弹窗宽度撑开。 */
+.settings-usage-time-filter-popover {
+  --settings-usage-wheel-min-width: 58px;
+  min-width: 720px;
 }
 
 .settings-usage-custom-range__field {
@@ -69,32 +75,72 @@
   line-height: 14px;
 }
 
-.settings-usage-custom-range__field input {
-  box-shadow: none;
-  width: 100%;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  outline: 0;
-  color: var(--app-text);
-  background: transparent;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  line-height: 20px;
+/* 日期（年月日）与时间（时分）各自成组，两组之间留出分隔。 */
+.settings-usage-custom-range__wheels {
+  display: grid;
+  /* 日期 3 列、时间 2 列，按列数而非内容分配宽度。 */
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 12px;
 }
 
-.settings-usage-custom-range__field input::placeholder {
-  color: var(--app-text-subtle);
+.settings-usage-custom-range__group {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(var(--settings-usage-wheel-min-width, 52px), 1fr);
+  gap: 6px;
+  padding: 4px;
+  /* 组内滚轮共用一层底色，避免三列各自描边显得零碎。 */
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface);
+}
+
+/* 单个滚轮的最小宽度，避免网格把列压扁到不可读。 */
+.settings-usage-custom-range__group .sd-wheel-picker {
+  min-inline-size: var(--settings-usage-wheel-min-width, 52px);
+}
+
+.settings-usage-custom-range__group + .settings-usage-custom-range__group {
+  box-shadow: inset 1px 0 0 var(--app-border);
+  padding-left: 8px;
+}
+
+.settings-usage-custom-range__field.is-invalid {
+  border-color: var(--app-danger);
 }
 
 .settings-usage-custom-range__footer {
   display: flex;
   align-items: center;
+  /* 按钮固定在右侧；提示存在时由自身 margin 推开，避免无提示时按钮贴左。 */
   justify-content: flex-end;
   gap: 12px;
   min-width: 0;
   padding: 6px 14px 10px;
   background: transparent;
+}
+
+/* 时段非法时的即时提示：与字段标红配合，说明具体原因。 */
+.settings-usage-custom-range__hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  margin: 0;
+  /* 提示靠左、按钮靠右；无提示时按钮仍由 footer 的 flex-end 贴右。 */
+  margin-inline-end: auto;
+  min-width: 0;
+  padding: 5px 9px;
+  border: 1px solid color-mix(in srgb, var(--app-danger) 38%, transparent);
+  border-radius: var(--app-radius-sm);
+  color: var(--app-danger);
+  background: var(--app-danger-bg);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 15px;
+}
+
+.settings-usage-custom-range__hint svg {
+  flex: 0 0 auto;
 }
 
 .settings-usage-custom-range__actions {
