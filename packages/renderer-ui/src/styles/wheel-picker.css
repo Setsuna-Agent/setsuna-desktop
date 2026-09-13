@@ -1,0 +1,86 @@
+/* Wheel picker：beUI Wheel Picker 的视觉层，配色全部走宿主 token。 */
+
+.sd-wheel-picker {
+  position: relative;
+  overflow: hidden;
+  block-size: calc(var(--sd-wheel-picker-item-height) * var(--sd-wheel-picker-rows));
+  inline-size: 100%;
+  min-inline-size: 0;
+  /* 转轮鼓面靠父级透视，行自身只做 rotateX。 */
+  perspective: 520px;
+  border-radius: var(--app-radius-sm);
+  outline: 0;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.sd-wheel-picker:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--app-primary) 45%, transparent);
+}
+
+.sd-wheel-picker.is-disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.sd-wheel-picker:not(.is-disabled):active {
+  cursor: grabbing;
+}
+
+.sd-wheel-picker__drum {
+  display: flex;
+  flex-direction: column;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.sd-wheel-picker__item {
+  display: grid;
+  flex: 0 0 auto;
+  block-size: var(--sd-wheel-picker-item-height);
+  place-items: center;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: var(--sd-wheel-picker-item-height);
+  transition: color 120ms ease;
+}
+
+.sd-wheel-picker__item.is-active {
+  color: var(--app-text);
+  font-weight: 600;
+}
+
+/* 中间选中行的横向高亮，参考 iOS 转轮。 */
+.sd-wheel-picker__highlight {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline: 0;
+  block-size: var(--sd-wheel-picker-item-height);
+  border-radius: var(--app-radius-sm);
+  background: color-mix(in srgb, var(--app-text) 6%, transparent);
+  translate: 0 -50%;
+  pointer-events: none;
+}
+
+/* 上下渐隐遮罩，让滚动进出更柔和。 */
+.sd-wheel-picker__fade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    var(--app-surface-subtle) 0%,
+    transparent 22%,
+    transparent 78%,
+    var(--app-surface-subtle) 100%
+  );
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sd-wheel-picker__item {
+    transition: none;
+  }
+}

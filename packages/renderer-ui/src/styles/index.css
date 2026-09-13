@@ -9,6 +9,7 @@
 @import './overlays.css';
 @import './menu-motion.css';
 @import './file-tree.css';
+@import './wheel-picker.css';
 
 /* Every shared surface inherits the host's single semantic palette. */
 

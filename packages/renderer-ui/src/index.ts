@@ -14,6 +14,7 @@ export { SelectField } from './select.js';
 export { UiProvider } from './locale.js';
 export { ToastStack, type ToastEntry, type ToastTone } from './toast.js';
 export { Slider } from './slider.js';
+export { WheelPicker, type WheelPickerOption, type WheelPickerProps } from './wheel-picker.js';
 export { ResizeHandle } from './resize-handle.js';
 export { FileTreeToggle } from './file-tree-toggle.js';
 export { FileTreeSurface, FileTreeRow } from './file-tree.js';

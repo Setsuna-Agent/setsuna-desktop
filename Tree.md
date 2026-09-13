@@ -213,9 +213,9 @@ packages/feature-core/ — 4 direct / 32 total files
 ### `packages/renderer-ui/`
 
 ```text
-packages/renderer-ui/ — 3 direct / 38 total files
-├── src/ — 24 direct / 32 total files
-│   └── styles/ — 8 direct / 8 total files
+packages/renderer-ui/ — 3 direct / 40 total files
+├── src/ — 25 direct / 34 total files
+│   └── styles/ — 9 direct / 9 total files
 └── test/ — 3 direct / 3 total files
 ```
 
