@@ -21,6 +21,7 @@ import { WorkspaceCodeViewScrollbar } from './WorkspaceCodeViewScrollbar.js';
 import { useWorkspaceEditorDocument } from './useWorkspaceEditorDocument.js';
 
 type EditableWorkspaceFileProps = {
+  active?: boolean;
   content: string;
   file: Pick<WorkspaceFileRead, 'projectId' | 'path' | 'revision'>;
   fileFocusRequest?: WorkspaceFileFocusRequest;
@@ -30,6 +31,7 @@ type EditableWorkspaceFileProps = {
 };
 
 export function EditableWorkspaceFile({
+  active = true,
   content,
   file,
   fileFocusRequest,
@@ -37,6 +39,8 @@ export function EditableWorkspaceFile({
   onChange,
   onSave,
 }: EditableWorkspaceFileProps) {
+  const activeRef = useRef(active);
+  activeRef.current = active;
   const codeViewRef = useRef<CodeViewHandle<undefined>>(null);
   const codeViewSurface = useWorkspaceCodeViewSurface();
   const options = usePierreFileOptions({
@@ -47,9 +51,10 @@ export function EditableWorkspaceFile({
   const { items, onEditorChange } = useWorkspaceEditorDocument({ content, file, language, onChange });
   const editorOptions = useMemo<Omit<EditorOptions<undefined>, 'onChange'>>(() => ({
     onAttach: (editor) => {
-      window.requestAnimationFrame(() => editor.focus({
-        lineNumber: fileFocusRequest?.line ?? 'first-visible',
-      }));
+      window.requestAnimationFrame(() => {
+        // Loading the editor can finish after the user has switched to Markdown preview.
+        if (activeRef.current) editor.focus({ lineNumber: fileFocusRequest?.line ?? 'first-visible' });
+      });
     },
   }), [fileFocusRequest?.line]);
   const createEditor = useCallback((creationOptions: EditorOptions<undefined>) => new Editor({

@@ -21,6 +21,7 @@ import {
   type AppKeyboardShortcutHandlers,
 } from '../controller/useAppKeyboardShortcuts.js';
 import { useThreadNavigationHistory } from '../controller/useThreadNavigationHistory.js';
+import { useSidebarThreadNavigation } from '../controller/useSidebarThreadNavigation.js';
 import { AppOverlays } from './AppOverlays.js';
 import { AppChatToolbarTitle } from './AppChatToolbarTitle.js';
 import { AppRouteContent } from './AppRouteContent.js';
@@ -98,6 +99,11 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   }, []);
   const runtimeActivityTriggerRef = useRef<HTMLButtonElement | null>(null);
   const currentThread = runtime.currentThread;
+  const sidebarNavigation = useSidebarThreadNavigation({
+    currentThreadId: currentThread?.id ?? null,
+    onOpenThread: navigation.selectThread,
+    onError: runtime.setError,
+  });
   const threadHistory = useThreadNavigationHistory({
     currentThreadId: currentThread?.id ?? null,
     onOpenThread: navigation.selectThread,
@@ -194,6 +200,14 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     'navigation.goForward': {
       enabled: threadHistory.canGoForward,
       execute: threadHistory.goForward,
+    },
+    'navigation.previousChat': {
+      enabled: activeView === 'chat' && !sidebarCollapsed,
+      execute: sidebarNavigation.goPrevious,
+    },
+    'navigation.nextChat': {
+      enabled: activeView === 'chat' && !sidebarCollapsed,
+      execute: sidebarNavigation.goNext,
     },
     'app.addProject': {
       execute: navigation.openCreateProject,
@@ -295,6 +309,9 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     runtime.currentThread,
     runtimeActivityOpen,
     setActiveView,
+    sidebarCollapsed,
+    sidebarNavigation.goPrevious,
+    sidebarNavigation.goNext,
     threadHistory.canGoBack,
     threadHistory.canGoForward,
     threadHistory.goBack,

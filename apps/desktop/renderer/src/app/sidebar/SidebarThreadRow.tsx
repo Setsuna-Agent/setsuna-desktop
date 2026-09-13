@@ -1,6 +1,6 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
-import { Archive, LoaderCircle, Pin } from 'lucide-react';
+import { Archive, ArrowDown, ArrowUp, LoaderCircle, Pin } from 'lucide-react';
 import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { EditIcon } from '../../shared/ui/EditIcon.js';
@@ -124,6 +124,7 @@ export function SidebarThreadRow({
       <SidebarThreadHoverCard disabled={menuOpen} projectName={projectName} thread={thread}>
         <Button variant="ghost"
           className="desktop-agent-session__select"
+          data-sidebar-thread-id={thread.id}
           ref={rowRef}
           type="button"
           onClick={() => onSelect(thread.id)}
@@ -133,6 +134,12 @@ export function SidebarThreadRow({
         </Button>
       </SidebarThreadHoverCard>
       {meta}
+      {selected ? (
+        <span className="desktop-agent-session__navigation-hint" aria-hidden="true">
+          <ArrowUp size={14} strokeWidth={1.75} />
+          <ArrowDown size={14} strokeWidth={1.75} />
+        </span>
+      ) : null}
       {menu}
     </div>
   );

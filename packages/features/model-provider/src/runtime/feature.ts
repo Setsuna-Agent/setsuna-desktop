@@ -6,6 +6,7 @@ import {
   runtimeRouteRegistrarCapability,
 } from '@setsuna-desktop/feature-core/runtime';
 import {
+  copyModelProviderApiKey,
   discoverModelProviderModels,
   modelProviderFeature,
   modelProviderRuntimeHostCapability,
@@ -29,6 +30,29 @@ export const modelProviderRuntimeFeature = defineRuntimeFeature({
   dependencies,
   provides: [samplingProvider],
   setup(context) {
+    context.dependencies.routes.register(
+      context.scope,
+      copyModelProviderApiKey,
+      async (input, routeContext) => {
+        const apiKey = input.apiKey?.trim()
+          || (await context.dependencies.host.resolveProvider(input.providerId))?.apiKey;
+        if (!apiKey) {
+          throw new FeatureOperationFailure({
+            code: 'CREDENTIALS_MISSING', message: 'No API key is available to copy.', retryable: false,
+          });
+        }
+        routeContext.signal.throwIfAborted();
+        try {
+          // Saved secrets go straight to the native clipboard, never into renderer state or responses.
+          await context.dependencies.host.writeClipboardText(apiKey);
+        } catch {
+          throw new FeatureOperationFailure({
+            code: 'DEPENDENCY_UNAVAILABLE', message: 'Could not copy the API key.', retryable: true,
+          });
+        }
+        return { ok: true as const };
+      },
+    );
     context.dependencies.routes.register(
       context.scope,
       readModelProviderCatalog,

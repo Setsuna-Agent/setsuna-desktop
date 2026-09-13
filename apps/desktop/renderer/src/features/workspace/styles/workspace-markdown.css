@@ -1,0 +1,39 @@
+.desktop-markdown-preview {
+  min-width: 0;
+  min-height: 0;
+  padding: 24px clamp(16px, 4%, 40px) 40px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--app-bg);
+}
+
+.desktop-markdown-preview .desktop-markdown-preview__document {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.desktop-markdown-preview__document > :first-child {
+  margin-top: 0;
+}
+
+.desktop-markdown-preview .desktop-markdown-preview__document img {
+  display: inline-block;
+  margin: 0;
+  vertical-align: middle;
+}
+
+.desktop-markdown-preview__document [align="center"] { text-align: center; }
+.desktop-markdown-preview__document [align="right"] { text-align: right; }
+.desktop-markdown-preview__document [align="left"] { text-align: left; }
+
+.desktop-markdown-preview__document .task-list-item {
+  list-style: none;
+}
+
+.desktop-markdown-preview__document input[type="checkbox"] {
+  margin: 0 0.5em 0 -1.3em;
+}
+
+.desktop-markdown-preview__image-alt {
+  color: var(--app-text-muted);
+}

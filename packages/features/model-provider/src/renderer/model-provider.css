@@ -444,6 +444,12 @@
   overflow: hidden;
 }
 
+.model-provider-settings__editor .sd-icon-button.sd-button--danger:not(:hover, :active, :focus-visible) {
+  color: var(--app-text-secondary);
+  border-color: transparent;
+  background: transparent;
+}
+
 .model-provider-settings__card {
   min-width: 0;
   border: 0;
@@ -496,7 +502,8 @@
   grid-column: 1 / -1;
 }
 
-.model-provider-settings__field > span {
+.model-provider-settings__field > span,
+.model-provider-settings__field > label {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -507,7 +514,7 @@
   line-height: 15px;
 }
 
-.model-provider-settings__field > span em {
+.model-provider-settings__field > label em {
   min-width: 0;
   overflow: hidden;
   color: var(--app-text-subtle);
@@ -523,6 +530,25 @@
 .model-provider-settings__primary-fields .sd-select {
   width: 100%;
   max-width: none;
+}
+
+.model-provider-settings__api-key-input {
+  position: relative;
+  min-width: 0;
+}
+
+.model-provider-settings__api-key-input .sd-field {
+  padding-right: 38px;
+}
+
+.model-provider-settings__copy-api-key {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  width: 26px;
+  height: 26px;
+  min-height: 0;
+  transform: translateY(-50%);
 }
 
 .model-provider-settings__advanced > summary {

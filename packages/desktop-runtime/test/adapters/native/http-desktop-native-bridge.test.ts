@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import {
+  DESKTOP_CLIPBOARD_WRITE_PATH,
   DESKTOP_SYSTEM_PROXY_FETCH_METADATA_PREFIX_BYTES,
   type DesktopSystemProxyFetchRequest,
 } from '@setsuna-desktop/contracts';
@@ -38,6 +39,10 @@ describe('HttpDesktopNativeBridge', () => {
       await client.set('mcp.test', 'secret');
       await expect(client.get('mcp.test')).resolves.toBe('secret');
       await client.openExternal('https://example.com/login');
+      await expect(client.writeClipboardText('secret-key')).resolves.toBeUndefined();
+      expect(calls).toContainEqual({
+        authorization: 'Bearer bridge-token', body: { text: 'secret-key' }, url: DESKTOP_CLIPBOARD_WRITE_PATH,
+      });
       await expect(client.resolveNetworkProxy({
         scope: 'runtime',
         override: { mode: 'proxy', proxyServerId: 'proxy-example' },
@@ -71,6 +76,7 @@ describe('HttpDesktopNativeBridge', () => {
 
   it('fails closed without the desktop host', async () => {
     const client = new UnavailableDesktopNativeBridge();
+    await expect(client.writeClipboardText('secret-key')).rejects.toThrow('Setsuna Desktop host');
     await expect(client.status()).resolves.toMatchObject({ available: false });
     await expect(client.set('mcp.test', 'secret')).rejects.toThrow('Setsuna Desktop host');
     await expect(client.resolveNetworkProxy({ scope: 'runtime' })).resolves.toEqual({ mode: 'system' });

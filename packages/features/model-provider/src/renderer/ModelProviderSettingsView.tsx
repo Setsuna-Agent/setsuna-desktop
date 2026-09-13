@@ -214,6 +214,10 @@ export function ModelProviderSettingsView({
                 stageProviders(providers, nextApiKeys);
               }}
               onChange={replaceProvider}
+              onCopyApiKey={() => service.copyApiKey({
+                providerId: selectedProvider.id,
+                apiKey: apiKeys[selectedProvider.id],
+              })}
               onDelete={removeProvider}
               onDiscover={discoverModels}
               onProviderIdentityChange={replaceProviderIdentity}

@@ -363,6 +363,7 @@ function host(
   return {
     fetchForRoute: () => fetch,
     readProviderState: async () => ({ activeProviderId: provider.id, providers: [provider] }),
+    writeClipboardText: async () => undefined,
     resolveProvider: async () => provider,
     saveProviderState: async (input) => ({ ...input, providers: input.providers as ProviderConfigState[] }),
     ...(reportReplayDecisions ? { reportReplayDecisions } : {}),

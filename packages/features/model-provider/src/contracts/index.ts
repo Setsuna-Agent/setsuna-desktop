@@ -18,7 +18,9 @@ export type {
 } from './capabilities.js';
 export {
   discoverModelProviderModels,
+  copyModelProviderApiKey,
   readModelProviderCatalog,
   readModelProviderSettings,
   updateModelProviderSettings,
 } from './operations.js';
+export type { CopyModelProviderApiKeyInput } from './operations.js';

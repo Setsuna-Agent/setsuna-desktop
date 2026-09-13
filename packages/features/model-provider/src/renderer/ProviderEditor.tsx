@@ -24,6 +24,7 @@ export function ProviderEditor({
   discovering,
   host,
   onApiKeyChange,
+  onCopyApiKey,
   onChange,
   onDelete,
   onDiscover,
@@ -39,6 +40,7 @@ export function ProviderEditor({
   discovering: boolean;
   host: ModelProviderRendererHost;
   onApiKeyChange(value: string): void;
+  onCopyApiKey(): Promise<void>;
   onChange(provider: ProviderConfigState): void;
   onDelete(): void;
   onDiscover(): Promise<ProviderConfigState['models'] | undefined>;
@@ -104,6 +106,7 @@ export function ProviderEditor({
           translate={translate}
           ui={ui}
           onApiKeyChange={onApiKeyChange}
+          onCopyApiKey={onCopyApiKey}
           onChange={onChange}
           onProviderIdentityChange={onProviderIdentityChange}
         />

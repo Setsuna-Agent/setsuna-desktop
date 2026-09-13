@@ -4,6 +4,7 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "jsx": "react-jsx",
     "strict": true,
@@ -46,6 +47,7 @@
     }
   },
   "include": [
+    "package.json",
     "apps/desktop/renderer/src/**/*.ts",
     "apps/desktop/renderer/src/**/*.tsx",
     "apps/desktop/renderer/test/**/*.ts",

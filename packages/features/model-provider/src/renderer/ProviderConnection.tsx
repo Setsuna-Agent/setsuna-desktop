@@ -12,6 +12,7 @@ import type {
 import { TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import type { ModelProviderCatalog } from '../contracts/index.js';
+import { ProviderApiKeyField } from './ProviderApiKeyField.js';
 import {
   CUSTOM_PROVIDER_ID,
   catalogPlanForConfig,
@@ -25,6 +26,7 @@ export function ProviderConnection({
   apiKey,
   catalog,
   onApiKeyChange,
+  onCopyApiKey,
   onChange,
   onProviderIdentityChange,
   provider,
@@ -35,6 +37,7 @@ export function ProviderConnection({
   apiKey: string;
   catalog: ModelProviderCatalog;
   onApiKeyChange(value: string): void;
+  onCopyApiKey(): Promise<void>;
   onChange(provider: ProviderConfigState): void;
   onProviderIdentityChange(provider: ProviderConfigState): void;
   provider: ProviderConfigState;
@@ -94,21 +97,16 @@ export function ProviderConnection({
             </ui.SelectField>
           </Field>
         ) : null}
-        <Field
+        <ProviderApiKeyField
+          apiKey={apiKey}
+          apiKeyPreview={provider.apiKeyPreview}
+          apiKeySet={provider.apiKeySet}
           className={catalogProvider && catalogProvider.plans.length > 1 ? 'is-wide' : ''}
-          label={translate('feature.modelProvider.apiKey')}
-          meta={provider.apiKeySet ? provider.apiKeyPreview : undefined}
-        >
-          <ui.TextField
-            autoComplete="off"
-            placeholder={provider.apiKeySet
-              ? translate('feature.modelProvider.keepApiKey')
-              : translate('feature.modelProvider.enterApiKey')}
-            type="password"
-            value={apiKey}
-            onChange={(event) => onApiKeyChange(event.target.value)}
-          />
-        </Field>
+          translate={translate}
+          ui={ui}
+          onChange={onApiKeyChange}
+          onCopy={onCopyApiKey}
+        />
         {custom ? (
           <>
             <Field label={translate('feature.modelProvider.protocol')}>
@@ -190,15 +188,14 @@ export function ProviderConnection({
   );
 }
 
-function Field({ children, className = '', label, meta }: Readonly<{
+function Field({ children, className = '', label }: Readonly<{
   children: React.ReactNode;
   className?: string;
   label: string;
-  meta?: string;
 }>) {
   return (
     <label className={`model-provider-settings__field ${className}`}>
-      <span>{label}{meta ? <em>{meta}</em> : null}</span>
+      <span>{label}</span>
       {children}
     </label>
   );
