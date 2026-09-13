@@ -283,6 +283,7 @@ class SecureMcpOAuthProvider implements OAuthClientProvider {
 }
 
 function oauthCredentialKeys(server: RuntimeMcpServerInput) {
+  // Hash public server coordinates into vault lookup keys; tokens remain in secure storage.
   const identity = createHash('sha256').update(`${server.key}\0${server.url ?? ''}`).digest('hex');
   const prefix = `mcp.oauth.${identity}`;
   return {

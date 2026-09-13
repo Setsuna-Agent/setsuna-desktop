@@ -44,7 +44,7 @@ export async function createRepositorySourceFixture() {
     bytes = new Uint8Array(await readFile(archive));
   };
   await publish(revision);
-  const fetch = vi.fn(async (url: string | URL) => String(url).includes('api.github.com')
+  const fetch = vi.fn(async (url: string | URL) => new URL(url).origin === 'https://api.github.com'
     ? Response.json({ object: { sha: revision } }) : new Response(bytes));
   return { root, source, fetch, publish };
 }

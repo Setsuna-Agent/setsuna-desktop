@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FilePluginDraftStore } from '../../../src/adapters/plugin/file-plugin-draft-store.js';
+import { readPluginManifest } from '../../../src/adapters/plugin/file-plugin-bundle-model.js';
 
 describe('file plugin draft store', () => {
   it('atomically replaces a complete managed draft and removes omitted files', async () => {
@@ -16,14 +17,21 @@ describe('file plugin draft store', () => {
           schemaVersion: 2,
           id: 'demo',
           name: 'Demo Plugin',
-          resources: [{ id: 'guide', label: 'Guide', path: 'resources/guide.md' }],
+          resources: [{ id: 'guide', label: 'Guide', path: 'resources\\guide.md' }],
+          extension: {
+            apiVersion: 1, runtime: 'node-worker', entry: 'extension\\entry.mjs', capabilities: ['tools'],
+          },
         },
-        files: [{ path: 'resources/guide.md', content: '# Guide\n' }],
+        files: [
+          { path: 'resources/guide.md', content: '# Guide\n' },
+          { path: 'extension/entry.mjs', content: 'export default function activate() {}\n' },
+        ],
       });
 
       expect(first).toEqual({ pluginId: 'demo', path: path.join(draftsRoot, 'demo') });
       await expect(readFile(path.join(first.path, 'resources', 'guide.md'), 'utf8')).resolves.toBe('# Guide\n');
       await expect(readFile(path.join(first.path, '.setsuna-plugin', 'plugin.json'), 'utf8')).resolves.toContain('"schemaVersion": 2');
+      expect((await readPluginManifest(first.path)).extension?.entry).toBe(path.join('extension', 'entry.mjs'));
 
       await store.writeDraft({
         pluginId: 'demo',

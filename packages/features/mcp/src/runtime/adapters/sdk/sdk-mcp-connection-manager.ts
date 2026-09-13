@@ -746,6 +746,7 @@ export function threadScopeId(threadId: string): string {
 }
 
 function connectionFingerprint(server: RuntimeMcpServerInput): string {
+  // In-memory cache identity for detecting configuration changes, never a stored password verifier.
   const connectionConfig = {
     transport: normalizedMcpTransport(server),
     command: server.command?.trim(),

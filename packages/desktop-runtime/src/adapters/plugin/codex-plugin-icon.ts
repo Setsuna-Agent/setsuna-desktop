@@ -39,5 +39,16 @@ async function readIcon(root: string, relativePath: unknown): Promise<string | u
 function isSvgImage(bytes: Buffer): boolean {
   // This recognizes the format; the security boundary is SVG's image mode in
   // <img>, which disables scripts, interaction and external resource loading.
-  return /^(?:\s|<\?xml[\s\S]*?\?>|<!--[\s\S]*?-->)*<svg(?:\s|>)/u.test(bytes.toString('utf8'));
+  const text = bytes.toString('utf8');
+  let cursor = 0;
+  while (cursor < text.length) {
+    if (/\s/u.test(text[cursor])) { cursor += 1; continue; }
+    const closing = text.startsWith('<?xml', cursor) ? '?>' : text.startsWith('<!--', cursor) ? '-->' : undefined;
+    if (!closing) return text.startsWith('<svg', cursor) && /[\s>]/u.test(text[cursor + 4] ?? '');
+    // Consume each prolog/comment exactly once, including malformed artwork.
+    const end = text.indexOf(closing, cursor + (closing === '?>' ? 5 : 4));
+    if (end < 0) return false;
+    cursor = end + closing.length;
+  }
+  return false;
 }

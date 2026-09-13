@@ -16,8 +16,10 @@ describe('plugin references', () => {
     const reference = pluginMentionText({ id: 'github', name: 'GitHub' });
     const content = [
       `\`${reference}\``,
+      `\`\`literal \` ${reference}\`\``,
       '```markdown', reference, '```',
       '~~~', reference, '~~~',
+      '~~~~', reference, '~~~~~',
       '[$bad](plugin://%zz) [$bad](plugin://has%20space) [$bad](plugin://%00)',
       reference,
       '```', reference,
@@ -26,6 +28,19 @@ describe('plugin references', () => {
       pluginId: 'github', label: 'GitHub',
       start: content.lastIndexOf(reference, content.lastIndexOf('```')),
       end: content.lastIndexOf(reference, content.lastIndexOf('```')) + reference.length,
+    }]);
+  });
+
+  it('handles long malformed message text and still finds a later selection', () => {
+    const reference = pluginMentionText({ id: 'github', name: 'GitHub' });
+    const content = [
+      `Unclosed inline code ${'`'.repeat(30_000)}`,
+      '[$\\'.repeat(20_000),
+      '[$\\](plugin://' + '[$!](plugin://!'.repeat(15_000),
+      reference,
+    ].join('\r\n');
+    expect(parsePluginMentions(content)).toEqual([{
+      pluginId: 'github', label: 'GitHub', start: content.length - reference.length, end: content.length,
     }]);
   });
 });

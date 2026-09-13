@@ -22,3 +22,17 @@ it('projects local light and dark artwork as image data and excludes external or
   expect(await readCodexPluginIcon(bundle, { logo: './large.png', composerIcon: './logo.png' })).toEqual({ light: icon!.light });
   expect(normalizePluginIconImage({ light: 'data:text/html;base64,PHNjcmlwdD4=' })).toBeUndefined();
 });
+
+it('reads SVG prologs without backtracking through malformed repository artwork', async () => {
+  const bundle = await createTestTempDirectory('setsuna-plugin-icon-prolog-');
+  const prolog = '<?xml version="1.0"?>\n<!-- artwork -->\n';
+  const svg = `${prolog}<svg xmlns="http://www.w3.org/2000/svg"></svg>`;
+  await writeFile(path.join(bundle, 'logo.svg'), svg);
+  expect(await readCodexPluginIcon(bundle, { logo: 'logo.svg' })).toEqual({
+    light: `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`,
+  });
+  for (const text of ['<?xml?>'.repeat(8_000), '<!---->'.repeat(8_000), `${prolog}<!-- unclosed`]) {
+    await writeFile(path.join(bundle, 'logo.svg'), text);
+    expect(await readCodexPluginIcon(bundle, { logo: 'logo.svg' })).toBeUndefined();
+  }
+});

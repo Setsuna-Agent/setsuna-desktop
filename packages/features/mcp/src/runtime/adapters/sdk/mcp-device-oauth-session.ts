@@ -150,6 +150,7 @@ export class McpDeviceOAuthSession {
 }
 
 function tokenKey(server: RuntimeMcpServerInput): string {
+  // Vault lookup namespace from public server coordinates and client id, not a password verifier.
   const identity = `${server.key}\0${server.url}\0${mcpDeviceOAuthProvider(server)?.clientId}`;
   return `mcp.device-oauth.${createHash('sha256').update(identity).digest('hex')}`;
 }

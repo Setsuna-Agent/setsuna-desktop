@@ -169,7 +169,7 @@ describe('repository plugin marketplace', () => {
   it('keeps the last successful snapshot when a download is corrupt', async () => {
     const { marketplace, fetch } = await repositoryFixture();
     await marketplace.listPlugins({ refreshRepositories: true });
-    fetch.mockImplementation(async (url) => String(url).includes('api.github.com')
+    fetch.mockImplementation(async (url) => new URL(url).origin === 'https://api.github.com'
       ? Response.json({ object: { sha: SECOND_REVISION } }) : new Response('not a gzip archive'));
     const catalog = await marketplace.listPlugins({ refreshRepositories: true });
     expect(catalog.errors).toHaveLength(1);
