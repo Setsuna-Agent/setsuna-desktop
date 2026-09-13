@@ -11,6 +11,22 @@ export type UsageCustomTimeRange = {
   to: string;
 };
 
+/** 自定义时段校验失败的原因；用于给出比“边框标红”更明确的提示。 */
+export type UsageCustomRangeIssue = 'invalid-from' | 'invalid-to' | 'end-before-start';
+
+/**
+ * 校验自定义时段并返回具体原因。`usageQueryForCustomRange` 只回答“能不能查”，
+ * 这里补上“为什么不能”，供 UI 展示可读提示。
+ */
+export function inspectUsageCustomRange(range: UsageCustomTimeRange): UsageCustomRangeIssue | null {
+  const from = parseLocalDateTime(range.from);
+  if (!from) return 'invalid-from';
+  const to = parseLocalDateTime(range.to);
+  if (!to) return 'invalid-to';
+  if (from > to) return 'end-before-start';
+  return null;
+}
+
 export function usageQueryForPreset(
   preset: Exclude<UsageTimePreset, 'all'>,
   now: Date = new Date(),
@@ -27,15 +43,16 @@ export function usageQueryForPreset(
 }
 
 /**
- * 自定义输入按用户设备的本地时间解析，并把结束分钟转换成 exclusive 上界，
- * 确保用户选择的整分钟都被包含，同时不向界面暴露秒。
+ * 自定义输入按用户设备的本地时间解析；滚轮只精确到分，所以结束分钟按整分钟包含，
+ * 上界加满一分钟再取 ISO 字符串。
  */
 export function usageQueryForCustomRange(
   range: UsageCustomTimeRange,
 ): RuntimeUsageQuery | null {
+  if (inspectUsageCustomRange(range)) return null;
   const from = parseLocalDateTime(range.from);
   const selectedTo = parseLocalDateTime(range.to);
-  if (!from || !selectedTo || from > selectedTo) return null;
+  if (!from || !selectedTo) return null;
   return {
     from: from.toISOString(),
     to: new Date(selectedTo.getTime() + MINUTE_MS).toISOString(),
@@ -51,26 +68,56 @@ export function defaultUsageCustomTimeRange(now: Date = new Date()): UsageCustom
 }
 
 function parseLocalDateTime(value: string): Date | null {
-  const match = /^(\d{4})[-/](\d{2})[-/](\d{2})[T ](\d{2}):(\d{2})$/u.exec(value);
-  if (!match) return null;
-  const parts = match.slice(1).map(Number);
-  const date = new Date(parts[0], parts[1] - 1, parts[2], parts[3], parts[4], 0, 0);
-  return date.getFullYear() === parts[0]
-    && date.getMonth() === parts[1] - 1
-    && date.getDate() === parts[2]
-    && date.getHours() === parts[3]
-    && date.getMinutes() === parts[4]
+  const parts = parseUsageCustomTimeValue(value);
+  if (!parts) return null;
+  const date = new Date(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, 0, 0);
+  return date.getFullYear() === parts.year
+    && date.getMonth() === parts.month - 1
+    && date.getDate() === parts.day
+    && date.getHours() === parts.hour
+    && date.getMinutes() === parts.minute
     ? date
     : null;
 }
 
-export function formatUsageCustomTimeValue(value: Date): string {
-  const year = String(value.getFullYear()).padStart(4, '0');
-  const month = String(value.getMonth() + 1).padStart(2, '0');
-  const day = String(value.getDate()).padStart(2, '0');
-  const hour = String(value.getHours()).padStart(2, '0');
-  const minute = String(value.getMinutes()).padStart(2, '0');
-  return `${year}/${month}/${day} ${hour}:${minute}`;
+export type UsageCustomTimeParts = {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+};
+
+/** 解析 `YYYY/MM/DD HH:mm`；越界日期（例如 2 月 30 日）返回 null。 */
+export function parseUsageCustomTimeValue(value: string): UsageCustomTimeParts | null {
+  const match = /^(\d{4})[-/](\d{2})[-/](\d{2})[T ](\d{2}):(\d{2})$/u.exec(value);
+  if (!match) return null;
+  const [year, month, day, hour, minute] = match.slice(1).map(Number);
+  const date = new Date(year, month - 1, day, hour, minute, 0, 0);
+  return date.getFullYear() === year
+    && date.getMonth() === month - 1
+    && date.getDate() === day
+    && date.getHours() === hour
+    && date.getMinutes() === minute
+    ? { year, month, day, hour, minute }
+    : null;
+}
+
+export function formatUsageCustomTimeValue(value: Date | UsageCustomTimeParts): string {
+  const parts = value instanceof Date
+    ? {
+      year: value.getFullYear(),
+      month: value.getMonth() + 1,
+      day: value.getDate(),
+      hour: value.getHours(),
+      minute: value.getMinutes(),
+    }
+    : value;
+  return [
+    String(parts.year).padStart(4, '0'),
+    String(parts.month).padStart(2, '0'),
+    String(parts.day).padStart(2, '0'),
+  ].join('/') + ` ${[parts.hour, parts.minute].map((part) => String(part).padStart(2, '0')).join(':')}`;
 }
 
 function validDate(value: Date): Date | null {

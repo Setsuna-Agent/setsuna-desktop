@@ -71,15 +71,52 @@ describe('UsageSettings', () => {
     expect(screen.getByText('1 个活跃日')).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: '自定义' }));
-    const fromInput = await screen.findByLabelText('开始时间');
-    const toInput = screen.getByLabelText('结束时间');
-    expect((fromInput as HTMLInputElement).type).toBe('text');
-    expect((fromInput as HTMLInputElement).value).toMatch(/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}$/u);
-    expect((toInput as HTMLInputElement).type).toBe('text');
-    expect((toInput as HTMLInputElement).value).toMatch(/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}$/u);
+    // 自定义时段使用滚轮选择，年月日与时分各自成组，不再暴露文本输入。
+    await screen.findByLabelText('开始时间 年');
+    for (const label of ['开始时间 年', '开始时间 月', '开始时间 日', '开始时间 时', '开始时间 分',
+      '结束时间 年', '结束时间 月', '结束时间 日', '结束时间 时', '结束时间 分']) {
+      expect(screen.getByLabelText(label)).toBeTruthy();
+    }
+    const startMinute = screen.getByLabelText('开始时间 分');
+    // 分钟滚轮取值是 0-59 的十进制文本；不假设零填充，避免依赖运行时刻。
+    const minuteText = startMinute.getAttribute('aria-valuetext') ?? '';
+    expect(Number(minuteText)).toBeGreaterThanOrEqual(0);
+    expect(Number(minuteText)).toBeLessThanOrEqual(59);
+    expect(screen.queryByLabelText('开始时间 秒')).toBeNull();
+    // 弹窗内容经 portal 渲染，不在 container 内。
+    expect(document.querySelectorAll('.sd-wheel-picker').length).toBe(10);
     expect(screen.getByLabelText('统计时段').querySelector('input')).toBeNull();
     expect(container.querySelector('input[type="datetime-local"]')).toBeNull();
     expect(screen.getByText('过去一年的每日消耗')).toBeTruthy();
+  });
+
+  it('explains a reversed custom range instead of only outlining the field', async () => {
+    const user = userEvent.setup();
+    const query = vi.fn(async () => usageResponse(100));
+    render(
+      <UsageSettingsView
+        host={{ BrandIcon: () => null, Tooltip: usageTestUi.Tooltip }}
+        service={usageService(query)}
+        translate={usageTestTranslate}
+        ui={usageTestUi}
+      />,
+    );
+
+    await user.click(await screen.findByRole('button', { name: '自定义' }));
+
+    // 默认范围合法：既没有提示，也没有字段标红。
+    const yearWheel = await screen.findByLabelText('开始时间 年');
+    expect(screen.queryByText('结束时间不能早于开始时间，请重新选择。')).toBeNull();
+    expect(document.querySelector('.settings-usage-custom-range__field.is-invalid')).toBeNull();
+
+    // 把开始时间推到年份上界，必然晚于结束时间。
+    yearWheel.focus();
+    await user.keyboard('{End}');
+
+    await screen.findByText('结束时间不能早于开始时间，请重新选择。');
+    expect(screen.getByRole('button', { name: '应用筛选' })).toHaveProperty('disabled', true);
+    // 两个字段都标红，提示指向具体原因。
+    expect(document.querySelectorAll('.settings-usage-custom-range__field.is-invalid').length).toBe(2);
   });
 
   it('keeps the base provider catalog when filtered queries omit it', async () => {
