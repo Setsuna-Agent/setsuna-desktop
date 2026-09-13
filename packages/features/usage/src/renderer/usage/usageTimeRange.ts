@@ -88,6 +88,16 @@ export type UsageCustomTimeParts = {
   minute: number;
 };
 
+/** Merge one wheel's change into the latest value and keep the resulting local date editable. */
+export function updateUsageCustomTimeValue(value: string, patch: Partial<UsageCustomTimeParts>): string {
+  const parts = parseUsageCustomTimeValue(value);
+  if (!parts) return value;
+  const next = { ...parts, ...patch };
+  const day = Math.min(next.day, new Date(next.year, next.month, 0).getDate());
+  // Clamp month ends before constructing Date; Date also advances across a local DST gap.
+  return formatUsageCustomTimeValue(new Date(next.year, next.month - 1, day, next.hour, next.minute));
+}
+
 /** 解析 `YYYY/MM/DD HH:mm`；越界日期（例如 2 月 30 日）返回 null。 */
 export function parseUsageCustomTimeValue(value: string): UsageCustomTimeParts | null {
   const match = /^(\d{4})[-/](\d{2})[-/](\d{2})[T ](\d{2}):(\d{2})$/u.exec(value);

@@ -1,15 +1,16 @@
 import { Button, Popover, WheelPicker, type WheelPickerOption } from '@setsuna-desktop/renderer-ui';
 
 import { CalendarDays, TriangleAlert } from 'lucide-react';
-import { useState } from 'react';
+import { useState, type Dispatch, type SetStateAction } from 'react';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import {
   defaultUsageCustomTimeRange,
-  formatUsageCustomTimeValue,
   inspectUsageCustomRange,
   parseUsageCustomTimeValue,
+  updateUsageCustomTimeValue,
   usageQueryForCustomRange,
   type UsageCustomTimeRange,
+  type UsageCustomTimeParts,
   type UsageTimePreset,
   type UsageTimeRangeId,
 } from './usageTimeRange.js';
@@ -110,7 +111,7 @@ function UsageCustomRangeEditor({
   valid: boolean;
   onApply: () => void;
   onCancel: () => void;
-  onChange: (range: UsageCustomTimeRange) => void;
+  onChange: Dispatch<SetStateAction<UsageCustomTimeRange>>;
 }) {
   const { translate: t } = useUsageView();
   // 校验失败时按原因精确定位提示：解析失败标对应字段，“结束早于开始”标两个字段。
@@ -135,13 +136,19 @@ function UsageCustomRangeEditor({
           invalid={issue === 'invalid-from' || issue === 'end-before-start'}
           label={t('feature.usage.from')}
           value={range.from}
-          onChange={(from) => onChange({ ...range, from })}
+          onChange={(patch) => onChange((current) => ({
+            ...current,
+            from: updateUsageCustomTimeValue(current.from, patch),
+          }))}
         />
         <UsageCustomRangeField
           invalid={issue === 'invalid-to' || issue === 'end-before-start'}
           label={t('feature.usage.to')}
           value={range.to}
-          onChange={(to) => onChange({ ...range, to })}
+          onChange={(patch) => onChange((current) => ({
+            ...current,
+            to: updateUsageCustomTimeValue(current.to, patch),
+          }))}
         />
       </div>
       <footer className="settings-usage-custom-range__footer">
@@ -176,14 +183,10 @@ function UsageCustomRangeField({
   invalid: boolean;
   label: string;
   value: string;
-  onChange: (value: string) => void;
+  onChange: (patch: Partial<UsageCustomTimeParts>) => void;
 }) {
-  // 滚轮只负责年月日与时分秒两段，数值范围由当前值推导，避免为每个月重建选项。
+  const { translate: t } = useUsageView();
   const parts = parseUsageCustomTimeValue(value);
-  const update = (patch: Partial<NonNullable<typeof parts>>) => {
-    if (!parts) return;
-    onChange(formatUsageCustomTimeValue({ ...parts, ...patch }));
-  };
 
   return (
     <div className={['settings-usage-custom-range__field', invalid ? 'is-invalid' : ''].filter(Boolean).join(' ')}>
@@ -192,36 +195,36 @@ function UsageCustomRangeField({
         <div className="settings-usage-custom-range__wheels">
           <div className="settings-usage-custom-range__group">
             <WheelPicker
-              aria-label={`${label} 年`}
+              aria-label={`${label} ${t('feature.usage.year')}`}
               options={yearOptions(parts.year)}
               value={String(parts.year)}
-              onValueChange={(year) => update({ year: Number(year) })}
+              onValueChange={(year) => onChange({ year: Number(year) })}
             />
             <WheelPicker
-              aria-label={`${label} 月`}
+              aria-label={`${label} ${t('feature.usage.month')}`}
               options={rangeOptions(1, 12)}
               value={String(parts.month)}
-              onValueChange={(month) => update({ month: Number(month) })}
+              onValueChange={(month) => onChange({ month: Number(month) })}
             />
             <WheelPicker
-              aria-label={`${label} 日`}
+              aria-label={`${label} ${t('feature.usage.day')}`}
               options={rangeOptions(1, daysInMonth(parts.year, parts.month))}
               value={String(parts.day)}
-              onValueChange={(day) => update({ day: Number(day) })}
+              onValueChange={(day) => onChange({ day: Number(day) })}
             />
           </div>
           <div className="settings-usage-custom-range__group">
             <WheelPicker
-              aria-label={`${label} 时`}
+              aria-label={`${label} ${t('feature.usage.hour')}`}
               options={rangeOptions(0, 23)}
               value={String(parts.hour)}
-              onValueChange={(hour) => update({ hour: Number(hour) })}
+              onValueChange={(hour) => onChange({ hour: Number(hour) })}
             />
             <WheelPicker
-              aria-label={`${label} 分`}
+              aria-label={`${label} ${t('feature.usage.minute')}`}
               options={rangeOptions(0, 59)}
               value={String(parts.minute)}
-              onValueChange={(minute) => update({ minute: Number(minute) })}
+              onValueChange={(minute) => onChange({ minute: Number(minute) })}
             />
           </div>
         </div>

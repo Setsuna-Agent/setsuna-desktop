@@ -2,7 +2,7 @@
 // 保留 iOS 风格的动量滚动、吸附和键盘操作；去掉 beUI 的 tick 音效与外部 touch 工具模块，
 // 指针捕获在这里内联实现，视觉与配色跟随宿主 token。
 
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { cn } from './utils.js';
 
 export type WheelPickerOption = string | { label: string; value: string };
@@ -27,11 +27,12 @@ const DECELERATION = 0.0012; // 每毫秒平方衰减的行数；越大越快停
 const MAX_VELOCITY = 0.09; // 每毫秒行数上界
 // 滚轮位移按 deltaY * WHEEL_SENS * itemHeight 换算。取默认行高 36px 时，
 // 一次滚轮 tick（约 100px）≈ 1 行，避免轻微滚动就跨越十几行。
-const WHEEL_SENS = 1 / (100 * 36);
+const WHEEL_SENS = 1 / 100;
 // 拖拽阻尼：手指位移乘该系数后才换算成行进距离。取 0.4 时拖动约 90px 才换
 // 一行，避免行高偏小时“轻轻一动就跳好几行”。
 const DRAG_RATIO = 0.4;
 const WHEEL_SETTLE = 110; // 毫秒，滚轮静默后吸附
+const VELOCITY_MAX_AGE = 100; // A held drag has no release momentum once its last sample expires.
 const BACK = 1.35;
 
 function clamp(value: number, lower: number, upper: number): number {
@@ -75,10 +76,12 @@ export function WheelPicker({
   const selectedValue = uncontrolled ? internalValue : value;
   const selectedIndex = Math.max(0, values.indexOf(selectedValue ?? ''));
 
+  const wheelRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   // 滚动位置在动画帧之间直接读写，避免每帧触发 React 渲染。
-  const offsetRef = useRef(0);
+  const offsetRef = useRef(selectedIndex * itemHeight);
   const frameRef = useRef(0);
+  const committedValueRef = useRef(selectedValue);
   const velocityRef = useRef({ lastY: 0, lastTime: 0, value: 0 });
   const wheelTimerRef = useRef(0);
   const dragRef = useRef({ active: false, startY: 0, startOffset: 0 });
@@ -86,6 +89,7 @@ export function WheelPicker({
   const [activeIndex, setActiveIndex] = useState(selectedIndex);
 
   const maxOffset = Math.max(0, (values.length - 1) * itemHeight);
+  const geometryRef = useRef({ itemHeight, maxOffset, padding });
 
   const applyOffset = useCallback((offset: number) => {
     const next = clamp(offset, 0, maxOffset);
@@ -98,19 +102,22 @@ export function WheelPicker({
 
   const commitIndex = useCallback((index: number) => {
     const next = values[clamp(index, 0, Math.max(0, values.length - 1))];
-    if (next === undefined || next === selectedValue) return;
+    if (next === undefined || next === committedValueRef.current) return;
+    committedValueRef.current = next;
     if (uncontrolled) setInternalValue(next);
     onValueChange?.(next);
-  }, [onValueChange, selectedValue, uncontrolled, values]);
+  }, [onValueChange, uncontrolled, values]);
 
-  const stopAnimation = useCallback(() => {
+  const stopMotion = useCallback(() => {
     if (frameRef.current) cancelAnimationFrame(frameRef.current);
     frameRef.current = 0;
+    if (wheelTimerRef.current) window.clearTimeout(wheelTimerRef.current);
+    wheelTimerRef.current = 0;
   }, []);
 
   /** 吸附到最近一行；非减速动画用 easeOutBack 制造一次轻微过冲回弹。 */
   const snapTo = useCallback((targetIndex: number, withBounce: boolean) => {
-    stopAnimation();
+    stopMotion();
     const from = offsetRef.current;
     const to = clamp(targetIndex * itemHeight, 0, maxOffset);
     const distance = to - from;
@@ -130,15 +137,15 @@ export function WheelPicker({
       } else {
         frameRef.current = 0;
         applyOffset(to);
-        commitIndex(targetIndex);
       }
     };
     frameRef.current = requestAnimationFrame(step);
-  }, [applyOffset, commitIndex, itemHeight, maxOffset, reduceMotion, stopAnimation]);
+    // Selection is state, animation is presentation: Apply must never wait for a frame.
+    commitIndex(targetIndex);
+  }, [applyOffset, commitIndex, itemHeight, maxOffset, reduceMotion, stopMotion]);
 
   /** 释放后按速度滑行，再交给吸附动画。 */
   const fling = useCallback((velocity: number) => {
-    stopAnimation();
     const direction = Math.sign(velocity);
     // v² / (2a) 得到滑行行数，再换算成像素。
     const travelled = (velocity * velocity) / (2 * DECELERATION) * itemHeight;
@@ -149,20 +156,25 @@ export function WheelPicker({
     );
     const targetIndex = Math.round(target / itemHeight);
     snapTo(targetIndex, false);
-  }, [itemHeight, maxOffset, snapTo, stopAnimation]);
+  }, [itemHeight, maxOffset, snapTo]);
 
   // 外部值变化、选项变化时校正位置。
-  useEffect(() => {
-    if (dragRef.current.active || frameRef.current) return;
-    const current = Math.round(offsetRef.current / itemHeight);
-    if (current === selectedIndex) return;
+  useLayoutEffect(() => {
+    const previous = geometryRef.current;
+    const geometryChanged = previous.itemHeight !== itemHeight || previous.maxOffset !== maxOffset || previous.padding !== padding;
+    const externallyChanged = selectedValue !== committedValueRef.current;
+    geometryRef.current = { itemHeight, maxOffset, padding };
+    committedValueRef.current = selectedValue;
+    // Preserve gesture offsets and the animation of our own committed value. Changing
+    // option bounds (month length/year range) or receiving a different value cancels it.
+    if (!disabled && !geometryChanged && !externallyChanged
+      && (dragRef.current.active || wheelTimerRef.current || frameRef.current)) return;
+    stopMotion();
+    dragRef.current.active = false;
     applyOffset(selectedIndex * itemHeight);
-  }, [applyOffset, itemHeight, selectedIndex, values.length]);
+  }, [applyOffset, disabled, itemHeight, maxOffset, padding, selectedIndex, selectedValue, stopMotion]);
 
-  useEffect(() => () => {
-    stopAnimation();
-    if (wheelTimerRef.current) window.clearTimeout(wheelTimerRef.current);
-  }, [stopAnimation]);
+  useEffect(() => stopMotion, [stopMotion]);
 
   const nearestIndex = () => clamp(Math.round(offsetRef.current / itemHeight), 0, Math.max(0, values.length - 1));
 
@@ -170,10 +182,10 @@ export function WheelPicker({
     if (disabled) return;
     if (event.key === 'ArrowUp') {
       event.preventDefault();
-      snapTo(clamp(nearestIndex() - 1, 0, values.length - 1), true);
+      snapTo(clamp(selectedIndex - 1, 0, values.length - 1), true);
     } else if (event.key === 'ArrowDown') {
       event.preventDefault();
-      snapTo(clamp(nearestIndex() + 1, 0, values.length - 1), true);
+      snapTo(clamp(selectedIndex + 1, 0, values.length - 1), true);
     } else if (event.key === 'Home') {
       event.preventDefault();
       snapTo(0, true);
@@ -184,20 +196,30 @@ export function WheelPicker({
   };
 
   /** 滚轮：累计增量后静默数百毫秒再吸附，避免逐帧抖动。 */
-  const handleWheel = (event: { deltaY: number; preventDefault: () => void }) => {
-    if (disabled) return;
+  const handleWheel = useCallback((event: WheelEvent) => {
+    if (disabled || dragRef.current.active) return;
     event.preventDefault();
-    stopAnimation();
-    applyOffset(offsetRef.current + event.deltaY * WHEEL_SENS * itemHeight);
-    if (wheelTimerRef.current) window.clearTimeout(wheelTimerRef.current);
+    stopMotion();
+    // Wheel events can report pixels, lines or pages. Normalize all three to rows.
+    const rowsPerUnit = event.deltaMode === 1 ? 1 : event.deltaMode === 2 ? rows : WHEEL_SENS;
+    const offset = applyOffset(offsetRef.current + event.deltaY * rowsPerUnit * itemHeight);
     wheelTimerRef.current = window.setTimeout(() => {
       wheelTimerRef.current = 0;
-      snapTo(nearestIndex(), true);
+      snapTo(Math.round(offsetRef.current / itemHeight), true);
     }, WHEEL_SETTLE);
-  };
+    commitIndex(Math.round(offset / itemHeight));
+  }, [applyOffset, commitIndex, disabled, itemHeight, rows, snapTo, stopMotion]);
+
+  useEffect(() => {
+    const node = wheelRef.current;
+    // React's delegated wheel listener is passive, so use a cancellable native listener.
+    node?.addEventListener('wheel', handleWheel, { passive: false });
+    return () => node?.removeEventListener('wheel', handleWheel);
+  }, [handleWheel]);
 
   const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (disabled || event.button !== 0) return;
+    stopMotion();
     dragRef.current = { active: true, startY: event.clientY, startOffset: offsetRef.current };
     velocityRef.current = { lastY: event.clientY, lastTime: event.timeStamp, value: 0 };
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -206,14 +228,16 @@ export function WheelPicker({
   const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
     if (!dragRef.current.active) return;
     // 阻尼后的位移既用于跟手，也用于速度估算，保证滑行与手感一致。
-    applyOffset(dragRef.current.startOffset + (dragRef.current.startY - event.clientY) * DRAG_RATIO);
+    const offset = applyOffset(dragRef.current.startOffset + (dragRef.current.startY - event.clientY) * DRAG_RATIO);
     const sample = velocityRef.current;
     const elapsed = event.timeStamp - sample.lastTime;
     if (elapsed > 0) {
-      sample.value = ((sample.lastY - event.clientY) * DRAG_RATIO) / elapsed;
+      // Fling physics uses rows/ms, while pointer events supply pixels.
+      sample.value = ((sample.lastY - event.clientY) * DRAG_RATIO) / (elapsed * itemHeight);
       sample.lastY = event.clientY;
       sample.lastTime = event.timeStamp;
     }
+    commitIndex(Math.round(offset / itemHeight));
   };
 
   const handlePointerUp = (event: PointerEvent<HTMLDivElement>) => {
@@ -222,7 +246,10 @@ export function WheelPicker({
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-    const velocity = clamp(velocityRef.current.value, -MAX_VELOCITY, MAX_VELOCITY);
+    const sample = velocityRef.current;
+    const velocity = event.type === 'pointercancel' || event.timeStamp - sample.lastTime > VELOCITY_MAX_AGE
+      ? 0
+      : clamp(sample.value, -MAX_VELOCITY, MAX_VELOCITY);
     if (Math.abs(velocity) > 0.004) {
       fling(velocity);
     } else {
@@ -238,6 +265,7 @@ export function WheelPicker({
       aria-valuenow={selectedIndex}
       aria-valuetext={labels[selectedIndex]}
       className={cn('sd-wheel-picker', disabled && 'is-disabled', className)}
+      ref={wheelRef}
       role={ariaLabel ? 'listbox' : undefined}
       style={{ '--sd-wheel-picker-item-height': `${itemHeight}px`, '--sd-wheel-picker-rows': rows } as React.CSSProperties}
       tabIndex={disabled ? -1 : 0}
@@ -246,9 +274,8 @@ export function WheelPicker({
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onWheel={handleWheel}
     >
-      <div className="sd-wheel-picker__drum" ref={scrollRef} style={{ transform: `translate3d(0, ${padding - selectedIndex * itemHeight}px, 0)` }}>
+      <div className="sd-wheel-picker__drum" ref={scrollRef} style={{ transform: `translate3d(0, ${padding - offsetRef.current}px, 0)` }}>
         {labels.map((label, index) => {
           // 距中心越远越倾斜、越淡，形成转轮鼓面。
           const distance = index - activeIndex;
