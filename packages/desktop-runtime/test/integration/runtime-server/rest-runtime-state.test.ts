@@ -1,4 +1,5 @@
 import {
+  WORKSPACE_ENTRY_EXISTS_ERROR_CODE,
   WORKSPACE_TEXT_FILE_MAX_BYTES,
   type RuntimeDataMigrationReadiness,
   type RuntimeThread,
@@ -75,6 +76,39 @@ describe('runtime server REST runtime state', () => {
     });
     await harness.runtimeFetch(`${base}/entries?path=source`, { method: 'DELETE' });
     expect((await harness.runtimeFetch(`${base}/entries/search?q=&parent=`)).entries).toEqual([]);
+  });
+
+  it('returns a path-free conflict for duplicate files, folders and rename targets', async () => {
+    const projectPath = path.join(harness.runtimeDataDir, 'collision-project');
+    await mkdir(projectPath);
+    await mkdir(path.join(projectPath, 'test'));
+    await writeFile(path.join(projectPath, 'keep.txt'), 'keep');
+    await writeFile(path.join(projectPath, 'source.txt'), 'source');
+    const project = await harness.runtimeFetch('/v1/projects', {
+      method: 'POST', body: JSON.stringify({ path: projectPath }),
+    });
+    const entriesUrl = `${harness.baseUrl}/v1/projects/${encodeURIComponent(project.id)}/entries`;
+    const requests = [
+      ...(['file', 'directory'] as const).flatMap((type) => ['test', 'keep.txt'].map((name) => ({
+        url: entriesUrl, method: 'POST', body: { parentPath: '', name, type },
+      }))),
+      { url: `${entriesUrl}?path=source.txt`, method: 'PATCH', body: { name: 'keep.txt' } },
+    ];
+    for (const input of requests) {
+      const response = await fetch(input.url, {
+        method: input.method,
+        headers: { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' },
+        body: JSON.stringify(input.body),
+      });
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({
+        code: WORKSPACE_ENTRY_EXISTS_ERROR_CODE,
+        error: 'A file or folder with that name already exists.',
+      });
+    }
+    expect(await readFile(path.join(projectPath, 'keep.txt'), 'utf8')).toBe('keep');
+    expect(await readFile(path.join(projectPath, 'source.txt'), 'utf8')).toBe('source');
+    expect((await stat(path.join(projectPath, 'test'))).isDirectory()).toBe(true);
   });
 
   it('freezes every REST mutation while a WebDAV snapshot is being staged', async () => {

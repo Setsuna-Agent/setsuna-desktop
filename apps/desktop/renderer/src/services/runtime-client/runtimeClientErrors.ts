@@ -1,3 +1,10 @@
+export class RuntimeClientError extends Error {
+  constructor(readonly code: string, message: string) {
+    super(message);
+    this.name = 'RuntimeClientError';
+  }
+}
+
 export function runtimeClientErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }

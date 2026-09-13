@@ -38,9 +38,9 @@ it('rejects collisions without changing either entry and supports casing-only re
   const { store, projectId, projectPath } = await fixture();
   await store.writeFile(projectId, 'existing.txt', 'keep');
   await store.writeFile(projectId, 'source.txt', 'source');
-  await expect(store.createEntry(projectId, { parentPath: '', name: 'existing.txt', type: 'file' })).rejects.toThrow();
-  await expect(store.createEntry(projectId, { parentPath: '', name: 'existing.txt', type: 'directory' })).rejects.toThrow();
-  await expect(store.renameEntry(projectId, 'source.txt', { name: 'existing.txt' })).rejects.toThrow('already exists');
+  await expect(store.createEntry(projectId, { parentPath: '', name: 'existing.txt', type: 'file' })).rejects.toMatchObject({ code: 'EEXIST' });
+  await expect(store.createEntry(projectId, { parentPath: '', name: 'existing.txt', type: 'directory' })).rejects.toMatchObject({ code: 'EEXIST' });
+  await expect(store.renameEntry(projectId, 'source.txt', { name: 'existing.txt' })).rejects.toMatchObject({ code: 'EEXIST' });
   expect(await readFile(path.join(projectPath, 'existing.txt'), 'utf8')).toBe('keep');
   expect(await readFile(path.join(projectPath, 'source.txt'), 'utf8')).toBe('source');
   const outcomes = await Promise.allSettled([0, 1].map(() => store.createEntry(projectId, {

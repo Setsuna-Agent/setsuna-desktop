@@ -23,6 +23,7 @@ import type {
   RuntimeMessagePage,
   RuntimeMessagePageQuery,
   RuntimeRequestInput,
+  RuntimeFeatureOperationResponse,
   RuntimeThread,
   SendTurnInput,
   SendTurnResponse,
@@ -44,6 +45,7 @@ import type {
   WorkspaceSearchResponse,
   WorkspaceStatus,
 } from '@setsuna-desktop/contracts';
+import { RuntimeClientError } from './runtimeClientErrors.js';
 
 /**
  * 基于 preload bridge 构造 renderer 侧 runtime client；renderer 永远不直接访问 runtime 端口。
@@ -54,6 +56,12 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
 
   // 底层 request 只留在适配器闭包内，避免 renderer 业务绕过窄 client 契约。
   const request = <T = unknown>(input: RuntimeRequestInput): Promise<T> => bridge.request<T>(input);
+  const requestEntryMutation = async <T>(input: RuntimeRequestInput): Promise<T> => {
+    // IPC strips custom properties from thrown errors; reuse the structured response envelope.
+    const response = await request<RuntimeFeatureOperationResponse<T>>({ ...input, responseMode: 'feature-operation' });
+    if (!response.ok) throw new RuntimeClientError(response.error.code, response.error.message);
+    return response.value;
+  };
 
   return {
     applyThreadFileChanges(threadId: string, input: ThreadFileChangesInput, action: WorkspaceFileChangeAction) {
@@ -262,18 +270,18 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
       });
     },
     createProjectEntry(projectId: string, input: WorkspaceEntryCreateInput) {
-      return request<WorkspaceEntry>({
+      return requestEntryMutation<WorkspaceEntry>({
         path: `/v1/projects/${encodeURIComponent(projectId)}/entries`, method: 'POST', body: input,
       });
     },
     renameProjectEntry(projectId: string, path: string, input: WorkspaceEntryRenameInput) {
-      return request<WorkspaceEntry>({
+      return requestEntryMutation<WorkspaceEntry>({
         path: `/v1/projects/${encodeURIComponent(projectId)}/entries?path=${encodeURIComponent(path)}`,
         method: 'PATCH', body: input,
       });
     },
     moveProjectEntry(projectId: string, path: string, input: WorkspaceEntryMoveInput) {
-      return request<WorkspaceEntry>({
+      return requestEntryMutation<WorkspaceEntry>({
         path: `/v1/projects/${encodeURIComponent(projectId)}/entries/move?path=${encodeURIComponent(path)}`,
         method: 'POST', body: input,
       });

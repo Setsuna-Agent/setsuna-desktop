@@ -1,4 +1,5 @@
 import {
+  WORKSPACE_ENTRY_EXISTS_ERROR_CODE,
   WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES,
   type WorkspaceFileSaveInput,
   type WorkspaceEntryCreateInput,
@@ -15,6 +16,7 @@ import {
   saveRuntimeWorkspaceFile,
 } from '../runtime/use-cases/workspace-operations.js';
 import { assertSafeRuntimeId } from '../security/runtime-id.js';
+import { isNodeErrorCode } from '../shared/node-errors.js';
 import { RuntimeHttpError } from './http-error.js';
 import { readBody, sendJson } from './http-utils.js';
 import type { RuntimeFactory } from './types.js';
@@ -121,16 +123,16 @@ export async function handleRuntimeWorkspaceRequest(
 
   const projectEntriesMatch = url.pathname.match(/^\/v1\/projects\/([^/]+)\/entries$/u);
   if (projectEntriesMatch && request.method === 'POST') {
-    sendJson(response, 201, await runtime.workspaceProjects.createEntry(
+    sendJson(response, 201, await workspaceEntryMutationForRest(runtime.workspaceProjects.createEntry(
       decodeURIComponent(projectEntriesMatch[1]), await readBody<WorkspaceEntryCreateInput>(request),
-    ));
+    )));
     return true;
   }
   if (projectEntriesMatch && request.method === 'PATCH') {
-    sendJson(response, 200, await runtime.workspaceProjects.renameEntry(
+    sendJson(response, 200, await workspaceEntryMutationForRest(runtime.workspaceProjects.renameEntry(
       decodeURIComponent(projectEntriesMatch[1]), url.searchParams.get('path') ?? '',
       await readBody<WorkspaceEntryRenameInput>(request),
-    ));
+    )));
     return true;
   }
   if (projectEntriesMatch && request.method === 'DELETE') {
@@ -142,10 +144,10 @@ export async function handleRuntimeWorkspaceRequest(
   }
   const projectEntryMoveMatch = url.pathname.match(/^\/v1\/projects\/([^/]+)\/entries\/move$/u);
   if (projectEntryMoveMatch && request.method === 'POST') {
-    sendJson(response, 200, await runtime.workspaceProjects.moveEntry(
+    sendJson(response, 200, await workspaceEntryMutationForRest(runtime.workspaceProjects.moveEntry(
       decodeURIComponent(projectEntryMoveMatch[1]), url.searchParams.get('path') ?? '',
       await readBody<WorkspaceEntryMoveInput>(request),
-    ));
+    )));
     return true;
   }
   const projectEntriesSearchMatch = url.pathname.match(
@@ -212,6 +214,17 @@ export async function handleRuntimeWorkspaceRequest(
   }
 
   return false;
+}
+
+async function workspaceEntryMutationForRest<T>(mutation: Promise<T>): Promise<T> {
+  try {
+    return await mutation;
+  } catch (error) {
+    if (isNodeErrorCode(error, 'EEXIST')) {
+      throw new RuntimeHttpError(409, 'A file or folder with that name already exists.', WORKSPACE_ENTRY_EXISTS_ERROR_CODE);
+    }
+    throw error;
+  }
 }
 
 function runtimeQueryId(value: string | null, label: string): string {
