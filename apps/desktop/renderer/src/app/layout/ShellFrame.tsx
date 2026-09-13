@@ -1,5 +1,5 @@
 import { useConfirm } from '@setsuna-desktop/renderer-ui';
-import { Button } from '@setsuna-desktop/renderer-ui';
+import { Button, MenuSurface } from '@setsuna-desktop/renderer-ui';
 import { Minus, PanelLeft, Plus, X } from 'lucide-react';
 import {
   useCallback,
@@ -284,7 +284,7 @@ function WindowTopbarMenu({ actions }: { actions: WindowMenuActions }) {
             {item.label}
           </Button>
           {openMenu === item.key ? (
-            <span
+            <MenuSurface
               className="app-topbar__menu-popover"
               data-window-menu={item.key}
               role="menu"
@@ -320,7 +320,7 @@ function WindowTopbarMenu({ actions }: { actions: WindowMenuActions }) {
                   {menuItem.label}
                 </Button>
               ))}
-            </span>
+            </MenuSurface>
           ) : null}
         </span>
       ))}

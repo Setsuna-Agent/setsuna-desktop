@@ -385,8 +385,6 @@
   overscroll-behavior: contain;
   font-size: 12.5px;
   line-height: 1.6;
-  scrollbar-color: color-mix(in srgb, currentColor 28%, transparent) transparent;
-  scrollbar-width: thin;
 }
 
 .chat-thinking-disclosure__content .chat-markdown {

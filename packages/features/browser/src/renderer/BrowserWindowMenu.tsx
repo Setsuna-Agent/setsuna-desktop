@@ -1,4 +1,4 @@
-import { Button } from '@setsuna-desktop/renderer-ui';
+import { Button, MenuSurface } from '@setsuna-desktop/renderer-ui';
 import { EllipsisVertical, Minus, Plus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { BrowserTranslate } from './messages.js';
@@ -80,7 +80,7 @@ export function BrowserWindowMenu({
       >
         <EllipsisVertical size={16} />
       </Button>
-      <span className="desktop-browser-window-menu__popover" hidden={!open} role="menu" aria-label={translate('feature.browser.menuSettings')}>
+      {open ? <MenuSurface className="desktop-browser-window-menu__popover" role="menu" aria-label={translate('feature.browser.menuSettings')} style={{ transformOrigin: 'top right' }}>
         <Button variant="ghost" type="button" role="menuitem" onClick={() => runAndClose(onReload)}>
           {translate(loading ? 'feature.browser.stop' : 'feature.browser.reload')}
         </Button>
@@ -130,7 +130,7 @@ export function BrowserWindowMenu({
         <Button variant="ghost" type="button" role="menuitem" onClick={() => runAndClose(onOpenDevTools)}>
           {translate('feature.browser.openDevTools')}
         </Button>
-      </span>
+      </MenuSurface> : null}
     </span>
   );
 }

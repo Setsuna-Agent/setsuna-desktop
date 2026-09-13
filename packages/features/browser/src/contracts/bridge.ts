@@ -2,6 +2,9 @@ import type { DesktopBrowserDeviceEmulation, DesktopBrowserScreenshot } from './
 
 export const BROWSER_IPC_CHANNELS = Object.freeze({
   captureScreenshot: 'browser:capture-screenshot',
+  contextMenu: 'browser:context-menu',
+  dismissContextMenu: 'browser:dismiss-context-menu',
+  runContextMenuAction: 'browser:run-context-menu-action',
   openNewTab: 'browser:open-new-tab',
   reloadTab: 'browser:reload-tab',
   registerTab: 'browser:register-tab',
@@ -19,6 +22,14 @@ export type BrowserOpenNewTabRequest = Readonly<{
 
 export type BrowserReloadMode = 'normal' | 'hard';
 
+export type BrowserContextMenuRequest = Readonly<{
+  id: string;
+  webContentsId: number;
+  x: number;
+  y: number;
+  items: readonly Readonly<{ key: string; type?: 'divider'; label?: string; disabled?: boolean; shortcut?: string }>[];
+}>;
+
 export type BrowserReloadShortcutBindings = Readonly<{
   hard: string | null;
   normal: string | null;
@@ -35,7 +46,11 @@ export interface BrowserDesktopBridge {
   showReloadMenu(
     webContentsId: number,
     shortcutBindings?: BrowserReloadShortcutBindings,
+    point?: Readonly<{ x: number; y: number }>,
   ): Promise<boolean>;
+  runContextMenuAction(menuId: string, key: string): Promise<boolean>;
+  dismissContextMenu(menuId: string): Promise<void>;
+  onContextMenu(callback: (request: BrowserContextMenuRequest | null) => void): () => void;
   onOpenNewTab(callback: (request: BrowserOpenNewTabRequest) => void): () => void;
 }
 

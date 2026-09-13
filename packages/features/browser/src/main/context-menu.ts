@@ -1,7 +1,15 @@
 import type { RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import type { BrowserReloadShortcutBindings } from '../contracts/index.js';
-import type { ContextMenuParams, MenuItemConstructorOptions, WebContents } from 'electron';
+import type { ContextMenuParams, WebContents } from 'electron';
 import { createBrowserNativeTranslate, type BrowserNativeTranslate } from './native-messages.js';
+
+export type BrowserMenuEntry = {
+  type?: 'separator';
+  label?: string;
+  enabled?: boolean;
+  accelerator?: string;
+  click?: () => void;
+};
 
 type BrowserContextMenuParams = Pick<
   ContextMenuParams,
@@ -27,8 +35,8 @@ export function createBrowserContextMenuTemplate(
   contents: WebContents,
   params: BrowserContextMenuParams,
   options: BrowserContextMenuOptions,
-): MenuItemConstructorOptions[] {
-  const items: MenuItemConstructorOptions[] = [];
+): BrowserMenuEntry[] {
+  const items: BrowserMenuEntry[] = [];
   const t = createBrowserNativeTranslate(options.locale ?? 'zh-CN');
 
   appendMenuGroup(items, linkMenuItems(params, options, t));
@@ -43,7 +51,7 @@ export function createBrowserReloadMenuTemplate(
   contents: WebContents,
   locale: RuntimeInterfaceLanguage = 'zh-CN',
   shortcutBindings?: BrowserReloadShortcutBindings,
-): MenuItemConstructorOptions[] {
+): BrowserMenuEntry[] {
   const t = createBrowserNativeTranslate(locale);
   return [
     reloadCommand(
@@ -108,7 +116,7 @@ function linkMenuItems(
   params: BrowserContextMenuParams,
   options: BrowserContextMenuOptions,
   t: BrowserNativeTranslate,
-): MenuItemConstructorOptions[] {
+): BrowserMenuEntry[] {
   if (!params.linkURL) return [];
   return [
     ...(options.canOpenInNewTab(params.linkURL) ? [{
@@ -127,7 +135,7 @@ function imageMenuItems(
   params: BrowserContextMenuParams,
   options: BrowserContextMenuOptions,
   t: BrowserNativeTranslate,
-): MenuItemConstructorOptions[] {
+): BrowserMenuEntry[] {
   if (params.mediaType !== 'image' && !params.hasImageContents) return [];
   const srcURL = params.srcURL.trim();
   return [
@@ -153,7 +161,7 @@ function editMenuItems(
   contents: WebContents,
   params: BrowserContextMenuParams,
   t: BrowserNativeTranslate,
-): MenuItemConstructorOptions[] {
+): BrowserMenuEntry[] {
   const { editFlags } = params;
   if (params.isEditable) {
     return [
@@ -172,7 +180,7 @@ function editMenuItems(
   return [guestCommand(contents, t('browser.copy'), editFlags.canCopy, () => contents.copy())];
 }
 
-function navigationMenuItems(contents: WebContents, t: BrowserNativeTranslate): MenuItemConstructorOptions[] {
+function navigationMenuItems(contents: WebContents, t: BrowserNativeTranslate): BrowserMenuEntry[] {
   return [
     guestCommand(contents, t('browser.back'), contents.canGoBack(), () => contents.goBack()),
     guestCommand(contents, t('browser.forward'), contents.canGoForward(), () => contents.goForward()),
@@ -185,7 +193,7 @@ function guestCommand(
   label: string,
   enabled: boolean,
   action: () => void,
-): MenuItemConstructorOptions {
+): BrowserMenuEntry {
   return {
     click: () => runGuestAction(contents, action),
     enabled,
@@ -198,13 +206,12 @@ function reloadCommand(
   label: string,
   accelerator: string | undefined,
   action: () => void,
-): MenuItemConstructorOptions {
+): BrowserMenuEntry {
   return {
-    ...(accelerator ? { accelerator, registerAccelerator: false } : {}),
+    ...(accelerator ? { accelerator } : {}),
     click: () => runGuestAction(contents, action),
     label,
-    // The renderer shortcut registry owns execution; the native menu only
-    // displays the current binding and must not register a competing shortcut.
+    // Shortcut labels are presentation; the renderer shortcut registry owns execution.
   };
 }
 
@@ -228,8 +235,8 @@ function runGuestAction(contents: WebContents, action: () => void): void {
 }
 
 function appendMenuGroup(
-  target: MenuItemConstructorOptions[],
-  group: MenuItemConstructorOptions[],
+  target: BrowserMenuEntry[],
+  group: BrowserMenuEntry[],
 ): void {
   if (!group.length) return;
   if (target.length) target.push({ type: 'separator' });

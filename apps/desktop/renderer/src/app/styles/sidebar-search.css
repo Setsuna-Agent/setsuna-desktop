@@ -65,20 +65,6 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scrollbar-color: var(--chat-scrollbar-thumb) transparent;
-}
-
-.desktop-agent-search-popover__list::-webkit-scrollbar {
-  width: var(--chat-scrollbar-width);
-  height: var(--chat-scrollbar-width);
-}
-
-.desktop-agent-search-popover__list::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
-  border-radius: var(--app-radius-full);
-  background: var(--chat-scrollbar-thumb);
-  background-clip: content-box;
 }
 
 .desktop-agent-search-popover__empty {

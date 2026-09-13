@@ -94,7 +94,11 @@
   white-space: nowrap;
 }
 
-:root[data-desktop-platform='win32'] .chat-main-conversation--with-bottom-sender,
+:root[data-desktop-platform='win32'] .chat-main-conversation--with-bottom-sender {
+  /* The conversation sits below the workspace title, not the native window bar. */
+  padding-top: var(--desktop-workspace-toolbar-height);
+}
+
 :root[data-desktop-platform='linux'] .chat-main-conversation--with-bottom-sender {
   padding-top: var(--app-topbar-height);
 }
@@ -115,10 +119,7 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   scroll-padding-bottom: var(--chat-message-bottom-gap, 18px);
-  scrollbar-color: transparent transparent;
   scrollbar-gutter: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
 }
 
 /* Windows 主对话与右侧概览卡片共用同一视觉起始线；侧对话仍使用默认紧凑间距。 */
@@ -130,29 +131,6 @@
 .chat-messages * {
   scrollbar-width: none !important;
   -ms-overflow-style: none !important;
-}
-
-.desktop-code-editor::-webkit-scrollbar,
-.desktop-file-list::-webkit-scrollbar,
-.desktop-agent-sidebar__body::-webkit-scrollbar {
-  width: var(--chat-scrollbar-width);
-  height: var(--chat-scrollbar-width);
-}
-
-.desktop-code-editor::-webkit-scrollbar-thumb,
-.desktop-file-list::-webkit-scrollbar-thumb,
-.desktop-agent-sidebar__body::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
-  border-radius: var(--app-radius-full);
-  background: var(--chat-scrollbar-thumb);
-  background-clip: content-box;
-}
-
-.chat-messages::-webkit-scrollbar {
-  display: none !important;
-  width: 0 !important;
-  height: 0 !important;
-  background: transparent !important;
 }
 
 .chat-messages *::-webkit-scrollbar {

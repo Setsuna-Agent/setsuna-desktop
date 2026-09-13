@@ -1,8 +1,6 @@
-import { ResizeHandle, TextField, Button } from '@setsuna-desktop/renderer-ui';
+import { FileTreeSurface, FileTreeRow, ResizeHandle, TextField } from '@setsuna-desktop/renderer-ui';
 
 import {
-  ChevronRight,
-  Folder,
   List,
   ListTree,
   Search,
@@ -137,25 +135,20 @@ export const ReviewFileNavigator = memo(function ReviewFileNavigator({
 
   const renderFileRow = (file: DesktopDiffFile, label: string, depth: number): JSX.Element => {
     const selected = file.path === selectedPath;
-    const rowStyle = {
-      '--desktop-review-tree-indent': `${depth * 14}px`,
-    } as CSSProperties;
     return (
       <div className="desktop-review-file-tree__node" key={`file:${file.path}`}>
-        <Button variant="ghost"
-          aria-current={selected ? 'true' : undefined}
+        <FileTreeRow
+          depth={depth}
+          selected={selected}
+          label={label}
+          icon={<ReviewFileIcon path={file.path} />}
+          extra={<ReviewChangeCounts additions={file.additions} deletions={file.deletions} />}
           aria-label={file.path}
-          className={`desktop-review-file-tree__row is-file${selected ? ' is-selected' : ''}`}
-          style={rowStyle}
+          className="desktop-review-file-tree__row"
           title={file.path}
           type="button"
           onClick={() => onSelect(file.path)}
-        >
-          <span className="desktop-review-file-tree__spacer" />
-          <ReviewFileIcon path={file.path} />
-          <span>{label}</span>
-          <ReviewChangeCounts additions={file.additions} deletions={file.deletions} />
-        </Button>
+        />
       </div>
     );
   };
@@ -163,23 +156,17 @@ export const ReviewFileNavigator = memo(function ReviewFileNavigator({
   const renderNode = (node: ReviewFileTreeNode, depth = 0): JSX.Element => {
     if (node.type === 'file') return renderFileRow(node.file, node.name, depth);
     const expanded = Boolean(normalizedQuery) || !collapsedPaths.has(node.path);
-    const rowStyle = {
-      '--desktop-review-tree-indent': `${depth * 14}px`,
-    } as CSSProperties;
     return (
       <div className="desktop-review-file-tree__node" key={`directory:${node.path}`}>
-        <Button variant="ghost"
-          aria-expanded={expanded}
-          className="desktop-review-file-tree__row is-directory"
-          style={rowStyle}
+        <FileTreeRow
+          depth={depth}
+          expanded={expanded}
+          label={node.name}
+          className="desktop-review-file-tree__row"
           title={node.path}
           type="button"
           onClick={() => toggleDirectory(node.path)}
-        >
-          <ChevronRight className={expanded ? 'is-expanded' : ''} size={13} />
-          <Folder size={14} />
-          <span>{node.name}</span>
-        </Button>
+        />
         {expanded ? node.children.map((child) => renderNode(child, depth + 1)) : null}
       </div>
     );
@@ -260,13 +247,13 @@ export const ReviewFileNavigator = memo(function ReviewFileNavigator({
           onChange={(event) => setQuery(event.target.value)}
         />
       </label>
-      <div className="desktop-review-file-tree__items">
+      <FileTreeSurface className="desktop-review-file-tree__items">
         {rows.length ? rows : (
           <div className="desktop-review-file-tree__empty">
             {t('feature.review.workspace.fileBrowser.noMatch')}
           </div>
         )}
-      </div>
+      </FileTreeSurface>
     </aside>
   );
 });

@@ -77,7 +77,7 @@
 }
 
 .sd-select-menu .sd-select-menu__viewport {
-  scrollbar-width: thin;
+  scrollbar-width: auto;
 }
 
 .sd-select-menu .sd-select-menu__viewport::-webkit-scrollbar {

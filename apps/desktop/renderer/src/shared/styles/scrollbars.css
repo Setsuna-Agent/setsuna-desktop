@@ -1,0 +1,28 @@
+/* Chromium's native size/color properties must stay auto for pixel-sized
+   pseudo-elements. This sheet also runs inside Pierre's shadow roots. */
+* {
+  scrollbar-width: auto;
+  scrollbar-color: auto;
+}
+
+*::-webkit-scrollbar {
+  width: var(--chat-scrollbar-width, 8px);
+  height: var(--chat-scrollbar-width, 8px);
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  min-height: 40px;
+  border: 0;
+  border-radius: var(--app-radius-full, 999px);
+  background: var(--chat-scrollbar-thumb, #e4e4e5);
+}
+
+*::-webkit-scrollbar-thumb:hover,
+*::-webkit-scrollbar-thumb:active {
+  background: var(--chat-scrollbar-thumb-hover, #585a5b);
+}

@@ -137,10 +137,6 @@
   box-shadow: var(--app-shadow-popover);
 }
 
-.desktop-browser-window-menu__popover[hidden] {
-  display: none;
-}
-
 .desktop-browser-window-menu__popover > button {
   display: flex;
   align-items: center;

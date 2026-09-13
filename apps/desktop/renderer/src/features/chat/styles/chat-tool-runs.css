@@ -609,8 +609,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   overscroll-behavior-y: contain;
   scrollbar-gutter: stable;
   /* 聊天正文默认隐藏内部滚动条；长工具记录需要可拖动的滚动提示。 */
-  scrollbar-width: thin !important;
-  scrollbar-color: var(--chat-scrollbar-thumb) transparent;
+  scrollbar-width: auto !important;
 }
 
 .chat-tool-runs > .chat-tool-run--group > .chat-tool-run__body::-webkit-scrollbar {
@@ -619,10 +618,15 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 }
 
 .chat-tool-runs > .chat-tool-run--group > .chat-tool-run__body::-webkit-scrollbar-thumb {
-  border: 2px solid transparent !important;
+  border: 0 !important;
   border-radius: var(--app-radius-full);
   background: var(--chat-scrollbar-thumb) !important;
   background-clip: content-box !important;
+}
+
+.chat-tool-runs > .chat-tool-run--group > .chat-tool-run__body::-webkit-scrollbar-thumb:hover,
+.chat-tool-runs > .chat-tool-run--group > .chat-tool-run__body::-webkit-scrollbar-thumb:active {
+  background: var(--chat-scrollbar-thumb-hover) !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1371,7 +1375,6 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
   color: color-mix(in srgb, currentColor 82%, transparent);
   background: color-mix(in srgb, var(--app-surface) 88%, transparent);
   overflow: auto;
-  scrollbar-width: thin;
 }
 
 .chat-mcp-terminal__metadata-title {
@@ -1395,8 +1398,6 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
   max-height: 360px;
   padding: 7px 10px 8px;
   overflow: auto;
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, currentColor 28%, transparent) transparent;
 }
 
 .chat-mcp-terminal__command {

@@ -46,12 +46,11 @@
   user-select: none;
 }
 
-.sd-menu__item[data-highlighted], .sd-menu__item[data-state='open'] {
-  background: var(--desktop-agent-control-hover-bg);
-}
-
+/* Menu interaction states share a neutral fill, independent of the accent color. */
+.sd-menu__item[data-highlighted],
+.sd-menu__item[data-state='open'],
 .sd-menu__item.is-selected {
-  background: var(--app-accent-subtle);
+  background: var(--desktop-agent-control-hover-bg);
 }
 
 .sd-menu__item.is-danger {

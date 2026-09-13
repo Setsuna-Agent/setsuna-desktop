@@ -6,11 +6,13 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
   type TouchEvent as ReactTouchEvent,
   type WheelEvent as ReactWheelEvent,
   type RefObject,
 } from 'react';
 import type { Translate } from '../../../shared/i18n/I18nProvider.js';
+import { useSmoothScroll } from '../../../shared/hooks/useSmoothScroll.js';
 import type { ChatContextTokenUsage } from './chatContextUsage.js';
 import { conversationOverviewLayout, type ConversationOverviewLayout } from './conversationOverviewLayout.js';
 
@@ -36,9 +38,13 @@ const keyboardScrollIntentKeys = new Set([
 export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter, threadId }: { contentRef: RefObject<HTMLDivElement | null>; scrollSignal: string; showEmptyStarter: boolean; threadId: string | null }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const { cancelSmoothScroll, setScrollPosition } = useSmoothScroll({
+    scrollRef, contentRef, enabled: !showEmptyStarter, resetKey: threadId,
+  });
   // sticky 状态放在 ref 里，滚动事件高频触发时不需要每次 rerender。
   const shouldStickToBottomRef = useRef(true);
   const userScrollIntentRef = useRef(false);
+  const scrollbarDragRef = useRef(false);
   const lastScrollTopRef = useRef(0);
   const scrollFrameRef = useRef<number | null>(null);
   // token 递增会让已排队的 animation-frame 滚动失效，用于线程切换或用户手势打断。
@@ -55,12 +61,13 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
     scrollFrameRef.current = null;
   }, []);
   const schedulePinnedScroll = useCallback((immediate = false) => {
-    if (showEmptyStarter || !shouldStickToBottomRef.current) return;
+    if (showEmptyStarter || scrollbarDragRef.current || !shouldStickToBottomRef.current) return;
     // Streaming updates move the destination; they must not restart an in-flight glide.
     if (scrollFrameRef.current !== null) {
       if (!immediate) return;
       cancelScheduledScroll();
     }
+    cancelSmoothScroll();
     const token = ++scrollScheduleTokenRef.current;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     let previousTime = performance.now();
@@ -74,20 +81,21 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
       const elapsed = Math.max(1, now - previousTime);
       previousTime = now;
       const progress = 1 - Math.exp(-elapsed / followScrollTimeConstantMs);
-      node.scrollTop = immediate || reducedMotion.matches || Math.abs(distance) <= 1
+      const nextTop = immediate || reducedMotion.matches || Math.abs(distance) <= 1
         ? target
         : node.scrollTop + Math.sign(distance) * Math.max(1, Math.abs(distance) * progress);
+      setScrollPosition(nextTop, 'auto');
       lastScrollTopRef.current = node.scrollTop;
       setShowScrollBottom(false);
       if (Math.abs(target - node.scrollTop) > 1) {
         scrollFrameRef.current = window.requestAnimationFrame(tick);
       } else {
-        node.scrollTop = target;
+        setScrollPosition(target, 'auto');
         lastScrollTopRef.current = node.scrollTop;
       }
     };
     scrollFrameRef.current = window.requestAnimationFrame(tick);
-  }, [cancelScheduledScroll, showEmptyStarter]);
+  }, [cancelScheduledScroll, cancelSmoothScroll, setScrollPosition, showEmptyStarter]);
 
   const syncScrollBottomState = useCallback((movingTowardBottom = false) => {
     const node = scrollRef.current;
@@ -98,6 +106,13 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
 
     const distanceToBottom = scrollDistanceToBottom(node);
     const atBottom = distanceToBottom <= scrollBottomThresholdPx;
+    // Native thumb drags can snap back to their origin when the pointer moves sideways.
+    // Reaching the bottom mid-drag must not let follow compete with the next native move.
+    if (scrollbarDragRef.current) {
+      shouldStickToBottomRef.current = false;
+      setShowScrollBottom(!atBottom);
+      return;
+    }
     if (atBottom && (shouldStickToBottomRef.current || (userScrollIntentRef.current && movingTowardBottom))) {
       // 向上滚动时即使仍在底部容差内也不能重新吸附；尺寸通知同样不能恢复跟随。
       userScrollIntentRef.current = false;
@@ -145,10 +160,10 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
     userScrollIntentRef.current = false;
     const node = scrollRef.current;
     if (!node) return;
-    node.scrollTo({ top, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : behavior });
+    setScrollPosition(top, behavior);
     lastScrollTopRef.current = node.scrollTop;
     setShowScrollBottom(scrollDistanceToBottom(node) > scrollBottomThresholdPx);
-  }, [cancelScheduledScroll, scrollDistanceToBottom]);
+  }, [cancelScheduledScroll, scrollDistanceToBottom, setScrollPosition]);
 
   const markUserScrollIntent = useCallback(() => {
     if (!showEmptyStarter) userScrollIntentRef.current = true;
@@ -166,9 +181,48 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
     setShowScrollBottom(scrollDistanceToBottom(node) > scrollBottomThresholdPx);
   }, [cancelScheduledScroll, scrollDistanceToBottom, showEmptyStarter]);
 
+  const handleScrollPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const node = scrollRef.current;
+    if (!node || event.target !== node || event.button !== 0) return;
+    // Native scrollbar hits are outside clientWidth; convert the gutter edge for app zoom.
+    const bounds = node.getBoundingClientRect();
+    const scale = node.offsetWidth > 0 ? bounds.width / node.offsetWidth : 1;
+    const contentRight = bounds.left + (node.clientLeft + node.clientWidth) * scale;
+    if (event.clientX < contentRight || event.clientX >= bounds.right) return;
+    scrollbarDragRef.current = true;
+    cancelSmoothScroll();
+    releasePinnedScrollForUser();
+  }, [cancelSmoothScroll, releasePinnedScrollForUser]);
+
+  useEffect(() => {
+    const finishDrag = (event: Event) => {
+      if (!scrollbarDragRef.current) return;
+      scrollbarDragRef.current = false;
+      cancelSmoothScroll();
+      const node = scrollRef.current;
+      if (!node) return;
+      lastScrollTopRef.current = node.scrollTop;
+      if (event.type === 'pointerup' && scrollDistanceToBottom(node) <= scrollBottomThresholdPx) {
+        scrollToBottom();
+      } else {
+        syncScrollBottomState();
+      }
+    };
+    // The release may target the overview or another panel, outside the scroll viewport.
+    window.addEventListener('pointerup', finishDrag, true);
+    window.addEventListener('pointercancel', finishDrag, true);
+    window.addEventListener('blur', finishDrag);
+    return () => {
+      scrollbarDragRef.current = false;
+      window.removeEventListener('pointerup', finishDrag, true);
+      window.removeEventListener('pointercancel', finishDrag, true);
+      window.removeEventListener('blur', finishDrag);
+    };
+  }, [cancelSmoothScroll, scrollDistanceToBottom, scrollToBottom, syncScrollBottomState, threadId]);
+
   const handleScrollWheel = useCallback(
     (event: ReactWheelEvent<HTMLDivElement>) => {
-      if (showEmptyStarter) return;
+      if (showEmptyStarter || event.ctrlKey || event.deltaY === 0) return;
       const node = scrollRef.current;
       if (!node) return;
       const distanceToBottom = scrollDistanceToBottom(node);
@@ -183,39 +237,42 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
 
   const handleScrollTouchMove = useCallback(
     (_event: ReactTouchEvent<HTMLDivElement>) => {
+      cancelSmoothScroll();
       releasePinnedScrollForUser();
     },
-    [releasePinnedScrollForUser],
+    [cancelSmoothScroll, releasePinnedScrollForUser],
   );
 
   const handleScrollKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
       if (!keyboardScrollIntentKeys.has(event.key)) return;
       if (event.target instanceof Element && event.target.closest('input, textarea, select, button, [contenteditable="true"], [role="combobox"]')) return;
+      cancelSmoothScroll();
       if (event.key === 'End') {
         markUserScrollIntent();
         return;
       }
       releasePinnedScrollForUser();
     },
-    [markUserScrollIntent, releasePinnedScrollForUser],
+    [cancelSmoothScroll, markUserScrollIntent, releasePinnedScrollForUser],
   );
 
   useLayoutEffect(() => {
     cancelScheduledScroll();
+    scrollbarDragRef.current = false;
     userScrollIntentRef.current = false;
     const node = scrollRef.current;
     if (!node) return;
     if (showEmptyStarter) {
       // starter 页面没有 transcript，滚动位置固定在顶部，避免 composer 被强行贴底。
-      node.scrollTop = 0;
+      setScrollPosition(0, 'auto');
       shouldStickToBottomRef.current = false;
       setShowScrollBottom(false);
       return;
     }
     shouldStickToBottomRef.current = true;
     schedulePinnedScroll(true);
-  }, [cancelScheduledScroll, schedulePinnedScroll, showEmptyStarter, threadId]);
+  }, [cancelScheduledScroll, schedulePinnedScroll, setScrollPosition, showEmptyStarter, threadId]);
 
   useLayoutEffect(() => {
     if (showEmptyStarter) return;
@@ -250,6 +307,7 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
   return {
     contentRef,
     handleScroll,
+    handleScrollPointerDown,
     handleScrollKeyDown,
     handleScrollTouchMove,
     handleScrollWheel,

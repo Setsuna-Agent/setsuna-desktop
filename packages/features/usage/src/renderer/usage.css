@@ -216,8 +216,6 @@
   min-width: 0;
   padding: 16px 16px 13px;
   overflow-x: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--chat-scrollbar-thumb) transparent;
 }
 
 .desktop-settings-panel .settings-usage-calendar__canvas {
@@ -432,8 +430,6 @@
 .desktop-settings-panel .settings-usage-records__scroller {
   min-width: 0;
   overflow-x: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--chat-scrollbar-thumb) transparent;
 }
 
 .desktop-settings-panel .settings-usage-records table {

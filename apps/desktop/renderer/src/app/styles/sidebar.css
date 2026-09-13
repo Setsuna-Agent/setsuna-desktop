@@ -240,14 +240,14 @@
   background: var(--desktop-agent-sidebar-hover-bg);
 }
 
-.desktop-agent-floating-menu {
+.desktop-agent-floating-menu.sd-menu-motion {
   position: fixed;
   z-index: 1000;
   display: grid;
   min-width: 138px;
   padding: 4px;
   border: 1px solid var(--desktop-agent-subtle-divider);
-  border-radius: var(--app-radius-md);
+  border-radius: 12px;
   background: var(--app-surface);
   box-shadow: var(--app-shadow-popover);
 }
@@ -264,10 +264,6 @@
   background: transparent;
   font-size: 12px;
   text-align: left;
-}
-
-.desktop-agent-floating-menu button:hover {
-  background: var(--desktop-agent-control-hover-bg);
 }
 
 .desktop-agent-floating-menu button.is-danger {

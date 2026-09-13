@@ -1,33 +1,7 @@
+@import './scrollbars.css';
+
 * {
   box-sizing: border-box;
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--app-muted) 26%, transparent) transparent;
-}
-
-*::-webkit-scrollbar {
-  width: var(--chat-scrollbar-width);
-  height: var(--chat-scrollbar-width);
-}
-
-*::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-*::-webkit-scrollbar-thumb {
-  min-height: 40px;
-  border: 2px solid transparent;
-  border-radius: var(--app-radius-full);
-  background: color-mix(in srgb, var(--app-muted) 24%, transparent);
-  background-clip: content-box;
-}
-
-*::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--app-muted) 38%, transparent);
-  background-clip: content-box;
-}
-
-*::-webkit-scrollbar-corner {
-  background: transparent;
 }
 
 html {

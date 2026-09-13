@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import {
   useRef,
+  useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
@@ -295,6 +296,7 @@ function ProjectSection({
   onToggleThreadPin: (thread: RuntimeThreadSummary) => void;
 }) {
   const { t } = useI18n();
+  const [menuPoint, setMenuPoint] = useState<{ projectId: string; x: number; y: number } | null>(null);
 
   return (
     <section className="desktop-agent-sidebar__group">
@@ -342,6 +344,7 @@ function ProjectSection({
                           if (isProjectActionTarget(event.target)) return;
                           event.preventDefault();
                           event.stopPropagation();
+                          setMenuPoint({ projectId: project.id, x: event.clientX, y: event.clientY });
                           if (projectActionMenuId !== project.id) onToggleProjectActions(project.id);
                         }}
                       >
@@ -352,6 +355,8 @@ function ProjectSection({
                           onKeyDown={(event) => {
                             if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
                             event.preventDefault();
+                            const rect = event.currentTarget.getBoundingClientRect();
+                            setMenuPoint({ projectId: project.id, x: rect.left + 20, y: rect.bottom });
                             if (projectActionMenuId !== project.id) onToggleProjectActions(project.id);
                           }}
                         >
@@ -364,13 +369,14 @@ function ProjectSection({
                           </span>
                         </Button>
                         <ProjectActionMenu
+                          anchorPoint={menuPoint?.projectId === project.id ? menuPoint : undefined}
                           open={projectActionMenuId === project.id}
                           project={project}
                           onArchiveProject={onArchiveProject}
                           onCreateProjectThread={onCreateProjectThread}
                           onEditProject={onEditProject}
                           onRemoveProject={onRemoveProject}
-                          onToggleProjectActions={onToggleProjectActions}
+                          onToggleProjectActions={(projectId) => { setMenuPoint(null); onToggleProjectActions(projectId); }}
                         />
                       </div>
                     </SidebarProjectHoverCard>
@@ -409,6 +415,7 @@ function ProjectSection({
 }
 
 function ProjectActionMenu({
+  anchorPoint,
   open,
   project,
   onArchiveProject,
@@ -417,6 +424,7 @@ function ProjectActionMenu({
   onRemoveProject,
   onToggleProjectActions,
 }: {
+  anchorPoint?: { x: number; y: number };
   open: boolean;
   project: WorkspaceProject;
   onArchiveProject: (project: WorkspaceProject) => void;
@@ -463,7 +471,7 @@ function ProjectActionMenu({
       >
         <MoreHorizontal size={14} />
       </Button>
-      <SidebarFloatingMenu open={open} placement="bottom-right" triggerRef={triggerRef} onClose={toggleMenu}>
+      <SidebarFloatingMenu anchorPoint={anchorPoint} open={open} placement="bottom-right" triggerRef={triggerRef} onClose={toggleMenu}>
         <Button variant="ghost"
           type="button"
           role="menuitem"

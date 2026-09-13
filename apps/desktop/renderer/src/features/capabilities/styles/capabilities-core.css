@@ -405,8 +405,6 @@
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--chat-scrollbar-thumb) transparent;
 }
 
 .desktop-capabilities-grid__content {
@@ -417,17 +415,6 @@
   min-width: 0;
   margin: 0 auto;
   padding: 4px 0 24px;
-}
-
-.desktop-capabilities-grid::-webkit-scrollbar {
-  width: var(--chat-scrollbar-width);
-}
-
-.desktop-capabilities-grid::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
-  border-radius: var(--app-radius-full);
-  background: var(--chat-scrollbar-thumb);
-  background-clip: content-box;
 }
 
 .desktop-capabilities-panel__inner--market .desktop-capabilities-grid {

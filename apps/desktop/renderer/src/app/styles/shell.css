@@ -628,10 +628,6 @@
   padding-left: calc(var(--app-topbar-item-gap) + 4px + var(--app-topbar-navigation-icon-inset));
 }
 
-:root[data-desktop-platform='win32'] .chat-main-conversation--with-bottom-sender {
-  padding-top: var(--desktop-workspace-toolbar-height);
-}
-
 :root[data-desktop-platform='win32'] .desktop-agent-page--settings-open .app-workbench__main-title,
 :root[data-desktop-platform='linux'] .desktop-agent-page--settings-open .app-workbench__main-title {
   display: none;

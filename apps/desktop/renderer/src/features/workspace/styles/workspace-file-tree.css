@@ -90,21 +90,6 @@ body.desktop-file-tree-resizing .desktop-file-tree__resize-handle::after {
   min-width: 0;
 }
 
-.desktop-file-row-shell {
-  display: grid;
-  align-items: center;
-  min-width: 0;
-  border-radius: var(--app-radius-sm);
-}
-
-.desktop-file-row-shell:hover {
-  background: var(--desktop-agent-control-hover-bg);
-}
-
-.desktop-file-row-shell.is-active {
-  background: var(--desktop-agent-control-active-bg);
-}
-
 .desktop-file-tree-node.is-drop-target,
 .desktop-file-list.is-drop-target {
   border-radius: var(--app-radius-sm);
@@ -113,37 +98,8 @@ body.desktop-file-tree-resizing .desktop-file-tree__resize-handle::after {
   outline-offset: -1px;
 }
 
-.desktop-file-row-shell.is-dragging {
+.desktop-file-row.is-dragging {
   opacity: 0.5;
-}
-
-.desktop-file-row-shell.is-active .desktop-file-row {
-  font-weight: 500;
-}
-
-.desktop-file-row {
-  display: grid;
-  grid-template-columns: 14px 16px minmax(0, 1fr);
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  height: 28px;
-  padding: 0 7px 0 calc(7px + var(--desktop-file-tree-indent, 0px));
-  border: 0;
-  border-radius: var(--app-radius-sm);
-  color: var(--app-text);
-  background: transparent;
-  font-size: 12px;
-  text-align: left;
-}
-
-.desktop-file-row--directory {
-  /* Reserve the loading slot so the first fetch cannot create a second row. */
-  grid-template-columns: 14px minmax(0, 1fr) 14px;
-}
-
-.desktop-file-row .is-collapsed {
-  transform: rotate(-90deg);
 }
 
 .desktop-file-row__icon {
@@ -153,26 +109,6 @@ body.desktop-file-tree-resizing .desktop-file-tree__resize-handle::after {
   width: 16px;
   height: 16px;
   font-size: 16px;
-}
-
-.desktop-file-row svg {
-  color: var(--app-text-muted);
-}
-
-.desktop-file-row__name,
-.desktop-file-row__loading {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.desktop-file-row__loading {
-  color: var(--app-text-subtle);
-}
-
-.desktop-file-row__spacer {
-  width: 14px;
 }
 
 .desktop-file-tree__empty {
