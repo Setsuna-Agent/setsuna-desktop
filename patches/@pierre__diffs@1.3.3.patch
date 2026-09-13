@@ -1,0 +1,15 @@
+diff --git a/dist/renderers/FileRenderer.js b/dist/renderers/FileRenderer.js
+index fb146c3585d1ee374b8d99fefe26867b6384a73a..c183609d77094c0b80af2d937e1b62d3696fd3e0 100644
+--- a/dist/renderers/FileRenderer.js
++++ b/dist/renderers/FileRenderer.js
+@@ -349,7 +349,9 @@ var FileRenderer = class {
+ 			const hasThemes = this.highlighter != null && areThemesAttached(options.theme);
+ 			const hasLangs = this.highlighter != null && areLanguagesAttached(this.computedLang);
+ 			const canHighlight = !forcePlainText && hasLangs;
+-			if (this.highlighter != null && hasThemes && (forceHighlight || forcePlainText || !this.renderCache.highlighted && canHighlight || this.renderCache.result == null)) {
++			// Editing owns the live row cache. Re-highlighting plain text from the
++			// original file discards typed text and leaves newly inserted rows missing.
++			if (this.highlighter != null && hasThemes && (forceHighlight || forcePlainText && !this.editSessionActive || !this.renderCache.highlighted && canHighlight || this.renderCache.result == null)) {
+ 				const { result, options } = this.renderFileWithHighlighter(file, this.highlighter, forcePlainText || !hasLangs);
+ 				this.renderCache = {
+ 					file,

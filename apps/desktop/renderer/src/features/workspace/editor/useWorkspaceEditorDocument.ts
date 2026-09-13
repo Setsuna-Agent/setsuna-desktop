@@ -9,16 +9,26 @@ export function useWorkspaceEditorDocument({ content, file, language, onChange }
   onChange(content: string): void;
 }) {
   const itemId = `${file.projectId}:${file.path}`;
-  const liveContent = useRef(content);
+  const receivedDocument = useRef({ content, itemId, language });
+  const pendingEdits = useRef<string[]>([]);
   const [items, setItems] = useState<readonly CodeViewItem<undefined>[]>(() => [{
     id: itemId, type: 'file', edit: true, version: 0,
     file: { cacheKey: `${itemId}:${file.revision ?? 'unknown'}:0`, contents: content, name: file.path, ...(language ? { lang: language } : {}) },
   }]);
-  const currentItem = items[0];
   useEffect(() => {
-    const currentLanguage = currentItem?.type === 'file' ? currentItem.file.lang : undefined;
-    if (content === liveContent.current && currentItem?.id === itemId && currentLanguage === language) return;
-    liveContent.current = content;
+    const previous = receivedDocument.current;
+    const sameDocument = previous.itemId === itemId && previous.language === language;
+    receivedDocument.current = { content, itemId, language };
+    // Native input may advance before React commits an earlier draft. Acknowledge
+    // all edits through that echo; comparing only the latest text resets the editor
+    // during fast typing. Discard acknowledged entries so future external edits work.
+    const echoIndex = sameDocument ? pendingEdits.current.lastIndexOf(content) : -1;
+    if (echoIndex !== -1) {
+      pendingEdits.current.splice(0, echoIndex + 1);
+      return;
+    }
+    if (sameDocument && previous.content === content) return;
+    pendingEdits.current = [];
     // Publish a new CodeView version only for incoming document changes. Echoes of
     // typing or saving keep the live item, caret, and undo history intact.
     setItems((current) => {
@@ -27,10 +37,10 @@ export function useWorkspaceEditorDocument({ content, file, language, onChange }
         file: { cacheKey: `${itemId}:${file.revision ?? 'unknown'}:${version}`, contents: content, name: file.path, ...(language ? { lang: language } : {}) },
       }];
     });
-  }, [content, currentItem, file.path, file.revision, itemId, language]);
+  }, [content, file.path, file.revision, itemId, language]);
 
   const onEditorChange = useCallback((_item: CodeViewItem<undefined>, nextFile: FileContents) => {
-    liveContent.current = nextFile.contents;
+    pendingEdits.current.push(nextFile.contents);
     onChange(nextFile.contents);
   }, [onChange]);
   return { items, onEditorChange };

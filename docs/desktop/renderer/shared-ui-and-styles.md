@@ -23,8 +23,11 @@
 
 - Motion 负责复选框、开关和通知动画；`motion.ts` 提供复选框与通知使用的 spring 参数，开关的参数随组件维护。
 - `FileIcon` 使用 Symbols，统一按跨平台路径的文件名选择文件类型图标；workspace、artifact 和插件卡片复用这个入口，尺寸由各自样式控制。
+- `FileTreeSurface` / `FileTreeRow` 为文件面板与审查文件树共用的 beUI 视觉层：36px 行高、18px 层级缩进、目录开合图标、引导线与选中背景滑动；每个 surface 隔离布局动画并跟踪自身滚动，减少动态效果时关闭移动动画。Surface 挂载时直接显示现有行，避免文件标签切换导致的重新挂载重播整树入场动画；目录展开后新增的行仍有入场过渡。目录加载、筛选、拖放、文件选择仍由各 Feature 持有。
 - Dialog 的入场动画由 `overlays.css` 持有：弹窗上移 12px 并淡入（180ms ease-out），遮罩淡入（160ms ease）。弹窗已去掉 scale 动画，居中与入场位移统一使用 `translate`；12px 按应用密度缩放，减少动态效果偏好下禁用入场动画。
 - Radix 提供浮层定位、焦点约束、嵌套子菜单、键盘操作和关闭行为。控件遵循本项目的窄 API，不提供 Ant Design 兼容层。
+- 应用内操作菜单参考 [beUI Animated Context Menu](https://beui.dev/components/motion/context-menu)：`MenuSurface` 与 `menu-motion.css` 统一从触发位置展开的裁切动画和滑动高亮，右键、按钮下拉、坐标菜单、侧栏、添加面板、窗口菜单和能力创建菜单共用视觉层；禁用项、危险项、子菜单和减少动态效果偏好保持有效。浏览器菜单通过 Feature bridge 接入，系统托盘菜单仍由操作系统绘制。
+- 菜单悬停、按下、选中和子菜单展开统一使用中性灰底，不随主题强调色变化；选中勾选与危险项文字保留各自语义，滑动高亮不另设危险底色。
 - `ui/primitives.tsx` / `SelectField.tsx` 保留宿主导出；`SettingsViewUi.tsx` 将同一实现注入 Feature 的 Settings UI contract。
 - `I18nProvider` 同步共享控件的中英文标签；外观和字体继续由宿主偏好控制。
 - 业务专用内容仍留在所属 Feature，弹窗外壳使用共享 `Dialog`，不要复制 backdrop、Escape 监听或 focus trap。
@@ -98,6 +101,7 @@
 
 - `tokens.css`：颜色、间距、字体、圆角、层级等 token。
 - `base.css`：reset、字体和 root 基础。
+- `scrollbars.css`：全局原生滚动条固定宽/高 `8px`、默认 `#E4E4E5`、hover/active `#585A5B`，颜色不透明且不随主题变化；由 `base.css` 引入，同一份规则也注入 Pierre 的 Shadow DOM。终端与 `ScrollOverlay` 的自绘滑块复用相同 token，不用透明边框缩小可见厚度。
 - `beui.css`：Tailwind 语义色、字体和圆角到宿主 token 的映射，不定义第二套主题。
 - `packages/renderer-ui/src/styles/index.css`：通用控件样式唯一入口，按 controls、select、overlays、media、toast 拆分；只在 `main.tsx` 导入一次。
 - `primitives.css`：宿主页面标题、Panel、状态徽章和滚动条，不重复定义基础表单控件。

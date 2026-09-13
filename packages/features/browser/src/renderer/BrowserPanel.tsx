@@ -18,6 +18,7 @@ import {
   type ReactNode,
 } from 'react';
 import { BrowserAddressBar } from './BrowserAddressBar.js';
+import { BrowserContextMenu } from './BrowserContextMenu.js';
 import { BrowserDeviceToolbar } from './BrowserDeviceToolbar.js';
 import { BrowserDeviceViewport } from './BrowserDeviceViewport.js';
 import { BrowserHomePage } from './BrowserHomePage.js';
@@ -315,7 +316,7 @@ export function BrowserPanel({
       reportBrowserActionFailure(translate('feature.browser.reloadFailed'));
       return;
     }
-    void bridge.showReloadMenu(webContentsId, reloadShortcutBindings).then((shown) => {
+    void bridge.showReloadMenu(webContentsId, reloadShortcutBindings, { x: event.clientX, y: event.clientY }).then((shown) => {
       if (!shown) reportBrowserActionFailure(translate('feature.browser.reloadFailed'));
     }).catch((error) => {
       reportBrowserActionFailure(translate('feature.browser.reloadFailed'), error);
@@ -468,6 +469,7 @@ export function BrowserPanel({
         )}
         {tab.error ? <div className="desktop-browser-error"><strong>{translate('feature.browser.loadFailed')}</strong><span>{tab.error}</span></div> : null}
       </div>
+      <BrowserContextMenu bridge={bridge} active={!hidden && !tab.showingHome} webviewRef={webviewRef} />
     </aside>
   );
 }

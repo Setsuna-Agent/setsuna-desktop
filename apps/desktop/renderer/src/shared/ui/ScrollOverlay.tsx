@@ -3,6 +3,7 @@ import { useCallback, useLayoutEffect, useRef, useState, type PointerEvent as Re
 /** A draggable scrollbar over a native scroll viewport, without reserving layout width. */
 export function ScrollOverlay({ disabled = false, scrollRef, scrollSignal = '' }: { disabled?: boolean; scrollRef: RefObject<HTMLDivElement | null>; scrollSignal?: string }) {
   const dragRef = useRef<{
+    scaleY: number;
     scrollRange: number;
     startScrollTop: number;
     startY: number;
@@ -57,10 +58,11 @@ export function ScrollOverlay({ disabled = false, scrollRef, scrollSignal = '' }
   const handlePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       const node = scrollRef.current;
-      if (!node || !metrics.visible) return;
+      if (!node || !metrics.visible || event.button !== 0) return;
       event.preventDefault();
       event.currentTarget.setPointerCapture(event.pointerId);
       dragRef.current = {
+        scaleY: (event.currentTarget.parentElement!.getBoundingClientRect().height / metrics.height) || 1,
         scrollRange: Math.max(0, node.scrollHeight - node.clientHeight),
         startScrollTop: node.scrollTop,
         startY: event.clientY,
@@ -75,10 +77,12 @@ export function ScrollOverlay({ disabled = false, scrollRef, scrollSignal = '' }
       const node = scrollRef.current;
       const drag = dragRef.current;
       if (!node || !drag) return;
-      const delta = event.clientY - drag.startY;
-      node.scrollTop = drag.startScrollTop + (delta / drag.thumbRange) * drag.scrollRange;
+      const delta = (event.clientY - drag.startY) / drag.scaleY;
+      const top = Math.max(0, Math.min(node.scrollHeight - node.clientHeight, drag.startScrollTop + (delta / drag.thumbRange) * drag.scrollRange));
+      node.scrollTop = top;
+      updateMetrics();
     },
-    [scrollRef],
+    [scrollRef, updateMetrics],
   );
 
   const handlePointerUp = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
@@ -92,7 +96,7 @@ export function ScrollOverlay({ disabled = false, scrollRef, scrollSignal = '' }
 
   return (
     <div className="sd-scrollbar-overlay" aria-hidden="true" style={{ height: metrics.height, top: metrics.top }}>
-      <div className="sd-scrollbar-overlay__thumb" style={{ height: metrics.thumbHeight, transform: `translateY(${metrics.thumbTop}px)` }} onPointerCancel={handlePointerUp} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} />
+      <div className="sd-scrollbar-overlay__thumb" style={{ height: metrics.thumbHeight, transform: `translateY(${metrics.thumbTop}px)` }} onLostPointerCapture={handlePointerUp} onPointerCancel={handlePointerUp} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} />
     </div>
   );
 }

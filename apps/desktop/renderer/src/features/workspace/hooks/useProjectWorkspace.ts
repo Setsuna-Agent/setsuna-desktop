@@ -211,12 +211,12 @@ export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel, 
     (projectId) => client.createProjectEntry(projectId, input),
   ), [client, runEntryMutation]);
 
-  const relocateEntry = useCallback((entryPath: string, relocate: (projectId: string) => Promise<WorkspaceEntry>) => runEntryMutation(async (projectId, isCurrent) => {
+  const relocateEntry = useCallback((entryPath: string, relocate: (projectId: string, isCurrent: () => boolean) => Promise<WorkspaceEntry | null>) => runEntryMutation(async (projectId, isCurrent) => {
     const preview = filePreviewRef.current;
     const affectsPreview = preview && isWorkspaceEntryWithin(preview.path, entryPath);
     if (affectsPreview && fileDraft.isSaving()) throw new Error(t('workspace.files.renameWhileSaving'));
-    const entry = await relocate(projectId);
-    if (!isCurrent()) return null;
+    const entry = await relocate(projectId, isCurrent);
+    if (!entry || !isCurrent()) return null;
     filePreviewRequests.invalidate();
     const current = filePreviewRef.current;
     if (current?.projectId === projectId) {
@@ -237,8 +237,19 @@ export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel, 
   ), [client, relocateEntry]);
 
   const moveEntry = useCallback((entryPath: string, parentPath: string) => relocateEntry(
-    entryPath, (projectId) => client.moveProjectEntry(projectId, entryPath, { parentPath }),
-  ), [client, relocateEntry]);
+    entryPath, async (projectId, isCurrent) => {
+      const approved = await confirm({
+        title: t('workspace.files.moveConfirm'),
+        description: t('workspace.files.moveDescription', {
+          path: entryPath, destination: parentPath || t('workspace.files.workspaceRoot'),
+        }),
+        confirmLabel: t('workspace.files.move'),
+      });
+      // Keep the mutation guard while deciding, and reject confirmations for a workspace that changed.
+      if (!approved || !isCurrent()) return null;
+      return client.moveProjectEntry(projectId, entryPath, { parentPath });
+    },
+  ), [client, confirm, relocateEntry, t]);
 
   const deleteEntry = useCallback(async (entryPath: string): Promise<boolean> => (await runEntryMutation(async (projectId, isCurrent) => {
     if (!entryPath) return false;

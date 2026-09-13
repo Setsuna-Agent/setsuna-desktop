@@ -4,6 +4,7 @@ import { forwardRef, useEffect, useRef, type HTMLAttributes, type ReactElement, 
 import { createPortal } from 'react-dom';
 import { floatingPlacement, overlayContainer, type Placement } from './portal.js';
 import { cn } from './utils.js';
+import { MenuSurface } from './menu-surface.js';
 
 export type MenuAction = { key: string; domEvent: Event };
 export type MenuItem = {
@@ -38,12 +39,12 @@ export const Dropdown = forwardRef<HTMLElement, DropdownProps>(function Dropdown
   const classes = cn('sd-menu', rootClassName, className);
   if (context) return <ContextMenu.Root onOpenChange={onOpenChange} modal={false}>
     <ContextMenu.Trigger asChild disabled={disabled}><Slot.Root {...triggerProps} ref={ref}>{children}</Slot.Root></ContextMenu.Trigger>
-    <ContextMenu.Portal container={overlayContainer()}><ContextMenu.Content className={classes} collisionPadding={8}>{contents}</ContextMenu.Content></ContextMenu.Portal>
+    <ContextMenu.Portal container={overlayContainer()}><ContextMenu.Content asChild className={classes} collisionPadding={8}><MenuSurface>{contents}</MenuSurface></ContextMenu.Content></ContextMenu.Portal>
   </ContextMenu.Root>;
   return <DropdownMenu.Root open={open} onOpenChange={onOpenChange} modal={false}>
     <DropdownMenu.Trigger asChild disabled={disabled}><Slot.Root {...triggerProps} ref={ref}>{children}</Slot.Root></DropdownMenu.Trigger>
     <DropdownMenu.Portal container={overlayContainer()}>
-      <DropdownMenu.Content {...floatingPlacement(placement)} sideOffset={align?.offset?.[1] ?? 6} alignOffset={align?.offset?.[0]} collisionPadding={8} className={classes}>{contents}</DropdownMenu.Content>
+      <DropdownMenu.Content asChild {...floatingPlacement(placement)} sideOffset={align?.offset?.[1] ?? 6} alignOffset={align?.offset?.[0]} collisionPadding={8} className={classes}><MenuSurface>{contents}</MenuSurface></DropdownMenu.Content>
     </DropdownMenu.Portal>
   </DropdownMenu.Root>;
 });
@@ -63,7 +64,7 @@ function MenuItems({ menu, context }: { menu: MenuProps; context: boolean }) {
     </>;
     if (item.children) return <ui.Sub key={key}>
       <ui.SubTrigger disabled={item.disabled} className={cn('sd-menu__item', item.className)}>{content}<ChevronRight size={13} /></ui.SubTrigger>
-      <ui.Portal container={overlayContainer()}><ui.SubContent className="sd-menu" sideOffset={4} collisionPadding={8}><MenuItems context={context} menu={{ ...menu, items: item.children }} /></ui.SubContent></ui.Portal>
+      <ui.Portal container={overlayContainer()}><ui.SubContent asChild className="sd-menu" sideOffset={4} collisionPadding={8}><MenuSurface><MenuItems context={context} menu={{ ...menu, items: item.children }} /></MenuSurface></ui.SubContent></ui.Portal>
     </ui.Sub>;
     return <ui.Item key={key} className={cn('sd-menu__item', item.className, selected && 'is-selected', item.danger && 'is-danger')} disabled={item.disabled}
       onSelect={(event) => { const action = { key, domEvent: event }; item.onClick?.(action); menu.onClick?.(action); }}>{content}</ui.Item>;
@@ -71,7 +72,7 @@ function MenuItems({ menu, context }: { menu: MenuProps; context: boolean }) {
 }
 
 /** Electron file and editor surfaces report viewport coordinates instead of a DOM trigger. */
-export function PointMenu({ x, y, menu, onClose }: { x: number; y: number; menu: MenuProps; onClose(): void }) {
+export function PointMenu({ x, y, menu, modal = false, onClose }: { x: number; y: number; menu: MenuProps; modal?: boolean; onClose(): void }) {
   const returnFocus = useRef(document.activeElement as HTMLElement | null);
   useEffect(() => {
     window.addEventListener('resize', onClose);
@@ -80,14 +81,14 @@ export function PointMenu({ x, y, menu, onClose }: { x: number; y: number; menu:
   const container = overlayContainer();
   if (!container) return null;
   return createPortal(
-    <DropdownMenu.Root open onOpenChange={(open) => { if (!open) onClose(); }} modal={false}>
+    <DropdownMenu.Root open onOpenChange={(open) => { if (!open) onClose(); }} modal={modal}>
       <DropdownMenu.Trigger asChild>
         <span aria-hidden="true" tabIndex={-1} style={{ position: 'fixed', left: x, top: y, width: 0, height: 0 }} />
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal container={container}>
-        <DropdownMenu.Content className="sd-menu" align="start" sideOffset={2} collisionPadding={8}
+        <DropdownMenu.Content asChild className="sd-menu" align="start" sideOffset={2} collisionPadding={8}
           onCloseAutoFocus={(event) => { event.preventDefault(); returnFocus.current?.focus({ preventScroll: true }); }}>
-          <MenuItems menu={menu} context={false} />
+          <MenuSurface origin={{ x, y }}><MenuItems menu={menu} context={false} /></MenuSurface>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>, container,

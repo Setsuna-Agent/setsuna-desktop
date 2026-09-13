@@ -5,7 +5,7 @@ import {
 } from '../contracts/index.js';
 import {
   clipboard,
-  Menu,
+  screen,
   session,
   type BrowserWindow,
   type Event,
@@ -14,6 +14,7 @@ import {
   type WebPreferences,
 } from 'electron';
 import { createBrowserContextMenuTemplate } from './context-menu.js';
+import type { BrowserContextMenuSession } from './context-menu-session.js';
 import { embeddedBrowserKeyboardShortcut } from './keyboard-shortcuts.js';
 import {
   isAllowedEmbeddedBrowserUrl,
@@ -25,6 +26,7 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
   browserTabIdForWebContents(webContentsId: number): string | null;
   interfaceLanguage(): RuntimeInterfaceLanguage;
   mainWindow: BrowserWindow;
+  contextMenus: BrowserContextMenuSession;
 }>): () => void {
   const { mainWindow } = input;
   const guestDisposers = new Map<number, () => void>();
@@ -84,12 +86,12 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
     };
     const handleContextMenu = (_contextMenuEvent: Event, params: Electron.ContextMenuParams) => {
       if (mainWindow.isDestroyed()) return;
-      Menu.buildFromTemplate(createBrowserContextMenuTemplate(guestContents, params, {
+      input.contextMenus.show(guestContents, createBrowserContextMenuTemplate(guestContents, params, {
         canOpenInNewTab: isAllowedEmbeddedBrowserUrl,
         copyText: (value) => clipboard.writeText(value),
         locale: input.interfaceLanguage(),
         openInNewTab: (url) => { requestNewTab(url); },
-      })).popup({ window: mainWindow });
+      }), browserMenuPoint(mainWindow));
     };
     const handleWillNavigate = (event: Event, url: string) => {
       if (!isAllowedEmbeddedBrowserUrl(url)) event.preventDefault();
@@ -121,6 +123,14 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
     mainWindow.webContents.off('did-attach-webview', handleDidAttachWebview);
     for (const dispose of [...guestDisposers.values()]) dispose();
   };
+}
+
+/** Screen DIPs avoid mixing guest zoom/device emulation with host overlay coordinates. */
+export function browserMenuPoint(mainWindow: BrowserWindow): { x: number; y: number } {
+  const point = screen.getCursorScreenPoint();
+  const bounds = mainWindow.getContentBounds();
+  const zoom = mainWindow.webContents.getZoomFactor();
+  return { x: (point.x - bounds.x) / zoom, y: (point.y - bounds.y) / zoom };
 }
 
 export function publishBrowserOpenNewTab(mainWindow: BrowserWindow, url: string): boolean {

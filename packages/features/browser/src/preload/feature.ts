@@ -4,6 +4,7 @@ import {
   BROWSER_IPC_CHANNELS,
   browserFeature,
   type BrowserDesktopBridge,
+  type BrowserContextMenuRequest,
   type BrowserOpenNewTabRequest,
   type BrowserPreloadBridgeContribution,
 } from '../contracts/index.js';
@@ -30,11 +31,19 @@ export const browserPreloadFeature = definePreloadFeature<BrowserPreloadBridgeCo
         ipcRenderer.invoke(BROWSER_IPC_CHANNELS.setActiveTab, { tabId }),
       setDeviceEmulation: (tabId, emulation) =>
         ipcRenderer.invoke(BROWSER_IPC_CHANNELS.setDeviceEmulation, { emulation, tabId }),
-      showReloadMenu: (webContentsId, shortcutBindings) =>
+      showReloadMenu: (webContentsId, shortcutBindings, point) =>
         ipcRenderer.invoke(BROWSER_IPC_CHANNELS.showReloadMenu, {
           shortcutBindings: shortcutBindings ? { ...shortcutBindings } : undefined,
           webContentsId,
+          point,
         }),
+      runContextMenuAction: (menuId, key) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.runContextMenuAction, { menuId, key }),
+      dismissContextMenu: (menuId) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.dismissContextMenu, { menuId }),
+      onContextMenu(callback) {
+        const listener = (_event: IpcRendererEvent, request: BrowserContextMenuRequest | null) => callback(request);
+        ipcRenderer.on(BROWSER_IPC_CHANNELS.contextMenu, listener);
+        return () => ipcRenderer.off(BROWSER_IPC_CHANNELS.contextMenu, listener);
+      },
       onOpenNewTab(callback) {
         const listener = (_event: IpcRendererEvent, request: BrowserOpenNewTabRequest) => callback(request);
         ipcRenderer.on(BROWSER_IPC_CHANNELS.openNewTab, listener);

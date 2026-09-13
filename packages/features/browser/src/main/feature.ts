@@ -3,13 +3,14 @@ import {
   requiredCapability,
 } from '@setsuna-desktop/feature-core/capability';
 import { defineMainDependencies, defineMainFeature } from '@setsuna-desktop/feature-core/main';
-import { browserFeature } from '../contracts/index.js';
+import { BROWSER_IPC_CHANNELS, browserFeature } from '../contracts/index.js';
 import {
   browserControlConnectionCapability,
   browserMainHostCapability,
 } from './capabilities.js';
 import { BrowserControlServer } from './control-server.js';
 import { DesktopBrowserController } from './control.js';
+import { BrowserContextMenuSession } from './context-menu-session.js';
 import { registerBrowserIpc } from './ipc.js';
 import { installEmbeddedBrowserWebviews, publishBrowserOpenNewTab } from './webview.js';
 
@@ -23,6 +24,12 @@ export const browserMainFeature = defineMainFeature({
   provides: [declareCapabilityProvider(browserControlConnectionCapability)],
   async setup(context) {
     const { host } = context.dependencies;
+    const contextMenus = new BrowserContextMenuSession((request) => {
+      if (!host.mainWindow.isDestroyed() && !host.mainWindow.webContents.isDestroyed()) {
+        host.mainWindow.webContents.send(BROWSER_IPC_CHANNELS.contextMenu, request);
+      }
+    });
+    context.scope.add(() => contextMenus.dismiss());
     const controller = new DesktopBrowserController({
       openTab: (url) => publishBrowserOpenNewTab(host.mainWindow, url),
     });
@@ -41,12 +48,14 @@ export const browserMainFeature = defineMainFeature({
       controller,
       host.mainWindow,
       () => host.interfaceLanguage(),
+      contextMenus,
     ));
     context.scope.add(installEmbeddedBrowserWebviews({
       activeKeyboardShortcutBindings: () => host.activeKeyboardShortcutBindings(),
       browserTabIdForWebContents: (webContentsId) => controller.tabIdForWebContents(webContentsId),
       interfaceLanguage: () => host.interfaceLanguage(),
       mainWindow: host.mainWindow,
+      contextMenus,
     }));
     context.provide(declareCapabilityProvider(browserControlConnectionCapability), connection);
   },

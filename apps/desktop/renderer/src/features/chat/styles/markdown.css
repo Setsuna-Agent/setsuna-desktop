@@ -211,13 +211,7 @@ a.chat-markdown__file-link:focus-visible {
   margin: 1em 0 1.15em;
   overflow-x: auto;
   overscroll-behavior-inline: contain;
-  scrollbar-color: transparent transparent;
-  scrollbar-width: thin !important;
-}
-
-.chat-markdown__table-scroll:hover,
-.chat-markdown__table-scroll:focus-visible {
-  scrollbar-color: var(--chat-scrollbar-thumb) transparent;
+  scrollbar-width: auto !important;
 }
 
 .chat-markdown__table-scroll:focus-visible {
@@ -232,15 +226,15 @@ a.chat-markdown__file-link:focus-visible {
 }
 
 .chat-markdown__table-scroll::-webkit-scrollbar-thumb {
-  border: 2px solid transparent !important;
+  border: 0 !important;
   border-radius: 999px;
-  background: transparent !important;
+  background: var(--chat-scrollbar-thumb) !important;
   background-clip: content-box !important;
 }
 
-.chat-markdown__table-scroll:hover::-webkit-scrollbar-thumb,
-.chat-markdown__table-scroll:focus-visible::-webkit-scrollbar-thumb {
-  background: var(--chat-scrollbar-thumb) !important;
+.chat-markdown__table-scroll::-webkit-scrollbar-thumb:hover,
+.chat-markdown__table-scroll::-webkit-scrollbar-thumb:active {
+  background: var(--chat-scrollbar-thumb-hover) !important;
   background-clip: content-box !important;
 }
 

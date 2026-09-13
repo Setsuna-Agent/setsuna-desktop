@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { WebviewTag } from 'electron';
 import { useCallback, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_BROWSER_URL, type BrowserDesktopBridge } from '../../src/contracts/index.js';
+import { DEFAULT_BROWSER_URL, type BrowserContextMenuRequest, type BrowserDesktopBridge } from '../../src/contracts/index.js';
 import { BrowserPanel } from '../../src/renderer/BrowserPanel.js';
 import {
   BROWSER_BOOKMARKS_STORAGE_KEY,
@@ -105,13 +105,19 @@ describe('BrowserPanel interactions', () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Browser menu' }));
+    // Menu contents mount on opening so the reveal animation starts with the interaction.
+    expect(screen.getByRole('menu', { name: 'Browser window settings' })).toBeTruthy();
+    for (const name of ['Print page', 'Capture screenshot', 'Show device toolbar', 'Open developer tools']) {
+      expect(screen.getByRole('menuitem', { name })).toBeTruthy();
+    }
+    expect(screen.getByRole('menuitem', { name: 'Reset zoom' }).textContent).toBe('100%');
     await user.click(screen.getByRole('menuitem', { name: 'Zoom in' }));
 
     expect(setZoomFactor).toHaveBeenCalledWith(1.1);
     expect(screen.getByRole('menuitem', { name: 'Reset zoom' }).textContent).toBe('110%');
   });
 
-  it('opens the native reload menu from the refresh button context menu', async () => {
+  it('opens the shared reload menu at the refresh button context point', async () => {
     const showReloadMenu = vi.fn(async () => true);
     browserBridge = createBrowserBridge({ showReloadMenu });
     renderBrowserPanel();
@@ -119,12 +125,36 @@ describe('BrowserPanel interactions', () => {
       getWebContentsId: () => 42,
     });
 
-    fireEvent.contextMenu(screen.getByRole('button', { name: 'Refresh' }));
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Refresh' }), { clientX: 180, clientY: 64 });
 
     await waitFor(() => expect(showReloadMenu).toHaveBeenCalledWith(42, {
       hard: 'Control+Shift+KeyR',
       normal: 'Control+KeyR',
-    }));
+    }, { x: 180, y: 64 }));
+  });
+
+  it('renders only the attached guest menu and routes selection through its one-time action ID', async () => {
+    let publishMenu: (request: BrowserContextMenuRequest | null) => void = () => undefined;
+    const unsubscribe = vi.fn();
+    browserBridge = createBrowserBridge({ onContextMenu: (callback) => { publishMenu = callback; return unsubscribe; } });
+    renderBrowserPanel();
+    Object.assign(document.querySelector('webview') as unknown as WebviewTag, { getWebContentsId: () => 42 });
+    const request: BrowserContextMenuRequest = {
+      id: 'menu-session', webContentsId: 99, x: 180, y: 64,
+      items: [{ key: 'copy', label: 'Copy image' }, { key: 'paste', label: 'Paste', disabled: true }],
+    };
+    act(() => publishMenu(request));
+    expect(screen.queryByRole('menuitem', { name: 'Copy image' })).toBeNull();
+    act(() => publishMenu({ ...request, webContentsId: 42 }));
+    const copy = await screen.findByRole('menuitem', { name: 'Copy image' });
+    expect(copy.closest('[role="menu"]')?.classList.contains('sd-menu-motion')).toBe(true);
+    fireEvent.click(copy);
+    expect(browserBridge.runContextMenuAction).toHaveBeenCalledWith('menu-session', 'copy');
+    expect(browserBridge.dismissContextMenu).not.toHaveBeenCalled();
+    act(() => publishMenu({ ...request, id: 'next-menu', webContentsId: 42 }));
+    fireEvent.keyDown(await screen.findByRole('menu'), { key: 'Escape' });
+    await waitFor(() => expect(browserBridge.dismissContextMenu).toHaveBeenCalledWith('next-menu'));
+    expect(browserBridge.runContextMenuAction).toHaveBeenCalledOnce();
   });
 
   it('keeps the last confirmed zoom and reports a rejected webview action', async () => {
@@ -240,6 +270,9 @@ function createBrowserBridge(overrides: Partial<BrowserDesktopBridge> = {}): Bro
   return {
     captureScreenshot: vi.fn(async () => null),
     onOpenNewTab: vi.fn(() => () => undefined),
+    onContextMenu: vi.fn(() => () => undefined),
+    dismissContextMenu: vi.fn(async () => undefined),
+    runContextMenuAction: vi.fn(async () => true),
     reloadTab: vi.fn(async () => true),
     registerTab: vi.fn(async () => false),
     resolveFavicon: vi.fn(async () => null),

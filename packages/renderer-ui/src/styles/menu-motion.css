@@ -1,0 +1,64 @@
+/* Shared with host-rendered sidebar menus; positioning and focus remain with the owner. */
+.sd-menu-motion {
+  isolation: isolate;
+  transform-origin: var(--radix-context-menu-content-transform-origin, var(--radix-dropdown-menu-content-transform-origin, top left));
+}
+
+.sd-menu-motion[role='menu'] {
+  border-radius: 12px;
+}
+
+/* Host menus already own their absolute/fixed positioning. */
+.sd-menu.sd-menu-motion {
+  position: relative;
+}
+
+.sd-menu-motion:not([data-motion-ready]) {
+  opacity: 0;
+  animation: none;
+}
+
+.sd-menu-motion[data-motion-ready] {
+  animation: sd-menu-reveal 300ms var(--app-ease-out);
+}
+
+.sd-menu-motion[data-state='closed'] {
+  pointer-events: none;
+  animation: sd-menu-dismiss 140ms var(--app-ease-out) forwards;
+}
+
+.sd-menu-motion__highlight {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: -1;
+  border-radius: 7px;
+  background: var(--desktop-agent-control-hover-bg);
+  pointer-events: none;
+}
+
+.sd-menu-motion [role='menuitem'] {
+  position: relative;
+  border-radius: 7px;
+}
+
+.sd-menu-motion .sd-menu__item[data-highlighted],
+.sd-menu-motion [role='menuitem']:not(:disabled):not([data-disabled]):is(:hover, :active) {
+  background: transparent;
+}
+
+@keyframes sd-menu-reveal {
+  from { opacity: 0; clip-path: var(--sd-menu-clip-start, inset(0 100% 100% 0 round 8px)); }
+  to { opacity: 1; clip-path: inset(0 0 0 0 round 12px); }
+}
+
+@keyframes sd-menu-dismiss {
+  from { opacity: 1; clip-path: inset(0 0 0 0 round 12px); }
+  to { opacity: 0; clip-path: var(--sd-menu-clip-start, inset(0 100% 100% 0 round 8px)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sd-menu-motion, .sd-menu-motion[data-motion-ready], .sd-menu-motion[data-state='closed'] {
+    animation: none;
+  }
+}

@@ -242,7 +242,7 @@ export function ChatTranscript({
     () => `${createChatScrollSignal(renderWindow, { activeTurnId, contextCompactionRunning, threadId: currentThread?.id })}:plugins:${pluginUseScrollSignal}`,
     [activeTurnId, contextCompactionRunning, currentThread?.id, pluginUseScrollSignal, renderWindow],
   );
-  const { handleScroll, handleScrollKeyDown, handleScrollTouchMove, handleScrollWheel, listRef, scrollRef: scrollRefInternal, scrollToBottom, scrollToOffset, showScrollBottom } = usePinnedChatScroll({
+  const { handleScroll, handleScrollPointerDown, handleScrollKeyDown, handleScrollTouchMove, handleScrollWheel, listRef, scrollRef: scrollRefInternal, scrollToBottom, scrollToOffset, showScrollBottom } = usePinnedChatScroll({
     contentRef,
     scrollSignal,
     showEmptyStarter,
@@ -272,13 +272,13 @@ export function ChatTranscript({
     const scrollNode = scrollRefInternal.current;
     if (!anchor || !scrollNode) return;
     // Prepending a page must not move the message currently under the user's cursor.
-    scrollNode.scrollTop = anchor.top + (scrollNode.scrollHeight - anchor.height);
+    scrollToOffset(anchor.top + (scrollNode.scrollHeight - anchor.height), 'auto');
     if (!messageHistory.loading) historyScrollAnchorRef.current = null;
-  }, [messageHistory.loading, messages.length, scrollRefInternal, showFullHistory]);
+  }, [messageHistory.loading, messages.length, scrollRefInternal, scrollToOffset, showFullHistory]);
 
   return (
     <>
-      <div className={`chat-messages ${showEmptyStarter ? 'chat-messages--starter' : ''}`} ref={scrollRefInternal} tabIndex={0} aria-label={t('chat.navigation.messages')} onKeyDownCapture={handleScrollKeyDown} onScroll={handleScroll} onTouchMoveCapture={handleScrollTouchMove} onWheelCapture={handleScrollWheel}>
+      <div className={`chat-messages ${showEmptyStarter ? 'chat-messages--starter' : ''}`} ref={scrollRefInternal} tabIndex={0} aria-label={t('chat.navigation.messages')} onKeyDownCapture={handleScrollKeyDown} onPointerDownCapture={handleScrollPointerDown} onScroll={handleScroll} onTouchMoveCapture={handleScrollTouchMove} onWheelCapture={handleScrollWheel}>
         <MarkdownViewportProvider scrollRef={scrollRefInternal}>
           <div className="chat-content-frame" ref={attachContent}>
             {showEmptyStarter ? (

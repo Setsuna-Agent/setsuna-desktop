@@ -18,8 +18,6 @@
   padding: 12px 12px 20px;
   overflow-y: auto;
   background: transparent;
-  scrollbar-width: thin;
-  scrollbar-color: var(--chat-scrollbar-thumb) transparent;
 }
 
 .desktop-settings-sidebar .chat-user-settings__page-back.sd-page-back {
@@ -115,8 +113,6 @@
   overflow-x: hidden;
   overflow-y: auto;
   background: var(--app-bg);
-  scrollbar-width: thin;
-  scrollbar-color: var(--chat-scrollbar-thumb) transparent;
 }
 
 .desktop-settings-panel .chat-user-settings__content--wide {

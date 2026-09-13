@@ -1,4 +1,4 @@
-import { Button as UiButton } from '@setsuna-desktop/renderer-ui';
+import { Button as UiButton, MenuSurface } from '@setsuna-desktop/renderer-ui';
 import {
   CAPABILITIES_CATALOG_NAVIGATION_GROUP_ID,
   settingsPageKey,
@@ -148,7 +148,7 @@ function CapabilitiesCreateMenu({
         {buttonLabel}
       </Button>
       {open ? (
-        <div className="desktop-capabilities-create-menu" role="menu">
+        <MenuSurface className="desktop-capabilities-create-menu" role="menu" style={{ transformOrigin: 'top right' }}>
           {items.map((item) => (
             <UiButton variant="ghost"
               className="desktop-capabilities-create-menu__item"
@@ -168,7 +168,7 @@ function CapabilitiesCreateMenu({
               </span>
             </UiButton>
           ))}
-        </div>
+        </MenuSurface>
       ) : null}
     </div>
   );

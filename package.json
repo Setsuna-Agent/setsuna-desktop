@@ -89,6 +89,7 @@
     "@xterm/xterm": "^6.0.0",
     "corepack": "0.34.7",
     "katex": "^0.16.22",
+    "lenis": "1.3.26",
     "lucide-react": "^0.468.0",
     "marked": "^17.0.1",
     "node-pty": "^1.1.0",
@@ -131,7 +132,8 @@
   },
   "pnpm": {
     "patchedDependencies": {
-      "node-pty@1.1.0": "patches/node-pty@1.1.0.patch"
+      "node-pty@1.1.0": "patches/node-pty@1.1.0.patch",
+      "@pierre/diffs@1.3.3": "patches/@pierre__diffs@1.3.3.patch"
     }
   },
   "build": {

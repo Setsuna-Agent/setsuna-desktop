@@ -59,33 +59,8 @@
 
 .feature-terminal .xterm-viewport {
   overscroll-behavior: contain;
-  scrollbar-color: var(--chat-scrollbar-thumb) transparent;
-  scrollbar-width: thin;
 }
 
-.feature-terminal .xterm-viewport::-webkit-scrollbar {
-  width: var(--chat-scrollbar-width);
-  height: var(--chat-scrollbar-width);
-}
-
-.feature-terminal .xterm-viewport::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.feature-terminal .xterm-viewport::-webkit-scrollbar-thumb {
-  min-height: 40px;
-  border: 2px solid transparent;
-  border-radius: var(--app-radius-full);
-  background: var(--chat-scrollbar-thumb);
-  background-clip: content-box;
-}
-
-.feature-terminal .xterm-viewport::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--app-muted) 38%, transparent);
-  background-clip: content-box;
-}
-
-.feature-terminal .xterm-viewport::-webkit-scrollbar-corner,
 .feature-terminal .xterm .xterm-scrollable-element,
 .feature-terminal .xterm .xterm-scrollable-element > .scrollbar {
   background: transparent !important;
@@ -100,13 +75,13 @@
 }
 
 .feature-terminal .xterm .xterm-scrollable-element > .scrollbar.vertical > .slider {
-  left: 2px !important;
-  width: calc(var(--chat-scrollbar-width) - 4px) !important;
+  left: 0 !important;
+  width: var(--chat-scrollbar-width) !important;
 }
 
 .feature-terminal .xterm .xterm-scrollable-element > .scrollbar.horizontal > .slider {
-  top: 2px !important;
-  height: calc(var(--chat-scrollbar-width) - 4px) !important;
+  top: 0 !important;
+  height: var(--chat-scrollbar-width) !important;
 }
 
 .feature-terminal .xterm .xterm-scrollable-element > .scrollbar > .slider {
@@ -116,7 +91,7 @@
 
 .feature-terminal .xterm .xterm-scrollable-element > .scrollbar > .slider:hover,
 .feature-terminal .xterm .xterm-scrollable-element > .scrollbar > .slider.active {
-  background: color-mix(in srgb, var(--app-muted) 38%, transparent) !important;
+  background: var(--chat-scrollbar-thumb-hover) !important;
 }
 
 .feature-terminal__placeholder {

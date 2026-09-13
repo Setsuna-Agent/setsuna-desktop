@@ -121,10 +121,22 @@ it('shares the directory navigator across file and files renderer slots', async 
 
     fireEvent.click(screen.getByRole('button', { name: 'a.ts' }));
     expect(screen.getByRole('button', { name: 'b.ts' })).toBeTruthy();
+    // A tab switch remounts the slot; restored rows must already be at their final positions.
+    const expectRestoredTree = () => {
+      const rows = view.container.querySelectorAll<HTMLElement>('.sd-file-tree__node');
+      expect(rows.length).toBe(3);
+      for (const row of rows) {
+        expect(row.style.opacity).toBe('1');
+        expect(row.style.transform).toBe('none');
+      }
+    };
+    expectRestoredTree();
     expect(view.container.querySelector('.desktop-file-list')?.scrollTop).toBe(128);
     expect(screen.getByRole('separator', { name: '调整文件目录宽度' }).getAttribute('aria-valuenow')).toBe('232');
     fireEvent.click(screen.getByRole('button', { name: 'b.ts' }));
+    expectRestoredTree();
     fireEvent.click(screen.getByRole('button', { name: '目录标签' }));
+    expectRestoredTree();
     expect(screen.getByRole('button', { name: 'a.ts' })).toBeTruthy();
     expect(searchEntries).toHaveBeenCalledTimes(2);
 

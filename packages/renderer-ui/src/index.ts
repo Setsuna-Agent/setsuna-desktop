@@ -3,6 +3,7 @@ export { TextField, TextArea, type TextFieldProps, type TextAreaProps } from './
 export { Checkbox, CheckField, Switch, type CheckboxProps } from './selection-controls.js';
 export { Dialog, type DialogProps } from './dialog.js';
 export { Dropdown, PointMenu, type DropdownProps, type MenuProps, type MenuItem } from './menu.js';
+export { MenuSurface } from './menu-surface.js';
 export { Popover, Tooltip, type TooltipProps } from './popover.js';
 export { ConfirmDialog, ConfirmDialogTrigger, type ConfirmationOptions } from './confirm-dialog.js';
 export { ConfirmationProvider, useConfirm } from './confirmation-provider.js';
@@ -15,4 +16,5 @@ export { ToastStack, type ToastEntry, type ToastTone } from './toast.js';
 export { Slider } from './slider.js';
 export { ResizeHandle } from './resize-handle.js';
 export { FileTreeToggle } from './file-tree-toggle.js';
+export { FileTreeSurface, FileTreeRow } from './file-tree.js';
 export { FileIcon } from './file-icon.js';

@@ -315,10 +315,11 @@
 }
 
 .sd-scrollbar-overlay__thumb {
+  touch-action: none;
   box-sizing: border-box;
   width: var(--chat-scrollbar-width);
   margin-left: 0;
-  border: 1px solid transparent;
+  border: 0;
   border-radius: var(--app-radius-full);
   background: var(--chat-scrollbar-thumb);
   background-clip: content-box;
@@ -330,6 +331,6 @@
 .sd-scrollbar-overlay:hover .sd-scrollbar-overlay__thumb,
 .sd-scrollbar-overlay__thumb:hover,
 .sd-scrollbar-overlay__thumb:active {
-  background: color-mix(in srgb, var(--app-muted) 48%, transparent);
+  background: var(--chat-scrollbar-thumb-hover);
   background-clip: content-box;
 }

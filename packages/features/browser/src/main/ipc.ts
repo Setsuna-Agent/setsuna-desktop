@@ -6,7 +6,6 @@ import type { RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import type { FeatureScope } from '@setsuna-desktop/feature-core/scope';
 import {
   clipboard,
-  Menu,
   webContents as electronWebContents,
   ipcMain,
   nativeImage,
@@ -16,6 +15,8 @@ import {
 } from 'electron';
 import type { DesktopBrowserController } from './control.js';
 import { createBrowserReloadMenuTemplate } from './context-menu.js';
+import type { BrowserContextMenuSession } from './context-menu-session.js';
+import { browserMenuPoint } from './webview.js';
 import { loadBrowserFavicon } from './favicon.js';
 
 const handlerChannels = [
@@ -27,6 +28,8 @@ const handlerChannels = [
   BROWSER_IPC_CHANNELS.setActiveTab,
   BROWSER_IPC_CHANNELS.setDeviceEmulation,
   BROWSER_IPC_CHANNELS.showReloadMenu,
+  BROWSER_IPC_CHANNELS.runContextMenuAction,
+  BROWSER_IPC_CHANNELS.dismissContextMenu,
 ] as const;
 
 export function registerBrowserIpc(
@@ -34,6 +37,7 @@ export function registerBrowserIpc(
   controller: DesktopBrowserController,
   mainWindow: BrowserWindow,
   interfaceLanguage: () => RuntimeInterfaceLanguage,
+  contextMenus: BrowserContextMenuSession,
 ): () => void {
   for (const channel of handlerChannels) ipcMain.removeHandler(channel);
   ipcMain.handle(BROWSER_IPC_CHANNELS.captureScreenshot, (event, input) => scope.runOperation(async () => {
@@ -86,14 +90,23 @@ export function registerBrowserIpc(
   ipcMain.handle(BROWSER_IPC_CHANNELS.showReloadMenu, (event, input) => scope.runOperation(() => {
     const guest = resolveEmbeddedBrowserGuest(event.sender, Number(input?.webContentsId), mainWindow);
     if (!guest) return false;
-    Menu.buildFromTemplate(createBrowserReloadMenuTemplate(
+    const point = input?.point;
+    const position = Number.isFinite(point?.x) && Number.isFinite(point?.y)
+      ? { x: point.x as number, y: point.y as number }
+      : browserMenuPoint(mainWindow);
+    return contextMenus.show(guest, createBrowserReloadMenuTemplate(
       guest,
       interfaceLanguage(),
       normalizeReloadShortcutBindings(input?.shortcutBindings),
-    ))
-      .popup({ window: mainWindow });
-    return true;
+    ), position);
   }));
+  ipcMain.handle(BROWSER_IPC_CHANNELS.runContextMenuAction, (event, input) => scope.runOperation(() => {
+    if (!isDesktopRendererSender(event.sender, mainWindow)) return false;
+    return contextMenus.execute(String(input?.menuId ?? ''), String(input?.key ?? ''));
+  }));
+  ipcMain.handle(BROWSER_IPC_CHANNELS.dismissContextMenu, (event, input) => {
+    if (isDesktopRendererSender(event.sender, mainWindow) && typeof input?.menuId === 'string') contextMenus.dismiss(input.menuId);
+  });
   return () => {
     for (const channel of handlerChannels) ipcMain.removeHandler(channel);
   };

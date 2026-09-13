@@ -50,7 +50,12 @@ it('renames and moves open descendants, preserving the active draft for saving a
   expect(view.result.current.workspace.fileDraft).toMatchObject({ editing: true, dirty: true, content: 'unsaved' });
   expect(view.result.current.slot.active).toBe('file:lib/main.ts');
   expect(view.result.current.slot.panels.map((panel) => panel.filePath)).toEqual(['lib/main.ts', 'lib/other.ts', 'src-extra/keep.ts']);
-  await act(async () => { await view.result.current.workspace.moveEntry('lib', 'archive'); });
+  let moving!: Promise<WorkspaceEntry | null>;
+  act(() => { moving = view.result.current.workspace.moveEntry('lib', 'archive'); });
+  expect(screen.getByText('将“lib”移动到“archive”？')).toBeTruthy();
+  expect(client.moveProjectEntry).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: '移动' }));
+  await act(async () => { await moving; });
   expect(client.moveProjectEntry).toHaveBeenCalledWith('project', 'lib', { parentPath: 'archive' });
   expect(view.result.current.workspace.fileDraft).toMatchObject({ content: 'unsaved', dirty: true });
   expect(view.result.current.slot.panels.map((panel) => panel.filePath)).toEqual(['archive/lib/main.ts', 'archive/lib/other.ts', 'src-extra/keep.ts']);
@@ -88,6 +93,45 @@ it('does not apply a pending rename to the next workspace', async () => {
   expect(view.result.current.entryOperationPending).toBe(false);
 });
 
+it('moves a file only after confirmation and ignores cancellation, duplicate requests and stale decisions', async () => {
+  const entry: WorkspaceEntry = { path: 'archive/main.ts', name: 'main.ts', type: 'file' };
+  const client = { moveProjectEntry: vi.fn().mockResolvedValue(entry) };
+  const onEntryRenamed = vi.fn();
+  const view = renderHook(({ projectId }) => useProjectWorkspace({
+    activeProjectId: projectId, client: client as unknown as DesktopRuntimeClient,
+    onOpenFilePanel: vi.fn(), onEntryRenamed,
+  }), { initialProps: { projectId: 'first' }, wrapper: WorkspaceProviders });
+  let moving!: Promise<WorkspaceEntry | null>;
+  act(() => { moving = view.result.current.moveEntry('src/main.ts', 'archive'); });
+  expect(screen.getByText('将“src/main.ts”移动到“archive”？')).toBeTruthy();
+  expect(view.result.current.entryOperationPending).toBe(true);
+  await act(async () => { expect(await view.result.current.moveEntry('other.ts', 'archive')).toBeNull(); });
+  expect(client.moveProjectEntry).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: '取消' }));
+  await act(async () => { expect(await moving).toBeNull(); });
+  expect(view.result.current.entryOperationPending).toBe(false);
+  expect(onEntryRenamed).not.toHaveBeenCalled();
+
+  act(() => { moving = view.result.current.moveEntry('src/main.ts', 'archive'); });
+  fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+  await act(async () => { expect(await moving).toBeNull(); });
+  expect(client.moveProjectEntry).not.toHaveBeenCalled();
+
+  act(() => { moving = view.result.current.moveEntry('src/main.ts', 'archive'); });
+  view.rerender({ projectId: 'second' });
+  fireEvent.click(screen.getByRole('button', { name: '移动' }));
+  await act(async () => { expect(await moving).toBeNull(); });
+  expect(client.moveProjectEntry).not.toHaveBeenCalled();
+  expect(onEntryRenamed).not.toHaveBeenCalled();
+
+  act(() => { moving = view.result.current.moveEntry('src/main.ts', 'archive'); });
+  fireEvent.click(screen.getByRole('button', { name: '移动' }));
+  await act(async () => { expect(await moving).toEqual(entry); });
+  expect(client.moveProjectEntry).toHaveBeenCalledExactlyOnceWith('second', 'src/main.ts', { parentPath: 'archive' });
+  expect(onEntryRenamed).toHaveBeenCalledExactlyOnceWith('src/main.ts', 'archive/main.ts');
+  expect(view.result.current.entryOperationPending).toBe(false);
+});
+
 it('blocks saves throughout a delayed move and releases the guard after either success or failure', async () => {
   const file: WorkspaceFileRead = {
     projectId: 'project', path: 'src/main.ts', content: 'original', size: 8,
@@ -113,6 +157,11 @@ it('blocks saves throughout a delayed move and releases the guard after either s
   expect(client.saveProjectFile).not.toHaveBeenCalled();
   expect(view.result.current.entryOperationPending).toBe(true);
   expect(view.result.current.fileDraft).toMatchObject({ content: 'unsaved', dirty: true, saving: false });
+  expect(client.moveProjectEntry).not.toHaveBeenCalled();
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: '移动' }));
+    expect(await view.result.current.fileDraft.save()).toBe(false);
+  });
   await act(async () => {
     finishMove({ path: 'archive/src', name: 'src', type: 'directory' });
     await moving;
@@ -125,7 +174,11 @@ it('blocks saves throughout a delayed move and releases the guard after either s
 
   act(() => view.result.current.fileDraft.updateContent('next edit'));
   client.moveProjectEntry.mockRejectedValueOnce(new Error('move failed'));
-  await act(async () => { await expect(view.result.current.moveEntry('archive/src', '')).rejects.toThrow('move failed'); });
+  act(() => { moving = view.result.current.moveEntry('archive/src', ''); });
+  expect(screen.getByText('将“archive/src”移动到“工作区根目录”？')).toBeTruthy();
+  const failedMove = expect(moving).rejects.toThrow('move failed');
+  fireEvent.click(screen.getByRole('button', { name: '移动' }));
+  await act(async () => { await failedMove; });
   expect(view.result.current.entryOperationPending).toBe(false);
   client.saveProjectFile.mockResolvedValueOnce({ ...movedFile, content: 'next edit', revision: 'revision-3' });
   await act(async () => { expect(await view.result.current.fileDraft.save()).toBe(true); });
@@ -164,7 +217,10 @@ it('rejects moving a saving file before React renders and lets the save complete
     expect(await saving).toBe(true);
   });
   expect(view.result.current.fileDraft).toMatchObject({ content: 'second edit', dirty: true, saving: false });
-  await act(async () => { await view.result.current.moveEntry('src', 'archive'); });
+  let moving!: Promise<WorkspaceEntry | null>;
+  act(() => { moving = view.result.current.moveEntry('src', 'archive'); });
+  fireEvent.click(screen.getByRole('button', { name: '移动' }));
+  await act(async () => { await moving; });
   client.saveProjectFile.mockResolvedValueOnce({ ...file, path: 'archive/src/main.ts', content: 'second edit', revision: 'revision-3' });
   await act(async () => { expect(await view.result.current.fileDraft.save()).toBe(true); });
   expect(client.saveProjectFile).toHaveBeenLastCalledWith('project', 'archive/src/main.ts', {

@@ -1,4 +1,4 @@
-import { FileTreeToggle, ResizeHandle, TextField, Button } from '@setsuna-desktop/renderer-ui';
+import { FileTreeToggle, FileTreeSurface, FileTreeRow, ResizeHandle, TextField, Button } from '@setsuna-desktop/renderer-ui';
 
 import {
   WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES,
@@ -10,7 +10,7 @@ import {
   type RuntimeReviewFinding,
 } from '@setsuna-desktop/contracts';
 import type { DesktopReviewSource } from '@setsuna-desktop/feature-review/contracts';
-import { Bug, ChevronDown, FileDiff, FolderOpen, GitBranch, MessageSquare, Search, SquareTerminal } from 'lucide-react';
+import { Bug, FileDiff, FolderOpen, GitBranch, MessageSquare, Search, SquareTerminal } from 'lucide-react';
 import {
   lazy,
   Suspense,
@@ -61,7 +61,6 @@ import {
   workspaceFileMentionEntry,
 } from './workspaceFileMention.js';
 
-const FILE_TREE_INDENT_STEP_PX = 8;
 const LazyEditableWorkspaceFile = lazy(async () => {
   const module = await import('./editor/EditableWorkspaceFile.js');
   return { default: module.EditableWorkspaceFile };
@@ -209,31 +208,31 @@ export function WorkspacePanel({
     const selected = activePanel.type === 'file' && activePanel.filePath === node.path;
     return (
       <div className={`desktop-file-tree-node ${directory && entryDrag.dropPath === node.path ? 'is-drop-target' : ''}`} key={node.path}>
-        <div className={`desktop-file-row-shell ${selected ? 'is-active' : ''} ${entryDrag.draggingPath === node.path ? 'is-dragging' : ''}`} style={{ '--desktop-file-tree-indent': `${level * FILE_TREE_INDENT_STEP_PX}px` } as CSSProperties}>
-          <Button variant="ghost"
-            className={`desktop-file-row desktop-file-row--${node.type}`}
-            type="button"
-            title={node.path}
-            disabled={entryOperationPending}
-            draggable={!entryOperationPending && !treeSearching}
-            onDragStart={(event) => entryDrag.startDrag(event, node.entry)}
-            onDragEnd={entryDrag.endDrag}
-            onDragOver={(event) => entryDrag.dragOver(event, directory ? node.path : workspaceEntryParent(node.path))}
-            onDragLeave={entryDrag.clearDropTarget}
-            onDrop={(event) => entryDrag.drop(event, directory ? node.path : workspaceEntryParent(node.path))}
-            onContextMenu={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              setContextMenu({ filePath: node.path, type: node.type, x: event.clientX, y: event.clientY });
-            }}
-            onClick={() => (directory ? toggleDirectory(node.path) : onOpenEntry(node.entry))}
-          >
-            {directory ? <ChevronDown className={expanded ? '' : 'is-collapsed'} size={12} /> : <span className="desktop-file-row__spacer" />}
-            <WorkspaceFileIcon path={node.path} type={node.type} />
-            <span className="desktop-file-row__name" title={node.path}>{node.name}</span>
-            {loading ? <span className="desktop-file-row__loading">...</span> : null}
-          </Button>
-        </div>
+        <FileTreeRow
+          className={`desktop-file-row ${entryDrag.draggingPath === node.path ? 'is-dragging' : ''}`}
+          depth={level}
+          expanded={directory ? expanded : undefined}
+          selected={selected}
+          label={node.name}
+          icon={directory ? undefined : <WorkspaceFileIcon path={node.path} type={node.type} />}
+          extra={loading ? <span className="sd-spinner" aria-hidden="true" /> : undefined}
+          aria-busy={loading || undefined}
+          type="button"
+          title={node.path}
+          disabled={entryOperationPending}
+          draggable={!entryOperationPending && !treeSearching}
+          onDragStart={(event) => entryDrag.startDrag(event, node.entry)}
+          onDragEnd={entryDrag.endDrag}
+          onDragOver={(event) => entryDrag.dragOver(event, directory ? node.path : workspaceEntryParent(node.path))}
+          onDragLeave={entryDrag.clearDropTarget}
+          onDrop={(event) => entryDrag.drop(event, directory ? node.path : workspaceEntryParent(node.path))}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setContextMenu({ filePath: node.path, type: node.type, x: event.clientX, y: event.clientY });
+          }}
+          onClick={() => (directory ? toggleDirectory(node.path) : onOpenEntry(node.entry))}
+        />
         {directory && expanded ? node.children.map((child) => renderTreeNode(child, level + 1)) : null}
       </div>
     );
@@ -391,7 +390,7 @@ export function WorkspacePanel({
                   />
                 </div>
                 {activeProject ? (
-                  <div className={`desktop-file-list ${entryDrag.dropPath === '' ? 'is-drop-target' : ''}`} ref={fileListRef} onScroll={onFileListScroll}
+                  <FileTreeSurface className={`desktop-file-list ${entryDrag.dropPath === '' ? 'is-drop-target' : ''}`} ref={fileListRef} onScroll={onFileListScroll}
                     onDragOver={(event) => entryDrag.dragOver(event, '')}
                     onDragLeave={entryDrag.clearDropTarget}
                     onDrop={(event) => entryDrag.drop(event, '')}
@@ -414,7 +413,7 @@ export function WorkspacePanel({
                         {t(query ? 'workspace.files.searchLimit' : 'workspace.files.scanLimit')}
                       </div>
                     ) : null}
-                  </div>
+                  </FileTreeSurface>
                 ) : (
                   <EmptyState title={t('workspace.files.noProject')} body={t('workspace.files.addProject')} />
                 )}

@@ -1,0 +1,104 @@
+.sd-file-tree,
+.sd-file-tree__node {
+  min-width: 0;
+}
+
+.sd-file-tree__row {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  padding: 0 8px 0 calc(8px + var(--sd-file-tree-depth) * 18px);
+  border: 0;
+  border-radius: 8px;
+  color: var(--app-text-muted);
+  background: transparent;
+  font-family: var(--app-font-family);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+  transition: color 150ms ease, background 150ms ease;
+}
+
+.sd-file-tree__row:hover:not(:disabled) {
+  color: var(--app-text);
+  background: var(--desktop-agent-control-hover-bg);
+}
+
+.sd-file-tree__row.is-selected {
+  color: var(--app-text);
+  font-weight: 500;
+}
+
+.sd-file-tree__row:focus-visible {
+  outline: 2px solid var(--app-border-strong);
+  outline-offset: -2px;
+}
+
+.sd-file-tree__row:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.sd-file-tree__selection {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 8px;
+  background: var(--desktop-agent-control-active-bg);
+  pointer-events: none;
+}
+
+.sd-file-tree__branch {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(16px + (var(--sd-file-tree-depth) - 1) * 18px);
+  width: 1px;
+  background: var(--app-border);
+  transform-origin: top;
+  pointer-events: none;
+}
+
+.sd-file-tree__chevron,
+.sd-file-tree__icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.sd-file-tree__folder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.sd-file-tree__label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sd-file-tree__extra {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--app-text-muted);
+  font-size: 11px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sd-file-tree__row { transition: none; }
+}

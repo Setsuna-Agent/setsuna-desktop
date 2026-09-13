@@ -1,4 +1,4 @@
-import { Button } from '@setsuna-desktop/renderer-ui';
+import { Button, MenuSurface } from '@setsuna-desktop/renderer-ui';
 import { Bug, FileDiff, FolderOpen, GitBranch, MessageSquare, Plus, SquareTerminal, X } from 'lucide-react';
 import {
   useEffect,
@@ -145,7 +145,7 @@ export function DesktopPanelHeader({
   const tabsRef = useRef<HTMLSpanElement | null>(null);
   const launcherRef = useRef<HTMLSpanElement | null>(null);
   const launcherButtonRef = useRef<HTMLButtonElement | null>(null);
-  const launcherMenuRef = useRef<HTMLSpanElement | null>(null);
+  const launcherMenuRef = useRef<HTMLDivElement | null>(null);
   const {
     closingPanelWidths,
     finishPanelClose,
@@ -491,7 +491,7 @@ export function DesktopPanelHeader({
               </Button>
               {launcherOpen
                 ? createPortal(
-                    <span
+                    <MenuSurface
                       className="desktop-panel-launcher-menu desktop-panel-launcher-menu--native"
                       ref={launcherMenuRef}
                       role="menu"
@@ -522,7 +522,7 @@ export function DesktopPanelHeader({
                           </Button>
                         );
                       })}
-                    </span>,
+                    </MenuSurface>,
                     document.body,
                   )
                 : null}

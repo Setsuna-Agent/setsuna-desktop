@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
+import { MenuSurface } from '@setsuna-desktop/renderer-ui';
 import { focusMenuItem, menuFocusIntent } from '../../shared/lib/menuFocus.js';
 import { pageScaleInverse, zoomedPortalPosition } from '../../shared/lib/zoomedPortalPosition.js';
 
@@ -37,7 +38,7 @@ export function SidebarFloatingMenu({
         anchorY: anchorPoint?.y ?? (opensAbove ? (rect?.top ?? 0) : (rect?.bottom ?? 0)),
         horizontalAlign: !anchorPoint && opensToLeft ? 'end' : 'start',
         menuHeight,
-        menuWidth: MENU_WIDTH,
+        menuWidth: menuRef.current?.offsetWidth ?? MENU_WIDTH,
         offsetY: anchorPoint ? 0 : opensAbove ? -menuHeight - 6 : 6,
         scaleInverse: pageScaleInverse(),
         viewportHeight: window.innerHeight,
@@ -80,17 +81,18 @@ export function SidebarFloatingMenu({
   };
 
   return createPortal(
-    <div
+    <MenuSurface
       className="desktop-agent-floating-menu"
       ref={menuRef}
       role="menu"
       aria-orientation="vertical"
+      origin={anchorPoint}
       style={{ left: position.left, top: position.top }}
       onClick={(event) => event.stopPropagation()}
       onKeyDown={handleKeyDown}
     >
       {children}
-    </div>,
+    </MenuSurface>,
     document.body,
   );
 }
