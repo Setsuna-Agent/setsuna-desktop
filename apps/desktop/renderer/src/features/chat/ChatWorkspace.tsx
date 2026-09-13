@@ -191,7 +191,12 @@ export function ChatWorkspace({
   const modelSetupNotice = showEmptyStarter && modelSetupNoticeVisible && onOpenModelSettings ? (
     <ChatModelSetupNotice onConfigure={onOpenModelSettings} onDismiss={dismissModelSetupNotice} />
   ) : null;
-  const conversationClassName = ['chat-main-conversation', showEmptyStarter || deleteModeActive ? '' : 'chat-main-conversation--with-bottom-sender', conversationOverview && overviewShiftsContent ? 'chat-main-conversation--overview-shifted' : ''].filter(Boolean).join(' ');
+  const conversationClassName = [
+    'chat-main-conversation',
+    showEmptyStarter ? '' : 'chat-main-conversation--with-transcript',
+    showEmptyStarter || deleteModeActive ? '' : 'chat-main-conversation--with-bottom-sender',
+    conversationOverview && overviewShiftsContent ? 'chat-main-conversation--overview-shifted' : '',
+  ].filter(Boolean).join(' ');
   useEffect(() => {
     onConversationOverviewRenderedChange?.(Boolean(conversationOverview && currentThread && overviewVisible));
   }, [conversationOverview, currentThread, onConversationOverviewRenderedChange, overviewVisible]);

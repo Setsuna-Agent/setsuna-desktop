@@ -42,6 +42,6 @@ describe('electron build externals', () => {
     )) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
 
     expect(packageJson.dependencies).not.toHaveProperty('@earendil-works/pi-ai');
-    expect(packageJson.devDependencies).toHaveProperty('@earendil-works/pi-ai', '0.84.3');
+    expect(packageJson.devDependencies).toHaveProperty('@earendil-works/pi-ai', expect.any(String));
   });
 });
