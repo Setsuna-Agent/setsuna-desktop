@@ -50,7 +50,6 @@
 
 .chat-main-conversation--with-bottom-sender {
   --chat-message-bottom-gap: 66px;
-  padding-top: 0;
 }
 
 .chat-memory-citations {
@@ -94,17 +93,18 @@
   white-space: nowrap;
 }
 
-:root[data-desktop-platform='win32'] .chat-main-conversation--with-bottom-sender {
+/* 标题栏留白属于消息区，进入删除模式隐藏输入框时也必须保留。 */
+:root[data-desktop-platform='win32'] .chat-main-conversation--with-transcript {
   /* The conversation sits below the workspace title, not the native window bar. */
   padding-top: var(--desktop-workspace-toolbar-height);
 }
 
-:root[data-desktop-platform='linux'] .chat-main-conversation--with-bottom-sender {
+:root[data-desktop-platform='linux'] .chat-main-conversation--with-transcript {
   padding-top: var(--app-topbar-height);
 }
 
-:root[data-desktop-platform='win32'] .desktop-chat-panel--side .chat-main-conversation--with-bottom-sender,
-:root[data-desktop-platform='linux'] .desktop-chat-panel--side .chat-main-conversation--with-bottom-sender {
+:root[data-desktop-platform='win32'] .desktop-chat-panel--side .chat-main-conversation--with-transcript,
+:root[data-desktop-platform='linux'] .desktop-chat-panel--side .chat-main-conversation--with-transcript {
   padding-top: 0;
 }
 
@@ -123,7 +123,7 @@
 }
 
 /* Windows 主对话与右侧概览卡片共用同一视觉起始线；侧对话仍使用默认紧凑间距。 */
-:root[data-desktop-platform='win32'] .desktop-chat-panel:not(.desktop-chat-panel--side) .chat-main-conversation--with-bottom-sender > .chat-messages {
+:root[data-desktop-platform='win32'] .desktop-chat-panel:not(.desktop-chat-panel--side) .chat-main-conversation--with-transcript > .chat-messages {
   padding-top: 24px;
 }
 

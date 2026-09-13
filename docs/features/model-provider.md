@@ -19,7 +19,7 @@ AgentLoop / Review / Vision / Thread title / Memory
                          │
        feature-model-provider/runtime
                          │
-          @earendil-works/pi-ai 0.84.3
+          @earendil-works/pi-ai 0.85.1
 ```
 
 `model-provider` 是 required runtime/renderer Feature。Runtime factory 先创建 `BindableModelClient`，Feature 激活完成后把 sampling capability 绑定进去；激活失败不会退回旧协议栈。

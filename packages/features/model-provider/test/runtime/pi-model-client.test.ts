@@ -19,7 +19,7 @@ describe('Pi model client protocol integration', () => {
       },
     })));
 
-    expect(capture.url()).toBe('https://api.anthropic.test/v1/messages');
+    expect(capture.url()).toBe('https://api.anthropic.test/v1/messages?beta=true');
     expect(capture.headers().get('x-api-key')).toBe('secret');
     expect(capture.body()).toMatchObject({
       model: 'model-code',
