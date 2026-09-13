@@ -1,0 +1,101 @@
+.app-about-dialog .sd-dialog__body {
+  display: grid;
+  gap: 24px;
+}
+
+.app-about-dialog .sd-dialog__footer {
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--app-border);
+}
+
+.app-about__identity {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 16px 0 0;
+}
+
+.app-about__icon {
+  display: block;
+  flex: 0 0 auto;
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+}
+
+.app-about__identity h1 {
+  margin: 0;
+  color: var(--app-text);
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 28px;
+  letter-spacing: -0.3px;
+}
+
+.app-about__version {
+  font-variant-numeric: tabular-nums;
+  user-select: text;
+}
+
+.app-about__description {
+  margin: 6px 0 0;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.app-about__details {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.app-about__details > div {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  gap: 16px;
+}
+
+.app-about__details dt {
+  color: var(--app-text-muted);
+}
+
+.app-about__details dd {
+  margin: 0;
+  color: var(--app-text);
+}
+
+.app-about__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.app-about__links a {
+  border-radius: var(--app-radius-xs);
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 20px;
+  text-decoration: none;
+}
+
+.app-about__links a:hover {
+  color: var(--app-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.app-about__links a:focus-visible {
+  outline: none;
+  box-shadow: var(--app-focus-ring);
+}
+
+.app-about__error {
+  margin: 0;
+  color: var(--app-danger);
+  font-size: 12px;
+}

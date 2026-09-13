@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  DESKTOP_CLIPBOARD_WRITE_PATH,
   DESKTOP_SYSTEM_PROXY_FETCH_METADATA_PREFIX_BYTES,
   DESKTOP_SYSTEM_PROXY_FETCH_PATH,
   defaultDesktopNetworkProxyRouting,
@@ -27,6 +28,7 @@ describe('DesktopNativeBridgeServer', () => {
       delete: async (key) => { values.delete(key); },
     };
     const openExternal = vi.fn(async () => undefined);
+    const writeClipboardText = vi.fn();
     const resolveNetworkProxy = vi.fn(async () => ({
       mode: 'proxy' as const,
       proxyServerId: 'proxy-example',
@@ -47,6 +49,7 @@ describe('DesktopNativeBridgeServer', () => {
     ));
     const server = new DesktopNativeBridgeServer({
       credentialVault,
+      writeClipboardText,
       deleteNetworkProxy,
       openExternal,
       resolveNetworkProxy,
@@ -59,6 +62,22 @@ describe('DesktopNativeBridgeServer', () => {
 
     const unauthorized = await fetch(`${connection.url}/v1/credentials/status`);
     expect(unauthorized.status).toBe(401);
+
+    const unauthorizedCopy = await fetch(`${connection.url}${DESKTOP_CLIPBOARD_WRITE_PATH}`, {
+      method: 'POST', body: JSON.stringify({ text: 'secret-key' }),
+    });
+    expect(unauthorizedCopy.status).toBe(401);
+    expect(writeClipboardText).not.toHaveBeenCalled();
+    await expect(nativeRequest(connection, DESKTOP_CLIPBOARD_WRITE_PATH, { text: 'secret-key' }))
+      .resolves.toEqual({ ok: true });
+    expect(writeClipboardText).toHaveBeenCalledExactlyOnceWith('secret-key');
+    const invalidCopy = await fetch(`${connection.url}${DESKTOP_CLIPBOARD_WRITE_PATH}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${connection.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: 42 }),
+    });
+    expect(invalidCopy.status).toBe(400);
+    expect(writeClipboardText).toHaveBeenCalledTimes(1);
 
     await expect(nativeRequest(connection, '/v1/credentials/set', { key: 'mcp.oauth.test', value: 'secret' }))
       .resolves.toEqual({ ok: true });
@@ -222,6 +241,7 @@ describe('DesktopNativeBridgeServer', () => {
 
 function createFilePreviewServer(maxFilePreviewContentBytes?: number): DesktopNativeBridgeServer {
   const server = new DesktopNativeBridgeServer({
+    writeClipboardText: () => undefined,
     credentialVault: {
       status: async () => ({ available: true, backend: 'test' }),
       get: async () => undefined,

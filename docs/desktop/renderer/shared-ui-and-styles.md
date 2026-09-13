@@ -101,7 +101,7 @@
 
 - `tokens.css`：颜色、间距、字体、圆角、层级等 token。
 - `base.css`：reset、字体和 root 基础。
-- `scrollbars.css`：全局原生滚动条固定宽/高 `8px`、默认 `#E4E4E5`、hover/active `#585A5B`，颜色不透明且不随主题变化；由 `base.css` 引入，同一份规则也注入 Pierre 的 Shadow DOM。终端与 `ScrollOverlay` 的自绘滑块复用相同 token，不用透明边框缩小可见厚度。
+- `scrollbars.css`：全局原生滚动条固定宽/高 `8px`；亮色模式默认 `#E4E4E5`、hover/active `#585A5B`，暗色模式默认 `#585A5B`、hover/active `#8A8C8D`。颜色不透明且不随强调色变化；由 `base.css` 引入，同一份规则也注入 Pierre 的 Shadow DOM。终端与 `ScrollOverlay` 的自绘滑块复用相同 token，不用透明边框缩小可见厚度。
 - `beui.css`：Tailwind 语义色、字体和圆角到宿主 token 的映射，不定义第二套主题。
 - `packages/renderer-ui/src/styles/index.css`：通用控件样式唯一入口，按 controls、select、overlays、media、toast 拆分；只在 `main.tsx` 导入一次。
 - `primitives.css`：宿主页面标题、Panel、状态徽章和滚动条，不重复定义基础表单控件。

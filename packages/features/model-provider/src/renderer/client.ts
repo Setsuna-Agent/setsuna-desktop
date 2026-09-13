@@ -4,6 +4,8 @@ import type {
 } from '@setsuna-desktop/contracts';
 import type { FeatureOperationTransport } from '@setsuna-desktop/feature-core/operation';
 import {
+  copyModelProviderApiKey,
+  type CopyModelProviderApiKeyInput,
   discoverModelProviderModels,
   readModelProviderCatalog,
   readModelProviderSettings,
@@ -14,6 +16,7 @@ import {
 } from '../contracts/index.js';
 
 export type ModelProviderClient = Readonly<{
+  copyApiKey(input: CopyModelProviderApiKeyInput): Promise<Readonly<{ ok: true }>>;
   read(options?: Readonly<{ signal?: AbortSignal }>): Promise<ModelProviderSettingsState>;
   catalog(options?: Readonly<{ signal?: AbortSignal }>): Promise<ModelProviderCatalog>;
   save(
@@ -28,6 +31,7 @@ export type ModelProviderClient = Readonly<{
 
 export function createModelProviderClient(transport: FeatureOperationTransport): ModelProviderClient {
   return Object.freeze({
+    copyApiKey: (input) => transport.call(copyModelProviderApiKey, input),
     read: (options) => transport.call(readModelProviderSettings, undefined, options),
     catalog: (options) => transport.call(readModelProviderCatalog, undefined, options),
     save: (input, options) => transport.call(updateModelProviderSettings, input, options),

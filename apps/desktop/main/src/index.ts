@@ -7,6 +7,7 @@ import type { MainFeatureComposition } from '@setsuna-desktop/feature-core/main'
 import {
   app,
   BrowserWindow,
+  clipboard,
   dialog,
   Menu,
   nativeImage,
@@ -242,6 +243,7 @@ async function createWindow(): Promise<void> {
   );
   const currentDesktopNativeBridgeServer = new DesktopNativeBridgeServer({
     credentialVault,
+    writeClipboardText: (text) => clipboard.writeText(text),
     deleteNetworkProxy: (proxyServerId) => requireNetworkProxyMainService().deleteServer(proxyServerId),
     openExternal: async (url) => { await shell.openExternal(url); },
     resolveNetworkProxy: (input) => requireNetworkProxyMainService().resolve(input),

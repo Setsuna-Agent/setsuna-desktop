@@ -39,6 +39,7 @@ import { useWorkspaceEntryDrag } from './hooks/useWorkspaceEntryDrag.js';
 import { workspaceEntryParent } from './workspaceEntryPaths.js';
 import { FILE_TREE_MIN_WIDTH, FILE_TREE_MAX_WIDTH, normalizeProjectTreePath } from './workspaceFileTree.js';
 import type { WorkspaceFileDraftState } from './hooks/useWorkspaceFileDraft.js';
+import { useWorkspaceFileViewMode, type WorkspaceFileViewMode } from './hooks/useWorkspaceFileViewMode.js';
 import type {
   DesktopDiffSummary,
   DesktopPanelSlot,
@@ -64,6 +65,11 @@ import {
 const LazyEditableWorkspaceFile = lazy(async () => {
   const module = await import('./editor/EditableWorkspaceFile.js');
   return { default: module.EditableWorkspaceFile };
+});
+
+const LazyWorkspaceMarkdownPreview = lazy(async () => {
+  const module = await import('./markdown/WorkspaceMarkdownPreview.js');
+  return { default: module.WorkspaceMarkdownPreview };
 });
 
 export function WorkspacePanel({
@@ -172,6 +178,7 @@ export function WorkspacePanel({
   // Selection can change before its file read settles. Never render another tab's document or draft here.
   const filePreview = workspaceFilePreview && activePanel.type === 'file' && activePanel.filePath === workspaceFilePreview.path
     && activeProject?.id === workspaceFilePreview.projectId ? workspaceFilePreview : null;
+  const fileView = useWorkspaceFileViewMode(filePreview, fileFocusRequest);
   const activeProjectLabel = activeProject?.name ?? t('workspace.files.noProject');
   const editorPath = activePanel.type === 'file' && activePanel.filePath
     ? `${activeProjectLabel}/${activePanel.filePath}` : activeProjectLabel;
@@ -244,6 +251,16 @@ export function WorkspacePanel({
         <WorkspaceFilePath path={editorPath} />
       </span>
       <span className="desktop-editor__crumb-actions">
+        {fileView.canPreviewMarkdown ? (
+          <span className="desktop-editor__view-toggle" role="group" aria-label={t('workspace.files.markdownView')}>
+            {(['source', 'preview'] as const).map((mode) => (
+              <Button key={mode} variant="ghost" type="button" aria-pressed={fileView.mode === mode}
+                className="desktop-editor__view-option" onClick={() => fileView.setMode(mode)}>
+                {t(mode === 'source' ? 'workspace.files.viewSource' : 'workspace.files.viewPreview')}
+              </Button>
+            ))}
+          </span>
+        ) : null}
         <FileTreeToggle
           className="app-shell-icon-control"
           label={t(treeVisible ? 'workspace.files.collapseTree' : 'workspace.files.expandTree')}
@@ -331,6 +348,8 @@ export function WorkspacePanel({
             file={filePreview}
             fileDraft={fileDraft}
             fileFocusRequest={fileFocusRequest}
+            viewMode={fileView.mode}
+            onOpenFile={onOpenProjectFile}
           />
         ) : (
           <EmptyState title={t('workspace.files.noneOpen')} body={t('workspace.files.noneOpenDescription')} />
@@ -578,10 +597,14 @@ export function WorkspaceFilePreviewContent({
   file,
   fileDraft,
   fileFocusRequest,
+  viewMode = 'source',
+  onOpenFile,
 }: {
   file: WorkspaceFileRead;
   fileDraft?: WorkspaceFileDraftState;
   fileFocusRequest?: WorkspaceFileFocusRequest | null;
+  viewMode?: WorkspaceFileViewMode;
+  onOpenFile?: (path: string, line?: number) => void;
 }) {
   const { t } = useI18n();
   const activeFocusRequest = fileFocusRequest?.path === file.path
@@ -610,23 +633,37 @@ export function WorkspaceFilePreviewContent({
       </div>
     );
   }
-  if (fileDraft?.editing) {
-    return (
-      <Suspense fallback={(
-        <CodeEditorPreview file={file} fileFocusRequest={activeFocusRequest} />
-      )}>
-        <LazyEditableWorkspaceFile
-          key={`${file.projectId}:${file.path}`}
-          content={fileDraft.content}
-          file={file}
-          fileFocusRequest={activeFocusRequest}
-          onChange={fileDraft.updateContent}
-          onSave={fileDraft.save}
-        />
-      </Suspense>
-    );
-  }
-  return <CodeEditorPreview file={file} fileFocusRequest={activeFocusRequest} />;
+  const previewing = viewMode === 'preview';
+  const source = fileDraft?.editing ? (
+    <Suspense fallback={(
+      <CodeEditorPreview file={file} fileFocusRequest={activeFocusRequest} />
+    )}>
+      <LazyEditableWorkspaceFile
+        key={`${file.projectId}:${file.path}`}
+        content={fileDraft.content}
+        file={file}
+        fileFocusRequest={activeFocusRequest}
+        active={!previewing}
+        onChange={fileDraft.updateContent}
+        onSave={fileDraft.save}
+      />
+    </Suspense>
+  ) : <CodeEditorPreview file={file} fileFocusRequest={activeFocusRequest} />;
+  return (
+    <div className="desktop-file-document">
+      {/* Keep the editor and its measured viewport alive, including undo and caret state. */}
+      <div className="desktop-file-document__source" aria-hidden={previewing || undefined}
+        style={{ visibility: previewing ? 'hidden' : undefined }}>
+        {source}
+      </div>
+      {previewing ? (
+        <Suspense fallback={<div className="desktop-markdown-preview" role="status">{t('workspace.files.loadingPreview')}</div>}>
+          <LazyWorkspaceMarkdownPreview key={`${file.projectId}:${file.path}`} file={file}
+            content={fileDraft?.editing ? fileDraft.content : file.content} onOpenFile={onOpenFile} />
+        </Suspense>
+      ) : null}
+    </div>
+  );
 }
 
 function CodeEditorPreview({

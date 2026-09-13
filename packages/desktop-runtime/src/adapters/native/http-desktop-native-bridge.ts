@@ -9,6 +9,8 @@ import {
   DESKTOP_SYSTEM_PROXY_FETCH_MAX_METADATA_BYTES,
   DESKTOP_SYSTEM_PROXY_FETCH_METADATA_PREFIX_BYTES,
   DESKTOP_SYSTEM_PROXY_FETCH_PATH,
+  DESKTOP_CLIPBOARD_WRITE_PATH,
+  type DesktopClipboardWriteInput,
 } from '@setsuna-desktop/contracts';
 import {
   DESKTOP_SANDBOX_NETWORK_ENVIRONMENT_PATH,
@@ -61,6 +63,11 @@ export class HttpDesktopNativeBridge implements DesktopNativeBridge {
 
   async openExternal(url: string): Promise<void> {
     await this.request('/v1/external/open', { body: { url }, method: 'POST' });
+  }
+
+  async writeClipboardText(text: string): Promise<void> {
+    const body: DesktopClipboardWriteInput = { text };
+    await this.request(DESKTOP_CLIPBOARD_WRITE_PATH, { body, method: 'POST' });
   }
 
   async fetchWithSystemProxy(input: string | URL, init?: RequestInit): Promise<Response> {
@@ -140,6 +147,10 @@ export class HttpDesktopNativeBridge implements DesktopNativeBridge {
 
 export class UnavailableDesktopNativeBridge implements DesktopNativeBridge {
   async close(): Promise<void> {}
+
+  async writeClipboardText(_text: string): Promise<void> {
+    throw new Error('Copying to the clipboard requires the Setsuna Desktop host.');
+  }
 
   async status(): Promise<SecretStoreStatus> {
     return { available: false, backend: 'unavailable' };

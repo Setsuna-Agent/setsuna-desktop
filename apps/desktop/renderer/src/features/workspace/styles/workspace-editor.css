@@ -187,6 +187,44 @@
   gap: 2px;
 }
 
+.desktop-editor__view-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: 6px;
+  padding: 2px;
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface-muted);
+}
+
+.desktop-editor__view-option {
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: var(--app-radius-xs);
+  color: var(--app-text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.desktop-editor__view-option[aria-pressed="true"] {
+  color: var(--app-text);
+  background: var(--app-bg);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 8%);
+}
+
+.desktop-file-document,
+.desktop-file-document__source {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.desktop-file-document > * {
+  grid-area: 1 / 1;
+}
+
 .desktop-file-preview {
   min-width: 0;
   min-height: 0;

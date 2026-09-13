@@ -24,6 +24,47 @@ import { ModelProviderRendererStateService } from '../../src/renderer/service.js
 afterEach(cleanup);
 
 describe('ModelProviderSettingsView', () => {
+  it('copies the saved key without revealing it, prioritizes a draft, and reports copy failures', async () => {
+    const user = userEvent.setup();
+    const client = clientFixture(async (input) => stateFromInput(input));
+    const state = await client.read();
+    state.providers[0]!.apiKeySet = true;
+    state.providers[0]!.apiKeyPreview = 'sk-••••saved';
+    const copyApiKey = vi.fn<ModelProviderClient['copyApiKey']>().mockResolvedValue({ ok: true });
+    const service = new ModelProviderRendererStateService({ ...client, copyApiKey }, null);
+    service.start();
+    const view = render(
+      <ModelProviderSettingsView
+        host={{ BrandIcon: () => null, BrandIconPicker: () => null, networkProxyBridge: null }}
+        service={service}
+        translate={translate}
+        ui={testUi}
+      />,
+    );
+    try {
+      const input = await screen.findByPlaceholderText('留空以保留现有密钥');
+      await user.click(screen.getByRole('button', { name: '复制 API Key' }));
+      await screen.findByRole('button', { name: '已复制' });
+      expect(copyApiKey).toHaveBeenLastCalledWith({ providerId: 'provider-1', apiKey: undefined });
+      expect((input as HTMLInputElement).value).toBe('');
+      expect(input.getAttribute('type')).toBe('password');
+
+      fireEvent.change(input, { target: { value: 'new-draft-key' } });
+      copyApiKey.mockRejectedValueOnce(new Error('Native clipboard unavailable'));
+      await user.click(screen.getByRole('button', { name: '复制 API Key' }));
+      expect(await screen.findByRole('alert')).toHaveProperty('textContent', '复制 API Key 失败，请重试。');
+      expect(copyApiKey).toHaveBeenLastCalledWith({ providerId: 'provider-1', apiKey: 'new-draft-key' });
+      expect(screen.queryByRole('button', { name: '已复制' })).toBeNull();
+
+      await user.click(screen.getByRole('button', { name: '复制 API Key' }));
+      await screen.findByRole('button', { name: '已复制' });
+      expect(screen.queryByRole('alert')).toBeNull();
+    } finally {
+      view.unmount();
+      service.dispose();
+    }
+  });
+
   it('persists an edit staged while the previous debounced save is still in flight', async () => {
     const saves: ModelProviderSettingsInput[] = [];
     const gates = [deferred<ModelProviderSettingsState>(), deferred<ModelProviderSettingsState>()];
@@ -43,6 +84,7 @@ describe('ModelProviderSettingsView', () => {
     );
 
     const apiKey = await screen.findByLabelText('API Key');
+    expect((screen.getByRole('button', { name: '复制 API Key' }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(apiKey, { target: { value: 'first-secret' } });
     await waitFor(() => expect(saves).toHaveLength(1));
 
@@ -116,6 +158,7 @@ describe('ModelProviderSettingsView', () => {
       models: [],
     };
     const service = new ModelProviderRendererStateService({
+      copyApiKey: async () => ({ ok: true }),
       catalog: async () => ({ providers: [] }),
       read: async () => ({ activeProviderId: provider.id, providers: [provider] }),
       save: async (input) => stateFromInput(input),
@@ -163,6 +206,7 @@ describe('ModelProviderSettingsView', () => {
       models: [],
     };
     const service = new ModelProviderRendererStateService({
+      copyApiKey: async () => ({ ok: true }),
       catalog: async () => ({ providers: [] }),
       read: async () => ({ activeProviderId: provider.id, providers: [provider] }),
       save: async (input) => stateFromInput(input),
@@ -208,6 +252,7 @@ describe('ModelProviderSettingsView', () => {
       models: [],
     };
     const service = new ModelProviderRendererStateService({
+      copyApiKey: async () => ({ ok: true }),
       catalog: async () => ({ providers: [] }),
       read: async () => ({ activeProviderId: provider.id, providers: [provider] }),
       save: async (input) => stateFromInput(input),
@@ -246,6 +291,7 @@ describe('ModelProviderSettingsView', () => {
       models: [],
     };
     const service = new ModelProviderRendererStateService({
+      copyApiKey: async () => ({ ok: true }),
       catalog: async () => ({ providers: [] }),
       read: async () => ({ activeProviderId: provider.id, providers: [provider] }),
       save: async (input) => stateFromInput(input),
@@ -425,6 +471,7 @@ describe('ModelProviderSettingsView', () => {
         proxyServers={[]}
         translate={translate}
         ui={testUi}
+        onCopyApiKey={async () => undefined}
         onApiKeyChange={vi.fn()}
         onChange={vi.fn()}
         onDelete={onDelete}
@@ -485,6 +532,7 @@ describe('ModelProviderSettingsView', () => {
         proxyServers={[]}
         translate={translate}
         ui={testUi}
+        onCopyApiKey={async () => undefined}
         onApiKeyChange={vi.fn()}
         onChange={vi.fn()}
         onProviderIdentityChange={onProviderIdentityChange}
@@ -523,6 +571,7 @@ describe('ModelProviderSettingsView', () => {
       providers: [customProvider],
     }));
     const service = new ModelProviderRendererStateService({
+      copyApiKey: async () => ({ ok: true }),
       catalog: async () => clientCatalogFixture(),
       read: async () => ({ activeProviderId: provider.id, providers: [provider] }),
       save,
@@ -592,6 +641,7 @@ function clientFixture(save: ModelProviderClient['save']): ModelProviderClient {
   };
   const catalog = clientCatalogFixture();
   return {
+    copyApiKey: async () => ({ ok: true }),
     catalog: async () => catalog,
     read: async () => state,
     save,
@@ -702,6 +752,7 @@ const testUi = {
   SelectField: ({ children, onValueChange, ...props }: ComponentProps<SettingsViewUi['SelectField']>) => (
     <select {...props} onChange={(event) => onValueChange(event.currentTarget.value)}>{children}</select>
   ),
+  Tooltip: ({ children }: ComponentProps<SettingsViewUi['Tooltip']>) => children,
   TextField: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
   Toast: ({ message, tone }: ComponentProps<SettingsViewUi['Toast']>) => (
     <div data-tone={tone} role={tone === 'error' ? 'alert' : 'status'}>{message}</div>

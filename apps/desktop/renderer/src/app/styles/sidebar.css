@@ -601,6 +601,33 @@
   transform: rotate(45deg);
 }
 
+.desktop-agent-session__navigation-hint {
+  position: absolute;
+  top: 50%;
+  right: var(--desktop-agent-row-action-inset);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: calc(var(--desktop-agent-row-action-size) * 2);
+  height: var(--desktop-agent-row-action-size);
+  color: var(--app-sidebar-text);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.desktop-agent-sidebar[data-navigation-hint] .desktop-agent-session.is-active .desktop-agent-session__navigation-hint {
+  display: flex;
+}
+
+.desktop-agent-sidebar[data-navigation-hint] .desktop-agent-session.is-active .desktop-agent-session__meta {
+  visibility: hidden;
+}
+
+.desktop-agent-sidebar[data-navigation-hint] .desktop-agent-session.is-active .desktop-agent-session__select {
+  padding-right: calc(var(--desktop-agent-row-action-size) * 2 + 8px);
+}
+
 .desktop-agent-project {
   display: flex;
   align-items: center;

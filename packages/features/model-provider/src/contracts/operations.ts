@@ -45,6 +45,36 @@ const emptyInputCodec = defineRuntimeCodec<undefined>((value) => {
   return undefined;
 });
 
+export type CopyModelProviderApiKeyInput = Readonly<{
+  providerId: string;
+  /** A replacement key that may not have been saved yet. */
+  apiKey?: string;
+}>;
+
+export const copyModelProviderApiKey = defineFeatureOperation({
+  id: 'model-provider.api-key.copy',
+  method: 'POST',
+  path: '/v1/features/model-provider/api-key/copy',
+  input: defineRuntimeCodec<CopyModelProviderApiKeyInput>((value) => {
+    const record = objectRecord(value, 'API key copy input must be an object.');
+    if (typeof record.providerId !== 'string' || !record.providerId.trim()) {
+      throw new Error('Provider ID is required.');
+    }
+    if (record.apiKey !== undefined && typeof record.apiKey !== 'string') {
+      throw new Error('API key must be a string.');
+    }
+    return { providerId: record.providerId, ...(record.apiKey ? { apiKey: record.apiKey } : {}) };
+  }),
+  output: defineRuntimeCodec<Readonly<{ ok: true }>>((value) => {
+    if (objectRecord(value, 'API key copy result must be an object.').ok !== true) {
+      throw new Error('API key copy failed.');
+    }
+    return { ok: true };
+  }),
+  errors: Object.freeze({}),
+  idempotency: 'non-idempotent',
+});
+
 export const readModelProviderSettings = defineFeatureOperation({
   id: 'model-provider.settings.read',
   method: 'GET',

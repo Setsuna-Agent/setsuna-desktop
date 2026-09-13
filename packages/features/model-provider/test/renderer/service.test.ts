@@ -10,6 +10,7 @@ describe('ModelProviderRendererStateService', () => {
     const saves: ModelProviderSettingsInput[] = [];
     const gates = [deferred<ModelProviderSettingsState>(), deferred<ModelProviderSettingsState>()];
     const client: ModelProviderClient = {
+      copyApiKey: async () => ({ ok: true }),
       catalog: async () => ({ providers: [] }),
       discover: async () => ({ models: [] }),
       read: async () => initial,

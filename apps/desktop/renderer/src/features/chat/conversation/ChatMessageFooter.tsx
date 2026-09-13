@@ -1,7 +1,7 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
-import { Copy, Trash2 } from 'lucide-react';
-import { useMemo, useState, type ReactNode } from 'react';
+import { Check, Copy, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useI18n, type AppLocale } from '../../../shared/i18n/I18nProvider.js';
 import { copyTextToClipboard } from '../../../shared/lib/clipboard.js';
 import { EditIcon } from '../../../shared/ui/EditIcon.js';
@@ -26,14 +26,21 @@ export function ChatMessageFooter({
 }) {
   const { locale, t } = useI18n();
   const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<number | null>(null);
   const formattedTime = useMemo(() => formatTime(message.createdAt, locale), [locale, message.createdAt]);
+
+  useEffect(() => () => {
+    if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
+  }, []);
 
   const copyMessage = async () => {
     if (!message.content) return;
     try {
       await copyTextToClipboard(message.content);
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1400);
+      // Repeated clicks keep the confirmation visible for the latest successful copy.
+      if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = window.setTimeout(() => setCopied(false), 1600);
     } catch {
       setCopied(false);
     }
@@ -46,7 +53,9 @@ export function ChatMessageFooter({
   const actionNodes = (
     <>
       <MessageFooterAction active={copied} disabled={!message.content} label={copied ? t('chat.message.copied') : t('chat.message.copy')} onClick={() => void copyMessage()}>
-        <Copy size={14} strokeWidth={1.8} aria-hidden="true" />
+        {copied
+          ? <Check size={14} strokeWidth={1.8} aria-hidden="true" />
+          : <Copy size={14} strokeWidth={1.8} aria-hidden="true" />}
       </MessageFooterAction>
       {onDelete ? (
         <MessageFooterAction disabled={actionsDisabled} label={t('common.delete')} onClick={onDelete}>
@@ -62,7 +71,7 @@ export function ChatMessageFooter({
   );
 
   return (
-    <div className={`chat-message-footer chat-message-footer--${align}`}>
+    <div className={`chat-message-footer chat-message-footer--${align}`} data-copied={copied || undefined}>
       {timePosition === 'before-actions' ? timeNode : null}
       {actionNodes}
       {timePosition === 'after-actions' ? timeNode : null}

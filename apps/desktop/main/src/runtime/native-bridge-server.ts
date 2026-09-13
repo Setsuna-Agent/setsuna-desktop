@@ -1,4 +1,6 @@
 import {
+  DESKTOP_CLIPBOARD_WRITE_PATH,
+  type DesktopClipboardWriteInput,
   DESKTOP_NETWORK_PROXY_SCOPES,
   DESKTOP_SYSTEM_PROXY_FETCH_PATH,
   normalizeDesktopNetworkProxyRoute,
@@ -34,6 +36,7 @@ export type DesktopNativeBridgeConnection = {
 
 type DesktopNativeBridgeOptions = {
   credentialVault: CredentialVault;
+  writeClipboardText(text: string): void;
   deleteNetworkProxy(proxyServerId: string): Promise<DesktopNetworkProxyState>;
   openExternal(url: string): Promise<void>;
   resolveNetworkProxy(input: DesktopResolveNetworkProxyInput): Promise<DesktopResolvedNetworkProxy>;
@@ -181,6 +184,14 @@ export class DesktopNativeBridgeServer {
         const body = recordInput(await readJsonBody(request));
         const url = externalUrl(body.url);
         await this.options.openExternal(url);
+        sendJson(response, 200, { ok: true });
+        return;
+      }
+      if (request.method === 'POST' && request.url === DESKTOP_CLIPBOARD_WRITE_PATH) {
+        const body = recordInput(await readJsonBody(request));
+        if (typeof body.text !== 'string') throw new Error('Clipboard text is required.');
+        const input: DesktopClipboardWriteInput = { text: body.text };
+        this.options.writeClipboardText(input.text);
         sendJson(response, 200, { ok: true });
         return;
       }

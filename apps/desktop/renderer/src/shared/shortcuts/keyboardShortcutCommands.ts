@@ -17,6 +17,8 @@ export const KEYBOARD_SHORTCUT_COMMAND_IDS = [
   'app.toggleRuntimeActivity',
   'navigation.goBack',
   'navigation.goForward',
+  'navigation.previousChat',
+  'navigation.nextChat',
   'layout.toggleSidebar',
   'layout.toggleWorkspace',
   'layout.toggleTerminal',
@@ -114,6 +116,28 @@ export const keyboardShortcutCommands: readonly KeyboardShortcutCommand[] = [
       darwin: ['Meta+BracketRight'],
       linux: ['Alt+ArrowRight'],
       win32: ['Alt+ArrowRight'],
+    },
+  },
+  {
+    id: 'navigation.previousChat',
+    group: 'navigation',
+    labelKey: 'shortcuts.command.previousChat',
+    descriptionKey: 'shortcuts.command.previousChatDescription',
+    defaultBindings: {
+      darwin: ['Alt+ArrowUp'],
+      linux: ['Alt+ArrowUp'],
+      win32: ['Alt+ArrowUp'],
+    },
+  },
+  {
+    id: 'navigation.nextChat',
+    group: 'navigation',
+    labelKey: 'shortcuts.command.nextChat',
+    descriptionKey: 'shortcuts.command.nextChatDescription',
+    defaultBindings: {
+      darwin: ['Alt+ArrowDown'],
+      linux: ['Alt+ArrowDown'],
+      win32: ['Alt+ArrowDown'],
     },
   },
   {

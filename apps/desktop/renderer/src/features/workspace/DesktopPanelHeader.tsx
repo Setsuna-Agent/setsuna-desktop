@@ -1,4 +1,4 @@
-import { Button, MenuSurface } from '@setsuna-desktop/renderer-ui';
+import { Button, MenuSurface, Tooltip } from '@setsuna-desktop/renderer-ui';
 import { Bug, FileDiff, FolderOpen, GitBranch, MessageSquare, Plus, SquareTerminal, X } from 'lucide-react';
 import {
   useEffect,
@@ -15,7 +15,7 @@ import { BrowserFeatureIcon } from '../../composition/BrowserWorkspaceFeatureBou
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../shared/i18n/messages.js';
 import type { KeyboardShortcutCommandId } from '../../shared/shortcuts/keyboardShortcutCommands.js';
-import { ShortcutHint, ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
+import { ShortcutHint, ShortcutTooltip, ShortcutTooltipContent } from '../../shared/ui/ShortcutTooltip.js';
 import { usePanelTabCloseTransition } from './hooks/usePanelTabCloseTransition.js';
 import { DesktopPanelIcon, desktopPanelTitle } from './PanelChrome.js';
 import { PanelPlacementIcon } from './PanelPlacementIcon.js';
@@ -424,6 +424,7 @@ export function DesktopPanelHeader({
           {tabPanels.map((panel) => {
             const closingWidth = closingPanelWidths[panel.id];
             const closing = closingWidth !== undefined;
+            const closeLabel = t('workspace.panel.closeNamed', { title: desktopPanelTitle(panel, t) });
             const draggable = canDragPanel(panel);
             const tabStyle = closing
               ? { '--desktop-panel-tab-exit-width': `${closingWidth}px` } as CSSProperties
@@ -456,19 +457,27 @@ export function DesktopPanelHeader({
                   {renderTabLabel(panel)}
                 </Button>
                 {onClosePanel ? (
-                  <Button variant="ghost"
-                    className="chat-file-review-panel__tab-close"
-                    disabled={closing}
-                    type="button"
-                    aria-label={t('workspace.panel.closeNamed', { title: desktopPanelTitle(panel, t) })}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      const visualWidth = event.currentTarget.parentElement?.getBoundingClientRect().width ?? 0;
-                      startPanelClose(panel.id, visualWidth * pageScaleInverse());
-                    }}
+                  <Tooltip
+                    placement="bottom"
+                    disabled={closing || Boolean(dragOverlay)}
+                    title={placement === 'side' && activeId === panel.id
+                      ? <ShortcutTooltipContent commandId="workspace.closeActiveSidePanel" label={closeLabel} />
+                      : closeLabel}
                   >
-                    <span className="chat-file-review-panel__tab-close-glyph" aria-hidden="true" />
-                  </Button>
+                    <Button variant="ghost"
+                      className="chat-file-review-panel__tab-close"
+                      disabled={closing}
+                      type="button"
+                      aria-label={closeLabel}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        const visualWidth = event.currentTarget.parentElement?.getBoundingClientRect().width ?? 0;
+                        startPanelClose(panel.id, visualWidth * pageScaleInverse());
+                      }}
+                    >
+                      <span className="chat-file-review-panel__tab-close-glyph" aria-hidden="true" />
+                    </Button>
+                  </Tooltip>
                 ) : null}
               </span>
             );

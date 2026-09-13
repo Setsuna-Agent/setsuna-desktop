@@ -1,6 +1,7 @@
 import { access, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { InMemoryDesktopNativeBridge } from '../../support/in-memory-secret-store.js';
 import { createRuntimeServerTestHarness, type RuntimeServerTestHarness } from '../../support/runtime-server/harness.js';
 import {
   createModelListCaptureServer,
@@ -17,7 +18,51 @@ describe('runtime server REST config and model discovery', () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await harness.close();
+  });
+
+  it('copies only the requested provider key to the native clipboard without exposing secrets in responses', async () => {
+    const writeClipboard = vi.spyOn(InMemoryDesktopNativeBridge.prototype, 'writeClipboardText');
+    await harness.runtimeFetch('/v1/features/model-provider/settings', {
+      method: 'PUT',
+      body: JSON.stringify({
+        activeProviderId: 'active',
+        providers: ['active', 'selected'].map((id) => ({
+          id, name: id, provider: 'openai-compatible', baseUrl: 'https://example.com/v1',
+          apiKey: `sk-${id}-secret`, models: [],
+        })),
+      }),
+    });
+    const copy = (input: unknown) => fetch(`${harness.baseUrl}/v1/features/model-provider/api-key/copy`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${harness.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    const savedCopy = await copy({ providerId: 'selected' });
+    expect(savedCopy.status).toBe(200);
+    expect(await savedCopy.json()).toEqual({ ok: true });
+    expect(writeClipboard).toHaveBeenLastCalledWith('sk-selected-secret');
+
+    const draftCopy = await copy({ providerId: 'selected', apiKey: ' sk-draft-secret ' });
+    expect(draftCopy.status).toBe(200);
+    expect(await draftCopy.json()).toEqual({ ok: true });
+    expect(writeClipboard).toHaveBeenLastCalledWith('sk-draft-secret');
+    await copy({ providerId: 'selected' });
+    expect(writeClipboard).toHaveBeenLastCalledWith('sk-selected-secret');
+
+    writeClipboard.mockClear();
+    expect((await copy({ providerId: '' })).status).toBe(400);
+    expect((await copy({ providerId: 'missing' })).status).toBe(409);
+    expect(writeClipboard).not.toHaveBeenCalled();
+
+    writeClipboard.mockRejectedValueOnce(new Error('Clipboard failed with sk-selected-secret'));
+    const failedCopy = await copy({ providerId: 'selected' });
+    expect(failedCopy.status).toBe(503);
+    expect(await failedCopy.text()).not.toContain('sk-selected-secret');
+    const settings = await harness.runtimeFetch('/v1/features/model-provider/settings');
+    expect(JSON.stringify(settings)).not.toContain('sk-selected-secret');
+    expect(JSON.stringify(settings)).not.toContain('sk-draft-secret');
   });
 
   it('returns masked config without leaking API keys', async () => {

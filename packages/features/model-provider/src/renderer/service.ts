@@ -6,7 +6,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import type { NetworkProxyDesktopBridge } from '@setsuna-desktop/feature-network-proxy/contracts';
 import type { ModelProviderSettingsInput, ModelProviderSettingsState } from '../contracts/index.js';
-import type { ModelProviderCatalog } from '../contracts/index.js';
+import type { CopyModelProviderApiKeyInput, ModelProviderCatalog } from '../contracts/index.js';
 import type { ModelProviderClient } from './client.js';
 
 export type ModelProviderRendererSnapshot = Readonly<{
@@ -93,6 +93,10 @@ export class ModelProviderRendererStateService {
     this.stageRevision += 1;
     this.stagedInput = structuredClone(input);
     this.update({ error: null, state: structuredClone(state) });
+  }
+
+  async copyApiKey(input: CopyModelProviderApiKeyInput): Promise<void> {
+    await this.client.copyApiKey(input);
   }
 
   commit(): Promise<ModelProviderSettingsState> {

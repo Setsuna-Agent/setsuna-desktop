@@ -31,6 +31,7 @@ import { SidebarProjectHoverCard } from './SidebarProjectHoverCard.js';
 import { SidebarThreadList } from './SidebarThreadList.js';
 import { PinnedThreadSection } from './PinnedThreadSection.js';
 import { SidebarUserMenu } from './SidebarUserMenu.js';
+import { useSidebarNavigationHint } from './useSidebarNavigationHint.js';
 
 const isProjectActionTarget = (target: EventTarget | null) =>
   target instanceof HTMLElement && Boolean(target.closest('.desktop-agent-project__actions'));
@@ -131,9 +132,14 @@ export function AgentSidebar({
   runtimeActivityTriggerRef: RefObject<HTMLButtonElement>;
 }) {
   const { t } = useI18n();
+  const navigationHint = useSidebarNavigationHint(activeView === 'chat' && !collapsed);
 
   return (
-    <aside className="app-sidebar desktop-agent-sidebar" aria-hidden={collapsed || undefined}>
+    <aside
+      className="app-sidebar desktop-agent-sidebar"
+      aria-hidden={collapsed || undefined}
+      data-navigation-hint={navigationHint || undefined}
+    >
       <div className="desktop-agent-sidebar__top-actions">
         <ShortcutTooltip commandId="app.newChat" label={t('app.newChat')} placement="bottom">
           <Button variant="ghost" className="desktop-agent-command" type="button" onClick={onCreateCurrentThread}>

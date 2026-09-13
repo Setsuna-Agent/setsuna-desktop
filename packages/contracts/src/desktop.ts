@@ -13,6 +13,10 @@ export type DesktopOpenPathResult =
   | { ok: true }
   | { ok: false; error: string };
 
+export const DESKTOP_CLIPBOARD_WRITE_PATH = '/v1/clipboard/write-text';
+
+export type DesktopClipboardWriteInput = Readonly<{ text: string }>;
+
 export type DesktopWorkspaceFilePreviewResult =
   | { ok: true; url: string }
   | { ok: false; error: string };

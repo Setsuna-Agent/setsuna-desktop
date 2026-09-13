@@ -57,6 +57,10 @@
 
 迟到请求必须通过 identity guard 丢弃。
 
+`Alt+↑` / `Alt+↓` 按侧栏顺序切换当前已显示的会话，跳过折叠分组和“展开显示”后隐藏的会话，到首尾停止；侧栏整体收起时不执行。未选中可见会话时，`Alt+↓` 打开第一项。`SidebarThreadRow` 通过 `data-sidebar-thread-id` 标记导航目标，`useSidebarThreadNavigation` 在按键时读取已挂载行，避免复制侧栏的排序、置顶、折叠和分页状态。切换沿用 `selectThread` 的未保存文件确认，并阻止并发切换叠加弹窗。快捷键通过统一注册表配置，可在设置中修改；沿用弹窗、输入法组合输入和终端的快捷键保护规则。
+
+保留这两个 Alt 快捷键时，按住 Alt 会在当前会话右侧显示上下箭头；松开、窗口失焦或页面隐藏后清除。`useSidebarNavigationHint` 在侧栏统一监听按键，行组件只渲染提示，不各自注册全局监听。
+
 ### 其他 controller
 
 - `useDesktopSidebarAutoCollapse.ts`：窗口/布局条件下的 sidebar 自动收起。
@@ -73,6 +77,7 @@ Updater 不再进入 App controller。Renderer composition 解析 Feature 提供
 | `AppRouteContent.tsx` | 主 view 选择 |
 | `AppChatSurface.tsx` | Chat surface 组合 |
 | `AppSidebarSurface.tsx` | Sidebar surface 组合 |
+| `AboutDialog.tsx` | 帮助菜单中的应用信息弹窗；复用正式图标，从根 package.json 读取版本、作者与许可证，外部链接经 preload 打开 |
 | `AppWorkspaceToolbar.tsx` | Workspace toolbar |
 | `AppChatToolbarTitle.tsx` | 项目内外的对话标题及重命名、归档菜单 |
 | `AppTopbarActions.tsx` | Chat 顶部右侧动作 |

@@ -179,6 +179,7 @@ export async function activateBuiltinRuntimeFeatures(
       provideHostCapability(
         modelProviderRuntimeHostCapability,
         Object.freeze({
+          writeClipboardText: (text: string) => runtime.nativeBridge.writeClipboardText(text),
           resolveProvider: (providerId?: string) => providerId
             ? runtime.configStore.getProviderConfig?.(providerId) ?? Promise.resolve(null)
             : runtime.configStore.getActiveProviderConfig(),

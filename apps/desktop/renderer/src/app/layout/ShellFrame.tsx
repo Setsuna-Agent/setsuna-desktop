@@ -1,4 +1,3 @@
-import { useConfirm } from '@setsuna-desktop/renderer-ui';
 import { Button, MenuSurface } from '@setsuna-desktop/renderer-ui';
 import { Minus, PanelLeft, Plus, X } from 'lucide-react';
 import {
@@ -22,6 +21,7 @@ import { useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
 import { IconButton } from '../../shared/ui/primitives.js';
 import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
 import { appRouteTopbarSlotId } from '../../shared/ui/AppRouteTopbarPortal.js';
+import { AboutDialog } from './AboutDialog.js';
 
 type WindowMenuKey = 'file' | 'edit' | 'view' | 'help';
 
@@ -209,8 +209,8 @@ function TitlebarNavigation({
 }
 
 function WindowTopbarMenu({ actions }: { actions: WindowMenuActions }) {
-  const confirm = useConfirm();
   const { t } = useI18n();
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [openMenu, setOpenMenu] = useState<WindowMenuKey | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const editTargetRef = useRef<DocumentEditTarget | null>(null);
@@ -226,9 +226,10 @@ function WindowTopbarMenu({ actions }: { actions: WindowMenuActions }) {
   }, []);
   const menus = useMemo(
     () => windowMenuDefinitions(actions, t, executeEditCommand, () => {
-      void confirm({ title: t('shell.menu.about'), description: 'Setsuna Desktop', acknowledgement: true });
+      rootRef.current?.querySelector<HTMLButtonElement>('[data-window-menu-trigger="help"]')?.focus();
+      setAboutOpen(true);
     }),
-    [actions, confirm, executeEditCommand, t],
+    [actions, executeEditCommand, t],
   );
   const windowMenuLabels: Array<{ key: WindowMenuKey; label: string }> = [
     { key: 'file', label: t('shell.menu.file') },
@@ -324,6 +325,7 @@ function WindowTopbarMenu({ actions }: { actions: WindowMenuActions }) {
           ) : null}
         </span>
       ))}
+      {aboutOpen ? <AboutDialog onClose={() => setAboutOpen(false)} /> : null}
     </nav>
   );
 }

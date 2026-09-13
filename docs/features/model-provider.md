@@ -71,7 +71,9 @@ Provider projection 仍合入共享 `RuntimeConfigState`，供聊天模型选择
 
 可选 `catalogProviderId` 记录 Pi built-in provider identity。历史配置缺少该字段时，runtime 会用协议和规范化 Base URL 做唯一匹配以恢复 Pi compat；无法唯一匹配或显式切换到自定义服务时仍按自定义服务处理。API key 只保存在 `secrets.json`，切换厂商或自定义服务会先确认并清除旧端点的凭据与模型。
 
-`FileConfigStore` 继续拥有 `config.json`/`secrets.json` 的锁与原子写入。Feature host 只暴露 provider 查询/保存及按 proxy route 解析的 fetch；API key 不进入 renderer state。
+`FileConfigStore` 继续拥有 `config.json`/`secrets.json` 的锁与原子写入。Feature host 暴露 provider 查询/保存、按 proxy route 解析的 fetch 和原生剪贴板写入；已保存的 API key 不进入 renderer state。
+
+API Key 输入框右侧提供复制按钮，优先复制当前输入，否则复制该服务已保存的密钥。`model-provider.api-key.copy` 通过已认证的 native bridge 直接写入系统剪贴板，仅返回成功状态；复制不会保存输入草稿。按钮在无密钥时禁用，成功后短暂显示对勾，失败显示可重试提示。
 
 ## Replay metadata
 

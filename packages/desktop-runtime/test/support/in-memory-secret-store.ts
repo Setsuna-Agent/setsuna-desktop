@@ -32,11 +32,16 @@ export class InMemorySecretStore implements SecretStore {
 }
 
 export class InMemoryDesktopNativeBridge extends InMemorySecretStore implements DesktopNativeBridge {
+  clipboardText = '';
   readonly deletedNetworkProxyServerIds: string[] = [];
   readonly openedUrls: string[] = [];
   readonly validatedNetworkProxyServerIds: string[][] = [];
 
   async close(): Promise<void> {}
+
+  async writeClipboardText(text: string): Promise<void> {
+    this.clipboardText = text;
+  }
 
   fetchWithSystemProxy(input: string | URL, init?: RequestInit): Promise<Response> {
     return fetch(input, init);
