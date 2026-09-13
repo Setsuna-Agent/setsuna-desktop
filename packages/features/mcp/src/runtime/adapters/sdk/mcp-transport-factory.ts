@@ -1,3 +1,4 @@
+import { mcpDeviceOAuthProvider } from './mcp-device-oauth-provider.js';
 import { StdioClientTransport, getDefaultEnvironment } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { RuntimeMcpServerInput } from '@setsuna-desktop/contracts';
@@ -42,10 +43,11 @@ export async function createMcpTransport(
   }
   const headers = resolvedMcpHttpHeaders(server);
   const hasAuthorization = Object.keys(headers).some((name) => name.toLowerCase() === 'authorization');
+  const deviceProvider = mcpDeviceOAuthProvider(server);
   return new StreamableHTTPClientTransport(url, {
     requestInit: { headers },
-    fetch: hasAuthorization ? fetchImpl : oauth.fetchFor(server.key),
-    ...(!hasAuthorization ? { authProvider: oauth.providerFor(server) } : {}),
+    fetch: hasAuthorization ? fetchImpl : deviceProvider ? oauth.deviceFetchFor(server) : oauth.fetchFor(server.key),
+    ...(!hasAuthorization && !deviceProvider ? { authProvider: oauth.providerFor(server) } : {}),
     reconnectionOptions: {
       initialReconnectionDelay: 500,
       maxReconnectionDelay: 10_000,
@@ -82,6 +84,7 @@ export function stdioTransportEnvironment(
 export function resolvedMcpHttpHeaders(server: RuntimeMcpServerInput): Record<string, string> {
   const headers: Record<string, string> = {};
   for (const [name, value] of Object.entries(server.headers ?? {})) {
+    if (name.toLowerCase() === 'authorization' && !value.trim()) continue;
     if (!RESERVED_HTTP_HEADERS.has(name.toLowerCase())) headers[name] = value;
   }
   for (const [name, envVar] of Object.entries(server.envHttpHeaders ?? {})) {
@@ -90,8 +93,12 @@ export function resolvedMcpHttpHeaders(server: RuntimeMcpServerInput): Record<st
     if (value?.trim()) headers[name] = value;
   }
   const bearerTokenEnvVar = server.bearerTokenEnvVar?.trim();
-  if (bearerTokenEnvVar) {
+  // A credential entered in MCP settings takes precedence over a bundle's env reference.
+  const hasAuthorization = Object.entries(headers).some(([name, value]) => name.toLowerCase() === 'authorization' && value.trim());
+  if (bearerTokenEnvVar && !hasAuthorization) {
     const value = process.env[bearerTokenEnvVar];
+    // Registered providers can sign in without the optional token referenced by imported bundles.
+    if (!value?.trim() && mcpDeviceOAuthProvider(server)) return headers;
     if (value === undefined) throw new Error(`Environment variable ${bearerTokenEnvVar} for MCP server '${server.key}' is not set`);
     if (!value.trim()) throw new Error(`Environment variable ${bearerTokenEnvVar} for MCP server '${server.key}' is empty`);
     headers.Authorization = `Bearer ${value}`;

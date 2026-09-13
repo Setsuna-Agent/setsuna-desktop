@@ -23,11 +23,13 @@ import { shouldRenderCapabilitiesNavigationInPage } from './capabilitiesLayout.j
 export function CapabilitiesShell({
   activeProjectPath,
   onCreateInConversation,
+  onUsePluginInConversation,
   onSelectedPluginIdChange,
   selectedPluginId,
 }: Readonly<{
   activeProjectPath?: string;
   onCreateInConversation(skillId: string): void;
+  onUsePluginInConversation(pluginId: string): void;
   onSelectedPluginIdChange(pluginId: string | null): void;
   selectedPluginId: string | null;
 }>) {
@@ -40,6 +42,7 @@ export function CapabilitiesShell({
     ))
     .sort((left, right) => left.metadata.order - right.metadata.order || left.entryId.localeCompare(right.entryId)), [entries]);
   const defaultSectionId = catalogEntries[0]?.metadata.sectionId ?? 'plugins';
+  const [sectionItemId, setSectionItemId] = useState<string | null>(null);
   const [activeSectionId, setActiveSectionId] = useState(() => selectedPluginId ? 'plugins' : defaultSectionId);
 
   useEffect(() => {
@@ -62,6 +65,7 @@ export function CapabilitiesShell({
           type="button"
           onClick={() => {
             setActiveSectionId(entry.metadata.sectionId);
+            setSectionItemId(null);
             if (entry.metadata.sectionId !== 'plugins') onSelectedPluginIdChange(null);
           }}
         >
@@ -93,19 +97,30 @@ export function CapabilitiesShell({
     <CapabilitiesCreateMenu {...props} />
   ), []);
   const navigation = useMemo<CapabilitiesPageNavigation>(() => Object.freeze({
-    activeItemId: selectedPluginId,
+    activeItemId: activeSectionId === 'plugins' ? selectedPluginId : sectionItemId,
     catalogNavigation,
     catalogNavigationInPage,
     openChat: onCreateInConversation,
+    openPluginChat: onUsePluginInConversation,
     renderBreadcrumb,
     renderCreateMenu,
-    setActiveItemId: onSelectedPluginIdChange,
+    setActiveItemId: activeSectionId === 'plugins' ? onSelectedPluginIdChange : setSectionItemId,
+    openSection: (sectionId, itemId) => {
+      if (!catalogEntries.some((entry) => entry.metadata.sectionId === sectionId)) return;
+      onSelectedPluginIdChange(sectionId === 'plugins' ? itemId ?? null : null);
+      setSectionItemId(itemId ?? null);
+      setActiveSectionId(sectionId);
+    },
     workspacePath: activeProjectPath ?? null,
   }), [
     activeProjectPath,
+    activeSectionId,
+    sectionItemId,
+    catalogEntries,
     catalogNavigation,
     catalogNavigationInPage,
     onCreateInConversation,
+    onUsePluginInConversation,
     onSelectedPluginIdChange,
     renderBreadcrumb,
     renderCreateMenu,

@@ -16,6 +16,8 @@ export * from './message-metadata.js';
 export * from './model-request.js';
 export * from './network-proxy/index.js';
 export * from './plugins.js';
+export * from './plugin-reference.js';
+export * from './plugin-connectors.js';
 export * from './plugin-ui.js';
 export * from './plugin-ui-card.js';
 export * from './provider.js';

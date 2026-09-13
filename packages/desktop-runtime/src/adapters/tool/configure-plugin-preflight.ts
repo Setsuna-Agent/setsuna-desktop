@@ -37,8 +37,8 @@ export function assertCompleteConfigurePluginSnapshot(input: PluginDraftInput): 
     if (issues.length < MAX_REPORTED_ISSUES && !issues.includes(message)) issues.push(message);
   };
   // configure_plugin canonicalizes draft file names before this preflight.
-  // References must retain exact casing and separators so approval cannot pass
-  // a snapshot that the real bundle reader will reject on a case-sensitive FS.
+  // Match the bundle reader's portable separator normalization while retaining
+  // exact casing, so preflight and installation agree on case-sensitive systems.
   const filesByPath = new Map(input.files.map((file) => [file.path, file.content]));
   const filePaths = new Set(filesByPath.keys());
   const requireFile = (rawPath: unknown, owner: string): string | null => {

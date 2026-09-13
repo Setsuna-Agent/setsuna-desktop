@@ -1,13 +1,17 @@
 import type {
+  RuntimePluginIconImage,
   RuntimePluginReference,
   RuntimePluginSummary,
   RuntimeSkillSummary,
   RuntimeThread,
   RuntimeToolRun,
 } from '@setsuna-desktop/contracts';
+import { createRuntimePluginUseAnchors, type RuntimePluginUseAnchor } from './runtimePluginUsageAnchor.js';
 
 export type RuntimePluginUse = RuntimePluginReference & Readonly<{
   installed: boolean;
+  iconImage?: RuntimePluginIconImage;
+  anchor?: RuntimePluginUseAnchor;
 }>;
 
 /** Retains per-turn arrays when streamed thread fields did not change plugin usage. */
@@ -44,12 +48,16 @@ export function runtimePluginUsesByTurn(
 
   const skillById = new Map(skills.map((skill) => [skill.id, skill]));
   const pluginById = new Map(plugins.map((plugin) => [plugin.id, plugin]));
+  const anchors = createRuntimePluginUseAnchors(thread.messages);
   const collected = new Map<string, Map<string, RuntimePluginUse>>();
   const addPlugin = (
     turnId: string | undefined,
     pluginId: string | undefined,
-    embedded?: RuntimePluginReference,
-    fallbackName?: string,
+    { embedded, fallbackName, anchor }: {
+      embedded?: RuntimePluginReference;
+      fallbackName?: string;
+      anchor?: RuntimePluginUseAnchor;
+    } = {},
   ) => {
     if (!turnId || !pluginId) return;
     const installed = pluginById.get(pluginId);
@@ -58,36 +66,47 @@ export function runtimePluginUsesByTurn(
       installed: Boolean(installed),
       name: embedded?.name || installed?.name || fallbackName || pluginId,
       ...(embedded?.icon || installed?.icon ? { icon: embedded?.icon || installed?.icon } : {}),
+      // Resolve artwork from the catalog without duplicating image data in persisted turn references.
+      ...(installed?.iconImage ? { iconImage: installed.iconImage } : {}),
+      ...(anchor ? { anchor } : {}),
     };
     const turnPlugins = collected.get(turnId) ?? new Map<string, RuntimePluginUse>();
     const current = turnPlugins.get(pluginId);
     // 如果后续来源解析出显示名称或图标，则优先采用更丰富的元数据。
-    turnPlugins.set(pluginId, current ? mergePluginReference(current, plugin) : plugin);
+    turnPlugins.set(pluginId, current ? {
+      ...mergePluginReference(current, plugin),
+      anchor: anchors.first(current.anchor, plugin.anchor),
+    } : plugin);
     collected.set(turnId, turnPlugins);
   };
 
   for (const turn of thread.turns ?? []) {
     for (const step of turn.stepSnapshots ?? []) {
+      const anchor = anchors.forStep(turn.id, step);
       for (const selectedSkill of step.snapshot.selectedSkills) {
         const currentSkill = skillById.get(selectedSkill.id);
         const pluginId = selectedSkill.plugin?.id ?? currentSkill?.pluginId;
-        addPlugin(turn.id, pluginId, selectedSkill.plugin, currentSkill?.name ?? selectedSkill.name);
+        addPlugin(turn.id, pluginId, { embedded: selectedSkill.plugin, fallbackName: currentSkill?.name ?? selectedSkill.name, anchor });
       }
     }
   }
 
-  const addHookPlugin = (turnId: string | undefined, pluginId: string | undefined) => {
-    addPlugin(turnId, pluginId, undefined, pluginId);
-  };
-  for (const run of thread.pendingHookRuns ?? []) addHookPlugin(run.turnId, run.pluginId);
+  for (const run of thread.pendingHookRuns ?? []) {
+    addPlugin(run.turnId, run.pluginId, { anchor: anchors.forHook(run) });
+  }
 
   for (const message of thread.messages) {
-    for (const run of message.hookRuns ?? []) addHookPlugin(message.turnId ?? run.turnId, run.pluginId);
+    for (const run of message.hookRuns ?? []) {
+      addPlugin(message.turnId ?? run.turnId, run.pluginId, { anchor: anchors.forHook(run, message) });
+    }
     for (const toolRun of message.toolRuns ?? []) {
-      for (const run of toolRun.hookRuns ?? []) addHookPlugin(message.turnId ?? run.turnId, run.pluginId);
-      if (toolRun.plugin) addPlugin(message.turnId, toolRun.plugin.id, toolRun.plugin);
+      const anchor: RuntimePluginUseAnchor = { messageId: message.id, toolRunId: toolRun.id, placement: 'before' };
+      for (const run of toolRun.hookRuns ?? []) {
+        addPlugin(message.turnId ?? run.turnId, run.pluginId, { anchor: anchors.forHook({ ...run, toolCallId: toolRun.id }, message) });
+      }
+      if (toolRun.plugin) addPlugin(message.turnId, toolRun.plugin.id, { embedded: toolRun.plugin, anchor });
       for (const pluginId of pluginIdsForToolRun(toolRun, plugins)) {
-        addPlugin(message.turnId, pluginId);
+        addPlugin(message.turnId, pluginId, { anchor });
       }
     }
   }
@@ -103,6 +122,7 @@ function mergePluginReference(current: RuntimePluginUse, next: RuntimePluginUse)
     installed: current.installed || next.installed,
     name: current.name === current.id && next.name !== next.id ? next.name : current.name,
     ...(current.icon || next.icon ? { icon: current.icon ?? next.icon } : {}),
+    ...(current.iconImage || next.iconImage ? { iconImage: current.iconImage ?? next.iconImage } : {}),
   };
 }
 
@@ -112,6 +132,11 @@ function samePluginUses(left: RuntimePluginUse[], right: RuntimePluginUse[]): bo
     return use.id === other?.id
       && use.name === other.name
       && use.icon === other.icon
+      && use.iconImage?.light === other.iconImage?.light
+      && use.iconImage?.dark === other.iconImage?.dark
+      && use.anchor?.messageId === other.anchor?.messageId
+      && use.anchor?.toolRunId === other.anchor?.toolRunId
+      && use.anchor?.placement === other.anchor?.placement
       && use.installed === other.installed;
   });
 }

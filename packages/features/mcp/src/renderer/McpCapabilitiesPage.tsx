@@ -1,3 +1,5 @@
+import { useMcpAuthentication } from './useMcpAuthentication.js';
+import { McpServerDetail } from './McpServerDetail.js';
 import { useConfirm } from '@setsuna-desktop/renderer-ui';
 import { TextField as UiTextField, Button as UiButton, Switch } from '@setsuna-desktop/renderer-ui';
 
@@ -16,18 +18,12 @@ import type {
   SettingsViewUi,
 } from '@setsuna-desktop/renderer-contracts/settings';
 import {
-  Clock3,
   Loader2,
-  LogIn,
-  LogOut,
   MessageSquare,
-  Pencil,
   Plug,
   RefreshCw,
   Save,
   Search,
-  Settings2,
-  Trash2,
 } from 'lucide-react';
 import {
   useEffect,
@@ -91,9 +87,10 @@ const emptyDraft: McpDraft = Object.freeze({
 export function McpCapabilitiesPage({
   capabilities,
   service,
+  openExternal,
   translate,
   ui,
-}: SettingsPageSlotProps & Readonly<{ service: McpRendererService }>) {
+}: SettingsPageSlotProps & Readonly<{ service: McpRendererService; openExternal(url: string): Promise<boolean> }>) {
   const confirm = useConfirm();
   const snapshot = useSyncExternalStore(
     (listener) => service.subscribe(listener),
@@ -102,11 +99,14 @@ export function McpCapabilitiesPage({
   );
   const [query, setQuery] = useState('');
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(capabilities?.activeItemId ?? null);
+  useEffect(() => {
+    setSelectedKey(capabilities?.activeItemId ?? null);
+  }, [capabilities?.activeItemId]);
   const [editingServer, setEditingServer] = useState<RuntimeMcpServer | null>(null);
   const [draft, setDraft] = useState<McpDraft>(emptyDraft);
   const [saving, setSaving] = useState(false);
-  const [authPendingKeys, setAuthPendingKeys] = useState<ReadonlySet<string>>(new Set());
+  const authentication = useMcpAuthentication(service, translate);
 
   useEffect(() => {
     if (snapshot) return;
@@ -147,18 +147,6 @@ export function McpCapabilitiesPage({
       setSaving(false);
     }
   };
-  const runAuth = async (server: RuntimeMcpServer, action: () => Promise<unknown>) => {
-    setAuthPendingKeys((current) => new Set(current).add(server.key));
-    try {
-      await action();
-    } finally {
-      setAuthPendingKeys((current) => {
-        const next = new Set(current);
-        next.delete(server.key);
-        return next;
-      });
-    }
-  };
 
   if (editingServer || draft !== emptyDraft) {
     return (
@@ -181,7 +169,10 @@ export function McpCapabilitiesPage({
     return (
       <McpServerDetail
         capabilities={capabilities}
-        authPending={authPendingKeys.has(selectedServer.key)}
+        authAction={authentication.pendingActions.get(selectedServer.key)}
+        authError={authentication.errors.get(selectedServer.key)}
+        onCancelLogin={() => authentication.cancel(selectedServer.key)}
+        openExternal={openExternal}
         server={selectedServer}
         translate={translate}
         ui={ui}
@@ -196,8 +187,8 @@ export function McpCapabilitiesPage({
           setSelectedKey(null);
         }}
         onEdit={() => openEditor(selectedServer)}
-        onLogin={() => runAuth(selectedServer, () => service.login(selectedServer.key))}
-        onLogout={() => runAuth(selectedServer, () => service.logout(selectedServer.key))}
+        onLogin={() => authentication.run(selectedServer.key, 'login')}
+        onLogout={() => authentication.run(selectedServer.key, 'logout')}
         onUpdate={(enabled) => service.updateServer(selectedServer.key, { enabled })}
       />
     );
@@ -439,7 +430,7 @@ function McpServerEditor({
                 <FormField className="desktop-capabilities-mcp-form__full" help={translate('feature.mcp.envHeadersHelp')} label={translate('feature.mcp.envHeaders')}>
                   <ui.TextArea placeholder="X-API-Key=API_KEY" value={draft.envHttpHeaders} onChange={(event) => setDraftField(setDraft, 'envHttpHeaders', event.currentTarget.value)} />
                 </FormField>
-                <FormField label={translate('feature.mcp.bearerEnv')}>
+                <FormField help={translate('feature.mcp.bearerEnvHelp')} label={translate('feature.mcp.bearerEnv')}>
                   <ui.TextField placeholder="MCP_ACCESS_TOKEN" value={draft.bearerTokenEnvVar} onChange={(event) => setDraftField(setDraft, 'bearerTokenEnvVar', event.currentTarget.value)} />
                 </FormField>
                 <FormField label="OAuth Client ID">
@@ -502,140 +493,6 @@ function McpServerEditor({
   );
 }
 
-function McpServerDetail({
-  authPending,
-  capabilities,
-  onBack,
-  onDelete,
-  onEdit,
-  onLogin,
-  onLogout,
-  onUpdate,
-  server,
-  translate,
-  ui,
-}: Readonly<{
-  authPending: boolean;
-  capabilities?: CapabilitiesPageNavigation;
-  onBack(): void;
-  onDelete(): Promise<void>;
-  onEdit(): void;
-  onLogin(): Promise<void>;
-  onLogout(): Promise<void>;
-  onUpdate(enabled: boolean): Promise<unknown>;
-  server: RuntimeMcpServer;
-  translate: McpTranslate;
-  ui: SettingsViewUi;
-}>) {
-  const canUseOAuth = server.transport === 'streamableHttp'
-    && server.authStatus !== 'bearerToken'
-    && server.authStatus !== 'unsupported';
-  const loggedIn = server.authStatus === 'oAuth';
-  const disabledTools = new Set(server.disabledTools);
-  const allowedTools = new Set(server.allowedTools);
-  const enabledToolCount = server.tools.filter((tool) => (
-    (!allowedTools.size || allowedTools.has(tool.name)) && !disabledTools.has(tool.name)
-  )).length;
-  const actionItems = [
-    {
-      disabled: server.readOnly,
-      icon: <Pencil size={14} />,
-      id: 'edit',
-      label: translate('feature.mcp.edit'),
-    },
-    {
-      danger: true,
-      disabled: server.readOnly,
-      icon: <Trash2 size={14} />,
-      id: 'delete',
-      label: translate('feature.mcp.delete'),
-    },
-  ];
-  return (
-    <main className="capabilities-page desktop-capabilities-panel" data-feature-id="mcp">
-      <section className="desktop-capabilities-panel__inner desktop-capabilities-panel__inner--detail">
-        {capabilities?.renderBreadcrumb({
-          currentLabel: server.label,
-          parentLabel: translate('feature.mcp.title'),
-          onBack,
-        })}
-        <section className="desktop-capabilities-detail desktop-capabilities-skill-detail desktop-capabilities-mcp-detail">
-          <ui.PageHeader
-            actions={(
-              <>
-                <span className="sd-toggle-label"><Switch label={translate('feature.mcp.enabled')} checked={server.enabled} disabled={server.readOnly} onCheckedChange={(checked) => void onUpdate(checked)} /><span>{translate('feature.mcp.enabled')}</span></span>
-                <ui.ActionMenu
-                  items={actionItems}
-                  label={translate('feature.mcp.actions')}
-                  onSelect={(actionId) => {
-                    if (actionId === 'edit') onEdit();
-                    if (actionId === 'delete') void onDelete();
-                  }}
-                />
-              </>
-            )}
-            subtitle={translate(mcpSourceKey(server.source))}
-            title={server.label}
-          />
-
-          <McpDetailSection icon={<Settings2 size={14} />} title={translate('feature.mcp.detail.configuration')}>
-            <McpDetailGrid fields={[
-              { label: translate('feature.mcp.key'), value: server.key },
-              { label: translate('feature.mcp.name'), value: server.label },
-              { label: translate('feature.mcp.transport'), value: server.transport },
-              { label: translate('feature.mcp.description'), value: server.description, wide: true },
-            ]} />
-          </McpDetailSection>
-
-          <McpDetailSection icon={<Plug size={14} />} title={translate('feature.mcp.connection')}>
-            <div className="desktop-capabilities-mcp-detail__connection">
-              <McpDetailGrid fields={server.transport === 'stdio'
-                ? [
-                    { label: translate('feature.mcp.command'), value: server.command },
-                    { label: translate('feature.mcp.args'), value: server.args },
-                    { label: translate('feature.mcp.cwd'), value: server.cwd },
-                  ]
-                : [{ label: 'URL', value: server.url, wide: true }]} />
-              {server.authError ? <small className="is-error">{server.authError}</small> : null}
-              {canUseOAuth ? (
-                <ui.Button
-                  disabled={authPending}
-                  icon={authPending ? <Loader2 className="is-spinning" size={14} /> : loggedIn ? <LogOut size={14} /> : <LogIn size={14} />}
-                  onClick={() => void (loggedIn ? onLogout() : onLogin())}
-                >
-                  {translate(authPending ? 'feature.mcp.awaitingAuthorization' : loggedIn ? 'feature.mcp.logout' : 'feature.mcp.login')}
-                </ui.Button>
-              ) : null}
-            </div>
-          </McpDetailSection>
-
-          <McpDetailSection icon={<Clock3 size={14} />} title={translate('feature.mcp.detail.timeouts')}>
-            <McpDetailGrid fields={[
-              { label: translate('feature.mcp.requestTimeout'), value: `${server.timeoutMs} ms` },
-              { label: translate('feature.mcp.startupTimeout'), value: `${server.startupTimeoutMs} ms` },
-              { label: translate('feature.mcp.toolTimeout'), value: `${server.toolTimeoutMs} ms` },
-            ]} />
-          </McpDetailSection>
-          <section className="desktop-capabilities-skill-section">
-            <header>
-              <span>{translate('feature.mcp.tools')}</span>
-              <small>{translate('feature.mcp.toolsEnabled', { enabled: enabledToolCount, total: server.tools.length })}</small>
-            </header>
-            {server.tools.length ? (
-              <div className="desktop-capabilities-mcp-detail__tools">
-                {server.tools.map((tool) => {
-                  const enabled = (!allowedTools.size || allowedTools.has(tool.name)) && !disabledTools.has(tool.name);
-                  return <div className={enabled ? '' : 'is-disabled'} key={tool.name}><strong>{tool.title || tool.name}</strong>{tool.description ? <span>{tool.description}</span> : null}</div>;
-                })}
-              </div>
-            ) : <div className="desktop-capabilities-skill-empty">{translate('feature.mcp.toolsNotFetched')}</div>}
-          </section>
-        </section>
-      </section>
-    </main>
-  );
-}
-
 function FormField({ children, className = '', help, label }: Readonly<{
   children: ReactNode;
   className?: string;
@@ -643,39 +500,6 @@ function FormField({ children, className = '', help, label }: Readonly<{
   label: string;
 }>) {
   return <label className={`desktop-capabilities-mcp-field ${className}`}><span>{label}</span>{children}{help ? <small>{help}</small> : null}</label>;
-}
-
-type McpDetailField = Readonly<{
-  label: string;
-  value?: string | readonly string[];
-  wide?: boolean;
-}>;
-
-function McpDetailSection({ children, icon, title }: Readonly<{
-  children: ReactNode;
-  icon: ReactNode;
-  title: string;
-}>) {
-  return <section className="desktop-capabilities-skill-section"><header>{icon}<span>{title}</span></header>{children}</section>;
-}
-
-function McpDetailGrid({ fields }: Readonly<{ fields: readonly McpDetailField[] }>) {
-  const visibleFields = fields.filter((field) => (
-    typeof field.value === 'string' ? Boolean(field.value) : Boolean(field.value?.length)
-  ));
-  return (
-    <dl className="desktop-capabilities-mcp-detail__grid">
-      {visibleFields.map((field) => {
-        const values = typeof field.value === 'string' ? [field.value] : field.value ?? [];
-        return (
-          <div data-wide={field.wide || undefined} key={field.label}>
-            <dt>{field.label}</dt>
-            <dd>{values.map((value, index) => <code key={`${value}:${index}`}>{value}</code>)}</dd>
-          </div>
-        );
-      })}
-    </dl>
-  );
 }
 
 function setDraftField<TKey extends keyof McpDraft>(
@@ -711,19 +535,11 @@ function setAllToolsEnabled(
   }));
 }
 
-function mcpSourceKey(source: RuntimeMcpServer['source']):
-  | 'feature.mcp.source.builtin'
-  | 'feature.mcp.source.legacy'
-  | 'feature.mcp.source.local'
-  | 'feature.mcp.source.workspace' {
-  return `feature.mcp.source.${source}`;
-}
-
 function draftFromServer(server: RuntimeMcpServer): McpDraft {
   return {
     allowedTools: server.allowedTools.join('\n'),
     args: server.args.join('\n'),
-    bearerTokenEnvVar: '',
+    bearerTokenEnvVar: server.bearerTokenEnvVar ?? '',
     command: server.command ?? '',
     cwd: server.cwd ?? '',
     description: server.description ?? '',
@@ -777,7 +593,8 @@ function draftToInput(
         url: draft.url.trim(),
         ...(!existing || draft.headers.trim() ? { headers: keyValueLines(draft.headers) } : {}),
         ...(draft.envHttpHeaders.trim() ? { envHttpHeaders: keyValueLines(draft.envHttpHeaders) } : {}),
-        ...(draft.bearerTokenEnvVar.trim() ? { bearerTokenEnvVar: draft.bearerTokenEnvVar.trim() } : {}),
+        // The name is public and prefilled; an explicit empty value removes the old reference.
+        bearerTokenEnvVar: draft.bearerTokenEnvVar.trim(),
         ...(draft.oauthClientId.trim() ? { oauthClientId: draft.oauthClientId.trim() } : {}),
         ...(draft.oauthResource.trim() ? { oauthResource: draft.oauthResource.trim() } : {}),
       };

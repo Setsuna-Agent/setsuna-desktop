@@ -10,6 +10,8 @@ import {
   readPluginExtensionStatuses,
   readMarketplacePluginItem,
   readPluginManagementSnapshot,
+  readPluginConnectorStatuses,
+  refreshPluginMarketplace,
   readPluginHooks,
   removeInstalledPlugin,
   runInstalledPluginRendererUiAction,
@@ -32,6 +34,9 @@ import type {
 
 export function createPluginManagementClient(transport: FeatureOperationTransport) {
   return Object.freeze({
+    readConnectorStatuses: (input: PluginManagementPluginTarget, options?: Readonly<{ signal?: AbortSignal }>) => (
+      transport.call(readPluginConnectorStatuses, input, options)
+    ),
     deleteStandaloneHook: (
       input: PluginManagementHookTarget,
       options?: Readonly<{ signal?: AbortSignal }>,
@@ -68,6 +73,9 @@ export function createPluginManagementClient(transport: FeatureOperationTranspor
     ),
     readSnapshot: (options?: Readonly<{ signal?: AbortSignal }>) => (
       transport.call(readPluginManagementSnapshot, undefined, options)
+    ),
+    refreshMarketplace: (options?: Readonly<{ signal?: AbortSignal }>) => (
+      transport.call(refreshPluginMarketplace, undefined, options)
     ),
     remove: (input: PluginManagementPluginTarget, options?: Readonly<{ signal?: AbortSignal }>) => (
       transport.call(removeInstalledPlugin, input, options)

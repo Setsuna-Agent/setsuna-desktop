@@ -504,6 +504,7 @@
   line-height: 20px;
 }
 
+.chat-plugin-uses__icon,
 .chat-plugin-uses__status {
   flex: 0 0 auto;
 }

@@ -175,6 +175,8 @@ export class RendererMcpService implements McpRendererService {
       const mergedServer = { ...server };
       delete mergedServer.authStatus;
       delete mergedServer.authError;
+      delete mergedServer.deviceAuthorization;
+      if (currentServer.deviceAuthorization) mergedServer.deviceAuthorization = currentServer.deviceAuthorization;
       if (currentServer.authStatus !== undefined) {
         mergedServer.authStatus = currentServer.authStatus;
       }
@@ -205,6 +207,8 @@ export class RendererMcpService implements McpRendererService {
         : {}),
     };
     delete mergedServer.authError;
+    delete mergedServer.deviceAuthorization;
+    if (authenticatedServer.deviceAuthorization) mergedServer.deviceAuthorization = authenticatedServer.deviceAuthorization;
     if (authenticatedServer.authError !== undefined) {
       mergedServer.authError = authenticatedServer.authError;
     }

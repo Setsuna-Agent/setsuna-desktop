@@ -34,6 +34,7 @@ import { goalRendererFeature } from '@setsuna-desktop/feature-goal/renderer';
 import { memoryRendererFeature } from '@setsuna-desktop/feature-memory/renderer';
 import { threadTitleGenerationRendererFeature } from '@setsuna-desktop/feature-thread-title-generation/renderer';
 import { mcpRendererFeature } from '@setsuna-desktop/feature-mcp/renderer';
+import { mcpRendererHostCapability } from '@setsuna-desktop/feature-mcp/contracts';
 import {
   modelProviderRendererFeature,
   modelProviderRendererHostCapability,
@@ -223,6 +224,13 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
         pluginManagementRendererHostCapability,
         Object.freeze({
           bridge: window.setsunaDesktop?.plugins ?? null,
+          openExternal: (url: string) => window.setsunaDesktop?.links.openExternal(url)
+            ?? Promise.resolve(false),
+        }),
+      ),
+      provideHostCapability(
+        mcpRendererHostCapability,
+        Object.freeze({
           openExternal: (url: string) => window.setsunaDesktop?.links.openExternal(url)
             ?? Promise.resolve(false),
         }),

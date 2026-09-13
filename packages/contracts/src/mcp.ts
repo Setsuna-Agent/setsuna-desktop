@@ -9,7 +9,15 @@ export type RuntimeMcpAuthStatus =
   | 'oAuth'
   | 'oAuthLoggingIn'
   | 'oAuthExpired'
-  | 'oAuthError';
+  | 'oAuthError'
+  | 'configurationError';
+
+/** Public device challenge only. The device code and tokens remain inside runtime. */
+export type RuntimeMcpDeviceAuthorization = {
+  userCode: string;
+  verificationUri: string;
+  expiresAt: string;
+};
 
 export type RuntimeMcpServer = {
   key: string;
@@ -28,7 +36,10 @@ export type RuntimeMcpServer = {
   disabledTools: string[];
   oauthClientId?: string;
   oauthResource?: string;
+  /** Public variable name only; credential values are never projected. */
+  bearerTokenEnvVar?: string;
   authStatus?: RuntimeMcpAuthStatus;
+  deviceAuthorization?: RuntimeMcpDeviceAuthorization;
   authError?: string;
   tools: RuntimeMcpToolInfo[];
   envKeys: string[];

@@ -78,7 +78,7 @@ export type RuntimeModelRequestStepSkill = {
 export type RuntimePromptManifestEntry = {
   id: string;
   role: Extract<RuntimeMessageRole, 'system' | 'developer' | 'user' | 'assistant'>;
-  source: 'product' | 'tool_policy' | 'tool_external_context' | 'environment' | 'permissions' | 'personalization' | 'project_workflow' | 'project_instruction' | 'memory' | 'skill' | RuntimeMessagePromptSource;
+  source: 'product' | 'tool_policy' | 'tool_external_context' | 'environment' | 'permissions' | 'personalization' | 'project_workflow' | 'project_instruction' | 'memory' | 'skill' | 'plugin' | RuntimeMessagePromptSource;
   trust: 'runtime' | 'trusted_local' | 'user' | 'external';
   lifecycle: 'runtime' | 'workspace' | 'turn';
   estimatedTokens: number;

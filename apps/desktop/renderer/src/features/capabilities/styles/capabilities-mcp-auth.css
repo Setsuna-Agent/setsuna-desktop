@@ -1,0 +1,194 @@
+.desktop-mcp-connection {
+  min-width: 0;
+  color: var(--app-text);
+  font-family: var(--app-font-family);
+}
+
+.desktop-mcp-connection__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: 64px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--app-surface-muted);
+}
+
+.desktop-mcp-connection__icon {
+  display: grid;
+  flex: 0 0 36px;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  background: var(--app-surface);
+}
+
+.desktop-mcp-connection__identity {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 4px;
+  min-width: 0;
+}
+
+.desktop-mcp-connection__identity strong {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.desktop-mcp-connection__identity > span {
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.desktop-mcp-connection__row .sd-button {
+  flex-shrink: 0;
+  min-height: 30px;
+  padding: 4px 10px;
+  border-radius: 9px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.desktop-mcp-connection__row .desktop-mcp-connection__status {
+  gap: 6px;
+  background: var(--app-accent-subtle);
+}
+
+.desktop-mcp-connection__dot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--app-success);
+}
+
+.desktop-mcp-connection__progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.desktop-mcp-connection__error {
+  margin: 8px 12px 0;
+  color: var(--app-danger);
+  font-size: 12px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.desktop-mcp-connection-menu {
+  min-width: 160px;
+  border-radius: 14px;
+}
+
+.desktop-mcp-device-authorization {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  min-width: 0;
+  padding: 4px 0;
+  color: var(--app-text);
+  font-family: var(--app-font-family);
+  text-align: center;
+}
+
+.desktop-mcp-device-authorization__instructions {
+  margin: 0;
+  color: var(--app-text-muted);
+  font-size: 13px;
+  line-height: 21px;
+}
+
+.desktop-mcp-device-authorization__code-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  box-sizing: border-box;
+  width: min(100%, 320px);
+  min-height: 64px;
+  padding: 12px 16px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: var(--app-surface-subtle);
+}
+
+.desktop-mcp-device-authorization__code-row code {
+  min-width: 0;
+  color: var(--app-text);
+  font-family: var(--app-code-font-family);
+  font-size: clamp(18px, 3vw, 26px);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 32px;
+  letter-spacing: 2px;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.desktop-mcp-device-authorization__code-row .sd-icon-button {
+  flex-shrink: 0;
+  color: var(--app-text-muted);
+}
+
+.desktop-mcp-device-authorization__actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.desktop-mcp-device-authorization__actions .sd-button {
+  min-height: 36px;
+  padding-inline: 16px;
+}
+
+.desktop-mcp-device-authorization__footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 2px;
+  color: var(--app-text-subtle);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.desktop-mcp-device-authorization__footer > span,
+.desktop-mcp-device-authorization__preparing {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.desktop-mcp-device-authorization__preparing {
+  color: var(--app-text-muted);
+  font-size: 13px;
+}
+
+.desktop-mcp-device-authorization__error {
+  margin: 0;
+  max-width: 360px;
+  color: var(--app-danger);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.desktop-mcp-device-authorization__error > span {
+  display: block;
+  overflow-wrap: anywhere;
+  user-select: text;
+}

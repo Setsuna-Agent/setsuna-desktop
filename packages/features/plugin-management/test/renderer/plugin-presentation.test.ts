@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import type { PluginManagementHook } from '../../src/contracts/index.js';
 import {
   installedPluginsOutsideCatalog,
+  installedPluginCatalogId,
   matchingPluginHook,
   mergePluginSkills,
   pluginMatchesQuery,
@@ -14,6 +15,17 @@ import {
 } from '../../src/renderer/pluginPresentation.js';
 
 describe('plugin presentation', () => {
+  it('matches repository installations by source without duplicating them as local plugins', () => {
+    const repositoryPlugin = {
+      ...installedPlugin('github', 'repository'),
+      repository: { marketplaceId: 'openai-plugins:github', url: 'https://github.com/openai/plugins', path: 'plugins/github', revision: 'abc' },
+    };
+    const local = installedPlugin('local', 'local');
+    expect(installedPluginCatalogId(repositoryPlugin)).toBe('openai-plugins:github');
+    expect(installedPluginsOutsideCatalog([repositoryPlugin, local], [marketplacePlugin('openai-plugins:github')])).toEqual([local]);
+    expect(installedPluginsOutsideCatalog([repositoryPlugin], [])).toEqual([repositoryPlugin]);
+  });
+
   it('keeps local and orphaned marketplace installations outside the active catalog', () => {
     const marketplace = [marketplacePlugin('catalog')];
     const installed = [

@@ -1,6 +1,7 @@
 import type {
   RuntimeInterfaceLanguage,
   RuntimeMcpAuthStatus,
+  RuntimeMcpDeviceAuthorization,
   RuntimeMcpResource,
   RuntimeMcpResourceTemplate,
   RuntimeMcpServerInput,
@@ -70,7 +71,7 @@ export type McpServerRuntimeSnapshot = {
   authError?: string;
 };
 
-export type McpAuthStatusResult = { status: RuntimeMcpAuthStatus; error?: string };
+export type McpAuthStatusResult = { status: RuntimeMcpAuthStatus; error?: string; deviceAuthorization?: RuntimeMcpDeviceAuthorization };
 
 export type McpSnapshotOptions = {
   includeTools?: boolean;

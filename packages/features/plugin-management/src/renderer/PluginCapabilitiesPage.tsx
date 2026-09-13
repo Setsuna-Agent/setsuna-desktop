@@ -28,9 +28,10 @@ import type {
 } from '../contracts/index.js';
 import type { PluginManagementTranslate } from './messages.js';
 import { PluginDetail } from './PluginDetail.js';
-import { PluginDetailSection } from './PluginDetailPrimitives.js';
+import { PluginDetailSection, PluginRepositoryLink } from './PluginDetailPrimitives.js';
 import {
   installedPluginsOutsideCatalog,
+  installedPluginCatalogId,
   pluginMatchesQuery,
 } from './pluginPresentation.js';
 
@@ -62,14 +63,25 @@ export function PluginCapabilitiesPage({
   const [selectedPluginId, setSelectedPluginId] = useState<string | null>(capabilities?.activeItemId ?? null);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [repositoryRefreshing, setRepositoryRefreshing] = useState(true);
   const t = translate as PluginManagementTranslate;
   const confirm = useConfirm();
 
   useEffect(() => {
+    let active = true;
+    // The service publishes local state while the page-scoped repository refresh runs.
+    setRepositoryRefreshing(true);
+    void service.refresh({ refreshRepositories: true })
+      .catch((error: unknown) => { if (active) setError(error instanceof Error ? error.message : String(error)); })
+      .finally(() => { if (active) setRepositoryRefreshing(false); });
+    return () => { active = false; };
+  }, [service]);
+
+  useEffect(() => {
     // Chat tools can mutate Plugin bundles while this feature service is idle.
-    // Refresh on page entry and item navigation so details never reuse a stale
-    // install manifest or extension failure from an earlier activation.
-    void service.refresh().catch(() => undefined);
+    // Page entry already refreshes above; item navigation also needs the latest
+    // install manifest and extension status.
+    if (selectedPluginId) void service.refresh().catch(() => undefined);
   }, [selectedPluginId, service]);
 
   useEffect(() => {
@@ -82,7 +94,7 @@ export function PluginCapabilitiesPage({
   }, [capabilities?.activeItemId]);
 
   const installedById = useMemo(
-    () => new Map(snapshot.plugins.map((plugin) => [plugin.id, plugin])),
+    () => new Map(snapshot.plugins.map((plugin) => [installedPluginCatalogId(plugin), plugin])),
     [snapshot.plugins],
   );
   const marketplaceById = useMemo(
@@ -95,8 +107,9 @@ export function PluginCapabilitiesPage({
   const localPlugins = useMemo(() => installedPluginsOutsideCatalog(snapshot.plugins, snapshot.marketplace).filter((plugin) => (
     pluginMatchesQuery(plugin, query)
   )), [query, snapshot.marketplace, snapshot.plugins]);
-  const selectedInstalled = selectedPluginId ? installedById.get(selectedPluginId) : undefined;
   const selectedMarketplace = selectedPluginId ? marketplaceById.get(selectedPluginId) : undefined;
+  const selectedInstalled = selectedPluginId ? installedById.get(selectedPluginId)
+    ?? (!selectedMarketplace ? snapshot.plugins.find((plugin) => plugin.id === selectedPluginId) : undefined) : undefined;
   const standaloneHooks = hookSnapshot.hooks.filter((hook) => !hook.pluginId && !hook.isManaged);
 
   const openPlugin = (pluginId: string) => {
@@ -174,7 +187,7 @@ export function PluginCapabilitiesPage({
       <>
         <PluginDetail
           capabilities={capabilities}
-          extensionStatus={snapshot.extensions.find((extension) => extension.pluginId === selectedPluginId)}
+          extensionStatus={snapshot.extensions.find((extension) => extension.pluginId === selectedInstalled?.id)}
           hooks={hookSnapshot.hooks}
           installedPlugin={selectedInstalled}
           marketplacePlugin={selectedMarketplace}
@@ -183,7 +196,7 @@ export function PluginCapabilitiesPage({
           service={service}
           translate={t}
           ui={ui}
-          useSkill={capabilities ? (skillId) => capabilities.openChat(skillId) : undefined}
+          usePlugin={capabilities ? (pluginId) => capabilities.openPluginChat(pluginId) : undefined}
           onBack={closePlugin}
           onInstall={installMarketplace}
           onRemove={removePlugin}
@@ -216,25 +229,30 @@ export function PluginCapabilitiesPage({
   }
 
   const installedMarketplacePlugins = catalog.filter((plugin) => installedById.has(plugin.id));
-  const marketplaceSections = pluginMarketplaceSections(catalog, t);
+  const marketplaceSections = pluginMarketplaceSections(catalog, t, repositoryRefreshing && !query.trim());
   const installedCount = installedMarketplacePlugins.length + localPlugins.length + Number(standaloneHooks.length > 0);
   const hasPageErrors = snapshot.marketplaceErrors.length > 0 || Boolean(error);
   const tabsInPage = capabilities?.catalogNavigationInPage ?? false;
   return (
     <main className="capabilities-page desktop-capabilities-panel" data-feature-id="plugin-management">
-      <section className={`desktop-capabilities-panel__inner desktop-capabilities-panel__inner--catalog desktop-capabilities-panel__inner--market${tabsInPage ? ' desktop-capabilities-panel__inner--page-tabs' : ''}${hasPageErrors ? ' desktop-capabilities-panel__inner--market-notice' : ''}`}>
+      <section className={`desktop-capabilities-panel__inner desktop-capabilities-panel__inner--catalog desktop-capabilities-panel__inner--market${tabsInPage ? ' desktop-capabilities-panel__inner--page-tabs' : ''}`}>
         {capabilities?.catalogNavigation}
         <header className="desktop-capabilities-header desktop-capabilities-header--market">
           <div className="desktop-capabilities-title"><h2>{t('feature.pluginManagement.title')}</h2></div>
           <div className="desktop-capabilities-actions">
             <ui.IconButton
               label={t('feature.pluginManagement.refresh')}
-              onClick={() => void run(
-                'refresh',
-                () => Promise.all([service.refresh(), service.refreshHooks()]),
-              )}
+              disabled={repositoryRefreshing}
+              onClick={() => {
+                setRepositoryRefreshing(true);
+                setError(null);
+                // Refresh has its own busy state; installs and local actions remain available.
+                void Promise.all([service.refresh({ refreshRepositories: true }), service.refreshHooks()])
+                  .catch((error: unknown) => setError(pluginErrorMessage(error, t)))
+                  .finally(() => setRepositoryRefreshing(false));
+              }}
             >
-              <RefreshCw size={15} />
+              <RefreshCw className={repositoryRefreshing ? 'is-spinning' : undefined} size={15} />
             </ui.IconButton>
             {capabilities ? capabilities.renderCreateMenu({
               busy: pendingAction === 'import',
@@ -274,7 +292,7 @@ export function PluginCapabilitiesPage({
             )}
           </div>
         </header>
-        <div className="desktop-capabilities-search-row">
+        <div className="desktop-capabilities-search-row desktop-plugin-market__search">
           <label className="desktop-capabilities-search">
             <Search size={14} />
             <TextField aria-label={t('feature.pluginManagement.search')} placeholder={t('feature.pluginManagement.search')} value={query} onChange={(event) => setQuery(event.currentTarget.value)} />
@@ -290,7 +308,7 @@ export function PluginCapabilitiesPage({
                 title={snapshot.marketplaceErrors.join('\n')}
               >
                 <AlertTriangle aria-hidden="true" size={14} />
-                <span>{t('feature.pluginManagement.partialUnavailable')}</span>
+                <span>{t('feature.pluginManagement.partialUnavailable')} {snapshot.marketplaceErrors.join(' · ')}</span>
               </div>
             ) : null}
           </div>
@@ -323,7 +341,25 @@ export function PluginCapabilitiesPage({
             ) : null}
             <div className="desktop-plugin-market__catalog">
               {marketplaceSections.map((section) => (
-                <PluginSection key={section.id} title={section.title}>
+                <PluginSection
+                  key={section.id}
+                  title={section.title}
+                  trailing={section.id === 'repository' ? (
+                    <div className="desktop-plugin-market__source">
+                      <PluginRepositoryLink onClick={() => void openExternal('https://github.com/openai/plugins')}>
+                        {t('feature.pluginManagement.repositorySource')}
+                      </PluginRepositoryLink>
+                      {repositoryRefreshing ? (
+                        <span className="desktop-plugin-market__sync" role="status" aria-label={t('feature.pluginManagement.repositoryRefreshing')} title={t('feature.pluginManagement.repositoryRefreshing')}>
+                          <Loader2 aria-hidden="true" className="is-spinning" size={14} />
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : undefined}
+                >
+                  {section.id === 'repository' && !section.plugins.length ? (
+                    <span role="status">{t('feature.pluginManagement.repositoryRefreshing')}</span>
+                  ) : null}
                   {section.plugins.map((plugin) => (
                     <PluginCard
                       installed={installedById.get(plugin.id)}
@@ -338,7 +374,7 @@ export function PluginCapabilitiesPage({
                   ))}
                 </PluginSection>
               ))}
-              {!catalog.length && !localPlugins.length ? <div className="desktop-capabilities-empty">{t('feature.pluginManagement.empty')}</div> : null}
+              {!catalog.length && !localPlugins.length && !repositoryRefreshing ? <div className="desktop-capabilities-empty">{t('feature.pluginManagement.empty')}</div> : null}
             </div>
           </div>
         </div></div>
@@ -347,8 +383,13 @@ export function PluginCapabilitiesPage({
   );
 }
 
-function PluginSection({ children, title }: Readonly<{ children: ReactNode; title: string }>) {
-  return <section className="desktop-plugin-market__section"><header><h3>{title}</h3></header><div className="desktop-plugin-market__list desktop-capability-list">{children}</div></section>;
+function PluginSection({ children, title, trailing }: Readonly<{ children: ReactNode; title: string; trailing?: ReactNode }>) {
+  return (
+    <section className="desktop-plugin-market__section">
+      <header><h3>{title}</h3>{trailing}</header>
+      <div className="desktop-plugin-market__list desktop-capability-list">{children}</div>
+    </section>
+  );
 }
 
 function InstalledPluginShortcut({ onOpen, plugin, ui }: Readonly<{
@@ -360,7 +401,7 @@ function InstalledPluginShortcut({ onOpen, plugin, ui }: Readonly<{
   return (
     <article className={`desktop-plugin-installed-shortcut${updateAvailable ? ' has-update' : ''}`}>
       <UiButton variant="ghost" aria-label={plugin.name} type="button" onClick={onOpen}>
-        <ui.PluginIcon name={plugin.icon} pluginId={plugin.id} variant="installed" />
+        <ui.PluginIcon iconImage={plugin.iconImage} name={plugin.icon} pluginId={plugin.id} variant="installed" />
         {updateAvailable ? <span aria-hidden="true" className="desktop-plugin-installed-shortcut__update" /> : null}
       </UiButton>
       <span aria-hidden="true" className="desktop-plugin-installed-shortcut__name">{plugin.name}</span>
@@ -398,7 +439,8 @@ function PluginCard({ installed, marketplace, onInstall, onOpen, pending, transl
   if (!plugin) return null;
   const updateAvailable = Boolean(marketplace?.updateAvailable && onInstall);
   const installedWithoutUpdate = Boolean(installed && !updateAvailable);
-  const actionLabel = pending
+  const actionLabel = marketplace?.unavailableReason
+    ? translate('feature.pluginManagement.unavailable') : pending
     ? translate(updateAvailable ? 'feature.pluginManagement.updating' : 'feature.pluginManagement.getting')
     : translate(updateAvailable
       ? 'feature.pluginManagement.update'
@@ -408,13 +450,14 @@ function PluginCard({ installed, marketplace, onInstall, onOpen, pending, transl
   return (
     <article className="desktop-capability-list-item">
       <UiButton variant="ghost" className="desktop-capability-list-item__identity" type="button" onClick={onOpen}>
-        <ui.PluginIcon name={plugin.icon} pluginId={plugin.id} variant="list" />
+        <ui.PluginIcon iconImage={plugin.iconImage} name={plugin.icon} pluginId={plugin.id} variant="list" />
         <span className="desktop-capability-list-item__copy"><strong>{plugin.name}</strong><span>{plugin.description ?? plugin.id}</span></span>
       </UiButton>
       <UiButton variant="ghost"
         aria-label={`${actionLabel}: ${plugin.name}`}
         className={`desktop-plugin-market__get${installedWithoutUpdate ? ' is-installed' : ''}`}
-        disabled={pending || installedWithoutUpdate || !onInstall}
+        disabled={pending || installedWithoutUpdate || !onInstall || Boolean(marketplace?.unavailableReason)}
+        title={marketplace?.unavailableReason}
         type="button"
         onClick={() => void onInstall?.()}
       >
@@ -509,9 +552,12 @@ function pluginErrorMessage(error: unknown, translate: PluginManagementTranslate
 function pluginMarketplaceSections(
   plugins: readonly RuntimePluginMarketplaceItem[],
   translate: PluginManagementTranslate,
+  repositoryRefreshing: boolean,
 ) {
-  const utilities = plugins.filter((plugin) => plugin.publisher === 'Setsuna' && plugin.capabilities.extension);
-  const regular = plugins.filter((plugin) => !utilities.includes(plugin));
+  const repository = plugins.filter((plugin) => plugin.repository);
+  const bundled = plugins.filter((plugin) => !plugin.repository);
+  const utilities = bundled.filter((plugin) => plugin.publisher === 'Setsuna' && plugin.capabilities.extension);
+  const regular = bundled.filter((plugin) => !utilities.includes(plugin));
   const featured = regular.filter((plugin) => plugin.featured);
   const catalog = regular.filter((plugin) => !plugin.featured);
   const creation = catalog.filter((plugin) => !plugin.capabilities.hooks);
@@ -519,7 +565,8 @@ function pluginMarketplaceSections(
   return [
     { id: 'featured', plugins: featured, title: translate('feature.pluginManagement.marketplace.featured') },
     { id: 'utilities', plugins: utilities, title: translate('feature.pluginManagement.marketplace.utilities') },
+    { id: 'repository', plugins: repository, title: translate('feature.pluginManagement.marketplace.repository') },
     { id: 'creation', plugins: creation, title: translate('feature.pluginManagement.marketplace.creation') },
     { id: 'automation', plugins: automation, title: translate('feature.pluginManagement.marketplace.automation') },
-  ].filter((section) => section.plugins.length > 0);
+  ].filter((section) => section.plugins.length > 0 || (section.id === 'repository' && repositoryRefreshing));
 }

@@ -362,20 +362,21 @@ describe('plugin bundle tool host', () => {
       files: [{ path: 'extension/entry.mjs', content: 'export default function activate() {}\n' }],
     })).toThrow('files is missing manifest.extension.entry: extension/Entry.mjs');
 
-    if (path.sep === '/') {
-      expect(() => normalizeConfigurePluginInput({
+    for (const entry of ['extension/entry.mjs', 'extension\\entry.mjs']) {
+      const normalized = normalizeConfigurePluginInput({
         manifest: {
           id: 'backslash-entry',
           name: 'Backslash entry',
           extension: {
             apiVersion: 1,
             runtime: 'node-worker',
-            entry: 'extension\\entry.mjs',
+            entry,
             capabilities: ['tools'],
           },
         },
         files: [{ path: 'extension/entry.mjs', content: 'export default function activate() {}\n' }],
-      })).toThrow('files is missing manifest.extension.entry: extension\\entry.mjs');
+      });
+      expect(normalized.files[0].path).toBe('extension/entry.mjs');
     }
   });
 

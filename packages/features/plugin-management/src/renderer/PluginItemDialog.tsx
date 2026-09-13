@@ -1,4 +1,3 @@
-import { Button as UiButton } from '@setsuna-desktop/renderer-ui';
 import type {
   RuntimePluginFilePreview,
   RuntimePluginHook,
@@ -18,13 +17,8 @@ import {
 } from 'lucide-react';
 import {
   useEffect,
-  useMemo,
   useState,
-  type ComponentProps,
-  type MouseEvent,
 } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import type {
   PluginManagementHook,
   PluginManagementRendererService,
@@ -47,7 +41,6 @@ export function PluginItemDialog({
   installed,
   item,
   onClose,
-  openExternal,
   onSetHookEnabled,
   onSetHookTrust,
   pluginId,
@@ -59,7 +52,6 @@ export function PluginItemDialog({
   hooks: readonly PluginManagementHook[];
   item: PluginDetailItem;
   onClose(): void;
-  openExternal(url: string): Promise<boolean>;
   onSetHookEnabled(hook: PluginManagementHook, enabled: boolean): Promise<void>;
   onSetHookTrust(hook: PluginManagementHook, trusted: boolean): Promise<void>;
   pluginId: string;
@@ -172,7 +164,7 @@ export function PluginItemDialog({
               <PluginFilePreview
                 file={file}
                 key={file.path}
-                openExternal={openExternal}
+                ui={ui}
                 translate={translate}
               />
             ))}
@@ -185,105 +177,29 @@ export function PluginItemDialog({
   );
 }
 
-function PluginFilePreview({
-  file,
-  openExternal,
-  translate,
-}: Readonly<{
+function PluginFilePreview({ file, translate, ui }: Readonly<{
   file: RuntimePluginFilePreview;
-  openExternal(url: string): Promise<boolean>;
   translate: PluginManagementTranslate;
+  ui: SettingsViewUi;
 }>) {
-  const [source, setSource] = useState(false);
-  const markdown = file.text !== undefined && isMarkdownFile(file);
   const name = file.path.split(/[\\/]/u).at(-1) || file.path;
-  const markdownComponents = useMemo<NonNullable<ComponentProps<typeof ReactMarkdown>['components']>>(
-    () => ({
-      a: (props) => <PluginMarkdownLink {...props} openExternal={openExternal} />,
-    }),
-    [openExternal],
-  );
-  return (
-    <article className="desktop-plugin-item-dialog__file">
-      <header>
-        <span className="desktop-plugin-item-dialog__file-heading">
-          <span className="desktop-plugin-item-dialog__file-name">{name}</span>
-          <small>{file.mimeType} · {formatPluginFileSize(file.size)}</small>
-        </span>
-        {markdown ? (
-          <span className="desktop-plugin-item-dialog__view-switch" role="group" aria-label={name}>
-            <UiButton variant="ghost"
-              aria-pressed={!source}
-              className={!source ? 'is-active' : undefined}
-              type="button"
-              onClick={() => setSource(false)}
-            >
-              {translate('feature.pluginManagement.preview')}
-            </UiButton>
-            <UiButton variant="ghost"
-              aria-pressed={source}
-              className={source ? 'is-active' : undefined}
-              type="button"
-              onClick={() => setSource(true)}
-            >
-              {translate('feature.pluginManagement.source')}
-            </UiButton>
-          </span>
-        ) : null}
-      </header>
-      {file.base64 && file.mimeType.startsWith('image/') ? (
-        <div className="desktop-plugin-item-dialog__image-wrap"><img alt={name} src={`data:${file.mimeType};base64,${file.base64}`} /></div>
-      ) : markdown && !source ? (
-        <div className="chat-markdown desktop-plugin-item-dialog__markdown">
-          <ReactMarkdown
-            components={markdownComponents}
-            remarkPlugins={[remarkGfm]}
-          >
-            {markdownPreviewBody(file.text ?? '')}
-          </ReactMarkdown>
-        </div>
-      ) : file.text !== undefined ? (
-        <pre tabIndex={0}>{file.text}</pre>
-      ) : (
-        <div className="desktop-plugin-item-dialog__status">{translate('feature.pluginManagement.previewUnavailable')}</div>
-      )}
-    </article>
-  );
-}
-
-function PluginMarkdownLink({
-  children,
-  href,
-  node: _node,
-  onClick,
-  openExternal,
-  ...props
-}: ComponentProps<'a'> & Readonly<{
-  node?: unknown;
-  openExternal(url: string): Promise<boolean>;
-}>) {
-  const external = href && /^(?:https?:|mailto:)/iu.test(href);
-  const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
-    onClick?.(event);
-    if (event.defaultPrevented) return;
-    event.preventDefault();
-    if (!external) return;
-    void openExternal(href).catch((error: unknown) => {
-      console.error('[plugin-management] failed to open external link', error);
-    });
-  };
-  return (
-    <a
-      {...props}
-      aria-disabled={external ? undefined : true}
-      href={external ? href : undefined}
-      rel="noreferrer"
-      target={external ? '_blank' : undefined}
-      onClick={handleClick}
-    >
-      {children}
-    </a>
-  );
+  if (file.text !== undefined && isMarkdownFile(file)) {
+    return <ui.MarkdownDocument content={file.text} name={name}
+      previewLabel={translate('feature.pluginManagement.preview')} sourceLabel={translate('feature.pluginManagement.source')} />;
+  }
+  return <article className="desktop-plugin-item-dialog__file">
+    <header>
+      <span className="desktop-plugin-item-dialog__file-heading">
+        <span className="desktop-plugin-item-dialog__file-name">{name}</span>
+        <small>{file.mimeType} · {formatPluginFileSize(file.size)}</small>
+      </span>
+    </header>
+    {file.base64 && file.mimeType.startsWith('image/') ? (
+      <div className="desktop-plugin-item-dialog__image-wrap"><img alt={name} src={`data:${file.mimeType};base64,${file.base64}`} /></div>
+    ) : file.text !== undefined ? <pre tabIndex={0}>{file.text}</pre> : (
+      <div className="desktop-plugin-item-dialog__status">{translate('feature.pluginManagement.previewUnavailable')}</div>
+    )}
+  </article>;
 }
 
 function itemTitle(item: PluginDetailItem): string {
@@ -306,13 +222,6 @@ function itemKindLabel(kind: RuntimePluginItemKind, translate: PluginManagementT
 function isMarkdownFile(file: RuntimePluginFilePreview): boolean {
   const mime = file.mimeType.split(';', 1)[0]?.trim().toLocaleLowerCase();
   return mime === 'text/markdown' || /\.(?:md|markdown|mdown|mkd|mdx)$/iu.test(file.path);
-}
-
-function markdownPreviewBody(content: string): string {
-  const frontmatter = content.match(/^---[\t ]*\r?\n([\s\S]*?)\r?\n---[\t ]*(?:\r?\n|$)/u);
-  return frontmatter?.[1] && /^(?:[A-Za-z_][\w.-]*):(?:[\t ]|$)/mu.test(frontmatter[1])
-    ? content.slice(frontmatter[0].length)
-    : content;
 }
 
 function errorMessage(error: unknown): string {

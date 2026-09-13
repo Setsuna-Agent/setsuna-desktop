@@ -20,6 +20,8 @@ import {
   readMarketplacePluginItem,
   readInstalledPluginRendererUiState,
   readPluginManagementSnapshot,
+  readPluginConnectorStatuses,
+  refreshPluginMarketplace,
   readPluginHooks,
   removeInstalledPlugin,
   runInstalledPluginRendererUiAction,
@@ -40,11 +42,11 @@ export const pluginManagementRuntimeFeature = defineRuntimeFeature({
   setup(context) {
     const { host, routes } = context.dependencies;
 
-    routes.register(context.scope, readPluginManagementSnapshot, async () => {
+    const readSnapshot = async (refreshRepositories = false) => {
       const catalogRevision = await host.catalogRevision();
       const [plugins, marketplace, extensions] = await Promise.all([
         host.listPlugins(),
-        host.listMarketplace(),
+        host.listMarketplace({ refreshRepositories }),
         host.listExtensions(),
       ]);
       return Object.freeze({
@@ -54,7 +56,14 @@ export const pluginManagementRuntimeFeature = defineRuntimeFeature({
         marketplaceErrors: Object.freeze([...marketplace.errors]),
         plugins: Object.freeze([...plugins.plugins]),
       });
-    });
+    };
+    routes.register(context.scope, readPluginConnectorStatuses, (input) => (
+      preservePluginOperationError(() => host.readConnectorStatuses(input))
+    ));
+    routes.register(context.scope, readPluginManagementSnapshot, () => readSnapshot());
+    routes.register(context.scope, refreshPluginMarketplace, () => (
+      preservePluginOperationError(() => readSnapshot(true))
+    ));
     routes.register(context.scope, readPluginExtensionStatuses, async () => {
       const [catalogRevision, extensions] = await Promise.all([
         host.catalogRevision(),

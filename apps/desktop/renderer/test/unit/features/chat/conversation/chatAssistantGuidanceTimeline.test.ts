@@ -95,6 +95,7 @@ describe('createAssistantGuidanceTimelinePlan', () => {
       items: [{
         type: 'pluginUses',
         id: 'assistant_plugin:plugins',
+        messageId: message.id,
         plugins: [{ id: 'documents', installed: true, name: 'Word 文档处理' }],
       }],
     };

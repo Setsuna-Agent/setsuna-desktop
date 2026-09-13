@@ -15,16 +15,10 @@ import type {
 } from '@setsuna-desktop/renderer-contracts/settings';
 import {
   FilePlus2,
-  FileText,
-  Loader2,
-  LogIn,
   MessageSquare,
-  Pencil,
-  Plug,
   RefreshCw,
   Save,
   Search,
-  Trash2,
 } from 'lucide-react';
 import {
   useCallback,
@@ -36,6 +30,7 @@ import {
 } from 'react';
 import type { SkillsRendererService } from '../contracts/index.js';
 import type { SkillsTranslate } from './messages.js';
+import { SkillDetail } from './SkillDetail.js';
 
 type SkillPageMode = 'catalog' | 'create' | 'detail' | 'edit';
 
@@ -208,10 +203,6 @@ export function SkillsCapabilitiesPage({
         summary={summary}
         translate={translate}
         ui={ui}
-        onAuthenticate={(serverKey) => updateDependency(
-          `auth:${serverKey}`,
-          () => service.authenticateMcpDependency(summary.id, serverKey),
-        )}
         onBack={closeDetail}
         onDelete={summary.kind === 'builtin' ? undefined : () => deleteSkill(summary)}
         onEdit={summary.kind === 'builtin' ? undefined : () => setMode('edit')}
@@ -378,149 +369,6 @@ function SkillListItem({
   );
 }
 
-function SkillDetail({
-  capabilities,
-  detail,
-  error,
-  loading,
-  onAuthenticate,
-  onBack,
-  onDelete,
-  onEdit,
-  onInstallDependencies,
-  onToggle,
-  onUseInChat,
-  pendingDependencies,
-  summary,
-  translate,
-  ui,
-}: Readonly<{
-  capabilities?: CapabilitiesPageNavigation;
-  detail: RuntimeSkillDetail | null;
-  error: string | null;
-  loading: boolean;
-  onAuthenticate(serverKey: string): Promise<void>;
-  onBack(): void;
-  onDelete?: () => Promise<void>;
-  onEdit?: () => void;
-  onInstallDependencies(): Promise<void>;
-  onToggle(enabled: boolean): void;
-  onUseInChat?: () => void;
-  pendingDependencies: ReadonlySet<string>;
-  summary: RuntimeSkillSummary;
-  translate: SkillsTranslate;
-  ui: SettingsViewUi;
-}>) {
-  const active = detail ?? summary;
-  const actionItems = [
-    ...(onEdit ? [{
-      icon: <Pencil size={14} />,
-      id: 'edit',
-      label: translate('feature.skills.edit'),
-    }] : []),
-    ...(onDelete ? [{
-      danger: true,
-      icon: <Trash2 size={14} />,
-      id: 'delete',
-      label: translate('feature.skills.delete'),
-    }] : []),
-    {
-      disabled: !active.enabled || !onUseInChat,
-      icon: <MessageSquare size={14} />,
-      id: 'use-in-conversation',
-      label: translate('feature.skills.useInChat'),
-    },
-  ];
-  return (
-    <main className="capabilities-page desktop-capabilities-panel" data-feature-id="skills">
-      <section className="desktop-capabilities-panel__inner desktop-capabilities-panel__inner--detail">
-        {capabilities?.renderBreadcrumb({
-          currentLabel: active.name,
-          parentLabel: translate('feature.skills.title'),
-          onBack,
-        })}
-        <section className="desktop-capabilities-detail desktop-capabilities-skill-detail">
-          <ui.PageHeader
-            actions={(
-              <>
-                <span className="sd-toggle-label"><Switch label={translate('feature.skills.enableHint')} checked={active.enabled} onCheckedChange={(checked) => onToggle(checked)} /><span>{translate('feature.skills.enabled')}</span></span>
-                <ui.ActionMenu
-                  items={actionItems}
-                  label={translate('feature.skills.actions')}
-                  onSelect={(actionId) => {
-                    if (actionId === 'edit') onEdit?.();
-                    if (actionId === 'delete') void onDelete?.();
-                    if (actionId === 'use-in-conversation') onUseInChat?.();
-                  }}
-                />
-              </>
-            )}
-            subtitle={translate(skillSourceKey(active.kind))}
-            title={active.name}
-          />
-          <div className="desktop-capabilities-skill-meta">
-            <span>{active.id}</span>
-            <span>{active.kind}</span>
-            <span>{translate('feature.skills.referenceCount', { count: detail?.references.length ?? 0 })}</span>
-          </div>
-          {active.description ? <p className="desktop-capabilities-skill-description">{active.description}</p> : null}
-          {loading ? <div className="desktop-capabilities-skill-loading"><RefreshCw className="is-spinning" size={14} />{translate('feature.skills.loading')}</div> : null}
-          {error ? <ui.EmptyState title={translate('feature.skills.loadFailed')} body={error} /> : null}
-          {detail?.mcpDependencies?.length ? (
-            <section className="desktop-capabilities-skill-section">
-              <header><Plug size={14} /><span>{translate('feature.skills.mcpDependencies')}</span></header>
-              <div className="desktop-capabilities-skill-reference-list">
-                {detail.mcpDependencies.map((dependency) => {
-                  const authPending = pendingDependencies.has(`auth:${dependency.value}`);
-                  const installPending = pendingDependencies.has('install');
-                  return (
-                    <div className="desktop-capabilities-skill-dependency" key={dependency.value}>
-                      <code>{dependency.value}</code>
-                      <span>{translate(dependencyStatusKey(dependency.status))}</span>
-                      {['missing', 'disabled', 'unchecked'].includes(dependency.status) ? (
-                        <ui.Button disabled={installPending} icon={installPending ? <Loader2 className="is-spinning" size={14} /> : <Plug size={14} />} onClick={() => void onInstallDependencies()}>
-                          {translate('feature.skills.installAndEnable')}
-                        </ui.Button>
-                      ) : ['authRequired', 'error'].includes(dependency.status) ? (
-                        <ui.Button disabled={authPending} icon={authPending ? <Loader2 className="is-spinning" size={14} /> : <LogIn size={14} />} onClick={() => void onAuthenticate(dependency.value)}>
-                          {translate(authPending ? 'feature.skills.awaitingAuthorization' : 'feature.skills.login')}
-                        </ui.Button>
-                      ) : null}
-                      {dependency.error ? <small>{dependency.error}</small> : null}
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          ) : null}
-          {detail?.dependencyErrors?.map((dependencyError) => (
-            <div className="desktop-capabilities-skill-empty" key={dependencyError}>{dependencyError}</div>
-          ))}
-          {detail ? (
-            <>
-              <article className="desktop-plugin-item-dialog__file">
-                <header>
-                  <span className="desktop-plugin-item-dialog__file-heading">
-                    <span className="desktop-plugin-item-dialog__file-name">SKILL.md</span>
-                    <small>text/markdown · {new TextEncoder().encode(detail.content).byteLength} B</small>
-                  </span>
-                </header>
-                <pre tabIndex={0}>{detail.content}</pre>
-              </article>
-              <section className="desktop-capabilities-skill-section">
-                <header><FileText size={14} /><span>{translate('feature.skills.references')}</span></header>
-                {detail.references.length ? (
-                  <div className="desktop-capabilities-skill-reference-list">{detail.references.map((reference) => <code key={reference}>{reference}</code>)}</div>
-                ) : <div className="desktop-capabilities-skill-empty">{translate('feature.skills.noReferences')}</div>}
-              </section>
-            </>
-          ) : null}
-        </section>
-      </section>
-    </main>
-  );
-}
-
 function SkillEditor({
   capabilities,
   mode,
@@ -605,30 +453,6 @@ function skillInput(draft: SkillEditorDraft, includeId: boolean): RuntimeSkillIn
 function skillPatch(input: RuntimeSkillInput): RuntimeSkillPatch {
   const { id: _id, ...patch } = input;
   return patch;
-}
-
-function skillSourceKey(kind: RuntimeSkillSummary['kind']):
-  | 'feature.skills.source.builtin'
-  | 'feature.skills.source.plugin'
-  | 'feature.skills.source.user' {
-  return `feature.skills.source.${kind}`;
-}
-
-function dependencyStatusKey(status: NonNullable<RuntimeSkillDetail['mcpDependencies']>[number]['status']):
-  | 'feature.skills.dependency.authRequired'
-  | 'feature.skills.dependency.conflict'
-  | 'feature.skills.dependency.disabled'
-  | 'feature.skills.dependency.error'
-  | 'feature.skills.dependency.missing'
-  | 'feature.skills.dependency.pending'
-  | 'feature.skills.dependency.ready' {
-  if (status === 'ready') return 'feature.skills.dependency.ready';
-  if (status === 'missing') return 'feature.skills.dependency.missing';
-  if (status === 'disabled') return 'feature.skills.dependency.disabled';
-  if (status === 'authRequired') return 'feature.skills.dependency.authRequired';
-  if (status === 'conflict') return 'feature.skills.dependency.conflict';
-  if (status === 'error') return 'feature.skills.dependency.error';
-  return 'feature.skills.dependency.pending';
 }
 
 function errorMessage(error: unknown): string {

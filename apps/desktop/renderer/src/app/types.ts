@@ -4,8 +4,9 @@ export type MainView = 'chat' | 'capabilities' | 'plugin' | 'settings';
 
 export type ConversationOverviewVisibility = 'auto' | 'hidden' | 'shown';
 
-export type ChatSkillSelectionRequest = {
-  skillId: string;
+export type ChatCapabilitySelectionRequest = {
+  kind: 'skill' | 'plugin';
+  id: string;
   requestId: number;
 };
 

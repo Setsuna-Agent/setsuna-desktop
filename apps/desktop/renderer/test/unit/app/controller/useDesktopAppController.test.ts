@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  createChatSkillSelectionRequest,
+  createChatCapabilitySelectionRequest,
   resolveShellSidebarState,
 } from '../../../../src/app/controller/useDesktopAppController.js';
 
@@ -24,10 +24,11 @@ describe('resolveShellSidebarState', () => {
   });
 });
 
-describe('createChatSkillSelectionRequest', () => {
+describe('createChatCapabilitySelectionRequest', () => {
   it('targets the next active main composer without an ephemeral composer identity', () => {
-    expect(createChatSkillSelectionRequest('skill-creator', 3)).toEqual({
-      skillId: 'skill-creator',
+    expect(createChatCapabilitySelectionRequest({ kind: 'skill', id: 'skill-creator' }, 3)).toEqual({
+      kind: 'skill',
+      id: 'skill-creator',
       requestId: 3,
     });
   });

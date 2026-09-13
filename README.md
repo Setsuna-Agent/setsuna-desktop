@@ -61,6 +61,23 @@ Each release also includes `SHA256SUMS` and `release-manifest.json` for checksum
 
 ## Run from source
 
+### Prerequisites
+
+- Git, Node.js `>=22.19.0`, and pnpm `7.33.7` (the version pinned in `package.json`).
+- **Windows x64:** Rust/Cargo `>=1.85` with the `x86_64-pc-windows-msvc` toolchain, Visual Studio C++ build tools, and a Windows SDK.
+
+On Windows, install the **Desktop development with C++** workload, including the MSVC x64/x86 tools and Windows SDK, as described in the [Rust MSVC prerequisites](https://rust-lang.github.io/rustup/installation/windows-msvc.html). Then install Rust using the [Windows x64 rustup installer](https://rust-lang.org/tools/install/) and select the MSVC toolchain. Reopen your terminal and check:
+
+```powershell
+rustup target add x86_64-pc-windows-msvc
+rustc --version
+cargo --version
+```
+
+On Windows x64, `pnpm dev` and `pnpm dev:electron` compile the native Windows sandbox before starting Electron. Missing Cargo or MSVC/SDK components cause startup to fail; installing JavaScript dependencies alone is not enough. Windows packaging also requires these tools.
+
+macOS and Linux development startup does not build this Windows component. **Running a downloaded release does not require Rust**; the Windows release includes the compiled sandbox executable. See [Windows development setup](docs/development/README.md#windows-x64) for troubleshooting.
+
 ### Development
 
 ```bash
@@ -72,6 +89,8 @@ pnpm dev
 ```
 
 `pnpm dev` starts both the Vite renderer and the Electron desktop shell. If no model provider is configured, the local smoke fallback can be used to verify the runtime path; add a provider under **Settings → Model providers** to use a real model.
+
+Renderer changes use Vite hot reload. After changing runtime, Electron main/preload, or native code, stop and rerun `pnpm dev` to rebuild and restart the backend; refreshing the window alone keeps the old backend process running.
 
 ## Development commands
 

@@ -2,9 +2,9 @@ import type { ComposerSlot } from '../../../../../src/features/chat/composer/edi
 import type { RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  ensureChatComposerSkillSlot,
-  startChatComposerSkillSelection,
-} from '../../../../../src/features/chat/composer/chatComposerSkillSelection.js';
+  ensureChatComposerCapabilitySlot,
+  startChatComposerCapabilitySelection,
+} from '../../../../../src/features/chat/composer/chatComposerCapabilitySelection.js';
 
 const skill: RuntimeSkillSummary = {
   id: 'create-plugin-in-chat',
@@ -13,10 +13,10 @@ const skill: RuntimeSkillSummary = {
   enabled: true,
 };
 
-describe('ensureChatComposerSkillSlot', () => {
+describe('ensureChatComposerCapabilitySlot', () => {
   it('waits when the ChatPromptInput ref or its inner editor is not ready', () => {
-    expect(ensureChatComposerSkillSlot(null, skill)).toBe(false);
-    expect(ensureChatComposerSkillSlot({}, skill)).toBe(false);
+    expect(ensureChatComposerCapabilitySlot(null, { kind: 'skill', value: skill })).toBe(false);
+    expect(ensureChatComposerCapabilitySlot({}, { kind: 'skill', value: skill })).toBe(false);
   });
 
   it('focuses before insertion and only succeeds after the slot is observable', () => {
@@ -31,7 +31,7 @@ describe('ensureChatComposerSkillSlot', () => {
       insert,
     };
 
-    expect(ensureChatComposerSkillSlot(editor, skill)).toBe(true);
+    expect(ensureChatComposerCapabilitySlot(editor, { kind: 'skill', value: skill })).toBe(true);
     expect(focus).toHaveBeenCalledWith({ cursor: 'start', preventScroll: true });
     expect(insert).toHaveBeenCalledWith(
       expect.arrayContaining([expect.objectContaining({
@@ -44,7 +44,7 @@ describe('ensureChatComposerSkillSlot', () => {
     );
     expect(focus.mock.invocationCallOrder[0]).toBeLessThan(insert.mock.invocationCallOrder[0]);
 
-    expect(ensureChatComposerSkillSlot(editor, skill)).toBe(true);
+    expect(ensureChatComposerCapabilitySlot(editor, { kind: 'skill', value: skill })).toBe(true);
     expect(insert).toHaveBeenCalledTimes(1);
   });
 
@@ -55,7 +55,7 @@ describe('ensureChatComposerSkillSlot', () => {
       insert: vi.fn(),
     };
 
-    expect(ensureChatComposerSkillSlot(editor, skill)).toBe(false);
+    expect(ensureChatComposerCapabilitySlot(editor, { kind: 'skill', value: skill })).toBe(false);
   });
 
   it('inserts a distinct Skill slot when ordinary prose already contains its name', () => {
@@ -70,7 +70,7 @@ describe('ensureChatComposerSkillSlot', () => {
       insert,
     };
 
-    expect(ensureChatComposerSkillSlot(editor, skill)).toBe(true);
+    expect(ensureChatComposerCapabilitySlot(editor, { kind: 'skill', value: skill })).toBe(true);
     expect(insert).toHaveBeenCalledWith([
       expect.objectContaining({ composerReference: { type: 'skill', skillId: skill.id } }),
       { type: 'text', value: ' ' },
@@ -78,7 +78,7 @@ describe('ensureChatComposerSkillSlot', () => {
   });
 });
 
-describe('startChatComposerSkillSelection', () => {
+describe('startChatComposerCapabilitySelection', () => {
   it('waits for a mounted editor before consuming its request', () => {
     const frames = new Map<number, FrameRequestCallback>();
     let nextFrameId = 1;
@@ -88,7 +88,7 @@ describe('startChatComposerSkillSelection', () => {
       slots = nextSlots;
     });
     const onConfirmed = vi.fn();
-    const stop = startChatComposerSkillSelection({
+    const stop = startChatComposerCapabilitySelection({
       getEditor: () => ready ? {
         getValue: () => ({ value: '', slotConfig: slots }),
         insert,
@@ -102,7 +102,7 @@ describe('startChatComposerSkillSelection', () => {
           return frameId;
         },
       },
-      skill,
+      selection: { kind: 'skill', value: skill },
     });
     const flushFrame = () => {
       const [frameId, callback] = frames.entries().next().value as [number, FrameRequestCallback];

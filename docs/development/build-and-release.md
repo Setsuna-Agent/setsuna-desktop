@@ -12,6 +12,8 @@
 - 原生依赖：`node-pty`
 - Electron：`43.x`
 
+Windows x64 源码开发和打包另需 Rust/Cargo `>=1.85`、`x86_64-pc-windows-msvc` 工具链、MSVC C++ 构建工具及 Windows SDK，安装和排错见 [Windows 开发环境](README.md#windows-x64)。发布版已携带编译后的沙箱程序，运行发布版不需要 Rust。
+
 如果本地 pnpm 版本过高导致 lockfile 或 modules-dir 兼容问题，优先使用：
 
 ```bash
@@ -81,10 +83,11 @@ dev 启动流程：
 1. `dev:electron` 先通过 `scripts/prepare-electron.mjs` 检查二进制；缺失时显示周期进度，
    下载超时会明确失败而不是让启动命令无限等待。安装期的 root `postinstall` 也执行同一检查。
 2. 复用当前 pnpm entrypoint 构建 contracts、Feature packages 和 runtime。
-3. 调用 `buildElectron()`。
-4. 通过开发 supervisor 启动 Electron；应用内计划重启使用专用退出码原地拉起，
+3. Windows x64 调用 `build:windows-sandbox` 编译并校验 Rust 沙箱程序，再通过 `prepare:windows-sandbox-curl` 准备 curl；任一步失败都会阻止 Electron 启动。
+4. 调用 `buildElectron()`。
+5. 通过开发 supervisor 启动 Electron；应用内计划重启使用专用退出码原地拉起，
    不结束 Vite renderer。
-5. 注入：
+6. 注入：
    - `SETSUNA_DESKTOP_DEV_SERVER_URL=http://127.0.0.1:5174`
    - `SETSUNA_DESKTOP_RUNTIME_ENTRY=packages/desktop-runtime/dist/cli.js`
 

@@ -21,7 +21,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type {
   ChatImageAttachmentOutcome,
   ChatImageAttachmentRequest,
-  ChatSkillSelectionRequest,
+  ChatCapabilitySelectionRequest,
   ChatWorkspaceMentionRequest,
   ConversationOverviewVisibility,
 } from '../../app/types.js';
@@ -64,7 +64,7 @@ export function ChatWorkspace({
   focusComposerOnReveal = false,
   focusComposerRequest = 0,
   imageAttachmentRequest,
-  skillSelectionRequest,
+  capabilitySelectionRequest,
   workspaceMentionRequest,
   skills,
   onCancelActiveTurn,
@@ -88,7 +88,7 @@ export function ChatWorkspace({
   onSetMultiAgentEnabled,
   onStartThreadReview,
   onImageAttachmentRequestConsumed,
-  onSkillSelectionRequestConsumed,
+  onCapabilitySelectionRequestConsumed,
   onWorkspaceMentionRequestConsumed,
   reviewControls,
   reviewError = null,
@@ -109,7 +109,7 @@ export function ChatWorkspace({
   focusComposerOnReveal?: boolean;
   focusComposerRequest?: number;
   imageAttachmentRequest?: ChatImageAttachmentRequest | null;
-  skillSelectionRequest: ChatSkillSelectionRequest | null;
+  capabilitySelectionRequest: ChatCapabilitySelectionRequest | null;
   workspaceMentionRequest?: ChatWorkspaceMentionRequest | null;
   skills: RuntimeSkillSummary[];
   onCancelActiveTurn: () => void;
@@ -136,7 +136,7 @@ export function ChatWorkspace({
     modelSelection?: RuntimeConfiguredModelReference,
   ) => Promise<unknown>;
   onImageAttachmentRequestConsumed?: (requestId: number, outcome: ChatImageAttachmentOutcome) => void;
-  onSkillSelectionRequestConsumed: (requestId: number) => void;
+  onCapabilitySelectionRequestConsumed: (requestId: number) => void;
   onWorkspaceMentionRequestConsumed?: (requestId: number) => void;
   reviewControls?: ReactNode;
   reviewError?: string | null;
@@ -235,9 +235,10 @@ export function ChatWorkspace({
             focusRequest={focusComposerRequest}
             onFocusRequestConsumed={onFocusComposerRequestConsumed}
             imageAttachmentRequest={imageAttachmentRequest}
-            skillSelectionRequest={skillSelectionRequest}
+            capabilitySelectionRequest={capabilitySelectionRequest}
             workspaceMentionRequest={workspaceMentionRequest}
             skills={skills}
+            plugins={plugins}
             sideConversation={variant === 'side'}
             starter={starter}
             onCancelActiveTurn={onCancelActiveTurn}
@@ -253,7 +254,7 @@ export function ChatWorkspace({
             queuedTurnActions={queuedTurnActions}
             onStartThreadReview={onStartThreadReview}
             onImageAttachmentRequestConsumed={onImageAttachmentRequestConsumed}
-            onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
+            onCapabilitySelectionRequestConsumed={onCapabilitySelectionRequestConsumed}
             onWorkspaceMentionRequestConsumed={onWorkspaceMentionRequestConsumed}
           />
         ),
