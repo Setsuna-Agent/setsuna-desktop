@@ -1,6 +1,7 @@
 import {
   RUNTIME_LOCAL_ATTACHMENT_LINK_PATH,
   RUNTIME_PROCESS_SHUTDOWN_MESSAGE,
+  WORKSPACE_ENTRY_EXISTS_ERROR_CODE,
   type RuntimeEvent,
 } from '@setsuna-desktop/contracts';
 import { installLocalPlugin } from '@setsuna-desktop/feature-plugin-management/contracts';
@@ -256,6 +257,23 @@ describe('runtime host packaging paths', () => {
       '[runtime] GET /v1/threads transport failed; retrying once',
       transportError,
     );
+  });
+
+  it('preserves workspace conflicts as serializable responses without retrying the mutation', async () => {
+    const message = 'A file or folder with that name already exists.';
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({
+      error: message, code: WORKSPACE_ENTRY_EXISTS_ERROR_CODE,
+    }, { status: 409 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const host = new RuntimeHost({ appRoot: '/tmp/setsuna', dataDir: '/tmp/setsuna-data' });
+    await expect(host.request({
+      path: '/v1/projects/project/entries', method: 'POST',
+      body: { parentPath: '', name: 'test', type: 'directory' }, responseMode: 'feature-operation',
+    })).resolves.toEqual({
+      ok: false, status: 409,
+      error: { code: WORKSPACE_ENTRY_EXISTS_ERROR_CODE, message, retryable: false },
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 
   it('returns renderer cancellation without retrying or reporting a transport failure', async () => {

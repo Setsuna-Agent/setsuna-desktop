@@ -80,6 +80,8 @@ export type WorkspaceStatusQuery = {
   threadId?: string;
 };
 
+export const WORKSPACE_ENTRY_EXISTS_ERROR_CODE = 'workspace_entry_exists';
+
 export type WorkspaceEntry = {
   name: string;
   path: string;

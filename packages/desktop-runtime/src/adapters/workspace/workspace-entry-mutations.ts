@@ -59,7 +59,8 @@ function relocateWorkspaceEntry(root: string, relativePath: string, input: { nam
       // replace another directory entry, including hard links to this file.
       const names = await readdir(parent);
       if (names.includes(name) || sourceStat.ino !== targetStat.ino || sourceStat.dev !== targetStat.dev) {
-        throw new Error(`An entry named "${name}" already exists.`);
+        // Match the collision code from exclusive file and directory creation.
+        throw Object.assign(new Error(`An entry named "${name}" already exists.`), { code: 'EEXIST' });
       }
     }
     await rename(source, target);

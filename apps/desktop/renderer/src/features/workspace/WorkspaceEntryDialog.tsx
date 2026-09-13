@@ -1,7 +1,8 @@
-import { isValidWorkspaceEntryName, type WorkspaceEntry } from '@setsuna-desktop/contracts';
+import { isValidWorkspaceEntryName, WORKSPACE_ENTRY_EXISTS_ERROR_CODE, type WorkspaceEntry } from '@setsuna-desktop/contracts';
 import { Button, Dialog, TextField } from '@setsuna-desktop/renderer-ui';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import { RuntimeClientError, runtimeClientErrorMessage } from '../../services/runtime-client/runtimeClientErrors.js';
 
 export type WorkspaceEntryDialogRequest =
   | { mode: 'create'; parentPath: string; type: WorkspaceEntry['type'] }
@@ -42,7 +43,9 @@ export function WorkspaceEntryDialog({ request, onClose, onSubmit }: {
       await onSubmit(name);
       onClose();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(cause instanceof RuntimeClientError && cause.code === WORKSPACE_ENTRY_EXISTS_ERROR_CODE
+        ? t('workspace.files.entryAlreadyExists', { name })
+        : runtimeClientErrorMessage(cause));
     } finally {
       submitting.current = false;
       setPending(false);
