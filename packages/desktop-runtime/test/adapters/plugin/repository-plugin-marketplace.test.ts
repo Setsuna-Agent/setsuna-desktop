@@ -16,7 +16,7 @@ const PLUGIN_KEY = 'openai-plugins:github';
 
 describe('repository plugin marketplace', () => {
   it('uses the index, installs a pinned snapshot, updates changed contents, and retains an offline catalog', async () => {
-    const fixture = await repositoryFixture();
+    const fixture = await repositoryFixture({ aliasCache: true });
     const { marketplace, runtime, source, cacheRoot, root, fetch } = fixture;
     expect(await marketplace.listPlugins()).toEqual({ plugins: [], errors: [] });
     expect(fetch).not.toHaveBeenCalled();
@@ -203,10 +203,15 @@ describe('repository plugin marketplace', () => {
   });
 });
 
-async function repositoryFixture() {
+async function repositoryFixture({ aliasCache = false } = {}) {
   const fixture = await createRepositorySourceFixture();
   const runtime = await createPluginRuntime(fixture.root);
   const cacheRoot = path.join(fixture.root, 'repository-cache');
+  if (aliasCache) {
+    const cacheTarget = path.join(fixture.root, 'repository-cache-target');
+    await mkdir(cacheTarget);
+    await symlink(cacheTarget, cacheRoot, process.platform === 'win32' ? 'junction' : 'dir');
+  }
   const marketplace = new RepositoryPluginMarketplace(cacheRoot, runtime.plugins, fixture.fetch);
   return { ...fixture, cacheRoot, runtime, marketplace };
 }
