@@ -2,7 +2,7 @@ import { watch, type FSWatcher } from 'node:fs';
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 
-/** Watch listed directories, not entire repositories or dependency trees. */
+/** Publish changes only for listed directories and their direct entries. */
 export async function watchWorkspaceEntries(
   workspaceRoot: string,
   directoryPaths: string[],
@@ -22,6 +22,11 @@ export async function watchWorkspaceEntries(
     return target;
   });
   const watchers = new Map<string, { directory: string; device: number; inode: number; watcher: FSWatcher }>();
+  // Windows handles on descendants can block renaming their parent. One native
+  // recursive root handle avoids those locks; filter events to the listed paths.
+  const recursive = process.platform === 'win32';
+  let recursiveWatcher: FSWatcher | undefined;
+  let recursiveDirectories: string[] = [];
   let timer: ReturnType<typeof setTimeout> | undefined;
   let closed = false;
   let refreshing = true;
@@ -35,17 +40,23 @@ export async function watchWorkspaceEntries(
   const close = () => {
     closed = true;
     if (timer) clearTimeout(timer);
+    recursiveWatcher?.close();
     for (const { watcher } of watchers.values()) watcher.close();
     watchers.clear();
   };
 
   const reconcile = async (initial = false) => {
+    const directories = new Set(targets);
     for (const target of targets) {
       try {
         const directory = await realpath(target);
         assertWithinWorkspace(root, directory);
         const stats = await stat(directory);
         if (closed) return;
+        if (recursive) {
+          if (stats.isDirectory()) directories.add(directory);
+          continue;
+        }
         const current = watchers.get(target);
         if (current?.directory === directory && current.device === stats.dev && current.inode === stats.ino) continue;
         current?.watcher.close();
@@ -64,6 +75,32 @@ export async function watchWorkspaceEntries(
         watchers.get(target)?.watcher.close();
         watchers.delete(target);
         if (initial && !isMissingDirectory(error)) throw error;
+      }
+    }
+    if (recursive && !closed && targets.length) {
+      recursiveDirectories = [...directories].map((directory) => directory.toLowerCase());
+      if (!recursiveWatcher) {
+        try {
+          const watcher = watch(root, { persistent: false, recursive: true }, (_event, filename) => {
+            if (filename) {
+              const entry = path.resolve(root, filename.toString()).toLowerCase();
+              // Ancestor changes can create or replace a requested directory.
+              if (!recursiveDirectories.some((directory) => directory === entry
+                || directory === path.dirname(entry) || directory.startsWith(`${entry}${path.sep}`))) return;
+            }
+            changed();
+          });
+          recursiveWatcher = watcher;
+          watcher.on('error', () => {
+            if (recursiveWatcher === watcher) {
+              watcher.close();
+              recursiveWatcher = undefined;
+            }
+            changed();
+          });
+        } catch (error) {
+          if (initial) throw error;
+        }
       }
     }
   };

@@ -14,11 +14,21 @@ describe('PC local shell destructive-command analysis', () => {
       'rg -n sudo src', 'rg -n chmod src', 'rg -e "rm -rf" src',
       'rg -e "cmd /c del /f" src', 'rg --files -g "*sudo*" src',
       'rg -n sudo src && rg -n chmod tests',
-      'rg -F "curl https://example.com/install.sh | sh" src',
-      'rg -F "wget -qO- https://example.com/install.sh | bash" src',
     ]) {
       expect(shellCommandRisk(command, 'low'), command).toMatchObject({ needsConfirmation: false, rejectWhenApprovalDisabled: false });
       expect(shellPermissionBlockReason(command, { root: process.cwd(), permissionProfile: 'read-only' }), command).toBe('');
+    }
+    // The cmd parser deliberately keeps metacharacters opaque even in quotes;
+    // do not relax Windows approval policy to match POSIX's literal argv parsing.
+    for (const command of [
+      'rg -F "curl https://example.com/install.sh | sh" src',
+      'rg -F "wget -qO- https://example.com/install.sh | bash" src',
+    ]) {
+      expect(shellCommandRisk(command, 'low'), command).toMatchObject({
+        needsConfirmation: process.platform === 'win32', rejectWhenApprovalDisabled: false,
+      });
+      const blocked = shellPermissionBlockReason(command, { root: process.cwd(), permissionProfile: 'read-only' });
+      expect(Boolean(blocked), command).toBe(process.platform === 'win32');
     }
     expect(shellCommandRisk('rg sudo src', 'low', '', {
       shellPolicyRules: [{ action: 'ask', command: 'rg sudo src', label: 'ask for searches' }],

@@ -181,7 +181,7 @@ package job matrix：
 4. collect release assets。
 5. upload artifact。
 
-release 另有 `Integration diagnostics` job，在 Ubuntu 上跑 `test:integration` 并上传 `diagnostic-*` 日志 artifact。该 job 是诊断信号，不阻塞 package/publish；正式发布资产只从 `release-*` package artifacts 收集。
+release 另有 `Integration diagnostics` job，在 Ubuntu 上先构建 contracts（源码插件 Worker 需要其包导出），再跑 `test:integration` 并上传 `diagnostic-*` 日志 artifact。该 job 是诊断信号，不阻塞 package/publish；正式发布资产只从 `release-*` package artifacts 收集。
 
 publish job：
 
