@@ -67,6 +67,7 @@ import {
 } from './composition/windows-sandbox-feature-host.js';
 import { registerWindowsTitlebarDoubleClick } from './window/frame.js';
 import { registerMainWindowNavigationGuards } from './window/navigation.js';
+import { loadDesktopRenderer } from './window/renderer-loading.js';
 import { DesktopWindowCloseBehaviorController } from './window/close-behavior.js';
 import { DesktopWindowPreferencesStore } from './window/preferences.js';
 import { showStartupSplash, waitForRendererFirstPaint } from './window/splash/window.js';
@@ -216,13 +217,14 @@ async function createWindow(): Promise<void> {
       sandbox: true,
     },
   });
-  const startupSplashLayer = await showStartupSplash(currentMainWindow, startupSplashView, desktopIcon, {
-    maximized: windowState.maximized,
-    windowControls: usesCustomFrame,
-  });
-  if (startupClosedBeforeHandoff) return;
-
-  await hydrateDesktopProcessEnvironment({ loadLoginShell: app.isPackaged });
+  // Login-shell setup does not depend on Chromium; overlap it with the splash load.
+  const [startupSplashLayer] = await Promise.all([
+    showStartupSplash(currentMainWindow, startupSplashView, desktopIcon, {
+      maximized: windowState.maximized,
+      windowControls: usesCustomFrame,
+    }),
+    hydrateDesktopProcessEnvironment({ loadLoginShell: app.isPackaged }),
+  ]);
   if (startupClosedBeforeHandoff) return;
   const ripgrepPath = resolveDesktopRipgrep({
     appRoot: app.getAppPath(),
@@ -379,81 +381,81 @@ async function createWindow(): Promise<void> {
   });
   requestRuntime = (input) => currentRuntimeHost.request(input);
   runtimeHost = currentRuntimeHost;
-  try {
-    try {
-      await currentRuntimeHost.start();
-    } catch (error) {
-      if (webDavRestoreRecovery !== 'awaiting-validation') throw error;
-      console.error('[webdav-sync] restored data failed Runtime startup; rolling back', error);
-      await currentRuntimeHost.stop().catch(() => undefined);
-      await rollbackCommittedWebDavRestore(
-        dataLayout.root,
-        desktopWebDavSyncStorageHost,
-      );
-      await currentRuntimeHost.start();
-    }
-    if (webDavRestoreRecovery === 'awaiting-validation') {
-      await finalizeCommittedWebDavRestore(
-        dataLayout.root,
-        desktopWebDavSyncStorageHost,
-      );
-    }
-  } catch (error) {
-    await currentMainFeatureComposition.dispose().catch(() => undefined);
-    if (mainFeatureComposition === currentMainFeatureComposition) mainFeatureComposition = null;
-    if (desktopUpdaterLifecycle === currentDesktopUpdaterLifecycle) desktopUpdaterLifecycle = null;
-    if (networkProxyMainService === activatedMainFeatures.networkProxy) networkProxyMainService = null;
-    if (windowsSandboxMainService === activatedMainFeatures.windowsSandbox) windowsSandboxMainService = null;
-    await currentDesktopNativeBridgeServer.stop();
-    throw error;
-  }
-  registerRuntimeIpc(currentRuntimeHost);
+  await loadDesktopRenderer(currentMainWindow, {
+    appRoot: app.getAppPath(),
+    devServerUrl: process.env.SETSUNA_DESKTOP_DEV_SERVER_URL,
+    prepare: async () => {
+      try {
+        try {
+          await currentRuntimeHost.start();
+        } catch (error) {
+          if (webDavRestoreRecovery !== 'awaiting-validation') throw error;
+          console.error('[webdav-sync] restored data failed Runtime startup; rolling back', error);
+          await currentRuntimeHost.stop().catch(() => undefined);
+          await rollbackCommittedWebDavRestore(
+            dataLayout.root,
+            desktopWebDavSyncStorageHost,
+          );
+          await currentRuntimeHost.start();
+        }
+        if (webDavRestoreRecovery === 'awaiting-validation') {
+          await finalizeCommittedWebDavRestore(
+            dataLayout.root,
+            desktopWebDavSyncStorageHost,
+          );
+        }
+      } catch (error) {
+        await currentMainFeatureComposition.dispose().catch(() => undefined);
+        if (mainFeatureComposition === currentMainFeatureComposition) mainFeatureComposition = null;
+        if (desktopUpdaterLifecycle === currentDesktopUpdaterLifecycle) desktopUpdaterLifecycle = null;
+        if (networkProxyMainService === activatedMainFeatures.networkProxy) networkProxyMainService = null;
+        if (windowsSandboxMainService === activatedMainFeatures.windowsSandbox) windowsSandboxMainService = null;
+        await currentDesktopNativeBridgeServer.stop();
+        throw error;
+      }
+      registerRuntimeIpc(currentRuntimeHost);
+      if (startupClosedBeforeHandoff) return;
+      await currentWebDavSyncLifecycle.start();
+      await currentDesktopUpdaterLifecycle.initialize();
+      registerDesktopIpc({
+        mainWindow: currentMainWindow,
+        nativeBridge: currentDesktopNativeBridgeServer,
+        onActiveKeyboardShortcutBindingsChange: (bindings) => {
+          activeKeyboardShortcutBindings = new Set(bindings);
+        },
+        onInterfaceLanguageChange: (locale) => {
+          interfaceLanguage = locale;
+          currentDesktopTray.refreshMenu();
+        },
+        userDataPath: dataLayout.root,
+      });
+      registerWindowIpc({
+        mainWindow: currentMainWindow,
+        macTrafficLightPosition: getMacTrafficLightPosition,
+        getCloseBehavior: () => closeBehaviorController.getCloseBehavior(),
+        setCloseBehavior: (behavior) => process.platform === 'win32'
+          ? closeBehaviorController.setCloseBehavior(behavior)
+          : Promise.resolve('quit'),
+      });
+      currentMainWindow.on('closed', () => {
+        currentWebDavSyncLifecycle.close();
+        void shutdownDesktopServices();
+        if (mainWindow === currentMainWindow) mainWindow = null;
+      });
+      const publishWindowMaximizedState = () => {
+        if (currentMainWindow.isDestroyed()) return;
+        currentMainWindow.webContents.send(
+          'window-control:maximized-change',
+          currentMainWindow.isMaximized() || currentMainWindow.isFullScreen(),
+        );
+      };
+      currentMainWindow.on('maximize', publishWindowMaximizedState);
+      currentMainWindow.on('unmaximize', publishWindowMaximizedState);
+      currentMainWindow.on('enter-full-screen', publishWindowMaximizedState);
+      currentMainWindow.on('leave-full-screen', publishWindowMaximizedState);
+    },
+  });
   if (startupClosedBeforeHandoff) return;
-  await currentWebDavSyncLifecycle.start();
-  await currentDesktopUpdaterLifecycle.initialize();
-  registerDesktopIpc({
-    mainWindow: currentMainWindow,
-    nativeBridge: currentDesktopNativeBridgeServer,
-    onActiveKeyboardShortcutBindingsChange: (bindings) => {
-      activeKeyboardShortcutBindings = new Set(bindings);
-    },
-    onInterfaceLanguageChange: (locale) => {
-      interfaceLanguage = locale;
-      currentDesktopTray.refreshMenu();
-    },
-    userDataPath: dataLayout.root,
-  });
-  registerWindowIpc({
-    mainWindow: currentMainWindow,
-    macTrafficLightPosition: getMacTrafficLightPosition,
-    getCloseBehavior: () => closeBehaviorController.getCloseBehavior(),
-    setCloseBehavior: (behavior) => process.platform === 'win32'
-      ? closeBehaviorController.setCloseBehavior(behavior)
-      : Promise.resolve('quit'),
-  });
-  currentMainWindow.on('closed', () => {
-    currentWebDavSyncLifecycle.close();
-    void shutdownDesktopServices();
-    if (mainWindow === currentMainWindow) mainWindow = null;
-  });
-  const publishWindowMaximizedState = () => {
-    if (currentMainWindow.isDestroyed()) return;
-    currentMainWindow.webContents.send(
-      'window-control:maximized-change',
-      currentMainWindow.isMaximized() || currentMainWindow.isFullScreen(),
-    );
-  };
-  currentMainWindow.on('maximize', publishWindowMaximizedState);
-  currentMainWindow.on('unmaximize', publishWindowMaximizedState);
-  currentMainWindow.on('enter-full-screen', publishWindowMaximizedState);
-  currentMainWindow.on('leave-full-screen', publishWindowMaximizedState);
-
-  const devServerUrl = process.env.SETSUNA_DESKTOP_DEV_SERVER_URL;
-  if (devServerUrl) {
-    await currentMainWindow.loadURL(devServerUrl);
-  } else {
-    await currentMainWindow.loadFile(path.join(app.getAppPath(), 'dist/renderer/index.html'));
-  }
   await waitForRendererFirstPaint(currentMainWindow);
   startupInProgress = false;
   startupSplashLayer.reveal();
@@ -495,9 +497,10 @@ async function createDataRootMaintenanceWindow(): Promise<void> {
     if (mainWindow === currentMainWindow) mainWindow = null;
     app.quit();
   });
-  const devServerUrl = process.env.SETSUNA_DESKTOP_DEV_SERVER_URL;
-  if (devServerUrl) await currentMainWindow.loadURL(devServerUrl);
-  else await currentMainWindow.loadFile(path.join(app.getAppPath(), 'dist/renderer/index.html'));
+  await loadDesktopRenderer(currentMainWindow, {
+    appRoot: app.getAppPath(),
+    devServerUrl: process.env.SETSUNA_DESKTOP_DEV_SERVER_URL,
+  });
   await waitForRendererFirstPaint(currentMainWindow);
   currentMainWindow.show();
 }

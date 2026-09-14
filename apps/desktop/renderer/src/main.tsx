@@ -51,15 +51,16 @@ import './features/chat/styles/chat-send-queue.css';
 import './app/styles/sidebar-search.css';
 import './shared/styles/code-theme.css';
 
-applyDesktopPlatformAttribute();
-initializeLocalePreference();
-initializeThemePreference();
-initializeAccentColorPreference();
-initializeAppearancePreference();
-initializeCodeAppearancePreference();
-initializeSidebarBackgroundPreference();
-
 async function bootstrapRenderer(): Promise<void> {
+  // Main loads this module while runtime starts; preferences and Feature setup may call IPC.
+  await window.setsunaDesktop?.desktop.whenReady();
+  applyDesktopPlatformAttribute();
+  initializeLocalePreference();
+  initializeThemePreference();
+  initializeAccentColorPreference();
+  initializeAppearancePreference();
+  initializeCodeAppearancePreference();
+  initializeSidebarBackgroundPreference();
   const features = await activateBuiltinRendererFeatures();
   window.addEventListener('beforeunload', () => {
     void features.composition.dispose();

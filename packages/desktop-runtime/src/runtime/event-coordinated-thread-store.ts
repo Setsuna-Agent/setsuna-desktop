@@ -6,6 +6,7 @@ import {
   type RuntimeThreadMemoryMode,
 } from '@setsuna-desktop/contracts';
 import { RuntimeEventWriter } from '../loop/lifecycle/runtime-event-writer.js';
+import { activeTurnIdsInThread } from '../utils/runtime-turn-state.js';
 import type { GeneratedImageStore } from '../ports/generated-image-store.js';
 import type {
   ThreadStore,
@@ -42,6 +43,11 @@ export class EventCoordinatedThreadStore implements ThreadStore {
 
   getThread(threadId: string) {
     return this.inner.getThread(threadId);
+  }
+
+  async getActiveTurnIds(threadId: string) {
+    if (this.inner.getActiveTurnIds) return this.inner.getActiveTurnIds(threadId);
+    return activeTurnIdsInThread(await this.inner.getThread(threadId));
   }
 
   getTurnActivity(threadId: string, turnId: string) {

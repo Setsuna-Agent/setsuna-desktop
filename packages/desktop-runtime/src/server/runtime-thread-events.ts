@@ -1,5 +1,4 @@
 import {
-  isActiveToolRun,
   type PendingRuntimeEvent,
   type RuntimeEvent,
   type RuntimeMessage,
@@ -8,6 +7,7 @@ import {
 export { copyRuntimeMessagesToThread } from '../runtime/use-cases/thread-copy.js';
 import { AppServerRpcError } from './app-server/errors.js';
 import { randomRuntimeId } from './runtime-ids.js';
+import { activeTurnIdsInThread } from '../utils/runtime-turn-state.js';
 import { compareNullableMs, maxNullableMs, minNullableMs, parseDateMs } from './time-utils.js';
 import type { RuntimeFactory } from './types.js';
 
@@ -23,12 +23,11 @@ export async function settleStaleRuntimeTurns(runtime: RuntimeFactory): Promise<
   // Hidden workspace tasks can survive restart, but their running turns cannot.
   const summaries = await runtime.threadStore.listThreads({ includeArchived: true, includeSide: true });
   for (const summary of summaries) {
-    const thread = await runtime.threadStore.getThread(summary.id);
-    if (!thread) continue;
-    for (const turnId of activeTurnIdsInThread(thread)) {
-      await appendAndPublishRuntimeEvent(runtime, thread.id, {
+    const turnIds = await runtime.threadStore.getActiveTurnIds(summary.id);
+    for (const turnId of turnIds) {
+      await appendAndPublishRuntimeEvent(runtime, summary.id, {
         id: randomRuntimeId('event_cancel'),
-        threadId: thread.id,
+        threadId: summary.id,
         turnId,
         type: 'turn.cancelled',
         createdAt: new Date().toISOString(),
@@ -52,23 +51,6 @@ export async function cancelRuntimeTurn(runtime: RuntimeFactory, threadId: strin
     payload: { reason: 'Turn cancelled.' },
   });
   return true;
-}
-
-function activeTurnIdsInThread(thread: RuntimeThread): string[] {
-  const turnIds = new Set<string>();
-  if (thread.activeTurnId) turnIds.add(thread.activeTurnId);
-  for (const turn of thread.turns ?? []) {
-    if (turn.status === 'in_progress' || turn.items.some((item) => item.status === 'in_progress')) {
-      turnIds.add(turn.id);
-    }
-  }
-  for (const message of thread.messages) {
-    if (!message.turnId) continue;
-    if (message.status === 'streaming' || message.toolRuns?.some(isActiveToolRun)) {
-      turnIds.add(message.turnId);
-    }
-  }
-  return [...turnIds];
 }
 
 function runtimeTurnAppearsActive(thread: RuntimeThread, turnId: string): boolean {

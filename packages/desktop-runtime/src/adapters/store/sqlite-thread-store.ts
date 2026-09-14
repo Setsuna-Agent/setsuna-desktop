@@ -24,6 +24,7 @@ import type {
   ThreadStoreQuery,
 } from '../../ports/thread-store.js';
 import { assertSafeRuntimeId } from '../../security/runtime-id.js';
+import { activeTurnIdsInThread } from '../../utils/runtime-turn-state.js';
 import { readLegacyJsonThreads } from './legacy-json-thread-reader.js';
 import {
   archiveTransientEvents,
@@ -63,6 +64,7 @@ import {
   normalizeThreadSnapshot,
   normalizeThreadSummary,
   optionalSafeRuntimeId,
+  projectRuntimeThreadSamplingState,
   projectRuntimeTurnActivity,
   threadHasAncestor,
   toSummary,
@@ -226,10 +228,11 @@ export class SqliteThreadStore implements ThreadStore {
   }
 
   async getSamplingState(threadId: string) {
-    const { thread } = await this.readThread(threadId);
-    if (!thread) return null;
-    const { messages, kind, lastSeq, messageCount, updatedAt } = thread;
-    return structuredClone({ messages, kind, lastSeq, messageCount, updatedAt });
+    return projectRuntimeThreadSamplingState((await this.readThread(threadId)).thread);
+  }
+
+  async getActiveTurnIds(threadId: string): Promise<string[]> {
+    return activeTurnIdsInThread((await this.readThread(threadId)).thread);
   }
 
   async getThreadLastSeq(threadId: string): Promise<number> {

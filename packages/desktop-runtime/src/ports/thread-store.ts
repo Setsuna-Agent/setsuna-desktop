@@ -57,6 +57,8 @@ export type RuntimeThreadSamplingState = Pick<RuntimeThread, 'messages' | 'kind'
 export type ThreadStore = {
   listThreads(query?: ThreadStoreQuery): Promise<RuntimeThreadSummary[]>;
   getThread(threadId: string): Promise<RuntimeThread | null>;
+  /** Recovery can inspect live turns without copying the full transcript and model diagnostics. */
+  getActiveTurnIds?(threadId: string): Promise<string[]>;
   getSamplingState?(threadId: string): Promise<RuntimeThreadSamplingState | null>;
   getTurnActivity(threadId: string, turnId: string): Promise<RuntimeTurnActivityProjection | null>;
   getThreadPage(threadId: string, query?: RuntimeMessagePageQuery): Promise<RuntimeThread | null>;

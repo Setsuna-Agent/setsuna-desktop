@@ -5,7 +5,7 @@ export {
   type TerminalWorkspacePanelHost,
 } from './TerminalWorkspacePanel.js';
 export { LazyTerminalPane } from './LazyTerminalPane.js';
-export { TerminalPane, type TerminalPaneProps } from './TerminalPane.js';
+export type { TerminalPaneProps } from './TerminalPane.js';
 export {
   appendTerminalRestoreBuffer,
   clearTerminalRestoreBuffer,

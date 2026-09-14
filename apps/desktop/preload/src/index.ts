@@ -58,6 +58,7 @@ const runtime: DesktopRuntimeBridge = {
 
 const desktop: SetsunaDesktopBridge['desktop'] = {
   platform: process.platform,
+  whenReady: () => ipcRenderer.invoke('desktop:when-ready'),
   watchWorkspaceEntries,
   setInterfaceLanguage: (locale) => ipcRenderer.invoke('desktop:set-interface-language', locale),
   setActiveKeyboardShortcutBindings: (bindings) =>
