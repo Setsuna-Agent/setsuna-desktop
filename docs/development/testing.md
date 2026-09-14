@@ -15,7 +15,7 @@ pnpm test:unit
 - Contracts reducer/mapper。
 - Runtime 协作者和 adapter。
 - Main 纯逻辑/service。
-- Renderer pure helper、hook 和组件。
+- Renderer helper、hook 和组件中的业务行为、数据处理、状态流转和实际功能交互。
 - Scripts。
 
 ### Integration
@@ -142,6 +142,7 @@ pnpm benchmark:feature-projection -- --events=10000,50000,100000 --runs=3
 
 ## 测试编写规则
 
+- 不新增 UI 展示和样式单测：不锁定 CSS、类名、颜色、字体、图标、DOM 排列、布局尺寸或动画效果。混合用例只保留业务行为、数据处理、安全边界和实际功能交互断言。
 - Production 与 test 严格分离。
 - Test 路径镜像 source path。
 - 共享大型 setup 放 `test/support/`。

@@ -43,7 +43,6 @@ describe('RuntimeShellToolRun', () => {
         argumentsPreview: '{"cmd":"git status --short"}', resultPreview,
       };
       const html = renderToStaticMarkup(createElement(ShellTerminalResult, { run }));
-      if (segments.length === 0) expect(html).not.toContain('chat-mcp-terminal__output');
       if (stderr === '(no new output)') expect(html).not.toContain('chat-mcp-terminal__stream--stderr');
       else expect(html).toContain('fatal: not a git repository');
       expect(html).toContain('git status --short');
@@ -78,7 +77,6 @@ describe('RuntimeShellToolRun', () => {
     const html = renderToStaticMarkup(createElement(ShellTerminalResult, { run }));
     const output = /<div class="chat-mcp-terminal__output">([\s\S]*?)<\/div>/u
       .exec(html)?.[1] ?? '';
-    expect(html).toContain('class="chat-mcp-terminal__metadata"');
     expect(html).toContain('aria-label="运行详情"');
     expect(html).toContain('命令终端');
     expect(output).toContain('typecheck passed');

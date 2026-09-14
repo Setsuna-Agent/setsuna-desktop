@@ -20,11 +20,7 @@ describe('Feature Settings UI', () => {
     );
 
     expect(html).toContain('data-feature-id="memory"');
-    expect(html).toContain('chat-user-settings__section');
     expect(html.match(/role="switch"/g)).toHaveLength(3);
-    expect(html).not.toContain('sd-select-field');
-    expect(html).toContain('sd-button');
-    expect(html).toContain('sd-settings-navigation-row');
     expect(html).toContain('feature.memory.settings.title');
     expect(html).toContain('feature.memory.settings.preview');
     expect(html).toContain('feature.memory.settings.view');

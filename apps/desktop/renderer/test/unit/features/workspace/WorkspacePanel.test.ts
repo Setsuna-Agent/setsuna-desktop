@@ -13,10 +13,7 @@ describe('WorkspaceFilePreviewContent', () => {
     const html = renderWorkspaceFilePreview({
       file: workspaceFile({ kind: 'image', mimeType: 'image/webp', base64: 'UklGRg==' }),
     });
-
-    expect(html).toContain('desktop-file-preview--image');
     expect(html).toContain('src="data:image/webp;base64,UklGRg=="');
-    expect(html).not.toContain('desktop-code-line');
   });
 
   it('shows a clear notice instead of decoding unsupported binary files as text', () => {
@@ -26,7 +23,6 @@ describe('WorkspaceFilePreviewContent', () => {
 
     expect(html).toContain('暂不支持预览二进制文件');
     expect(html).toContain('请使用其他应用打开此文件查看');
-    expect(html).not.toContain('desktop-code-line');
   });
 
   it('renders text files through the shared code-preview surface', () => {
@@ -37,8 +33,6 @@ describe('WorkspaceFilePreviewContent', () => {
         path: 'src/example.ts',
       },
     });
-
-    expect(html).toContain('desktop-code-editor__pierre');
     expect(html).toContain('const ready = true;');
   });
 

@@ -84,11 +84,8 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
     expect(genericText).not.toContain('extension demo demo getenv已取消');
     expect(genericText.split('已取消')).toHaveLength(2);
     expect(genericText).not.toContain('Turn cancelled.');
-    expect(genericHtml).not.toContain('chat-tool-run__status');
     expect(shellText.split('已取消')).toHaveLength(2);
     expect(shellText).not.toContain('Turn cancelled.');
-    expect(shellHtml).not.toContain('chat-tool-run__status');
-    expect(shellHtml).not.toContain('chat-mcp-terminal__footer');
   });
 
   it('shows a rejected plugin tool once with its plugin-aware label', () => {
@@ -278,10 +275,7 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
     expect(automaticPending).not.toContain('运行中');
     expect(automaticPending).not.toContain('允许');
     expect(automaticPending).not.toContain('拒绝');
-    expect(automaticPendingHtml).toContain('chat-tool-run__icon');
     expect(automaticPendingHtml).not.toContain('is-spinning');
-    expect(automaticPendingHtml).not.toContain('chat-tool-run__approval-review--pending');
-    expect(automaticPendingHtml).not.toContain('chat-mcp-terminal__footer');
     for (const html of [
       renderedHtml([
         toolRun('exec_previous', 'exec_command', { cmd: 'pnpm typecheck' }),
@@ -294,25 +288,19 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
     ]) {
       expect(renderedTextFromHtml(firstToolRunSummaryHtml(html)))
         .toContain('自动审查中：运行 pnpm dev');
-      expect(html).not.toContain('chat-tool-run__approval-review--pending');
     }
     expect(automaticAllowed).not.toContain('已通过审查');
     expect(automaticAllowed).not.toContain('风险：低');
     expect(automaticAllowed).not.toContain('这段模型解释不应出现在界面上');
-    expect(automaticAllowedHtml).not.toContain('chat-tool-run__approval-review');
     expect(automaticDenied).toContain('高风险操作详情');
     expect(automaticDenied).toContain('风险等级：极高');
     expect(automaticDenied).toContain('原因：该操作超出用户授权范围。');
     expect(automaticDenied).toContain('可能影响：可能造成凭据或敏感数据泄露，或不可逆的重大破坏。');
     expect(automaticDenied.split('已拒绝')).toHaveLength(2);
-    expect(automaticDeniedHtml).not.toContain('chat-tool-run__status');
-    expect(automaticDeniedHtml).not.toContain('chat-mcp-terminal__footer');
-    expect(automaticDeniedHtml).toContain('chat-tool-run__approval-review--denied');
     expect(genericAutomaticDenied).toContain('高风险操作详情');
     expect(genericAutomaticDenied).toContain('原因：自动审批认为该操作不能安全地直接执行。');
     expect(genericAutomaticDenied).not.toContain('Automatic approval review denied');
     expect(genericAutomaticDenied.split('已拒绝')).toHaveLength(2);
-    expect(genericAutomaticDeniedHtml).not.toContain('chat-tool-run__status');
     expect(manualRiskFallback).toContain('高风险操作，需要你确认');
     expect(manualRiskFallback).toContain('风险等级：高');
     expect(manualRiskFallback).toContain('原因：该操作会重启本地服务。');
@@ -320,8 +308,6 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
     expect(manualRiskFallback).toContain('仍然授权并执行');
     expect(manualRiskFallback).toContain('拒绝');
     expect(manualRiskFallback).not.toContain('本会话允许');
-    expect(approvedRiskOverrideHtml).toContain('chat-mcp-terminal__output');
-    expect(approvedRiskOverrideHtml).toContain('chat-mcp-terminal__footer');
     expect(renderedTextFromHtml(approvedRiskOverrideHtml)).toContain('completed');
     expect(manuallyRejectedRiskHtml).toContain('<details');
     expect(manuallyRejectedRisk).toContain('高风险操作详情');
@@ -335,8 +321,6 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
     expect(manualCriticalFallback).toContain('仍然授权并执行');
     expect(manualCriticalFallback).toContain('拒绝');
     expect(manualFallback).toContain('自动审查不可用：Cannot connect to API');
-    expect(manualFallbackHtml).toContain('chat-tool-run__approval-review-detail');
-    expect(manualFallbackHtml).not.toContain('chat-mcp-terminal__output');
     expect(manualFallback).toContain('允许');
     expect(manualFallback).toContain('拒绝');
   });
@@ -439,9 +423,6 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
       toolRun('shell_single', 'run_shell_command', { command: 'python3 selection_sort.py' }),
     ];
     const text = renderedText(runs);
-    const html = renderedHtml(runs);
-
-    expect(html).toContain('chat-tool-run--mixed');
     expect(text).toContain('已创建 1 个文件，已运行 1 条命令');
     expect(text.match(/已创建 1 个文件/gu)).toHaveLength(1);
     expect(text).toContain('创建selection_sort.py');
@@ -501,7 +482,6 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
     expect(renderedTextFromHtml(groupedHtml)).not.toContain(workspaceRoot);
     expect(groupedHtml).toContain('title="src"');
     expect(groupedHtml).toContain('title="src/components"');
-    expect(groupedHtml).toContain('chat-workspace-path-label chat-tool-run__file-list-target');
     expect(groupedHtml).toContain('title="index.html"');
     expect(groupedHtml).toContain('title="src/components/Grid.tsx"');
     expect(groupedHtml).toContain('<span>Grid.tsx</span>');
@@ -535,7 +515,6 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
     expect(text).not.toContain('结果');
     expect(text).not.toContain('maxChars');
     expect(text).not.toContain('Daily');
-    expect(html).not.toContain('chat-tool-run__preview');
   });
 
   it('uses a compact summary for grouped web-content MCP runs', () => {
@@ -568,7 +547,6 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
     expect(text).toContain('拒绝');
     expect(text).not.toContain('调用 MCP 工具');
     expect(text).not.toContain('maxChars');
-    expect(html).not.toContain('chat-tool-run__preview');
   });
 
   it('renders MCP form and URL elicitations as structured, query-redacted interactions', () => {

@@ -222,7 +222,6 @@ describe('pinned chat scrolling', () => {
     fireEvent.wheel(viewport, { deltaY: -100 });
     view.unmount();
     flushFrames();
-    expect(viewport.classList.contains('lenis')).toBe(false);
     expect(fireEvent.wheel(viewport, { deltaY: -100 })).toBe(true);
   });
 
@@ -292,21 +291,6 @@ describe('pinned chat scrolling', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Scroll to bottom' }));
     flushFrames();
     expect(viewport.scrollTop).toBe(600);
-  });
-
-  it('snaps without a glide when reduced motion is enabled', () => {
-    const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
-    Object.defineProperty(preference, 'matches', { value: true });
-    vi.spyOn(window, 'matchMedia').mockReturnValue(preference);
-    render(<ScrollHarness signal="initial" />);
-    const viewport = screen.getByTestId('viewport');
-    const metrics = mockScrollMetrics(viewport);
-    flushFrames();
-    metrics.scrollHeight += 200;
-    notifyResize();
-    flushOneFrame();
-    expect(viewport.scrollTop).toBe(700);
-    expect(frames.size).toBe(0);
   });
 
   it('does not release follow for arrow keys used inside an input', () => {

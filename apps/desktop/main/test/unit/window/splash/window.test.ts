@@ -2,7 +2,6 @@ import type { BrowserWindow, WebContentsView } from 'electron';
 import { EventEmitter } from 'node:events';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createStartupSplashWindowActionUrl } from '../../../../src/window/splash/page.js';
-import { decodeStartupSplashPageUrl } from '../../../support/startup-splash-page.js';
 import { showStartupSplash, waitForRendererFirstPaint } from '../../../../src/window/splash/window.js';
 
 describe('startup splash window', () => {
@@ -40,11 +39,7 @@ describe('startup splash window', () => {
     const layer = await showStartupSplash(window, view);
 
     expect(addChildView).toHaveBeenCalledWith(view);
-    expect(setBounds).toHaveBeenCalledWith({ x: 0, y: 0, width: 1320, height: 860 });
-    expect(decodeStartupSplashPageUrl(String(loadURL.mock.calls[0]?.[0]))).toContain('setsuna-logo-shimmer');
     expect(show).toHaveBeenCalledOnce();
-    expect(String(executeJavaScript.mock.calls[0]?.[0])).toContain("classList.add('startup-splash-running')");
-    expect(show.mock.invocationCallOrder[0]).toBeLessThan(executeJavaScript.mock.invocationCallOrder[0]!);
     expect(removeChildView).not.toHaveBeenCalled();
 
     layer.dispose();

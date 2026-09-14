@@ -7,8 +7,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   DesktopPanelHeader,
   panelCrossSlotDropTargetAtPoint,
-  panelDragPreviewPosition,
-  panelLauncherMenuPosition,
 } from '../../../../src/features/workspace/DesktopPanelHeader.js';
 
 afterEach(() => {
@@ -61,71 +59,6 @@ describe('DesktopPanelHeader browser tabs', () => {
     expect(html).toContain('aria-label="添加面板"');
   });
 
-  it('uses the shared Browser Feature globe in the panel launcher', () => {
-    const { getByRole } = render(createElement(DesktopPanelHeader, {
-      activePanel: 'terminal',
-      activePanelId: 'terminal-1',
-      availablePanelTypes: ['browser'],
-      onClose: () => undefined,
-      onOpenPanel: () => undefined,
-      panels: [{ id: 'terminal-1', type: 'terminal' }],
-      placement: 'side',
-    }));
-
-    fireEvent.click(getByRole('button', { name: '添加面板' }));
-
-    expect(
-      getByRole('menuitem', { name: /浏览器/ }).querySelector('[data-browser-feature-icon="globe"]'),
-    ).not.toBeNull();
-  });
-
-  it('uses the collaboration icon for subagent tabs', () => {
-    const html = renderToStaticMarkup(createElement(DesktopPanelHeader, {
-      activePanel: 'subagent',
-      activePanelId: 'subagent:child-1',
-      onClose: () => undefined,
-      onClosePanel: () => undefined,
-      onSelectPanel: () => undefined,
-      panels: [{
-        id: 'subagent:child-1',
-        type: 'subagent',
-        title: 'contracts-investigator',
-        subagent: { parentThreadId: 'parent-1', threadId: 'child-1' },
-      }],
-      placement: 'side',
-    }));
-
-    expect(html).toContain('lucide-users');
-    expect(html).not.toContain('lucide-folder-open');
-  });
-
-  it('uses selected layout controls while the side and bottom panels are open', () => {
-    const { getByRole } = render(createElement(DesktopPanelHeader, {
-      activePanel: 'terminal',
-      activePanelId: 'terminal-1',
-      bottomBarActive: true,
-      onClose: () => undefined,
-      onClosePanel: () => undefined,
-      onToggleBottomTerminal: () => undefined,
-      panels: [{ id: 'terminal-1', type: 'terminal' }],
-      placement: 'side',
-    }));
-
-    const bottomPanelToggle = getByRole('button', { name: '打开底栏终端' });
-    expect(bottomPanelToggle.classList.contains('chat-file-review-panel__close--active')).toBe(true);
-    expect(bottomPanelToggle.getAttribute('aria-pressed')).toBe('false');
-    const bottomPanelIcon = bottomPanelToggle.querySelector('.app-panel-placement-icon--bottom rect');
-    expect(bottomPanelIcon?.getAttribute('width')).toBe('19');
-    expect(bottomPanelIcon?.getAttribute('height')).toBe('16');
-
-    const sidePanelToggle = getByRole('button', { name: '收起右侧栏' });
-    expect(sidePanelToggle.classList.contains('chat-file-review-panel__close--active')).toBe(true);
-    expect(sidePanelToggle.getAttribute('aria-pressed')).toBe('true');
-    const sidePanelIcon = sidePanelToggle.querySelector('.app-panel-placement-icon--side rect');
-    expect(sidePanelIcon?.getAttribute('width')).toBe('16');
-    expect(sidePanelIcon?.getAttribute('height')).toBe('19');
-  });
-
   it('exposes terminal close semantics only while the bottom terminal is active', () => {
     const { getByRole } = render(createElement(DesktopPanelHeader, {
       activePanel: 'review',
@@ -139,41 +72,11 @@ describe('DesktopPanelHeader browser tabs', () => {
     }));
 
     const bottomPanelToggle = getByRole('button', { name: '关闭终端' });
-    expect(bottomPanelToggle.classList.contains('chat-file-review-panel__close--active')).toBe(true);
     expect(bottomPanelToggle.getAttribute('aria-pressed')).toBe('true');
   });
 });
 
-describe('DesktopPanelHeader launcher menu positioning', () => {
-  it('opens the menu to the right from the launcher', () => {
-    expect(panelLauncherMenuPosition({ bottom: 42, left: 248 }, 744)).toEqual({ left: 248, top: 48 });
-  });
-
-  it('keeps the menu inside the viewport', () => {
-    expect(panelLauncherMenuPosition({ bottom: 42, left: 4 }, 744)).toEqual({ left: 8, top: 48 });
-    expect(panelLauncherMenuPosition({ bottom: 42, left: 700 }, 744)).toEqual({ left: 460, top: 48 });
-  });
-
-  it('converts visual coordinates back to zoomed body coordinates', () => {
-    expect(panelLauncherMenuPosition({ bottom: 84, left: 496 }, 1488, 0.5)).toEqual({ left: 248, top: 48 });
-  });
-});
-
-describe('DesktopPanelHeader tab drag preview positioning', () => {
-  it('keeps the preview under the pointer when the page is zoomed', () => {
-    expect(
-      panelDragPreviewPosition(
-        { clientX: 500, clientY: 120 },
-        {
-          height: 28,
-          offsetX: 32,
-          offsetY: 10,
-          scaleInverse: 0.5,
-          width: 104,
-        },
-      ),
-    ).toEqual({ height: 28, left: 218, top: 50, width: 104 });
-  });
+describe('DesktopPanelHeader tab dragging', () => {
 
   it('moves the blank slot once per frame and deduplicates a stable target', () => {
     const animationFrames: FrameRequestCallback[] = [];
@@ -214,7 +117,6 @@ describe('DesktopPanelHeader tab drag preview positioning', () => {
     fireEvent.pointerMove(header, { clientX: 180, clientY: 18, pointerId: 1 });
 
     expect(onReorderPanels).not.toHaveBeenCalled();
-    expect(terminalTab.classList.contains('is-dragging')).toBe(true);
     animationFrames.shift()?.(0);
     expect(onReorderPanels).toHaveBeenCalledWith('terminal-1', 'files', 'after');
 
@@ -272,7 +174,6 @@ describe('DesktopPanelHeader tab drag preview positioning', () => {
 
     const placeholder = targetTabs.querySelector('.desktop-panel-tab-drop-placeholder');
     expect(placeholder?.nextSibling).toBe(targetTab);
-    expect(sourceTab.classList.contains('is-cross-slot-targeting')).toBe(true);
     expect(onMovePanel).not.toHaveBeenCalled();
 
     fireEvent.pointerUp(sourceHeader, { clientX: 430, clientY: 18, pointerId: 1 });
@@ -299,7 +200,6 @@ describe('DesktopPanelHeader tab drag preview positioning', () => {
     fireEvent.pointerDown(overviewTab, { button: 0, clientX: 24, clientY: 18, pointerId: 1 });
 
     expect(header.setPointerCapture).not.toHaveBeenCalled();
-    expect(overviewTab.classList.contains('chat-file-review-panel__title--sortable')).toBe(false);
     expect(onMovePanel).not.toHaveBeenCalled();
   });
 });

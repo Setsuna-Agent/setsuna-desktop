@@ -177,8 +177,6 @@ function renderAssistantMessage(
 describe('MessageItem user messages', () => {
   it('marks Goal inputs distinctly without offering Goal regeneration', () => {
     const goalHtml = renderUserMessage('goal');
-
-    expect(goalHtml).toContain('chat-user-message-kind--goal');
     expect(goalHtml).toContain('目标');
     expect(goalHtml).not.toContain('aria-label="编辑"');
   });
@@ -189,8 +187,6 @@ describe('MessageItem user messages', () => {
       false,
       '请审查当前项目中尚未提交的代码更改',
     );
-
-    expect(reviewHtml).toContain('chat-user-message-kind--review');
     expect(reviewHtml).toContain('审查');
     expect(reviewHtml).toContain('请审查当前项目中尚未提交的代码更改');
     expect(reviewHtml).not.toContain('aria-label="编辑"');
@@ -209,8 +205,6 @@ describe('MessageItem user messages', () => {
 
   it('omits the message timestamp while editing', () => {
     const editorHtml = renderUserMessage('message', true);
-
-    expect(editorHtml).toContain('class="chat-user-edit"');
     expect(editorHtml).not.toContain('<time');
   });
 
@@ -258,62 +252,11 @@ describe('MessageItem user messages', () => {
     expect(html).not.toContain('late extra guidance');
   });
 
-  it('keeps workspace mentions inline with the surrounding message text', () => {
-    const html = renderUserMessage('message', false, '请看 @agent-pc/ 以及 @agent-mobile/ 现在处理');
-
-    expect(html).toContain('class="chat-user-message-content__body"');
-    expect(html).toMatch(/chat-user-message-content__body">请看 .*agent-pc\/.* 以及 .*agent-mobile\/.* 现在处理<\/span>/u);
-  });
-
-  it('renders selected Skill references inline while leaving matching ordinary text plain', () => {
-    const selectedHtml = renderUserMessage(
-      'message',
-      false,
-      '对话创建Skill 你看下这个 skill',
-      {
-        skillReferences: [{ skillId: skillCreator.id, start: 0, end: skillCreator.name.length }],
-        skills: [skillCreator],
-      },
-    );
-    const plainHtml = renderUserMessage(
-      'message',
-      false,
-      '对话创建Skill 只是普通文字',
-      { skills: [skillCreator] },
-    );
-
-    expect(selectedHtml).toContain('class="chat-inline-reference chat-skill-reference"');
-    expect(selectedHtml).toContain('data-skill-icon="skill"');
-    expect(selectedHtml).toMatch(/chat-user-message-content__body"><span class="chat-inline-reference chat-skill-reference"[^>]*>.*对话创建Skill<\/span><\/span> 你看下这个 skill<\/span>/u);
-    expect(plainHtml).not.toContain('chat-skill-reference');
-  });
-
-  it('uses the owning Plugin icon for a Plugin Skill reference', () => {
-    const visionSkill: RuntimeSkillSummary = {
-      id: 'openai-vision-recognition.vision-recognition',
-      name: '视觉识别',
-      icon: 'vision-recognition',
-      kind: 'plugin',
-      enabled: true,
-      pluginId: 'openai-vision-recognition',
-    };
-    const html = renderUserMessage('message', false, '视觉识别 看下图片', {
-      skillReferences: [{ skillId: visionSkill.id, start: 0, end: visionSkill.name.length }],
-      skills: [visionSkill],
-    });
-
-    expect(html).toContain('data-plugin-icon="vision-recognition"');
-    expect(html).toContain('desktop-plugin-icon--inline');
-    expect(html).not.toContain('data-skill-icon="skill"');
-  });
-
   it('renders the historical serialized Skill label after the Skill is renamed', () => {
     const html = renderUserMessage('message', false, '对话创建Skill 历史消息', {
       skillReferences: [{ skillId: skillCreator.id, start: 0, end: skillCreator.name.length }],
       skills: [{ ...skillCreator, name: '新的 Skill 名称' }],
     });
-
-    expect(html).toContain('class="chat-inline-reference chat-skill-reference"');
     expect(html).toContain('对话创建Skill');
     expect(html).not.toContain('新的 Skill 名称');
   });
@@ -323,9 +266,6 @@ describe('MessageItem user messages', () => {
       skillReferences: [{ skillId: skillCreator.id, start: 0, end: skillCreator.name.length }],
       skills: [],
     });
-
-    expect(html).toContain('class="chat-inline-reference chat-skill-reference"');
-    expect(html).toContain('data-skill-icon="skill"');
     expect(html).toContain('对话创建Skill');
   });
 
@@ -338,9 +278,7 @@ describe('MessageItem user messages', () => {
 
     expect(html).toContain('已使用插件');
     expect(html).toContain('视觉识别');
-    expect(html).toContain('chat-plan-card');
     expect(html).toContain('计划模式已移除');
-    expect(html).not.toContain('chat-plan-card__actions');
   });
 });
 
@@ -442,12 +380,9 @@ describe('MessageItem assistant tool history', () => {
       createdAt: '2026-08-15T00:00:00.000Z',
       status: 'streaming',
     }], true);
-
-    expect(html).toContain('chat-thinking-disclosure');
     expect(html).toContain('正在思考');
     expect(html).toContain('Visible answer.');
     expect(html).not.toContain(reasoning);
-    expect(html).not.toContain('chat-assistant-loading');
   });
 
   it('renders completed structured content without falling back to mixed raw text', () => {
@@ -485,11 +420,8 @@ describe('MessageItem assistant tool history', () => {
       createdAt: '2026-08-15T00:00:00.000Z',
       status: 'complete',
     }], false, undefined, true);
-
-    expect(html).toContain('chat-work-history');
     expect(html).toContain('已处理');
     expect(html).not.toContain('工作中');
-    expect(html).not.toContain('chat-thinking-disclosure');
     expect(html).not.toContain(reasoning);
     expect(html).toContain('Visible answer.');
   });
@@ -529,8 +461,6 @@ describe('MessageItem assistant tool history', () => {
       // Older runtimes persisted only the raw review when their parser missed linked locations.
       summary: review,
     });
-
-    expect(html).toContain('chat-review-summary-card');
     expect(html).toContain('1 条评论');
     expect(html).toContain('复制不能吞掉换行');
     expect(html).not.toContain('apps/desktop/renderer/src/chat.ts:211');
@@ -553,7 +483,6 @@ describe('MessageItem assistant tool history', () => {
     });
 
     expect(html).toContain('本轮未发现需要修复的问题。');
-    expect(html).not.toContain('chat-review-summary-card__panel');
     expect(html).not.toContain('0 条评论');
   });
 
@@ -659,7 +588,6 @@ describe('MessageItem assistant tool history', () => {
 
     expect(html).toContain('前一段正文。');
     expect(html).toContain('后一段正文。');
-    expect(html).toContain('chat-work-history__chevron');
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain('工作中');
     expect(html).not.toContain('已处理');
@@ -690,8 +618,6 @@ describe('MessageItem assistant tool history', () => {
         toolRuns: [{ id: 'read_diff', name: 'workspace_read_file', status: 'running' }],
       },
     ], true);
-
-    expect(html).toContain('chat-work-history');
     expect(html).toContain('我先看一下工作区的改动概况。');
     expect(html).toContain('正在查看文件/目录');
   });

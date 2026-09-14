@@ -15,7 +15,7 @@ const message: RuntimeMessage = {
   createdAt: '2026-09-13T06:00:00Z',
 };
 
-it('confirms only successful clipboard writes and restarts the visible check feedback on another click', async () => {
+it('confirms successful clipboard writes and restarts confirmation on another click', async () => {
   vi.useFakeTimers();
   let completeCopy!: () => void;
   vi.mocked(copyTextToClipboard).mockReturnValueOnce(new Promise<void>((resolve) => { completeCopy = resolve; }))
@@ -27,28 +27,23 @@ it('confirms only successful clipboard writes and restarts the visible check fee
 
   await act(async () => completeCopy());
   const button = screen.getByRole('button', { name: '已复制' });
-  expect(button.querySelector('.lucide-check')).not.toBeNull();
-  expect(button.querySelector('.lucide-copy')).toBeNull();
-  expect(button.closest('.chat-message-footer')?.getAttribute('data-copied')).toBe('true');
   act(() => vi.advanceTimersByTime(1000));
   await act(async () => fireEvent.click(button));
   act(() => vi.advanceTimersByTime(600));
   expect(screen.getByRole('button', { name: '已复制' })).toBe(button);
   act(() => vi.advanceTimersByTime(1000));
-  expect(screen.getByRole('button', { name: '复制' }).querySelector('.lucide-copy')).not.toBeNull();
-  expect(button.closest('.chat-message-footer')?.hasAttribute('data-copied')).toBe(false);
+  expect(screen.getByRole('button', { name: '复制' })).toBe(button);
 
   await act(async () => fireEvent.click(button));
   view.unmount();
   expect(vi.getTimerCount()).toBe(0);
 });
 
-it('does not show a success check when copying fails or empty text is disabled', async () => {
+it('does not confirm failed clipboard writes and disables copying empty text', async () => {
   vi.mocked(copyTextToClipboard).mockRejectedValue(new Error('Clipboard unavailable'));
   const view = render(<ChatMessageFooter message={message} />);
   await act(async () => fireEvent.click(screen.getByRole('button', { name: '复制' })));
-  expect(view.container.querySelector('.lucide-check')).toBeNull();
-  expect(view.container.querySelector('.chat-message-footer')?.hasAttribute('data-copied')).toBe(false);
+  expect(screen.queryByRole('button', { name: '已复制' })).toBeNull();
   view.rerender(<ChatMessageFooter message={{ ...message, content: '' }} />);
   const button = screen.getByRole('button', { name: '复制' }) as HTMLButtonElement;
   expect(button.disabled).toBe(true);

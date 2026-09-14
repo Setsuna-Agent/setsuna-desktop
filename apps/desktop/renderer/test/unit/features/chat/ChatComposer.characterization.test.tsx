@@ -233,22 +233,6 @@ describe('ChatComposer view state characterization', () => {
     expect(attachmentOnly).not.toContain('data-action="sender-default"');
   });
 
-  it('keeps editing, collaboration and goal badges in the footer', () => {
-    composerHarness.queuedEdit.editing = true;
-    composerHarness.mode.goalModeEnabled = true;
-
-    const html = renderComposer({
-      activeTurnId: 'turn-1',
-      config: {
-        features: { multi_agent: true },
-      } as unknown as RuntimeConfigState,
-    });
-
-    expect(html).toContain('chat.queue.editing');
-    expect(html).toContain('chat.composer.badge.collaboration');
-    expect(html).toContain('chat.composer.badge.goalNext');
-  });
-
   it('renders mention and slash command overlays independently', () => {
     composerHarness.command.mentionMenuOpen = true;
     expect(renderComposer()).toContain('data-overlay="mention"');

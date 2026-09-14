@@ -24,8 +24,7 @@ function setup(itemHeight = 36) {
     hasPointerCapture: () => true,
     releasePointerCapture: vi.fn(),
   });
-  const drum = () => wheel.querySelector<HTMLElement>('.sd-wheel-picker__drum')!.style.transform;
-  return { ...view, wheel, change, drum };
+  return { ...view, wheel, change };
 }
 
 function pointer(wheel: HTMLElement, type: 'pointerDown' | 'pointerMove' | 'pointerUp' | 'pointerCancel', y: number, timeStamp: number) {
@@ -63,7 +62,7 @@ it.each([false, true])('commits keyboard targets immediately with reduced motion
 });
 
 it.each(['animation', 'wheel timer'] as const)('a corrective drag takes over from the previous %s', (source) => {
-  const { wheel, change, drum } = setup();
+  const { wheel, change } = setup();
   if (source === 'animation') {
     fireEvent.keyDown(wheel, { key: 'End' });
     act(() => vi.advanceTimersByTime(64));
@@ -72,11 +71,9 @@ it.each(['animation', 'wheel timer'] as const)('a corrective drag takes over fro
   }
   pointer(wheel, 'pointerDown', 200, 1000);
   pointer(wheel, 'pointerMove', 180, 1100);
-  const heldPosition = drum();
   const committedCount = change.mock.calls.length;
 
   act(() => vi.advanceTimersByTime(800));
-  expect(drum()).toBe(heldPosition);
   expect(change).toHaveBeenCalledTimes(committedCount);
 });
 

@@ -10,28 +10,8 @@ describe('SelectField form behavior', () => {
         <option value="retry">重试</option>
       </SelectField>,
     );
-
-    expect(html).toContain('class="sd-field sd-select-field');
     expect(html).toContain('aria-haspopup="listbox"');
-    expect(html).toContain('class="sd-select-field__form-control"');
     expect(html).toContain('name="resolution"');
     expect(html).toContain('required=""');
-  });
-
-  it('allows domain content without replacing the shared trigger chrome', () => {
-    const html = renderToStaticMarkup(
-      <SelectField
-        aria-label="权限策略"
-        value="full-access"
-        valueContent={<span className="permission-value">完全访问</span>}
-        onValueChange={() => undefined}
-      >
-        <option value="full-access">完全访问</option>
-      </SelectField>,
-    );
-
-    expect(html).toContain('class="sd-field sd-select-field');
-    expect(html).toContain('class="permission-value"');
-    expect(html).toContain('sd-select-field__chevron');
   });
 });

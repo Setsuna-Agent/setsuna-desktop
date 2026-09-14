@@ -39,7 +39,7 @@
 ### `apps/desktop/main/`
 
 ```text
-apps/desktop/main/ — 0 direct / 84 total files
+apps/desktop/main/ — 0 direct / 83 total files
 ├── src/ — 2 direct / 50 total files
 │   ├── composition/ — 3 direct / 3 total files
 │   ├── data-root/ — 14 direct / 14 total files
@@ -50,14 +50,14 @@ apps/desktop/main/ — 0 direct / 84 total files
 │   ├── window/ — 9 direct / 11 total files
 │   │   └── splash/ — 2 direct / 2 total files
 │   └── workspace/ — 3 direct / 3 total files
-└── test/ — 34 files
+└── test/ — 33 files
     ├── support/ — 2 direct / 2 total files
-    └── unit/ — 1 direct / 32 total files
+    └── unit/ — 1 direct / 31 total files
         ├── data-root/ — 8 direct / 8 total files
         ├── ipc/ — 1 direct / 1 total files
         ├── runtime/ — 7 direct / 7 total files
         ├── security/ — 2 direct / 2 total files
-        ├── window/ — 7 direct / 9 total files
+        ├── window/ — 6 direct / 8 total files
         │   └── splash/ — 2 direct / 2 total files
         └── workspace/ — 4 direct / 4 total files
 ```
@@ -75,7 +75,7 @@ apps/desktop/preload/ — 0 direct / 4 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 640 total files
+apps/desktop/renderer/ — 0 direct / 621 total files
 ├── src/ — 2 direct / 449 total files
 │   ├── app/ — 3 direct / 57 total files
 │   │   ├── controller/ — 7 direct / 7 total files
@@ -132,46 +132,46 @@ apps/desktop/renderer/ — 0 direct / 640 total files
 │       ├── shortcuts/ — 3 direct / 3 total files
 │       ├── styles/ — 10 direct / 10 total files
 │       └── ui/ — 14 direct / 14 total files
-└── test/ — 191 files
+└── test/ — 172 files
     ├── integration/ — 2 direct / 2 total files
-    └── unit/ — 189 files
-        ├── app/ — 2 direct / 23 total files
-        │   ├── controller/ — 5 direct / 5 total files
-        │   ├── layout/ — 8 direct / 8 total files
+    └── unit/ — 170 files
+        ├── app/ — 2 direct / 20 total files
+        │   ├── controller/ — 4 direct / 4 total files
+        │   ├── layout/ — 7 direct / 7 total files
         │   ├── providers/ — 1 direct / 1 total files
-        │   └── sidebar/ — 7 direct / 7 total files
-        ├── composition/ — 9 direct / 10 total files
+        │   └── sidebar/ — 6 direct / 6 total files
+        ├── composition/ — 8 direct / 9 total files
         │   └── renderer-plugins/ — 1 direct / 1 total files
-        ├── features/ — 116 files
-        │   ├── chat/ — 4 direct / 89 total files
-        │   │   ├── composer/ — 22 direct / 22 total files
-        │   │   ├── conversation/ — 31 direct / 32 total files
-        │   │   ├── hooks/ — 5 direct / 5 total files
-        │   │   ├── markdown/ — 9 direct / 9 total files
+        ├── features/ — 110 files
+        │   ├── chat/ — 4 direct / 84 total files
+        │   │   ├── composer/ — 21 direct / 21 total files
+        │   │   ├── conversation/ — 29 direct / 30 total files
+        │   │   ├── hooks/ — 4 direct / 4 total files
+        │   │   ├── markdown/ — 8 direct / 8 total files
         │   │   ├── mentions/ — 3 direct / 3 total files
         │   │   ├── plugin-usage/ — 3 direct / 3 total files
         │   │   ├── skills/ — 1 direct / 1 total files
         │   │   └── tool-runs/ — 10 direct / 10 total files
         │   ├── settings/ — 6 direct / 8 total files
         │   │   └── data-root/ — 2 direct / 2 total files
-        │   └── workspace/ — 6 direct / 19 total files
+        │   └── workspace/ — 6 direct / 18 total files
         │       ├── editor/ — 2 direct / 2 total files
-        │       ├── hooks/ — 10 direct / 10 total files
+        │       ├── hooks/ — 9 direct / 9 total files
         │       └── markdown/ — 1 direct / 1 total files
         ├── kernel/ — 7 files
         │   ├── renderer-plugins/ — 6 direct / 6 total files
         │   └── sandboxed-plugin-ui/ — 1 direct / 1 total files
         ├── services/ — 6 files
         │   └── runtime-client/ — 6 direct / 6 total files
-        ├── shared/ — 26 files
-        │   ├── branding/ — 2 direct / 2 total files
+        ├── shared/ — 17 files
+        │   ├── branding/ — 1 direct / 1 total files
         │   ├── code/ — 1 direct / 1 total files
         │   ├── hooks/ — 2 direct / 2 total files
         │   ├── i18n/ — 1 direct / 1 total files
-        │   ├── lib/ — 3 direct / 3 total files
-        │   ├── preferences/ — 5 direct / 5 total files
+        │   ├── lib/ — 2 direct / 2 total files
+        │   ├── preferences/ — 1 direct / 1 total files
         │   ├── shortcuts/ — 2 direct / 2 total files
-        │   └── ui/ — 10 direct / 10 total files
+        │   └── ui/ — 7 direct / 7 total files
         └── support/ — 1 direct / 1 total files
 ```
 
@@ -222,7 +222,7 @@ packages/renderer-ui/ — 3 direct / 41 total files
 ### `packages/features/`
 
 ```text
-packages/features/ — 0 direct / 983 total files
+packages/features/ — 0 direct / 978 total files
 ├── approval-review/ — 2 direct / 20 total files
 │   ├── src/ — 17 files
 │   │   ├── contracts/ — 5 direct / 5 total files
@@ -230,16 +230,16 @@ packages/features/ — 0 direct / 983 total files
 │   │   └── runtime/ — 7 direct / 7 total files
 │   └── test/ — 1 files
 │       └── runtime/ — 1 direct / 1 total files
-├── artifact/ — 2 direct / 22 total files
+├── artifact/ — 2 direct / 21 total files
 │   ├── src/ — 16 files
 │   │   ├── contracts/ — 4 direct / 4 total files
 │   │   ├── renderer/ — 9 direct / 9 total files
 │   │   └── runtime/ — 3 direct / 3 total files
-│   └── test/ — 4 files
+│   └── test/ — 3 files
 │       ├── contracts/ — 1 direct / 1 total files
-│       ├── renderer/ — 2 direct / 2 total files
+│       ├── renderer/ — 1 direct / 1 total files
 │       └── runtime/ — 1 direct / 1 total files
-├── browser/ — 2 direct / 75 total files
+├── browser/ — 2 direct / 74 total files
 │   ├── src/ — 55 files
 │   │   ├── contracts/ — 8 direct / 8 total files
 │   │   ├── main/ — 14 direct / 17 total files
@@ -247,10 +247,10 @@ packages/features/ — 0 direct / 983 total files
 │   │   ├── preload/ — 2 direct / 2 total files
 │   │   ├── renderer/ — 24 direct / 24 total files
 │   │   └── runtime/ — 4 direct / 4 total files
-│   └── test/ — 18 files
+│   └── test/ — 17 files
 │       ├── main/ — 7 direct / 9 total files
 │       │   └── cdp/ — 2 direct / 2 total files
-│       ├── renderer/ — 7 direct / 7 total files
+│       ├── renderer/ — 6 direct / 6 total files
 │       └── runtime/ — 2 direct / 2 total files
 ├── collaboration/ — 2 direct / 32 total files
 │   ├── src/ — 25 files
@@ -261,13 +261,13 @@ packages/features/ — 0 direct / 983 total files
 │       ├── contracts/ — 1 direct / 1 total files
 │       ├── renderer/ — 2 direct / 2 total files
 │       └── runtime/ — 2 direct / 2 total files
-├── conversation-debug/ — 2 direct / 56 total files
+├── conversation-debug/ — 2 direct / 55 total files
 │   ├── src/ — 42 files
 │   │   ├── contracts/ — 7 direct / 7 total files
 │   │   ├── renderer/ — 31 direct / 31 total files
 │   │   └── runtime/ — 4 direct / 4 total files
-│   └── test/ — 12 files
-│       ├── renderer/ — 11 direct / 11 total files
+│   └── test/ — 11 files
+│       ├── renderer/ — 10 direct / 10 total files
 │       └── runtime/ — 1 direct / 1 total files
 ├── goal/ — 2 direct / 30 total files
 │   ├── src/ — 23 files
@@ -333,7 +333,7 @@ packages/features/ — 0 direct / 983 total files
 │       ├── main/ — 1 direct / 1 total files
 │       ├── renderer/ — 4 direct / 4 total files
 │       └── runtime/ — 1 direct / 1 total files
-├── review/ — 2 direct / 142 total files
+├── review/ — 2 direct / 140 total files
 │   ├── src/ — 114 files
 │   │   ├── contracts/ — 16 direct / 16 total files
 │   │   ├── main/ — 16 direct / 16 total files
@@ -345,13 +345,13 @@ packages/features/ — 0 direct / 983 total files
 │   │   │   ├── model/ — 1 direct / 1 total files
 │   │   │   └── styles/ — 6 direct / 6 total files
 │   │   └── runtime/ — 8 direct / 8 total files
-│   └── test/ — 26 files
+│   └── test/ — 24 files
 │       ├── integration/ — 4 files
 │       │   └── main/ — 4 direct / 4 total files
 │       ├── main/ — 4 direct / 4 total files
-│       ├── renderer/ — 6 direct / 14 total files
+│       ├── renderer/ — 6 direct / 12 total files
 │       │   ├── git/ — 1 direct / 1 total files
-│       │   ├── history/ — 6 direct / 6 total files
+│       │   ├── history/ — 4 direct / 4 total files
 │       │   └── hooks/ — 1 direct / 1 total files
 │       └── runtime/ — 4 direct / 4 total files
 ├── runtime-activity/ — 2 direct / 30 total files

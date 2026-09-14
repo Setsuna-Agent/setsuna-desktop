@@ -59,7 +59,6 @@ describe('SettingsSidebar', () => {
 
     expect(html.match(/role="group"/g)).toHaveLength(3);
     expect(html).not.toContain('>功能<');
-    expect(html).toContain('data-settings-icon="webdav-sync"');
     expect(html).toContain('同步');
   });
 
@@ -79,7 +78,7 @@ describe('SettingsSidebar', () => {
       onSelectSection: vi.fn(),
     });
 
-    const featurePosition = html.indexOf('data-settings-icon="network-proxy"');
+    const featurePosition = html.indexOf('代理服务器');
     expect(featurePosition).toBeGreaterThan(html.indexOf('模型服务'));
     expect(featurePosition).toBeLessThan(html.indexOf('专用模型'));
   });

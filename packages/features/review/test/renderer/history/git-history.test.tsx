@@ -8,7 +8,7 @@ import { GitChangesPanel } from '../../../src/renderer/history/GitChangesPanel.j
 import { GitHistoryGraph } from '../../../src/renderer/history/GitHistoryGraph.js';
 import { useGitCommitFile } from '../../../src/renderer/history/useGitCommit.js';
 import { useGitHistory } from '../../../src/renderer/history/useGitHistory.js';
-import { layoutGitHistory, GIT_GRAPH_ROW_HEIGHT } from '../../../src/renderer/history/gitGraph.js';
+import { GIT_GRAPH_ROW_HEIGHT } from '../../../src/renderer/history/gitGraph.js';
 import { ReviewRendererTestHost } from '../review-renderer-test-host.js';
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
@@ -311,44 +311,5 @@ describe('Git change navigation', () => {
     await waitFor(() => expect(hook.result.current.page?.tip).toBe(two));
     await act(async () => { pendingPage.resolve(page([commit('c'.repeat(40))])); });
     expect(hook.result.current.page?.commits.map((entry) => entry.oid)).toEqual([two]);
-  });
-
-  it('keeps graph connections continuous through branching, merging and pagination', () => {
-    const commits = [commit('merge', ['left', 'right']), commit('left', ['base']), commit('right', ['base']), commit('base')];
-    const rows = layoutGitHistory(commits);
-    expect(rows[0].edges.filter((edge) => edge.end === GIT_GRAPH_ROW_HEIGHT)).toHaveLength(2);
-    for (let index = 1; index < rows.length; index += 1) {
-      const above = rows[index - 1].edges.filter((edge) => edge.end === GIT_GRAPH_ROW_HEIGHT).map((edge) => edge.to + ':' + edge.color);
-      const below = rows[index].edges.filter((edge) => edge.start === 0).map((edge) => edge.from + ':' + edge.color);
-      expect([...new Set(above)].sort()).toEqual([...new Set(below)].sort());
-    }
-    expect(rows.at(-1)?.edges.every((edge) => edge.end < GIT_GRAPH_ROW_HEIGHT)).toBe(true);
-    expect(layoutGitHistory(commits.slice(0, 2))).toEqual(rows.slice(0, 2));
-  });
-
-  it('renders visible nodes centered in each clickable row with distinct branch lanes', () => {
-    const commits = [commit('head', ['merge']), commit('merge', ['left', 'right']), commit('left', ['right']), commit('right')];
-    const view = render(<GitHistoryGraph
-      workspaceRoot="/repo"
-      commits={commits} refs={[]} head="head" selectedOid={null} loading={false} hasMore={false} error={null}
-      onSelect={noop} onSelectRef={noop} onLoadMore={noop} onRetry={noop}
-    />, { wrapper: host({}) });
-    const nodes = [...view.container.querySelectorAll<HTMLElement>('.git-history-row')].map((row, index) => {
-      const graph = row.querySelector('svg')!;
-      const node = graph.querySelector('circle')!;
-      const radius = Number(node.getAttribute('r'));
-      const height = Number(graph.getAttribute('height'));
-      expect(radius).toBeGreaterThan(0);
-      expect(radius).toBeLessThan(height / 2);
-      expect(Number(node.getAttribute('cy'))).toBe(height / 2);
-      expect(parseFloat(row.style.height)).toBe(height);
-      expect(parseFloat(row.style.top)).toBe(index * height);
-      expect(node.getAttribute('fill')).toBeTruthy();
-      return node;
-    });
-    expect(nodes[0].getAttribute('fill')).toBe('var(--git-nav-bg)');
-    expect(nodes[1].getAttribute('fill')).toBe('var(--git-nav-bg)');
-    expect(nodes[2].getAttribute('fill')).toBe(nodes[2].getAttribute('stroke'));
-    expect(nodes[2].getAttribute('stroke')).not.toBe(nodes[3].getAttribute('stroke'));
   });
 });

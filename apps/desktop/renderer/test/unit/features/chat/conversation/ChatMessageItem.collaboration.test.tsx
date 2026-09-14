@@ -37,18 +37,6 @@ afterEach(() => {
 });
 
 describe('MessageItem collaboration updates', () => {
-  it('groups consecutive subagent results into one compact result grid', () => {
-    const view = render(messageItem([
-      persistentToolRun('spawn_first'),
-      persistentToolRun('spawn_second'),
-      persistentToolRun('spawn_third'),
-    ]));
-
-    const grid = view.container.querySelector('.chat-persistent-tool-result-grid');
-    expect(grid).not.toBeNull();
-    expect(grid?.querySelectorAll(':scope > .chat-tool-runs')).toHaveLength(3);
-    expect(grid?.querySelectorAll('.subagent-task-card')).toHaveLength(3);
-  });
 
   it('keeps tool chunks around a subagent card as uniquely keyed siblings', () => {
     const keyWarnings: string[] = [];

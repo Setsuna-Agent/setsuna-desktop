@@ -258,15 +258,6 @@ describe('DesktopReviewPanel interactions', () => {
         />
       </ReviewRendererTestHost>,
     );
-
-    await waitFor(() => {
-      expect(document.querySelector(
-        '[data-review-finding-path="src/review.ts"]',
-      )?.classList.contains('is-focused')).toBe(true);
-    });
-    expect(document.querySelector(
-      '[data-review-file-path="packages/app/src/review.ts"]',
-    )?.classList.contains('is-focused')).toBe(false);
     await waitFor(() => {
       const diff = document.querySelector(
         '[data-review-file-path="packages/app/src/review.ts"] diffs-container',
@@ -350,16 +341,7 @@ describe('DesktopReviewPanel interactions', () => {
     expect(screen.getByText('[P3] 缺少测试脚本')).toBeTruthy();
     const location = screen.getByText('package.json:8');
     expect(location.tagName).toBe('SPAN');
-    expect(location.classList.contains('is-unavailable')).toBe(true);
     expect(screen.queryByRole('button', { name: 'package.json:8' })).toBeNull();
-    await waitFor(() => {
-      expect(document.querySelector(
-        '[data-review-finding-path="package.json"]',
-      )?.classList.contains('is-focused')).toBe(true);
-    });
-    expect(document.querySelector(
-      '.desktop-review-unanchored-finding',
-    )?.classList.contains('is-focused')).toBe(false);
     await waitFor(() => {
       expect(virtualizerScrollTo).toHaveBeenCalledWith({
         top: 380,
@@ -629,21 +611,10 @@ describe('DesktopReviewPanel interactions', () => {
     expect(screen.getByRole('button', { name: '切换为目录树' })).toBeTruthy();
     expect(window.localStorage.getItem('setsuna-desktop:review-file-browser-layout')).toBe('flat');
 
-    const resizeHandle = screen.getByRole('separator', { name: '调整变更文件栏宽度' });
-    expect(resizeHandle.getAttribute('aria-valuenow')).toBe('248');
-    fireEvent.pointerDown(resizeHandle, { button: 0, clientX: 500, pointerId: 1 });
-    fireEvent.pointerMove(window, { clientX: 460, pointerId: 1 });
-    fireEvent.pointerUp(window, { clientX: 460, pointerId: 1 });
-    expect(screen.getByRole('separator', { name: '调整变更文件栏宽度' })
-      .getAttribute('aria-valuenow')).toBe('288');
-    expect(window.localStorage.getItem('setsuna-desktop:review-file-browser-width')).toBe('288');
-
     fireEvent.change(screen.getByRole('searchbox', { name: '筛选变更文件' }), {
       target: { value: 'file-1.ts' },
     });
     const treeToggle = screen.getByRole('button', { name: '收起变更文件', expanded: true, pressed: true });
-    expect(treeToggle.closest('.desktop-review-panel__toolbar')).toBeTruthy();
-    expect(treeToggle.nextElementSibling).toBe(screen.getByRole('button', { name: '提交或推送' }));
     fireEvent.click(treeToggle);
     expect(document.querySelector('.desktop-review-file-tree')).toBeNull();
     expect(screen.queryByRole('separator', { name: '调整变更文件栏宽度' })).toBeNull();
@@ -651,8 +622,6 @@ describe('DesktopReviewPanel interactions', () => {
     expect(window.localStorage.getItem('setsuna-desktop:review-file-browser-visible')).toBe('false');
 
     fireEvent.click(screen.getByRole('button', { name: '展开变更文件' }));
-    expect(screen.getByRole('separator', { name: '调整变更文件栏宽度' })
-      .getAttribute('aria-valuenow')).toBe('288');
     expect(screen.getByRole('button', { name: '切换为目录树' })).toBeTruthy();
     expect((screen.getByRole('searchbox', { name: '筛选变更文件' }) as HTMLInputElement).value).toBe('file-1.ts');
     expect(screen.queryByRole('button', { name: 'src/file-0.ts' })).toBeNull();

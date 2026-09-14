@@ -18,7 +18,6 @@ describe('MarkdownContentBlock links', () => {
     expect(html.match(/data-markdown-link="web"/g)).toHaveLength(1);
     expect(html).toContain('href="mailto:hello@example.com"');
     expect(html).toContain('data-markdown-link="external"');
-    expect(html.match(/chat-markdown__web-link-icon/g)).toHaveLength(1);
   });
 
   it('stops an unformatted GFM autolink before Chinese punctuation', () => {

@@ -4,15 +4,6 @@ import { groupToolRuns, shouldAutoOpenToolRunDisclosure, toolRunDisplayStableKey
 import { shellRun, toolRun, fileRunWithDiff, hookBearingMultiFileRunWithDiff, groupLabel, renderedTextFromHtml, firstToolRunSummaryHtml, renderedHtml } from './RuntimeToolRuns.support.js';
 
 describe('RuntimeToolRuns disclosure behavior', () => {
-  it('uses disclosure chevrons and per-row action icons for expanded history', () => {
-    const html = renderedHtml([
-      toolRun('read_first', 'read_file', { file_path: 'src/first.ts' }),
-      toolRun('read_second', 'read_file', { file_path: 'src/second.ts' }),
-    ]);
-
-    expect(html).toContain('chat-tool-run__chevron');
-    expect(html.match(/chat-tool-run__detail-icon/gu)).toHaveLength(2);
-  });
 
   it('keeps ordinary tool details collapsed and opens pending user authorization', () => {
     const pendingApprovalRun: RuntimeToolRun = {
@@ -38,9 +29,7 @@ describe('RuntimeToolRuns disclosure behavior', () => {
     ]);
 
     expect(html).toContain('<details');
-    expect(html).toContain('chat-tool-run__chevron');
     expect(html).not.toMatch(/<details[^>]*\bopen(?:=|\s|>)/u);
-    expect(html).not.toContain('chat-file-diff__preview');
     expect(renderedTextFromHtml(firstToolRunSummaryHtml(html))).toContain('已编辑RuntimeErrorNotice.tsx+1-1');
   });
 
@@ -52,7 +41,6 @@ describe('RuntimeToolRuns disclosure behavior', () => {
     const html = renderedHtml([pendingRun]);
 
     expect(html).toMatch(/<details[^>]*\bopen(?:=|\s|>)/u);
-    expect(html).toContain('chat-file-diff__preview');
     expect(html).toContain('diff --git a/src/pending.ts b/src/pending.ts');
     expect(html).toContain('-return &#x27;before&#x27;;');
     expect(html).toContain('+return &#x27;after&#x27;;');
@@ -66,7 +54,6 @@ describe('RuntimeToolRuns disclosure behavior', () => {
 
     expect(html.match(/chat-file-diff__disclosure/gu)).toHaveLength(2);
     expect(html.match(/chat-file-diff__chevron/gu)).toHaveLength(2);
-    expect(html).not.toContain('chat-file-diff__preview');
     expect(renderedTextFromHtml(html)).toContain('编辑first.ts+1-1');
     expect(renderedTextFromHtml(html)).toContain('编辑second.ts+1-1');
   });
@@ -78,7 +65,6 @@ describe('RuntimeToolRuns disclosure behavior', () => {
     expect(html.match(/chat-file-diff__disclosure/gu)).toHaveLength(2);
     expect(renderedTextFromHtml(html)).toContain('编辑first.ts+1-1');
     expect(renderedTextFromHtml(html)).toContain('编辑second.ts+1-1');
-    expect(html).toContain('chat-tool-run__hook');
   });
 
   it('auto-opens each new approval once without overriding a manual collapse during the same request', () => {

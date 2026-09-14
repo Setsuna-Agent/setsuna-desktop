@@ -108,8 +108,6 @@ describe('BrowserPanel', () => {
     }));
 
     expect(html).toContain('allowpopups="true"');
-    expect(html).not.toContain('desktop-browser-tabs');
-    expect(html).toContain('desktop-browser-address-bar__external');
     expect(html).toContain('aria-label="浏览器菜单"');
     expect(html).not.toContain('role="menu"');
   });

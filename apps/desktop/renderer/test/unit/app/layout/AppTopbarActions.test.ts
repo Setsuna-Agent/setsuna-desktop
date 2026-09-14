@@ -40,7 +40,6 @@ describe('AppTopbarActions', () => {
 
     expect(bottomPanelButton).toContain('aria-pressed="false"');
     expect(bottomPanelButton).toContain('is-active');
-    expect(html).toContain('app-panel-placement-icon--bottom');
   });
 
   it('底栏终端激活时表达关闭终端', () => {
@@ -79,7 +78,6 @@ describe('AppWorkspaceToolbar', () => {
     }));
 
     expect(html).toContain('data-desktop-panel-placement="side"');
-    expect(html).toContain('chat-file-review-panel__tabs');
     expect(html).not.toContain('data-desktop-panel-tab-id="workspace-overview"');
   });
 });

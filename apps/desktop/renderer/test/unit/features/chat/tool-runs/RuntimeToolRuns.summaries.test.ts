@@ -78,10 +78,8 @@ describe('RuntimeToolRuns compact summaries', () => {
     };
     const html = renderedHtml([run]);
     expect(renderedTextFromHtml(firstToolRunSummaryHtml(html))).toContain('已在 src 中搜索“absent”');
-    expect(html).toContain('chat-mcp-terminal--completed');
     expect(renderedTextFromHtml(html)).toContain('未找到匹配结果。');
     expect(renderedTextFromHtml(html)).toContain('成功 · 退出码 1');
-    expect(html).not.toContain('chat-mcp-terminal--error');
   });
 
   it('summarizes command searches while retaining the command and terminal output', () => {
@@ -94,7 +92,6 @@ describe('RuntimeToolRuns compact summaries', () => {
     expect(renderedTextFromHtml(firstToolRunSummaryHtml(html))).toContain('已在 src 中搜索“sudo”');
     expect(html).toContain('rg -n -g &quot;*.ts&quot; sudo src');
     expect(renderedTextFromHtml(html)).toContain('src/policy.ts:12:sudo');
-    expect(html).toContain('chat-mcp-terminal');
   });
 
   it('groups file discovery and content search without turning globs into file links', () => {
@@ -121,7 +118,6 @@ describe('RuntimeToolRuns compact summaries', () => {
     };
     const html = renderedHtml([pending]);
     expect(renderedTextFromHtml(firstToolRunSummaryHtml(html))).toContain('搜索');
-    expect(html).toContain('chat-mcp-terminal');
     expect(renderedTextFromHtml(html)).toContain('允许本会话允许拒绝');
   });
 
@@ -170,25 +166,20 @@ describe('RuntimeToolRuns compact summaries', () => {
       fileRun('edit_merge', 'edit_file', 'merge_sort.py', 'Modified'),
     ];
     const text = renderedText(runs);
-    const html = renderedHtml(runs);
 
     expect(text).toContain('已创建 1 个文件，已编辑 1 个文件');
     expect(text).toContain('创建selection_sort.py');
     expect(text).toContain('编辑merge_sort.py');
-    expect(html).toContain('<span class="chat-tool-run__title">已创建 1 个文件，已编辑 1 个文件</span>');
-    expect(html).not.toContain('<span class="chat-tool-run__title">已创建 1 个文件，已编辑 1 个文件</span><span class="chat-change-counts"');
     expect(text).not.toContain('参数');
     expect(text).not.toContain('结果');
   });
 
-  it('shows change counts next to a concrete single edited file instead of an aggregate count', () => {
+  it('exposes a workspace link for a single edited file', () => {
     const html = renderedHtml([
       fileRun('edit_merge', 'edit_file', 'merge_sort.py', 'Modified'),
     ]);
 
     expect(html).toContain('data-markdown-link="workspace-tool"');
-    expect(html).toContain('class="chat-markdown__file-icon"');
-    expect(html).toMatch(/<a[^>]*chat-tool-run__file-target[^>]*>.*merge_sort\.py.*<\/a><span class="chat-change-counts"/u);
   });
 
   it('normalizes absolute tool paths through the shared workspace file renderer', () => {
@@ -225,7 +216,6 @@ describe('RuntimeToolRuns compact summaries', () => {
     for (const html of [groupedHtml, mixedHtml, hookBackedHtml]) {
       const summaryHtml = firstToolRunSummaryHtml(html);
       expect(summaryHtml).toContain('data-markdown-link="workspace-tool"');
-      expect(summaryHtml).toContain('class="chat-markdown__file-icon"');
       expect(summaryHtml).toContain('title="src/index.css"');
       expect(summaryHtml).toContain('<span>index.css</span>');
       expect(renderedTextFromHtml(summaryHtml)).not.toContain(absolutePath);
@@ -289,7 +279,6 @@ describe('RuntimeToolRuns compact summaries', () => {
     }]);
 
     expect(renderedTextFromHtml(html)).toContain('正在生成修改预览');
-    expect(html).not.toContain('chat-change-counts');
   });
 
   it('does not render zero change counts before a streamed patch contains changes', () => {
@@ -326,7 +315,6 @@ describe('RuntimeToolRuns compact summaries', () => {
 
     for (const html of [singleHtml, groupedHtml]) {
       expect(renderedTextFromHtml(html)).toContain('index.css');
-      expect(html).not.toContain('chat-change-counts');
     }
   });
 
@@ -364,7 +352,6 @@ describe('RuntimeToolRuns compact summaries', () => {
 
     expect(renderedTextFromHtml(html)).toBe('正在生成修改预览');
     expect(html).not.toContain('workspace-tool');
-    expect(html).not.toContain('chat-change-counts');
   });
 
   it('coalesces repeated mixed aggregate categories into one compact summary', () => {

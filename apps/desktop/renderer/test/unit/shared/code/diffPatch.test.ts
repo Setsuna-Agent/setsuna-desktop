@@ -1,5 +1,4 @@
-import { getSingularPatch, setLanguageOverride } from '@pierre/diffs';
-import { preloadFileDiff } from '@pierre/diffs/ssr';
+import { getSingularPatch } from '@pierre/diffs';
 import { describe, expect, it } from 'vitest';
 import { codeDiffLinesToPatch } from '../../../../src/shared/code/diffPatch.js';
 import { inferPatchLanguageOverride } from '../../../../src/shared/code/patchLanguage.js';
@@ -14,30 +13,12 @@ describe('codeDiffLinesToPatch', () => {
     expect(getSingularPatch(patch).name).toBe('src/App.vue');
   });
 
-  it('keeps a contextless Vue script hunk syntax-highlighted after truncation', async () => {
+  it('infers TypeScript for a truncated Vue script hunk', () => {
     const patch = truncatedVuePatch();
     const parsed = getSingularPatch(patch);
     const language = inferPatchLanguageOverride(parsed.name, patch);
 
     expect(language).toBe('typescript');
-    if (!language) throw new Error('Expected a language override for the truncated Vue script hunk.');
-    const { prerenderedHTML } = await preloadFileDiff({
-      fileDiff: setLanguageOverride(parsed, language),
-      options: {
-        diffIndicators: 'bars',
-        lineDiffType: 'none',
-        overflow: 'wrap',
-        theme: { dark: 'pierre-dark', light: 'pierre-light' },
-        themeType: 'light',
-      },
-    });
-    const tokenColors = new Set(
-      [...prerenderedHTML.matchAll(/--diffs-token-light:([^;"]+)/gu)].map((match) => match[1]),
-    );
-
-    expect(tokenColors.size).toBeGreaterThan(1);
-    expect(prerenderedHTML).not.toContain('<span data-diff-span');
-    expect(prerenderedHTML).toContain('data-line-type="change-addition"');
   });
 
   it('keeps the Vue grammar when the retained hunk contains an SFC boundary', () => {
