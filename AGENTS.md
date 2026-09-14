@@ -5,6 +5,7 @@
 ## 基本原则
 
 - 默认不要主动使用 `computer-use`、打开浏览器或做样式截图验证；只有用户明确要求时再做视觉确认。
+- 不再新增 UI 展示和样式相关单测，包括 CSS、类名、颜色、字体、图标、DOM 排列、布局尺寸和动画。测试聚焦业务行为、数据处理、状态流转、安全边界和实际功能交互。
 - 开发改动先读真实链路，再下结论。这个项目的关键链路通常跨 `contracts -> runtime -> Electron main/preload -> renderer`。
 - 保持现有分层，不把业务逻辑塞进单个组件、hook 或 server 文件。优先抽到已有同层 helper、hook、adapter、port 或样式文件。
 - 不要写屎山代码；开发相关需求要尽可能做好组件、样式、hook、helper 的封装，并在复杂逻辑处添加必要注释。
@@ -59,7 +60,7 @@
 - 事件驱动：线程状态以 append-only `RuntimeEvent` 为真源，snapshot 是投影结果。新增事件必须有 reducer 和测试。
 - 窄桥接：preload 只暴露明确方法；Electron main 持有 runtime token、端口和系统能力。
 - Ports/adapters：runtime 业务逻辑依赖 ports，文件系统、模型、MCP、Skill、本地工具作为 adapter 注入。
-- UI 编排下沉到 hook：跨页面状态放 hook，展示组件只接收明确 props。复杂展示逻辑拆到纯函数并配测试。
+- UI 编排下沉到 hook：跨页面状态放 hook，展示组件只接收明确 props。复杂逻辑拆到纯函数；仅对其中高收益的业务逻辑配测试。
 - 样式分域维护：全局 token 在 `tokens.css`，布局在 `shell.css`/`app.css`，聊天、workspace、settings、capabilities 各归各的 CSS 文件。
 - 注释克制但必要：不要给显而易见的赋值写注释；对跨进程、事件投影、路径安全、并发队列、工具审批等复杂逻辑加短注释说明原因。
 - 本地安全：路径必须归一化并限制在 workspace 内；shell、文件写入、MCP 默认经过审批或权限策略。

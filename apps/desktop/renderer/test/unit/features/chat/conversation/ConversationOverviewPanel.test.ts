@@ -107,7 +107,6 @@ describe('ConversationOverviewPanel', () => {
     });
 
     expect(html).toContain('aria-label="计划推进中，已完成 1/2"');
-    expect(html).toContain('chat-conversation-overview-panel__plan-popover');
     expect(html).toContain('Apply focused change');
   });
 

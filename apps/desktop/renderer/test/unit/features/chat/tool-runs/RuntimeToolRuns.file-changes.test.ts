@@ -21,39 +21,6 @@ describe('RuntimeToolRuns final file changes', () => {
     expect(text).toContain('已运行 pnpm test');
   });
 
-  it('renders final file changes as review links', () => {
-    const html = renderToStaticMarkup(createElement(FileChangesSummaryCard, {
-      summary: {
-        additions: 1,
-        deletions: 0,
-        files: [
-          {
-            path: 'book/2048/style/main.css',
-            additions: 1,
-            deletions: 0,
-            truncated: false,
-            lines: [
-              {
-                type: 'context',
-                oldLine: 1,
-                newLine: 1,
-                content: '.tile { color: red; }',
-              },
-            ],
-          },
-        ],
-      },
-      onOpenReview: () => undefined,
-    }));
-
-    expect(html).toContain('<span class="chat-file-changes__title">已编辑 main.css</span><span class="chat-change-counts"');
-    expect(html).not.toContain('chat-file-changes__file-icon');
-    expect(html).toMatch(/<button[^>]*class="[^"]*\bchat-file-changes__row\b[^"]*"/);
-    expect(html).not.toContain('<details');
-    expect(html).not.toContain('chat-file-changes__row-chevron');
-    expect(html).not.toContain('chat-file-review__');
-  });
-
   it('keeps multi-file change summaries scannable by previewing the first rows', () => {
     const html = renderToStaticMarkup(createElement(FileChangesSummaryCard, {
       summary: {
@@ -73,7 +40,6 @@ describe('RuntimeToolRuns final file changes', () => {
     expect(text).toContain('已编辑 5 个文件');
     // 多文件时标题后内联展示汇总增删统计（各文件 additions 1..5、deletions 0..4）
     expect(text).toContain('+15-10');
-    expect(html).toContain('<span class="chat-file-changes__title">已编辑 5 个文件</span><span class="chat-change-counts"');
     expect(text).toContain('再显示 2 个文件');
     expect(html.match(/class="chat-file-changes__item"/gu)).toHaveLength(3);
     expect(text).toContain('src/file-3.ts');
@@ -104,14 +70,12 @@ describe('RuntimeToolRuns final file changes', () => {
     ]);
 
     expect(summary).not.toBeNull();
-    const html = renderToStaticMarkup(createElement(FileChangesSummaryCard, { summary: summary! }));
 
     expect(summary?.files[0]?.lines).toEqual([
       { type: 'removed', lineNumber: 66, oldLine: 66, newLine: undefined, content: 'const now = new Date()' },
       { type: 'added', lineNumber: 66, oldLine: undefined, newLine: 66, content: 'const today = new Date()' },
       { type: 'gap', lineNumber: undefined, oldLine: undefined, newLine: undefined, content: '6 unmodified lines' },
     ]);
-    expect(html).not.toContain('chat-file-review__');
   });
 
   it('infers omitted file change gap rows from skipped diff line numbers', () => {

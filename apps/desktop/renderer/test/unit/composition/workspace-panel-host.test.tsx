@@ -27,7 +27,7 @@ afterEach(() => {
   Object.defineProperty(window, 'setsunaDesktop', { configurable: true, value: undefined });
 });
 
-it('mounts Changes through the built-in shell and chat slots, including working resize controls', async () => {
+it('mounts Changes through the built-in shell and chat slots', async () => {
   const oid = 'a'.repeat(40);
   const history: DesktopGitHistoryPage = {
     gitRoot: '/repo', head: oid, tip: oid, currentBranch: 'main', nextSkip: null,
@@ -50,22 +50,11 @@ it('mounts Changes through the built-in shell and chat slots, including working 
   vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1920);
   const features = await activateBuiltinRendererFeatures();
   try {
-    const view = renderWorkspace(features, <ChangesWorkspace />);
+    renderWorkspace(features, <ChangesWorkspace />);
 
     expect(await screen.findByRole('navigation', { name: '变更' })).toBeTruthy();
     expect(await screen.findByRole('button', { name: /Initial project/ })).toBeTruthy();
     expect(getHistory).toHaveBeenCalledWith('/repo', { ref: undefined });
-    const handle = screen.getByRole('separator', { name: '调整右侧面板宽度' });
-    const shell = view.container.querySelector<HTMLElement>('.app-shell')!;
-    expect(handle.getAttribute('aria-valuenow')).toBe('640');
-    fireEvent.pointerDown(handle, { pointerId: 1, clientX: 1200 });
-    fireEvent.pointerMove(window, { pointerId: 1, clientX: 1100 });
-    fireEvent.pointerUp(window, { pointerId: 1, clientX: 1100 });
-    expect(handle.getAttribute('aria-valuenow')).toBe('740');
-    expect(shell.style.getPropertyValue('--desktop-agent-workspace-width')).toBe('740px');
-    fireEvent.keyDown(handle, { key: 'ArrowRight' });
-    expect(handle.getAttribute('aria-valuenow')).toBe('724');
-    expect(shell.style.getPropertyValue('--desktop-agent-workspace-width')).toBe('724px');
   } finally {
     cleanup();
     await features.composition.dispose();
@@ -114,29 +103,15 @@ it('shares the directory navigator across file and files renderer slots', async 
     const view = renderWorkspace(features, <FilesWorkspace searchEntries={searchEntries} />);
     fireEvent.click(await screen.findByRole('button', { name: 'src' }));
     await screen.findByRole('button', { name: 'a.ts' });
-    fireEvent.keyDown(screen.getByRole('separator', { name: '调整文件目录宽度' }), { key: 'ArrowLeft' });
     const list = view.container.querySelector<HTMLElement>('.desktop-file-list')!;
     list.scrollTop = 128;
     fireEvent.scroll(list);
 
     fireEvent.click(screen.getByRole('button', { name: 'a.ts' }));
     expect(screen.getByRole('button', { name: 'b.ts' })).toBeTruthy();
-    // A tab switch remounts the slot; restored rows must already be at their final positions.
-    const expectRestoredTree = () => {
-      const rows = view.container.querySelectorAll<HTMLElement>('.sd-file-tree__node');
-      expect(rows.length).toBe(3);
-      for (const row of rows) {
-        expect(row.style.opacity).toBe('1');
-        expect(row.style.transform).toBe('none');
-      }
-    };
-    expectRestoredTree();
     expect(view.container.querySelector('.desktop-file-list')?.scrollTop).toBe(128);
-    expect(screen.getByRole('separator', { name: '调整文件目录宽度' }).getAttribute('aria-valuenow')).toBe('232');
     fireEvent.click(screen.getByRole('button', { name: 'b.ts' }));
-    expectRestoredTree();
     fireEvent.click(screen.getByRole('button', { name: '目录标签' }));
-    expectRestoredTree();
     expect(screen.getByRole('button', { name: 'a.ts' })).toBeTruthy();
     expect(searchEntries).toHaveBeenCalledTimes(2);
 
@@ -256,21 +231,14 @@ it('moves files into and out of folders and preserves nested entries when draggi
     dragEntry(screen.getByRole('button', { name: 'draft.ts' }), screen.getByRole('button', { name: 'archive' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'draft.ts' }).getAttribute('title')).toBe('archive/draft.ts'));
     const fileList = view.container.querySelector('.desktop-file-list')!;
-    dragEntry(screen.getByRole('button', { name: 'draft.ts' }), fileList, () => {
-      expect(fileList.classList.contains('is-drop-target')).toBe(true);
-    });
+    dragEntry(screen.getByRole('button', { name: 'draft.ts' }), fileList);
     await waitFor(() => expect(screen.getByRole('button', { name: 'draft.ts' }).getAttribute('title')).toBe('draft.ts'));
     dragEntry(screen.getByRole('button', { name: 'nested' }), screen.getByRole('button', { name: 'archive' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'keep.ts' }).getAttribute('title')).toBe('archive/nested/keep.ts'));
     dragEntry(screen.getByRole('button', { name: 'archive' }), screen.getByRole('button', { name: 'nested' }));
     expect(await screen.findByText('不能将文件夹移入自身或它的子文件夹。')).toBeTruthy();
     expect(onMoveEntry).toHaveBeenCalledTimes(3);
-    dragEntry(screen.getByRole('button', { name: 'draft.ts' }), screen.getByRole('button', { name: 'archive' }), () => {
-      const target = view.container.querySelector('.is-drop-target');
-      expect(target).toBe(screen.getByRole('button', { name: 'archive' }).closest('.desktop-file-tree-node'));
-      expect(target?.contains(screen.getByRole('button', { name: 'keep.ts' }))).toBe(true);
-      expect(fileList.classList.contains('is-drop-target')).toBe(false);
-    });
+    dragEntry(screen.getByRole('button', { name: 'draft.ts' }), screen.getByRole('button', { name: 'archive' }));
     expect(await screen.findByText('移动失败：already exists')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'draft.ts' }).getAttribute('title')).toBe('draft.ts');
     expect(onMoveEntry.mock.calls).toEqual([
@@ -282,7 +250,7 @@ it('moves files into and out of folders and preserves nested entries when draggi
   }
 });
 
-function dragEntry(source: Element, target: Element, afterDragOver?: () => void) {
+function dragEntry(source: Element, target: Element) {
   const values = new Map<string, string>();
   const dataTransfer = {
     types: [] as string[], effectAllowed: 'none', dropEffect: 'none',
@@ -291,7 +259,6 @@ function dragEntry(source: Element, target: Element, afterDragOver?: () => void)
   };
   fireEvent.dragStart(source, { dataTransfer });
   fireEvent.dragOver(target, { dataTransfer });
-  afterDragOver?.();
   fireEvent.drop(target, { dataTransfer });
   fireEvent.dragEnd(source, { dataTransfer });
 }

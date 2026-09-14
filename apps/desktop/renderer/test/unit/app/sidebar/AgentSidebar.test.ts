@@ -142,7 +142,6 @@ describe('AgentSidebar project actions', () => {
     const html = container.innerHTML;
 
     expect(html).toContain('aria-label="新建项目"');
-    expect(html).toContain('class="desktop-agent-project is-menu-open"');
     expect(html).toContain('aria-label="在 test-project 中新建会话"');
     expect(html).toContain('>编辑项目</button>');
     expect(html).toContain('>归档项目</button>');
@@ -188,7 +187,6 @@ describe('AgentSidebar project actions', () => {
 
     const unpin = within(pinned).getAllByRole('button', { name: '取消置顶' })[0]!;
     expect(unpin.getAttribute('aria-pressed')).toBe('true');
-    expect(unpin.querySelector('svg')?.getAttribute('fill')).toBe('currentColor');
     fireEvent.click(unpin);
     expect(within(projectNode('Project B')).getByRole('button', { name: 'Conversation 1' })).toBeTruthy();
     expect(threads[1]?.projectId).toBe(projects[1]?.id);

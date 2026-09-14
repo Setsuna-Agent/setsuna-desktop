@@ -56,7 +56,6 @@ describe('CollaborationSpawnResultView', () => {
     const card = view.getByRole('button') as HTMLButtonElement;
     expect(controllerForThread).not.toHaveBeenCalled();
     expect(card.disabled).toBe(true);
-    expect(card.classList.contains('subagent-task-card--historical')).toBe(true);
     expect(card.title).toBe('feature.collaboration.card.historicalTitle');
 
     fireEvent.click(card);

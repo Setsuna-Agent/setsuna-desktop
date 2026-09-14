@@ -16,8 +16,5 @@ describe('KeyboardShortcutsSettings', () => {
 
     expect(html).toContain('aria-label="Search shortcuts"');
     expect(html).toContain('<kbd>Ctrl+N</kbd>');
-    expect(html).toMatch(/class="[^"]*\bsettings-shortcuts__binding-key\b[^"]*"/);
-    expect(html).toMatch(/class="[^"]*\bsettings-shortcuts__binding-remove\b[^"]*"/);
-    expect(html).toMatch(/class="[^"]*\bsettings-shortcuts__add\b[^"]*"/);
   });
 });

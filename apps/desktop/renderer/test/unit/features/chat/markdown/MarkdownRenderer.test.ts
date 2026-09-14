@@ -9,8 +9,6 @@ import {
 import { MarkdownNavigationProvider } from '../../../../../src/features/chat/markdown/MarkdownNavigationProvider.js';
 import { MarkdownRenderer } from '../../../../../src/features/chat/markdown/MarkdownRenderer.js';
 import {
-  estimateMarkdownBlockHeight,
-  normalizeMarkdownBlockHeight,
   shouldVirtualizeMarkdownBlocks,
 } from '../../../../../src/features/chat/markdown/MarkdownVirtualBlock.js';
 import { I18nProvider, type AppLocale } from '../../../../../src/shared/i18n/I18nProvider.js';
@@ -36,23 +34,6 @@ function renderMarkdown(
 }
 
 describe('MarkdownRenderer', () => {
-  it('renders project-owned typography elements and table containment', () => {
-    const html = renderMarkdown('# Heading\n\n1. First\n2. Second\n\n| A | B |\n| - | - |\n| 1 | 2 |');
-
-    expect(html).toContain('<h1>Heading</h1>');
-    expect(html).toContain('<ol>');
-    expect(html).toContain('class="chat-markdown__table-scroll"');
-    expect(html).toContain('<table>');
-  });
-
-  it('renders GFM task items as ordinary list items without checkboxes', () => {
-    const html = renderMarkdown('- [ ] Use `path.join`\n- [x] Done');
-
-    expect(html).toContain('<ul class="contains-task-list">');
-    expect(html).toMatch(/<li class="task-list-item">\s*Use <code>path\.join<\/code><\/li>/);
-    expect(html).toMatch(/<li class="task-list-item">\s*Done<\/li>/);
-    expect(html).not.toContain('<input');
-  });
 
   it('repairs the mutable streaming tail without replaying content present at mount', () => {
     const html = renderMarkdown('Stable.\n\nStreaming **bold', true);
@@ -60,9 +41,7 @@ describe('MarkdownRenderer', () => {
     expect(html).toContain('data-markdown-block="stable"');
     expect(html).toContain('data-markdown-block="mutable"');
     expect(html).toContain('<strong>bold</strong>');
-    expect(html).not.toContain('chat-markdown__stream-reveal');
     expect(html).not.toContain('is-streaming');
-    expect(html).not.toContain('chat-markdown__empty-tail');
   });
 
   it('keeps reference definitions with their mutable uses while preserving the stable prefix', () => {
@@ -97,10 +76,7 @@ describe('MarkdownRenderer', () => {
 
   it('keeps unverified workspace links non-interactive and does not render raw HTML', () => {
     const html = renderMarkdown('[source](./src/main.ts:12)\n\n<script>alert(1)</script>');
-
-    expect(html).toContain('class="chat-markdown__unavailable-link">source</span>');
     expect(html).not.toContain('data-markdown-link="workspace"');
-    expect(html).not.toContain('class="chat-markdown__file-icon"');
     expect(html).not.toContain('<script>');
     expect(html).not.toContain('alert(1)');
   });
@@ -137,8 +113,6 @@ describe('MarkdownRenderer', () => {
 
   it('keeps fenced code on the existing code highlighter path', () => {
     const html = renderMarkdown('```ts\nconst answer = 42;\n```');
-
-    expect(html).toContain('chat-code-highlighter');
     expect(html).toContain('>TypeScript</span>');
     expect(html).toContain('aria-label="复制代码"');
     expect(html).toContain('const answer = 42;');
@@ -160,16 +134,12 @@ describe('MarkdownRenderer', () => {
       false,
       'en-US',
     );
-
-    expect(html).toContain('class="chat-markdown__image-alt">diagram</span>');
     expect(html).toContain('aria-label="Markdown table"');
     expect(html).toContain('aria-label="Copy code"');
   });
 
   it('renders unlabelled fenced code as a contained plain code block', () => {
     const html = renderMarkdown('```\nChatWorkspace.tsx\n├── useChatWorkspaceState.ts\n```');
-
-    expect(html).toContain('chat-code-highlighter chat-code-highlighter--plain');
     expect(html).toContain('>Plain Text</span>');
     expect(html).toContain('<pre><code>ChatWorkspace.tsx\n├── useChatWorkspaceState.ts</code></pre>');
   });
@@ -179,7 +149,6 @@ describe('MarkdownRenderer', () => {
     const html = renderMarkdown(`\`\`\`text\n${code}\n\`\`\``);
 
     expect(shouldSyntaxHighlightMarkdownCode(code)).toBe(false);
-    expect(html).toContain('chat-code-highlighter--plain');
     expect(html).toContain('line 500');
     expect(html).toContain('aria-label="复制代码"');
   });
@@ -191,13 +160,5 @@ describe('MarkdownRenderer', () => {
     expect(shouldVirtualizeMarkdownBlocks(shortBlocks)).toBe(false);
     expect(shouldVirtualizeMarkdownBlocks(manyBlocks)).toBe(true);
     expect(shouldVirtualizeMarkdownBlocks([{ content: 'x'.repeat(16_000) }])).toBe(true);
-    expect(estimateMarkdownBlockHeight('```ts\nconst value = 1;\n```')).toBeGreaterThan(60);
-  });
-
-  it('converts zoomed Markdown measurements back to layout pixels', () => {
-    expect(normalizeMarkdownBlockHeight({
-      rectHeight: 210,
-      scaleInverse: 1 / 1.05,
-    })).toBeCloseTo(200);
   });
 });

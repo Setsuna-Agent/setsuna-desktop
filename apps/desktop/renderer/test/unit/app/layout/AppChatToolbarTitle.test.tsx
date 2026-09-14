@@ -25,7 +25,7 @@ describe.each([
   it('offers rename and archive actions for the active thread', async () => {
     const onArchiveThread = vi.fn();
     const onRenameThread = vi.fn();
-    const view = render(
+    render(
       <AppChatToolbarTitle
         project={activeProject}
         title="Current thread"
@@ -33,8 +33,6 @@ describe.each([
         onRenameThread={onRenameThread}
       />,
     );
-
-    expect(Boolean(view.container.querySelector('.app-chat-toolbar-title__project-icon'))).toBe(Boolean(activeProject));
     expect(screen.getByText('Current thread')).toBeTruthy();
 
     fireEvent.keyDown(screen.getByRole('button', { name: '对话操作' }), { key: 'ArrowDown' });
@@ -81,8 +79,7 @@ it('opens a workspace app from the nested conversation menu and closes both menu
   fireEvent.keyDown(screen.getByRole('button', { name: '对话操作' }), { key: 'ArrowDown' });
   const openWith = await screen.findByRole('menuitem', { name: '打开方式' });
   fireEvent.keyDown(openWith, { key: 'ArrowRight' });
-  const selectedApp = await screen.findByRole('menuitem', { name: 'VS Code' });
-  expect(selectedApp.classList.contains('is-selected')).toBe(true);
+  await screen.findByRole('menuitem', { name: 'VS Code' });
   fireEvent.click(screen.getByRole('menuitem', { name: 'Cursor' }));
   expect(onOpenWorkspaceInApp).toHaveBeenCalledExactlyOnceWith('cursor');
   expect(screen.queryByRole('menu')).toBeNull();

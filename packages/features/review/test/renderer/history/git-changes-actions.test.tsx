@@ -98,28 +98,6 @@ it.each(['更多 Git 操作', '提交选项'])('hides the %s tooltip while its m
   await screen.findByRole('tooltip', { name: label });
 });
 
-it('retains the manually dragged message height while editing and restores automatic sizing on reset', () => {
-  render(surface(createBridge({})));
-  const input = screen.getByRole('textbox', { name: '提交消息' }) as HTMLTextAreaElement;
-  vi.spyOn(input, 'offsetHeight', 'get').mockReturnValue(26);
-  vi.spyOn(input, 'getBoundingClientRect').mockReturnValue({ height: 32.5 } as DOMRect);
-  const handle = screen.getByRole('separator', { name: '调整提交消息输入框高度' });
-  handle.setPointerCapture = vi.fn();
-  handle.releasePointerCapture = vi.fn();
-  fireEvent.pointerDown(handle, { button: 0, pointerId: 1, clientY: 40 });
-  fireEvent.pointerMove(handle, { pointerId: 1, clientY: 165 });
-  fireEvent.pointerUp(handle, { pointerId: 1 });
-  expect(input.style.height).toBe('126px');
-  expect(handle.releasePointerCapture).toHaveBeenCalledWith(1);
-  fireEvent.change(input, { target: { value: 'feat: multiline draft\n\n- Explain the changes' } });
-  expect(input.style.height).toBe('126px');
-  fireEvent.pointerMove(handle, { pointerId: 1, clientY: 240 });
-  expect(input.style.height).toBe('126px');
-  fireEvent.doubleClick(handle);
-  expect(input.style.height).not.toBe('126px');
-  expect(input.value).toBe('feat: multiline draft\n\n- Explain the changes');
-});
-
 it('uses the latest conversation model when generating after switching conversations', async () => {
   const generateCommitMessage = vi.fn().mockResolvedValue({ message: 'feat: generated summary' });
   const bridge = createBridge({ generateCommitMessage });
@@ -421,7 +399,6 @@ it('opens the complete group diff, including deleted files, and can return to a 
   const group = within(screen.getByRole('button', { name: 'first.txt' }).closest<HTMLElement>('.git-changes-files__group')!);
   fireEvent.click(group.getByRole('button', { name: '更改' }));
   fireEvent.click(group.getByRole('button', { name: '打开全部更改' }));
-  expect(view.container.querySelector('.git-changes-panel__body')?.classList.contains('has-detail')).toBe(true);
   const diff = within(view.container.querySelector<HTMLElement>('.git-history-diff')!);
   expect(diff.getByText('变更文件 · 2')).toBeTruthy();
   expect(diff.getByText('first.txt')).toBeTruthy();

@@ -5,7 +5,6 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { ConversationDebugActivityList } from '../../src/renderer/ConversationDebugActivityList.js';
 import { ConversationDebugInspector } from '../../src/renderer/ConversationDebugInspector.js';
-import { ConversationDebugRecordPicker } from '../../src/renderer/ConversationDebugRecordPicker.js';
 import type { ConversationDebugNode } from '../../src/renderer/conversationDebugGraph.js';
 import { ConversationDebugI18nProvider } from '../../src/renderer/context.js';
 import {
@@ -47,23 +46,6 @@ describe('human-readable conversation debug views', () => {
     expect(html).toContain('原始记录');
     expect(html).not.toContain('event_message_delta');
     expect(html).not.toContain('<details');
-  });
-
-  it('uses a compact selector instead of a horizontal raw-record strip', () => {
-    const node = messageNode();
-    const html = renderWithProviders(
-      <ConversationDebugRecordPicker
-        records={node.events}
-        selectedRecordId="event_message_delta"
-        onSelectRecord={() => undefined}
-      />,
-    );
-
-    expect(html).toContain('<select');
-    expect(html).toContain('aria-label="选择原始记录"');
-    expect(html).toContain('message.created');
-    expect(html).toContain('message.delta');
-    expect(html).not.toContain('conversation-debug-inspector__record-group');
   });
 });
 

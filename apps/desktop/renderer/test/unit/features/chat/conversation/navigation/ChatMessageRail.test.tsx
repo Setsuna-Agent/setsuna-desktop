@@ -85,27 +85,13 @@ describe('chat message navigation', () => {
     expect(onScrollToBottom).toHaveBeenCalledOnce();
   });
 
-  it('moves a contiguous reading band smoothly and hides navigation when the viewport no longer overflows', () => {
+  it('updates the current message on scroll and hides navigation when the viewport no longer overflows', () => {
     render(<Harness />);
     const { viewport, metrics } = mockGeometry(1.25);
     const buttons = screen.getAllByRole('button');
-    const ticks = buttons.map((button) => button.querySelector('span')!);
-    viewport.scrollTop = 500;
-    fireEvent.scroll(viewport);
-    flushFrames();
-    const firstOpacity = Number(ticks[0].style.opacity);
-    const lastOpacity = Number(ticks[3].style.opacity);
-    expect(firstOpacity).toBeGreaterThan(0.45);
-    expect(firstOpacity).toBeLessThan(1);
-    expect(lastOpacity).toBeGreaterThan(0.45);
-    expect(lastOpacity).toBeLessThan(1);
     viewport.scrollTop = 650;
     fireEvent.scroll(viewport);
     flushFrames();
-    expect(Number(ticks[0].style.opacity)).toBeLessThan(firstOpacity);
-    expect(Number(ticks[3].style.opacity)).toBeGreaterThan(lastOpacity);
-    expect(ticks.slice(1, 3).every((tick) => tick.style.opacity === '1')).toBe(true);
-    expect(ticks.every((tick) => tick.style.transform === 'scaleX(0.25)')).toBe(true);
     expect(buttons[2].getAttribute('aria-current')).toBe('location');
     viewport.scrollTop = 1190;
     fireEvent.scroll(viewport);

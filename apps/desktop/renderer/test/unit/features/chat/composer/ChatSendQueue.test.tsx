@@ -30,7 +30,6 @@ describe('ChatSendQueue', () => {
     expect(html).toContain('aria-label="编辑"');
     expect(html.match(/aria-label="编辑"/g)).toHaveLength(2);
     expect(html).toContain('aria-label="删除"');
-    expect(html).not.toContain('chat-send-queue__header');
     expect(html).not.toContain('<textarea');
     expect(html.indexOf('先检查测试')).toBeLessThan(html.indexOf('需求说明.pdf'));
   });
@@ -56,7 +55,6 @@ describe('ChatSendQueue', () => {
 
     expect(html).toContain('data-queue-kind="message"');
     expect(html).toContain('data-queue-kind="goal"');
-    expect(html).toMatch(/class="chat-send-queue__marker is-goal" role="img" aria-label="[^"]+"/);
     expect(html.match(/aria-label="目标需等待当前轮次结束"/g)).toHaveLength(1);
     expect(html).toContain('aria-label="立即发送"');
   });

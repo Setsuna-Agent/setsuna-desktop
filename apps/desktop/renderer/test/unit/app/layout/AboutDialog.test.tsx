@@ -22,7 +22,6 @@ it('opens app information from Help, handles external link failure and retry, an
   fireEvent.click(help);
   fireEvent.click(screen.getByRole('menuitem', { name: '关于 Setsuna Desktop' }));
   const dialog = screen.getByRole('dialog', { name: '关于 Setsuna Desktop' });
-  expect(within(dialog).getByRole('img', { name: 'Setsuna Desktop' }).getAttribute('src')).toContain('icon.png');
   expect(within(dialog).getByText(/^v\d+\.\d+\.\d+/u)).toBeTruthy();
   expect(within(dialog).getByText('Windows')).toBeTruthy();
   expect(within(dialog).getByText('MIT')).toBeTruthy();

@@ -8,7 +8,7 @@ import { Dropdown, PointMenu, type MenuProps } from '../src/menu.js';
 
 afterEach(cleanup);
 
-it.each(['context', 'point', 'click'] as const)('keeps keyboard navigation, submenus and selection working through the %s animation surface', async (kind) => {
+it.each(['context', 'point', 'click'] as const)('supports keyboard navigation, submenus and selection in the %s menu', async (kind) => {
   const select = vi.fn();
   const menu: MenuProps = { items: [
     { key: 'disabled', label: 'Unavailable', disabled: true },
@@ -28,7 +28,6 @@ it.each(['context', 'point', 'click'] as const)('keeps keyboard navigation, subm
   if (kind === 'context') fireEvent.contextMenu(opener, { clientX: 40, clientY: 60 });
   else await user.click(opener);
   const content = await screen.findByRole('menu');
-  expect(content.classList.contains('sd-menu-motion')).toBe(true);
   fireEvent.keyDown(content, { key: 'Home' });
   await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Copy' })));
   await user.keyboard('{ArrowDown}{ArrowRight}');

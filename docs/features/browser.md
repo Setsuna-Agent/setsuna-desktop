@@ -159,6 +159,5 @@ Renderer（`packages/features/browser/test/renderer/`）：
 
 - `BrowserPanel.test.ts`
 - `BrowserPanel.interaction.test.tsx`
-- `BrowserDeviceToolbar.test.tsx`
 - `browserDeviceEmulation.test.ts`
 - `runtimeBrowserActions.test.ts`

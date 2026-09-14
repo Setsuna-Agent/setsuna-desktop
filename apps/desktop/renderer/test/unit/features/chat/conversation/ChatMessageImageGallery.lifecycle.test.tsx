@@ -167,12 +167,6 @@ describe('ChatMessageImageGallery generated image lifecycle', () => {
     image.rerender();
     hookHarness.flushEffects();
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:generated-1');
-    const reservedFrame = image.rerender().props.children as ReactElement<{
-      className: string;
-      style?: { aspectRatio?: number };
-    }>;
-    expect(reservedFrame.props.className).toContain('chat-message-image--reserved');
-    expect(reservedFrame.props.style?.aspectRatio).toBe(1.5);
 
     viewport.setIntersecting(true);
     image.rerender();

@@ -2,29 +2,10 @@
 
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { RuntimeAccessModeMenu } from '../../../../src/shared/ui/RuntimeAccessModeMenu.js';
 
 afterEach(cleanup);
-
-describe('RuntimeAccessModeMenu settings variant', () => {
-  it('uses the shared settings select chrome while retaining the access-state content', () => {
-    const { container } = render(
-      <RuntimeAccessModeMenu
-        mode="full-access"
-        variant="settings"
-        onChange={() => undefined}
-      />,
-    );
-    const html = container.innerHTML;
-
-    expect(html).toContain('class="sd-field sd-select-field');
-    expect(html).toContain('runtime-access-mode-trigger--settings');
-    expect(html).toContain('runtime-access-mode-trigger--full-access');
-    expect(html).toContain('sd-select-field__chevron');
-    expect(html).not.toContain('ant-btn');
-  });
-});
 
 it.each(['chat', 'settings'] as const)('requires explicit confirmation before enabling full access from %s', async (variant) => {
   const user = userEvent.setup();

@@ -147,7 +147,6 @@ describe('BrowserPanel interactions', () => {
     expect(screen.queryByRole('menuitem', { name: 'Copy image' })).toBeNull();
     act(() => publishMenu({ ...request, webContentsId: 42 }));
     const copy = await screen.findByRole('menuitem', { name: 'Copy image' });
-    expect(copy.closest('[role="menu"]')?.classList.contains('sd-menu-motion')).toBe(true);
     fireEvent.click(copy);
     expect(browserBridge.runContextMenuAction).toHaveBeenCalledWith('menu-session', 'copy');
     expect(browserBridge.dismissContextMenu).not.toHaveBeenCalled();

@@ -25,7 +25,6 @@ it('renders README HTML, GFM and local images while removing executable content'
   expect(screen.getAllByRole('checkbox').map((node) => (node as HTMLInputElement).checked)).toEqual([true, false]);
   const image = await screen.findByRole('img', { name: 'Logo' });
   expect(image.getAttribute('src')).toBe('data:image/png;base64,aW1hZ2U=');
-  expect(image.getAttribute('width')).toBe('96');
   expect(request).toHaveBeenCalledWith({ path: '/v1/projects/project/read?path=assets%2Flogo.png' });
   expect(view.container.querySelector('script, iframe, [onerror], [onclick], [onmouseover], [style]')).toBeNull();
   expect(screen.getByText('Unsafe link').closest('a')).toBeNull();
