@@ -11,7 +11,7 @@ export const fontWeightOptions = [
 ] as const;
 export type FontWeightMode = typeof fontWeightOptions[number]['value'];
 
-export type FontPlatform = 'mac' | 'windows' | 'linux';
+export type FontPlatform = 'mac' | 'windows';
 type FontPlatformScope = FontPlatform | 'all';
 type FontFamilyOptionConfig = {
   label: string;
@@ -208,36 +208,6 @@ export const fontFamilyOptions = [
     platforms: ['windows'],
   },
   {
-    label: 'Ubuntu',
-    value: 'ubuntu',
-    css: 'Ubuntu, "Noto Sans SC", "Source Han Sans SC", sans-serif',
-    platforms: ['linux'],
-  },
-  {
-    label: 'Cantarell',
-    value: 'cantarell',
-    css: 'Cantarell, "Noto Sans SC", "Source Han Sans SC", sans-serif',
-    platforms: ['linux'],
-  },
-  {
-    label: 'Noto Sans SC',
-    value: 'notoSansSc',
-    css: '"Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei UI", sans-serif',
-    platforms: ['linux'],
-  },
-  {
-    label: 'Source Han Sans SC',
-    value: 'sourceHanSansSc',
-    css: '"Source Han Sans SC", "Noto Sans SC", "Microsoft YaHei UI", sans-serif',
-    platforms: ['linux'],
-  },
-  {
-    label: 'WenQuanYi Micro Hei',
-    value: 'wenquanyiMicroHei',
-    css: '"WenQuanYi Micro Hei", "Noto Sans SC", "Source Han Sans SC", sans-serif',
-    platforms: ['linux'],
-  },
-  {
     label: 'Serif',
     value: 'serif',
     css: 'serif',
@@ -269,7 +239,6 @@ const legacyFontFamilyMap: Partial<Record<string, FontFamilyMode>> = {
   roboto: 'helveticaNeue',
   sfProDisplay: 'system',
   sfProText: 'system',
-  sourceHan: 'sourceHanSansSc',
 };
 
 export function useAppearancePreferences() {
@@ -364,7 +333,6 @@ export function getFontPlatform(): FontPlatform {
   if (typeof navigator === 'undefined') return 'mac';
   const platformText = `${navigator.userAgent} ${navigator.platform}`.toLowerCase();
   if (platformText.includes('win')) return 'windows';
-  if (platformText.includes('linux') || platformText.includes('x11')) return 'linux';
   return 'mac';
 }
 

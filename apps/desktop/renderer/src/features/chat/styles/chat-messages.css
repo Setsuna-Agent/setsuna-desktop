@@ -99,12 +99,7 @@
   padding-top: var(--desktop-workspace-toolbar-height);
 }
 
-:root[data-desktop-platform='linux'] .chat-main-conversation--with-transcript {
-  padding-top: var(--app-topbar-height);
-}
-
-:root[data-desktop-platform='win32'] .desktop-chat-panel--side .chat-main-conversation--with-transcript,
-:root[data-desktop-platform='linux'] .desktop-chat-panel--side .chat-main-conversation--with-transcript {
+:root[data-desktop-platform='win32'] .desktop-chat-panel--side .chat-main-conversation--with-transcript {
   padding-top: 0;
 }
 

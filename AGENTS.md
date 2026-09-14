@@ -10,7 +10,7 @@
 - 保持现有分层，不把业务逻辑塞进单个组件、hook 或 server 文件。优先抽到已有同层 helper、hook、adapter、port 或样式文件。
 - 不要写屎山代码；开发相关需求要尽可能做好组件、样式、hook、helper 的封装，并在复杂逻辑处添加必要注释。
 - 保留用户现有 WIP。开始前看 `git status --short`，只改请求相关文件，不回滚不属于自己的改动。
-- 路径、runtime 启动、打包和终端能力要按 macOS、Windows、Linux 一起考虑，优先用 `path.join`、`path.resolve`、`path.relative` 和规范化比较。
+- 仅支持 macOS 和 Windows；不再维护 Linux 的开发、运行和发布兼容。路径、runtime 启动、打包和终端能力要按两个受支持平台考虑，优先用 `path.join`、`path.resolve`、`path.relative` 和规范化比较。
 - renderer 不应直接访问本地 runtime 端口、token、模型供应商或文件系统；这些能力必须通过 preload 暴露的窄 API 或 runtime client。
 
 ## 工作流速查

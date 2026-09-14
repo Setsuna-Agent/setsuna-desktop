@@ -6,7 +6,6 @@ import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bu
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
 import { FileToolResultStore } from '../../../src/adapters/store/file-tool-result-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
-import { shellSandboxCapability } from '../../../src/adapters/tool/pc-local/pc-local-tools.js';
 import { estimateUtf8Tokens } from '../../../src/loop/tools/tool-output-budget.js';
 import { RuntimeToolRouter } from '../../../src/loop/tools/tool-router.js';
 import type { ModelClient } from '../../../src/ports/model-client.js';
@@ -16,9 +15,9 @@ import { createTestThreadStore } from '../../support/thread-store.js';
 import { createHost, execFileAsync, nodeCommand, restrictedShellExecutionUnavailable } from '../adapters/tool/pc-local-tool-host.support.js';
 
 describe('shell output across the model and result store', () => {
-  it.each(['native', 'linux'] as const)('keeps review Git inspection available with %s sandbox capability', async (capability) => {
-    const { host, fixtureRoot, projectDir, projectId } = await createHost(capability === 'linux'
-      ? { shellSandboxCapability: () => shellSandboxCapability('linux') } : {});
+  it.each(['native', 'unavailable'] as const)('keeps review Git inspection available with %s sandbox capability', async (capability) => {
+    const { host, fixtureRoot, projectDir, projectId } = await createHost(capability === 'unavailable'
+      ? { shellSandboxCapability: () => ({ supported: false, provider: '', reason: 'OS sandbox is unavailable.' }) } : {});
     const ids = new RandomIdGenerator();
     const threadStore = createTestThreadStore(path.join(fixtureRoot, 'loop-data'), systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Read-only review', projectId });
@@ -31,7 +30,7 @@ describe('shell output across the model and result store', () => {
       "try { fs.writeFileSync('tracked.txt', 'unauthorized'); } catch { console.log('write blocked'); }",
       "process.stdout.write(require('node:child_process').execFileSync('git', ['--no-pager', 'diff', '--no-ext-diff', '--no-textconv', '--', 'tracked.txt']));",
     ].join('\n'));
-    const fallback = capability === 'linux' || restrictedShellExecutionUnavailable;
+    const fallback = capability === 'unavailable' || restrictedShellExecutionUnavailable;
     const modelClient = new ShellModelClient(`${nodeCommand()} review.cjs`, fallback
       ? { name: 'git_inspect', input: { operation: 'diff', path: 'tracked.txt' } } : undefined);
     const config = await new FullApprovalConfigStore('workspace-write').getConfig();

@@ -191,7 +191,7 @@ Shell 结果的 `data` 只保留进程元数据与失败诊断，不包含 `cont
 
 Review/subagent turn 可使用 shell 检查 Git；Core 的任务只读标记强制宿主使用无写入、
 无网络的沙箱，不继承可写授权，也不通过失败重试扩大权限。
-Linux 等缺少沙箱的平台在只读任务中用 `git_inspect` 替代 shell 执行入口。
+缺少可用 OS 沙箱的环境在只读任务中用 `git_inspect` 替代 shell 执行入口。
 该工具直接启动 Git，仅接受 status/diff/log/show 的结构化参数和工作区路径，
 禁用可执行 helpers、可选 index 写入与网络协议；输出共用 16 MiB 收集上限和结果分页，
 普通任务仍只提供 shell Git 路径。

@@ -3,7 +3,6 @@ import {
   isNetworkVolumePath,
   isPathOnNetworkMount,
   parseDarwinMounts,
-  parseLinuxMountInfo,
 } from '../../../src/data-root/volume-kind.js';
 
 describe('data root volume detection', () => {
@@ -17,17 +16,14 @@ describe('data root volume detection', () => {
     expect(isPathOnNetworkMount('/Users/user/Setsuna Data', mounts)).toBe(false);
   });
 
-  it('uses the longest Linux mount and recognizes NFS and CIFS volumes', () => {
-    const mounts = parseLinuxMountInfo([
-      '21 1 8:1 / / rw,relatime - ext4 /dev/sda1 rw',
-      '22 21 0:42 / /mnt/team rw,relatime - nfs4 server:/team rw',
-      '23 21 0:43 / /mnt/team/local rw,relatime - ext4 /dev/sdb1 rw',
-      '24 21 0:44 / /mnt/share rw,relatime - cifs //server/share rw',
+  it('uses the longest mount when a local volume is nested under a network share', () => {
+    const mounts = parseDarwinMounts([
+      'server:/team on /Volumes/Team (nfs, nodev, nosuid)',
+      '/dev/disk4s1 on /Volumes/Team/Local (apfs, local, journaled)',
     ].join('\n'));
 
-    expect(isPathOnNetworkMount('/mnt/team/project', mounts)).toBe(true);
-    expect(isPathOnNetworkMount('/mnt/share/data', mounts)).toBe(true);
-    expect(isPathOnNetworkMount('/mnt/team/local/data', mounts)).toBe(false);
+    expect(isPathOnNetworkMount('/Volumes/Team/project', mounts)).toBe(true);
+    expect(isPathOnNetworkMount('/Volumes/Team/Local/data', mounts)).toBe(false);
   });
 
   it('treats a failed Windows drive probe as advisory', async () => {

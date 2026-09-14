@@ -49,9 +49,6 @@ System tools for rendering:
 ```bash
 # macOS (Homebrew)
 brew install poppler
-
-# Ubuntu/Debian
-sudo apt-get install -y poppler-utils
 ```
 
 If installation is not possible in the current environment, tell the user which dependency is missing and how to install it locally.

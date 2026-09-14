@@ -1,6 +1,6 @@
 import type { MessageKey } from '../i18n/messages.js';
 
-export const KEYBOARD_SHORTCUT_PLATFORMS = ['darwin', 'win32', 'linux'] as const;
+export const KEYBOARD_SHORTCUT_PLATFORMS = ['darwin', 'win32'] as const;
 
 export type KeyboardShortcutPlatform = typeof KEYBOARD_SHORTCUT_PLATFORMS[number];
 
@@ -49,7 +49,6 @@ export type KeyboardShortcutCommand = {
 
 const primaryBinding = (code: string, shift = false): KeyboardShortcutCommand['defaultBindings'] => ({
   darwin: [`${shift ? 'Shift+' : ''}Meta+${code}`],
-  linux: [`Control+${shift ? 'Shift+' : ''}${code}`],
   win32: [`Control+${shift ? 'Shift+' : ''}${code}`],
 });
 
@@ -103,7 +102,6 @@ export const keyboardShortcutCommands: readonly KeyboardShortcutCommand[] = [
     descriptionKey: 'shortcuts.command.goBackDescription',
     defaultBindings: {
       darwin: ['Meta+BracketLeft'],
-      linux: ['Alt+ArrowLeft'],
       win32: ['Alt+ArrowLeft'],
     },
   },
@@ -114,7 +112,6 @@ export const keyboardShortcutCommands: readonly KeyboardShortcutCommand[] = [
     descriptionKey: 'shortcuts.command.goForwardDescription',
     defaultBindings: {
       darwin: ['Meta+BracketRight'],
-      linux: ['Alt+ArrowRight'],
       win32: ['Alt+ArrowRight'],
     },
   },
@@ -125,7 +122,6 @@ export const keyboardShortcutCommands: readonly KeyboardShortcutCommand[] = [
     descriptionKey: 'shortcuts.command.previousChatDescription',
     defaultBindings: {
       darwin: ['Alt+ArrowUp'],
-      linux: ['Alt+ArrowUp'],
       win32: ['Alt+ArrowUp'],
     },
   },
@@ -136,7 +132,6 @@ export const keyboardShortcutCommands: readonly KeyboardShortcutCommand[] = [
     descriptionKey: 'shortcuts.command.nextChatDescription',
     defaultBindings: {
       darwin: ['Alt+ArrowDown'],
-      linux: ['Alt+ArrowDown'],
       win32: ['Alt+ArrowDown'],
     },
   },
@@ -161,7 +156,6 @@ export const keyboardShortcutCommands: readonly KeyboardShortcutCommand[] = [
     descriptionKey: 'shortcuts.command.toggleTerminalDescription',
     defaultBindings: {
       darwin: ['Control+Backquote'],
-      linux: ['Control+Backquote'],
       win32: ['Control+Backquote'],
     },
   },
@@ -271,6 +265,6 @@ export function isKeyboardShortcutCommandId(value: unknown): value is KeyboardSh
 }
 
 export function keyboardShortcutPlatform(value: string | null | undefined): KeyboardShortcutPlatform {
-  if (value === 'darwin' || value === 'linux' || value === 'win32') return value;
+  if (value === 'darwin' || value === 'win32') return value;
   return 'win32';
 }

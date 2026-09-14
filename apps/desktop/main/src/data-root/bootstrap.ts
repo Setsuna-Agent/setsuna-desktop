@@ -362,7 +362,7 @@ export function newPendingLegacyDataImport(
 export function samePath(left: string, right: string): boolean {
   const normalize = (value: string) => {
     const resolved = path.resolve(value);
-    return process.platform === 'linux' ? resolved : resolved.toLocaleLowerCase('en-US');
+    return resolved.toLocaleLowerCase('en-US');
   };
   return normalize(left) === normalize(right);
 }

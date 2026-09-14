@@ -11,10 +11,10 @@ type PackagedApplicationLocation = ApplicationLocation & {
   root: string;
 };
 
-// electron-builder unpacked output directories (win-unpacked, linux-unpacked, …)
+// electron-builder unpacked output directories (win-unpacked, mac, …)
 // share the same names across products, so the directory name alone cannot prove
 // both paths belong to the same application.
-const GENERIC_UNPACKED_DIRECTORY = /^(?:win(?:-(?:ia32|x64|arm64))?-unpacked|linux(?:-(?:arm|armv7l|arm64|x64))?-unpacked|mac(?:-(?:x64|arm64|universal))?)$/u;
+const GENERIC_UNPACKED_DIRECTORY = /^(?:win(?:-(?:ia32|x64|arm64))?-unpacked|mac(?:-(?:x64|arm64|universal))?)$/u;
 
 /**
  * Legacy plugin records predate the persisted marketplace provenance. The
@@ -24,10 +24,6 @@ const GENERIC_UNPACKED_DIRECTORY = /^(?:win(?:-(?:ia32|x64|arm64))?-unpacked|lin
  */
 export async function sameLegacyMarketplaceSource(left: string, right: string): Promise<boolean> {
   if (samePath(left, right)) return true;
-
-  const leftAppImage = appImageApplicationLocation(left);
-  const rightAppImage = appImageApplicationLocation(right);
-  if (sameApplicationLocation(leftAppImage, rightAppImage)) return true;
 
   const leftPackaged = packagedApplicationLocation(left);
   const rightPackaged = packagedApplicationLocation(right);
@@ -142,24 +138,6 @@ function packagedApplicationLocation(value: string): PackagedApplicationLocation
     suffix: segments.slice(appAsarIndex - 1).join(path.sep),
     root,
   };
-}
-
-function appImageApplicationLocation(value: string): ApplicationLocation | null {
-  const segments = path.resolve(value).split(path.sep);
-  for (let index = 0; index < segments.length; index += 1) {
-    const match = /^\.mount_(.+)[a-z0-9]{6}$/iu.exec(segments[index]);
-    if (!match) continue;
-    const appAsarIndex = segments.findIndex(
-      (segment, candidateIndex) => candidateIndex > index && segment.toLowerCase() === 'app.asar',
-    );
-    if (appAsarIndex < 0) return null;
-    // AppImage replaces only the six-character mount suffix between launches.
-    return {
-      identity: match[1].toLowerCase(),
-      suffix: segments.slice(appAsarIndex).join(path.sep),
-    };
-  }
-  return null;
 }
 
 export function samePath(left: string, right: string): boolean {

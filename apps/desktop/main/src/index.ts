@@ -75,9 +75,14 @@ import { loadDesktopWindowState, trackDesktopWindowState } from './window/state.
 import { resolveMainWindowSurfaceOptions } from './window/surface.js';
 import { DesktopTrayController, revealDesktopWindow } from './window/tray.js';
 
+// Reject unsupported hosts before acquiring locks or creating the data directory.
+if (process.platform !== 'darwin' && process.platform !== 'win32') {
+  throw new Error(`Setsuna Desktop supports macOS and Windows only. Unsupported platform: ${process.platform}.`);
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Windows already constrains taskbar and tray icons, so use artwork without the
-// platform-style transparent inset applied to the macOS/Linux source image.
+// platform-style transparent inset applied to the macOS source image.
 const desktopIconFileName = process.platform === 'win32' ? 'icon-windows.png' : 'icon.png';
 const desktopIconRelativePath = path.join('assets', 'build', desktopIconFileName);
 const mainWindowDefaultWidth = 1320;
@@ -101,7 +106,7 @@ let desktopServicesShutdownPromise: Promise<void> | null = null;
 let appQuitAfterShutdown = false;
 let appQuitShutdownPending = false;
 let desktopRelaunchRequested = false;
-const usesCustomFrame = process.platform !== 'darwin';
+const usesCustomFrame = process.platform === 'win32';
 const desktopInstanceProfile = resolveDesktopInstanceProfile({
   appDataRoot: app.getPath('appData'),
   defaultDataRoot: app.getPath('userData'),

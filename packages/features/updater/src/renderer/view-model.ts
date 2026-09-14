@@ -54,9 +54,7 @@ export function useUpdaterServiceView(
       statusText: updateStatusText(state, service.available, checking, translate),
       installButtonText: state?.manualInstall
         ? translate('feature.updater.install.finder')
-        : state?.platform === 'linux'
-          ? translate('feature.updater.install.downloads')
-          : translate('feature.updater.install.restart'),
+        : translate('feature.updater.install.restart'),
       alertLabel: state?.manualInstall
         ? translate('feature.updater.topbar.openInstaller')
         : translate('feature.updater.topbar.restartUpdate'),

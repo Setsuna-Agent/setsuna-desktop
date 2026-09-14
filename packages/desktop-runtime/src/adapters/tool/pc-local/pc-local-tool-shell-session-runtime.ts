@@ -549,7 +549,7 @@ export function shellSpawnSpec(
       args: [],
       sandboxed: false,
       sandboxProvider: 'bypass',
-      shell: shellWithPipefailSupport(),
+      shell: true,
     };
   }
   return {
@@ -568,16 +568,6 @@ function shellCommandWithPipefail(command: string): string {
   // POSIX 未标准化 pipefail。请在子 Shell 中探测，使不支持此选项的 Shell 仍可执行
   // 原命令，而支持它的 Shell 能正确暴露被末尾 `tail` 或 `tee` 阶段掩盖的失败。
   return `(set -o pipefail) 2>/dev/null && set -o pipefail\n${command}`;
-}
-
-function shellWithPipefailSupport(): boolean | string {
-  if (process.platform !== 'linux') return true;
-  // Node defaults to /bin/sh, which is dash on Ubuntu and cannot expose a failed
-  // upstream pipeline stage. Prefer bash when available; the guarded command still
-  // falls back cleanly on systems whose selected shell does not implement pipefail.
-  if (existsSync('/bin/bash')) return '/bin/bash';
-  if (existsSync('/usr/bin/bash')) return '/usr/bin/bash';
-  return true;
 }
 
 export function shellEnvironment(

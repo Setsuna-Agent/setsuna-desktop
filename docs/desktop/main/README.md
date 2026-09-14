@@ -46,7 +46,7 @@ Electron main 是桌面可信边界。它负责应用生命周期、窗口、IPC
 - 拦截外链和 `<webview>` attach。
 - 等待 renderer 首帧后揭示工作台。
 
-Windows 任务栏和系统托盘使用无透明外边距的 `assets/build/icon-windows.png`，安装包/可执行文件使用由同一画面生成的多尺寸 `assets/build/icon.ico`；macOS 与 Linux 继续使用保留平台留白的 `icon.icns` / `icon.png`。
+Windows 任务栏和系统托盘使用无透明外边距的 `assets/build/icon-windows.png`，安装包/可执行文件使用由同一画面生成的多尺寸 `assets/build/icon.ico`；macOS 继续使用保留平台留白的 `icon.icns` / `icon.png`。
 
 ### 3. 本机服务组装
 

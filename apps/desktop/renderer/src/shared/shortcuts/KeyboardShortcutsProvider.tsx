@@ -260,6 +260,5 @@ function currentKeyboardShortcutPlatform(): KeyboardShortcutPlatform {
   if (typeof window === 'undefined') return defaultPlatform;
   const detected = window.setsunaDesktop?.desktop.platform ?? navigator.platform.toLowerCase();
   if (detected === 'darwin' || detected.includes('mac')) return 'darwin';
-  if (detected === 'linux' || detected.includes('linux')) return 'linux';
   return keyboardShortcutPlatform(detected);
 }

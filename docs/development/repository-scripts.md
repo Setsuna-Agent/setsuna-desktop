@@ -136,28 +136,21 @@ Electron Builder 收集文件前：
 
 验证 package version、tag/输入和 release 约束。所有 package/release script 都前置调用。
 
+### `release-assets.mjs`
+
+定义 macOS 两个架构的 DMG 和 Windows x64 EXE 名称，供收集、发布校验和本地预览共用。
+
 ### `release-dry-run.mjs`
 
-在本地根据预期产物生成：
-
-- `release-manifest.json`
-- `SHA256SUMS`
-
-用于验证 metadata，不创建 GitHub Release。
+生成本地 `release-artifacts/dry-run/release-manifest.json`，预览安装包及 `SHA256SUMS` 的公开清单，不创建 GitHub Release，也不为预览生成校验文件。
 
 ### `collect-release-job-assets.mjs`
 
-在单个平台 job 中收集安装包、metadata 和日志，形成 workflow artifact。
+在单个平台 job 中仅收集对应安装包，形成 workflow artifact。日志由独立的 `diagnostic-*` artifact 保存。
 
 ### `prepare-github-release-assets.mjs`
 
-Publish job：
-
-- 合并平台 artifacts。
-- 校验文件名/平台/架构。
-- 打包 build logs。
-- 生成最终 manifest/checksum。
-- 处理冲突 metadata 名称。
+Publish job 只接收清单中的三个安装包，拒绝缺失或重名的安装包，生成 `SHA256SUMS`。ZIP、内部 manifest、日志和 electron-builder metadata 均不进入公开下载区。
 
 ## Package scripts 对照
 
@@ -176,7 +169,7 @@ Publish job：
 ## 修改脚本时
 
 - 使用 Node API 和 `path`，不要假设 Bash。
-- 支持 macOS、Windows、Linux。
+- 支持 macOS、Windows。
 - 输入路径先 resolve/validate。
 - 下载固定 hash 和大小。
 - Archive 提取使用 allowlist 并拒绝逃逸。

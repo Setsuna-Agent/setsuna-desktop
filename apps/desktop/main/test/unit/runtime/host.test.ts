@@ -79,9 +79,9 @@ describe('runtime host packaging paths', () => {
     expect(resolveRuntimeNodeExecutable(executablePath, 'darwin', () => false)).toBe(executablePath);
   });
 
-  it('keeps the current executable on non-macOS platforms', () => {
-    expect(resolveRuntimeNodeExecutable('/opt/setsuna/setsuna-desktop', 'linux', () => true))
-      .toBe('/opt/setsuna/setsuna-desktop');
+  it('keeps the current executable on Windows', () => {
+    const executablePath = 'C:/Program Files/Setsuna Desktop/Setsuna Desktop.exe';
+    expect(resolveRuntimeNodeExecutable(executablePath, 'win32', () => true)).toBe(executablePath);
   });
 
   it('points packaged built-in skills at the asar app root', () => {

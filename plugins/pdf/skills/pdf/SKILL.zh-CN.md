@@ -49,9 +49,6 @@ python3 -m pip install reportlab pdfplumber pypdf
 ```bash
 # macOS（Homebrew）
 brew install poppler
-
-# Ubuntu/Debian
-sudo apt-get install -y poppler-utils
 ```
 
 当前环境无法安装时，告知用户缺少哪项依赖以及如何在本地安装。

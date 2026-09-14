@@ -5,11 +5,7 @@
 <h1 align="center">Setsuna Desktop</h1>
 
 <p align="center">
-  <strong>让 AI 理解、修改、运行并审查你的代码。</strong>
-</p>
-
-<p align="center">
-  面向 macOS、Windows 和 Linux 的开源 AI Agent 工作台。
+  开源的桌面 AI 编程助手，支持 macOS 和 Windows。
 </p>
 
 <p align="center">
@@ -26,8 +22,7 @@
 <p align="center">
   <a href="https://github.com/Setsuna-Agent/setsuna-desktop/releases/latest"><img alt="最新版本" src="https://img.shields.io/github/v/release/Setsuna-Agent/setsuna-desktop?display_name=tag&amp;sort=semver"></a>
   <a href="LICENSE"><img alt="MIT 许可证" src="https://img.shields.io/badge/license-MIT-black.svg"></a>
-  <img alt="支持 macOS、Windows 和 Linux" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-black.svg">
-  <img alt="Node.js 22.19 或更高版本" src="https://img.shields.io/badge/node-%3E%3D22.19.0-43853d.svg">
+  <img alt="支持 macOS 和 Windows" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-black.svg">
 </p>
 
 <p align="center">
@@ -42,43 +37,21 @@
 
 ## 下载
 
-从 [GitHub Releases](https://github.com/Setsuna-Agent/setsuna-desktop/releases/latest) 获取最新稳定版本。
+在 [GitHub Releases](https://github.com/Setsuna-Agent/setsuna-desktop/releases/latest) 下载最新版本。
 
-| 平台 | 发布产物 |
+| 平台 | 安装包 |
 | --- | --- |
-| macOS Apple Silicon | DMG、ZIP |
-| macOS Intel | DMG、ZIP |
-| Windows x64 | NSIS 安装程序、ZIP |
-| Linux x64 | AppImage、DEB、tar.gz |
+| macOS Apple Silicon | DMG |
+| macOS Intel | DMG |
+| Windows x64 | EXE |
 
-每次发布还会提供 `SHA256SUMS` 与 `release-manifest.json`，用于校验文件完整性和查看产物元数据。
+macOS 版本暂未签名和公证，安装说明见对应 Release。
 
-> [!IMPORTANT]
-> 当前 macOS 构建尚未签名和公证，需要手动安装。安装前请先查看对应版本的 release notes。
-
-> [!WARNING]
-> Setsuna Desktop 正处于迈向 1.0 的活跃开发阶段。不同版本之间的功能、接口和本地数据格式仍可能发生变化。
+打开应用后，在**设置 → 模型服务**中添加你的模型供应商。
 
 ## 从源码运行
 
-### 环境要求
-
-- Git、Node.js `>=22.19.0`、pnpm `7.33.7`（`package.json` 固定版本）。
-- **Windows x64：** Rust/Cargo `>=1.85`，使用 `x86_64-pc-windows-msvc` 工具链，并安装 Visual Studio C++ 构建工具和 Windows SDK。
-
-Windows 请先按 [Rust MSVC 环境说明](https://rust-lang.github.io/rustup/installation/windows-msvc.html)安装“**使用 C++ 的桌面开发**”工作负载，包含 MSVC x64/x86 工具和 Windows SDK；再通过 [Windows x64 rustup 安装程序](https://rust-lang.org/tools/install/)安装 Rust，选择 MSVC 工具链。安装后重新打开终端并检查：
-
-```powershell
-rustup target add x86_64-pc-windows-msvc
-rustc --version
-cargo --version
-```
-
-Windows x64 下，`pnpm dev` 和 `pnpm dev:electron` 会先编译原生 Windows 沙箱，再启动 Electron。缺少 Cargo 或 MSVC/SDK 时会在启动阶段失败，只有 JavaScript 依赖是不够的；Windows 打包同样需要这些工具。
-
-macOS 和 Linux 的开发启动不会编译此 Windows 组件。**下载安装好的发布版不需要配置 Rust**，Windows 发布包已包含编译后的沙箱程序。故障排查见 [Windows 开发环境](docs/development/README.md#windows-x64)。
-
-### 开发环境
+需要 Git、Node.js `>=22.19.0` 和 pnpm `7.33.7`。Windows 还需要 Rust 和 C++ 构建工具，安装步骤见 [Windows 开发环境](docs/development/README.md#windows-x64)。
 
 ```bash
 git clone https://github.com/Setsuna-Agent/setsuna-desktop.git
@@ -88,27 +61,11 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm dev` 会同时启动 Vite renderer 和 Electron desktop shell。如果还没有配置模型供应商，可以使用本地 smoke fallback 验证 runtime 链路；要连接真实模型，请前往**设置 → 模型服务**添加供应商。
+测试、构建和常见问题见[开发文档](docs/development/README.md)。
 
-Renderer 修改可通过 Vite 热更新生效；修改 runtime、Electron main/preload 或原生代码后，需要停止并重新运行 `pnpm dev`，重新编译和启动后台。仅刷新窗口仍会使用旧的后台进程。
+## 参与贡献
 
-## 开发命令
-
-| 命令 | 用途 |
-| --- | --- |
-| `pnpm dev` | 启动 renderer 与 Electron 开发环境 |
-| `pnpm typecheck` | 运行架构检查与 TypeScript project references 检查 |
-| `pnpm test` | 运行单元测试和集成测试 |
-| `pnpm lint` | 运行 ESLint，并且不允许 warning |
-| `pnpm build` | 构建 contracts、runtime、Electron 与 renderer |
-
-完整流程见[开发入口](docs/development/README.md)、[测试与验证](docs/development/testing.md)和[构建与发布](docs/development/build-and-release.md)。
-
-## 参与贡献与安全反馈
-
-欢迎参与贡献。提交 Pull Request 前请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)；bug 与功能建议可以提交到 [GitHub Issues](https://github.com/Setsuna-Agent/setsuna-desktop/issues)；报告安全漏洞时请遵循 [SECURITY.md](SECURITY.md)。
-
-Setsuna Desktop 是 [Setsuna Agent](https://github.com/Setsuna-Agent) 开源组织的一部分。
+Bug 和功能建议可以提到 [Issues](https://github.com/Setsuna-Agent/setsuna-desktop/issues)。代码贡献见 [CONTRIBUTING.md](CONTRIBUTING.md)，安全问题见 [SECURITY.md](SECURITY.md)。
 
 ## 许可证
 

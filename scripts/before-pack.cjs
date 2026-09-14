@@ -1,6 +1,9 @@
 const { pathToFileURL } = require('node:url');
 
 exports.default = async function beforePack(context) {
+  if (context.electronPlatformName !== 'darwin' && context.electronPlatformName !== 'win32') {
+    throw new Error(`Setsuna Desktop supports macOS and Windows only. Unsupported packaging target: ${context.electronPlatformName}.`);
+  }
   const moduleUrl = pathToFileURL(require.resolve('./ripgrep/prepare-ripgrep.mjs')).href;
   const { electronBuilderArchName, prepareRipgrep } = await import(moduleUrl);
   await prepareRipgrep({

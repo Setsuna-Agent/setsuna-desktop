@@ -179,5 +179,5 @@ Workspace Apps 拥有 IDE/系统应用检测、结构化启动参数、preload b
 3. Main 是否重新校验 sender、路径、URL、ID、平台和当前状态？
 4. Secret、绝对路径、token、WebContents/PTY/native handle 是否停留在可信进程？
 5. 所有 handler/listener/process/server 是否跟随 FeatureScope 或 app shutdown？
-6. macOS、Windows、Linux 的路径、shell、app bundle、installer 和 GUI PATH 是否分别考虑？
+6. macOS、Windows 的路径、shell、app bundle、installer 和 GUI PATH 是否分别考虑？
 7. 数据迁移/restore/update 等 destructive 或不可逆动作是否有 staging、校验、取消和恢复语义？

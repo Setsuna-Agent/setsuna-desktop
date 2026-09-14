@@ -7,7 +7,7 @@ import { getDesktopPlatform } from '../../shared/lib/desktopPlatform.js';
 import '../styles/about.css';
 
 const repositoryUrl = 'https://github.com/Setsuna-Agent/setsuna-desktop';
-const platformNames: Record<string, string> = { win32: 'Windows', darwin: 'macOS', linux: 'Linux' };
+const platformNames: Record<string, string> = { win32: 'Windows', darwin: 'macOS' };
 
 export function AboutDialog({ onClose }: { onClose: () => void }) {
   const { t } = useI18n();

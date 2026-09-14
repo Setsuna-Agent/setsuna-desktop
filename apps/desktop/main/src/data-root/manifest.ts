@@ -404,7 +404,7 @@ function isPathInside(root: string, candidate: string): boolean {
 
 function pathComparisonKey(value: string): string {
   const resolved = path.resolve(value);
-  return process.platform === 'linux' ? resolved : resolved.toLocaleLowerCase('en-US');
+  return resolved.toLocaleLowerCase('en-US');
 }
 
 function looksLikeCloudOrNetworkLocation(target: string): boolean {

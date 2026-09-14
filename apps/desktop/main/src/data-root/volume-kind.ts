@@ -1,5 +1,4 @@
 import { execFile } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
@@ -42,10 +41,6 @@ export async function isNetworkVolumePath(
       });
       return isPathOnNetworkMount(target, parseDarwinMounts(stdout));
     }
-    if (platform === 'linux') {
-      const mountInfo = await readFile('/proc/self/mountinfo', 'utf8');
-      return isPathOnNetworkMount(target, parseLinuxMountInfo(mountInfo));
-    }
     if (platform === 'win32') {
       // Await inside the try so PowerShell/CIM failures remain advisory.
       return await (options.windowsDriveDetector ?? windowsDriveIsNetwork)(target);
@@ -64,22 +59,6 @@ export function parseDarwinMounts(output: string): MountedVolume[] {
     mounts.push({
       mountPoint: unescapeMountPath(match[1]),
       fileSystem: match[2].trim().toLowerCase(),
-    });
-  }
-  return mounts;
-}
-
-export function parseLinuxMountInfo(output: string): MountedVolume[] {
-  const mounts: MountedVolume[] = [];
-  for (const line of output.split(/\r?\n/u)) {
-    const [metadata, fileSystemData] = line.split(' - ', 2);
-    if (!metadata || !fileSystemData) continue;
-    const metadataFields = metadata.split(' ');
-    const fileSystemFields = fileSystemData.split(' ');
-    if (!metadataFields[4] || !fileSystemFields[0]) continue;
-    mounts.push({
-      mountPoint: unescapeMountPath(metadataFields[4]),
-      fileSystem: fileSystemFields[0].trim().toLowerCase(),
     });
   }
   return mounts;

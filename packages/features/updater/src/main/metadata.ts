@@ -90,13 +90,5 @@ function scoreAsset(name: string, platform: UpdatePlatform, arch: string): numbe
     return 10;
   }
 
-  if (platform === 'linux') {
-    if (!lowerName.includes('ubuntu') || !lowerName.includes('x64')) return 0;
-    if (lowerName.endsWith('.appimage')) return 120;
-    if (lowerName.endsWith('.deb')) return 100;
-    if (lowerName.endsWith('.tar.gz')) return 70;
-    return 10;
-  }
-
   return 0;
 }
