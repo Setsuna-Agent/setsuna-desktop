@@ -10,6 +10,7 @@ it('notifies about external file creation, content edits, folder renames and del
   const changed = vi.fn();
   const dispose = await watchWorkspaceEntries(root, ['', 'src'], changed);
   try {
+    await waitForNativeWatch(root, changed);
     await writeFile(path.join(root, 'README.md'), '# new');
     await vi.waitFor(() => expect(changed).toHaveBeenCalled());
     changed.mockClear();
@@ -57,6 +58,7 @@ it('attaches directories created after subscribing and reattaches when their ino
     changed.mockClear();
   };
   try {
+    await waitForNativeWatch(root, changed);
     await mkdir(directory);
     await waitForChange();
     await mkdir(nested);
@@ -84,3 +86,19 @@ it('attaches directories created after subscribing and reattaches when their ino
     await rm(root, { recursive: true, force: true });
   }
 });
+
+async function waitForNativeWatch(root: string, changed: ReturnType<typeof vi.fn>) {
+  // macOS fs.watch returns before native observation starts and has no ready event
+  // (nodejs/node#52601). Establish observation before testing one-shot mutations.
+  const probe = path.join(root, '.watch-ready');
+  await writeFile(probe, 'starting');
+  await vi.waitFor(async () => {
+    if (changed.mock.calls.length) return;
+    await writeFile(probe, String(Date.now()));
+    expect(changed).toHaveBeenCalled();
+  }, { timeout: 5_000 });
+  changed.mockClear();
+  await rm(probe, { force: true });
+  await vi.waitFor(() => expect(changed).toHaveBeenCalled());
+  changed.mockClear();
+}

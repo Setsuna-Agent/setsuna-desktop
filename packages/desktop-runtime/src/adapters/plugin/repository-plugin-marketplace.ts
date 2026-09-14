@@ -1,5 +1,5 @@
 import type { RuntimePluginItemKind, RuntimePluginMarketplaceList, RuntimePluginSummary } from '@setsuna-desktop/contracts';
-import { mkdir, mkdtemp, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { PluginBundleStore } from '../../ports/plugin-bundle-store.js';
 import type { PluginMarketplace, PluginMarketplaceListOptions } from '../../ports/plugin-marketplace.js';
@@ -132,8 +132,11 @@ export class RepositoryPluginMarketplace implements PluginMarketplace {
     try {
       const extracted = path.join(staging, 'snapshot');
       await downloadRepositoryArchive(this.fetch, revision, path.join(staging, 'repository.tar'), extracted);
+      // Catalog source paths are canonical; use the same root when relocating
+      // them so symlink/junction aliases cannot point back into deleted staging.
+      const extractedRoot = await realpath(extracted);
       // Validate the index and all candidates before publishing a new current pointer.
-      const catalog = await readRepositoryPluginCatalog(extracted, revision, this.bundles);
+      const catalog = await readRepositoryPluginCatalog(extractedRoot, revision, this.bundles);
       await this.removeCacheDirectory(snapshotPath);
       await rename(extracted, snapshotPath);
       const pointer = path.join(staging, 'current.json');
@@ -141,7 +144,7 @@ export class RepositoryPluginMarketplace implements PluginMarketplace {
       await rename(pointer, path.join(this.cacheRoot, 'current.json'));
       this.catalog = catalog.map((entry) => ({
         ...entry,
-        ...(entry.sourcePath ? { sourcePath: path.join(snapshotPath, path.relative(extracted, entry.sourcePath)) } : {}),
+        ...(entry.sourcePath ? { sourcePath: path.join(snapshotPath, path.relative(extractedRoot, entry.sourcePath)) } : {}),
       }));
       this.revision = revision;
       this.errors = [];
