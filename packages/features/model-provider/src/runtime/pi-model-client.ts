@@ -203,6 +203,8 @@ function streamForProvider(
     signal: input.signal,
     maxRetries: 0,
     maxTokens: input.maxOutputTokens,
+    // 同一任务的工具续跑及后续轮次共享缓存亲和性；不能使用每轮变化的 turnId。
+    sessionId: input.stepSnapshot?.threadId,
     ...(typeof input.temperature === 'number' ? { temperature: input.temperature } : {}),
   };
   const builtinProvider = catalogProviderId === model.provider

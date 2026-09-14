@@ -32,6 +32,8 @@ export type RuntimeUsageSummary = Readonly<{
   outputTokens: number;
   totalTokens: number;
   recordCount: number;
+  /** 仅当统计范围内所有记录都有采样次数时提供。 */
+  requestCount?: number;
   byDay: readonly RuntimeUsageBucket[];
   byProvider: readonly RuntimeUsageBucket[];
   byModel: readonly RuntimeUsageBucket[];

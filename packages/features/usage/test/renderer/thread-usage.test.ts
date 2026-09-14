@@ -33,7 +33,7 @@ describe('chat thread usage projection', () => {
   it('counts a model request even when it fails before reporting usage', () => {
     const usage = chatThreadUsageForDisplay(null, runtimeThread('failed', [], 1));
 
-    expect(usage?.summary).toMatchObject({ totalTokens: 0, recordCount: 1 });
+    expect(usage?.summary).toMatchObject({ totalTokens: 0, recordCount: 0, requestCount: 1 });
   });
 
   it('adds only the live delta when part of the turn has already been persisted', () => {
@@ -67,7 +67,7 @@ describe('chat thread usage projection', () => {
       tokenCount('2026-07-16T00:00:02.000Z', 50, 10),
     ]));
 
-    expect(usage?.summary).toMatchObject({ totalTokens: 180, recordCount: 2 });
+    expect(usage?.summary).toMatchObject({ totalTokens: 180, recordCount: 1, requestCount: 2 });
     expect(usage?.records).toEqual(stored.records);
   });
 
@@ -79,7 +79,7 @@ describe('chat thread usage projection', () => {
       runtimeThread('completed', [tokenCount('2026-07-16T00:00:01.000Z', 100, 20)], 1),
     );
 
-    expect(usage?.summary).toMatchObject({ totalTokens: 145, recordCount: 1 });
+    expect(usage?.summary).toMatchObject({ totalTokens: 145, recordCount: 2, requestCount: 1 });
   });
 
   it('reports requests from the latest turn instead of accumulating retained turn history', () => {
@@ -100,7 +100,7 @@ describe('chat thread usage projection', () => {
 
     const usage = chatThreadUsageForDisplay(null, thread);
 
-    expect(usage?.summary.recordCount).toBe(2);
+    expect(usage?.summary.requestCount).toBe(2);
   });
 });
 

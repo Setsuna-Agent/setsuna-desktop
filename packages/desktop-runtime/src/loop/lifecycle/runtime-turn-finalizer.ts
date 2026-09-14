@@ -51,6 +51,7 @@ export class RuntimeTurnFinalizer {
     threadId,
     turnId,
     usage,
+    requestCount,
   }: {
     finalization: RuntimeAssistantTurnFinalization;
     messageId: string;
@@ -58,6 +59,7 @@ export class RuntimeTurnFinalizer {
     threadId: string;
     turnId: string;
     usage?: RuntimeUsage;
+    requestCount: number;
   }): Promise<void> {
     if (usage) {
       await this.options.usageStore?.recordUsage({
@@ -65,6 +67,7 @@ export class RuntimeTurnFinalizer {
         turnId,
         createdAt: this.options.clock.now().toISOString(),
         ...usage,
+        requestCount,
       });
     }
     await this.options.streamEvents.completeMessage(threadId, turnId, messageId, {

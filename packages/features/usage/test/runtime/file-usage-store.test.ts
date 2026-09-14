@@ -1,4 +1,4 @@
-import { mkdtemp } from 'node:fs/promises';
+import { appendFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -18,6 +18,7 @@ describe('file usage store', () => {
       cachedInputTokens: 6,
       outputTokens: 20,
       totalTokens: 30,
+      requestCount: 47,
     });
     await store.recordUsage({
       threadId: 'thread_2',
@@ -40,6 +41,7 @@ describe('file usage store', () => {
       outputTokens: 28,
       totalTokens: 45,
       recordCount: 2,
+      requestCount: 48,
     });
     expect(all.summary.byProvider).toMatchObject([
       { key: 'openai-compatible', cachedInputTokens: 6, totalTokens: 30, recordCount: 1 },
@@ -49,7 +51,24 @@ describe('file usage store', () => {
       { key: '2026-06-25', cachedInputTokens: 9, totalTokens: 45, recordCount: 2 },
     ]);
     expect(threadOnly.records).toHaveLength(1);
-    expect(threadOnly.summary).toMatchObject({ totalTokens: 30, recordCount: 1 });
+    expect(threadOnly.summary).toMatchObject({ totalTokens: 30, recordCount: 1, requestCount: 47 });
+  });
+
+  it('does not count a historical aggregate as one request or rewrite its token usage', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-usage-old-count-'));
+    const store = new FileUsageStore(dataDir, () => 'new-record');
+    await appendFile(path.join(dataDir, 'usage.jsonl'), `${JSON.stringify({
+      id: 'old-record', threadId: 'old-thread', turnId: 'old-turn',
+      createdAt: '2026-09-10T00:00:00.000Z', totalTokens: 3_855_661, cachedInputTokens: 3_726_464,
+    })}\n`);
+    await store.recordUsage({
+      threadId: 'new-thread', turnId: 'new-turn', createdAt: '2026-09-14T00:00:00.000Z',
+      totalTokens: 100, requestCount: 3,
+    });
+
+    expect((await store.getUsage()).summary).toMatchObject({ totalTokens: 3_855_761, recordCount: 2 });
+    expect((await store.getUsage()).summary.requestCount).toBeUndefined();
+    expect((await store.getUsage({ from: '2026-09-14T00:00:00.000Z' })).summary.requestCount).toBe(3);
   });
 
   it('paginates records without narrowing the complete usage summary', async () => {

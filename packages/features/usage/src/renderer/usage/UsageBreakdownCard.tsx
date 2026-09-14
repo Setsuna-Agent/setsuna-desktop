@@ -1,5 +1,5 @@
 import type { RuntimeUsageBucket, UsageProviderDescriptor } from '../../contracts/index.js';
-import { formatTokens } from './usage-format.js';
+import { formatTokens, tokensExcludingCache } from './usage-format.js';
 import { useUsageView } from './view-context.js';
 
 type UsageBreakdownCardProps = {
@@ -24,8 +24,8 @@ export function UsageBreakdownCard({ buckets, providers, totalTokens, variant }:
         subtitle: t('feature.usage.modelSubtitle'),
         title: t('feature.usage.modelTitle'),
       };
-  const visibleBuckets = buckets.slice(0, 6);
-  const maximumTokens = Math.max(1, ...visibleBuckets.map((bucket) => bucket.totalTokens));
+  const visibleBuckets = [...buckets].sort((a, b) => tokensExcludingCache(b) - tokensExcludingCache(a) || a.key.localeCompare(b.key)).slice(0, 6);
+  const maximumTokens = Math.max(1, ...visibleBuckets.map(tokensExcludingCache));
 
   return (
     <section className="settings-usage-card settings-usage-breakdown" aria-labelledby={`settings-usage-${variant}-title`}>
@@ -39,7 +39,8 @@ export function UsageBreakdownCard({ buckets, providers, totalTokens, variant }:
       {visibleBuckets.length ? (
         <ol className="settings-usage-breakdown__list">
           {visibleBuckets.map((bucket, index) => {
-            const share = totalTokens > 0 ? bucket.totalTokens / totalTokens : 0;
+            const tokens = tokensExcludingCache(bucket);
+            const share = totalTokens > 0 ? tokens / totalTokens : 0;
             return (
               <li className="settings-usage-breakdown__item" key={bucket.key}>
                 <span className="settings-usage-breakdown__rank">{index + 1}</span>
@@ -57,11 +58,11 @@ export function UsageBreakdownCard({ buckets, providers, totalTokens, variant }:
                     <strong title={bucket.key}>{bucket.key || t(variant === 'provider' ? 'feature.usage.unknownProvider' : 'feature.usage.unknownModel')}</strong>
                     <span>{formatShare(share)}</span>
                   </div>
-                  <progress aria-label={`${bucket.key} ${formatShare(share)}`} max={maximumTokens} value={bucket.totalTokens} />
+                  <progress aria-label={`${bucket.key} ${formatShare(share)}`} max={maximumTokens} value={tokens} />
                 </div>
                 <div className="settings-usage-breakdown__value">
-                  <strong>{formatTokens(bucket.totalTokens)}</strong>
-                  <span>{t('feature.usage.callCount', { count: bucket.recordCount })}</span>
+                  <strong>{formatTokens(tokens)}</strong>
+                  <span>{t('feature.usage.recordCount', { count: bucket.recordCount })}</span>
                 </div>
               </li>
             );

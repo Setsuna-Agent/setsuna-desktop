@@ -2,24 +2,38 @@ import type { RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 
 export const SEARCH_TOOLS_TOOL_NAME = 'search_tools';
 
+// 日常读写、执行工具常驻；安装和配置能力在实际需要时才发送完整 schema。
+const MANAGEMENT_TOOLS = new Set([
+  'configure_mcp_server',
+  'list_plugin_resources', 'read_plugin_resource', 'configure_plugin',
+  'install_plugin_bundle', 'remove_plugin_bundle', 'verify_plugin',
+  'configure_skill', 'install_skill_mcp_dependencies', 'authenticate_skill_mcp_dependency',
+]);
+
+function isDeferred(tool: RuntimeToolDefinition): boolean {
+  return tool.name.startsWith('mcp__') || tool.name.startsWith('extension__') || MANAGEMENT_TOOLS.has(tool.name);
+}
+
 /** Search only the already permission-filtered catalog. Loading a schema never grants execution rights. */
 export class DeferredTools {
   private readonly deferred: RuntimeToolDefinition[];
 
   constructor(catalog: RuntimeToolDefinition[], private readonly loaded: Set<string>) {
-    this.deferred = catalog.filter((tool) => tool.name.startsWith('mcp__'));
+    this.deferred = catalog.filter(isDeferred);
   }
 
   isVisible(tool: RuntimeToolDefinition): boolean {
-    return !tool.name.startsWith('mcp__') || this.loaded.has(tool.name);
+    return !isDeferred(tool) || this.loaded.has(tool.name);
   }
 
   definition(): RuntimeToolDefinition[] {
     if (!this.deferred.length) return [];
-    const integrations = [...new Set(this.deferred.map((tool) => tool.name.split('__')[1]).filter(Boolean))];
+    const capabilities = [...new Set(this.deferred.map((tool) => (
+      tool.name.includes('__') ? tool.name.split('__')[1] : tool.name
+    )).filter(Boolean))];
     return [{
       name: SEARCH_TOOLS_TOOL_NAME,
-      description: `Find available integration tools by capability or name before using them. Matching tools become callable on the next model request. Use short keywords (e.g. integration name and action). Available integrations: ${integrations.join(', ')}.`,
+      description: `Find integration, extension, plugin and skill management tools by capability or name before using them. Matching tools become callable on the next model request. Use short keywords or an exact tool name. Available capabilities: ${capabilities.join(', ')}.`,
       inputSchema: {
         type: 'object', additionalProperties: false, required: ['query'],
         properties: {

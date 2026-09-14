@@ -17,6 +17,7 @@ describe('UsageConversationSummary', () => {
           outputTokens: 50_000,
           totalTokens: 850_000,
           recordCount: 1,
+          requestCount: 47,
           byDay: [],
           byProvider: [],
           byModel: [],
@@ -48,10 +49,12 @@ describe('UsageConversationSummary', () => {
       </UsageRendererProvider>,
     );
 
-    expect(html).toContain('850.0K · 95% · 1 次');
-    expect(html).toContain('总 Token');
+    expect(html).toContain('94.0K · 95% · 47 次');
+    expect(html).toContain('Token（不含缓存读取）');
+    expect(html).toContain('850.0K');
+    expect(html).toContain('44.0K');
     expect(html).toContain('缓存命中率');
-    expect(html).toContain('调用次数');
+    expect(html).toContain('最近一轮采样次数');
   });
 });
 

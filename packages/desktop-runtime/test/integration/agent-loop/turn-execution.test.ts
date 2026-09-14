@@ -110,6 +110,7 @@ describe('agent loop turn execution', () => {
           inputTokens: 5,
           outputTokens: 6,
           totalTokens: 11,
+          requestCount: 2,
         },
       ]);
     });

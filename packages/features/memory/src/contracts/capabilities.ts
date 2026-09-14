@@ -11,7 +11,7 @@ import type {
   RuntimeThreadSummary,
   RuntimeToolCall,
   RuntimeToolDefinition,
-  RuntimeUsage,
+  RuntimeUsageRecord,
 } from '@setsuna-desktop/contracts';
 import { defineCapability, type CapabilityToken } from '@setsuna-desktop/feature-core/capability';
 import type { MemoryPreferences, MemoryPreferencesPatch } from './settings.js';
@@ -104,7 +104,7 @@ export interface MemoryRuntimeHost {
   updateThreadMode(threadId: string, mode: RuntimeThreadMemoryMode, reason?: string): Promise<RuntimeThread>;
   appendEvent(threadId: string, event: PendingRuntimeEvent): Promise<void>;
   streamModel(request: ModelRequest): AsyncGenerator<ModelStreamEvent>;
-  recordUsage(input: RuntimeUsage & Readonly<{ threadId: string; turnId: string; createdAt: string }>): Promise<void>;
+  recordUsage(input: Readonly<Omit<RuntimeUsageRecord, 'id'>>): Promise<void>;
   resolveModel(input: Readonly<{
     selection: RuntimeConfiguredModelReference | null;
     legacyModelCode?: string;

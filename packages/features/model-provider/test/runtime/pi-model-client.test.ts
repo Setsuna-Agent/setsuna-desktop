@@ -157,7 +157,7 @@ describe('Pi model client protocol integration', () => {
     const reportReplayDecisions = vi.fn();
     const client = new PiModelClient(host(providerFixture('openai-responses'), capture.fetch, reportReplayDecisions));
 
-    await collect(client.stream(requestFixture({
+    const request = requestFixture({
       messages: [{
         id: 'assistant-history',
         role: 'assistant',
@@ -185,7 +185,9 @@ describe('Pi model client protocol integration', () => {
         featureKeys: [],
         worldState: { threadMessageCount: 2, threadUpdatedAt: '2026-01-01T00:00:01.000Z' },
       },
-    })));
+    });
+    await collect(client.stream(request));
+    expect(capture.body().prompt_cache_key).toBe('thread-1');
 
     expect(reportReplayDecisions).toHaveBeenCalledWith({
       afterEventSeq: 42,
@@ -197,6 +199,10 @@ describe('Pi model client protocol integration', () => {
       threadId: 'thread-1',
       turnId: 'turn-1',
     });
+    for (const threadId of ['thread-1', 'thread-2']) {
+      await collect(client.stream({ ...request, stepSnapshot: { ...request.stepSnapshot!, threadId, turnId: 'next-turn' } }));
+      expect(capture.body().prompt_cache_key).toBe(threadId);
+    }
   });
 
   it('preserves budget-based and adaptive Anthropic thinking configuration', async () => {

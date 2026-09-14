@@ -16,4 +16,6 @@ export type RuntimeUsageRecord = RuntimeUsage & {
   threadId: string;
   turnId: string;
   createdAt: string;
+  /** 本条用量包含的模型采样次数；旧记录缺失时不能由记录条数推断。 */
+  requestCount?: number;
 };

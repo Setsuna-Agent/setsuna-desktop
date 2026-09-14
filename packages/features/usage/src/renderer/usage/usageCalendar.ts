@@ -1,4 +1,5 @@
 import type { RuntimeUsageBucket } from '../../contracts/index.js';
+import { tokensExcludingCache } from './usage-format.js';
 
 export const USAGE_CALENDAR_WEEK_COUNT = 53;
 
@@ -68,14 +69,14 @@ export function buildUsageCalendar(
         level: isInRange && bucket ? activityLevel(bucket, levels) : 0,
         outputTokens: bucket?.outputTokens ?? 0,
         recordCount: bucket?.recordCount ?? 0,
-        totalTokens: bucket?.totalTokens ?? 0,
+        totalTokens: tokensExcludingCache(bucket),
       });
     }
     weeks.push(week);
   }
 
   const activeBuckets = periodBuckets.filter((bucket) => bucket.recordCount > 0 || bucket.totalTokens > 0);
-  const periodTokens = periodBuckets.reduce((total, bucket) => total + bucket.totalTokens, 0);
+  const periodTokens = periodBuckets.reduce((total, bucket) => total + tokensExcludingCache(bucket), 0);
   return {
     activeDays: activeBuckets.length,
     averageTokensPerActiveDay: activeBuckets.length ? Math.round(periodTokens / activeBuckets.length) : 0,
@@ -103,7 +104,7 @@ function mergeBucketsByDate(buckets: readonly RuntimeUsageBucket[]): Map<string,
 }
 
 function tokenLevelMap(buckets: readonly RuntimeUsageBucket[]): Map<number, 1 | 2 | 3 | 4> {
-  const tokenTotals = [...new Set(buckets.map((bucket) => bucket.totalTokens).filter((value) => value > 0))]
+  const tokenTotals = [...new Set(buckets.map(tokensExcludingCache).filter((value) => value > 0))]
     .sort((a, b) => a - b);
   const levels = new Map<number, 1 | 2 | 3 | 4>();
   tokenTotals.forEach((value, index) => {
@@ -118,7 +119,8 @@ function tokenLevelMap(buckets: readonly RuntimeUsageBucket[]): Map<number, 1 | 
 }
 
 function activityLevel(bucket: RuntimeUsageBucket, levels: Map<number, 1 | 2 | 3 | 4>): 0 | 1 | 2 | 3 | 4 {
-  if (bucket.totalTokens > 0) return levels.get(bucket.totalTokens) ?? 1;
+  const tokens = tokensExcludingCache(bucket);
+  if (tokens > 0) return levels.get(tokens) ?? 1;
   return bucket.recordCount > 0 ? 1 : 0;
 }
 

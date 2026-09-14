@@ -8,7 +8,7 @@ import type {
   RuntimeUsageResponse,
   UsageProviderDescriptor,
 } from '../../contracts/index.js';
-import { formatTokens } from './usage-format.js';
+import { formatTokens, tokensExcludingCache, uncachedInputTokens } from './usage-format.js';
 import { useUsageView } from './view-context.js';
 
 type UsageRecentCallsProps = {
@@ -95,7 +95,7 @@ export function UsageRecentCalls({
               <tr>
                 <th scope="col">{t('feature.usage.model')}</th>
                 <th scope="col">{t('feature.usage.provider')}</th>
-                <th scope="col">Token</th>
+                <th scope="col">{t('feature.usage.totalTokens')}</th>
                 <th scope="col">{t('feature.usage.callTime')}</th>
               </tr>
             </thead>
@@ -128,12 +128,13 @@ export function UsageRecentCalls({
                     </span>
                   </td>
                   <td>
-                    <strong className="settings-usage-records__tokens">{formatTokens(record.totalTokens ?? 0)}</strong>
+                    <strong className="settings-usage-records__tokens" title={t('feature.usage.rawTotal', { tokens: formatTokens(record.totalTokens ?? 0) })}>{formatTokens(tokensExcludingCache(record))}</strong>
                     <small>{t('feature.usage.tokenDetails', {
-                      input: formatTokens(record.inputTokens ?? 0),
+                      input: formatTokens(uncachedInputTokens(record)),
                       cache: formatTokens(record.cachedInputTokens ?? 0),
                       output: formatTokens(record.outputTokens ?? 0),
                     })}</small>
+                    {record.requestCount !== undefined ? <small>{t('feature.usage.callCount', { count: record.requestCount })}</small> : null}
                   </td>
                   <td><time dateTime={record.createdAt}>{formatUsageTimestamp(record.createdAt, usageTimestampFormatter)}</time></td>
                 </tr>

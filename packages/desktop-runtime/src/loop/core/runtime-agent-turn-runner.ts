@@ -258,6 +258,7 @@ export class RuntimeAgentTurnRunner {
       let stopHookActive = false;
       const publishedModelHistoryWarnings = new Set<string>();
       const loadedToolNames = new Set<string>();
+      let requestCount = 0;
       const contextTokenCalibration = new ContextTokenCalibration();
 
       // 一个 turn 可能包含多段 assistant：工具调用会结束当前段，把 tool 消息补回上下文后再问模型。
@@ -305,6 +306,7 @@ export class RuntimeAgentTurnRunner {
           });
         }
 
+        requestCount += 1;
         const sampled = await this.options.modelSampler.sample({
           captureProtocolUsage: true,
           onAssistantStarted: (messageId) => {
@@ -423,6 +425,7 @@ export class RuntimeAgentTurnRunner {
           messageId: assistantMessageId,
           messageUsage: sampled.usage,
           usage,
+          requestCount,
           finalization: {
             explicitMemory: taskKind === 'goal' ? undefined : {
               alreadySaved: memorySavedByTool,
