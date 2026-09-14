@@ -53,6 +53,7 @@
 }
 
 .chat-attachments {
+  --chat-attachment-height: 56px;
   display: flex;
   gap: 10px;
   width: 100%;
@@ -84,8 +85,8 @@
 }
 
 .chat-attachment--image {
-  width: 78px;
-  height: 78px;
+  width: var(--chat-attachment-height);
+  height: var(--chat-attachment-height);
 }
 
 .chat-attachment--file {
@@ -93,7 +94,7 @@
   align-items: center;
   gap: 10px;
   width: min(232px, 62vw);
-  height: 56px;
+  height: var(--chat-attachment-height);
   padding: 7px 28px 7px 7px;
   border-radius: var(--app-radius-lg);
 }

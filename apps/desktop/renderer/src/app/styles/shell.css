@@ -55,6 +55,11 @@
   overflow: hidden;
 }
 
+/* 图片预览浮层已抵消页面缩放，直接复用原生窗口控件的留白。 */
+:root[data-desktop-platform='darwin'] .sd-image-viewer__title {
+  padding-left: calc(var(--app-topbar-native-controls-inset) + var(--app-topbar-item-gap));
+}
+
 .app-topbar__nav {
   flex: 0 0 auto;
   gap: var(--app-topbar-navigation-item-gap);
