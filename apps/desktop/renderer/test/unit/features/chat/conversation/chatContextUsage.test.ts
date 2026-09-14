@@ -14,12 +14,13 @@ import {
 } from '../../../../../src/features/chat/conversation/chatContextUsage.js';
 
 describe('chat context usage', () => {
-  it('keeps the complete request budget through sampling, compaction and the next request', () => {
+  it('separates estimated input from output reserve through sampling and compaction', () => {
     let thread = sampledThread();
     expect(contextTokenUsageFromThread(thread)).toMatchObject({
-      usedTokens: 217_304,
+      usedTokens: 178_904,
+      reservedOutputTokens: 38_400,
       totalTokens: 256_000,
-      percent: 85,
+      percent: 70,
     });
 
     thread = applyRuntimeEventToThread(thread, {
@@ -29,7 +30,7 @@ describe('chat context usage', () => {
     });
     // Runtime's event percent is relative to its trigger threshold; the ring stays
     // relative to the full model window throughout all three lifecycle states.
-    expect(contextTokenUsageFromThread(thread)).toMatchObject({ usedTokens: 219_518, percent: 86 });
+    expect(contextTokenUsageFromThread(thread)).toMatchObject({ usedTokens: 181_118, percent: 71 });
 
     const notice: RuntimeContextCompactionNotice = {
       compactedMessageCount: 206, compactedTokens: 8_527, compactedRequestTokens: 115_670,
@@ -44,15 +45,15 @@ describe('chat context usage', () => {
         messages: [{ ...runtimeMessage({ id: 'summary', role: 'user', content: 'Short summary' }), contextCompaction: notice }],
       },
     });
-    expect(contextTokenUsageFromThread(thread)).toMatchObject({ usedTokens: 115_670, percent: 45 });
-    expect(contextTokenUsageFromThread({ ...thread, messages: [] }).usedTokens).toBe(115_670);
+    expect(contextTokenUsageFromThread(thread)).toMatchObject({ usedTokens: 77_270, percent: 30 });
+    expect(contextTokenUsageFromThread({ ...thread, messages: [] }).usedTokens).toBe(77_270);
 
     thread = applyRuntimeEventToThread(thread, {
       id: 'next_step', threadId: thread.id, turnId: 'turn_1', seq: 5,
       createdAt: '2026-09-12T14:50:00.265Z', type: 'turn.step_snapshot',
       payload: { snapshot: requestSnapshot(169_951, ['summary']) },
     });
-    expect(contextTokenUsageFromThread(thread)).toMatchObject({ usedTokens: 169_951, percent: 66 });
+    expect(contextTokenUsageFromThread(thread)).toMatchObject({ usedTokens: 131_551, percent: 51 });
   });
 
   it('keeps request usage independent of transcript pagination and provider billing counts', () => {
@@ -71,7 +72,7 @@ describe('chat context usage', () => {
 
   it('uses the running request limit until it finishes, then reflects the selected model limit', () => {
     const thread = sampledThread();
-    expect(contextTokenUsageFromThread(thread, 1_000_000)).toMatchObject({ totalTokens: 256_000, percent: 85 });
+    expect(contextTokenUsageFromThread(thread, 1_000_000)).toMatchObject({ totalTokens: 256_000, percent: 70 });
 
     const idleUsage = contextTokenUsageFromThread({ ...thread, activeTurnId: null }, 1_000_000);
     expect(idleUsage.totalTokens).toBe(1_000_000);
@@ -105,7 +106,7 @@ describe('chat context usage', () => {
       usedTokens: contextTokenUsageFromThread({ ...updated, turns: [] }, 128_000).usedTokens,
       percent: 0,
     });
-    expect(contextTokenUsageFromThread(thread).usedTokens).toBe(217_304);
+    expect(contextTokenUsageFromThread(thread).usedTokens).toBe(178_904);
 
     const refreshed = applyRuntimeEventToThread(updated, {
       id: 'fresh_step', threadId: thread.id, turnId: 'turn_1', seq: 4, createdAt,
@@ -197,6 +198,8 @@ function sampledThread(): RuntimeThread {
 }
 
 function requestSnapshot(estimatedTokens: number, summaryIds: string[] = []): RuntimeModelRequestStepSnapshot {
+  const reservedOutputTokens = estimatedTokens >= 38_400 ? 38_400 : 0;
+  const toolDefinitionTokens = Math.min(62_799, estimatedTokens - reservedOutputTokens);
   return {
     threadId: 'thread_1', turnId: 'turn_1', threadLastSeq: 2,
     conversationMessageIds: ['history'], messageIds: ['history'], toolNames: ['read_file'],
@@ -206,7 +209,7 @@ function requestSnapshot(estimatedTokens: number, summaryIds: string[] = []): Ru
       estimatedTokens, maxContextTokens: 256_000, maxContextTokensK: 256,
       autoCompactTokenLimit: 217_600, tokensUntilCompaction: Math.max(0, 217_600 - estimatedTokens),
       compactionSummaryMessageIds: summaryIds, messageCount: 191,
-      messageTokens: estimatedTokens - 62_799 - 38_400, toolDefinitionTokens: 62_799, reservedOutputTokens: 38_400,
+      messageTokens: estimatedTokens - toolDefinitionTokens - reservedOutputTokens, toolDefinitionTokens, reservedOutputTokens,
     },
   };
 }

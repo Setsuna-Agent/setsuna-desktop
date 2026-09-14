@@ -12,25 +12,29 @@ import type { RuntimeToolExecutionContext, ToolHost } from '../../../src/ports/t
 const RUNTIME_PROVIDED_NAMES = [READ_TOOL_RESULT_TOOL_NAME];
 
 describe('RuntimeToolRouter', () => {
-  it('loads MCP schemas on demand across router rebuilds while preserving permissions and execution approval', async () => {
+  it.each([
+    ['mcp__docs__search', 'mcp__docs__delete'],
+    ['configure_plugin', 'remove_plugin_bundle'],
+    ['extension__docs__search', 'extension__docs__delete'],
+  ])('loads %s on demand across router rebuilds while preserving permissions and approval', async (searchTool, deleteTool) => {
     const loadedToolNames = new Set<string>();
     const runToolCall = vi.fn(async () => ({ content: 'done', processed: true, status: 'success' as const }));
     const tools: RuntimeToolDefinition[] = [
       { name: 'read_file', description: 'Read files', inputSchema: { type: 'object' } },
-      { name: 'mcp__docs__search', description: 'Search documents', inputSchema: { type: 'object', description: 'Large schema '.repeat(2000) } },
-      { name: 'mcp__docs__delete', description: 'Delete documents', inputSchema: { type: 'object' } },
+      { name: searchTool, description: 'Search documents', inputSchema: { type: 'object', description: 'Large schema '.repeat(2000) } },
+      { name: deleteTool, description: 'Delete documents', inputSchema: { type: 'object' } },
     ];
     const options = {
       approvalPolicy: 'on-request' as const, context: runtimeToolContext(), loadedToolNames,
       orchestrator: { runToolCall } as unknown as ToolOrchestrator,
       toolHost: { listTools: async () => tools, runTool: async () => ({ content: 'unused' }) },
-      allowTool: (tool: RuntimeToolDefinition) => tool.name !== 'mcp__docs__delete',
+      allowTool: (tool: RuntimeToolDefinition) => tool.name !== deleteTool,
     };
     const router = await RuntimeToolRouter.create(options);
     expect(router.tools.map((tool) => tool.name)).toEqual(['read_file', 'search_tools', READ_TOOL_RESULT_TOOL_NAME]);
     expect(JSON.stringify(router.tools).length).toBeLessThan(JSON.stringify(tools).length / 5);
-    expect(router.searchTools({ query: 'documents search' })).toContain('mcp__docs__search');
-    expect(router.searchTools({ query: 'delete' })).not.toContain('mcp__docs__delete');
+    expect(router.searchTools({ query: 'documents search' })).toContain(searchTool);
+    expect(router.searchTools({ query: 'delete' })).not.toContain(deleteTool);
     const rebuilt = await RuntimeToolRouter.create(options);
     expect(rebuilt.tools).toContainEqual(tools[1]);
     await rebuilt.runToolCall({ id: 'call_search', name: tools[1]!.name, arguments: '{}' }, {});

@@ -563,6 +563,7 @@ export class RuntimeMemoryCoordinator implements MemoryControl {
           turnId: sourceTurnId ?? 'memory_startup',
           createdAt: this.options.host.now().toISOString(),
           ...consolidation.usage,
+          requestCount: consolidation.rounds,
         });
       }
       throwIfAborted(signal);

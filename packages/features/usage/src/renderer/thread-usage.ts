@@ -94,7 +94,7 @@ export function chatThreadUsageForDisplay(
   if (!liveRecords.length) return withRequestCount(storedUsage, requestCount);
   const mergedSummary = addRecordsToSummary(storedUsage?.summary ?? emptyUsageSummary(), liveRecords);
   // 每次模型采样请求前都会立即写入步骤快照，包括后来失败或被取消且未报告用量的请求。
-  const summary = { ...mergedSummary, recordCount: requestCount };
+  const summary = { ...mergedSummary, requestCount };
   return {
     records: [...liveRecords.map(({ record }) => record), ...storedRecords],
     summary,
@@ -116,13 +116,13 @@ function withRequestCount(usage: RuntimeUsageResponse | null, requestCount: numb
     if (requestCount === 0) return null;
     return {
       records: [],
-      summary: { ...emptyUsageSummary(), recordCount: requestCount },
+      summary: { ...emptyUsageSummary(), requestCount },
     };
   }
-  if (usage.summary.recordCount === requestCount) return usage;
+  if (usage.summary.requestCount === requestCount) return usage;
   return {
     ...usage,
-    summary: { ...usage.summary, recordCount: requestCount },
+    summary: { ...usage.summary, requestCount },
   };
 }
 

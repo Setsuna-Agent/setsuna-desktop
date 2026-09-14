@@ -31,6 +31,8 @@ export class FileUsageStore {
   async recordUsage(input: Omit<RuntimeUsageRecord, 'id'>): Promise<RuntimeUsageRecord> {
     const record = normalizeRecord({
       id: this.id('usage'),
+      // 新写入默认代表一次采样；聚合多次采样的调用方必须提供实际次数。
+      requestCount: 1,
       ...input,
     });
     await mkdir(path.dirname(this.usagePath), { recursive: true });
@@ -121,6 +123,9 @@ function summarizeUsage(records: RuntimeUsageRecord[]): RuntimeUsageSummary {
     outputTokens: sum(records, 'outputTokens'),
     totalTokens: sum(records, 'totalTokens'),
     recordCount: records.length,
+    ...(records.every((record) => record.requestCount !== undefined)
+      ? { requestCount: records.reduce((count, record) => count + record.requestCount!, 0) }
+      : {}),
     byDay: bucket(records, (record) => localUsageDateKey(record.createdAt)).sort((a, b) => a.key.localeCompare(b.key)),
     byProvider: bucket(records, usageProviderKey),
     byModel: modelBuckets(records),
@@ -265,6 +270,9 @@ function normalizeRecord(record: RuntimeUsageRecord): RuntimeUsageRecord {
     cachedInputTokens: numberValue(record.cachedInputTokens),
     outputTokens: numberValue(record.outputTokens),
     totalTokens: numberValue(record.totalTokens),
+    requestCount: Number.isSafeInteger(record.requestCount) && record.requestCount! >= 0
+      ? record.requestCount
+      : undefined,
   };
 }
 

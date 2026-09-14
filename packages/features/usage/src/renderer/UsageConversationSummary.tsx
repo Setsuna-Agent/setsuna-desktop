@@ -3,7 +3,7 @@ import { CircleGauge } from 'lucide-react';
 import { useMemo } from 'react';
 import { useUsageRendererContext, useUsageThreadState } from './context.js';
 import { chatThreadUsageForDisplay } from './thread-usage.js';
-import { formatTokens } from './usage/usage-format.js';
+import { formatTokens, tokensExcludingCache, uncachedInputTokens } from './usage/usage-format.js';
 import './conversation-summary.css';
 
 export function UsageConversationSummary({ thread }: Readonly<{ thread: RuntimeThread }>) {
@@ -16,11 +16,11 @@ export function UsageConversationSummary({ thread }: Readonly<{ thread: RuntimeT
   const summary = usage?.summary;
   const input = summary?.inputTokens ?? 0;
   const cached = summary?.cachedInputTokens ?? 0;
-  const total = summary?.totalTokens ?? 0;
-  const calls = summary?.recordCount ?? 0;
+  const total = tokensExcludingCache(summary);
+  const calls = summary?.requestCount;
   const totalTokensLabel = formatTokens(total);
   const cacheHitRateLabel = formatCacheHitRate(cached, input);
-  const callCountLabel = translate(
+  const callCountLabel = calls === undefined ? '—' : translate(
     calls === 1
       ? 'feature.usage.conversation.callCount.one'
       : 'feature.usage.conversation.callCount.many',
@@ -40,6 +40,10 @@ export function UsageConversationSummary({ thread }: Readonly<{ thread: RuntimeT
               label={translate('feature.usage.conversation.tooltip.totalTokens')}
               value={totalTokensLabel}
             />
+            <UsageTooltipMetric label={translate('feature.usage.inputTokens')} value={formatTokens(uncachedInputTokens(summary))} />
+            <UsageTooltipMetric label={translate('feature.usage.cacheHit')} value={formatTokens(cached)} />
+            <UsageTooltipMetric label={translate('feature.usage.outputTokens')} value={formatTokens(summary?.outputTokens ?? 0)} />
+            <UsageTooltipMetric label={translate('feature.usage.totalIncludingCache')} value={formatTokens(summary?.totalTokens ?? 0)} />
             <UsageTooltipMetric
               label={translate('feature.usage.conversation.tooltip.cacheHitRate')}
               value={cacheHitRateLabel}

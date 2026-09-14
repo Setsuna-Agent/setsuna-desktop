@@ -261,7 +261,12 @@ function modelContextUsage(usage: ChatContextTokenUsage | undefined, t: Translat
   return {
     percentLabel,
     percentValue,
-    tooltipLabel: `${percentLabel} · ${tokenLabel}`,
+    tooltipLabel: [
+      `${percentLabel} · ${tokenLabel}`,
+      ...(usage?.reservedOutputTokens
+        ? [t('chat.model.outputReserve', { tokens: formatTokenCount(usage.reservedOutputTokens) })]
+        : []),
+    ].join(' · '),
     visible: true,
   };
 }

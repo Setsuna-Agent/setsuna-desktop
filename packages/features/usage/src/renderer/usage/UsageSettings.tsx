@@ -9,7 +9,7 @@ import { UsageBreakdownCard } from './UsageBreakdownCard.js';
 import { UsageMetricCard } from './UsageMetricCard.js';
 import { UsageRecentCalls } from './UsageRecentCalls.js';
 import { UsageTimeRangeFilter } from './UsageTimeRangeFilter.js';
-import { formatTokens } from './usage-format.js';
+import { formatTokens, tokensExcludingCache, uncachedInputTokens } from './usage-format.js';
 import {
   usageQueryForCustomRange,
   usageQueryForPreset,
@@ -35,8 +35,9 @@ export function UsageSettings({ providers, usage, onQueryUsage }: UsageSettingsP
   const requestVersionRef = useRef(0);
   const displayedUsage = activeRange === 'all' ? usage : filteredUsage;
   const summary = displayedUsage?.summary;
-  const totalTokens = summary?.totalTokens ?? 0;
+  const totalTokens = tokensExcludingCache(summary);
   const recordCount = summary?.recordCount ?? 0;
+  const requestCount = summary?.requestCount;
 
   useEffect(() => () => {
     requestVersionRef.current += 1;
@@ -101,14 +102,14 @@ export function UsageSettings({ providers, usage, onQueryUsage }: UsageSettingsP
         <div aria-busy={filterLoading}>
           <div className="settings-usage-summary" aria-label={t('feature.usage.overview')}>
             <UsageMetricCard
-              detail={t('feature.usage.providersAndModels', { providers: summary?.byProvider.length ?? 0, models: summary?.byModel.length ?? 0 })}
+              detail={t('feature.usage.rawTotal', { tokens: formatTokens(summary?.totalTokens ?? 0) })}
               label={t('feature.usage.totalTokens')}
               value={formatTokens(totalTokens)}
             />
             <UsageMetricCard
-              detail={t('feature.usage.shareOfTotal', { ratio: formatRatio(summary?.inputTokens ?? 0, totalTokens) })}
+              detail={t('feature.usage.shareOfTotal', { ratio: formatRatio(uncachedInputTokens(summary), totalTokens) })}
               label={t('feature.usage.inputTokens')}
-              value={formatTokens(summary?.inputTokens ?? 0)}
+              value={formatTokens(uncachedInputTokens(summary))}
             />
             <UsageMetricCard
               detail={t('feature.usage.inputHitRate', { ratio: formatRatio(summary?.cachedInputTokens ?? 0, summary?.inputTokens ?? 0) })}
@@ -121,9 +122,11 @@ export function UsageSettings({ providers, usage, onQueryUsage }: UsageSettingsP
               value={formatTokens(summary?.outputTokens ?? 0)}
             />
             <UsageMetricCard
-              detail={t('feature.usage.averagePerCall', { tokens: formatTokens(recordCount ? totalTokens / recordCount : 0) })}
+              detail={requestCount === undefined
+                ? t('feature.usage.unknownRequestCount')
+                : t('feature.usage.averagePerCall', { tokens: formatTokens(requestCount ? totalTokens / requestCount : 0) })}
               label={t('feature.usage.calls')}
-              value={recordCount.toLocaleString(locale)}
+              value={requestCount?.toLocaleString(locale) ?? '—'}
             />
           </div>
 

@@ -93,7 +93,7 @@ export type RuntimeToolRouterOptions = {
 
 /**
  * 维护经过权限与可见性过滤的 host catalog，并追加 runtime 自带工具。
- * Core tools remain visible; MCP schemas are loaded on demand from this allowed catalog.
+ * Core tools remain visible; integrations and management schemas load on demand from this allowed catalog.
  */
 export class RuntimeToolRouter {
   private readonly catalogTools: RuntimeToolDefinition[];

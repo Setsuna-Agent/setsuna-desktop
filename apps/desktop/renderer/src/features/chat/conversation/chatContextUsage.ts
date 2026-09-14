@@ -20,6 +20,7 @@ export type ChatContextTokenUsage = {
   totalTokens: number;
   triggerScopes: string[];
   usedTokens: number;
+  reservedOutputTokens?: number;
   visiblePercent: number;
 };
 
@@ -33,9 +34,9 @@ export function contextTokenUsageFromThread(thread: RuntimeThread | null, config
   const totalTokens = (thread?.activeTurnId ? budget?.maxContextTokens : undefined)
     ?? configuredLimit ?? budget?.maxContextTokens
     ?? notice?.maxContextTokens ?? state?.maxContextTokens ?? DEFAULT_CONTEXT_TOKENS;
-  // Request snapshots include prompts, tool schemas, replay metadata and output reserve.
-  // Recounting the paged transcript loses that budget and makes compaction look like a jump.
-  const usedTokens = budget?.estimatedTokens ?? positiveNumber(
+  // 保留快照中的提示词、工具与重放估算，但输出预留不是已经输入模型的内容。
+  const reservedOutputTokens = Math.max(0, budget?.reservedOutputTokens ?? 0);
+  const usedTokens = budget ? Math.max(0, budget.estimatedTokens - reservedOutputTokens) : positiveNumber(
     estimateRuntimeMessagesTokens(thread?.messages ?? []),
     compactionBudgetValid ? notice?.compactedTokens ?? 0 : 0,
     compactionBudgetValid ? state?.usedTokens ?? 0 : 0,
@@ -50,11 +51,12 @@ export function contextTokenUsageFromThread(thread: RuntimeThread | null, config
     totalTokens,
     triggerScopes: notice?.triggerScopes ?? [],
     usedTokens,
+    reservedOutputTokens,
     visiblePercent: rawPercent > 0 && rawPercent < 0.1 ? 0.1 : rawPercent,
   };
 }
 
-type ContextBudget = Pick<RuntimeModelRequestContextWindow, 'estimatedTokens' | 'maxContextTokens'>;
+type ContextBudget = Pick<RuntimeModelRequestContextWindow, 'estimatedTokens' | 'maxContextTokens' | 'reservedOutputTokens'>;
 
 function runtimeContextBudget(
   thread: RuntimeThread | null,
@@ -69,6 +71,7 @@ function runtimeContextBudget(
     return {
       estimatedTokens: state.usedTokens,
       maxContextTokens,
+      reservedOutputTokens: window?.reservedOutputTokens,
     };
   }
 
@@ -80,6 +83,7 @@ function runtimeContextBudget(
     return {
       estimatedTokens: notice.compactedRequestTokens,
       maxContextTokens: notice.maxContextTokens ?? notice.maxContextTokensK * 1000,
+      reservedOutputTokens: window?.reservedOutputTokens,
     };
   }
   return window;
