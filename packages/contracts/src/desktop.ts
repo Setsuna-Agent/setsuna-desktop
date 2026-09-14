@@ -98,6 +98,8 @@ export type DesktopWindowCloseBehavior = 'quit' | 'hide-to-tray';
 export type SetsunaDesktopBridge = {
   desktop: {
     platform: string;
+    /** Resolves once main has prepared the services required by renderer initialization. */
+    whenReady(): Promise<void>;
     setInterfaceLanguage(locale: RuntimeInterfaceLanguage): Promise<boolean>;
     setActiveKeyboardShortcutBindings(bindings: readonly string[]): Promise<boolean>;
     setKeyboardShortcutRecording(recording: boolean): Promise<boolean>;

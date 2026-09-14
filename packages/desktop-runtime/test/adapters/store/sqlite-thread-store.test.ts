@@ -22,6 +22,63 @@ afterEach(async () => {
 });
 
 describe('sqlite thread store', () => {
+  it('recovers active turn IDs from an uncheckpointed tail without cloning transcript diagnostics', async () => {
+    const dataDir = await temporaryDirectory();
+    const first = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    const thread = await first.createThread({ title: 'Recovery projection' });
+    await first.appendEvent(thread.id, {
+      id: 'event_started', threadId: thread.id, turnId: 'turn_active',
+      type: 'turn.started', createdAt: thread.createdAt, payload: { input: 'Continue.' },
+    });
+    const checkpoint = await first.getThread(thread.id);
+    // Legacy message-only turns and pending approvals need recovery even without
+    // their own thread-level activeTurnId or turn.started record.
+    await first.appendEvent(thread.id, messageCreatedEvent(thread.id, 'msg_tail', 'Partial answer', {
+      role: 'assistant', turnId: 'turn_tail', status: 'streaming',
+      toolRuns: [{ id: 'call_tail', name: 'shell', status: 'running' }],
+    }));
+    await first.appendEvent(thread.id, messageCreatedEvent(thread.id, 'msg_approval', '', {
+      role: 'assistant', turnId: 'turn_approval', status: 'complete', phase: 'commentary',
+      toolRuns: [{ id: 'call_approval', name: 'shell', status: 'pending_approval' }],
+    }));
+    await first.close();
+
+    // Simulate a crash after the event commit but before its delayed snapshot.
+    const database = new DatabaseSync(path.join(dataDir, 'threads.sqlite'));
+    try {
+      database.prepare('UPDATE threads SET snapshot_json = ?, snapshot_seq = ? WHERE id = ?')
+        .run(JSON.stringify(checkpoint), checkpoint!.lastSeq, thread.id);
+    } finally {
+      database.close();
+    }
+
+    const reopened = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    try {
+      await reopened.recover();
+      const clone = vi.spyOn(globalThis, 'structuredClone');
+      let active: string[];
+      try {
+        active = await reopened.getActiveTurnIds(thread.id);
+        expect(active).toEqual(['turn_active', 'turn_tail', 'turn_approval']);
+        expect(clone).not.toHaveBeenCalled();
+      } finally {
+        clone.mockRestore();
+      }
+      // Mutating a returned ID list must not affect the persisted projection.
+      active.length = 0;
+      for (const turnId of await reopened.getActiveTurnIds(thread.id)) {
+        await reopened.appendEvent(thread.id, {
+          id: `event_cancel_${turnId}`, threadId: thread.id, turnId,
+          type: 'turn.cancelled', createdAt: thread.createdAt, payload: { reason: 'Runtime restarted.' },
+        });
+      }
+      await expect(reopened.getActiveTurnIds(thread.id)).resolves.toEqual([]);
+      await expect(reopened.getActiveTurnIds('thread_missing')).resolves.toEqual([]);
+    } finally {
+      await reopened.close();
+    }
+  });
+
   it('commits step history before checkpointing and reconstructs it without copying diagnostics into sampling reads', async () => {
     const dataDir = await temporaryDirectory();
     const store = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator(), { checkpointDelayMs: 60_000 });

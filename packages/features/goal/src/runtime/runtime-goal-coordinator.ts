@@ -118,7 +118,9 @@ export class RuntimeGoalCoordinator implements GoalControl {
     for (const summary of summaries) {
       try {
         await this.withGoalMutation(summary.id, async () => {
-          const current = await this.getGoal(summary.id);
+          // Startup already enumerated existing threads; read the Goal checkpoint directly
+          // instead of loading and copying every transcript just to check thread existence.
+          const current = (await this.options.projection.read(summary.id)).state.goal;
           if (!current) return;
           const normalized = normalizeRestoredGoal(current, this.options.host);
           const accounted = await this.accountUnsettledGoalTurns(summary.id, normalized);

@@ -21,11 +21,11 @@
 
 1. 读取窗口状态并创建主 `BrowserWindow`。
 2. 在同一个 native window 内显示 splash `WebContentsView`。
-3. 补齐桌面进程 PATH 并解析随包发布的 ripgrep。
+3. 与 splash 加载并行补齐桌面进程 PATH，完成后解析随包发布的 ripgrep。
 4. 启动原生凭据 bridge，并激活 Main Feature composition；Browser server、Terminal/Updater IPC 等由各自 Feature scope 管理。
-5. 创建并启动 `RuntimeHost`。
-6. 启动 WebDAV 调度、初始化 updater 持久下载源并注册其余宿主 IPC。
-7. 加载 Vite dev server 或 `dist/renderer/index.html`。
+5. 创建 `RuntimeHost`，并行启动 runtime 与加载 Vite dev server 或 `dist/renderer/index.html`。
+6. Runtime 数据恢复完成后，启动 WebDAV 调度、初始化 updater 持久下载源并注册其余宿主 IPC。
+7. `desktop.whenReady()` 在以上服务准备完成后放行 renderer 的偏好设置、Feature 和工作台初始化；JS、CSS 等资源已可提前加载。维护模式复用同一入口，无需启动 runtime。
 8. renderer 首帧完成后揭示主界面并启动 updater。
 
 维护模式只创建数据迁移/恢复所需窗口，不启动 runtime、terminal、内置浏览器和 updater。
@@ -45,9 +45,13 @@ Runtime 的 `src/cli.ts` 创建 server；`src/runtime/runtime-factory.ts` 组装
 
 Goal 和 Collaboration 的 Feature 投影使用 SQLite `feature_projection_checkpoints` 保存状态与已处理事件序号。重启时先校验 Feature 自己的 codec 和带 reducer 版本的 key，再回放检查点之后的事件；首次启动、版本变化或缓存损坏时从历史事件重建。检查点只是可重建缓存，历史事件仍是真源，异常任务结算仍在 runtime ready 前完成。事件高水位直接查询线程序号，不加载或复制完整聊天记录。
 
+异常 turn 结算从 store 内部投影提取活动 turn ID，仍检查旧版消息、工具和 item 的残留运行状态，但不向调用方复制完整历史和模型请求诊断。Goal 启动恢复直接读取已枚举线程的 Feature 投影，不为检查线程存在而再次读取完整会话。
+
 生成图片清理先枚举本地 asset ID，再检查会话引用；没有本地图片时不读取历史，已找到全部候选引用时提前结束扫描。
 
 ## Renderer 初始化
+
+Renderer 模块可以在 runtime 恢复数据时加载，但有 IPC 副作用的偏好设置与 Feature setup 必须等 `desktop.whenReady()`。就绪 handler 保留到窗口关闭，支持 renderer reload；准备失败会同时拒绝 main 与 renderer 的等待。终端包入口只导出懒加载组件与类型，避免通过静态导出把 xterm 提前带入首屏。
 
 `DesktopDataRootGate` 先读取 main 侧数据根状态：
 

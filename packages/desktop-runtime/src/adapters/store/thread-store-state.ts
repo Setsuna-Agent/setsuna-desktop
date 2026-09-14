@@ -8,7 +8,7 @@ import {
   normalizeLegacyAssistantPhases,
   normalizeRuntimeMessageProviderMetadata,
 } from '@setsuna-desktop/contracts';
-import type { RuntimeTurnActivityProjection } from '../../ports/thread-store.js';
+import type { RuntimeThreadSamplingState, RuntimeTurnActivityProjection } from '../../ports/thread-store.js';
 import { assertSafeRuntimeId } from '../../security/runtime-id.js';
 
 export const DEFAULT_THREAD_MEMORY_MODE: RuntimeThreadMemoryMode = 'enabled';
@@ -33,6 +33,13 @@ export function assertThreadSnapshot(thread: RuntimeThread, expectedThreadId: st
 
 export function cloneThread(thread: RuntimeThread): RuntimeThread {
   return structuredClone(thread);
+}
+
+/** Model request diagnostics belong to full thread reads, not sampling input. */
+export function projectRuntimeThreadSamplingState(thread: RuntimeThread | null): RuntimeThreadSamplingState | null {
+  if (!thread) return null;
+  const { messages, kind, lastSeq, messageCount, updatedAt } = thread;
+  return structuredClone({ messages, kind, lastSeq, messageCount, updatedAt });
 }
 
 /** Read only the fields needed by activity polling without cloning the full thread. */
