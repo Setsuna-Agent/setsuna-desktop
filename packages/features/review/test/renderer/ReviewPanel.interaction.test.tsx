@@ -14,6 +14,7 @@ import type {
   DesktopReviewState,
 } from '../../src/contracts/index.js';
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -28,6 +29,7 @@ import { ReviewRendererTestHost } from './review-renderer-test-host.js';
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   window.localStorage.clear();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -435,6 +437,7 @@ describe('DesktopReviewPanel interactions', () => {
   });
 
   it('yields navigation to user scroll intent instead of fighting it', async () => {
+    vi.useFakeTimers({ toFake: ['requestAnimationFrame', 'cancelAnimationFrame'] });
     const finding: RuntimeReviewFinding = {
       priority: 'P2',
       title: '远端评论',
@@ -484,7 +487,7 @@ describe('DesktopReviewPanel interactions', () => {
     expect(scrollRoot).toBeTruthy();
     fireEvent.wheel(scrollRoot as Element, { deltaY: -240 });
 
-    await new Promise((resolve) => setTimeout(resolve, 120));
+    await act(async () => { await vi.advanceTimersByTimeAsync(120); });
     expect(virtualizerScrollTo).not.toHaveBeenCalled();
   });
 

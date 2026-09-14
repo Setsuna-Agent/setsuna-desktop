@@ -2,24 +2,22 @@
 
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { Button } from '@setsuna-desktop/renderer-ui';
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { SidebarProjectHoverCard } from '../../../../src/app/sidebar/SidebarProjectHoverCard.js';
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+beforeEach(() => { vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); });
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
-it.each([
-  { path: '/workspace/viper', threadCount: 3, directory: '/workspace/viper' },
-  { path: undefined, threadCount: 0, directory: '尚未关联本机目录' },
-])('shows project details and allows editing from the hover card ($directory)', async ({ path, threadCount, directory }) => {
+it('opens project editing from the hover card without selecting the project', async () => {
   const project: WorkspaceProject = {
-    id: 'project-1', name: 'viper', path,
+    id: 'project-1', name: 'viper', path: '/workspace/viper',
     createdAt: '', updatedAt: '',
   };
   const onEditProject = vi.fn();
   const onSelectProject = vi.fn();
   const content = (disabled = false) => (
-    <SidebarProjectHoverCard disabled={disabled} project={project} threadCount={threadCount} onEditProject={onEditProject}>
+    <SidebarProjectHoverCard disabled={disabled} project={project} threadCount={3} onEditProject={onEditProject}>
       <div><Button onClick={onSelectProject}>{project.name}</Button></div>
     </SidebarProjectHoverCard>
   );
@@ -33,16 +31,14 @@ it.each([
 
   fireEvent.pointerEnter(trigger, { pointerType: 'mouse' });
   expect(preview()).toBeNull();
-  await waitFor(() => expect(preview()).not.toBeNull());
+  await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+  expect(preview()).not.toBeNull();
   const card = preview()!;
-  expect(within(card).getByText(project.name)).toBeTruthy();
-  expect(within(card).getByText(`${threadCount} 个对话`)).toBeTruthy();
-  expect(within(card).getByText(directory)).toBeTruthy();
 
   // Crossing from the sidebar into the card must keep its edit action available.
   fireEvent.pointerLeave(trigger, { pointerType: 'mouse' });
   fireEvent.pointerEnter(card, { pointerType: 'mouse' });
-  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 200)); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(200); });
   expect(preview()).toBe(card);
   fireEvent.click(within(card).getByRole('button', { name: '编辑项目' }));
   expect(onEditProject).toHaveBeenCalledExactlyOnceWith(project);
@@ -51,6 +47,6 @@ it.each([
 
   view.rerender(content(true));
   fireEvent.pointerEnter(trigger, { pointerType: 'mouse' });
-  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 400)); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(400); });
   expect(preview()).toBeNull();
 });

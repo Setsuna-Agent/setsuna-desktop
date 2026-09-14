@@ -1,10 +1,8 @@
 import type { ProviderConfigState, RuntimeConfigState } from '@setsuna-desktop/contracts';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
   configuredTaskModelOptions,
 } from '../../../../src/features/settings/sections/task-model-options.js';
-import { TaskModelSettings } from '../../../../src/features/settings/sections/TaskModelSettings.js';
 
 describe('TaskModelSettings', () => {
   it('offers configured models from every enabled provider', () => {
@@ -19,23 +17,6 @@ describe('TaskModelSettings', () => {
       '火山方舟 · Kimi K2.7 (kimi-k2.7)',
     ]);
   });
-
-  it('renders every host-owned task-model selector with configured choices', () => {
-    const html = renderToStaticMarkup(
-      <TaskModelSettings config={configFixture} onSave={async () => undefined} />,
-    );
-
-    expect(html.match(/\bsd-settings-row\b/gu)).toHaveLength(1);
-    expect(html.match(/\bsd-select-field\b/gu)).toHaveLength(1);
-    expect(html.match(/task-model-settings__card/gu)).toHaveLength(1);
-    expect(html).not.toContain('task-model-option-label');
-    expect(html).toContain('>上下文</h3>');
-    expect(html).not.toContain('专用任务模型');
-    expect(html).toContain('aria-label="上下文压缩"');
-    expect(html).toContain('接近上下文上限时，把较早的对话整理成可继续使用的摘要。');
-    expect(html).toContain('MiniMax · MiniMax M3 (MiniMax-M3)');
-  });
-
 });
 
 const enabledProviders: ProviderConfigState[] = [

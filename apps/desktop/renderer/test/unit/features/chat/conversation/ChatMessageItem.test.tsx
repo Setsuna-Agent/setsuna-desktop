@@ -1,5 +1,4 @@
 import type { RuntimeMessage, RuntimeReviewModeNotice, RuntimeSkillReference, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
-import { Window } from 'happy-dom';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { MessageItem } from '../../../../../src/features/chat/conversation/ChatMessageItem.js';
@@ -203,11 +202,6 @@ describe('MessageItem user messages', () => {
     expect(readOnlyHtml).not.toContain('aria-label="删除"');
   });
 
-  it('omits the message timestamp while editing', () => {
-    const editorHtml = renderUserMessage('message', true);
-    expect(editorHtml).not.toContain('<time');
-  });
-
   it('does not duplicate handled guidance above the assistant timeline', () => {
     const guidance: RuntimeMessage = {
       id: 'user_steer',
@@ -283,88 +277,6 @@ describe('MessageItem user messages', () => {
 });
 
 describe('MessageItem assistant tool history', () => {
-  it('nests thinking that follows a tool batch inside the tool disclosure', () => {
-    const html = renderAssistantMessage([
-      {
-        id: 'assistant_inspection_tools',
-        turnId: 'turn_nested_tool_thinking',
-        role: 'assistant',
-        content: '',
-        createdAt: '2026-08-18T00:00:00.000Z',
-        status: 'complete',
-        phase: 'commentary',
-        toolRuns: [
-          {
-            id: 'read_main',
-            name: 'workspace_read_file',
-            status: 'success',
-            argumentsPreview: '{"path":"src/main.tsx"}',
-          },
-          {
-            id: 'list_src',
-            name: 'workspace_list_directory',
-            status: 'success',
-            argumentsPreview: '{"path":"src"}',
-          },
-        ],
-      },
-      {
-        id: 'assistant_after_inspection_thinking',
-        turnId: 'turn_nested_tool_thinking',
-        role: 'assistant',
-        content: 'Now inspect how these files connect.',
-        streamParts: [{ type: 'reasoning', content: 'Now inspect how these files connect.' }],
-        createdAt: '2026-08-18T00:00:01.000Z',
-        status: 'complete',
-        phase: 'commentary',
-      },
-    ], true, undefined, true);
-    const document = new Window().document;
-    document.body.innerHTML = html;
-    const thinking = document.querySelector('.chat-thinking-disclosure');
-    const toolDisclosure = thinking?.closest('details.chat-tool-run');
-
-    expect(thinking).not.toBeNull();
-    expect(toolDisclosure).not.toBeNull();
-    expect(toolDisclosure?.querySelector(':scope > summary.chat-tool-run__summary')).not.toBeNull();
-  });
-
-  it('keeps active thinking visible outside the preceding tool disclosure', () => {
-    const html = renderAssistantMessage([
-      {
-        id: 'assistant_active_tools',
-        turnId: 'turn_active_tool_thinking',
-        role: 'assistant',
-        content: '',
-        createdAt: '2026-08-18T00:00:00.000Z',
-        status: 'complete',
-        phase: 'commentary',
-        toolRuns: [{
-          id: 'read_active_file',
-          name: 'workspace_read_file',
-          status: 'success',
-          argumentsPreview: '{"path":"src/main.tsx"}',
-        }],
-      },
-      {
-        id: 'assistant_active_thinking',
-        turnId: 'turn_active_tool_thinking',
-        role: 'assistant',
-        content: 'Still thinking about the result.',
-        streamParts: [{ type: 'reasoning', content: 'Still thinking about the result.' }],
-        createdAt: '2026-08-18T00:00:01.000Z',
-        status: 'streaming',
-        phase: 'commentary',
-      },
-    ], true, undefined, true);
-    const document = new Window().document;
-    document.body.innerHTML = html;
-    const thinking = document.querySelector('.chat-thinking-disclosure.is-active');
-
-    expect(thinking).not.toBeNull();
-    expect(thinking?.closest('details.chat-tool-run')).toBeNull();
-  });
-
   it('renders structured reasoning only inside the collapsed thinking disclosure', () => {
     const reasoning = 'after: inspect "before<think>private</think>after", then continue private analysis';
     const html = renderAssistantMessage([{

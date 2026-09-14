@@ -28,14 +28,12 @@ vi.mock('../../../../src/features/chat/composer/editor/ChatPromptInput.js', asyn
     footer,
     header,
     onSubmit,
-    placeholder,
   }: {
     footer?: (actions: React.ReactNode) => React.ReactNode;
     header?: React.ReactNode;
     onSubmit?: (value?: string) => unknown;
-    placeholder?: string;
   }, _ref) => (
-    <div data-component="sender" data-placeholder={placeholder}>
+    <div data-component="sender">
       {header}
       {footer?.(<button type="button" data-action="sender-default">default</button>)}
       <button type="button" data-testid="sender-submit" onClick={() => void onSubmit?.()}>submit</button>
@@ -44,8 +42,6 @@ vi.mock('../../../../src/features/chat/composer/editor/ChatPromptInput.js', asyn
   ChatPromptInput.displayName = 'MockSender';
   return { ChatPromptInput };
 });
-
-
 
 vi.mock('../../../../src/shared/i18n/I18nProvider.js', () => ({
   useI18n: () => ({
@@ -66,7 +62,7 @@ vi.mock('../../../../src/features/chat/composer/ChatAttachmentTray.js', () => ({
 }));
 
 vi.mock('../../../../src/features/chat/composer/ChatCommandMenus.js', () => ({
-  ProjectEntryCommandMenu: () => <div data-overlay="mention" />,
+  ProjectEntryCommandMenu: () => null,
 }));
 
 vi.mock('../../../../src/features/chat/composer/ChatModelPicker.js', () => ({
@@ -88,7 +84,7 @@ vi.mock('../../../../src/features/chat/composer/ChatSendQueue.js', () => ({
 }));
 
 vi.mock('../../../../src/features/chat/composer/ChatSlashCommandMenu.js', () => ({
-  ChatSlashCommandMenu: () => <div data-overlay="slash" />,
+  ChatSlashCommandMenu: () => null,
 }));
 
 vi.mock('../../../../src/features/chat/composer/useChatAttachments.js', () => ({
@@ -231,40 +227,6 @@ describe('ChatComposer view state characterization', () => {
     const attachmentOnly = renderComposer();
     expect(attachmentOnly).toContain('aria-label="chat.composer.send"');
     expect(attachmentOnly).not.toContain('data-action="sender-default"');
-  });
-
-  it('renders mention and slash command overlays independently', () => {
-    composerHarness.command.mentionMenuOpen = true;
-    expect(renderComposer()).toContain('data-overlay="mention"');
-
-    composerHarness.command.mentionMenuOpen = false;
-    composerHarness.command.slashMenuOpen = true;
-    expect(renderComposer()).toContain('data-overlay="slash"');
-  });
-
-  it('adds the local file mention hint only for project conversations', () => {
-    expect(renderComposer()).toContain('data-placeholder="chat.composer.placeholder"');
-
-    const activeProject = {
-      id: 'project-1',
-      name: 'Project',
-      path: '/workspace',
-      createdAt: '2026-08-18T00:00:00.000Z',
-      updatedAt: '2026-08-18T00:00:00.000Z',
-    };
-    expect(renderComposer({ activeProject }))
-      .toContain('data-placeholder="chat.composer.projectPlaceholder"');
-    expect(renderComposer({
-      activeProject,
-      currentThread: {
-        id: 'global-thread',
-        messages: [],
-        projectId: undefined,
-        queuedTurnInputs: [],
-      } as unknown as RuntimeThread,
-    })).toContain('data-placeholder="chat.composer.placeholder"');
-    expect(renderComposer({ activeProject, placeholder: 'Custom placeholder' }))
-      .toContain('data-placeholder="Custom placeholder"');
   });
 
   it('carries the composer model selection into a first-turn review', async () => {

@@ -21,7 +21,7 @@ import { ProviderConnection } from '../../src/renderer/ProviderConnection.js';
 import { ProviderModelList } from '../../src/renderer/ProviderModelList.js';
 import { ModelProviderRendererStateService } from '../../src/renderer/service.js';
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('ModelProviderSettingsView', () => {
   it('copies the saved key without revealing it, prioritizes a draft, and reports copy failures', async () => {
@@ -84,23 +84,25 @@ describe('ModelProviderSettingsView', () => {
     );
 
     const apiKey = await screen.findByLabelText('API Key');
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     expect((screen.getByRole('button', { name: '复制 API Key' }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(apiKey, { target: { value: 'first-secret' } });
-    await waitFor(() => expect(saves).toHaveLength(1));
+    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
+    expect(saves).toHaveLength(1);
 
     fireEvent.change(apiKey, { target: { value: 'second-secret' } });
-    await act(async () => new Promise((resolve) => window.setTimeout(resolve, 500)));
-    gates[0]!.resolve(stateFromInput(saves[0]!));
-    await waitFor(() => expect(saves).toHaveLength(2));
+    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
+    expect(saves).toHaveLength(1);
+    await act(async () => { gates[0]!.resolve(stateFromInput(saves[0]!)); });
+    expect(saves).toHaveLength(2);
     expect(saves[1]?.providers[0]?.apiKey).toBe('second-secret');
 
-    gates[1]!.resolve(stateFromInput(saves[1]!));
-    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    await act(async () => { gates[1]!.resolve(stateFromInput(saves[1]!)); });
+    expect(save).toHaveBeenCalledTimes(2);
     service.dispose();
   });
 
   it('keeps the Pi preset flow to provider, key, and catalog model while hiding raw fields from the primary form', async () => {
-    const user = userEvent.setup();
     const save = vi.fn(async (input) => input as ModelProviderSettingsState);
     const service = new ModelProviderRendererStateService(clientFixture(save), null);
     service.start();
@@ -114,16 +116,18 @@ describe('ModelProviderSettingsView', () => {
     );
 
     const vendor = await screen.findByLabelText('厂商');
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     expect((vendor as HTMLSelectElement).value).toBe('deepseek');
     expect(screen.getByLabelText('API Key')).toBeTruthy();
     const primaryForm = container.querySelector('.model-provider-settings__primary-fields');
     expect(primaryForm?.textContent).not.toContain('协议');
     expect(primaryForm?.textContent).not.toContain('API Base URL');
 
-    await user.click(screen.getByRole('button', { name: '添加模型' }));
-    await user.click(await screen.findByRole('button', { name: '全选结果' }));
-    await user.click(screen.getByRole('button', { name: '添加 2 个模型' }));
-    await waitFor(() => expect(save).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: '添加模型' }));
+    fireEvent.click(screen.getByRole('button', { name: '全选结果' }));
+    fireEvent.click(screen.getByRole('button', { name: '添加 2 个模型' }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
+    expect(save).toHaveBeenCalled();
     expect(save.mock.calls.at(-1)?.[0]).toMatchObject({
       providers: [{
         catalogProviderId: 'deepseek',
@@ -552,7 +556,6 @@ describe('ModelProviderSettingsView', () => {
   });
 
   it.each(['', 'replacement-secret'])('preserves preset configuration when switching to custom with API key draft %j', async (apiKeyDraft) => {
-    const user = userEvent.setup();
     const provider: ProviderConfigState = {
       id: 'provider-deepseek',
       name: 'My DeepSeek',
@@ -588,16 +591,18 @@ describe('ModelProviderSettingsView', () => {
     );
 
     const vendor = await screen.findByLabelText('厂商');
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const apiKey = screen.getByLabelText(/^API Key/u) as HTMLInputElement;
     if (apiKeyDraft) fireEvent.change(apiKey, { target: { value: apiKeyDraft } });
-    await user.selectOptions(vendor, '__custom__');
+    fireEvent.change(vendor, { target: { value: '__custom__' } });
 
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(service.snapshot().state?.providers[0]).toEqual(customProvider);
     expect(apiKey.value).toBe(apiKeyDraft);
     expect((screen.getByLabelText('API Base URL') as HTMLInputElement).value).toBe(provider.baseUrl);
     expect(screen.getByText('DeepSeek Chat')).toBeTruthy();
-    await waitFor(() => expect(save).toHaveBeenCalled());
+    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
+    expect(save).toHaveBeenCalled();
     const saved = save.mock.calls.at(-1)?.[0];
     expect(saved).toEqual({
       activeProviderId: provider.id,

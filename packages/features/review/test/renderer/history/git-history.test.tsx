@@ -11,7 +11,7 @@ import { useGitHistory } from '../../../src/renderer/history/useGitHistory.js';
 import { GIT_GRAPH_ROW_HEIGHT } from '../../../src/renderer/history/gitGraph.js';
 import { ReviewRendererTestHost } from '../review-renderer-test-host.js';
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 const one = 'a'.repeat(40);
 const two = 'b'.repeat(40);
@@ -179,6 +179,7 @@ describe('Git change navigation', () => {
   });
 
   it('loads a hover card only after a pause and keeps its actions separate from diff selection and the context menu', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const pending = deferred<DesktopGitCommitDetails>();
     const getCommitDetails = vi.fn().mockReturnValue(pending.promise);
     const copyText = vi.fn().mockResolvedValue(undefined);
@@ -196,13 +197,14 @@ describe('Git change navigation', () => {
     vi.spyOn(row, 'getBoundingClientRect').mockReturnValue(new DOMRect(600, 100, 300, GIT_GRAPH_ROW_HEIGHT));
     fireEvent.pointerEnter(row);
     fireEvent.pointerLeave(row);
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 450)); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
     expect(getCommitDetails).not.toHaveBeenCalled();
     expect(screen.queryByRole('region', { name: '提交详情' })).toBeNull();
 
     fireEvent.pointerEnter(row);
-    await waitFor(() => expect(getCommitDetails).toHaveBeenCalledExactlyOnceWith('/repo', one));
-    const card = await screen.findByRole('region', { name: '提交详情' });
+    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
+    expect(getCommitDetails).toHaveBeenCalledExactlyOnceWith('/repo', one);
+    const card = screen.getByRole('region', { name: '提交详情' });
     expect(within(card).getByRole('status').textContent).toBe('正在加载…');
     await act(async () => { pending.resolve({
       commit: commit(one), message, githubUrl, baseOid: null,
@@ -217,7 +219,7 @@ describe('Git change navigation', () => {
 
     fireEvent.pointerLeave(row);
     fireEvent.pointerEnter(card.closest('.git-commit-hover')!);
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 200)); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(200); });
     expect(screen.getByRole('region', { name: '提交详情' })).toBe(card);
     fireEvent.click(within(card).getByRole('button', { name: '复制提交 ID' }));
     expect(copyText).toHaveBeenCalledExactlyOnceWith(one);
@@ -226,12 +228,14 @@ describe('Git change navigation', () => {
     expect(onSelect).not.toHaveBeenCalled();
 
     fireEvent.contextMenu(row);
-    expect(await screen.findByRole('menuitem', { name: '打开更改' })).toBeTruthy();
-    await waitFor(() => expect(screen.queryByRole('region', { name: '提交详情' })).toBeNull(), { timeout: 2000 });
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.getByRole('menuitem', { name: '打开更改' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: '提交详情' })).toBeNull();
     expect(getCommitDetails).toHaveBeenCalledOnce();
   });
 
   it.each([0, 450])('dismisses a commit preview on activation after %i ms and ignores pending focus delays', async (hoverTime) => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const getCommitDetails = vi.fn().mockResolvedValue({ commit: commit(one), message: 'Preview', baseOid: null, files: [] });
     const onSelect = vi.fn();
     render(<GitHistoryGraph workspaceRoot="/repo" commits={[commit(one), commit(two)]} refs={[]} head={one} selectedOid={null}
@@ -242,7 +246,7 @@ describe('Git change navigation', () => {
     const preview = () => document.querySelector('.git-commit-card');
     fireEvent.pointerEnter(row, { pointerType: 'mouse' });
     if (hoverTime) {
-      await act(async () => { await new Promise((resolve) => setTimeout(resolve, hoverTime)); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(hoverTime); });
       expect(preview()).not.toBeNull();
     }
     // Pointer activation also focuses the trigger, queuing another delayed open.
@@ -250,13 +254,14 @@ describe('Git change navigation', () => {
     fireEvent.click(target);
     expect(onSelect).toHaveBeenLastCalledWith(one);
     expect(preview()).toBeNull();
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 450)); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
     expect(preview()).toBeNull();
     expect(getCommitDetails).toHaveBeenCalledTimes(hoverTime ? 1 : 0);
 
     fireEvent.pointerLeave(row, { pointerType: 'mouse' });
     fireEvent.pointerEnter(row, { pointerType: 'mouse' });
-    await waitFor(() => expect(preview()).not.toBeNull());
+    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
+    expect(preview()).not.toBeNull();
     fireEvent.keyDown(target, { key: 'ArrowDown' });
     expect(onSelect).toHaveBeenLastCalledWith(two);
     expect(preview()).toBeNull();
