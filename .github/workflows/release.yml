@@ -126,7 +126,9 @@ jobs:
         env:
           RUN_WITH_LOG_HEARTBEAT_SECONDS: "30"
           RUN_WITH_LOG_TIMEOUT_MINUTES: "25"
-        run: node scripts/run-with-log.mjs release-logs/test-integration.log pnpm test:integration
+        run: |
+          pnpm build:contracts
+          node scripts/run-with-log.mjs release-logs/test-integration.log pnpm test:integration
 
       - uses: actions/upload-artifact@v4
         if: always()
