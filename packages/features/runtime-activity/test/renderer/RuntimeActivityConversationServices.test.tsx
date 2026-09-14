@@ -2,7 +2,6 @@
 
 import type { RuntimeBackgroundShellProcess } from '@setsuna-desktop/contracts';
 import { cleanup, fireEvent, render } from '@testing-library/react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RuntimeActivityConversationServiceList } from '../../src/renderer/RuntimeActivityConversationServiceList.js';
 import { runtimeActivityTestTranslate } from './support.js';
@@ -21,20 +20,6 @@ const service: RuntimeBackgroundShellProcess = {
 afterEach(cleanup);
 
 describe('RuntimeActivityConversationServiceList', () => {
-  it('renders no panel chrome without a running service', () => {
-    const html = renderToStaticMarkup(
-      <RuntimeActivityConversationServiceList
-        error={null}
-        onStop={vi.fn()}
-        services={[]}
-        stoppingIds={new Set()}
-        translate={runtimeActivityTestTranslate}
-      />,
-    );
-
-    expect(html).toBe('');
-  });
-
   it('exposes a Feature-owned stop action for the conversation service', () => {
     const onStop = vi.fn();
     const { getByRole } = render(

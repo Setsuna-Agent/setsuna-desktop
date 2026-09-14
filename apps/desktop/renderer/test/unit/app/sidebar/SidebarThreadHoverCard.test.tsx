@@ -2,11 +2,12 @@
 
 import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
 import { Button } from '@setsuna-desktop/renderer-ui';
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { SidebarThreadHoverCard } from '../../../../src/app/sidebar/SidebarThreadHoverCard.js';
 
-afterEach(cleanup);
+beforeEach(() => { vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); });
+afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 it.each([0, 400])('dismisses pending and visible previews when selecting a thread after %i ms', async (hoverTime) => {
   const onSelect = vi.fn();
@@ -25,7 +26,7 @@ it.each([0, 400])('dismisses pending and visible previews when selecting a threa
   fireEvent.pointerEnter(button, { pointerType: 'mouse' });
   expect(preview()).toBeNull();
   if (hoverTime) {
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, hoverTime)); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(hoverTime); });
     const card = preview()!;
     expect(within(card).getByText(thread.title)).toBeTruthy();
     expect(within(card).getByText('agent')).toBeTruthy();
@@ -38,12 +39,13 @@ it.each([0, 400])('dismisses pending and visible previews when selecting a threa
   fireEvent.click(button);
   expect(onSelect).toHaveBeenCalledOnce();
   expect(preview()).toBeNull();
-  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 400)); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(400); });
   expect(preview()).toBeNull();
 
   fireEvent.pointerLeave(button, { pointerType: 'mouse' });
   fireEvent.pointerEnter(button, { pointerType: 'mouse' });
-  await waitFor(() => expect(preview()).not.toBeNull());
+  await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+  expect(preview()).not.toBeNull();
   fireEvent.contextMenu(button);
   view.rerender(content(true));
   expect(preview()).toBeNull();

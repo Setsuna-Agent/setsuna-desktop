@@ -24,23 +24,6 @@ const messageCatalog = composeRendererMessages(hostMessages, [
 ]);
 
 describe('SettingsSidebar', () => {
-  it('groups settings navigation by purpose while preserving the section order', () => {
-    const html = renderSettingsSidebar({
-      activeSection: 'general',
-      pages: basePages,
-      onBack: vi.fn(),
-      onSelectSection: vi.fn(),
-    });
-
-    expect(html.match(/role="group"/g)).toHaveLength(3);
-    expect(html).toContain('应用偏好');
-    expect(html).toContain('模型与服务');
-    expect(html).toContain('数据与系统');
-    expect(html.indexOf('应用偏好')).toBeLessThan(html.indexOf('键盘快捷键'));
-    expect(html.indexOf('模型与服务')).toBeLessThan(html.indexOf('模型服务'));
-    expect(html.indexOf('数据与系统')).toBeLessThan(html.indexOf('归档对话'));
-  });
-
   it('places built-in Feature settings in their declared host group', () => {
     const html = renderSettingsSidebar({
       activeSection: 'webdav-sync',

@@ -5,13 +5,12 @@ import type {
   RuntimeBackgroundServiceActivity,
 } from '../../src/contracts/index.js';
 import { cleanup, fireEvent, render } from '@testing-library/react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   RuntimeActiveTaskRows,
   RuntimeBackgroundServiceRows,
 } from '../../src/renderer/RuntimeActivityRows.js';
-import { runtimeTaskActivityKey } from '../../src/renderer/runtime-activity-model.js';
+import { runtimeServiceActivityKey, runtimeTaskActivityKey } from '../../src/renderer/runtime-activity-model.js';
 import { runtimeActivityTestTranslate } from './support.js';
 
 const task: RuntimeActiveTask = {
@@ -46,35 +45,59 @@ afterEach(cleanup);
 
 describe('RuntimeActiveTaskRows', () => {
   it('exposes the task-specific stop action and disables it while stopping', () => {
-    const activeHtml = renderTaskRows(new Set());
-    const stoppingHtml = renderTaskRows(new Set([runtimeTaskActivityKey(task)]));
+    const onStopTask = vi.fn();
+    const content = (stoppingKeys: Set<string>) => (
+      <RuntimeActiveTaskRows
+        nowMs={Date.parse('2026-08-06T07:02:00.000Z')}
+        onOpenThread={vi.fn()}
+        onStopTask={onStopTask}
+        projectNameById={new Map()}
+        stoppingKeys={stoppingKeys}
+        tasks={[task]}
+        translate={runtimeActivityTestTranslate}
+      />
+    );
+    const view = render(content(new Set()));
+    const stop = view.getByRole('button', { name: '终止任务：整理运行中心' });
+    fireEvent.click(stop);
+    expect(onStopTask).toHaveBeenCalledExactlyOnceWith(task, runtimeTaskActivityKey(task));
 
-    expect(activeHtml).toContain('aria-label="终止任务：整理运行中心"');
-    expect(activeHtml).toContain('>终止<');
-    const action = stoppingHtml.match(/<button[^>]*class="[^"]*runtime-activity-row__action[^>]*>/)?.[0];
-    expect(action).toContain('disabled=""');
-    expect(stoppingHtml).toContain('is-spinning');
+    view.rerender(content(new Set([runtimeTaskActivityKey(task)])));
+    expect((stop as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(stop);
+    expect(onStopTask).toHaveBeenCalledOnce();
   });
 
   it('does not offer an open action when a service source thread was deleted', () => {
-    const html = renderToStaticMarkup(
+    const onOpenThread = vi.fn();
+    const onStopService = vi.fn();
+    const content = (service: RuntimeBackgroundServiceActivity) => (
       <RuntimeBackgroundServiceRows
         nowMs={Date.parse('2026-08-06T07:02:00.000Z')}
-        onOpenThread={vi.fn()}
-        onStopService={vi.fn()}
+        onOpenThread={onOpenThread}
+        onStopService={onStopService}
         projectNameById={new Map()}
-        services={[orphanedService]}
+        services={[service]}
         stoppingKeys={new Set()}
         translate={runtimeActivityTestTranslate}
-      />,
+      />
     );
+    const view = render(content(orphanedService));
+    fireEvent.doubleClick(view.getByText('pnpm dev'));
+    expect(onOpenThread).not.toHaveBeenCalled();
+    fireEvent.click(view.getByRole('button', { name: '终止服务：pnpm dev' }));
+    expect(onStopService).toHaveBeenCalledExactlyOnceWith(orphanedService, runtimeServiceActivityKey(orphanedService));
 
-    expect(html).toContain('原对话已删除');
-    expect(html).toContain('aria-label="终止服务：pnpm dev"');
+    const ownedService = { ...orphanedService, threadTitle: 'Existing thread' };
+    view.rerender(content(ownedService));
+    fireEvent.doubleClick(view.getByText('pnpm dev'));
+    expect(onOpenThread).toHaveBeenCalledExactlyOnceWith(ownedService.threadId);
   });
 
   it('keeps side tasks and services stoppable without opening them in the primary chat', () => {
     const onOpenThread = vi.fn();
+    const onStopTask = vi.fn();
+    const onStopService = vi.fn();
     const sideTask: RuntimeActiveTask = {
       ...task,
       threadId: 'thread_side_task',
@@ -87,12 +110,12 @@ describe('RuntimeActiveTaskRows', () => {
       threadKind: 'side',
       threadTitle: '侧边服务',
     };
-    const { container } = render(
+    const view = render(
       <>
         <RuntimeActiveTaskRows
           nowMs={Date.parse('2026-08-06T07:02:00.000Z')}
           onOpenThread={onOpenThread}
-          onStopTask={vi.fn()}
+          onStopTask={onStopTask}
           projectNameById={new Map()}
           stoppingKeys={new Set()}
           tasks={[sideTask]}
@@ -101,7 +124,7 @@ describe('RuntimeActiveTaskRows', () => {
         <RuntimeBackgroundServiceRows
           nowMs={Date.parse('2026-08-06T07:02:00.000Z')}
           onOpenThread={onOpenThread}
-          onStopService={vi.fn()}
+          onStopService={onStopService}
           projectNameById={new Map()}
           services={[sideService]}
           stoppingKeys={new Set()}
@@ -110,25 +133,12 @@ describe('RuntimeActiveTaskRows', () => {
       </>,
     );
 
-    const rows = container.querySelectorAll('.runtime-activity-row');
-    expect(rows).toHaveLength(2);
-    rows.forEach((row) => fireEvent.doubleClick(row));
-
+    fireEvent.doubleClick(view.getByText(sideTask.threadTitle));
+    fireEvent.doubleClick(view.getByText(sideService.command));
     expect(onOpenThread).not.toHaveBeenCalled();
-    expect(container.querySelectorAll('.runtime-activity-row__action')).toHaveLength(2);
+    fireEvent.click(view.getByRole('button', { name: '终止任务：整理运行中心' }));
+    fireEvent.click(view.getByRole('button', { name: '终止服务：pnpm dev' }));
+    expect(onStopTask).toHaveBeenCalledExactlyOnceWith(sideTask, runtimeTaskActivityKey(sideTask));
+    expect(onStopService).toHaveBeenCalledExactlyOnceWith(sideService, runtimeServiceActivityKey(sideService));
   });
 });
-
-function renderTaskRows(stoppingKeys: Set<string>): string {
-  return renderToStaticMarkup(
-    <RuntimeActiveTaskRows
-      nowMs={Date.parse('2026-08-06T07:02:00.000Z')}
-      onOpenThread={vi.fn()}
-      onStopTask={vi.fn()}
-      projectNameById={new Map()}
-      stoppingKeys={stoppingKeys}
-      tasks={[task]}
-      translate={runtimeActivityTestTranslate}
-    />,
-  );
-}

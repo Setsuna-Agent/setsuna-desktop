@@ -25,7 +25,7 @@ describe('WebDAV sync encryption', () => {
     const payload = Buffer.from('model-api-key-value', 'utf8');
     const encrypted = encryptWebDavBuffer(payload, key, 'repo/snapshot/key');
 
-    expect(encrypted).not.toContain(payload);
+    expect(encrypted.includes(payload)).toBe(false);
     expect(decryptWebDavBuffer(encrypted, key, 'repo/snapshot/key')).toEqual(payload);
     expect(() => decryptWebDavBuffer(encrypted, generateWebDavRecoveryKey(), 'repo/snapshot/key'))
       .toThrow('无法解密');
@@ -42,6 +42,8 @@ describe('WebDAV sync encryption', () => {
     const encryptedPath = path.join(root, 'encrypted.bin');
     const restoredPath = path.join(root, 'restored.bin');
     const payload = Buffer.alloc(2 * 1024 * 1024 + 7, 0x5a);
+    const plaintextMarker = Buffer.from('model-api-key-value');
+    plaintextMarker.copy(payload);
     await writeFile(sourcePath, payload);
     const key = generateWebDavRecoveryKey();
 
@@ -60,11 +62,12 @@ describe('WebDAV sync encryption', () => {
     });
 
     expect(restored).toEqual(encrypted);
-    expect(await readFile(restoredPath)).toEqual(payload);
+    // Compare every byte without the generic matcher's per-element deep comparison.
+    expect((await readFile(restoredPath)).equals(payload)).toBe(true);
     if (process.platform !== 'win32') {
       expect((await stat(restoredPath)).mode & 0o777).toBe(0o700);
     }
-    expect(await readFile(encryptedPath)).not.toContain(Buffer.from('model-api-key-value'));
+    expect((await readFile(encryptedPath)).includes(plaintextMarker)).toBe(false);
     const verifier = webDavRepositoryKeyVerifier(key, 'repo-id');
     expect(verifyWebDavRepositoryKey(key, 'repo-id', verifier)).toBe(true);
     expect(verifyWebDavRepositoryKey(generateWebDavRecoveryKey(), 'repo-id', verifier)).toBe(false);

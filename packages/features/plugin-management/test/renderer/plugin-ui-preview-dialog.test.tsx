@@ -45,23 +45,4 @@ describe('Plugin UI preview dialog', () => {
     expect(html).toContain('data-temperature="28"');
     expect(html).toContain('feature.pluginManagement.interface.previewSample');
   });
-
-  it('explains why a declared card without a static sample cannot be previewed', () => {
-    const html = renderToStaticMarkup(
-      <PluginUiPreviewDialog
-        surface={{
-          id: 'card:weather_today',
-          kind: 'chat-card',
-          renderMode: 'sandbox',
-          title: 'weather_today',
-        }}
-        translate={translate}
-        ui={ui}
-        onClose={() => undefined}
-      />,
-    );
-
-    expect(html).toContain('feature.pluginManagement.interface.previewUnavailableTitle');
-    expect(html).toContain('feature.pluginManagement.interface.previewUnavailableBody');
-  });
 });

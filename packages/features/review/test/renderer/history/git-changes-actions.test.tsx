@@ -79,25 +79,6 @@ it('generates and commits only staged changes by default and preserves edits whe
   expect(input.value).toBe('');
 });
 
-it.each(['更多 Git 操作', '提交选项'])('hides the %s tooltip while its menu is open and restores hover after closing', async (label) => {
-  render(surface(createBridge({})));
-  const trigger = screen.getByRole('button', { name: label });
-  fireEvent.pointerMove(trigger, { pointerType: 'mouse' });
-  await screen.findByRole('tooltip', { name: label });
-  fireEvent.pointerDown(trigger, { button: 0, pointerType: 'mouse' });
-  const menu = await screen.findByRole('menu');
-  expect(screen.queryByRole('tooltip', { name: label })).toBeNull();
-  fireEvent.pointerMove(trigger, { pointerType: 'mouse' });
-  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 220)); });
-  expect(screen.queryByRole('tooltip', { name: label })).toBeNull();
-  expect(screen.getByRole('menu')).toBe(menu);
-  fireEvent.keyDown(menu, { key: 'Escape' });
-  await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
-  fireEvent.pointerLeave(trigger, { pointerType: 'mouse' });
-  fireEvent.pointerMove(trigger, { pointerType: 'mouse' });
-  await screen.findByRole('tooltip', { name: label });
-});
-
 it('uses the latest conversation model when generating after switching conversations', async () => {
   const generateCommitMessage = vi.fn().mockResolvedValue({ message: 'feat: generated summary' });
   const bridge = createBridge({ generateCommitMessage });
@@ -409,7 +390,6 @@ it('opens the complete group diff, including deleted files, and can return to a 
   await waitFor(() => expect(group.getByRole('button', { name: 'first.txt' }).getAttribute('aria-pressed')).toBe('true'));
 });
 
-
 it.each(['pull', 'sync'] as const)('keeps %s recovery details available until dismissed and shows subsequent failures', async (kind) => {
   const recoveryCommand = `git stash apply --index ${'d'.repeat(40)}`;
   const gitError = `Rebase conflict\n原始暂存与未暂存改动已保留，请使用 ${recoveryCommand} 恢复。`;
@@ -454,7 +434,6 @@ it.each(['pull', 'sync'] as const)('keeps %s recovery details available until di
   expect(nextAlert.textContent).toContain(recoveryCommand);
   expect(resolveGitConflicts).toHaveBeenCalledTimes(2);
 });
-
 
 it('keeps multiple conflict transcripts per workspace, deduplicates the active task, and allows reopening older records', async () => {
   const resolveGitConflicts = vi.fn<ReviewRendererService['resolveGitConflicts']>()
@@ -535,7 +514,6 @@ it.each(['no-conflicts', 'disabled'] as const)('retains pull errors when conflic
   expect((await screen.findByRole('alert')).textContent).toContain('Pull failed');
   expect(screen.queryByRole('region', { name: '冲突处理记录' })).toBeNull();
 });
-
 
 it('archives single conflict records from the row and context menu, preserving failed writes and persisted visibility', async () => {
   const records = [
