@@ -110,8 +110,8 @@ export class EventCoordinatedThreadStore implements ThreadStore {
     });
   }
 
-  listEvents(threadId: string, sinceSeq?: number) {
-    return this.inner.listEvents(threadId, sinceSeq);
+  listEvents(threadId: string, sinceSeq?: number, filter?: Parameters<ThreadStore['listEvents']>[2]) {
+    return this.inner.listEvents(threadId, sinceSeq, filter);
   }
 
   readEventPage(threadId: string, query: ThreadEventPageQuery) {

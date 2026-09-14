@@ -1,6 +1,31 @@
 import type { DatabaseSync } from 'node:sqlite';
 
-export const SQLITE_THREAD_SCHEMA_VERSION = 4;
+export const SQLITE_THREAD_SCHEMA_VERSION = 5;
+
+const INCREMENTAL_CHECKPOINT_SCHEMA = `
+  ALTER TABLE threads ADD COLUMN snapshot_format INTEGER NOT NULL DEFAULT 1;
+  CREATE TABLE thread_turn_checkpoints (
+    thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+    turn_index INTEGER NOT NULL,
+    turn_id TEXT NOT NULL,
+    turn_json BLOB NOT NULL,
+    PRIMARY KEY (thread_id, turn_index)
+  ) WITHOUT ROWID;
+  CREATE INDEX runtime_events_steps_idx ON runtime_events(thread_id, turn_id, seq)
+    WHERE type = 'turn.step_snapshot';
+  -- Event sequence uniqueness is already enforced by runtime_events. The identity ledger
+  -- only needs its primary key to reject reused IDs after events enter compressed archives.
+  ALTER TABLE runtime_event_ids RENAME TO runtime_event_ids_v4;
+  CREATE TABLE runtime_event_ids (
+    thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+    event_id TEXT NOT NULL,
+    seq INTEGER NOT NULL,
+    PRIMARY KEY (thread_id, event_id)
+  ) WITHOUT ROWID;
+  INSERT INTO runtime_event_ids SELECT thread_id, event_id, seq FROM runtime_event_ids_v4;
+  DROP TABLE runtime_event_ids_v4;
+  PRAGMA user_version = 5;
+`;
 
 const FEATURE_PROJECTION_CHECKPOINT_SCHEMA = `
   CREATE TABLE feature_projection_checkpoints (
@@ -75,6 +100,10 @@ export function ensureSqliteThreadSchema(database: DatabaseSync): void {
   }
   if (version === 3) {
     withTransaction(database, () => database.exec(FEATURE_PROJECTION_CHECKPOINT_SCHEMA));
+    version = 4;
+  }
+  if (version === 4) {
+    withTransaction(database, () => database.exec(INCREMENTAL_CHECKPOINT_SCHEMA));
     return;
   }
   if (version !== 0) throw new Error(`Unsupported SQLite thread store schema: ${version}`);
@@ -162,6 +191,7 @@ export function ensureSqliteThreadSchema(database: DatabaseSync): void {
     );
 
     ${FEATURE_PROJECTION_CHECKPOINT_SCHEMA}
+    ${INCREMENTAL_CHECKPOINT_SCHEMA}
   `));
 }
 

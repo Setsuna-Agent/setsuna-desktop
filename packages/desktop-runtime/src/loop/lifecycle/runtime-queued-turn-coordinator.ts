@@ -383,7 +383,9 @@ export class RuntimeQueuedTurnCoordinator {
     return this.runExclusive(threadId, async () => {
       try {
         if (this.stopped || !this.isLatestObservedRun(threadId, settledRun)) return;
-        const events = await this.options.threadStore.listEvents(threadId);
+        const events = await this.options.threadStore.listEvents(threadId, 0, {
+          turnId, types: ['turn.completed', 'turn.cancelled', 'runtime.error'],
+        });
         if (!this.isLatestObservedRun(threadId, settledRun)) return;
         const outcome = terminalOutcome(events, turnId);
         if (outcome !== 'completed') {

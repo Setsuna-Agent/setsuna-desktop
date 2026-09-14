@@ -46,7 +46,7 @@ describe('sqlite thread store', () => {
     // Simulate a crash after the event commit but before its delayed snapshot.
     const database = new DatabaseSync(path.join(dataDir, 'threads.sqlite'));
     try {
-      database.prepare('UPDATE threads SET snapshot_json = ?, snapshot_seq = ? WHERE id = ?')
+      database.prepare('UPDATE threads SET snapshot_json = ?, snapshot_seq = ?, snapshot_format = 1 WHERE id = ?')
         .run(JSON.stringify(checkpoint), checkpoint!.lastSeq, thread.id);
     } finally {
       database.close();
@@ -281,10 +281,15 @@ describe('sqlite thread store', () => {
     await first.recover();
     const thread = await first.createThread({ title: 'Schema migration' });
     await first.appendEvent(thread.id, messageCreatedEvent(thread.id, 'msg_v1', 'from v1'));
+    const legacySnapshot = await first.getThread(thread.id);
     await first.close();
 
     const legacy = new DatabaseSync(path.join(dataDir, 'threads.sqlite'));
+    legacy.prepare('UPDATE threads SET snapshot_json = ? WHERE id = ?').run(JSON.stringify(legacySnapshot), thread.id);
     legacy.exec(`
+      DROP TABLE thread_turn_checkpoints;
+      DROP INDEX runtime_events_steps_idx;
+      ALTER TABLE threads DROP COLUMN snapshot_format;
       DROP TABLE feature_projection_checkpoints;
       DROP TABLE runtime_event_archives;
       DROP TABLE runtime_event_ids;
@@ -363,7 +368,7 @@ describe('sqlite thread store', () => {
     await first.close();
 
     const database = new DatabaseSync(path.join(dataDir, 'threads.sqlite'), { readOnly: true });
-    expect(database.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 4 });
+    expect(database.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 5 });
     database.close();
 
     const reopened = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());

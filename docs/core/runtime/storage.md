@@ -95,40 +95,41 @@ Input 中未提供 key 表示不覆盖；不能把 UI 空输入误解释为删�
 
 ### Append
 
-一次 event append 在事务中：
+事件和流式批次在事务中：
 
-1. 校验 owner/fencing。
-2. 分配 next seq。
-3. 写 event。
-4. 用 reducer 更新 snapshot。
-5. Copy-on-write 同步受影响的 message index row。
-6. 按策略写 checkpoint/summary，并把已被 checkpoint 覆盖的旧 streaming delta 压缩归档。
-7. Commit。
+1. 校验 owner/fencing，分配连续 seq。
+2. 写事件并用 reducer 更新内存投影；大于 4 KiB 的 JSON 在压缩确实更小时存为 gzip BLOB，小记录仍是 TEXT。
+3. 更新轻量线程摘要。生命周期边界同时推进检查点；其他记录按默认 1 秒窗口合并检查点。
+4. Commit 后发布整批事件。批次失败不发布其中任何事件，也不提交半批记录。
 
-只有 commit 成功后 `RuntimeEventWriter` 才发布 SSE。
+检查点使用 `snapshot_format = 2`：
 
-消息、工具、用量与采样步骤事件立即提交，完整 checkpoint 默认按 1 秒窗口合并；
-turn 开始/终止、runtime 错误及历史修改立即 checkpoint，flush/close 排空待写状态。
-恢复时重放 `snapshot_seq` 之后的短 tail。
-`message.delta`、reasoning/item/plan delta、tool preview/output delta 可以在检查点后从热表移入
-gzip archive；完整事件仍可无损重放，turn、approval、error、completion 等生命周期/审计事件
-持续留在热表。请求序号早于归档边界时，store 返回 retention gap，由 Thread SSE 发送
-canonical snapshot resync。
+- `threads.snapshot_json` 只保存线程头部和消息/回合数量，不再包含完整历史。
+- `thread_messages` 保存有序消息；`thread_turn_checkpoints` 保存有序回合。
+- 同一检查点的头部、变化消息、变化回合和 `snapshot_seq` 在一个事务中更新。
+- Copy-on-write 引用用于跳过未改变的旧消息和旧回合。流式消息行按检查点更新，不随每个 delta 重写。
+- 回合的采样步骤诊断引用 `turn.step_snapshot` 事件，恢复时通过专用索引读取；原生 provider metadata 与完整步骤仍可恢复。
+- 部分旧快照中的步骤早于事件日志，无法完整引用时保留内联记录。
 
-消息分页使用稳定的 `message_index < before` 游标。追加消息只插入一行，普通 delta
-只更新 copy-on-write 改变的行；删除、截断和清空才重建索引。
+消息分页读取当前缓存投影，包含已提交但尚未写入检查点的事件尾部；搜索合并缓存中的最新消息，
+因此不需要通过读请求强制刷盘。采样仍只读取消息及必要线程状态。
 
-事件写入使用内部 copy-on-write 投影，已保存的不可变 step snapshot 不随每个事件深拷贝。
-采样通过 `getSamplingState` 只读取消息及必要线程状态，避免复制全部诊断历史；
-公开完整线程读取仍返回独立副本，SWE、插件用量和诊断所需的历史步骤保持完整。
+`message.delta`、reasoning/item/plan delta、tool preview/output delta 在检查点后移入 gzip archive，
+保留连续 seq 和无损事件重放。SSE 超过热尾保留边界时返回 canonical snapshot resync。
+回合结算、取消和 Goal 核算按事件类型/turn 查询持久记录，不再解压无关的流式归档。
+
+v5 移除事件 ID ledger 上重复的 seq 唯一索引；事件 ID 仍由 ledger 主键保证唯一，
+seq 由事件表主键保证唯一。大事件可以混合 TEXT 与 gzip BLOB，WebDAV 恢复会保留编码并重映射项目引用。
 
 ### Recovery
 
 - 取得/续租 runtime owner。
 - 拒绝第二个有效 runtime。
-- 读取 snapshot checkpoint。
-- 重放 event tail。
+- 读取检查点头部、消息和回合，并恢复被引用的采样步骤。
+- 重放 `snapshot_seq` 后的 event tail。
 - v1 → v2 原地增加 retention marker 和 message index；首次读取旧 thread 时回填索引。
+- v4 → v5 在取得 runtime owner 后升级 schema；旧单体快照在首次读取对应会话时，事务内转换为分行检查点并压缩大事件。
+- 释放的 SQLite 页先供后续写入复用；物理文件缩小需要离线 `VACUUM`，正常对话热路径不执行全库整理。
 - 结算 stale streaming turn 由 server lifecycle 完成。
 
 ### Legacy JSON import

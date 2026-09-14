@@ -36,7 +36,7 @@ export function createRuntimeGoalHost(
       includeSide: true,
     }),
     getThread: (threadId) => dependencies.threadStore.getThread(threadId),
-    listEvents: (threadId) => dependencies.threadStore.listEvents(threadId),
+    listEvents: (threadId, query) => dependencies.threadStore.listEvents(threadId, 0, query),
     activeTask: (threadId) => dependencies.turnTasks.activeForThread(threadId),
     registeredTask: (threadId) => dependencies.turnTasks.registeredForThread(threadId),
     cancelTurn: (threadId, turnId) => dependencies.cancelTurn(threadId, turnId),

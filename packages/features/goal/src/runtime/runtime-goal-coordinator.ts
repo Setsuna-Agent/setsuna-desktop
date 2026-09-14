@@ -514,7 +514,10 @@ export class RuntimeGoalCoordinator implements GoalControl {
     threadId: string,
     goal: RuntimeThreadGoal,
   ): Promise<RuntimeThreadGoal> {
-    const storedEvents = await this.options.host.listEvents(threadId);
+    const storedEvents = await this.options.host.listEvents(threadId, {
+      types: ['feature.event', 'thread.goal_updated', 'thread.goal_cleared', 'message.created',
+        'turn.started', 'turn.completed', 'turn.cancelled', 'runtime.error', 'token.count'],
+    });
     const events = runtimeEvents(storedEvents);
     const checkpoints = storedEvents.flatMap((event) => {
       const state = goalStateFromRecord(event);
@@ -599,7 +602,9 @@ export class RuntimeGoalCoordinator implements GoalControl {
       return;
     }
 
-    const events = runtimeEvents(await this.options.host.listEvents(threadId))
+    const events = runtimeEvents(await this.options.host.listEvents(threadId, {
+      turnId, types: ['turn.started', 'turn.completed', 'turn.cancelled', 'runtime.error', 'token.count', 'tool.completed'],
+    }))
       .filter((event) => event.turnId === turnId);
     await this.withGoalMutation(threadId, () => this.settleGoalTurn(
       threadId,

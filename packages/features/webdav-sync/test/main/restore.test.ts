@@ -511,6 +511,10 @@ describe('WebDAV restore planning and commit', () => {
         events_gzip BLOB NOT NULL,
         PRIMARY KEY (thread_id, start_seq)
       );
+      CREATE TABLE thread_turn_checkpoints (
+        thread_id TEXT NOT NULL, turn_index INTEGER NOT NULL, turn_id TEXT NOT NULL,
+        turn_json BLOB NOT NULL, PRIMARY KEY (thread_id, turn_index)
+      );
     `);
     database.prepare('INSERT INTO threads VALUES (?, ?, ?)').run(
       'thread_alpha',
@@ -536,7 +540,7 @@ describe('WebDAV restore planning and commit', () => {
     database.prepare('INSERT INTO runtime_events VALUES (?, ?, ?)').run(
       'thread_alpha',
       1,
-      JSON.stringify({
+      gzipSync(JSON.stringify({
         id: 'event_live',
         seq: 1,
         threadId: 'thread_alpha',
@@ -550,7 +554,13 @@ describe('WebDAV restore planning and commit', () => {
             },
           },
         },
-      }),
+      })),
+    );
+    database.prepare('INSERT INTO thread_turn_checkpoints VALUES (?, ?, ?, ?)').run(
+      'thread_alpha', 0, 'turn_alpha', gzipSync(JSON.stringify({
+        turn: { id: 'turn_alpha', items: [{ projectId: 'project_remote_alpha', workspaceRoot: '/source-device/alpha' }] },
+        stepCount: 1,
+      })),
     );
     database.prepare('INSERT INTO runtime_event_archives VALUES (?, ?, ?)').run(
       'thread_alpha',
@@ -614,14 +624,18 @@ describe('WebDAV restore planning and commit', () => {
         artifact: { projectId: 'project_local_alpha', workspaceRoot: localProjectPath },
       });
       const liveEvent = restored.prepare('SELECT event_json FROM runtime_events').get() as {
-        event_json: string;
+        event_json: Uint8Array;
       };
-      expect(JSON.parse(liveEvent.event_json)).toMatchObject({
+      expect(JSON.parse(gunzipSync(liveEvent.event_json).toString('utf8'))).toMatchObject({
         payload: {
           data: {
             artifact: { projectId: 'project_local_alpha', workspaceRoot: localProjectPath },
           },
         },
+      });
+      const checkpoint = restored.prepare('SELECT turn_json FROM thread_turn_checkpoints').get() as { turn_json: Uint8Array };
+      expect(JSON.parse(gunzipSync(checkpoint.turn_json).toString('utf8'))).toMatchObject({
+        turn: { items: [{ projectId: 'project_local_alpha', workspaceRoot: localProjectPath }] }, stepCount: 1,
       });
       const archive = restored.prepare('SELECT events_gzip FROM runtime_event_archives').get() as {
         events_gzip: Uint8Array;

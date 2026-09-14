@@ -43,7 +43,10 @@ export interface GoalRuntimeHost {
   id(prefix: string): string;
   listThreads(): Promise<RuntimeThreadSummary[]>;
   getThread(threadId: string): Promise<RuntimeThread | null>;
-  listEvents(threadId: string): Promise<StoredThreadEvent[]>;
+  listEvents(threadId: string, query?: Readonly<{
+    turnId?: string;
+    types: readonly StoredThreadEvent['type'][];
+  }>): Promise<StoredThreadEvent[]>;
   activeTask(threadId: string): GoalTask | null;
   registeredTask(threadId: string): GoalTask | null;
   cancelTurn(threadId: string, turnId: string): Promise<boolean>;

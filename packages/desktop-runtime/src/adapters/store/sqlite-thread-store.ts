@@ -18,6 +18,7 @@ import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type {
   ThreadEventPageQuery,
+  ThreadEventFilter,
   ThreadStore,
   ThreadStoreCreateInput,
   ThreadStorePatch,
@@ -31,26 +32,28 @@ import {
   readEventArchiveState,
 } from './sqlite-thread-event-archive.js';
 import {
+  compressLegacyThreadEvents,
   readAllThreadEvents,
   readHotThreadEvents,
   readThreadEventPage,
+  readFilteredThreadEvents,
 } from './sqlite-thread-event-reader.js';
 import { normalizeRuntimeMessagePatch } from './runtime-message-patch.js';
 import {
   insertRuntimeEvent,
   insertThreadProjection,
-  listIndexedMessages,
+  threadMessagePage,
   replaceMessageIndex,
   syncMessageIndex,
   threadTranscriptPage,
   updateThreadProjection,
 } from './sqlite-thread-projections.js';
+import { readThreadCheckpoint, syncTurnCheckpoints } from './sqlite/checkpoints.js';
 import { ensureSqliteThreadSchema } from './sqlite-thread-schema.js';
 import { SqliteFeatureProjectionCheckpoints } from './sqlite-feature-projection-checkpoints.js';
 import {
   changedRows,
   numberColumn,
-  optionalJson,
   stringColumn,
   summaryFromRow,
 } from './sqlite-thread-row.js';
@@ -67,9 +70,9 @@ import {
   projectRuntimeThreadSamplingState,
   projectRuntimeTurnActivity,
   threadHasAncestor,
-  toSummary,
 } from './thread-store-state.js';
 import {
+  buildThreadSearchPreview,
   normalizedThreadSearch,
   threadSearchResult,
 } from './thread-search.js';
@@ -119,6 +122,7 @@ export class SqliteThreadStore implements ThreadStore {
   private readonly ownershipWaitMs: number;
   private readonly threadWriteQueues = new Map<string, Promise<void>>();
   private readonly threadCache = new Map<string, RuntimeThread>();
+  private readonly checkpointCache = new Map<string, RuntimeThread>();
   private readonly checkpointTimers = new Map<string, NodeJS.Timeout>();
   private readonly checkpointTasks = new Set<Promise<void>>();
 
@@ -189,6 +193,7 @@ export class SqliteThreadStore implements ThreadStore {
       }
       this.database = null;
       this.threadCache.clear();
+      this.checkpointCache.clear();
       this.closed = true;
     }
     if (failure) throw failure;
@@ -208,6 +213,18 @@ export class SqliteThreadStore implements ThreadStore {
     const messagePreviews = search
       ? searchSqliteThreadMessagePreviews(this.requireDatabase(), search)
       : new Map<string, string>();
+    if (search) {
+      for (const thread of this.threadCache.values()) {
+        messagePreviews.delete(thread.id);
+        for (let index = thread.messages.length - 1; index >= 0; index -= 1) {
+          const preview = buildThreadSearchPreview(thread.messages[index]!.content, search);
+          if (preview) {
+            messagePreviews.set(thread.id, preview);
+            break;
+          }
+        }
+      }
+    }
     const parentMap = new Map(summaries.map((thread) => [thread.id, thread.parentThreadId]));
     return summaries
       .filter((thread) => (query.includeSide || thread.kind !== 'side') && (query.includeArchived || !thread.archived))
@@ -254,7 +271,7 @@ export class SqliteThreadStore implements ThreadStore {
     const { safeThreadId, thread } = await this.readThread(threadId);
     // Loading once also repairs a v1 database whose message index has not been backfilled yet.
     if (!thread) throw new Error(`Thread not found: ${safeThreadId}`);
-    return listIndexedMessages(this.requireDatabase(), safeThreadId, query);
+    return threadMessagePage(thread.messages, query);
   }
 
   async getThreadPage(
@@ -322,6 +339,7 @@ export class SqliteThreadStore implements ThreadStore {
         if (changedRows(result) !== 1) throw new Error(`Thread not found: ${safeThreadId}`);
       });
       this.threadCache.delete(safeThreadId);
+      this.checkpointCache.delete(safeThreadId);
     });
   }
 
@@ -443,11 +461,14 @@ export class SqliteThreadStore implements ThreadStore {
     );
   }
 
-  async listEvents(threadId: string, sinceSeq = 0): Promise<StoredThreadEvent[]> {
+  async listEvents(threadId: string, sinceSeq = 0, filter?: ThreadEventFilter): Promise<StoredThreadEvent[]> {
     const safeThreadId = assertSafeRuntimeId(threadId, 'Thread id');
     await this.ensureReady();
     this.assertOwnership();
-    return readAllThreadEvents(this.requireDatabase(), safeThreadId, Math.max(0, Math.floor(sinceSeq)));
+    const afterSeq = Math.max(0, Math.floor(sinceSeq));
+    return filter
+      ? readFilteredThreadEvents(this.requireDatabase(), safeThreadId, afterSeq, filter)
+      : readAllThreadEvents(this.requireDatabase(), safeThreadId, afterSeq);
   }
 
   async readEventPage(threadId: string, query: ThreadEventPageQuery): Promise<StoredThreadEvent[]> {
@@ -495,8 +516,10 @@ export class SqliteThreadStore implements ThreadStore {
         PRAGMA temp_store = MEMORY;
       `);
       registerSqliteThreadSearch(database);
+      const existing = numberColumn(database.prepare('PRAGMA user_version').get(), 'user_version') > 0;
+      if (existing) await this.acquireOwnership();
       ensureSqliteThreadSchema(database);
-      await this.acquireOwnership();
+      if (!existing) await this.acquireOwnership();
       this.startLeaseHeartbeat();
       await this.importLegacyJsonStore();
     } catch (error) {
@@ -603,12 +626,15 @@ export class SqliteThreadStore implements ThreadStore {
         delayedCheckpoint ? null : nextThread.lastSeq,
         persistedLastSeq,
       );
-      syncMessageIndex(this.requireDatabase(), current, nextThread);
+      if (!delayedCheckpoint) this.syncCheckpointParts(nextThread);
     });
 
     if (!events.length || !nextThread) throw new Error(`Unable to persist runtime events for thread: ${threadId}`);
     this.threadCache.set(threadId, nextThread);
-    if (!delayedCheckpoint) this.cancelCheckpoint(threadId);
+    if (!delayedCheckpoint) {
+      this.checkpointCache.set(threadId, nextThread);
+      this.cancelCheckpoint(threadId);
+    }
     // Archiving is maintenance, not part of the event commit. Keeping it on the
     // checkpoint queue prevents compression work from delaying lifecycle publication.
     this.scheduleCheckpoint(threadId);
@@ -625,7 +651,7 @@ export class SqliteThreadStore implements ThreadStore {
 
   private loadThread(threadId: string): RuntimeThread | null {
     const row = this.requireDatabase().prepare(`
-      SELECT snapshot_json, snapshot_seq, last_seq, message_index_seq
+      SELECT snapshot_json, snapshot_seq, last_seq, message_index_seq, snapshot_format
       FROM threads
       WHERE id = ?
     `).get(threadId);
@@ -635,7 +661,9 @@ export class SqliteThreadStore implements ThreadStore {
     const lastSeq = numberColumn(row, 'last_seq');
     let snapshot: RuntimeThread;
     try {
-      snapshot = JSON.parse(stringColumn(row, 'snapshot_json')) as RuntimeThread;
+      snapshot = readThreadCheckpoint(
+        this.requireDatabase(), threadId, stringColumn(row, 'snapshot_json'), numberColumn(row, 'snapshot_format'),
+      );
     } catch (error) {
       throw new Error(`Invalid SQLite thread snapshot JSON: ${threadId}`, { cause: error });
     }
@@ -644,6 +672,11 @@ export class SqliteThreadStore implements ThreadStore {
       throw new Error(`Invalid SQLite thread checkpoint sequence: ${threadId}`);
     }
 
+    const partitioned = numberColumn(row, 'snapshot_format') === 2;
+    if (partitioned) {
+      if (numberColumn(row, 'message_index_seq') !== snapshotSeq) throw new Error(`Invalid SQLite message checkpoint: ${threadId}`);
+      this.checkpointCache.set(threadId, snapshot);
+    }
     const normalized = normalizeThreadSnapshot(snapshot);
     let thread = normalized.thread;
     const events = readAllThreadEvents(this.requireDatabase(), threadId, snapshotSeq);
@@ -657,51 +690,28 @@ export class SqliteThreadStore implements ThreadStore {
     const replayNormalized = normalizeThreadAfterEventReplay(thread);
     thread = hydrateMessageCompletionTimesFromEvents(replayNormalized.thread, events);
     this.threadCache.set(threadId, thread);
-    const indexedMessageCount = numberColumn(this.requireDatabase().prepare(`
-      SELECT COUNT(*) AS count FROM thread_messages WHERE thread_id = ?
-    `).get(threadId), 'count');
-    const messageIndexStale = numberColumn(row, 'message_index_seq') !== lastSeq
-      || indexedMessageCount !== thread.messages.length;
-    if (normalized.changed || replayNormalized.changed || events.length || messageIndexStale) {
-      this.repairLoadedThread(thread, messageIndexStale || normalized.changed || replayNormalized.changed);
+    if (!partitioned || normalized.changed || replayNormalized.changed || events.length) {
+      if (normalized.changed || replayNormalized.changed) this.checkpointCache.delete(threadId);
+      this.withWriteTransaction(() => {
+        if (!partitioned) compressLegacyThreadEvents(this.requireDatabase(), threadId);
+        this.syncCheckpointParts(thread);
+        updateThreadProjection(this.requireDatabase(), thread, thread.lastSeq, thread.lastSeq);
+        this.archiveTransientEvents(thread);
+      });
+      this.checkpointCache.set(threadId, thread);
     }
     return thread;
   }
 
-  private repairLoadedThread(thread: RuntimeThread, rebuildMessageIndex: boolean): void {
-    this.withWriteTransaction(() => {
-      const summary = toSummary(thread);
-      const result = this.requireDatabase().prepare(`
-        UPDATE threads SET kind = ?, active_turn_id = ?, forked_from_id = ?, parent_thread_id = ?, project_id = ?, title = ?,
-          created_at = ?, updated_at = ?, archived = ?, memory_mode = ?, git_info_json = ?, goal_json = ?,
-          message_count = ?, last_message_preview = ?, snapshot_json = ?, snapshot_seq = ?,
-          message_index_seq = ?
-        WHERE id = ? AND last_seq = ?
-      `).run(
-        summary.kind ?? 'regular',
-        summary.activeTurnId ?? null,
-        summary.forkedFromId ?? null,
-        summary.parentThreadId ?? null,
-        summary.projectId ?? null,
-        summary.title,
-        summary.createdAt,
-        summary.updatedAt,
-        summary.archived ? 1 : 0,
-        normalizeThreadMemoryMode(summary.memoryMode),
-        optionalJson(summary.gitInfo),
-        null,
-        summary.messageCount,
-        summary.lastMessagePreview,
-        JSON.stringify(thread),
-        thread.lastSeq,
-        thread.lastSeq,
-        thread.id,
-        thread.lastSeq,
-      );
-      if (changedRows(result) !== 1) throw new Error(`Unable to repair SQLite thread: ${thread.id}`);
-      if (rebuildMessageIndex) replaceMessageIndex(this.requireDatabase(), thread);
-      this.archiveTransientEvents(thread);
-    });
+  private syncCheckpointParts(thread: RuntimeThread): void {
+    const previous = this.checkpointCache.get(thread.id);
+    if (previous) syncMessageIndex(this.requireDatabase(), previous, thread);
+    else {
+      replaceMessageIndex(this.requireDatabase(), thread);
+      this.requireDatabase().prepare('UPDATE threads SET message_index_seq = ? WHERE id = ?')
+        .run(thread.lastSeq, thread.id);
+    }
+    syncTurnCheckpoints(this.requireDatabase(), previous, thread);
   }
 
   private archiveTransientEvents(thread: RuntimeThread): void {
@@ -717,41 +727,13 @@ export class SqliteThreadStore implements ThreadStore {
     const thread = this.threadCache.get(threadId);
     if (!thread) return;
     this.withWriteTransaction(() => {
-      const row = this.requireDatabase().prepare('SELECT snapshot_seq FROM threads WHERE id = ?').get(threadId);
-      if (row && numberColumn(row, 'snapshot_seq') === thread.lastSeq) {
-        this.archiveTransientEvents(thread);
-        return;
+      if (this.checkpointCache.get(threadId)?.lastSeq !== thread.lastSeq) {
+        this.syncCheckpointParts(thread);
+        updateThreadProjection(this.requireDatabase(), thread, thread.lastSeq, thread.lastSeq);
       }
-      const summary = toSummary(thread);
-      const result = this.requireDatabase().prepare(`
-        UPDATE threads SET kind = ?, active_turn_id = ?, forked_from_id = ?, parent_thread_id = ?, project_id = ?, title = ?,
-          created_at = ?, updated_at = ?, archived = ?, memory_mode = ?, git_info_json = ?, goal_json = ?,
-          message_count = ?, last_message_preview = ?, snapshot_json = ?, snapshot_seq = ?
-        WHERE id = ? AND last_seq = ? AND snapshot_seq <= ?
-      `).run(
-        summary.kind ?? 'regular',
-        summary.activeTurnId ?? null,
-        summary.forkedFromId ?? null,
-        summary.parentThreadId ?? null,
-        summary.projectId ?? null,
-        summary.title,
-        summary.createdAt,
-        summary.updatedAt,
-        summary.archived ? 1 : 0,
-        normalizeThreadMemoryMode(summary.memoryMode),
-        optionalJson(summary.gitInfo),
-        null,
-        summary.messageCount,
-        summary.lastMessagePreview,
-        JSON.stringify(thread),
-        thread.lastSeq,
-        thread.id,
-        thread.lastSeq,
-        thread.lastSeq,
-      );
-      if (changedRows(result) !== 1) throw new Error(`Unable to checkpoint SQLite thread: ${thread.id}`);
       this.archiveTransientEvents(thread);
     });
+    this.checkpointCache.set(threadId, thread);
   }
 
   private scheduleCheckpoint(threadId: string): void {

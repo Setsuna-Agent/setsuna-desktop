@@ -102,7 +102,9 @@ export class RuntimeTurnTerminationCoordinator {
   }
 
   private async hasTerminalEvent(threadId: string, turnId: string): Promise<boolean> {
-    const events = await this.options.threadStore.listEvents(threadId, 0);
+    const events = await this.options.threadStore.listEvents(threadId, 0, {
+      turnId, types: ['turn.cancelled', 'turn.completed', 'runtime.error'],
+    });
     return events.some((event) =>
       event.turnId === turnId
       && (event.type === 'turn.cancelled' || event.type === 'turn.completed' || event.type === 'runtime.error')

@@ -126,7 +126,7 @@ Runtime 在多个层面约束工具：
 
 1. `RuntimeEvent` 先写入 SQLite，再通过 event bus 广播。
 2. `seq` 在线程内单调递增，`(thread_id, seq)` 与事件 ID 唯一。
-3. Snapshot 带 `snapshot_seq` checkpoint；恢复只重放 checkpoint 后事件。
+3. Snapshot 带 `snapshot_seq` checkpoint；头部、消息和回合分行持久化，步骤诊断引用事件；恢复只重放 checkpoint 后事件。
 4. Runtime ownership lease 与 fencing token 防止两个进程并发写同一数据目录。
 5. Renderer 忽略 `seq <= lastSeq` 的事件。
 6. 删除、截断、压缩、队列消费都必须由 reducer 可重放地表达。
