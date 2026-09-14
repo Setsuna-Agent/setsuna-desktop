@@ -84,6 +84,9 @@ function remapConversationDatabase(
       if (sqliteTableExists(database, 'runtime_event_archives')) {
         remapRuntimeEventArchives(database, projectIdMap, targetPaths);
       }
+      if (sqliteTableExists(database, 'thread_turn_checkpoints')) {
+        remapTurnCheckpoints(database, projectIdMap, targetPaths);
+      }
       database.exec('COMMIT');
     } catch (error) {
       database.exec('ROLLBACK');
@@ -109,8 +112,31 @@ function remapRuntimeEvents(
     const seq = numberColumn(row, 'seq');
     const event = parseJsonColumn(row, 'event_json', `event ${threadId}:${seq}`);
     const remapped = remapStructuredValue(event, projectIdMap, targetPaths);
-    if (remapped.changed) updateEvent.run(JSON.stringify(remapped.value), threadId, seq);
+    if (remapped.changed) updateEvent.run(encodeRemappedJson(remapped.value, row.event_json), threadId, seq);
   }
+}
+
+function remapTurnCheckpoints(
+  database: DatabaseSync,
+  projectIdMap: ReadonlyMap<string, string>,
+  targetPaths: ReadonlyMap<string, string>,
+): void {
+  const update = database.prepare(`
+    UPDATE thread_turn_checkpoints SET turn_json = ? WHERE thread_id = ? AND turn_index = ?
+  `);
+  for (const row of database.prepare('SELECT thread_id, turn_index, turn_json FROM thread_turn_checkpoints').all()) {
+    const value = parseJsonColumn(row, 'turn_json', 'turn checkpoint');
+    const remapped = remapStructuredValue(value, projectIdMap, targetPaths);
+    if (remapped.changed) update.run(
+      encodeRemappedJson(remapped.value, row.turn_json),
+      stringColumn(row, 'thread_id'), numberColumn(row, 'turn_index'),
+    );
+  }
+}
+
+function encodeRemappedJson(value: unknown, original: unknown): string | Uint8Array {
+  const json = JSON.stringify(value);
+  return original instanceof Uint8Array ? gzipSync(json, { level: 1 }) : json;
 }
 
 function remapRuntimeEventArchives(
@@ -280,7 +306,10 @@ function isToolEnvironment(value: Record<string, unknown>): boolean {
 
 function parseJsonColumn(row: SqliteRow, column: string, label: string): unknown {
   try {
-    return JSON.parse(stringColumn(row, column)) as unknown;
+    const value = row[column];
+    return JSON.parse(value instanceof Uint8Array
+      ? gunzipSync(value).toString('utf8')
+      : stringColumn(row, column)) as unknown;
   } catch (error) {
     throw new Error(`备份数据库中的 ${label} 数据无效。`, { cause: error });
   }

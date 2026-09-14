@@ -1,4 +1,4 @@
-import { Button, ImagePreview, ImagePreviewGroup } from '@setsuna-desktop/renderer-ui';
+import { IconButton, ImagePreview, ImagePreviewGroup } from '@setsuna-desktop/renderer-ui';
 import { isRuntimeInlineMessageAttachment } from '@setsuna-desktop/contracts';
 
 import { LoaderCircle, TriangleAlert, X } from 'lucide-react';
@@ -81,15 +81,15 @@ function ComposerAttachmentCard({
           </span>
         </>
       )}
-      <Button variant="danger"
+      <IconButton variant="danger"
         className="chat-attachment__remove"
         type="button"
-        aria-label={t('chat.attachments.remove', { name: item.name })}
+        label={t('chat.attachments.remove', { name: item.name })}
         disabled={disabled || removing}
         onClick={() => onRemove(item.key)}
       >
         <X size={12} />
-      </Button>
+      </IconButton>
     </div>
   );
 }

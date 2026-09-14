@@ -161,6 +161,15 @@ export class RuntimeEventWriter {
 
   private async persistAndPublish(events: PendingEvent[]): Promise<void> {
     this.streamMetrics.recordBatchFlushed(events);
+    if (!events.length) return;
+    if (this.threadStore.appendEvents) {
+      const savedEvents = await this.threadStore.appendEvents(events[0]!.threadId, events);
+      for (const saved of savedEvents) {
+        this.eventBus.publish(saved);
+        this.streamMetrics.recordPersisted(saved);
+      }
+      return;
+    }
     for (const event of events) await this.persistAndPublishOne(event);
   }
 

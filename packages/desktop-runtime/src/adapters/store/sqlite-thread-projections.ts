@@ -7,8 +7,8 @@ import type {
 } from '@setsuna-desktop/contracts';
 import type { DatabaseSync, StatementResultingChanges } from 'node:sqlite';
 import { normalizeThreadKind, normalizeThreadMemoryMode, toSummary } from './thread-store-state.js';
-
-type SqliteRow = Record<string, string | number | bigint | Uint8Array | null>;
+import { encodeSqliteJson } from './sqlite/json.js';
+import { threadCheckpointHeader } from './sqlite/checkpoints.js';
 
 /** Keep a prompt and all of its work together, even after repeated compactions. */
 export function threadTranscriptPage(
@@ -40,33 +40,15 @@ export function threadTranscriptPage(
   };
 }
 
-export function listIndexedMessages(
-  database: DatabaseSync,
-  threadId: string,
+export function threadMessagePage(
+  messages: RuntimeMessage[],
   query: RuntimeMessagePageQuery,
 ): RuntimeMessagePage {
-  // Pagination cursors use the persisted message-index domain, which also contains
-  // model-only messages excluded from the transcript summary's message_count.
-  const total = numberColumn(database.prepare(`
-    SELECT COUNT(*) AS count FROM thread_messages WHERE thread_id = ?
-  `).get(threadId), 'count');
+  // The cache includes the committed event tail that has not reached the checkpoint yet.
+  const total = messages.length;
   const before = normalizedMessageBefore(query.before, total);
-  const rows = database.prepare(`
-    SELECT message_index, message_json
-    FROM thread_messages
-    WHERE thread_id = ? AND message_index < ?
-    ORDER BY message_index DESC
-    LIMIT ?
-  `).all(threadId, before, normalizedMessageLimit(query.limit));
-  const messages = rows.reverse().map((row) => {
-    try {
-      return JSON.parse(stringColumn(row, 'message_json')) as RuntimeThread['messages'][number];
-    } catch (error) {
-      throw new Error(`Invalid SQLite message JSON for ${threadId}`, { cause: error });
-    }
-  });
-  const firstIndex = rows.length ? numberColumn(rows[0], 'message_index') : before;
-  return { messages, nextBefore: firstIndex > 0 ? firstIndex : null, total };
+  const start = Math.max(0, before - normalizedMessageLimit(query.limit));
+  return { messages: structuredClone(messages.slice(start, before)), nextBefore: start > 0 ? start : null, total };
 }
 
 export function insertThreadProjection(
@@ -121,7 +103,7 @@ export function insertRuntimeEvent(database: DatabaseSync, event: StoredThreadEv
     event.type,
     event.turnId ?? null,
     event.createdAt,
-    JSON.stringify(event),
+    encodeSqliteJson(event),
   );
 }
 
@@ -160,9 +142,9 @@ export function updateThreadProjection(
         UPDATE threads SET
           kind = ?, active_turn_id = ?, forked_from_id = ?, parent_thread_id = ?, project_id = ?, title = ?,
           created_at = ?, updated_at = ?, archived = ?, memory_mode = ?, git_info_json = ?, goal_json = ?,
-          message_count = ?, last_message_preview = ?, snapshot_json = ?, snapshot_seq = ?, last_seq = ?
+          message_count = ?, last_message_preview = ?, snapshot_json = ?, snapshot_seq = ?, last_seq = ?, snapshot_format = 2
         WHERE id = ? AND last_seq = ?
-      `).run(...common, JSON.stringify(thread), snapshotSeq, thread.lastSeq, thread.id, expectedLastSeq);
+      `).run(...common, threadCheckpointHeader(thread), snapshotSeq, thread.lastSeq, thread.id, expectedLastSeq);
   if (changedRows(result) !== 1) {
     throw new Error(`Concurrent SQLite thread update rejected: ${thread.id}`);
   }
@@ -173,45 +155,27 @@ export function syncMessageIndex(
   previous: RuntimeThread,
   next: RuntimeThread,
 ): void {
-  const sameOrder = previous.messages.length === next.messages.length
+  const samePrefix = previous.messages.length <= next.messages.length
     && previous.messages.every((message, index) => message.id === next.messages[index]?.id);
-  const appended = next.messages.length === previous.messages.length + 1
-    && previous.messages.every((message, index) => message.id === next.messages[index]?.id);
-  if (appended) {
-    const message = next.messages.at(-1);
-    if (!message) throw new Error(`Unable to index appended message for ${next.id}.`);
-    database.prepare(`
-      INSERT INTO thread_messages(thread_id, message_index, message_id, created_at, message_json)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(
-      next.id,
-      previous.messages.length,
-      message.id,
-      message.createdAt,
-      JSON.stringify(message),
-    );
-  } else if (!sameOrder) {
+  if (!samePrefix) {
     replaceMessageIndex(database, next);
   } else {
     const update = database.prepare(`
-      UPDATE thread_messages
-      SET created_at = ?, message_json = ?
-      WHERE thread_id = ? AND message_index = ? AND message_id = ?
+      INSERT INTO thread_messages(thread_id, message_index, message_id, created_at, message_json)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(thread_id, message_index) DO UPDATE
+      SET created_at = excluded.created_at, message_json = excluded.message_json
     `);
     for (const [index, message] of next.messages.entries()) {
       // The event reducer preserves unchanged message references, so streamed deltas update one row.
       if (message === previous.messages[index]) continue;
-      const result = update.run(
-        message.createdAt,
-        JSON.stringify(message),
+      update.run(
         next.id,
         index,
         message.id,
+        message.createdAt,
+        JSON.stringify(message),
       );
-      if (changedRows(result) !== 1) {
-        replaceMessageIndex(database, next);
-        break;
-      }
     }
   }
   database.prepare('UPDATE threads SET message_index_seq = ? WHERE id = ?')
@@ -237,21 +201,6 @@ function normalizedMessageLimit(value: number | undefined): number {
 function normalizedMessageBefore(value: number | undefined, total: number): number {
   if (value === undefined || !Number.isFinite(value)) return total;
   return Math.min(total, Math.max(0, Math.floor(value)));
-}
-
-function stringColumn(row: SqliteRow | undefined, column: string): string {
-  const value = row?.[column];
-  if (typeof value !== 'string') throw new Error(`Invalid SQLite text column: ${column}`);
-  return value;
-}
-
-function numberColumn(row: SqliteRow | undefined, column: string): number {
-  const value = row?.[column];
-  if (typeof value === 'bigint') return Number(value);
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    throw new Error(`Invalid SQLite number column: ${column}`);
-  }
-  return value;
 }
 
 function changedRows(result: StatementResultingChanges): number {

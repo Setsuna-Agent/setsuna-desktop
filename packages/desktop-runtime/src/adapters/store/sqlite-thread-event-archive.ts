@@ -1,11 +1,12 @@
 import type { CoreRuntimeEvent, StoredThreadEvent } from '@setsuna-desktop/contracts';
 import type { DatabaseSync } from 'node:sqlite';
 import { gunzipSync, gzipSync } from 'node:zlib';
+import { sqliteJsonText } from './sqlite/json.js';
 
 type SqliteRow = Record<string, string | number | bigint | Uint8Array | null>;
 
 const ARCHIVE_BLOCK_EVENT_LIMIT = 512;
-const TRANSIENT_EVENT_TYPES = [
+export const TRANSIENT_EVENT_TYPES = [
   'message.delta',
   'item.delta',
   'reasoning.summary_delta',
@@ -46,7 +47,7 @@ export function archiveTransientEvents(
     if (!rows.length) return;
     const startSeq = numberColumn(rows[0], 'seq');
     const endSeq = numberColumn(rows.at(-1), 'seq');
-    const payload = `[${rows.map((row) => stringColumn(row, 'event_json')).join(',')}]`;
+    const payload = `[${rows.map((row) => sqliteJsonText(row.event_json)).join(',')}]`;
     database.prepare(`
       INSERT INTO runtime_event_archives(thread_id, start_seq, end_seq, events_gzip)
       VALUES (?, ?, ?, ?)
@@ -174,11 +175,11 @@ function archivedEventsFromRow(row: SqliteRow, threadId: string): StoredThreadEv
   return events;
 }
 
-function rawEventFromRow(row: SqliteRow, threadId: string): StoredThreadEvent {
+export function rawEventFromRow(row: SqliteRow, threadId: string): StoredThreadEvent {
   const seq = numberColumn(row, 'seq');
   let event: StoredThreadEvent;
   try {
-    event = JSON.parse(stringColumn(row, 'event_json')) as StoredThreadEvent;
+    event = JSON.parse(sqliteJsonText(row.event_json)) as StoredThreadEvent;
   } catch (error) {
     throw new Error(`Invalid SQLite runtime event JSON for ${threadId}:${seq}`, { cause: error });
   }

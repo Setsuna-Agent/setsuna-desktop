@@ -43,6 +43,12 @@ export type ThreadEventPageQuery = Readonly<{
   limit: number;
 }>;
 
+/** Domain queries can select durable lifecycle records without decoding the streaming history. */
+export type ThreadEventFilter = Readonly<{
+  turnId?: string;
+  types: readonly StoredThreadEvent['type'][];
+}>;
+
 /** Small live-turn projection used by frequent runtime activity reads. */
 export type RuntimeTurnActivityProjection = {
   queuedInputCount: number;
@@ -77,6 +83,6 @@ export type ThreadStore = {
     events: readonly PendingStoredThreadEvent[],
   ): Promise<StoredThreadEvent[]>;
   readEventPage(threadId: string, query: ThreadEventPageQuery): Promise<StoredThreadEvent[]>;
-  listEvents(threadId: string, sinceSeq?: number): Promise<StoredThreadEvent[]>;
+  listEvents(threadId: string, sinceSeq?: number, filter?: ThreadEventFilter): Promise<StoredThreadEvent[]>;
   replayEvents(threadId: string, sinceSeq?: number): Promise<RuntimeEventReplay>;
 };
