@@ -25,7 +25,7 @@ Windows 桌面源码开发与打包还需要 Rust/Cargo `>=1.85`（原生 crate 
 | 找不到 `link.exe`、MSVC 或 Windows SDK 库 | 安装上述 C++ 工作负载和 SDK；仅安装 Rust 不会替代 Windows 链接工具 |
 | 缺少 `x86_64-pc-windows-msvc` target | 运行 `rustup target add x86_64-pc-windows-msvc`，并确认当前使用 MSVC 工具链 |
 
-macOS/Linux 的常规桌面开发启动不执行这个 Windows 编译步骤。只运行 `pnpm dev:renderer` 也不会触发 Rust 编译，但它仅启动界面开发服务器，不包含 Electron 和本地 runtime。下载发布版的用户不需要 Rust，Windows 包内已经包含沙箱可执行文件。
+macOS 的常规桌面开发启动不执行这个 Windows 编译步骤。只运行 `pnpm dev:renderer` 也不会触发 Rust 编译，但它仅启动界面开发服务器，不包含 Electron 和本地 runtime。下载发布版的用户不需要 Rust，Windows 包内已经包含沙箱可执行文件。
 
 ### 安装依赖
 

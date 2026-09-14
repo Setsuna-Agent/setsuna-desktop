@@ -94,23 +94,6 @@ describe('file plugin marketplace', () => {
     });
   });
 
-  it('migrates legacy marketplace provenance across AppImage mount paths', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-appimage-'));
-    const catalogDir = path.join(root, '.mount_SetsunaXYZ789', 'resources', 'app.asar', 'plugins');
-    await createCatalogPlugin(catalogDir, 'docs', { name: 'Docs Helper' });
-    const runtime = await createPluginRuntime(root, catalogDir);
-    const marketplace = new FilePluginMarketplace(catalogDir, runtime.plugins);
-    await marketplace.installPlugin('docs');
-    await removePersistedInstallationSource(
-      path.join(root, 'runtime', 'plugins.json'),
-      path.join(root, '.mount_SetsunaABC123', 'resources', 'app.asar', 'plugins', 'docs'),
-    );
-
-    await expect(runtime.plugins.listPlugins()).resolves.toMatchObject({
-      plugins: [{ id: 'docs', installationSource: 'marketplace' }],
-    });
-  });
-
   it('migrates legacy marketplace provenance across macOS application locations', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-macos-'));
     const oldCatalogDir = path.join(
@@ -194,8 +177,8 @@ describe('file plugin marketplace', () => {
 
   it('does not migrate a legacy local bundle from another application\'s unpacked build', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-other-unpacked-'));
-    const setsunaAsarRoot = path.join(root, 'setsuna', 'dist', 'linux-unpacked', 'resources', 'app.asar');
-    const otherAsarRoot = path.join(root, 'other-app', 'dist', 'linux-unpacked', 'resources', 'app.asar');
+    const setsunaAsarRoot = path.join(root, 'setsuna', 'dist', 'win-unpacked', 'resources', 'app.asar');
+    const otherAsarRoot = path.join(root, 'other-app', 'dist', 'win-unpacked', 'resources', 'app.asar');
     const catalogDir = path.join(setsunaAsarRoot, 'plugins');
     const localDir = path.join(otherAsarRoot, 'plugins');
     await Promise.all([
@@ -244,8 +227,8 @@ describe('file plugin marketplace', () => {
 
   it('rejects a legacy record when equal package names carry different appIds', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-appid-veto-'));
-    const setsunaAsarRoot = path.join(root, 'setsuna', 'dist', 'linux-unpacked', 'resources', 'app.asar');
-    const otherAsarRoot = path.join(root, 'other', 'dist', 'linux-unpacked', 'resources', 'app.asar');
+    const setsunaAsarRoot = path.join(root, 'setsuna', 'dist', 'win-unpacked', 'resources', 'app.asar');
+    const otherAsarRoot = path.join(root, 'other', 'dist', 'win-unpacked', 'resources', 'app.asar');
     const catalogDir = path.join(setsunaAsarRoot, 'plugins');
     const localDir = path.join(otherAsarRoot, 'plugins');
     await Promise.all([

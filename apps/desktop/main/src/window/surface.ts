@@ -18,7 +18,7 @@ export function resolveMainWindowSurfaceOptions(
   }
 
   return {
-    transparent: platform !== 'darwin',
+    transparent: false,
     backgroundColor: '#00000000',
   };
 }

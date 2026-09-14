@@ -11,7 +11,6 @@ export type DesktopUpdateStatus =
 export type DesktopUpdateInstallMode =
   | 'run-installer'
   | 'open-finder'
-  | 'open-file'
   | 'unsupported';
 
 export type DesktopUpdateProgress = Readonly<{

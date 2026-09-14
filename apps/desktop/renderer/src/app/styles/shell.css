@@ -419,21 +419,18 @@
   }
 }
 
-:root[data-desktop-platform='win32'],
-:root[data-desktop-platform='linux'] {
+:root[data-desktop-platform='win32'] {
   --app-topbar-height: 34px;
 }
 
-:root[data-desktop-platform='win32'] .app-topbar,
-:root[data-desktop-platform='linux'] .app-topbar {
+:root[data-desktop-platform='win32'] .app-topbar {
   grid-template-columns: minmax(0, auto) minmax(0, 1fr) var(--app-titlebar-control-width);
   padding-right: 0;
   background: var(--app-titlebar-bg);
   border-bottom: 0;
 }
 
-:root[data-desktop-platform='win32'] .app-topbar__brand,
-:root[data-desktop-platform='linux'] .app-topbar__brand {
+:root[data-desktop-platform='win32'] .app-topbar__brand {
   gap: var(--app-topbar-item-gap);
   padding: 0 var(--app-topbar-item-gap) 0 12px;
   border-right: 0;
@@ -442,19 +439,16 @@
   overflow: visible;
 }
 
-:root[data-desktop-platform='win32'] .app-topbar__right,
-:root[data-desktop-platform='linux'] .app-topbar__right {
+:root[data-desktop-platform='win32'] .app-topbar__right {
   border-radius: 0;
   background: var(--app-titlebar-bg);
 }
 
-:root[data-desktop-platform='win32'] .app-topbar__drag,
-:root[data-desktop-platform='linux'] .app-topbar__drag {
+:root[data-desktop-platform='win32'] .app-topbar__drag {
   background: var(--app-titlebar-bg);
 }
 
-:root[data-desktop-platform='win32'] .app-topbar__nav,
-:root[data-desktop-platform='linux'] .app-topbar__nav {
+:root[data-desktop-platform='win32'] .app-topbar__nav {
   gap: var(--app-topbar-item-gap);
 }
 
@@ -472,22 +466,17 @@
 }
 
 :root[data-desktop-platform='win32'] .app-topbar__menu,
-:root[data-desktop-platform='linux'] .app-topbar__menu,
-:root[data-desktop-platform='win32'] .app-topbar__status,
-:root[data-desktop-platform='linux'] .app-topbar__status {
+:root[data-desktop-platform='win32'] .app-topbar__status {
   display: inline-flex;
 }
 
 :root[data-desktop-platform='win32'] .app-topbar__menu-item:hover,
-:root[data-desktop-platform='linux'] .app-topbar__menu-item:hover,
-:root[data-desktop-platform='win32'] .app-topbar__menu-item.is-open,
-:root[data-desktop-platform='linux'] .app-topbar__menu-item.is-open {
+:root[data-desktop-platform='win32'] .app-topbar__menu-item.is-open {
   color: var(--app-text);
   background: color-mix(in srgb, var(--app-text) 6%, transparent);
 }
 
-:root[data-desktop-platform='win32'] .app-topbar .sd-icon-button,
-:root[data-desktop-platform='linux'] .app-topbar .sd-icon-button {
+:root[data-desktop-platform='win32'] .app-topbar .sd-icon-button {
   width: 24px;
   height: 24px;
   border-color: transparent;
@@ -495,26 +484,22 @@
   background: transparent;
 }
 
-:root[data-desktop-platform='win32'] .app-topbar .sd-icon-button:hover:not(:disabled),
-:root[data-desktop-platform='linux'] .app-topbar .sd-icon-button:hover:not(:disabled) {
+:root[data-desktop-platform='win32'] .app-topbar .sd-icon-button:hover:not(:disabled) {
   color: var(--app-text);
   background: var(--desktop-agent-control-hover-bg);
 }
 
-:root[data-desktop-platform='win32'] .app-topbar .sd-icon-button.is-active,
-:root[data-desktop-platform='linux'] .app-topbar .sd-icon-button.is-active {
+:root[data-desktop-platform='win32'] .app-topbar .sd-icon-button.is-active {
   color: var(--app-text);
   background: var(--desktop-agent-control-active-bg);
 }
 
-:root[data-desktop-platform='win32'] .app-topbar .sd-icon-button:disabled,
-:root[data-desktop-platform='linux'] .app-topbar .sd-icon-button:disabled {
+:root[data-desktop-platform='win32'] .app-topbar .sd-icon-button:disabled {
   color: color-mix(in srgb, var(--app-titlebar-text) 45%, transparent);
   background: transparent;
 }
 
-:root[data-desktop-platform='win32'] .app-window-controls,
-:root[data-desktop-platform='linux'] .app-window-controls {
+:root[data-desktop-platform='win32'] .app-window-controls {
   display: inline-flex;
   align-items: stretch;
   justify-content: flex-end;
@@ -524,8 +509,7 @@
   background: var(--app-titlebar-bg);
 }
 
-:root[data-desktop-platform='win32'] .app-window-controls button,
-:root[data-desktop-platform='linux'] .app-window-controls button {
+:root[data-desktop-platform='win32'] .app-window-controls button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -537,20 +521,17 @@
   background: transparent;
 }
 
-:root[data-desktop-platform='win32'] .app-window-controls button:hover,
-:root[data-desktop-platform='linux'] .app-window-controls button:hover {
+:root[data-desktop-platform='win32'] .app-window-controls button:hover {
   color: var(--app-text);
   background: color-mix(in srgb, var(--app-text) 8%, transparent);
 }
 
-:root[data-desktop-platform='win32'] .app-window-controls__close:hover,
-:root[data-desktop-platform='linux'] .app-window-controls__close:hover {
+:root[data-desktop-platform='win32'] .app-window-controls__close:hover {
   color: #ffffff;
   background: #e81123;
 }
 
-:root[data-desktop-platform='win32'] .app-workbench__main-actions,
-:root[data-desktop-platform='linux'] .app-workbench__main-actions {
+:root[data-desktop-platform='win32'] .app-workbench__main-actions {
   display: inline-flex;
   grid-column: 2;
   grid-row: 1;
@@ -564,8 +545,7 @@
   z-index: 20;
 }
 
-:root[data-desktop-platform='win32'] .app-workbench__main-actions .sd-icon-button,
-:root[data-desktop-platform='linux'] .app-workbench__main-actions .sd-icon-button {
+:root[data-desktop-platform='win32'] .app-workbench__main-actions .sd-icon-button {
   width: 24px;
   height: 24px;
   border-color: transparent;
@@ -573,20 +553,17 @@
   background: transparent;
 }
 
-:root[data-desktop-platform='win32'] .app-workbench__main-actions .sd-icon-button:hover,
-:root[data-desktop-platform='linux'] .app-workbench__main-actions .sd-icon-button:hover {
+:root[data-desktop-platform='win32'] .app-workbench__main-actions .sd-icon-button:hover {
   color: var(--app-text);
   background: var(--desktop-agent-control-hover-bg);
 }
 
-:root[data-desktop-platform='win32'] .app-workbench__main-actions .sd-icon-button.is-active,
-:root[data-desktop-platform='linux'] .app-workbench__main-actions .sd-icon-button.is-active {
+:root[data-desktop-platform='win32'] .app-workbench__main-actions .sd-icon-button.is-active {
   color: var(--app-text);
   background: var(--desktop-agent-control-active-bg);
 }
 
-:root[data-desktop-platform='win32'] .app-workbench__main-title,
-:root[data-desktop-platform='linux'] .app-workbench__main-title {
+:root[data-desktop-platform='win32'] .app-workbench__main-title {
   display: flex;
   grid-column: 2;
   grid-row: 1;
@@ -604,8 +581,7 @@
 /* A Renderer Slot can be a truthy React element whose selected contribution
  * renders null. Hide the region in that case without merging content styles
  * into the full-width workbench grid item. */
-:root[data-desktop-platform='win32'] .app-workbench__main-title:has(> .chat-toolbar-title:empty),
-:root[data-desktop-platform='linux'] .app-workbench__main-title:has(> .chat-toolbar-title:empty) {
+:root[data-desktop-platform='win32'] .app-workbench__main-title:has(> .chat-toolbar-title:empty) {
   display: none;
 }
 
@@ -628,13 +604,11 @@
   padding-left: calc(var(--app-topbar-item-gap) + 4px + var(--app-topbar-navigation-icon-inset));
 }
 
-:root[data-desktop-platform='win32'] .desktop-agent-page--settings-open .app-workbench__main-title,
-:root[data-desktop-platform='linux'] .desktop-agent-page--settings-open .app-workbench__main-title {
+:root[data-desktop-platform='win32'] .desktop-agent-page--settings-open .app-workbench__main-title {
   display: none;
 }
 
-:root[data-desktop-platform='win32'] .app-workbench__workspace-toolbar,
-:root[data-desktop-platform='linux'] .app-workbench__workspace-toolbar {
+:root[data-desktop-platform='win32'] .app-workbench__workspace-toolbar {
   display: flex;
   grid-column: 3;
   grid-row: 1;
@@ -647,14 +621,11 @@
 }
 
 :root[data-desktop-platform='win32'] .app-workbench__main-actions:empty,
-:root[data-desktop-platform='linux'] .app-workbench__main-actions:empty,
-:root[data-desktop-platform='win32'] .app-workbench__workspace-toolbar:empty,
-:root[data-desktop-platform='linux'] .app-workbench__workspace-toolbar:empty {
+:root[data-desktop-platform='win32'] .app-workbench__workspace-toolbar:empty {
   display: none;
 }
 
-:root[data-desktop-platform='win32'] .desktop-workspace-panel,
-:root[data-desktop-platform='linux'] .desktop-workspace-panel {
+:root[data-desktop-platform='win32'] .desktop-workspace-panel {
   padding-top: var(--desktop-workspace-toolbar-height);
 }
 
@@ -693,13 +664,11 @@
   display: none;
 }
 
-:root[data-desktop-platform='win32'] .app-error-shell .app-topbar,
-:root[data-desktop-platform='linux'] .app-error-shell .app-topbar {
+:root[data-desktop-platform='win32'] .app-error-shell .app-topbar {
   grid-template-columns: minmax(0, auto) minmax(0, 1fr) var(--app-titlebar-control-width);
 }
 
-:root[data-desktop-platform='win32'] .app-error-shell .app-topbar__brand,
-:root[data-desktop-platform='linux'] .app-error-shell .app-topbar__brand {
+:root[data-desktop-platform='win32'] .app-error-shell .app-topbar__brand {
   display: flex;
   justify-content: flex-start;
   padding-left: 12px;
@@ -985,8 +954,7 @@ body.desktop-terminal-resizing {
     overflow: hidden;
   }
 
-  :root[data-desktop-platform='win32'] .app-workbench__workspace-toolbar,
-  :root[data-desktop-platform='linux'] .app-workbench__workspace-toolbar {
+  :root[data-desktop-platform='win32'] .app-workbench__workspace-toolbar {
     grid-column: 2;
     justify-self: end;
     width: min(var(--desktop-agent-workspace-width), 100%);
@@ -1024,8 +992,7 @@ body.desktop-terminal-resizing {
     width: min(var(--desktop-agent-workspace-width), 100vw);
   }
 
-  :root[data-desktop-platform='win32'] .app-workbench__workspace-toolbar,
-  :root[data-desktop-platform='linux'] .app-workbench__workspace-toolbar {
+  :root[data-desktop-platform='win32'] .app-workbench__workspace-toolbar {
     grid-column: 1;
   }
 
@@ -1034,8 +1001,7 @@ body.desktop-terminal-resizing {
   }
 }
 
-:root[data-desktop-platform='win32'] .desktop-agent-page--settings-open .app-topbar,
-:root[data-desktop-platform='linux'] .desktop-agent-page--settings-open .app-topbar {
+:root[data-desktop-platform='win32'] .desktop-agent-page--settings-open .app-topbar {
   grid-template-columns: var(--app-topbar-sidebar-width, var(--desktop-settings-nav-width)) minmax(0, 1fr) var(--app-titlebar-control-width);
 }
 

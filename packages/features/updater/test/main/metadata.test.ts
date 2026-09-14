@@ -13,7 +13,6 @@ const assets: ReleaseAsset[] = [
   { name: 'Setsuna-Desktop-0.2.0-mac-arm64.dmg', browser_download_url: 'https://example.com/mac-arm64.dmg' },
   { name: 'Setsuna-Desktop-0.2.0-mac-x64.dmg', browser_download_url: 'https://example.com/mac-x64.dmg' },
   { name: 'Setsuna-Desktop-0.2.0-windows-x64.exe', browser_download_url: 'https://example.com/windows.exe' },
-  { name: 'Setsuna-Desktop-0.2.0-ubuntu-x64.AppImage', browser_download_url: 'https://example.com/linux.AppImage' },
 ];
 
 describe('desktop update metadata', () => {
@@ -29,7 +28,6 @@ describe('desktop update metadata', () => {
     expect(selectUpdateAsset(assets, 'darwin', 'arm64')?.name).toBe('Setsuna-Desktop-0.2.0-mac-arm64.dmg');
     expect(selectUpdateAsset(assets, 'darwin', 'x64')?.name).toBe('Setsuna-Desktop-0.2.0-mac-x64.dmg');
     expect(selectUpdateAsset(assets, 'win32', 'x64')?.name).toBe('Setsuna-Desktop-0.2.0-windows-x64.exe');
-    expect(selectUpdateAsset(assets, 'linux', 'x64')?.name).toBe('Setsuna-Desktop-0.2.0-ubuntu-x64.AppImage');
   });
 
   it('parses SHA256SUMS entries for release asset verification', () => {

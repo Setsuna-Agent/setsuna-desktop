@@ -295,9 +295,7 @@ function containsPath(parent: string, child: string): boolean {
 
 function comparisonPath(value: string): string {
   const resolved = path.resolve(value);
-  return process.platform === 'linux'
-    ? resolved
-    : resolved.toLocaleLowerCase('en-US');
+  return resolved.toLocaleLowerCase('en-US');
 }
 
 async function pathKind(target: string): Promise<'missing' | 'directory' | 'symlink' | 'other'> {

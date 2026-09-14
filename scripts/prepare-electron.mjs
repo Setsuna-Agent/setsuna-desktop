@@ -13,6 +13,9 @@ const TERMINATION_GRACE_MS = 5_000;
 const require = createRequire(import.meta.url);
 
 export async function prepareElectronBinary(options = {}) {
+  if (process.platform !== 'darwin' && process.platform !== 'win32') {
+    throw new Error(`Setsuna Desktop supports macOS and Windows only. Unsupported platform: ${process.platform}.`);
+  }
   const electronPackagePath = require.resolve('electron/package.json');
   const electronDirectory = path.dirname(electronPackagePath);
   const electronPackage = JSON.parse(readFileSync(electronPackagePath, 'utf8'));

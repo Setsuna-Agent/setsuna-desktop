@@ -328,11 +328,6 @@ export class DesktopUpdater {
       return { ok: true, action: 'opened-folder', state: this.getState() };
     }
 
-    if (process.platform === 'linux') {
-      shell.showItemInFolder(downloadedFilePath);
-      return { ok: true, action: 'opened-folder', state: this.getState() };
-    }
-
     return { ok: false, action: 'unsupported', state: this.getState(), error: `Unsupported update platform: ${process.platform}` };
   }
 
@@ -354,7 +349,6 @@ class UpdateDownloadSourceChangedError extends Error {
 function updateInstallMode(platform: NodeJS.Platform): DesktopUpdateInstallMode {
   if (platform === 'win32') return 'run-installer';
   if (platform === 'darwin') return 'open-finder';
-  if (platform === 'linux') return 'open-file';
   return 'unsupported';
 }
 

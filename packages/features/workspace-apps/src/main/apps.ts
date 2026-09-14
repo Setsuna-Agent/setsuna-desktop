@@ -11,7 +11,6 @@ type WorkspaceAppDefinition = DesktopWorkspaceApp & {
   macExecutableRelativePaths?: string[];
   macPaths?: string[];
   macAlways?: boolean;
-  linuxCommands?: string[];
   windowsCommands?: string[];
   windowsPaths?: Array<[string, string]>;
   windowsAlways?: boolean;
@@ -34,7 +33,6 @@ const WORKSPACE_APPS: WorkspaceAppDefinition[] = [
     icon: 'vscode',
     macAppName: 'Visual Studio Code',
     macPaths: ['/Applications/Visual Studio Code.app', '${HOME}/Applications/Visual Studio Code.app'],
-    linuxCommands: ['code'],
     windowsCommands: ['code', 'Code.exe', 'code.cmd'],
     windowsPaths: [
       ['LOCALAPPDATA', 'Programs\\Microsoft VS Code\\Code.exe'],
@@ -48,7 +46,6 @@ const WORKSPACE_APPS: WorkspaceAppDefinition[] = [
     icon: 'cursor',
     macAppName: 'Cursor',
     macPaths: ['/Applications/Cursor.app', '${HOME}/Applications/Cursor.app'],
-    linuxCommands: ['cursor'],
     windowsCommands: ['cursor', 'Cursor.exe'],
     windowsPaths: [
       ['LOCALAPPDATA', 'Programs\\Cursor\\Cursor.exe'],
@@ -71,7 +68,6 @@ const WORKSPACE_APPS: WorkspaceAppDefinition[] = [
       '${HOME}/Applications/Trae.app',
       '${HOME}/Applications/Trae CN.app',
     ],
-    linuxCommands: ['trae', 'trae-cn'],
     windowsCommands: ['trae', 'trae-cn', 'Trae.exe', 'Trae CN.exe'],
     windowsPaths: [
       ['LOCALAPPDATA', 'Programs\\Trae\\Trae.exe'],
@@ -99,7 +95,6 @@ const WORKSPACE_APPS: WorkspaceAppDefinition[] = [
     icon: 'terminal',
     macAppName: 'Terminal',
     macAlways: true,
-    linuxCommands: ['x-terminal-emulator', 'gnome-terminal', 'konsole'],
     windowsCommands: ['wt.exe'],
     windowsAlways: true,
   },
@@ -110,7 +105,6 @@ const WORKSPACE_APPS: WorkspaceAppDefinition[] = [
     macAppName: 'IntelliJ IDEA',
     macExecutableName: 'idea',
     macPaths: ['/Applications/IntelliJ IDEA.app', '/Applications/IntelliJ IDEA CE.app', '${HOME}/Applications/IntelliJ IDEA.app'],
-    linuxCommands: ['idea', 'idea.sh'],
     windowsCommands: ['idea64.exe', 'idea.bat'],
   },
   {
@@ -120,7 +114,6 @@ const WORKSPACE_APPS: WorkspaceAppDefinition[] = [
     macAppName: 'PyCharm',
     macExecutableName: 'pycharm',
     macPaths: ['/Applications/PyCharm.app', '/Applications/PyCharm CE.app', '${HOME}/Applications/PyCharm.app'],
-    linuxCommands: ['pycharm', 'pycharm.sh'],
     windowsCommands: ['pycharm64.exe', 'pycharm.bat'],
   },
   {
@@ -130,7 +123,6 @@ const WORKSPACE_APPS: WorkspaceAppDefinition[] = [
     macAppName: 'WebStorm',
     macExecutableName: 'webstorm',
     macPaths: ['/Applications/WebStorm.app', '${HOME}/Applications/WebStorm.app'],
-    linuxCommands: ['webstorm', 'webstorm.sh'],
     windowsCommands: ['webstorm64.exe', 'webstorm.bat'],
   },
 ];
@@ -203,9 +195,6 @@ function workspaceAppIsAvailable(definition: WorkspaceAppDefinition): boolean {
       || windowsKnownPaths(definition).some((item) => existsSync(item)),
     );
   }
-  if (process.platform === 'linux') {
-    return Boolean(definition.linuxCommands?.some((item) => findCommandInPath(item)));
-  }
   return false;
 }
 
@@ -221,7 +210,7 @@ function workspaceAppLaunchSpec(
   if (process.platform === 'win32') {
     return windowsWorkspaceAppLaunchSpec(definition, workspaceRoot, filePath, line);
   }
-  return linuxWorkspaceAppLaunchSpec(definition, workspaceRoot, filePath, line);
+  throw new Error('当前系统不受支持。');
 }
 
 function macWorkspaceAppLaunchSpec(
@@ -305,18 +294,6 @@ function windowsWorkspaceAppLaunchSpec(
   }
   const program = resolveWindowsWorkspaceAppProgram(definition);
   if (!program) throw new Error('当前系统不支持此应用。');
-  return { program, args: filePath ? workspaceAppFileArgs(definition.id, filePath, line) : [workspaceRoot] };
-}
-
-function linuxWorkspaceAppLaunchSpec(
-  definition: WorkspaceAppDefinition,
-  workspaceRoot: string,
-  filePath: string | null,
-  line?: number,
-): WorkspaceAppLaunchSpec {
-  const program = definition.linuxCommands?.map(findCommandInPath).find(Boolean);
-  if (!program) throw new Error('当前系统不支持此应用。');
-  if (definition.id === 'terminal') return { program, args: ['--working-directory', workspaceRoot] };
   return { program, args: filePath ? workspaceAppFileArgs(definition.id, filePath, line) : [workspaceRoot] };
 }
 

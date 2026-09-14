@@ -12,7 +12,7 @@ describe('workspace file context menu helpers', () => {
   it('uses the platform-native folder label', () => {
     expect(workspaceFileRevealLabel('darwin')).toBe('在访达中显示');
     expect(workspaceFileRevealLabel('win32')).toBe('在文件资源管理器中显示');
-    expect(workspaceFileRevealLabel('linux')).toBe('在文件夹中显示');
+    expect(workspaceFileRevealLabel('browser')).toBe('在文件夹中显示');
     const en: Translate = (key, params) => translate('en-US', key, params);
     expect(workspaceFileRevealLabel('darwin', en)).toBe('Show in Finder');
   });

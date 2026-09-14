@@ -1,14 +1,13 @@
 import { access, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { shellSandboxCapability } from '../../../../src/adapters/tool/pc-local/pc-local-tools.js';
 import type { ToolExecutionContext } from '../../../../src/ports/tool-host.js';
 import { createHost, execFileAsync } from './pc-local-tool-host.support.js';
 
 describe('Git inspection without an OS sandbox', () => {
   it('reads status, patches, and history in scope without running Git helpers or writing the index', async () => {
     const { host, fixtureRoot, projectDir, projectId } = await createHost({
-      shellSandboxCapability: () => shellSandboxCapability('linux'),
+      shellSandboxCapability: () => ({ supported: false, provider: '', reason: 'OS sandbox is unavailable.' }),
     });
     const root = path.join(projectDir, 'scope');
     const marker = path.join(projectDir, 'helper-ran');

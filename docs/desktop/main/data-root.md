@@ -135,7 +135,7 @@ Phase 2 memory 增量以内部 snapshot baseline 计算，不读取或修改用�
 - 无 marker 的非空目标默认不属于 Setsuna。
 - 跨卷不能假设 rename 原子；最终提交必须在目标同级 staging 内完成。
 - 任何 `rm`/递归删除都以匹配的目录身份和 owner 为前提。
-- 路径比较必须跨 macOS、Windows、Linux 正常工作。
+- 路径比较必须跨 macOS、Windows 正常工作。
 - Maintenance profile 不能指向源数据根。
 
 ## Renderer 协作

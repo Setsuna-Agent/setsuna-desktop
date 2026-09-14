@@ -4,7 +4,7 @@ export function applyDesktopPlatformAttribute(root: HTMLElement = document.docum
 
 export function usesCustomFrameLayout(): boolean {
   const platform = getDesktopPlatform();
-  return platform === 'win32' || platform === 'linux';
+  return platform === 'win32';
 }
 
 export function getDesktopPlatform(): string {
@@ -14,6 +14,5 @@ export function getDesktopPlatform(): string {
   const platform = navigator.platform.toLowerCase();
   if (platform.includes('win')) return 'win32';
   if (platform.includes('mac')) return 'darwin';
-  if (platform.includes('linux')) return 'linux';
   return 'browser';
 }

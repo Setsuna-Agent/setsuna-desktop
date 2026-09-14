@@ -345,7 +345,7 @@ Device Flow 的提供方配置由 MCP runtime 宿主持有；插件不能指定�
 }
 ```
 
-- `cli` 的 `command` 是跨机器的可执行文件名，禁止绝对路径和 shell 表达式。Setsuna 在当前 runtime 的 PATH 中检测文件，不执行插件提供的命令；“已安装”不代表已经登录。安装按钮打开声明的 HTTPS 安装说明，用户按终端指引登录并验证。Windows、macOS、Linux 走同一声明；新安装未进入当前进程 PATH 时需重启应用。
+- `cli` 的 `command` 是跨机器的可执行文件名，禁止绝对路径和 shell 表达式。Setsuna 在当前 runtime 的 PATH 中检测文件，不执行插件提供的命令；“已安装”不代表已经登录。安装按钮打开声明的 HTTPS 安装说明，用户按终端指引登录并验证。Windows 和 macOS 走同一声明；新安装未进入当前进程 PATH 时需重启应用。
 - `mcp` 的 `serverKey` 必须引用插件已声明的 MCP。未显式配置连接器的 MCP 会自动生成设置入口。按钮定位到对应 MCP 服务，复用现有服务器编辑、凭据存储和 OAuth 登录；不另建账号或 token 存储。
 - `required` 默认 true，作为设置页的依赖提示；false 表示可选接入方式。连接器最多 32 个，id 唯一；安装和说明链接只接受无用户名/密码的 HTTPS 地址。配置命令只作指引，导入、打开页面和检测不会执行。
 - `GET /v1/features/plugin-management/installed/:pluginId/connectors` 读取该用户的安装/认证配置状态，不向 renderer 返回命令路径、凭据或原始认证错误。“已配置”只代表 MCP 配置已存在，实际可用性通过 MCP 页测试。某个 MCP 查询失败不会遮蔽 CLI 检测结果。

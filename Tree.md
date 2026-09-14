@@ -222,7 +222,7 @@ packages/renderer-ui/ — 3 direct / 42 total files
 ### `packages/features/`
 
 ```text
-packages/features/ — 0 direct / 975 total files
+packages/features/ — 0 direct / 973 total files
 ├── approval-review/ — 2 direct / 20 total files
 │   ├── src/ — 17 files
 │   │   ├── contracts/ — 5 direct / 5 total files
@@ -333,10 +333,10 @@ packages/features/ — 0 direct / 975 total files
 │       ├── main/ — 1 direct / 1 total files
 │       ├── renderer/ — 4 direct / 4 total files
 │       └── runtime/ — 1 direct / 1 total files
-├── review/ — 2 direct / 140 total files
-│   ├── src/ — 114 files
+├── review/ — 2 direct / 138 total files
+│   ├── src/ — 113 files
 │   │   ├── contracts/ — 16 direct / 16 total files
-│   │   ├── main/ — 16 direct / 16 total files
+│   │   ├── main/ — 15 direct / 15 total files
 │   │   ├── preload/ — 2 direct / 2 total files
 │   │   ├── renderer/ — 30 direct / 72 total files
 │   │   │   ├── git/ — 10 direct / 10 total files
@@ -345,10 +345,10 @@ packages/features/ — 0 direct / 975 total files
 │   │   │   ├── model/ — 1 direct / 1 total files
 │   │   │   └── styles/ — 6 direct / 6 total files
 │   │   └── runtime/ — 8 direct / 8 total files
-│   └── test/ — 24 files
+│   └── test/ — 23 files
 │       ├── integration/ — 4 files
 │       │   └── main/ — 4 direct / 4 total files
-│       ├── main/ — 4 direct / 4 total files
+│       ├── main/ — 3 direct / 3 total files
 │       ├── renderer/ — 6 direct / 12 total files
 │       │   ├── git/ — 1 direct / 1 total files
 │       │   ├── history/ — 4 direct / 4 total files
@@ -565,9 +565,9 @@ packages/desktop-runtime/ — 4 direct / 576 total files
 ### `scripts/`
 
 ```text
-scripts/ — 21 direct / 34 total files
+scripts/ — 22 direct / 36 total files
 ├── ripgrep/ — 3 direct / 3 total files
-├── test/ — 4 direct / 6 total files
+├── test/ — 5 direct / 7 total files
 │   ├── ripgrep/ — 1 direct / 1 total files
 │   └── windows-sandbox/ — 1 direct / 1 total files
 └── windows-sandbox/ — 4 direct / 4 total files

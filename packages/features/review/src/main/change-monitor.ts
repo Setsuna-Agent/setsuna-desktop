@@ -1,18 +1,17 @@
 import { spawn } from 'node:child_process';
 import { watch } from 'node:fs';
 import path from 'node:path';
-import {
-  createPrunedRecursiveWatcher,
-  type PrunedRecursiveWatchOptions,
-  type ReviewDirectoryWatcher,
-} from './pruned-recursive-watcher.js';
 import { resolveDesktopReviewRepository } from './state.js';
+
+type ReviewDirectoryWatcher = {
+  close: () => void;
+  on: (event: 'error', listener: (error: Error) => void) => unknown;
+};
 
 type ReviewChangeListener = () => void;
 type WatchDirectory = (
   directoryPath: string,
   listener: (eventType: string, filename: string | Buffer | null) => void,
-  options?: PrunedRecursiveWatchOptions,
 ) => Promise<ReviewDirectoryWatcher> | ReviewDirectoryWatcher;
 type VisiblePathResolver = (gitRoot: string, paths: string[]) => Promise<boolean>;
 
@@ -127,9 +126,6 @@ export class DesktopReviewChangeMonitor {
         if (relativePath) entry.pendingPaths.add(relativePath);
         else entry.unknownWorktreeChange = true;
         this.schedule(entry);
-      }, {
-        ignoreDirectories: async (relativePaths) => await ignoredGitPaths(gitRoot, relativePaths) ?? new Set(),
-        shouldDescend: (relativePath) => !pathIsInsideGitMetadata(relativePath),
       }));
       for (const gitDirectory of uniquePaths(gitDirectories)) {
         entry.watchers.push(await this.watchDirectory(gitDirectory, (_eventType, filename) => {
@@ -137,7 +133,7 @@ export class DesktopReviewChangeMonitor {
           if (relativePath && !isRelevantGitMetadataPath(relativePath)) return;
           entry.gitMetadataDirty = true;
           this.schedule(entry);
-        }, { shouldDescend: isRelevantGitMetadataPath }));
+        }));
       }
     } catch (error) {
       for (const watcher of entry.watchers) watcher.close();
@@ -196,9 +192,7 @@ export class DesktopReviewChangeMonitor {
 function nodeWatchDirectory(
   directoryPath: string,
   listener: Parameters<WatchDirectory>[1],
-  options: PrunedRecursiveWatchOptions = {},
 ): Promise<ReviewDirectoryWatcher> | ReviewDirectoryWatcher {
-  if (process.platform === 'linux') return createPrunedRecursiveWatcher(directoryPath, listener, options);
   return watch(directoryPath, { persistent: false, recursive: true }, listener);
 }
 

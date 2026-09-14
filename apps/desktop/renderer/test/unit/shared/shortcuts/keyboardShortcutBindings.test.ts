@@ -80,15 +80,12 @@ describe('keyboard shortcut bindings', () => {
     const newChat = keyboardShortcutCommand('app.newChat');
     expect(newChat.defaultBindings.darwin).toEqual(['Meta+KeyN']);
     expect(newChat.defaultBindings.win32).toEqual(['Control+KeyN']);
-    expect(newChat.defaultBindings.linux).toEqual(['Control+KeyN']);
     expect(keyboardShortcutCommand('workspace.closeActiveSidePanel').defaultBindings).toEqual({
       darwin: ['Meta+KeyW'],
-      linux: ['Control+KeyW'],
       win32: ['Control+KeyW'],
     });
     expect(keyboardShortcutCommand('browser.reload').defaultBindings).toEqual({
       darwin: ['Meta+KeyR'],
-      linux: ['Control+KeyR'],
       win32: ['Control+KeyR'],
     });
     expect(keyboardShortcutCommand('browser.hardReload').defaultBindings.win32)

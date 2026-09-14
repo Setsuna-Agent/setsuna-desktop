@@ -54,7 +54,7 @@ corepack pnpm@7.33.7 <command>
 - `pnpm test:release`：先下载并校验当前平台固定版本的 ripgrep，再运行需要在每个打包平台验证的 Main、Git、路径、Shell、Store、workspace 和构建脚本门禁。
 - `pnpm lint`：ESLint；架构规则由 `pnpm typecheck` 前置执行。
 - `pnpm package:*`：按平台打包。
-- `pnpm release:dry-run`：生成 release manifest 和校验预览。
+- `pnpm release:dry-run`：生成本地发布清单预览。
 
 ## `scripts/build-electron.ts`
 
@@ -144,15 +144,14 @@ dev 启动流程：
 
 平台产物：
 
-- macOS arm64/x64：DMG + ZIP，当前 unsigned/manual install。
-- Windows x64：NSIS EXE + ZIP。
-- Linux x64：AppImage + deb + tar.gz。
+- macOS arm64/x64：DMG，当前 unsigned/manual install。
+- Windows x64：NSIS EXE。
 
 ## CI
 
 `.github/workflows/ci.yml` 在面向 `master` 的 pull request 和手动运行时触发。分支保护要求 PR 基于最新基线通过 `CI / typecheck, lint, test`。
 
-Ubuntu `verify` job 固定 pnpm `7.33.7`、Node.js `22` 和 Python `3.11`，依次执行：
+macOS `verify` job 固定 pnpm `7.33.7`、Node.js `22` 和 Python `3.11`，依次执行：
 
 1. `node scripts/configure-node-gyp-python.mjs`。
 2. `pnpm install --frozen-lockfile`。
@@ -171,9 +170,8 @@ package job matrix：
 - macOS Apple Silicon：`macos-15`，`package:mac:arm64`。
 - macOS Intel：`macos-15-intel`，`package:mac:x64`。
 - Windows x64：`windows-2025`，`package:win:x64`。
-- Ubuntu x64：`ubuntu-24.04`，`package:linux:x64`。
 
-发布先在 Ubuntu `quality-gate` job 中统一运行一次 typecheck 和完整 `test:unit`。门禁通过后，每个平台：
+发布先在 macOS `quality-gate` job 中统一运行一次 typecheck 和完整 `test:unit`。门禁通过后，每个平台：
 
 1. 安装依赖。
 2. `test:release`，只覆盖必须跨平台验证的边界。
@@ -181,12 +179,12 @@ package job matrix：
 4. collect release assets。
 5. upload artifact。
 
-release 另有 `Integration diagnostics` job，在 Ubuntu 上先构建 contracts（源码插件 Worker 需要其包导出），再跑 `test:integration` 并上传 `diagnostic-*` 日志 artifact。该 job 是诊断信号，不阻塞 package/publish；正式发布资产只从 `release-*` package artifacts 收集。
+release 另有 `Integration diagnostics` job，在 macOS 上先构建 contracts（源码插件 Worker 需要其包导出），再跑 `test:integration` 并上传 `diagnostic-*` 日志 artifact。该 job 是诊断信号，不阻塞 package/publish；正式发布资产只从 `release-*` package artifacts 收集。
 
 publish job：
 
 1. 下载所有 release artifact。
-2. `prepare-github-release-assets.mjs` 整理上传目录、打包日志、生成 manifest 和 SHA256SUMS。
+2. `prepare-github-release-assets.mjs` 校验三个安装包齐全且无重名，整理上传目录并生成 SHA256SUMS。
 3. 写 release notes。
 4. 用 `gh release create/edit/upload` 发布或更新 GitHub Release。
 
@@ -200,23 +198,21 @@ Windows runner 可能同时暴露同一目录的 8.3 短路径和长路径，并
 - 测试如果验证两个路径指向同一目录，必须用同一种 `realpath` 实现 canonicalize 实际值和期望值后再比较。除非路径的字符串表示本身就是对外契约，否则禁止直接断言原始路径字符串相等。
 - canonicalization 的测试必须关闭无关的默认排除层，确保断言确实由目标 deny root/glob 命中，不能让 `.env` 等默认规则代替被测路径逻辑。
 
-这类改动至少运行对应路径策略测试、`pnpm typecheck` 和 `pnpm test:release`。最终结论以 Release workflow 的 Windows x64 gate 为准；本地 macOS/Linux 通过不能替代 Windows 路径验证。
+这类改动至少运行对应路径策略测试、`pnpm typecheck` 和 `pnpm test:release`。最终结论以 Release workflow 的 Windows x64 gate 为准；本地 macOS 通过不能替代 Windows 路径验证。
 
-## Release Metadata
+## Release 下载清单
 
-`scripts/prepare-github-release-assets.mjs` 会：
+公开下载仅保留 macOS arm64 DMG、macOS x64 DMG、Windows x64 NSIS EXE 和 `SHA256SUMS`。不再构建 ZIP，不上传 Linux 包、blockmap、electron-builder 更新元数据、内部 manifest 或构建日志。更新器从 GitHub Release API 选择安装包，并使用 `SHA256SUMS` 校验下载。
 
-- 递归收集 downloaded artifacts。
-- 把 logs 打包成 `build-logs-v<version>.zip`。
-- 根据文件名推断 platform、arch、kind。
-- 生成 `release-manifest.json`。
-- 生成 `SHA256SUMS`。
-- 处理 `latest-mac.yml` arch 重命名，避免资产名冲突。
+`scripts/release-assets.mjs` 定义三个安装包目标，供以下脚本共用：
 
-`scripts/release-dry-run.mjs` 生成本地预览：
+- `collect-release-job-assets.mjs`：每个平台只收集其安装包；安装包缺失直接失败。
+- `prepare-github-release-assets.mjs`：只接收清单中的安装包，拒绝重名或缺少平台的发布，并生成校验文件。
+- `release-dry-run.mjs`：生成本地 `release-artifacts/dry-run/release-manifest.json` 预览；该文件不上传，也不为预览生成安装包校验和。
 
-- `release-artifacts/dry-run/release-manifest.json`
-- `release-artifacts/dry-run/SHA256SUMS`
+构建和测试日志继续通过 `diagnostic-*` Actions artifacts 保留 14 天，不进入公开 Release 下载区。
+
+同一 tag 重跑时，先上传新安装包与校验文件，再清理该版本已废弃的生成资产；保留自定义附件。此流程不会批量修改其他历史 Release。
 
 ## 验证分层
 

@@ -417,7 +417,7 @@ function isSameOrChild(candidate: string, parent: string): boolean {
   if (samePath(candidate, parent)) return true;
   const normalize = (value: string) => {
     const resolved = path.resolve(value);
-    return process.platform === 'linux' ? resolved : resolved.toLocaleLowerCase('en-US');
+    return resolved.toLocaleLowerCase('en-US');
   };
   const relative = path.relative(normalize(parent), normalize(candidate));
   return Boolean(relative)

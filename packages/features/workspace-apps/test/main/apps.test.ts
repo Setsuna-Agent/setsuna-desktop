@@ -63,7 +63,7 @@ describe('desktop workspace app spawning', () => {
   it('does not wrap non-Windows launch specs', () => {
     const spec = { program: '/usr/local/bin/code.cmd', args: ['/work/sample-app'] };
 
-    expect(workspaceAppSpawnSpec(spec, 'linux')).toBe(spec);
+    expect(workspaceAppSpawnSpec(spec, 'darwin')).toBe(spec);
   });
 
   it('opens JetBrains editors at the requested line on macOS', () => {

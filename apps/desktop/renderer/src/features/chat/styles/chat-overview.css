@@ -11,10 +11,6 @@
   top: calc(var(--desktop-workspace-toolbar-height) + 10px);
 }
 
-:root[data-desktop-platform='linux'] .chat-conversation-overview {
-  top: calc(var(--app-topbar-height) + 10px);
-}
-
 .chat-conversation-overview-panel {
   pointer-events: auto;
   transform-origin: top right;

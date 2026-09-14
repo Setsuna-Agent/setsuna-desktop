@@ -150,7 +150,7 @@ Active turn 队列的完整设计见 [queued turn inputs](../designs/current/que
 - `layout.ts` 的所有受管路径。
 - runtime graceful shutdown 与迁移准入。
 - renderer `DesktopDataRootGate` 和维护页面。
-- macOS、Windows、Linux 的 volume/path 行为。
+- macOS、Windows 的 volume/path 行为。
 - source 永不提前删除和 custom root 不可用的恢复测试。
 
 ## 修改构建或发布

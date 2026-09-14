@@ -34,21 +34,6 @@
         "copying": "ripgrep-15.1.0-x86_64-apple-darwin/COPYING"
       }
     },
-    "linux-x64": {
-      "platform": "linux",
-      "arch": "x64",
-      "builderOs": "linux",
-      "archiveFormat": "tar.gz",
-      "archiveSize": 2263077,
-      "archiveSha256": "1c9297be4a084eea7ecaedf93eb03d058d6faae29bbc57ecdaf5063921491599",
-      "url": "https://github.com/BurntSushi/ripgrep/releases/download/15.1.0/ripgrep-15.1.0-x86_64-unknown-linux-musl.tar.gz",
-      "members": {
-        "binary": "ripgrep-15.1.0-x86_64-unknown-linux-musl/rg",
-        "licenseMit": "ripgrep-15.1.0-x86_64-unknown-linux-musl/LICENSE-MIT",
-        "unlicense": "ripgrep-15.1.0-x86_64-unknown-linux-musl/UNLICENSE",
-        "copying": "ripgrep-15.1.0-x86_64-unknown-linux-musl/COPYING"
-      }
-    },
     "win-x64": {
       "platform": "win32",
       "arch": "x64",

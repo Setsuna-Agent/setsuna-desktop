@@ -54,18 +54,6 @@ export const codeFontFamilyOptions = [
     platforms: ['windows'],
   },
   {
-    label: 'Liberation Mono',
-    value: 'liberationMono',
-    css: '"Liberation Mono", "DejaVu Sans Mono", monospace',
-    platforms: ['linux'],
-  },
-  {
-    label: 'DejaVu Sans Mono',
-    value: 'dejavuSansMono',
-    css: '"DejaVu Sans Mono", "Liberation Mono", monospace',
-    platforms: ['linux'],
-  },
-  {
     label: 'JetBrains Mono',
     value: 'jetbrainsMono',
     css: '"JetBrains Mono", "Geist Mono", "SFMono-Regular", Consolas, monospace',

@@ -20,7 +20,6 @@ describe('ripgrep packaging supply chain', () => {
     expect(manifest.version).toBe('15.1.0');
     expect(manifest.license).toBe('MIT OR Unlicense');
     expect(Object.keys(manifest.packages).sort()).toEqual([
-      'linux-x64',
       'mac-arm64',
       'mac-x64',
       'win-x64',

@@ -15,7 +15,7 @@
 
 ### `surface.ts`
 
-根据平台决定 frame、titleBarStyle、traffic light 等 `BrowserWindow` 选项。macOS 使用原生标题栏语义，Windows/Linux 使用自定义 frame。
+根据平台决定 frame、titleBarStyle、traffic light 等 `BrowserWindow` 选项。macOS 使用原生标题栏语义，Windows 使用自定义 frame。
 
 ### `frame.ts`
 
@@ -164,7 +164,7 @@ Updater 是纵向 Feature：状态 DTO、IPC channel、main 状态机、preload 
 - 管理 check/download/open 状态机。
 - 下载到用户 Downloads 下的专用目录。
 - 校验 SHA-256。
-- macOS/Linux 打开文件位置，Windows 打开 installer。
+- macOS 打开文件位置，Windows 打开 installer。
 - 下载期间切换源会取消并按新源重试。
 
 Updater 默认只在 packaged 或 `SETSUNA_DESKTOP_ENABLE_UPDATES=1` 时启用。测试位于 `packages/features/updater/test/`。
@@ -199,7 +199,6 @@ Updater 默认只在 packaged 或 `SETSUNA_DESKTOP_ENABLE_UPDATES=1` 时启用�
 - 路径分隔符和盘符。
 - macOS app bundle/Helper。
 - Windows custom frame、installer 与 shell。
-- Linux AppImage/deb 环境。
 - GUI 启动缺少 login-shell PATH。
 - 应用不存在、被移动或启动失败。
 - Unicode、空格和引号路径。
