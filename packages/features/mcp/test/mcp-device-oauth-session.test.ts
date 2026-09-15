@@ -7,6 +7,30 @@ const server = { key: 'github', transport: 'streamableHttp' as const, url: 'http
 const deviceCode = { device_code: 'private-device-code', user_code: 'ABCD-EFGH', verification_uri: 'https://github.com/login/device', expires_in: 900, interval: 0.001 };
 
 describe('MCP device authorization session', () => {
+  it('keeps MCP credentials scoped to the server and revokes access on logout', async () => {
+    const host = new InMemoryMcpHost();
+    const requests: { url: string; authorization: string | null; redirect?: RequestRedirect }[] = [];
+    const fetch = async (url: string | URL, init?: RequestInit): Promise<Response> => {
+      if (String(url).endsWith('/device/code')) return Response.json(deviceCode);
+      if (String(url).endsWith('/access_token')) return Response.json({ access_token: 'fixture-access', token_type: 'bearer' });
+      requests.push({ url: String(url), authorization: new Headers(init?.headers).get('Authorization'), redirect: init?.redirect });
+      return Response.json({ login: 'alice' });
+    };
+    const session = new McpDeviceOAuthSession(host, fetch, Date.now);
+    await session.login(server);
+    await session.fetchFor(server)(server.url);
+    expect(requests).toEqual([
+      { url: server.url, authorization: 'Bearer fixture-access', redirect: 'error' },
+    ]);
+    for (const url of ['https://attacker.example/user', 'https://api.github.com.attacker.example/user', 'https://user:password@api.githubcopilot.com/mcp/']) {
+      await expect(session.fetchFor(server)(url)).rejects.toThrow('another origin');
+    }
+    await session.logout(server);
+    await expect(session.fetchFor(server)(server.url)).rejects.toThrow('sign-in is required');
+    expect(requests).toHaveLength(1);
+    await session.shutdown();
+  });
+
   it('prepares a public challenge without opening the browser and clears it on cancellation', async () => {
     const host = new InMemoryMcpHost();
     const set = vi.spyOn(host, 'set');

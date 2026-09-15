@@ -63,9 +63,9 @@ export function SkillDetail({
           parentLabel: translate('feature.skills.title'),
           onBack,
         })}
-        <section className="desktop-capabilities-detail desktop-capabilities-skill-detail">
+        <section className="sd-detail desktop-capabilities-skill-detail">
           <ui.PageHeader
-            className="desktop-capabilities-detail__header"
+            className="sd-detail__header"
             leading={<ui.SkillIcon skill={active} variant="list" />}
             actions={(
               <>
@@ -85,7 +85,7 @@ export function SkillDetail({
             title={active.name}
           />
           {active.description ? <p className="desktop-capabilities-skill-description">{active.description}</p> : null}
-          <dl className="desktop-capabilities-detail__metadata">
+          <dl className="sd-detail__metadata">
             <div><dt>{translate('feature.skills.editor.id')}</dt><dd>{active.id}</dd></div>
             <div><dt>{translate('feature.skills.references')}</dt><dd>{detail ? translate('feature.skills.referenceCount', { count: detail.references.length }) : '—'}</dd></div>
           </dl>

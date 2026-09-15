@@ -47,6 +47,7 @@ export function ShellFrame({
   sidebarCollapsed = false,
   onToggleSidebar,
   showSidebarToggle = true,
+  overlayTitlebar = false,
   navigationActions,
   toolbarTitle,
   viewTabs,
@@ -63,6 +64,7 @@ export function ShellFrame({
   sidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
   showSidebarToggle?: boolean;
+  overlayTitlebar?: boolean;
   navigationActions?: ReactNode;
   toolbarTitle?: ReactNode;
   viewTabs?: ReactNode;
@@ -89,6 +91,7 @@ export function ShellFrame({
     'desktop-agent-page',
     windowMaximized ? 'app-shell--window-maximized' : '',
     inspectorOpen ? 'app-shell--inspector-open' : '',
+    overlayTitlebar && !customFrame ? 'app-shell--titlebar-overlay' : '',
     className,
   ]
     .filter(Boolean)

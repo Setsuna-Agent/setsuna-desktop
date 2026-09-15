@@ -26,6 +26,23 @@ it('keeps IME confirmation and Shift+Enter separate from sending the current dra
   expect(submit).toHaveBeenCalledExactlyOnceWith('你好\n');
 });
 
+it('supports multiline comments with modifier-Enter submission without sending IME confirmation', () => {
+  const editor = createRef<ComposerEditor>();
+  const submit = vi.fn();
+  render(<ChatPromptInput ref={editor} value="你好" submitOn="mod-enter" onSubmit={submit} />);
+  const input = screen.getByRole('textbox');
+  editor.current?.focus({ cursor: 'end' });
+  fireEvent.compositionStart(input);
+  fireEvent.keyDown(input, { key: 'Enter', ctrlKey: true, isComposing: true });
+  expect(submit).not.toHaveBeenCalled();
+  fireEvent.compositionEnd(input);
+  fireEvent.keyDown(input, { key: 'Enter' });
+  expect(editor.current?.getValue().value).toBe('你好\n');
+  expect(submit).not.toHaveBeenCalled();
+  fireEvent.keyDown(input, { key: 'Enter', metaKey: true });
+  expect(submit).toHaveBeenCalledExactlyOnceWith('你好\n');
+});
+
 it('replaces only the active mention command and submits the full path behind its short label', () => {
   const editor = createRef<ComposerEditor>();
   render(<ChatPromptInput ref={editor} value="保留 @foo，然后查看 @fo" />);

@@ -1,6 +1,6 @@
-import { Button } from '@setsuna-desktop/renderer-ui';
+import { Button, DiffViewControls } from '@setsuna-desktop/renderer-ui';
 import { Virtualizer } from '@pierre/diffs/react';
-import { ArrowLeft, Columns2, FileDiff, GitCommitHorizontal, WrapText } from 'lucide-react';
+import { ArrowLeft, FileDiff, GitCommitHorizontal } from 'lucide-react';
 import { memo, useMemo, useState, type ComponentProps } from 'react';
 import type { DesktopDiffFile, DesktopGitCommitDetails } from '../../contracts/index.js';
 import { useReviewRendererHost } from '../host.js';
@@ -43,12 +43,13 @@ export const GitHistoryDiff = memo(function GitHistoryDiff({
   const useFileToolbar = !details && files.length === 1 && !loading && !error;
   const backButton = <ReviewIconButton className="app-shell-icon-control git-history-diff__back" label={t('feature.review.history.back')} onClick={onBack}><ArrowLeft size={15} /></ReviewIconButton>;
   const viewControls = (
-    <>
-      <ReviewIconButton tooltip className={'app-shell-icon-control' + (layout === 'split' ? ' is-active' : '')} label={t(layout === 'split' ? 'feature.review.workspace.layout.split' : 'feature.review.workspace.layout.unified')} aria-pressed={layout === 'split'} onClick={() => setLayout((value) => value === 'split' ? 'unified' : 'split')}>
-        <Columns2 size={15} />
-      </ReviewIconButton>
-      <ReviewIconButton tooltip className={'app-shell-icon-control' + (wrap ? ' is-active' : '')} label={t(wrap ? 'feature.review.workspace.wrap.on' : 'feature.review.workspace.wrap.off')} aria-pressed={wrap} onClick={() => setWrap((value) => !value)}><WrapText size={15} /></ReviewIconButton>
-    </>
+    <DiffViewControls
+      className="app-shell-icon-control"
+      layout={layout} wrap={wrap}
+      layoutLabel={t(layout === 'split' ? 'feature.review.workspace.layout.split' : 'feature.review.workspace.layout.unified')}
+      wrapLabel={t(wrap ? 'feature.review.workspace.wrap.on' : 'feature.review.workspace.wrap.off')}
+      onLayoutChange={setLayout} onWrapChange={setWrap}
+    />
   );
   return (
     <section className="git-history-diff">

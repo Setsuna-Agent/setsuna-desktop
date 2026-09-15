@@ -22,6 +22,7 @@ export function AppSidebarSurface({
   maxWidth,
   minWidth,
   onOpenCapabilities,
+  onOpenPullRequests,
   onOpenRuntimeActivity,
   onOpenPluginView,
   onOpenSettings,
@@ -45,6 +46,7 @@ export function AppSidebarSurface({
   maxWidth: number;
   minWidth: number;
   onOpenCapabilities: () => void;
+  onOpenPullRequests: () => void;
   onOpenRuntimeActivity: () => void;
   onOpenPluginView: (viewKey: string) => void;
   onOpenSettings: () => void;
@@ -63,7 +65,7 @@ export function AppSidebarSurface({
       activeThreadId={activeThreadId}
       collapsed={sidebarCollapsed}
       runningThreadId={runningThreadId}
-      activeView={activeView === 'capabilities' ? 'capabilities' : 'chat'}
+      activeView={activeView === 'capabilities' || activeView === 'pull-requests' ? activeView : 'chat'}
       collapsedProjectIds={navigation.collapsedProjectIds}
       forceExpandedProjectIds={navigation.forceExpandedProjectIds}
       globalThreads={globalThreads}
@@ -112,6 +114,7 @@ export function AppSidebarSurface({
       onEnterChatMode={() => void navigation.enterChatMode()}
       onEditProject={navigation.editProject}
       onOpenCapabilities={onOpenCapabilities}
+      onOpenPullRequests={onOpenPullRequests}
       onOpenRuntimeActivity={onOpenRuntimeActivity}
       onOpenSettings={onOpenSettings}
       onRemoveProject={(project) => {

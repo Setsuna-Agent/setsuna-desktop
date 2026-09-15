@@ -76,17 +76,9 @@ export class McpDeviceOAuthSession {
 
   fetchFor(server: RuntimeMcpServerInput): DeviceOAuthFetch {
     return async (input, init) => {
-      if (new URL(input).origin !== new URL(server.url!).origin) throw new Error('Refusing to send MCP credentials to another origin.');
-      const identity = tokenKey(server);
-      const logoutVersion = this.logoutVersions.get(identity);
-      let stored = await this.readTokens(server);
-      const assertActive = () => {
-        if (this.logoutVersions.get(identity) !== logoutVersion) throw new DOMException('GitHub session signed out.', 'AbortError');
-      };
-      assertActive();
-      if (!stored) throw new Error(`MCP server '${server.key}' requires GitHub sign-in.`);
-      if (expired(stored, this.now(), 30_000)) stored = await this.refreshTokens(server, stored);
-      assertActive();
+      const url = new URL(input);
+      if (url.origin !== new URL(server.url!).origin || url.username || url.password) throw new Error('Refusing to send MCP credentials to another origin.');
+      const stored = await this.activeTokens(server);
       init?.signal?.throwIfAborted();
       const headers = new Headers(init?.headers);
       headers.set('Authorization', `Bearer ${stored.tokens.access_token}`);
@@ -94,6 +86,21 @@ export class McpDeviceOAuthSession {
       if (response.status === 401) this.errors.set(server.key, 'GitHub authorization was rejected. Sign in again.');
       return response;
     };
+  }
+
+  private async activeTokens(server: RuntimeMcpServerInput): Promise<StoredTokens> {
+    if (!mcpDeviceOAuthProvider(server)) throw new Error('GitHub device authorization is unavailable.');
+    const identity = tokenKey(server);
+    const version = this.logoutVersions.get(identity);
+    let stored = await this.readTokens(server);
+    const assertActive = () => {
+      if (this.logoutVersions.get(identity) !== version) throw new DOMException('GitHub session signed out.', 'AbortError');
+    };
+    assertActive();
+    if (!stored) throw new Error('GitHub sign-in is required.');
+    if (expired(stored, this.now(), 30_000)) stored = await this.refreshTokens(server, stored);
+    assertActive();
+    return stored;
   }
 
   async logout(server: RuntimeMcpServerInput): Promise<void> {

@@ -1,3 +1,5 @@
+import { pullRequestsRuntimeFeature } from '@setsuna-desktop/feature-pull-requests/runtime';
+import { githubCliInstallationHostCapability, pullRequestsWorkspaceCapability } from '@setsuna-desktop/feature-pull-requests/contracts';
 import { readPluginConnectorStatuses } from '../adapters/plugin/plugin-connector-status.js';
 import {
   completeFeatureHostActivation,
@@ -141,6 +143,7 @@ const runtimeFeatures = defineRuntimeFeatureHost({
     mcpRuntimeFeature,
   ],
   optional: [
+    pullRequestsRuntimeFeature,
     approvalReviewRuntimeFeature,
     collaborationRuntimeFeature,
     conversationDebugRuntimeFeature,
@@ -161,6 +164,8 @@ export async function activateBuiltinRuntimeFeatures(
   const composition = await runtimeFeatures.activate({
     settingsRegistry: runtime.featureSettings,
     hostCapabilities: [
+      provideHostCapability(pullRequestsWorkspaceCapability, runtime.workspaceProjects),
+      provideHostCapability(githubCliInstallationHostCapability, { dataDir: runtime.dataDir, fetch: runtime.networkProxyFetch.forRoute() }),
       provideHostCapability(runtimeRouteRegistrarCapability, runtime.featureRoutes),
       provideHostCapability(
         approvalReviewRuntimeHostCapability,

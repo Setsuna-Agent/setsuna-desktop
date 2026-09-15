@@ -70,6 +70,7 @@
     "@setsuna-desktop/feature-model-provider": "workspace:*",
     "@setsuna-desktop/feature-network-proxy": "workspace:*",
     "@setsuna-desktop/feature-plugin-management": "workspace:*",
+    "@setsuna-desktop/feature-pull-requests": "workspace:*",
     "@setsuna-desktop/feature-review": "workspace:*",
     "@setsuna-desktop/feature-runtime-activity": "workspace:*",
     "@setsuna-desktop/feature-side-conversation": "workspace:*",

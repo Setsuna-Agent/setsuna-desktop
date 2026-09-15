@@ -6,7 +6,7 @@ import {
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import type { ButtonHTMLAttributes, ComponentType, ReactNode } from 'react';
 
-export type RendererAppRouteId = 'capabilities' | 'chat' | 'plugin' | 'settings';
+export type RendererAppRouteId = 'capabilities' | 'chat' | 'plugin' | 'settings' | 'pull-requests';
 export type RendererPluginViewKey = string;
 
 export type AppReadySlotProps = Readonly<{

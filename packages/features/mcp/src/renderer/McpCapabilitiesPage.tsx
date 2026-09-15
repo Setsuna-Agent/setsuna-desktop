@@ -354,7 +354,7 @@ function McpServerEditor({
           parentLabel: translate('feature.mcp.title'),
           onBack,
         })}
-        <section className="desktop-capabilities-detail desktop-capabilities-mcp-editor">
+        <section className="sd-detail desktop-capabilities-mcp-editor">
           <ui.PageHeader
             actions={(
               <ui.Button

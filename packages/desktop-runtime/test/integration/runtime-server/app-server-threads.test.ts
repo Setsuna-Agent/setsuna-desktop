@@ -1,7 +1,9 @@
 import type { RuntimeThread } from '@setsuna-desktop/contracts';
 import { access, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
+import { RuntimeModelStreamEventPublisher } from '../../../src/loop/core/runtime-model-stream-event-publisher.js';
 import {
   createRuntimeServerTestHarness,
   mediumIntegrationTestTimeoutMs,
@@ -342,7 +344,7 @@ describe('runtime server AppServer thread lifecycle', () => {
       });
     });
   
-  it('rolls back trailing AppServer turns and returns populated thread history', async () => {
+  it.each([false, true])('rolls back trailing AppServer turns and returns populated thread history (already cancelled: %s)', async (alreadyCancelled) => {
       const startedThread = await harness.appServerRpc('thread/start', { name: 'Rollback AppServer RPC thread', cwd: process.cwd() });
       const firstTurn = await harness.appServerRpc('turn/start', {
         threadId: startedThread.thread.id,
@@ -352,31 +354,68 @@ describe('runtime server AppServer thread lifecycle', () => {
         startedThread.thread.id,
         (item) => item.messages.some((message) => message.turnId === firstTurn.turn.id && message.role === 'assistant' && message.status === 'complete'),
       );
-      const secondTurn = await harness.appServerRpc('turn/start', {
-        threadId: startedThread.thread.id,
-        input: [{ type: 'text', text: 'Second local smoke response.' }],
-      });
-      await harness.waitForThread(
-        startedThread.thread.id,
-        (item) => item.messages.some((message) => message.turnId === secondTurn.turn.id && message.role === 'assistant' && message.status === 'complete'),
-      );
-  
-      const rolledBack = await harness.appServerRpc('thread/rollback', {
-        threadId: startedThread.thread.id,
-        numTurns: 1,
-      });
-  
-      expect(rolledBack.thread.turns).toEqual([expect.objectContaining({
-        id: firstTurn.turn.id,
-        items: expect.arrayContaining([
-          expect.objectContaining({ type: 'userMessage' }),
-          expect.objectContaining({ type: 'agentMessage' }),
-        ]),
-      })]);
-      expect(rolledBack.thread.turns.some((turn: { id: string }) => turn.id === secondTurn.turn.id)).toBe(false);
-  
-      const resumed = await harness.appServerRpc('thread/resume', { threadId: startedThread.thread.id });
-      expect(resumed.thread.turns.map((turn: { id: string }) => turn.id)).toEqual([firstTurn.turn.id]);
+      let releaseFinalization!: () => void;
+      const finalizationGate = new Promise<void>((resolve) => { releaseFinalization = resolve; });
+      let finalizationStarted!: () => void;
+      const finalizing = new Promise<void>((resolve) => { finalizationStarted = resolve; });
+      const completeMessage = RuntimeModelStreamEventPublisher.prototype.completeMessage;
+      const completion = vi.spyOn(RuntimeModelStreamEventPublisher.prototype, 'completeMessage')
+        .mockImplementationOnce(async function (this: RuntimeModelStreamEventPublisher, ...args) {
+          await completeMessage.apply(this, args);
+          // Hold the turn after its assistant message is complete but before terminal writes.
+          finalizationStarted();
+          await finalizationGate;
+        });
+      let cancellationFinished!: () => void;
+      const cancelled = new Promise<void>((resolve) => { cancellationFinished = resolve; });
+      const cancelTurn = AgentLoop.prototype.cancelTurn;
+      const cancellation = vi.spyOn(AgentLoop.prototype, 'cancelTurn')
+        .mockImplementationOnce(async function (this: AgentLoop, ...args) {
+          const result = await cancelTurn.apply(this, args);
+          cancellationFinished();
+          return result;
+        });
+      try {
+        const secondTurn = await harness.appServerRpc('turn/start', {
+          threadId: startedThread.thread.id,
+          input: [{ type: 'text', text: 'Second local smoke response.' }],
+        });
+        await finalizing;
+        if (alreadyCancelled) {
+          await harness.appServerRpc('turn/interrupt', {
+            threadId: startedThread.thread.id,
+            turnId: secondTurn.turn.id,
+          });
+        }
+
+        let rollbackReturned = false;
+        const rollback = harness.appServerRpc('thread/rollback', {
+          threadId: startedThread.thread.id,
+          numTurns: 1,
+        });
+        void rollback.then(() => { rollbackReturned = true; }, () => { rollbackReturned = true; });
+        await cancelled;
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(rollbackReturned).toBe(false);
+        releaseFinalization();
+        const rolledBack = await rollback;
+
+        expect(rolledBack.thread.turns).toEqual([expect.objectContaining({
+          id: firstTurn.turn.id,
+          items: expect.arrayContaining([
+            expect.objectContaining({ type: 'userMessage' }),
+            expect.objectContaining({ type: 'agentMessage' }),
+          ]),
+        })]);
+        expect(rolledBack.thread.turns.some((turn: { id: string }) => turn.id === secondTurn.turn.id)).toBe(false);
+
+        const resumed = await harness.appServerRpc('thread/resume', { threadId: startedThread.thread.id });
+        expect(resumed.thread.turns.map((turn: { id: string }) => turn.id)).toEqual([firstTurn.turn.id]);
+      } finally {
+        releaseFinalization();
+        completion.mockRestore();
+        cancellation.mockRestore();
+      }
     });
   
   it('returns JSON-RPC method errors from the AppServer app-server adapter', async () => {

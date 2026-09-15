@@ -31,6 +31,7 @@ importers:
       '@setsuna-desktop/feature-model-provider': workspace:*
       '@setsuna-desktop/feature-network-proxy': workspace:*
       '@setsuna-desktop/feature-plugin-management': workspace:*
+      '@setsuna-desktop/feature-pull-requests': workspace:*
       '@setsuna-desktop/feature-review': workspace:*
       '@setsuna-desktop/feature-runtime-activity': workspace:*
       '@setsuna-desktop/feature-side-conversation': workspace:*
@@ -108,6 +109,7 @@ importers:
       '@setsuna-desktop/feature-model-provider': link:packages/features/model-provider
       '@setsuna-desktop/feature-network-proxy': link:packages/features/network-proxy
       '@setsuna-desktop/feature-plugin-management': link:packages/features/plugin-management
+      '@setsuna-desktop/feature-pull-requests': link:packages/features/pull-requests
       '@setsuna-desktop/feature-review': link:packages/features/review
       '@setsuna-desktop/feature-runtime-activity': link:packages/features/runtime-activity
       '@setsuna-desktop/feature-side-conversation': link:packages/features/side-conversation
@@ -185,6 +187,7 @@ importers:
       '@setsuna-desktop/feature-memory': workspace:*
       '@setsuna-desktop/feature-model-provider': workspace:*
       '@setsuna-desktop/feature-plugin-management': workspace:*
+      '@setsuna-desktop/feature-pull-requests': workspace:*
       '@setsuna-desktop/feature-review': workspace:*
       '@setsuna-desktop/feature-runtime-activity': workspace:*
       '@setsuna-desktop/feature-side-conversation': workspace:*
@@ -213,6 +216,7 @@ importers:
       '@setsuna-desktop/feature-memory': link:../features/memory
       '@setsuna-desktop/feature-model-provider': link:../features/model-provider
       '@setsuna-desktop/feature-plugin-management': link:../features/plugin-management
+      '@setsuna-desktop/feature-pull-requests': link:../features/pull-requests
       '@setsuna-desktop/feature-review': link:../features/review
       '@setsuna-desktop/feature-runtime-activity': link:../features/runtime-activity
       '@setsuna-desktop/feature-side-conversation': link:../features/side-conversation
@@ -444,6 +448,26 @@ importers:
       react: 18.3.1
       react-markdown: 10.1.0_ldrqq4ddkzwykih5vpyejmhynu
       remark-gfm: 4.0.1
+
+  packages/features/pull-requests:
+    specifiers:
+      '@pierre/diffs': 1.3.3
+      '@setsuna-desktop/contracts': workspace:*
+      '@setsuna-desktop/feature-core': workspace:*
+      '@setsuna-desktop/renderer-contracts': workspace:*
+      '@setsuna-desktop/renderer-ui': workspace:*
+      fflate: ^0.8.3
+      lucide-react: ^0.468.0
+      react: ^18.3.1
+    dependencies:
+      '@pierre/diffs': 1.3.3_ac5755nbtac3ltqfexhaxiqwpa_nnrd3gsncyragczmpvfhocinkq
+      '@setsuna-desktop/contracts': link:../../contracts
+      '@setsuna-desktop/feature-core': link:../../feature-core
+      '@setsuna-desktop/renderer-contracts': link:../../renderer-contracts
+      '@setsuna-desktop/renderer-ui': link:../../renderer-ui
+      fflate: 0.8.3
+      lucide-react: 0.468.0_react@18.3.1
+      react: 18.3.1
 
   packages/features/review:
     specifiers:
@@ -5752,6 +5776,10 @@ packages:
       node-domexception: 1.0.0
       web-streams-polyfill: 3.3.3
     dev: true
+
+  /fflate/0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
+    dev: false
 
   /file-entry-cache/8.0.0:
     resolution: {integrity: sha512-XXTUwCvisa5oacNGRP9SfNtYBNAMi+RPwBFmblZEF7N7swHYQS6/Zfk7SRwx4D5j3CH211YNRco1DEMNVfZCnQ==}

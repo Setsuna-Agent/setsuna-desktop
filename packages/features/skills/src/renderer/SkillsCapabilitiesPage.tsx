@@ -400,7 +400,7 @@ function SkillEditor({
           parentLabel: translate('feature.skills.title'),
           onBack,
         })}
-        <section className="desktop-capabilities-detail desktop-capabilities-skill-editor">
+        <section className="sd-detail desktop-capabilities-skill-editor">
           <ui.PageHeader
             actions={(
               <ui.Button

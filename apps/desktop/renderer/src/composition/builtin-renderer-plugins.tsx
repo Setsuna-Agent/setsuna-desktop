@@ -113,6 +113,10 @@ const appShellPlugin = defineRendererPlugin({
 const routePlugin = defineRendererPlugin({
   id: 'core.routes',
   activate({ ui }) {
+    ui.keyed(shellRouteSlot, {
+      id: 'routes.pull-requests', key: 'pull-requests', priority: 0,
+      render: () => <FeatureRecoveryShell candidateFeatureIds={['pull-requests']} reason="view-missing" />,
+    });
     registerRoute(ui, 'chat', [
       declareRendererChildSlot(chatConversationSlot, { required: true }),
       declareRendererChildSlot(chatComposerSlot, { required: true }),

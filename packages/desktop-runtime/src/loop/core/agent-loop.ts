@@ -515,9 +515,9 @@ export class AgentLoop {
       // Drain tasks first so an admitted synchronous caller waiting on task.done can observe abort.
       // Then wait all older mutations (attachment claims, regeneration, shell, compact, goal and
       // context writes) before the final task check and destructive commit.
-      await this.drainRegisteredTasksForDeletion(threadId);
+      await this.cancelThreadTurnsAndWait(threadId);
       await this.threadMutationAdmissions.waitForThread(threadId);
-      await this.drainRegisteredTasksForDeletion(threadId);
+      await this.cancelThreadTurnsAndWait(threadId);
       // A concurrent user cancel can hide the task from activeTurnId before its terminal writes settle.
       await this.turnTermination.waitForThread(threadId);
       await this.featureControls.goals.waitForThreadDeletionPause(threadId);
@@ -874,14 +874,17 @@ export class AgentLoop {
     );
   }
 
-  private async drainRegisteredTasksForDeletion(threadId: string): Promise<void> {
+  /** History rewrites must wait for terminal writes, including tasks already hidden by cancellation. */
+  async cancelThreadTurnsAndWait(threadId: string): Promise<void> {
     for (;;) {
       const task = this.turnTasks.registeredForThread(threadId);
-      if (!task) return;
+      if (!task) break;
       if (!task.controller.signal.aborted) await this.cancelTurn(threadId, task.turnId);
       if (!task.done) throw new Error(`thread ${threadId} has a registered turn without a completion promise`);
       await task.done.catch(() => undefined);
     }
+    await this.turnTermination.waitForThread(threadId);
+    await this.eventWriter.flushThread(threadId);
   }
 
   /**
