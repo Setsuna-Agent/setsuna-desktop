@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { dispatchAppServerRpcRequest } from '../../../src/server/app-server/dispatcher.js';
 
 describe('AppServer dispatcher rollback', () => {
-  it('cancels an active turn before computing the rollback boundary', async () => {
+  it('drains turn writes before computing the rollback boundary', async () => {
     const calls: string[] = [];
     const beforeCancel = runtimeThread([
       runtimeMessage('msg_user_1', 'turn_1', 'user', 'first'),
@@ -25,14 +25,9 @@ describe('AppServer dispatcher rollback', () => {
     const runtime = {
       agentLoop: {
         withThreadMutation: (_threadId: string, operation: () => Promise<unknown>) => operation(),
-        activeTurnId(threadId: string) {
-          calls.push(`active:${threadId}`);
-          return 'turn_3';
-        },
-        async cancelTurn(threadId: string, turnId: string) {
-          calls.push(`cancel:${threadId}:${turnId}`);
+        async cancelThreadTurnsAndWait(threadId: string) {
+          calls.push(`drain:${threadId}`);
           current = afterCancel;
-          return true;
         },
       },
       threadStore: {
@@ -61,8 +56,7 @@ describe('AppServer dispatcher rollback', () => {
 
     expect(calls).toEqual([
       'get:thread_1',
-      'active:thread_1',
-      'cancel:thread_1:turn_3',
+      'drain:thread_1',
       'get:thread_1',
       'truncate:thread_1:msg_user_3:true',
     ]);

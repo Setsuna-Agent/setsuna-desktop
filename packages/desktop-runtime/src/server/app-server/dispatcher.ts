@@ -608,8 +608,7 @@ export async function dispatchAppServerRpcRequest(
     return runtime.agentLoop.withThreadMutation(threadId, async () => {
       const thread = await runtime.threadStore.getThread(threadId);
       if (!thread) throw new AppServerRpcError(-32004, 'Thread not found', { threadId });
-      const activeTurnId = runtime.agentLoop.activeTurnId(threadId);
-      if (activeTurnId) await runtime.agentLoop.cancelTurn(threadId, activeTurnId);
+      await runtime.agentLoop.cancelThreadTurnsAndWait(threadId);
       const currentThread = await runtime.threadStore.getThread(threadId) ?? thread;
       const rollbackMessageId = rollbackStartMessageId(currentThread.messages, numTurns);
       const rolledBack = rollbackMessageId
