@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 import { DEFAULT_WORKSPACE_DEPENDENCY_SETTINGS } from '@setsuna-desktop/feature-workspace-dependencies/contracts';
 import { ManagedWorkspaceDependencyManager } from '@setsuna-desktop/feature-workspace-dependencies/runtime';
 import { PcLocalToolHost } from '../../../../src/adapters/tool/pc-local/pc-local-tool-host.js';
@@ -514,7 +514,11 @@ describe('pc local shell execution', () => {
   });
 
   it('supports Codex-compatible exec_command and write_stdin tool names', async () => {
-    const { host } = await createHost();
+    const { host, fixtureRoot } = await createHost();
+    onTestFinished(async () => {
+      await host.shutdown();
+      await rm(fixtureRoot, { recursive: true, force: true });
+    });
     const context = {
       threadId: 'thread_1',
       turnId: 'turn_1',
@@ -573,12 +577,18 @@ describe('pc local shell execution', () => {
     }, context)).resolves.toMatchObject({
       content: expect.stringContaining('Wrote'),
     });
-    const polled = await host.runTool('write_stdin', {
-      session_id: processId,
-      chars: '',
-      yield_time_ms: 500,
-    }, context);
-    expect(polled.content).toContain('stdin:hello');
+    // A yield may return before the child starts on a busy runner. Reads consume
+    // output, so retain earlier chunks while waiting for the actual echo.
+    let output = '';
+    await expect.poll(async () => {
+      const polled = await host.runTool('write_stdin', {
+        session_id: processId,
+        chars: '',
+        yield_time_ms: 100,
+      }, context);
+      output += polled.content;
+      return output;
+    }, { timeout: 5_000 }).toContain('stdin:hello');
   });
 });
 
