@@ -69,7 +69,7 @@ async function main(): Promise<void> {
   const server = await createRuntimeServer({
     dataDir: runtimeDataDir,
     token: runtimeToken,
-    version: process.env.npm_package_version ?? '0.1.0',
+    version: process.env.SETSUNA_DESKTOP_APP_VERSION ?? process.env.npm_package_version ?? 'dev',
     builtinSkillsDir,
     builtinPluginsDir,
   });

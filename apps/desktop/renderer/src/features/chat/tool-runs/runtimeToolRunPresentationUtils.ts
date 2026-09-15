@@ -1,6 +1,7 @@
 import type { RuntimeToolRun } from '@setsuna-desktop/contracts';
 import { translate, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { builtinToolNameKey } from '../../../shared/i18n/toolNameMessages.js';
+import { isAutomaticApprovalReviewPending } from './runtimeToolRunState.js';
 
 const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
@@ -124,4 +125,14 @@ export function toolRunDisplayName(run: RuntimeToolRun, t: Translate): string {
     ? run.name.slice(separatorIndex + 2).trim()
     : run.name.trim();
   return localName ? `${pluginName} / ${localName}` : pluginName;
+}
+
+export function automaticApprovalReviewTitle(
+  run: RuntimeToolRun,
+  action: string,
+  t: Translate,
+): string | null {
+  return isAutomaticApprovalReviewPending(run)
+    ? t('toolRun.approvalReview.pendingAction', { action })
+    : null;
 }

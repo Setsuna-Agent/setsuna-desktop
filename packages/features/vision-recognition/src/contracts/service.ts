@@ -84,7 +84,7 @@ export type VisionRecognitionResolvedImage = Readonly<{
 
 export type VisionRecognitionTextRequest = Pick<
   ModelRequest,
-  'providerId' | 'model' | 'messages' | 'maxOutputTokens' | 'tools' | 'toolChoice' | 'signal'
+  'providerId' | 'sessionId' | 'model' | 'messages' | 'maxOutputTokens' | 'tools' | 'toolChoice' | 'signal'
 > & Readonly<{ maxResultChars: number }>;
 
 export type VisionRecognitionTextResult = Readonly<{

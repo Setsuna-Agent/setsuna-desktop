@@ -14,6 +14,8 @@ export type ModelRequest = {
   model: string;
   /** Selects a configured provider for background task requests. */
   providerId?: string;
+  /** Stable conversation or task identity, shared across model rounds and retries. */
+  sessionId?: string;
   messages: RuntimeMessage[];
   tools?: RuntimeToolDefinition[];
   toolChoice?: RuntimeToolChoice;
@@ -26,7 +28,7 @@ export type ModelRequest = {
   signal?: AbortSignal;
 };
 
-export type ModelCompactionRequest = Pick<ModelRequest, 'model' | 'providerId' | 'messages' | 'signal'>;
+export type ModelCompactionRequest = Pick<ModelRequest, 'model' | 'providerId' | 'sessionId' | 'messages' | 'signal'>;
 
 export type ModelCompactionResult =
   | {

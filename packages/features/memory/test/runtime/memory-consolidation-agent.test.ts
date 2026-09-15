@@ -13,6 +13,7 @@ describe('memory consolidation agent', () => {
 
     const result = await runMemoryConsolidationAgent({
       streamModel: (request) => modelClient.stream(request),
+      sessionId: 'memory-job-1',
       model: 'background-memory-model',
       providerId: 'background-provider',
       root,
@@ -26,6 +27,7 @@ describe('memory consolidation agent', () => {
       usage: { inputTokens: 14, outputTokens: 14, totalTokens: 28 },
     });
     expect(modelClient.requests).toHaveLength(toolCallBatches + 1);
+    expect(new Set(modelClient.requests.map((request) => request.sessionId))).toEqual(new Set(['memory-job-1']));
     expect(modelClient.requests.every((request) => request.model === 'background-memory-model')).toBe(true);
     expect(modelClient.requests.every((request) => request.providerId === 'background-provider')).toBe(true);
     expect(modelClient.requests.every((request) => request.toolChoice === 'auto')).toBe(true);
@@ -38,6 +40,7 @@ describe('memory consolidation agent', () => {
 
     await expect(runMemoryConsolidationAgent({
       streamModel: (request) => modelClient.stream(request),
+      sessionId: 'memory-job-1',
       root,
       now: fixedNow,
       rolloutTokenBudget: 8,
@@ -55,6 +58,7 @@ describe('memory consolidation agent', () => {
 
     await expect(runMemoryConsolidationAgent({
       streamModel: (request) => modelClient.stream(request),
+      sessionId: 'memory-job-1',
       root,
       now: fixedNow,
       rolloutTokenBudget: 8,
@@ -70,6 +74,7 @@ describe('memory consolidation agent', () => {
 
     await expect(runMemoryConsolidationAgent({
       streamModel: (request) => modelClient.stream(request),
+      sessionId: 'memory-job-1',
       root,
       now: fixedNow,
       rolloutTokenBudget: 8,
@@ -87,6 +92,7 @@ describe('memory consolidation agent', () => {
 
     await expect(runMemoryConsolidationAgent({
       streamModel: (request) => modelClient.stream(request),
+      sessionId: 'memory-job-1',
       root,
       now: fixedNow,
       signal: controller.signal,

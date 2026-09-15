@@ -22,12 +22,14 @@ export function ProviderEditor({
   catalog,
   canDelete,
   discovering,
+  refreshingCatalog,
   host,
   onApiKeyChange,
   onCopyApiKey,
   onChange,
   onDelete,
   onDiscover,
+  onRefreshCatalog,
   onProviderIdentityChange,
   provider,
   proxyServers,
@@ -38,12 +40,14 @@ export function ProviderEditor({
   catalog: ModelProviderCatalog;
   canDelete: boolean;
   discovering: boolean;
+  refreshingCatalog: boolean;
   host: ModelProviderRendererHost;
   onApiKeyChange(value: string): void;
   onCopyApiKey(): Promise<void>;
   onChange(provider: ProviderConfigState): void;
   onDelete(): void;
   onDiscover(): Promise<ProviderConfigState['models'] | undefined>;
+  onRefreshCatalog(): void;
   onProviderIdentityChange(provider: ProviderConfigState): void;
   provider: ProviderConfigState;
   proxyServers: readonly DesktopNetworkProxyServerState[];
@@ -113,12 +117,14 @@ export function ProviderEditor({
         <ProviderModelList
           catalogPlan={catalogPlan}
           discovering={discovering}
+          refreshingCatalog={refreshingCatalog}
           host={host}
           provider={provider}
           translate={translate}
           ui={ui}
           onChange={onChange}
           onDiscover={onDiscover}
+          onRefreshCatalog={onRefreshCatalog}
         />
       </div>
       {iconPickerOpen ? (

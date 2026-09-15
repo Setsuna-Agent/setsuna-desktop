@@ -39,6 +39,8 @@ export type ModelProviderReplayTrace = Readonly<{
 }>;
 
 export interface ModelProviderRuntimeHost {
+  readonly appVersion: string;
+  readonly dataDir: string;
   writeClipboardText(text: string): Promise<void>;
   resolveProvider(providerId?: string): Promise<ModelProviderRuntimeConfig | null>;
   readProviderState(): Promise<ModelProviderSettingsState>;

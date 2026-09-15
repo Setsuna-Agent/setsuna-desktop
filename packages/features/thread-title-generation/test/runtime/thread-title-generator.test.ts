@@ -21,6 +21,7 @@ describe('thread title generator', () => {
     };
 
     const result = await generateThreadTitle({
+      sessionId: 'thread-title-owner',
       attachmentCount: 1,
       host: {
         generateText: async (input) => {
@@ -36,6 +37,7 @@ describe('thread title generator', () => {
 
     expect(result).toEqual({ title: '修复自动标题生成', usage });
     expect(request).toMatchObject({
+      sessionId: 'thread-title-owner',
       model: 'current-model',
       temperature: 0,
       thinking: false,
@@ -81,6 +83,7 @@ describe('thread title generator', () => {
 
   it('keeps the deterministic fallback when the provider truncates visible output', async () => {
     const result = await generateThreadTitle({
+      sessionId: 'thread-title-owner',
       attachmentCount: 0,
       host: {
         generateText: async (): Promise<ThreadTitleGenerationModelResult> => ({

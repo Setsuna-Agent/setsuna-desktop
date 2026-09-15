@@ -45,6 +45,11 @@ Feature setup 只创建 manager 和 idle cleanup timer，不主动连接 server�
 
 同一个 `ToolExecutionContext` 会映射为稳定的 feature context，保证模型看到的 `mcp__server__tool` 在 preview/run 阶段仍指向同一工具。SDK progress 经 `onProgress` 转换为常规 tool output delta。
 
+工具目录附带真实 server key、显示名和说明，供 runtime 关联插件并生成搜索摘要。
+单个 server 发现失败不会阻止其他 server 的工具使用；失败原因按当前 context 保存，
+遮蔽配置中的凭据、认证头和 URL 后，经现有外部工具上下文提供给模型。
+下一步骤重新发现成功后不再携带旧错误；取消会继续向上抛出，不作为发现失败吞掉。
+
 ## 宿主兼容面
 
 - `/v1/mcp/*` 路径和 response DTO 不变，由 route 调用 `McpControl`。

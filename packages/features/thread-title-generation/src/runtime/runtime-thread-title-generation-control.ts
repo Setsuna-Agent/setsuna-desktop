@@ -80,6 +80,7 @@ export class RuntimeThreadTitleGenerationControl implements ThreadTitleGeneratio
       if (!model) return null;
       return generateThreadTitle({
         attachmentCount: input.attachmentCount,
+        sessionId: input.thread.id,
         host: this.host,
         model: model.model,
         now: this.host.now(),

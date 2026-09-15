@@ -698,6 +698,8 @@
 
 .chat-model-command-menu {
   position: absolute;
+  /* 搜索框占自然高度，滚动列表只占剩余空间，避免末项被外层裁切。 */
+  grid-template-rows: auto minmax(0, 1fr);
   /* 以输入框为包含块，覆盖其 1px 边框，与 / 菜单对齐外沿。 */
   right: -1px;
   bottom: calc(100% + 6px);
@@ -718,7 +720,8 @@
 }
 
 .chat-model-command-menu .chat-model-command-menu__list {
-  max-height: calc(var(--chat-command-menu-max-height, 280px) - 42px);
+  min-height: 0;
+  max-height: none;
 }
 
 .chat-model-command-menu__search.sd-field {

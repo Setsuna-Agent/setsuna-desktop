@@ -50,6 +50,7 @@ export async function generateThreadTitle({
   model,
   now,
   providerId,
+  sessionId,
   signal,
   userContent,
 }: {
@@ -58,12 +59,14 @@ export async function generateThreadTitle({
   model: string;
   now: Date;
   providerId?: string;
+  sessionId: string;
   signal: AbortSignal;
   userContent: string;
 }): Promise<GeneratedThreadTitle> {
   const titleSignal = AbortSignal.any([signal, AbortSignal.timeout(TITLE_GENERATION_TIMEOUT_MS)]);
   const output = await host.generateText({
     model,
+    sessionId,
     ...(providerId ? { providerId } : {}),
     messages: titlePromptMessages(userContent, attachmentCount, now),
     toolChoice: 'none',

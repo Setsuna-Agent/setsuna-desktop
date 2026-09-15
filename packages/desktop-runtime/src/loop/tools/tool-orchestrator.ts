@@ -95,6 +95,8 @@ export type ToolOrchestratorOptions = {
 export type ToolOrchestratorRunOptions = {
   checkApproval?: boolean;
   plugin?: RuntimePluginReference;
+  /** Resolve argument-dependent attribution again after hooks rewrite the input. */
+  resolvePlugin?(toolCall: RuntimeToolCall, parsedArguments: unknown): RuntimePluginReference | undefined;
   postProcessResult?(result: ToolExecutionResult): Promise<ToolExecutionResult>;
   waitsForRuntimeCancellation?: boolean;
 };
@@ -187,6 +189,7 @@ export class ToolOrchestrator {
         runArguments = applyHookUpdatedInput(runToolCall.name, runArguments, preHookOutcome.updatedInput);
         runToolCall = { ...runToolCall, arguments: JSON.stringify(runArguments) };
       }
+      if (runOptions.resolvePlugin) runOptions = { ...runOptions, plugin: runOptions.resolvePlugin(runToolCall, runArguments) };
       const preExtensionOutcome = effective.rejectionReason
         ? null
         : await this.options.extensions?.dispatch('tool.before', {
@@ -214,6 +217,7 @@ export class ToolOrchestrator {
         ...(preExtensionOutcome?.context ?? []),
         ...(preExtensionOutcome?.feedback ? [preExtensionOutcome.feedback] : []),
       );
+      if (runOptions.resolvePlugin) runOptions = { ...runOptions, plugin: runOptions.resolvePlugin(runToolCall, runArguments) };
       const startPreview = effective.rejectionReason
         ? null
         : await this.options.toolHost.previewToolCall?.(runToolCall.name, runArguments, stepContext).catch(() => null);

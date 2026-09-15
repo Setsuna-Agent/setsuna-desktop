@@ -24,11 +24,15 @@ describe('agent loop tool catalog and stored results', () => {
     const thread = await threadStore.createThread({ title: 'MCP discovery' });
     const requests: ModelRequest[] = [];
     const hostCalls: string[] = [];
-    const tool: RuntimeToolDefinition = { name: 'mcp__docs__search', description: 'Search documents', inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] } };
+    const tool: RuntimeToolDefinition = {
+      name: 'mcp__docs__search', description: 'Search documents',
+      inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
+      source: { kind: 'mcp', id: 'docs', name: 'Document service' },
+    };
     const modelClient: ModelClient = { stream: async function* (request) {
       requests.push(request);
       if (requests.length <= 2) {
-        yield { type: 'tool_calls', toolCalls: [{ id: `call_${requests.length}`, name: requests.length === 1 ? 'search_tools' : tool.name, arguments: '{"query":"documents"}' }] };
+        yield { type: 'tool_calls', toolCalls: [{ id: `call_${requests.length}`, name: requests.length === 1 ? 'search_tools' : tool.name, arguments: '{"query":"Notebook"}' }] };
         yield { type: 'done', finishReason: 'tool_calls' };
       } else {
         yield { type: 'text_delta', text: 'Found the requested document.' };
@@ -36,17 +40,24 @@ describe('agent loop tool catalog and stored results', () => {
       }
     } };
     const loop = new AgentLoop({ threadStore, modelClient, eventBus: new InMemoryEventBus(), clock: systemClock, ids,
+      pluginStore: { listPlugins: async () => ({ plugins: [{
+        id: 'notebook', name: 'Notebook', description: 'Find shared knowledge', installedAt: '',
+        skills: [], hooks: [], hookCount: 0, resources: [],
+        mcpServers: [{ key: 'docs', label: 'Document service', owned: true, transport: 'streamableHttp' }],
+      }] }) },
       toolHost: { listTools: async () => [tool], runTool: async (name) => { hostCalls.push(name); return { content: 'Requested document.' }; } },
     });
     await loop.sendTurn(thread.id, { input: 'Find my document.' });
     expect(requests[0]?.tools?.map((item) => item.name)).toContain('search_tools');
     expect(requests[0]?.tools?.map((item) => item.name)).not.toContain(tool.name);
-    expect(requests[1]?.tools).toContainEqual(tool);
-    expect(requests[2]?.tools).toContainEqual(tool);
+    expect(requests[0]?.tools?.find((item) => item.name === 'search_tools')?.description).toContain('Notebook');
+    const definition = { name: tool.name, description: tool.description, inputSchema: tool.inputSchema };
+    expect(requests[1]?.tools).toContainEqual(definition);
+    expect(requests[2]?.tools).toContainEqual(definition);
     expect(hostCalls).toEqual([tool.name]);
     expect((await threadStore.getThread(thread.id))?.messages.at(-1)?.content).toBe('Found the requested document.');
   });
-  it('advertises and executes a host tool while preserving host name ownership', async () => {
+  it('persists CLI plugin attribution while preserving host name ownership', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Tool catalog routing' });
@@ -59,6 +70,11 @@ describe('agent loop tool catalog and stored results', () => {
       clock: systemClock,
       ids,
       toolHost,
+      pluginStore: { listPlugins: async () => ({ plugins: [{
+        id: 'github', name: 'GitHub', installedAt: '', skills: [], hooks: [], hookCount: 0, resources: [], mcpServers: [],
+        connectors: [{ id: 'cli', name: 'GitHub CLI', kind: 'cli', command: 'gh', required: false,
+          installUrl: 'https://cli.github.com', setupCommands: [] }],
+      }] }) },
     });
     loop.registerAppServerDynamicTools(thread.id, [{
       name: 'run_shell_command',
@@ -81,9 +97,16 @@ describe('agent loop tool catalog and stored results', () => {
     expect(modelClient.requests).toHaveLength(2);
     expect(modelClient.requests[0].tools?.map((tool) => tool.name))
       .toContain('run_shell_command');
-    expect(toolHost.calls).toEqual([{ command: 'printf direct' }]);
+    expect(toolHost.calls).toEqual([{ command: 'gh pr list' }]);
     expect(shellMessages).toHaveLength(1);
     expect(shellMessages[0]?.content).toBe('command output');
+    const events = await threadStore.listEvents(thread.id, 0);
+    expect(events.find((event) => event.type === 'tool.started')?.payload).toMatchObject({
+      toolName: 'run_shell_command', plugin: { id: 'github', name: 'GitHub' },
+    });
+    expect(saved?.messages.flatMap((message) => message.toolRuns ?? [])).toMatchObject([{
+      name: 'run_shell_command', status: 'success', plugin: { id: 'github', name: 'GitHub' },
+    }]);
   });
 
   it('recovers a stored result page by page without re-truncating read_tool_result output', async () => {
@@ -139,7 +162,7 @@ class CatalogToolCallModelClient implements ModelClient {
         toolCalls: [{
           id: 'call_shell',
           name: 'run_shell_command',
-          arguments: JSON.stringify({ command: 'printf direct' }),
+          arguments: JSON.stringify({ command: 'gh pr list' }),
         }],
       };
       yield { type: 'done', finishReason: 'tool_calls' };

@@ -30,6 +30,7 @@ describe('RuntimeThreadTitleGenerationControl', () => {
     const recordUsage = vi.fn<ThreadTitleGenerationRuntimeHost['recordUsage']>();
     const appendTitleUpdate = vi.fn<ThreadTitleGenerationRuntimeHost['appendTitleUpdate']>();
     const host = runtimeHost({ current, recordUsage, appendTitleUpdate });
+    const generateText = vi.spyOn(host, 'generateText');
     const control = activeControl(host, { providerId: 'provider-title', modelId: 'model-title' });
 
     const generation = control.start({
@@ -47,6 +48,7 @@ describe('RuntimeThreadTitleGenerationControl', () => {
       fallback: { model: 'chat-model', providerId: 'provider-chat' },
     });
     expect(recordUsage).toHaveBeenCalledWith(current.id, 'turn_1', usage);
+    expect(generateText).toHaveBeenCalledWith(expect.objectContaining({ sessionId: current.id }));
     expect(appendTitleUpdate).toHaveBeenCalledWith(current.id, 'turn_1', '自动标题 Feature 归属');
   });
 

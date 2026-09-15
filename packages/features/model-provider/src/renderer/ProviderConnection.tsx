@@ -13,6 +13,7 @@ import { TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import type { ModelProviderCatalog } from '../contracts/index.js';
 import { ProviderApiKeyField } from './ProviderApiKeyField.js';
+import { ProviderRequestHeadersField } from './ProviderRequestHeadersField.js';
 import {
   CUSTOM_PROVIDER_ID,
   catalogPlanForConfig,
@@ -53,7 +54,7 @@ export function ProviderConnection({
     provider: ProviderConfigState;
   }> | null>(null);
   const requestChange = (next: ProviderConfigState, clearApiKey: boolean) => {
-    const destructive = Boolean(provider.models.length || (clearApiKey && (provider.apiKeySet || apiKey)));
+    const destructive = Boolean(provider.models.length || (clearApiKey && (provider.apiKeySet || apiKey || Object.keys(provider.requestHeaders ?? {}).length)));
     if (destructive) {
       setPendingChange({ clearApiKey, provider: next });
       return;
@@ -145,6 +146,14 @@ export function ProviderConnection({
               {proxyServers.map((server) => <option key={server.id} value={`proxy:${server.id}`}>{server.name}</option>)}
             </ui.SelectField>
           </Field>
+          <ProviderRequestHeadersField
+            key={`${provider.id}:${provider.catalogProviderId ?? ''}`}
+            catalogProviderId={provider.catalogProviderId}
+            requestHeaders={provider.requestHeaders}
+            translate={translate}
+            ui={ui}
+            onChange={(requestHeaders) => onChange({ ...provider, requestHeaders })}
+          />
         </div>
       </details>
       {pendingChange ? (

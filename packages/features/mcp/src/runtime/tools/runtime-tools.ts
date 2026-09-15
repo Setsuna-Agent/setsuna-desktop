@@ -89,6 +89,7 @@ function readMcpResourceDefinition(language?: RuntimeInterfaceLanguage): Runtime
  */
 export class McpRuntimeTools {
   private readonly mappingsByContext = new WeakMap<object, McpToolMapping[]>();
+  private readonly discoveryFailuresByContext = new WeakMap<object, McpToolExternalContext[]>();
 
   constructor(
     private readonly mcpStore: { listServerInputs(): Promise<RuntimeMcpServerInput[]> },
@@ -103,6 +104,10 @@ export class McpRuntimeTools {
       name,
       description: [`MCP ${server.label ?? server.key}: ${tool.name}`, tool.description].filter(Boolean).join('\n'),
       inputSchema: validInputSchema(tool.inputSchema),
+      source: {
+        kind: 'mcp' as const, id: server.key, name: server.label ?? server.key,
+        ...(server.description ? { description: server.description } : {}),
+      },
     }));
     const resourceTools = servers.length
       ? [listMcpResourcesDefinition(context.interfaceLanguage), listMcpResourceTemplatesDefinition(context.interfaceLanguage), readMcpResourceDefinition(context.interfaceLanguage)]
@@ -145,7 +150,10 @@ export class McpRuntimeTools {
         ? { id: `mcp_${safeToolNamePart(server.key)}`, label: server.label ?? server.key, content: snapshot.instructions }
         : null;
     }));
-    return snapshots.filter((item): item is McpToolExternalContext => Boolean(item));
+    return [
+      ...(this.discoveryFailuresByContext.get(context) ?? []),
+      ...snapshots.filter((item): item is McpToolExternalContext => Boolean(item)),
+    ];
   }
 
   async approvalForTool(): Promise<null> {
@@ -272,13 +280,20 @@ export class McpRuntimeTools {
     servers: RuntimeMcpServerInput[],
     context: McpOperationContext,
   ): Promise<McpToolMapping[]> {
+    const failures: McpToolExternalContext[] = [];
     const liveInventories = await Promise.all(servers.map(async (server) => {
       try {
         return { server, tools: await this.mcpControl.listTools(server.key, mcpContext(context)) };
-      } catch {
+      } catch (error) {
+        context.signal?.throwIfAborted();
+        failures.push({
+          id: `mcp_discovery_${safeToolNamePart(server.key)}`, label: server.label ?? server.key,
+          content: JSON.stringify({ server: server.key, status: 'tool_discovery_failed', error: discoveryErrorMessage(error, server) }),
+        });
         return { server, tools: [] };
       }
     }));
+    this.discoveryFailuresByContext.set(context, failures.sort((left, right) => left.id.localeCompare(right.id)));
     const usedNames = new Map<string, number>();
     const mappings: McpToolMapping[] = [];
     for (const { server, tools } of liveInventories) {
@@ -291,6 +306,18 @@ export class McpRuntimeTools {
     }
     return mappings;
   }
+}
+
+function discoveryErrorMessage(error: unknown, server: RuntimeMcpServerInput): string {
+  let message = errorMessage(error);
+  // Transport errors can echo configured credentials. Redact before including diagnostics in model context.
+  const secrets = [...Object.values(server.headers ?? {}), ...Object.values(server.env ?? {})]
+    .filter(Boolean).sort((left, right) => right.length - left.length);
+  for (const secret of secrets) message = message.replaceAll(secret, '[redacted]');
+  return message
+    .replace(/https?:\/\/[^\s<>"']+/giu, '[URL omitted]')
+    .replace(/\b(Bearer|Basic)\s+[\w.~+/=-]+/giu, '$1 [redacted]')
+    .slice(0, 1_000);
 }
 
 function mcpContext(context: McpOperationContext, toolName?: string): McpOperationContext {

@@ -377,6 +377,7 @@ async function createWindow(): Promise<void> {
 
   const currentRuntimeHost = new RuntimeHost({
     appRoot: app.getAppPath(),
+    appVersion: app.getVersion(),
     browserControl: activatedMainFeatures.browserControl,
     nativeBridge,
     dataDir: dataLayout.root,

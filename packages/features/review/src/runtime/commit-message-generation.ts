@@ -1,4 +1,5 @@
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
+import { randomUUID } from 'node:crypto';
 import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
 import { COMMIT_MESSAGE_HISTORY_LIMIT, DEFAULT_COMMIT_MESSAGE_PROMPT } from '../contracts/index.js';
 import type {
@@ -42,6 +43,7 @@ export async function generateRuntimeReviewCommitMessage(
   let generated: string;
   try {
     generated = await host.generateText({
+      sessionId: `commit_message_${randomUUID()}`,
       messages: commitMessagePrompt(input, prompt),
       maxOutputTokens: 1_024,
       temperature: 0.2,

@@ -313,6 +313,17 @@
   min-width: 0;
 }
 
+/* Fill both virtualizer wrappers so the empty state centers in the panel viewport. */
+.desktop-review-panel__sections--empty {
+  display: flex;
+}
+
+.desktop-review-panel__sections--empty :is(.desktop-review-panel__sections-content, .desktop-review-section) {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
 .desktop-review-file-list {
   display: grid;
   gap: 0;

@@ -1,4 +1,4 @@
-import type { RuntimeToolDefinition } from '@setsuna-desktop/contracts';
+import type { RuntimePluginSummary, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import type { ToolOrchestrator } from '../../../src/loop/tools/tool-orchestrator.js';
 import {
@@ -12,6 +12,69 @@ import type { RuntimeToolExecutionContext, ToolHost } from '../../../src/ports/t
 const RUNTIME_PROVIDED_NAMES = [READ_TOOL_RESULT_TOOL_NAME];
 
 describe('RuntimeToolRouter', () => {
+  it('resolves CLI ownership per invocation and drops it when plugins are disabled or removed', async () => {
+    const plugin: RuntimePluginSummary = {
+      id: 'github', name: 'GitHub', installedAt: '', skills: [], hooks: [], hookCount: 0, resources: [], mcpServers: [],
+      connectors: [{ id: 'cli', name: 'GitHub CLI', kind: 'cli', command: 'gh', required: false,
+        installUrl: 'https://cli.github.com', setupCommands: [] }],
+    };
+    const runToolCall = vi.fn(async () => ({ content: 'done', processed: true, status: 'success' as const }));
+    const options = {
+      approvalPolicy: 'on-request' as const, context: runtimeToolContext(), toolHost: catalogToolHost(),
+      orchestrator: { runToolCall } as unknown as ToolOrchestrator,
+      pluginStore: { listPlugins: vi.fn(async () => ({ plugins: [plugin] })) },
+    };
+    const call = { id: 'call_cli', name: 'run_shell_command', arguments: '{"command":"gh pr list"}' };
+    const resolveOwner = async (router: RuntimeToolRouter) => {
+      await router.runToolCall(call, { command: 'gh pr list' });
+      const invocation = runToolCall.mock.calls.at(-1) as unknown as Parameters<ToolOrchestrator['runToolCall']>;
+      expect(invocation[3]).toBe('on-request');
+      return invocation[4]?.resolvePlugin;
+    };
+    const resolve = await resolveOwner(await RuntimeToolRouter.create(options));
+    expect(resolve?.(call, { command: 'gh pr list' })).toEqual({ id: 'github', name: 'GitHub' });
+    expect(resolve?.(call, { command: 'git status' })).toBeUndefined();
+    const disabled = await resolveOwner(await RuntimeToolRouter.create({
+      ...options, context: { ...options.context, features: { plugins: false } },
+    }));
+    expect(disabled?.(call, { command: 'gh pr list' })).toBeUndefined();
+    options.pluginStore.listPlugins.mockResolvedValue({ plugins: [] });
+    const removed = await resolveOwner(await RuntimeToolRouter.create(options));
+    expect(removed?.(call, { command: 'gh pr list' })).toBeUndefined();
+  });
+
+  it('discovers integrations by installed provenance and refreshes that metadata with the allowed catalog', async () => {
+    const plugin: RuntimePluginSummary = {
+      id: 'github', name: 'GitHub', description: 'Repository pull requests', installedAt: '',
+      skills: [], hooks: [], hookCount: 0, resources: [],
+      mcpServers: [{ key: 'service-42', label: 'Repository service', transport: 'streamableHttp', owned: true }],
+    };
+    const lookup: RuntimeToolDefinition = {
+      name: 'mcp__service_42__lookup', description: 'Find items',
+      inputSchema: { type: 'object', properties: { branchRef: { type: 'string' } } },
+      source: { kind: 'mcp', id: 'service-42', name: 'Repository service' },
+    };
+    const options = {
+      approvalPolicy: 'on-request' as const, context: runtimeToolContext(), orchestrator: null,
+      pluginStore: { listPlugins: vi.fn(async () => ({ plugins: [plugin] })) },
+      toolHost: { listTools: async () => [lookup], runTool: async () => ({ content: 'unused' }) },
+    };
+    const router = await RuntimeToolRouter.create(options);
+    expect(router.tools.find((tool) => tool.name === 'search_tools')?.description).toContain('Repository pull requests');
+    expect(router.tools.find((tool) => tool.name === lookup.name)).toBeUndefined();
+    const found = JSON.parse(router.searchTools({ query: 'GitHub' }));
+    expect(found.tools).toMatchObject([{ name: lookup.name, source: { plugins: [{ id: 'github', name: 'GitHub' }] } }]);
+    expect(router.searchTools({ query: 'branchRef' })).toContain(lookup.name);
+    expect(router.tools.find((tool) => tool.name === lookup.name)?.inputSchema).toEqual(lookup.inputSchema);
+
+    options.pluginStore.listPlugins.mockResolvedValue({ plugins: [] });
+    const uninstalled = await RuntimeToolRouter.create(options);
+    expect(JSON.parse(uninstalled.searchTools({ query: 'GitHub' })).tools).toEqual([]);
+    const filtered = await RuntimeToolRouter.create({ ...options, allowTool: () => false });
+    expect(filtered.tools.some((tool) => tool.source)).toBe(false);
+    expect(filtered.searchTools({ query: 'lookup' })).not.toContain(lookup.name);
+  });
+
   it.each([
     ['mcp__docs__search', 'mcp__docs__delete'],
     ['configure_plugin', 'remove_plugin_bundle'],

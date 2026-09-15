@@ -356,6 +356,10 @@ function conversationProvider(id: string, modelCode: string): ProviderConfigStat
         'write_file',
         'delete_file',
       ]);
+      const sessions = modelClient.requests.map((request) => request.sessionId);
+      expect(sessions.slice(0, 2)).toEqual([thread.id, thread.id]);
+      expect(sessions[2]).toMatch(/^memory_consolidation_/u);
+      expect(sessions[3]).toBe(sessions[2]);
       await expect(memoryStore.readMemoryFile({ path: 'memory_summary.md' })).resolves.toMatchObject({
         content: expect.stringMatching(/^v1\n/),
       });

@@ -159,9 +159,11 @@ export function SidebarSearchOverlay({
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => openResult(result.thread.id)}
               >
-                <span className="desktop-agent-search-result__status">
-                  {result.isBusy ? <LoaderCircle className="is-spinning" size={13} /> : null}
-                </span>
+                {result.isBusy ? (
+                  <span className="desktop-agent-search-result__status">
+                    <LoaderCircle className="is-spinning" size={13} />
+                  </span>
+                ) : null}
                 <span className="desktop-agent-search-result__main">
                   <span className="desktop-agent-search-result__title">{result.thread.title}</span>
                   {result.matchText ? <span className="desktop-agent-search-result__match">{result.matchText}</span> : null}

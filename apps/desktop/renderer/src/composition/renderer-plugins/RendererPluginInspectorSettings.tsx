@@ -102,14 +102,6 @@ export function RendererPluginInspectorSettings({
 
           {copyState === 'done' ? <ui.Toast message={translate('feature.rendererInspector.copied')} tone="success" /> : null}
           {copyState === 'error' ? <ui.Toast message={translate('feature.rendererInspector.copyError')} tone="error" /> : null}
-          {inspection.stalePreferences.length ? (
-            <ui.Toast
-              message={translate('feature.rendererInspector.stale', {
-                count: inspection.stalePreferences.length,
-              })}
-              tone="warning"
-            />
-          ) : null}
           {inspection.renderErrors.length ? (
             <ui.Toast
               message={translate('feature.rendererInspector.renderErrors', {

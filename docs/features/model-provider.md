@@ -41,9 +41,11 @@ AgentLoop / Review / Vision / Thread title / Memory
 | `pi-context.ts` | `ModelRequest`/tool/image/history 到 Pi context，v2/v3 replay |
 | `pi-stream-bridge.ts` | Pi stream 到 `ModelStreamEvent`、usage、v3 metadata |
 | `provider-catalog.ts` | 窄注册表筛选 Pi built-in 厂商/方案/模型，并恢复预置模型 compat metadata |
+| `remote-model-catalog.ts` / `remote-model-catalog-data.ts` | 远程目录校验、按厂商更新、缓存恢复及内存合并 |
 | `model-discovery.ts` | 模型列表、能力解析、请求取消和超时上限 |
 | `responses-compactor.ts` | 唯一保留的窄原生协议调用：`/responses/compact` |
 | `model-request-timeout.ts` | 总超时与 idle timeout |
+| `provider-request-headers.ts` | 合并用户请求头或厂商预置，填入应用版本和会话 ID |
 
 预置厂商从 Pi provider factories 建立仅包含下列三种 API 的窄注册表，避免把 AWS、Google 等未支持协议的 SDK 打进桌面 runtime；自定义兼容服务直接使用对应 adapter：
 
@@ -57,9 +59,19 @@ Setsuna provider ID 是配置和 metadata 身份。预置配置的 Pi model 保�
 
 `packages/features/model-provider/src/renderer/` 持有 provider settings state、Pi 目录 typed client、自动保存、模型发现和 `model-provider` 设置视图。Host 设置页只负责 contribution 布局与品牌图标渲染，不再拥有 provider CRUD controller。
 
-预置服务的主流程是厂商、接入方案、API Key 和模型目录；协议、Base URL、代理、图标与模型 token/capability override 位于高级配置。选择“自定义兼容服务”后才展开协议、URL、同步模型和手动模型入口。
+预置服务的主流程是厂商、接入方案、API Key 和模型目录；协议、Base URL、代理、请求头、图标与模型 token/capability override 位于高级配置。选择“自定义兼容服务”后才展开协议、URL、同步模型和手动模型入口。
 
 Provider projection 仍合入共享 `RuntimeConfigState`，供聊天模型选择和 Core task-model 设置读取；写 provider 配置只走 Feature operation。
+
+## 远程模型目录
+
+每个 runtime Feature 实例持有一个 `RemoteModelCatalog`。启动只读取本地缓存，`GET /v1/features/model-provider/catalog` 返回内置目录与缓存的合并结果。进入厂商设置时通过 `POST /v1/features/model-provider/catalog/refresh` 按需更新；“刷新目录”按钮可强制更新。公开数据来自 Pi CLI 同样使用的 `https://pi.dev/api/models/providers/<厂商 ID>`，保持现有支持的厂商与三种协议范围。
+
+目录更新使用配置连接的代理路由（未保存连接使用全局路由），只发送应用 User-Agent、Accept 和缓存 ETag。模型服务的 API Key 和自定义请求头不发往目录服务。普通刷新间隔为 4 小时，单次请求最多 8 秒，同一厂商的并发刷新合并；失败保留上次有效数据，自动刷新失败后短暂退避，手动刷新可立即重试。
+
+远程记录按模型 ID 覆盖内置记录，同时保留内置目录中其余模型。完整元数据包含 `api`、`compat`、`thinkingLevelMap`、图片能力和 token 上限；设置投影、Pi 采样及原生压缩共享同一份 Provider 列表。目录刷新只更新元数据，不修改用户已选模型、自定义能力值或未保存的设置。
+
+缓存按厂商原子写入 `runtime/features/model-provider/catalog-cache/`，属于可重建数据，不进入用户设置。缓存损坏时回退内置目录，应用版本变化后重新获取；更新会校验字段和响应体积，错误响应不发布部分模型。Feature 关闭时取消进行中的目录请求。
 
 ## 配置与 Secret
 
@@ -69,7 +81,9 @@ Provider projection 仍合入共享 `RuntimeConfigState`，供聊天模型选择
 - `openai-responses` → Pi `openai-responses`
 - `anthropic` → Pi `anthropic-messages`
 
-可选 `catalogProviderId` 记录 Pi built-in provider identity。历史配置缺少该字段时，runtime 会用协议和规范化 Base URL 做唯一匹配以恢复 Pi compat；无法唯一匹配或显式切换到自定义服务时仍按自定义服务处理。API key 只保存在 `secrets.json`，切换厂商或自定义服务会先确认并清除旧端点的凭据与模型。
+可选 `catalogProviderId` 记录 Pi built-in provider identity。历史配置缺少该字段时，runtime 和 renderer 用协议和规范化 Base URL 做唯一匹配以恢复 Pi compat 和预置配置；无法唯一匹配或显式切换到自定义服务时仍按自定义服务处理。API key 输入框的值只保存在 `secrets.json`，切换厂商会先确认并清除旧端点的凭据、自定义请求头与模型。切换到“自定义兼容服务”保留当前连接和生效的请求头。
+
+`requestHeaders` 保存在 `config.json`，通过设置投影供用户编辑。省略该字段表示使用厂商预置，显式空对象表示取消预置头；用户提供的 map 完整替换预置并覆盖同名 SDK 请求头。保存输入中省略字段保留原值，传 `null` 恢复默认。高级设置按每行 `名称: 值` 编辑，校验名称、重复头和非法控制字符，合法编辑复用自动保存。
 
 `FileConfigStore` 继续拥有 `config.json`/`secrets.json` 的锁与原子写入。Feature host 暴露 provider 查询/保存、按 proxy route 解析的 fetch 和原生剪贴板写入；已保存的 API key 不进入 renderer state。
 
@@ -87,6 +101,14 @@ API Key 输入框右侧提供复制按钮，优先复制当前输入，否则复
 只有 source 和 semantic fingerprint 都匹配时才恢复签名或 native item；否则退回 portable text/thinking/tool calls。历史 v2 Anthropic/Responses envelope 仍只读兼容。
 
 所有 metadata 经过 JSON 清洗、2 MiB 单消息上限和持久化预留检查，不保存 header、API key 或完整 raw response。
+
+## 请求头与会话身份
+
+`ModelRequest.sessionId` 表示稳定的对话或独立任务身份，Pi 采样优先使用该字段，旧调用可回退到 `stepSnapshot.threadId`。主对话、工具续跑、标题、压缩、记忆提取、自动审批和图片识别使用所属线程 ID；独立记忆整合、提交信息生成和图片识别测试在任务开始时确定自己的 ID，并在多轮采样及内部重试中复用。
+
+OpenCode Go 的默认请求头在 Feature contracts 中定义为 `User-Agent: setsuna-desktop/{{appVersion}}` 和 `x-opencode-session: {{sessionId}}`。高级设置显示这些默认值，用户可以修改、删除或恢复默认。其他厂商使用相同的自定义请求头能力。
+
+`PiModelClient` 在共用 fetch 边界解析这两个占位符，三种协议及 `/responses/compact` 使用相同处理。模型列表同步也复用请求头 helper，但没有所属对话，因此跳过包含 `{{sessionId}}` 的请求头。版本由 Electron `app.getVersion()` 经 `SETSUNA_DESKTOP_APP_VERSION` 传入 runtime host，直接嵌入 runtime factory 的源码调用默认标识为 `dev`。
 
 ## Compaction
 

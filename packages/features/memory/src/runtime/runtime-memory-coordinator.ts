@@ -419,6 +419,7 @@ export class RuntimeMemoryCoordinator implements MemoryControl {
     let usage: RuntimeUsage | undefined;
     for await (const item of this.options.host.streamModel({
       ...extractionModel,
+      sessionId: thread.id,
       messages: this.passiveMemoryPromptMessages(thread, messages, sourceLabel),
       maxOutputTokens: PASSIVE_MEMORY_MAX_OUTPUT_TOKENS,
       signal,
@@ -549,6 +550,8 @@ export class RuntimeMemoryCoordinator implements MemoryControl {
       const consolidation = await runMemoryConsolidationAgent({
         streamModel: (request) => this.options.host.streamModel(request),
         ...consolidationModel,
+        // Phase 2 is its own multi-round conversation, independent of the triggering thread.
+        sessionId: this.options.host.id('memory_consolidation'),
         root: workspace.root,
         now: () => this.options.host.now(),
         signal,

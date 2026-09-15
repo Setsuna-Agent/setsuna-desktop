@@ -85,6 +85,16 @@ type RuntimeCompactionDebugContext = {
   turnId: string;
 };
 
+type CompactionSamplingInput = {
+  candidate: RuntimeContextCompactionCandidate;
+  threadId: string;
+  recordUsage: (usage: RuntimeUsage) => Promise<void>;
+  signal?: AbortSignal;
+  debugContext?: RuntimeCompactionDebugContext;
+  runtimeConfig?: RuntimeConfigState | null;
+  conversationModel?: Pick<ModelRequest, 'model' | 'providerId'>;
+};
+
 /** 管理上下文窗口策略、摘要生成及压缩事件投影。 */
 export class RuntimeContextCompactor {
   constructor(private readonly options: RuntimeContextCompactorOptions) {}
@@ -195,21 +205,9 @@ export class RuntimeContextCompactor {
       const event = await this.publishContextCompactionUsage(threadId, turnId, usage);
       advanceDebugAnchor(debugContext, event);
     };
-    const portableSummary = await this.generatePortableContextCompactionSummary(
-      candidate,
-      recordUsage,
-      signal,
-      debugContext,
-      runtimeConfig,
-      conversationModel,
-    );
-    const nativeArtifact = await this.generateNativeContextCompaction(
-      candidate,
-      recordUsage,
-      signal,
-      debugContext,
-      conversationModel,
-    );
+    const samplingInput = { candidate, threadId, recordUsage, signal, debugContext, runtimeConfig, conversationModel };
+    const portableSummary = await this.generatePortableContextCompactionSummary(samplingInput);
+    const nativeArtifact = await this.generateNativeContextCompaction(samplingInput);
     return {
       source: nativeArtifact.providerMetadata ? 'remote' : 'local',
       text: portableSummary,
@@ -222,14 +220,9 @@ export class RuntimeContextCompactor {
     };
   }
 
-  private async generatePortableContextCompactionSummary(
-    candidate: RuntimeContextCompactionCandidate,
-    recordUsage: (usage: RuntimeUsage) => Promise<void>,
-    signal?: AbortSignal,
-    debugContext?: RuntimeCompactionDebugContext,
-    runtimeConfig?: RuntimeConfigState | null,
-    conversationModel?: Pick<ModelRequest, 'model' | 'providerId'>,
-  ): Promise<string> {
+  private async generatePortableContextCompactionSummary({
+    candidate, threadId, recordUsage, signal, debugContext, runtimeConfig, conversationModel,
+  }: CompactionSamplingInput): Promise<string> {
     this.traceCompaction(debugContext, 'context.compaction.portable', {
       olderMessageCount: candidate.olderMessages.length,
       outcome: 'started',
@@ -248,6 +241,7 @@ export class RuntimeContextCompactor {
       try {
         for await (const item of this.options.modelClient.stream({
           ...compactionModel,
+          sessionId: threadId,
           messages: compactionSummaryPrompt(candidate, this.options.clock.now().toISOString(), maxOutputTokens, attempt > 0),
           maxOutputTokens, temperature: 0, thinking: false, toolChoice: 'none', signal,
         })) {
@@ -284,17 +278,10 @@ export class RuntimeContextCompactor {
   /**
    * 使用 provider 原生压缩能力生成 replacement items。portable 摘要始终由独立链路生成，
    * 避免把 provider 返回的保留消息误当成跨协议摘要。
-   *
-   * @param candidate 已选出的上下文压缩候选。
-   * @param signal 可选取消信号，自动压缩时跟随当前 turn。
    */
-  private async generateNativeContextCompaction(
-    candidate: RuntimeContextCompactionCandidate,
-    recordUsage: (usage: RuntimeUsage) => Promise<void>,
-    signal?: AbortSignal,
-    debugContext?: RuntimeCompactionDebugContext,
-    conversationModel?: Pick<ModelRequest, 'model' | 'providerId'>,
-  ): Promise<NativeContextCompactionArtifact> {
+  private async generateNativeContextCompaction({
+    candidate, threadId, recordUsage, signal, debugContext, conversationModel,
+  }: CompactionSamplingInput): Promise<NativeContextCompactionArtifact> {
     if (!this.options.modelClient.compactConversation) {
       this.traceCompaction(debugContext, 'context.compaction.native', {
         olderMessageCount: candidate.olderMessages.length,
@@ -314,6 +301,7 @@ export class RuntimeContextCompactor {
         // Provider-native compaction stays on the current conversation model because
         // its opaque metadata is only replayable by that provider/model pair.
         ...(conversationModel ?? { model: 'context-compaction' }),
+        sessionId: threadId,
         // Native compact must see the real model window, including exact provider envelopes.
         messages: candidate.olderMessages,
         signal,

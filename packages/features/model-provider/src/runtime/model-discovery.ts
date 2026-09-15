@@ -1,9 +1,12 @@
-import type {
-  ModelProviderKind,
-  RuntimeAvailableModel,
-  RuntimeFetchModelsInput,
+import {
+  normalizeProviderRequestHeaders,
+  type ModelProviderKind,
+  type RuntimeAvailableModel,
+  type RuntimeFetchModelsInput,
 } from '@setsuna-desktop/contracts';
 import type { ModelProviderRuntimeConfig } from '../contracts/index.js';
+import { applyProviderRequestHeaders } from './provider-request-headers.js';
+import type { Provider } from '@earendil-works/pi-ai';
 
 const MODEL_LIST_TIMEOUT_MS = 10_000;
 
@@ -12,6 +15,8 @@ export async function fetchAvailableModels(
   savedProvider: ModelProviderRuntimeConfig | null,
   fetchImpl: typeof fetch = globalThis.fetch,
   parentSignal?: AbortSignal,
+  appVersion = 'dev',
+  providers?: readonly Provider[],
 ): Promise<RuntimeAvailableModel[]> {
   if (typeof fetchImpl !== 'function') throw new Error('当前运行环境不支持网络请求。');
   const provider = input.provider ?? savedProvider?.provider ?? 'openai-compatible';
@@ -27,9 +32,18 @@ export async function fetchAvailableModels(
     : controller.signal;
 
   try {
+    const headers = new Headers(modelListHeaders(provider, apiKey));
+    applyProviderRequestHeaders(headers, {
+      provider,
+      baseUrl,
+      catalogProviderId: Object.hasOwn(input, 'catalogProviderId') ? input.catalogProviderId : savedProvider?.catalogProviderId,
+      requestHeaders: normalizeProviderRequestHeaders(
+        Object.hasOwn(input, 'requestHeaders') ? input.requestHeaders : savedProvider?.requestHeaders,
+      ),
+    }, { appVersion }, providers);
     const response = await fetchImpl(modelListUrl(provider, baseUrl), {
       method: 'GET',
-      headers: modelListHeaders(provider, apiKey),
+      headers,
       signal,
     });
     const text = await response.text();
@@ -49,11 +63,11 @@ export async function fetchAvailableModels(
 
 function modelListHeaders(provider: ModelProviderKind, apiKey: string): Record<string, string> {
   const headers: Record<string, string> = { Accept: 'application/json' };
-  if (!apiKey) return headers;
   if (provider === 'anthropic') {
-    headers['x-api-key'] = apiKey;
+    // Versioning is required even when authentication comes from custom headers.
     headers['anthropic-version'] = '2023-06-01';
-  } else {
+    if (apiKey) headers['x-api-key'] = apiKey;
+  } else if (apiKey) {
     headers.Authorization = `Bearer ${apiKey}`;
   }
   return headers;

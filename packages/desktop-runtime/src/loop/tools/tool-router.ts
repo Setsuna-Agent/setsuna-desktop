@@ -3,6 +3,7 @@ import {
   type ModelRequest,
   type RuntimeConfigState,
   type RuntimeMessage,
+  type RuntimePluginSummary,
   type RuntimeModelRequestToolRuntime,
   type RuntimeToolCall,
   type RuntimeToolDefinition,
@@ -14,8 +15,11 @@ import type {
   ToolRuntimeProfile,
 } from '../../ports/tool-host.js';
 import type { ToolResultStore } from '../../ports/tool-result-store.js';
+import type { PluginBundleStore } from '../../ports/plugin-bundle-store.js';
 import { assertSafeRuntimeId } from '../../security/runtime-id.js';
 import { DeferredTools, SEARCH_TOOLS_TOOL_NAME } from './deferred-tools.js';
+import { withToolDiscoverySource } from './tool-discovery-source.js';
+import { CliPluginAttribution, isCliCommandTool } from './cli-plugin-attribution.js';
 import type {
   ToolOrchestrator,
   ToolOrchestratorRunOptions,
@@ -89,6 +93,7 @@ export type RuntimeToolRouterOptions = {
   toolResultStore?: ToolResultStore;
   /** Turn-owned state survives router rebuilds and context compaction, but not permission filtering. */
   loadedToolNames?: Set<string>;
+  pluginStore?: Pick<PluginBundleStore, 'listPlugins'>;
 };
 
 /**
@@ -100,16 +105,19 @@ export class RuntimeToolRouter {
   private readonly catalogToolNames: ReadonlySet<string>;
   private readonly profiles: Map<string, ToolRuntimeProfile>;
   private readonly deferredTools: DeferredTools;
+  private readonly cliPlugins: CliPluginAttribution;
 
   private constructor(
     private readonly options: RuntimeToolRouterOptions,
     catalogTools: RuntimeToolDefinition[],
     profiles: Map<string, ToolRuntimeProfile>,
+    plugins: RuntimePluginSummary[],
   ) {
     this.catalogTools = catalogTools;
     this.catalogToolNames = new Set(catalogTools.map((tool) => tool.name));
     this.profiles = profiles;
     this.deferredTools = new DeferredTools(catalogTools, options.loadedToolNames ?? new Set());
+    this.cliPlugins = new CliPluginAttribution(plugins);
   }
 
   static async create(options: RuntimeToolRouterOptions): Promise<RuntimeToolRouter> {
@@ -125,7 +133,10 @@ export class RuntimeToolRouter {
       catalogTools.push(tool);
     }
 
-    return new RuntimeToolRouter(options, catalogTools, profiles);
+    const plugins = options.context.features?.plugins === false || !catalogTools.some((tool) => tool.source || profiles.get(tool.name)?.plugin || isCliCommandTool(tool.name))
+      ? [] : (await options.pluginStore?.listPlugins())?.plugins ?? [];
+    return new RuntimeToolRouter(options,
+      catalogTools.map((tool) => withToolDiscoverySource(tool, profiles.get(tool.name)?.plugin, plugins)), profiles, plugins);
   }
 
   /** 本次请求实际下发给模型的完整可见工具目录。 */
@@ -140,7 +151,8 @@ export class RuntimeToolRouter {
 
   private advertisedTools(): RuntimeToolDefinition[] {
     return [
-      ...this.catalogTools.filter((tool) => this.deferredTools.isVisible(tool)),
+      ...this.catalogTools.filter((tool) => this.deferredTools.isVisible(tool))
+        .map(({ source: _source, ...definition }) => definition),
       ...this.deferredTools.definition(),
       readToolResultDefinition(this.options.context.interfaceLanguage),
     ];
@@ -172,7 +184,8 @@ export class RuntimeToolRouter {
   }
 
   async systemPrompt(): Promise<string | null> {
-    return this.options.toolHost.systemPrompt?.(this.options.context, { tools: this.catalogTools }) ?? null;
+    const hostPrompt = await this.options.toolHost.systemPrompt?.(this.options.context, { tools: this.catalogTools });
+    return [hostPrompt, this.deferredTools.systemPrompt(this.options.context.interfaceLanguage)].filter(Boolean).join('\n\n') || null;
   }
 
   async externalContext() {
@@ -230,6 +243,9 @@ export class RuntimeToolRouter {
       {
         ...options,
         ...(profile.plugin ? { plugin: profile.plugin } : {}),
+        ...(!profile.plugin && isCliCommandTool(toolCall.name)
+          ? { resolvePlugin: (call: RuntimeToolCall, args: unknown) => this.cliPlugins.resolve(call.name, args) }
+          : {}),
         waitsForRuntimeCancellation: profile.waitsForRuntimeCancellation !== false,
       },
     );

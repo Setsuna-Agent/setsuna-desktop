@@ -6,13 +6,15 @@ import type {
 } from '@setsuna-desktop/contracts';
 import type { NetworkProxyDesktopBridge } from '@setsuna-desktop/feature-network-proxy/contracts';
 import type { ModelProviderSettingsInput, ModelProviderSettingsState } from '../contracts/index.js';
-import type { CopyModelProviderApiKeyInput, ModelProviderCatalog } from '../contracts/index.js';
+import type { CopyModelProviderApiKeyInput, ModelProviderCatalog, RefreshModelProviderCatalogInput } from '../contracts/index.js';
 import type { ModelProviderClient } from './client.js';
 
 export type ModelProviderRendererSnapshot = Readonly<{
   error: string | null;
   loading: boolean;
   catalog: ModelProviderCatalog | null;
+  refreshingCatalogProviderId: string | null;
+  catalogError: string | null;
   proxyServers: readonly DesktopNetworkProxyServerState[];
   state: ModelProviderSettingsState | null;
 }>;
@@ -21,6 +23,8 @@ const INITIAL_SNAPSHOT: ModelProviderRendererSnapshot = Object.freeze({
   error: null,
   loading: true,
   catalog: null,
+  refreshingCatalogProviderId: null,
+  catalogError: null,
   proxyServers: Object.freeze([]),
   state: null,
 });
@@ -34,6 +38,8 @@ export class ModelProviderRendererStateService {
   private generation = 0;
   private started = false;
   private unsubscribeProxy: (() => void) | null = null;
+  private catalogRevision = 0;
+  private readonly catalogRequests = new Set<AbortController>();
 
   constructor(
     private readonly client: ModelProviderClient,
@@ -73,6 +79,8 @@ export class ModelProviderRendererStateService {
     this.started = false;
     this.unsubscribeProxy?.();
     this.unsubscribeProxy = null;
+    for (const controller of this.catalogRequests) controller.abort();
+    this.catalogRequests.clear();
     this.listeners.clear();
   }
 
@@ -93,6 +101,24 @@ export class ModelProviderRendererStateService {
     this.stageRevision += 1;
     this.stagedInput = structuredClone(input);
     this.update({ error: null, state: structuredClone(state) });
+  }
+
+  async refreshCatalog(input: RefreshModelProviderCatalogInput): Promise<void> {
+    const revision = ++this.catalogRevision;
+    const controller = new AbortController();
+    this.catalogRequests.add(controller);
+    this.update({ refreshingCatalogProviderId: input.catalogProviderId, catalogError: null });
+    try {
+      const result = await this.client.refreshCatalog(input, { signal: controller.signal });
+      if (revision !== this.catalogRevision || controller.signal.aborted) return;
+      // Refresh metadata only: settings and unsaved provider edits keep their current revision.
+      this.update({ catalog: result.catalog, catalogError: result.error ?? null });
+    } catch (error) {
+      if (revision === this.catalogRevision && !controller.signal.aborted) this.update({ catalogError: errorMessage(error) });
+    } finally {
+      this.catalogRequests.delete(controller);
+      if (revision === this.catalogRevision && !controller.signal.aborted) this.update({ refreshingCatalogProviderId: null });
+    }
   }
 
   async copyApiKey(input: CopyModelProviderApiKeyInput): Promise<void> {
@@ -178,6 +204,7 @@ function inputFromState(
         enabled: provider.enabled,
         icon: provider.icon ?? null,
         proxyRoute: provider.proxyRoute,
+        requestHeaders: provider.requestHeaders ?? null,
         ...(secretInput?.apiKey ? { apiKey: secretInput.apiKey } : {}),
         ...(secretInput?.clearApiKey ? { clearApiKey: true } : {}),
         models: provider.models,

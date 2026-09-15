@@ -63,6 +63,7 @@ describe('automatic approval reviewer', () => {
     expect(modelClient.requests[0]).toMatchObject({
       model: 'approval-review-model-code',
       providerId: 'review-provider',
+      sessionId: input.request.threadId,
       toolChoice: 'none',
       thinking: false,
       temperature: 0,

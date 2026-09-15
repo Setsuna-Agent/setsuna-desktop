@@ -25,18 +25,22 @@ type ModelEditorState = Readonly<{
 export function ProviderModelList({
   catalogPlan,
   discovering,
+  refreshingCatalog,
   host,
   onChange,
   onDiscover,
+  onRefreshCatalog,
   provider,
   translate,
   ui,
 }: Readonly<{
   catalogPlan?: ModelProviderCatalogPlan;
   discovering: boolean;
+  refreshingCatalog: boolean;
   host: ModelProviderRendererHost;
   onChange(provider: ProviderConfigState): void;
   onDiscover(): Promise<readonly ProviderModelConfig[] | undefined>;
+  onRefreshCatalog(): void;
   provider: ProviderConfigState;
   translate: RendererTranslate;
   ui: SettingsViewUi;
@@ -155,6 +159,13 @@ export function ProviderModelList({
               </>
             ) : catalogPlan ? (
               <>
+                <ui.Button
+                  disabled={refreshingCatalog}
+                  icon={<RefreshCw className={refreshingCatalog ? 'is-spinning' : undefined} size={14} />}
+                  onClick={onRefreshCatalog}
+                >
+                  {translate(refreshingCatalog ? 'feature.modelProvider.refreshingCatalog' : 'feature.modelProvider.refreshCatalog')}
+                </ui.Button>
                 {provider.models.length ? (
                   <ui.Button icon={<ListChecks size={14} />} onClick={() => setBatchMode(true)}>
                     {translate('feature.modelProvider.batchManageModels')}
@@ -381,5 +392,6 @@ function providerConnectionKey(provider: ProviderConfigState): string {
     provider.provider,
     provider.baseUrl,
     provider.proxyRoute ?? null,
+    provider.requestHeaders ?? null,
   ]);
 }

@@ -11,41 +11,43 @@
   max-width: 100%;
 }
 
-.desktop-review-empty,
 .desktop-review-truncated {
   padding: 8px var(--desktop-review-panel-x-padding);
   color: var(--app-text-muted);
   font-size: 12px;
 }
 
-.desktop-review-empty--panel {
+.desktop-review-empty {
   display: flex;
-  height: 100%;
-  min-height: 220px;
-  margin: 0;
-  padding: 0 24px;
+  flex: 1 1 auto;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  border-radius: 0;
+  gap: 16px;
+  min-width: 0;
+  min-height: 0;
+  padding: 24px;
   color: var(--app-text-muted);
-  background: transparent;
+  font-size: 13px;
+  line-height: 1.5;
   text-align: center;
 }
 
-.desktop-review-empty--panel strong {
-  color: var(--app-text);
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 20px;
+.desktop-review-empty > svg {
+  flex-shrink: 0;
 }
 
-.desktop-review-empty--panel span {
-  color: var(--app-text-muted);
-  font-size: 13px;
-  font-weight: var(--app-font-weight);
-  line-height: 20px;
+.desktop-review-empty__copy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.desktop-review-empty__copy strong {
+  color: var(--app-text);
+  font-size: 16px;
+  font-weight: 500;
 }
 
 .desktop-review-truncated {

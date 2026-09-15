@@ -22,8 +22,9 @@ describe('model provider catalog selection', () => {
       }],
     };
 
-    expect(selectCatalogProvider(providerFixture(), catalogProvider)).toMatchObject({
+    expect(selectCatalogProvider({ ...providerFixture(), requestHeaders: { Authorization: 'old-service' } }, catalogProvider)).toMatchObject({
       catalogProviderId: 'deepseek',
+      requestHeaders: undefined,
       name: 'DeepSeek',
       provider: 'openai-compatible',
       baseUrl: 'https://api.deepseek.com',
@@ -50,6 +51,9 @@ describe('model provider catalog selection', () => {
     });
     expect(detachCatalogProvider({ ...providerFixture(), catalogProviderId: 'openai' }))
       .toEqual({ ...providerFixture(), catalogProviderId: null });
+    expect(detachCatalogProvider({ ...providerFixture(), catalogProviderId: 'opencode-go' }).requestHeaders).toEqual({
+      'user-agent': 'setsuna-desktop/{{appVersion}}', 'x-opencode-session': '{{sessionId}}',
+    });
   });
 
   it('infers legacy catalog records without overriding an explicit custom-service choice', () => {
@@ -70,7 +74,6 @@ describe('model provider catalog selection', () => {
       ...providerFixture(),
       provider: 'openai-compatible' as const,
       baseUrl: 'https://api.deepseek.com',
-      models: [],
     };
 
     expect(attachInferredCatalogProviders([matching], catalog)[0]?.catalogProviderId).toBe('deepseek');

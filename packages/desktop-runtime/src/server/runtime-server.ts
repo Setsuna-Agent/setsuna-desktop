@@ -31,6 +31,7 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
   const startedAt = new Date().toISOString();
   const runtime = createRuntimeFactory({
     dataDir: options.dataDir,
+    appVersion: options.version,
     builtinSkillsDir: options.builtinSkillsDir,
     builtinPluginsDir: options.builtinPluginsDir,
     nativeBridge: options.nativeBridge,

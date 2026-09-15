@@ -13,10 +13,20 @@ export type { ModelProviderKind } from './model-provider.js';
 
 export type RuntimeToolChoice = 'auto' | 'none' | { type: 'tool'; name: string };
 
+/** Discovery metadata from the current tool inventory; never an execution grant or provider schema. */
+export type RuntimeToolSource = {
+  kind: 'mcp' | 'extension';
+  id: string;
+  name: string;
+  description?: string;
+  plugins?: RuntimePluginReference[];
+};
+
 export type RuntimeToolDefinition = {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  source?: RuntimeToolSource;
 };
 
 export type RuntimeDynamicToolDefinition = RuntimeToolDefinition & {

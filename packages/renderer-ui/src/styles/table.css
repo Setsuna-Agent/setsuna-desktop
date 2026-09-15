@@ -1,0 +1,67 @@
+.sd-table {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface);
+  color: var(--app-text);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.sd-table__scroller {
+  overflow: auto;
+}
+
+.sd-table__content {
+  width: 100%;
+  min-width: var(--sd-table-min-width, 100%);
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.sd-table__content th,
+.sd-table__content td {
+  height: 48px;
+  padding: 8px 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.sd-table__content th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-bottom: 1px solid var(--app-border);
+  background: var(--app-surface-muted);
+  color: var(--app-text-muted);
+  font-weight: 500;
+}
+
+.sd-table__row {
+  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 60%, transparent);
+  transition: background-color 150ms var(--app-ease-out);
+}
+
+.sd-table__row:last-child {
+  border-bottom: 0;
+}
+
+.sd-table__row:hover {
+  background: color-mix(in srgb, var(--app-surface-muted) 50%, transparent);
+}
+
+.sd-table__content .sd-table__empty {
+  padding: 40px 16px;
+  color: var(--app-text-muted);
+  text-align: center;
+  white-space: normal;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sd-table__row {
+    transition: none;
+  }
+}

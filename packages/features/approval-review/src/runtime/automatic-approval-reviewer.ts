@@ -144,6 +144,7 @@ export class AutomaticApprovalReviewControl implements ApprovalReviewControl {
       try {
         const result = await this.host.generateText({
           ...modelRequest,
+          sessionId: thread.id,
           messages: prompt.messages,
           toolChoice: 'none',
           temperature: 0,

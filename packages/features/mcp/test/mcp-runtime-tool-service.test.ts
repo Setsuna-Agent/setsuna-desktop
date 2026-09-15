@@ -8,6 +8,47 @@ import { McpRuntimeToolServiceImpl } from '../src/runtime/mcp-runtime-tool-servi
 import { InMemoryMcpStore } from './support/in-memory-mcp-host.js';
 
 describe('McpRuntimeToolServiceImpl', () => {
+  it('retains discovery failures per step without exposing credentials or hiding healthy tools', async () => {
+    const servers: RuntimeMcpServerInput[] = [
+      { key: 'broken', headers: { 'x-api-key': 'private-api-key' } },
+      { key: 'healthy', label: 'Documents', description: 'Search team documents' },
+      { key: 'disabled', enabled: false },
+    ];
+    const listTools = vi.fn(async (key: string): Promise<RuntimeMcpToolInfo[]> => {
+      if (key === 'broken') throw new Error('401 Unauthorized: private-api-key Bearer private-oauth-token at https://service.test/?token=private-query');
+      return [{ name: 'lookup', inputSchema: { type: 'object' } }];
+    });
+    const control = controlService({ listTools });
+    const service = new McpRuntimeToolServiceImpl(control, new InMemoryMcpStore(servers));
+    const context = { threadId: 'thread_1' };
+    const tools = await service.listTools(context);
+    expect(tools.find((tool) => tool.name === 'mcp__healthy__lookup')?.source).toEqual({
+      kind: 'mcp', id: 'healthy', name: 'Documents', description: 'Search team documents',
+    });
+    expect(listTools.mock.calls.map(([key]) => key)).toEqual(['broken', 'healthy']);
+    const request = { tools: tools.filter((tool) => tool.name === 'list_mcp_resources') };
+    const failures = await service.externalContext(context, request);
+    expect(failures).toHaveLength(1);
+    expect(JSON.parse(failures[0]!.content)).toMatchObject({ server: 'broken', status: 'tool_discovery_failed', error: expect.stringContaining('401 Unauthorized') });
+    expect(failures[0]!.content).not.toContain('private-');
+    expect(control.snapshot).not.toHaveBeenCalled();
+
+    listTools.mockResolvedValue([{ name: 'lookup' }]);
+    const nextContext = { threadId: 'thread_1' };
+    await service.listTools(nextContext);
+    await expect(service.externalContext(nextContext, request)).resolves.toEqual([]);
+    await expect(service.externalContext(context, request)).resolves.toEqual(failures);
+  });
+
+  it('propagates cancellation instead of reporting it as an unavailable integration', async () => {
+    const controller = new AbortController();
+    const service = new McpRuntimeToolServiceImpl(controlService({ listTools: async () => {
+      controller.abort(new Error('turn cancelled'));
+      throw controller.signal.reason;
+    } }), new InMemoryMcpStore([{ key: 'docs' }]));
+    await expect(service.listTools({ threadId: 'thread_1', signal: controller.signal })).rejects.toThrow('turn cancelled');
+  });
+
   it('keeps management prompts separate and preserves one turn tool mapping through execution', async () => {
     let inventory: RuntimeMcpToolInfo[] = [{
       name: 'search',

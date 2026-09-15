@@ -1,4 +1,4 @@
-/** Portable setup metadata. Commands are instructions for the user, never autorun probes. */
+/** Portable setup and CLI attribution metadata. Setup commands are instructions, never autorun probes. */
 export type RuntimePluginConnector = {
   id: string;
   name: string;

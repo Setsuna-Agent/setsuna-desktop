@@ -52,6 +52,7 @@ describe('RuntimeVisionRecognitionService', () => {
 
     expect(requests).toHaveLength(1);
     expect(requests[0]).toMatchObject({
+      sessionId: 'thread_1',
       providerId: 'vision-provider',
       model: 'qwen-vl-max',
       maxOutputTokens: 4_096,
@@ -122,7 +123,7 @@ describe('RuntimeVisionRecognitionService', () => {
       { attachment_id: 'attachment_asset_1', prompt: 'Describe it.' },
       { threadId: 'thread_1' },
     )).resolves.toMatchObject({ model: 'qwen-vl-max', modelId: 'vision-model' });
-    expect(requests[0]).toMatchObject({ providerId: 'vision-provider', model: 'qwen-vl-max' });
+    expect(requests[0]).toMatchObject({ sessionId: 'thread_1', providerId: 'vision-provider', model: 'qwen-vl-max' });
   });
 
   it('keeps provider health degraded across settings refreshes until a retry succeeds', async () => {

@@ -30,6 +30,7 @@ export type ThreadTitleGenerationSettingsUpdate = Readonly<{
 export type ThreadTitleGenerationModelRequest = Pick<
   ModelRequest,
   | 'providerId'
+  | 'sessionId'
   | 'model'
   | 'messages'
   | 'toolChoice'
