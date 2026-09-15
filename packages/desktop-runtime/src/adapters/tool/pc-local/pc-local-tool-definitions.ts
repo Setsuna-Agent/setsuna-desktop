@@ -4,7 +4,6 @@ import { TOOL_OUTPUT_MIN_REQUEST_TOKENS } from '../../../loop/tools/tool-output-
 import {
   MAX_FIND_RESULTS,
   MAX_MCP_TIMEOUT_MS,
-  MAX_PERSISTENT_SHELL_TTL_MS,
   MAX_SEARCH_CONTEXT_LINES,
   MAX_SEARCH_RESULTS,
   MAX_SHELL_TIMEOUT_MS,
@@ -361,7 +360,7 @@ export function localToolDefinitions(language?: RuntimeInterfaceLanguage): Local
     ),
     localTool(
       'run_shell_command',
-      text('Run a foreground shell command inside the local workspace. Include risk_level so the desktop runtime can decide whether user authorization is needed. Do not use this to modify files when edit or write_file can express the change.', "在本地工作区内执行前台 shell 命令。提供 risk_level，让运行时判断是否需要用户授权。edit 或 write_file 能表达的文件修改不要使用此工具。"),
+      text('Run a shell command inside the local workspace. Include risk_level so the desktop runtime can decide whether user authorization is needed. Do not use this to modify files when edit or write_file can express the change.', "在本地工作区内执行 shell 命令。提供 risk_level，让运行时判断是否需要用户授权。edit 或 write_file 能表达的文件修改不要使用此工具。"),
       {
         max_output_tokens: shellOutputTokenBudgetSchema(language),
         command: {
@@ -374,7 +373,7 @@ export function localToolDefinitions(language?: RuntimeInterfaceLanguage): Local
         },
         timeout: {
           type: 'integer',
-          description: text('Optional timeout in milliseconds. Defaults to 120000 for foreground commands. For persisted commands without an explicit timeout, defaults to the persistence TTL.', "可选超时（毫秒）。前台命令默认 120000；持久化命令未指定超时时，默认使用其持久化存活时间。"),
+          description: text('Optional foreground command timeout in milliseconds, defaulting to 120000 and capped at 3600000 (1 hour). Ignored when persist is true; background processes have no automatic timeout.', "可选前台命令超时（毫秒），默认 120000，最长 3600000（1 小时）。persist 为 true 时忽略；后台进程不设自动超时。"),
           minimum: 1,
           maximum: MAX_SHELL_TIMEOUT_MS,
         },
@@ -395,13 +394,7 @@ export function localToolDefinitions(language?: RuntimeInterfaceLanguage): Local
         },
         persist: {
           type: 'boolean',
-          description: text('Keep a still-running command available after the current turn completes. Use for dev servers, watchers, and other intentional background processes.', "本轮结束后保留仍在运行的命令。用于开发服务器、监听器及其他有意启动的后台进程。"),
-        },
-        persist_ttl_ms: {
-          type: 'integer',
-          description: text('Optional lifetime for a persisted running process in milliseconds. Defaults to 30 minutes and is capped at 6 hours.', "可选持久化运行进程的存活时间（毫秒）。默认 30 分钟，上限 6 小时。"),
-          minimum: 1000,
-          maximum: MAX_PERSISTENT_SHELL_TTL_MS,
+          description: text('Keep a still-running command available across turns without an automatic timeout. Use for dev servers, watchers, and intentional background processes; stop them from the Run Center or with terminate_shell_process when no longer needed.', "跨轮次保留仍在运行的命令，不设自动超时。用于开发服务器、监听器及其他有意启动的后台进程；不再需要时，在运行中心或通过 terminate_shell_process 终止。"),
         },
       },
       ['command', 'risk_level'],

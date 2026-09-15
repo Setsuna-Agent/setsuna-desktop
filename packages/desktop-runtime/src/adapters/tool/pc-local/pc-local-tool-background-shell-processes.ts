@@ -45,6 +45,6 @@ function backgroundShellProcessSnapshot(session: ShellSession) {
     command: session.command,
     directory: formatPath(session.cwd, session.root || session.cwd),
     started_at_ms: session.startedAt,
-    expires_at_ms: session.persist ? session.expiresAt : null,
+    expires_at_ms: null,
   };
 }

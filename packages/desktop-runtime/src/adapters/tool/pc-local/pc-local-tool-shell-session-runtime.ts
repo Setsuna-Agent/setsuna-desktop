@@ -36,10 +36,6 @@ import {
   truncateMiddle,
 } from './pc-local-tool-utils.js';
 
-export function isExpiredShellSession(session: ShellSession): boolean {
-  return Boolean(session?.persist && session.expiresAt && Date.now() >= session.expiresAt);
-}
-
 export async function createShellSessionTempDirectory(
   sandboxPlan: SandboxExecutionPlan,
   options: {
@@ -97,14 +93,14 @@ export function runningShellResult(session: ShellSession, root: string, language
       '',
       text(`Process is still running. Use read_shell_process with process_id ${session.id} to read more output or completion status.`, `进程仍在运行。使用 read_shell_process 并传入 process_id ${session.id}，读取后续输出或完成状态。`),
       session.persist
-        ? text(`This process is persisted for future turns until ${new Date(session.expiresAt).toISOString()} or until terminate_shell_process is called.`, `此进程会保留至 ${new Date(session.expiresAt).toISOString()}，可在后续轮次继续使用，或调用 terminate_shell_process 终止。`)
+        ? text('This background process has no automatic timeout and remains available across turns. Stop it from the Run Center or with terminate_shell_process when it is no longer needed.', '此后台进程没有自动超时，可跨轮次继续运行。不再需要时，在运行中心或通过 terminate_shell_process 终止。')
         : '',
     ].join('\n'),
     display: text(`command still running: ${session.command}`, `命令仍在运行：${session.command}`),
     process_id: session.id,
     running: true,
     persisted: Boolean(session.persist),
-    expires_at_ms: session.persist ? session.expiresAt : null,
+    expires_at_ms: null,
   };
 }
 
@@ -128,7 +124,7 @@ export function completedShellResult(session: ShellSession, root: string, langua
     exit_code: session.exitCode,
     signal: session.signal,
     persisted: Boolean(session.persist),
-    expires_at_ms: session.persist ? session.expiresAt : null,
+    expires_at_ms: null,
     ...(failure ? failure : {}),
   };
 }
@@ -337,7 +333,7 @@ export function isShellSessionVisibleToState(
   state: ShellProcessState,
   session: ShellSession | null | undefined,
 ): boolean {
-  if (!session || isExpiredShellSession(session)) return false;
+  if (!session) return false;
   if (!session.root) return true;
   return path.resolve(session.root) === path.resolve(state.root);
 }
@@ -354,7 +350,7 @@ export function shellProcessSnapshot(session: ShellSession, root: string) {
     thread_id: session.threadId || null,
     turn_id: session.turnId || null,
     tool_call_id: session.toolCallId || null,
-    expires_at_ms: session.persist ? session.expiresAt : null,
+    expires_at_ms: null,
     exit_code: session.exitCode ?? null,
     signal: session.signal ?? null,
     sandbox_provider: session.sandboxProvider,
@@ -376,7 +372,6 @@ export function takeShellSessionOutput(session: ShellSession, root: string): str
     `Status: ${session.closed ? 'completed' : 'running'}`,
     `Sandbox: ${session.sandboxProvider}`,
     `Persisted: ${session.persist ? 'yes' : 'no'}`,
-    session.persist ? `Expires At: ${new Date(session.expiresAt).toISOString()}` : '',
     `Elapsed Ms: ${Math.max(0, (session.finishedAt || Date.now()) - session.startedAt)}`,
     `Exit Code: ${session.exitCode ?? '(none)'}`,
     `Signal: ${session.signal ?? '(none)'}`,
