@@ -19,3 +19,6 @@ export { ResizeHandle } from './resize-handle.js';
 export { FileTreeToggle } from './file-tree-toggle.js';
 export { FileTreeSurface, FileTreeRow } from './file-tree.js';
 export { FileIcon } from './file-icon.js';
+export { DetailSection } from './detail-section.js';
+export { DiffViewControls } from './diff-view-controls.js';
+export { Skeleton } from './skeleton.js';

@@ -1,6 +1,6 @@
-import { Button } from '@setsuna-desktop/renderer-ui';
-import { ChevronDown, ChevronRight, Github } from 'lucide-react';
-import { useId, useState, type ReactNode } from 'react';
+import { Button, DetailSection } from '@setsuna-desktop/renderer-ui';
+import { ChevronRight, Github } from 'lucide-react';
+import { type ReactNode } from 'react';
 
 export function PluginRepositoryLink({ children, className = '', onClick }: Readonly<{
   children: ReactNode;
@@ -26,35 +26,10 @@ export function PluginDetailSection({
   icon: ReactNode;
   title: string;
 }>) {
-  const [expanded, setExpanded] = useState(count > 0);
-  const contentId = useId();
   if (!count) return null;
-
-  return (
-    <section className={`desktop-capabilities-plugin-detail__section${expanded ? ' is-expanded' : ''}`}>
-      <header>
-        <h3>
-          <Button variant="ghost"
-            aria-controls={contentId}
-            aria-expanded={expanded}
-            className="desktop-capabilities-plugin-detail__section-toggle"
-            type="button"
-            onClick={() => setExpanded((current) => !current)}
-          >
-            <span aria-hidden="true" className="desktop-capabilities-plugin-detail__section-icon">{icon}</span>
-            <span className="desktop-capabilities-plugin-detail__section-title">{title}</span>
-            <span className="desktop-capabilities-plugin-detail__section-trailing">
-              <small>{count}</small>
-              <ChevronDown aria-hidden="true" className="desktop-capabilities-plugin-detail__section-chevron" size={15} />
-            </span>
-          </Button>
-        </h3>
-      </header>
-      <div className="desktop-capabilities-plugin-detail__section-content" hidden={!expanded} id={contentId}>
-        <div className="desktop-capabilities-plugin-detail__list">{children}</div>
-      </div>
-    </section>
-  );
+  return <DetailSection title={title} icon={icon} count={count}>
+    <div className="desktop-capabilities-plugin-detail__list">{children}</div>
+  </DetailSection>;
 }
 
 export function PluginDetailItem({

@@ -55,7 +55,7 @@ describe('renderer feature composition', () => {
       activeEntryIds: ['app-shell.default'],
     });
     expect(findSlot(inspection.roots, 'renderer.shell.route')).toMatchObject({
-      activeEntryIds: ['routes.chat', 'routes.settings', 'routes.capabilities', 'routes.plugin'],
+      activeEntryIds: ['pull-requests.page', 'routes.chat', 'routes.settings', 'routes.capabilities', 'routes.plugin'],
     });
     expect(findSlot(inspection.roots, 'renderer.chat.composer.status')).toMatchObject({
       activeEntryIds: ['goal.composer-status'],

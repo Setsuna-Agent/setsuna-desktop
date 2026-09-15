@@ -648,6 +648,27 @@
     grid-template-rows 180ms ease;
 }
 
+/* Reading workbenches can extend behind the macOS titlebar. Only the main
+   sidebar reserves its control row; the content owns the full window height. */
+.app-shell--titlebar-overlay > .app-workbench {
+  grid-area: 1 / 1 / -1 / -1;
+  grid-template-rows: var(--app-topbar-height) minmax(0, 1fr);
+}
+
+.app-shell--titlebar-overlay > .app-workbench > .app-sidebar {
+  grid-row: 2 / -1;
+}
+
+.app-shell.app-shell--titlebar-overlay > .app-topbar {
+  grid-area: 1 / 1;
+  grid-template-columns: minmax(0, 1fr);
+  width: var(--app-topbar-sidebar-width, var(--app-sidebar-width));
+}
+
+.app-shell--titlebar-overlay > .app-topbar > :is(.app-topbar__right, .app-topbar__workspace) {
+  display: none;
+}
+
 .app-error-shell .app-topbar {
   grid-template-columns: minmax(0, 1fr);
 }

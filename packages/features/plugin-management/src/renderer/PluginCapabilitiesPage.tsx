@@ -497,7 +497,7 @@ function LegacyHooksDetail({
           parentLabel: translate('feature.pluginManagement.title'),
           onBack,
         })}
-        <section className="desktop-capabilities-detail desktop-capabilities-plugin-detail desktop-capabilities-legacy-hooks">
+        <section className="sd-detail desktop-capabilities-plugin-detail desktop-capabilities-legacy-hooks">
           <ui.PageHeader
             subtitle={translate('feature.pluginManagement.legacyHooksDescription')}
             title={translate('feature.pluginManagement.legacyHooks')}

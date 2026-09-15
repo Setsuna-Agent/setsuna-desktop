@@ -10,6 +10,7 @@ import type { ComposerEditor, ComposerSlot } from './types.js';
 type Props = Omit<HTMLAttributes<HTMLDivElement>, 'onChange' | 'onSubmit'> & {
   value?: string; slotConfig?: ComposerSlot[]; disabled?: boolean; loading?: boolean; placeholder?: string;
   autoSize?: { minRows: number; maxRows: number };
+  submitOn?: 'enter' | 'mod-enter';
   header?: ReactNode; footer?: (actions: ReactNode) => ReactNode;
   onChange?(value: string, event?: unknown, slots?: ComposerSlot[]): void;
   onPasteFile?(files: FileList): void;
@@ -18,7 +19,7 @@ type Props = Omit<HTMLAttributes<HTMLDivElement>, 'onChange' | 'onSubmit'> & {
 };
 type TagPortal = { element: HTMLElement; slot: Extract<ComposerSlot, { type: 'tag' }> };
 
-export const ChatPromptInput = forwardRef<ComposerEditor, Props>(function ChatPromptInput({ value = '', slotConfig, disabled, loading, placeholder, autoSize = { minRows: 2, maxRows: 6 }, header, footer, onChange, onSubmit, onCancel, onPasteFile, onKeyDown, ...props }, ref) {
+export const ChatPromptInput = forwardRef<ComposerEditor, Props>(function ChatPromptInput({ value = '', slotConfig, disabled, loading, placeholder, 'aria-label': ariaLabel, autoSize = { minRows: 2, maxRows: 6 }, submitOn = 'enter', header, footer, onChange, onSubmit, onCancel, onPasteFile, onKeyDown, ...props }, ref) {
   const { t } = useI18n();
   const elementRef = useRef<HTMLDivElement | null>(null);
   const references = useRef(new Map<string, ComposerSlot>());
@@ -118,7 +119,7 @@ export const ChatPromptInput = forwardRef<ComposerEditor, Props>(function ChatPr
   return <div className="chat-prompt" data-disabled={disabled || undefined}>
     {header}
     {/* Keep the editor focusable during the temporary contentEditable lock used for sending. */}
-    <div {...props} ref={elementRef} className="chat-prompt__input" contentEditable={!disabled} suppressContentEditableWarning role="textbox" aria-multiline="true" aria-label={placeholder} aria-disabled={disabled}
+    <div {...props} ref={elementRef} className="chat-prompt__input" contentEditable={!disabled} suppressContentEditableWarning role="textbox" aria-multiline="true" aria-label={ariaLabel ?? placeholder} aria-disabled={disabled}
       tabIndex={disabled ? -1 : 0}
       data-placeholder={placeholder} data-empty={empty || undefined} style={{ '--prompt-min-rows': autoSize.minRows, '--prompt-max-rows': autoSize.maxRows } as CSSProperties}
       onInput={synchronize} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; synchronize(); }}
@@ -132,8 +133,8 @@ export const ChatPromptInput = forwardRef<ComposerEditor, Props>(function ChatPr
         if (disabled) return;
         onKeyDown?.(event);
         if (event.defaultPrevented || composing.current || event.nativeEvent.isComposing || event.key !== 'Enter') return;
-        if (event.shiftKey) { event.preventDefault(); insert([{ type: 'text', value: '\n' }]); return; }
-        if (event.altKey || event.ctrlKey || event.metaKey) return;
+        if (event.shiftKey || (submitOn === 'mod-enter' && !event.altKey && !event.ctrlKey && !event.metaKey)) { event.preventDefault(); insert([{ type: 'text', value: '\n' }]); return; }
+        if (event.altKey || (submitOn === 'enter' && (event.ctrlKey || event.metaKey))) return;
         event.preventDefault();
         if (!disabled && !loading && !empty) onSubmit?.(readComposerDocument(event.currentTarget, references.current).map(slotText).join(''));
       }} />

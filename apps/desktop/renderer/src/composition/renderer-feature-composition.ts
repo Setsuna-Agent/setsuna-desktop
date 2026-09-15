@@ -1,3 +1,5 @@
+import { pullRequestsRendererFeature, pullRequestsRendererHostCapability } from '@setsuna-desktop/feature-pull-requests/renderer';
+import { PullRequestsFeatureBoundary } from './PullRequestsFeatureBoundary.js';
 import {
   completeFeatureHostActivation,
   defineRendererFeatureHost,
@@ -129,6 +131,7 @@ const rendererFeatures = defineRendererFeatureHost({
     workspaceAppsRendererFeature,
   ],
   optional: [
+    pullRequestsRendererFeature,
     approvalReviewRendererFeature,
     collaborationRendererFeature,
     conversationDebugRendererFeature,
@@ -171,6 +174,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
       createUiRegistrar: (owner, track) => rendererPlugins.createRegistrar(owner, track),
       hostMessages,
       hostCapabilities: [
+      provideHostCapability(pullRequestsRendererHostCapability, PullRequestsFeatureBoundary),
       provideHostCapability(
         capabilitiesRefreshCoordinatorCapability,
         capabilitiesRefresh,

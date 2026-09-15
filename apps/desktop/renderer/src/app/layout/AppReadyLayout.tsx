@@ -336,6 +336,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       sidebarCollapsed={sidebarCollapsed}
       onToggleSidebar={handleToggleSidebar}
       showSidebarToggle={activeView !== 'settings'}
+      overlayTitlebar={activeView === 'pull-requests'}
       navigationActions={activeView !== 'settings' ? (
         <AppThreadHistoryNavigation
           canGoBack={threadHistory.canGoBack}
@@ -419,6 +420,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         maxWidth={sidebarMaxWidth}
         minWidth={sidebarMinWidth}
         onOpenCapabilities={openCapabilities}
+        onOpenPullRequests={() => setActiveView('pull-requests')}
         onOpenPluginView={openPluginView}
         onOpenRuntimeActivity={() => setRuntimeActivityOpen(true)}
         onOpenSettings={openSettings}

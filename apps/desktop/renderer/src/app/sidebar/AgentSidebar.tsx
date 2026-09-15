@@ -11,6 +11,7 @@ import {
   MoreHorizontal,
   Plus,
   Search,
+  GitPullRequest,
   Settings,
   Trash2,
 } from 'lucide-react';
@@ -67,6 +68,7 @@ export function AgentSidebar({
   onEnterChatMode,
   onEditProject,
   onOpenCapabilities,
+  onOpenPullRequests,
   onOpenRuntimeActivity,
   onOpenSettings,
   onRemoveProject,
@@ -88,7 +90,7 @@ export function AgentSidebar({
   activeThreadId?: string | null;
   collapsed?: boolean;
   runningThreadId?: string | null;
-  activeView: 'chat' | 'capabilities';
+  activeView: 'chat' | 'capabilities' | 'pull-requests';
   collapsedProjectIds: Set<string>;
   forceExpandedProjectIds: Set<string>;
   globalThreads: RuntimeThreadSummary[];
@@ -114,6 +116,7 @@ export function AgentSidebar({
   onEnterChatMode: () => void;
   onEditProject: (project: WorkspaceProject) => void;
   onOpenCapabilities: () => void;
+  onOpenPullRequests: () => void;
   onOpenRuntimeActivity: () => void;
   onOpenSettings: () => void;
   onRemoveProject: (project: WorkspaceProject) => void;
@@ -153,6 +156,10 @@ export function AgentSidebar({
             <span className="desktop-agent-command__label">{t('sidebar.search')}</span>
           </Button>
         </ShortcutTooltip>
+        <Button variant="ghost" className={`desktop-agent-command ${activeView === 'pull-requests' ? 'is-active' : ''}`} type="button" onClick={onOpenPullRequests}>
+          <GitPullRequest className="desktop-agent-command__icon" size={15} />
+          <span className="desktop-agent-command__label">Pull Request</span>
+        </Button>
         <ShortcutTooltip commandId="app.openCapabilities" label={t('sidebar.plugins')} placement="bottom">
           <Button variant="ghost" className={`desktop-agent-command ${activeView === 'capabilities' ? 'is-active' : ''}`} type="button" onClick={onOpenCapabilities}>
             <Blocks className="desktop-agent-command__icon" size={15} />

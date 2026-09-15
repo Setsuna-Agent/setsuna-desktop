@@ -166,11 +166,11 @@ export function PluginDetail({
           parentLabel: translate('feature.pluginManagement.title'),
           onBack,
         })}
-        <section className="desktop-capabilities-detail desktop-capabilities-plugin-detail">
+        <section className="sd-detail desktop-capabilities-plugin-detail">
           <ui.PageHeader
             actions={installedPlugin ? (
               <>
-                <span className="desktop-capabilities-detail__status"><Check size={14} />{translate('feature.pluginManagement.installed')}</span>
+                <span className="sd-detail__status"><Check size={14} />{translate('feature.pluginManagement.installed')}</span>
                 <ui.ActionMenu items={actionItems} label={translate('feature.pluginManagement.actions')} onSelect={selectAction} />
               </>
             ) : marketplacePlugin ? (
@@ -189,7 +189,7 @@ export function PluginDetail({
                 {translate('feature.pluginManagement.installed')}
               </ui.Button>
             )}
-            className="desktop-capabilities-detail__header"
+            className="sd-detail__header"
             leading={<ui.PluginIcon iconImage={plugin.iconImage ?? marketplacePlugin?.iconImage} name={plugin.icon} pluginId={plugin.id} variant="list" />}
             subtitle={subtitle}
             title={plugin.name}

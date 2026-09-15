@@ -1,4 +1,5 @@
 @import './toast.css';
+@import './detail.css';
 
 @import './select.css';
 
@@ -47,6 +48,19 @@
   animation: sd-spin 700ms linear infinite;
 }
 
+.sd-skeleton {
+  display: block;
+  min-width: 0;
+  height: 12px;
+  border-radius: var(--app-radius-xs);
+  background: var(--app-accent-soft);
+  animation: sd-skeleton-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes sd-skeleton-pulse {
+  50% { opacity: 0.45; }
+}
+
 .sd-control-error {
   color: var(--app-danger);
   font-size: 12px;
@@ -60,6 +74,9 @@
 
 @media (prefers-reduced-motion: reduce) {
   .sd-spinner {
+    animation: none;
+  }
+  .sd-skeleton {
     animation: none;
   }
   .sd-progress-ring__value {

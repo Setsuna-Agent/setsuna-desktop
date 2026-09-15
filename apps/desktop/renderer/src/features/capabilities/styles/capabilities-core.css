@@ -49,7 +49,7 @@
   padding-left: 0;
 }
 
-.desktop-capabilities-panel__inner--detail > .desktop-capabilities-detail {
+.desktop-capabilities-panel__inner--detail > .sd-detail {
   /* 顶部留白由详情容器统一控制，避免各页面再叠加光学校正。 */
   padding-top: 0;
 }

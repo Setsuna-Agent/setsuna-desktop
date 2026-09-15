@@ -250,6 +250,7 @@ function sidebarProps(project: WorkspaceProject): ComponentProps<typeof AgentSid
     onEnterChatMode: noop,
     onEditProject: noop,
     onOpenCapabilities: noop,
+    onOpenPullRequests: noop,
     onOpenRuntimeActivity: noop,
     onOpenSettings: noop,
     onRemoveProject: noop,

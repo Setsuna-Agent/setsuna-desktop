@@ -9,8 +9,8 @@
 }
 
 /* Keep each document's header visible while its preview or source scrolls. */
-.desktop-plugin-item-dialog .desktop-markdown-document__preview,
-.desktop-plugin-item-dialog .desktop-markdown-document__source,
+.desktop-plugin-item-dialog .sd-markdown-document__preview,
+.desktop-plugin-item-dialog .sd-markdown-document__source,
 .desktop-plugin-item-dialog__section > pre,
 .desktop-plugin-item-dialog__file > pre {
   max-height: var(--desktop-plugin-preview-max-height);
