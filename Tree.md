@@ -222,7 +222,7 @@ packages/renderer-ui/ — 3 direct / 48 total files
 ### `packages/features/`
 
 ```text
-packages/features/ — 0 direct / 1045 total files
+packages/features/ — 0 direct / 1046 total files
 ├── approval-review/ — 2 direct / 20 total files
 │   ├── src/ — 17 files
 │   │   ├── contracts/ — 5 direct / 5 total files
@@ -304,14 +304,14 @@ packages/features/ — 0 direct / 1045 total files
 │   │   └── runtime/ — 10 direct / 10 total files
 │   └── test/ — 4 files
 │       └── runtime/ — 4 direct / 4 total files
-├── model-provider/ — 2 direct / 55 total files
+├── model-provider/ — 2 direct / 56 total files
 │   ├── src/ — 42 files
 │   │   ├── contracts/ — 5 direct / 5 total files
 │   │   ├── renderer/ — 22 direct / 22 total files
 │   │   └── runtime/ — 15 direct / 15 total files
-│   └── test/ — 11 files
+│   └── test/ — 12 files
 │       ├── renderer/ — 4 direct / 4 total files
-│       └── runtime/ — 7 direct / 7 total files
+│       └── runtime/ — 8 direct / 8 total files
 ├── network-proxy/ — 2 direct / 31 total files
 │   ├── src/ — 24 files
 │   │   ├── contracts/ — 3 direct / 3 total files

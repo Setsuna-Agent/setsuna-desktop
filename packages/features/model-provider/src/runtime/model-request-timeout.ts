@@ -1,9 +1,7 @@
 const DEFAULT_TOTAL_TIMEOUT_MS = 15 * 60 * 1000;
-const DEFAULT_IDLE_TIMEOUT_MS = 2 * 60 * 1000;
 
 export type ModelRequestTimeoutOptions = Readonly<{
   totalTimeoutMs?: number;
-  idleTimeoutMs?: number;
 }>;
 
 export async function* streamWithModelTimeout<T>(
@@ -14,16 +12,15 @@ export async function* streamWithModelTimeout<T>(
   const controller = new AbortController();
   const signal = parentSignal ? AbortSignal.any([parentSignal, controller.signal]) : controller.signal;
   const totalTimeoutMs = positiveTimeout(options.totalTimeoutMs, DEFAULT_TOTAL_TIMEOUT_MS);
-  const idleTimeoutMs = positiveTimeout(options.idleTimeoutMs, DEFAULT_IDLE_TIMEOUT_MS);
   const deadline = Date.now() + totalTimeoutMs;
   const iterator = createStream(signal)[Symbol.asyncIterator]();
   try {
     for (;;) {
       const remaining = deadline - Date.now();
       if (remaining <= 0) throw timeoutError('Model request timed out.');
-      const timeoutMs = Math.min(remaining, idleTimeoutMs);
-      const reason = remaining <= idleTimeoutMs ? 'Model request timed out.' : 'Model stream became idle.';
-      const result = await waitForPromise(iterator.next(), signal, controller, timeoutMs, reason);
+      // Providers may think or send heartbeats without yielding SDK events. Silence alone
+      // must not end the turn; bound each wait by the request's total deadline instead.
+      const result = await waitForPromise(iterator.next(), signal, controller, remaining, 'Model request timed out.');
       if (result.done) return;
       yield result.value;
     }
