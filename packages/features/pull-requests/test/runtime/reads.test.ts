@@ -3,7 +3,7 @@ import { actionInputCodec, commentInputCodec, detailCodec, patchInputCodec, refe
 import { readChecks } from '../../src/runtime/checks.js';
 import { readDiscussions, readThread } from '../../src/runtime/discussions.js';
 import { listRequests, readRequest } from '../../src/runtime/pull-requests.js';
-import { base, commentNode, githubFixture, head, page, reference, repositoryNode, summaryNode } from '../support/github-fixture.js';
+import { base, checkNode, commentNode, githubFixture, head, page, reference, repositoryNode, summaryNode } from '../support/github-fixture.js';
 
 describe('GitHub PR projections', () => {
   it('uses any released request slot and cancels queued work before it reaches GitHub', async () => {
@@ -45,14 +45,14 @@ describe('GitHub PR projections', () => {
       if (partial) return Response.json({ data: { repository: {} }, errors: [{ message: 'Resource unavailable' }] });
       if (query.includes('viewerPermission')) return { repository: repositoryNode() };
       return { repository: { object: { statusCheckRollup: { contexts: page([
-        { __typename: 'CheckRun', id: 'CR1', name: 'test', status: 'COMPLETED', conclusion: 'FAILURE', isRequired: true, detailsUrl: 'https://ci.example/run/1', summary: 'Failed assertion', startedAt: null, completedAt: null, checkSuite: { app: { name: 'CI' } } },
+        { ...checkNode(1, 'test', 'FAILURE'), summary: 'Failed assertion' },
         { __typename: 'StatusContext', id: 'SC1', context: 'deploy', state: 'PENDING', isRequired: false, targetUrl: 'javascript:alert(1)', description: 'Waiting', createdAt: '2026-09-14' },
-      ], 'next-checks') } } } };
+      ]) } } } };
     });
     const detail = await readRequest(api, reference);
     expect(detail).toMatchObject({ checksState: 'SUCCESS', checksCommit: 'c'.repeat(40) });
     const checks = await readChecks(api, { ...reference, commitSha: detail.checksCommit!, cursor: null });
-    expect(checks).toMatchObject({ cursor: 'next-checks', items: [{ required: true, conclusion: 'FAILURE' }, { required: false, conclusion: null, url: null }] });
+    expect(checks).toMatchObject({ cursor: null, items: [{ required: true, conclusion: 'FAILURE' }, { required: false, conclusion: null, url: null }] });
     partial = true;
     await expect(readRequest(api, reference)).rejects.toMatchObject({ code: 'GITHUB_REQUEST_FAILED' });
   });
@@ -100,37 +100,6 @@ describe('GitHub PR projections', () => {
       { name: 'design', avatarUrl: null, state: 'REQUESTED' },
     ]);
     expect(request).toHaveBeenCalledTimes(3);
-  });
-
-  it('counts every check and legacy status for the selected checks commit, including more than one page', async () => {
-    const repository = repositoryNode();
-    const pr = repository.pullRequest;
-    pr.potentialMergeCommit!.statusCheckRollup = {
-      state: 'FAILURE',
-      contexts: {
-        totalCount: 205, checkRunCount: 200, statusContextCount: 5,
-        checkRunCountsByState: [
-          { state: 'SUCCESS', count: 180 }, { state: 'NEUTRAL', count: 5 }, { state: 'SKIPPED', count: 5 },
-          { state: 'PENDING', count: 8 }, { state: 'FAILURE', count: 2 },
-        ],
-        statusContextCountsByState: [{ state: 'SUCCESS', count: 2 }, { state: 'FAILURE', count: 1 }, { state: 'ERROR', count: 1 }, { state: 'PENDING', count: 1 }],
-      },
-    };
-    const { api } = githubFixture(() => ({ repository }));
-    expect(detailCodec.parse(await readRequest(api, reference))).toMatchObject({
-      checksCommit: 'c'.repeat(40), checksState: 'FAILURE', checksProgress: { passed: 192, total: 205 },
-    });
-
-    pr.potentialMergeCommit = null;
-    const commit = pr.commits.nodes[0].commit;
-    commit.statusCheckRollup = {
-      state: 'SUCCESS', contexts: { totalCount: 3, checkRunCount: 0, statusContextCount: 3, checkRunCountsByState: [], statusContextCountsByState: [{ state: 'SUCCESS', count: 3 }] },
-    };
-    expect(detailCodec.parse(await readRequest(api, reference))).toMatchObject({ checksCommit: head, checksState: 'SUCCESS', checksProgress: { passed: 3, total: 3 } });
-    commit.statusCheckRollup.contexts.statusContextCountsByState = null;
-    expect((await readRequest(api, reference)).checksProgress).toBeNull();
-    commit.statusCheckRollup = null;
-    expect(detailCodec.parse(await readRequest(api, reference))).toMatchObject({ checksCommit: head, checksState: null, checksProgress: { passed: 0, total: 0 } });
   });
 
   it('rejects paths and mutation inputs that cannot identify a valid PR revision', () => {

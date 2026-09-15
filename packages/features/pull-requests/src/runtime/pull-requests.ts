@@ -1,6 +1,6 @@
 import type { PullRequestDetail, PullRequestListInput, PullRequestListResult, PullRequestReference, PullRequestSummary, MergeMethod } from '../contracts/index.js';
 import { actor, actorFields, GitHubApi, nextCursor, pageFields, repoVariables, type Actor, type Page } from './github-api.js';
-import { checkProgress, checkRollupFields, type CheckRollup } from './checks.js';
+import { collectChecks, summarizeChecks, checkRollupFields, type CheckRollup } from './checks.js';
 
 const summaryFields = (checksFields = 'state') => `id number title url state isDraft updatedAt headRefOid author { ${actorFields} }
   commits(last: 1) { nodes { commit { statusCheckRollup { ${checksFields} } } } }`;
@@ -88,9 +88,11 @@ export async function readRequest(api: GitHubApi, input: PullRequestReference, s
   if (repository.mergeCommitAllowed) allowedMethods.push('MERGE');
   if (repository.squashMergeAllowed) allowedMethods.push('SQUASH');
   if (repository.rebaseMergeAllowed) allowedMethods.push('REBASE');
-  const checks = node.potentialMergeCommit?.statusCheckRollup ?? node.commits.nodes[0]?.commit.statusCheckRollup ?? null;
+  const rollup = node.potentialMergeCommit?.statusCheckRollup ?? node.commits.nodes[0]?.commit.statusCheckRollup ?? null;
+  const checksCommit = node.potentialMergeCommit?.statusCheckRollup ? node.potentialMergeCommit.oid : node.headRefOid;
+  const checks = await collectChecks(api, { ...input, commitSha: checksCommit, cursor: null }, rollup, signal);
   return {
-    ...summary(node, input.repository), checksState: checks?.state ?? null, checksProgress: checkProgress(checks), body: node.body, createdAt: node.createdAt,
+    ...summary(node, input.repository), ...summarizeChecks(checks), body: node.body, createdAt: node.createdAt,
     baseBranch: node.baseRefName, headBranch: node.headRefName, baseSha: node.baseRefOid,
     headRepository: node.headRepository?.nameWithOwner ?? null, additions: node.additions, deletions: node.deletions,
     fileCount: node.changedFiles, commentCount: node.comments.totalCount + node.reviewThreads.totalCount,
@@ -101,7 +103,7 @@ export async function readRequest(api: GitHubApi, input: PullRequestReference, s
     allowedMethods, autoMerge: node.autoMergeRequest ? { method: node.autoMergeRequest.mergeMethod, author: actor(node.autoMergeRequest.enabledBy) } : null,
     queueRequired: Boolean(node.mergeQueue), queueState: node.mergeQueueEntry?.state ?? null,
     reviewers: [...reviewers.values()],
-    checksCommit: node.potentialMergeCommit?.statusCheckRollup ? node.potentialMergeCommit.oid : node.headRefOid,
+    checksCommit,
   };
 }
 
