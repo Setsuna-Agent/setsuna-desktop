@@ -247,6 +247,10 @@ Policy 评估失败应保守，不因解析器“不认识”就默认安全。
 
 Runtime Activity Feature 通过自己的 typed operations 为 Chat 提供 thread-scoped 后台进程投影，并聚合全局生命周期元数据。两个视图都不直接连接 pty，也不暴露原始 shell 输出。
 
+Shell 命令通过 `persist: true` 显式保留为后台进程，跨轮次运行，不设置命令超时或存活期限；旧调用中的 `timeout`、`timeout_ms`、`persist_ttl_ms` 不会终止后台进程。用户可通过运行中心或 `terminate_shell_process` 停止它，runtime 关闭时仍会清理进程。`yield_time_ms` 只决定何时返回工具调用，不限制进程运行时间。已退出后台进程的输出暂留 30 分钟供读取，这项清理不会影响活着的进程。
+
+未设置 `persist` 的前台命令默认超时为 2 分钟，模型可通过 `timeout`（或 `exec_command` 的 `timeout_ms`）指定最长 1 小时；任务结束时仍清理本轮的临时进程。
+
 ## Structured user input
 
 `UserInputToolHost` 暴露 `request_user_input`：

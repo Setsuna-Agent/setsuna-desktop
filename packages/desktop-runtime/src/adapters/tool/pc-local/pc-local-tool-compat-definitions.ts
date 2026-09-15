@@ -1,5 +1,5 @@
 import { runtimeText, type RuntimeInterfaceLanguage, type RuntimeToolDefinition } from '@setsuna-desktop/contracts';
-import { MAX_PERSISTENT_SHELL_TTL_MS } from './pc-local-tool-constants.js';
+import { MAX_SHELL_TIMEOUT_MS } from './pc-local-tool-constants.js';
 import { shellCommandDescription, shellOutputTokenBudgetSchema } from './pc-local-tool-definitions.js';
 
 export function compatToolDefinitions(language?: RuntimeInterfaceLanguage): RuntimeToolDefinition[] {
@@ -68,10 +68,9 @@ export function compatToolDefinitions(language?: RuntimeInterfaceLanguage): Runt
           cmd: { type: 'string', description: shellCommandDescription(language) },
           cwd: { type: 'string', description: text('Optional working directory, absolute or relative to the project root.', "可选工作目录，可为绝对路径或相对于项目根目录的路径。") },
           yield_time_ms: { type: 'integer', description: text('Milliseconds to wait before returning while the command keeps running.', "等待多少毫秒后返回，命令仍继续运行。"), minimum: 0, maximum: 30000 },
-          timeout_ms: { type: 'integer', description: text('Optional timeout in milliseconds.', "可选超时（毫秒）。"), minimum: 1, maximum: 600000 },
+          timeout_ms: { type: 'integer', description: text('Optional foreground command timeout in milliseconds, defaulting to 120000 and capped at 3600000 (1 hour). Ignored when persist is true; background processes have no automatic timeout.', "可选前台命令超时（毫秒），默认 120000，最长 3600000（1 小时）。persist 为 true 时忽略；后台进程不设自动超时。"), minimum: 1, maximum: MAX_SHELL_TIMEOUT_MS },
           max_output_tokens: shellOutputTokenBudgetSchema(language),
-          persist: { type: 'boolean', description: text('Keep a still-running dev server or watcher available after the current turn completes.', "本轮结束后保留仍在运行的开发服务器或监听器。") },
-          persist_ttl_ms: { type: 'integer', description: text('Optional lifetime for a persisted process in milliseconds.', "可选持久化进程的存活时间（毫秒）。"), minimum: 1000, maximum: MAX_PERSISTENT_SHELL_TTL_MS },
+          persist: { type: 'boolean', description: text('Keep a still-running dev server or watcher available across turns without an automatic timeout. Stop it from the Run Center or with terminate_shell_process when no longer needed.', "跨轮次保留仍在运行的开发服务器或监听器，不设自动超时。不再需要时，在运行中心或通过 terminate_shell_process 终止。") },
           sandbox_permissions: { type: 'string', enum: ['use_default', 'with_additional_permissions', 'require_escalated'], description: text('Per-command sandbox override. Use with_additional_permissions only together with a non-empty additional_permissions request; otherwise omit this field or use use_default. require_escalated asks for unsandboxed execution.', "当前命令的沙箱权限覆盖。with_additional_permissions 必须配合非空的 additional_permissions；否则省略本字段或使用 use_default。require_escalated 表示申请沙箱外执行。") },
           additional_permissions: {
             type: 'object',

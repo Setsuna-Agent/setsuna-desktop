@@ -63,6 +63,24 @@ describe('pc local process lifecycle', () => {
       .rejects.toThrow('Shell process not found');
   });
 
+  it('still stops a foreground command when its requested timeout expires', async () => {
+    const { host, projectId } = await createHost();
+    try {
+      await expect(host.runTool('exec_command', {
+        cmd: `${nodeCommand()} -e "setInterval(() => {}, 1000)"`,
+        timeout_ms: 50,
+        yield_time_ms: 0,
+      }, {
+        threadId: 'thread_1',
+        turnId: 'turn_foreground_timeout',
+        projectId,
+        permissionProfile: 'danger-full-access',
+      })).rejects.toMatchObject({ failureKind: 'timeout', failureStage: 'execution' });
+    } finally {
+      await host.shutdown();
+    }
+  });
+
   it('drops per-turn file read state during turn cleanup', async () => {
     const { host, projectDir, projectId } = await createHost();
     const context = { threadId: 'thread_1', turnId: 'turn_file_state', projectId };
@@ -121,7 +139,7 @@ describe('pc local process lifecycle', () => {
     await host.shutdown();
   });
 
-  it('preserves explicitly persisted shell processes across turn cleanup', async () => {
+  it.each(['run_shell_command', 'exec_command'])('keeps %s background processes alive across turn cleanup and former time limits', async (toolName) => {
     const { host, projectId } = await createHost();
     const context = {
       threadId: 'thread_1',
@@ -131,13 +149,15 @@ describe('pc local process lifecycle', () => {
       permissionProfile: 'danger-full-access' as const,
     };
     const running = await host.runTool(
-      'run_shell_command',
+      toolName,
       {
         command: `${nodeCommand()} -e "setInterval(() => {}, 1000)"`,
         risk_level: 'low',
         yield_time_ms: 1,
         persist: true,
-        persist_ttl_ms: 5000,
+        // Old conversation history may still supply these limits; they must not kill a service.
+        persist_ttl_ms: 1000,
+        ...(toolName === 'run_shell_command' ? { timeout: 50 } : { timeout_ms: 50 }),
       },
       context,
     );
@@ -146,6 +166,8 @@ describe('pc local process lifecycle', () => {
 
     try {
       await host.cleanupTurn?.(context, { status: 'completed' });
+      const status = await host.runTool('read_shell_process', { process_id: processId, wait_ms: 1100 }, context);
+      expect(status.data).toMatchObject({ running: true, persisted: true, expires_at_ms: null });
       const listed = await host.runTool('list_shell_processes', {}, context);
       const processes = (listed.data as { processes?: Array<Record<string, unknown>> }).processes ?? [];
       expect(processes).toEqual(expect.arrayContaining([
@@ -157,8 +179,9 @@ describe('pc local process lifecycle', () => {
         }),
       ]));
     } finally {
-      await host.runTool('terminate_shell_process', { process_id: processId }, context).catch(() => undefined);
+      await host.shutdown();
     }
+    await expect(host.listAllBackgroundShellProcesses()).resolves.toEqual([]);
   });
 
   it('lists and terminates persisted shell services within their originating conversation', async () => {
@@ -177,7 +200,6 @@ describe('pc local process lifecycle', () => {
         risk_level: 'low',
         yield_time_ms: 1,
         persist: true,
-        persist_ttl_ms: 5_000,
       },
       context,
     );
@@ -193,7 +215,7 @@ describe('pc local process lifecycle', () => {
           command: expect.stringContaining('setInterval'),
           directory: '.',
           startedAt: expect.any(String),
-          expiresAt: expect.any(String),
+          expiresAt: null,
         }),
       ]);
       await expect(host.listBackgroundShellProcesses('thread_other')).resolves.toEqual([]);

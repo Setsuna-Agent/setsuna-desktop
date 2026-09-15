@@ -13,15 +13,8 @@ export type ToolArguments = Record<string, unknown>;
 
 export type ShellProgressHandler = (progress: Record<string, unknown>) => void;
 
-export type ShellProcessStoreOptions = {
-  defaultTtlMs?: unknown;
-  maxTtlMs?: unknown;
-};
-
 export type ShellProcessStore = {
   sessions: Map<string, ShellSession>;
-  defaultTtlMs: number;
-  maxTtlMs: number;
 };
 
 export type ShellProcessState = ShellPolicyState & {
@@ -44,22 +37,16 @@ export type ShellCommandExecutionOptions = {
 
 export type RegisterShellSessionOptions = {
   persist?: boolean;
-  persistTtlMs?: unknown;
   threadId?: string;
   turnId?: string;
   toolCallId?: string;
-};
-
-export type ShellCommandTimeoutOptions = {
-  persist?: boolean;
-  persistTtlMs?: unknown;
 };
 
 export type StartShellSessionOptions = {
   command: string;
   cwd: string;
   state: ShellProcessState;
-  timeout: number;
+  timeout: number | null;
   signal?: AbortSignal;
   onProgress?: ShellProgressHandler;
 };
@@ -72,7 +59,7 @@ export type ShellSession = {
   child: ChildProcessWithoutNullStreams | null;
   startedAt: number;
   finishedAt: number;
-  timeout: number;
+  timeout: number | null;
   timedOut: boolean;
   terminatedByUser: boolean;
   aborted: boolean;
@@ -90,8 +77,6 @@ export type ShellSession = {
   turnId: string;
   toolCallId: string;
   persist: boolean;
-  persistTtlMs: number;
-  expiresAt: number;
   unreadOutput: ShellOutputBuffer;
   stdout: string;
   stderr: string;

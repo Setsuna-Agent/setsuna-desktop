@@ -13,10 +13,9 @@ import {
   isNodeError,
 } from '../../../shared/node-errors.js';
 import {
-  DEFAULT_PERSISTENT_SHELL_TTL_MS,
+  COMPLETED_SHELL_RETENTION_MS,
   DEFAULT_SHELL_TIMEOUT_MS,
   DEFAULT_SHELL_YIELD_MS,
-  MAX_PERSISTENT_SHELL_TTL_MS,
   MAX_SHELL_TIMEOUT_MS,
   MAX_SHELL_YIELD_MS,
   SHELL_GRACEFUL_KILL_MS,
@@ -41,10 +40,8 @@ import {
 import type {
   RegisterShellSessionOptions,
   ShellCommandExecutionOptions,
-  ShellCommandTimeoutOptions,
   ShellProcessState,
   ShellProcessStore,
-  ShellProcessStoreOptions,
   ShellSession,
   StartShellSessionOptions,
   ToolArguments,
@@ -62,7 +59,6 @@ import {
   createShellSessionTempDirectory,
   flushShellProgress,
   takeShellSessionOutput,
-  isExpiredShellSession,
   isShellSessionVisibleToState,
   removeShellSessionTempDirectory,
   runningShellResult,
@@ -87,17 +83,12 @@ export type {
   ShellCommandExecutionOptions,
   ShellProcessState,
   ShellProcessStore,
-  ShellProcessStoreOptions,
   ShellSession,
 } from './pc-local-tool-shell-process-types.js';
 
-export function createShellProcessStore(
-  options: ShellProcessStoreOptions = {},
-): ShellProcessStore {
+export function createShellProcessStore(): ShellProcessStore {
   return {
     sessions: new Map<string, ShellSession>(),
-    defaultTtlMs: boundedInteger(options.defaultTtlMs, DEFAULT_PERSISTENT_SHELL_TTL_MS, 1000, MAX_PERSISTENT_SHELL_TTL_MS),
-    maxTtlMs: boundedInteger(options.maxTtlMs, MAX_PERSISTENT_SHELL_TTL_MS, 1000, MAX_PERSISTENT_SHELL_TTL_MS),
   };
 }
 
@@ -152,16 +143,11 @@ function registerShellSession(
 ): void {
   pruneShellProcessStore(state.shellProcessStore);
   const persist = Boolean(options.persist);
-  const persistTtlMs = persist
-    ? boundedInteger(options.persistTtlMs, DEFAULT_PERSISTENT_SHELL_TTL_MS, 1000, MAX_PERSISTENT_SHELL_TTL_MS)
-    : 0;
   session.root = state.root;
   session.threadId = String(options.threadId || '');
   session.turnId = String(options.turnId || '');
   session.toolCallId = String(options.toolCallId || '');
   session.persist = persist;
-  session.persistTtlMs = persistTtlMs;
-  session.expiresAt = persist ? Date.now() + persistTtlMs : 0;
   shellSessionsMap(state).set(session.id, session);
   if (!persist) state.ownedShellProcessIds?.add?.(session.id);
 }
@@ -173,11 +159,6 @@ function lookupShellSession(
   const session = shellSessionsMap(state).get(processId);
   if (!session) return null;
   if (session.root && path.resolve(session.root) !== path.resolve(state.root)) return null;
-  if (isExpiredShellSession(session)) {
-    terminateShellSession(session, 'SIGTERM');
-    removeShellSession(state, session.id);
-    return null;
-  }
   return session;
 }
 
@@ -212,12 +193,10 @@ export function pruneShellProcessStore(store?: ShellProcessStore): void {
   const sessions = store?.sessions;
   if (!sessions || typeof sessions[Symbol.iterator] !== 'function') return;
   for (const [id, session] of sessions) {
-    if (isExpiredShellSession(session)) {
-      terminateShellSession(session, 'SIGTERM');
+    // Retain finished background output briefly without limiting a live service.
+    if (session.closed && (!session.persist || Date.now() - session.finishedAt >= COMPLETED_SHELL_RETENTION_MS)) {
       sessions.delete(id);
-      continue;
     }
-    if (!session.persist && session.closed) sessions.delete(id);
   }
 }
 
@@ -225,13 +204,6 @@ export function shellSessionsMap(state: ShellProcessState): Map<string, ShellSes
   return state.shellProcessStore?.sessions
     || state.shellProcesses
     || new Map<string, ShellSession>();
-}
-
-function persistentShellTtlMs(args: ToolArguments, state: ShellProcessState): number {
-  const store = state.shellProcessStore;
-  const maxTtlMs = boundedInteger(store?.maxTtlMs, MAX_PERSISTENT_SHELL_TTL_MS, 1000, MAX_PERSISTENT_SHELL_TTL_MS);
-  const defaultTtlMs = boundedInteger(store?.defaultTtlMs, DEFAULT_PERSISTENT_SHELL_TTL_MS, 1000, maxTtlMs);
-  return boundedInteger(args?.persist_ttl_ms ?? args?.persistTtlMs, defaultTtlMs, 1000, maxTtlMs);
 }
 
 export async function runShellCommand(
@@ -299,8 +271,7 @@ export async function runShellCommand(
 
   const yieldTimeMs = boundedInteger(args?.yield_time_ms, DEFAULT_SHELL_YIELD_MS, 0, MAX_SHELL_YIELD_MS);
   const persist = Boolean(args?.persist || args?.keep_alive);
-  const persistTtlMs = persistentShellTtlMs(args, state);
-  const timeout = shellCommandTimeoutMs(args, { persist, persistTtlMs });
+  const timeout = persist ? null : shellCommandTimeoutMs(args);
   if (options.signal?.aborted) {
     return errorResult('Command was cancelled before it started.', {
       failure_kind: 'cancelled',
@@ -317,7 +288,6 @@ export async function runShellCommand(
   });
   registerShellSession(state, session, {
     persist,
-    persistTtlMs,
     threadId: options.threadId,
     turnId: options.turnId,
     toolCallId: options.toolCallId,
@@ -349,16 +319,10 @@ function resolveShellDirectoryPath(value: unknown, state: ShellProcessState): st
   throw new Error('Shell directory escapes the workspace and configured writable roots.');
 }
 
-function shellCommandTimeoutMs(
-  args: ToolArguments,
-  options: ShellCommandTimeoutOptions = {},
-): number {
+function shellCommandTimeoutMs(args: ToolArguments): number {
   const explicitTimeout = args?.timeout ?? args?.timeout_ms;
   if (explicitTimeout !== undefined && explicitTimeout !== null && explicitTimeout !== '') {
     return boundedInteger(explicitTimeout, DEFAULT_SHELL_TIMEOUT_MS, 1, MAX_SHELL_TIMEOUT_MS);
-  }
-  if (options.persist) {
-    return boundedInteger(options.persistTtlMs, DEFAULT_PERSISTENT_SHELL_TTL_MS, 1, MAX_PERSISTENT_SHELL_TTL_MS);
   }
   return DEFAULT_SHELL_TIMEOUT_MS;
 }
@@ -527,8 +491,6 @@ async function startShellSession({
     turnId: '',
     toolCallId: '',
     persist: false,
-    persistTtlMs: 0,
-    expiresAt: 0,
     unreadOutput: new ShellOutputBuffer(),
     stdout: '',
     stderr: '',
@@ -625,11 +587,13 @@ async function startShellSession({
     terminateShellSession(session, 'SIGTERM');
   };
 
-  session.timeoutTimer = setTimeout(() => {
-    session.timedOut = true;
-    terminateShellSession(session, 'SIGTERM');
-  }, timeout);
-  session.timeoutTimer.unref?.();
+  if (timeout !== null) {
+    session.timeoutTimer = setTimeout(() => {
+      session.timedOut = true;
+      terminateShellSession(session, 'SIGTERM');
+    }, timeout);
+    session.timeoutTimer.unref?.();
+  }
 
   signal?.addEventListener('abort', abort, { once: true });
   if (signal?.aborted) abort();
