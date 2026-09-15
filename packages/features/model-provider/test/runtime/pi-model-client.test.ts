@@ -1,12 +1,98 @@
 import type { ModelRequest, ProviderConfigState, ProviderModelConfig } from '@setsuna-desktop/contracts';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   ModelProviderRuntimeConfig,
   ModelProviderRuntimeHost,
 } from '../../src/contracts/index.js';
 import { PiModelClient } from '../../src/runtime/pi-model-client.js';
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe('Pi model client protocol integration', () => {
+  it.each([
+    ['openai-compatible', openAiCompletionsSse],
+    ['anthropic', anthropicSse],
+    ['openai-responses', responsesSse],
+  ] as const)('recovers from server errors and throttling without replaying the turn for %s', async (kind, sse) => {
+    vi.useFakeTimers();
+    const bodies: string[] = [];
+    const sessions: (string | null)[] = [];
+    const fetch: typeof globalThis.fetch = vi.fn(async (_input, init) => {
+      bodies.push(String(init?.body));
+      sessions.push(new Headers(init?.headers).get('x-opencode-session'));
+      return bodies.length <= 2
+        ? transientProviderError(bodies.length === 1 ? 500 : 429)
+        : new Response(sse(), { headers: { 'Content-Type': 'text/event-stream' } });
+    });
+    const client = new PiModelClient(host({
+      ...providerFixture(kind), catalogProviderId: 'opencode-go',
+    }, fetch));
+    const request = requestFixture({ sessionId: 'retry-thread' });
+    request.messages.push(
+      {
+        id: 'assistant', role: 'assistant', content: '', status: 'complete', createdAt: '2026-01-01T00:00:02.000Z',
+        toolCalls: [{ id: 'call-1', name: 'run_shell_command', arguments: '{"command":"write-result"}' }],
+      },
+      {
+        id: 'tool', role: 'tool', toolCallId: 'call-1', status: 'complete', createdAt: '2026-01-01T00:00:03.000Z',
+        content: 'Command completed; stored once.',
+      },
+    );
+
+    const pending = expect(collect(client.stream(request))).resolves.toContainEqual({ type: 'done', finishReason: 'stop' });
+    await vi.advanceTimersByTimeAsync(3_000);
+    await pending;
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(new Set(bodies).size).toBe(1);
+    expect(bodies[0]).toContain('Command completed; stored once.');
+    expect(sessions).toEqual(['retry-thread', 'retry-thread', 'retry-thread']);
+  });
+
+  it('stops after three retries when the provider keeps failing', async () => {
+    vi.useFakeTimers();
+    const fetch = vi.fn(async () => transientProviderError(500));
+    const client = new PiModelClient(host(providerFixture('openai-compatible'), fetch));
+
+    const pending = expect(collect(client.stream(requestFixture()))).rejects.toMatchObject({ status: 500 });
+    await vi.advanceTimersByTimeAsync(4_000);
+    await pending;
+    expect(fetch).toHaveBeenCalledTimes(4);
+  });
+
+  it('cancels immediately during server-requested retry backoff', async () => {
+    vi.useFakeTimers();
+    const parent = new AbortController();
+    const reason = new Error('User stopped the turn.');
+    const fetch = vi.fn(async () => transientProviderError(503, '30'));
+    const client = new PiModelClient(host(providerFixture('openai-responses'), fetch));
+
+    const pending = expect(collect(client.stream(requestFixture({ signal: parent.signal })))).rejects.toBe(reason);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(fetch).toHaveBeenCalledOnce();
+    parent.abort(reason);
+    await pending;
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it('does not restart a stream after publishing partial output', async () => {
+    const partial = `${openAiCompletionsSse().split('\n\n')[0]}\n\n`;
+    const fetch = vi.fn(async () => new Response(partial, { headers: { 'Content-Type': 'text/event-stream' } }));
+    const client = new PiModelClient(host(providerFixture('openai-compatible'), fetch));
+    const deltas: string[] = [];
+    const consume = async () => {
+      for await (const event of client.stream(requestFixture())) {
+        if (event.type === 'item_delta') deltas.push(event.delta);
+      }
+    };
+
+    await expect(consume()).rejects.toThrow();
+    expect(deltas.join('')).toBe('catalog response');
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
   it.each([
     ['openai-compatible', openAiCompletionsSse],
     ['anthropic', anthropicSse],
@@ -419,17 +505,17 @@ describe('Pi model client protocol integration', () => {
       expected: { code: 'ECONNRESET' },
     },
   ])('preserves safe $label details on provider failures', async ({ fetch, expected }) => {
+    vi.useFakeTimers();
     const client = new PiModelClient(host(providerFixture('openai-responses'), fetch));
 
     let error: unknown;
-    try {
-      await collect(client.stream(requestFixture()));
-    } catch (caught) {
-      error = caught;
-    }
+    const pending = collect(client.stream(requestFixture())).catch((caught) => { error = caught; });
+    await vi.advanceTimersByTimeAsync(4_000);
+    await pending;
 
     expect(error).toBeInstanceOf(Error);
     expect(error).toMatchObject(expected);
+    expect(fetch).toHaveBeenCalledTimes('status' in expected ? 1 : 4);
   });
 
   it('does not send unsupported schema-less structured output to Anthropic', async () => {
@@ -545,6 +631,13 @@ function providerValidationError(message: string): Response {
   return new Response(JSON.stringify({ error: { message, type: 'invalid_request_error' } }), {
     status: 400,
     headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+function transientProviderError(status: number, retryAfter = '1'): Response {
+  return new Response(JSON.stringify({ error: { type: 'error', message: 'Temporary provider failure.' } }), {
+    status,
+    headers: { 'Content-Type': 'application/json', 'Retry-After': retryAfter },
   });
 }
 

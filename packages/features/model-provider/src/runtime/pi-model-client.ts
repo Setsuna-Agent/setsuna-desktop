@@ -213,7 +213,9 @@ function streamForProvider(
     apiKey: input.apiKey,
     fetch: input.fetch,
     signal: input.signal,
-    maxRetries: 0,
+    // Pi retries transient request failures with abortable backoff before emitting
+    // output, preserving this sampling step and its already-completed tool results.
+    maxRetries: 3,
     maxTokens: input.maxOutputTokens,
     // 同一任务的工具续跑及后续轮次共享缓存亲和性；不能使用每轮变化的 turnId。
     sessionId: input.sessionId,
