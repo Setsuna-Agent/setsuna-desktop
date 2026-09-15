@@ -1,7 +1,9 @@
 import type { RuntimeHooksConfig } from './hooks.js';
-import type { ModelProviderKind } from './model-provider.js';
+import type { ModelProviderKind, ProviderRequestHeaders } from './model-provider.js';
 import type { DesktopNetworkProxyRoute } from './network-proxy/index.js';
 import type { RuntimePermissionProfile, RuntimeSandboxWorkspaceWrite } from './permissions.js';
+
+export { normalizeProviderRequestHeaders, type ProviderRequestHeaders } from './model-provider.js';
 
 export type * from './hooks.js';
 export type * from './permissions.js';
@@ -36,6 +38,8 @@ export type ProviderConfigState = {
   apiKeySet: boolean;
   apiKeyPreview: string;
   proxyRoute?: DesktopNetworkProxyRoute;
+  /** Omitted: provider preset. Empty object: no preset headers. */
+  requestHeaders?: ProviderRequestHeaders;
   models: ProviderModelConfig[];
 };
 
@@ -211,10 +215,12 @@ export type RuntimeAvailableModel = {
 
 export type RuntimeFetchModelsInput = {
   providerId?: string;
+  catalogProviderId?: string | null;
   provider?: ModelProviderKind;
   baseUrl?: string;
   apiKey?: string;
   proxyRoute?: DesktopNetworkProxyRoute;
+  requestHeaders?: ProviderRequestHeaders | null;
 };
 
 export type RuntimeAvailableModelsResponse = {
@@ -233,6 +239,8 @@ export type ProviderConfigInput = {
   apiKey?: string;
   clearApiKey?: boolean;
   proxyRoute?: DesktopNetworkProxyRoute;
+  /** Null restores the provider preset; omission preserves the existing configuration. */
+  requestHeaders?: ProviderRequestHeaders | null;
   models?: ProviderModelConfig[];
 };
 

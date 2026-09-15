@@ -1,4 +1,4 @@
-import { ChevronRight, File, Folder, FolderOpen } from 'lucide-react';
+import { ChevronRight, File } from 'lucide-react';
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from 'motion/react';
 import { forwardRef, useId, type ButtonHTMLAttributes, type CSSProperties, type HTMLAttributes, type ReactNode } from 'react';
 import { SPRING_LAYOUT } from './motion.js';
@@ -22,6 +22,7 @@ type FileTreeRowProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'
   depth: number;
   expanded?: boolean;
   selected?: boolean;
+  /** Files have a default icon; directories omit it. null removes the icon slot. */
   icon?: ReactNode;
   label: ReactNode;
   extra?: ReactNode;
@@ -32,6 +33,7 @@ export const FileTreeRow = forwardRef<HTMLButtonElement, FileTreeRowProps>(funct
 }, ref) {
   const reduce = useReducedMotion();
   const directory = expanded !== undefined;
+  const rowIcon = icon === undefined ? (directory ? null : <File size={16} />) : icon;
   return <motion.div className="sd-file-tree__node" layout={reduce ? false : 'position'}
     initial={reduce ? false : { opacity: 0, y: -6 }}
     animate={{ opacity: 1, y: 0 }}
@@ -45,21 +47,13 @@ export const FileTreeRow = forwardRef<HTMLButtonElement, FileTreeRowProps>(funct
       {depth > 0 ? <motion.span aria-hidden="true" className="sd-file-tree__branch"
         initial={reduce ? false : { opacity: 0, scaleY: 0 }} animate={{ opacity: 1, scaleY: 1 }}
         transition={{ duration: reduce ? 0 : 0.3, ease: 'easeOut' }} /> : null}
-      <motion.span aria-hidden="true" className="sd-file-tree__chevron" style={{ opacity: directory ? 1 : 0 }}
+      {directory ? <motion.span aria-hidden="true" className="sd-file-tree__chevron"
         animate={{ rotate: expanded ? 90 : 0 }} transition={reduce ? { duration: 0 } : iconSpring}>
         <ChevronRight size={14} />
-      </motion.span>
-      <span aria-hidden="true" className="sd-file-tree__icon">
-        {icon ?? (directory ? <AnimatePresence initial={false} mode="popLayout">
-          <motion.span key={expanded ? 'open' : 'closed'} className="sd-file-tree__folder"
-            initial={reduce ? false : { opacity: 0, scale: 0.75, rotate: expanded ? -8 : 8 }}
-            animate={{ opacity: 1, scale: 1, rotate: 0 }}
-            exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.75 }}
-            transition={reduce ? { duration: 0 } : iconSpring}>
-            {expanded ? <FolderOpen size={16} /> : <Folder size={16} />}
-          </motion.span>
-        </AnimatePresence> : <File size={16} />)}
-      </span>
+      </motion.span> : null}
+      {rowIcon != null ? <span aria-hidden="true" className="sd-file-tree__icon">
+        {rowIcon}
+      </span> : null}
       <span className="sd-file-tree__label">{label}</span>
       {extra ? <span className="sd-file-tree__extra">{extra}</span> : null}
     </button>

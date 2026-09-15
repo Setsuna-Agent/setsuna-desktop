@@ -49,6 +49,29 @@
   grid-template-rows: auto minmax(0, 1fr);
 }
 
+.desktop-editor__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-width: 0;
+  min-height: 0;
+  padding: 24px;
+  color: var(--app-text-muted);
+  text-align: center;
+}
+
+.desktop-editor__empty .sd-empty-state {
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+}
+
+.desktop-editor__empty .sd-empty-state strong {
+  font-size: 16px;
+}
+
 .desktop-workspace-body--single .desktop-editor,
 .desktop-workspace-body--single .desktop-review-panel {
   border-right: 0;

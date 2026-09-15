@@ -1,4 +1,4 @@
-import { pluginMentionText, type RuntimePluginSummary } from '@setsuna-desktop/contracts';
+import { pluginMentionText, type RuntimePluginSummary, type RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import { RuntimePromptContextAssembler } from '../../../src/loop/context/runtime-prompt-context-assembler.js';
 
@@ -15,16 +15,33 @@ const documents: RuntimePluginSummary = {
 describe('selected plugin prompt context', () => {
   it('resolves a no-Skill plugin by installed identity and supplies its actual capabilities to the model', async () => {
     const { assembler } = setup();
-    const result = await assembler.build(input(`[$Spoofed name](plugin://github) ${pluginMentionText(github)} [$Missing](plugin://removed)`));
+    const result = await assembler.build({
+      ...input(`[$Spoofed name](plugin://github) ${pluginMentionText(github)} [$Missing](plugin://removed)`),
+      catalogTools: [githubTool],
+    });
     const fragments = result.fragments.filter((fragment) => fragment.source === 'plugin');
     expect(fragments).toHaveLength(1);
     expect(fragments[0]).toMatchObject({ role: 'user', trust: 'external', lifecycle: 'turn' });
     expect(fragments[0]?.content).toContain('"name":"GitHub"');
-    expect(fragments[0]?.content).toContain('"mcpServers":[{"key":"github","label":"GitHub MCP"}]');
-    expect(fragments[0]?.content).toContain('search_tools');
+    expect(fragments[0]?.content).toContain('"availableMcpServers":[{"key":"github","label":"GitHub MCP"}]');
+    expect(fragments[0]?.content).toContain('"availableTools":["mcp__github__search"]');
+    expect(result.fragments.find((fragment) => fragment.id === 'selected_plugin_policy')).toMatchObject({
+      role: 'developer', trust: 'runtime', source: 'tool_policy', content: expect.stringContaining('search_tools'),
+    });
     expect(fragments[0]?.content).toContain('list_plugin_connectors');
     expect(fragments[0]?.content).not.toContain('Spoofed');
     expect(result.selectedSkills).toEqual([]);
+  });
+
+  it('does not present installed declarations as callable tools and keeps external metadata out of policy', async () => {
+    const { assembler } = setup();
+    const result = await assembler.build(input(pluginMentionText(github)));
+    const metadata = result.fragments.find((fragment) => fragment.id === 'selected_plugin_github')?.content;
+    expect(metadata).toContain('"availableTools":[]');
+    expect(metadata).toContain('"availableMcpServers":[]');
+    expect(metadata).toContain('"unavailableMcpServers":["github"]');
+    expect(result.fragments.filter((fragment) => fragment.trust === 'runtime')
+      .some((fragment) => fragment.content.includes(github.description!))).toBe(false);
   });
 
   it('loads associated Skills through the existing registry alongside explicitly selected Skills', async () => {
@@ -52,6 +69,11 @@ describe('selected plugin prompt context', () => {
     expect(listPlugins).not.toHaveBeenCalled();
   });
 });
+
+const githubTool: RuntimeToolDefinition = {
+  name: 'mcp__github__search', description: 'Search pull requests', inputSchema: { type: 'object' },
+  source: { kind: 'mcp', id: 'github', name: 'GitHub MCP' },
+};
 
 function setup() {
   const listPlugins = vi.fn(async () => ({ plugins: [github, documents] }));

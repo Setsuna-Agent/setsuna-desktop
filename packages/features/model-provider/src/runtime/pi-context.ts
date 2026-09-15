@@ -15,6 +15,7 @@ import {
   type ImageContent,
   type Message,
   type Model,
+  type Provider,
   type TextContent,
   type ThinkingContent,
   type Tool,
@@ -51,14 +52,14 @@ export function piApiForProvider(provider: ModelProviderKind): PiApi {
 export function createPiModel(
   provider: ModelProviderRuntimeConfig,
   modelId: string,
-  options: Readonly<{ forceAdaptiveThinking?: boolean }> = {},
+  options: Readonly<{ forceAdaptiveThinking?: boolean; providers?: readonly Provider[] }> = {},
 ): Model<PiApi> {
   const activeModel = provider.activeModel;
   const api = piApiForProvider(provider.provider);
-  const catalogProviderId = builtinCatalogProviderIdForConfig(provider);
-  const catalogProvider = catalogProviderId ? getBuiltinCatalogProvider(catalogProviderId) : undefined;
+  const catalogProviderId = builtinCatalogProviderIdForConfig(provider, options.providers);
+  const catalogProvider = catalogProviderId ? getBuiltinCatalogProvider(catalogProviderId, options.providers) : undefined;
   const catalogModel = catalogProviderId
-    ? getBuiltinCatalogModel(catalogProviderId, modelId)
+    ? getBuiltinCatalogModel(catalogProviderId, modelId, options.providers)
     : undefined;
   const catalogBase = catalogModel?.api === api ? catalogModel : undefined;
   const apiModels = catalogProvider?.getModels().filter((candidate) => candidate.api === api) ?? [];
@@ -96,9 +97,10 @@ export function createPiModel(
 export function createPiReplayContext(
   provider: ModelProviderRuntimeConfig,
   model: string,
+  providers?: readonly Provider[],
 ): PiReplayContext {
   return {
-    piProvider: createPiModel(provider, model).provider,
+    piProvider: createPiModel(provider, model, { providers }).provider,
     providerId: provider.id,
     providerKind: provider.provider,
     model,

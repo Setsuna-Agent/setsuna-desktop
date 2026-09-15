@@ -23,7 +23,8 @@
 
 - Motion 负责复选框、开关和通知动画；`motion.ts` 提供复选框与通知使用的 spring 参数，开关的参数随组件维护。
 - `FileIcon` 使用 Symbols，统一按跨平台路径的文件名选择文件类型图标；workspace、artifact 和插件卡片复用这个入口，尺寸由各自样式控制。
-- `FileTreeSurface` / `FileTreeRow` 为文件面板与审查文件树共用的 beUI 视觉层：36px 行高、18px 层级缩进、目录开合图标、引导线与选中背景滑动；每个 surface 隔离布局动画并跟踪自身滚动，减少动态效果时关闭移动动画。Surface 挂载时直接显示现有行，避免文件标签切换导致的重新挂载重播整树入场动画；目录展开后新增的行仍有入场过渡。目录加载、筛选、拖放、文件选择仍由各 Feature 持有。
+- `FileTreeSurface` / `FileTreeRow` 为文件面板、审查和 PR Diff 文件树共用的 beUI 视觉层：26px 行高、12px 字号、16px 层级缩进、展开箭头、引导线与选中背景滑动。目录行默认只显示展开箭头，文件行保留类型图标并省略空白箭头占位，同层名称对齐；每行按深度延续所有祖先层级的引导线，展开多层目录后外层线段保持连续。每个 surface 隔离布局动画并跟踪自身滚动，减少动态效果时关闭移动动画。Surface 挂载时直接显示现有行，避免文件标签切换导致的重新挂载重播整树入场动画；目录展开后新增的行仍有入场过渡。目录加载、筛选、拖放、文件选择仍由各 Feature 持有。
+- `Table` / `TableColumn` 参考 [beUI Table](https://beui.dev/components/motion/table)，统一列定义、表头、行悬停、空状态和横向滚动，沿用宿主主题与减少动态效果偏好。用量记录的列内容由 `UsageRecordsTable` 持有，`UsageRecentCalls` 负责每页 10 条的数据加载与分页；共享表格直接渲染当前页。
 - Dialog 的入场动画由 `overlays.css` 持有：弹窗上移 12px 并淡入（180ms ease-out），遮罩淡入（160ms ease）。弹窗已去掉 scale 动画，居中与入场位移统一使用 `translate`；12px 按应用密度缩放，减少动态效果偏好下禁用入场动画。
 - Radix 提供浮层定位、焦点约束、嵌套子菜单、键盘操作和关闭行为。控件遵循本项目的窄 API，不提供 Ant Design 兼容层。
 - 应用内操作菜单参考 [beUI Animated Context Menu](https://beui.dev/components/motion/context-menu)：`MenuSurface` 与 `menu-motion.css` 统一从触发位置展开的裁切动画和滑动高亮，右键、按钮下拉、坐标菜单、侧栏、添加面板、窗口菜单和能力创建菜单共用视觉层；禁用项、危险项、子菜单和减少动态效果偏好保持有效。浏览器菜单通过 Feature bridge 接入，系统托盘菜单仍由操作系统绘制。

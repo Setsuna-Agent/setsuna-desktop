@@ -90,6 +90,11 @@ export function ModelProviderSettingsView({
   }, [service]);
 
   const selectedProvider = providers.find((provider) => provider.id === selectedProviderId);
+  const selectedCatalogProviderId = selectedProvider?.catalogProviderId;
+  useEffect(() => {
+    if (!selectedCatalogProviderId || !selectedProviderId) return;
+    void service.refreshCatalog({ catalogProviderId: selectedCatalogProviderId, providerId: selectedProviderId });
+  }, [selectedCatalogProviderId, selectedProviderId, service]);
 
   const stageProviders = (
     nextProviders: ProviderConfigState[],
@@ -147,6 +152,7 @@ export function ModelProviderSettingsView({
       provider: selectedProvider.provider,
       baseUrl: selectedProvider.baseUrl,
       proxyRoute: selectedProvider.proxyRoute,
+      requestHeaders: selectedProvider.requestHeaders ?? null,
       apiKey: apiKeys[selectedProvider.id] || undefined,
     } satisfies ProviderConfigDiscoveryInput;
     setOperationError('');
@@ -181,6 +187,9 @@ export function ModelProviderSettingsView({
         title={translate('feature.modelProvider.title')}
       />
       {operationError ? <ui.Toast message={operationError} tone="error" /> : null}
+      {snapshot.catalogError ? (
+        <ui.Toast message={translate('feature.modelProvider.catalogRefreshFailed', { message: snapshot.catalogError })} tone="error" />
+      ) : null}
       {snapshot.loading && !snapshot.state ? (
         <ui.EmptyState title={translate('feature.modelProvider.loading')} />
       ) : snapshot.error && !snapshot.state ? (
@@ -203,6 +212,7 @@ export function ModelProviderSettingsView({
               canDelete={providers.length > 1}
               catalog={catalog}
               discovering={discoveringProviderId === selectedProvider.id}
+              refreshingCatalog={snapshot.refreshingCatalogProviderId === selectedCatalogProviderId}
               host={host}
               provider={selectedProvider}
               proxyServers={snapshot.proxyServers}
@@ -220,6 +230,11 @@ export function ModelProviderSettingsView({
               })}
               onDelete={removeProvider}
               onDiscover={discoverModels}
+              onRefreshCatalog={() => {
+                if (selectedCatalogProviderId) void service.refreshCatalog({
+                  catalogProviderId: selectedCatalogProviderId, providerId: selectedProvider.id, force: true,
+                });
+              }}
               onProviderIdentityChange={replaceProviderIdentity}
             />
           ) : (
@@ -243,6 +258,7 @@ function providerInput(provider: ProviderConfigState, apiKey: string | undefined
     enabled: provider.enabled,
     icon: provider.icon ?? null,
     proxyRoute: provider.proxyRoute,
+    requestHeaders: provider.requestHeaders ?? null,
     ...(apiKey ? { apiKey } : provider.apiKeySet ? {} : { clearApiKey: true }),
     models: provider.models,
   };
@@ -254,6 +270,7 @@ type ProviderConfigDiscoveryInput = Readonly<{
   provider: ProviderConfigState['provider'];
   baseUrl: string;
   proxyRoute: ProviderConfigState['proxyRoute'];
+  requestHeaders: ProviderConfigState['requestHeaders'] | null;
   apiKey: string | undefined;
 }>;
 
@@ -267,6 +284,7 @@ function matchesDiscoveryInput(
     && provider.provider === input.provider
     && provider.baseUrl === input.baseUrl
     && (apiKey || undefined) === input.apiKey
+    && JSON.stringify(provider.requestHeaders ?? null) === JSON.stringify(input.requestHeaders)
     && JSON.stringify(provider.proxyRoute ?? null) === JSON.stringify(input.proxyRoute ?? null);
 }
 

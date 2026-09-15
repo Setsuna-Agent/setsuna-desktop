@@ -64,6 +64,8 @@ import { EventCoordinatedThreadStore } from './event-coordinated-thread-store.js
 
 export type RuntimeFactoryOptions = {
   dataDir: string;
+  /** Desktop supplies its installed version; source-only embedders default to dev. */
+  appVersion?: string;
   builtinSkillsDir?: string;
   builtinPluginsDir?: string;
   nativeBridge?: DesktopNativeBridge;
@@ -248,6 +250,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   });
   return {
     agentLoop,
+    appVersion: options.appVersion ?? 'dev',
     artifactToolHost,
     attachmentStore,
     approvalGate,

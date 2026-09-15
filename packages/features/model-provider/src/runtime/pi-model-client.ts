@@ -12,6 +12,7 @@ import type {
   ModelThinkingLevel,
   OpenAICompletionsOptions,
   OpenAIResponsesOptions,
+  Provider,
 } from '@earendil-works/pi-ai';
 import {
   DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
@@ -43,13 +44,17 @@ import {
   withKnownPiRequestCompatibility,
 } from './pi-request-compatibility.js';
 import { builtinCatalogProviderIdForConfig, getBuiltinCatalogProvider } from './provider-catalog.js';
+import { applyProviderRequestHeaders } from './provider-request-headers.js';
 
 const EMPTY_API_KEY = 'setsuna-no-provider-api-key';
 const LOCAL_SMOKE_MODEL = 'local-runtime-smoke';
 const PI_REASONING_EFFORTS = new Set(['minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
 
 export class PiModelClient implements ModelProviderSamplingService {
-  constructor(private readonly host: ModelProviderRuntimeHost) {}
+  constructor(
+    private readonly host: ModelProviderRuntimeHost,
+    private readonly providers?: readonly Provider[],
+  ) {}
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     const provider = await this.resolveRequestProvider(request);
@@ -59,7 +64,7 @@ export class PiModelClient implements ModelProviderSamplingService {
     }
 
     const modelId = provider.activeModel?.code || request.model;
-    const compatibilityModel = createPiModel(provider, modelId);
+    const compatibilityModel = createPiModel(provider, modelId, { providers: this.providers });
     let currentRequest = withKnownPiRequestCompatibility(
       withProviderDefaults(request, provider, modelId),
       compatibilityModel,
@@ -92,7 +97,8 @@ export class PiModelClient implements ModelProviderSamplingService {
       (signal) => compactOpenAiResponsesConversation(
         { ...request, model, signal },
         provider,
-        this.providerFetch(provider),
+        this.providerFetch(provider, request.sessionId),
+        this.providers,
       ),
       request.signal,
     );
@@ -102,20 +108,23 @@ export class PiModelClient implements ModelProviderSamplingService {
     provider: ModelProviderRuntimeConfig,
     request: ModelRequest,
   ): AsyncGenerator<ModelStreamEvent> {
-    const replayContext = createPiReplayContext(provider, request.model);
+    const replayContext = createPiReplayContext(provider, request.model, this.providers);
     this.publishProviderReplayDebug(request, replayContext);
     const model = createPiModel(provider, request.model, {
       forceAdaptiveThinking: usesAdaptiveAnthropicThinking(request),
+      providers: this.providers,
     });
     const context = toPiContext(request, replayContext);
     const transportFailure: ProviderTransportFailure = {};
-    const fetch = this.providerFetch(provider, transportFailure);
+    const fetch = this.providerFetch(provider, request.sessionId, transportFailure);
+    const catalogProviderId = builtinCatalogProviderIdForConfig(provider, this.providers);
+    const catalogProvider = catalogProviderId ? getBuiltinCatalogProvider(catalogProviderId, this.providers) : undefined;
     const createStream = (signal: AbortSignal) => streamForProvider(model, context, {
       ...request,
       signal,
       apiKey: provider.apiKey.trim() || EMPTY_API_KEY,
       fetch,
-    }, builtinCatalogProviderIdForConfig(provider));
+    }, catalogProvider);
     const events = streamWithModelTimeout(createStream, request.signal);
     yield* bridgePiStream(events, provider, replayContext, transportFailure);
   }
@@ -158,6 +167,7 @@ export class PiModelClient implements ModelProviderSamplingService {
 
   private providerFetch(
     provider: ModelProviderRuntimeConfig,
+    sessionId: string | undefined,
     transportFailure?: ProviderTransportFailure,
   ): typeof fetch {
     const fetchImpl = this.host.fetchForRoute(provider.proxyRoute);
@@ -167,11 +177,13 @@ export class PiModelClient implements ModelProviderSamplingService {
         delete transportFailure.status;
         delete transportFailure.code;
       }
-      const headers = new Headers(init?.headers);
+      const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
       if (!hasApiKey) {
         headers.delete('authorization');
         headers.delete('x-api-key');
       }
+      // Remove only the SDK's placeholder credentials before applying explicit user headers.
+      applyProviderRequestHeaders(headers, provider, { appVersion: this.host.appVersion, sessionId }, this.providers);
       try {
         const response = await fetchImpl(input, { ...init, headers });
         if (!response.ok && transportFailure) transportFailure.status = response.status;
@@ -195,7 +207,7 @@ function streamForProvider(
   model: Model<PiApi>,
   context: Context,
   input: ModelRequest & Readonly<{ apiKey: string; fetch: typeof fetch; signal: AbortSignal }>,
-  catalogProviderId?: string,
+  catalogProvider?: Provider,
 ): AsyncIterable<AssistantMessageEvent> {
   const common = {
     apiKey: input.apiKey,
@@ -204,11 +216,11 @@ function streamForProvider(
     maxRetries: 0,
     maxTokens: input.maxOutputTokens,
     // 同一任务的工具续跑及后续轮次共享缓存亲和性；不能使用每轮变化的 turnId。
-    sessionId: input.stepSnapshot?.threadId,
+    sessionId: input.sessionId,
     ...(typeof input.temperature === 'number' ? { temperature: input.temperature } : {}),
   };
-  const builtinProvider = catalogProviderId === model.provider
-    ? getBuiltinCatalogProvider(catalogProviderId)
+  const builtinProvider = catalogProvider?.id === model.provider
+    ? catalogProvider
     : undefined;
   if (model.api === 'openai-responses') {
     const typedModel = model as Model<'openai-responses'>;
@@ -260,6 +272,7 @@ function withProviderDefaults(
   return {
     ...request,
     model,
+    sessionId: request.sessionId ?? request.stepSnapshot?.threadId,
     maxOutputTokens: request.maxOutputTokens
       ?? configuredModel?.maxOutputTokens
       ?? DEFAULT_MODEL_MAX_OUTPUT_TOKENS,

@@ -90,7 +90,7 @@ export class RuntimePromptContextAssembler {
     const environment = toolContext.environment;
     const permissionToolNames = catalogTools ?? tools;
     const pluginContext = await runtimePluginSelectionContext(skillActivationText,
-      config?.features?.plugins === false ? undefined : this.options.pluginStore, language);
+      config?.features?.plugins === false ? undefined : this.options.pluginStore, language, catalogTools ?? tools);
     const [skillContext, memoryMessages, projectInstructions, projectWorkflow, toolPrompt, toolExternalContext] = await Promise.all([
       this.skillContext(
         [...new Set([...skillIds, ...pluginContext.skillIds])],

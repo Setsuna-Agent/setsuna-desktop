@@ -14,6 +14,7 @@ import {
   type PiReplayContext,
 } from './pi-context.js';
 import { portableAssistantText } from './portable-assistant-text.js';
+import type { Provider } from '@earendil-works/pi-ai';
 
 const MAX_ERROR_BODY_LENGTH = 500;
 
@@ -21,8 +22,9 @@ export async function compactOpenAiResponsesConversation(
   request: ModelCompactionRequest,
   provider: ModelProviderRuntimeConfig,
   fetchImpl: typeof fetch,
+  providers?: readonly Provider[],
 ): Promise<ModelCompactionResult> {
-  const replayContext = createPiReplayContext(provider, request.model);
+  const replayContext = createPiReplayContext(provider, request.model, providers);
   const response = await fetchImpl(withEndpoint(provider.baseUrl, '/responses/compact'), {
     method: 'POST',
     headers: {

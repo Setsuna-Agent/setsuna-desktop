@@ -8,6 +8,9 @@ import {
   type CopyModelProviderApiKeyInput,
   discoverModelProviderModels,
   readModelProviderCatalog,
+  refreshModelProviderCatalog,
+  type RefreshModelProviderCatalogInput,
+  type RefreshModelProviderCatalogResult,
   readModelProviderSettings,
   updateModelProviderSettings,
   type ModelProviderSettingsInput,
@@ -19,6 +22,7 @@ export type ModelProviderClient = Readonly<{
   copyApiKey(input: CopyModelProviderApiKeyInput): Promise<Readonly<{ ok: true }>>;
   read(options?: Readonly<{ signal?: AbortSignal }>): Promise<ModelProviderSettingsState>;
   catalog(options?: Readonly<{ signal?: AbortSignal }>): Promise<ModelProviderCatalog>;
+  refreshCatalog(input: RefreshModelProviderCatalogInput, options?: Readonly<{ signal?: AbortSignal }>): Promise<RefreshModelProviderCatalogResult>;
   save(
     input: ModelProviderSettingsInput,
     options?: Readonly<{ signal?: AbortSignal }>,
@@ -34,6 +38,7 @@ export function createModelProviderClient(transport: FeatureOperationTransport):
     copyApiKey: (input) => transport.call(copyModelProviderApiKey, input),
     read: (options) => transport.call(readModelProviderSettings, undefined, options),
     catalog: (options) => transport.call(readModelProviderCatalog, undefined, options),
+    refreshCatalog: (input, options) => transport.call(refreshModelProviderCatalog, input, options),
     save: (input, options) => transport.call(updateModelProviderSettings, input, options),
     discover: (input, options) => transport.call(discoverModelProviderModels, input, options),
   });

@@ -75,6 +75,7 @@ export type ApprovalReviewResolvedModel = Readonly<{
 export type ApprovalReviewModelRequest = Pick<
   ModelRequest,
   | 'providerId'
+  | 'sessionId'
   | 'model'
   | 'messages'
   | 'toolChoice'

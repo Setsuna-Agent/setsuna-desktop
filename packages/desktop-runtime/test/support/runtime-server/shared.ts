@@ -37,8 +37,10 @@ export function persistentOutputScript(label: string): string {
 export async function createOpenAiCaptureServer(responseText = 'Captured.', beforeFinish?: () => Promise<void>): Promise<{
   baseUrl: string;
   nextBody: Promise<Record<string, unknown>>;
+  requestHeaders: IncomingMessage['headers'][];
   close(): Promise<void>;
 }> {
+  const requestHeaders: IncomingMessage['headers'][] = [];
   let resolveBody: (body: Record<string, unknown>) => void = () => undefined;
   let rejectBody: (error: unknown) => void = () => undefined;
   const nextBody = new Promise<Record<string, unknown>>((resolve, reject) => {
@@ -52,6 +54,7 @@ export async function createOpenAiCaptureServer(responseText = 'Captured.', befo
         response.end();
         return;
       }
+      requestHeaders.push(request.headers);
       resolveBody(JSON.parse(await readRequestText(request)) as Record<string, unknown>);
       response.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8' });
       if (responseText) response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: responseText } }] })}\n\n`);
@@ -72,6 +75,7 @@ export async function createOpenAiCaptureServer(responseText = 'Captured.', befo
   return {
     baseUrl: `http://127.0.0.1:${address.port}`,
     nextBody,
+    requestHeaders,
     close: () => new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
   };
 }

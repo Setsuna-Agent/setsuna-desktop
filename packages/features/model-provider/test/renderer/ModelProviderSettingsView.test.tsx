@@ -164,6 +164,7 @@ describe('ModelProviderSettingsView', () => {
     const service = new ModelProviderRendererStateService({
       copyApiKey: async () => ({ ok: true }),
       catalog: async () => ({ providers: [] }),
+      refreshCatalog: async () => ({ catalog: { providers: [] } }),
       read: async () => ({ activeProviderId: provider.id, providers: [provider] }),
       save: async (input) => stateFromInput(input),
       discover: async () => discovery.promise,
@@ -212,6 +213,7 @@ describe('ModelProviderSettingsView', () => {
     const service = new ModelProviderRendererStateService({
       copyApiKey: async () => ({ ok: true }),
       catalog: async () => ({ providers: [] }),
+      refreshCatalog: async () => ({ catalog: { providers: [] } }),
       read: async () => ({ activeProviderId: provider.id, providers: [provider] }),
       save: async (input) => stateFromInput(input),
       discover: async () => discovery.promise,
@@ -258,6 +260,7 @@ describe('ModelProviderSettingsView', () => {
     const service = new ModelProviderRendererStateService({
       copyApiKey: async () => ({ ok: true }),
       catalog: async () => ({ providers: [] }),
+      refreshCatalog: async () => ({ catalog: { providers: [] } }),
       read: async () => ({ activeProviderId: provider.id, providers: [provider] }),
       save: async (input) => stateFromInput(input),
       discover: async () => {
@@ -297,6 +300,7 @@ describe('ModelProviderSettingsView', () => {
     const service = new ModelProviderRendererStateService({
       copyApiKey: async () => ({ ok: true }),
       catalog: async () => ({ providers: [] }),
+      refreshCatalog: async () => ({ catalog: { providers: [] } }),
       read: async () => ({ activeProviderId: provider.id, providers: [provider] }),
       save: async (input) => stateFromInput(input),
       discover: async () => discovery.promise,
@@ -576,6 +580,7 @@ describe('ModelProviderSettingsView', () => {
     const service = new ModelProviderRendererStateService({
       copyApiKey: async () => ({ ok: true }),
       catalog: async () => clientCatalogFixture(),
+      refreshCatalog: async () => ({ catalog: clientCatalogFixture() }),
       read: async () => ({ activeProviderId: provider.id, providers: [provider] }),
       save,
       discover: async () => ({ models: [] }),
@@ -609,6 +614,7 @@ describe('ModelProviderSettingsView', () => {
       providers: [{
         ...providerInputFixture(customProvider),
         icon: null,
+        requestHeaders: null,
         ...(apiKeyDraft ? { apiKey: apiKeyDraft } : {}),
       }],
     });
@@ -648,6 +654,7 @@ function clientFixture(save: ModelProviderClient['save']): ModelProviderClient {
   return {
     copyApiKey: async () => ({ ok: true }),
     catalog: async () => catalog,
+    refreshCatalog: async () => ({ catalog }),
     read: async () => state,
     save,
     discover: async () => ({ models: [] }),
@@ -694,6 +701,7 @@ function stateFromInput(input: ModelProviderSettingsInput): ModelProviderSetting
       id: provider.id!,
       name: provider.name!,
       catalogProviderId: provider.catalogProviderId,
+      requestHeaders: provider.requestHeaders ?? undefined,
       provider: provider.provider!,
       baseUrl: provider.baseUrl!,
       enabled: provider.enabled ?? true,
@@ -759,6 +767,7 @@ const testUi = {
   ),
   Tooltip: ({ children }: ComponentProps<SettingsViewUi['Tooltip']>) => children,
   TextField: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
+  TextArea: (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => <textarea {...props} />,
   Toast: ({ message, tone }: ComponentProps<SettingsViewUi['Toast']>) => (
     <div data-tone={tone} role={tone === 'error' ? 'alert' : 'status'}>{message}</div>
   ),

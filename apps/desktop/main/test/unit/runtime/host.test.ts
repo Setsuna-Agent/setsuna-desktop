@@ -109,22 +109,23 @@ describe('runtime host packaging paths', () => {
   it('passes the absolute bundled rg path to runtime and prepends its directory', () => {
     const ripgrepPath = path.join('/Applications/Setsuna Desktop.app/Contents/Resources', 'setsuna-path', 'rg');
     const env = runtimeProcessEnvironment(
-      { ripgrepPath, requireBundledRipgrep: true },
-      { PATH: '/usr/bin:/bin' },
+      { appVersion: '1.2.3', ripgrepPath, requireBundledRipgrep: true },
+      { PATH: '/usr/bin:/bin', SETSUNA_DESKTOP_APP_VERSION: 'old', npm_package_version: 'unrelated' },
     );
 
+    expect(env.SETSUNA_DESKTOP_APP_VERSION).toBe('1.2.3');
     expect(env.SETSUNA_DESKTOP_RG_PATH).toBe(ripgrepPath);
     expect(env.SETSUNA_DESKTOP_REQUIRE_BUNDLED_RG).toBe('1');
     expect(String(env.PATH).split(path.delimiter)[0]).toBe(path.dirname(ripgrepPath));
   });
 
   it('always starts the selected Electron executable in Node mode', () => {
-    expect(runtimeProcessEnvironment({}, {}).ELECTRON_RUN_AS_NODE).toBe('1');
+    expect(runtimeProcessEnvironment({ appVersion: '1.2.3' }, {}).ELECTRON_RUN_AS_NODE).toBe('1');
   });
 
   it('fails closed when a packaged runtime has no bundled rg path', () => {
     expect(() => runtimeProcessEnvironment(
-      { requireBundledRipgrep: true },
+      { appVersion: '1.2.3', requireBundledRipgrep: true },
       { PATH: '' },
     )).toThrow('Bundled ripgrep is required');
   });
@@ -150,6 +151,7 @@ describe('runtime host packaging paths', () => {
     } as unknown as WebContents;
     const host = new RuntimeHost({
       appRoot: '/tmp/setsuna',
+      appVersion: '1.2.3',
       dataDir: '/tmp/setsuna-data',
       sseRetryBaseDelayMs: 1,
     });
@@ -181,6 +183,7 @@ describe('runtime host packaging paths', () => {
     } as unknown as WebContents;
     const host = new RuntimeHost({
       appRoot: '/tmp/setsuna',
+      appVersion: '1.2.3',
       dataDir: '/tmp/setsuna-data',
       sseRetryBaseDelayMs: 1,
     });
@@ -223,6 +226,7 @@ describe('runtime host packaging paths', () => {
     } as unknown as WebContents;
     const host = new RuntimeHost({
       appRoot: '/tmp/setsuna',
+      appVersion: '1.2.3',
       dataDir: '/tmp/setsuna-data',
       sseRetryBaseDelayMs: 1,
     });
@@ -246,6 +250,7 @@ describe('runtime host packaging paths', () => {
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const host = new RuntimeHost({
       appRoot: '/tmp/setsuna',
+      appVersion: '1.2.3',
       dataDir: '/tmp/setsuna-data',
       runtimeRequestRetryDelayMs: 0,
     });
@@ -265,7 +270,7 @@ describe('runtime host packaging paths', () => {
       error: message, code: WORKSPACE_ENTRY_EXISTS_ERROR_CODE,
     }, { status: 409 }));
     vi.stubGlobal('fetch', fetchMock);
-    const host = new RuntimeHost({ appRoot: '/tmp/setsuna', dataDir: '/tmp/setsuna-data' });
+    const host = new RuntimeHost({ appRoot: '/tmp/setsuna', appVersion: '1.2.3', dataDir: '/tmp/setsuna-data' });
     await expect(host.request({
       path: '/v1/projects/project/entries', method: 'POST',
       body: { parentPath: '', name: 'test', type: 'directory' }, responseMode: 'feature-operation',
@@ -299,6 +304,7 @@ describe('runtime host packaging paths', () => {
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const host = new RuntimeHost({
       appRoot: '/tmp/setsuna',
+      appVersion: '1.2.3',
       dataDir: '/tmp/setsuna-data',
       runtimeRequestRetryDelayMs: 0,
     });
@@ -345,6 +351,7 @@ describe('runtime host packaging paths', () => {
     vi.stubGlobal('fetch', fetchMock);
     const host = new RuntimeHost({
       appRoot: '/tmp/setsuna',
+      appVersion: '1.2.3',
       dataDir: '/tmp/setsuna-data',
     });
 
@@ -377,7 +384,7 @@ describe('runtime host packaging paths', () => {
       size: 5,
     }), { status: 201 }));
     vi.stubGlobal('fetch', fetchMock);
-    const host = new RuntimeHost({ appRoot: '/tmp/setsuna', dataDir: '/tmp/setsuna-data' });
+    const host = new RuntimeHost({ appRoot: '/tmp/setsuna', appVersion: '1.2.3', dataDir: '/tmp/setsuna-data' });
 
     await expect(host.request({ path: RUNTIME_LOCAL_ATTACHMENT_LINK_PATH }))
       .rejects.toThrow('Runtime path is not allowed');
@@ -399,6 +406,7 @@ describe('runtime host packaging paths', () => {
     vi.stubGlobal('fetch', fetchMock);
     const host = new RuntimeHost({
       appRoot: '/tmp/setsuna',
+      appVersion: '1.2.3',
       dataDir: '/tmp/setsuna-data',
       runtimeRequestRetryDelayMs: 0,
     });
@@ -424,7 +432,7 @@ describe('runtime host packaging paths', () => {
       size: 8,
     }), { status: 201 }));
     vi.stubGlobal('fetch', fetchMock);
-    const host = new RuntimeHost({ appRoot: '/tmp/setsuna', dataDir: '/tmp/setsuna-data' });
+    const host = new RuntimeHost({ appRoot: '/tmp/setsuna', appVersion: '1.2.3', dataDir: '/tmp/setsuna-data' });
 
     await expect(host.uploadAttachment({
       name: 'guide.pdf',
@@ -448,7 +456,7 @@ describe('runtime host packaging paths', () => {
       headers: { 'Content-Type': 'image/png' },
     }));
     vi.stubGlobal('fetch', fetchMock);
-    const host = new RuntimeHost({ appRoot: '/tmp/setsuna', dataDir: '/tmp/setsuna-data' });
+    const host = new RuntimeHost({ appRoot: '/tmp/setsuna', appVersion: '1.2.3', dataDir: '/tmp/setsuna-data' });
 
     await expect(host.readAttachmentImage('thread 1', 'attachment 1')).resolves.toEqual({
       ok: true,

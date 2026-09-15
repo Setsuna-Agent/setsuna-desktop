@@ -1,5 +1,6 @@
 import { declareCapabilityProvider, requiredCapability } from '@setsuna-desktop/feature-core/capability';
 import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
+import path from 'node:path';
 import {
   defineRuntimeDependencies,
   defineRuntimeFeature,
@@ -12,12 +13,13 @@ import {
   modelProviderRuntimeHostCapability,
   modelProviderSamplingCapability,
   readModelProviderCatalog,
+  refreshModelProviderCatalog,
   readModelProviderSettings,
   updateModelProviderSettings,
 } from '../contracts/index.js';
 import { PiModelClient } from './pi-model-client.js';
 import { fetchAvailableModels, ModelDiscoveryInputError } from './model-discovery.js';
-import { createModelProviderCatalog } from './provider-catalog.js';
+import { RemoteModelCatalog } from './remote-model-catalog.js';
 
 const dependencies = defineRuntimeDependencies({
   host: requiredCapability(modelProviderRuntimeHostCapability),
@@ -29,7 +31,14 @@ export const modelProviderRuntimeFeature = defineRuntimeFeature({
   definition: modelProviderFeature,
   dependencies,
   provides: [samplingProvider],
-  setup(context) {
+  async setup(context) {
+    const catalog = new RemoteModelCatalog(
+      path.join(context.dependencies.host.dataDir, 'features', 'model-provider', 'catalog-cache'),
+      context.dependencies.host.appVersion,
+      { signal: context.scope.signal },
+    );
+    context.scope.add(() => catalog.dispose());
+    await catalog.restore();
     context.dependencies.routes.register(
       context.scope,
       copyModelProviderApiKey,
@@ -56,7 +65,18 @@ export const modelProviderRuntimeFeature = defineRuntimeFeature({
     context.dependencies.routes.register(
       context.scope,
       readModelProviderCatalog,
-      () => createModelProviderCatalog(),
+      () => catalog.snapshot(),
+    );
+    context.dependencies.routes.register(
+      context.scope,
+      refreshModelProviderCatalog,
+      async (input) => {
+        if (!catalog.providers.some((provider) => provider.id === input.catalogProviderId)) {
+          throw new FeatureOperationFailure({ code: 'INVALID_INPUT', message: 'Unknown catalog provider.', retryable: false });
+        }
+        const provider = input.providerId ? await context.dependencies.host.resolveProvider(input.providerId) : null;
+        return catalog.refresh(input.catalogProviderId, context.dependencies.host.fetchForRoute(provider?.proxyRoute), input.force);
+      },
     );
     context.dependencies.routes.register(
       context.scope,
@@ -80,6 +100,8 @@ export const modelProviderRuntimeFeature = defineRuntimeFeature({
               savedProvider,
               context.dependencies.host.fetchForRoute(input.proxyRoute ?? savedProvider?.proxyRoute),
               routeContext.signal,
+              context.dependencies.host.appVersion,
+              catalog.providers,
             ),
           };
         } catch (error) {
@@ -90,7 +112,7 @@ export const modelProviderRuntimeFeature = defineRuntimeFeature({
         }
       },
     );
-    context.provide(samplingProvider, new PiModelClient(context.dependencies.host));
+    context.provide(samplingProvider, new PiModelClient(context.dependencies.host, catalog.providers));
   },
 });
 

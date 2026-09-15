@@ -1,4 +1,5 @@
 export { modelProviderFeature } from './definition.js';
+export { defaultProviderRequestHeaders } from './request-headers.js';
 export {
   modelProviderRuntimeHostCapability,
   modelProviderSamplingCapability,
@@ -20,7 +21,8 @@ export {
   discoverModelProviderModels,
   copyModelProviderApiKey,
   readModelProviderCatalog,
+  refreshModelProviderCatalog,
   readModelProviderSettings,
   updateModelProviderSettings,
 } from './operations.js';
-export type { CopyModelProviderApiKeyInput } from './operations.js';
+export type { CopyModelProviderApiKeyInput, RefreshModelProviderCatalogInput, RefreshModelProviderCatalogResult } from './operations.js';

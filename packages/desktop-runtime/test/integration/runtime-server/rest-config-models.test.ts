@@ -2,6 +2,7 @@ import { access, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryDesktopNativeBridge } from '../../support/in-memory-secret-store.js';
+import { NativeBridgeProxyFetch } from '../../../src/adapters/network/native-bridge-proxy-fetch.js';
 import { createRuntimeServerTestHarness, type RuntimeServerTestHarness } from '../../support/runtime-server/harness.js';
 import {
   createModelListCaptureServer,
@@ -325,13 +326,69 @@ describe('runtime server REST config and model discovery', () => {
       expect(deepseek.plans[0].models.length).toBeGreaterThan(0);
       expect(JSON.stringify(catalog)).not.toContain('apiKey');
     });
+
+  it('refreshes public catalog metadata through the selected route and applies it to actual sampling', async () => {
+    const modelServer = await createOpenAiCaptureServer('feat: use refreshed model');
+    const remoteHeaders: Headers[] = [];
+    const transport = vi.spyOn(NativeBridgeProxyFetch.prototype, 'forRoute').mockReturnValue(async (input, init) => {
+      if (String(input) === 'https://pi.dev/api/models/providers/opencode-go') {
+        remoteHeaders.push(new Headers(init?.headers));
+        return Response.json([{
+          id: 'deepseek-v4.1-flash', name: 'DeepSeek V4.1 Flash', api: 'openai-completions',
+          provider: 'opencode-go', baseUrl: 'https://opencode.ai/zen/go/v1',
+          reasoning: true, input: ['text', 'image'], contextWindow: 1_000_000, maxTokens: 384_000,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          compat: { thinkingFormat: 'deepseek', supportsDeveloperRole: false },
+        }]);
+      }
+      return fetch(input, init);
+    });
+    try {
+      await harness.runtimeFetch('/v1/features/model-provider/settings', {
+        method: 'PUT', body: JSON.stringify({ activeProviderId: 'go', providers: [{
+          id: 'go', catalogProviderId: 'opencode-go', provider: 'openai-compatible', name: 'Go',
+          baseUrl: modelServer.baseUrl, apiKey: 'private-api-key', requestHeaders: { 'x-private': 'private-header' },
+          proxyRoute: { mode: 'direct' }, enabled: true, models: [],
+        }] }),
+      });
+      const result = await harness.runtimeFetch('/v1/features/model-provider/catalog/refresh', {
+        method: 'POST', body: JSON.stringify({ catalogProviderId: 'opencode-go', providerId: 'go', force: true }),
+      });
+      expect(result.error).toBeUndefined();
+      const provider = result.catalog.providers.find((item: { id: string }) => item.id === 'opencode-go');
+      expect(provider.plans.some((plan: { models: { code: string }[] }) => plan.models.some((model) => model.code === 'deepseek-v4.1-flash'))).toBe(true);
+      expect(transport).toHaveBeenCalledWith({ mode: 'direct' });
+      expect(remoteHeaders).toHaveLength(1);
+      const catalogHeaders: Record<string, string> = {};
+      remoteHeaders[0].forEach((value, name) => { catalogHeaders[name] = value; });
+      expect(catalogHeaders).toEqual({ accept: 'application/json', 'user-agent': 'setsuna-desktop/test' });
+      await harness.runtimeFetch('/v1/features/model-provider/settings', {
+        method: 'PUT', body: JSON.stringify({ providers: [{ id: 'go', models: [{
+          id: 'new-model', code: 'deepseek-v4.1-flash', name: 'DeepSeek V4.1 Flash', enabled: true,
+          thinkingEnabled: true, thinkingEfforts: ['high'], supportsImages: true,
+        }] }] }),
+      });
+      expect(await harness.runtimeFetch('/v1/features/desktop-review/commit-message', {
+        method: 'POST', body: JSON.stringify({ branch: 'master', status: ' M src/app.ts', diff: '+const updated = true;' }),
+      })).toEqual({ message: 'feat: use refreshed model' });
+      expect(await modelServer.nextBody).toMatchObject({ model: 'deepseek-v4.1-flash', thinking: { type: 'disabled' } });
+      expect(modelServer.requestHeaders[0]).toMatchObject({ authorization: 'Bearer private-api-key', 'x-private': 'private-header' });
+    } finally { await modelServer.close(); }
+  });
   
-  it('generates git commit messages through the active model', async () => {
+  it('uses editable Go header defaults from saved settings when generating commit messages', async () => {
       const modelServer = await createOpenAiCaptureServer('feat: update git controls');
       try {
-        await harness.configureOpenAiProvider('commit-message', modelServer.baseUrl);
-  
-        const result = await harness.runtimeFetch('/v1/features/desktop-review/commit-message', {
+        await harness.runtimeFetch('/v1/features/model-provider/settings', {
+          method: 'PUT',
+          body: JSON.stringify({ activeProviderId: 'go', providers: [{
+            id: 'go', name: 'Go', catalogProviderId: 'opencode-go', provider: 'openai-compatible',
+            baseUrl: modelServer.baseUrl, apiKey: 'sk-test', enabled: true,
+            models: [{ id: 'model', name: 'Model', code: 'model', enabled: true, thinkingEnabled: false, thinkingEfforts: [] }],
+          }] }),
+        });
+
+        const generate = () => harness.runtimeFetch('/v1/features/desktop-review/commit-message', {
           method: 'POST',
           body: JSON.stringify({
             branch: 'master',
@@ -339,10 +396,51 @@ describe('runtime server REST config and model discovery', () => {
             diff: 'diff --git a/src/chat.ts b/src/chat.ts\n+const changed = true;\n',
           }),
         });
+        const result = await generate();
+        await generate();
         const requestBody = await modelServer.nextBody;
   
         expect(JSON.stringify(requestBody)).toContain('src/chat.ts');
         expect(result).toEqual({ message: 'feat: update git controls' });
+        expect(modelServer.requestHeaders).toHaveLength(2);
+        for (const headers of modelServer.requestHeaders) {
+          expect(headers['user-agent']).toBe('setsuna-desktop/test');
+          expect(headers['x-opencode-session']).toMatch(/^commit_message_/u);
+        }
+        expect(modelServer.requestHeaders[0]['x-opencode-session'])
+          .not.toBe(modelServer.requestHeaders[1]['x-opencode-session']);
+
+        const saveHeaders = (requestHeaders: Record<string, string> | null) => harness.runtimeFetch('/v1/features/model-provider/settings', {
+          method: 'PUT',
+          body: JSON.stringify({ providers: [{ id: 'go', requestHeaders }] }),
+        });
+        const customHeaders = {
+          'user-agent': 'my-app/{{appVersion}}',
+          'x-opencode-session': 'custom-{{sessionId}}',
+          'x-route': 'preferred',
+        };
+        await saveHeaders(customHeaders);
+        const saved = await harness.runtimeFetch('/v1/features/model-provider/settings');
+        expect(saved.providers[0].requestHeaders).toEqual(customHeaders);
+        await generate();
+        expect(modelServer.requestHeaders.at(-1)).toMatchObject({
+          'user-agent': 'my-app/test',
+          'x-opencode-session': expect.stringMatching(/^custom-commit_message_/u),
+          'x-route': 'preferred',
+        });
+
+        await saveHeaders({});
+        await generate();
+        expect(modelServer.requestHeaders.at(-1)?.['user-agent']).toMatch(/^pi\b/u);
+        expect(modelServer.requestHeaders.at(-1)?.['x-opencode-session']).toBeUndefined();
+        expect(modelServer.requestHeaders.at(-1)?.['x-route']).toBeUndefined();
+
+        await saveHeaders(null);
+        await generate();
+        expect(modelServer.requestHeaders.at(-1)).toMatchObject({
+          'user-agent': 'setsuna-desktop/test',
+          'x-opencode-session': expect.stringMatching(/^commit_message_/u),
+        });
       } finally {
         await modelServer.close();
       }

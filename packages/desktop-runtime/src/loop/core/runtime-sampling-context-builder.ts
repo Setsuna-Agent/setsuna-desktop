@@ -259,6 +259,7 @@ export class RuntimeSamplingContextBuilder {
     const toolRouter = this.options.toolHost && toolAccess !== 'none'
       ? await RuntimeToolRouter.create({
           toolHost: this.options.toolHost,
+          pluginStore: this.options.pluginStore,
           loadedToolNames,
           orchestrator: this.options.toolExecutor.toolOrchestratorFor(toolContext, stepRuntimeConfig),
           context: toolContext,

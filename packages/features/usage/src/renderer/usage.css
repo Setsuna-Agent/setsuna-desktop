@@ -427,65 +427,9 @@
   white-space: nowrap;
 }
 
-.desktop-settings-panel .settings-usage-records__scroller {
-  min-width: 0;
-  overflow-x: auto;
-}
-
-.desktop-settings-panel .settings-usage-records table {
-  width: 100%;
-  min-width: 680px;
-  border-collapse: collapse;
-  table-layout: fixed;
-}
-
-.desktop-settings-panel .settings-usage-records th,
-.desktop-settings-panel .settings-usage-records td {
-  padding: 0 16px;
-  text-align: left;
-}
-
-.desktop-settings-panel .settings-usage-records th {
-  height: 32px;
-  color: var(--app-text-subtle);
-  background: color-mix(in srgb, var(--app-surface-muted) 54%, var(--app-surface));
-  font-size: 9px;
-  font-weight: 500;
-  line-height: 14px;
-}
-
-.desktop-settings-panel .settings-usage-records th:nth-child(1) {
-  width: 34%;
-}
-
-.desktop-settings-panel .settings-usage-records th:nth-child(2) {
-  width: 20%;
-}
-
-.desktop-settings-panel .settings-usage-records th:nth-child(3) {
-  width: 28%;
-}
-
-.desktop-settings-panel .settings-usage-records th:nth-child(4) {
-  width: 18%;
-}
-
-.desktop-settings-panel .settings-usage-records th:last-child,
-.desktop-settings-panel .settings-usage-records td:last-child {
-  text-align: right;
-}
-
-.desktop-settings-panel .settings-usage-records td {
-  height: 54px;
-  border-bottom: 1px solid var(--chat-settings-divider);
-  color: var(--app-text);
-  font-size: 10px;
-  line-height: 15px;
-  vertical-align: middle;
-}
-
-.desktop-settings-panel .settings-usage-records tbody tr:last-child td {
-  border-bottom: 0;
+.desktop-settings-panel .settings-usage-records__table {
+  --sd-table-min-width: 760px;
+  border: 0;
 }
 
 .desktop-settings-panel .settings-usage-records__model {
@@ -509,7 +453,7 @@
 .desktop-settings-panel .settings-usage-records__model strong {
   min-width: 0;
   overflow: hidden;
-  font-size: 10px;
+  font-size: inherit;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -537,7 +481,7 @@
 
 .desktop-settings-panel .settings-usage-records__tokens {
   display: block;
-  font-size: 10px;
+  font-variant-numeric: tabular-nums;
   font-weight: 500;
 }
 
@@ -546,15 +490,16 @@
   margin-top: 1px;
   overflow: hidden;
   color: var(--app-text-muted);
-  font-size: 9px;
-  line-height: 13px;
+  font-size: 11px;
+  line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .desktop-settings-panel .settings-usage-records time {
   color: var(--app-text-muted);
-  font-size: 9px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
@@ -566,36 +511,6 @@
   min-height: 40px;
   padding: 7px 16px;
   border-top: 1px solid var(--chat-settings-divider);
-}
-
-.desktop-settings-panel .settings-usage-records__pagination button {
-  display: inline-grid;
-  width: 27px;
-  height: 27px;
-  padding: 0;
-  place-items: center;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-sm);
-  color: var(--app-text-muted);
-  background: var(--app-surface);
-  font: inherit;
-  cursor: pointer;
-}
-
-.desktop-settings-panel .settings-usage-records__pagination button:hover:not(:disabled) {
-  color: var(--app-text);
-  background: var(--app-surface-muted);
-}
-
-.desktop-settings-panel .settings-usage-records__pagination button:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.desktop-settings-panel .settings-usage-records__pagination button span {
-  font-size: 17px;
-  line-height: 1;
-  transform: translateY(-1px);
 }
 
 .desktop-settings-panel .settings-usage-records__pagination > span {

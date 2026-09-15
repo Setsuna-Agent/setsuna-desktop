@@ -1,14 +1,15 @@
-import { Button } from '@setsuna-desktop/renderer-ui';
+import { IconButton } from '@setsuna-desktop/renderer-ui';
 import type {
   RuntimeUsageRecord,
 } from '@setsuna-desktop/contracts';
 import { useEffect, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type {
   RuntimeUsageQuery,
   RuntimeUsageResponse,
   UsageProviderDescriptor,
 } from '../../contracts/index.js';
-import { formatTokens, tokensExcludingCache, uncachedInputTokens } from './usage-format.js';
+import { UsageRecordsTable } from './UsageRecordsTable.js';
 import { useUsageView } from './view-context.js';
 
 type UsageRecentCallsProps = {
@@ -28,19 +29,12 @@ export function UsageRecentCalls({
   totalRecordCount,
   onQueryUsage,
 }: UsageRecentCallsProps) {
-  const { host: { BrandIcon }, locale, translate: t, ui: { EmptyState } } = useUsageView();
+  const { translate: t } = useUsageView();
   const [page, setPage] = useState(1);
   const [pageRecords, setPageRecords] = useState(() => records.slice(0, PAGE_SIZE));
   const [pageLoading, setPageLoading] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
   const requestVersionRef = useRef(0);
-  const usageTimestampFormatter = new Intl.DateTimeFormat(locale, {
-    day: '2-digit',
-    hour: '2-digit',
-    hour12: false,
-    minute: '2-digit',
-    month: '2-digit',
-  });
   const totalPages = Math.max(1, Math.ceil(totalRecordCount / PAGE_SIZE));
 
   useEffect(() => {
@@ -88,92 +82,35 @@ export function UsageRecentCalls({
         </div>
         <span className="settings-usage-card__count">{totalRecordCount ? t('feature.usage.totalCalls', { count: totalRecordCount }) : t('feature.usage.noRecords')}</span>
       </header>
-      {pageRecords.length ? (
-        <div className="settings-usage-records__scroller">
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">{t('feature.usage.model')}</th>
-                <th scope="col">{t('feature.usage.provider')}</th>
-                <th scope="col">{t('feature.usage.totalTokens')}</th>
-                <th scope="col">{t('feature.usage.callTime')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pageRecords.map((record) => (
-                <tr key={record.id}>
-                  <td>
-                    <div className="settings-usage-records__model">
-                      <span className="settings-usage-records__model-icon">
-                        <BrandIcon
-                          kind="model"
-                          name={record.model ?? ''}
-                          providerId={record.providerId}
-                          providerName={record.provider}
-                          providers={providers}
-                        />
-                      </span>
-                      <strong title={record.model}>{record.model || t('feature.usage.unknownModel')}</strong>
-                    </div>
-                  </td>
-                  <td>
-                    <span className="settings-usage-records__provider" title={record.provider}>
-                      <BrandIcon
-                        kind="provider"
-                        name={record.provider ?? ''}
-                        providerId={record.providerId}
-                        providers={providers}
-                      />
-                      <span>{record.provider || t('feature.usage.unknownProvider')}</span>
-                    </span>
-                  </td>
-                  <td>
-                    <strong className="settings-usage-records__tokens" title={t('feature.usage.rawTotal', { tokens: formatTokens(record.totalTokens ?? 0) })}>{formatTokens(tokensExcludingCache(record))}</strong>
-                    <small>{t('feature.usage.tokenDetails', {
-                      input: formatTokens(uncachedInputTokens(record)),
-                      cache: formatTokens(record.cachedInputTokens ?? 0),
-                      output: formatTokens(record.outputTokens ?? 0),
-                    })}</small>
-                    {record.requestCount !== undefined ? <small>{t('feature.usage.callCount', { count: record.requestCount })}</small> : null}
-                  </td>
-                  <td><time dateTime={record.createdAt}>{formatUsageTimestamp(record.createdAt, usageTimestampFormatter)}</time></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <EmptyState title={t('feature.usage.empty')} />
-      )}
+      <UsageRecordsTable providers={providers} records={pageRecords} loading={pageLoading} />
       {totalPages > 1 ? (
         <footer className="settings-usage-records__pagination" aria-label={t('feature.usage.pagination')}>
           {pageError ? (
             <span className="settings-usage-records__pagination-error" role="alert">{pageError}</span>
           ) : null}
-          <Button variant="ghost"
-            aria-label={t('feature.usage.previousPage')}
+          <IconButton
+            label={t('feature.usage.previousPage')}
+            size="small"
+            variant="secondary"
             disabled={page === 1 || pageLoading}
             type="button"
             onClick={() => void loadPage(page - 1)}
           >
-            <span aria-hidden="true">‹</span>
-          </Button>
+            <ChevronLeft aria-hidden="true" />
+          </IconButton>
           <span aria-live="polite">{t('feature.usage.pageStatus', { page, total: totalPages })}</span>
-          <Button variant="ghost"
-            aria-label={t('feature.usage.nextPage')}
+          <IconButton
+            label={t('feature.usage.nextPage')}
+            size="small"
+            variant="secondary"
             disabled={page === totalPages || pageLoading}
             type="button"
             onClick={() => void loadPage(page + 1)}
           >
-            <span aria-hidden="true">›</span>
-          </Button>
+            <ChevronRight aria-hidden="true" />
+          </IconButton>
         </footer>
       ) : null}
     </section>
   );
-}
-
-function formatUsageTimestamp(value: string, formatter: Intl.DateTimeFormat): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : formatter.format(date);
 }

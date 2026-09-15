@@ -36,6 +36,7 @@ import { readRuntimeProgressResponse } from './runtime-progress-response.js';
 
 type RuntimeHostOptions = {
   appRoot: string;
+  appVersion: string;
   browserControl?: BrowserControlConnection;
   nativeBridge?: {
     token: string;
@@ -664,6 +665,7 @@ export function resolveRuntimeNodeExecutable(
 
 export function runtimeProcessEnvironment(
   options: Pick<RuntimeHostOptions,
+    | 'appVersion'
     | 'ripgrepPath'
     | 'requireBundledRipgrep'
   >,
@@ -672,6 +674,7 @@ export function runtimeProcessEnvironment(
   const env = desktopProcessEnvironment(baseEnv);
   // 主 App 和 macOS Helper 都必须显式进入 Node 模式，否则会启动 Electron 桌面实例。
   env.ELECTRON_RUN_AS_NODE = '1';
+  env.SETSUNA_DESKTOP_APP_VERSION = options.appVersion;
   if (options.requireBundledRipgrep && !options.ripgrepPath) {
     throw new Error('Bundled ripgrep is required for the packaged runtime.');
   }

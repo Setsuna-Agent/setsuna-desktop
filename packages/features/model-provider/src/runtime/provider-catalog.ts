@@ -92,8 +92,8 @@ const SUPPORTED_PROVIDER_FACTORIES = Object.freeze([
 
 let supportedProvidersCache: readonly Provider[] | undefined;
 
-export function createModelProviderCatalog(): ModelProviderCatalog {
-  const providers = supportedProviders().flatMap((runtimeProvider) => {
+export function createModelProviderCatalog(source: readonly Provider[] = supportedProviders()): ModelProviderCatalog {
+  const providers = source.flatMap((runtimeProvider) => {
     if (!runtimeProvider.auth.apiKey) return [];
 
     const plansByKey = new Map<string, { api: keyof typeof API_KIND; baseUrl: string; models: Model<Api>[] }>();
@@ -124,20 +124,21 @@ export function createModelProviderCatalog(): ModelProviderCatalog {
   return { providers };
 }
 
-export function getBuiltinCatalogModel(providerId: string, modelId: string): Model<Api> | undefined {
-  return getBuiltinCatalogProvider(providerId)?.getModels().find((model) => model.id === modelId);
+export function getBuiltinCatalogModel(providerId: string, modelId: string, source?: readonly Provider[]): Model<Api> | undefined {
+  return getBuiltinCatalogProvider(providerId, source)?.getModels().find((model) => model.id === modelId);
 }
 
-export function getBuiltinCatalogProvider(providerId: string): Provider | undefined {
-  return supportedProviders().find((provider) => provider.id === providerId);
+export function getBuiltinCatalogProvider(providerId: string, source: readonly Provider[] = supportedProviders()): Provider | undefined {
+  return source.find((provider) => provider.id === providerId);
 }
 
 /** Preserve an explicit custom-service choice while still migrating legacy records without catalog identity. */
 export function builtinCatalogProviderIdForConfig(
   provider: Pick<ModelProviderRuntimeConfig, 'baseUrl' | 'catalogProviderId' | 'provider'>,
+  source?: readonly Provider[],
 ): string | undefined {
   if (provider.catalogProviderId === null) return undefined;
-  return provider.catalogProviderId ?? inferBuiltinCatalogProviderId(provider);
+  return provider.catalogProviderId ?? inferBuiltinCatalogProviderId(provider, source);
 }
 
 /**
@@ -146,10 +147,11 @@ export function builtinCatalogProviderIdForConfig(
  */
 export function inferBuiltinCatalogProviderId(
   provider: Pick<ModelProviderRuntimeConfig, 'baseUrl' | 'provider'>,
+  source: readonly Provider[] = supportedProviders(),
 ): string | undefined {
   const api = KIND_API[provider.provider];
   const baseUrl = normalizeBaseUrl(provider.baseUrl);
-  const matches = supportedProviders().filter((candidate) => (
+  const matches = source.filter((candidate) => (
     candidate.getModels().some((model) => (
       model.api === api && normalizeBaseUrl(model.baseUrl) === baseUrl
     ))
@@ -157,7 +159,7 @@ export function inferBuiltinCatalogProviderId(
   return matches.length === 1 ? matches[0]?.id : undefined;
 }
 
-function supportedProviders(): readonly Provider[] {
+export function supportedProviders(): readonly Provider[] {
   supportedProvidersCache ??= Object.freeze(SUPPORTED_PROVIDER_FACTORIES.map((factory) => factory()));
   return supportedProvidersCache;
 }

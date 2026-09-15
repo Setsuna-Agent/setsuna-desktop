@@ -6,6 +6,24 @@ import { describe, expect, it } from 'vitest';
 import { FileConfigStore } from '../../../src/adapters/store/file-config-store.js';
 
 describe('file config store', () => {
+  it('persists request header overrides, distinguishes disabled presets from resets, and rejects invalid updates atomically', async () => {
+    const store = new FileConfigStore(await mkdtemp(path.join(tmpdir(), 'setsuna-config-headers-')));
+    const requestHeaders = { 'User-Agent': 'my-client/{{appVersion}}', 'X-Session': '{{sessionId}}' };
+    await store.saveConfig({ providers: [{ id: 'go', catalogProviderId: 'opencode-go', requestHeaders }] });
+    await store.saveConfig({ providers: [{ id: 'go', name: 'Renamed' }] });
+    expect((await store.getProviderConfig('go'))?.requestHeaders).toEqual({
+      'user-agent': 'my-client/{{appVersion}}', 'x-session': '{{sessionId}}',
+    });
+    await expect(store.saveConfig({ providers: [{ id: 'go', requestHeaders: { 'x-test': 'bad\r\ninjected: value' } }] }))
+      .rejects.toThrow('Invalid HTTP header value');
+    expect((await store.getConfig()).providers[0].requestHeaders?.['user-agent']).toBe('my-client/{{appVersion}}');
+
+    await store.saveConfig({ providers: [{ id: 'go', requestHeaders: {} }] });
+    expect((await store.getProviderConfig('go'))?.requestHeaders).toEqual({});
+    await store.saveConfig({ providers: [{ id: 'go', requestHeaders: null }] });
+    expect((await store.getProviderConfig('go'))?.requestHeaders).toBeUndefined();
+  });
+
   it('enables workspace sandbox networking by default', async () => {
     const store = new FileConfigStore(await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-')));
 

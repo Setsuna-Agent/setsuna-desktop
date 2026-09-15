@@ -5,6 +5,31 @@ import type { ModelProviderClient } from '../../src/renderer/client.js';
 import { ModelProviderRendererStateService } from '../../src/renderer/service.js';
 
 describe('ModelProviderRendererStateService', () => {
+  it('refreshes catalog metadata without overwriting staged settings and ignores older refresh responses', async () => {
+    const state = stateFixture();
+    const oldResponse = deferred<{ catalog: { providers: [] } }>();
+    const newResponse = deferred<{ catalog: { providers: []; generatedAt: number } }>();
+    const client: ModelProviderClient = {
+      copyApiKey: async () => ({ ok: true }), read: async () => state, catalog: async () => ({ providers: [] }),
+      discover: async () => ({ models: [] }), save: vi.fn(async () => state),
+      refreshCatalog: vi.fn().mockImplementationOnce(() => oldResponse.promise).mockImplementationOnce(() => newResponse.promise),
+    };
+    const service = new ModelProviderRendererStateService(client, null);
+    await service.refresh();
+    const first = service.refreshCatalog({ catalogProviderId: 'deepseek' });
+    const second = service.refreshCatalog({ catalogProviderId: 'opencode-go', force: true });
+    const edited = { ...state, providers: state.providers.map((provider) => ({ ...provider, name: 'Unsaved' })) };
+    service.stage(inputFromState(edited, 'draft-secret'), edited);
+    newResponse.resolve({ catalog: { providers: [], generatedAt: 2 } });
+    await second;
+    oldResponse.resolve({ catalog: { providers: [] } });
+    await first;
+    expect(service.snapshot().catalog?.generatedAt).toBe(2);
+    expect(service.snapshot().state).toEqual(edited);
+    expect(client.save).not.toHaveBeenCalled();
+    service.dispose();
+  });
+
   it('serializes settings flushes and chat model selection against the latest staged provider state', async () => {
     const initial = stateFixture();
     const saves: ModelProviderSettingsInput[] = [];
@@ -12,6 +37,7 @@ describe('ModelProviderRendererStateService', () => {
     const client: ModelProviderClient = {
       copyApiKey: async () => ({ ok: true }),
       catalog: async () => ({ providers: [] }),
+      refreshCatalog: async () => ({ catalog: { providers: [] } }),
       discover: async () => ({ models: [] }),
       read: async () => initial,
       save: vi.fn(async (input) => {
@@ -23,7 +49,7 @@ describe('ModelProviderRendererStateService', () => {
     await service.refresh();
     const edited = {
       ...initial,
-      providers: initial.providers.map((provider) => ({ ...provider, name: 'Edited provider' })),
+      providers: initial.providers.map((provider) => ({ ...provider, name: 'Edited provider', requestHeaders: { 'x-route': 'custom' } })),
     };
     service.stage(inputFromState(edited, 'new-secret'), edited);
 
@@ -39,6 +65,7 @@ describe('ModelProviderRendererStateService', () => {
       providers: [{
         name: 'Edited provider',
         apiKey: 'new-secret',
+        requestHeaders: { 'x-route': 'custom' },
         models: [
           { id: 'model-a', enabled: false },
           { id: 'model-b', enabled: true },
@@ -94,6 +121,7 @@ function stateFromInput(input: ModelProviderSettingsInput): ModelProviderSetting
       provider: provider.provider!,
       baseUrl: provider.baseUrl!,
       enabled: provider.enabled ?? true,
+      requestHeaders: provider.requestHeaders ?? undefined,
       apiKeySet: Boolean(provider.apiKey),
       apiKeyPreview: provider.apiKey ? 'sk-••••' : '',
       models: provider.models ?? [],

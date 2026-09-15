@@ -10,7 +10,7 @@ import {
   type RuntimeReviewFinding,
 } from '@setsuna-desktop/contracts';
 import type { DesktopReviewSource } from '@setsuna-desktop/feature-review/contracts';
-import { Bug, FileDiff, FolderOpen, GitBranch, MessageSquare, Search, SquareTerminal } from 'lucide-react';
+import { Bug, FileDiff, FolderOpen, Folders, GitBranch, MessageSquare, Search, SquareTerminal } from 'lucide-react';
 import {
   lazy,
   Suspense,
@@ -352,7 +352,10 @@ export function WorkspacePanel({
             onOpenFile={onOpenProjectFile}
           />
         ) : (
-          <EmptyState title={t('workspace.files.noneOpen')} body={t('workspace.files.noneOpenDescription')} />
+          <div className="desktop-editor__empty">
+            <Folders size={28} strokeWidth={1.75} aria-hidden="true" />
+            <EmptyState title={t('workspace.files.noneOpen')} body={t('workspace.files.noneOpenDescription')} />
+          </div>
         )}
       </section>
     );

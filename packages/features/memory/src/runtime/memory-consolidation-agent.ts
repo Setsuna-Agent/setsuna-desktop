@@ -22,6 +22,7 @@ export type MemoryConsolidationAgentResult = {
 
 export type RunMemoryConsolidationAgentInput = {
   streamModel: MemoryRuntimeHost['streamModel'];
+  sessionId: string;
   model?: string;
   providerId?: string;
   root: string;
@@ -79,6 +80,7 @@ async function runMemoryConsolidationRollout(
     const assistantId = `memory_consolidation_assistant_${rounds}`;
     const { text, toolCalls, usage: roundUsage } = await runConsolidationModelRound({
       streamModel: input.streamModel,
+      sessionId: input.sessionId,
       model: input.model,
       providerId: input.providerId,
       messages,
@@ -253,6 +255,7 @@ class MemoryConsolidationToolHost {
 
 async function runConsolidationModelRound(input: {
   streamModel: MemoryRuntimeHost['streamModel'];
+  sessionId: string;
   model?: string;
   providerId?: string;
   messages: RuntimeMessage[];
@@ -261,6 +264,7 @@ async function runConsolidationModelRound(input: {
 }): Promise<{ text: string; toolCalls: RuntimeToolCall[]; usage?: RuntimeUsage }> {
   const request: ModelRequest = {
     model: input.model?.trim() || MEMORY_CONSOLIDATION_MODEL,
+    sessionId: input.sessionId,
     providerId: input.providerId,
     messages: input.messages,
     tools: input.tools,

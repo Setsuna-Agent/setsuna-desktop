@@ -3,23 +3,27 @@
   min-width: 0;
 }
 
+.sd-file-tree {
+  --sd-file-tree-indent: 16px;
+}
+
 .sd-file-tree__row {
   position: relative;
   isolation: isolate;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   width: 100%;
   min-width: 0;
-  height: 36px;
-  padding: 0 8px 0 calc(8px + var(--sd-file-tree-depth) * 18px);
+  height: 26px;
+  padding: 0 6px 0 calc(6px + var(--sd-file-tree-depth) * var(--sd-file-tree-indent));
   border: 0;
   border-radius: 8px;
   color: var(--app-text-muted);
   background: transparent;
   font-family: var(--app-font-family);
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 12px;
+  line-height: 18px;
   font-weight: 400;
   text-align: left;
   cursor: pointer;
@@ -59,9 +63,10 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  left: calc(16px + (var(--sd-file-tree-depth) - 1) * 18px);
-  width: 1px;
-  background: var(--app-border);
+  left: 14px;
+  width: calc(var(--sd-file-tree-depth) * var(--sd-file-tree-indent));
+  /* 每行延续所有祖先层级的引导线，避免展开子目录后外层线段中断。 */
+  background: repeating-linear-gradient(to right, var(--app-border) 0 1px, transparent 1px var(--sd-file-tree-indent));
   transform-origin: top;
   pointer-events: none;
 }
@@ -74,13 +79,6 @@
   flex-shrink: 0;
   width: 16px;
   height: 16px;
-}
-
-.sd-file-tree__folder {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
 }
 
 .sd-file-tree__label {

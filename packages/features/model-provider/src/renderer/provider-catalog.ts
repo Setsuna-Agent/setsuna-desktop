@@ -4,11 +4,12 @@ import {
   type ProviderConfigState,
   type ProviderModelConfig,
 } from '@setsuna-desktop/contracts';
-import type {
-  ModelProviderCatalog,
-  ModelProviderCatalogModel,
-  ModelProviderCatalogPlan,
-  ModelProviderCatalogProvider,
+import {
+  defaultProviderRequestHeaders,
+  type ModelProviderCatalog,
+  type ModelProviderCatalogModel,
+  type ModelProviderCatalogPlan,
+  type ModelProviderCatalogProvider,
 } from '../contracts/index.js';
 
 export const CUSTOM_PROVIDER_ID = '__custom__';
@@ -55,6 +56,7 @@ export function selectCatalogProvider(
   return {
     ...provider,
     catalogProviderId: catalogProvider.id,
+    requestHeaders: undefined,
     name: catalogProvider.name,
     provider: plan.provider,
     baseUrl: plan.baseUrl,
@@ -78,9 +80,11 @@ export function selectCatalogPlan(
 
 export function detachCatalogProvider(provider: ProviderConfigState): ProviderConfigState {
   // Custom mode unlocks the existing connection; it does not switch services.
+  const requestHeaders = provider.requestHeaders ?? defaultProviderRequestHeaders(provider.catalogProviderId);
   return {
     ...provider,
     catalogProviderId: null,
+    ...(Object.keys(requestHeaders).length ? { requestHeaders: { ...requestHeaders } } : {}),
   };
 }
 
@@ -133,7 +137,11 @@ export function createProvider(catalog: ModelProviderCatalog): ProviderConfigSta
 }
 
 export function cloneProvider(provider: ProviderConfigState): ProviderConfigState {
-  return { ...provider, models: provider.models.map((model) => ({ ...model })) };
+  return {
+    ...provider,
+    ...(provider.requestHeaders !== undefined ? { requestHeaders: { ...provider.requestHeaders } } : {}),
+    models: provider.models.map((model) => ({ ...model })),
+  };
 }
 
 function inferCatalogProvider(
@@ -143,7 +151,6 @@ function inferCatalogProvider(
   const matching = catalog.providers.filter((candidate) => candidate.plans.some((plan) => (
     plan.provider === provider.provider
     && normalizeBaseUrl(plan.baseUrl) === normalizeBaseUrl(provider.baseUrl)
-    && provider.models.every((model) => plan.models.some((catalogModel) => catalogModel.code === model.code))
   )));
   return matching.length === 1 ? matching[0] : undefined;
 }

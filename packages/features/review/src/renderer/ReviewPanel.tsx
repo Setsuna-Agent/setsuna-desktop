@@ -475,7 +475,7 @@ export function DesktopReviewPanel({
         />
       ) : (
         <Virtualizer
-          className="desktop-review-panel__sections"
+          className={`desktop-review-panel__sections${hasReviewFiles ? '' : ' desktop-review-panel__sections--empty'}`}
           contentClassName="desktop-review-panel__sections-content"
         >
           <ReviewSummarySection

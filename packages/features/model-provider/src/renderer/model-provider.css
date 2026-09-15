@@ -502,6 +502,33 @@
   grid-column: 1 / -1;
 }
 
+.model-provider-settings__request-headers {
+  grid-column: 1 / -1;
+}
+
+.model-provider-settings__request-headers-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--app-text-secondary);
+  font-size: 11px;
+}
+
+.model-provider-settings__request-headers textarea {
+  font-family: monospace;
+  resize: vertical;
+}
+
+.model-provider-settings__request-headers small {
+  color: var(--app-text-secondary);
+  line-height: 1.5;
+}
+
+.model-provider-settings__request-headers [role='alert'] {
+  color: var(--app-danger);
+}
+
 .model-provider-settings__field > span,
 .model-provider-settings__field > label {
   display: inline-flex;

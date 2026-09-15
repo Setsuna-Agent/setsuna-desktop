@@ -5,6 +5,7 @@ import type {
   RuntimeMessage,
   RuntimeUsage,
 } from '@setsuna-desktop/contracts';
+import { randomUUID } from 'node:crypto';
 import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
 import type { FeatureScope } from '@setsuna-desktop/feature-core/scope';
 import type {
@@ -121,7 +122,7 @@ export class RuntimeVisionRecognitionService implements VisionRecognitionService
         name: 'vision-recognition-test.png',
         mimeType: 'image/png',
         data: Buffer.from(TEST_IMAGE_BASE64, 'base64'),
-      }, operationSignal);
+      }, `vision_test_${randomUUID()}`, operationSignal);
       return Object.freeze({
         content,
         durationMs: Math.max(0, this.host.now().getTime() - startedAt),
@@ -145,6 +146,7 @@ export class RuntimeVisionRecognitionService implements VisionRecognitionService
         selection,
         prompt,
         image,
+        context.threadId,
         operationSignal,
         context.turnId ? { threadId: context.threadId, turnId: context.turnId } : undefined,
       );
@@ -236,6 +238,7 @@ export class RuntimeVisionRecognitionService implements VisionRecognitionService
     selection: AppliedVisionModel,
     prompt: string,
     image: VisionRecognitionResolvedImage,
+    sessionId: string,
     signal?: AbortSignal,
     usageContext?: Readonly<{ threadId: string; turnId: string }>,
   ): Promise<string> {
@@ -243,6 +246,7 @@ export class RuntimeVisionRecognitionService implements VisionRecognitionService
     try {
       result = await this.host.generateText({
         providerId: selection.reference.providerId,
+        sessionId,
         model: selection.model.code,
         messages: [visionRequestMessage(prompt, image, this.host.now())],
         maxOutputTokens: Math.min(selection.model.maxOutputTokens, MAX_OUTPUT_TOKENS),

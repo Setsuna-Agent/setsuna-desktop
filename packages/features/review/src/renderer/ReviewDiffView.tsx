@@ -2,7 +2,7 @@ import { Button } from '@setsuna-desktop/renderer-ui';
 import type { DiffLineAnnotation } from '@pierre/diffs/react';
 import type { RuntimeReviewFinding } from '@setsuna-desktop/contracts';
 import type { DesktopWorkspaceApp } from '@setsuna-desktop/feature-workspace-apps/contracts';
-import { Code2, PanelRightOpen } from 'lucide-react';
+import { Code2, FileDiff, PanelRightOpen } from 'lucide-react';
 import {
   useCallback,
   useEffect,
@@ -198,9 +198,12 @@ export function ReviewSummarySection({
           ))}
         </div>
       ) : (
-        <div className="desktop-review-empty desktop-review-empty--panel">
-          <strong>{emptyText.title}</strong>
-          <span>{emptyText.description}</span>
+        <div className="desktop-review-empty">
+          <FileDiff size={28} strokeWidth={1.75} aria-hidden="true" />
+          <div className="desktop-review-empty__copy">
+            <strong>{emptyText.title}</strong>
+            <span>{emptyText.description}</span>
+          </div>
         </div>
       )}
     </section>

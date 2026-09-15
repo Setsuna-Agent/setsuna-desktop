@@ -2,6 +2,15 @@
   height: min(520px, calc(100vh - 64px));
 }
 
+/* Keep spacing inside the search controls so the list scrollbar reaches the dialog edge. */
+.desktop-agent-search-popover:has(.sd-dialog__header.sd-visually-hidden) > .sd-dialog__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
 .desktop-agent-search-popover__input {
   display: flex;
   flex: 0 0 36px;
@@ -9,6 +18,7 @@
   gap: 8px;
   height: 36px;
   min-height: 36px;
+  margin: 12px 12px 0;
   padding: 0 10px;
   border-radius: var(--app-radius-md);
   color: var(--app-text-muted);
@@ -25,6 +35,7 @@
   box-shadow: none;
   min-width: 0;
   width: 100%;
+  padding: 0;
   border: 0;
   outline: 0;
   color: var(--app-text);
@@ -38,12 +49,12 @@
 
 .desktop-agent-search-popover__heading {
   display: flex;
-  flex: 0 0 30px;
+  flex: 0 0 28px;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  height: 30px;
-  padding: 0 2px;
+  height: 28px;
+  padding: 0 22px;
   color: var(--app-text-muted);
   font-size: 12px;
   line-height: 16px;
@@ -62,6 +73,7 @@
 .desktop-agent-search-popover__list {
   flex: 1 1 auto;
   min-height: 0;
+  padding: 0 12px 12px;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -71,16 +83,15 @@
   display: flex;
   align-items: center;
   height: 40px;
-  padding: 0 12px;
+  padding: 0 10px;
   color: var(--app-text-muted);
   font-size: 13px;
 }
 
 .desktop-agent-search-result {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) minmax(54px, max-content);
+  display: flex;
   align-items: center;
-  column-gap: 6px;
+  gap: 8px;
   width: 100%;
   min-width: 0;
   min-height: 32px;
@@ -108,15 +119,16 @@
 
 .desktop-agent-search-result__status {
   display: inline-flex;
+  flex: 0 0 13px;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  height: 16px;
   color: var(--app-text-muted);
 }
 
 .desktop-agent-search-result__main {
   display: flex;
+  flex: 1 1 auto;
   min-width: 0;
   flex-direction: column;
   justify-content: center;
@@ -146,11 +158,9 @@
 }
 
 .desktop-agent-search-result__source {
-  justify-self: end;
+  flex: 0 0 auto;
   max-width: 160px;
   color: var(--app-text-muted);
   font-size: 12px;
   line-height: 16px;
 }
-
-.desktop-agent-search-popover > .sd-dialog__body { display: flex; flex-direction: column; height: 100%; }

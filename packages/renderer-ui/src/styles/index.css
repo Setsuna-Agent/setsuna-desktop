@@ -11,6 +11,7 @@
 @import './menu-motion.css';
 @import './file-tree.css';
 @import './wheel-picker.css';
+@import './table.css';
 
 /* Every shared surface inherits the host's single semantic palette. */
 

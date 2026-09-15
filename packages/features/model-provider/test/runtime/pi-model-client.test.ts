@@ -7,6 +7,131 @@ import type {
 import { PiModelClient } from '../../src/runtime/pi-model-client.js';
 
 describe('Pi model client protocol integration', () => {
+  it.each([
+    ['openai-compatible', openAiCompletionsSse],
+    ['anthropic', anthropicSse],
+    ['openai-responses', responsesSse],
+  ] as const)('lets custom headers override SDK authentication and identity for %s', async (kind, sse) => {
+    const capture = captureFetch(sse());
+    const client = new PiModelClient(host({
+      ...providerFixture(kind), apiKey: '', catalogProviderId: 'opencode-go',
+      requestHeaders: {
+        'User-Agent': 'my-client/{{appVersion}}',
+        'x-opencode-session': 'my-{{sessionId}}',
+        'X-Route': 'custom-route',
+        [kind === 'anthropic' ? 'x-api-key' : 'Authorization']: 'custom-credential',
+      },
+    }, capture.fetch));
+    await collect(client.stream(requestFixture({ sessionId: 'thread-1' })));
+    expect(capture.headers().get('user-agent')).toBe('my-client/1.2.3');
+    expect(capture.headers().get('x-opencode-session')).toBe('my-thread-1');
+    expect(capture.headers().get('x-route')).toBe('custom-route');
+    expect(capture.headers().get(kind === 'anthropic' ? 'x-api-key' : 'authorization')).toBe('custom-credential');
+  });
+
+  it('allows an empty header configuration to disable the Go preset', async () => {
+    const capture = captureFetch(openAiCompletionsSse());
+    const client = new PiModelClient(host({
+      ...providerFixture('openai-compatible'), catalogProviderId: 'opencode-go', requestHeaders: {},
+    }, capture.fetch));
+    await collect(client.stream(requestFixture({ sessionId: 'thread-1' })));
+    expect(capture.headers().get('user-agent')).toMatch(/^pi\b/u);
+    expect(capture.headers().get('x-opencode-session')).toBeNull();
+  });
+
+  it.each([
+    ['openai-compatible', openAiCompletionsSse, '/chat/completions'],
+    ['anthropic', anthropicSse, '/messages'],
+    ['openai-responses', responsesSse, '/responses'],
+  ] as const)('sends Go identity through %s for conversation and auxiliary requests', async (kind, sse, endpoint) => {
+    const headers: Headers[] = [];
+    const capture = captureFetch(sse());
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      headers.push(new Headers(init?.headers));
+      return capture.fetch(input, init);
+    };
+    const client = new PiModelClient(host({
+      ...providerFixture(kind),
+      catalogProviderId: 'opencode-go',
+      baseUrl: 'https://opencode.ai/zen/go/v1',
+    }, fetch));
+
+    // Concurrent conversations stay separate; later turns and auxiliary calls retain identity.
+    await Promise.all([
+      collect(client.stream(requestFixture({ stepSnapshot: stepSnapshotFixture('thread-1', 'turn-1') }))),
+      collect(client.stream(requestFixture({ stepSnapshot: stepSnapshotFixture('thread-1', 'turn-2') }))),
+      collect(client.stream(requestFixture({ sessionId: 'thread-1' }))),
+      collect(client.stream(requestFixture({ sessionId: 'thread-2' }))),
+      collect(client.stream(requestFixture({ sessionId: 'explicit', stepSnapshot: stepSnapshotFixture('ignored', 'turn-3') }))),
+    ]);
+
+    expect(new URL(capture.url()).pathname).toBe(`/zen/go/v1${endpoint}`);
+    expect(headers.map((item) => item.get('x-opencode-session')).sort())
+      .toEqual(['explicit', 'thread-1', 'thread-1', 'thread-1', 'thread-2']);
+    for (const item of headers) {
+      expect(item.get('user-agent')).toBe('setsuna-desktop/1.2.3');
+      expect(item.get(kind === 'anthropic' ? 'x-api-key' : 'authorization'))
+        .toBe(kind === 'anthropic' ? 'secret' : 'Bearer secret');
+    }
+  });
+
+  it('preserves the Go session when a compatibility retry changes the request payload', async () => {
+    const headers: Headers[] = [];
+    const fetch: typeof globalThis.fetch = async (_input, init) => {
+      headers.push(new Headers(init?.headers));
+      return headers.length === 1
+        ? providerValidationError('response_format json_schema is not supported')
+        : new Response(openAiCompletionsSse(), { headers: { 'Content-Type': 'text/event-stream' } });
+    };
+    const client = new PiModelClient(host({
+      ...providerFixture('openai-compatible'),
+      // Legacy configs recover identity through their exact catalog endpoint.
+      baseUrl: 'https://opencode.ai/zen/go/v1',
+    }, fetch));
+
+    await collect(client.stream(requestFixture({
+      sessionId: 'retry-thread',
+      responseFormat: { type: 'json', schema: { type: 'object', properties: { answer: { type: 'string' } } } },
+    })));
+
+    expect(headers).toHaveLength(2);
+    expect(headers.map((item) => item.get('x-opencode-session'))).toEqual(['retry-thread', 'retry-thread']);
+    expect(headers.every((item) => item.get('user-agent') === 'setsuna-desktop/1.2.3')).toBe(true);
+  });
+
+  it.each([
+    { catalogProviderId: null, baseUrl: 'https://opencode.ai/zen/go/v1' },
+    { catalogProviderId: undefined, baseUrl: 'https://api.openai.test/v1' },
+  ])('keeps SDK identity for non-Go and explicitly custom providers: $baseUrl', async (config) => {
+    const capture = captureFetch(openAiCompletionsSse());
+    const client = new PiModelClient(host({ ...providerFixture('openai-compatible'), ...config }, capture.fetch));
+    await collect(client.stream(requestFixture({ sessionId: 'custom-thread' })));
+    expect(capture.headers().get('x-opencode-session')).toBeNull();
+    expect(capture.headers().get('user-agent')).toMatch(/^pi\b/u);
+  });
+
+  it.each([undefined, {
+    'user-agent': 'custom/{{appVersion}}',
+    'x-opencode-session': 'custom-{{sessionId}}',
+  }])('applies configured or default identity to native compaction: %j', async (requestHeaders) => {
+    const capture = captureFetch(JSON.stringify({ output: [{ type: 'compaction', encrypted_content: 'opaque' }] }));
+    const client = new PiModelClient(host({
+      ...providerFixture('openai-responses'),
+      catalogProviderId: 'opencode-go',
+      baseUrl: 'https://opencode.ai/zen/go/v1',
+      requestHeaders,
+    }, capture.fetch));
+
+    const result = await client.compactConversation(requestFixture({ sessionId: 'compacting-thread' }));
+
+    expect(result.kind).toBe('native');
+    expect(capture.url()).toBe('https://opencode.ai/zen/go/v1/responses/compact');
+    expect(capture.headers().get('user-agent')).toBe(requestHeaders ? 'custom/1.2.3' : 'setsuna-desktop/1.2.3');
+    expect(capture.headers().get('x-opencode-session')).toBe(requestHeaders ? 'custom-compacting-thread' : 'compacting-thread');
+    expect(capture.headers().get('authorization')).toBe('Bearer secret');
+    expect(capture.headers().get('content-type')).toBe('application/json');
+  });
+
   it('streams Anthropic Messages and injects schema output through the Pi payload hook', async () => {
     const capture = captureFetch(anthropicSse());
     const client = new PiModelClient(host(providerFixture('anthropic'), capture.fetch));
@@ -367,6 +492,8 @@ function host(
   reportReplayDecisions?: NonNullable<ModelProviderRuntimeHost['reportReplayDecisions']>,
 ): ModelProviderRuntimeHost {
   return {
+    appVersion: '1.2.3',
+    dataDir: '',
     fetchForRoute: () => fetch,
     readProviderState: async () => ({ activeProviderId: provider.id, providers: [provider] }),
     writeClipboardText: async () => undefined,
@@ -385,6 +512,16 @@ function requestFixture(overrides: Partial<ModelRequest> = {}): ModelRequest {
       { id: 'user', role: 'user', content: 'Decide.', status: 'complete', createdAt: '2026-01-01T00:00:01.000Z' },
     ],
     ...overrides,
+  };
+}
+
+function stepSnapshotFixture(threadId: string, turnId: string): NonNullable<ModelRequest['stepSnapshot']> {
+  return {
+    threadId, turnId, threadLastSeq: 1,
+    conversationMessageIds: ['user'], messageIds: ['user'], toolNames: [],
+    selectedSkills: [], mcpServerKeys: [], mcpServerCount: 0,
+    permissionProfile: 'workspace-write', featureKeys: [],
+    worldState: { threadMessageCount: 1, threadUpdatedAt: '2026-01-01T00:00:01.000Z' },
   };
 }
 

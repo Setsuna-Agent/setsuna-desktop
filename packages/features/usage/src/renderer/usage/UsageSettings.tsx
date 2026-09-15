@@ -26,7 +26,7 @@ type UsageSettingsProps = {
 };
 
 export function UsageSettings({ providers, usage, onQueryUsage }: UsageSettingsProps) {
-  const { locale, translate: t, ui: { PageHeading, Section } } = useUsageView();
+  const { translate: t, ui: { PageHeading, Section } } = useUsageView();
   const [activeRange, setActiveRange] = useState<UsageTimeRangeId>('all');
   const [filteredUsage, setFilteredUsage] = useState(usage);
   const [activeQuery, setActiveQuery] = useState<RuntimeUsageQuery>({});
@@ -37,7 +37,6 @@ export function UsageSettings({ providers, usage, onQueryUsage }: UsageSettingsP
   const summary = displayedUsage?.summary;
   const totalTokens = tokensExcludingCache(summary);
   const recordCount = summary?.recordCount ?? 0;
-  const requestCount = summary?.requestCount;
 
   useEffect(() => () => {
     requestVersionRef.current += 1;
@@ -120,13 +119,6 @@ export function UsageSettings({ providers, usage, onQueryUsage }: UsageSettingsP
               detail={t('feature.usage.shareOfTotal', { ratio: formatRatio(summary?.outputTokens ?? 0, totalTokens) })}
               label={t('feature.usage.outputTokens')}
               value={formatTokens(summary?.outputTokens ?? 0)}
-            />
-            <UsageMetricCard
-              detail={requestCount === undefined
-                ? t('feature.usage.unknownRequestCount')
-                : t('feature.usage.averagePerCall', { tokens: formatTokens(requestCount ? totalTokens / requestCount : 0) })}
-              label={t('feature.usage.calls')}
-              value={requestCount?.toLocaleString(locale) ?? '—'}
             />
           </div>
 

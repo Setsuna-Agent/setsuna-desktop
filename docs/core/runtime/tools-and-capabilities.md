@@ -63,6 +63,13 @@ Factory 当前按顺序组合：
 runtime 还追加用于读取超限结果的 `read_tool_result`；工具是否需要审批、能否并行
 以及输出上限仍由 runtime profile 和 orchestrator 决定。
 
+`RuntimeToolDefinition.source` 携带当前 MCP 的真实 server key、显示名和说明；router
+在权限过滤后关联已安装插件，扩展工具则使用 runtime profile 中的插件归属。
+`search_tools` 提供有长度上限的来源摘要，搜索同时匹配插件名、来源描述和参数字段。
+这些元数据只服务于发现和上下文，不随完整工具 schema 重复发送。
+使用规则由 runtime 单独提供：涉及已列出的集成时先发现相关工具，再判断能力是否不可用；
+资源列表不替代工具搜索。每步重新取得目录和插件关联，已撤销的能力不会因先前加载而保留。
+
 普通任务和可运行沙箱 shell 的只读任务通过 `exec_command` / `run_shell_command`
 调用 `rg` 搜索内容、`rg --files` 查找文件，模型目录不再公布 `find_files` 和
 `search_text`。只有无法提供沙箱 shell 的内部只读任务使用这两个直接搜索工具兜底。

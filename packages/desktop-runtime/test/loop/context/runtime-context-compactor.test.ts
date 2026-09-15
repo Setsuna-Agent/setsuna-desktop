@@ -39,6 +39,7 @@ describe('RuntimeContextCompactor', () => {
       runtimeConfig: null, signal: new AbortController().signal,
     });
 
+    expect(requests.map((request) => request.sessionId)).toEqual([thread.id, thread.id]);
     expect(requests.map((request) => request.maxOutputTokens)).toEqual([4_096, 8_192]);
     expect(compacted.find((message) => message.id === 'latest')).toMatchObject({ content: messages[1]!.content, visibility: 'transcript' });
     expect(compacted.some((message) => message.contextCompaction)).toBe(true);
@@ -123,6 +124,8 @@ describe('RuntimeContextCompactor', () => {
       text: '摘要：\nPortable independent summary.',
       providerMetadata,
     });
+    expect(modelClient.compactRequest?.sessionId).toBe(summaryInput(candidate).threadId);
+    expect(modelClient.summaryRequest?.sessionId).toBe(summaryInput(candidate).threadId);
     expect(modelClient.compactRequest?.messages).toEqual(candidate.olderMessages);
     expect(modelClient.summaryRequest?.messages).not.toEqual(candidate.olderMessages);
     expect(JSON.stringify(modelClient.summaryRequest)).not.toContain('encrypted-reasoning');
@@ -253,6 +256,7 @@ describe('RuntimeContextCompactor', () => {
     const events: Array<Omit<RuntimeEvent, 'seq'>> = [];
     const usageStore = new CapturingUsageStore();
     const result = await createCompactor(client, events, undefined, usageStore).generateContextCompactionSummary(summaryInput(candidate));
+    expect(requests.map((request) => request.sessionId)).toEqual([summaryInput(candidate).threadId, summaryInput(candidate).threadId]);
     expect(requests.map((request) => request.maxOutputTokens)).toEqual([4096, 8192]);
     expect(events.filter((event) => event.type === 'token.count')).toMatchObject([
       { payload: { usage } }, { payload: { usage } },

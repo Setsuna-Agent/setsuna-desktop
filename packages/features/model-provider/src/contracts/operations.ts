@@ -1,7 +1,8 @@
-import type {
-  RuntimeAvailableModel,
-  RuntimeAvailableModelsResponse,
-  RuntimeFetchModelsInput,
+import {
+  normalizeProviderRequestHeaders,
+  type RuntimeAvailableModel,
+  type RuntimeAvailableModelsResponse,
+  type RuntimeFetchModelsInput,
 } from '@setsuna-desktop/contracts';
 import { defineRuntimeCodec } from '@setsuna-desktop/feature-core/codec';
 import { defineFeatureOperation } from '@setsuna-desktop/feature-core/operation';
@@ -20,11 +21,15 @@ const providerStateCodec = defineRuntimeCodec<ModelProviderSettingsState>((value
 const providerInputCodec = defineRuntimeCodec<ModelProviderSettingsInput>((value) => {
   const record = objectRecord(value, 'Model provider input must be an object.');
   if (!Array.isArray(record.providers)) throw new Error('Model provider input must include providers.');
+  for (const provider of record.providers) {
+    normalizeProviderRequestHeaders(objectRecord(provider, 'Provider must be an object.').requestHeaders);
+  }
   return structuredClone(record) as ModelProviderSettingsInput;
 });
 
 const fetchModelsInputCodec = defineRuntimeCodec<RuntimeFetchModelsInput>((value) => {
   const record = objectRecord(value, 'Model discovery input must be an object.');
+  normalizeProviderRequestHeaders(record.requestHeaders);
   return structuredClone(record) as RuntimeFetchModelsInput;
 });
 
@@ -91,6 +96,37 @@ export const readModelProviderCatalog = defineFeatureOperation({
   path: '/v1/features/model-provider/catalog',
   input: emptyInputCodec,
   output: providerCatalogCodec,
+  errors: Object.freeze({}),
+  idempotency: 'idempotent',
+});
+
+export type RefreshModelProviderCatalogInput = Readonly<{
+  catalogProviderId: string;
+  /** Configured connection whose proxy route should be used, when already saved. */
+  providerId?: string;
+  force?: boolean;
+}>;
+
+export type RefreshModelProviderCatalogResult = Readonly<{
+  catalog: ModelProviderCatalog;
+  error?: string;
+}>;
+
+export const refreshModelProviderCatalog = defineFeatureOperation({
+  id: 'model-provider.catalog.refresh',
+  method: 'POST',
+  path: '/v1/features/model-provider/catalog/refresh',
+  input: defineRuntimeCodec<RefreshModelProviderCatalogInput>((value) => {
+    const record = objectRecord(value, 'Catalog refresh input must be an object.');
+    if (typeof record.catalogProviderId !== 'string' || !record.catalogProviderId.trim()
+      || (record.providerId !== undefined && typeof record.providerId !== 'string')
+      || (record.force !== undefined && typeof record.force !== 'boolean')) throw new Error('Invalid catalog refresh input.');
+    return { catalogProviderId: record.catalogProviderId, providerId: record.providerId, force: record.force } as RefreshModelProviderCatalogInput;
+  }),
+  output: defineRuntimeCodec<RefreshModelProviderCatalogResult>((value) => {
+    const record = objectRecord(value, 'Catalog refresh result must be an object.');
+    return { catalog: providerCatalogCodec.parse(record.catalog), ...(typeof record.error === 'string' ? { error: record.error } : {}) };
+  }),
   errors: Object.freeze({}),
   idempotency: 'idempotent',
 });

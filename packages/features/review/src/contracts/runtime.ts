@@ -15,7 +15,7 @@ import type { ReviewModelSelection } from './settings.js';
 
 export type ReviewTextGenerationRequest = Pick<
   ModelRequest,
-  'messages' | 'maxOutputTokens' | 'signal' | 'temperature' | 'toolChoice'
+  'messages' | 'maxOutputTokens' | 'signal' | 'sessionId' | 'temperature' | 'toolChoice'
 > & { modelSelection?: RuntimeConfiguredModelReference; onProgress?: (message: string) => void };
 
 export type ReviewModelOption = Readonly<{

@@ -26,7 +26,7 @@ Panel 选择和 session 生命周期在 hooks，不应由各 tab 各自维护一
 
 文件详情与「打开文件」标签共用工作区层的 `useWorkspaceFileTree`：目录加载结果、展开状态、筛选、宽度、显隐和滚动位置不随标签重建。切换工作区时重置目录，并丢弃旧工作区或旧筛选条件下的异步响应。
 
-文件面板和审查导航的目录行共用 `renderer-ui` 的 `FileTreeSurface` / `FileTreeRow`，样式参考 [beUI File Tree](https://beui.dev/components/motion/file-tree)。树行尺寸、目录图标和动效由共享层管理，各自的选择、目录加载和文件操作保持在原 owner。
+文件面板、审查导航和 PR Diff 共用 `renderer-ui` 的 `FileTreeSurface` / `FileTreeRow`，样式参考 [beUI File Tree](https://beui.dev/components/motion/file-tree)。树行尺寸、展开箭头和动效由共享层管理，各自的选择、目录加载和文件操作保持在原 owner。目录行默认省略文件夹图标及其占位，只显示展开箭头；文件行保留文件类型图标。每行延续所有祖先层级的引导线，多层展开时保持连续。
 
 文件目录通过 `desktop.watchWorkspaceEntries` 订阅 Main 的目录变更；`entry-watcher.ts` 在 macOS 上非递归监听根目录及已加载的目录，筛选时包含结果的祖先目录，不依赖 Git。Windows 使用单个原生递归根目录句柄，避免子目录句柄阻止父目录重命名；事件只接受已订阅目录、直接子项及祖先变化，忽略未展开子树。每次通知前会校验订阅路径；macOS 同时检查目录 inode，为后来创建或重建的目录补建监听。工具、终端或外部编辑器的写入会触发后台重新读取，监听就绪及窗口重新聚焦时也会校正缓存。`useWorkspaceEntriesSync` 合并读取期间的重复通知，操作对话框提交期间暂停同步。目录快照按父子顺序替换，清理已删除/重命名的旧节点及后代，保留现存目录的展开状态、宽度和滚动位置；刷新失败保留最后可用的目录，不清空文件树或覆盖编辑草稿。切换工作区、窗口导航或 renderer 退出会释放旧监听。
 
