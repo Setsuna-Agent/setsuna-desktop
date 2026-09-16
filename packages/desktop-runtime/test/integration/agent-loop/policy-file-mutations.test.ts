@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { InMemoryApprovalGate } from '../../../src/adapters/approval/in-memory-approval-gate.js';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
@@ -5,6 +8,7 @@ import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.
 import { createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
+import { createHost } from '../adapters/tool/pc-local-tool-host.support.js';
 import {
   EmptyAdditionalPermissionsExecModelClient,
   ProtectedMetadataWriteModelClient,
@@ -26,6 +30,7 @@ import {
   nodeEvalHook,
   PreviewingToolHost,
   ReadOnlyConfigStore,
+  SingleToolCallModelClient,
   StrictApprovalConfigStore,
   ToolCallingModelClient,
   ToolDeltaModelClient,
@@ -585,7 +590,7 @@ describe('agent loop tool policy and file mutations', () => {
       expect(events.some((event) => event.type === 'approval.requested')).toBe(false);
     });
 
-  it('rejects Codex-dangerous commands instead of prompting under full policy', async () => {
+  it('rejects forced-deletion hints without prompting when full policy still uses a restricted profile', async () => {
       const ids = new RandomIdGenerator();
       const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Full approval dangerous command loop' });
@@ -615,6 +620,64 @@ describe('agent loop tool policy and file mutations', () => {
         && event.payload.content.includes('changes local state')
       )).toBe(true);
     });
+
+  it.each([
+    ['danger-full-access', false, 'success'],
+    ['workspace-write', false, 'rejected'],
+    ['danger-full-access', true, 'error'],
+  ] as const)('handles forced cleanup with %s and explicit deny=%s as %s', async (permissionProfile, explicitDeny, status) => {
+    const { host, fixtureRoot, projectDir, projectId } = await createHost({
+      // Restricted calls must reach approval policy even on hosts without a sandbox.
+      // They are rejected before execution; only full-access calls launch a process.
+      shellSandboxCapability: () => ({ supported: true, provider: 'test', reason: '' }),
+    });
+    const ids = new RandomIdGenerator();
+    const threadStore = createTestThreadStore(path.join(fixtureRoot, 'loop-data'), systemClock, ids);
+    const command = process.platform === 'win32'
+      ? 'cmd /c rd /s /q "build output"'
+      : 'rm -rf -- "build output"';
+    const outputDir = path.join(projectDir, 'build output');
+    const sourcePath = path.join(projectDir, 'source.txt');
+    const denyReason = 'Build cleanup is disabled by the workspace policy.';
+
+    try {
+      await mkdir(outputDir);
+      await writeFile(path.join(outputDir, 'artifact.txt'), 'generated');
+      await writeFile(sourcePath, 'keep');
+      if (explicitDeny) {
+        await mkdir(path.join(projectDir, '.setsuna'));
+        await writeFile(path.join(projectDir, '.setsuna', 'exec-policy.json'), JSON.stringify({
+          rules: [{ action: 'deny', command, reason: denyReason }],
+        }));
+      }
+      const thread = await threadStore.createThread({ title: 'Clean build output', projectId });
+      const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+      const loop = new AgentLoop({
+        threadStore, toolHost: host, ids, clock: systemClock,
+        modelClient: new SingleToolCallModelClient({
+          id: 'cleanup', name: 'exec_command',
+          arguments: JSON.stringify({ cmd: command, yield_time_ms: 1000 }),
+        }),
+        eventBus: new InMemoryEventBus(),
+        approvalGate,
+        configStore: new FullApprovalConfigStore(permissionProfile),
+      });
+
+      await loop.sendTurn(thread.id, { input: 'Delete the generated build output directory.' });
+
+      expect(existsSync(outputDir)).toBe(status !== 'success');
+      expect(await readFile(sourcePath, 'utf8')).toBe('keep');
+      await expect(approvalGate.listApprovals()).resolves.toEqual({ approvals: [] });
+      const events = await threadStore.listEvents(thread.id, 0);
+      const completed = events.find((event) => event.type === 'tool.completed');
+      expect(completed?.payload).toMatchObject({ toolName: 'exec_command', status });
+      if (explicitDeny) expect(completed?.payload.content).toContain(denyReason);
+    } finally {
+      await host.shutdown();
+      await threadStore.close();
+      await rm(fixtureRoot, { recursive: true, force: true });
+    }
+  });
   
   it('runs unsandboxed exec without prompting under full access', async () => {
       const ids = new RandomIdGenerator();

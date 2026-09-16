@@ -58,6 +58,7 @@ Feature setup 只创建 manager 和 idle cleanup timer，不主动连接 server�
 - Skill/Plugin coordinator 依赖 feature contracts，并继续使用宿主 store 完成原有安装事务。
 - 宿主 Capabilities 页面继续负责统一导航和视觉适配；MCP snapshot/client/mutation 由 Feature renderer service 持有，`mcp.json` 格式/位置不变。
 - elicitation 仍由 desktop runtime 接入 approval/event；URL elicitation 由 feature 打开系统 URL 后等待完成通知。
+- 启动时的旧凭据迁移先检查 `mcp.json` 是否含内联环境变量或静态请求头；没有待迁移值时不探测原生凭据存储，避免仅启动应用就触发钥匙串授权。
 
 MCP server 的启用状态和 allow/deny 工具范围是执行边界。工具结果、resource 和 server instructions 始终按外部不可信上下文处理。
 

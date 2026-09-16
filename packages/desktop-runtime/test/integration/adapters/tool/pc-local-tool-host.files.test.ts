@@ -341,24 +341,86 @@ describe('pc local file tools and previews', () => {
     await expect(readFile(missingBlankPath, 'utf8')).resolves.toBe('old\ntail\n');
   });
 
-  it('rejects update hunks without additions or removals', async () => {
+  it('uses context-only hunks to locate later edits and validate the file ending', async () => {
     const { host, projectDir } = await createHost();
     const context = { threadId: 'thread_1', turnId: 'turn_1' };
-    const filePath = path.join(projectDir, 'unchanged.txt');
+    const filePath = path.join(projectDir, 'repeated.txt');
+    await writeFile(filePath, 'same\nsection\nsame\ntail\n', 'utf8');
 
-    await writeFile(filePath, 'unchanged', 'utf8');
+    await host.runTool('apply_patch', {
+      patch: [
+        '*** Begin Patch',
+        '*** Update File: repeated.txt',
+        '@@',
+        ' section',
+        '@@',
+        '-same',
+        '+changed',
+        '@@',
+        ' tail',
+        '*** End of File',
+        '*** Add File: added.txt',
+        '+created',
+        '*** End Patch',
+      ].join('\n'),
+    }, context);
+
+    await expect(readFile(filePath, 'utf8')).resolves.toBe('same\nsection\nchanged\ntail\n');
+    await expect(readFile(path.join(projectDir, 'added.txt'), 'utf8')).resolves.toBe('created\n');
+  });
+
+  it.each([
+    { name: 'missing leading context', hunks: ['@@', ' missing', '@@', '-same', '+changed'] },
+    { name: 'context-only EOF mismatch', hunks: ['@@', '-same', '+changed', '@@', ' middle', '*** End of File'] },
+  ])('rejects $name before writing any files', async ({ hunks }) => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const filePath = path.join(projectDir, 'source.txt');
+    const original = 'same\nmiddle\ntail\n';
+    await writeFile(filePath, original, 'utf8');
 
     await expect(host.runTool('apply_patch', {
       patch: [
         '*** Begin Patch',
-        '*** Update File: unchanged.txt',
-        '@@',
-        ' unchanged',
+        '*** Add File: added.txt',
+        '+must not exist',
+        '*** Update File: source.txt',
+        ...hunks,
         '*** End Patch',
       ].join('\n'),
-    }, context)).rejects.toThrow('hunk 不包含变更行');
+    }, context)).rejects.toThrow('未找到匹配的旧内容');
 
-    await expect(readFile(filePath, 'utf8')).resolves.toBe('unchanged');
+    await expect(readFile(filePath, 'utf8')).resolves.toBe(original);
+    await expect(readFile(path.join(projectDir, 'added.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it.each([
+    { name: 'empty update', body: [], line: 4, reason: 'hunk 不能为空' },
+    { name: 'empty final chunk', body: ['@@'], line: 5, reason: 'hunk 不能为空' },
+    { name: 'empty chunk before another chunk', body: ['@@', '@@', '-same', '+changed'], line: 5, reason: 'hunk 不能为空' },
+    { name: 'empty chunk before another file', body: ['@@', '*** Delete File: other.txt'], line: 5, reason: 'hunk 不能为空' },
+    { name: 'empty chunk before EOF', body: ['@@', '*** End of File'], line: 6, reason: 'End of File 前缺少正文行' },
+    { name: 'unprefixed update line', body: ['@@', 'same'], line: 6, reason: '必须以空格、+ 或 - 开头' },
+    { name: 'unprefixed added line', body: ['@@', '-same', '+changed', '*** Add File: other.txt', 'invalid'], line: 9, reason: '内容行必须以 + 开头' },
+  ])('reports the patch line for $name without applying earlier operations', async ({ body, line, reason }) => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const filePath = path.join(projectDir, 'source.txt');
+    await writeFile(filePath, 'same\n', 'utf8');
+
+    await expect(host.runTool('apply_patch', {
+      patch: [
+        '*** Begin Patch',
+        '*** Add File: added.txt',
+        '+must not exist',
+        '*** Update File: source.txt',
+        ...body,
+        '*** End Patch',
+      ].join('\n'),
+    }, context)).rejects.toThrow(new RegExp(`补丁第 ${line} 行：.*${reason.replaceAll('+', '\\+')}`));
+
+    await expect(readFile(filePath, 'utf8')).resolves.toBe('same\n');
+    await expect(readFile(path.join(projectDir, 'added.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('allows Add File patches to create empty files', async () => {

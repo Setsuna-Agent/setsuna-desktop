@@ -249,7 +249,7 @@ export function mixedToolRunBucketSummary(
     const parts = inspectionSummaryParts(inspectionEntries(runs), t);
     return parts.length ? parts.join(t('toolRun.joiner')) : inspectionGroupSummary(runs, t).title;
   }
-  if (kind === 'shell') return shellCountSummary(runs, status, t);
+  if (kind === 'shell') return shellCountSummary(runs, t);
   if (kind === 'search') return searchCountSummary(runs, status, t);
   if (kind === 'webContent') return webContentGroupSummary(runs, t)?.title ?? '';
   const name = runs[0]
@@ -266,7 +266,7 @@ export function mixedToolRunGroupPart(group: ToolRunGroup, t: Translate = defaul
   const kind = group.type === 'single' ? toolRunGroupKind(group.run) : group.kind;
   const status = toolRunGroupStatus(runs);
   if (kind === 'fileMutation') return fileOperationAggregateTitle(runs, t);
-  if (kind === 'shell') return shellCountSummary(runs, status, t);
+  if (kind === 'shell') return shellCountSummary(runs, t);
   if (kind === 'inspection') return inspectionGroupSummary(runs, t).title;
   if (kind === 'search') return searchCountSummary(runs, status, t);
   const webContentSummary = webContentGroupSummary(runs, t);

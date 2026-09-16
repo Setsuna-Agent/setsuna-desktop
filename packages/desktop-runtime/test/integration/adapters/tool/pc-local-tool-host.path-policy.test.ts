@@ -105,7 +105,7 @@ describe('pc local path and mutation policy', () => {
         '*** End Patch',
         'PATCH',
       ].join('\n'),
-    }, context)).rejects.toThrow('apply_patch 补丁必须以');
+    }, context)).rejects.toThrow('apply_patch 补丁第 1 行：补丁必须以 *** Begin Patch 开头。');
   });
 
   it('accepts apply_patch environment preambles for the active local environment', async () => {

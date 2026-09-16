@@ -127,7 +127,7 @@ export type ToolApprovalRequirement = {
   argumentsPreview?: string;
   approvalKeys?: string[];
   persistentApprovalKeys?: string[];
-  /** Narrow destructive commands are rejected when prompts are disabled. */
+  /** Reject destructive-command hints when prompts are disabled and the profile is restricted. */
   rejectWhenApprovalDisabled?: boolean;
 };
 

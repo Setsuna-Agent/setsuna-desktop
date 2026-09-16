@@ -78,7 +78,52 @@ export function shellCommand(run: RuntimeToolRun): string {
   // Process/session handles identify a continuation, never the command shown to users.
   return stringField(args.command ?? args.cmd)
     || shellContentLine(content, /^\$\s+(.+)$/m)
-    || shellContentLine(content, /^command:\s*(.+)$/im);
+    || shellContentLine(content, /^command:\s*(.+)$/im)
+    || shellCommandFromTruncatedPreview(run.argumentsPreview);
+}
+
+function shellCommandFromTruncatedPreview(preview = ''): string {
+  if (!preview.trimStart().startsWith('{')) return '';
+  let depth = 0;
+  for (let index = 0; index < preview.length; index += 1) {
+    const character = preview[index];
+    if (character === '{' || character === '[') depth += 1;
+    else if (character === '}' || character === ']') depth -= 1;
+    else if (character === '"') {
+      const token = previewString(preview, index);
+      if (!token?.complete) return '';
+      index = token.end - 1;
+      if (depth !== 1 || (token.value !== 'command' && token.value !== 'cmd')) continue;
+      const valuePrefix = /^\s*:\s*"/u.exec(preview.slice(token.end));
+      if (!valuePrefix) continue;
+      const command = previewString(preview, token.end + valuePrefix[0].length - 1);
+      if (!command?.value.trim()) return '';
+      return `${command.value.trim()}${command.complete ? '' : '…'}`;
+    }
+  }
+  return '';
+}
+
+/** Persisted previews may end inside a JSON escape. Recover display text only. */
+function previewString(preview: string, start: number) {
+  let end = start + 1;
+  try {
+    while (end < preview.length) {
+      if (preview[end] === '"') {
+        return { value: JSON.parse(preview.slice(start, end + 1)) as string, end: end + 1, complete: true };
+      }
+      if (preview[end] === '\\') {
+        const escapeLength = preview[end + 1] === 'u' ? 6 : 2;
+        if (end + escapeLength > preview.length) break;
+        end += escapeLength;
+      } else {
+        end += 1;
+      }
+    }
+    return { value: JSON.parse(`${preview.slice(start, end)}"`) as string, end, complete: false };
+  } catch {
+    return null;
+  }
 }
 
 export function shellResultPreviewForDisplay(

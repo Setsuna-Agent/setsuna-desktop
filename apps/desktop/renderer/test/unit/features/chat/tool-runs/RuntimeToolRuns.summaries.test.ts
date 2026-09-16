@@ -1,10 +1,33 @@
 import type { RuntimeToolRun } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import { translate } from '../../../../../src/shared/i18n/I18nProvider.js';
-import { toolRunSummary } from '../../../../../src/features/chat/tool-runs/RuntimeToolRunPresentation.js';
+import { mixedToolRunBucketSummary, toolRunSummary } from '../../../../../src/features/chat/tool-runs/RuntimeToolRunPresentation.js';
+import { shellCountSummary, shellGroupSummary } from '../../../../../src/features/chat/tool-runs/runtimeShellSummary.js';
 import { toolRun, fileRun, preparingFileRun, renderedText, renderedTextFromHtml, firstToolRunSummaryHtml, renderedHtml } from './RuntimeToolRuns.support.js';
 
 describe('RuntimeToolRuns compact summaries', () => {
+  it('counts command outcomes separately after a rejected command is retried successfully', () => {
+    const runs = [
+      toolRun('denied', 'exec_command', { cmd: 'echo denied' }, 'rejected'),
+      toolRun('retry', 'exec_command', { cmd: 'echo retry' }),
+    ];
+    const expected = '已拒绝 1 条命令，已运行 1 条命令';
+    expect(shellCountSummary(runs)).toBe(expected);
+    expect(shellGroupSummary(runs).title).toBe(expected);
+    expect(mixedToolRunBucketSummary('shell', runs)).toBe(expected);
+    expect(shellCountSummary(runs, (key, params) => translate('en-US', key, params)))
+      .toBe('Rejected 1 commands, Ran 1 commands');
+
+    runs.push(
+      toolRun('cancelled', 'exec_command', { cmd: 'echo cancelled' }, 'cancelled'),
+      toolRun('failed', 'exec_command', { cmd: 'echo failed' }, 'error'),
+      toolRun('active', 'exec_command', { cmd: 'echo active' }, 'running'),
+      toolRun('pending', 'exec_command', { cmd: 'echo pending' }, 'pending_approval'),
+    );
+    expect(shellCountSummary(runs)).toBe(`${expected}，已取消 1 条命令，运行失败 1 条命令，正在运行 1 条命令，等待授权 1 条命令`);
+    expect(shellGroupSummary(runs).title).toContain('echo pending');
+  });
+
   it('shows readable output-read activity before and after the command result arrives', () => {
     const processId = 'e8ff5269-24f6-4540-99a9-c53b6ff5c730';
     const previous = toolRun('search', 'search_text', { path: 'src', query: 'needle' });

@@ -1,7 +1,7 @@
 .chat-tool-runs {
   --chat-tool-run-font-size: 13px;
   --chat-tool-run-line-height: 20px;
-  --chat-tool-run-row-gap: 6px;
+  --chat-tool-run-row-gap: var(--chat-work-history-item-gap, 8px);
   /* 所有工具运行行（顶层/嵌套/inspection）共用同一行高，保证垂直节奏统一。 */
   --chat-tool-run-row-min-height: 24px;
 
@@ -15,6 +15,8 @@
 .chat-tool-run {
   /* 普通工具汇总、展开子项和思考记录共用同一灰度；异常与审批状态仍由状态类覆盖。 */
   --chat-tool-run-title-color: color-mix(in srgb, var(--app-text-muted) 86%, transparent);
+  /* 每层工具记录重置图标颜色，避免分组的异常状态染色成功的子项。 */
+  --chat-tool-run-icon-color: color-mix(in srgb, var(--app-text-muted) 86%, transparent);
   /* 根节点保持确定宽度，避免 fit-content 与子项百分比上限形成内在尺寸循环，
      导致文件名和工具名在仍有可用空间时就按 min-content 提前省略。 */
   width: 100%;
@@ -28,23 +30,26 @@
 }
 
 .chat-tool-run--pending_approval {
+  --chat-tool-run-icon-color: var(--app-warning);
   color: color-mix(in srgb, var(--app-warning) 72%, var(--app-text));
   --chat-tool-run-title-color: color-mix(in srgb, var(--app-warning) 72%, var(--app-text));
 }
 
 .chat-tool-run--error,
 .chat-tool-run--rejected {
+  --chat-tool-run-icon-color: var(--app-danger);
   color: color-mix(in srgb, var(--app-danger) 78%, var(--app-text));
   --chat-tool-run-title-color: color-mix(in srgb, var(--app-danger) 78%, var(--app-text));
 }
 
 .chat-tool-run--cancelled {
+  --chat-tool-run-icon-color: var(--app-text-muted);
   color: color-mix(in srgb, var(--app-text-muted) 88%, var(--app-text));
   --chat-tool-run-title-color: color-mix(in srgb, var(--app-text-muted) 88%, var(--app-text));
 }
 
 .chat-tool-run__summary {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: start;
   gap: 6px;
@@ -110,7 +115,7 @@ details.chat-tool-run[open] > .chat-tool-run__summary > .chat-tool-run__chevron 
   background: transparent;
 }
 
-.chat-tool-run--file-mutation {
+.chat-tool-run--file-mutation.chat-tool-run--flat {
   display: grid;
   gap: var(--chat-tool-run-row-gap);
 }
@@ -120,7 +125,6 @@ details.chat-tool-run[open] > .chat-tool-run__summary > .chat-tool-run__chevron 
   flex: 0 1 auto;
   align-items: center;
   gap: 5px;
-  min-height: var(--chat-tool-run-row-min-height);
   min-width: 0;
   overflow: hidden;
   font-size: var(--chat-tool-run-font-size);
@@ -496,24 +500,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   width: 14px;
   height: 20px;
   flex: 0 0 14px;
-  color: currentColor;
-}
-
-.chat-tool-run--success .chat-tool-run__icon {
-  color: color-mix(in srgb, var(--app-text-muted) 86%, transparent);
-}
-
-.chat-tool-run--error .chat-tool-run__icon,
-.chat-tool-run--rejected .chat-tool-run__icon {
-  color: var(--app-danger);
-}
-
-.chat-tool-run--cancelled .chat-tool-run__icon {
-  color: var(--app-text-muted);
-}
-
-.chat-tool-run--pending_approval .chat-tool-run__icon {
-  color: var(--app-warning);
+  color: var(--chat-tool-run-icon-color);
 }
 
 .chat-tool-run__summary-text {

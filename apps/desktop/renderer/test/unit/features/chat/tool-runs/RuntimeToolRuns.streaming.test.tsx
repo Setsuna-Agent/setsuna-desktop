@@ -39,7 +39,7 @@ describe('RuntimeToolRuns streaming history', () => {
     expect(summary.textContent).toContain('echo current');
     setOpen(root, true);
     const aggregate = summary.textContent;
-    expect(aggregate).toBe(kind === 'mixed' ? '正在运行 2 条命令，已读取 1 个文件' : '正在运行 2 条命令');
+    expect(aggregate).toBe(kind === 'mixed' ? '已运行 1 条命令，正在运行 1 条命令，已读取 1 个文件' : '已运行 1 条命令，正在运行 1 条命令');
     expect(aggregate).not.toContain('echo current');
     const updated = { ...running, argumentsPreview: JSON.stringify({ cmd: 'echo updated' }) };
     view.rerender(panel([...completed, updated]));

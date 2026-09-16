@@ -41,12 +41,13 @@ export function parseApplyPatch(patch: unknown): ParseApplyPatchResult {
   const text = normalizeApplyPatchText(patch);
   const lines = text.split('\n');
   if (lines[0] !== '*** Begin Patch') {
-    return { ok: false, error: 'apply_patch 补丁必须以 *** Begin Patch 开头。' };
+    return patchParseError(0, '补丁必须以 *** Begin Patch 开头。');
   }
   const endIndex = lines.findIndex((line, index) => index > 0 && line === '*** End Patch');
-  if (endIndex < 0) return { ok: false, error: 'apply_patch 补丁缺少 *** End Patch。' };
-  if (lines.slice(endIndex + 1).some((line) => line.trim())) {
-    return { ok: false, error: 'apply_patch 补丁在 *** End Patch 后包含额外内容。' };
+  if (endIndex < 0) return patchParseError(lines.length - 1, '补丁缺少 *** End Patch。');
+  const trailingIndex = lines.findIndex((line, index) => index > endIndex && line.trim());
+  if (trailingIndex >= 0) {
+    return patchParseError(trailingIndex, '补丁在 *** End Patch 后包含额外内容。');
   }
 
   const operations: ApplyPatchOperation[] = [];
@@ -59,22 +60,22 @@ export function parseApplyPatch(patch: unknown): ParseApplyPatchResult {
       continue;
     }
     if (line.startsWith('*** Environment ID: ')) {
-      if (operations.length) return { ok: false, error: 'apply_patch environment_id must appear before file hunks.' };
-      if (environmentId) return { ok: false, error: 'apply_patch environment_id cannot be specified more than once.' };
+      if (operations.length) return patchParseError(index, 'apply_patch environment_id must appear before file hunks.');
+      if (environmentId) return patchParseError(index, 'apply_patch environment_id cannot be specified more than once.');
       environmentId = line.slice('*** Environment ID: '.length).trim();
-      if (!environmentId) return { ok: false, error: 'apply_patch environment_id cannot be empty.' };
+      if (!environmentId) return patchParseError(index, 'apply_patch environment_id cannot be empty.');
       index += 1;
       continue;
     }
     if (line.startsWith('*** Add File: ')) {
       const filePath = patchFilePath(line, '*** Add File: ');
-      if (!filePath) return { ok: false, error: 'apply_patch Add File 路径不能为空。' };
+      if (!filePath) return patchParseError(index, 'apply_patch Add File 路径不能为空。');
       const contentLines: string[] = [];
       index += 1;
       while (index < endIndex && !isApplyPatchFileHeader(lines[index])) {
         const contentLine = lines[index];
         if (!contentLine.startsWith('+')) {
-          return { ok: false, error: `新增文件 ${filePath} 的内容行必须以 + 开头。` };
+          return patchParseError(index, `新增文件 ${filePath} 的内容行必须以 + 开头。`);
         }
         contentLines.push(contentLine.slice(1));
         index += 1;
@@ -88,20 +89,21 @@ export function parseApplyPatch(patch: unknown): ParseApplyPatchResult {
     }
     if (line.startsWith('*** Delete File: ')) {
       const filePath = patchFilePath(line, '*** Delete File: ');
-      if (!filePath) return { ok: false, error: 'apply_patch Delete File 路径不能为空。' };
+      if (!filePath) return patchParseError(index, 'apply_patch Delete File 路径不能为空。');
       operations.push({ type: 'delete', path: filePath });
       index += 1;
       continue;
     }
     if (line.startsWith('*** Update File: ')) {
       const filePath = patchFilePath(line, '*** Update File: ');
-      if (!filePath) return { ok: false, error: 'apply_patch Update File 路径不能为空。' };
+      if (!filePath) return patchParseError(index, 'apply_patch Update File 路径不能为空。');
       const chunks: ApplyPatchUpdateChunk[] = [];
       let moveTo = '';
+      let chunkStartIndex = index;
       index += 1;
       if (lines[index]?.startsWith('*** Move to: ')) {
         moveTo = patchFilePath(lines[index], '*** Move to: ');
-        if (!moveTo) return { ok: false, error: `更新文件 ${filePath} 的 Move to 路径不能为空。` };
+        if (!moveTo) return patchParseError(index, `更新文件 ${filePath} 的 Move to 路径不能为空。`);
         index += 1;
       }
 
@@ -109,18 +111,19 @@ export function parseApplyPatch(patch: unknown): ParseApplyPatchResult {
         const hunkLine = lines[index];
         if (hunkLine === '@@' || hunkLine.startsWith('@@ ')) {
           const previous = chunks[chunks.length - 1];
-          if (previous && !chunkHasChanges(previous)) {
-            return { ok: false, error: `更新文件 ${filePath} 的 hunk 不包含变更行。` };
+          if (previous && !chunkHasLines(previous)) {
+            return patchParseError(chunkStartIndex, `更新文件 ${filePath} 的 hunk 不能为空；至少包含一行上下文、新增或删除内容。`);
           }
           const changeContext = hunkLine.slice(3);
           chunks.push(createUpdateChunk(changeContext.trim() ? changeContext : null));
+          chunkStartIndex = index;
           index += 1;
           continue;
         }
         if (hunkLine === '*** End of File') {
           const chunk = chunks[chunks.length - 1];
-          if (!chunk || !chunkHasChanges(chunk)) {
-            return { ok: false, error: `更新文件 ${filePath} 的 End of File 前缺少变更行。` };
+          if (!chunk || !chunkHasLines(chunk)) {
+            return patchParseError(index, `更新文件 ${filePath} 的 End of File 前缺少正文行。`);
           }
           chunk.isEndOfFile = true;
           index += 1;
@@ -141,10 +144,11 @@ export function parseApplyPatch(patch: unknown): ParseApplyPatchResult {
             continue;
           }
           if (chunk?.isEndOfFile) {
-            return { ok: false, error: `更新文件 ${filePath} 的 End of File 后必须开始新的 @@ hunk。` };
+            return patchParseError(index, `更新文件 ${filePath} 的 End of File 后必须开始新的 @@ hunk。`);
           }
           chunk = createUpdateChunk(null);
           chunks.push(chunk);
+          chunkStartIndex = index;
         }
 
         if (hunkLine === '') {
@@ -156,20 +160,25 @@ export function parseApplyPatch(patch: unknown): ParseApplyPatchResult {
         } else if (hunkLine.startsWith('-')) {
           chunk.oldLines.push(hunkLine.slice(1));
         } else {
-          return { ok: false, error: `更新文件 ${filePath} 的变更行必须以空格、+ 或 - 开头。` };
+          return patchParseError(index, `更新文件 ${filePath} 的正文行必须以空格、+ 或 - 开头。`);
         }
         index += 1;
       }
 
-      if ((!chunks.length && !moveTo) || chunks.some((chunk) => !chunkHasChanges(chunk))) {
-        return { ok: false, error: `更新文件 ${filePath} 的 hunk 不包含变更行。` };
+      if ((!chunks.length && !moveTo) || chunks.some((chunk) => !chunkHasLines(chunk))) {
+        return patchParseError(chunkStartIndex, `更新文件 ${filePath} 的 hunk 不能为空；至少包含一行上下文、新增或删除内容。`);
       }
       operations.push({ type: 'update', path: filePath, moveTo, chunks });
       continue;
     }
-    return { ok: false, error: `无法识别的 apply_patch 行：${line}` };
+    return patchParseError(index, `无法识别的 apply_patch 行：${line}`);
   }
   return { ok: true, operations, environmentId };
+}
+
+/** Line numbers refer to normalized patch text, excluding any heredoc wrapper. */
+function patchParseError(lineIndex: number, message: string): ParseApplyPatchResult {
+  return { ok: false, error: `apply_patch 补丁第 ${lineIndex + 1} 行：${message}` };
 }
 
 function createUpdateChunk(changeContext: string | null): ApplyPatchUpdateChunk {
@@ -188,9 +197,9 @@ function pushContextLine(chunk: ApplyPatchUpdateChunk, line: string): void {
   chunk.newLines.push(line);
 }
 
-function chunkHasChanges(chunk: ApplyPatchUpdateChunk): boolean {
-  return chunk.oldLines.length !== chunk.contextLineIndices.length
-    || chunk.newLines.length !== chunk.contextLineIndices.length;
+function chunkHasLines(chunk: ApplyPatchUpdateChunk): boolean {
+  // Context-only chunks still locate source lines and advance the matching cursor.
+  return chunk.oldLines.length > 0 || chunk.newLines.length > 0;
 }
 
 function hasFollowingHunkBodyLine(lines: readonly string[], currentIndex: number, endIndex: number): boolean {

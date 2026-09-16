@@ -471,13 +471,22 @@
 }
 
 .chat-work-history__body {
+  --chat-work-history-item-gap: 8px;
+
   display: grid;
-  gap: 8px;
+  gap: var(--chat-work-history-item-gap);
   width: 100%;
   min-width: 0;
   margin: 3px 0 0;
   padding: 0;
   border: 0;
+}
+
+.chat-work-history__body > .chat-markdown {
+  /* 相邻消息由 grid 留白；正文块只留底部间距，避免代码/表格的上下 margin 叠加。
+     通过变量交给 Markdown 基础样式消费，不依赖两个样式文件的加载顺序。 */
+  --chat-markdown-block-gap: var(--chat-work-history-item-gap);
+  --chat-markdown-block-start-gap: 0px;
 }
 
 .chat-assistant-run__segment {

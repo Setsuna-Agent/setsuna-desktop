@@ -72,9 +72,9 @@ Feature 管理：
 
 - “请求批准”：`on-request + user + workspace-write`，工作区内的读取、编辑和常规命令无需审批；越过沙箱边界时由用户决定。
 - “替我审批”：`on-request + automatic + workspace-write`，只把 policy 检出的交互审批交给独立审查模型。
-- “完全访问”：`full + user + danger-full-access`，不运行 OS sandbox 或审批审查。对强制删除命令的
-  处理与 Codex 的 `DangerFullAccess + Never` 一致：命中窄范围危险命令规则时直接拒绝而不是弹窗，
-  其余命令不受风险提示规则限制。Windows Shell 即使处于完全访问，也会将 `TEMP` / `TMP` / `TMPDIR` 指向系统临时
+- “完全访问”：`full + user + danger-full-access`，不运行 OS sandbox 或审批审查。文件删除包含在该模式的授权范围内，
+  `rm -f`、`rm -rf`、Windows 强制删除命令等不再仅因命中删除启发式规则而拒绝；用户配置的显式 exec deny 规则仍在执行前生效。
+  `full` 审批策略搭配受限权限配置时仍保留强制删除拒绝规则。Windows Shell 即使处于完全访问，也会将 `TEMP` / `TMP` / `TMPDIR` 指向系统临时
   目录下的独立会话目录，并在进程结束后清理；临时文件不应回落到当前项目工作区。
 
 Approval Review Feature 通过目标为 `taskModels` 的 Settings extension Slot 贡献独立 provider/model 选择；值保存在 Feature settings，未配置或引用失效时跟随当前对话模型。自动审查的等待、允许、拒绝和人工降级状态仍由 Core tool run 投影展示，renderer 不持有未截断工具参数，也不能回答标记为 `automatic` 的审批请求。

@@ -434,14 +434,15 @@
 }
 
 .model-provider-settings__editor-body {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 0;
   min-width: 0;
   min-height: 0;
   padding: 0;
   background: var(--app-surface);
-  overflow: hidden;
+  /* 连接配置和模型列表共用滚动区域，展开高级配置时也能完整访问模型。 */
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .model-provider-settings__editor .sd-icon-button.sd-button--danger:not(:hover, :active, :focus-visible) {
@@ -656,10 +657,6 @@
   min-width: 0;
   min-height: 0;
   padding: 4px 6px 6px;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
 }
 
 .model-provider-settings__model-row {
@@ -1113,13 +1110,11 @@
   }
 
   .model-provider-settings__editor-body {
-    grid-template-rows: auto auto;
     overflow: visible;
   }
 
   .model-provider-settings__models-card {
     min-height: 260px;
-    max-height: 480px;
   }
 
   .model-provider-settings__primary-fields,
