@@ -6,11 +6,19 @@ import { automaticApprovalReviewTitle, isPreparingToolRun, isRecord, stringField
 
 const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
-export function shellCountSummary(runs: RuntimeToolRun[], status: RuntimeToolRun['status'], t: Translate = defaultTranslate): string {
-  if (status === 'running' || status === 'pending_approval') return t('toolRun.shell.runningCount', { count: runs.length });
-  if (status === 'cancelled') return t('toolRun.shell.cancelledCount', { count: runs.length });
-  if (status === 'rejected') return t('toolRun.shell.rejectedCount', { count: runs.length });
-  return t('toolRun.shell.completedCount', { count: runs.length });
+export function shellCountSummary(runs: RuntimeToolRun[], t: Translate = defaultTranslate): string {
+  const counts = new Map<RuntimeToolRun['status'], number>();
+  for (const run of runs) counts.set(run.status, (counts.get(run.status) ?? 0) + 1);
+  const keys = {
+    pending_approval: 'toolRun.shell.awaitingCount',
+    running: 'toolRun.shell.runningCount',
+    success: 'toolRun.shell.completedCount',
+    error: 'toolRun.shell.failedCount',
+    cancelled: 'toolRun.shell.cancelledCount',
+    rejected: 'toolRun.shell.rejectedCount',
+  } as const;
+  // 分组状态只决定提示优先级，计数必须来自每条命令自身的状态。
+  return [...counts].map(([status, count]) => t(keys[status], { count })).join(t('toolRun.joiner'));
 }
 
 export function shellGroupSummary(runs: RuntimeToolRun[], t: Translate = defaultTranslate): { title: string; target?: string } {
@@ -21,10 +29,7 @@ export function shellGroupSummary(runs: RuntimeToolRun[], t: Translate = default
     if (active && isPreparingToolRun(active)) return { title: command ? t('toolRun.shell.preparingCommand', { command }) : t('toolRun.shell.generatingCommand') };
     return { title: command ? t('toolRun.shell.runningCommand', { command }) : t('toolRun.shell.running') };
   }
-  if (status === 'error') return { title: command ? t('toolRun.shell.failedCommand', { command }) : t('toolRun.shell.failed') };
-  if (status === 'cancelled') return { title: command ? t('toolRun.shell.cancelledCommand', { command }) : t('toolRun.shell.cancelled') };
-  if (status === 'rejected') return { title: command ? t('toolRun.shell.rejectedCommand', { command }) : t('toolRun.shell.rejected') };
-  return { title: t('toolRun.shell.completedCount', { count: runs.length }) };
+  return { title: shellCountSummary(runs, t) };
 }
 
 export function shellRunSummary(run: RuntimeToolRun, command: string, t: Translate = defaultTranslate): { title: string; target?: string } {

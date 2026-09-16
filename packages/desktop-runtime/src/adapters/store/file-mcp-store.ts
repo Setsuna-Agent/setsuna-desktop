@@ -169,10 +169,16 @@ export class FileMcpStore implements McpStore {
 
   /** 将旧版内联环境变量及请求头值迁移到原生凭据保险库。 */
   async migrateLegacySecrets(): Promise<void> {
-    const status = await this.secretStore.status().catch(() => ({ available: false, backend: 'unavailable' }));
-    if (!status.available) return;
     await withFileStateUpdate(this.configPath, async () => {
       const { config } = await this.readConfig();
+      const hasLegacySecrets = Object.values(config.mcpServers).some((server) => (
+        Object.keys(stringMap(server.env) ?? {}).length > 0
+        || Object.keys(stringMap(serverStaticHeaders(server)) ?? {}).length > 0
+      ));
+      // 可用性检查也会初始化系统钥匙串；没有待迁移凭据时不要触发授权。
+      if (!hasLegacySecrets) return;
+      const status = await this.secretStore.status().catch(() => ({ available: false, backend: 'unavailable' }));
+      if (!status.available) return;
       let changed = false;
       for (const [key, server] of Object.entries(config.mcpServers)) {
         const env = stringMap(server.env);

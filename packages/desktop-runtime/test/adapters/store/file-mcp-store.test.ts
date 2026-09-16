@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { FileMcpStore } from '../../../src/adapters/store/file-mcp-store.js';
 import { InMemorySecretStore } from '../../support/in-memory-secret-store.js';
 
@@ -187,7 +187,44 @@ describe('file mcp store', () => {
     });
   });
 
-  it('migrates legacy inline env and HTTP headers into credential references', async () => {
+  it.each([
+    { name: 'missing config', config: undefined },
+    {
+      name: 'servers without inline credentials',
+      config: {
+        mcp_servers: {
+          local: { command: 'node', env: {} },
+          remote: {
+            url: 'https://example.com/mcp',
+            http_headers: {},
+            env_http_headers: { 'X-Account': 'MCP_ACCOUNT' },
+            bearer_token_env_var: 'MCP_TOKEN',
+          },
+        },
+      },
+    },
+  ])('skips credential storage during migration with $name', async ({ config }) => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-store-test-'));
+    const accessCredentials = vi.fn(async () => { throw new Error('Unexpected credential access.'); });
+    const store = new FileMcpStore(dataDir, {
+      status: accessCredentials,
+      get: accessCredentials,
+      set: accessCredentials,
+      delete: accessCredentials,
+    });
+    if (config) await writeFile(store.configPath, JSON.stringify(config));
+
+    await store.migrateLegacySecrets();
+
+    expect(accessCredentials).not.toHaveBeenCalled();
+    if (config) {
+      expect(await readFile(store.configPath, 'utf8')).toBe(JSON.stringify(config));
+    } else {
+      await expect(stat(store.configPath)).rejects.toMatchObject({ code: 'ENOENT' });
+    }
+  });
+
+  it('migrates legacy inline credentials once without probing storage on later startups', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-store-test-'));
     const secrets = new InMemorySecretStore();
     const store = new FileMcpStore(dataDir, secrets);
@@ -215,6 +252,35 @@ describe('file mcp store', () => {
       expect.objectContaining({ key: 'remote', headers: { Authorization: 'Bearer legacy-secret' } }),
       expect.objectContaining({ key: 'local', env: { API_TOKEN: 'legacy-token' } }),
     ]));
+
+    const status = vi.spyOn(secrets, 'status');
+    await new FileMcpStore(dataDir, secrets).migrateLegacySecrets();
+
+    expect(status).not.toHaveBeenCalled();
+    expect(await readFile(store.configPath, 'utf8')).toBe(raw);
+  });
+
+  it.each(['unavailable', 'rejected'] as const)('preserves legacy credentials when storage is %s', async (failure) => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-store-test-'));
+    const secrets = new InMemorySecretStore();
+    const status = vi.spyOn(secrets, 'status');
+    if (failure === 'unavailable') status.mockResolvedValue({ available: false, backend: 'memory' });
+    else status.mockRejectedValue(new Error('Credential access denied.'));
+    const set = vi.spyOn(secrets, 'set');
+    const store = new FileMcpStore(dataDir, secrets);
+    const raw = JSON.stringify({
+      mcp_servers: {
+        local: { command: 'node', env: { API_TOKEN: 'legacy-token' } },
+        remote: { url: 'https://example.com/mcp', http_headers: { Authorization: 'Bearer legacy-secret' } },
+      },
+    });
+    await writeFile(store.configPath, raw);
+
+    await store.migrateLegacySecrets();
+
+    expect(status).toHaveBeenCalled();
+    expect(set).not.toHaveBeenCalled();
+    expect(await readFile(store.configPath, 'utf8')).toBe(raw);
   });
 
   it('reads and writes codex-compatible MCP server fields', async () => {

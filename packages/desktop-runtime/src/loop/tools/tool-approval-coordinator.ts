@@ -419,15 +419,16 @@ export class ToolApprovalCoordinator {
     ) {
       return { action: 'skip' };
     }
-    // Full policy never prompts. Reject only the narrow destructive-command
-    // denylist; ordinary approval hints are skipped.
+    // Full access already authorizes file deletion. The forced-deletion heuristic
+    // only rejects restricted profiles without prompts; explicit exec deny rules
+    // remain enforced by the tool host before execution.
     if (approvalPolicy === 'full' && !strictAutoReview) {
       const hostRequirement = await this.options.toolHost.approvalForTool?.(
         toolCall.name,
         parsedArguments,
         context,
       );
-      return hostRequirement?.rejectWhenApprovalDisabled
+      return hostRequirement?.rejectWhenApprovalDisabled && context.permissionProfile !== 'danger-full-access'
         ? { action: 'reject', reason: hostRequirement.reason }
         : { action: 'skip' };
     }

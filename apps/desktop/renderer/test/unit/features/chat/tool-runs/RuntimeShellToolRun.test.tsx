@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { I18nProvider, translate } from '../../../../../src/shared/i18n/I18nProvider.js';
 import {
   ShellTerminalResult,
+  shellCommand,
   shellDiagnosticText,
   shellOutputSegments,
   shellRuntimeDetailLines,
@@ -28,6 +29,31 @@ const currentShellResult = [
 ].join('\n');
 
 describe('RuntimeShellToolRun', () => {
+  it('recovers rejected command previews without losing JSON escapes or mistaking other fields for commands', () => {
+    const run: RuntimeToolRun = { id: 'truncated', name: 'exec_command', status: 'rejected' };
+    const command = 'cd "my project"\ncat > /tmp/sim.sh <<\'SCRIPT\'\n' + 'echo "你好"\n'.repeat(200);
+    for (const key of ['command', 'cmd']) {
+      const argumentsPreview = JSON.stringify({ directory: '.', [key]: command }).slice(0, 1200);
+      const recovered = shellCommand({ ...run, argumentsPreview });
+      expect(recovered.endsWith('…')).toBe(true);
+      expect(recovered.length).toBeGreaterThan(100);
+      expect(command.startsWith(recovered.slice(0, -1))).toBe(true);
+      expect(shellCommand({ ...run, argumentsPreview, resultPreview: 'Command: echo actual\nExit Code: 0' }))
+        .toBe('echo actual');
+    }
+    for (const tail of ['\\', '\\u', '\\u4', '\\u4f', '\\u4f6']) {
+      expect(shellCommand({ ...run, argumentsPreview: '{"cmd":"echo ' + tail })).toBe('echo…');
+    }
+    expect(shellCommand({ ...run, argumentsPreview: '{"cmd":"echo \\u4f60\\u597d", "other":' })).toBe('echo 你好');
+    expect(shellCommand({ ...run, argumentsPreview: '{"nested":{"cmd":"echo nested"},"cmd":"echo actual' })).toBe('echo actual…');
+    for (const argumentsPreview of [
+      '{"session_id":"process-123", "chars":"echo input',
+      JSON.stringify({ description: '"cmd":"echo fake"', nested: { cmd: 'echo nested' } }).slice(0, -1),
+    ]) {
+      expect(shellCommand({ ...run, argumentsPreview })).toBe('');
+    }
+  });
+
   it('hides empty runtime streams while preserving real command output and stderr', () => {
     const cases = [
       { stdout: '(no new output)', stderr: '(no new output)', segments: [] },

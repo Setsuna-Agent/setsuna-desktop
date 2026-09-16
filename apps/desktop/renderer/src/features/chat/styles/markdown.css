@@ -16,7 +16,7 @@
 }
 
 .chat-markdown + .chat-markdown {
-  margin-top: 0.9em;
+  margin-top: var(--chat-markdown-block-start-gap, 0.9em);
 }
 
 .chat-markdown__block {
@@ -35,7 +35,7 @@
 }
 
 .chat-markdown :where(p, ul, ol, blockquote, pre) {
-  margin: 0 0 0.9em;
+  margin: 0 0 var(--chat-markdown-block-gap, 0.9em);
 }
 
 .chat-markdown :where(h1, h2, h3, h4, h5, h6) {
@@ -208,7 +208,7 @@ a.chat-markdown__file-link:focus-visible {
 
 .chat-markdown__table-scroll {
   width: 100%;
-  margin: 1em 0 1.15em;
+  margin: var(--chat-markdown-block-start-gap, 1em) 0 var(--chat-markdown-block-gap, 1.15em);
   overflow-x: auto;
   overscroll-behavior-inline: contain;
   scrollbar-width: auto !important;
@@ -304,7 +304,7 @@ a.chat-markdown__file-link:focus-visible {
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  margin: 12px 0;
+  margin: var(--chat-markdown-block-start-gap, 12px) 0 var(--chat-markdown-block-gap, 12px);
   overflow: hidden;
   border-radius: var(--app-radius-lg);
   background: var(--app-surface-muted);

@@ -87,7 +87,7 @@
   line-height: 20px;
 }
 
-[data-feature-id='updater'] .updater-settings__update-copy span {
+[data-feature-id='updater'] .updater-settings__update-copy > span {
   min-width: 0;
   overflow: hidden;
   color: var(--sd-color-text-muted, GrayText);
