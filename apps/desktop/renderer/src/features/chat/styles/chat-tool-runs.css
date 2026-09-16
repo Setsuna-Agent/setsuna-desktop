@@ -318,7 +318,6 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 
 .chat-file-changes__header {
   gap: 8px;
-  flex-wrap: wrap;
   justify-content: space-between;
   padding: 10px 12px;
 }
@@ -343,10 +342,15 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 }
 
 .chat-file-changes__title {
+  /* 窄面板优先收缩标题，为变更统计和操作按钮保留空间。 */
+  min-width: 0;
+  overflow: hidden;
   color: var(--app-text);
   font-size: 14px;
   font-weight: 500;
   line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-file-changes__actions {

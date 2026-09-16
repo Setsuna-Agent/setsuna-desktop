@@ -91,26 +91,26 @@ export function SidebarThreadRow({
           <Pin className="desktop-agent-session__pin-icon" size={14} strokeWidth={1.5} fill={pinned ? 'currentColor' : 'none'} />
         </Button>
       </ActionTooltip>
+      {/* 运行状态与归档操作共用同一位置，进行中不挂载归档按钮。 */}
       {isRunning ? (
         <ActionTooltip title={t('sidebar.chatRunning')}>
-          {/* 进行中的对话不允许归档，hover 时同样保持 loading 指示。 */}
           <span className="desktop-agent-session__running" aria-label={t('sidebar.chatRunning')} role="status">
             <LoaderCircle className="is-spinning" size={13} />
           </span>
         </ActionTooltip>
-      ) : null}
-      <ActionTooltip title={t('sidebar.archiveChat')}>
-        <Button variant="ghost"
-          className="desktop-agent-session__archive-button"
-          type="button"
-          aria-label={t('sidebar.archiveChat')}
-          disabled={isRunning}
-          onClick={handleArchiveClick}
-          onKeyDown={(event) => event.stopPropagation()}
-        >
-          <Archive size={14} />
-        </Button>
-      </ActionTooltip>
+      ) : (
+        <ActionTooltip title={t('sidebar.archiveChat')}>
+          <Button variant="ghost"
+            className="desktop-agent-session__archive-button"
+            type="button"
+            aria-label={t('sidebar.archiveChat')}
+            onClick={handleArchiveClick}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            <Archive size={14} />
+          </Button>
+        </ActionTooltip>
+      )}
     </span>
   );
 

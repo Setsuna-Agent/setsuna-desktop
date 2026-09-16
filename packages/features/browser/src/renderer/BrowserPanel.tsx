@@ -50,6 +50,7 @@ import type {
   BrowserSelectFieldComponent,
 } from './types.js';
 import { useBrowserBookmarks } from './useBrowserBookmarks.js';
+import { useBrowserBackgroundViewport } from './useBrowserBackgroundViewport.js';
 import { useBrowserHistory } from './useBrowserHistory.js';
 import { useBrowserScreenshot } from './useBrowserScreenshot.js';
 import './browser.css';
@@ -136,6 +137,7 @@ export function BrowserPanel({
   selectField?: BrowserSelectFieldComponent;
   translate: BrowserTranslate;
 }) {
+  const panelRef = useBrowserBackgroundViewport(hidden);
   const webviewRef = useRef<BrowserWebviewElement | null>(null);
   const registeredTabIdRef = useRef<string | null>(null);
   const [tab, setTab] = useState<BrowserTab>(() => createBrowserTab(panel, translate));
@@ -373,9 +375,12 @@ export function BrowserPanel({
 
   return (
     <aside
+      ref={panelRef}
       className={`desktop-workspace-panel desktop-browser-panel${placement === 'bottom' ? ' desktop-workspace-panel--bottom-floating' : ''}`}
       aria-label={translate('feature.browser.label')}
+      aria-hidden={hidden || undefined}
       hidden={hidden}
+      {...(hidden ? { inert: '' } : {})}
     >
       {placement === 'side' ? (
         resizeHandle

@@ -535,16 +535,12 @@
 }
 
 .desktop-agent-session__running {
-  position: absolute;
-  top: 0;
-  right: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: var(--desktop-agent-row-action-size);
   height: var(--desktop-agent-row-action-size);
   color: color-mix(in srgb, var(--desktop-agent-accent) 72%, var(--app-sidebar-text-secondary));
-  transition: opacity 160ms ease;
 }
 
 .desktop-agent-session__pin-button,
@@ -583,9 +579,8 @@
   pointer-events: auto;
 }
 
-/* 进行中的行禁用归档：hover/focus 时保持 loading 指示，而不是替换成归档按钮。 */
-.desktop-agent-session:not(.is-running):hover .desktop-agent-session__archive-button,
-.desktop-agent-session:not(.is-running):has(:focus-visible) .desktop-agent-session__archive-button,
+.desktop-agent-session:hover .desktop-agent-session__archive-button,
+.desktop-agent-session:has(:focus-visible) .desktop-agent-session__archive-button,
 .desktop-agent-session__archive-button:focus-visible {
   opacity: 1;
   pointer-events: auto;

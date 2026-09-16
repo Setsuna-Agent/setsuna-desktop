@@ -448,7 +448,7 @@ export function DesktopWorkspacePanelLayer({
           const target = desktopWorkspacePanelTargetContext(instance.targetIdentity, projectIdByThreadId);
           const surfaceInstanceId = JSON.stringify([instance.targetIdentity, instance.panel.id]);
           return (
-            <FloatingWorkspacePanelSlot hidden={!instance.active} key={surfaceInstanceId} placement={instance.placement}>
+            <FloatingWorkspacePanelSlot hidden={!instance.active} keepRenderingWhenHidden key={surfaceInstanceId} placement={instance.placement}>
               <WorkspacePanelRenderer panel={instance.panel} placement={instance.placement} projectId={target.projectId} surfaceInstanceId={surfaceInstanceId} threadId={target.threadId} visible={instance.active}>
                 {null}
               </WorkspacePanelRenderer>

@@ -1,5 +1,15 @@
-.desktop-browser-panel[hidden] {
-  display: none;
+/* display:none/visibility:hidden suppress the guest's capture surface. Keep a
+   transparent, inert viewport without occupying the active workspace panel. */
+:root .desktop-workspace-panel.desktop-browser-panel[hidden] {
+  display: flex;
+  position: fixed;
+  inset: 0 auto auto 0;
+  /* The layout width becomes 0px when collapsed; visual width retains a usable viewport. */
+  width: var(--desktop-browser-background-width, var(--desktop-agent-workspace-visual-width, 960px));
+  height: var(--desktop-browser-background-height, 720px);
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .desktop-browser-tab__favicon {
@@ -523,19 +533,15 @@
 }
 
 .desktop-browser-viewport {
-  display: none;
+  display: block;
   grid-area: 1 / 1;
   min-width: 0;
   min-height: 0;
-}
-
-.desktop-browser-viewport.is-active {
-  display: block;
   width: 100%;
   height: 100%;
 }
 
-.desktop-browser-content.is-device-emulation .desktop-browser-viewport.is-active {
+.desktop-browser-content.is-device-emulation .desktop-browser-viewport {
   align-self: start;
   justify-self: safe center;
   position: relative;

@@ -1,57 +1,48 @@
+// @vitest-environment happy-dom
+
 import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
+import { cleanup, fireEvent, render } from '@testing-library/react';
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SidebarThreadRow } from '../../../../src/app/sidebar/SidebarThreadRow.js';
 
 vi.mock('../../../../src/app/sidebar/SidebarFloatingMenu.js', () => ({ SidebarFloatingMenu: () => null }));
 
+afterEach(cleanup);
+
 describe('SidebarThreadRow', () => {
-  it('shows loading from the thread runtime snapshot without relying on the selected thread prop', () => {
-    const html = renderRow({ ...thread, activeTurnId: 'turn_goal_1' });
+  it.each([
+    { source: 'runtime snapshot', activeTurnId: 'turn_goal_1', running: false },
+    { source: 'current-thread fallback', activeTurnId: undefined, running: true },
+  ])('makes archiving unavailable while the $source is running, then restores the action', ({ activeTurnId, running }) => {
+    const onArchive = vi.fn();
+    const onSelect = vi.fn();
+    const row = (value: RuntimeThreadSummary, isRunning = false) => createElement(SidebarThreadRow, {
+      menuOpen: false,
+      running: isRunning,
+      selected: false,
+      thread: value,
+      variant: 'project',
+      onArchive,
+      onRename: () => undefined,
+      onSelect,
+      onToggleMenu: () => undefined,
+      onTogglePin: () => undefined,
+    });
+    const view = render(row(thread));
+    expect(view.getByRole('button', { name: '归档对话' })).toBeTruthy();
 
-    expect(html).toContain('is-running');
-    expect(html).toContain('aria-label="对话进行中"');
-    expect(html).toContain('aria-label="归档对话"');
-    expect(html).not.toContain('aria-label="对话操作"');
+    view.rerender(row({ ...thread, activeTurnId }, running));
+    expect(view.getByRole('status', { name: '对话进行中' })).toBeTruthy();
+    expect(view.queryByRole('button', { name: '归档对话', hidden: true })).toBeNull();
+    expect(onArchive).not.toHaveBeenCalled();
+
+    view.rerender(row(thread));
+    fireEvent.click(view.getByRole('button', { name: '归档对话' }));
+    expect(onArchive).toHaveBeenCalledExactlyOnceWith(thread);
+    expect(onSelect).not.toHaveBeenCalled();
   });
-
-  it('keeps the explicit current-thread running state as a snapshot race fallback', () => {
-    const html = renderRow(thread, true);
-
-    expect(html).toContain('is-running');
-    expect(html).toContain('aria-label="对话进行中"');
-  });
-
-  it('disables the archive action while the thread is running', () => {
-    const html = renderRow({ ...thread, activeTurnId: 'turn_goal_1' });
-
-    const archive = html.match(/<button[^>]*aria-label="归档对话"[^>]*>/)?.[0];
-    expect(archive).toContain('disabled=""');
-  });
-
-  it('keeps the archive action enabled when idle', () => {
-    const html = renderRow(thread);
-
-    expect(html).not.toContain('disabled');
-  });
-
 });
-
-function renderRow(value: RuntimeThreadSummary, running = false): string {
-  return renderToStaticMarkup(createElement(SidebarThreadRow, {
-    menuOpen: false,
-    running,
-    selected: false,
-    thread: value,
-    variant: 'project',
-    onArchive: () => undefined,
-    onRename: () => undefined,
-    onSelect: () => undefined,
-    onToggleMenu: () => undefined,
-    onTogglePin: () => undefined,
-  }));
-}
 
 const thread: RuntimeThreadSummary = {
   id: 'thread_1',

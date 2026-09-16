@@ -88,9 +88,82 @@ describe('Pi model client protocol integration', () => {
       }
     };
 
-    await expect(consume()).rejects.toThrow();
+    await expect(consume()).rejects.toThrow('Stream ended without finish_reason');
     expect(deltas.join('')).toBe('catalog response');
     expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['dedicated reasoning', { reasoning_content: 'unfinished thinking' }, true],
+    ['legacy think tags', { content: '<think>unfinished thinking' }, false],
+  ] as const)('recovers truncated %s with the same tool results and session', async (_kind, delta, emittedReasoning) => {
+    vi.useFakeTimers();
+    const bodies: string[] = [];
+    const sessions: (string | null)[] = [];
+    const fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      bodies.push(String(init?.body));
+      sessions.push(new Headers(init?.headers).get('x-opencode-session'));
+      const body = bodies.length === 1
+        ? `data: ${JSON.stringify({ choices: [{ delta, finish_reason: null }] })}\n\n`
+        : openAiCompletionsSse();
+      return new Response(body, { headers: { 'Content-Type': 'text/event-stream' } });
+    });
+    const client = new PiModelClient(host({
+      ...providerFixture('openai-compatible'), catalogProviderId: 'opencode-go',
+    }, fetch));
+    const request = requestFixture({ sessionId: 'same-thread', thinking: true });
+    request.messages.push(
+      {
+        id: 'assistant', role: 'assistant', content: '', status: 'complete', createdAt: '2026-01-01T00:00:02.000Z',
+        toolCalls: [{ id: 'call-1', name: 'run_shell_command', arguments: '{"command":"write-result"}' }],
+      },
+      {
+        id: 'tool', role: 'tool', toolCallId: 'call-1', status: 'complete', createdAt: '2026-01-01T00:00:03.000Z',
+        content: 'Command completed; stored once.',
+      },
+    );
+    const pending = collect(client.stream(request));
+    const completed = expect(pending).resolves.toContainEqual({ type: 'done', finishReason: 'stop' });
+
+    await Promise.all([completed, vi.advanceTimersByTimeAsync(1_000)]);
+    const events = await pending;
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(new Set(bodies).size).toBe(1);
+    expect(bodies[1]).toContain('Command completed; stored once.');
+    expect(bodies[1]).not.toContain('unfinished thinking');
+    expect(sessions).toEqual(['same-thread', 'same-thread']);
+    // Legacy envelopes stay buffered until a valid terminal event resolves the channel.
+    expect(events.filter((event) => event.type === 'item_completed' && event.item.status === 'failed'))
+      .toMatchObject(emittedReasoning ? [{ item: { kind: 'reasoning', content: 'unfinished thinking' } }] : []);
+    const textIds = new Set(events.flatMap((event) => (
+      event.type === 'item_started' && event.item.kind === 'agent_message' ? [event.item.id] : []
+    )));
+    expect(events.flatMap((event) => (
+      event.type === 'item_delta' && textIds.has(event.itemId) ? [event.delta] : []
+    )).join('')).toBe('catalog response');
+    expect(events.filter((event) => event.type === 'assistant_metadata')).toHaveLength(1);
+    expect(JSON.stringify(events.find((event) => event.type === 'assistant_metadata'))).not.toContain('unfinished thinking');
+    expect(events.filter((event) => event.type === 'tool_calls')).toHaveLength(0);
+    expect(events.at(-1)).toEqual({ type: 'done', finishReason: 'stop' });
+  });
+
+  it.each([
+    ['openai-compatible', openAiCompletionsSse],
+    ['anthropic', anthropicSse],
+    ['openai-responses', responsesSse],
+  ] as const)('retries missing terminal responses before content for %s', async (kind, sse) => {
+    vi.useFakeTimers();
+    let attempts = 0;
+    const fetch = vi.fn(async () => new Response(++attempts === 1 ? '' : sse(), {
+      headers: { 'Content-Type': 'text/event-stream' },
+    }));
+    const client = new PiModelClient(host(providerFixture(kind), fetch));
+    const pending = expect(collect(client.stream(requestFixture())))
+      .resolves.toContainEqual({ type: 'done', finishReason: 'stop' });
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    await pending;
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   it.each([

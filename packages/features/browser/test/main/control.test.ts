@@ -1,6 +1,6 @@
 import type { KeyboardInputEvent, WebContents } from 'electron';
 import { EventEmitter } from 'node:events';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type {
   BrowserAutomation,
   BrowserAutomationSnapshot,
@@ -252,10 +252,13 @@ describe('DesktopBrowserController', () => {
     });
   });
 
-  it('captures a registered browser page as PNG data for UI and model tools', async () => {
+  it('captures and reads a background tab without changing the active tab or input focus', async () => {
     const contents = new FakeWebContents(13);
+    const foreground = new FakeWebContents(14);
     const controller = new DesktopBrowserController({ createAutomation: () => new FakeAutomation() });
     controller.registerTab('tab-1', asWebContents(contents));
+    controller.registerTab('tab-2', asWebContents(foreground));
+    controller.setActiveTab('tab-2');
 
     await expect(controller.captureScreenshot('tab-1')).resolves.toEqual({
       dataUrl: 'data:image/png;base64,aW1hZ2U=',
@@ -273,8 +276,37 @@ describe('DesktopBrowserController', () => {
       url: 'https://example.com/',
       width: 1280,
     });
+    await expect(controller.execute({ kind: 'snapshot', tabId: 'tab-1' })).resolves.toMatchObject({
+      kind: 'snapshot',
+      tabId: 'tab-1',
+      text: 'Inbox row page',
+    });
+    await expect(controller.execute({ kind: 'tabs' })).resolves.toMatchObject({
+      tabs: [{ id: 'tab-1', active: false }, { id: 'tab-2', active: true }],
+    });
     expect(contents.captureCount).toBe(2);
+    expect(foreground.captureCount).toBe(0);
+    expect(contents.focusCount).toBe(0);
+    expect(contents.hostFocusCount).toBe(0);
     await expect(controller.captureScreenshot('../invalid')).resolves.toBeNull();
+  });
+
+  it('preserves capture failures for tools while retaining the UI null result', async () => {
+    const contents = new FakeWebContents(15);
+    const controller = new DesktopBrowserController({ createAutomation: () => new FakeAutomation() });
+    controller.registerTab('tab-1', asWebContents(contents));
+    const capture = vi.spyOn(contents, 'capturePage').mockRejectedValue(new Error('Guest render process exited.'));
+
+    await expect(controller.execute({ kind: 'screenshot', tabId: 'tab-1' })).rejects.toThrow('Guest render process exited.');
+    await expect(controller.captureScreenshot('tab-1')).resolves.toBeNull();
+
+    capture.mockResolvedValue({
+      getSize: () => ({ height: 0, width: 0 }),
+      isEmpty: () => true,
+      toPNG: () => Buffer.alloc(0),
+    });
+    await expect(controller.execute({ kind: 'screenshot', tabId: 'tab-1' })).rejects.toThrow('No rendered frame');
+    capture.mockRestore();
   });
 
   it('reloads a registered tab with the requested cache policy', () => {

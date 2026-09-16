@@ -19,6 +19,7 @@ export type DesktopTerminalEventPayload = DesktopTerminalEvent & Readonly<{
 export interface TerminalDesktopBridge {
   open(workspaceRoot?: string | null, cols?: number, rows?: number): Promise<DesktopTerminalSession>;
   write(sessionId: string, input: string): Promise<boolean>;
+  /** Returns a non-destructive snapshot of bounded history; consumers deduplicate by seq. */
   read(sessionId: string): Promise<DesktopTerminalEvent[]>;
   resize(sessionId: string, cols: number, rows: number): Promise<boolean>;
   restart(sessionId: string, cols?: number, rows?: number): Promise<boolean>;

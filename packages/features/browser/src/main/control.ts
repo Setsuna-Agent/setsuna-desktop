@@ -141,7 +141,7 @@ export class DesktopBrowserController implements BrowserControlExecutor {
     }
     if (!entry || entry.contents.isDestroyed()) return null;
 
-    return captureBrowserScreenshot(entry.contents);
+    return captureBrowserScreenshot(entry.contents).catch(() => null);
   }
 
   async setDeviceEmulation(tabId: string, emulation: DesktopBrowserDeviceEmulation | null): Promise<boolean> {
@@ -278,7 +278,6 @@ export class DesktopBrowserController implements BrowserControlExecutor {
     throwIfAborted(signal);
     const screenshot = await captureBrowserScreenshot(entry.contents);
     throwIfAborted(signal);
-    if (!screenshot) throw new Error('The browser page could not be captured.');
     return {
       ...screenshot,
       kind: 'screenshot',
@@ -433,24 +432,20 @@ function assertCurrentSnapshotRef(revisions: Map<string, number>, tabId: string,
   }
 }
 
-async function captureBrowserScreenshot(contents: WebContents): Promise<DesktopBrowserScreenshot | null> {
-  try {
-    const image = await contents.capturePage();
-    if (image.isEmpty()) return null;
-    const png = image.toPNG();
-    if (!png.byteLength) return null;
-    const { height, width } = image.getSize();
-    return {
-      dataUrl: `data:image/png;base64,${png.toString('base64')}`,
-      height,
-      mimeType: 'image/png',
-      size: png.byteLength,
-      width,
-    };
-  } catch {
-    // Chromium 生成位图期间，来宾页面可能会分离。
-    return null;
-  }
+async function captureBrowserScreenshot(contents: WebContents): Promise<DesktopBrowserScreenshot> {
+  // 后台截图只唤醒画面生成，不激活页签；底层异常保留给工具，避免误判为页签失效。
+  const image = await contents.capturePage(undefined, { stayHidden: true, stayAwake: true });
+  if (image.isEmpty()) throw new Error('No rendered frame is available for this browser tab screenshot.');
+  const png = image.toPNG();
+  if (!png.byteLength) throw new Error('The browser screenshot could not be encoded as PNG.');
+  const { height, width } = image.getSize();
+  return {
+    dataUrl: `data:image/png;base64,${png.toString('base64')}`,
+    height,
+    mimeType: 'image/png',
+    size: png.byteLength,
+    width,
+  };
 }
 
 function normalizeBrowserKey(value: string): string {

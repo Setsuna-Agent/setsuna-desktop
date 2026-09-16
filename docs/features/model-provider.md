@@ -40,6 +40,7 @@ AgentLoop / Review / Vision / Thread title / Memory
 | `pi-model-client.ts` | Provider 解析、Pi built-in/custom 分发、超时、取消和温度兼容重试 |
 | `pi-context.ts` | `ModelRequest`/tool/image/history 到 Pi context，v2/v3 replay |
 | `pi-stream-bridge.ts` | Pi stream 到 `ModelStreamEvent`、usage、v3 metadata |
+| `pi-stream-recovery.ts` | 缺失结束标记时的有限重试、部分输出保护和可取消退避 |
 | `provider-catalog.ts` | 窄注册表筛选 Pi built-in 厂商/方案/模型，并恢复预置模型 compat metadata |
 | `remote-model-catalog.ts` / `remote-model-catalog-data.ts` | 远程目录校验、按厂商更新、缓存恢复及内存合并 |
 | `model-discovery.ts` | 模型列表、能力解析、请求取消和超时上限 |
@@ -57,7 +58,9 @@ Setsuna provider ID 是配置和 metadata 身份。预置配置的 Pi model 保�
 
 模型采样与原生压缩保留单次请求 15 分钟总超时，用户取消会立即中止等待。流式请求不再按 SDK 输出事件设置空闲超时：首个事件较慢、思考期间没有输出或心跳未透传为 SDK 事件，都不能单独触发轮次失败。该上限针对每次模型请求，不是整个任务的运行时长。
 
-三种采样协议均启用 Pi 的请求重试：连接失败、HTTP 408/409/429 和 5xx 等临时错误最多重试 3 次，使用可取消的指数退避，并遵循服务端重试提示（单次等待上限 60 秒）。重试共享同一次采样的上下文、会话身份与总超时，期间不结束轮次或重新执行已完成的工具。流式响应开始后的中断不自动重放，避免重复输出；不可重试错误或重试耗尽后才向上层报告失败。
+三种采样协议均启用 Pi 的请求重试：连接失败、HTTP 408/409/429 和 5xx 等临时错误最多重试 3 次，使用可取消的指数退避，并遵循服务端重试提示（单次等待上限 60 秒）。重试共享同一次采样的上下文、会话身份与总超时，期间不结束轮次或重新执行已完成的工具。
+
+响应缺失协议结束标记（例如 `Stream ended without finish_reason`）时，如果尚未输出正文或工具调用，允许在同一采样内额外重试最多 2 次，分别等待 1 秒和 2 秒；思考输出不阻止恢复。失败尝试的思考条目标记为失败并保留，同时发布重试提示；只有成功尝试的 metadata 用于后续模型回放。重试与退避共享原有 15 分钟总超时，并响应用户取消。已经开始输出正文或工具调用、其他类型错误或重试耗尽时，仍向上层报告失败，避免重复输出或错误执行不完整的工具调用。
 
 ### Renderer
 

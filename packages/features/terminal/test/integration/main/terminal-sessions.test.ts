@@ -28,6 +28,9 @@ describe('desktop terminal store', () => {
     expect(queuedEvents.map((event) => event.seq)).toEqual(
       [...queuedEvents].sort((left, right) => left.seq - right.seq).map((event) => event.seq),
     );
+    // An unmounted renderer may never apply its read response. A replacement
+    // panel must still be able to read the same prompt and output.
+    expect(store.read(session.sessionId)).toEqual(queuedEvents);
     expect(store.close(session.sessionId)).toBe(true);
   });
 

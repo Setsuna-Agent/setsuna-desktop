@@ -84,7 +84,7 @@ export function FileChangesSummaryCard({
           <FileDiff size={14} />
         </span>
         <span className="chat-file-changes__summary">
-          <span className="chat-file-changes__title">
+          <span className="chat-file-changes__title" title={singleFile?.path}>
             {singleFile
               ? `${completedFileOperationActionLabel(
                 normalizeFileOperationAction(singleFile.action),

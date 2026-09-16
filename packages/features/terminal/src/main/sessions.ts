@@ -93,7 +93,9 @@ export class DesktopTerminalStore {
   read(sessionId: string): DesktopTerminalEventPayload[] {
     const session = this.sessions.get(sessionId);
     if (!session) return [];
-    return session.events.splice(0, session.events.length);
+    // A panel may unmount before its IPC response arrives. Retain the bounded
+    // history so the next subscriber can replay it using its last applied seq.
+    return session.events.slice();
   }
 
   resize(sessionId: string, cols: number, rows: number): boolean {

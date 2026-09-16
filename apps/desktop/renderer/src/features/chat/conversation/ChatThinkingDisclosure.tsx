@@ -1,4 +1,4 @@
-import { Brain as ThinkIcon } from 'lucide-react';
+import { Atom as ThinkIcon } from 'lucide-react';
 import { ChevronDown } from 'lucide-react';
 import { useState, type ReactNode, type SyntheticEvent } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
