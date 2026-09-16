@@ -155,7 +155,6 @@ export function BrowserDeviceViewport({
     <div
       className={[
         'desktop-browser-viewport',
-        active ? 'is-active' : '',
         deviceEmulation.enabled ? 'is-device-emulation' : '',
         resizable ? 'is-responsive' : '',
       ].filter(Boolean).join(' ')}

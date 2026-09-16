@@ -36,6 +36,12 @@
   display: none;
 }
 
+/* Browser guests own their background viewport; the slot must not suppress it. */
+.desktop-workspace-panel-slot[hidden][data-keep-rendering],
+.desktop-floating-workspace-panel-slot[hidden][data-keep-rendering] {
+  display: contents;
+}
+
 .desktop-workspace-panel-slot > .desktop-workspace-panel {
   position: absolute;
   inset: 0 0 0 auto;

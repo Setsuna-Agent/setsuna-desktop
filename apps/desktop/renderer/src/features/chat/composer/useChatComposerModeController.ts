@@ -166,10 +166,8 @@ export function useChatComposerModeController({
     enableGoalMode,
     enableReviewMode,
     goalModeEnabled: localModes.sendIntent === 'goal',
-    hasProtectedModeState: Boolean(
-      thinkingSelection.enabled
-      || localModes.sendIntent !== 'message'
-    ),
+    // Thinking is a persistent model preference; retrieving a queued draft does not overwrite it.
+    hasProtectedModeState: localModes.sendIntent !== 'message',
     modelOpenSignal,
     openModelPicker,
     resetAfterSend,

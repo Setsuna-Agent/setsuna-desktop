@@ -45,6 +45,7 @@ import {
 } from './pi-request-compatibility.js';
 import { builtinCatalogProviderIdForConfig, getBuiltinCatalogProvider } from './provider-catalog.js';
 import { applyProviderRequestHeaders } from './provider-request-headers.js';
+import { recoverIncompletePiStream } from './pi-stream-recovery.js';
 
 const EMPTY_API_KEY = 'setsuna-no-provider-api-key';
 const LOCAL_SMOKE_MODEL = 'local-runtime-smoke';
@@ -119,14 +120,16 @@ export class PiModelClient implements ModelProviderSamplingService {
     const fetch = this.providerFetch(provider, request.sessionId, transportFailure);
     const catalogProviderId = builtinCatalogProviderIdForConfig(provider, this.providers);
     const catalogProvider = catalogProviderId ? getBuiltinCatalogProvider(catalogProviderId, this.providers) : undefined;
-    const createStream = (signal: AbortSignal) => streamForProvider(model, context, {
-      ...request,
-      signal,
-      apiKey: provider.apiKey.trim() || EMPTY_API_KEY,
-      fetch,
-    }, catalogProvider);
-    const events = streamWithModelTimeout(createStream, request.signal);
-    yield* bridgePiStream(events, provider, replayContext, transportFailure);
+    // All stream attempts and their backoff share this sampling step's total deadline.
+    yield* streamWithModelTimeout((signal) => recoverIncompletePiStream(() => {
+      const events = streamForProvider(model, context, {
+        ...request,
+        signal,
+        apiKey: provider.apiKey.trim() || EMPTY_API_KEY,
+        fetch,
+      }, catalogProvider);
+      return bridgePiStream(events, provider, replayContext, transportFailure);
+    }, signal), request.signal);
   }
 
   private publishProviderReplayDebug(request: ModelRequest, replayContext: ReturnType<typeof createPiReplayContext>): void {

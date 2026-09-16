@@ -124,6 +124,7 @@ Main 不执行页面任意 JavaScript，也不向 runtime 暴露原始 CDP comma
 
 - Favicon 只从当前 guest 提供的候选 URL 解析，限制 scheme、大小和响应类型。
 - Screenshot 由 main 对可信 guest 执行，再通过明确 payload 返回 renderer。
+- 后台标签页保留最近一次可见面板的尺寸，以透明、inert 的独立视口维持 guest 渲染；外层 slot 不能使用 `display: none` 截断它。截图和 DOM 快照按 tab ID 读取，不切换前台标签或抢占焦点。截图时仅临时唤醒画面生成，工具保留底层错误供诊断。
 - Device emulation 绑定 tab/CDP target；关闭或切回响应式模式时必须清除 override。
 - Renderer 的设备 toolbar 只表达 UI 状态，最终模拟状态由 main 确认。
 

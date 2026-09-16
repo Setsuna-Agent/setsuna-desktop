@@ -73,7 +73,7 @@ Terminal 拥有 PTY session、固定 IPC、preload bridge、xterm pane、恢复 
 - Cwd 必须是存在目录；有 workspace 时使用 workspace root，否则使用安全默认目录。
 - Shell 按平台选择，环境由 main composition 注入，包含 GUI 启动补齐的 PATH 和 Network Proxy 的 terminal 路由。
 - Session ID 由 Main 生成，renderer 不能指定任意系统进程。
-- Output event 带递增 sequence 和有界恢复 buffer；renderer 重挂载后先 read，再继续订阅。
+- Output event 带递增 sequence 和有界恢复 buffer；renderer 先订阅并暂存实时事件，待 read 返回后合并、按 sequence 排序去重，再继续实时消费。Read 不清空 Main 缓存，避免面板卸载后的过期响应取走恢复数据；卸载时停止订阅并忽略未完成的 read 响应。
 - 关闭 window、Feature scope 或 app 时必须撤销 handler 并关闭全部 PTY。
 - 输入是 PTY 字节流，不经过 shell 字符串拼接；“打开 session”与 Agent 的 `exec` 工具是不同安全面。
 

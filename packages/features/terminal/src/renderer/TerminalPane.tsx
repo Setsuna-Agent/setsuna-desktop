@@ -13,11 +13,10 @@ import type {
 import {
   appendTerminalRestoreBuffer,
   markTerminalSessionExited,
-  recordTerminalEventSeq,
-  terminalLastEventSeq,
   terminalRestoreBuffer,
   terminalSessionExited,
 } from './terminalRestoreBuffer.js';
+import { subscribeTerminalEvents } from './terminalEventSubscription.js';
 import { terminalDisplayTitle } from './terminalTitle.js';
 import './terminal.css';
 
@@ -103,9 +102,6 @@ export function TerminalPane({
     });
 
     const handleEvent = (event: DesktopTerminalEvent) => {
-      const lastSeq = terminalLastEventSeq(session.sessionId);
-      if (event.seq <= lastSeq) return;
-      recordTerminalEventSeq(session.sessionId, event.seq);
       if (event.event === 'ready') {
         markTerminalSessionExited(session.sessionId, false);
         setExited(false);
@@ -143,8 +139,7 @@ export function TerminalPane({
       }
     };
 
-    const unsubscribe = bridge.onEvent(session.sessionId, handleEvent);
-    void bridge.read(session.sessionId).then((events) => events.forEach(handleEvent)).catch(() => undefined);
+    const unsubscribe = subscribeTerminalEvents(bridge, session.sessionId, handleEvent);
 
     return () => {
       sessionActive = false;
