@@ -36,9 +36,10 @@ export function UpdaterSettingsView({
   const updateBusy = updater.checking
     || state?.status === 'checking'
     || state?.status === 'available'
-    || state?.status === 'downloading';
+    || state?.status === 'downloading'
+    || updater.installing;
   const updateUnsupported = state?.canUpdate === false || state?.status === 'unsupported';
-  const showCheckButton = updater.available && !updater.ready;
+  const showCheckButton = updater.available && !updater.ready && !updater.installing;
   const showProgress = updateBusy || updater.ready;
   const releaseUrl = state?.releaseUrl ?? state?.feedUrl ?? null;
   const displayedPlatform = state?.platform ?? platform;
@@ -346,6 +347,7 @@ function updateBadgeTone(
 }
 
 function updateBadgeText(state: DesktopUpdateState | null, t: RendererTranslate): string {
+  if (state?.status === 'installing') return t('feature.updater.settings.badge.installing');
   if (state?.status === 'downloaded') return t('feature.updater.settings.badge.pending');
   if (state?.status === 'downloading') return t('feature.updater.settings.badge.downloading');
   if (state?.status === 'checking') return t('feature.updater.settings.badge.checking');

@@ -62,7 +62,8 @@ async function bootstrapRenderer(): Promise<void> {
   initializeCodeAppearancePreference();
   initializeSidebarBackgroundPreference();
   const features = await activateBuiltinRendererFeatures();
-  window.addEventListener('beforeunload', () => {
+  // A draft guard may cancel beforeunload; only dispose after closing is accepted.
+  window.addEventListener('unload', () => {
     void features.composition.dispose();
   }, { once: true });
 

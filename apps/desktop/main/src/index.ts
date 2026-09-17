@@ -6,6 +6,7 @@ import type {
 import type { MainFeatureComposition } from '@setsuna-desktop/feature-core/main';
 import {
   app,
+  autoUpdater,
   BrowserWindow,
   clipboard,
   dialog,
@@ -74,6 +75,7 @@ import { showStartupSplash, waitForRendererFirstPaint } from './window/splash/wi
 import { loadDesktopWindowState, trackDesktopWindowState } from './window/state.js';
 import { resolveMainWindowSurfaceOptions } from './window/surface.js';
 import { DesktopTrayController, revealDesktopWindow } from './window/tray.js';
+import { DesktopUpdateInstallCoordinator, updateInstallUnsavedDialog } from './window/update-install.js';
 
 // Reject unsupported hosts before acquiring locks or creating the data directory.
 if (process.platform !== 'darwin' && process.platform !== 'win32') {
@@ -106,6 +108,22 @@ let desktopServicesShutdownPromise: Promise<void> | null = null;
 let appQuitAfterShutdown = false;
 let appQuitShutdownPending = false;
 let desktopRelaunchRequested = false;
+const updateInstallCoordinator = new DesktopUpdateInstallCoordinator({
+  getWindows: () => BrowserWindow.getAllWindows(),
+  confirmDiscard: (window) => dialog.showMessageBoxSync(window, updateInstallUnsavedDialog(interfaceLanguage)) === 1,
+  stopRuntime: async () => { await runtimeHost?.stop(); },
+  recover: () => {
+    isAppQuitting = false;
+    if (mainWindow && !mainWindow.isDestroyed()) return;
+    // Run after the updater IPC settles: Feature disposal drains active IPC calls.
+    setImmediate(() => {
+      void shutdownDesktopServices().then(createWindow).catch((error) => {
+        console.error('[desktop-updater] failed to restore the app', error);
+        dialog.showErrorBox('Setsuna Desktop', String(error));
+      });
+    });
+  },
+});
 const usesCustomFrame = process.platform === 'win32';
 const desktopInstanceProfile = resolveDesktopInstanceProfile({
   appDataRoot: app.getPath('appData'),
@@ -310,6 +328,7 @@ async function createWindow(): Promise<void> {
         downloadsDir: path.join(app.getPath('downloads'), 'Setsuna Desktop Updates'),
         sourceConfigPath: dataLayout.updateSourcesPath,
         enabled: app.isPackaged || process.env.SETSUNA_DESKTOP_ENABLE_UPDATES === '1',
+        installUpdate: (quitAndInstall: () => void) => updateInstallCoordinator.install(quitAndInstall),
         fetch: (
           input: Parameters<typeof globalThis.fetch>[0],
           init?: RequestInit,
@@ -444,6 +463,8 @@ async function createWindow(): Promise<void> {
           : Promise.resolve('quit'),
       });
       currentMainWindow.on('closed', () => {
+        // The update coordinator owns shutdown after all close guards accept.
+        if (updateInstallCoordinator.active) return;
         currentWebDavSyncLifecycle.close();
         void shutdownDesktopServices();
         if (mainWindow === currentMainWindow) mainWindow = null;
@@ -695,10 +716,14 @@ if (!ownsDesktopInstance) {
   });
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) void createWindow();
+    if (!updateInstallCoordinator.active && BrowserWindow.getAllWindows().length === 0) void createWindow();
   });
 
   app.on('before-quit', (event) => {
+    if (updateInstallCoordinator.active && !isAppQuitting) {
+      event.preventDefault();
+      return;
+    }
     isAppQuitting = true;
     if (appQuitAfterShutdown) return;
     event.preventDefault();
@@ -708,5 +733,12 @@ if (!ownsDesktopInstance) {
       appQuitAfterShutdown = true;
       app.quit();
     });
+  });
+
+  autoUpdater.on('before-quit-for-update', () => { isAppQuitting = true; });
+  // Native completion can arrive after the Feature has been disposed on quit.
+  autoUpdater.on('error', (error) => {
+    console.error('[desktop-updater]', error);
+    updateInstallCoordinator.recover();
   });
 }

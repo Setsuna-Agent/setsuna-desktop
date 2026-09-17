@@ -105,7 +105,7 @@ Updater 拥有 release metadata、asset 选择、下载源、checksum 校验、�
 状态链路：
 
 ```text
-idle → checking → available → downloading → ready
+idle → checking → available → downloading → downloaded → installing（macOS ZIP）
              └──────────────→ error/cancelled
 ```
 
@@ -117,6 +117,18 @@ idle → checking → available → downloading → ready
 - 下载中切换源要取消当前请求，再按新源重试。
 - Packaged app 默认启用；开发环境只有显式环境变量才启用更新。
 - 下载/安装动作与状态事件都由 Main Feature owner 管理，renderer 不能自行下载或打开任意 URL。
+
+macOS 优先下载同架构 ZIP，要求 `SHA256SUMS` 中存在其校验值；旧 Release 只有 DMG 时仍显示手动安装。
+用户点击「重启安装」后再次校验本地 ZIP，经仅绑定 loopback、随机路径的临时 feed 交给 Electron
+`autoUpdater` / Squirrel.Mac。原生签名验证和 staging 完成后，宿主先关闭窗口：未保存文件可选择返回保存或明确放弃；
+取消关闭会恢复为更新就绪，runtime 和 renderer 服务保持可用。只有全部窗口确认关闭后才停止 runtime 并调用原生安装，
+避免 Squirrel 提前接管退出后被 `beforeunload` 卡住。若关闭后的停机或原生安装失败，宿主会重新打开应用。
+临时 feed 在完成、失败、超时和退出时关闭；准备失败不会触发退出。互联网下载仍走既有代理与下载源。
+窗口关闭阶段暂缓通常的 main Feature shutdown，避免销毁仍在执行的 updater；renderer 服务只在实际 unload 时释放。
+
+应用必须先通过 DMG 安装到可写位置，并使用同一 Developer ID 签名。未签名旧版本或尚未包含原生更新逻辑的版本
+需要手动安装一次新版 DMG，此后才可使用原生自动更新。发布仍以 GitHub Release API 和 `SHA256SUMS` 为元数据，
+不使用 electron-builder 的 `latest-mac.yml`。
 
 ## WebDAV Sync
 

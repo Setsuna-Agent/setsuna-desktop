@@ -144,7 +144,7 @@ dev 启动流程：
 
 平台产物：
 
-- macOS arm64/x64：DMG；Release workflow 要求内部 app 完成 Developer ID 签名和 Apple 公证。
+- macOS arm64/x64：DMG 安装包和原生自动更新用 ZIP；Release workflow 要求内部 app 完成 Developer ID 签名和 Apple 公证。
 - Windows x64：NSIS EXE。
 
 ### macOS 签名与公证
@@ -211,7 +211,7 @@ release 另有 `Integration diagnostics` job，在 macOS 上先构建 contracts�
 publish job：
 
 1. 下载所有 release artifact。
-2. `prepare-github-release-assets.mjs` 校验三个安装包齐全且无重名，整理上传目录并生成 SHA256SUMS。
+2. `prepare-github-release-assets.mjs` 校验三个安装包及两个 macOS 更新 ZIP 齐全且无重名，整理上传目录并生成 SHA256SUMS。
 3. 写 release notes。
 4. 用 `gh release create/edit/upload` 发布或更新 GitHub Release。
 
@@ -229,12 +229,17 @@ Windows runner 可能同时暴露同一目录的 8.3 短路径和长路径，并
 
 ## Release 下载清单
 
-公开下载仅保留 macOS arm64 DMG、macOS x64 DMG、Windows x64 NSIS EXE 和 `SHA256SUMS`。不再构建 ZIP，不上传 Linux 包、blockmap、electron-builder 更新元数据、内部 manifest 或构建日志。更新器从 GitHub Release API 选择安装包，并使用 `SHA256SUMS` 校验下载。
+公开下载包括 macOS arm64/x64 的 DMG 和 ZIP、Windows x64 NSIS EXE，以及覆盖全部五个文件的 `SHA256SUMS`。
+ZIP 与 DMG 来自同一签名、公证 app，ZIP 用于 Electron 原生自动更新。更新器仍从 GitHub Release API
+发现版本，macOS 优先选取同架构 ZIP，并强制校验 SHA-256；不上传 Linux 包、blockmap、electron-builder
+更新元数据、内部 manifest 或构建日志。临时 Squirrel feed 由 main 根据已下载 ZIP 在本机生成，无需托管额外服务。
 
-`scripts/release-assets.mjs` 定义三个安装包目标，供以下脚本共用：
+首次从未签名或尚无原生更新逻辑的旧版本迁移时，用户需要手动安装新版 DMG；后续版本可在应用内重启安装。
 
-- `collect-release-job-assets.mjs`：每个平台只收集其安装包；安装包缺失直接失败。
-- `prepare-github-release-assets.mjs`：只接收清单中的安装包，拒绝重名或缺少平台的发布，并生成校验文件。
+`scripts/release-assets.mjs` 定义三个平台的安装包与更新 ZIP 清单，供以下脚本共用：
+
+- `collect-release-job-assets.mjs`：每个平台收集其安装包与更新 ZIP；任一必需文件缺失直接失败。
+- `prepare-github-release-assets.mjs`：只接收清单中的安装包与更新 ZIP，拒绝重名或缺少平台的发布，并生成校验文件。
 - `release-dry-run.mjs`：生成本地 `release-artifacts/dry-run/release-manifest.json` 预览；该文件不上传，也不为预览生成安装包校验和。
 
 构建和测试日志继续通过 `diagnostic-*` Actions artifacts 保留 14 天，不进入公开 Release 下载区。
