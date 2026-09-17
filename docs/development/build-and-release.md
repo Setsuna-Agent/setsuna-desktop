@@ -37,7 +37,8 @@ corepack pnpm@7.33.7 <command>
 - `pnpm dev`：并行启动 Vite renderer 和 Electron dev。
 - `pnpm dev:renderer`：启动 Vite，默认 `127.0.0.1:5174`。
 - `pnpm prepare:electron`：检查并准备当前平台的 Electron 二进制；默认使用 Electron
-  文档推荐的中国镜像，可通过 `ELECTRON_MIRROR` 覆盖下载源。
+  文档推荐的中国镜像，可通过 `ELECTRON_MIRROR` 覆盖下载源。CI 和 Release workflow
+  显式使用 Electron 官方 GitHub 下载源，避免海外 runner 访问国内镜像时下载缓慢或超时。
 - `pnpm dev:electron`：先准备 Electron，再构建 contracts/runtime/electron bundle 并启动。
 - `pnpm build`：clean 后构建 contracts、runtime、electron、renderer。
 - `pnpm build:contracts`：只编译 `packages/contracts/src`，测试由独立 test tsconfig 类型检查。

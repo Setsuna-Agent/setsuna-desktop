@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+env:
+  # Hosted runners download directly from Electron instead of the local China mirror.
+  ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
