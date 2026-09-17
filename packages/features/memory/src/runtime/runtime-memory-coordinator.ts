@@ -47,6 +47,7 @@ import {
 } from './passive-memory-extraction.js';
 import { MemoryCitationStreamParser, parseMemoryCitationBodies } from './memory-citation.js';
 import { MemoryRuntimeTools } from './memory-runtime-tools.js';
+import { explicitMemoryContentFromUserText } from './explicit-memory-content.js';
 
 const PASSIVE_MEMORY_MODEL = 'passive-memory-extraction';
 const PASSIVE_MEMORY_MAX_OUTPUT_TOKENS = 900;
@@ -782,32 +783,6 @@ function clampInteger(value: unknown, fallback: number, min: number, max: number
 
 function toolCallPollutesMemory(toolCall: RuntimeToolCall, result: Readonly<{ containsExternalContext?: boolean }>): boolean {
   return result.containsExternalContext === true || toolCall.name.startsWith('mcp__');
-}
-
-function explicitMemoryContentFromUserText(value: string): string {
-  const text = value.trim();
-  if (!text) return '';
-  const patterns = [
-    /^(?:请|帮我|麻烦你)?(?:记住|记一下|记下来)(?:这件事|一下|一点)?[：:，,\s]*(?<content>[\s\S]+)$/u,
-    /^(?:请|帮我|麻烦你)?(?:保存|存储|写入|加入)(?:为|成|到|进)?(?:长期)?记忆[：:，,\s]*(?<content>[\s\S]+)$/u,
-    /^(?:please\s+)?remember(?:\s+that)?[\s:,-]*(?<content>[\s\S]+)$/i,
-    /^(?:please\s+)?(?:save|store)(?:\s+this)?(?:\s+(?:as|to|in))?\s+memory[\s:,-]*(?<content>[\s\S]+)$/i,
-  ];
-  for (const pattern of patterns) {
-    const content = cleanExplicitMemoryContent(pattern.exec(text)?.groups?.content);
-    if (content) return content;
-  }
-  return '';
-}
-
-function cleanExplicitMemoryContent(value: string | undefined): string {
-  const content = (value ?? '')
-    .trim()
-    .replace(/^["'“”‘’]+|["'“”‘’。.!?？]+$/g, '')
-    .trim();
-  if (content.length < 3) return '';
-  if (/^(吗|么|嘛|没有|了吗|一下)?[？?]*$/u.test(content)) return '';
-  return content;
 }
 
 function passiveMemorySourceMessages(messages: RuntimeMessage[], turnId: string): RuntimeMessage[] {

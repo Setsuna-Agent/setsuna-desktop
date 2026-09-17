@@ -81,6 +81,7 @@ describe('JavaScriptWorkspaceSearchEngine', () => {
 
     const search = new JavaScriptWorkspaceSearchEngine().search({
       root,
+      // Deliberately unsafe input verifies the VM's 100ms execution limit.
       query: '^(a+)+$',
       regex: true,
       caseSensitive: true,

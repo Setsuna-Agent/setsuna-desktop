@@ -46,7 +46,9 @@ function normalizeAbsoluteReviewPath(value: string | null | undefined): string {
   const normalized = String(value ?? '').trim().replace(/\\/gu, '/');
   if (!normalized) return '';
   if (normalized === '/') return normalized;
-  return normalized.replace(/\/+$/u, '');
+  let end = normalized.length;
+  while (end > 0 && normalized[end - 1] === '/') end -= 1;
+  return normalized.slice(0, end);
 }
 
 function relativeReviewPath(fromRoot: string, targetPath: string): string {

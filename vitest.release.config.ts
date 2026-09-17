@@ -19,7 +19,6 @@ export default createVitestConfig({
   hookTimeout: 20_000,
   include: releasePlatformTestGlobs,
   maxWorkers: 1,
-  minWorkers: 1,
   slowTestThreshold: 1_000,
   teardownTimeout: 20_000,
   testTimeout: 12_000,
