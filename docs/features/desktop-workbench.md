@@ -120,9 +120,11 @@ idle → checking → available → downloading → downloaded → installing（
 
 macOS 优先下载同架构 ZIP，要求 `SHA256SUMS` 中存在其校验值；旧 Release 只有 DMG 时仍显示手动安装。
 用户点击「重启安装」后再次校验本地 ZIP，经仅绑定 loopback、随机路径的临时 feed 交给 Electron
-`autoUpdater` / Squirrel.Mac；原生签名验证和 staging 完成后才停止 runtime、刷新状态并重启替换 app。
+`autoUpdater` / Squirrel.Mac。原生签名验证和 staging 完成后，宿主先关闭窗口：未保存文件可选择返回保存或明确放弃；
+取消关闭会恢复为更新就绪，runtime 和 renderer 服务保持可用。只有全部窗口确认关闭后才停止 runtime 并调用原生安装，
+避免 Squirrel 提前接管退出后被 `beforeunload` 卡住。若关闭后的停机或原生安装失败，宿主会重新打开应用。
 临时 feed 在完成、失败、超时和退出时关闭；准备失败不会触发退出。互联网下载仍走既有代理与下载源。
-原生安装开始前设置退出标志，避免「关闭到托盘」拦截窗口关闭；通常的 main Feature shutdown 继续负责退出清理。
+窗口关闭阶段暂缓通常的 main Feature shutdown，避免销毁仍在执行的 updater；renderer 服务只在实际 unload 时释放。
 
 应用必须先通过 DMG 安装到可写位置，并使用同一 Developer ID 签名。未签名旧版本或尚未包含原生更新逻辑的版本
 需要手动安装一次新版 DMG，此后才可使用原生自动更新。发布仍以 GitHub Release API 和 `SHA256SUMS` 为元数据，

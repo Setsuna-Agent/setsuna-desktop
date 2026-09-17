@@ -34,7 +34,7 @@ type DesktopUpdaterOptions = {
   downloadsDir: string;
   sourceConfigPath: string;
   enabled: boolean;
-  prepareForUpdateInstall: () => Promise<void>;
+  installUpdate: (quitAndInstall: () => void) => Promise<boolean>;
   fetch?: typeof globalThis.fetch;
   checkIntervalMs?: number;
 };
@@ -58,7 +58,7 @@ export class DesktopUpdater {
   private runningCheck: Promise<DesktopUpdateState> | null = null;
   private sourceRevision = 0;
   private readonly macInstaller: MacUpdateInstaller | null;
-  private readonly prepareForUpdateInstall: () => Promise<void>;
+  private readonly installUpdate: DesktopUpdaterOptions['installUpdate'];
   private downloadedSha256: string | null = null;
   private runningInstall: Promise<DesktopUpdateActionResult> | null = null;
 
@@ -69,7 +69,7 @@ export class DesktopUpdater {
     this.checkIntervalMs = options.checkIntervalMs ?? DEFAULT_CHECK_INTERVAL_MS;
     this.latestReleaseUrl = `https://api.github.com/repos/${options.repository}/releases/latest`;
     this.sourceStore = new UpdateDownloadSourceStore(options.sourceConfigPath);
-    this.prepareForUpdateInstall = options.prepareForUpdateInstall;
+    this.installUpdate = options.installUpdate;
     this.macInstaller = process.platform === 'darwin'
       ? new MacUpdateInstaller(autoUpdater, (error) => this.setState({ status: 'error', error: error.message }))
       : null;
@@ -356,8 +356,11 @@ export class DesktopUpdater {
           throw new Error('The downloaded macOS update has changed. Check for updates to download it again.');
         }
         await this.macInstaller.prepare(downloadedFilePath, this.state.downloadedVersion!);
-        await this.prepareForUpdateInstall();
-        this.macInstaller.quitAndInstall();
+        const installing = await this.installUpdate(() => this.macInstaller!.quitAndInstall());
+        if (!installing) {
+          this.setState({ status: 'downloaded', error: undefined });
+          return { ok: true, action: 'none', state: this.getState() };
+        }
         return { ok: true, action: 'restarting', state: this.getState() };
       }
       shell.showItemInFolder(downloadedFilePath);

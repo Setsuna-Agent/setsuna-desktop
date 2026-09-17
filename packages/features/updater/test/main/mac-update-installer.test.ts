@@ -58,12 +58,9 @@ describe('native macOS update handoff', () => {
     await prepared;
     await expect(fetch(feedUrl)).rejects.toThrow();
     expect(native.quitAndInstall).not.toHaveBeenCalled();
-    vi.useFakeTimers();
     installer.quitAndInstall();
-    installer.quitAndInstall();
-    expect(native.quitAndInstall).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(50);
     expect(native.quitAndInstall).toHaveBeenCalledOnce();
+    expect(() => installer.quitAndInstall()).toThrow('No verified macOS update');
   });
 
   it('closes the feed after signature rejection, permits retry, and reports late errors', async () => {

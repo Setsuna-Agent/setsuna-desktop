@@ -164,7 +164,7 @@ Updater 是纵向 Feature：状态 DTO、IPC channel、main 状态机、preload 
 - 管理 check/download/open 状态机。
 - 下载到用户 Downloads 下的专用目录。
 - 校验 SHA-256。
-- macOS 打开文件位置，Windows 打开 installer。
+- macOS ZIP 经原生验证后，由宿主 `window/update-install.ts` 协调未保存文件、窗口关闭与 runtime 停机，再交给 Squirrel 安装；DMG 仍打开文件位置。Windows 打开 installer。
 - 下载期间切换源会取消并按新源重试。
 
 Updater 默认只在 packaged 或 `SETSUNA_DESKTOP_ENABLE_UPDATES=1` 时启用。测试位于 `packages/features/updater/test/`。

@@ -8,7 +8,6 @@ export class MacUpdateInstaller {
   private preparation: Promise<void> | null = null;
   private controller: AbortController | null = null;
   private prepared = false;
-  private quitTimer: NodeJS.Timeout | null = null;
   private disposed = false;
 
   constructor(private readonly nativeUpdater: AutoUpdater, private readonly onError: (error: Error) => void) {
@@ -33,19 +32,13 @@ export class MacUpdateInstaller {
 
   quitAndInstall(): void {
     if (this.disposed || !this.prepared) throw new Error('No verified macOS update is ready to install.');
-    if (this.quitTimer) return;
-    // Let the installation IPC reply settle before native code closes windows.
-    this.quitTimer = setTimeout(() => {
-      this.quitTimer = null;
-      try { this.nativeUpdater.quitAndInstall(); } catch (error) { this.handleError(asError(error)); }
-    }, 50);
+    this.prepared = false;
+    this.nativeUpdater.quitAndInstall();
   }
 
   dispose(): void {
     this.disposed = true;
     this.controller?.abort(new Error('The macOS updater has stopped.'));
-    if (this.quitTimer) clearTimeout(this.quitTimer);
-    this.quitTimer = null;
     this.nativeUpdater.removeListener('error', this.handleError);
   }
 

@@ -39,25 +39,25 @@
 ### `apps/desktop/main/`
 
 ```text
-apps/desktop/main/ — 0 direct / 83 total files
-├── src/ — 2 direct / 50 total files
+apps/desktop/main/ — 0 direct / 85 total files
+├── src/ — 2 direct / 51 total files
 │   ├── composition/ — 3 direct / 3 total files
 │   ├── data-root/ — 14 direct / 14 total files
 │   ├── i18n/ — 1 direct / 1 total files
 │   ├── ipc/ — 6 direct / 6 total files
 │   ├── runtime/ — 8 direct / 8 total files
 │   ├── security/ — 2 direct / 2 total files
-│   ├── window/ — 9 direct / 11 total files
+│   ├── window/ — 10 direct / 12 total files
 │   │   └── splash/ — 2 direct / 2 total files
 │   └── workspace/ — 3 direct / 3 total files
-└── test/ — 33 files
+└── test/ — 34 files
     ├── support/ — 2 direct / 2 total files
-    └── unit/ — 1 direct / 31 total files
+    └── unit/ — 1 direct / 32 total files
         ├── data-root/ — 8 direct / 8 total files
         ├── ipc/ — 1 direct / 1 total files
         ├── runtime/ — 7 direct / 7 total files
         ├── security/ — 2 direct / 2 total files
-        ├── window/ — 6 direct / 8 total files
+        ├── window/ — 7 direct / 9 total files
         │   └── splash/ — 2 direct / 2 total files
         └── workspace/ — 4 direct / 4 total files
 ```
