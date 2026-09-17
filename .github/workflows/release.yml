@@ -25,6 +25,10 @@ on:
 permissions:
   contents: write
 
+env:
+  # Hosted runners download directly from Electron instead of the local China mirror.
+  ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
+
 concurrency:
   group: release-${{ inputs.tag_name }}
   cancel-in-progress: false
