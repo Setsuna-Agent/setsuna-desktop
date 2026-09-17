@@ -1,4 +1,4 @@
-import type { ModelRequest, ProviderConfigState, ProviderModelConfig } from '@setsuna-desktop/contracts';
+import type { ModelDiagnostic, ModelRequest, ProviderConfigState, ProviderModelConfig } from '@setsuna-desktop/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   ModelProviderRuntimeConfig,
@@ -26,9 +26,11 @@ describe('Pi model client protocol integration', () => {
         ? transientProviderError(bodies.length === 1 ? 500 : 429)
         : new Response(sse(), { headers: { 'Content-Type': 'text/event-stream' } });
     });
-    const client = new PiModelClient(host({
-      ...providerFixture(kind), catalogProviderId: 'opencode-go',
-    }, fetch));
+    const diagnostics: ModelDiagnostic[] = [];
+    const client = new PiModelClient({
+      ...host({ ...providerFixture(kind), catalogProviderId: 'opencode-go' }, fetch),
+      reportModelDiagnostic: (record) => diagnostics.push(record),
+    });
     const request = requestFixture({ sessionId: 'retry-thread' });
     request.messages.push(
       {
@@ -48,6 +50,10 @@ describe('Pi model client protocol integration', () => {
     expect(new Set(bodies).size).toBe(1);
     expect(bodies[0]).toContain('Command completed; stored once.');
     expect(sessions).toEqual(['retry-thread', 'retry-thread', 'retry-thread']);
+    expect(diagnostics.filter((record) => record.phase === 'http.headers').map((record) => record.status)).toEqual([500, 429, 200]);
+    expect(diagnostics.filter((record) => record.phase === 'http.started').map((record) => record.attempt)).toEqual([1, 2, 3]);
+    expect(diagnostics.map((record) => record.phase)).toEqual(expect.arrayContaining(['model.first_agent_message', 'model.completed', 'model.usage']));
+    expect(JSON.stringify(diagnostics)).not.toContain('write-result');
   });
 
   it('stops after three retries when the provider keeps failing', async () => {

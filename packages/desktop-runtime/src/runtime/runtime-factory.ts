@@ -33,6 +33,7 @@ import { FilePersistentToolApprovalStore } from '../adapters/store/file-persiste
 import { FilePolicyAmendmentStore } from '../adapters/store/file-policy-amendment-store.js';
 import { FileToolResultStore } from '../adapters/store/file-tool-result-store.js';
 import { SqliteThreadStore } from '../adapters/store/sqlite-thread-store.js';
+import { ModelLatencyLog } from '../adapters/model/model-latency-log.js';
 import { ArtifactToolHost } from '../adapters/tool/artifact-tool-host.js';
 import { BrowserToolHost } from '../adapters/tool/browser-tool-host.js';
 import { CompositeToolHost } from '../adapters/tool/composite-tool-host.js';
@@ -87,7 +88,9 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const runtimeDataDir = path.join(options.dataDir, 'runtime');
   const clock = systemClock;
   const ids = new RandomIdGenerator();
-  const eventBus = new InMemoryEventBus();
+  const modelLatencyLog = new ModelLatencyLog(runtimeDataDir);
+  modelLatencyLog.record({ phase: 'runtime.started' });
+  const eventBus = new InMemoryEventBus((event) => modelLatencyLog.recordEvent(event));
   const conversationDebugTraceSink = new ConversationDebugRuntimeSink();
   const appServerNotificationBus = new InMemoryAppServerNotificationBus();
   const featureRoutes = new RuntimeRouteRegistry();
@@ -157,7 +160,10 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const projectInstructions = new FileProjectInstructionLoader();
   const projectWorkflow = new FileProjectWorkflowResolver();
   const providerModelClient = new BindableModelClient();
-  const modelClient = new ImageAssetResolvingModelClient(providerModelClient, generatedImageStore);
+  const modelClient = new ImageAssetResolvingModelClient(providerModelClient, generatedImageStore, {
+    reportDiagnostic: (record) => modelLatencyLog.record(record),
+    getImageCompression: async () => (await configStore.getConfig()).imageCompression,
+  });
   const visionRecognitionHost = new DesktopVisionRecognitionRuntimeHost({
     attachments: attachmentStore,
     clock,
@@ -276,6 +282,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     memoryToolHost,
     modelClient,
     providerModelClient,
+    modelLatencyLog,
     networkProxyFetch,
     mcpControl,
     mcpElicitations,

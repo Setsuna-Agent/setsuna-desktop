@@ -19,6 +19,7 @@ export type RuntimePreferenceInput = Pick<
   | 'desktopSettings'
   | 'features'
   | 'globalPrompt'
+  | 'imageCompression'
   | 'permissionProfile'
   | 'sandboxWorkspaceWrite'
   | 'setsunaStyle'

@@ -104,6 +104,7 @@
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
     "remend": "^1.3.0",
+    "sharp": "0.35.4",
     "undici": "7.29.0"
   },
   "devDependencies": {
@@ -164,7 +165,9 @@
       "plugins/**/*"
     ],
     "asarUnpack": [
-      "**/node_modules/node-pty/prebuilds/**/*"
+      "**/node_modules/node-pty/prebuilds/**/*",
+      "**/node_modules/sharp/**/*",
+      "**/node_modules/@img/**/*"
     ],
     "extraResources": [
       {
@@ -187,7 +190,9 @@
         "dmg"
       ],
       "artifactName": "Setsuna-Desktop-${version}-mac-${arch}.${ext}",
-      "identity": null
+      "type": "distribution",
+      "hardenedRuntime": true,
+      "notarize": true
     },
     "win": {
       "icon": "assets/build/icon.ico",

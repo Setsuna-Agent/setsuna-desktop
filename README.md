@@ -45,7 +45,7 @@ Download the latest version from [GitHub Releases](https://github.com/Setsuna-Ag
 | macOS Intel | DMG |
 | Windows x64 | EXE |
 
-macOS builds are not yet signed or notarized. See the release notes for installation instructions.
+The macOS release workflow requires Developer ID signing and Apple notarization. Check each release's notes for the signing status of older downloads.
 
 After opening the app, add your model provider in **Settings → Model providers**.
 

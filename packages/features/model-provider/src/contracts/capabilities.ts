@@ -3,6 +3,7 @@ import type {
   ModelCompactionRequest,
   ModelCompactionResult,
   ModelRequest,
+  ModelDiagnosticReporter,
   ModelStreamEvent,
   ProviderConfigInput,
   ProviderConfigState,
@@ -47,6 +48,7 @@ export interface ModelProviderRuntimeHost {
   saveProviderState(input: ModelProviderSettingsInput): Promise<ModelProviderSettingsState>;
   fetchForRoute(route?: DesktopNetworkProxyRoute): typeof fetch;
   reportReplayDecisions?(trace: ModelProviderReplayTrace): void;
+  reportModelDiagnostic?: ModelDiagnosticReporter;
 }
 
 export type ModelProviderSettingsState = Readonly<{

@@ -1,13 +1,18 @@
 import {
   isRuntimeGeneratedMessageAttachment,
+  isRuntimeInlineMessageAttachment,
+  normalizeRuntimeImageCompression,
   type ModelRequest,
+  type ModelDiagnosticReporter,
   type RuntimeGeneratedMessageAttachment,
   type RuntimeMessage,
   type RuntimeMessageAttachment,
+  type RuntimeImageCompression,
 } from '@setsuna-desktop/contracts';
 import type { GeneratedImageReader } from '../../ports/generated-image-store.js';
 import type { ModelClient, ModelCompactionRequest } from '../../ports/model-client.js';
 import { modelErrorDetails } from './model-error-details.js';
+import { ModelImageTransport } from './model-image-transport.js';
 
 const IMAGE_INPUT_FALLBACK_MESSAGE = [
   'The runtime has already handled any user-facing disclosure for unavailable image inputs.',
@@ -19,29 +24,40 @@ const IMAGE_INPUT_FALLBACK_NOTICE = `${IMAGE_INPUT_FALLBACK_NOTICE_MARKER}本轮
 
 /** Resolves opaque, model-visible image assets only for the lifetime of a provider request. */
 export class ImageAssetResolvingModelClient implements ModelClient {
+  private readonly imageTransport = new ModelImageTransport();
+  private readonly originalImageProviders = new Set<string>();
   constructor(
     private readonly inner: ModelClient,
     private readonly imageStore: GeneratedImageReader,
+    private readonly options: {
+      reportDiagnostic?: ModelDiagnosticReporter;
+      getImageCompression?: () => Promise<RuntimeImageCompression | undefined>;
+    } = {},
   ) {}
 
   async *stream(request: ModelRequest) {
     const preparedRequest = prepareRequestAfterImageFallback(request);
-    const resolvedRequest = {
-      ...preparedRequest,
-      messages: await this.resolveMessages(preparedRequest.messages),
-    };
+    let resolvedRequest = await this.resolveRequest(preparedRequest);
     let emitted = false;
-    try {
-      for await (const event of this.inner.stream(resolvedRequest)) {
-        emitted = true;
-        yield event;
+    for (;;) {
+      try {
+        for await (const event of this.inner.stream(resolvedRequest)) {
+          emitted = true;
+          yield event;
+        }
+        return;
+      } catch (error) {
+        if (!emitted && this.retryOriginalImages(preparedRequest, resolvedRequest, error)) {
+          resolvedRequest = await this.resolveRequest(preparedRequest);
+          continue;
+        }
+        if (emitted || !hasModelVisibleImages(resolvedRequest.messages) || !isRejectedImageInputError(error)) throw error;
+        // Main-turn requests carry a step snapshot. Emit a deterministic disclosure instead of
+        // relying on the fallback model to remember to mention the rejected visual inspection.
+        if (request.stepSnapshot) yield { type: 'text_delta' as const, text: IMAGE_INPUT_FALLBACK_NOTICE };
+        yield* this.inner.stream(withoutModelVisibleImages(resolvedRequest));
+        return;
       }
-    } catch (error) {
-      if (emitted || !hasModelVisibleImages(resolvedRequest.messages) || !isRejectedImageInputError(error)) throw error;
-      // Main-turn requests carry a step snapshot. Emit a deterministic disclosure instead of
-      // relying on the fallback model to remember to mention the rejected visual inspection.
-      if (request.stepSnapshot) yield { type: 'text_delta' as const, text: IMAGE_INPUT_FALLBACK_NOTICE };
-      yield* this.inner.stream(withoutModelVisibleImages(resolvedRequest));
     }
   }
 
@@ -50,40 +66,122 @@ export class ImageAssetResolvingModelClient implements ModelClient {
       throw new Error('Remote context compaction is not supported by the configured model client.');
     }
     const preparedRequest = prepareRequestAfterImageFallback(request);
-    const resolvedRequest = {
-      ...preparedRequest,
-      messages: await this.resolveMessages(preparedRequest.messages),
-    };
-    try {
-      return await this.inner.compactConversation(resolvedRequest);
-    } catch (error) {
-      if (!hasModelVisibleImages(resolvedRequest.messages) || !isRejectedImageInputError(error)) throw error;
-      return this.inner.compactConversation(withoutModelVisibleImages(resolvedRequest));
+    let resolvedRequest = await this.resolveRequest(preparedRequest);
+    for (;;) {
+      try {
+        return await this.inner.compactConversation(resolvedRequest);
+      } catch (error) {
+        if (this.retryOriginalImages(preparedRequest, resolvedRequest, error)) {
+          resolvedRequest = await this.resolveRequest(preparedRequest);
+          continue;
+        }
+        if (!hasModelVisibleImages(resolvedRequest.messages) || !isRejectedImageInputError(error)) throw error;
+        return this.inner.compactConversation(withoutModelVisibleImages(resolvedRequest));
+      }
     }
   }
 
-  private async resolveMessages(messages: RuntimeMessage[]): Promise<RuntimeMessage[]> {
-    return Promise.all(messages.map(async (message) => {
-      if (!message.attachments?.some(needsModelAssetResolution)) return message;
-      const attachments = await Promise.all(message.attachments.map((attachment) => (
-        this.resolveAttachment(attachment)
-      )));
-      return { ...message, attachments };
-    }));
+  private async resolveRequest<T extends ModelRequest | ModelCompactionRequest>(request: T): Promise<T> {
+    const started = performance.now();
+    const snapshot = 'stepSnapshot' in request ? request.stepSnapshot : undefined;
+    const record = (phase: string) => {
+      try {
+        this.options.reportDiagnostic?.({
+          phase, threadId: snapshot?.threadId ?? request.sessionId, turnId: snapshot?.turnId,
+          stepSeq: snapshot?.threadLastSeq, providerId: request.providerId, model: request.model,
+          elapsedMs: Math.round(performance.now() - started), messageCount: request.messages.length,
+          imageCount: request.messages.reduce((count, message) => count
+            + (message.attachments?.filter(isModelVisibleImage).length ?? 0), 0),
+        });
+      } catch { /* Diagnostics cannot interrupt image preparation. */ }
+    };
+    record('images.started');
+    try {
+      // Read once per sampling request so all its images use the same level, while
+      // later tool steps pick up saved changes without restarting the runtime.
+      const compression = !hasModelVisibleImages(request.messages) || this.originalImageProviders.has(imageProviderKey(request))
+        ? 'original' : normalizeRuntimeImageCompression(await this.options.getImageCompression?.());
+      const messages = await this.resolveMessages(request.messages, request.signal, compression);
+      record('images.ready');
+      return { ...request, messages };
+    } catch (error) {
+      record('images.failed');
+      throw error;
+    }
   }
 
-  private async resolveAttachment(attachment: RuntimeMessageAttachment): Promise<RuntimeMessageAttachment> {
-    if (!needsModelAssetResolution(attachment)) return attachment;
-    const asset = await this.imageStore.read(attachment.assetId);
+  private retryOriginalImages(request: ModelRequest | ModelCompactionRequest, resolved: ModelRequest | ModelCompactionRequest, error: unknown): boolean {
+    if (request.signal?.aborted || this.originalImageProviders.has(imageProviderKey(request))) return false;
+    const details = modelErrorDetails(error).toLowerCase();
+    if (!details.includes('webp') || !/unsupported|not supported|does not support|not allowed|invalid.*(?:format|mime|media.type)/u.test(details)) return false;
+    const changed = resolved.messages.some((message, index) => message.attachments?.some((attachment, attachmentIndex) => (
+      attachment.type === 'image/webp' && request.messages[index]?.attachments?.[attachmentIndex]?.type === 'image/png'
+    )));
+    if (!changed) return false;
+    // Some compatible endpoints accept fewer formats than their protocol. Retry
+    // only explicit format rejection, preserving the complete original image.
+    this.originalImageProviders.add(imageProviderKey(request));
+    if (this.originalImageProviders.size > 64) this.originalImageProviders.delete(this.originalImageProviders.values().next().value!);
+    return true;
+  }
+
+  private async resolveMessages(messages: RuntimeMessage[], signal: AbortSignal | undefined, compression: RuntimeImageCompression): Promise<RuntimeMessage[]> {
+    const resolved: RuntimeMessage[] = [];
+    // Decode at most one history image per request at a time. A long screenshot
+    // history must not allocate every full-resolution pixel buffer concurrently.
+    for (const message of messages) {
+      signal?.throwIfAborted();
+      if (message.visibility === 'transcript' || !message.attachments?.some(needsImagePreparation)) {
+        resolved.push(message);
+        continue;
+      }
+      const attachments: RuntimeMessageAttachment[] = [];
+      for (const attachment of message.attachments) {
+        signal?.throwIfAborted();
+        attachments.push(await this.resolveAttachment(attachment, compression));
+      }
+      resolved.push({ ...message, attachments });
+    }
+    signal?.throwIfAborted();
+    return resolved;
+  }
+
+  private async resolveAttachment(attachment: RuntimeMessageAttachment, compression: RuntimeImageCompression): Promise<RuntimeMessageAttachment> {
+    if (!needsImagePreparation(attachment)) return attachment;
+    if (compression === 'original' && isRuntimeInlineMessageAttachment(attachment)) return attachment;
+    const asset = needsModelAssetResolution(attachment)
+      ? await this.imageStore.read(attachment.assetId)
+      : inlinePngData(attachment);
+    if (!asset) return attachment;
+    const data = Buffer.isBuffer(asset.data) ? asset.data : Buffer.from(asset.data);
+    const image = await this.imageTransport.prepare(data, asset.type, compression);
+    if (isRuntimeInlineMessageAttachment(attachment) && image.data === data) return attachment;
     return {
       id: attachment.id,
       name: attachment.name,
-      type: asset.type,
-      size: asset.data.byteLength,
+      type: image.type,
+      size: image.data.byteLength,
       modelVisible: true,
-      url: `data:${asset.type};base64,${Buffer.from(asset.data).toString('base64')}`,
+      url: `data:${image.type};base64,${image.data.toString('base64')}`,
     };
   }
+}
+
+function imageProviderKey(request: ModelRequest | ModelCompactionRequest): string {
+  return JSON.stringify([request.providerId, request.model]);
+}
+
+function needsImagePreparation(attachment: RuntimeMessageAttachment): boolean {
+  return needsModelAssetResolution(attachment)
+    || (isRuntimeInlineMessageAttachment(attachment)
+      && attachment.modelVisible !== false && attachment.type === 'image/png');
+}
+
+function inlinePngData(attachment: RuntimeMessageAttachment): { data: Buffer; type: string } | null {
+  if (!isRuntimeInlineMessageAttachment(attachment)) return null;
+  const prefix = 'data:image/png;base64,';
+  if (!attachment.url.startsWith(prefix)) return null;
+  return { data: Buffer.from(attachment.url.slice(prefix.length), 'base64'), type: attachment.type };
 }
 
 function withoutModelVisibleImages<T extends ModelRequest | ModelCompactionRequest>(request: T): T {
