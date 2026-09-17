@@ -25,9 +25,16 @@ describe('desktop update metadata', () => {
   });
 
   it('selects the preferred installer for the current platform and architecture', () => {
-    expect(selectUpdateAsset(assets, 'darwin', 'arm64')?.name).toBe('Setsuna-Desktop-0.2.0-mac-arm64.dmg');
+    expect(selectUpdateAsset(assets, 'darwin', 'arm64')?.name).toBe('Setsuna-Desktop-0.2.0-mac-arm64.zip');
     expect(selectUpdateAsset(assets, 'darwin', 'x64')?.name).toBe('Setsuna-Desktop-0.2.0-mac-x64.dmg');
     expect(selectUpdateAsset(assets, 'win32', 'x64')?.name).toBe('Setsuna-Desktop-0.2.0-windows-x64.exe');
+  });
+
+  it('does not select checksum files, the wrong architecture, or unsafe asset paths', () => {
+    const invalid = ['Setsuna-Desktop-0.2.0-mac-arm64.zip.blockmap', 'Setsuna-Desktop-0.2.0-mac-x64.zip',
+      '../Setsuna-Desktop-0.2.0-mac-arm64.zip', '..\\Setsuna-Desktop-0.2.0-mac-arm64.zip'];
+    expect(selectUpdateAsset(invalid.map((name) => ({ name, browser_download_url: 'https://example.com/file' })), 'darwin', 'arm64')).toBeNull();
+    expect(selectUpdateAsset(assets, 'darwin', 'unknown')).toBeNull();
   });
 
   it('parses SHA256SUMS entries for release asset verification', () => {

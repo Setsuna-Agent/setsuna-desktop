@@ -6,6 +6,7 @@ export interface UpdaterMainHost {
   readonly enabled: boolean;
   readonly repository: string;
   readonly sourceConfigPath: string;
+  prepareForUpdateInstall(): Promise<void>;
   fetch(
     input: Parameters<typeof globalThis.fetch>[0],
     init?: Parameters<typeof globalThis.fetch>[1],

@@ -24,14 +24,23 @@ export function UpdaterTopbarAction({
         if (!state) return;
         const accepted = await confirm({
           title: updater.statusTitle,
-          description: translate(state.platform === 'darwin' ? 'feature.updater.ready.macDetail'
+          description: translate(state.platform === 'darwin'
+            ? state.manualInstall ? 'feature.updater.ready.macDetail' : 'feature.updater.ready.macAutoDetail'
             : state.platform === 'win32' ? 'feature.updater.ready.windowsDetail' : 'feature.updater.ready.detail', {
             name: state.assetName ?? translate('feature.updater.ready.package'),
           }),
           confirmLabel: updater.installButtonText,
           cancelLabel: translate('feature.updater.ready.later'),
         });
-        if (accepted) await updater.installReadyUpdate();
+        if (!accepted) return;
+        const result = await updater.installReadyUpdate();
+        if (result && !result.ok) {
+          await confirm({
+            title: translate('feature.updater.title.error'),
+            description: result.error ?? translate('feature.updater.text.retry'),
+            acknowledgement: true,
+          });
+        }
       }}
     >
       <Bell size={15} />

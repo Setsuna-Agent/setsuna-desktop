@@ -46,7 +46,7 @@ export function useUpdaterServiceView(
       available: service.available,
       state,
       checking,
-      installing,
+      installing: installing || status === 'installing',
       ready,
       currentVersion: state?.currentVersion ?? '0.0.0',
       updateVersion,
@@ -73,6 +73,7 @@ function updateStatusTitle(
   t: RendererTranslate,
 ): string {
   const status = state?.status ?? 'idle';
+  if (status === 'installing') return t('feature.updater.title.installing');
   if (status === 'downloaded') return t('feature.updater.title.downloaded');
   if (status === 'downloading') return t('feature.updater.title.downloading');
   if (status === 'available') return t('feature.updater.title.available');
@@ -93,6 +94,7 @@ function updateStatusText(
 ): string {
   const status = state?.status ?? 'idle';
   const updateVersion = state?.downloadedVersion ?? state?.availableVersion;
+  if (status === 'installing') return t('feature.updater.text.installing');
   if (status === 'downloaded') {
     return state?.manualInstall
       ? t('feature.updater.text.downloadedManual')

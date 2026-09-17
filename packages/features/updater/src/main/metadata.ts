@@ -72,14 +72,13 @@ export function checksumForAsset(checksums: Map<string, string>, assetName: stri
 }
 
 function scoreAsset(name: string, platform: UpdatePlatform, arch: string): number {
+  if (name.includes('/') || name.includes('\\') || !['arm64', 'x64'].includes(arch)) return 0;
   const lowerName = name.toLowerCase();
-  const normalizedArch = arch === 'x64' || arch === 'arm64' ? arch : 'x64';
 
   if (platform === 'darwin') {
-    if (!lowerName.includes('mac') || !lowerName.includes(normalizedArch)) return 0;
-    if (lowerName.endsWith('.dmg')) return 120;
-    if (lowerName.endsWith('.zip')) return 80;
-    return 10;
+    if (!lowerName.endsWith(`-mac-${arch}.zip`) && !lowerName.endsWith(`-mac-${arch}.dmg`)) return 0;
+    // ZIPs are consumed by Squirrel; older DMG-only releases remain installable.
+    return lowerName.endsWith('.zip') ? 120 : 80;
   }
 
   if (platform === 'win32') {
@@ -87,7 +86,7 @@ function scoreAsset(name: string, platform: UpdatePlatform, arch: string): numbe
     if (lowerName.endsWith('.exe')) return 120;
     if (lowerName.endsWith('.msi')) return 100;
     if (lowerName.endsWith('.zip')) return 70;
-    return 10;
+    return 0;
   }
 
   return 0;

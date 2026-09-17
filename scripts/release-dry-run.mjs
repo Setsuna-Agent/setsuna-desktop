@@ -11,7 +11,7 @@ await mkdir(outDir, { recursive: true });
 const manifest = {
   version: packageJson.version,
   platforms: releaseTargets,
-  requiredAssets: [...releaseTargets.map((target) => target.fileName), 'SHA256SUMS'],
+  requiredAssets: [...releaseTargets.flatMap((target) => target.fileNames), 'SHA256SUMS'],
 };
 await writeFile(path.join(outDir, 'release-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 

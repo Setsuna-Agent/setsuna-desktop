@@ -8,10 +8,12 @@ import type {
   DesktopUpdateState,
 } from '../contracts/index.js';
 import { UPDATER_IPC_CHANNELS } from '../contracts/index.js';
-import { app, BrowserWindow, shell } from 'electron';
+import { app, autoUpdater, BrowserWindow, shell } from 'electron';
 import { createHash } from 'node:crypto';
-import { mkdir, open, readFile, rename, rm } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { mkdir, open, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
+import { MacUpdateInstaller } from './mac-update-installer.js';
 import {
   GITHUB_DIRECT_DOWNLOAD_SOURCE,
   resolveUpdateDownloadUrl,
@@ -32,6 +34,7 @@ type DesktopUpdaterOptions = {
   downloadsDir: string;
   sourceConfigPath: string;
   enabled: boolean;
+  prepareForUpdateInstall: () => Promise<void>;
   fetch?: typeof globalThis.fetch;
   checkIntervalMs?: number;
 };
@@ -54,6 +57,10 @@ export class DesktopUpdater {
   private restartRequested = false;
   private runningCheck: Promise<DesktopUpdateState> | null = null;
   private sourceRevision = 0;
+  private readonly macInstaller: MacUpdateInstaller | null;
+  private readonly prepareForUpdateInstall: () => Promise<void>;
+  private downloadedSha256: string | null = null;
+  private runningInstall: Promise<DesktopUpdateActionResult> | null = null;
 
   constructor(options: DesktopUpdaterOptions) {
     this.downloadsDir = options.downloadsDir;
@@ -62,6 +69,10 @@ export class DesktopUpdater {
     this.checkIntervalMs = options.checkIntervalMs ?? DEFAULT_CHECK_INTERVAL_MS;
     this.latestReleaseUrl = `https://api.github.com/repos/${options.repository}/releases/latest`;
     this.sourceStore = new UpdateDownloadSourceStore(options.sourceConfigPath);
+    this.prepareForUpdateInstall = options.prepareForUpdateInstall;
+    this.macInstaller = process.platform === 'darwin'
+      ? new MacUpdateInstaller(autoUpdater, (error) => this.setState({ status: 'error', error: error.message }))
+      : null;
     this.state = {
       status: 'idle',
       currentVersion: options.currentVersion,
@@ -100,11 +111,12 @@ export class DesktopUpdater {
     this.checkTimer = null;
     this.activeTransferController?.abort(new Error('Desktop updater stopped.'));
     this.activeTransferController = null;
+    this.macInstaller?.dispose();
   }
 
   checkAndDownload(): Promise<DesktopUpdateState> {
     if (this.runningCheck) return this.runningCheck;
-    if (this.state.status === 'downloaded') return Promise.resolve(this.getState());
+    if (this.state.status === 'downloaded' || this.state.status === 'installing') return Promise.resolve(this.getState());
 
     this.runningCheck = this.runChecksUntilStable().finally(() => {
       this.runningCheck = null;
@@ -131,12 +143,18 @@ export class DesktopUpdater {
     return this.getState();
   }
 
-  async installReady(): Promise<DesktopUpdateActionResult> {
+  installReady(): Promise<DesktopUpdateActionResult> {
+    if (this.runningInstall) return this.runningInstall;
     if (this.state.status !== 'downloaded' || !this.state.downloadedFilePath) {
-      return { ok: false, action: 'none', state: this.getState(), error: 'No downloaded update is ready.' };
+      return Promise.resolve({ ok: false, action: 'none', state: this.getState(), error: 'No downloaded update is ready.' });
     }
 
-    return this.openReadyUpdate();
+    this.runningInstall = this.openReadyUpdate().catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      this.setState({ status: 'error', error: message });
+      return { ok: false, action: 'none' as const, state: this.getState(), error: message };
+    }).finally(() => { this.runningInstall = null; });
+    return this.runningInstall;
   }
 
   private async runChecksUntilStable(): Promise<DesktopUpdateState> {
@@ -156,6 +174,7 @@ export class DesktopUpdater {
     const sourceRevision = this.sourceRevision;
     try {
       this.setState({ status: 'checking', error: undefined, progress: null });
+      this.downloadedSha256 = null;
       const release = await fetchJson<ReleaseInfo>(this.latestReleaseUrl, this.fetchImpl);
       this.ensureSourceUnchanged(sourceRevision);
       const availableVersion = release.tag_name;
@@ -192,6 +211,8 @@ export class DesktopUpdater {
         releaseUrl: release.html_url ?? undefined,
         updateInfo: updateInfoFromRelease(release),
         assetName: asset.name,
+        installMode: process.platform === 'darwin' && asset.name.endsWith('.zip') ? 'native-mac' : updateInstallMode(process.platform),
+        manualInstall: process.platform === 'darwin' && !asset.name.endsWith('.zip'),
         downloadedFilePath: undefined,
         downloadedAt: undefined,
         progress: null,
@@ -209,6 +230,9 @@ export class DesktopUpdater {
       const transferController = new AbortController();
       this.activeTransferController = transferController;
       const expectedSha256 = await this.fetchExpectedChecksum(release.assets, asset, downloadSource, transferController.signal);
+      if (this.state.installMode === 'native-mac' && !expectedSha256) {
+        throw new Error(`The macOS update is missing a SHA256SUMS entry for ${asset.name}.`);
+      }
       this.ensureSourceUnchanged(sourceRevision);
       const downloadedFilePath = await this.downloadAsset(asset, availableVersion, downloadSource, transferController.signal);
       this.ensureSourceUnchanged(sourceRevision);
@@ -221,6 +245,7 @@ export class DesktopUpdater {
         }
       }
 
+      this.downloadedSha256 = expectedSha256;
       this.setState({
         status: 'downloaded',
         downloadedVersion: availableVersion,
@@ -324,6 +349,17 @@ export class DesktopUpdater {
     }
 
     if (process.platform === 'darwin') {
+      if (this.state.installMode === 'native-mac' && this.macInstaller) {
+        this.setState({ status: 'installing', error: undefined });
+        // The archive lives in Downloads and may have changed since download.
+        if (!this.downloadedSha256 || await sha256File(downloadedFilePath) !== this.downloadedSha256) {
+          throw new Error('The downloaded macOS update has changed. Check for updates to download it again.');
+        }
+        await this.macInstaller.prepare(downloadedFilePath, this.state.downloadedVersion!);
+        await this.prepareForUpdateInstall();
+        this.macInstaller.quitAndInstall();
+        return { ok: true, action: 'restarting', state: this.getState() };
+      }
       shell.showItemInFolder(downloadedFilePath);
       return { ok: true, action: 'opened-folder', state: this.getState() };
     }
@@ -377,7 +413,9 @@ function requestInit(signal?: AbortSignal): RequestInit {
 }
 
 async function sha256File(filePath: string): Promise<string> {
-  return createHash('sha256').update(await readFile(filePath)).digest('hex');
+  const hash = createHash('sha256');
+  for await (const chunk of createReadStream(filePath)) hash.update(chunk);
+  return hash.digest('hex');
 }
 
 async function fetchWithTimeout<T>(

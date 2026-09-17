@@ -10,6 +10,8 @@ const releaseDir = path.resolve('release-artifacts');
 const outputDir = path.resolve('release-upload', target.jobArtifact);
 await rm(outputDir, { recursive: true, force: true });
 await mkdir(outputDir, { recursive: true });
-await copyFile(path.join(releaseDir, target.fileName), path.join(outputDir, target.fileName));
+for (const fileName of target.fileNames) {
+  await copyFile(path.join(releaseDir, fileName), path.join(outputDir, fileName));
+}
 
-console.log(`Collected ${target.fileName}.`);
+console.log(`Collected ${target.fileNames.join(', ')}.`);

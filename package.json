@@ -187,7 +187,8 @@
     "mac": {
       "icon": "assets/build/icon.icns",
       "target": [
-        "dmg"
+        "dmg",
+        "zip"
       ],
       "artifactName": "Setsuna-Desktop-${version}-mac-${arch}.${ext}",
       "type": "distribution",

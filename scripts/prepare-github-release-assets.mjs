@@ -18,28 +18,28 @@ async function listFiles(rootDir) {
   return files;
 }
 
-const installerNames = new Set(releaseTargets.map((target) => target.fileName));
-const installers = new Map();
+const assetNames = new Set(releaseTargets.flatMap((target) => target.fileNames));
+const assets = new Map();
 for (const filePath of await listFiles(downloadedDir)) {
   const fileName = path.basename(filePath);
-  if (!installerNames.has(fileName)) continue;
-  if (installers.has(fileName)) throw new Error(`Release asset name collision: ${fileName}`);
-  installers.set(fileName, filePath);
+  if (!assetNames.has(fileName)) continue;
+  if (assets.has(fileName)) throw new Error(`Release asset name collision: ${fileName}`);
+  assets.set(fileName, filePath);
 }
 
 // Validate the complete release before preparing anything for publication.
-const missing = [...installerNames].filter((name) => !installers.has(name));
-if (missing.length) throw new Error(`Missing release installers: ${missing.join(', ')}`);
+const missing = [...assetNames].filter((name) => !assets.has(name));
+if (missing.length) throw new Error(`Missing release assets: ${missing.join(', ')}`);
 
 await rm(uploadDir, { recursive: true, force: true });
 await mkdir(uploadDir, { recursive: true });
 const checksumLines = [];
-for (const fileName of [...installerNames].sort()) {
-  const filePath = installers.get(fileName);
+for (const fileName of [...assetNames].sort()) {
+  const filePath = assets.get(fileName);
   await copyFile(filePath, path.join(uploadDir, fileName));
   const checksum = createHash('sha256').update(await readFile(filePath)).digest('hex');
   checksumLines.push(`${checksum}  ${fileName}`);
 }
 await writeFile(path.join(uploadDir, 'SHA256SUMS'), `${checksumLines.join('\n')}\n`);
 
-console.log(`Prepared ${installerNames.size} installers and SHA256SUMS in ${uploadDir}.`);
+console.log(`Prepared ${assetNames.size} assets and SHA256SUMS in ${uploadDir}.`);

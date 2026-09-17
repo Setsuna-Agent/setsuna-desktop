@@ -30,6 +30,7 @@ export const updaterMainFeature = defineMainFeature({
       fetch: (input, init) => host.fetch(input, init),
       repository: host.repository,
       sourceConfigPath: host.sourceConfigPath,
+      prepareForUpdateInstall: () => host.prepareForUpdateInstall(),
     });
 
     context.scope.add(() => updater.stop());

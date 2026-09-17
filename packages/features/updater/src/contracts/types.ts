@@ -5,11 +5,13 @@ export type DesktopUpdateStatus =
   | 'downloading'
   | 'not-available'
   | 'downloaded'
+  | 'installing'
   | 'error'
   | 'unsupported';
 
 export type DesktopUpdateInstallMode =
   | 'run-installer'
+  | 'native-mac'
   | 'open-finder'
   | 'unsupported';
 
@@ -62,7 +64,7 @@ export type DesktopUpdateState = Readonly<{
 
 export type DesktopUpdateActionResult = Readonly<{
   ok: boolean;
-  action: 'none' | 'opened-installer' | 'opened-folder' | 'unsupported';
+  action: 'none' | 'opened-installer' | 'opened-folder' | 'restarting' | 'unsupported';
   state: DesktopUpdateState;
   error?: string;
 }>;

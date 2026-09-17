@@ -6,6 +6,7 @@ import type {
 import type { MainFeatureComposition } from '@setsuna-desktop/feature-core/main';
 import {
   app,
+  autoUpdater,
   BrowserWindow,
   clipboard,
   dialog,
@@ -310,6 +311,9 @@ async function createWindow(): Promise<void> {
         downloadsDir: path.join(app.getPath('downloads'), 'Setsuna Desktop Updates'),
         sourceConfigPath: dataLayout.updateSourcesPath,
         enabled: app.isPackaged || process.env.SETSUNA_DESKTOP_ENABLE_UPDATES === '1',
+        // Squirrel closes windows before app.before-quit. Flush the runtime
+        // while the renderer and its native bridges are still alive.
+        prepareForUpdateInstall: async () => { await runtimeHost?.stop(); },
         fetch: (
           input: Parameters<typeof globalThis.fetch>[0],
           init?: RequestInit,
@@ -709,4 +713,8 @@ if (!ownsDesktopInstance) {
       app.quit();
     });
   });
+
+  autoUpdater.on('before-quit-for-update', () => { isAppQuitting = true; });
+  // Native completion can arrive after the Feature has been disposed on quit.
+  autoUpdater.on('error', (error) => console.error('[desktop-updater]', error));
 }
