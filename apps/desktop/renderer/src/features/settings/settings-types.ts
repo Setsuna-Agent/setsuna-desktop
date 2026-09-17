@@ -16,6 +16,7 @@ export type RuntimePreferenceInput = Pick<
   | 'globalPrompt'
   | 'taskModels'
   | 'setsunaStyle'
+  | 'imageCompression'
   | 'approvalPolicy'
   | 'approvalReviewer'
   | 'permissionProfile'

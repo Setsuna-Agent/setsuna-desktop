@@ -90,6 +90,14 @@ export type ProviderModelConfig = {
 
 export type RuntimeSetsunaStyle = 'developer' | 'daily';
 
+export const RUNTIME_IMAGE_COMPRESSION_LEVELS = ['original', 'lossless', 'high', 'compact', 'fast'] as const;
+export type RuntimeImageCompression = typeof RUNTIME_IMAGE_COMPRESSION_LEVELS[number];
+
+/** Older configurations keep the existing high-quality image transport default. */
+export function normalizeRuntimeImageCompression(value: unknown): RuntimeImageCompression {
+  return RUNTIME_IMAGE_COMPRESSION_LEVELS.find((level) => level === value) ?? 'high';
+}
+
 export type RuntimeMarkdownLinkOpenMode = 'in-app' | 'external';
 
 export const RUNTIME_INTERFACE_LANGUAGES = ['zh-CN', 'en-US'] as const;
@@ -133,6 +141,7 @@ export type RuntimeConfigState = {
   globalPrompt: string;
   taskModels?: RuntimeTaskModelSettings;
   setsunaStyle: RuntimeSetsunaStyle;
+  imageCompression?: RuntimeImageCompression;
   approvalPolicy: 'strict' | 'on-request' | 'full';
   /**
    * Selects who resolves interactive approval requests. Older snapshots omit
@@ -250,6 +259,7 @@ export type RuntimeConfigInput = {
   storagePath?: string;
   taskModels?: RuntimeTaskModelSettingsInput;
   setsunaStyle?: RuntimeSetsunaStyle | string;
+  imageCompression?: RuntimeImageCompression;
   approvalPolicy?: RuntimeConfigState['approvalPolicy'];
   approvalReviewer?: RuntimeApprovalReviewer;
   permissionProfile?: RuntimePermissionProfile;

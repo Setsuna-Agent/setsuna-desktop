@@ -1,4 +1,5 @@
 import type { ModelRequest, ModelStreamEvent } from '@setsuna-desktop/contracts';
+import sharp from 'sharp';
 import { describe, expect, it, vi } from 'vitest';
 import { ImageAssetResolvingModelClient } from '../../../src/adapters/model/image-asset-resolving-model-client.js';
 import type { ModelClient } from '../../../src/ports/model-client.js';
@@ -10,6 +11,96 @@ const ONE_PIXEL_PNG = Buffer.from(
 const IMAGE_INPUT_FALLBACK_NOTICE = '图片视觉检查未能完成：模型供应商拒绝了图片输入。本轮将跳过视觉检查，并基于其余文本和工具结果继续。\n\n';
 
 describe('image asset resolving model client', () => {
+  it('applies saved compression changes to the next request including managed tool images', async () => {
+    const data = await largePng();
+    const inner = new CapturingModelClient();
+    const getImageCompression = vi.fn<() => Promise<'high' | 'original'>>()
+      .mockResolvedValueOnce('high').mockResolvedValueOnce('original').mockResolvedValueOnce('high');
+    const client = new ImageAssetResolvingModelClient(inner, {
+      read: async () => ({ name: 'screen.png', type: 'image/png', data }),
+    }, { getImageCompression });
+    const request = imageRequest(data);
+    request.messages.push({
+      ...request.messages[0]!, id: 'tool-result', role: 'tool', toolCallId: 'view', toolName: 'view_image',
+      attachments: [{ id: 'managed-image', source: 'generated', assetId: 'screen', name: 'screen.png',
+        type: 'image/png', size: data.length, modelVisible: true }],
+    });
+    const before = structuredClone(request);
+    for (const type of ['image/webp', 'image/png', 'image/webp']) {
+      for await (const _event of client.stream(request)) { /* Consume. */ }
+      for (const message of inner.request!.messages) {
+        expect(message.attachments?.[0]?.type).toBe(type);
+        if (type === 'image/png') {
+          expect(message.attachments?.[0]).toMatchObject({ url: `data:image/png;base64,${data.toString('base64')}` });
+        }
+      }
+    }
+    expect(getImageCompression).toHaveBeenCalledTimes(3);
+    expect(request).toEqual(before);
+  });
+
+  it('optimizes user and tool PNGs on the wire while preserving the full request history', async () => {
+    const data = await largePng();
+    const inner = new CapturingModelClient();
+    const read = vi.fn(async () => ({ name: 'screen.png', type: 'image/png', data }));
+    const client = new ImageAssetResolvingModelClient(inner, { read });
+    const request = imageRequest(data);
+    request.messages.push({
+      ...request.messages[0]!, id: 'tool-result', role: 'tool', toolCallId: 'view', toolName: 'view_image',
+      content: 'Complete tool output', attachments: [{
+        id: 'tool-image', source: 'generated', assetId: 'screen', name: 'screen.png',
+        type: 'image/png', size: data.length, modelVisible: true,
+      }],
+    });
+    const before = structuredClone(request);
+
+    for await (const _event of client.stream(request)) { /* Consume. */ }
+
+    expect(request).toEqual(before);
+    expect(inner.request?.messages.map(({ content }) => content)).toEqual(request.messages.map(({ content }) => content));
+    expect(inner.request?.messages).toHaveLength(2);
+    for (const message of inner.request!.messages) {
+      const attachment = message.attachments![0]!;
+      expect(attachment.type).toBe('image/webp');
+      expect(attachment.size).toBeLessThan(data.length);
+    }
+    expect(read).toHaveBeenCalledOnce();
+  });
+
+  it('retries an explicit WebP format rejection with original images and remembers that provider', async () => {
+    const data = await largePng();
+    const requests: ModelRequest[] = [];
+    const inner: ModelClient = {
+      async *stream(request) {
+        requests.push(request);
+        if (request.messages[0]?.attachments?.[0]?.type === 'image/webp') {
+          throw new Error('Unsupported image format: image/webp');
+        }
+        yield { type: 'text_delta', text: 'ok' };
+      },
+    };
+    const client = new ImageAssetResolvingModelClient(inner, { read: vi.fn() });
+    const request = imageRequest(data);
+    for (let turn = 0; turn < 2; turn += 1) {
+      for await (const _event of client.stream(request)) { /* Consume. */ }
+    }
+    expect(requests.map((item) => item.messages[0]?.attachments?.[0]?.type)).toEqual(['image/webp', 'image/png', 'image/png']);
+    expect(requests[1]?.messages).toEqual(request.messages);
+    expect(requests[2]?.messages).toEqual(request.messages);
+  });
+
+  it('never retries an image-format error after the provider has emitted output', async () => {
+    const stream = vi.fn(async function* () {
+      yield { type: 'text_delta' as const, text: 'partial' };
+      throw new Error('Unsupported image format: image/webp');
+    });
+    const client = new ImageAssetResolvingModelClient({ stream }, { read: vi.fn() });
+    const iterator = client.stream(imageRequest(await largePng()));
+    expect((await iterator.next()).value).toEqual({ type: 'text_delta', text: 'partial' });
+    await expect(iterator.next()).rejects.toThrow('Unsupported image format');
+    expect(stream).toHaveBeenCalledOnce();
+  });
+
   it('hydrates visible managed images only in the provider request', async () => {
     const inner = new CapturingModelClient();
     const read = vi.fn(async () => ({ name: 'page.png', type: 'image/png', data: ONE_PIXEL_PNG }));
@@ -260,6 +351,25 @@ describe('image asset resolving model client', () => {
     ]);
   });
 });
+
+async function largePng(): Promise<Buffer> {
+  return sharp({ create: { width: 256, height: 128, channels: 4, background: '#579acd' } })
+    .png({ compressionLevel: 0 }).toBuffer();
+}
+
+function imageRequest(data: Buffer): ModelRequest {
+  return {
+    providerId: 'provider', model: 'vision-model',
+    messages: [{
+      id: 'user', role: 'user', content: 'Keep all context and inspect the image.',
+      createdAt: '2026-09-17T00:00:00Z', status: 'complete',
+      attachments: [{
+        id: 'user-image', name: 'screen.png', source: 'inline', type: 'image/png',
+        size: data.length, url: `data:image/png;base64,${data.toString('base64')}`,
+      }],
+    }],
+  };
+}
 
 class CapturingModelClient implements ModelClient {
   request?: ModelRequest;

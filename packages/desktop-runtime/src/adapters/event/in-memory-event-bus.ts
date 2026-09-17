@@ -4,7 +4,10 @@ import type { EventBus, RuntimeEventSubscriber } from '../../ports/event-bus.js'
 export class InMemoryEventBus implements EventBus {
   private subscribers = new Map<string, Set<RuntimeEventSubscriber>>();
 
+  constructor(private readonly observePublication?: RuntimeEventSubscriber) {}
+
   publish(event: StoredThreadEvent): void {
+    try { this.observePublication?.(event); } catch { /* Diagnostics cannot interrupt delivery. */ }
     const subscribers = this.subscribers.get(event.threadId);
     if (!subscribers) return;
     for (const subscriber of subscribers) subscriber(event);
@@ -23,4 +26,3 @@ export class InMemoryEventBus implements EventBus {
     };
   }
 }
-

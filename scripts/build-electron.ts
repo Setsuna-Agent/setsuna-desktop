@@ -13,7 +13,7 @@ export const electronMainExternals = [
   'proxy-chain',
   'undici',
 ];
-export const runtimeExternals = ['node-pty'];
+export const runtimeExternals = ['node-pty', 'sharp'];
 
 const runtimeImportMetaUrlIdentifier = '__setsunaRuntimeModuleUrl';
 
@@ -35,8 +35,7 @@ export function createRuntimeBuildOptions(projectRoot: string): BuildOptions[] {
       define: {
         'import.meta.url': runtimeImportMetaUrlIdentifier,
       },
-      // node-pty 会相对于包目录加载原生预构建文件。将其打包进 dist/runtime 会导致
-      // 打包应用无法启动，因为该目录不包含解包后的原生模块树。
+      // node-pty 和 sharp 从包目录加载平台原生模块，必须保留安装后的依赖树。
       external: runtimeExternals,
     },
     {

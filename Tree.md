@@ -222,7 +222,7 @@ packages/renderer-ui/ — 3 direct / 48 total files
 ### `packages/features/`
 
 ```text
-packages/features/ — 0 direct / 1051 total files
+packages/features/ — 0 direct / 1053 total files
 ├── approval-review/ — 2 direct / 20 total files
 │   ├── src/ — 17 files
 │   │   ├── contracts/ — 5 direct / 5 total files
@@ -304,14 +304,14 @@ packages/features/ — 0 direct / 1051 total files
 │   │   └── runtime/ — 10 direct / 10 total files
 │   └── test/ — 4 files
 │       └── runtime/ — 4 direct / 4 total files
-├── model-provider/ — 2 direct / 58 total files
-│   ├── src/ — 43 files
+├── model-provider/ — 2 direct / 60 total files
+│   ├── src/ — 44 files
 │   │   ├── contracts/ — 5 direct / 5 total files
 │   │   ├── renderer/ — 22 direct / 22 total files
-│   │   └── runtime/ — 16 direct / 16 total files
-│   └── test/ — 13 files
+│   │   └── runtime/ — 17 direct / 17 total files
+│   └── test/ — 14 files
 │       ├── renderer/ — 4 direct / 4 total files
-│       └── runtime/ — 9 direct / 9 total files
+│       └── runtime/ — 10 direct / 10 total files
 ├── network-proxy/ — 2 direct / 31 total files
 │   ├── src/ — 24 files
 │   │   ├── contracts/ — 3 direct / 3 total files
@@ -481,15 +481,15 @@ packages/features/ — 0 direct / 1051 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 584 total files
-├── src/ — 2 direct / 339 total files
-│   ├── adapters/ — 140 files
+packages/desktop-runtime/ — 4 direct / 588 total files
+├── src/ — 2 direct / 341 total files
+│   ├── adapters/ — 142 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── event/ — 2 direct / 2 total files
 │   │   ├── feature/ — 8 direct / 8 total files
 │   │   ├── id/ — 1 direct / 1 total files
 │   │   ├── mcp/ — 4 direct / 4 total files
-│   │   ├── model/ — 2 direct / 2 total files
+│   │   ├── model/ — 4 direct / 4 total files
 │   │   ├── native/ — 1 direct / 1 total files
 │   │   ├── network/ — 2 direct / 2 total files
 │   │   ├── plugin/ — 24 direct / 24 total files
@@ -521,12 +521,12 @@ packages/desktop-runtime/ — 4 direct / 584 total files
 │   │   └── app-server/ — 23 direct / 23 total files
 │   ├── shared/ — 3 direct / 3 total files
 │   └── utils/ — 8 direct / 8 total files
-└── test/ — 241 files
-    ├── adapters/ — 62 files
+└── test/ — 243 files
+    ├── adapters/ — 64 files
     │   ├── approval/ — 1 direct / 1 total files
     │   ├── feature/ — 1 direct / 1 total files
     │   ├── mcp/ — 2 direct / 2 total files
-    │   ├── model/ — 1 direct / 1 total files
+    │   ├── model/ — 3 direct / 3 total files
     │   ├── native/ — 1 direct / 1 total files
     │   ├── network/ — 1 direct / 1 total files
     │   ├── plugin/ — 10 direct / 13 total files

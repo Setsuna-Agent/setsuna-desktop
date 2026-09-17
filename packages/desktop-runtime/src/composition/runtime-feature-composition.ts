@@ -208,6 +208,7 @@ export async function activateBuiltinRuntimeFeatures(
           fetchForRoute: (route) => (
             runtime.networkProxyFetch.forRoute(route) as typeof fetch
           ),
+          reportModelDiagnostic: (record) => runtime.modelLatencyLog.record(record),
           reportReplayDecisions: (trace) => {
             const spanId = `model-request:${trace.turnId}:${trace.afterEventSeq}`;
             for (const payload of trace.decisions) {

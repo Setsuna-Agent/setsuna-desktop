@@ -56,6 +56,33 @@ Workspace、shell、artifact 和图片生成扩展的 host bridge 共享该环�
 
 每个 sampling step 只解析一次；同一结果同时传给 prompt、ToolHost、sandbox、project workflow 和 step snapshot。
 
+## 请求耗时日志
+
+模型延迟诊断默认写入 `<runtime 数据目录>/logs/model-latency.jsonl`。这是单个最多 1 MiB
+的 JSONL 文件，溢出时保留最新半份完整记录；异步写入失败不会中断任务。记录通过 threadId、
+turnId、stepSeq 和 requestId 关联生命周期、图片准备、供应商准备、每次 HTTP 尝试的请求字节数、
+响应头、首个流式数据、首个模型事件及结束/失败时间。`elapsedMs` 在 `http.*` 记录中从该次
+HTTP 尝试开始计时，在 `model.*` / `provider.*` 中从模型调用开始计时；不记录正文、图片、URL、
+请求头或供应商错误正文。修改 runtime 代码后需重启应用才能记录新的请求。
+
+## 图片传输
+
+设置页的「图片传输 → 图片压缩」保存为全局配置 `imageCompression`：原图（`original`）不编码；
+无损（`lossless`）使用 lossless WebP；高清（`high`，默认）和省流（`compact`）分别使用 WebP quality 95 和 80。
+极速（`fast`）使用 quality 60、effort 1，进一步减少传输体积和编码开销，允许更多画质损失。
+旧配置或非法档位按高清处理；每次模型请求开始解析图片时读取一次配置，修改从后续请求生效，无需重启。
+
+`ImageAssetResolvingModelClient` 在模型请求边界解析图片，`ModelImageTransport` 为较大的静态
+8-bit PNG 生成传输副本。有损档使用 alphaQuality 100、smartSubsample；高清和省流使用 effort 2，极速使用 effort 1。
+无损档使用 exact、effort 1。
+所有档位保留原始尺寸、透明度和元数据；原图、聊天记录、文本历史及上下文压缩阈值不变。
+只在体积至少减少 10% 时使用副本，动画、高位深、不支持或编码失败的图片沿用原图。
+
+编码结果按档位与内容摘要缓存，最多 32 MiB / 128 项，并合并同档位、相同图片的并发编码；逐张处理历史图片，
+避免长会话同时解码大量原图。兼容端点明确拒绝 WebP 且尚未返回输出时，使用完整原图重试一次，
+后续该模型请求沿用原格式。不能把模型侧的 prompt cache 命中当成图片已免于网络上传：内联图片
+仍会在每次请求中传输，诊断延迟时应同时检查请求字节数和首个流式输出时间。
+
 ## Sampling context builder
 
 `RuntimeSamplingContextBuilder` 使用分阶段 builder：

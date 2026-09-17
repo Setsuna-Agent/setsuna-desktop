@@ -62,6 +62,7 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
     await runtime.networkProxyFetch.close().catch(() => undefined);
     await runtime.nativeBridge.close().catch(() => undefined);
     await runtime.threadStore.close().catch(() => undefined);
+    await runtime.modelLatencyLog.flush();
     throw error;
   }
   // Recovery 完成后再排队历史记忆抽取，避免读取尚未结算的 turn；shutdown 会取消该后台队列。
@@ -206,6 +207,7 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
                     try {
                       await runtime.threadStore.close();
                     } finally {
+                      await runtime.modelLatencyLog.flush();
                       await serverClosed;
                     }
                   }

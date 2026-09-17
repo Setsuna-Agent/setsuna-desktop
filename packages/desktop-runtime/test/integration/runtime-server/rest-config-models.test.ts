@@ -66,6 +66,22 @@ describe('runtime server REST config and model discovery', () => {
     expect(JSON.stringify(settings)).not.toContain('sk-draft-secret');
   });
 
+  it('persists compression levels through config requests and retains them across unrelated saves', async () => {
+    expect(await harness.runtimeFetch('/v1/config')).toMatchObject({ imageCompression: 'high' });
+    for (const imageCompression of ['original', 'lossless', 'high', 'compact', 'fast']) {
+      expect(await harness.runtimeFetch('/v1/config', {
+        method: 'PUT', body: JSON.stringify({ imageCompression }),
+      })).toMatchObject({ imageCompression });
+      await harness.runtimeFetch('/v1/config', {
+        method: 'PUT', body: JSON.stringify({ globalPrompt: 'Keep unrelated preferences.' }),
+      });
+      expect(await harness.runtimeFetch('/v1/config')).toMatchObject({ imageCompression });
+    }
+    expect(await harness.runtimeFetch('/v1/config', {
+      method: 'PUT', body: JSON.stringify({ imageCompression: 'unknown' }),
+    })).toMatchObject({ imageCompression: 'high' });
+  });
+
   it('returns masked config without leaking API keys', async () => {
       const config = await harness.runtimeFetch('/v1/config', {
         method: 'PUT',

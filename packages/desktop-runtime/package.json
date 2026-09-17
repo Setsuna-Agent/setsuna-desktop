@@ -34,6 +34,7 @@
     "@setsuna-desktop/feature-windows-sandbox": "workspace:*",
     "@setsuna-desktop/feature-workspace-dependencies": "workspace:*",
     "node-pty": "^1.1.0",
+    "sharp": "0.35.4",
     "tar": "7.5.22",
     "undici": "7.29.0",
     "yaml": "^2.8.1",

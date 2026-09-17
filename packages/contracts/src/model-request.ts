@@ -41,3 +41,33 @@ export type ModelCompactionResult =
       providerMetadata: RuntimeMessageProviderMetadata;
       usage?: RuntimeUsage;
     };
+
+/** Metadata only. Never include prompts, output, request headers or provider error bodies. */
+export type ModelDiagnostic = {
+  phase: string;
+  requestId?: string;
+  threadId?: string;
+  turnId?: string;
+  stepSeq?: number;
+  providerId?: string;
+  model?: string;
+  elapsedMs?: number;
+  attempt?: number;
+  requestBytes?: number;
+  responseBytes?: number;
+  status?: number;
+  aborted?: boolean;
+  thinking?: boolean;
+  reasoningEffort?: string;
+  messageCount?: number;
+  imageCount?: number;
+  toolCount?: number;
+  maxOutputTokens?: number;
+  inputTokens?: number;
+  cachedInputTokens?: number;
+  outputTokens?: number;
+  eventSeq?: number;
+  eventAt?: string;
+};
+
+export type ModelDiagnosticReporter = (record: ModelDiagnostic) => void;

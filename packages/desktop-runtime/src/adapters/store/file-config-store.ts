@@ -13,6 +13,7 @@ import {
   normalizeProviderIconConfig,
   normalizeProviderRequestHeaders,
   normalizeRuntimeAccessModeConfig,
+  normalizeRuntimeImageCompression,
 } from '@setsuna-desktop/contracts';
 import type {
   ApprovalReviewLegacySettingsAdapter,
@@ -270,6 +271,7 @@ export class FileConfigStore implements ConfigStore {
         globalPrompt: normalizeGlobalPrompt(input.globalPrompt ?? previous.globalPrompt),
         taskModels,
         setsunaStyle: normalizeSetsunaStyle(input.setsunaStyle ?? previous.setsunaStyle),
+        imageCompression: normalizeRuntimeImageCompression(input.imageCompression ?? previous.imageCompression),
         approvalPolicy: normalizeApprovalPolicy(input.approvalPolicy ?? previousAccessMode.approvalPolicy),
         approvalReviewer: normalizeApprovalReviewer(
           input.approvalReviewer ?? previousAccessMode.approvalReviewer,
@@ -507,6 +509,7 @@ export class FileConfigStore implements ConfigStore {
       globalPrompt: normalizeGlobalPrompt(stored.globalPrompt),
       taskModels: taskModelSettingsForState(stored.taskModels),
       setsunaStyle: normalizeSetsunaStyle(stored.setsunaStyle),
+      imageCompression: normalizeRuntimeImageCompression(stored.imageCompression),
       approvalPolicy: normalizeApprovalPolicy(stored.approvalPolicy),
       approvalReviewer: normalizeApprovalReviewer(
         stored.approvalReviewer,

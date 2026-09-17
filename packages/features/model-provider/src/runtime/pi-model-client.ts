@@ -46,6 +46,7 @@ import {
 import { builtinCatalogProviderIdForConfig, getBuiltinCatalogProvider } from './provider-catalog.js';
 import { applyProviderRequestHeaders } from './provider-request-headers.js';
 import { recoverIncompletePiStream } from './pi-stream-recovery.js';
+import { ModelRequestDiagnostics } from './model-request-diagnostics.js';
 
 const EMPTY_API_KEY = 'setsuna-no-provider-api-key';
 const LOCAL_SMOKE_MODEL = 'local-runtime-smoke';
@@ -58,32 +59,44 @@ export class PiModelClient implements ModelProviderSamplingService {
   ) {}
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
-    const provider = await this.resolveRequestProvider(request);
-    if (!provider || isBuiltInLocalSmokeProvider(provider)) {
-      yield* localSmokeStream();
-      return;
-    }
-
-    const modelId = provider.activeModel?.code || request.model;
-    const compatibilityModel = createPiModel(provider, modelId, { providers: this.providers });
-    let currentRequest = withKnownPiRequestCompatibility(
-      withProviderDefaults(request, provider, modelId),
-      compatibilityModel,
-    );
-    while (true) {
-      let emitted = false;
-      try {
-        for await (const event of this.streamConfigured(provider, currentRequest)) {
-          emitted = true;
-          yield event;
-        }
+    const diagnostics = new ModelRequestDiagnostics(request, this.host.reportModelDiagnostic);
+    diagnostics.record('model.started', { messageCount: request.messages.length, toolCount: request.tools?.length ?? 0 });
+    try {
+      const provider = await this.resolveRequestProvider(request);
+      if (!provider || isBuiltInLocalSmokeProvider(provider)) {
+        yield* localSmokeStream();
         return;
-      } catch (error) {
-        if (emitted || request.signal?.aborted) throw error;
-        const retryRequest = nextPiCompatibilityRetry(currentRequest, error, compatibilityModel.api);
-        if (!retryRequest) throw error;
-        currentRequest = retryRequest;
       }
+
+      const modelId = provider.activeModel?.code || request.model;
+      const compatibilityModel = createPiModel(provider, modelId, { providers: this.providers });
+      let currentRequest = withKnownPiRequestCompatibility(
+        withProviderDefaults(request, provider, modelId),
+        compatibilityModel,
+      );
+      while (true) {
+        let emitted = false;
+        try {
+          for await (const event of this.streamConfigured(provider, currentRequest, diagnostics)) {
+            emitted = true;
+            diagnostics.observe(event);
+            yield event;
+          }
+          diagnostics.record('model.completed');
+          return;
+        } catch (error) {
+          if (emitted || request.signal?.aborted) throw error;
+          const retryRequest = nextPiCompatibilityRetry(currentRequest, error, compatibilityModel.api);
+          if (!retryRequest) throw error;
+          diagnostics.record('model.compatibility_retry');
+          currentRequest = retryRequest;
+        }
+      }
+    } catch (error) {
+      diagnostics.record('model.failed', { aborted: request.signal?.aborted ?? false });
+      throw error;
+    } finally {
+      diagnostics.record('model.closed', { aborted: request.signal?.aborted ?? false });
     }
   }
 
@@ -108,6 +121,7 @@ export class PiModelClient implements ModelProviderSamplingService {
   private async *streamConfigured(
     provider: ModelProviderRuntimeConfig,
     request: ModelRequest,
+    diagnostics: ModelRequestDiagnostics,
   ): AsyncGenerator<ModelStreamEvent> {
     const replayContext = createPiReplayContext(provider, request.model, this.providers);
     this.publishProviderReplayDebug(request, replayContext);
@@ -116,8 +130,12 @@ export class PiModelClient implements ModelProviderSamplingService {
       providers: this.providers,
     });
     const context = toPiContext(request, replayContext);
+    diagnostics.record('provider.ready', {
+      thinking: request.thinking, reasoningEffort: request.reasoningEffort,
+      maxOutputTokens: request.maxOutputTokens,
+    });
     const transportFailure: ProviderTransportFailure = {};
-    const fetch = this.providerFetch(provider, request.sessionId, transportFailure);
+    const fetch = diagnostics.wrapFetch(this.providerFetch(provider, request.sessionId, transportFailure));
     const catalogProviderId = builtinCatalogProviderIdForConfig(provider, this.providers);
     const catalogProvider = catalogProviderId ? getBuiltinCatalogProvider(catalogProviderId, this.providers) : undefined;
     // All stream attempts and their backoff share this sampling step's total deadline.

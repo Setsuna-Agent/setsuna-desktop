@@ -1,4 +1,8 @@
-import type { RuntimeConfigState } from '@setsuna-desktop/contracts';
+import {
+  RUNTIME_IMAGE_COMPRESSION_LEVELS,
+  normalizeRuntimeImageCompression,
+  type RuntimeConfigState,
+} from '@setsuna-desktop/contracts';
 import { ChevronRight, FileJson2, Plus, ShieldCheck } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
@@ -12,8 +16,8 @@ import {
   SettingsDirectoryList,
   SettingsListEditor,
 } from '../../../shared/ui/SettingsListFields.js';
-import { SettingsToggle } from '../../../shared/ui/SettingsViewUi.js';
-import { Button, TextArea, TextField } from '../../../shared/ui/primitives.js';
+import { SettingsGroup, SettingsRow, SettingsToggle } from '../../../shared/ui/SettingsViewUi.js';
+import { Button, SelectField, TextArea, TextField } from '../../../shared/ui/primitives.js';
 import { SettingsPathValue } from '../components/SettingsPathValue.js';
 import { DataLocationSettings } from '../data-root/DataLocationSettings.js';
 import type { RuntimePreferenceInput } from '../settings-types.js';
@@ -79,6 +83,8 @@ export function RuntimePolicySettings({
         </div>
       </div>
 
+      <RuntimeImageCompressionSettings config={config} onSave={onSave} />
+
       <div className="chat-user-settings__section-block">
         <div className="chat-user-settings__group-title">{t('settings.runtime.localStorage')}</div>
         <div className="chat-user-settings__group chat-user-settings__runtime-card">
@@ -103,6 +109,43 @@ export function RuntimePolicySettings({
         {localPathError ? <div className="chat-user-settings__runtime-error">{localPathError}</div> : null}
       </div>
     </div>
+  );
+}
+
+function RuntimeImageCompressionSettings({ config, onSave }: {
+  config: RuntimeConfigState;
+  onSave: (input: RuntimePreferenceInput) => Promise<void>;
+}) {
+  const { t } = useI18n();
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const saveCompression = async (value: string) => {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await onSave({ imageCompression: normalizeRuntimeImageCompression(value) });
+    } catch (error) {
+      setSaveError(errorMessage(error, t('settings.runtime.saveError', { label: t('settings.runtime.imageCompression') })));
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <SettingsGroup title={t('settings.runtime.imageTransfer')}>
+      <SettingsRow label={t('settings.runtime.imageCompression')} description={t('settings.runtime.imageCompressionDescription')}>
+        <SelectField
+          aria-label={t('settings.runtime.imageCompression')}
+          disabled={saving}
+          value={normalizeRuntimeImageCompression(config.imageCompression)}
+          onValueChange={(value) => void saveCompression(value)}
+        >
+          {RUNTIME_IMAGE_COMPRESSION_LEVELS.map((level) => (
+            <option key={level} value={level}>{t(`settings.runtime.imageCompression.${level}`)}</option>
+          ))}
+        </SelectField>
+      </SettingsRow>
+      {saveError ? <div className="chat-user-settings__runtime-error" role="alert">{saveError}</div> : null}
+    </SettingsGroup>
   );
 }
 
