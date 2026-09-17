@@ -144,8 +144,35 @@ dev 启动流程：
 
 平台产物：
 
-- macOS arm64/x64：DMG，当前 unsigned/manual install。
+- macOS arm64/x64：DMG；Release workflow 要求内部 app 完成 Developer ID 签名和 Apple 公证。
 - Windows x64：NSIS EXE。
+
+### macOS 签名与公证
+
+使用 **Developer ID Application** 证书，导出的 `.p12` 必须包含对应私钥。
+GitHub 仓库的 Settings → Secrets and variables → Actions 中配置：
+
+| Secret | 内容 |
+| --- | --- |
+| `CSC_LINK` | `.p12` 文件的 Base64 内容 |
+| `CSC_KEY_PASSWORD` | `.p12` 导出密码 |
+| `APPLE_ID` | Apple 开发者账号邮箱 |
+| `APPLE_APP_SPECIFIC_PASSWORD` | 在 Apple 账号「登录和安全性」中生成的 App 专用密码 |
+| `APPLE_TEAM_ID` | 证书所属开发者团队的 Team ID |
+
+证书与密码不放入仓库。可通过 `base64 -i /absolute/path/certificate.p12 | gh secret set CSC_LINK`
+直接上传证书；其余值可在 GitHub 页面填写，或通过 `gh secret set <NAME>` 交互输入。
+
+`electron-builder` 负责临时钥匙串、嵌套 Electron Helper、原生模块和 ripgrep 的签名，
+并提交 app 公证、装订票据。使用内置 Electron entitlements 和 Hardened Runtime。
+Release workflow 只向 macOS 打包步骤注入凭据，强制签名，并在收集产物前运行
+`codesign --verify`、`stapler validate` 和 Gatekeeper 检查。缺少凭据或公证失败会阻止发布。
+DMG 是包含已签名、公证 app 的分发容器，不单独提交公证。
+
+本地打包自动使用登录钥匙串里的 Developer ID 证书；设置上述 Apple 公证环境变量后也会公证。
+也支持先用 `xcrun notarytool store-credentials setsuna-notary` 交互保存公证凭据，
+再设置 `APPLE_KEYCHAIN_PROFILE=setsuna-notary` 打包，避免把密码写进 shell 历史。
+没有正式签名身份时，`after-pack.cjs` 保留 ad-hoc 签名供本机测试；此类包不能作为正式发布产物。
 
 ## CI
 

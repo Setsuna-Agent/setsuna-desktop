@@ -187,7 +187,9 @@
         "dmg"
       ],
       "artifactName": "Setsuna-Desktop-${version}-mac-${arch}.${ext}",
-      "identity": null
+      "type": "distribution",
+      "hardenedRuntime": true,
+      "notarize": true
     },
     "win": {
       "icon": "assets/build/icon.ico",

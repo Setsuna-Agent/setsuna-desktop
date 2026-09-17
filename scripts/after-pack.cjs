@@ -36,6 +36,8 @@ exports.default = async function afterPack(context) {
   if (process.env.SETSUNA_DESKTOP_SKIP_ADHOC_SIGN === '1') return;
   if (process.env.CSC_LINK || process.env.CSC_NAME) return;
 
+  // Keep local packages runnable without a certificate. electron-builder replaces
+  // this fallback with a Developer ID signature when it finds a signing identity.
   const appName = `${context.packager.appInfo.productFilename}.app`;
   const appPath = path.join(context.appOutDir, appName);
   run('codesign', ['--force', '--deep', '--sign', '-', appPath]);
