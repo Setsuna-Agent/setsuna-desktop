@@ -272,6 +272,22 @@ describe('DesktopReviewPanel', () => {
     })).toBe('src/domain/agent/App.vue');
   });
 
+  it('normalizes long slash runs while preserving the workspace boundary', () => {
+    const slashes = '/'.repeat(100_000);
+    const context = {
+      source: 'unstaged' as const,
+      workspaceRoot: `/repo${slashes}project${slashes}`,
+      gitRoot: `/repo${slashes}`,
+    };
+    expect(reviewWorkspaceFilePath('project/src/app.ts', context)).toBe('src/app.ts');
+    expect(reviewWorkspaceFilePath('sibling/secret.txt', context)).toBeNull();
+    expect(reviewWorkspaceFilePath('src/app.ts', {
+      source: 'unstaged',
+      workspaceRoot: 'C:\\repo\\project\\',
+      gitRoot: 'c:\\repo\\project',
+    })).toBe('src/app.ts');
+  });
+
   it('splits review paths so the filename can stay visible when the directory is truncated', () => {
     expect(reviewFilePathParts('front-end/agent/src/App.tsx')).toEqual({
       directory: 'front-end/agent/src/',

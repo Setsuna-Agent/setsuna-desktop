@@ -4,7 +4,6 @@ export default createVitestConfig({
   fileParallelism: false,
   hookTimeout: 30_000,
   maxWorkers: 1,
-  minWorkers: 1,
   pool: 'forks',
   sequence: {
     shuffle: false,

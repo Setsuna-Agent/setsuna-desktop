@@ -213,5 +213,7 @@ export async function decryptWebDavFile(input: {
 }
 
 export function sha256Buffer(data: Buffer): string {
+  // File integrity only: backup digests live inside the AES-GCM encrypted manifest;
+  // this is never a password verifier or a key derivation function.
   return createHash('sha256').update(data).digest('hex');
 }

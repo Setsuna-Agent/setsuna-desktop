@@ -5,7 +5,6 @@ export default createVitestConfig({
   hookTimeout: 45_000,
   include: integrationTestGlobs,
   maxWorkers: 1,
-  minWorkers: 1,
   pool: 'forks',
   sequence: {
     shuffle: false,
