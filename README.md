@@ -45,7 +45,9 @@ Download the latest version from [GitHub Releases](https://github.com/Setsuna-Ag
 | macOS Intel | DMG |
 | Windows x64 | EXE |
 
-The macOS release workflow requires Developer ID signing and Apple notarization. Check each release's notes for the signing status of older downloads.
+Starting with **v0.4.0**, the macOS app is code-signed and notarized by Apple. To install, open the DMG and drag Setsuna Desktop into Applications.
+
+If you're upgrading from v0.3.x or earlier on macOS, quit the app and install the new version using the DMG. After this one-time step, you can download future updates in the app and click **Restart to install**.
 
 After opening the app, add your model provider in **Settings → Model providers**.
 
