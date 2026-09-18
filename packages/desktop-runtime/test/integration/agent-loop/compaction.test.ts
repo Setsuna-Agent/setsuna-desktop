@@ -50,6 +50,7 @@ describe('agent loop context compaction', () => {
       configStore: new ContextWindowConfigStore(16_000),
       modelClient: { stream: async function* (request): AsyncGenerator<ModelStreamEvent> {
         expect(request.messages.some((message) => message.id === 'context_compaction_system')).toBe(true);
+        expect(request.maxOutputTokens).toBeLessThan(16_000);
         const usage = usages[attempts++]!;
         yield { type: 'text_delta', text: '{"summary":"Truncated summary' };
         yield { type: 'usage', usage };
@@ -66,6 +67,7 @@ describe('agent loop context compaction', () => {
     const events = await threadStore.listEvents(thread.id, 0);
     const counts = events.filter((event) => event.type === 'token.count');
     const turnId = events.find((event) => event.type === 'thread.context_compacting')?.turnId;
+    expect(events.find((event) => event.type === 'thread.context_compacting')?.payload.maxContextTokens).toBe(16_000);
     expect(attempts).toBe(2);
     expect(counts.map((event) => event.payload.usage)).toEqual(usages);
     expect(usageStore.records).toMatchObject(usages.map((usage) => ({ ...usage, threadId: thread.id, turnId, createdAt: expect.any(String) })));
@@ -180,8 +182,7 @@ describe('agent loop context compaction', () => {
       expect(modelClient.requests[0]).toMatchObject({
         model: 'background-summary-model',
         providerId: 'background-provider',
-        maxOutputTokens: 4096,
-        temperature: 0,
+        maxOutputTokens: 8192,
         toolChoice: 'none',
       });
       expect(compactingEvent?.turnId).toBeTruthy();
@@ -547,9 +548,10 @@ describe('agent loop context compaction', () => {
       expect(mainRequest?.messages.map((message) => message.content).join('\n')).not.toContain(smallWindowHistory.slice(0, 200));
     });
   
-  it('uses provider-native context compaction when available', async () => {
+  it.each([false, true])('resumes native history after reopening on another provider (delete archived source: %s)', async (deleteSource) => {
       const ids = new RandomIdGenerator();
-      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+      const dataDir = await mkDataDir();
+      const threadStore = createTestThreadStore(dataDir, systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Remote automatic context compaction' });
       const smallWindowHistory = 'remote older context '.repeat(6000);
       for (let index = 0; index < 3; index += 1) {
@@ -577,7 +579,7 @@ describe('agent loop context compaction', () => {
         eventBus: new InMemoryEventBus(),
         clock: systemClock,
         ids,
-        configStore: new ContextWindowConfigStore(16_000),
+        configStore: new NativeContextWindowConfigStore(16_000),
         usageStore,
       });
   
@@ -592,7 +594,7 @@ describe('agent loop context compaction', () => {
         providerId: 'test',
       });
       expect(modelClient.compactRequests[0].messages.map((message) => message.content).join('\n')).toContain(smallWindowHistory.slice(0, 200));
-      expect(modelClient.requests.map((request) => request.model)).toEqual(['local-runtime-smoke', 'local-runtime-smoke']);
+      expect(modelClient.requests.map((request) => request.model)).toEqual(['local-runtime-smoke']);
       expect(saved?.messages.find((message) => message.contextCompaction)?.contextCompaction).toMatchObject({
         source: 'remote',
         triggerScopes: ['total'],
@@ -602,18 +604,6 @@ describe('agent loop context compaction', () => {
         compactionSummaryMessageIds: [expect.any(String)],
       });
       expect(events.filter((event) => event.type === 'token.count')).toMatchObject([
-        {
-          payload: {
-            usage: {
-              providerId: 'background-provider',
-              provider: 'Background provider',
-              model: 'background-summary-model',
-              inputTokens: 7,
-              outputTokens: 3,
-              totalTokens: 10,
-            },
-          },
-        },
         {
           payload: {
             usage: {
@@ -629,15 +619,6 @@ describe('agent loop context compaction', () => {
       expect(usageStore.records).toMatchObject([
         {
           threadId: thread.id,
-          providerId: 'background-provider',
-          provider: 'Background provider',
-          model: 'background-summary-model',
-          inputTokens: 7,
-          outputTokens: 3,
-          totalTokens: 10,
-        },
-        {
-          threadId: thread.id,
           provider: 'openai-responses',
           model: 'gpt-compact',
           inputTokens: 10,
@@ -645,8 +626,21 @@ describe('agent loop context compaction', () => {
           totalTokens: 12,
         },
       ]);
-      expect(mainRequest?.messages.map((message) => message.content).join('\n')).toContain('Remote provider compacted the older history.');
+      expect(mainRequest?.messages.some((message) => message.contextCompaction?.nativeSourceMessageIds?.includes('remote_compact_msg_0'))).toBe(true);
       expect(mainRequest?.messages.map((message) => message.content).join('\n')).not.toContain(smallWindowHistory.slice(0, 200));
+      if (deleteSource) await threadStore.deleteMessages(thread.id, { messageIds: ['remote_compact_msg_0'] });
+      await threadStore.close();
+      const reopened = createTestThreadStore(dataDir, systemClock, ids);
+      const nextLoop = new AgentLoop({
+        threadStore: reopened, modelClient, ids, clock: systemClock, eventBus: new InMemoryEventBus(),
+        configStore: new ContextWindowConfigStore(256_000),
+      });
+      await nextLoop.sendTurn(thread.id, { input: 'Continue with the replacement provider' });
+      const resumed = modelClient.requests.at(-1)!;
+      expect(resumed.messages.find((message) => message.id === 'remote_compact_msg_0')?.content).toBe(deleteSource ? undefined : smallWindowHistory);
+      expect(resumed.messages.find((message) => message.id === 'remote_compact_msg_2')?.content).toBe('recent remote message 2');
+      expect(resumed.messages.some((message) => message.contextCompaction?.nativeSourceMessageIds)).toBe(false);
+      expect(modelClient.compactRequests).toHaveLength(1);
     });
   
   it('bounds oversized tool results during a long tool chain without context compaction', async () => {
@@ -831,4 +825,12 @@ function withDedicatedCompactionModel(config: RuntimeConfigState): RuntimeConfig
       },
     },
   };
+}
+
+class NativeContextWindowConfigStore extends ContextWindowConfigStore {
+  override async getConfig(): Promise<RuntimeConfigState> {
+    const config = await super.getConfig();
+    config.providers[0]!.provider = 'openai-responses';
+    return config;
+  }
 }

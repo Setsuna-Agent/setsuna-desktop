@@ -10,7 +10,7 @@ import type {
   DesktopTerminalSession,
   TerminalEnvironmentPatch,
 } from '../contracts/index.js';
-import { terminalProcessOptions } from './process-options.js';
+import { terminalProcessOptions, terminalWindowsPty } from './process-options.js';
 
 const require = createRequire(import.meta.url);
 const pty = require('node-pty') as typeof import('node-pty');
@@ -22,7 +22,7 @@ type TerminalSession = DesktopTerminalSession & {
   exited: boolean;
   exitDisposable: IDisposable;
   ptyProcess: IPty | null;
-  restartPromise: Promise<boolean> | null;
+  startPromise: Promise<boolean> | null;
   rows: number;
   seq: number;
   shellArgs: string[];
@@ -54,27 +54,40 @@ export class DesktopTerminalStore {
       sessionId,
       workspaceRoot,
       shell: shell.displayName,
+      windowsPty: terminalWindowsPty(),
       cols: terminalDimension(input.cols, 100),
       dataDisposable: { dispose: () => undefined },
       events: [],
       exited: false,
       exitDisposable: { dispose: () => undefined },
       ptyProcess: null,
-      restartPromise: null,
+      startPromise: null,
       rows: terminalDimension(input.rows, 24),
       seq: 0,
       shellArgs: shell.args,
       shellCommand: shell.command,
     };
     this.sessions.set(sessionId, session);
-    try {
-      await this.startSessionProcess(session, signal);
-    } catch (error) {
-      this.sessions.delete(sessionId);
-      throw error;
-    }
 
-    return { sessionId, workspaceRoot, shell: shell.displayName };
+    return {
+      sessionId,
+      workspaceRoot,
+      shell: session.shell,
+      cols: session.cols,
+      rows: session.rows,
+      windowsPty: session.windowsPty,
+    };
+  }
+
+  async attach(sessionId: string, cols: number, rows: number, signal?: AbortSignal): Promise<boolean> {
+    const session = this.sessions.get(sessionId);
+    if (!session || session.exited) return false;
+    if (session.ptyProcess) return this.resize(sessionId, cols, rows);
+    session.cols = terminalDimension(cols, session.cols);
+    session.rows = terminalDimension(rows, session.rows);
+    // The renderer has subscribed and fitted its grid before this handshake.
+    // ConPTY must generate its first absolute-position repaint at that size.
+    return this.startSessionProcess(session, signal);
   }
 
   write(sessionId: string, input: string): boolean {
@@ -83,9 +96,10 @@ export class DesktopTerminalStore {
     // lifecycle race as stale while preserving the explicit restart signal for
     // a session whose shell exited but whose panel is still open.
     if (!session) return false;
-    if (!session.ptyProcess || session.exited) {
+    if (session.exited) {
       throw new Error('终端进程已退出，请重新启动。');
     }
+    if (!session.ptyProcess) return false;
     session.ptyProcess.write(input);
     return true;
   }
@@ -101,27 +115,22 @@ export class DesktopTerminalStore {
   resize(sessionId: string, cols: number, rows: number): boolean {
     const session = this.sessions.get(sessionId);
     if (!session) return false;
-    session.cols = terminalDimension(cols, 100);
-    session.rows = terminalDimension(rows, 24);
+    const nextCols = terminalDimension(cols, 100);
+    const nextRows = terminalDimension(rows, 24);
     if (!session.ptyProcess || session.exited) return false;
-    session.ptyProcess.resize(session.cols, session.rows);
+    if (nextCols === session.cols && nextRows === session.rows) return true;
+    session.ptyProcess.resize(nextCols, nextRows);
+    session.cols = nextCols;
+    session.rows = nextRows;
     return true;
   }
 
   async restart(sessionId: string, cols?: number, rows?: number, signal?: AbortSignal): Promise<boolean> {
     const session = this.sessions.get(sessionId);
-    if (!session) return false;
+    if (!session || (!session.startPromise && !session.exited)) return false;
     session.cols = terminalDimension(cols, session.cols);
     session.rows = terminalDimension(rows, session.rows);
-    if (session.restartPromise) return session.restartPromise;
-    if (!session.exited) return false;
-    const restartPromise = this.startSessionProcess(session, signal);
-    session.restartPromise = restartPromise;
-    try {
-      return await restartPromise;
-    } finally {
-      if (session.restartPromise === restartPromise) session.restartPromise = null;
-    }
+    return this.startSessionProcess(session, signal);
   }
 
   close(sessionId: string): boolean {
@@ -144,6 +153,20 @@ export class DesktopTerminalStore {
   }
 
   private async startSessionProcess(session: TerminalSession, signal?: AbortSignal): Promise<boolean> {
+    if (session.startPromise) return session.startPromise;
+    const starting = this.spawnSessionProcess(session, signal);
+    session.startPromise = starting;
+    try {
+      return await starting;
+    } catch (error) {
+      session.exited = true;
+      throw error;
+    } finally {
+      if (session.startPromise === starting) session.startPromise = null;
+    }
+  }
+
+  private async spawnSessionProcess(session: TerminalSession, signal?: AbortSignal): Promise<boolean> {
     signal?.throwIfAborted();
     const environmentPatch = await this.resolveEnvironment();
     signal?.throwIfAborted();
@@ -240,5 +263,5 @@ function terminalEnvironment(patch: TerminalEnvironmentPatch = {}): NodeJS.Proce
 }
 
 function terminalDimension(value: number | undefined, fallback: number): number {
-  return Math.max(1, Math.round(value ?? fallback));
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(1, Math.round(value)) : fallback;
 }

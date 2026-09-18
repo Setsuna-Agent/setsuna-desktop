@@ -34,6 +34,7 @@ export {
 } from './swe/think-tag-scanner.js';
 export * from './swe-events.js';
 export * from './thread-events.js';
+export { restoreNativeCompactionHistory } from './event-projections/native-compaction.js';
 export * from './thread-title.js';
 export * from './threads.js';
 export * from './usage.js';

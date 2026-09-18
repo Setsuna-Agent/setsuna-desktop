@@ -5,6 +5,7 @@ export function subscribeTerminalEvents(
   bridge: Pick<TerminalDesktopBridge, 'onEvent' | 'read'>,
   sessionId: string,
   onEvent: (event: DesktopTerminalEvent) => void,
+  onRestored?: () => void,
 ): () => void {
   let disposed = false;
   let pendingEvents: DesktopTerminalEvent[] | null = [];
@@ -27,6 +28,7 @@ export function subscribeTerminalEvents(
     const events = [...history, ...(pendingEvents ?? [])].sort((left, right) => left.seq - right.seq);
     pendingEvents = null;
     events.forEach(deliver);
+    onRestored?.();
   };
   void bridge.read(sessionId).then(restore, () => restore([]));
 

@@ -27,9 +27,9 @@ import {
 import type { UsageRecorder } from '../../ports/usage-store.js';
 import { createModelStreamTextCollector } from '../../utils/model-stream-text-collector.js';
 import { PROVIDER_METADATA_SEMANTIC_BINDING_RESERVE_BYTES } from '../../utils/runtime-message-semantic-fingerprint.js';
-import { runtimeTaskModelRequest } from '../core/runtime-task-model.js';
 import {
   createRuntimeContextCompactionCandidate,
+  estimateRuntimeMessageTokens,
   estimateRuntimeToolDefinitionTokens,
   materializeRuntimeContextCompaction,
   reserveRuntimeContextCompactionBudget,
@@ -39,17 +39,18 @@ import {
 } from './context-compaction.js';
 import { compactForPrompt } from './prompt-utils.js';
 import {
-  compactionSummaryOutputBudget,
-  compactionSummaryPrompt,
   parseCompactionSummary,
   stripContextCompactionTags,
 } from './context-compaction-summary.js';
+import { contextCompactionRequest } from './context-compaction-request.js';
+import { nativeCompactionMatchesModel, restoreNativeCompactionHistory } from './context-compaction-history.js';
 
 type GeneratedContextCompactionSummary = {
   source: 'local' | 'remote';
   text: string;
   providerMetadata?: RuntimeMessageProviderMetadata;
   omittedProviderMetadata?: RuntimeMessageProviderMetadata;
+  nativeSourceMessageIds?: string[];
 };
 
 type NativeContextCompactionArtifact = {
@@ -100,6 +101,7 @@ export class RuntimeContextCompactor {
   constructor(private readonly options: RuntimeContextCompactorOptions) {}
 
   async compactMessagesBeforeModelRequest({ contextBudget, conversationModel, force, messages, reservedTokens = 0, runtimeConfig, signal, thread, threadId, turnId }: { contextBudget?: RuntimeContextCompactionBudget; conversationModel?: Pick<ModelRequest, 'model' | 'providerId'>; force: boolean; messages: RuntimeMessage[]; reservedTokens?: number; runtimeConfig: RuntimeConfigState | null | undefined; signal: AbortSignal; thread: RuntimeThread; threadId: string; turnId: string }): Promise<RuntimeMessage[]> {
+    messages = restoreNativeCompactionHistory(messages, (message) => Boolean(conversationModel && nativeCompactionMatchesModel(message, runtimeConfig, conversationModel)));
     // 自动压缩必须先持久化再发模型请求，保证 UI、存储历史和实际 prompt window 一致。
     const budget = reserveRuntimeContextCompactionBudget(
       contextBudget ?? contextCompactionBudgetForConfig(runtimeConfig),
@@ -140,13 +142,14 @@ export class RuntimeContextCompactor {
       createdAt: this.options.clock.now().toISOString(),
       id: this.options.ids.id('msg'),
       providerMetadata: summary.providerMetadata,
+      nativeSourceMessageIds: summary.nativeSourceMessageIds,
       source: summary.source,
       summary: summary.text,
       turnId,
     });
     throwIfAborted(signal);
-    if (!force && (result.notice.compactedRequestTokens! >= candidate.originalTokens + candidate.reservedTokens
-      || result.notice.compactedRequestTokens! >= candidate.autoCompactTokenLimit)) {
+    if ((!force && result.notice.compactedRequestTokens! >= candidate.originalTokens + candidate.reservedTokens)
+      || result.notice.compactedRequestTokens! >= candidate.autoCompactTokenLimit) {
       throw new Error('Context compaction did not free enough space; original history was retained.');
     }
     const metadataWarningEvent = await this.publishProviderMetadataWarning(
@@ -206,14 +209,34 @@ export class RuntimeContextCompactor {
       advanceDebugAnchor(debugContext, event);
     };
     const samplingInput = { candidate, threadId, recordUsage, signal, debugContext, runtimeConfig, conversationModel };
-    const portableSummary = await this.generatePortableContextCompactionSummary(samplingInput);
-    const nativeArtifact = await this.generateNativeContextCompaction(samplingInput);
+    const provider = runtimeConfig?.providers.find((item) => item.id === (conversationModel?.providerId ?? runtimeConfig.activeProviderId));
+    // An explicit task model selects portable compaction. Native-only checkpoints require all
+    // source messages to survive transcript archival, including on a later provider switch.
+    const useNative = !runtimeConfig?.taskModels?.contextCompaction
+      && (!provider || provider.provider === 'openai-responses')
+      && !candidate.olderMessages.some((message) => message.visibility === 'model');
+    const nativeArtifact: NativeContextCompactionArtifact = useNative ? await this.generateNativeContextCompaction(samplingInput) : {};
+    if (nativeArtifact.providerMetadata) {
+      const nativeTokens = Math.ceil(runtimeJsonByteLength(sanitizeRuntimeJsonObject(nativeArtifact.providerMetadata) ?? {}) / 4) + 256;
+      const available = candidate.autoCompactTokenLimit - candidate.reservedTokens
+        - estimateRuntimeMessageTokens([...candidate.pinnedMessages, ...candidate.recentMessages]);
+      if (nativeTokens < available) {
+        return {
+          source: 'remote',
+          text: 'Earlier context is preserved in provider-native compaction state.',
+          providerMetadata: nativeArtifact.providerMetadata,
+          nativeSourceMessageIds: candidate.olderMessages.filter((message) => message.visibility !== 'transcript').map((message) => message.id),
+        };
+      }
+      nativeArtifact.omittedProviderMetadata = nativeArtifact.providerMetadata;
+    }
+    const portableSummary = await this.generatePortableContextCompactionSummary({
+      ...samplingInput,
+      candidate: { ...candidate, olderMessages: restoreNativeCompactionHistory(candidate.olderMessages) },
+    });
     return {
-      source: nativeArtifact.providerMetadata ? 'remote' : 'local',
+      source: 'local',
       text: portableSummary,
-      ...(nativeArtifact.providerMetadata
-        ? { providerMetadata: nativeArtifact.providerMetadata }
-        : {}),
       ...(nativeArtifact.omittedProviderMetadata
         ? { omittedProviderMetadata: nativeArtifact.omittedProviderMetadata }
         : {}),
@@ -228,22 +251,21 @@ export class RuntimeContextCompactor {
       outcome: 'started',
       recentMessageCount: candidate.recentMessages.length,
     });
-    const compactionModel = runtimeTaskModelRequest(runtimeConfig, 'contextCompaction', 'context-compaction', conversationModel);
-    const modelLimit = runtimeConfig?.providers.find((provider) => provider.id === (compactionModel.providerId ?? runtimeConfig.activeProviderId))
-      ?.models.find((model) => model.code === compactionModel.model)?.maxOutputTokens;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       throwIfAborted(signal);
       const output = createModelStreamTextCollector();
-      const maxOutputTokens = compactionSummaryOutputBudget(candidate, attempt, modelLimit);
+      const { request, summaryTokenLimit } = contextCompactionRequest({
+        candidate, runtimeConfig, conversationModel,
+        createdAt: this.options.clock.now().toISOString(), retry: attempt > 0,
+      });
       let usage: RuntimeUsage | undefined;
       let completed = false;
       let finishReason: string | undefined;
       try {
         for await (const item of this.options.modelClient.stream({
-          ...compactionModel,
+          ...request,
           sessionId: threadId,
-          messages: compactionSummaryPrompt(candidate, this.options.clock.now().toISOString(), maxOutputTokens, attempt > 0),
-          maxOutputTokens, temperature: 0, thinking: false, toolChoice: 'none', signal,
+          signal,
         })) {
           if (item.type === 'usage' || item.type === 'token_count') usage = item.usage;
           throwIfAborted(signal);
@@ -252,9 +274,9 @@ export class RuntimeContextCompactor {
         }
         throwIfAborted(signal);
         if (!completed || (finishReason !== undefined && finishReason !== 'stop')) {
-          throw new Error(`Context compaction response was incomplete (${finishReason ?? 'stream closed'}).`);
+          throw new Error(`Context compaction response was incomplete (${finishReason ?? 'stream closed'}; generation limit ${request.maxOutputTokens} tokens${output.text().trim() ? '' : '; no summary text'}).`);
         }
-        const text = parseCompactionSummary(output.text());
+        const text = parseCompactionSummary(output.text(), summaryTokenLimit);
         this.traceCompaction(debugContext, 'context.compaction.portable', {
           olderMessageCount: candidate.olderMessages.length, outcome: 'success',
           recentMessageCount: candidate.recentMessages.length, summaryCharacters: text.length,
@@ -266,7 +288,7 @@ export class RuntimeContextCompactor {
           outcome: 'error', recentMessageCount: candidate.recentMessages.length,
         });
         if (signal?.aborted) throw error;
-        if (attempt === 1) throw new Error('Context compaction failed; original history was retained.', { cause: error });
+        if (attempt === 1) throw new Error(`Context compaction failed; original history was retained. ${compactionDebugError(error)}`, { cause: error });
       } finally {
         // Usage belongs to the model call, including incomplete and cancelled attempts.
         if (usage) await recordUsage(usage);
@@ -276,8 +298,7 @@ export class RuntimeContextCompactor {
   }
 
   /**
-   * 使用 provider 原生压缩能力生成 replacement items。portable 摘要始终由独立链路生成，
-   * 避免把 provider 返回的保留消息误当成跨协议摘要。
+   * 原生结果只在原供应商边界回放；跨模型交接从归档原文重新生成，不猜测 opaque 内容。
    */
   private async generateNativeContextCompaction({
     candidate, threadId, recordUsage, signal, debugContext, conversationModel,
@@ -490,6 +511,18 @@ export function contextCompactionBudgetForConfig(
     ...(maxContextTokens !== undefined ? { maxContextTokens } : {}),
     ...(autoCompactTokenLimit !== undefined ? { autoCompactTokenLimit } : {}),
   };
+}
+
+/** Reserve the continuation's output separately from the summarizer's generation budget. */
+export function reservedOutputTokensForConfig(
+  config: RuntimeConfigState | null | undefined,
+  modelOverride?: RuntimeConfigState['providers'][number]['models'][number],
+): number {
+  const provider = config?.providers.find((item) => item.enabled && item.id === config.activeProviderId)
+    ?? config?.providers.find((item) => item.enabled);
+  const model = modelOverride ?? provider?.models.find((item) => item.enabled) ?? provider?.models[0];
+  const contextWindow = contextCompactionBudgetForConfig(config, model)?.maxContextTokens ?? 256_000;
+  return Math.min(Math.max(0, Math.floor(model?.maxOutputTokens ?? 0)), Math.floor(contextWindow * 0.15));
 }
 
 function positiveRuntimeInt(value: unknown): number | undefined {

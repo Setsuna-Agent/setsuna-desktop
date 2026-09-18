@@ -1,5 +1,6 @@
 import {
   isRuntimeInlineMessageAttachment,
+  normalizeRuntimeProviderEndpoint as normalizeProviderBaseUrl,
   sanitizeRuntimeJsonValue,
   type ModelProviderKind,
   type ModelRequest,
@@ -594,20 +595,4 @@ function normalizedPiBaseUrl(provider: ModelProviderRuntimeConfig): string {
     return baseUrl.replace(/\/v1$/iu, '');
   }
   return baseUrl.replace(/\/chat\/completions$/iu, '');
-}
-
-function normalizeProviderBaseUrl(baseUrl: string): string {
-  const trimmed = baseUrl.trim();
-  try {
-    const url = new URL(trimmed);
-    url.hash = '';
-    url.hostname = url.hostname.toLowerCase();
-    url.protocol = url.protocol.toLowerCase();
-    url.pathname = url.pathname.replace(/\/+$/u, '') || '/';
-    url.searchParams.sort();
-    const path = url.pathname === '/' ? '' : url.pathname;
-    return `${url.protocol}//${url.host}${path}${url.search}`;
-  } catch {
-    return trimmed.replace(/\/+$/u, '');
-  }
 }

@@ -1,7 +1,8 @@
-import type {
-  PendingStoredThreadEvent,
-  RuntimeMessage,
-  RuntimeThread,
+import {
+  restoreNativeCompactionHistory,
+  type PendingStoredThreadEvent,
+  type RuntimeMessage,
+  type RuntimeThread,
 } from '@setsuna-desktop/contracts';
 import type { SideConversationRuntimeHost } from '../contracts/index.js';
 import {
@@ -35,7 +36,9 @@ export async function createRuntimeSideConversation(
   if (parent.kind === 'side') throw new SideConversationInvalidParentError();
   throwIfCancelled(options.signal);
 
-  const inheritedMessages = parent.messages
+  // Expand opaque checkpoints before copying: the side snapshot is self-contained and all
+  // inherited context remains model-only. Its own sampling loop can compact it if needed.
+  const inheritedMessages = restoreNativeCompactionHistory(parent.messages)
     .filter((message) => message.visibility !== 'transcript')
     .map((message): RuntimeMessage => ({ ...message, visibility: 'model' }));
   const child = await host.createThread({

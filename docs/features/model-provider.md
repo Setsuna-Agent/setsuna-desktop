@@ -119,13 +119,18 @@ OpenCode Go 的默认请求头在 Feature contracts 中定义为 `User-Agent: se
 
 ## Compaction
 
-所有协议都有 portable summary。OpenAI Responses 额外支持原生 compact：
+所有协议支持 portable summary；显式配置压缩任务模型时只走该模型的摘要路径。
+否则 OpenAI Responses 优先尝试原生 compact，成功时不额外调用文本摘要模型：
 
 1. 把真实待替换旧窗口转成 Responses input。
 2. POST `{baseUrl}/responses/compact`。
 3. 只接受恰好一个可回放 `compaction` item。
 4. 写入 v3 `openAiResponsesCompaction`。
-5. 同 replay boundary 才原生续写，否则使用 portable summary。
+5. 同 replay boundary 才原生续写。新的原生检查点记录归档原文 ID；边界变化时 runtime
+   先恢复原文，再按新模型窗口决定是否生成文本摘要。已有 portable summary 保持可跨模型使用。
+
+原生接口不可用或结果无法装入窗口/持久化上限时退回 portable summary。摘要生成预算包含
+reasoning tokens，按实际摘要模型的输入、窗口及输出上限计算；最终保存的文本长度单独限制。
 
 ## 新增协议或 Provider
 

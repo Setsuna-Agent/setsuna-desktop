@@ -1,26 +1,20 @@
-import type { RuntimeThread } from '@setsuna-desktop/contracts';
+import type { RuntimeConfigState, RuntimeThread } from '@setsuna-desktop/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { ConfigStore } from '../../ports/config-store.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import { isAbortError } from '../core/runtime-turn-errors.js';
-import { resolveRuntimeTurnModel } from '../core/runtime-thread-model.js';
-import type { RuntimeHookCoordinator } from '../lifecycle/runtime-hook-coordinator.js';
+import { resolveRuntimeTurnModel, type RuntimeResolvedTurnModel } from '../core/runtime-thread-model.js';
 import type { RuntimeTurnTerminationCoordinator } from '../lifecycle/runtime-turn-termination-coordinator.js';
 import { RuntimeTurnTaskRegistry } from '../lifecycle/turn-task-registry.js';
-import { createRuntimeContextCompactionCandidate, materializeRuntimeContextCompaction } from './context-compaction.js';
-import { compactHookTrigger, type RuntimeContextCompactor } from './runtime-context-compactor.js';
+import { createRuntimeContextCompactionCandidate, reserveRuntimeContextCompactionBudget } from './context-compaction.js';
+import { nativeCompactionMatchesModel, restoreNativeCompactionHistory } from './context-compaction-history.js';
+import { contextCompactionBudgetForConfig, HookStoppedTurnError, reservedOutputTokensForConfig, type RuntimeContextCompactor } from './runtime-context-compactor.js';
 
 type RuntimeCompactionTurnCoordinatorOptions = {
   clock: Clock;
   configStore?: ConfigStore;
-  contextCompactor: Pick<
-    RuntimeContextCompactor,
-    | 'generateContextCompactionSummary'
-    | 'publishContextCompacting'
-    | 'publishProviderMetadataWarning'
-  >;
-  hooks: Pick<RuntimeHookCoordinator, 'queueSessionStartSource' | 'runCompactHooks'>;
+  contextCompactor: Pick<RuntimeContextCompactor, 'compactMessagesBeforeModelRequest'>;
   ids: IdGenerator;
   threadStore: ThreadStore;
   turnTasks: RuntimeTurnTaskRegistry;
@@ -44,7 +38,16 @@ export class RuntimeCompactionTurnCoordinator {
     await this.options.turnTasks.waitForFinalizingRegularTurn(threadId);
     const thread = await this.options.threadStore.getThread(threadId);
     if (!thread) throw new Error(`Thread not found: ${threadId}`);
-    const candidate = createRuntimeContextCompactionCandidate({ force, messages: thread.messages });
+    const runtimeConfig = await this.options.configStore?.getConfig();
+    const turnModel = resolveRuntimeTurnModel(runtimeConfig, thread);
+    const budget = reserveRuntimeContextCompactionBudget(
+      contextCompactionBudgetForConfig(runtimeConfig, turnModel?.model),
+      reservedOutputTokensForConfig(runtimeConfig, turnModel?.model),
+    );
+    const messages = restoreNativeCompactionHistory(thread.messages, (message) => Boolean(turnModel && nativeCompactionMatchesModel(message, runtimeConfig, {
+      providerId: turnModel.binding.providerId, model: turnModel.binding.modelCode,
+    })));
+    const candidate = createRuntimeContextCompactionCandidate({ budget, force, messages });
     if (!candidate) return thread;
     const turnId = this.options.ids.id('turn');
     const run = this.options.turnTasks.run<RuntimeThread>({
@@ -52,29 +55,28 @@ export class RuntimeCompactionTurnCoordinator {
       taskKind: 'compact',
       threadId,
       turnId,
-    }, (task) => this.run({ candidate, force, signal: task.controller.signal, thread, threadId, turnId }));
+    }, (task) => this.run({ runtimeConfig, turnModel, force, signal: task.controller.signal, thread, threadId, turnId }));
     this.options.observeRun?.(threadId, turnId, run.done);
     return run.done;
   }
 
   private async run({
-    candidate,
+    runtimeConfig,
+    turnModel,
     force,
     signal,
     thread,
     threadId,
     turnId,
   }: {
-    candidate: NonNullable<ReturnType<typeof createRuntimeContextCompactionCandidate>>;
+    runtimeConfig: RuntimeConfigState | undefined;
+    turnModel: RuntimeResolvedTurnModel | undefined;
     force: boolean;
     signal: AbortSignal;
     thread: RuntimeThread;
     threadId: string;
     turnId: string;
   }): Promise<RuntimeThread> {
-    const runtimeConfig = await this.options.configStore?.getConfig().catch(() => null);
-    const turnModel = resolveRuntimeTurnModel(runtimeConfig, thread);
-    const trigger = compactHookTrigger(force);
     await this.options.appendEvent(threadId, {
       id: this.options.ids.id('event'),
       threadId,
@@ -87,27 +89,18 @@ export class RuntimeCompactionTurnCoordinator {
         ...(turnModel ? { modelBinding: { ...turnModel.binding } } : {}),
       },
     });
-    const preCompact = await this.options.hooks.runCompactHooks({
-      eventName: 'PreCompact',
-      runtimeConfig,
-      signal,
-      thread,
-      trigger,
-      turnId,
-    });
-    if (preCompact.shouldStop) {
-      await this.publishCompleted(threadId, turnId);
-      return (await this.options.threadStore.getThread(threadId)) ?? thread;
-    }
-
-    await this.options.contextCompactor.publishContextCompacting(threadId, turnId, force, thread.messages);
     try {
-      const summary = await this.options.contextCompactor.generateContextCompactionSummary({
-        candidate,
+      // Manual and automatic compaction share hooks, validation, persistence and debug tracing.
+      await this.options.contextCompactor.compactMessagesBeforeModelRequest({
+        force,
+        messages: thread.messages,
+        thread,
         threadId,
         turnId,
         signal,
         runtimeConfig,
+        contextBudget: contextCompactionBudgetForConfig(runtimeConfig, turnModel?.model),
+        reservedTokens: reservedOutputTokensForConfig(runtimeConfig, turnModel?.model),
         conversationModel: turnModel
           ? {
               providerId: turnModel.binding.providerId,
@@ -115,42 +108,14 @@ export class RuntimeCompactionTurnCoordinator {
             }
           : undefined,
       });
-      const result = materializeRuntimeContextCompaction({
-        candidate,
-        createdAt: this.options.clock.now().toISOString(),
-        id: this.options.ids.id('msg'),
-        providerMetadata: summary.providerMetadata,
-        source: summary.source,
-        summary: summary.text,
-        turnId,
-      });
-      signal.throwIfAborted();
-      await this.options.contextCompactor.publishProviderMetadataWarning(
-        threadId,
-        turnId,
-        summary.omittedProviderMetadata,
-      );
-      await this.options.appendEvent(threadId, {
-        id: this.options.ids.id('event'),
-        threadId,
-        turnId,
-        type: 'thread.context_compacted',
-        createdAt: this.options.clock.now().toISOString(),
-        payload: result,
-      });
-      this.options.hooks.queueSessionStartSource(threadId, 'compact');
-      await this.options.hooks.runCompactHooks({
-        eventName: 'PostCompact',
-        runtimeConfig,
-        signal,
-        thread,
-        trigger,
-        turnId,
-      });
       await this.publishCompleted(threadId, turnId);
       return (await this.options.threadStore.getThread(threadId)) ?? thread;
     } catch (error) {
-      if (isAbortError(error)) {
+      if (error instanceof HookStoppedTurnError) {
+        await this.publishCompleted(threadId, turnId);
+        return (await this.options.threadStore.getThread(threadId)) ?? thread;
+      }
+      if (signal.aborted || isAbortError(error)) {
         await this.options.turnTermination.publishCancelledOnce(
           threadId,
           turnId,

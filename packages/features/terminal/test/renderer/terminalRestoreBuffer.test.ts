@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   appendTerminalRestoreBuffer,
   clearTerminalRestoreBuffer,
+  initializeTerminalRestoreBuffer,
   markTerminalSessionExited,
   recordTerminalEventSeq,
   terminalLastEventSeq,
@@ -11,16 +12,21 @@ import {
 
 const sessionId = 'terminal_test';
 
+beforeEach(() => initializeTerminalRestoreBuffer(sessionId, { cols: 100, rows: 24 }));
 afterEach(() => clearTerminalRestoreBuffer(sessionId));
 
 describe('terminal restore buffer', () => {
   it('keeps terminal replay state outside the xterm UI module', () => {
-    appendTerminalRestoreBuffer(sessionId, 'first');
-    appendTerminalRestoreBuffer(sessionId, ' second');
+    appendTerminalRestoreBuffer(sessionId, { type: 'output', text: 'first' });
+    appendTerminalRestoreBuffer(sessionId, { type: 'output', text: ' second' });
     recordTerminalEventSeq(sessionId, 4);
     markTerminalSessionExited(sessionId, true);
 
-    expect(terminalRestoreBuffer(sessionId)).toBe('first second');
+    expect(terminalRestoreBuffer(sessionId)).toEqual({
+      initialGrid: { cols: 100, rows: 24 },
+      entries: [{ type: 'output', text: 'first second' }],
+      pendingEntries: [],
+    });
     expect(terminalLastEventSeq(sessionId)).toBe(4);
     expect(terminalSessionExited(sessionId)).toBe(true);
 
@@ -30,11 +36,13 @@ describe('terminal restore buffer', () => {
     expect(terminalSessionExited(sessionId)).toBe(false);
   });
 
-  it('bounds replay text retained for a long-running session', () => {
-    appendTerminalRestoreBuffer(sessionId, `prefix${'x'.repeat(1_000_000)}`);
+  it('bounds replay text while retaining the grid at the truncation boundary', () => {
+    appendTerminalRestoreBuffer(sessionId, { type: 'output', text: 'prefix' });
+    appendTerminalRestoreBuffer(sessionId, { type: 'resize', cols: 80, rows: 6 });
+    appendTerminalRestoreBuffer(sessionId, { type: 'output', text: 'x'.repeat(1_000_000) });
 
     const restored = terminalRestoreBuffer(sessionId);
-    expect(restored).toHaveLength(1_000_000);
-    expect(restored?.startsWith('x')).toBe(true);
+    expect(restored?.initialGrid).toEqual({ cols: 80, rows: 6 });
+    expect(restored?.entries).toEqual([{ type: 'output', text: 'x'.repeat(1_000_000) }]);
   });
 });

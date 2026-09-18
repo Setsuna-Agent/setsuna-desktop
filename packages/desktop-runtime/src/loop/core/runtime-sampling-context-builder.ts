@@ -36,7 +36,6 @@ import type { ThreadStore } from '../../ports/thread-store.js';
 import type { RuntimeToolExecutionContext, ToolHost } from '../../ports/tool-host.js';
 import type { ToolResultStore } from '../../ports/tool-result-store.js';
 import {
-  CONTEXT_COMPACTION_MAX_TOKENS,
   estimateRuntimeMessageTokens,
   estimateRuntimeToolDefinitionTokens,
 } from '../context/context-compaction.js';
@@ -45,6 +44,7 @@ import { buildRuntimeAttachmentContext, messagesForModel } from '../context/runt
 import type { RuntimeContextCompactor } from '../context/runtime-context-compactor.js';
 import {
   contextCompactionBudgetForConfig,
+  reservedOutputTokensForConfig,
   samplingContextWindowForRequest,
   samplingInputMessageIds,
 } from '../context/runtime-context-compactor.js';
@@ -54,9 +54,8 @@ import type { RuntimeToolCallExecutor } from '../tools/runtime-tool-call-executo
 import { READ_TOOL_RESULT_TOOL_NAME, RuntimeToolRouter } from '../tools/tool-router.js';
 import { modelFacingTools, samplingToolRuntimes } from './agent-loop-tool-utils.js';
 import { normalizeModelConversationHistory } from './runtime-model-message-order.js';
+import { nativeCompactionMatchesModel, restoreNativeCompactionHistory } from '../context/context-compaction-history.js';
 import type { RuntimeResolvedTurnModel } from './runtime-thread-model.js';
-
-const OUTPUT_RESERVE_CONTEXT_RATIO = 0.15;
 
 export type RuntimeSamplingStepContext = {
   conversationMessages: RuntimeMessage[];
@@ -154,8 +153,6 @@ export class RuntimeSamplingContextBuilder {
     turnModel?: RuntimeResolvedTurnModel;
     toolAccess?: 'all' | 'read-only' | 'none';
   }): Promise<RuntimeSamplingStepContext> {
-    const normalizedConversation = normalizeModelConversationHistory(conversationMessages);
-    const orderedConversationMessages = normalizedConversation.messages;
     const latestRuntimeConfig = await this.options.configStore?.getConfig().catch(() => null);
     const stepRuntimeConfig = latestRuntimeConfig ?? runtimeConfig ?? null;
     const interfaceLanguage = stepRuntimeConfig?.desktopSettings?.interfaceLanguage;
@@ -164,6 +161,9 @@ export class RuntimeSamplingContextBuilder {
       responseLanguage = interfaceLanguage;
     }
     const modelForSampling = samplingModelForTurn(stepRuntimeConfig, samplingModel ?? turnModel);
+    const replayableHistory = restoreNativeCompactionHistory(conversationMessages, (message) => nativeCompactionMatchesModel(message, stepRuntimeConfig, modelForSampling.request));
+    const normalizedConversation = normalizeModelConversationHistory(replayableHistory);
+    const orderedConversationMessages = normalizedConversation.messages;
     const debugTraceEnabled = runtimeDebugTraceEnabled(this.options.debugTrace);
     const snapshotThread = await (this.options.threadStore.getSamplingState
       ? this.options.threadStore.getSamplingState(threadId)
@@ -498,20 +498,6 @@ function modelRequestMessages(messages: RuntimeMessage[]): RuntimeMessage[] {
   return messages.filter((message) => message.visibility !== 'transcript');
 }
 
-function reservedOutputTokensForConfig(
-  config: RuntimeConfigState | null | undefined,
-  modelOverride?: RuntimeConfigState['providers'][number]['models'][number],
-): number {
-  const activeModel = modelOverride ?? activeModelForConfig(config);
-  const maxContextTokens = positiveSetting(
-    activeModel?.contextWindowTokens
-      ?? config?.desktopSettings?.modelContextWindow
-      ?? config?.desktopSettings?.model_context_window,
-  ) ?? CONTEXT_COMPACTION_MAX_TOKENS;
-  const configuredOutputTokens = Math.max(0, Math.floor(activeModel?.maxOutputTokens ?? 0));
-  return Math.min(configuredOutputTokens, Math.floor(maxContextTokens * OUTPUT_RESERVE_CONTEXT_RATIO));
-}
-
 function activeModelForConfig(config: RuntimeConfigState | null | undefined): RuntimeConfigState['providers'][number]['models'][number] | undefined {
   const activeProvider = config?.providers.find((provider) => provider.id === config.activeProviderId && provider.enabled)
     ?? config?.providers.find((provider) => provider.enabled)
@@ -540,8 +526,4 @@ function samplingModelForTurn(
     model: activeModel,
     request: { model: 'local-runtime-smoke' },
   };
-}
-
-function positiveSetting(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
 }

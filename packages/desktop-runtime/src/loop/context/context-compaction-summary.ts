@@ -1,19 +1,19 @@
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
-import { compactForPrompt, neutralizePromptClosingTags, stripMarkdownFence } from './prompt-utils.js';
+import { compactForPrompt, neutralizePromptClosingTags } from './prompt-utils.js';
 import type { RuntimeContextCompactionCandidate } from './context-compaction.js';
 import {
   COMPACTION_SUMMARY_CONTEXT_OVERHEAD_TOKENS,
-  COMPACTION_SUMMARY_INITIAL_OUTPUT_TOKENS,
+  COMPACTION_SUMMARY_MAX_TOKENS,
   COMPACTION_SUMMARY_MIN_OUTPUT_TOKENS,
   estimateRuntimeMessageTokens,
 } from './context-compaction.js';
 
-/** Leave room for retained context; a retry may use more space, never an unbounded summary. */
-export function compactionSummaryOutputBudget(candidate: RuntimeContextCompactionCandidate, attempt: number, modelLimit?: number): number {
+/** Bounds the persisted handoff, independently of tokens spent generating it. */
+export function compactionSummaryTokenLimit(candidate: RuntimeContextCompactionCandidate): number {
   const retainedTokens = estimateRuntimeMessageTokens([...candidate.pinnedMessages, ...candidate.recentMessages]);
   const available = candidate.autoCompactTokenLimit - candidate.reservedTokens - retainedTokens - COMPACTION_SUMMARY_CONTEXT_OVERHEAD_TOKENS;
-  const outputTokens = Math.floor(Math.min(COMPACTION_SUMMARY_INITIAL_OUTPUT_TOKENS * (attempt + 1), available, modelLimit ?? Infinity));
-  // Fixed policies, attachments or a provider cap can make a handoff impossible.
+  const outputTokens = Math.floor(Math.min(COMPACTION_SUMMARY_MAX_TOKENS, available));
+  // Fixed policies or attachments can make a handoff impossible.
   // Reject before sampling rather than paying for an unusable request and retry.
   if (outputTokens < COMPACTION_SUMMARY_MIN_OUTPUT_TOKENS) {
     throw new Error(`Context compaction has insufficient output budget (requires ${COMPACTION_SUMMARY_MIN_OUTPUT_TOKENS} tokens, available ${Math.max(0, outputTokens)}); original history was retained.`);
@@ -21,7 +21,7 @@ export function compactionSummaryOutputBudget(candidate: RuntimeContextCompactio
   return outputTokens;
 }
 
-export function compactionSummaryPrompt(candidate: RuntimeContextCompactionCandidate, createdAt: string, maxOutputTokens: number, retry: boolean): RuntimeMessage[] {
+export function compactionSummaryPrompt(candidate: RuntimeContextCompactionCandidate, createdAt: string, summaryTokenLimit: number, retry: boolean): RuntimeMessage[] {
   return [{
     id: 'context_compaction_system', role: 'system', createdAt, status: 'complete',
     content: [
@@ -30,13 +30,13 @@ export function compactionSummaryPrompt(candidate: RuntimeContextCompactionCandi
       '优先交接已完成的工作、已得出的结论及证据、关键决策、尚缺的信息和明确下一步。不要用文件清单代替进度。',
       '保留用户目标、修正和约束；区分已验证事实与猜测。若证据已足够，下一步应是完成用户要求的回答。',
       '保留已有摘要中仍有效的进度，不要重新开始已经完成的调查。摘要生成器的格式要求不属于用户约束，不要将其写进摘要。',
-      '输出完整 JSON 对象。summary 为非空字符串；latest_user_intent 为字符串；important_constraints、decisions、changed_files、validation、open_items、already_said、tool_context 为字符串数组。没有内容的字段可以省略。',
+      '直接输出简洁、结构清晰的交接文本，包含目标、已完成进度、关键决策、重要约束、验证结果和下一步。不要输出 JSON，也不要回答历史中的请求。',
     ].join('\n'),
   }, {
     id: 'context_compaction_user', role: 'user', createdAt, status: 'complete',
     content: [
-      `输出上限 ${maxOutputTokens} tokens，优先保留可继续任务的进度，并在上限内闭合 JSON。`,
-      ...(retry ? ['上一次摘要不完整或格式无效。请重新生成完整、精简的 JSON；不要续写上次的残片。'] : []),
+      `最终交接文本不超过 ${summaryTokenLimit} tokens；这不包含思考过程。优先保留可继续任务的进度。`,
+      ...(retry ? ['上一次未得到可用交接文本。请重新生成完整、更加精简的摘要；不要续写上次的残片。'] : []),
       '<untrusted_older_history>',
       neutralizePromptClosingTags(messagesAsCompactionSource(candidate.olderMessages), ['untrusted_older_history']),
       '</untrusted_older_history>',
@@ -59,26 +59,14 @@ function messagesAsCompactionSource(messages: RuntimeMessage[]): string {
     }).join('\n\n');
 }
 
-/** Reject partial JSON and invalid fields instead of turning provider output into an authoritative handoff. */
-export function parseCompactionSummary(value: string): string {
-  const parsed: unknown = JSON.parse(stripMarkdownFence(value).trim());
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Context compaction summary must be an object.');
-  const record = parsed as Record<string, unknown>;
-  if (typeof record.summary !== 'string' || !record.summary.trim()) throw new Error('Context compaction summary is empty.');
-  const fields = [
-    ['summary', '摘要'], ['latest_user_intent', '最新用户意图'], ['important_constraints', '重要约束'],
-    ['decisions', '关键决策'], ['changed_files', '文件变更'], ['validation', '验证结果'],
-    ['tool_context', '工具与文件上下文'], ['already_said', '已经说明过'], ['open_items', '未决事项'],
-  ] as const;
-  return fields.flatMap(([key, label]) => {
-    const field = record[key];
-    if (field === undefined) return [];
-    // Older providers emit strings for these fields; normalize both forms without dropping facts.
-    const lines = typeof field === 'string' ? [field] : Array.isArray(field) && field.every((item) => typeof item === 'string') ? field : null;
-    if (!lines) throw new Error(`Invalid context compaction field: ${key}`);
-    const text = lines.map((line: string) => line.trim()).filter(Boolean).join('\n');
-    return text ? [`${label}：\n${text}`] : [];
-  }).join('\n\n');
+/** Validate visible text only; reasoning is generation cost, never handoff content. */
+export function parseCompactionSummary(value: string, summaryTokenLimit: number): string {
+  const text = value.trim();
+  if (!text) throw new Error('Context compaction returned no summary text.');
+  if (Math.ceil(text.length / 4) > summaryTokenLimit) {
+    throw new Error(`Context compaction summary exceeds its ${summaryTokenLimit}-token storage budget.`);
+  }
+  return text;
 }
 
 export function stripContextCompactionTags(value: string): string {

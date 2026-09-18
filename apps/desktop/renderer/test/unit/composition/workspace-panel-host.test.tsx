@@ -8,6 +8,7 @@ import { workspacePanelSlot } from '@setsuna-desktop/renderer-contracts/workspac
 import { useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ToastProvider } from '../../../src/app/providers/ToastProvider.js';
+import { SideWorkspacePanelSlot } from '../../../src/app/layout/SideWorkspacePanelSlot.js';
 import { activateBuiltinRendererFeatures } from '../../../src/composition/renderer-feature-composition.js';
 import { ReviewFeatureHostBoundary } from '../../../src/composition/review-feature-adapter.js';
 import { useDesktopPanelResize } from '../../../src/features/workspace/hooks/useDesktopPanelResize.js';
@@ -289,7 +290,6 @@ function FilesWorkspace({
         onCreateEntry={onCreateEntry} onRenameEntry={onRenameEntry} onMoveEntry={onMoveEntry} onDeleteEntry={onDeleteEntry}
         onOpenProjectFile={(filePath) => setActivePanel(createFilePanel(filePath))}
         onOpenEntry={(entry) => setActivePanel(createFilePanel(entry.path))}
-        onResizeStart={noop} onResizeStep={noop} resizeMin={320} resizeMax={900} resizeValue={640}
       />,
     }} />
   </>;
@@ -302,19 +302,22 @@ function ChangesWorkspace() {
   const fileTree = useWorkspaceFileTree({ workspaceKey: 'project_1', enabled: false, searchEntries: vi.fn() });
   return (
     <div className="app-shell" ref={shellRef}>
-      <RendererOwnedKeyedSlot slot={workspacePanelSlot} entryKey="changes" instanceKey="workspace:side:changes" props={{
-        panelId: 'changes', panelType: 'changes', placement: 'side', projectId: 'project_1',
-        surfaceInstanceId: 'workspace:side:changes', threadId: 'thread_1', translate: t, visible: true,
-        renderDefault: () => <WorkspacePanel
-          {...panelProps}
-          fileTree={fileTree}
-          onResizeStart={resize.handleWorkspaceResizeStart}
-          onResizeStep={resize.handleWorkspaceResizeStep}
-          resizeMin={resize.workspaceMinWidth}
-          resizeMax={resize.workspaceMaxWidth}
-          resizeValue={resize.workspaceWidth}
-        />,
-      }} />
+      <SideWorkspacePanelSlot
+        onResizeStart={resize.handleWorkspaceResizeStart}
+        onResizeStep={resize.handleWorkspaceResizeStep}
+        min={resize.workspaceMinWidth}
+        max={resize.workspaceMaxWidth}
+        value={resize.workspaceWidth}
+      >
+        <RendererOwnedKeyedSlot slot={workspacePanelSlot} entryKey="changes" instanceKey="workspace:side:changes" props={{
+          panelId: 'changes', panelType: 'changes', placement: 'side', projectId: 'project_1',
+          surfaceInstanceId: 'workspace:side:changes', threadId: 'thread_1', translate: t, visible: true,
+          renderDefault: () => <WorkspacePanel
+            {...panelProps}
+            fileTree={fileTree}
+          />,
+        }} />
+      </SideWorkspacePanelSlot>
     </div>
   );
 }
@@ -339,4 +342,4 @@ const panelProps = {
   onOpenEntry: noop, onOpenProjectFile: noop, onOpenFilesPanel: noop,
   onOpenBrowser: noop, onOpenSideChat: noop, onOpenTerminalPanel: noop, onReviewRefresh: noop,
   onReviewBaseRefChange: noop, onReviewSourceChange: noop, onRevealFile: noop,
-} satisfies Omit<ComponentProps<typeof WorkspacePanel>, 'fileTree' | 'onResizeStart' | 'onResizeStep' | 'resizeMin' | 'resizeMax' | 'resizeValue'>;
+} satisfies Omit<ComponentProps<typeof WorkspacePanel>, 'fileTree'>;

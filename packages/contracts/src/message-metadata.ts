@@ -362,3 +362,27 @@ function isEndpointFingerprint(value: unknown): value is string {
 function isSemanticFingerprint(value: unknown): value is string {
   return typeof value === 'string' && /^sha256:[a-fA-F0-9]{64}$/.test(value);
 }
+
+/** Canonical endpoint identity shared by native replay and context recovery. */
+export function normalizeRuntimeProviderEndpoint(baseUrl: string): string {
+  const trimmed = baseUrl.trim();
+  try {
+    const url = new URL(trimmed);
+    url.hash = '';
+    url.hostname = url.hostname.toLowerCase();
+    url.protocol = url.protocol.toLowerCase();
+    url.pathname = stripTrailingSlashes(url.pathname) || '/';
+    url.searchParams.sort();
+    const path = url.pathname === '/' ? '' : url.pathname;
+    return `${url.protocol}//${url.host}${path}${url.search}`;
+  } catch {
+    return stripTrailingSlashes(trimmed);
+  }
+}
+
+/** Scan the suffix once; an unanchored /+ regex can repeatedly scan internal slash runs. */
+function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === '/') end -= 1;
+  return value.slice(0, end);
+}

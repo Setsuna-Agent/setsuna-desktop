@@ -73,11 +73,11 @@ export function parseApplyPatch(patch: unknown): ParseApplyPatchResult {
       const contentLines: string[] = [];
       index += 1;
       while (index < endIndex && !isApplyPatchFileHeader(lines[index])) {
-        const contentLine = lines[index];
-        if (!contentLine.startsWith('+')) {
-          return patchParseError(index, `新增文件 ${filePath} 的内容行必须以 + 开头。`);
+        const contentLine = parseApplyPatchAddedLine(lines[index]);
+        if (contentLine === null) {
+          return patchParseError(index, `新增文件 ${filePath} 中包含未识别的补丁标记；如果它是正文，请在行首添加 +。`);
         }
-        contentLines.push(contentLine.slice(1));
+        contentLines.push(contentLine);
         index += 1;
       }
       operations.push({
@@ -174,6 +174,15 @@ export function parseApplyPatch(patch: unknown): ParseApplyPatchResult {
     return patchParseError(index, `无法识别的 apply_patch 行：${line}`);
   }
   return { ok: true, operations, environmentId };
+}
+
+/** Add File has no removal/context ambiguity; recover omitted + prefixes verbatim. */
+export function parseApplyPatchAddedLine(line: string): string | null {
+  if (line.startsWith('+')) return line.slice(1);
+  // Never turn a malformed file/hunk boundary into file content. Literal markers
+  // must still be escaped with +, and Update File keeps its strict prefix rules.
+  if (line.trimStart().startsWith('***') || line.trimStart().startsWith('@@')) return null;
+  return line;
 }
 
 /** Line numbers refer to normalized patch text, excluding any heredoc wrapper. */

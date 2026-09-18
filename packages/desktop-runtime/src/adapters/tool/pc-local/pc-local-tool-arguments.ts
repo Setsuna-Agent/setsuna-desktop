@@ -7,6 +7,7 @@ import type {
   FileDiffAction,
   PatchDiff,
 } from './pc-local-tool-diff.js';
+import { parseApplyPatchAddedLine } from './pc-local-tool-patch.js';
 import {
   escapeRegExp,
 } from './pc-local-tool-utils.js';
@@ -202,6 +203,7 @@ function applyPatchPreviewFiles(
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n');
   const lines = normalizedPatch.split('\n');
+  if (normalizedPatch.endsWith('\n')) lines.pop();
   const trailingLineIndex = normalizedPatch.endsWith('\n') ? -1 : lines.length - 1;
 
   lines.forEach((line, index) => {
@@ -214,6 +216,11 @@ function applyPatchPreviewFiles(
       currentFile = pushFile(trimmed.slice('*** Update File: '.length), 'edit');
     } else if (!trailingLineIncomplete && trimmed.startsWith('*** Delete File: ')) {
       currentFile = pushFile(trimmed.slice('*** Delete File: '.length), 'delete');
+    } else if (currentFile?.action === 'create') {
+      // Use the same Add File recovery as execution, including raw SQL comments
+      // and blank lines; control markers and incomplete file headers are not content.
+      if (parseApplyPatchAddedLine(line) !== null) currentFile.additions += 1;
+      else currentFile = null;
     } else if (currentFile && trimmed.startsWith('+')) {
       currentFile.additions += 1;
     } else if (currentFile && trimmed.startsWith('-')) {

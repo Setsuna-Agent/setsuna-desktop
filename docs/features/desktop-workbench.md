@@ -66,14 +66,16 @@ Workspace 宿主决定 panel、当前 project 和导航；Review Feature 决定 
 
 源码：`packages/features/terminal/`
 
-Terminal 拥有 PTY session、固定 IPC、preload bridge、xterm pane、恢复 buffer 和标题推导。Main 内部的 session store 使用 `node-pty` 管理 open/write/read/resize/restart/close。
+Terminal 拥有 PTY session、固定 IPC、preload bridge、xterm pane、恢复 buffer 和标题推导。Main 内部的 session store 使用 `node-pty` 管理 open/attach/write/read/resize/restart/close。
 
 关键规则：
 
 - Cwd 必须是存在目录；有 workspace 时使用 workspace root，否则使用安全默认目录。
 - Shell 按平台选择，环境由 main composition 注入，包含 GUI 启动补齐的 PATH 和 Network Proxy 的 terminal 路由。
 - Session ID 由 Main 生成，renderer 不能指定任意系统进程。
+- `open` 只准备 session；renderer 接好双向数据、完成历史输出解析并测出有效行列数后才 `attach` 启动 shell，避免 Windows 首屏在默认尺寸下生成后被小视口的清行指令抹掉。重复 attach 复用进程，重复尺寸不触发 PTY resize；Windows backend/build 信息经 session contract 传给 xterm，启用对应的重排规则。
 - Output event 带递增 sequence 和有界恢复 buffer；renderer 先订阅并暂存实时事件，待 read 返回后合并、按 sequence 排序去重，再继续实时消费。Read 不清空 Main 缓存，避免面板卸载后的过期响应取走恢复数据；卸载时停止订阅并忽略未完成的 read 响应。
+- Renderer 恢复 buffer 保存起始行列数以及按执行顺序记录的 output/resize；xterm 的异步写入完成后才执行后续 resize，重新挂载时按原网格序列回放，再适配当前容器。只有解析完成回调触发后才将输出归入历史，回放历史时屏蔽重复协议回复。卸载时将进行中的写入、排队输出和 PTY 网格单独保留为待解析尾部，恢复后正常发送首次协议回复；丢弃未执行的容器适配，避免清屏或快速切换面板丢失滚动历史。
 - 关闭 window、Feature scope 或 app 时必须撤销 handler 并关闭全部 PTY。
 - 输入是 PTY 字节流，不经过 shell 字符串拼接；“打开 session”与 Agent 的 `exec` 工具是不同安全面。
 

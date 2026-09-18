@@ -222,16 +222,21 @@ Review 不是另一个绕过 thread event 的执行器。
 - 中间有 steer 时仍按同一工具 transaction 处理。
 - 旧 portable summary 可以再次合并。
 
-### 双产物
+### 压缩路径
 
-所有 provider 都生成 portable summary。
+所有 provider 支持 portable summary；显式配置压缩任务模型时只调用该模型。
 
-OpenAI Responses 还可以：
+否则 OpenAI Responses 优先：
 
 - 把真实旧模型窗口发送 `/responses/compact`。
 - 保存完整 replacement native items。
 
-Native items 只在 provider/协议/model/endpoint/semantic fingerprint 都兼容时回放；否则使用 portable summary。不能从 native replacement 反推 portable summary。
+Native items 只在 provider/协议/model/endpoint/semantic fingerprint 都兼容时回放。
+原生成功时无需另做文本摘要；检查点引用已有 transcript 中的原文 ID，边界变化时先恢复原文，
+再按新模型的预算决定是否重新压缩。原生接口不可用、结果过大或原文无法归档时使用文本摘要。
+不能从 native replacement 反推 portable summary；旧版已经保存的文本摘要仍可直接跨模型回放。
+侧聊快照复制时展开原生检查点，避免继承对主聊归档原文的依赖；复制后的原文保持 model-only，
+由侧聊按自身预算生成摘要。删除或截断原文时，事件投影递归解除受影响的检查点并恢复剩余历史。
 
 ### 投影
 

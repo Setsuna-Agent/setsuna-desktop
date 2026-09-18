@@ -11,12 +11,12 @@ import type {
   TerminalDesktopBridge,
 } from '../contracts/index.js';
 import {
-  appendTerminalRestoreBuffer,
   markTerminalSessionExited,
   terminalRestoreBuffer,
   terminalSessionExited,
 } from './terminalRestoreBuffer.js';
 import { subscribeTerminalEvents } from './terminalEventSubscription.js';
+import { createTerminalOutput, type TerminalOutput } from './terminalOutput.js';
 import { terminalDisplayTitle } from './terminalTitle.js';
 import './terminal.css';
 
@@ -54,19 +54,25 @@ export function TerminalPane({
     setExited(terminalSessionExited(session.sessionId));
     setRestartError(null);
 
+    const restored = terminalRestoreBuffer(session.sessionId);
+    const initialGrid = restored?.initialGrid ?? session;
     const terminal = new XTermTerminal({
       allowProposedApi: false,
+      cols: initialGrid.cols,
       convertEol: true,
       cursorBlink: true,
       fontFamily: terminalFontFamily(),
-      fontSize: 12.5,
+      fontSize: terminalFontSize(),
       lineHeight: 1.42,
+      rows: initialGrid.rows,
       scrollback: 5_000,
       theme: terminalTheme(),
+      windowsPty: session.windowsPty,
     });
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
     terminal.open(container);
+    const output = createTerminalOutput(terminal, session.sessionId, restored);
     const linkProviderDisposable = terminal.registerLinkProvider(
       createTerminalLinkProvider(terminal, openExternal),
     );
@@ -76,33 +82,59 @@ export function TerminalPane({
     terminalRef.current = terminal;
     onTitleChangeRef.current?.(terminalDisplayTitle('', session.shell));
     let sessionActive = true;
+    let outputRestored = false;
+    let attached = false;
+    let attaching = false;
 
     const fitTerminal = () => {
-      if (!sessionActive) return;
-      fitAddon.fit();
-      void bridge.resize(session.sessionId, terminal.cols, terminal.rows).catch(() => undefined);
+      if (!sessionActive || !outputRestored) return;
+      output.afterPendingOutput(() => {
+        if (!sessionActive || attaching || container.clientWidth === 0 || container.clientHeight === 0) return;
+        fitAddon.fit();
+        if (!attached) {
+          attaching = true;
+          void bridge.attach(session.sessionId, terminal.cols, terminal.rows).then((started) => {
+            if (!sessionActive) return;
+            attached = started;
+            attaching = false;
+            if (started) fitTerminal();
+          }).catch((error: unknown) => {
+            if (!sessionActive) return;
+            attaching = false;
+            markTerminalSessionExited(session.sessionId, true);
+            setExited(true);
+            setRestartError(errorMessage(error));
+          });
+          return;
+        }
+        void bridge.resize(session.sessionId, terminal.cols, terminal.rows).catch(() => undefined);
+      });
     };
     const handleAppearanceChange = () => {
       terminal.options.fontFamily = terminalFontFamily();
+      terminal.options.fontSize = terminalFontSize();
       fitTerminal();
     };
     const resizeObserver = new ResizeObserver(() => fitTerminal());
     resizeObserver.observe(container);
+    // Page scale can change while the pane keeps the same viewport dimensions.
+    const scaleObserver = new MutationObserver(handleAppearanceChange);
+    scaleObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-font-size'] });
     const unsubscribeAppearance = subscribeAppearanceChange?.(handleAppearanceChange) ?? (() => undefined);
-    fitTerminal();
     terminal.focus();
-    const restored = terminalRestoreBuffer(session.sessionId);
-    if (restored) terminal.write(restored);
 
     const dataDisposable = terminal.onData((input) => {
-      if (!sessionActive) return;
+      // Parsed history has already replied; the restored unparsed tail has not.
+      if (!sessionActive || output.replaying) return;
       void bridge.write(session.sessionId, input).catch((error: unknown) => {
-        writeTerminalSystemLine(terminal, errorMessage(error), session.sessionId);
+        writeTerminalSystemLine(output, errorMessage(error));
       });
     });
 
     const handleEvent = (event: DesktopTerminalEvent) => {
       if (event.event === 'ready') {
+        output.resize({ cols: Number(event.data.cols), rows: Number(event.data.rows) });
+        attached = true;
         markTerminalSessionExited(session.sessionId, false);
         setExited(false);
         setRestarting(false);
@@ -110,24 +142,21 @@ export function TerminalPane({
       }
       if (event.event === 'output') {
         const text = String(event.data.text ?? '');
-        appendTerminalRestoreBuffer(session.sessionId, text);
-        terminal.write(text);
+        output.write(text);
         return;
       }
       if (event.event === 'error') {
         writeTerminalSystemLine(
-          terminal,
+          output,
           String(event.data.message ?? translate('feature.terminal.error')),
-          session.sessionId,
         );
         return;
       }
       if (event.event === 'exit') {
         const exitCode = event.data.exitCode ?? event.data.signal ?? 'unknown';
         writeTerminalSystemLine(
-          terminal,
+          output,
           translate('feature.terminal.exited', { code: String(exitCode) }),
-          session.sessionId,
         );
         markTerminalSessionExited(session.sessionId, true);
         setExited(true);
@@ -135,11 +164,19 @@ export function TerminalPane({
       }
       if (event.event === 'closed') {
         sessionActive = false;
-        writeTerminalSystemLine(terminal, translate('feature.terminal.closed'), session.sessionId);
+        writeTerminalSystemLine(output, translate('feature.terminal.closed'));
       }
     };
 
-    const unsubscribe = subscribeTerminalEvents(bridge, session.sessionId, handleEvent);
+    const unsubscribe = subscribeTerminalEvents(bridge, session.sessionId, handleEvent, () => {
+      // ConPTY output contains absolute cursor positions for its original grid.
+      // Drain the replay before resizing either side, or early repaint/erase
+      // sequences can land on the prompt after being clamped to a smaller grid.
+      output.afterPendingOutput(() => {
+        outputRestored = true;
+        fitTerminal();
+      });
+    });
 
     return () => {
       sessionActive = false;
@@ -149,6 +186,8 @@ export function TerminalPane({
       linkProviderDisposable.dispose();
       titleDisposable.dispose();
       resizeObserver.disconnect();
+      scaleObserver.disconnect();
+      output.dispose();
       terminal.dispose();
       terminalRef.current = null;
     };
@@ -220,10 +259,16 @@ function terminalFontFamily(): string {
   return codeFont || 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
 }
 
-function writeTerminalSystemLine(terminal: XTermTerminal, text: string, sessionId?: string): void {
-  const value = `\r\n${text}\r\n`;
-  if (sessionId) appendTerminalRestoreBuffer(sessionId, value);
-  terminal.write(value);
+function terminalFontSize(): number {
+  const pageScale = Number.parseFloat(window.getComputedStyle(document.documentElement)
+    .getPropertyValue('--app-page-scale'));
+  // The frame cancels CSS zoom so xterm's cell metrics match mouse coordinates.
+  // Apply the user's scale through xterm itself to keep text at the intended size.
+  return 12.5 * (Number.isFinite(pageScale) && pageScale > 0 ? pageScale : 1);
+}
+
+function writeTerminalSystemLine(output: TerminalOutput, text: string): void {
+  output.write(`\r\n${text}\r\n`);
 }
 
 function normalizeTerminalLink(rawText: string): { text: string; url: string } | null {

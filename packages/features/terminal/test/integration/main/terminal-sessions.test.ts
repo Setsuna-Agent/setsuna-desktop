@@ -1,12 +1,47 @@
 import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { Terminal } from '@xterm/xterm';
 import { describe, expect, it } from 'vitest';
 import type { DesktopTerminalEventPayload } from '../../../src/contracts/index.js';
 import { terminalProcessOptions } from '../../../src/main/process-options.js';
 import { DesktopTerminalStore } from '../../../src/main/sessions.js';
 
 describe('desktop terminal store', () => {
+  it.skipIf(process.platform !== 'win32')('shows the initial Windows prompt without keyboard input', async () => {
+    const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-terminal-prompt-test-'));
+    let terminal: Terminal | undefined;
+    const store = new DesktopTerminalStore((event) => {
+      if (event.event === 'output') terminal?.write(String(event.data.text ?? ''));
+    });
+    try {
+      const session = await store.open({ workspaceRoot, cols: 100, rows: 24 });
+      terminal = new Terminal({
+        allowProposedApi: true,
+        cols: 80,
+        rows: 6,
+        windowsPty: session.windowsPty,
+      });
+      // ConPTY may query the terminal during startup. Forward protocol replies
+      // just as the renderer does, but never synthesize an Enter or a command.
+      terminal.onData((input) => store.write(session.sessionId, input));
+      for (const event of store.read(session.sessionId)) {
+        if (event.event === 'output') terminal.write(String(event.data.text ?? ''));
+      }
+      await store.attach(session.sessionId, terminal.cols, terminal.rows);
+      await waitFor(() => {
+        const buffer = terminal!.buffer.active;
+        const output = Array.from({ length: buffer.length }, (_, row) => (
+          buffer.getLine(row)?.translateToString(true) ?? ''
+        )).join('');
+        return output.toLowerCase().includes(`${session.workspaceRoot}>`.toLowerCase());
+      });
+    } finally {
+      terminal?.dispose();
+      store.closeAll();
+    }
+  });
+
   it('opens a shell session and reads command output', async () => {
     const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-terminal-test-'));
     const events: DesktopTerminalEventPayload[] = [];
@@ -14,6 +49,8 @@ describe('desktop terminal store', () => {
     const session = await store.open({ workspaceRoot, cols: 80, rows: 24 });
 
     expect(session.workspaceRoot).toBe(await realpath(workspaceRoot));
+    expect(store.read(session.sessionId)).toEqual([]);
+    await store.attach(session.sessionId, 80, 24);
 
     store.write(session.sessionId, terminalSmokeCommand());
     await waitFor(() => events.some((event) => (
@@ -40,6 +77,7 @@ describe('desktop terminal store', () => {
     const store = new DesktopTerminalStore((event) => events.push(event));
     const session = await store.open({ workspaceRoot, cols: 80, rows: 24 });
 
+    await store.attach(session.sessionId, 80, 24);
     store.write(session.sessionId, terminalExitCommand());
     await waitFor(() => events.some((event) => event.event === 'exit'));
 
@@ -54,7 +92,7 @@ describe('desktop terminal store', () => {
     expect(store.close(session.sessionId)).toBe(true);
   });
 
-  it('coalesces concurrent restarts while environment resolution is pending', async () => {
+  it('coalesces concurrent attachments and restarts while environment resolution is pending', async () => {
     const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-terminal-concurrent-restart-test-'));
     const events: DesktopTerminalEventPayload[] = [];
     let environmentResolutionCount = 0;
@@ -71,6 +109,12 @@ describe('desktop terminal store', () => {
       },
     );
     const session = await store.open({ workspaceRoot, cols: 80, rows: 24 });
+    expect(environmentResolutionCount).toBe(0);
+    await expect(Promise.all([
+      store.attach(session.sessionId, 80, 24),
+      store.attach(session.sessionId, 80, 24),
+    ])).resolves.toEqual([true, true]);
+    expect(environmentResolutionCount).toBe(1);
     store.write(session.sessionId, terminalExitCommand());
     await waitFor(() => events.some((event) => event.event === 'exit'));
 
@@ -85,7 +129,7 @@ describe('desktop terminal store', () => {
     expect(store.close(session.sessionId)).toBe(true);
   });
 
-  it('does not spawn a PTY when an opening operation is aborted during environment resolution', async () => {
+  it('does not spawn a PTY when attachment is aborted during environment resolution', async () => {
     const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-terminal-abort-test-'));
     const events: DesktopTerminalEventPayload[] = [];
     let markEnvironmentStarted!: () => void;
@@ -104,8 +148,9 @@ describe('desktop terminal store', () => {
         return {};
       },
     );
+    const session = await store.open({ workspaceRoot });
     const controller = new AbortController();
-    const opening = store.open({ workspaceRoot }, controller.signal);
+    const opening = store.attach(session.sessionId, 80, 24, controller.signal);
     await environmentStarted;
 
     controller.abort(new Error('Terminal Feature is draining.'));
@@ -125,6 +170,7 @@ describe('desktop terminal store', () => {
     );
     const session = await store.open({ workspaceRoot });
 
+    await store.attach(session.sessionId, 80, 24);
     store.write(session.sessionId, terminalProxyCommand());
     await waitFor(() => events.some((event) => (
       event.event === 'output'
@@ -143,6 +189,7 @@ describe('desktop terminal store', () => {
     expect(store.read(session.sessionId)).toEqual([]);
     expect(store.resize(session.sessionId, 90, 30)).toBe(false);
     expect(store.write(session.sessionId, 'echo stale')).toBe(false);
+    await expect(store.attach(session.sessionId, 90, 30)).resolves.toBe(false);
     await expect(store.restart(session.sessionId)).resolves.toBe(false);
   });
 
