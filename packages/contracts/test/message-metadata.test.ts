@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   normalizeRuntimeMessageProviderMetadata,
+  normalizeRuntimeProviderEndpoint,
   RUNTIME_PROVIDER_METADATA_MAX_BYTES,
   runtimeJsonByteLength,
   sanitizeRuntimeJsonValue,
@@ -15,6 +16,26 @@ const source = {
   model: 'gpt-test',
   endpointFingerprint: 'a'.repeat(64),
 };
+
+describe('runtime provider endpoint identity', () => {
+  it.each([
+    ['canonical URL', ' HTTPS://EXAMPLE.COM:443/v1///?z=2&a=1#fragment ', 'https://example.com/v1?a=1&z=2'],
+    ['root URL', 'https://example.com///', 'https://example.com'],
+    ['invalid endpoint', ' invalid endpoint/// ', 'invalid endpoint'],
+    ['slashes only', ' /// ', ''],
+  ])('preserves normalization for %s', (_name, input, expected) => {
+    expect(normalizeRuntimeProviderEndpoint(input)).toBe(expected);
+  });
+
+  it('preserves long internal slash runs while trimming only trailing slashes', () => {
+    const slashes = '/'.repeat(100_000);
+    // Both URL parsing and its invalid-input fallback must avoid regex backtracking.
+    for (const prefix of ['https://example.com/', 'invalid endpoint/']) {
+      const expected = `${prefix}${slashes}x`;
+      expect(normalizeRuntimeProviderEndpoint(`${expected}${slashes}`)).toBe(expected);
+    }
+  });
+});
 
 describe('runtime provider metadata', () => {
   it('keeps legacy Anthropic blocks without inventing a source', () => {

@@ -371,11 +371,18 @@ export function normalizeRuntimeProviderEndpoint(baseUrl: string): string {
     url.hash = '';
     url.hostname = url.hostname.toLowerCase();
     url.protocol = url.protocol.toLowerCase();
-    url.pathname = url.pathname.replace(/\/+$/u, '') || '/';
+    url.pathname = stripTrailingSlashes(url.pathname) || '/';
     url.searchParams.sort();
     const path = url.pathname === '/' ? '' : url.pathname;
     return `${url.protocol}//${url.host}${path}${url.search}`;
   } catch {
-    return trimmed.replace(/\/+$/u, '');
+    return stripTrailingSlashes(trimmed);
   }
+}
+
+/** Scan the suffix once; an unanchored /+ regex can repeatedly scan internal slash runs. */
+function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === '/') end -= 1;
+  return value.slice(0, end);
 }
