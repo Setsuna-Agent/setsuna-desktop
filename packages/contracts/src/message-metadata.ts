@@ -362,3 +362,20 @@ function isEndpointFingerprint(value: unknown): value is string {
 function isSemanticFingerprint(value: unknown): value is string {
   return typeof value === 'string' && /^sha256:[a-fA-F0-9]{64}$/.test(value);
 }
+
+/** Canonical endpoint identity shared by native replay and context recovery. */
+export function normalizeRuntimeProviderEndpoint(baseUrl: string): string {
+  const trimmed = baseUrl.trim();
+  try {
+    const url = new URL(trimmed);
+    url.hash = '';
+    url.hostname = url.hostname.toLowerCase();
+    url.protocol = url.protocol.toLowerCase();
+    url.pathname = url.pathname.replace(/\/+$/u, '') || '/';
+    url.searchParams.sort();
+    const path = url.pathname === '/' ? '' : url.pathname;
+    return `${url.protocol}//${url.host}${path}${url.search}`;
+  } catch {
+    return trimmed.replace(/\/+$/u, '');
+  }
+}

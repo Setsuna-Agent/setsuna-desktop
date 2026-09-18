@@ -27,7 +27,7 @@ export function cloneMessage(message: RuntimeMessage): RuntimeMessage {
     streamParts: message.streamParts?.map((part) => ({ ...part })),
     skillIds: message.skillIds ? [...message.skillIds] : undefined,
     skillReferences: cloneRuntimeSkillReferences(message.skillReferences),
-    contextCompaction: message.contextCompaction ? { ...message.contextCompaction } : undefined,
+    contextCompaction: message.contextCompaction ? structuredClone(message.contextCompaction) : undefined,
     goalMode: message.goalMode ? {
       ...message.goalMode,
       goal: cloneRuntimeThreadGoal(message.goalMode.goal),
@@ -226,7 +226,7 @@ export function cloneTranscriptMessage(message: RuntimeMessage): RuntimeMessage 
 export function cloneThreadContextCompaction(compaction: NonNullable<RuntimeThread['contextCompaction']>): NonNullable<RuntimeThread['contextCompaction']> {
   return {
     ...compaction,
-    notice: compaction.notice ? { ...compaction.notice } : undefined,
+    notice: compaction.notice ? structuredClone(compaction.notice) : undefined,
   };
 }
 

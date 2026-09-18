@@ -56,7 +56,6 @@ import {
 } from './WorkspaceFileContextMenu.js';
 import { WorkspaceFileIcon, WorkspaceFilePath } from './WorkspaceFileIcon.js';
 import { WorkspaceEntryDialog, type WorkspaceEntryDialogRequest } from './WorkspaceEntryDialog.js';
-import { WorkspaceResizeHandle } from './WorkspaceResizeHandle.js';
 import {
   workspaceDirectoryMentionEntry,
   workspaceFileMentionEntry,
@@ -110,11 +109,6 @@ export function WorkspacePanel({
   onReviewBaseRefChange,
   onReviewSourceChange,
   onRevealFile,
-  onResizeStep,
-  onResizeStart,
-  resizeMax,
-  resizeMin,
-  resizeValue,
 }: {
   activePanel: DesktopPanelTab;
   placement?: DesktopPanelSlot;
@@ -153,11 +147,6 @@ export function WorkspacePanel({
   onReviewBaseRefChange: (baseRef: string) => void;
   onReviewSourceChange: (source: DesktopReviewSource) => void;
   onRevealFile: (filePath: string) => void;
-  onResizeStep: (delta: number) => void;
-  onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
-  resizeMax: number;
-  resizeMin: number;
-  resizeValue: number;
 }) {
   const { t } = useI18n();
   const {
@@ -363,15 +352,6 @@ export function WorkspacePanel({
   return (
     <>
       <aside className={`desktop-workspace-panel${placement === 'bottom' ? ' desktop-workspace-panel--bottom-embedded' : ''}`}>
-        {placement === 'side' ? (
-          <WorkspaceResizeHandle
-            max={resizeMax}
-            min={resizeMin}
-            value={resizeValue}
-            onResizeStart={onResizeStart}
-            onResizeStep={onResizeStep}
-          />
-        ) : null}
         <div
           className={`desktop-workspace-body ${showsFileExplorer ? 'desktop-workspace-body--file-explorer' : 'desktop-workspace-body--single'}`}
           style={showsFileExplorer ? ({ '--desktop-file-tree-width': `${treeVisible ? treeWidth : 0}px` } as CSSProperties) : undefined}

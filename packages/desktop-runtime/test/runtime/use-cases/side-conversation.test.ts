@@ -2,6 +2,7 @@ import { access, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import type { ModelRequest, ModelStreamEvent, RuntimeMessage } from '@setsuna-desktop/contracts';
 import {
   cleanupRuntimeSideConversations,
   createRuntimeSideConversation,
@@ -10,8 +11,58 @@ import { createSideConversationRuntimeHost } from '../../../src/composition/side
 import { createRuntimeFactory } from '../../../src/runtime/runtime-factory.js';
 import { copyRuntimeMessagesToThread } from '../../../src/runtime/use-cases/thread-copy.js';
 import { deleteRuntimeThread } from '../../../src/runtime/use-cases/thread-operations.js';
+import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
+import { materializeRuntimeContextCompaction } from '../../../src/loop/context/context-compaction.js';
+import { ContextWindowConfigStore } from '../../support/agent-loop/shared.js';
 
 describe('side conversations', () => {
+  it('copies nested native checkpoints as independent hidden history and can compact the side snapshot', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-side-native-compaction-'));
+    const runtime = createRuntimeFactory({ dataDir });
+    try {
+      await runtime.threadStore.recover();
+      const parent = await runtime.threadStore.createThread({ title: 'Native history' });
+      const original = ['Original requirement', 'Verified implementation', 'Pending validation'].map((content, index): RuntimeMessage => ({
+        id: `original_${index}`, role: index === 1 ? 'assistant' : 'user', content: `${content} ${'detail '.repeat(3_000)}`,
+        createdAt: parent.createdAt, status: 'complete',
+      }));
+      const first = nativeSnapshot(original.slice(0, 2), 'first');
+      const second = nativeSnapshot([...first.messages, original[2]!], 'second');
+      await runtime.threadStore.appendEvent(parent.id, {
+        id: 'native_history', threadId: parent.id, type: 'thread.context_compacted', createdAt: parent.createdAt,
+        payload: second,
+      });
+      const before = await runtime.threadStore.getThread(parent.id);
+      const side = await createRuntimeSideConversation(createSideConversationRuntimeHost(runtime), parent.id);
+      expect(side.messages.filter((message) => message.id.startsWith('original_')))
+        .toMatchObject(original.map((message) => ({ ...message, visibility: 'model' })));
+      expect(side.messages.every((message) => message.visibility === 'model')).toBe(true);
+      expect(side.messages.some((message) => message.contextCompaction?.nativeSourceMessageIds)).toBe(false);
+      expect(side.messageCount).toBe(0);
+
+      const requests: ModelRequest[] = [];
+      const loop = new AgentLoop({
+        threadStore: runtime.threadStore, eventBus: runtime.eventBus, clock: runtime.clock, ids: runtime.ids,
+        configStore: new ContextWindowConfigStore(16_000),
+        modelClient: { stream: async function* (request): AsyncGenerator<ModelStreamEvent> {
+          requests.push(request);
+          yield { type: 'text_delta', text: 'Preserved requirement and verified implementation; validation remains.' };
+          yield { type: 'done', finishReason: 'stop' };
+        } },
+      });
+      const compacted = await loop.compactThreadContext(side.id);
+      expect(requests).toHaveLength(1);
+      expect(requests[0]!.messages.map((message) => message.content).join('\n')).toContain('Original requirement');
+      expect(compacted.messages.some((message) => message.contextCompaction?.source === 'local')).toBe(true);
+      expect(await runtime.threadStore.getThread(parent.id)).toEqual(before);
+    } finally {
+      await runtime.extensionManager.shutdown();
+      await runtime.networkProxyFetch.close();
+      await runtime.nativeBridge.close();
+      await runtime.threadStore.close();
+    }
+  });
+
   it('retains and releases stored tool results through a real fork lifecycle', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-thread-fork-test-'));
     const runtime = createRuntimeFactory({ dataDir });
@@ -290,3 +341,20 @@ describe('side conversations', () => {
     }
   });
 });
+
+function nativeSnapshot(messages: RuntimeMessage[], id: string) {
+  return materializeRuntimeContextCompaction({
+    candidate: {
+      autoCompactTokenLimit: 54_400, maxContextTokens: 64_000, maxContextTokensK: 64,
+      historyTokens: 20_000, originalTokens: 20_000, reservedTokens: 0, targetContextTokens: 10_000,
+      olderMessages: messages, pinnedMessages: [], recentMessages: [], triggerScopes: ['manual'],
+    },
+    id, createdAt: '2026-09-17T00:00:00.000Z', source: 'remote', summary: 'Opaque provider checkpoint',
+    nativeSourceMessageIds: messages.filter((message) => message.visibility !== 'transcript').map((message) => message.id),
+    providerMetadata: {
+      schemaVersion: 3,
+      source: { providerId: 'native', providerKind: 'openai-responses', model: 'model', endpointFingerprint: 'a'.repeat(64) },
+      openAiResponsesCompaction: { items: [{ type: 'compaction', encrypted_content: 'opaque-state' }] },
+    },
+  });
+}

@@ -197,7 +197,6 @@ export class AgentLoop {
       clock: options.clock,
       configStore: options.configStore,
       contextCompactor: this.contextCompactor,
-      hooks: this.hooks,
       ids: options.ids,
       threadStore: options.threadStore,
       turnTasks: this.turnTasks,

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type {
   ModelRequest,
   ModelStreamEvent
@@ -112,10 +113,10 @@ export class RemoteCompactionModelClient implements ModelClient {
       providerMetadata: {
         schemaVersion: 2 as const,
         source: {
-          providerId: 'provider-1',
+          providerId: 'test',
           providerKind: 'openai-responses' as const,
-          model: 'gpt-compact',
-          endpointFingerprint: 'a'.repeat(64),
+          model: 'local-runtime-smoke',
+          endpointFingerprint: createHash('sha256').update('https://llm.test/v1').digest('hex'),
         },
         openAiResponses: {
           kind: 'compaction' as const,
@@ -208,7 +209,7 @@ export class LongToolChainCompactionModelClient implements ModelClient {
 }
 
 function isPortableCompactionRequest(request: ModelRequest): boolean {
-  return request.toolChoice === 'none' && request.thinking === false;
+  return request.messages.some((message) => message.id === 'context_compaction_system');
 }
 
 export class LateLargeToolResultHost extends CapturingToolHost {

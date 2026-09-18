@@ -5,7 +5,7 @@ import {
   estimateRuntimeMessageTokens,
   materializeRuntimeContextCompaction,
 } from '../../../src/loop/context/context-compaction.js';
-import { compactionSummaryOutputBudget } from '../../../src/loop/context/context-compaction-summary.js';
+import { compactionSummaryTokenLimit } from '../../../src/loop/context/context-compaction-summary.js';
 
 describe('runtime context compaction', () => {
   it('includes pinned context when deciding whether the latest input leaves room for a summary', () => {
@@ -23,7 +23,7 @@ describe('runtime context compaction', () => {
     expect(candidate.pinnedMessages.map((message) => message.id)).toEqual(['policy', 'request']);
     expect(candidate.olderMessages).toContainEqual(latest);
     expect(candidate.recentMessages).toEqual([]);
-    expect(compactionSummaryOutputBudget(candidate, 0)).toBeGreaterThanOrEqual(850);
+    expect(compactionSummaryTokenLimit(candidate)).toBeGreaterThanOrEqual(850);
     const result = materializeRuntimeContextCompaction({ candidate, id: 'summary', createdAt: latest.createdAt, summary: 'Continue the current task.' });
     expect(result.messages.find((message) => message.id === 'request')).toEqual(request);
     expect(result.messages.find((message) => message.id === 'policy')).toEqual(policy);

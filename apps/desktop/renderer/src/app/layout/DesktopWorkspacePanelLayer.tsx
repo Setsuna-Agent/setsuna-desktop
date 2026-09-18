@@ -76,6 +76,7 @@ import { useKeyboardShortcuts } from '../../shared/shortcuts/KeyboardShortcutsPr
 import { SelectField } from '../../shared/ui/primitives.js';
 import { useToast } from '../providers/ToastProvider.js';
 import { FloatingWorkspacePanelSlot } from './FloatingWorkspacePanelSlot.js';
+import { SideWorkspacePanelSlot } from './SideWorkspacePanelSlot.js';
 
 const ConversationDebugFeaturePanel = lazy(async () => {
   const module = await import('../../composition/conversation-debug-feature-panel.js');
@@ -273,15 +274,10 @@ export function DesktopWorkspacePanelLayer({
     onOpenChangesPanel: actions.onOpenChangesPanel,
     onOpenSideChat: actions.onOpenSideChat,
     onOpenTerminalPanel: actions.onOpenSideTerminalPanel,
-    onResizeStart: layout.onWorkspaceResizeStart,
-    onResizeStep: layout.onWorkspaceResizeStep,
     onReviewBaseRefChange: actions.onReviewBaseRefChange,
     onReviewRefresh: actions.onReviewRefresh,
     onReviewSourceChange: actions.onReviewSourceChange,
     onRevealFile: actions.onRevealFile,
-    resizeMax: layout.workspaceMaxWidth,
-    resizeMin: layout.workspaceMinWidth,
-    resizeValue: layout.workspaceWidth,
   } satisfies Omit<ComponentProps<typeof WorkspacePanel>, 'activePanel' | 'placement'>;
 
   const browserBindings = useMemo(() => new Map<string, BrowserWorkspacePanelBinding>(
@@ -337,7 +333,13 @@ export function DesktopWorkspacePanelLayer({
           onReveal={actions.onRevealFile}
         />
         {panels.sidePanelPresent && panels.sideActivePanel && !isFloatingPanelType(panels.sideActivePanel.type) ? (
-          <SideWorkspacePanelSlot>
+          <SideWorkspacePanelSlot
+            max={layout.workspaceMaxWidth}
+            min={layout.workspaceMinWidth}
+            value={layout.workspaceWidth}
+            onResizeStart={layout.onWorkspaceResizeStart}
+            onResizeStep={layout.onWorkspaceResizeStep}
+          >
             <Suspense fallback={null}>
               <WorkspacePanelRenderer panel={panels.sideActivePanel} placement="side" projectId={context.activeProject?.id ?? null} threadId={context.currentThread?.id ?? null} visible>
                 <WorkspacePanel {...workspacePanelProps} activePanel={panels.sideActivePanel} placement="side" />
@@ -510,10 +512,6 @@ function panelHidden(panels: DesktopWorkspacePanelModel['panels'], panelId: stri
   return placement === 'side'
     ? !panels.sidePanelPresent || panels.sideActivePanel?.id !== panelId
     : !panels.bottomPanelVisible || panels.bottomActivePanel?.id !== panelId;
-}
-
-function SideWorkspacePanelSlot({ children }: Readonly<{ children: ReactNode }>) {
-  return <div className="desktop-workspace-panel-slot">{children}</div>;
 }
 
 function isFloatingPanelType(type: DesktopPanelType): boolean {

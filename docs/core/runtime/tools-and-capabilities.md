@@ -172,6 +172,7 @@ runtime 还追加用于读取超限结果的 `read_tool_result`；工具是否�
 
 - 相关的多文件修改优先合并为一次 `apply_patch`；单文件工具保留给新文件、完整重写或无法用补丁清晰表达的操作。
 - `apply_patch` 通过 JSON 的 `patch` 字符串接收补丁。`@@` 区块允许只有上下文，这些原文仍须匹配并推进后续查找位置；完全没有正文的区块会被拒绝。`*** End of File` 要求区块原文匹配文件末尾。格式错误包含归一化补丁正文中的行号（不计 heredoc 包装）。
+- `*** Add File` 正文缺少 `+` 时按新增内容原样接收，保留缩进、空行和 SQL 注释；流式计数与完整预览使用相同规则。补丁控制标记仍须合法，正文中的字面量标记必须加 `+`。`*** Update File` 继续严格校验增删/上下文前缀，不推测修改方向；整份补丁验证通过后才写入。
 - 流式 `tool.preview` 只表示计划中的修改。文件路径集合不变时不重复持久化浮动 diff 计数；完整差异由 `tool.started` / `tool.completed` 接管。
 - Resolve/canonical path。
 - Workspace confinement。

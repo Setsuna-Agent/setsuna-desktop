@@ -4,6 +4,9 @@ export type DesktopTerminalSession = Readonly<{
   sessionId: string;
   workspaceRoot: string;
   shell: string;
+  cols: number;
+  rows: number;
+  windowsPty?: Readonly<{ backend: 'conpty' | 'winpty'; buildNumber: number }>;
 }>;
 
 export type DesktopTerminalEvent = Readonly<{
@@ -17,7 +20,9 @@ export type DesktopTerminalEventPayload = DesktopTerminalEvent & Readonly<{
 }>;
 
 export interface TerminalDesktopBridge {
+  /** Prepares a session; the shell starts after the renderer attaches at its actual size. */
   open(workspaceRoot?: string | null, cols?: number, rows?: number): Promise<DesktopTerminalSession>;
+  attach(sessionId: string, cols: number, rows: number): Promise<boolean>;
   write(sessionId: string, input: string): Promise<boolean>;
   /** Returns a non-destructive snapshot of bounded history; consumers deduplicate by seq. */
   read(sessionId: string): Promise<DesktopTerminalEvent[]>;
@@ -33,6 +38,7 @@ export type TerminalPreloadBridgeContribution = Readonly<{
 
 export const TERMINAL_IPC_CHANNELS = Object.freeze({
   open: 'terminal:open',
+  attach: 'terminal:attach',
   write: 'terminal:write',
   read: 'terminal:read',
   resize: 'terminal:resize',

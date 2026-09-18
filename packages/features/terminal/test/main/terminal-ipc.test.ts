@@ -26,14 +26,15 @@ afterEach(() => {
 });
 
 describe('terminal IPC lifecycle', () => {
-  it('waits for an opening session before closing PTYs during drain', async () => {
-    const opened = deferred<Readonly<{ sessionId: string }>>();
+  it('waits for session attachment before closing PTYs during drain', async () => {
+    const attached = deferred<boolean>();
     const closeAll = vi.fn();
-    const openSession = vi.fn((_input: unknown, _signal?: AbortSignal) => opened.promise);
+    const attachSession = vi.fn((_sessionId: string, _cols: number, _rows: number, _signal?: AbortSignal) => attached.promise);
     const terminal = {
+      attach: attachSession,
       close: vi.fn(),
       closeAll,
-      open: openSession,
+      open: vi.fn(),
       read: vi.fn(),
       resize: vi.fn(),
       restart: vi.fn(),
@@ -43,21 +44,21 @@ describe('terminal IPC lifecycle', () => {
     scope.scope.add(() => terminal.closeAll());
     scope.scope.add(registerTerminalIpc(scope.scope, terminal));
     scope.activate();
-    const open = ipcHandler('terminal:open');
+    const attach = ipcHandler('terminal:attach');
 
-    const request = open({}, { workspaceRoot: '/workspace' });
+    const request = attach({}, { sessionId: 'terminal-1', cols: 80, rows: 24 });
     const disposal = scope.finishDispose();
 
     expect(scope.scope.state).toBe('draining');
     expect(closeAll).not.toHaveBeenCalled();
-    expect(openSession.mock.calls[0]?.[1]?.aborted).toBe(true);
-    expect(terminalIpcMocks.handlers.has('terminal:open')).toBe(true);
-    await expect(open({}, { workspaceRoot: '/late' })).rejects.toBeInstanceOf(
+    expect(attachSession.mock.calls[0]?.[3]?.aborted).toBe(true);
+    expect(terminalIpcMocks.handlers.has('terminal:attach')).toBe(true);
+    await expect(attach({}, { sessionId: 'terminal-late', cols: 80, rows: 24 })).rejects.toBeInstanceOf(
       FeatureScopeUnavailableError,
     );
 
-    opened.resolve({ sessionId: 'terminal-1' });
-    await expect(request).resolves.toEqual({ sessionId: 'terminal-1' });
+    attached.resolve(true);
+    await expect(request).resolves.toBe(true);
     await disposal;
     expect(terminalIpcMocks.handlers.size).toBe(0);
     expect(closeAll).toHaveBeenCalledOnce();

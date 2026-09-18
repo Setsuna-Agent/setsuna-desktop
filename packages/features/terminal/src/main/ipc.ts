@@ -5,6 +5,7 @@ import type { DesktopTerminalStore } from './sessions.js';
 
 const handlerChannels = [
   TERMINAL_IPC_CHANNELS.open,
+  TERMINAL_IPC_CHANNELS.attach,
   TERMINAL_IPC_CHANNELS.write,
   TERMINAL_IPC_CHANNELS.read,
   TERMINAL_IPC_CHANNELS.resize,
@@ -22,6 +23,10 @@ export function registerTerminalIpc(scope: FeatureScope, terminal: DesktopTermin
       cols: optionalNumber(input.cols),
       rows: optionalNumber(input.rows),
     }, signal);
+  });
+  registerScopedIpcHandler(scope, TERMINAL_IPC_CHANNELS.attach, (_event, value, signal) => {
+    const input = inputRecord(value);
+    return terminal.attach(String(input.sessionId ?? ''), Number(input.cols), Number(input.rows), signal);
   });
   registerScopedIpcHandler(scope, TERMINAL_IPC_CHANNELS.write, (_event, value) => {
     const input = inputRecord(value);

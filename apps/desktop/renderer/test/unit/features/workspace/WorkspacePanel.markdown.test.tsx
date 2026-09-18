@@ -34,7 +34,6 @@ function Document({ currentFile = file, initialContent = currentFile.content, fo
     onExternalOpenFile={noop} onOpenFileWithApp={noop} onOpenEntry={noop} onOpenProjectFile={noop}
     onOpenFilesPanel={noop} onOpenBrowser={noop} onOpenSideChat={noop} onOpenTerminalPanel={noop}
     onReviewRefresh={noop} onReviewBaseRefChange={noop} onReviewSourceChange={noop} onRevealFile={noop}
-    onResizeStep={noop} onResizeStart={noop} resizeMax={900} resizeMin={320} resizeValue={640}
   /></ToastProvider></I18nProvider>;
 }
 

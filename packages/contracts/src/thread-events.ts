@@ -1,5 +1,6 @@
 import type { StoredThreadEvent } from './events.js';
 import { threadFileChangeKey } from './workspace.js';
+import { removeMessagesWithNativeCompaction } from './event-projections/native-compaction.js';
 import { normalizeLegacyAssistantPhasesForTurn } from './event-projections/assistant-phase.js';
 import { isRuntimeThreadProjectionIgnoredEvent } from './event-projections/dispositions.js';
 import {
@@ -401,10 +402,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
   if (event.type === 'messages.deleted') {
     next.contextBudgetInvalidatedAtSeq = event.seq;
     const ids = new Set(event.payload.messageIds);
-    const removedTurnIds = new Set(next.messages.filter((message) => message.turnId && ids.has(message.id)).map((message) => message.turnId!));
-    next.messages = next.messages.filter((message) => !ids.has(message.id));
-    pruneRemovedTurns(next, removedTurnIds);
-    refreshThreadSummary(next);
+    removeThreadMessages(next, ids);
     return next;
   }
 
@@ -412,12 +410,8 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
     next.contextBudgetInvalidatedAtSeq = event.seq;
     const index = next.messages.findIndex((message) => message.id === event.payload.messageId);
     if (index >= 0) {
-      const removedMessageIds = new Set(event.payload.removedMessageIds);
-      const removedTurnIds = new Set(next.messages.filter((message) => message.turnId && removedMessageIds.has(message.id)).map((message) => message.turnId!));
       const keepUntil = event.payload.includeSelf ? index : index + 1;
-      next.messages = next.messages.slice(0, keepUntil);
-      pruneRemovedTurns(next, removedTurnIds);
-      refreshThreadSummary(next);
+      removeThreadMessages(next, new Set(next.messages.slice(keepUntil).map((message) => message.id)));
     }
     return next;
   }
@@ -640,6 +634,20 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
 
   if (isRuntimeThreadProjectionIgnoredEvent(event)) return next;
   return assertNeverRuntimeEvent(event);
+}
+
+function removeThreadMessages(thread: RuntimeThread, ids: ReadonlySet<string>): void {
+  const previous = thread.messages;
+  thread.messages = removeMessagesWithNativeCompaction(previous, ids);
+  const remainingIds = new Set(thread.messages.map((message) => message.id));
+  const removedTurnIds = new Set(previous
+    .filter((message) => message.turnId && !remainingIds.has(message.id))
+    .map((message) => message.turnId!));
+  if (thread.contextCompaction?.notice?.nativeSourceMessageIds?.some((id) => !remainingIds.has(id))) {
+    thread.contextCompaction = undefined;
+  }
+  pruneRemovedTurns(thread, removedTurnIds);
+  refreshThreadSummary(thread);
 }
 
 function appendMessageStreamPart(

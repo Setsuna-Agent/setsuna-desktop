@@ -22,6 +22,9 @@ Workspace host 管理右侧/底部工作区 surface 和项目文件；Review、T
 - `WorkspaceTopbar.tsx`：项目级工具栏。
 - `WorkspaceResizeHandle.tsx`：面板 resize 交互。
 
+非浮动右侧面板的宽度拖柄由 `SideWorkspacePanelSlot.tsx` 持有，位于 Feature 内容插槽之外。
+终端等 Feature 替换默认内容时仍保留拖拽与方向键调宽能力；底部面板的高度拖柄仍由 `BottomToolsPanel` 持有。
+
 Panel 选择和 session 生命周期在 hooks，不应由各 tab 各自维护一份打开状态。
 
 文件详情与「打开文件」标签共用工作区层的 `useWorkspaceFileTree`：目录加载结果、展开状态、筛选、宽度、显隐和滚动位置不随标签重建。切换工作区时重置目录，并丢弃旧工作区或旧筛选条件下的异步响应。

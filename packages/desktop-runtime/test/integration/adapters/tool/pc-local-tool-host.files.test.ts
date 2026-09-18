@@ -401,7 +401,8 @@ describe('pc local file tools and previews', () => {
     { name: 'empty chunk before another file', body: ['@@', '*** Delete File: other.txt'], line: 5, reason: 'hunk 不能为空' },
     { name: 'empty chunk before EOF', body: ['@@', '*** End of File'], line: 6, reason: 'End of File 前缺少正文行' },
     { name: 'unprefixed update line', body: ['@@', 'same'], line: 6, reason: '必须以空格、+ 或 - 开头' },
-    { name: 'unprefixed added line', body: ['@@', '-same', '+changed', '*** Add File: other.txt', 'invalid'], line: 9, reason: '内容行必须以 + 开头' },
+    { name: 'malformed file header in added file', body: ['@@', '-same', '+changed', '*** Add File: other.txt', '*** Update File source.txt'], line: 9, reason: '未识别的补丁标记' },
+    { name: 'update hunk in added file', body: ['@@', '-same', '+changed', '*** Add File: other.txt', '@@'], line: 9, reason: '未识别的补丁标记' },
   ])('reports the patch line for $name without applying earlier operations', async ({ body, line, reason }) => {
     const { host, projectDir } = await createHost();
     const context = { threadId: 'thread_1', turnId: 'turn_1' };
@@ -437,6 +438,61 @@ describe('pc local file tools and previews', () => {
     }, context);
 
     await expect(readFile(filePath, 'utf8')).resolves.toBe('');
+  });
+
+  it('recovers missing Add File prefixes with the same content in previews and committed files', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const sourcePath = path.join(projectDir, 'schema.ts');
+    const sqlPath = path.join(projectDir, 'migration.sql');
+    await writeFile(sourcePath, 'export const version = 1;\n', 'utf8');
+    const args = {
+      patch: [
+        '*** Begin Patch',
+        '*** Update File: schema.ts',
+        '@@',
+        '-export const version = 1;',
+        '+export const version = 2;',
+        '*** Add File: migration.sql',
+        '+-- 同步任务日志表',
+        '',
+        'CREATE TABLE sync_job_logs (',
+        '  id bigint NOT NULL',
+        ');',
+        '-- SQL comment without a patch prefix',
+        '*** Add File: notes.txt',
+        'plain content',
+        '++literal plus',
+        '+*** End Patch',
+        '*** End Patch',
+      ].join('\n'),
+    };
+    const sqlContent = '-- 同步任务日志表\n\nCREATE TABLE sync_job_logs (\n  id bigint NOT NULL\n);\n-- SQL comment without a patch prefix\n';
+    const partial = await host.previewPartialToolCall('apply_patch', JSON.stringify(args), context);
+    expect(JSON.parse(partial?.resultPreview ?? '{}')).toMatchObject({
+      diff: { diffs: [
+        { path: 'schema.ts', additions: 1, deletions: 1 },
+        { path: 'migration.sql', additions: 6, deletions: 0 },
+        { path: 'notes.txt', additions: 3, deletions: 0 },
+      ] },
+    });
+    const preview = await host.previewToolCall('apply_patch', args, context);
+    expect(preview?.integrityToken).toBeTruthy();
+    const previewDiff = JSON.parse(preview?.resultPreview ?? '{}').diff;
+    expect(previewDiff.diffs[1].lines.map((line: { content: string }) => line.content).join('\n') + '\n')
+      .toBe(sqlContent);
+    await expect(readFile(sourcePath, 'utf8')).resolves.toBe('export const version = 1;\n');
+    await expect(readFile(sqlPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+
+    const result = await host.runTool('apply_patch', args, {
+      ...context,
+      expectedPreviewIntegrityToken: preview?.integrityToken,
+    });
+    expect(JSON.parse(result.preview ?? '{}').diff).toEqual(previewDiff);
+    await expect(readFile(sourcePath, 'utf8')).resolves.toBe('export const version = 2;\n');
+    await expect(readFile(sqlPath, 'utf8')).resolves.toBe(sqlContent);
+    await expect(readFile(path.join(projectDir, 'notes.txt'), 'utf8'))
+      .resolves.toBe('plain content\n+literal plus\n*** End Patch\n');
   });
 
   it('preserves file bytes in move-only patches', async () => {

@@ -14,6 +14,8 @@ export type RuntimeContextCompactionNotice = {
   originalTokens: number;
   scope?: string;
   source?: 'local' | 'remote';
+  /** Native-only checkpoint: recover these archived messages before incompatible model replay. */
+  nativeSourceMessageIds?: string[];
   summaryRole?: string;
   summaryTokens?: number;
   targetContextTokens?: number;
