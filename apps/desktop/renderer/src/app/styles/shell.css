@@ -630,7 +630,10 @@
   display: none;
 }
 
-:root[data-desktop-platform='win32'] .desktop-workspace-panel {
+/* Side-slot Feature roots also sit beneath the overlaid Windows tab bar.
+ * Bottom panels already reserve their own header row. */
+:root[data-desktop-platform='win32'] .desktop-workspace-panel,
+:root[data-desktop-platform='win32'] .desktop-workspace-panel-slot > .desktop-workspace-terminal-panel {
   padding-top: var(--desktop-workspace-toolbar-height);
 }
 
