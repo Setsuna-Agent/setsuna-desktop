@@ -263,11 +263,11 @@ export function applyPatchHunks(
 
   const replacements: LineReplacement[] = [];
   let cursor = 0;
-  for (const chunk of chunks) {
+  for (const [chunkIndex, chunk] of chunks.entries()) {
     if (chunk.changeContext !== null) {
       const contextIndex = seekSequence(lines, [chunk.changeContext], cursor, false);
       if (contextIndex === null) {
-        return { ok: false, error: `补丁无法应用到 ${label}：未找到上下文 ${JSON.stringify(chunk.changeContext)}。` };
+        return { ok: false, error: patchMatchFailure(lines, [chunk.changeContext], cursor, false, label, chunkIndex) };
       }
       cursor = contextIndex + 1;
     }
@@ -283,7 +283,7 @@ export function applyPatchHunks(
     if (start === null) {
       return {
         ok: false,
-        error: `补丁无法应用到 ${label}：未找到匹配的旧内容。\n${chunk.oldLines.join('\n')}`,
+        error: patchMatchFailure(lines, chunk.oldLines, cursor, chunk.isEndOfFile, label, chunkIndex),
       };
     }
     pushContextPreservingReplacements(replacements, chunk, start);
@@ -301,6 +301,22 @@ export function applyPatchHunks(
   if (nextLines.length) nextContent += '\n';
   if (useCrLf) nextContent = nextContent.replace(/\n/g, '\r\n');
   return { ok: true, content: nextContent };
+}
+
+/** Diagnose misplaced hunks without silently reordering or weakening their anchors. */
+function patchMatchFailure(
+  lines: readonly string[], pattern: readonly string[], cursor: number,
+  endOfFile: boolean, label: string, chunkIndex: number,
+): string {
+  const prefix = `补丁无法应用到 ${label} 的第 ${chunkIndex + 1} 个区块`;
+  const earlier = seekSequence(lines, pattern, 0, endOfFile);
+  if (earlier !== null && earlier < cursor) {
+    return `${prefix}：旧内容存在于原文件第 ${earlier + 1} 行，但当前查找已推进到第 ${cursor + 1} 行。区块顺序颠倒或范围重叠；请按原文件从上到下排列并合并重叠区块后重试，不要因此整文件重写。`;
+  }
+  if (endOfFile && seekSequence(lines, pattern, cursor, false) !== null) {
+    return `${prefix}：旧内容存在，但不在文件末尾，不满足 *** End of File。请读取实际结尾并核对插入位置。`;
+  }
+  return `${prefix}：从原文件第 ${cursor + 1} 行起未找到匹配的旧内容。请重新读取目标区域及函数或章节边界，保留准确上下文后重试。\n${pattern.join('\n')}`;
 }
 
 /** Preserve matched context verbatim while replacing only added/removed segments. */

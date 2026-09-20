@@ -44,6 +44,45 @@ export type PatchDiff = {
 
 export type LocalToolDiff = FileDiff | PatchDiff;
 
+/** Keep the model's receipt independent of UI previews, with bounded source excerpts. */
+export function formatFileMutationReceipt(diffs: readonly FileDiff[]): string {
+  const summaries = diffs.map((diff) => {
+    const added = diff.lines.filter((line) => line.type === 'add');
+    const deleted = diff.lines.filter((line) => line.type === 'del');
+    const ranges = [
+      added.length ? `new lines ${added[0].newLine}-${added[added.length - 1].newLine}` : '',
+      deleted.length ? `old lines ${deleted[0].oldLine}-${deleted[deleted.length - 1].oldLine}` : '',
+    ].filter(Boolean).join('; ');
+    return `${diff.action} ${JSON.stringify(diff.path)} (+${diff.additions}/-${diff.deletions})${ranges ? `; ${ranges}` : ''}`;
+  });
+  const excerpts: string[] = [];
+  let remainingChars = 6_000;
+  let remainingLines = 60;
+  let omitted = false;
+  for (const diff of diffs) {
+    const header = `File: ${JSON.stringify(diff.path)}`;
+    if (remainingLines <= 0 || remainingChars < header.length) { omitted = true; break; }
+    excerpts.push(header);
+    remainingChars -= header.length;
+    for (const line of diff.lines) {
+      const text = line.type === 'gap' ? '[unchanged lines omitted]'
+        : line.type === 'del' ? `- old ${line.oldLine}: ${line.content}`
+          : `${line.type === 'add' ? '+' : ' '} new ${line.newLine}: ${line.content}`;
+      if (remainingLines <= 0 || text.length > remainingChars) { omitted = true; break; }
+      excerpts.push(text);
+      remainingChars -= text.length;
+      remainingLines -= 1;
+    }
+    if (omitted) break;
+  }
+  return [
+    ...summaries,
+    'Applied diff excerpt (old = before this edit; new = current file; not an apply_patch input):',
+    ...excerpts,
+    ...(omitted ? ['[diff excerpt truncated; use read_file for the affected ranges before relying on omitted content]'] : []),
+  ].join('\n');
+}
+
 type FileDiffInput = {
   filePath: string;
   root: string;

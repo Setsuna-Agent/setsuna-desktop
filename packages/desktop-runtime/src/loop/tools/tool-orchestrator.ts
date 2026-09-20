@@ -590,13 +590,16 @@ export class ToolOrchestrator {
     if (hookAdditionalContexts.length) {
       content = appendHookAdditionalContexts(content, hookAdditionalContexts);
     }
+    const resultBlocked = Boolean(postHookOutcome?.shouldBlock || postExtensionOutcome?.block);
+    if (resultBlocked) content = `Tool execution completed, but post-execution validation blocked the result. The execution was not rolled back.\n${content}`;
     await Promise.all(outputDeltaPublishes);
     await this.options.events.publishToolCompleted(toolCall, parsedArguments, 'success', result.preview ?? content, {
       data: result.data,
       resultPreview: result.preview,
       startedAtMs,
     });
-    return { content, processed: true, result, status: 'success' };
+    // The UI records the actual execution; the model must also see a failed validation.
+    return { content, processed: true, result, status: resultBlocked ? 'error' : 'success' };
   }
 
   private async completeRetryOutcome({

@@ -521,6 +521,7 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
     return {
       ...projectState.toolState,
       reads: turnFileState.reads,
+      samplingStepId: context.samplingStepId,
       environmentId: context.environment?.id ?? projectState.toolState.environmentId,
       permissionProfile: context.readOnly ? 'read-only' : context.permissionProfile ?? 'workspace-write',
       sandboxWorkspaceWrite: cloneSandboxWorkspaceWrite(context.sandboxWorkspaceWrite),

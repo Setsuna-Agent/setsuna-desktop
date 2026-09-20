@@ -234,6 +234,8 @@ describe('agent loop tool hook results', () => {
   
       expect(toolHost.calls).toHaveLength(1);
       expect(toolMessage?.content).toContain('review the tool result first');
+      expect(toolMessage?.status).toBe('error');
+      expect(toolMessage?.content).toContain('not rolled back');
       expect(events).toContainEqual(expect.objectContaining({
         type: 'tool.completed',
         payload: expect.objectContaining({
