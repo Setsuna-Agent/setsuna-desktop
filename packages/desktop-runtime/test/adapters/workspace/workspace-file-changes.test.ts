@@ -3,7 +3,7 @@ import { chmod, lstat, mkdtemp, readFile, readdir, realpath, rm, symlink, writeF
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { applyLocalPatch, deleteLocalFile, editLocalFile, writeLocalFile, type PcLocalFileState } from '../../../src/adapters/tool/pc-local/pc-local-tool-files.js';
+import { applyLocalPatch, deleteLocalFile, editLocalFile, readLocalFile, writeLocalFile, type PcLocalFileState } from '../../../src/adapters/tool/pc-local/pc-local-tool-files.js';
 import { applyWorkspaceFileChanges } from '../../../src/adapters/workspace/workspace-file-changes.js';
 import { createFileChangePatch } from '../../../src/utils/file-change-patch.js';
 
@@ -37,6 +37,7 @@ describe('workspace operation undo', () => {
     const original = '\uFEFF标题 😃\r\nsecond\nlast\r';
     await writeFile(path.join(root, 'note.txt'), original);
     await writeFile(path.join(root, 'empty.txt'), '');
+    await readLocalFile({ file_path: 'note.txt' }, state);
     const first = await writeLocalFile({ file_path: 'note.txt', content: 'one\ntwo\n' }, state);
     const moved = await applyLocalPatch({ patch: '*** Begin Patch\n*** Update File: note.txt\n*** Move to: moved.txt\n@@\n-one\n+changed\n two\n*** End Patch' }, state);
     const empty = await deleteLocalFile({ file_path: 'empty.txt' }, state);
@@ -89,6 +90,7 @@ describe('workspace operation undo', () => {
   it('checks the entire batch before restoring or deleting anything when one file has newer edits', async () => {
     const created = await writeLocalFile({ file_path: 'new.txt', content: 'generated\n' }, state);
     await writeFile(path.join(root, 'existing.txt'), 'before\n');
+    await readLocalFile({ file_path: 'existing.txt' }, state);
     const edited = await writeLocalFile({ file_path: 'existing.txt', content: 'after\n' }, state);
     await writeFile(path.join(root, 'new.txt'), 'generated\nuser addition\n');
     await expect(applyWorkspaceFileChanges(root, [...capturedChanges(created), ...capturedChanges(edited)], 'undo'))
@@ -100,6 +102,7 @@ describe('workspace operation undo', () => {
   it('cancels the whole reapply if any file was edited or a removed path was recreated after undo', async () => {
     const created = await writeLocalFile({ file_path: 'new.txt', content: 'generated\n' }, state);
     await writeFile(path.join(root, 'existing.txt'), 'before\n');
+    await readLocalFile({ file_path: 'existing.txt' }, state);
     const edited = await writeLocalFile({ file_path: 'existing.txt', content: 'after\n' }, state);
     const changes = [...capturedChanges(created), ...capturedChanges(edited)];
     await applyWorkspaceFileChanges(root, changes, 'undo');
