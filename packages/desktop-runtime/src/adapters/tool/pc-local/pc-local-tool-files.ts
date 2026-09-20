@@ -4,7 +4,7 @@ import type {
   RuntimePermissionProfile,
   RuntimeSandboxWorkspaceWrite,
 } from '@setsuna-desktop/contracts';
-import { existsSync, type Stats } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { lstat, readdir, readlink, stat, type FileHandle } from 'node:fs/promises';
 import path from 'node:path';
 import type {
@@ -12,6 +12,7 @@ import type {
   WorkspaceTextSearchMatch,
 } from '../../../ports/workspace-search-engine.js';
 import { isNodeErrorCode } from '../../../shared/node-errors.js';
+import { estimateUtf8Tokens, TOOL_OUTPUT_BUDGET_DEFAULT_TOKENS } from '../../../loop/tools/tool-output-budget.js';
 import {
   buildFileMentionIndex,
   findFileMentionSuggestions,
@@ -21,7 +22,6 @@ import {
 import {
   DEFAULT_FIND_RESULTS,
   DEFAULT_SEARCH_RESULTS,
-  MAX_FILE_READ_STATE_ENTRIES,
   MAX_FIND_RESULTS,
   MAX_LIST_ENTRIES,
   MAX_SEARCH_CONTEXT_LINES,
@@ -31,10 +31,13 @@ import {
 import {
   buildDeletedFileDiff,
   buildFileDiff,
+  formatFileMutationReceipt,
   patchDiffFromDiffs,
   type FileDiff,
   type LocalToolDiff,
 } from './pc-local-tool-diff.js';
+import { overwriteObservationError, priorReadGuard, rememberRead, type FileReadCacheState } from './pc-local-tool-file-observation.js';
+export { rememberRead } from './pc-local-tool-file-observation.js';
 import {
   commitFileChanges,
   mutationIntegrityToken,
@@ -72,15 +75,6 @@ type ToolArguments = Record<string, unknown>;
 export type FileReadRange = {
   offset: number;
   limit: number | null;
-};
-
-type FileReadIdentity = {
-  mtimeMs: number;
-  size: number;
-};
-
-type FileReadCacheState = {
-  reads: Map<string, FileReadIdentity>;
 };
 
 export type PcLocalFileState = FileMutationState & FileReadCacheState & {
@@ -240,7 +234,6 @@ export async function readLocalFile(args: ToolArguments, state: PcLocalFileState
     const info = opened.info;
     if (!info.isFile()) return errorResult(`Path is not a file: ${formatAccessiblePath(filePath, state)}`);
 
-    rememberRead(state, filePath, info);
     const range = normalizeReadRange(args);
     let prefix = `File: ${formatAccessiblePath(filePath, state)}`;
     let body = '';
@@ -254,7 +247,13 @@ export async function readLocalFile(args: ToolArguments, state: PcLocalFileState
       body = await streamFilePrefix(opened.handle, MAX_TEXT_BYTES);
     }
 
-    return okResult(`${prefix}\n${truncateText(body, MAX_TEXT_BYTES)}`, `read ${formatAccessiblePath(filePath, state)}`);
+    const content = `${prefix}\n${truncateText(body, MAX_TEXT_BYTES)}`;
+    // read_file uses the default runtime output budget; a locally complete read
+    // can still be clipped before sampling, so it cannot authorize an overwrite.
+    const complete = !range && body.length <= MAX_TEXT_BYTES
+      && estimateUtf8Tokens(content) <= TOOL_OUTPUT_BUDGET_DEFAULT_TOKENS;
+    rememberRead(state, filePath, info, complete ? body : undefined);
+    return okResult(content, `read ${formatAccessiblePath(filePath, state)}`);
   } finally {
     await opened.handle.close().catch(() => undefined);
   }
@@ -268,7 +267,7 @@ async function streamFilePrefix(handle: FileHandle, maxChars: number): Promise<s
     if (remaining) body += String(chunk).slice(0, remaining);
     if (body.length > maxChars) break;
   }
-  return truncateText(body, maxChars);
+  return body;
 }
 
 async function streamFileRange(handle: FileHandle, range: FileReadRange) {
@@ -276,14 +275,15 @@ async function streamFileRange(handle: FileHandle, range: FileReadRange) {
   const requestedEnd = range.limit === null ? Number.POSITIVE_INFINITY : startLine + Math.max(0, range.limit) - 1;
   let lineNumber = 1;
   let totalLines = 1;
-  let selectedLine = '';
+  // Empty source lines and stream boundaries must not duplicate the line prefix.
+  let linePrefixWritten = false;
   let output = '';
   let outputTruncated = false;
   let reachedEof = true;
 
   const appendSelected = (value: string): void => {
     if (lineNumber < startLine || lineNumber > requestedEnd || outputTruncated) return;
-    const prefix = selectedLine ? '' : `${lineNumber}: `;
+    const prefix = linePrefixWritten ? '' : `${lineNumber}: `;
     const addition = `${prefix}${value}`;
     const remaining = MAX_TEXT_BYTES - output.length;
     if (remaining <= 0) {
@@ -291,17 +291,16 @@ async function streamFileRange(handle: FileHandle, range: FileReadRange) {
       return;
     }
     output += addition.slice(0, remaining);
-    selectedLine += value;
+    linePrefixWritten = true;
     if (addition.length > remaining) outputTruncated = true;
   };
 
   const finishLine = (): void => {
     if (lineNumber >= startLine && lineNumber <= requestedEnd && !outputTruncated) {
-      if (!selectedLine) appendSelected('');
       if (output.length < MAX_TEXT_BYTES) output += '\n';
       else outputTruncated = true;
     }
-    selectedLine = '';
+    linePrefixWritten = false;
     lineNumber += 1;
     totalLines = lineNumber;
   };
@@ -339,13 +338,12 @@ export async function applyLocalPatch(args: ToolArguments, state: PcLocalFileSta
 
   await commitFileChanges(result.changes, state);
   for (const change of result.changes) {
-    if (change.action === 'delete') state.reads.delete(change.filePath);
-    else rememberRead(state, change.filePath, await stat(change.filePath));
+    state.reads.delete(change.filePath);
   }
   invalidateFileMentionIndex(state.root);
 
   return okResult(
-    `Successfully applied patch to ${result.changes.length} file${result.changes.length === 1 ? '' : 's'}.`,
+    `Successfully applied patch to ${result.changes.length} file${result.changes.length === 1 ? '' : 's'}.\n${formatFileMutationReceipt(result.diffs)}`,
     result.changes.length === 1
       ? `patched ${result.diffs[0].path}`
       : `patched ${result.changes.length} files`,
@@ -356,6 +354,10 @@ export async function applyLocalPatch(args: ToolArguments, state: PcLocalFileSta
 export async function writeLocalFile(args: ToolArguments, state: PcLocalFileState) {
   const result = await calculateWriteFile(args, state);
   if (!result.ok) return errorResult(result.error);
+  if (result.existed) {
+    const error = overwriteObservationError(state, result.filePath, result.previousContent);
+    if (error) return errorResult(error);
+  }
 
   await commitFileChanges([{
     action: 'write',
@@ -365,12 +367,13 @@ export async function writeLocalFile(args: ToolArguments, state: PcLocalFileStat
     nextContent: result.nextContent,
   }], state);
   invalidateFileMentionIndex(state.root);
-  rememberRead(state, result.filePath, await stat(result.filePath));
+  state.reads.delete(result.filePath);
 
   return okResult(
-    result.existed
+    (result.existed
       ? `Successfully overwrote file: ${formatPath(result.filePath, state.root)}.`
-      : `Successfully created and wrote to new file: ${formatPath(result.filePath, state.root)}.`,
+      : `Successfully created and wrote to new file: ${formatPath(result.filePath, state.root)}.`)
+      + `\n${formatFileMutationReceipt([result.diff])}`,
     `${result.existed ? 'wrote' : 'created'} ${formatPath(result.filePath, state.root)}`,
     result.diff.additions || result.diff.deletions ? { diff: result.diff } : {},
   );
@@ -559,12 +562,13 @@ export async function appendLocalFile(args: ToolArguments, state: PcLocalFileSta
     nextContent: result.nextContent,
   }], state);
   invalidateFileMentionIndex(state.root);
-  rememberRead(state, result.filePath, await stat(result.filePath));
+  state.reads.delete(result.filePath);
 
   return okResult(
-    result.existed
+    (result.existed
       ? `Successfully appended to file: ${formatPath(result.filePath, state.root)}.`
-      : `Successfully created and wrote to new file: ${formatPath(result.filePath, state.root)}.`,
+      : `Successfully created and wrote to new file: ${formatPath(result.filePath, state.root)}.`)
+      + `\n${formatFileMutationReceipt([result.diff])}`,
     `${result.existed ? 'appended' : 'created'} ${formatPath(result.filePath, state.root)}`,
     result.diff.additions || result.diff.deletions ? { diff: result.diff } : {},
   );
@@ -587,7 +591,7 @@ export async function deleteLocalFile(args: ToolArguments, state: PcLocalFileSta
   state.reads.delete(result.filePath);
 
   return okResult(
-    `Successfully deleted file: ${formatPath(result.filePath, state.root)}.`,
+    `Successfully deleted file: ${formatPath(result.filePath, state.root)}.\n${formatFileMutationReceipt([result.diff])}`,
     `deleted ${formatPath(result.filePath, state.root)}`,
     { diff: result.diff },
   );
@@ -605,12 +609,13 @@ export async function editLocalFile(args: ToolArguments, state: PcLocalFileState
     nextContent: result.nextContent,
   }], state);
   invalidateFileMentionIndex(state.root);
-  rememberRead(state, result.filePath, await stat(result.filePath));
+  state.reads.delete(result.filePath);
 
   return okResult(
-    result.existed
+    (result.existed
       ? `Successfully edited file: ${formatPath(result.filePath, state.root)}.`
-      : `Successfully created file: ${formatPath(result.filePath, state.root)}.`,
+      : `Successfully created file: ${formatPath(result.filePath, state.root)}.`)
+      + `\n${formatFileMutationReceipt([result.diff])}`,
     `${result.existed ? 'edited' : 'created'} ${formatPath(result.filePath, state.root)}`,
     result.diff.additions || result.diff.deletions ? { diff: result.diff } : {},
   );
@@ -832,47 +837,6 @@ function formatSearchMatch(match: WorkspaceTextSearchMatch): string {
     lines.push(`${match.path}-${match.lineNumber + index + 1}-${line}`);
   });
   return lines.join('\n');
-}
-
-async function priorReadGuard(
-  state: PcLocalFileState,
-  filePath: string,
-  currentStats: Pick<Stats, 'mtimeMs' | 'size'>,
-  verb: string,
-) {
-  const previousRead = state.reads?.get(filePath);
-  if (!previousRead) return errorResult(`请先查看 ${formatPath(filePath, state.root)}，再${verb}它。`);
-  if (previousRead.mtimeMs !== currentStats.mtimeMs || previousRead.size !== currentStats.size) {
-    return errorResult(`${formatPath(filePath, state.root)} 在上次查看后发生了变化，请重新查看后再${verb}。`);
-  }
-  return null;
-}
-
-export function rememberRead(
-  state: FileReadCacheState,
-  filePath: string,
-  info: Pick<Stats, 'mtimeMs' | 'size'>,
-): void {
-  boundedMapSet(state.reads, filePath, {
-    mtimeMs: info.mtimeMs,
-    size: info.size,
-  }, MAX_FILE_READ_STATE_ENTRIES);
-}
-
-function boundedMapSet<Key, Value>(
-  map: Map<Key, Value> | undefined,
-  key: Key,
-  value: Value,
-  maxEntries: number,
-): void {
-  if (!map?.set) return;
-  if (map.has(key)) map.delete(key);
-  map.set(key, value);
-  while (map.size > maxEntries) {
-    const oldestKey = map.keys().next().value;
-    if (oldestKey === undefined) break;
-    map.delete(oldestKey);
-  }
 }
 
 export function isEditToolName(name: string): boolean {

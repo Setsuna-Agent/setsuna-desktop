@@ -19,6 +19,8 @@ export type ToolExecutionContext = {
   projectId?: string;
   turnId?: string;
   toolCallId?: string;
+  /** Runtime-owned identity shared by all tools generated in one model sampling step. */
+  samplingStepId?: string;
   modelCapabilities?: {
     supportsImages: boolean;
   };

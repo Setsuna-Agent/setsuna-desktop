@@ -8,6 +8,55 @@ import { systemClock } from '../../../../src/ports/clock.js';
 import { execFileAsync, createHost } from './pc-local-tool-host.support.js';
 
 describe('pc local file tools and previews', () => {
+  it('keeps overwrite observations scoped to actual reads in the current turn', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const input = { file_path: 'observed.txt', content: 'new\n' };
+    await writeFile(path.join(projectDir, input.file_path), 'old\n');
+    expect(await host.previewToolCall('write_file', input, context)).toHaveProperty('integrityToken');
+    await expect(host.runTool('write_file', input, context)).rejects.toThrow('完整读取');
+    await host.runTool('read_file', { file_path: input.file_path }, context);
+    await expect(host.runTool('write_file', input, { ...context, turnId: 'turn_2' })).rejects.toThrow('完整读取');
+    const written = await host.runTool('write_file', input, context);
+    expect(written.content).toContain('Edited "observed.txt" (+1/-1)');
+    expect(await readFile(path.join(projectDir, input.file_path), 'utf8')).toBe(input.content);
+  });
+
+  it('diagnoses reversed hunks before committing any file, then accepts the ordered patch', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const original = 'function first() {\n  return 1;\n}\n\nfunction second() {\n  return 2;\n}\n';
+    await writeFile(path.join(projectDir, 'functions.ts'), original);
+    const first = '@@\n function first() {\n-  return 1;\n+  return 10;\n }';
+    const second = '@@\n function second() {\n-  return 2;\n+  return 20;\n }';
+    const patch = (hunks: string[]) => ['*** Begin Patch', '*** Add File: new.txt', '+new', '*** Update File: functions.ts', ...hunks, '*** End Patch'].join('\n');
+    await expect(host.runTool('apply_patch', { patch: patch([second, first]) }, context))
+      .rejects.toThrow(/第 2 个区块.*原文件第 1 行.*顺序颠倒/u);
+    expect(await readFile(path.join(projectDir, 'functions.ts'), 'utf8')).toBe(original);
+    await expect(readFile(path.join(projectDir, 'new.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+
+    const applied = await host.runTool('apply_patch', { patch: patch([first, second]) }, context);
+    expect(await readFile(path.join(projectDir, 'functions.ts'), 'utf8')).toBe(original.replace('return 1', 'return 10').replace('return 2', 'return 20'));
+    expect(applied.content).toContain('Edited "functions.ts" (+2/-2); new lines 2-6; old lines 2-6');
+    expect(applied.content).toContain('+ new 6:   return 20;');
+  });
+
+  it('reports actual insertion context and current line numbers to the model independently of the preview', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    await writeFile(path.join(projectDir, 'backend.md'), '## 8. Sync\n\n### 8.1 Covers\nExisting paragraph.\n\n### 8.2 Queue\n');
+    const result = await host.runTool('apply_patch', { patch: [
+      '*** Begin Patch', '*** Update File: backend.md', '@@',
+      ' Existing paragraph.', '+', '+## 8.9 Profile', '+New section.',
+      '*** End Patch',
+    ].join('\n') }, context);
+    expect(result.content).toContain('new lines 6-8');
+    expect(result.content).toContain('new 4: Existing paragraph.');
+    expect(result.content).toContain('+ new 6: ## 8.9 Profile');
+    expect(result.content).toContain('new 9: ### 8.2 Queue');
+    expect(await readFile(path.join(projectDir, 'backend.md'), 'utf8')).toContain('## 8.9 Profile\nNew section.\n\n### 8.2 Queue');
+  });
+
   it('exposes the pc SWE tool contract and writes files directly', async () => {
     const { host, projectDir } = await createHost();
     const context = { threadId: 'thread_1', turnId: 'turn_1' };
@@ -370,9 +419,9 @@ describe('pc local file tools and previews', () => {
   });
 
   it.each([
-    { name: 'missing leading context', hunks: ['@@', ' missing', '@@', '-same', '+changed'] },
-    { name: 'context-only EOF mismatch', hunks: ['@@', '-same', '+changed', '@@', ' middle', '*** End of File'] },
-  ])('rejects $name before writing any files', async ({ hunks }) => {
+    { name: 'missing leading context', hunks: ['@@', ' missing', '@@', '-same', '+changed'], error: '未找到匹配的旧内容' },
+    { name: 'context-only EOF mismatch', hunks: ['@@', '-same', '+changed', '@@', ' middle', '*** End of File'], error: '不在文件末尾' },
+  ])('rejects $name before writing any files', async ({ hunks, error }) => {
     const { host, projectDir } = await createHost();
     const context = { threadId: 'thread_1', turnId: 'turn_1' };
     const filePath = path.join(projectDir, 'source.txt');
@@ -388,7 +437,7 @@ describe('pc local file tools and previews', () => {
         ...hunks,
         '*** End Patch',
       ].join('\n'),
-    }, context)).rejects.toThrow('未找到匹配的旧内容');
+    }, context)).rejects.toThrow(error);
 
     await expect(readFile(filePath, 'utf8')).resolves.toBe(original);
     await expect(readFile(path.join(projectDir, 'added.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
@@ -596,7 +645,7 @@ describe('pc local file tools and previews', () => {
         '*** End of File',
         '*** End Patch',
       ].join('\n'),
-    }, context)).rejects.toThrow('未找到匹配的旧内容');
+    }, context)).rejects.toThrow('不在文件末尾');
 
     await expect(readFile(filePath, 'utf8')).resolves.toBe(original);
   });

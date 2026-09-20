@@ -13,6 +13,22 @@ import {
 } from '../../src/runtime/pi-context.js';
 
 describe('Pi model context', () => {
+  it('preserves failed and successful tool results at the provider boundary', () => {
+    const provider = providerFixture('provider-a', 'anthropic');
+    const context = toPiContext(requestFixture([
+      messageFixture({ id: 'call', role: 'assistant', content: '', toolCalls: [
+        { id: 'failed', name: 'apply_patch', arguments: '{}' },
+        { id: 'success', name: 'read_file', arguments: '{}' },
+      ] }),
+      messageFixture({ id: 'failed-result', role: 'tool', toolCallId: 'failed', toolName: 'apply_patch', status: 'error', content: 'Hunk order is reversed.' }),
+      messageFixture({ id: 'success-result', role: 'tool', toolCallId: 'success', toolName: 'read_file', status: 'complete', content: 'current contents' }),
+    ]), createPiReplayContext(provider, 'claude-test'));
+    expect(context.messages.filter((message) => message.role === 'toolResult')).toMatchObject([
+      { toolCallId: 'failed', isError: true, content: [{ type: 'text', text: 'Hunk order is reversed.' }] },
+      { toolCallId: 'success', isError: false },
+    ]);
+  });
+
   it('preserves privileged instruction order in the provider system prompt', () => {
     const provider = providerFixture('provider-a', 'openai-compatible');
     const context = toPiContext(requestFixture([

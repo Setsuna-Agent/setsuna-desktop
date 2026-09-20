@@ -25,7 +25,7 @@ import {
 } from '../../support/agent-loop/shared.js';
 
 describe('agent loop tool approval', () => {
-  it('pauses tool execution until approval is answered', async () => {
+  it.each(['approve', 'reject'] as const)('waits for approval and carries the %s result back to the model', async (decision) => {
       const ids = new RandomIdGenerator();
       const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Approval loop' });
@@ -48,20 +48,22 @@ describe('agent loop tool approval', () => {
       expect(toolHost.calls).toEqual([]);
       expect(pendingApproval.toolName).toBe('dangerous_tool');
   
-      await approvalGate.answerApproval(pendingApproval.id, { decision: 'approve' });
+      await approvalGate.answerApproval(pendingApproval.id, { decision });
       await pendingTurn;
       const events = await threadStore.listEvents(thread.id, 0);
   
-      expect(toolHost.calls).toEqual([{ name: 'dangerous_tool', input: { value: 42 } }]);
+      expect(toolHost.calls).toEqual(decision === 'approve' ? [{ name: 'dangerous_tool', input: { value: 42 } }] : []);
       expect(modelClient.requests).toHaveLength(2);
-      expect(modelClient.requests[1].messages.some((message) => message.role === 'tool' && message.content.includes('approved result'))).toBe(true);
+      const toolMessage = modelClient.requests[1].messages.find((message) => message.role === 'tool');
+      expect(toolMessage?.status).toBe(decision === 'approve' ? 'complete' : 'error');
+      if (decision === 'approve') expect(toolMessage?.content).toContain('approved result');
       const startedIndex = events.findIndex((event) => event.type === 'tool.started' && event.payload.toolName === 'dangerous_tool');
       const approvalIndex = events.findIndex((event) => event.type === 'approval.requested');
       expect(startedIndex).toBeGreaterThanOrEqual(0);
       expect(approvalIndex).toBeGreaterThanOrEqual(0);
       expect(startedIndex).toBeLessThan(approvalIndex);
       expect(events.some((event) => event.type === 'approval.requested')).toBe(true);
-      expect(events.some((event) => event.type === 'tool.completed' && event.payload.status === 'success')).toBe(true);
+      expect(events.some((event) => event.type === 'tool.completed' && event.payload.status === (decision === 'approve' ? 'success' : 'rejected'))).toBe(true);
     });
   
   it('persists tool approvals across loop instances', async () => {

@@ -223,6 +223,7 @@ export class RuntimeSamplingContextBuilder {
     });
     const toolContext: RuntimeToolExecutionContext = {
       environment,
+      samplingStepId: this.options.ids.id('sampling_step'),
       interfaceLanguage: stepRuntimeConfig?.desktopSettings?.interfaceLanguage ?? 'zh-CN',
       ...(goalExecution ? { goalExecution } : {}),
       threadId,

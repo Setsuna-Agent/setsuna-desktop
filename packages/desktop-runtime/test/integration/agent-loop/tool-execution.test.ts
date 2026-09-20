@@ -1,12 +1,19 @@
 import type {
+  ModelRequest,
+  ModelStreamEvent,
   RuntimeEvent
 } from '@setsuna-desktop/contracts';
-import { describe, expect, it } from 'vitest';
+import { readFile, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { describe, expect, it, vi } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
 import { createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
+import { ToolExecutionError } from '../../../src/ports/tool-host.js';
+import type { ModelClient } from '../../../src/ports/model-client.js';
+import { createHost } from '../adapters/tool/pc-local-tool-host.support.js';
 import {
   CapturingToolHost,
   mkDataDir,
@@ -37,6 +44,100 @@ import {
 } from '../../support/agent-loop/tool-execution.js';
 
 describe('agent loop tool execution', () => {
+  it('rejects a same-sampling overwrite and allows a subsequent request based on the returned source', async () => {
+    const { host, fixtureRoot, projectDir, projectId } = await createHost();
+    const target = path.join(projectDir, 'source.txt');
+    const original = 'existing user edits must survive\n';
+    const requests: ModelRequest[] = [];
+    const contentsBeforeRequests: string[] = [];
+    const ids = new RandomIdGenerator();
+    const threadStore = createTestThreadStore(path.join(fixtureRoot, 'loop-data'), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Observed overwrite', projectId });
+    const modelClient: ModelClient = {
+      async *stream(request): AsyncGenerator<ModelStreamEvent> {
+        requests.push(request);
+        contentsBeforeRequests.push(await readFile(target, 'utf8'));
+        if (requests.length === 1) {
+          yield { type: 'tool_calls', toolCalls: [
+            { id: 'read_target', name: 'read_file', arguments: '{"file_path":"source.txt"}' },
+            // Exercise the parallel read group before the serial write in the same response.
+            { id: 'read_other', name: 'read_file', arguments: '{"file_path":"other.txt"}' },
+            { id: 'blind_write', name: 'write_file', arguments: '{"file_path":"source.txt","content":"blind replacement\\n"}' },
+          ] };
+        } else if (requests.length === 2) {
+          const source = request.messages.find((message) => message.role === 'tool' && message.toolCallId === 'read_target');
+          const observedContent = source!.content.slice(source!.content.indexOf('\n') + 1);
+          yield { type: 'tool_calls', toolCalls: [
+            { id: 'reread_target', name: 'read_file', arguments: '{"file_path":"source.txt"}' },
+            { id: 'informed_write', name: 'write_file', arguments: JSON.stringify({ file_path: 'source.txt', content: `${observedContent}reviewed\n` }) },
+          ] };
+        } else {
+          yield { type: 'text_delta', text: 'Finished after reading the source.' };
+          yield { type: 'done', finishReason: 'stop' };
+          return;
+        }
+        yield { type: 'done', finishReason: 'tool_calls' };
+      },
+    };
+    const loop = new AgentLoop({ threadStore, modelClient, toolHost: host, ids, eventBus: new InMemoryEventBus(), clock: systemClock });
+    try {
+      await writeFile(target, original);
+      await writeFile(path.join(projectDir, 'other.txt'), 'other source\n');
+      await loop.sendTurn(thread.id, { input: 'Update source.txt after inspecting it.' });
+      expect(requests).toHaveLength(3);
+      expect(JSON.stringify(requests[0].messages)).not.toContain(original.trim());
+      expect(contentsBeforeRequests[1]).toBe(original);
+      expect(requests[1].messages).toContainEqual(expect.objectContaining({
+        role: 'tool', toolCallId: 'blind_write', status: 'error', content: expect.stringContaining('同一采样批次'),
+      }));
+      expect(requests[2].messages).toContainEqual(expect.objectContaining({ role: 'tool', toolCallId: 'informed_write', status: 'complete' }));
+      expect(await readFile(target, 'utf8')).toBe(`${original}reviewed\n`);
+    } finally {
+      // Windows cannot remove the fixture while SQLite/WAL or tool handles are open.
+      await host.shutdown();
+      await threadStore.close();
+      await rm(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('returns an AppServer dynamic tool failure as a model-visible error', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Dynamic tool failure' });
+    const modelClient = new SingleToolCallModelClient({ id: 'dynamic_failure', name: 'tickets__lookup', arguments: '{}' });
+    const loop = new AgentLoop({
+      threadStore, modelClient, ids, eventBus: new InMemoryEventBus(), clock: systemClock,
+      appServerNotificationBus: {
+        publish: (notification) => {
+          if (notification.method === 'item/tool/call') loop.answerAppServerDynamicToolResponse(notification.id, {
+            result: { success: false, contentItems: [{ type: 'inputText', text: 'Ticket unavailable.' }] },
+          });
+        },
+        subscribe: () => () => undefined,
+      },
+    });
+    loop.registerAppServerDynamicTools(thread.id, [{ name: 'tickets__lookup', toolName: 'lookup', description: 'Look up a ticket', inputSchema: { type: 'object' } }], 'connection_1');
+    await loop.sendTurn(thread.id, { input: 'look up the ticket' });
+    expect(modelClient.requests[1].messages).toContainEqual(expect.objectContaining({
+      role: 'tool', toolCallId: 'dynamic_failure', status: 'error', content: expect.stringContaining('Ticket unavailable.'),
+    }));
+  });
+
+  it.each([false, true])('preserves execution failure=%s through persistence and the next model request', async (failed) => {
+    const ids = new RandomIdGenerator();
+    const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Tool result feedback' });
+    const modelClient = new SingleToolCallModelClient({ id: 'call_result', name: 'workspace_read_file', arguments: '{"path":"source.ts"}' });
+    const toolHost = new CapturingToolHost();
+    if (failed) vi.spyOn(toolHost, 'runTool').mockRejectedValue(new ToolExecutionError('Expected source context was not found.'));
+    const loop = new AgentLoop({ threadStore, modelClient, toolHost, eventBus: new InMemoryEventBus(), clock: systemClock, ids });
+    await loop.sendTurn(thread.id, { input: 'inspect source' });
+    const expected = { role: 'tool', toolCallId: 'call_result', status: failed ? 'error' : 'complete' };
+    expect(modelClient.requests[1].messages).toContainEqual(expect.objectContaining(expected));
+    expect((await threadStore.getThread(thread.id))?.messages).toContainEqual(expect.objectContaining(expected));
+    if (failed) expect(modelClient.requests[1].messages.find((message) => message.role === 'tool')?.content).toContain('Expected source context was not found.');
+  });
+
   it('publishes tool output deltas before completing command tools', async () => {
       const ids = new RandomIdGenerator();
       const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);

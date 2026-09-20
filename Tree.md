@@ -481,9 +481,9 @@ packages/features/ — 0 direct / 1062 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 591 total files
-├── src/ — 2 direct / 343 total files
-│   ├── adapters/ — 142 files
+packages/desktop-runtime/ — 4 direct / 592 total files
+├── src/ — 2 direct / 344 total files
+│   ├── adapters/ — 143 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── event/ — 2 direct / 2 total files
 │   │   ├── feature/ — 8 direct / 8 total files
@@ -497,8 +497,8 @@ packages/desktop-runtime/ — 4 direct / 591 total files
 │   │   ├── skill/ — 6 direct / 6 total files
 │   │   ├── store/ — 35 direct / 37 total files
 │   │   │   └── sqlite/ — 2 direct / 2 total files
-│   │   ├── tool/ — 15 direct / 39 total files
-│   │   │   └── pc-local/ — 24 direct / 24 total files
+│   │   ├── tool/ — 15 direct / 40 total files
+│   │   │   └── pc-local/ — 25 direct / 25 total files
 │   │   └── workspace/ — 8 direct / 8 total files
 │   ├── composition/ — 3 direct / 3 total files
 │   ├── extensions/ — 14 direct / 14 total files

@@ -208,6 +208,7 @@ export class RuntimeToolCallExecutor {
    */
   private async runSingleToolCall(toolCall: RuntimeToolCall, context: RuntimeToolExecutionContext, toolRouter: RuntimeToolRouter | null, runtimeConfig: RuntimeConfigState | null | undefined, options: { skipApproval?: boolean } = {}): Promise<RuntimeMessage> {
     let content = '';
+    let status: 'success' | 'error' | 'rejected' = 'error';
     let attachments: RuntimeMessage['attachments'];
     let parsedArguments: unknown;
     try {
@@ -219,49 +220,49 @@ export class RuntimeToolCallExecutor {
       ) {
         content = `Tool ${toolCall.name} is unavailable in a side conversation.`;
         await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
-        return this.publishToolMessage(context.threadId, context.turnId, toolCall, content);
+        return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, 'error');
       }
       if (this.options.collaborationControl().isToolName(toolCall.name)) {
         if (!this.options.collaborationControl().enabled(runtimeConfig)) {
           content = `Tool ${toolCall.name} failed: multi_agent feature is disabled.`;
           await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
-          return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, undefined, toolRouter);
+          return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, 'error', undefined, toolRouter);
         }
         const execution = await this.runCollaborationToolCall(toolCall, parsedArguments, context);
-        return this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content, undefined, toolRouter);
+        return this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content, 'success', undefined, toolRouter);
       }
       if (this.options.goalCoordinator().isToolName(toolCall.name)) {
         const execution = await this.runGoalToolCall(toolCall, parsedArguments, context);
-        return this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content, undefined, toolRouter);
+        return this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content, 'success', undefined, toolRouter);
       }
       const dynamicTool = this.appServerDynamicToolForCall(context.threadId, toolCall.name, toolRouter);
       if (dynamicTool) {
         const execution = await this.runAppServerDynamicToolCall(toolCall, parsedArguments, context, dynamicTool.registration, dynamicTool.tool);
-        return this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content, undefined, toolRouter);
+        return this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content, execution.status, undefined, toolRouter);
       }
       const memoryBlock = await this.options.memoryControl().toolBlockForCall(toolCall, context.threadId);
       if (memoryBlock) {
         content = memoryBlock;
         await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
-        return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, undefined, toolRouter);
+        return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, 'error', undefined, toolRouter);
       }
       // Runtime catalog discovery and authorized stored-result reads do not execute host tools.
       if (toolCall.name === READ_TOOL_RESULT_TOOL_NAME || toolCall.name === SEARCH_TOOLS_TOOL_NAME) {
         if (!toolRouter) {
           content = `Tool ${toolCall.name} failed: no tool host is available.`;
           await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
-          return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, undefined, toolRouter);
+          return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, 'error', undefined, toolRouter);
         }
         content = toolCall.name === SEARCH_TOOLS_TOOL_NAME
           ? toolRouter.searchTools(parsedArguments)
           : await toolRouter.runReadToolResult(parsedArguments, context.threadId);
         await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'success', content);
-        return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, undefined, toolRouter);
+        return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, 'success', undefined, toolRouter);
       }
       if (!toolRouter) {
         content = `Tool ${toolCall.name} failed: no tool host is available.`;
         await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
-        return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, undefined, toolRouter);
+        return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, 'error', undefined, toolRouter);
       }
       const execution = await toolRouter.runToolCall(toolCall, parsedArguments, {
         checkApproval: options.skipApproval !== true,
@@ -280,13 +281,14 @@ export class RuntimeToolCallExecutor {
         },
       });
       content = execution.content;
+      status = execution.status;
       attachments = execution.result?.attachments;
     } catch (error) {
       if (isAbortError(error)) throw error;
       content = `Tool ${toolCall.name} failed: ${error instanceof Error ? error.message : String(error)}`;
       await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
     }
-    return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, attachments, toolRouter);
+    return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, status, attachments, toolRouter);
   }
 
   private appServerDynamicToolForCall(threadId: string, name: string, toolRouter: RuntimeToolRouter | null): AppServerDynamicToolLookup | null {
@@ -304,7 +306,7 @@ export class RuntimeToolCallExecutor {
     context: RuntimeToolExecutionContext,
     registration: AppServerDynamicToolRegistration,
     tool: RuntimeDynamicToolDefinition,
-  ): Promise<{ content: string }> {
+  ): Promise<{ content: string; status: 'success' | 'error' }> {
     if (!this.options.appServerNotificationBus) throw new Error('AppServer dynamic tool runtime is unavailable.');
     const startedAtMs = this.options.clock.now().getTime();
     await this.publishToolStarted(context.threadId, context.turnId, toolCall, parsedArguments);
@@ -335,7 +337,7 @@ export class RuntimeToolCallExecutor {
       resultPreview: content,
       startedAtMs,
     });
-    return { content };
+    return { content, status: success ? 'success' : 'error' };
   }
 
   private waitForAppServerDynamicToolResponse(requestId: string, signal: AbortSignal, timeoutMs: number): Promise<RuntimeDynamicToolCallResult> {
@@ -428,6 +430,7 @@ export class RuntimeToolCallExecutor {
    * @param turnId 当前 turn ID。
    * @param toolCall 对应的模型工具调用。
    * @param content 工具返回给模型的文本内容。
+   * @param status 执行结果；完成返回不等于执行成功，拒绝和失败必须保留到模型回放。
    * @param attachments 工具返回给模型的图片等附件。
    * @param toolRouter 当前 sampling step 的工具路由器,用于查询该工具的输出上限。
    */
@@ -436,6 +439,7 @@ export class RuntimeToolCallExecutor {
     turnId: string,
     toolCall: RuntimeToolCall,
     content: string,
+    status: 'success' | 'error' | 'rejected',
     attachments?: RuntimeMessage['attachments'],
     toolRouter: RuntimeToolRouter | null = null,
   ): Promise<RuntimeMessage> {
@@ -450,7 +454,7 @@ export class RuntimeToolCallExecutor {
       ...(bounded.toolResultRef ? { toolResultRef: bounded.toolResultRef } : {}),
       ...(attachments?.length ? { attachments: attachments.map((attachment) => ({ ...attachment })) } : {}),
       createdAt: this.options.clock.now().toISOString(),
-      status: 'complete',
+      status: status === 'success' ? 'complete' : 'error',
     };
     await this.options.publishMessage(threadId, turnId, message);
     return message;
