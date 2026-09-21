@@ -1,4 +1,5 @@
 import {
+  DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
   isRuntimeInlineMessageAttachment,
   normalizeRuntimeProviderEndpoint as normalizeProviderBaseUrl,
   sanitizeRuntimeJsonValue,
@@ -84,7 +85,7 @@ export function createPiModel(
       ? (activeModel.supportsImages === true ? ['text', 'image'] : ['text'])
       : catalogBase?.input ?? ['text'],
     cost: catalogBase?.cost ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: activeModel?.contextWindowTokens ?? catalogBase?.contextWindow ?? 128_000,
+    contextWindow: activeModel?.contextWindowTokens ?? catalogBase?.contextWindow ?? DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
     maxTokens: activeModel?.maxOutputTokens ?? catalogBase?.maxTokens ?? 8_192,
     thinkingLevelMap: catalogBase?.thinkingLevelMap ?? thinkingLevelMap(activeModel?.thinkingEfforts ?? []),
     ...(inheritedHeaders ? { headers: inheritedHeaders as Record<string, string> } : {}),

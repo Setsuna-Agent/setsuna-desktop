@@ -1,4 +1,5 @@
 import {
+  DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
   DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
   type ModelRequest,
   type RuntimeConfigState,
@@ -10,53 +11,67 @@ import {
   estimateRuntimeMessageTokens,
   type RuntimeContextCompactionCandidate,
 } from './context-compaction.js';
-import { compactionSummaryPrompt, compactionSummaryTokenLimit } from './context-compaction-summary.js';
+import { compactionSummaryPrompt, compactionSummaryTokenLimit, type CompactionSummarySource } from './context-compaction-summary.js';
 
-/** Resolve and budget the actual summarizer, which may differ from the conversation model. */
-export function contextCompactionRequest(input: {
+export type ContextCompactionRequestBudget = {
+  modelRequest: Omit<ModelRequest, 'messages'>;
+  contextWindow: number;
+  modelOutputLimit: number;
+  summaryTokenLimit: number;
+  inputTokenLimit: number;
+};
+
+/** Resolve the actual summarizer once, including room for a handoff between batches. */
+export function contextCompactionRequestBudget(input: {
   candidate: RuntimeContextCompactionCandidate;
   runtimeConfig?: RuntimeConfigState | null;
   conversationModel?: Pick<ModelRequest, 'model' | 'providerId'>;
-  createdAt: string;
-  retry: boolean;
-}): { request: ModelRequest; summaryTokenLimit: number } {
-  const { candidate, runtimeConfig, conversationModel, createdAt, retry } = input;
+}): ContextCompactionRequestBudget {
+  const { candidate, runtimeConfig, conversationModel } = input;
   const selected = runtimeTaskModelRequest(runtimeConfig, 'contextCompaction', 'context-compaction', conversationModel);
   const provider = runtimeConfig?.providers.find((item) => item.enabled && item.id === (selected.providerId ?? runtimeConfig.activeProviderId));
   const model = provider?.models.find((item) => item.code === selected.model)
     ?? (!selected.providerId ? provider?.models.find((item) => item.enabled) : undefined);
   const modelOutputLimit = model?.maxOutputTokens ?? DEFAULT_MODEL_MAX_OUTPUT_TOKENS;
-  let summaryTokenLimit = Math.min(compactionSummaryTokenLimit(candidate), modelOutputLimit);
+  const contextWindow = model?.contextWindowTokens ?? DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS;
+  const summaryTokenLimit = Math.min(
+    compactionSummaryTokenLimit(candidate), modelOutputLimit,
+    Math.max(COMPACTION_SUMMARY_MIN_OUTPUT_TOKENS, Math.floor(contextWindow / 8)),
+  );
   if (summaryTokenLimit < COMPACTION_SUMMARY_MIN_OUTPUT_TOKENS) {
     throw new Error(`Context compaction has insufficient output budget on ${selected.model}; original history was retained.`);
   }
-  let messages = compactionSummaryPrompt(candidate, createdAt, summaryTokenLimit, retry);
-  const inputTokens = estimateRuntimeMessageTokens(messages);
-  // Match the provider adapter's conservative fallback for uncatalogued models. A per-message
-  // excerpt limit does not bound the aggregate prompt or make a smaller task model fit it.
-  const contextWindow = model?.contextWindowTokens ?? 128_000;
-  const maxOutputTokens = Math.floor(Math.min(
-    modelOutputLimit,
-    contextWindow - inputTokens - COMPACTION_SUMMARY_CONTEXT_OVERHEAD_TOKENS,
-  ));
-  if (maxOutputTokens < COMPACTION_SUMMARY_MIN_OUTPUT_TOKENS) {
-    throw new Error(`Context compaction input does not fit ${selected.model}: approximately ${inputTokens} input tokens leave fewer than ${COMPACTION_SUMMARY_MIN_OUTPUT_TOKENS} output tokens in its ${contextWindow}-token window; original history was retained.`);
-  }
-  if (summaryTokenLimit > maxOutputTokens) {
-    summaryTokenLimit = maxOutputTokens;
-    messages = compactionSummaryPrompt(candidate, createdAt, summaryTokenLimit, retry);
-  }
+  // The visible handoff is not the generation budget: reasoning needs space too.
+  // Leave at least a quarter of the window for generation when the model allows it.
+  const outputReserve = Math.min(modelOutputLimit, Math.max(summaryTokenLimit, Math.floor(contextWindow / 4)));
   return {
-    summaryTokenLimit,
-    request: {
+    contextWindow, modelOutputLimit, summaryTokenLimit,
+    inputTokenLimit: contextWindow - outputReserve - COMPACTION_SUMMARY_CONTEXT_OVERHEAD_TOKENS,
+    modelRequest: {
       ...selected,
-      messages,
-      // This is the entire generation budget, including reasoning. Do not cap it at the
-      // size of the persisted summary or rely on every provider supporting thinking=false.
-      maxOutputTokens,
       thinking: model?.thinkingEnabled === true,
       ...(model?.thinkingEnabled ? { reasoningEffort: model.defaultThinkingEffort || model.thinkingEfforts[0] } : {}),
       toolChoice: 'none',
     },
   };
+}
+
+export function contextCompactionRequest(input: {
+  budget: ContextCompactionRequestBudget;
+  source: CompactionSummarySource;
+  previousSummary: string;
+  createdAt: string;
+  retry: boolean;
+}): ModelRequest {
+  const { budget, source, previousSummary, createdAt, retry } = input;
+  const messages = compactionSummaryPrompt(source, createdAt, budget.summaryTokenLimit, retry, previousSummary);
+  const inputTokens = estimateRuntimeMessageTokens(messages);
+  const maxOutputTokens = Math.floor(Math.min(
+    budget.modelOutputLimit,
+    budget.contextWindow - inputTokens - COMPACTION_SUMMARY_CONTEXT_OVERHEAD_TOKENS,
+  ));
+  if (maxOutputTokens < budget.summaryTokenLimit) {
+    throw new Error(`Context compaction has insufficient output budget on ${budget.modelRequest.model}; original history was retained.`);
+  }
+  return { ...budget.modelRequest, messages, maxOutputTokens };
 }

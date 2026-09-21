@@ -1,4 +1,5 @@
 import {
+  DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
   isRuntimeInlineMessageAttachment,
   type RuntimeConfigState,
   type RuntimeContextCompactionNotice,
@@ -9,8 +10,7 @@ import {
 } from '@setsuna-desktop/contracts';
 import { chatThreadModelSelection } from '../chatModelSelection.js';
 
-const DEFAULT_CONTEXT_TOKENS_K = 256;
-const DEFAULT_CONTEXT_TOKENS = DEFAULT_CONTEXT_TOKENS_K * 1000;
+const DEFAULT_CONTEXT_TOKENS = DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS;
 const APPROX_CHARS_PER_TOKEN = 4;
 
 export type ChatContextTokenUsage = {
@@ -24,19 +24,25 @@ export type ChatContextTokenUsage = {
   visiblePercent: number;
 };
 
-export function contextTokenUsageFromThread(thread: RuntimeThread | null, configuredMaxContextTokens?: number): ChatContextTokenUsage {
+type ModelContextBudget = Pick<RuntimeModelRequestContextWindow, 'maxContextTokens' | 'reservedOutputTokens'>;
+
+export function contextTokenUsageFromThread(thread: RuntimeThread | null, configuredBudget?: ModelContextBudget): ChatContextTokenUsage {
   const notice = latestContextCompactionNotice(thread);
   const state = thread?.contextCompaction;
   const budget = runtimeContextBudget(thread, notice);
   const compactionBudgetValid = hasCurrentCompactionBudget(thread);
-  const configuredLimit = positiveTokenLimit(configuredMaxContextTokens);
+  const configuredLimit = positiveTokenLimit(configuredBudget?.maxContextTokens);
+  const hasActiveRequest = Boolean(thread?.activeTurnId && latestContextStep(thread)?.snapshot.turnId === thread.activeTurnId);
   // An in-flight request owns its budget even if model settings change while it runs.
-  const totalTokens = (thread?.activeTurnId ? budget?.maxContextTokens : undefined)
+  const totalTokens = (hasActiveRequest ? budget?.maxContextTokens : undefined)
     ?? configuredLimit ?? budget?.maxContextTokens
     ?? notice?.maxContextTokens ?? state?.maxContextTokens ?? DEFAULT_CONTEXT_TOKENS;
   // 保留快照中的提示词、工具与重放估算，但输出预留不是已经输入模型的内容。
-  const reservedOutputTokens = Math.max(0, budget?.reservedOutputTokens ?? 0);
-  const usedTokens = budget ? Math.max(0, budget.estimatedTokens - reservedOutputTokens) : positiveNumber(
+  const previousOutputReserve = Math.max(0, budget?.reservedOutputTokens ?? 0);
+  const reservedOutputTokens = hasActiveRequest ? previousOutputReserve
+    : configuredBudget?.reservedOutputTokens ?? previousOutputReserve;
+  // Historical input still subtracts its own output reserve, even after selecting a new model.
+  const usedTokens = budget ? Math.max(0, budget.estimatedTokens - previousOutputReserve) : positiveNumber(
     estimateRuntimeMessagesTokens(thread?.messages ?? []),
     compactionBudgetValid ? notice?.compactedTokens ?? 0 : 0,
     compactionBudgetValid ? state?.usedTokens ?? 0 : 0,
@@ -111,11 +117,20 @@ function hasCurrentCompactionBudget(thread: RuntimeThread | null): boolean {
     || (thread.contextCompaction?.seq ?? 0) > thread.contextBudgetInvalidatedAtSeq;
 }
 
-export function activeModelContextWindowTokens(
+export function activeModelContextBudget(
   config: RuntimeConfigState | null,
   thread: RuntimeThread | null = null,
-): number | undefined {
-  return positiveTokenLimit(chatThreadModelSelection(config, thread).model?.contextWindowTokens);
+): ModelContextBudget | undefined {
+  if (!config) return undefined;
+  const model = chatThreadModelSelection(config, thread).model;
+  // An unset field means the current default, not the last model's recorded window.
+  const maxContextTokens = positiveTokenLimit(model?.contextWindowTokens)
+    ?? positiveTokenLimit(config.desktopSettings?.modelContextWindow ?? config.desktopSettings?.model_context_window)
+    ?? DEFAULT_CONTEXT_TOKENS;
+  return {
+    maxContextTokens,
+    reservedOutputTokens: Math.min(Math.max(0, Math.floor(model?.maxOutputTokens ?? 0)), Math.floor(maxContextTokens * 0.15)),
+  };
 }
 
 export function latestContextCompactionNotice(thread: RuntimeThread | null): RuntimeContextCompactionNotice | undefined {

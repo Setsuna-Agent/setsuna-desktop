@@ -1,16 +1,24 @@
-import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+// @vitest-environment happy-dom
+import { cleanup, render } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RuntimeErrorNotice, runtimeErrorNoticeMessage } from '../../../../src/app/layout/RuntimeErrorNotice.js';
 
-describe('RuntimeErrorNotice', () => {
-  it('renders runtime details in a dismissible alert', () => {
-    const html = renderToStaticMarkup(
-      <RuntimeErrorNotice message="provider returned 403" onDismiss={() => undefined} />,
-    );
+const toast = vi.hoisted(() => ({ error: vi.fn(), dismiss: vi.fn() }));
+vi.mock('../../../../src/app/providers/ToastProvider.js', () => ({ useToast: () => toast }));
+afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
-    expect(html).toContain('role="alert"');
-    expect(html).toContain('provider returned 403');
-    expect(html).toContain('aria-label="关闭运行时错误提示"');
+describe('RuntimeErrorNotice', () => {
+  it('owns one shared toast and dismisses it when the error changes or its conversation leaves', () => {
+    toast.error.mockReturnValueOnce(1).mockReturnValueOnce(2);
+    const view = render(<RuntimeErrorNotice message="first error" />);
+    view.rerender(<RuntimeErrorNotice message="first error" />);
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    expect(toast.error).toHaveBeenLastCalledWith('first error');
+    view.rerender(<RuntimeErrorNotice message="second error" />);
+    expect(toast.dismiss).toHaveBeenCalledWith(1);
+    expect(toast.error).toHaveBeenLastCalledWith('second error');
+    view.unmount();
+    expect(toast.dismiss).toHaveBeenLastCalledWith(2);
   });
 
   it('suppresses an error already visible in the transcript', () => {
@@ -27,6 +35,9 @@ describe('RuntimeErrorNotice', () => {
     };
 
     expect(runtimeErrorNoticeMessage(error, thread)).toBeNull();
+    expect(runtimeErrorNoticeMessage(
+      `Error invoking remote method 'runtime:request': Error: ${error} (POST /v1/threads/thread_old/turns)`, thread,
+    )).toBeNull();
     expect(runtimeErrorNoticeMessage('另一个错误', thread)).toBe('另一个错误');
     expect(runtimeErrorNoticeMessage('   ', thread)).toBeNull();
   });

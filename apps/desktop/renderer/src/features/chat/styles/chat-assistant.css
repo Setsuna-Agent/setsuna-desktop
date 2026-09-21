@@ -608,11 +608,21 @@ button.chat-plugin-use:focus-visible {
 }
 
 .chat-message-error {
-  padding: 9px 11px;
-  border: 1px solid color-mix(in srgb, var(--app-danger) 28%, var(--app-border));
-  border-radius: var(--app-radius-md);
-  color: var(--app-danger);
-  background: color-mix(in srgb, var(--app-danger) 8%, transparent);
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-lg);
+  color: var(--app-text);
+  background: var(--app-surface);
   font-size: 13px;
-  line-height: 1.55;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.chat-message-error > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--app-danger);
 }

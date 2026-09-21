@@ -8,7 +8,7 @@ import {
 } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import {
-  activeModelContextWindowTokens,
+  activeModelContextBudget,
   contextTokenUsageFromThread,
   formatTokenCount,
 } from '../../../../../src/features/chat/conversation/chatContextUsage.js';
@@ -72,10 +72,33 @@ describe('chat context usage', () => {
 
   it('uses the running request limit until it finishes, then reflects the selected model limit', () => {
     const thread = sampledThread();
-    expect(contextTokenUsageFromThread(thread, 1_000_000)).toMatchObject({ totalTokens: 256_000, percent: 70 });
+    expect(contextTokenUsageFromThread(thread, { maxContextTokens: 1_000_000 })).toMatchObject({ totalTokens: 256_000, percent: 70 });
 
-    const idleUsage = contextTokenUsageFromThread({ ...thread, activeTurnId: null }, 1_000_000);
+    const idleUsage = contextTokenUsageFromThread({ ...thread, activeTurnId: null }, { maxContextTokens: 1_000_000 });
     expect(idleUsage.totalTokens).toBe(1_000_000);
+  });
+
+  it.each([
+    ['turn_1', 1_000_000, 150_000],
+    [null, 256_000, 38_400],
+    ['turn_2', 256_000, 38_400],
+  ] as const)('uses the selected model default once the old request no longer owns the budget (active turn: %s)', (activeTurnId, totalTokens, reservedOutputTokens) => {
+    const config = configWithContextWindow();
+    const model = config.providers[0]!.models[0]!;
+    model.maxOutputTokens = 128_000;
+    const thread = sampledThread();
+    thread.activeTurnId = activeTurnId;
+    thread.modelBinding = { providerId: config.providers[0]!.id, modelId: model.id, modelCode: model.code };
+    const snapshot = thread.turns![0]!.stepSnapshots![0]!.snapshot;
+    snapshot.modelBinding = { providerId: 'previous-provider', modelId: 'previous-model', modelCode: 'previous-model' };
+    snapshot.contextWindow = {
+      ...snapshot.contextWindow!, estimatedTokens: 159_609, maxContextTokens: 1_000_000,
+      maxContextTokensK: 1_000, autoCompactTokenLimit: 850_000, reservedOutputTokens: 150_000,
+    };
+
+    const usage = contextTokenUsageFromThread(thread, activeModelContextBudget(config, thread));
+    expect(usage).toMatchObject({ usedTokens: 9_609, totalTokens, reservedOutputTokens });
+    expect(snapshot.contextWindow.maxContextTokens).toBe(1_000_000);
   });
 
   it('discards request budgets when the context is cleared', () => {
@@ -102,8 +125,8 @@ describe('chat context usage', () => {
     expect(updated.messages).toEqual([hello]);
     // Keep diagnostic snapshots intact, while invalidating their use as a live budget.
     expect(updated.turns?.[0]?.stepSnapshots).toBe(thread.turns?.[0]?.stepSnapshots);
-    expect(contextTokenUsageFromThread(updated, 128_000)).toMatchObject({
-      usedTokens: contextTokenUsageFromThread({ ...updated, turns: [] }, 128_000).usedTokens,
+    expect(contextTokenUsageFromThread(updated, { maxContextTokens: 128_000 })).toMatchObject({
+      usedTokens: contextTokenUsageFromThread({ ...updated, turns: [] }, { maxContextTokens: 128_000 }).usedTokens,
       percent: 0,
     });
     expect(contextTokenUsageFromThread(thread).usedTokens).toBe(178_904);
@@ -161,17 +184,17 @@ describe('chat context usage', () => {
   });
 
   it('uses the configured model context window instead of the 256k display fallback', () => {
-    expect(contextTokenUsageFromThread(null, 1_000_000).totalTokens).toBe(1_000_000);
+    expect(contextTokenUsageFromThread(null, { maxContextTokens: 1_000_000 }).totalTokens).toBe(1_000_000);
   });
 
   it('uses the selected model context window over a stale thread compaction limit', () => {
     const thread = compactedThread('archived');
 
-    expect(contextTokenUsageFromThread(thread, 1_000_000).totalTokens).toBe(1_000_000);
+    expect(contextTokenUsageFromThread(thread, { maxContextTokens: 1_000_000 }).totalTokens).toBe(1_000_000);
   });
 
   it('reads the context window from the active provider model', () => {
-    expect(activeModelContextWindowTokens(configWithContextWindow(1_000_000))).toBe(1_000_000);
+    expect(activeModelContextBudget(configWithContextWindow(1_000_000))).toEqual({ maxContextTokens: 1_000_000, reservedOutputTokens: 4096 });
   });
 
   it.each([
@@ -214,7 +237,7 @@ function requestSnapshot(estimatedTokens: number, summaryIds: string[] = []): Ru
   };
 }
 
-function configWithContextWindow(contextWindowTokens: number): RuntimeConfigState {
+function configWithContextWindow(contextWindowTokens?: number): RuntimeConfigState {
   return {
     configPath: '/tmp/config.json',
     dataPath: '/tmp/setsuna',

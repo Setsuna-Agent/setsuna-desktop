@@ -82,7 +82,7 @@ Updater 不再进入 App controller。Renderer composition 解析 Feature 提供
 | `AppChatToolbarTitle.tsx` | 项目内外的对话标题及重命名、归档菜单 |
 | `AppTopbarActions.tsx` | Chat 顶部右侧动作 |
 | `AppOverlays.tsx` | Dialog、toast、全局 overlay |
-| `RuntimeErrorNotice.tsx` | 可恢复 runtime 错误 |
+| `RuntimeErrorNotice.tsx` | 可恢复 runtime 错误接入共享 Toast，切换会话时清理，并避免与转录重复提示 |
 | `RenameThreadDialog.tsx` | 线程重命名交互 |
 
 Layout 只组合已经定义清楚的状态和 callback，不在 render 中发起 runtime 请求。

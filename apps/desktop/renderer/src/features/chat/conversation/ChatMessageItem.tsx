@@ -45,6 +45,7 @@ import {
 import { memoryCitationEntriesFromMessages } from './chatMemoryCitations.js';
 import { visibleMarkdownContent } from './chatThinkingContent.js';
 import { ChatMessageAttachments } from './ChatMessageAttachments.js';
+import { ChatErrorMessage } from './ChatErrorMessage.js';
 import { ChatMessageFooter } from './ChatMessageFooter.js';
 import {
   assistantRunCopyText,
@@ -475,7 +476,7 @@ function AssistantRunContent({
         hideFinalContent: Boolean(reviewExit),
       })}
       {!active && hasHiddenOnlyFinalAnswer && !reviewExit && !goalExitSummary ? (
-        <div className="chat-message-error">{t('chat.assistant.noVisibleFinalAnswer')}</div>
+        <ChatErrorMessage message={t('chat.assistant.noVisibleFinalAnswer')} />
       ) : null}
       {toolAttachments.length ? (
         <div className="chat-assistant-run__segment chat-assistant-run__attachments">
@@ -881,7 +882,7 @@ function assistantTimelineNode(
   if (block.type === 'error') {
     return (
       <div className="chat-assistant-run__segment" key={block.id}>
-        <div className="chat-message-error">{block.segment.error}</div>
+        <ChatErrorMessage message={block.segment.error ?? t('common.unknownError')} />
       </div>
     );
   }

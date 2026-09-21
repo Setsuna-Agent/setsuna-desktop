@@ -1,4 +1,5 @@
 import {
+  DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
   cloneRuntimeSkillReferences,
   cloneRuntimeThreadGoal,
   isRuntimeInlineMessageAttachment,
@@ -13,8 +14,8 @@ import {
 import { bindProviderMetadataToSemanticMessage } from '../../utils/runtime-message-semantic-fingerprint.js';
 import { neutralizePromptClosingTags } from './prompt-utils.js';
 
-export const CONTEXT_COMPACTION_MAX_TOKENS_K = 256;
-export const CONTEXT_COMPACTION_MAX_TOKENS = CONTEXT_COMPACTION_MAX_TOKENS_K * 1000;
+export const CONTEXT_COMPACTION_MAX_TOKENS = DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS;
+export const CONTEXT_COMPACTION_MAX_TOKENS_K = CONTEXT_COMPACTION_MAX_TOKENS / 1000;
 export const COMPACTION_SUMMARY_MAX_TOKENS = 4096;
 export const COMPACTION_SUMMARY_MIN_OUTPUT_TOKENS = 256;
 export const COMPACTION_SUMMARY_CONTEXT_OVERHEAD_TOKENS = 128;

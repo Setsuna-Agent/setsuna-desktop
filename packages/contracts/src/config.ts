@@ -11,6 +11,8 @@ export type * from './permissions.js';
 export const BRAND_ICON_MAX_BYTES = 512 * 1024;
 export const BRAND_ICON_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;
 export const DEFAULT_MODEL_MAX_OUTPUT_TOKENS = 68000;
+// Keep the product default consistent across sampling, compaction and context usage.
+export const DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS = 256_000;
 export const DEFAULT_ANTHROPIC_MODEL_MAX_OUTPUT_TOKENS = 8192;
 // Backwards-compatible names for callers added with provider icon configuration.
 export const PROVIDER_CUSTOM_ICON_MAX_BYTES = BRAND_ICON_MAX_BYTES;

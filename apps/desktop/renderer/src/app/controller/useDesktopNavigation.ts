@@ -15,6 +15,7 @@ type DesktopNavigationOptions = {
   confirmDiscardProjectFile: () => Promise<boolean>;
   currentThread: RuntimeThread | null;
   globalThreads: RuntimeThreadSummary[];
+  projects: WorkspaceProject[];
   reloadThreads: () => Promise<RuntimeThreadSummary[]>;
   resetNewThreadWorkspacePanels: (projectId: string | null) => void;
   resetProjectWorkspaceState: () => void;
@@ -36,6 +37,7 @@ export function useDesktopNavigation({
   confirmDiscardProjectFile,
   currentThread,
   globalThreads,
+  projects,
   reloadThreads,
   resetNewThreadWorkspacePanels,
   resetProjectWorkspaceState,
@@ -83,19 +85,23 @@ export function useDesktopNavigation({
 
   const startCurrentThread = useCallback(async () => {
     if (!await confirmDiscardProjectFile()) return;
+    // Restored conversations may reference removed projects. A new chat must not
+    // inherit that orphaned reference and fail before its first model request.
+    const projectId = projects.some((project) => project.id === activeProjectId) ? activeProjectId : null;
     navigationRequests.invalidate();
     setActiveView('chat');
     setThreadActionMenuId(null);
     setProjectActionMenuId(null);
-    resetNewThreadWorkspacePanels(activeProjectId);
+    if (activeProjectId && !projectId) resetProjectWorkspaceState();
+    resetNewThreadWorkspacePanels(projectId);
+    setActiveProjectId(projectId);
     setCurrentThread(null);
-    if (activeProjectId) {
-      expandProject(activeProjectId);
+    if (projectId) {
+      expandProject(projectId);
     } else {
       setSessionsCollapsed(false);
-      setActiveProjectId(null);
     }
-  }, [activeProjectId, confirmDiscardProjectFile, expandProject, navigationRequests, resetNewThreadWorkspacePanels, setActiveProjectId, setActiveView, setCurrentThread]);
+  }, [activeProjectId, confirmDiscardProjectFile, expandProject, navigationRequests, projects, resetNewThreadWorkspacePanels, resetProjectWorkspaceState, setActiveProjectId, setActiveView, setCurrentThread]);
 
   const startGlobalThread = useCallback(async () => {
     if (!await confirmDiscardProjectFile()) return;

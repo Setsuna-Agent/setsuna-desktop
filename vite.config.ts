@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
@@ -16,15 +17,21 @@ export default defineConfig({
     strictPort: true,
   },
   resolve: {
-    alias: {
-      '@renderer': resolve(rootDir, 'apps/desktop/renderer/src'),
-      '@setsuna-desktop/contracts': resolve(rootDir, 'packages/contracts/src/index.ts'),
-      '@setsuna-desktop/feature-core': resolve(rootDir, 'packages/feature-core/src'),
-      '@setsuna-desktop/renderer-contracts': resolve(rootDir, 'packages/renderer-contracts/src'),
-      '@setsuna-desktop/renderer-ui/styles.css': resolve(rootDir, 'packages/renderer-ui/src/styles/index.css'),
-      '@setsuna-desktop/renderer-ui': resolve(rootDir, 'packages/renderer-ui/src/index.ts'),
-      ...createFeaturePackageSourceAliases(rootDir),
-    },
+    alias: [
+      // xterm 6's pre-minified ESM crashes on Vim's DECRQM after production
+      // optimization. Its CJS build preserves the parser; keep CSS paths intact.
+      // https://github.com/xtermjs/xterm.js/issues/5800
+      { find: /^@xterm\/xterm$/, replacement: createRequire(import.meta.url).resolve('@xterm/xterm') },
+      ...Object.entries({
+        '@renderer': resolve(rootDir, 'apps/desktop/renderer/src'),
+        '@setsuna-desktop/contracts': resolve(rootDir, 'packages/contracts/src/index.ts'),
+        '@setsuna-desktop/feature-core': resolve(rootDir, 'packages/feature-core/src'),
+        '@setsuna-desktop/renderer-contracts': resolve(rootDir, 'packages/renderer-contracts/src'),
+        '@setsuna-desktop/renderer-ui/styles.css': resolve(rootDir, 'packages/renderer-ui/src/styles/index.css'),
+        '@setsuna-desktop/renderer-ui': resolve(rootDir, 'packages/renderer-ui/src/index.ts'),
+        ...createFeaturePackageSourceAliases(rootDir),
+      }).map(([find, replacement]) => ({ find, replacement })),
+    ],
   },
   build: {
     outDir: 'dist/renderer',
