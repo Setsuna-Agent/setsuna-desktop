@@ -209,6 +209,7 @@ export function useDesktopAppController() {
     confirmDiscardProjectFile: projectWorkspace.fileDraft.confirmDiscardChanges,
     currentThread,
     globalThreads,
+    projects,
     reloadThreads,
     resetNewThreadWorkspacePanels: workspacePanels.resetNewThreadPanelSession,
     resetProjectWorkspaceState: projectWorkspace.resetProjectWorkspaceState,

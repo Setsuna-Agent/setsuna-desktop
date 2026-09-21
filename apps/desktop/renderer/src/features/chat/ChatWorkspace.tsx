@@ -41,7 +41,7 @@ import {
 import { ConversationOverviewPanel } from './conversation/ConversationOverviewPanel.js';
 import type { AnswerApprovalHandler } from './conversation/chat-workspace-types.js';
 import { ChatStarter, ChatStarterContent } from './conversation/ChatStarter.js';
-import { activeModelContextWindowTokens, contextTokenUsageFromThread } from './conversation/chatContextUsage.js';
+import { activeModelContextBudget, contextTokenUsageFromThread } from './conversation/chatContextUsage.js';
 import { conversationOverviewFromMessages } from './conversation/chatConversationOverview.js';
 import { ChatTranscript } from './conversation/ChatTranscript.js';
 import type { ChatQueuedTurnActions } from './hooks/useQueuedTurnInputActions.js';
@@ -159,7 +159,7 @@ export function ChatWorkspace({
   const showThinkingInTranscript = config?.desktopSettings?.showThinkingInTranscript === true;
   const contextUsage = useMemo(() => contextTokenUsageFromThread(
     historyThread,
-    activeModelContextWindowTokens(config, historyThread),
+    activeModelContextBudget(config, historyThread),
   ), [config, historyThread]);
   const contextCompactionRunning = contextCompacting || currentThread?.contextCompaction?.status === 'running';
   const conversationOverview = useMemo(() => (variant === 'main' && currentThread ? conversationOverviewFromMessages(messages) : null), [currentThread, messages, variant]);

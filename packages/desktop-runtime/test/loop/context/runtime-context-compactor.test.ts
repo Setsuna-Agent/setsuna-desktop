@@ -46,17 +46,91 @@ describe('RuntimeContextCompactor', () => {
     expect(usageStore.records).toMatchObject([{ outputTokens: 10_020 }]);
   });
 
-  it('rejects aggregate input that cannot fit the dedicated summarizer before sampling', async () => {
+  it.each([undefined, 4_000])('summarizes oversized history in bounded batches with a %s-token task model', async (contextWindow) => {
+    const config = contextCompactionTaskModelConfig();
+    config.providers[1]!.models[0]!.contextWindowTokens = contextWindow;
+    const candidate = compactionCandidate();
+    candidate.olderMessages = Array.from({ length: contextWindow ? 20 : 400 }, (_, index) => ({
+      ...candidate.olderMessages[0]!, id: `history_${index}`, content: `Evidence ${index}: ${'x'.repeat(2900)} end ${index}.`,
+    }));
+    const requests: ModelRequest[] = [];
+    const summaries: string[] = [];
+    const usageStore = new CapturingUsageStore();
+    const result = await createCompactor({ stream: async function* (request) {
+      const previous = summaries.at(-1);
+      if (previous) expect(request.messages[1]!.content).toContain(previous);
+      expect(estimateRuntimeMessageTokens(request.messages) + request.maxOutputTokens!).toBeLessThanOrEqual(contextWindow ?? 256_000);
+      expect(request).toMatchObject({ model: 'background-summary-model', providerId: 'background-provider', sessionId: 'thread_1' });
+      requests.push(request);
+      const summary = `Verified progress through batch ${requests.length}.`.padEnd(1600, '.');
+      summaries.push(summary);
+      yield { type: 'text_delta', text: summary };
+      yield { type: 'usage', usage: { inputTokens: 100, outputTokens: 400, totalTokens: 500 } };
+      yield { type: 'done', finishReason: 'stop' };
+    } }, [], undefined, usageStore).generateContextCompactionSummary({ ...summaryInput(candidate), runtimeConfig: config });
+    expect(requests.length).toBeGreaterThan(1);
+    const allSource = requests.map((request) => request.messages[1]!.content.match(/<untrusted_older_history>\n([\s\S]*)\n<\/untrusted_older_history>/)![1]).join('');
+    for (const message of candidate.olderMessages) expect(allSource).toContain(message.content);
+    expect(result.text).toBe(summaries.at(-1));
+    expect(usageStore.records).toHaveLength(requests.length);
+  });
+
+  it.each(['failure', 'cancel'] as const)('retains all original history if a later batch ends in %s', async (outcome) => {
     const config = contextCompactionTaskModelConfig();
     config.providers[1]!.models[0]!.contextWindowTokens = 4_000;
-    const candidate = compactionCandidate();
-    candidate.olderMessages = Array.from({ length: 20 }, (_, index) => ({
-      ...candidate.olderMessages[0]!, id: `history_${index}`, content: 'history '.repeat(1_000),
+    const messages = Array.from({ length: 20 }, (_, index) => ({
+      ...compactionCandidate().olderMessages[0]!, id: `history_${index}`, content: 'history '.repeat(400),
     }));
-    const client = new CompactionModelClient([]);
-    await expect(createCompactor(client).generateContextCompactionSummary({ ...summaryInput(candidate), runtimeConfig: config }))
-      .rejects.toThrow('input does not fit background-summary-model');
-    expect(client.request).toBeNull();
+    const original = structuredClone(messages);
+    const events: Array<Omit<RuntimeEvent, 'seq'>> = [];
+    const controller = new AbortController();
+    const usageStore = new CapturingUsageStore();
+    let requests = 0;
+    const compactor = createCompactor({ stream: async function* () {
+      requests += 1;
+      if (requests > 1) {
+        if (outcome === 'cancel') controller.abort(new Error('Cancelled compaction'));
+        throw new Error('Batch failed');
+      }
+      yield { type: 'text_delta', text: 'Verified the first batch.' };
+      yield { type: 'usage', usage: { inputTokens: 100, outputTokens: 20, totalTokens: 120 } };
+      yield { type: 'done', finishReason: 'stop' };
+    } }, events, undefined, usageStore);
+    await expect(compactor.compactMessagesBeforeModelRequest({
+      force: true, messages, thread: compactionThread(messages), threadId: 'thread_1', turnId: 'turn_1',
+      runtimeConfig: config, signal: controller.signal,
+    })).rejects.toThrow(outcome === 'cancel' ? 'Batch failed' : 'original history was retained');
+    expect(requests).toBe(outcome === 'cancel' ? 2 : 3);
+    expect(events.some((event) => event.type === 'thread.context_compacted')).toBe(false);
+    expect(messages).toEqual(original);
+    expect(usageStore.records).toHaveLength(1);
+  });
+
+  it('batches a single large tool-call record and retained context without dropping either source', async () => {
+    const config = contextCompactionTaskModelConfig();
+    config.providers[1]!.models[0]!.contextWindowTokens = 4_000;
+    const candidate = { ...compactionCandidate(), autoCompactTokenLimit: 100_000 };
+    const calls = Array.from({ length: 20 }, (_, i) => ({
+      id: `call_${i}`, name: 'read_file', arguments: `argument ${i} ${'🧪'.repeat(500)} end ${i}`,
+    }));
+    candidate.olderMessages = [{ ...candidate.olderMessages[0]!, role: 'assistant', toolCalls: calls }];
+    candidate.recentMessages = [{ ...candidate.olderMessages[0]!, id: 'recent', content: 'Retained recent evidence', toolCalls: calls }];
+    const olderParts: string[] = [];
+    const recentParts: string[] = [];
+    await createCompactor({ stream: async function* (request) {
+      const prompt = request.messages[1]!.content;
+      expect(estimateRuntimeMessageTokens(request.messages) + request.maxOutputTokens!).toBeLessThanOrEqual(4_000);
+      olderParts.push(prompt.match(/<untrusted_older_history>\n([\s\S]*)\n<\/untrusted_older_history>/)![1]!);
+      recentParts.push(prompt.match(/<retained_recent_context>\n([\s\S]*)\n<\/retained_recent_context>/)![1]!);
+      yield { type: 'text_delta', text: 'Preserved the verified evidence.' };
+      yield { type: 'done', finishReason: 'stop' };
+    } }).generateContextCompactionSummary({ ...summaryInput(candidate), runtimeConfig: config });
+    expect(olderParts.length).toBeGreaterThan(2);
+    for (const call of calls) {
+      expect(olderParts.join('')).toContain(call.arguments);
+      expect(recentParts.join('')).toContain(call.arguments);
+    }
+    expect(recentParts.join('')).toContain('Retained recent evidence');
   });
 
   it('uses a shorter handoff when a small task model still has usable output space', async () => {

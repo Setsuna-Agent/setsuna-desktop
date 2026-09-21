@@ -78,6 +78,7 @@ Terminal 拥有 PTY session、固定 IPC、preload bridge、xterm pane、恢复 
 - Renderer 恢复 buffer 保存起始行列数以及按执行顺序记录的 output/resize；xterm 的异步写入完成后才执行后续 resize，重新挂载时按原网格序列回放，再适配当前容器。只有解析完成回调触发后才将输出归入历史，回放历史时屏蔽重复协议回复。卸载时将进行中的写入、排队输出和 PTY 网格单独保留为待解析尾部，恢复后正常发送首次协议回复；丢弃未执行的容器适配，避免清屏或快速切换面板丢失滚动历史。
 - 关闭 window、Feature scope 或 app 时必须撤销 handler 并关闭全部 PTY。
 - 输入是 PTY 字节流，不经过 shell 字符串拼接；“打开 session”与 Agent 的 `exec` 工具是不同安全面。
+- Vite 将 `@xterm/xterm` 的运行时入口精确解析到同版本 CommonJS 构建，CSS 子路径保持原样。6.0.0 的预压缩 ESM 经生产构建优化后会在 Vim 的 DECRQM 模式查询中抛出 `ReferenceError`，卡住输出解析；终端构建测试必须执行实际 Vite 产物，仅测源码或开发模式无法覆盖此故障。
 
 Terminal 没有 runtime entry：用户可见终端属于 Electron main 管理的本机交互，不应绕路进入 Agent runtime。
 

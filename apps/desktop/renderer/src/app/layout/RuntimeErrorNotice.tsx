@@ -1,23 +1,21 @@
-import { Button } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeThread } from '@setsuna-desktop/contracts';
-import { AlertTriangle, X } from 'lucide-react';
+import { useEffect } from 'react';
+import { runtimeErrorDisplayMessage, unwrapRuntimeErrorMessage } from '../../services/runtime-client/runtimeErrorMessages.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import { useToast } from '../providers/ToastProvider.js';
 
-export function RuntimeErrorNotice({ message, onDismiss }: { message: string; onDismiss: () => void }) {
+export function RuntimeErrorNotice({ message }: { message: string }) {
   const { t } = useI18n();
+  const toast = useToast();
+  const displayMessage = runtimeErrorDisplayMessage(message, t);
 
-  return (
-    <div className="app-runtime-error-notice" role="alert">
-      <AlertTriangle aria-hidden="true" className="app-runtime-error-notice__icon" size={17} />
-      <div className="app-runtime-error-notice__content">
-        <strong>{t('app.error.runtime')}</strong>
-        <span>{message}</span>
-      </div>
-      <Button variant="ghost" aria-label={t('runtimeError.close')} type="button" onClick={onDismiss}>
-        <X aria-hidden="true" size={15} />
-      </Button>
-    </div>
-  );
+  useEffect(() => {
+    const id = toast.error(displayMessage);
+    // The notice belongs to the current conversation; navigation must dismiss it.
+    return () => { if (id !== null) toast.dismiss(id); };
+  }, [displayMessage, toast]);
+
+  return null;
 }
 
 /**
@@ -30,8 +28,9 @@ export function runtimeErrorNoticeMessage(
 ): string | null {
   const message = error?.trim();
   if (!message) return null;
+  const unwrapped = unwrapRuntimeErrorMessage(message);
   const alreadyProjected = thread?.messages.some(
-    (item) => item.status === 'error' && item.error?.trim() === message,
+    (item) => item.status === 'error' && item.error && unwrapRuntimeErrorMessage(item.error) === unwrapped,
   );
   return alreadyProjected ? null : message;
 }

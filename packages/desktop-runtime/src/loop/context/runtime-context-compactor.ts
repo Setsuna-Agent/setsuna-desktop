@@ -1,4 +1,5 @@
 import {
+  DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
   RUNTIME_PROVIDER_METADATA_MAX_BYTES,
   runtimeJsonByteLength,
   sanitizeRuntimeJsonObject,
@@ -39,10 +40,13 @@ import {
 } from './context-compaction.js';
 import { compactForPrompt } from './prompt-utils.js';
 import {
+  compactionSummarySource,
   parseCompactionSummary,
   stripContextCompactionTags,
+  type CompactionSummarySource,
 } from './context-compaction-summary.js';
-import { contextCompactionRequest } from './context-compaction-request.js';
+import { contextCompactionRequest, contextCompactionRequestBudget, type ContextCompactionRequestBudget } from './context-compaction-request.js';
+import { nextContextCompactionBatch } from './context-compaction-batches.js';
 import { nativeCompactionMatchesModel, restoreNativeCompactionHistory } from './context-compaction-history.js';
 
 type GeneratedContextCompactionSummary = {
@@ -243,9 +247,26 @@ export class RuntimeContextCompactor {
     };
   }
 
-  private async generatePortableContextCompactionSummary({
-    candidate, threadId, recordUsage, signal, debugContext, runtimeConfig, conversationModel,
-  }: CompactionSamplingInput): Promise<string> {
+  private async generatePortableContextCompactionSummary(input: CompactionSamplingInput): Promise<string> {
+    const budget = contextCompactionRequestBudget(input);
+    let source = compactionSummarySource(input.candidate);
+    let summary = '';
+    do {
+      throwIfAborted(input.signal);
+      const batch = nextContextCompactionBatch({
+        source, previousSummary: summary, budget, createdAt: this.options.clock.now().toISOString(),
+      });
+      summary = await this.generatePortableContextCompactionBatch({
+        ...input, budget, source: batch.source, previousSummary: summary,
+      });
+      source = batch.remaining;
+    } while (source.olderHistory || source.recentContext);
+    return summary;
+  }
+
+  private async generatePortableContextCompactionBatch({
+    candidate, threadId, recordUsage, signal, debugContext, budget, source, previousSummary,
+  }: CompactionSamplingInput & { budget: ContextCompactionRequestBudget; source: CompactionSummarySource; previousSummary: string }): Promise<string> {
     this.traceCompaction(debugContext, 'context.compaction.portable', {
       olderMessageCount: candidate.olderMessages.length,
       outcome: 'started',
@@ -254,8 +275,8 @@ export class RuntimeContextCompactor {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       throwIfAborted(signal);
       const output = createModelStreamTextCollector();
-      const { request, summaryTokenLimit } = contextCompactionRequest({
-        candidate, runtimeConfig, conversationModel,
+      const request = contextCompactionRequest({
+        budget, source, previousSummary,
         createdAt: this.options.clock.now().toISOString(), retry: attempt > 0,
       });
       let usage: RuntimeUsage | undefined;
@@ -276,7 +297,7 @@ export class RuntimeContextCompactor {
         if (!completed || (finishReason !== undefined && finishReason !== 'stop')) {
           throw new Error(`Context compaction response was incomplete (${finishReason ?? 'stream closed'}; generation limit ${request.maxOutputTokens} tokens${output.text().trim() ? '' : '; no summary text'}).`);
         }
-        const text = parseCompactionSummary(output.text(), summaryTokenLimit);
+        const text = parseCompactionSummary(output.text(), budget.summaryTokenLimit);
         this.traceCompaction(debugContext, 'context.compaction.portable', {
           olderMessageCount: candidate.olderMessages.length, outcome: 'success',
           recentMessageCount: candidate.recentMessages.length, summaryCharacters: text.length,
@@ -521,7 +542,7 @@ export function reservedOutputTokensForConfig(
   const provider = config?.providers.find((item) => item.enabled && item.id === config.activeProviderId)
     ?? config?.providers.find((item) => item.enabled);
   const model = modelOverride ?? provider?.models.find((item) => item.enabled) ?? provider?.models[0];
-  const contextWindow = contextCompactionBudgetForConfig(config, model)?.maxContextTokens ?? 256_000;
+  const contextWindow = contextCompactionBudgetForConfig(config, model)?.maxContextTokens ?? DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS;
   return Math.min(Math.max(0, Math.floor(model?.maxOutputTokens ?? 0)), Math.floor(contextWindow * 0.15));
 }
 

@@ -478,7 +478,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       })}
 
       {visibleRuntimeError ? (
-        <RuntimeErrorNotice message={visibleRuntimeError} onDismiss={() => runtime.setError(null)} />
+        <RuntimeErrorNotice message={visibleRuntimeError} />
       ) : null}
 
       <RendererOwnedSingleSlot
