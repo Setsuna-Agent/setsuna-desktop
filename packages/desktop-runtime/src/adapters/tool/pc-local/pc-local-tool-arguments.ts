@@ -140,17 +140,10 @@ export function parsePartialEditFileArguments(rawArguments: string) {
     const parsed = JSON.parse(raw) as unknown;
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
       const input = parsed as Record<string, unknown>;
+      const editFields = ['path', 'edits', 'old_string', 'new_string', 'old_text', 'new_text', 'replace_all'];
       return {
+        ...Object.fromEntries(editFields.filter((key) => Object.hasOwn(input, key)).map((key) => [key, input[key]])),
         file_path: String(input.file_path || input.path || ''),
-        ...(Object.hasOwn(input, 'path') ? { path: input.path } : {}),
-        old_string: String(input.old_string ?? ''),
-        new_string: String(input.new_string ?? ''),
-        replace_all: Boolean(input.replace_all),
-        has_old_string: Object.hasOwn(input, 'old_string'),
-        has_new_string: Object.hasOwn(input, 'new_string'),
-        file_path_closed: true,
-        old_string_closed: true,
-        new_string_closed: true,
         complete: true,
       };
     }
@@ -159,20 +152,12 @@ export function parsePartialEditFileArguments(rawArguments: string) {
   }
 
   const filePath = findJsonFilePathValue(raw);
-  const oldString = findJsonStringValue(raw, 'old_string');
-  const newString = findJsonStringValue(raw, 'new_string');
-  if (!filePath && !oldString && !newString) return null;
+  if (!filePath?.match.closed) return null;
+  // Show the target while arguments stream, but only calculate a diff once the
+  // full request is available; a later entry may invalidate the entire batch.
   return {
-    file_path: filePath?.match.value || '',
+    file_path: filePath.match.value,
     ...(filePath?.usedPathAlias ? { path: filePath.match.value || '' } : {}),
-    old_string: oldString?.value || '',
-    new_string: newString?.value || '',
-    replace_all: false,
-    has_old_string: Boolean(oldString),
-    has_new_string: Boolean(newString),
-    file_path_closed: Boolean(filePath?.match.closed),
-    old_string_closed: Boolean(oldString?.closed),
-    new_string_closed: Boolean(newString?.closed),
     complete: false,
   };
 }

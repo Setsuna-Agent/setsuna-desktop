@@ -23,18 +23,6 @@ export function escapeRegExp(value: unknown): string {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-export function countOccurrences(content: string, needle: string): number {
-  if (!needle) return 0;
-  let count = 0;
-  let offset = 0;
-  while (true) {
-    const index = content.indexOf(needle, offset);
-    if (index < 0) return count;
-    count += 1;
-    offset = index + needle.length;
-  }
-}
-
 export function boundedInteger(value: unknown, fallback: number, min: number, max: number): number {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;

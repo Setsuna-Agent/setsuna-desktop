@@ -59,25 +59,45 @@ export function formatFileMutationReceipt(diffs: readonly FileDiff[]): string {
   let remainingChars = 6_000;
   let remainingLines = 60;
   let omitted = false;
-  for (const diff of diffs) {
+  // Whole-file deletions are fully described by the summary. Spend the bounded
+  // excerpts on surviving code, sharing the budget so a large file cannot hide
+  // every later edit. Small excerpts release their unused share to later files.
+  const excerptDiffs = diffs.filter((diff) => diff.action !== 'Deleted' && diff.lines.length)
+    .sort((left, right) => Number(left.action === 'Created') - Number(right.action === 'Created'));
+  const omission = '[remaining diff lines omitted]';
+  for (const [index, diff] of excerptDiffs.entries()) {
+    const filesLeft = excerptDiffs.length - index;
+    const charBudget = Math.floor(remainingChars / filesLeft);
+    const lineBudget = Math.floor(remainingLines / filesLeft);
     const header = `File: ${JSON.stringify(diff.path)}`;
-    if (remainingLines <= 0 || remainingChars < header.length) { omitted = true; break; }
-    excerpts.push(header);
-    remainingChars -= header.length;
+    if (!lineBudget || charBudget < header.length + omission.length + 2) {
+      omitted = true;
+      continue;
+    }
+    const section = [header];
+    let sectionChars = header.length + 1;
+    let sectionLines = 0;
     for (const line of diff.lines) {
       const text = line.type === 'gap' ? '[unchanged lines omitted]'
         : line.type === 'del' ? `- old ${line.oldLine}: ${line.content}`
           : `${line.type === 'add' ? '+' : ' '} new ${line.newLine}: ${line.content}`;
-      if (remainingLines <= 0 || text.length > remainingChars) { omitted = true; break; }
-      excerpts.push(text);
-      remainingChars -= text.length;
-      remainingLines -= 1;
+      if (sectionLines >= lineBudget || sectionChars + text.length + omission.length + 2 > charBudget) break;
+      section.push(text);
+      sectionChars += text.length + 1;
+      sectionLines += 1;
     }
-    if (omitted) break;
+    if (sectionLines < diff.lines.length) {
+      omitted = true;
+      section.push(omission);
+      sectionChars += omission.length + 1;
+    }
+    excerpts.push(...section);
+    remainingChars -= sectionChars;
+    remainingLines -= sectionLines;
   }
   return [
     ...summaries,
-    'Applied diff excerpt (old = before this edit; new = current file; not an apply_patch input):',
+    ...(excerpts.length ? ['Applied diff excerpt (old = before this edit; new = current file; not an apply_patch input):'] : []),
     ...excerpts,
     ...(omitted ? ['[diff excerpt truncated; use read_file for the affected ranges before relying on omitted content]'] : []),
   ].join('\n');

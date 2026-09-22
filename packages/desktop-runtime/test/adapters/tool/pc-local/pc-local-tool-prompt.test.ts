@@ -14,7 +14,8 @@ describe('pcLocalToolPrompt', () => {
       tool('update_plan'),
     ]);
     expect(mutating).toContain('apply_patch');
-    expect(mutating).toContain('two or more related existing files');
+    expect(mutating).toContain('combined file creation, deletion, or moves');
+    expect(mutating).not.toContain('Prefer edit');
     expect(mutating).toContain('run_shell_command');
     expect(mutating).toContain('exactly one step in progress');
 
@@ -30,6 +31,10 @@ describe('pcLocalToolPrompt', () => {
     expect(review).toContain('rg --files');
     expect(review).toContain('Exit code 1 means no matches');
     expect(review).not.toContain('Prefer search_text');
+
+    const editing = pcLocalToolPrompt([tool('edit'), tool('apply_patch')]);
+    expect(editing).toContain('Prefer edit for targeted changes');
+    expect(editing).toContain('all based on the same original file');
   });
 
   it.each([
