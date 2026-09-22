@@ -60,9 +60,37 @@ describe('PC local tool resource bounds', () => {
       expect(result).toMatchObject({ ok: true });
       expect(result.content).toContain('Created "large.txt" (+100/-0); new lines 1-100');
       expect(result.content).toContain('Created "small.txt" (+1/-0); new lines 1-1');
+      expect(result.content).toContain('+ new 1: small');
       expect(result.content).toContain('diff excerpt truncated');
       expect(result.content.length).toBeLessThan(7_000);
       expect(await readFile(path.join(root, 'large.txt'), 'utf8')).toContain('line 99:');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps later code edits visible when the patch also deletes a large file', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-mutation-receipt-'));
+    try {
+      await writeFile(path.join(root, 'removed.txt'), 'deleted source\n'.repeat(100));
+      await writeFile(path.join(root, 'first.ts'), 'old\n'.repeat(100));
+      await writeFile(path.join(root, 'last.ts'), 'async function processCovers(\n');
+      const result = await applyLocalPatch({ patch: [
+        '*** Begin Patch', '*** Delete File: removed.txt',
+        '*** Update File: first.ts', '@@',
+        ...Array.from({ length: 100 }, () => '-old'),
+        ...Array.from({ length: 100 }, () => '+new'),
+        '*** Update File: last.ts', '@@',
+        '-async function processCovers(', '+export async function processCovers(',
+        '*** End Patch',
+      ].join('\n') }, { root, reads: new Map() });
+      expect(result).toMatchObject({ ok: true });
+      expect(result.content).toContain('Deleted "removed.txt" (+0/-100)');
+      expect(result.content).not.toContain('deleted source');
+      expect(result.content).toContain('- old 1: async function processCovers(');
+      expect(result.content).toContain('+ new 1: export async function processCovers(');
+      expect(result.content).toContain('diff excerpt truncated');
+      expect(result.content.length).toBeLessThan(7_000);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

@@ -55,11 +55,14 @@ export function pcLocalToolPrompt(
   }
 
   if (hasAny(advertised, FILE_MUTATION_TOOL_NAMES)) {
+    if (advertised.has('edit')) {
+      lines.push(
+        text('- Prefer edit for targeted changes to existing files. For multiple locations in one file, use one edits array with small, unique old_string blocks, all based on the same original file. Merge overlapping changes into one entry.', '- 现有文件的定向修改优先使用 edit。同一文件修改多处时，使用一个 edits 数组；各组 old_string 简短且唯一，全部基于同一份原文件，重叠修改合并为一组。'),
+      );
+    }
     if (advertised.has('apply_patch')) {
       lines.push(
-        text('- Prefer apply_patch for targeted code changes so the runtime can preview and approve a cohesive multi-file patch.', "- 定向修改代码优先用 apply_patch，以便运行时预览并审批完整的多文件补丁。"),
-        text('- apply_patch may create, update, or delete multiple files. Keep patches scoped and easy to review.', "- apply_patch 可以创建、更新或删除多个文件。保持补丁范围清晰、易于审阅。"),
-        text('- When one requested change touches two or more related existing files, combine those edits into one apply_patch call. Do not split them into sequential full-file rewrites when a cohesive patch can express the change.', "- 同一请求涉及两个或更多相关现有文件时，把修改合并为一次 apply_patch 调用。可以用完整补丁表达时，不要拆成多次串行的整文件重写。"),
+        text('- Use apply_patch when a cohesive patch is the clearest way to express the change, including combined file creation, deletion, or moves. Keep patches scoped and easy to review.', '- 当完整补丁更适合表达修改时使用 apply_patch，包括组合新增、删除或移动文件。保持补丁范围清晰、易于审阅。'),
       );
     }
     const singleFileTools = ['edit', 'write_file', 'append_file', 'delete_file'].filter((name) => advertised.has(name));

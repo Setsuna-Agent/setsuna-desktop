@@ -48,6 +48,7 @@ import {
   applyPatchHunks,
   parseApplyPatch,
 } from './pc-local-tool-patch.js';
+import { applyTextEdits, parseTextEditRequest } from './pc-local-tool-edit.js';
 import {
   deniedSandboxRuleForPath,
   formatAccessiblePath,
@@ -63,7 +64,6 @@ import {
 import { openValidatedReadableFile, readValidatedFileBytes, readValidatedFileText } from './pc-local-tool-secure-read.js';
 import {
   boundedInteger,
-  countOccurrences,
   errorResult,
   integerOrNull,
   okResult,
@@ -598,7 +598,7 @@ export async function deleteLocalFile(args: ToolArguments, state: PcLocalFileSta
 }
 
 export async function editLocalFile(args: ToolArguments, state: PcLocalFileState) {
-  const result = await calculateEditFile(normalizeEditArgs(args), state, { enforcePriorRead: false });
+  const result = await calculateEditFile(args, state, { enforcePriorRead: false });
   if (!result.ok) return errorResult(result.error);
 
   await commitFileChanges([{
@@ -627,9 +627,9 @@ export async function calculateEditFile(
   options: PriorReadOptions = {},
 ): Promise<FileMutationCalculation | FileCalculationFailure> {
   const filePath = resolveWorkspacePath(args?.file_path, state.root);
-  const oldString = String(args?.old_string ?? '');
-  const newString = String(args?.new_string ?? '');
-  const replaceAll = Boolean(args?.replace_all);
+  const parsed = parseTextEditRequest(args);
+  if (!parsed.ok) return parsed;
+  const { request } = parsed;
   let existed = false;
   let existingStats = null;
   let previousContent = '';
@@ -645,7 +645,10 @@ export async function calculateEditFile(
   }
 
   if (!existed) {
-    if (oldString !== '') return { ok: false, error: `找不到文件，无法编辑：${formatPath(filePath, state.root)}` };
+    if (!request.allowCreate || request.edits[0].old_string !== '') {
+      return { ok: false, error: `找不到文件，无法编辑：${formatPath(filePath, state.root)}` };
+    }
+    const newString = request.edits[0].new_string;
     const diff = buildFileDiff({
       filePath,
       root: state.root,
@@ -662,27 +665,9 @@ export async function calculateEditFile(
   }
 
   previousContent = await readValidatedFileText(filePath, state);
-  if (oldString === '') return { ok: false, error: `文件已存在，无法按新建方式写入：${formatPath(filePath, state.root)}` };
-  if (oldString === newString) return { ok: false, error: '没有需要应用的变化。' };
-
-  const occurrences = countOccurrences(previousContent, oldString);
-  if (!occurrences) {
-    return {
-      ok: false,
-      error: `没有在 ${formatPath(filePath, state.root)} 中找到要替换的内容，请检查空格、缩进和上下文。`,
-    };
-  }
-  if (!replaceAll && occurrences > 1) {
-    return {
-      ok: false,
-      error: `要替换的内容在 ${formatPath(filePath, state.root)} 中匹配了 ${occurrences} 处，请提供更精确的上下文或明确批量替换。`,
-    };
-  }
-
-  const matchIndex = previousContent.indexOf(oldString);
-  const nextContent = replaceAll
-    ? previousContent.split(oldString).join(newString)
-    : `${previousContent.slice(0, matchIndex)}${newString}${previousContent.slice(matchIndex + oldString.length)}`;
+  const applied = applyTextEdits(previousContent, request, formatPath(filePath, state.root));
+  if (!applied.ok) return applied;
+  const nextContent = applied.content;
   const diff = buildFileDiff({
     filePath,
     root: state.root,
@@ -800,14 +785,6 @@ function filterFilesByScope(
   if (scope === '.') return index;
   const prefix = `${scope}/`;
   return index.filter((file) => file.path === scope || file.path.startsWith(prefix));
-}
-
-export function normalizeEditArgs(args: ToolArguments = {}): ToolArguments {
-  return {
-    ...args,
-    old_string: Object.hasOwn(args, 'old_string') ? args.old_string : args.old_text,
-    new_string: Object.hasOwn(args, 'new_string') ? args.new_string : args.new_text,
-  };
 }
 
 export function normalizeReadRange(args: ToolArguments = {}): FileReadRange | null {

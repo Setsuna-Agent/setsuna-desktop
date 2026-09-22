@@ -42,7 +42,6 @@ import {
   integrityTokenForCalculatedMutation,
   isEditToolName,
   listDirectory,
-  normalizeEditArgs,
   readLocalFile,
   searchText,
   type PcLocalFileState,
@@ -273,7 +272,10 @@ export async function previewEditFileDiff(
   args: ToolArguments,
   state: PcLocalToolState = createLocalToolState(),
 ) {
-  const result = await calculateEditFile(normalizeEditArgs(args), state, { enforcePriorRead: false });
+  // An unfinished new_string must never preview as a deletion, and later batch
+  // entries can still invalidate the entire edit through overlap or ambiguity.
+  if (args.complete === false) return null;
+  const result = await calculateEditFile(args, state, { enforcePriorRead: false });
   if (!result.ok) return null;
   return {
     path: result.diff.path,

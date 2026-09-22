@@ -116,26 +116,34 @@ export function localToolDefinitions(language?: RuntimeInterfaceLanguage): Local
     ),
     localTool(
       'edit',
-      text('Precisely edit a UTF-8 file by replacing exact literal text.', "通过精确的字面量替换编辑 UTF-8 文件。"),
+      text('Edit an existing UTF-8 file with one or more literal text replacements. Every old_string must uniquely match a non-overlapping region of the original file. All replacements are validated before writing. Merge overlapping changes into one replacement. Line endings are matched equivalently; other whitespace and source text must match exactly.', '用一组或多组字面量替换编辑现有 UTF-8 文件。每组 old_string 必须在同一份原文件中唯一匹配，且各组范围不能重叠；全部验证通过后才写入。重叠修改合并为一组替换。匹配兼容换行符差异，其他空白与源码必须准确一致。'),
       {
         file_path: {
           type: 'string',
           description: text('File path, absolute or relative to the workspace root.', "文件路径，可为绝对路径或相对于工作区根目录的路径。"),
         },
-        old_string: {
-          type: 'string',
-          description: text('Exact literal text to replace, including whitespace and surrounding context. Must uniquely identify one location unless replace_all is true. Use an empty string only to create a new file.', "要替换的精确字面量文本，包含空白和周围上下文。除非 replace_all 为 true，否则必须唯一匹配一个位置。空字符串仅用于创建新文件。"),
-        },
-        new_string: {
-          type: 'string',
-          description: text('Exact literal replacement text.', "替换后的精确字面量文本。"),
-        },
-        replace_all: {
-          type: 'boolean',
-          description: text('Replace every occurrence of old_string. Defaults to false.', "是否替换所有 old_string。默认 false。"),
+        edits: {
+          type: 'array',
+          minItems: 1,
+          description: text('Targeted replacements, all matched against the original file, not the results of earlier entries. Keep old_string small but unique; combine nearby changes instead of overlapping entries.', '定向替换列表，所有条目都匹配原文件，不匹配前面条目的修改结果。old_string 尽量简短但必须唯一；相邻且重叠的修改合并为一组。'),
+          items: {
+            type: 'object',
+            properties: {
+              old_string: {
+                type: 'string',
+                minLength: 1,
+                description: text('Exact source text to replace, with enough context to uniquely identify it.', '要替换的准确原文，包含足以唯一定位的上下文。'),
+              },
+              new_string: {
+                type: 'string',
+                description: text('Literal replacement text. Use an empty string to delete old_string.', '替换后的字面量文本；删除 old_string 时明确传入空字符串。'),
+              },
+            },
+            required: ['old_string', 'new_string'],
+          },
         },
       },
-      ['file_path', 'old_string', 'new_string'],
+      ['file_path', 'edits'],
     ),
     localTool(
       'read_file',
@@ -162,7 +170,7 @@ export function localToolDefinitions(language?: RuntimeInterfaceLanguage): Local
     localTool(
       'apply_patch',
       [
-        text('Apply one cohesive app-server-style patch to one or more local workspace text files. Prefer this for related edits across multiple existing files. Supports *** Add File, *** Update File, and *** Delete File hunks.', "用一次完整的 AppServer 格式补丁修改一个或多个工作区文本文件。多个现有文件的相关修改优先用此工具。支持 *** Add File、*** Update File 和 *** Delete File。"),
+        text('Apply one cohesive app-server-style patch to one or more local workspace text files. Useful for combined file creation, deletion, moves, or changes best expressed as a patch. Supports *** Add File, *** Update File, and *** Delete File hunks.', '用一次完整的 AppServer 格式补丁修改一个或多个工作区文本文件。适合组合新增、删除、移动文件，或更适合以补丁表达的修改。支持 *** Add File、*** Update File 和 *** Delete File。'),
         text('Pass the patch text as the patch string in the JSON arguments.', '将补丁文本作为 JSON 参数中的 patch 字符串传入。'),
         text('Format rules: the patch must begin with *** Begin Patch and end with *** End Patch. In *** Add File hunks, prefix every content line with +, including blank lines as +. In *** Update File hunks, use @@ and prefix context/removal/addition lines with space, -, or +.', "格式规则：补丁必须以 *** Begin Patch 开始，以 *** End Patch 结束。*** Add File 中每行内容都以 + 开头，空行也写作 +。*** Update File 使用 @@，上下文、删除、新增行分别以空格、-、+ 开头。"),
         text('Patch content is literal: never abbreviate unchanged code with ... or placeholder comments. Use separate @@ hunks to skip unchanged regions. Only - lines are removed; replacing a function declaration does not remove its existing body. Read/search line-number prefixes and truncation markers are not source text.', '补丁正文按字面写入：不要用 ... 或占位注释省略未改代码，用独立的 @@ 区块跳过未改区域。只有 - 行会被删除；替换函数声明不会自动删除原函数体。读取/搜索结果中的行号前缀和截断标记不是源代码。'),

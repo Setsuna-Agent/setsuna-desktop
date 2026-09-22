@@ -481,9 +481,9 @@ packages/features/ — 0 direct / 1062 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 594 total files
-├── src/ — 2 direct / 345 total files
-│   ├── adapters/ — 143 files
+packages/desktop-runtime/ — 4 direct / 597 total files
+├── src/ — 2 direct / 346 total files
+│   ├── adapters/ — 144 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── event/ — 2 direct / 2 total files
 │   │   ├── feature/ — 8 direct / 8 total files
@@ -497,8 +497,8 @@ packages/desktop-runtime/ — 4 direct / 594 total files
 │   │   ├── skill/ — 6 direct / 6 total files
 │   │   ├── store/ — 35 direct / 37 total files
 │   │   │   └── sqlite/ — 2 direct / 2 total files
-│   │   ├── tool/ — 15 direct / 40 total files
-│   │   │   └── pc-local/ — 25 direct / 25 total files
+│   │   ├── tool/ — 15 direct / 41 total files
+│   │   │   └── pc-local/ — 26 direct / 26 total files
 │   │   └── workspace/ — 8 direct / 8 total files
 │   ├── composition/ — 3 direct / 3 total files
 │   ├── extensions/ — 14 direct / 14 total files
@@ -521,8 +521,8 @@ packages/desktop-runtime/ — 4 direct / 594 total files
 │   │   └── app-server/ — 23 direct / 23 total files
 │   ├── shared/ — 3 direct / 3 total files
 │   └── utils/ — 8 direct / 8 total files
-└── test/ — 245 files
-    ├── adapters/ — 64 files
+└── test/ — 247 files
+    ├── adapters/ — 65 files
     │   ├── approval/ — 1 direct / 1 total files
     │   ├── feature/ — 1 direct / 1 total files
     │   ├── mcp/ — 2 direct / 2 total files
@@ -534,8 +534,8 @@ packages/desktop-runtime/ — 4 direct / 594 total files
     │   ├── search/ — 4 direct / 4 total files
     │   ├── skill/ — 1 direct / 1 total files
     │   ├── store/ — 16 direct / 16 total files
-    │   ├── tool/ — 8 direct / 14 total files
-    │   │   └── pc-local/ — 6 direct / 6 total files
+    │   ├── tool/ — 8 direct / 15 total files
+    │   │   └── pc-local/ — 7 direct / 7 total files
     │   └── workspace/ — 7 direct / 7 total files
     ├── extensions/ — 9 direct / 10 total files
     │   └── support/ — 1 direct / 1 total files
@@ -548,11 +548,11 @@ packages/desktop-runtime/ — 4 direct / 594 total files
     │   └── legacy-thread-store/ — 3 files
     │       └── threads/ — 3 direct / 3 total files
     ├── hooks/ — 1 direct / 1 total files
-    ├── integration/ — 63 files
-    │   ├── adapters/ — 10 files
+    ├── integration/ — 64 files
+    │   ├── adapters/ — 11 files
     │   │   ├── skill/ — 1 direct / 1 total files
     │   │   ├── store/ — 1 direct / 1 total files
-    │   │   └── tool/ — 8 direct / 8 total files
+    │   │   └── tool/ — 9 direct / 9 total files
     │   ├── agent-loop/ — 31 direct / 31 total files
     │   └── runtime-server/ — 22 direct / 22 total files
     ├── loop/ — 33 files
