@@ -128,6 +128,7 @@
 .pr-markdown .chat-markdown { font-size: 13px; line-height: 1.75; overflow-wrap: anywhere; }
 .pr-markdown .chat-markdown > :first-child { margin-top: 0; }
 .pr-markdown .chat-markdown > :last-child { margin-bottom: 0; }
+.pr-markdown .chat-markdown pre { max-width: 100%; overflow-x: auto; }
 .pr-description { padding: 4px 0 16px; }
 .pr-timeline { display: flex; flex: 1 0 auto; flex-direction: column; gap: 16px; margin-top: 24px; }
 .pr-timeline > * { flex-shrink: 0; }
