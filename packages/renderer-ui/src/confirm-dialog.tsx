@@ -26,7 +26,8 @@ export function ConfirmDialog({ open, title, description, confirmLabel, cancelLa
   const labels = useUiLabels();
   return <Dialog open={open} width={420} dismissible={!pending} onClose={onClose}
     title={<span className="sd-confirm-dialog__title">
-      {!acknowledgement ? <TriangleAlert size={16} aria-hidden="true" /> : null}{title}
+      {!acknowledgement ? <TriangleAlert size={16} aria-hidden="true" /> : null}
+      <span className="sd-confirm-dialog__title-text">{title}</span>
     </span>}
     footer={<>
       {!acknowledgement ? <Button disabled={pending} onClick={onClose}>{cancelLabel ?? labels.cancel}</Button> : null}

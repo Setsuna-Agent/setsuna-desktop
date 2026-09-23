@@ -112,13 +112,20 @@
 /* Confirmation surfaces share the dialog gutter, footer and focus behavior. */
 .sd-confirm-dialog__title {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
+  min-width: 0;
 }
 
 .sd-confirm-dialog__title > svg {
   flex-shrink: 0;
+  margin-top: 4px;
   color: var(--app-text-secondary);
+}
+
+.sd-confirm-dialog__title-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .sd-confirm-dialog__description {
