@@ -427,6 +427,65 @@ describe('desktop review state actions', () => {
     await expect(createAndCheckoutReviewBranch(untrackedRepo, 'feature/untracked-blocked')).rejects.toThrow('未暂存更改');
   }, GIT_INTEGRATION_TEST_TIMEOUT_MS);
 
+  it('auto-stages working changes when requested and carries the complete index to the new branch without committing', async () => {
+    const repo = await mkGitRepo();
+    const head = await git(repo, ['rev-parse', 'HEAD']);
+    await writeFile(path.join(repo, 'staged.txt'), 'already staged\n');
+    await git(repo, ['add', 'staged.txt']);
+    await writeFile(path.join(repo, 'tracked.txt'), 'changed\n');
+    await writeFile(path.join(repo, 'new.txt'), 'new file\n');
+    await writeFile(path.join(repo, '.git', 'info', 'exclude'), 'ignored.log\n');
+    await writeFile(path.join(repo, 'ignored.log'), 'ignored\n');
+
+    const result = await createAndCheckoutReviewBranch(repo, 'feature/auto-stage', { stageUnstaged: true });
+
+    expect(result.currentBranch).toBe('feature/auto-stage');
+    expect(result.stagedSummary?.files.map((file) => file.path).sort()).toEqual(['new.txt', 'staged.txt', 'tracked.txt']);
+    expect(result.unstagedSummary?.files).toEqual([]);
+    await expect(git(repo, ['rev-parse', 'HEAD'])).resolves.toBe(head);
+    await expect(git(repo, ['show', ':tracked.txt'])).resolves.toBe('changed');
+    await expect(readFile(path.join(repo, 'new.txt'), 'utf8')).resolves.toBe('new file\n');
+    await expect(readFile(path.join(repo, 'ignored.log'), 'utf8')).resolves.toBe('ignored\n');
+  }, GIT_INTEGRATION_TEST_TIMEOUT_MS);
+
+  it('preserves partial staging when branch creation fails, including ref namespace conflicts', async () => {
+    const repo = await mkGitRepo();
+    await git(repo, ['branch', 'existing']);
+    await git(repo, ['branch', 'nested/branch']);
+    await writeFile(path.join(repo, 'tracked.txt'), 'staged version\n');
+    await git(repo, ['add', 'tracked.txt']);
+    await writeFile(path.join(repo, 'tracked.txt'), 'working version\n');
+    await writeFile(path.join(repo, 'untracked.txt'), 'untracked\n');
+    const index = await git(repo, ['diff', '--cached']);
+    const working = await git(repo, ['diff']);
+    const branch = await git(repo, ['branch', '--show-current']);
+
+    for (const name of ['invalid name', 'existing', 'existing/new', 'nested']) {
+      await expect(createAndCheckoutReviewBranch(repo, name, { stageUnstaged: true })).rejects.toThrow();
+      await expect(git(repo, ['diff', '--cached'])).resolves.toBe(index);
+      await expect(git(repo, ['diff'])).resolves.toBe(working);
+      await expect(git(repo, ['branch', '--show-current'])).resolves.toBe(branch);
+      await expect(git(repo, ['ls-files', '--others', '--exclude-standard'])).resolves.toBe('untracked.txt');
+    }
+  }, GIT_INTEGRATION_TEST_TIMEOUT_MS);
+
+  it('does not auto-stage unresolved merge conflicts', async () => {
+    const repo = await mkGitRepo();
+    await git(repo, ['checkout', '-b', 'other']);
+    await writeFile(path.join(repo, 'tracked.txt'), 'other branch\n');
+    await git(repo, ['commit', '-am', 'other change']);
+    await git(repo, ['checkout', '-b', 'current', 'HEAD~1']);
+    await writeFile(path.join(repo, 'tracked.txt'), 'current branch\n');
+    await git(repo, ['commit', '-am', 'current change']);
+    await expect(git(repo, ['merge', 'other'])).rejects.toThrow();
+    const unmerged = await git(repo, ['ls-files', '--unmerged']);
+    expect(unmerged).not.toBe('');
+
+    await expect(createAndCheckoutReviewBranch(repo, 'feature/conflict', { stageUnstaged: true })).rejects.toThrow('合并冲突');
+    await expect(git(repo, ['ls-files', '--unmerged'])).resolves.toBe(unmerged);
+    await expect(git(repo, ['branch', '--show-current'])).resolves.toBe('current');
+  }, GIT_INTEGRATION_TEST_TIMEOUT_MS);
+
   it('stages, unstages, and discards local git changes', async () => {
     const repo = await mkGitRepo();
     const trackedPath = path.join(repo, 'tracked.txt');

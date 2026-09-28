@@ -17,7 +17,7 @@ async function openMenu(service: ReviewRendererService) {
   render(
     <ReviewRendererProvider service={service}>
       <ReviewRendererTestHost>
-        <GitChangesMenu refs={[]} selectedRef="" currentBranch="main" filterVisible={false} busy={false} onSelectRef={noop} onSelectHead={noop} onToggleFilter={noop} />
+        <GitChangesMenu refs={[]} selectedRef="" currentBranch="main" busy={false} onSelectRef={noop} onSelectHead={noop} />
       </ReviewRendererTestHost>
     </ReviewRendererProvider>,
   );

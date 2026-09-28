@@ -1,6 +1,6 @@
 .capabilities-page {
   --desktop-capabilities-content-width: 750px;
-  --desktop-capabilities-page-padding-top: 56px;
+  --desktop-capabilities-page-padding-top: 28px;
   --desktop-capabilities-page-padding-inline: 20px;
   --desktop-capabilities-in-page-navigation-padding-top: 14px;
 
@@ -35,12 +35,6 @@
   grid-template-rows: minmax(0, 1fr);
   padding-top: var(--desktop-capabilities-page-padding-top);
   overflow: auto;
-}
-
-:root[data-desktop-platform='win32'] .desktop-capabilities-panel__inner--detail {
-  /* Breadcrumb 留在内容区，同时保持详情正文原有的纵向起点。 */
-  grid-template-rows: auto minmax(0, 1fr);
-  padding-top: var(--desktop-capabilities-in-page-navigation-padding-top);
 }
 
 .desktop-capabilities-panel__inner--catalog {

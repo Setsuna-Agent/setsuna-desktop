@@ -6,7 +6,7 @@
 
 .desktop-review-panel {
   --desktop-review-panel-x-padding: 8px;
-  --desktop-review-file-action-edge: 8px;
+  --desktop-review-file-action-edge: var(--app-topbar-item-gap);
   --desktop-review-file-content-max-width: 80%;
   --desktop-review-file-info-width: 75%;
   --desktop-review-file-icon-size: 16px;
@@ -168,18 +168,6 @@
 
 .desktop-review-panel__refresh.is-refreshing .desktop-review-panel__refresh-icon {
   animation: desktop-review-refresh-spin 0.8s linear infinite;
-}
-
-.desktop-review-panel__commit-action.sd-button {
-  flex: 0 0 auto;
-  gap: 5px;
-  border: 1px solid var(--app-border-strong);
-  border-radius: var(--app-radius-sm);
-  background: transparent;
-}
-
-.desktop-review-panel__commit-action > svg {
-  flex: 0 0 auto;
 }
 
 @keyframes desktop-review-refresh-spin {
@@ -408,6 +396,7 @@
   top: 3px;
   right: var(--desktop-review-file-action-edge);
   justify-content: flex-end;
+  gap: 4px;
   height: 28px;
   padding-left: 16px;
   background: linear-gradient(90deg, transparent, var(--desktop-review-file-row-bg) 14px);
@@ -426,6 +415,8 @@
 }
 
 .desktop-review-file-card__meta .sd-icon-button {
+  width: var(--app-topbar-navigation-control-size);
+  height: var(--app-topbar-navigation-control-size);
   color: var(--app-text-muted);
   transition: color 120ms ease;
 }
@@ -471,11 +462,6 @@
   gap: inherit;
   padding: 0;
   background: transparent;
-}
-
-.desktop-review-file-card__summary--toolbar .desktop-review-file-card__meta .sd-icon-button {
-  width: var(--app-topbar-navigation-control-size);
-  height: var(--app-topbar-navigation-control-size);
 }
 
 .desktop-review-file-card__view-controls {

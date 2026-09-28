@@ -23,49 +23,53 @@ export function GitChangesCommitComposer({ blocked = false }: { blocked?: boolea
       // The shared composer explains blocked commits, so the form always forwards the attempt.
       composer?.commit();
     }}>
-      <div className="git-changes-composer__input">
-        <TextArea
-          ref={inputRef}
-          autoSize={height === null ? { minRows: 1, maxRows: 3 } : false}
-          style={height === null ? undefined : { height }}
-          rows={1}
-          wrap="soft"
-          aria-label={t('feature.review.history.messageLabel')}
-          placeholder={t('feature.review.history.messagePlaceholder', {
-            branch: composer?.currentBranch ?? 'HEAD',
-          })}
-          value={message}
-          disabled={!composer || busy}
-          onChange={(event) => composer?.setMessage(event.currentTarget.value)}
-        />
-        <ReviewActionTooltip
-          className="git-changes-composer__generate-tooltip"
-          title={t(composer?.generating ? 'feature.review.git.generatingMessage' : 'feature.review.history.generateMessage')}
-        >
-          <Button variant="ghost"
-            className="git-changes-composer__generate"
-            type="button"
-            aria-label={t('feature.review.history.generateMessage')}
-            aria-busy={composer?.generating || undefined}
-            onClick={() => composer?.generateMessage()}
+      <div className="git-changes-composer__surface">
+        <div className="git-changes-composer__input">
+          <TextArea
+            ref={inputRef}
+            autoSize={height === null ? { minRows: 1, maxRows: 3 } : false}
+            style={height === null ? undefined : { height }}
+            rows={1}
+            wrap="soft"
+            aria-label={t('feature.review.history.messageLabel')}
+            placeholder={t('feature.review.history.messagePlaceholder', {
+              branch: composer?.currentBranch ?? 'HEAD',
+            })}
+            value={message}
+            disabled={!composer || busy}
+            onChange={(event) => composer?.setMessage(event.currentTarget.value)}
+          />
+          <ResizeHandle
+            {...resizeHandleProps}
+            className="git-changes-composer__resize"
+            aria-orientation="horizontal"
+            aria-label={t('feature.review.history.resizeMessage')}
+            title={t('feature.review.history.resizeMessageHint')}
+          />
+        </div>
+        <div className="git-changes-composer__toolbar">
+          <ReviewActionTooltip
+            className="git-changes-composer__generate-tooltip"
+            title={t(composer?.generating ? 'feature.review.git.generatingMessage' : 'feature.review.history.generateMessage')}
           >
-            {composer?.generating ? <Loader2 size={14} className="chat-git-loading-icon" /> : <Sparkles size={14} />}
-          </Button>
-        </ReviewActionTooltip>
-        <ResizeHandle
-          {...resizeHandleProps}
-          className="git-changes-composer__resize"
-          aria-orientation="horizontal"
-          aria-label={t('feature.review.history.resizeMessage')}
-          title={t('feature.review.history.resizeMessageHint')}
-        />
-      </div>
-      <div className="git-changes-composer__submit">
-        <Button variant="primary" size="small" className="git-changes-nav__commit" type="submit"
-          loading={composer?.committing} icon={<Check size={14} />} title={target}>
-          {t(composer?.committing ? 'feature.review.git.committing' : 'feature.review.git.commit')}
-        </Button>
-        <GitCommitActionMenu disabled={busy} />
+            <Button variant="ghost"
+              className="git-changes-composer__generate"
+              type="button"
+              aria-label={t('feature.review.history.generateMessage')}
+              aria-busy={composer?.generating || undefined}
+              onClick={() => composer?.generateMessage()}
+            >
+              {composer?.generating ? <Loader2 size={14} className="chat-git-loading-icon" /> : <Sparkles size={14} />}
+            </Button>
+          </ReviewActionTooltip>
+          <div className="git-changes-composer__submit">
+            <Button variant="ghost" size="small" className="git-changes-nav__commit" type="submit"
+              loading={composer?.committing} icon={<Check size={14} />} title={target}>
+              {t(composer?.committing ? 'feature.review.git.committing' : 'feature.review.git.commit')}
+            </Button>
+            <GitCommitActionMenu disabled={busy} />
+          </div>
+        </div>
       </div>
       {composer?.error ? <GitOperationError message={composer.error} onDismiss={composer.dismissError} /> : null}
     </form>

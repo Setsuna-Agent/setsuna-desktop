@@ -26,7 +26,7 @@ export const workspaceCodeViewUnsafeCSS = `
 
   [data-code] {
     align-content: start;
-    padding: 0 0 var(--chat-scrollbar-width, 8px);
+    padding: 0 0 var(--chat-scrollbar-width, 6px);
     scrollbar-width: none;
   }
 

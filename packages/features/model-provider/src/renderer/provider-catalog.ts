@@ -53,16 +53,12 @@ export function selectCatalogProvider(
 ): ProviderConfigState {
   const plan = catalogProvider.plans[0];
   if (!plan) return provider;
+  // Switching presets changes the connection, not the user's saved configuration.
   return {
     ...provider,
     catalogProviderId: catalogProvider.id,
-    requestHeaders: undefined,
-    name: catalogProvider.name,
     provider: plan.provider,
     baseUrl: plan.baseUrl,
-    apiKeySet: false,
-    apiKeyPreview: '',
-    models: [],
   };
 }
 
@@ -74,7 +70,6 @@ export function selectCatalogPlan(
     ...provider,
     provider: plan.provider,
     baseUrl: plan.baseUrl,
-    models: [],
   };
 }
 

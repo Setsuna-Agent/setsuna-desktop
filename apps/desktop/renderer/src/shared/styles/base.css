@@ -61,8 +61,6 @@ button {
 .sd-page-back:focus-visible,
 .chat-user-settings__tabs button:focus-visible,
 .chat-user-settings__option-button:focus-visible,
-.app-topbar__menu-item:focus-visible,
-.app-topbar__menu-popover button:focus-visible,
 .app-window-controls button:focus-visible {
   outline: 0;
   box-shadow: var(--app-focus-ring);

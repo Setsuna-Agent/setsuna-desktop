@@ -1,30 +1,17 @@
-import { Button } from '@setsuna-desktop/renderer-ui';
-import {
-  Bug,
-  GitPullRequest,
-  ListChecks,
-  ListTodo,
-  MessagesSquare,
-  Search,
-  type LucideIcon,
-} from 'lucide-react';
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
-
-type StarterSuggestion = {
-  icon: LucideIcon;
-  prompt: string;
-};
 
 export function ChatStarter({
   children,
   composer,
+  contextBar,
   settleComposerHeight = 0,
   settleOffsetY = 0,
   settlePhase = null,
 }: {
   children: ReactNode;
   composer: ReactNode;
+  contextBar?: ReactNode;
   settleComposerHeight?: number;
   settleOffsetY?: number;
   settlePhase?: 'settling' | 'settled' | null;
@@ -41,6 +28,7 @@ export function ChatStarter({
         {children}
 
         <div className="chat-starter__composer chat-starter__reveal chat-starter__reveal--composer">
+          {contextBar ? <div className="chat-starter__context">{contextBar}</div> : null}
           <div className="chat-starter__composer-motion" data-chat-starter-composer-motion>
             {composer}
           </div>
@@ -53,38 +41,14 @@ export function ChatStarter({
 export function ChatStarterContent({
   modelSetupNotice,
   projectName,
-  onSend,
 }: {
   modelSetupNotice?: ReactNode;
   projectName?: string;
-  onSend: (value: string) => Promise<boolean>;
 }) {
   const { t } = useI18n();
-  const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
   const title = projectName
     ? t('chat.starter.projectTitle', { project: projectName })
     : t('chat.starter.title');
-  const suggestions: StarterSuggestion[] = projectName
-    ? [
-        { icon: Search, prompt: t('chat.starter.project.explore', { project: projectName }) },
-        { icon: GitPullRequest, prompt: t('chat.starter.project.review', { project: projectName }) },
-        { icon: ListChecks, prompt: t('chat.starter.project.verify', { project: projectName }) },
-      ]
-    : [
-        { icon: ListTodo, prompt: t('chat.starter.general.plan') },
-        { icon: MessagesSquare, prompt: t('chat.starter.general.explain') },
-        { icon: Bug, prompt: t('chat.starter.general.debug') },
-      ];
-
-  const sendSuggestion = async (prompt: string) => {
-    if (pendingPrompt) return;
-    setPendingPrompt(prompt);
-    try {
-      await onSend(prompt).catch(() => false);
-    } finally {
-      setPendingPrompt(null);
-    }
-  };
 
   return (
     <>
@@ -102,25 +66,6 @@ export function ChatStarterContent({
           {modelSetupNotice}
         </div>
       ) : null}
-
-      <div
-        aria-label={t('chat.starter.suggestions')}
-        className="chat-starter__suggestions chat-starter__reveal chat-starter__reveal--suggestions"
-        role="group"
-      >
-        {suggestions.map(({ icon: Icon, prompt }) => (
-          <Button variant="ghost"
-            className="chat-starter__suggestion"
-            disabled={pendingPrompt !== null}
-            key={prompt}
-            type="button"
-            onClick={() => void sendSuggestion(prompt)}
-          >
-            <Icon className="chat-starter__suggestion-icon" aria-hidden="true" size={15} strokeWidth={1.8} />
-            <span className="chat-starter__suggestion-label">{prompt}</span>
-          </Button>
-        ))}
-      </div>
     </>
   );
 }

@@ -22,8 +22,10 @@ import { CapabilitiesRouteAdapter } from './CapabilitiesRouteAdapter.js';
 import { ChatRouteAdapter } from './ChatRouteAdapter.js';
 import { SettingsRouteAdapter } from './SettingsRouteAdapter.js';
 import { PluginRouteAdapter } from './PluginRouteAdapter.js';
+import type { ChatStarterProjectSelection } from '../../features/chat/conversation/ChatStarterWorkspace.js';
 
 export type AppRouteContentProps = Readonly<{
+  starterProjectSelection: ChatStarterProjectSelection;
   activeProject?: WorkspaceProject;
   activeWorkspace?: WorkspaceProject;
   activeView: MainView;

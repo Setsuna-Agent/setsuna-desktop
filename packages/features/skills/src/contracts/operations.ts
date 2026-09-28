@@ -86,6 +86,7 @@ const skillDirectoryInspectionResultCodec = defineRuntimeCodec<SkillDirectoryIns
 const skillListCodec = defineRuntimeCodec<RuntimeSkillList>((value) => {
   const record = objectRecord(value, 'Skill list must be an object.');
   return Object.freeze({
+    extraRoots: uniqueTextArray(record.extraRoots, 'extraRoots'),
     skills: arrayValue(record.skills, 'skills').map(skillSummary),
   });
 });

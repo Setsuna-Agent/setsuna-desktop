@@ -14,6 +14,7 @@ import type {
 import type { ReviewTarget } from '@setsuna-desktop/feature-review/contracts';
 import type { ReactNode } from 'react';
 import { ChatWorkspace } from '../../features/chat/ChatWorkspace.js';
+import type { ChatStarterProjectSelection } from '../../features/chat/conversation/ChatStarterWorkspace.js';
 import type { ChatModelSelectionHandler } from '../../features/chat/chatModelSelection.js';
 import type { ChatQueuedTurnActions } from '../../features/chat/hooks/useQueuedTurnInputActions.js';
 import { MarkdownNavigationProvider } from '../../features/chat/markdown/MarkdownNavigationProvider.js';
@@ -32,6 +33,7 @@ import type {
 } from '../types.js';
 
 export type ChatConversationSurfaceModel = Readonly<{
+  starterProjectSelection: ChatStarterProjectSelection;
   activeTurnId: string | null;
   activeWorkspace?: WorkspaceProject;
   canClearContext: boolean;
@@ -93,6 +95,7 @@ export function ChatConversationSurface({
   onWorkspaceMentionRequestConsumed,
   workspaceMentionRequest,
   reviewControls,
+  starterControls,
 }: Readonly<{
   imageAttachmentRequest: ChatImageAttachmentRequest | null;
   model: ChatConversationSurfaceModel;
@@ -100,6 +103,7 @@ export function ChatConversationSurface({
   onOpenWorkspaceFileContextMenu(target: WorkspaceFileContextTarget): void;
   onWorkspaceMentionRequestConsumed(requestId: number): void;
   reviewControls?: ReactNode;
+  starterControls?: ReactNode;
   workspaceMentionRequest: ChatWorkspaceMentionRequest | null;
 }>) {
   return (
@@ -129,6 +133,7 @@ export function ChatConversationSurface({
         plugins={model.plugins}
         queuedTurnActions={model.queuedTurnActions}
         reviewControls={reviewControls}
+        starterControls={starterControls}
         reviewError={model.reviewError}
         reviewState={model.reviewState}
         capabilitySelectionRequest={model.capabilitySelectionRequest}

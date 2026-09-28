@@ -5,18 +5,12 @@
   --desktop-agent-icon-size: 16px;
   --desktop-agent-leading-center: calc(var(--desktop-agent-text-start) - var(--desktop-agent-icon-size));
   --desktop-agent-leading-gap: calc(var(--desktop-agent-text-start) - var(--desktop-agent-leading-center) - var(--desktop-agent-icon-size) / 2);
-  --desktop-agent-mac-close-center: 23px;
   --desktop-agent-row-action-inset: 6px;
   --desktop-agent-row-action-size: 22px;
   --desktop-agent-row-height: 32px;
+  --desktop-agent-row-gap: 1px;
   -webkit-user-select: none;
   user-select: none;
-}
-
-/* macOS 原生关闭按钮位于 x=16、宽 14px，视觉圆心固定在 23px。
-   页面内容使用 CSS zoom，因此侧栏前导中心必须乘缩放倒数才能始终与它重合。 */
-:root[data-desktop-platform='darwin'] .desktop-agent-sidebar {
-  --desktop-agent-leading-center: calc(var(--desktop-agent-mac-close-center) * var(--app-page-scale-inverse));
 }
 
 .desktop-agent-sidebar :where(input, textarea, [contenteditable='true']) {
@@ -31,10 +25,6 @@
   gap: 4px;
   padding: 12px 8px 10px;
   background: transparent;
-}
-
-:root[data-desktop-platform='darwin'] .desktop-agent-sidebar__top-actions {
-  padding-top: 4px;
 }
 
 .desktop-agent-sidebar__top-actions > .sd-shortcut-tooltip-target {
@@ -92,18 +82,6 @@
   overscroll-behavior: contain;
 }
 
-.desktop-agent-sidebar__plugin-entries {
-  display: flex;
-  flex: 0 0 auto;
-  flex-direction: column;
-  gap: 4px;
-  padding: 0 8px 8px;
-}
-
-.desktop-agent-sidebar__plugin-entries:empty {
-  display: none;
-}
-
 .desktop-agent-sidebar__group {
   flex: 0 0 auto;
   min-width: 0;
@@ -124,7 +102,7 @@
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  gap: 0;
+  gap: var(--desktop-agent-row-gap);
   padding: 0 8px 4px;
   overflow: visible;
 }
@@ -160,8 +138,10 @@
   line-height: inherit;
 }
 
-.desktop-agent-sidebar__section-title-button:hover {
-  color: var(--app-sidebar-text-secondary);
+.desktop-agent-sidebar__section-title-button.sd-button:is(:hover, :active):not(:disabled) {
+  color: inherit;
+  background: transparent;
+  border-color: transparent;
 }
 
 .desktop-agent-sidebar__section-title-button.is-active {
@@ -270,95 +250,9 @@
   color: var(--app-danger);
 }
 
-.chat-sidebar-user {
-  position: relative;
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 2px;
-  padding: 10px var(--desktop-agent-row-start);
-  background: transparent;
-}
-
-.chat-sidebar-user > .sd-shortcut-tooltip-target {
-  display: flex;
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.chat-sidebar-user::before {
-  content: none;
-}
-
-.chat-sidebar-user__trigger,
-.chat-sidebar-user__more {
-  height: 28px;
-}
-
-.chat-sidebar-user__trigger {
-  display: flex;
-  align-items: center;
-  gap: var(--desktop-agent-leading-gap);
-  width: 100%;
-  padding: 0 9px 0 calc(var(--desktop-agent-leading-center) - var(--desktop-agent-row-start) - 1px - var(--desktop-agent-icon-size) / 2);
-  border: 1px solid transparent;
-  border-radius: var(--app-radius-md);
-  color: var(--app-sidebar-text);
-  background: transparent;
-  font-size: 13px;
-  line-height: 18px;
-  text-align: left;
-}
-
-.chat-sidebar-user__more {
-  display: inline-flex;
-  flex: 0 0 28px;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: var(--app-radius-md);
-  color: var(--app-sidebar-text-secondary);
-  background: transparent;
-}
-
-.chat-sidebar-user__more:hover,
-.chat-sidebar-user__more:focus-visible,
-.chat-sidebar-user__more.is-active {
-  color: var(--app-text);
-  border-color: var(--desktop-agent-divider);
-  background: var(--desktop-agent-sidebar-active-bg);
-  box-shadow: var(--desktop-agent-sidebar-active-shadow);
-}
-
-.chat-sidebar-user__icon {
-  flex: 0 0 var(--desktop-agent-icon-size);
-  width: var(--desktop-agent-icon-size);
-  height: var(--desktop-agent-icon-size);
-}
-
-.chat-sidebar-user__trigger:hover,
-.chat-sidebar-user__trigger:focus-visible {
-  color: var(--app-text);
-  border-color: var(--desktop-agent-divider);
-  background: var(--desktop-agent-sidebar-active-bg);
-  box-shadow: var(--desktop-agent-sidebar-active-shadow);
-}
-
-.chat-sidebar-user__name {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  font-size: 13px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .project-list {
   display: grid;
-  gap: 0;
+  gap: var(--desktop-agent-row-gap);
   width: 100%;
   min-width: 0;
 }
@@ -399,7 +293,7 @@
 
 .desktop-agent-project-node {
   display: grid;
-  gap: 0;
+  gap: var(--desktop-agent-row-gap);
   min-width: 0;
   position: relative;
 }
@@ -407,7 +301,7 @@
 .desktop-agent-session-list {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: var(--desktop-agent-row-gap);
   width: 100%;
   min-width: 0;
 }
@@ -485,7 +379,7 @@
 .desktop-agent-session.is-active {
   color: var(--app-text);
   border-color: transparent;
-  background: var(--desktop-agent-sidebar-active-bg);
+  background: var(--desktop-agent-sidebar-hover-bg);
 }
 
 .desktop-agent-session:has(.desktop-agent-session__select:focus-visible) {
@@ -646,7 +540,7 @@
 .desktop-agent-project.is-menu-open {
   border-color: transparent;
   color: var(--desktop-agent-sidebar-active-text);
-  background: var(--desktop-agent-sidebar-active-bg);
+  background: var(--desktop-agent-sidebar-hover-bg);
 }
 
 .desktop-agent-project:has(.desktop-agent-project__select:focus-visible) {
@@ -674,8 +568,8 @@
 }
 
 /* 整行容器统一承载状态背景，内部点击区不再叠加按钮的 hover 底色。 */
-.desktop-agent-session__select:hover:not(:disabled),
-.desktop-agent-project__select:hover:not(:disabled) {
+.desktop-agent-session__select:is(:hover, :active):not(:disabled),
+.desktop-agent-project__select:is(:hover, :active):not(:disabled) {
   color: inherit;
   background: transparent;
 }

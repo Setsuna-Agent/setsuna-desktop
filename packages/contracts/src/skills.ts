@@ -53,6 +53,7 @@ export type RuntimeSkillDetail = RuntimeSkillSummary & {
 };
 
 export type RuntimeSkillList = {
+  extraRoots: string[];
   skills: RuntimeSkillSummary[];
 };
 

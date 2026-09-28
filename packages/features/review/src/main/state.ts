@@ -186,9 +186,19 @@ export async function createAndCheckoutReviewBranch(
   const root = await resolveWorkspaceDirectory(workspaceRoot);
   const gitRoot = await requireGitRoot(root);
   const normalized = normalizeBranchName(branchName);
-  if (!options.allowUnstaged && await hasUnstagedChanges(gitRoot)) throw new Error('请先暂存或丢弃当前工作区的未暂存更改。');
   await assertValidBranchName(gitRoot, normalized);
+  if (options.stageUnstaged === true) {
+    // Validate before touching the index; auto-staging must not mark merge conflicts resolved.
+    const exists = await runGit(['show-ref', '--verify', '--quiet', `refs/heads/${normalized}`], gitRoot)
+      .then(() => true, () => false);
+    if (exists) throw new Error('分支已存在。');
+    if (await runGit(['ls-files', '--unmerged'], gitRoot)) throw new Error('请先解决当前工作区的合并冲突。');
+  } else if (!options.allowUnstaged && await hasUnstagedChanges(gitRoot)) {
+    throw new Error('请先暂存或丢弃当前工作区的未暂存更改。');
+  }
   await runGit(['checkout', '-b', normalized], gitRoot);
+  // Git must accept the new ref before auto-staging can replace a partial index.
+  if (options.stageUnstaged === true) await runGit(['add', '--all'], gitRoot);
   return getDesktopReviewState(root);
 }
 

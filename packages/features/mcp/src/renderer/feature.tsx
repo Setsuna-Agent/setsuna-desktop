@@ -13,6 +13,7 @@ import {
 } from '@setsuna-desktop/renderer-contracts/settings';
 import { capabilitiesRefreshCoordinatorCapability } from '@setsuna-desktop/renderer-contracts/capabilities';
 import { lazy } from 'react';
+import { Plug } from 'lucide-react';
 import {
   mcpFeature,
   mcpRendererHostCapability,
@@ -50,6 +51,7 @@ export const mcpRendererFeature = defineRendererFeature({
     registerSettingsPage(context.ui, {
       entryId: 'mcp.capabilities-page',
       location: 'capabilities',
+      icon: Plug,
       navigationGroupId: CAPABILITIES_CATALOG_NAVIGATION_GROUP_ID,
       order: 300,
       pageHeading: 'view',

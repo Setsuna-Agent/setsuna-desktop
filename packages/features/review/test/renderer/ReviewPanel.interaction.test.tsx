@@ -24,7 +24,6 @@ import {
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DesktopReviewPanel } from '../../src/renderer/ReviewPanel.js';
-import { WorkspaceGitCommitProvider } from '../../src/renderer/git/WorkspaceGitCommitDialog.js';
 import { ReviewRendererTestHost } from './review-renderer-test-host.js';
 
 afterEach(() => {
@@ -489,40 +488,6 @@ describe('DesktopReviewPanel interactions', () => {
 
     await act(async () => { await vi.advanceTimersByTimeAsync(120); });
     expect(virtualizerScrollTo).not.toHaveBeenCalled();
-  });
-
-  it('opens the shared Git dialog from the review action', async () => {
-    render(
-      <ReviewRendererTestHost locale="en-US">
-        <WorkspaceGitCommitProvider
-          activeProject={project}
-          reviewLoading={false}
-          reviewState={reviewState}
-        >
-          <DesktopReviewPanel
-            activeProject={project}
-            error={null}
-            latestSummary={emptySummary}
-            loading={false}
-            reviewState={reviewState}
-            onExternalOpenFile={() => undefined}
-            onOpenProjectFile={() => undefined}
-            onRefresh={() => undefined}
-            onSelectBaseRef={() => undefined}
-          />
-        </WorkspaceGitCommitProvider>
-      </ReviewRendererTestHost>,
-    );
-
-    const trigger = screen.getByRole('button', { name: 'Commit or push' }) as HTMLButtonElement;
-    expect(trigger.disabled).toBe(false);
-    await userEvent.click(trigger);
-    expect(screen.getByRole('dialog', { name: 'Commit or push' })).toBeTruthy();
-
-    const includeUnstaged = screen.getByRole('checkbox', { name: 'Include unstaged changes' }) as HTMLInputElement;
-    expect(includeUnstaged.checked).toBe(false);
-    await userEvent.click(includeUnstaged);
-    expect(includeUnstaged.checked).toBe(true);
   });
 
   it('refreshes a branch review without changing its selected base ref', async () => {

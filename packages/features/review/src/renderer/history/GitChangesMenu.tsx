@@ -1,6 +1,6 @@
 import { Button, type MenuProps } from '@setsuna-desktop/renderer-ui';
 
-import { Check, ChevronDown, Ellipsis, Settings } from 'lucide-react';
+import { ChevronDown, Ellipsis, Settings } from 'lucide-react';
 import { useState } from 'react';
 import type { DesktopGitRef } from '../../contracts/index.js';
 import { useWorkspaceGitCommitDialog } from '../git/WorkspaceGitCommitDialog.js';
@@ -8,25 +8,19 @@ import { useReviewRendererHost } from '../host.js';
 import { ReviewActionTooltip } from '../primitives.js';
 import { GitSettingsDialog } from '../git/GitSettingsDialog.js';
 
-export function GitChangesMenu({ refs, selectedRef, currentBranch, filterVisible, busy, onSelectRef, onSelectHead, onToggleFilter }: {
+export function GitChangesMenu({ refs, selectedRef, currentBranch, busy, onSelectRef, onSelectHead }: {
   refs: DesktopGitRef[];
   selectedRef: string;
   currentBranch: string | null;
-  filterVisible: boolean;
   busy: boolean;
   onSelectRef: (ref: DesktopGitRef) => void;
   onSelectHead: () => void;
-  onToggleFilter: () => void;
 }) {
   const { translate: t, ui: { ContextMenu } } = useReviewRendererHost();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const commitItems = useGitCommitMenuItems();
   const { composer, canOpenCommitDialog, openCommitDialog } = useWorkspaceGitCommitDialog();
   const items: MenuProps['items'] = [
-    { key: 'filter', label: t('feature.review.history.filterFiles'), extra: filterVisible ? <Check size={13} /> : null, onClick: onToggleFilter },
-    { type: 'divider' },
-    { key: 'commit', label: t('feature.review.git.commit'), children: commitItems },
     {
       key: 'branches', label: t('feature.review.history.browse'), children: [
         { key: 'head', label: t('feature.review.history.current', { branch: currentBranch ?? 'HEAD' }), onClick: onSelectHead },
@@ -67,7 +61,7 @@ export function GitCommitActionMenu({ disabled = false }: { disabled?: boolean }
   return (
     <ReviewActionTooltip disabled={menuOpen} className="git-changes-composer__commit-menu-tooltip" title={t('feature.review.history.commitOptions')}>
       <ContextMenu disabled={disabled} onOpenChange={setMenuOpen} trigger={['click']} placement="bottomRight" menu={{ items }}>
-        <Button variant="primary" size="small" disabled={disabled} className="git-changes-composer__commit-menu" type="button" aria-haspopup="menu" aria-label={t('feature.review.history.commitOptions')}>
+        <Button variant="ghost" size="small" disabled={disabled} className="git-changes-composer__commit-menu" type="button" aria-haspopup="menu" aria-label={t('feature.review.history.commitOptions')}>
           <ChevronDown size={13} />
         </Button>
       </ContextMenu>

@@ -3,7 +3,7 @@
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import type { PropsWithChildren } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { DesktopDiffFile, DesktopGitCommit, DesktopGitCommitDetails, DesktopGitHistoryPage, DesktopReviewBridge, DesktopReviewState } from '../../../src/contracts/index.js';
+import type { DesktopDiffFile, DesktopGitCommit, DesktopGitCommitDetails, DesktopGitHistoryPage, DesktopGitRef, DesktopReviewBridge, DesktopReviewState } from '../../../src/contracts/index.js';
 import { GitChangesPanel } from '../../../src/renderer/history/GitChangesPanel.js';
 import { GitHistoryGraph } from '../../../src/renderer/history/GitHistoryGraph.js';
 import { useGitCommitFile } from '../../../src/renderer/history/useGitCommit.js';
@@ -176,6 +176,29 @@ describe('Git change navigation', () => {
     fireEvent.contextMenu(target);
     fireEvent.click(await screen.findByRole('menuitem', { name: '复制提交 ID' }));
     await waitFor(() => expect(notifyError).toHaveBeenCalledWith('复制失败：Clipboard unavailable'));
+  });
+
+  it('keeps every ref actionable through the primary chip and overflow menu without selecting the commit', async () => {
+    const refs: DesktopGitRef[] = [
+      { name: 'refs/heads/main', label: 'main', kind: 'local', oid: one },
+      { name: 'refs/remotes/origin/main', label: 'origin/main', kind: 'remote', oid: one },
+      { name: 'refs/tags/release/next', label: 'release/next', kind: 'tag', oid: one },
+    ];
+    const onSelectRef = vi.fn();
+    const onSelect = vi.fn();
+    render(<GitHistoryGraph workspaceRoot="/repo" commits={[commit(one)]} refs={refs} head={one} selectedOid={null}
+      loading={false} hasMore={false} error={null} onSelect={onSelect} onSelectRef={onSelectRef} onLoadMore={noop} onRetry={noop}
+    />, { wrapper: host({}) });
+
+    fireEvent.click(screen.getByRole('button', { name: 'main', exact: true }));
+    expect(onSelectRef).toHaveBeenLastCalledWith(refs[0]);
+    for (const ref of refs.slice(1)) {
+      fireEvent.pointerDown(screen.getByRole('button', { name: '浏览分支或标签' }), { button: 0, pointerType: 'mouse' });
+      fireEvent.click(await screen.findByRole('menuitem', { name: ref.label }));
+      expect(onSelectRef).toHaveBeenLastCalledWith(ref);
+    }
+    expect(onSelectRef).toHaveBeenCalledTimes(3);
+    expect(onSelect).not.toHaveBeenCalled();
   });
 
   it('loads a hover card only after a pause and keeps its actions separate from diff selection and the context menu', async () => {

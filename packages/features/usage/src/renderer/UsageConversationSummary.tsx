@@ -31,7 +31,7 @@ export function UsageConversationSummary({ thread }: Readonly<{ thread: RuntimeT
     <div className="chat-conversation-overview-panel__row chat-conversation-overview-panel__row--static">
       <span className="chat-conversation-overview-panel__icon"><CircleGauge size={14} /></span>
       <span className="chat-conversation-overview-panel__label">
-        {translate('feature.usage.conversation.usageDiagnostics')}
+        {translate('feature.usage.conversation.usage')}
       </span>
       <Tooltip
         title={(

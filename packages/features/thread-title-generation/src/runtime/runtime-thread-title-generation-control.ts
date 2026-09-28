@@ -9,7 +9,6 @@ import {
   type RuntimeFeatureSettingsDocumentHandle,
 } from '@setsuna-desktop/feature-core/settings';
 import type {
-  ThreadTitleGeneration,
   ThreadTitleGenerationControl,
   ThreadTitleGenerationModelSelection,
   ThreadTitleGenerationRuntimeHost,
@@ -65,20 +64,23 @@ export class RuntimeThreadTitleGenerationControl implements ThreadTitleGeneratio
     }
   }
 
-  start(input: ThreadTitleGenerationStartInput): ThreadTitleGeneration | null {
-    if (input.taskKind !== 'regular' || input.thread.title !== DEFAULT_THREAD_TITLE) return null;
+  async start(input: ThreadTitleGenerationStartInput): Promise<void> {
+    if (input.taskKind !== 'regular' || input.thread.title !== DEFAULT_THREAD_TITLE) return;
     if (input.thread.messages.some((message) => message.role === 'user' && message.visibility !== 'model')) {
-      return null;
+      return;
     }
 
-    const result = this.scope.runOperation(async (signal) => {
+    // Generation and persistence share the Feature lifetime, independently of the
+    // first answer's completion or cancellation. Feature shutdown still cancels both.
+    await this.scope.runOperation(async (signal) => {
       const selection = (await this.settings.read()).value;
       const model = await this.host.resolveModel({
         selection,
         ...(input.conversationModel ? { fallback: input.conversationModel } : {}),
       });
-      if (!model) return null;
-      return generateThreadTitle({
+      if (!model) return;
+      signal.throwIfAborted();
+      const generated = await generateThreadTitle({
         attachmentCount: input.attachmentCount,
         sessionId: input.thread.id,
         host: this.host,
@@ -88,27 +90,20 @@ export class RuntimeThreadTitleGenerationControl implements ThreadTitleGeneratio
         signal,
         userContent: input.userContent,
       });
-    }, { signal: input.signal }).catch(() => null);
-
-    return Object.freeze({
-      initialSeq: input.thread.lastSeq,
-      result,
-    });
+      signal.throwIfAborted();
+      if (generated.usage) await this.host.recordUsage(input.thread.id, input.turnId, generated.usage);
+      if (generated.title) await this.commit(input, generated.title, signal);
+    }).catch(() => undefined);
   }
 
-  async commit(
-    threadId: string,
-    turnId: string,
-    generation: ThreadTitleGeneration | null | undefined,
+  private async commit(
+    input: ThreadTitleGenerationStartInput,
+    title: string,
+    signal: AbortSignal,
   ): Promise<void> {
-    if (!generation) return;
-    const generated = await generation.result;
-    if (!generated) return;
-    if (generated.usage) await this.host.recordUsage(threadId, turnId, generated.usage);
-    if (!generated.title) return;
-
+    const threadId = input.thread.id;
     await this.host.flushThread(threadId);
-    const eventsSinceTurnStart = await this.host.listEvents(threadId, generation.initialSeq);
+    const eventsSinceTurnStart = await this.host.listEvents(threadId, input.thread.lastSeq);
     const explicitlyRenamed = eventsSinceTurnStart.some((event) => (
       event.type === 'thread.updated'
       && typeof event.payload.title === 'string'
@@ -125,7 +120,8 @@ export class RuntimeThreadTitleGenerationControl implements ThreadTitleGeneratio
       || !fallback
       || current.title !== fallbackThreadTitle(fallback.content, fallback.attachments?.length)
     ) return;
-    await this.host.appendTitleUpdate(threadId, turnId, generated.title);
+    signal.throwIfAborted();
+    await this.host.appendTitleUpdate(threadId, input.turnId, title);
   }
 }
 

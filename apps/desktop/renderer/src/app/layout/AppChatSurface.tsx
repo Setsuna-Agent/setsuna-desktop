@@ -7,6 +7,7 @@ import {
 } from '../../composition/review-feature-adapter.js';
 import { useChatImageAttachmentRequest } from '../../features/chat/hooks/useChatImageAttachmentRequest.js';
 import { chatThreadModelSelection } from '../../features/chat/chatModelSelection.js';
+import { ChatStarterWorkspace } from '../../features/chat/conversation/ChatStarterWorkspace.js';
 import {
   RuntimePluginNavigationProvider,
   type OpenRuntimePluginHandler,
@@ -75,6 +76,19 @@ export function AppChatSurface({
         <ChatConversationSurface
           imageAttachmentRequest={imageAttachmentRequest}
           model={conversation}
+          starterControls={(
+            <ChatStarterWorkspace activeProject={conversation.activeWorkspace} {...conversation.starterProjectSelection}>
+              <ReviewFeatureConversationGitControls
+                key={conversation.activeWorkspace?.id ?? 'global'}
+                variant="compact"
+                activeProject={conversation.activeWorkspace}
+                reviewError={workspace.context.reviewError}
+                reviewLoading={workspace.context.reviewLoading}
+                reviewState={workspace.context.reviewState}
+                onReviewRefresh={workspace.actions.onReviewRefresh}
+              />
+            </ChatStarterWorkspace>
+          )}
           reviewControls={(
             <ReviewFeatureConversationGitControls
               activeProject={workspace.context.activeWorkspace}

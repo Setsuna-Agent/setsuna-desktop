@@ -1,7 +1,11 @@
-export function SettingsPathValue({ path }: { path: string }) {
+import { File, Folder } from 'lucide-react';
+
+export function SettingsPathValue({ kind, path }: { kind: 'file' | 'directory'; path: string }) {
   const { directory, name, separator } = settingsPathParts(path);
+  const Icon = kind === 'file' ? File : Folder;
   return (
     <span className="chat-user-settings__path-value" title={path}>
+      <Icon className="chat-user-settings__path-icon" size={12} aria-hidden="true" />
       {directory ? (
         <span className="chat-user-settings__path-directory">{directory}</span>
       ) : null}

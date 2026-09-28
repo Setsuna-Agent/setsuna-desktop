@@ -60,7 +60,7 @@ export class RendererSkillsService implements SkillsRendererService {
     }, options);
     if (stateVersion === this.stateVersion && sequence >= this.appliedRefreshSequence) {
       this.appliedRefreshSequence = sequence;
-      this.applySkills(list.skills);
+      this.applySkills(list.skills, list.extraRoots);
     }
     return list;
   }
@@ -125,7 +125,7 @@ export class RendererSkillsService implements SkillsRendererService {
     const normalizedRoots = normalizeSkillExtraRoots(extraRoots);
     return this.runMutation(
       (signal) => this.options.client.setExtraRoots(normalizedRoots, { signal }),
-      (list) => this.applySkills(list.skills, normalizedRoots),
+      (list) => this.applySkills(list.skills, list.extraRoots),
       options,
     );
   }
@@ -140,7 +140,7 @@ export class RendererSkillsService implements SkillsRendererService {
         const list = await this.options.client.listSkills({ signal });
         return { list, result };
       },
-      ({ list }) => this.applySkills(list.skills),
+      ({ list }) => this.applySkills(list.skills, list.extraRoots),
       options,
     ).then(({ result }) => result);
   }

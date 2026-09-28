@@ -12,6 +12,7 @@ const reviewIpcMocks = vi.hoisted(() => ({
   getCommitMessage: vi.fn(),
   getCommitMessageGenerationSource: vi.fn(),
   commit: vi.fn(),
+  createBranch: vi.fn(),
   pull: vi.fn(),
   handlers: new Map<string, (...args: unknown[]) => unknown>(),
   subscribe: vi.fn(),
@@ -40,7 +41,7 @@ vi.mock('../../src/main/state.js', () => ({
   checkoutReviewBranch: vi.fn(),
   commitReviewChanges: reviewIpcMocks.commit,
   getReviewCommitMessage: reviewIpcMocks.getCommitMessage,
-  createAndCheckoutReviewBranch: vi.fn(),
+  createAndCheckoutReviewBranch: reviewIpcMocks.createBranch,
   discardUnstagedReviewFiles: vi.fn(),
   getCommitMessageGenerationSource: reviewIpcMocks.getCommitMessageGenerationSource,
   getDesktopReviewState: reviewIpcMocks.getState,
@@ -123,6 +124,8 @@ describe('review IPC lifecycle', () => {
       expect(reviewIpcMocks.commit).toHaveBeenCalledWith('/repo', { message: 'Edited', includeUnstaged: false, push: false, sync: true, amend: target });
       // Only an explicit boolean true may broaden the default scope at the process boundary.
       for (const value of [undefined, false, true, 'true']) {
+        await ipcHandler('desktop-review:create-branch')({}, { workspaceRoot: '/repo', branchName: 'feature/test', stageUnstaged: value });
+        expect(reviewIpcMocks.createBranch).toHaveBeenLastCalledWith('/repo', 'feature/test', { allowUnstaged: false, stageUnstaged: value === true });
         const includeUnstaged = value === true;
         const scopeInput = value === undefined ? {} : { includeUnstaged: value };
         await ipcHandler('desktop-review:commit')({}, { workspaceRoot: '/repo', message: 'Scoped commit', ...scopeInput });

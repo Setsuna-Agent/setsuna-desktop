@@ -17,21 +17,12 @@ export function PanelPlacementIcon({
       stroke="currentColor"
       strokeLinecap="round"
       strokeLinejoin="round"
-      strokeWidth="2"
+      strokeWidth="1.7"
       viewBox="0 0 24 24"
       width={size}
     >
-      {placement === 'bottom' ? (
-        <>
-          <rect x="2.5" y="4" width="19" height="16" rx="2" />
-          <path d="M2.5 14.5h19" />
-        </>
-      ) : (
-        <>
-          <rect x="4" y="2.5" width="16" height="19" rx="2" />
-          <path d="M14.5 2.5v19" />
-        </>
-      )}
+      <rect x="3" y="4" width="18" height="16" rx="3" />
+      {placement === 'bottom' ? <path d="M3 14.5h18" /> : <path d="M15 4v16" />}
     </svg>
   );
 }

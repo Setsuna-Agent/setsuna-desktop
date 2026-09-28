@@ -9,7 +9,6 @@ import type {
 } from '../contracts/index.js';
 
 const TITLE_SOURCE_MAX_LENGTH = 6_000;
-const TITLE_GENERATION_TIMEOUT_MS = 12_000;
 export const THREAD_TITLE_RESPONSE_SCHEMA = Object.freeze({
   type: 'object',
   additionalProperties: false,
@@ -63,7 +62,8 @@ export async function generateThreadTitle({
   signal: AbortSignal;
   userContent: string;
 }): Promise<GeneratedThreadTitle> {
-  const titleSignal = AbortSignal.any([signal, AbortSignal.timeout(TITLE_GENERATION_TIMEOUT_MS)]);
+  // The model provider owns the request deadline, including queueing and streaming.
+  // A short title must not impose a short wall-clock budget on a slow model.
   const output = await host.generateText({
     model,
     sessionId,
@@ -78,7 +78,7 @@ export async function generateThreadTitle({
       description: 'One concise title for the first user message in a new conversation.',
       schema: THREAD_TITLE_RESPONSE_SCHEMA,
     },
-    signal: titleSignal,
+    signal,
   });
 
   // Provider-specific hidden-token accounting can exhaust an output before a

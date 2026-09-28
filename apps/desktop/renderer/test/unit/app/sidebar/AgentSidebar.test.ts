@@ -145,9 +145,6 @@ describe('AgentSidebar project actions', () => {
     expect(html).toContain('aria-label="在 test-project 中新建会话"');
     expect(html).toContain('>编辑项目</button>');
     expect(html).toContain('>归档项目</button>');
-    expect(html).toContain('>插件</span>');
-    expect(html).toContain('aria-label="更多操作"');
-    expect(html).toContain('>运行中心</button>');
   });
 
   it('moves chats into a persistent pinned section and restores their original project on unpin', () => {
@@ -249,16 +246,12 @@ function sidebarProps(project: WorkspaceProject): ComponentProps<typeof AgentSid
     onCreateProjectThread: noop,
     onEnterChatMode: noop,
     onEditProject: noop,
-    onOpenCapabilities: noop,
-    onOpenPullRequests: noop,
-    onOpenRuntimeActivity: noop,
-    onOpenSettings: noop,
     onRemoveProject: noop,
     onRenameThread: noop,
     onResizeStart: noop,
     onResizeStep: noop,
     onCreateProject: noop,
-    onSelectProject: noop,
+    onToggleProjectCollapsed: noop,
     onSelectThread: noop,
     onToggleProjectActions: noop,
     onToggleProjectsCollapsed: noop,
@@ -266,6 +259,5 @@ function sidebarProps(project: WorkspaceProject): ComponentProps<typeof AgentSid
     onToggleSessionsCollapsed: noop,
     onToggleThreadActions: noop,
     onToggleThreadPin: noop,
-    runtimeActivityTriggerRef: createRef<HTMLButtonElement>(),
   };
 }

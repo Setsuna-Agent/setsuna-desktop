@@ -71,6 +71,10 @@ export function createPiModel(
   const planModels = sameEndpointModels.length ? sameEndpointModels : apiModels;
   const inheritedHeaders = catalogBase?.headers ?? commonRecord(planModels.map((model) => model.headers));
   const inheritedCompat = catalogBase?.compat ?? commonRecord(planModels.map((model) => model.compat));
+  // Explicit endpoint compatibility overrides catalog metadata without changing reasoning support.
+  const compat = api === 'openai-completions' && typeof provider.supportsDeveloperRole === 'boolean'
+    ? { ...inheritedCompat, supportsDeveloperRole: provider.supportsDeveloperRole }
+    : inheritedCompat;
   return {
     ...(catalogBase ?? {}),
     id: modelId,
@@ -89,9 +93,9 @@ export function createPiModel(
     maxTokens: activeModel?.maxOutputTokens ?? catalogBase?.maxTokens ?? 8_192,
     thinkingLevelMap: catalogBase?.thinkingLevelMap ?? thinkingLevelMap(activeModel?.thinkingEfforts ?? []),
     ...(inheritedHeaders ? { headers: inheritedHeaders as Record<string, string> } : {}),
-    ...(inheritedCompat ? { compat: inheritedCompat } : {}),
+    ...(compat ? { compat } : {}),
     ...(provider.provider === 'anthropic' && options.forceAdaptiveThinking
-      ? { compat: { ...inheritedCompat, forceAdaptiveThinking: true } }
+      ? { compat: { ...compat, forceAdaptiveThinking: true } }
       : {}),
   };
 }

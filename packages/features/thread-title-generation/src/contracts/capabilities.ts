@@ -69,9 +69,9 @@ export interface ThreadTitleGenerationRuntimeHost {
 export type ThreadTitleGenerationStartInput = Readonly<{
   attachmentCount: number;
   conversationModel?: ThreadTitleGenerationResolvedModel;
-  signal: AbortSignal;
   taskKind: RuntimeTaskKind;
   thread: RuntimeThread;
+  turnId: string;
   userContent: string;
 }>;
 
@@ -80,19 +80,10 @@ export type GeneratedThreadTitle = Readonly<{
   usage?: RuntimeUsage;
 }>;
 
-export type ThreadTitleGeneration = Readonly<{
-  initialSeq: number;
-  result: Promise<GeneratedThreadTitle | null>;
-}>;
-
 export interface ThreadTitleGenerationControl {
   readonly available: boolean;
-  start(input: ThreadTitleGenerationStartInput): ThreadTitleGeneration | null;
-  commit(
-    threadId: string,
-    turnId: string,
-    generation: ThreadTitleGeneration | null | undefined,
-  ): Promise<void>;
+  /** Feature-owned background work; callers must not await it to finish the conversation turn. */
+  start(input: ThreadTitleGenerationStartInput): Promise<void>;
 }
 
 export interface ThreadTitleGenerationLegacySettingsAdapter {
@@ -118,7 +109,6 @@ export const threadTitleGenerationLegacySettingsCapability: CapabilityToken<Thre
 export function createNoopThreadTitleGenerationControl(): ThreadTitleGenerationControl {
   return Object.freeze({
     available: false,
-    start: () => null,
-    commit: async () => undefined,
+    start: async () => undefined,
   });
 }

@@ -1,0 +1,88 @@
+.app-navigation {
+  display: flex;
+  grid-column: 1;
+  grid-row: 2;
+  flex-direction: column;
+  align-items: center;
+  min-height: 0;
+  padding: 8px 0;
+  color: var(--app-sidebar-text-secondary);
+  user-select: none;
+}
+
+.app-navigation__routes,
+.app-navigation__plugins,
+.app-navigation__footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 8px;
+  width: 100%;
+}
+
+.app-navigation__routes {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-bottom: 8px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.app-navigation__plugins {
+  position: relative;
+  margin-top: 4px;
+  padding-top: 12px;
+}
+
+.app-navigation__plugins:empty {
+  display: none;
+}
+
+.app-navigation__plugins::before {
+  position: absolute;
+  top: 0;
+  width: 24px;
+  height: 1px;
+  background: var(--desktop-agent-sidebar-edge);
+  content: '';
+}
+
+.app-navigation__button.sd-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  color: var(--app-sidebar-text-secondary);
+  background: transparent;
+}
+
+.app-navigation__button.sd-button:hover:not(:disabled) {
+  color: var(--app-text);
+  background: var(--app-toolbar-control-hover-bg);
+}
+
+.app-navigation__button.sd-button.is-active:not(:disabled) {
+  color: var(--app-text);
+  background: var(--app-toolbar-control-active-bg);
+}
+
+.app-navigation__button > svg {
+  stroke-width: 1.7;
+}
+
+.app-navigation__button.sd-button:focus-visible {
+  outline: 0;
+  box-shadow: var(--app-focus-ring);
+}
+
+.app-navigation .sd-shortcut-tooltip-target {
+  display: flex;
+}

@@ -196,6 +196,7 @@ export function registerReviewIpc(scope: FeatureScope, dependencies: ReviewIpcDe
     const input = inputRecord(value);
     return createAndCheckoutReviewBranch(String(input.workspaceRoot ?? ''), String(input.branchName ?? ''), {
       allowUnstaged: Boolean(input.allowUnstaged),
+      stageUnstaged: input.stageUnstaged === true,
     });
   });
   registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.commit, (_event, value) => {

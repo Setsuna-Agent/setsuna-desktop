@@ -1,5 +1,5 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
-import { ArrowLeft, Check, RefreshCw } from 'lucide-react';
+import { ArrowLeft, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DesktopDiffFile, DesktopGitCommit, DesktopGitRef, DesktopReviewState } from '../../contracts/index.js';
 import { useReviewRendererHost } from '../host.js';
@@ -44,7 +44,6 @@ function GitChangesWorkspace({ workspaceRoot, editingMessage = false, reviewStat
   const showMessageEditor = editingMessage && Boolean(messageEditor);
   const history = useGitHistory(workspaceRoot, reviewState);
   const fileActions = useGitFileActions(workspaceRoot, onRefresh);
-  const [filterVisible, setFilterVisible] = useState(false);
   const [selectedOid, setSelectedOid] = useState<string | null>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [worktreeSelection, setWorktreeSelection] = useState<{ source: 'staged' | 'unstaged'; path: string | null } | null>(null);
@@ -118,9 +117,8 @@ function GitChangesWorkspace({ workspaceRoot, editingMessage = false, reviewStat
         <nav className="git-changes-nav" aria-label={t('feature.review.history.title')}>
           <div className="git-changes-nav__header">
             <h2 className="git-changes-nav__title">{t('feature.review.history.title')}</h2>
-            <ReviewIconButton tooltip className="app-shell-icon-control" label={t('feature.review.git.commit')} onClick={composer?.commit}><Check size={16} /></ReviewIconButton>
             <ReviewIconButton tooltip className="app-shell-icon-control" label={t('feature.review.workspace.refresh')} onClick={refresh} disabled={history.loading || reviewLoading}><RefreshCw size={13} /></ReviewIconButton>
-            <GitChangesMenu refs={refs} selectedRef={history.selectedRef} filterVisible={filterVisible} busy={fileActions.busy} onToggleFilter={() => setFilterVisible((value) => !value)} currentBranch={page?.currentBranch ?? reviewState?.currentBranch ?? null} onSelectRef={selectRef} onSelectHead={() => {
+            <GitChangesMenu refs={refs} selectedRef={history.selectedRef} busy={fileActions.busy} currentBranch={page?.currentBranch ?? reviewState?.currentBranch ?? null} onSelectRef={selectRef} onSelectHead={() => {
               history.selectRef('');
               if (page?.head) selectCommit(page.head);
             }} />
@@ -136,7 +134,6 @@ function GitChangesWorkspace({ workspaceRoot, editingMessage = false, reviewStat
               <GitChangesFiles
                 groups={groups}
                 pathContext={pathContext}
-                filterVisible={filterVisible}
                 selectedKey={selectedOid ? 'commit:' + commitFile?.path : worktreePath ? source + ':' + worktreePath : null}
                 loading={selectedOid ? details.loading : reviewLoading}
                 error={selectedOid ? details.error : fileActions.error ?? reviewError}

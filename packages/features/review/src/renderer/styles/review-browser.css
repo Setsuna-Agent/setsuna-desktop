@@ -10,7 +10,7 @@
 .desktop-review-file-tree {
   position: relative;
   display: grid;
-  grid-template-rows: 34px auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   width: var(--desktop-review-file-tree-width, 248px);
   min-width: 0;
   min-height: 0;
@@ -50,53 +50,20 @@ body.desktop-review-file-tree-resizing * {
   user-select: none !important;
 }
 
-.desktop-review-file-tree__header {
+.desktop-review-file-tree__toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 4px;
   min-width: 0;
-  padding: 0 10px;
-  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 58%, transparent);
-  color: var(--app-text-muted);
-  font-size: 12px;
-  font-weight: 500;
+  margin: 8px;
 }
 
-.desktop-review-file-tree__header-label {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
-}
-
-.desktop-review-file-tree__header-label > span:first-child {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.desktop-review-file-tree__header-count {
-  flex: 0 0 auto;
-  color: var(--app-text-subtle);
-  font-variant-numeric: tabular-nums;
-}
-
-.desktop-review-file-tree__header-actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 2px;
-}
-
-.desktop-review-file-tree__header-actions .sd-action-tooltip {
+.desktop-review-file-tree__toolbar .sd-action-tooltip {
   display: inline-flex;
+  flex: 0 0 auto;
 }
 
-.desktop-review-file-tree__header-button {
+.desktop-review-file-tree__layout-toggle {
   width: 26px;
   height: 26px;
   padding: 0;
@@ -104,16 +71,20 @@ body.desktop-review-file-tree-resizing * {
 
 .desktop-review-file-tree__search {
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
   gap: 6px;
   height: 30px;
   min-width: 0;
-  margin: 8px;
   padding: 0 7px;
   border: 1px solid color-mix(in srgb, var(--app-border) 76%, transparent);
   border-radius: var(--app-radius-sm);
   color: var(--app-text-muted);
   background: var(--app-bg);
+}
+
+.desktop-review-file-tree__search > svg {
+  flex: 0 0 auto;
 }
 
 .desktop-review-file-tree__search input {

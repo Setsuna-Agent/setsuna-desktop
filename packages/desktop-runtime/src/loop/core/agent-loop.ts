@@ -182,7 +182,6 @@ export class AgentLoop {
       ids: options.ids,
       memoryControl: () => this.featureControls.memory,
       streamEvents: this.modelStreamEvents,
-      threadTitleGeneration: () => this.featureControls.threadTitles,
       usageStore: options.usageStore,
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
     });

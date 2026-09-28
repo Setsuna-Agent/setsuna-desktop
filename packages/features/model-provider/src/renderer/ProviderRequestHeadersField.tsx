@@ -1,62 +1,74 @@
 import type { ProviderRequestHeaders } from '@setsuna-desktop/contracts';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import type { SettingsViewUi } from '@setsuna-desktop/renderer-contracts/settings';
-import { useId, useState } from 'react';
-import { defaultProviderRequestHeaders } from '../contracts/index.js';
-import { formatRequestHeaders, parseRequestHeaders } from './request-header-editor.js';
+import { Plus, Trash2 } from 'lucide-react';
+import { useEffect, useId, useState } from 'react';
+import { useRequestHeaderEditor } from './useRequestHeaderEditor.js';
 
 export function ProviderRequestHeadersField({
-  catalogProviderId, requestHeaders, onChange, translate, ui,
+  catalogProviderId, requestHeaders, onChange, onValidityChange, translate, ui,
 }: Readonly<{
   catalogProviderId?: string | null;
   requestHeaders?: ProviderRequestHeaders;
   onChange(headers: ProviderRequestHeaders | undefined): void;
+  onValidityChange?(valid: boolean): void;
   translate: RendererTranslate;
   ui: SettingsViewUi;
 }>) {
   const id = useId();
-  const source = formatRequestHeaders(requestHeaders ?? defaultProviderRequestHeaders(catalogProviderId));
-  // Keep incomplete edits local, and discard them if an external settings update changes the source.
-  const [draft, setDraft] = useState<{ source: string; text: string; invalid: boolean } | null>(null);
-  const currentDraft = draft?.source === source ? draft : null;
-  const invalid = currentDraft?.invalid ?? false;
+  const editor = useRequestHeaderEditor(catalogProviderId, requestHeaders, onChange);
+  const [focusRowId, setFocusRowId] = useState<string>();
+  const { invalid } = editor;
+
+  useEffect(() => { onValidityChange?.(!invalid); }, [invalid, onValidityChange]);
 
   return (
-    <div className="model-provider-settings__field model-provider-settings__request-headers">
+    <div className="model-provider-settings__field model-provider-settings__request-headers" role="group" aria-labelledby={id}>
       <div className="model-provider-settings__request-headers-head">
-        <label htmlFor={id}>{translate('feature.modelProvider.requestHeaders')}</label>
-        <ui.Button
-          variant="ghost"
-          disabled={requestHeaders === undefined && !currentDraft}
-          onClick={() => { setDraft(null); onChange(undefined); }}
-        >
-          {translate('feature.modelProvider.restoreDefaultHeaders')}
-        </ui.Button>
+        <span id={id}>{translate('feature.modelProvider.requestHeaders')}</span>
+        <div className="model-provider-settings__request-headers-actions">
+          <ui.Button variant="ghost" disabled={!editor.canRestore} onClick={editor.restore}>
+            {translate('feature.modelProvider.restoreDefaultHeaders')}
+          </ui.Button>
+          <ui.Button variant="ghost" icon={<Plus size={13} />} onClick={() => setFocusRowId(editor.add())}>
+            {translate('feature.modelProvider.addRequestHeader')}
+          </ui.Button>
+        </div>
       </div>
-      <ui.TextArea
-        id={id}
-        aria-describedby={`${id}-help${invalid ? ` ${id}-error` : ''}`}
-        aria-invalid={invalid}
-        autoComplete="off"
-        spellCheck={false}
-        rows={4}
-        value={currentDraft?.text ?? source}
-        placeholder="X-Custom-Header: value"
-        onChange={(event) => {
-          const text = event.currentTarget.value;
-          try {
-            const headers = parseRequestHeaders(text);
-            setDraft({ source: formatRequestHeaders(headers), text, invalid: false });
-            onChange(headers);
-          } catch {
-            setDraft({ source, text, invalid: true });
-          }
-        }}
-        onBlur={() => { if (!invalid) setDraft(null); }}
-      />
-      <small id={`${id}-help`}>
-        {translate('feature.modelProvider.requestHeadersHelp', { session: '{{sessionId}}', version: '{{appVersion}}' })}
-      </small>
+      {editor.rows.map((row, index) => (
+        <div className="model-provider-settings__request-header-row" key={row.id}>
+          <ui.TextField
+            aria-label={translate('feature.modelProvider.requestHeaderName', { index: index + 1 })}
+            aria-describedby={invalid ? `${id}-error` : undefined}
+            aria-invalid={invalid}
+            autoComplete="off"
+            autoFocus={focusRowId === row.id}
+            spellCheck={false}
+            placeholder={translate('feature.modelProvider.requestHeaderNamePlaceholder')}
+            value={row.name}
+            onChange={(event) => editor.update(row.id, { name: event.currentTarget.value })}
+          />
+          <ui.TextField
+            aria-label={translate('feature.modelProvider.requestHeaderValue', { index: index + 1 })}
+            aria-describedby={invalid ? `${id}-error` : undefined}
+            aria-invalid={invalid}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder={translate('feature.modelProvider.requestHeaderValuePlaceholder')}
+            value={row.value}
+            onChange={(event) => editor.update(row.id, { value: event.currentTarget.value })}
+          />
+          <ui.Tooltip title={translate('feature.modelProvider.removeRequestHeader', { index: index + 1 })}>
+            <ui.IconButton
+              label={translate('feature.modelProvider.removeRequestHeader', { index: index + 1 })}
+              title=""
+              onClick={() => editor.remove(row.id)}
+            >
+              <Trash2 size={14} aria-hidden="true" />
+            </ui.IconButton>
+          </ui.Tooltip>
+        </div>
+      ))}
       {invalid ? <small id={`${id}-error`} role="alert">{translate('feature.modelProvider.invalidRequestHeaders')}</small> : null}
     </div>
   );

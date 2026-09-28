@@ -327,7 +327,6 @@ export function SkillsExtraRootsSettings({
   return (
     <ui.Group>
       <ui.DirectoryList
-        description={translate('feature.skills.extraRootsDescription')}
         formatPresetCount={(count) => translate('feature.skills.directory.count', { count })}
         inspectDirectories={inspectDirectories}
         label={translate('feature.skills.extraRoots')}

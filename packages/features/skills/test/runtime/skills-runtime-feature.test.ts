@@ -80,7 +80,10 @@ describe('skillsRuntimeFeature', () => {
     const unnormalizedRoot = `${process.cwd()}${path.sep}skills${path.sep}..${path.sep}shared`;
     await expect(routeHandlers.get(setSkillExtraRoots.id)?.({
       extraRoots: [unnormalizedRoot],
-    })).resolves.toMatchObject({ skills: [{ id: 'local-helper' }] });
+    })).resolves.toMatchObject({
+      extraRoots: [path.resolve(unnormalizedRoot)],
+      skills: [{ id: 'local-helper' }],
+    });
     expect(setExtraRoots).toHaveBeenCalledWith([path.resolve(unnormalizedRoot)]);
     await expect(routeHandlers.get(setSkillExtraRoots.id)?.({
       extraRoots: ['../skills'],
@@ -103,6 +106,7 @@ function memorySkillsControl(
   subscribeChanges: SkillsControl['subscribeChanges'],
 ): SkillsControl {
   const skills = new Map<string, RuntimeSkillDetail>();
+  let extraRoots: string[] = [];
   return {
     authenticateMcpDependency: async (skillId) => requiredSkill(skills, skillId),
     createSkill: async (input) => {
@@ -119,10 +123,10 @@ function memorySkillsControl(
       installed: [],
       skill: requiredSkill(skills, skillId),
     }),
-    listSkills: async () => ({ skills: [...skills.values()] }),
+    listSkills: async () => ({ extraRoots, skills: [...skills.values()] }),
     resolvePromptContext: async () => ({ availableSkills: [], selectedInjections: [] }),
     selectedSkillInjections: async () => [],
-    setExtraRoots: async () => undefined,
+    setExtraRoots: async (roots) => { extraRoots = roots; },
     subscribeChanges,
     updateSkill: async (skillId, patch) => {
       const current = requiredSkill(skills, skillId);

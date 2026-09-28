@@ -30,7 +30,7 @@ describe('SettingsDirectoryList', () => {
       </I18nProvider>,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: '添加目录' }));
+    fireEvent.click(screen.getByRole('button', { name: '添加' }));
     await waitFor(() => {
       expect(selectDirectory).toHaveBeenCalledWith({ title: '选择额外 Skill 目录' });
       expect(onSave).toHaveBeenCalledWith(['C:\\existing-skills', 'D:\\shared-skills']);

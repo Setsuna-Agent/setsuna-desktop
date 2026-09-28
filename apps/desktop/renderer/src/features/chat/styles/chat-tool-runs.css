@@ -611,7 +611,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 .chat-tool-runs > .chat-tool-run--group > .chat-tool-run__body::-webkit-scrollbar-thumb {
   border: 0 !important;
   border-radius: var(--app-radius-full);
-  background: var(--chat-scrollbar-thumb) !important;
+  background: var(--sd-scrollbar-thumb) !important;
   background-clip: content-box !important;
 }
 

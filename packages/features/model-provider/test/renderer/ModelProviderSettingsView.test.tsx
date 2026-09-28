@@ -17,13 +17,96 @@ import type { ModelProviderClient } from '../../src/renderer/client.js';
 import { ModelProviderSettingsView } from '../../src/renderer/ModelProviderSettingsView.js';
 import { modelProviderMessages } from '../../src/renderer/messages.js';
 import { ProviderEditor } from '../../src/renderer/ProviderEditor.js';
-import { ProviderConnection } from '../../src/renderer/ProviderConnection.js';
 import { ProviderModelList } from '../../src/renderer/ProviderModelList.js';
 import { ModelProviderRendererStateService } from '../../src/renderer/service.js';
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('ModelProviderSettingsView', () => {
+  it('auto-saves developer role changes and explicitly clears the override when automatic is selected', async () => {
+    const user = userEvent.setup();
+    const save = vi.fn(async (input) => stateFromInput(input));
+    const service = new ModelProviderRendererStateService(clientFixture(save), null);
+    service.start();
+    const view = render(
+      <ModelProviderSettingsView
+        host={{ BrandIcon: () => null, BrandIconPicker: () => null, networkProxyBridge: null }}
+        service={service}
+        translate={translate}
+        ui={testUi}
+      />,
+    );
+    try {
+      await user.click(await screen.findByRole('button', { name: '高级配置' }));
+      for (const [value, override] of [['false', false], ['true', true], ['auto', null]] as const) {
+        await user.selectOptions(screen.getByLabelText('Developer role'), value);
+        await waitFor(() => expect(save).toHaveBeenLastCalledWith(expect.objectContaining({
+          providers: [expect.objectContaining({ supportsDeveloperRole: override })],
+        })));
+        expect(service.snapshot().state?.providers[0].supportsDeveloperRole).toBe(override ?? undefined);
+      }
+    } finally {
+      view.unmount();
+      service.dispose();
+    }
+  });
+
+  it('tests the current connection without saving or replacing models and blocks invalid header drafts', async () => {
+    const user = userEvent.setup();
+    const save = vi.fn(async (input) => stateFromInput(input));
+    const client = clientFixture(save);
+    const state = await client.read();
+    const provider = state.providers[0]!;
+    provider.apiKeySet = true;
+    provider.apiKeyPreview = 'sk-saved';
+    provider.proxyRoute = { mode: 'direct' };
+    provider.requestHeaders = { 'x-route': 'test-route' };
+    provider.models = [modelFixture('retained-model', 'Retained model', true)];
+    const pending = deferred<{ models: Array<{ id: string; name: string }> }>();
+    const discover = vi.fn<ModelProviderClient['discover']>().mockImplementationOnce(() => pending.promise);
+    const service = new ModelProviderRendererStateService({ ...client, discover }, null);
+    service.start();
+    const view = render(
+      <ModelProviderSettingsView
+        host={{ BrandIcon: () => null, BrandIconPicker: () => null, networkProxyBridge: null }}
+        service={service}
+        translate={translate}
+        ui={testUi}
+      />,
+    );
+    try {
+      await user.click(await screen.findByRole('button', { name: '测试连接' }));
+      const testingButton = screen.getByRole('button', { name: '测试中…' });
+      expect((testingButton as HTMLButtonElement).disabled).toBe(true);
+      expect(discover).toHaveBeenCalledWith({
+        providerId: provider.id,
+        catalogProviderId: provider.catalogProviderId,
+        provider: provider.provider,
+        baseUrl: provider.baseUrl,
+        proxyRoute: provider.proxyRoute,
+        requestHeaders: provider.requestHeaders,
+        apiKey: undefined,
+      }, { signal: expect.any(AbortSignal) });
+      await act(async () => pending.resolve({ models: [{ id: 'remote-model', name: 'Remote model' }] }));
+      expect(screen.getByRole('status').textContent).toBe('连接成功');
+      expect(service.snapshot().state).toEqual(state);
+      expect(save).not.toHaveBeenCalled();
+      expect(screen.queryByRole('dialog')).toBeNull();
+
+      discover.mockRejectedValueOnce(new Error('401 Unauthorized'));
+      await user.click(screen.getByRole('button', { name: '测试连接' }));
+      expect((await screen.findByRole('alert')).textContent).toBe('连接失败：401 Unauthorized');
+
+      await user.click(screen.getByRole('button', { name: '高级配置' }));
+      fireEvent.change(screen.getByLabelText('请求头名称 1'), { target: { value: 'invalid header' } });
+      expect((screen.getByRole('button', { name: '测试连接' }) as HTMLButtonElement).disabled).toBe(true);
+      expect(discover).toHaveBeenCalledTimes(2);
+    } finally {
+      view.unmount();
+      service.dispose();
+    }
+  });
+
   it('copies the saved key without revealing it, prioritizes a draft, and reports copy failures', async () => {
     const user = userEvent.setup();
     const client = clientFixture(async (input) => stateFromInput(input));
@@ -484,7 +567,7 @@ describe('ModelProviderSettingsView', () => {
         onChange={vi.fn()}
         onDelete={onDelete}
         onDiscover={vi.fn()}
-        onProviderIdentityChange={vi.fn()}
+        onTestConnection={vi.fn()}
       />,
     );
 
@@ -496,67 +579,93 @@ describe('ModelProviderSettingsView', () => {
     expect(onDelete).toHaveBeenCalledOnce();
   });
 
-  it('confirms a provider switch before clearing models and the saved API key', async () => {
-    const user = userEvent.setup();
-    const onProviderIdentityChange = vi.fn();
+  it.each(['', 'replacement-secret'])('retains configuration and API key draft %j when saving vendor and plan changes', async (apiKeyDraft) => {
     const provider: ProviderConfigState = {
       id: 'provider-deepseek',
-      name: 'DeepSeek',
+      name: 'My service',
       catalogProviderId: 'deepseek',
       provider: 'openai-compatible',
       baseUrl: 'https://api.deepseek.com',
       enabled: true,
       apiKeySet: true,
       apiKeyPreview: 'sk-••••',
+      requestHeaders: { 'x-custom-key': 'custom-value' },
+      proxyRoute: { mode: 'direct' },
       models: [modelFixture('deepseek-chat', 'DeepSeek Chat', true)],
     };
+    const catalog: ModelProviderCatalog = {
+      providers: [...clientCatalogFixture().providers, {
+        id: 'openai',
+        name: 'OpenAI',
+        plans: [{
+          id: 'openai:responses',
+          name: 'OpenAI Responses',
+          provider: 'openai-responses',
+          baseUrl: 'https://api.openai.com/v1',
+          models: [],
+        }, {
+          id: 'openai:chat',
+          name: 'OpenAI Chat Completions',
+          provider: 'openai-compatible',
+          baseUrl: 'https://gateway.example/v1',
+          models: [],
+        }],
+      }],
+    };
+    const afterVendor: ProviderConfigState = {
+      ...provider, catalogProviderId: 'openai', provider: 'openai-responses', baseUrl: 'https://api.openai.com/v1',
+    };
+    const afterPlan: ProviderConfigState = {
+      ...afterVendor, provider: 'openai-compatible', baseUrl: 'https://gateway.example/v1',
+    };
+    const save = vi.fn<ModelProviderClient['save']>()
+      .mockResolvedValueOnce({ activeProviderId: provider.id, providers: [afterVendor] })
+      .mockResolvedValueOnce({ activeProviderId: provider.id, providers: [afterPlan] });
+    const service = new ModelProviderRendererStateService({
+      ...clientFixture(save),
+      read: async () => ({ activeProviderId: provider.id, providers: [provider] }),
+      catalog: async () => catalog,
+      refreshCatalog: async () => ({ catalog }),
+    }, null);
+    service.start();
     render(
-      <ProviderConnection
-        apiKey=""
-        catalog={{
-          providers: [{
-            id: 'deepseek',
-            name: 'DeepSeek',
-            plans: [{
-              id: 'deepseek:chat',
-              name: 'OpenAI Chat Completions',
-              provider: 'openai-compatible',
-              baseUrl: 'https://api.deepseek.com',
-              models: [],
-            }],
-          }, {
-            id: 'openai',
-            name: 'OpenAI',
-            plans: [{
-              id: 'openai:responses',
-              name: 'OpenAI Responses',
-              provider: 'openai-responses',
-              baseUrl: 'https://api.openai.com/v1',
-              models: [],
-            }],
-          }],
-        }}
-        provider={provider}
-        proxyServers={[]}
+      <ModelProviderSettingsView
+        host={{ BrandIcon: () => null, BrandIconPicker: () => null, networkProxyBridge: null }}
+        service={service}
         translate={translate}
         ui={testUi}
-        onCopyApiKey={async () => undefined}
-        onApiKeyChange={vi.fn()}
-        onChange={vi.fn()}
-        onProviderIdentityChange={onProviderIdentityChange}
       />,
     );
 
-    await user.selectOptions(screen.getByLabelText('厂商'), 'openai');
-    const dialog = screen.getByRole('dialog');
-    expect(dialog.textContent).toContain('更换连接配置？');
-    expect(onProviderIdentityChange).not.toHaveBeenCalled();
-    await user.click(within(dialog).getByRole('button', { name: '确认更换' }));
-    expect(onProviderIdentityChange).toHaveBeenCalledWith(expect.objectContaining({
-      catalogProviderId: 'openai',
-      apiKeySet: false,
-      models: [],
-    }));
+    const vendor = await screen.findByLabelText('厂商');
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    if (apiKeyDraft) fireEvent.change(screen.getByLabelText(/^API Key/u), { target: { value: apiKeyDraft } });
+    fireEvent.change(vendor, { target: { value: 'openai' } });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(service.snapshot().state?.providers[0]).toEqual(afterVendor);
+    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
+
+    fireEvent.change(screen.getByLabelText('接入方案'), { target: { value: 'openai:chat' } });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(service.snapshot().state?.providers[0]).toEqual(afterPlan);
+    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
+
+    expect(save).toHaveBeenCalledTimes(2);
+    for (const [index, expected] of [afterVendor, afterPlan].entries()) {
+      expect(save.mock.calls[index]?.[0]).toEqual({
+        activeProviderId: provider.id,
+        providers: [{
+          ...providerInputFixture(expected),
+          icon: null,
+          requestHeaders: provider.requestHeaders,
+          supportsDeveloperRole: provider.supportsDeveloperRole ?? null,
+          ...(apiKeyDraft ? { apiKey: apiKeyDraft } : {}),
+        }],
+      });
+    }
+    expect(service.snapshot().state?.providers[0]).toEqual(afterPlan);
+    expect((screen.getByLabelText(/^API Key/u) as HTMLInputElement).value).toBe(apiKeyDraft);
+    service.dispose();
   });
 
   it.each(['', 'replacement-secret'])('preserves preset configuration when switching to custom with API key draft %j', async (apiKeyDraft) => {
@@ -615,6 +724,7 @@ describe('ModelProviderSettingsView', () => {
         ...providerInputFixture(customProvider),
         icon: null,
         requestHeaders: null,
+        supportsDeveloperRole: provider.supportsDeveloperRole ?? null,
         ...(apiKeyDraft ? { apiKey: apiKeyDraft } : {}),
       }],
     });
@@ -702,6 +812,7 @@ function stateFromInput(input: ModelProviderSettingsInput): ModelProviderSetting
       name: provider.name!,
       catalogProviderId: provider.catalogProviderId,
       requestHeaders: provider.requestHeaders ?? undefined,
+      supportsDeveloperRole: provider.supportsDeveloperRole ?? undefined,
       provider: provider.provider!,
       baseUrl: provider.baseUrl!,
       enabled: provider.enabled ?? true,

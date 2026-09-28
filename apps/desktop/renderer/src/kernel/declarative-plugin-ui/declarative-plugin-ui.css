@@ -108,24 +108,10 @@
 }
 
 .declarative-plugin-navigation__icon {
-  width: var(--desktop-agent-icon-size);
-  height: var(--desktop-agent-icon-size);
+  width: 18px;
+  height: 18px;
   border-radius: var(--app-radius-xs);
-  font-size: var(--desktop-agent-icon-size);
-}
-
-.declarative-plugin-navigation__badge {
-  flex: 0 0 auto;
-  max-width: 72px;
-  overflow: hidden;
-  border-radius: var(--app-radius-full);
-  padding: 1px 6px;
-  color: var(--app-sidebar-text-secondary);
-  background: var(--desktop-agent-sidebar-hover-bg);
-  font-size: 11px;
-  line-height: 17px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 18px;
 }
 
 .declarative-plugin-page {

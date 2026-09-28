@@ -1,0 +1,106 @@
+.capabilities-sidebar {
+  padding: 10px 8px;
+  gap: 8px;
+}
+
+.capabilities-sidebar__header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+  padding-left: 8px;
+}
+
+.capabilities-sidebar__header h2 {
+  margin: 0;
+  color: var(--app-sidebar-text);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.capabilities-sidebar__header .sd-icon-button {
+  color: var(--app-sidebar-text-secondary);
+}
+
+.capabilities-sidebar__search {
+  flex-shrink: 0;
+  width: 100%;
+  min-width: 0;
+}
+
+.capabilities-sidebar__categories {
+  display: grid;
+  flex-shrink: 0;
+  gap: 2px;
+}
+
+.capabilities-sidebar__installed {
+  min-height: 0;
+  padding-top: 8px;
+  overflow-y: auto;
+}
+
+.capabilities-sidebar__group-title {
+  margin: 0;
+  padding: 4px 8px 8px;
+  color: var(--app-sidebar-text-secondary);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+}
+
+.capabilities-sidebar .capabilities-sidebar__item {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--app-radius-md);
+  color: var(--app-sidebar-text);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 400;
+  text-align: left;
+}
+
+.capabilities-sidebar__item > :first-child {
+  flex-shrink: 0;
+}
+
+.capabilities-sidebar__item > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.capabilities-sidebar .capabilities-sidebar__item:hover:not(:disabled) {
+  background: var(--desktop-agent-sidebar-hover-bg);
+}
+
+.capabilities-sidebar .capabilities-sidebar__item[aria-current='page'] {
+  color: var(--desktop-agent-sidebar-active-text);
+  background: var(--desktop-agent-sidebar-active-bg);
+}
+
+/* 分类入口属于插件页面，窄窗口下仍可通过顶部开关展开访问。 */
+@media (max-width: 760px) {
+  .desktop-agent-page--capabilities-open .app-workbench {
+    grid-template-columns: var(--app-sidebar-width) minmax(0, 1fr);
+  }
+
+  .capabilities-sidebar.app-sidebar {
+    display: flex;
+  }
+
+  .desktop-agent-page--capabilities-open .capabilities-page {
+    grid-column: 2 / -1;
+  }
+}

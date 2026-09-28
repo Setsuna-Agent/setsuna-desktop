@@ -153,9 +153,6 @@ export function SettingsDirectoryList({
             className={`chat-user-settings__runtime-directory-preset${preset.inherited ? ' is-inherited' : ''}`}
             key={preset.id}
           >
-            <span className="chat-user-settings__runtime-directory-preset-icon" aria-hidden="true">
-              {preset.inherited ? <Check size={16} /> : <Folder size={16} />}
-            </span>
             <span className="chat-user-settings__runtime-directory-preset-copy">
               <strong>
                 <span>{preset.label}</span>
@@ -165,11 +162,16 @@ export function SettingsDirectoryList({
                   </span>
                 ) : null}
               </strong>
-              <code title={preset.path ?? preset.displayPath}>{preset.displayPath}</code>
+              <span className="chat-user-settings__runtime-directory-preset-path">
+                <span className="chat-user-settings__runtime-directory-preset-icon" aria-hidden="true">
+                  {preset.inherited ? <Check size={12} /> : <Folder size={12} />}
+                </span>
+                <code title={preset.path ?? preset.displayPath}>{preset.displayPath}</code>
+              </span>
             </span>
             <Button variant="secondary" size="small"
               aria-label={actionAriaLabel}
-              className="chat-user-settings__runtime-directory-preset-action"
+              className="chat-user-settings__runtime-directory-action"
               disabled={busy || !preset.path}
               icon={preset.inherited ? <X aria-hidden="true" size={13} /> : <Plus aria-hidden="true" size={13} />}
               type="button"
@@ -188,8 +190,11 @@ export function SettingsDirectoryList({
       className={hasHomePresets ? 'chat-user-settings__runtime-list-editor--presets' : undefined}
       action={(
         <Button
+          className="chat-user-settings__runtime-directory-action"
           disabled={busy}
-          icon={<FolderOpen size={14} />}
+          icon={<FolderOpen size={13} />}
+          size="small"
+          variant="secondary"
           onClick={() => void addDirectory()}
         >
           {busy ? t('common.processing') : t('settings.runtime.addDirectory')}
@@ -224,7 +229,7 @@ export function SettingsListEditor({
   busy: boolean;
   className?: string;
   children?: ReactNode;
-  description: string;
+  description?: string;
   error: string | null;
   items: readonly string[];
   label: string;
@@ -237,7 +242,7 @@ export function SettingsListEditor({
       <div className="chat-user-settings__runtime-list-head">
         <span className="chat-user-settings__runtime-list-copy">
           <strong>{label}</strong>
-          <small>{description}</small>
+          {description ? <small>{description}</small> : null}
         </span>
         {action}
       </div>

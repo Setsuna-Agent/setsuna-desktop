@@ -1,5 +1,5 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
-import { ChevronDown, GitBranch, GitCommitHorizontal, Tag } from 'lucide-react';
+import { ChevronDown, GitBranch, Tag } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { DesktopGitCommit, DesktopGitRef } from '../../contracts/index.js';
 import { useReviewRendererHost } from '../host.js';
@@ -56,10 +56,9 @@ export const GitHistoryGraph = memo(function GitHistoryGraph({
   return (
     <section className={'git-history-graph' + (expanded ? '' : ' is-collapsed')}>
       <Button variant="ghost" className="git-history-section-heading" type="button" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
-        <GitCommitHorizontal size={14} />
+        <ChevronDown size={14} className={expanded ? '' : 'is-collapsed'} />
         <span className="git-history-graph__heading">{t('feature.review.history.graph')}</span>
         <span className="git-changes-count">{commits.length}{hasMore ? '+' : ''}</span>
-        <ChevronDown size={13} className={expanded ? '' : 'is-collapsed'} />
       </Button>
       {expanded ? (
         <GitHistoryScrollArea className="git-history-graph__scroll" scrollRef={scrollRef} onScroll={(event) => setViewport({ top: event.currentTarget.scrollTop, height: event.currentTarget.clientHeight })}>
@@ -86,16 +85,8 @@ export const GitHistoryGraph = memo(function GitHistoryGraph({
                     >
                       <GraphGlyph row={rows[index]} head={head === commit.oid} merge={commit.parents.length > 1} />
                       <span className={'git-history-row__subject' + (head === commit.oid ? ' is-head' : '')}>{commit.subject || commit.oid.slice(0, 8)}</span>
-                      <span className="git-history-row__author">{commit.author}</span>
                     </Button>
-                    <span className="git-history-row__refs">
-                      {(refsByOid.get(commit.oid) ?? []).map((ref) => (
-                        <Button variant="ghost" className={'git-history-ref is-' + ref.kind} type="button" key={ref.name} title={ref.label} onClick={() => onSelectRef(ref)}>
-                          {ref.kind === 'tag' ? <Tag size={10} /> : <GitBranch size={10} />}
-                          <span>{ref.label}</span>
-                        </Button>
-                      ))}
-                    </span>
+                    <GitHistoryRefs refs={refsByOid.get(commit.oid)} onSelect={onSelectRef} />
                   </div>
                 </GitHistoryCommitMenu>
               );
@@ -110,17 +101,49 @@ export const GitHistoryGraph = memo(function GitHistoryGraph({
   );
 });
 
-function GraphGlyph({ row, head, merge }: { row: GitGraphRow; head: boolean; merge: boolean }) {
-  // The first lane shares the 14px icon column used by the sidebar headings and files.
-  const x = (lane: number) => 7 + lane * GIT_GRAPH_LANE_WIDTH;
+/** Keep one readable ref in the row; the remaining refs stay individually actionable. */
+function GitHistoryRefs({ refs, onSelect }: {
+  refs: DesktopGitRef[] | undefined;
+  onSelect: (ref: DesktopGitRef) => void;
+}) {
+  const { translate: t, ui: { ContextMenu } } = useReviewRendererHost();
+  const first = refs?.[0];
+  if (!refs || !first) return null;
+  const remaining = refs.slice(1);
+  const menuLabel = t('feature.review.history.browse');
   return (
-    <svg className="git-history-row__graph" width={14 + (row.columns - 1) * GIT_GRAPH_LANE_WIDTH} height={GIT_GRAPH_ROW_HEIGHT} aria-hidden="true">
+    <span className="git-history-row__refs">
+      <Button variant="ghost" className={'git-history-ref is-' + first.kind} type="button" title={first.label} onClick={() => onSelect(first)}>
+        {first.kind === 'tag' ? <Tag size={10} /> : <GitBranch size={10} />}
+        <span>{first.label}</span>
+      </Button>
+      {remaining.length ? (
+        <ContextMenu trigger={['click']} placement="bottomRight" menu={{ items: remaining.map((ref) => ({
+          key: ref.name,
+          label: ref.label,
+          icon: ref.kind === 'tag' ? <Tag size={12} /> : <GitBranch size={12} />,
+          onClick: () => onSelect(ref),
+        })) }}>
+          <Button variant="ghost" className="git-history-ref__more" type="button" aria-haspopup="menu" aria-label={menuLabel} title={menuLabel}>
+            <ChevronDown size={12} />
+          </Button>
+        </ContextMenu>
+      ) : null}
+    </span>
+  );
+}
+
+function GraphGlyph({ row, head, merge }: { row: GitGraphRow; head: boolean; merge: boolean }) {
+  // The first lane shares the file tree's 16px icon column.
+  const x = (lane: number) => 8 + lane * GIT_GRAPH_LANE_WIDTH;
+  return (
+    <svg className="git-history-row__graph" width={16 + (row.columns - 1) * GIT_GRAPH_LANE_WIDTH} height={GIT_GRAPH_ROW_HEIGHT} aria-hidden="true">
       {row.edges.map((edge, index) => {
         const mid = (edge.start + edge.end) / 2;
         const d = 'M ' + x(edge.from) + ' ' + edge.start + ' C ' + x(edge.from) + ' ' + mid + ', ' + x(edge.to) + ' ' + mid + ', ' + x(edge.to) + ' ' + edge.end;
         return <path key={index} d={d} fill="none" stroke={edge.color} strokeWidth={1.5} />;
       })}
-      <circle cx={x(row.lane)} cy={GIT_GRAPH_ROW_HEIGHT / 2} r={head ? 5 : 4} fill={head || merge ? 'var(--git-nav-bg)' : row.color} stroke={row.color} strokeWidth={1.5} />
+      <circle cx={x(row.lane)} cy={GIT_GRAPH_ROW_HEIGHT / 2} r={head ? 5 : 4} fill={head || merge ? 'var(--git-surface)' : row.color} stroke={row.color} strokeWidth={1.5} />
       {merge ? <circle cx={x(row.lane)} cy={GIT_GRAPH_ROW_HEIGHT / 2} r={1.5} fill={row.color} /> : null}
     </svg>
   );

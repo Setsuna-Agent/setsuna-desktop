@@ -31,7 +31,7 @@
 | Plugin | `runtime/plugins/<plugin>/skills/` + `runtime/plugin-skill-overrides/` | 是 |
 | User | `runtime/user-skills/<id>/SKILL.md` | 是 |
 
-Enable 状态统一保存在 `runtime/skills.json`。
+Enable 状态和额外 Skill 目录统一保存在 `runtime/skills.json`。
 
 ## 详情预览
 
@@ -77,7 +77,7 @@ main RuntimeHost
 - `~/.grok/skills`
 - `~/.pi/agent/skills`
 
-这些路径由宿主使用当前用户主目录解析，并由 Skills Feature 的只读 typed operation 统计直接子目录中的 `SKILL.md`。未继承且计数为零的预设不会展示；已继承项始终保留取消入口。继承状态仅作用于当前 runtime 会话。Setsuna 自己的 `runtime/user-skills/` 始终由 registry 自动加载，不作为 extra root 重复展示。
+这些路径由宿主使用当前用户主目录解析，并由 Skills Feature 的只读 typed operation 统计直接子目录中的 `SKILL.md`。未继承且计数为零的预设不会展示；已继承项始终保留取消入口。继承和手动添加的目录写入 `runtime/skills.json` 的 `extraRoots`，重启或升级后自动恢复；目录暂时不存在也不会清除选择。Skill 列表响应同时返回已保存目录，renderer 刷新时同步恢复继承状态。取消继承只移除目录配置，不删除外部 Skill 文件。Setsuna 自己的 `runtime/user-skills/` 始终由 registry 自动加载，不作为 extra root 重复展示。
 
 ## 选择与自动激活
 

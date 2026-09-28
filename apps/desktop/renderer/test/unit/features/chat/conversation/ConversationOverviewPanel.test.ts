@@ -110,10 +110,10 @@ describe('ConversationOverviewPanel', () => {
     expect(html).toContain('Apply focused change');
   });
 
-  it('omits usage diagnostics when the optional Usage feature is unavailable', () => {
+  it('omits usage when the optional Usage feature is unavailable', () => {
     const html = renderOverviewPanel({ ...baseProps });
 
-    expect(html).not.toContain('用量与诊断');
+    expect(html).not.toContain('用量');
     expect(html).not.toContain('0 · 0% · 0 次');
   });
 
@@ -219,8 +219,6 @@ const reviewState: DesktopReviewState = {
 
 const baseProps = {
   activeProject: project,
-  contextLabel: '2%',
-  contextPercent: 2,
   currentThread: {
     id: 'thread_1',
     title: 'Fixture thread',

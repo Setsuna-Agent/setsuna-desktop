@@ -50,8 +50,8 @@ export function transitionChatComposerSession(
 
 /**
  * Owns the state that must travel together with a composer. Normal navigation
- * starts a fresh session; creating the first runtime thread explicitly claims the
- * current new-thread slot so the in-flight composer is not torn down mid-send.
+ * starts a fresh session; choosing a project for an unsent message or creating
+ * its first runtime thread claims the existing composer instead of remounting it.
  */
 export function useChatComposerSession(targetIdentity: ChatComposerTargetIdentity) {
   const nextSessionIdRef = useRef(2);
@@ -105,7 +105,18 @@ export function useChatComposerSession(targetIdentity: ChatComposerTargetIdentit
     };
   }, [sessionId, targetIdentity]);
 
+  const claimForProject = useCallback((projectId: string | null) => {
+    if (!targetIdentity.startsWith('new-thread-slot:')) return;
+    // Choosing a workspace for the same unsent message must keep its draft and attachments.
+    claimRef.current = {
+      fromIdentity: targetIdentity,
+      sessionId,
+      toIdentity: chatComposerTargetIdentity(null, projectId),
+    };
+  }, [sessionId, targetIdentity]);
+
   return {
+    claimForProject,
     claimForThread,
     composerKey: `chat-composer-session:${sessionId}`,
     draft: session.draft,

@@ -102,7 +102,7 @@ export function RuntimePolicySettings({
                 {isOpeningConfig ? t('common.opening') : t('common.open')}
               </Button>
             </div>
-            <SettingsPathValue path={config.configPath} />
+            <SettingsPathValue kind="file" path={config.configPath} />
           </div>
           <DataLocationSettings fallbackRoot={config.dataPath} />
         </div>

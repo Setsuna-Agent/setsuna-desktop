@@ -57,6 +57,10 @@
 
 迟到请求必须通过 identity guard 丢弃。
 
+侧栏项目标题只切换会话列表的展开/收起，不改变当前项目、会话或工作区；打开会话由会话条目触发，在项目中新建会话使用项目菜单入口。
+
+新对话的 `ChatStarterWorkspace` 在输入框上方显示项目入口，可搜索项目、创建项目或转为全局会话。`selectNewThreadProject` 沿用未保存文件确认，只更换这条草稿的工作区，不打开已有会话；`useChatComposerSession.claimForProject` 保留输入内容与 composer 身份，避免丢失附件。分支入口由 Review Feature 的 `ConversationGitControls` 紧凑变体提供，复用 Git 查询、切换和创建分支；项目切换或控件卸载后，迟到的 Git 操作不会刷新旧工作区状态。
+
 `Alt+↑` / `Alt+↓` 按侧栏顺序切换当前已显示的会话，跳过折叠分组和“展开显示”后隐藏的会话，到首尾停止；侧栏整体收起时不执行。未选中可见会话时，`Alt+↓` 打开第一项。`SidebarThreadRow` 通过 `data-sidebar-thread-id` 标记导航目标，`useSidebarThreadNavigation` 在按键时读取已挂载行，避免复制侧栏的排序、置顶、折叠和分页状态。切换沿用 `selectThread` 的未保存文件确认，并阻止并发切换叠加弹窗。快捷键通过统一注册表配置，可在设置中修改；沿用弹窗、输入法组合输入和终端的快捷键保护规则。
 
 保留这两个 Alt 快捷键时，按住 Alt 会在当前会话右侧显示上下箭头；松开、窗口失焦或页面隐藏后清除。`useSidebarNavigationHint` 在侧栏统一监听按键，行组件只渲染提示，不各自注册全局监听。
@@ -73,11 +77,12 @@ Updater 不再进入 App controller。Renderer composition 解析 Feature 提供
 | 文件 | 职责 |
 | --- | --- |
 | `AppReadyLayout.tsx` | Ready 工作台总装 |
-| `ShellFrame.tsx` | 桌面 frame、titlebar、窗口按钮与左侧导航动作插槽 |
+| `ShellFrame.tsx` | macOS / Windows 共用的桌面外壳与顶部标题栏，仅系统窗口按钮保留平台差异 |
 | `AppRouteContent.tsx` | 主 view 选择 |
 | `AppChatSurface.tsx` | Chat surface 组合 |
-| `AppSidebarSurface.tsx` | Sidebar surface 组合 |
-| `AboutDialog.tsx` | 帮助菜单中的应用信息弹窗；复用正式图标，从根 package.json 读取版本、作者与许可证，外部链接经 preload 打开 |
+| `AppSidebarSurface.tsx` | 仅在聊天页组合项目、置顶和会话列表；插件页由能力模块持有侧栏，PR 与独立插件页面不挂载聊天侧栏 |
+| `AppNavigationRail.tsx` | 常驻全局图标栏、插件页面入口及底部设置菜单 |
+| `AboutDialog.tsx` | 全局图标栏“更多操作”中的应用信息弹窗；复用正式图标，从根 package.json 读取版本、作者与许可证，外部链接经 preload 打开 |
 | `AppWorkspaceToolbar.tsx` | Workspace toolbar |
 | `AppChatToolbarTitle.tsx` | 项目内外的对话标题及重命名、归档菜单 |
 | `AppTopbarActions.tsx` | Chat 顶部右侧动作 |
@@ -91,7 +96,7 @@ Layout 只组合已经定义清楚的状态和 callback，不在 render 中发�
 
 置顶分组标题与项目分组一样支持折叠。置顶会话复用普通会话行的悬停、键盘聚焦和选中效果；图钉只在悬停或键盘聚焦时显示，以实心表示已置顶，不因置顶而常亮或高亮整行。
 
-`packages/features/runtime-activity/src/renderer/` 同时实现全局运行中心和当前对话的后台服务列表。全局入口位于侧栏开关旁且不显示计数角标；两个视图都每两秒通过 typed Feature operation 拉取各自的投影。Feature 自己拥有 DTO、聚合/按对话查询、终止操作、轮询、乐观移除、文案和样式；Core 继续拥有 turn、approval、thread 与后台进程生命周期。宿主 `composition/RuntimeActivityFeatureBoundary.tsx` 只注入标准按钮、i18n、项目名称和线程导航，layout 只持有开关状态与入口位置。
+`packages/features/runtime-activity/src/renderer/` 同时实现全局运行中心和当前对话的后台服务列表。全局入口位于图标栏底部的“更多操作”菜单且不显示计数角标；两个视图都每两秒通过 typed Feature operation 拉取各自的投影。Feature 自己拥有 DTO、聚合/按对话查询、终止操作、轮询、乐观移除、文案和样式；Core 继续拥有 turn、approval、thread 与后台进程生命周期。宿主 `composition/RuntimeActivityFeatureBoundary.tsx` 只注入标准按钮、i18n、项目名称和线程导航，layout 只持有开关状态与入口位置。
 
 ## Sidebar
 

@@ -72,7 +72,7 @@ Runtime state、导航状态、feature 临时状态分开持有：
 - Conversation debug。
 - Workspace side/bottom surfaces。
 
-`AppReadyLayout.tsx` 保留 controller 状态和默认 JSX，但 shell、sidebar、topbar、route、workspace 和 overlay 都经过 owner-bound Slot outlet 组合。Chat route 声明 conversation/composer/details/workspace 子 Slot，Settings route 声明 page/extensions 子 Slot；替换父 contribution 会让它所有的子树一起失活。
+`AppReadyLayout.tsx` 保留 controller 状态和默认 JSX，但 shell、sidebar、topbar、route、workspace 和 overlay 都经过 owner-bound Slot outlet 组合。Chat route 声明 conversation/composer/details/workspace 子 Slot，Settings route 声明 page/extensions 子 Slot；替换父 contribution 会让它所有的子树一起失活。插件导航入口由 app shell 直接持有，随全局图标栏常驻，不依赖会话侧栏的展开状态。
 
 新增可替换 UI 时，先确认是否有真实的第二个组合者，再在 `@setsuna-desktop/renderer-contracts` 中定义最小 typed Slot，由 Feature setup 或 host Plugin activate 注册。不在 React component/hook/effect 中创建 contribution。完整所有权、事务和安全边界见 [Renderer Plugin Runtime 设计](../../designs/current/renderer-plugin-runtime.md)。
 

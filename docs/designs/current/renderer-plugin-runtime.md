@@ -977,7 +977,7 @@ tree UI action 只能引用 manifest 中声明的 action ID，由 host 携带当
 ### 里程碑 B 产品边界复核记录（2026-08-31）
 
 - 曾实现的全局 `RendererLayoutPreferencesSettings` 在产品复核后撤回：单/双 entry 的上移、下移与显隐暴露了 Runtime 机制，却没有对应的普通用户任务。
-- V1 preference store、事务 controller 和 Inspector 诊断能力保留为内部底座；高级设置只保留 Renderer Slot Inspector，不再承担布局配置。
+- V1 preference store、事务 controller 和 Inspector 诊断能力保留为内部底座；Renderer Slot Inspector 仅在开发模式的运行时设置中注册，正式版不提供入口，也不承担布局配置。
 - 后续若有真实布局定制需求，入口必须归属于对应 surface，并使用业务名称与约束，不能重新暴露 raw Slot/entry 模型。
 
 ### 里程碑 C 产品闭环验收记录（2026-08-31）

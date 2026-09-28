@@ -7,10 +7,6 @@
   pointer-events: none;
 }
 
-:root[data-desktop-platform='win32'] .chat-conversation-overview {
-  top: calc(var(--desktop-workspace-toolbar-height) + 10px);
-}
-
 .chat-conversation-overview-panel {
   pointer-events: auto;
   transform-origin: top right;
@@ -63,11 +59,19 @@
   display: flex;
   align-items: center;
   gap: 7px;
+  min-width: 0;
   min-height: 22px;
   padding: 0 0 0 10px;
   color: var(--app-text-muted);
   font-size: 13px;
   line-height: 20px;
+}
+
+.chat-conversation-overview-panel__header > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-conversation-overview-panel__actions {
@@ -150,27 +154,6 @@
   color: var(--app-text);
   background: var(--app-surface);
   box-shadow: var(--app-shadow-popover);
-}
-
-.chat-conversation-overview-progress-icon {
-  width: 14px;
-  height: 14px;
-  transform: rotate(-90deg);
-}
-
-.chat-conversation-overview-progress-icon circle {
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-width: 1.6;
-}
-
-.chat-conversation-overview-progress-icon circle:first-child {
-  opacity: 0.24;
-}
-
-.chat-conversation-overview-progress-icon circle:last-child {
-  opacity: 0.95;
 }
 
 .chat-conversation-overview-panel__divider {

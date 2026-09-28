@@ -6,6 +6,28 @@ import { describe, expect, it } from 'vitest';
 import { FileConfigStore } from '../../../src/adapters/store/file-config-store.js';
 
 describe('file config store', () => {
+  it('persists developer role overrides across reloads and partial updates, and resets to automatic', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-role-'));
+    const store = new FileConfigStore(dataDir);
+    await store.saveConfig({ providers: [{ id: 'custom' }] });
+    expect((await store.getProviderConfig('custom'))?.supportsDeveloperRole).toBeUndefined();
+
+    for (const supportsDeveloperRole of [false, true]) {
+      await store.saveConfig({ providers: [{ id: 'custom', supportsDeveloperRole }] });
+      const reloaded = new FileConfigStore(dataDir);
+      await reloaded.saveConfig({ providers: [{ id: 'custom', name: 'Renamed' }] });
+      expect((await reloaded.getConfig()).providers[0].supportsDeveloperRole).toBe(supportsDeveloperRole);
+      expect((await reloaded.getProviderConfig('custom'))?.supportsDeveloperRole).toBe(supportsDeveloperRole);
+    }
+
+    await expect(store.saveConfig({
+      providers: [{ id: 'custom', supportsDeveloperRole: 'false' as unknown as boolean }],
+    })).rejects.toThrow('Developer role support must be a boolean');
+    expect((await store.getProviderConfig('custom'))?.supportsDeveloperRole).toBe(true);
+    await store.saveConfig({ providers: [{ id: 'custom', supportsDeveloperRole: null }] });
+    expect((await new FileConfigStore(dataDir).getProviderConfig('custom'))?.supportsDeveloperRole).toBeUndefined();
+  });
+
   it('persists request header overrides, distinguishes disabled presets from resets, and rejects invalid updates atomically', async () => {
     const store = new FileConfigStore(await mkdtemp(path.join(tmpdir(), 'setsuna-config-headers-')));
     const requestHeaders = { 'User-Agent': 'my-client/{{appVersion}}', 'X-Session': '{{sessionId}}' };

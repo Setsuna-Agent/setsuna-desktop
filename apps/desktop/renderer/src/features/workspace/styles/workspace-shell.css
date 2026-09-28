@@ -141,7 +141,7 @@
   width: 100%;
   min-width: 0;
   height: var(--desktop-workspace-toolbar-height);
-  background: var(--desktop-agent-main-bg);
+  background: transparent;
 }
 
 .chat-file-review-panel__tab-file-icon {
@@ -198,26 +198,4 @@
   align-items: center;
   gap: 4px;
   margin-left: auto;
-}
-
-.desktop-workspace-toolbar--overview .chat-file-review-panel__heading-action,
-.desktop-workspace-toolbar--overview .chat-file-review-panel__close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  min-width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--app-radius-sm);
-  color: var(--app-text-muted);
-  background: transparent;
-}
-
-.desktop-workspace-toolbar--overview .chat-file-review-panel__heading-action:hover,
-.desktop-workspace-toolbar--overview .chat-file-review-panel__close:hover,
-.desktop-workspace-toolbar .chat-file-review-panel__close--active {
-  color: var(--app-text);
-  background: var(--desktop-agent-control-hover-bg);
 }

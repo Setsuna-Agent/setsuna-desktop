@@ -20,18 +20,6 @@
   background: transparent;
 }
 
-.desktop-settings-sidebar .chat-user-settings__page-back.sd-page-back {
-  width: 100%;
-  height: 32px;
-  margin: 0 0 14px;
-  border-radius: var(--app-radius-sm);
-}
-
-.desktop-settings-sidebar .chat-user-settings__page-back.sd-page-back:hover,
-.desktop-settings-sidebar .chat-user-settings__page-back.sd-page-back:focus-visible {
-  background: var(--desktop-agent-sidebar-hover-bg);
-}
-
 .desktop-settings-sidebar .chat-user-settings__title {
   margin: 0 8px 18px;
   color: var(--app-text);
@@ -116,11 +104,10 @@
 }
 
 .desktop-settings-panel .chat-user-settings__content--wide {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  align-content: stretch;
+  display: flex;
+  flex-direction: column;
   height: 100%;
-  padding-bottom: 12px;
+  padding: 0;
   overflow: hidden;
 }
 
@@ -139,11 +126,10 @@
 }
 
 .desktop-settings-panel .chat-user-settings__content--wide > .chat-user-settings__section {
-  width: min(1120px, 100%);
-  height: 100%;
+  flex: 1 1 0;
+  width: 100%;
   min-height: 0;
-  margin-right: auto;
-  margin-left: auto;
+  margin: 0;
 }
 
 .desktop-settings-panel .chat-user-settings__content--wide .chat-user-settings__page-heading {
@@ -411,6 +397,12 @@
   font-size: 11px;
   line-height: 16px;
   text-align: left;
+}
+
+.desktop-settings-panel .chat-user-settings__path-icon {
+  flex: 0 0 12px;
+  align-self: center;
+  margin-right: 5px;
 }
 
 .desktop-settings-panel .chat-user-settings__path-directory {

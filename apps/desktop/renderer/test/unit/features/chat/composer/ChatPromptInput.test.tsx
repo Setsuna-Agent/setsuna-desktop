@@ -43,6 +43,18 @@ it('supports multiline comments with modifier-Enter submission without sending I
   expect(submit).toHaveBeenCalledExactlyOnceWith('你好\n');
 });
 
+it('submits an empty draft with Enter only when attachments make it sendable', () => {
+  const submit = vi.fn();
+  const { rerender } = render(<ChatPromptInput onSubmit={submit} />);
+  const input = screen.getByRole('textbox');
+  fireEvent.keyDown(input, { key: 'Enter' });
+  expect(submit).not.toHaveBeenCalled();
+
+  rerender(<ChatPromptInput allowEmptySubmit onSubmit={submit} />);
+  fireEvent.keyDown(input, { key: 'Enter' });
+  expect(submit).toHaveBeenCalledExactlyOnceWith('');
+});
+
 it('replaces only the active mention command and submits the full path behind its short label', () => {
   const editor = createRef<ComposerEditor>();
   render(<ChatPromptInput ref={editor} value="保留 @foo，然后查看 @fo" />);

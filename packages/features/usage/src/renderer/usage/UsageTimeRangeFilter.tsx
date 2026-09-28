@@ -159,9 +159,8 @@ function UsageCustomRangeEditor({
           </p>
         ) : null}
         <div className="settings-usage-custom-range__actions">
-          <Button variant="ghost" type="button" onClick={onCancel}>{t('feature.usage.cancel')}</Button>
+          <Button variant="secondary" type="button" onClick={onCancel}>{t('feature.usage.cancel')}</Button>
           <Button variant="primary"
-            className="is-primary"
             disabled={!valid || loading}
             type="button"
             onClick={onApply}

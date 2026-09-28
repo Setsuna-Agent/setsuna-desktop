@@ -1,43 +1,17 @@
-import { Button, MenuSurface } from '@setsuna-desktop/renderer-ui';
+import { Button } from '@setsuna-desktop/renderer-ui';
 import { Minus, PanelLeft, Plus, X } from 'lucide-react';
 import {
-  useCallback,
   useEffect,
-  useMemo,
-  useRef,
   useState,
   type CSSProperties,
   type ReactNode,
   type Ref,
 } from 'react';
-import { usesCustomFrameLayout } from '../../shared/lib/desktopPlatform.js';
-import {
-  captureDocumentEditTarget,
-  executeDocumentEditCommand,
-  type DocumentEditTarget,
-} from '../../shared/lib/documentEditCommand.js';
-import { focusMenuItem, menuFocusIntent } from '../../shared/lib/menuFocus.js';
-import { useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
+import { getDesktopPlatform } from '../../shared/lib/desktopPlatform.js';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { IconButton } from '../../shared/ui/primitives.js';
 import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
 import { appRouteTopbarSlotId } from '../../shared/ui/AppRouteTopbarPortal.js';
-import { AboutDialog } from './AboutDialog.js';
-
-type WindowMenuKey = 'file' | 'edit' | 'view' | 'help';
-
-type WindowMenuActions = {
-  onNewChat?: () => void;
-  onOpenCapabilities?: () => void;
-  onOpenSettings?: () => void;
-  onToggleSidebar?: () => void;
-};
-
-type WindowMenuItem = {
-  key: string;
-  label: string;
-  disabled?: boolean;
-  action: () => void;
-};
 
 export function ShellFrame({
   children,
@@ -47,13 +21,13 @@ export function ShellFrame({
   sidebarCollapsed = false,
   onToggleSidebar,
   showSidebarToggle = true,
-  overlayTitlebar = false,
+  navigationRail,
   navigationActions,
   toolbarTitle,
   viewTabs,
   workspaceToolbar,
   actions,
-  menuActions,
+  onNewChat,
   className = '',
   inspectorOpen = true,
 }: {
@@ -64,34 +38,25 @@ export function ShellFrame({
   sidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
   showSidebarToggle?: boolean;
-  overlayTitlebar?: boolean;
+  navigationRail?: ReactNode;
   navigationActions?: ReactNode;
   toolbarTitle?: ReactNode;
   viewTabs?: ReactNode;
   workspaceToolbar?: ReactNode;
   actions?: ReactNode;
-  menuActions?: WindowMenuActions;
+  onNewChat?: () => void;
   className?: string;
   inspectorOpen?: boolean;
 }) {
-  const customFrame = usesCustomFrameLayout();
+  const showWindowControls = getDesktopPlatform() === 'win32';
   const windowMaximized = useWindowMaximizedState();
   const sidebarToggleAction = showSidebarToggle ? onToggleSidebar : undefined;
-  const titlebarNewChatAction = !customFrame || (sidebarCollapsed && showSidebarToggle)
-    ? menuActions?.onNewChat
-    : undefined;
-  const showTitlebarNavigation = !customFrame
-    || Boolean(sidebarToggleAction || navigationActions || titlebarNewChatAction);
-  const topbarMenuActions = useMemo(
-    () => ({ ...menuActions, onToggleSidebar: sidebarToggleAction }),
-    [menuActions, sidebarToggleAction],
-  );
   const rootClassName = [
     'app-shell',
     'desktop-agent-page',
     windowMaximized ? 'app-shell--window-maximized' : '',
     inspectorOpen ? 'app-shell--inspector-open' : '',
-    overlayTitlebar && !customFrame ? 'app-shell--titlebar-overlay' : '',
+    navigationRail ? 'app-shell--with-navigation' : '',
     className,
   ]
     .filter(Boolean)
@@ -102,40 +67,25 @@ export function ShellFrame({
     <div ref={rootRef} className={rootClassName} style={style}>
       <header className="app-topbar">
         <div className="app-topbar__brand">
-          {showTitlebarNavigation ? (
-            <TitlebarNavigation
-              actions={navigationActions}
-              sidebarCollapsed={sidebarCollapsed}
-              showSidebarToggle={showSidebarToggle}
-              onNewChat={titlebarNewChatAction}
-              onToggleSidebar={sidebarToggleAction}
-            />
-          ) : null}
-          {customFrame ? <WindowTopbarMenu actions={topbarMenuActions} /> : null}
-          {customFrame && status ? <div className="app-topbar__status">{status}</div> : null}
+          <TitlebarNavigation
+            actions={navigationActions}
+            sidebarCollapsed={sidebarCollapsed}
+            showSidebarToggle={showSidebarToggle}
+            onNewChat={sidebarCollapsed && showSidebarToggle ? onNewChat : undefined}
+            onToggleSidebar={sidebarToggleAction}
+          />
         </div>
-        {customFrame ? <div className="app-topbar__drag">{routeTopbarSlot}</div> : null}
-        {!customFrame ? (
-          <>
-            <div className="app-topbar__right">
-              {routeTopbarSlot}
-              {toolbarTitle ? <div className="chat-toolbar-title">{toolbarTitle}</div> : viewTabs}
-              {status}
-              {actions}
-            </div>
-            <div className="app-topbar__workspace">{workspaceToolbar}</div>
-          </>
-        ) : null}
-        {customFrame ? <WindowControls /> : null}
+        <div className="app-topbar__right">
+          {routeTopbarSlot}
+          {toolbarTitle ? <div className="chat-toolbar-title">{toolbarTitle}</div> : viewTabs}
+          {status}
+          {actions}
+        </div>
+        <div className="app-topbar__workspace">{workspaceToolbar}</div>
+        {showWindowControls ? <WindowControls /> : null}
       </header>
+      {navigationRail}
       <div className={`app-workbench ${inspectorOpen ? '' : 'app-workbench--inspector-closed'}`}>
-        {customFrame && (toolbarTitle || viewTabs) ? (
-          <div className="app-workbench__main-title">
-            {toolbarTitle ? <div className="chat-toolbar-title">{toolbarTitle}</div> : viewTabs}
-          </div>
-        ) : null}
-        {customFrame && workspaceToolbar ? <div className="app-workbench__workspace-toolbar">{workspaceToolbar}</div> : null}
-        {customFrame && actions ? <div className="app-workbench__main-actions">{actions}</div> : null}
         {children}
       </div>
     </div>
@@ -184,6 +134,7 @@ function TitlebarNavigation({
   const { t } = useI18n();
   return (
     <div className="app-topbar__nav">
+      {actions}
       {showSidebarToggle && onToggleSidebar ? (
         <ShortcutTooltip
           commandId="layout.toggleSidebar"
@@ -199,7 +150,6 @@ function TitlebarNavigation({
           </IconButton>
         </ShortcutTooltip>
       ) : null}
-      {actions}
       {onNewChat ? (
         <ShortcutTooltip commandId="app.newChat" label={t('app.newChat')}>
           <IconButton title="" label={t('app.newChat')} className="app-shell-icon-control app-topbar__new-chat" onClick={onNewChat}>
@@ -209,173 +159,6 @@ function TitlebarNavigation({
       ) : null}
     </div>
   );
-}
-
-function WindowTopbarMenu({ actions }: { actions: WindowMenuActions }) {
-  const { t } = useI18n();
-  const [aboutOpen, setAboutOpen] = useState(false);
-  const [openMenu, setOpenMenu] = useState<WindowMenuKey | null>(null);
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  const editTargetRef = useRef<DocumentEditTarget | null>(null);
-  const rememberEditTarget = useCallback((element: Element | null) => {
-    // Switching between topbar menus must not replace the original editor with a menu button.
-    if (element && rootRef.current?.contains(element)) return;
-    editTargetRef.current = captureDocumentEditTarget(element);
-  }, []);
-  const executeEditCommand = useCallback((command: string) => {
-    const target = editTargetRef.current;
-    editTargetRef.current = null;
-    executeDocumentEditCommand(document, target, command);
-  }, []);
-  const menus = useMemo(
-    () => windowMenuDefinitions(actions, t, executeEditCommand, () => {
-      rootRef.current?.querySelector<HTMLButtonElement>('[data-window-menu-trigger="help"]')?.focus();
-      setAboutOpen(true);
-    }),
-    [actions, executeEditCommand, t],
-  );
-  const windowMenuLabels: Array<{ key: WindowMenuKey; label: string }> = [
-    { key: 'file', label: t('shell.menu.file') },
-    { key: 'edit', label: t('shell.menu.edit') },
-    { key: 'view', label: t('shell.menu.view') },
-    { key: 'help', label: t('shell.menu.help') },
-  ];
-
-  useEffect(() => {
-    if (!openMenu) return undefined;
-    const focusFrame = window.requestAnimationFrame(() => {
-      const menu = rootRef.current?.querySelector<HTMLElement>(`[data-window-menu="${openMenu}"]`) ?? null;
-      focusMenuItem(menu, 'first');
-    });
-    const handlePointerDown = (event: PointerEvent) => {
-      if (rootRef.current?.contains(event.target as Node)) return;
-      editTargetRef.current = null;
-      setOpenMenu(null);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpenMenu(null);
-    };
-    window.addEventListener('pointerdown', handlePointerDown);
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.cancelAnimationFrame(focusFrame);
-      window.removeEventListener('pointerdown', handlePointerDown);
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [openMenu]);
-
-  return (
-    <nav className="app-topbar__menu" aria-label={t('shell.window.menu')} ref={rootRef}>
-      {windowMenuLabels.map((item) => (
-        <span className="app-topbar__menu-group" key={item.key}>
-          <Button variant="ghost"
-            aria-expanded={openMenu === item.key}
-            aria-haspopup="menu"
-            data-window-menu-trigger={item.key}
-            className={`app-topbar__menu-item ${openMenu === item.key ? 'is-open' : ''}`}
-            type="button"
-            onFocus={(event) => {
-              rememberEditTarget(event.relatedTarget instanceof Element ? event.relatedTarget : null);
-            }}
-            onPointerDown={() => rememberEditTarget(document.activeElement)}
-            onKeyDown={(event) => {
-              if (event.key !== 'ArrowDown') return;
-              event.preventDefault();
-              setOpenMenu(item.key);
-            }}
-            onClick={() => setOpenMenu((current) => (current === item.key ? null : item.key))}
-          >
-            {item.label}
-          </Button>
-          {openMenu === item.key ? (
-            <MenuSurface
-              className="app-topbar__menu-popover"
-              data-window-menu={item.key}
-              role="menu"
-              aria-orientation="vertical"
-              onKeyDown={(event) => {
-                if (event.key === 'Escape') {
-                  event.preventDefault();
-                  setOpenMenu(null);
-                  rootRef.current
-                    ?.querySelector<HTMLButtonElement>(`[data-window-menu-trigger="${item.key}"]`)
-                    ?.focus();
-                  return;
-                }
-                const intent = menuFocusIntent(event.key);
-                if (!intent) return;
-                event.preventDefault();
-                focusMenuItem(event.currentTarget, intent);
-              }}
-            >
-              {menus[item.key].map((menuItem) => (
-                <Button variant="ghost"
-                  disabled={menuItem.disabled}
-                  key={menuItem.key}
-                  role="menuitem"
-                  type="button"
-                  onClick={() => {
-                    if (menuItem.disabled) return;
-                    setOpenMenu(null);
-                    if (item.key !== 'edit') editTargetRef.current = null;
-                    menuItem.action();
-                  }}
-                >
-                  {menuItem.label}
-                </Button>
-              ))}
-            </MenuSurface>
-          ) : null}
-        </span>
-      ))}
-      {aboutOpen ? <AboutDialog onClose={() => setAboutOpen(false)} /> : null}
-    </nav>
-  );
-}
-
-function windowMenuDefinitions(
-  actions: WindowMenuActions,
-  t: Translate,
-  executeEditCommand: (command: string) => void,
-  showAbout: () => void,
-): Record<WindowMenuKey, WindowMenuItem[]> {
-  return {
-    file: [
-      menuItem('new-chat', t('app.newChat'), actions.onNewChat),
-      menuItem('settings', t('shell.menu.settings'), actions.onOpenSettings),
-    ],
-    edit: [
-      commandMenuItem('cut', t('shell.menu.cut'), executeEditCommand),
-      commandMenuItem('copy', t('shell.menu.copy'), executeEditCommand),
-      commandMenuItem('paste', t('shell.menu.paste'), executeEditCommand),
-      commandMenuItem('select-all', t('shell.menu.selectAll'), executeEditCommand, 'selectAll'),
-    ],
-    view: [
-      menuItem('toggle-sidebar', t('shell.menu.toggleSidebar'), actions.onToggleSidebar),
-      menuItem('capabilities', t('shell.menu.capabilities'), actions.onOpenCapabilities),
-    ],
-    help: [
-      menuItem('about', t('shell.menu.about'), showAbout),
-    ],
-  };
-}
-
-function menuItem(key: string, label: string, action?: () => void): WindowMenuItem {
-  return {
-    key,
-    label,
-    disabled: !action,
-    action: action ?? (() => undefined),
-  };
-}
-
-function commandMenuItem(
-  key: string,
-  label: string,
-  execute: (command: string) => void,
-  command = key,
-): WindowMenuItem {
-  return menuItem(key, label, () => execute(command));
 }
 
 function WindowControls() {

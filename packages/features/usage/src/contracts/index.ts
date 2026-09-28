@@ -1,4 +1,5 @@
 export { usageFeature } from './definition.js';
+export { usageRecordedEvent } from './events.js';
 export {
   createNoopUsageControl,
   createNoopUsageRendererStateService,

@@ -9,10 +9,12 @@ import { appReadySlot, shellRouteSlot } from '@setsuna-desktop/renderer-contract
 
 describe('renderer feature composition', () => {
   afterEach(() => {
+    vi.unstubAllEnvs();
     Object.defineProperty(window, 'setsunaDesktop', { configurable: true, value: undefined });
   });
 
-  it('activates the built-in feature graph with the desktop host bridges', async () => {
+  it.each([true, false])('activates the built-in feature graph with the desktop host bridges (development: %s)', async (development) => {
+    vi.stubEnv('DEV', development);
     const request = vi.fn(async ({ path }: { path: string }) => {
       if (path === '/v1/features/plugin-management/installed') {
         return { ok: true as const, value: { plugins: [] } };
@@ -60,6 +62,9 @@ describe('renderer feature composition', () => {
     expect(findSlot(inspection.roots, 'renderer.chat.composer.status')).toMatchObject({
       activeEntryIds: ['goal.composer-status'],
     });
+    expect(findSlot(inspection.roots, 'renderer.capabilities.sidebar')).toMatchObject({
+      activeEntryIds: ['plugin-management.installed-sidebar'],
+    });
     expect(findSlot(inspection.roots, 'renderer.shell.topbar.action')?.activeEntryIds).toEqual([
       'updater.ready-action',
     ]);
@@ -85,8 +90,9 @@ describe('renderer feature composition', () => {
     expect(runtimeExtensions.find((entry) => entry.metadata.id === 'layout-preferences')).toBeUndefined();
     expect(runtimeExtensions.find((entry) => entry.metadata.id === 'desktop-review-conflict-archives')?.metadata)
       .toMatchObject({ targetSectionId: 'archives' });
-    expect(runtimeExtensions.find((entry) => entry.metadata.id === 'renderer-inspector')?.metadata)
-      .toMatchObject({ targetSectionId: 'runtime' });
+    const inspector = runtimeExtensions.find((entry) => entry.metadata.id === 'renderer-inspector');
+    if (development) expect(inspector?.metadata).toMatchObject({ targetSectionId: 'runtime' });
+    else expect(inspector).toBeUndefined();
     const artifact = {
       id: 'artifact_legacy',
       kind: 'file' as const,

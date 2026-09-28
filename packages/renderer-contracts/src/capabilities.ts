@@ -1,5 +1,22 @@
 import { defineCapability, type CapabilityToken } from '@setsuna-desktop/feature-core/capability';
 import type { Disposer } from '@setsuna-desktop/feature-core/scope';
+import { defineSingleRendererSlot, type RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
+import type { SettingsViewUi } from './settings.js';
+
+/** Plugin Management owns the installed catalog; the shell only supplies navigation. */
+export type CapabilitiesSidebarSlotProps = Readonly<{
+  selectedPluginId: string | null;
+  query: string;
+  onSelectPlugin(pluginId: string): void;
+  translate: RendererTranslate;
+  ui: SettingsViewUi;
+}>;
+
+export const capabilitiesSidebarSlot = defineSingleRendererSlot<CapabilitiesSidebarSlotProps>({
+  id: 'renderer.capabilities.sidebar',
+  scope: 'app',
+  userConfigurable: true,
+});
 
 export type CapabilitiesRefreshOwner = 'mcp' | 'plugin-management' | 'skills';
 export type CapabilitiesRefreshOperation = () => Promise<unknown>;

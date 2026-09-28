@@ -1,34 +1,36 @@
-import { TextField, Button } from '@setsuna-desktop/renderer-ui';
+import { TextField, Button, Popover } from '@setsuna-desktop/renderer-ui';
 
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { Check, ChevronDown, GitBranch, Search } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type {
-  DesktopDiffSummary,
   DesktopReviewBridge,
   DesktopReviewState,
 } from '../contracts/index.js';
 import { WorkspaceGitBranchCreateControl } from './git/WorkspaceGitBranchCreateControl.js';
 import { useReviewRendererHost } from './host.js';
 import type { ReviewTranslate } from './messages.js';
+import { useReviewRequestGuard } from './request-guard.js';
 
 type BranchBusyAction = 'checkout' | 'create' | null;
 
 export function ConversationGitControls({
   activeProject,
+  variant = 'overview',
   reviewError,
   reviewLoading,
   reviewState,
   onReviewRefresh,
 }: {
   activeProject?: WorkspaceProject;
+  variant?: 'overview' | 'compact';
   reviewError: string | null;
   reviewLoading: boolean;
   reviewState: DesktopReviewState | null;
   onReviewRefresh?: () => void | Promise<void>;
 }) {
   const { bridge, translate: t } = useReviewRendererHost();
-  const rootRef = useRef<HTMLDivElement | null>(null);
+  const branchRequests = useReviewRequestGuard();
   const [branchMenuOpen, setBranchMenuOpen] = useState(false);
   const [branchQuery, setBranchQuery] = useState('');
   const [creatingBranch, setCreatingBranch] = useState(false);
@@ -46,10 +48,6 @@ export function ConversationGitControls({
       : reviewError
         ? t('feature.review.git.loadFailed')
         : t('feature.review.git.loading');
-  const unstagedFileCount = fileCount(reviewState?.unstagedSummary);
-  const createBranchDisabledReason = unstagedFileCount > 0
-    ? t('feature.review.git.unstagedBranchBlocked')
-    : null;
   const filteredBranches = useMemo(() => {
     const branches = reviewState?.branches ?? [];
     const normalizedQuery = branchQuery.trim().toLowerCase();
@@ -59,25 +57,16 @@ export function ConversationGitControls({
   }, [branchQuery, reviewState?.branches]);
 
   useEffect(() => {
-    if (!branchMenuOpen) return undefined;
-    const handlePointerDown = (event: MouseEvent) => {
-      if (rootRef.current?.contains(event.target as Node)) return;
-      closeBranchMenu();
-    };
-    document.addEventListener('mousedown', handlePointerDown);
-    return () => document.removeEventListener('mousedown', handlePointerDown);
-  }, [branchMenuOpen]);
-
-  useEffect(() => {
+    branchRequests.invalidate();
     setBranchMenuOpen(false);
     setBranchQuery('');
     setCreatingBranch(false);
     setBranchDraft('');
     setBusyAction(null);
     setError(null);
-  }, [projectStateKey]);
+  }, [branchRequests, projectStateKey]);
 
-  if (!activeProject || (reviewState && !reviewState.isGitRepository)) return null;
+  if (!workspaceRoot || (reviewState && !reviewState.isGitRepository)) return null;
 
   const closeBranchCreate = () => {
     setCreatingBranch(false);
@@ -93,7 +82,7 @@ export function ConversationGitControls({
 
   const runBranchAction = async (
     action: BranchBusyAction,
-    task: (api: DesktopReviewBridge) => Promise<void>,
+    task: (api: DesktopReviewBridge) => Promise<DesktopReviewState>,
   ) => {
     if (!workspaceRoot || busyAction) return;
     const api = bridge;
@@ -103,21 +92,22 @@ export function ConversationGitControls({
     }
     setBusyAction(action);
     setError(null);
+    const isLatest = branchRequests.begin();
     try {
       await task(api);
+      // The user may select another project while native Git is still running.
+      if (!isLatest()) return;
+      closeBranchMenu();
       await onReviewRefresh?.();
     } catch (unknownError) {
-      setError(gitControlErrorMessage(unknownError, t));
+      if (isLatest()) setError(gitControlErrorMessage(unknownError, t));
     } finally {
-      setBusyAction(null);
+      if (isLatest()) setBusyAction(null);
     }
   };
 
   const checkoutBranch = (branchName: string) => {
-    void runBranchAction('checkout', async (api) => {
-      await api.checkoutBranch(workspaceRoot, branchName);
-      closeBranchMenu();
-    });
+    void runBranchAction('checkout', (api) => api.checkoutBranch(workspaceRoot, branchName));
   };
 
   const createBranch = (event: FormEvent<HTMLFormElement>) => {
@@ -127,62 +117,66 @@ export function ConversationGitControls({
       setError(t('feature.review.git.branchRequired'));
       return;
     }
-    void runBranchAction('create', async (api) => {
-      await api.createBranch(workspaceRoot, branchName);
-      closeBranchMenu();
-    });
+    void runBranchAction('create', (api) => api.createBranch(workspaceRoot, branchName, { stageUnstaged: true }));
   };
 
   return (
-    <div className="chat-conversation-git" ref={rootRef}>
-      <Button variant="ghost"
-        type="button"
-        className="chat-conversation-overview-panel__row chat-conversation-git__branch-row"
-        disabled={!hasGit || reviewLoading}
-        onClick={() => {
-          setBranchMenuOpen((open) => !open);
-          setError(null);
-        }}
-      >
-        <span className="chat-conversation-overview-panel__icon">
-          <GitBranch size={14} />
-        </span>
-        <span className="chat-conversation-overview-panel__label">{t('feature.review.git.branch')}</span>
-        <span
-          className="chat-conversation-overview-panel__meta"
-          title={!reviewState && reviewError ? reviewError : undefined}
-        >
-          <span
-            className="chat-conversation-git__branch-name"
-            title={reviewState ? currentBranch : undefined}
-          >
-            {currentBranchLabel}
-          </span>
-          <ChevronDown size={12} />
-        </span>
-      </Button>
-      {branchMenuOpen ? (
-        <BranchMenu
-          branchDraft={branchDraft}
-          busyAction={busyAction}
-          creatingBranch={creatingBranch}
-          createDisabledReason={createBranchDisabledReason}
-          currentBranch={currentBranch}
-          error={error}
-          filteredBranches={filteredBranches}
-          query={branchQuery}
-          onBranchDraftChange={setBranchDraft}
-          onCancelCreate={closeBranchCreate}
-          onCheckout={checkoutBranch}
-          onCreate={createBranch}
-          onCreateStart={() => {
-            setCreatingBranch(true);
+    <div className={`chat-conversation-git${variant === 'compact' ? ' chat-conversation-git--compact' : ''}`}>
+      <Popover
+        open={branchMenuOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            setBranchMenuOpen(true);
             setError(null);
-          }}
-          onQueryChange={setBranchQuery}
-          t={t}
-        />
-      ) : null}
+          } else closeBranchMenu();
+        }}
+        placement={variant === 'compact' ? 'topLeft' : 'leftTop'}
+        className="sd-picker"
+        content={(
+          <BranchMenu
+            branchDraft={branchDraft}
+            busyAction={busyAction}
+            creatingBranch={creatingBranch}
+            currentBranch={currentBranch}
+            error={error}
+            filteredBranches={filteredBranches}
+            query={branchQuery}
+            onBranchDraftChange={setBranchDraft}
+            onCancelCreate={closeBranchCreate}
+            onCheckout={checkoutBranch}
+            onCreate={createBranch}
+            onCreateStart={() => {
+              setCreatingBranch(true);
+              setError(null);
+            }}
+            onQueryChange={setBranchQuery}
+            t={t}
+          />
+        )}
+      >
+        <Button variant="ghost"
+          type="button"
+          className={variant === 'compact'
+            ? 'sd-picker-trigger'
+            : 'chat-conversation-overview-panel__row chat-conversation-git__branch-row'}
+          disabled={!hasGit || reviewLoading || Boolean(busyAction)}
+          aria-label={`${t('feature.review.git.branch')}: ${currentBranchLabel}`}
+          title={reviewState ? currentBranch : reviewError ?? undefined}
+        >
+          {variant === 'compact' ? <>
+            <GitBranch size={14} aria-hidden="true" />
+            <span className="chat-conversation-git__branch-name">{currentBranchLabel}</span>
+            <ChevronDown size={12} aria-hidden="true" />
+          </> : <>
+            <span className="chat-conversation-overview-panel__icon"><GitBranch size={14} /></span>
+            <span className="chat-conversation-overview-panel__label">{t('feature.review.git.branch')}</span>
+            <span className="chat-conversation-overview-panel__meta">
+              <span className="chat-conversation-git__branch-name">{currentBranchLabel}</span>
+              <ChevronDown size={12} />
+            </span>
+          </>}
+        </Button>
+      </Popover>
     </div>
   );
 }
@@ -191,7 +185,6 @@ function BranchMenu({
   branchDraft,
   busyAction,
   creatingBranch,
-  createDisabledReason,
   currentBranch,
   error,
   filteredBranches,
@@ -207,7 +200,6 @@ function BranchMenu({
   branchDraft: string;
   busyAction: BranchBusyAction;
   creatingBranch: boolean;
-  createDisabledReason: string | null;
   currentBranch: string;
   error: string | null;
   filteredBranches: DesktopReviewState['branches'];
@@ -221,62 +213,50 @@ function BranchMenu({
   t: ReviewTranslate;
 }) {
   return (
-    <div className="chat-git-branch-menu">
-      <label className="chat-git-branch-menu__search">
-        <Search size={13} />
+    <>
+      <label className="sd-picker__search">
+        <Search size={14} aria-hidden="true" />
         <TextField
           value={query}
+          aria-label={t('feature.review.git.searchBranches')}
           placeholder={t('feature.review.git.searchBranches')}
           onChange={(event) => onQueryChange(event.currentTarget.value)}
         />
       </label>
-      <div className="chat-git-branch-menu__label">{t('feature.review.git.branch')}</div>
-      <div className="chat-git-branch-menu__list">
+      <div className="sd-picker__list">
         {filteredBranches.length ? filteredBranches.map((branch) => (
           <Button variant="ghost"
             type="button"
-            className={`chat-git-branch-menu__item ${branch.current ? 'is-current' : ''} ${branch.uncommittedFiles > 0 ? 'has-detail' : ''}`}
+            className="sd-picker__item"
+            aria-current={branch.current ? 'true' : undefined}
             disabled={Boolean(busyAction) || branch.name === currentBranch}
             key={branch.name}
             onClick={() => onCheckout(branch.name)}
           >
-            <GitBranch size={14} />
-            <span className="chat-git-branch-menu__item-body">
-              <span>{branch.name}</span>
-              {branch.uncommittedFiles > 0 ? (
-                <small>{t(branch.uncommittedFiles === 1
-                  ? 'feature.review.git.uncommittedFiles.one'
-                  : 'feature.review.git.uncommittedFiles.many', { count: branch.uncommittedFiles })}</small>
-              ) : null}
-            </span>
-            <span className="chat-git-branch-menu__check">
-              {branch.current ? <Check size={13} /> : null}
-            </span>
+            <GitBranch size={14} aria-hidden="true" />
+            <span>{branch.name}</span>
+            {branch.current ? <Check size={14} aria-hidden="true" /> : null}
           </Button>
         )) : (
-          <div className="chat-git-branch-menu__empty">{t('feature.review.git.noMatchingBranches')}</div>
+          <div className="sd-picker__empty">{t('feature.review.git.noMatchingBranches')}</div>
         )}
       </div>
-      <div className="chat-git-branch-menu__divider" />
-      <WorkspaceGitBranchCreateControl
-        branchDraft={branchDraft}
-        busy={Boolean(busyAction)}
-        creatingBranch={creatingBranch}
-        disabledReason={createDisabledReason}
-        submitting={busyAction === 'create'}
-        onBranchDraftChange={onBranchDraftChange}
-        onCancelCreate={onCancelCreate}
-        onCreate={onCreate}
-        onCreateStart={onCreateStart}
-        t={t}
-      />
-      {error ? <div className="chat-git-branch-menu__error">{error}</div> : null}
-    </div>
+      <div className="sd-picker__actions">
+        <WorkspaceGitBranchCreateControl
+          branchDraft={branchDraft}
+          busy={Boolean(busyAction)}
+          creatingBranch={creatingBranch}
+          submitting={busyAction === 'create'}
+          onBranchDraftChange={onBranchDraftChange}
+          onCancelCreate={onCancelCreate}
+          onCreate={onCreate}
+          onCreateStart={onCreateStart}
+          t={t}
+        />
+      </div>
+      {error ? <div className="sd-picker__error" role="alert">{error}</div> : null}
+    </>
   );
-}
-
-function fileCount(summary: DesktopDiffSummary | null | undefined): number {
-  return summary?.files.length ?? 0;
 }
 
 function gitControlErrorMessage(error: unknown, t: ReviewTranslate): string {

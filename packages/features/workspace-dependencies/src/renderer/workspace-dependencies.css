@@ -9,8 +9,13 @@
   color: var(--sd-color-text-muted, GrayText);
 }
 
-[data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__source-row {
+[data-feature-id='workspace-dependencies'].feature-workspace-dependencies .feature-workspace-dependencies__source-row {
+  grid-template-columns: max-content minmax(0, 1fr);
   min-height: 62px;
+}
+
+[data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__source-row > .sd-settings-row__control {
+  max-width: none;
 }
 
 [data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__source-row form,

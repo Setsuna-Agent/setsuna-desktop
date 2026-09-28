@@ -11,7 +11,6 @@ import {
   ChevronsUpDown,
   Columns2,
   GitBranch,
-  GitCommitHorizontal,
   RefreshCw,
   Search,
   WrapText,
@@ -46,7 +45,6 @@ import { ReviewChangeCounts } from './ReviewChangeCounts.js';
 import { canCompareReviewBranch } from './reviewChanges.js';
 import { ReviewSummarySection } from './ReviewDiffView.js';
 import { ReviewFileBrowser } from './ReviewFileBrowser.js';
-import { useWorkspaceGitCommitDialog } from './git/WorkspaceGitCommitDialog.js';
 import { reviewFindingKey, reviewPathsMatch } from './review-findings.js';
 
 export type { BranchCompareRefOption, DesktopReviewSource, ReviewPathContext } from './review-types.js';
@@ -134,7 +132,6 @@ export function DesktopReviewPanel({
   onRevealFile?: (filePath: string) => void;
 }) {
   const { translate: t } = useReviewRendererHost();
-  const { canOpenCommitDialog, openCommitDialog } = useWorkspaceGitCommitDialog();
   const [reviewSourceByKey, setReviewSourceByKey] = useState<Record<string, DesktopReviewSource>>({});
   const [reviewDiffLayoutByKey, setReviewDiffLayoutByKey] = useState<Record<string, DesktopReviewDiffLayout>>({});
   const [reviewLineWrapByKey, setReviewLineWrapByKey] = useState<Record<string, boolean>>({});
@@ -426,18 +423,6 @@ export function DesktopReviewPanel({
                   writeReviewPreference(REVIEW_FILE_TREE_VISIBLE_STORAGE_KEY, String(next));
                 }}
               />
-            ) : null}
-            {hasGit ? (
-              <Button
-                aria-haspopup="dialog"
-                className="desktop-review-panel__commit-action"
-                size="small"
-                disabled={!canOpenCommitDialog}
-                onClick={openCommitDialog}
-              >
-                <GitCommitHorizontal size={14} />
-                <span>{t('feature.review.git.commitOrPush')}</span>
-              </Button>
             ) : null}
           </div>
         </div>

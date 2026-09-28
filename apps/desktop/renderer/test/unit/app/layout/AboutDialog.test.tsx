@@ -2,8 +2,14 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { ShellFrame } from '../../../../src/app/layout/ShellFrame.js';
+import { createRef } from 'react';
+import { composeRendererMessages } from '@setsuna-desktop/feature-core/renderer';
+import { runtimeActivityRendererFeature } from '@setsuna-desktop/feature-runtime-activity/renderer';
+import { hostMessages } from '../../../../src/shared/i18n/messages.js';
+import { SidebarUserMenu } from '../../../../src/app/sidebar/SidebarUserMenu.js';
 import { I18nProvider } from '../../../../src/shared/i18n/I18nProvider.js';
+
+const messageCatalog = composeRendererMessages(hostMessages, [{ module: runtimeActivityRendererFeature }]);
 
 afterEach(() => {
   cleanup();
@@ -11,15 +17,24 @@ afterEach(() => {
   localStorage.clear();
 });
 
-it('opens app information from Help, handles external link failure and retry, and restores menu focus on close', async () => {
+it('opens app information from the global navigation menu, handles external link failure and retry, and restores menu focus on close', async () => {
   const openExternal = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
   vi.stubGlobal('setsunaDesktop', {
     desktop: { platform: 'win32', setInterfaceLanguage: vi.fn(async () => true) },
     links: { openExternal },
   });
-  render(<I18nProvider initialLocale="zh-CN"><ShellFrame /></I18nProvider>);
-  const help = screen.getByRole('button', { name: '帮助' });
-  fireEvent.click(help);
+  render(
+    <I18nProvider initialLocale="zh-CN" messageCatalog={messageCatalog}>
+      <SidebarUserMenu
+        settingsActive={false}
+        runtimeActivityTriggerRef={createRef<HTMLButtonElement>()}
+        onOpenRuntimeActivity={() => undefined}
+        onOpenSettings={() => undefined}
+      />
+    </I18nProvider>,
+  );
+  const more = screen.getByRole('button', { name: '更多操作' });
+  fireEvent.click(more);
   fireEvent.click(screen.getByRole('menuitem', { name: '关于 Setsuna Desktop' }));
   const dialog = screen.getByRole('dialog', { name: '关于 Setsuna Desktop' });
   expect(within(dialog).getByText(/^v\d+\.\d+\.\d+/u)).toBeTruthy();
@@ -39,5 +54,5 @@ it('opens app information from Help, handles external link failure and retry, an
 
   fireEvent.click(within(dialog).getAllByRole('button', { name: '关闭' }).at(-1)!);
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-  expect(document.activeElement).toBe(help);
+  expect(document.activeElement).toBe(more);
 });

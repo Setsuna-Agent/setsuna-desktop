@@ -1,4 +1,5 @@
 import type { FeatureScope } from '@setsuna-desktop/feature-core/scope';
+import type { RendererFeatureEventFeed } from '@setsuna-desktop/feature-core/renderer';
 import type {
   RuntimeUsageQuery,
   UsageRendererStateService,
@@ -15,6 +16,7 @@ export class RendererUsageStateService implements UsageRendererStateService {
 
   constructor(private readonly options: Readonly<{
     client: UsageClient;
+    eventFeed: RendererFeatureEventFeed;
     scope: FeatureScope;
   }>) {
     options.scope.add(() => this.dispose());
@@ -25,9 +27,18 @@ export class RendererUsageStateService implements UsageRendererStateService {
       query: (options) => this.query({ threadId }, options),
       onStop: (controller) => this.activeControllers.delete(controller),
       onStart: (controller) => this.activeControllers.add(controller),
-      subscribeInvalidation: (listener) => this.subscribeInvalidation((changedThreadId) => {
-        if (changedThreadId === threadId) listener();
-      }),
+      subscribeInvalidation: (listener) => {
+        const unsubscribe = this.subscribeInvalidation((changedThreadId) => {
+          if (changedThreadId === threadId) listener();
+        });
+        const subscription = this.options.eventFeed.subscribe(
+          this.options.scope, threadId, () => this.invalidate(threadId),
+        );
+        return () => {
+          unsubscribe();
+          subscription.dispose();
+        };
+      },
     });
   }
 

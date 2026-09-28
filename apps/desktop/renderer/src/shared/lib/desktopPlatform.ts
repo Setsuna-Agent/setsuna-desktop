@@ -2,11 +2,6 @@ export function applyDesktopPlatformAttribute(root: HTMLElement = document.docum
   root.dataset.desktopPlatform = getDesktopPlatform();
 }
 
-export function usesCustomFrameLayout(): boolean {
-  const platform = getDesktopPlatform();
-  return platform === 'win32';
-}
-
 export function getDesktopPlatform(): string {
   const bridgePlatform = window.setsunaDesktop?.desktop.platform;
   if (bridgePlatform) return bridgePlatform;

@@ -49,7 +49,9 @@ describe('ModelProviderRendererStateService', () => {
     await service.refresh();
     const edited = {
       ...initial,
-      providers: initial.providers.map((provider) => ({ ...provider, name: 'Edited provider', requestHeaders: { 'x-route': 'custom' } })),
+      providers: initial.providers.map((provider) => ({
+        ...provider, name: 'Edited provider', requestHeaders: { 'x-route': 'custom' }, supportsDeveloperRole: false,
+      })),
     };
     service.stage(inputFromState(edited, 'new-secret'), edited);
 
@@ -66,6 +68,7 @@ describe('ModelProviderRendererStateService', () => {
         name: 'Edited provider',
         apiKey: 'new-secret',
         requestHeaders: { 'x-route': 'custom' },
+        supportsDeveloperRole: false,
         models: [
           { id: 'model-a', enabled: false },
           { id: 'model-b', enabled: true },
@@ -122,6 +125,7 @@ function stateFromInput(input: ModelProviderSettingsInput): ModelProviderSetting
       baseUrl: provider.baseUrl!,
       enabled: provider.enabled ?? true,
       requestHeaders: provider.requestHeaders ?? undefined,
+      supportsDeveloperRole: provider.supportsDeveloperRole ?? undefined,
       apiKeySet: Boolean(provider.apiKey),
       apiKeyPreview: provider.apiKey ? 'sk-••••' : '',
       models: provider.models ?? [],

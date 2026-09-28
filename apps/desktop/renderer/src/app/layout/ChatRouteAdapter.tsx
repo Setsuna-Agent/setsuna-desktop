@@ -31,6 +31,7 @@ type ChatRouteAdapterProps = Omit<
 >;
 
 export function ChatRouteAdapter({
+  starterProjectSelection,
   activeProject,
   activeWorkspace,
   chatActions,
@@ -147,6 +148,7 @@ export function ChatRouteAdapter({
     },
   });
   const conversation: ChatConversationSurfaceModel = {
+    starterProjectSelection,
     activeTurnId: runtime.activeTurnId,
     activeWorkspace,
     canClearContext: Boolean(runtime.currentThread?.messages.length),

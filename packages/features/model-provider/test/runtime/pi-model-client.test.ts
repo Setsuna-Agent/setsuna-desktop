@@ -12,6 +12,39 @@ afterEach(() => {
 
 describe('Pi model client protocol integration', () => {
   it.each([
+    [null, undefined, 'developer'],
+    [null, false, 'system'],
+    [null, true, 'developer'],
+    ['zai', undefined, 'system'],
+    ['zai', false, 'system'],
+    ['zai', true, 'developer'],
+  ] as const)('sends the configured instruction role for catalog %s with developer support %s', async (
+    catalogProviderId, supportsDeveloperRole, role,
+  ) => {
+    const capture = captureFetch(openAiCompletionsSse());
+    const provider = {
+      ...providerFixture('openai-compatible', { code: 'glm-5.3-flash', thinkingEnabled: true }),
+      catalogProviderId,
+      supportsDeveloperRole,
+    };
+    const client = new PiModelClient(host(provider, capture.fetch));
+    const request = requestFixture({ model: 'glm-5.3-flash', thinking: true, reasoningEffort: 'high' });
+    request.messages.splice(1, 0, {
+      id: 'developer', role: 'developer', content: 'Keep instructions intact.',
+      status: 'complete', createdAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    await collect(client.stream(request));
+
+    expect(capture.body().messages).toEqual([
+      { role, content: 'Return JSON.\n\nKeep instructions intact.' },
+      { role: 'user', content: 'Decide.' },
+    ]);
+    // Disabling the role must not disable reasoning or discard its effort setting.
+    if (catalogProviderId === null) expect(capture.body().reasoning_effort).toBe('high');
+  });
+
+  it.each([
     ['openai-compatible', openAiCompletionsSse],
     ['anthropic', anthropicSse],
     ['openai-responses', responsesSse],

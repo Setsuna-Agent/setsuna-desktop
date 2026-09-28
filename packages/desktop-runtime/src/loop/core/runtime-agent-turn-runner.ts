@@ -199,8 +199,8 @@ export class RuntimeAgentTurnRunner {
         ...(options.runtimeContextMessages ?? []),
         ...turnStartHooks.contextMessages,
       ];
-      // 标题请求与主回答并行，避免额外增加首轮回复延迟；失败时首条消息投影已经提供 fallback。
-      const threadTitleGeneration = this.options.threadTitleGeneration().start({
+      // 标题由 Feature 在后台生成并落盘，不阻塞主回答，也不绑定当前轮次的取消信号。
+      void this.options.threadTitleGeneration().start({
         attachmentCount: attachments.length,
         conversationModel: turnModel
           ? {
@@ -208,9 +208,9 @@ export class RuntimeAgentTurnRunner {
               model: turnModel.binding.modelCode,
             }
           : undefined,
-        signal,
         taskKind,
         thread,
+        turnId,
         userContent: userMessage.content,
       });
 
@@ -440,7 +440,6 @@ export class RuntimeAgentTurnRunner {
               language: responseLanguage,
             } : undefined,
             taskKind,
-            threadTitle: threadTitleGeneration,
           },
         });
         activeAssistantMessageId = null;

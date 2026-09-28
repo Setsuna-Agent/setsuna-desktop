@@ -323,6 +323,11 @@
   pointer-events: auto;
 }
 
+/* The mirrored scrollbar belongs to the whole editor, not only its bottom strip. */
+.desktop-code-editor__viewport:hover > .desktop-code-editor__horizontal-scrollbar {
+  --sd-scrollbar-thumb: var(--chat-scrollbar-thumb);
+}
+
 .desktop-code-editor__horizontal-scrollbar-track {
   height: 1px;
 }
