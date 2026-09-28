@@ -14,11 +14,10 @@ import {
   useRendererOwnedKeyedEntries,
 } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
-import { getDesktopPlatform } from '../../shared/lib/desktopPlatform.js';
 import { AppRouteTopbarPortal } from '../../shared/ui/AppRouteTopbarPortal.js';
 import { settingsViewUi } from '../../shared/ui/SettingsViewUi.js';
 import { Button } from '../../shared/ui/primitives.js';
-import { shouldRenderCapabilitiesNavigationInPage } from './capabilitiesLayout.js';
+import { CapabilitiesSidebar } from './CapabilitiesSidebar.js';
 
 export function CapabilitiesShell({
   activeProjectPath,
@@ -43,6 +42,7 @@ export function CapabilitiesShell({
     .sort((left, right) => left.metadata.order - right.metadata.order || left.entryId.localeCompare(right.entryId)), [entries]);
   const defaultSectionId = catalogEntries[0]?.metadata.sectionId ?? 'plugins';
   const [sectionItemId, setSectionItemId] = useState<string | null>(null);
+  const [catalogVisit, setCatalogVisit] = useState(0);
   const [activeSectionId, setActiveSectionId] = useState(() => selectedPluginId ? 'plugins' : defaultSectionId);
 
   useEffect(() => {
@@ -55,28 +55,14 @@ export function CapabilitiesShell({
     }
   }, [activeSectionId, catalogEntries, defaultSectionId]);
 
-  const catalogNavigationInPage = shouldRenderCapabilitiesNavigationInPage(getDesktopPlatform());
-  const tabs = useMemo(() => (
-    <nav className="desktop-capabilities-tabs" aria-label={t('capabilities.title.capabilities')}>
-      {catalogEntries.map((entry) => (
-        <UiButton variant="ghost"
-          className={activeSectionId === entry.metadata.sectionId ? 'is-active' : undefined}
-          key={entry.key}
-          type="button"
-          onClick={() => {
-            setActiveSectionId(entry.metadata.sectionId);
-            setSectionItemId(null);
-            if (entry.metadata.sectionId !== 'plugins') onSelectedPluginIdChange(null);
-          }}
-        >
-          {(t as (key: string) => string)(entry.metadata.titleKey)}
-        </UiButton>
-      ))}
-    </nav>
-  ), [activeSectionId, catalogEntries, onSelectedPluginIdChange, t]);
-  const catalogNavigation = catalogNavigationInPage
-    ? tabs
-    : <AppRouteTopbarPortal>{tabs}</AppRouteTopbarPortal>;
+  const openSection = useCallback((sectionId: string, itemId?: string) => {
+    if (!catalogEntries.some((entry) => entry.metadata.sectionId === sectionId)) return;
+    onSelectedPluginIdChange(sectionId === 'plugins' ? itemId ?? null : null);
+    setSectionItemId(itemId ?? null);
+    setActiveSectionId(sectionId);
+    // 一级入口返回目录，同时清理各 Feature 自己持有的详情或编辑模式。
+    if (!itemId) setCatalogVisit((visit) => visit + 1);
+  }, [catalogEntries, onSelectedPluginIdChange]);
   const renderBreadcrumb = useCallback(({
     currentLabel,
     parentLabel,
@@ -89,36 +75,27 @@ export function CapabilitiesShell({
         <span title={currentLabel}>{currentLabel}</span>
       </nav>
     );
-    return catalogNavigationInPage
-      ? breadcrumb
-      : <AppRouteTopbarPortal>{breadcrumb}</AppRouteTopbarPortal>;
-  }, [catalogNavigationInPage]);
+    return <AppRouteTopbarPortal>{breadcrumb}</AppRouteTopbarPortal>;
+  }, []);
   const renderCreateMenu = useCallback((props: CapabilitiesCreateMenuProps) => (
     <CapabilitiesCreateMenu {...props} />
   ), []);
   const navigation = useMemo<CapabilitiesPageNavigation>(() => Object.freeze({
     activeItemId: activeSectionId === 'plugins' ? selectedPluginId : sectionItemId,
-    catalogNavigation,
-    catalogNavigationInPage,
+    catalogNavigation: null,
+    catalogNavigationInPage: false,
     openChat: onCreateInConversation,
     openPluginChat: onUsePluginInConversation,
     renderBreadcrumb,
     renderCreateMenu,
     setActiveItemId: activeSectionId === 'plugins' ? onSelectedPluginIdChange : setSectionItemId,
-    openSection: (sectionId, itemId) => {
-      if (!catalogEntries.some((entry) => entry.metadata.sectionId === sectionId)) return;
-      onSelectedPluginIdChange(sectionId === 'plugins' ? itemId ?? null : null);
-      setSectionItemId(itemId ?? null);
-      setActiveSectionId(sectionId);
-    },
+    openSection,
     workspacePath: activeProjectPath ?? null,
   }), [
     activeProjectPath,
     activeSectionId,
     sectionItemId,
-    catalogEntries,
-    catalogNavigation,
-    catalogNavigationInPage,
+    openSection,
     onCreateInConversation,
     onUsePluginInConversation,
     onSelectedPluginIdChange,
@@ -128,16 +105,25 @@ export function CapabilitiesShell({
   ]);
 
   return (
-    <RendererOwnedKeyedSlot
-      entryKey={settingsPageKey('capabilities', activeSectionId)}
-      slot={settingsPageSlot}
-      props={{
-        capabilities: navigation,
-        sectionId: activeSectionId,
-        translate: t,
-        ui: settingsViewUi,
-      }}
-    />
+    <>
+      <CapabilitiesSidebar
+        entries={catalogEntries}
+        activeSectionId={activeSectionId}
+        selectedPluginId={selectedPluginId}
+        onOpenSection={openSection}
+      />
+      <RendererOwnedKeyedSlot
+        key={`${activeSectionId}:${catalogVisit}`}
+        entryKey={settingsPageKey('capabilities', activeSectionId)}
+        slot={settingsPageSlot}
+        props={{
+          capabilities: navigation,
+          sectionId: activeSectionId,
+          translate: t,
+          ui: settingsViewUi,
+        }}
+      />
+    </>
   );
 }
 

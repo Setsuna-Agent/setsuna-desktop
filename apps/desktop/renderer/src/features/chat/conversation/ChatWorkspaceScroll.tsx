@@ -1,4 +1,3 @@
-import type { RuntimeThread } from '@setsuna-desktop/contracts';
 import {
   useCallback,
   useEffect,
@@ -11,9 +10,7 @@ import {
   type WheelEvent as ReactWheelEvent,
   type RefObject,
 } from 'react';
-import type { Translate } from '../../../shared/i18n/I18nProvider.js';
 import { useSmoothScroll } from '../../../shared/hooks/useSmoothScroll.js';
-import type { ChatContextTokenUsage } from './chatContextUsage.js';
 import { conversationOverviewLayout, type ConversationOverviewLayout } from './conversationOverviewLayout.js';
 
 const scrollBottomThresholdPx = 56;
@@ -352,20 +349,4 @@ export function useConversationOverviewLayout(
   }, [conversationRef, contentNode]);
 
   return layout;
-}
-
-export function conversationOverviewContextLabel(
-  usage: ChatContextTokenUsage,
-  compactionStatus: NonNullable<RuntimeThread['contextCompaction']>['status'] | undefined,
-  t: Translate,
-): string {
-  if (compactionStatus === 'running') return t('conversation.overview.context.compacting');
-  const percent = usage.visiblePercent || usage.percent;
-  if (percent > 0) return `${formatPercent(percent)}%`;
-  return t('conversation.overview.context.ready');
-}
-
-function formatPercent(value: number): string {
-  const safeValue = Math.min(100, Math.max(0, value));
-  return safeValue > 0 && safeValue < 1 ? safeValue.toFixed(1) : safeValue.toFixed(0);
 }

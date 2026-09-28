@@ -5,11 +5,12 @@ import {
   attachInferredCatalogProviders,
   configuredModelFromCatalog,
   detachCatalogProvider,
+  selectCatalogPlan,
   selectCatalogProvider,
 } from '../../src/renderer/provider-catalog.js';
 
 describe('model provider catalog selection', () => {
-  it('applies the selected Pi plan and discards incompatible configured models', () => {
+  it.each([undefined, {}, { Authorization: 'custom-value' }])('preserves existing configuration when switching presets with headers %j', (requestHeaders) => {
     const catalogProvider: ModelProviderCatalogProvider = {
       id: 'deepseek',
       name: 'DeepSeek',
@@ -22,14 +23,21 @@ describe('model provider catalog selection', () => {
       }],
     };
 
-    expect(selectCatalogProvider({ ...providerFixture(), requestHeaders: { Authorization: 'old-service' } }, catalogProvider)).toMatchObject({
+    const provider = { ...providerFixture(), requestHeaders };
+    const selected = selectCatalogProvider(provider, catalogProvider);
+    expect(selected).toEqual({
+      ...provider,
       catalogProviderId: 'deepseek',
-      requestHeaders: undefined,
-      name: 'DeepSeek',
       provider: 'openai-compatible',
       baseUrl: 'https://api.deepseek.com',
-      models: [],
     });
+    expect(selectCatalogPlan(selected, {
+      id: 'deepseek:responses',
+      name: 'Responses',
+      provider: 'openai-responses',
+      baseUrl: 'https://gateway.example/v1',
+      models: [],
+    })).toEqual({ ...selected, provider: 'openai-responses', baseUrl: 'https://gateway.example/v1' });
   });
 
   it('copies Pi model capabilities and can detach back to a custom service', () => {

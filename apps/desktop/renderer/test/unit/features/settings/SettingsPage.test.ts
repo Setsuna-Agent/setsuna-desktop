@@ -36,7 +36,6 @@ describe('SettingsSidebar', () => {
         sectionId: 'webdav-sync',
         titleKey: 'feature.webdavSync.settings.title',
       }, webDavSyncFeature.id)],
-      onBack: vi.fn(),
       onSelectSection: vi.fn(),
     });
 
@@ -57,7 +56,6 @@ describe('SettingsSidebar', () => {
         sectionId: 'network-proxy',
         titleKey: 'feature.networkProxy.settings.title',
       }, networkProxyFeature.id)],
-      onBack: vi.fn(),
       onSelectSection: vi.fn(),
     });
 

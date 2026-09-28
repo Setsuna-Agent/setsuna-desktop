@@ -146,7 +146,7 @@ export type SettingsNavigationRowProps = Readonly<{
 }>;
 
 export type SettingsDirectoryListProps = Readonly<{
-  description: string;
+  description?: string;
   formatPresetCount?(count: number): string;
   inspectDirectories?(paths: readonly string[]): Promise<readonly Readonly<{
     count: number;

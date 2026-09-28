@@ -9,6 +9,7 @@ import type { ComposerEditor, ComposerSlot } from './types.js';
 
 type Props = Omit<HTMLAttributes<HTMLDivElement>, 'onChange' | 'onSubmit'> & {
   value?: string; slotConfig?: ComposerSlot[]; disabled?: boolean; loading?: boolean; placeholder?: string;
+  allowEmptySubmit?: boolean;
   autoSize?: { minRows: number; maxRows: number };
   submitOn?: 'enter' | 'mod-enter';
   header?: ReactNode; footer?: (actions: ReactNode) => ReactNode;
@@ -19,7 +20,7 @@ type Props = Omit<HTMLAttributes<HTMLDivElement>, 'onChange' | 'onSubmit'> & {
 };
 type TagPortal = { element: HTMLElement; slot: Extract<ComposerSlot, { type: 'tag' }> };
 
-export const ChatPromptInput = forwardRef<ComposerEditor, Props>(function ChatPromptInput({ value = '', slotConfig, disabled, loading, placeholder, 'aria-label': ariaLabel, autoSize = { minRows: 2, maxRows: 6 }, submitOn = 'enter', header, footer, onChange, onSubmit, onCancel, onPasteFile, onKeyDown, ...props }, ref) {
+export const ChatPromptInput = forwardRef<ComposerEditor, Props>(function ChatPromptInput({ value = '', slotConfig, disabled, loading, placeholder, allowEmptySubmit = false, 'aria-label': ariaLabel, autoSize = { minRows: 2, maxRows: 6 }, submitOn = 'enter', header, footer, onChange, onSubmit, onCancel, onPasteFile, onKeyDown, ...props }, ref) {
   const { t } = useI18n();
   const elementRef = useRef<HTMLDivElement | null>(null);
   const references = useRef(new Map<string, ComposerSlot>());
@@ -112,7 +113,7 @@ export const ChatPromptInput = forwardRef<ComposerEditor, Props>(function ChatPr
     insert,
   }), [insert, synchronize]);
 
-  const actions = <Button className="chat-prompt__submit" variant="primary" disabled={disabled || (!loading && empty)} aria-label={loading ? t('chat.composer.stop') : t('chat.composer.send')}
+  const actions = <Button className="chat-prompt__submit" variant="primary" disabled={disabled || (!loading && empty && !allowEmptySubmit)} aria-label={loading ? t('chat.composer.stop') : t('chat.composer.send')}
     onClick={() => loading ? onCancel?.() : onSubmit?.(elementRef.current ? readComposerDocument(elementRef.current, references.current).map(slotText).join('') : value)}>
     {loading ? <Square size={13} fill="currentColor" /> : <ArrowUp size={16} />}
   </Button>;
@@ -136,7 +137,7 @@ export const ChatPromptInput = forwardRef<ComposerEditor, Props>(function ChatPr
         if (event.shiftKey || (submitOn === 'mod-enter' && !event.altKey && !event.ctrlKey && !event.metaKey)) { event.preventDefault(); insert([{ type: 'text', value: '\n' }]); return; }
         if (event.altKey || (submitOn === 'enter' && (event.ctrlKey || event.metaKey))) return;
         event.preventDefault();
-        if (!disabled && !loading && !empty) onSubmit?.(readComposerDocument(event.currentTarget, references.current).map(slotText).join(''));
+        if (!disabled && !loading && (!empty || allowEmptySubmit)) onSubmit?.(readComposerDocument(event.currentTarget, references.current).map(slotText).join(''));
       }} />
     {portals.map(({ element, slot }) => createPortal(slot.props.label ?? slot.props.value, element, slot.key))}
     <div className="chat-prompt__footer">{footer ? footer(actions) : actions}</div>

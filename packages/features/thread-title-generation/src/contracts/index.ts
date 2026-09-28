@@ -7,7 +7,6 @@ export {
 } from './capabilities.js';
 export type {
   GeneratedThreadTitle,
-  ThreadTitleGeneration,
   ThreadTitleGenerationControl,
   ThreadTitleGenerationLegacySettingsAdapter,
   ThreadTitleGenerationModelOption,

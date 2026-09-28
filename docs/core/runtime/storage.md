@@ -224,6 +224,10 @@ runtime/memories/
 Agent loop 仅依赖 Core `UsageRecorder` 窄口；composition 在 Usage Runtime Feature 激活后把
 `usage.control` 绑定到稳定 recorder proxy。查询、分页、bucket 聚合和持久化实现都不在 Core runtime。
 
+后台标题用量写入成功后，宿主追加 `usage.recorded` Feature 事件。Usage renderer 通过现有事件订阅
+重新查询当前线程用量，不依赖主回答的 `turn.completed` 或标题是否被采用；事件只用于失效通知，
+Core reducer 仅推进序列，不将标题消耗计入主回答的 usage。
+
 部分写入/坏尾行需要有明确读取策略，不能让一条坏记录抹掉全部历史。
 
 ## Policy stores
@@ -253,7 +257,7 @@ Search 实现独立为 `WorkspaceSearchEngine`，不把 ripgrep process 状态�
 
 它们不位于 `adapters/store/`，但属于 runtime 数据：
 
-- `skills.json` 保存 enable 状态。
+- `skills.json` 保存 enable 状态和 `extraRoots` 目录列表，重启或升级后继续加载；旧文件缺少目录字段时按空列表读取。
 - `user-skills/<id>/SKILL.md` 保存用户 Skill。
 - `plugin-skill-overrides/<plugin>/<skill>/` 保存 Plugin Skill 的可编辑副本或删除标记，并按 Plugin 安装实例隔离。
 - `plugins.json` 保存安装所有权和 manifest 摘要。

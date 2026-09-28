@@ -31,17 +31,16 @@ describe('RuntimeThreadTitleGenerationControl', () => {
     const appendTitleUpdate = vi.fn<ThreadTitleGenerationRuntimeHost['appendTitleUpdate']>();
     const host = runtimeHost({ current, recordUsage, appendTitleUpdate });
     const generateText = vi.spyOn(host, 'generateText');
-    const control = activeControl(host, { providerId: 'provider-title', modelId: 'model-title' });
+    const { control } = activeControl(host, { providerId: 'provider-title', modelId: 'model-title' });
 
-    const generation = control.start({
+    await control.start({
       attachmentCount: 0,
       conversationModel: { model: 'chat-model', providerId: 'provider-chat' },
-      signal: new AbortController().signal,
       taskKind: 'regular',
       thread: emptyThread(),
+      turnId: 'turn_1',
       userContent: '请分析自动标题的归属',
     });
-    await control.commit(current.id, 'turn_1', generation);
 
     expect(host.resolveModel).toHaveBeenCalledWith({
       selection: { providerId: 'provider-title', modelId: 'model-title' },
@@ -60,24 +59,67 @@ describe('RuntimeThreadTitleGenerationControl', () => {
       appendTitleUpdate,
       events: [{ type: 'thread.updated', payload: { title: '用户手动标题' } } as StoredThreadEvent],
     });
-    const control = activeControl(host, null);
+    const { control } = activeControl(host, null);
 
-    const generation = control.start({
+    await control.start({
       attachmentCount: 0,
       conversationModel: { model: 'chat-model' },
-      signal: new AbortController().signal,
       taskKind: 'regular',
       thread: emptyThread(),
+      turnId: 'turn_1',
       userContent: '生成标题',
     });
-    await control.commit(current.id, 'turn_1', generation);
 
     expect(appendTitleUpdate).not.toHaveBeenCalled();
+    expect(host.recordUsage).toHaveBeenCalledWith(current.id, 'turn_1', usage);
+  });
+
+  it('cancels pending generation on Feature shutdown and discards a late provider result', async () => {
+    const host = runtimeHost({ current: threadAfterFirstMessage('生成标题') });
+    let finish!: (result: Awaited<ReturnType<typeof host.generateText>>) => void;
+    const generateText = vi.spyOn(host, 'generateText').mockImplementation(() => new Promise((resolve) => {
+      finish = resolve;
+    }));
+    const { control, scope } = activeControl(host, null);
+    const pending = control.start({
+      attachmentCount: 0,
+      taskKind: 'regular',
+      thread: emptyThread(),
+      turnId: 'turn_1',
+      userContent: '生成标题',
+    });
+    await vi.waitFor(() => expect(generateText).toHaveBeenCalledOnce());
+    const signal = generateText.mock.calls[0]![0].signal!;
+    expect(signal.aborted).toBe(false);
+
+    scope.beginDrain();
+    expect(signal.aborted).toBe(true);
+    finish({ content: '{"title":"迟到的标题"}', usage });
+    await pending;
+    await scope.finishDispose();
+
+    expect(host.recordUsage).not.toHaveBeenCalled();
+    expect(host.appendTitleUpdate).not.toHaveBeenCalled();
+  });
+
+  it('contains background provider failures without replacing the fallback title', async () => {
+    const host = runtimeHost({ current: threadAfterFirstMessage('生成标题') });
+    vi.spyOn(host, 'generateText').mockRejectedValue(new Error('Provider unavailable'));
+    const { control } = activeControl(host, null);
+
+    await expect(control.start({
+      attachmentCount: 0,
+      taskKind: 'regular',
+      thread: emptyThread(),
+      turnId: 'turn_1',
+      userContent: '生成标题',
+    })).resolves.toBeUndefined();
+    expect(host.appendTitleUpdate).not.toHaveBeenCalled();
   });
 
   it('preserves revision conflict semantics when saving settings', async () => {
     const current = threadAfterFirstMessage('生成标题');
-    const control = activeControl(
+    const { control } = activeControl(
       runtimeHost({ current }),
       null,
       new FeatureSettingsRevisionConflictError(2, null),
@@ -97,14 +139,14 @@ function activeControl(
   host: ThreadTitleGenerationRuntimeHost,
   selection: ThreadTitleGenerationModelSelection,
   updateError?: unknown,
-): RuntimeThreadTitleGenerationControl {
+): { control: RuntimeThreadTitleGenerationControl; scope: ReturnType<typeof createFeatureScope> } {
   const controller = createFeatureScope({
     featureId: threadTitleGenerationFeature.id,
     process: 'runtime',
     scopeId: 'thread-title-generation:test',
   });
   controller.activate();
-  return new RuntimeThreadTitleGenerationControl(controller.scope, {
+  const control = new RuntimeThreadTitleGenerationControl(controller.scope, {
     read: async () => ({ value: selection, revision: 0 }),
     readPublic: async () => ({ value: selection, revision: 0 }),
     update: async ({ patch }) => {
@@ -112,6 +154,7 @@ function activeControl(
       return { value: patch, revision: 1 };
     },
   }, host);
+  return { control, scope: controller };
 }
 
 function runtimeHost({

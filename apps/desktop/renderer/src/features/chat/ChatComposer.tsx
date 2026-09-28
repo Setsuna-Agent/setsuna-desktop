@@ -283,10 +283,11 @@ export function ChatComposer({
     sendableAttachments,
     settleSend: settleAttachmentSend,
   } = useChatAttachments({ client });
-  const attachmentOnlyReady = sendableAttachments.length > 0 && !draft.trim();
+  const attachmentOnlyAllowed = !modeController.goalModeEnabled && !modeController.reviewModeEnabled;
+  const attachmentOnlyReady = attachmentOnlyAllowed && sendableAttachments.length > 0 && !draft.trim();
   const activeQueueReady = Boolean(
     activeTurnId
-    && (draft.trim() || sendableAttachments.length),
+    && (draft.trim() || (attachmentOnlyAllowed && sendableAttachments.length)),
   );
   const contextCompactPercent = Math.round(Number(contextUsage.percent || 0));
   const multiAgentEnabled = !sideConversation
@@ -758,6 +759,7 @@ export function ChatComposer({
       <ChatPromptInput
         ref={senderRef}
         value={draft}
+        allowEmptySubmit={attachmentOnlyReady}
         disabled={submitting || queuedTurnEdit.retrieving}
         slotConfig={initialSlotConfigRef.current}
         loading={Boolean(activeTurnId)}

@@ -48,6 +48,8 @@ Network Proxy 同样通过 Settings page Slot 提供完整“代理服务器”�
 
 模型服务由 `packages/features/model-provider/` 独立拥有，并通过 Settings page Slot 挂载到宿主设置页。renderer service 负责读取、暂存和串行保存，宿主只注入 Settings UI、品牌图标和网络代理能力。
 
+模型服务使用铺满设置内容区的 `wide` 布局。左栏承载标题、添加、搜索和服务选择，右栏承载服务开关、连接配置及单列模型列表；两栏独立滚动，窄内容区按容器宽度收缩。设置仍自动保存。
+
 Feature 管理：
 
 - Pi 内置厂商/方案、API key 与模型目录。
@@ -60,7 +62,7 @@ Feature 管理：
 
 - API key 留空不能覆盖已保存 secret。
 - Renderer 只看到 `apiKeySet`/preview。
-- 厂商或方案变更必须确认并清除旧凭据和不兼容模型；显式选择自定义服务不能被旧配置迁移再次识别成预设厂商。
+- 厂商或方案变更保留已有模型、密钥及自定义配置，只更新所选连接的目录身份、协议与地址；显式选择自定义服务不能被旧配置迁移再次识别成预设厂商。
 - Provider capabilities 来自 Pi catalog 或 discovery，不在 UI 写死厂商私有 payload。
 - Base URL normalize 和 provider validation 最终仍由 runtime store 执行。
 - 模型列表没有厂商级“默认模型”概念；聊天和宿主任务各自保存 provider/model 引用。
@@ -129,7 +131,9 @@ Feature 的 typed operations 读取 Node.js/Python/uv 状态、更新 npm/Python
 
 ## Capabilities
 
-`CapabilitiesShell.tsx` 是薄宿主：它只从 `renderer.settings.page` keyed Slot 的 metadata 生成一级导航，在 topbar 或 Windows 页内渲染标签，并把当前 key 对应的页面 contribution 挂到 outlet。它不读取 Plugin、Skill、MCP snapshot，也不执行业务 mutation。
+`CapabilitiesShell.tsx` 是薄宿主：它从 `renderer.settings.page` keyed Slot 的 metadata 生成一级导航，交给独立的 `CapabilitiesSidebar` 展示，并把当前 key 对应的页面 contribution 挂到 outlet。它不读取 Plugin、Skill、MCP snapshot，也不执行业务 mutation。
+
+插件侧栏替代聊天的项目与会话列表，分类入口下方通过 `renderer.capabilities.sidebar` Slot 展示已安装插件。Plugin Management 的 `InstalledPluginsSidebar` 直接订阅自己的 service，负责搜索过滤、安装状态更新和安装 ID 到市场详情 ID 的映射；宿主只提供导航回调。侧栏折叠状态与聊天独立，分类入口会返回所属目录并清理详情或编辑模式。
 
 三个一级页面由各自 Renderer Feature 在 setup 中注册，`navigationGroupId = capabilities.catalog` 只表达共同的信息架构：
 
@@ -147,7 +151,7 @@ Plugin 管理的跨层所有权位于 `packages/features/plugin-management/`：c
 
 默认市场来自随应用打包的 `plugins/`，renderer 只接收无路径摘要。市场首页分别展示市场目录和不在目录内的本地安装项；卡片直接表达安装、更新和打开状态。详情页展示声明的 Tool/Skill/MCP/Hook/resource 元数据，并负责 install/update/uninstall 动作。
 
-Capabilities 的一级标签默认通过 `AppRouteTopbarPortal` 挂载到 `ShellFrame` 的 route topbar slot；Windows 下改为放在能力页内容顶部。各 Feature page 自己持有标题、搜索、刷新、创建/导入和详情返回动作，但复用宿主注入的 controls 与共享能力页布局样式。
+Capabilities 的分类导航在 macOS、Windows 上共用左侧插件侧栏，详情面包屑继续通过 `AppRouteTopbarPortal` 挂载到顶部。各 Feature page 自己持有标题、搜索、刷新、创建/导入和详情返回动作，但复用宿主注入的 controls 与共享能力页布局样式。
 
 页面标题栏分别提供“用对话创建插件”和“导入本地插件”；不属于默认市场的已安装 Plugin 在本地来源分区单独展示。
 

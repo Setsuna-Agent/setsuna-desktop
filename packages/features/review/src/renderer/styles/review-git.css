@@ -24,7 +24,8 @@
   white-space: nowrap;
 }
 
-.chat-git-branch-menu,
+.chat-conversation-git--compact { max-width: 40%; }
+
 .chat-git-commit-branch-menu {
   border: 1px solid var(--app-border);
   color: var(--app-text);
@@ -32,29 +33,6 @@
   box-shadow: var(--app-shadow-popover);
 }
 
-.chat-git-branch-menu {
-  position: absolute;
-  top: 0;
-  right: calc(100% + 8px);
-  z-index: 20;
-  display: grid;
-  gap: 8px;
-  width: min(298px, calc(100vw - 32px));
-  box-sizing: border-box;
-  padding: 12px;
-  border-radius: var(--app-radius-sm);
-}
-
-.chat-git-branch-menu__search {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
-  align-items: center;
-  gap: 6px;
-  min-height: 30px;
-  color: var(--app-text-muted);
-}
-
-.chat-git-branch-menu__search input,
 .chat-git-branch-menu__create-form input,
 .chat-git-commit-popover__message {
   box-shadow: none;
@@ -66,13 +44,11 @@
   font: inherit;
 }
 
-.chat-git-branch-menu__search input::placeholder,
 .chat-git-branch-menu__create-form input::placeholder,
 .chat-git-commit-popover__message::placeholder {
   color: color-mix(in srgb, var(--app-text-muted) 78%, transparent);
 }
 
-.chat-git-branch-menu__label,
 .chat-git-commit-branch-menu__label {
   padding: 0 2px;
   color: var(--app-text-muted);
@@ -80,15 +56,6 @@
   line-height: 18px;
 }
 
-.chat-git-branch-menu__list {
-  display: grid;
-  gap: 2px;
-  max-height: 190px;
-  overflow-y: auto;
-}
-
-.chat-git-branch-menu__item,
-.chat-git-branch-menu__create,
 .chat-git-commit-branch-menu__item {
   display: grid;
   grid-template-columns: 20px minmax(0, 1fr) 20px;
@@ -106,64 +73,16 @@
   text-align: left;
 }
 
-.chat-git-branch-menu__item.has-detail {
-  min-height: 42px;
-  padding-block: 4px;
-}
-
-.chat-git-branch-menu__item:not(:disabled):hover,
-.chat-git-branch-menu__create:not(:disabled):hover {
-  background: color-mix(in srgb, var(--app-surface) 88%, var(--app-text) 12%);
-}
-
-.chat-git-branch-menu__item.is-current,
 .chat-git-commit-branch-menu__item.is-current {
   background: color-mix(in srgb, var(--app-surface) 88%, var(--app-text) 12%);
 }
 
-.chat-git-branch-menu__item:disabled,
-.chat-git-branch-menu__create:disabled {
-  cursor: default;
-}
-
-.chat-git-branch-menu__item-body {
-  display: grid;
-  min-width: 0;
-  line-height: 18px;
-}
-
-.chat-git-branch-menu__item-body span,
 .chat-git-commit-popover__branch span,
 .chat-git-commit-branch-menu__item span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.chat-git-branch-menu__item-body small {
-  color: var(--app-text-muted);
-  font-size: 12px;
-  line-height: 16px;
-}
-
-.chat-git-branch-menu__check {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--app-text-muted);
-}
-
-.chat-git-branch-menu__empty,
-.chat-git-branch-menu__error {
-  color: var(--app-text-muted);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.chat-git-branch-menu__error {
-  color: var(--app-danger);
-  overflow-wrap: anywhere;
 }
 
 .git-operation-error {
@@ -215,44 +134,9 @@
   font: inherit;
 }
 
-.chat-git-branch-menu__divider,
 .chat-git-commit-popover__divider {
   height: 1px;
   background: var(--app-border);
-}
-
-.chat-git-branch-menu__create {
-  cursor: pointer;
-}
-
-.chat-git-branch-menu__create.has-detail {
-  min-height: 42px;
-  padding-block: 4px;
-}
-
-.chat-git-branch-menu__create:disabled {
-  color: var(--app-text-muted);
-  cursor: default;
-}
-
-.chat-git-branch-menu__create-body {
-  display: grid;
-  min-width: 0;
-  line-height: 18px;
-}
-
-.chat-git-branch-menu__create-body > span,
-.chat-git-branch-menu__create-body > small {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chat-git-branch-menu__create-body > small {
-  color: var(--app-text-muted);
-  font-size: 12px;
-  line-height: 16px;
 }
 
 .chat-git-branch-menu__create-form {

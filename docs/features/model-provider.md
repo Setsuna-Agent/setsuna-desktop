@@ -88,13 +88,17 @@ Provider projection 仍合入共享 `RuntimeConfigState`，供聊天模型选择
 - `openai-responses` → Pi `openai-responses`
 - `anthropic` → Pi `anthropic-messages`
 
-可选 `catalogProviderId` 记录 Pi built-in provider identity。历史配置缺少该字段时，runtime 和 renderer 用协议和规范化 Base URL 做唯一匹配以恢复 Pi compat 和预置配置；无法唯一匹配或显式切换到自定义服务时仍按自定义服务处理。API key 输入框的值只保存在 `secrets.json`，切换厂商会先确认并清除旧端点的凭据、自定义请求头与模型。切换到“自定义兼容服务”保留当前连接和生效的请求头。
+可选 `catalogProviderId` 记录 Pi built-in provider identity。历史配置缺少该字段时，runtime 和 renderer 用协议和规范化 Base URL 做唯一匹配以恢复 Pi compat 和预置配置；无法唯一匹配或显式切换到自定义服务时仍按自定义服务处理。API key 输入框的值只保存在 `secrets.json`。切换厂商或接入方案仅更新目录身份、协议与 Base URL，保留已有模型、已保存或正在输入的 API Key、自定义请求头、显示名称、图标和代理配置，复用普通编辑的自动保存链路。未自定义的请求头仍跟随所选厂商的预置。切换到“自定义兼容服务”保留当前连接和生效的请求头。
 
-`requestHeaders` 保存在 `config.json`，通过设置投影供用户编辑。省略该字段表示使用厂商预置，显式空对象表示取消预置头；用户提供的 map 完整替换预置并覆盖同名 SDK 请求头。保存输入中省略字段保留原值，传 `null` 恢复默认。高级设置按每行 `名称: 值` 编辑，校验名称、重复头和非法控制字符，合法编辑复用自动保存。
+`requestHeaders` 保存在 `config.json`，通过设置投影供用户编辑。省略该字段表示使用厂商预置，显式空对象表示取消预置头；用户提供的 map 完整替换预置并覆盖同名 SDK 请求头。保存输入中省略字段保留原值，传 `null` 恢复默认。高级设置使用名称和值分列的可增删行编辑器；空白新行不写入配置，删除全部请求头保存空对象，恢复默认则重新使用厂商预置。校验名称、重复头和非法控制字符，非法或未完成的编辑留在本地草稿，合法编辑复用自动保存；保存后的规范化不会替换正在输入的行或打断焦点。
+
+Chat Completions 厂商的高级配置提供 `Developer role`（自动 / 启用 / 禁用），保存为可选 `supportsDeveloperRole`。默认沿用 Pi 的目录和域名判断；显式布尔值覆盖该能力，禁用时将合并的 system/developer 指令以 `system` 发送，不改变模型思考能力。启用仍遵循 Pi 的 reasoning 模型条件。保存输入省略字段保留原值，`null` 恢复自动。该设置对 Responses 和 Anthropic 协议不生效。
 
 `FileConfigStore` 继续拥有 `config.json`/`secrets.json` 的锁与原子写入。Feature host 暴露 provider 查询/保存、按 proxy route 解析的 fetch 和原生剪贴板写入；已保存的 API key 不进入 renderer state。
 
 API Key 输入框右侧提供复制按钮，优先复制当前输入，否则复制该服务已保存的密钥。`model-provider.api-key.copy` 通过已认证的 native bridge 直接写入系统剪贴板，仅返回成功状态；复制不会保存输入草稿。按钮在无密钥时禁用，成功后短暂显示对勾，失败显示可重试提示。
+
+连接配置底部左侧展开高级配置，右侧“测试连接”复用模型发现接口，以当前表单的地址、协议、代理、请求头和密钥草稿请求模型列表；密钥留空时由 runtime 使用已保存值。测试只反馈连接结果，不同步模型或保存配置；编辑连接或离开页面会取消测试并忽略过期结果。沿用模型列表请求的 10 秒超时，不创建对话或发起模型生成。
 
 ## Replay metadata
 

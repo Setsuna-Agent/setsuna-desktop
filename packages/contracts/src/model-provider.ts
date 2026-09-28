@@ -1,5 +1,11 @@
 export type ModelProviderKind = 'openai-compatible' | 'openai-responses' | 'anthropic';
 
+export function normalizeProviderSupportsDeveloperRole(value: unknown): boolean | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'boolean') throw new Error('Developer role support must be a boolean.');
+  return value;
+}
+
 /** User-supplied headers replace the provider preset; an empty map disables that preset. */
 export type ProviderRequestHeaders = Record<string, string>;
 

@@ -115,7 +115,7 @@
   justify-content: flex-end;
   gap: 12px;
   min-width: 0;
-  padding: 6px 14px 10px;
+  padding: 6px 18px 14px;
   background: transparent;
 }
 
@@ -147,40 +147,5 @@
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 7px;
-}
-
-.settings-usage-custom-range__actions button {
-  min-width: 58px;
-  height: 29px;
-  padding: 4px 11px;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-sm);
-  color: var(--app-text-muted);
-  background: var(--app-surface);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.settings-usage-custom-range__actions button:hover:not(:disabled) {
-  color: var(--app-text);
-  background: var(--app-surface-muted);
-}
-
-.settings-usage-custom-range__actions button.is-primary {
-  border-color: var(--app-primary);
-  color: var(--app-primary-text);
-  background: var(--app-primary);
-}
-
-.settings-usage-custom-range__actions button.is-primary:hover:not(:disabled) {
-  color: var(--app-primary-text);
-  background: var(--app-primary-hover);
-}
-
-.settings-usage-custom-range__actions button:disabled {
-  opacity: 0.45;
-  cursor: default;
+  gap: 8px;
 }

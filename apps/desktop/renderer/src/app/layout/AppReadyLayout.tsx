@@ -26,6 +26,7 @@ import { AppOverlays } from './AppOverlays.js';
 import { AppChatToolbarTitle } from './AppChatToolbarTitle.js';
 import { AppRouteContent } from './AppRouteContent.js';
 import { AppSidebarSurface } from './AppSidebarSurface.js';
+import { AppNavigationRail } from './AppNavigationRail.js';
 import { AppTopbarActions } from './AppTopbarActions.js';
 import { AppThreadHistoryNavigation } from './AppThreadHistoryNavigation.js';
 import { AppWorkspaceToolbar } from './AppWorkspaceToolbar.js';
@@ -173,20 +174,13 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     if (!browserPanelId) return;
     void window.setsunaDesktop?.browser.reloadTab(browserPanelId, mode).catch(() => undefined);
   }, [activeBrowserPanelId]);
-  const windowMenuActions = useMemo(
-    () => ({
-      onNewChat: () => {
-        resetComposer();
-        navigation.startCurrentThread();
-      },
-      onOpenCapabilities: openCapabilities,
-      onOpenSettings: openSettings,
-    }),
-    [navigation, openCapabilities, openSettings, resetComposer],
-  );
+  const startNewChat = useCallback(() => {
+    resetComposer();
+    navigation.startCurrentThread();
+  }, [navigation, resetComposer]);
   const shortcutHandlers = useMemo<AppKeyboardShortcutHandlers>(() => ({
     'app.newChat': {
-      execute: windowMenuActions.onNewChat,
+      execute: startNewChat,
     },
     'app.searchChats': {
       execute: () => {
@@ -214,7 +208,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       execute: navigation.openCreateProject,
     },
     'app.openSettings': {
-      execute: windowMenuActions.onOpenSettings,
+      execute: openSettings,
     },
     'app.openCapabilities': {
       execute: openCapabilities,
@@ -224,7 +218,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       execute: () => setRuntimeActivityOpen((open) => !open),
     },
     'layout.toggleSidebar': {
-      enabled: activeView !== 'settings',
+      enabled: activeView === 'chat' || activeView === 'capabilities',
       execute: handleToggleSidebar,
     },
     'layout.toggleWorkspace': {
@@ -305,6 +299,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     openChangesPanel,
     openFilesPanel,
     openReviewPanel,
+    openSettings,
     reloadBrowserPanel,
     runtime.activeTurnId,
     runtime.currentThread,
@@ -317,7 +312,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     threadHistory.canGoForward,
     threadHistory.goBack,
     threadHistory.goForward,
-    windowMenuActions,
+    startNewChat,
     workspacePanels.toggleBottomTerminal,
     workspacePanels.closeActiveSidePanel,
     workspacePanels.conversationDebugEnabled,
@@ -335,9 +330,23 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       style={shellStyle}
       sidebarCollapsed={sidebarCollapsed}
       onToggleSidebar={handleToggleSidebar}
-      showSidebarToggle={activeView !== 'settings'}
-      overlayTitlebar={activeView === 'pull-requests'}
-      navigationActions={activeView !== 'settings' ? (
+      showSidebarToggle={activeView === 'chat' || activeView === 'capabilities'}
+      navigationRail={(
+        <AppNavigationRail
+          activeView={activeView}
+          activeProjectId={activeProjectId}
+          activeThreadId={currentThread?.id}
+          selectedPluginViewKey={selectedPluginViewKey}
+          runtimeActivityTriggerRef={runtimeActivityTriggerRef}
+          onOpenChat={() => setActiveView('chat')}
+          onOpenCapabilities={openCapabilities}
+          onOpenPullRequests={() => setActiveView('pull-requests')}
+          onOpenPluginView={openPluginView}
+          onOpenRuntimeActivity={() => setRuntimeActivityOpen(true)}
+          onOpenSettings={openSettings}
+        />
+      )}
+      navigationActions={activeView === 'chat' ? (
         <AppThreadHistoryNavigation
           canGoBack={threadHistory.canGoBack}
           canGoForward={threadHistory.canGoForward}
@@ -379,7 +388,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
           }}
         />
       )}
-      menuActions={windowMenuActions}
+      onNewChat={activeView === 'chat' ? startNewChat : undefined}
       className={shellClassName}
       actions={(
         <RendererOwnedSingleSlot
@@ -405,31 +414,26 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       <RendererOwnedSingleSlot
         slot={shellSidebarSlot}
         props={{
-          renderDefault: () => <AppSidebarSurface
-        activeProjectId={activeProjectId}
-        activeThreadId={runtime.currentThread?.id}
-        runningThreadId={(runtime.activeTurnId || runtime.currentThread?.activeTurnId) ? runtime.currentThread?.id ?? null : null}
-        activeView={activeView}
-        globalThreads={globalThreads}
-        navigation={navigation}
-        projects={runtime.projects}
-        searchTriggerRef={searchTriggerRef}
-        sidebarCollapsed={sidebarCollapsed}
-        threadsByProjectId={threadsByProjectId}
-        width={sidebarWidth}
-        maxWidth={sidebarMaxWidth}
-        minWidth={sidebarMinWidth}
-        onOpenCapabilities={openCapabilities}
-        onOpenPullRequests={() => setActiveView('pull-requests')}
-        onOpenPluginView={openPluginView}
-        onOpenRuntimeActivity={() => setRuntimeActivityOpen(true)}
-        onOpenSettings={openSettings}
-        onResetDraft={resetComposer}
-        selectedPluginViewKey={selectedPluginViewKey}
-        onResizeStep={handleSidebarResizeStep}
-        onResizeStart={handleSidebarResizeStart}
-        runtimeActivityTriggerRef={runtimeActivityTriggerRef}
-          />,
+          renderDefault: () => (
+            <AppSidebarSurface
+              activeProjectId={activeProjectId}
+              activeThreadId={runtime.currentThread?.id}
+              runningThreadId={(runtime.activeTurnId || runtime.currentThread?.activeTurnId) ? runtime.currentThread?.id ?? null : null}
+              activeView={activeView}
+              globalThreads={globalThreads}
+              navigation={navigation}
+              projects={runtime.projects}
+              searchTriggerRef={searchTriggerRef}
+              sidebarCollapsed={sidebarCollapsed}
+              threadsByProjectId={threadsByProjectId}
+              width={sidebarWidth}
+              maxWidth={sidebarMaxWidth}
+              minWidth={sidebarMinWidth}
+              onResetDraft={resetComposer}
+              onResizeStep={handleSidebarResizeStep}
+              onResizeStart={handleSidebarResizeStart}
+            />
+          ),
         }}
       />
 
@@ -437,6 +441,11 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         routeId: activeView,
         renderDefault: () => (
           <AppRouteContent
+        starterProjectSelection={{
+          projects: runtime.projects,
+          onSelectProject: navigation.selectNewThreadProject,
+          onCreateProject: navigation.openCreateProject,
+        }}
         activeProject={activeProject}
         activeWorkspace={activeWorkspace}
         activeView={activeView}

@@ -12,6 +12,10 @@ describe('Skills operation codecs', () => {
     })).toEqual({
       extraRoots: ['/workspace/skills', '/workspace/shared'],
     });
+    expect(readSkills.output.parse({
+      extraRoots: ['/workspace/skills'],
+      skills: [],
+    })).toEqual({ extraRoots: ['/workspace/skills'], skills: [] });
   });
 
   it('rejects malformed Skill dependencies and result snapshots', () => {
@@ -21,6 +25,7 @@ describe('Skills operation codecs', () => {
       name: 'Search',
     })).toThrow('transport');
     expect(() => readSkills.output.parse({
+      extraRoots: [],
       skills: [{ enabled: true, id: 'search', kind: 'external', name: 'Search' }],
     })).toThrow('kind');
   });

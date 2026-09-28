@@ -321,11 +321,15 @@
   margin-left: 0;
   border: 0;
   border-radius: var(--app-radius-full);
-  background: var(--chat-scrollbar-thumb);
+  background: transparent;
   background-clip: content-box;
   cursor: default;
   pointer-events: auto;
   transition: background 120ms ease;
+}
+
+:hover > .sd-scrollbar-overlay .sd-scrollbar-overlay__thumb {
+  background: var(--chat-scrollbar-thumb);
 }
 
 .sd-scrollbar-overlay:hover .sd-scrollbar-overlay__thumb,

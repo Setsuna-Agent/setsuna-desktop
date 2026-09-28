@@ -6,9 +6,9 @@ const COLORS = [
   'var(--desktop-git-graph-blue)',
   'var(--desktop-git-graph-teal)',
   'var(--desktop-git-graph-purple)',
-  'var(--desktop-git-graph-yellow)',
+  'var(--desktop-git-graph-cyan)',
   'var(--desktop-git-graph-indigo)',
-  'var(--desktop-git-graph-orange)',
+  'var(--desktop-git-graph-rose)',
 ];
 type Lane = { oid: string; color: string };
 export type GitGraphEdge = { from: number; to: number; start: number; end: number; color: string };

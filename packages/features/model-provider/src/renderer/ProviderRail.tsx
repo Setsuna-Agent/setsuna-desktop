@@ -6,7 +6,8 @@ import type { RendererTranslate,
 import type {
   SettingsViewUi,
 } from '@setsuna-desktop/renderer-contracts/settings';
-import { Plus } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
+import { useState } from 'react';
 import type { ModelProviderRendererHost } from './capabilities.js';
 
 export function ProviderRail({
@@ -26,21 +27,38 @@ export function ProviderRail({
   translate: RendererTranslate;
   ui: SettingsViewUi;
 }>) {
-  const enabledCount = providers.filter((provider) => provider.enabled).length;
+  const [search, setSearch] = useState('');
+  const query = search.trim().toLocaleLowerCase();
+  const visibleProviders = providers.filter((provider) => (
+    (provider.name || provider.id).toLocaleLowerCase().includes(query)
+  ));
   const BrandIcon = host.BrandIcon;
   return (
     <aside className="model-provider-settings__rail">
       <div className="model-provider-settings__rail-head">
-        <div>
-          <span>{translate('feature.modelProvider.provider')}</span>
-          <strong>{translate('feature.modelProvider.serviceSummary', { total: providers.length, enabled: enabledCount })}</strong>
-        </div>
-        <ui.Button className="model-provider-settings__add-provider" icon={<Plus size={13} />} onClick={onAdd}>
+        <h1>{translate('feature.modelProvider.title')}</h1>
+        <ui.Button
+          className="model-provider-settings__add-provider"
+          icon={<Plus size={13} />}
+          onClick={() => {
+            setSearch('');
+            onAdd();
+          }}
+        >
           {translate('feature.modelProvider.add')}
         </ui.Button>
       </div>
+      <label className="model-provider-settings__rail-search">
+        <Search aria-hidden="true" size={14} />
+        <ui.TextField
+          aria-label={translate('feature.modelProvider.searchProviders')}
+          placeholder={translate('feature.modelProvider.searchProviders')}
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+        />
+      </label>
       <nav className="model-provider-settings__rail-list" aria-label={translate('feature.modelProvider.title')}>
-        {providers.map((provider) => (
+        {visibleProviders.map((provider) => (
           <UiButton variant="ghost"
             key={provider.id}
             aria-current={provider.id === selectedProviderId ? 'true' : undefined}
@@ -59,6 +77,11 @@ export function ProviderRail({
             </span>
           </UiButton>
         ))}
+        {query && !visibleProviders.length ? (
+          <div className="model-provider-settings__rail-empty">
+            {translate('feature.modelProvider.noMatchingProviders')}
+          </div>
+        ) : null}
       </nav>
     </aside>
   );

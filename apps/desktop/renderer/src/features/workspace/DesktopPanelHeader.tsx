@@ -489,7 +489,7 @@ export function DesktopPanelHeader({
                 aria-expanded={launcherOpen}
                 aria-haspopup="menu"
                 aria-label={t('workspace.panel.add')}
-                className="chat-file-review-panel__heading-action"
+                className="app-shell-icon-control chat-file-review-panel__heading-action"
                 type="button"
                 onClick={() => {
                   updateLauncherPosition();
@@ -550,7 +550,7 @@ export function DesktopPanelHeader({
                   'app-shell-icon-control',
                   'chat-file-review-panel__close',
                   'chat-file-review-panel__terminal-action',
-                  bottomBarActive ? 'chat-file-review-panel__close--active' : '',
+                  bottomBarActive ? 'is-active' : '',
                 ]
                   .filter(Boolean)
                   .join(' ')}
@@ -566,7 +566,7 @@ export function DesktopPanelHeader({
           {placement === 'side' ? (
             <ShortcutTooltip commandId="layout.toggleWorkspace" label={t('workspace.panel.collapseSide')}>
               <Button variant="ghost"
-                className="app-shell-icon-control chat-file-review-panel__close chat-file-review-panel__panel-close chat-file-review-panel__close--active"
+                className="app-shell-icon-control chat-file-review-panel__close chat-file-review-panel__panel-close is-active"
                 type="button"
                 aria-label={t('workspace.panel.collapseSide')}
                 aria-pressed={true}
@@ -577,7 +577,7 @@ export function DesktopPanelHeader({
             </ShortcutTooltip>
           ) : (
             <Button variant="ghost"
-              className="chat-file-review-panel__close chat-file-review-panel__panel-close"
+              className="app-shell-icon-control chat-file-review-panel__close chat-file-review-panel__panel-close"
               type="button"
               aria-label={t('workspace.panel.close')}
               title={t('workspace.panel.close')}

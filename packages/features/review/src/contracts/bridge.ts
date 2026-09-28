@@ -67,6 +67,8 @@ export type DesktopReviewCommitMessage = {
 
 export type DesktopReviewCreateBranchOptions = {
   allowUnstaged?: boolean;
+  /** Stage working changes after successfully creating and checking out the branch. */
+  stageUnstaged?: boolean;
 };
 
 export type DesktopReviewActionResult = {

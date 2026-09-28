@@ -70,71 +70,18 @@
 }
 
 .chat-starter:is(.is-settling, .is-settled) .chat-starter__title,
-.chat-starter:is(.is-settling, .is-settled) .chat-starter__notice,
-.chat-starter:is(.is-settling, .is-settled) .chat-starter__suggestions {
+.chat-starter:is(.is-settling, .is-settled) .chat-starter__notice {
   opacity: 0;
   pointer-events: none;
   transform: translateY(-4px);
 }
 
 .chat-starter.is-settling .chat-starter__title,
-.chat-starter.is-settling .chat-starter__notice,
-.chat-starter.is-settling .chat-starter__suggestions {
+.chat-starter.is-settling .chat-starter__notice {
   animation: none;
   transition:
     opacity 150ms ease-out,
     transform 180ms cubic-bezier(0.2, 0.82, 0.2, 1);
-}
-
-.chat-starter__suggestions {
-  display: flex;
-  flex-direction: column;
-  order: 4;
-  margin-top: 16px;
-  /* Align with the prompt's text, including its 1px outer border. */
-  padding-inline: calc(var(--chat-prompt-inline-padding) + 1px);
-}
-
-.chat-starter__suggestion.sd-button {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
-  min-width: 0;
-  min-height: 30px;
-  padding: 5px 0;
-  border: 0;
-  border-radius: var(--app-radius-sm);
-  color: var(--app-text-subtle);
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-}
-
-.chat-starter__suggestion-icon {
-  flex-shrink: 0;
-}
-
-.chat-starter__suggestion-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chat-starter__suggestion.sd-button:is(:hover, :active):not(:disabled) {
-  color: var(--app-text-secondary);
-  background: transparent;
-}
-
-.chat-starter__suggestion:disabled {
-  cursor: wait;
-  opacity: 0.55;
-}
-
-.chat-starter__suggestion:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--app-primary) 42%, transparent);
-  outline-offset: 2px;
 }
 
 .chat-starter__reveal {
@@ -158,10 +105,6 @@
 
 .chat-starter__reveal--composer {
   animation-delay: 150ms;
-}
-
-.chat-starter__reveal--suggestions {
-  animation-delay: 220ms;
 }
 
 @keyframes chat-starter-reveal {
@@ -260,8 +203,7 @@
 
   .chat-starter.is-settling .chat-starter__composer-motion,
   .chat-starter.is-settling .chat-starter__title,
-  .chat-starter.is-settling .chat-starter__notice,
-  .chat-starter.is-settling .chat-starter__suggestions {
+  .chat-starter.is-settling .chat-starter__notice {
     transition: none;
   }
 }

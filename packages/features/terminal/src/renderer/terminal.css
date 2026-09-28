@@ -88,6 +88,10 @@
 
 .feature-terminal .xterm .xterm-scrollable-element > .scrollbar > .slider {
   border-radius: var(--app-radius-full) !important;
+  background: transparent !important;
+}
+
+.feature-terminal .xterm .xterm-scrollable-element:hover > .scrollbar > .slider {
   background: var(--chat-scrollbar-thumb) !important;
 }
 

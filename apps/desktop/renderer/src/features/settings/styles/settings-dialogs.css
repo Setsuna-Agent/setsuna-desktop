@@ -227,10 +227,7 @@
   }
 
   .desktop-settings-panel .chat-user-settings__content--wide {
-    display: block;
-    height: auto;
-    padding-bottom: 20px;
-    overflow-y: auto;
+    padding: 0;
   }
 
   .desktop-settings-panel .chat-user-settings__row {

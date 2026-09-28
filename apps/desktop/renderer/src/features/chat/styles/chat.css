@@ -2,5 +2,6 @@
 @import './chat-message-scroller.css';
 @import './chat-overview.css';
 @import './chat-assistant.css';
+@import './chat-starter-workspace.css';
 @import './chat-file-diff.css';
 @import './chat-tool-runs.css';

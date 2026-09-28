@@ -3,7 +3,11 @@ import type { ModelProviderKind, ProviderRequestHeaders } from './model-provider
 import type { DesktopNetworkProxyRoute } from './network-proxy/index.js';
 import type { RuntimePermissionProfile, RuntimeSandboxWorkspaceWrite } from './permissions.js';
 
-export { normalizeProviderRequestHeaders, type ProviderRequestHeaders } from './model-provider.js';
+export {
+  normalizeProviderRequestHeaders,
+  normalizeProviderSupportsDeveloperRole,
+  type ProviderRequestHeaders,
+} from './model-provider.js';
 
 export type * from './hooks.js';
 export type * from './permissions.js';
@@ -42,6 +46,8 @@ export type ProviderConfigState = {
   proxyRoute?: DesktopNetworkProxyRoute;
   /** Omitted: provider preset. Empty object: no preset headers. */
   requestHeaders?: ProviderRequestHeaders;
+  /** Chat Completions only. Omission keeps the provider's automatic role compatibility. */
+  supportsDeveloperRole?: boolean;
   models: ProviderModelConfig[];
 };
 
@@ -252,6 +258,8 @@ export type ProviderConfigInput = {
   proxyRoute?: DesktopNetworkProxyRoute;
   /** Null restores the provider preset; omission preserves the existing configuration. */
   requestHeaders?: ProviderRequestHeaders | null;
+  /** Null restores automatic detection; omission preserves the saved override. */
+  supportsDeveloperRole?: boolean | null;
   models?: ProviderModelConfig[];
 };
 

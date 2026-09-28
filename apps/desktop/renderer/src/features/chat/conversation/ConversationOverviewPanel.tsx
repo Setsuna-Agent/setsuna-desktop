@@ -20,8 +20,6 @@ import { ConversationPlanSummary } from './ConversationPlanSummary.js';
 
 export function ConversationOverviewPanel({
   activeProject,
-  contextLabel,
-  contextPercent,
   currentThread,
   overview,
   reviewControls,
@@ -30,8 +28,6 @@ export function ConversationOverviewPanel({
   reviewError,
 }: {
   activeProject?: WorkspaceProject;
-  contextLabel: string;
-  contextPercent: number;
   currentThread: RuntimeThread;
   overview: ConversationOverviewState;
   reviewControls?: ReactNode;
@@ -40,6 +36,7 @@ export function ConversationOverviewPanel({
   reviewError: string | null;
 }) {
   const { t } = useI18n();
+  const panelTitle = (currentThread.projectId ? activeProject?.name : undefined) || t('conversation.overview.title');
   const changeStats = reviewState?.isGitRepository
     ? localFeatureReviewChangeStats(reviewState)
     : {
@@ -54,9 +51,9 @@ export function ConversationOverviewPanel({
   const collaboration = useCollaborationFeatureState(currentThread.id);
 
   return (
-    <section className="chat-conversation-overview-panel" aria-label={t('conversation.overview.title')}>
+    <section className="chat-conversation-overview-panel" aria-label={panelTitle}>
       <div className="chat-conversation-overview-panel__header">
-        <span>{t('conversation.overview.title')}</span>
+        <span title={panelTitle}>{panelTitle}</span>
       </div>
       <div className="chat-conversation-overview-panel__actions">
         <Button variant="ghost"
@@ -76,13 +73,6 @@ export function ConversationOverviewPanel({
           </span>
         </Button>
         {reviewControls}
-        <div className="chat-conversation-overview-panel__row chat-conversation-overview-panel__row--static">
-          <span className="chat-conversation-overview-panel__icon">
-            <ContextProgressIcon percent={contextPercent} />
-          </span>
-          <span className="chat-conversation-overview-panel__label">{t('conversation.overview.context')}</span>
-          <span className="chat-conversation-overview-panel__meta">{contextLabel}</span>
-        </div>
         <UsageFeatureConversationSummary thread={currentThread} />
       </div>
       <RuntimeActivityFeatureConversationServices threadId={currentThread.id} />
@@ -98,18 +88,5 @@ export function ConversationOverviewPanel({
         </>
       ) : null}
     </section>
-  );
-}
-
-function ContextProgressIcon({ percent }: { percent: number }) {
-  const radius = 5;
-  const circumference = 2 * Math.PI * radius;
-  const clampedPercent = Math.min(100, Math.max(0, Number(percent) || 0));
-  const dashOffset = circumference * (1 - clampedPercent / 100);
-  return (
-    <svg className="chat-conversation-overview-progress-icon" viewBox="0 0 14 14" aria-hidden="true">
-      <circle cx="7" cy="7" r={radius} />
-      <circle cx="7" cy="7" r={radius} strokeDasharray={circumference} strokeDashoffset={dashOffset} />
-    </svg>
   );
 }

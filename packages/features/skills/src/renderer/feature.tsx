@@ -14,6 +14,7 @@ import {
   registerSettingsPageExtension,
 } from '@setsuna-desktop/renderer-contracts/settings';
 import { lazy } from 'react';
+import { Sparkles } from 'lucide-react';
 import {
   skillsFeature,
   skillsRendererServiceCapability,
@@ -54,6 +55,7 @@ export const skillsRendererFeature = defineRendererFeature({
     registerSettingsPage(context.ui, {
       entryId: 'skills.capabilities-page',
       location: 'capabilities',
+      icon: Sparkles,
       navigationGroupId: CAPABILITIES_CATALOG_NAVIGATION_GROUP_ID,
       order: 200,
       pageHeading: 'view',

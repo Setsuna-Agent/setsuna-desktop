@@ -228,7 +228,7 @@ a.chat-markdown__file-link:focus-visible {
 .chat-markdown__table-scroll::-webkit-scrollbar-thumb {
   border: 0 !important;
   border-radius: 999px;
-  background: var(--chat-scrollbar-thumb) !important;
+  background: var(--sd-scrollbar-thumb) !important;
   background-clip: content-box !important;
 }
 

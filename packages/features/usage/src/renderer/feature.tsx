@@ -5,6 +5,7 @@ import {
 import {
   defineRendererDependencies,
   defineRendererFeature,
+  rendererFeatureEventFeedCapability,
   rendererFeatureOperationTransportCapability,
 } from '@setsuna-desktop/feature-core/renderer';
 import { registerSettingsPage } from '@setsuna-desktop/renderer-contracts/settings';
@@ -25,6 +26,7 @@ const UsageSettingsView = lazy(async () => {
 });
 
 const dependencies = defineRendererDependencies({
+  eventFeed: requiredCapability(rendererFeatureEventFeedCapability),
   host: requiredCapability(usageRendererHostCapability),
   transport: requiredCapability(rendererFeatureOperationTransportCapability),
 });
@@ -39,6 +41,7 @@ export const usageRendererFeature = defineRendererFeature({
   setup(context) {
     const service = new RendererUsageStateService({
       client: createUsageClient(context.dependencies.transport),
+      eventFeed: context.dependencies.eventFeed,
       scope: context.scope,
     });
     context.provide(stateProvider, service);

@@ -25,7 +25,6 @@ import type {
   ChatWorkspaceMentionRequest,
   ConversationOverviewVisibility,
 } from '../../app/types.js';
-import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { RuntimeAccessModeSelection } from '../../shared/lib/runtimeAccessMode.js';
 import type {
   DesktopReviewOpenHandler,
@@ -34,10 +33,7 @@ import type {
 import { ChatComposer } from './ChatComposer.js';
 import { ChatModelSetupNotice } from './ChatModelSetupNotice.js';
 import type { ChatModelSelectionHandler } from './chatModelSelection.js';
-import {
-  conversationOverviewContextLabel,
-  useConversationOverviewLayout,
-} from './conversation/ChatWorkspaceScroll.js';
+import { useConversationOverviewLayout } from './conversation/ChatWorkspaceScroll.js';
 import { ConversationOverviewPanel } from './conversation/ConversationOverviewPanel.js';
 import type { AnswerApprovalHandler } from './conversation/chat-workspace-types.js';
 import { ChatStarter, ChatStarterContent } from './conversation/ChatStarter.js';
@@ -91,6 +87,7 @@ export function ChatWorkspace({
   onCapabilitySelectionRequestConsumed,
   onWorkspaceMentionRequestConsumed,
   reviewControls,
+  starterControls,
   reviewError = null,
   reviewState = null,
   plugins = [],
@@ -139,12 +136,12 @@ export function ChatWorkspace({
   onCapabilitySelectionRequestConsumed: (requestId: number) => void;
   onWorkspaceMentionRequestConsumed?: (requestId: number) => void;
   reviewControls?: ReactNode;
+  starterControls?: ReactNode;
   reviewError?: string | null;
   reviewState?: DesktopReviewState | null;
   plugins?: RuntimePluginSummary[];
   variant?: 'main' | 'side';
 }) {
-  const { t } = useI18n();
   const messageHistory = useThreadMessageHistory(client, currentThread);
   const messages = messageHistory.messages;
   const historyThread = useMemo(
@@ -167,12 +164,8 @@ export function ChatWorkspace({
   const overviewVisible = conversationOverviewVisibility === 'shown'
     || (conversationOverviewVisibility === 'auto' && overviewLayout !== 'hidden');
   const overviewShiftsContent = overviewVisible && overviewLayout === 'shifted';
-  const overviewContextLabel = useMemo(
-    () => conversationOverviewContextLabel(contextUsage, currentThread?.contextCompaction?.status, t),
-    [contextUsage, currentThread?.contextCompaction?.status, t],
-  );
   const starterSourceVisible = variant === 'main' && messages.length === 0 && !activeTurnId;
-  const starterIdentity = currentThread?.id ?? activeProject?.id ?? 'empty-chat';
+  const starterIdentity = currentThread?.id ?? composerKey;
   const starterTransition = useChatStarterTransition({
     conversationRef,
     sourceVisible: starterSourceVisible,
@@ -283,6 +276,7 @@ export function ChatWorkspace({
                 <ChatStarter
                   key={starterKey}
                   composer={composer(true)}
+                  contextBar={!currentThread || starterSettlePhase ? starterControls : undefined}
                   settleComposerHeight={starterComposerHeight}
                   settleOffsetY={starterOffsetY}
                   settlePhase={starterSettlePhase}
@@ -291,7 +285,6 @@ export function ChatWorkspace({
                     <ChatStarterContent
                       modelSetupNotice={modelSetupNotice}
                       projectName={activeProject?.name}
-                      onSend={handleSend}
                     />
                   ))}
                 </ChatStarter>
@@ -328,8 +321,6 @@ export function ChatWorkspace({
                   renderDefault: () => (
                     <ConversationOverviewPanel
                       activeProject={activeProject}
-                      contextLabel={overviewContextLabel}
-                      contextPercent={contextUsage.visiblePercent || contextUsage.percent}
                       overview={conversationOverview}
                       reviewControls={reviewControls}
                       reviewError={reviewError}

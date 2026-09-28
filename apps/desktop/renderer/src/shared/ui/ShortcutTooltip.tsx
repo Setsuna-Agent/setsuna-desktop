@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import {
   formatKeyboardShortcutBinding,
   formatKeyboardShortcutBindingParts,
@@ -16,7 +16,7 @@ export function ShortcutTooltip({
   children: ReactNode;
   commandId: KeyboardShortcutCommandId;
   label: string;
-  placement?: 'top' | 'bottom' | 'bottomRight';
+  placement?: ComponentProps<typeof AppTooltip>['placement'];
 }) {
   return (
     <AppTooltip placement={placement} title={<ShortcutTooltipContent commandId={commandId} label={label} />}>

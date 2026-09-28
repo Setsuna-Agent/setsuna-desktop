@@ -1,0 +1,13 @@
+.chat-starter__context { margin: 0 10px; }
+.chat-starter-workspace {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 4px 6px 8px;
+  margin-bottom: -4px;
+  border-radius: 12px 12px 0 0;
+  background: var(--app-surface-muted);
+}
+.chat-starter-workspace__project { max-width: 60%; }
+.chat-starter:is(.is-settling, .is-settled) .chat-starter__context { opacity: 0; pointer-events: none; }

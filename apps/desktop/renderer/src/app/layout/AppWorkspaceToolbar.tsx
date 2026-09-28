@@ -27,7 +27,7 @@ export function AppWorkspaceToolbar({
   const actions = (
     <AppTooltip title={maximizeLabel} placement="bottom">
       <Button variant="ghost"
-        className={'app-shell-icon-control chat-file-review-panel__close' + (workspaceMaximized ? ' chat-file-review-panel__close--active' : '')}
+        className={'app-shell-icon-control chat-file-review-panel__close' + (workspaceMaximized ? ' is-active' : '')}
         type="button"
         aria-label={maximizeLabel}
         aria-pressed={workspaceMaximized}
@@ -142,7 +142,7 @@ function WorkspaceOverviewToolbar({
                   'app-shell-icon-control',
                   'chat-file-review-panel__close',
                   'chat-file-review-panel__terminal-action',
-                  bottomPanelOpen ? 'chat-file-review-panel__close--active' : '',
+                  bottomPanelOpen ? 'is-active' : '',
                 ]
                   .filter(Boolean)
                   .join(' ')}
@@ -156,7 +156,7 @@ function WorkspaceOverviewToolbar({
             </ShortcutTooltip>
             <ShortcutTooltip commandId="layout.toggleWorkspace" label={t('topbar.collapseRightSidebar')}>
               <Button variant="ghost"
-                className="app-shell-icon-control chat-file-review-panel__close chat-file-review-panel__panel-close chat-file-review-panel__close--active"
+                className="app-shell-icon-control chat-file-review-panel__close chat-file-review-panel__panel-close is-active"
                 type="button"
                 aria-label={t('topbar.collapseRightSidebar')}
                 aria-pressed={true}

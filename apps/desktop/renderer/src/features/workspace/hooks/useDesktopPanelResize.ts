@@ -72,7 +72,7 @@ export function useDesktopPanelResize(
     (value: number) =>
       clampWorkspaceWidthForLayout(value, {
         sidebarWidth: readShellPixelVariable(shellRef.current, '--app-sidebar-width', sidebarWidth),
-        viewportWidth: shellRef.current?.clientWidth ?? viewportWidth(),
+        viewportWidth: readWorkbenchWidth(shellRef.current),
       }),
     [shellRef, sidebarWidth],
   );
@@ -88,7 +88,7 @@ export function useDesktopPanelResize(
     (value: number) =>
       canWorkspaceWidthKeepExpandedSidebar({
         sidebarWidth,
-        viewportWidth: shellRef.current?.clientWidth ?? viewportWidth(),
+        viewportWidth: readWorkbenchWidth(shellRef.current),
         workspaceWidth: value,
       }),
     [shellRef, sidebarWidth],
@@ -161,7 +161,7 @@ export function useDesktopPanelResize(
   const fitWorkspaceForExpandedSidebar = useCallback(() => {
     const maxExpandedWorkspaceWidth = workspaceMaxWidthForExpandedSidebar({
       sidebarWidth,
-      viewportWidth: shellRef.current?.clientWidth ?? viewportWidth(),
+      viewportWidth: readWorkbenchWidth(shellRef.current),
     });
     workspacePreviewCanFitSidebarRef.current = null;
     setWorkspaceRestoreWidth(null);
@@ -397,6 +397,11 @@ function readShellPixelVariable(shell: HTMLElement | null, name: string, fallbac
 
 function viewportWidth(): number {
   return typeof window === 'undefined' ? WORKSPACE_MIN_WIDTH + SIDEBAR_MAX_WIDTH + WORKBENCH_SPLIT_MAIN_MIN_WIDTH : window.innerWidth * pageScaleInverse();
+}
+
+/** Use the content surface width so the global navigation rail never consumes panel space. */
+export function readWorkbenchWidth(shell: HTMLElement | null): number {
+  return shell?.querySelector<HTMLElement>('.app-workbench')?.clientWidth ?? shell?.clientWidth ?? viewportWidth();
 }
 
 function readWorkbenchHeight(shell: HTMLElement | null): number {

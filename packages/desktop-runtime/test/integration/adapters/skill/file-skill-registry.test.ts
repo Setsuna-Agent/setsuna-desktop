@@ -13,17 +13,28 @@ import { systemClock } from '../../../../src/ports/clock.js';
 import type { ModelClient } from '../../../../src/ports/model-client.js';
 
 describe('file skill registry', () => {
-  it('serializes concurrent skill state writes', async () => {
+  it('preserves legacy enable flags and serializes directory changes with skill state writes', async () => {
     const { builtinDir, dataDir } = await createSkillFixture();
+    await mkdir(dataDir, { recursive: true });
+    await writeFile(path.join(dataDir, 'skills.json'), JSON.stringify({
+      version: 1,
+      states: { 'builtin-demo': { enabled: false } },
+    }));
     const registry = new FileSkillRegistry(builtinDir, dataDir);
+    expect((await registry.listSkills()).extraRoots).toEqual([]);
+    const missingRoot = path.join(dataDir, 'missing-skills');
 
     await Promise.all([
       registry.createSkill({ name: 'Alpha Skill', content: 'alpha' }),
+      registry.setExtraRoots([missingRoot]),
       registry.createSkill({ name: 'Beta Skill', content: 'beta', enabled: false }),
     ]);
 
-    await expect(registry.listSkills()).resolves.toMatchObject({
+    const restarted = new FileSkillRegistry(builtinDir, dataDir);
+    await expect(restarted.listSkills()).resolves.toMatchObject({
+      extraRoots: [missingRoot],
       skills: expect.arrayContaining([
+        expect.objectContaining({ id: 'builtin-demo', enabled: false }),
         expect.objectContaining({ id: 'alpha-skill', enabled: true }),
         expect.objectContaining({ id: 'beta-skill', enabled: false }),
       ]),
@@ -376,7 +387,7 @@ describe('file skill registry', () => {
     });
   });
 
-  it('loads runtime extra roots without persisting them', async () => {
+  it('restores extra roots and prompt content after restart and persists removal without deleting files', async () => {
     const { builtinDir, dataDir } = await createSkillFixture();
     const extraRoot = path.join(dataDir, 'extra-skills');
     const registry = new FileSkillRegistry(builtinDir, dataDir);
@@ -402,7 +413,9 @@ describe('file skill registry', () => {
     await writeFile(referencePath, 'Keep this externally managed reference.');
     await registry.setExtraRoots([extraRoot]);
 
-    expect(await registry.listSkills()).toMatchObject({
+    const restarted = new FileSkillRegistry(builtinDir, dataDir);
+    expect(await restarted.listSkills()).toMatchObject({
+      extraRoots: [extraRoot],
       skills: expect.arrayContaining([
         expect.objectContaining({
           id: 'extra-helper',
@@ -412,7 +425,7 @@ describe('file skill registry', () => {
         }),
       ]),
     });
-    await expect(registry.selectedSkillInjections(['extra-helper'])).resolves.toEqual(
+    await expect(restarted.selectedSkillInjections(['extra-helper'])).resolves.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           id: 'extra-helper',
@@ -420,7 +433,16 @@ describe('file skill registry', () => {
         }),
       ]),
     );
-    await expect(registry.deleteSkill('extra-helper')).resolves.toBeUndefined();
+
+    await restarted.setExtraRoots([]);
+    const afterRemoval = new FileSkillRegistry(builtinDir, dataDir);
+    expect((await afterRemoval.listSkills()).extraRoots).toEqual([]);
+    await expect(afterRemoval.getSkill('extra-helper')).resolves.toBeNull();
+    await expect(readFile(path.join(extraRoot, 'extra-helper', 'SKILL.md'), 'utf8'))
+      .resolves.toContain('Use the extra root.');
+
+    await afterRemoval.setExtraRoots([extraRoot]);
+    await expect(afterRemoval.deleteSkill('extra-helper')).resolves.toBeUndefined();
     await expect(readFile(path.join(extraRoot, 'extra-helper', 'SKILL.md'), 'utf8'))
       .rejects.toMatchObject({ code: 'ENOENT' });
     await expect(readFile(referencePath, 'utf8'))

@@ -6,9 +6,9 @@ import {
 } from './browserStorage.js';
 
 export const sidebarBackgroundOptions = [
-  { value: 'soft', label: '柔和', lightSwatch: '#f7f7f7', darkSwatch: '#282b2e' },
-  { value: 'plain', label: '素净', lightSwatch: '#ffffff', darkSwatch: '#202020' },
-  { value: 'contrast', label: '层次', lightSwatch: '#edf1f5', darkSwatch: '#30343a' },
+  { value: 'soft', label: '柔和', lightSwatch: '#f3f2ef', darkSwatch: '#292927' },
+  { value: 'plain', label: '素净', lightSwatch: '#f8f8f8', darkSwatch: '#222222' },
+  { value: 'contrast', label: '层次', lightSwatch: '#e8ecef', darkSwatch: '#2a2e31' },
 ] as const;
 
 export type SidebarBackgroundStyle = typeof sidebarBackgroundOptions[number]['value'];

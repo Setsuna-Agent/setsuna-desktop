@@ -1,4 +1,4 @@
-import { Button } from '@setsuna-desktop/renderer-ui';
+import { Button, Tooltip } from '@setsuna-desktop/renderer-ui';
 import {
   parseRuntimePluginUiManifest,
   type RuntimePluginSummary,
@@ -319,22 +319,24 @@ function DeclarativePluginSidebarEntry({
   const badge = missingContext
     ? t(missingContext === 'project' ? 'pluginUi.projectRequired' : 'pluginUi.threadRequired')
     : resolveRuntimePluginUiText(contribution.navigation?.badge, data);
+  const label = contribution.navigation?.label ?? plugin.name;
   return (
-    <Button variant="ghost"
-      className={`desktop-agent-command${active ? ' is-active' : ''}`}
-      onClick={onOpen}
-      title={missingContext ? badge : undefined}
-      type="button"
-    >
-      <PluginIcon
-        className="declarative-plugin-navigation__icon"
-        name={plugin.icon}
-        pluginId={plugin.id}
-        variant="menu"
-      />
-      <span className="desktop-agent-command__label">{contribution.navigation?.label}</span>
-      {badge ? <span className="declarative-plugin-navigation__badge">{badge}</span> : null}
-    </Button>
+    <Tooltip title={badge ? `${label} · ${badge}` : label} placement="right">
+      <Button variant="ghost"
+        className={`app-navigation__button${active ? ' is-active' : ''}`}
+        onClick={onOpen}
+        aria-label={label}
+        aria-current={active ? 'page' : undefined}
+        type="button"
+      >
+        <PluginIcon
+          className="declarative-plugin-navigation__icon"
+          name={plugin.icon}
+          pluginId={plugin.id}
+          variant="menu"
+        />
+      </Button>
+    </Tooltip>
   );
 }
 

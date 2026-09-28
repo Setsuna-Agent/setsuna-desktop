@@ -5,6 +5,7 @@ import {
   type RendererSingleSlot,
 } from '@setsuna-desktop/feature-core/renderer';
 import type { Disposer } from '@setsuna-desktop/feature-core/scope';
+import { capabilitiesSidebarSlot } from '@setsuna-desktop/renderer-contracts/capabilities';
 import {
   chatComposerSlot,
   chatComposerStatusSlot,
@@ -95,6 +96,7 @@ const appShellPlugin = defineRendererPlugin({
       priority: 0,
       children: [
         declareRendererChildSlot(shellSidebarSlot, { required: true }),
+        declareRendererChildSlot(shellSidebarPluginEntrySlot),
         declareRendererChildSlot(shellTopbarTitleSlot, { required: true }),
         declareRendererChildSlot(shellTopbarActionsSlot, { required: true }),
         declareRendererChildSlot(shellWorkspaceToolbarSlot, { required: true }),
@@ -128,6 +130,7 @@ const routePlugin = defineRendererPlugin({
       declareRendererChildSlot(settingsPageExtensionSlot),
     ]);
     registerRoute(ui, 'capabilities', [
+      declareRendererChildSlot(capabilitiesSidebarSlot),
       declareRendererChildSlot(settingsPageSlot, {
         fallback: {
           render: ({ sectionId }) => (
@@ -154,7 +157,6 @@ const shellRegionsPlugin = defineRendererPlugin({
     ui.single(shellSidebarSlot, {
       id: 'shell.sidebar.default',
       priority: 0,
-      children: [declareRendererChildSlot(shellSidebarPluginEntrySlot)],
       render: ({ renderDefault }, slots) => (
         <RendererOwnedSlotsProvider slots={slots}>
           {renderDefault()}
@@ -231,6 +233,7 @@ const coreSettingsPlugin = defineRendererPlugin({
 const rendererDiagnosticsPlugin = defineRendererPlugin({
   id: 'core.renderer-diagnostics',
   activate({ ui }) {
+    if (!import.meta.env.DEV) return;
     registerSettingsPageExtension(ui, {
       entryId: 'settings.renderer-inspector',
       id: 'renderer-inspector',

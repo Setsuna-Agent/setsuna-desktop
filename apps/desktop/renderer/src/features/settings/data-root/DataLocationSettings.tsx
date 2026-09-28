@@ -98,7 +98,7 @@ export function DataLocationSettings({ fallbackRoot }: { fallbackRoot: string })
             {t('dataRoot.change')}
           </Button>
         </div>
-        <SettingsPathValue path={activeRoot} />
+        <SettingsPathValue kind="directory" path={activeRoot} />
       </div>
       <DataRootBackupSettings />
       {error && !plan ? <div className="chat-user-settings__runtime-error">{error}</div> : null}

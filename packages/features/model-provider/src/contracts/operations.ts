@@ -1,5 +1,6 @@
 import {
   normalizeProviderRequestHeaders,
+  normalizeProviderSupportsDeveloperRole,
   type RuntimeAvailableModel,
   type RuntimeAvailableModelsResponse,
   type RuntimeFetchModelsInput,
@@ -22,7 +23,9 @@ const providerInputCodec = defineRuntimeCodec<ModelProviderSettingsInput>((value
   const record = objectRecord(value, 'Model provider input must be an object.');
   if (!Array.isArray(record.providers)) throw new Error('Model provider input must include providers.');
   for (const provider of record.providers) {
-    normalizeProviderRequestHeaders(objectRecord(provider, 'Provider must be an object.').requestHeaders);
+    const entry = objectRecord(provider, 'Provider must be an object.');
+    normalizeProviderRequestHeaders(entry.requestHeaders);
+    normalizeProviderSupportsDeveloperRole(entry.supportsDeveloperRole);
   }
   return structuredClone(record) as ModelProviderSettingsInput;
 });

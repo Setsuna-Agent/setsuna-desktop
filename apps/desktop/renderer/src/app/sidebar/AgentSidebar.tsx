@@ -3,7 +3,6 @@ import { ResizeHandle, Button } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeThreadSummary, WorkspaceProject } from '@setsuna-desktop/contracts';
 import {
   Archive,
-  Blocks,
   ChevronDown,
   FolderClosed,
   FolderOpen,
@@ -11,7 +10,6 @@ import {
   MoreHorizontal,
   Plus,
   Search,
-  GitPullRequest,
   Settings,
   Trash2,
 } from 'lucide-react';
@@ -22,8 +20,6 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type Ref,
-  type RefObject,
-  type ReactNode,
 } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
@@ -31,7 +27,6 @@ import { SidebarFloatingMenu } from './SidebarFloatingMenu.js';
 import { SidebarProjectHoverCard } from './SidebarProjectHoverCard.js';
 import { SidebarThreadList } from './SidebarThreadList.js';
 import { PinnedThreadSection } from './PinnedThreadSection.js';
-import { SidebarUserMenu } from './SidebarUserMenu.js';
 import { useSidebarNavigationHint } from './useSidebarNavigationHint.js';
 
 const isProjectActionTarget = (target: EventTarget | null) =>
@@ -49,7 +44,6 @@ export function AgentSidebar({
   pinnedThreadIds,
   pinnedThreads,
   projectActionMenuId,
-  pluginEntries,
   projects,
   projectsCollapsed,
   searchOpen,
@@ -67,15 +61,11 @@ export function AgentSidebar({
   onCreateProjectThread,
   onEnterChatMode,
   onEditProject,
-  onOpenCapabilities,
-  onOpenPullRequests,
-  onOpenRuntimeActivity,
-  onOpenSettings,
   onRemoveProject,
   onResizeStep,
   onResizeStart,
   onCreateProject,
-  onSelectProject,
+  onToggleProjectCollapsed,
   onSelectThread,
   onToggleProjectActions,
   onToggleProjectsCollapsed,
@@ -84,7 +74,6 @@ export function AgentSidebar({
   onToggleThreadActions,
   onToggleThreadPin,
   onRenameThread,
-  runtimeActivityTriggerRef,
 }: {
   activeProjectId: string | null;
   activeThreadId?: string | null;
@@ -97,7 +86,6 @@ export function AgentSidebar({
   pinnedThreadIds: ReadonlySet<string>;
   pinnedThreads: RuntimeThreadSummary[];
   projectActionMenuId: string | null;
-  pluginEntries?: ReactNode;
   projects: WorkspaceProject[];
   projectsCollapsed: boolean;
   searchOpen: boolean;
@@ -115,15 +103,11 @@ export function AgentSidebar({
   onCreateProjectThread: (projectId: string) => void;
   onEnterChatMode: () => void;
   onEditProject: (project: WorkspaceProject) => void;
-  onOpenCapabilities: () => void;
-  onOpenPullRequests: () => void;
-  onOpenRuntimeActivity: () => void;
-  onOpenSettings: () => void;
   onRemoveProject: (project: WorkspaceProject) => void;
   onResizeStep: (delta: number) => void;
   onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   onCreateProject: () => void;
-  onSelectProject: (project: WorkspaceProject) => void;
+  onToggleProjectCollapsed: (projectId: string) => void;
   onSelectThread: (threadId: string) => void;
   onToggleProjectActions: (projectId: string) => void;
   onToggleProjectsCollapsed: () => void;
@@ -132,7 +116,6 @@ export function AgentSidebar({
   onToggleThreadActions: (threadId: string) => void;
   onToggleThreadPin: (thread: RuntimeThreadSummary) => void;
   onRenameThread: (thread: RuntimeThreadSummary) => void;
-  runtimeActivityTriggerRef: RefObject<HTMLButtonElement>;
 }) {
   const { t } = useI18n();
   const navigationHint = useSidebarNavigationHint(activeView === 'chat' && !collapsed);
@@ -156,21 +139,8 @@ export function AgentSidebar({
             <span className="desktop-agent-command__label">{t('sidebar.search')}</span>
           </Button>
         </ShortcutTooltip>
-        <Button variant="ghost" className={`desktop-agent-command ${activeView === 'pull-requests' ? 'is-active' : ''}`} type="button" onClick={onOpenPullRequests}>
-          <GitPullRequest className="desktop-agent-command__icon" size={15} />
-          <span className="desktop-agent-command__label">Pull Request</span>
-        </Button>
-        <ShortcutTooltip commandId="app.openCapabilities" label={t('sidebar.plugins')} placement="bottom">
-          <Button variant="ghost" className={`desktop-agent-command ${activeView === 'capabilities' ? 'is-active' : ''}`} type="button" onClick={onOpenCapabilities}>
-            <Blocks className="desktop-agent-command__icon" size={15} />
-            <span className="desktop-agent-command__label">{t('sidebar.plugins')}</span>
-          </Button>
-        </ShortcutTooltip>
       </div>
       <div className="desktop-agent-sidebar__body">
-        <nav className="desktop-agent-sidebar__plugin-entries" aria-label={t('sidebar.pluginFeatures')}>
-          {pluginEntries}
-        </nav>
         <PinnedThreadSection
           menuThreadId={threadActionMenuId}
           projects={projects}
@@ -202,7 +172,7 @@ export function AgentSidebar({
           onRemoveProject={onRemoveProject}
           onRenameThread={onRenameThread}
           onCreateProject={onCreateProject}
-          onSelectProject={onSelectProject}
+          onToggleProjectCollapsed={onToggleProjectCollapsed}
           onSelectThread={onSelectThread}
           onToggleProjectActions={onToggleProjectActions}
           onToggleProjectsCollapsed={onToggleProjectsCollapsed}
@@ -227,11 +197,6 @@ export function AgentSidebar({
           onToggleThreadPin={onToggleThreadPin}
         />
       </div>
-      <SidebarUserMenu
-        runtimeActivityTriggerRef={runtimeActivityTriggerRef}
-        onOpenRuntimeActivity={onOpenRuntimeActivity}
-        onOpenSettings={onOpenSettings}
-      />
       <ResizeHandle
         className="desktop-agent-sidebar__resize-handle"
         type="button"
@@ -276,7 +241,7 @@ function ProjectSection({
   onRemoveProject,
   onRenameThread,
   onCreateProject,
-  onSelectProject,
+  onToggleProjectCollapsed,
   onSelectThread,
   onToggleProjectActions,
   onToggleProjectsCollapsed,
@@ -301,7 +266,7 @@ function ProjectSection({
   onRemoveProject: (project: WorkspaceProject) => void;
   onRenameThread: (thread: RuntimeThreadSummary) => void;
   onCreateProject: () => void;
-  onSelectProject: (project: WorkspaceProject) => void;
+  onToggleProjectCollapsed: (projectId: string) => void;
   onSelectThread: (threadId: string) => void;
   onToggleProjectActions: (projectId: string) => void;
   onToggleProjectsCollapsed: () => void;
@@ -364,7 +329,8 @@ function ProjectSection({
                         <Button variant="ghost"
                           className="desktop-agent-project__select"
                           type="button"
-                          onClick={() => onSelectProject(project)}
+                          aria-expanded={!isProjectCollapsed}
+                          onClick={() => onToggleProjectCollapsed(project.id)}
                           onKeyDown={(event) => {
                             if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
                             event.preventDefault();

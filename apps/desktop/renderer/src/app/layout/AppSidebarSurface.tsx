@@ -1,7 +1,5 @@
 import type { RuntimeThreadSummary, WorkspaceProject } from '@setsuna-desktop/contracts';
-import type { PointerEvent as ReactPointerEvent, Ref, RefObject } from 'react';
-import { shellSidebarPluginEntrySlot } from '@setsuna-desktop/renderer-contracts/shell';
-import { RendererOwnedListSlot } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
+import type { PointerEvent as ReactPointerEvent, Ref } from 'react';
 import type { DesktopNavigationState } from '../controller/useDesktopNavigation.js';
 import { AgentSidebar } from '../sidebar/AgentSidebar.js';
 import { usePinnedThreads } from '../sidebar/usePinnedThreads.js';
@@ -21,16 +19,9 @@ export function AppSidebarSurface({
   width,
   maxWidth,
   minWidth,
-  onOpenCapabilities,
-  onOpenPullRequests,
-  onOpenRuntimeActivity,
-  onOpenPluginView,
-  onOpenSettings,
   onResetDraft,
-  selectedPluginViewKey,
   onResizeStep,
   onResizeStart,
-  runtimeActivityTriggerRef,
 }: {
   activeProjectId: string | null;
   activeThreadId?: string | null;
@@ -45,19 +36,12 @@ export function AppSidebarSurface({
   width: number;
   maxWidth: number;
   minWidth: number;
-  onOpenCapabilities: () => void;
-  onOpenPullRequests: () => void;
-  onOpenRuntimeActivity: () => void;
-  onOpenPluginView: (viewKey: string) => void;
-  onOpenSettings: () => void;
   onResetDraft: () => void;
-  selectedPluginViewKey: string | null;
   onResizeStep: (delta: number) => void;
   onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
-  runtimeActivityTriggerRef: RefObject<HTMLButtonElement>;
 }) {
   const { pinnedThreadIds, pinnedThreads, togglePinnedThread } = usePinnedThreads(projects, threadsByProjectId, globalThreads);
-  if (activeView === 'settings') return null;
+  if (activeView !== 'chat') return null;
 
   return (
     <AgentSidebar
@@ -65,7 +49,7 @@ export function AppSidebarSurface({
       activeThreadId={activeThreadId}
       collapsed={sidebarCollapsed}
       runningThreadId={runningThreadId}
-      activeView={activeView === 'capabilities' || activeView === 'pull-requests' ? activeView : 'chat'}
+      activeView="chat"
       collapsedProjectIds={navigation.collapsedProjectIds}
       forceExpandedProjectIds={navigation.forceExpandedProjectIds}
       globalThreads={globalThreads}
@@ -73,17 +57,6 @@ export function AppSidebarSurface({
       pinnedThreads={pinnedThreads}
       onToggleThreadPin={togglePinnedThread}
       projectActionMenuId={navigation.projectActionMenuId}
-      pluginEntries={(
-        <RendererOwnedListSlot
-          slot={shellSidebarPluginEntrySlot}
-          props={{
-            activeViewKey: activeView === 'plugin' ? selectedPluginViewKey : null,
-            ...(activeProjectId ? { projectId: activeProjectId } : {}),
-            ...(activeThreadId ? { threadId: activeThreadId } : {}),
-            onOpen: onOpenPluginView,
-          }}
-        />
-      )}
       projects={projects}
       projectsCollapsed={navigation.projectsCollapsed}
       searchOpen={navigation.sidebarSearchOpen}
@@ -113,10 +86,6 @@ export function AppSidebarSurface({
       }}
       onEnterChatMode={() => void navigation.enterChatMode()}
       onEditProject={navigation.editProject}
-      onOpenCapabilities={onOpenCapabilities}
-      onOpenPullRequests={onOpenPullRequests}
-      onOpenRuntimeActivity={onOpenRuntimeActivity}
-      onOpenSettings={onOpenSettings}
       onRemoveProject={(project) => {
         navigation.setProjectActionMenuId(null);
         void navigation.removeProject(project);
@@ -124,7 +93,7 @@ export function AppSidebarSurface({
       onResizeStep={onResizeStep}
       onResizeStart={onResizeStart}
       onCreateProject={navigation.openCreateProject}
-      onSelectProject={(project) => void navigation.selectProjectFromSidebar(project)}
+      onToggleProjectCollapsed={navigation.toggleProjectCollapsed}
       onSelectThread={(threadId) => void navigation.selectThread(threadId)}
       onToggleProjectActions={(projectId) => navigation.setProjectActionMenuId((current) => (current === projectId ? null : projectId))}
       onToggleProjectsCollapsed={() => navigation.setProjectsCollapsed((value) => !value)}
@@ -132,7 +101,6 @@ export function AppSidebarSurface({
       onToggleSessionsCollapsed={() => navigation.setSessionsCollapsed((value) => !value)}
       onToggleThreadActions={(threadId) => navigation.setThreadActionMenuId((current) => (current === threadId ? null : threadId))}
       onRenameThread={navigation.openRenameThread}
-      runtimeActivityTriggerRef={runtimeActivityTriggerRef}
     />
   );
 }

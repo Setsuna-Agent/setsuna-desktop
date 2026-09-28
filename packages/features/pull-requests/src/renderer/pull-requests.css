@@ -1,6 +1,6 @@
 .pr-workbench {
   position: relative;
-  grid-column: 2 / -1;
+  grid-column: 1 / -1;
   grid-row: 1 / -1;
   display: grid;
   grid-template-columns: var(--pr-sidebar-width, 340px) minmax(0, 1fr);
@@ -18,16 +18,8 @@
 .pr-sidebar { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-right: 1px solid var(--app-border); }
 .pr-sidebar__resize-handle { position: absolute; z-index: 12; top: 0; bottom: 0; left: calc(var(--pr-sidebar-width) - 5px); width: 10px; cursor: col-resize; -webkit-app-region: no-drag; }
 .pr-sidebar__resize-handle::after { content: ''; position: absolute; top: 0; bottom: 0; left: 4px; width: 1px; background: transparent; }
-/* Reserve the native control row and its divider together so both follow the PR list width. */
-.app-shell--titlebar-overlay.desktop-agent-page--sidebar-collapsed .pr-sidebar::before {
-  content: '';
-  flex: 0 0 var(--app-topbar-height);
-  box-sizing: border-box;
-  border-bottom: 1px solid var(--desktop-agent-subtle-divider);
-  -webkit-app-region: drag;
-}
 .pr-sidebar__header { display: flex; align-items: center; padding: 12px 14px; gap: 8px; }
-/* These headers replace the native titlebar area; interactive controls remain no-drag. */
+/* Header whitespace can move the window; interactive controls remain no-drag. */
 .pr-sidebar__header, .pr-detail__topline { -webkit-app-region: drag; user-select: none; }
 .pr-sidebar__header h1 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 15px; font-weight: 600; }
 .pr-sidebar__header > .pr-identity { --pr-avatar-size: 24px; margin-left: auto; }
@@ -54,8 +46,13 @@
 .pr-identity__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pr-detail-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; container: pr-detail / inline-size; }
 .pr-detail { --sd-detail-width: 100%; --pr-detail-gutter: 20px; flex: 1; box-sizing: border-box; overflow: hidden; }
+/* Feature styles can load before shared detail defaults; keep this override independent of order. */
+.sd-detail.pr-detail { gap: 0; }
+/* Header spacing belongs above the tabs; the scroll viewport meets their divider. */
+.pr-detail > :is(.pr-detail__topline, .sd-detail__header, .pr-status) { margin-bottom: 8px; }
 .pr-detail > :is(.sd-detail__header, .pr-status, .pr-tabs) { margin-inline: var(--pr-detail-gutter); }
-.pr-detail__topline { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 16px var(--pr-detail-gutter) 0; color: var(--app-text-muted); }
+.pr-detail > .sd-detail__header { padding-block: 0; }
+.pr-detail__topline { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 8px var(--pr-detail-gutter) 0; color: var(--app-text-muted); }
 .pr-detail__eyebrow, .pr-detail .pr-detail__metadata { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--app-text-muted); font-size: 12px; }
 .pr-detail__eyebrow { flex: 1; min-width: 0; flex-wrap: nowrap; }
 .pr-detail__eyebrow .pr-state { flex-shrink: 0; }
@@ -64,7 +61,7 @@
 .pr-detail .sd-page-header__body { flex-wrap: wrap; }
 .pr-detail .sd-page-header__main { min-width: 0; }
 .pr-tabs { display: flex; align-self: stretch; align-items: center; gap: 18px; min-width: 0; border-bottom: 1px solid var(--app-border); }
-.pr-tabs .sd-button { min-width: 0; border-radius: 0; border: 0; border-bottom: 2px solid transparent; padding: 8px 2px; color: var(--app-text-muted); }
+.pr-tabs .sd-button { min-width: 0; border-radius: 0; border: 0; border-bottom: 2px solid transparent; padding: 6px 2px; color: var(--app-text-muted); }
 .pr-tabs .sd-button:is(:hover, :active):not(:disabled) { background: transparent; }
 .pr-tabs .sd-button[aria-selected='true'] { color: var(--app-text); border-bottom-color: var(--app-text); }
 .pr-tabs small { color: var(--app-text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
@@ -82,10 +79,10 @@
 .pr-detail-loading__header { display: grid; gap: 10px; }
 .pr-detail-loading__title { width: 65%; height: 28px; }
 .pr-detail-loading__author { width: 180px; height: 18px; }
-.pr-detail-loading__status { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; min-height: 24px; padding-block: 6px; }
+.pr-detail-loading__status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 24px; min-height: 24px; }
 .pr-detail-loading__status .sd-skeleton { flex: 0 1 120px; max-width: 100%; }
 .pr-detail-loading__status .sd-skeleton:first-child { flex-basis: 260px; }
-.pr-detail-loading__tabs { gap: 18px; padding-block: 10px; }
+.pr-detail-loading__tabs { gap: 18px; padding-block: 8px; }
 .pr-detail-loading__tabs .sd-skeleton { width: 46px; height: 16px; }
 .pr-detail-loading__paragraphs { display: grid; align-content: start; gap: 28px; min-width: 0; padding-top: 8px; }
 .pr-detail-loading__paragraphs > div { display: grid; gap: 12px; }
@@ -97,7 +94,7 @@
 .pr-detail-loading__checks { display: grid; gap: 12px; }
 .pr-detail-loading__checks .sd-skeleton { height: 52px; border-radius: var(--app-radius-lg); }
 .pr-status { min-width: 0; }
-.pr-status__items { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; margin: 0; padding-bottom: 4px; }
+.pr-status__items { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 24px; margin: 0; }
 .pr-status__items > div { display: flex; flex: 0 1 auto; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
 .pr-status dt { flex-shrink: 0; color: var(--app-text-muted); font-size: 11px; white-space: nowrap; }
 .pr-status dd { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; margin: 0; font-size: 12px; overflow-wrap: anywhere; }
@@ -185,7 +182,6 @@
 }
 @media (max-width: 760px) {
   .pr-workbench { grid-column: 1 / -1; }
-  .app-shell--titlebar-overlay .pr-sidebar { padding-top: var(--app-topbar-height); }
 }
 @media (prefers-reduced-motion: reduce) {
   .pr-spin { animation: none; }

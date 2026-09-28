@@ -192,7 +192,9 @@
 }
 
 .chat-user-settings__runtime-list-editor--presets .chat-user-settings__runtime-list-head {
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
 }
 
 .chat-user-settings__runtime-list-editor--presets .chat-user-settings__runtime-list-copy strong {
@@ -203,7 +205,7 @@
 
 .chat-user-settings__runtime-directory-preset {
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   min-height: 44px;
@@ -248,6 +250,13 @@
   font-variant-numeric: tabular-nums;
 }
 
+.chat-user-settings__runtime-directory-preset-path {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+}
+
 .chat-user-settings__runtime-directory-preset-copy code {
   min-width: 0;
   overflow: hidden;
@@ -258,8 +267,9 @@
   white-space: nowrap;
 }
 
-.chat-user-settings__runtime-directory-preset-action {
+.chat-user-settings__runtime-directory-action {
   justify-self: end;
+  flex-shrink: 0;
   min-width: 72px;
   font-size: 12px;
 }

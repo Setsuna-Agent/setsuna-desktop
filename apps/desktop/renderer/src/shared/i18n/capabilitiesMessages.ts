@@ -1,6 +1,8 @@
 export const capabilitiesZhCN = {
   'capabilities.title.marketplace': '插件',
   'capabilities.title.capabilities': '能力',
+  'capabilities.sidebar.title': '自定义',
+  'capabilities.sidebar.search': '搜索已安装插件',
   'capabilities.market.installLocal': '导入本地插件',
   'capabilities.market.installingLocal': '正在导入',
   'capabilities.search.capabilities': '搜索能力...',
@@ -80,6 +82,8 @@ export const capabilitiesZhCN = {
 export const capabilitiesEnUS = {
   'capabilities.title.marketplace': 'Plugins',
   'capabilities.title.capabilities': 'Capabilities',
+  'capabilities.sidebar.title': 'Customize',
+  'capabilities.sidebar.search': 'Search installed plugins',
   'capabilities.market.installLocal': 'Import local plugin',
   'capabilities.market.installingLocal': 'Importing',
   'capabilities.search.capabilities': 'Search capabilities...',

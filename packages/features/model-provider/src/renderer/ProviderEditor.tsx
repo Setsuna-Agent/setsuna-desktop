@@ -1,4 +1,4 @@
-import { Button as UiButton } from '@setsuna-desktop/renderer-ui';
+import { Button as UiButton, Switch } from '@setsuna-desktop/renderer-ui';
 import type {
   DesktopNetworkProxyServerState,
   ProviderConfigState } from '@setsuna-desktop/contracts';
@@ -16,6 +16,7 @@ import { ProviderConnection } from './ProviderConnection.js';
 import { ProviderModelList } from './ProviderModelList.js';
 import { catalogPlanForConfig, catalogProviderForConfig } from './provider-catalog.js';
 import { protocolLabel } from './ProviderRail.js';
+import type { ProviderConnectionTester } from './useProviderConnectionTest.js';
 
 export function ProviderEditor({
   apiKey,
@@ -30,7 +31,7 @@ export function ProviderEditor({
   onDelete,
   onDiscover,
   onRefreshCatalog,
-  onProviderIdentityChange,
+  onTestConnection,
   provider,
   proxyServers,
   translate,
@@ -48,7 +49,7 @@ export function ProviderEditor({
   onDelete(): void;
   onDiscover(): Promise<ProviderConfigState['models'] | undefined>;
   onRefreshCatalog(): void;
-  onProviderIdentityChange(provider: ProviderConfigState): void;
+  onTestConnection: ProviderConnectionTester;
   provider: ProviderConfigState;
   proxyServers: readonly DesktopNetworkProxyServerState[];
   translate: RendererTranslate;
@@ -83,13 +84,14 @@ export function ProviderEditor({
           </span>
         </div>
         <div className="model-provider-settings__editor-actions">
-          <ui.Checkbox
-            aria-label={translate('feature.modelProvider.enabled')}
-            checked={provider.enabled}
-            onChange={(enabled) => onChange({ ...provider, enabled })}
-          >
-            {translate('feature.modelProvider.enabled')}
-          </ui.Checkbox>
+          <label className="model-provider-settings__enabled">
+            <span>{translate('feature.modelProvider.enabled')}</span>
+            <Switch
+              label={translate('feature.modelProvider.enabled')}
+              checked={provider.enabled}
+              onCheckedChange={(enabled) => onChange({ ...provider, enabled })}
+            />
+          </label>
           {canDelete ? (
             <ui.IconButton
               label={translate('feature.modelProvider.deleteProvider')}
@@ -112,7 +114,7 @@ export function ProviderEditor({
           onApiKeyChange={onApiKeyChange}
           onCopyApiKey={onCopyApiKey}
           onChange={onChange}
-          onProviderIdentityChange={onProviderIdentityChange}
+          onTestConnection={onTestConnection}
         />
         <ProviderModelList
           catalogPlan={catalogPlan}

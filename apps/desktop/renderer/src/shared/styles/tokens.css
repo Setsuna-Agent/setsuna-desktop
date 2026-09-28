@@ -12,9 +12,11 @@
   --app-scaled-viewport-height: calc(var(--app-visual-viewport-height, 100dvh) / var(--app-page-scale));
   --app-bg: #ffffff;
   --app-window-bg: #fafafa;
-  --app-sidebar-bg: #f7f7f7;
-  --app-sidebar-text: #454545;
-  --app-sidebar-text-secondary: #7d7d7d;
+  /* 默认“柔和”使用暖灰；外框、侧栏和前景共同定义预设的色调。 */
+  --app-sidebar-bg: #f3f2ef;
+  --app-shell-bg: #ecebe8;
+  --app-sidebar-text: #4b4943;
+  --app-sidebar-text-secondary: #77746d;
   --app-surface: #ffffff;
   --app-surface-subtle: #fafafa;
   --app-surface-muted: #f5f5f5;
@@ -73,13 +75,13 @@
   --app-mono-chip-radius: var(--app-radius-xs);
   --app-success: var(--app-green-active);
   --app-warning: var(--app-orange-active);
-  /* Muted Git lane colors stay distinct without competing with commit text. */
-  --desktop-git-graph-blue: #6379ad;
-  --desktop-git-graph-yellow: #a18850;
-  --desktop-git-graph-purple: #9272a5;
-  --desktop-git-graph-teal: #438780;
-  --desktop-git-graph-orange: #b27b61;
-  --desktop-git-graph-indigo: #7a78b2;
+  /* Cool Git lanes stay distinct; rose separates the sixth concurrent branch. */
+  --desktop-git-graph-blue: #5b83e8;
+  --desktop-git-graph-cyan: #31a6bc;
+  --desktop-git-graph-purple: #9a75dc;
+  --desktop-git-graph-teal: #36a89b;
+  --desktop-git-graph-rose: #d87da6;
+  --desktop-git-graph-indigo: #7b7de1;
   /* beUI geometry: compact fields, pill actions, rounded surfaces. */
   --app-radius-xs: 6px;
   --app-radius-sm: 8px;
@@ -102,6 +104,11 @@
   --app-topbar-navigation-icon-inset: 7px;
   --app-topbar-navigation-visual-gap: 20px;
   --app-topbar-navigation-control-size: 28px;
+  --app-toolbar-control-radius: 8px;
+  /* 共用预设前景生成交互层，使顶部与侧栏的状态填充保持同一色调。 */
+  --app-toolbar-control-hover-bg: color-mix(in srgb, var(--app-sidebar-text) 6%, transparent);
+  --app-toolbar-control-active-bg: color-mix(in srgb, var(--app-sidebar-text) 10%, transparent);
+  --app-toolbar-tab-active-bg: var(--app-surface);
   --app-topbar-navigation-item-gap: calc(
     var(--app-topbar-navigation-visual-gap)
     - var(--app-topbar-navigation-control-size)
@@ -125,10 +132,8 @@
     + var(--app-topbar-navigation-divider-inset)
   );
   --desktop-workspace-toolbar-height: 42px;
-  /* 复用实色外壳基底，让标题栏与侧边栏在视觉上保持连续。 */
-  --app-titlebar-bg: transparent;
   --app-titlebar-text: var(--app-sidebar-text-secondary);
-  --app-titlebar-control-width: 140px;
+  --app-titlebar-control-width: 0px;
   --app-sidebar-width: 240px;
   --desktop-agent-main-min-width: 420px;
   --desktop-agent-workspace-width: clamp(520px, 37vw, 760px);
@@ -151,11 +156,11 @@
   --desktop-agent-composer-shadow:
     0 1px 4px rgba(0, 0, 0, 0.045),
     0 5px 16px rgba(0, 0, 0, 0.025);
-  --desktop-agent-sidebar-hover-bg: #f2f2f2;
+  --desktop-agent-sidebar-hover-bg: color-mix(in srgb, var(--app-sidebar-text) 6%, var(--app-sidebar-bg));
   --desktop-agent-sidebar-active-bg: color-mix(in srgb, var(--app-sidebar-text) 10%, var(--app-sidebar-bg));
   --desktop-agent-sidebar-active-text: #242424;
   --desktop-agent-sidebar-active-shadow: none;
-  --desktop-agent-sidebar-edge: #d6d6d6;
+  --desktop-agent-sidebar-edge: color-mix(in srgb, var(--app-sidebar-text) 12%, var(--app-shell-bg));
   --desktop-agent-sidebar-separator-color: rgba(0, 0, 0, 0.045);
   --desktop-agent-accent: var(--app-primary);
   --desktop-agent-button-border: color-mix(in srgb, var(--app-border) 88%, transparent);
@@ -169,7 +174,7 @@
   --chat-prompt-inline-padding: 14px;
   --chat-composer-bottom-inset: 16px;
   --chat-message-footer-gap: 3px;
-  --chat-scrollbar-width: 8px;
+  --chat-scrollbar-width: 6px;
   --chat-scrollbar-thumb: #e4e4e5;
   --chat-scrollbar-thumb-hover: #585a5b;
   --desktop-inline-icon-size: 18px;
@@ -246,9 +251,11 @@
   color-scheme: dark;
   --app-bg: #181818;
   --app-window-bg: #181818;
-  --app-sidebar-bg: #282b2e;
-  --app-sidebar-text: #d0d0d0;
-  --app-sidebar-text-secondary: #999999;
+  --app-toolbar-tab-active-bg: var(--desktop-agent-sidebar-hover-bg);
+  --app-sidebar-bg: #292927;
+  --app-shell-bg: #232321;
+  --app-sidebar-text: #d5d4cf;
+  --app-sidebar-text-secondary: #a3a29b;
   --app-surface: #202020;
   --app-surface-subtle: #222222;
   --app-surface-muted: #282828;
@@ -289,12 +296,12 @@
   --app-mono-chip-bg: color-mix(in srgb, var(--app-text) 8%, transparent);
   --app-success: var(--app-green-hover);
   --app-warning: var(--app-orange-hover);
-  --desktop-git-graph-blue: #91a3d2;
-  --desktop-git-graph-yellow: #c5b17c;
-  --desktop-git-graph-purple: #b79bcc;
-  --desktop-git-graph-teal: #80b8ad;
-  --desktop-git-graph-orange: #c99e87;
-  --desktop-git-graph-indigo: #a6a0cf;
+  --desktop-git-graph-blue: #86aaff;
+  --desktop-git-graph-cyan: #73cede;
+  --desktop-git-graph-purple: #bd9cf1;
+  --desktop-git-graph-teal: #75d4c2;
+  --desktop-git-graph-rose: #eea1c0;
+  --desktop-git-graph-indigo: #a7a4f4;
   --app-titlebar-text: var(--app-sidebar-text-secondary);
   --desktop-agent-panel-border: color-mix(in srgb, var(--app-border) 88%, transparent);
   --desktop-agent-main-bg: var(--app-bg);
@@ -308,9 +315,7 @@
   --desktop-agent-composer-shadow:
     0 1px 5px rgba(0, 0, 0, 0.18),
     0 6px 18px rgba(0, 0, 0, 0.1);
-  --desktop-agent-sidebar-hover-bg: #34383b;
   --desktop-agent-sidebar-active-text: #fafafa;
-  --desktop-agent-sidebar-edge: color-mix(in srgb, var(--app-border-strong) 68%, transparent);
   --desktop-agent-sidebar-separator-color: rgba(0, 0, 0, 0.18);
   --desktop-agent-accent: var(--app-primary);
   --desktop-agent-button-border: color-mix(in srgb, var(--app-border) 88%, transparent);
@@ -326,27 +331,31 @@
 }
 
 :root[data-theme='light'][data-sidebar-background-style='plain'] {
-  --app-sidebar-bg: #ffffff;
-  --desktop-agent-sidebar-hover-bg: #f5f5f5;
-  --desktop-agent-sidebar-edge: #d8d8d8;
+  --app-sidebar-bg: #f8f8f8;
+  --app-shell-bg: #f1f1f1;
+  --app-sidebar-text: #464646;
+  --app-sidebar-text-secondary: #767676;
 }
 
 :root[data-theme='light'][data-sidebar-background-style='contrast'] {
-  --app-sidebar-bg: #edf1f5;
-  --desktop-agent-sidebar-hover-bg: #e3e8ee;
-  --desktop-agent-sidebar-edge: #d3dae3;
+  --app-sidebar-bg: #e8ecef;
+  --app-shell-bg: #e1e5e8;
+  --app-sidebar-text: #434c54;
+  --app-sidebar-text-secondary: #707c85;
 }
 
 :root[data-theme='dark'][data-sidebar-background-style='plain'] {
-  --app-sidebar-bg: #202020;
-  --desktop-agent-sidebar-hover-bg: #2a2a2a;
-  --desktop-agent-sidebar-edge: #343434;
+  --app-sidebar-bg: #222222;
+  --app-shell-bg: #1c1c1c;
+  --app-sidebar-text: #d4d4d4;
+  --app-sidebar-text-secondary: #a1a1a1;
 }
 
 :root[data-theme='dark'][data-sidebar-background-style='contrast'] {
-  --app-sidebar-bg: #30343a;
-  --desktop-agent-sidebar-hover-bg: #3a3f46;
-  --desktop-agent-sidebar-edge: #484e56;
+  --app-sidebar-bg: #2a2e31;
+  --app-shell-bg: #24282b;
+  --app-sidebar-text: #cfd5d9;
+  --app-sidebar-text-secondary: #9ba6ae;
 }
 
 /* 强调色预设仅用于主要操作、链接、焦点环和显式强调。 */

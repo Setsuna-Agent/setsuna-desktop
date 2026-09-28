@@ -31,7 +31,7 @@ export class SkillMcpDependencyCoordinator implements SkillRegistry, SkillMcpDep
 
   async listSkills(): Promise<RuntimeSkillList> {
     const [list, servers] = await Promise.all([this.skills.listSkills(), this.mcpStore.listServerInputs()]);
-    return { skills: await Promise.all(list.skills.map((skill) => this.enrichSkill(skill, servers))) };
+    return { ...list, skills: await Promise.all(list.skills.map((skill) => this.enrichSkill(skill, servers))) };
   }
 
   async createSkill(input: RuntimeSkillInput): Promise<RuntimeSkillDetail> {

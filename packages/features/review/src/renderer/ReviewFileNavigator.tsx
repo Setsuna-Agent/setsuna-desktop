@@ -217,36 +217,30 @@ export const ReviewFileNavigator = memo(function ReviewFileNavigator({
         }}
         onPointerDown={startResize}
       />
-      <header className="desktop-review-file-tree__header">
-        <span className="desktop-review-file-tree__header-label">
-          <span>{t('feature.review.workspace.fileBrowser.label')}</span>
-          <span className="desktop-review-file-tree__header-count">{files.length}</span>
-        </span>
-        <span className="desktop-review-file-tree__header-actions">
-          <ActionTooltip title={layoutToggleLabel}>
-            <IconButton
-              aria-pressed={layout === 'flat'}
-              className="desktop-review-file-tree__header-button"
-              label={layoutToggleLabel}
-              title=""
-              variant="ghost"
-              onClick={toggleLayout}
-            >
-              {layout === 'tree' ? <List size={14} /> : <ListTree size={14} />}
-            </IconButton>
-          </ActionTooltip>
-        </span>
-      </header>
-      <label className="desktop-review-file-tree__search">
-        <Search size={13} />
-        <TextField
-          aria-label={t('feature.review.workspace.fileBrowser.filter')}
-          placeholder={t('feature.review.workspace.fileBrowser.filter')}
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-      </label>
+      <div className="desktop-review-file-tree__toolbar">
+        <label className="desktop-review-file-tree__search">
+          <Search size={13} />
+          <TextField
+            aria-label={t('feature.review.workspace.fileBrowser.filter')}
+            placeholder={t('feature.review.workspace.fileBrowser.filter')}
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
+        <ActionTooltip title={layoutToggleLabel}>
+          <IconButton
+            aria-pressed={layout === 'flat'}
+            className="desktop-review-file-tree__layout-toggle"
+            label={layoutToggleLabel}
+            title=""
+            variant="ghost"
+            onClick={toggleLayout}
+          >
+            {layout === 'tree' ? <List size={14} /> : <ListTree size={14} />}
+          </IconButton>
+        </ActionTooltip>
+      </div>
       <FileTreeSurface className="desktop-review-file-tree__items">
         {rows.length ? rows : (
           <div className="desktop-review-file-tree__empty">
@@ -294,7 +288,25 @@ export function buildReviewFileTree(files: DesktopDiffFile[]): ReviewFileTreeNod
   }
 
   sortReviewFileTree(root);
-  return root.children;
+  return root.children.map(compactReviewFileTreeNode);
+}
+
+function compactReviewFileTreeNode(node: ReviewFileTreeNode): ReviewFileTreeNode {
+  if (node.type === 'file') return node;
+
+  const names = [node.name];
+  let directory = node;
+  while (directory.children.length === 1 && directory.children[0]?.type === 'directory') {
+    directory = directory.children[0];
+    names.push(directory.name);
+  }
+
+  // The final directory owns folding; file paths remain unchanged for selection.
+  return {
+    ...directory,
+    name: names.join('/'),
+    children: directory.children.map(compactReviewFileTreeNode),
+  };
 }
 
 function sortReviewFileTree(directory: ReviewFileDirectoryNode): void {

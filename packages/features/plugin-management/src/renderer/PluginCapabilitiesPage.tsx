@@ -90,7 +90,7 @@ export function PluginCapabilitiesPage({
   }, [capabilities?.workspacePath, service]);
 
   useEffect(() => {
-    if (capabilities?.activeItemId) setSelectedPluginId(capabilities.activeItemId);
+    if (capabilities?.activeItemId !== undefined) setSelectedPluginId(capabilities.activeItemId);
   }, [capabilities?.activeItemId]);
 
   const installedById = useMemo(

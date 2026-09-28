@@ -2,6 +2,8 @@ import type {
   ThreadTitleGenerationResolvedModel,
   ThreadTitleGenerationRuntimeHost,
 } from '@setsuna-desktop/feature-thread-title-generation/contracts';
+import { createFeatureEvent } from '@setsuna-desktop/feature-core/events';
+import { usageRecordedEvent } from '@setsuna-desktop/feature-usage/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { ConfigStore } from '../../ports/config-store.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
@@ -73,12 +75,21 @@ export function createRuntimeThreadTitleGenerationHost(
       });
     },
     recordUsage: async (threadId, turnId, usage) => {
-      await dependencies.usageStore?.recordUsage({
+      const recorded = await dependencies.usageStore?.recordUsage({
         threadId,
         turnId,
         createdAt: dependencies.clock.now().toISOString(),
         ...usage,
       });
+      // Background title requests may finish after turn.completed, including
+      // requests whose generated title is discarded after a manual rename.
+      if (!recorded?.id) return;
+      await dependencies.appendEvent(threadId, createFeatureEvent(usageRecordedEvent, {
+        id: dependencies.ids.id('event'),
+        threadId,
+        turnId,
+        createdAt: dependencies.clock.now().toISOString(),
+      }, { recordId: recorded.id }));
     },
     flushThread: (threadId) => dependencies.eventWriter.flushThread(threadId),
     listEvents: (threadId, afterSeq) => dependencies.threadStore.listEvents(threadId, afterSeq),

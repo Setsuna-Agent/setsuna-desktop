@@ -7,12 +7,13 @@ import {
   defineRendererFeature,
   rendererFeatureOperationTransportCapability,
 } from '@setsuna-desktop/feature-core/renderer';
-import { capabilitiesRefreshCoordinatorCapability } from '@setsuna-desktop/renderer-contracts/capabilities';
+import { capabilitiesRefreshCoordinatorCapability, capabilitiesSidebarSlot } from '@setsuna-desktop/renderer-contracts/capabilities';
 import {
   CAPABILITIES_CATALOG_NAVIGATION_GROUP_ID,
   registerSettingsPage,
 } from '@setsuna-desktop/renderer-contracts/settings';
 import { lazy } from 'react';
+import { Blocks } from 'lucide-react';
 import {
   pluginManagementFeature,
   pluginManagementRendererHostCapability,
@@ -25,6 +26,10 @@ import { RendererPluginManagementService } from './service.js';
 const PluginCapabilitiesPage = lazy(async () => {
   const module = await import('./PluginCapabilitiesPage.js');
   return { default: module.PluginCapabilitiesPage };
+});
+const InstalledPluginsSidebar = lazy(async () => {
+  const module = await import('./InstalledPluginsSidebar.js');
+  return { default: module.InstalledPluginsSidebar };
 });
 
 const dependencies = defineRendererDependencies({
@@ -56,6 +61,7 @@ export const pluginManagementRendererFeature = defineRendererFeature({
     registerSettingsPage(context.ui, {
       entryId: 'plugin-management.capabilities-page',
       location: 'capabilities',
+      icon: Blocks,
       navigationGroupId: CAPABILITIES_CATALOG_NAVIGATION_GROUP_ID,
       order: 100,
       pageHeading: 'view',
@@ -69,6 +75,10 @@ export const pluginManagementRendererFeature = defineRendererFeature({
           service={service}
         />
       ),
+    });
+    context.ui.single(capabilitiesSidebarSlot, {
+      id: 'plugin-management.installed-sidebar',
+      render: (props) => <InstalledPluginsSidebar {...props} service={service} />,
     });
   },
 });

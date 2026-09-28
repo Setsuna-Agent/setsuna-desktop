@@ -12,6 +12,7 @@ import {
   normalizeModelIconConfig,
   normalizeProviderIconConfig,
   normalizeProviderRequestHeaders,
+  normalizeProviderSupportsDeveloperRole,
   normalizeRuntimeAccessModeConfig,
   normalizeRuntimeImageCompression,
 } from '@setsuna-desktop/contracts';
@@ -612,6 +613,9 @@ function normalizeProviders(
       name: typeof provider.name === 'string' ? provider.name : previous?.name ?? 'Local provider',
       ...(catalogProviderId !== undefined ? { catalogProviderId } : {}),
       ...(requestHeaders !== undefined ? { requestHeaders } : {}),
+      supportsDeveloperRole: normalizeProviderSupportsDeveloperRole(
+        provider.supportsDeveloperRole === undefined ? previous?.supportsDeveloperRole : provider.supportsDeveloperRole,
+      ),
       provider: provider.provider ?? previous?.provider ?? 'openai-compatible',
       baseUrl: normalizeBaseUrl(provider.baseUrl ?? previous?.baseUrl ?? ''),
       enabled: provider.enabled ?? previous?.enabled ?? true,

@@ -17,7 +17,7 @@ import {
   RendererOwnedKeyedSlot,
   useRendererOwnedKeyedEntries,
 } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
-import { EmptyState, PageBackButton } from '../../shared/ui/primitives.js';
+import { EmptyState } from '../../shared/ui/primitives.js';
 import { SettingsPageHeading, settingsViewUi } from '../../shared/ui/SettingsViewUi.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../shared/i18n/messages.js';
@@ -59,7 +59,6 @@ export function SettingsPage({
   archivedThreads,
   config,
   initialSection,
-  onBack,
   onSaveRuntimePreferences,
   onDeleteAllArchivedThreads,
   onDeleteArchivedThread,
@@ -68,7 +67,6 @@ export function SettingsPage({
   archivedThreads: RuntimeThreadSummary[];
   config: RuntimeConfigState | null;
   initialSection?: SettingsSectionId;
-  onBack: () => void;
   onSaveRuntimePreferences: (input: RuntimePreferenceInput) => Promise<void>;
   onDeleteAllArchivedThreads: (threadIds: string[]) => Promise<void>;
   onDeleteArchivedThread: (threadId: string) => Promise<void>;
@@ -141,7 +139,6 @@ export function SettingsPage({
       <SettingsSidebar
         activeSection={resolvedSection}
         pages={pages}
-        onBack={onBack}
         onSelectSection={setActiveSection}
       />
       <main className="desktop-settings-panel">
@@ -186,24 +183,16 @@ export function SettingsPage({
 export function SettingsSidebar({
   activeSection,
   pages,
-  onBack,
   onSelectSection,
 }: {
   activeSection: SettingsSectionId;
   pages: readonly SettingsPageEntryDescriptor[];
-  onBack: () => void;
   onSelectSection: (section: SettingsSectionId) => void;
 }) {
   const { t } = useI18n();
   const { byGroup, ungrouped } = partitionSettingsPages(pages);
   return (
     <nav className="app-sidebar desktop-settings-sidebar chat-user-settings__nav">
-      <PageBackButton
-        block
-        className="chat-user-settings__page-back"
-        label={t('settings.back')}
-        onClick={onBack}
-      />
       <div className="chat-user-settings__title">{t('settings.title')}</div>
       <div className="chat-user-settings__tabs">
         {settingsSectionGroups.map((group) => {

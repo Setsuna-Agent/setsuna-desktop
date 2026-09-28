@@ -342,8 +342,7 @@ it('batches only the selected group, includes filtered files and rename paths, a
   const onRefresh = vi.fn();
   render(surface(createBridge({ stageFiles, unstageFiles, discardUnstaged }), { reviewState, onRefresh }));
 
-  fireEvent.pointerDown(screen.getByRole('button', { name: '更多 Git 操作' }), { button: 0, pointerType: 'mouse' });
-  fireEvent.click(await screen.findByRole('menuitem', { name: '筛选变更文件' }));
+  fireEvent.click(screen.getByRole('button', { name: '更改', expanded: true }));
   fireEvent.change(screen.getByRole('textbox', { name: '筛选变更文件' }), { target: { value: 'new.txt' } });
   const group = within(screen.getByRole('button', { name: 'new.txt' }).closest<HTMLElement>('.git-changes-files__group')!);
   const heading = group.getByRole('button', { name: '更改', expanded: true });
@@ -367,6 +366,7 @@ it('batches only the selected group, includes filtered files and rename paths, a
   expect(discardUnstaged).toHaveBeenCalledExactlyOnceWith('/repo', ['old.txt', 'new.txt', 'hidden.txt']);
 
   fireEvent.change(screen.getByRole('textbox', { name: '筛选变更文件' }), { target: { value: '' } });
+  expect(screen.getByRole('button', { name: '更改', expanded: false })).toBeTruthy();
   const stagedGroup = within(screen.getByRole('button', { name: '暂存的更改' }).closest<HTMLElement>('.git-changes-files__group')!);
   expect(stagedGroup.queryByRole('button', { name: '丢弃全部更改' })).toBeNull();
   fireEvent.click(stagedGroup.getByRole('button', { name: '取消全部暂存' }));

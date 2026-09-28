@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type RefObject } from 'react';
 import {
+  readWorkbenchWidth,
   WORKBENCH_SPLIT_MAIN_MIN_WIDTH,
   WORKBENCH_MAIN_MIN_WIDTH,
 } from '../../features/workspace/hooks/useDesktopPanelResize.js';
@@ -22,7 +23,7 @@ export function useDesktopSidebarAutoCollapse({
     setCanExpand(
       canFitDesktopSidebar({
         sidebarWidth,
-        viewportWidth: shellRef.current?.clientWidth ?? viewportWidth(),
+        viewportWidth: readWorkbenchWidth(shellRef.current),
         workspaceVisible,
         workspaceWidth,
       }),
@@ -78,8 +79,4 @@ export function shouldCollapseSidebar({
 }): boolean {
   if (manuallyCollapsed) return true;
   return !canExpand && !manuallyExpanded;
-}
-
-function viewportWidth(): number {
-  return typeof window === 'undefined' ? Number.POSITIVE_INFINITY : window.innerWidth;
 }

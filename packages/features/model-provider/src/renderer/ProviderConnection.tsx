@@ -9,11 +9,12 @@ import type { RendererTranslate,
 import type {
   SettingsViewUi,
 } from '@setsuna-desktop/renderer-contracts/settings';
-import { TriangleAlert } from 'lucide-react';
-import { useState } from 'react';
+import { ChevronRight, LoaderCircle, PlugZap, SlidersHorizontal } from 'lucide-react';
+import { useId, useState } from 'react';
 import type { ModelProviderCatalog } from '../contracts/index.js';
 import { ProviderApiKeyField } from './ProviderApiKeyField.js';
 import { ProviderRequestHeadersField } from './ProviderRequestHeadersField.js';
+import { useProviderConnectionTest, type ProviderConnectionTester } from './useProviderConnectionTest.js';
 import {
   CUSTOM_PROVIDER_ID,
   catalogPlanForConfig,
@@ -29,7 +30,7 @@ export function ProviderConnection({
   onApiKeyChange,
   onCopyApiKey,
   onChange,
-  onProviderIdentityChange,
+  onTestConnection,
   provider,
   proxyServers,
   translate,
@@ -40,7 +41,7 @@ export function ProviderConnection({
   onApiKeyChange(value: string): void;
   onCopyApiKey(): Promise<void>;
   onChange(provider: ProviderConfigState): void;
-  onProviderIdentityChange(provider: ProviderConfigState): void;
+  onTestConnection: ProviderConnectionTester;
   provider: ProviderConfigState;
   proxyServers: readonly DesktopNetworkProxyServerState[];
   translate: RendererTranslate;
@@ -49,31 +50,25 @@ export function ProviderConnection({
   const catalogProvider = catalogProviderForConfig(provider, catalog);
   const plan = catalogPlanForConfig(provider, catalogProvider);
   const custom = !catalogProvider;
-  const [pendingChange, setPendingChange] = useState<Readonly<{
-    clearApiKey: boolean;
-    provider: ProviderConfigState;
-  }> | null>(null);
-  const requestChange = (next: ProviderConfigState, clearApiKey: boolean) => {
-    const destructive = Boolean(provider.models.length || (clearApiKey && (provider.apiKeySet || apiKey || Object.keys(provider.requestHeaders ?? {}).length)));
-    if (destructive) {
-      setPendingChange({ clearApiKey, provider: next });
-      return;
-    }
-    if (clearApiKey) onProviderIdentityChange(next);
-    else onChange(next);
-  };
+  const advancedId = useId();
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [headersValid, setHeadersValid] = useState(true);
+  const { testing, result, runTest } = useProviderConnectionTest(provider, apiKey, onTestConnection);
   return (
     <section className="model-provider-settings__card model-provider-settings__connection">
       <header className="model-provider-settings__section-head">
         <span><strong>{translate('feature.modelProvider.connection')}</strong></span>
       </header>
       <div className="model-provider-settings__primary-fields">
+        <Field label={translate('feature.modelProvider.name')}>
+          <ui.TextField value={provider.name} onChange={(event) => onChange({ ...provider, name: event.target.value })} />
+        </Field>
         <Field label={translate('feature.modelProvider.vendor')}>
           <ui.SelectField
             value={catalogProvider?.id ?? CUSTOM_PROVIDER_ID}
             onValueChange={(value) => {
               const next = catalog.providers.find((candidate) => candidate.id === value);
-              if (next) requestChange(selectCatalogProvider(provider, next), true);
+              if (next) onChange(selectCatalogProvider(provider, next));
               else onChange(detachCatalogProvider(provider));
             }}
           >
@@ -89,7 +84,7 @@ export function ProviderConnection({
               value={plan?.id ?? ''}
               onValueChange={(value) => {
                 const next = catalogProvider.plans.find((candidate) => candidate.id === value);
-                if (next) requestChange(selectCatalogPlan(provider, next), false);
+                if (next) onChange(selectCatalogPlan(provider, next));
               }}
             >
               {catalogProvider.plans.map((candidate) => (
@@ -98,16 +93,6 @@ export function ProviderConnection({
             </ui.SelectField>
           </Field>
         ) : null}
-        <ProviderApiKeyField
-          apiKey={apiKey}
-          apiKeyPreview={provider.apiKeyPreview}
-          apiKeySet={provider.apiKeySet}
-          className={catalogProvider && catalogProvider.plans.length > 1 ? 'is-wide' : ''}
-          translate={translate}
-          ui={ui}
-          onChange={onApiKeyChange}
-          onCopy={onCopyApiKey}
-        />
         {custom ? (
           <>
             <Field label={translate('feature.modelProvider.protocol')}>
@@ -118,13 +103,39 @@ export function ProviderConnection({
             </Field>
           </>
         ) : null}
+        <ProviderApiKeyField
+          apiKey={apiKey}
+          apiKeyPreview={provider.apiKeyPreview}
+          apiKeySet={provider.apiKeySet}
+          className={catalogProvider && catalogProvider.plans.length > 1 ? '' : 'is-wide'}
+          translate={translate}
+          ui={ui}
+          onChange={onApiKeyChange}
+          onCopy={onCopyApiKey}
+        />
       </div>
-      <details className="model-provider-settings__advanced">
-        <summary>{translate('feature.modelProvider.advanced')}</summary>
+      <div className="model-provider-settings__connection-actions">
+        <ui.Button
+          aria-controls={advancedId}
+          aria-expanded={advancedOpen}
+          className="model-provider-settings__advanced-trigger"
+          icon={<SlidersHorizontal size={13} />}
+          variant="ghost"
+          onClick={() => setAdvancedOpen((open) => !open)}
+        >
+          {translate('feature.modelProvider.advanced')}
+          <ChevronRight className={advancedOpen ? 'is-open' : undefined} size={13} />
+        </ui.Button>
+        <ui.Button
+          disabled={testing || !headersValid || !provider.baseUrl.trim()}
+          icon={testing ? <LoaderCircle className="is-spinning" size={13} /> : <PlugZap size={13} />}
+          onClick={() => void runTest()}
+        >
+          {translate(testing ? 'feature.modelProvider.testingConnection' : 'feature.modelProvider.testConnection')}
+        </ui.Button>
+      </div>
+      <div className="model-provider-settings__advanced" hidden={!advancedOpen} id={advancedId}>
         <div className="model-provider-settings__advanced-fields">
-          <Field label={translate('feature.modelProvider.name')}>
-            <ui.TextField value={provider.name} onChange={(event) => onChange({ ...provider, name: event.target.value })} />
-          </Field>
           {!custom ? (
             <>
               <Field label={translate('feature.modelProvider.protocol')}>
@@ -135,7 +146,25 @@ export function ProviderConnection({
               </Field>
             </>
           ) : null}
-          <Field label={translate('feature.modelProvider.proxy')}>
+          {provider.provider === 'openai-compatible' ? (
+            <Field label={translate('feature.modelProvider.developerRole')}>
+              <ui.SelectField
+                value={provider.supportsDeveloperRole === undefined ? 'auto' : String(provider.supportsDeveloperRole)}
+                onValueChange={(value) => onChange({
+                  ...provider,
+                  supportsDeveloperRole: value === 'auto' ? undefined : value === 'true',
+                })}
+              >
+                <option value="auto">{translate('feature.modelProvider.developerRoleAuto')}</option>
+                <option value="true">{translate('feature.modelProvider.developerRoleEnabled')}</option>
+                <option value="false">{translate('feature.modelProvider.developerRoleDisabled')}</option>
+              </ui.SelectField>
+            </Field>
+          ) : null}
+          <Field
+            className={provider.provider === 'openai-compatible' ? '' : 'is-wide'}
+            label={translate('feature.modelProvider.proxy')}
+          >
             <ui.SelectField
               value={routeValue(provider.proxyRoute)}
               onValueChange={(value) => onChange({ ...provider, proxyRoute: routeFromValue(value) })}
@@ -147,51 +176,22 @@ export function ProviderConnection({
             </ui.SelectField>
           </Field>
           <ProviderRequestHeadersField
-            key={`${provider.id}:${provider.catalogProviderId ?? ''}`}
             catalogProviderId={provider.catalogProviderId}
             requestHeaders={provider.requestHeaders}
             translate={translate}
             ui={ui}
             onChange={(requestHeaders) => onChange({ ...provider, requestHeaders })}
+            onValidityChange={setHeadersValid}
           />
         </div>
-      </details>
-      {pendingChange ? (
-        <ui.Dialog
-          className="model-provider-settings__confirmation-dialog"
-          closeLabel={translate('feature.modelProvider.close')}
-          footer={(
-            <>
-              <ui.Button onClick={() => setPendingChange(null)}>
-                {translate('feature.modelProvider.cancel')}
-              </ui.Button>
-              <ui.Button
-                variant="danger"
-                onClick={() => {
-                  const next = pendingChange;
-                  setPendingChange(null);
-                  if (next.clearApiKey) onProviderIdentityChange(next.provider);
-                  else onChange(next.provider);
-                }}
-              >
-                {translate('feature.modelProvider.connectionChangeConfirm')}
-              </ui.Button>
-            </>
-          )}
-          size="small"
-          title={translate('feature.modelProvider.connectionChangeTitle')}
-          titleIcon={<TriangleAlert size={16} />}
-          onClose={() => setPendingChange(null)}
-        >
-          <p className="model-provider-settings__delete-confirm-copy">
-            {translate(
-              pendingChange.clearApiKey
-                ? 'feature.modelProvider.providerChangeDescription'
-                : 'feature.modelProvider.planChangeDescription',
-              { count: provider.models.length },
-            )}
-          </p>
-        </ui.Dialog>
+      </div>
+      {result ? (
+        <ui.Toast
+          message={result.ok
+            ? translate('feature.modelProvider.connectionSucceeded')
+            : translate('feature.modelProvider.connectionFailed', { message: result.message })}
+          tone={result.ok ? 'success' : 'error'}
+        />
       ) : null}
     </section>
   );

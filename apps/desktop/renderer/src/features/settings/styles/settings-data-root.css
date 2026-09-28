@@ -16,15 +16,14 @@
   border-color: transparent;
 }
 
-/* Maintenance windows have no sidebar or inspector. On macOS, collapse those
-   empty titlebar tracks so the traffic lights sit on one uninterrupted surface. */
-:root[data-desktop-platform='darwin'] .data-root-maintenance-shell .app-topbar {
-  grid-template-columns: 0 minmax(0, 1fr) 0;
+/* Maintenance windows keep only the system controls in the shared titlebar. */
+.data-root-maintenance-shell .app-topbar {
+  grid-template-columns: 0 minmax(0, 1fr) 0 var(--app-titlebar-control-width);
 }
 
-:root[data-desktop-platform='darwin'] .data-root-maintenance-shell .app-topbar__brand,
-:root[data-desktop-platform='darwin'] .data-root-maintenance-shell .app-topbar__right,
-:root[data-desktop-platform='darwin'] .data-root-maintenance-shell .app-topbar__workspace {
+.data-root-maintenance-shell .app-topbar__brand,
+.data-root-maintenance-shell .app-topbar__right,
+.data-root-maintenance-shell .app-topbar__workspace {
   padding-right: 0;
   padding-left: 0;
 }

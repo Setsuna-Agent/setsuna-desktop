@@ -79,7 +79,7 @@ export const reviewPreloadFeature = definePreloadFeature<ReviewPreloadBridgeCont
       ),
       createBranch: (workspaceRoot, branchName, options) => ipcRenderer.invoke(
         REVIEW_IPC_CHANNELS.createBranch,
-        { workspaceRoot, branchName, allowUnstaged: options?.allowUnstaged ?? false },
+        { workspaceRoot, branchName, allowUnstaged: options?.allowUnstaged ?? false, stageUnstaged: options?.stageUnstaged === true },
       ),
       commit: (workspaceRoot, input) => ipcRenderer.invoke(
         REVIEW_IPC_CHANNELS.commit,

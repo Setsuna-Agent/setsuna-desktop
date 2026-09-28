@@ -88,7 +88,8 @@ Thread Title Generation 拥有新对话首轮的模型标题生成、专用模�
 关键边界：
 
 - Runtime 激活后把 `threadTitleGenerationControlCapability` 延迟绑定到 AgentLoop；Feature optional 失败时 no-op control 保留首消息 fallback，不影响正常回答。
-- AgentLoop 只在首个 regular turn 调用 `start/commit` 接缝；Feature 通过 Pi 兼容的 `responseFormat` JSON Schema 请求 `{ title }`，并负责模型解析、生成超时、usage 记录和迟到标题取舍。
+- AgentLoop 在新对话的 regular turn 启动标题后台任务；Feature 通过 Pi 兼容的 `responseFormat` JSON Schema 请求 `{ title }`，并负责模型解析、usage 记录和迟到标题取舍。任务完成后独立更新标题，不阻塞主回答结束，也不随该轮取消或失败而丢弃；Feature 关闭时仍取消在途任务。
+- 标题请求沿用模型供应商统一的请求总超时（当前为 15 分钟，包含等待、重试和完整输出），不再另外施加短时限。
 - `threadTitleGenerationRuntimeHostCapability` 只暴露模型请求、线程读取/事件写入和 usage 所需的窄宿主能力。
 - 专用模型存入 Feature settings document；旧 `RuntimeConfig.taskModels.threadTitle` 由一次性 adapter 导入并在成功初始化后退休。
 - Renderer 通过 typed operation 读写设置，并向宿主 `taskModels` section 注入自己的 selector。

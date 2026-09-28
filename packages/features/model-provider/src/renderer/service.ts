@@ -169,8 +169,8 @@ export class ModelProviderRendererStateService {
     return this.commit();
   }
 
-  discover(input: RuntimeFetchModelsInput): Promise<RuntimeAvailableModelsResponse> {
-    return this.client.discover(input);
+  discover(input: RuntimeFetchModelsInput, options?: Readonly<{ signal?: AbortSignal }>): Promise<RuntimeAvailableModelsResponse> {
+    return this.client.discover(input, options);
   }
 
   providerProjection(): Readonly<{
@@ -205,6 +205,7 @@ function inputFromState(
         icon: provider.icon ?? null,
         proxyRoute: provider.proxyRoute,
         requestHeaders: provider.requestHeaders ?? null,
+        supportsDeveloperRole: provider.supportsDeveloperRole ?? null,
         ...(secretInput?.apiKey ? { apiKey: secretInput.apiKey } : {}),
         ...(secretInput?.clearApiKey ? { clearApiKey: true } : {}),
         models: provider.models,

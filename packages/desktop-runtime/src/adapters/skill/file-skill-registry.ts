@@ -34,6 +34,7 @@ import { installedPluginMessages, localizePluginDisplayFields, pluginText } from
 
 type SkillStateFile = {
   version: 1;
+  extraRoots: string[];
   states: Record<string, { enabled?: boolean }>;
 };
 
@@ -60,7 +61,6 @@ const MAX_SKILL_AGENT_MANIFEST_BYTES = 128 * 1024;
 export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
   private changeTimer: NodeJS.Timeout | undefined;
   private readonly changeSubscribers = new Set<() => void>();
-  private extraSkillRoots: string[] = [];
   private readonly statePath: string;
   private readonly pluginIndexPath: string;
   private readonly pluginSkillOverrides: PluginSkillOverrideStore;
@@ -85,8 +85,10 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
   }
 
   async listSkills(): Promise<RuntimeSkillList> {
-    const [skills, state] = await Promise.all([this.readSkills(), this.readState()]);
+    const state = await this.readState();
+    const skills = await this.readSkills(undefined, state);
     return {
+      extraRoots: state.extraRoots,
       skills: skills.map((skill) => toSummary(skill, state)),
     };
   }
@@ -112,7 +114,8 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
   }
 
   async getSkill(skillId: string): Promise<RuntimeSkillDetail | null> {
-    const [skills, state] = await Promise.all([this.readSkills(), this.readState()]);
+    const state = await this.readState();
+    const skills = await this.readSkills(undefined, state);
     const skill = skills.find((item) => item.id === skillId);
     return skill ? toDetail(skill, state) : null;
   }
@@ -195,7 +198,8 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
     skillIds: string[] = [],
     activation?: SkillActivationContext,
   ): Promise<SkillPromptContextSnapshot> {
-    const [skills, state] = await Promise.all([this.readSkills(activation?.interfaceLanguage), this.readState()]);
+    const state = await this.readState();
+    const skills = await this.readSkills(activation?.interfaceLanguage, state);
     const explicitSkillIds = new Set(skillIds.filter(Boolean));
     const allowAutomaticPluginActivation = explicitSkillIds.size === 0 && Boolean(activation?.text.trim());
     const resolvedSkills = skills.map((parsed) => ({ parsed, detail: toDetail(parsed, state) }));
@@ -226,7 +230,12 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
   }
 
   async setExtraRoots(extraRoots: string[]): Promise<void> {
-    this.extraSkillRoots = [...extraRoots];
+    // Share the state-file queue with enable/disable and CRUD so neither write loses the other.
+    await withFileStateUpdate(this.statePath, async () => {
+      const state = await this.readState();
+      state.extraRoots = [...new Set(extraRoots)];
+      await this.writeState(state);
+    });
     await this.refreshChangeWatchers();
     this.queueChangeNotification();
   }
@@ -256,12 +265,13 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
     };
   }
 
-  private async readSkills(language?: RuntimeInterfaceLanguage): Promise<ParsedSkill[]> {
+  private async readSkills(language?: RuntimeInterfaceLanguage, state?: SkillStateFile): Promise<ParsedSkill[]> {
+    const { extraRoots } = state ?? await this.readState();
     language ??= await this.localization?.getLanguage();
     const [builtinSkills, userSkills, extraSkills, pluginSkills] = await Promise.all([
       this.readSkillDirectory(this.builtinSkillsDir, 'builtin', language),
       this.readSkillDirectory(this.userSkillsDir, 'user'),
-      Promise.all(this.extraSkillRoots.map((root) => this.readSkillDirectory(root, 'user'))).then((groups) => groups.flat()),
+      Promise.all(extraRoots.map((root) => this.readSkillDirectory(root, 'user'))).then((groups) => groups.flat()),
       this.readPluginSkills(language),
     ]);
     return [...builtinSkills, ...userSkills, ...extraSkills, ...pluginSkills].sort((a, b) => a.name.localeCompare(b.name));
@@ -322,9 +332,15 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
   }
 
   private async readState(): Promise<SkillStateFile> {
-    const state = await readJsonFile<SkillStateFile>(this.statePath, { version: 1, states: {} });
+    const state = await readJsonFile<SkillStateFile>(this.statePath, { version: 1, extraRoots: [], states: {} });
     return {
       version: 1,
+      // Older state files contain only enable flags. Keep missing folders saved for later use.
+      extraRoots: Array.isArray(state.extraRoots)
+        ? [...new Set(state.extraRoots
+            .filter((root) => typeof root === 'string' && path.isAbsolute(root))
+            .map((root) => path.resolve(root)))]
+        : [],
       states: Object.fromEntries(Object.entries(state.states).map(([id, skillState]) => [
         id,
         { ...(typeof skillState.enabled === 'boolean' ? { enabled: skillState.enabled } : {}) },
@@ -430,7 +446,10 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
   }
 
   private async watchDirectories(): Promise<string[]> {
-    const pluginIndex = await readJsonFile<PluginIndexFile>(this.pluginIndexPath, { version: 1, plugins: [] });
+    const [pluginIndex, state] = await Promise.all([
+      readJsonFile<PluginIndexFile>(this.pluginIndexPath, { version: 1, plugins: [] }),
+      this.readState(),
+    ]);
     const pluginRoots = pluginIndex.plugins.flatMap((plugin) => [
       plugin.installPath,
       ...plugin.skillEntries.map((entry) => path.join(plugin.installPath, entry.relativePath)),
@@ -438,7 +457,7 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
     const roots = [
       this.builtinSkillsDir,
       this.userSkillsDir,
-      ...this.extraSkillRoots,
+      ...state.extraRoots,
       ...pluginRoots,
       ...this.pluginSkillOverrides.watchRoots(pluginIndex.plugins),
     ].map((root) => path.resolve(root));

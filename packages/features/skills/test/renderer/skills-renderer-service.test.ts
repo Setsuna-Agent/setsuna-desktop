@@ -33,7 +33,7 @@ describe('RendererSkillsService', () => {
   });
 
   it('normalizes extra roots and commits the returned catalog atomically', async () => {
-    const setExtraRoots = vi.fn(async () => skillList('external'));
+    const setExtraRoots = vi.fn(async () => skillList('external', ['/workspace/skills']));
     const client = { setExtraRoots } as unknown as SkillsRendererClient;
     const scope = createFeatureScope({
       featureId: skillsFeature.id,
@@ -52,10 +52,41 @@ describe('RendererSkillsService', () => {
     });
     await scope.finishDispose();
   });
+
+  it('restores saved roots on startup and keeps a late refresh from undoing their removal', async () => {
+    const staleRefresh = deferred<RuntimeSkillList>();
+    const client = {
+      listSkills: vi.fn()
+        .mockResolvedValueOnce(skillList('external', ['/workspace/skills']))
+        .mockImplementationOnce(() => staleRefresh.promise),
+      setExtraRoots: vi.fn(async () => skillList('builtin')),
+    } as unknown as SkillsRendererClient;
+    const scope = createFeatureScope({
+      featureId: skillsFeature.id,
+      process: 'renderer',
+      scopeId: 'skills-renderer-restored-roots-test',
+    });
+    scope.activate();
+    const service = new RendererSkillsService({ client, scope: scope.scope });
+
+    await service.refresh();
+    expect(service.getSnapshot().extraRoots).toEqual(['/workspace/skills']);
+
+    const refresh = service.refresh();
+    await service.setExtraRoots([]);
+    staleRefresh.resolve(skillList('external', ['/workspace/skills']));
+    await refresh;
+    expect(service.getSnapshot()).toMatchObject({
+      extraRoots: [],
+      skills: [{ id: 'builtin' }],
+    });
+    await scope.finishDispose();
+  });
 });
 
-function skillList(id: string): RuntimeSkillList {
+function skillList(id: string, extraRoots: string[] = []): RuntimeSkillList {
   return {
+    extraRoots,
     skills: [{ enabled: true, id, kind: 'user', name: id }],
   };
 }

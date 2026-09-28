@@ -42,6 +42,7 @@ export function useDesktopAppController() {
   const [activeView, setActiveView] = useState<MainView>('chat');
   const [sidebarManuallyCollapsed, setSidebarManuallyCollapsed] = useState(false);
   const [sidebarManuallyExpanded, setSidebarManuallyExpanded] = useState(false);
+  const [capabilitiesSidebarCollapsed, setCapabilitiesSidebarCollapsed] = useState(false);
   const [capabilitySelectionRequest, setCapabilitySelectionRequest] = useState<ChatCapabilitySelectionRequest | null>(null);
   const capabilitySelectionRequestIdRef = useRef(0);
 
@@ -165,13 +166,18 @@ export function useDesktopAppController() {
     workspaceVisible: workspacePanelReservesLayout,
     workspaceWidth: workspaceLayoutWidth,
   });
-  const sidebarCollapsed = shouldCollapseSidebar({
+  const chatSidebarCollapsed = shouldCollapseSidebar({
     canExpand: sidebarCanExpand,
     manuallyCollapsed: sidebarManuallyCollapsed,
     manuallyExpanded: sidebarManuallyExpanded,
   });
-  const sidebarReservesLayout = !sidebarCollapsed;
+  // 插件导航有独立的折叠状态，切换页面不会改写聊天侧栏的偏好。
+  const sidebarCollapsed = activeView === 'capabilities' ? capabilitiesSidebarCollapsed : chatSidebarCollapsed;
   const setSidebarCollapsed = useCallback((value: SetStateAction<boolean>) => {
+    if (activeView === 'capabilities') {
+      setCapabilitiesSidebarCollapsed(value);
+      return;
+    }
     const nextCollapsed = typeof value === 'function' ? value(sidebarCollapsed) : value;
     if (nextCollapsed) {
       setSidebarManuallyCollapsed(true);
@@ -181,7 +187,7 @@ export function useDesktopAppController() {
     fitWorkspaceForExpandedSidebar();
     setSidebarManuallyCollapsed(false);
     setSidebarManuallyExpanded(true);
-  }, [fitWorkspaceForExpandedSidebar, sidebarCollapsed]);
+  }, [activeView, fitWorkspaceForExpandedSidebar, sidebarCollapsed]);
 
   useEffect(() => {
     setSidebarManuallyExpanded(false);
@@ -209,6 +215,7 @@ export function useDesktopAppController() {
     confirmDiscardProjectFile: projectWorkspace.fileDraft.confirmDiscardChanges,
     currentThread,
     globalThreads,
+    onNewThreadProjectChange: composerSession.claimForProject,
     projects,
     reloadThreads,
     resetNewThreadWorkspacePanels: workspacePanels.resetNewThreadPanelSession,
@@ -295,7 +302,7 @@ export function useDesktopAppController() {
   const shellSidebarState = resolveShellSidebarState(activeView, sidebarCollapsed);
   const shellStyle = {
     '--app-sidebar-width': shellSidebarState.reservesLayout ? `${sidebarWidth}px` : '0px',
-    '--app-topbar-sidebar-width': activeView === 'settings' ? 'var(--desktop-settings-nav-width)' : sidebarReservesLayout ? `${sidebarWidth}px` : 'var(--app-topbar-collapsed-sidebar-width)',
+    '--app-topbar-sidebar-width': shellSidebarState.reservesLayout ? `${sidebarWidth}px` : 'var(--app-topbar-collapsed-sidebar-width)',
     '--desktop-agent-sidebar-visual-width': `${sidebarWidth}px`,
     '--desktop-settings-nav-width': `${sidebarWidth}px`,
     '--desktop-agent-workspace-width': workspacePanelReservesLayout ? `${workspaceLayoutWidth}px` : '0px',
@@ -368,11 +375,11 @@ export function useDesktopAppController() {
 }
 
 export function resolveShellSidebarState(activeView: MainView, sidebarCollapsed: boolean) {
-  // 设置导航是共享 workbench 的侧栏，但不继承聊天侧栏的折叠状态。
-  const settingsOpen = activeView === 'settings';
+  if (activeView === 'settings') return { collapsed: false, reservesLayout: true };
+  const hasSidebar = activeView === 'chat' || activeView === 'capabilities';
   return {
-    collapsed: !settingsOpen && sidebarCollapsed,
-    reservesLayout: settingsOpen || !sidebarCollapsed,
+    collapsed: !hasSidebar || sidebarCollapsed,
+    reservesLayout: hasSidebar && !sidebarCollapsed,
   };
 }
 

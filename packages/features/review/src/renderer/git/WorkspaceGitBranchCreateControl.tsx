@@ -9,7 +9,6 @@ export function WorkspaceGitBranchCreateControl({
   busy,
   compact = false,
   creatingBranch,
-  disabledReason,
   submitting,
   onBranchDraftChange,
   onCancelCreate,
@@ -21,7 +20,6 @@ export function WorkspaceGitBranchCreateControl({
   busy: boolean;
   compact?: boolean;
   creatingBranch: boolean;
-  disabledReason?: string | null;
   submitting: boolean;
   onBranchDraftChange: (value: string) => void;
   onCancelCreate: () => void;
@@ -29,21 +27,16 @@ export function WorkspaceGitBranchCreateControl({
   onCreateStart: () => void;
   t: ReviewTranslate;
 }) {
-  const createDisabled = busy || Boolean(disabledReason);
   if (!creatingBranch) {
     return (
       <Button variant="ghost"
         type="button"
-        className={`chat-git-branch-menu__create ${disabledReason ? 'has-detail' : ''}`}
-        disabled={createDisabled}
-        title={disabledReason ?? undefined}
+        className="sd-picker__item"
+        disabled={busy}
         onClick={onCreateStart}
       >
         <Plus size={14} />
-        <span className="chat-git-branch-menu__create-body">
-          <span>{t(compact ? 'feature.review.git.newBranch' : 'feature.review.git.createAndCheckout')}</span>
-          {disabledReason ? <small>{disabledReason}</small> : null}
-        </span>
+        <span>{t(compact ? 'feature.review.git.newBranch' : 'feature.review.git.createAndCheckout')}</span>
       </Button>
     );
   }
@@ -56,14 +49,13 @@ export function WorkspaceGitBranchCreateControl({
         autoFocus
         value={branchDraft}
         placeholder={t('feature.review.git.branchNamePlaceholder')}
-        disabled={createDisabled}
+        disabled={busy}
         onChange={(event) => onBranchDraftChange(event.currentTarget.value)}
       />
       <Button variant="ghost"
         type="submit"
-        disabled={createDisabled}
+        disabled={busy}
         aria-label={t('feature.review.git.createBranch')}
-        title={disabledReason ?? undefined}
       >
         {submitting
           ? <Loader2 className="chat-git-loading-icon" size={13} />

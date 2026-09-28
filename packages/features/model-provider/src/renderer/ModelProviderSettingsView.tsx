@@ -115,16 +115,6 @@ export function ModelProviderSettingsView({
   const replaceProvider = (nextProvider: ProviderConfigState) => {
     stageProviders(providers.map((provider) => provider.id === nextProvider.id ? nextProvider : provider));
   };
-  const replaceProviderIdentity = (nextProvider: ProviderConfigState) => {
-    const nextApiKeys = Object.fromEntries(Object.entries(apiKeys).filter(([id]) => id !== nextProvider.id));
-    setApiKeys(nextApiKeys);
-    stageProviders(
-      providers.map((provider) => provider.id === nextProvider.id
-        ? { ...nextProvider, apiKeySet: false, apiKeyPreview: '' }
-        : provider),
-      nextApiKeys,
-    );
-  };
   const addProvider = () => {
     const provider = createProvider(catalog);
     const nextProviders = [...providers, provider];
@@ -182,10 +172,6 @@ export function ModelProviderSettingsView({
 
   return (
     <ui.Section className="model-provider-settings" featureId="model-provider">
-      <ui.PageHeading
-        description={translate('feature.modelProvider.description')}
-        title={translate('feature.modelProvider.title')}
-      />
       {operationError ? <ui.Toast message={operationError} tone="error" /> : null}
       {snapshot.catalogError ? (
         <ui.Toast message={translate('feature.modelProvider.catalogRefreshFailed', { message: snapshot.catalogError })} tone="error" />
@@ -230,12 +216,12 @@ export function ModelProviderSettingsView({
               })}
               onDelete={removeProvider}
               onDiscover={discoverModels}
+              onTestConnection={async (input, signal) => { await service.discover(input, { signal }); }}
               onRefreshCatalog={() => {
                 if (selectedCatalogProviderId) void service.refreshCatalog({
                   catalogProviderId: selectedCatalogProviderId, providerId: selectedProvider.id, force: true,
                 });
               }}
-              onProviderIdentityChange={replaceProviderIdentity}
             />
           ) : (
             <div className="model-provider-settings__editor">
@@ -259,6 +245,7 @@ function providerInput(provider: ProviderConfigState, apiKey: string | undefined
     icon: provider.icon ?? null,
     proxyRoute: provider.proxyRoute,
     requestHeaders: provider.requestHeaders ?? null,
+    supportsDeveloperRole: provider.supportsDeveloperRole ?? null,
     ...(apiKey ? { apiKey } : provider.apiKeySet ? {} : { clearApiKey: true }),
     models: provider.models,
   };
