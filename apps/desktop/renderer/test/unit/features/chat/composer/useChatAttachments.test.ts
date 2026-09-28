@@ -4,7 +4,7 @@ import type { ChatComposerAttachmentItem } from '../../../../../src/features/cha
 import {
   disposableChatAttachments,
   inlineImageAttachmentsToStore,
-} from '../../../../../src/features/chat/composer/useChatAttachments.js';
+} from '../../../../../src/features/chat/composer/chatAttachmentStore.js';
 
 describe('disposableChatAttachments', () => {
   it('keeps a leased attachment alive while a send is pending', () => {

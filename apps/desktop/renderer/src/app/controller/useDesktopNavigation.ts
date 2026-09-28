@@ -85,6 +85,8 @@ export function useDesktopNavigation({
     });
   }, []);
 
+  // New-chat entry points restore draft slots, including browser tabs referenced
+  // by the draft. Panel ownership transfers when the first thread is created.
   const startCurrentThread = useCallback(async () => {
     if (!await confirmDiscardProjectFile()) return;
     // Restored conversations may reference removed projects. A new chat must not
@@ -95,7 +97,6 @@ export function useDesktopNavigation({
     setThreadActionMenuId(null);
     setProjectActionMenuId(null);
     if (activeProjectId && !projectId) resetProjectWorkspaceState();
-    resetNewThreadWorkspacePanels(projectId);
     setActiveProjectId(projectId);
     setCurrentThread(null);
     if (projectId) {
@@ -103,7 +104,7 @@ export function useDesktopNavigation({
     } else {
       setSessionsCollapsed(false);
     }
-  }, [activeProjectId, confirmDiscardProjectFile, expandProject, navigationRequests, projects, resetNewThreadWorkspacePanels, resetProjectWorkspaceState, setActiveProjectId, setActiveView, setCurrentThread]);
+  }, [activeProjectId, confirmDiscardProjectFile, expandProject, navigationRequests, projects, resetProjectWorkspaceState, setActiveProjectId, setActiveView, setCurrentThread]);
 
   const startGlobalThread = useCallback(async () => {
     if (!await confirmDiscardProjectFile()) return;
@@ -113,10 +114,9 @@ export function useDesktopNavigation({
     setThreadActionMenuId(null);
     setProjectActionMenuId(null);
     resetProjectWorkspaceState();
-    resetNewThreadWorkspacePanels(null);
     setActiveProjectId(null);
     setCurrentThread(null);
-  }, [confirmDiscardProjectFile, navigationRequests, resetNewThreadWorkspacePanels, resetProjectWorkspaceState, setActiveProjectId, setActiveView, setCurrentThread]);
+  }, [confirmDiscardProjectFile, navigationRequests, resetProjectWorkspaceState, setActiveProjectId, setActiveView, setCurrentThread]);
 
   const startProjectThread = useCallback(
     async (projectId: string) => {
@@ -126,12 +126,11 @@ export function useDesktopNavigation({
       setThreadActionMenuId(null);
       setProjectActionMenuId(null);
       if (projectId !== currentProjectId) resetProjectWorkspaceState();
-      resetNewThreadWorkspacePanels(projectId);
       setActiveProjectId(projectId);
       expandProject(projectId);
       setCurrentThread(null);
     },
-    [confirmDiscardProjectFile, currentProjectId, expandProject, navigationRequests, resetNewThreadWorkspacePanels, resetProjectWorkspaceState, setActiveProjectId, setActiveView, setCurrentThread],
+    [confirmDiscardProjectFile, currentProjectId, expandProject, navigationRequests, resetProjectWorkspaceState, setActiveProjectId, setActiveView, setCurrentThread],
   );
 
   const selectThread = useCallback(

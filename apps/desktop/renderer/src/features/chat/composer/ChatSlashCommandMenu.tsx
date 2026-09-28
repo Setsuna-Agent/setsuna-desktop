@@ -57,69 +57,71 @@ export function ChatSlashCommandMenu({
   const sections = createSlashCommandMenuSections(items);
 
   return (
-    <div ref={scrollContainerRef} className="chat-command-menu chat-skill-command-menu" role="listbox" aria-label={t('chat.command.label')}>
-      <div ref={floatingCursorRef} className="chat-command-menu__cursor" aria-hidden="true" />
-      {items.length ? (
-        sections.map((section) => {
-          const sectionLabel = section.id === 'skills' ? t('chat.command.skill') : section.id === 'plugins' ? t('chat.command.installedPlugins') : t('chat.command.label');
-          return (
-            <div
-              key={`${section.id}:${section.items[0]?.item.key ?? 'empty'}`}
-              className="chat-command-menu__section"
-              role="group"
-              aria-label={sectionLabel}
-            >
-              <div className="chat-command-menu__title">{sectionLabel}</div>
-              {section.items.map(({ index, item }) => (
-                <Button variant="ghost"
-                  ref={index === activeIndex ? activeOptionRef : undefined}
-                  key={item.key}
-                  type="button"
-                  className={`chat-command-menu__item ${item.kind === 'skill' ? 'chat-command-menu__item--skill' : ''} ${index === activeIndex ? 'is-active' : ''}`}
-                  disabled={item.kind === 'action' && item.disabled}
-                  role="option"
-                  aria-selected={index === activeIndex}
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onSelect(item);
-                  }}
-                  onMouseMove={() => onHover(index)}
-                >
-                  <SlashCommandIcon item={item} />
-                  <span className="chat-command-menu__item-main">
-                    <span className="chat-command-menu__item-title">{item.kind === 'skill' ? item.skill.name : item.kind === 'plugin' ? item.plugin.name : item.title}</span>
-                    {item.kind === 'plugin' ? <span className="chat-command-menu__item-desc">{item.plugin.description ?? item.plugin.id}</span> : item.kind === 'skill' ? (
-                      (item.skill.description || unresolvedSkillMcpDependencyCount(item.skill)) ? (
-                        <span className="chat-command-menu__item-desc">
-                          {unresolvedSkillMcpDependencyCount(item.skill)
-                            ? `${t('chat.command.mcpRequired', { count: unresolvedSkillMcpDependencyCount(item.skill) })}${item.skill.description ? ` · ${item.skill.description}` : ''}`
-                            : item.skill.description}
-                        </span>
-                      ) : null
-                    ) : item.description ? (
-                      <span className="chat-command-menu__item-desc">{item.description}</span>
-                    ) : null}
-                  </span>
-                  {item.kind === 'skill' ? (
-                    <span className="chat-command-menu__item-scope">
-                      {unresolvedSkillMcpDependencyCount(item.skill)
-                        ? t('chat.command.needsConfiguration')
-                        : item.skill.kind === 'user'
-                          ? t('chat.command.personal')
-                          : item.skill.kind === 'plugin'
-                            ? t('chat.command.plugin')
-                            : t('chat.command.builtIn')}
+    <div className="chat-command-menu chat-skill-command-menu" role="listbox" aria-label={t('chat.command.label')}>
+      <div ref={scrollContainerRef} className="chat-command-menu__list">
+        <div ref={floatingCursorRef} className="chat-command-menu__cursor" aria-hidden="true" />
+        {items.length ? (
+          sections.map((section) => {
+            const sectionLabel = section.id === 'skills' ? t('chat.command.skill') : section.id === 'plugins' ? t('chat.command.installedPlugins') : t('chat.command.label');
+            return (
+              <div
+                key={`${section.id}:${section.items[0]?.item.key ?? 'empty'}`}
+                className="chat-command-menu__section"
+                role="group"
+                aria-label={sectionLabel}
+              >
+                <div className="chat-command-menu__title">{sectionLabel}</div>
+                {section.items.map(({ index, item }) => (
+                  <Button variant="ghost"
+                    ref={index === activeIndex ? activeOptionRef : undefined}
+                    key={item.key}
+                    type="button"
+                    className={`chat-command-menu__item ${item.kind === 'skill' ? 'chat-command-menu__item--skill' : ''} ${index === activeIndex ? 'is-active' : ''}`}
+                    disabled={item.kind === 'action' && item.disabled}
+                    role="option"
+                    aria-selected={index === activeIndex}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onSelect(item);
+                    }}
+                    onMouseMove={() => onHover(index)}
+                  >
+                    <SlashCommandIcon item={item} />
+                    <span className="chat-command-menu__item-main">
+                      <span className="chat-command-menu__item-title">{item.kind === 'skill' ? item.skill.name : item.kind === 'plugin' ? item.plugin.name : item.title}</span>
+                      {item.kind === 'plugin' ? <span className="chat-command-menu__item-desc">{item.plugin.description ?? item.plugin.id}</span> : item.kind === 'skill' ? (
+                        (item.skill.description || unresolvedSkillMcpDependencyCount(item.skill)) ? (
+                          <span className="chat-command-menu__item-desc">
+                            {unresolvedSkillMcpDependencyCount(item.skill)
+                              ? `${t('chat.command.mcpRequired', { count: unresolvedSkillMcpDependencyCount(item.skill) })}${item.skill.description ? ` · ${item.skill.description}` : ''}`
+                              : item.skill.description}
+                          </span>
+                        ) : null
+                      ) : item.description ? (
+                        <span className="chat-command-menu__item-desc">{item.description}</span>
+                      ) : null}
                     </span>
-                  ) : null}
-                </Button>
-              ))}
-            </div>
-          );
-        })
-      ) : (
-        <div className="chat-command-menu__state">{t('chat.command.noMatch')}</div>
-      )}
+                    {item.kind === 'skill' ? (
+                      <span className="chat-command-menu__item-scope">
+                        {unresolvedSkillMcpDependencyCount(item.skill)
+                          ? t('chat.command.needsConfiguration')
+                          : item.skill.kind === 'user'
+                            ? t('chat.command.personal')
+                            : item.skill.kind === 'plugin'
+                              ? t('chat.command.plugin')
+                              : t('chat.command.builtIn')}
+                      </span>
+                    ) : null}
+                  </Button>
+                ))}
+              </div>
+            );
+          })
+        ) : (
+          <div className="chat-command-menu__state">{t('chat.command.noMatch')}</div>
+        )}
+      </div>
     </div>
   );
 }

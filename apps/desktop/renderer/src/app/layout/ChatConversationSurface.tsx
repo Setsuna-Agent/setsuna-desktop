@@ -7,12 +7,14 @@ import type {
   RuntimeConfigState,
   RuntimePluginSummary,
   RuntimeSkillSummary,
+  RuntimeSkillReference,
   RuntimeThread,
   WorkspaceEntrySearchResponse,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
 import type { ReviewTarget } from '@setsuna-desktop/feature-review/contracts';
 import type { ReactNode } from 'react';
+import type { ChatAttachmentStore } from '../../features/chat/composer/chatAttachmentStore.js';
 import { ChatWorkspace } from '../../features/chat/ChatWorkspace.js';
 import type { ChatStarterProjectSelection } from '../../features/chat/conversation/ChatStarterWorkspace.js';
 import type { ChatModelSelectionHandler } from '../../features/chat/chatModelSelection.js';
@@ -38,11 +40,13 @@ export type ChatConversationSurfaceModel = Readonly<{
   activeWorkspace?: WorkspaceProject;
   canClearContext: boolean;
   composerKey: string;
+  attachmentStore?: ChatAttachmentStore;
   config: RuntimeConfigState | null;
   conversationOverviewVisibility: ConversationOverviewVisibility;
   contextCompacting: boolean;
   currentThread: RuntimeThread | null;
   draft: string;
+  draftSkillReferences?: RuntimeSkillReference[];
   focusComposerRequest: number;
   findInChatRequest?: number;
   onFindInChatRequestConsumed?(requestId: number): void;
@@ -61,7 +65,7 @@ export type ChatConversationSurfaceModel = Readonly<{
   onConversationOverviewRenderedChange(visible: boolean): void;
   onDeleteMessages(messageIds: string[]): void | Promise<void>;
   onFileChangesAction?(toolCallIds: string[], action: WorkspaceFileChangeAction): void | Promise<void | ThreadFileChangesResult>;
-  onDraftChange(value: string): void;
+  onDraftChange(value: string, skillReferences?: RuntimeSkillReference[]): void;
   onEditUserMessage(messageId: string, content: string): void | Promise<void>;
   onFocusComposerRequestConsumed(requestId: number): void;
   onOpenBrowser(url?: string): void;
@@ -124,11 +128,13 @@ export function ChatConversationSurface({
         canClearContext={model.canClearContext}
         client={model.runtimeClient}
         composerKey={model.composerKey}
+        attachmentStore={model.attachmentStore}
         config={model.config}
         contextCompacting={model.contextCompacting}
         conversationOverviewVisibility={model.conversationOverviewVisibility}
         currentThread={model.currentThread}
         draft={model.draft}
+        draftSkillReferences={model.draftSkillReferences}
         focusComposerOnReveal
         focusComposerRequest={model.focusComposerRequest}
         findInChatRequest={model.findInChatRequest}

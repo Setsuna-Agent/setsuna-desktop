@@ -62,7 +62,7 @@ vi.mock('../../../../src/features/chat/composer/ChatAttachmentTray.js', () => ({
 }));
 
 vi.mock('../../../../src/features/chat/composer/ChatCommandMenus.js', () => ({
-  ProjectEntryCommandMenu: () => null,
+  ChatMentionCommandMenu: () => null,
 }));
 
 vi.mock('../../../../src/features/chat/composer/ChatModelPicker.js', () => ({

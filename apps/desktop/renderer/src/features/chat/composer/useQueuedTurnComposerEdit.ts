@@ -44,6 +44,8 @@ export function useQueuedTurnComposerEdit({
   const protectedStateRef = useRef(composerHasProtectedState);
   const sessionRef = useRef<ChatQueuedTurnEditSession | null>(null);
   const releaseRef = useRef(actions.releaseQueuedTurnInputEdit);
+  const resetRef = useRef(resetComposer);
+  resetRef.current = resetComposer;
   protectedStateRef.current = composerHasProtectedState;
   releaseRef.current = actions.releaseQueuedTurnInputEdit;
 
@@ -119,6 +121,8 @@ export function useQueuedTurnComposerEdit({
       const activeSession = sessionRef.current;
       sessionRef.current = null;
       if (activeSession) {
+        // This is a borrowed queue edit, not an independent unsent draft.
+        resetRef.current();
         void releaseRef.current(activeSession, { silent: true });
       }
     };

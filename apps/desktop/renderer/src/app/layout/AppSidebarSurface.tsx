@@ -19,7 +19,6 @@ export function AppSidebarSurface({
   width,
   maxWidth,
   minWidth,
-  onResetDraft,
   onResizeStep,
   onResizeStart,
 }: {
@@ -36,7 +35,6 @@ export function AppSidebarSurface({
   width: number;
   maxWidth: number;
   minWidth: number;
-  onResetDraft: () => void;
   onResizeStep: (delta: number) => void;
   onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
 }) {
@@ -73,15 +71,12 @@ export function AppSidebarSurface({
         void navigation.archiveProject(project);
       }}
       onCreateCurrentThread={() => {
-        onResetDraft();
         navigation.startCurrentThread();
       }}
       onCreateGlobalThread={() => {
-        onResetDraft();
         navigation.startGlobalThread();
       }}
       onCreateProjectThread={(projectId) => {
-        onResetDraft();
         navigation.startProjectThread(projectId);
       }}
       onEnterChatMode={() => void navigation.enterChatMode()}

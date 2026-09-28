@@ -4,6 +4,8 @@ import { latestBrowserFeatureOpenRequest } from '../../composition/BrowserWorksp
 import { usePluginManagementFeatureSnapshot } from '../../composition/PluginManagementFeatureBoundary.js';
 import { useSkillsFeatureSnapshot } from '../../composition/SkillsFeatureBoundary.js';
 import { markdownLinkOpenModeFromConfig } from '../../features/chat/markdown/markdownLinkPreference.js';
+import { BrowserTabMentionsProvider } from '../../features/chat/mentions/BrowserTabReference.js';
+import { browserTabReferences } from '../../features/chat/mentions/chatMentionItems.js';
 import { fileChangesFromToolRun } from '../../features/chat/tool-runs/runtimeFileChanges.js';
 import type {
   DesktopReviewFocusRequest,
@@ -36,8 +38,10 @@ export function ChatRouteAdapter({
   activeWorkspace,
   chatActions,
   composerKey,
+  attachmentStore,
   conversationOverviewVisibility,
   draft,
+  draftSkillReferences,
   focusComposerRequest,
   findInChatRequest,
   onFindInChatRequestConsumed,
@@ -77,6 +81,10 @@ export function ChatRouteAdapter({
     [runtime.activityEvents],
   );
   const { openBrowserPanel } = workspacePanels;
+  const mentionedBrowserTabs = useMemo(() => browserTabReferences([
+    ...workspacePanels.sidePanelSlot.panels,
+    ...workspacePanels.bottomPanelSlot.panels,
+  ].filter((panel) => panel.type === 'browser')), [workspacePanels.sidePanelSlot.panels, workspacePanels.bottomPanelSlot.panels]);
   const openBrowserUrl = useCallback((url: string) => openBrowserPanel(url), [openBrowserPanel]);
   const markdownLinkOpenMode = markdownLinkOpenModeFromConfig(runtime.config);
   const openMarkdownWebLink = useCallback((url: string) => {
@@ -155,11 +163,13 @@ export function ChatRouteAdapter({
     activeWorkspace,
     canClearContext: Boolean(runtime.currentThread?.messages.length),
     composerKey,
+    attachmentStore,
     config: runtime.config,
     contextCompacting: runtime.contextCompacting,
     conversationOverviewVisibility,
     currentThread: runtime.currentThread,
     draft,
+    draftSkillReferences,
     focusComposerRequest,
     findInChatRequest,
     onFindInChatRequestConsumed,
@@ -301,5 +311,7 @@ export function ChatRouteAdapter({
     },
   };
 
-  return <AppChatSurface conversation={conversation} onOpenPlugin={onOpenPlugin} workspace={workspace} />;
+  return <BrowserTabMentionsProvider value={mentionedBrowserTabs}>
+    <AppChatSurface conversation={conversation} onOpenPlugin={onOpenPlugin} workspace={workspace} />
+  </BrowserTabMentionsProvider>;
 }

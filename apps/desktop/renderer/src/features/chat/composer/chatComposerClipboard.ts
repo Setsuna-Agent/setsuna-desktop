@@ -1,8 +1,10 @@
 import type { ComposerSlot } from './editor/types.js';
+import { isBrowserTabReference } from '@setsuna-desktop/feature-browser/contracts';
 import type { RuntimePluginSummary, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import {
   createSelectedSkillSlot,
   createSelectedPluginSlot,
+  createBrowserTabMentionSlot,
   createTextSlot,
   createWorkspaceMentionReferenceSlot,
   getChatComposerSlotReference,
@@ -71,6 +73,10 @@ export function createChatComposerClipboardPastePlan(
     }
     if (part.type === 'workspace') {
       slots.push(createWorkspaceMentionReferenceSlot(part.entry));
+      continue;
+    }
+    if (part.type === 'browser-tab') {
+      slots.push(createBrowserTabMentionSlot(part.tab));
       continue;
     }
     if (part.type === 'plugin') {
@@ -235,6 +241,7 @@ function isClipboardPart(value: unknown): value is ChatComposerClipboardPart {
   if (value.type === 'text') return typeof value.value === 'string';
   if (value.type === 'skill') return typeof value.skillId === 'string' && Boolean(value.skillId);
   if (value.type === 'plugin') return typeof value.pluginId === 'string' && Boolean(value.pluginId);
+  if (value.type === 'browser-tab') return isBrowserTabReference(value.tab);
   if (value.type !== 'workspace' || !isRecord(value.entry)) return false;
   return (value.entry.kind === 'file' || value.entry.kind === 'directory')
     && typeof value.entry.name === 'string'

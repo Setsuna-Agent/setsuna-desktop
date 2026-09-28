@@ -94,12 +94,13 @@ export function useDesktopAppController() {
     currentThread?.id,
     currentThread ? null : activeProjectId,
   );
-  const composerSession = useChatComposerSession(chatTargetIdentity);
+  const composerSession = useChatComposerSession(chatTargetIdentity, client);
   const {
     claimForThread: claimComposerForThread,
     composerKey,
     draft,
-    reset: resetComposer,
+    draftSkillReferences,
+    attachmentStore,
     setDraft,
   } = composerSession;
   const reviewRequests = useIdentityRequestGuard(composerKey);
@@ -343,7 +344,8 @@ export function useDesktopAppController() {
     navigation,
     networkProxy,
     projectWorkspace,
-    resetComposer,
+    attachmentStore,
+    draftSkillReferences,
     runtime,
     searchTriggerRef,
     selectSkillForChat,

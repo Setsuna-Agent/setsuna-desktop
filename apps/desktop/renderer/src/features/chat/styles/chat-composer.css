@@ -276,13 +276,14 @@
 
 .chat-command-menu {
   display: grid;
+  grid-template-rows: minmax(0, 1fr);
   position: relative;
   gap: 2px;
   width: min(var(--chat-content-max-width), 100%);
   max-height: 280px;
   margin-bottom: 2px;
   padding: 8px;
-  overflow: auto;
+  overflow: hidden;
   border: 1px solid var(--desktop-agent-panel-border);
   border-radius: var(--app-radius-xl);
   background: var(--desktop-agent-main-surface);
@@ -471,9 +472,19 @@
 
 .chat-command-menu__list {
   display: grid;
+  /* Scroll overflow must not shrink two-line options down to their minimum height. */
+  grid-auto-rows: max-content;
+  align-content: start;
   position: relative;
   gap: 4px;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* The padded shell owns the rounded border; only the inset options scroll. */
+.chat-sender > .chat-command-menu > .chat-command-menu__list {
+  gap: inherit;
 }
 
 /* 浮动高亮块：键盘/鼠标切换 active 时在条目间滑动，替代逐项变色。 */
@@ -496,7 +507,7 @@
   opacity: 1;
 }
 
-/* 模型菜单的光标挂在无内边距的 __list 内，与条目等宽。 */
+/* 光标挂在无内边距的 __list 内，与条目等宽。 */
 .chat-command-menu__list > .chat-command-menu__cursor {
   right: 0;
   left: 0;

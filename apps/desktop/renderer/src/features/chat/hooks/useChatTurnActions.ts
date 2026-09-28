@@ -17,6 +17,7 @@ import {
 } from './chatTurnSubmission.js';
 import { useQueuedTurnInputActions } from './useQueuedTurnInputActions.js';
 import { chatThreadModelSelection } from '../chatModelSelection.js';
+import type { SetChatComposerDraft } from './useChatComposerSession.js';
 
 type ChatTurnSendOptions = {
   attachments?: RuntimeMessageAttachment[];
@@ -59,7 +60,7 @@ export function useChatTurnActions({
   reloadThreads: () => Promise<unknown>;
   setActiveTurnId: Dispatch<SetStateAction<string | null>>;
   setCurrentThread: Dispatch<SetStateAction<RuntimeThread | null>>;
-  setDraft: Dispatch<SetStateAction<string>>;
+  setDraft: SetChatComposerDraft;
   setError: Dispatch<SetStateAction<string | null>>;
   terminalTurnIdsRef: MutableRefObject<Set<string>>;
 }) {
@@ -123,7 +124,8 @@ export function useChatTurnActions({
           if (isCurrentRequest()) setCurrentThread(thread);
         }
         submissionThreadId = threadId;
-        if (isCurrentRequest()) setDraft('');
+        // A hidden draft may have been edited again while its first thread was being created.
+        setDraft((current) => current.trim() === input ? '' : current);
         const startTurn = () => client.sendTurn(threadId, {
           attachments,
           clientId,
@@ -159,8 +161,7 @@ export function useChatTurnActions({
         return true;
       } catch (unknownError) {
         if (
-          isCurrentRequest()
-          && submissionDispatched
+          submissionDispatched
           && submissionThreadId
           && isRuntimeTransportFailure(unknownError)
         ) {
@@ -169,27 +170,30 @@ export function useChatTurnActions({
             submissionThreadId,
             clientId,
           );
-          if (reconciled && isCurrentRequest()) {
-            setCurrentThread((current) => (
-              current?.id === reconciled.thread.id
-              && current.lastSeq > reconciled.thread.lastSeq
-                ? current
-                : reconciled.thread
-            ));
-            const reconciledActiveTurnId = reconciled.thread.activeTurnId;
-            if (
-              reconciledActiveTurnId
-              && !terminalTurnIdsRef.current.has(reconciledActiveTurnId)
-            ) {
-              setActiveTurnId(reconciledActiveTurnId);
+          if (reconciled) {
+            if (isCurrentRequest()) {
+              setCurrentThread((current) => (
+                current?.id === reconciled.thread.id
+                && current.lastSeq > reconciled.thread.lastSeq
+                  ? current
+                  : reconciled.thread
+              ));
+              const reconciledActiveTurnId = reconciled.thread.activeTurnId;
+              if (
+                reconciledActiveTurnId
+                && !terminalTurnIdsRef.current.has(reconciledActiveTurnId)
+              ) {
+                setActiveTurnId(reconciledActiveTurnId);
+              }
+              setError(null);
             }
-            setError(null);
             void reloadThreads().catch(() => undefined);
             return true;
           }
         }
+        // setDraft is session-scoped; preserve retry input even after navigation.
+        setDraft((current) => current || input, options.skillReferences);
         if (isCurrentRequest()) {
-          setDraft((current) => current || input);
           setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
         }
         return false;

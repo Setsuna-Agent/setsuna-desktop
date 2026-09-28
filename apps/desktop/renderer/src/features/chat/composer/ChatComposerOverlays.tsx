@@ -1,5 +1,5 @@
-import type { WorkspaceEntrySearchItem } from '@setsuna-desktop/contracts';
-import { ProjectEntryCommandMenu } from './ChatCommandMenus.js';
+import type { ChatMentionItem } from '../mentions/chatMentionItems.js';
+import { ChatMentionCommandMenu } from './ChatCommandMenus.js';
 import {
   ChatSlashCommandMenu,
   type SlashCommandMenuItem,
@@ -11,13 +11,13 @@ export function ChatComposerOverlays({
 }: {
   mentionMenu: {
     activeIndex: number;
-    entries: WorkspaceEntrySearchItem[];
+    items: ChatMentionItem[];
     hasProject: boolean;
     loadError: string;
     loading: boolean;
     open: boolean;
     onHover: (index: number) => void;
-    onSelect: (entry: WorkspaceEntrySearchItem) => void;
+    onSelect: (entry: ChatMentionItem) => void;
   };
   slashMenu: {
     activeIndex: number;
@@ -30,9 +30,9 @@ export function ChatComposerOverlays({
   return (
     <>
       {mentionMenu.open ? (
-        <ProjectEntryCommandMenu
+        <ChatMentionCommandMenu
           activeIndex={mentionMenu.activeIndex}
-          entries={mentionMenu.entries}
+          items={mentionMenu.items}
           hasProject={mentionMenu.hasProject}
           loadError={mentionMenu.loadError}
           loading={mentionMenu.loading}
