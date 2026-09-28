@@ -90,6 +90,9 @@ Active turn 时普通提交默认排队；显式立即发送才尝试 steer。Go
 - `chatComposerCursorOffset.ts`：菜单定位需要的光标偏移。
 - `chatComposerSlots.tsx`：workspace mention、Skill 和文本输入 slots。
 - `useQueuedTurnComposerEdit.ts`：带 token 的队列项取回编辑。
+- `useChatComposerHistory.ts`：光标折叠在首行开头时，用上下箭头遍历当前对话已加载的用户提问；消息来自 `ChatWorkspace` 合并后的分页历史，按消息 ID 保持浏览位置，分页新增的旧提问可继续向上取回。向下越过最新提问时恢复原草稿及结构化引用。输入法、修饰键、命令菜单和队列编辑保留原有键盘行为。
+
+粘贴超过 10,000 个 UTF-16 字符的文本时，`useChatComposerClipboard` 将原文转换为 UTF-8 TXT 附件，沿用附件准备、发送和清理流程；附件已满或当前模式不允许附件时保留为内联文本。普通文本和结构化引用粘贴后，光标移到输入末尾，仅滚动输入框到底部。
 
 输入框上方的 `chat-composer-stack` 统一承载状态贡献和 `ChatSendQueue`：目标状态与单条、多条队列共享一张向内收窄的卡片，底部留白与输入框重叠，呈现从后方露出的层次。状态贡献只绘制行内容，不再持有独立边框、阴影和外部间距；目标在队列上方，队列限高后内部滚动。两者都无内容时容器不占空间，主对话、侧边对话与概览偏移共用这套布局。
 
@@ -127,7 +130,7 @@ Runtime 一轮可能包含：
 - `chatContextUsage.ts`：会话上下文占用；thread usage 投影已归 `packages/features/usage/src/renderer/thread-usage.ts`。
   删除、截断或清空历史会投影预算失效序号；旧请求快照和压缩预算仍保留作诊断，界面改用剩余
   消息估算，直到出现基于新历史的请求预算或新的压缩预算。分页加载本身不使预算失效。
-- `chatConversationOverview.ts`：overview 数据。
+- `chatConversationOverview.ts`：overview 数据；计划活动状态由最后一次计划的所属回合与当前活动回合共同决定。回合结束后保留未完成步骤和计数，停止运行指示，后续新回合也不会重新激活旧计划。
 - `chatWorkHistoryState.ts`：工作历史状态。
 - `chatWorkspaceOperationScope.ts`：workspace 操作归属。
 
@@ -157,6 +160,13 @@ SQLite 投影的 `before` 游标按需加载更早轮次，并在 prepend 后保
 新消息追加不会丢弃在途历史请求，已加载的前缀也不会被 SSE 的旧游标重新标记成未加载。
 已加载 transcript 仍使用尾部 display-item window 控制 DOM 数量；折叠计数只统计可见行，
 未加载历史显示加载入口，不把底层游标当作聊天消息数。上下文压缩不删除用户可查看的历史。
+
+`conversation/search/` 提供当前主对话的 Ctrl+F（macOS 为 ⌘F）搜索，快捷键仍由宿主统一注册。
+搜索打开时展示已加载的完整消息窗口及屏幕外 Markdown 块；输入查询后沿用历史分页接口加载更早消息。
+分页请求期间，搜索结果跳转、查询变更引起的定位和手动滚动会更新当前阅读锚点；补入旧消息时按最新位置恢复，避免覆盖新的搜索定位。
+匹配按正文 DOM 的文字范围计算，支持跨行内格式和代码块 Shadow DOM，不包含侧栏、输入框和未展开的工具详情。
+CSS Highlight 不改写 React 管理的消息节点；结果定位通过 `scrollToOffset` 退出流式跟随，流式更新只刷新匹配和计数。
+Enter / Shift+Enter 循环跳转，Esc 或关闭按钮清理观察器和高亮，切换线程自动退出搜索。
 
 ## Tool runs
 
@@ -212,6 +222,8 @@ SQLite 投影的 `before` 游标按需加载更早轮次，并在 prepend 后保
 
 `MarkdownNavigationProvider` 统一导航，`WorkspaceFileLink` 走 workspace 能力，不能让 Markdown 任意调用 `window.open` 或本地 shell。
 
+`MarkdownExternalLink` 为 Web 链接提供复制链接、在内置浏览器打开、在外部浏览器打开的右键菜单；菜单显式选择不修改默认打开偏好，普通点击继续遵循该偏好。`MarkdownWebLinkIcon` 在文字前加载站点根路径的 `/favicon.ico`，不发送 referrer，加载失败时回退到地球图标。
+
 Markdown 内联代码只将单一路径作为文件候选，命令、Git 状态、通配符和表达式保留代码；含空格的路径可以使用显式 Markdown 链接。候选文件、显式本地链接和本地图片都由 `useMarkdownWorkspaceFiles` 通过现有目录 API 确认是当前工作区的文件后才可点击，目录和不存在的路径保留原文，不猜测同名文件的位置。目录读取和监听由同目录内的引用共享，引用卸载时释放，目录变动和窗口聚焦时重新校验；切换工作区会隔离旧请求。显式链接的标签内不再自动生成嵌套文件链接，行号仍传给文件打开入口。
 
 ## Mentions 与附件
@@ -220,7 +232,7 @@ Markdown 内联代码只将单一路径作为文件候选，命令、Git 状态�
 - 文件打开仍走 main/workspace API。
 - 文件选择器中的本地文件通过 preload 从 Electron `File` 提取可信路径并登记为 runtime 引用；renderer 和线程事件只保留不透明 attachment ID，不读取或复制文件字节。
 - runtime 将被引用的原文件作为该 turn 的 direct-tool-only readable root 暴露给 Agent，但不会把动态附件根加入 shell sandbox plan，也不会新增写权限；文件若本来位于 workspace 或已配置的 writable root 内，仍遵循原有 workspace 权限。文件移动或删除后引用变为不可用，不会生成第二份副本。
-- 原生视觉模型由 runtime 在 provider 请求边界临时读取并复验本地图片；剪贴板截图等没有本地路径的图片才写入受管 attachment store。
+- 原生视觉模型由 runtime 在 provider 请求边界临时读取并复验本地图片；剪贴板图片和超长粘贴生成的 TXT 写入受管 attachment store。TXT 上传要求 `.txt`、`text/plain` 与有效 UTF-8 内容一致，并沿用线程归属和工具只读访问边界。
 - 已发送图片通过带 thread 归属校验的窄 bridge 按需读取并继续使用消息图片画廊预览；Base64 不进入 renderer 持久状态或线程事件。
 - Thread/project 切换时迟到的引用登记或图片存储不得附加到新 composer。
 - 仅附件输入也是合法输入。

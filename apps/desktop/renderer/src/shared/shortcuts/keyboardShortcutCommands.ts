@@ -23,6 +23,7 @@ export const KEYBOARD_SHORTCUT_COMMAND_IDS = [
   'layout.toggleWorkspace',
   'layout.toggleTerminal',
   'chat.focusComposer',
+  'chat.find',
   'chat.cancelTurn',
   'chat.toggleOverview',
   'workspace.openFiles',
@@ -53,6 +54,13 @@ const primaryBinding = (code: string, shift = false): KeyboardShortcutCommand['d
 });
 
 export const keyboardShortcutCommands: readonly KeyboardShortcutCommand[] = [
+  {
+    id: 'chat.find',
+    group: 'chat',
+    labelKey: 'shortcuts.command.findInChat',
+    descriptionKey: 'shortcuts.command.findInChatDescription',
+    defaultBindings: primaryBinding('KeyF'),
+  },
   {
     id: 'app.newChat',
     group: 'general',

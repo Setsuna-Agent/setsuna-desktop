@@ -137,10 +137,22 @@
   display: inline-block;
   width: 0.9em;
   height: 0.9em;
-  margin-left: 0.28em;
+  margin-right: 0.28em;
   color: var(--app-text-muted);
-  opacity: 0.72;
   vertical-align: -0.12em;
+}
+
+.chat-markdown .chat-markdown__web-link-icon > :is(img, svg) {
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border-radius: 2px;
+  object-fit: contain;
+}
+
+.chat-markdown__web-link-icon > svg {
+  opacity: 0.72;
 }
 
 a.chat-markdown__file-link {

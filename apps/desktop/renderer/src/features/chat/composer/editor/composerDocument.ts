@@ -41,6 +41,42 @@ export function applyComposerRange(range: Range): void {
   selection?.addRange(range);
 }
 
+/** Scroll only the editor, keeping the surrounding conversation at its reading position. */
+export function focusComposerEnd(element: HTMLElement): void {
+  element.focus({ preventScroll: true });
+  applyComposerRange(composerRange(element, 'end'));
+  element.scrollTop = element.scrollHeight;
+}
+
+export function isComposerSelectionAtStart(element: HTMLElement): boolean {
+  const selection = element.ownerDocument.getSelection();
+  if (!selection?.isCollapsed || !selection.rangeCount) return false;
+  const range = selection.getRangeAt(0);
+  if (!element.contains(range.startContainer)) return false;
+  let node: Node | null = range.startContainer;
+  if (node.nodeType === Node.TEXT_NODE) {
+    if (range.startOffset !== 0) return false;
+  } else if (Array.from(node.childNodes).slice(0, range.startOffset).some(hasComposerContent)) {
+    return false;
+  }
+  // Empty block siblings still represent preceding lines in contenteditable.
+  while (node && node !== element) {
+    let previous = node.previousSibling;
+    while (previous) {
+      if (hasComposerContent(previous)) return false;
+      previous = previous.previousSibling;
+    }
+    node = node.parentNode;
+  }
+  return true;
+}
+
+function hasComposerContent(node: Node): boolean {
+  return Boolean(node.textContent)
+    || (node instanceof Element && (node.matches('br, div, p, [data-slot-key]')
+      || Boolean(node.querySelector('br, div, p, [data-slot-key]'))));
+}
+
 /** Only replace a command immediately preceding the caret, never another match. */
 export function extendCommandRange(range: Range, element: HTMLElement, command: string): void {
   if (!command || !range.collapsed) return;

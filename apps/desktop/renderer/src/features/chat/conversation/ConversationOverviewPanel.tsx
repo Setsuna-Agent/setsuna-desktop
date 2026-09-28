@@ -84,7 +84,7 @@ export function ConversationOverviewPanel({
       {overview.planItems.length ? (
         <>
           <div className="chat-conversation-overview-panel__divider" />
-          <ConversationPlanSummary items={overview.planItems} />
+          <ConversationPlanSummary items={overview.planItems} running={overview.planRunning} />
         </>
       ) : null}
     </section>

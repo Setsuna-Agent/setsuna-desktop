@@ -59,6 +59,8 @@ export function ChatWorkspace({
   draft,
   focusComposerOnReveal = false,
   focusComposerRequest = 0,
+  findInChatRequest,
+  onFindInChatRequestConsumed,
   imageAttachmentRequest,
   capabilitySelectionRequest,
   workspaceMentionRequest,
@@ -105,6 +107,8 @@ export function ChatWorkspace({
   draft: string;
   focusComposerOnReveal?: boolean;
   focusComposerRequest?: number;
+  findInChatRequest?: number;
+  onFindInChatRequestConsumed?(requestId: number): void;
   imageAttachmentRequest?: ChatImageAttachmentRequest | null;
   capabilitySelectionRequest: ChatCapabilitySelectionRequest | null;
   workspaceMentionRequest?: ChatWorkspaceMentionRequest | null;
@@ -159,7 +163,7 @@ export function ChatWorkspace({
     activeModelContextBudget(config, historyThread),
   ), [config, historyThread]);
   const contextCompactionRunning = contextCompacting || currentThread?.contextCompaction?.status === 'running';
-  const conversationOverview = useMemo(() => (variant === 'main' && currentThread ? conversationOverviewFromMessages(messages) : null), [currentThread, messages, variant]);
+  const conversationOverview = useMemo(() => (variant === 'main' && currentThread ? conversationOverviewFromMessages(messages, activeTurnId) : null), [activeTurnId, currentThread, messages, variant]);
   const overviewLayout = useConversationOverviewLayout(conversationRef, contentNode);
   const overviewVisible = conversationOverviewVisibility === 'shown'
     || (conversationOverviewVisibility === 'auto' && overviewLayout !== 'hidden');
@@ -227,7 +231,7 @@ export function ChatWorkspace({
             contextCompacting={contextCompactionRunning}
             contextUsage={contextUsage}
             config={config}
-            currentThread={currentThread}
+            currentThread={historyThread}
             draft={draft}
             focusOnReveal={focusComposerOnReveal}
             focusRequest={focusComposerRequest}
@@ -292,6 +296,8 @@ export function ChatWorkspace({
             </div>
           ) : conversation(() => (
             <ChatTranscript
+              findRequest={findInChatRequest}
+              onFindRequestConsumed={onFindInChatRequestConsumed}
               activeTurnId={activeTurnId}
               contextCompactionRunning={contextCompactionRunning}
               contentRef={contentRef}

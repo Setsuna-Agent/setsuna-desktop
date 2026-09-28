@@ -58,6 +58,7 @@ import { createChatSlashCommandItems } from './composer/chatSlashCommandItems.js
 import { useChatAttachments } from './composer/useChatAttachments.js';
 import { useChatCommandController } from './composer/useChatCommandController.js';
 import { useChatComposerClipboard } from './composer/useChatComposerClipboard.js';
+import { useChatComposerHistory } from './composer/useChatComposerHistory.js';
 import { useChatComposerModeController } from './composer/useChatComposerModeController.js';
 import { useQueuedTurnComposerEdit } from './composer/useQueuedTurnComposerEdit.js';
 import type { ChatContextTokenUsage } from './conversation/chatContextUsage.js';
@@ -248,14 +249,6 @@ export function ChatComposer({
     model: selectedThreadModel.model,
     provider: selectedThreadModel.provider,
   });
-  const clipboardHandlers = useChatComposerClipboard({
-    allowStructuredPaste: !modeController.reviewModeEnabled,
-    getEditor: getComposerEditor,
-    onSkillsRestored: addSelectedSkills,
-    plugins,
-    skills,
-  });
-
   const selectModel = useCallback((providerId: string, modelId: string) => {
     const requestId = modelSelectionRequestRef.current + 1;
     modelSelectionRequestRef.current = requestId;
@@ -329,6 +322,24 @@ export function ChatComposer({
     || submitting
     || queuedTurnEdit.retrieving
     || modeController.reviewModeEnabled;
+  const clipboardHandlers = useChatComposerClipboard({
+    allowStructuredPaste: !modeController.reviewModeEnabled,
+    disabled: submitting || queuedTurnEdit.retrieving,
+    getEditor: getComposerEditor,
+    onPasteTextAttachment: (file) => {
+      if (attachmentPickerDisabled) return false;
+      void addAttachmentFiles([file]);
+      return true;
+    },
+    onSkillsRestored: addSelectedSkills,
+    plugins,
+    skills,
+  });
+  const navigateHistory = useChatComposerHistory({
+    currentThread, draft, getEditor: getComposerEditor, plugins, skills,
+    disabled: submitting || queuedTurnEdit.editing || queuedTurnEdit.retrieving || modeController.reviewModeEnabled,
+    onRestore: (slots) => setSelectedSkills(filterSelectedSkillsBySlots(skills, slots)),
+  });
   const commandController = useChatCommandController({
     activeProject,
     draft,
@@ -549,6 +560,7 @@ export function ChatComposer({
     if (commandController.mentionMenuOpen) {
       return commandController.handleMentionKeyDown(event, selectEntry);
     }
+    if (navigateHistory(event)) return false;
     return submitActiveQueueFromKeyboard(event);
   };
 

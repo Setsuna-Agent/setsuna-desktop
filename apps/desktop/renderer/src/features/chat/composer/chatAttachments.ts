@@ -36,11 +36,11 @@ export async function createChatMessageAttachment(
 ): Promise<RuntimeMessageAttachment> {
   const linkedAttachment = await client.linkAttachment(file);
   if (linkedAttachment) return linkedAttachment;
-  if (!isChatPreviewableImageType(file.type)) {
+  const isPlainText = file.type === 'text/plain' && file.name.toLowerCase().endsWith('.txt');
+  if (!isChatPreviewableImageType(file.type) && !isPlainText) {
     throw new Error(t('chat.composer.fileLinkUnavailable'));
   }
-  // Clipboard-created images do not have an Electron-backed local path, so they
-  // remain the only File objects that need managed byte storage.
+  // Pasted images and text have no Electron-backed path and need managed storage.
   return client.uploadAttachment({
     name: file.name,
     type: file.type,

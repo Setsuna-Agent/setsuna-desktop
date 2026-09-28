@@ -1,0 +1,62 @@
+@import '../../../shared/styles/content-find-highlights.css';
+
+.chat-find {
+  position: absolute;
+  z-index: 30;
+  top: 8px;
+  right: 12px;
+  width: min(340px, calc(100% - 24px));
+  border: 1px solid var(--app-border);
+  border-radius: 16px;
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-popover);
+  color: var(--app-text);
+  overflow: hidden;
+  -webkit-app-region: no-drag;
+}
+
+.chat-find__input-row,
+.chat-find__results-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+}
+
+.chat-find__input-row {
+  min-height: 42px;
+  gap: 10px;
+  border-bottom: 1px solid var(--app-border);
+}
+
+.chat-find__input-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  box-shadow: none;
+}
+
+.chat-find .sd-icon-button {
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+  color: var(--app-text-secondary);
+}
+
+.chat-find__count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  color: var(--app-text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}

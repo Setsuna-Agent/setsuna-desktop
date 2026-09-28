@@ -44,6 +44,8 @@ export type ChatConversationSurfaceModel = Readonly<{
   currentThread: RuntimeThread | null;
   draft: string;
   focusComposerRequest: number;
+  findInChatRequest?: number;
+  onFindInChatRequestConsumed?(requestId: number): void;
   plugins: RuntimePluginSummary[];
   queuedTurnActions: ChatQueuedTurnActions;
   reviewError: string | null;
@@ -129,6 +131,8 @@ export function ChatConversationSurface({
         draft={model.draft}
         focusComposerOnReveal
         focusComposerRequest={model.focusComposerRequest}
+        findInChatRequest={model.findInChatRequest}
+        onFindInChatRequestConsumed={model.onFindInChatRequestConsumed}
         imageAttachmentRequest={imageAttachmentRequest}
         plugins={model.plugins}
         queuedTurnActions={model.queuedTurnActions}

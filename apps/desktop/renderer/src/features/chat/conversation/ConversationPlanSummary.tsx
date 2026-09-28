@@ -4,11 +4,10 @@ import { useId } from 'react';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import type { ConversationPlanItem, ConversationPlanStatus } from './chatConversationOverview.js';
 
-export function ConversationPlanSummary({ items }: { items: ConversationPlanItem[] }) {
+export function ConversationPlanSummary({ items, running }: { items: ConversationPlanItem[]; running: boolean }) {
   const { t } = useI18n();
   const popoverId = useId();
   const completedCount = items.filter((item) => item.status === 'completed').length;
-  const inProgress = items.some((item) => item.status === 'in_progress');
   const progressLabel = `${completedCount}/${items.length}`;
 
   return (
@@ -17,13 +16,13 @@ export function ConversationPlanSummary({ items }: { items: ConversationPlanItem
         type="button"
         className="chat-conversation-overview-panel__row chat-conversation-overview-panel__plan-trigger"
         aria-label={t('conversation.overview.plan.aria', {
-          state: t(inProgress ? 'conversation.overview.plan.running' : 'conversation.overview.plan.progress'),
+          state: t(running ? 'conversation.overview.plan.running' : 'conversation.overview.plan.progress'),
           progress: progressLabel,
         })}
         aria-describedby={popoverId}
       >
         <span className="chat-conversation-overview-panel__icon">
-          {inProgress
+          {running
             ? <LoaderCircle className="chat-conversation-overview-panel__plan-loading" size={14} />
             : <ListChecks size={14} />}
         </span>

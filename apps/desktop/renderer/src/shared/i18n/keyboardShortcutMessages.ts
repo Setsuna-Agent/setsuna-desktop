@@ -1,4 +1,6 @@
 export const keyboardShortcutZhCN = {
+  'shortcuts.command.findInChat': '搜索对话内容',
+  'shortcuts.command.findInChatDescription': '在当前对话内容中查找文字。',
   'settings.section.shortcuts': '键盘快捷键',
   'settings.section.shortcutsDescription': '自定义常用操作的按键组合。修改只应用于当前操作系统。',
   'shortcuts.search': '搜索快捷键',
@@ -79,6 +81,8 @@ export const keyboardShortcutZhCN = {
 } as const;
 
 export const keyboardShortcutEnUS = {
+  'shortcuts.command.findInChat': 'Find in conversation',
+  'shortcuts.command.findInChatDescription': 'Find text in the current conversation.',
   'settings.section.shortcuts': 'Keyboard shortcuts',
   'settings.section.shortcutsDescription': 'Customize key combinations for common actions. Changes apply only to the current operating system.',
   'shortcuts.search': 'Search shortcuts',

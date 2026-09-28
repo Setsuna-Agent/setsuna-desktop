@@ -11,27 +11,41 @@ export type ConversationPlanItem = {
 export type ConversationOverviewState = {
   fileChangeSummary: RuntimeFileChangeSummary | null;
   planItems: ConversationPlanItem[];
+  planRunning: boolean;
 };
 
-export function conversationOverviewFromMessages(messages: RuntimeMessage[]): ConversationOverviewState {
+export function conversationOverviewFromMessages(
+  messages: RuntimeMessage[],
+  activeTurnId: string | null = null,
+): ConversationOverviewState {
   const fileChangeSummary = latestFileChangeSummaryFromMessages(messages);
+  const plan = latestPlanFromMessages(messages);
   return {
     fileChangeSummary: fileChangeSummary?.files.length ? fileChangeSummary : null,
-    planItems: latestPlanItemsFromMessages(messages),
+    planItems: plan.items,
+    // A saved in_progress step can outlive its turn. Only that plan's live turn
+    // signals activity; a later follow-up must not restart an old plan's spinner.
+    planRunning: Boolean(activeTurnId && plan.turnId === activeTurnId
+      && plan.items.some((item) => item.status === 'in_progress')),
   };
 }
 
 export function latestPlanItemsFromMessages(messages: RuntimeMessage[]): ConversationPlanItem[] {
+  return latestPlanFromMessages(messages).items;
+}
+
+function latestPlanFromMessages(messages: RuntimeMessage[]): { items: ConversationPlanItem[]; turnId: string | null } {
   for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
-    const runs = messages[messageIndex]?.toolRuns ?? [];
+    const message = messages[messageIndex];
+    const runs = message?.toolRuns ?? [];
     for (let runIndex = runs.length - 1; runIndex >= 0; runIndex -= 1) {
       const run = runs[runIndex];
       if (run?.name !== 'update_plan') continue;
       const plan = planItemsFromToolRun(run);
-      if (plan.length) return plan;
+      if (plan.length) return { items: plan, turnId: message.turnId ?? null };
     }
   }
-  return [];
+  return { items: [], turnId: null };
 }
 
 function planItemsFromToolRun(run: RuntimeToolRun): ConversationPlanItem[] {

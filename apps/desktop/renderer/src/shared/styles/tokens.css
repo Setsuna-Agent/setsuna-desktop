@@ -119,8 +119,8 @@
     - var(--app-topbar-navigation-icon-inset)
   );
   --app-topbar-native-controls-inset: 82px;
-  /* 侧栏折叠后保留四个等间距导航控件：侧栏开关、会话历史箭头和新对话。 */
-  --app-topbar-collapsed-sidebar-width: calc(
+  /* 从窗口左缘计算折叠后的完整顶部导航宽度，包含原生控件留白和四个导航按钮。 */
+  --app-topbar-collapsed-leading-width: calc(
     var(--app-topbar-native-controls-inset)
     + var(--app-topbar-navigation-control-size)
     + var(--app-topbar-navigation-item-gap)

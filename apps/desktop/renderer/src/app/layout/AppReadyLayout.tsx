@@ -96,6 +96,10 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSectionId | null>(null);
   const [runtimeActivityOpen, setRuntimeActivityOpen] = useState(false);
   const [focusComposerRequest, setFocusComposerRequest] = useState(0);
+  const [findInChatRequest, setFindInChatRequest] = useState(0);
+  const consumeFindInChatRequest = useCallback((requestId: number) => {
+    setFindInChatRequest((current) => current === requestId ? 0 : current);
+  }, []);
   const consumeFocusComposerRequest = useCallback((requestId: number) => {
     setFocusComposerRequest((current) => current === requestId ? 0 : current);
   }, []);
@@ -236,6 +240,10 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         setActiveView('chat');
         setFocusComposerRequest((request) => request + 1);
       },
+    },
+    'chat.find': {
+      enabled: activeView === 'chat' && Boolean(runtime.currentThread?.messages.length),
+      execute: () => setFindInChatRequest((request) => request + 1),
     },
     'chat.cancelTurn': {
       allowInModal: true,
@@ -455,6 +463,8 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         chatActions={chatActions}
         composerKey={composerKey}
         focusComposerRequest={focusComposerRequest}
+        findInChatRequest={findInChatRequest}
+        onFindInChatRequestConsumed={consumeFindInChatRequest}
         conversationOverviewVisibility={conversationOverviewVisibility}
         draft={draft}
         projectWorkspace={projectWorkspace}

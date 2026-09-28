@@ -92,7 +92,7 @@ describe('runtime server REST threads and attachments', () => {
       await expect(invalid.json()).resolves.toMatchObject({ code: 'attachment_unsupported' });
     });
   
-  it('claims a linked local file for a turn without granting additional write access', async () => {
+  it.each(['linked', 'pasted'])('claims a %s text attachment for a turn without granting additional write access', async (source) => {
       const capture = await createOpenAiCaptureServer();
       try {
         await harness.configureOpenAiProvider('attachment-provider', capture.baseUrl);
@@ -100,14 +100,21 @@ describe('runtime server REST threads and attachments', () => {
         const sourcePath = path.join(sourceDirectory, 'notes.txt');
         await mkdir(sourceDirectory, { recursive: true });
         await writeFile(sourcePath, 'plugin-readable local file');
-        const canonicalSourcePath = await realpath(sourcePath);
-        const link = await fetch(`${harness.baseUrl}${RUNTIME_LOCAL_ATTACHMENT_LINK_PATH}`, {
+        const attachmentPath = source === 'linked'
+          ? RUNTIME_LOCAL_ATTACHMENT_LINK_PATH
+          : `/v1/attachments?${new URLSearchParams({ name: 'notes.txt', type: 'text/plain' })}`;
+        const link = await fetch(`${harness.baseUrl}${attachmentPath}`, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${harness.token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: sourcePath, type: 'text/plain' }),
+          headers: { Authorization: `Bearer ${harness.token}`, 'Content-Type': source === 'linked' ? 'application/json' : 'application/octet-stream' },
+          body: source === 'linked'
+            ? JSON.stringify({ path: sourcePath, type: 'text/plain' })
+            : Buffer.from('plugin-readable pasted text'),
         });
         expect(link.status).toBe(201);
         const attachment = await link.json();
+        const attachmentSourcePath = source === 'linked'
+          ? await realpath(sourcePath)
+          : path.join(harness.runtimeDataDir, 'runtime', 'attachments', 'files', attachment.assetId, 'notes.txt');
         const thread = await harness.runtimeFetch('/v1/threads', {
           method: 'POST',
           body: JSON.stringify({ title: 'Attachment context' }),
@@ -115,7 +122,7 @@ describe('runtime server REST threads and attachments', () => {
   
         const started = await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/turns`, {
           method: 'POST',
-          body: JSON.stringify({ input: 'Summarize the attached document.', attachments: [attachment] }),
+          body: JSON.stringify({ input: source === 'linked' ? 'Summarize the attached document.' : '', attachments: [attachment] }),
         });
         const request = await withTimeout(capture.nextBody, harness.providerCaptureTimeoutMs, 'Timed out waiting for attachment model request');
         const serializedMessages = JSON.stringify(request.messages ?? []);
@@ -127,10 +134,11 @@ describe('runtime server REST threads and attachments', () => {
   
         expect(serializedMessages).toContain('User attachments available to this thread');
         expect(serializedMessages).toContain('notes.txt');
-        expect(messageText).toContain(JSON.stringify(canonicalSourcePath).slice(1, -1));
+        expect(messageText).toContain(JSON.stringify(attachmentSourcePath).slice(1, -1));
         expect(messageText).toContain('do not grant additional write access');
         expect(messageText).toContain('Existing workspace permissions still apply');
         expect(messageText).not.toContain('plugin-readable local file');
+        expect(messageText).not.toContain('plugin-readable pasted text');
         expect(updated.messages.find((message) => message.turnId === started.turnId && message.role === 'user'))
           .toMatchObject({ attachments: [expect.objectContaining({ source: 'runtime', name: 'notes.txt' })] });
       } finally {

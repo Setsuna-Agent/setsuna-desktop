@@ -61,6 +61,10 @@
   border-radius: 50%;
 }
 
+.chat-prompt .chat-prompt__submit:disabled {
+  opacity: 1;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .chat-prompt {
     transition: none;

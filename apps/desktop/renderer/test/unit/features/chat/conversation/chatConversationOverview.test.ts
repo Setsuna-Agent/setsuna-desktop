@@ -33,6 +33,7 @@ describe('chatConversationOverview', () => {
     expect(conversationOverviewFromMessages([assistantMessage('assistant_1', [toolRun('read_1', 'read_file')])])).toEqual({
       fileChangeSummary: null,
       planItems: [],
+      planRunning: false,
     });
   });
 
@@ -86,6 +87,38 @@ describe('chatConversationOverview', () => {
       { step: '读取现有实现', status: 'in_progress' },
       { step: '编写组件', status: 'pending' },
     ]);
+  });
+
+  it('stops plan activity when its turn ends without rewriting unfinished steps or restarting them in a later turn', () => {
+    const plan = [
+      { step: '实现', status: 'completed' },
+      { step: '验证', status: 'in_progress' },
+      { step: '收尾', status: 'pending' },
+    ];
+    const message = { ...assistantMessage('assistant_1', [toolRun('plan_1', 'update_plan', { data: { plan } })]), turnId: 'turn_1' };
+    expect(conversationOverviewFromMessages([message], 'turn_1').planRunning).toBe(true);
+
+    for (const activeTurnId of [null, 'turn_2']) {
+      expect(conversationOverviewFromMessages([message], activeTurnId)).toMatchObject({
+        planItems: plan,
+        planRunning: false,
+      });
+    }
+    expect(message.toolRuns?.[0].data).toEqual({ plan });
+  });
+
+  it('uses the latest plan and does not report activity for completed or unowned historical plans', () => {
+    const completed = { ...assistantMessage('assistant_2', [toolRun('plan_2', 'update_plan', {
+      data: { plan: [{ step: '验证', status: 'completed' }] },
+    })]), turnId: 'turn_1' };
+    const historical = assistantMessage('assistant_1', [toolRun('plan_1', 'update_plan', {
+      data: { plan: [{ step: '验证', status: 'in_progress' }] },
+    })]);
+    expect(conversationOverviewFromMessages([historical], 'turn_1').planRunning).toBe(false);
+    expect(conversationOverviewFromMessages([{ ...historical, turnId: 'turn_1' }, completed], 'turn_1')).toMatchObject({
+      planItems: [{ step: '验证', status: 'completed' }],
+      planRunning: false,
+    });
   });
 });
 

@@ -1,6 +1,7 @@
 import type { ComposerEditor } from './editor/types.js';
 import type { RuntimePluginSummary, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import { useCallback, type ClipboardEvent as ReactClipboardEvent } from 'react';
+import { focusComposerEnd } from './editor/composerDocument.js';
 import {
   CHAT_COMPOSER_CLIPBOARD_TYPE,
   createChatComposerClipboardPastePlan,
@@ -11,14 +12,20 @@ import {
 
 type ChatComposerClipboardOptions = {
   allowStructuredPaste?: boolean;
+  disabled?: boolean;
+  onPasteTextAttachment?: (file: File) => boolean;
   getEditor: () => ComposerEditor | null;
   onSkillsRestored: (skills: RuntimeSkillSummary[]) => void;
   skills: RuntimeSkillSummary[];
   plugins?: readonly RuntimePluginSummary[];
 };
 
+export const MAX_INLINE_PASTE_CHARACTERS = 10_000;
+
 export function useChatComposerClipboard({
   allowStructuredPaste = true,
+  disabled = false,
+  onPasteTextAttachment,
   getEditor,
   onSkillsRestored,
   skills,
@@ -57,14 +64,28 @@ export function useChatComposerClipboard({
   }, [handleClipboardWrite]);
 
   const handlePasteCapture = useCallback((event: ReactClipboardEvent<HTMLDivElement>) => {
-    if (!allowStructuredPaste) return;
-    const serializedPayload = event.clipboardData.getData(CHAT_COMPOSER_CLIPBOARD_TYPE);
-    if (!serializedPayload) return;
-
     const editor = getEditor();
     if (!editor || !(editor.inputElement instanceof HTMLDivElement)) return;
     const input = editor.inputElement;
     if (!eventTargetsEditor(event, input)) return;
+    if (disabled) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    if (event.clipboardData.files?.length) return;
+    const text = event.clipboardData.getData('text/plain');
+    if (text.length > MAX_INLINE_PASTE_CHARACTERS && onPasteTextAttachment) {
+      const file = new File([text], `pasted-${Date.now()}.txt`, { type: 'text/plain' });
+      if (onPasteTextAttachment(file)) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+    }
+    if (!allowStructuredPaste) return;
+    const serializedPayload = event.clipboardData.getData(CHAT_COMPOSER_CLIPBOARD_TYPE);
+    if (!serializedPayload) return;
     const pastePlan = createChatComposerClipboardPastePlan(serializedPayload, skills, plugins);
     if (!pastePlan) return;
 
@@ -73,7 +94,8 @@ export function useChatComposerClipboard({
     setNormalizedChatComposerSelection(input, editor.getValue().slotConfig);
     editor.insert(pastePlan.slots, 'cursor', undefined, true);
     onSkillsRestored(pastePlan.selectedSkills);
-  }, [allowStructuredPaste, getEditor, onSkillsRestored, skills, plugins]);
+    focusComposerEnd(input);
+  }, [allowStructuredPaste, disabled, getEditor, onPasteTextAttachment, onSkillsRestored, skills, plugins]);
 
   return {
     onCopyCapture: handleCopyCapture,

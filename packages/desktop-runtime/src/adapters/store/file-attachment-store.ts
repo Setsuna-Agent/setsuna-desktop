@@ -57,7 +57,7 @@ type AttachmentIndex = {
 const EMPTY_INDEX: AttachmentIndex = { version: 1, attachments: [] };
 const DEFAULT_PENDING_TTL_MS = 24 * 60 * 60 * 1_000;
 
-/** 通过不透明 ID 管理本地文件引用，以及必须持久化的图片字节。 */
+/** 通过不透明 ID 管理本地文件引用，以及剪贴板图片和文本等受管内容。 */
 export class FileAttachmentStore implements AttachmentStore {
   private readonly root: string;
   private readonly filesRoot: string;
