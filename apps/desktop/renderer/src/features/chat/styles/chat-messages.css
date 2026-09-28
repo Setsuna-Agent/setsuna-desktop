@@ -674,6 +674,13 @@
   overflow-wrap: anywhere;
 }
 
+/* 夜间气泡和全局选区的浅主题色接近；使用亮底深字区分实际复制范围。 */
+:root[data-theme='dark'] :is(.chat-user-message-content, .chat-guidance-message__bubble)::selection,
+:root[data-theme='dark'] :is(.chat-user-message-content, .chat-guidance-message__bubble) *::selection {
+  color: var(--app-bg);
+  background-color: color-mix(in srgb, var(--app-primary) 70%, #ffffff);
+}
+
 .chat-user-bubble--with-attachments .sd-message__content {
   padding: 0;
   border: 0;

@@ -158,6 +158,7 @@ export function useDesktopAppController() {
     workspaceWidth,
   } = useDesktopPanelResize(shellRef, {
     bottomPanelVisible: bottomPanelReservesLayout,
+    sidebarManuallyCollapsed,
     workspaceVisible: workspacePanelReservesLayout,
   });
   const sidebarCanExpand = useDesktopSidebarAutoCollapse({
@@ -302,7 +303,7 @@ export function useDesktopAppController() {
   const shellSidebarState = resolveShellSidebarState(activeView, sidebarCollapsed);
   const shellStyle = {
     '--app-sidebar-width': shellSidebarState.reservesLayout ? `${sidebarWidth}px` : '0px',
-    '--app-topbar-sidebar-width': shellSidebarState.reservesLayout ? `${sidebarWidth}px` : 'var(--app-topbar-collapsed-sidebar-width)',
+    '--app-topbar-sidebar-width': shellSidebarState.reservesLayout ? `${sidebarWidth}px` : '0px',
     '--desktop-agent-sidebar-visual-width': `${sidebarWidth}px`,
     '--desktop-settings-nav-width': `${sidebarWidth}px`,
     '--desktop-agent-workspace-width': workspacePanelReservesLayout ? `${workspaceLayoutWidth}px` : '0px',

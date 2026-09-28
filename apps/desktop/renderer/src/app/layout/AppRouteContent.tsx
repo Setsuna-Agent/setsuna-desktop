@@ -34,6 +34,8 @@ export type AppRouteContentProps = Readonly<{
   conversationOverviewVisibility: ConversationOverviewVisibility;
   draft: string;
   focusComposerRequest: number;
+  findInChatRequest?: number;
+  onFindInChatRequestConsumed?(requestId: number): void;
   projectWorkspace: ProjectWorkspaceState;
   runtime: RuntimeClientState;
   selectedCapabilitiesPluginId: string | null;

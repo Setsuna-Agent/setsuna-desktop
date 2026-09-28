@@ -4,7 +4,7 @@ import { ArrowUp, Square } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { forwardRef, useCallback, useImperativeHandle, useLayoutEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type ReactNode } from 'react';
 import { useI18n } from '../../../../shared/i18n/I18nProvider.js';
-import { applyComposerRange, composerFragment, composerRange, extendCommandRange, readComposerDocument, slotText } from './composerDocument.js';
+import { applyComposerRange, composerFragment, composerRange, extendCommandRange, focusComposerEnd, readComposerDocument, slotText } from './composerDocument.js';
 import type { ComposerEditor, ComposerSlot } from './types.js';
 
 type Props = Omit<HTMLAttributes<HTMLDivElement>, 'onChange' | 'onSubmit'> & {
@@ -128,10 +128,12 @@ export const ChatPromptInput = forwardRef<ComposerEditor, Props>(function ChatPr
         if (event.defaultPrevented) return;
         if (disabled) { event.preventDefault(); return; }
         if (event.clipboardData.files.length) { event.preventDefault(); onPasteFile?.(event.clipboardData.files); return; }
-        event.preventDefault(); insert([{ type: 'text', value: event.clipboardData.getData('text/plain') }]);
+        event.preventDefault();
+        insert([{ type: 'text', value: event.clipboardData.getData('text/plain') }]);
+        focusComposerEnd(event.currentTarget);
       }}
       onKeyDown={(event) => {
-        if (disabled) return;
+        if (disabled || composing.current || event.nativeEvent.isComposing) return;
         onKeyDown?.(event);
         if (event.defaultPrevented || composing.current || event.nativeEvent.isComposing || event.key !== 'Enter') return;
         if (event.shiftKey || (submitOn === 'mod-enter' && !event.altKey && !event.ctrlKey && !event.metaKey)) { event.preventDefault(); insert([{ type: 'text', value: '\n' }]); return; }

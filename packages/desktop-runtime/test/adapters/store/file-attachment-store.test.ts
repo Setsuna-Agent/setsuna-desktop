@@ -10,6 +10,32 @@ import type { IdGenerator } from '../../../src/ports/id-generator.js';
 import { createTestTempDirectory } from '../../support/test-temp-directory.js';
 
 describe('file attachment store', () => {
+  it('stores pasted UTF-8 text verbatim and resolves it after the thread claims it', async () => {
+    const fixture = await attachmentStoreFixture();
+    const content = '\uFEFF中文和 emoji 🙂\r\n第二行\n'.repeat(1_000);
+    const bytes = Buffer.from(content, 'utf8');
+    const attachment = await fixture.store.create({ name: 'pasted.txt', type: 'text/plain', data: bytes });
+    expect(attachment).toMatchObject({ name: 'pasted.txt', type: 'text/plain', size: bytes.length });
+    expect(await fixture.store.resolveForThread('thread_1', [attachment])).toEqual([]);
+    await fixture.store.claimForThread('thread_1', [attachment]);
+    const reloaded = new FileAttachmentStore(fixture.dataDir, fixture.clock, new SequentialIdGenerator());
+    const [resolved] = await reloaded.resolveForThread('thread_1', [attachment]);
+    await expect(readFile(resolved!.absolutePath, 'utf8')).resolves.toBe(content);
+    await expect(reloaded.deletePending(attachment.assetId)).resolves.toBe(false);
+    await reloaded.releaseThread('thread_1');
+    await expect(access(resolved!.absolutePath)).rejects.toThrow();
+  });
+
+  it.each([
+    { name: 'binary.txt', type: 'text/plain', data: Buffer.from([0xff, 0xfe]) },
+    { name: 'binary.txt', type: 'text/plain', data: Buffer.from([65, 0, 66]) },
+    { name: 'script.js', type: 'text/plain', data: Buffer.from('hello') },
+    { name: 'text.txt', type: 'application/pdf', data: Buffer.from('hello') },
+  ])('rejects invalid text attachment bytes or metadata: $name / $type', async (input) => {
+    const { store } = await attachmentStoreFixture();
+    await expect(store.create(input)).rejects.toMatchObject({ code: 'attachment_unsupported' });
+  });
+
   it('links a local file in place without copying it into attachment storage', async () => {
     const fixture = await attachmentStoreFixture();
     const sourceDirectory = path.join(fixture.dataDir, 'user-files');

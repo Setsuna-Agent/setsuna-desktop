@@ -12,6 +12,7 @@ import {
 type CssVariableName = string | readonly string[];
 type DesktopPanelResizeOptions = {
   bottomPanelVisible?: boolean;
+  sidebarManuallyCollapsed?: boolean;
   workspaceVisible?: boolean;
 };
 
@@ -22,16 +23,20 @@ export const WORKBENCH_MAIN_MIN_WIDTH = 420;
 export const WORKBENCH_SPLIT_MAIN_MIN_WIDTH = 520;
 const WORKBENCH_MAIN_MIN_HEIGHT = 260;
 const WORKSPACE_MIN_WIDTH = 410;
-const WORKSPACE_DEFAULT_WIDTH = 640;
 const TERMINAL_MIN_HEIGHT = 180;
 const TERMINAL_MAX_HEIGHT = 520;
 
 export function useDesktopPanelResize(
   shellRef: RefObject<HTMLDivElement | null>,
-  { bottomPanelVisible = true, workspaceVisible = true }: DesktopPanelResizeOptions = {},
+  { bottomPanelVisible = true, sidebarManuallyCollapsed = false, workspaceVisible = true }: DesktopPanelResizeOptions = {},
 ) {
   const [sidebarWidth, setSidebarWidth] = useState(240);
-  const [workspaceWidth, setWorkspaceWidth] = useState(WORKSPACE_DEFAULT_WIDTH);
+  const defaultWorkspaceWidth = useCallback(() => workspaceDefaultWidthForLayout({
+    sidebarWidth: sidebarManuallyCollapsed ? 0 : sidebarWidth,
+    viewportWidth: readWorkbenchWidth(shellRef.current),
+  }), [shellRef, sidebarManuallyCollapsed, sidebarWidth]);
+  const [workspaceWidth, setWorkspaceWidth] = useState(defaultWorkspaceWidth);
+  const workspaceWidthCustomizedRef = useRef(false);
   const [workspaceRestoreWidth, setWorkspaceRestoreWidth] = useState<number | null>(null);
   const [workspacePreviewWidth, setWorkspacePreviewWidth] = useState<number | null>(null);
   const [terminalHeight, setTerminalHeight] = useState(260);
@@ -95,6 +100,7 @@ export function useDesktopPanelResize(
   );
   const beginWorkspacePreviewResize = useCallback(
     (value: number) => {
+      workspaceWidthCustomizedRef.current = true;
       setWorkspaceRestoreWidth(null);
       workspacePreviewCanFitSidebarRef.current = canWorkspaceKeepSidebarExpanded(value);
       setWorkspacePreviewWidth(null);
@@ -145,12 +151,14 @@ export function useDesktopPanelResize(
   );
   const handleWorkspaceResizeStep = useCallback(
     (delta: number) => {
+      workspaceWidthCustomizedRef.current = true;
       setWorkspaceRestoreWidth(null);
       stepResizeValue('--desktop-agent-workspace-width', clampWorkspaceWidth, setWorkspaceWidth, delta);
     },
     [clampWorkspaceWidth, stepResizeValue],
   );
   const toggleWorkspaceMaximized = useCallback(() => {
+    workspaceWidthCustomizedRef.current = true;
     // Keep the normal width separate so resizing the window while maximized does not overwrite it.
     const nextValue = clampWorkspaceWidth(workspaceRestoreWidth ?? Number.POSITIVE_INFINITY);
     setWorkspaceRestoreWidth(workspaceMaximized ? null : workspaceWidth);
@@ -159,15 +167,17 @@ export function useDesktopPanelResize(
     setShellVariables('--desktop-agent-workspace-width', workspaceWidthCssValue(nextValue, workspaceVisible));
   }, [clampWorkspaceWidth, endWorkspacePreviewResize, setShellVariables, workspaceMaximized, workspaceRestoreWidth, workspaceVisible, workspaceWidth]);
   const fitWorkspaceForExpandedSidebar = useCallback(() => {
-    const maxExpandedWorkspaceWidth = workspaceMaxWidthForExpandedSidebar({
+    const expandedLayout = {
       sidebarWidth,
       viewportWidth: readWorkbenchWidth(shellRef.current),
-    });
+    };
+    const maxExpandedWorkspaceWidth = workspaceMaxWidthForExpandedSidebar(expandedLayout);
     workspacePreviewCanFitSidebarRef.current = null;
     setWorkspaceRestoreWidth(null);
     setWorkspacePreviewWidth(null);
     setWorkspaceWidth((current) => {
-      const nextValue = Math.min(current, maxExpandedWorkspaceWidth);
+      const preferredWidth = workspaceWidthCustomizedRef.current ? current : workspaceDefaultWidthForLayout(expandedLayout);
+      const nextValue = Math.min(preferredWidth, maxExpandedWorkspaceWidth);
       setShellVariables('--desktop-agent-workspace-width', workspaceWidthCssValue(nextValue, workspaceVisible));
       if (nextValue === current) return current;
       return nextValue;
@@ -186,7 +196,8 @@ export function useDesktopPanelResize(
       frame = window.requestAnimationFrame(() => {
         frame = 0;
         setWorkspaceWidth((current) => {
-          const nextValue = clampWorkspaceWidth(workspaceMaximized ? Number.POSITIVE_INFINITY : current);
+          const preferredWidth = workspaceWidthCustomizedRef.current ? current : defaultWorkspaceWidth();
+          const nextValue = clampWorkspaceWidth(workspaceMaximized ? Number.POSITIVE_INFINITY : preferredWidth);
           setShellVariables('--desktop-agent-workspace-width', workspaceWidthCssValue(nextValue, workspaceVisible));
           if (nextValue === current) return current;
           return nextValue;
@@ -205,7 +216,7 @@ export function useDesktopPanelResize(
       if (frame) window.cancelAnimationFrame(frame);
       window.removeEventListener('resize', syncResponsiveBounds);
     };
-  }, [bottomPanelVisible, clampTerminalHeight, clampWorkspaceWidth, setShellVariables, workspaceMaximized, workspaceVisible]);
+  }, [bottomPanelVisible, clampTerminalHeight, clampWorkspaceWidth, defaultWorkspaceWidth, setShellVariables, workspaceMaximized, workspaceVisible]);
 
   const terminalMaxHeight = clampTerminalHeight(TERMINAL_MAX_HEIGHT);
   const workspaceMaxWidth = clampWorkspaceWidth(Number.POSITIVE_INFINITY);
@@ -314,6 +325,20 @@ function usePointerResize({
 
 function clampSidebarWidth(value: number): number {
   return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, Math.round(value)));
+}
+
+function workspaceDefaultWidthForLayout({ sidebarWidth, viewportWidth: availableViewportWidth }: {
+  sidebarWidth: number;
+  viewportWidth: number;
+}): number {
+  // Predict the existing sidebar auto-collapse before splitting, so its CSS
+  // transition cannot feed a stale width back into the default panel size.
+  const reservedSidebarWidth = availableViewportWidth - sidebarWidth >= WORKBENCH_SPLIT_MAIN_MIN_WIDTH * 2
+    ? sidebarWidth : 0;
+  return clampWorkspaceWidthForLayout((availableViewportWidth - reservedSidebarWidth) / 2, {
+    sidebarWidth: reservedSidebarWidth,
+    viewportWidth: availableViewportWidth,
+  });
 }
 
 export function clampWorkspaceWidthForLayout(

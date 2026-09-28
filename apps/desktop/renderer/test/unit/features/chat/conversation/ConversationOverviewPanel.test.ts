@@ -99,6 +99,7 @@ describe('ConversationOverviewPanel', () => {
       ...baseProps,
       overview: {
         ...overview,
+        planRunning: true,
         planItems: [
           { step: 'Inspect implementation', status: 'completed' },
           { step: 'Apply focused change', status: 'in_progress' },
@@ -200,6 +201,7 @@ const overview: ConversationOverviewState = {
     files: [],
   },
   planItems: [],
+  planRunning: false,
 };
 
 const reviewState: DesktopReviewState = {

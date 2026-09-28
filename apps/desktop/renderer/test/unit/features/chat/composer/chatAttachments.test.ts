@@ -24,7 +24,7 @@ describe('chat attachments', () => {
     expect(uploadAttachment).not.toHaveBeenCalled();
   });
 
-  it('stores only pathless clipboard images as runtime-managed bytes', async () => {
+  it('stores pathless clipboard images as runtime-managed bytes', async () => {
     const bytes = pngBytes();
     const uploaded: RuntimeStoredMessageAttachment = {
       id: 'attachment_1',
@@ -46,12 +46,12 @@ describe('chat attachments', () => {
     });
   });
 
-  it('does not copy a non-image file when no trusted local path is available', async () => {
+  it('does not copy other files when no trusted local path is available', async () => {
     const linkAttachment = vi.fn(async () => null);
     const uploadAttachment = vi.fn();
 
     await expect(createChatMessageAttachment(
-      file('notes.txt', 'clipboard text', 'text/plain'),
+      file('notes.pdf', 'local document', 'application/pdf'),
       { linkAttachment, uploadAttachment },
     )).rejects.toThrow('无法获取该文件的本地路径');
     expect(uploadAttachment).not.toHaveBeenCalled();

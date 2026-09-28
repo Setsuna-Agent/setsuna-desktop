@@ -1,12 +1,10 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
-import { Globe2 } from 'lucide-react';
 import {
   Children,
   createContext,
   isValidElement,
   memo,
   useContext,
-  type MouseEvent,
   type ReactNode,
 } from 'react';
 import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown';
@@ -15,6 +13,7 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { MarkdownCodeBlock } from './MarkdownCodeBlock.js';
+import { MarkdownExternalLink } from './MarkdownExternalLink.js';
 import { useMarkdownNavigation } from './MarkdownNavigationProvider.js';
 import { WorkspaceFileLink } from './WorkspaceFileLink.js';
 import { markdownUrlTransform, resolveMarkdownFileReference, resolveMarkdownLinkTarget } from './markdownLinks.js';
@@ -57,7 +56,7 @@ function MarkdownTaskInput() {
 }
 
 function MarkdownLink({ children, href, node: _node, onClick, ...props }: MarkdownElementProps<'a'>) {
-  const { onOpenWebLink, workspaceRoot } = useMarkdownNavigation();
+  const { workspaceRoot } = useMarkdownNavigation();
   const target = resolveMarkdownLinkTarget(href, workspaceRoot);
   const label = <MarkdownLinkLabelContext.Provider value>{children}</MarkdownLinkLabelContext.Provider>;
 
@@ -77,30 +76,10 @@ function MarkdownLink({ children, href, node: _node, onClick, ...props }: Markdo
   }
 
   if (target.kind === 'external') {
-    const webLink = /^https?:/i.test(target.href);
-    const handleExternalClick = (event: MouseEvent<HTMLAnchorElement>) => {
-      onClick?.(event);
-      if (event.defaultPrevented) return;
-      event.preventDefault();
-      if (webLink && onOpenWebLink) {
-        onOpenWebLink(target.href);
-        return;
-      }
-      openExternalMarkdownLink(target.href);
-    };
     return (
-      <a
-        {...props}
-        className={[props.className, webLink ? 'chat-markdown__web-link' : ''].filter(Boolean).join(' ') || undefined}
-        data-markdown-link={webLink ? 'web' : 'external'}
-        href={target.href}
-        onClick={handleExternalClick}
-        rel="noreferrer"
-        target="_blank"
-      >
+      <MarkdownExternalLink {...props} href={target.href} onClick={onClick}>
         {label}
-        {webLink ? <Globe2 className="chat-markdown__web-link-icon" size={12} aria-hidden="true" /> : null}
-      </a>
+      </MarkdownExternalLink>
     );
   }
 
@@ -193,16 +172,4 @@ function MarkdownTable({ children, node: _node, ...props }: MarkdownElementProps
       <table {...props}>{children}</table>
     </div>
   );
-}
-
-function openExternalMarkdownLink(href: string): void {
-  if (typeof window === 'undefined') return;
-  const openExternal = window.setsunaDesktop?.links?.openExternal;
-  if (openExternal) {
-    void openExternal(href).catch((error: unknown) => {
-      console.error('[MarkdownContentBlock] failed to open external link', error);
-    });
-    return;
-  }
-  window.open(href, '_blank', 'noopener,noreferrer');
 }

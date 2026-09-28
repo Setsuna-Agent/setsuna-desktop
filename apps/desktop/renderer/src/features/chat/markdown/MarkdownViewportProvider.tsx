@@ -13,6 +13,7 @@ type MarkdownViewportRef = RefObject<HTMLDivElement | null>;
 type MarkdownViewportContextValue = {
   observe: (element: Element, onIntersectionChange: (intersects: boolean) => void) => (() => void) | null;
   supported: boolean;
+  renderAll: boolean;
 };
 
 const markdownVirtualizationOverscanPx = 1_200;
@@ -21,9 +22,11 @@ const MarkdownViewportContext = createContext<MarkdownViewportContextValue | nul
 export function MarkdownViewportProvider({
   children,
   scrollRef,
+  renderAll = false,
 }: {
   children: ReactNode;
   scrollRef: MarkdownViewportRef;
+  renderAll?: boolean;
 }) {
   const callbacksRef = useRef(new Map<Element, (intersects: boolean) => void>());
   const observerRef = useRef<IntersectionObserver | null>(null);
@@ -51,7 +54,7 @@ export function MarkdownViewportProvider({
       observerRef.current?.unobserve(element);
     };
   }, [scrollRef, supported]);
-  const value = useMemo<MarkdownViewportContextValue>(() => ({ observe, supported }), [observe, supported]);
+  const value = useMemo<MarkdownViewportContextValue>(() => ({ observe, supported, renderAll }), [observe, supported, renderAll]);
 
   useEffect(() => () => {
     callbacksRef.current.clear();

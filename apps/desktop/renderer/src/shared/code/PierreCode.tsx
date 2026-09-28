@@ -29,6 +29,7 @@ import {
 import { useCodeAppearance } from './CodeAppearanceProvider.js';
 import { inferPatchLanguageOverride } from './patchLanguage.js';
 import scrollbarCSS from '../styles/scrollbars.css?raw';
+import contentFindCSS from '../styles/content-find-highlights.css?raw';
 
 type CodeFileViewProps = {
   cacheKey?: string;
@@ -235,7 +236,7 @@ export function usePierreFileOptions({
     theme: appearance.themes,
     themeType: appearance.resolvedTheme,
     // Shadow DOM needs the shared rules too; viewport-specific CSS may still hide a mirrored scrollbar.
-    unsafeCSS: `${scrollbarCSS}\n${unsafeCSS ?? ''}`,
+    unsafeCSS: `${scrollbarCSS}\n${contentFindCSS}\n${unsafeCSS ?? ''}`,
   }), [appearance.resolvedTheme, appearance.themes, disableBackground, layout, showHeader, showLineNumbers, unsafeCSS, wrap]);
 }
 
@@ -266,7 +267,7 @@ export function usePierreDiffOptions<LAnnotation = undefined>({
     overflow: wrap ? 'wrap' as const : 'scroll' as const,
     theme: appearance.themes,
     themeType: appearance.resolvedTheme,
-    unsafeCSS: scrollbarCSS,
+    unsafeCSS: `${scrollbarCSS}\n${contentFindCSS}`,
   }), [appearance.resolvedTheme, appearance.themes, layout, onPostRender, showHeader, wrap]);
 }
 

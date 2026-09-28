@@ -3,6 +3,7 @@ import {
   type RuntimeAttachmentUploadInput,
 } from '@setsuna-desktop/contracts';
 import path from 'node:path';
+import { isUtf8 } from 'node:buffer';
 import { RuntimeAttachmentValidationError } from '../../ports/attachment-store.js';
 import { detectSafeImageMimeType, type SafeImageMimeType } from '../../utils/safe-image.js';
 import { replaceControlCharacters, safeStorageFileStem } from './storage-file-name.js';
@@ -38,6 +39,12 @@ export function validateStoredAttachmentUpload(input: RuntimeAttachmentUploadInp
 
   const extension = path.extname(name).toLowerCase();
   const declaredType = normalizeDeclaredMimeType(input.type);
+  if (extension === '.txt' || declaredType === 'text/plain') {
+    if (extension === '.txt' && declaredType === 'text/plain' && isUtf8(data) && !data.includes(0)) {
+      return { name, type: 'text/plain', data };
+    }
+    throw unsupportedAttachment();
+  }
   if (extension === '.pdf' || declaredType === PDF_MIME_TYPE) {
     if (extension === '.pdf' && hasPdfSignature(data) && compatibleDeclaredType(declaredType, PDF_MIME_TYPE)) {
       return { name, type: PDF_MIME_TYPE, data };

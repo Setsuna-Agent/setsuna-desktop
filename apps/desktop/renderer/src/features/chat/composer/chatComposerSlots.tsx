@@ -1,5 +1,5 @@
 import type { ComposerSlot } from './editor/types.js';
-import { parsePluginMentions, pluginMentionText, type RuntimePluginSummary } from '@setsuna-desktop/contracts';
+import { normalizeRuntimeSkillReferences, parsePluginMentions, pluginMentionText, type RuntimeMessage, type RuntimePluginSummary } from '@setsuna-desktop/contracts';
 import type {
   RuntimeSkillReference,
   RuntimeSkillSummary,
@@ -68,6 +68,31 @@ export function createPluginDraftSlots(value: string, plugins: readonly RuntimeP
     offset = mention.end;
   }
   if (offset < value.length) slots.push(createTextSlot(value.slice(offset)));
+  return slots;
+}
+
+export function createMessageDraftSlots(
+  message: RuntimeMessage,
+  skills: RuntimeSkillSummary[],
+  plugins: readonly RuntimePluginSummary[],
+): ComposerSlot[] {
+  const slots: ComposerSlot[] = [];
+  let offset = 0;
+  const references = normalizeRuntimeSkillReferences({
+    content: message.content,
+    skillIds: message.skillIds ?? [],
+    references: message.skillReferences,
+  });
+  for (const reference of references) {
+    const skill = skills.find((item) => item.id === reference.skillId && item.enabled);
+    if (!skill) continue;
+    slots.push(...createPluginDraftSlots(message.content.slice(offset, reference.start), plugins));
+    const slot = createSelectedSkillSlot(skill);
+    slot.props.value = message.content.slice(reference.start, reference.end);
+    slots.push(slot);
+    offset = reference.end;
+  }
+  slots.push(...createPluginDraftSlots(message.content.slice(offset), plugins));
   return slots;
 }
 

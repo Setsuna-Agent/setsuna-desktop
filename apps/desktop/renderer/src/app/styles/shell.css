@@ -273,6 +273,11 @@
   background: var(--desktop-agent-control-hover-bg);
 }
 
+.desktop-agent-page--sidebar-collapsed .app-topbar {
+  /* 折叠导航已包含窗口左侧留白，不再叠加下方独立导航栏的宽度。 */
+  --app-topbar-leading-width: var(--app-topbar-collapsed-leading-width);
+}
+
 .desktop-agent-page--sidebar-collapsed .app-topbar__brand {
   gap: var(--app-topbar-item-gap);
   padding-right: var(--app-topbar-navigation-divider-inset);

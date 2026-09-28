@@ -303,7 +303,7 @@ export class RuntimeHost {
     }, RUNTIME_LOCAL_ATTACHMENT_LINK_PATH);
   }
 
-  /** Stores an image without a local path (for example, a pasted image). */
+  /** Stores clipboard content without a local path (pasted images or text). */
   async uploadAttachment(input: RuntimeAttachmentUploadInput): Promise<RuntimeStoredMessageAttachment> {
     if (!(input.data instanceof Uint8Array)) throw new Error('Attachment bytes are invalid.');
     const params = new URLSearchParams({ name: input.name, type: input.type });

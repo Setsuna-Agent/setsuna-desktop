@@ -37,6 +37,7 @@ import {
 import { TranscriptWindowDivider } from './TranscriptWindowDivider.js';
 import { usePinnedChatScroll } from './ChatWorkspaceScroll.js';
 import { ChatMessageRail } from './navigation/ChatMessageRail.js';
+import { ChatFindBar } from './search/ChatFindBar.js';
 import { createChatMessageNavigation } from './navigation/chatMessageNavigation.js';
 import { ContextCompactionStatus } from './ContextCompactionStatus.js';
 import { StreamingScrollPinProvider } from './StreamingScrollPinProvider.js';
@@ -70,6 +71,8 @@ type ChatTranscriptMutationProps =
     };
 
 type ChatTranscriptProps = ChatTranscriptMutationProps & {
+  findRequest?: number;
+  onFindRequestConsumed?(requestId: number): void;
   activeTurnId: string | null;
   contextCompactionRunning: boolean;
   contentRef: React.MutableRefObject<HTMLDivElement | null>;
@@ -96,6 +99,8 @@ type ChatTranscriptProps = ChatTranscriptMutationProps & {
  * contentRef 由父级注入；节点挂载/替换通过回调通知外层环境面板重绑尺寸监听。
  */
 export function ChatTranscript({
+  findRequest = 0,
+  onFindRequestConsumed,
   activeTurnId,
   contextCompactionRunning,
   contentRef,
@@ -182,6 +187,14 @@ export function ChatTranscript({
     readOnly,
   });
   const [showFullHistory, setShowFullHistory] = useState(false);
+  const [findThreadId, setFindThreadId] = useState<string | null>(null);
+  const findOpen = findThreadId !== null && findThreadId === currentThread?.id;
+  const closeFind = useCallback(() => setFindThreadId(null), []);
+  useLayoutEffect(() => { setFindThreadId(null); }, [currentThread?.id]);
+  useLayoutEffect(() => {
+    if (!findRequest) return;
+    setFindThreadId(currentThread?.id ?? null);
+  }, [currentThread?.id, findRequest]);
   const [expandedWorkHistoryItemIds, setExpandedWorkHistoryItemIds] = useState<Set<string>>(() => new Set());
   useEffect(() => {
     historyScrollAnchorRef.current = null;
@@ -224,7 +237,7 @@ export function ChatTranscript({
         onSubmitEdit: submitEditingMessage,
         onToggleDelete: toggleDeleteSelection,
       };
-  const renderWindow = useMemo(() => createChatRenderWindow(displayItems, { activeTurnId, enabled: !deleteMode && !showFullHistory }), [activeTurnId, deleteMode, displayItems, showFullHistory]);
+  const renderWindow = useMemo(() => createChatRenderWindow(displayItems, { activeTurnId, enabled: !deleteMode && !showFullHistory && !findOpen }), [activeTurnId, deleteMode, displayItems, findOpen, showFullHistory]);
   const renderedDisplayItems = renderWindow.items;
   const navigationItems = useMemo(() => createChatMessageNavigation(renderedDisplayItems), [renderedDisplayItems]);
   const activeAssistantItemId = useMemo(() => activeAssistantRunItemId(renderedDisplayItems, activeTurnId), [activeTurnId, renderedDisplayItems]);
@@ -255,18 +268,32 @@ export function ChatTranscript({
       if (scrollToBottomRef) scrollToBottomRef.current = null;
     };
   }, [scrollToBottom, scrollToBottomRef]);
-  const showEarlierMessages = useCallback(() => {
+  const captureHistoryScrollAnchor = useCallback(() => {
+    const node = scrollRefInternal.current;
+    if (node) historyScrollAnchorRef.current = { height: node.scrollHeight, top: node.scrollTop };
+  }, [scrollRefInternal]);
+  const scrollToReadingOffset = useCallback((top: number, behavior: ScrollBehavior = 'smooth') => {
+    scrollToOffset(top, behavior);
+    // A search/rail jump during pagination supersedes the position at request start.
+    if (historyScrollAnchorRef.current) captureHistoryScrollAnchor();
+  }, [captureHistoryScrollAnchor, scrollToOffset]);
+  const handleTranscriptScroll = useCallback(() => {
+    handleScroll();
+    if (historyScrollAnchorRef.current) captureHistoryScrollAnchor();
+  }, [captureHistoryScrollAnchor, handleScroll]);
+  const loadEarlierMessages = useCallback(() => {
     const scrollNode = scrollRefInternal.current;
     if (scrollNode) {
       scrollToOffset(scrollNode.scrollTop, 'auto');
-      historyScrollAnchorRef.current = {
-        height: scrollNode.scrollHeight,
-        top: scrollNode.scrollTop,
-      };
+      captureHistoryScrollAnchor();
     }
-    setShowFullHistory(true);
     if (messageHistory.hasMore) void messageHistory.loadOlder();
-  }, [messageHistory.hasMore, messageHistory.loadOlder, scrollRefInternal, scrollToOffset]);
+  }, [captureHistoryScrollAnchor, messageHistory.hasMore, messageHistory.loadOlder, scrollRefInternal, scrollToOffset]);
+  const showEarlierMessages = useCallback(() => {
+    // Search shares pagination, but only manual expansion persists after find closes.
+    setShowFullHistory(true);
+    loadEarlierMessages();
+  }, [loadEarlierMessages]);
 
   useLayoutEffect(() => {
     const anchor = historyScrollAnchorRef.current;
@@ -279,8 +306,8 @@ export function ChatTranscript({
 
   return (
     <>
-      <div className={`chat-messages ${showEmptyStarter ? 'chat-messages--starter' : ''}`} ref={scrollRefInternal} tabIndex={0} aria-label={t('chat.navigation.messages')} onKeyDownCapture={handleScrollKeyDown} onPointerDownCapture={handleScrollPointerDown} onScroll={handleScroll} onTouchMoveCapture={handleScrollTouchMove} onWheelCapture={handleScrollWheel}>
-        <MarkdownViewportProvider scrollRef={scrollRefInternal}>
+      <div className={`chat-messages ${showEmptyStarter ? 'chat-messages--starter' : ''}`} ref={scrollRefInternal} tabIndex={0} aria-label={t('chat.navigation.messages')} onKeyDownCapture={handleScrollKeyDown} onPointerDownCapture={handleScrollPointerDown} onScroll={handleTranscriptScroll} onTouchMoveCapture={handleScrollTouchMove} onWheelCapture={handleScrollWheel}>
+        <MarkdownViewportProvider scrollRef={scrollRefInternal} renderAll={findOpen}>
           <div className="chat-content-frame" ref={attachContent}>
             {showEmptyStarter ? (
               starterContent
@@ -341,13 +368,25 @@ export function ChatTranscript({
           </div>
         </MarkdownViewportProvider>
       </div>
+      {findOpen ? (
+        <ChatFindBar
+          contentRef={contentRef}
+          scrollRef={scrollRefInternal}
+          focusRequest={findRequest}
+          history={messageHistory}
+          onLoadOlder={loadEarlierMessages}
+          onFocusRequestConsumed={onFindRequestConsumed}
+          onClose={closeFind}
+          onScrollToOffset={scrollToReadingOffset}
+        />
+      ) : null}
       {!showEmptyStarter && !deleteMode && !editingMessageId ? (
         <ChatMessageRail
           key={currentThread?.id ?? 'no-thread'}
           items={navigationItems}
           scrollRef={scrollRefInternal}
           contentRef={contentRef}
-          onScrollToOffset={scrollToOffset}
+          onScrollToOffset={scrollToReadingOffset}
           onScrollToBottom={scrollToBottom}
         />
       ) : null}

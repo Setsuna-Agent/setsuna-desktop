@@ -28,7 +28,7 @@ export const MarkdownVirtualBlock = memo(function MarkdownVirtualBlock({
     && Boolean(viewport?.supported);
   const [intersectsViewport, setIntersectsViewport] = useState(false);
   const [placeholderHeight, setPlaceholderHeight] = useState(estimatedHeight);
-  const shouldRender = !canVirtualize || forceRender || intersectsViewport;
+  const shouldRender = !canVirtualize || forceRender || viewport?.renderAll || intersectsViewport;
 
   useEffect(() => {
     if (!canVirtualize) return undefined;

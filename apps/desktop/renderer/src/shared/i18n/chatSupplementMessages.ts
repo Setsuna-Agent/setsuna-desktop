@@ -1,4 +1,9 @@
 export const chatSupplementZhCN = {
+  'chat.find.placeholder': '搜索对话内容',
+  'chat.find.previous': '上一个结果',
+  'chat.find.next': '下一个结果',
+  'chat.find.results': '第 {current} 项，共 {total} 项',
+  'chat.find.noResults': '无结果',
   'chat.copy.tool.awaiting': '等待授权',
   'chat.copy.tool.running': '正在使用',
   'chat.copy.tool.success': '已使用',
@@ -26,6 +31,9 @@ export const chatSupplementZhCN = {
   'chat.markdown.copyCode': '复制代码',
   'chat.markdown.copied': '已复制',
   'chat.markdown.copy': '复制',
+  'chat.markdown.copyLink': '复制链接',
+  'chat.markdown.openInAppBrowser': '在内置浏览器打开',
+  'chat.markdown.openExternalBrowser': '在外部浏览器打开',
   'chat.mention.openDefault': '使用默认打开方式打开 {path}',
   'chat.mention.openDirectory': '在文件管理器中打开 {path}',
   'chat.mention.openDirectoryUnsupported': '当前环境不支持打开工作区目录。',
@@ -45,6 +53,11 @@ export const chatSupplementZhCN = {
 } as const;
 
 export const chatSupplementEnUS = {
+  'chat.find.placeholder': 'Find in conversation',
+  'chat.find.previous': 'Previous result',
+  'chat.find.next': 'Next result',
+  'chat.find.results': '{current} of {total}',
+  'chat.find.noResults': 'No results',
   'chat.copy.tool.awaiting': 'Awaiting approval',
   'chat.copy.tool.running': 'Using',
   'chat.copy.tool.success': 'Used',
@@ -72,6 +85,9 @@ export const chatSupplementEnUS = {
   'chat.markdown.copyCode': 'Copy code',
   'chat.markdown.copied': 'Copied',
   'chat.markdown.copy': 'Copy',
+  'chat.markdown.copyLink': 'Copy link',
+  'chat.markdown.openInAppBrowser': 'Open in built-in browser',
+  'chat.markdown.openExternalBrowser': 'Open in external browser',
   'chat.mention.openDefault': 'Open {path} with the default app',
   'chat.mention.openDirectory': 'Open {path} in the file manager',
   'chat.mention.openDirectoryUnsupported': 'Opening workspace directories is not supported in this environment.',
