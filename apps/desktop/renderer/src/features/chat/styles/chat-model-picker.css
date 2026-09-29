@@ -121,6 +121,20 @@
   white-space: nowrap;
 }
 
+.chat-model-details-tooltip.sd-tooltip {
+  /* Model details share the menu surface and the current theme's text palette. */
+  --app-text: inherit;
+  --app-text-muted: inherit;
+  --app-text-secondary: inherit;
+
+  padding: 10px 12px;
+  border: 1px solid var(--app-menu-border);
+  border-radius: var(--app-menu-radius);
+  background: var(--app-menu-bg);
+  box-shadow: var(--app-menu-shadow);
+  backdrop-filter: var(--app-menu-backdrop-filter);
+}
+
 .chat-model-details {
   display: grid;
   gap: 6px;

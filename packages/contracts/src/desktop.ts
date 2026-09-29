@@ -13,6 +13,17 @@ export type DesktopOpenPathResult =
   | { ok: true }
   | { ok: false; error: string };
 
+export type DesktopApplicationMenuItem =
+  | { type: 'separator' }
+  | { type: 'command'; id: string; label: string; enabled: boolean }
+  | { type: 'edit'; role: 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'selectAll'; label: string };
+
+export type DesktopApplicationMenuInput = {
+  x: number;
+  y: number;
+  items: DesktopApplicationMenuItem[];
+};
+
 export const DESKTOP_CLIPBOARD_WRITE_PATH = '/v1/clipboard/write-text';
 
 export type DesktopClipboardWriteInput = Readonly<{ text: string }>;
@@ -154,6 +165,7 @@ export type SetsunaDesktopBridge = {
   };
   runtime: DesktopRuntimeBridge;
   windowControls: {
+    showApplicationMenu(input: DesktopApplicationMenuInput): Promise<string | null>;
     openThread(threadId: string): Promise<void>;
     getInitialThreadId(): Promise<string | null>;
     minimize(): Promise<boolean>;

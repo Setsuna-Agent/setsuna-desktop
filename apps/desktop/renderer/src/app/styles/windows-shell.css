@@ -1,0 +1,111 @@
+.app-shell--inset-headers .app-topbar {
+  grid-template-columns: auto minmax(0, 1fr) var(--app-topbar-trailing-width);
+  transition: none;
+}
+
+.app-shell--inset-headers .app-topbar__brand:has(> .app-topbar__nav:empty) {
+  display: none;
+}
+
+.app-shell--inset-headers .app-topbar__brand:has(> .app-topbar__nav:empty) + .app-menu-bar {
+  padding-left: var(--app-topbar-native-controls-inset);
+}
+
+.app-shell--inset-headers .app-window-controls {
+  grid-column: 3;
+}
+
+.app-shell--inset-headers .app-workbench {
+  grid-template-rows: [header] auto [content] minmax(0, 1fr) [bottom] var(--app-bottom-panel-height);
+}
+
+.app-menu-bar {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 2px;
+}
+
+.app-menu-bar__trigger.sd-button {
+  flex: 0 0 auto;
+  height: var(--app-topbar-navigation-control-size);
+  padding: 0 9px;
+  border: 0;
+  border-radius: var(--app-toolbar-control-radius);
+  background: transparent;
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
+.app-menu-bar__trigger.sd-button:hover,
+.app-menu-bar__trigger.sd-button[aria-expanded='true'] {
+  color: var(--app-text);
+  background: var(--app-toolbar-control-hover-bg);
+}
+
+.app-content-header,
+.app-workspace-header {
+  display: flex;
+  grid-row: header;
+  position: relative;
+  align-items: center;
+  min-width: 0;
+  height: var(--app-topbar-height);
+  background: var(--desktop-agent-main-bg);
+  border-bottom: 1px solid var(--desktop-agent-subtle-divider);
+  overflow: hidden;
+  z-index: 20;
+}
+
+/* Keep portal targets mounted, but let empty slot wrappers collapse the header row. */
+.app-content-header:not(:has(> :not(.app-topbar__route-slot:empty, .chat-toolbar-title:empty))),
+.app-workspace-header:empty {
+  display: none;
+}
+
+.app-content-header {
+  grid-column: 2;
+  justify-content: flex-end;
+  gap: var(--app-toolbar-action-gap);
+  padding: 0 var(--app-topbar-item-gap);
+  container-name: app-main-header;
+  container-type: inline-size;
+}
+
+.app-content-header > .sd-shortcut-tooltip-target {
+  flex: 0 0 auto;
+}
+
+.app-workspace-header {
+  grid-column: 3;
+}
+
+.app-shell--inspector-open .app-workspace-header {
+  border-left: 1px solid var(--desktop-agent-subtle-divider);
+}
+
+/* The header follows the panel's grid track while tabs retain their full width. */
+.app-shell:is(.desktop-agent-page--workspace-opening, .desktop-agent-page--workspace-closing) .app-workspace-header {
+  pointer-events: none;
+}
+
+.app-shell:is(.desktop-agent-page--workspace-opening, .desktop-agent-page--workspace-closing) .app-workspace-header > * {
+  flex: 0 0 var(--desktop-agent-workspace-visual-width);
+  width: var(--desktop-agent-workspace-visual-width);
+  margin-left: auto;
+}
+
+@media (max-width: 879px) {
+  .app-workspace-header {
+    grid-column: 2;
+    justify-self: end;
+    width: min(var(--desktop-agent-workspace-width), 100%);
+  }
+}
+
+@media (max-width: 760px) {
+  .app-content-header,
+  .app-workspace-header {
+    grid-column: 1;
+  }
+}

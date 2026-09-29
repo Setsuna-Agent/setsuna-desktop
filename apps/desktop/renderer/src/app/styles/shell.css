@@ -289,38 +289,25 @@
 
 :root[data-desktop-platform='win32'] {
   --app-topbar-native-controls-inset: 12px;
-  --app-titlebar-control-width: 138px;
+  /* 三个按钮、两个按钮间距与右侧留白共同决定标题栏预留宽度。 */
+  --app-titlebar-control-width: calc(3 * var(--app-topbar-navigation-control-size) + 2 * var(--app-toolbar-action-gap) + var(--app-topbar-item-gap));
+}
+
+:root[data-desktop-platform='win32'] .app-topbar__right {
+  padding-right: var(--app-topbar-item-gap);
 }
 
 .app-window-controls {
   display: inline-flex;
   grid-column: 4;
-  align-items: stretch;
   justify-content: flex-end;
-  align-self: stretch;
-  gap: 0;
+  gap: var(--app-toolbar-action-gap);
   height: 100%;
+  padding-right: calc(var(--app-topbar-item-gap) + var(--app-workbench-inset));
   background: transparent;
 }
 
-.app-window-controls button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 46px;
-  height: 100%;
-  padding: 0;
-  border: 0;
-  color: var(--app-titlebar-text);
-  background: transparent;
-}
-
-.app-window-controls button:hover {
-  color: var(--app-text);
-  background: color-mix(in srgb, var(--app-text) 8%, transparent);
-}
-
-.app-window-controls__close:hover {
+.app-window-controls .app-window-controls__close:hover:not(:disabled) {
   color: #ffffff;
   background: #e81123;
 }
@@ -331,7 +318,8 @@
   grid-row: 2;
   position: relative;
   grid-template-columns: var(--app-sidebar-width) minmax(0, 1fr) var(--desktop-agent-workspace-width);
-  grid-template-rows: minmax(0, 1fr) var(--app-bottom-panel-height);
+  /* Named rows let Windows insert content headers without moving the sidebar. */
+  grid-template-rows: [content] minmax(0, 1fr) [bottom] var(--app-bottom-panel-height);
   min-width: 0;
   min-height: 0;
   background: transparent;
@@ -374,20 +362,8 @@
 }
 
 @media (min-width: 761px) {
-  .app-workbench::after {
-    position: absolute;
-    z-index: 24;
-    inset: 0 auto 0 0;
-    width: var(--app-sidebar-width);
+  .app-sidebar-slot {
     box-shadow: inset -1px 0 color-mix(in srgb, var(--desktop-agent-sidebar-edge) 50%, transparent);
-    content: '';
-    pointer-events: none;
-    transition: width var(--app-sidebar-motion-duration) var(--app-sidebar-motion-easing);
-  }
-
-  .desktop-agent-page--sidebar-collapsed .app-workbench::after {
-    width: 0;
-    opacity: 0;
   }
 }
 
@@ -398,8 +374,7 @@ body.desktop-terminal-resizing .app-workbench {
 }
 
 body.desktop-agent-sidebar-resizing .app-topbar,
-body.desktop-agent-workspace-resizing .app-topbar,
-body.desktop-agent-sidebar-resizing .app-workbench::after {
+body.desktop-agent-workspace-resizing .app-topbar {
   transition: none;
 }
 
@@ -407,39 +382,41 @@ body.desktop-agent-sidebar-resizing .app-workbench::after {
   grid-template-columns: var(--app-sidebar-width) minmax(0, 1fr) 0;
 }
 
-.app-sidebar {
-  display: flex;
+.app-sidebar-slot {
   grid-column: 1;
   grid-row: 1 / -1;
-  flex-direction: column;
   position: relative;
-  width: var(--desktop-agent-sidebar-visual-width);
   min-width: 0;
   min-height: 0;
-  clip-path: inset(0);
+  /* Clip to the live grid track, including sidebars first mounted during a route change. */
   overflow: hidden;
-  background: transparent;
-  color: var(--app-sidebar-text);
   opacity: 1;
-  /* 固定内容宽度并按布局轨道裁切，避免列宽动画和整栏位移产生双重速度。 */
   transition:
-    clip-path var(--app-sidebar-motion-duration) var(--app-sidebar-motion-easing),
     opacity 130ms ease 70ms,
     visibility 0s linear 0s;
   visibility: visible;
 }
 
-.desktop-agent-page--sidebar-collapsed .app-sidebar {
-  width: var(--desktop-agent-sidebar-visual-width);
-  min-width: var(--desktop-agent-sidebar-visual-width);
-  clip-path: inset(0 100% 0 0);
+.desktop-agent-page--sidebar-collapsed .app-sidebar-slot {
   opacity: 0;
   pointer-events: none;
   transition:
-    clip-path var(--app-sidebar-motion-duration) var(--app-sidebar-motion-easing),
     opacity 110ms ease,
     visibility 0s linear var(--app-sidebar-motion-duration);
   visibility: hidden;
+}
+
+.app-sidebar {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  width: var(--desktop-agent-sidebar-visual-width);
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: transparent;
+  color: var(--app-sidebar-text);
 }
 
 .desktop-agent-sidebar__resize-handle,
@@ -507,7 +484,7 @@ body.desktop-terminal-resizing {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .app-sidebar {
+  .app-sidebar-slot {
     display: none;
   }
 }

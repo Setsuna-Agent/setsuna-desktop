@@ -78,6 +78,27 @@
   stroke-width: 1.7;
 }
 
+.app-navigation__avatar {
+  display: block;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  overflow: hidden;
+  border-radius: 50%;
+}
+
+.app-navigation__avatar > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.app-navigation__avatar > .app-navigation__logo {
+  /* Crop the app icon's transparent safety margin so the portrait fills the circle. */
+  transform: scale(1.25);
+}
+
 .app-navigation__button.sd-button:focus-visible {
   outline: 0;
   box-shadow: var(--app-focus-ring);

@@ -1,5 +1,6 @@
 @import "../../shared/styles/base.css";
 @import "./shell.css";
+@import "./windows-shell.css";
 @import "./navigation.css";
 
 .app-blank-surface {

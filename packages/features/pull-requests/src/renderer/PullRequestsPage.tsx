@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { PullRequestReference } from '../contracts/index.js';
 import type { PullRequestsRendererHost } from './host.js';
 import type { PullRequestsClient } from './client.js';
+import type { PullRequestConnectionState } from './account/connection-state.js';
 import { PullRequestsHostContext, usePrText } from './context.js';
 import { useConnection } from './useConnection.js';
 import { useCliInstallation } from './useCliInstallation.js';
@@ -17,12 +18,14 @@ import { PullRequestScrollArea } from './PullRequestScrollArea.js';
 import { CheckState, Loading, PullRequestState, Timestamp } from './status.js';
 import type { PullRequestSession } from './session.js';
 
-export function PullRequestsPage({ client, host, session }: { client: PullRequestsClient; host: PullRequestsRendererHost; session: PullRequestSession }) {
-  return <PullRequestsHostContext.Provider value={host}><Workbench client={client} session={session} /></PullRequestsHostContext.Provider>;
+type PullRequestsPageProps = { client: PullRequestsClient; connectionState: PullRequestConnectionState; host: PullRequestsRendererHost; session: PullRequestSession };
+
+export function PullRequestsPage({ client, connectionState, host, session }: PullRequestsPageProps) {
+  return <PullRequestsHostContext.Provider value={host}><Workbench client={client} connectionState={connectionState} session={session} /></PullRequestsHostContext.Provider>;
 }
-function Workbench({ client, session }: { client: PullRequestsClient; session: PullRequestSession }) {
+function Workbench({ client, connectionState, session }: Omit<PullRequestsPageProps, 'host'>) {
   const t = usePrText();
-  const auth = useConnection(client);
+  const auth = useConnection(client, connectionState);
   const installation = useCliInstallation(client, auth.refresh);
   const loginCommand = auth.connection?.loginCommand ?? 'gh auth login --hostname github.com --web';
   const installLabel = installation.pending ? installation.state?.phase === 'downloading'

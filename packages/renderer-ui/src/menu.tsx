@@ -15,6 +15,7 @@ export type MenuItem = {
   /** Optional control (such as search) before the submenu's roving menu items. */
   submenuInitialFocusRef?: RefObject<HTMLElement>;
   tooltip?: ReactNode;
+  tooltipClassName?: string;
   onClick?(action: MenuAction): void;
 };
 export type MenuProps = {
@@ -103,7 +104,7 @@ function MenuItems({ menu, context }: { menu: MenuProps; context: boolean }) {
     </ui.Sub>;
     const row = <ui.Item key={key} className={cn('sd-menu__item', item.className, selected && 'is-selected', item.danger && 'is-danger')} disabled={item.disabled}
       onSelect={(event) => { const action = { key, domEvent: event }; item.onClick?.(action); menu.onClick?.(action); }}>{content}</ui.Item>;
-    return item.tooltip ? <Tooltip key={key} title={item.tooltip} placement="right" mouseEnterDelay={0.35}>{row}</Tooltip> : row;
+    return item.tooltip ? <Tooltip key={key} title={item.tooltip} className={item.tooltipClassName} placement="right" mouseEnterDelay={0.35}>{row}</Tooltip> : row;
   })}</>;
 }
 

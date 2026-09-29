@@ -69,6 +69,12 @@ export const shellSidebarSlot = defineSingleRendererSlot<ShellRegionSlotProps>({
   userConfigurable: true,
 });
 
+export const shellSidebarAvatarSlot = defineSingleRendererSlot<ShellRegionSlotProps>({
+  id: 'renderer.shell.sidebar.avatar',
+  scope: 'app',
+  userConfigurable: false,
+});
+
 /** Host-owned outlet for declarative Plugin feature navigation only. */
 export const shellSidebarPluginEntrySlot = defineListRendererSlot<ShellSidebarPluginEntrySlotProps>({
   id: 'renderer.shell.sidebar.plugin-entry',

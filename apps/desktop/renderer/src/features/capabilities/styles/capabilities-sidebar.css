@@ -96,8 +96,8 @@
     grid-template-columns: var(--app-sidebar-width) minmax(0, 1fr);
   }
 
-  .capabilities-sidebar.app-sidebar {
-    display: flex;
+  .desktop-agent-page--capabilities-open .app-sidebar-slot {
+    display: block;
   }
 
   .desktop-agent-page--capabilities-open .capabilities-page {

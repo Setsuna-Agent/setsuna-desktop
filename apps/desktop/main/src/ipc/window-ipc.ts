@@ -1,6 +1,7 @@
 import type { DesktopWindowCloseBehavior } from '@setsuna-desktop/contracts';
 import { BrowserWindow, ipcMain } from 'electron';
 import { toggleWindowMaximized } from '../window/frame.js';
+import { showApplicationMenu } from '../window/application-menu.js';
 import { isDesktopRendererSender } from './sender.js';
 
 type WindowIpcOptions = {
@@ -15,6 +16,7 @@ export function registerWindowIpc({
   setCloseBehavior,
 }: WindowIpcOptions): void {
   const channels = [
+    'window-control:show-application-menu',
     'window-control:minimize',
     'window-control:toggle-maximize',
     'window-control:close',
@@ -24,6 +26,12 @@ export function registerWindowIpc({
     'window-control:set-titlebar-scale',
   ];
   for (const channel of channels) ipcMain.removeHandler(channel);
+
+  ipcMain.handle('window-control:show-application-menu', (event, input: unknown) => {
+    if (!isDesktopRendererSender(event.sender)) return null;
+    const window = BrowserWindow.fromWebContents(event.sender);
+    return window ? showApplicationMenu(window, input) : null;
+  });
 
   ipcMain.handle('window-control:minimize', (event) => {
     BrowserWindow.fromWebContents(event.sender)?.minimize();

@@ -1,7 +1,7 @@
 .bottom-panel {
   display: grid;
   grid-column: 2 / -1;
-  grid-row: 2;
+  grid-row: bottom;
   position: relative;
   grid-template-rows: var(--desktop-workspace-toolbar-height) minmax(0, 1fr);
   min-width: 0;

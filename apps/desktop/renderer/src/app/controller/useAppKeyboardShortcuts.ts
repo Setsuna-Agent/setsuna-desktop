@@ -16,7 +16,7 @@ export type AppKeyboardShortcutHandler = {
   enabled?: boolean;
   allowInModal?: boolean;
   allowInTerminal?: boolean;
-  execute: (event: AppKeyboardShortcutEvent) => void;
+  execute: (event?: AppKeyboardShortcutEvent) => void;
 };
 
 export type AppKeyboardShortcutHandlers = Partial<
@@ -83,10 +83,10 @@ export function matchingKeyboardShortcutCommand(
 }
 
 export function browserShortcutTabId(
-  event: AppKeyboardShortcutEvent,
+  event: AppKeyboardShortcutEvent | undefined,
   fallbackTabId: string | null,
 ): string | null {
-  if ('source' in event && event.source?.kind === 'embedded-browser') return event.source.tabId;
+  if (event && 'source' in event && event.source?.kind === 'embedded-browser') return event.source.tabId;
   return fallbackTabId;
 }
 

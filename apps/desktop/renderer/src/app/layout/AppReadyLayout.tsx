@@ -36,6 +36,7 @@ import { AppWorkspaceToolbar } from './AppWorkspaceToolbar.js';
 import { RuntimeErrorNotice, runtimeErrorNoticeMessage } from './RuntimeErrorNotice.js';
 import { MissingWorktreeDialog } from '../../features/workspace/MissingWorktreeDialog.js';
 import { ShellFrame } from './ShellFrame.js';
+import { AppMenuBar } from './AppMenuBar.js';
 import { useSecondaryRoutePrefetch } from './useSecondaryRoutePrefetch.js';
 import {
   RendererOwnedSingleSlot,
@@ -200,7 +201,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   ))?.panel.id ?? null;
   const reloadBrowserPanel = useCallback((
     mode: BrowserReloadMode,
-    event: AppKeyboardShortcutEvent,
+    event?: AppKeyboardShortcutEvent,
   ) => {
     const browserPanelId = browserShortcutTabId(event, activeBrowserPanelId);
     if (!browserPanelId) return;
@@ -372,6 +373,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
 
   return (
     <ShellFrame
+      applicationMenu={<AppMenuBar handlers={shortcutHandlers} />}
       rootRef={shellRef}
       inspectorOpen={workspacePanelReservesLayout}
       style={shellStyle}

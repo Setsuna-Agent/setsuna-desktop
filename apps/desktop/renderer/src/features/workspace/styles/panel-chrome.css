@@ -246,7 +246,7 @@
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 4px;
+  gap: var(--app-toolbar-action-gap);
   margin-left: auto;
 }
 

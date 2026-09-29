@@ -29,6 +29,9 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
   contextMenus: BrowserContextMenuSession;
 }>): () => void {
   const { mainWindow } = input;
+  // Closed windows no longer expose native properties; retain the event emitter
+  // while it is alive so teardown only removes listeners from the saved object.
+  const hostContents = mainWindow.webContents;
   const guestDisposers = new Map<number, () => void>();
   const browserSession = session.fromPartition(DESKTOP_BROWSER_PARTITION);
   // Keep this deny handler for the process lifetime. Clearing it while guest views
@@ -51,7 +54,8 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
   };
 
   const handleDidAttachWebview = (_event: Event, guestContents: WebContents) => {
-    guestDisposers.get(guestContents.id)?.();
+    const guestId = guestContents.id;
+    guestDisposers.get(guestId)?.();
 
     const handleInput = (event: Event, keyboardInput: Input) => {
       const shortcut = embeddedBrowserKeyboardShortcut(
@@ -59,7 +63,7 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
         input.activeKeyboardShortcutBindings(),
         {
           kind: 'embedded-browser',
-          tabId: input.browserTabIdForWebContents(guestContents.id),
+          tabId: input.browserTabIdForWebContents(guestId),
         },
       );
       if (!shortcut) return;
@@ -70,16 +74,16 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
     };
     const requestNewTab = (url: string): boolean => {
       const hostWebContents = guestContents.hostWebContents;
-      if (requestEmbeddedBrowserNewTab(hostWebContents, guestContents.id, url)) {
+      if (requestEmbeddedBrowserNewTab(hostWebContents, guestId, url)) {
         console.info('[browser] intercepted new-window request', {
-          openerWebContentsId: guestContents.id,
+          openerWebContentsId: guestId,
           url,
         });
         return true;
       }
       console.warn('[browser] blocked new-window request', {
         hasHostWebContents: Boolean(hostWebContents),
-        openerWebContentsId: guestContents.id,
+        openerWebContentsId: guestId,
         url,
       });
       return false;
@@ -102,7 +106,7 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
       guestContents.off('context-menu', handleContextMenu);
       guestContents.off('will-navigate', handleWillNavigate);
       guestContents.off('destroyed', handleDestroyed);
-      guestDisposers.delete(guestContents.id);
+      guestDisposers.delete(guestId);
     };
 
     guestContents.on('before-input-event', handleInput);
@@ -113,14 +117,14 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
       requestNewTab(url);
       return { action: 'deny' };
     });
-    guestDisposers.set(guestContents.id, disposeGuest);
+    guestDisposers.set(guestId, disposeGuest);
   };
 
-  mainWindow.webContents.on('will-attach-webview', handleWillAttachWebview);
-  mainWindow.webContents.on('did-attach-webview', handleDidAttachWebview);
+  hostContents.on('will-attach-webview', handleWillAttachWebview);
+  hostContents.on('did-attach-webview', handleDidAttachWebview);
   return () => {
-    mainWindow.webContents.off('will-attach-webview', handleWillAttachWebview);
-    mainWindow.webContents.off('did-attach-webview', handleDidAttachWebview);
+    hostContents.off('will-attach-webview', handleWillAttachWebview);
+    hostContents.off('did-attach-webview', handleDidAttachWebview);
     for (const dispose of [...guestDisposers.values()]) dispose();
   };
 }
