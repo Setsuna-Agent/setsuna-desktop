@@ -1,3 +1,4 @@
+import type { ThreadMenuState } from '../thread-menu/useThreadMenu.js';
 import { Button } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
 import { useState } from 'react';
@@ -37,6 +38,8 @@ export function SidebarThreadList({
   threads,
   variant,
   onArchive,
+  threadMenu,
+  onOpenInNewWindow,
   onRename,
   onSelect,
   onToggleMenu,
@@ -50,6 +53,8 @@ export function SidebarThreadList({
   threads: RuntimeThreadSummary[];
   variant: 'global' | 'project' | 'pinned';
   onArchive: (thread: RuntimeThreadSummary) => void;
+  threadMenu: ThreadMenuState;
+  onOpenInNewWindow: (threadId: string) => void;
   onRename: (thread: RuntimeThreadSummary) => void;
   onSelect: (threadId: string) => void;
   onToggleMenu: (threadId: string) => void;
@@ -88,6 +93,8 @@ export function SidebarThreadList({
           thread={thread}
           variant={variant}
           onArchive={onArchive}
+          threadMenu={threadMenu}
+          onOpenInNewWindow={onOpenInNewWindow}
           onRename={onRename}
           onSelect={onSelect}
           onToggleMenu={onToggleMenu}

@@ -149,7 +149,7 @@ function CapabilitiesCreateMenu({
         {buttonLabel}
       </Button>
       {open ? (
-        <MenuSurface className="desktop-capabilities-create-menu" role="menu" style={{ transformOrigin: 'top right' }}>
+        <MenuSurface className="desktop-capabilities-create-menu" role="menu">
           {items.map((item) => (
             <UiButton variant="ghost"
               className="desktop-capabilities-create-menu__item"
@@ -162,7 +162,7 @@ function CapabilitiesCreateMenu({
                 item.onSelect();
               }}
             >
-              <span className="desktop-capabilities-create-menu__icon">{item.icon}</span>
+              <span className="desktop-capabilities-create-menu__icon" data-menu-color="preserve">{item.icon}</span>
               <span className="desktop-capabilities-create-menu__content">
                 <strong>{item.title}</strong>
                 <span>{item.description}</span>

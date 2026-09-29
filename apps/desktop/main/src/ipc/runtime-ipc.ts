@@ -1,7 +1,10 @@
 import { ipcMain } from 'electron';
 import type { RuntimeHost } from '../runtime/host.js';
+import type { RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
+import { createThreadDeletionHandler } from '../window/thread-deletion.js';
 
-export function registerRuntimeIpc(host: RuntimeHost): void {
+export function registerRuntimeIpc(host: RuntimeHost, language: () => RuntimeInterfaceLanguage): void {
+  const deleteThread = createThreadDeletionHandler(host, language);
   ipcMain.removeHandler('runtime:request');
   ipcMain.removeHandler('runtime:cancel-request');
   ipcMain.removeHandler('runtime:link-attachment');
@@ -9,7 +12,11 @@ export function registerRuntimeIpc(host: RuntimeHost): void {
   ipcMain.removeHandler('runtime:read-attachment-image');
   ipcMain.removeHandler('runtime:subscribe');
   ipcMain.removeHandler('runtime:unsubscribe');
-  ipcMain.handle('runtime:request', async (_event, input) => host.request(input));
+  ipcMain.handle('runtime:request', async (event, input) => (
+    input?.method === 'DELETE' && /^\/v1\/threads\/[^/?]+$/.test(input.path)
+      ? deleteThread(event.sender, input)
+      : host.request(input)
+  ));
   ipcMain.handle('runtime:cancel-request', async (_event, input) => (
     host.cancelRequest(String(input?.requestId ?? ''))
   ));

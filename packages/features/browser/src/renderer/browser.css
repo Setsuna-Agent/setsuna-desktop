@@ -140,28 +140,16 @@
   z-index: 40;
   display: grid;
   width: 220px;
-  padding: 6px;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-md);
-  background: var(--app-surface);
-  box-shadow: var(--app-shadow-popover);
 }
 
 .desktop-browser-window-menu__popover > button {
   display: flex;
   align-items: center;
-  min-height: 30px;
-  padding: 0 9px;
   border: 0;
-  border-radius: var(--app-radius-sm);
   color: var(--app-text);
   background: transparent;
   font-size: 13px;
   text-align: left;
-}
-
-.desktop-browser-window-menu__popover > button:hover {
-  background: var(--desktop-agent-control-hover-bg);
 }
 
 .desktop-browser-window-menu__popover > button:disabled {
@@ -209,10 +197,6 @@
 
 .desktop-browser-window-menu__zoom-controls button:last-child {
   border-right: 0;
-}
-
-.desktop-browser-window-menu__zoom-controls button:not(:disabled):hover {
-  background: var(--desktop-agent-control-hover-bg);
 }
 
 .desktop-browser-window-menu__zoom-controls button:disabled {

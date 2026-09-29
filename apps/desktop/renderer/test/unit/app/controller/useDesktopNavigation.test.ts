@@ -12,7 +12,12 @@ import { addPanelToSlotState, createBrowserPanel } from '../../../../src/feature
 
 afterEach(cleanup);
 
-it.each([false, true])('opens a fork under its original project, unless navigation changed while creating it: %s', async (navigateAway) => {
+it.each([
+  { navigateAway: false, fromSidebar: false },
+  { navigateAway: true, fromSidebar: false },
+  { navigateAway: false, fromSidebar: true },
+  { navigateAway: true, fromSidebar: true },
+])('opens a fork in its original project; navigateAway=$navigateAway, fromSidebar=$fromSidebar', async ({ navigateAway, fromSidebar }) => {
   const source: RuntimeThread = { id: 'source', projectId: 'original', title: 'Source', createdAt: '', updatedAt: '',
     archived: false, messageCount: 0, lastMessagePreview: '', messages: [], lastSeq: 0 };
   const forked = { ...source, id: 'forked', workspaceId: 'worktree' };
@@ -37,12 +42,14 @@ it.each([false, true])('opens a fork under its original project, unless navigati
   });
   let pending!: Promise<void>;
   await act(async () => {
-    pending = result.current.navigation.forkThread({ messageId: 'answer', target: 'worktree' });
+    pending = fromSidebar
+      ? result.current.navigation.forkThreadFromId('unselected-thread', { messageId: 'answer', target: 'worktree' })
+      : result.current.navigation.forkThread({ messageId: 'answer', target: 'worktree' });
     await Promise.resolve();
   });
   if (navigateAway) await act(() => result.current.navigation.selectThread(other.id));
   await act(async () => { finish(forked); await pending; });
-  expect(forkThread).toHaveBeenCalledWith(source.id, { messageId: 'answer', target: 'worktree' });
+  expect(forkThread).toHaveBeenCalledWith(fromSidebar ? 'unselected-thread' : source.id, { messageId: 'answer', target: 'worktree' });
   expect(reloadThreads).toHaveBeenCalledTimes(1);
   expect(result.current.projects).toEqual([project]);
   expect(listProjects).not.toHaveBeenCalled();

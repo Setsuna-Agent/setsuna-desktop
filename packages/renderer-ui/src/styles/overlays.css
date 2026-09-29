@@ -12,7 +12,7 @@
   font-family: var(--app-font-family);
 }
 
-.sd-menu, .sd-popover {
+.sd-popover {
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-lg);
   background: var(--app-surface);
@@ -26,7 +26,6 @@
   min-width: 180px;
   max-width: min(420px, calc(100vw - 24px));
   max-height: var(--radix-dropdown-menu-content-available-height, 70vh);
-  padding: 5px;
   overflow-y: auto;
   outline: none;
 }
@@ -35,22 +34,11 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 30px;
-  padding: 5px 9px;
-  border-radius: var(--app-radius-xs);
   color: var(--app-text);
   font-size: 12px;
-  line-height: 20px;
   outline: none;
   cursor: default;
   user-select: none;
-}
-
-/* Menu interaction states share a neutral fill, independent of the accent color. */
-.sd-menu__item[data-highlighted],
-.sd-menu__item[data-state='open'],
-.sd-menu__item.is-selected {
-  background: var(--desktop-agent-control-hover-bg);
 }
 
 .sd-menu__item.is-danger {
@@ -96,13 +84,19 @@
 }
 
 .sd-tooltip {
+  /* Rich titles inherit a readable palette on the tooltip's dark surface. */
+  --app-text: var(--app-tooltip-text);
+  --app-text-muted: color-mix(in srgb, var(--app-tooltip-text) 72%, transparent);
+  --app-text-secondary: var(--app-text-muted);
+  /* Avoid the extra baseline space below inline-flex shortcut content. */
+  display: flex;
+  flex-direction: column;
   max-width: min(360px, calc(100vw - 24px));
-  padding: 6px 9px;
+  padding: 6px 10px;
   color: var(--app-text);
   background: var(--app-tooltip-bg);
-  border: 1px solid var(--app-tooltip-border);
-  border-radius: var(--app-radius-sm);
-  box-shadow: var(--app-shadow-raised);
+  border-radius: var(--app-radius-xl);
+  box-shadow: var(--app-tooltip-shadow);
   font-size: 12px;
   line-height: 18px;
   overflow-wrap: anywhere;

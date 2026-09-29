@@ -1,12 +1,12 @@
-import { ipcMain, type BrowserWindow } from 'electron';
+import { ipcMain } from 'electron';
 import type { DesktopDataRootCoordinator } from '../data-root/coordinator.js';
+import { desktopWindows } from '../window/registry.js';
 import { isDesktopRendererSender } from './sender.js';
 
 const DATA_ROOT_STATE_CHANNEL = 'desktop-data-root:state-change';
 
 export function registerDataRootIpc(
   coordinator: DesktopDataRootCoordinator,
-  mainWindow: BrowserWindow,
 ): () => void {
   const channels = [
     'desktop-data-root:get-state',
@@ -23,7 +23,7 @@ export function registerDataRootIpc(
   for (const channel of channels) ipcMain.removeHandler(channel);
 
   const trusted = (sender: Electron.WebContents) =>
-    isDesktopRendererSender(sender, mainWindow);
+    isDesktopRendererSender(sender);
   ipcMain.handle('desktop-data-root:get-state', (event) => {
     if (!trusted(event.sender)) throw new Error('Desktop renderer is unavailable.');
     return coordinator.getState();
@@ -69,6 +69,6 @@ export function registerDataRootIpc(
   });
 
   return coordinator.subscribe((state) => {
-    if (!mainWindow.isDestroyed()) mainWindow.webContents.send(DATA_ROOT_STATE_CHANNEL, state);
+    desktopWindows.publish(DATA_ROOT_STATE_CHANNEL, state);
   });
 }

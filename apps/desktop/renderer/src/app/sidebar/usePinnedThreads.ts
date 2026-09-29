@@ -12,15 +12,21 @@ export function usePinnedThreads(
   const [pinnedThreadIds, setPinnedThreadIds] = useState(readPinnedThreadIds);
 
   useEffect(() => {
-    writeBrowserStorageValue(PINNED_THREADS_STORAGE_KEY, JSON.stringify([...pinnedThreadIds]));
-  }, [pinnedThreadIds]);
+    const sync = (event: StorageEvent) => {
+      if (event.key === PINNED_THREADS_STORAGE_KEY || event.key === null) setPinnedThreadIds(readPinnedThreadIds());
+    };
+    window.addEventListener('storage', sync);
+    return () => window.removeEventListener('storage', sync);
+  }, []);
 
   const togglePinnedThread = useCallback((thread: RuntimeThreadSummary) => {
-    setPinnedThreadIds((current) => {
-      const next = new Set(current);
-      if (next.delete(thread.id)) return next;
-      return new Set([thread.id, ...current]);
-    });
+    // Read the latest shared value so another window's pins are preserved.
+    const current = readPinnedThreadIds();
+    const next = current.has(thread.id)
+      ? new Set([...current].filter((id) => id !== thread.id))
+      : new Set([thread.id, ...current]);
+    writeBrowserStorageValue(PINNED_THREADS_STORAGE_KEY, JSON.stringify([...next]));
+    setPinnedThreadIds(next);
   }, []);
 
   const pinnedThreads = useMemo(() => {
@@ -38,6 +44,8 @@ export function usePinnedThreads(
 
   return { pinnedThreadIds, pinnedThreads, togglePinnedThread };
 }
+
+export type PinnedThreadsState = ReturnType<typeof usePinnedThreads>;
 
 function readPinnedThreadIds(): Set<string> {
   try {

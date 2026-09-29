@@ -56,6 +56,10 @@ export type DesktopUserProfile = {
 };
 
 export type DesktopRuntimeBridge = {
+  onThreadDeletionCheck(
+    check: () => DesktopThreadDeletionState,
+    finished: (result: DesktopThreadDeletionFinished) => void,
+  ): () => void;
   request<T = unknown>(input: RuntimeRequestInput): Promise<T>;
   cancelRequest(requestId: string): Promise<boolean>;
   linkAttachment(file: File): Promise<RuntimeStoredMessageAttachment | null>;
@@ -63,6 +67,21 @@ export type DesktopRuntimeBridge = {
   readAttachmentImage(threadId: string, assetId: string): Promise<DesktopImageDataResult>;
   startSse(threadId: string, sinceSeq: number | undefined, onBatch: (batch: RuntimeEventBatch) => void): () => void;
 };
+
+export const THREAD_DELETION_CHANNELS = {
+  check: 'runtime:thread-deletion-check',
+  checked: 'runtime:thread-deletion-checked',
+  finished: 'runtime:thread-deletion-finished',
+} as const;
+
+export type DesktopThreadDeletionState = {
+  threadId: string | null;
+  dirty: boolean;
+  busy: boolean;
+};
+
+export type DesktopThreadDeletionFinished = { deletedThreadIds: string[] };
+export type DesktopThreadDeletionResult = { cancelled: true };
 
 export type DesktopRuntimeEventPayload =
   | {
@@ -135,6 +154,8 @@ export type SetsunaDesktopBridge = {
   };
   runtime: DesktopRuntimeBridge;
   windowControls: {
+    openThread(threadId: string): Promise<void>;
+    getInitialThreadId(): Promise<string | null>;
     minimize(): Promise<boolean>;
     toggleMaximize(): Promise<boolean>;
     close(): Promise<boolean>;

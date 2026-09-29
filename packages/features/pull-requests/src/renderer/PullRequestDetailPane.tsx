@@ -13,6 +13,7 @@ import { MergeActions } from './MergeActions.js';
 import { PullRequestStatus } from './PullRequestStatus.js';
 import { PullRequestHeader } from './PullRequestHeader.js';
 import { PullRequestDetailLoading } from './PullRequestDetailLoading.js';
+import { PullRequestScrollArea } from './PullRequestScrollArea.js';
 import type { PullRequestSession, PullRequestTab } from './session.js';
 
 export function PullRequestDetailPane({ client, reference, summary, account, session, onUpdated }: {
@@ -54,15 +55,13 @@ function DetailBody({ client, detail, account, session, revision, onUpdated, onR
         {value === 'checks' && detail.checksProgress ? <small title={t('checksProgress', detail.checksProgress)}>{detail.checksProgress.passed}/{detail.checksProgress.total}</small> : null}
       </Button>)}
     </div>
-    <div className={`pr-detail__body${tab === 'diff' ? ' pr-detail__body--diff' : ''}`} ref={scroll} onScroll={(event) => session.detailScroll.set(scrollKey, event.currentTarget.scrollTop)}>
-      <div className="pr-detail__main">
-        <section id="pr-panel-overview" className="pr-detail__panel--overview" role="tabpanel" aria-labelledby="pr-tab-overview" hidden={tab !== 'overview'}>
-          <div className="pr-markdown pr-description" aria-label={t('description')}><Markdown content={detail.body || t('noDescription')} baseUrl={`https://github.com/${detail.headRepository ?? detail.repository}/blob/${detail.headSha}/`} /></div>
-          <DiscussionTimeline client={client} detail={detail} account={account} discussions={discussions} onPublished={onUpdated} onDiff={(discussion) => { setFocus({ discussion, version: Date.now() }); selectTab('diff'); }} />
-        </section>
-        <section id="pr-panel-diff" className="pr-detail__panel--diff" role="tabpanel" aria-labelledby="pr-tab-diff" hidden={tab !== 'diff'}>{visited.has('diff') ? <PullRequestDiff client={client} detail={detail} account={account} discussions={discussions} focus={focus} onPublished={onUpdated} /> : null}</section>
-        <section id="pr-panel-checks" role="tabpanel" aria-labelledby="pr-tab-checks" hidden={tab !== 'checks'}>{visited.has('checks') ? <PullRequestChecks client={client} detail={detail} revision={revision} /> : null}</section>
-      </div>
-    </div>
+    <PullRequestScrollArea className={`pr-detail__body${tab === 'diff' ? ' pr-detail__body--diff' : ''}`} contentClassName="pr-detail__main" scrollRef={scroll} scrollable={tab !== 'diff'} onScroll={(event) => session.detailScroll.set(scrollKey, event.currentTarget.scrollTop)}>
+      <section id="pr-panel-overview" className="pr-detail__panel--overview" role="tabpanel" aria-labelledby="pr-tab-overview" hidden={tab !== 'overview'}>
+        <div className="pr-markdown pr-description" aria-label={t('description')}><Markdown content={detail.body || t('noDescription')} baseUrl={`https://github.com/${detail.headRepository ?? detail.repository}/blob/${detail.headSha}/`} /></div>
+        <DiscussionTimeline client={client} detail={detail} account={account} discussions={discussions} onPublished={onUpdated} onDiff={(discussion) => { setFocus({ discussion, version: Date.now() }); selectTab('diff'); }} />
+      </section>
+      <section id="pr-panel-diff" className="pr-detail__panel--diff" role="tabpanel" aria-labelledby="pr-tab-diff" hidden={tab !== 'diff'}>{visited.has('diff') ? <PullRequestDiff client={client} detail={detail} account={account} discussions={discussions} focus={focus} onPublished={onUpdated} /> : null}</section>
+      <section id="pr-panel-checks" role="tabpanel" aria-labelledby="pr-tab-checks" hidden={tab !== 'checks'}>{visited.has('checks') ? <PullRequestChecks client={client} detail={detail} revision={revision} /> : null}</section>
+    </PullRequestScrollArea>
   </article>;
 }

@@ -2,10 +2,13 @@ import type { RuntimeThreadSummary, WorkspaceProject } from '@setsuna-desktop/co
 import type { PointerEvent as ReactPointerEvent, Ref } from 'react';
 import type { DesktopNavigationState } from '../controller/useDesktopNavigation.js';
 import { AgentSidebar } from '../sidebar/AgentSidebar.js';
-import { usePinnedThreads } from '../sidebar/usePinnedThreads.js';
+import type { ThreadMenuState } from '../thread-menu/useThreadMenu.js';
+import type { PinnedThreadsState } from '../sidebar/usePinnedThreads.js';
 import type { MainView } from '../types.js';
 
 export function AppSidebarSurface({
+  threadMenu,
+  pins,
   activeProjectId,
   activeThreadId,
   runningThreadId,
@@ -21,7 +24,10 @@ export function AppSidebarSurface({
   minWidth,
   onResizeStep,
   onResizeStart,
+  onOpenThreadInNewWindow,
 }: {
+  threadMenu: ThreadMenuState;
+  pins: PinnedThreadsState;
   activeProjectId: string | null;
   activeThreadId?: string | null;
   runningThreadId?: string | null;
@@ -37,12 +43,14 @@ export function AppSidebarSurface({
   minWidth: number;
   onResizeStep: (delta: number) => void;
   onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onOpenThreadInNewWindow: (threadId: string) => void;
 }) {
-  const { pinnedThreadIds, pinnedThreads, togglePinnedThread } = usePinnedThreads(projects, threadsByProjectId, globalThreads);
+  const { pinnedThreadIds, pinnedThreads, togglePinnedThread } = pins;
   if (activeView !== 'chat') return null;
 
   return (
     <AgentSidebar
+      threadMenu={threadMenu}
       activeProjectId={activeProjectId}
       activeThreadId={activeThreadId}
       collapsed={sidebarCollapsed}
@@ -95,6 +103,7 @@ export function AppSidebarSurface({
       onToggleSearch={() => navigation.setSidebarSearchOpen((value) => !value)}
       onToggleSessionsCollapsed={() => navigation.setSessionsCollapsed((value) => !value)}
       onToggleThreadActions={(threadId) => navigation.setThreadActionMenuId((current) => (current === threadId ? null : threadId))}
+      onOpenThreadInNewWindow={onOpenThreadInNewWindow}
       onRenameThread={navigation.openRenameThread}
     />
   );

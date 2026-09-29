@@ -196,7 +196,7 @@ function DeclarativePluginUiViewInstance({
       ? 'page'
       : 'settings';
   return (
-    <div className={`declarative-plugin-ui declarative-plugin-ui--${mode}`}>
+    <div className={`declarative-plugin-ui declarative-plugin-ui--${mode}${mode === 'settings' ? ' sd-settings-form' : ''}`}>
       {renderNode(contribution.tree, 'root', {
         actions,
         actionState,

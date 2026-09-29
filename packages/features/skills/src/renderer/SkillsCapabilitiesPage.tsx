@@ -31,6 +31,7 @@ import {
 import type { SkillsRendererService } from '../contracts/index.js';
 import type { SkillsTranslate } from './messages.js';
 import { SkillDetail } from './SkillDetail.js';
+import { groupSkillsBySource, skillDirectoryPresets } from './skillCatalog.js';
 
 type SkillPageMode = 'catalog' | 'create' | 'detail' | 'edit';
 
@@ -41,20 +42,6 @@ type SkillEditorDraft = Readonly<{
   id: string;
   name: string;
 }>;
-
-const skillGroups = [
-  ['user', 'feature.skills.category.user'],
-  ['plugin', 'feature.skills.category.plugin'],
-  ['builtin', 'feature.skills.category.builtin'],
-] as const;
-
-const skillDirectoryPresets = [
-  { id: 'global', labelKey: 'feature.skills.directory.global', homeRelativePath: ['.agents', 'skills'] },
-  { id: 'codex', labelKey: 'feature.skills.directory.codex', homeRelativePath: ['.codex', 'skills'] },
-  { id: 'claude', labelKey: 'feature.skills.directory.claude', homeRelativePath: ['.claude', 'skills'] },
-  { id: 'grok', labelKey: 'feature.skills.directory.grok', homeRelativePath: ['.grok', 'skills'] },
-  { id: 'pi', labelKey: 'feature.skills.directory.pi', homeRelativePath: ['.pi', 'agent', 'skills'] },
-] as const;
 
 export function SkillsCapabilitiesPage({
   capabilities,
@@ -93,6 +80,10 @@ export function SkillsCapabilitiesPage({
     !normalizedQuery
     || `${skill.name} ${skill.description ?? ''} ${skill.id}`.toLocaleLowerCase().includes(normalizedQuery)
   )), [normalizedQuery, snapshot.skills]);
+  const skillGroups = useMemo(
+    () => groupSkillsBySource(visibleSkills, snapshot.extraRoots, translate),
+    [visibleSkills, snapshot.extraRoots, translate],
+  );
 
   const closeDetail = () => {
     requestVersion.current += 1;
@@ -266,28 +257,24 @@ export function SkillsCapabilitiesPage({
         </div>
         <div className="desktop-capabilities-grid">
           <div className="desktop-capabilities-grid__content">
-            <div className="desktop-skill-catalog">
-              {skillGroups.map(([kind, titleKey]) => {
-                const groupSkills = visibleSkills.filter((skill) => skill.kind === kind);
-                if (!groupSkills.length) return null;
-                return (
-                  <section className="desktop-skill-catalog__section" key={kind}>
-                    <header><h3>{translate(titleKey)}</h3><span>{groupSkills.length}</span></header>
-                    <div className="desktop-capability-list">
-                      {groupSkills.map((skill) => (
-                        <SkillListItem
-                          key={skill.id}
-                          skill={skill}
-                          translate={translate}
-                          ui={ui}
-                          onOpen={() => void openSkill(skill)}
-                          onToggle={(enabled) => void updateSkill(skill, { enabled })}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                );
-              })}
+            <div className="desktop-capability-catalog">
+              {skillGroups.map(({ id, title, skills: groupSkills }) => (
+                <section className="desktop-capability-catalog__section" key={id}>
+                  <header><h3>{title}</h3><span>{groupSkills.length}</span></header>
+                  <div className="desktop-capability-list">
+                    {groupSkills.map((skill) => (
+                      <SkillListItem
+                        key={skill.id}
+                        skill={skill}
+                        translate={translate}
+                        ui={ui}
+                        onOpen={() => void openSkill(skill)}
+                        onToggle={(enabled) => void updateSkill(skill, { enabled })}
+                      />
+                    ))}
+                  </div>
+                </section>
+              ))}
               {!visibleSkills.length ? <div className="desktop-capabilities-empty">{translate('feature.skills.empty')}</div> : null}
             </div>
           </div>

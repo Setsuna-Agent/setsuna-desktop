@@ -37,6 +37,7 @@ export function SkillIcon({
         classes,
       ].filter(Boolean).join(' ')}
       data-skill-icon="skill"
+      data-menu-color="preserve"
       aria-hidden="true"
     >
       <WandSparkles strokeWidth={2} />

@@ -147,6 +147,21 @@ describe('AgentSidebar project actions', () => {
     expect(html).toContain('>归档项目</button>');
   });
 
+  it('receives pins from another window and preserves them when toggling a local conversation', () => {
+    const thread: RuntimeThreadSummary = {
+      id: 'local', title: 'Local', createdAt: '', updatedAt: '', archived: false, messageCount: 0, lastMessagePreview: '',
+    };
+    const view = renderHook(() => usePinnedThreads([], new Map(), [thread]));
+    act(() => {
+      localStorage.setItem(PINNED_THREADS_STORAGE_KEY, JSON.stringify(['remote']));
+      window.dispatchEvent(new StorageEvent('storage', { key: PINNED_THREADS_STORAGE_KEY }));
+    });
+    expect([...view.result.current.pinnedThreadIds]).toEqual(['remote']);
+    act(() => view.result.current.togglePinnedThread(thread));
+    expect([...view.result.current.pinnedThreadIds]).toEqual(['local', 'remote']);
+    expect(JSON.parse(localStorage.getItem(PINNED_THREADS_STORAGE_KEY)!)).toEqual(['local', 'remote']);
+  });
+
   it('moves chats into a persistent pinned section and restores their original project on unpin', () => {
     const threads: RuntimeThreadSummary[] = projects.map((project, index) => ({
       id: `thread-${index}`, projectId: project.id, title: `Conversation ${index}`,
@@ -247,6 +262,9 @@ function sidebarProps(project: WorkspaceProject): ComponentProps<typeof AgentSid
     onEnterChatMode: noop,
     onEditProject: noop,
     onRemoveProject: noop,
+    threadMenu: { canFork: false, canCreateWorktree: false, apps: [],
+      fork: async () => undefined, openWith: async () => undefined, deleteThread: async () => undefined, close: () => undefined },
+    onOpenThreadInNewWindow: noop,
     onRenameThread: noop,
     onResizeStart: noop,
     onResizeStep: noop,

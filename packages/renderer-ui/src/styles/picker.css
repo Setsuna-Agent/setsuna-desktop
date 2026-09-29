@@ -22,8 +22,6 @@
   display: grid;
   gap: 4px;
   width: min(260px, calc(100vw - 24px));
-  padding: 8px;
-  border-radius: 14px;
 }
 
 .sd-picker__search {
@@ -55,8 +53,8 @@
   align-items: center;
   gap: 7px;
   width: 100%;
-  min-height: 28px;
-  padding: 4px 6px;
+  min-height: var(--app-menu-item-height);
+  padding: 3px 8px;
   border: 0;
   border-radius: 6px;
   font-size: 13px;
@@ -66,7 +64,6 @@
 }
 
 .sd-picker__item > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sd-picker__item[aria-current='true'] { background: var(--desktop-agent-control-hover-bg); }
 .sd-picker__item[aria-current='true']:disabled { opacity: 1; }
 .sd-picker__actions { display: grid; gap: 1px; padding-top: 4px; border-top: 1px solid var(--app-border); }
 .sd-picker__empty { padding: 8px 6px; color: var(--app-text-muted); font-size: 12px; }

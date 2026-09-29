@@ -5,7 +5,7 @@ import type {
   DesktopNetworkProxyState,
 } from '@setsuna-desktop/contracts';
 import { defineCapability, type CapabilityToken } from '@setsuna-desktop/feature-core/capability';
-import type { BrowserWindow } from 'electron';
+
 
 export interface NetworkProxyCredentialVault {
   get(key: string): Promise<string | undefined>;
@@ -18,7 +18,7 @@ export type NetworkProxyJsonWriter = (filePath: string, value: unknown) => Promi
 export interface NetworkProxyMainHost {
   readonly configPath: string;
   readonly credentialVault: NetworkProxyCredentialVault;
-  readonly mainWindow: BrowserWindow;
+  publishState(state: DesktopNetworkProxyState): void;
   readonly writeJsonAtomically: NetworkProxyJsonWriter;
   deleteServerThroughRuntime(proxyServerId: string): Promise<DesktopNetworkProxyState>;
   systemFetch(

@@ -13,6 +13,7 @@ import { PullRequestFilters } from './PullRequestFilters.js';
 import { GitHubIdentity } from './GitHubIdentity.js';
 import { GitHubCliLoginCommand } from './GitHubCliLoginCommand.js';
 import { PullRequestsSplit } from './PullRequestsSplit.js';
+import { PullRequestScrollArea } from './PullRequestScrollArea.js';
 import { CheckState, Loading, PullRequestState, Timestamp } from './status.js';
 import type { PullRequestSession } from './session.js';
 
@@ -56,9 +57,8 @@ function Workbench({ client, session }: { client: PullRequestsClient; session: P
         setRepository(next.repository); setFilters(next.filters);
         session.repository = next.repository; session.filters = next.filters; select(null);
       }} />
-      <div className="pr-list" ref={scroll} onScroll={(event) => { session.listScroll = event.currentTarget.scrollTop; }} aria-label={t('pullRequests')}>
+      <PullRequestScrollArea className="pr-list" contentClassName="pr-list__content" scrollRef={scroll} onScroll={(event) => { session.listScroll = event.currentTarget.scrollTop; }} aria-label={t('pullRequests')}>
         {list.error ? <p className="sd-control-error" role="alert">{list.error}</p> : null}
-        {list.inventory.issues.map((issue) => <p className="pr-notice" key={issue.project}>{issue.project}: {issue.message}</p>)}
         {list.errors.map((issue) => <p className="sd-control-error" role="alert" key={issue.repository}>{issue.repository}: {issue.message}</p>)}
         {list.items.map((pr) => <Button key={pr.id} variant="ghost" className={`pr-list-item${selected?.repository === pr.repository && selected.number === pr.number ? ' is-selected' : ''}`} aria-current={selected?.repository === pr.repository && selected.number === pr.number ? 'true' : undefined} onClick={() => select({ repository: pr.repository, number: pr.number })}>
           <span className="pr-list-item__meta"><PullRequestState pr={pr} label={false} /><span>#{pr.number}</span><Timestamp value={pr.updatedAt} /><CheckState state={pr.checksState} label={false} /></span>
@@ -67,7 +67,7 @@ function Workbench({ client, session }: { client: PullRequestsClient; session: P
         </Button>)}
         {list.loading ? <Loading /> : account && !list.items.length ? <p className="pr-empty">{list.inventory.repositories.length ? t('noResults') : t('noRepositories')}</p> : null}
         {list.hasMore ? <Button disabled={list.loading} onClick={() => void list.more()}>{t('loadMore')}</Button> : null}
-      </div>
+      </PullRequestScrollArea>
     </aside> : null
     }>
     {account ? selected ? <PullRequestDetailPane key={`${account}/${selected.repository}/${selected.number}`} client={auth.client} reference={selected} summary={list.items.find((item) => item.repository === selected.repository && item.number === selected.number)} account={account} session={session} onUpdated={list.refresh} /> : <div className="pr-empty pr-welcome"><GitPullRequest size={32} /><h2>{t('selectPr')}</h2><p>{t('selectPrDescription')}</p></div>

@@ -7,19 +7,19 @@
   min-width: 0;
 }
 
-.desktop-skill-catalog {
+.desktop-capability-catalog {
   display: grid;
   gap: 28px;
   min-width: 0;
 }
 
-.desktop-skill-catalog__section {
+.desktop-capability-catalog__section {
   display: grid;
   gap: 8px;
   min-width: 0;
 }
 
-.desktop-skill-catalog__section > header {
+.desktop-capability-catalog__section > header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -29,19 +29,19 @@
   border-bottom: 1px solid color-mix(in srgb, var(--app-border) 68%, transparent);
 }
 
-.desktop-skill-catalog__section h3,
-.desktop-skill-catalog__section header span {
+.desktop-capability-catalog__section h3,
+.desktop-capability-catalog__section header span {
   margin: 0;
 }
 
-.desktop-skill-catalog__section h3 {
+.desktop-capability-catalog__section h3 {
   color: var(--app-text);
   font-size: 15px;
   font-weight: 600;
   line-height: 22px;
 }
 
-.desktop-skill-catalog__section header span {
+.desktop-capability-catalog__section header span {
   color: var(--app-text-subtle);
   font-size: 11px;
   line-height: 18px;

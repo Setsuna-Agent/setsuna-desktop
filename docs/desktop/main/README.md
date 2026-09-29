@@ -72,7 +72,9 @@ Runtime 依赖 Browser Feature/native bridge 的地址和 token，因此相应 p
 
 ### 5. 关闭
 
-窗口关闭和 app quit 都收敛到幂等的服务关闭流程。要先停止 Updater 定时检查等新工作，再排空 runtime，随后 dispose Main Feature（Review 撤销 handler/watcher，Terminal 撤销 handler 并关闭 PTY，Updater 撤销 handler 与下载），最后关闭 native bridge；重复 quit 事件不能启动两套 shutdown。
+侧栏会话支持在新窗口打开。`window/registry.ts` 只登记宿主创建的桌面窗口，`window/thread-windows.ts` 校验会话后加载同一 renderer，并通过窄 IPC 提供窗口的初始会话 ID。所有窗口共享 runtime 和 Main Feature 服务；renderer readiness、快捷键、文件监听和浏览器菜单按窗口分别维护。
+
+最后一个桌面窗口关闭和 app quit 都收敛到幂等的服务关闭流程。关闭其中一个窗口只释放其订阅和本机视图，不停止其他窗口的 runtime。要先停止 Updater 定时检查等新工作，再排空 runtime，随后 dispose Main Feature（Review 撤销 handler/watcher，Terminal 撤销 handler 并关闭 PTY，Updater 撤销 handler 与下载），最后关闭 native bridge；重复 quit 事件不能启动两套 shutdown。
 
 Windows 用户可选择关闭窗口时直接退出或隐藏到系统托盘。托盘模式只隐藏原窗口并保持本机服务运行；托盘图标负责恢复窗口，右键菜单提供打开与显式退出。若托盘初始化失败，关闭行为必须回退为直接退出。
 

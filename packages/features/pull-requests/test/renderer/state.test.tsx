@@ -23,7 +23,7 @@ import { commentNode, githubFixture, head, reference, repositoryNode, summaryNod
 afterEach(() => { cleanup(); notifyError.mockClear(); });
 const notifyError = vi.fn();
 const host: PullRequestsRendererHost = {
-  Markdown: ({ content }) => <div>{content}</div>, PageHeader: () => null, CodePatch: () => null,
+  Markdown: ({ content }) => <div>{content}</div>, PageHeader: () => null, CodePatch: () => null, ScrollOverlay: () => null,
   CommentInput: ({ value, label, disabled, maxLength, onChange, footer }) => <><textarea aria-label={label} value={value} disabled={disabled} maxLength={maxLength} onChange={(event) => onChange(event.currentTarget.value)} />{footer}</>,
   translate: (key, params) => `${key.replace('feature.pullRequests.', '')}${params?.error ? `: ${params.error}` : ''}`,
   locale: 'en', openExternal: vi.fn(), copyText: vi.fn(), notifyError,

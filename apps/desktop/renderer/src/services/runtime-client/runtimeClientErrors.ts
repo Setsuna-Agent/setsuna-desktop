@@ -9,6 +9,10 @@ export function runtimeClientErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+export function isThreadDeletionCancelled(error: unknown): boolean {
+  return error instanceof RuntimeClientError && error.code === 'thread_deletion_cancelled';
+}
+
 export function isRuntimeTransportFailure(error: unknown): boolean {
   const message = runtimeClientErrorMessage(error);
   return (

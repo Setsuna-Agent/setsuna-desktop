@@ -39,7 +39,7 @@ describe('MCP management operation codecs', () => {
     })).toThrow();
   });
 
-  it('preserves OAuth configuration in renderer snapshots', () => {
+  it('preserves OAuth configuration and plugin ownership in renderer snapshots', () => {
     const result = readMcpServers.output.parse({
       configPath: '/tmp/mcp.json',
       errors: [],
@@ -56,6 +56,7 @@ describe('MCP management operation codecs', () => {
         oauthResource: 'https://resource.example.com',
         readOnly: false,
         source: 'local',
+        pluginId: 'test-plugin',
         startupTimeoutMs: 120_000,
         timeoutMs: 120_000,
         toolTimeoutMs: 120_000,
@@ -67,6 +68,7 @@ describe('MCP management operation codecs', () => {
     });
 
     expect(result.servers[0]).toMatchObject({
+      pluginId: 'test-plugin',
       oauthClientId: 'desktop-client',
       oauthResource: 'https://resource.example.com',
     });

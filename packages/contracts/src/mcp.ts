@@ -46,6 +46,8 @@ export type RuntimeMcpServer = {
   headerKeys: string[];
   source: RuntimeMcpServerSource;
   sourcePath?: string;
+  /** Plugin that created this server; absent when a plugin only reuses an existing configuration. */
+  pluginId?: string;
   readOnly: boolean;
 };
 

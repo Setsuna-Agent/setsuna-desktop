@@ -103,9 +103,9 @@ export function ImageGenerationSettingsView({
   const hasSavedKey = Boolean(state?.value.apiKeySet && !clearApiKey);
   const busy = saving || testing;
   return (
-    <section data-feature-id="image-generation" className="feature-image-generation-settings" aria-labelledby="feature-image-generation-title">
-      <header>
-        <span className="feature-image-generation-settings__icon"><KeyRound size={16} /></span>
+    <section data-feature-id="image-generation" className="sd-settings-form feature-image-generation-settings" aria-labelledby="feature-image-generation-title">
+      <header className="sd-settings-form__header">
+        <span className="sd-settings-form__icon"><KeyRound size={16} /></span>
         <div>
           <h3 id="feature-image-generation-title">{translate('feature.imageGeneration.settings.title')}</h3>
           <p>{translate('feature.imageGeneration.settings.description')}</p>
@@ -225,7 +225,7 @@ function ImageGenerationConnectionTest({
     catch (generationError) { setError(errorMessage(generationError)); }
   }
   return (
-    <section className="feature-image-generation-test" aria-labelledby="feature-image-generation-test-title">
+    <section className="sd-settings-form__section feature-image-generation-test" aria-labelledby="feature-image-generation-test-title">
       <header><div><h4 id="feature-image-generation-test-title">{translate('feature.imageGeneration.test.title')}</h4><p>{translate('feature.imageGeneration.test.description')}</p></div><span>{translate('feature.imageGeneration.test.badge')}</span></header>
       <label className="feature-image-generation-test__prompt">
         <span>{translate('feature.imageGeneration.test.prompt')}</span>

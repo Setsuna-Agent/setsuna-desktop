@@ -36,6 +36,7 @@ import type { RuntimeTurnSettlement } from '../../services/runtime-client/useRun
 import { useDesktopNavigation } from './useDesktopNavigation.js';
 import { shouldCollapseSidebar, useDesktopSidebarAutoCollapse } from './useDesktopSidebarAutoCollapse.js';
 import { useGlobalEscapeMenus } from './useGlobalEscapeMenus.js';
+import { useThreadDeletionGuard } from './useThreadDeletionGuard.js';
 
 export function useDesktopAppController() {
   const { t } = useI18n();
@@ -60,6 +61,7 @@ export function useDesktopAppController() {
   const runtime = useRuntimeClientState({
     activeProjectId,
     modelProvider,
+    onThreadDeleted: handleThreadDeleted,
     onTurnSettled: handleTurnSettled,
     review,
     setActiveProjectId,
@@ -212,6 +214,16 @@ export function useDesktopAppController() {
     targetIdentity: chatTargetIdentity,
   });
   const { globalThreads, threadsByProjectId } = useThreadGroups(threads);
+  useThreadDeletionGuard({
+    threadId: currentThread?.id ?? null,
+    dirty: projectWorkspace.fileDraft.dirty,
+    busy: projectWorkspace.fileDraft.saving || projectWorkspace.entryOperationPending,
+  });
+
+  function handleThreadDeleted(threadId: string) {
+    workspacePanels.resetThreadPanelSession(threadId);
+    projectWorkspace.resetProjectWorkspaceState();
+  }
 
   const navigation = useDesktopNavigation({
     activeProjectId,

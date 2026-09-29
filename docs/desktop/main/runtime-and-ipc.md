@@ -98,11 +98,17 @@ Runtime 的 `secrets.json` 只保存适合 runtime 管理的 secret 状态；需
 | `desktop-ipc.ts` | 目录选择、profile、clipboard、图片、本地路径与外链 |
 | `browser-ipc.ts` | browser tab 注册、active tab、截图、favicon、设备模拟 |
 | `window-ipc.ts` | minimize/maximize/close、标题栏 scale |
-| `sender.ts` | 可信主窗口 sender 校验 |
+| `sender.ts` | 已登记桌面窗口的 sender 校验，拒绝未登记窗口与 webview guest |
+
+`window/thread-windows.ts` 提供 `window-control:open-thread` 和 `window-control:get-initial-thread-id`：校验来源窗口与目标会话，创建共享 runtime 的桌面窗口，并为各窗口保留独立的启动会话。`desktop:when-ready` 按 sender 保存 readiness，关闭一个窗口不会撤销其他窗口的 handler。
+
+`window/thread-deletion.ts` 在转发线程 DELETE 前串行检查所有桌面窗口。目标会话及子会话存在文件草稿时，在发起窗口确认是否放弃修改并删除；文件操作未完成或窗口无法响应时不执行删除。取消以结构化结果返回，renderer 不将其当成操作失败或已删除。
 
 Review 的固定 handler、Git 状态和变更监控已由 `packages/features/review/src/main/` 拥有。它监听 worktree、worktree Git 目录及共享 Git 目录，合并事件并过滤 ignored 文件后，只向 renderer 发布失效通知；具体 diff 仍由带当前比较基准的 `get-state` 请求生成。Commit message typed operation 由 `packages/features/review/src/runtime/` 登记；宿主 composition 只注入默认模型 adapter、preview registry 与 sender policy。
 
 Terminal 的固定 handler 已由 `packages/features/terminal/src/main/ipc.ts` 拥有，并通过 Main Feature scope 注册/撤销；app main 的 composition root 只提供环境与 renderer event 出口。
+
+Terminal IPC 按创建会话的 WebContents 记录归属，读写、附着、重启和关闭只接受所属窗口。窗口销毁时释放其全部会话，其他窗口和共享 Feature 继续运行；窗口关闭期间尚未完成的创建请求在返回时立即释放会话。Feature 退出时也会撤销窗口监听。
 
 Updater 的固定 handler、channel contract 和状态机由 `packages/features/updater/{contracts,main}` 拥有。Main composition 只注入版本、路径与代理 fetch；Feature scope 排空在途检查后撤销全部 handler。更新就绪确认由 renderer 共享弹窗显示，确认后才通过安装 IPC 打开安装包或重启。
 
@@ -122,7 +128,7 @@ Channel 使用领域前缀，例如 `runtime:*`、`desktop-data-root:*`、`brows
 
 ### 校验 sender
 
-Main handler 要确认请求来自当前可信主 renderer。Browser guest 相关调用还要核对：
+Main handler 要确认请求来自 `DesktopWindowRegistry` 登记的可信桌面 renderer。Browser guest 相关调用还要核对：
 
 - `guestContents.hostWebContents` 是主 renderer。
 - guest 属于内置浏览器 partition。

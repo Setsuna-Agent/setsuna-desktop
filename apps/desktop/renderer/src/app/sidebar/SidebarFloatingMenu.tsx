@@ -86,7 +86,6 @@ export function SidebarFloatingMenu({
       ref={menuRef}
       role="menu"
       aria-orientation="vertical"
-      origin={anchorPoint}
       style={{ left: position.left, top: position.top }}
       onClick={(event) => event.stopPropagation()}
       onKeyDown={handleKeyDown}

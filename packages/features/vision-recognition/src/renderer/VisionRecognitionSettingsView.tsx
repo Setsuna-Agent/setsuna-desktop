@@ -79,11 +79,11 @@ export function VisionRecognitionSettingsView({
   return (
     <section
       data-feature-id="vision-recognition"
-      className="feature-vision-recognition-settings"
+      className="sd-settings-form feature-vision-recognition-settings"
       aria-labelledby="feature-vision-recognition-title"
     >
-      <header>
-        <span className="feature-vision-recognition-settings__icon"><Eye size={16} /></span>
+      <header className="sd-settings-form__header">
+        <span className="sd-settings-form__icon"><Eye size={16} /></span>
         <div>
           <h3 id="feature-vision-recognition-title">{translate('feature.visionRecognition.settings.title')}</h3>
           <p>{translate('feature.visionRecognition.settings.description')}</p>
@@ -166,7 +166,7 @@ function VisionRecognitionTestView({
   }
 
   return (
-    <section className="feature-vision-recognition-test" aria-labelledby="feature-vision-recognition-test-title">
+    <section className="sd-settings-form__section feature-vision-recognition-test" aria-labelledby="feature-vision-recognition-test-title">
       <header>
         <div>
           <h4 id="feature-vision-recognition-test-title">{translate('feature.visionRecognition.test.title')}</h4>

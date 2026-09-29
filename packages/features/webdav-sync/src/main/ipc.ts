@@ -1,10 +1,11 @@
 import type {
+  DesktopWebDavSyncState,
   DesktopWebDavSyncCategoryId,
   DesktopWebDavSyncConfigureInput,
   DesktopWebDavSyncPreferencesInput,
   DesktopWebDavSyncRestorePlanInput,
 } from '../contracts/index.js';
-import { ipcMain, type BrowserWindow } from 'electron';
+import { ipcMain } from 'electron';
 import {
   WEB_DAV_SYNC_IPC_CHANNELS,
 } from '../contracts/index.js';
@@ -12,7 +13,7 @@ import type { WebDavSyncService } from './service.js';
 
 export function registerWebDavSyncIpc(
   service: WebDavSyncService,
-  mainWindow: BrowserWindow,
+  publishState: (state: DesktopWebDavSyncState) => void,
   run: <T>(operation: () => Promise<T>) => Promise<T>,
   requestRelaunch: () => Promise<void>,
 ): () => void {
@@ -59,11 +60,7 @@ export function registerWebDavSyncIpc(
   ipcMain.handle(WEB_DAV_SYNC_IPC_CHANNELS.cancel, async () =>
     run(() => service.cancelCurrentOperation()));
   ipcMain.handle(WEB_DAV_SYNC_IPC_CHANNELS.disconnect, async () => run(() => service.disconnect()));
-  const unsubscribe = service.subscribe((state) => {
-    if (!mainWindow.isDestroyed()) {
-      mainWindow.webContents.send(WEB_DAV_SYNC_IPC_CHANNELS.stateChange, state);
-    }
-  });
+  const unsubscribe = service.subscribe(publishState);
   return () => {
     unsubscribe();
     for (const channel of channels) ipcMain.removeHandler(channel);

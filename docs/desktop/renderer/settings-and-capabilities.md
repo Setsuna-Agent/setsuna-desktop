@@ -151,6 +151,8 @@ Plugin 管理的跨层所有权位于 `packages/features/plugin-management/`：c
 
 默认市场来自随应用打包的 `plugins/`，renderer 只接收无路径摘要。市场首页分别展示市场目录和不在目录内的本地安装项；卡片直接表达安装、更新和打开状态。详情页展示声明的 Tool/Skill/MCP/Hook/resource 元数据，并负责 install/update/uninstall 动作。
 
+目录页的安装、导入和手动刷新失败通过宿主 `ui.Toast` 反馈，保留重试入口；页面进入时的后台仓库刷新失败不弹通知，也不插入常驻警告区域。
+
 Capabilities 的分类导航在 macOS、Windows 上共用左侧插件侧栏，详情面包屑继续通过 `AppRouteTopbarPortal` 挂载到顶部。各 Feature page 自己持有标题、搜索、刷新、创建/导入和详情返回动作，但复用宿主注入的 controls 与共享能力页布局样式。
 
 页面标题栏分别提供“用对话创建插件”和“导入本地插件”；不属于默认市场的已安装 Plugin 在本地来源分区单独展示。
@@ -176,6 +178,8 @@ Bundle 规则见 [Plugin Bundle](../../extensions/plugins/bundles.md)。
 - Fetch tools、OAuth login/logout。
 
 保存时保持结构化字段，不把 command/args 拼成 shell 文本。List/status 不显示 secret 值。
+
+目录按来源分为个人、插件、工作区、旧版配置和内置，仅显示非空分组。runtime 从插件索引的 `mcpServers[].owned` 投影 `pluginId`，仅由插件创建的服务归入插件分组；插件复用已有 MCP 配置时保留其原来源。Skill 与 MCP 目录共用分组样式，来源分类不改变服务的启停或编辑权限。
 
 MCP 的 renderer 状态与命令由 `packages/features/mcp/src/renderer` 持有。Feature service 通过 typed operations 管理 server snapshot、工具发现、保存、启停、删除和 OAuth 登录/登出，并用统一请求序列阻止迟到 refresh 回退 mutation 结果；旧 `/v1/mcp/*` REST 与 App Server 仍作为兼容 adapter 调用同一个 `McpControl`。
 

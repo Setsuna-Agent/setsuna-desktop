@@ -4,8 +4,9 @@ import type { BrowserWindow } from 'electron';
 import type { BrowserControlConnection } from '../contracts/index.js';
 
 export interface BrowserMainHost {
-  readonly mainWindow: BrowserWindow;
-  activeKeyboardShortcutBindings(): ReadonlySet<string>;
+  focusedWindow(): BrowserWindow | null;
+  onWindowAdded(listener: (window: BrowserWindow) => () => void): () => void;
+  activeKeyboardShortcutBindings(senderId: number): ReadonlySet<string>;
   interfaceLanguage(): RuntimeInterfaceLanguage;
 }
 

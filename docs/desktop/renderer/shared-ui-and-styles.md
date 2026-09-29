@@ -27,9 +27,10 @@
 - `Table` / `TableColumn` 参考 [beUI Table](https://beui.dev/components/motion/table)，统一列定义、表头、行悬停、空状态和横向滚动，沿用宿主主题与减少动态效果偏好。用量记录的列内容由 `UsageRecordsTable` 持有，`UsageRecentCalls` 负责每页 10 条的数据加载与分页；共享表格直接渲染当前页。
 - Dialog 的入场动画由 `overlays.css` 持有：弹窗上移 12px 并淡入（180ms ease-out），遮罩淡入（160ms ease）。弹窗已去掉 scale 动画，居中与入场位移统一使用 `translate`；12px 按应用密度缩放，减少动态效果偏好下禁用入场动画。
 - Radix 提供浮层定位、焦点约束、嵌套子菜单、键盘操作和关闭行为。控件遵循本项目的窄 API，不提供 Ant Design 兼容层。
-- 应用内操作菜单参考 [beUI Animated Context Menu](https://beui.dev/components/motion/context-menu)：`MenuSurface` 与 `menu-motion.css` 统一从触发位置展开的裁切动画和滑动高亮，右键、按钮下拉、坐标菜单、侧栏、添加面板、窗口菜单和能力创建菜单共用视觉层；禁用项、危险项、子菜单和减少动态效果偏好保持有效。浏览器菜单通过 Feature bridge 接入，系统托盘菜单仍由操作系统绘制。
-- 菜单悬停、按下、选中和子菜单展开统一使用中性灰底，不随主题强调色变化；选中勾选与危险项文字保留各自语义，滑动高亮不另设危险底色。
+- 应用内菜单由 `MenuSurface` 与 `menu.css` 统一为紧凑圆角面板、细边框、柔和阴影和即时蓝底白字高亮；右键、按钮下拉、坐标菜单、子菜单、侧栏、添加面板、浏览器窗口与能力创建菜单共用视觉层。Select、项目/分支选择器也使用相同菜单样式。底色采用独立的冷灰半透明 `--app-menu-bg`，浅色与深色分别配置，背景模糊由 `--app-menu-backdrop-filter` 统一控制。输入框上方的命令、插件、Skill 与 @ 候选列表由聊天样式持有，使用不透明面板和中性选中背景，避免下方页面文字透出。菜单直接显示/关闭，不使用展开、裁切、缩放或滑动高亮动画；键盘导航、禁用项与危险项仍由原组件管理。系统托盘菜单由操作系统绘制。
+- 菜单高亮时普通图标、描述和快捷键跟随白色文字；拥有独立底色的 Skill/Plugin 图标通过 `data-menu-color="preserve"` 保留自身及子元素配色，避免白色图形与浅色图标底板混在一起。
 - `ui/primitives.tsx` / `SelectField.tsx` 保留宿主导出；`SettingsViewUi.tsx` 将同一实现注入 Feature 的 Settings UI contract。
+- 插件配置表单复用 `settings-form.css` 的 `sd-settings-form`：浅灰圆角卡片、统一输入控件间距、图标底板和中性分隔线。图片生成、视觉识别与声明式插件设置共用这层外观；各 Feature 只维护字段排布、业务状态和结果展示，不再各自绘制外框。
 - `I18nProvider` 同步共享控件的中英文标签；外观和字体继续由宿主偏好控制。
 - 业务专用内容仍留在所属 Feature，弹窗外壳使用共享 `Dialog`，不要复制 backdrop、Escape 监听或 focus trap。
 - 确认操作统一使用居中的 `ConfirmDialog`：按钮入口使用 `ConfirmDialogTrigger`，hook/流程入口使用 `useConfirm` 并等待结果。`I18nProvider` 挂载 `ConfirmationProvider`；调用方卸载会取消等待中的确认。不要使用原生 `window.confirm` / `alert`、Electron message box 或按钮旁的确认气泡。

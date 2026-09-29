@@ -38,7 +38,7 @@ export const webDavSyncMainFeature = defineMainFeature({
     context.scope.add(() => service.close());
     context.scope.add(registerWebDavSyncIpc(
       service,
-      host.mainWindow,
+      (state) => host.publishState(state),
       (operation) => context.scope.runOperation(operation),
       () => host.requestRelaunch(),
     ));

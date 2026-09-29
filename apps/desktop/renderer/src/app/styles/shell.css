@@ -27,7 +27,9 @@
   margin: 0 var(--app-workbench-inset) var(--app-workbench-inset) 0;
   border-radius: 12px;
   background: var(--app-sidebar-bg);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--desktop-agent-sidebar-edge) 50%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--desktop-agent-sidebar-edge) 50%, transparent),
+    var(--app-shadow-workbench);
   overflow: hidden;
 }
 

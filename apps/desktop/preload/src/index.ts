@@ -7,8 +7,10 @@ import type {
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { composeBuiltinPreloadBridge } from './composition/builtin-preload-features.js';
 import { watchWorkspaceEntries } from './workspace-entry-watch.js';
+import { onThreadDeletionCheck } from './thread-deletion.js';
 
 const runtime: DesktopRuntimeBridge = {
+  onThreadDeletionCheck,
   request: <T = unknown>(input: RuntimeRequestInput): Promise<T> => ipcRenderer.invoke('runtime:request', input),
   cancelRequest: (requestId) => ipcRenderer.invoke('runtime:cancel-request', { requestId }),
   linkAttachment: (file) => {
@@ -116,6 +118,8 @@ const dataRoot: SetsunaDesktopBridge['dataRoot'] = {
 };
 
 const windowControls: SetsunaDesktopBridge['windowControls'] = {
+  openThread: (threadId) => ipcRenderer.invoke('window-control:open-thread', threadId),
+  getInitialThreadId: () => ipcRenderer.invoke('window-control:get-initial-thread-id'),
   minimize: () => ipcRenderer.invoke('window-control:minimize'),
   toggleMaximize: () => ipcRenderer.invoke('window-control:toggle-maximize'),
   close: () => ipcRenderer.invoke('window-control:close'),

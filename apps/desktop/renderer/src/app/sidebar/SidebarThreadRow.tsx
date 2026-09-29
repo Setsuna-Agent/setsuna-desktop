@@ -1,17 +1,19 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
 import { Archive, ArrowDown, ArrowUp, LoaderCircle, Pin } from 'lucide-react';
-import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { useContext, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
-import { EditIcon } from '../../shared/ui/EditIcon.js';
 import { ActionTooltip } from '../../shared/ui/primitives.js';
-import { SidebarFloatingMenu } from './SidebarFloatingMenu.js';
+import { SidebarThreadMenu } from './SidebarThreadMenu.js';
+import { SidebarMenuOpenContext } from './SidebarMenuContext.js';
+import type { ThreadMenuState } from '../thread-menu/useThreadMenu.js';
 import { SidebarThreadHoverCard } from './SidebarThreadHoverCard.js';
 import { SidebarThreadTitle } from './SidebarThreadTitle.js';
 import { SidebarThreadWorktreeBadge } from './SidebarThreadWorktreeBadge.js';
 
 export function SidebarThreadRow({
   menuOpen,
+  threadMenu,
   pinned = false,
   projectName,
   running = false,
@@ -19,12 +21,14 @@ export function SidebarThreadRow({
   thread,
   variant,
   onArchive,
+  onOpenInNewWindow,
   onRename,
   onSelect,
   onToggleMenu,
   onTogglePin,
 }: {
   menuOpen: boolean;
+  threadMenu: ThreadMenuState;
   pinned?: boolean;
   projectName?: string;
   running?: boolean;
@@ -32,18 +36,20 @@ export function SidebarThreadRow({
   thread: RuntimeThreadSummary;
   variant: 'global' | 'project' | 'pinned';
   onArchive: (thread: RuntimeThreadSummary) => void;
+  onOpenInNewWindow: (threadId: string) => void;
   onRename: (thread: RuntimeThreadSummary) => void;
   onSelect: (threadId: string) => void;
   onToggleMenu: (threadId: string) => void;
   onTogglePin: (thread: RuntimeThreadSummary) => void;
 }) {
   const { t } = useI18n();
+  const sidebarMenuOpen = useContext(SidebarMenuOpenContext);
+  const hoverDisabled = sidebarMenuOpen || menuOpen;
   // 线程列表快照包含整个 runtime 的活动状态；在经过防抖的侧边栏快照尚未更新时，
   // 当前打开线程仍可回退使用显式属性。
   const isRunning = running || Boolean(thread.activeTurnId);
-  const rowRef = useRef<HTMLButtonElement | null>(null);
   const [hovered, setHovered] = useState(false);
-  const [menuAnchorPoint, setMenuAnchorPoint] = useState<{ x: number; y: number }>();
+  const [menuAnchorPoint, setMenuAnchorPoint] = useState({ x: 0, y: 0 });
   const openContextMenu = (x: number, y: number) => {
     setMenuAnchorPoint({ x, y });
     if (!menuOpen) onToggleMenu(thread.id);
@@ -64,15 +70,13 @@ export function SidebarThreadRow({
     event.stopPropagation();
     onArchive(thread);
   };
-  const menu = (
-    <SidebarFloatingMenu anchorPoint={menuAnchorPoint} open={menuOpen} triggerRef={rowRef} onClose={() => onToggleMenu(thread.id)}>
-      <Button variant="ghost" type="button" role="menuitem" onClick={() => onRename(thread)}>
-        <EditIcon size={13} />
-        <span>{t('sidebar.rename')}</span>
-      </Button>
-    </SidebarFloatingMenu>
-  );
-  const className = ['desktop-agent-session', `desktop-agent-session--${variant}`, selected ? 'is-active' : '', isRunning ? 'is-running' : '']
+  const className = [
+    'desktop-agent-session',
+    `desktop-agent-session--${variant}`,
+    selected ? 'is-active' : '',
+    isRunning ? 'is-running' : '',
+    menuOpen ? 'is-menu-open' : '',
+  ]
     .filter(Boolean)
     .join(' ');
   const meta = (
@@ -119,19 +123,18 @@ export function SidebarThreadRow({
     <div
       className={className}
       onContextMenu={handleContextMenu}
-      onMouseEnter={() => setHovered(true)}
+      onMouseEnter={() => setHovered(!hoverDisabled)}
       onMouseLeave={() => setHovered(false)}
     >
       <SidebarThreadHoverCard disabled={menuOpen} projectName={projectName} thread={thread}>
         <Button variant="ghost"
           className="desktop-agent-session__select"
           data-sidebar-thread-id={thread.id}
-          ref={rowRef}
           type="button"
           onClick={() => onSelect(thread.id)}
           onKeyDown={handleSelectKeyDown}
         >
-          <SidebarThreadTitle hovered={hovered && !menuOpen} title={thread.title} />
+          <SidebarThreadTitle hovered={hovered && !hoverDisabled} title={thread.title} />
           <SidebarThreadWorktreeBadge thread={thread} />
         </Button>
       </SidebarThreadHoverCard>
@@ -142,7 +145,8 @@ export function SidebarThreadRow({
           <ArrowDown size={14} strokeWidth={1.75} />
         </span>
       ) : null}
-      {menu}
+      {menuOpen ? <SidebarThreadMenu anchor={menuAnchorPoint} thread={thread} pinned={pinned} running={isRunning}
+        actions={threadMenu} onRename={onRename} onTogglePin={onTogglePin} onArchive={onArchive} onOpenInNewWindow={onOpenInNewWindow} /> : null}
     </div>
   );
 }

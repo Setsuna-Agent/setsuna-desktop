@@ -132,7 +132,7 @@ export function ConversationGitControls({
           } else closeBranchMenu();
         }}
         placement={variant === 'compact' ? 'topLeft' : 'leftTop'}
-        className="sd-picker"
+        className="sd-menu-surface sd-picker"
         content={(
           <BranchMenu
             branchDraft={branchDraft}

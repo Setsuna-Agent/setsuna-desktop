@@ -113,6 +113,25 @@ describe('applyCurrentThreadEvent', () => {
     expect(projection.acceptedEvents.map((event) => event.seq)).toEqual([9]);
     expect(projection.thread).toMatchObject({ lastSeq: 9, title: 'After resync' });
   });
+
+  it('releases a deleted owner and rejects stale, foreign, and post-deletion events', () => {
+    const initial = threadWithMessages([]);
+    initial.lastSeq = 5;
+    const deletion: RuntimeEvent = {
+      id: 'deleted', threadId: initial.id, seq: 6, createdAt: '', type: 'thread.deleted', payload: {},
+    };
+    expect(applyCurrentThreadEvent(initial, { ...deletion, seq: 5 })).toBe(initial);
+    expect(applyCurrentThreadEvent(initial, { ...deletion, threadId: 'other' })).toBe(initial);
+    const projection = applyCurrentThreadEventBatch(initial, {
+      events: [deletion, deletion, threadUpdatedEvent(initial.id, 7, 'Late update')],
+    });
+    expect(projection.thread).toBeNull();
+    expect(projection.acceptedEvents).toEqual([deletion]);
+    expect(applyCurrentThreadEventBatch(null, { events: [deletion], resync: {
+      reason: 'retention_gap', requestedSinceSeq: 0, retainedFromSeq: 1, thread: initial,
+    } }).thread).toBeNull();
+    expect(adoptOwnedThreadSnapshot(null, initial.id, initial)).toBeNull();
+  });
 });
 
 describe('shouldFrameCoalesceThreadEvents', () => {

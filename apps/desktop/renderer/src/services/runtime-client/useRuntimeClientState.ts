@@ -28,6 +28,7 @@ export type LoadState = 'loading' | 'ready' | 'error';
 type RuntimeClientStateOptions = {
   activeProjectId: string | null;
   modelProvider: ModelProviderProjectionService;
+  onThreadDeleted?: (threadId: string) => void;
   onTurnSettled?: (settlement: RuntimeTurnSettlement) => void;
   review: ReviewFeatureService;
   setActiveProjectId: Dispatch<SetStateAction<string | null>>;
@@ -40,6 +41,7 @@ type RuntimeClientStateOptions = {
 export function useRuntimeClientState({
   activeProjectId,
   modelProvider,
+  onThreadDeleted,
   onTurnSettled,
   review,
   setActiveProjectId,
@@ -62,6 +64,11 @@ export function useRuntimeClientState({
   const forwardTurnSettlement = useCallback((settlement: RuntimeTurnSettlement) => {
     turnSettlementHandlerRef.current(settlement);
   }, []);
+  const threadDeletedHandlerRef = useRef(onThreadDeleted);
+  threadDeletedHandlerRef.current = onThreadDeleted;
+  const forwardThreadDeletion = useCallback((threadId: string) => {
+    threadDeletedHandlerRef.current?.(threadId);
+  }, []);
   const {
     replaceConfig,
     ...configState
@@ -73,6 +80,7 @@ export function useRuntimeClientState({
     activeProjectId,
     client,
     onError: setError,
+    onThreadDeleted: forwardThreadDeletion,
     onTurnSettled: forwardTurnSettlement,
     review,
     setActiveProjectId,

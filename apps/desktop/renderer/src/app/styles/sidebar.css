@@ -18,13 +18,26 @@
   user-select: text;
 }
 
+/* Menus live in a portal. Override row actions that explicitly enable pointer events,
+   so the background cannot regain hover while a sidebar menu owns the interaction. */
+.desktop-agent-sidebar[data-menu-open],
+.desktop-agent-sidebar[data-menu-open] * {
+  pointer-events: none !important;
+}
+
 .desktop-agent-sidebar__top-actions {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
   gap: 4px;
   padding: 12px 8px 10px;
   background: transparent;
+}
+
+.desktop-agent-sidebar[data-scrolled] > .desktop-agent-sidebar__top-actions {
+  box-shadow: var(--app-shadow-scroll-edge);
 }
 
 .desktop-agent-sidebar__top-actions > .sd-shortcut-tooltip-target {
@@ -220,26 +233,18 @@
   background: var(--desktop-agent-sidebar-hover-bg);
 }
 
-.desktop-agent-floating-menu.sd-menu-motion {
+.desktop-agent-floating-menu {
   position: fixed;
   z-index: 1000;
   display: grid;
   min-width: 138px;
-  padding: 4px;
-  border: 1px solid var(--desktop-agent-subtle-divider);
-  border-radius: 12px;
-  background: var(--app-surface);
-  box-shadow: var(--app-shadow-popover);
 }
 
 .desktop-agent-floating-menu button {
   display: flex;
   align-items: center;
   gap: 7px;
-  height: 28px;
-  padding: 0 8px;
   border: 0;
-  border-radius: var(--app-radius-sm);
   color: var(--app-text);
   background: transparent;
   font-size: 12px;
@@ -363,7 +368,9 @@
   padding-left: calc(var(--desktop-agent-content-start) - var(--desktop-agent-row-start));
 }
 
+/* 菜单接管鼠标后，用打开状态保留来源行的高亮和操作区。 */
 .desktop-agent-session:hover,
+.desktop-agent-session.is-menu-open,
 .desktop-agent-session:has(:focus-visible) {
   color: var(--desktop-agent-sidebar-active-text);
   border-color: transparent;
@@ -372,6 +379,7 @@
 
 /* 经过位移的操作槽会创建层叠上下文；提升整行层级，避免其提示框被后续会话行遮盖。 */
 .desktop-agent-session:hover,
+.desktop-agent-session.is-menu-open,
 .desktop-agent-session:has(:focus-visible) {
   z-index: 1;
 }
@@ -463,17 +471,20 @@
 }
 
 .desktop-agent-session:hover .desktop-agent-session__select,
+.desktop-agent-session.is-menu-open .desktop-agent-session__select,
 .desktop-agent-session:has(:focus-visible) .desktop-agent-session__select {
   padding-right: calc(var(--desktop-agent-row-action-size) * 2 + 8px);
 }
 
 .desktop-agent-session:hover .desktop-agent-session__pin-button,
+.desktop-agent-session.is-menu-open .desktop-agent-session__pin-button,
 .desktop-agent-session:has(:focus-visible) .desktop-agent-session__pin-button {
   opacity: 1;
   pointer-events: auto;
 }
 
 .desktop-agent-session:hover .desktop-agent-session__archive-button,
+.desktop-agent-session.is-menu-open .desktop-agent-session__archive-button,
 .desktop-agent-session:has(:focus-visible) .desktop-agent-session__archive-button,
 .desktop-agent-session__archive-button:focus-visible {
   opacity: 1;

@@ -1,5 +1,5 @@
 import { defineCapability } from '@setsuna-desktop/feature-core/capability';
-import type { ComponentType, ReactNode } from 'react';
+import type { ComponentType, ReactNode, RefObject } from 'react';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import type { SettingsPageHeaderProps } from '@setsuna-desktop/renderer-contracts/settings';
 import type { FileDiff, PostRenderPhase } from '@pierre/diffs';
@@ -20,6 +20,7 @@ export type PullRequestsRendererHost = {
   Markdown: ComponentType<{ content: string; baseUrl: string }>;
   CodePatch: ComponentType<PullRequestPatchViewProps>;
   CommentInput: ComponentType<PullRequestCommentInputProps>;
+  ScrollOverlay: ComponentType<{ scrollRef: RefObject<HTMLDivElement | null>; disabled?: boolean }>;
   openExternal(url: string): Promise<boolean>;
   copyText(text: string): Promise<void>;
   notifyError(message: string): void;

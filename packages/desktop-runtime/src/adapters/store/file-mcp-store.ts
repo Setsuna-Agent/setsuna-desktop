@@ -13,6 +13,7 @@ import path from 'node:path';
 import type { SecretStore } from '../../ports/secret-store.js';
 import { withFileStateUpdate } from './file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from './json-file.js';
+import { readMcpPluginOwners } from '../plugin/plugin-mcp-ownership.js';
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_TIMEOUT_MS = 30 * 60 * 1000;
@@ -84,18 +85,23 @@ type StoredMcpServer = {
 
 export class FileMcpStore implements McpStore {
   readonly configPath: string;
+  private readonly pluginIndexPath: string;
 
   constructor(
     dataDir: string,
     private readonly secretStore: SecretStore,
   ) {
     this.configPath = path.join(dataDir, 'mcp.json');
+    this.pluginIndexPath = path.join(dataDir, 'plugins.json');
   }
 
   async listServers(): Promise<RuntimeMcpServerList> {
-    const { config, errors } = await this.readConfig();
+    const [{ config, errors }, pluginOwners] = await Promise.all([
+      this.readConfig(),
+      readMcpPluginOwners(this.pluginIndexPath),
+    ]);
     const servers = Object.entries(config.mcpServers ?? {})
-      .map(([key, server]) => normalizeServer(key, server, this.configPath, errors))
+      .map(([key, server]) => normalizeServer(key, server, this.configPath, errors, pluginOwners.get(key)))
       .filter((server): server is RuntimeMcpServer => Boolean(server))
       .sort((left, right) => left.label.localeCompare(right.label) || left.key.localeCompare(right.key));
     return {
@@ -313,6 +319,7 @@ function normalizeServer(
   rawServer: StoredMcpServer,
   sourcePath: string,
   errors: string[],
+  pluginId?: string,
 ): RuntimeMcpServer | null {
   try {
     const key = normalizeKey(rawKey);
@@ -347,6 +354,7 @@ function normalizeServer(
       headerKeys: serverHeaderKeys(rawServer),
       source: 'local',
       sourcePath,
+      ...(pluginId ? { pluginId } : {}),
       readOnly: false,
     };
   } catch (error) {

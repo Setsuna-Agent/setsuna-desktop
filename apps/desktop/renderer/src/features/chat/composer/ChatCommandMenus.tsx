@@ -20,7 +20,7 @@ export function ChatMentionCommandMenu({
 }) {
   const { t } = useI18n();
   const activeItem = items[activeIndex];
-  const { activeOptionRef, floatingCursorRef, scrollContainerRef } = useActiveOptionScroll<HTMLDivElement, HTMLButtonElement>(
+  const { activeOptionRef, scrollContainerRef } = useActiveOptionScroll<HTMLDivElement, HTMLButtonElement>(
     activeItem ? chatMentionItemKey(activeItem) : null,
   );
   const hasFiles = items.some((item) => item.kind === 'workspace');
@@ -28,7 +28,6 @@ export function ChatMentionCommandMenu({
   return (
     <div className="chat-command-menu chat-project-entry-command-menu" role="listbox" aria-label={t('chat.command.mentions')}>
       <div ref={scrollContainerRef} className="chat-command-menu__list">
-        <div ref={floatingCursorRef} className="chat-command-menu__cursor" aria-hidden="true" />
         {items.map((item, index) => {
           const entry = item.kind === 'workspace' ? item.entry : null;
           const tab = item.kind === 'browser-tab' ? item.tab : null;

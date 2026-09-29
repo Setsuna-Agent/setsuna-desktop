@@ -1,12 +1,13 @@
 import { ipcMain, type BrowserWindow } from 'electron';
 import path from 'node:path';
-import { isDesktopRendererSender } from '../ipc/sender.js';
 
 type RendererLoadOptions = {
   appRoot: string;
   devServerUrl?: string;
   prepare?: () => Promise<void>;
 };
+
+const readinessBySender = new Map<number, () => Promise<void>>();
 
 /** Load Chromium resources alongside services, then allow renderer business initialization. */
 export async function loadDesktopRenderer(window: BrowserWindow, options: RendererLoadOptions): Promise<void> {
@@ -18,14 +19,22 @@ export async function loadDesktopRenderer(window: BrowserWindow, options: Render
     return options.prepare?.();
   });
 
-  ipcMain.removeHandler('desktop:when-ready');
-  ipcMain.handle('desktop:when-ready', async (event) => {
-    if (!isDesktopRendererSender(event.sender, window)) throw new Error('Desktop renderer is unavailable.');
+  const senderId = window.webContents.id;
+  readinessBySender.set(senderId, async () => {
     await ready;
     assertAvailable();
   });
+  ipcMain.removeHandler('desktop:when-ready');
+  ipcMain.handle('desktop:when-ready', async (event) => {
+    const whenReady = readinessBySender.get(event.sender.id);
+    if (!whenReady) throw new Error('Desktop renderer is unavailable.');
+    await whenReady();
+  });
   // Keep the handler after handoff so a renderer reload observes the same settled readiness.
-  window.once('closed', () => ipcMain.removeHandler('desktop:when-ready'));
+  window.once('closed', () => {
+    readinessBySender.delete(senderId);
+    if (!readinessBySender.size) ipcMain.removeHandler('desktop:when-ready');
+  });
 
   const loaded = Promise.resolve().then(() => {
     assertAvailable();

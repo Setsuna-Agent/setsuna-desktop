@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   shellOverlaySlot,
   shellRouteSlot,
@@ -22,6 +22,9 @@ import {
 } from '../controller/useAppKeyboardShortcuts.js';
 import { useThreadNavigationHistory } from '../controller/useThreadNavigationHistory.js';
 import { useSidebarThreadNavigation } from '../controller/useSidebarThreadNavigation.js';
+import { useToast } from '../providers/ToastProvider.js';
+import { usePinnedThreads } from '../sidebar/usePinnedThreads.js';
+import { useThreadMenu } from '../thread-menu/useThreadMenu.js';
 import { AppOverlays } from './AppOverlays.js';
 import { AppChatToolbarTitle } from './AppChatToolbarTitle.js';
 import { AppRouteContent } from './AppRouteContent.js';
@@ -106,7 +109,28 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     setFocusComposerRequest((current) => current === requestId ? 0 : current);
   }, []);
   const runtimeActivityTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const themeToggleTriggerRef = useRef<HTMLButtonElement | null>(null);
   const currentThread = runtime.currentThread;
+  const toast = useToast();
+  const pins = usePinnedThreads(runtime.projects, threadsByProjectId, globalThreads);
+  const [toolbarMenuOpen, setToolbarMenuOpen] = useState(false);
+  useEffect(() => setToolbarMenuOpen(false), [activeView, activeProjectId, currentThread?.id]);
+  // Both entry points share one pending-fork guard and the target's actual workspace.
+  const threadMenu = useThreadMenu({
+    client: runtime.client,
+    threadId: activeView === 'chat'
+      ? navigation.threadActionMenuId ?? (toolbarMenuOpen ? currentThread?.id ?? null : null)
+      : null,
+    onFork: navigation.forkThreadFromId,
+    onDelete: navigation.deleteThread,
+    onClose: () => navigation.setThreadActionMenuId(null),
+    onError: toast.error,
+  });
+  const openThreadInNewWindow = useCallback((threadId: string) => {
+    void window.setsunaDesktop?.windowControls.openThread(threadId).catch((error: unknown) => {
+      toast.error(error instanceof Error ? error.message : String(error));
+    });
+  }, [toast]);
   const sidebarNavigation = useSidebarThreadNavigation({
     currentThreadId: currentThread?.id ?? null,
     onOpenThread: navigation.selectThread,
@@ -129,6 +153,8 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     setSelectedCapabilitiesPluginId(null);
     setActiveView('capabilities');
   }, [setActiveView]);
+  const openChat = useCallback(() => setActiveView('chat'), [setActiveView]);
+  const openPullRequests = useCallback(() => setActiveView('pull-requests'), [setActiveView]);
   const openCapabilitiesPlugin = useCallback((pluginId: string) => {
     setSelectedCapabilitiesPluginId(pluginId);
     setActiveView('capabilities');
@@ -218,6 +244,16 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     'app.openCapabilities': {
       execute: openCapabilities,
     },
+    'app.openChat': {
+      execute: openChat,
+    },
+    'app.openPullRequests': {
+      execute: openPullRequests,
+    },
+    'app.toggleTheme': {
+      // Use the same toggle and transition origin as pointer activation.
+      execute: () => themeToggleTriggerRef.current?.click(),
+    },
     'app.toggleRuntimeActivity': {
       allowInModal: runtimeActivityOpen,
       execute: () => setRuntimeActivityOpen((open) => !open),
@@ -305,6 +341,8 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     handleToggleSidebar,
     navigation,
     openCapabilities,
+    openChat,
+    openPullRequests,
     openChangesPanel,
     openFilesPanel,
     openReviewPanel,
@@ -347,9 +385,10 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
           activeThreadId={currentThread?.id}
           selectedPluginViewKey={selectedPluginViewKey}
           runtimeActivityTriggerRef={runtimeActivityTriggerRef}
-          onOpenChat={() => setActiveView('chat')}
+          themeToggleTriggerRef={themeToggleTriggerRef}
+          onOpenChat={openChat}
           onOpenCapabilities={openCapabilities}
-          onOpenPullRequests={() => setActiveView('pull-requests')}
+          onOpenPullRequests={openPullRequests}
           onOpenPluginView={openPluginView}
           onOpenRuntimeActivity={() => setRuntimeActivityOpen(true)}
           onOpenSettings={openSettings}
@@ -372,16 +411,25 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
                 key={currentThread?.id ?? activeProject?.id}
                 project={activeProject}
                 title={toolbarTitle ?? activeProject?.name}
-                archiveThreadDisabled={Boolean(currentThread?.activeTurnId)}
-                selectedWorkspaceApp={workspacePanels.selectedWorkspaceApp}
-                workspaceApps={workspacePanels.workspaceApps}
-                onOpenWorkspaceInApp={activeWorkspace?.path ? workspacePanels.openWorkspaceInApp : undefined}
-                onArchiveThread={currentThread
-                  ? () => void navigation.archiveThread(currentThread)
-                  : undefined}
-                onRenameThread={currentThread
-                  ? () => navigation.openRenameThread(currentThread)
-                  : undefined}
+                menuOpen={toolbarMenuOpen}
+                onMenuOpenChange={(open) => {
+                  setToolbarMenuOpen(open);
+                  if (open) navigation.setThreadActionMenuId(null);
+                }}
+                menu={{
+                  thread: currentThread,
+                  pinned: Boolean(currentThread && pins.pinnedThreadIds.has(currentThread.id)),
+                  running: Boolean(runtime.activeTurnId || currentThread?.activeTurnId),
+                  actions: currentThread ? threadMenu : {
+                    ...threadMenu,
+                    apps: activeWorkspace?.path ? workspacePanels.workspaceApps : [],
+                    openWith: workspacePanels.openWorkspaceInApp,
+                  },
+                  onRename: navigation.openRenameThread,
+                  onTogglePin: pins.togglePinnedThread,
+                  onArchive: (thread) => void navigation.archiveThread(thread),
+                  onOpenInNewWindow: openThreadInNewWindow,
+                }}
               />
             ) : toolbarTitle,
           }}
@@ -424,6 +472,9 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         props={{
           renderDefault: () => (
             <AppSidebarSurface
+              threadMenu={threadMenu}
+              pins={pins}
+              onOpenThreadInNewWindow={openThreadInNewWindow}
               activeProjectId={activeProjectId}
               activeThreadId={runtime.currentThread?.id}
               runningThreadId={(runtime.activeTurnId || runtime.currentThread?.activeTurnId) ? runtime.currentThread?.id ?? null : null}

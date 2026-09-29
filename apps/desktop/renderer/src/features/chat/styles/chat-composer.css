@@ -253,14 +253,6 @@
     transition: none;
   }
 
-  .chat-command-menu {
-    animation: none;
-  }
-
-  .chat-command-menu__cursor {
-    transition: none;
-  }
-
   .chat-attachment {
     animation: none;
     transition: none;
@@ -288,21 +280,9 @@
   overflow: hidden;
   border: 1px solid var(--desktop-agent-panel-border);
   border-radius: var(--app-radius-xl);
+  /* Candidate lists cover page content, so their surface must stay opaque. */
   background: var(--desktop-agent-main-surface);
   box-shadow: var(--desktop-agent-composer-shadow);
-  animation: chat-command-menu-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-@keyframes chat-command-menu-in {
-  from {
-    opacity: 0;
-    translate: 0 6px;
-  }
-
-  to {
-    opacity: 1;
-    translate: 0 0;
-  }
 }
 
 .chat-sender > .chat-command-menu {
@@ -373,6 +353,11 @@
   text-align: left;
   position: relative;
   z-index: 1;
+  transition: none;
+}
+
+.chat-command-menu__item.is-active:not(:disabled) {
+  background: var(--desktop-agent-control-active-bg);
 }
 
 .chat-command-menu__item:disabled {
@@ -487,32 +472,6 @@
 /* The padded shell owns the rounded border; only the inset options scroll. */
 .chat-sender > .chat-command-menu > .chat-command-menu__list {
   gap: inherit;
-}
-
-/* 浮动高亮块：键盘/鼠标切换 active 时在条目间滑动，替代逐项变色。 */
-.chat-command-menu__cursor {
-  position: absolute;
-  top: 0;
-  right: 8px;
-  left: 8px;
-  z-index: 0;
-  border-radius: var(--app-radius-sm);
-  background: var(--desktop-agent-control-active-bg);
-  opacity: 0;
-  pointer-events: none;
-  transition:
-    translate 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    opacity 120ms ease;
-}
-
-.chat-command-menu__cursor.is-visible {
-  opacity: 1;
-}
-
-/* 光标挂在无内边距的 __list 内，与条目等宽。 */
-.chat-command-menu__list > .chat-command-menu__cursor {
-  right: 0;
-  left: 0;
 }
 
 .chat-sender__footer,
@@ -816,7 +775,7 @@
   .runtime-access-mode-menu__icon,
   .runtime-access-mode-menu__copy strong
 ) {
-  color: var(--app-warning) !important;
+  color: var(--app-warning);
 }
 
 .runtime-access-mode-trigger__icon {

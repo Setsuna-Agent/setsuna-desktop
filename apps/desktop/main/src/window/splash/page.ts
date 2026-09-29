@@ -145,17 +145,7 @@ function createStartupSplashHtml(logoDataUrl: string, options: StartupSplashPage
         isolation: isolate;
         overflow: hidden;
         border-radius: 13px;
-      }
-
-      .setsuna-logo::after {
-        position: absolute;
-        inset: 0;
-        z-index: 2;
-        box-sizing: border-box;
-        border: 1px solid rgba(84, 108, 136, 0.16);
-        border-radius: inherit;
-        pointer-events: none;
-        content: '';
+        box-shadow: 0 3px 12px rgba(58, 65, 82, 0.09), 0 1px 3px rgba(58, 65, 82, 0.05);
       }
 
       .setsuna-logo__layer {

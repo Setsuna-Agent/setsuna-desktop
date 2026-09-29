@@ -1,0 +1,48 @@
+/* Action menus, selects and searchable pickers share a static surface. */
+.sd-menu-surface {
+  box-sizing: border-box;
+  padding: 4px;
+  border: 1px solid var(--app-menu-border);
+  border-radius: var(--app-menu-radius);
+  color: var(--app-text);
+  font-family: var(--app-font-family);
+  background: var(--app-menu-bg);
+  box-shadow: var(--app-menu-shadow);
+  backdrop-filter: var(--app-menu-backdrop-filter);
+  animation: none;
+}
+
+.sd-menu-surface [role='menuitem'] {
+  min-height: var(--app-menu-item-height);
+  padding: 3px 8px;
+  font-family: var(--app-font-family);
+  line-height: 20px;
+}
+
+.sd-menu-surface :is([role='menuitem'], [role='option'], .sd-picker__item) {
+  border-radius: var(--app-menu-item-radius);
+  transition: none;
+}
+
+/* The row itself highlights immediately, including when focus enters a submenu. */
+.sd-menu-surface :is([role='menuitem'], [role='option'], .sd-picker__item):not(:disabled, [data-disabled]):is(
+  :hover:not(.sd-menu__item, .sd-select-menu__option, [aria-selected]), :focus-visible, [data-highlighted], [data-state='open'], [aria-selected='true']
+) {
+  color: var(--app-menu-highlight-text);
+  background: var(--app-menu-highlight-bg);
+  outline: none;
+  box-shadow: none;
+}
+
+/* Text and plain icons follow the row; framed artwork keeps its own foreground/background pair. */
+.sd-menu-surface :is([role='menuitem'], [role='option'], .sd-picker__item):not(:disabled, [data-disabled]):is(
+  :hover:not(.sd-menu__item, .sd-select-menu__option, [aria-selected]), :focus-visible, [data-highlighted], [data-state='open'], [aria-selected='true']
+) :where(svg, span, strong, small, kbd):not(:where([data-menu-color='preserve'], [data-menu-color='preserve'] *)) {
+  color: inherit;
+}
+
+.sd-menu-surface [role='separator'] {
+  height: 1px;
+  margin: 5px 8px;
+  background: color-mix(in srgb, var(--app-menu-border) 50%, transparent);
+}

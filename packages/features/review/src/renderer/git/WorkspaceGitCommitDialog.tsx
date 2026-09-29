@@ -510,7 +510,7 @@ function CommitBranchMenu({
   t: ReviewTranslate;
 }) {
   return (
-    <div className="chat-git-commit-branch-menu">
+    <div className="sd-menu-surface chat-git-commit-branch-menu">
       <div className="chat-git-commit-branch-menu__label">{t('feature.review.git.commitTo')}</div>
       <div className="chat-git-commit-branch-menu__item is-current">
         <GitBranch size={14} />

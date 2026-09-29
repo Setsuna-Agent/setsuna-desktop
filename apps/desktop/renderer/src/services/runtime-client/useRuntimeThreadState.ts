@@ -27,8 +27,9 @@ import type {
 import { useIdentityRequestGuard } from '../../shared/hooks/useIdentityRequestGuard.js';
 import { useAnimationFrameCommit } from '../../shared/hooks/useAnimationFrameCommit.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
-import { readBrowserStorageValue, writeBrowserStorageValue } from '../../shared/preferences/browserStorage.js';
+import { readBrowserStorageValue, removeBrowserStorageValue, writeBrowserStorageValue } from '../../shared/preferences/browserStorage.js';
 import {
+  isThreadDeletionCancelled,
   reportRuntimeBackgroundFailure,
   runtimeClientErrorMessage,
 } from './runtimeClientErrors.js';
@@ -72,6 +73,7 @@ type RuntimeThreadStateOptions = {
   activeProjectId: string | null;
   client: RuntimeThreadClient;
   onError: (message: string) => void;
+  onThreadDeleted?: (threadId: string) => void;
   onTurnSettled: (settlement: RuntimeTurnSettlement) => void;
   review: ReviewFeatureService;
   setActiveProjectId: Dispatch<SetStateAction<string | null>>;
@@ -87,6 +89,7 @@ export function useRuntimeThreadState({
   activeProjectId,
   client,
   onError,
+  onThreadDeleted,
   onTurnSettled,
   review,
   setActiveProjectId,
@@ -165,13 +168,15 @@ export function useRuntimeThreadState({
     if (initializedSelectionRef.current) return;
 
     initializedSelectionRef.current = true;
+    const requestedThreadId = await window.setsunaDesktop?.windowControls?.getInitialThreadId?.();
     const initialThread = selectInitialThreadSummary(
       primaryThreads,
       readPersistedActiveThreadId(),
     );
-    if (initialThread) {
+    const initialThreadId = requestedThreadId ?? initialThread?.id;
+    if (initialThreadId) {
       try {
-        const thread = await client.getThread(initialThread.id);
+        const thread = await client.getThread(initialThreadId);
         setCurrentThread(thread);
         setActiveProjectId(thread.projectId ?? null);
         return;
@@ -271,6 +276,24 @@ export function useRuntimeThreadState({
           currentThreadCommit.commitNow(projection.thread);
         }
 
+        const deletion = projection.acceptedEvents.find((event) => event.type === 'thread.deleted');
+        if (deletion) {
+          // Every window observes deletion through the same owner/sequence gate.
+          contextRequests.invalidate();
+          setThreads((items) => items.filter((thread) => thread.id !== deletion.threadId));
+          setArchivedThreads((items) => items.filter((thread) => thread.id !== deletion.threadId));
+          setActivityEvents([]);
+          terminalTurnIdsRef.current.clear();
+          setActiveTurnId(null);
+          setContextCompactingThreadId(null);
+          if (readPersistedActiveThreadId() === deletion.threadId) {
+            removeBrowserStorageValue(lastActiveThreadStorageKey);
+          }
+          onThreadDeleted?.(deletion.threadId);
+          refreshThreadsSoon(true);
+          return;
+        }
+
         if (projection.resynced) {
           if (projection.thread) {
             featureEvents.resync(projection.thread.id, projection.thread.lastSeq);
@@ -321,7 +344,7 @@ export function useRuntimeThreadState({
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
     };
-  }, [client, currentThreadCommit, currentThreadId, featureEvents, onError, onTurnSettled, refreshThreadsSoon]);
+  }, [client, contextRequests, currentThreadCommit, currentThreadId, featureEvents, onError, onThreadDeleted, onTurnSettled, refreshThreadsSoon]);
 
   useEffect(() => {
     if (!effectiveActiveTurnId || !currentThreadId) {
@@ -460,7 +483,12 @@ export function useRuntimeThreadState({
   }, [client, reloadThreads]);
 
   const permanentlyDeleteThread = useCallback(async (threadId: string) => {
-    await client.deleteThread(threadId);
+    try {
+      await client.deleteThread(threadId);
+    } catch (error) {
+      if (isThreadDeletionCancelled(error)) return;
+      throw error;
+    }
     await reloadThreads();
   }, [client, reloadThreads]);
 
@@ -473,7 +501,7 @@ export function useRuntimeThreadState({
     );
     await reloadThreads();
 
-    const failureCount = results.filter((result) => result.status === 'rejected').length;
+    const failureCount = results.filter((result) => result.status === 'rejected' && !isThreadDeletionCancelled(result.reason)).length;
     if (failureCount) {
       throw new Error(t('settings.archives.deleteSomeError', { count: failureCount }));
     }

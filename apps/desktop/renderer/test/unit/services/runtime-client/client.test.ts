@@ -210,6 +210,13 @@ describe('desktop runtime client advanced thread methods', () => {
     ]);
   });
 
+  it('does not treat a cancelled cross-window deletion as a successful DELETE', async () => {
+    installRuntimeBridge(() => ({ cancelled: true }));
+    await expect(createDesktopRuntimeClient().deleteThread('thread-1')).rejects.toMatchObject({
+      code: 'thread_deletion_cancelled',
+    });
+  });
+
   it('requests the workspace scoped to a conversation thread', async () => {
     const request = installRuntimeBridge(() => ({ exists: true, readable: true }));
     const client = createDesktopRuntimeClient();
