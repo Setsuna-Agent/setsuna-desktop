@@ -11,6 +11,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '../../../../../src/app/providers/ToastProvider.js';
 import { ReviewFeatureHostBoundary } from '../../../../../src/composition/review-feature-adapter.js';
 import { useDesktopWorkspacePanels, useSidePanelTransition } from '../../../../../src/features/workspace/hooks/useDesktopWorkspacePanels.js';
+import type { ChatComposerTargetIdentity } from '../../../../../src/features/chat/hooks/useChatComposerSession.js';
+import type { DesktopTerminalEvent } from '../../../../../src/features/workspace/model.js';
 import { I18nProvider } from '../../../../../src/shared/i18n/I18nProvider.js';
 import { hostMessages } from '../../../../../src/shared/i18n/messages.js';
 
@@ -186,6 +188,140 @@ it('closes only the visible active side tab, leaving bottom and collapsed tabs i
   expect(view.result.current.bottomPanelSlot).toEqual(bottomTabs);
 });
 
+it('hides and restores all bottom tabs and terminal sessions without closing them, scoped to the conversation', async () => {
+  const project = { id: 'project', path: '/repo', name: 'Repository', createdAt: '', updatedAt: '' };
+  let sequence = 0;
+  const open = vi.fn(async () => ({ sessionId: `session-${++sequence}`, workspaceRoot: project.path, shell: '/bin/zsh', cols: 100, rows: 24 }));
+  const close = vi.fn(async () => true);
+  Object.defineProperty(window, 'setsunaDesktop', {
+    configurable: true,
+    value: {
+      desktop: { platform: 'darwin' },
+      terminal: { open, close, read: vi.fn().mockResolvedValue([]), onEvent: vi.fn(() => () => undefined) },
+      workspaceApps: { list: vi.fn().mockResolvedValue([]) },
+    },
+  });
+  const view = renderHook(({ targetIdentity }) => useDesktopWorkspacePanels({
+    activeProject: project, activeView: 'chat', conversationDebugEnabled: false,
+    targetIdentity, workspaceStatus: 'ready', setError: vi.fn(),
+  }), {
+    initialProps: { targetIdentity: 'thread:A' as ChatComposerTargetIdentity },
+    wrapper: ({ children }) => <I18nProvider initialLocale="zh-CN" messageCatalog={messageCatalog}>
+      <ToastProvider><ReviewFeatureHostBoundary>{children}</ReviewFeatureHostBoundary></ToastProvider>
+    </I18nProvider>,
+  });
+
+  act(() => view.result.current.toggleBottomPanel());
+  await waitFor(() => expect(Object.keys(view.result.current.terminalSessionsByPanelId)).toHaveLength(1));
+  act(() => view.result.current.openDesktopPanel('bottom', 'terminal'));
+  await waitFor(() => expect(Object.keys(view.result.current.terminalSessionsByPanelId)).toHaveLength(2));
+  const tabs = view.result.current.bottomPanelSlot;
+  const sessions = view.result.current.terminalSessionsByPanelId;
+  expect(view.result.current.bottomPanelVisible).toBe(true);
+
+  act(() => view.result.current.hideBottomPanel());
+  expect(view.result.current.bottomPanelVisible).toBe(false);
+  expect(view.result.current.bottomPanelSlot).toEqual(tabs);
+  expect(view.result.current.terminalSessionsByPanelId).toEqual(sessions);
+  view.rerender({ targetIdentity: 'thread:B' });
+  act(() => view.result.current.openDesktopPanel('bottom', 'chat'));
+  expect(view.result.current.bottomPanelVisible).toBe(true);
+  view.rerender({ targetIdentity: 'thread:A' });
+  expect(view.result.current.bottomPanelVisible).toBe(false);
+
+  act(() => view.result.current.toggleBottomPanel());
+  expect(view.result.current.bottomPanelVisible).toBe(true);
+  expect(view.result.current.bottomPanelSlot).toEqual(tabs);
+  expect(view.result.current.terminalSessionsByPanelId).toEqual(sessions);
+  act(() => view.result.current.toggleBottomPanel());
+  expect(view.result.current.bottomPanelVisible).toBe(false);
+  expect(close).not.toHaveBeenCalled();
+  expect(open).toHaveBeenCalledTimes(2);
+
+  act(() => view.result.current.closeDesktopPanelItem('bottom', tabs.active!));
+  expect(close).toHaveBeenCalledExactlyOnceWith(sessions[tabs.active!].sessionId);
+  expect(view.result.current.bottomPanelSlot.panels).toHaveLength(1);
+  expect(view.result.current.bottomPanelVisible).toBe(false);
+});
+
+it.each(['side', 'bottom'] as const)('closes the exited shell tab in the %s slot and collapses only when the last tab exits', async (slot) => {
+  const { view, terminal, emit } = renderTerminalWorkspace();
+  const slotKey = slot === 'side' ? 'sidePanelSlot' : 'bottomPanelSlot';
+  const visibleKey = slot === 'side' ? 'sidePanelVisible' : 'bottomPanelVisible';
+  const openTab = async () => {
+    act(() => view.result.current.openDesktopPanel(slot, 'terminal'));
+    const panelId = view.result.current[slotKey].active!;
+    await waitFor(() => expect(view.result.current.terminalSessionsByPanelId[panelId]).toBeDefined());
+    return { panelId, sessionId: view.result.current.terminalSessionsByPanelId[panelId].sessionId };
+  };
+  const first = await openTab();
+  const second = await openTab();
+  act(() => emit(first.sessionId, { seq: 1, event: 'exit', data: { exitCode: 0 } }));
+  expect(view.result.current[slotKey].panels.map((panel) => panel.id)).toEqual([second.panelId]);
+  expect(view.result.current[slotKey].active).toBe(second.panelId);
+  expect(view.result.current[visibleKey]).toBe(true);
+  expect(terminal.close).toHaveBeenCalledExactlyOnceWith(first.sessionId);
+
+  const third = await openTab();
+  act(() => emit(third.sessionId, { seq: 1, event: 'exit', data: { exitCode: 1 } }));
+  expect(view.result.current[slotKey].active).toBe(second.panelId);
+  expect(view.result.current[visibleKey]).toBe(true);
+  act(() => emit(second.sessionId, { seq: 1, event: 'exit', data: { exitCode: 0 } }));
+  expect(view.result.current[slotKey]).toEqual({ active: null, panels: [] });
+  expect(view.result.current[visibleKey]).toBe(false);
+  expect(view.result.current.terminalSessionsByPanelId).toEqual({});
+  expect(terminal.close).toHaveBeenCalledTimes(3);
+  expect(terminal.open).toHaveBeenCalledTimes(3);
+});
+
+it('closes a hidden terminal in its claimed conversation without changing the current conversation', async () => {
+  const { view, terminal, emit } = renderTerminalWorkspace('new-thread-slot:project');
+  act(() => view.result.current.toggleBottomPanel());
+  const panelId = view.result.current.bottomPanelSlot.active!;
+  await waitFor(() => expect(view.result.current.terminalSessionsByPanelId[panelId]).toBeDefined());
+  const { sessionId } = view.result.current.terminalSessionsByPanelId[panelId];
+  act(() => view.result.current.claimForThread('A'));
+  view.rerender({ targetIdentity: 'thread:A' });
+  act(() => view.result.current.hideBottomPanel());
+  view.rerender({ targetIdentity: 'thread:B' });
+  act(() => view.result.current.openDesktopPanel('bottom', 'chat'));
+  const currentTabs = view.result.current.bottomPanelSlot;
+
+  act(() => emit(sessionId, { seq: 2, event: 'exit', data: { exitCode: 0 } }));
+  expect(view.result.current.bottomPanelSlot).toBe(currentTabs);
+  expect(view.result.current.bottomPanelVisible).toBe(true);
+  expect(terminal.close).toHaveBeenCalledExactlyOnceWith(sessionId);
+  view.rerender({ targetIdentity: 'thread:A' });
+  expect(view.result.current.bottomPanelSlot).toEqual({ active: null, panels: [] });
+  expect(view.result.current.bottomPanelExpanded).toBe(false);
+  expect(view.result.current.terminalSessionsByPanelId[panelId]).toBeUndefined();
+  expect(terminal.open).toHaveBeenCalledTimes(1);
+});
+
+it('restores a hidden non-terminal tab and reveals it only for an explicit navigation action', () => {
+  const view = renderHook(() => useDesktopWorkspacePanels({
+    activeProject: null, activeView: 'chat', conversationDebugEnabled: false,
+    targetIdentity: 'new-thread-slot:global', workspaceStatus: 'ready', setError: vi.fn(),
+  }), {
+    wrapper: ({ children }) => <I18nProvider initialLocale="zh-CN" messageCatalog={messageCatalog}>
+      <ToastProvider><ReviewFeatureHostBoundary>{children}</ReviewFeatureHostBoundary></ToastProvider>
+    </I18nProvider>,
+  });
+  act(() => view.result.current.openBrowserPanel('https://example.com', 'bottom'));
+  const tab = view.result.current.bottomActivePanel!;
+  act(() => view.result.current.hideBottomPanel());
+  act(() => view.result.current.updateDesktopPanel(tab.id, { title: 'Updated in background' }));
+  expect(view.result.current.bottomPanelVisible).toBe(false);
+  expect(view.result.current.browserPanelInstances[0]?.active).toBe(false);
+  act(() => view.result.current.toggleBottomPanel());
+  expect(view.result.current.bottomActivePanel?.id).toBe(tab.id);
+  expect(view.result.current.bottomPanelSlot.panels).toHaveLength(1);
+  expect(view.result.current.browserPanelInstances[0]?.active).toBe(true);
+  act(() => view.result.current.hideBottomPanel());
+  act(() => view.result.current.activateDesktopPanel('bottom', tab.id));
+  expect(view.result.current.bottomPanelVisible).toBe(true);
+});
+
 describe('useSidePanelTransition', () => {
   it('keeps the panel mounted until a reversed closing transition settles', () => {
     vi.useFakeTimers();
@@ -208,3 +344,34 @@ describe('useSidePanelTransition', () => {
     expect(view.result.current).toEqual({ phase: null, present: false });
   });
 });
+
+function renderTerminalWorkspace(targetIdentity: ChatComposerTargetIdentity = 'thread:A') {
+  const project = { id: 'project', path: '/repo', name: 'Repository', createdAt: '', updatedAt: '' };
+  const listeners = new Map<string, Set<(event: DesktopTerminalEvent) => void>>();
+  let sequence = 0;
+  const terminal = {
+    open: vi.fn(async () => ({ sessionId: `session-${++sequence}`, workspaceRoot: '/repo', shell: 'zsh', cols: 100, rows: 24 })),
+    close: vi.fn(async () => true),
+    read: vi.fn(async () => []),
+    onEvent: vi.fn((sessionId: string, listener: (event: DesktopTerminalEvent) => void) => {
+      const subscribers = listeners.get(sessionId) ?? new Set();
+      listeners.set(sessionId, subscribers);
+      subscribers.add(listener);
+      return () => { subscribers.delete(listener); };
+    }),
+  };
+  Object.defineProperty(window, 'setsunaDesktop', {
+    configurable: true,
+    value: { desktop: { platform: 'darwin' }, terminal, workspaceApps: { list: vi.fn().mockResolvedValue([]) } },
+  });
+  const view = renderHook(({ targetIdentity: identity }) => useDesktopWorkspacePanels({
+    activeProject: project, activeView: 'chat', conversationDebugEnabled: false,
+    targetIdentity: identity, workspaceStatus: 'ready', setError: vi.fn(),
+  }), {
+    initialProps: { targetIdentity },
+    wrapper: ({ children }) => <I18nProvider initialLocale="zh-CN" messageCatalog={messageCatalog}>
+      <ToastProvider><ReviewFeatureHostBoundary>{children}</ReviewFeatureHostBoundary></ToastProvider>
+    </I18nProvider>,
+  });
+  return { view, terminal, emit: (sessionId: string, event: DesktopTerminalEvent) => listeners.get(sessionId)?.forEach((listener) => listener(event)) };
+}

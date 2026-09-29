@@ -13,7 +13,7 @@ it.each(['context', 'point', 'click'] as const)('supports keyboard navigation, s
   const menu: MenuProps = { items: [
     { key: 'disabled', label: 'Unavailable', disabled: true },
     { key: 'copy', label: 'Copy' },
-    { key: 'open', label: 'Open with', children: [{ key: 'editor', label: 'Editor' }] },
+    { key: 'open', label: 'Open with', children: [{ key: 'editor', label: 'Editor', tooltip: 'Open in the editor' }] },
   ], onClick: select };
   function Harness() {
     const [open, setOpen] = useState(false);
@@ -37,4 +37,30 @@ it.each(['context', 'point', 'click'] as const)('supports keyboard navigation, s
   expect(select).toHaveBeenCalledOnce();
   expect(select.mock.calls[0]?.[0].key).toBe('editor');
   await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+  await waitFor(() => expect(document.activeElement).toBe(opener));
+});
+
+it('does not return focus to the dropdown trigger after pointer selection, including after keyboard navigation', async () => {
+  const user = userEvent.setup({ skipHover: true });
+  const select = vi.fn();
+  render(<>
+    <input aria-label="Message" />
+    <Dropdown menu={{ items: [{ key: 'high', label: 'High' }], onClick: select }}>
+      <button>Model</button>
+    </Dropdown>
+  </>);
+  const trigger = screen.getByRole('button', { name: 'Model' });
+  await user.click(screen.getByRole('textbox', { name: 'Message' }));
+  await user.click(trigger);
+  await user.click(await screen.findByRole('menuitem', { name: 'High' }));
+  await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+  expect(select).toHaveBeenCalledOnce();
+  expect(document.activeElement).not.toBe(trigger);
+
+  trigger.focus();
+  await user.keyboard('{Enter}');
+  await user.click(await screen.findByRole('menuitem', { name: 'High' }));
+  await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+  expect(select).toHaveBeenCalledTimes(2);
+  expect(document.activeElement).not.toBe(trigger);
 });

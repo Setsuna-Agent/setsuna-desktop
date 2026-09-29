@@ -53,6 +53,7 @@ import {
 } from './useDesktopWorkspacePanelSession.js';
 import { readyThreadWorkspacePath, type ThreadWorkspaceStatus } from './useThreadWorkspace.js';
 import { useCommitMessagePanel } from './useCommitMessagePanel.js';
+import { useTerminalPanelExit, type TerminalSessionsByPanelId } from './useTerminalPanelExit.js';
 
 // Keep panel contents mounted for the compositor-only drawer transition. Keep
 // this duration aligned with --app-workspace-motion-duration in shell.css.
@@ -69,7 +70,6 @@ type WorkspacePanelsOptions = {
   workspaceStatus: ThreadWorkspaceStatus;
 };
 
-type TerminalSessionsByPanelId = Record<string, Record<string, DesktopTerminalSession>>;
 const GLOBAL_TERMINAL_PROJECT_KEY = '__global__';
 
 export function useDesktopWorkspacePanels({
@@ -82,11 +82,14 @@ export function useDesktopWorkspacePanels({
 }: WorkspacePanelsOptions) {
   const { t } = useI18n();
   const {
+    bottomPanelExpanded,
     bottomPanelSlot,
     claimForThread,
     layoutForIdentity,
     layouts,
+    removePanel,
     resetForIdentity,
+    setBottomPanelExpanded,
     setBottomPanelSlot,
     setSidePanelExpanded,
     setSidePanelSlot,
@@ -119,8 +122,7 @@ export function useDesktopWorkspacePanels({
   const sidePanelVisible = activeView === 'chat' && sidePanelExpanded && Boolean(sideActivePanel);
   const sidePanelTransition = useSidePanelTransition(sidePanelVisible);
   const sidePanelPresent = sidePanelTransition.present;
-  const bottomPanelVisible = activeView === 'chat' && Boolean(bottomActivePanel);
-  const bottomTerminalPanelActive = bottomPanelVisible && bottomActivePanel?.type === 'terminal';
+  const bottomPanelVisible = activeView === 'chat' && bottomPanelExpanded && Boolean(bottomActivePanel);
   const browserPanelInstances = useMemo(
     () => desktopWorkspaceBrowserPanelInstances(layouts, targetIdentity, {
       bottomVisible: bottomPanelVisible,
@@ -193,6 +195,12 @@ export function useDesktopWorkspacePanels({
       .forEach((panel) => closeTerminalSessionsForPanel(panel.id));
   }, [closeTerminalSessionsForPanel]);
 
+  const closeExitedTerminalPanel = useCallback((panelId: string) => {
+    removePanel(panelId);
+    closeTerminalSessionsForPanel(panelId);
+  }, [closeTerminalSessionsForPanel, removePanel]);
+  useTerminalPanelExit(terminalSessionsByPanelId, closeExitedTerminalPanel);
+
   useEffect(() => {
     if (!activeProject?.path) {
       setWorkspaceApps([]);
@@ -254,8 +262,9 @@ export function useDesktopWorkspacePanels({
       setSidePanelSlot(updater);
       return;
     }
+    setBottomPanelExpanded(true);
     setBottomPanelSlot(updater);
-  }, [setBottomPanelSlot, setSidePanelExpanded, setSidePanelSlot]);
+  }, [setBottomPanelExpanded, setBottomPanelSlot, setSidePanelExpanded, setSidePanelSlot]);
 
   const openBrowserPanel = useCallback((url?: string, slot: DesktopPanelSlot = 'side') => {
     closeWorkspaceMenus();
@@ -318,6 +327,7 @@ export function useDesktopWorkspacePanels({
             setSidePanelExpanded(true);
             setSidePanelSlot(updater);
           } else {
+            setBottomPanelExpanded(true);
             setBottomPanelSlot(updater);
           }
           return;
@@ -355,6 +365,7 @@ export function useDesktopWorkspacePanels({
       createChatPanel,
       createTerminalPanel,
       conversationDebugEnabled,
+      setBottomPanelExpanded,
       setBottomPanelSlot,
       setSidePanelExpanded,
       setSidePanelSlot,
@@ -381,11 +392,12 @@ export function useDesktopWorkspacePanels({
       return;
     }
     if (bottomPanelSlot.panels.some((item) => item.id === panel.id)) {
+      setBottomPanelExpanded(true);
       setBottomPanelSlot((current) => activatePanelInSlotState(current, panel.id));
       return;
     }
     addPanelToDesktopSlot(fileWorkspacePanelTargetSlot('side', sidePanelSlot, bottomPanelSlot), panel);
-  }, [addPanelToDesktopSlot, bottomPanelSlot.panels, closeWorkspaceMenus, setBottomPanelSlot, setSidePanelExpanded, setSidePanelSlot, sidePanelSlot.panels]);
+  }, [addPanelToDesktopSlot, bottomPanelSlot.panels, closeWorkspaceMenus, setBottomPanelExpanded, setBottomPanelSlot, setSidePanelExpanded, setSidePanelSlot, sidePanelSlot.panels]);
 
   const renameFilePanels = useCallback((previousPath: string, nextPath: string) => {
     setSidePanelSlot((slot) => renameFilePanelsInSlot(slot, previousPath, nextPath));
@@ -410,11 +422,12 @@ export function useDesktopWorkspacePanels({
       return;
     }
     if (bottomPanelSlot.panels.some((item) => item.id === panel.id)) {
+      setBottomPanelExpanded(true);
       setBottomPanelSlot((current) => activatePanelInSlotState(current, panel.id));
       return;
     }
     addPanelToDesktopSlot('side', panel);
-  }, [addPanelToDesktopSlot, bottomPanelSlot.panels, closeWorkspaceMenus, setBottomPanelSlot, setSidePanelExpanded, setSidePanelSlot, sidePanelSlot.panels]);
+  }, [addPanelToDesktopSlot, bottomPanelSlot.panels, closeWorkspaceMenus, setBottomPanelExpanded, setBottomPanelSlot, setSidePanelExpanded, setSidePanelSlot, sidePanelSlot.panels]);
 
   const activateDesktopPanel = useCallback((slot: DesktopPanelSlot, panelId: string) => {
     const updater = (current: DesktopPanelSlotState) => activatePanelInSlotState(current, panelId);
@@ -423,8 +436,9 @@ export function useDesktopWorkspacePanels({
       setSidePanelSlot(updater);
       return;
     }
+    setBottomPanelExpanded(true);
     setBottomPanelSlot(updater);
-  }, [setBottomPanelSlot, setSidePanelExpanded, setSidePanelSlot]);
+  }, [setBottomPanelExpanded, setBottomPanelSlot, setSidePanelExpanded, setSidePanelSlot]);
 
   const activateDesktopPanelByType = useCallback((type: DesktopPanelType) => {
     const location = findDesktopPanelLocationByType(sidePanelSlot, bottomPanelSlot, type);
@@ -480,6 +494,7 @@ export function useDesktopWorkspacePanels({
       const bottomPanelSlot = sourceSlot === 'bottom' ? moved.source : moved.target;
       return {
         ...current,
+        bottomPanelExpanded: targetSlot === 'bottom' || (current.bottomPanelExpanded && bottomPanelSlot.panels.length > 0),
         bottomPanelSlot,
         sidePanelExpanded: targetSlot === 'side' || (current.sidePanelExpanded && sidePanelSlot.panels.length > 0),
         sidePanelSlot,
@@ -542,9 +557,10 @@ export function useDesktopWorkspacePanels({
         setSidePanelSlot(createEmptyPanelSlot());
         return;
       }
+      setBottomPanelExpanded(false);
       setBottomPanelSlot(createEmptyPanelSlot());
     },
-    [bottomPanelSlot, closeCommitMessageEditor, closeTerminalSessionsForPanel, setBottomPanelSlot, setSidePanelExpanded, setSidePanelSlot, sidePanelSlot],
+    [bottomPanelSlot, closeCommitMessageEditor, closeTerminalSessionsForPanel, setBottomPanelExpanded, setBottomPanelSlot, setSidePanelExpanded, setSidePanelSlot, sidePanelSlot],
   );
 
   const toggleSidePanel = useCallback(() => {
@@ -557,18 +573,20 @@ export function useDesktopWorkspacePanels({
     setSidePanelExpanded(true);
   }, [closeWorkspaceMenus, setSidePanelExpanded, setSidePanelSlot, sidePanelExpanded, sidePanelSlot.active]);
 
-  const toggleBottomTerminal = useCallback(() => {
-    const terminalPanel = bottomPanelSlot.panels.find((panel) => panel.type === 'terminal');
-    if (terminalPanel && bottomPanelSlot.active === terminalPanel.id) {
-      closeDesktopPanelItem('bottom', terminalPanel.id);
+  const hideBottomPanel = useCallback(() => {
+    setBottomPanelExpanded(false);
+    closeWorkspaceMenus();
+  }, [closeWorkspaceMenus, setBottomPanelExpanded]);
+
+  const toggleBottomPanel = useCallback(() => {
+    // Visibility is independent of tab lifetime; reopening restores the selected tab.
+    if (bottomPanelSlot.active) {
+      setBottomPanelExpanded((expanded) => !expanded);
+      closeWorkspaceMenus();
       return;
     }
-    if (terminalPanel) {
-      activateDesktopPanel('bottom', terminalPanel.id);
-      return;
-    }
-    setBottomPanelSlot((current) => addPanelToSlotState(current, createTerminalPanel()));
-  }, [activateDesktopPanel, bottomPanelSlot, closeDesktopPanelItem, createTerminalPanel, setBottomPanelSlot]);
+    addPanelToDesktopSlot('bottom', createTerminalPanel());
+  }, [addPanelToDesktopSlot, bottomPanelSlot.active, closeWorkspaceMenus, createTerminalPanel, setBottomPanelExpanded]);
 
   useEffect(() => {
     [sideActivePanel, bottomActivePanel]
@@ -667,9 +685,9 @@ export function useDesktopWorkspacePanels({
       activateDesktopPanel,
       activateDesktopPanelByType,
       bottomActivePanel,
+      bottomPanelExpanded,
       bottomPanelSlot,
       bottomPanelVisible,
-      bottomTerminalPanelActive,
       bottomTerminalPanelOpen,
       browserPanelInstances,
       claimForThread,
@@ -679,6 +697,7 @@ export function useDesktopWorkspacePanels({
       closeWorkspaceMenus,
       copyWorkspaceFilePath,
       conversationDebugEnabled: conversationDebugEnabled === true,
+      hideBottomPanel,
       loadReviewState,
       moveDesktopPanel,
       openBrowserPanel,
@@ -710,7 +729,7 @@ export function useDesktopWorkspacePanels({
       sidePanelTransitionPhase: sidePanelTransition.phase,
       sidePanelVisible,
       terminalSessionsByPanelId: activeTerminalSessionsByPanelId,
-      toggleBottomTerminal,
+      toggleBottomPanel,
       togglePanelLauncherMenu,
       toggleSidePanel,
       updateBrowserPanel,
@@ -721,9 +740,9 @@ export function useDesktopWorkspacePanels({
       activateDesktopPanel,
       activateDesktopPanelByType,
       bottomActivePanel,
+      bottomPanelExpanded,
       bottomPanelSlot,
       bottomPanelVisible,
-      bottomTerminalPanelActive,
       bottomTerminalPanelOpen,
       browserPanelInstances,
       claimForThread,
@@ -733,6 +752,7 @@ export function useDesktopWorkspacePanels({
       closeWorkspaceMenus,
       copyWorkspaceFilePath,
       conversationDebugEnabled,
+      hideBottomPanel,
       loadReviewState,
       moveDesktopPanel,
       openBrowserPanel,
@@ -764,7 +784,7 @@ export function useDesktopWorkspacePanels({
       sidePanelTransition.phase,
       sidePanelVisible,
       activeTerminalSessionsByPanelId,
-      toggleBottomTerminal,
+      toggleBottomPanel,
       togglePanelLauncherMenu,
       toggleSidePanel,
       updateBrowserPanel,

@@ -1,4 +1,4 @@
-import { Button as UiButton, Button, Dropdown } from '@setsuna-desktop/renderer-ui';
+import { Button as UiButton, ProgressRing } from '@setsuna-desktop/renderer-ui';
 import type {
   ProviderConfigState,
   ProviderModelConfig,
@@ -7,22 +7,22 @@ import type {
 
 import {
   ArrowUp,
+  LoaderCircle,
   Plus,
-  Sparkles,
   Square,
   X,
 } from 'lucide-react';
 import type {
-  ComponentProps,
   ReactNode,
 } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import type { RuntimeAccessModeSelection } from '../../../shared/lib/runtimeAccessMode.js';
 import { ShortcutTooltip } from '../../../shared/ui/ShortcutTooltip.js';
-import type { ChatContextTokenUsage } from '../conversation/chatContextUsage.js';
+import { AppTooltip } from '../../../shared/ui/primitives.js';
+import { formatTokenCount, type ChatContextTokenUsage } from '../conversation/chatContextUsage.js';
 import { ChatApprovalPolicyMenu } from './ChatApprovalPolicyMenu.js';
 import { ChatModelPicker } from './ChatModelPicker.js';
-import type { ChatThinkingConfig } from './chatComposerModeState.js';
+import type { ChatThinkingControl } from './chatThinkingMenu.js';
 
 type ChatComposerFooterCommandControl = {
   active: boolean;
@@ -52,17 +52,6 @@ type ChatComposerFooterPrimaryAction = {
   submitting: boolean;
   onCancelActiveTurn: () => void;
   onSubmit: () => void;
-};
-
-type ChatComposerFooterThinkingControl = {
-  config: ChatThinkingConfig;
-  disabled: boolean;
-  effort: string;
-  enabled: boolean;
-  menuOpen: boolean;
-  onEffortChange: (effort: string) => void;
-  onEnabledChange: (enabled: boolean) => void;
-  onMenuOpenChange: (open: boolean) => void;
 };
 
 export function ChatComposerFooter({
@@ -96,7 +85,7 @@ export function ChatComposerFooter({
   modelProvider: ProviderConfigState | null;
   primaryAction: ChatComposerFooterPrimaryAction;
   senderActions: ReactNode;
-  thinkingControl: ChatComposerFooterThinkingControl;
+  thinkingControl: ChatThinkingControl;
   onAccessModeChange: (selection: RuntimeAccessModeSelection) => void;
   onSelectModel: (providerId: string, modelId: string) => void;
 }) {
@@ -116,16 +105,6 @@ export function ChatComposerFooter({
         >
           <Plus size={14} />
         </UiButton>
-        <ChatThinkingMenu
-          disabled={thinkingControl.disabled}
-          enabled={thinkingControl.enabled}
-          menuOpen={thinkingControl.menuOpen}
-          thinkingConfig={thinkingControl.config}
-          value={thinkingControl.effort}
-          onEnabledChange={thinkingControl.onEnabledChange}
-          onMenuOpenChange={thinkingControl.onMenuOpenChange}
-          onValueChange={thinkingControl.onEffortChange}
-        />
         <ChatApprovalPolicyMenu
           approvalPolicy={config?.approvalPolicy ?? 'on-request'}
           approvalReviewer={config?.approvalReviewer}
@@ -161,14 +140,14 @@ export function ChatComposerFooter({
         ) : null}
       </div>
       <div className="chat-sender__right-actions">
+        <ChatContextUsageIndicator compacting={contextCompacting} usage={contextUsage} />
         <ChatModelPicker
           config={config}
-          contextCompacting={contextCompacting}
-          contextUsage={contextUsage}
           fallbackModelCode={modelFallbackCode}
           model={model}
           openSignal={modelOpenSignal}
           provider={modelProvider}
+          thinkingControl={thinkingControl}
           onSelect={onSelectModel}
         />
         <div className="chat-sender__primary-action">
@@ -180,6 +159,42 @@ export function ChatComposerFooter({
         </div>
       </div>
     </div>
+  );
+}
+
+function ChatContextUsageIndicator({ compacting, usage }: {
+  compacting: boolean;
+  usage: ChatContextTokenUsage;
+}) {
+  const { t } = useI18n();
+  const usedTokens = Math.round(Number(usage.usedTokens || 0));
+  if (usedTokens <= 0) return null;
+
+  const totalTokens = Math.round(Number(usage.totalTokens || 0));
+  const rawPercent = Number(usage.visiblePercent || usage.percent || 0);
+  const percentValue = Math.min(100, Math.max(0, rawPercent > 0 && rawPercent < 0.1 ? 0.1 : rawPercent));
+  const percentLabel = `${percentValue.toFixed(percentValue > 0 && percentValue < 1 ? 1 : 0)}%`;
+  const tokenLabel = totalTokens > 0
+    ? `${formatTokenCount(usedTokens)}/${formatTokenCount(totalTokens)}`
+    : `${formatTokenCount(usedTokens)} tokens`;
+  const usageLabel = percentValue > 0 ? `${percentLabel} · ${tokenLabel}` : tokenLabel;
+
+  return (
+    <AppTooltip title={usageLabel} placement="top">
+      <span className="chat-context-usage" tabIndex={0}>
+        {compacting ? (
+          <LoaderCircle size={14} className="is-spinning" role="img" aria-label={t('chat.composer.compacting')} />
+        ) : (
+          <ProgressRing
+            aria-label={t('chat.model.contextUsage', { usage: usageLabel })}
+            className="chat-token-progress"
+            percent={percentValue}
+            size={14}
+            strokeWidth={18}
+          />
+        )}
+      </span>
+    </AppTooltip>
   );
 }
 
@@ -259,89 +274,4 @@ function ChatModeBadge({
       <X className="chat-sender-plan-badge__close" size={11} aria-hidden="true" />
     </UiButton>
   );
-}
-
-function ChatThinkingMenu({
-  disabled,
-  enabled,
-  menuOpen,
-  thinkingConfig,
-  value,
-  onEnabledChange,
-  onMenuOpenChange,
-  onValueChange,
-}: {
-  disabled?: boolean;
-  enabled: boolean;
-  menuOpen: boolean;
-  thinkingConfig: ChatThinkingConfig;
-  value: string;
-  onEnabledChange: (enabled: boolean) => void;
-  onMenuOpenChange: (open: boolean) => void;
-  onValueChange: (value: string) => void;
-}) {
-  const { t } = useI18n();
-  const hasEfforts = thinkingConfig.efforts.length > 0;
-  const currentEffort = value && thinkingConfig.efforts.includes(value) ? value : thinkingConfig.defaultEffort;
-
-  if (!thinkingConfig.supported) return null;
-
-  const thinkingLabel = enabled ? (currentEffort ? formatThinkingEffort(currentEffort, t('chat.composer.thinking')) : t('chat.composer.thinking')) : '';
-  const selectedThinkingKey = enabled && currentEffort ? currentEffort : 'off';
-  const items: NonNullable<ComponentProps<typeof Dropdown>['menu']>['items'] = [
-    {
-      key: 'off',
-      label: t('chat.composer.thinkingOff'),
-    },
-    ...thinkingConfig.efforts.map((effort) => ({
-      key: effort,
-      label: formatThinkingEffort(effort, t('chat.composer.thinking')),
-    })),
-  ];
-  const thinkingSwitch = (
-    <Button
-      variant="ghost"
-      size="small"
-      className="chat-thinking-switch"
-      disabled={disabled}
-      aria-pressed={enabled}
-      onClick={hasEfforts ? undefined : () => onEnabledChange(!enabled)}
-    >
-      <Sparkles className="chat-thinking-switch__icon" size={13} />
-      {thinkingLabel ? <span className="chat-thinking-switch__label">{thinkingLabel}</span> : null}
-    </Button>
-  );
-
-  if (!hasEfforts) return thinkingSwitch;
-
-  return (
-    <Dropdown
-      rootClassName="chat-thinking-menu-root"
-      trigger={['click']}
-      placement="topLeft"
-      disabled={disabled}
-      open={menuOpen}
-      menu={{
-        items,
-        selectedKeys: [selectedThinkingKey],
-        onClick: ({ key }) => {
-          if (key === 'off') {
-            onEnabledChange(false);
-          } else {
-            onValueChange(key);
-            onEnabledChange(true);
-          }
-          onMenuOpenChange(false);
-        },
-      }}
-      onOpenChange={onMenuOpenChange}
-    >
-      {thinkingSwitch}
-    </Dropdown>
-  );
-}
-
-function formatThinkingEffort(effort: string, fallback = 'Thinking'): string {
-  const value = effort.trim();
-  return value ? value.charAt(0).toUpperCase() + value.slice(1) : fallback;
 }

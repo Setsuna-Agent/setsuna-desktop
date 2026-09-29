@@ -52,7 +52,6 @@ export function useChatComposerModeController({
   );
   const [localModes, setLocalModes] = useState(emptyChatComposerLocalModes);
   const [modelOpenSignal, setModelOpenSignal] = useState(0);
-  const [thinkingMenuOpen, setThinkingMenuOpen] = useState(false);
   const [modelThinkingSelection, setModelThinkingSelection] = useState<ModelThinkingSelectionState>(() => (
     createModelThinkingSelectionState(modelCapabilities)
   ));
@@ -174,12 +173,10 @@ export function useChatComposerModeController({
     reviewModeEnabled: localModes.sendIntent === 'review',
     setThinkingEffort,
     setThinkingEnabled,
-    setThinkingMenuOpen,
     supportsImageInput: modelCapabilities.supportsImageInput,
     thinkingConfig: modelCapabilities.thinking,
     thinkingEffort: thinkingSelection.effort,
     thinkingEnabled: thinkingSelection.enabled,
-    thinkingMenuOpen,
   };
 }
 

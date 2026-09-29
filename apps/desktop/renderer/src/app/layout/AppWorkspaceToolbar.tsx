@@ -44,8 +44,7 @@ export function AppWorkspaceToolbar({
       <WorkspaceOverviewToolbar
         actions={actions}
         bottomPanelOpen={workspacePanels.bottomPanelVisible}
-        bottomTerminalActive={workspacePanels.bottomTerminalPanelActive}
-        onToggleTerminal={workspacePanels.toggleBottomTerminal}
+        onToggleTerminal={workspacePanels.toggleBottomPanel}
         onToggleWorkspace={workspacePanels.toggleSidePanel}
       />
     );
@@ -59,7 +58,6 @@ export function AppWorkspaceToolbar({
       panels={workspacePanels.sidePanelSlot.panels}
       unsavedFilePath={projectWorkspace.fileDraft.dirty ? projectWorkspace.filePreview?.path : null}
       bottomPanelOpen={workspacePanels.bottomPanelVisible}
-      bottomTerminalActive={workspacePanels.bottomTerminalPanelActive}
       onClosePanel={(panelId) => workspacePanels.closeDesktopPanelItem('side', panelId)}
       onOpenBrowser={() => {
         workspacePanels.openBrowserPanel();
@@ -102,7 +100,7 @@ export function AppWorkspaceToolbar({
         if (panel?.type === 'files' && !await projectWorkspace.setFilePreview(null)) return;
         workspacePanels.activateDesktopPanel('side', panelId);
       }}
-      onToggleTerminal={workspacePanels.toggleBottomTerminal}
+      onToggleTerminal={workspacePanels.toggleBottomPanel}
       onToggleWorkspace={workspacePanels.toggleSidePanel}
     />
   );
@@ -111,13 +109,11 @@ export function AppWorkspaceToolbar({
 function WorkspaceOverviewToolbar({
   actions,
   bottomPanelOpen,
-  bottomTerminalActive,
   onToggleTerminal,
   onToggleWorkspace,
 }: {
   actions: ReactNode;
   bottomPanelOpen: boolean;
-  bottomTerminalActive: boolean;
   onToggleTerminal: () => void;
   onToggleWorkspace: () => void;
 }) {
@@ -135,7 +131,7 @@ function WorkspaceOverviewToolbar({
             {actions}
             <ShortcutTooltip
               commandId="layout.toggleTerminal"
-              label={bottomTerminalActive ? t('topbar.closeTerminal') : t('topbar.openBottomTerminal')}
+              label={t(bottomPanelOpen ? 'workspace.panel.hideBottom' : 'workspace.panel.showBottom')}
             >
               <Button variant="ghost"
                 className={[
@@ -147,8 +143,8 @@ function WorkspaceOverviewToolbar({
                   .filter(Boolean)
                   .join(' ')}
                 type="button"
-                aria-label={bottomTerminalActive ? t('topbar.closeTerminal') : t('topbar.openBottomTerminal')}
-                aria-pressed={bottomTerminalActive}
+                aria-label={t(bottomPanelOpen ? 'workspace.panel.hideBottom' : 'workspace.panel.showBottom')}
+                aria-pressed={bottomPanelOpen}
                 onClick={onToggleTerminal}
               >
                 <PanelPlacementIcon placement="bottom" />

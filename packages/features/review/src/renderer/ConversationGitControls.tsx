@@ -166,7 +166,6 @@ export function ConversationGitControls({
           {variant === 'compact' ? <>
             <GitBranch size={14} aria-hidden="true" />
             <span className="chat-conversation-git__branch-name">{currentBranchLabel}</span>
-            <ChevronDown size={12} aria-hidden="true" />
           </> : <>
             <span className="chat-conversation-overview-panel__icon"><GitBranch size={14} /></span>
             <span className="chat-conversation-overview-panel__label">{t('feature.review.git.branch')}</span>

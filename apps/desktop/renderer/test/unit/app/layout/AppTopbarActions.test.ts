@@ -34,25 +34,24 @@ describe('AppTopbarActions', () => {
     expect(html).toContain('aria-pressed="false"');
   });
 
-  it('非终端底栏打开时保留选中背景但仍表达打开终端', () => {
+  it('底栏打开时表达隐藏底栏', () => {
     const html = renderActions({ activeView: 'chat', bottomPanelVisible: true, sidePanelVisible: false });
-    const bottomPanelButton = html.match(/<button[^>]*aria-label="打开底栏终端"[^>]*>/)?.[0] ?? '';
-
-    expect(bottomPanelButton).toContain('aria-pressed="false"');
-    expect(bottomPanelButton).toContain('is-active');
-  });
-
-  it('底栏终端激活时表达关闭终端', () => {
-    const html = renderActions({
-      activeView: 'chat',
-      bottomPanelVisible: true,
-      bottomTerminalPanelActive: true,
-      sidePanelVisible: false,
-    });
-    const bottomPanelButton = html.match(/<button[^>]*aria-label="关闭终端"[^>]*>/)?.[0] ?? '';
+    const bottomPanelButton = html.match(/<button[^>]*aria-label="隐藏底栏"[^>]*>/)?.[0] ?? '';
 
     expect(bottomPanelButton).toContain('aria-pressed="true"');
     expect(bottomPanelButton).toContain('is-active');
+  });
+
+  it('底栏隐藏时表达显示底栏', () => {
+    const html = renderActions({
+      activeView: 'chat',
+      bottomPanelVisible: false,
+      sidePanelVisible: false,
+    });
+    const bottomPanelButton = html.match(/<button[^>]*aria-label="显示底栏"[^>]*>/)?.[0] ?? '';
+
+    expect(bottomPanelButton).toContain('aria-pressed="false"');
+    expect(bottomPanelButton).not.toContain('is-active');
   });
 
 });
@@ -62,11 +61,10 @@ describe('AppWorkspaceToolbar', () => {
     const overview = createWorkspaceOverviewPanel();
     const workspacePanels = {
       bottomPanelVisible: true,
-      bottomTerminalPanelActive: false,
       sidePanelSlot: { active: overview.id, panels: [overview] },
       sidePanelPresent: true,
       sidePanelVisible: true,
-      toggleBottomTerminal: vi.fn(),
+      toggleBottomPanel: vi.fn(),
       toggleSidePanel: vi.fn(),
     } as unknown as DesktopWorkspacePanelsState;
 
@@ -85,20 +83,17 @@ describe('AppWorkspaceToolbar', () => {
 function renderActions({
   activeView,
   bottomPanelVisible = false,
-  bottomTerminalPanelActive = false,
   conversationOverviewVisible = true,
   sidePanelVisible,
 }: {
   activeView: 'chat' | 'capabilities' | 'settings';
   bottomPanelVisible?: boolean;
-  bottomTerminalPanelActive?: boolean;
   conversationOverviewVisible?: boolean;
   sidePanelVisible: boolean;
 }): string {
   return renderToStaticMarkup(createElement(AppTopbarActions, {
     activeView,
     bottomPanelVisible,
-    bottomTerminalPanelActive,
     conversationOverviewAvailable: true,
     conversationOverviewVisible,
     onToggleConversationOverview: vi.fn(),

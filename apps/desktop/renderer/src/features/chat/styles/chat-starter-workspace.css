@@ -2,7 +2,7 @@
 .chat-starter-workspace {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 16px;
   min-width: 0;
   padding: 4px 6px 8px;
   margin-bottom: -4px;
@@ -10,4 +10,7 @@
   background: var(--app-surface-muted);
 }
 .chat-starter-workspace__project { max-width: 60%; }
+.chat-starter-workspace .sd-picker-trigger.sd-button {
+  border-radius: var(--app-radius-full);
+}
 .chat-starter:is(.is-settling, .is-settled) .chat-starter__context { opacity: 0; pointer-events: none; }

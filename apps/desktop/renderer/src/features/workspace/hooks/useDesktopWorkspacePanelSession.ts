@@ -5,12 +5,14 @@ import {
 } from '../../chat/hooks/useChatComposerSession.js';
 import {
   createEmptyPanelSlot,
+  removePanelFromSlotState,
   type DesktopPanelSlot,
   type DesktopPanelSlotState,
   type DesktopPanelTab,
 } from '../model.js';
 
 export type DesktopWorkspacePanelLayout = {
+  bottomPanelExpanded: boolean;
   bottomPanelSlot: DesktopPanelSlotState;
   sidePanelExpanded: boolean;
   sidePanelSlot: DesktopPanelSlotState;
@@ -31,6 +33,7 @@ export type DesktopWorkspacePanelTargetContext = {
 };
 
 const EMPTY_PANEL_LAYOUT: DesktopWorkspacePanelLayout = {
+  bottomPanelExpanded: false,
   bottomPanelSlot: createEmptyPanelSlot(),
   sidePanelExpanded: false,
   sidePanelSlot: createEmptyPanelSlot(),
@@ -166,6 +169,13 @@ export function useDesktopWorkspacePanelSession(targetIdentity: ChatComposerTarg
     });
   }, [updateLayout]);
 
+  const setBottomPanelExpanded = useCallback<Dispatch<SetStateAction<boolean>>>((value) => {
+    updateLayout((current) => {
+      const bottomPanelExpanded = typeof value === 'function' ? value(current.bottomPanelExpanded) : value;
+      return bottomPanelExpanded === current.bottomPanelExpanded ? current : { ...current, bottomPanelExpanded };
+    });
+  }, [updateLayout]);
+
   const layoutForIdentity = useCallback(
     (identity: ChatComposerTargetIdentity) => desktopWorkspacePanelLayout(layouts, identity),
     [layouts],
@@ -175,16 +185,38 @@ export function useDesktopWorkspacePanelSession(targetIdentity: ChatComposerTarg
     setLayouts((current) => resetDesktopWorkspacePanelLayout(current, identity));
   }, []);
 
+  const removePanel = useCallback((panelId: string) => {
+    setLayouts((current) => {
+      let next = current;
+      for (const identity of Object.keys(current) as ChatComposerTargetIdentity[]) {
+        next = updateDesktopWorkspacePanelLayout(next, identity, (layout) => {
+          const sidePanelSlot = removePanelFromSlotState(layout.sidePanelSlot, panelId);
+          const bottomPanelSlot = removePanelFromSlotState(layout.bottomPanelSlot, panelId);
+          if (sidePanelSlot === layout.sidePanelSlot && bottomPanelSlot === layout.bottomPanelSlot) return layout;
+          return {
+            ...layout, sidePanelSlot, bottomPanelSlot,
+            sidePanelExpanded: layout.sidePanelExpanded && sidePanelSlot.panels.length > 0,
+            bottomPanelExpanded: layout.bottomPanelExpanded && bottomPanelSlot.panels.length > 0,
+          };
+        });
+      }
+      return next;
+    });
+  }, []);
+
   const claimForThread = useCallback((threadId: string) => {
     setLayouts((current) => claimDesktopWorkspacePanelLayout(current, targetIdentityRef.current, threadId));
   }, []);
 
   return {
+    bottomPanelExpanded: layout.bottomPanelExpanded,
     bottomPanelSlot: layout.bottomPanelSlot,
     claimForThread,
     layoutForIdentity,
     layouts,
+    removePanel,
     resetForIdentity,
+    setBottomPanelExpanded,
     setBottomPanelSlot,
     setSidePanelExpanded,
     setSidePanelSlot,

@@ -59,19 +59,18 @@ describe('DesktopPanelHeader browser tabs', () => {
     expect(html).toContain('aria-label="添加面板"');
   });
 
-  it('exposes terminal close semantics only while the bottom terminal is active', () => {
+  it('exposes hide semantics while the bottom panel is visible', () => {
     const { getByRole } = render(createElement(DesktopPanelHeader, {
       activePanel: 'review',
       activePanelId: 'review',
       bottomBarActive: true,
-      bottomTerminalActive: true,
       onClose: () => undefined,
       onToggleBottomTerminal: () => undefined,
       panels: [{ id: 'review', type: 'review' }],
       placement: 'side',
     }));
 
-    const bottomPanelToggle = getByRole('button', { name: '关闭终端' });
+    const bottomPanelToggle = getByRole('button', { name: '隐藏底栏' });
     expect(bottomPanelToggle.getAttribute('aria-pressed')).toBe('true');
   });
 });

@@ -87,6 +87,8 @@
 
 这些偏好不应进入 runtime config，除非需要跨设备/进程或影响 Agent 行为。Hook 负责 default、normalize、DOM side effect 和 storage event。
 
+主题切换沿用 beUI Theme Toggle 的 circle 动画，从触发按钮中心展开，持续 700ms；`theme-transition.css` 持有 View Transition 样式，`useThemeTransition` 负责偏好保存和切换生命周期。侧栏与设置共用这条链路，减少动态效果或不支持 View Transition 时直接应用主题。
+
 ## Branding
 
 `branding/providerBranding.ts` 把 provider/model 信息映射到内置 token 或用户 data URL 图标。`BrandIconMark.tsx` 负责安全渲染。

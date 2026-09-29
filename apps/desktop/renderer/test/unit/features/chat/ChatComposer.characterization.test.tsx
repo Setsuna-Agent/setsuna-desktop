@@ -190,7 +190,6 @@ describe('ChatComposer view state characterization', () => {
       reviewModeEnabled: false,
       setThinkingEffort: vi.fn(),
       setThinkingEnabled: vi.fn(),
-      setThinkingMenuOpen: vi.fn(),
       supportsImageInput: true,
       thinkingConfig: {
         defaultEffort: '',
@@ -199,7 +198,6 @@ describe('ChatComposer view state characterization', () => {
       },
       thinkingEffort: '',
       thinkingEnabled: false,
-      thinkingMenuOpen: false,
     };
     composerHarness.queuedEdit = {
       cancel: vi.fn(),

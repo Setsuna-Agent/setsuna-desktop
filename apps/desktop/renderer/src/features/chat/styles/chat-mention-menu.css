@@ -1,0 +1,50 @@
+.chat-command-menu.chat-project-entry-command-menu {
+  gap: 0;
+  padding: 4px;
+}
+
+.chat-project-entry-command-menu .chat-command-menu__list {
+  gap: 0;
+}
+
+.chat-project-entry-command-menu .chat-command-menu__item {
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 8px;
+  min-height: 28px;
+  padding: 4px 8px;
+  border-radius: var(--app-radius-full);
+  font-weight: 400;
+}
+
+.chat-project-entry-command-menu .chat-command-menu__cursor {
+  border-radius: var(--app-radius-full);
+}
+
+.chat-project-entry-command-menu .chat-command-menu__item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+}
+
+.chat-project-entry-command-menu .chat-command-menu__item-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-project-entry-command-menu .chat-command-menu__item-title {
+  flex: 0 0 auto;
+  max-width: 60%;
+}
+
+.chat-project-entry-command-menu .chat-command-menu__item-title:only-child {
+  max-width: 100%;
+}
+
+.chat-project-entry-command-menu .chat-command-menu__item-desc {
+  flex: 0 1 auto;
+  font-size: 13px;
+  line-height: 18px;
+}

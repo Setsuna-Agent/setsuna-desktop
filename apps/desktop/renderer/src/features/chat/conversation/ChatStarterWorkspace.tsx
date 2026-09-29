@@ -1,6 +1,6 @@
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { Button, Popover, TextField } from '@setsuna-desktop/renderer-ui';
-import { Check, ChevronDown, FolderClosed, Plus, Search, X } from 'lucide-react';
+import { Check, FolderClosed, Plus, Search, X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 
@@ -75,7 +75,6 @@ export function ChatStarterWorkspace({ activeProject, projects, children, onSele
       <Button variant="ghost" className="chat-starter-workspace__project sd-picker-trigger" aria-label={t('chat.starter.switchProject')} title={activeProject?.path} disabled={pending}>
         <FolderClosed size={14} aria-hidden="true" />
         <span>{activeProject?.name ?? t('chat.starter.noProject')}</span>
-        <ChevronDown size={12} aria-hidden="true" />
       </Button>
     </Popover>
     {children}

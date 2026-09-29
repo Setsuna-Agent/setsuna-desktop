@@ -4,7 +4,8 @@
   justify-content: center;
   width: 100%;
   min-height: 100%;
-  padding: clamp(36px, 9vh, 88px) 0;
+  /* 下方多留空间，让新对话内容的视觉重心略高于页面中心。 */
+  padding: clamp(36px, 9vh, 88px) 0 clamp(108px, 21vh, 208px);
 }
 
 .chat-starter__stage {
@@ -24,7 +25,7 @@
   font-weight: 400;
   letter-spacing: -0.02em;
   line-height: 1.5;
-  text-align: left;
+  text-align: center;
 }
 
 .chat-starter__notice {
@@ -34,7 +35,7 @@
 
 .chat-starter__composer {
   order: 3;
-  margin-top: 20px;
+  margin-top: 28px;
 }
 
 .chat-starter__composer-motion {
@@ -89,10 +90,6 @@
   filter: blur(0);
   transform: translateY(0);
   animation: chat-starter-reveal 500ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
-}
-
-.chat-starter__reveal--greeting {
-  animation-delay: 30ms;
 }
 
 .chat-starter__reveal--question {
@@ -192,7 +189,7 @@
 
 @container (max-width: 420px) {
   .chat-starter {
-    padding-block: 28px;
+    padding-block: 28px 100px;
   }
 }
 

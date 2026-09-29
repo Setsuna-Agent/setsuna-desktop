@@ -262,7 +262,7 @@ export function ChatRouteAdapter({
         if (panel?.type === 'files' && !await projectWorkspace.setFilePreview(null)) return;
         workspacePanels.activateDesktopPanel('bottom', panelId);
       },
-      onCloseBottomSlot: () => workspacePanels.closeDesktopPanelSlot('bottom'),
+      onHideBottomSlot: workspacePanels.hideBottomPanel,
       onClosePanel: workspacePanels.closeDesktopPanelItem,
       onOpenCommitMessageEditor: workspacePanels.openCommitMessageEditor,
       onCopyFilePath: workspacePanels.copyWorkspaceFilePath,

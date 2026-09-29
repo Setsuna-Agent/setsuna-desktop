@@ -849,10 +849,8 @@ export function ChatComposer({
               disabled: queuedTurnEdit.editing || queuedTurnEdit.retrieving,
               effort: modeController.thinkingEffort,
               enabled: modeController.thinkingEnabled,
-              menuOpen: modeController.thinkingMenuOpen,
               onEffortChange: modeController.setThinkingEffort,
               onEnabledChange: modeController.setThinkingEnabled,
-              onMenuOpenChange: modeController.setThinkingMenuOpen,
             }}
             onAccessModeChange={onAccessModeChange}
             onSelectModel={selectModel}

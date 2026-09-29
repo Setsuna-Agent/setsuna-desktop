@@ -1,0 +1,25 @@
+/* Adapted from beUI Theme Toggle's circle variant (MIT): https://beui.dev/components/motion/theme-toggle */
+:root[data-theme-transition='circle']::view-transition-old(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+:root[data-theme-transition='circle']::view-transition-new(root) {
+  mix-blend-mode: normal;
+  animation: beui-circle-reveal 700ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes beui-circle-reveal {
+  from {
+    clip-path: circle(0% at var(--desktop-theme-transition-origin));
+  }
+  to {
+    clip-path: circle(150% at var(--desktop-theme-transition-origin));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme-transition='circle']::view-transition-new(root) {
+    animation: none;
+  }
+}
