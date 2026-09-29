@@ -1,3 +1,4 @@
+import { copyRuntimeThread } from '../../runtime/use-cases/thread-fork.js';
 import {
   DEFAULT_THREAD_TITLE,
   type ThreadQuery,
@@ -17,7 +18,6 @@ import {
 import {
   appendAndPublishRuntimeEvent,
   cancelRuntimeTurn,
-  copyRuntimeMessagesToThread,
   randomRuntimeId,
   requireRuntimeThread,
   rollbackStartMessageId,
@@ -386,23 +386,7 @@ export async function dispatchAppServerRpcRequest(
     if (!source) throw new AppServerRpcError(-32004, 'Thread not found', { threadId });
     const messages = runtimeMessagesThroughTurn(source.messages, stringInput(input.lastTurnId));
     const cwd = stringInput(input.cwd) || process.cwd();
-    const thread = await runtime.threadStore.createThread({
-      title: stringInput(input.name) || source.title,
-      projectId: source.projectId,
-      forkedFromId: source.id,
-      modelBinding: source.modelBinding ? { ...source.modelBinding } : undefined,
-    });
-    const attachments = messages.flatMap((message) => message.attachments ?? []);
-    try {
-      await runtime.attachmentStore.retainForThread(thread.id, attachments);
-      await copyRuntimeMessagesToThread(runtime, source.id, thread.id, messages);
-    } catch (error) {
-      await runtime.attachmentStore.releaseThread(thread.id).catch(() => undefined);
-      await runtime.toolResultStore.releaseThread(thread.id).catch(() => undefined);
-      await runtime.threadStore.deleteThread(thread.id).catch(() => undefined);
-      throw error;
-    }
-    const forked = await runtime.threadStore.getThread(thread.id) ?? thread;
+    const forked = await copyRuntimeThread(runtime, source, messages, { title: stringInput(input.name) });
     const config = await runtime.configStore.getConfig();
     return sweThreadSessionResponse(forked, cwd, config, options, input.excludeTurns !== true);
   }

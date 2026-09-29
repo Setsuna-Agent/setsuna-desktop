@@ -12,6 +12,8 @@ import type {
   DesktopReviewOpenHandler,
 } from '../../features/workspace/model.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import { ChatForkProvider } from '../../features/chat/fork/ChatForkAction.js';
+import { useChatStarterLocation } from '../../features/chat/hooks/useChatStarterLocation.js';
 import { AppChatSurface } from './AppChatSurface.js';
 import type { AppRouteContentProps } from './AppRouteContent.js';
 import type { ChatConversationSurfaceModel } from './ChatConversationSurface.js';
@@ -48,6 +50,7 @@ export function ChatRouteAdapter({
   onConversationOverviewRenderedChange,
   onFocusComposerRequestConsumed,
   onOpenModelSettings,
+  onForkThread,
   onOpenPlugin,
   onCapabilitySelectionRequestConsumed,
   onTerminalResizeStart,
@@ -70,6 +73,12 @@ export function ChatRouteAdapter({
   const { t } = useI18n();
   const pluginManagement = usePluginManagementFeatureSnapshot();
   const skills = useSkillsFeatureSnapshot();
+  const starterLocation = useChatStarterLocation({
+    identity: `${composerKey}:${activeProject?.id ?? 'global'}`,
+    canCreateWorktree: Boolean(activeProject && activeWorkspace?.gitRoot),
+    hasThread: Boolean(runtime.currentThread),
+    onSend: chatActions.sendInput,
+  });
   const [scopedReviewFocusRequest, setScopedReviewFocusRequest] = useState<ScopedReviewFocusRequest | null>(null);
   const reviewFocusOwnerKey = `${runtime.currentThread?.id ?? ''}:${activeWorkspace?.id ?? ''}`;
   const reviewFocusRequest = scopedReviewFocusRequest?.ownerKey === reviewFocusOwnerKey
@@ -159,6 +168,7 @@ export function ChatRouteAdapter({
   });
   const conversation: ChatConversationSurfaceModel = {
     starterProjectSelection,
+    starterLocationSelection: starterLocation.selection,
     activeTurnId: runtime.activeTurnId,
     activeWorkspace,
     canClearContext: Boolean(runtime.currentThread?.messages.length),
@@ -200,10 +210,12 @@ export function ChatRouteAdapter({
     onOpenWorkspaceDirectory: (directoryPath) => { void workspacePanels.openWorkspaceDirectory(directoryPath); },
     onSearchProjectEntries: projectWorkspace.searchProjectEntries,
     onSelectModel: runtime.selectConversationModel,
-    onSend: chatActions.sendInput,
+    onSend: starterLocation.sendInput,
     onSetMultiAgentEnabled: setMultiAgentEnabled,
     onCapabilitySelectionRequestConsumed,
-    onStartThreadReview: startCurrentThreadReview,
+    onStartThreadReview: (target, modelSelection) => startCurrentThreadReview(
+      target, modelSelection, runtime.currentThread ? undefined : starterLocation.selection.value,
+    ),
   };
   const workspace: DesktopWorkspacePanelModel = {
     context: {
@@ -312,6 +324,14 @@ export function ChatRouteAdapter({
   };
 
   return <BrowserTabMentionsProvider value={mentionedBrowserTabs}>
-    <AppChatSurface conversation={conversation} onOpenPlugin={onOpenPlugin} workspace={workspace} />
+    <ChatForkProvider
+      threadId={runtime.currentThread?.id ?? null}
+      disabled={Boolean(runtime.activeTurnId) || runtime.contextCompacting}
+      canCreateWorktree={Boolean(activeWorkspace?.gitRoot)}
+      onFork={onForkThread}
+      onError={runtime.setError}
+    >
+      <AppChatSurface conversation={conversation} onOpenPlugin={onOpenPlugin} workspace={workspace} />
+    </ChatForkProvider>
   </BrowserTabMentionsProvider>;
 }

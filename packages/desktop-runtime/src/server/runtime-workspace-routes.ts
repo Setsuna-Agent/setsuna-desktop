@@ -75,7 +75,7 @@ export async function handleRuntimeWorkspaceRequest(
         sendJson(response, 404, { error: 'Thread not found' });
         return true;
       }
-      const projectId = thread.projectId
+      const projectId = thread.workspaceId ?? thread.projectId
         ?? (await runtime.workspaceProjects.ensureTemporaryWorkspace({
           threadId,
           createdAt: thread.createdAt,

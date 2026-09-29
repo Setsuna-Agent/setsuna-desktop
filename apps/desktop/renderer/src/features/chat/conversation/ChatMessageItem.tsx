@@ -172,7 +172,7 @@ export const MessageItem = memo(function MessageItem({
         <MessageBubble
           className={`chat-user-bubble ${hasAttachments ? 'chat-user-bubble--with-attachments' : ''}`}
           content={<UserMessageContent message={message} streaming={streaming} />}
-          footer={<ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} align="end" message={message} onDelete={steered || !onStartDelete ? undefined : () => onStartDelete(item.id)} onEdit={steered || !onStartEdit || message.inputKind === 'goal' || message.inputKind === 'review' || message.inputKind === 'subagent_task' ? undefined : () => onStartEdit(message)} timePosition={steered ? 'none' : 'before-actions'} />}
+          footer={<ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} align="end" message={message} forkMessageId={steered ? null : message.id} onDelete={steered || !onStartDelete ? undefined : () => onStartDelete(item.id)} onEdit={steered || !onStartEdit || message.inputKind === 'goal' || message.inputKind === 'review' || message.inputKind === 'subagent_task' ? undefined : () => onStartEdit(message)} timePosition={steered ? 'none' : 'before-actions'} />}
           align="end"
           variant="soft"
         />
@@ -281,7 +281,7 @@ function AssistantRunItem({
       <MessageBubble
         className="chat-ai-bubble"
         content={<AssistantRunContent active={active} contextCompactionActive={contextCompactionActive} item={item} onAnswerApproval={onAnswerApproval} onFileChangesAction={onFileChangesAction} onOpenFileReview={onOpenFileReview} onWorkHistoryExpandedChange={onWorkHistoryExpandedChange} pluginUses={pluginUses} showThinkingInTranscript={showThinkingInTranscript} />}
-        footer={belongsToActiveTurn ? undefined : <ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} message={footerMessage} onDelete={onStartDelete ? () => onStartDelete(item.id) : undefined} timePosition="after-actions" />}
+        footer={belongsToActiveTurn ? undefined : <ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} message={footerMessage} forkMessageId={item.messageIds.at(-1)} onDelete={onStartDelete ? () => onStartDelete(item.id) : undefined} timePosition="after-actions" />}
         align="start"
         variant="ghost"
       />
@@ -578,7 +578,7 @@ function GuidanceMessage({ message }: { message: RuntimeMessage }) {
       <div className="chat-guidance-message__bubble">
         <UserMessageContent message={message} streaming={false} />
       </div>
-      <ChatMessageFooter align="end" message={message} timePosition="none" />
+      <ChatMessageFooter align="end" message={message} forkMessageId={null} timePosition="none" />
     </div>
   );
 }

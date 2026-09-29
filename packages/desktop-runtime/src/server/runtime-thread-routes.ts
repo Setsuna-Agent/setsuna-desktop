@@ -1,5 +1,6 @@
 import type {
   CreateThreadInput,
+  ForkThreadInput,
   MessageDeleteInput,
   MessagePatch,
   RegenerateMessageInput,
@@ -15,6 +16,10 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { URL } from 'node:url';
 import type { ThreadStorePatch } from '../ports/thread-store.js';
 import { applyThreadFileChanges } from '../runtime/use-cases/thread-file-changes.js';
+import { forkRuntimeThread } from '../runtime/use-cases/thread-fork.js';
+import { createRuntimeThread } from '../runtime/use-cases/thread-create.js';
+import { validateRuntimeThreadWorkspaceReset } from '../runtime/use-cases/thread-operations.js';
+import { RuntimeUseCaseError } from '../runtime/use-cases/errors.js';
 import { stringInput } from './app-server/input.js';
 import { runtimeSkillReferenceList } from './runtime-skill-reference-input.js';
 import {
@@ -53,16 +58,20 @@ export async function handleRuntimeThreadRequest(
 
   if (request.method === 'POST' && url.pathname === '/v1/threads') {
     const input = await readBody<CreateThreadInput>(request, {});
-    const settings = await runtime.agentLoop.memoryControl().readSettings().catch(() => null);
-    const thread = await runtime.threadStore.createThread({
-      ...input,
-      memoryMode: input.memoryMode ?? (settings?.value.generateMemories ? 'enabled' : 'disabled'),
-    });
+    const thread = await createRuntimeThread(runtime, input);
     sendJson(response, 201, await runtimeThreadResponse(runtime, thread));
     return true;
   }
 
   const threadMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)$/u);
+  const forkMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/fork$/u);
+  if (forkMatch && request.method === 'POST') {
+    const thread = await forkRuntimeThread(
+      runtime, decodeRuntimeId(forkMatch[1], 'Thread id'), await readBody<ForkThreadInput>(request),
+    );
+    sendJson(response, 201, await runtimeThreadResponse(runtime, thread));
+    return true;
+  }
   const fileChangesMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/file-changes\/(undo|redo)$/u);
   if (fileChangesMatch && request.method === 'POST') {
     sendJson(response, 200, await applyThreadFileChanges(
@@ -95,6 +104,9 @@ export async function handleRuntimeThreadRequest(
   if (threadMatch && request.method === 'PATCH') {
     const threadId = decodeRuntimeId(threadMatch[1], 'Thread id');
     const input = await readBody<ThreadPatch>(request);
+    if (input.workspaceId !== undefined && input.workspaceId !== null) {
+      throw new RuntimeUseCaseError('invalid_input', 'workspaceId can only be cleared.');
+    }
     const modelSelection = await resolveRuntimeModelSelectionInput(
       runtime.configStore,
       input.modelSelection,
@@ -102,11 +114,13 @@ export async function handleRuntimeThreadRequest(
     const patch: ThreadStorePatch = {
       title: input.title,
       archived: input.archived,
+      workspaceId: input.workspaceId,
       ...(modelSelection ? { modelBinding: modelSelection.binding } : {}),
     };
     const thread = await runtime.agentLoop.withThreadMutation(
       threadId,
       async () => {
+        if (input.workspaceId === null) await validateRuntimeThreadWorkspaceReset(runtime, threadId);
         const beforeSeq = (await runtime.threadStore.getThread(threadId))?.lastSeq ?? 0;
         const updated = await runtime.threadStore.updateThread(threadId, patch);
         await publishThreadEventsSince(runtime, threadId, beforeSeq);

@@ -1,6 +1,6 @@
-import type { WorkspaceProject } from '@setsuna-desktop/contracts';
-import { Button, Popover, TextField } from '@setsuna-desktop/renderer-ui';
-import { Check, FolderClosed, Plus, Search, X } from 'lucide-react';
+import type { CreateThreadInput, WorkspaceProject } from '@setsuna-desktop/contracts';
+import { Button, Dropdown, Popover, TextField } from '@setsuna-desktop/renderer-ui';
+import { Check, FolderClosed, Laptop, Plus, Search, Split, X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 
@@ -10,9 +10,17 @@ export type ChatStarterProjectSelection = {
   onCreateProject(): void;
 };
 
-export function ChatStarterWorkspace({ activeProject, projects, children, onSelectProject, onCreateProject }: ChatStarterProjectSelection & {
+export type ChatStarterLocationSelection = {
+  value: NonNullable<CreateThreadInput['workspaceMode']>;
+  canCreateWorktree: boolean;
+  disabled: boolean;
+  onChange(value: NonNullable<CreateThreadInput['workspaceMode']>): void;
+};
+
+export function ChatStarterWorkspace({ activeProject, projects, children, locationSelection, onSelectProject, onCreateProject }: ChatStarterProjectSelection & {
   activeProject?: WorkspaceProject;
   children?: ReactNode;
+  locationSelection?: ChatStarterLocationSelection;
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -77,6 +85,30 @@ export function ChatStarterWorkspace({ activeProject, projects, children, onSele
         <span>{activeProject?.name ?? t('chat.starter.noProject')}</span>
       </Button>
     </Popover>
+    {locationSelection ? <ChatStarterLocation {...locationSelection} /> : null}
     {children}
   </div>;
+}
+
+function ChatStarterLocation({ value, canCreateWorktree, disabled, onChange }: ChatStarterLocationSelection) {
+  const { t } = useI18n();
+  return <Dropdown
+    disabled={disabled}
+    placement="topLeft"
+    menu={{ selectedKeys: [value], items: [{
+      type: 'group', label: t('chat.starter.location'), children: [
+        { key: 'local', label: t('chat.starter.local'), icon: <Laptop size={14} />,
+          onClick: () => onChange('local') },
+        { key: 'worktree', label: t('chat.starter.newWorktree'), icon: <Split size={14} />,
+          disabled: !canCreateWorktree,
+          tooltip: canCreateWorktree ? undefined : t('chat.fork.requiresGit'),
+          onClick: () => onChange('worktree') },
+      ],
+    }] }}
+  >
+    <Button variant="ghost" className="sd-picker-trigger" disabled={disabled} aria-label={t('chat.starter.location')}>
+      {value === 'worktree' ? <Split size={14} aria-hidden="true" /> : <Laptop size={14} aria-hidden="true" />}
+      <span>{t(value === 'worktree' ? 'chat.starter.newWorktree' : 'chat.starter.local')}</span>
+    </Button>
+  </Dropdown>;
 }

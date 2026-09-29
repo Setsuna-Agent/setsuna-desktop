@@ -12,6 +12,50 @@ import { addPanelToSlotState, createBrowserPanel } from '../../../../src/feature
 
 afterEach(cleanup);
 
+it.each([false, true])('opens a fork under its original project, unless navigation changed while creating it: %s', async (navigateAway) => {
+  const source: RuntimeThread = { id: 'source', projectId: 'original', title: 'Source', createdAt: '', updatedAt: '',
+    archived: false, messageCount: 0, lastMessagePreview: '', messages: [], lastSeq: 0 };
+  const forked = { ...source, id: 'forked', workspaceId: 'worktree' };
+  const other = { ...source, id: 'other' };
+  const project: WorkspaceProject = { id: 'original', name: 'Original', createdAt: '', updatedAt: '' };
+  const resetProjectWorkspaceState = vi.fn();
+  const listProjects = vi.fn();
+  let finish!: (thread: RuntimeThread) => void;
+  const forkThread = vi.fn(() => new Promise<RuntimeThread>((resolve) => { finish = resolve; }));
+  const reloadThreads = vi.fn(async () => [source, forked]);
+  const { result } = renderHook(() => {
+    const [currentThread, setCurrentThread] = useState<RuntimeThread | null>(source);
+    const [activeProjectId, setActiveProjectId] = useState<string | null>(source.projectId!);
+    const [projects, setProjects] = useState<WorkspaceProject[]>([project]);
+    const navigation = useDesktopNavigation({
+      activeProjectId, setActiveProjectId, currentThread, setCurrentThread, projects, setProjects, setActiveView: vi.fn(),
+      client: { forkThread, getThread: async () => other, listProjects } as unknown as DesktopRuntimeClient,
+      confirmDiscardProjectFile: async () => true, globalThreads: [], threadsByProjectId: new Map(), reloadThreads,
+      resetProjectWorkspaceState, resetNewThreadWorkspacePanels: vi.fn(), resetThreadWorkspacePanels: vi.fn(),
+    });
+    return { navigation, currentThread, activeProjectId, projects };
+  });
+  let pending!: Promise<void>;
+  await act(async () => {
+    pending = result.current.navigation.forkThread({ messageId: 'answer', target: 'worktree' });
+    await Promise.resolve();
+  });
+  if (navigateAway) await act(() => result.current.navigation.selectThread(other.id));
+  await act(async () => { finish(forked); await pending; });
+  expect(forkThread).toHaveBeenCalledWith(source.id, { messageId: 'answer', target: 'worktree' });
+  expect(reloadThreads).toHaveBeenCalledTimes(1);
+  expect(result.current.projects).toEqual([project]);
+  expect(listProjects).not.toHaveBeenCalled();
+  expect(resetProjectWorkspaceState).toHaveBeenCalledTimes(navigateAway ? 0 : 1);
+  expect(result.current.currentThread?.id).toBe(navigateAway ? other.id : forked.id);
+  expect(result.current.activeProjectId).toBe(project.id);
+  if (!navigateAway) {
+    await act(() => result.current.navigation.selectThread(other.id));
+    expect(resetProjectWorkspaceState).toHaveBeenCalledTimes(2);
+    expect(result.current.currentThread?.workspaceId).toBeUndefined();
+  }
+});
+
 it('changes a new chat project without opening a conversation or losing its draft and composer session', async () => {
   const getThread = vi.fn();
   const resetProjectWorkspaceState = vi.fn();

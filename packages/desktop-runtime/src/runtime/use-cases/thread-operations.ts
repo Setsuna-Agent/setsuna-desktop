@@ -38,6 +38,19 @@ export async function requireRuntimeThread(
   return thread;
 }
 
+/** Validate the destination before dropping a conversation's worktree binding. Called under the thread mutation lock. */
+export async function validateRuntimeThreadWorkspaceReset(runtime: RuntimeContainer, threadId: string): Promise<void> {
+  const thread = await requireRuntimeThread(runtime, threadId);
+  if (runtime.agentLoop.activeTurnId(threadId) || thread.contextCompaction?.status === 'running') {
+    throw new RuntimeUseCaseError('conflict', 'Wait for the current turn to finish before switching workspace.');
+  }
+  if (!thread.projectId) throw new RuntimeUseCaseError('invalid_request', 'This conversation has no owning project.');
+  const status = await runtime.workspaceProjects.getStatus(thread.projectId);
+  if (!status.project?.path || !status.exists || !status.readable) {
+    throw new RuntimeUseCaseError('invalid_request', 'The project directory is unavailable.');
+  }
+}
+
 /**
  * Owns destructive thread deletion after protocol parsing. Both REST and
  * app-server must cross the same deletion barrier and run the same teardown.

@@ -1,4 +1,10 @@
 export const workspaceZhCN = {
+  'workspace.worktree.missing': '找不到工作树',
+  'workspace.worktree.switchDescription': '切换到项目「{project}」继续此对话。',
+  'workspace.worktree.switchToProject': '切换到当前项目',
+  'workspace.worktree.keepConversation': '暂不切换',
+  'workspace.worktree.projectUnavailable': '当前项目目录也不可用，请先重新关联项目目录。',
+  'workspace.worktree.switchFailed': '切换失败，请确认项目目录可用且当前任务已结束后重试。',
   'conversation.overview.review': '审查',
   'conversation.overview.title': '环境信息',
   'conversation.overview.loading': '加载中',
@@ -135,6 +141,12 @@ export const workspaceZhCN = {
 } as const;
 
 export const workspaceEnUS = {
+  'workspace.worktree.missing': 'Worktree not found',
+  'workspace.worktree.switchDescription': 'Switch to “{project}” to continue this conversation.',
+  'workspace.worktree.switchToProject': 'Switch to current project',
+  'workspace.worktree.keepConversation': 'Not now',
+  'workspace.worktree.projectUnavailable': 'The project directory is also unavailable. Reconnect the project directory first.',
+  'workspace.worktree.switchFailed': 'Could not switch. Make sure the project directory is available and the current task has finished, then retry.',
   'conversation.overview.review': 'Review',
   'conversation.overview.title': 'Environment information',
   'conversation.overview.loading': 'Loading',

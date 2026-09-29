@@ -20,7 +20,8 @@ export type ThreadStorePatch = Omit<ThreadPatch, 'modelSelection'> & {
   modelBinding?: RuntimeThreadModelBinding;
 };
 
-export type ThreadStoreCreateInput = CreateThreadInput & {
+export type ThreadStoreCreateInput = Omit<CreateThreadInput, 'workspaceMode'> & {
+  workspaceId?: string;
   kind?: NonNullable<RuntimeThreadSummary['kind']>;
   modelBinding?: RuntimeThreadModelBinding;
 };

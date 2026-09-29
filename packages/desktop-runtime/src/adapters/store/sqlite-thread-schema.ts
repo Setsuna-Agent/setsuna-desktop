@@ -1,6 +1,15 @@
 import type { DatabaseSync } from 'node:sqlite';
 
-export const SQLITE_THREAD_SCHEMA_VERSION = 5;
+export const SQLITE_THREAD_SCHEMA_VERSION = 6;
+
+// Keep summary polling independent of full transcript JSON. Existing bindings
+// may live in either a legacy snapshot or the partitioned checkpoint header.
+const WORKSPACE_SUMMARY_SCHEMA = `
+  ALTER TABLE threads ADD COLUMN workspace_id TEXT;
+  UPDATE threads SET workspace_id = json_extract(snapshot_json,
+    CASE WHEN snapshot_format = 2 THEN '$.thread.workspaceId' ELSE '$.workspaceId' END);
+  PRAGMA user_version = 6;
+`;
 
 const INCREMENTAL_CHECKPOINT_SCHEMA = `
   ALTER TABLE threads ADD COLUMN snapshot_format INTEGER NOT NULL DEFAULT 1;
@@ -104,6 +113,10 @@ export function ensureSqliteThreadSchema(database: DatabaseSync): void {
   }
   if (version === 4) {
     withTransaction(database, () => database.exec(INCREMENTAL_CHECKPOINT_SCHEMA));
+    version = 5;
+  }
+  if (version === 5) {
+    withTransaction(database, () => database.exec(WORKSPACE_SUMMARY_SCHEMA));
     return;
   }
   if (version !== 0) throw new Error(`Unsupported SQLite thread store schema: ${version}`);
@@ -192,6 +205,7 @@ export function ensureSqliteThreadSchema(database: DatabaseSync): void {
 
     ${FEATURE_PROJECTION_CHECKPOINT_SCHEMA}
     ${INCREMENTAL_CHECKPOINT_SCHEMA}
+    ${WORKSPACE_SUMMARY_SCHEMA}
   `));
 }
 

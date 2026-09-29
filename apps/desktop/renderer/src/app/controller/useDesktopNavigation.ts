@@ -1,5 +1,6 @@
 import type {
   DesktopRuntimeClient,
+  ForkThreadInput,
   RuntimeThread,
   RuntimeThreadSummary,
   UpdateWorkspaceProjectInput,
@@ -63,6 +64,7 @@ export function useDesktopNavigation({
   const [renameThreadTitle, setRenameThreadTitle] = useState('');
   const navigationRequests = useLatestRequestGuard();
   const currentProjectId = currentThread ? currentThread.projectId ?? null : activeProjectId;
+  const currentWorkspaceId = currentThread?.workspaceId ?? currentThread?.projectId ?? currentThread?.id ?? activeProjectId;
 
   const closeNavigationMenus = useCallback(() => {
     setProjectActionMenuId(null);
@@ -96,7 +98,7 @@ export function useDesktopNavigation({
     setActiveView('chat');
     setThreadActionMenuId(null);
     setProjectActionMenuId(null);
-    if (activeProjectId && !projectId) resetProjectWorkspaceState();
+    if (currentWorkspaceId !== projectId) resetProjectWorkspaceState();
     setActiveProjectId(projectId);
     setCurrentThread(null);
     if (projectId) {
@@ -104,7 +106,7 @@ export function useDesktopNavigation({
     } else {
       setSessionsCollapsed(false);
     }
-  }, [activeProjectId, confirmDiscardProjectFile, expandProject, navigationRequests, projects, resetProjectWorkspaceState, setActiveProjectId, setActiveView, setCurrentThread]);
+  }, [activeProjectId, confirmDiscardProjectFile, currentWorkspaceId, expandProject, navigationRequests, projects, resetProjectWorkspaceState, setActiveProjectId, setActiveView, setCurrentThread]);
 
   const startGlobalThread = useCallback(async () => {
     if (!await confirmDiscardProjectFile()) return;
@@ -125,12 +127,12 @@ export function useDesktopNavigation({
       setActiveView('chat');
       setThreadActionMenuId(null);
       setProjectActionMenuId(null);
-      if (projectId !== currentProjectId) resetProjectWorkspaceState();
+      if (projectId !== currentWorkspaceId) resetProjectWorkspaceState();
       setActiveProjectId(projectId);
       expandProject(projectId);
       setCurrentThread(null);
     },
-    [confirmDiscardProjectFile, currentProjectId, expandProject, navigationRequests, resetProjectWorkspaceState, setActiveProjectId, setActiveView, setCurrentThread],
+    [confirmDiscardProjectFile, currentWorkspaceId, expandProject, navigationRequests, resetProjectWorkspaceState, setActiveProjectId, setActiveView, setCurrentThread],
   );
 
   const selectThread = useCallback(
@@ -141,8 +143,7 @@ export function useDesktopNavigation({
       setThreadActionMenuId(null);
       const thread = await client.getThread(threadId);
       if (!isLatest()) return;
-      const nextProjectId = thread.projectId ?? null;
-      if (nextProjectId !== currentProjectId) resetProjectWorkspaceState();
+      if ((thread.workspaceId ?? thread.projectId ?? thread.id) !== currentWorkspaceId) resetProjectWorkspaceState();
       if (thread.projectId) {
         setActiveProjectId(thread.projectId);
         expandProject(thread.projectId);
@@ -151,8 +152,22 @@ export function useDesktopNavigation({
       }
       setCurrentThread(thread);
     },
-    [client, confirmDiscardProjectFile, currentProjectId, expandProject, navigationRequests, resetProjectWorkspaceState, setActiveProjectId, setActiveView, setCurrentThread],
+    [client, confirmDiscardProjectFile, currentWorkspaceId, expandProject, navigationRequests, resetProjectWorkspaceState, setActiveProjectId, setActiveView, setCurrentThread],
   );
+
+  const forkThread = useCallback(async (input: ForkThreadInput) => {
+    if (!currentThread || !await confirmDiscardProjectFile()) return;
+    const isLatest = navigationRequests.begin();
+    const forked = await client.forkThread(currentThread.id, input);
+    await reloadThreads();
+    // Worktree creation can outlive navigation to another conversation.
+    if (!isLatest()) return;
+    if ((forked.workspaceId ?? forked.projectId ?? forked.id) !== currentWorkspaceId) resetProjectWorkspaceState();
+    setActiveView('chat');
+    setActiveProjectId(forked.projectId ?? null);
+    if (forked.projectId) expandProject(forked.projectId);
+    setCurrentThread(forked);
+  }, [client, confirmDiscardProjectFile, currentWorkspaceId, currentThread, expandProject, navigationRequests, reloadThreads, resetProjectWorkspaceState, setActiveProjectId, setActiveView, setCurrentThread]);
 
   const selectNewThreadProject = useCallback(async (projectId: string | null) => {
     if (currentThread || projectId === activeProjectId) return;
@@ -200,13 +215,13 @@ export function useDesktopNavigation({
         (thread.projectId ? nextThreads.find((item) => item.projectId === thread.projectId) : nextThreads.find((item) => !item.projectId)) ??
         nextThreads[0];
       if (!fallbackSummary) {
+        resetProjectWorkspaceState();
         setCurrentThread(null);
         return;
       }
       const fallback = await client.getThread(fallbackSummary.id);
       if (!isLatest()) return;
-      const nextProjectId = fallback.projectId ?? null;
-      if (nextProjectId !== (thread.projectId ?? null)) resetProjectWorkspaceState();
+      if ((fallback.workspaceId ?? fallback.projectId ?? fallback.id) !== currentWorkspaceId) resetProjectWorkspaceState();
       if (fallback.projectId) {
         setActiveProjectId(fallback.projectId);
         expandProject(fallback.projectId);
@@ -215,7 +230,7 @@ export function useDesktopNavigation({
       }
       setCurrentThread(fallback);
     },
-    [client, confirmDiscardProjectFile, currentThread?.id, expandProject, navigationRequests, reloadThreads, resetProjectWorkspaceState, resetThreadWorkspacePanels, setActiveProjectId, setCurrentThread],
+    [client, confirmDiscardProjectFile, currentThread?.id, currentWorkspaceId, expandProject, navigationRequests, reloadThreads, resetProjectWorkspaceState, resetThreadWorkspacePanels, setActiveProjectId, setCurrentThread],
   );
 
   const enterChatMode = useCallback(async () => {
@@ -379,6 +394,7 @@ export function useDesktopNavigation({
     saveProject,
     selectNewThreadProject,
     selectThread,
+    forkThread,
     sessionsCollapsed,
     setProjectActionMenuId,
     setProjectsCollapsed,

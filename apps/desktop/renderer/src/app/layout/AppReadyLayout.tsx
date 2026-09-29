@@ -31,6 +31,7 @@ import { AppTopbarActions } from './AppTopbarActions.js';
 import { AppThreadHistoryNavigation } from './AppThreadHistoryNavigation.js';
 import { AppWorkspaceToolbar } from './AppWorkspaceToolbar.js';
 import { RuntimeErrorNotice, runtimeErrorNoticeMessage } from './RuntimeErrorNotice.js';
+import { MissingWorktreeDialog } from '../../features/workspace/MissingWorktreeDialog.js';
 import { ShellFrame } from './ShellFrame.js';
 import { useSecondaryRoutePrefetch } from './useSecondaryRoutePrefetch.js';
 import {
@@ -459,6 +460,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         selectedPluginViewKey={selectedPluginViewKey}
         settingsInitialSection={settingsInitialSection}
         chatActions={chatActions}
+        onForkThread={navigation.forkThread}
         composerKey={composerKey}
         attachmentStore={attachmentStore}
         focusComposerRequest={focusComposerRequest}
@@ -498,6 +500,18 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
 
       {visibleRuntimeError ? (
         <RuntimeErrorNotice message={visibleRuntimeError} />
+      ) : null}
+
+      {activeView === 'chat' && currentThread && controller.worktreeRecovery.open ? (
+        <MissingWorktreeDialog
+          key={`${currentThread.id}:${currentThread.workspaceId}`}
+          threadId={currentThread.id}
+          project={activeProject}
+          client={runtime.client}
+          setCurrentThread={runtime.setCurrentThread}
+          reloadThreads={runtime.reloadThreads}
+          onClose={controller.worktreeRecovery.dismiss}
+        />
       ) : null}
 
       <RendererOwnedSingleSlot

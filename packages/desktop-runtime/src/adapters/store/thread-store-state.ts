@@ -84,6 +84,7 @@ export function toSummary(thread: RuntimeThread): RuntimeThreadSummary {
     forkedFromId: thread.forkedFromId,
     parentThreadId: thread.parentThreadId,
     projectId: thread.projectId,
+    workspaceId: thread.workspaceId,
     title: thread.title,
     createdAt: thread.createdAt,
     updatedAt: thread.updatedAt,

@@ -114,10 +114,11 @@ export type StoredFeatureEventEnvelope = Readonly<{
 }>;
 
 export type CoreRuntimeEvent =
-  | RuntimeEventBase<'thread.created', { title: string; modelBinding?: RuntimeThreadModelBinding }>
+  | RuntimeEventBase<'thread.created', { title: string; workspaceId?: string; modelBinding?: RuntimeThreadModelBinding }>
   | RuntimeEventBase<'thread.updated', {
       title?: string;
       archived?: boolean;
+      workspaceId?: null;
       modelBinding?: RuntimeThreadModelBinding;
     }>
   | RuntimeEventBase<'thread.deleted', Record<string, never>>

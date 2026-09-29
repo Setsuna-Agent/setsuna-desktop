@@ -59,11 +59,11 @@ export function insertThreadProjection(
   const summary = toSummary(thread);
   database.prepare(`
     INSERT INTO threads(
-      id, kind, active_turn_id, forked_from_id, parent_thread_id, project_id, title,
+      id, kind, active_turn_id, forked_from_id, parent_thread_id, project_id, workspace_id, title,
       created_at, updated_at, archived, memory_mode, git_info_json, goal_json,
       message_count, last_message_preview, snapshot_json, snapshot_seq, last_seq,
       events_archived_through_seq, message_index_seq
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
   `).run(
     thread.id,
     normalizeThreadKind(summary.kind),
@@ -71,6 +71,7 @@ export function insertThreadProjection(
     summary.forkedFromId ?? null,
     summary.parentThreadId ?? null,
     summary.projectId ?? null,
+    summary.workspaceId ?? null,
     summary.title,
     summary.createdAt,
     summary.updatedAt,
@@ -120,6 +121,7 @@ export function updateThreadProjection(
     summary.forkedFromId ?? null,
     summary.parentThreadId ?? null,
     summary.projectId ?? null,
+    summary.workspaceId ?? null,
     summary.title,
     summary.createdAt,
     summary.updatedAt,
@@ -133,14 +135,14 @@ export function updateThreadProjection(
   const result = snapshotSeq === null
     ? database.prepare(`
         UPDATE threads SET
-          kind = ?, active_turn_id = ?, forked_from_id = ?, parent_thread_id = ?, project_id = ?, title = ?,
+          kind = ?, active_turn_id = ?, forked_from_id = ?, parent_thread_id = ?, project_id = ?, workspace_id = ?, title = ?,
           created_at = ?, updated_at = ?, archived = ?, memory_mode = ?, git_info_json = ?, goal_json = ?,
           message_count = ?, last_message_preview = ?, last_seq = ?
         WHERE id = ? AND last_seq = ?
       `).run(...common, thread.lastSeq, thread.id, expectedLastSeq)
     : database.prepare(`
         UPDATE threads SET
-          kind = ?, active_turn_id = ?, forked_from_id = ?, parent_thread_id = ?, project_id = ?, title = ?,
+          kind = ?, active_turn_id = ?, forked_from_id = ?, parent_thread_id = ?, project_id = ?, workspace_id = ?, title = ?,
           created_at = ?, updated_at = ?, archived = ?, memory_mode = ?, git_info_json = ?, goal_json = ?,
           message_count = ?, last_message_preview = ?, snapshot_json = ?, snapshot_seq = ?, last_seq = ?, snapshot_format = 2
         WHERE id = ? AND last_seq = ?

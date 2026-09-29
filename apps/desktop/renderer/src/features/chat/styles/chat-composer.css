@@ -729,6 +729,7 @@
   min-height: var(--chat-composer-control-size, 26px);
   padding: 0 8px !important;
   font-size: 12px;
+  font-weight: 400;
   line-height: 14px;}
 
 .chat-authorization-switch.sd-button:disabled,
@@ -818,8 +819,7 @@
   color: var(--app-warning) !important;
 }
 
-.runtime-access-mode-trigger__icon,
-.runtime-access-mode-trigger__arrow {
+.runtime-access-mode-trigger__icon {
   flex: 0 0 auto;
   color: currentColor;
 }
@@ -837,8 +837,7 @@
 
 .runtime-access-mode-trigger--full-access :where(
   .runtime-access-mode-trigger__icon,
-  .runtime-access-mode-trigger__label,
-  .runtime-access-mode-trigger__arrow
+  .runtime-access-mode-trigger__label
 ) {
   color: var(--app-warning) !important;
 }

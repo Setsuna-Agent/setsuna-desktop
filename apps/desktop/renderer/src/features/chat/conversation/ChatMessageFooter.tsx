@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useI18n, type AppLocale } from '../../../shared/i18n/I18nProvider.js';
 import { copyTextToClipboard } from '../../../shared/lib/clipboard.js';
 import { EditIcon } from '../../../shared/ui/EditIcon.js';
+import { ChatForkAction } from '../fork/ChatForkAction.js';
 import { ActionTooltip } from '../../../shared/ui/primitives.js';
 
 const timeFormatters = new Map<AppLocale, Intl.DateTimeFormat>();
@@ -16,6 +17,7 @@ export function ChatMessageFooter({
   onDelete,
   onEdit,
   timePosition = 'before-actions',
+  forkMessageId = message.id,
 }: {
   actionsDisabled?: boolean;
   align?: 'start' | 'end';
@@ -23,6 +25,7 @@ export function ChatMessageFooter({
   onDelete?: () => void;
   onEdit?: () => void;
   timePosition?: 'before-actions' | 'after-actions' | 'none';
+  forkMessageId?: string | null;
 }) {
   const { locale, t } = useI18n();
   const [copied, setCopied] = useState(false);
@@ -57,6 +60,9 @@ export function ChatMessageFooter({
           ? <Check size={14} strokeWidth={1.8} aria-hidden="true" />
           : <Copy size={14} strokeWidth={1.8} aria-hidden="true" />}
       </MessageFooterAction>
+      {forkMessageId && message.status !== 'streaming' ? (
+        <ChatForkAction messageId={forkMessageId} disabled={actionsDisabled} />
+      ) : null}
       {onDelete ? (
         <MessageFooterAction disabled={actionsDisabled} label={t('common.delete')} onClick={onDelete}>
           <Trash2 size={14} strokeWidth={1.8} aria-hidden="true" />

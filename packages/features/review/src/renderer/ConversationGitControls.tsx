@@ -1,7 +1,7 @@
 import { TextField, Button, Popover } from '@setsuna-desktop/renderer-ui';
 
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
-import { Check, ChevronDown, GitBranch, Search } from 'lucide-react';
+import { Check, GitBranch, Search } from 'lucide-react';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type {
   DesktopReviewBridge,
@@ -40,7 +40,8 @@ export function ConversationGitControls({
   const workspaceRoot = activeProject?.path ?? '';
   const projectStateKey = activeProject ? `${activeProject.id}:${workspaceRoot}` : '';
   const hasGit = Boolean(reviewState?.isGitRepository);
-  const currentBranch = reviewState?.currentBranch || 'HEAD';
+  const branchLocked = reviewState?.isWorktree === true;
+  const currentBranch = branchLocked ? 'HEAD' : reviewState?.currentBranch || 'HEAD';
   const currentBranchLabel = reviewLoading
     ? t('feature.review.git.loading')
     : reviewState
@@ -84,7 +85,7 @@ export function ConversationGitControls({
     action: BranchBusyAction,
     task: (api: DesktopReviewBridge) => Promise<DesktopReviewState>,
   ) => {
-    if (!workspaceRoot || busyAction) return;
+    if (!workspaceRoot || busyAction || branchLocked) return;
     const api = bridge;
     if (!api) {
       setError(t('feature.review.git.unsupported'));
@@ -123,9 +124,9 @@ export function ConversationGitControls({
   return (
     <div className={`chat-conversation-git${variant === 'compact' ? ' chat-conversation-git--compact' : ''}`}>
       <Popover
-        open={branchMenuOpen}
+        open={branchMenuOpen && !branchLocked}
         onOpenChange={(open) => {
-          if (open) {
+          if (open && !branchLocked) {
             setBranchMenuOpen(true);
             setError(null);
           } else closeBranchMenu();
@@ -159,7 +160,7 @@ export function ConversationGitControls({
           className={variant === 'compact'
             ? 'sd-picker-trigger'
             : 'chat-conversation-overview-panel__row chat-conversation-git__branch-row'}
-          disabled={!hasGit || reviewLoading || Boolean(busyAction)}
+          disabled={branchLocked || !hasGit || reviewLoading || Boolean(busyAction)}
           aria-label={`${t('feature.review.git.branch')}: ${currentBranchLabel}`}
           title={reviewState ? currentBranch : reviewError ?? undefined}
         >
@@ -171,7 +172,6 @@ export function ConversationGitControls({
             <span className="chat-conversation-overview-panel__label">{t('feature.review.git.branch')}</span>
             <span className="chat-conversation-overview-panel__meta">
               <span className="chat-conversation-git__branch-name">{currentBranchLabel}</span>
-              <ChevronDown size={12} />
             </span>
           </>}
         </Button>

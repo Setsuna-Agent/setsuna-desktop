@@ -145,7 +145,7 @@ describe('sqlite thread store', () => {
     const dataDir = await temporaryDirectory();
     const first = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
     await first.recover();
-    const thread = await first.createThread({ title: 'SQLite chat', projectId: 'project_1' });
+    const thread = await first.createThread({ title: 'SQLite chat', projectId: 'project_1', workspaceId: 'worktree_1' });
     await first.appendEvent(thread.id, messageCreatedEvent(thread.id, 'msg_1', 'hello sqlite'));
     const updated = await first.updateMessage(thread.id, 'msg_1', { content: 'edited sqlite' });
     expect(updated).toMatchObject({ lastMessagePreview: 'edited sqlite', messageCount: 1 });
@@ -159,10 +159,22 @@ describe('sqlite thread store', () => {
       messages: [expect.objectContaining({ id: 'msg_1', content: 'edited sqlite' })],
     });
     await expect(reopened.listThreads({ projectId: 'project_1' })).resolves.toMatchObject([
-      { id: thread.id, lastMessagePreview: 'edited sqlite' },
+      { id: thread.id, workspaceId: 'worktree_1', lastMessagePreview: 'edited sqlite' },
     ]);
     await expect(reopened.listEvents(thread.id, 1)).resolves.toHaveLength(2);
+    await reopened.updateThread(thread.id, { workspaceId: null });
     await reopened.close();
+
+    const recovered = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    await recovered.recover();
+    const events = await recovered.listEvents(thread.id);
+    const replayed = events.reduce(applyRuntimeEventToThread, thread);
+    expect(replayed.workspaceId).toBeUndefined();
+    expect(replayed.projectId).toBe('project_1');
+    expect((await recovered.getThread(thread.id))?.workspaceId).toBeUndefined();
+    expect((await recovered.listThreads())[0]?.workspaceId).toBeUndefined();
+    expect(replayed.messages[0]?.content).toBe('edited sqlite');
+    await recovered.close();
   });
 
   it('replays cleared and replacement Skill metadata across reopen', async () => {
@@ -290,6 +302,7 @@ describe('sqlite thread store', () => {
       DROP TABLE thread_turn_checkpoints;
       DROP INDEX runtime_events_steps_idx;
       ALTER TABLE threads DROP COLUMN snapshot_format;
+      ALTER TABLE threads DROP COLUMN workspace_id;
       DROP TABLE feature_projection_checkpoints;
       DROP TABLE runtime_event_archives;
       DROP TABLE runtime_event_ids;
@@ -368,7 +381,7 @@ describe('sqlite thread store', () => {
     await first.close();
 
     const database = new DatabaseSync(path.join(dataDir, 'threads.sqlite'), { readOnly: true });
-    expect(database.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 5 });
+    expect(database.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 6 });
     database.close();
 
     const reopened = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());

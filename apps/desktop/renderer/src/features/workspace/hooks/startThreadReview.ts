@@ -1,4 +1,5 @@
 import type {
+  CreateThreadInput,
   DesktopRuntimeClient,
   RuntimeConfiguredModelReference,
   RuntimeInterfaceLanguage,
@@ -21,6 +22,7 @@ type StartThreadReviewOptions = {
   currentThread: RuntimeThread | null;
   language: RuntimeInterfaceLanguage;
   modelSelection?: RuntimeConfiguredModelReference;
+  workspaceMode?: CreateThreadInput['workspaceMode'];
   onThreadCreated: (thread: RuntimeThread) => void | Promise<unknown>;
   review: Pick<ReviewRendererService, 'start'>;
   t?: Translate;
@@ -37,6 +39,7 @@ export async function startThreadReview({
   currentThread,
   language,
   modelSelection,
+  workspaceMode,
   onThreadCreated,
   review,
   t = defaultTranslate,
@@ -45,7 +48,7 @@ export async function startThreadReview({
   let thread = currentThread;
   if (!thread) {
     if (!activeProjectId) throw new Error(t('chat.composer.selectProjectFirst'));
-    thread = await client.createThread({ projectId: activeProjectId });
+    thread = await client.createThread({ projectId: activeProjectId, ...(workspaceMode ? { workspaceMode } : {}) });
     await onThreadCreated(thread);
   }
 

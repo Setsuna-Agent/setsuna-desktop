@@ -5,8 +5,8 @@
 export type RuntimeEnvironment = {
   id: string;
   /**
-   * Registered project used by workspace-backed tools when it differs from the
-   * logical project identity, such as an unbound project's managed workspace.
+   * Backing workspace used by file tools when it differs from logical project
+   * ownership, such as a forked worktree or an unbound project's temporary directory.
    */
   workspaceProjectId?: string;
   /** Shell 命令的默认工作目录。 */

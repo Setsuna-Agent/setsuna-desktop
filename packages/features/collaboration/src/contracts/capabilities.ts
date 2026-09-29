@@ -50,6 +50,7 @@ export interface CollaborationRuntimeHost {
     modelBinding?: RuntimeThreadModelBinding;
     parentThreadId: string;
     projectId?: string;
+    workspaceId?: string;
     title: string;
   }>): Promise<RuntimeThread>;
   activeTask(threadId: string): CollaborationActiveTask | null;

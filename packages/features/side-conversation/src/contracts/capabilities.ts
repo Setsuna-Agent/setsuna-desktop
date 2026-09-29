@@ -22,6 +22,7 @@ export interface SideConversationRuntimeHost {
     memoryMode: RuntimeThreadMemoryMode;
     modelBinding?: RuntimeThreadModelBinding;
     projectId?: string;
+    workspaceId?: string;
     title: string;
   }>): Promise<RuntimeThread>;
   retainAttachments(

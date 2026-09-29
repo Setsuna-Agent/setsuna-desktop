@@ -65,7 +65,7 @@ export async function getDesktopReviewState(workspaceRoot: string, options: Desk
     };
   }
 
-  const currentBranch = await currentGitBranch(gitRoot);
+  const currentBranch = await currentGitBranchName(gitRoot);
   const baseRefs = await listBaseRefs(gitRoot);
   const currentRemoteRef = await resolveCurrentRemoteRef(gitRoot, baseRefs, currentBranch);
   const baseRef = resolveBaseRef(options.baseRef, baseRefs, currentBranch, currentRemoteRef);
@@ -87,6 +87,7 @@ export async function getDesktopReviewState(workspaceRoot: string, options: Desk
 
   return {
     isGitRepository: true,
+    isWorktree: isLinkedWorktree(repository),
     workspaceRoot: root,
     gitRoot,
     currentBranch,
@@ -170,10 +171,12 @@ export async function discardUnstagedReviewFiles(workspaceRoot: string, filePath
 
 export async function checkoutReviewBranch(workspaceRoot: string, branchName: string): Promise<DesktopReviewState> {
   const root = await resolveWorkspaceDirectory(workspaceRoot);
-  const gitRoot = await requireGitRoot(root);
+  const gitRoot = await requireBranchSwitchableGitRoot(root);
   const normalized = normalizeBranchName(branchName);
   const branches = await listBranches(gitRoot, await currentGitBranch(gitRoot), 0);
-  if (!branches.some((branch) => branch.name === normalized && !branch.remote)) throw new Error('分支不存在。');
+  if (!branches.some((branch) => branch.name === normalized && !branch.remote)) {
+    throw new Error('分支不存在或已被其他工作树占用。');
+  }
   await runGit(['checkout', normalized], gitRoot);
   return getDesktopReviewState(root);
 }
@@ -184,7 +187,7 @@ export async function createAndCheckoutReviewBranch(
   options: DesktopReviewCreateBranchOptions = {},
 ): Promise<DesktopReviewState> {
   const root = await resolveWorkspaceDirectory(workspaceRoot);
-  const gitRoot = await requireGitRoot(root);
+  const gitRoot = await requireBranchSwitchableGitRoot(root);
   const normalized = normalizeBranchName(branchName);
   await assertValidBranchName(gitRoot, normalized);
   if (options.stageUnstaged === true) {
@@ -346,6 +349,19 @@ async function requireGitRoot(workspaceRoot: string): Promise<string> {
   return gitRoot;
 }
 
+function isLinkedWorktree(repository: DesktopReviewRepositoryLocation): boolean {
+  return Boolean(repository.gitDirectory && repository.gitCommonDirectory
+    && path.relative(repository.gitCommonDirectory, repository.gitDirectory));
+}
+
+async function requireBranchSwitchableGitRoot(workspaceRoot: string): Promise<string> {
+  const repository = await resolveDesktopReviewRepository(workspaceRoot);
+  if (!repository.gitRoot) throw new Error('不是 Git 仓库。');
+  // Enforce this at the native operation too, before checkout or auto-staging.
+  if (isLinkedWorktree(repository)) throw new Error('工作树已绑定 HEAD，不能切换或创建并检出分支。');
+  return repository.gitRoot;
+}
+
 async function resolveReviewAction(workspaceRoot: string, filePaths: string[]): Promise<{ root: string; gitRoot: string; files: string[] }> {
   const root = await resolveWorkspaceDirectory(workspaceRoot);
   const gitRoot = await requireGitRoot(root);
@@ -406,8 +422,14 @@ function isRemoteHeadRef(ref: string): boolean {
 }
 
 async function listBranches(gitRoot: string, currentBranch: string | null, uncommittedFiles: number): Promise<DesktopReviewBranch[]> {
-  const localRefs = await runGit(['for-each-ref', '--format=%(refname:short)', 'refs/heads'], gitRoot).catch(() => '');
-  const names = localRefs.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  // Git owns checkout availability. Emit a flag rather than paths, which can contain line breaks.
+  const localRefs = await runGit([
+    'for-each-ref', '--format=%(refname:short)%00%(if)%(worktreepath)%(then)occupied%(end)', 'refs/heads',
+  ], gitRoot).catch(() => '');
+  const names = localRefs.split(/\r?\n/).flatMap((line) => {
+    const [name, occupied] = line.split('\0');
+    return name && (!occupied || name === currentBranch) ? [name] : [];
+  });
   const uniqueNames = [...new Set(currentBranch && !names.includes(currentBranch) ? [currentBranch, ...names] : names)];
   return uniqueNames
     .sort((left, right) => {

@@ -1,4 +1,5 @@
 import {
+  type CreateThreadInput,
   type RuntimeConfiguredModelReference,
 } from '@setsuna-desktop/contracts';
 import type { ReviewTarget } from '@setsuna-desktop/feature-review/contracts';
@@ -247,6 +248,7 @@ export function useDesktopAppController() {
   const chatActions = useChatTurnActions({
     activeProjectId,
     activeTurnId,
+    beforeSend: activeWorkspaceState.ensureAvailableForSend,
     claimComposerForThread: claimConversationSessionForThread,
     client,
     config: runtime.config,
@@ -287,6 +289,7 @@ export function useDesktopAppController() {
   const startCurrentThreadReview = useCallback((
     target: ReviewTarget,
     modelSelection?: RuntimeConfiguredModelReference,
+    workspaceMode?: CreateThreadInput['workspaceMode'],
   ) => {
     const isCurrentRequest = reviewRequests.begin();
     runtime.setError(null);
@@ -294,6 +297,7 @@ export function useDesktopAppController() {
       claimComposerForThread: claimConversationSessionForThread,
       isCurrentRequest,
       modelSelection,
+      workspaceMode,
     }).catch((unknownError: unknown) => {
       if (isCurrentRequest()) {
         runtime.setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
@@ -328,6 +332,10 @@ export function useDesktopAppController() {
   return {
     activeProject: effectiveProject,
     activeWorkspace,
+    worktreeRecovery: {
+      open: activeWorkspaceState.missingWorktreePromptOpen,
+      dismiss: activeWorkspaceState.dismissMissingWorktreePrompt,
+    },
     activeProjectId,
     activeView,
     chatActions,

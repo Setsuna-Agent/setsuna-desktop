@@ -48,6 +48,8 @@ import { WorkspaceImageToolHost } from '../adapters/tool/workspace-image-tool-ho
 import { FileProjectInstructionLoader } from '../adapters/workspace/file-project-instruction-loader.js';
 import { FileProjectWorkflowResolver } from '../adapters/workspace/file-project-workflow-resolver.js';
 import { FileWorkspaceProjectStore } from '../adapters/workspace/file-workspace-project-store.js';
+import { GitWorkspaceFork } from '../adapters/workspace/git-workspace-fork.js';
+import type { WorkspaceFork } from '../ports/workspace-fork.js';
 import { WorkspaceRuntimeEnvironmentResolver } from '../adapters/workspace/workspace-runtime-environment-resolver.js';
 import { ExtensionManager } from '../extensions/extension-manager.js';
 import { RuntimeRouteRegistry } from '../features/routes/runtime-route-registry.js';
@@ -155,7 +157,8 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     ripgrepPath: options.ripgrepPath,
     requireBundledRipgrep: options.requireBundledRipgrep,
   });
-  const workspaceProjects = new FileWorkspaceProjectStore(runtimeDataDir, clock, { searchEngine: workspaceSearchEngine });
+  const workspaceFork: WorkspaceFork = new GitWorkspaceFork(path.join(runtimeDataDir, 'worktrees'));
+  const workspaceProjects = new FileWorkspaceProjectStore(runtimeDataDir, clock, { searchEngine: workspaceSearchEngine, worktrees: workspaceFork });
   const environmentResolver = new WorkspaceRuntimeEnvironmentResolver(workspaceProjects);
   const projectInstructions = new FileProjectInstructionLoader();
   const projectWorkflow = new FileProjectWorkflowResolver();
@@ -304,5 +307,6 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     usageRecorder,
     workspaceProjects,
     workspaceSearchEngine,
+    workspaceFork,
   };
 }

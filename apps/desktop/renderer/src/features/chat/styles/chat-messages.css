@@ -851,6 +851,8 @@
 
 .chat-bubble-item:hover .chat-message-footer,
 .chat-bubble-item:focus-within .chat-message-footer,
+/* The menu is portaled outside the bubble, so its trigger owns visibility. */
+.chat-message-footer:has([aria-haspopup='menu'][aria-expanded='true']),
 .chat-message-footer[data-copied='true'] {
   opacity: 1;
   pointer-events: auto;

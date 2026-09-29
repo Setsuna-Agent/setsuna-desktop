@@ -6,6 +6,7 @@ import type {
   ThreadFileChangesResult,
   AnswerRuntimeApprovalInput,
   CreateThreadInput,
+  ForkThreadInput,
   DesktopRuntimeClient,
   MessageDeleteInput,
   MessagePatch,
@@ -110,6 +111,11 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     },
     createThread(input: CreateThreadInput = {}) {
       return request<RuntimeThread>({ path: '/v1/threads', method: 'POST', body: input });
+    },
+    forkThread(threadId: string, input: ForkThreadInput) {
+      return request<RuntimeThread>({
+        path: `/v1/threads/${encodeURIComponent(threadId)}/fork`, method: 'POST', body: input,
+      });
     },
     updateThread(threadId: string, patch: ThreadPatch) {
       return request<RuntimeThread>({

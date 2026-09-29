@@ -16,7 +16,7 @@ import type { ReviewTarget } from '@setsuna-desktop/feature-review/contracts';
 import type { ReactNode } from 'react';
 import type { ChatAttachmentStore } from '../../features/chat/composer/chatAttachmentStore.js';
 import { ChatWorkspace } from '../../features/chat/ChatWorkspace.js';
-import type { ChatStarterProjectSelection } from '../../features/chat/conversation/ChatStarterWorkspace.js';
+import type { ChatStarterLocationSelection, ChatStarterProjectSelection } from '../../features/chat/conversation/ChatStarterWorkspace.js';
 import type { ChatModelSelectionHandler } from '../../features/chat/chatModelSelection.js';
 import type { ChatQueuedTurnActions } from '../../features/chat/hooks/useQueuedTurnInputActions.js';
 import { MarkdownNavigationProvider } from '../../features/chat/markdown/MarkdownNavigationProvider.js';
@@ -36,6 +36,7 @@ import type {
 
 export type ChatConversationSurfaceModel = Readonly<{
   starterProjectSelection: ChatStarterProjectSelection;
+  starterLocationSelection: ChatStarterLocationSelection;
   activeTurnId: string | null;
   activeWorkspace?: WorkspaceProject;
   canClearContext: boolean;

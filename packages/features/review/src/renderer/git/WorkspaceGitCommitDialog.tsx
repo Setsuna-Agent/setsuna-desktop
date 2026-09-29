@@ -125,7 +125,9 @@ export function WorkspaceGitCommitProvider({
   const currentProjectKey = useRef(projectStateKey);
   const activeAction = useRef<{ projectKey: string } | null>(null);
   currentProjectKey.current = projectStateKey;
-  const currentBranch = reviewState?.currentBranch || 'HEAD';
+  const branchLocked = reviewState?.isWorktree === true;
+  const currentBranch = branchLocked ? 'HEAD' : reviewState?.currentBranch || 'HEAD';
+  const branchMenuVisible = branchMenuOpen && !branchLocked;
   const canOpenCommitDialog = Boolean(
     activeProject
       && reviewState?.isGitRepository
@@ -229,6 +231,7 @@ export function WorkspaceGitCommitProvider({
 
   const createBranch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (branchLocked) return;
     const branchName = branchDraft.trim();
     if (!branchName) {
       setError(t('feature.review.git.branchRequired'));
@@ -390,9 +393,9 @@ export function WorkspaceGitCommitProvider({
           <div className="chat-git-commit-popover__branch-wrap">
             <Button variant="ghost"
               type="button"
-              className={`chat-git-commit-popover__branch ${branchMenuOpen ? 'is-open' : ''}`}
-              aria-expanded={branchMenuOpen}
-              disabled={Boolean(busyAction)}
+              className={`chat-git-commit-popover__branch ${branchMenuVisible ? 'is-open' : ''}`}
+              aria-expanded={branchMenuVisible}
+              disabled={branchLocked || Boolean(busyAction)}
               onClick={() => {
                 setBranchMenuOpen((current) => !current);
                 setError(null);
@@ -400,9 +403,9 @@ export function WorkspaceGitCommitProvider({
             >
               <GitBranch size={13} />
               <span>{currentBranch}</span>
-              <ChevronDown size={12} />
+              {!branchLocked ? <ChevronDown size={12} /> : null}
             </Button>
-            {branchMenuOpen ? (
+            {branchMenuVisible ? (
               <CommitBranchMenu
                 branchDraft={branchDraft}
                 busyAction={busyAction}
@@ -467,7 +470,7 @@ export function WorkspaceGitCommitProvider({
             onClick={pushBranch}
           />
         </div>
-        {error && !branchMenuOpen ? (
+        {error && !branchMenuVisible ? (
           <GitOperationError message={error} onDismiss={dismissError} />
         ) : null}
     </Dialog>

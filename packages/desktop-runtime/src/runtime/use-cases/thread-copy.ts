@@ -9,24 +9,34 @@ import {
 } from '@setsuna-desktop/contracts';
 import { managedGeneratedImageAssetIds } from '../../utils/generated-image-assets.js';
 import type { RuntimeContainer } from '../runtime-factory.js';
+import { randomRuntimeId } from '../runtime-id.js';
+import { runtimeMessageCopyEvents } from './thread-fork-history.js';
 
 /**
  * Copies an immutable message snapshot into a new thread while giving generated
  * image assets independent ownership. Callers own attachment retention and
  * rollback cleanup for the destination thread and its retained results.
+ * Only conversation forks opt into historical visibility; side snapshots keep
+ * their supplied visibility and must not compact away destination messages.
  */
 export async function copyRuntimeMessagesToThread(
   runtime: RuntimeContainer,
   sourceThreadId: string,
   destinationThreadId: string,
   messages: RuntimeMessage[],
+  options: { preserveForkHistory?: boolean } = {},
 ): Promise<void> {
-  const cloned = await cloneForkMessages(runtime, messages);
+  const events = options.preserveForkHistory && messages.some((message) => message.contextCompaction)
+    ? await runtime.threadStore.listEvents(sourceThreadId) : [];
+  const history = runtimeMessageCopyEvents(events, messages);
+  const cloned = await cloneForkMessages(runtime, history.flatMap((event) => (
+    event.type === 'message.created' ? [event.payload.message] : event.payload.messages
+  )));
   const committedAssetIds = new Set<string>();
   let appendAttempted = false;
   try {
-    const resultIds = cloned.messages.flatMap((message) =>
-      message.toolResultRef ? [message.toolResultRef.resultId] : []);
+    const resultIds = [...new Set(cloned.messages.flatMap((message) =>
+      message.toolResultRef ? [message.toolResultRef.resultId] : []))];
     if (resultIds.length) {
       // Retain before appending so quota eviction cannot race the copied messages.
       // Unavailable results are an expected degraded state: the bounded message
@@ -44,19 +54,23 @@ export async function copyRuntimeMessagesToThread(
       }
     }
     await runtime.eventWriter.flushThread(destinationThreadId);
-    let index = 0;
-    for (const message of cloned.messages) {
-      index += 1;
+    let messageIndex = 0;
+    for (const event of history) {
+      const count = event.type === 'message.created' ? 1 : event.payload.messages.length;
+      const eventMessages = cloned.messages.slice(messageIndex, messageIndex + count);
+      messageIndex += count;
+      const copiedEvent = event.type === 'message.created'
+        ? { type: event.type, payload: { message: eventMessages[0]! } }
+        : { type: event.type, payload: { notice: event.payload.notice, messages: eventMessages } };
       appendAttempted = true;
       await runtime.threadStore.appendEvent(destinationThreadId, {
-        id: `event_fork_${message.id}_${index}`,
+        id: randomRuntimeId('event_fork'),
         threadId: destinationThreadId,
-        turnId: message.turnId,
-        type: 'message.created',
+        turnId: event.turnId,
         createdAt: new Date().toISOString(),
-        payload: { message },
+        ...copiedEvent,
       });
-      for (const attachment of message.attachments ?? []) {
+      for (const attachment of eventMessages.flatMap((message) => message.attachments ?? [])) {
         if (isRuntimeGeneratedMessageAttachment(attachment)) committedAssetIds.add(attachment.assetId);
       }
     }

@@ -203,7 +203,7 @@ export class SqliteThreadStore implements ThreadStore {
     await this.ensureReady();
     this.assertOwnership();
     const rows = this.requireDatabase().prepare(`
-      SELECT id, kind, active_turn_id, forked_from_id, parent_thread_id, project_id, title,
+      SELECT id, kind, active_turn_id, forked_from_id, parent_thread_id, project_id, workspace_id, title,
              created_at, updated_at, archived, memory_mode, git_info_json, goal_json,
              message_count, last_message_preview
       FROM threads ORDER BY created_at DESC, id ASC -- 创建时间稳定排序；按 updated_at 排序会被并行对话活动跳乱；依赖活跃顺序的消费方自行显式排序
@@ -315,7 +315,11 @@ export class SqliteThreadStore implements ThreadStore {
       threadId,
       type: 'thread.created',
       createdAt: now,
-      payload: { title: initial.title, modelBinding: input.modelBinding ? { ...input.modelBinding } : undefined },
+      payload: {
+        title: initial.title,
+        workspaceId: optionalSafeRuntimeId(input.workspaceId, 'Workspace id'),
+        modelBinding: input.modelBinding ? { ...input.modelBinding } : undefined,
+      },
       seq: 1,
     } satisfies StoredThreadEvent;
     const thread = applyRuntimeEventToThread(initial, event);
@@ -352,6 +356,7 @@ export class SqliteThreadStore implements ThreadStore {
       payload: {
         title: patch.title?.trim() || undefined,
         archived: patch.archived,
+        workspaceId: patch.workspaceId,
         modelBinding: patch.modelBinding ? { ...patch.modelBinding } : undefined,
       },
     });

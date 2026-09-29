@@ -189,6 +189,7 @@ export class RuntimeSamplingContextBuilder {
     }
     const environment = await this.options.environmentResolver.resolve({
       projectId: thread.projectId,
+      workspaceId: thread.workspaceId,
       threadId,
       threadCreatedAt: thread.createdAt,
     });
