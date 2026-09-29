@@ -123,6 +123,7 @@ export function useDesktopAppController() {
   });
   const {
     bottomActivePanel,
+    bottomPanelExpanded,
     bottomPanelVisible,
     claimForThread: claimWorkspacePanelsForThread,
     closeWorkspaceMenus,
@@ -135,7 +136,7 @@ export function useDesktopAppController() {
   // 设置页会覆盖整个工作台。保留其后的聊天面板轨道，避免返回时所有已保存宽度
   // 都从零重新动画到原有尺寸。
   const workspacePanelReservesLayout = sidePanelVisible || (activeView === 'settings' && Boolean(sideActivePanel));
-  const bottomPanelReservesLayout = bottomPanelVisible || (activeView === 'settings' && Boolean(bottomActivePanel));
+  const bottomPanelReservesLayout = bottomPanelVisible || (activeView === 'settings' && bottomPanelExpanded && Boolean(bottomActivePanel));
 
   const {
     handleSidebarResizeStep,

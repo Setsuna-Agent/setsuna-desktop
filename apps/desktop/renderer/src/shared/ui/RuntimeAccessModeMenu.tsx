@@ -4,8 +4,8 @@ import {
   Folder,
   Globe2,
   Hand,
+  ShieldAlert,
   ShieldCheck,
-  ShieldOff,
   SquareTerminal,
   TriangleAlert,
   type LucideIcon,
@@ -24,7 +24,7 @@ import { Button, SelectField } from './primitives.js';
 const modeIcons: Record<RuntimeAccessMode, LucideIcon> = {
   'request-approval': Hand,
   'agent-approval': ShieldCheck,
-  'full-access': ShieldOff,
+  'full-access': ShieldAlert,
 };
 
 const fullAccessCapabilities = [

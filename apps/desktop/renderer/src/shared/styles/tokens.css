@@ -428,9 +428,3 @@
   --app-focus: color-mix(in srgb, var(--app-orange) 28%, transparent);
   --chat-send-bg-active: var(--app-orange-active);
 }
-
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation-duration: 220ms;
-  animation-timing-function: ease-out;
-}

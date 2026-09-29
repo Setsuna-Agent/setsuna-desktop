@@ -1,15 +1,20 @@
 import { Slot, ContextMenu, DropdownMenu } from 'radix-ui';
 import { Check, ChevronRight } from 'lucide-react';
-import { forwardRef, useEffect, useRef, type HTMLAttributes, type ReactElement, type ReactNode } from 'react';
+import { forwardRef, useEffect, useRef, type HTMLAttributes, type KeyboardEvent, type ReactElement, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { floatingPlacement, overlayContainer, type Placement } from './portal.js';
 import { cn } from './utils.js';
 import { MenuSurface } from './menu-surface.js';
+import { Tooltip } from './popover.js';
 
 export type MenuAction = { key: string; domEvent: Event };
 export type MenuItem = {
   key?: string; type?: 'divider' | 'group'; label?: ReactNode; icon?: ReactNode;
   className?: string; extra?: ReactNode; danger?: boolean; disabled?: boolean; children?: (MenuItem | null | false)[];
+  submenuClassName?: string;
+  /** Optional control (such as search) before the submenu's roving menu items. */
+  submenuInitialFocusRef?: RefObject<HTMLElement>;
+  tooltip?: ReactNode;
   onClick?(action: MenuAction): void;
 };
 export type MenuProps = {
@@ -33,6 +38,7 @@ export type DropdownProps = Omit<HTMLAttributes<HTMLElement>, 'children'> & {
 
 /** beUI menu presentation; Radix supplies nested menus, roving focus and typeahead. */
 export const Dropdown = forwardRef<HTMLElement, DropdownProps>(function Dropdown({ children, menu, disabled, open, onOpenChange, placement, trigger, rootClassName, className, align, popupRender, ...triggerProps }, ref) {
+  const keyboardInteraction = useRef(false);
   const context = trigger?.includes('contextMenu') ?? false;
   const rows = <MenuItems menu={menu} context={context} />;
   const contents = popupRender ? popupRender(rows) : rows;
@@ -42,9 +48,25 @@ export const Dropdown = forwardRef<HTMLElement, DropdownProps>(function Dropdown
     <ContextMenu.Portal container={overlayContainer()}><ContextMenu.Content asChild className={classes} collisionPadding={8}><MenuSurface>{contents}</MenuSurface></ContextMenu.Content></ContextMenu.Portal>
   </ContextMenu.Root>;
   return <DropdownMenu.Root open={open} onOpenChange={onOpenChange} modal={false}>
-    <DropdownMenu.Trigger asChild disabled={disabled}><Slot.Root {...triggerProps} ref={ref}>{children}</Slot.Root></DropdownMenu.Trigger>
+    <DropdownMenu.Trigger asChild disabled={disabled}>
+      <Slot.Root {...triggerProps} ref={ref}
+        onPointerDownCapture={(event) => { keyboardInteraction.current = false; triggerProps.onPointerDownCapture?.(event); }}
+        onKeyDownCapture={(event) => { keyboardInteraction.current = true; triggerProps.onKeyDownCapture?.(event); }}>
+        {children}
+      </Slot.Root>
+    </DropdownMenu.Trigger>
     <DropdownMenu.Portal container={overlayContainer()}>
-      <DropdownMenu.Content asChild {...floatingPlacement(placement)} sideOffset={align?.offset?.[1] ?? 6} alignOffset={align?.offset?.[0]} collisionPadding={8} className={classes}><MenuSurface>{contents}</MenuSurface></DropdownMenu.Content>
+      <DropdownMenu.Content asChild {...floatingPlacement(placement)} sideOffset={align?.offset?.[1] ?? 6} alignOffset={align?.offset?.[0]} collisionPadding={8} className={classes}
+        onCloseAutoFocus={(event) => {
+          // Pointer selection must not refocus the trigger and leave a focus ring or tooltip.
+          if (!keyboardInteraction.current) event.preventDefault();
+        }}>
+        <MenuSurface
+          onPointerDownCapture={() => { keyboardInteraction.current = false; }}
+          onKeyDownCapture={() => { keyboardInteraction.current = true; }}>
+          {contents}
+        </MenuSurface>
+      </DropdownMenu.Content>
     </DropdownMenu.Portal>
   </DropdownMenu.Root>;
 });
@@ -55,7 +77,7 @@ function MenuItems({ menu, context }: { menu: MenuProps; context: boolean }) {
     if (!item) return null;
     const key = item.key ?? String(index);
     if (item.type === 'divider') return <ui.Separator key={key} className="sd-menu__separator" />;
-    if (item.type === 'group') return <ui.Group key={key}><ui.Label className="sd-menu__label">{item.label}</ui.Label><MenuItems context={context} menu={{ ...menu, items: item.children }} /></ui.Group>;
+    if (item.type === 'group') return <ui.Group key={key} className={item.className}>{item.label != null ? <ui.Label className="sd-menu__label">{item.label}</ui.Label> : null}<MenuItems context={context} menu={{ ...menu, items: item.children }} /></ui.Group>;
     const selected = menu.selectedKeys?.includes(key);
     const content = <>
       {item.icon ? <span className="sd-menu__icon">{item.icon}</span> : null}
@@ -64,11 +86,37 @@ function MenuItems({ menu, context }: { menu: MenuProps; context: boolean }) {
     </>;
     if (item.children) return <ui.Sub key={key}>
       <ui.SubTrigger disabled={item.disabled} className={cn('sd-menu__item', item.className)}>{content}<ChevronRight size={13} /></ui.SubTrigger>
-      <ui.Portal container={overlayContainer()}><ui.SubContent asChild className="sd-menu" sideOffset={4} collisionPadding={8}><MenuSurface><MenuItems context={context} menu={{ ...menu, items: item.children }} /></MenuSurface></ui.SubContent></ui.Portal>
+      <ui.Portal container={overlayContainer()}>
+        <ui.SubContent asChild className={cn('sd-menu', item.submenuClassName)} sideOffset={4} collisionPadding={8}
+          onFocus={(event) => {
+            const initialFocus = item.submenuInitialFocusRef?.current;
+            if (event.target !== event.currentTarget || !initialFocus) return;
+            // Radix focuses the content on keyboard entry. Override its default
+            // first-row focus here without stealing focus on pointer hover.
+            event.preventDefault();
+            initialFocus.focus({ preventScroll: true });
+          }}
+          onKeyDownCapture={(event) => handleSubmenuControlNavigation(event, item.submenuInitialFocusRef?.current)}>
+          <MenuSurface><MenuItems context={context} menu={{ ...menu, items: item.children }} /></MenuSurface>
+        </ui.SubContent>
+      </ui.Portal>
     </ui.Sub>;
-    return <ui.Item key={key} className={cn('sd-menu__item', item.className, selected && 'is-selected', item.danger && 'is-danger')} disabled={item.disabled}
+    const row = <ui.Item key={key} className={cn('sd-menu__item', item.className, selected && 'is-selected', item.danger && 'is-danger')} disabled={item.disabled}
       onSelect={(event) => { const action = { key, domEvent: event }; item.onClick?.(action); menu.onClick?.(action); }}>{content}</ui.Item>;
+    return item.tooltip ? <Tooltip key={key} title={item.tooltip} placement="right" mouseEnterDelay={0.35}>{row}</Tooltip> : row;
   })}</>;
+}
+
+function handleSubmenuControlNavigation(event: KeyboardEvent<HTMLDivElement>, control?: HTMLElement | null) {
+  if (!control || event.nativeEvent.isComposing || !(event.target instanceof HTMLElement)) return;
+  const row = event.target.closest('[role="menuitem"]');
+  if (!row || row.closest('[role="menu"]') !== event.currentTarget) return;
+  const firstRow = event.currentTarget.querySelector('[role="menuitem"]:not([data-disabled])');
+  if (event.key !== 'Tab' && !(event.key === 'ArrowUp' && row === firstRow)) return;
+  // Capture before Radix's roving focus consumes Tab or schedules ArrowUp focus.
+  event.preventDefault();
+  event.stopPropagation();
+  control.focus({ preventScroll: true });
 }
 
 /** Electron file and editor surfaces report viewport coordinates instead of a DOM trigger. */

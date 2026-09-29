@@ -30,6 +30,10 @@ Workspace host 管理右侧/底部工作区 surface 和项目文件；Review、T
 
 Panel 选择和 session 生命周期在 hooks，不应由各 tab 各自维护一份打开状态。
 
+底栏右上角的向下箭头只隐藏底栏。显隐状态按对话保存在 panel layout 中，与标签及终端 session 生命周期分开；顶部入口和快捷键重新展开时恢复原来的选中标签，空底栏才创建终端。单个标签上的关闭按钮仍移除该标签并释放对应资源。
+
+Shell 退出时，`useTerminalPanelExit` 自动移除对应终端标签并释放 session；关闭最后一个标签时收起所在面板。监听跟随 session 生命周期，底栏隐藏、标签未选中或切到其他对话时仍生效，不依赖终端内容是否挂载。
+
 文件详情与「打开文件」标签共用工作区层的 `useWorkspaceFileTree`：目录加载结果、展开状态、筛选、宽度、显隐和滚动位置不随标签重建。切换工作区时重置目录，并丢弃旧工作区或旧筛选条件下的异步响应。
 
 文件面板、审查导航和 PR Diff 共用 `renderer-ui` 的 `FileTreeSurface` / `FileTreeRow`，样式参考 [beUI File Tree](https://beui.dev/components/motion/file-tree)。树行尺寸、展开箭头和动效由共享层管理，各自的选择、目录加载和文件操作保持在原 owner。目录行默认省略文件夹图标及其占位，只显示展开箭头；文件行保留文件类型图标。每行延续所有祖先层级的引导线，多层展开时保持连续。

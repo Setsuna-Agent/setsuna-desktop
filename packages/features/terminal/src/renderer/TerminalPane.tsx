@@ -111,15 +111,16 @@ export function TerminalPane({
       });
     };
     const handleAppearanceChange = () => {
+      terminal.options.theme = terminalTheme();
       terminal.options.fontFamily = terminalFontFamily();
       terminal.options.fontSize = terminalFontSize();
       fitTerminal();
     };
     const resizeObserver = new ResizeObserver(() => fitTerminal());
     resizeObserver.observe(container);
-    // Page scale can change while the pane keeps the same viewport dimensions.
-    const scaleObserver = new MutationObserver(handleAppearanceChange);
-    scaleObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-font-size'] });
+    // Theme and page scale can change without unmounting or resizing the pane.
+    const appearanceObserver = new MutationObserver(handleAppearanceChange);
+    appearanceObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-font-size', 'data-theme'] });
     const unsubscribeAppearance = subscribeAppearanceChange?.(handleAppearanceChange) ?? (() => undefined);
     terminal.focus();
 
@@ -186,7 +187,7 @@ export function TerminalPane({
       linkProviderDisposable.dispose();
       titleDisposable.dispose();
       resizeObserver.disconnect();
-      scaleObserver.disconnect();
+      appearanceObserver.disconnect();
       output.dispose();
       terminal.dispose();
       terminalRef.current = null;

@@ -24,6 +24,7 @@ export function ChatMentionCommandMenu({
     activeItem ? chatMentionItemKey(activeItem) : null,
   );
   const hasFiles = items.some((item) => item.kind === 'workspace');
+  const showSectionTitles = items.some((item) => item.kind === 'browser-tab');
   return (
     <div className="chat-command-menu chat-project-entry-command-menu" role="listbox" aria-label={t('chat.command.mentions')}>
       <div ref={scrollContainerRef} className="chat-command-menu__list">
@@ -32,7 +33,7 @@ export function ChatMentionCommandMenu({
           const entry = item.kind === 'workspace' ? item.entry : null;
           const tab = item.kind === 'browser-tab' ? item.tab : null;
           return <Fragment key={chatMentionItemKey(item)}>
-            {index === 0 || items[index - 1].kind !== item.kind ? (
+            {showSectionTitles && (index === 0 || items[index - 1].kind !== item.kind) ? (
               <div className="chat-command-menu__title">{t(tab ? 'chat.command.browserTabs' : 'chat.command.projectFiles')}</div>
             ) : null}
             <Button variant="ghost"
@@ -41,16 +42,16 @@ export function ChatMentionCommandMenu({
               className={`chat-command-menu__item ${index === activeIndex ? 'is-active' : ''}`}
               role="option"
               aria-selected={index === activeIndex}
+              title={entry?.path ?? tab?.url}
               onMouseDown={(event) => { event.preventDefault(); onSelect(item); }}
               onMouseMove={() => onHover(index)}
             >
               {entry ? <WorkspaceEntryIcon className="chat-command-menu__item-icon" path={entry.path} type={entry.kind} />
                 : <span className="chat-command-menu__item-icon"><BrowserFavicon faviconUrl={tab?.faviconUrl ?? null} loading={false} /></span>}
               <span className="chat-command-menu__item-main">
-                <span className="chat-command-menu__item-title">{tab ? tab.title || tab.url : entry?.kind === 'directory' ? `${entry.name}/` : entry?.name}</span>
+                <span className="chat-command-menu__item-title">{tab ? tab.title || tab.url : entry?.name}</span>
                 {tab?.url || entry?.parent ? <span className="chat-command-menu__item-desc">{tab?.url ?? entry?.parent}</span> : null}
               </span>
-              {entry ? <span className="chat-command-menu__item-scope">{t(entry.kind === 'directory' ? 'chat.command.folder' : 'chat.command.file')}</span> : null}
             </Button>
           </Fragment>;
         })}

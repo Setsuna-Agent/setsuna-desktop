@@ -1,8 +1,9 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
-import { Info, MoreHorizontal, Settings } from 'lucide-react';
+import { Info, Moon, MoreHorizontal, Settings, Sun } from 'lucide-react';
 import { useCallback, useState, type RefObject } from 'react';
 import { RuntimeActivityFeatureMenuItem } from '../../composition/RuntimeActivityFeatureBoundary.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import { useResolvedThemeMode, useThemeTransition } from '../../shared/preferences/useThemeTransition.js';
 import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
 import { AppTooltip } from '../../shared/ui/primitives.js';
 import { AboutDialog } from '../layout/AboutDialog.js';
@@ -20,23 +21,24 @@ export function SidebarUserMenu({
   onOpenSettings: () => void;
 }) {
   const { t } = useI18n();
+  const { toggleWithTransition } = useThemeTransition();
+  const resolvedTheme = useResolvedThemeMode();
+  const themeToggleLabel = t(resolvedTheme === 'dark' ? 'sidebar.switchToLightTheme' : 'sidebar.switchToDarkTheme');
   const [aboutOpen, setAboutOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
 
   return (
     <div className="app-navigation__footer">
-      <AppTooltip title={t('sidebar.moreActions')} placement="right">
-        <Button variant="ghost"
-          ref={runtimeActivityTriggerRef}
-          className={`app-navigation__button${menuOpen ? ' is-active' : ''}`}
+      <AppTooltip title={themeToggleLabel} placement="right">
+        <Button
+          variant="ghost"
+          className="app-navigation__button"
           type="button"
-          aria-label={t('sidebar.moreActions')}
-          aria-expanded={menuOpen}
-          aria-haspopup="menu"
-          onClick={() => setMenuOpen((open) => !open)}
+          aria-label={themeToggleLabel}
+          onClick={toggleWithTransition}
         >
-          <MoreHorizontal size={18} />
+          {resolvedTheme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
         </Button>
       </AppTooltip>
       <ShortcutTooltip commandId="app.openSettings" label={t('sidebar.openSettings')} placement="right">
@@ -50,6 +52,19 @@ export function SidebarUserMenu({
           <Settings size={18} />
         </Button>
       </ShortcutTooltip>
+      <AppTooltip title={t('sidebar.moreActions')} placement="right">
+        <Button variant="ghost"
+          ref={runtimeActivityTriggerRef}
+          className={`app-navigation__button${menuOpen ? ' is-active' : ''}`}
+          type="button"
+          aria-label={t('sidebar.moreActions')}
+          aria-expanded={menuOpen}
+          aria-haspopup="menu"
+          onClick={() => setMenuOpen((open) => !open)}
+        >
+          <MoreHorizontal size={18} />
+        </Button>
+      </AppTooltip>
       <SidebarFloatingMenu
         open={menuOpen}
         placement="top-left"

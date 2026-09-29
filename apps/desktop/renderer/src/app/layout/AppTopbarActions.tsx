@@ -10,7 +10,6 @@ import type { MainView } from '../types.js';
 export function AppTopbarActions({
   activeView,
   bottomPanelVisible,
-  bottomTerminalPanelActive,
   conversationOverviewAvailable,
   conversationOverviewVisible,
   sidePanelVisible,
@@ -20,7 +19,6 @@ export function AppTopbarActions({
 }: {
   activeView: MainView;
   bottomPanelVisible: boolean;
-  bottomTerminalPanelActive: boolean;
   conversationOverviewAvailable: boolean;
   conversationOverviewVisible: boolean;
   sidePanelVisible: boolean;
@@ -55,12 +53,12 @@ export function AppTopbarActions({
       {activeView === 'chat' && !sidePanelVisible ? (
         <ShortcutTooltip
           commandId="layout.toggleTerminal"
-          label={bottomTerminalPanelActive ? t('topbar.closeTerminal') : t('topbar.openBottomTerminal')}
+          label={t(bottomPanelVisible ? 'workspace.panel.hideBottom' : 'workspace.panel.showBottom')}
         >
           <IconButton
-            label={bottomTerminalPanelActive ? t('topbar.closeTerminal') : t('topbar.openBottomTerminal')}
+            label={t(bottomPanelVisible ? 'workspace.panel.hideBottom' : 'workspace.panel.showBottom')}
             title=""
-            aria-pressed={bottomTerminalPanelActive}
+            aria-pressed={bottomPanelVisible}
             className={`app-shell-icon-control ${bottomPanelVisible ? 'is-active' : ''}`}
             onClick={onToggleBottomTerminal}
           >

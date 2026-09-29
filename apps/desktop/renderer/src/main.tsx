@@ -28,6 +28,7 @@ import { KeyboardShortcutsProvider } from './shared/shortcuts/KeyboardShortcutsP
 
 // Shared defaults must load before feature styles so scoped components can override them.
 import './shared/styles/tokens.css';
+import './shared/styles/theme-transition.css';
 import './shared/styles/beui.css';
 import './app/styles/app.css';
 import './features/settings/styles/settings-data-root.css';

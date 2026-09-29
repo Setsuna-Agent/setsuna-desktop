@@ -17,7 +17,7 @@ export function BottomToolsPanel({
   unsavedFilePath,
   onActivatePanel,
   onClosePanel,
-  onCloseSlot,
+  onHide,
   onMovePanel,
   onOpenPanel,
   onReorderPanels,
@@ -34,7 +34,7 @@ export function BottomToolsPanel({
   unsavedFilePath?: string | null;
   onActivatePanel: (panelId: string) => void;
   onClosePanel: (panelId: string) => void;
-  onCloseSlot: () => void;
+  onHide: () => void;
   onMovePanel: (
     panelId: string,
     targetPlacement: DesktopPanelSlot,
@@ -81,7 +81,7 @@ export function BottomToolsPanel({
         panels={panels}
         placement="bottom"
         unsavedFilePath={unsavedFilePath}
-        onClose={onCloseSlot}
+        onClose={onHide}
         onClosePanel={onClosePanel}
         onMovePanel={onMovePanel}
         onOpenPanel={onOpenPanel}

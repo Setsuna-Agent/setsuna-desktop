@@ -79,7 +79,7 @@ Active turn 时普通提交默认排队；显式立即发送才尝试 steer。Go
 - `chatComposerSendOptions.ts`：附件、thinking、Skill 与 mode 的发送参数归一化。
 - `chatComposerModeState.ts`：当前模型能力、Goal 和 thinking selection 的纯状态模型。
 - `useChatComposerModeController.ts`：Goal、thinking、model/usage view state 与 send options。
-- `ChatComposerFooter.tsx`：命令入口、thinking、审批策略、模式徽标、模型选择与 send/stop/queue 主操作的纯展示组合。
+- `ChatComposerFooter.tsx`：命令入口、审批策略、模式徽标、模型/思考强度选择与 send/stop/queue 主操作的纯展示组合。
 - `ChatComposerOverlays.tsx`：mention、slash 和 usage 浮层的纯展示组合。
 - `chatAttachments.ts` / `chatImageAttachments.ts`：本地文件引用、无路径图片托管与清理。
 - `chatCommandUtils.ts`：slash/command 解析。
@@ -100,7 +100,11 @@ Active turn 时普通提交默认排队；显式立即发送才尝试 steer。Go
 
 Command controller 只拥有输入菜单交互，不负责发送、附件、Goal 或 queued edit 事务。Mention 菜单优先于强制打开的 slash 菜单；dismiss 只绑定当前 draft；queued edit 只阻止 slash menu。Project entry 搜索切换 query 或关闭菜单时会取消旧请求的写回。
 
+`@` 候选由 `ChatCommandMenus.tsx` 展示，紧凑样式独立放在 `styles/chat-mention-menu.css`。每行展示图标、名称和浅色路径，完整路径可悬停查看；只有文件结果时省略分类标题，有浏览器标签页时保留分类。
+
 裸 `/` 菜单同时保留 quick actions 和最多 8 个 enabled、未选择的 Skill slot；quick action 数量不占用 Skill 的显示额度。
+
+模型选择器的按钮同时显示当前模型和思考强度。上下文用量由独立的 `ChatContextUsageIndicator` 展示在模型按钮左侧，悬停查看用量详情，压缩期间显示加载状态。一级菜单直接选择该模型支持的思考档位（或开启/关闭），底部“模型”进入带搜索和独立滚动的二级列表。列表按配置的厂商分组，搜索后仅保留有匹配项的分组；模型行仅显示图标和模型名，完整名称、模型 ID、服务商、上下文窗口、最大输出与能力放在行悬停详情中。选模型后保持菜单打开，便于接着调整思考强度。模型选择和思考偏好仍由原 controller 持有，思考偏好按模型保存，不支持思考的模型不显示思考选项。
 
 Mode controller 只拥有本地 Goal 选择和发送参数快照；切换 thread 会重置 thread-scoped Goal 和 usage panel，成功发送后重置 Goal，thinking 继续保留。附件 begin/settle、实际 `onSend`、queued-edit token 和 Sender clear 仍由各自原 owner 管理。
 

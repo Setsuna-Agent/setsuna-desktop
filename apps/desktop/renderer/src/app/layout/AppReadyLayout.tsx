@@ -232,7 +232,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     'layout.toggleTerminal': {
       allowInTerminal: true,
       enabled: activeView === 'chat',
-      execute: workspacePanels.toggleBottomTerminal,
+      execute: workspacePanels.toggleBottomPanel,
     },
     'chat.focusComposer': {
       allowInTerminal: true,
@@ -321,7 +321,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     threadHistory.goBack,
     threadHistory.goForward,
     startNewChat,
-    workspacePanels.toggleBottomTerminal,
+    workspacePanels.toggleBottomPanel,
     workspacePanels.closeActiveSidePanel,
     workspacePanels.conversationDebugEnabled,
     workspacePanels.openBrowserPanel,
@@ -406,13 +406,12 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
               <AppTopbarActions
                 activeView={activeView}
                 bottomPanelVisible={workspacePanels.bottomPanelVisible}
-                bottomTerminalPanelActive={workspacePanels.bottomTerminalPanelActive}
                 conversationOverviewAvailable={Boolean(runtime.currentThread)}
                 conversationOverviewVisible={conversationOverviewRendered}
                 sidePanelVisible={workspacePanels.sidePanelVisible}
                 onToggleConversationOverview={handleToggleConversationOverview}
                 onToggleSidePanel={workspacePanels.toggleSidePanel}
-                onToggleBottomTerminal={workspacePanels.toggleBottomTerminal}
+                onToggleBottomTerminal={workspacePanels.toggleBottomPanel}
               />
             ) : undefined,
           }}

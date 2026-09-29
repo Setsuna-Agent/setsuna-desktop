@@ -6,6 +6,11 @@ export type ChatModelOption = {
   provider: ProviderConfigState;
 };
 
+type ChatModelOptionGroup = {
+  provider: ProviderConfigState;
+  options: ChatModelOption[];
+};
+
 const modelPickerCollator = new Intl.Collator('zh-CN', {
   numeric: true,
   sensitivity: 'base',
@@ -33,6 +38,16 @@ export function chatModelOptions(config: RuntimeConfigState | null): ChatModelOp
 
 export function chatModelOptionKey(providerId: string, modelId: string): string {
   return `${providerId}:${modelId}`;
+}
+
+export function groupChatModelOptions(options: ChatModelOption[]): ChatModelOptionGroup[] {
+  const groups = new Map<string, ChatModelOptionGroup>();
+  for (const option of options) {
+    const group = groups.get(option.provider.id);
+    if (group) group.options.push(option);
+    else groups.set(option.provider.id, { provider: option.provider, options: [option] });
+  }
+  return Array.from(groups.values());
 }
 
 export function chatModelSearchText(option: ChatModelOption): string {

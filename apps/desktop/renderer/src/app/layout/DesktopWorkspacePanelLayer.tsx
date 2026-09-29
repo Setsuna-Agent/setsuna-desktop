@@ -146,7 +146,7 @@ export type DesktopWorkspacePanelModel = Readonly<{
   actions: Readonly<{
     onAccessModeChange(selection: RuntimeAccessModeSelection): void;
     onActivateBottomPanel(panelId: string): void;
-    onCloseBottomSlot(): void;
+    onHideBottomSlot(): void;
     onClosePanel(placement: DesktopPanelSlot, panelId: string): void;
     onCopyFilePath(filePath: string): void;
     onCreateEntry(input: WorkspaceEntryCreateInput): Promise<WorkspaceEntry | null>;
@@ -359,7 +359,7 @@ export function DesktopWorkspacePanelLayer({
               resizeValue={layout.terminalHeight}
               onActivatePanel={actions.onActivateBottomPanel}
               onClosePanel={(panelId) => actions.onClosePanel('bottom', panelId)}
-              onCloseSlot={actions.onCloseBottomSlot}
+              onHide={actions.onHideBottomSlot}
               onMovePanel={actions.onMoveBottomPanel}
               onOpenPanel={actions.onOpenBottomPanel}
               onReorderPanels={actions.onReorderBottomPanels}

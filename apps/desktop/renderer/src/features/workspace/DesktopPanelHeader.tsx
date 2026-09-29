@@ -1,5 +1,5 @@
 import { Button, MenuSurface, Tooltip } from '@setsuna-desktop/renderer-ui';
-import { Bug, FileDiff, FolderOpen, GitBranch, MessageSquare, Plus, SquareTerminal, X } from 'lucide-react';
+import { Bug, ChevronDown, FileDiff, FolderOpen, GitBranch, MessageSquare, Plus, SquareTerminal } from 'lucide-react';
 import {
   useEffect,
   useRef,
@@ -100,7 +100,6 @@ export function DesktopPanelHeader({
   activePanelId,
   availablePanelTypes,
   bottomBarActive = false,
-  bottomTerminalActive = false,
   onClose,
   onClosePanel,
   onMovePanel,
@@ -117,7 +116,6 @@ export function DesktopPanelHeader({
   activePanelId?: string | null;
   availablePanelTypes?: DesktopPanelType[];
   bottomBarActive?: boolean;
-  bottomTerminalActive?: boolean;
   onClose: () => void;
   onClosePanel?: (panelId: string) => void;
   onMovePanel?: (
@@ -543,7 +541,7 @@ export function DesktopPanelHeader({
           {placement === 'side' && onToggleBottomTerminal ? (
             <ShortcutTooltip
               commandId="layout.toggleTerminal"
-              label={t(bottomTerminalActive ? 'topbar.closeTerminal' : 'workspace.panel.openBottomTerminal')}
+              label={t(bottomBarActive ? 'workspace.panel.hideBottom' : 'workspace.panel.showBottom')}
             >
               <Button variant="ghost"
                 className={[
@@ -555,8 +553,8 @@ export function DesktopPanelHeader({
                   .filter(Boolean)
                   .join(' ')}
                 type="button"
-                aria-label={t(bottomTerminalActive ? 'topbar.closeTerminal' : 'workspace.panel.openBottomTerminal')}
-                aria-pressed={bottomTerminalActive}
+                aria-label={t(bottomBarActive ? 'workspace.panel.hideBottom' : 'workspace.panel.showBottom')}
+                aria-pressed={bottomBarActive}
                 onClick={onToggleBottomTerminal}
               >
                 <PanelPlacementIcon placement="bottom" />
@@ -579,11 +577,11 @@ export function DesktopPanelHeader({
             <Button variant="ghost"
               className="app-shell-icon-control chat-file-review-panel__close chat-file-review-panel__panel-close"
               type="button"
-              aria-label={t('workspace.panel.close')}
-              title={t('workspace.panel.close')}
+              aria-label={t('workspace.panel.hideBottom')}
+              title={t('workspace.panel.hideBottom')}
               onClick={onClose}
             >
-              <X size={14} />
+              <ChevronDown size={14} />
             </Button>
           )}
         </span>

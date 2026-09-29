@@ -53,9 +53,6 @@ export function ChatStarterContent({
   return (
     <>
       <h1 className="chat-starter__title font-sans">
-        <span className="chat-starter__reveal chat-starter__reveal--greeting block text-ink-3">
-          {t('chat.starter.greeting')}
-        </span>
         <span className="chat-starter__reveal chat-starter__reveal--question block text-ink">
           {title}
         </span>

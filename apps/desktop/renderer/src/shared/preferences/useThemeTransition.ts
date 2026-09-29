@@ -47,6 +47,10 @@ export function useThemeTransition() {
   }, []);
 
   const setThemeModeWithTransition = useCallback((nextMode: ThemeMode, event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>) => {
+    const root = document.documentElement;
+    // Settings and the sidebar share one root transition; ignore overlapping requests.
+    if (root.dataset.themeTransition) return;
+
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const animatedDocument = document as AnimatedDocument;
     const apply = () => setThemeMode(nextMode);
@@ -57,17 +61,18 @@ export function useThemeTransition() {
     }
 
     const rect = event.currentTarget.getBoundingClientRect();
-    const clientX = 'clientX' in event ? event.clientX : rect.left + rect.width / 2;
-    const clientY = 'clientY' in event ? event.clientY : rect.top + rect.height / 2;
-    document.documentElement.style.setProperty('--desktop-theme-transition-x', `${clientX}px`);
-    document.documentElement.style.setProperty('--desktop-theme-transition-y', `${clientY}px`);
+    // Button coordinates also give keyboard activation the correct reveal origin.
+    root.style.setProperty('--desktop-theme-transition-origin', `${rect.left + rect.width / 2}px ${rect.top + rect.height / 2}px`);
+    root.dataset.themeTransition = 'circle';
     const transition = animatedDocument.startViewTransition(() => {
       flushSync(apply);
     });
-    transition.finished.finally(() => {
-      document.documentElement.style.removeProperty('--desktop-theme-transition-x');
-      document.documentElement.style.removeProperty('--desktop-theme-transition-y');
-    });
+    const cleanup = () => {
+      delete root.dataset.themeTransition;
+      root.style.removeProperty('--desktop-theme-transition-origin');
+    };
+    // A skipped transition can reject; both outcomes must release the shared guard.
+    void transition.finished.then(cleanup, cleanup);
   }, [setThemeMode]);
 
   const toggleWithTransition = useCallback((event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>) => {
