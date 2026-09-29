@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import type { DesktopRuntimeClient, RuntimeThread } from '@setsuna-desktop/contracts';
-import { cleanup, renderHook } from '@testing-library/react';
+import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   claimCreatedChatThreadForSend,
@@ -13,6 +13,7 @@ import {
   reconcileChatTurnSubmission,
 } from '../../../../../src/features/chat/hooks/chatTurnSubmission.js';
 import { createIdentityRequestGuard } from '../../../../../src/shared/hooks/useIdentityRequestGuard.js';
+import { useChatComposerSession } from '../../../../../src/features/chat/hooks/useChatComposerSession.js';
 
 afterEach(cleanup);
 
@@ -134,6 +135,37 @@ describe('composer turn routing', () => {
 });
 
 describe('new thread refresh ordering', () => {
+  it('keeps newer input when the first thread finishes creating after navigation', async () => {
+    const created = deferred<RuntimeThread>();
+    const client = {
+      createThread: () => created.promise,
+      sendTurn: vi.fn(async () => ({ accepted: true as const, turnId: 'turn-first' })),
+    } as unknown as DesktopRuntimeClient;
+    const view = renderHook(({ id }: { id: string | null }) => {
+      const composer = useChatComposerSession(id ? `thread:${id}` : 'new-thread-slot:global', client);
+      const actions = useChatTurnActions({
+        activeProjectId: null, activeTurnId: null, client, currentThread: id ? thread({ id }) : null,
+        claimComposerForThread: composer.claimForThread, composerKey: composer.composerKey,
+        draft: composer.draft, setDraft: composer.setDraft, setCurrentThread: vi.fn(),
+        setActiveTurnId: vi.fn(), setError: vi.fn(), reloadThreads: async () => undefined,
+        terminalTurnIdsRef: { current: new Set() },
+      });
+      return { composer, actions };
+    }, { initialProps: { id: null as string | null } });
+    act(() => view.result.current.composer.setDraft('First input'));
+    let submission!: Promise<boolean>;
+    act(() => { submission = view.result.current.actions.sendInput(); });
+    view.rerender({ id: 'B' });
+    view.rerender({ id: null });
+    act(() => view.result.current.composer.setDraft('Newer input'));
+    await act(async () => {
+      created.resolve(thread({ id: 'created' }));
+      await submission;
+    });
+    expect(client.sendTurn).toHaveBeenCalledWith('created', expect.objectContaining({ input: 'First input' }));
+    expect(view.result.current.composer.draft).toBe('Newer input');
+  });
+
   it('waits for the primary thread list refresh before dispatching the first turn', async () => {
     const refresh = deferred<void>();
     const events: string[] = [];
@@ -238,6 +270,68 @@ describe('new thread refresh ordering', () => {
 });
 
 describe('ambiguous composer submission reconciliation', () => {
+  it.each(['accepted', 'rejected', 'response-lost'] as const)('settles a background %s send in its originating draft', async (outcome) => {
+    const response = deferred<{ accepted: true; turnId: string }>();
+    let fail!: (reason: Error) => void;
+    const pending = new Promise<{ accepted: true; turnId: string }>((resolve, reject) => {
+      response.promise.then(resolve);
+      fail = reject;
+    });
+    const asset = { id: 'asset-A', assetId: 'asset-A', source: 'runtime' as const, name: 'A.txt', type: 'text/plain', size: 1 };
+    const skillReferences = [{ skillId: 'skill-A', start: 0, end: 1 }];
+    const setCurrentThread = vi.fn();
+    const setError = vi.fn();
+    const setActiveTurnId = vi.fn();
+    const sendTurn = vi.fn<DesktopRuntimeClient['sendTurn']>(() => pending);
+    const deleteAttachment = vi.fn().mockResolvedValue({ deleted: true });
+    const client = {
+      sendTurn, deleteAttachment,
+      getThread: async () => thread({ messages: [{
+        id: 'sent', role: 'user', content: 'A draft', createdAt: '',
+        clientId: sendTurn.mock.calls[0][1].clientId,
+      }] }),
+    } as unknown as DesktopRuntimeClient;
+    const view = renderHook(({ id }) => {
+      const composer = useChatComposerSession(`thread:${id}`, client);
+      const actions = useChatTurnActions({
+        activeProjectId: null, activeTurnId: null, client, currentThread: thread({ id }),
+        claimComposerForThread: composer.claimForThread, composerKey: composer.composerKey,
+        draft: composer.draft, setDraft: composer.setDraft, setCurrentThread, setActiveTurnId, setError,
+        reloadThreads: async () => undefined, terminalTurnIdsRef: { current: new Set() },
+      });
+      return { composer, actions };
+    }, { initialProps: { id: 'A' } });
+    act(() => {
+      view.result.current.composer.setDraft('A draft', skillReferences);
+      view.result.current.composer.attachmentStore.replaceWithExisting([asset]);
+    });
+    const store = view.result.current.composer.attachmentStore;
+    let submission!: Promise<boolean>;
+    act(() => {
+      store.beginSend([asset]);
+      submission = view.result.current.actions.sendInput(undefined, { attachments: [asset], skillIds: ['skill-A'], skillReferences });
+    });
+    view.rerender({ id: 'B' });
+    act(() => view.result.current.composer.setDraft('B draft'));
+    await act(async () => {
+      if (outcome === 'accepted') response.resolve({ accepted: true, turnId: 'turn-A' });
+      else fail(new Error(outcome === 'response-lost' ? 'Runtime request transport failed' : 'Send rejected'));
+      store.settleSend([asset], await submission);
+    });
+    expect(view.result.current.composer.draft).toBe('B draft');
+    expect(view.result.current.composer.draftSkillReferences).toEqual([]);
+    expect(view.result.current.composer.attachmentStore.getSnapshot().items).toEqual([]);
+    expect(setCurrentThread).not.toHaveBeenCalled();
+    expect(setActiveTurnId).not.toHaveBeenCalled();
+    expect(setError).toHaveBeenCalledTimes(1); // only the initial error reset in A
+    expect(deleteAttachment).not.toHaveBeenCalled();
+    view.rerender({ id: 'A' });
+    expect(view.result.current.composer.draft).toBe(outcome === 'rejected' ? 'A draft' : '');
+    expect(view.result.current.composer.draftSkillReferences).toEqual(outcome === 'rejected' ? skillReferences : []);
+    expect(store.getSnapshot().items.map((item) => item.attachment)).toEqual(outcome === 'rejected' ? [asset] : []);
+    expect(store.getSnapshot().sending).toBe(false);
+  });
+
   it('recognizes both started messages and durable queued inputs by client id', () => {
     const started = thread({
       messages: [{

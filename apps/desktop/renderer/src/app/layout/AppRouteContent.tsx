@@ -1,5 +1,6 @@
 import type {
   RuntimeConfiguredModelReference,
+  RuntimeSkillReference,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
 import type { ReviewTarget } from '@setsuna-desktop/feature-review/contracts';
@@ -8,7 +9,9 @@ import type {
   PointerEvent as ReactPointerEvent,
   SetStateAction,
 } from 'react';
+import type { ChatAttachmentStore } from '../../features/chat/composer/chatAttachmentStore.js';
 import type { ChatTurnActions } from '../../features/chat/hooks/useChatTurnActions.js';
+import type { SetChatComposerDraft } from '../../features/chat/hooks/useChatComposerSession.js';
 import type { SettingsSectionId } from '../../features/settings/settings-types.js';
 import type { DesktopWorkspacePanelsState } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
 import type { ProjectWorkspaceState } from '../../features/workspace/hooks/useProjectWorkspace.js';
@@ -31,8 +34,10 @@ export type AppRouteContentProps = Readonly<{
   activeView: MainView;
   chatActions: ChatTurnActions;
   composerKey: string;
+  attachmentStore?: ChatAttachmentStore;
   conversationOverviewVisibility: ConversationOverviewVisibility;
   draft: string;
+  draftSkillReferences?: RuntimeSkillReference[];
   focusComposerRequest: number;
   findInChatRequest?: number;
   onFindInChatRequestConsumed?(requestId: number): void;
@@ -42,7 +47,7 @@ export type AppRouteContentProps = Readonly<{
   selectedPluginViewKey: string | null;
   settingsInitialSection?: SettingsSectionId | null;
   setActiveView: Dispatch<SetStateAction<MainView>>;
-  setDraft: Dispatch<SetStateAction<string>>;
+  setDraft: SetChatComposerDraft;
   capabilitySelectionRequest: ChatCapabilitySelectionRequest | null;
   startCurrentThreadReview: (
     target: ReviewTarget,

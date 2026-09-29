@@ -38,6 +38,8 @@ Active tab 也在 main 保持一份可信映射，Agent 的“当前页面”不
 
 Tab 销毁、导航和重新注册都会清理 snapshot/ref 与 CDP 状态。
 
+聊天输入框的 `@` 菜单包含当前会话侧栏和底栏中打开的 HTTP(S) 标签页，支持按标题或网址搜索；内部首页不列入候选。引用以 `[@标题](browser-tab://ID?url=URL)` 保存在消息正文，ID 和 URL 按 URI component 编码，因此草稿、排队、历史恢复与复制粘贴均保留标签页身份。模型按引用 ID 调用现有 Browser tools；标题和网址只是外部引用信息，不自动读取页面，也不提升为指令。标签关闭后保留历史引用，main 对已失效 ID 报错，不回退到其他标签页。
+
 ## Guest 安全配置
 
 `will-attach-webview` 强制：

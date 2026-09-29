@@ -49,6 +49,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     clearCapabilitySelectionRequest,
     composerKey,
     draft,
+    draftSkillReferences,
     globalThreads,
     handleSidebarResizeStep,
     handleSidebarResizeStart,
@@ -58,7 +59,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     handleWorkspaceResizeStart,
     navigation,
     projectWorkspace,
-    resetComposer,
+    attachmentStore,
     runtime,
     searchTriggerRef,
     selectSkillForChat,
@@ -179,9 +180,8 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     void window.setsunaDesktop?.browser.reloadTab(browserPanelId, mode).catch(() => undefined);
   }, [activeBrowserPanelId]);
   const startNewChat = useCallback(() => {
-    resetComposer();
     navigation.startCurrentThread();
-  }, [navigation, resetComposer]);
+  }, [navigation]);
   const shortcutHandlers = useMemo<AppKeyboardShortcutHandlers>(() => ({
     'app.newChat': {
       execute: startNewChat,
@@ -437,7 +437,6 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
               width={sidebarWidth}
               maxWidth={sidebarMaxWidth}
               minWidth={sidebarMinWidth}
-              onResetDraft={resetComposer}
               onResizeStep={handleSidebarResizeStep}
               onResizeStart={handleSidebarResizeStart}
             />
@@ -462,11 +461,13 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         settingsInitialSection={settingsInitialSection}
         chatActions={chatActions}
         composerKey={composerKey}
+        attachmentStore={attachmentStore}
         focusComposerRequest={focusComposerRequest}
         findInChatRequest={findInChatRequest}
         onFindInChatRequestConsumed={consumeFindInChatRequest}
         conversationOverviewVisibility={conversationOverviewVisibility}
         draft={draft}
+        draftSkillReferences={draftSkillReferences}
         projectWorkspace={projectWorkspace}
         runtime={runtime}
         setActiveView={setActiveView}

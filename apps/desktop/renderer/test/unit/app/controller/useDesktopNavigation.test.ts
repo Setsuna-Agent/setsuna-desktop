@@ -1,11 +1,14 @@
 // @vitest-environment happy-dom
 import type { DesktopRuntimeClient, RuntimeThread, WorkspaceProject } from '@setsuna-desktop/contracts';
+import { browserTabMentionText } from '@setsuna-desktop/feature-browser/contracts';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { useDesktopNavigation } from '../../../../src/app/controller/useDesktopNavigation.js';
 import type { MainView } from '../../../../src/app/types.js';
 import { chatComposerTargetIdentity, useChatComposerSession } from '../../../../src/features/chat/hooks/useChatComposerSession.js';
+import { desktopWorkspaceBrowserPanelInstances, useDesktopWorkspacePanelSession } from '../../../../src/features/workspace/hooks/useDesktopWorkspacePanelSession.js';
+import { addPanelToSlotState, createBrowserPanel } from '../../../../src/features/workspace/model.js';
 
 afterEach(cleanup);
 
@@ -18,7 +21,7 @@ it('changes a new chat project without opening a conversation or losing its draf
   }));
   const { result } = renderHook(() => {
     const [activeProjectId, setActiveProjectId] = useState<string | null>('project_a');
-    const composer = useChatComposerSession(chatComposerTargetIdentity(null, activeProjectId));
+    const composer = useChatComposerSession(chatComposerTargetIdentity(null, activeProjectId), {} as DesktopRuntimeClient);
     const navigation = useDesktopNavigation({
       activeProjectId, setActiveProjectId, currentThread: null, setCurrentThread: vi.fn(),
       projects, setProjects: vi.fn(), setActiveView: vi.fn(),
@@ -129,7 +132,61 @@ it.each([false, true])('starts a new chat from a restored thread when its projec
   expect(result.current.activeProjectId).toBe(newProjectId);
   expect(result.current.currentThread).toBeNull();
   expect(result.current.activeView).toBe('chat');
-  expect(resetPanels).toHaveBeenCalledWith(newProjectId);
+  expect(resetPanels).not.toHaveBeenCalled();
   expect(resetProject).toHaveBeenCalledTimes(projectExists ? 0 : 1);
   expect(oldThread.projectId).toBe('project_old');
+});
+
+it.each([
+  { entry: 'global', projectId: null },
+  { entry: 'project', projectId: 'project_a' },
+  { entry: 'current', projectId: null },
+  { entry: 'current', projectId: 'project_a' },
+] as const)('restores the draft and its browser sessions via $entry ($projectId)', async ({ entry, projectId }) => {
+  const otherThread: RuntimeThread = {
+    id: 'thread_other', projectId: projectId ?? undefined, title: 'Other conversation',
+    createdAt: '', updatedAt: '', archived: false, messageCount: 0,
+    lastMessagePreview: '', messages: [], lastSeq: 0,
+  };
+  const client = { getThread: vi.fn(async () => otherThread) } as unknown as DesktopRuntimeClient;
+  const project: WorkspaceProject = { id: 'project_a', name: 'Project', createdAt: '', updatedAt: '' };
+  const tab = { id: 'browser-draft', title: 'Draft page', url: 'https://example.com/' };
+  const browser = createBrowserPanel(tab.id, tab.url);
+  const draft = `Inspect ${browserTabMentionText(tab)}`;
+  const { result } = renderHook(() => {
+    const [activeProjectId, setActiveProjectId] = useState<string | null>(projectId);
+    const [currentThread, setCurrentThread] = useState<RuntimeThread | null>(null);
+    const identity = chatComposerTargetIdentity(currentThread?.id, activeProjectId);
+    const composer = useChatComposerSession(identity, client);
+    const panels = useDesktopWorkspacePanelSession(identity);
+    const navigation = useDesktopNavigation({
+      activeProjectId, setActiveProjectId, currentThread, setCurrentThread, client,
+      projects: [project], setProjects: vi.fn(), setActiveView: vi.fn(),
+      confirmDiscardProjectFile: async () => true,
+      globalThreads: [], threadsByProjectId: new Map(), reloadThreads: async () => [],
+      resetProjectWorkspaceState: vi.fn(), resetThreadWorkspacePanels: vi.fn(),
+      resetNewThreadWorkspacePanels: (id) => panels.resetForIdentity(chatComposerTargetIdentity(null, id)),
+    });
+    return { composer, panels, navigation, identity };
+  });
+  act(() => {
+    result.current.composer.setDraft(draft);
+    result.current.panels.setSidePanelSlot((slot) => addPanelToSlotState(slot, browser));
+    result.current.panels.setSidePanelExpanded(true);
+  });
+  const originalKey = result.current.composer.composerKey;
+  await act(() => result.current.navigation.selectThread(otherThread.id));
+  expect(result.current.composer.draft).toBe('');
+
+  await act(() => entry === 'global'
+    ? result.current.navigation.startGlobalThread()
+    : entry === 'project'
+      ? result.current.navigation.startProjectThread(projectId!)
+      : result.current.navigation.startCurrentThread());
+
+  expect(result.current.composer.composerKey).toBe(originalKey);
+  expect(result.current.composer.draft).toBe(draft);
+  expect(desktopWorkspaceBrowserPanelInstances(result.current.panels.layouts, result.current.identity, {
+    bottomVisible: false, sideVisible: true,
+  })).toEqual([{ active: true, panel: browser, placement: 'side', targetIdentity: result.current.identity }]);
 });

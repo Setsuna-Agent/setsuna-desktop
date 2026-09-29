@@ -4,4 +4,5 @@ export * from './control-port.js';
 export * from './definition.js';
 export * from './panel.js';
 export * from './runtime-tools.js';
+export * from './tab-mention.js';
 export * from './ui-actions.js';

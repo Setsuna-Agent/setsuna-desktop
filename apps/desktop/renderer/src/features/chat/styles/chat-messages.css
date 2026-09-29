@@ -396,7 +396,8 @@
 .chat-inline-reference {
   appearance: none;
   display: inline-flex;
-  align-items: center;
+  /* Let the label supply the inline baseline; the icon has no text baseline. */
+  align-items: baseline;
   gap: 4px;
   min-height: 0;
   margin: 0;
@@ -408,7 +409,7 @@
   font: inherit;
   font-weight: inherit;
   line-height: inherit;
-  vertical-align: middle;
+  vertical-align: baseline;
   white-space: nowrap;
 }
 
@@ -431,6 +432,7 @@
 
 .chat-inline-reference__icon {
   display: inline-flex;
+  align-self: center;
   align-items: center;
   justify-content: center;
   width: var(--desktop-inline-icon-size);

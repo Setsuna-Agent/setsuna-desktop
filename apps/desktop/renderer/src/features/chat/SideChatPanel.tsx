@@ -179,10 +179,12 @@ export function SideChatPanel({
           canClearContext={Boolean(sideChat.currentThread?.messages.length)}
           client={client}
           composerKey={sideChat.composerKey}
+          attachmentStore={sideChat.attachmentStore}
           config={config}
           contextCompacting={sideChat.contextCompacting}
           currentThread={sideChat.currentThread}
           draft={sideChat.draft}
+          draftSkillReferences={sideChat.draftSkillReferences}
           focusComposerOnReveal={!hidden}
           plugins={plugins}
           capabilitySelectionRequest={null}

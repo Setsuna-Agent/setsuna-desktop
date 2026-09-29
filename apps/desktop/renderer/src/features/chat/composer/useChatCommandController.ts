@@ -1,5 +1,4 @@
 import type {
-  WorkspaceEntrySearchItem,
   WorkspaceEntrySearchResponse,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
@@ -11,6 +10,8 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
 import type { Translate } from '../../../shared/i18n/I18nProvider.js';
+import { useBrowserTabMentions } from '../mentions/BrowserTabReference.js';
+import { chatMentionItems, type ChatMentionItem } from '../mentions/chatMentionItems.js';
 import type { SlashCommandMenuItem } from './ChatSlashCommandMenu.js';
 import {
   createChatComposerCommandState,
@@ -45,6 +46,7 @@ export function useChatCommandController({
   const [focused, setFocused] = useState(false);
   const [forcedSlashMenuOpen, setForcedSlashMenuOpen] = useState(false);
   const [searchState, setSearchState] = useState(emptyProjectEntrySearchState);
+  const browserTabs = useBrowserTabMentions();
   const state = useMemo(() => createChatComposerCommandState({
     cursorOffset,
     dismissedMentionDraft,
@@ -62,6 +64,12 @@ export function useChatCommandController({
     forcedSlashMenuOpen,
     slashMenuBlocked,
   ]);
+
+  const mentionItems = useMemo(() => chatMentionItems(browserTabs, searchState.entries, state.mentionQuery),
+    [browserTabs, searchState.entries, state.mentionQuery]);
+  const browserTabIds = browserTabs.map((tab) => tab.id).join('\n');
+  useEffect(() => { setActiveMentionIndex(0); }, [state.mentionQuery, browserTabIds]);
+  const mentionIndex = Math.min(activeMentionIndex, Math.max(0, mentionItems.length - 1));
 
   useEffect(() => {
     if (!state.mentionMenuOpen || !activeProject) {
@@ -149,35 +157,31 @@ export function useChatCommandController({
 
   const handleMentionKeyDown = useCallback((
     event: ReactKeyboardEvent,
-    onSelect: (entry?: WorkspaceEntrySearchItem) => void,
+    onSelect: (entry?: ChatMentionItem) => void,
   ) => {
     if (event.key === 'Escape') {
       stopMenuKeyboardEvent(event);
       setDismissedMentionDraft(draft);
       return false;
     }
-    if (!searchState.entries.length) return undefined;
+    if (!mentionItems.length) return undefined;
     if (event.key === 'ArrowDown') {
       stopMenuKeyboardEvent(event);
-      setActiveMentionIndex((current) => (
-        moveChatCommandMenuIndex(current, 1, searchState.entries.length)
-      ));
+      setActiveMentionIndex(moveChatCommandMenuIndex(mentionIndex, 1, mentionItems.length));
       return false;
     }
     if (event.key === 'ArrowUp') {
       stopMenuKeyboardEvent(event);
-      setActiveMentionIndex((current) => (
-        moveChatCommandMenuIndex(current, -1, searchState.entries.length)
-      ));
+      setActiveMentionIndex(moveChatCommandMenuIndex(mentionIndex, -1, mentionItems.length));
       return false;
     }
     if (event.key === 'Enter' || event.key === 'Tab') {
       stopMenuKeyboardEvent(event);
-      onSelect(searchState.entries[activeMentionIndex]);
+      onSelect(mentionItems[mentionIndex]);
       return false;
     }
     return undefined;
-  }, [activeMentionIndex, draft, searchState.entries]);
+  }, [mentionIndex, draft, mentionItems]);
 
   const handleSlashKeyDown = useCallback((
     event: ReactKeyboardEvent,
@@ -213,11 +217,11 @@ export function useChatCommandController({
     ...state,
     acceptMentionSelection,
     acceptSlashSelection,
-    activeMentionIndex,
+    activeMentionIndex: mentionIndex,
     activeSlashIndex,
     clearSlashDismissal,
     closeSlashMenu,
-    entries: searchState.entries,
+    mentionItems,
     focusComposer,
     forcedSlashMenuOpen,
     handleComposerBlur,

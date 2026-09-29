@@ -58,13 +58,15 @@ export function useSideChat({
   const {
     claimForThread: claimComposerForThread,
     composerKey,
+    attachmentStore,
     draft,
+    draftSkillReferences,
     reset: resetComposer,
     setDraft,
   } = useChatComposerSession(chatComposerTargetIdentity(
     threadId,
     threadId ? null : parentThreadId ? `side:${parentThreadId}` : 'side:unavailable',
-  ));
+  ), client);
   const contextRequests = useIdentityRequestGuard(threadId ?? `new-side-thread:${parentThreadId ?? 'unavailable'}`);
   const creationRequests = useIdentityRequestGuard(`side-conversation-owner:${parentThreadId ?? 'unavailable'}`);
   const reviewRequests = useIdentityRequestGuard(composerKey);
@@ -286,22 +288,26 @@ export function useSideChat({
     answerApproval,
     clearContext,
     composerKey,
+    attachmentStore,
     compactContext,
     contextCompacting,
     currentThread,
     draft,
     setDraft,
     startReview,
+    draftSkillReferences,
   }), [
     actions,
     answerApproval,
     clearContext,
     composerKey,
+    attachmentStore,
     compactContext,
     contextCompacting,
     currentThread,
     draft,
     effectiveActiveTurnId,
+    draftSkillReferences,
     setDraft,
     startReview,
   ]);

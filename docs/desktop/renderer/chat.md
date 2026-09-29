@@ -44,7 +44,7 @@ Chat feature 把 runtime thread snapshot 投影为对话 UI，并负责 composer
 - `ChatSendQueue`。
 - 取回编辑 footer。
 
-Composer state 由 `useChatComposerSession` 和专用 hooks 管理，避免页面切换时草稿与异步请求互相覆盖。
+Composer state 由 `useChatComposerSession` 和专用 hooks 管理。应用运行期间，文字草稿、Skill ID 及其未裁剪文本引用范围、`chatAttachmentStore` 按 thread / new-thread-slot 独立保留，切换会话、新建会话或切换页面不会清空原草稿。选择空工作区、首次创建 runtime thread 时转移同一份草稿；目标已有文字或附件（包括上传中）时恢复目标草稿，并将来源草稿保留在原位置。恢复编辑器时按已保存的 Skill ID 和范围重建槽位，发送时再换算为裁剪后的范围。附件上传和发送结果仍归原 session，成功发送只清理已提交附件，失败保留文字、Skill 引用和附件以便重试。`useChatAttachments` 只订阅附件状态，输入框卸载不再删除会话持有的附件；显式丢弃草稿或会话状态 owner 卸载时回收未发送资源。队列编辑仍按原流程释放编辑租约和临时副本。
 
 Renderer Slot 的实例身份沿用这套 session 语义：Conversation/Details 跟随具体 thread surface，Composer 则使用 `variant + composerKey`。首次发送把 new-thread slot claim 为新 thread 时，Composer Slot 不会因 threadId 出现而中途 remount。空白 starter 的可替换 Conversation 内容与宿主 Composer 是同级所有权；Conversation winner 即使完全替换默认内容，也不能让发送入口消失。
 
@@ -229,6 +229,7 @@ Markdown 内联代码只将单一路径作为文件候选，命令、Git 状态�
 ## Mentions 与附件
 
 - Workspace mention 使用明确 parser，不从渲染后的 Markdown 反推。
+- `@` 同时提供当前会话打开的浏览器标签页，通过 Browser contract 序列化稳定 ID、标题和网址；候选、输入槽位和历史消息共用该引用格式。
 - 文件打开仍走 main/workspace API。
 - 文件选择器中的本地文件通过 preload 从 Electron `File` 提取可信路径并登记为 runtime 引用；renderer 和线程事件只保留不透明 attachment ID，不读取或复制文件字节。
 - runtime 将被引用的原文件作为该 turn 的 direct-tool-only readable root 暴露给 Agent，但不会把动态附件根加入 shell sandbox plan，也不会新增写权限；文件若本来位于 workspace 或已配置的 writable root 内，仍遵循原有 workspace 权限。文件移动或删除后引用变为不可用，不会生成第二份副本。

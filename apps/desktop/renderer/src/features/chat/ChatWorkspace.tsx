@@ -7,6 +7,7 @@ import type {
   RuntimeMessage,
   RuntimePluginSummary,
   RuntimeSkillSummary,
+  RuntimeSkillReference,
   RuntimeThread,
   WorkspaceEntrySearchResponse,
   WorkspaceProject,
@@ -30,6 +31,7 @@ import type {
   DesktopReviewOpenHandler,
   DesktopReviewState,
 } from '../workspace/model.js';
+import type { ChatAttachmentStore } from './composer/chatAttachmentStore.js';
 import { ChatComposer } from './ChatComposer.js';
 import { ChatModelSetupNotice } from './ChatModelSetupNotice.js';
 import type { ChatModelSelectionHandler } from './chatModelSelection.js';
@@ -52,11 +54,13 @@ export function ChatWorkspace({
   canClearContext,
   client,
   composerKey,
+  attachmentStore,
   config,
   conversationOverviewVisibility = 'auto',
   contextCompacting = false,
   currentThread,
   draft,
+  draftSkillReferences,
   focusComposerOnReveal = false,
   focusComposerRequest = 0,
   findInChatRequest,
@@ -100,11 +104,13 @@ export function ChatWorkspace({
   canClearContext: boolean;
   client: DesktopRuntimeClient;
   composerKey: string;
+  attachmentStore?: ChatAttachmentStore;
   config: RuntimeConfigState | null;
   conversationOverviewVisibility?: ConversationOverviewVisibility;
   contextCompacting?: boolean;
   currentThread: RuntimeThread | null;
   draft: string;
+  draftSkillReferences?: RuntimeSkillReference[];
   focusComposerOnReveal?: boolean;
   focusComposerRequest?: number;
   findInChatRequest?: number;
@@ -122,7 +128,7 @@ export function ChatWorkspace({
   onClearContext: () => void;
   onDeleteMessages: (messageIds: string[]) => void | Promise<void>;
   onFileChangesAction?: (toolCallIds: string[], action: WorkspaceFileChangeAction) => void | Promise<void | ThreadFileChangesResult>;
-  onDraftChange: (value: string) => void;
+  onDraftChange: (value: string, skillReferences?: RuntimeSkillReference[]) => void;
   onEditUserMessage: (messageId: string, content: string) => void | Promise<void>;
   onOpenSideChat?: () => void;
   onOpenFileReview?: DesktopReviewOpenHandler;
@@ -224,6 +230,7 @@ export function ChatWorkspace({
         renderDefault: () => (
           <ChatComposer
             key={composerKey}
+            attachmentStore={attachmentStore}
             activeTurnId={activeTurnId}
             activeProject={activeProject}
             canClearContext={canClearContext}
@@ -233,6 +240,7 @@ export function ChatWorkspace({
             config={config}
             currentThread={historyThread}
             draft={draft}
+            draftSkillReferences={draftSkillReferences}
             focusOnReveal={focusComposerOnReveal}
             focusRequest={focusComposerRequest}
             onFocusRequestConsumed={onFocusComposerRequestConsumed}
