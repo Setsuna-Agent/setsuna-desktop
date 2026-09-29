@@ -9,6 +9,7 @@ import type {
 import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
 import { useLatestRequestGuard } from '../../shared/hooks/useLatestRequestGuard.js';
 import type { MainView } from '../types.js';
+import { isThreadDeletionCancelled } from '../../services/runtime-client/runtimeClientErrors.js';
 
 type DesktopNavigationOptions = {
   activeProjectId: string | null;
@@ -155,10 +156,10 @@ export function useDesktopNavigation({
     [client, confirmDiscardProjectFile, currentWorkspaceId, expandProject, navigationRequests, resetProjectWorkspaceState, setActiveProjectId, setActiveView, setCurrentThread],
   );
 
-  const forkThread = useCallback(async (input: ForkThreadInput) => {
-    if (!currentThread || !await confirmDiscardProjectFile()) return;
+  const forkThreadFromId = useCallback(async (threadId: string, input: ForkThreadInput) => {
     const isLatest = navigationRequests.begin();
-    const forked = await client.forkThread(currentThread.id, input);
+    if (!await confirmDiscardProjectFile() || !isLatest()) return;
+    const forked = await client.forkThread(threadId, input);
     await reloadThreads();
     // Worktree creation can outlive navigation to another conversation.
     if (!isLatest()) return;
@@ -167,7 +168,11 @@ export function useDesktopNavigation({
     setActiveProjectId(forked.projectId ?? null);
     if (forked.projectId) expandProject(forked.projectId);
     setCurrentThread(forked);
-  }, [client, confirmDiscardProjectFile, currentWorkspaceId, currentThread, expandProject, navigationRequests, reloadThreads, resetProjectWorkspaceState, setActiveProjectId, setActiveView, setCurrentThread]);
+  }, [client, confirmDiscardProjectFile, currentWorkspaceId, expandProject, navigationRequests, reloadThreads, resetProjectWorkspaceState, setActiveProjectId, setActiveView, setCurrentThread]);
+
+  const forkThread = useCallback(async (input: ForkThreadInput) => {
+    if (currentThread) await forkThreadFromId(currentThread.id, input);
+  }, [currentThread, forkThreadFromId]);
 
   const selectNewThreadProject = useCallback(async (projectId: string | null) => {
     if (currentThread || projectId === activeProjectId) return;
@@ -201,12 +206,19 @@ export function useDesktopNavigation({
     closeRenameThread();
   }, [client, closeRenameThread, reloadThreads, renameThreadTitle, renamingThread, setCurrentThread]);
 
-  const archiveThread = useCallback(
-    async (thread: RuntimeThreadSummary) => {
-      if (currentThread?.id === thread.id && !await confirmDiscardProjectFile()) return;
+  const hideThreadFromNavigation = useCallback(
+    async (thread: RuntimeThreadSummary, persist: () => Promise<unknown>, deleting = false) => {
+      // Deletion checks every window in main; do not discard this window's draft
+      // early, since another window can still cancel or the request can fail.
+      if (!deleting && currentThread?.id === thread.id && !await confirmDiscardProjectFile()) return;
       const isLatest = navigationRequests.begin();
       setThreadActionMenuId(null);
-      await client.updateThread(thread.id, { archived: true });
+      try {
+        await persist();
+      } catch (error) {
+        if (isThreadDeletionCancelled(error)) return;
+        throw error;
+      }
       resetThreadWorkspacePanels(thread.id);
       const nextThreads = await reloadThreads();
       if (!isLatest()) return;
@@ -231,6 +243,16 @@ export function useDesktopNavigation({
       setCurrentThread(fallback);
     },
     [client, confirmDiscardProjectFile, currentThread?.id, currentWorkspaceId, expandProject, navigationRequests, reloadThreads, resetProjectWorkspaceState, resetThreadWorkspacePanels, setActiveProjectId, setCurrentThread],
+  );
+
+  const archiveThread = useCallback(
+    (thread: RuntimeThreadSummary) => hideThreadFromNavigation(thread, () => client.updateThread(thread.id, { archived: true })),
+    [client, hideThreadFromNavigation],
+  );
+
+  const deleteThread = useCallback(
+    (thread: RuntimeThreadSummary) => hideThreadFromNavigation(thread, () => client.deleteThread(thread.id), true),
+    [client, hideThreadFromNavigation],
   );
 
   const enterChatMode = useCallback(async () => {
@@ -374,6 +396,7 @@ export function useDesktopNavigation({
   return {
     archiveProject,
     archiveThread,
+    deleteThread,
     closeNavigationMenus,
     closeRenameThread,
     collapsedProjectIds,
@@ -395,6 +418,7 @@ export function useDesktopNavigation({
     selectNewThreadProject,
     selectThread,
     forkThread,
+    forkThreadFromId,
     sessionsCollapsed,
     setProjectActionMenuId,
     setProjectsCollapsed,

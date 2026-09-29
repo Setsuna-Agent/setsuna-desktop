@@ -1,5 +1,4 @@
 import { createFeatureScope } from '@setsuna-desktop/feature-core/scope';
-import type { BrowserWindow } from 'electron';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const webDavIpcMocks = vi.hoisted(() => ({
@@ -44,7 +43,7 @@ describe('WebDAV sync IPC lifecycle', () => {
     });
     scope.scope.add(registerWebDavSyncIpc(
       service,
-      fakeMainWindow(),
+      vi.fn(),
       <T>(operation: () => Promise<T>) => scope.scope.runOperation(() => operation()),
       requestRelaunch,
     ));
@@ -75,7 +74,7 @@ describe('WebDAV sync IPC lifecycle', () => {
     const requestRelaunch = vi.fn(async () => undefined);
     scope.scope.add(registerWebDavSyncIpc(
       service,
-      fakeMainWindow(),
+      vi.fn(),
       <T>(operation: () => Promise<T>) => scope.scope.runOperation(() => operation()),
       requestRelaunch,
     ));
@@ -95,12 +94,6 @@ function fakeService(overrides: Readonly<{
   return overrides as unknown as WebDavSyncService;
 }
 
-function fakeMainWindow(): BrowserWindow {
-  return {
-    isDestroyed: () => false,
-    webContents: { send: vi.fn() },
-  } as unknown as BrowserWindow;
-}
 
 function ipcHandler(channel: string): (...args: unknown[]) => Promise<unknown> {
   const handler = webDavIpcMocks.handlers.get(channel);

@@ -1,16 +1,17 @@
 import type {
+  DesktopNetworkProxyState,
   DesktopNetworkProxyRoutingInput,
   DesktopNetworkProxyServerInput,
 } from '@setsuna-desktop/contracts';
 import type { FeatureScope } from '@setsuna-desktop/feature-core/scope';
-import { ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron';
+import { ipcMain, type IpcMainInvokeEvent } from 'electron';
 import { NETWORK_PROXY_IPC_CHANNELS } from '../contracts/index.js';
 import type { DesktopNetworkProxyService } from './service.js';
 
 export function registerNetworkProxyIpc(
   scope: FeatureScope,
   service: DesktopNetworkProxyService,
-  mainWindow: BrowserWindow,
+  publishState: (state: DesktopNetworkProxyState) => void,
   deleteServerThroughRuntime: (proxyServerId: string) => Promise<unknown>,
 ): () => void {
   const channels = [
@@ -33,11 +34,7 @@ export function registerNetworkProxyIpc(
     service.setRouting(routingInput(value))
   ));
 
-  const unsubscribe = service.subscribe((state) => {
-    if (!mainWindow.isDestroyed()) {
-      mainWindow.webContents.send(NETWORK_PROXY_IPC_CHANNELS.stateChange, state);
-    }
-  });
+  const unsubscribe = service.subscribe(publishState);
   return () => {
     unsubscribe();
     for (const channel of channels) ipcMain.removeHandler(channel);

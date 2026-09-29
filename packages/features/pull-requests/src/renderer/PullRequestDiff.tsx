@@ -8,6 +8,7 @@ import type { PullRequestsClient } from './client.js';
 import { usePrText, usePullRequestsHost } from './context.js';
 import { DiscussionCard } from './DiscussionTimeline.js';
 import { PullRequestFileTree } from './PullRequestFileTree.js';
+import { PullRequestScrollArea } from './PullRequestScrollArea.js';
 import { Loading } from './status.js';
 import { usePullRequestFiles } from './usePullRequestFiles.js';
 import type { DiscussionsState } from './useDiscussions.js';
@@ -60,10 +61,10 @@ export function PullRequestDiff({ client, detail, account, discussions, focus, o
     <aside className="pr-diff__navigation">
       <header><TextField leadingIcon={<Search size={14} />} aria-label={t('searchFiles')} placeholder={t('searchFiles')} value={search} onChange={(event) => setSearch(event.currentTarget.value)} />
       </header>
-      <div className="pr-diff__files">
+      <PullRequestScrollArea className="pr-diff__files" contentClassName="pr-diff__files-content">
         <PullRequestFileTree files={filtered} path={files.path} onSelect={(path) => { setActivePath(path); setActiveDiscussion(null); }} />
         {files.loading ? <Loading /> : null}
-      </div>
+      </PullRequestScrollArea>
     </aside>
     <div className="pr-diff__content">
       <header>
@@ -78,7 +79,7 @@ export function PullRequestDiff({ client, detail, account, discussions, focus, o
             onLayoutChange={setLayout} onWrapChange={setWrap} />
         </div>
       </header>
-      <div className="pr-diff__scroll" ref={codeScroll}>
+      <PullRequestScrollArea className="pr-diff__scroll" contentClassName="pr-diff__scroll-content" scrollRef={codeScroll}>
         {files.error || files.patchError ? <div role="alert"><p className="sd-control-error">{files.error || files.patchError}</p><Button onClick={files.retry}>{t('retry')}</Button></div> : null}
         {files.path && !files.patch && !files.patchError ? <Loading /> : null}
         {!files.path && !files.loading ? <p className="pr-muted">{t('noFiles')}</p> : null}
@@ -90,7 +91,7 @@ export function PullRequestDiff({ client, detail, account, discussions, focus, o
           <DiscussionCard key={(selected ?? threads[0]).id} discussion={selected ?? threads[0]} client={client} detail={detail} account={account} onPublished={onPublished} onDiff={(thread) => { setActivePath(thread.path); setActiveDiscussion(thread.id); }} moreReplies={() => void discussions.moreReplies(selected ?? threads[0])} repliesPending={discussions.repliesPending === (selected ?? threads[0]).id} />
         </div> : null}
         {discussions.hasMore ? <Button disabled={discussions.pending} onClick={() => void discussions.more()}>{t('moreDiscussions')}</Button> : null}
-      </div>
+      </PullRequestScrollArea>
     </div>
   </section>;
 }

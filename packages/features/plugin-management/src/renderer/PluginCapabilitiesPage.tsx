@@ -72,7 +72,8 @@ export function PluginCapabilitiesPage({
     // The service publishes local state while the page-scoped repository refresh runs.
     setRepositoryRefreshing(true);
     void service.refresh({ refreshRepositories: true })
-      .catch((error: unknown) => { if (active) setError(error instanceof Error ? error.message : String(error)); })
+      // Background repository failures stay quiet; explicit actions report through Toast.
+      .catch(() => undefined)
       .finally(() => { if (active) setRepositoryRefreshing(false); });
     return () => { active = false; };
   }, [service]);
@@ -231,7 +232,6 @@ export function PluginCapabilitiesPage({
   const installedMarketplacePlugins = catalog.filter((plugin) => installedById.has(plugin.id));
   const marketplaceSections = pluginMarketplaceSections(catalog, t, repositoryRefreshing && !query.trim());
   const installedCount = installedMarketplacePlugins.length + localPlugins.length + Number(standaloneHooks.length > 0);
-  const hasPageErrors = snapshot.marketplaceErrors.length > 0 || Boolean(error);
   const tabsInPage = capabilities?.catalogNavigationInPage ?? false;
   return (
     <main className="capabilities-page desktop-capabilities-panel" data-feature-id="plugin-management">
@@ -298,21 +298,6 @@ export function PluginCapabilitiesPage({
             <TextField aria-label={t('feature.pluginManagement.search')} placeholder={t('feature.pluginManagement.search')} value={query} onChange={(event) => setQuery(event.currentTarget.value)} />
           </label>
         </div>
-        {hasPageErrors ? (
-          <div className="desktop-capabilities-market-notices">
-            {error ? <div className="desktop-capabilities-errors" role="alert">{error}</div> : null}
-            {snapshot.marketplaceErrors.length ? (
-              <div
-                className="desktop-capabilities-market-warning"
-                role="status"
-                title={snapshot.marketplaceErrors.join('\n')}
-              >
-                <AlertTriangle aria-hidden="true" size={14} />
-                <span>{t('feature.pluginManagement.partialUnavailable')} {snapshot.marketplaceErrors.join(' · ')}</span>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
         <div className="desktop-capabilities-grid"><div className="desktop-capabilities-grid__content">
           <div className="desktop-plugin-market">
             {installedCount ? (
@@ -357,9 +342,6 @@ export function PluginCapabilitiesPage({
                     </div>
                   ) : undefined}
                 >
-                  {section.id === 'repository' && !section.plugins.length ? (
-                    <span role="status">{t('feature.pluginManagement.repositoryRefreshing')}</span>
-                  ) : null}
                   {section.plugins.map((plugin) => (
                     <PluginCard
                       installed={installedById.get(plugin.id)}
@@ -379,6 +361,7 @@ export function PluginCapabilitiesPage({
           </div>
         </div></div>
       </section>
+      {error ? <ui.Toast message={error} tone="error" /> : null}
     </main>
   );
 }

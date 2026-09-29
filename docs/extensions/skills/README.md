@@ -79,6 +79,8 @@ main RuntimeHost
 
 这些路径由宿主使用当前用户主目录解析，并由 Skills Feature 的只读 typed operation 统计直接子目录中的 `SKILL.md`。未继承且计数为零的预设不会展示；已继承项始终保留取消入口。继承和手动添加的目录写入 `runtime/skills.json` 的 `extraRoots`，重启或升级后自动恢复；目录暂时不存在也不会清除选择。Skill 列表响应同时返回已保存目录，renderer 刷新时同步恢复继承状态。取消继承只移除目录配置，不删除外部 Skill 文件。Setsuna 自己的 `runtime/user-skills/` 始终由 registry 自动加载，不作为 extra root 重复展示。
 
+Skill 目录页按已继承目录和 Skill 文件路径分组，每个 extra root 单独成组；预设目录沿用运行时设置中的来源名称，自定义目录使用路径。Setsuna 本地创建的 Skill 保留在「个人」，插件与内置 Skill 保留各自分组。分组仅用于目录展示，不改变 Skill 的运行时 kind 或启用、编辑逻辑。
+
 ## 选择与自动激活
 
 注入来源：

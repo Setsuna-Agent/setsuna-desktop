@@ -3,6 +3,8 @@ import type {
   RuntimeInterfaceLanguage,
   RuntimeRequestInput,
 } from '@setsuna-desktop/contracts';
+import { NETWORK_PROXY_IPC_CHANNELS } from '@setsuna-desktop/feature-network-proxy/contracts';
+import { WEB_DAV_SYNC_IPC_CHANNELS, type DesktopWebDavSyncState } from '@setsuna-desktop/feature-webdav-sync/contracts';
 import type { MainFeatureComposition } from '@setsuna-desktop/feature-core/main';
 import {
   app,
@@ -68,6 +70,8 @@ import {
 } from './composition/windows-sandbox-feature-host.js';
 import { registerWindowsTitlebarDoubleClick } from './window/frame.js';
 import { registerMainWindowNavigationGuards } from './window/navigation.js';
+import { desktopWindows } from './window/registry.js';
+import { registerThreadWindowIpc } from './window/thread-windows.js';
 import { loadDesktopRenderer } from './window/renderer-loading.js';
 import { DesktopWindowCloseBehaviorController } from './window/close-behavior.js';
 import { DesktopWindowPreferencesStore } from './window/preferences.js';
@@ -190,8 +194,9 @@ async function createWindow(): Promise<void> {
   });
   // The splash and app share one native window so the OS never animates a window swap.
   const currentMainWindow = createMainBrowserWindow(desktopIcon, windowState.bounds);
+  desktopWindows.add(currentMainWindow);
   registerMainWindowNavigationGuards(currentMainWindow, (url) => shell.openExternal(url));
-  let activeKeyboardShortcutBindings = new Set<string>();
+  const activeKeyboardShortcutBindings = new Map<number, ReadonlySet<string>>();
   trackDesktopWindowState(currentMainWindow, windowStateFilePath);
   let startupClosedBeforeHandoff = false;
   let startupInProgress = true;
@@ -201,7 +206,7 @@ async function createWindow(): Promise<void> {
     createTray: (icon) => new Tray(icon),
     getInterfaceLanguage: () => interfaceLanguage,
     icon: desktopIcon,
-    onOpen: () => revealDesktopWindow(currentMainWindow),
+    onOpen: () => { if (mainWindow) revealDesktopWindow(mainWindow); },
     onQuit: () => app.quit(),
   });
   const closeBehaviorController = new DesktopWindowCloseBehaviorController(
@@ -210,24 +215,26 @@ async function createWindow(): Promise<void> {
   );
   if (process.platform === 'win32') await closeBehaviorController.initialize();
   let isSystemSessionEnding = false;
-  currentMainWindow.on('query-session-end', () => {
-    isSystemSessionEnding = true;
-  });
-  const handleMainWindowClose = (event: Electron.Event) => {
-    // Windows shutdown/logoff does not emit app.before-quit, so it must bypass tray hiding here.
-    if (!closeBehaviorController.shouldHideWindow(isAppQuitting || isSystemSessionEnding)) return;
-    event.preventDefault();
-    currentMainWindow.hide();
+  const installCloseBehavior = (window: BrowserWindow) => {
+    // Windows session shutdown must bypass tray hiding even without before-quit.
+    window.on('query-session-end', () => { isSystemSessionEnding = true; });
+    window.on('close', (event) => {
+      if (desktopWindows.all().length > 1 || !closeBehaviorController.shouldHideWindow(isAppQuitting || isSystemSessionEnding)) return;
+      event.preventDefault();
+      window.hide();
+    });
   };
-  currentMainWindow.on('close', handleMainWindowClose);
-  const unregisterDataRootState = registerDataRootIpc(dataRootCoordinator, currentMainWindow);
+  installCloseBehavior(currentMainWindow);
+  const unregisterDataRootState = registerDataRootIpc(dataRootCoordinator);
   registerWindowsTitlebarDoubleClick(currentMainWindow);
   if (usesCustomFrame) currentMainWindow.setMenu(null);
   currentMainWindow.on('closed', () => {
-    currentDesktopTray.dispose();
-    unregisterDataRootState();
     startupClosedBeforeHandoff = startupInProgress;
-    if (mainWindow === currentMainWindow) mainWindow = null;
+    if (mainWindow === currentMainWindow) mainWindow = desktopWindows.all()[0] ?? null;
+    if (startupInProgress) {
+      currentDesktopTray.dispose();
+      unregisterDataRootState();
+    }
     if (!isAppQuitting && startupInProgress) {
       startupClosedBeforeHandoff = true;
       app.quit();
@@ -286,15 +293,14 @@ async function createWindow(): Promise<void> {
   let nativeBridge: Awaited<ReturnType<typeof currentDesktopNativeBridgeServer.start>>;
   try {
     activatedMainFeatures = await activateBuiltinMainFeatures({
-      activeKeyboardShortcutBindings: () => activeKeyboardShortcutBindings,
+      activeKeyboardShortcutBindings: (senderId) => activeKeyboardShortcutBindings.get(senderId) ?? new Set<string>(),
       interfaceLanguage: () => interfaceLanguage,
-      mainWindow: currentMainWindow,
       nativeBridge: currentDesktopNativeBridgeServer,
       networkProxy: requireNetworkProxyMainService,
       networkProxyHost: Object.freeze({
         configPath: dataLayout.networkProxyPath,
         credentialVault,
-        mainWindow: currentMainWindow,
+        publishState: (state: DesktopNetworkProxyState) => desktopWindows.publish(NETWORK_PROXY_IPC_CHANNELS.stateChange, state),
         writeJsonAtomically,
         deleteServerThroughRuntime: async (proxyServerId: string) => (
           await requestRuntime({
@@ -307,13 +313,9 @@ async function createWindow(): Promise<void> {
       pluginManagementHost: Object.freeze({
         installLocal: (sourcePath: string) => requireRuntimeHost().installLocalPluginBundle(sourcePath),
         interfaceLanguage: () => interfaceLanguage,
-        isRendererSender: (senderId: number) => (
-          !currentMainWindow.isDestroyed()
-          && !currentMainWindow.webContents.isDestroyed()
-          && currentMainWindow.webContents.id === senderId
-        ),
+        isRendererSender: (senderId: number) => Boolean(desktopWindows.get(senderId)),
         selectLocalBundle: async (title: string) => {
-          const selection = await dialog.showOpenDialog(currentMainWindow, {
+          const selection = await dialog.showOpenDialog(mainWindow ?? currentMainWindow, {
             title,
             properties: ['openDirectory'],
           });
@@ -339,7 +341,7 @@ async function createWindow(): Promise<void> {
         configPath: dataLayout.webDavSyncConfigPath,
         credentialVault,
         dataRoot: dataLayout.root,
-        mainWindow: currentMainWindow,
+        publishState: (state: DesktopWebDavSyncState) => desktopWindows.publish(WEB_DAV_SYNC_IPC_CHANNELS.stateChange, state),
         requestRelaunch: requestDesktopRelaunch,
         runtime: Object.freeze({
           prepare: () => requireRuntimeHost().prepareWebDavSync(),
@@ -362,11 +364,7 @@ async function createWindow(): Promise<void> {
       }),
       windowsSandboxHost: createWindowsSandboxMainHost({
         executablePath: windowsSandbox.executablePath,
-        isRendererSender: (senderId) => (
-          !currentMainWindow.isDestroyed()
-          && !currentMainWindow.webContents.isDestroyed()
-          && currentMainWindow.webContents.id === senderId
-        ),
+        isRendererSender: (senderId) => Boolean(desktopWindows.get(senderId)),
         resolveUpstreamProxy: async () => {
           const route = await requireNetworkProxyMainService().resolve({ scope: 'runtime' });
           return route.mode === 'proxy' ? route.proxyUrl : undefined;
@@ -438,15 +436,14 @@ async function createWindow(): Promise<void> {
         await currentDesktopNativeBridgeServer.stop();
         throw error;
       }
-      registerRuntimeIpc(currentRuntimeHost);
+      registerRuntimeIpc(currentRuntimeHost, () => interfaceLanguage);
       if (startupClosedBeforeHandoff) return;
       await currentWebDavSyncLifecycle.start();
       await currentDesktopUpdaterLifecycle.initialize();
       registerDesktopIpc({
-        mainWindow: currentMainWindow,
         nativeBridge: currentDesktopNativeBridgeServer,
-        onActiveKeyboardShortcutBindingsChange: (bindings) => {
-          activeKeyboardShortcutBindings = new Set(bindings);
+        onActiveKeyboardShortcutBindingsChange: (bindings, senderId) => {
+          activeKeyboardShortcutBindings.set(senderId, new Set(bindings));
         },
         onInterfaceLanguageChange: (locale) => {
           interfaceLanguage = locale;
@@ -455,31 +452,47 @@ async function createWindow(): Promise<void> {
         userDataPath: dataLayout.root,
       });
       registerWindowIpc({
-        mainWindow: currentMainWindow,
         macTrafficLightPosition: getMacTrafficLightPosition,
         getCloseBehavior: () => closeBehaviorController.getCloseBehavior(),
         setCloseBehavior: (behavior) => process.platform === 'win32'
           ? closeBehaviorController.setCloseBehavior(behavior)
           : Promise.resolve('quit'),
       });
-      currentMainWindow.on('closed', () => {
-        // The update coordinator owns shutdown after all close guards accept.
-        if (updateInstallCoordinator.active) return;
-        currentWebDavSyncLifecycle.close();
-        void shutdownDesktopServices();
-        if (mainWindow === currentMainWindow) mainWindow = null;
+      const stopObservingWindows = desktopWindows.onWindowAdded((window) => {
+        const publishMaximized = () => {
+          if (!window.isDestroyed()) window.webContents.send(
+            'window-control:maximized-change', window.isMaximized() || window.isFullScreen(),
+          );
+        };
+        window.on('maximize', publishMaximized);
+        window.on('unmaximize', publishMaximized);
+        window.on('enter-full-screen', publishMaximized);
+        window.on('leave-full-screen', publishMaximized);
+        const senderId = window.webContents.id;
+        window.once('closed', () => {
+          activeKeyboardShortcutBindings.delete(senderId);
+          if (mainWindow === window) mainWindow = desktopWindows.all()[0] ?? null;
+          if (desktopWindows.all().length) return;
+          stopObservingWindows();
+          currentDesktopTray.dispose();
+          unregisterDataRootState();
+          // Only the last desktop window owns service shutdown.
+          if (!updateInstallCoordinator.active) void shutdownDesktopServices();
+        });
       });
-      const publishWindowMaximizedState = () => {
-        if (currentMainWindow.isDestroyed()) return;
-        currentMainWindow.webContents.send(
-          'window-control:maximized-change',
-          currentMainWindow.isMaximized() || currentMainWindow.isFullScreen(),
-        );
-      };
-      currentMainWindow.on('maximize', publishWindowMaximizedState);
-      currentMainWindow.on('unmaximize', publishWindowMaximizedState);
-      currentMainWindow.on('enter-full-screen', publishWindowMaximizedState);
-      currentMainWindow.on('leave-full-screen', publishWindowMaximizedState);
+      registerThreadWindowIpc({
+        appRoot: app.getAppPath(),
+        devServerUrl: process.env.SETSUNA_DESKTOP_DEV_SERVER_URL,
+        validateThread: (threadId) => currentRuntimeHost.request({ path: `/v1/threads/${encodeURIComponent(threadId)}` }),
+        createWindow: (bounds) => {
+          const window = createMainBrowserWindow(desktopIcon, bounds);
+          registerMainWindowNavigationGuards(window, (url) => shell.openExternal(url));
+          registerWindowsTitlebarDoubleClick(window);
+          installCloseBehavior(window);
+          if (usesCustomFrame) window.setMenu(null);
+          return window;
+        },
+      });
     },
   });
   if (startupClosedBeforeHandoff) return;
@@ -509,19 +522,19 @@ async function createDataRootMaintenanceWindow(): Promise<void> {
     },
   );
   const currentMainWindow = createMainBrowserWindow(desktopIcon, windowState.bounds);
+  desktopWindows.add(currentMainWindow);
   registerMainWindowNavigationGuards(currentMainWindow, (url) => shell.openExternal(url));
   mainWindow = currentMainWindow;
   trackDesktopWindowState(currentMainWindow, profileLayout.windowStatePath);
   registerWindowsTitlebarDoubleClick(currentMainWindow);
   if (usesCustomFrame) currentMainWindow.setMenu(null);
   registerWindowIpc({
-    mainWindow: currentMainWindow,
     macTrafficLightPosition: getMacTrafficLightPosition,
   });
-  const unregisterDataRootState = registerDataRootIpc(dataRootCoordinator, currentMainWindow);
+  const unregisterDataRootState = registerDataRootIpc(dataRootCoordinator);
   currentMainWindow.on('closed', () => {
     unregisterDataRootState();
-    if (mainWindow === currentMainWindow) mainWindow = null;
+    if (mainWindow === currentMainWindow) mainWindow = desktopWindows.all()[0] ?? null;
     app.quit();
   });
   await loadDesktopRenderer(currentMainWindow, {

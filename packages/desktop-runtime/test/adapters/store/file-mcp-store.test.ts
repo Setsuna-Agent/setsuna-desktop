@@ -6,6 +6,46 @@ import { FileMcpStore } from '../../../src/adapters/store/file-mcp-store.js';
 import { InMemorySecretStore } from '../../support/in-memory-secret-store.js';
 
 describe('file mcp store', () => {
+  it('projects plugin ownership without claiming reused servers and refreshes it after plugin removal', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-store-test-'));
+    const store = new FileMcpStore(dataDir, new InMemorySecretStore());
+    await store.upsertServer({ key: 'owned', transport: 'stdio', command: 'owned-server' });
+    await store.upsertServer({ key: 'reused', transport: 'stdio', command: 'reused-server' });
+    await writeFile(path.join(dataDir, 'plugins.json'), JSON.stringify({
+      version: 1,
+      plugins: [{
+        id: 'test-plugin',
+        mcpServers: [{ key: 'owned', owned: true }, { key: 'reused', owned: false }],
+      }],
+    }));
+
+    const listed = await store.listServers();
+    expect(listed.servers.find(({ key }) => key === 'owned')).toMatchObject({
+      pluginId: 'test-plugin', source: 'local', readOnly: false,
+    });
+    expect(listed.servers.find(({ key }) => key === 'reused')).not.toHaveProperty('pluginId');
+    const updated = await store.updateServer('owned', { enabled: false });
+    expect(updated.servers.find(({ key }) => key === 'owned')).toMatchObject({
+      pluginId: 'test-plugin', enabled: false,
+    });
+    expect(await store.listServerInputs()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'owned', enabled: false }),
+    ]));
+
+    await writeFile(path.join(dataDir, 'plugins.json'), JSON.stringify({ version: 1, plugins: [] }));
+    expect((await store.listServers()).servers.every((server) => server.pluginId === undefined)).toBe(true);
+  });
+
+  it('keeps MCP configuration usable when optional plugin provenance cannot be read', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-store-test-'));
+    const store = new FileMcpStore(dataDir, new InMemorySecretStore());
+    await writeFile(path.join(dataDir, 'plugins.json'), '{invalid');
+
+    const saved = await store.upsertServer({ key: 'local', transport: 'stdio', command: 'local-server' });
+    expect(saved.servers).toMatchObject([{ key: 'local', source: 'local' }]);
+    expect(saved.servers[0]).not.toHaveProperty('pluginId');
+  });
+
   it('serializes concurrent server upserts without losing either server', async () => {
     const store = new FileMcpStore(await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-store-test-')), new InMemorySecretStore());
 

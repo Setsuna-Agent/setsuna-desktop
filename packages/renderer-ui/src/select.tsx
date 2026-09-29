@@ -92,7 +92,7 @@ export function SelectField({
         </Primitive.Trigger>
         <Primitive.Portal container={overlayContainer()}>
           {/* Radix coordinates the nested modal's pointer, scroll and focus scopes. */}
-          <Primitive.Content className={`sd-select-menu${menuClassName ? ` ${menuClassName}` : ''}`}
+          <Primitive.Content className={`sd-menu-surface sd-select-menu${menuClassName ? ` ${menuClassName}` : ''}`}
             position="popper" align="start" sideOffset={6} collisionPadding={8}
             aria-label={ariaLabel} aria-labelledby={ariaLabelledBy}
             style={{ ...style, '--sd-select-menu-min-width': `${menuMinWidth ?? 160}px` } as CSSProperties}

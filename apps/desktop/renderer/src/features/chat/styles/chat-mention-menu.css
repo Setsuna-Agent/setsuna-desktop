@@ -16,10 +16,6 @@
   font-weight: 400;
 }
 
-.chat-project-entry-command-menu .chat-command-menu__cursor {
-  border-radius: var(--app-radius-full);
-}
-
 .chat-project-entry-command-menu .chat-command-menu__item-icon {
   display: inline-flex;
   align-items: center;

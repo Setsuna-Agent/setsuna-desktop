@@ -8,6 +8,7 @@ import type {
   CreateThreadInput,
   ForkThreadInput,
   DesktopRuntimeClient,
+  DesktopThreadDeletionResult,
   MessageDeleteInput,
   MessagePatch,
   QueueTurnInput,
@@ -124,11 +125,12 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
         body: patch,
       });
     },
-    deleteThread(threadId: string) {
-      return request<void>({
+    async deleteThread(threadId: string) {
+      const result = await request<DesktopThreadDeletionResult | undefined>({
         path: `/v1/threads/${encodeURIComponent(threadId)}`,
         method: 'DELETE',
       });
+      if (result?.cancelled) throw new RuntimeClientError('thread_deletion_cancelled', 'Thread deletion cancelled.');
     },
     clearThreadContext(threadId: string) {
       return request<RuntimeThread>({

@@ -35,6 +35,7 @@ import {
   type SetStateAction,
 } from 'react';
 import type { McpTranslate } from './messages.js';
+import { groupMcpServersBySource } from './mcpPresentation.js';
 
 type McpDraft = Readonly<{
   allowedTools: string;
@@ -122,6 +123,7 @@ export function McpCapabilitiesPage({
     !normalizedQuery
     || `${server.label} ${server.key} ${server.transport}`.toLocaleLowerCase().includes(normalizedQuery)
   )), [normalizedQuery, servers]);
+  const serverGroups = useMemo(() => groupMcpServersBySource(visibleServers), [visibleServers]);
 
   const closeEditor = () => {
     setEditingServer(null);
@@ -243,15 +245,22 @@ export function McpCapabilitiesPage({
           </label>
         </div>
         <div className="desktop-capabilities-grid">
-          <div className="desktop-capabilities-grid__content desktop-capability-list">
-            {visibleServers.map((server) => (
-              <McpServerListItem
-                key={server.key}
-                server={server}
-                translate={translate}
-                onOpen={() => setSelectedKey(server.key)}
-                onUpdate={(enabled) => void service.updateServer(server.key, { enabled })}
-              />
+          <div className="desktop-capabilities-grid__content desktop-capability-catalog">
+            {serverGroups.map(({ id, titleKey, servers: groupServers }) => (
+              <section className="desktop-capability-catalog__section" key={id}>
+                <header><h3>{translate(titleKey)}</h3></header>
+                <div className="desktop-capability-list">
+                  {groupServers.map((server) => (
+                    <McpServerListItem
+                      key={server.key}
+                      server={server}
+                      translate={translate}
+                      onOpen={() => setSelectedKey(server.key)}
+                      onUpdate={(enabled) => void service.updateServer(server.key, { enabled })}
+                    />
+                  ))}
+                </div>
+              </section>
             ))}
             {!visibleServers.length ? (
               <div className="desktop-capabilities-empty">{translate('feature.mcp.empty')}</div>

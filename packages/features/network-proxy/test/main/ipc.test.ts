@@ -1,7 +1,6 @@
 import type { DesktopNetworkProxyState } from '@setsuna-desktop/contracts';
 import { createFeatureScope } from '@setsuna-desktop/feature-core/scope';
 import { FeatureScopeUnavailableError } from '@setsuna-desktop/feature-core/status';
-import type { BrowserWindow } from 'electron';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const networkProxyIpcMocks = vi.hoisted(() => ({
@@ -47,7 +46,7 @@ describe('network proxy IPC lifecycle', () => {
     scope.scope.add(registerNetworkProxyIpc(
       scope.scope,
       service,
-      fakeMainWindow(),
+      vi.fn(),
       deleteServerThroughRuntime,
     ));
     scope.activate();
@@ -72,12 +71,6 @@ describe('network proxy IPC lifecycle', () => {
   });
 });
 
-function fakeMainWindow(): BrowserWindow {
-  return {
-    isDestroyed: () => false,
-    webContents: { send: vi.fn() },
-  } as unknown as BrowserWindow;
-}
 
 function ipcHandler(channel: string): (...args: unknown[]) => Promise<unknown> {
   const handler = networkProxyIpcMocks.handlers.get(channel);

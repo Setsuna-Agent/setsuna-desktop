@@ -6,10 +6,11 @@
 @import './media.css';
 
 @import './controls.css';
+@import './settings-form.css';
 
 @import './overlays.css';
 @import './picker.css';
-@import './menu-motion.css';
+@import './menu.css';
 @import './file-tree.css';
 @import './wheel-picker.css';
 @import './table.css';

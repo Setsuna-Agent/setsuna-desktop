@@ -69,6 +69,7 @@ import {
 } from '@setsuna-desktop/feature-windows-sandbox/main';
 import type { BrowserWindow } from 'electron';
 import type { DesktopNativeBridgeServer } from '../runtime/native-bridge-server.js';
+import { desktopWindows } from '../window/registry.js';
 import { desktopShellPath } from '../runtime/desktop-environment.js';
 import { resolveWorkspaceFilePreview } from '../workspace/file-opening.js';
 
@@ -97,9 +98,8 @@ export type ActivatedBuiltinMainFeatures = Readonly<{
 }>;
 
 export async function activateBuiltinMainFeatures(input: Readonly<{
-  activeKeyboardShortcutBindings(): ReadonlySet<string>;
+  activeKeyboardShortcutBindings(senderId: number): ReadonlySet<string>;
   interfaceLanguage(): RuntimeInterfaceLanguage;
-  mainWindow: BrowserWindow;
   nativeBridge: DesktopNativeBridgeServer;
   networkProxy(): NetworkProxyMainService;
   networkProxyHost: NetworkProxyMainHost;
@@ -117,7 +117,8 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
         Object.freeze({
           activeKeyboardShortcutBindings: input.activeKeyboardShortcutBindings,
           interfaceLanguage: input.interfaceLanguage,
-          mainWindow: input.mainWindow,
+          focusedWindow: () => desktopWindows.all().find((window) => window.isFocused()) ?? desktopWindows.all()[0] ?? null,
+          onWindowAdded: (listener: (window: BrowserWindow) => () => void) => desktopWindows.onWindowAdded(listener),
         }),
       ),
       provideHostCapability(
@@ -176,11 +177,7 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
       provideHostCapability(
         reviewRendererSenderCapability,
         Object.freeze({
-          isAllowed: (senderId: number) => (
-            !input.mainWindow.isDestroyed()
-            && !input.mainWindow.webContents.isDestroyed()
-            && input.mainWindow.webContents.id === senderId
-          ),
+          isAllowed: (senderId: number) => Boolean(desktopWindows.get(senderId)),
         }),
       ),
       provideHostCapability(
@@ -196,9 +193,7 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
         terminalEventPublisherCapability,
         Object.freeze({
           publish: (event: DesktopTerminalEventPayload) => {
-            if (!input.mainWindow.isDestroyed() && !input.mainWindow.webContents.isDestroyed()) {
-              input.mainWindow.webContents.send(TERMINAL_IPC_CHANNELS.event, event);
-            }
+            desktopWindows.publish(TERMINAL_IPC_CHANNELS.event, event);
           },
         }),
       ),

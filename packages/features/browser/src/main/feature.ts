@@ -11,7 +11,7 @@ import {
 import { BrowserControlServer } from './control-server.js';
 import { DesktopBrowserController } from './control.js';
 import { BrowserContextMenuSession } from './context-menu-session.js';
-import { registerBrowserIpc } from './ipc.js';
+import { registerBrowserIpc, type BrowserWindowSession } from './ipc.js';
 import { installEmbeddedBrowserWebviews, publishBrowserOpenNewTab } from './webview.js';
 
 const dependencies = defineMainDependencies({
@@ -24,15 +24,34 @@ export const browserMainFeature = defineMainFeature({
   provides: [declareCapabilityProvider(browserControlConnectionCapability)],
   async setup(context) {
     const { host } = context.dependencies;
-    const contextMenus = new BrowserContextMenuSession((request) => {
-      if (!host.mainWindow.isDestroyed() && !host.mainWindow.webContents.isDestroyed()) {
-        host.mainWindow.webContents.send(BROWSER_IPC_CHANNELS.contextMenu, request);
-      }
-    });
-    context.scope.add(() => contextMenus.dismiss());
+    const windows = new Map<number, BrowserWindowSession>();
     const controller = new DesktopBrowserController({
-      openTab: (url) => publishBrowserOpenNewTab(host.mainWindow, url),
+      openTab: (url) => {
+        const window = host.focusedWindow();
+        return window ? publishBrowserOpenNewTab(window, url) : false;
+      },
     });
+    context.scope.add(host.onWindowAdded((window) => {
+      const senderId = window.webContents.id;
+      const contextMenus = new BrowserContextMenuSession((request) => {
+        if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
+          window.webContents.send(BROWSER_IPC_CHANNELS.contextMenu, request);
+        }
+      });
+      windows.set(senderId, { window, contextMenus });
+      const uninstall = installEmbeddedBrowserWebviews({
+        activeKeyboardShortcutBindings: () => host.activeKeyboardShortcutBindings(senderId),
+        browserTabIdForWebContents: (webContentsId) => controller.tabIdForWebContents(webContentsId),
+        interfaceLanguage: () => host.interfaceLanguage(),
+        mainWindow: window,
+        contextMenus,
+      });
+      return () => {
+        windows.delete(senderId);
+        contextMenus.dismiss();
+        uninstall();
+      };
+    }));
     const controlServer = new BrowserControlServer({
       execute: (command, signal) => context.scope.runOperation(
         (scopeSignal) => controller.execute(command, scopeSignal),
@@ -46,17 +65,9 @@ export const browserMainFeature = defineMainFeature({
     context.scope.add(registerBrowserIpc(
       context.scope,
       controller,
-      host.mainWindow,
+      windows,
       () => host.interfaceLanguage(),
-      contextMenus,
     ));
-    context.scope.add(installEmbeddedBrowserWebviews({
-      activeKeyboardShortcutBindings: () => host.activeKeyboardShortcutBindings(),
-      browserTabIdForWebContents: (webContentsId) => controller.tabIdForWebContents(webContentsId),
-      interfaceLanguage: () => host.interfaceLanguage(),
-      mainWindow: host.mainWindow,
-      contextMenus,
-    }));
     context.provide(declareCapabilityProvider(browserControlConnectionCapability), connection);
   },
 });

@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type { BrowserWindow } from 'electron';
 import { WORKSPACE_ENTRIES_WATCH_CHANNELS } from '@setsuna-desktop/contracts';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   handlers: new Map<string, (...args: unknown[]) => unknown>(),
@@ -12,19 +12,43 @@ vi.mock('electron', () => ({ ipcMain: {
   removeHandler: (channel: string) => { mocks.handlers.delete(channel); },
 } }));
 vi.mock('../../../src/workspace/entry-watcher.js', () => ({ watchWorkspaceEntries: mocks.watch }));
+import { desktopWindows } from '../../../src/window/registry.js';
 import { registerWorkspaceEntryWatchIpc } from '../../../src/ipc/workspace-entry-watch-ipc.js';
 
 beforeEach(() => { mocks.watch.mockReset(); });
+afterEach(() => { for (const window of desktopWindows.all()) window.emit('closed'); });
+
+it('isolates matching subscription IDs across desktop windows and disposes only the closing sender', async () => {
+  const senders = [1, 2].map((id) => Object.assign(new EventEmitter(), { id, isDestroyed: () => false, send: vi.fn() }));
+  for (const sender of senders) desktopWindows.add(Object.assign(new EventEmitter(), {
+    webContents: sender, isDestroyed: () => false,
+  }) as unknown as BrowserWindow);
+  const disposers = [vi.fn(), vi.fn()];
+  mocks.watch.mockResolvedValueOnce(disposers[0]).mockResolvedValueOnce(disposers[1]);
+  registerWorkspaceEntryWatchIpc();
+  const subscribe = mocks.handlers.get(WORKSPACE_ENTRIES_WATCH_CHANNELS.subscribe)!;
+  const unsubscribe = mocks.handlers.get(WORKSPACE_ENTRIES_WATCH_CHANNELS.unsubscribe)!;
+  for (const sender of senders) await subscribe({ sender }, { subscriptionId: 'tree', workspaceRoot: '/root', directoryPaths: [''] });
+  unsubscribe({ sender: senders[0] }, 'tree');
+  expect(disposers[0]).toHaveBeenCalledOnce();
+  expect(disposers[1]).not.toHaveBeenCalled();
+  senders[0]!.emit('destroyed');
+  mocks.watch.mock.calls[1][2]();
+  expect(senders[1]!.send).toHaveBeenCalledExactlyOnceWith(WORKSPACE_ENTRIES_WATCH_CHANNELS.changed, { subscriptionId: 'tree' });
+  senders[1]!.emit('destroyed');
+  expect(disposers[1]).toHaveBeenCalledOnce();
+});
 
 it('keeps tree and editor subscriptions independent, including out-of-order setup and unsubscribe', async () => {
   const sender = Object.assign(new EventEmitter(), { id: 1, isDestroyed: () => false, send: vi.fn() });
-  const mainWindow = { webContents: sender, isDestroyed: () => false } as unknown as BrowserWindow;
+  const mainWindow = Object.assign(new EventEmitter(), { webContents: sender, isDestroyed: () => false }) as unknown as BrowserWindow;
+  desktopWindows.add(mainWindow);
   let finishFirst!: (dispose: () => void) => void;
   const firstDispose = vi.fn();
   const secondDispose = vi.fn();
   mocks.watch.mockReturnValueOnce(new Promise<() => void>((resolve) => { finishFirst = resolve; }))
     .mockResolvedValueOnce(secondDispose);
-  registerWorkspaceEntryWatchIpc(mainWindow);
+  registerWorkspaceEntryWatchIpc();
   const subscribe = mocks.handlers.get(WORKSPACE_ENTRIES_WATCH_CHANNELS.subscribe)!;
   const unsubscribe = mocks.handlers.get(WORKSPACE_ENTRIES_WATCH_CHANNELS.unsubscribe)!;
   const first = subscribe({ sender }, { subscriptionId: 'first', workspaceRoot: '/first', directoryPaths: [''] });
@@ -53,7 +77,8 @@ it('keeps tree and editor subscriptions independent, including out-of-order setu
 
 it('disposes replaced or navigated subscriptions that finish setup late without cancelling current consumers', async () => {
   const sender = Object.assign(new EventEmitter(), { id: 1, isDestroyed: () => false, send: vi.fn() });
-  const mainWindow = { webContents: sender, isDestroyed: () => false } as unknown as BrowserWindow;
+  const mainWindow = Object.assign(new EventEmitter(), { webContents: sender, isDestroyed: () => false }) as unknown as BrowserWindow;
+  desktopWindows.add(mainWindow);
   const staleDispose = vi.fn();
   const currentDispose = vi.fn();
   const pendingDispose = vi.fn();
@@ -62,7 +87,7 @@ it('disposes replaced or navigated subscriptions that finish setup late without 
   mocks.watch.mockReturnValueOnce(new Promise<() => void>((resolve) => { finishStale = resolve; }))
     .mockResolvedValueOnce(currentDispose)
     .mockReturnValueOnce(new Promise<() => void>((resolve) => { finishPending = resolve; }));
-  registerWorkspaceEntryWatchIpc(mainWindow);
+  registerWorkspaceEntryWatchIpc();
   const subscribe = mocks.handlers.get(WORKSPACE_ENTRIES_WATCH_CHANNELS.subscribe)!;
   const input = { subscriptionId: 'tree', workspaceRoot: '/root', directoryPaths: [''] };
   const stale = subscribe({ sender }, input);

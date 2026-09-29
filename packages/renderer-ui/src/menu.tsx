@@ -36,7 +36,7 @@ export type DropdownProps = Omit<HTMLAttributes<HTMLElement>, 'children'> & {
   popupRender?(menu: ReactNode): ReactNode;
 };
 
-/** beUI menu presentation; Radix supplies nested menus, roving focus and typeahead. */
+/** Shared menu presentation; Radix supplies nested menus, roving focus and typeahead. */
 export const Dropdown = forwardRef<HTMLElement, DropdownProps>(function Dropdown({ children, menu, disabled, open, onOpenChange, placement, trigger, rootClassName, className, align, popupRender, ...triggerProps }, ref) {
   const keyboardInteraction = useRef(false);
   const context = trigger?.includes('contextMenu') ?? false;
@@ -136,7 +136,7 @@ export function PointMenu({ x, y, menu, modal = false, onClose }: { x: number; y
       <DropdownMenu.Portal container={container}>
         <DropdownMenu.Content asChild className="sd-menu" align="start" sideOffset={2} collisionPadding={8}
           onCloseAutoFocus={(event) => { event.preventDefault(); returnFocus.current?.focus({ preventScroll: true }); }}>
-          <MenuSurface origin={{ x, y }}><MenuItems menu={menu} context={false} /></MenuSurface>
+          <MenuSurface><MenuItems menu={menu} context={false} /></MenuSurface>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>, container,

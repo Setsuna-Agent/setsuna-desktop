@@ -1,5 +1,6 @@
 import { Popover } from '@setsuna-desktop/renderer-ui';
-import { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { useContext, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { SidebarMenuOpenContext } from './SidebarMenuContext.js';
 
 export function SidebarHoverCard({ children, className, content, disabled }: {
   children: ReactElement;
@@ -7,6 +8,8 @@ export function SidebarHoverCard({ children, className, content, disabled }: {
   content: (dismiss: () => void) => ReactNode;
   disabled: boolean;
 }) {
+  const menuOpen = useContext(SidebarMenuOpenContext);
+  const suppressed = disabled || menuOpen;
   const [open, setOpen] = useState(false);
   const dismissed = useRef(false);
   const dismiss = () => {
@@ -14,7 +17,7 @@ export function SidebarHoverCard({ children, className, content, disabled }: {
     dismissed.current = true;
     setOpen(false);
   };
-  useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
+  useEffect(() => { if (suppressed) setOpen(false); }, [suppressed]);
 
   return (
     <Popover
@@ -22,8 +25,8 @@ export function SidebarHoverCard({ children, className, content, disabled }: {
       placement="rightTop"
       mouseEnterDelay={0.35}
       mouseLeaveDelay={0.15}
-      open={open && !disabled}
-      onOpenChange={(next) => setOpen(next && !disabled && !dismissed.current)}
+      open={open && !suppressed}
+      onOpenChange={(next) => setOpen(next && !suppressed && !dismissed.current)}
       onPointerEnter={() => { dismissed.current = false; }}
       onFocusCapture={() => { dismissed.current = false; }}
       onPointerDownCapture={dismiss}

@@ -184,7 +184,7 @@
 }
 
 .sd-shortcut-tooltip-content {
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -197,22 +197,20 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 24px;
-  padding: 1px 6px;
-  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
-  border-radius: var(--app-radius-xs);
+  padding: 0 4px;
+  border-radius: 4px;
   color: inherit;
-  background: color-mix(in srgb, currentColor 7%, transparent);
+  background: color-mix(in srgb, currentColor 20%, transparent);
   font-family: var(--app-font-family);
-  font-size: 12px;
+  font-size: inherit;
   font-weight: 500;
-  line-height: 18px;
+  line-height: inherit;
   text-align: center;
   white-space: nowrap;
 }
 
 .sd-shortcut-tooltip-bindings kbd.is-mac {
-  gap: 3px;
+  gap: 1px;
 }
 
 .sd-empty-state {

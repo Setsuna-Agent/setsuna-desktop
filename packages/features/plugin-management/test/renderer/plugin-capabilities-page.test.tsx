@@ -10,6 +10,44 @@ import { PluginCapabilitiesPage } from '../../src/renderer/PluginCapabilitiesPag
 
 afterEach(cleanup);
 
+it.each(['install', 'import', 'refresh'] as const)('reports a catalog %s failure through Toast and allows retry', async (operation) => {
+  const snapshot: PluginManagementSnapshot = {
+    catalogRevision: 'local', extensions: [], plugins: [], marketplaceErrors: [],
+    marketplace: [{
+      id: 'bundled', name: 'Local tools', tags: [], featured: true,
+      skills: [], mcpServers: [], hooks: [], resources: [], installed: false, updateAvailable: false,
+      capabilities: { skills: 0, mcpServers: 0, hooks: 0, resources: 0 },
+    }],
+  };
+  const hooks = { hooks: [] };
+  const service = {
+    getSnapshot: () => snapshot, getHookSnapshot: () => hooks, subscribe: () => () => undefined,
+    refresh: vi.fn().mockRejectedValueOnce(new Error('Background repository unavailable')).mockResolvedValue(snapshot),
+    refreshHooks: vi.fn(async () => hooks),
+    installMarketplace: vi.fn(async () => undefined), installLocal: vi.fn(async () => undefined),
+  };
+  const Toast = vi.fn((_props: { message: string; tone?: string }) => null);
+  await act(async () => {
+    render(<PluginCapabilitiesPage
+      sectionId="plugins" service={service as unknown as PluginManagementRendererService}
+      capabilitiesRefresh={{ refresh: vi.fn() } as unknown as CapabilitiesRefreshCoordinator}
+      openExternal={async () => true} translate={(key, params) => params?.detail ? String(params.detail) : key}
+      ui={{ Button, IconButton, PluginIcon: () => null, Toast } as unknown as SettingsViewUi}
+    />);
+  });
+  expect(Toast).not.toHaveBeenCalled();
+  const method = operation === 'install' ? service.installMarketplace : operation === 'import' ? service.installLocal : service.refresh;
+  method.mockRejectedValueOnce(new Error('Operation failed'));
+  const button = screen.getByRole('button', { name: operation === 'install'
+    ? 'feature.pluginManagement.install: Local tools' : `feature.pluginManagement.${operation}` });
+  await act(async () => { fireEvent.click(button); });
+  expect(Toast.mock.calls.at(-1)?.[0]).toMatchObject({ message: 'Operation failed', tone: 'error' });
+  expect((button as HTMLButtonElement).disabled).toBe(false);
+  const callCount = method.mock.calls.length;
+  await act(async () => { fireEvent.click(button); });
+  expect(method).toHaveBeenCalledTimes(callCount + 1);
+});
+
 it('allows installing a bundled plugin during a manual OpenAI repository refresh', async () => {
   const snapshot: PluginManagementSnapshot = {
     catalogRevision: 'local', extensions: [], plugins: [], marketplaceErrors: [],

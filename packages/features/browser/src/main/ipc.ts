@@ -32,16 +32,17 @@ const handlerChannels = [
   BROWSER_IPC_CHANNELS.dismissContextMenu,
 ] as const;
 
+export type BrowserWindowSession = { window: BrowserWindow; contextMenus: BrowserContextMenuSession };
+
 export function registerBrowserIpc(
   scope: FeatureScope,
   controller: DesktopBrowserController,
-  mainWindow: BrowserWindow,
+  windows: ReadonlyMap<number, BrowserWindowSession>,
   interfaceLanguage: () => RuntimeInterfaceLanguage,
-  contextMenus: BrowserContextMenuSession,
 ): () => void {
   for (const channel of handlerChannels) ipcMain.removeHandler(channel);
   ipcMain.handle(BROWSER_IPC_CHANNELS.captureScreenshot, (event, input) => scope.runOperation(async () => {
-    if (!isDesktopRendererSender(event.sender, mainWindow)) return null;
+    if (!isDesktopRendererSender(event.sender, windows)) return null;
     const screenshot = await controller.captureScreenshot(String(input?.tabId ?? ''));
     if (!screenshot) return null;
     const image = nativeImage.createFromDataURL(screenshot.dataUrl);
@@ -51,12 +52,12 @@ export function registerBrowserIpc(
     return screenshot;
   }));
   ipcMain.handle(BROWSER_IPC_CHANNELS.reloadTab, (event, input) => scope.runOperation(() => {
-    if (!isDesktopRendererSender(event.sender, mainWindow)) return false;
+    if (!isDesktopRendererSender(event.sender, windows)) return false;
     if (input?.mode !== 'normal' && input?.mode !== 'hard') return false;
     return controller.reloadTab(String(input?.tabId ?? ''), input.mode);
   }));
   ipcMain.handle(BROWSER_IPC_CHANNELS.resolveFavicon, (event, input) => scope.runOperation(async () => {
-    const guest = resolveEmbeddedBrowserGuest(event.sender, Number(input?.webContentsId), mainWindow);
+    const guest = resolveEmbeddedBrowserGuest(event.sender, Number(input?.webContentsId), windows);
     if (!guest) return null;
     const faviconUrls = Array.isArray(input?.faviconUrls) ? input.faviconUrls : [];
     return loadBrowserFavicon(guest.session, guest.getURL(), faviconUrls);
@@ -64,13 +65,13 @@ export function registerBrowserIpc(
   ipcMain.handle(BROWSER_IPC_CHANNELS.registerTab, (event, input) => scope.runOperation(() => {
     const webContentsId = Number(input?.webContentsId);
     const tabId = String(input?.tabId ?? '');
-    const guest = resolveEmbeddedBrowserGuest(event.sender, webContentsId, mainWindow);
+    const guest = resolveEmbeddedBrowserGuest(event.sender, webContentsId, windows);
     if (!guest) return false;
     controller.registerTab(tabId, guest);
     return true;
   }));
   ipcMain.handle(BROWSER_IPC_CHANNELS.unregisterTab, (event, input) => scope.runOperation(() => {
-    if (!isDesktopRendererSender(event.sender, mainWindow)) return false;
+    if (!isDesktopRendererSender(event.sender, windows)) return false;
     const webContentsId = Number(input?.webContentsId);
     controller.unregisterTab(
       String(input?.tabId ?? ''),
@@ -79,33 +80,33 @@ export function registerBrowserIpc(
     return true;
   }));
   ipcMain.handle(BROWSER_IPC_CHANNELS.setActiveTab, (event, input) => scope.runOperation(() => {
-    if (!isDesktopRendererSender(event.sender, mainWindow)) return false;
+    if (!isDesktopRendererSender(event.sender, windows)) return false;
     controller.setActiveTab(typeof input?.tabId === 'string' ? input.tabId : null);
     return true;
   }));
   ipcMain.handle(BROWSER_IPC_CHANNELS.setDeviceEmulation, (event, input) => scope.runOperation(() => {
-    if (!isDesktopRendererSender(event.sender, mainWindow)) return false;
+    if (!isDesktopRendererSender(event.sender, windows)) return false;
     return controller.setDeviceEmulation(String(input?.tabId ?? ''), input?.emulation ?? null);
   }));
   ipcMain.handle(BROWSER_IPC_CHANNELS.showReloadMenu, (event, input) => scope.runOperation(() => {
-    const guest = resolveEmbeddedBrowserGuest(event.sender, Number(input?.webContentsId), mainWindow);
+    const guest = resolveEmbeddedBrowserGuest(event.sender, Number(input?.webContentsId), windows);
     if (!guest) return false;
     const point = input?.point;
     const position = Number.isFinite(point?.x) && Number.isFinite(point?.y)
       ? { x: point.x as number, y: point.y as number }
-      : browserMenuPoint(mainWindow);
-    return contextMenus.show(guest, createBrowserReloadMenuTemplate(
+      : browserMenuPoint(windows.get(event.sender.id)!.window);
+    return windows.get(event.sender.id)!.contextMenus.show(guest, createBrowserReloadMenuTemplate(
       guest,
       interfaceLanguage(),
       normalizeReloadShortcutBindings(input?.shortcutBindings),
     ), position);
   }));
   ipcMain.handle(BROWSER_IPC_CHANNELS.runContextMenuAction, (event, input) => scope.runOperation(() => {
-    if (!isDesktopRendererSender(event.sender, mainWindow)) return false;
-    return contextMenus.execute(String(input?.menuId ?? ''), String(input?.key ?? ''));
+    if (!isDesktopRendererSender(event.sender, windows)) return false;
+    return windows.get(event.sender.id)!.contextMenus.execute(String(input?.menuId ?? ''), String(input?.key ?? ''));
   }));
   ipcMain.handle(BROWSER_IPC_CHANNELS.dismissContextMenu, (event, input) => {
-    if (isDesktopRendererSender(event.sender, mainWindow) && typeof input?.menuId === 'string') contextMenus.dismiss(input.menuId);
+    if (isDesktopRendererSender(event.sender, windows) && typeof input?.menuId === 'string') windows.get(event.sender.id)!.contextMenus.dismiss(input.menuId);
   });
   return () => {
     for (const channel of handlerChannels) ipcMain.removeHandler(channel);
@@ -115,17 +116,18 @@ export function registerBrowserIpc(
 function resolveEmbeddedBrowserGuest(
   sender: WebContents,
   webContentsId: number,
-  mainWindow: BrowserWindow,
+  windows: ReadonlyMap<number, BrowserWindowSession>,
 ): WebContents | null {
-  if (!Number.isSafeInteger(webContentsId) || !isDesktopRendererSender(sender, mainWindow)) return null;
+  if (!Number.isSafeInteger(webContentsId) || !isDesktopRendererSender(sender, windows)) return null;
   const guest = electronWebContents.fromId(webContentsId);
   const browserSession = session.fromPartition(DESKTOP_BROWSER_PARTITION);
   if (!guest || guest.hostWebContents?.id !== sender.id || guest.session !== browserSession) return null;
   return guest;
 }
 
-function isDesktopRendererSender(sender: WebContents, mainWindow: BrowserWindow): boolean {
-  return !mainWindow.isDestroyed() && sender.id === mainWindow.webContents.id;
+function isDesktopRendererSender(sender: WebContents, windows: ReadonlyMap<number, BrowserWindowSession>): boolean {
+  const window = windows.get(sender.id)?.window;
+  return Boolean(window && !window.isDestroyed());
 }
 
 function normalizeReloadShortcutBindings(value: unknown): Readonly<{

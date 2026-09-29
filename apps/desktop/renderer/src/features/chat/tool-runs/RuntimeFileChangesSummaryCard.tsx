@@ -81,7 +81,7 @@ export function FileChangesSummaryCard({
     <section className="chat-file-changes" aria-label={t('toolRun.changes.label')}>
       <div className="chat-file-changes__header">
         <span className="chat-file-changes__icon" aria-hidden="true">
-          <FileDiff size={14} />
+          <FileDiff size={18} />
         </span>
         <span className="chat-file-changes__summary">
           <span className="chat-file-changes__title" title={singleFile?.path}>

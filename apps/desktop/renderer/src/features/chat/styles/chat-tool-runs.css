@@ -304,7 +304,6 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   border: 1px solid color-mix(in srgb, var(--app-border) 68%, transparent);
   background: var(--app-surface);
   border-radius: var(--app-radius-lg);
-  box-shadow: var(--app-shadow-card);
   overflow: hidden;
 }
 
@@ -317,33 +316,34 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 }
 
 .chat-file-changes__header {
-  gap: 8px;
+  gap: 10px;
   justify-content: space-between;
-  padding: 10px 12px;
+  padding: 12px;
 }
 
 .chat-file-changes__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 40px;
+  height: 40px;
   flex: 0 0 auto;
-  border-radius: var(--app-radius-sm);
+  border-radius: var(--app-radius-lg);
   color: var(--app-text-muted);
   background: color-mix(in srgb, var(--app-text) 4%, transparent);
 }
 
 .chat-file-changes__summary {
-  flex-direction: row;
-  align-items: baseline;
-  gap: 8px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   flex: 1 1 auto;
 }
 
 .chat-file-changes__title {
-  /* 窄面板优先收缩标题，为变更统计和操作按钮保留空间。 */
+  /* 纵向摘要仍需限制标题宽度，避免长文件名挤出右侧操作。 */
   min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   color: var(--app-text);
   font-size: 14px;
@@ -369,7 +369,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   height: 28px;
   padding: 0 8px;
   border: 1px solid transparent;
-  border-radius: var(--app-radius-xs);
+  border-radius: var(--app-radius-sm);
   color: var(--app-text);
   background: transparent;
   font: inherit;
@@ -386,7 +386,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 
 .chat-file-changes__action--review {
   padding: 0 10px;
-  border-color: color-mix(in srgb, var(--app-text) 10%, var(--app-border));
+  border-color: var(--app-border);
   background: var(--app-surface);
 }
 
@@ -403,17 +403,12 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 
 .chat-file-changes__list {
   display: grid;
-  gap: 2px;
   min-width: 0;
-  padding: 8px 12px;
   border-top: 1px solid color-mix(in srgb, var(--app-border) 70%, transparent);
 }
 
 .chat-file-changes__item {
   min-width: 0;
-  border-radius: var(--app-radius-xs);
-  overflow: hidden;
-  background: transparent;
 }
 
 .chat-file-changes__row {
@@ -421,10 +416,10 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   align-items: center;
   gap: 10px;
   width: 100%;
-  min-height: 32px;
-  padding: 0 8px;
+  min-height: 36px;
+  padding: 6px 12px;
   border: 0;
-  border-radius: var(--app-radius-xs);
+  border-radius: 0;
   color: inherit;
   background: transparent;
   font: inherit;
@@ -433,9 +428,15 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   list-style: none;
 }
 
-.chat-file-changes__row:hover:not(:disabled),
+.chat-file-changes__row:is(:hover, :active):not(:disabled),
 .chat-file-changes__row:focus-visible {
   background: color-mix(in srgb, var(--app-text) 4%, transparent);
+}
+
+.chat-file-changes__row:focus-visible,
+.chat-file-changes__more:focus-visible {
+  /* 通栏按钮的焦点环向内绘制，避免被卡片圆角裁切。 */
+  outline-offset: -2px;
 }
 
 .chat-file-changes__row:disabled {
@@ -457,34 +458,40 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   color: var(--app-text-muted);
 }
 
-/* 文件变更卡片与工具运行各自按所在正文档位覆盖全局 12px 统计字号。 */
+/* 文件行统计与路径对齐，头部统计作为标题下的次级信息。 */
 .chat-file-changes .chat-change-counts {
   --chat-change-count-line-height: 20px;
 
   font-size: 13px;
 }
 
+.chat-file-changes__summary .chat-change-counts {
+  --chat-change-count-line-height: 16px;
+
+  font-size: 12px;
+}
+
 .chat-file-changes__more {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  width: fit-content;
+  width: 100%;
   min-width: 0;
-  height: 32px;
-  margin-top: 1px;
-  padding: 0 10px;
+  height: 36px;
+  padding: 0 12px;
   border: 0;
-  border-radius: var(--app-radius-xs);
-  color: var(--app-text);
+  border-radius: 0;
+  color: var(--app-text-muted);
   background: transparent;
   font: inherit;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 20px;
   cursor: pointer;
 }
 
-.chat-file-changes__more:hover {
-  color: var(--app-primary);
+.chat-file-changes__more:is(:hover, :active):not(:disabled) {
+  color: var(--app-text);
+  background: transparent;
 }
 
 .chat-file-changes__more-chevron {

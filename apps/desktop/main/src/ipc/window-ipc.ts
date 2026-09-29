@@ -1,17 +1,15 @@
 import type { DesktopWindowCloseBehavior } from '@setsuna-desktop/contracts';
-import { BrowserWindow, ipcMain, type WebContents } from 'electron';
+import { BrowserWindow, ipcMain } from 'electron';
 import { toggleWindowMaximized } from '../window/frame.js';
 import { isDesktopRendererSender } from './sender.js';
 
 type WindowIpcOptions = {
-  mainWindow: BrowserWindow;
   macTrafficLightPosition(pageScale: number): { x: number; y: number };
   getCloseBehavior?: () => DesktopWindowCloseBehavior;
   setCloseBehavior?: (behavior: DesktopWindowCloseBehavior) => Promise<DesktopWindowCloseBehavior>;
 };
 
 export function registerWindowIpc({
-  mainWindow,
   macTrafficLightPosition,
   getCloseBehavior,
   setCloseBehavior,
@@ -40,10 +38,10 @@ export function registerWindowIpc({
     return true;
   });
   ipcMain.handle('window-control:get-close-behavior', (event) => (
-    canManageCloseBehavior(event.sender, mainWindow) ? getCloseBehavior?.() ?? 'quit' : 'quit'
+    isDesktopRendererSender(event.sender) ? getCloseBehavior?.() ?? 'quit' : 'quit'
   ));
   ipcMain.handle('window-control:set-close-behavior', async (event, value) => {
-    if (!canManageCloseBehavior(event.sender, mainWindow) || !setCloseBehavior) return 'quit';
+    if (!isDesktopRendererSender(event.sender) || !setCloseBehavior) return 'quit';
     if (!isDesktopWindowCloseBehavior(value)) throw new Error('Unsupported window close behavior.');
     return setCloseBehavior(value);
   });
@@ -58,10 +56,6 @@ export function registerWindowIpc({
     window.setWindowButtonPosition(macTrafficLightPosition(Number(input?.scale ?? 1)));
     return true;
   });
-}
-
-function canManageCloseBehavior(sender: WebContents, mainWindow: BrowserWindow): boolean {
-  return isDesktopRendererSender(sender, mainWindow);
 }
 
 function isDesktopWindowCloseBehavior(value: unknown): value is DesktopWindowCloseBehavior {

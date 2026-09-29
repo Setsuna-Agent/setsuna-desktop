@@ -12,11 +12,13 @@ import { SidebarFloatingMenu } from './SidebarFloatingMenu.js';
 export function SidebarUserMenu({
   settingsActive,
   runtimeActivityTriggerRef,
+  themeToggleTriggerRef,
   onOpenRuntimeActivity,
   onOpenSettings,
 }: {
   settingsActive: boolean;
   runtimeActivityTriggerRef: RefObject<HTMLButtonElement>;
+  themeToggleTriggerRef: RefObject<HTMLButtonElement>;
   onOpenRuntimeActivity: () => void;
   onOpenSettings: () => void;
 }) {
@@ -30,8 +32,9 @@ export function SidebarUserMenu({
 
   return (
     <div className="app-navigation__footer">
-      <AppTooltip title={themeToggleLabel} placement="right">
+      <ShortcutTooltip commandId="app.toggleTheme" label={themeToggleLabel} placement="right">
         <Button
+          ref={themeToggleTriggerRef}
           variant="ghost"
           className="app-navigation__button"
           type="button"
@@ -40,7 +43,7 @@ export function SidebarUserMenu({
         >
           {resolvedTheme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
         </Button>
-      </AppTooltip>
+      </ShortcutTooltip>
       <ShortcutTooltip commandId="app.openSettings" label={t('sidebar.openSettings')} placement="right">
         <Button variant="ghost"
           className={`app-navigation__button${settingsActive ? ' is-active' : ''}`}

@@ -44,7 +44,7 @@ export const networkProxyMainFeature = defineMainFeature({
     context.scope.add(registerNetworkProxyIpc(
       context.scope,
       service,
-      host.mainWindow,
+      (state) => host.publishState(state),
       (proxyServerId) => host.deleteServerThroughRuntime(proxyServerId),
     ));
 

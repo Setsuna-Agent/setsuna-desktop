@@ -41,6 +41,8 @@ export function applyCurrentThreadEvent(
   event: StoredThreadEvent,
 ): RuntimeThread | null {
   if (!thread || thread.id !== event.threadId || event.seq <= thread.lastSeq) return thread;
+  // The persisted projection ignores deletion; the selected renderer owner must release it.
+  if (event.type === 'thread.deleted') return null;
   return applyRuntimeEventToThread(thread, event);
 }
 

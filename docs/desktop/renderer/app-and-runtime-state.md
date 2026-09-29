@@ -59,6 +59,14 @@
 
 侧栏项目标题只切换会话列表的展开/收起，不改变当前项目、会话或工作区；打开会话由会话条目触发，在项目中新建会话使用项目菜单入口。
 
+顶部对话菜单和侧栏右键菜单共用 `thread-menu/threadMenuItems.tsx`，以分隔线划分会话管理、分叉和打开操作；分叉与打开方式使用二级菜单。`AppChatToolbarTitle` 使用 `Dropdown`，`SidebarThreadMenu` 使用 `PointMenu`，两者沿用同一套共享菜单样式。`AppReadyLayout` 持有一份 `useThreadMenu` 状态，仅在菜单打开时读取目标会话的末条消息边界、工作区和可用应用，关闭或切换目标后忽略旧请求，跨两个入口共用分叉防重入状态。未创建的对话禁用依赖会话的操作，但仍可打开已选工作区。分叉复用 `forkThreadFromId` 和现有 runtime fork 链路；空会话、运行或压缩中的会话不可分叉，新工作树分叉还要求 Git 目录。打开方式使用目标会话的实际目录（含工作树与临时工作区），不借用当前会话的目录。运行中的会话不可归档。
+
+新窗口初始化优先采用 main 指定的会话，再回退到上次使用的会话；不切换来源窗口的当前会话。置顶状态通过浏览器 storage 事件同步到其他桌面窗口。
+
+会话管理菜单提供「彻底删除」，与归档一样在运行中禁用。共享 `useThreadMenu` 在菜单关闭后继续持有二次确认，只有确认后才调用删除，并防止重复提交。删除复用 runtime 的永久删除链路；当前会话删除后优先切换到同项目的其他会话，没有剩余会话时回到空白对话。异步删除完成不会覆盖用户期间发起的新导航。
+
+侧栏菜单打开时，`SidebarMenuOpenContext` 暂停整个侧栏的走马灯与悬浮预览，侧栏背景不再接受鼠标命中。会话菜单使用 `PointMenu` 的 modal 模式隔离背景交互；点击菜单外或按 Esc 关闭后恢复，二级菜单继续由共享菜单管理。
+
 新对话的 `ChatStarterWorkspace` 在输入框上方显示项目入口，可搜索项目、创建项目或转为全局会话。`selectNewThreadProject` 沿用未保存文件确认，只更换这条草稿的工作区，不打开已有会话；`useChatComposerSession.claimForProject` 保留输入内容与 composer 身份，避免丢失附件。分支入口由 Review Feature 的 `ConversationGitControls` 紧凑变体提供，复用 Git 查询、切换和创建分支；项目切换或控件卸载后，迟到的 Git 操作不会刷新旧工作区状态。
 
 `Alt+↑` / `Alt+↓` 按侧栏顺序切换当前已显示的会话，跳过折叠分组和“展开显示”后隐藏的会话，到首尾停止；侧栏整体收起时不执行。未选中可见会话时，`Alt+↓` 打开第一项。`SidebarThreadRow` 通过 `data-sidebar-thread-id` 标记导航目标，`useSidebarThreadNavigation` 在按键时读取已挂载行，避免复制侧栏的排序、置顶、折叠和分页状态。切换沿用 `selectThread` 的未保存文件确认，并阻止并发切换叠加弹窗。快捷键通过统一注册表配置，可在设置中修改；沿用弹窗、输入法组合输入和终端的快捷键保护规则。
@@ -92,7 +100,9 @@ Updater 不再进入 App controller。Renderer composition 解析 Feature 提供
 
 Layout 只组合已经定义清楚的状态和 callback，不在 render 中发起 runtime 请求。
 
-`AppSidebarSurface` 通过 `sidebar/usePinnedThreads.ts` 保存本机置顶偏好（`setsuna-pinned-threads-v1`）。会话行的图钉将会话移入项目分组上方的 `PinnedThreadSection`，按最近置顶排序；取消置顶后按原排序回到项目或全局列表。置顶只改变侧栏投影，保留原始 `projectId`、项目会话总数和导航/归档使用的完整分组。已归档、删除或不在当前快照中的会话不会出现在置顶列表；加载期间不清除保存的 ID。
+`AppReadyLayout` 通过 `sidebar/usePinnedThreads.ts` 向顶部菜单和 `AppSidebarSurface` 提供共享置顶状态，并保存本机置顶偏好（`setsuna-pinned-threads-v1`）。会话行的图钉将会话移入项目分组上方的 `PinnedThreadSection`，按最近置顶排序；取消置顶后按原排序回到项目或全局列表。置顶只改变侧栏投影，保留原始 `projectId`、项目会话总数和导航/归档使用的完整分组。已归档、删除或不在当前快照中的会话不会出现在置顶列表；加载期间不清除保存的 ID。
+
+全局图标栏的对话主页、Pull Request 与明暗主题切换分别默认绑定 `Cmd/Ctrl+1`、`Cmd/Ctrl+2`、`Cmd/Ctrl+Shift+M`。三项沿用统一快捷键注册、设置与悬停提示；主页保留当前对话，主题快捷键复用图标按钮的切换逻辑和动画起点。
 
 置顶分组标题与项目分组一样支持折叠。置顶会话复用普通会话行的悬停、键盘聚焦和选中效果；图钉只在悬停或键盘聚焦时显示，以实心表示已置顶，不因置顶而常亮或高亮整行。
 
@@ -162,6 +172,10 @@ Renderer 的薄 runtime facade，只持有：
 该 hook 只依赖 12 个 thread/review/approval client 方法。一个 bridge batch 只提交一次 current-thread React state；batch 内的 SSE projection、activity、runtime error、turn transition 和跨域刷新共用同一个 thread + sequence 接受判定。旧线程或不前进的事件不会产生任何副作用。REST snapshot 也必须同时匹配请求 owner 且不回退 sequence。
 
 纯状态规则位于 `runtimeThreadState.ts`，覆盖 initial selection、SSE gate、snapshot adoption 和 active-turn inference。Turn settlement 通过窄 callback 通知 facade 刷新 capability；Usage Feature 根据 thread 终态刷新自己的持久化投影。
+
+`thread.deleted` 通过同一 owner/sequence 判定后立即清空当前会话、摘要与运行状态，取消待提交的帧投影并失效化上下文请求。订阅释放后迟到的事件与快照不能恢复该会话；所有打开该会话的窗口独立消费删除事件。`onThreadDeleted` 通知 App controller 清理对应工作区面板、终端和文件状态。
+
+`useThreadDeletionGuard` 向 main 提供当前会话的文件草稿和进行中的文件操作状态。检查与确认期间暂停窗口输入，不提前清空编辑器；取消或请求失败即可继续编辑、保存。删除成功后等 `thread.deleted` 投影切离旧会话再恢复输入，避免 HTTP 响应与事件之间产生新草稿；不另存草稿副本。
 
 ### `useRuntimeConfigState.ts`
 

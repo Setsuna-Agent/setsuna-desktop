@@ -86,7 +86,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 9px;
+  gap: 16px 24px;
   min-width: 0;
 }
 
@@ -105,6 +105,7 @@
   position: relative;
   align-items: center;
   justify-content: center;
+  padding: 0;
   border: 0;
   background: transparent;
   border-radius: var(--app-radius-lg);
@@ -229,6 +230,12 @@
   line-height: 22px;
 }
 
+.desktop-plugin-market__list .desktop-capability-list-item {
+  /* Extend the hover surface while keeping the content aligned with section headings. */
+  margin-inline: -8px;
+  padding-inline: 8px;
+}
+
 .desktop-capabilities-plugin-detail {
   align-self: start;
   padding-bottom: 18px;
@@ -240,12 +247,6 @@
   font-size: 13px;
   line-height: 21px;
   overflow-wrap: anywhere;
-}
-
-.desktop-capabilities-plugin-detail > .declarative-plugin-ui--settings {
-  padding: 16px;
-  border-radius: 12px;
-  background: var(--app-surface-muted);
 }
 
 .desktop-capabilities-plugin-detail__item-icon {

@@ -80,7 +80,7 @@ export function BrowserWindowMenu({
       >
         <EllipsisVertical size={16} />
       </Button>
-      {open ? <MenuSurface className="desktop-browser-window-menu__popover" role="menu" aria-label={translate('feature.browser.menuSettings')} style={{ transformOrigin: 'top right' }}>
+      {open ? <MenuSurface className="desktop-browser-window-menu__popover" role="menu" aria-label={translate('feature.browser.menuSettings')}>
         <Button variant="ghost" type="button" role="menuitem" onClick={() => runAndClose(onReload)}>
           {translate(loading ? 'feature.browser.stop' : 'feature.browser.reload')}
         </Button>

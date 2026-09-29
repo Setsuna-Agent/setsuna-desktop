@@ -114,6 +114,7 @@ export function PluginIcon({
         className,
       ].filter(Boolean).join(' ')}
       data-plugin-icon={icon ?? 'plugin'}
+      data-menu-color="preserve"
       aria-hidden="true"
     >
       {imageSource ? (

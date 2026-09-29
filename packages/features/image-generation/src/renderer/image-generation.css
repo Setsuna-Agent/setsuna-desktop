@@ -2,21 +2,6 @@
   color: var(--sd-color-text, CanvasText);
 }
 
-.feature-image-generation-settings {
-  display: grid;
-  gap: 16px;
-  padding: 16px;
-  border: 1px solid color-mix(in srgb, var(--sd-color-accent, Highlight) 22%, var(--sd-color-border, CanvasText));
-  border-radius: var(--app-radius-sm);
-}
-
-.feature-image-generation-settings > header {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-}
-
 .feature-image-generation-settings > header h3,
 .feature-image-generation-settings > header p,
 .feature-image-generation-test > header h4,
@@ -39,27 +24,16 @@
   line-height: 18px;
 }
 
-.feature-image-generation-settings__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: var(--app-radius-sm);
-  color: var(--sd-color-accent, Highlight);
-  background: color-mix(in srgb, var(--sd-color-accent, Highlight) 11%, transparent);
-}
-
 .feature-image-generation-settings__form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 16px;
 }
 
 .feature-image-generation-settings__field,
 .feature-image-generation-test__prompt {
   display: grid;
-  gap: 7px;
+  gap: 8px;
   min-width: 0;
   color: var(--sd-color-text-muted, GrayText);
   font-size: 12px;
@@ -116,13 +90,6 @@
 .feature-image-generation-settings__status .is-success,
 .feature-image-generation-test .is-success {
   color: var(--sd-color-success, #16803d);
-}
-
-.feature-image-generation-test {
-  display: grid;
-  gap: 12px;
-  padding-top: 16px;
-  border-top: 1px solid color-mix(in srgb, var(--sd-color-accent, Highlight) 16%, var(--sd-color-border, CanvasText));
 }
 
 .feature-image-generation-test > header {

@@ -9,7 +9,7 @@ export function PinnedThreadSection({ projects, threads, ...listProps }: {
   projects: WorkspaceProject[];
   threads: RuntimeThreadSummary[];
 } & Pick<ComponentProps<typeof SidebarThreadList>,
-  'menuThreadId' | 'runningThreadId' | 'selectedThreadId' | 'onArchive' | 'onRename' | 'onSelect' | 'onToggleMenu' | 'onTogglePin'
+  'threadMenu' | 'menuThreadId' | 'runningThreadId' | 'selectedThreadId' | 'onArchive' | 'onOpenInNewWindow' | 'onRename' | 'onSelect' | 'onToggleMenu' | 'onTogglePin'
 >) {
   const { t } = useI18n();
   const [collapsed, setCollapsed] = useState(false);

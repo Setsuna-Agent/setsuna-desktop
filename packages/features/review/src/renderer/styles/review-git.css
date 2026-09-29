@@ -26,13 +26,6 @@
 
 .chat-conversation-git--compact { max-width: 40%; }
 
-.chat-git-commit-branch-menu {
-  border: 1px solid var(--app-border);
-  color: var(--app-text);
-  background: var(--app-surface);
-  box-shadow: var(--app-shadow-popover);
-}
-
 .chat-git-branch-menu__create-form input,
 .chat-git-commit-popover__message {
   box-shadow: none;
@@ -62,8 +55,8 @@
   align-items: center;
   gap: 7px;
   width: 100%;
-  min-height: 30px;
-  padding: 0 7px;
+  min-height: var(--app-menu-item-height);
+  padding: 3px 8px;
   border: 0;
   border-radius: var(--app-radius-xs);
   color: var(--app-text);
@@ -71,10 +64,6 @@
   font: inherit;
   font-size: 13px;
   text-align: left;
-}
-
-.chat-git-commit-branch-menu__item.is-current {
-  background: color-mix(in srgb, var(--app-surface) 88%, var(--app-text) 12%);
 }
 
 .chat-git-commit-popover__branch span,
@@ -300,8 +289,6 @@
   display: grid;
   gap: 5px;
   width: 224px;
-  padding: 9px 8px;
-  border-radius: var(--app-radius-sm);
 }
 
 .chat-git-commit-branch-menu__item {

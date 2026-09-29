@@ -1,5 +1,5 @@
 import type { DesktopUserProfile, RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
-import { clipboard, dialog, ipcMain, nativeImage, shell, type BrowserWindow, type OpenDialogOptions } from 'electron';
+import { clipboard, dialog, ipcMain, nativeImage, shell, type OpenDialogOptions } from 'electron';
 import { hostname, userInfo } from 'node:os';
 import path from 'node:path';
 import type { DesktopNativeBridgeServer } from '../runtime/native-bridge-server.js';
@@ -13,19 +13,18 @@ import {
   revealWorkspaceFileInFolder,
 } from '../workspace/file-opening.js';
 import { copyChatImage, readGeneratedImageAsset, revealChatImage } from '../workspace/generated-image-actions.js';
+import { desktopWindows } from '../window/registry.js';
 import { isDesktopRendererSender } from './sender.js';
 import { registerWorkspaceEntryWatchIpc } from './workspace-entry-watch-ipc.js';
 
 type DesktopIpcOptions = {
-  mainWindow: BrowserWindow;
   nativeBridge: DesktopNativeBridgeServer;
-  onActiveKeyboardShortcutBindingsChange: (bindings: readonly string[]) => void;
+  onActiveKeyboardShortcutBindingsChange: (bindings: readonly string[], senderId: number) => void;
   onInterfaceLanguageChange: (locale: RuntimeInterfaceLanguage) => void;
   userDataPath: string;
 };
 
 export function registerDesktopIpc({
-  mainWindow,
   nativeBridge,
   onActiveKeyboardShortcutBindingsChange,
   onInterfaceLanguageChange,
@@ -49,40 +48,45 @@ export function registerDesktopIpc({
     'desktop:create-workspace-file-preview',
   ];
   for (const channel of channels) ipcMain.removeHandler(channel);
-  const keyboardShortcuts = registerWindowKeyboardShortcuts(mainWindow.webContents);
-  registerWorkspaceEntryWatchIpc(mainWindow);
+  const keyboards = new Map<number, ReturnType<typeof registerWindowKeyboardShortcuts>>();
+  desktopWindows.onWindowAdded((window) => {
+    const senderId = window.webContents.id;
+    keyboards.set(senderId, registerWindowKeyboardShortcuts(window.webContents));
+    return () => keyboards.delete(senderId);
+  });
+  registerWorkspaceEntryWatchIpc();
 
   ipcMain.handle('desktop:set-active-keyboard-shortcut-bindings', (event, value) => {
-    if (!isDesktopRendererSender(event.sender, mainWindow)) return false;
+    if (!isDesktopRendererSender(event.sender)) return false;
     const bindings = Array.isArray(value)
       ? [...new Set(value.filter((item): item is string => typeof item === 'string' && item.length <= 80))].slice(0, 256)
       : [];
-    keyboardShortcuts.setActiveBindings(bindings);
-    onActiveKeyboardShortcutBindingsChange(bindings);
+    keyboards.get(event.sender.id)?.setActiveBindings(bindings);
+    onActiveKeyboardShortcutBindingsChange(bindings, event.sender.id);
     return true;
   });
 
   ipcMain.handle('desktop:set-interface-language', (event, value) => {
-    if (!isDesktopRendererSender(event.sender, mainWindow)) return false;
+    if (!isDesktopRendererSender(event.sender)) return false;
     const locale = normalizeNativeInterfaceLanguage(value);
     if (!locale) return false;
     onInterfaceLanguageChange(locale);
     return true;
   });
   ipcMain.handle('desktop:set-keyboard-shortcut-recording', (event, value) => {
-    if (!isDesktopRendererSender(event.sender, mainWindow)) return false;
+    if (!isDesktopRendererSender(event.sender)) return false;
     // Native application-menu accelerators (for example Command+Q) must not win
     // while the renderer is inspecting a candidate shortcut.
-    keyboardShortcuts.setRecording(Boolean(value));
+    keyboards.get(event.sender.id)?.setRecording(Boolean(value));
     return true;
   });
   ipcMain.handle('desktop:select-directory', async (event, input) => {
-    if (!isDesktopRendererSender(event.sender, mainWindow)) return null;
+    if (!isDesktopRendererSender(event.sender)) return null;
     const options: OpenDialogOptions = {
       title: String(input?.title || '选择项目目录'),
       properties: ['openDirectory', 'createDirectory'],
     };
-    const result = await dialog.showOpenDialog(mainWindow, options);
+    const result = await dialog.showOpenDialog(desktopWindows.get(event.sender.id)!, options);
     return result.canceled ? null : result.filePaths[0] ?? null;
   });
   ipcMain.handle('desktop:get-user-profile', async () => getDesktopUserProfile());
@@ -91,7 +95,7 @@ export function registerDesktopIpc({
     return true;
   });
   ipcMain.handle('desktop:copy-image-to-clipboard', async (event, input) => {
-    if (!isDesktopRendererSender(event.sender, mainWindow)) return { ok: false, error: 'Desktop renderer is unavailable.' };
+    if (!isDesktopRendererSender(event.sender)) return { ok: false, error: 'Desktop renderer is unavailable.' };
     return copyChatImage(
       userDataPath,
       input,
@@ -101,11 +105,11 @@ export function registerDesktopIpc({
     );
   });
   ipcMain.handle('desktop:read-image-asset', async (event, assetId) => {
-    if (!isDesktopRendererSender(event.sender, mainWindow)) return { ok: false, error: 'Desktop renderer is unavailable.' };
+    if (!isDesktopRendererSender(event.sender)) return { ok: false, error: 'Desktop renderer is unavailable.' };
     return readGeneratedImageAsset(userDataPath, assetId);
   });
   ipcMain.handle('desktop:reveal-image-in-folder', async (event, input) => {
-    if (!isDesktopRendererSender(event.sender, mainWindow)) return { ok: false, error: 'Desktop renderer is unavailable.' };
+    if (!isDesktopRendererSender(event.sender)) return { ok: false, error: 'Desktop renderer is unavailable.' };
     return revealChatImage(userDataPath, input, (targetPath) => shell.showItemInFolder(targetPath));
   });
   ipcMain.handle('desktop:open-path', async (_event, targetPath) => {
@@ -130,15 +134,15 @@ export function registerDesktopIpc({
     (targetPath) => shell.openPath(targetPath),
   ));
   ipcMain.handle('desktop:copy-workspace-file-path', async (event, input) => {
-    if (!isDesktopRendererSender(event.sender, mainWindow)) return { ok: false, error: 'Desktop renderer is unavailable.' };
+    if (!isDesktopRendererSender(event.sender)) return { ok: false, error: 'Desktop renderer is unavailable.' };
     return copyWorkspaceFilePath(input?.workspaceRoot, input?.filePath, (targetPath) => clipboard.writeText(targetPath));
   });
   ipcMain.handle('desktop:reveal-workspace-file', async (event, input) => {
-    if (!isDesktopRendererSender(event.sender, mainWindow)) return { ok: false, error: 'Desktop renderer is unavailable.' };
+    if (!isDesktopRendererSender(event.sender)) return { ok: false, error: 'Desktop renderer is unavailable.' };
     return revealWorkspaceFileInFolder(input?.workspaceRoot, input?.filePath, (targetPath) => shell.showItemInFolder(targetPath));
   });
   ipcMain.handle('desktop:create-workspace-file-preview', async (event, input) => {
-    if (!isDesktopRendererSender(event.sender, mainWindow)) return { ok: false, error: 'Desktop renderer is unavailable.' };
+    if (!isDesktopRendererSender(event.sender)) return { ok: false, error: 'Desktop renderer is unavailable.' };
     return createWorkspaceFilePreviewUrl(
       input?.workspaceRoot,
       input?.filePath,

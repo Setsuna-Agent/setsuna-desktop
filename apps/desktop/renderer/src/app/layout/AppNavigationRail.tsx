@@ -15,6 +15,7 @@ export function AppNavigationRail({
   activeThreadId,
   selectedPluginViewKey,
   runtimeActivityTriggerRef,
+  themeToggleTriggerRef,
   onOpenChat,
   onOpenCapabilities,
   onOpenPullRequests,
@@ -27,6 +28,7 @@ export function AppNavigationRail({
   activeThreadId?: string;
   selectedPluginViewKey: string | null;
   runtimeActivityTriggerRef: RefObject<HTMLButtonElement>;
+  themeToggleTriggerRef: RefObject<HTMLButtonElement>;
   onOpenChat: () => void;
   onOpenCapabilities: () => void;
   onOpenPullRequests: () => void;
@@ -38,10 +40,10 @@ export function AppNavigationRail({
   return (
     <div className="app-navigation">
       <nav className="app-navigation__routes">
-        <NavigationButton label={t('sidebar.chats')} active={activeView === 'chat'} onClick={onOpenChat}>
+        <NavigationButton label={t('sidebar.chats')} commandId="app.openChat" active={activeView === 'chat'} onClick={onOpenChat}>
           <Home size={18} />
         </NavigationButton>
-        <NavigationButton label="Pull Request" active={activeView === 'pull-requests'} onClick={onOpenPullRequests}>
+        <NavigationButton label="Pull Request" commandId="app.openPullRequests" active={activeView === 'pull-requests'} onClick={onOpenPullRequests}>
           <GitPullRequest size={18} />
         </NavigationButton>
         <NavigationButton label={t('sidebar.plugins')} commandId="app.openCapabilities" active={activeView === 'capabilities'} onClick={onOpenCapabilities}>
@@ -62,6 +64,7 @@ export function AppNavigationRail({
       <SidebarUserMenu
         settingsActive={activeView === 'settings'}
         runtimeActivityTriggerRef={runtimeActivityTriggerRef}
+        themeToggleTriggerRef={themeToggleTriggerRef}
         onOpenRuntimeActivity={onOpenRuntimeActivity}
         onOpenSettings={onOpenSettings}
       />

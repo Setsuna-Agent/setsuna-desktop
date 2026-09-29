@@ -4,7 +4,7 @@ import { Switch } from '@setsuna-desktop/renderer-ui';
 import { ChevronDown, Pencil, Search, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { McpConnectionCard } from './McpConnectionCard.js';
-import { mcpConnectionPresentation, mcpToolDisplayName } from './mcpPresentation.js';
+import { mcpConnectionPresentation, mcpServerCategory, mcpToolDisplayName } from './mcpPresentation.js';
 import type { McpTranslate } from './messages.js';
 
 export function McpServerDetail({ server, authAction, authError, onCancelLogin, openExternal, capabilities,
@@ -47,7 +47,7 @@ export function McpServerDetail({ server, authAction, authError, onCancelLogin, 
           <McpSummary title={translate('feature.mcp.detail.configuration')} fields={[
             [translate('feature.mcp.key'), server.key],
             [translate('feature.mcp.detail.connectionType'), translate(server.transport === 'stdio' ? 'feature.mcp.detail.local' : 'feature.mcp.detail.remote')],
-            [translate('feature.mcp.detail.source'), translate(`feature.mcp.source.${server.source}`)],
+            [translate('feature.mcp.detail.source'), translate(`feature.mcp.source.${mcpServerCategory(server)}`)],
           ]} />
           <McpSummary title={translate('feature.mcp.detail.timeouts')} fields={[
             [translate('feature.mcp.detail.request'), seconds(server.timeoutMs)],

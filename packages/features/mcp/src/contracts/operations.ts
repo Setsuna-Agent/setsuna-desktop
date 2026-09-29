@@ -217,6 +217,7 @@ function mcpServer(value: unknown): RuntimeMcpServer {
     headerKeys: stringArray(record.headerKeys, 'headerKeys'),
     source: mcpServerSource(record.source),
     ...optionalTextProperty(record, 'sourcePath'),
+    ...optionalTextProperty(record, 'pluginId'),
     readOnly: booleanValue(record.readOnly, 'readOnly'),
   };
 }

@@ -28,6 +28,7 @@ it('opens app information from the global navigation menu, handles external link
       <SidebarUserMenu
         settingsActive={false}
         runtimeActivityTriggerRef={createRef<HTMLButtonElement>()}
+        themeToggleTriggerRef={createRef<HTMLButtonElement>()}
         onOpenRuntimeActivity={() => undefined}
         onOpenSettings={() => undefined}
       />

@@ -28,7 +28,7 @@ export function useAppKeyboardShortcuts(handlers: AppKeyboardShortcutHandlers): 
 
   useEffect(() => {
     const executeShortcut = (event: KeyboardEvent | DesktopKeyboardShortcutInput) => {
-      if (recording || event.repeat || event.isComposing || event.key === 'Process') return;
+      if (document.body.inert || recording || event.repeat || event.isComposing || event.key === 'Process') return;
       const commandId = matchingKeyboardShortcutCommand(event, bindingsFor);
       if (!commandId) return;
       const handler = handlers[commandId];

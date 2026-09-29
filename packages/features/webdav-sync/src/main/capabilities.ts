@@ -5,7 +5,7 @@ import type {
   PortableFeatureSettingsDocument,
   PortableFeatureSettingsRestoreTarget,
 } from '@setsuna-desktop/feature-core/settings';
-import type { BrowserWindow } from 'electron';
+import type { DesktopWebDavSyncState } from '../contracts/index.js';
 
 export interface WebDavSyncCredentialVault {
   get(key: string): Promise<string | undefined>;
@@ -50,7 +50,7 @@ export interface WebDavSyncMainHost {
   readonly configPath: string;
   readonly credentialVault: WebDavSyncCredentialVault;
   readonly dataRoot: string;
-  readonly mainWindow: BrowserWindow;
+  publishState(state: DesktopWebDavSyncState): void;
   readonly runtime: WebDavSyncRuntimeCoordinator;
   readonly storage: WebDavSyncStorageHost;
   fetch(input: Parameters<typeof globalThis.fetch>[0], init?: RequestInit): Promise<Response>;

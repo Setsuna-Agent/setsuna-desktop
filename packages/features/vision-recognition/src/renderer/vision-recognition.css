@@ -1,29 +1,3 @@
-.feature-vision-recognition-settings {
-  display: grid;
-  gap: 16px;
-  padding: 16px;
-  border: 1px solid color-mix(in srgb, var(--app-primary) 22%, var(--app-border));
-  border-radius: var(--app-radius-md);
-}
-
-.feature-vision-recognition-settings > header {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-}
-
-.feature-vision-recognition-settings__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: var(--app-radius-sm);
-  color: var(--app-primary);
-  background: color-mix(in srgb, var(--app-primary) 11%, transparent);
-}
-
 .feature-vision-recognition-settings h3,
 .feature-vision-recognition-settings h4,
 .feature-vision-recognition-settings p {
@@ -47,7 +21,8 @@
 .feature-vision-recognition-settings__field,
 .feature-vision-recognition-test__prompt {
   display: grid;
-  gap: 7px;
+  gap: 8px;
+  min-width: 0;
   color: var(--app-text-muted);
   font-size: 12px;
 }
@@ -77,13 +52,6 @@
 .feature-vision-recognition-settings__status .is-success,
 .feature-vision-recognition-test__status .is-success {
   color: var(--app-success);
-}
-
-.feature-vision-recognition-test {
-  display: grid;
-  gap: 12px;
-  padding-top: 16px;
-  border-top: 1px solid color-mix(in srgb, var(--app-primary) 16%, var(--app-border));
 }
 
 .feature-vision-recognition-test > header,

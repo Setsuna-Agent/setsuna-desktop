@@ -1,3 +1,4 @@
+import type { ThreadMenuState } from '../thread-menu/useThreadMenu.js';
 import { useConfirm } from '@setsuna-desktop/renderer-ui';
 import { ResizeHandle, Button } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeThreadSummary, WorkspaceProject } from '@setsuna-desktop/contracts';
@@ -24,6 +25,7 @@ import {
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
 import { SidebarFloatingMenu } from './SidebarFloatingMenu.js';
+import { SidebarMenuOpenContext } from './SidebarMenuContext.js';
 import { SidebarProjectHoverCard } from './SidebarProjectHoverCard.js';
 import { SidebarThreadList } from './SidebarThreadList.js';
 import { PinnedThreadSection } from './PinnedThreadSection.js';
@@ -73,6 +75,8 @@ export function AgentSidebar({
   onToggleSessionsCollapsed,
   onToggleThreadActions,
   onToggleThreadPin,
+  threadMenu,
+  onOpenThreadInNewWindow,
   onRenameThread,
 }: {
   activeProjectId: string | null;
@@ -115,16 +119,22 @@ export function AgentSidebar({
   onToggleSessionsCollapsed: () => void;
   onToggleThreadActions: (threadId: string) => void;
   onToggleThreadPin: (thread: RuntimeThreadSummary) => void;
+  threadMenu: ThreadMenuState;
+  onOpenThreadInNewWindow: (threadId: string) => void;
   onRenameThread: (thread: RuntimeThreadSummary) => void;
 }) {
   const { t } = useI18n();
+  const [scrolled, setScrolled] = useState(false);
   const navigationHint = useSidebarNavigationHint(activeView === 'chat' && !collapsed);
+  const menuOpen = Boolean(threadActionMenuId || projectActionMenuId);
 
-  return (
+  const sidebar = (
     <aside
       className="app-sidebar desktop-agent-sidebar"
       aria-hidden={collapsed || undefined}
       data-navigation-hint={navigationHint || undefined}
+      data-menu-open={menuOpen || undefined}
+      data-scrolled={scrolled || undefined}
     >
       <div className="desktop-agent-sidebar__top-actions">
         <ShortcutTooltip commandId="app.newChat" label={t('app.newChat')} placement="bottom">
@@ -140,7 +150,10 @@ export function AgentSidebar({
           </Button>
         </ShortcutTooltip>
       </div>
-      <div className="desktop-agent-sidebar__body">
+      <div
+        className="desktop-agent-sidebar__body"
+        onScroll={(event) => setScrolled(event.currentTarget.scrollTop > 0)}
+      >
         <PinnedThreadSection
           menuThreadId={threadActionMenuId}
           projects={projects}
@@ -148,6 +161,8 @@ export function AgentSidebar({
           selectedThreadId={activeThreadId}
           threads={pinnedThreads}
           onArchive={onArchiveThread}
+          threadMenu={threadMenu}
+          onOpenInNewWindow={onOpenThreadInNewWindow}
           onRename={onRenameThread}
           onSelect={onSelectThread}
           onToggleMenu={onToggleThreadActions}
@@ -170,6 +185,8 @@ export function AgentSidebar({
           onCreateProjectThread={onCreateProjectThread}
           onEditProject={onEditProject}
           onRemoveProject={onRemoveProject}
+          threadMenu={threadMenu}
+          onOpenThreadInNewWindow={onOpenThreadInNewWindow}
           onRenameThread={onRenameThread}
           onCreateProject={onCreateProject}
           onToggleProjectCollapsed={onToggleProjectCollapsed}
@@ -190,6 +207,8 @@ export function AgentSidebar({
           onArchiveThread={onArchiveThread}
           onCreateGlobalThread={onCreateGlobalThread}
           onEnterChatMode={onEnterChatMode}
+          threadMenu={threadMenu}
+          onOpenThreadInNewWindow={onOpenThreadInNewWindow}
           onRenameThread={onRenameThread}
           onSelectThread={onSelectThread}
           onToggleSessionsCollapsed={onToggleSessionsCollapsed}
@@ -220,6 +239,7 @@ export function AgentSidebar({
       />
     </aside>
   );
+  return <SidebarMenuOpenContext.Provider value={menuOpen}>{sidebar}</SidebarMenuOpenContext.Provider>;
 }
 
 function ProjectSection({
@@ -239,6 +259,8 @@ function ProjectSection({
   onCreateProjectThread,
   onEditProject,
   onRemoveProject,
+  threadMenu,
+  onOpenThreadInNewWindow,
   onRenameThread,
   onCreateProject,
   onToggleProjectCollapsed,
@@ -264,6 +286,8 @@ function ProjectSection({
   onCreateProjectThread: (projectId: string) => void;
   onEditProject: (project: WorkspaceProject) => void;
   onRemoveProject: (project: WorkspaceProject) => void;
+  threadMenu: ThreadMenuState;
+  onOpenThreadInNewWindow: (threadId: string) => void;
   onRenameThread: (thread: RuntimeThreadSummary) => void;
   onCreateProject: () => void;
   onToggleProjectCollapsed: (projectId: string) => void;
@@ -369,6 +393,8 @@ function ProjectSection({
                           threads={unpinnedThreads}
                           variant="project"
                           onArchive={onArchiveThread}
+                          threadMenu={threadMenu}
+                          onOpenInNewWindow={onOpenThreadInNewWindow}
                           onRename={onRenameThread}
                           onSelect={onSelectThread}
                           onToggleMenu={onToggleThreadActions}
@@ -518,6 +544,8 @@ function GlobalThreadSection({
   onArchiveThread,
   onCreateGlobalThread,
   onEnterChatMode,
+  threadMenu,
+  onOpenThreadInNewWindow,
   onRenameThread,
   onSelectThread,
   onToggleSessionsCollapsed,
@@ -534,6 +562,8 @@ function GlobalThreadSection({
   onArchiveThread: (thread: RuntimeThreadSummary) => void;
   onCreateGlobalThread: () => void;
   onEnterChatMode: () => void;
+  threadMenu: ThreadMenuState;
+  onOpenThreadInNewWindow: (threadId: string) => void;
   onRenameThread: (thread: RuntimeThreadSummary) => void;
   onSelectThread: (threadId: string) => void;
   onToggleSessionsCollapsed: () => void;
@@ -568,6 +598,8 @@ function GlobalThreadSection({
             threads={globalThreads.filter((thread) => !pinnedThreadIds.has(thread.id))}
             variant="global"
             onArchive={onArchiveThread}
+            threadMenu={threadMenu}
+            onOpenInNewWindow={onOpenThreadInNewWindow}
             onRename={onRenameThread}
             onSelect={onSelectThread}
             onToggleMenu={onToggleThreadActions}

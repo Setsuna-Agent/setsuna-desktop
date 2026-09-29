@@ -25,6 +25,10 @@
   gap: 12px;
 }
 
+.declarative-plugin-ui--settings .declarative-plugin-ui__stack--normal {
+  gap: 16px;
+}
+
 .declarative-plugin-ui__text,
 .declarative-plugin-ui__badge,
 .declarative-plugin-ui__notice,
@@ -70,6 +74,10 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.declarative-plugin-ui--settings .declarative-plugin-ui__field {
+  gap: 8px;
 }
 
 .declarative-plugin-ui__approval {

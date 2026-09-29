@@ -1,0 +1,45 @@
+/* Plugin forms share a soft surface; feature styles own their field layouts. */
+.sd-settings-form {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+  padding: 20px;
+  border-radius: var(--app-radius-xl);
+  background: var(--app-surface-muted);
+}
+
+.sd-settings-form__header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.sd-settings-form__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--app-radius-lg);
+  color: var(--app-text-secondary);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-card);
+}
+
+.sd-settings-form__section {
+  display: grid;
+  gap: 16px;
+  padding-top: 20px;
+  border-top: 1px solid var(--app-border);
+}
+
+/* Keep validation, disabled and focus colors owned by the shared controls. */
+:where(.sd-settings-form) :is(.sd-field, .sd-textarea) {
+  padding: 8px 12px;
+  border-radius: var(--app-radius-lg);
+}
+
+:where(.sd-settings-form) .sd-field {
+  min-height: 38px;
+}

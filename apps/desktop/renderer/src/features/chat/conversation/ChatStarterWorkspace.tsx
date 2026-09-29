@@ -52,7 +52,7 @@ export function ChatStarterWorkspace({ activeProject, projects, children, locati
   };
 
   return <div className="chat-starter-workspace">
-    <Popover open={open} onOpenChange={changeOpen} placement="topLeft" className="sd-picker" content={<>
+    <Popover open={open} onOpenChange={changeOpen} placement="topLeft" className="sd-menu-surface sd-picker" content={<>
       <label className="sd-picker__search">
         <Search size={14} aria-hidden="true" />
         <TextField value={query} aria-label={t('chat.starter.searchProjects')} placeholder={t('chat.starter.searchProjects')} onChange={(event) => setQuery(event.currentTarget.value)} />
