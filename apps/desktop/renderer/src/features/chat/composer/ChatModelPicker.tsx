@@ -155,7 +155,7 @@ export function ChatModelPicker({
               </span>
             ) : null}
             <span className="chat-model-selector__name">{model?.name ?? fallbackModelCode ?? t('chat.model.noneSelected')}</span>
-            {thinkingMenu ? <span className="chat-model-selector__effort">{thinkingMenu.label}</span> : null}
+            {thinkingMenu && thinkingControl.enabled ? <span className="chat-model-selector__effort">{thinkingMenu.label}</span> : null}
             <ChevronDown size={12} aria-hidden="true" />
           </Button>
         </AppTooltip>
