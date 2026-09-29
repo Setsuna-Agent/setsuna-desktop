@@ -8,6 +8,7 @@ import { ActionTooltip } from '../../shared/ui/primitives.js';
 import { SidebarFloatingMenu } from './SidebarFloatingMenu.js';
 import { SidebarThreadHoverCard } from './SidebarThreadHoverCard.js';
 import { SidebarThreadTitle } from './SidebarThreadTitle.js';
+import { SidebarThreadWorktreeBadge } from './SidebarThreadWorktreeBadge.js';
 
 export function SidebarThreadRow({
   menuOpen,
@@ -131,6 +132,7 @@ export function SidebarThreadRow({
           onKeyDown={handleSelectKeyDown}
         >
           <SidebarThreadTitle hovered={hovered && !menuOpen} title={thread.title} />
+          <SidebarThreadWorktreeBadge thread={thread} />
         </Button>
       </SidebarThreadHoverCard>
       {meta}

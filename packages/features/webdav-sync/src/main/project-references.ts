@@ -36,6 +36,10 @@ function remapConversationDatabase(
   try {
     database.exec('BEGIN IMMEDIATE');
     try {
+      // Older backups predate this summary column. Snapshots and events are scrubbed below in either format.
+      const hasWorkspaceColumn = database.prepare('PRAGMA table_info(threads)').all()
+        .some((column) => column.name === 'workspace_id');
+      if (hasWorkspaceColumn) database.exec('UPDATE threads SET workspace_id = NULL WHERE workspace_id IS NOT NULL');
       const updateThread = database.prepare(`
         UPDATE threads SET project_id = ?, snapshot_json = ? WHERE id = ?
       `);
@@ -209,6 +213,13 @@ function remapStructuredValue(
     changed ||= remapped.changed;
     output[key] = remapped.value;
   }
+  // Worktree directories/metadata are deliberately absent from portable backups.
+  // Let restored conversations resolve through the remapped project instead.
+  const deviceLocalWorkspace = isDeviceLocalWorkspaceId(value.workspaceId);
+  if (deviceLocalWorkspace) {
+    delete output.workspaceId;
+    changed = true;
+  }
   const sourceProjectId = typeof value.projectId === 'string' ? value.projectId : undefined;
   const sourceEnvironmentId = typeof value.environmentId === 'string'
     ? value.environmentId
@@ -236,13 +247,11 @@ function remapStructuredValue(
   const temporaryToolEnvironmentId = Boolean(
     sourceToolEnvironmentId && isTemporaryWorkspaceProjectId(sourceToolEnvironmentId),
   );
-  const temporaryWorkspaceProjectId = Boolean(
-    sourceWorkspaceProjectId && isTemporaryWorkspaceProjectId(sourceWorkspaceProjectId),
-  );
-  const hasDeviceLocalEnvironment = temporaryProjectId
+  const deviceLocalWorkspaceProjectId = isDeviceLocalWorkspaceId(sourceWorkspaceProjectId);
+  const hasDeviceLocalEnvironment = deviceLocalWorkspace || temporaryProjectId
     || temporaryEnvironmentId
     || temporaryToolEnvironmentId
-    || temporaryWorkspaceProjectId;
+    || deviceLocalWorkspaceProjectId;
   if (mappedProjectId) {
     output.projectId = mappedProjectId;
     changed ||= mappedProjectId !== sourceProjectId;
@@ -271,7 +280,7 @@ function remapStructuredValue(
   if (mappedWorkspaceProjectId) {
     output.workspaceProjectId = mappedWorkspaceProjectId;
     changed ||= mappedWorkspaceProjectId !== sourceWorkspaceProjectId;
-  } else if (sourceWorkspaceProjectId && (targetProjectId || temporaryWorkspaceProjectId)) {
+  } else if (sourceWorkspaceProjectId && (targetProjectId || deviceLocalWorkspaceProjectId)) {
     // Managed workspace IDs are device-local. If they are not part of the
     // portable project map, let the target device allocate a fresh one.
     delete output.workspaceProjectId;
@@ -302,6 +311,10 @@ function isToolEnvironment(value: Record<string, unknown>): boolean {
   return Object.hasOwn(value, 'cwd')
     || Object.hasOwn(value, 'workspaceRoot')
     || Object.hasOwn(value, 'workspaceRoots');
+}
+
+function isDeviceLocalWorkspaceId(value: unknown): boolean {
+  return typeof value === 'string' && (value.startsWith('worktree_') || isTemporaryWorkspaceProjectId(value));
 }
 
 function parseJsonColumn(row: SqliteRow, column: string, label: string): unknown {

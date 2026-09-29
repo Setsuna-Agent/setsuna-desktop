@@ -1,4 +1,6 @@
 import type {
+  CreateThreadInput,
+  ForkThreadInput,
   RuntimeConfiguredModelReference,
   RuntimeSkillReference,
   WorkspaceProject,
@@ -52,6 +54,7 @@ export type AppRouteContentProps = Readonly<{
   startCurrentThreadReview: (
     target: ReviewTarget,
     modelSelection?: RuntimeConfiguredModelReference,
+    workspaceMode?: CreateThreadInput['workspaceMode'],
   ) => Promise<unknown>;
   workspacePanels: DesktopWorkspacePanelsState;
   onSelectSkillForChat(skillId: string): void;
@@ -60,6 +63,7 @@ export type AppRouteContentProps = Readonly<{
   onFocusComposerRequestConsumed(requestId: number): void;
   onOpenPlugin(pluginId: string): void;
   onOpenModelSettings(): void;
+  onForkThread(input: ForkThreadInput): Promise<void>;
   onSelectedCapabilitiesPluginIdChange(pluginId: string | null): void;
   onCapabilitySelectionRequestConsumed(requestId: number): void;
   onTerminalResizeStep(delta: number): void;

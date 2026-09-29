@@ -3,6 +3,7 @@ import { FolderClosed, MessageSquare } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { SidebarHoverCard } from './SidebarHoverCard.js';
+import { SidebarThreadWorktreeBadge } from './SidebarThreadWorktreeBadge.js';
 
 export function SidebarThreadHoverCard({ children, disabled, projectName, thread }: {
   children: ReactElement;
@@ -35,7 +36,9 @@ function ThreadPreview({ projectName, thread }: { projectName?: string; thread: 
   return (
     <>
       <div className="desktop-agent-thread-preview__heading">
-        <span className="desktop-agent-thread-preview__title">{thread.title}</span>
+        <span className="desktop-agent-thread-preview__title">
+          {thread.title}<SidebarThreadWorktreeBadge thread={thread} />
+        </span>
         {Number.isFinite(seconds) ? (
           <time dateTime={thread.updatedAt} title={updatedAt.toLocaleString(locale)}>
             {new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(Math.round(seconds / divisor), unit)}

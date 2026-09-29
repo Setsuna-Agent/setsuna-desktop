@@ -11,6 +11,7 @@ import type {
 import type { RuntimeEventBatch } from './events.js';
 import type {
   CreateThreadInput,
+  ForkThreadInput,
   DeleteQueuedTurnInputResponse,
   MessageDeleteInput,
   MessagePatch,
@@ -91,6 +92,7 @@ export type DesktopRuntimeClient = {
   getThread(threadId: string): Promise<RuntimeThread>;
   listThreadMessages(threadId: string, query?: RuntimeMessagePageQuery): Promise<RuntimeMessagePage>;
   createThread(input?: CreateThreadInput): Promise<RuntimeThread>;
+  forkThread(threadId: string, input: ForkThreadInput): Promise<RuntimeThread>;
   updateThread(threadId: string, patch: ThreadPatch): Promise<RuntimeThread>;
   deleteThread(threadId: string): Promise<void>;
   clearThreadContext(threadId: string): Promise<RuntimeThread>;

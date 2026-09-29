@@ -615,10 +615,20 @@
   gap: var(--sidebar-title-loop-gap);
   overflow: visible;
   animation: sidebar-title-loop var(--sidebar-title-loop-duration) linear infinite;
+  animation-delay: 1s;
 }
 
 .desktop-agent-session__title-track.is-scrolling > span {
   flex: 0 0 auto;
+}
+
+.desktop-agent-thread-worktree-badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  margin-left: 6px;
+  color: var(--app-text-muted);
+  vertical-align: -1px;
 }
 
 @keyframes sidebar-title-loop {

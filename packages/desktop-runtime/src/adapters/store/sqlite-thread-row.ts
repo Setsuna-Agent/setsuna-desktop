@@ -13,6 +13,7 @@ export function summaryFromRow(row: SqliteThreadRow): RuntimeThreadSummary {
     forkedFromId: nullableStringColumn(row, 'forked_from_id'),
     parentThreadId: nullableStringColumn(row, 'parent_thread_id'),
     projectId: nullableStringColumn(row, 'project_id'),
+    workspaceId: nullableStringColumn(row, 'workspace_id'),
     title: stringColumn(row, 'title'),
     createdAt: stringColumn(row, 'created_at'),
     updatedAt: stringColumn(row, 'updated_at'),

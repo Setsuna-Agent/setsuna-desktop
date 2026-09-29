@@ -7,6 +7,7 @@ import type { ReviewFilePreviewRegistry } from '../../../src/contracts/index.js'
 import { describe, expect, it } from 'vitest';
 import { createReviewImagePreviewUrl } from '../../../src/main/image-preview.js';
 import {
+  checkoutReviewBranch,
   commitReviewChanges,
   createAndCheckoutReviewBranch,
   discardUnstagedReviewFiles,
@@ -21,6 +22,69 @@ const execFileAsync = promisify(execFile);
 const GIT_INTEGRATION_TEST_TIMEOUT_MS = 50_000;
 
 describe('desktop review state actions', () => {
+  it('only offers branches available for checkout while retaining occupied refs for comparison', async () => {
+    const repo = await mkGitRepo();
+    const worktree = await mkdtemp(path.join(tmpdir(), 'setsuna occupied worktree-'));
+    const occupiedBranch = 'codex/fork-existing';
+    const availableBranch = 'fork/manual';
+    try {
+      await git(repo, ['branch', availableBranch]);
+      await git(repo, ['worktree', 'add', '-b', occupiedBranch, worktree, 'HEAD']);
+      const state = await getDesktopReviewState(repo);
+      expect(state.branches.map((branch) => branch.name)).toEqual(['main', availableBranch]);
+      expect(state.branches[0]?.current).toBe(true);
+      expect(state.baseRefs).toContain(occupiedBranch);
+      await expect(checkoutReviewBranch(repo, occupiedBranch)).rejects.toThrow('已被其他工作树占用');
+      expect(await git(repo, ['branch', '--show-current'])).toBe('main');
+      expect(await git(worktree, ['branch', '--show-current'])).toBe(occupiedBranch);
+      expect((await checkoutReviewBranch(repo, availableBranch)).currentBranch).toBe(availableBranch);
+
+      await git(worktree, ['checkout', '--detach']);
+      expect((await getDesktopReviewState(repo)).branches.map((branch) => branch.name)).toContain(occupiedBranch);
+      expect((await checkoutReviewBranch(repo, occupiedBranch)).currentBranch).toBe(occupiedBranch);
+    } finally {
+      await git(repo, ['worktree', 'remove', '--force', worktree]).catch(() => undefined);
+      await rm(worktree, { recursive: true, force: true });
+      await rm(repo, { recursive: true, force: true });
+    }
+  }, GIT_INTEGRATION_TEST_TIMEOUT_MS);
+
+  it.each([false, true])('locks a linked worktree HEAD before checkout or auto-staging (attached branch: %s)', async (attached) => {
+    const repo = await mkGitRepo();
+    const worktree = await mkdtemp(path.join(tmpdir(), 'setsuna-review-worktree-'));
+    try {
+      await git(repo, ['worktree', 'add', ...(attached ? ['-b', 'existing-worktree'] : ['--detach']), worktree, 'HEAD']);
+      const subdirectory = path.join(worktree, 'subdirectory');
+      await mkdir(subdirectory);
+      await writeFile(path.join(worktree, 'tracked.txt'), 'staged\n');
+      await git(worktree, ['add', 'tracked.txt']);
+      await writeFile(path.join(worktree, 'tracked.txt'), 'unstaged\n');
+      const state = await getDesktopReviewState(subdirectory);
+      expect(state).toMatchObject({ isWorktree: true, currentBranch: attached ? 'existing-worktree' : null });
+      const head = await git(worktree, ['rev-parse', 'HEAD']);
+      const index = await git(worktree, ['write-tree']);
+      const branches = await git(repo, ['branch', '--list']);
+      await expect(checkoutReviewBranch(subdirectory, 'main')).rejects.toThrow('工作树已绑定 HEAD');
+      await expect(createAndCheckoutReviewBranch(subdirectory, 'must-not-exist', { stageUnstaged: true }))
+        .rejects.toThrow('工作树已绑定 HEAD');
+      expect(await git(worktree, ['rev-parse', 'HEAD'])).toBe(head);
+      expect(await git(worktree, ['write-tree'])).toBe(index);
+      expect(await git(repo, ['branch', '--list'])).toBe(branches);
+      expect(await readFile(path.join(worktree, 'tracked.txt'), 'utf8')).toBe('unstaged\n');
+      expect(await readFile(path.join(repo, 'tracked.txt'), 'utf8')).toBe('initial\n');
+      const committed = await commitReviewChanges(subdirectory, { message: 'Worktree change' });
+      expect(committed.state.isWorktree).toBe(true);
+      expect(await git(worktree, ['branch', '--show-current'])).toBe(attached ? 'existing-worktree' : '');
+      expect(await git(repo, ['rev-parse', 'HEAD'])).toBe(head);
+      await createAndCheckoutReviewBranch(repo, 'regular-branch');
+      expect((await checkoutReviewBranch(repo, 'main')).currentBranch).toBe('main');
+    } finally {
+      await git(repo, ['worktree', 'remove', '--force', worktree]).catch(() => undefined);
+      await rm(worktree, { recursive: true, force: true });
+      await rm(repo, { recursive: true, force: true });
+    }
+  }, GIT_INTEGRATION_TEST_TIMEOUT_MS);
+
   it('prefers the matching master base ref for a master worktree', async () => {
     const repo = await mkGitRepo();
     await git(repo, ['branch', '-M', 'master']);

@@ -24,6 +24,8 @@ export type DesktopReviewBranch = {
 
 export type DesktopReviewState = {
   isGitRepository: boolean;
+  /** Linked worktrees use their own HEAD; branch checkout is unavailable in the app. */
+  isWorktree?: boolean;
   workspaceRoot: string;
   gitRoot: string | null;
   currentBranch: string | null;

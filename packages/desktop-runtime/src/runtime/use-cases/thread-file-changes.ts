@@ -50,7 +50,7 @@ export async function applyThreadFileChanges(
         return { path: file.path, patch: file.undo };
       });
     });
-    const projectId = thread.projectId ?? (await runtime.workspaceProjects.ensureTemporaryWorkspace({
+    const projectId = thread.workspaceId ?? thread.projectId ?? (await runtime.workspaceProjects.ensureTemporaryWorkspace({
       threadId, createdAt: thread.createdAt,
     })).id;
     let event!: StoredThreadEvent;

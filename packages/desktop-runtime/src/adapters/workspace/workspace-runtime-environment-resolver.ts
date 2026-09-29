@@ -8,12 +8,12 @@ import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.
 export class WorkspaceRuntimeEnvironmentResolver implements RuntimeEnvironmentResolver {
   constructor(private readonly projects: Pick<WorkspaceProjectStore, 'ensureTemporaryWorkspace' | 'getStatus'>) {}
 
-  async resolve({ projectId, threadCreatedAt, threadId }: Parameters<RuntimeEnvironmentResolver['resolve']>[0]): Promise<RuntimeEnvironment> {
-    const resolvedProjectId = projectId
+  async resolve({ projectId, workspaceId, threadCreatedAt, threadId }: Parameters<RuntimeEnvironmentResolver['resolve']>[0]): Promise<RuntimeEnvironment> {
+    const resolvedProjectId = projectId ?? workspaceId
       ?? (await this.projects.ensureTemporaryWorkspace({ threadId, createdAt: threadCreatedAt })).id;
-    let workspaceProjectId = resolvedProjectId;
-    let status = await this.projects.getStatus(resolvedProjectId);
-    if (projectId && status.project && !status.project.path) {
+    let workspaceProjectId = workspaceId ?? resolvedProjectId;
+    let status = await this.projects.getStatus(workspaceProjectId);
+    if (!workspaceId && projectId && status.project && !status.project.path) {
       const temporaryWorkspace = await this.projects.ensureTemporaryWorkspace({
         threadId,
         createdAt: threadCreatedAt,
@@ -34,8 +34,7 @@ export class WorkspaceRuntimeEnvironmentResolver implements RuntimeEnvironmentRe
     const workspacePrefix = worktreeRoot ? relativePathWithin(worktreeRoot, workspaceRoot) : null;
 
     return {
-      // An unbound portable project keeps its logical identity while using a
-      // managed per-thread workspace until the user associates a local folder.
+      // Project ownership is independent of the backing worktree or temporary directory.
       id: resolvedProjectId,
       ...(workspaceProjectId !== resolvedProjectId ? { workspaceProjectId } : {}),
       cwd: workspaceRoot,

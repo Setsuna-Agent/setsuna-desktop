@@ -77,7 +77,11 @@ export function AppChatSurface({
           imageAttachmentRequest={imageAttachmentRequest}
           model={conversation}
           starterControls={(
-            <ChatStarterWorkspace activeProject={conversation.activeWorkspace} {...conversation.starterProjectSelection}>
+            <ChatStarterWorkspace
+              activeProject={conversation.activeWorkspace}
+              locationSelection={conversation.starterLocationSelection}
+              {...conversation.starterProjectSelection}
+            >
               <ReviewFeatureConversationGitControls
                 key={conversation.activeWorkspace?.id ?? 'global'}
                 variant="compact"

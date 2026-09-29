@@ -45,6 +45,7 @@ import type {
   WorkspaceProjectStore,
 } from '../../ports/workspace-project-store.js';
 import type { WorkspaceSearchEngine } from '../../ports/workspace-search-engine.js';
+import type { WorkspaceFork } from '../../ports/workspace-fork.js';
 import { assertSafeRuntimeId } from '../../security/runtime-id.js';
 import { detectSafeImageMimeType } from '../../utils/safe-image.js';
 import {
@@ -72,6 +73,7 @@ type ProjectIndex = {
 };
 
 type FileWorkspaceProjectStoreOptions = {
+  worktrees?: Pick<WorkspaceFork, 'getWorkspace'>;
   searchEngine?: WorkspaceSearchEngine;
   temporaryWorkspacePath?: string;
 };
@@ -85,7 +87,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
   constructor(
     dataDir: string,
     private readonly clock: Clock,
-    options: FileWorkspaceProjectStoreOptions = {},
+    private readonly options: FileWorkspaceProjectStoreOptions = {},
   ) {
     this.indexPath = path.join(dataDir, 'projects.json');
     this.searchEngine = options.searchEngine ?? new JavaScriptWorkspaceSearchEngine();
@@ -605,6 +607,8 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
 
   private async findProject(projectId?: string): Promise<WorkspaceProject | undefined> {
     if (!projectId || projectId === TEMPORARY_WORKSPACE_PROJECT_ID) return this.legacyTemporaryWorkspace();
+    const worktree = await this.options.worktrees?.getWorkspace(projectId);
+    if (worktree) return worktree;
     const temporaryReference = parseTemporaryWorkspaceProjectId(projectId);
     if (temporaryReference) {
       const threadId = assertSafeRuntimeId(temporaryReference.threadId, 'Thread id');

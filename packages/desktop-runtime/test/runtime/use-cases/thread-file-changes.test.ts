@@ -4,13 +4,15 @@ import { applyThreadFileChanges } from '../../../src/runtime/use-cases/thread-fi
 import { createFileChangePatch } from '../../../src/utils/file-change-patch.js';
 
 describe('applyThreadFileChanges', () => {
-  it.each(['undo', 'redo'] as const)('resolves %s operations from stored results in completion order, ignoring clipped previews', async (action) => {
+  it.each([
+    ['undo', undefined], ['redo', undefined], ['undo', 'worktree_1'], ['redo', 'worktree_1'],
+  ] as const)('resolves %s operations in the conversation workspace (%s), ignoring clipped previews', async (action, workspaceId) => {
     const later = run('later', 'first', 'second', '2026-09-12T01:00:02Z');
     const earlier = run('earlier', 'original', 'first', '2026-09-12T01:00:01Z');
-    const runtime = fixture([later, earlier, run('unrelated', 'x', 'y')]);
+    const runtime = fixture([later, earlier, run('unrelated', 'x', 'y')], workspaceId);
     await expect(applyThreadFileChanges(runtime, 'thread_1', { toolCallIds: ['later', 'earlier', 'earlier'] }, action))
       .resolves.toEqual({ files: ['README.md'], state: { action, seq: 10 } });
-    expect(runtime.workspaceProjects.applyFileChanges).toHaveBeenCalledWith('project_1', [
+    expect(runtime.workspaceProjects.applyFileChanges).toHaveBeenCalledWith(workspaceId ?? 'project_1', [
       { path: 'README.md', patch: createFileChangePatch('original', 'first') },
       { path: 'README.md', patch: createFileChangePatch('first', 'second') },
     ], action, expect.any(Function));
@@ -40,8 +42,8 @@ function run(id: string, before: string, after: string, completedAt = ''): Runti
     data: { ok: true, diff: { path: 'README.md', undo: createFileChangePatch(before, after) } } };
 }
 
-function fixture(runs: RuntimeToolRun[]) {
-  const thread = { id: 'thread_1', projectId: 'project_1', messages: [{ toolRuns: runs }] } as RuntimeThread;
+function fixture(runs: RuntimeToolRun[], workspaceId?: string) {
+  const thread = { id: 'thread_1', projectId: 'project_1', workspaceId, messages: [{ toolRuns: runs }] } as RuntimeThread;
   return {
     threadStore: { getThread: vi.fn(async () => thread),
       appendEvent: vi.fn(async (_id: string, event: PendingStoredThreadEvent) => ({ ...event, seq: 10 })),

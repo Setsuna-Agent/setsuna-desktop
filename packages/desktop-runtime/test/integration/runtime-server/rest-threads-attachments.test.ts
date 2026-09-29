@@ -1,7 +1,9 @@
 import { RUNTIME_LOCAL_ATTACHMENT_LINK_PATH } from '@setsuna-desktop/contracts';
-import { mkdir, mkdtemp, realpath, truncate, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { mkdir, mkdtemp, readFile, realpath, rename, rm, truncate, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MAX_IN_MEMORY_RASTER_IMAGE_BYTES } from '../../../src/utils/safe-image.js';
 import { createRuntimeServerTestHarness, type RuntimeServerTestHarness } from '../../support/runtime-server/harness.js';
@@ -20,6 +22,166 @@ describe('runtime server REST threads and attachments', () => {
 
   afterEach(async () => {
     await harness.close();
+  });
+
+  it.each(['local', 'worktree'])('starts a new chat in its selected %s workspace and sends its first turn there', async (workspaceMode) => {
+    const repository = path.join(harness.runtimeDataDir, 'repository');
+    const git = async (...args: string[]) => (await promisify(execFile)('git', args, { cwd: repository })).stdout;
+    await mkdir(repository);
+    await git('init');
+    await writeFile(path.join(repository, 'file.txt'), 'committed');
+    await git('add', '.');
+    await git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-m', 'Initial');
+    await writeFile(path.join(repository, 'file.txt'), 'local edit');
+    await writeFile(path.join(repository, 'new.txt'), 'untracked');
+    const project = await harness.runtimeFetch('/v1/projects', { method: 'POST', body: JSON.stringify({ path: repository }) });
+    const branchesBefore = await git('branch', '--list');
+    const worktreesBefore = await git('worktree', 'list', '--porcelain');
+    const statusBefore = await git('status', '--porcelain');
+    const thread = await harness.runtimeFetch('/v1/threads', {
+      method: 'POST', body: JSON.stringify({ title: 'Work location test', projectId: project.id, workspaceMode }),
+    });
+    const workspace = await harness.runtimeFetch(`/v1/workspace/status?threadId=${thread.id}`);
+    expect(thread.projectId).toBe(project.id);
+    expect(thread.messages).toEqual([]);
+    expect((await harness.runtimeFetch('/v1/projects')).projects).toHaveLength(1);
+    expect(await git('branch', '--list')).toBe(branchesBefore);
+    expect(await git('status', '--porcelain')).toBe(statusBefore);
+    if (workspaceMode === 'worktree') {
+      expect(thread.workspaceId).toBe(workspace.project.id);
+      expect(workspace.project.path).not.toBe(await realpath(repository));
+      const branch = await promisify(execFile)('git', ['branch', '--show-current'], { cwd: workspace.project.path });
+      expect(branch.stdout.trim()).toBe('');
+    } else {
+      expect(thread.workspaceId).toBeUndefined();
+      expect(workspace.project.path).toBe(await realpath(repository));
+      expect(await git('worktree', 'list', '--porcelain')).toBe(worktreesBefore);
+    }
+    expect(await readFile(path.join(workspace.project.path, 'file.txt'), 'utf8')).toBe('local edit');
+    expect(await readFile(path.join(workspace.project.path, 'new.txt'), 'utf8')).toBe('untracked');
+    const capture = await createOpenAiCaptureServer();
+    try {
+      await harness.configureOpenAiProvider('new-chat-location', capture.baseUrl);
+      await harness.runtimeFetch(`/v1/threads/${thread.id}/turns`, { method: 'POST', body: JSON.stringify({ input: 'First message' }) });
+      const request = await withTimeout(capture.nextBody, harness.providerCaptureTimeoutMs, 'Waiting for first turn');
+      expect(flattenStringValues(request.messages).join('\n')).toContain(workspace.project.path);
+    } finally {
+      await capture.close();
+    }
+  });
+
+  it.each(['workspace', 'worktree'])('forks to %s at a REST boundary and continues in the correct workspace', async (target) => {
+    let projectId: string | undefined;
+    if (target === 'worktree') {
+      const repository = path.join(harness.runtimeDataDir, 'repository');
+      await mkdir(repository);
+      const git = promisify(execFile);
+      await git('git', ['init'], { cwd: repository });
+      await git('git', ['-c', 'user.name=Fork test', '-c', 'user.email=fork@example.invalid',
+        '-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '-m', 'Initial'], { cwd: repository });
+      projectId = (await harness.runtimeFetch('/v1/projects', { method: 'POST', body: JSON.stringify({ path: repository }) })).id;
+    }
+    const source = await harness.runtimeFetch('/v1/threads', { method: 'POST', body: JSON.stringify({ title: 'Fork source', projectId }) });
+    await harness.appServerRpc('thread/inject_items', {
+      threadId: source.id,
+      items: [
+        { id: 'question', type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Question' }] },
+        { id: 'answer', type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Answer' }] },
+        { id: 'later', type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Later question' }] },
+      ],
+    });
+    const before = await harness.runtimeFetch(`/v1/threads/${source.id}`);
+    const forked = await harness.runtimeFetch(`/v1/threads/${source.id}/fork`, {
+      method: 'POST', body: JSON.stringify({ messageId: before.messages[1].id, target }),
+    });
+    expect(forked.forkedFromId).toBe(source.id);
+    expect(forked.projectId).toBe(source.projectId);
+    const workspace = await harness.runtimeFetch(`/v1/workspace/status?threadId=${forked.id}`);
+    if (target === 'worktree') {
+      expect(workspace.project.id).toBe(forked.workspaceId);
+      const list = await harness.runtimeFetch(`/v1/threads?projectId=${projectId}`);
+      expect(list.threads.find((thread: { id: string }) => thread.id === forked.id))
+        .toMatchObject({ projectId, workspaceId: forked.workspaceId });
+      expect(list.threads.find((thread: { id: string }) => thread.id === source.id).workspaceId).toBeUndefined();
+      expect((await harness.runtimeFetch('/v1/projects')).projects).toHaveLength(1);
+    }
+    expect(forked.messages.map((message: { content: string }) => message.content)).toEqual(['Question', 'Answer']);
+    expect(await harness.runtimeFetch(`/v1/threads/${source.id}`)).toEqual(before);
+    const response = await fetch(`${harness.baseUrl}/v1/threads/${source.id}/fork`, {
+      method: 'POST', headers: { Authorization: `Bearer ${harness.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messageId: 'answer', target: 'arbitrary-path' }),
+    });
+    expect(response.status).toBe(400);
+    expect((await harness.runtimeFetch('/v1/threads')).threads).toHaveLength(2);
+    const capture = await createOpenAiCaptureServer();
+    try {
+      await harness.configureOpenAiProvider('fork-continuation', capture.baseUrl);
+      await harness.runtimeFetch(`/v1/threads/${forked.id}/turns`, { method: 'POST', body: JSON.stringify({ input: 'Continue the branch' }) });
+      const request = await withTimeout(capture.nextBody, harness.providerCaptureTimeoutMs, 'Waiting for fork continuation');
+      const history = JSON.stringify(request.messages);
+      expect(history).toContain('Question');
+      expect(history).toContain('Answer');
+      expect(history).toContain('Continue the branch');
+      expect(history).not.toContain('Later question');
+      expect(flattenStringValues(request.messages).join('\n')).toContain(workspace.project.path);
+      expect(await harness.runtimeFetch(`/v1/threads/${source.id}`)).toEqual(before);
+    } finally {
+      await capture.close();
+    }
+  });
+
+  it('reconnects a conversation with a removed worktree to its project and continues with its history', async () => {
+    const repository = path.join(harness.runtimeDataDir, 'repository');
+    await mkdir(repository);
+    const git = async (...args: string[]) => promisify(execFile)('git', args, { cwd: repository });
+    await git('init');
+    await git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', '-c', 'commit.gpgsign=false',
+      'commit', '--allow-empty', '-m', 'Initial');
+    const project = await harness.runtimeFetch('/v1/projects', { method: 'POST', body: JSON.stringify({ path: repository }) });
+    const thread = await harness.runtimeFetch('/v1/threads', {
+      method: 'POST', body: JSON.stringify({ title: 'Recovered workspace', projectId: project.id, workspaceMode: 'worktree' }),
+    });
+    await harness.appServerRpc('thread/inject_items', {
+      threadId: thread.id, items: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Preserve this requirement' }] }],
+    });
+    const before = await harness.runtimeFetch(`/v1/threads/${thread.id}`);
+    const workspace = await harness.runtimeFetch(`/v1/workspace/status?threadId=${thread.id}`);
+    await git('worktree', 'remove', workspace.project.path);
+    expect(await harness.runtimeFetch(`/v1/workspace/status?threadId=${thread.id}`))
+      .toMatchObject({ project: { id: thread.workspaceId }, exists: false, readable: false });
+    const reset = () => harness.runtimeFetch(`/v1/threads/${thread.id}`, {
+      method: 'PATCH', body: JSON.stringify({ workspaceId: null }),
+    });
+    await expect(harness.runtimeFetch(`/v1/threads/${thread.id}`, {
+      method: 'PATCH', body: JSON.stringify({ workspaceId: 'arbitrary-workspace' }),
+    })).rejects.toThrow('workspaceId can only be cleared');
+    // Do not drop the binding if the fallback project is also unavailable.
+    await rename(repository, `${repository}-moved`);
+    await expect(reset()).rejects.toThrow('project directory is unavailable');
+    expect((await harness.runtimeFetch(`/v1/threads/${thread.id}`)).workspaceId).toBe(thread.workspaceId);
+    await rename(`${repository}-moved`, repository);
+    await rm(path.join(harness.runtimeDataDir, 'runtime', 'worktrees', `${thread.workspaceId.slice('worktree_'.length)}.json`));
+    expect(await harness.runtimeFetch(`/v1/workspace/status?threadId=${thread.id}`))
+      .toMatchObject({ exists: false, readable: false });
+    const recovered = await reset();
+    expect(recovered.workspaceId).toBeUndefined();
+    expect(recovered.projectId).toBe(project.id);
+    expect(recovered.messages).toEqual(before.messages);
+    expect(await harness.readEventStreamContains(thread.id, before.lastSeq, '"workspaceId":null')).toBe(true);
+    expect((await harness.runtimeFetch('/v1/threads')).threads[0].workspaceId).toBeUndefined();
+    expect((await harness.runtimeFetch(`/v1/workspace/status?threadId=${thread.id}`)).project.path).toBe(await realpath(repository));
+    const capture = await createOpenAiCaptureServer();
+    try {
+      await harness.configureOpenAiProvider('recovered-workspace', capture.baseUrl);
+      await harness.runtimeFetch(`/v1/threads/${thread.id}/turns`, { method: 'POST', body: JSON.stringify({ input: 'Continue here' }) });
+      const request = await withTimeout(capture.nextBody, harness.providerCaptureTimeoutMs, 'Waiting for recovered conversation');
+      const context = flattenStringValues(request.messages).join('\n');
+      expect(context).toContain('Preserve this requirement');
+      expect(context).toContain(await realpath(repository));
+      expect(context).not.toContain(workspace.project.path);
+    } finally {
+      await capture.close();
+    }
   });
 
   it('returns 400 for malformed request JSON', async () => {

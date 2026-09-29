@@ -1,4 +1,5 @@
 import type {
+  CreateThreadInput,
   AnswerRuntimeApprovalInput,
   CoreRuntimeEvent,
   RuntimeConfiguredModelReference,
@@ -484,6 +485,7 @@ export function useRuntimeThreadState({
       claimComposerForThread: (threadId: string) => void;
       isCurrentRequest: () => boolean;
       modelSelection?: RuntimeConfiguredModelReference;
+      workspaceMode?: CreateThreadInput['workspaceMode'];
     },
   ) => {
     const isCurrentRequest = scope?.isCurrentRequest ?? (() => true);
@@ -493,6 +495,7 @@ export function useRuntimeThreadState({
       currentThread,
       language: locale,
       modelSelection: scope?.modelSelection,
+      workspaceMode: scope?.workspaceMode,
       onThreadCreated: async (thread) => {
         if (isCurrentRequest()) {
           scope?.claimComposerForThread(thread.id);

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { startThreadReview } from '../../../../../src/features/workspace/hooks/startThreadReview.js';
 
 describe('startThreadReview', () => {
-  it('creates and selects a project thread before starting a first-turn review', async () => {
+  it.each([undefined, 'worktree'] as const)('creates and selects a project thread before starting a first-turn review: %s', async (workspaceMode) => {
     const calls: string[] = [];
     const createdThread = thread('thread_new', 'project_a');
     const client = {
@@ -25,6 +25,7 @@ describe('startThreadReview', () => {
       currentThread: null,
       language: 'zh-CN',
       modelSelection: { providerId: 'provider-new', modelId: 'model-new' },
+      workspaceMode,
       onThreadCreated: async (created) => {
         calls.push(`select:${created.id}`);
       },
@@ -34,6 +35,7 @@ describe('startThreadReview', () => {
 
     expect(started).toEqual({ accepted: true, turnId: 'turn_review' });
     expect(calls).toEqual(['create:project_a', 'select:thread_new', 'review:thread_new']);
+    expect(client.createThread).toHaveBeenCalledWith({ projectId: 'project_a', ...(workspaceMode ? { workspaceMode } : {}) });
     expect(review.start).toHaveBeenCalledWith({
       threadId: 'thread_new',
       language: 'zh-CN',

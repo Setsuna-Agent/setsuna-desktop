@@ -47,6 +47,7 @@ export class RuntimeUserShellRunner {
     if (!toolHost) throw new Error('Tool host is not configured.');
     const environment = await this.options.environmentResolver.resolve({
       projectId: thread.projectId,
+      workspaceId: thread.workspaceId,
       threadId,
       threadCreatedAt: thread.createdAt,
     });

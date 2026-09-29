@@ -33,7 +33,7 @@ export async function resolveReviewWorkspace(
 ) {
   const thread = await threads.getThread(threadId);
   if (!thread) throw new FeatureOperationFailure({ code: 'THREAD_NOT_FOUND', message: 'Thread not found.', retryable: false });
-  const environment = await environments.resolve({ projectId: thread.projectId, threadId, threadCreatedAt: thread.createdAt });
+  const environment = await environments.resolve({ projectId: thread.projectId, workspaceId: thread.workspaceId, threadId, threadCreatedAt: thread.createdAt });
   const [requested, actual] = await Promise.all([realpath(workspaceRoot), realpath(environment.workspaceRoot)]);
   if (path.relative(requested, actual) !== '') {
     throw new FeatureOperationFailure({ code: 'WORKSPACE_MISMATCH', message: 'The conversation and Git panel must use the same workspace.', retryable: false });

@@ -352,6 +352,7 @@ export class RuntimeCollaborationCoordinator implements CollaborationControl {
     const child = await this.options.host.createThread({
       title: collaborationTitle(input, prompt),
       projectId: parent.projectId,
+      workspaceId: parent.workspaceId,
       parentThreadId: context.threadId,
       memoryMode: parent.memoryMode,
       modelBinding: parent.modelBinding ? { ...parent.modelBinding } : undefined,

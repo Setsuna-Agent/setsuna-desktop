@@ -45,6 +45,7 @@ export async function createRuntimeSideConversation(
     kind: 'side',
     title: 'Side conversation',
     projectId: parent.projectId,
+    workspaceId: parent.workspaceId,
     forkedFromId: parent.id,
     memoryMode: 'disabled',
     modelBinding: parent.modelBinding ? { ...parent.modelBinding } : undefined,

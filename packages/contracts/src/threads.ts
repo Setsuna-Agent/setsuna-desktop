@@ -698,6 +698,8 @@ export type RuntimeThreadSummary = {
   forkedFromId?: string;
   parentThreadId?: string;
   projectId?: string;
+  /** Backing workspace for this conversation; projectId remains its sidebar ownership. */
+  workspaceId?: string;
   title: string;
   createdAt: string;
   updatedAt: string;
@@ -757,14 +759,24 @@ export type ThreadList = {
 export type CreateThreadInput = {
   title?: string;
   projectId?: string;
+  /** Create the new chat in the project directory, or in a fresh local worktree. */
+  workspaceMode?: 'local' | 'worktree';
   forkedFromId?: string;
   parentThreadId?: string;
   memoryMode?: RuntimeThreadMemoryMode;
 };
 
+export type ForkThreadInput = {
+  /** Inclusive persisted message boundary, never a renderer display-item id. */
+  messageId: string;
+  target: 'workspace' | 'worktree';
+};
+
 export type ThreadPatch = {
   title?: string;
   archived?: boolean;
+  /** Clear the device-local worktree binding and resume in the owning project. */
+  workspaceId?: null;
   modelSelection?: RuntimeConfiguredModelReference; // Future turns only; active turns keep their snapshot.
 };
 export type ThreadMemoryModePatch = {

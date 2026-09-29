@@ -16,15 +16,28 @@ const state: DesktopReviewState = {
   })),
 };
 
-function surface(checkoutBranch: DesktopReviewBridge['checkoutBranch'], onRefresh: () => void, root = '/repo') {
+function surface(checkoutBranch: DesktopReviewBridge['checkoutBranch'], onRefresh: () => void, root = '/repo', isWorktree = false) {
   return <ReviewRendererTestHost bridge={{ checkoutBranch } as DesktopReviewBridge}>
     <ConversationGitControls variant="compact"
       activeProject={{ id: root, name: 'Project', path: root, createdAt: '', updatedAt: '' }}
-      reviewState={{ ...state, workspaceRoot: root, gitRoot: root }} reviewError={null}
+      reviewState={{ ...state, workspaceRoot: root, gitRoot: root, isWorktree }} reviewError={null}
       reviewLoading={false} onReviewRefresh={onRefresh}
     />
   </ReviewRendererTestHost>;
 }
+
+it('closes the branch picker when entering a worktree and cannot issue a checkout there', async () => {
+  const checkout = vi.fn();
+  const refresh = vi.fn();
+  const view = render(surface(checkout, refresh));
+  fireEvent.click(screen.getByRole('button', { name: '分支: main' }));
+  await screen.findByRole('textbox', { name: '搜索分支' });
+  view.rerender(surface(checkout, refresh, '/worktree', true));
+  fireEvent.click(screen.getByRole('button', { name: '分支: HEAD' }));
+  expect(screen.queryByRole('textbox', { name: '搜索分支' })).toBeNull();
+  expect(checkout).not.toHaveBeenCalled();
+  expect(refresh).not.toHaveBeenCalled();
+});
 
 it('searches branches and checks out the chosen branch, preserving Git errors for a retry', async () => {
   const checkout = vi.fn().mockRejectedValueOnce(new Error('Your local changes would be overwritten by checkout'))

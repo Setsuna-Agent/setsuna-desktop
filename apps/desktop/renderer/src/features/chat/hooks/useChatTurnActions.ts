@@ -1,5 +1,6 @@
 import {
   isRuntimeInputMessageAttachment,
+  type CreateThreadInput,
   type DesktopRuntimeClient,
   type RuntimeConfiguredModelReference,
   type RuntimeConfigState,
@@ -20,6 +21,7 @@ import { chatThreadModelSelection } from '../chatModelSelection.js';
 import type { SetChatComposerDraft } from './useChatComposerSession.js';
 
 type ChatTurnSendOptions = {
+  workspaceMode?: CreateThreadInput['workspaceMode'];
   attachments?: RuntimeMessageAttachment[];
   goalMode?: boolean;
   modelSelection?: RuntimeConfiguredModelReference;
@@ -32,6 +34,7 @@ type ChatTurnSendOptions = {
 export function useChatTurnActions({
   activeProjectId,
   activeTurnId,
+  beforeSend,
   claimComposerForThread,
   client,
   config = null,
@@ -49,6 +52,7 @@ export function useChatTurnActions({
 }: {
   activeProjectId: string | null;
   activeTurnId: string | null;
+  beforeSend?: () => Promise<boolean>;
   claimComposerForThread: (threadId: string) => void;
   client: DesktopRuntimeClient;
   config?: RuntimeConfigState | null;
@@ -88,12 +92,16 @@ export function useChatTurnActions({
       let createdThread = false;
       if (isCurrentRequest()) setError(null);
       try {
+        if (beforeSend && (!await beforeSend() || !isCurrentRequest())) return false;
         let thread = currentThread;
         if (!thread) {
           // 首条消息事件会先投影出本地 fallback；runtime 随后用当前模型生成正式标题。
           thread = createThread
             ? await createThread()
-            : await client.createThread({ projectId: activeProjectId ?? undefined });
+            : await client.createThread({
+                projectId: activeProjectId ?? undefined,
+                ...(options.workspaceMode ? { workspaceMode: options.workspaceMode } : {}),
+              });
           createdThread = true;
           claimCreatedChatThreadForSend({
             activeProjectId,
@@ -199,7 +207,7 @@ export function useChatTurnActions({
         return false;
       }
     },
-    [actionRequests, activeProjectId, activeTurnId, claimComposerForThread, client, config, createThread, currentThread, draft, expandProject, reloadThreads, setActiveTurnId, setCurrentThread, setDraft, setError, terminalTurnIdsRef],
+    [actionRequests, activeProjectId, activeTurnId, beforeSend, claimComposerForThread, client, config, createThread, currentThread, draft, expandProject, reloadThreads, setActiveTurnId, setCurrentThread, setDraft, setError, terminalTurnIdsRef],
   );
 
   const cancelActiveTurn = useCallback(async () => {

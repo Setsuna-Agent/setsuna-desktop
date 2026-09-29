@@ -4,6 +4,32 @@ import { ensureSqliteThreadSchema } from '../../../src/adapters/store/sqlite-thr
 const { DatabaseSync } = process.getBuiltinModule('node:sqlite') as typeof import('node:sqlite');
 
 describe('SQLite thread schema', () => {
+  it('restores workspace bindings from both v5 checkpoint formats without changing history', () => {
+    const database = new DatabaseSync(':memory:');
+    try {
+      database.exec(`
+        CREATE TABLE threads (id TEXT PRIMARY KEY, snapshot_json TEXT NOT NULL, snapshot_format INTEGER NOT NULL);
+        PRAGMA user_version = 5;
+      `);
+      const snapshots = [
+        { id: 'legacy', format: 1, snapshot: { workspaceId: 'worktree_legacy', messages: [] } },
+        { id: 'partitioned', format: 2, snapshot: { thread: { workspaceId: 'worktree_partitioned' }, messageCount: 85 } },
+        { id: 'regular', format: 2, snapshot: { thread: { projectId: 'original' }, messageCount: 1 } },
+      ];
+      for (const { id, format, snapshot } of snapshots) {
+        database.prepare('INSERT INTO threads VALUES (?, ?, ?)').run(id, JSON.stringify(snapshot), format);
+      }
+      ensureSqliteThreadSchema(database);
+      ensureSqliteThreadSchema(database);
+      for (const { id, snapshot } of snapshots) {
+        expect(database.prepare('SELECT workspace_id, snapshot_json FROM threads WHERE id = ?').get(id))
+          .toMatchObject({ workspace_id: id === 'regular' ? null : `worktree_${id}`, snapshot_json: JSON.stringify(snapshot) });
+      }
+    } finally {
+      database.close();
+    }
+  });
+
   it('upgrades v3 without rewriting thread history and cascades cached projections on deletion', () => {
     const database = new DatabaseSync(':memory:');
     try {
@@ -30,7 +56,7 @@ describe('SQLite thread schema', () => {
         DELETE FROM threads WHERE id = 'thread_1';
       `);
       expect(database.prepare('SELECT * FROM feature_projection_checkpoints').all()).toEqual([]);
-      expect(database.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 5 });
+      expect(database.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 6 });
     } finally {
       database.close();
     }
@@ -40,7 +66,7 @@ describe('SQLite thread schema', () => {
     const database = new DatabaseSync(':memory:');
     try {
       database.exec(`
-        CREATE TABLE threads (id TEXT PRIMARY KEY);
+        CREATE TABLE threads (id TEXT PRIMARY KEY, snapshot_json TEXT);
         CREATE TABLE runtime_events (
           thread_id TEXT NOT NULL,
           seq INTEGER NOT NULL,
@@ -53,7 +79,7 @@ describe('SQLite thread schema', () => {
 
       ensureSqliteThreadSchema(database);
 
-      expect(database.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 5 });
+      expect(database.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 6 });
       const columns = database.prepare('PRAGMA table_info(threads)').all()
         .map((row) => (row as { name: string }).name);
       expect(columns).toEqual(expect.arrayContaining([

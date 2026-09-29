@@ -63,6 +63,7 @@ export class RuntimeHookCoordinator {
     if (!runner && !this.options.extensions) return { stopped: false, contextMessages: [] };
     const environment = await this.options.environmentResolver.resolve({
       projectId: thread.projectId,
+      workspaceId: thread.workspaceId,
       threadId: thread.id,
       threadCreatedAt: thread.createdAt,
     });
@@ -193,6 +194,7 @@ export class RuntimeHookCoordinator {
     if (!runner && !this.options.extensions) return { shouldStop: false };
     const environment = await this.options.environmentResolver.resolve({
       projectId: thread.projectId,
+      workspaceId: thread.workspaceId,
       threadId: thread.id,
       threadCreatedAt: thread.createdAt,
     });

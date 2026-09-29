@@ -1,6 +1,5 @@
 import { Button as ModeButton, Dropdown, Dialog } from '@setsuna-desktop/renderer-ui';
 import {
-  ChevronDown,
   Folder,
   Globe2,
   Hand,
@@ -119,7 +118,6 @@ export function RuntimeAccessModeMenu({
           >
             <ActiveIcon className="runtime-access-mode-trigger__icon" size={13} />
             <span className="runtime-access-mode-trigger__label">{activeOption.label}</span>
-            <ChevronDown className="runtime-access-mode-trigger__arrow" size={12} />
           </ModeButton>
         </Dropdown>
       )}
