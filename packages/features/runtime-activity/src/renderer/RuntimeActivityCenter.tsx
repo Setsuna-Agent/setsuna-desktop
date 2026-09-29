@@ -90,7 +90,7 @@ export function RuntimeActivityCenter({
 
   return (
     <Dialog title={t('feature.runtimeActivity.title')} description={t('feature.runtimeActivity.description')}
-      width={760} className="runtime-activity-dialog" onClose={closeAndRestoreFocus}
+      width={680} className="runtime-activity-dialog" onClose={closeAndRestoreFocus}
       footer={error && snapshot ? (
         <div className="runtime-activity-dialog__footer">
           <span className="runtime-activity-dialog__status" role="status" title={error}>

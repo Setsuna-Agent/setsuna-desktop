@@ -108,57 +108,66 @@
   }
 }
 
-.runtime-activity-dialog {
-  height: min(530px, calc(100vh - 64px));
-  min-height: 360px;
+.sd-dialog.runtime-activity-dialog {
+  --sd-dialog-gutter: 16px;
+  height: min(400px, calc(var(--app-scaled-viewport-height) - 48px));
+}
+
+.runtime-activity-dialog > .sd-dialog__header {
+  padding-top: 16px;
+  padding-bottom: 12px;
+}
+
+.runtime-activity-dialog > .sd-dialog__close {
+  top: 12px;
+  right: 12px;
+  border-radius: var(--app-radius-full);
+}
+
+.runtime-activity-dialog > .sd-dialog__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+  padding-bottom: var(--sd-dialog-gutter);
 }
 
 .runtime-activity-tabs {
   display: flex;
-  align-items: flex-end;
-  gap: 20px;
-  height: 39px;
-  padding: 0 18px;
-  border-bottom: 1px solid var(--app-border);
+  flex-shrink: 0;
+  align-items: center;
+  align-self: flex-start;
+  gap: 4px;
+  padding: 3px;
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-muted);
 }
 
 .runtime-activity-tabs > button {
-  position: relative;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 7px;
-  height: 39px;
-  padding: 0 2px;
+  height: 30px;
+  padding: 0 12px;
   border: 0;
+  border-radius: var(--app-radius-full);
   color: var(--app-text-muted);
   background: transparent;
   font-size: 12px;
   font-weight: 500;
 }
 
-.runtime-activity-tabs > button::after {
-  position: absolute;
-  right: 0;
-  bottom: -1px;
-  left: 0;
-  height: 2px;
-  border-radius: 999px 999px 0 0;
-  background: transparent;
-  content: '';
-}
-
-.runtime-activity-tabs > button:hover,
-.runtime-activity-tabs > button.is-active {
+.runtime-activity-tabs > button:hover {
   color: var(--app-text);
 }
 
-.runtime-activity-tabs > button.is-active::after {
-  background: var(--app-primary);
-}
-
-.runtime-activity-tabs > button:focus-visible {
-  outline: 0;
-  box-shadow: var(--app-focus-ring);
+.runtime-activity-tabs > button.is-active,
+.runtime-activity-tabs > button.is-active:is(:hover, :active) {
+  color: var(--app-text);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-card);
 }
 
 .runtime-activity-tabs__count {
@@ -178,14 +187,18 @@
 
 .runtime-activity-tabs > button.is-active > .runtime-activity-tabs__count {
   color: var(--app-text);
-  background: var(--app-accent-soft);
+  background: var(--app-surface-muted);
 }
 
 .runtime-activity-dialog__body {
+  /* Fill the remaining dialog space so empty states center and only the list scrolls. */
+  flex: 1;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-surface-subtle);
 }
 
 .runtime-activity-table {
@@ -194,6 +207,7 @@
   width: 100%;
   height: 100%;
   min-height: 0;
+  background: var(--app-surface);
 }
 
 .runtime-activity-table__header,
@@ -206,10 +220,10 @@
 
 .runtime-activity-table__header {
   min-height: 34px;
-  padding: 0 20px;
+  padding: 0 16px;
   border-bottom: 1px solid var(--app-border);
   color: var(--app-text-muted);
-  background: var(--app-surface);
+  background: var(--app-surface-subtle);
   font-size: 11px;
   font-weight: 500;
 }
@@ -224,7 +238,7 @@
 
 .runtime-activity-table__body {
   min-height: 0;
-  padding: 7px 8px;
+  padding: 6px;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -234,8 +248,8 @@
   width: 100%;
   min-width: 0;
   min-height: 48px;
-  padding: 5px 12px;
-  border-radius: var(--app-radius-md);
+  padding: 5px 10px;
+  border-radius: var(--app-radius-lg);
   color: var(--app-text);
   background: transparent;
   text-align: left;
@@ -260,7 +274,7 @@
   width: 28px;
   height: 28px;
   border: 1px solid color-mix(in srgb, var(--app-border) 86%, transparent);
-  border-radius: var(--app-radius-sm);
+  border-radius: var(--app-radius-lg);
   color: var(--app-text-muted);
   background: var(--app-surface);
 }
@@ -335,7 +349,7 @@
   height: 26px;
   padding: 0 7px;
   border: 1px solid transparent;
-  border-radius: var(--app-radius-sm);
+  border-radius: var(--app-radius-full);
   color: var(--app-text-muted);
   background: transparent;
   font-size: 11px;
@@ -362,12 +376,13 @@
   display: flex;
   width: 100%;
   height: 100%;
-  min-height: 180px;
+  min-height: 0;
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  gap: 7px;
-  padding: 28px;
+  gap: 8px;
+  padding: 20px;
+  overflow-y: auto;
   color: var(--app-text-muted);
   text-align: center;
 }
@@ -407,11 +422,6 @@
 }
 
 @media (max-width: 620px) {
-
-  .runtime-activity-dialog {
-    height: min(530px, calc(100vh - 32px));
-  }
-
   .runtime-activity-table__header,
   .runtime-activity-row {
     grid-template-columns: minmax(0, 1fr) 104px 58px;
@@ -423,5 +433,3 @@
     display: none;
   }
 }
-
-.runtime-activity-dialog > .sd-dialog__body { display: flex; flex-direction: column; flex: 1; }
