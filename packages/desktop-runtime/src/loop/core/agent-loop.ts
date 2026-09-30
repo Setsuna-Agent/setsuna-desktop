@@ -213,8 +213,8 @@ export class AgentLoop {
       threadStore: options.threadStore,
       turnTasks: this.turnTasks,
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
-      createMailboxTriggeredRun: async (threadId, thread, turnId, content) => {
-        const run = await this.turnRuns.createMailboxTriggered(threadId, thread, turnId, content);
+      createMailboxTriggeredRun: async (threadId, thread, turnId, content, execution) => {
+        const run = await this.turnRuns.createMailboxTriggered(threadId, thread, turnId, content, execution);
         this.observeRun(threadId, run.turnId, 'regular', run.done);
         return run;
       },
@@ -366,7 +366,9 @@ export class AgentLoop {
    * @param threadId 目标线程 ID。
    * @param input 用户输入、附件、skill 选择和客户端消息 ID。
    */
-  async startTurn(threadId: string, input: SendTurnInput): Promise<StartTurnResponse> {
+  async startTurn(threadId: string, input: SendTurnInput, execution: { unattended?: boolean } = {}): Promise<StartTurnResponse> {
+    // Only trusted runtime callers can supply execution policy; it is never parsed from HTTP input.
+    if (execution.unattended) return this.startPreparedTurn(threadId, 'regular', () => this.turnRuns.createRegular(threadId, input, execution));
     return this.withThreadMutation(threadId, async () => {
       const active = this.turnTasks.activeForThread(threadId);
       const hasQueuedInput = await this.queuedTurns.hasPending(threadId);
@@ -401,8 +403,9 @@ export class AgentLoop {
   async startSubagentTurn(
     threadId: string,
     input: { prompt: string; title?: string },
+    execution: { unattended?: boolean } = {},
   ): Promise<StartTurnResponse> {
-    return this.startPreparedTurn(threadId, 'subagent', () => this.turnRuns.createSubagent(threadId, input));
+    return this.startPreparedTurn(threadId, 'subagent', () => this.turnRuns.createSubagent(threadId, input, execution));
   }
 
   /**
@@ -583,9 +586,7 @@ export class AgentLoop {
       threadStore: this.options.threadStore,
       eventWriter: this.eventWriter,
       activeTask: (threadId) => this.turnTasks.activeForThread(threadId),
-      cancelTurn: (threadId, turnId) => this.cancelTurn(threadId, turnId),
-      deliverMailbox: (threadId, input) => this.deliverMailboxInput(threadId, input),
-      startTurn: (threadId, input) => this.startSubagentTurn(threadId, input),
+      turns: this,
     });
   }
 
@@ -724,8 +725,8 @@ export class AgentLoop {
    * @param threadId 目标线程 ID。
    * @param input mailbox 内容和可选来源。
    */
-  async deliverMailboxInput(threadId: string, input: DeliverMailboxInput): Promise<DeliverMailboxResponse> {
-    return this.withThreadMutation(threadId, () => this.turnInputs.deliverMailbox(threadId, input));
+  async deliverMailboxInput(threadId: string, input: DeliverMailboxInput, execution: { unattended?: boolean } = {}): Promise<DeliverMailboxResponse> {
+    return this.withThreadMutation(threadId, () => this.turnInputs.deliverMailbox(threadId, input, execution));
   }
 
   async runUserShellCommand(threadId: string, command: string, activeTurnId: string | null = null): Promise<void> {

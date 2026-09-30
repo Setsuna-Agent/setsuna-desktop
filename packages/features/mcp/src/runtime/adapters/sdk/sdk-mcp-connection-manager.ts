@@ -100,6 +100,7 @@ type PendingUrlElicitation = {
 };
 
 type McpConnectionContext = {
+  unattended?: boolean;
   scopeId: string;
   threadId?: string;
   turnId?: string;
@@ -807,6 +808,7 @@ function elicitationContext(
     turnId: context.turnId,
     toolCallId: context.toolCallId,
     toolName: context.toolName ?? toolName,
+    ...(context.unattended ? { unattended: true } : {}),
     ...(context.signal ? { signal: context.signal } : {}),
   };
 }

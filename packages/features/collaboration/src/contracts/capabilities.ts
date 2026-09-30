@@ -27,7 +27,10 @@ export type CollaborationSubagentTurnInput = Readonly<{
   title?: string;
 }>;
 
-export type CollaborationToolExecutionContext = Readonly<{
+/** Trusted turn policy, never read from model-supplied collaboration arguments. */
+export type CollaborationTurnExecutionPolicy = Readonly<{ unattended?: boolean }>;
+
+export type CollaborationToolExecutionContext = CollaborationTurnExecutionPolicy & Readonly<{
   signal: AbortSignal;
   threadId: string;
   turnId: string;
@@ -62,8 +65,8 @@ export interface CollaborationRuntimeHost {
     fromThreadId: string;
     toAgentId: string;
     triggerTurn: boolean;
-  }>): Promise<Readonly<{ queued?: boolean; turnId: string | null }>>;
-  startTurn(threadId: string, input: CollaborationSubagentTurnInput): Promise<Readonly<{ turnId: string }>>;
+  }>, execution?: CollaborationTurnExecutionPolicy): Promise<Readonly<{ queued?: boolean; turnId: string | null }>>;
+  startTurn(threadId: string, input: CollaborationSubagentTurnInput, execution?: CollaborationTurnExecutionPolicy): Promise<Readonly<{ turnId: string }>>;
   appendEvents(
     threadId: string,
     events: readonly PendingStoredThreadEvent[],

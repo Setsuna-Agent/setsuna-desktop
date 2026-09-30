@@ -1,6 +1,6 @@
 import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
 
-/** Primary conversations exclude transient side chats and child-agent threads. */
+/** Feature-owned, transient and child-agent chats have their own navigation. */
 export function isPrimaryConversationThread(thread: RuntimeThreadSummary): boolean {
-  return thread.kind !== 'side' && !thread.parentThreadId;
+  return !thread.featureId && thread.kind !== 'side' && !thread.parentThreadId;
 }

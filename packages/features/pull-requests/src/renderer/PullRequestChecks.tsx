@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import type { PullRequestCheck, PullRequestDetail } from '../contracts/index.js';
 import type { PullRequestsClient } from './client.js';
 import { errorText, usePrText, usePullRequestsHost } from './context.js';
-import { CheckState, Loading } from './status.js';
+import { CheckState } from './status.js';
+import { PullRequestSkeleton } from './loading/PullRequestSkeleton.js';
 
 export function PullRequestChecks({ client, detail, revision }: { client: PullRequestsClient; detail: PullRequestDetail; revision: number }) {
   const t = usePrText();
@@ -47,6 +48,7 @@ export function PullRequestChecks({ client, detail, revision }: { client: PullRe
         {check.summary ? <div className="pr-markdown"><Markdown content={check.summary} baseUrl={detail.url} /></div> : null}
       </div>
     </DetailSection>)}
-    {pending ? <Loading /> : !items.length && !error ? <p className="pr-empty">{t('noChecks')}</p> : null}
+    {pending && !items.length ? <PullRequestSkeleton kind="checks" label={t('loading')} /> : null}
+    {!pending && !items.length && !error ? <p className="pr-empty">{t('noChecks')}</p> : null}
   </section>;
 }

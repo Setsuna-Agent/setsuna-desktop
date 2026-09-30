@@ -203,7 +203,7 @@ export class SqliteThreadStore implements ThreadStore {
     await this.ensureReady();
     this.assertOwnership();
     const rows = this.requireDatabase().prepare(`
-      SELECT id, kind, active_turn_id, forked_from_id, parent_thread_id, project_id, workspace_id, title,
+      SELECT id, kind, feature_id, origin_json, active_turn_id, forked_from_id, parent_thread_id, project_id, workspace_id, title,
              created_at, updated_at, archived, memory_mode, git_info_json, goal_json,
              message_count, last_message_preview
       FROM threads ORDER BY created_at DESC, id ASC -- 创建时间稳定排序；按 updated_at 排序会被并行对话活动跳乱；依赖活跃顺序的消费方自行显式排序
@@ -228,6 +228,7 @@ export class SqliteThreadStore implements ThreadStore {
     const parentMap = new Map(summaries.map((thread) => [thread.id, thread.parentThreadId]));
     return summaries
       .filter((thread) => (query.includeSide || thread.kind !== 'side') && (query.includeArchived || !thread.archived))
+      .filter((thread) => query.includeFeatures || !thread.featureId)
       .filter((thread) => !query.parentThreadId || thread.parentThreadId === query.parentThreadId)
       .filter((thread) => !query.ancestorThreadId || threadHasAncestor(thread.id, query.ancestorThreadId, parentMap))
       .filter((thread) => {
@@ -317,6 +318,8 @@ export class SqliteThreadStore implements ThreadStore {
       createdAt: now,
       payload: {
         title: initial.title,
+        featureId: optionalSafeRuntimeId(input.featureId, 'Feature id'),
+        origin: input.origin ? { ...input.origin } : undefined,
         workspaceId: optionalSafeRuntimeId(input.workspaceId, 'Workspace id'),
         modelBinding: input.modelBinding ? { ...input.modelBinding } : undefined,
       },
@@ -355,6 +358,9 @@ export class SqliteThreadStore implements ThreadStore {
       createdAt: this.clock.now().toISOString(),
       payload: {
         title: patch.title?.trim() || undefined,
+        featureId: patch.featureId === null ? null : optionalSafeRuntimeId(patch.featureId, 'Feature id'),
+        origin: patch.origin ? { ...patch.origin } : undefined,
+        projectId: patch.projectId === null ? null : optionalSafeRuntimeId(patch.projectId, 'Project id'),
         archived: patch.archived,
         workspaceId: patch.workspaceId,
         modelBinding: patch.modelBinding ? { ...patch.modelBinding } : undefined,

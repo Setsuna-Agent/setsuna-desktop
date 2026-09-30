@@ -13,7 +13,7 @@ export function createSideConversationRuntimeHost(
     flushThread: (threadId) => runtime.eventWriter.flushThread(threadId),
     listThreads: async () => {
       const [threads, retained] = await Promise.all([
-        runtime.threadStore.listThreads({ includeArchived: true, includeSide: true }),
+        runtime.threadStore.listThreads({ includeArchived: true, includeSide: true, includeFeatures: true }),
         runtime.reviewRuntimeHost.retainedWorkspaceTaskThreadIds(),
       ]);
       // Review's hidden task transcripts have a durable owner; only transient

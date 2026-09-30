@@ -21,7 +21,7 @@ export async function requireRuntimeThread(runtime: RuntimeFactory, threadId: st
 
 export async function settleStaleRuntimeTurns(runtime: RuntimeFactory): Promise<void> {
   // Hidden workspace tasks can survive restart, but their running turns cannot.
-  const summaries = await runtime.threadStore.listThreads({ includeArchived: true, includeSide: true });
+  const summaries = await runtime.threadStore.listThreads({ includeArchived: true, includeSide: true, includeFeatures: true });
   for (const summary of summaries) {
     const turnIds = await runtime.threadStore.getActiveTurnIds(summary.id);
     for (const turnId of turnIds) {

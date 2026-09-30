@@ -8,7 +8,7 @@ import {
   type RuntimeReviewModeNotice,
   type RuntimeToolRun,
 } from '@setsuna-desktop/contracts';
-import { BookOpen, Goal as GoalIcon, MessageSquare, ShieldCheck, Users } from 'lucide-react';
+import { BookOpen, MessageSquare } from 'lucide-react';
 import { memo, useMemo, type FormEvent, type ReactNode } from 'react';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { Checkbox } from '../../../shared/ui/primitives.js';
@@ -16,7 +16,6 @@ import type { DesktopReviewOpenHandler } from '../../workspace/model.js';
 import type { RuntimePluginUse } from '../plugin-usage/runtimePluginUsage.js';
 import { RuntimePluginUses } from '../plugin-usage/RuntimePluginUses.js';
 import { MarkdownRenderer } from '../markdown/MarkdownRenderer.js';
-import { SkillReferenceText } from '../skills/SkillReference.js';
 import { fileChangeSummaryFromRuns, fileChangeToolCallIds } from '../tool-runs/runtimeFileChanges.js';
 import {
   resolveRuntimeFeatureToolResult,
@@ -45,6 +44,7 @@ import {
 import { memoryCitationEntriesFromMessages } from './chatMemoryCitations.js';
 import { visibleMarkdownContent } from './chatThinkingContent.js';
 import { ChatMessageAttachments } from './ChatMessageAttachments.js';
+import { UserMessageContent } from './messages/ChatUserMessageContent.js';
 import { ChatErrorMessage } from './ChatErrorMessage.js';
 import { ChatMessageFooter } from './ChatMessageFooter.js';
 import {
@@ -77,6 +77,7 @@ export const MessageItem = memo(function MessageItem({
   editingSubmitting,
   expandedWorkHistoryItemIds,
   item,
+  pending = false,
   onAnswerApproval,
   onCancelEdit,
   onFileChangesAction,
@@ -101,6 +102,7 @@ export const MessageItem = memo(function MessageItem({
   editingSubmitting: boolean;
   expandedWorkHistoryItemIds: Set<string>;
   item: ChatDisplayItem;
+  pending?: boolean;
   onAnswerApproval: AnswerApprovalHandler;
   onCancelEdit: () => void;
   onFileChangesAction?: (toolCallIds: string[], action: WorkspaceFileChangeAction) => void | Promise<void | ThreadFileChangesResult>;
@@ -172,7 +174,7 @@ export const MessageItem = memo(function MessageItem({
         <MessageBubble
           className={`chat-user-bubble ${hasAttachments ? 'chat-user-bubble--with-attachments' : ''}`}
           content={<UserMessageContent message={message} streaming={streaming} />}
-          footer={<ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} align="end" message={message} forkMessageId={steered ? null : message.id} onDelete={steered || !onStartDelete ? undefined : () => onStartDelete(item.id)} onEdit={steered || !onStartEdit || message.inputKind === 'goal' || message.inputKind === 'review' || message.inputKind === 'subagent_task' ? undefined : () => onStartEdit(message)} timePosition={steered ? 'none' : 'before-actions'} />}
+          footer={pending ? undefined : <ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} align="end" message={message} forkMessageId={steered ? null : message.id} onDelete={steered || !onStartDelete ? undefined : () => onStartDelete(item.id)} onEdit={steered || !onStartEdit || message.inputKind === 'goal' || message.inputKind === 'review' || message.inputKind === 'subagent_task' ? undefined : () => onStartEdit(message)} timePosition={steered ? 'none' : 'before-actions'} />}
           align="end"
           variant="soft"
         />
@@ -182,57 +184,6 @@ export const MessageItem = memo(function MessageItem({
     </article>
   );
 });
-
-function UserMessageContent({
-  message,
-  streaming,
-}: {
-  message: RuntimeMessage;
-  streaming: boolean;
-}) {
-  const hasSemanticKind = message.inputKind === 'goal'
-    || message.inputKind === 'review'
-    || message.inputKind === 'subagent_task';
-  return (
-    <div className="chat-user-message-content">
-      {message.attachments?.length ? (
-        <ChatMessageAttachments attachments={message.attachments} />
-      ) : null}
-      {message.content || streaming || hasSemanticKind ? (
-        <div className="chat-user-message-content__text">
-          <UserMessageKindBadge kind={message.inputKind} />
-          {message.content || streaming
-            ? (
-                <span className="chat-user-message-content__body">
-                  <SkillReferenceText
-                    content={message.content || '...'}
-                    skillReferences={message.skillReferences}
-                  />
-                </span>
-              )
-            : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function UserMessageKindBadge({ kind }: { kind: RuntimeMessage['inputKind'] }) {
-  const { t } = useI18n();
-  if (kind !== 'goal' && kind !== 'review' && kind !== 'subagent_task') return null;
-  const label = t(kind === 'goal'
-    ? 'chat.message.kind.goal'
-    : kind === 'review'
-      ? 'chat.message.kind.review'
-      : 'chat.message.kind.subagentTask');
-  const Icon = kind === 'goal' ? GoalIcon : kind === 'review' ? ShieldCheck : Users;
-  return (
-    <span className={`chat-user-message-kind chat-user-message-kind--${kind}`} aria-label={label}>
-      <Icon size={13} strokeWidth={1.9} aria-hidden="true" />
-      <span>{label}</span>
-    </span>
-  );
-}
 
 function AssistantRunItem({
   activeAssistantItemId,

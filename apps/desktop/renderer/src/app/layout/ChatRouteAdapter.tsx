@@ -14,6 +14,7 @@ import type {
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { ChatForkProvider } from '../../features/chat/fork/ChatForkAction.js';
 import { useChatStarterLocation } from '../../features/chat/hooks/useChatStarterLocation.js';
+import type { ChatStarterPresentation } from '../../features/chat/conversation/chat-workspace-types.js';
 import { AppChatSurface } from './AppChatSurface.js';
 import type { AppRouteContentProps } from './AppRouteContent.js';
 import type { ChatConversationSurfaceModel } from './ChatConversationSurface.js';
@@ -32,9 +33,10 @@ type ChatRouteAdapterProps = Omit<
   | 'selectedCapabilitiesPluginId'
   | 'setActiveView'
   | 'settingsInitialSection'
->;
+> & { starterPresentation?: ChatStarterPresentation };
 
 export function ChatRouteAdapter({
+  starterPresentation,
   starterProjectSelection,
   activeProject,
   activeWorkspace,
@@ -167,6 +169,7 @@ export function ChatRouteAdapter({
     },
   });
   const conversation: ChatConversationSurfaceModel = {
+    starterPresentation,
     starterProjectSelection,
     starterLocationSelection: starterLocation.selection,
     activeTurnId: runtime.activeTurnId,

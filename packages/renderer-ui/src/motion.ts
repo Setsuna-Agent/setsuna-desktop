@@ -1,6 +1,8 @@
 // Adapted from beUI (MIT): https://beui.dev
 // Shared spring settings for controls and surfaces.
 
+export const EASE_OUT = [0.16, 1, 0.3, 1] as const;
+
 /** Press feedback on buttons and other tappable surfaces. */
 export const SPRING_PRESS = {
   type: "spring",

@@ -105,7 +105,8 @@
     "remark-math": "^6.0.0",
     "remend": "^1.3.0",
     "sharp": "0.35.4",
-    "undici": "7.29.0"
+    "undici": "7.29.0",
+    "@setsuna-desktop/feature-automation": "workspace:*"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.2",

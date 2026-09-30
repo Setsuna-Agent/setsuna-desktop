@@ -10,6 +10,7 @@ import { useCallback, useState, type Dispatch, type SetStateAction } from 'react
 import { useLatestRequestGuard } from '../../shared/hooks/useLatestRequestGuard.js';
 import type { MainView } from '../types.js';
 import { isThreadDeletionCancelled } from '../../services/runtime-client/runtimeClientErrors.js';
+import { isPrimaryConversationThread } from '../../services/runtime-client/runtimeThreadRelations.js';
 
 type DesktopNavigationOptions = {
   activeProjectId: string | null;
@@ -136,14 +137,14 @@ export function useDesktopNavigation({
     [confirmDiscardProjectFile, currentWorkspaceId, expandProject, navigationRequests, resetProjectWorkspaceState, setActiveProjectId, setActiveView, setCurrentThread],
   );
 
-  const selectThread = useCallback(
-    async (threadId: string) => {
-      if (!await confirmDiscardProjectFile()) return;
+  const selectThreadInView = useCallback(
+    async (threadId: string, view: MainView): Promise<boolean> => {
+      if (!await confirmDiscardProjectFile()) return false;
       const isLatest = navigationRequests.begin();
-      setActiveView('chat');
+      setActiveView(view);
       setThreadActionMenuId(null);
       const thread = await client.getThread(threadId);
-      if (!isLatest()) return;
+      if (!isLatest()) return false;
       if ((thread.workspaceId ?? thread.projectId ?? thread.id) !== currentWorkspaceId) resetProjectWorkspaceState();
       if (thread.projectId) {
         setActiveProjectId(thread.projectId);
@@ -152,9 +153,14 @@ export function useDesktopNavigation({
         setActiveProjectId(null);
       }
       setCurrentThread(thread);
+      return true;
     },
     [client, confirmDiscardProjectFile, currentWorkspaceId, expandProject, navigationRequests, resetProjectWorkspaceState, setActiveProjectId, setActiveView, setCurrentThread],
   );
+
+  const selectThread = useCallback(async (threadId: string) => {
+    await selectThreadInView(threadId, 'chat');
+  }, [selectThreadInView]);
 
   const forkThreadFromId = useCallback(async (threadId: string, input: ForkThreadInput) => {
     const isLatest = navigationRequests.begin();
@@ -262,7 +268,7 @@ export function useDesktopNavigation({
     setSessionsCollapsed(false);
     setActiveProjectId(null);
     if (currentProjectId) resetProjectWorkspaceState();
-    if (!currentThread?.projectId) return;
+    if (!currentThread || (!currentThread.projectId && isPrimaryConversationThread(currentThread))) return;
     const fallback = globalThreads[0];
     if (!fallback) {
       setCurrentThread(null);
@@ -270,7 +276,7 @@ export function useDesktopNavigation({
     }
     const thread = await client.getThread(fallback.id);
     if (isLatest()) setCurrentThread(thread);
-  }, [client, confirmDiscardProjectFile, currentProjectId, currentThread?.projectId, globalThreads, navigationRequests, resetProjectWorkspaceState, setActiveProjectId, setActiveView, setCurrentThread]);
+  }, [client, confirmDiscardProjectFile, currentProjectId, currentThread, globalThreads, navigationRequests, resetProjectWorkspaceState, setActiveProjectId, setActiveView, setCurrentThread]);
 
   const toggleProjectCollapsed = useCallback((projectId: string) => {
     setForceExpandedProjectIds((current) => {
@@ -417,6 +423,7 @@ export function useDesktopNavigation({
     saveProject,
     selectNewThreadProject,
     selectThread,
+    selectThreadInView,
     forkThread,
     forkThreadFromId,
     sessionsCollapsed,

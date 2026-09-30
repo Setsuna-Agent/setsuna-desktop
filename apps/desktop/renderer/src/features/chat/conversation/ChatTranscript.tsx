@@ -55,6 +55,7 @@ import {
 export type ChatTranscriptMessageHistory = ReturnType<typeof useThreadMessageHistory>;
 
 const emptyRuntimePluginUses: RuntimePluginUse[] = [];
+const emptyPendingMessages: RuntimeMessage[] = [];
 
 type ChatTranscriptMutationProps =
   | {
@@ -80,6 +81,7 @@ type ChatTranscriptProps = ChatTranscriptMutationProps & {
   currentThread: RuntimeThread | null;
   messageHistory: ChatTranscriptMessageHistory;
   messages: RuntimeMessage[];
+  pendingMessages?: RuntimeMessage[];
   onAnswerApproval: AnswerApprovalHandler;
   onFileChangesAction?: (toolCallIds: string[], action: WorkspaceFileChangeAction) => void | Promise<void | ThreadFileChangesResult>;
   onOpenFileReview?: DesktopReviewOpenHandler;
@@ -108,6 +110,7 @@ export function ChatTranscript({
   currentThread,
   messageHistory,
   messages,
+  pendingMessages = emptyPendingMessages,
   onAnswerApproval,
   onDeleteMessages,
   onDeleteModeChange,
@@ -135,15 +138,18 @@ export function ChatTranscript({
     items: [],
     threadId: null,
   });
+  const pendingMessageIds = useMemo(() => new Set(pendingMessages.map((message) => message.id)), [pendingMessages]);
   const displayItems = useMemo(() => {
     const threadId = currentThread?.id ?? null;
-    const next = createChatDisplayItems(messages);
+    const next = createChatDisplayItems(pendingMessages.length ? [...messages, ...pendingMessages] : messages);
     const items = displayItemsRef.current.threadId === threadId
       ? reconcileChatDisplayItems(displayItemsRef.current.items, next)
       : next;
     displayItemsRef.current = { items, threadId };
     return items;
-  }, [currentThread?.id, messages]);
+  }, [currentThread?.id, messages, pendingMessages]);
+  // Pending submissions cannot participate in operations against persisted message IDs.
+  const mutableDisplayItems = useMemo(() => displayItems.filter((item) => !pendingMessageIds.has(item.id)), [displayItems, pendingMessageIds]);
   const historyScrollAnchorRef = useRef<{ height: number; top: number } | null>(null);
   const pluginUsesByTurnIdRef = useRef<ReturnType<typeof runtimePluginUsesByTurn>>(new Map());
   const pluginUsesByTurnId = useMemo(
@@ -181,7 +187,7 @@ export function ChatTranscript({
     activeTurnId,
     composerKey: readOnly ? `subagent-readonly:${currentThread?.id ?? 'none'}` : 'chat-transcript',
     currentThreadId: currentThread?.id,
-    displayItems,
+    displayItems: mutableDisplayItems,
     onDeleteMessages,
     onEditUserMessage,
     readOnly,
@@ -331,12 +337,13 @@ export function ChatTranscript({
                           activeTurnId={activeTurnId}
                           assistantItemIdByTurnId={assistantItemIdByTurnId}
                           contextCompactionRunning={contextCompactionRunning}
-                          deleteMode={!readOnly && deleteMode}
+                          deleteMode={!readOnly && deleteMode && !pendingMessageIds.has(item.id)}
                           editingDraft={editingDraft}
                           editingMessageId={readOnly ? null : editingMessageId}
                           editingSubmitting={editingSubmitting}
                           expandedWorkHistoryItemIds={expandedWorkHistoryItemIds}
                           item={item}
+                          pending={pendingMessageIds.has(item.id)}
                           onAnswerApproval={onAnswerApproval}
                           onCancelEdit={cancelEditingMessage}
                           onFileChangesAction={readOnly ? undefined : onFileChangesAction}

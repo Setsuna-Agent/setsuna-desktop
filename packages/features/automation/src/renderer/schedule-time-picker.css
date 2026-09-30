@@ -1,0 +1,66 @@
+.automation-time-picker {
+  width: min(300px, 60%);
+  justify-content: flex-start;
+  gap: 10px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.automation-time-picker > span {
+  flex: 1;
+  text-align: left;
+}
+
+.automation-time-picker > svg {
+  flex-shrink: 0;
+  color: var(--app-text-muted);
+}
+
+.automation-time-picker__popover {
+  width: 280px;
+  max-width: calc(100vw - 32px);
+  padding: 12px;
+}
+
+.automation-time-picker__popover--date {
+  width: 400px;
+}
+
+.automation-time-picker__panel {
+  display: grid;
+  gap: 12px;
+}
+
+.automation-time-picker__group {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface-subtle);
+}
+
+.automation-time-picker__column {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+
+.automation-time-picker__column > span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--app-text-muted);
+  font-size: 11px;
+}
+
+.automation-time-picker__separator {
+  margin-top: 18px;
+  color: var(--app-text-muted);
+  font-size: 16px;
+}
+
+.automation-time-picker__panel > footer {
+  display: flex;
+  justify-content: flex-end;
+}

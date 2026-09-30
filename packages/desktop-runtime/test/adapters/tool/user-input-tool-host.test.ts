@@ -10,6 +10,15 @@ import type { RuntimeToolExecutionContext } from '../../../src/ports/tool-host.j
 describe('user input tool host', () => {
   afterEach(() => vi.useRealTimers());
 
+  it('declines stale form calls during unattended execution without creating an approval', async () => {
+    const fixture = createFixture();
+    const context = { ...executionContext(), unattended: true };
+    await expect(fixture.host.listTools(context)).resolves.toEqual([]);
+    await expect(fixture.host.runTool(REQUEST_USER_INPUT_TOOL_NAME, { message: 'Choose a time', fields: [] }, context)).resolves.toMatchObject({ data: { action: 'decline' } });
+    expect(fixture.append).not.toHaveBeenCalled();
+    await expect(fixture.approvals.listApprovals()).resolves.toEqual({ approvals: [] });
+  });
+
   it('declares explicit string types for enum-constrained tool inputs', async () => {
     const fixture = createFixture();
 

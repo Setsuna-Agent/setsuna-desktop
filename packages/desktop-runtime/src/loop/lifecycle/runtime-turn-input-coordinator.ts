@@ -41,7 +41,7 @@ type RuntimeTurnInputCoordinatorOptions = {
   threadStore: ThreadStore;
   turnTasks: RuntimeTurnTaskRegistry;
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
-  createMailboxTriggeredRun(threadId: string, thread: RuntimeThread, turnId: string, content: string): Promise<{ done: Promise<void> }>;
+  createMailboxTriggeredRun(threadId: string, thread: RuntimeThread, turnId: string, content: string, execution?: { unattended?: boolean }): Promise<{ done: Promise<void> }>;
   publishMessage(
     threadId: string,
     turnId: string,
@@ -134,7 +134,7 @@ export class RuntimeTurnInputCoordinator {
     }
   }
 
-  async deliverMailbox(threadId: string, input: DeliverMailboxInput): Promise<DeliverMailboxResponse> {
+  async deliverMailbox(threadId: string, input: DeliverMailboxInput, execution: { unattended?: boolean } = {}): Promise<DeliverMailboxResponse> {
     const content = input.content.trim();
     if (!content) throw new Error('mailbox content must not be empty');
     const active = this.options.turnTasks.activeForThread(threadId);
@@ -187,7 +187,7 @@ export class RuntimeTurnInputCoordinator {
         createdAt: this.options.clock.now().toISOString(),
         payload: delivery,
       });
-      const run = await this.options.createMailboxTriggeredRun(threadId, thread, turnId, content);
+      const run = await this.options.createMailboxTriggeredRun(threadId, thread, turnId, content, execution);
       void run.done.catch(() => undefined);
       return { accepted: true, turnId };
     }

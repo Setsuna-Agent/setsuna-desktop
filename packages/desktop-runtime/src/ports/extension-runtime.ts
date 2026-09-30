@@ -28,6 +28,7 @@ export type ExtensionRegisteredTool = RuntimeToolDefinition & {
 };
 
 export type ExtensionEventContext = {
+  unattended?: boolean;
   threadId: string;
   turnId?: string;
   projectId?: string;

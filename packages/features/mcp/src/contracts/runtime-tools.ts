@@ -10,6 +10,7 @@ export type McpToolExecutionContext = McpOperationContext & {
   toolCallId?: string;
   toolName?: string;
   signal?: AbortSignal;
+  unattended?: boolean;
 };
 
 export type McpToolRunContext = McpToolExecutionContext & {

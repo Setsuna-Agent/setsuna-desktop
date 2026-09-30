@@ -48,12 +48,14 @@ export class RuntimeHookCoordinator {
     signal,
     thread,
     turnId,
+    unattended,
   }: {
     prompt: string;
     runtimeConfig: RuntimeConfigState | null | undefined;
     signal: AbortSignal;
     thread: RuntimeThread;
     turnId: string;
+    unattended?: boolean;
   }): Promise<RuntimeTurnStartHookResult> {
     const runner = createRuntimeToolHookRunner(runtimeConfig);
     const sessionStartSource = this.takeSessionStartSource(thread);
@@ -68,6 +70,7 @@ export class RuntimeHookCoordinator {
       threadCreatedAt: thread.createdAt,
     });
     const context: ToolExecutionContext & { turnId: string } = {
+      ...(unattended ? { unattended: true } : {}),
       environment,
       threadId: thread.id,
       projectId: thread.projectId,
@@ -96,6 +99,7 @@ export class RuntimeHookCoordinator {
       : null;
     const sessionExtensionOutcome = extensionSessionStartSource
       ? await this.options.extensions?.dispatch('session.start', {
+          ...(unattended ? { unattended: true } : {}),
           threadId: thread.id,
           turnId,
           projectId: thread.projectId,
@@ -124,6 +128,7 @@ export class RuntimeHookCoordinator {
     }
     const promptExtensionOutcome = extensionsEnabled
       ? await this.options.extensions?.dispatch('prompt.before', {
+          ...(unattended ? { unattended: true } : {}),
           threadId: thread.id,
           turnId,
           projectId: thread.projectId,
@@ -182,6 +187,7 @@ export class RuntimeHookCoordinator {
     thread,
     trigger,
     turnId,
+    unattended,
   }: {
     eventName: 'PreCompact' | 'PostCompact';
     runtimeConfig: RuntimeConfigState | null | undefined;
@@ -189,6 +195,7 @@ export class RuntimeHookCoordinator {
     thread: RuntimeThread;
     trigger: RuntimeCompactHookTrigger;
     turnId: string;
+    unattended?: boolean;
   }) {
     const runner = createRuntimeToolHookRunner(runtimeConfig);
     if (!runner && !this.options.extensions) return { shouldStop: false };
@@ -199,6 +206,7 @@ export class RuntimeHookCoordinator {
       threadCreatedAt: thread.createdAt,
     });
     const context: ToolExecutionContext & { turnId: string } = {
+      ...(unattended ? { unattended: true } : {}),
       environment,
       threadId: thread.id,
       projectId: thread.projectId,
@@ -220,6 +228,7 @@ export class RuntimeHookCoordinator {
       : { shouldStop: false };
     if (hookOutcome.shouldStop || eventName !== 'PreCompact') return hookOutcome;
     const extensionOutcome = await this.options.extensions?.dispatch('compact.before', {
+      ...(unattended ? { unattended: true } : {}),
       threadId: thread.id,
       turnId,
       projectId: thread.projectId,

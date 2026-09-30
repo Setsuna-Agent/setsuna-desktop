@@ -1,0 +1,3 @@
+.automation-model-picker.sd-field { display: flex; align-items: center; gap: 8px; }
+.automation-model-picker__value { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.automation-model-picker__value > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

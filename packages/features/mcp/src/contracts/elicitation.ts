@@ -27,6 +27,7 @@ export type McpElicitationContext = {
   toolCallId: string;
   toolName: string;
   signal?: AbortSignal;
+  unattended?: boolean;
 };
 
 export type McpElicitationResponse = RuntimeMcpElicitationResponse;

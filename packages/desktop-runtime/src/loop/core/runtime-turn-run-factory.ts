@@ -25,6 +25,7 @@ import {
 export type RuntimeTurnThinkingOptions = Pick<ModelRequest, 'thinking' | 'reasoningEffort'>;
 
 export type RuntimeTurnExecutionOptions = {
+  unattended?: boolean;
   clientId?: string;
   includeUserMessageInModel?: boolean;
   inputKind?: RuntimeMessage['inputKind'];
@@ -94,7 +95,7 @@ export class RuntimeTurnRunFactory {
   async createRegular(
     threadId: string,
     input: SendTurnInput,
-    execution: { queuedInputId?: string } = {},
+    execution: { queuedInputId?: string; unattended?: boolean } = {},
   ): Promise<{ turnId: string; done: Promise<void> }> {
     const text = input.input.trim();
     let attachments = this.options.normalizeAttachments(input.attachments);
@@ -125,13 +126,15 @@ export class RuntimeTurnRunFactory {
       options: {
         clientId: input.clientId,
         queuedInputId: execution.queuedInputId,
+        unattended: execution.unattended,
+        runtimeContextMessages: execution.unattended ? unattendedTurnContext(turnId, this.options.clock.now().toISOString()) : undefined,
         taskKind: 'regular',
       },
     }));
     return { turnId, done: run.done };
   }
 
-  async createMailboxTriggered(threadId: string, thread: RuntimeThread, turnId: string, content: string): Promise<{ turnId: string; done: Promise<void> }> {
+  async createMailboxTriggered(threadId: string, thread: RuntimeThread, turnId: string, content: string, execution: { unattended?: boolean } = {}): Promise<{ turnId: string; done: Promise<void> }> {
     const turnModel = await this.resolveTurnModel(thread);
     const taskKind = isCollaborationChildThread(thread) ? 'subagent' : 'regular';
     const run = this.options.turnTasks.run({
@@ -149,6 +152,8 @@ export class RuntimeTurnRunFactory {
       threadId,
       turnId,
       options: {
+        unattended: execution.unattended,
+        runtimeContextMessages: execution.unattended ? unattendedTurnContext(turnId, this.options.clock.now().toISOString()) : undefined,
         includeUserMessageInModel: true,
         publishUserMessage: false,
         ...(taskKind === 'subagent'
@@ -167,6 +172,7 @@ export class RuntimeTurnRunFactory {
   async createSubagent(
     threadId: string,
     input: { prompt: string; title?: string },
+    execution: { unattended?: boolean } = {},
   ): Promise<{ turnId: string; done: Promise<void> }> {
     const text = input.prompt.trim();
     if (!text) throw new Error('Subagent prompt is required.');
@@ -189,6 +195,8 @@ export class RuntimeTurnRunFactory {
       threadId,
       turnId,
       options: {
+        unattended: execution.unattended,
+        runtimeContextMessages: execution.unattended ? unattendedTurnContext(turnId, this.options.clock.now().toISOString()) : undefined,
         inputKind: 'subagent_task',
         promptSource: 'collaboration',
         taskKind: 'subagent',
@@ -414,6 +422,14 @@ export class RuntimeTurnRunFactory {
     const config = await this.options.configStore?.getConfig().catch(() => null);
     return resolveRuntimeTurnModel(config, thread, requested);
   }
+}
+
+function unattendedTurnContext(turnId: string, createdAt: string): RuntimeMessage[] {
+  return [{
+    id: 'unattended_task_policy', turnId, role: 'developer', visibility: 'model', status: 'complete', createdAt,
+    // Child agents retain their read-only boundary even when their parent runs with full access.
+    content: 'This is an unattended scheduled task. Execute the assigned work autonomously within this turn\'s tool permissions. Do not ask the user questions or display input forms. Infer reasonable defaults; if essential information or credentials are missing, report the blocker in the final answer and finish. Do not create new schedules or persistent goals from this run.',
+  }];
 }
 
 function reviewPolicyMessage(

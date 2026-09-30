@@ -9,21 +9,27 @@ import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { RuntimeEventWriter } from '../lifecycle/runtime-event-writer.js';
 
+type RuntimeCollaborationTurnServices = Readonly<{
+  cancelTurn(threadId: string, turnId: string): Promise<boolean>;
+  deliverMailboxInput(
+    threadId: string,
+    input: Parameters<CollaborationRuntimeHost['deliverMailbox']>[1],
+    execution?: Parameters<CollaborationRuntimeHost['deliverMailbox']>[2],
+  ): ReturnType<CollaborationRuntimeHost['deliverMailbox']>;
+  startSubagentTurn(
+    threadId: string,
+    input: CollaborationSubagentTurnInput,
+    execution?: Parameters<CollaborationRuntimeHost['startTurn']>[2],
+  ): Promise<StartTurnResponse>;
+}>;
+
 type RuntimeCollaborationHostDependencies = Readonly<{
   clock: Clock;
   ids: IdGenerator;
   threadStore: ThreadStore;
   eventWriter: RuntimeEventWriter;
   activeTask(threadId: string): CollaborationActiveTask | null;
-  cancelTurn(threadId: string, turnId: string): Promise<boolean>;
-  deliverMailbox(
-    threadId: string,
-    input: Parameters<CollaborationRuntimeHost['deliverMailbox']>[1],
-  ): ReturnType<CollaborationRuntimeHost['deliverMailbox']>;
-  startTurn(
-    threadId: string,
-    input: CollaborationSubagentTurnInput,
-  ): Promise<StartTurnResponse>;
+  turns: RuntimeCollaborationTurnServices;
 }>;
 
 /** Adapt Core thread and turn services to the Collaboration Feature's narrow host port. */
@@ -35,15 +41,15 @@ export function createRuntimeCollaborationHost(
     id: (prefix) => dependencies.ids.id(prefix),
     listThreads: () => dependencies.threadStore.listThreads({
       includeArchived: true,
-      includeSide: true,
+      includeSide: true, includeFeatures: true,
     }),
     getThread: (threadId) => dependencies.threadStore.getThread(threadId),
     createThread: (input) => dependencies.threadStore.createThread(input),
     activeTask: (threadId) => dependencies.activeTask(threadId),
-    cancelTurn: (threadId, turnId) => dependencies.cancelTurn(threadId, turnId),
-    deliverMailbox: (threadId, input) => dependencies.deliverMailbox(threadId, input),
-    startTurn: async (threadId, input) => {
-      const started = await dependencies.startTurn(threadId, input);
+    cancelTurn: (threadId, turnId) => dependencies.turns.cancelTurn(threadId, turnId),
+    deliverMailbox: (threadId, input, execution) => dependencies.turns.deliverMailboxInput(threadId, input, execution),
+    startTurn: async (threadId, input, execution) => {
+      const started = await dependencies.turns.startSubagentTurn(threadId, input, execution);
       if ('queuedInputId' in started && !started.turnId) {
         throw new Error(`Collaboration turn was queued instead of started: ${started.queuedInputId}`);
       }

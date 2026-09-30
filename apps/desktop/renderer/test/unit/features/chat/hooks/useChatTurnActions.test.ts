@@ -95,9 +95,11 @@ describe('composer turn routing', () => {
     }));
 
     await expect(result.current.sendInput('Use model B', {
+      clientId: 'composer_pending_choice',
       modelSelection: { providerId: 'provider-b', modelId: 'model-b' },
     })).resolves.toBe(true);
     expect(sendTurn).toHaveBeenCalledWith('thread_1', expect.objectContaining({
+      clientId: 'composer_pending_choice',
       modelSelection: { providerId: 'provider-b', modelId: 'model-b' },
     }));
   });

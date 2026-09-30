@@ -21,6 +21,7 @@ export type ExtensionWorkerRequestContext = {
   cwd?: string;
   environment?: RuntimeEnvironment;
   permissionProfile?: RuntimePermissionProfile;
+  unattended?: boolean;
   signal?: AbortSignal;
   onOutput?(message: string): void;
   /** Restricts host calls made while handling a declarative Renderer action. */

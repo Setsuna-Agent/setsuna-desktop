@@ -399,7 +399,7 @@ export function useDesktopAppController() {
 }
 
 export function resolveShellSidebarState(activeView: MainView, sidebarCollapsed: boolean) {
-  if (activeView === 'settings') return { collapsed: false, reservesLayout: true };
+  if (activeView === 'settings' || activeView === 'automation') return { collapsed: false, reservesLayout: true };
   const hasSidebar = activeView === 'chat' || activeView === 'capabilities';
   return {
     collapsed: !hasSidebar || sidebarCollapsed,

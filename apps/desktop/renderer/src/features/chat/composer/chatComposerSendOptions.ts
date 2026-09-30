@@ -6,6 +6,7 @@ import {
 } from '@setsuna-desktop/contracts';
 
 export type ChatComposerSendOptions = {
+  clientId?: string;
   attachments?: RuntimeMessageAttachment[];
   goalMode?: boolean;
   modelSelection?: RuntimeConfiguredModelReference;

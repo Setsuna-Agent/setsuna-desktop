@@ -14,6 +14,7 @@ export type ExtensionUiContext = {
   turnId?: string;
   toolCallId?: string;
   signal?: AbortSignal;
+  unattended?: boolean;
   onOutput?(message: string): void;
 };
 
@@ -51,6 +52,9 @@ export class ExtensionUiCoordinator {
       return null;
     }
 
+    if (context.unattended) {
+      throw new Error('Interactive forms are unavailable during unattended execution. Continue with defaults or report the missing input.');
+    }
     const turnId = requiredContextId(context.turnId, 'turnId');
     const toolCallId = requiredContextId(
       context.toolCallId,

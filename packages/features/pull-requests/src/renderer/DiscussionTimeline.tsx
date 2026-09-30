@@ -5,7 +5,8 @@ import type { PullRequestComment, PullRequestDetail, PullRequestDiscussion } fro
 import type { PullRequestsClient } from './client.js';
 import { CommentComposer, type QuoteRequest } from './CommentComposer.js';
 import { usePrText, usePullRequestsHost } from './context.js';
-import { Loading, stateLabel, Timestamp } from './status.js';
+import { stateLabel, Timestamp } from './status.js';
+import { PullRequestSkeleton } from './loading/PullRequestSkeleton.js';
 import type { DiscussionsState } from './useDiscussions.js';
 
 export function DiscussionTimeline({ client, detail, account, discussions, onPublished, onDiff }: {
@@ -19,7 +20,7 @@ export function DiscussionTimeline({ client, detail, account, discussions, onPub
     {discussions.items.length ? <h3>{t('discussion')}</h3> : null}
     {discussions.errors.map((error, index) => <p key={index} className="sd-control-error" role="alert">{error}</p>)}
     {discussions.items.map((discussion) => <DiscussionCard key={discussion.id} discussion={discussion} client={client} detail={detail} account={account} onPublished={onPublished} onDiff={onDiff} onQuote={quoteComment} moreReplies={() => void discussions.moreReplies(discussion)} repliesPending={discussions.repliesPending === discussion.id} />)}
-    {discussions.pending ? <Loading /> : null}
+    {discussions.pending && !discussions.items.length ? <PullRequestSkeleton kind="discussion" label={t('loading')} /> : null}
     {discussions.hasMore ? <Button disabled={discussions.pending} onClick={() => void discussions.more()}>{t('moreDiscussions')}</Button> : null}
     <CommentComposer client={client} reference={detail} account={account} disabled={!detail.canComment} quote={quote} onPublished={onPublished} />
   </section>;
@@ -49,7 +50,8 @@ export function DiscussionCard({ discussion, client, detail, account, onPublishe
       {comment.body ? <div className="pr-markdown"><Markdown content={comment.body} baseUrl={`https://github.com/${detail.headRepository ?? detail.repository}/blob/${detail.headSha}/`} /></div> : null}
       {detail.canComment && discussion.canReply ? <Button size="small" variant="ghost" onClick={() => thread ? setReplying(true) : onQuote?.(comment)}>{thread ? t('reply') : t('quoteReply')}</Button> : null}
     </article>)}
-    {discussion.replyCursor && moreReplies ? <Button size="small" loading={repliesPending} onClick={moreReplies}>{t('moreReplies')}</Button> : null}
+    {repliesPending ? <PullRequestSkeleton kind="discussion" label={t('loading')} /> : null}
+    {discussion.replyCursor && moreReplies ? <Button size="small" disabled={repliesPending} onClick={moreReplies}>{t('moreReplies')}</Button> : null}
     {replying ? <CommentComposer client={client} reference={detail} account={account} threadId={discussion.id} disabled={!detail.canComment || !discussion.canReply} onPublished={onPublished} /> : null}
   </DetailSection>;
 }

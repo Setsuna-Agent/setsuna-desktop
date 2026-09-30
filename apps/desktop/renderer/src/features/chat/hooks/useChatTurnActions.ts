@@ -2,10 +2,7 @@ import {
   isRuntimeInputMessageAttachment,
   type CreateThreadInput,
   type DesktopRuntimeClient,
-  type RuntimeConfiguredModelReference,
   type RuntimeConfigState,
-  type RuntimeMessageAttachment,
-  type RuntimeSkillReference,
   type RuntimeThread,
 } from '@setsuna-desktop/contracts';
 import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
@@ -19,16 +16,10 @@ import {
 import { useQueuedTurnInputActions } from './useQueuedTurnInputActions.js';
 import { chatThreadModelSelection } from '../chatModelSelection.js';
 import type { SetChatComposerDraft } from './useChatComposerSession.js';
+import type { ChatComposerSendOptions } from '../composer/chatComposerSendOptions.js';
 
-type ChatTurnSendOptions = {
+type ChatTurnSendOptions = ChatComposerSendOptions & {
   workspaceMode?: CreateThreadInput['workspaceMode'];
-  attachments?: RuntimeMessageAttachment[];
-  goalMode?: boolean;
-  modelSelection?: RuntimeConfiguredModelReference;
-  skillIds?: string[];
-  skillReferences?: RuntimeSkillReference[];
-  thinking?: boolean;
-  thinkingEffort?: string;
 };
 
 export function useChatTurnActions({
@@ -86,7 +77,7 @@ export function useChatTurnActions({
       const attachments = (options.attachments ?? []).filter(isRuntimeInputMessageAttachment);
       if (!input && !attachments.length) return false;
       const isCurrentRequest = actionRequests.begin();
-      const clientId = createChatTurnClientId();
+      const clientId = options.clientId ?? createChatTurnClientId();
       let submissionDispatched = false;
       let submissionThreadId: string | null = null;
       let createdThread = false;

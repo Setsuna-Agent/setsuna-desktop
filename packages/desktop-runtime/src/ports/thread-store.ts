@@ -16,6 +16,9 @@ import type {
 } from '@setsuna-desktop/contracts';
 
 export type ThreadStorePatch = Omit<ThreadPatch, 'modelSelection'> & {
+  featureId?: string | null;
+  origin?: RuntimeThreadSummary['origin'];
+  projectId?: string | null;
   /** Validated model identity resolved by the runtime boundary. */
   modelBinding?: RuntimeThreadModelBinding;
 };
@@ -23,12 +26,16 @@ export type ThreadStorePatch = Omit<ThreadPatch, 'modelSelection'> & {
 export type ThreadStoreCreateInput = Omit<CreateThreadInput, 'workspaceMode'> & {
   workspaceId?: string;
   kind?: NonNullable<RuntimeThreadSummary['kind']>;
+  featureId?: string;
+  origin?: RuntimeThreadSummary['origin'];
   modelBinding?: RuntimeThreadModelBinding;
 };
 
 export type ThreadStoreQuery = ThreadQuery & {
   /** Internal recovery paths include transient side conversations; user-facing lists do not. */
   includeSide?: boolean;
+  /** Feature navigation and runtime recovery can include feature-owned conversations. */
+  includeFeatures?: boolean;
 };
 
 export type RuntimeEventReplay = {

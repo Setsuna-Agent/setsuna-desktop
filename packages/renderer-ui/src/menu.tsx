@@ -27,28 +27,32 @@ export type DropdownProps = Omit<HTMLAttributes<HTMLElement>, 'children'> & {
   children: ReactElement;
   menu: MenuProps;
   disabled?: boolean;
+  /** Let a portalled menu inside a dialog own focus and scroll isolation while open. */
+  modal?: boolean;
   open?: boolean;
   onOpenChange?(open: boolean): void;
   placement?: Placement;
   trigger?: ('click' | 'contextMenu')[];
   className?: string;
   rootClassName?: string;
+  /** Optional search or other control before this menu's roving rows. */
+  initialFocusRef?: RefObject<HTMLElement>;
   align?: { offset?: number[] };
   popupRender?(menu: ReactNode): ReactNode;
 };
 
 /** Shared menu presentation; Radix supplies nested menus, roving focus and typeahead. */
-export const Dropdown = forwardRef<HTMLElement, DropdownProps>(function Dropdown({ children, menu, disabled, open, onOpenChange, placement, trigger, rootClassName, className, align, popupRender, ...triggerProps }, ref) {
+export const Dropdown = forwardRef<HTMLElement, DropdownProps>(function Dropdown({ children, menu, disabled, modal = false, open, onOpenChange, placement, trigger, rootClassName, initialFocusRef, className, align, popupRender, ...triggerProps }, ref) {
   const keyboardInteraction = useRef(false);
   const context = trigger?.includes('contextMenu') ?? false;
   const rows = <MenuItems menu={menu} context={context} />;
   const contents = popupRender ? popupRender(rows) : rows;
   const classes = cn('sd-menu', rootClassName, className);
-  if (context) return <ContextMenu.Root onOpenChange={onOpenChange} modal={false}>
+  if (context) return <ContextMenu.Root onOpenChange={onOpenChange} modal={modal}>
     <ContextMenu.Trigger asChild disabled={disabled}><Slot.Root {...triggerProps} ref={ref}>{children}</Slot.Root></ContextMenu.Trigger>
     <ContextMenu.Portal container={overlayContainer()}><ContextMenu.Content asChild className={classes} collisionPadding={8}><MenuSurface>{contents}</MenuSurface></ContextMenu.Content></ContextMenu.Portal>
   </ContextMenu.Root>;
-  return <DropdownMenu.Root open={open} onOpenChange={onOpenChange} modal={false}>
+  return <DropdownMenu.Root open={open} onOpenChange={onOpenChange} modal={modal}>
     <DropdownMenu.Trigger asChild disabled={disabled}>
       <Slot.Root {...triggerProps} ref={ref}
         onPointerDownCapture={(event) => { keyboardInteraction.current = false; triggerProps.onPointerDownCapture?.(event); }}
@@ -58,13 +62,19 @@ export const Dropdown = forwardRef<HTMLElement, DropdownProps>(function Dropdown
     </DropdownMenu.Trigger>
     <DropdownMenu.Portal container={overlayContainer()}>
       <DropdownMenu.Content asChild {...floatingPlacement(placement)} sideOffset={align?.offset?.[1] ?? 6} alignOffset={align?.offset?.[0]} collisionPadding={8} className={classes}
+        onFocus={(event) => {
+          if (event.target !== event.currentTarget || !initialFocusRef?.current) return;
+          // Override the content's initial focus without taking focus from its rows.
+          event.preventDefault();
+          initialFocusRef.current.focus({ preventScroll: true });
+        }}
         onCloseAutoFocus={(event) => {
           // Pointer selection must not refocus the trigger and leave a focus ring or tooltip.
           if (!keyboardInteraction.current) event.preventDefault();
         }}>
         <MenuSurface
           onPointerDownCapture={() => { keyboardInteraction.current = false; }}
-          onKeyDownCapture={() => { keyboardInteraction.current = true; }}>
+          onKeyDownCapture={(event) => { keyboardInteraction.current = true; handleMenuControlNavigation(event, initialFocusRef?.current); }}>
           {contents}
         </MenuSurface>
       </DropdownMenu.Content>
@@ -97,7 +107,7 @@ function MenuItems({ menu, context }: { menu: MenuProps; context: boolean }) {
             event.preventDefault();
             initialFocus.focus({ preventScroll: true });
           }}
-          onKeyDownCapture={(event) => handleSubmenuControlNavigation(event, item.submenuInitialFocusRef?.current)}>
+          onKeyDownCapture={(event) => handleMenuControlNavigation(event, item.submenuInitialFocusRef?.current)}>
           <MenuSurface><MenuItems context={context} menu={{ ...menu, items: item.children }} /></MenuSurface>
         </ui.SubContent>
       </ui.Portal>
@@ -108,7 +118,7 @@ function MenuItems({ menu, context }: { menu: MenuProps; context: boolean }) {
   })}</>;
 }
 
-function handleSubmenuControlNavigation(event: KeyboardEvent<HTMLDivElement>, control?: HTMLElement | null) {
+function handleMenuControlNavigation(event: KeyboardEvent<HTMLDivElement>, control?: HTMLElement | null) {
   if (!control || event.nativeEvent.isComposing || !(event.target instanceof HTMLElement)) return;
   const row = event.target.closest('[role="menuitem"]');
   if (!row || row.closest('[role="menu"]') !== event.currentTarget) return;

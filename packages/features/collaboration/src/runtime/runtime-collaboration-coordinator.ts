@@ -393,7 +393,7 @@ export class RuntimeCollaborationCoordinator implements CollaborationControl {
     this.trackedTasksByChild.set(child.id, tracked);
     let started: { turnId: string };
     try {
-      started = await this.options.host.startTurn(child.id, { name: identity.displayName, prompt, title: child.title });
+      started = await this.options.host.startTurn(child.id, { name: identity.displayName, prompt, title: child.title }, { unattended: context.unattended });
     } catch (error) {
       children.delete(child.id);
       if (!children.size) this.childrenByParentThread.delete(context.threadId);
@@ -480,7 +480,7 @@ export class RuntimeCollaborationCoordinator implements CollaborationControl {
       fromThreadId: context.threadId,
       toAgentId: receiverThreadId,
       triggerTurn: resume,
-    });
+    }, { unattended: context.unattended });
     if (resume && delivered.turnId) {
       this.rememberPendingChild(context.threadId, receiverThreadId);
       const resumedTask = tracked ?? await this.trackedTaskForChild(receiverThreadId);

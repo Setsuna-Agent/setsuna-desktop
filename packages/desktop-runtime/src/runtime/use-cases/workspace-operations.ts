@@ -22,6 +22,7 @@ export async function archiveRuntimeWorkspaceProject(
   projectId: string,
 ): Promise<void> {
   const projectThreads = await runtime.threadStore.listThreads({
+    includeFeatures: true,
     includeArchived: true,
     projectId,
   });

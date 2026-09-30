@@ -1,6 +1,18 @@
 import type { DatabaseSync } from 'node:sqlite';
 
-export const SQLITE_THREAD_SCHEMA_VERSION = 6;
+export const SQLITE_THREAD_SCHEMA_VERSION = 8;
+
+const THREAD_ORIGIN_SCHEMA = `
+  ALTER TABLE threads ADD COLUMN origin_json TEXT;
+  UPDATE threads SET origin_json = json_extract(snapshot_json,
+    CASE WHEN snapshot_format = 2 THEN '$.thread.origin' ELSE '$.origin' END);
+  PRAGMA user_version = 8;
+`;
+
+const FEATURE_OWNERSHIP_SCHEMA = `
+  ALTER TABLE threads ADD COLUMN feature_id TEXT;
+  PRAGMA user_version = 7;
+`;
 
 // Keep summary polling independent of full transcript JSON. Existing bindings
 // may live in either a legacy snapshot or the partitioned checkpoint header.
@@ -117,6 +129,14 @@ export function ensureSqliteThreadSchema(database: DatabaseSync): void {
   }
   if (version === 5) {
     withTransaction(database, () => database.exec(WORKSPACE_SUMMARY_SCHEMA));
+    version = 6;
+  }
+  if (version === 6) {
+    withTransaction(database, () => database.exec(FEATURE_OWNERSHIP_SCHEMA));
+    version = 7;
+  }
+  if (version === 7) {
+    withTransaction(database, () => database.exec(THREAD_ORIGIN_SCHEMA));
     return;
   }
   if (version !== 0) throw new Error(`Unsupported SQLite thread store schema: ${version}`);
@@ -206,6 +226,8 @@ export function ensureSqliteThreadSchema(database: DatabaseSync): void {
     ${FEATURE_PROJECTION_CHECKPOINT_SCHEMA}
     ${INCREMENTAL_CHECKPOINT_SCHEMA}
     ${WORKSPACE_SUMMARY_SCHEMA}
+    ${FEATURE_OWNERSHIP_SCHEMA}
+    ${THREAD_ORIGIN_SCHEMA}
   `));
 }
 

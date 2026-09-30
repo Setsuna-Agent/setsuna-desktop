@@ -633,7 +633,8 @@
   flex: 0 0 auto;
 }
 
-.desktop-agent-thread-worktree-badge {
+.desktop-agent-thread-worktree-badge,
+.desktop-agent-thread-origin-badge {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;

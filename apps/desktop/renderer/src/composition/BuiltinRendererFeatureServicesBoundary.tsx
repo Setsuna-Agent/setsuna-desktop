@@ -21,8 +21,11 @@ import { RuntimeActivityFeatureServiceBoundary } from './RuntimeActivityFeatureB
 import { SideConversationFeatureServiceBoundary } from './SideConversationFeatureBoundary.js';
 import { SkillsFeatureServiceBoundary } from './SkillsFeatureBoundary.js';
 import { UsageFeatureServiceBoundary } from './UsageFeatureBoundary.js';
+import type { AutomationClient } from '@setsuna-desktop/feature-automation/renderer';
+import { AutomationFeatureServiceBoundary } from './automation/AutomationFeatureBoundary.js';
 
 export type BuiltinRendererFeatureServices = Readonly<{
+  automation?: AutomationClient | null;
   collaboration: CollaborationRendererStateService;
   capabilitiesRefresh: CapabilitiesRefreshCoordinator;
   conversationDebug: ConversationDebugRendererService;
@@ -59,7 +62,7 @@ export function BuiltinRendererFeatureServicesBoundary({
                     <RuntimeActivityFeatureServiceBoundary service={services.runtimeActivity}>
                       <PluginManagementFeatureServiceBoundary service={services.pluginManagement}>
                         <SkillsFeatureServiceBoundary service={services.skills}>
-                          {children}
+                          <AutomationFeatureServiceBoundary client={services.automation ?? null}>{children}</AutomationFeatureServiceBoundary>
                         </SkillsFeatureServiceBoundary>
                       </PluginManagementFeatureServiceBoundary>
                     </RuntimeActivityFeatureServiceBoundary>

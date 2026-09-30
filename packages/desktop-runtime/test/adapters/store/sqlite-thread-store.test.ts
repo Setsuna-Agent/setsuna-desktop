@@ -303,6 +303,8 @@ describe('sqlite thread store', () => {
       DROP INDEX runtime_events_steps_idx;
       ALTER TABLE threads DROP COLUMN snapshot_format;
       ALTER TABLE threads DROP COLUMN workspace_id;
+      ALTER TABLE threads DROP COLUMN feature_id;
+      ALTER TABLE threads DROP COLUMN origin_json;
       DROP TABLE feature_projection_checkpoints;
       DROP TABLE runtime_event_archives;
       DROP TABLE runtime_event_ids;
@@ -381,7 +383,7 @@ describe('sqlite thread store', () => {
     await first.close();
 
     const database = new DatabaseSync(path.join(dataDir, 'threads.sqlite'), { readOnly: true });
-    expect(database.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 6 });
+    expect(database.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 8 });
     database.close();
 
     const reopened = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());

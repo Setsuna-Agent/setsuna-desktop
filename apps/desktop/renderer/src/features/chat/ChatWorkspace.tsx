@@ -4,7 +4,6 @@ import type {
   DesktopRuntimeClient,
   RuntimeConfiguredModelReference,
   RuntimeConfigState,
-  RuntimeMessage,
   RuntimePluginSummary,
   RuntimeSkillSummary,
   RuntimeSkillReference,
@@ -32,12 +31,13 @@ import type {
   DesktopReviewState,
 } from '../workspace/model.js';
 import type { ChatAttachmentStore } from './composer/chatAttachmentStore.js';
+import type { ChatComposerSendOptions } from './composer/chatComposerSendOptions.js';
 import { ChatComposer } from './ChatComposer.js';
 import { ChatModelSetupNotice } from './ChatModelSetupNotice.js';
 import type { ChatModelSelectionHandler } from './chatModelSelection.js';
 import { useConversationOverviewLayout } from './conversation/ChatWorkspaceScroll.js';
 import { ConversationOverviewPanel } from './conversation/ConversationOverviewPanel.js';
-import type { AnswerApprovalHandler } from './conversation/chat-workspace-types.js';
+import type { AnswerApprovalHandler, ChatStarterPresentation } from './conversation/chat-workspace-types.js';
 import { ChatStarter, ChatStarterContent } from './conversation/ChatStarter.js';
 import { activeModelContextBudget, contextTokenUsageFromThread } from './conversation/chatContextUsage.js';
 import { conversationOverviewFromMessages } from './conversation/chatConversationOverview.js';
@@ -45,6 +45,7 @@ import { ChatTranscript } from './conversation/ChatTranscript.js';
 import type { ChatQueuedTurnActions } from './hooks/useQueuedTurnInputActions.js';
 import { useModelSetupNotice } from './hooks/useModelSetupNotice.js';
 import { useChatStarterTransition } from './hooks/useChatStarterTransition.js';
+import { useChatSendPresentation } from './hooks/useChatSendPresentation.js';
 import { useThreadMessageHistory } from './hooks/useThreadMessageHistory.js';
 import { RendererOwnedSingleSlot } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
 
@@ -94,6 +95,7 @@ export function ChatWorkspace({
   onWorkspaceMentionRequestConsumed,
   reviewControls,
   starterControls,
+  starterPresentation,
   reviewError = null,
   reviewState = null,
   plugins = [],
@@ -135,7 +137,7 @@ export function ChatWorkspace({
   onOpenModelSettings?: () => void;
   onSelectModel: ChatModelSelectionHandler;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
-  onSend: (value?: string, options?: { attachments?: RuntimeMessage['attachments']; goalMode?: boolean; skillIds?: string[]; skillReferences?: RuntimeMessage['skillReferences']; thinking?: boolean; thinkingEffort?: string }) => Promise<boolean>;
+  onSend: (value?: string, options?: ChatComposerSendOptions) => Promise<boolean>;
   queuedTurnActions: ChatQueuedTurnActions;
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
   onStartThreadReview: (
@@ -147,6 +149,7 @@ export function ChatWorkspace({
   onWorkspaceMentionRequestConsumed?: (requestId: number) => void;
   reviewControls?: ReactNode;
   starterControls?: ReactNode;
+  starterPresentation?: ChatStarterPresentation;
   reviewError?: string | null;
   reviewState?: DesktopReviewState | null;
   plugins?: RuntimePluginSummary[];
@@ -154,6 +157,9 @@ export function ChatWorkspace({
 }) {
   const messageHistory = useThreadMessageHistory(client, currentThread);
   const messages = messageHistory.messages;
+  const { pendingMessages, sendInput, submitting } = useChatSendPresentation({
+    activeTurnId, composerKey, currentThread, draft, messages, onSend,
+  });
   const historyThread = useMemo(
     () => currentThread ? { ...currentThread, messages } : null,
     [currentThread, messages],
@@ -174,7 +180,8 @@ export function ChatWorkspace({
   const overviewVisible = conversationOverviewVisibility === 'shown'
     || (conversationOverviewVisibility === 'auto' && overviewLayout !== 'hidden');
   const overviewShiftsContent = overviewVisible && overviewLayout === 'shifted';
-  const starterSourceVisible = variant === 'main' && messages.length === 0 && !activeTurnId;
+  const starterSourceVisible = variant === 'main' && !activeTurnId && !pendingMessages.length
+    && (starterPresentation?.visible ?? messages.length === 0);
   const starterIdentity = currentThread?.id ?? composerKey;
   const starterTransition = useChatStarterTransition({
     conversationRef,
@@ -188,8 +195,10 @@ export function ChatWorkspace({
     offsetY: starterOffsetY,
     phase: starterSettlePhase,
     starterKey,
-    visible: showEmptyStarter,
+    visible: starterTransitionVisible,
   } = starterTransition;
+  // Task setup leaves its starter immediately, even while the first submission is still pending.
+  const showEmptyStarter = starterPresentation ? starterSourceVisible : starterTransitionVisible;
   const { modelSetupNoticeVisible, dismissModelSetupNotice } = useModelSetupNotice(config);
   const modelSetupNotice = showEmptyStarter && modelSetupNoticeVisible && onOpenModelSettings ? (
     <ChatModelSetupNotice onConfigure={onOpenModelSettings} onDismiss={dismissModelSetupNotice} />
@@ -207,9 +216,9 @@ export function ChatWorkspace({
     async (value, options) => {
       // 发送消息代表用户重新关注最新进度；同时恢复 sticky，后续流式内容会持续贴底。
       scrollToBottomRef.current?.();
-      beginStarterTransition();
+      if (!starterPresentation) beginStarterTransition();
       try {
-        const sent = await onSend(value, options);
+        const sent = await sendInput(value, options);
         if (!sent) cancelStarterTransition();
         return sent;
       } catch (error) {
@@ -217,7 +226,7 @@ export function ChatWorkspace({
         throw error;
       }
     },
-    [beginStarterTransition, cancelStarterTransition, onSend],
+    [beginStarterTransition, cancelStarterTransition, sendInput, starterPresentation],
   );
   const surfaceInstanceId = `${variant}:${currentThread?.id ?? activeProject?.id ?? 'new'}`;
   const composerSurfaceInstanceId = `${variant}:${composerKey}`;
@@ -251,6 +260,7 @@ export function ChatWorkspace({
             plugins={plugins}
             sideConversation={variant === 'side'}
             starter={starter}
+            submissionPending={submitting}
             onCancelActiveTurn={onCancelActiveTurn}
             onAccessModeChange={onAccessModeChange}
             onCompactContext={onCompactContext}
@@ -288,12 +298,16 @@ export function ChatWorkspace({
                 <ChatStarter
                   key={starterKey}
                   composer={composer(true)}
-                  contextBar={!currentThread || starterSettlePhase ? starterControls : undefined}
+                  contextBar={!starterPresentation && (!currentThread || starterSettlePhase) ? starterControls : undefined}
+                  footer={starterPresentation?.footer}
                   settleComposerHeight={starterComposerHeight}
                   settleOffsetY={starterOffsetY}
                   settlePhase={starterSettlePhase}
                 >
-                  {conversation(() => (
+                  {conversation(() => starterPresentation ? <>
+                    {starterPresentation.content}
+                    {modelSetupNotice ? <div className="chat-starter__notice chat-starter__reveal chat-starter__reveal--notice">{modelSetupNotice}</div> : null}
+                  </> : (
                     <ChatStarterContent
                       modelSetupNotice={modelSetupNotice}
                       projectName={activeProject?.name}
@@ -313,6 +327,7 @@ export function ChatWorkspace({
               currentThread={currentThread}
               messageHistory={messageHistory}
               messages={messages}
+              pendingMessages={pendingMessages}
               plugins={plugins}
               scrollToBottomRef={scrollToBottomRef}
               showThinkingInTranscript={showThinkingInTranscript}

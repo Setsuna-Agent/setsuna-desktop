@@ -27,6 +27,7 @@ describe('archiveRuntimeWorkspaceProject', () => {
     await archiveRuntimeWorkspaceProject(runtime, 'project_1');
 
     expect(runtime.threadStore.listThreads).toHaveBeenCalledWith({
+      includeFeatures: true,
       includeArchived: true,
       projectId: 'project_1',
     });

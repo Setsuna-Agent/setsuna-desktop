@@ -104,7 +104,7 @@ export class UserInputToolHost implements ToolHost {
   ) {}
 
   async listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
-    return context.features?.default_mode_request_user_input === false ? [] : [requestUserInputTool(context.interfaceLanguage)];
+    return context.unattended || context.features?.default_mode_request_user_input === false ? [] : [requestUserInputTool(context.interfaceLanguage)];
   }
 
   toolRuntimeProfile(name: string) {
@@ -128,6 +128,9 @@ export class UserInputToolHost implements ToolHost {
 
   async runTool(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult> {
     if (name !== REQUEST_USER_INPUT_TOOL_NAME) throw new Error(`Unknown user input tool: ${name}`);
+    if (context.unattended) {
+      return { content: 'User input is unavailable for this unattended task. Continue with reasonable defaults or report a blocker.', data: { action: 'decline' } };
+    }
     const turnId = requiredExecutionId(context.turnId, 'turnId');
     const toolCallId = requiredExecutionId(context.toolCallId, 'toolCallId');
     const request = normalizeUserInputRequest(input, this.clock.now());

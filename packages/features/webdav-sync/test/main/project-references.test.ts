@@ -41,7 +41,12 @@ it.each([1, 2])('restores worktree chats to the local project in snapshot format
     if (format === 1) {
       // Exercise migration from a pre-summary-column backup as well as the current checkpoint format.
       database.prepare('UPDATE threads SET snapshot_json = ?, snapshot_format = 1').run(JSON.stringify(thread));
-      database.exec('ALTER TABLE threads DROP COLUMN workspace_id; PRAGMA user_version = 5');
+      database.exec(`
+        ALTER TABLE threads DROP COLUMN workspace_id;
+        ALTER TABLE threads DROP COLUMN feature_id;
+        ALTER TABLE threads DROP COLUMN origin_json;
+        PRAGMA user_version = 5;
+      `);
     } else {
       const row = database.prepare('SELECT event_json FROM runtime_events WHERE thread_id = ? AND seq = 1').get(thread.id)!;
       const event = JSON.parse(row.event_json instanceof Uint8Array

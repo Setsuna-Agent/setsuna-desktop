@@ -5,6 +5,7 @@ export function ChatStarter({
   children,
   composer,
   contextBar,
+  footer,
   settleComposerHeight = 0,
   settleOffsetY = 0,
   settlePhase = null,
@@ -12,6 +13,7 @@ export function ChatStarter({
   children: ReactNode;
   composer: ReactNode;
   contextBar?: ReactNode;
+  footer?: ReactNode;
   settleComposerHeight?: number;
   settleOffsetY?: number;
   settlePhase?: 'settling' | 'settled' | null;
@@ -33,6 +35,11 @@ export function ChatStarter({
             {composer}
           </div>
         </div>
+        {footer ? (
+          <div className="chat-starter__footer chat-starter__reveal chat-starter__reveal--composer">
+            {footer}
+          </div>
+        ) : null}
       </div>
     </div>
   );

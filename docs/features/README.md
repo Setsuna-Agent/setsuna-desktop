@@ -29,6 +29,7 @@ packages/features/<feature>/
 | --- | --- | :---: | :---: | :---: | :---: | --- |
 | `approval-review` | `approval-review` | O | — | — | O | 自动审批的模型判定、策略约束、专用模型设置与人工回退 |
 | `artifact` | `artifact` | R | — | — | R | 发布 workspace 文件、持久工具结果与 Artifact 展示 |
+| `automation` | `automation` | O | — | — | O | 对话创建定时任务、本机调度、无人值守执行与运行记录 |
 | `browser` | `browser` | R | R | B | R | 内置浏览器、guest/CDP 控制、Agent Browser tools |
 | `collaboration` | `collaboration` | O | — | — | O | 子任务/协作线程状态、投影与 spawn result |
 | `conversation-debug` | `conversation-debug` | O | — | — | O | 调试设置、事件/trace 查询与时间线面板 |
@@ -77,6 +78,7 @@ Inventory 的事实来源不是这张表，而是四个 composition root 和各 
 
 - [Browser](browser.md)
 - [Pull Request 工作台](pull-requests.md)
+- [自动化](automation.md)
 - [Review、Terminal、Network、Updater、WebDAV、Sandbox 与 Workspace Apps](desktop-workbench.md)
 - [Desktop 宿主](../desktop/README.md)
 

@@ -36,6 +36,7 @@ export class McpElicitationCoordinator implements McpElicitationHandler {
     request: McpElicitationRequest,
     context: McpElicitationContext,
   ): Promise<RuntimeMcpElicitationResponse> {
+    if (context.unattended) return { action: 'decline' };
     const elicitation = normalizeElicitation(serverKey, request);
     const approval = await this.approvalGate.createApproval({
       threadId: context.threadId,

@@ -1,4 +1,4 @@
-import { Blocks, GitPullRequest, Home } from 'lucide-react';
+import { Blocks, Clock3, GitPullRequest, Home } from 'lucide-react';
 import type { ReactNode, RefObject } from 'react';
 import { shellSidebarPluginEntrySlot } from '@setsuna-desktop/renderer-contracts/shell';
 import { RendererOwnedListSlot } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
@@ -19,6 +19,7 @@ export function AppNavigationRail({
   onOpenChat,
   onOpenCapabilities,
   onOpenPullRequests,
+  onOpenAutomation,
   onOpenPluginView,
   onOpenRuntimeActivity,
   onOpenSettings,
@@ -32,6 +33,7 @@ export function AppNavigationRail({
   onOpenChat: () => void;
   onOpenCapabilities: () => void;
   onOpenPullRequests: () => void;
+  onOpenAutomation: () => void;
   onOpenPluginView: (viewKey: string) => void;
   onOpenRuntimeActivity: () => void;
   onOpenSettings: () => void;
@@ -45,6 +47,9 @@ export function AppNavigationRail({
         </NavigationButton>
         <NavigationButton label="Pull Request" commandId="app.openPullRequests" active={activeView === 'pull-requests'} onClick={onOpenPullRequests}>
           <GitPullRequest size={18} />
+        </NavigationButton>
+        <NavigationButton label={t('feature.automation.title')} active={activeView === 'automation'} onClick={onOpenAutomation}>
+          <Clock3 size={18} />
         </NavigationButton>
         <NavigationButton label={t('sidebar.plugins')} commandId="app.openCapabilities" active={activeView === 'capabilities'} onClick={onOpenCapabilities}>
           <Blocks size={18} />

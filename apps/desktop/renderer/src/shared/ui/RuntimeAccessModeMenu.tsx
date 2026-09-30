@@ -100,7 +100,7 @@ export function RuntimeAccessModeMenu({
         </SelectField>
       ) : (
         <Dropdown
-          rootClassName="runtime-access-mode-menu-root"
+          rootClassName="runtime-access-mode-menu-root sd-menu-surface--neutral"
           trigger={['click']}
           placement="topLeft"
           disabled={disabled}

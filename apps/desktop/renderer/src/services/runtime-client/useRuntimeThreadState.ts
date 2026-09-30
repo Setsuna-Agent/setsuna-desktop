@@ -210,7 +210,6 @@ export function useRuntimeThreadState({
   }, [client]);
 
   useEffect(() => {
-    if (!effectiveActiveTurnId && !hasRunningThreadSummary) return undefined;
     let cancelled = false;
     let timeoutId: number | undefined;
     const pollThreadSummaries = async () => {
@@ -220,17 +219,16 @@ export function useRuntimeThreadState({
         setThreads(all.threads.filter((thread) => !thread.archived && isPrimaryConversationThread(thread)));
         setArchivedThreads(all.threads.filter((thread) => thread.archived && isPrimaryConversationThread(thread)));
         const stillRunning = all.threads.some((thread) => Boolean(thread.activeTurnId));
-        if (stillRunning || effectiveActiveTurnId) {
-          timeoutId = window.setTimeout(pollThreadSummaries, 1000);
-        }
+        // Unattended runs can create conversations while no selected chat is running.
+        timeoutId = window.setTimeout(pollThreadSummaries, stillRunning || effectiveActiveTurnId ? 1000 : 5000);
       } catch (unknownError) {
         if (!cancelled) {
-          reportRuntimeBackgroundFailure('running thread summaries refresh', unknownError);
-          timeoutId = window.setTimeout(pollThreadSummaries, 1000);
+          reportRuntimeBackgroundFailure('thread summaries refresh', unknownError);
+          timeoutId = window.setTimeout(pollThreadSummaries, effectiveActiveTurnId || hasRunningThreadSummary ? 1000 : 5000);
         }
       }
     };
-    timeoutId = window.setTimeout(pollThreadSummaries, 250);
+    timeoutId = window.setTimeout(pollThreadSummaries, effectiveActiveTurnId || hasRunningThreadSummary ? 250 : 5000);
     return () => {
       cancelled = true;
       if (timeoutId !== undefined) window.clearTimeout(timeoutId);

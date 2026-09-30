@@ -89,10 +89,10 @@ export class RuntimeMaintenanceGate {
     }
     if (request.method !== 'POST') return false;
 
-    // The current prepare request is already tracked. Any other admitted handler may still
-    // perform a durable write, so it participates in the same atomic readiness decision.
+    // The current prepare request is already tracked. Both admitted handlers and scheduler
+    // mutations can still write, so neither may be overtaken by the readiness decision.
     const readiness = this.runtime.agentLoop.prepareDataMigration(
-      Math.max(0, this.requests.count - 1),
+      Math.max(0, this.requests.count - 1) + this.runtime.automationToolHost.pendingMutationCount(),
     );
     if (!readiness.ready) {
       sendJson(response, 200, readiness);
@@ -102,6 +102,7 @@ export class RuntimeMaintenanceGate {
     // No await is allowed between AgentLoop admission closing and this assignment. That keeps
     // new REST requests from slipping into the snapshot window on the JavaScript event loop.
     this.preparing = true;
+    this.runtime.automationToolHost.setMaintenancePaused(true);
     try {
       if (url.pathname === WEBDAV_SYNC_PREPARE_PATH) {
         await this.runtime.threadStore.flush();
@@ -126,6 +127,7 @@ export class RuntimeMaintenanceGate {
   private release(): void {
     this.runtime.agentLoop.cancelDataMigrationPreparation();
     this.preparing = false;
+    this.runtime.automationToolHost.setMaintenancePaused(false);
   }
 }
 

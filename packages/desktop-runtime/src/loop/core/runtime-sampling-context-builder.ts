@@ -56,6 +56,7 @@ import { modelFacingTools, samplingToolRuntimes } from './agent-loop-tool-utils.
 import { normalizeModelConversationHistory } from './runtime-model-message-order.js';
 import { nativeCompactionMatchesModel, restoreNativeCompactionHistory } from '../context/context-compaction-history.js';
 import type { RuntimeResolvedTurnModel } from './runtime-thread-model.js';
+import { runtimeConfigForTurn } from './runtime-turn-policy.js';
 
 export type RuntimeSamplingStepContext = {
   conversationMessages: RuntimeMessage[];
@@ -135,6 +136,7 @@ export class RuntimeSamplingContextBuilder {
     samplingModel,
     turnModel,
     toolAccess = 'all',
+    unattended,
   }: {
     loadedToolNames?: Set<string>;
     contextTokenCalibration?: ContextTokenCalibration;
@@ -152,9 +154,10 @@ export class RuntimeSamplingContextBuilder {
     samplingModel?: RuntimeResolvedTurnModel;
     turnModel?: RuntimeResolvedTurnModel;
     toolAccess?: 'all' | 'read-only' | 'none';
+    unattended?: boolean;
   }): Promise<RuntimeSamplingStepContext> {
     const latestRuntimeConfig = await this.options.configStore?.getConfig().catch(() => null);
-    const stepRuntimeConfig = latestRuntimeConfig ?? runtimeConfig ?? null;
+    const stepRuntimeConfig = runtimeConfigForTurn(latestRuntimeConfig ?? runtimeConfig ?? null, unattended);
     const interfaceLanguage = stepRuntimeConfig?.desktopSettings?.interfaceLanguage;
     // 设置修改在下一次采样生效，回复约束与内置文案一起切换；专用 review 保持按用户请求确定的语言。
     if (taskKind !== 'review' && interfaceLanguage && interfaceLanguage !== runtimeConfig?.desktopSettings?.interfaceLanguage) {
@@ -224,6 +227,7 @@ export class RuntimeSamplingContextBuilder {
     });
     const toolContext: RuntimeToolExecutionContext = {
       environment,
+      ...(unattended ? { unattended: true } : {}),
       samplingStepId: this.options.ids.id('sampling_step'),
       interfaceLanguage: stepRuntimeConfig?.desktopSettings?.interfaceLanguage ?? 'zh-CN',
       ...(goalExecution ? { goalExecution } : {}),
@@ -331,6 +335,7 @@ export class RuntimeSamplingContextBuilder {
     // Every task uses the actual sampling model's budget and usage correction.
     // A request-only tail trim would become the next step's history without a handoff.
     const compactedConversationMessages = await this.options.contextCompactor.compactMessagesBeforeModelRequest({
+      unattended,
       contextBudget,
       conversationModel: modelForSampling.request,
       force: false,

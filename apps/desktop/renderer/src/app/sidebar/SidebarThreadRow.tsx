@@ -10,6 +10,7 @@ import type { ThreadMenuState } from '../thread-menu/useThreadMenu.js';
 import { SidebarThreadHoverCard } from './SidebarThreadHoverCard.js';
 import { SidebarThreadTitle } from './SidebarThreadTitle.js';
 import { SidebarThreadWorktreeBadge } from './SidebarThreadWorktreeBadge.js';
+import { SidebarThreadAutomationBadge } from './SidebarThreadAutomationBadge.js';
 
 export function SidebarThreadRow({
   menuOpen,
@@ -136,6 +137,7 @@ export function SidebarThreadRow({
         >
           <SidebarThreadTitle hovered={hovered && !hoverDisabled} title={thread.title} />
           <SidebarThreadWorktreeBadge thread={thread} />
+          <SidebarThreadAutomationBadge thread={thread} />
         </Button>
       </SidebarThreadHoverCard>
       {meta}

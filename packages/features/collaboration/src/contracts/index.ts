@@ -50,4 +50,5 @@ export type {
   CollaborationSubagentTurnInput,
   CollaborationToolExecutionContext,
   CollaborationToolExecutionResult,
+  CollaborationTurnExecutionPolicy,
 } from './capabilities.js';

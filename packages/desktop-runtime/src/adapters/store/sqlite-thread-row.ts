@@ -9,6 +9,8 @@ export function summaryFromRow(row: SqliteThreadRow): RuntimeThreadSummary {
   return {
     id: stringColumn(row, 'id'),
     ...(stringColumn(row, 'kind') === 'side' ? { kind: 'side' as const } : {}),
+    featureId: nullableStringColumn(row, 'feature_id'),
+    origin: parseOptionalJson(row, 'origin_json'),
     activeTurnId: nullableStringColumn(row, 'active_turn_id'),
     forkedFromId: nullableStringColumn(row, 'forked_from_id'),
     parentThreadId: nullableStringColumn(row, 'parent_thread_id'),
