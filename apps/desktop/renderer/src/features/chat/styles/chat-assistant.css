@@ -38,6 +38,11 @@
   margin-top: 28px;
 }
 
+.chat-starter__footer {
+  order: 4;
+  margin-top: 20px;
+}
+
 .chat-starter__composer-motion {
   position: relative;
   left: 50%;

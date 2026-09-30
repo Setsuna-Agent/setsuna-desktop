@@ -7,7 +7,7 @@ import { GitHubIdentity } from './GitHubIdentity.js';
 export function PullRequestStatus({ detail, onChecks }: { detail: PullRequestDetail; onChecks(): void }) {
   const t = usePrText();
   const condition = mergeCondition(detail, t);
-  return <aside className="pr-status" aria-label={t('statusPanel')}>
+  return <aside className="pr-status" aria-label={t('statusPanel')} tabIndex={0}>
     <dl className="pr-status__items">
       <div className="pr-status__branch"><dt>{t('branch')}</dt><dd><code title={detail.headBranch}>{detail.headBranch}</code><span>→</span><code title={detail.baseBranch}>{detail.baseBranch}</code><span className="pr-diff-counts"><span>+{detail.additions}</span><span>−{detail.deletions}</span></span></dd></div>
       {detail.reviewers.length ? <div><dt>{t('reviewers')}</dt><dd>{detail.reviewers.map((reviewer) => <GitHubIdentity key={reviewer.name} login={reviewer.name} avatarUrl={reviewer.avatarUrl} showName={detail.reviewers.length === 1} />)}</dd></div> : null}

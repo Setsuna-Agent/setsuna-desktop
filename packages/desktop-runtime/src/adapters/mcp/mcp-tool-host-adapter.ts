@@ -85,6 +85,7 @@ function toMcpRunContext(context: ToolExecutionContext): McpToolRunContext {
   return {
     threadId: context.threadId,
     interfaceLanguage: context.interfaceLanguage,
+    ...(context.unattended ? { unattended: true } : {}),
     ...(context.turnId ? { turnId: context.turnId } : {}),
     ...(context.toolCallId ? { toolCallId: context.toolCallId } : {}),
     ...(context.signal ? { signal: context.signal } : {}),

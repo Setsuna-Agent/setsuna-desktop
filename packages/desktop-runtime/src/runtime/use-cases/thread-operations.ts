@@ -67,7 +67,7 @@ export async function deleteRuntimeThread(
     // snapshot and the parent commit. Child deletion uses its own barrier recursively.
     const children = await runtime.threadStore.listThreads({
       includeArchived: true,
-      includeSide: true,
+      includeSide: true, includeFeatures: true,
       parentThreadId: threadId,
     });
     for (const child of children) {

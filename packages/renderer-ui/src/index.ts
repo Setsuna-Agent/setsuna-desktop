@@ -22,4 +22,5 @@ export { FileIcon } from './file-icon.js';
 export { DetailSection } from './detail-section.js';
 export { DiffViewControls } from './diff-view-controls.js';
 export { Skeleton } from './skeleton.js';
+export { Tabs, TabsList, TabsTrigger } from './tabs/tabs.js';
 export { Table, type TableColumn, type TableProps } from './table.js';

@@ -164,6 +164,12 @@
   min-width: 0;
 }
 
+.app-topbar__route-content {
+  display: flex;
+  align-items: center;
+  gap: var(--app-toolbar-action-gap);
+}
+
 .app-topbar button,
 .app-topbar input,
 .app-topbar select,

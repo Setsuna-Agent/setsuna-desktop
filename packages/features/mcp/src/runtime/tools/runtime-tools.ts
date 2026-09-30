@@ -322,6 +322,7 @@ function discoveryErrorMessage(error: unknown, server: RuntimeMcpServerInput): s
 
 function mcpContext(context: McpOperationContext, toolName?: string): McpOperationContext {
   return {
+    ...(context.unattended ? { unattended: true } : {}),
     ...(context.threadId ? { threadId: context.threadId } : {}),
     ...(context.turnId ? { turnId: context.turnId } : {}),
     ...(context.toolCallId ? { toolCallId: context.toolCallId } : {}),

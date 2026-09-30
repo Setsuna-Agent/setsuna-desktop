@@ -21,6 +21,7 @@ import type {
   RuntimeThread,
   RuntimeThreadGoal,
   RuntimeThreadMemoryMode,
+  RuntimeThreadOrigin,
 } from './threads.js';
 import type { RuntimeUsage } from './usage.js';
 import type { WorkspaceFileChangeAction } from './workspace.js';
@@ -114,9 +115,12 @@ export type StoredFeatureEventEnvelope = Readonly<{
 }>;
 
 export type CoreRuntimeEvent =
-  | RuntimeEventBase<'thread.created', { title: string; workspaceId?: string; modelBinding?: RuntimeThreadModelBinding }>
+  | RuntimeEventBase<'thread.created', { title: string; featureId?: string; origin?: RuntimeThreadOrigin; workspaceId?: string; modelBinding?: RuntimeThreadModelBinding }>
   | RuntimeEventBase<'thread.updated', {
       title?: string;
+      featureId?: string | null;
+      origin?: RuntimeThreadOrigin;
+      projectId?: string | null;
       archived?: boolean;
       workspaceId?: null;
       modelBinding?: RuntimeThreadModelBinding;

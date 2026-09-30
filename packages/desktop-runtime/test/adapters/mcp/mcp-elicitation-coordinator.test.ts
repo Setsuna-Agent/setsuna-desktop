@@ -12,6 +12,14 @@ import type { IdGenerator } from '../../../src/ports/id-generator.js';
 import type { ThreadStore } from '../../../src/ports/thread-store.js';
 
 describe('McpElicitationCoordinator', () => {
+  it.each(['form', 'url'] as const)('declines unattended %s requests without emitting interactive events', async (mode) => {
+    const harness = createHarness();
+    const request = mode === 'form' ? { mode, message: 'Choose a value', elicitationId: 'request_1', requestedSchema: {} }
+      : { mode, message: 'Authorize', elicitationId: 'request_1', url: 'https://example.com/auth' };
+    await expect(harness.coordinator.request('server', request, { ...executionContext(), unattended: true })).resolves.toEqual({ action: 'decline' });
+    expect(harness.events).toEqual([]);
+    await expect(harness.gate.listApprovals()).resolves.toEqual({ approvals: [] });
+  });
   it('persists the request but keeps validated form answers out of thread events', async () => {
     const harness = createHarness();
     const resultPromise = harness.coordinator.request('profile_server', {

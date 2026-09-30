@@ -1,0 +1,51 @@
+/* Use the shell's tracks so Windows headers leave the sidebar at full height. */
+.automation-page { display: contents; }
+.automation-sidebar { grid-column: 1; grid-row: 1 / -1; display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 16px 8px; border-right: 1px solid var(--app-border); background: var(--app-sidebar-bg); overflow: hidden; }
+.automation-sidebar__header { display: flex; flex: 0 0 calc(var(--app-control-height) + 12px); align-items: center; justify-content: space-between; min-height: 0; padding: 0 8px 12px; }
+.automation-sidebar__header h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.automation-sidebar-row { box-sizing: border-box; width: 100%; min-width: 0; border: 0; border-radius: 8px; }
+/* Let short task lists size to their content while keeping activity visible for long lists. */
+.automation-sidebar__tasks { flex: 0 1 auto; min-height: 0; max-height: 50%; overflow-y: auto; }
+.automation-sidebar-row { display: flex; flex-direction: column; gap: 4px; padding: 10px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.automation-sidebar-row:hover, .automation-sidebar-row.is-active { background: var(--desktop-agent-sidebar-hover-bg); }
+.automation-sidebar-row__title { font-size: 13px; line-height: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.automation-sidebar-row__detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--app-text-muted); font-size: 11px; line-height: 16px; }
+.automation-sidebar__activity { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; margin-top: 16px; }
+.automation-sidebar__activity h3 { flex-shrink: 0; margin: 0 8px 8px; color: var(--app-text-muted); font-size: 12px; font-weight: 500; }
+.automation-sidebar__runs { flex: 1; min-height: 0; overflow-y: auto; }
+.automation-sidebar__empty { margin: 0; padding: 10px; color: var(--app-sidebar-text-secondary); font-size: 12px; line-height: 18px; }
+.automation-main { grid-column: 2 / -1; grid-row: content / -1; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--desktop-agent-main-bg); }
+/* Reused chat/workspace surfaces address columns 2/3 and named content/bottom rows. */
+.automation-conversation {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 0 minmax(0, 1fr) var(--desktop-agent-workspace-width, 0px);
+  grid-template-rows: [content] minmax(0, 1fr) [bottom] var(--app-bottom-panel-height, 0px);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.automation-conversation > .automation-loading { grid-column: 2 / -1; grid-row: content / -1; }
+.automation-starter.chat-starter__title { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; text-align: left; }
+.automation-starter h1 { margin: 0; font: inherit; font-weight: 500; }
+.automation-starter p { margin: 0; color: var(--app-text-muted); font-size: 14px; font-weight: 400; line-height: 1.6; letter-spacing: normal; }
+.automation-starter__suggestions { display: flex; flex-direction: column; gap: 6px; width: min(560px, 100%); }
+.automation-starter__suggestion.sd-button { justify-content: flex-start; gap: 10px; width: 100%; padding: 8px 10px; border-radius: var(--app-radius-control); font-weight: 400; text-align: left; white-space: normal; }
+.automation-loading { display: grid; place-content: center; color: var(--app-text-muted); font-size: 13px; }
+.automation-form { display: flex; flex-direction: column; gap: 16px; }
+.automation-form :is(.sd-field, .automation-time-picker) { border-radius: var(--app-radius-control); }
+.automation-form .sd-textarea { border-radius: var(--app-radius-xl); }
+.automation-form__field { display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.automation-form__row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 44px; font-size: 13px; }
+.automation-form__row > .sd-field { width: min(300px, 60%); }
+.automation-form__days { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; }
+.automation-form__advanced summary { display: flex; align-items: center; gap: 6px; width: fit-content; padding: 8px 0; cursor: pointer; list-style: none; color: var(--app-text-muted); font-size: 13px; }
+.automation-form__advanced summary::-webkit-details-marker { display: none; }
+.automation-form__advanced[open] summary > svg { transform: rotate(90deg); }
+.automation-form__advanced > .automation-form__row { margin-top: 8px; }
+.automation-error { color: var(--app-danger, #c64040); font-size: 13px; padding: 8px 16px; }
+.automation-result-card { display: flex; align-items: center; gap: 12px; padding: 14px; border: 1px solid var(--app-border); border-radius: 12px; margin: 12px 0; }
+.automation-result-card__icon { display: grid; place-content: center; width: 38px; height: 38px; border-radius: 10px; background: var(--desktop-agent-sidebar-hover-bg); color: var(--app-text-muted); }
+.automation-result-card > div { display: flex; flex: 1; flex-direction: column; gap: 4px; font-size: 13px; }
+.automation-result-card strong { font-weight: 500; }
+.automation-result-card > div > span { color: var(--app-text-muted); font-size: 12px; }

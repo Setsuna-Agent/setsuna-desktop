@@ -193,6 +193,7 @@ export class ToolOrchestrator {
       const preExtensionOutcome = effective.rejectionReason
         ? null
         : await this.options.extensions?.dispatch('tool.before', {
+            ...(stepContext.unattended ? { unattended: true } : {}),
             threadId: stepContext.threadId,
             turnId: stepContext.turnId,
             projectId: stepContext.projectId,
@@ -561,6 +562,7 @@ export class ToolOrchestrator {
       ?? (postHookOutcome?.shouldBlock ? 'PostToolUse hook blocked the tool result.' : undefined);
     if (modelVisibleHookFeedback) content = modelVisibleHookFeedback;
     const postExtensionOutcome = await this.options.extensions?.dispatch('tool.after', {
+      ...(context.unattended ? { unattended: true } : {}),
       threadId: context.threadId,
       turnId: context.turnId,
       projectId: context.projectId,

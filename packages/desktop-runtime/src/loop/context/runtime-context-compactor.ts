@@ -74,6 +74,7 @@ type RuntimeContextCompactorOptions = {
   ): Promise<RuntimeEvent | null | void>;
   onCompacted(threadId: string): void;
   runCompactHooks(input: {
+    unattended?: boolean;
     eventName: 'PreCompact' | 'PostCompact';
     runtimeConfig: RuntimeConfigState | null | undefined;
     signal?: AbortSignal;
@@ -104,7 +105,7 @@ type CompactionSamplingInput = {
 export class RuntimeContextCompactor {
   constructor(private readonly options: RuntimeContextCompactorOptions) {}
 
-  async compactMessagesBeforeModelRequest({ contextBudget, conversationModel, force, messages, reservedTokens = 0, runtimeConfig, signal, thread, threadId, turnId }: { contextBudget?: RuntimeContextCompactionBudget; conversationModel?: Pick<ModelRequest, 'model' | 'providerId'>; force: boolean; messages: RuntimeMessage[]; reservedTokens?: number; runtimeConfig: RuntimeConfigState | null | undefined; signal: AbortSignal; thread: RuntimeThread; threadId: string; turnId: string }): Promise<RuntimeMessage[]> {
+  async compactMessagesBeforeModelRequest({ contextBudget, conversationModel, force, messages, reservedTokens = 0, runtimeConfig, signal, thread, threadId, turnId, unattended }: { contextBudget?: RuntimeContextCompactionBudget; conversationModel?: Pick<ModelRequest, 'model' | 'providerId'>; force: boolean; messages: RuntimeMessage[]; reservedTokens?: number; runtimeConfig: RuntimeConfigState | null | undefined; signal: AbortSignal; thread: RuntimeThread; threadId: string; turnId: string; unattended?: boolean }): Promise<RuntimeMessage[]> {
     messages = restoreNativeCompactionHistory(messages, (message) => Boolean(conversationModel && nativeCompactionMatchesModel(message, runtimeConfig, conversationModel)));
     // 自动压缩必须先持久化再发模型请求，保证 UI、存储历史和实际 prompt window 一致。
     const budget = reserveRuntimeContextCompactionBudget(
@@ -116,6 +117,7 @@ export class RuntimeContextCompactor {
     const trigger = compactHookTrigger(force);
     const preCompact = await this.options.runCompactHooks({
       eventName: 'PreCompact',
+      unattended,
       runtimeConfig,
       signal,
       thread,
@@ -182,6 +184,7 @@ export class RuntimeContextCompactor {
     });
     const postCompact = await this.options.runCompactHooks({
       eventName: 'PostCompact',
+      unattended,
       runtimeConfig,
       signal,
       thread,

@@ -57,6 +57,7 @@ const REQUIRED_APP_ROUTE_IDS: readonly RendererAppRouteId[] = Object.freeze([
   'settings',
   'capabilities',
   'plugin',
+  'automation',
 ]);
 
 const CORE_SETTINGS_PAGES = Object.freeze([
@@ -132,6 +133,12 @@ const routePlugin = defineRendererPlugin({
     registerRoute(ui, 'settings', [
       declareRendererChildSlot(settingsPageSlot, { requiredKeys: REQUIRED_SETTINGS_PAGE_KEYS }),
       declareRendererChildSlot(settingsPageExtensionSlot),
+    ]);
+    registerRoute(ui, 'automation', [
+      declareRendererChildSlot(chatConversationSlot, { required: true }),
+      declareRendererChildSlot(chatComposerSlot, { required: true }),
+      declareRendererChildSlot(chatDetailsSlot, { required: true }),
+      declareRendererChildSlot(workspacePanelSlot, { requiredKeys: RENDERER_WORKSPACE_PANEL_TYPES }),
     ]);
     registerRoute(ui, 'capabilities', [
       declareRendererChildSlot(capabilitiesSidebarSlot),

@@ -37,6 +37,7 @@ import type { RuntimeSamplingContextBuilder } from './runtime-sampling-context-b
 import { isAbortError, throwIfAborted } from './runtime-turn-errors.js';
 import type { RuntimeTurnExecutionInput } from './runtime-turn-run-factory.js';
 import { addRuntimeUsage } from './runtime-usage.js';
+import { runtimeConfigForTurn } from './runtime-turn-policy.js';
 
 type RuntimeAgentTurnRunnerOptions = {
   clock: Clock;
@@ -124,7 +125,7 @@ export class RuntimeAgentTurnRunner {
     };
     let modelUserMessage: RuntimeMessage = options.modelInput ? { ...userMessage, content: options.modelInput } : userMessage;
     const includeUserMessageInConversation = publishUserMessage || options.includeUserMessageInModel === true;
-    let runtimeConfig = await this.options.configStore?.getConfig().catch(() => null);
+    let runtimeConfig = runtimeConfigForTurn(await this.options.configStore?.getConfig().catch(() => null), options.unattended);
     let responseLanguage = resolveRuntimeResponseLanguage({
       currentUserContent: publishUserMessage && !userMessage.promptSource
         ? userMessage.content
@@ -163,6 +164,7 @@ export class RuntimeAgentTurnRunner {
     let settledContent: string | undefined;
     try {
       const turnStartHooks = await this.options.hooks.runTurnStartHooks({
+        unattended: options.unattended,
         prompt: options.modelInput ?? text,
         runtimeConfig,
         signal,
@@ -273,6 +275,7 @@ export class RuntimeAgentTurnRunner {
           hookContextMessages: additionalContextMessages,
           responseLanguage,
           runtimeConfig,
+          unattended: options.unattended,
           signal,
           skillIds: activeSkillIds,
           thinkingOptions: activeThinkingOptions,
@@ -513,9 +516,11 @@ export class RuntimeAgentTurnRunner {
         settledContent,
         cleanupEnvironment?.cwd,
         runtimeConfig?.features,
+        options.unattended,
       );
       try {
         await this.cleanupToolHostTurn({
+          ...(options.unattended ? { unattended: true } : {}),
           ...(cleanupEnvironment ? { environment: cleanupEnvironment } : {}),
           threadId,
           projectId: thread.projectId,
@@ -535,10 +540,12 @@ export class RuntimeAgentTurnRunner {
     content?: string,
     cwd?: string,
     features?: Record<string, boolean>,
+    unattended?: boolean,
   ): Promise<void> {
     if (!this.options.extensions) return;
     try {
       const outcome = await this.options.extensions.dispatch('turn.settled', {
+        ...(unattended ? { unattended: true } : {}),
         threadId: thread.id,
         turnId,
         projectId: thread.projectId,

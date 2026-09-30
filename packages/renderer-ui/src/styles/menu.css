@@ -12,6 +12,16 @@
   animation: none;
 }
 
+/* Choice menus keep the neutral fill and their existing semantic text colors. */
+.sd-menu-surface--neutral {
+  --app-menu-highlight-bg: var(--desktop-agent-control-hover-bg);
+  --app-menu-highlight-text: var(--app-text);
+}
+
+.sd-menu-surface--neutral .sd-menu__item.is-selected:not([data-disabled]) {
+  background: var(--app-menu-highlight-bg);
+}
+
 .sd-menu-surface [role='menuitem'] {
   min-height: var(--app-menu-item-height);
   padding: 3px 8px;
@@ -35,7 +45,7 @@
 }
 
 /* Text and plain icons follow the row; framed artwork keeps its own foreground/background pair. */
-.sd-menu-surface :is([role='menuitem'], [role='option'], .sd-picker__item):not(:disabled, [data-disabled]):is(
+.sd-menu-surface:not(.sd-menu-surface--neutral) :is([role='menuitem'], [role='option'], .sd-picker__item):not(:disabled, [data-disabled]):is(
   :hover:not(.sd-menu__item, .sd-select-menu__option, [aria-selected]), :focus-visible, [data-highlighted], [data-state='open'], [aria-selected='true']
 ) :where(svg, span, strong, small, kbd):not(:where([data-menu-color='preserve'], [data-menu-color='preserve'] *)) {
   color: inherit;

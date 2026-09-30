@@ -1,7 +1,7 @@
 import { Image as ImageIcon, Sparkles } from 'lucide-react';
-import { useI18n } from '../../../shared/i18n/I18nProvider.js';
-import { formatTokenCount } from '../conversation/chatContextUsage.js';
-import type { ChatModelOption } from './chatModelOptions.js';
+import { useI18n } from '../../../../shared/i18n/I18nProvider.js';
+import { formatTokenCount } from '../../conversation/chatContextUsage.js';
+import type { ChatModelOption } from '../chatModelOptions.js';
 
 export function ChatModelDetails({ option: { model, provider } }: { option: ChatModelOption }) {
   const { t } = useI18n();

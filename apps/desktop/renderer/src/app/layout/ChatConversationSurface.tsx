@@ -15,9 +15,11 @@ import type {
 import type { ReviewTarget } from '@setsuna-desktop/feature-review/contracts';
 import type { ReactNode } from 'react';
 import type { ChatAttachmentStore } from '../../features/chat/composer/chatAttachmentStore.js';
+import type { ChatComposerSendOptions } from '../../features/chat/composer/chatComposerSendOptions.js';
 import { ChatWorkspace } from '../../features/chat/ChatWorkspace.js';
 import type { ChatStarterLocationSelection, ChatStarterProjectSelection } from '../../features/chat/conversation/ChatStarterWorkspace.js';
 import type { ChatModelSelectionHandler } from '../../features/chat/chatModelSelection.js';
+import type { ChatStarterPresentation } from '../../features/chat/conversation/chat-workspace-types.js';
 import type { ChatQueuedTurnActions } from '../../features/chat/hooks/useQueuedTurnInputActions.js';
 import { MarkdownNavigationProvider } from '../../features/chat/markdown/MarkdownNavigationProvider.js';
 import type { WorkspaceFileContextTarget } from '../../features/workspace/WorkspaceFileContextMenu.js';
@@ -35,6 +37,7 @@ import type {
 } from '../types.js';
 
 export type ChatConversationSurfaceModel = Readonly<{
+  starterPresentation?: ChatStarterPresentation;
   starterProjectSelection: ChatStarterProjectSelection;
   starterLocationSelection: ChatStarterLocationSelection;
   activeTurnId: string | null;
@@ -78,14 +81,7 @@ export type ChatConversationSurfaceModel = Readonly<{
   onOpenWorkspaceDirectory(directoryPath: string): void;
   onSearchProjectEntries(query?: string, parent?: string | null): Promise<WorkspaceEntrySearchResponse>;
   onSelectModel: ChatModelSelectionHandler;
-  onSend(value?: string, options?: {
-    attachments?: RuntimeThread['messages'][number]['attachments'];
-    goalMode?: boolean;
-    skillIds?: string[];
-    skillReferences?: RuntimeThread['messages'][number]['skillReferences'];
-    thinking?: boolean;
-    thinkingEffort?: string;
-  }): Promise<boolean>;
+  onSend(value?: string, options?: ChatComposerSendOptions): Promise<boolean>;
   onSetMultiAgentEnabled(enabled: boolean): void | Promise<unknown>;
   onCapabilitySelectionRequestConsumed(requestId: number): void;
   onStartThreadReview(
@@ -145,6 +141,7 @@ export function ChatConversationSurface({
         queuedTurnActions={model.queuedTurnActions}
         reviewControls={reviewControls}
         starterControls={starterControls}
+        starterPresentation={model.starterPresentation}
         reviewError={model.reviewError}
         reviewState={model.reviewState}
         capabilitySelectionRequest={model.capabilitySelectionRequest}

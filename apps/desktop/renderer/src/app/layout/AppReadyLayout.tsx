@@ -156,6 +156,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   }, [setActiveView]);
   const openChat = useCallback(() => setActiveView('chat'), [setActiveView]);
   const openPullRequests = useCallback(() => setActiveView('pull-requests'), [setActiveView]);
+  const openAutomation = useCallback(() => setActiveView('automation'), [setActiveView]);
   const openCapabilitiesPlugin = useCallback((pluginId: string) => {
     setSelectedCapabilitiesPluginId(pluginId);
     setActiveView('capabilities');
@@ -391,6 +392,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
           onOpenChat={openChat}
           onOpenCapabilities={openCapabilities}
           onOpenPullRequests={openPullRequests}
+          onOpenAutomation={openAutomation}
           onOpenPluginView={openPluginView}
           onOpenRuntimeActivity={() => setRuntimeActivityOpen(true)}
           onOpenSettings={openSettings}
@@ -501,6 +503,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         routeId: activeView,
         renderDefault: () => (
           <AppRouteContent
+        onSelectConversation={navigation.selectThreadInView}
         starterProjectSelection={{
           projects: runtime.projects,
           onSelectProject: navigation.selectNewThreadProject,

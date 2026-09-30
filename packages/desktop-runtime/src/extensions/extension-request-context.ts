@@ -22,6 +22,7 @@ export function workerRequestContext(context: ToolExecutionContext): ExtensionWo
     ...(context.environment?.cwd ? { cwd: context.environment.cwd } : {}),
     ...(context.environment ? { environment: context.environment } : {}),
     ...(context.permissionProfile ? { permissionProfile: context.permissionProfile } : {}),
+    ...(context.unattended ? { unattended: true } : {}),
     ...(context.signal ? { signal: context.signal } : {}),
     ...(context.onToolOutputDelta ? { onOutput: (message: string) => context.onToolOutputDelta?.({ delta: message }) } : {}),
   };
@@ -40,6 +41,7 @@ export function safeEventContext(context: ExtensionEventContext): Record<string,
 export function eventWorkerRequestContext(context: ExtensionEventContext): ExtensionWorkerRequestContext {
   return {
     threadId: context.threadId,
+    ...(context.unattended ? { unattended: true } : {}),
     ...(context.turnId ? { turnId: context.turnId } : {}),
     ...(context.projectId ? { projectId: context.projectId } : {}),
     ...(context.toolCallId ? { toolCallId: context.toolCallId } : {}),

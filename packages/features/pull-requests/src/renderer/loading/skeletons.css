@@ -1,0 +1,32 @@
+.pr-skeleton { display: grid; align-content: start; gap: 12px; min-width: 0; width: 100%; }
+.pr-skeleton__row { display: grid; gap: 12px; min-width: 0; }
+.pr-skeleton .pr-skeleton__meta { width: 38%; }
+.pr-skeleton .pr-skeleton__title { height: 18px; }
+.pr-skeleton .pr-skeleton__avatar { width: 22px; height: 22px; border-radius: 50%; }
+.pr-skeleton__author { display: flex; align-items: center; gap: 8px; }
+
+.pr-skeleton--list { gap: 2px; }
+.pr-skeleton--list .pr-skeleton__row { gap: 8px; padding: 7px 10px; }
+.pr-skeleton--list .pr-skeleton__row > :last-child { width: 62%; }
+
+.pr-skeleton--files, .pr-skeleton--patch { gap: 0; }
+.pr-skeleton--files .pr-skeleton__row, .pr-skeleton--patch .pr-skeleton__row { grid-template-columns: 16px minmax(0, 1fr); align-items: center; gap: 8px; height: 28px; }
+.pr-skeleton--patch .pr-skeleton__row { grid-template-columns: 24px minmax(0, 1fr); gap: 16px; height: 20px; }
+.pr-skeleton--files .pr-skeleton__row { padding-inline: 8px; }
+.pr-skeleton--patch { padding: 8px; }
+.pr-skeleton__line { width: 78%; }
+.pr-skeleton__row:nth-child(3n + 1) > .pr-skeleton__line { width: 92%; }
+.pr-skeleton__row:nth-child(3n + 2) > .pr-skeleton__line { width: 60%; }
+
+.pr-skeleton .pr-skeleton__check { height: 52px; border-radius: var(--app-radius-lg); }
+.pr-skeleton--paragraphs { gap: 28px; }
+.pr-skeleton--paragraphs .pr-skeleton__row > :nth-child(2) { width: 94%; }
+.pr-skeleton--paragraphs .pr-skeleton__row > :last-child, .pr-skeleton--discussion .pr-skeleton__row > :last-child { width: 62%; }
+.pr-skeleton--discussion { padding: 14px 16px; }
+
+.pr-skeleton--connection { width: min(320px, 100%); }
+.pr-skeleton--connection .pr-skeleton__row { justify-items: center; gap: 14px; }
+.pr-skeleton--connection .sd-skeleton { width: 100%; }
+.pr-skeleton--connection .pr-skeleton__avatar { width: 36px; height: 36px; }
+.pr-skeleton--connection .pr-skeleton__title { width: 70%; height: 24px; }
+.pr-skeleton--connection .pr-skeleton__action { width: 96px; height: var(--app-control-height); border-radius: var(--app-radius-control); }

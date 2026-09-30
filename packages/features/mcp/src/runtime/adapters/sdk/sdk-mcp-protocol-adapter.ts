@@ -88,6 +88,7 @@ function toConnectionContext(context: McpOperationContext, fallbackScopeId: stri
     ...(threadId ? { threadId } : {}),
     ...(context.turnId ? { turnId: context.turnId } : {}),
     ...(context.toolCallId ? { toolCallId: context.toolCallId } : {}),
+    ...(context.unattended ? { unattended: true } : {}),
     ...(context.toolName ? { toolName: context.toolName } : {}),
     ...(context.signal ? { signal: context.signal } : {}),
     ...(context.onProgress ? { onProgress: context.onProgress } : {}),

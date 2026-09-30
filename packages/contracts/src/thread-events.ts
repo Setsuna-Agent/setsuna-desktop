@@ -70,6 +70,8 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
 
   if (event.type === 'thread.created') {
     next.title = event.payload.title;
+    next.featureId = event.payload.featureId ?? next.featureId;
+    next.origin = event.payload.origin ? { ...event.payload.origin } : next.origin;
     next.workspaceId = event.payload.workspaceId ?? next.workspaceId;
     next.modelBinding = event.payload.modelBinding ? { ...event.payload.modelBinding } : next.modelBinding;
     return next;
@@ -77,6 +79,11 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
 
   if (event.type === 'thread.updated') {
     next.title = event.payload.title ?? next.title;
+    if (event.payload.featureId === null) delete next.featureId;
+    else next.featureId = event.payload.featureId ?? next.featureId;
+    next.origin = event.payload.origin ? { ...event.payload.origin } : next.origin;
+    if (event.payload.projectId === null) delete next.projectId;
+    else next.projectId = event.payload.projectId ?? next.projectId;
     next.archived = event.payload.archived ?? next.archived;
     if (event.payload.workspaceId === null) {
       delete next.workspaceId;

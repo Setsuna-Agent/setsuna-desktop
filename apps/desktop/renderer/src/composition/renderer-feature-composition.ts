@@ -1,4 +1,6 @@
 import { pullRequestsRendererFeature, pullRequestsRendererHostCapability } from '@setsuna-desktop/feature-pull-requests/renderer';
+import { automationClientCapability, automationRendererFeature, automationRendererHostCapability } from '@setsuna-desktop/feature-automation/renderer';
+import { AutomationModelPicker } from './automation/AutomationModelPicker.js';
 import { PullRequestsFeatureBoundary } from './PullRequestsFeatureBoundary.js';
 import {
   completeFeatureHostActivation,
@@ -131,6 +133,7 @@ const rendererFeatures = defineRendererFeatureHost({
     workspaceAppsRendererFeature,
   ],
   optional: [
+    automationRendererFeature,
     pullRequestsRendererFeature,
     approvalReviewRendererFeature,
     collaborationRendererFeature,
@@ -189,6 +192,10 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
             ? (workspaceRoot, filePath) => desktop.openWorkspaceFile(workspaceRoot, filePath)
             : null,
         } satisfies ArtifactRendererHost),
+      ),
+      provideHostCapability(
+        automationRendererHostCapability,
+        Object.freeze({ ModelPicker: AutomationModelPicker }),
       ),
       provideHostCapability(
         modelProviderRendererHostCapability,
@@ -295,6 +302,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
     });
     rendererPlugins.commitInitial();
     const dependencies = host.composition.resolveHostDependencies({
+      automation: optionalCapability(automationClientCapability, () => null),
       collaboration: optionalCapability(
         collaborationRendererStateCapability,
         createNoopCollaborationRendererStateService,

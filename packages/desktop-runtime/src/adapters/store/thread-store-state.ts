@@ -80,6 +80,8 @@ export function toSummary(thread: RuntimeThread): RuntimeThreadSummary {
   return {
     id: thread.id,
     ...(kind === 'side' ? { kind } : {}),
+    featureId: thread.featureId,
+    origin: thread.origin ? { ...thread.origin } : undefined,
     activeTurnId: thread.activeTurnId,
     forkedFromId: thread.forkedFromId,
     parentThreadId: thread.parentThreadId,

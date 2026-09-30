@@ -4,6 +4,18 @@ import { ExtensionUiCoordinator } from '../../src/extensions/extension-ui-coordi
 import type { ApprovalGate, CreateApprovalInput } from '../../src/ports/approval-gate.js';
 
 describe('extension UI coordinator', () => {
+  it('rejects plugin forms immediately during unattended execution', async () => {
+    const createApproval = vi.fn();
+    const coordinator = new ExtensionUiCoordinator(
+      { createApproval } as unknown as ApprovalGate,
+      { append: vi.fn(async () => null) },
+      { now: () => new Date('2026-09-30T00:00:00Z') }, { id: (prefix) => `${prefix}_1` },
+    );
+    await expect(coordinator.handle('ui.input', { message: 'Enter a value' }, {
+      threadId: 'thread_1', turnId: 'turn_1', toolCallId: 'call_1', unattended: true,
+    }, { id: 'demo', name: 'Demo' })).rejects.toThrow('unattended');
+    expect(createApproval).not.toHaveBeenCalled();
+  });
   it('projects structured input through the audited approval flow during a tool call', async () => {
     const createApproval = vi.fn(async (input: CreateApprovalInput) => ({
       ...input,

@@ -1,4 +1,4 @@
-import { Check, Circle, CircleX, Clock3, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft, Loader2 } from 'lucide-react';
+import { Check, Circle, CircleX, Clock3, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft } from 'lucide-react';
 import type { PullRequestDetail, PullRequestSummary } from '../contracts/index.js';
 import { usePrText, usePullRequestsHost } from './context.js';
 
@@ -52,4 +52,3 @@ export function Timestamp({ value }: { value: string }) {
   const date = new Date(value);
   return <time dateTime={value} title={date.toLocaleString(locale)}>{date.toLocaleDateString(locale, { month: 'short', day: 'numeric' })} {date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}</time>;
 }
-export function Loading() { const t = usePrText(); return <span className="pr-loading" role="status"><Loader2 size={15} className="pr-spin" />{t('loading')}</span>; }

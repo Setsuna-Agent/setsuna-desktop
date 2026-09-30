@@ -1,4 +1,7 @@
 import { pullRequestsRuntimeFeature } from '@setsuna-desktop/feature-pull-requests/runtime';
+import { automationFeature, automationRuntimeHostCapability, automationToolServiceCapability } from '@setsuna-desktop/feature-automation/contracts';
+import { automationRuntimeFeature } from '@setsuna-desktop/feature-automation/runtime';
+import { createAutomationRuntimeHost } from './automation-runtime-host.js';
 import { githubCliInstallationHostCapability, pullRequestsWorkspaceCapability } from '@setsuna-desktop/feature-pull-requests/contracts';
 import { readPluginConnectorStatuses } from '../adapters/plugin/plugin-connector-status.js';
 import {
@@ -143,6 +146,7 @@ const runtimeFeatures = defineRuntimeFeatureHost({
     mcpRuntimeFeature,
   ],
   optional: [
+    automationRuntimeFeature,
     pullRequestsRuntimeFeature,
     approvalReviewRuntimeFeature,
     collaborationRuntimeFeature,
@@ -164,6 +168,7 @@ export async function activateBuiltinRuntimeFeatures(
   const composition = await runtimeFeatures.activate({
     settingsRegistry: runtime.featureSettings,
     hostCapabilities: [
+      provideHostCapability(automationRuntimeHostCapability, createAutomationRuntimeHost(runtime)),
       provideHostCapability(pullRequestsWorkspaceCapability, runtime.workspaceProjects),
       provideHostCapability(githubCliInstallationHostCapability, { dataDir: runtime.dataDir, fetch: runtime.networkProxyFetch.forRoute() }),
       provideHostCapability(runtimeRouteRegistrarCapability, runtime.featureRoutes),
@@ -344,7 +349,7 @@ export async function activateBuiltinRuntimeFeatures(
             : runtime.backgroundShellProcesses.listAllBackgroundShellProcesses(),
           listThreads: () => runtime.threadStore.listThreads({
             includeArchived: true,
-            includeSide: true,
+            includeSide: true, includeFeatures: true,
           }),
           now: () => runtime.clock.now(),
           terminateBackgroundShellProcess: (threadId: string, processId: string) => (
@@ -530,6 +535,13 @@ export async function activateBuiltinRuntimeFeatures(
     }));
 
     host.add(runtime.featureManagement.attach(host.composition));
+    host.bindWhenFeatureAvailable(automationFeature.id, {
+      tools: requiredCapability(automationToolServiceCapability),
+    }, ({ tools }) => {
+      const unbind = runtime.automationToolHost.bind(tools);
+      tools.startScheduler();
+      return unbind;
+    });
     return host.composition;
   });
 }

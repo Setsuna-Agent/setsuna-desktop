@@ -125,6 +125,7 @@ export function ChatComposer({
   plugins = EMPTY_PLUGINS,
   sideConversation = false,
   starter = false,
+  submissionPending = false,
   placeholder,
   onCancelActiveTurn,
   onAccessModeChange,
@@ -163,6 +164,7 @@ export function ChatComposer({
   plugins?: RuntimePluginSummary[];
   sideConversation?: boolean;
   starter?: boolean;
+  submissionPending?: boolean;
   placeholder?: string;
   onCancelActiveTurn: () => void;
   onAccessModeChange: (selection: RuntimeAccessModeSelection) => void;
@@ -193,7 +195,8 @@ export function ChatComposer({
     reference: RuntimeConfiguredModelReference;
     threadId: string | null;
   } | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [localSubmitting, setSubmitting] = useState(false);
+  const submitting = localSubmitting || submissionPending;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const senderRef = useRef<ComponentRef<typeof ChatPromptInput>>(null);
   const lastEditorDraftRef = useRef(draft);

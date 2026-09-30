@@ -691,9 +691,15 @@ export type RuntimeToolRun = {
 
 export type RuntimeThreadKind = 'regular' | 'side';
 
+/** Records the feature entity that created a conversation without owning its navigation. */
+export type RuntimeThreadOrigin = { featureId: string; entityId: string };
+
 export type RuntimeThreadSummary = {
   id: string;
   kind?: RuntimeThreadKind;
+  /** Conversations owned by a feature are listed in that feature's navigation. */
+  featureId?: string;
+  origin?: RuntimeThreadOrigin;
   activeTurnId?: string | null;
   forkedFromId?: string;
   parentThreadId?: string;

@@ -124,6 +124,7 @@ Route 应：
 - 新请求是否允许进入。
 - 已取消但终态还未写完的 turn。
 - 已进入 handler 尚未完成的持久化写入。
+- Automation scheduler 已接纳的执行中与排队 mutation；readiness 返回 ready 后同步暂停其调度和写入，解除 gate 后再处理到期任务。
 - Background memory/tool/process。
 
 “active task registry 已空”不等于所有写入已经落盘；shutdown 还要等待 `InFlightRequestTracker` idle。

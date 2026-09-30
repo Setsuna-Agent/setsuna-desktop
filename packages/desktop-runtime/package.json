@@ -38,7 +38,8 @@
     "tar": "7.5.22",
     "undici": "7.29.0",
     "yaml": "^2.8.1",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@setsuna-desktop/feature-automation": "workspace:*"
   },
   "scripts": {
     "build": "tsc -b tsconfig.build.json",

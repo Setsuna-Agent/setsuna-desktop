@@ -15,7 +15,8 @@ import { GitHubIdentity } from './GitHubIdentity.js';
 import { GitHubCliLoginCommand } from './GitHubCliLoginCommand.js';
 import { PullRequestsSplit } from './PullRequestsSplit.js';
 import { PullRequestScrollArea } from './PullRequestScrollArea.js';
-import { CheckState, Loading, PullRequestState, Timestamp } from './status.js';
+import { CheckState, PullRequestState, Timestamp } from './status.js';
+import { PullRequestSkeleton } from './loading/PullRequestSkeleton.js';
 import type { PullRequestSession } from './session.js';
 
 type PullRequestsPageProps = { client: PullRequestsClient; connectionState: PullRequestConnectionState; host: PullRequestsRendererHost; session: PullRequestSession };
@@ -54,7 +55,6 @@ function Workbench({ client, connectionState, session }: Omit<PullRequestsPagePr
       <header className="pr-sidebar__header">
         <h1><GitPullRequest size={18} />Pull Request</h1>
         <IconButton size="small" label={t('refresh')} disabled={list.loading} onClick={() => { list.refresh(); void auth.refresh(); }}><RefreshCw size={14} /></IconButton>
-        <GitHubIdentity login={account} avatarUrl={auth.connection?.avatarUrl ?? null} showName={false} />
       </header>
       <PullRequestFilters value={{ repository, filters }} repositories={list.inventory.repositories} authors={list.items.map((item) => item.author.login)} onChange={(next) => {
         setRepository(next.repository); setFilters(next.filters);
@@ -68,14 +68,15 @@ function Workbench({ client, connectionState, session }: Omit<PullRequestsPagePr
           <strong title={pr.title}>{pr.title}</strong>
           <span className="pr-list-item__footer"><GitHubIdentity login={pr.author.login} avatarUrl={pr.author.avatarUrl} /><span className="pr-list-item__repository" title={pr.repository}>{pr.repository}</span></span>
         </Button>)}
-        {list.loading ? <Loading /> : account && !list.items.length ? <p className="pr-empty">{list.inventory.repositories.length ? t('noResults') : t('noRepositories')}</p> : null}
+        {list.loading && !list.items.length ? <PullRequestSkeleton kind="list" label={t('loading')} /> : null}
+        {!list.loading && account && !list.items.length ? <p className="pr-empty">{list.inventory.repositories.length ? t('noResults') : t('noRepositories')}</p> : null}
         {list.hasMore ? <Button disabled={list.loading} onClick={() => void list.more()}>{t('loadMore')}</Button> : null}
       </PullRequestScrollArea>
     </aside> : null
     }>
     {account ? selected ? <PullRequestDetailPane key={`${account}/${selected.repository}/${selected.number}`} client={auth.client} reference={selected} summary={list.items.find((item) => item.repository === selected.repository && item.number === selected.number)} account={account} session={session} onUpdated={list.refresh} /> : <div className="pr-empty pr-welcome"><GitPullRequest size={32} /><h2>{t('selectPr')}</h2><p>{t('selectPrDescription')}</p></div>
       : <main className="pr-empty pr-welcome">
-        {checkingConnection ? <Loading /> : <>
+        {checkingConnection ? <PullRequestSkeleton kind="connection" label={t('loading')} /> : <>
           <Github size={36} />
           <h2>{t(needsSetup ? 'connectTitle' : 'connectionCheckFailed')}</h2>
           {needsSetup ? <p>{t(auth.connection?.state === 'not-installed' ? 'cliNotInstalled' : 'connectDescription')}</p> : null}

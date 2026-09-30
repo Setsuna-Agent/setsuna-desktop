@@ -42,7 +42,7 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
   try {
     await runtime.mcpStore.migrateLegacySecrets();
     await runtime.threadStore.recover();
-    const recoveredThreads = await runtime.threadStore.listThreads({ includeArchived: true, includeSide: true });
+    const recoveredThreads = await runtime.threadStore.listThreads({ includeArchived: true, includeSide: true, includeFeatures: true });
     const imageCandidates = new Set(await runtime.generatedImageStore.listAssetIds());
     const recoveredGeneratedImageAssetIds = await managedGeneratedImageAssetIdsFromStore(runtime.threadStore, imageCandidates);
     await runtime.generatedImageStore.recover([...recoveredGeneratedImageAssetIds]);

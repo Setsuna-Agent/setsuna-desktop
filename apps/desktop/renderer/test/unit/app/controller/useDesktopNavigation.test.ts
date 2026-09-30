@@ -12,6 +12,31 @@ import { addPanelToSlotState, createBrowserPanel } from '../../../../src/feature
 
 afterEach(cleanup);
 
+it.each([true, false])('leaves the automation conversation when opening chat mode; has fallback=$0', async (hasFallback) => {
+  const automation: RuntimeThread = {
+    id: 'setup', featureId: 'automation', title: 'Setup', createdAt: '', updatedAt: '', archived: false,
+    messageCount: 0, lastMessagePreview: '', messages: [], lastSeq: 0,
+  };
+  const ordinary = { ...automation, id: 'ordinary', featureId: undefined };
+  const getThread = vi.fn(async () => ordinary);
+  const { result } = renderHook(() => {
+    const [currentThread, setCurrentThread] = useState<RuntimeThread | null>(automation);
+    const [activeView, setActiveView] = useState<MainView>('automation');
+    const navigation = useDesktopNavigation({
+      activeProjectId: null, setActiveProjectId: vi.fn(), currentThread, setCurrentThread,
+      projects: [], setProjects: vi.fn(), setActiveView,
+      client: { getThread } as unknown as DesktopRuntimeClient, confirmDiscardProjectFile: async () => true,
+      globalThreads: hasFallback ? [ordinary] : [], threadsByProjectId: new Map(), reloadThreads: async () => [],
+      resetProjectWorkspaceState: vi.fn(), resetNewThreadWorkspacePanels: vi.fn(), resetThreadWorkspacePanels: vi.fn(),
+    });
+    return { navigation, currentThread, activeView };
+  });
+  await act(() => result.current.navigation.enterChatMode());
+  expect(result.current.activeView).toBe('chat');
+  expect(result.current.currentThread?.id ?? null).toBe(hasFallback ? ordinary.id : null);
+  expect(getThread).toHaveBeenCalledTimes(hasFallback ? 1 : 0);
+});
+
 it.each([
   { navigateAway: false, fromSidebar: false },
   { navigateAway: true, fromSidebar: false },

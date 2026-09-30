@@ -33,7 +33,7 @@ export function createRuntimeGoalHost(
     id: (prefix) => dependencies.ids.id(prefix),
     listThreads: () => dependencies.threadStore.listThreads({
       includeArchived: true,
-      includeSide: true,
+      includeSide: true, includeFeatures: true,
     }),
     getThread: (threadId) => dependencies.threadStore.getThread(threadId),
     listEvents: (threadId, query) => dependencies.threadStore.listEvents(threadId, 0, query),

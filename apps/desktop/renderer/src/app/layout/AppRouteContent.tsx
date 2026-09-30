@@ -27,9 +27,11 @@ import { CapabilitiesRouteAdapter } from './CapabilitiesRouteAdapter.js';
 import { ChatRouteAdapter } from './ChatRouteAdapter.js';
 import { SettingsRouteAdapter } from './SettingsRouteAdapter.js';
 import { PluginRouteAdapter } from './PluginRouteAdapter.js';
+import { AutomationRouteAdapter } from '../../composition/automation/AutomationFeatureBoundary.js';
 import type { ChatStarterProjectSelection } from '../../features/chat/conversation/ChatStarterWorkspace.js';
 
 export type AppRouteContentProps = Readonly<{
+  onSelectConversation?(threadId: string, view: MainView): Promise<boolean>;
   starterProjectSelection: ChatStarterProjectSelection;
   activeProject?: WorkspaceProject;
   activeWorkspace?: WorkspaceProject;
@@ -79,6 +81,7 @@ export type AppRouteContentProps = Readonly<{
 }>;
 
 export function AppRouteContent(props: AppRouteContentProps) {
+  if (props.activeView === 'automation') return <AutomationRouteAdapter {...props} />;
   if (props.activeView === 'settings') return <SettingsRouteAdapter {...props} />;
   if (props.activeView === 'capabilities') return <CapabilitiesRouteAdapter {...props} />;
   if (props.activeView === 'plugin') {
