@@ -1,7 +1,7 @@
 .pr-workbench {
   position: relative;
   grid-column: 1 / -1;
-  grid-row: 1 / -1;
+  grid-row: content / -1;
   display: grid;
   grid-template-columns: var(--pr-sidebar-width, 340px) minmax(0, 1fr);
   min-width: 0;

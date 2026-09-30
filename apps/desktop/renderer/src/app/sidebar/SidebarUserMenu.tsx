@@ -1,7 +1,10 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
-import { Info, Moon, MoreHorizontal, Settings, Sun } from 'lucide-react';
+import { shellSidebarAvatarSlot } from '@setsuna-desktop/renderer-contracts/shell';
+import { Info, Moon, Settings, Sun } from 'lucide-react';
 import { useCallback, useState, type RefObject } from 'react';
+import appIcon from '../../../../../../assets/build/icon.png';
 import { RuntimeActivityFeatureMenuItem } from '../../composition/RuntimeActivityFeatureBoundary.js';
+import { RendererOwnedSingleSlot } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { useResolvedThemeMode, useThemeTransition } from '../../shared/preferences/useThemeTransition.js';
 import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
@@ -65,7 +68,12 @@ export function SidebarUserMenu({
           aria-haspopup="menu"
           onClick={() => setMenuOpen((open) => !open)}
         >
-          <MoreHorizontal size={18} />
+          <span className="app-navigation__avatar">
+            <RendererOwnedSingleSlot
+              slot={shellSidebarAvatarSlot}
+              props={{ renderDefault: () => <img className="app-navigation__logo" src={appIcon} alt="" width={28} height={28} draggable={false} /> }}
+            />
+          </span>
         </Button>
       </AppTooltip>
       <SidebarFloatingMenu

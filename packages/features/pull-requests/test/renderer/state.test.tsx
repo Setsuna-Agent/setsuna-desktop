@@ -12,6 +12,7 @@ import { usePullRequestFiles } from '../../src/renderer/usePullRequestFiles.js';
 import { useDiscussions } from '../../src/renderer/useDiscussions.js';
 import { useCliInstallation } from '../../src/renderer/useCliInstallation.js';
 import { useConnection } from '../../src/renderer/useConnection.js';
+import { PullRequestConnectionState } from '../../src/renderer/account/connection-state.js';
 import { CommentComposer } from '../../src/renderer/CommentComposer.js';
 import { MergeActions } from '../../src/renderer/MergeActions.js';
 import { PullRequestsPage } from '../../src/renderer/PullRequestsPage.js';
@@ -91,7 +92,7 @@ describe('PR navigation and drafts', () => {
       repositories: vi.fn(async () => ({ repositories, issues: [] })), list,
     });
     const session = createPullRequestSession();
-    render(<PullRequestsPage client={client} host={host} session={session} />);
+    render(<PullRequestsPage client={client} connectionState={new PullRequestConnectionState(client)} host={host} session={session} />);
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
     for (const repo of repositories) expect(list).toHaveBeenCalledWith({ repository: repo.id, cursor: null, filters: { state: 'all', author: '', search: '' } }, expect.anything());
 
@@ -305,9 +306,10 @@ describe('PR navigation and drafts', () => {
       .mockResolvedValueOnce({ state: 'connected', login: 'bob' });
     const publish = vi.fn().mockRejectedValue(Object.assign(new Error('Account changed'), { code: 'PR_ACCOUNT_CHANGED' }));
     const client = clientWith({ connection, publish });
+    const connectionState = new PullRequestConnectionState(client);
     const onPublished = vi.fn();
     function ConnectedComposer() {
-      const auth = useConnection(client);
+      const auth = useConnection(client, connectionState);
       const owner = auth.connection?.login;
       return owner ? <CommentComposer key={owner} client={auth.client} reference={reference} account={owner} onPublished={onPublished} /> : null;
     }
@@ -330,7 +332,8 @@ describe('PR navigation and drafts', () => {
       .mockResolvedValueOnce({ state: 'connected', login: 'bob' });
     const perform = vi.fn().mockRejectedValue(Object.assign(new Error('Account changed'), { code: 'PR_ACCOUNT_CHANGED' }));
     const client = clientWith({ connection, act: perform });
-    const hook = renderHook(() => useConnection(client), { wrapper });
+    const connectionState = new PullRequestConnectionState(client);
+    const hook = renderHook(() => useConnection(client, connectionState), { wrapper });
     await waitFor(() => expect(hook.result.current.connection?.login).toBe('alice'));
     render(<MergeActions client={hook.result.current.client} detail={pr} account="alice" onUpdated={vi.fn()} />, { wrapper });
     fireEvent.keyDown(screen.getByRole('button', { name: 'merge' }), { key: 'Enter' });

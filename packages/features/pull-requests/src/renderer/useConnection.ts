@@ -1,28 +1,19 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { PullRequestConnection } from '../contracts/index.js';
+import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { isAccountChangedError, type PullRequestsClient } from './client.js';
-import { errorText, usePullRequestsHost } from './context.js';
+import type { PullRequestConnectionState } from './account/connection-state.js';
+import { usePullRequestsHost } from './context.js';
 
 /** Reflect the CLI account; authentication remains owned by gh. */
-export function useConnection(client: PullRequestsClient) {
+export function useConnection(client: PullRequestsClient, state: PullRequestConnectionState) {
   const host = usePullRequestsHost();
   const notify = useRef(host.notifyError);
   notify.current = host.notifyError;
-  const [connection, setConnection] = useState<PullRequestConnection | null>(null);
-  const [error, setError] = useState('');
-  const [pending, setPending] = useState(false);
-  const controller = useRef<AbortController | null>(null);
-  const refresh = useCallback(async () => {
-    controller.current?.abort();
-    const request = new AbortController();
-    controller.current = request;
-    setPending(true);
-    try {
-      const value = await client.connection({}, request.signal);
-      if (!request.signal.aborted) { setConnection(value); setError(''); if (value.error) notify.current(value.error); }
-    } catch (cause) { if (!request.signal.aborted) { setError(errorText(cause)); notify.current(errorText(cause)); } }
-    finally { if (!request.signal.aborted) setPending(false); }
-  }, [client]);
+  const snapshot = useSyncExternalStore(state.subscribe, state.getSnapshot);
+  const refresh = state.refresh;
+  // Background avatar checks stay quiet; connection errors belong to the PR page.
+  useEffect(() => {
+    if (snapshot.error) notify.current(snapshot.error);
+  }, [snapshot.error]);
   // All nested comment and merge entry points share the same account refresh path.
   const accountClient = useMemo(() => {
     const guard = <Args extends unknown[], Result>(operation: (...args: Args) => Promise<Result>) => async (...args: Args) => {
@@ -31,11 +22,5 @@ export function useConnection(client: PullRequestsClient) {
     };
     return { ...client, publish: guard(client.publish), act: guard(client.act) };
   }, [client, refresh]);
-  useEffect(() => {
-    void refresh();
-    const focus = () => { void refresh(); };
-    window.addEventListener('focus', focus);
-    return () => { controller.current?.abort(); window.removeEventListener('focus', focus); };
-  }, [refresh]);
-  return { connection, error, pending, refresh, client: accountClient };
+  return { ...snapshot, refresh, client: accountClient };
 }

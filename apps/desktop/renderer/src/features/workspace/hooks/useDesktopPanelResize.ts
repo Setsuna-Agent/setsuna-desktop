@@ -430,7 +430,10 @@ export function readWorkbenchWidth(shell: HTMLElement | null): number {
 }
 
 function readWorkbenchHeight(shell: HTMLElement | null): number {
-  return shell?.querySelector<HTMLElement>('.app-workbench')?.clientHeight ?? viewportHeight();
+  const workbench = shell?.querySelector<HTMLElement>('.app-workbench');
+  const headerHeight = workbench?.querySelector<HTMLElement>('.app-content-header')?.offsetHeight ?? 0;
+  // Windows content headers share the workbench but cannot be resized by the terminal.
+  return Math.max(0, (workbench?.clientHeight ?? viewportHeight()) - headerHeight);
 }
 
 function viewportHeight(): number {

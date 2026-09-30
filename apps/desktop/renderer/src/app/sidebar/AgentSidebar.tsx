@@ -23,6 +23,7 @@ import {
   type Ref,
 } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import { AppSidebar } from '../../shared/ui/AppSidebar.js';
 import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
 import { SidebarFloatingMenu } from './SidebarFloatingMenu.js';
 import { SidebarMenuOpenContext } from './SidebarMenuContext.js';
@@ -129,8 +130,8 @@ export function AgentSidebar({
   const menuOpen = Boolean(threadActionMenuId || projectActionMenuId);
 
   const sidebar = (
-    <aside
-      className="app-sidebar desktop-agent-sidebar"
+    <AppSidebar
+      className="desktop-agent-sidebar"
       aria-hidden={collapsed || undefined}
       data-navigation-hint={navigationHint || undefined}
       data-menu-open={menuOpen || undefined}
@@ -237,7 +238,7 @@ export function AgentSidebar({
           }
         }}
       />
-    </aside>
+    </AppSidebar>
   );
   return <SidebarMenuOpenContext.Provider value={menuOpen}>{sidebar}</SidebarMenuOpenContext.Provider>;
 }

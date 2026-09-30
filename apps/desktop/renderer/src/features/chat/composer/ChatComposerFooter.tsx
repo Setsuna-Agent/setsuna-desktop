@@ -269,7 +269,6 @@ function ChatModeBadge({
 
   return (
     <UiButton variant="ghost" className="chat-sender-plan-badge" type="button" disabled={disabled} aria-label={t('chat.composer.closeBadge', { label })} title={t('chat.composer.closeBadge', { label })} onClick={onClose}>
-      <span className="chat-sender-plan-badge__dot" aria-hidden="true" />
       <span className="chat-sender-plan-badge__label">{label}</span>
       <X className="chat-sender-plan-badge__close" size={11} aria-hidden="true" />
     </UiButton>

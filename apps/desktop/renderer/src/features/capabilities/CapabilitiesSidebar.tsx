@@ -5,6 +5,7 @@ import { useRef, useState } from 'react';
 import { RendererOwnedSingleSlot } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { settingsViewUi } from '../../shared/ui/SettingsViewUi.js';
+import { AppSidebar } from '../../shared/ui/AppSidebar.js';
 import { Button, IconButton, TextField } from '../../shared/ui/primitives.js';
 
 export function CapabilitiesSidebar({
@@ -29,7 +30,7 @@ export function CapabilitiesSidebar({
   };
 
   return (
-    <aside className="app-sidebar capabilities-sidebar" aria-label={t('capabilities.sidebar.title')}>
+    <AppSidebar className="capabilities-sidebar" aria-label={t('capabilities.sidebar.title')}>
       <div className="capabilities-sidebar__header">
         <h2>{t('capabilities.sidebar.title')}</h2>
         <IconButton
@@ -84,6 +85,6 @@ export function CapabilitiesSidebar({
           }}
         />
       </div>
-    </aside>
+    </AppSidebar>
   );
 }

@@ -8,6 +8,7 @@ import { runtimeActivityRendererFeature } from '@setsuna-desktop/feature-runtime
 import { hostMessages } from '../../../../src/shared/i18n/messages.js';
 import { SidebarUserMenu } from '../../../../src/app/sidebar/SidebarUserMenu.js';
 import { I18nProvider } from '../../../../src/shared/i18n/I18nProvider.js';
+import { RendererPluginTestHost } from '../../support/RendererPluginTestHost.js';
 
 const messageCatalog = composeRendererMessages(hostMessages, [{ module: runtimeActivityRendererFeature }]);
 
@@ -33,6 +34,7 @@ it('opens app information from the global navigation menu, handles external link
         onOpenSettings={() => undefined}
       />
     </I18nProvider>,
+    { wrapper: RendererPluginTestHost },
   );
   const more = screen.getByRole('button', { name: '更多操作' });
   fireEvent.click(more);

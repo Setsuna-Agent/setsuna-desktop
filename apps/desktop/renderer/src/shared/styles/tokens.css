@@ -113,6 +113,7 @@
   --app-window-radius: 8px;
   --app-topbar-height: 42px;
   --app-topbar-item-gap: 8px;
+  --app-toolbar-action-gap: 4px;
   --app-topbar-navigation-icon-size: 14px;
   --app-topbar-navigation-icon-inset: 7px;
   --app-topbar-navigation-visual-gap: 20px;

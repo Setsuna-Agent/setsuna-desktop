@@ -18,6 +18,7 @@ import {
   useRendererOwnedKeyedEntries,
 } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
 import { EmptyState } from '../../shared/ui/primitives.js';
+import { AppSidebar } from '../../shared/ui/AppSidebar.js';
 import { SettingsPageHeading, settingsViewUi } from '../../shared/ui/SettingsViewUi.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../shared/i18n/messages.js';
@@ -192,7 +193,7 @@ export function SettingsSidebar({
   const { t } = useI18n();
   const { byGroup, ungrouped } = partitionSettingsPages(pages);
   return (
-    <nav className="app-sidebar desktop-settings-sidebar chat-user-settings__nav">
+    <AppSidebar as="nav" className="desktop-settings-sidebar chat-user-settings__nav">
       <div className="chat-user-settings__title">{t('settings.title')}</div>
       <div className="chat-user-settings__tabs">
         {settingsSectionGroups.map((group) => {
@@ -240,7 +241,7 @@ export function SettingsSidebar({
           </div>
         ) : null}
       </div>
-    </nav>
+    </AppSidebar>
   );
 }
 

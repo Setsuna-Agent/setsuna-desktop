@@ -641,15 +641,6 @@
   outline-offset: 2px;
 }
 
-.chat-sender-plan-badge__dot {
-  flex: 0 0 auto;
-  width: 5px;
-  height: 5px;
-  border-radius: var(--app-radius-full);
-  background: currentColor;
-  opacity: 0.55;
-}
-
 .chat-sender-plan-badge__label {
   display: inline-flex;
   align-items: center;
@@ -781,10 +772,6 @@
 .runtime-access-mode-trigger__icon {
   flex: 0 0 auto;
   color: currentColor;
-}
-
-.chat-authorization-switch .runtime-access-mode-trigger__icon {
-  transform: translateY(-1px);
 }
 
 .runtime-access-mode-trigger__label {

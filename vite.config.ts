@@ -15,6 +15,10 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 5174,
     strictPort: true,
+    // Transform the first screen while Electron builds and starts its services.
+    warmup: {
+      clientFiles: ['./apps/desktop/renderer/src/main.tsx'],
+    },
   },
   resolve: {
     alias: [

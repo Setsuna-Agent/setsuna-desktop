@@ -42,19 +42,21 @@ export function registerWorkspaceEntryWatchIpc(): void {
     if (isDesktopRendererSender(event.sender)) stop(`${event.sender.id}:${subscriptionId}`);
   });
   const observe = (window: BrowserWindow) => {
-    const senderId = window.webContents.id;
+    // The registry disposes this observer after BrowserWindow's native teardown.
+    const contents = window.webContents;
+    const senderId = contents.id;
     const stopAll = () => stopSender(senderId);
     const navigate = (_event: Electron.Event, _url: string, isInPlace: boolean, isMainFrame: boolean) => {
       if (isMainFrame && !isInPlace) stopAll();
     };
-    window.webContents.on('destroyed', stopAll);
-    window.webContents.on('render-process-gone', stopAll);
-    window.webContents.on('did-start-navigation', navigate);
+    contents.on('destroyed', stopAll);
+    contents.on('render-process-gone', stopAll);
+    contents.on('did-start-navigation', navigate);
     return () => {
       stopAll();
-      window.webContents.off('destroyed', stopAll);
-      window.webContents.off('render-process-gone', stopAll);
-      window.webContents.off('did-start-navigation', navigate);
+      contents.off('destroyed', stopAll);
+      contents.off('render-process-gone', stopAll);
+      contents.off('did-start-navigation', navigate);
     };
   };
   desktopWindows.onWindowAdded(observe);

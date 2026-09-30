@@ -1,5 +1,4 @@
-import { Button } from '@setsuna-desktop/renderer-ui';
-import { Minus, PanelLeft, Plus, X } from 'lucide-react';
+import { Minus, PanelLeft, Plus, Square, X } from 'lucide-react';
 import {
   useEffect,
   useState,
@@ -23,6 +22,7 @@ export function ShellFrame({
   showSidebarToggle = true,
   navigationRail,
   navigationActions,
+  applicationMenu,
   toolbarTitle,
   viewTabs,
   workspaceToolbar,
@@ -40,6 +40,7 @@ export function ShellFrame({
   showSidebarToggle?: boolean;
   navigationRail?: ReactNode;
   navigationActions?: ReactNode;
+  applicationMenu?: ReactNode;
   toolbarTitle?: ReactNode;
   viewTabs?: ReactNode;
   workspaceToolbar?: ReactNode;
@@ -49,6 +50,7 @@ export function ShellFrame({
   inspectorOpen?: boolean;
 }) {
   const showWindowControls = getDesktopPlatform() === 'win32';
+  const insetHeaders = showWindowControls && Boolean(applicationMenu);
   const windowMaximized = useWindowMaximizedState();
   const sidebarToggleAction = showSidebarToggle ? onToggleSidebar : undefined;
   const rootClassName = [
@@ -57,11 +59,23 @@ export function ShellFrame({
     windowMaximized ? 'app-shell--window-maximized' : '',
     inspectorOpen ? 'app-shell--inspector-open' : '',
     navigationRail ? 'app-shell--with-navigation' : '',
+    insetHeaders ? 'app-shell--inset-headers' : '',
     className,
   ]
     .filter(Boolean)
     .join(' ');
   const routeTopbarSlot = <div className="app-topbar__route-slot" id={appRouteTopbarSlotId} />;
+  const contentHeader = (
+    <div className={insetHeaders ? 'app-content-header' : 'app-topbar__right'}>
+      {routeTopbarSlot}
+      {toolbarTitle ? <div className="chat-toolbar-title">{toolbarTitle}</div> : viewTabs}
+      {status}
+      {actions}
+    </div>
+  );
+  const workspaceHeader = (
+    <div className={insetHeaders ? 'app-workspace-header' : 'app-topbar__workspace'}>{workspaceToolbar}</div>
+  );
 
   return (
     <div ref={rootRef} className={rootClassName} style={style}>
@@ -75,17 +89,14 @@ export function ShellFrame({
             onToggleSidebar={sidebarToggleAction}
           />
         </div>
-        <div className="app-topbar__right">
-          {routeTopbarSlot}
-          {toolbarTitle ? <div className="chat-toolbar-title">{toolbarTitle}</div> : viewTabs}
-          {status}
-          {actions}
-        </div>
-        <div className="app-topbar__workspace">{workspaceToolbar}</div>
+        {insetHeaders ? applicationMenu : contentHeader}
+        {insetHeaders ? null : workspaceHeader}
         {showWindowControls ? <WindowControls /> : null}
       </header>
       {navigationRail}
       <div className={`app-workbench ${inspectorOpen ? '' : 'app-workbench--inspector-closed'}`}>
+        {insetHeaders ? contentHeader : null}
+        {insetHeaders ? workspaceHeader : null}
         {children}
       </div>
     </div>
@@ -167,33 +178,15 @@ function WindowControls() {
 
   return (
     <div className="app-window-controls" aria-label={t('shell.window.controls')}>
-      <Button variant="ghost" type="button" aria-label={t('shell.window.minimize')} title={t('shell.window.minimize')} onClick={() => void controls?.minimize()}>
+      <IconButton className="app-shell-icon-control" label={t('shell.window.minimize')} onClick={() => void controls?.minimize()}>
         <Minus size={14} />
-      </Button>
-      <Button variant="ghost" type="button" aria-label={t('shell.window.maximize')} title={t('shell.window.maximize')} onClick={() => void controls?.toggleMaximize()}>
-        <WindowMaximizeIcon />
-      </Button>
-      <Button variant="ghost" className="app-window-controls__close" type="button" aria-label={t('shell.window.close')} title={t('shell.window.close')} onClick={() => void controls?.close()}>
+      </IconButton>
+      <IconButton className="app-shell-icon-control" label={t('shell.window.maximize')} onClick={() => void controls?.toggleMaximize()}>
+        <Square size={14} />
+      </IconButton>
+      <IconButton className="app-shell-icon-control app-window-controls__close" label={t('shell.window.close')} onClick={() => void controls?.close()}>
         <X size={14} />
-      </Button>
+      </IconButton>
     </div>
-  );
-}
-
-function WindowMaximizeIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="1.4"
-    >
-      <rect x="3.5" y="3.5" width="9" height="9" rx="0.4" />
-    </svg>
   );
 }

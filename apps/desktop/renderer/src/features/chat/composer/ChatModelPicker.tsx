@@ -69,6 +69,7 @@ export function ChatModelPicker({
       key: `model:${option.key}`,
       label: <ModelOptionLabel option={option} />,
       tooltip: <ChatModelDetails option={option} />,
+      tooltipClassName: 'chat-model-details-tooltip',
       onClick: ({ domEvent }) => {
         // Keep the model and its thinking options together until the user finishes choosing.
         domEvent.preventDefault();

@@ -33,6 +33,7 @@ import {
   shellOverlaySlot,
   shellPluginPageSlot,
   shellRouteSlot,
+  shellSidebarAvatarSlot,
   shellSidebarPluginEntrySlot,
   shellSidebarSlot,
   shellTopbarActionsSlot,
@@ -96,6 +97,9 @@ const appShellPlugin = defineRendererPlugin({
       priority: 0,
       children: [
         declareRendererChildSlot(shellSidebarSlot, { required: true }),
+        declareRendererChildSlot(shellSidebarAvatarSlot, {
+          fallback: { render: ({ renderDefault }) => renderDefault() },
+        }),
         declareRendererChildSlot(shellSidebarPluginEntrySlot),
         declareRendererChildSlot(shellTopbarTitleSlot, { required: true }),
         declareRendererChildSlot(shellTopbarActionsSlot, { required: true }),

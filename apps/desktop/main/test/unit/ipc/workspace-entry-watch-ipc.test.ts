@@ -115,3 +115,35 @@ it('disposes replaced or navigated subscriptions that finish setup late without 
   expect(currentDispose).toHaveBeenCalledOnce();
   expect(pendingDispose).toHaveBeenCalledOnce();
 });
+
+it('releases active and pending watchers when the closed window no longer exposes webContents', async () => {
+  let destroyed = false;
+  const sender = Object.assign(new EventEmitter(), { id: 1, isDestroyed: () => destroyed, send: vi.fn() });
+  const window = Object.assign(new EventEmitter(), { isDestroyed: () => destroyed }) as unknown as BrowserWindow;
+  Object.defineProperty(window, 'webContents', { get: () => {
+    if (destroyed) throw new TypeError('Object has been destroyed');
+    return sender;
+  } });
+  desktopWindows.add(window);
+  const activeDispose = vi.fn();
+  const pendingDispose = vi.fn();
+  let finishPending!: (dispose: () => void) => void;
+  mocks.watch.mockResolvedValueOnce(activeDispose)
+    .mockReturnValueOnce(new Promise<() => void>((resolve) => { finishPending = resolve; }));
+  registerWorkspaceEntryWatchIpc();
+  const subscribe = mocks.handlers.get(WORKSPACE_ENTRIES_WATCH_CHANNELS.subscribe)!;
+  const input = { workspaceRoot: '/root', directoryPaths: [''] };
+  await subscribe({ sender }, { ...input, subscriptionId: 'tree' });
+  const pending = subscribe({ sender }, { ...input, subscriptionId: 'editor' });
+
+  destroyed = true;
+  sender.emit('destroyed');
+  expect(() => window.emit('closed')).not.toThrow();
+  finishPending(pendingDispose);
+  await pending;
+  expect(activeDispose).toHaveBeenCalledOnce();
+  expect(pendingDispose).toHaveBeenCalledOnce();
+  expect(sender.eventNames()).toEqual([]);
+  for (const call of mocks.watch.mock.calls) call[2]();
+  expect(sender.send).not.toHaveBeenCalled();
+});
