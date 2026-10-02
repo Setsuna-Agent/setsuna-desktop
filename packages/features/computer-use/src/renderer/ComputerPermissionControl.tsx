@@ -17,8 +17,7 @@ export function ComputerPermissionControl({ permission, status, available, reque
   const { Button } = ui;
   return (
     <div className="computer-use-permission-control">
-      <span className="computer-use-permission-badge" data-status={status} role="status">
-        <span className="computer-use-permission-badge__dot" aria-hidden="true" />
+      <span className="computer-use-permission-status" data-status={status} role="status">
         {translate(`feature.computerUse.permission.${status}`)}
       </span>
       {needsPermission ? (

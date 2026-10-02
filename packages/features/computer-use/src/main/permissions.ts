@@ -1,13 +1,13 @@
 import { desktopCapturer, shell, systemPreferences } from 'electron';
 import type { ComputerPermission, ComputerPermissions } from '../contracts/index.js';
 
-const settingsUrls: Record<ComputerPermission, string> = {
+const settingsUrls: Record<Exclude<ComputerPermission, 'administrator'>, string> = {
   screen: 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
   accessibility: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
 };
 
 export function computerPermissions(): ComputerPermissions {
-  if (process.platform === 'win32') return { screen: 'not-required', accessibility: 'not-required' };
+  if (process.platform === 'win32') return { screen: 'unsupported', accessibility: 'unsupported', administrator: 'not-determined' };
   if (process.platform !== 'darwin') return { screen: 'unsupported', accessibility: 'unsupported' };
   return {
     screen: systemPreferences.getMediaAccessStatus('screen'),

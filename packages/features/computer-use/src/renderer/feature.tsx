@@ -16,7 +16,7 @@ export const computerRendererFeature = defineRendererFeature({
     registerSettingsPage(context.ui, {
       entryId: 'computer-use.settings-page', sectionId: 'computer-use', location: 'settings',
       navigationGroupId: 'models-and-services', order: 260, icon: Monitor,
-      titleKey: 'feature.computerUse.title',
+      titleKey: 'feature.computerUse.title', pageHeading: 'view',
       render: ({ translate, ui }) => <ComputerSettingsView bridge={context.dependencies.bridge} translate={translate} ui={ui} />,
     });
     context.ui.list(shellTopbarActionSlot, {

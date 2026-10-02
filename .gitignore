@@ -6,6 +6,7 @@ coverage/
 .cache/sandbox-curl/
 .cache/windows-sandbox/
 native/windows-sandbox/target/
+native/computer-use-windows/target/
 .env
 .env.*
 !.env.example

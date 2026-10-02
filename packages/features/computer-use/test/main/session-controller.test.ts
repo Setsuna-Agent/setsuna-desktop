@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ComputerSessionController, type ComputerSupervisor } from '../../src/main/session-controller.js';
-import { DesktopComputerBackend, type ComputerDriver, type ComputerCapture } from '../../src/main/backend.js';
+import { ComputerElevationCancelledError, StaleComputerObservationError, DesktopComputerBackend, type ComputerDriver, type ComputerCapture } from '../../src/main/backend.js';
 import type { ComputerFrame, ComputerIdentity } from '../../src/contracts/index.js';
 
 const identity: ComputerIdentity = { threadId: 'thread', turnId: 'turn', unattended: false, readOnly: false, supportsImages: true };
@@ -15,7 +15,7 @@ function fixture() {
   const capture = { capture: vi.fn(async () => image) } satisfies ComputerCapture;
   const supervisor = {
     display: vi.fn(() => ({ id: 1, bounds: { x: 0, y: 0, width: 100, height: 50 }, scaleFactor: 2, inputBounds: { x: 0, y: 0, width: 100, height: 50 }, inputCoordinateSpace: 'macos-points' as const })),
-    checkPermissions: vi.fn(), registerStop: vi.fn(async () => undefined), unregisterStop: vi.fn(),
+    checkPermissions: vi.fn(), registerStop: vi.fn(async () => undefined), unregisterStop: vi.fn(), showControl: vi.fn(async () => undefined), prepareInput: vi.fn(),
   } satisfies ComputerSupervisor & { display(): unknown };
   const onStopped = vi.fn();
   const control = new ComputerSessionController(new DesktopComputerBackend(driver, capture, supervisor.display), supervisor, () => time, onStopped);
@@ -24,6 +24,56 @@ function fixture() {
   return { control, driver, supervisor, capture, image, start, onStopped, advance: (ms: number) => { time += ms; } };
 }
 describe('desktop sessions', () => {
+  it.each([false, true])('prepares the indicator before input and refuses dispatch if it fails: %s', async (blocked) => {
+    const f = fixture(); const frame = await f.start();
+    if (blocked) f.supervisor.prepareInput.mockImplementationOnce(() => { throw new Error('Toolbar still blocks target'); });
+    const action = { kind: 'click' as const, x: 25, y: 25 };
+    const pending = f.control.execute({ kind: 'action', identity, sessionId: frame.sessionId, observationId: frame.observationId, action });
+    if (blocked) {
+      await expect(pending).rejects.toThrow('Toolbar still blocks target');
+      expect(f.driver.action).not.toHaveBeenCalled();
+      expect(f.control.status().active).toBe(false);
+    } else {
+      await pending;
+      expect(f.supervisor.prepareInput).toHaveBeenCalledExactlyOnceWith(action, frame);
+      expect(f.supervisor.prepareInput.mock.invocationCallOrder[0]).toBeLessThan(f.driver.action.mock.invocationCallOrder[0]!);
+    }
+  });
+
+  it('waits for startup UAC before capture, then revokes the turn if authorization is declined', async () => {
+    const f = fixture(); let deny!: (error: Error) => void;
+    f.driver.start.mockImplementationOnce(() => new Promise<void>((_resolve, reject) => { deny = reject; }));
+    const pending = f.start();
+    const rejected = expect(pending).rejects.toThrow('authorization cancelled');
+    await vi.waitFor(() => expect(deny).toBeDefined());
+    expect(f.capture.capture).not.toHaveBeenCalled();
+    deny(new ComputerElevationCancelledError('Administrator authorization cancelled.'));
+    await rejected;
+    expect(f.capture.capture).not.toHaveBeenCalled();
+    expect(f.onStopped).toHaveBeenCalledExactlyOnceWith('elevation-cancelled', identity);
+    await expect(f.start()).rejects.toThrow('stopped by the user');
+  });
+  it('revokes the turn after UAC cancellation instead of prompting again', async () => {
+    const f = fixture(); const frame = await f.start();
+    f.driver.action.mockRejectedValue(new ComputerElevationCancelledError('Administrator authorization cancelled.'));
+    await expect(f.control.execute({ kind: 'action', identity, sessionId: frame.sessionId, observationId: frame.observationId,
+      action: { kind: 'key', key: 'Enter' } })).rejects.toThrow('authorization cancelled');
+    expect(f.onStopped).toHaveBeenCalledExactlyOnceWith('elevation-cancelled', identity);
+    await expect(f.start()).rejects.toThrow('stopped by the user');
+    expect(f.driver.start).toHaveBeenCalledOnce();
+    await expect(f.control.execute({ kind: 'start', identity: { ...identity, turnId: 'new-turn' } })).resolves.toMatchObject({ kind: 'frame' });
+  });
+  it('refreshes after UAC without replaying input or reusing the pre-UAC observation', async () => {
+    const f = fixture(); const frame = await f.start();
+    f.driver.action.mockImplementationOnce(async () => { f.advance(60_000); throw new StaleComputerObservationError('Administrator access granted; refresh.'); });
+    const command = { kind: 'action' as const, identity, sessionId: frame.sessionId, observationId: frame.observationId, action: { kind: 'type' as const, text: 'hello' } };
+    const result = await f.control.execute(command) as ComputerFrame;
+    expect(result).toMatchObject({ inputDispatched: false, actionError: 'Administrator access granted; refresh.', sessionId: frame.sessionId });
+    expect(result.observationId).not.toBe(frame.observationId);
+    expect(f.driver.action).toHaveBeenCalledOnce();
+    await expect(f.control.execute(command)).resolves.toMatchObject({ inputDispatched: false, actionError: expect.stringContaining('stale') });
+    expect(f.driver.action).toHaveBeenCalledOnce();
+  });
   it('retains the first stop reason across cleanup without retaining screen or task content', async () => {
     const f = fixture(); const frame = await f.start();
     await f.control.stop('emergency-shortcut'); await f.control.stop();
@@ -91,6 +141,29 @@ describe('desktop sessions', () => {
     expect(f.driver.start).not.toHaveBeenCalled(); expect(f.capture.capture).not.toHaveBeenCalled();
     expect(f.control.status().active).toBe(false);
   });
+  it('withholds the first observation until the control indicator is ready and cancels pending input on stop', async () => {
+    const f = fixture(); let release!: () => void;
+    f.supervisor.showControl.mockImplementation(() => new Promise<void>((resolve) => { release = resolve; }));
+    const starting = f.start();
+    const rejected = expect(starting).rejects.toThrow();
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    expect(f.control.preview().frame).toBeNull();
+    expect(f.driver.action).not.toHaveBeenCalled();
+    await f.control.stop('emergency-shortcut');
+    release(); await rejected;
+    expect(f.control.preview()).toEqual({ active: false, frame: null });
+    expect(f.supervisor.unregisterStop).toHaveBeenCalled();
+    await expect(f.start()).rejects.toThrow('stopped by the user');
+  });
+  it('closes the session when the indicator fails and never replays accepted input', async () => {
+    const f = fixture(); const frame = await f.start();
+    f.supervisor.showControl.mockRejectedValueOnce(new Error('indicator unavailable'));
+    await expect(f.control.execute({ kind: 'action', identity, sessionId: frame.sessionId,
+      observationId: frame.observationId, action: { kind: 'key', key: 'Tab' } })).rejects.toThrow('Input was dispatched');
+    expect(f.driver.action).toHaveBeenCalledOnce();
+    expect(f.driver.stop).toHaveBeenCalled();
+    expect(f.control.status().active).toBe(false);
+  });
   it('passes the consumed observation geometry to input and revokes on the next failed image', async () => {
     const f = fixture(); const frame = await f.start();
     f.capture.capture.mockRejectedValue(new Error('observation ambiguous'));
@@ -109,6 +182,30 @@ describe('desktop sessions', () => {
       expect(refreshed.observationId).not.toBe(frame.observationId);
       expect(f.driver.action).not.toHaveBeenCalled(); expect(f.control.status().active).toBe(true);
     }
+  });
+  it('binds pixel bounds to the latest image when screenshot dimensions change', async () => {
+    const f = fixture(); const first = await f.start();
+    f.capture.capture.mockResolvedValue({ ...f.image, width: 400, height: 200 });
+    const command = { kind: 'action' as const, identity, sessionId: first.sessionId, observationId: first.observationId,
+      action: { kind: 'click' as const, x: 300, y: 150 } };
+    const refreshed = await f.control.execute(command) as ComputerFrame;
+    expect(refreshed).toMatchObject({ inputDispatched: false, width: 400, height: 200, actionError: expect.stringContaining('outside') });
+    expect(f.driver.action).not.toHaveBeenCalled();
+    const stale = await f.control.execute(command) as ComputerFrame;
+    expect(stale).toMatchObject({ inputDispatched: false, actionError: expect.stringContaining('stale') });
+    expect(f.driver.action).not.toHaveBeenCalled();
+    await f.control.execute({ ...command, observationId: stale.observationId });
+    expect(f.driver.action).toHaveBeenCalledExactlyOnceWith(command.action, stale, expect.any(AbortSignal));
+  });
+  it.each([false, true])('reports whether input preceded a failed screenshot (dispatched=%s)', async (dispatched) => {
+    const f = fixture(); const frame = await f.start();
+    if (!dispatched) f.driver.action.mockRejectedValueOnce(new StaleComputerObservationError('Permissions changed; refresh.'));
+    f.capture.capture.mockRejectedValueOnce(new Error('Failed to get sources.'));
+    const command = { kind: 'action' as const, identity, sessionId: frame.sessionId, observationId: frame.observationId, action: { kind: 'key' as const, key: 'Enter' as const } };
+    await expect(f.control.execute(command)).rejects.toThrow(dispatched ? 'Input was dispatched, but its effect could not be observed; do not replay it automatically' : 'Input was not dispatched');
+    expect(f.control.status().active).toBe(false);
+    await expect(f.control.execute(command)).rejects.toThrow('No authorized');
+    expect(f.driver.action).toHaveBeenCalledOnce();
   });
   it('stops on display changes, capture failures and blank images', async () => {
     for (const failure of ['display', 'capture', 'blank']) {

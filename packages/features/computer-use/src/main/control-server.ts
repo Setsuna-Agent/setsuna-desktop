@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
-import { parseComputerCommand, type ComputerConnection, type ComputerControlPort } from '../contracts/index.js';
+import { computerCommandTimeout, parseComputerCommand, type ComputerConnection, type ComputerControlPort } from '../contracts/index.js';
 
 /** Separate bearer and fixed protocol; renderer never receives either connection field. */
 export class ComputerControlServer {
@@ -33,7 +33,7 @@ export class ComputerControlServer {
       return;
     }
     const abort = new AbortController();
-    const timer = setTimeout(() => abort.abort(new DOMException('Desktop command timed out.', 'TimeoutError')), 30_000);
+    let timer = setTimeout(() => abort.abort(new DOMException('Desktop command timed out.', 'TimeoutError')), 30_000);
     request.once('aborted', () => abort.abort(new Error('transport-disconnected')));
     response.once('close', () => { if (!response.writableEnded) abort.abort(new Error('transport-disconnected')); });
     try {
@@ -44,6 +44,8 @@ export class ComputerControlServer {
         chunks.push(buffer);
       }
       const command = parseComputerCommand(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+      clearTimeout(timer);
+      timer = setTimeout(() => abort.abort(new DOMException('Desktop command timed out.', 'TimeoutError')), computerCommandTimeout(command.kind, process.platform));
       send(200, { result: await this.control.execute(command, abort.signal) });
     } catch (error) { send(400, { error: error instanceof Error ? error.message : 'Desktop control failed.' }); }
     finally { clearTimeout(timer); }

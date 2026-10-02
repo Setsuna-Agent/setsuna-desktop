@@ -28,7 +28,7 @@ function setup(remaining: RuntimeThread[] = [other, fallback]) {
     const [activeProjectId, setActiveProjectId] = useState<string | null>(source.projectId!);
     const navigation = useDesktopNavigation({
       activeProjectId, setActiveProjectId, currentThread, setCurrentThread,
-      projects: [], setProjects: vi.fn(), setActiveView: vi.fn(),
+      projects: [], setProjects: vi.fn(), activeView: 'chat', setActiveView: vi.fn(),
       client: { deleteThread, updateThread, getThread } as unknown as DesktopRuntimeClient,
       confirmDiscardProjectFile, globalThreads: [], threadsByProjectId: new Map(), reloadThreads,
       resetProjectWorkspaceState, resetNewThreadWorkspacePanels: vi.fn(), resetThreadWorkspacePanels,

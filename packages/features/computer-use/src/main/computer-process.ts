@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import path from 'node:path';
-import { StaleComputerObservationError } from './backend.js';
+import { ComputerElevationCancelledError, StaleComputerObservationError } from './backend.js';
 
 export function windowHelperPath(appPath: string, packaged: boolean): string {
   return packaged ? path.join(process.resourcesPath, 'computer-use', 'setsuna-computer')
@@ -9,8 +9,8 @@ export function windowHelperPath(appPath: string, packaged: boolean): string {
 
 type Pending = { resolve(value: unknown): void; reject(error: Error): void };
 
-/** Private stdio transport. The helper inherits the signed Electron host's TCC identity. */
-export class WindowProcess {
+/** Private stdio transport shared by the macOS window and Windows input helpers. */
+export class ComputerProcess {
   private child: ChildProcessWithoutNullStreams | undefined;
   private nextId = 0;
   private pending = new Map<number, Pending>();
@@ -22,14 +22,14 @@ export class WindowProcess {
     if (this.failure) throw this.failure;
     if (this.child) return this.child;
     this.stopping = undefined;
-    const env = Object.fromEntries(['PATH', 'HOME', 'TMPDIR', 'LANG'].flatMap((key) => process.env[key] ? [[key, process.env[key]!]] : []));
-    const child = this.spawnChild(this.executable, [], { env, stdio: 'pipe' });
+    const env = Object.fromEntries(['PATH', 'HOME', 'USERPROFILE', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'TMPDIR', 'LANG'].flatMap((key) => process.env[key] ? [[key, process.env[key]!]] : []));
+    const child = this.spawnChild(this.executable, [], { env, stdio: 'pipe', windowsHide: true });
     this.child = child;
     let buffer = '';
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', (chunk: string) => {
       buffer += chunk;
-      if (buffer.length > 26_000_000) { this.fail(new Error('Window helper response exceeded the limit.')); child.kill(); return; }
+      if (buffer.length > 26_000_000) { this.fail(new Error('Computer helper response exceeded the limit.')); child.kill(); return; }
       let newline: number;
       while ((newline = buffer.indexOf('\n')) !== -1) {
         const line = buffer.slice(0, newline); buffer = buffer.slice(newline + 1);
@@ -38,9 +38,10 @@ export class WindowProcess {
           const pending = this.pending.get(reply.id);
           if (!pending) continue;
           this.pending.delete(reply.id);
-          if (reply.error) pending.reject(reply.errorCode === 'stale-observation' ? new StaleComputerObservationError(reply.error) : new Error(reply.error));
+          if (reply.error) pending.reject(reply.errorCode === 'stale-observation' ? new StaleComputerObservationError(reply.error)
+            : reply.errorCode === 'elevation-cancelled' ? new ComputerElevationCancelledError(reply.error) : new Error(reply.error));
           else pending.resolve(reply.result);
-        } catch { this.fail(new Error('Invalid window helper response.')); child.kill(); return; }
+        } catch { this.fail(new Error('Invalid computer helper response.')); child.kill(); return; }
       }
     });
     child.stderr.resume(); // Never persist native output that could contain application data.
@@ -50,7 +51,7 @@ export class WindowProcess {
       if (this.child !== child) return;
       this.child = undefined;
       const unexpected = !this.stopping;
-      const error = new Error('Window helper exited; session revoked.');
+      const error = new Error('Computer helper exited; session revoked.');
       if (unexpected) this.failure = error;
       this.fail(error);
       if (unexpected) this.onExit();
@@ -85,12 +86,12 @@ export class WindowProcess {
     if (this.stopping) return this.stopping;
     const child = this.child;
     if (!child) return this.failure ? Promise.reject(this.failure) : Promise.resolve();
-    this.fail(new Error('Window control cancelled.'));
+    this.fail(new Error('Computer control cancelled.'));
     this.stopping = new Promise<void>((resolve, reject) => {
       const id = ++this.nextId;
       let acknowledged = false;
       const timer = setTimeout(() => {
-        this.failure = new Error('Window helper shutdown timed out; restart Setsuna before further control.');
+        this.failure = new Error('Computer helper shutdown timed out; restart Setsuna before further control.');
         child.kill('SIGKILL'); reject(this.failure);
       }, 2000);
       this.pending.set(id, {
@@ -101,7 +102,7 @@ export class WindowProcess {
         clearTimeout(timer);
         if (acknowledged) resolve();
         else {
-          this.failure ??= new Error('Window helper exited without confirming input release. Restart Setsuna.');
+          this.failure ??= new Error('Computer helper exited without confirming input release. Restart Setsuna.');
           reject(this.failure);
         }
       });

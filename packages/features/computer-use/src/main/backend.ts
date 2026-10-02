@@ -2,19 +2,26 @@ import type { ComputerAction, ComputerDisplay, ComputerFrame, ComputerImage, Com
 
 /** Raised only before any input is dispatched; the session can safely capture again. */
 export class StaleComputerObservationError extends Error {}
+export class ComputerElevationCancelledError extends Error {}
+
+export interface ComputerAdministratorAccess {
+  isAuthorized(): boolean;
+  authorize(signal: AbortSignal): Promise<void>;
+  revoke(): Promise<void>;
+}
 
 export interface ComputerBackend {
   windows(signal: AbortSignal): Promise<ComputerWindows>;
   start(sessionId: string, windowId: string | undefined, signal: AbortSignal): Promise<ComputerTarget>;
   capture(target: ComputerTarget, signal: AbortSignal): Promise<ComputerImage & ComputerTarget>;
   action(action: ComputerAction, frame: ComputerFrame, signal: AbortSignal): Promise<void>;
-  stop(): Promise<void>;
+  stop(reason?: string): Promise<void>;
 }
 export type DesktopInputFrame = { display: ComputerDisplay; width: number; height: number };
 export interface ComputerDriver {
   start(sessionId: string, signal: AbortSignal): Promise<void>;
   action(action: ComputerAction, frame: DesktopInputFrame, signal: AbortSignal): Promise<void>;
-  stop(): Promise<void>;
+  stop(reason?: string): Promise<void>;
 }
 export interface ComputerCapture {
   capture(display: ComputerDisplay, signal: AbortSignal): Promise<ComputerImage>;
@@ -23,7 +30,7 @@ export interface ComputerCapture {
 /** Windows retains its desktop input adapter. macOS never enters this backend. */
 export class DesktopComputerBackend implements ComputerBackend {
   constructor(private readonly driver: ComputerDriver, private readonly images: ComputerCapture, private readonly display: () => ComputerDisplay) {}
-  async windows(): Promise<ComputerWindows> { return { kind: 'windows', mode: 'foreground-desktop', windows: [] }; }
+  async windows(): Promise<ComputerWindows> { return { kind: 'windows', mode: 'foreground-desktop' }; }
   async start(sessionId: string, windowId: string | undefined, signal: AbortSignal): Promise<ComputerTarget> {
     if (windowId !== undefined) throw new Error('Window background control is currently available on macOS only.');
     const display = this.display();
@@ -43,5 +50,5 @@ export class DesktopComputerBackend implements ComputerBackend {
     this.check(frame);
     await this.driver.action(action, frame, signal);
   }
-  stop(): Promise<void> { return this.driver.stop(); }
+  stop(reason?: string): Promise<void> { return this.driver.stop(reason); }
 }

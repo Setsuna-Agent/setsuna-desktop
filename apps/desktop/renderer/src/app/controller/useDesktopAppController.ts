@@ -227,6 +227,7 @@ export function useDesktopAppController() {
 
   const navigation = useDesktopNavigation({
     activeProjectId,
+    activeView,
     client,
     confirmDiscardProjectFile: projectWorkspace.fileDraft.confirmDiscardChanges,
     currentThread,
@@ -243,6 +244,12 @@ export function useDesktopAppController() {
     setProjects,
     threadsByProjectId,
   });
+
+  const changeView = useCallback((view: SetStateAction<MainView>) => {
+    void navigation.changeView(view).catch((error: unknown) => {
+      setError(error instanceof Error ? error.message : String(error));
+    });
+  }, [navigation.changeView, setError]);
 
   useGlobalEscapeMenus({
     closeNavigationMenus: navigation.closeNavigationMenus,
@@ -278,21 +285,21 @@ export function useDesktopAppController() {
 
   const selectSkillForChat = useCallback((skillId: string) => {
     capabilitySelectionRequestIdRef.current += 1;
-    setActiveView('chat');
+    changeView('chat');
     setCapabilitySelectionRequest(createChatCapabilitySelectionRequest(
       { kind: 'skill', id: skillId },
       capabilitySelectionRequestIdRef.current,
     ));
-  }, []);
+  }, [changeView]);
 
   const selectPluginForChat = useCallback((pluginId: string) => {
     capabilitySelectionRequestIdRef.current += 1;
-    setActiveView('chat');
+    changeView('chat');
     setCapabilitySelectionRequest(createChatCapabilitySelectionRequest(
       { kind: 'plugin', id: pluginId },
       capabilitySelectionRequestIdRef.current,
     ));
-  }, []);
+  }, [changeView]);
 
   const clearCapabilitySelectionRequest = useCallback((requestId: number) => {
     setCapabilitySelectionRequest((current) => (current?.requestId === requestId ? null : current));
@@ -371,7 +378,7 @@ export function useDesktopAppController() {
     searchTriggerRef,
     selectSkillForChat,
     selectPluginForChat,
-    setActiveView,
+    setActiveView: changeView,
     setDraft,
     setSidebarCollapsed,
     shellClassName,

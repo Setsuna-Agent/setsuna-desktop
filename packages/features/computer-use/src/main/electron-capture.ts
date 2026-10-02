@@ -2,6 +2,14 @@ import { desktopCapturer, type DesktopCapturerSource } from 'electron';
 import type { ComputerDisplay, ComputerCaptureMetadata } from '../contracts/index.js';
 import type { ComputerCapture } from './backend.js';
 
+// Keep the model-facing image within a predictable resolution. Input remains
+// bound to the actual returned image and physical display geometry.
+const MAX_SCREENSHOT_EDGE = 1920;
+function screenshotSize(width: number, height: number) {
+  const scale = Math.min(1, MAX_SCREENSHOT_EDGE / Math.max(width, height));
+  return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
+}
+
 /** Diagnostic heuristics only: pixel darkness cannot prove a permission failure. */
 export function assessCapture(pixels: Buffer, width: number, height: number) {
   if (pixels.length !== width * height * 4 || !pixels.length) throw new Error('Invalid desktop sample.');
@@ -35,7 +43,7 @@ export class ElectronComputerCapture implements ComputerCapture {
         signal.throwIfAborted();
         return desktopCapturer.getSources({
         types: ['screen'], fetchWindowIcons: false,
-        thumbnailSize: { width: Math.round(display.bounds.width * display.scaleFactor), height: Math.round(display.bounds.height * display.scaleFactor) },
+        thumbnailSize: screenshotSize(display.bounds.width * display.scaleFactor, display.bounds.height * display.scaleFactor),
         });
       }).finally(() => { this.inFlight = false; });
       const sources = await Promise.race([capture, new Promise<never>((_resolve, reject) => {
@@ -45,19 +53,28 @@ export class ElectronComputerCapture implements ComputerCapture {
       })]);
       signal.throwIfAborted();
       return this.decode(sources, display);
+    } catch (error) {
+      // Electron can reject with a string when the desktop becomes unavailable
+      // (for example during UAC). Preserve it across the JSON control bridge.
+      throw error instanceof Error ? error : new Error(`Desktop capture failed: ${typeof error === 'string' ? error : 'Unknown capture error.'}`);
     } finally { signal.removeEventListener('abort', abort); }
   }
   private decode(sources: DesktopCapturerSource[], display: ComputerDisplay) {
     // Names, array positions and screen:ZZ:0 are not OS display identities.
     const matches = sources.filter((source) => source.display_id === String(display.id));
-    if (sources.length !== 1 || matches.length !== 1) throw new Error('Desktop capture display identity is unavailable or changed.');
+    if (matches.length !== 1) throw new Error('Desktop capture display identity is unavailable or changed.');
     const source = matches[0];
-    const image = source.thumbnail;
-    const { width, height } = image.getSize();
+    let image = source.thumbnail;
+    let { width, height } = image.getSize();
     if (image.isEmpty() || width <= 0 || height <= 0 || width > 32768 || height > 32768) throw new Error('Desktop image cannot be decoded.');
     // getSources does not guarantee the requested resolution. Accept uniform
     // resizing, bind actual dimensions, and reject cropped/distorted geometry.
     if (Math.abs(width / height - display.bounds.width / display.bounds.height) > 2 / height) throw new Error('Desktop capture aspect ratio does not match the authorized display.');
+    // Electron may ignore thumbnailSize. Encode and report the same bounded image.
+    if (Math.max(width, height) > MAX_SCREENSHOT_EDGE) {
+      image = image.resize({ ...screenshotSize(width, height), quality: 'best' });
+      ({ width, height } = image.getSize());
+    }
     const sample = image.resize({ width: 64, height: 64, quality: 'good' });
     let metrics: ReturnType<typeof assessCapture>;
     try { metrics = assessCapture(sample.toBitmap(), 64, 64); }

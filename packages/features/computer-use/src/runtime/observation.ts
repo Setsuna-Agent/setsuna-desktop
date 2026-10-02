@@ -16,5 +16,12 @@ export function computerObservation(frame: ComputerFrame) {
 }
 
 export function computerWindowList(result: ComputerWindows) {
+  // This backend does not enumerate windows. An empty list would incorrectly
+  // imply that no applications are running or no desktop can be controlled.
+  if (result.mode === 'foreground-desktop') return {
+    kind: result.kind, mode: result.mode,
+    nextStep: { tool: 'computer_start', arguments: {} },
+    note: 'Window enumeration is unavailable in this mode; application running state is unknown. Call computer_start with {} to inspect the primary desktop screenshot.',
+  };
   return { ...result, windows: result.windows.map(windowIdentity) };
 }

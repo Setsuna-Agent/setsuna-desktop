@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { WindowProcess } from '../../src/main/window-process.js';
+import { ComputerProcess } from '../../src/main/computer-process.js';
 import { StaleComputerObservationError } from '../../src/main/backend.js';
 
 class Child extends EventEmitter {
@@ -23,7 +23,7 @@ class Child extends EventEmitter {
 function fixture() {
   const child = new Child(); const spawn = vi.fn(() => child);
   const onExit = vi.fn();
-  const process = new WindowProcess('/signed-app/setsuna-computer', onExit, spawn as never);
+  const process = new ComputerProcess('/signed-app/setsuna-computer', onExit, spawn as never);
   return { child, process, onExit, spawn };
 }
 afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); });

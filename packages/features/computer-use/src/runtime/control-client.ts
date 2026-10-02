@@ -1,4 +1,5 @@
 import type { ComputerCommand, ComputerControlPort, ComputerResult } from '../contracts/index.js';
+import { computerCommandTimeout } from '../contracts/index.js';
 export class ComputerControlClient implements ComputerControlPort {
   constructor(private readonly url: string, private readonly token: string, private readonly fetchImpl: typeof fetch = fetch) {
     const parsed = new URL(url);
@@ -19,7 +20,7 @@ export class ComputerControlClient implements ComputerControlPort {
   async execute(command: ComputerCommand, signal?: AbortSignal): Promise<ComputerResult> {
     const response = await this.fetchImpl(`${this.url}/v1/computer/command`, {
       method: 'POST', headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(command), signal: AbortSignal.any([AbortSignal.timeout(32_000), ...(signal ? [signal] : [])]),
+      body: JSON.stringify(command), signal: AbortSignal.any([AbortSignal.timeout(computerCommandTimeout(command.kind, process.platform) + 2000), ...(signal ? [signal] : [])]),
     });
     const body = await response.json() as { error?: string; result?: ComputerResult };
     if (!response.ok) throw new Error(body.error ?? 'Desktop control failed.');

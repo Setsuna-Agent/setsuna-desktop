@@ -114,9 +114,9 @@ SOFTWARE.
 
 ## Computer Use MCP native input
 
-The Windows desktop helper uses only the host-native input interface of
+The Windows native input helper adapts keyboard and mouse event mappings from
 `@zavora-ai/computer-use-mcp` 7.4.0: https://github.com/zavora-ai/computer-use-mcp.
-The MCP server, Agent, screenshot and application scripting APIs are not started.
+The upstream package and MCP server are no longer bundled.
 
 MIT License
 

@@ -1,8 +1,9 @@
 import type { ComputerAction, ComputerCommand, ComputerIdentity, ComputerStopReason } from './index.js';
 import { parseComputerKeystroke } from './keyboard.js';
 
-export function record(value: unknown): Record<string, unknown> {
+export function record(value: unknown, allowedKeys?: readonly string[]): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Expected an object.');
+  if (allowedKeys && Object.keys(value).some((key) => !allowedKeys.includes(key))) throw new Error(`Unsupported computer-use field. Allowed fields: ${allowedKeys.join(', ')}.`);
   return value as Record<string, unknown>;
 }
 export function string(value: unknown, max = 200): string {
@@ -45,7 +46,10 @@ export function parseComputerCommand(value: unknown): ComputerCommand {
       return { kind: 'stop', identity, reason: reason as ComputerStopReason };
     }
     case 'screenshot': return { kind: 'screenshot', identity, sessionId: string(input.sessionId) };
-    case 'action': return { kind: 'action', identity, sessionId: string(input.sessionId), observationId: string(input.observationId), action: parseComputerAction(input.action) };
+    case 'action': {
+      record(input, ['kind', 'identity', 'sessionId', 'observationId', 'action']);
+      return { kind: 'action', identity, sessionId: string(input.sessionId), observationId: string(input.observationId), action: parseComputerAction(input.action) };
+    }
     default: throw new Error('Unsupported desktop command.');
   }
 }

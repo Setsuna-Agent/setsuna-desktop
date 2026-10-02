@@ -49,7 +49,11 @@
     "test:computer-use:mac": "node scripts/test-computer-use-mac.mjs",
     "test:windows-sandbox": "cargo test --locked --manifest-path native/windows-sandbox/Cargo.toml --all-targets",
     "typecheck": "pnpm check:architecture && tsc -b --pretty false",
-    "validate:release-version": "node scripts/validate-release-version.mjs"
+    "validate:release-version": "node scripts/validate-release-version.mjs",
+    "build:computer-use:windows": "node scripts/build-computer-use-windows.mjs",
+    "test:computer-use:windows": "cargo test --locked --manifest-path native/computer-use-windows/Cargo.toml --all-targets",
+    "check:computer-use:windows": "cargo clippy --locked --manifest-path native/computer-use-windows/Cargo.toml --all-targets -- -D warnings",
+    "format:computer-use:windows": "cargo fmt --manifest-path native/computer-use-windows/Cargo.toml"
   },
   "dependencies": {
     "@fontsource/geist-mono": "^5.2.8",
@@ -110,8 +114,7 @@
     "sharp": "0.35.4",
     "undici": "7.29.0",
     "@setsuna-desktop/feature-automation": "workspace:*",
-    "@setsuna-desktop/feature-computer-use": "workspace:*",
-    "@zavora-ai/computer-use-mcp": "7.4.0"
+    "@setsuna-desktop/feature-computer-use": "workspace:*"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.2",
@@ -182,8 +185,7 @@
     "asarUnpack": [
       "**/node_modules/node-pty/prebuilds/**/*",
       "**/node_modules/sharp/**/*",
-      "**/node_modules/@img/**/*",
-      "**/node_modules/@zavora-ai/computer-use-mcp/**/*"
+      "**/node_modules/@img/**/*"
     ],
     "extraResources": [
       {
@@ -197,14 +199,6 @@
           "COPYING",
           "NOTICE.txt",
           "metadata.json"
-        ]
-      },
-      {
-        "from": "dist/computer-use",
-        "to": "computer-use",
-        "filter": [
-          "*.mjs",
-          "*.map"
         ]
       }
     ],
@@ -248,6 +242,10 @@
             "NOTICE.txt",
             "metadata.json"
           ]
+        },
+        {
+          "from": "dist/computer-use/windows/${arch}/setsuna-computer-win.exe",
+          "to": "computer-use/setsuna-computer-win.exe"
         }
       ],
       "target": [

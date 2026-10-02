@@ -5,12 +5,152 @@ import { act, cleanup, renderHook } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { useDesktopNavigation } from '../../../../src/app/controller/useDesktopNavigation.js';
+import { RuntimeClientError } from '../../../../src/services/runtime-client/runtimeClientErrors.js';
 import type { MainView } from '../../../../src/app/types.js';
 import { chatComposerTargetIdentity, useChatComposerSession } from '../../../../src/features/chat/hooks/useChatComposerSession.js';
 import { desktopWorkspaceBrowserPanelInstances, useDesktopWorkspacePanelSession } from '../../../../src/features/workspace/hooks/useDesktopWorkspacePanelSession.js';
 import { addPanelToSlotState, createBrowserPanel } from '../../../../src/features/workspace/model.js';
 
 afterEach(cleanup);
+
+const automationThread: RuntimeThread = {
+  id: 'automation', featureId: 'automation', title: 'New automation', archived: false,
+  createdAt: '', updatedAt: '', messageCount: 0, lastMessagePreview: '', messages: [], lastSeq: 0,
+};
+
+function setupAutomationNavigation(initialThread: RuntimeThread | null, projectId: string | null = null) {
+  const getThread = vi.fn(async (id: string): Promise<RuntimeThread> => id === initialThread?.id ? initialThread : automationThread);
+  const confirmDiscardProjectFile = vi.fn(async () => true);
+  const client = { getThread } as unknown as DesktopRuntimeClient;
+  const hook = renderHook(() => {
+    const [activeView, setActiveView] = useState<MainView>('chat');
+    const [activeProjectId, setActiveProjectId] = useState(projectId);
+    const [currentThread, setCurrentThread] = useState(initialThread);
+    const composer = useChatComposerSession(chatComposerTargetIdentity(currentThread?.id, activeProjectId), client);
+    const navigation = useDesktopNavigation({
+      activeView, setActiveView, activeProjectId, setActiveProjectId, currentThread, setCurrentThread, client,
+      confirmDiscardProjectFile, projects: [], setProjects: vi.fn(), globalThreads: [],
+      threadsByProjectId: new Map(), reloadThreads: async () => [], resetProjectWorkspaceState: vi.fn(),
+      resetNewThreadWorkspacePanels: vi.fn(), resetThreadWorkspacePanels: vi.fn(),
+    });
+    return { navigation, activeView, currentThread, activeProjectId, composer, setCurrentThread };
+  });
+  return { ...hook, getThread, confirmDiscardProjectFile };
+}
+
+it.each([
+  { existing: false, projectId: null, viaSettings: false },
+  { existing: false, projectId: 'project', viaSettings: false },
+  { existing: true, projectId: null, viaSettings: false },
+  { existing: true, projectId: 'project', viaSettings: true },
+])('restores the chat and its draft after automation: %j', async ({ existing, projectId, viaSettings }) => {
+  const original = existing
+    ? { ...automationThread, id: 'ordinary', featureId: undefined, projectId: projectId ?? undefined }
+    : null;
+  const { result } = setupAutomationNavigation(original, projectId);
+  act(() => result.current.composer.setDraft('Unsent chat draft'));
+  const composerKey = result.current.composer.composerKey;
+
+  // Re-entering must preserve the destination, rather than adopting the last
+  // setup conversation or its draft on the second visit.
+  for (let visit = 0; visit < 2; visit += 1) {
+    await act(() => result.current.navigation.changeView('automation'));
+    await act(() => result.current.navigation.selectThreadInView(automationThread.id, 'automation'));
+    expect(result.current.currentThread?.id).toBe(automationThread.id);
+    expect(result.current.activeProjectId).toBeNull();
+    act(() => result.current.composer.setDraft('Automation draft'));
+    if (viaSettings) await act(() => result.current.navigation.changeView('settings'));
+    await act(() => result.current.navigation.changeView('chat'));
+
+    expect(result.current.activeView).toBe('chat');
+    expect(result.current.currentThread).toEqual(original);
+    expect(result.current.activeProjectId).toBe(projectId);
+    expect(result.current.composer.draft).toBe('Unsent chat draft');
+    expect(result.current.composer.composerKey).toBe(composerKey);
+  }
+});
+
+it.each(['confirmation', 'fetch', 'unmounted'] as const)(
+  'ignores an automation selection that finishes after leaving during %s', async (stage) => {
+    const original = { ...automationThread, id: 'ordinary', featureId: undefined };
+    const { result, getThread, confirmDiscardProjectFile } = setupAutomationNavigation(original);
+    await act(() => result.current.navigation.changeView('automation'));
+    const openConversation = result.current.navigation.selectThreadInView;
+    let finish!: () => void;
+    if (stage === 'confirmation') {
+      confirmDiscardProjectFile.mockImplementationOnce(() => new Promise((resolve) => { finish = () => resolve(true); }));
+    } else if (stage === 'fetch') {
+      getThread.mockImplementationOnce(() => new Promise((resolve) => { finish = () => resolve(automationThread); }));
+    }
+    let pending!: Promise<boolean>;
+    if (stage !== 'unmounted') {
+      await act(async () => {
+        pending = openConversation(automationThread.id, 'automation');
+        await Promise.resolve();
+      });
+    }
+    // SSE updates can still arrive before the setup conversation takes over.
+    const updated = { ...original, title: 'Latest title', lastSeq: 2 };
+    act(() => result.current.setCurrentThread(updated));
+    await act(() => result.current.navigation.changeView('chat'));
+    await act(async () => {
+      if (stage === 'unmounted') pending = openConversation(automationThread.id, 'automation');
+      else finish();
+      expect(await pending).toBe(false);
+    });
+    expect(result.current.activeView).toBe('chat');
+    expect(result.current.currentThread).toEqual(updated);
+  },
+);
+
+it('keeps the automation workspace when discarding its file changes is cancelled', async () => {
+  const { result, confirmDiscardProjectFile } = setupAutomationNavigation(null);
+  await act(() => result.current.navigation.changeView('automation'));
+  await act(() => result.current.navigation.selectThreadInView(automationThread.id, 'automation'));
+  confirmDiscardProjectFile.mockResolvedValueOnce(false);
+  await act(() => result.current.navigation.changeView('chat'));
+  expect(result.current.activeView).toBe('automation');
+  expect(result.current.currentThread?.id).toBe(automationThread.id);
+  await act(() => result.current.navigation.changeView('chat'));
+  expect(result.current.activeView).toBe('chat');
+  expect(result.current.currentThread).toBeNull();
+});
+
+it.each(['updated', 'deleted', 'unavailable'] as const)('revalidates the original chat after automation: %s', async (state) => {
+  const original = { ...automationThread, id: 'ordinary', featureId: undefined };
+  const { result, getThread } = setupAutomationNavigation(original);
+  await act(() => result.current.navigation.changeView('automation'));
+  await act(() => result.current.navigation.selectThreadInView(automationThread.id, 'automation'));
+  const updated = { ...original, lastSeq: 20, title: 'Updated while away' };
+  if (state === 'updated') getThread.mockResolvedValueOnce(updated);
+  else getThread.mockRejectedValueOnce(new RuntimeClientError(state === 'deleted' ? 'thread_not_found' : 'INTERNAL', 'Lookup failed'));
+  await act(async () => {
+    const returning = result.current.navigation.changeView('chat');
+    if (state === 'unavailable') await expect(returning).rejects.toThrow('Lookup failed');
+    else await returning;
+  });
+  expect(getThread).toHaveBeenLastCalledWith(original.id);
+  expect(result.current.activeView).toBe(state === 'unavailable' ? 'automation' : 'chat');
+  expect(result.current.currentThread).toEqual(state === 'updated' ? updated : state === 'deleted' ? null : automationThread);
+});
+
+it('does not let a late chat restoration replace a newer navigation', async () => {
+  const original = { ...automationThread, id: 'ordinary', featureId: undefined };
+  const { result, getThread } = setupAutomationNavigation(original);
+  await act(() => result.current.navigation.changeView('automation'));
+  await act(() => result.current.navigation.selectThreadInView(automationThread.id, 'automation'));
+  let finish!: (thread: RuntimeThread) => void;
+  getThread.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  let returning!: Promise<void>;
+  await act(async () => {
+    returning = result.current.navigation.changeView('chat');
+    await Promise.resolve();
+  });
+  await act(() => result.current.navigation.startGlobalThread());
+  await act(async () => { finish(original); await returning; });
+  expect(result.current.currentThread).toBeNull();
+  expect(result.current.activeView).toBe('chat');
+});
 
 it.each([true, false])('leaves the automation conversation when opening chat mode; has fallback=$0', async (hasFallback) => {
   const automation: RuntimeThread = {
@@ -24,7 +164,7 @@ it.each([true, false])('leaves the automation conversation when opening chat mod
     const [activeView, setActiveView] = useState<MainView>('automation');
     const navigation = useDesktopNavigation({
       activeProjectId: null, setActiveProjectId: vi.fn(), currentThread, setCurrentThread,
-      projects: [], setProjects: vi.fn(), setActiveView,
+      projects: [], setProjects: vi.fn(), activeView, setActiveView,
       client: { getThread } as unknown as DesktopRuntimeClient, confirmDiscardProjectFile: async () => true,
       globalThreads: hasFallback ? [ordinary] : [], threadsByProjectId: new Map(), reloadThreads: async () => [],
       resetProjectWorkspaceState: vi.fn(), resetNewThreadWorkspacePanels: vi.fn(), resetThreadWorkspacePanels: vi.fn(),
@@ -58,7 +198,7 @@ it.each([
     const [activeProjectId, setActiveProjectId] = useState<string | null>(source.projectId!);
     const [projects, setProjects] = useState<WorkspaceProject[]>([project]);
     const navigation = useDesktopNavigation({
-      activeProjectId, setActiveProjectId, currentThread, setCurrentThread, projects, setProjects, setActiveView: vi.fn(),
+      activeProjectId, setActiveProjectId, currentThread, setCurrentThread, projects, setProjects, activeView: 'chat', setActiveView: vi.fn(),
       client: { forkThread, getThread: async () => other, listProjects } as unknown as DesktopRuntimeClient,
       confirmDiscardProjectFile: async () => true, globalThreads: [], threadsByProjectId: new Map(), reloadThreads,
       resetProjectWorkspaceState, resetNewThreadWorkspacePanels: vi.fn(), resetThreadWorkspacePanels: vi.fn(),
@@ -100,7 +240,7 @@ it('changes a new chat project without opening a conversation or losing its draf
     const composer = useChatComposerSession(chatComposerTargetIdentity(null, activeProjectId), {} as DesktopRuntimeClient);
     const navigation = useDesktopNavigation({
       activeProjectId, setActiveProjectId, currentThread: null, setCurrentThread: vi.fn(),
-      projects, setProjects: vi.fn(), setActiveView: vi.fn(),
+      projects, setProjects: vi.fn(), activeView: 'chat', setActiveView: vi.fn(),
       client: { getThread } as unknown as DesktopRuntimeClient,
       confirmDiscardProjectFile, globalThreads: [], threadsByProjectId: new Map(),
       reloadThreads: async () => [], resetProjectWorkspaceState,
@@ -149,7 +289,7 @@ it('toggles project lists independently without navigating or disturbing the cur
     const [thread, setCurrentThread] = useState<RuntimeThread | null>(currentThread);
     const navigation = useDesktopNavigation({
       activeProjectId, setActiveProjectId, currentThread: thread, setCurrentThread,
-      projects, setProjects: vi.fn(), setActiveView: vi.fn(),
+      projects, setProjects: vi.fn(), activeView: 'chat', setActiveView: vi.fn(),
       client: { getThread } as unknown as DesktopRuntimeClient,
       confirmDiscardProjectFile, globalThreads: [],
       threadsByProjectId: new Map([['project_a', [currentThread]], ['project_b', [otherThread]]]),
@@ -191,7 +331,7 @@ it.each([false, true])('starts a new chat from a restored thread when its projec
     const [activeView, setActiveView] = useState<MainView>('settings');
     const [projects, setProjects] = useState(projectExists ? [project] : []);
     const navigation = useDesktopNavigation({
-      activeProjectId, setActiveProjectId, currentThread, setCurrentThread, projects, setProjects, setActiveView,
+      activeProjectId, setActiveProjectId, currentThread, setCurrentThread, projects, setProjects, activeView, setActiveView,
       client: {} as DesktopRuntimeClient,
       confirmDiscardProjectFile: async () => true,
       globalThreads: [], threadsByProjectId: new Map(), reloadThreads: async () => [],
@@ -237,7 +377,7 @@ it.each([
     const panels = useDesktopWorkspacePanelSession(identity);
     const navigation = useDesktopNavigation({
       activeProjectId, setActiveProjectId, currentThread, setCurrentThread, client,
-      projects: [project], setProjects: vi.fn(), setActiveView: vi.fn(),
+      projects: [project], setProjects: vi.fn(), activeView: 'chat', setActiveView: vi.fn(),
       confirmDiscardProjectFile: async () => true,
       globalThreads: [], threadsByProjectId: new Map(), reloadThreads: async () => [],
       resetProjectWorkspaceState: vi.fn(), resetThreadWorkspacePanels: vi.fn(),

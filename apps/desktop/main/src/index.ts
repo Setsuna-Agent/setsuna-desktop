@@ -122,7 +122,7 @@ let appQuitAfterShutdown = false;
 let appQuitShutdownPending = false;
 let desktopRelaunchRequested = false;
 const updateInstallCoordinator = new DesktopUpdateInstallCoordinator({
-  getWindows: () => BrowserWindow.getAllWindows(),
+  getWindows: () => desktopWindows.all(),
   confirmDiscard: (window) => dialog.showMessageBoxSync(window, updateInstallUnsavedDialog(interfaceLanguage)) === 1,
   stopRuntime: async () => { await runtimeHost?.stop(); },
   recover: () => {
@@ -749,7 +749,7 @@ if (!ownsDesktopInstance) {
   });
 
   app.on('activate', () => {
-    if (!updateInstallCoordinator.active && BrowserWindow.getAllWindows().length === 0) void createWindow();
+    if (!updateInstallCoordinator.active && desktopWindows.all().length === 0) void createWindow();
   });
 
   app.on('before-quit', (event) => {

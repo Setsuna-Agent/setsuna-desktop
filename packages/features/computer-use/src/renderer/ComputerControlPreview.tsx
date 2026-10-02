@@ -2,7 +2,7 @@ import { Button, Popover } from '@setsuna-desktop/renderer-ui';
 import type { ShellTopbarActionSlotProps } from '@setsuna-desktop/renderer-contracts/shell';
 import { Monitor, Square } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import type { ComputerBridge } from '../contracts/index.js';
+import { computerStopShortcuts, type ComputerBridge } from '../contracts/index.js';
 import { useComputerControl } from './useComputerControl.js';
 import './computer-preview.css';
 
@@ -56,16 +56,23 @@ export function ComputerControlPreview({ bridge, ui, translate: t }: {
           </div>
           <div className="computer-preview__actions">
             {control.error ? <div className="computer-preview__error" role="alert">{control.error}</div> : null}
-            <Button variant="danger" size="small" loading={control.stopping}
-              icon={<Square size={12} fill="currentColor" aria-hidden="true" />}
-              title="Ctrl / ⌘ + Shift + Esc" onClick={() => { void control.stop(); }}>
-              {t('feature.computerUse.stop')}
-            </Button>
+            <div className="computer-preview__footer">
+              <span className="computer-preview__status">
+                {t(control.stopping ? 'feature.computerUse.stopping' : 'feature.computerUse.active')}
+              </span>
+              <Button variant="secondary" size="small" loading={control.stopping}
+                icon={<Square size={10} fill="currentColor" aria-hidden="true" />}
+                title={`Windows: ${computerStopShortcuts.win32.label} · macOS: ${computerStopShortcuts.darwin.label}`} onClick={() => { void control.stop(); }}>
+                {t('feature.computerUse.stop')}
+              </Button>
+            </div>
           </div>
         </div>
       )}>
-      <ui.IconButton label={t('feature.computerUse.preview')} title="" aria-expanded={open}>
-        <Monitor size={18} aria-hidden="true" />
+      <ui.IconButton className="app-shell-icon-control computer-preview-trigger"
+        label={t('feature.computerUse.active')} title="" aria-expanded={open}>
+        <Monitor size={16} aria-hidden="true" />
+        <span className="computer-preview-trigger__status" aria-hidden="true" />
       </ui.IconButton>
     </Popover>
   );

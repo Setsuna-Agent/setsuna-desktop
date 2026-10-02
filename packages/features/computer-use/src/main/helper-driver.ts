@@ -1,107 +1,79 @@
-import { app, utilityProcess, type UtilityProcess } from 'electron';
-import { fileURLToPath } from 'node:url';
+import { app } from 'electron';
 import path from 'node:path';
-import type { ComputerAction } from '../contracts/index.js';
-import type { ComputerDriver, DesktopInputFrame } from './backend.js';
+import { parseComputerAction, type ComputerAction, type WindowsInputRequest } from '../contracts/index.js';
+import { record } from '../contracts/validation.js';
+import type { ComputerAdministratorAccess, ComputerDriver, DesktopInputFrame } from './backend.js';
+import { ComputerProcess } from './computer-process.js';
 
-/** Native input lives in a directly spawned, killable child of the permission-owning app. */
-export class HelperComputerDriver implements ComputerDriver {
-  private child: UtilityProcess | undefined;
-  private stopping: Promise<void> | undefined;
-  private failure: Error | undefined;
-  constructor(
-    private readonly onExit: () => void = () => undefined,
-    private readonly resolveNativeEntry = () => fileURLToPath(import.meta.resolve('@zavora-ai/computer-use-mcp/host-native')),
-  ) {}
-  private nextId = 0;
-  private pending = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
+type InputTransport = Pick<ComputerProcess, 'request' | 'stop'>;
+
+/** Only the native input helper can elevate; Electron and the agent remain unchanged. */
+export class HelperComputerDriver implements ComputerDriver, ComputerAdministratorAccess {
+  private readonly transport: InputTransport;
+  private authorized = false;
+  private active = false;
+  private pending = 0;
+  constructor(onExit: () => void = () => undefined, transport?: InputTransport) {
+    const executable = app.isPackaged
+      ? path.join(process.resourcesPath, 'computer-use', 'setsuna-computer-win.exe')
+      : path.join(app.getAppPath(), 'dist', 'computer-use', 'windows', process.arch, 'setsuna-computer-win.exe');
+    this.transport = transport ?? new ComputerProcess(executable, () => { this.authorized = false; this.active = false; onExit(); });
+  }
+  private async request(command: WindowsInputRequest, signal: AbortSignal): Promise<unknown> {
+    this.pending++;
+    try { return await this.transport.request(command, signal); }
+    finally { this.pending--; }
+  }
+  isAuthorized(): boolean { return this.authorized; }
+  async authorize(signal: AbortSignal): Promise<void> {
+    if (this.authorized) return;
+    try {
+      const result = record(await this.request({ kind: 'authorize' }, signal));
+      signal.throwIfAborted();
+      if (result.authorized !== true || typeof result.integrityLevel !== 'number' || result.integrityLevel < 0x3000) throw new Error('Windows did not confirm administrator access.');
+      this.authorized = true;
+    } catch (error) { await this.revoke(); throw error; }
+  }
   async probe(): Promise<unknown> {
-    this.spawn();
-    try { return await this.call({ kind: 'probe' }, AbortSignal.timeout(15_000)); }
-    finally { await this.stop(); }
+    try { return await this.request({ kind: 'probe' }, AbortSignal.timeout(15_000)); }
+    finally { await this.revoke(); }
   }
-  async start(sessionId: string, signal: AbortSignal): Promise<void> {
-    this.spawn();
-    await this.call({ kind: 'start', sessionId }, signal);
-  }
-  private spawn(): void {
-    if (this.child) throw new Error('Computer helper already running.');
-    if (this.failure) throw this.failure;
-    this.stopping = undefined;
-    // The N-API addon must resolve to real files outside ASAR.
-    const entry = this.resolveNativeEntry().replace(/app\.asar([/\\])/u, 'app.asar.unpacked$1');
-    const helper = app.isPackaged
-      ? path.join(process.resourcesPath, 'computer-use', 'driver-helper.mjs')
-      : path.join(app.getAppPath(), 'dist', 'computer-use', 'driver-helper.mjs');
-    const env = Object.fromEntries(['PATH', 'HOME', 'USERPROFILE', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'TMPDIR', 'LANG'].flatMap((key) => process.env[key] ? [[key, process.env[key]!]] : []));
-    const child = utilityProcess.fork(helper, [entry], { serviceName: 'Setsuna desktop input', env, stdio: 'ignore' });
-    this.child = child;
-    child.on('message', (message: { id: number; result?: unknown; error?: string }) => {
-      const pending = this.pending.get(message.id);
-      if (!pending) return;
-      this.pending.delete(message.id);
-      if (message.error) pending.reject(new Error(message.error));
-      else pending.resolve(message.result);
-    });
-    child.once('exit', () => {
-      if (this.child !== child) return;
-      this.child = undefined;
-      if (!this.stopping) this.failure = new Error('Desktop helper crashed; input release is unconfirmed. Restart Setsuna before further control.');
-      for (const pending of this.pending.values()) pending.reject(new Error('Desktop helper exited; session revoked.'));
-      this.pending.clear();
-      this.onExit();
-    });
+  async start(_sessionId: string, signal: AbortSignal): Promise<void> {
+    // Request access before the first screenshot/input. The broker reuses its
+    // elevated helper on later sessions, whether granted here or in Settings.
+    const result = record(await this.request({ kind: 'start', elevate: true }, signal));
+    signal.throwIfAborted();
+    if (result.ready !== true) throw new Error('Windows input helper did not start.');
+    if (typeof result.integrityLevel !== 'number' || result.integrityLevel < 0x3000) throw new Error('Windows input helper did not confirm administrator access.');
+    this.authorized = true;
+    this.active = true;
   }
   async action(action: ComputerAction, frame: DesktopInputFrame, signal: AbortSignal): Promise<void> {
-    await this.call({ kind: 'action', action, frame: { display: frame.display, width: frame.width, height: frame.height } }, signal);
+    const bounds = frame.display.inputBounds;
+    if (frame.display.inputCoordinateSpace !== 'windows-physical-pixels' || bounds.x !== 0 || bounds.y !== 0) {
+      throw new Error('Windows input requires the authorized primary display.');
+    }
+    const result = record(await this.request({ kind: 'action', action: parseComputerAction(action),
+      frame: { width: frame.width, height: frame.height, screenWidth: bounds.width, screenHeight: bounds.height } }, signal));
+    if (result.dispatched !== true) throw new Error('Windows did not confirm input dispatch.');
   }
-  stop(): Promise<void> {
-    if (this.stopping) return this.stopping;
-    const child = this.child;
-    if (!child) return this.failure ? Promise.reject(this.failure) : Promise.resolve();
-    for (const pending of this.pending.values()) pending.reject(new Error('Desktop control cancelled.'));
-    this.pending.clear();
-    this.stopping = new Promise<void>((resolve, reject) => {
-      let acknowledged = false;
-      const id = ++this.nextId;
-      const timer = setTimeout(() => {
-        child.kill();
-        reject(new Error('Desktop helper shutdown timed out; input release is unconfirmed. Restart Setsuna before further control.'));
-      }, 2000);
-      const message = (reply: { id: number; error?: string; result?: { stopped?: boolean } }) => {
-        if (reply.id !== id) return;
-        acknowledged = !reply.error && reply.result?.stopped === true;
-        child.kill();
-      };
-      child.on('message', message);
-      child.once('exit', () => {
-        clearTimeout(timer); child.off('message', message);
-        if (acknowledged) resolve();
-        else reject(new Error('Desktop helper exited before confirming input release; restart Setsuna before further control.'));
-      });
-      // Graceful shutdown rejects queued input and completes the current bounded
-      // gesture's release. A native hang is killed and leaves the controller closed.
-      child.postMessage({ kind: 'shutdown', id });
-    });
-    return this.stopping;
+  async stop(reason?: string): Promise<void> {
+    // A normal turn ending disarms input but retains the grant across sessions.
+    // Cancellation, errors, lock and app/runtime exit revoke the grant.
+    if (this.authorized && !this.pending && (reason === 'requested' || reason === 'turn-cleanup')) {
+      if (!this.active) return;
+      try {
+        const result = record(await this.request({ kind: 'end-session' }, AbortSignal.timeout(2000)));
+        if (result.stopped !== true) throw new Error('Windows did not confirm input release.');
+        this.active = false;
+        return;
+      } catch (error) { await this.revoke(); throw error; }
+    }
+    await this.revoke();
   }
-  private async call(command: object, signal: AbortSignal): Promise<unknown> {
-    signal.throwIfAborted();
-    const child = this.child;
-    if (!child) throw new Error('Desktop helper unavailable.');
-    const id = ++this.nextId;
-    let abort: () => void = () => undefined;
-    try {
-      return await new Promise((resolve, reject) => {
-        abort = () => {
-          this.pending.delete(id);
-          void this.stop().catch(() => undefined);
-          reject(new Error('Desktop operation cancelled.'));
-        };
-        this.pending.set(id, { resolve, reject });
-        signal.addEventListener('abort', abort, { once: true });
-        child.postMessage({ ...command, id });
-      });
-    } finally { signal.removeEventListener('abort', abort); }
+  revoke(): Promise<void> {
+    this.authorized = false;
+    this.active = false;
+    return this.transport.stop();
   }
 }

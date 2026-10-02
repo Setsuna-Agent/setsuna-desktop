@@ -1,15 +1,43 @@
 // @vitest-environment happy-dom
 
-import type { RuntimeMessage, RuntimeThread } from '@setsuna-desktop/contracts';
+import type { DesktopRuntimeClient, RuntimeMessage, RuntimeThread } from '@setsuna-desktop/contracts';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useChatSendPresentation } from '../../../../../src/features/chat/hooks/useChatSendPresentation.js';
+import { chatComposerTargetIdentity, useChatComposerSession } from '../../../../../src/features/chat/hooks/useChatComposerSession.js';
 
 afterEach(cleanup);
 
 type Input = Parameters<typeof useChatSendPresentation>[0];
 
 describe('chat submission presentation', () => {
+  it.each([false, true])('retires a first-send bubble after creating a thread and returning to a new chat (StrictMode: %s)', async (reactStrictMode) => {
+    const response = deferred<boolean>();
+    const input = initialInput(() => response.promise);
+    const client = { deleteAttachment: vi.fn<DesktopRuntimeClient['deleteAttachment']>(),
+      linkAttachment: vi.fn<DesktopRuntimeClient['linkAttachment']>(), uploadAttachment: vi.fn<DesktopRuntimeClient['uploadAttachment']>() };
+    const view = renderHook((props: Input) => {
+      const composer = useChatComposerSession(chatComposerTargetIdentity(props.currentThread?.id, null), client);
+      const presentation = useChatSendPresentation({ ...props, composerKey: composer.composerKey });
+      return { composer, ...presentation };
+    }, { initialProps: input, reactStrictMode });
+    let send!: Promise<boolean>;
+    act(() => { send = view.result.current.sendInput(); });
+    const pending = view.result.current.pendingMessages[0];
+    const composerKey = view.result.current.composer.composerKey;
+    act(() => view.result.current.composer.claimForThread('created'));
+    const thread: RuntimeThread = { id: 'created', title: 'First conversation', archived: false,
+      lastSeq: 1, messageCount: 1, lastMessagePreview: pending.content, createdAt: '', updatedAt: '',
+      messages: [{ ...pending, id: 'persisted' }] };
+    view.rerender({ ...input, currentThread: thread, messages: thread.messages });
+    expect(view.result.current.composer.composerKey).toBe(composerKey);
+    await act(async () => { response.resolve(true); await send; });
+    expect(view.result.current.pendingMessages).toEqual([]);
+    view.rerender(input);
+    expect(view.result.current.pendingMessages).toEqual([]);
+    expect(view.result.current.submitting).toBe(false);
+  });
+
   it('exposes the submitted message immediately and keeps it until the durable echo arrives', async () => {
     const response = deferred<boolean>();
     const onSend = vi.fn(() => response.promise);

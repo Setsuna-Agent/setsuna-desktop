@@ -96,12 +96,17 @@ export function useChatComposerSession(targetIdentity: ChatComposerTargetIdentit
     if (transition.claimed) entries.delete(current.targetIdentity);
     entries.set(targetIdentity, next);
     sessions = { activeIdentity: targetIdentity, entries };
-    claimRef.current = null;
     // Retry before committing children so they never see the previous conversation's draft.
     setStoredSessions(sessions);
   }
   const session = sessions.entries.get(targetIdentity)!;
   const sessionId = session.sessionId;
+
+  useEffect(() => {
+    // React can replay the transition render (including in StrictMode). Consume
+    // ownership only after commit, without erasing a new claim from this target.
+    if (claimRef.current?.fromIdentity !== targetIdentity) claimRef.current = null;
+  }, [targetIdentity]);
 
   const retainedStoresRef = useRef(new Set<ChatAttachmentStore>());
   useEffect(() => {

@@ -6,6 +6,7 @@ import type { ComputerBridge, ComputerPreview } from '../../src/contracts/index.
 import { ComputerControlPreview } from '../../src/renderer/ComputerControlPreview.js';
 
 const previewLabel = 'feature.computerUse.preview';
+const triggerLabel = 'feature.computerUse.active';
 const stopLabel = 'feature.computerUse.stop';
 const preview: ComputerPreview = { active: true, frame: {
   dataUrl: 'data:image/png;base64,YWJj', width: 200, height: 100, observationId: 'first',
@@ -35,7 +36,7 @@ describe('computer preview interaction', () => {
     expect(bridge.preview).not.toHaveBeenCalled();
     const other = screen.getByRole('button', { name: 'Other work' });
     other.focus();
-    const trigger = screen.getByRole('button', { name: previewLabel });
+    const trigger = screen.getByRole('button', { name: triggerLabel });
     fireEvent.pointerEnter(trigger);
     await advance(160);
     expect(bridge.preview).toHaveBeenCalledOnce();
@@ -47,14 +48,14 @@ describe('computer preview interaction', () => {
     await advance(250);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: stopLabel })); });
     expect(bridge.stop).toHaveBeenCalledOnce();
-    expect(screen.queryByRole('button', { name: previewLabel })).toBeNull();
+    expect(screen.queryByRole('button', { name: triggerLabel })).toBeNull();
   });
 
   it('opens on activation without stopping, dismisses with Escape and ignores a late preview after closing', async () => {
     const bridge = await fixture();
     let resolve!: (value: ComputerPreview) => void;
     bridge.preview.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
-    const trigger = screen.getByRole('button', { name: previewLabel });
+    const trigger = screen.getByRole('button', { name: triggerLabel });
     trigger.focus();
     await act(async () => { fireEvent.click(trigger); });
     expect(bridge.stop).not.toHaveBeenCalled();
@@ -73,7 +74,7 @@ describe('computer preview interaction', () => {
   it('keeps stop failures retryable and does not let an in-flight preview revive a stopped session', async () => {
     const bridge = await fixture();
     bridge.stop.mockRejectedValueOnce(new Error('Stop failed'));
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: previewLabel })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: triggerLabel })); });
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: stopLabel })); });
     expect(screen.getByRole('alert').textContent).toContain('Stop failed');
     const updated = { ...preview, frame: { ...preview.frame!, dataUrl: 'data:image/png;base64,ZGVm', observationId: 'second' } };
@@ -89,6 +90,6 @@ describe('computer preview interaction', () => {
     });
     expect(bridge.stop).toHaveBeenCalledTimes(2);
     await act(async () => { resolve(preview); });
-    expect(screen.queryByRole('button', { name: previewLabel })).toBeNull();
+    expect(screen.queryByRole('button', { name: triggerLabel })).toBeNull();
   });
 });

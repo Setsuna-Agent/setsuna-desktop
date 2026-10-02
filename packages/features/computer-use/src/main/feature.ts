@@ -1,5 +1,6 @@
 import { defineCapability, declareCapabilityProvider, requiredCapability } from '@setsuna-desktop/feature-core/capability';
 import { defineMainDependencies, defineMainFeature } from '@setsuna-desktop/feature-core/main';
+import type { RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import { app, ipcMain, powerMonitor, screen } from 'electron';
 import path from 'node:path';
 import { computerUseFeature, computerUseChannels, type ComputerConnection, type ComputerPermission } from '../contracts/index.js';
@@ -13,10 +14,11 @@ import { ComputerSettingsService } from './settings.js';
 import { computerPermissions, requestComputerPermission } from './permissions.js';
 import { DesktopComputerBackend } from './backend.js';
 import { MacWindowBackend } from './window-backend.js';
-import { WindowProcess, windowHelperPath } from './window-process.js';
+import { ComputerProcess, windowHelperPath } from './computer-process.js';
 
 export const computerMainHostCapability = defineCapability<{
   isAllowedSender(senderId: number): boolean;
+  interfaceLanguage(): RuntimeInterfaceLanguage;
   writeJsonAtomically(filePath: string, value: unknown): Promise<void>;
   cancelTurn(threadId: string, turnId: string): Promise<void>;
 }>({ id: 'computer-use.main-host', description: 'Trusted desktop window identity' });
@@ -30,16 +32,17 @@ export const computerMainFeature = defineMainFeature({
   async setup(context) {
     const host = context.dependencies.host;
     const journal = new ComputerDiagnosticJournal(path.join(app.getPath('userData'), 'logs', 'computer-use.jsonl'));
-    const supervisor = new NativeComputerSupervisor();
+    const supervisor = new NativeComputerSupervisor(host.interfaceLanguage);
     const onExit = () => { void control.stop('helper-exited').catch(() => undefined); };
+    const windowsDriver = process.platform === 'win32' ? new HelperComputerDriver(onExit) : undefined;
     const backend = process.platform === 'darwin'
-      ? new MacWindowBackend(new WindowProcess(windowHelperPath(app.getAppPath(), app.isPackaged), onExit))
-      : new DesktopComputerBackend(new HelperComputerDriver(onExit), new ElectronComputerCapture(), () => supervisor.display());
+      ? new MacWindowBackend(new ComputerProcess(windowHelperPath(app.getAppPath(), app.isPackaged), onExit))
+      : new DesktopComputerBackend(windowsDriver!, new ElectronComputerCapture(), () => supervisor.display());
     const control = new ComputerSessionController(backend, supervisor, Date.now, (reason, identity) => {
       console.info('[computer-use] session stopped', { reason, at: new Date().toISOString() });
       if (isUserComputerStop(reason)) return host.cancelTurn(identity.threadId, identity.turnId);
     }, (event) => journal.record(event));
-    const settings = new ComputerSettingsService(path.join(app.getPath('userData'), 'computer-use.json'), control, host.writeJsonAtomically, computerPermissions);
+    const settings = new ComputerSettingsService(path.join(app.getPath('userData'), 'computer-use.json'), control, host.writeJsonAtomically, computerPermissions, windowsDriver);
     await settings.load();
     const server = new ComputerControlServer(settings);
     const stop = (reason: string) => { void control.stop(reason).catch(() => undefined); };
@@ -70,6 +73,7 @@ export const computerMainFeature = defineMainFeature({
     });
     ipcMain.handle(computerUseChannels.requestPermission, (event, permission: ComputerPermission) => {
       if (!host.isAllowedSender(event.sender.id) || event.senderFrame !== event.sender.mainFrame) throw new Error('Unauthorized desktop permission sender.');
+      if (permission === 'administrator') return settings.requestAdministratorAccess();
       return requestComputerPermission(permission);
     });
     powerMonitor.on('lock-screen', locked);

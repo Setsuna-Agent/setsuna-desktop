@@ -2,11 +2,12 @@ import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import type { SettingsViewUi } from '@setsuna-desktop/renderer-contracts/settings';
 import { RefreshCw } from 'lucide-react';
 import type { ComputerBridge, ComputerPermission } from '../contracts/index.js';
+import { ComputerControlNotice } from './ComputerControlNotice.js';
 import { ComputerPermissionControl } from './ComputerPermissionControl.js';
 import { useComputerSettings } from './useComputerSettings.js';
 import './computer-use.css';
 
-const permissionRows: ComputerPermission[] = ['screen', 'accessibility'];
+const permissionRows: ComputerPermission[] = ['screen', 'accessibility', 'administrator'];
 
 export function ComputerSettingsView({ bridge, translate, ui }: Readonly<{
   bridge: ComputerBridge;
@@ -25,6 +26,7 @@ export function ComputerSettingsView({ bridge, translate, ui }: Readonly<{
           </IconButton>
         )}
       />
+      <ComputerControlNotice translate={translate} />
       <Group>
         <Toggle
           label={translate('feature.computerUse.enabled')}
@@ -35,8 +37,12 @@ export function ComputerSettingsView({ bridge, translate, ui }: Readonly<{
         />
       </Group>
       <Group title={translate('feature.computerUse.permissions')}>
-        {permissionRows.map((permission) => (
-          <Row key={permission} label={translate(`feature.computerUse.${permission}`)}>
+        {permissionRows.filter((permission) => settings?.permissions[permission] && settings.permissions[permission] !== 'unsupported').map((permission) => (
+          <Row
+            key={permission}
+            label={translate(`feature.computerUse.${permission}`)}
+            description={permission === 'administrator' ? translate('feature.computerUse.administrator.description') : undefined}
+          >
             <ComputerPermissionControl
               permission={permission}
               status={settings?.permissions[permission] ?? 'unknown'}

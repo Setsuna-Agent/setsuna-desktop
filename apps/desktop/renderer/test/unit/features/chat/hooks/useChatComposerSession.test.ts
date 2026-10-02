@@ -111,10 +111,10 @@ it('finishes an upload in its original draft while another conversation is activ
   expect(client.deleteAttachment).not.toHaveBeenCalled();
 });
 
-it('moves an unsent draft through project selection and first-thread creation without duplicating it', async () => {
+it.each([false, true])('moves an unsent draft through project selection and first-thread creation without duplicating it (StrictMode: %s)', async (reactStrictMode) => {
   const client = attachmentClient();
   const view = renderHook(({ target }) => useChatComposerSession(target, client), {
-    initialProps: { target: 'new-thread-slot:global' as ChatComposerSessionState['targetIdentity'] },
+    initialProps: { target: 'new-thread-slot:global' as ChatComposerSessionState['targetIdentity'] }, reactStrictMode,
   });
   act(() => view.result.current.setDraft('First input'));
   await act(() => view.result.current.attachmentStore.addFiles([new File(['A'], 'A.txt', { type: 'text/plain' })]));

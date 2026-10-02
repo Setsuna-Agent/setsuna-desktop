@@ -76,6 +76,14 @@ jobs:
       - name: Test Windows sidecar
         run: cargo test --locked --manifest-path native/windows-sandbox/Cargo.toml --all-targets
 
+      - name: Check Windows input helper
+        run: |
+          cargo fmt --manifest-path native/computer-use-windows/Cargo.toml -- --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo clippy --locked --manifest-path native/computer-use-windows/Cargo.toml --all-targets -- -D warnings
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --locked --manifest-path native/computer-use-windows/Cargo.toml --all-targets
+
       - name: Smoke-test Windows executable protocol
         shell: pwsh
         run: |
