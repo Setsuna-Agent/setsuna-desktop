@@ -6,8 +6,10 @@ exports.default = async function afterPack(context) {
   const resourcesDir = context.electronPlatformName === 'darwin'
     ? path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`, 'Contents', 'Resources')
     : path.join(context.appOutDir, 'resources');
+  const { verifyComputerUseResources } = await import(pathToFileURL(require.resolve('./computer-use-resources.mjs')).href);
   const moduleUrl = pathToFileURL(require.resolve('./ripgrep/prepare-ripgrep.mjs')).href;
   const { electronBuilderArchName, verifyPreparedRipgrep } = await import(moduleUrl);
+  await verifyComputerUseResources({ resourcesDir, platform: context.electronPlatformName, arch: electronBuilderArchName(context.arch) });
   await verifyPreparedRipgrep({
     platform: context.electronPlatformName,
     arch: electronBuilderArchName(context.arch),

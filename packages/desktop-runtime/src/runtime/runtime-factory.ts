@@ -36,6 +36,7 @@ import { SqliteThreadStore } from '../adapters/store/sqlite-thread-store.js';
 import { ModelLatencyLog } from '../adapters/model/model-latency-log.js';
 import { ArtifactToolHost } from '../adapters/tool/artifact-tool-host.js';
 import { AutomationToolHost } from '../adapters/tool/automation-tool-host.js';
+import { ComputerToolHost } from '../adapters/tool/computer-tool-host.js';
 import { BrowserToolHost } from '../adapters/tool/browser-tool-host.js';
 import { CompositeToolHost } from '../adapters/tool/composite-tool-host.js';
 import { ExtensionToolHost } from '../adapters/tool/extension-tool-host.js';
@@ -204,12 +205,14 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const artifactToolHost = new ArtifactToolHost();
   const automationToolHost = new AutomationToolHost();
   const browserToolHost = new BrowserToolHost();
+  const computerToolHost = new ComputerToolHost();
   const memoryToolHost = new MemoryToolHost();
   // ToolHost 顺序会影响模型看到的能力面：先管理能力，再运行 MCP，最后是本地 workspace/memory 工具。
   const toolHost = new CompositeToolHost([
     new UserInputToolHost(approvalGate, eventWriter, clock, ids),
     automationToolHost,
     browserToolHost,
+    computerToolHost,
     mcpToolHost,
     new PluginBundleToolHost(pluginStore, pluginDraftStore),
     new PluginVerificationToolHost(pluginStore, extensionManager),
@@ -270,6 +273,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     appServerNotificationBus,
     backgroundShellProcesses,
     browserToolHost,
+    computerToolHost,
     configStore,
     clock,
     conversationDebugTraceSink,

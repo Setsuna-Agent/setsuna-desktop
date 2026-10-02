@@ -29,6 +29,8 @@ import {
   artifactWorkspaceFilesCapability,
 } from '@setsuna-desktop/feature-artifact/contracts';
 import { artifactRuntimeFeature } from '@setsuna-desktop/feature-artifact/runtime';
+import { computerRuntimeToolsCapability } from '@setsuna-desktop/feature-computer-use/contracts';
+import { computerRuntimeFeature } from '@setsuna-desktop/feature-computer-use/runtime';
 import { browserRuntimeToolServiceCapability } from '@setsuna-desktop/feature-browser/contracts';
 import { browserRuntimeFeature } from '@setsuna-desktop/feature-browser/runtime';
 import {
@@ -137,6 +139,7 @@ const runtimeFeatures = defineRuntimeFeatureHost({
   required: [
     artifactRuntimeFeature,
     browserRuntimeFeature,
+    computerRuntimeFeature,
     modelProviderRuntimeFeature,
     pluginManagementRuntimeFeature,
     reviewRuntimeFeature,
@@ -441,6 +444,9 @@ export async function activateBuiltinRuntimeFeatures(
     host.bind({
       tools: requiredCapability(browserRuntimeToolServiceCapability),
     }, ({ tools }) => runtime.browserToolHost.bind(tools));
+    host.bind({
+      tools: requiredCapability(computerRuntimeToolsCapability),
+    }, ({ tools }) => runtime.computerToolHost.bind(tools));
 
     host.bind({
       collaboration: optionalCapability(collaborationControlCapability, createNoopCollaborationControl),

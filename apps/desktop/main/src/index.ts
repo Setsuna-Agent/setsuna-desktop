@@ -38,7 +38,7 @@ import {
 import { DesktopDataRootCoordinator } from './data-root/coordinator.js';
 import { writeJsonAtomically } from './data-root/atomic-json.js';
 import { acquireBootstrapInstanceLock } from './data-root/instance-lock.js';
-import { resolveDesktopInstanceProfile } from './data-root/instance-profile.js';
+import { COMPUTER_USE_LAB_APP_NAME, resolveDesktopInstanceProfile } from './data-root/instance-profile.js';
 import { desktopDataLayout, legacyDesktopPolicyPaths } from './data-root/layout.js';
 import {
   DESKTOP_DEV_RELAUNCH_EXIT_CODE_ENV,
@@ -81,11 +81,20 @@ import { resolveMainWindowSurfaceOptions } from './window/surface.js';
 import { DesktopTrayController, revealDesktopWindow } from './window/tray.js';
 import { DesktopUpdateInstallCoordinator, updateInstallUnsavedDialog } from './window/update-install.js';
 
+import { diagnoseBuiltinComputerUse } from './composition/builtin-main-features.js';
+
 // Reject unsupported hosts before acquiring locks or creating the data directory.
 if (process.platform !== 'darwin' && process.platform !== 'win32') {
   throw new Error(`Setsuna Desktop supports macOS and Windows only. Unsupported platform: ${process.platform}.`);
 }
 
+// Keep diagnostics outside normal startup so they never load user data or the Agent.
+if (process.argv.includes('--computer-use-diagnostics')) {
+  void diagnoseBuiltinComputerUse().then((result) => {
+    console.log(JSON.stringify(result, (_, value) => typeof value === 'bigint' ? value.toString() : value));
+    app.exit(0);
+  }).catch((error) => { console.error(error); app.exit(1); });
+} else {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Windows already constrains taskbar and tray icons, so use artwork without the
 // platform-style transparent inset applied to the macOS source image.
@@ -129,10 +138,12 @@ const updateInstallCoordinator = new DesktopUpdateInstallCoordinator({
   },
 });
 const usesCustomFrame = process.platform === 'win32';
+const isComputerUseLab = app.isPackaged && app.getName() === COMPUTER_USE_LAB_APP_NAME;
 const desktopInstanceProfile = resolveDesktopInstanceProfile({
   appDataRoot: app.getPath('appData'),
   defaultDataRoot: app.getPath('userData'),
   isPackaged: app.isPackaged,
+  appName: app.getName(),
 });
 const defaultDataRoot = desktopInstanceProfile.defaultDataRoot;
 const desktopAppDataRoot = desktopInstanceProfile.appDataRoot;
@@ -141,7 +152,7 @@ const legacyPolicyPaths = legacyDesktopPolicyPaths(os.homedir());
 const desktopDataRootBootMode = resolveDesktopDataRootBootMode({
   appDataRoot: desktopAppDataRoot,
   defaultRoot: defaultDataRoot,
-  legacyPolicyPaths: [
+  legacyPolicyPaths: isComputerUseLab ? [] : [
     legacyPolicyPaths.execPolicyPath,
     legacyPolicyPaths.shellPolicyPath,
   ],
@@ -329,7 +340,7 @@ async function createWindow(): Promise<void> {
         repository: process.env.SETSUNA_DESKTOP_UPDATE_REPOSITORY ?? 'Setsuna-Agent/setsuna-desktop',
         downloadsDir: path.join(app.getPath('downloads'), 'Setsuna Desktop Updates'),
         sourceConfigPath: dataLayout.updateSourcesPath,
-        enabled: app.isPackaged || process.env.SETSUNA_DESKTOP_ENABLE_UPDATES === '1',
+        enabled: !isComputerUseLab && (app.isPackaged || process.env.SETSUNA_DESKTOP_ENABLE_UPDATES === '1'),
         installUpdate: (quitAndInstall: () => void) => updateInstallCoordinator.install(quitAndInstall),
         fetch: (
           input: Parameters<typeof globalThis.fetch>[0],
@@ -396,6 +407,8 @@ async function createWindow(): Promise<void> {
     appRoot: app.getAppPath(),
     appVersion: app.getVersion(),
     browserControl: activatedMainFeatures.browserControl,
+    computerControl: activatedMainFeatures.computerControl,
+    onExit: () => activatedMainFeatures.computerLifecycle.runtimeExited(),
     nativeBridge,
     dataDir: dataLayout.root,
     ripgrepPath,
@@ -719,7 +732,14 @@ if (!ownsDesktopInstance) {
     revealDesktopWindow(mainWindow);
   });
 
-  app.whenReady().then(createWindow).catch((error) => {
+  app.whenReady().then(async () => {
+    await createWindow();
+    // Diagnose the same normally running main process and its direct helper,
+    // without starting a control session or requesting system permissions.
+    if (process.argv.includes('--computer-use-normal-diagnostics')) {
+      console.log(JSON.stringify({ context: 'normal-main', ...await diagnoseBuiltinComputerUse() as object }));
+    }
+  }).catch((error) => {
     console.error(error);
     app.quit();
   });
@@ -754,4 +774,6 @@ if (!ownsDesktopInstance) {
     console.error('[desktop-updater]', error);
     updateInstallCoordinator.recover();
   });
+}
+
 }

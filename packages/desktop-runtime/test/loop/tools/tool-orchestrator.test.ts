@@ -620,8 +620,9 @@ describe('ToolOrchestrator terminal and retry handling', () => {
     expect(fixture.completions).toEqual([]);
   });
 
-  it('publishes one error terminal when result post-processing fails', async () => {
-    const toolHost = stubToolHost(async () => ({ content: 'side effect completed' }));
+  it('publishes one error terminal and revokes stateful tools when result post-processing fails', async () => {
+    const toolResultFailed = vi.fn();
+    const toolHost = stubToolHost(async () => ({ content: 'side effect completed' }), { toolResultFailed });
     const fixture = createOrchestratorFixture(toolHost);
 
     const execution = await fixture.orchestrator.runToolCall(
@@ -636,6 +637,7 @@ describe('ToolOrchestrator terminal and retry handling', () => {
       },
     );
 
+    expect(toolResultFailed).toHaveBeenCalledWith('local_tool', expect.objectContaining({ turnId: 'turn_1' }));
     expect(execution).toMatchObject({ status: 'error', content: expect.stringContaining('attachment storage failed') });
     expect(fixture.completions).toEqual([
       expect.objectContaining({ status: 'error', content: expect.stringContaining('attachment storage failed') }),

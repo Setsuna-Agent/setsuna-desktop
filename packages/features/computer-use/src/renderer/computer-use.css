@@ -1,0 +1,53 @@
+.computer-use-permission-control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  text-align: right;
+}
+
+.computer-use-permission-badge {
+  --permission-color: var(--app-text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 10px;
+  border: 1px solid color-mix(in srgb, var(--permission-color) 16%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--permission-color) 8%, transparent);
+  color: var(--permission-color);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.computer-use-permission-badge[data-status='granted'] {
+  --permission-color: color-mix(in srgb, var(--app-success) 75%, var(--app-text));
+}
+
+.computer-use-permission-badge:is([data-status='denied'], [data-status='not-determined'], [data-status='restricted']) {
+  --permission-color: color-mix(in srgb, var(--app-warning) 75%, var(--app-text));
+}
+
+.computer-use-permission-badge__dot {
+  flex: 0 0 5px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.computer-use-permission-control .computer-use-permission-action {
+  min-height: 28px;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-surface-subtle);
+  color: var(--app-text);
+  font-size: 12px;
+  line-height: 20px;
+}

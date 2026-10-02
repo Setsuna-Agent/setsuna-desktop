@@ -14,6 +14,7 @@ import {
   type RuntimeStoredMessageAttachment,
 } from '@setsuna-desktop/contracts';
 import type { WebContents } from 'electron';
+import type { ComputerConnection } from '@setsuna-desktop/feature-computer-use/contracts';
 import type { BrowserControlConnection } from '@setsuna-desktop/feature-browser/contracts';
 import { installLocalPlugin } from '@setsuna-desktop/feature-plugin-management/contracts';
 import { KERNEL_FEATURE_OPERATION_ERRORS } from '@setsuna-desktop/feature-core/operation';
@@ -38,6 +39,8 @@ type RuntimeHostOptions = {
   appRoot: string;
   appVersion: string;
   browserControl?: BrowserControlConnection;
+  computerControl?: ComputerConnection;
+  onExit?: () => void | Promise<void>;
   nativeBridge?: {
     token: string;
     url: string;
@@ -75,6 +78,7 @@ export class RuntimeHost {
   private child: RuntimeChildProcess | null = null;
   private stoppingChild: RuntimeChildProcess | null = null;
   private stoppingPromise: Promise<void> | null = null;
+  private exitCleanup: Promise<void> = Promise.resolve();
   private port = 0;
   // 每次启动生成独立 token，避免任意 localhost 调用者绕过 Electron main 访问 runtime。
   private readonly token = randomBytes(32).toString('hex');
@@ -88,6 +92,7 @@ export class RuntimeHost {
    */
   async start(): Promise<void> {
     if (this.stoppingPromise) await this.stoppingPromise;
+    await this.exitCleanup;
     if (this.child) return;
     this.port = await findAvailablePort();
     const runtimeEntry = this.options.runtimeEntry ?? resolvePackagedRuntimeEntry(this.options.appRoot);
@@ -100,6 +105,10 @@ export class RuntimeHost {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: {
         ...runtimeProcessEnvironment(this.options),
+        ...(this.options.computerControl ? {
+          SETSUNA_DESKTOP_COMPUTER_CONTROL_TOKEN: this.options.computerControl.token,
+          SETSUNA_DESKTOP_COMPUTER_CONTROL_URL: this.options.computerControl.url,
+        } : {}),
         ...(this.options.browserControl ? {
           SETSUNA_DESKTOP_BROWSER_CONTROL_TOKEN: this.options.browserControl.token,
           SETSUNA_DESKTOP_BROWSER_CONTROL_URL: this.options.browserControl.url,
@@ -116,14 +125,24 @@ export class RuntimeHost {
     });
     this.child = child;
     child.stderr.on('data', (chunk) => console.error(`[runtime] ${String(chunk).trimEnd()}`));
-    child.on('exit', (code, signal) => {
-      if (this.child === child) this.child = null;
+    child.once('exit', (code, signal) => {
+      if (this.child === child) {
+        this.child = null;
+        // Idle turns have no open HTTP request to cancel. Revoke main-owned
+        // resources at process exit, and drain them before a replacement starts.
+        this.exitCleanup = this.cleanupAfterExit();
+        void this.exitCleanup.catch((error) => console.error('[runtime] exit cleanup failed', error));
+      }
       const message = `[runtime] exited code=${code ?? 'null'} signal=${signal ?? 'null'}`;
       if (this.stoppingChild === child) console.info(message);
       else console.error(message);
     });
     await this.waitForReady(child);
     await this.healthCheck();
+  }
+
+  private async cleanupAfterExit(): Promise<void> {
+    await this.options.onExit?.();
   }
 
   /**
@@ -133,15 +152,18 @@ export class RuntimeHost {
     for (const subscriptionId of this.subscriptions.keys()) this.unsubscribe(subscriptionId);
     if (this.stoppingPromise) return this.stoppingPromise;
     const child = this.child;
-    if (!child) return;
+    if (!child) return this.exitCleanup;
     this.stoppingChild = child;
     const stop = stopRuntimeChild(child, this.options.shutdownTimeoutMs ?? RUNTIME_SHUTDOWN_TIMEOUT_MS)
       .then(() => {
         if (this.child === child) this.child = null;
       })
-      .finally(() => {
-        if (this.stoppingChild === child) this.stoppingChild = null;
-        if (this.stoppingPromise === stop) this.stoppingPromise = null;
+      .finally(async () => {
+        try { await this.exitCleanup; }
+        finally {
+          if (this.stoppingChild === child) this.stoppingChild = null;
+          if (this.stoppingPromise === stop) this.stoppingPromise = null;
+        }
       });
     this.stoppingPromise = stop;
     return stop;

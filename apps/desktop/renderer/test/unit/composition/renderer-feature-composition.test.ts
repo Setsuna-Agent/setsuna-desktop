@@ -66,6 +66,7 @@ describe('renderer feature composition', () => {
       activeEntryIds: ['plugin-management.installed-sidebar'],
     });
     expect(findSlot(inspection.roots, 'renderer.shell.topbar.action')?.activeEntryIds).toEqual([
+      'computer-use.stop',
       'updater.ready-action',
     ]);
     expect(findSlot(inspection.roots, 'renderer.workspace.panel')?.activeEntryIds).toEqual(
@@ -76,6 +77,7 @@ describe('renderer feature composition', () => {
         'mcp.capabilities-page',
         'plugin-management.capabilities-page',
         'settings.general',
+        'computer-use.settings-page',
         'skills.capabilities-page',
       ]),
     );

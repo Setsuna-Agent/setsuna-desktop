@@ -2,6 +2,7 @@ import path from 'node:path';
 
 const DEVELOPMENT_PROFILE_DIRECTORY_NAME = 'Setsuna Desktop Development';
 const DEVELOPMENT_DATA_DIRECTORY_NAME = 'Data';
+export const COMPUTER_USE_LAB_APP_NAME = 'Setsuna Computer Use Lab';
 
 export type DesktopInstanceProfile = {
   /** Parent used by the bootstrap layout for pointers, migrations and the process lock. */
@@ -19,8 +20,15 @@ export function resolveDesktopInstanceProfile(input: {
   appDataRoot: string;
   defaultDataRoot: string;
   isPackaged: boolean;
+  appName?: string;
 }): DesktopInstanceProfile {
   const appDataRoot = path.resolve(input.appDataRoot);
+  // The signed native test app must not read the installed app's bootstrap
+  // pointer, process lock, credentials or conversation database.
+  if (input.isPackaged && input.appName === COMPUTER_USE_LAB_APP_NAME) {
+    const labRoot = path.join(appDataRoot, COMPUTER_USE_LAB_APP_NAME);
+    return { appDataRoot: labRoot, defaultDataRoot: path.join(labRoot, 'Data') };
+  }
   if (input.isPackaged) {
     return {
       appDataRoot,

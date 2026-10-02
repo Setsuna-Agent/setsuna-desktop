@@ -6,6 +6,10 @@ exports.default = async function beforePack(context) {
   }
   const moduleUrl = pathToFileURL(require.resolve('./ripgrep/prepare-ripgrep.mjs')).href;
   const { electronBuilderArchName, prepareRipgrep } = await import(moduleUrl);
+  if (context.electronPlatformName === 'darwin') {
+    const { buildMacComputerHelper } = await import(pathToFileURL(require.resolve('./build-computer-use-mac.mjs')).href);
+    await buildMacComputerHelper({ arch: electronBuilderArchName(context.arch), projectDir: context.packager.projectDir });
+  }
   await prepareRipgrep({
     platform: context.electronPlatformName,
     arch: electronBuilderArchName(context.arch),
