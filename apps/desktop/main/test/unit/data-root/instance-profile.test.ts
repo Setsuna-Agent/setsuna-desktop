@@ -1,8 +1,18 @@
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { resolveDesktopInstanceProfile } from '../../../src/data-root/instance-profile.js';
+import { COMPUTER_USE_LAB_APP_NAME, resolveDesktopInstanceProfile } from '../../../src/data-root/instance-profile.js';
 
 describe('desktop instance profile', () => {
+  it('isolates the signed computer-use lab even when a release data root is provided', () => {
+    const appDataRoot = path.join(path.parse(process.cwd()).root, 'system-app-data');
+    const defaultDataRoot = path.join(appDataRoot, 'Setsuna Desktop');
+    const profile = resolveDesktopInstanceProfile({ appDataRoot, defaultDataRoot, isPackaged: true, appName: COMPUTER_USE_LAB_APP_NAME });
+    expect(profile.appDataRoot).toBe(path.join(appDataRoot, COMPUTER_USE_LAB_APP_NAME));
+    expect(profile.defaultDataRoot).toBe(path.join(profile.appDataRoot, 'Data'));
+    expect(profile.defaultDataRoot).not.toBe(defaultDataRoot);
+    expect(resolveDesktopInstanceProfile({ appDataRoot, defaultDataRoot, isPackaged: true, appName: 'Setsuna Desktop' }))
+      .toEqual({ appDataRoot, defaultDataRoot });
+  });
   it('preserves Electron paths for packaged builds', () => {
     const appDataRoot = path.join(path.parse(process.cwd()).root, 'system-app-data');
     const defaultDataRoot = path.join(appDataRoot, 'Setsuna Desktop');

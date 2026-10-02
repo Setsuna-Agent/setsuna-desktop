@@ -11,6 +11,9 @@ import {
   defineMainFeatureHost,
   type MainFeatureComposition,
 } from '@setsuna-desktop/feature-core/main';
+import type { ComputerConnection } from '@setsuna-desktop/feature-computer-use/contracts';
+import { writeJsonAtomically } from '../data-root/atomic-json.js';
+import { computerMainFeature, computerMainHostCapability, computerConnectionCapability, computerMainLifecycleCapability, diagnoseComputerUse, type ComputerMainLifecycle } from '@setsuna-desktop/feature-computer-use/main';
 import type { BrowserControlConnection } from '@setsuna-desktop/feature-browser/contracts';
 import {
   browserControlConnectionCapability,
@@ -76,6 +79,7 @@ import { resolveWorkspaceFilePreview } from '../workspace/file-opening.js';
 const mainFeatures = defineMainFeatureHost({
   required: [
     browserMainFeature,
+    computerMainFeature,
     networkProxyMainFeature,
     pluginManagementMainFeature,
     reviewMainFeature,
@@ -90,6 +94,8 @@ const mainFeatures = defineMainFeatureHost({
 
 export type ActivatedBuiltinMainFeatures = Readonly<{
   browserControl: BrowserControlConnection;
+  computerControl: ComputerConnection;
+  computerLifecycle: ComputerMainLifecycle;
   composition: MainFeatureComposition;
   networkProxy: NetworkProxyMainService;
   updater: UpdaterLifecycle;
@@ -112,6 +118,16 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
 }>): Promise<ActivatedBuiltinMainFeatures> {
   const composition = await mainFeatures.activate({
     hostCapabilities: [
+      provideHostCapability(computerMainHostCapability, {
+        isAllowedSender: (senderId: number) => Boolean(desktopWindows.get(senderId)),
+        writeJsonAtomically,
+        cancelTurn: async (threadId: string, turnId: string) => {
+          await input.requestRuntime({
+            path: `/v1/threads/${encodeURIComponent(threadId)}/turns/${encodeURIComponent(turnId)}/cancel`,
+            method: 'POST',
+          });
+        },
+      }),
       provideHostCapability(
         browserMainHostCapability,
         Object.freeze({
@@ -214,6 +230,8 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
   return completeFeatureHostActivation(composition, (host) => {
     const dependencies = host.composition.resolveHostDependencies({
       browserControl: requiredCapability(browserControlConnectionCapability),
+      computerControl: requiredCapability(computerConnectionCapability),
+      computerLifecycle: requiredCapability(computerMainLifecycleCapability),
       networkProxy: requiredCapability(networkProxyMainServiceCapability),
       updater: requiredCapability(updaterLifecycleCapability),
       webDavSync: requiredCapability(webDavSyncLifecycleCapability),
@@ -221,6 +239,8 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
     });
     return Object.freeze({
       browserControl: dependencies.browserControl,
+      computerControl: dependencies.computerControl,
+      computerLifecycle: dependencies.computerLifecycle,
       composition: host.composition,
       networkProxy: dependencies.networkProxy,
       updater: dependencies.updater,
@@ -228,4 +248,8 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
       windowsSandbox: dependencies.windowsSandbox,
     });
   });
+}
+
+export async function diagnoseBuiltinComputerUse(): Promise<unknown> {
+  return diagnoseComputerUse();
 }

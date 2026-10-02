@@ -1,14 +1,14 @@
 import { Slot, HoverCard, Popover as Primitive, Tooltip as TooltipPrimitive } from 'radix-ui';
-import { forwardRef, useEffect, useState, type HTMLAttributes, type CSSProperties, type ReactElement, type ReactNode } from 'react';
+import { forwardRef, useEffect, useState, type ComponentPropsWithoutRef, type HTMLAttributes, type CSSProperties, type ReactElement, type ReactNode } from 'react';
 import { floatingPlacement, overlayContainer, type Placement } from './portal.js';
 import { cn } from './utils.js';
 
-export type PopoverProps = Omit<HTMLAttributes<HTMLElement>, 'children' | 'content'> & {
+export type PopoverProps = Omit<HTMLAttributes<HTMLElement>, 'children' | 'content'> & Pick<ComponentPropsWithoutRef<typeof Primitive.Content>, 'onOpenAutoFocus' | 'onCloseAutoFocus'> & {
   children: ReactElement; content: ReactNode; open?: boolean; onOpenChange?(open: boolean): void;
   trigger?: 'click' | 'hover'; placement?: Placement; className?: string; style?: CSSProperties;
   mouseEnterDelay?: number; mouseLeaveDelay?: number;
 };
-export const Popover = forwardRef<HTMLElement, PopoverProps>(function Popover({ children, content, open, onOpenChange, trigger = 'click', placement, className, style, mouseEnterDelay = 0.15, mouseLeaveDelay = 0.15, ...triggerProps }, ref) {
+export const Popover = forwardRef<HTMLElement, PopoverProps>(function Popover({ children, content, open, onOpenChange, trigger = 'click', placement, className, style, mouseEnterDelay = 0.15, mouseLeaveDelay = 0.15, onOpenAutoFocus, onCloseAutoFocus, ...triggerProps }, ref) {
   const panel = { ...floatingPlacement(placement), className: cn('sd-popover', className), style, sideOffset: 6, collisionPadding: 8 };
   if (trigger === 'hover') return <HoverCard.Root open={open} onOpenChange={onOpenChange} openDelay={mouseEnterDelay * 1000} closeDelay={mouseLeaveDelay * 1000}>
     <HoverCard.Trigger asChild><Slot.Root {...triggerProps} ref={ref}>{children}</Slot.Root></HoverCard.Trigger>
@@ -16,7 +16,7 @@ export const Popover = forwardRef<HTMLElement, PopoverProps>(function Popover({ 
   </HoverCard.Root>;
   return <Primitive.Root open={open} onOpenChange={onOpenChange}>
     <Primitive.Trigger asChild><Slot.Root {...triggerProps} ref={ref}>{children}</Slot.Root></Primitive.Trigger>
-    <Primitive.Portal container={overlayContainer()}><Primitive.Content {...panel}>{content}</Primitive.Content></Primitive.Portal>
+    <Primitive.Portal container={overlayContainer()}><Primitive.Content {...panel} onOpenAutoFocus={onOpenAutoFocus} onCloseAutoFocus={onCloseAutoFocus}>{content}</Primitive.Content></Primitive.Portal>
   </Primitive.Root>;
 });
 

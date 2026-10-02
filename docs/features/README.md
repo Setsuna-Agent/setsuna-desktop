@@ -32,6 +32,7 @@ packages/features/<feature>/
 | `automation` | `automation` | O | — | — | O | 对话创建定时任务、本机调度、无人值守执行与运行记录 |
 | `browser` | `browser` | R | R | B | R | 内置浏览器、guest/CDP 控制、Agent Browser tools |
 | `collaboration` | `collaboration` | O | — | — | O | 子任务/协作线程状态、投影与 spawn result |
+| `computer-use` | `computer-use` | R | R | B | R | 独立会话授权、受监督主桌面截图/基础输入与急停 |
 | `conversation-debug` | `conversation-debug` | O | — | — | O | 调试设置、事件/trace 查询与时间线面板 |
 | `goal` | `goal` | O | — | — | O | 持久 Goal、自动续轮、预算/状态与 UI |
 | `image-generation` | `image-generation` | O | — | — | O | 图片生成配置、服务、资产结果与 Plugin 详情贡献 |
@@ -77,6 +78,7 @@ Inventory 的事实来源不是这张表，而是四个 composition root 和各 
 ### Desktop 工作台与原生能力
 
 - [Browser](browser.md)
+- [桌面控制](computer-use.md)
 - [Pull Request 工作台](pull-requests.md)
 - [自动化](automation.md)
 - [Review、Terminal、Network、Updater、WebDAV、Sandbox 与 Workspace Apps](desktop-workbench.md)

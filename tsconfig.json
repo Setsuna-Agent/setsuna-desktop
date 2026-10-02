@@ -8,6 +8,7 @@
     { "path": "./packages/features/approval-review/tsconfig.build.json" },
     { "path": "./packages/features/artifact/tsconfig.build.json" },
     { "path": "./packages/features/browser/tsconfig.build.json" },
+    { "path": "./packages/features/computer-use/tsconfig.build.json" },
     { "path": "./packages/features/collaboration/tsconfig.build.json" },
     { "path": "./packages/features/conversation-debug/tsconfig.build.json" },
     { "path": "./packages/features/image-generation/tsconfig.build.json" },

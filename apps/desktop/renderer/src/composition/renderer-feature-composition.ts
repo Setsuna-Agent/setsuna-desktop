@@ -21,6 +21,8 @@ import {
 } from '@setsuna-desktop/feature-artifact/contracts';
 import { approvalReviewRendererFeature } from '@setsuna-desktop/feature-approval-review/renderer';
 import { artifactRendererFeature } from '@setsuna-desktop/feature-artifact/renderer';
+import { computerBridgeCapability } from '@setsuna-desktop/feature-computer-use/contracts';
+import { computerRendererFeature } from '@setsuna-desktop/feature-computer-use/renderer';
 import { browserRendererFeature } from '@setsuna-desktop/feature-browser/renderer';
 import {
   collaborationRendererStateCapability,
@@ -119,6 +121,7 @@ const rendererFeatures = defineRendererFeatureHost({
   required: [
     artifactRendererFeature,
     browserRendererFeature,
+    computerRendererFeature,
     mcpRendererFeature,
     modelProviderRendererFeature,
     networkProxyRendererFeature,
@@ -177,6 +180,13 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
       createUiRegistrar: (owner, track) => rendererPlugins.createRegistrar(owner, track),
       hostMessages,
       hostCapabilities: [
+      provideHostCapability(computerBridgeCapability, window.setsunaDesktop?.computerUse ?? {
+        status: async () => ({ active: false }), stop: async () => undefined,
+        preview: async () => ({ active: false, frame: null }),
+        settings: async () => { throw new Error('Desktop control settings are unavailable.'); },
+        setEnabled: async () => { throw new Error('Desktop control settings are unavailable.'); },
+        requestPermission: async () => { throw new Error('Desktop control settings are unavailable.'); },
+      }),
       provideHostCapability(pullRequestsRendererHostCapability, PullRequestsFeatureBoundary),
       provideHostCapability(
         capabilitiesRefreshCoordinatorCapability,

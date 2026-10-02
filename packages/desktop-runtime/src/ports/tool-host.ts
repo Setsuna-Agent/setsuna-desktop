@@ -146,5 +146,7 @@ export type ToolHost = {
   previewToolCall?(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionPreview | null>;
   previewPartialToolCall?(name: string, rawArguments: string, context: ToolExecutionContext): Promise<ToolExecutionPreview | null>;
   runTool(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult>;
+  /** Revoke stateful capabilities when a result cannot reach the model intact. */
+  toolResultFailed?(name: string, context: ToolExecutionContext): Promise<void> | void;
   cleanupTurn?(context: ToolExecutionContext, outcome: ToolTurnCleanupOutcome): Promise<void> | void;
 };

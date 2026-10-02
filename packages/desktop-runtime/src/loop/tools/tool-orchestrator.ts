@@ -543,9 +543,13 @@ export class ToolOrchestrator {
     result: ToolExecutionResult;
   }): Promise<ToolOrchestratorRunResult> {
     throwIfAborted(context.signal);
-    const result = runOptions.postProcessResult
-      ? await runOptions.postProcessResult(rawResult)
-      : rawResult;
+    let result: ToolExecutionResult;
+    try {
+      result = runOptions.postProcessResult ? await runOptions.postProcessResult(rawResult) : rawResult;
+    } catch (error) {
+      await this.options.toolHost.toolResultFailed?.(toolCall.name, context);
+      throw error;
+    }
     throwIfAborted(context.signal);
 
     let content = result.content;
@@ -593,6 +597,7 @@ export class ToolOrchestrator {
       content = appendHookAdditionalContexts(content, hookAdditionalContexts);
     }
     const resultBlocked = Boolean(postHookOutcome?.shouldBlock || postExtensionOutcome?.block);
+    if (resultBlocked) await this.options.toolHost.toolResultFailed?.(toolCall.name, context);
     if (resultBlocked) content = `Tool execution completed, but post-execution validation blocked the result. The execution was not rolled back.\n${content}`;
     await Promise.all(outputDeltaPublishes);
     await this.options.events.publishToolCompleted(toolCall, parsedArguments, 'success', result.preview ?? content, {

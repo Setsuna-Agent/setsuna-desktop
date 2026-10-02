@@ -95,6 +95,11 @@ export class CompositeToolHost implements ToolHost {
     return host?.previewPartialToolCall?.(name, rawArguments, context) ?? null;
   }
 
+  async toolResultFailed(name: string, context: ToolExecutionContext): Promise<void> {
+    const host = await this.hostFor(name, context);
+    await host?.toolResultFailed?.(name, context);
+  }
+
   async cleanupTurn(context: ToolExecutionContext, outcome: ToolTurnCleanupOutcome): Promise<void> {
     await Promise.all(this.hosts.map((host) => host.cleanupTurn?.(context, outcome)));
   }

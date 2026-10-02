@@ -3,6 +3,7 @@
 import type {
   SetsunaDesktopBridge,
 } from '@setsuna-desktop/contracts';
+import type { ComputerPreloadContribution } from '@setsuna-desktop/feature-computer-use/contracts';
 import type { BrowserPreloadBridgeContribution } from '@setsuna-desktop/feature-browser/contracts';
 import type { NetworkProxyPreloadBridgeContribution } from '@setsuna-desktop/feature-network-proxy/contracts';
 import type { PluginManagementPreloadBridgeContribution } from '@setsuna-desktop/feature-plugin-management/contracts';
@@ -17,6 +18,7 @@ declare global {
   interface Window {
     setsunaDesktop?: SetsunaDesktopBridge
       & BrowserPreloadBridgeContribution
+      & ComputerPreloadContribution
       & NetworkProxyPreloadBridgeContribution
       & PluginManagementPreloadBridgeContribution
       & ReviewPreloadBridgeContribution
