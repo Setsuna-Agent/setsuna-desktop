@@ -1,5 +1,5 @@
 import type { ComputerCommand, ComputerControlPort, ComputerResult } from '../contracts/index.js';
-import { computerCommandTimeout } from '../contracts/index.js';
+import { ComputerControlError, computerCommandTimeout, type ComputerControlFailure } from '../contracts/index.js';
 export class ComputerControlClient implements ComputerControlPort {
   constructor(private readonly url: string, private readonly token: string, private readonly fetchImpl: typeof fetch = fetch) {
     const parsed = new URL(url);
@@ -22,8 +22,12 @@ export class ComputerControlClient implements ComputerControlPort {
       method: 'POST', headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(command), signal: AbortSignal.any([AbortSignal.timeout(computerCommandTimeout(command.kind, process.platform) + 2000), ...(signal ? [signal] : [])]),
     });
-    const body = await response.json() as { error?: string; result?: ComputerResult };
-    if (!response.ok) throw new Error(body.error ?? 'Desktop control failed.');
+    const body = await response.json() as { error?: string; failure?: ComputerControlFailure; result?: ComputerResult };
+    if (!response.ok) {
+      if (body.failure && typeof body.failure.code === 'string' && typeof body.failure.message === 'string'
+        && (body.failure.sessionState === 'unchanged' || body.failure.sessionState === 'closed')) throw new ComputerControlError(body.failure);
+      throw new Error(body.error ?? 'Desktop control failed.');
+    }
     if (body.result?.kind !== 'stopped' && body.result?.kind !== 'frame' && body.result?.kind !== 'windows') throw new Error('Invalid desktop response.');
     return body.result;
   }

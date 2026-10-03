@@ -4,6 +4,7 @@ import type { RuntimeMessageAttachment, RuntimeToolDefinition } from '@setsuna-d
 import type { ComputerModifier } from './keyboard.js';
 export { computerNavigationKeys, computerModifiers, computerStopShortcuts, parseComputerKeystroke, type ComputerModifier } from './keyboard.js';
 export { computerCommandTimeout, type WindowsInputRequest } from './windows-input.js';
+export { ComputerControlError, type ComputerControlFailure, type ComputerControlErrorCode } from './errors.js';
 
 export const computerUseFeature = defineFeature('computer-use');
 export const computerUseChannels = {

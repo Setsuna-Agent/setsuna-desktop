@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import type { ComputerCommand, ComputerControlPort, ComputerPermissions, ComputerResult, ComputerSettings } from '../contracts/index.js';
 import type { ComputerSessionController } from './session-controller.js';
 import { ComputerElevationCancelledError, type ComputerAdministratorAccess } from './backend.js';
+import { ComputerControlError } from '../contracts/index.js';
 
 /** Main owns the preference and admission, including calls already advertised to a model. */
 export class ComputerSettingsService implements ComputerControlPort {
@@ -72,8 +73,8 @@ export class ComputerSettingsService implements ComputerControlPort {
   }
 
   execute(command: ComputerCommand, signal?: AbortSignal): Promise<ComputerResult> {
-    if (!this.enabled && command.kind !== 'stop') return Promise.reject(new Error('Desktop control is disabled. Enable it in Settings > Computer control.'));
-    if (this.authorization && command.kind !== 'stop') return Promise.reject(new Error('Administrator authorization is in progress. Wait until it completes.'));
+    if (!this.enabled && command.kind !== 'stop') return Promise.reject(new ComputerControlError({ code: 'control-unavailable', sessionState: 'closed', message: 'Desktop control is disabled. Enable it in Settings > Computer control.' }));
+    if (this.authorization && command.kind !== 'stop') return Promise.reject(new ComputerControlError({ code: 'control-unavailable', sessionState: 'closed', message: 'Administrator authorization is in progress. Wait until it completes.' }));
     return this.control.execute(command, signal);
   }
 

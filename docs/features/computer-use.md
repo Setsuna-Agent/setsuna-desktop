@@ -32,6 +32,10 @@
 
 窗口枚举与输入共用 native helper。已有 session 时仅允许所属 thread/turn 枚举；其他任务在接触 helper 前被拒绝，取消它们不会关闭当前会话。同一任务的枚举沿用 session 的取消与失败清理，成功时保留可用 observation。
 
+sessionId 仅在 runtime 与 main 内部传递，不出现在模型工具参数或返回结果中。runtime 按 thread/turn 保存启动结果，并为后续请求注入 sessionId；main 仍同时验证任务身份和会话 ID。模型使用 `computer_screenshot({})` 刷新截图，`computer_action` 只传 `observationId` 与 `action`，不能选择其他任务的会话，也不能省略截图依据。切换目标仍须先 stop 再 start。
+
+main 通过结构化错误区分会话不存在、ID 不匹配、其他任务占用、用户撤销与执行失败，并告知请求任务的会话是否已关闭。参数校验失败和重复 start 保留已有会话；runtime 不再因所有 HTTP 错误而统一 stop。输入状态不确定、截图失败等执行错误由 main 停止；runtime 的连接异常、图片交付失败和 turn 清理仍主动 stop，启动响应丢失时也会回收已创建的会话。错误参数不会触发自动重放输入。
+
 ```text
 ToolOrchestrator / 现有审批策略
   → ComputerToolHost → ComputerRuntimeTools

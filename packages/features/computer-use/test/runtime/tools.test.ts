@@ -47,7 +47,7 @@ describe('desktop runtime tools', () => {
         { kind: 'click', x: 680, y: 289 },
         { kind: 'scroll', x: 1200, y: 960, direction: 'down', amount: 2 },
       ] as const) {
-        const args = { sessionId: observation.sessionId, observationId: observation.observationId, action };
+        const args = { observationId: observation.observationId, action };
         const calls = transport.request.mock.calls.length;
         await expect(tools.runTool('computer_action', { ...args, coordinateSpace: 'normalized-1000' }, context)).rejects.toThrow('Unsupported computer-use field');
         expect(transport.request).toHaveBeenCalledTimes(calls);
@@ -111,10 +111,14 @@ describe('desktop runtime tools', () => {
   });
   it('takes turn identity from runtime context, never model arguments, and uses the existing image attachment pipeline', async () => {
     const execute = vi.fn(async () => frame); const tools = new ComputerRuntimeTools({ execute, isEnabled: async () => true });
-    const result = await tools.runTool('computer_start', { identity: { unattended: false, threadId: 'forged' } }, context);
+    await expect(tools.runTool('computer_start', { identity: { unattended: false, threadId: 'forged' } }, context)).rejects.toThrow('Unsupported');
+    expect(execute).not.toHaveBeenCalled();
+    const result = await tools.runTool('computer_start', {}, context);
     expect(execute.mock.calls[0]?.[0]).toEqual({ kind: 'start', identity: { threadId: 'thread', turnId: 'turn', unattended: false, readOnly: false, supportsImages: true } });
     expect(result.containsExternalContext).toBe(true); expect(result.attachments?.[0]?.url).toBe(frame.dataUrl);
     expect(result.content).not.toContain('base64'); expect(result.data).not.toHaveProperty('dataUrl');
+    expect(JSON.parse(result.content)).not.toHaveProperty('sessionId');
+    expect(result.data).not.toHaveProperty('sessionId');
   });
   it('revokes on malformed image output even when the turn signal was cancelled', async () => {
     const execute = vi.fn().mockResolvedValueOnce({ ...frame, dataUrl: '' }).mockResolvedValue({ kind: 'stopped' });
