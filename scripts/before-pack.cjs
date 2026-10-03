@@ -16,6 +16,8 @@ exports.default = async function beforePack(context) {
     projectDir: context.packager.projectDir,
   });
   if (context.electronPlatformName === 'win32') {
+    const { buildWindowsComputerHelper } = await import(pathToFileURL(require.resolve('./build-computer-use-windows.mjs')).href);
+    await buildWindowsComputerHelper({ arch: electronBuilderArchName(context.arch), projectDir: context.packager.projectDir });
     const curlModuleUrl = pathToFileURL(require.resolve('./windows-sandbox/prepare-sandbox-curl.mjs')).href;
     const { prepareSandboxCurl } = await import(curlModuleUrl);
     await prepareSandboxCurl({

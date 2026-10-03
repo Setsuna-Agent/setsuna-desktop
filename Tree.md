@@ -280,14 +280,14 @@ packages/features/ — 0 direct / 1183 total files
 │       ├── renderer/ — 2 direct / 2 total files
 │       └── runtime/ — 2 direct / 2 total files
 ├── computer-use/ — 2 direct / 53 total files
-│   ├── src/ — 34 files
-│   │   ├── contracts/ — 3 direct / 3 total files
-│   │   ├── main/ — 16 direct / 16 total files
+│   ├── src/ — 35 files
+│   │   ├── contracts/ — 4 direct / 4 total files
+│   │   ├── main/ — 15 direct / 15 total files
 │   │   ├── preload/ — 1 direct / 1 total files
-│   │   ├── renderer/ — 10 direct / 10 total files
+│   │   ├── renderer/ — 11 direct / 11 total files
 │   │   └── runtime/ — 4 direct / 4 total files
-│   └── test/ — 17 files
-│       ├── main/ — 14 direct / 14 total files
+│   └── test/ — 16 files
+│       ├── main/ — 13 direct / 13 total files
 │       ├── renderer/ — 2 direct / 2 total files
 │       └── runtime/ — 1 direct / 1 total files
 ├── conversation-debug/ — 2 direct / 54 total files
@@ -609,7 +609,7 @@ packages/desktop-runtime/ — 4 direct / 612 total files
 ### `scripts/`
 
 ```text
-scripts/ — 25 direct / 41 total files
+scripts/ — 26 direct / 42 total files
 ├── ripgrep/ — 3 direct / 3 total files
 ├── test/ — 7 direct / 9 total files
 │   ├── ripgrep/ — 1 direct / 1 total files

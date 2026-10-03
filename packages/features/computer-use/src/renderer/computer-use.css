@@ -1,43 +1,63 @@
+.computer-use-notice {
+  overflow: hidden;
+  border: 1px solid var(--app-border);
+  border-radius: 16px;
+  background: var(--app-surface);
+  color: var(--app-text);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.computer-use-notice__overview {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  padding: 20px;
+}
+
+.computer-use-notice__icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--app-surface-muted);
+}
+
+.computer-use-notice__copy {
+  margin: 0;
+  color: color-mix(in srgb, var(--app-text) 78%, var(--app-surface));
+}
+
+.computer-use-notice__model {
+  margin: 0;
+  padding: 14px 20px;
+  border-top: 1px solid var(--app-border);
+  background: var(--app-surface-subtle);
+  color: var(--app-text-secondary);
+  font-size: 12px;
+}
+
 .computer-use-permission-control {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 12px;
   text-align: right;
 }
 
-.computer-use-permission-badge {
-  --permission-color: var(--app-text-muted);
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 3px 10px;
-  border: 1px solid color-mix(in srgb, var(--permission-color) 16%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--permission-color) 8%, transparent);
-  color: var(--permission-color);
+.computer-use-permission-status {
+  color: var(--app-text-secondary);
   font-size: 12px;
   font-weight: 500;
   line-height: 18px;
   white-space: nowrap;
 }
 
-.computer-use-permission-badge[data-status='granted'] {
-  --permission-color: color-mix(in srgb, var(--app-success) 75%, var(--app-text));
-}
-
-.computer-use-permission-badge:is([data-status='denied'], [data-status='not-determined'], [data-status='restricted']) {
-  --permission-color: color-mix(in srgb, var(--app-warning) 75%, var(--app-text));
-}
-
-.computer-use-permission-badge__dot {
-  flex: 0 0 5px;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: currentColor;
-  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 10%, transparent);
+.computer-use-permission-status[data-status='granted'] {
+  color: color-mix(in srgb, var(--app-success) 75%, var(--app-text));
 }
 
 .computer-use-permission-control .computer-use-permission-action {

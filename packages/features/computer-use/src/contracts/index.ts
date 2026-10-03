@@ -2,7 +2,8 @@ import { defineFeature } from '@setsuna-desktop/feature-core/definition';
 import { defineCapability } from '@setsuna-desktop/feature-core/capability';
 import type { RuntimeMessageAttachment, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 import type { ComputerModifier } from './keyboard.js';
-export { computerNavigationKeys, computerModifiers, parseComputerKeystroke, type ComputerModifier } from './keyboard.js';
+export { computerNavigationKeys, computerModifiers, computerStopShortcuts, parseComputerKeystroke, type ComputerModifier } from './keyboard.js';
+export { computerCommandTimeout, type WindowsInputRequest } from './windows-input.js';
 
 export const computerUseFeature = defineFeature('computer-use');
 export const computerUseChannels = {
@@ -54,14 +55,17 @@ export type ComputerFrame = ComputerImage & ComputerTarget & {
   inputDispatched?: boolean;
   actionError?: string;
 };
-export type ComputerWindows = { kind: 'windows'; mode: 'background-window' | 'foreground-desktop'; windows: ComputerWindow[] };
+export type ComputerWindows = { kind: 'windows' } & (
+  | { mode: 'background-window'; windows: ComputerWindow[] }
+  | { mode: 'foreground-desktop' }
+);
 export type ComputerResult = ComputerFrame | ComputerWindows | { kind: 'stopped' };
 export type ComputerStatus = { active: boolean; threadId?: string };
 export type ComputerPreviewFrame = Pick<ComputerFrame, 'dataUrl' | 'width' | 'height' | 'observationId'>;
 export type ComputerPreview = ComputerStatus & { frame: ComputerPreviewFrame | null };
 export type ComputerPermissionStatus = 'granted' | 'not-determined' | 'denied' | 'restricted' | 'unknown' | 'not-required' | 'unsupported';
-export type ComputerPermission = 'screen' | 'accessibility';
-export type ComputerPermissions = { screen: ComputerPermissionStatus; accessibility: ComputerPermissionStatus };
+export type ComputerPermission = 'screen' | 'accessibility' | 'administrator';
+export type ComputerPermissions = { screen: ComputerPermissionStatus; accessibility: ComputerPermissionStatus; administrator?: ComputerPermissionStatus };
 export type ComputerSettings = { enabled: boolean; permissions: ComputerPermissions };
 export type ComputerConnection = { url: string; token: string };
 export interface ComputerControlPort {

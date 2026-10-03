@@ -74,16 +74,24 @@ describe('desktop runtime client advanced thread methods', () => {
   });
 
   it('requests a bounded thread snapshot and cursor-based older messages', async () => {
-    const request = installRuntimeBridge(() => ({ messages: [], nextBefore: null, total: 0 }));
+    const page = { messages: [], nextBefore: null, total: 0 };
+    const request = installRuntimeBridge((input) => input.responseMode === 'feature-operation' ? { ok: true, value: page } : page);
     const client = createDesktopRuntimeClient();
 
     await client.getThread('thread / 1');
     await client.listThreadMessages('thread / 1', { before: 40, limit: 20 });
 
     expect(request.mock.calls.map(([input]) => input)).toEqual([
-      { path: '/v1/threads/thread%20%2F%201?messageLimit=160' },
+      { path: '/v1/threads/thread%20%2F%201?messageLimit=160', responseMode: 'feature-operation' },
       { path: '/v1/threads/thread%20%2F%201/messages?before=40&limit=20' },
     ]);
+  });
+
+  it.each([404, 500])('preserves thread lookup errors across the bridge: HTTP %s', async (status) => {
+    installRuntimeBridge(() => ({ ok: false, status, error: { code: 'INTERNAL', message: 'Lookup failed' } }));
+    await expect(createDesktopRuntimeClient().getThread('missing')).rejects.toMatchObject({
+      name: 'RuntimeClientError', code: status === 404 ? 'thread_not_found' : 'INTERNAL', message: 'Lookup failed',
+    });
   });
 
   it('uses a separate complete-content request when a file enters edit mode', async () => {

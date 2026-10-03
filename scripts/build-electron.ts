@@ -4,6 +4,8 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 // @ts-expect-error Native build helpers are ESM scripts.
 import { buildMacComputerHelper } from './build-computer-use-mac.mjs';
+// @ts-expect-error Native build helpers are ESM scripts.
+import { buildWindowsComputerHelper } from './build-computer-use-windows.mjs';
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const electronMainExternals = [
@@ -60,12 +62,7 @@ export async function buildElectron(): Promise<void> {
   await mkdir(resolve(rootDir, 'dist/computer-use'), { recursive: true });
   await Promise.all([
     ...(process.platform === 'darwin' ? [buildMacComputerHelper()] : []),
-    build({
-      entryPoints: [resolve(rootDir, 'packages/features/computer-use/src/main/driver-helper.ts')],
-      outfile: resolve(rootDir, 'dist/computer-use/driver-helper.mjs'),
-      bundle: true, platform: 'node', target: 'node22', format: 'esm', sourcemap: true,
-      external: ['electron', '@zavora-ai/computer-use-mcp/host-native'],
-    }),
+    ...(process.platform === 'win32' ? [buildWindowsComputerHelper()] : []),
     build({
       entryPoints: [resolve(rootDir, 'apps/desktop/main/src/index.ts')],
       outfile: resolve(rootDir, 'dist/electron/main/index.js'),

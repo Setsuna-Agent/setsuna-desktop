@@ -27,7 +27,7 @@ function fixture() {
     stop: vi.fn(async () => undefined),
   };
   const backend = new MacWindowBackend(transport);
-  const controller = new ComputerSessionController(backend, { checkPermissions() {}, registerStop: async () => undefined, unregisterStop() {} });
+  const controller = new ComputerSessionController(backend, { checkPermissions() {}, registerStop: async () => undefined, unregisterStop() {}, showControl: async () => undefined, prepareInput() {} });
   cleanups.push(() => controller.stop());
   const start = () => controller.execute({ kind: 'start', windowId: window.id, identity }) as Promise<ComputerFrame>;
   return { image, transport, backend, controller, start };
@@ -82,7 +82,7 @@ describe('background window sessions', () => {
     expect(result.attachments?.[0]?.name).toBe('window-screenshot.png');
     expect(f.transport.request).toHaveBeenCalledWith({ kind: 'start', windowId: window.id }, expect.any(AbortSignal));
     const frame = result.data as ComputerFrame;
-    const action = { kind: 'click' as const, x: 120, y: 200 };
+    const action = { kind: 'click' as const, x: 150, y: 500 };
     await tools.runTool('computer_action', { sessionId: frame.sessionId, observationId: frame.observationId, action }, context);
     expect(f.transport.request).toHaveBeenCalledWith({ kind: 'action', action, frame: { window, width: 800, height: 600 } }, expect.any(AbortSignal));
     await tools.cleanupTurn(context);

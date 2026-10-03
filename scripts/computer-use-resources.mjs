@@ -1,14 +1,9 @@
 import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-export const computerDriverVersion = '7.4.0';
-export function computerNativeBinary(platform, arch) {
-  if (!['darwin', 'win32'].includes(platform) || !['arm64', 'x64'].includes(arch)) throw new Error(`Unsupported computer-use target: ${platform}-${arch}`);
-  return `computer-use-napi.${platform}-${arch}.node`;
-}
-
-/** Verify the actual packed host-only entry and native addon, never the MCP server. */
+/** Verify the native helper's actual executable architecture after packaging. */
 export async function verifyComputerUseResources({ resourcesDir, platform, arch }) {
+  if (!['darwin', 'win32'].includes(platform) || !['arm64', 'x64'].includes(arch)) throw new Error(`Unsupported computer-use target: ${platform}-${arch}`);
   if (platform === 'darwin') {
     if (!['arm64', 'x64'].includes(arch)) throw new Error(`Unsupported computer-use target: ${platform}-${arch}`);
     const binary = path.join(resourcesDir, 'computer-use', 'setsuna-computer');
@@ -19,15 +14,10 @@ export async function verifyComputerUseResources({ resourcesDir, platform, arch 
     await access(license);
     return [binary, license];
   }
-  const root = path.join(resourcesDir, 'app.asar.unpacked', 'node_modules', '@zavora-ai/computer-use-mcp');
-  const required = [
-    path.join(resourcesDir, 'computer-use', 'driver-helper.mjs'),
-    path.join(root, 'dist/native.js'),
-    path.join(root, computerNativeBinary(platform, arch)),
-    path.join(root, 'LICENSE'),
-  ];
-  await Promise.all(required.map((file) => access(file)));
-  const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
-  if (manifest.version !== computerDriverVersion) throw new Error(`Computer driver version mismatch: ${manifest.version}`);
-  return required;
+  const binary = path.join(resourcesDir, 'computer-use', 'setsuna-computer-win.exe');
+  const bytes = await readFile(binary);
+  const pe = bytes.length >= 64 ? bytes.readUInt32LE(60) : -1;
+  if (pe < 64 || pe + 6 > bytes.length || bytes.readUInt16LE(0) !== 0x5a4d || bytes.readUInt32LE(pe) !== 0x4550
+    || bytes.readUInt16LE(pe + 4) !== (arch === 'x64' ? 0x8664 : 0xaa64)) throw new Error(`Wrong Windows input helper architecture: ${arch}`);
+  return [binary];
 }

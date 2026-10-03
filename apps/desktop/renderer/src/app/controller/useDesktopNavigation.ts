@@ -6,14 +6,15 @@ import type {
   UpdateWorkspaceProjectInput,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
-import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { useLatestRequestGuard } from '../../shared/hooks/useLatestRequestGuard.js';
 import type { MainView } from '../types.js';
-import { isThreadDeletionCancelled } from '../../services/runtime-client/runtimeClientErrors.js';
+import { isThreadDeletionCancelled, RuntimeClientError } from '../../services/runtime-client/runtimeClientErrors.js';
 import { isPrimaryConversationThread } from '../../services/runtime-client/runtimeThreadRelations.js';
 
 type DesktopNavigationOptions = {
   activeProjectId: string | null;
+  activeView: MainView;
   client: DesktopRuntimeClient;
   confirmDiscardProjectFile: () => Promise<boolean>;
   currentThread: RuntimeThread | null;
@@ -37,6 +38,7 @@ type ProjectEditorState =
 
 export function useDesktopNavigation({
   activeProjectId,
+  activeView,
   client,
   confirmDiscardProjectFile,
   currentThread,
@@ -67,6 +69,48 @@ export function useDesktopNavigation({
   const navigationRequests = useLatestRequestGuard();
   const currentProjectId = currentThread ? currentThread.projectId ?? null : activeProjectId;
   const currentWorkspaceId = currentThread?.workspaceId ?? currentThread?.projectId ?? currentThread?.id ?? activeProjectId;
+  const activeViewRef = useRef(activeView);
+  activeViewRef.current = activeView;
+  const chatBeforeAutomation = useRef<{ threadId: string | null; projectId: string | null } | null>(null);
+
+  const changeView = useCallback(async (action: SetStateAction<MainView>) => {
+    const nextView = typeof action === 'function' ? action(activeViewRef.current) : action;
+    if (nextView === activeViewRef.current) return;
+    const isLatest = navigationRequests.begin();
+    if (activeViewRef.current === 'automation' && nextView !== 'automation') {
+      const previous = chatBeforeAutomation.current ?? { threadId: null, projectId: null };
+      if ((currentThread?.id ?? null) !== previous.threadId || currentProjectId !== previous.projectId) {
+        if (!await confirmDiscardProjectFile() || !isLatest()) return;
+        let thread: RuntimeThread | null = null;
+        if (previous.threadId) {
+          try { thread = await client.getThread(previous.threadId); }
+          catch (error) {
+            if (!isLatest()) return;
+            if (!(error instanceof RuntimeClientError) || error.code !== 'thread_not_found') throw error;
+          }
+        }
+        if (!isLatest()) return;
+        const projectId = thread ? thread.projectId ?? null : previous.projectId;
+        const workspaceId = thread?.workspaceId ?? thread?.projectId ?? thread?.id ?? projectId;
+        if (workspaceId !== currentWorkspaceId) resetProjectWorkspaceState();
+        setActiveProjectId(projectId);
+        // A deletion event cannot be replayed after its stream is removed.
+        // Restore a fresh snapshot, or the project's new-chat slot if deleted.
+        setCurrentThread(thread);
+      }
+    }
+    if (nextView === 'automation' && activeViewRef.current !== 'automation') {
+      // Automation borrows the conversation surface, not the chat destination.
+      // Preserve null as well: a new-chat draft must return to its own slot.
+      const isChat = !currentThread || isPrimaryConversationThread(currentThread);
+      chatBeforeAutomation.current = {
+        threadId: isChat ? currentThread?.id ?? null : null,
+        projectId: isChat ? currentProjectId : null,
+      };
+    }
+    activeViewRef.current = nextView;
+    setActiveView(nextView);
+  }, [client, confirmDiscardProjectFile, currentProjectId, currentThread, currentWorkspaceId, navigationRequests, resetProjectWorkspaceState, setActiveProjectId, setActiveView, setCurrentThread]);
 
   const closeNavigationMenus = useCallback(() => {
     setProjectActionMenuId(null);
@@ -139,8 +183,10 @@ export function useDesktopNavigation({
 
   const selectThreadInView = useCallback(
     async (threadId: string, view: MainView): Promise<boolean> => {
-      if (!await confirmDiscardProjectFile()) return false;
+      // Feature callbacks may finish after their route has already unmounted.
+      if (view !== 'chat' && view !== activeViewRef.current) return false;
       const isLatest = navigationRequests.begin();
+      if (!await confirmDiscardProjectFile() || !isLatest()) return false;
       setActiveView(view);
       setThreadActionMenuId(null);
       const thread = await client.getThread(threadId);
@@ -402,6 +448,7 @@ export function useDesktopNavigation({
   return {
     archiveProject,
     archiveThread,
+    changeView,
     deleteThread,
     closeNavigationMenus,
     closeRenameThread,

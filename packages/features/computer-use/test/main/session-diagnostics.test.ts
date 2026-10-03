@@ -16,7 +16,7 @@ async function fixture(enabled = true) {
   const events: ComputerDiagnostic[] = [];
   const driver = { start: vi.fn(async () => undefined), action: vi.fn(async () => undefined), stop: vi.fn(async () => undefined) };
   const supervisor: ComputerSupervisor & { display(): ComputerDisplay } = {
-    checkPermissions() {}, registerStop: async (callback) => { stop = callback; }, unregisterStop() {},
+    checkPermissions() {}, registerStop: async (callback) => { stop = callback; }, unregisterStop() {}, showControl: async () => undefined, prepareInput() {},
     display: () => ({ id: 1, bounds: { x: 0, y: 0, width: 1, height: 1 }, inputBounds: { x: 0, y: 0, width: 1, height: 1 }, scaleFactor: 1, inputCoordinateSpace: 'macos-points' }),
   };
   // Synthetic one-pixel PNG. No Electron, native driver, desktop or model access.

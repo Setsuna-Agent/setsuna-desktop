@@ -1,3 +1,19 @@
+.computer-preview-trigger {
+  position: relative;
+}
+
+.computer-preview-trigger__status {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid var(--app-surface);
+  border-radius: 50%;
+  background: var(--app-success);
+  pointer-events: none;
+}
+
 .computer-preview {
   width: min(340px, calc(100vw - 24px));
   overflow: hidden;
@@ -28,6 +44,20 @@
   gap: 8px;
   padding: 10px;
   border-top: 1px solid var(--app-border);
+}
+
+.computer-preview__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.computer-preview__status {
+  min-width: 0;
+  color: var(--app-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .computer-preview__error {

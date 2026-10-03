@@ -138,7 +138,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     onError: runtime.setError,
   });
   const threadHistory = useThreadNavigationHistory({
-    currentThreadId: currentThread?.id ?? null,
+    currentThreadId: activeView === 'chat' ? currentThread?.id ?? null : null,
     onOpenThread: navigation.selectThread,
   });
   const visibleRuntimeError = runtimeErrorNoticeMessage(runtime.error, runtime.currentThread);

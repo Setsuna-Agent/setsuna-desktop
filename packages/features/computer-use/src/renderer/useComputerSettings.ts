@@ -22,14 +22,14 @@ export function useComputerSettings(bridge: ComputerBridge) {
     }
   }, [bridge]);
 
-  const setEnabled = async (enabled: boolean) => {
+  const save = async (update: () => Promise<ComputerSettings>) => {
     if (writing.current) return;
     writing.current = true;
     ++request.current; // An earlier focus refresh must not overwrite this save.
     setSaving(true);
     setError(null);
     try {
-      const value = await bridge.setEnabled(enabled);
+      const value = await update();
       if (mounted.current) setSettings(value);
     } catch (cause) {
       // Disabling takes effect even if persistence fails; read the actual main state.
@@ -65,5 +65,7 @@ export function useComputerSettings(bridge: ComputerBridge) {
     return () => { mounted.current = false; ++request.current; window.removeEventListener('focus', onFocus); };
   }, [refresh]);
 
-  return { settings, saving, requesting, error, refresh, setEnabled, requestPermission };
+  return { settings, saving, requesting, error, refresh, requestPermission,
+    setEnabled: (enabled: boolean) => save(() => bridge.setEnabled(enabled)),
+  };
 }

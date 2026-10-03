@@ -40,6 +40,8 @@ vi.mock('../../src/main/supervisor.js', () => ({ NativeComputerSupervisor: class
   checkPermissions() {}
   async registerStop(stop: (reason: string) => void) { native.stopShortcut = stop; }
   unregisterStop() { native.stopShortcut = undefined; }
+  async showControl() {}
+  prepareInput() {}
 } }));
 vi.mock('../../src/main/window-backend.js', () => ({ MacWindowBackend: class { constructor() { return native.backend; } } }));
 vi.mock('../../src/main/backend.js', async (original) => ({
@@ -59,7 +61,7 @@ async function fixture() {
   cleanups.push(() => rm(directory, { recursive: true, force: true }));
   const cancelTurn = vi.fn(async () => undefined);
   const composition = await defineMainFeatureHost({ required: [computerMainFeature], optional: [] }).activate({
-    hostCapabilities: [provideHostCapability(computerMainHostCapability, { isAllowedSender: (id) => id === 7, writeJsonAtomically: async () => undefined, cancelTurn })],
+    hostCapabilities: [provideHostCapability(computerMainHostCapability, { isAllowedSender: (id) => id === 7, interfaceLanguage: () => 'zh-CN', writeJsonAtomically: async () => undefined, cancelTurn })],
   });
   cleanups.push(() => composition.dispose());
   const frame = {};

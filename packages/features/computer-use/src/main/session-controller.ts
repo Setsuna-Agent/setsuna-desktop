@@ -1,15 +1,18 @@
 import { randomUUID } from 'node:crypto';
-import type { ComputerCommand, ComputerFrame, ComputerIdentity, ComputerPreview, ComputerPreviewFrame, ComputerResult, ComputerStatus, ComputerTarget } from '../contracts/index.js';
+import type { ComputerAction, ComputerCommand, ComputerFrame, ComputerIdentity, ComputerPreview, ComputerPreviewFrame, ComputerResult, ComputerStatus, ComputerTarget } from '../contracts/index.js';
 import type { ComputerDiagnostic } from './diagnostics.js';
-import { StaleComputerObservationError, type ComputerBackend } from './backend.js';
+import { ComputerElevationCancelledError, StaleComputerObservationError, type ComputerBackend } from './backend.js';
+import { computerCommandTimeout } from '../contracts/index.js';
 
 export function isUserComputerStop(reason: string): boolean {
-  return ['user-stop', 'emergency-shortcut', 'settings-disabled'].includes(reason);
+  return ['user-stop', 'emergency-shortcut', 'settings-disabled', 'elevation-cancelled', 'administrator-authorization'].includes(reason);
 }
 
 export interface ComputerSupervisor {
   checkPermissions(): void;
   registerStop(stop: (reason?: string) => void): Promise<void>;
+  showControl(target: ComputerTarget, signal: AbortSignal): Promise<void>;
+  prepareInput(action: ComputerAction, frame: ComputerFrame): void;
   unregisterStop(): void;
 }
 type Session = {
@@ -53,7 +56,7 @@ export class ComputerSessionController {
     }
     current?.abort.abort(new Error('Desktop control stopped.'));
     this.supervisor.unregisterStop();
-    this.stopping = this.stopping.then(() => this.backend.stop());
+    this.stopping = this.stopping.then(() => this.backend.stop(reason));
     let notified: void | Promise<void> = undefined;
     if (current) {
       try { notified = this.onStopped(reason, current.identity); }
@@ -119,8 +122,9 @@ export class ComputerSessionController {
       if (this.session === current) void this.stop(reason).catch(() => undefined);
     };
     signal.addEventListener('abort', abort, { once: true });
-    const operationSignal = AbortSignal.any([signal, current.abort.signal, AbortSignal.timeout(30_000)]);
+    const operationSignal = AbortSignal.any([signal, current.abort.signal, AbortSignal.timeout(computerCommandTimeout(command.kind, process.platform))]);
     operationSignal.addEventListener('abort', abort, { once: true });
+    let inputDispatched = false;
     try {
       if (command.kind === 'start') {
         current.phase = 'supervisor';
@@ -148,9 +152,17 @@ export class ComputerSessionController {
         current.phase = 'observation-validation';
         try {
           if (!previous || command.observationId !== previous.observationId || this.now() - previous.capturedAt > 30_000) throw new StaleComputerObservationError('The observation is stale. Use the returned screenshot and observationId.');
-          if ('x' in command.action && (command.action.x >= previous.width || command.action.y >= previous.height)) throw new StaleComputerObservationError('Coordinates are outside the screenshot. Choose coordinates within its width and height.');
+          const action = command.action;
+          // Validate against the consumed image. Only the native backend maps
+          // its pixels to display pixels or window points, exactly once.
+          if ('x' in action && (!Number.isInteger(action.x) || !Number.isInteger(action.y)
+            || action.x < 0 || action.y < 0 || action.x >= previous.width || action.y >= previous.height)) {
+            throw new StaleComputerObservationError('Coordinates are outside the screenshot. Use pixel coordinates from the returned image.');
+          }
           current.phase = 'input';
-          await this.backend.action(command.action, previous, operationSignal);
+          this.supervisor.prepareInput(action, previous);
+          await this.backend.action(action, previous, operationSignal);
+          inputDispatched = true;
         } catch (error) {
           // Only failures known to precede input may refresh in-place. Never replay
           // an action automatically, especially text that may already be partly typed.
@@ -172,6 +184,9 @@ export class ComputerSessionController {
         coordinateSpace: 'screenshot-pixels',
         ...(command.kind === 'action' ? { inputDispatched: !actionError, ...(actionError ? { actionError } : {}) } : {}),
       };
+      current.phase = 'control-indicator';
+      await this.supervisor.showControl(frame, operationSignal);
+      operationSignal.throwIfAborted();
       current.frame = frame;
       // Keep the last visible image while input consumes its observation; preview never captures or authorizes input.
       current.preview = { dataUrl: frame.dataUrl, width: frame.width, height: frame.height, observationId: frame.observationId };
@@ -180,7 +195,13 @@ export class ComputerSessionController {
       operationSignal.throwIfAborted();
       return frame;
     } catch (error) {
-      if (this.session === current) await this.stop(`${current.phase}-failed`);
+      const captureFailed = ['capture', 'image-validation', 'control-indicator'].includes(current.phase);
+      if (this.session === current) await this.stop(error instanceof ComputerElevationCancelledError ? 'elevation-cancelled' : `${current.phase}-failed`);
+      if (command.kind === 'action' && captureFailed) {
+        const detail = error instanceof Error ? error.message : 'Desktop capture failed.';
+        // A missing post-action image must not lead the model to replay accepted input.
+        throw new Error(`${detail} Input ${inputDispatched ? 'was dispatched, but its effect could not be observed; do not replay it automatically' : 'was not dispatched'}. Desktop control stopped; obtain a fresh screenshot before further input.`, { cause: error });
+      }
       throw error;
     } finally {
       signal.removeEventListener('abort', abort);

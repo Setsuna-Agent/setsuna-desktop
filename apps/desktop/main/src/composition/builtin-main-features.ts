@@ -120,6 +120,7 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
     hostCapabilities: [
       provideHostCapability(computerMainHostCapability, {
         isAllowedSender: (senderId: number) => Boolean(desktopWindows.get(senderId)),
+        interfaceLanguage: input.interfaceLanguage,
         writeJsonAtomically,
         cancelTurn: async (threadId: string, turnId: string) => {
           await input.requestRuntime({

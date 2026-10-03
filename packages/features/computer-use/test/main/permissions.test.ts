@@ -65,7 +65,7 @@ describe('desktop permission actions', () => {
 
   it('does not invoke macOS permission APIs on Windows', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
-    expect(computerPermissions()).toEqual({ screen: 'not-required', accessibility: 'not-required' });
+    expect(computerPermissions()).toEqual({ screen: 'unsupported', accessibility: 'unsupported', administrator: 'not-determined' });
     await requestComputerPermission('screen'); await requestComputerPermission('accessibility');
     expect(mocks.screen).not.toHaveBeenCalled(); expect(mocks.accessibility).not.toHaveBeenCalled();
     expect(mocks.getSources).not.toHaveBeenCalled(); expect(mocks.openExternal).not.toHaveBeenCalled();

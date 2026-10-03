@@ -4,19 +4,26 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ComputerSettingsService } from '../../src/main/settings.js';
 import type { ComputerCommand } from '../../src/contracts/index.js';
+import { ComputerElevationCancelledError } from '../../src/main/backend.js';
 
 const directories: string[] = [];
 afterEach(async () => { await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))); });
 const start: ComputerCommand = { kind: 'start', identity: { threadId: 't', turnId: 'u', unattended: false, readOnly: false, supportsImages: true } };
-async function fixture() {
+async function fixture(windows = true) {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'computer-settings-'));
   directories.push(directory);
   const filePath = path.join(directory, 'computer-use.json');
-  const control = { execute: vi.fn(async () => ({ kind: 'stopped' as const })), stop: vi.fn(async () => undefined) };
+  let authorized = false;
+  const administrator = {
+    isAuthorized: () => authorized,
+    authorize: vi.fn(async (_signal: AbortSignal) => { authorized = true; }),
+    revoke: vi.fn(async () => { authorized = false; }),
+  };
+  const control = { execute: vi.fn(async () => ({ kind: 'stopped' as const })), stop: vi.fn(async () => { await administrator.revoke(); }) };
   const write = vi.fn(async (file: string, value: unknown) => { await writeFile(file, JSON.stringify(value)); });
-  const create = () => new ComputerSettingsService(filePath, control, write, () => ({ screen: 'granted', accessibility: 'granted' }));
+  const create = () => new ComputerSettingsService(filePath, control, write, () => ({ screen: 'granted', accessibility: 'granted' }), windows ? administrator : undefined);
   const settings = create(); await settings.load();
-  return { settings, create, control, write, filePath };
+  return { settings, create, control, write, filePath, administrator };
 }
 
 describe('persistent desktop control setting', () => {
@@ -69,5 +76,48 @@ describe('persistent desktop control setting', () => {
     await f.settings.setEnabled(false);
     const restarted = f.create(); await restarted.load();
     expect(await restarted.isEnabled()).toBe(false);
+  });
+
+  it('reports actual authorization, ignores legacy saved grants and keeps cancellation ungranted', async () => {
+    const f = await fixture();
+    await writeFile(f.filePath, JSON.stringify({ enabled: true, elevateOnStart: true }));
+    await f.settings.load();
+    expect(f.settings.settings().permissions.administrator).toBe('not-determined');
+    f.administrator.authorize.mockRejectedValueOnce(new ComputerElevationCancelledError('cancelled'));
+    await f.settings.requestAdministratorAccess();
+    expect(f.settings.settings().permissions.administrator).toBe('not-determined');
+    await f.settings.requestAdministratorAccess();
+    expect(f.settings.settings().permissions.administrator).toBe('granted');
+    await f.settings.requestAdministratorAccess();
+    expect(f.administrator.authorize).toHaveBeenCalledTimes(2);
+    expect(f.write).not.toHaveBeenCalled();
+    expect(f.control.execute).not.toHaveBeenCalled();
+    await f.administrator.revoke();
+    expect(f.settings.settings().permissions.administrator).toBe('not-determined');
+  });
+
+  it('deduplicates pending UAC, blocks model input, and cancels authorization when control is disabled', async () => {
+    const f = await fixture(); await f.settings.setEnabled(true);
+    let signal!: AbortSignal;
+    f.administrator.authorize.mockImplementationOnce((value) => {
+      signal = value;
+      return new Promise<void>((_resolve, reject) => value.addEventListener('abort', () => reject(value.reason), { once: true }));
+    });
+    const pending = f.settings.requestAdministratorAccess();
+    const rejected = expect(pending).rejects.toThrow('disabled');
+    expect(f.settings.requestAdministratorAccess()).toBe(pending);
+    await vi.waitFor(() => expect(signal).toBeDefined());
+    await expect(f.settings.execute(start)).rejects.toThrow('authorization is in progress');
+    expect(f.administrator.authorize).toHaveBeenCalledOnce();
+    await f.settings.setEnabled(false); await rejected;
+    expect(signal.aborted).toBe(true);
+    expect(f.settings.settings().permissions.administrator).toBe('not-determined');
+  });
+
+  it('does not expose Windows administrator access on macOS', async () => {
+    const f = await fixture(false);
+    expect(f.settings.settings().permissions.administrator).toBeUndefined();
+    await expect(f.settings.requestAdministratorAccess()).rejects.toThrow('only available on Windows');
+    expect(f.administrator.authorize).not.toHaveBeenCalled();
   });
 });

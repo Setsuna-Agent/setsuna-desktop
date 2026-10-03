@@ -32,8 +32,7 @@
     "@setsuna-desktop/renderer-contracts": "workspace:*",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
-    "@setsuna-desktop/renderer-ui": "workspace:*",
-    "@zavora-ai/computer-use-mcp": "7.4.0"
+    "@setsuna-desktop/renderer-ui": "workspace:*"
   },
   "peerDependencies": {
     "electron": ">=30"

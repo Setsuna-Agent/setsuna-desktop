@@ -19,13 +19,25 @@ function source(id = '42', width = 800, height = 400) {
 afterEach(() => vi.clearAllMocks());
 describe('authorized Electron memory capture', () => {
   it('binds actual thumbnail dimensions to the exact OS display and encodes PNG in memory', async () => {
-    mocks.getSources.mockResolvedValue([source()]);
+    mocks.getSources.mockResolvedValue([source('43', 1024, 768), source()]);
     const frame = await new ElectronComputerCapture().capture(display, new AbortController().signal);
     expect(frame).toMatchObject({ width: 800, height: 400, capture: { sourceDisplayId: '42', backend: 'electron-desktop-capturer' } });
-    expect(mocks.getSources).toHaveBeenCalledWith({ types: ['screen'], fetchWindowIcons: false, thumbnailSize: { width: 2000, height: 1000 } });
+    expect(mocks.getSources).toHaveBeenCalledWith({ types: ['screen'], fetchWindowIcons: false, thumbnailSize: { width: 1920, height: 960 } });
     expect(frame.dataUrl).toBe('data:image/png;base64,iVBORw0KGgo=');
   });
-  it.each([[], [source('')], [source('43')], [source(), source('43')], [source('42', 800, 700)]].map((sources) => ({ sources })))('rejects unknown, changed or distorted display sources', async ({ sources }) => {
+  it('bounds high-resolution images even when Electron ignores the requested size, preserving physical geometry', async () => {
+    const physicalDisplay: ComputerDisplay = { id: 42, bounds: { x: 0, y: 0, width: 2560, height: 1440 }, scaleFactor: 1.5,
+      inputBounds: { x: 0, y: 0, width: 3840, height: 2160 }, inputCoordinateSpace: 'windows-physical-pixels' };
+    const bounded = source('42', 1920, 1080).thumbnail;
+    const resize = vi.fn(() => bounded);
+    mocks.getSources.mockResolvedValue([{ ...source('42', 3840, 2160), thumbnail: { ...source('42', 3840, 2160).thumbnail, resize } }]);
+    const frame = await new ElectronComputerCapture().capture(physicalDisplay, new AbortController().signal);
+    expect(mocks.getSources).toHaveBeenCalledWith({ types: ['screen'], fetchWindowIcons: false, thumbnailSize: { width: 1920, height: 1080 } });
+    expect(resize).toHaveBeenCalledExactlyOnceWith({ width: 1920, height: 1080, quality: 'best' });
+    expect(frame).toMatchObject({ width: 1920, height: 1080 });
+    expect(physicalDisplay.inputBounds).toEqual({ x: 0, y: 0, width: 3840, height: 2160 });
+  });
+  it.each([[], [source('')], [source('43')], [source(), source()], [source('42', 800, 700)]].map((sources) => ({ sources })))('rejects unknown, ambiguous or distorted display sources', async ({ sources }) => {
     mocks.getSources.mockResolvedValue(sources);
     await expect(new ElectronComputerCapture().capture(display, new AbortController().signal)).rejects.toThrow(/display|ratio/);
   });
@@ -45,6 +57,12 @@ describe('authorized Electron memory capture', () => {
     await expect(new ElectronComputerCapture().capture(display, new AbortController().signal)).rejects.toThrow('decoded');
     const corrupt = source(); corrupt.thumbnail.toPNG = () => Buffer.from('broken'); mocks.getSources.mockResolvedValue([corrupt]);
     await expect(new ElectronComputerCapture().capture(display, new AbortController().signal)).rejects.toThrow('encoding');
+  });
+  it('preserves native string failures and releases the capture slot for the next session', async () => {
+    const capture = new ElectronComputerCapture();
+    mocks.getSources.mockRejectedValueOnce('Failed to get sources.').mockResolvedValueOnce([source()]);
+    await expect(capture.capture(display, new AbortController().signal)).rejects.toThrow('Desktop capture failed: Failed to get sources.');
+    await expect(capture.capture(display, new AbortController().signal)).resolves.toMatchObject({ width: 800 });
   });
 });
 describe('capture quality diagnostics', () => {
