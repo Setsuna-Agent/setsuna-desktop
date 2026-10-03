@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
-import { computerCommandTimeout, parseComputerCommand, type ComputerConnection, type ComputerControlPort } from '../contracts/index.js';
+import { ComputerControlError, computerCommandTimeout, parseComputerCommand, type ComputerCommand, type ComputerConnection, type ComputerControlPort } from '../contracts/index.js';
 
 /** Separate bearer and fixed protocol; renderer never receives either connection field. */
 export class ComputerControlServer {
@@ -43,11 +43,19 @@ export class ComputerControlServer {
         if (size > 16_384) throw new Error('Desktop command is too large.');
         chunks.push(buffer);
       }
-      const command = parseComputerCommand(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+      let command: ComputerCommand;
+      try { command = parseComputerCommand(JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
+      catch (error) {
+        throw new ComputerControlError({ code: 'invalid-command', sessionState: 'unchanged',
+          message: error instanceof Error ? error.message : 'Invalid desktop command. No input was dispatched.' });
+      }
       clearTimeout(timer);
       timer = setTimeout(() => abort.abort(new DOMException('Desktop command timed out.', 'TimeoutError')), computerCommandTimeout(command.kind, process.platform));
       send(200, { result: await this.control.execute(command, abort.signal) });
-    } catch (error) { send(400, { error: error instanceof Error ? error.message : 'Desktop control failed.' }); }
+    } catch (error) {
+      send(400, { error: error instanceof Error ? error.message : 'Desktop control failed.',
+        ...(error instanceof ComputerControlError ? { failure: error.failure } : {}) });
+    }
     finally { clearTimeout(timer); }
   }
 }

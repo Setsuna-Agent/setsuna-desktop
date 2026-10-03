@@ -83,7 +83,7 @@ describe('background window sessions', () => {
     expect(f.transport.request).toHaveBeenCalledWith({ kind: 'start', windowId: window.id }, expect.any(AbortSignal));
     const frame = result.data as ComputerFrame;
     const action = { kind: 'click' as const, x: 150, y: 500 };
-    await tools.runTool('computer_action', { sessionId: frame.sessionId, observationId: frame.observationId, action }, context);
+    await tools.runTool('computer_action', { observationId: frame.observationId, action }, context);
     expect(f.transport.request).toHaveBeenCalledWith({ kind: 'action', action, frame: { window, width: 800, height: 600 } }, expect.any(AbortSignal));
     await tools.cleanupTurn(context);
     expect(f.controller.status().active).toBe(false);
@@ -133,13 +133,13 @@ describe('background window sessions', () => {
     f.transport.request.mockRejectedValueOnce(new StaleComputerObservationError('Window moved. No input was sent.'))
       .mockResolvedValueOnce({ ...f.image, window: moved });
     const action = { kind: 'key', key: 'n', modifiers: ['Meta'] };
-    const recovered = await tools.runTool('computer_action', { sessionId: first.sessionId, observationId: first.observationId, action }, context);
+    const recovered = await tools.runTool('computer_action', { observationId: first.observationId, action }, context);
     const frame = recovered.data as ComputerFrame;
-    expect(JSON.parse(recovered.content)).toMatchObject({ inputDispatched: false, actionError: expect.stringContaining('Window moved'), sessionId: first.sessionId });
+    expect(JSON.parse(recovered.content)).toMatchObject({ inputDispatched: false, actionError: expect.stringContaining('Window moved') });
     expect(frame.observationId).not.toBe(first.observationId);
     expect(f.controller.status().active).toBe(true);
     expect(f.transport.stop).not.toHaveBeenCalled();
-    const after = await tools.runTool('computer_action', { sessionId: frame.sessionId, observationId: frame.observationId, action }, context);
+    const after = await tools.runTool('computer_action', { observationId: frame.observationId, action }, context);
     expect(after.data).toMatchObject({ inputDispatched: true });
     expect(f.transport.request).toHaveBeenCalledWith({ kind: 'action', action, frame: { window: moved, width: 800, height: 600 } }, expect.any(AbortSignal));
     expect(f.transport.request.mock.calls.filter(([command]) => (command as { kind: string }).kind === 'action')).toHaveLength(2);

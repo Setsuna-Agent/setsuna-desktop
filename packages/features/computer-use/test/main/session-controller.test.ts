@@ -107,7 +107,7 @@ describe('desktop sessions', () => {
   it('binds the session to its exact thread and turn and returns physical image/DPI metadata', async () => {
     const f = fixture(); const frame = await f.start();
     expect(frame).toMatchObject({ coordinateSpace: 'screenshot-pixels', width: 200, display: { scaleFactor: 2, bounds: { width: 100 } } });
-    await expect(f.control.execute({ kind: 'screenshot', sessionId: frame.sessionId, identity: { ...identity, turnId: 'other' } })).rejects.toThrow('No authorized');
+    await expect(f.control.execute({ kind: 'screenshot', sessionId: frame.sessionId, identity: { ...identity, turnId: 'other' } })).rejects.toThrow('another turn');
     await expect(f.control.execute({ kind: 'stop', identity: { ...identity, threadId: 'other' } })).rejects.toThrow('another turn');
     expect(f.control.status().active).toBe(true);
   });
@@ -171,7 +171,7 @@ describe('desktop sessions', () => {
     await expect(f.control.execute({ kind: 'action', identity, sessionId: frame.sessionId, observationId: frame.observationId, action })).rejects.toThrow('ambiguous');
     expect(f.driver.action).toHaveBeenCalledWith(action, frame, expect.any(AbortSignal));
     expect(f.control.status().active).toBe(false);
-    await expect(f.control.execute({ kind: 'action', identity, sessionId: frame.sessionId, observationId: frame.observationId, action })).rejects.toThrow('No authorized');
+    await expect(f.control.execute({ kind: 'action', identity, sessionId: frame.sessionId, observationId: frame.observationId, action })).rejects.toThrow('No desktop session');
     expect(f.driver.action).toHaveBeenCalledOnce();
   });
   it('rejects expired images and out-of-bounds coordinates', async () => {
@@ -204,7 +204,7 @@ describe('desktop sessions', () => {
     const command = { kind: 'action' as const, identity, sessionId: frame.sessionId, observationId: frame.observationId, action: { kind: 'key' as const, key: 'Enter' as const } };
     await expect(f.control.execute(command)).rejects.toThrow(dispatched ? 'Input was dispatched, but its effect could not be observed; do not replay it automatically' : 'Input was not dispatched');
     expect(f.control.status().active).toBe(false);
-    await expect(f.control.execute(command)).rejects.toThrow('No authorized');
+    await expect(f.control.execute(command)).rejects.toThrow('No desktop session');
     expect(f.driver.action).toHaveBeenCalledOnce();
   });
   it('stops on display changes, capture failures and blank images', async () => {

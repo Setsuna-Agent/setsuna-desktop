@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { ComputerAction, ComputerCommand, ComputerFrame, ComputerIdentity, ComputerPreview, ComputerPreviewFrame, ComputerResult, ComputerStatus, ComputerTarget } from '../contracts/index.js';
 import type { ComputerDiagnostic } from './diagnostics.js';
 import { ComputerElevationCancelledError, StaleComputerObservationError, type ComputerBackend } from './backend.js';
-import { computerCommandTimeout } from '../contracts/index.js';
+import { ComputerControlError, computerCommandTimeout } from '../contracts/index.js';
 
 export function isUserComputerStop(reason: string): boolean {
   return ['user-stop', 'emergency-shortcut', 'settings-disabled', 'elevation-cancelled', 'administrator-authorization'].includes(reason);
@@ -72,7 +72,7 @@ export class ComputerSessionController {
     if (command.kind === 'stop') {
       if (!this.session || this.owns(command.identity)) return this.stop(command.reason).then(() => ({ kind: 'stopped' }));
       this.trace({ event: 'rejected', run: runId, reason: 'owner-mismatch' });
-      return Promise.reject(new Error('Desktop session belongs to another turn.'));
+      return Promise.reject(new ComputerControlError({ code: 'session-busy', sessionState: 'closed', message: 'Desktop session belongs to another turn.' }));
     }
     const epoch = this.epoch;
     const run = this.queue.then(async () => {
@@ -91,19 +91,40 @@ export class ComputerSessionController {
   private async run(command: Exclude<ComputerCommand, { kind: 'stop' }>, signal: AbortSignal, runId: number): Promise<ComputerResult> {
     signal.throwIfAborted();
     const identity = command.identity;
-    if (this.revokedTurns.get(identity.threadId) === identity.turnId) throw new Error('Computer control was stopped by the user. Do not restart or use another input tool in this turn. Wait for a new user request.');
-    if (identity.readOnly || !identity.supportsImages) throw new Error('Desktop control requires a writable turn and an image-capable model.');
+    if (this.revokedTurns.get(identity.threadId) === identity.turnId) {
+      throw new ComputerControlError({ code: 'turn-revoked', sessionState: 'closed',
+        message: 'Computer control was stopped by the user. Do not restart or use another input tool in this turn. Wait for a new user request.' });
+    }
+    if (identity.readOnly || !identity.supportsImages) {
+      throw new ComputerControlError({ code: 'control-unavailable', sessionState: 'unchanged',
+        message: 'Desktop control requires a writable turn and an image-capable model.' });
+    }
+    // Discovery uses the same helper as input, so all commands must check the
+    // owner before acquiring a signal that could close another turn's helper.
+    if (this.session && !this.owns(identity)) {
+      throw new ComputerControlError({ code: 'session-busy', sessionState: 'closed',
+        message: 'Desktop session belongs to another turn; the global controller is busy.' });
+    }
     if (command.kind === 'windows') {
-      // Discovery uses the same native helper as input; a different turn must not
-      // acquire a cancellation signal that can shut down the current owner's helper.
-      if (this.session && !this.owns(identity)) throw new Error('Desktop session belongs to another turn.');
       if (!this.session) {
         this.supervisor.checkPermissions();
         return this.backend.windows(AbortSignal.any([signal, AbortSignal.timeout(30_000)]));
       }
     }
-    if (command.kind !== 'start' && command.kind !== 'windows' && (!this.owns(identity) || !('sessionId' in command) || this.session?.id !== command.sessionId)) throw new Error(`No authorized desktop session for this turn.${!this.session && this.lastStopReason ? ` Last stop: ${this.lastStopReason}.` : ''}`);
-    if (command.kind === 'start' && this.session) throw new Error('A desktop session already owns the global controller.');
+    if (command.kind === 'screenshot' || command.kind === 'action') {
+      if (!this.session) {
+        throw new ComputerControlError({ code: 'session-required', sessionState: 'closed',
+          message: `No desktop session is active for this turn. Call computer_start first.${this.lastStopReason ? ` Last stop: ${this.lastStopReason}.` : ''}` });
+      }
+      if (this.session.id !== command.sessionId) {
+        throw new ComputerControlError({ code: 'session-mismatch', sessionState: 'unchanged',
+          message: 'Desktop session ID does not match this turn. No input was dispatched; the active session was preserved.' });
+      }
+    }
+    if (command.kind === 'start' && this.session) {
+      throw new ComputerControlError({ code: 'session-busy', sessionState: 'unchanged',
+        message: 'This turn already has an active desktop session. Use computer_screenshot to refresh it, or computer_stop before switching targets.' });
+    }
     let session = this.session;
     if (command.kind === 'start') {
       this.supervisor.checkPermissions();
@@ -200,9 +221,14 @@ export class ComputerSessionController {
       if (command.kind === 'action' && captureFailed) {
         const detail = error instanceof Error ? error.message : 'Desktop capture failed.';
         // A missing post-action image must not lead the model to replay accepted input.
-        throw new Error(`${detail} Input ${inputDispatched ? 'was dispatched, but its effect could not be observed; do not replay it automatically' : 'was not dispatched'}. Desktop control stopped; obtain a fresh screenshot before further input.`, { cause: error });
+        throw new ComputerControlError({ code: 'operation-failed', sessionState: 'closed',
+          message: `${detail} Input ${inputDispatched ? 'was dispatched, but its effect could not be observed; do not replay it automatically' : 'was not dispatched'}. Desktop control stopped; call computer_start to obtain a fresh screenshot before further input.` });
       }
-      throw error;
+      const inputWarning = inputDispatched || current.phase === 'input'
+        ? ' Input may have been partially dispatched; inspect the target before retrying, and do not replay automatically.'
+        : ' No input was dispatched.';
+      throw new ComputerControlError({ code: 'operation-failed', sessionState: 'closed',
+        message: `${error instanceof Error ? error.message : 'Desktop operation failed.'} Desktop control stopped.${command.kind === 'action' ? inputWarning : ''}` });
     } finally {
       signal.removeEventListener('abort', abort);
       operationSignal.removeEventListener('abort', abort);
