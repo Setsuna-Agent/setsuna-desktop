@@ -135,8 +135,9 @@
   box-shadow: var(--app-shadow-card);
 }
 
-.sd-markdown-document__preview,
-.sd-markdown-document__source {
+/* Keep card insets when the Markdown renderer also applies full-width styles. */
+.sd-markdown-document > .sd-markdown-document__preview,
+.sd-markdown-document > .sd-markdown-document__source {
   box-sizing: border-box;
   width: auto;
   min-width: 0;
@@ -193,8 +194,8 @@
     max-width: 100%;
   }
 
-  .sd-markdown-document__preview,
-  .sd-markdown-document__source {
+  .sd-markdown-document > .sd-markdown-document__preview,
+  .sd-markdown-document > .sd-markdown-document__source {
     padding: 16px;
   }
 }
