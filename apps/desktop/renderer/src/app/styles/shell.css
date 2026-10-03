@@ -3,7 +3,6 @@
   --app-workbench-inset: 0px;
   --app-sidebar-motion-duration: 220ms;
   --app-sidebar-motion-easing: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --app-workspace-motion-duration: 280ms;
 
   display: grid;
   grid-template-columns: var(--app-navigation-width) minmax(0, 1fr);
@@ -396,6 +395,12 @@ body.desktop-agent-workspace-resizing .app-topbar {
   min-height: 0;
   /* Clip to the live grid track, including sidebars first mounted during a route change. */
   overflow: hidden;
+}
+
+/* Both sidebars share the reveal cadence while their grid tracks slide.
+   Hidden browser slots keep their background viewport outside this motion. */
+.app-sidebar-slot,
+.desktop-workspace-panel-slot:not([hidden]) {
   opacity: 1;
   transition:
     opacity 130ms ease 70ms,
@@ -403,13 +408,21 @@ body.desktop-agent-workspace-resizing .app-topbar {
   visibility: visible;
 }
 
-.desktop-agent-page--sidebar-collapsed .app-sidebar-slot {
+.desktop-agent-page--sidebar-collapsed .app-sidebar-slot,
+.desktop-agent-page--workspace-closing .desktop-workspace-panel-slot:not([hidden]) {
   opacity: 0;
   pointer-events: none;
   transition:
     opacity 110ms ease,
     visibility 0s linear var(--app-sidebar-motion-duration);
   visibility: hidden;
+}
+
+/* The right slot mounts on demand; provide the same start as the closed left slot. */
+@starting-style {
+  .desktop-agent-page--workspace-opening .desktop-workspace-panel-slot:not([hidden]) {
+    opacity: 0;
+  }
 }
 
 .app-sidebar {
@@ -497,16 +510,6 @@ body.desktop-terminal-resizing {
 
 /* The grid track is the sole source of workspace motion. Its clipping slot keeps
    panel contents at full width while the shared boundary opens or closes. */
-.desktop-agent-page--workspace-opening .app-workbench,
-.desktop-agent-page--workspace-closing .app-workbench {
-  transition-duration: var(--app-workspace-motion-duration), 180ms;
-}
-
-.desktop-agent-page--workspace-opening .app-topbar,
-.desktop-agent-page--workspace-closing .app-topbar {
-  transition-duration: var(--app-workspace-motion-duration);
-}
-
 .desktop-agent-page--workspace-opening .desktop-workspace-panel-slot,
 .desktop-agent-page--workspace-closing .desktop-workspace-panel-slot,
 .desktop-agent-page--workspace-opening .app-topbar__workspace,
@@ -517,6 +520,9 @@ body.desktop-terminal-resizing {
 .desktop-agent-page--workspace-opening .desktop-workspace-panel-slot > .desktop-workspace-panel,
 .desktop-agent-page--workspace-closing .desktop-workspace-panel-slot > .desktop-workspace-panel {
   width: var(--desktop-agent-workspace-visual-width);
+  /* Cache the full-width surface separately from the changing clip. Promote
+     only during motion so editors/webviews do not retain extra layers at rest. */
+  will-change: transform;
 }
 
 .desktop-agent-page--workspace-opening .app-topbar__workspace,
@@ -529,4 +535,5 @@ body.desktop-terminal-resizing {
   flex: 0 0 max(0px, calc(var(--desktop-agent-workspace-visual-width) - var(--app-titlebar-control-width)));
   width: max(0px, calc(var(--desktop-agent-workspace-visual-width) - var(--app-titlebar-control-width)));
   margin-left: auto;
+  will-change: transform;
 }

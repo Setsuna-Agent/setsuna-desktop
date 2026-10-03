@@ -93,6 +93,7 @@
   flex: 0 0 var(--desktop-agent-workspace-visual-width);
   width: var(--desktop-agent-workspace-visual-width);
   margin-left: auto;
+  will-change: transform;
 }
 
 @media (max-width: 879px) {

@@ -55,9 +55,9 @@ import { readyThreadWorkspacePath, type ThreadWorkspaceStatus } from './useThrea
 import { useCommitMessagePanel } from './useCommitMessagePanel.js';
 import { useTerminalPanelExit, type TerminalSessionsByPanelId } from './useTerminalPanelExit.js';
 
-// Keep panel contents mounted for the compositor-only drawer transition. Keep
-// this duration aligned with --app-workspace-motion-duration in shell.css.
-const SIDE_PANEL_TRANSITION_DURATION_MS = 280;
+// Keep panel contents mounted while the drawer's grid track transitions. Keep
+// this duration aligned with the shared --app-sidebar-motion-duration in shell.css.
+const SIDE_PANEL_TRANSITION_DURATION_MS = 220;
 
 type SidePanelTransitionPhase = 'opening' | 'closing' | null;
 
@@ -803,36 +803,32 @@ export function useSidePanelTransition(visible: boolean): {
     present: visible,
     targetVisible: visible,
   }));
-  const previousVisibleRef = useRef(visible);
+  // Adjust before children commit. Updating the same derived state in an effect
+  // would render the entire workspace again just after mounting its contents.
+  if (state.targetVisible !== visible) {
+    setState({
+      phase: visible ? 'opening' : 'closing',
+      present: visible || state.present,
+      targetVisible: visible,
+    });
+  }
 
   useEffect(() => {
-    if (previousVisibleRef.current === visible) {
-      return undefined;
-    }
-    previousVisibleRef.current = visible;
-
-    setState((current) => ({
-      phase: visible ? 'opening' : 'closing',
-      present: visible || current.present,
-      targetVisible: visible,
-    }));
+    if (state.phase === null) return undefined;
+    const targetVisible = state.targetVisible;
     const timeoutId = window.setTimeout(() => {
       setState((current) => (
-        current.targetVisible === visible
-          ? { phase: null, present: visible, targetVisible: visible }
+        current.targetVisible === targetVisible
+          ? { phase: null, present: targetVisible, targetVisible }
           : current
       ));
     }, SIDE_PANEL_TRANSITION_DURATION_MS);
     return () => window.clearTimeout(timeoutId);
-  }, [visible]);
+  }, [state.phase, state.targetVisible]);
 
   return {
-    // Reflect a reversed request before the effect commits its new transition target.
-    phase: visible === state.targetVisible
-      ? state.phase
-      : visible ? 'opening' : 'closing',
-    // Opening renders synchronously; every closing target remains mounted until its timer settles.
-    present: visible || state.present,
+    phase: state.phase,
+    present: state.present,
   };
 }
 
