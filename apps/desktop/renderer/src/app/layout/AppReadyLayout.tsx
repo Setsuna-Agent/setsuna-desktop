@@ -20,7 +20,7 @@ import {
   type AppKeyboardShortcutEvent,
   type AppKeyboardShortcutHandlers,
 } from '../controller/useAppKeyboardShortcuts.js';
-import { useThreadNavigationHistory } from '../controller/useThreadNavigationHistory.js';
+import { useAppNavigationHistory, type AppNavigationLocation } from '../controller/useAppNavigationHistory.js';
 import { useSidebarThreadNavigation } from '../controller/useSidebarThreadNavigation.js';
 import { useToast } from '../providers/ToastProvider.js';
 import { usePinnedThreads } from '../sidebar/usePinnedThreads.js';
@@ -137,9 +137,38 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     onOpenThread: navigation.selectThread,
     onError: runtime.setError,
   });
-  const threadHistory = useThreadNavigationHistory({
-    currentThreadId: activeView === 'chat' ? currentThread?.id ?? null : null,
-    onOpenThread: navigation.selectThread,
+  const historyLocation: AppNavigationLocation = activeView === 'chat'
+    ? { view: activeView, threadId: currentThread?.id ?? null, projectId: currentThread ? currentThread.projectId ?? null : activeProjectId }
+    : activeView === 'capabilities'
+      ? { view: activeView, pluginId: selectedCapabilitiesPluginId }
+      : activeView === 'plugin'
+        ? { view: activeView, viewKey: selectedPluginViewKey }
+        : { view: activeView };
+  const openHistoryLocation = useCallback(async (location: AppNavigationLocation) => {
+    if (location.view === 'chat') {
+      if (location.threadId) {
+        if (currentThread?.id === location.threadId) await navigation.changeView('chat');
+        else await navigation.selectThreadInView(location.threadId, 'chat');
+      } else if (!currentThread && activeProjectId === location.projectId) {
+        await navigation.changeView('chat');
+      } else if (location.projectId && runtime.projects.some((project) => project.id === location.projectId)) {
+        await navigation.startProjectThread(location.projectId);
+      } else {
+        await navigation.startGlobalThread();
+      }
+      return;
+    }
+    if (location.view === 'capabilities') setSelectedCapabilitiesPluginId(location.pluginId);
+    if (location.view === 'plugin') setSelectedPluginViewKey(location.viewKey);
+    await navigation.changeView(location.view);
+  }, [activeProjectId, currentThread, navigation, runtime.projects]);
+  const reportHistoryError = useCallback((error: unknown) => {
+    runtime.setError(error instanceof Error ? error.message : String(error));
+  }, [runtime.setError]);
+  const appHistory = useAppNavigationHistory({
+    location: historyLocation,
+    onNavigate: openHistoryLocation,
+    onError: reportHistoryError,
   });
   const visibleRuntimeError = runtimeErrorNoticeMessage(runtime.error, runtime.currentThread);
   const handleToggleSidebar = useCallback(() => setSidebarCollapsed((value) => !value), [setSidebarCollapsed]);
@@ -222,12 +251,12 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       },
     },
     'navigation.goBack': {
-      enabled: threadHistory.canGoBack,
-      execute: threadHistory.goBack,
+      enabled: appHistory.canGoBack,
+      execute: appHistory.goBack,
     },
     'navigation.goForward': {
-      enabled: threadHistory.canGoForward,
-      execute: threadHistory.goForward,
+      enabled: appHistory.canGoForward,
+      execute: appHistory.goForward,
     },
     'navigation.previousChat': {
       enabled: activeView === 'chat' && !sidebarCollapsed,
@@ -357,10 +386,10 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     sidebarCollapsed,
     sidebarNavigation.goPrevious,
     sidebarNavigation.goNext,
-    threadHistory.canGoBack,
-    threadHistory.canGoForward,
-    threadHistory.goBack,
-    threadHistory.goForward,
+    appHistory.canGoBack,
+    appHistory.canGoForward,
+    appHistory.goBack,
+    appHistory.goForward,
     startNewChat,
     workspacePanels.toggleBottomPanel,
     workspacePanels.closeActiveSidePanel,
@@ -398,14 +427,14 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
           onOpenSettings={openSettings}
         />
       )}
-      navigationActions={activeView === 'chat' ? (
+      navigationActions={(
         <AppThreadHistoryNavigation
-          canGoBack={threadHistory.canGoBack}
-          canGoForward={threadHistory.canGoForward}
-          onGoBack={threadHistory.goBack}
-          onGoForward={threadHistory.goForward}
+          canGoBack={appHistory.canGoBack}
+          canGoForward={appHistory.canGoForward}
+          onGoBack={appHistory.goBack}
+          onGoForward={appHistory.goForward}
         />
-      ) : undefined}
+      )}
       toolbarTitle={(
         <RendererOwnedSingleSlot
           slot={shellTopbarTitleSlot}

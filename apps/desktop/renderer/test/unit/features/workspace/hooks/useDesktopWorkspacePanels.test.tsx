@@ -337,7 +337,7 @@ describe('useSidePanelTransition', () => {
     view.rerender({ visible: false });
     expect(view.result.current).toEqual({ phase: 'closing', present: true });
 
-    act(() => vi.advanceTimersByTime(279));
+    act(() => vi.advanceTimersByTime(219));
     expect(view.result.current).toEqual({ phase: 'closing', present: true });
 
     act(() => vi.advanceTimersByTime(1));

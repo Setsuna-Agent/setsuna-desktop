@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type RefObject } from 'react';
+import { useEffect, useState, type RefObject } from 'react';
 import {
   readWorkbenchWidth,
   WORKBENCH_SPLIT_MAIN_MIN_WIDTH,
@@ -18,37 +18,36 @@ export function useDesktopSidebarAutoCollapse({
   workspaceVisible: boolean;
   workspaceWidth: number;
 }): boolean {
-  const [canExpand, setCanExpand] = useState(true);
-  const syncCanExpand = useCallback(() => {
-    setCanExpand(
-      canFitDesktopSidebar({
-        sidebarWidth,
-        viewportWidth: readWorkbenchWidth(shellRef.current),
-        workspaceVisible,
-        workspaceWidth,
-      }),
-    );
-  }, [shellRef, sidebarWidth, workspaceVisible, workspaceWidth]);
+  const [workbenchWidth, setWorkbenchWidth] = useState(() => readWorkbenchWidth(shellRef.current));
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     let frame = 0;
+    const syncWorkbenchWidth = () => setWorkbenchWidth(readWorkbenchWidth(shellRef.current));
     const scheduleSync = () => {
       if (frame) return;
       frame = window.requestAnimationFrame(() => {
         frame = 0;
-        syncCanExpand();
+        syncWorkbenchWidth();
       });
     };
-    syncCanExpand();
+    syncWorkbenchWidth();
     window.addEventListener('resize', scheduleSync);
     return () => {
       if (frame) window.cancelAnimationFrame(frame);
       window.removeEventListener('resize', scheduleSync);
     };
-  }, [syncCanExpand]);
+  }, [shellRef]);
 
-  return canExpand;
+  // Derive both sidebars' targets in one render, before the shared grid starts
+  // moving; an effect here would retarget the conversation a frame later.
+  return canFitDesktopSidebar({
+    sidebarWidth,
+    // The shell can mount after runtime startup, without a window resize event.
+    viewportWidth: shellRef.current ? readWorkbenchWidth(shellRef.current) : workbenchWidth,
+    workspaceVisible,
+    workspaceWidth,
+  });
 }
 
 export function canFitDesktopSidebar({

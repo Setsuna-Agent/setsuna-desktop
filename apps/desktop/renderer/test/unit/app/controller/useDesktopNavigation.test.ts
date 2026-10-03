@@ -38,6 +38,31 @@ function setupAutomationNavigation(initialThread: RuntimeThread | null, projectI
   return { ...hook, getThread, confirmDiscardProjectFile };
 }
 
+it.each(['loaded', 'failed'] as const)('commits the chat route only with its requested conversation: %s', async (outcome) => {
+  const original = { ...automationThread, id: 'ordinary', featureId: undefined };
+  const target = { ...original, id: 'another-chat' };
+  const { result, getThread } = setupAutomationNavigation(original);
+  await act(() => result.current.navigation.changeView('settings'));
+  let finish!: (thread: RuntimeThread) => void;
+  let fail!: (error: Error) => void;
+  getThread.mockImplementationOnce(() => new Promise<RuntimeThread>((resolve, reject) => { finish = resolve; fail = reject; }));
+  let pending!: Promise<boolean>;
+  await act(async () => { pending = result.current.navigation.selectThreadInView(target.id, 'chat'); });
+  expect(result.current.activeView).toBe('settings');
+  expect(result.current.currentThread).toEqual(original);
+  await act(async () => {
+    if (outcome === 'loaded') {
+      finish(target);
+      expect(await pending).toBe(true);
+    } else {
+      fail(new Error('Unavailable'));
+      await expect(pending).rejects.toThrow('Unavailable');
+    }
+  });
+  expect(result.current.activeView).toBe(outcome === 'loaded' ? 'chat' : 'settings');
+  expect(result.current.currentThread).toEqual(outcome === 'loaded' ? target : original);
+});
+
 it.each([
   { existing: false, projectId: null, viaSettings: false },
   { existing: false, projectId: 'project', viaSettings: false },

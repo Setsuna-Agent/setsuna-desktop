@@ -321,22 +321,24 @@ export function useConversationOverviewLayout(
   contentNode: HTMLElement | null,
 ): ConversationOverviewLayout {
   const [layout, setLayout] = useState<ConversationOverviewLayout>('hidden');
+  const layoutRef = useRef(layout);
+  const sync = useCallback(() => {
+    const conversationNode = conversationRef.current;
+    const next = conversationNode && contentNode
+      ? readConversationOverviewLayout(conversationNode, contentNode)
+      : 'hidden';
+    if (layoutRef.current === next) return;
+    layoutRef.current = next;
+    setLayout(next);
+  }, [conversationRef, contentNode]);
+
+  // Shell width targets change in the same commit as a sidebar toggle. Resolve
+  // the overview before paint so its offset starts with the grid transition.
+  useLayoutEffect(sync);
 
   useLayoutEffect(() => {
     const conversationNode = conversationRef.current;
-    if (!conversationNode || !contentNode || typeof window === 'undefined') {
-      setLayout('hidden');
-      return undefined;
-    }
-
-    const sync = () => {
-      // Match the panel's CSS-pixel dimensions even when the app is zoomed.
-      setLayout(conversationOverviewLayout({
-        conversationWidth: conversationNode.clientWidth,
-        contentWidth: contentNode.offsetWidth,
-      }));
-    };
-    sync();
+    if (!conversationNode || !contentNode) return undefined;
 
     window.addEventListener('resize', sync);
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(sync);
@@ -346,7 +348,29 @@ export function useConversationOverviewLayout(
       observer?.disconnect();
       window.removeEventListener('resize', sync);
     };
-  }, [conversationRef, contentNode]);
+  }, [conversationRef, contentNode, sync]);
 
   return layout;
+}
+
+function readConversationOverviewLayout(conversation: HTMLElement, content: HTMLElement): ConversationOverviewLayout {
+  const workbench = conversation.closest<HTMLElement>('.app-workbench');
+  if (workbench && !conversation.closest('.desktop-chat-panel--side')) {
+    const shellStyle = window.getComputedStyle(workbench);
+    const sidebarWidth = Number.parseFloat(shellStyle.getPropertyValue('--app-sidebar-width'));
+    const workspaceWidth = Number.parseFloat(shellStyle.getPropertyValue('--desktop-agent-workspace-width'));
+    const maxContentWidth = Number.parseFloat(window.getComputedStyle(content).getPropertyValue('--chat-content-max-width'));
+    if ([sidebarWidth, workspaceWidth, maxContentWidth].every(Number.isFinite)) {
+      // Use the grid's destination, not its animated intermediate widths. Otherwise
+      // centered -> shifted -> hidden briefly moves the Markdown out and back.
+      // Narrow overlay layouts cannot fit the overview regardless of these insets.
+      const conversationWidth = Math.max(0, workbench.clientWidth - sidebarWidth - workspaceWidth);
+      return conversationOverviewLayout({
+        conversationWidth,
+        contentWidth: Math.min(maxContentWidth, conversationWidth),
+      });
+    }
+  }
+  // Standalone/side conversations keep measuring their own CSS-pixel bounds.
+  return conversationOverviewLayout({ conversationWidth: conversation.clientWidth, contentWidth: content.offsetWidth });
 }

@@ -187,10 +187,12 @@ export function useDesktopNavigation({
       if (view !== 'chat' && view !== activeViewRef.current) return false;
       const isLatest = navigationRequests.begin();
       if (!await confirmDiscardProjectFile() || !isLatest()) return false;
-      setActiveView(view);
       setThreadActionMenuId(null);
       const thread = await client.getThread(threadId);
       if (!isLatest()) return false;
+      // Commit the route with its thread, so history never sees the old chat on
+      // an intermediate page while the requested conversation is still loading.
+      setActiveView(view);
       if ((thread.workspaceId ?? thread.projectId ?? thread.id) !== currentWorkspaceId) resetProjectWorkspaceState();
       if (thread.projectId) {
         setActiveProjectId(thread.projectId);
