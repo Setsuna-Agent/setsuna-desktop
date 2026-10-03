@@ -26,7 +26,11 @@ export function normalizeBrowserInput(input: string): string {
     return `http://${value}`;
   }
   if (/^[\w.-]+\.[a-z]{2,}(?::\d+)?(?:\/|$)/i.test(value)) return `https://${value}`;
-  return `https://www.bing.com/search?q=${encodeURIComponent(value)}`;
+  return browserSearchUrl(value);
+}
+
+export function browserSearchUrl(query: string): string {
+  return `https://www.bing.com/search?q=${encodeURIComponent(query.trim())}`;
 }
 
 export function isBrowserHomeUrl(url: string): boolean {

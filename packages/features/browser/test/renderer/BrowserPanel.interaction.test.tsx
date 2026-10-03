@@ -5,7 +5,10 @@ import userEvent from '@testing-library/user-event';
 import type { WebviewTag } from 'electron';
 import { useCallback, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_BROWSER_URL, type BrowserContextMenuRequest, type BrowserDesktopBridge } from '../../src/contracts/index.js';
+import {
+  DEFAULT_BROWSER_URL, parseBrowserAnnotationMessage, type BrowserAnnotationSendHandler,
+  type BrowserAnnotationTarget, type BrowserContextMenuRequest, type BrowserDesktopBridge,
+} from '../../src/contracts/index.js';
 import { BrowserPanel } from '../../src/renderer/BrowserPanel.js';
 import {
   BROWSER_BOOKMARKS_STORAGE_KEY,
@@ -32,6 +35,55 @@ afterEach(() => {
 });
 
 describe('BrowserPanel interactions', () => {
+  it.each(['reload', 'navigation', 'in-page navigation', 'home'])('starts a fresh annotation batch after %s without capturing old node IDs', async (navigation) => {
+    const target: BrowserAnnotationTarget = {
+      id: '27f0b1c9-8c70-452e-8cce-2dd7e029f084', url: 'https://example.com/', title: 'Example',
+      selector: '#submit', tag: 'button', text: 'Submit', bounds: { x: 1, y: 2, width: 30, height: 40 },
+      viewport: { width: 800, height: 600 }, styles: {},
+    };
+    const next = { ...target, id: '69a247d0-0ea1-4d87-9d27-701e850138ee' };
+    const pickAnnotation = vi.fn(async (): Promise<BrowserAnnotationTarget | null> => null).mockResolvedValueOnce(target);
+    const captureAnnotationScreenshots = vi.fn(async (_tabId: string, ids: readonly string[]) => ids.includes(target.id) ? null : [{
+      dataUrl: 'data:image/png;base64,b3JpZ2luYWw=', width: 1280, height: 720, mimeType: 'image/png' as const, size: 8,
+    }]);
+    const onSend = vi.fn<BrowserAnnotationSendHandler>(async () => true);
+    browserBridge = createBrowserBridge({ pickAnnotation, captureAnnotationScreenshots });
+    render(<BrowserPanelHarness url={target.url} onSendAnnotations={onSend} />);
+    let webview = document.querySelector('webview') as unknown as WebviewTag;
+    const attachNavigationMethods = () => Object.assign(webview, {
+      getURL: () => next.url, getZoomFactor: () => 1, canGoBack: () => false, canGoForward: () => false,
+    });
+    attachNavigationMethods();
+    fireEvent(webview, new Event('did-stop-loading'));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Annotate page' }));
+    await user.type(screen.getByRole('textbox', { name: 'Comment' }), 'Old page note');
+    await user.click(screen.getByRole('button', { name: 'Save & continue' }));
+    // Subframe navigation does not dispose the main document's annotation session.
+    fireEvent(webview, Object.assign(new Event('did-start-navigation'), { isMainFrame: false, isInPlace: false }));
+    await user.click(screen.getByRole('button', { name: 'Send to Agent' }));
+    expect(captureAnnotationScreenshots).toHaveBeenLastCalledWith('browser-interaction', [target.id]);
+    captureAnnotationScreenshots.mockClear();
+
+    if (navigation === 'home') {
+      await user.click(screen.getByRole('button', { name: 'Home' }));
+      await user.type(screen.getByRole('combobox', { name: 'Address or search' }), `${target.url}{Enter}`);
+      webview = document.querySelector('webview') as unknown as WebviewTag;
+      attachNavigationMethods();
+    } else {
+      if (navigation !== 'reload') next.url = 'https://example.com/next';
+      fireEvent(webview, Object.assign(new Event('did-start-navigation'), { isMainFrame: true, isInPlace: navigation === 'in-page navigation' }));
+    }
+    fireEvent(webview, new Event('did-stop-loading'));
+    pickAnnotation.mockResolvedValueOnce(next);
+    await user.click(screen.getByRole('button', { name: 'Select element' }));
+    await user.type(screen.getByRole('textbox', { name: 'Comment' }), 'New page note');
+    await user.click(screen.getByRole('button', { name: 'Send to Agent' }));
+    await waitFor(() => expect(onSend).toHaveBeenCalledOnce());
+    expect(captureAnnotationScreenshots).toHaveBeenCalledExactlyOnceWith('browser-interaction', [next.id]);
+    expect(parseBrowserAnnotationMessage(onSend.mock.calls[0][0])?.annotations).toEqual([{ target: next, comment: 'New page note' }]);
+  });
+
   it('opens a recent page from the internal home', async () => {
     writeBrowserHistory([{
       title: 'Example documentation',
@@ -45,6 +97,36 @@ describe('BrowserPanel interactions', () => {
     await user.click(screen.getByRole('button', { name: 'Open Example documentation' }));
 
     expect(document.querySelector('webview')?.getAttribute('src')).toBe('https://example.com/docs');
+  });
+
+  it('retries a failed main-frame load and clears the error when loading restarts', async () => {
+    renderBrowserPanel();
+    const webview = document.querySelector('webview') as unknown as WebviewTag;
+    const reload = vi.fn(() => fireEvent(webview, new Event('did-start-loading')));
+    Object.assign(webview, { reload });
+    const fail = (errorCode: number, isMainFrame: boolean) => fireEvent(webview, Object.assign(new Event('did-fail-load'), {
+      errorCode, isMainFrame, errorDescription: 'ERR_CONNECTION_REFUSED',
+    }));
+
+    fail(-102, false);
+    fail(-3, true);
+    expect(screen.queryByRole('alert')).toBeNull();
+    fail(-102, true);
+    expect(screen.getByRole('alert')).toBeTruthy();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Reload', exact: true }));
+    await waitFor(() => expect(reload).toHaveBeenCalledOnce());
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('opens the selected address suggestion instead of searching the typed title', async () => {
+    writeBrowserHistory([{ title: 'Model management', url: 'https://example.com/models', visitedAt: Date.now() }]);
+    renderBrowserPanel(DEFAULT_BROWSER_URL);
+    const user = userEvent.setup();
+    await user.type(screen.getByRole('combobox', { name: 'Address or search' }), 'management');
+    await user.keyboard('{ArrowDown}{Enter}');
+
+    expect(document.querySelector('webview')?.getAttribute('src')).toBe('https://example.com/models');
   });
 
   it('deletes an individual recent visit without navigating', async () => {
@@ -200,7 +282,7 @@ describe('BrowserPanel interactions', () => {
     expect(reload).toHaveBeenCalledTimes(1);
     expect(screen.queryByText('Device emulation could not be applied; the page will keep its current settings')).toBeNull();
 
-    const address = screen.getByRole('textbox', { name: 'Address or search' });
+    const address = screen.getByRole('combobox', { name: 'Address or search' });
     await user.clear(address);
     await user.type(address, 'example.org/docs{Enter}');
     await waitFor(() => expect(setDeviceEmulation).toHaveBeenCalledTimes(2));
@@ -220,7 +302,7 @@ function renderBrowserPanel(url = 'https://example.com') {
   return render(<BrowserPanelHarness url={url} />);
 }
 
-function BrowserPanelHarness({ url }: { url: string }) {
+function BrowserPanelHarness({ url, onSendAnnotations }: { url: string; onSendAnnotations?: BrowserAnnotationSendHandler }) {
   const [notification, setNotification] = useState<string | null>(null);
   const notify = useCallback((_tone: string, message: string) => setNotification(message), []);
   return (
@@ -240,6 +322,7 @@ function BrowserPanelHarness({ url }: { url: string }) {
         }}
         translate={translate}
         onPanelMetadataChange={() => undefined}
+        onSendAnnotations={onSendAnnotations}
       />
       {notification ? <span>{notification}</span> : null}
     </>
@@ -267,7 +350,12 @@ function installBrowserBridge({
 
 function createBrowserBridge(overrides: Partial<BrowserDesktopBridge> = {}): BrowserDesktopBridge {
   return {
+    pickAnnotation: vi.fn(async () => null),
+    cancelAnnotation: vi.fn(async () => undefined),
+    setAnnotationMarkers: vi.fn(async () => true),
+    getAnnotationAnchor: vi.fn(async () => null),
     captureScreenshot: vi.fn(async () => null),
+    captureAnnotationScreenshots: vi.fn(async () => null),
     onOpenNewTab: vi.fn(() => () => undefined),
     onContextMenu: vi.fn(() => () => undefined),
     dismissContextMenu: vi.fn(async () => undefined),

@@ -7,6 +7,9 @@ import type {
   BrowserReloadMode,
   DesktopBrowserScreenshot,
   DesktopBrowserTab,
+  BrowserAnnotationMarkers,
+  BrowserAnnotationAnchor,
+  BrowserAnnotationTarget,
 } from '../contracts/index.js';
 import type { WebContents } from 'electron';
 import {
@@ -20,14 +23,16 @@ import {
   type BrowserDeviceEmulator,
 } from './cdp/device-emulation.js';
 import { dispatchNativeBrowserKey } from './native-keyboard.js';
+import { BrowserAnnotationSession } from './annotations/session.js';
 
 type RegisteredBrowserTab = {
+  annotations: BrowserAnnotationSession;
   automation: BrowserAutomation;
   contents: WebContents;
   defaultUserAgent: string;
   deviceEmulator: BrowserDeviceEmulator;
   destroyedListener: () => void;
-  navigationListener: () => void;
+  navigationListener: (_event: unknown, _url: string, _inPlace: boolean, isMainFrame: boolean) => void;
 };
 
 const desktopBrowserDeviceUserAgentProfiles = new Set<DesktopBrowserDeviceUserAgentProfile>([
@@ -72,15 +77,18 @@ export class DesktopBrowserController implements BrowserControlExecutor {
       if (entry.contents.id === contents.id) this.unregisterTab(existingId, contents.id);
     }
     const automation = this.createAutomation(contents);
+    const annotations = new BrowserAnnotationSession(contents);
     const deviceEmulator = this.createDeviceEmulator(contents);
     const defaultUserAgent = contents.session.getUserAgent();
     const destroyedListener = () => this.unregisterTab(normalizedTabId, contents.id);
-    const navigationListener = () => {
+    const navigationListener = (_event: unknown, _url: string, _inPlace: boolean, isMainFrame: boolean) => {
       this.invalidateSnapshot(normalizedTabId, automation);
+      if (isMainFrame !== false) annotations.dispose();
     };
     contents.once('destroyed', destroyedListener);
     contents.on('did-start-navigation', navigationListener);
     this.tabs.set(normalizedTabId, {
+      annotations,
       automation,
       contents,
       defaultUserAgent,
@@ -97,6 +105,7 @@ export class DesktopBrowserController implements BrowserControlExecutor {
     entry.contents.off('destroyed', entry.destroyedListener);
     entry.contents.off('did-start-navigation', entry.navigationListener);
     entry.automation.dispose();
+    entry.annotations.dispose();
     entry.deviceEmulator.dispose();
     this.tabs.delete(tabId);
     this.snapshotRevisions.delete(tabId);
@@ -105,6 +114,36 @@ export class DesktopBrowserController implements BrowserControlExecutor {
 
   setActiveTab(tabId: string | null): void {
     this.activeTabId = tabId ? normalizeTabId(tabId) : null;
+  }
+
+  pickAnnotation(tabId: string, senderId: number, signal?: AbortSignal): Promise<BrowserAnnotationTarget | null> {
+    const entry = this.annotationTab(tabId, senderId);
+    if (!entry) return Promise.reject(new Error('Browser annotation tab is unavailable.'));
+    return entry.annotations.pick(signal);
+  }
+
+  cancelAnnotation(tabId: string, senderId: number): Promise<void> {
+    return this.annotationTab(tabId, senderId)?.annotations.cancel() ?? Promise.resolve();
+  }
+
+  setAnnotationMarkers(tabId: string, senderId: number, markers: BrowserAnnotationMarkers, signal?: AbortSignal): Promise<boolean> {
+    return this.annotationTab(tabId, senderId)?.annotations.sync(markers, signal) ?? Promise.resolve(false);
+  }
+
+  getAnnotationAnchor(tabId: string, senderId: number, annotationId: string, signal?: AbortSignal): Promise<BrowserAnnotationAnchor | null> {
+    return this.annotationTab(tabId, senderId)?.annotations.anchor(annotationId, signal) ?? Promise.resolve(null);
+  }
+
+  private annotationTab(tabId: string, senderId: number): RegisteredBrowserTab | null {
+    const entry = this.tabs.get(tabId);
+    return entry && !entry.contents.isDestroyed() && entry.contents.hostWebContents?.id === senderId ? entry : null;
+  }
+
+  async captureAnnotationScreenshots(tabId: string, senderId: number, annotationIds: readonly string[], signal?: AbortSignal): Promise<DesktopBrowserScreenshot[] | null> {
+    const entry = this.annotationTab(tabId, senderId);
+    if (!entry) return null;
+    // Capture only the guest surface: the host's editor and dock are not part of this image.
+    return entry.annotations.captureScreenshots(annotationIds, () => captureBrowserScreenshot(entry.contents), signal).catch(() => null);
   }
 
   tabIdForWebContents(webContentsId: number): string | null {

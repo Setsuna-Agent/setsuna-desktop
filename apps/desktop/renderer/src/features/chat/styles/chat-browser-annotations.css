@@ -1,0 +1,56 @@
+.chat-browser-annotations__tag.sd-button {
+  gap: 6px;
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface);
+  color: var(--app-text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.chat-browser-annotations__tag .sd-button__icon { color: var(--app-text-muted); }
+
+.chat-browser-annotations__tag.sd-button:hover,
+.chat-browser-annotations__tag.sd-button[data-state='open'] {
+  border-color: var(--app-border-strong);
+  background: var(--app-surface-subtle);
+}
+
+.chat-browser-annotations__detail.sd-popover {
+  width: 340px;
+  max-width: min(calc(100vw - 24px), var(--radix-popover-content-available-width, 340px));
+  max-height: min(400px, var(--radix-popover-content-available-height, 70vh));
+  overflow: auto;
+  padding: 4px;
+  border-radius: 14px;
+  color: var(--app-text);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.chat-browser-annotations__list { margin: 0; padding: 0; list-style: none; }
+.chat-browser-annotations__list li { padding: 10px; }
+.chat-browser-annotations__list li + li { border-top: 1px solid var(--app-border); }
+
+.chat-browser-annotations__list code {
+  display: inline-block;
+  max-width: 100%;
+  padding: 0 6px;
+  overflow: hidden;
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  background: var(--app-surface-muted);
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.chat-browser-annotations__list p { margin: 6px 0 0; white-space: pre-wrap; }

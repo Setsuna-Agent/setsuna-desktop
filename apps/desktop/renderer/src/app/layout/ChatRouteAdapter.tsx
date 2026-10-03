@@ -14,6 +14,8 @@ import type {
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { ChatForkProvider } from '../../features/chat/fork/ChatForkAction.js';
 import { useChatStarterLocation } from '../../features/chat/hooks/useChatStarterLocation.js';
+import { useBrowserAnnotationSend } from '../../features/chat/hooks/useBrowserAnnotationSend.js';
+import { useChatSubmissionQueue } from '../../features/chat/hooks/useChatSubmissionQueue.js';
 import type { ChatStarterPresentation } from '../../features/chat/conversation/chat-workspace-types.js';
 import { AppChatSurface } from './AppChatSurface.js';
 import type { AppRouteContentProps } from './AppRouteContent.js';
@@ -75,11 +77,18 @@ export function ChatRouteAdapter({
   const { t } = useI18n();
   const pluginManagement = usePluginManagementFeatureSnapshot();
   const skills = useSkillsFeatureSnapshot();
+  const chatIdentity = `${composerKey}:${activeProject?.id ?? 'global'}`;
   const starterLocation = useChatStarterLocation({
-    identity: `${composerKey}:${activeProject?.id ?? 'global'}`,
+    identity: chatIdentity,
     canCreateWorktree: Boolean(activeProject && activeWorkspace?.gitRoot),
     hasThread: Boolean(runtime.currentThread),
     onSend: chatActions.sendInput,
+  });
+  const sendInput = useChatSubmissionQueue({ identity: chatIdentity, draft, sendInput: starterLocation.sendInput });
+  const sendBrowserAnnotations = useBrowserAnnotationSend({
+    identity: chatIdentity,
+    client: runtime.client,
+    sendInput,
   });
   const [scopedReviewFocusRequest, setScopedReviewFocusRequest] = useState<ScopedReviewFocusRequest | null>(null);
   const reviewFocusOwnerKey = `${runtime.currentThread?.id ?? ''}:${activeWorkspace?.id ?? ''}`;
@@ -213,7 +222,7 @@ export function ChatRouteAdapter({
     onOpenWorkspaceDirectory: (directoryPath) => { void workspacePanels.openWorkspaceDirectory(directoryPath); },
     onSearchProjectEntries: projectWorkspace.searchProjectEntries,
     onSelectModel: runtime.selectConversationModel,
-    onSend: starterLocation.sendInput,
+    onSend: sendInput,
     onSetMultiAgentEnabled: setMultiAgentEnabled,
     onCapabilitySelectionRequestConsumed,
     onStartThreadReview: (target, modelSelection) => startCurrentThreadReview(
@@ -267,6 +276,7 @@ export function ChatRouteAdapter({
       onWorkspaceResizeStep,
     },
     actions: {
+      onSendBrowserAnnotations: sendBrowserAnnotations,
       onAccessModeChange: (selection) => { void runtime.saveRuntimePreferences(selection); },
       onActivateBottomPanel: async (panelId) => {
         const panel = workspacePanels.bottomPanelSlot.panels.find((item) => item.id === panelId);

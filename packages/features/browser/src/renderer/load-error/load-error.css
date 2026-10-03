@@ -1,0 +1,72 @@
+.desktop-browser-load-error {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: auto;
+  background: var(--desktop-agent-main-bg);
+  color: var(--app-text-muted);
+}
+
+.desktop-browser-load-error__content {
+  box-sizing: border-box;
+  width: min(100%, 520px);
+  margin: 0 auto;
+  padding: clamp(28px, 14vh, 100px) 28px 40px;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.desktop-browser-load-error__icon {
+  display: block;
+  margin-bottom: 28px;
+  color: var(--app-primary);
+}
+
+.desktop-browser-load-error h1 {
+  margin: 0;
+  color: var(--app-text);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+}
+
+.desktop-browser-load-error__reason {
+  margin: 12px 0 0;
+}
+
+.desktop-browser-load-error__suggestions {
+  margin-top: 24px;
+}
+
+.desktop-browser-load-error__suggestions p {
+  margin: 0;
+}
+
+.desktop-browser-load-error__suggestions ul {
+  margin: 4px 0 0;
+  padding-left: 24px;
+}
+
+.desktop-browser-load-error__suggestions li + li {
+  margin-top: 4px;
+}
+
+.desktop-browser-load-error__code {
+  margin: 28px 0 0;
+  font-size: 12px;
+}
+
+.desktop-browser-load-error__reload.sd-button {
+  min-height: 32px;
+  margin-top: 40px;
+  padding: 5px 12px;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface-muted);
+}
+
+.desktop-browser-load-error__reload.sd-button:hover:not(:disabled) {
+  background: var(--desktop-agent-control-hover-bg);
+}

@@ -1,4 +1,5 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
+import { parseBrowserAnnotationMessage } from '@setsuna-desktop/feature-browser/contracts';
 import {
   normalizeRuntimeQueuedTurnInputKind,
   type RuntimeQueuedTurnInput,
@@ -13,6 +14,7 @@ import {
 import { memo, useState } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { EditIcon } from '../../../shared/ui/EditIcon.js';
+import { BrowserAnnotationReference } from '../mentions/BrowserAnnotationReference.js';
 
 type QueueAction = 'delete' | 'edit' | 'send';
 
@@ -56,6 +58,7 @@ export const ChatSendQueue = memo(function ChatSendQueue({
     <section className="chat-send-queue" aria-label={t('chat.queue.label')}>
       <ol className="chat-send-queue__list">
         {items.map((item) => {
+          const annotationMessage = parseBrowserAnnotationMessage(item.input);
           const kind = normalizeRuntimeQueuedTurnInputKind(item.kind);
           const MarkerIcon = kind === 'goal' ? GoalIcon : MessageSquareText;
           const kindLabel = kind === 'goal'
@@ -86,9 +89,9 @@ export const ChatSendQueue = memo(function ChatSendQueue({
                 <MarkerIcon size={14} aria-hidden="true" />
               </span>
               <div className="chat-send-queue__content">
-                <p className="chat-send-queue__text" title={item.input}>
+                {annotationMessage ? <BrowserAnnotationReference message={annotationMessage} /> : <p className="chat-send-queue__text" title={item.input}>
                   {item.input || t('chat.queue.attachmentOnly')}
-                </p>
+                </p>}
                 {attachments.length ? (
                   <span
                     className="chat-send-queue__attachments"
