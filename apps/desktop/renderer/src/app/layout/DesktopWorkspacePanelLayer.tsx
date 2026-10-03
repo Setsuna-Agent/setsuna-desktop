@@ -22,6 +22,7 @@ import {
   type BrowserScreenshotAttachmentHandler,
 } from '../../composition/BrowserWorkspaceFeatureBoundary.js';
 import type { DesktopReviewSource, ReviewTarget } from '@setsuna-desktop/feature-review/contracts';
+import type { BrowserAnnotationSendHandler } from '@setsuna-desktop/feature-browser/contracts';
 import {
   TerminalWorkspaceFeatureBoundary,
   type TerminalWorkspacePanelHost,
@@ -144,6 +145,7 @@ export type DesktopWorkspacePanelModel = Readonly<{
     onWorkspaceResizeStep(delta: number): void;
   }>;
   actions: Readonly<{
+    onSendBrowserAnnotations?: BrowserAnnotationSendHandler;
     onAccessModeChange(selection: RuntimeAccessModeSelection): void;
     onActivateBottomPanel(panelId: string): void;
     onHideBottomSlot(): void;
@@ -282,7 +284,7 @@ export function DesktopWorkspacePanelLayer({
 
   const browserBindings = useMemo(() => new Map<string, BrowserWorkspacePanelBinding>(
     panels.browserPanelInstances.map((instance) => {
-      const surfaceInstanceId = JSON.stringify([instance.targetIdentity, instance.panel.id]);
+      const surfaceInstanceId = instance.panel.id;
       return [surfaceInstanceId, {
         panel: { browser: instance.panel.browser, id: instance.panel.id, title: instance.panel.title },
         resizeHandle: (
@@ -296,6 +298,7 @@ export function DesktopWorkspacePanelLayer({
         ),
         onPanelMetadataChange: (panelId, patch) => actions.onUpdateBrowserPanel(instance.targetIdentity, panelId, patch),
         onScreenshotAttachment: requestImageAttachment,
+        onSendAnnotations: actions.onSendBrowserAnnotations,
       }];
     }),
   ), [actions, layout, panels.browserPanelInstances, requestImageAttachment]);
@@ -448,7 +451,8 @@ export function DesktopWorkspacePanelLayer({
         })}
         {panels.browserPanelInstances.map((instance) => {
           const target = desktopWorkspacePanelTargetContext(instance.targetIdentity, projectIdByThreadId);
-          const surfaceInstanceId = JSON.stringify([instance.targetIdentity, instance.panel.id]);
+          // Browser IDs survive the draft-to-thread claim; changing ownership must not reload the guest.
+          const surfaceInstanceId = instance.panel.id;
           return (
             <FloatingWorkspacePanelSlot hidden={!instance.active} keepRenderingWhenHidden key={surfaceInstanceId} placement={instance.placement}>
               <WorkspacePanelRenderer panel={instance.panel} placement={instance.placement} projectId={target.projectId} surfaceInstanceId={surfaceInstanceId} threadId={target.threadId} visible={instance.active}>
@@ -494,7 +498,7 @@ function WorkspacePanelRenderer({ children, panel, placement, projectId, surface
   return (
     <RendererOwnedKeyedSlot
       entryKey={panel.type}
-      instanceKey={JSON.stringify([projectId, threadId, surfaceInstanceId])}
+      instanceKey={explicitSurfaceInstanceId ?? JSON.stringify([projectId, threadId, surfaceInstanceId])}
       slot={workspacePanelSlot}
       props={{ panelId: panel.id, panelType: panel.type, placement, projectId, renderDefault: () => children, surfaceInstanceId, threadId, translate: t, visible }}
     />

@@ -6,3 +6,5 @@ export * from './panel.js';
 export * from './runtime-tools.js';
 export * from './tab-mention.js';
 export * from './ui-actions.js';
+export * from './annotations.js';
+export * from './annotation-message.js';

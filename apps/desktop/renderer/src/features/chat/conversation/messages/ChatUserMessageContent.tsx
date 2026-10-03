@@ -1,8 +1,10 @@
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
+import { parseBrowserAnnotationMessage } from '@setsuna-desktop/feature-browser/contracts';
 import { Goal as GoalIcon, ShieldCheck, Users } from 'lucide-react';
 import { useI18n } from '../../../../shared/i18n/I18nProvider.js';
 import { SkillReferenceText } from '../../skills/SkillReference.js';
 import { ChatMessageAttachments } from '../ChatMessageAttachments.js';
+import { BrowserAnnotationReference } from '../../mentions/BrowserAnnotationReference.js';
 
 export function UserMessageContent({ message, streaming }: {
   message: RuntimeMessage;
@@ -11,8 +13,9 @@ export function UserMessageContent({ message, streaming }: {
   const hasSemanticKind = message.inputKind === 'goal'
     || message.inputKind === 'review'
     || message.inputKind === 'subagent_task';
+  const annotations = parseBrowserAnnotationMessage(message.content);
   return (
-    <div className="chat-user-message-content">
+    <div className={`chat-user-message-content${annotations ? ' chat-user-message-content--annotations' : ''}`}>
       {message.attachments?.length ? (
         <ChatMessageAttachments attachments={message.attachments} />
       ) : null}
@@ -21,7 +24,8 @@ export function UserMessageContent({ message, streaming }: {
           <UserMessageKindBadge kind={message.inputKind} />
           {message.content || streaming ? (
             <span className="chat-user-message-content__body">
-              <SkillReferenceText content={message.content || '...'} skillReferences={message.skillReferences} />
+              {annotations ? <BrowserAnnotationReference message={annotations} />
+                : <SkillReferenceText content={message.content || '...'} skillReferences={message.skillReferences} />}
             </span>
           ) : null}
         </div>

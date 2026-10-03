@@ -455,7 +455,7 @@
   justify-items: end;
 }
 
-.chat-user-bubble--with-attachments .chat-user-message-content__text {
+.chat-user-bubble--with-attachments .chat-user-message-content:not(.chat-user-message-content--annotations) > .chat-user-message-content__text {
   max-width: 100%;
   padding: 10px 14px;
   border: 0;
@@ -683,7 +683,9 @@
   background-color: color-mix(in srgb, var(--app-primary) 70%, #ffffff);
 }
 
-.chat-user-bubble--with-attachments .sd-message__content {
+.chat-user-bubble--with-attachments .sd-message__content,
+.chat-user-bubble .sd-message__content:has(> .chat-user-message-content--annotations),
+.chat-guidance-message__bubble:has(> .chat-user-message-content--annotations) {
   padding: 0;
   border: 0;
   background: transparent;

@@ -14,6 +14,11 @@ export const browserPreloadFeature = definePreloadFeature<BrowserPreloadBridgeCo
   bridgeKeys: ['browser'],
   contribute(writer) {
     const browser: BrowserDesktopBridge = {
+      pickAnnotation: (tabId) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.pickAnnotation, { tabId }),
+      cancelAnnotation: (tabId) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.cancelAnnotation, { tabId }),
+      setAnnotationMarkers: (tabId, markers) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.setAnnotationMarkers, { tabId, markers }),
+      getAnnotationAnchor: (tabId, annotationId) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.getAnnotationAnchor, { tabId, annotationId }),
+      captureAnnotationScreenshots: (tabId, annotationIds) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.captureAnnotationScreenshots, { tabId, annotationIds }),
       captureScreenshot: (tabId) =>
         ipcRenderer.invoke(BROWSER_IPC_CHANNELS.captureScreenshot, { tabId }),
       reloadTab: (tabId, mode) =>

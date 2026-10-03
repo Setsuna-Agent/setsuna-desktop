@@ -18,8 +18,14 @@ import { createBrowserReloadMenuTemplate } from './context-menu.js';
 import type { BrowserContextMenuSession } from './context-menu-session.js';
 import { browserMenuPoint } from './webview.js';
 import { loadBrowserFavicon } from './favicon.js';
+import { parseAnnotationMarkers } from './annotations/session.js';
 
 const handlerChannels = [
+  BROWSER_IPC_CHANNELS.pickAnnotation,
+  BROWSER_IPC_CHANNELS.cancelAnnotation,
+  BROWSER_IPC_CHANNELS.setAnnotationMarkers,
+  BROWSER_IPC_CHANNELS.getAnnotationAnchor,
+  BROWSER_IPC_CHANNELS.captureAnnotationScreenshots,
   BROWSER_IPC_CHANNELS.captureScreenshot,
   BROWSER_IPC_CHANNELS.reloadTab,
   BROWSER_IPC_CHANNELS.resolveFavicon,
@@ -41,6 +47,28 @@ export function registerBrowserIpc(
   interfaceLanguage: () => RuntimeInterfaceLanguage,
 ): () => void {
   for (const channel of handlerChannels) ipcMain.removeHandler(channel);
+  ipcMain.handle(BROWSER_IPC_CHANNELS.pickAnnotation, (event, input) => scope.runOperation((signal) => {
+    if (!isDesktopRendererSender(event.sender, windows)) return null;
+    return controller.pickAnnotation(String(input?.tabId ?? ''), event.sender.id, signal);
+  }));
+  ipcMain.handle(BROWSER_IPC_CHANNELS.cancelAnnotation, (event, input) => scope.runOperation(() => {
+    if (!isDesktopRendererSender(event.sender, windows)) return;
+    return controller.cancelAnnotation(String(input?.tabId ?? ''), event.sender.id);
+  }));
+  ipcMain.handle(BROWSER_IPC_CHANNELS.setAnnotationMarkers, (event, input) => scope.runOperation((signal) => {
+    if (!isDesktopRendererSender(event.sender, windows)) return false;
+    const markers = parseAnnotationMarkers(input?.markers);
+    return markers ? controller.setAnnotationMarkers(String(input?.tabId ?? ''), event.sender.id, markers, signal) : false;
+  }));
+  ipcMain.handle(BROWSER_IPC_CHANNELS.getAnnotationAnchor, (event, input) => scope.runOperation((signal) => {
+    if (!isDesktopRendererSender(event.sender, windows)) return null;
+    return controller.getAnnotationAnchor(String(input?.tabId ?? ''), event.sender.id, String(input?.annotationId ?? ''), signal);
+  }));
+  ipcMain.handle(BROWSER_IPC_CHANNELS.captureAnnotationScreenshots, (event, input) => scope.runOperation((signal) => {
+    if (!isDesktopRendererSender(event.sender, windows)) return null;
+    const markers = parseAnnotationMarkers({ ids: input?.annotationIds, visible: true });
+    return markers ? controller.captureAnnotationScreenshots(String(input?.tabId ?? ''), event.sender.id, markers.ids, signal) : null;
+  }));
   ipcMain.handle(BROWSER_IPC_CHANNELS.captureScreenshot, (event, input) => scope.runOperation(async () => {
     if (!isDesktopRendererSender(event.sender, windows)) return null;
     const screenshot = await controller.captureScreenshot(String(input?.tabId ?? ''));

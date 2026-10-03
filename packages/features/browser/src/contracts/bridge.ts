@@ -1,6 +1,12 @@
 import type { DesktopBrowserDeviceEmulation, DesktopBrowserScreenshot } from './browser-control.js';
+import type { BrowserAnnotationAnchor, BrowserAnnotationMarkers, BrowserAnnotationTarget } from './annotations.js';
 
 export const BROWSER_IPC_CHANNELS = Object.freeze({
+  pickAnnotation: 'browser:pick-annotation',
+  cancelAnnotation: 'browser:cancel-annotation',
+  setAnnotationMarkers: 'browser:set-annotation-markers',
+  getAnnotationAnchor: 'browser:get-annotation-anchor',
+  captureAnnotationScreenshots: 'browser:capture-annotation-screenshots',
   captureScreenshot: 'browser:capture-screenshot',
   contextMenu: 'browser:context-menu',
   dismissContextMenu: 'browser:dismiss-context-menu',
@@ -36,6 +42,11 @@ export type BrowserReloadShortcutBindings = Readonly<{
 }>;
 
 export interface BrowserDesktopBridge {
+  pickAnnotation(tabId: string): Promise<BrowserAnnotationTarget | null>;
+  cancelAnnotation(tabId: string): Promise<void>;
+  setAnnotationMarkers(tabId: string, markers: BrowserAnnotationMarkers): Promise<boolean>;
+  getAnnotationAnchor(tabId: string, annotationId: string): Promise<BrowserAnnotationAnchor | null>;
+  captureAnnotationScreenshots(tabId: string, annotationIds: readonly string[]): Promise<DesktopBrowserScreenshot[] | null>;
   captureScreenshot(tabId: string): Promise<DesktopBrowserScreenshot | null>;
   reloadTab(tabId: string, mode: BrowserReloadMode): Promise<boolean>;
   resolveFavicon(webContentsId: number, faviconUrls: readonly string[]): Promise<string | null>;

@@ -20,6 +20,8 @@ import type { ChatComposerSendOptions } from '../composer/chatComposerSendOption
 
 type ChatTurnSendOptions = ChatComposerSendOptions & {
   workspaceMode?: CreateThreadInput['workspaceMode'];
+  /** External inputs own their retry state and must not consume or restore the composer draft. */
+  preserveDraft?: boolean;
 };
 
 export function useChatTurnActions({
@@ -124,7 +126,7 @@ export function useChatTurnActions({
         }
         submissionThreadId = threadId;
         // A hidden draft may have been edited again while its first thread was being created.
-        setDraft((current) => current.trim() === input ? '' : current);
+        if (!options.preserveDraft) setDraft((current) => current.trim() === input ? '' : current);
         const startTurn = () => client.sendTurn(threadId, {
           attachments,
           clientId,
@@ -191,7 +193,7 @@ export function useChatTurnActions({
           }
         }
         // setDraft is session-scoped; preserve retry input even after navigation.
-        setDraft((current) => current || input, options.skillReferences);
+        if (!options.preserveDraft) setDraft((current) => current || input, options.skillReferences);
         if (isCurrentRequest()) {
           setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
         }

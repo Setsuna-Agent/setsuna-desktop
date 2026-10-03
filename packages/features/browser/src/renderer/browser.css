@@ -175,31 +175,32 @@
 }
 
 .desktop-browser-window-menu__zoom-controls {
-  display: inline-flex;
-  align-items: center;
+  display: inline-grid;
+  flex: 0 0 auto;
+  grid-template-columns: 28px 48px 28px;
   overflow: hidden;
-  border: 1px solid var(--app-border);
+  border: 1px solid var(--app-menu-border);
   border-radius: var(--app-radius-sm);
+  background: var(--desktop-agent-control-hover-bg);
 }
 
-.desktop-browser-window-menu__zoom-controls button {
+/* The group owns the outline; menu-item defaults must not round each segment. */
+.desktop-browser-window-menu__zoom-controls > button[role='menuitem'] {
   display: inline-grid;
-  min-width: 28px;
+  min-width: 0;
+  min-height: 0;
   height: 26px;
-  padding: 0 7px;
+  padding: 0;
   place-items: center;
   border: 0;
-  border-right: 1px solid var(--app-border);
+  border-radius: 0;
   color: var(--app-text);
-  background: var(--app-surface-subtle);
+  background: transparent;
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
-.desktop-browser-window-menu__zoom-controls button:last-child {
-  border-right: 0;
-}
-
-.desktop-browser-window-menu__zoom-controls button:disabled {
+.desktop-browser-window-menu__zoom-controls > button[role='menuitem']:disabled {
   color: var(--app-text-subtle);
 }
 
@@ -280,6 +281,14 @@
   flex: 0 0 76px;
   width: 76px;
   min-width: 76px;
+}
+
+.desktop-browser-page {
+  display: flex;
+  flex: 1 1 auto;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
 }
 
 .desktop-browser-content {
@@ -666,26 +675,6 @@
   display: flex;
   width: 100%;
   height: 100%;
-}
-
-.desktop-browser-error {
-  display: grid;
-  grid-area: 1 / 1;
-  align-self: center;
-  justify-self: center;
-  gap: 6px;
-  max-width: 320px;
-  padding: 18px;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-lg);
-  color: var(--app-text-muted);
-  background: var(--app-surface);
-  text-align: center;
-  z-index: 2;
-}
-
-.desktop-browser-error strong {
-  color: var(--app-text);
 }
 
 .desktop-browser-panel .is-spinning {

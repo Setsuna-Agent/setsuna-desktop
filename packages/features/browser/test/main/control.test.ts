@@ -151,6 +151,23 @@ function asWebContents(value: FakeWebContents): WebContents {
 }
 
 describe('DesktopBrowserController', () => {
+  it('rejects annotation access from a different host renderer', async () => {
+    const controller = new DesktopBrowserController({ createAutomation: () => new FakeAutomation() });
+    const guest = new FakeWebContents(90);
+    Object.assign(guest.hostWebContents, { id: 10 });
+    const execute = vi.fn();
+    Object.assign(guest, { executeJavaScriptInIsolatedWorld: execute });
+    controller.registerTab('private-tab', guest as unknown as WebContents);
+    await expect(controller.pickAnnotation('private-tab', 11)).rejects.toThrow('unavailable');
+    expect(await controller.setAnnotationMarkers('private-tab', 11, { ids: [], visible: false })).toBe(false);
+    await controller.cancelAnnotation('private-tab', 11);
+    expect(await controller.getAnnotationAnchor('private-tab', 11, '27f0b1c9-8c70-452e-8cce-2dd7e029f084')).toBeNull();
+    expect(await controller.captureAnnotationScreenshots('private-tab', 11, ['27f0b1c9-8c70-452e-8cce-2dd7e029f084'])).toBeNull();
+    expect(guest.captureCount).toBe(0);
+    expect(execute).not.toHaveBeenCalled();
+    controller.clear();
+  });
+
   it('asks the renderer to open a tab and waits until its guest is registered', async () => {
     let controller: DesktopBrowserController;
     controller = new DesktopBrowserController({
