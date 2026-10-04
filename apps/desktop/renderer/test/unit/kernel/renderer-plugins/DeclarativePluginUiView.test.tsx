@@ -3,17 +3,20 @@
 import { parseRuntimePluginUiManifest } from '@setsuna-desktop/contracts';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import type { PluginManagementRendererService } from '@setsuna-desktop/feature-plugin-management/contracts';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DeclarativePluginUiView } from '../../../../src/kernel/declarative-plugin-ui/DeclarativePluginUiView.js';
 
 describe('DeclarativePluginUiView', () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
 
-  it('hydrates, confirms, saves, and rehydrates state through the bounded host contract', async () => {
+  it.each([false, true])('hydrates, saves and rehydrates state (extra confirmation: %s)', async (confirmSave) => {
     const manifest = parseRuntimePluginUiManifest({
       schemaVersion: 1,
-      actions: [{ id: 'profile.save', approval: { message: 'Save profile?' } }],
+      actions: [{ id: 'profile.save', ...(confirmSave ? { approval: { message: 'Save profile?' } } : {}) }],
       contributions: [{
         id: 'profile.settings',
         slot: 'renderer.capabilities.plugin.details',
@@ -46,10 +49,23 @@ describe('DeclarativePluginUiView', () => {
       />,
     );
     await screen.findByDisplayValue('Persisted');
+    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(screen.getByText('Required')).toBeTruthy();
+    expect(runRendererUiAction).not.toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Setsuna' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    expect(screen.getByText('Save profile?')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    if (confirmSave) {
+      expect(screen.getByText('Save profile?')).toBeTruthy();
+      expect(runRendererUiAction).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(runRendererUiAction).not.toHaveBeenCalled();
+      expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe('Setsuna');
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    } else {
+      expect(screen.queryByRole('button', { name: 'Confirm' })).toBeNull();
+    }
 
     await waitFor(() => expect(runRendererUiAction).toHaveBeenCalledWith({
       actionId: 'profile.save',

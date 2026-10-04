@@ -10,6 +10,7 @@ import {
   shellSidebarPluginEntrySlot,
 } from '@setsuna-desktop/renderer-contracts/shell';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ReactElement } from 'react';
 import {
   activateDeclarativePluginUiGateway,
   assertHostAllowedContribution,
@@ -36,7 +37,7 @@ describe('declarative Plugin UI gateway', () => {
       }),
     } as unknown as PluginManagementRendererService;
 
-    const dispose = activateDeclarativePluginUiGateway({ mount } as unknown as RendererPluginRuntime, service);
+    const dispose = activateDeclarativePluginUiGateway({ mount } as unknown as RendererPluginRuntime, service, { refresh: async () => undefined });
     expect(typeof dispose).toBe('function');
     expect(mount).not.toHaveBeenCalled();
     if (closeBeforeRefresh) {
@@ -119,6 +120,7 @@ describe('declarative Plugin UI gateway', () => {
     const disposeGateway = activateDeclarativePluginUiGateway(
       { mount } as unknown as RendererPluginRuntime,
       service,
+      { refresh: async () => undefined },
     );
 
     expect(subscribe.mock.invocationCallOrder[0]).toBeLessThan(
@@ -153,9 +155,10 @@ describe('declarative Plugin UI gateway', () => {
     expect(disposeMount).toHaveBeenCalledOnce();
   });
 
-  it('maps a standalone contribution to a host sidebar entry and keyed page', async () => {
+  it('maps standalone pages and uninstalls the owning plugin through the sidebar action', async () => {
     const list = vi.fn(() => vi.fn());
     const keyed = vi.fn(() => vi.fn());
+    const disposeMount = vi.fn();
     const mount = vi.fn(async (plugin) => {
       await plugin.activate({
         ui: {
@@ -166,24 +169,37 @@ describe('declarative Plugin UI gateway', () => {
           single: vi.fn(),
         } as never,
       });
-      return vi.fn();
+      return disposeMount;
     });
     const plugin = installedPagePlugin();
+    let plugins = [plugin];
+    let emitSnapshot: () => void = () => undefined;
+    const refresh = vi.fn(async () => undefined);
+    const remove = vi.fn(async ({ pluginId }: { pluginId: string }) => {
+      plugins = [];
+      emitSnapshot();
+      return { pluginId, removedMcpServers: [], preservedMcpServers: [] };
+    });
     const service = {
       getSnapshot: () => ({
         catalogRevision: 'fixture',
         extensions: [],
         marketplace: [],
         marketplaceErrors: [],
-        plugins: [plugin],
+        plugins,
       }),
       refreshInstalled: vi.fn(async () => ({ plugins: [plugin] })),
-      subscribe: vi.fn(() => () => undefined),
+      remove,
+      subscribe: vi.fn((listener: () => void) => {
+        emitSnapshot = listener;
+        return () => undefined;
+      }),
     } as unknown as PluginManagementRendererService;
 
     const dispose = activateDeclarativePluginUiGateway(
       { mount } as unknown as RendererPluginRuntime,
       service,
+      { refresh },
     );
 
     await vi.waitFor(() => expect(list).toHaveBeenCalledWith(
@@ -197,7 +213,19 @@ describe('declarative Plugin UI gateway', () => {
       shellPluginPageSlot,
       expect.objectContaining({ id: expect.stringContaining('.page'), key: 'release-checker/release.page' }),
     );
+    const renderSidebar = sidebarRegistration?.render as (props: {
+      activeViewKey: null; onOpen(): void; onViewPlugin(pluginId: string): void;
+    }) => ReactElement<{ onRemove(): Promise<void>; onViewPlugin(): void }>;
+    const onViewPlugin = vi.fn();
+    const entry = renderSidebar({ activeViewKey: null, onOpen: () => undefined, onViewPlugin });
+    entry.props.onViewPlugin();
+    expect(onViewPlugin).toHaveBeenCalledWith(plugin.id);
+    await entry.props.onRemove();
+    expect(remove).toHaveBeenCalledWith({ pluginId: plugin.id });
+    expect(refresh).toHaveBeenCalledWith(['skills', 'mcp']);
+    await vi.waitFor(() => expect(disposeMount).toHaveBeenCalledOnce());
     await dispose();
+    expect(disposeMount).toHaveBeenCalledOnce();
   });
 
   it('remounts sandbox pages when the trusted catalog revision changes', async () => {
@@ -227,6 +255,7 @@ describe('declarative Plugin UI gateway', () => {
     const dispose = activateDeclarativePluginUiGateway(
       { mount } as unknown as RendererPluginRuntime,
       service,
+      { refresh: async () => undefined },
     );
     await vi.waitFor(() => expect(mount).toHaveBeenCalledOnce());
 

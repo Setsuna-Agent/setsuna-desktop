@@ -1,4 +1,5 @@
 import { PluginConnectors } from './PluginConnectors.js';
+import { isRequiredBuiltinPlugin } from '@setsuna-desktop/contracts';
 import type {
   RuntimeExtensionStatus,
   RuntimePluginMarketplaceItem,
@@ -47,6 +48,7 @@ import {
   mergePluginMcpServers,
   mergePluginSkills,
   mergePluginTools,
+  pluginIconProps,
   pluginUiSurfaces,
   type PluginUiSurface,
   type PluginUiSurfaceKind,
@@ -127,6 +129,7 @@ export function PluginDetail({
   const hasPluginSettings = installedPlugin?.installationSource === 'marketplace'
     || hasDeclarativeSettings;
   const subtitle = [plugin.publisher, plugin.version ? `v${plugin.version}` : null].filter(Boolean).join(' · ');
+  const canUninstall = Boolean(installedPlugin && !isRequiredBuiltinPlugin(installedPlugin));
   const actionItems = [
     ...(marketplacePlugin?.updateAvailable && !marketplacePlugin.unavailableReason ? [{
       disabled: pending,
@@ -136,7 +139,7 @@ export function PluginDetail({
         ? translate('feature.pluginManagement.updateTo', { version: marketplacePlugin.version })
         : translate('feature.pluginManagement.updatePlugin'),
     }] : []),
-    {
+    ...(canUninstall ? [{
       danger: true,
       disabled: pending,
       icon: pending ? <Loader2 className="is-spinning" size={14} /> : <Trash2 size={14} />,
@@ -144,7 +147,7 @@ export function PluginDetail({
       label: translate(pending
         ? 'feature.pluginManagement.uninstalling'
         : 'feature.pluginManagement.uninstall'),
-    },
+    }] : []),
     {
       disabled: !installedPlugin || !usePlugin,
       icon: <MessageSquare size={14} />,
@@ -154,7 +157,7 @@ export function PluginDetail({
   ];
   const selectAction = (actionId: string) => {
     if (actionId === 'update' && marketplacePlugin) void onInstall(marketplacePlugin);
-    if (actionId === 'uninstall' && installedPlugin) void onRemove(installedPlugin);
+    if (actionId === 'uninstall' && installedPlugin && canUninstall) void onRemove(installedPlugin);
     if (actionId === 'use-in-conversation' && installedPlugin) usePlugin?.(installedPlugin.id);
   };
 
@@ -190,7 +193,7 @@ export function PluginDetail({
               </ui.Button>
             )}
             className="sd-detail__header"
-            leading={<ui.PluginIcon iconImage={plugin.iconImage ?? marketplacePlugin?.iconImage} name={plugin.icon} pluginId={plugin.id} variant="list" />}
+            leading={<ui.PluginIcon {...pluginIconProps(marketplacePlugin ?? plugin, installedPlugin)} variant="list" />}
             subtitle={subtitle}
             title={plugin.name}
           />
@@ -296,7 +299,7 @@ export function PluginDetail({
             {skills.map((skill) => (
               <PluginDetailItem
                 description={skill.description ?? skill.id}
-                icon={<ui.PluginIcon iconImage={plugin.iconImage ?? marketplacePlugin?.iconImage} name={plugin.icon} pluginId={plugin.id} variant="list" />}
+                icon={<ui.PluginIcon {...pluginIconProps(marketplacePlugin ?? plugin, installedPlugin)} variant="list" />}
                 key={skill.id}
                 title={skill.name}
                 viewLabel={translate('feature.pluginManagement.viewItem', { title: skill.name })}

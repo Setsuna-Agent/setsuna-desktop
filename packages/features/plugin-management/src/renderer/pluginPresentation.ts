@@ -9,6 +9,7 @@ import type {
   RuntimePluginUiCardPreview,
 } from '@setsuna-desktop/contracts';
 import type { PluginManagementHook } from '../contracts/index.js';
+import type { SettingsPluginIconProps } from '@setsuna-desktop/renderer-contracts/settings';
 
 export type PluginMcpDetail = RuntimePluginMcpServerDescriptor & Readonly<{ owned?: boolean }>;
 
@@ -33,6 +34,21 @@ export type PluginUiSurface = Readonly<{
 export function installedPluginCatalogId(plugin: RuntimePluginSummary): string {
   return plugin.installationSource === 'repository' && plugin.repository
     ? plugin.repository.marketplaceId : plugin.id;
+}
+
+export function pluginIconProps(
+  plugin: RuntimePluginMarketplaceItem | RuntimePluginSummary,
+  installed?: RuntimePluginSummary,
+): SettingsPluginIconProps {
+  const active = installed ?? ('installedAt' in plugin ? plugin : undefined);
+  // Catalog IDs can differ from installation IDs. Appearance belongs to the installed app.
+  const primaryApp = active?.extension?.rendererUi?.contributions.find((item) => item.slot === 'renderer.plugin.page');
+  return {
+    name: active?.icon ?? plugin.icon,
+    iconImage: active?.iconImage ?? plugin.iconImage,
+    pluginId: active?.id ?? plugin.id,
+    ...(primaryApp ? { appContributionId: primaryApp.id } : {}),
+  };
 }
 
 export function installedPluginsOutsideCatalog(

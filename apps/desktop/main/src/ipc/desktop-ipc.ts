@@ -31,6 +31,9 @@ export function registerDesktopIpc({
   userDataPath,
 }: DesktopIpcOptions): void {
   const channels = [
+    'desktop:create-sandbox-dialog-session',
+    'desktop:update-sandbox-dialog-session',
+    'desktop:release-sandbox-dialog-session',
     'desktop:set-active-keyboard-shortcut-bindings',
     'desktop:set-interface-language',
     'desktop:set-keyboard-shortcut-recording',
@@ -55,6 +58,24 @@ export function registerDesktopIpc({
     return () => keyboards.delete(senderId);
   });
   registerWorkspaceEntryWatchIpc();
+
+  ipcMain.handle('desktop:create-sandbox-dialog-session', (event, title: unknown) => {
+    const owner = desktopWindows.get(event.sender.id);
+    if (!owner || event.senderFrame !== event.sender.mainFrame) throw new Error('Desktop renderer is unavailable.');
+    if (typeof title !== 'string') throw new Error('Dialog title is required.');
+    return nativeBridge.registerSandboxDialogSession(owner, title);
+  });
+  ipcMain.handle('desktop:release-sandbox-dialog-session', (event, id: unknown) => {
+    if (!isDesktopRendererSender(event.sender) || event.senderFrame !== event.sender.mainFrame) return;
+    if (typeof id === 'string') nativeBridge.releaseSandboxDialogSession(event.sender.id, id);
+  });
+  ipcMain.handle('desktop:update-sandbox-dialog-session', (event, id: unknown, title: unknown) => {
+    if (!isDesktopRendererSender(event.sender) || event.senderFrame !== event.sender.mainFrame) {
+      throw new Error('Desktop renderer is unavailable.');
+    }
+    if (typeof id !== 'string' || typeof title !== 'string') throw new Error('Dialog session and title are required.');
+    nativeBridge.updateSandboxDialogSession(event.sender.id, id, title);
+  });
 
   ipcMain.handle('desktop:set-active-keyboard-shortcut-bindings', (event, value) => {
     if (!isDesktopRendererSender(event.sender)) return false;

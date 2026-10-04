@@ -48,6 +48,7 @@ import {
   createSelectedSkillReferences,
   createSelectedSkillSlot,
   createSelectedPluginSlot,
+  createPluginAppMentionSlot,
   createReferenceDraftSlots,
   createBrowserTabMentionSlot,
   createTextSlot,
@@ -355,6 +356,7 @@ export function ChatComposer({
   const commandController = useChatCommandController({
     activeProject,
     draft,
+    plugins,
     getInputElement: getComposerInputElement,
     onSearchProjectEntries,
     slashMenuBlocked: queuedTurnEdit.editing || queuedTurnEdit.retrieving,
@@ -505,7 +507,9 @@ export function ChatComposer({
       ?? parseMentionCommand(draft, commandController.commandCursorOffset);
     if (!command || !item) return;
     senderRef.current?.insert?.(
-      item.kind === 'browser-tab'
+      item.kind === 'app'
+        ? [createPluginAppMentionSlot(item.app), createTextSlot(' ')]
+        : item.kind === 'browser-tab'
         ? [createBrowserTabMentionSlot(item.tab), createTextSlot(' ')]
         : createWorkspaceMentionSlots(item.entry),
       'cursor',

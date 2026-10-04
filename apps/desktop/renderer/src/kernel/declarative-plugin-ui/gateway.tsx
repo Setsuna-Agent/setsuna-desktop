@@ -1,4 +1,3 @@
-import { Button, Tooltip } from '@setsuna-desktop/renderer-ui';
 import {
   parseRuntimePluginUiManifest,
   type RuntimePluginSummary,
@@ -10,6 +9,7 @@ import { defineRendererPlugin, type RendererPluginDefinition } from '@setsuna-de
 import type { Disposer } from '@setsuna-desktop/feature-core/scope';
 import type { PluginManagementRendererService } from '@setsuna-desktop/feature-plugin-management/contracts';
 import { chatComposerStatusSlot } from '@setsuna-desktop/renderer-contracts/chat';
+import type { CapabilitiesRefreshCoordinator } from '@setsuna-desktop/renderer-contracts/capabilities';
 import {
   registerSettingsPage,
   registerSettingsPageExtension,
@@ -21,13 +21,11 @@ import {
 } from '@setsuna-desktop/renderer-contracts/shell';
 import type { RendererPluginRuntime } from '../renderer-plugins/runtime.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
-import { PluginIcon } from '../../shared/ui/PluginIcon.js';
+import { DeclarativePluginSidebarEntry } from './DeclarativePluginSidebarEntry.js';
+import { PluginAppAvatar } from './app-appearance/PluginAppAvatar.js';
+import { usePluginAppAppearance } from './app-appearance/usePluginAppAppearance.js';
 import { DeclarativePluginUiView } from './DeclarativePluginUiView.js';
 import { SandboxedPluginUiView } from './SandboxedPluginUiView.js';
-import {
-  resolveRuntimePluginUiText,
-  useDeclarativePluginUiData,
-} from './useDeclarativePluginUiData.js';
 
 const SETTINGS_TARGET_ALLOWLIST = new Set(['about', 'general']);
 const CHAT_NODE_ALLOWLIST = new Set<RuntimePluginUiNode['type']>([
@@ -50,16 +48,21 @@ type ActiveUiPlugin = Readonly<{
 export function activateDeclarativePluginUiGateway(
   runtime: RendererPluginRuntime,
   service: PluginManagementRendererService,
+  capabilitiesRefresh: Pick<CapabilitiesRefreshCoordinator, 'refresh'>,
 ): Disposer {
   const active = new Map<string, ActiveUiPlugin>();
   const startupRefresh = new AbortController();
   let disposed = false;
   let tail: Promise<void> = Promise.resolve();
+  const removeApp = async (pluginId: string) => {
+    await service.remove({ pluginId });
+    await capabilitiesRefresh.refresh(['skills', 'mcp']);
+  };
 
   const synchronize = async (): Promise<void> => {
     if (disposed) return;
     const snapshot = service.getSnapshot();
-    const desired = desiredUiPlugins(snapshot.plugins, snapshot.catalogRevision, service);
+    const desired = desiredUiPlugins(snapshot.plugins, snapshot.catalogRevision, service, removeApp);
     for (const [pluginId, current] of active) {
       if (desired.has(pluginId)) continue;
       active.delete(pluginId);
@@ -119,6 +122,7 @@ function desiredUiPlugins(
   plugins: readonly RuntimePluginSummary[],
   catalogRevision: string,
   service: PluginManagementRendererService,
+  removeApp: (pluginId: string) => Promise<void>,
 ): Map<string, Readonly<{ plugin: RendererPluginDefinition; signature: string }>> {
   const desired = new Map<string, Readonly<{ plugin: RendererPluginDefinition; signature: string }>>();
   for (const plugin of plugins) {
@@ -128,7 +132,6 @@ function desiredUiPlugins(
       const contributions = manifest.contributions.map(assertHostAllowedContribution);
       const signature = JSON.stringify({
         description: plugin.description,
-        icon: plugin.icon,
         installedAt: plugin.installedAt,
         catalogRevision,
         manifest,
@@ -136,7 +139,7 @@ function desiredUiPlugins(
         resources: plugin.resources,
       });
       desired.set(plugin.id, Object.freeze({
-        plugin: declarativeRendererPlugin(plugin, manifest, contributions, catalogRevision, service),
+        plugin: declarativeRendererPlugin(plugin, manifest, contributions, catalogRevision, service, removeApp),
         signature,
       }));
     } catch {
@@ -152,6 +155,7 @@ function declarativeRendererPlugin(
   contributions: readonly RuntimePluginUiContribution[],
   revision: string,
   service: PluginManagementRendererService,
+  removeApp: (pluginId: string) => Promise<void>,
 ): RendererPluginDefinition {
   const identity = rendererPluginIdentity(plugin.id);
   return defineRendererPlugin({
@@ -224,15 +228,20 @@ function declarativeRendererPlugin(
         ui.list(shellSidebarPluginEntrySlot, {
           id: `${entryId}.navigation`,
           order: contribution.order ?? 0,
-          render: ({ activeViewKey, onOpen, projectId, threadId }) => (
+          render: ({ activeViewKey, onOpen, onViewPlugin, onModifyApp, projectId, threadId }) => (
             <DeclarativePluginSidebarEntry
               active={activeViewKey === viewKey}
+              entryId={`${entryId}.navigation`}
+              missingContext={missingContributionContext(contribution, projectId, threadId)}
               contribution={contribution}
               plugin={plugin}
               projectId={projectId}
               service={service}
               threadId={threadId}
               onOpen={() => onOpen(viewKey)}
+              onRemove={() => removeApp(plugin.id)}
+              onViewPlugin={() => onViewPlugin(plugin.id)}
+              onModifyApp={onModifyApp}
             />
           ),
         });
@@ -296,50 +305,6 @@ function missingContributionContext(
   return null;
 }
 
-function DeclarativePluginSidebarEntry({
-  active,
-  contribution,
-  plugin,
-  projectId,
-  service,
-  threadId,
-  onOpen,
-}: Readonly<{
-  active: boolean;
-  contribution: RuntimePluginUiContribution;
-  plugin: RuntimePluginSummary;
-  projectId?: string;
-  service: PluginManagementRendererService;
-  threadId?: string;
-  onOpen(): void;
-}>) {
-  const { t } = useI18n();
-  const missingContext = missingContributionContext(contribution, projectId, threadId);
-  const { data } = useDeclarativePluginUiData({ contribution, pluginId: plugin.id, projectId, service, threadId });
-  const badge = missingContext
-    ? t(missingContext === 'project' ? 'pluginUi.projectRequired' : 'pluginUi.threadRequired')
-    : resolveRuntimePluginUiText(contribution.navigation?.badge, data);
-  const label = contribution.navigation?.label ?? plugin.name;
-  return (
-    <Tooltip title={badge ? `${label} · ${badge}` : label} placement="right">
-      <Button variant="ghost"
-        className={`app-navigation__button${active ? ' is-active' : ''}`}
-        onClick={onOpen}
-        aria-label={label}
-        aria-current={active ? 'page' : undefined}
-        type="button"
-      >
-        <PluginIcon
-          className="declarative-plugin-navigation__icon"
-          name={plugin.icon}
-          pluginId={plugin.id}
-          variant="menu"
-        />
-      </Button>
-    </Tooltip>
-  );
-}
-
 function DeclarativePluginPage({
   contribution,
   cwd,
@@ -360,16 +325,18 @@ function DeclarativePluginPage({
   threadId?: string;
 }>) {
   const { t } = useI18n();
+  const { appearance } = usePluginAppAppearance(plugin.id, contribution.id);
+  const label = appearance.name ?? contribution.navigation?.label ?? plugin.name;
   const missingContext = missingContributionContext(contribution, projectId, threadId);
   return (
-    <main className="declarative-plugin-page">
-      <header className="declarative-plugin-page__header">
-        <PluginIcon name={plugin.icon} pluginId={plugin.id} variant="list" />
+    <main className={`declarative-plugin-page${contribution.document ? ' declarative-plugin-page--app' : ''}`}>
+      {!contribution.document ? <header className="declarative-plugin-page__header">
+        <PluginAppAvatar avatar={appearance.avatar} variant="list" />
         <div>
-          <h1>{contribution.navigation?.label}</h1>
+          <h1>{label}</h1>
           {plugin.description ? <p>{plugin.description}</p> : null}
         </div>
-      </header>
+      </header> : null}
       <section className={`declarative-plugin-page__content${contribution.document ? ' is-sandboxed' : ''}`}>
         {missingContext ? (
           <div className="declarative-plugin-ui">
@@ -387,6 +354,7 @@ function DeclarativePluginPage({
         ) : (
           contribution.document ? (
             <SandboxedPluginUiView
+              title={label}
               contribution={contribution}
               cwd={cwd}
               manifest={manifest}

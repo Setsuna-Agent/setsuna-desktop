@@ -95,16 +95,22 @@ export type RuntimePluginUiNode =
 
 export type RuntimePluginUiAction = Readonly<{
   id: string;
-  approval: Readonly<{
+  /** Optional interaction confirmation, independent of bundle trust and tool approval. */
+  approval?: Readonly<{
     message: string;
     title?: string;
   }>;
 }>;
 
+export const RUNTIME_PLUGIN_UI_LIBRARIES = ['echarts'] as const;
+export type RuntimePluginUiLibrary = typeof RUNTIME_PLUGIN_UI_LIBRARIES[number];
+
 export type RuntimePluginUiDocument = Readonly<{
   htmlResourceId: string;
   cssResourceId?: string;
   jsResourceId?: string;
+  /** Host-bundled libraries loaded inside the sandbox before Plugin source. */
+  libraries?: readonly RuntimePluginUiLibrary[];
   /** Exact manifest actions that the isolated document may request from its host page. */
   actionIds: readonly string[];
 }>;
@@ -256,17 +262,19 @@ export function parseRuntimePluginUiManifest(value: unknown): RuntimePluginUiMan
     const id = identity(action.id, `Plugin rendererUi actions[${index}].id`);
     if (actionIds.has(id)) throw new Error(`Duplicate Plugin rendererUi action: ${id}.`);
     actionIds.add(id);
-    const approval = exactRecord(
+    const approval = action.approval === undefined ? undefined : exactRecord(
       action.approval,
       ['message', 'title'],
       `Plugin rendererUi action ${id} approval`,
     );
     return Object.freeze({
       id,
-      approval: Object.freeze({
-        message: budgetText(approval.message, `Plugin rendererUi action ${id} approval message`, budget),
-        ...(approval.title === undefined ? {} : {
-          title: budgetText(approval.title, `Plugin rendererUi action ${id} approval title`, budget),
+      ...(approval === undefined ? {} : {
+        approval: Object.freeze({
+          message: budgetText(approval.message, `Plugin rendererUi action ${id} approval message`, budget),
+          ...(approval.title === undefined ? {} : {
+            title: budgetText(approval.title, `Plugin rendererUi action ${id} approval title`, budget),
+          }),
         }),
       }),
     });
@@ -660,7 +668,7 @@ function parseDocument(
 ): RuntimePluginUiDocument {
   const record = exactRecord(
     value,
-    ['htmlResourceId', 'cssResourceId', 'jsResourceId', 'actionIds'],
+    ['htmlResourceId', 'cssResourceId', 'jsResourceId', 'libraries', 'actionIds'],
     `Plugin rendererUi contribution ${contributionId} document`,
   );
   const htmlResourceId = resourceIdentity(
@@ -701,10 +709,21 @@ function parseDocument(
     }
     uniqueActionIds.add(actionId);
   }
+  const libraries = record.libraries === undefined ? undefined : boundedArray(
+    record.libraries,
+    `Plugin rendererUi contribution ${contributionId} document libraries`,
+    RUNTIME_PLUGIN_UI_LIBRARIES.length,
+  ).map((library) => {
+    if (!RUNTIME_PLUGIN_UI_LIBRARIES.some((allowed) => allowed === library)) {
+      throw new Error(`Unsupported Plugin UI library: ${String(library)}.`);
+    }
+    return library as RuntimePluginUiLibrary;
+  });
   return Object.freeze({
     htmlResourceId,
     ...(cssResourceId ? { cssResourceId } : {}),
     ...(jsResourceId ? { jsResourceId } : {}),
+    ...(libraries ? { libraries: Object.freeze([...new Set(libraries)]) } : {}),
     actionIds: Object.freeze(declaredActionIds),
   });
 }

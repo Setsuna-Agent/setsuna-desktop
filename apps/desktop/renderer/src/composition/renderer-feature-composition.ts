@@ -341,6 +341,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
       const disposeDeclarativePluginUi = activateDeclarativePluginUiGateway(
         rendererPlugins,
         dependencies.pluginManagement,
+        capabilitiesRefresh,
       );
       host.add(disposeDeclarativePluginUi);
     } catch {

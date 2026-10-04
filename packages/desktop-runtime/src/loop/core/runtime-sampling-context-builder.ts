@@ -1,5 +1,6 @@
 import type { ContextTokenCalibration } from '../context/context-token-calibration.js';
 import { SEARCH_TOOLS_TOOL_NAME } from '../tools/deferred-tools.js';
+import { selectedPluginIdsForInput } from '../context/runtime-plugin-selection-context.js';
 import {
   cloneRuntimeSkillReferences,
   isRuntimeInputMessageAttachment,
@@ -262,11 +263,13 @@ export class RuntimeSamplingContextBuilder {
     const goalTools = goalControl.toolDefinitions(stepGoal, goalCompletionPending, toolContext.interfaceLanguage);
     const collaborationControl = this.options.collaborationControl();
     const collaborationTools = collaborationControl.toolDefinitions(stepRuntimeConfig);
+    const skillActivationText = currentTurnSkillActivationText(orderedConversationMessages, turnId);
     const toolRouter = this.options.toolHost && toolAccess !== 'none'
       ? await RuntimeToolRouter.create({
           toolHost: this.options.toolHost,
           pluginStore: this.options.pluginStore,
           loadedToolNames,
+          selectedPluginIds: selectedPluginIdsForInput(skillActivationText),
           orchestrator: this.options.toolExecutor.toolOrchestratorFor(toolContext, stepRuntimeConfig),
           context: toolContext,
           approvalPolicy: stepRuntimeConfig?.approvalPolicy ?? 'on-request',
@@ -318,7 +321,7 @@ export class RuntimeSamplingContextBuilder {
       ],
       responseLanguage,
       skillCatalogContextWindowTokens: contextBudget?.maxContextTokens,
-      skillActivationText: currentTurnSkillActivationText(orderedConversationMessages, turnId),
+      skillActivationText,
       skillIds,
       thread,
       toolContext,

@@ -1,6 +1,7 @@
 import type {
   WorkspaceEntrySearchResponse,
   WorkspaceProject,
+  RuntimePluginSummary,
 } from '@setsuna-desktop/contracts';
 import {
   useCallback,
@@ -11,6 +12,7 @@ import {
 } from 'react';
 import type { Translate } from '../../../shared/i18n/I18nProvider.js';
 import { useBrowserTabMentions } from '../mentions/BrowserTabReference.js';
+import { usePluginAppCatalog } from '../../../kernel/declarative-plugin-ui/app-appearance/usePluginAppCatalog.js';
 import { chatMentionItems, type ChatMentionItem } from '../mentions/chatMentionItems.js';
 import type { SlashCommandMenuItem } from './ChatSlashCommandMenu.js';
 import {
@@ -26,6 +28,7 @@ import {
 export function useChatCommandController({
   activeProject,
   draft,
+  plugins,
   getInputElement,
   onSearchProjectEntries,
   slashMenuBlocked,
@@ -33,6 +36,7 @@ export function useChatCommandController({
 }: {
   activeProject?: WorkspaceProject;
   draft: string;
+  plugins: readonly RuntimePluginSummary[];
   getInputElement: () => HTMLElement | null;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
   slashMenuBlocked: boolean;
@@ -47,6 +51,7 @@ export function useChatCommandController({
   const [forcedSlashMenuOpen, setForcedSlashMenuOpen] = useState(false);
   const [searchState, setSearchState] = useState(emptyProjectEntrySearchState);
   const browserTabs = useBrowserTabMentions();
+  const apps = usePluginAppCatalog(plugins);
   const state = useMemo(() => createChatComposerCommandState({
     cursorOffset,
     dismissedMentionDraft,
@@ -65,8 +70,8 @@ export function useChatCommandController({
     slashMenuBlocked,
   ]);
 
-  const mentionItems = useMemo(() => chatMentionItems(browserTabs, searchState.entries, state.mentionQuery),
-    [browserTabs, searchState.entries, state.mentionQuery]);
+  const mentionItems = useMemo(() => chatMentionItems(browserTabs, searchState.entries, state.mentionQuery, apps),
+    [browserTabs, searchState.entries, state.mentionQuery, apps]);
   const browserTabIds = browserTabs.map((tab) => tab.id).join('\n');
   useEffect(() => { setActiveMentionIndex(0); }, [state.mentionQuery, browserTabIds]);
   const mentionIndex = Math.min(activeMentionIndex, Math.max(0, mentionItems.length - 1));

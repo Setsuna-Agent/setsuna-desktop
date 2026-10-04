@@ -1,10 +1,8 @@
 import { ipcMain } from 'electron';
 import type { RuntimeHost } from '../runtime/host.js';
-import type { RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
-import { createThreadDeletionHandler } from '../window/thread-deletion.js';
+import type { createThreadDeletionHandler } from '../window/thread-deletion.js';
 
-export function registerRuntimeIpc(host: RuntimeHost, language: () => RuntimeInterfaceLanguage): void {
-  const deleteThread = createThreadDeletionHandler(host, language);
+export function registerRuntimeIpc(host: RuntimeHost, deleteThread: ReturnType<typeof createThreadDeletionHandler>): void {
   ipcMain.removeHandler('runtime:request');
   ipcMain.removeHandler('runtime:cancel-request');
   ipcMain.removeHandler('runtime:link-attachment');

@@ -1,3 +1,5 @@
+import type { RuntimeApiToolResultPage } from '@setsuna-desktop/contracts';
+
 /**
  * 超限工具结果的本地存储边界。
  *
@@ -19,13 +21,7 @@ export type StoredToolResultInput = {
   locallyTruncated: boolean;
 };
 
-export type StoredToolResultPage = {
-  /** 本次读取范围内可见的文本。 */
-  content: string;
-  /** 下一页起始字节偏移;null 表示已到末尾。 */
-  nextOffset: number | null;
-  totalBytes: number;
-};
+export type StoredToolResultPage = RuntimeApiToolResultPage;
 
 export type StoredToolResultRecord = {
   resultId: string;

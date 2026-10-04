@@ -348,6 +348,9 @@ function toolRunGroupPanelNode(
   const status = toolRunGroupStatus(group.runs);
   const summary = toolRunGroupSummary(group, t);
   const showRunTitles = group.kind !== 'shell' && group.kind !== 'fileMutation';
+  const firstPlugin = group.runs[0]?.plugin;
+  const sharedPlugin = firstPlugin && group.runs.every((run) => run.plugin?.id === firstPlugin.id)
+    ? firstPlugin : undefined;
   const shellGroup = group.kind === 'shell';
   const autoOpenKey = pendingApprovalDisclosureKey(group.runs);
   const fileOperationGroup = group.kind === 'fileMutation';
@@ -363,7 +366,7 @@ function toolRunGroupPanelNode(
       className={`chat-tool-run chat-tool-run--group ${toolRunGroupKindClassName(group.kind)} chat-tool-run--${status}`}
       summary={(expanded) => (
         <ToolRunGroupHeading
-          icon={toolRunGroupIcon(group.kind, status)}
+          icon={toolRunGroupIcon(group.kind, status, sharedPlugin)}
           status={status}
           summary={expanded
             ? mixedToolRunGroupSummary([group], 'aggregate', t)

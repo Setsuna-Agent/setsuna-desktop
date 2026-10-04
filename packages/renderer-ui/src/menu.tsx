@@ -31,6 +31,7 @@ export type DropdownProps = Omit<HTMLAttributes<HTMLElement>, 'children'> & {
   modal?: boolean;
   open?: boolean;
   onOpenChange?(open: boolean): void;
+  onCloseAutoFocus?(event: Event): void;
   placement?: Placement;
   trigger?: ('click' | 'contextMenu')[];
   className?: string;
@@ -42,7 +43,7 @@ export type DropdownProps = Omit<HTMLAttributes<HTMLElement>, 'children'> & {
 };
 
 /** Shared menu presentation; Radix supplies nested menus, roving focus and typeahead. */
-export const Dropdown = forwardRef<HTMLElement, DropdownProps>(function Dropdown({ children, menu, disabled, modal = false, open, onOpenChange, placement, trigger, rootClassName, initialFocusRef, className, align, popupRender, ...triggerProps }, ref) {
+export const Dropdown = forwardRef<HTMLElement, DropdownProps>(function Dropdown({ children, menu, disabled, modal = false, open, onOpenChange, onCloseAutoFocus, placement, trigger, rootClassName, initialFocusRef, className, align, popupRender, ...triggerProps }, ref) {
   const keyboardInteraction = useRef(false);
   const context = trigger?.includes('contextMenu') ?? false;
   const rows = <MenuItems menu={menu} context={context} />;
@@ -50,7 +51,7 @@ export const Dropdown = forwardRef<HTMLElement, DropdownProps>(function Dropdown
   const classes = cn('sd-menu', rootClassName, className);
   if (context) return <ContextMenu.Root onOpenChange={onOpenChange} modal={modal}>
     <ContextMenu.Trigger asChild disabled={disabled}><Slot.Root {...triggerProps} ref={ref}>{children}</Slot.Root></ContextMenu.Trigger>
-    <ContextMenu.Portal container={overlayContainer()}><ContextMenu.Content asChild className={classes} collisionPadding={8}><MenuSurface>{contents}</MenuSurface></ContextMenu.Content></ContextMenu.Portal>
+    <ContextMenu.Portal container={overlayContainer()}><ContextMenu.Content asChild className={classes} collisionPadding={8} onCloseAutoFocus={onCloseAutoFocus}><MenuSurface>{contents}</MenuSurface></ContextMenu.Content></ContextMenu.Portal>
   </ContextMenu.Root>;
   return <DropdownMenu.Root open={open} onOpenChange={onOpenChange} modal={modal}>
     <DropdownMenu.Trigger asChild disabled={disabled}>
@@ -69,6 +70,7 @@ export const Dropdown = forwardRef<HTMLElement, DropdownProps>(function Dropdown
           initialFocusRef.current.focus({ preventScroll: true });
         }}
         onCloseAutoFocus={(event) => {
+          onCloseAutoFocus?.(event);
           // Pointer selection must not refocus the trigger and leave a focus ring or tooltip.
           if (!keyboardInteraction.current) event.preventDefault();
         }}>

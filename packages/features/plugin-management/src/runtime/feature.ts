@@ -8,6 +8,7 @@ import {
 } from '@setsuna-desktop/feature-core/runtime';
 import {
   deleteStandalonePluginHook,
+  requestInstalledPluginRuntimeApi,
   installLocalPlugin,
   installMarketplacePlugin,
   pluginManagementFeature,
@@ -41,6 +42,9 @@ export const pluginManagementRuntimeFeature = defineRuntimeFeature({
   dependencies,
   setup(context) {
     const { host, routes } = context.dependencies;
+    routes.register(context.scope, requestInstalledPluginRuntimeApi, (input, operation) => (
+      preservePluginOperationError(() => host.requestRuntimeApi(input, operation.signal), operation.signal)
+    ));
 
     const readSnapshot = async (refreshRepositories = false) => {
       const catalogRevision = await host.catalogRevision();

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 2,
+  "id": "app-builder",
+  "name": "应用构建器",
+  "icon": "app-builder",
+  "version": "1.4.4",
+  "description": "用一句话创建侧栏应用，支持表格、表单、ECharts 看板和对话汇总，也可创建或更新其他 Setsuna 插件。",
+  "publisher": "Setsuna",
+  "tags": ["应用", "创作"],
+  "featured": false,
+  "skills": ["skills/create-plugin-in-chat"],
+  "resources": [
+    { "id": "ui-design", "label": "应用界面设计规范", "path": "skills/create-plugin-in-chat/references/ui-design.md" },
+    { "id": "ui-base", "label": "系统风格基础样式", "path": "skills/create-plugin-in-chat/assets/ui-base.css" },
+    { "id": "ui-patterns", "label": "表格、表单与图表模板", "path": "skills/create-plugin-in-chat/references/ui-patterns.md" },
+    { "id": "ui-component-guide", "label": "公共组件与图标用法", "path": "skills/create-plugin-in-chat/references/ui-components.md" },
+    { "id": "ui-components", "label": "公共交互组件", "path": "skills/create-plugin-in-chat/assets/ui-components.js" },
+    { "id": "ui-icons", "label": "Lucide 离线图标库", "path": "skills/create-plugin-in-chat/assets/ui-icons.js" }
+  ],
+  "tools": [
+    { "name": "read_runtime_api", "description": "读取项目、对话、历史消息与工具调用等真实后端数据。" },
+    { "name": "configure_plugin", "description": "提交完整插件包，创建或更新侧栏应用与插件。" },
+    { "name": "verify_plugin", "description": "验证已安装应用的后端接口和工具、页面操作的处理函数，不验证页面点击或弹窗。" }
+  ]
+}

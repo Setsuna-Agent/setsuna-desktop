@@ -9,7 +9,7 @@ import type {
   ExtensionWorkerTool,
   HostToExtensionWorkerMessage,
 } from './extension-worker-protocol.js';
-import { protocolRecord } from './extension-worker-protocol.js';
+import { MAX_EXTENSION_PROTOCOL_LINE_BYTES as MAX_PROTOCOL_LINE_BYTES, protocolRecord } from './extension-worker-protocol.js';
 
 type ToolHandler = (input: unknown, context: ExtensionHandlerContext) => unknown | Promise<unknown>;
 type EventHandler = (payload: unknown, context: ExtensionHandlerContext) => unknown | Promise<unknown>;
@@ -17,6 +17,7 @@ type UiActionHandler = (input: unknown, context: ExtensionHandlerContext) => unk
 
 type ExtensionHandlerContext = Record<string, unknown> & {
   signal: AbortSignal;
+  runtime: { request(input: unknown): Promise<unknown> };
   state?: {
     get(key: string, scope?: ExtensionStateScope): Promise<unknown>;
     set(key: string, value: unknown, scope?: ExtensionStateScope): Promise<void>;
@@ -50,7 +51,6 @@ type ExtensionNetworkResponse = {
   json(): Promise<unknown>;
 };
 
-const MAX_PROTOCOL_LINE_BYTES = 1024 * 1024;
 const pluginId = process.argv[2] ?? '';
 const entryPath = process.argv[3] ?? '';
 const capabilities = new Set(
@@ -274,6 +274,7 @@ function handlerContext(
   return {
     ...context,
     signal,
+    runtime: { request: (input: unknown) => hostCall(requestId, 'runtime.request', input) },
     ...(capabilities.has('state') ? {
       state: {
         get: (key: string, scope: ExtensionStateScope = defaultStateScope) => hostCall(requestId, 'state.get', { key, scope }),

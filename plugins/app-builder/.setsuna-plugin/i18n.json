@@ -1,0 +1,22 @@
+{
+  "en-US": {
+    "公共组件与图标用法": "Shared components and icons guide",
+    "公共交互组件": "Shared interactive components",
+    "Lucide 离线图标库": "Offline Lucide icon library",
+    "应用界面设计规范": "App UI design guidelines",
+    "系统风格基础样式": "System UI base styles",
+    "表格、表单与图表模板": "Table, form, and chart patterns",
+    "读取项目、对话、历史消息与工具调用等真实后端数据。": "Read live backend data including projects, conversations, message history, and tool calls.",
+    "提交完整插件包，创建或更新侧栏应用与插件。": "Create or update sidebar apps and plugins from a complete bundle snapshot.",
+    "验证已安装应用的后端接口和工具、页面操作的处理函数，不验证页面点击或弹窗。": "Verify an installed app's backend APIs and tool/UI-action handlers, not page clicks or dialogs.",
+    "应用构建器": "App Builder",
+    "用一句话创建侧栏应用，支持表格、表单、ECharts 看板和对话汇总，也可创建或更新其他 Setsuna 插件。": "Create sidebar apps from a sentence: tables, forms, ECharts dashboards, and conversation summaries. Also create or update other Setsuna plugins.",
+    "应用": "Apps",
+    "创作": "Creation",
+    "create-plugin-in-chat": "Create Plugin in Chat",
+    "通过对话创建或更新 Setsuna Plugin Bundle，包括左侧栏插件下方的独立应用、可编辑表格、表单和 ECharts 视图。根据一句话需求生成完整 manifest 和 UTF-8 文件快照并调用 configure_plugin，也支持 Skill、MCP、Hook 和可执行扩展。": "Create or update a Setsuna Plugin Bundle from a natural-language request, including sidebar apps, editable tables, forms, and ECharts views. Generate a complete manifest and UTF-8 files, then call configure_plugin. Also supports Skills, MCP servers, Hooks, and executable extensions."
+  },
+  "zh-CN": {
+    "create-plugin-in-chat": "对话创建插件"
+  }
+}

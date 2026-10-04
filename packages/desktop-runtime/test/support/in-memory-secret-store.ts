@@ -1,4 +1,5 @@
 import type {
+  DesktopThreadDeletionResult,
   DesktopNetworkProxyState,
   DesktopResolveNetworkProxyInput,
   DesktopResolvedNetworkProxy,
@@ -38,6 +39,10 @@ export class InMemoryDesktopNativeBridge extends InMemorySecretStore implements 
   readonly validatedNetworkProxyServerIds: string[][] = [];
 
   async close(): Promise<void> {}
+
+  async deleteThread(_threadId: string): Promise<DesktopThreadDeletionResult> {
+    throw new Error('Deleting a conversation requires the Setsuna Desktop host.');
+  }
 
   async writeClipboardText(text: string): Promise<void> {
     this.clipboardText = text;

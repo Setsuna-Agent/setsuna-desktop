@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
   BookOpenText,
+  AppWindow,
   Braces,
   Compass,
   Eye,
@@ -23,6 +24,7 @@ import {
 import openaiLogoUrl from '../assets/provider-logos/openai.svg';
 
 const pluginIconNames = [
+  'app-builder',
   'context7',
   'openai-docs',
   'pdf',
@@ -47,6 +49,7 @@ type PluginIconName = typeof pluginIconNames[number];
 type PluginIconVariant = 'card' | 'detail' | 'inline' | 'installed' | 'list' | 'menu';
 
 const pluginGlyphs: Partial<Record<PluginIconName, LucideIcon>> = {
+  'app-builder': AppWindow,
   context7: Braces,
   'openai-docs': BookOpenText,
   'image-generation': Sparkles,

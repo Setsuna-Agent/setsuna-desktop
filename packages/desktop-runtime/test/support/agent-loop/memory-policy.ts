@@ -35,7 +35,10 @@ export class ExternalContextToolHost implements ToolHost {
 export class ExternalContextMemoryModelClient implements ModelClient {
   requests: ModelRequest[] = [];
 
-  constructor(private readonly toolName = 'mcp__search__fetch') {}
+  constructor(
+    private readonly toolName = 'mcp__search__fetch',
+    private readonly toolArguments = '{"query":"setsuna"}',
+  ) {}
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     this.requests.push(request);
@@ -52,7 +55,7 @@ export class ExternalContextMemoryModelClient implements ModelClient {
     if (this.requests.length === 1) {
       yield {
         type: 'tool_calls',
-        toolCalls: [{ id: 'call_external', name: this.toolName, arguments: '{"query":"setsuna"}' }],
+        toolCalls: [{ id: 'call_external', name: this.toolName, arguments: this.toolArguments }],
       };
       yield { type: 'done', finishReason: 'tool_calls' };
       return;

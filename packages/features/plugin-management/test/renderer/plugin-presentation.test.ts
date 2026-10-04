@@ -11,10 +11,34 @@ import {
   matchingPluginHook,
   mergePluginSkills,
   pluginMatchesQuery,
+  pluginIconProps,
   pluginUiSurfaces,
 } from '../../src/renderer/pluginPresentation.js';
 
 describe('plugin presentation', () => {
+  it('uses installed app identity for appearance even when the catalog has a different ID', () => {
+    const catalog = marketplacePlugin('catalog:notes');
+    const installed = installedPlugin('notes-local', 'repository');
+    installed.extension = {
+      apiVersion: 1,
+      runtime: 'node-worker',
+      capabilities: ['ui'],
+      trust: 'trusted',
+      rendererUi: {
+        schemaVersion: 2,
+        actions: [],
+        contributions: [
+          { id: 'settings', slot: 'renderer.capabilities.plugin.details', tree: { type: 'text', text: 'Settings' } },
+          { id: 'notes.app', slot: 'renderer.plugin.page', navigation: { label: 'Notes' }, tree: { type: 'text', text: 'Notes' } },
+        ],
+      },
+    };
+    expect(pluginIconProps(catalog, installed)).toMatchObject({ pluginId: 'notes-local', appContributionId: 'notes.app' });
+    expect(pluginIconProps(installed)).toMatchObject({ pluginId: 'notes-local', appContributionId: 'notes.app' });
+    expect(pluginIconProps(catalog)).not.toHaveProperty('appContributionId');
+    expect(pluginIconProps(installedPlugin('plain-plugin', 'local'))).not.toHaveProperty('appContributionId');
+  });
+
   it('matches repository installations by source without duplicating them as local plugins', () => {
     const repositoryPlugin = {
       ...installedPlugin('github', 'repository'),

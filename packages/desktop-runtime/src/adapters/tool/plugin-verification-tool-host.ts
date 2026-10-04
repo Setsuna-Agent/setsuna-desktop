@@ -2,6 +2,7 @@ import { runtimeText, type RuntimeInterfaceLanguage } from '@setsuna-desktop/con
 import {
   PLUGIN_UI_CARD_RESULT_KIND,
   parseRuntimePluginUiData,
+  parseRuntimeApiRequest,
   type RuntimePluginUiData,
   type RuntimePluginUiManifest,
   type RuntimePluginUiNode,
@@ -19,6 +20,7 @@ import {
   type ToolHost,
 } from '../../ports/tool-host.js';
 import { normalizePluginId } from '../plugin/file-plugin-bundle-model.js';
+import { appBuilderToolOwner, requireAppBuilderTool } from './app-builder-tool-owner.js';
 
 export const VERIFY_PLUGIN_TOOL = 'verify_plugin';
 const MAX_VERIFICATION_CHECKS = 512;
@@ -38,8 +40,8 @@ function verifyPluginDefinition(language?: RuntimeInterfaceLanguage): RuntimeToo
   return {
     name: VERIFY_PLUGIN_TOOL,
     description: [
-      text('Functionally verify an installed Setsuna Plugin before claiming it is usable.', "声称已安装 Setsuna 插件可用前，对其进行功能验证。"),
-      text('Runs one approved check for every declared tool and visible Renderer UI action path through the real host-managed network/state path.', "通过真实的宿主管理网络和状态通道，为每个声明工具及可见 Renderer UI 操作执行一次已批准的检查。"),
+      text('Verify the host handlers and runtime API requests of an installed Setsuna Plugin.', "验证已安装 Setsuna 插件的宿主处理函数和 runtime API 请求。"),
+      text('Runs approved checks through the real host-managed network/state path. UI-action checks call worker handlers directly; they do not execute page JavaScript, click buttons or test dialogs.', "通过真实的宿主管理网络和状态通道执行已批准的检查。ui-action 检查直接调用 worker 处理函数，不执行页面 JavaScript，不点击按钮，也不测试弹窗。"),
       text('Use after configure_plugin for every user-visible executable path; this requires explicit approval.', "configure_plugin 后对每条用户可见的可执行路径使用此工具；需要明确审批。"),
     ].join(' '),
     inputSchema: {
@@ -56,8 +58,8 @@ function verifyPluginDefinition(language?: RuntimeInterfaceLanguage): RuntimeToo
             type: 'object',
             additionalProperties: false,
             properties: {
-              kind: { type: 'string', enum: ['tool', 'ui-action'] },
-              name: { type: 'string', description: text('Local extension tool name or Renderer UI action id.', "本地扩展工具名称或 Renderer UI 操作 ID。") },
+              kind: { type: 'string', enum: ['tool', 'ui-action', 'runtime-api'] },
+              name: { type: 'string', description: text('Local tool name, UI action id, or GET /v1/ path for a runtime-api check.', "本地工具名称、UI 操作 ID，或 runtime-api 检查的 GET /v1/ 路径。") },
               input: { type: 'object', description: text('Tool arguments when kind is tool.', "kind 为 tool 时的工具参数。") },
               expectUiCard: { type: 'boolean', description: text('Require a plugin.ui-card result. Automatically true for declared uiCards tools.', "要求返回 plugin.ui-card；对声明为 uiCards 的工具自动启用。") },
               contributionId: { type: 'string', description: text('Renderer UI contribution that exposes the action.', "公开该操作的 Renderer UI contribution。") },
@@ -95,7 +97,8 @@ type UiActionVerificationCheck = Readonly<{
   expectStatePaths: string[];
 }>;
 
-type PluginVerificationCheck = ToolVerificationCheck | UiActionVerificationCheck;
+type RuntimeApiVerificationCheck = Readonly<{ kind: 'runtime-api'; name: string; contributionId: string }>;
+type PluginVerificationCheck = ToolVerificationCheck | UiActionVerificationCheck | RuntimeApiVerificationCheck;
 type PluginVerificationInput = Readonly<{ pluginId: string; checks: PluginVerificationCheck[] }>;
 
 type VerificationResult = Readonly<{
@@ -110,15 +113,16 @@ type VerificationResult = Readonly<{
 
 export class PluginVerificationToolHost implements ToolHost {
   constructor(
-    private readonly plugins: Pick<PluginBundleStore, 'listInstalledRecords'>,
+    private readonly plugins: Pick<PluginBundleStore, 'listInstalledRecords' | 'listPlugins'>,
     private readonly extensions: Pick<
       ExtensionRuntime,
-      'listTools' | 'readRendererUiData' | 'runRendererUiAction' | 'runTool'
+      'listTools' | 'readRendererUiData' | 'runRendererUiAction' | 'runTool' | 'requestRuntimeApi'
     >,
   ) {}
 
   async listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
-    return context.features?.plugins === false ? [] : [verifyPluginDefinition(context.interfaceLanguage)];
+    return await appBuilderToolOwner(this.plugins, VERIFY_PLUGIN_TOOL, context)
+      ? [verifyPluginDefinition(context.interfaceLanguage)] : [];
   }
 
   systemPrompt(context: ToolExecutionContext): string {
@@ -126,13 +130,16 @@ export class PluginVerificationToolHost implements ToolHost {
     return [
       text('Installing and activating an executable Plugin does not prove its handlers work.', "安装并激活可执行插件不能证明其处理函数正常工作。"),
       text('After configure_plugin, call verify_plugin with representative checks for every user-visible extension tool and Renderer UI action.', "configure_plugin 后，使用 verify_plugin 为每个用户可见的扩展工具和 Renderer UI 操作执行有代表性的检查。"),
-      text('Do not report the Plugin as usable unless verify_plugin returns "Verified and usable: true"; repair the complete bundle and verify again on failure.', "只有 verify_plugin 返回 \"Verified and usable: true\" 才能报告插件可用；失败时修复完整插件包后重新验证。"),
+      text('Report only the handlers and API checks that passed. This tool does not test page JavaScript, button clicks, dialogs or rendering; their behavior remains unverified without separate interaction evidence. Repair failed checks and verify again.', "仅报告已通过的处理函数和 API 检查。本工具不测试页面 JavaScript、按钮点击、弹窗或渲染；没有独立交互证据时，这些行为仍未验证。失败时修复后重新检查。"),
     ].join(' ');
   }
 
-  toolRuntimeProfile(name: string) {
+  async toolRuntimeProfile(name: string, context: ToolExecutionContext) {
     if (name !== VERIFY_PLUGIN_TOOL) return null;
+    const plugin = await appBuilderToolOwner(this.plugins, name, context);
+    if (!plugin) return null;
     return {
+      plugin,
       supportsParallel: false,
       waitsForRuntimeCancellation: true,
       approvalMode: 'orchestrated' as const,
@@ -171,6 +178,7 @@ export class PluginVerificationToolHost implements ToolHost {
     context: ToolExecutionContext,
   ): Promise<ToolExecutionResult> {
     if (name !== VERIFY_PLUGIN_TOOL) throw new Error(`Unknown Plugin verification tool: ${name}`);
+    await requireAppBuilderTool(this.plugins, name, context);
     const normalized = normalizeVerificationInput(input);
     const plugin = await this.installedPlugin(normalized.pluginId);
     assertCompleteVerificationCoverage(plugin, normalized.checks);
@@ -183,7 +191,9 @@ export class PluginVerificationToolHost implements ToolHost {
       try {
         results.push(check.kind === 'tool'
           ? await this.verifyTool(plugin, check, registeredTools, context)
-          : await this.verifyUiAction(plugin, check, context));
+          : check.kind === 'runtime-api'
+            ? await this.verifyRuntimeApi(plugin, check, context)
+            : await this.verifyUiAction(plugin, check, context));
       } catch (error) {
         if (context.signal?.aborted) throw context.signal.reason ?? error;
         throw new ToolExecutionError(
@@ -199,17 +209,18 @@ export class PluginVerificationToolHost implements ToolHost {
 
     return {
       content: [
-        `Verified Plugin ${plugin.name} (${plugin.id}).`,
+        `Verified host execution checks for Plugin ${plugin.name} (${plugin.id}).`,
         ...results.map((result) => [
           `- ${result.kind} ${result.name}`,
           result.contributionId ? ` @ ${result.contributionId}` : '',
           `: passed${result.resultKind ? ` (${result.resultKind})` : ''}`,
         ].join('')),
-        'Verified and usable: true.',
+        'Host checks passed: true.',
+        'Page interactions: not tested. These checks do not execute page JavaScript, click buttons, open dialogs or verify rendering.',
       ].join('\n'),
-      preview: `已验证 Plugin ${plugin.name}`,
+      preview: `Plugin ${plugin.name} 的宿主检查通过`,
       containsExternalContext: true,
-      data: { pluginId: plugin.id, verified: true, checks: results },
+      data: { pluginId: plugin.id, checksPassed: true, pageInteractionsVerified: false, checks: results },
     };
   }
 
@@ -282,6 +293,16 @@ export class PluginVerificationToolHost implements ToolHost {
       ...(check.expectStatePaths.length ? { statePaths: [...check.expectStatePaths] } : {}),
     };
   }
+
+  private async verifyRuntimeApi(
+    plugin: InstalledPluginRecord, check: RuntimeApiVerificationCheck, context: ToolExecutionContext,
+  ): Promise<VerificationResult> {
+    const response = await this.extensions.requestRuntimeApi({
+      pluginId: plugin.id, contributionId: check.contributionId, request: { path: check.name },
+    }, context.signal);
+    if (!response.ok) throw new Error(`Runtime API returned HTTP ${response.status}: ${JSON.stringify(response.data)}`);
+    return { kind: check.kind, name: check.name, contributionId: check.contributionId, status: 'passed' };
+  }
 }
 
 function assertCompleteVerificationCoverage(
@@ -291,11 +312,11 @@ function assertCompleteVerificationCoverage(
   const required = requiredVerificationPaths(plugin);
   const supplied = new Set<string>();
   for (const check of checks) {
-    const key = verificationPathKey(check.kind, check.name, check.kind === 'ui-action' ? check.contributionId : undefined);
+    const key = verificationPathKey(check.kind, check.name, check.kind !== 'tool' ? check.contributionId : undefined);
     if (supplied.has(key)) {
       throw incompleteVerification(plugin, `Duplicate verification path: ${verificationPathLabel(check)}.`);
     }
-    if (!required.has(key)) {
+    if (check.kind !== 'runtime-api' && !required.has(key)) {
       throw incompleteVerification(plugin, `Unexpected verification path: ${verificationPathLabel(check)}.`);
     }
     supplied.add(key);
@@ -340,13 +361,13 @@ function verificationPathKey(
 ): string {
   return kind === 'tool'
     ? `tool\u0000${name}`
-    : `ui-action\u0000${contributionId ?? ''}\u0000${name}`;
+    : `${kind}\u0000${contributionId ?? ''}\u0000${name}`;
 }
 
 function verificationPathLabel(check: PluginVerificationCheck): string {
   return check.kind === 'tool'
     ? `tool ${check.name}`
-    : `ui-action ${check.name} @ ${check.contributionId}`;
+    : `${check.kind} ${check.name} @ ${check.contributionId}`;
 }
 
 function incompleteVerification(plugin: InstalledPluginRecord, detail: string): ToolExecutionError {
@@ -368,6 +389,14 @@ function normalizeVerificationInput(input: unknown): PluginVerificationInput {
   }
   const checks = root.checks.map((value, index): PluginVerificationCheck => {
     const check = record(value, `checks[${index}] must be an object.`);
+    if (check.kind === 'runtime-api') {
+      assertExactKeys(check, ['kind', 'name', 'contributionId'], `checks[${index}]`);
+      return {
+        kind: 'runtime-api',
+        name: parseRuntimeApiRequest({ path: check.name }).path,
+        contributionId: requiredText(check.contributionId, `checks[${index}].contributionId`),
+      };
+    }
     if (check.kind === 'tool') {
       assertExactKeys(check, ['kind', 'name', 'input', 'expectUiCard'], `checks[${index}]`);
       return {
@@ -394,7 +423,7 @@ function normalizeVerificationInput(input: unknown): PluginVerificationInput {
         expectStatePaths: statePaths(check.expectStatePaths, `checks[${index}].expectStatePaths`),
       };
     }
-    throw new Error(`checks[${index}].kind must be tool or ui-action.`);
+    throw new Error(`checks[${index}].kind must be tool, ui-action or runtime-api.`);
   });
   return { pluginId, checks };
 }

@@ -3,11 +3,16 @@ import { createContext, Fragment, useContext, type ReactNode } from 'react';
 import { PluginIcon } from '../../../shared/ui/PluginIcon.js';
 import { BrowserTabReferenceText } from '../mentions/BrowserTabReference.js';
 import { ChatInlineReference } from './ChatInlineReference.js';
+import { PluginAppReferenceLabel } from './PluginAppReferenceLabel.js';
 
 const PluginCatalog = createContext<readonly RuntimePluginSummary[]>([]);
 
 export function PluginReferenceCatalogProvider({ plugins, children }: { plugins: readonly RuntimePluginSummary[]; children: ReactNode }) {
   return <PluginCatalog.Provider value={plugins}>{children}</PluginCatalog.Provider>;
+}
+
+export function usePluginReferenceCatalog() {
+  return useContext(PluginCatalog);
 }
 
 export function PluginReferenceLabel({ plugin, label }: { plugin?: RuntimePluginSummary; label: string }) {
@@ -22,13 +27,15 @@ export function PluginReferenceLabel({ plugin, label }: { plugin?: RuntimePlugin
 }
 
 export function PluginReferenceText({ content }: { content: string }) {
-  const plugins = useContext(PluginCatalog);
+  const plugins = usePluginReferenceCatalog();
   const parts: ReactNode[] = [];
   let offset = 0;
   for (const mention of parsePluginMentions(content)) {
     parts.push(<BrowserTabReferenceText key={`text:${offset}`} content={content.slice(offset, mention.start)} />);
     const plugin = plugins.find((item) => item.id === mention.pluginId);
-    parts.push(<PluginReferenceLabel key={`plugin:${mention.start}`} plugin={plugin} label={plugin?.name ?? mention.label} />);
+    parts.push(mention.contributionId
+      ? <PluginAppReferenceLabel key={`plugin:${mention.start}`} app={{ pluginId: mention.pluginId, contributionId: mention.contributionId, name: mention.label }} />
+      : <PluginReferenceLabel key={`plugin:${mention.start}`} plugin={plugin} label={plugin?.name ?? mention.label} />);
     offset = mention.end;
   }
   parts.push(<BrowserTabReferenceText key={`text:${offset}`} content={content.slice(offset)} />);

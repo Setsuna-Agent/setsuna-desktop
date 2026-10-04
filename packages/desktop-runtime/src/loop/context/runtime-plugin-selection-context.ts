@@ -1,7 +1,14 @@
-import { parsePluginMentions, runtimeText, type RuntimeInterfaceLanguage, type RuntimeToolDefinition } from '@setsuna-desktop/contracts';
+import { APP_BUILDER_PLUGIN_ID, parsePluginMentions, runtimeText, type RuntimeInterfaceLanguage, type RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 import type { PluginBundleStore } from '../../ports/plugin-bundle-store.js';
 import type { RuntimePromptFragment } from './prompt-compiler.js';
 import { neutralizePromptClosingTags } from './prompt-utils.js';
+
+/** App references bring the authoring tools and Skill into the same normal permission pipeline. */
+export function selectedPluginIdsForInput(input: string): string[] {
+  const mentions = parsePluginMentions(input);
+  return [...new Set(mentions.flatMap((mention) => mention.contributionId
+    ? [mention.pluginId, APP_BUILDER_PLUGIN_ID] : [mention.pluginId]))];
+}
 
 /** Resolve references against installed bundles, never against names supplied in the message. */
 export async function runtimePluginSelectionContext(
@@ -10,7 +17,8 @@ export async function runtimePluginSelectionContext(
   language: RuntimeInterfaceLanguage,
   catalog: RuntimeToolDefinition[],
 ): Promise<{ skillIds: string[]; fragments: RuntimePromptFragment[] }> {
-  const ids = new Set(parsePluginMentions(input).map((mention) => mention.pluginId));
+  const mentions = parsePluginMentions(input);
+  const ids = new Set(selectedPluginIdsForInput(input));
   if (!ids.size || !store) return { skillIds: [], fragments: [] };
   const plugins = (await store.listPlugins()).plugins.filter((plugin) => ids.has(plugin.id));
   if (!plugins.length) return { skillIds: [], fragments: [] };
@@ -22,6 +30,7 @@ export async function runtimePluginSelectionContext(
       content: [
         text('The user explicitly selected the installed plugins described in selected_plugin context for this request. Prefer their relevant available capabilities. If a relevant tool is deferred, use search_tools before falling back to other tools.', '用户为本次请求明确选择了 selected_plugin 上下文中的已安装插件。优先使用其相关的可用能力；相关工具按需加载时，先通过 search_tools 查找，再考虑其他工具。'),
         text('Only availableTools and availableMcpServers reflect this step’s allowed tool catalog. Use Skills through the available Skill registry. Connectors describe setup, not callable tools. If the requested capability is unavailable, explain briefly and use the best available fallback. Plugin selection does not change enablement, sign-in, trust or tool permissions.', '只有 availableTools 和 availableMcpServers 反映当前步骤允许的工具目录。Skill 通过可用 Skill 目录使用。连接器是配置声明，不是可调用工具。所需能力不可用时，简要说明并使用当前最合适的替代方式。选择插件不会改变启用、登录、信任或工具权限。'),
+        ...(mentions.some((mention) => mention.contributionId) ? [text('App references also make the app-builder available. referencedApps identifies existing pages in their installed plugin. When asked to modify an app, inspect its current bundle, preserve its plugin ID, page ID and stored data, and update that bundle in place. An attachment alone does not request changes.', '应用引用同时提供应用构建器能力。referencedApps 标识已安装插件中的现有页面。用户要求修改应用时，先读取当前 Bundle，保留插件 ID、页面 ID 和已保存数据，原位更新该插件。仅附上应用不代表要求修改。')] : []),
       ].join('\n'),
     }, ...plugins.map((plugin): RuntimePromptFragment => {
       const availableTools = catalog.filter((tool) => tool.source?.plugins?.some(({ id }) => id === plugin.id)
@@ -45,6 +54,9 @@ export async function runtimePluginSelectionContext(
             hookCount: plugin.hookCount,
             resources: plugin.resources.map(({ id, label }) => ({ id, label })),
             extensionTrust: plugin.extension?.trust,
+            referencedApps: plugin.extension?.rendererUi?.contributions
+              .filter((page) => page.slot === 'renderer.plugin.page' && mentions.some((mention) => mention.pluginId === plugin.id && mention.contributionId === page.id))
+              .map((page) => ({ contributionId: page.id, name: page.navigation?.label ?? plugin.name, document: page.document })),
             unsupportedApps: plugin.unsupportedApps,
             unsupportedComponents: plugin.unsupportedComponents,
           }), ['selected_plugin']),

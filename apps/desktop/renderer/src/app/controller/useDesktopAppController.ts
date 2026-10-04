@@ -1,5 +1,7 @@
 import {
+  pluginMentionText,
   type CreateThreadInput,
+  type RuntimePluginReference,
   type RuntimeConfiguredModelReference,
 } from '@setsuna-desktop/contracts';
 import type { ReviewTarget } from '@setsuna-desktop/feature-review/contracts';
@@ -305,6 +307,13 @@ export function useDesktopAppController() {
     setCapabilitySelectionRequest((current) => (current?.requestId === requestId ? null : current));
   }, []);
 
+  const startPluginAppChat = useCallback((plugin: RuntimePluginReference, prompt: string) => (
+    navigation.createGlobalThread((threadId) => {
+      setCapabilitySelectionRequest(null);
+      composerSession.initializeThreadDraft(threadId, `${pluginMentionText(plugin)} ${prompt}`);
+    })
+  ), [composerSession.initializeThreadDraft, navigation.createGlobalThread]);
+
   const startCurrentThreadReview = useCallback((
     target: ReviewTarget,
     modelSelection?: RuntimeConfiguredModelReference,
@@ -378,6 +387,7 @@ export function useDesktopAppController() {
     searchTriggerRef,
     selectSkillForChat,
     selectPluginForChat,
+    startPluginAppChat,
     setActiveView: changeView,
     setDraft,
     setSidebarCollapsed,

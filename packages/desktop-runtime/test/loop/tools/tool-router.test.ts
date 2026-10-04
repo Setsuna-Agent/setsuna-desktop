@@ -12,6 +12,32 @@ import type { RuntimeToolExecutionContext, ToolHost } from '../../../src/ports/t
 const RUNTIME_PROVIDED_NAMES = [READ_TOOL_RESULT_TOOL_NAME];
 
 describe('RuntimeToolRouter', () => {
+  it('loads explicitly selected plugin tools without search while preserving permission and lifecycle filters', async () => {
+    const plugin = { id: 'app-builder', name: 'App Builder' };
+    const names = ['read_runtime_api', 'configure_plugin', 'verify_plugin'];
+    const toolHost: ToolHost = {
+      listTools: async () => names.map((name) => ({ name, description: name, inputSchema: { type: 'object' } })),
+      toolRuntimeProfile: async () => ({ plugin }),
+      runTool: async () => ({ content: 'unused' }),
+    };
+    const options = { toolHost, context: runtimeToolContext(), approvalPolicy: 'on-request' as const, orchestrator: null };
+    const ordinary = await RuntimeToolRouter.create(options);
+    expect(ordinary.tools.map(({ name }) => name)).not.toEqual(expect.arrayContaining(names));
+    const selected = await RuntimeToolRouter.create({ ...options, selectedPluginIds: [plugin.id] });
+    expect(selected.tools.map(({ name }) => name)).toEqual(expect.arrayContaining(names));
+    expect(selected.catalogToolDefinitions.every((tool) => tool.source?.plugins?.[0].id === plugin.id)).toBe(true);
+    const readOnly = await RuntimeToolRouter.create({
+      ...options, selectedPluginIds: [plugin.id], allowTool: (tool) => tool.name === 'read_runtime_api',
+    });
+    expect(readOnly.tools.map(({ name }) => name)).toContain('read_runtime_api');
+    expect(readOnly.canRouteTool('configure_plugin')).toBe(false);
+    expect(readOnly.canRouteTool('verify_plugin')).toBe(false);
+    const removed = await RuntimeToolRouter.create({
+      ...options, selectedPluginIds: [plugin.id], toolHost: { ...toolHost, listTools: async () => [] },
+    });
+    expect(removed.canRouteTool('read_runtime_api')).toBe(false);
+  });
+
   it('resolves CLI ownership per invocation and drops it when plugins are disabled or removed', async () => {
     const plugin: RuntimePluginSummary = {
       id: 'github', name: 'GitHub', installedAt: '', skills: [], hooks: [], hookCount: 0, resources: [], mcpServers: [],

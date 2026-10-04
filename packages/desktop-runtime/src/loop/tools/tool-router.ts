@@ -93,6 +93,8 @@ export type RuntimeToolRouterOptions = {
   toolResultStore?: ToolResultStore;
   /** Turn-owned state survives router rebuilds and context compaction, but not permission filtering. */
   loadedToolNames?: Set<string>;
+  /** Explicit mentions load owned schemas from the already permission-filtered catalog. */
+  selectedPluginIds?: readonly string[];
   pluginStore?: Pick<PluginBundleStore, 'listPlugins'>;
 };
 
@@ -116,7 +118,8 @@ export class RuntimeToolRouter {
     this.catalogTools = catalogTools;
     this.catalogToolNames = new Set(catalogTools.map((tool) => tool.name));
     this.profiles = profiles;
-    this.deferredTools = new DeferredTools(catalogTools, options.loadedToolNames ?? new Set());
+    this.deferredTools = new DeferredTools(catalogTools, options.loadedToolNames ?? new Set(),
+      new Set(options.context.features?.plugins === false ? [] : options.selectedPluginIds));
     this.cliPlugins = new CliPluginAttribution(plugins);
   }
 

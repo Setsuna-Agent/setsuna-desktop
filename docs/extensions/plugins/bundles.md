@@ -73,6 +73,8 @@ my-plugin/
 
 上面的 v2 manifest 可以只包含声明式能力。`tools` 本身是工具展示和执行策略元数据，不会执行 Bundle 代码；需要动态工具或生命周期中间件时，再添加 [`extension`](extensions.md#最小-bundle)，由 Bundle 内的入口注册同名工具。这样 Skill、MCP、Hook 与可执行扩展共用同一份安装生命周期。
 
+内置 `app-builder` 的 `read_runtime_api`、`configure_plugin`、`verify_plugin` 在其清单中声明，由 runtime 原生 adapter 实现，以复用后端访问、安装审批和完整快照校验。它们仅在内置市场来源的构建器已安装且声明对应工具时可用，调用事件携带构建器归属；同 ID 的本地或第三方包不能取得这些工具。明确选择插件时，宿主从经过权限过滤的目录直接加载其工具 schema，不必先调用 `search_tools`。
+
 字段规则：
 
 - `id` 会规范化为最多 80 字符的小写标识。
@@ -87,7 +89,7 @@ my-plugin/
 
 ### Renderer UI：宿主组件与沙箱页面
 
-需要在 Setsuna 宿主界面中显示配置或状态时，Bundle 可以在 manifest 的 `extension` 对象内增加 `rendererUi`。它必须同时声明 `extension.capabilities` 中的 `ui`；使用动态数据时还要声明 `state`。每个 contribution 二选一：`tree` 由宿主组件渲染，适合紧凑状态和普通表单；`document` 把 Bundle 内的 HTML/CSS/JS 作为 opaque-origin sandbox iframe 渲染，适合自由布局的独立功能页。两者都由宿主管理侧栏入口、数据 scope、action allowlist 与审批。
+需要在 Setsuna 宿主界面中显示配置或状态时，Bundle 可以在 manifest 的 `extension` 对象内增加 `rendererUi`。它必须同时声明 `extension.capabilities` 中的 `ui`；使用动态数据时还要声明 `state`。每个 contribution 二选一：`tree` 由宿主组件渲染，适合紧凑状态和普通表单；`document` 把 Bundle 内的 HTML/CSS/JS 作为 opaque-origin sandbox iframe 渲染，适合自由布局的独立功能页。两者都由宿主管理侧栏入口、数据 scope、action allowlist 与可选的操作确认。
 
 ```json
 {
@@ -99,13 +101,7 @@ my-plugin/
     "rendererUi": {
       "schemaVersion": 2,
       "actions": [
-        {
-          "id": "save-preference",
-          "approval": {
-            "title": "保存插件设置",
-            "message": "允许此插件保存当前设置吗？"
-          }
-        }
+        { "id": "save-preference" }
       ],
       "contributions": [
         {
@@ -132,7 +128,7 @@ my-plugin/
 }
 ```
 
-自由页面只允许进入 `renderer.plugin.page`，其源码必须是已声明资源：
+自由应用页面只允许进入 `renderer.plugin.page`，入口自动出现在左侧栏“插件”下方。应用占满主内容区，自行控制标题、布局和滚动；宿主不追加标题、描述或卡片外框。表格、表单和图表可以在同一页面中组合，其源码必须是已声明资源：
 
 ```json
 {
@@ -149,7 +145,7 @@ my-plugin/
     "rendererUi": {
       "schemaVersion": 2,
       "actions": [
-        { "id": "dashboard.refresh", "approval": { "message": "刷新仪表盘数据吗？" } }
+        { "id": "dashboard.refresh" }
       ],
       "contributions": [
         {
@@ -161,6 +157,7 @@ my-plugin/
             "htmlResourceId": "dashboard-html",
             "cssResourceId": "dashboard-css",
             "jsResourceId": "dashboard-js",
+            "libraries": ["echarts"],
             "actionIds": ["dashboard.refresh"]
           }
         }
@@ -179,17 +176,28 @@ window.setsunaUI.subscribe(({ data }) => render(data));
 await window.setsunaUI.invoke('dashboard.refresh', { range: '7d' });
 ```
 
+侧栏应用还可以直接使用宿主后端 API，安装并信任后即可跨项目读取或操作已有数据，不需要额外声明 capability 或每次弹确认：
+
+```js
+const response = await window.setsunaUI.runtime.request({ path: '/v1/threads?scope=all' });
+if (!response.ok) throw new Error(JSON.stringify(response.data));
+renderConversations(response.data.threads);
+```
+
+支持全部 `/v1/` 业务接口及 GET/POST/PUT/PATCH/DELETE/HEAD；完整调用约定、接口发现、消息与事件分页见 [宿主后端 API](extensions.md#宿主后端-api)。`runtime.request` 直接返回数据，和通过 `invoke()` 更新声明状态是两条独立通道；纯后端数据应用可省略 `data`，使用空 `actions/actionIds`，避免误设 project scope 导致无项目时打不开。
+
 固定边界：
 
 - schemaVersion 1 继续兼容插件详情设置和紧凑 Chat contribution；早期 `renderer.settings.page.extensions` 的 `general/about` 输入会归一化到所属插件详情。详情 contribution 可用 `stateKey` 绑定一条 global state，且至少包含一个字段。
 - schemaVersion 2 新增 `renderer.plugin.page`、宿主侧栏入口、作用域数据和绑定；允许的 Slot 为 `renderer.capabilities.plugin.details`、`renderer.plugin.page`、`renderer.settings.page.extensions` 和 `renderer.chat.composer.status`。Settings target 只允许 `general/about`，Chat 区域不允许 `field/select`。
 - `tree` node 只允许 `stack/text/badge/notice/button/field/select`，未知字段直接拒绝；它不接受 HTML、CSS、`className`、script、函数 handler 或任意 URL。
 - `document` 只接受已声明的 `.html/.htm`、`.css`、`.js/.mjs` 文本资源，并沿用交互卡片的单文件和总源码上限。宿主从一次完整 Bundle hash 快照中同时取得源码字节；当前 hash 与用户信任的 hash 不一致时拒绝返回，避免校验和读取之间出现可执行内容替换。
-- document iframe 只带 `sandbox="allow-scripts"`，绝不带 `allow-same-origin`。CSP 禁止直接网络、远程资源、worker、嵌套 frame、对象、媒体和表单；Electron 主窗口另外阻止子 frame 离开 `about:srcdoc/about:blank`。页面没有 Node、Electron、preload、文件系统或宿主 DOM，只能使用 `window.setsunaUI`。
+- `document.libraries` 可选，目前只允许 `echarts`。宿主按需读取随应用打包的库源码，在隔离 frame 内先加载库、再执行页面源码，以 `window.echarts` 提供图表 API。库源码不占 Plugin 源码额度，不进入主 Renderer 的执行环境，不允许 URL、CDN 或任意包名。图表容器需要明确尺寸，随容器变化调用 `chart.resize()`，移除时调用 `chart.dispose()`。
+- document iframe 只带 `sandbox="allow-scripts"`，绝不带 `allow-same-origin`。CSP 禁止直接网络、远程资源、worker、嵌套 frame、对象、媒体和原生表单提交；HTML 表单控件仍可使用，通过 bridge action 保存。Electron 主窗口另外阻止子 frame 离开 `about:srcdoc/about:blank`。页面没有 Node、Electron、preload、文件系统或宿主 DOM，只能使用 `window.setsunaUI`。
 - 动态值只能使用 `{ "path": "summary.label", "fallback": "未运行" }` 从 contribution 声明的 `data.stateKey` 读取。数据 scope 只能是 `global/project/thread`，JSON 大小、深度和条目数均受限；renderer 不能自行选择 state key。
 - 单个 manifest 最多 16 个 contribution、32 个 action、128 个 node、24 个字段，树深最多 8 层；文本、选项和提交值也都有独立上限。
 - UI 只在安装记录与当前 Bundle hash 仍处于 `trusted` 时挂载；更新、卸载或撤销信任会通过 Renderer transaction 替换/撤销整个 Plugin UI。
-- Button 或 document `invoke()` 只能引用当前 contribution 明确列出的 manifest action ID。宿主先展示 `approval` 文案，再携带当前 `contributionId`、有界 JSON payload 和可用的 project/thread/cwd 上下文，通过 Plugin Management typed operation 调用 worker 的 `api.onUiAction`；Runtime 只按该 contribution 校验字段和 state scope，Plugin 返回的 markup 或错误文本不会进入 Renderer。动作完成后宿主重新读取声明的数据快照。
+- Button 或 document `invoke()` 只能引用当前 contribution 明确列出的 manifest action ID。action 的 `approval` 可选：普通保存、应用数据更新和刷新省略它并直接执行；显式声明时才展示确认文案，取消不调用 handler。宿主携带当前 `contributionId`、有界 JSON payload 和可用的 project/thread/cwd 上下文，通过 Plugin Management typed operation 调用 worker 的 `api.onUiAction`；Runtime 只按该 contribution 校验字段和 state scope，Plugin 返回的 markup 或错误文本不会进入 Renderer。动作完成后宿主重新读取声明的数据快照。旧配置中显式声明的确认继续生效，可移除保存 action 的 `approval` 以取消逐次弹窗。
 
 ### 对话 HTML/CSS/JS 卡片
 
@@ -357,7 +365,7 @@ GitHub / GitHub Enterprise 的可选 OpenAI App ID 通过兼容数据映射为 g
 
 应用根目录的 `plugins/` 是内置精选市场源，打包时随应用发布，与 OpenAI 仓库目录一起显示。Plugin Management renderer service 通过 `GET /v1/features/plugin-management` 获取不含本地路径、Hook 可执行命令或凭据的聚合投影；投影包含已安装插件、市场、extension 状态，以及详情页需要的 Tool、Skill、MCP、Hook、连接器和 resource 描述。点击安装后只向 `POST /v1/features/plugin-management/marketplace/:pluginId/install` 提交市场 ID。runtime 区分内置目录和仓库缓存后找到 Bundle，并复制到 Electron `userData/runtime/plugins/<plugin-id>`；安装目录完全由 Setsuna 管理。
 
-普通用户从随应用发布的市场卡片一键安装，不需要下载或解压 Bundle。页面标题栏提供“用对话创建插件”和“导入本地插件”：前者会选中内置 `create-plugin-in-chat` Skill，由模型调用 `configure_plugin` 创建或更新受管 Plugin；后者用于导入已经准备好的开发 Bundle 目录。能力页使用 Electron 原生目录选择器，主进程把用户选中的路径提交给 runtime 的受保护 Plugin Management operation；通用 renderer runtime proxy 明确拒绝该路径。内部开发工具 `install_plugin_bundle` 仍可执行目录侧载。模型发起的创建、更新、侧载和卸载始终需要审批。安装后：
+普通用户从随应用发布的市场卡片一键安装，不需要下载或解压 Bundle。页面标题栏提供“用对话创建插件”和“导入本地插件”：前者会选中默认安装的 `app-builder`（应用构建器）插件，其 `app-builder.create-plugin-in-chat` Skill 指导模型调用 `configure_plugin` 创建或更新受管 Plugin；后者用于导入已经准备好的开发 Bundle 目录。能力页使用 Electron 原生目录选择器，主进程把用户选中的路径提交给 runtime 的受保护 Plugin Management operation；通用 renderer runtime proxy 明确拒绝该路径。内部开发工具 `install_plugin_bundle` 仍可执行目录侧载。模型发起的创建、更新、侧载和卸载始终需要审批。安装后：
 
 - Bundle 被复制到 runtime 数据目录，运行不依赖原始目录继续存在。
 - Skills 会出现在技能页并标记为 Plugin 来源。
@@ -374,10 +382,12 @@ GitHub / GitHub Enterprise 的可选 OpenAI App ID 通过兼容数据映射为 g
 
 - `manifest` 是完整的 Bundle v2 manifest；runtime 负责生成 `.setsuna-plugin/plugin.json`。
 - `files` 只接受 UTF-8 文本，最多 64 个、合计最多 512 KiB；更新时未再次提交的旧文件会被删除。图片等二进制资源仍应通过本地开发 Bundle 或内置市场分发。
+- 每个文件使用 `{path, sourcePath}` 或 `{path, content}`，两者互斥。`path` 是包内目标路径；`sourcePath` 相对当前工作区或位于已批准可读范围，沿用本地文件工具的 canonical path、符号链接目标和 deny 规则检查。HTML/CSS/JS 应用优先先写工作区文件，再传路径，避免重复传输和转义整份源码；内联 `content` 仅使用普通 JSON 字符串，不附加 XML/HTML 或 Base64 编码。
 - 草稿写入 runtime 私有的 `plugin-drafts/<plugin-id>`，再复用标准 Bundle 校验和事务式安装链路。模型不能指定目标目录，也不能覆盖从内置市场或其他本地目录安装的同名 Plugin。
 - 审批预览包含规范化后的 manifest、完整文件内容、能力数量和每个文件的 SHA-256。执行时会重新计算完整性 token；审批后内容或动作发生变化会以 `preview_changed` 拒绝执行。
+- `sourcePath` 在预览及执行前分别读取，审批绑定实际内容而非路径；源文件被修改后必须重新预览。落盘和安装只使用本次解析得到的内存快照。
 - 一次批准同时授权安装和启用审批中展示的版本。若其中包含 Hook 或可执行扩展，当前命令/Bundle 哈希会随安装写入信任状态，不再弹出第二次“信任”确认；任何后续内容更新都需要新的 `configure_plugin` 审批。
-- extension 安装前会检查入口、页面与静态卡片脚本语法，并在 staged 目录临时启动 worker，核对声明工具和 UI action 已注册；这仍只证明“能加载”。Agent 随后必须用 `verify_plugin` 实际执行每个用户可见工具/UI action，只有返回 `Verified and usable: true` 才能宣称功能可用。验证调用可能联网或更新 Plugin 状态，因此展示完整输入并单独审批。
+- extension 安装前会检查入口、页面与静态卡片脚本语法，并在 staged 目录临时启动 worker，核对声明工具和 UI action 已注册；这仍只证明“能加载”。Agent 随后用 `verify_plugin` 实际执行声明工具/UI action 处理函数或 runtime API 检查；`checksPassed:true` 仅代表这些检查通过，`pageInteractionsVerified:false` 明确页面交互未验证。该工具不会运行页面 JavaScript、点击按钮或打开弹窗，不能据此宣称整个应用可用。验证调用可能联网或更新 Plugin 状态，因此展示完整输入并单独审批。
 
 这项授权只适用于 Agent 受管草稿。`install_plugin_bundle` 和能力页的本地目录导入仍按开发者侧载处理，不会因为目录存在就自动信任 Hook 或可执行扩展；随应用发布的内置市场继续使用应用控制的可信来源规则。
 
@@ -402,6 +412,8 @@ GitHub / GitHub Enterprise 的可选 OpenAI App ID 通过兼容数据映射为 g
 已安装插件详情中的“在对话中使用”和输入框 `/` 菜单都按 Plugin 本身选择，不依赖插件是否包含 Skill。菜单展示全部已安装插件，支持按名称、描述、标识和标签搜索；选择后显示带图标的插件标签，可与 Skill、文件引用一起使用。
 
 插件引用通过 `plugin-reference.ts` 序列化为 `[$名称](plugin://插件标识)` 并保存在消息正文中，随草稿、排队、重试和侧边对话继续传递。输入框恢复草稿时重新显示标签；代码示例中的引用不作为插件选择。Runtime 仅解析当前轮用户输入，并按真实安装记录查找插件。工具和 MCP 摘要与当前步骤经过权限过滤的目录匹配，缺少工具的 MCP 单独标为不可用；连接器与资源仍作为声明提供，Skill 交由现有 SkillRegistry 解析与加载。
+
+`@` 菜单同时列出已信任的侧栏应用，无项目对话也可选择。应用沿用侧栏的自定义名称和头像，以 `[$应用名称](plugin://插件标识#app=页面标识)` 保存精确引用；草稿、历史和结构化复制粘贴保留页面身份。应用右键「修改插件」创建无项目新对话，附上目标应用及应用构建器，预填修改提示并聚焦输入框，不自动发送。Runtime 为应用引用加载构建器的工具与 Skill，将实际安装的页面声明放入 `referencedApps` 外部上下文；按用户需求原位更新既有插件和页面，保留数据，引用本身不代表执行修改或放宽权限。
 
 明确选择插件的使用规则是独立的 runtime developer 片段：优先使用本轮相关可用能力，按需加载的工具先通过 `search_tools` 查找，再考虑替代方式。插件名称、描述和声明保留在外部不可信片段中，不能提升为运行时策略。选择本身不改变启用、登录、信任和审批设置。未明确选择时，模型可通过工具来源摘要发现相关插件能力。
 
@@ -437,3 +449,13 @@ CLI 连接器的 `command` 也用于工具调用归属：runtime 按本轮已安
 - `packages/features/plugin-management/test/renderer/`
 
 修改 manifest schema 时还要同步 contracts、市场摘要、renderer detail、打包文件列表和数据根迁移校验。
+
+### 应用创建入口
+
+`app-builder` 是随应用打包的必备内置插件。每次 runtime 启动时自动补齐缺失安装，并更新到当前应用附带的较新版本；忽略旧版 `default-plugins.json` 的一次性安装标记，保留用户编辑或禁用的 Skill。内置市场来源的构建器不提供卸载入口，底层存储同时拒绝 API、AI 工具等路径的卸载请求；同 ID 的用户本地包仍可正常移除。
+
+构建器通过 `ui-design`、`ui-base`、`ui-patterns` 三个资源提供系统设计规范、沙箱基础 CSS 和表格/表单/ECharts 模板。Skill 在生成界面前引导模型使用 `read_plugin_resource` 读取；Markdown 按界面语言切换，CSS 通过现有 `--setsuna-*` 主题变量适配宿主。生成应用将所需样式复制到自己的 CSS resource，不依赖跨插件运行时引用；这套默认规范不限制用户明确指定的风格，也不会改写已有应用。
+
+`ui-component-guide`、`ui-components`、`ui-icons` 补充公共 DOM 组件与离线 Lucide 图标。按钮、字段、下拉选择、标签页和弹窗可复用 `SetsunaComponents`，标签页与弹窗包含键盘/焦点行为；表格等基础结构继续使用 HTML + 共享 CSS。图标资源由 `pnpm generate:app-icons` 从仓库安装的 `lucide-react` 导出，保留许可证，不在沙箱加载 React。生成应用按图标、组件、业务代码的顺序合入自己的 JS resource；两者不增加宿主 API 或第三方运行时权限。
+
+侧栏应用支持拖动图标调整顺序，顺序沿用宿主 Renderer 布局偏好保存，不改写插件清单；列表末尾始终显示「+」，没有应用时位于插件导航下方；侧栏内容超出高度后可滚动，悬浮滚动条不占布局宽度，底部用户菜单固定；介绍弹窗提供表格、表单、ECharts 看板和对话汇总快捷选项。选项创建无项目新对话，使用可恢复的插件 mention 填充草稿，保留原对话输入和附件，不自动发送。

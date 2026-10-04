@@ -220,6 +220,7 @@ describe('runtime factory tool wiring', () => {
     };
 
     try {
+      await runtime.installDefaultPlugins();
       await expect(runtime.toolHost.listTools(context)).resolves.toEqual(
         expect.arrayContaining([
           expect.objectContaining({ name: 'configure_plugin' }),
@@ -243,10 +244,10 @@ describe('runtime factory tool wiring', () => {
         },
       });
       await expect(runtime.pluginStore.listPlugins()).resolves.toMatchObject({
-        plugins: [expect.objectContaining({
+        plugins: expect.arrayContaining([expect.objectContaining({
           id: 'factory-plugin',
           extension: expect.objectContaining({ trust: 'trusted' }),
-        })],
+        })]),
       });
       const verificationInput = {
         pluginId: 'factory-plugin',
@@ -255,8 +256,7 @@ describe('runtime factory tool wiring', () => {
       await expect(runtime.toolHost.approvalForTool?.('verify_plugin', verificationInput, context))
         .resolves.toMatchObject({ reason: expect.stringContaining('实际执行 1 个扩展路径') });
       await expect(runtime.toolHost.runTool('verify_plugin', verificationInput, context)).resolves.toMatchObject({
-        content: expect.stringContaining('Verified and usable: true.'),
-        data: { pluginId: 'factory-plugin', verified: true },
+        data: { pluginId: 'factory-plugin', checksPassed: true, pageInteractionsVerified: false },
       });
 
       const updateInput = {
@@ -271,12 +271,12 @@ describe('runtime factory tool wiring', () => {
         expectedPreviewIntegrityToken: updatePreview?.integrityToken,
       });
       await expect(runtime.pluginStore.listPlugins()).resolves.toMatchObject({
-        plugins: [expect.objectContaining({
+        plugins: expect.arrayContaining([expect.objectContaining({
           id: 'factory-plugin',
           version: '1.0.1',
           description: 'Updated through configure_plugin.',
           extension: expect.objectContaining({ trust: 'trusted' }),
-        })],
+        })]),
       });
     } finally {
       await runtime.extensionManager.shutdown();

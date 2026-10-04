@@ -1,11 +1,12 @@
 import type { RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FilePluginBundleStore } from '../../../src/adapters/plugin/file-plugin-bundle-store.js';
 import { FilePluginMarketplace } from '../../../src/adapters/plugin/file-plugin-marketplace.js';
+import { installDefaultPlugins } from '../../../src/adapters/plugin/install-default-plugins.js';
 import { inspectBundleTree } from '../../../src/adapters/plugin/file-plugin-bundle-model.js';
 import { localizePluginDisplayFields, readBundledPluginMessages } from '../../../src/adapters/plugin/bundled-plugin-localization.js';
 import { FileSkillRegistry } from '../../../src/adapters/skill/file-skill-registry.js';
@@ -25,11 +26,82 @@ afterEach(async () => {
 });
 
 describe('bundled content localization', () => {
+  it('keeps the built-in builder installed, rejects removal, and preserves localized Skill overrides', async () => {
+    const { root, marketplace, plugins, skills, language } = await fixture();
+    await Promise.all([installDefaultPlugins(root, marketplace), installDefaultPlugins(root, marketplace)]);
+    const installed = (await plugins.listPlugins()).plugins;
+    expect(installed).toEqual([expect.objectContaining({ id: 'app-builder', installationSource: 'marketplace' })]);
+    expect(installed[0].tools?.map((tool) => tool.name)).toEqual(['read_runtime_api', 'configure_plugin', 'verify_plugin']);
+    expect(installed[0].resources.map((resource) => resource.id)).toEqual([
+      'ui-design', 'ui-base', 'ui-patterns', 'ui-component-guide', 'ui-components', 'ui-icons',
+    ]);
+    for (const resource of installed[0].resources) {
+      expect(await plugins.readResource('app-builder', resource.id)).toMatchObject({
+        text: await readFile(path.join(catalogRoot, 'app-builder', resource.path), 'utf8'),
+      });
+    }
+    const skillId = 'app-builder.create-plugin-in-chat';
+    expect(await skills.getSkill(skillId)).toMatchObject({ kind: 'plugin', enabled: true });
+    expect((await skills.resolvePromptContext([skillId])).selectedInjections[0].content).toContain('创建侧栏应用无需先选择项目');
+    await language('en-US');
+    const english = await skills.getSkill(skillId);
+    expect(english?.content).toContain('Creating a sidebar app does not require a project.');
+    expect(english?.name).not.toMatch(han);
+    expect(await plugins.readResource('app-builder', 'ui-design')).toMatchObject({
+      text: await readFile(path.join(catalogRoot, 'app-builder/skills/create-plugin-in-chat/references/ui-design.en-US.md'), 'utf8'),
+    });
+    await skills.updateSkill(skillId, { content: '# My builder', enabled: false });
+    await installDefaultPlugins(root, marketplace);
+    expect(await skills.getSkill(skillId)).toMatchObject({ content: '# My builder', enabled: false });
+    const indexBefore = await readFile(path.join(root, 'plugins.json'), 'utf8');
+    await expect(plugins.removePlugin('app-builder')).rejects.toThrow('Built-in plugin cannot be uninstalled');
+    expect(await readFile(path.join(root, 'plugins.json'), 'utf8')).toBe(indexBefore);
+    expect(await skills.getSkill(skillId)).toMatchObject({ content: '# My builder', enabled: false });
+  });
+
+  it('automatically upgrades the built-in builder without replacing Skill overrides', async () => {
+    const { root, marketplace, plugins, skills } = await fixture();
+    await installDefaultPlugins(root, marketplace);
+    const skillId = 'app-builder.create-plugin-in-chat';
+    await skills.updateSkill(skillId, { content: '# My builder', enabled: false });
+    // Model an older installed version while retaining the real bundle and update transaction.
+    const indexPath = path.join(root, 'plugins.json');
+    const index = JSON.parse(await readFile(indexPath, 'utf8'));
+    const builder = index.plugins.find((plugin: { id: string }) => plugin.id === 'app-builder');
+    builder.version = '1.0.0';
+    builder.resources = [];
+    await writeFile(indexPath, JSON.stringify(index));
+    const stylesheet = 'skills/create-plugin-in-chat/assets/ui-base.css';
+    await rm(path.join(builder.installPath, stylesheet));
+    await installDefaultPlugins(root, marketplace);
+    expect((await plugins.listPlugins()).plugins[0]).toMatchObject({ version: '1.4.4' });
+    expect(await plugins.readResource('app-builder', 'ui-base')).toMatchObject({
+      text: await readFile(path.join(catalogRoot, 'app-builder', stylesheet), 'utf8'),
+    });
+    expect(await skills.getSkill(skillId)).toMatchObject({ content: '# My builder', enabled: false });
+  });
+
+  it('restores a missing builder despite a legacy installation marker', async () => {
+    const { root, marketplace, plugins } = await fixture();
+    await writeFile(path.join(root, 'default-plugins.json'), JSON.stringify({ installedIds: ['app-builder'] }));
+    await installDefaultPlugins(root, marketplace);
+    expect((await plugins.listPlugins()).plugins).toEqual([
+      expect.objectContaining({ id: 'app-builder', installationSource: 'marketplace', version: '1.4.4' }),
+    ]);
+  });
+
+  it('allows removing a local bundle that reuses the builder ID', async () => {
+    const { plugins } = await fixture();
+    await plugins.installPlugin({ path: path.join(catalogRoot, 'app-builder') });
+    await expect(plugins.removePlugin('app-builder')).resolves.toMatchObject({ pluginId: 'app-builder' });
+    expect((await plugins.listPlugins()).plugins).toEqual([]);
+  });
+
   it('switches every built-in Skill catalog, detail, and prompt without changing IDs or enabled state', async () => {
     const { skills, language } = await fixture();
     const chinese = await skills.listSkills();
     const ids = chinese.skills.map((skill) => skill.id).sort();
-    expect(ids).toEqual(['create-mcp-in-chat', 'create-plugin-in-chat', 'create-skill-in-chat', 'goal-writer']);
+    expect(ids).toEqual(['create-mcp-in-chat', 'create-skill-in-chat', 'goal-writer']);
     for (const skill of chinese.skills) {
       expect(skill.name).toMatch(han);
       expect(skill.description).toMatch(han);

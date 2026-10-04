@@ -115,16 +115,13 @@
   padding: 4px 8px;
 }
 
-.declarative-plugin-navigation__icon {
-  width: 18px;
-  height: 18px;
-  border-radius: var(--app-radius-xs);
-  font-size: 18px;
-}
-
 .declarative-plugin-page {
+  /* Standalone apps own the workbench; auto-placement can land in the hidden sidebar column. */
+  grid-column: 1 / -1;
+  grid-row: content / -1;
   flex: 1 1 auto;
   min-width: 0;
+  min-height: 0;
   overflow: auto;
   padding: 36px clamp(24px, 6vw, 72px);
   color: var(--sd-color-text);
@@ -175,14 +172,25 @@
 }
 
 .declarative-plugin-page__content.is-sandboxed {
-  width: min(100%, 1120px);
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+  margin: 0;
   overflow: hidden;
+  border: 0;
+  border-radius: 0;
   padding: 0;
   background: var(--sd-color-surface);
 }
 
-.sandboxed-plugin-ui__frame {
-  min-height: 320px;
+.declarative-plugin-page--app {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
 }
 
 .sandboxed-plugin-ui__status {

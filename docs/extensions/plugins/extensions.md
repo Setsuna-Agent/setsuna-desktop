@@ -151,6 +151,8 @@ host 会用 `contributionId` 把 action 精确绑定到触发它的 contribution
 
 tree action 的字段位于 `input.values`；sandbox document 通过 `window.setsunaUI.invoke(actionId, payload)` 提交的有界 JSON 位于 `input.payload`。两种输入都不能改变 action ID、contribution、scope 或 host 上下文。
 
+`rendererUi.actions` 中的 `approval` 是可选的交互确认，不是权限授权。普通保存、应用本地数据更新和刷新声明 `{ "id": "table.save" }` 即可直接执行，handler 使用 `ctx.state.set` 持久化。需要二次确认时才添加 `approval: { title?, message }`；页面已确认的操作不应再添加它。旧 manifest 中显式声明的确认继续生效，移除保存 action 的 `approval` 即可取消逐次弹窗，无需改存储实现。安装信任、Agent 工具审批及主进程的业务检查独立生效。
+
 Renderer UI action 不是第二套交互通道：
 
 - `ctx.state` 的默认 scope 由触发 action 的 contribution 决定：存在 `data` 时严格使用其 `global/project/thread` scope，否则为兼容 v1 使用 `global`。host 拒绝 action 显式切换到其他 scope；使用 state 仍需 manifest 声明 `state`。
@@ -176,6 +178,7 @@ Plugin 详情 contribution 若声明 `stateKey`，host 会从同名 global state
   state?: ExtensionStateApi;
   ui?: ExtensionUiApi;
   network?: ExtensionNetworkApi;
+  runtime: { request(input: RuntimeApiRequest): Promise<RuntimeApiResponse> };
   // 以下桥只向对应的内置 marketplace Bundle 提供：
   imageGeneration?: ExtensionImageGenerationApi;
   visionRecognition?: ExtensionVisionRecognitionApi;
@@ -183,6 +186,29 @@ Plugin 详情 contribution 若声明 `stateKey`，host 会从同名 global state
 ```
 
 不向 worker 传递 runtime token、native bridge token、模型凭据或完整进程环境。
+
+### 宿主后端 API
+
+已信任的扩展 handler 始终提供 `ctx.runtime.request({ path, method?, body? })`。已安装的侧栏 document 页面提供相同的 `window.setsunaUI.runtime.request(...)`。两者均返回 `{ ok, status, data }`，`data` 是已解析的 JSON；非 JSON 资源返回文本或 `{ mimeType, base64 }`。4xx/5xx 保留原状态和错误数据，传输错误或无权限才 reject。
+
+沙箱页面的 `window.alert/confirm/prompt` 在源码执行前接入主进程弹窗通道，保留同步返回值，已有 `if (confirm(...))`、`const name = prompt(..., oldName)` 无需改成 Promise。iframe 仍只有 `allow-scripts`；CSP 只额外允许当前 frame 的随机、可撤销弹窗地址，不开放通用网络或宿主 DOM。该地址不能调用其他原生接口，也不含 runtime bearer token。重命名应用只更新所属会话的弹窗标题，保留会话地址和当前 iframe 文档。页面卸载、窗口关闭或 renderer 退出会撤销弹窗会话并取消待处理弹窗。复杂表单仍使用页面内 `SetsunaComponents.dialog`。
+
+- 支持 `/v1/` 后端路由的 GET、POST、PUT、PATCH、DELETE、HEAD，包括跨项目的项目、对话、消息、调用记录、功能操作和设置；不逐个维护业务接口白名单，也不要求选择当前项目。
+- 本地插件导入 `/v1/features/plugin-management/install-local` 是主进程专用入口，应用桥禁止调用，继续通过原生目录选择器导入。`DELETE /v1/threads/:id` 通过已认证的 native bridge 进入与桌面 IPC 共用的删除队列，检查所有窗口（含子对话）的未保存修改和文件操作，并按需确认；取消返回 `{ok:false,status:409,data:{cancelled:true}}`。主进程不可用时拒绝删除，不回退到直接请求。应用桥禁止使用 `thread/delete` RPC 绕过此流程。
+- 安装并信任应用即授权这些 API，不需要新增 manifest capability、网络 origin 或逐次确认。原有路由的数据校验、业务约束和事件发布仍然生效。
+- 先读 `GET /v1/runtime-api` 获取常用核心接口示例及实时注册的 Feature operation 路径。Agent 也可用只读工具 `read_runtime_api` 查询同一后端。
+- Agent 的 `read_runtime_api` 不开放宿主文件路由：`/v1/projects/:id/...`、`/v1/workspace/...` 和附件读取必须改用当前工具权限约束下的文件工具。项目列表、对话和历史查询仍可用；已信任侧栏应用的 API 权限不受这条 Agent 工具边界影响。读取结果可能嵌入来源不明的 MCP、网页或历史工具内容，因此统一设置 `containsExternalContext`，由现有记忆策略处理。
+- `GET /v1/threads/:threadId/messages?limit=50&before=...` 读取消息页；`GET /v1/threads/:threadId/event-history?sinceSeq=0&limit=100` 读取含工具输入、输出、状态的事件页，返回 `nextSinceSeq/hasMore/latestSeq`，可继续翻页或轮询增量。
+- 截断工具输出使用 `GET /v1/threads/:threadId/tool-results/:resultId?offset=0&limit=32000`，返回 `content/nextOffset/totalBytes`，偏移以 UTF-8 字节计。
+- `path` 是本机后端的相对路径。认证由宿主注入；应用不接触端口或 token，不能把此通道重定向到外部站点、`/internal/` 或递归调用桥本身。SSE 长连接不通过此请求通道传输，事件使用上述增量接口。
+- 单次请求/响应最多 8 MiB，超时 120 秒；长记录应分页。关闭或替换页面会取消请求。聊天卡片与安装前预览不具备后端调用权限。
+
+```js
+const response = await ctx.runtime.request({ path: '/v1/projects' });
+if (!response.ok) throw new Error(`HTTP ${response.status}: ${JSON.stringify(response.data)}`);
+const projects = response.data.projects;
+// 项目关联直接保存已有 project.id，不另建一份手工项目目录。
+```
 
 ### 第一方私有能力桥
 
@@ -246,10 +272,10 @@ const value = await ctx.ui.input({ message: 'Name', placeholder: 'example' });
 - 本地目录安装的可执行扩展默认 `untrusted`，不会激活。用户需要在“能力 → 插件”详情中确认信任。
 - 随应用发布的内置市场是受控来源，安装和升级时自动校验并启用完整包，能力页不会为内置扩展显示手动信任或撤销入口；普通本地更新不会把旧信任转移给变更后的内容。
 - Agent 通过 `configure_plugin` 创建或更新扩展时，工具审批会展示完整文本内容和逐文件哈希，并绑定本次动作的完整性 token。批准后只信任并启用该版 Bundle；任何内容更新都必须再次审批。
-- `configure_plugin` 的 staged activation 只验证模块加载和注册契约。Agent 创建的扩展还必须通过 `verify_plugin` 执行代表性的工具与 Renderer UI action；该检查走真实 network/state bridge，并可断言卡片结果和页面状态路径，未返回 `Verified and usable: true` 时不能报告功能已可用。
+- `configure_plugin` 的 staged activation 只验证模块加载和注册契约。Agent 创建的扩展还必须通过 `verify_plugin` 执行代表性的工具与 Renderer UI action 处理函数；该检查走真实 network/state bridge，并可断言卡片结果和页面状态路径。结果中的 `checksPassed` 只覆盖已执行的宿主检查；`pageInteractionsVerified:false` 表示未运行页面 JavaScript、点击按钮或验证弹窗，报告时必须保留这个范围。
 - 信任绑定整个 Bundle 的确定性 SHA-256：排序后的相对路径、文件大小和文件内容都参与计算。安装会比较源目录与 staged 副本；启动、事件分发和每次工具执行前还会重新校验。
 - 任意文件变化都会使状态变成 `modified` 并停止后续执行。本地侧载扩展必须再次明确授权当前哈希；内置扩展需要从受控市场更新或重新安装。信任切换、升级和卸载也会先停止 worker，再变更目录或索引。
-- 每个 Plugin 最多一个按需启动的 Node worker。host 与 worker 使用有 1 MiB 单行上限的 JSONL RPC，带启动/请求超时、取消传播、stderr 截断和异常退出回收。
+- 每个 Plugin 最多一个按需启动的 Node worker。host 与 worker 使用有 16 MiB 单行上限的 JSONL RPC（包含后端 API 响应的编码开销），带启动/请求超时、取消传播、stderr 截断和异常退出回收。
 - worker 只继承 PATH、临时目录、locale 等显式允许的环境变量；`SETSUNA_DESKTOP_*`、`NODE_OPTIONS` 和凭据不会继承。需要遵守应用代理和 origin 策略的代码必须使用 `ctx.network.request`。
 - marketplace 专用私有桥在 Bundle 安装和 worker 激活两层校验来源；本地扩展不能借用图片服务凭据、视觉模型或线程附件。
 

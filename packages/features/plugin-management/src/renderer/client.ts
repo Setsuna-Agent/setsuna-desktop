@@ -1,5 +1,6 @@
 import type { FeatureOperationTransport } from '@setsuna-desktop/feature-core/operation';
 import {
+  requestInstalledPluginRuntimeApi,
   deleteStandalonePluginHook,
   installMarketplacePlugin,
   readInstalledPlugins,
@@ -26,6 +27,7 @@ import {
   type PluginManagementPluginTarget,
 } from '../contracts/index.js';
 import type {
+  RuntimePluginUiRuntimeRequest,
   RuntimePluginUiActionInput,
   RuntimePluginUiStateInput,
   RuntimePluginUiDataInput,
@@ -34,6 +36,9 @@ import type {
 
 export function createPluginManagementClient(transport: FeatureOperationTransport) {
   return Object.freeze({
+    requestRuntimeApi: (input: RuntimePluginUiRuntimeRequest, options?: Readonly<{ signal?: AbortSignal }>) => (
+      transport.call(requestInstalledPluginRuntimeApi, input, options)
+    ),
     readConnectorStatuses: (input: PluginManagementPluginTarget, options?: Readonly<{ signal?: AbortSignal }>) => (
       transport.call(readPluginConnectorStatuses, input, options)
     ),

@@ -46,6 +46,26 @@ describe('Plugin UI card declarations', () => {
 });
 
 describe('Plugin declarative Renderer UI contract', () => {
+  it.each([1, 2])('accepts optional confirmations without accepting malformed approvals in schema v%s', (schemaVersion) => {
+    const input = {
+      schemaVersion,
+      actions: [
+        { id: 'table.save' },
+        { id: 'table.clear', approval: { title: 'Clear table', message: 'Delete all rows?' } },
+      ],
+      contributions: [],
+    };
+    const parsed = parseRuntimePluginUiManifest(input);
+    expect(parsed.actions).toEqual(input.actions);
+    expect(Object.isFrozen(parsed.actions[0])).toBe(true);
+    expect(Object.isFrozen(parsed.actions[1].approval)).toBe(true);
+    for (const approval of [null, false, {}, { message: 42 }, { message: 'Delete?', required: false }]) {
+      expect(() => parseRuntimePluginUiManifest({
+        ...input, actions: [{ id: 'table.clear', approval }],
+      })).toThrow();
+    }
+  });
+
   it('accepts the bounded host schema and rejects executable, unknown, or over-budget shapes', () => {
     const manifest = parseRuntimePluginUiManifest({
       schemaVersion: 1,
@@ -221,6 +241,7 @@ describe('Plugin declarative Renderer UI contract', () => {
           htmlResourceId: 'weather-html',
           cssResourceId: 'weather-css',
           jsResourceId: 'weather-js',
+          libraries: ['echarts'],
           actionIds: ['weather.refresh'],
         },
       }],
@@ -229,6 +250,7 @@ describe('Plugin declarative Renderer UI contract', () => {
     expect(manifest.contributions[0]).toMatchObject({
       document: {
         htmlResourceId: 'weather-html',
+        libraries: ['echarts'],
         actionIds: ['weather.refresh'],
       },
     });
@@ -250,6 +272,21 @@ describe('Plugin declarative Renderer UI contract', () => {
         document: { htmlResourceId: 'weather-html', actionIds: [] },
       }],
     })).toThrow('exactly one of tree or document');
+  });
+
+  it('rejects remote scripts and unknown libraries at the manifest boundary', () => {
+    for (const libraries of [['https://example.com/echarts.js'], ['react'], ['echarts', 'echarts'], 'echarts', [null]]) {
+      expect(() => parseRuntimePluginUiManifest({
+        schemaVersion: 2,
+        actions: [],
+        contributions: [{
+          id: 'app.page',
+          slot: 'renderer.plugin.page',
+          navigation: { label: 'App' },
+          document: { htmlResourceId: 'app-html', libraries, actionIds: [] },
+        }],
+      })).toThrow();
+    }
   });
 });
 

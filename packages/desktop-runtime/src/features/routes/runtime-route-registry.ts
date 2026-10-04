@@ -35,6 +35,12 @@ type RouteRegistration = {
 export class RuntimeRouteRegistry implements RuntimeRouteRegistrar {
   private readonly registrations = new Set<RouteRegistration>();
 
+  describe(): ReadonlyArray<{ id: string; method: FeatureOperationMethod; path: string }> {
+    return [...this.registrations].map(({ operation }) => ({
+      id: operation.id, method: operation.method, path: operation.path,
+    }));
+  }
+
   register<TInput, TOutput, TErrors extends FeatureOperationErrorDefinitions>(
     scope: FeatureScope,
     operation: FeatureOperationDescriptor<TInput, TOutput, TErrors>,

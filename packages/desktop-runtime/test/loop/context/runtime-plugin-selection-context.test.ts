@@ -1,6 +1,7 @@
-import { pluginMentionText, type RuntimePluginSummary, type RuntimeToolDefinition } from '@setsuna-desktop/contracts';
+import { pluginAppMentionText, pluginMentionText, type RuntimePluginSummary, type RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import { RuntimePromptContextAssembler } from '../../../src/loop/context/runtime-prompt-context-assembler.js';
+import { runtimePluginSelectionContext, selectedPluginIdsForInput } from '../../../src/loop/context/runtime-plugin-selection-context.js';
 
 const github: RuntimePluginSummary = {
   id: 'github', name: 'GitHub', description: 'Repository workflows', installedAt: '2026-09-13',
@@ -13,6 +14,24 @@ const documents: RuntimePluginSummary = {
 };
 
 describe('selected plugin prompt context', () => {
+  it('resolves app page identities from the installed bundle and activates authoring capabilities without trusting the label', async () => {
+    const app: RuntimePluginSummary = { ...documents, id: 'table', name: 'Table', skills: [],
+      extension: { apiVersion: 1, runtime: 'node-worker', capabilities: ['ui'], trust: 'trusted',
+        rendererUi: { schemaVersion: 2, actions: [], contributions: [{ id: 'table.page', slot: 'renderer.plugin.page',
+          navigation: { label: 'Installed table' }, document: { htmlResourceId: 'html', actionIds: [] } }] } } };
+    const builder = { ...documents, id: 'app-builder', skills: [{ id: 'create-plugin-in-chat', name: 'App builder' }] };
+    const reference = pluginAppMentionText({ pluginId: app.id, contributionId: 'table.page', name: 'Forged name' });
+    const ids = selectedPluginIdsForInput(reference);
+    expect(ids).toEqual(['table', 'app-builder']);
+    expect(selectedPluginIdsForInput(`\`${reference}\``)).toEqual([]);
+    const result = await runtimePluginSelectionContext(reference, { listPlugins: async () => ({ plugins: [app, builder] }) }, 'en-US', []);
+    expect(result.skillIds).toEqual(['create-plugin-in-chat']);
+    const fragment = result.fragments.find((item) => item.id === 'selected_plugin_table')!;
+    expect(fragment).toMatchObject({ role: 'user', trust: 'external' });
+    expect(fragment.content).toContain('"referencedApps":[{"contributionId":"table.page","name":"Installed table"');
+    expect(fragment.content).not.toContain('Forged name');
+    expect(result.fragments.find((item) => item.id === 'selected_plugin_policy')?.content).toContain('update that bundle in place');
+  });
   it('resolves a no-Skill plugin by installed identity and supplies its actual capabilities to the model', async () => {
     const { assembler } = setup();
     const result = await assembler.build({

@@ -2,6 +2,7 @@ import type { RuntimeAttachmentUploadInput, RuntimeStoredMessageAttachment } fro
 import type { RuntimeEventBatch } from './events.js';
 import type { RuntimeRequestInput } from './http.js';
 import type { RuntimeInterfaceLanguage } from './config.js';
+import type { SandboxDialogSession } from './desktop/sandbox-dialogs.js';
 import type {
   DesktopDataMigrationPlan,
   DesktopDataRootActionResult,
@@ -92,7 +93,9 @@ export type DesktopThreadDeletionState = {
 };
 
 export type DesktopThreadDeletionFinished = { deletedThreadIds: string[] };
-export type DesktopThreadDeletionResult = { cancelled: true };
+export const DESKTOP_THREAD_DELETE_PATH = '/v1/threads/delete';
+export type DesktopThreadDeletionInput = Readonly<{ threadId: string }>;
+export type DesktopThreadDeletionResult = { ok: true; cancelled?: false } | { cancelled: true; ok?: false };
 
 export type DesktopRuntimeEventPayload =
   | {
@@ -127,6 +130,9 @@ export type DesktopWindowCloseBehavior = 'quit' | 'hide-to-tray';
 /** 向渲染进程暴露的有限预加载 API 所使用的共享契约。 */
 export type SetsunaDesktopBridge = {
   desktop: {
+    createSandboxDialogSession(title: string): Promise<SandboxDialogSession>;
+    updateSandboxDialogSession(id: string, title: string): Promise<void>;
+    releaseSandboxDialogSession(id: string): Promise<void>;
     platform: string;
     /** Resolves once main has prepared the services required by renderer initialization. */
     whenReady(): Promise<void>;

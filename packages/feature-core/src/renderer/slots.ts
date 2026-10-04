@@ -91,6 +91,8 @@ export interface RendererOwnedSlotRenderer {
     props: TProps,
     instanceKey?: string,
   ): ReactNode;
+  /** Active entries in their effective display order, scoped to the owning contribution. */
+  listEntryIds<TProps extends object>(slot: RendererListSlot<TProps>): readonly string[];
   keyed<TKey extends string, TProps extends object, TMetadata>(
     slot: RendererKeyedSlot<TKey, TProps, TMetadata>,
     key: TKey,

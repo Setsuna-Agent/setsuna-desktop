@@ -1,5 +1,6 @@
 import { useConfirm } from '@setsuna-desktop/renderer-ui';
 import type {
+  RuntimeApiRequest,
   RuntimePluginUiActionInput,
   RuntimePluginUiData,
   RuntimePluginUiDocumentContribution,
@@ -21,6 +22,7 @@ export function SandboxedPluginUiView({
   revision,
   service,
   threadId,
+  title,
 }: Readonly<{
   contribution: RuntimePluginUiDocumentContribution;
   cwd?: string;
@@ -30,6 +32,7 @@ export function SandboxedPluginUiView({
   revision: string;
   service: PluginManagementRendererService;
   threadId?: string;
+  title?: string;
 }>) {
   const { t } = useI18n();
   const confirm = useConfirm();
@@ -50,7 +53,7 @@ export function SandboxedPluginUiView({
     if (!action || !contribution.document.actionIds.includes(actionId)) {
       throw new Error('Plugin page action is not declared.');
     }
-    if (!await confirm({
+    if (action.approval && !await confirm({
       title: action.approval.title ?? t('pluginUi.confirmAction'),
       description: action.approval.message,
     })) throw new Error('Plugin page action was cancelled.');
@@ -69,6 +72,10 @@ export function SandboxedPluginUiView({
     });
     await service.runRendererUiAction(input);
   }, [actions, confirm, contribution, cwd, pluginId, projectId, service, t, threadId]);
+
+  const requestRuntime = useCallback((request: RuntimeApiRequest, signal: AbortSignal) => (
+    service.requestRuntimeApi({ pluginId, contributionId: contribution.id, request }, { signal })
+  ), [contribution.id, pluginId, service]);
 
   if (sourceState.status !== 'ready') {
     return (
@@ -97,9 +104,12 @@ export function SandboxedPluginUiView({
       className="sandboxed-plugin-ui__frame"
       context={context}
       data={dataState.data}
+      libraryScripts={sourceState.libraryScripts}
       onAction={runAction}
+      onRuntimeRequest={contribution.slot === 'renderer.plugin.page' ? requestRuntime : undefined}
+      size="fill"
       source={sourceState.source}
-      title={contribution.navigation?.label ?? pluginId}
+      title={title ?? contribution.navigation?.label ?? pluginId}
     />
   );
 }

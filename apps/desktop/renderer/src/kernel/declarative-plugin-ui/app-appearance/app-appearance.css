@@ -1,0 +1,144 @@
+.plugin-app-avatar {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--plugin-app-avatar-color);
+  background: color-mix(in srgb, var(--plugin-app-avatar-color) 14%, transparent);
+}
+
+.plugin-app-avatar svg {
+  flex: none;
+  width: 68%;
+  height: 68%;
+}
+
+.plugin-app-avatar-image {
+  display: block;
+  flex: 0 0 auto;
+  object-fit: cover;
+}
+
+.plugin-app-avatar-size--menu {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+}
+
+.plugin-app-avatar-size--list {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+}
+
+.plugin-app-avatar-size--inline {
+  width: var(--desktop-inline-icon-size);
+  height: var(--desktop-inline-icon-size);
+  border-radius: 5px;
+}
+
+.plugin-app-avatar-size--installed {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+}
+
+.plugin-app-avatar-size--card {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+}
+
+.plugin-app-avatar-size--detail {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+}
+
+.plugin-app-appearance {
+  display: grid;
+  gap: 22px;
+}
+
+.plugin-app-appearance__identity {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.plugin-app-appearance__name {
+  display: grid;
+  flex: 1;
+  gap: 8px;
+  min-width: 0;
+}
+
+.plugin-app-appearance__name label,
+.plugin-app-appearance__avatars legend {
+  color: var(--sd-color-text-muted);
+  font-size: 12px;
+}
+
+.plugin-app-appearance__avatars {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.plugin-app-appearance__avatars legend {
+  margin-bottom: 10px;
+  padding: 0;
+}
+
+.plugin-app-appearance__presets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.plugin-app-appearance__choice {
+  justify-content: center;
+  min-height: 44px;
+  border: 1px solid transparent;
+  border-radius: var(--app-radius-md);
+  padding: 6px;
+}
+
+.plugin-app-appearance__choice[aria-pressed='true'] {
+  border-color: var(--sd-color-accent);
+  background: var(--sd-color-surface-muted);
+}
+
+.plugin-app-appearance__error {
+  color: var(--sd-color-danger);
+  font-size: 12px;
+}
+
+.plugin-app-appearance__plugin-link {
+  align-self: center;
+  min-width: 0;
+  margin-right: auto;
+  border: 0;
+  padding: 0;
+  overflow: hidden;
+  color: var(--sd-color-text-muted);
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.plugin-app-appearance__plugin-link:hover {
+  color: var(--sd-color-accent);
+  text-decoration: underline;
+}
+
+.plugin-app-appearance__plugin-link:focus-visible {
+  outline: 2px solid var(--sd-color-accent);
+  outline-offset: 3px;
+}

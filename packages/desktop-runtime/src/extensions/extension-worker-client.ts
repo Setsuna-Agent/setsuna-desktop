@@ -11,7 +11,7 @@ import type {
   ExtensionWorkerToHostMessage,
   HostToExtensionWorkerMessage,
 } from './extension-worker-protocol.js';
-import { protocolRecord } from './extension-worker-protocol.js';
+import { MAX_EXTENSION_PROTOCOL_LINE_BYTES, protocolRecord } from './extension-worker-protocol.js';
 
 export type ExtensionWorkerRequestContext = {
   threadId: string;
@@ -55,7 +55,7 @@ type ExtensionWorkerClientOptions = {
   onHostRequest(method: string, params: unknown, context: ExtensionWorkerRequestContext): Promise<unknown>;
 };
 
-const MAX_PROTOCOL_LINE_BYTES = 1024 * 1024;
+const MAX_PROTOCOL_LINE_BYTES = MAX_EXTENSION_PROTOCOL_LINE_BYTES;
 const MAX_STDERR_BYTES = 16 * 1024;
 
 export class ExtensionWorkerClient {

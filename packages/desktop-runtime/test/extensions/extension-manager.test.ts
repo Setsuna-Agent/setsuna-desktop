@@ -607,11 +607,11 @@ describe('extension manager', () => {
     }
   });
 
-  it('allows a sandboxed Plugin page to invoke only declared actions with bounded JSON', async () => {
+  it('persists sandboxed page actions without per-save approval while enforcing declared inputs', async () => {
     const fixture = await extensionFixture({ includeRendererUiAction: true });
     const rendererUi = parseRuntimePluginUiManifest({
       schemaVersion: 2,
-      actions: [{ id: 'profile.save', approval: { message: 'Refresh weather?' } }],
+      actions: [{ id: 'profile.save' }],
       contributions: [{
         id: 'weather.page',
         slot: 'renderer.plugin.page',
@@ -628,7 +628,8 @@ describe('extension manager', () => {
       set: vi.fn(async () => undefined),
       delete: vi.fn(async () => undefined),
     };
-    const manager = testManager(record, state, { handle: vi.fn(async () => null) });
+    const handleUi = vi.fn(async () => null);
+    const manager = testManager(record, state, { handle: handleUi });
     try {
       await expect(manager.runRendererUiAction({
         pluginId: 'worker-demo',
@@ -646,6 +647,7 @@ describe('extension manager', () => {
         'ui-payload',
         { city: '杭州', units: { temperature: 'celsius' } },
       );
+      expect(handleUi).not.toHaveBeenCalled();
 
       await expect(manager.runRendererUiAction({
         pluginId: 'worker-demo',

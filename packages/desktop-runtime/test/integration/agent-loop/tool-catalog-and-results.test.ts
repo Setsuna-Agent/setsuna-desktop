@@ -3,10 +3,12 @@ import type {
   ModelStreamEvent,
   RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
+import { pluginAppMentionText, pluginMentionText } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
 import { FileToolResultStore } from '../../../src/adapters/store/file-tool-result-store.js';
+import { RuntimeApiToolHost } from '../../../src/adapters/tool/runtime-api-tool-host.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import type { ModelClient } from '../../../src/ports/model-client.js';
 import { systemClock } from '../../../src/ports/clock.js';
@@ -14,10 +16,46 @@ import type {
   ToolExecutionContext,
   ToolHost,
 } from '../../../src/ports/tool-host.js';
-import { CapturingToolHost, mkDataDir } from '../../support/agent-loop/shared.js';
+import { CapturingToolHost, mkDataDir, SingleToolCallModelClient } from '../../support/agent-loop/shared.js';
+import { installedAppBuilder } from '../../support/app-builder.js';
 import { createTestThreadStore } from '../../support/thread-store.js';
 
 describe('agent loop tool catalog and stored results', () => {
+  it.each(['builder', 'app'] as const)('loads authoring tools for a %s reference on the first model step and persists ownership in a projectless chat', async (referenceKind) => {
+    const ids = new RandomIdGenerator();
+    const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Build an app' });
+    const builder = installedAppBuilder();
+    const app = { ...builder, id: 'my-table', name: 'My table', skills: [], tools: [],
+      extension: { apiVersion: 1 as const, runtime: 'node-worker' as const, capabilities: ['ui' as const], trust: 'trusted' as const,
+        rendererUi: { schemaVersion: 2 as const, actions: [], contributions: [{ id: 'table.page', slot: 'renderer.plugin.page' as const,
+          navigation: { label: 'My table' }, document: { htmlResourceId: 'html', actionIds: [] } }] } } };
+    const pluginStore = { listPlugins: async () => ({ plugins: [builder, app] }) };
+    const modelClient = new SingleToolCallModelClient({
+      id: 'read_projects', name: 'read_runtime_api', arguments: '{"path":"/v1/projects"}',
+    });
+    const toolHost = new RuntimeApiToolHost({
+      request: async () => ({ ok: true, status: 200, data: { projects: [] } }),
+    }, pluginStore);
+    const loop = new AgentLoop({
+      threadStore, modelClient, pluginStore, toolHost, eventBus: new InMemoryEventBus(), clock: systemClock, ids,
+    });
+    const reference = referenceKind === 'builder' ? pluginMentionText(builder)
+      : pluginAppMentionText({ pluginId: app.id, contributionId: 'table.page', name: app.name });
+    await loop.sendTurn(thread.id, { input: `${reference} Show my projects in this app.` });
+    expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toContain('read_runtime_api');
+    expect(modelClient.requests[0].messages.map((message) => message.content).join('\n'))
+      .toContain('"availableTools":["read_runtime_api"]');
+    const events = await threadStore.listEvents(thread.id, 0);
+    expect(events.find((event) => event.type === 'tool.started')?.payload).toMatchObject({
+      toolName: 'read_runtime_api', plugin: { id: builder.id, name: builder.name, icon: builder.icon },
+    });
+    const saved = await threadStore.getThread(thread.id);
+    expect(saved?.messages.flatMap((message) => message.toolRuns ?? [])).toMatchObject([{
+      name: 'read_runtime_api', status: 'success', plugin: { id: builder.id, name: builder.name },
+    }]);
+  });
+
   it('discovers an MCP tool, advertises its schema on the next step, and executes through the host', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);

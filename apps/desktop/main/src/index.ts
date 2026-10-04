@@ -30,6 +30,8 @@ import { fileURLToPath } from 'node:url';
 import { registerDataRootIpc } from './ipc/data-root-ipc.js';
 import { registerDesktopIpc } from './ipc/desktop-ipc.js';
 import { registerRuntimeIpc } from './ipc/runtime-ipc.js';
+import { createThreadDeletionHandler } from './window/thread-deletion.js';
+import { showSandboxDialog } from './window/sandbox-dialogs.js';
 import { registerWindowIpc } from './ipc/window-ipc.js';
 import {
   maintenanceProfileRoot,
@@ -284,8 +286,18 @@ async function createWindow(): Promise<void> {
     dataLayout.credentialVaultPath,
     electronCredentialEncryption(safeStorage),
   );
+  let requestRuntime = (_input: RuntimeRequestInput): Promise<unknown> => (
+    Promise.reject(new Error('Desktop runtime is still starting.'))
+  );
+  const deleteThread = createThreadDeletionHandler({
+    request: <T>(input: RuntimeRequestInput) => requestRuntime(input) as Promise<T>,
+  }, () => interfaceLanguage);
   const currentDesktopNativeBridgeServer = new DesktopNativeBridgeServer({
     credentialVault,
+    showSandboxDialog: (owner, input, options) => showSandboxDialog(owner, input, { ...options, language: interfaceLanguage }),
+    deleteThread: (threadId, signal) => deleteThread(null, {
+      method: 'DELETE', path: `/v1/threads/${encodeURIComponent(threadId)}`,
+    }, signal),
     writeClipboardText: (text) => clipboard.writeText(text),
     deleteNetworkProxy: (proxyServerId) => requireNetworkProxyMainService().deleteServer(proxyServerId),
     openExternal: async (url) => { await shell.openExternal(url); },
@@ -297,9 +309,6 @@ async function createWindow(): Promise<void> {
   });
   desktopNativeBridgeServer = currentDesktopNativeBridgeServer;
 
-  let requestRuntime = (_input: RuntimeRequestInput): Promise<unknown> => (
-    Promise.reject(new Error('Desktop runtime is still starting.'))
-  );
   let activatedMainFeatures: ActivatedBuiltinMainFeatures | null = null;
   let nativeBridge: Awaited<ReturnType<typeof currentDesktopNativeBridgeServer.start>>;
   try {
@@ -450,7 +459,7 @@ async function createWindow(): Promise<void> {
         await currentDesktopNativeBridgeServer.stop();
         throw error;
       }
-      registerRuntimeIpc(currentRuntimeHost, () => interfaceLanguage);
+      registerRuntimeIpc(currentRuntimeHost, deleteThread);
       if (startupClosedBeforeHandoff) return;
       await currentWebDavSyncLifecycle.start();
       await currentDesktopUpdaterLifecycle.initialize();

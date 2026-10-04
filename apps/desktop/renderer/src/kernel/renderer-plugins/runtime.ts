@@ -688,6 +688,8 @@ function replaceMap<TKey, TValue>(
   target: Map<TKey, TValue>,
   source: ReadonlyMap<TKey, TValue>,
 ): void {
+  // Preference-only commits reuse the live maps; clearing them would erase registrations.
+  if (target === source) return;
   target.clear();
   for (const [key, value] of source) target.set(key, value);
 }

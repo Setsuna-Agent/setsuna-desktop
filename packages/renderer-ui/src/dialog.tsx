@@ -1,7 +1,7 @@
 // beUI's center-modal surface, with Radix owning focus and dismissal.
 import { Dialog as Primitive } from 'radix-ui';
 import { X } from 'lucide-react';
-import { useRef, type ReactNode } from 'react';
+import { useRef, type ComponentPropsWithoutRef, type ReactNode } from 'react';
 import { overlayContainer } from './portal.js';
 import { IconButton } from './button.js';
 import { useUiLabels } from './locale.js';
@@ -20,8 +20,8 @@ export type DialogProps = {
   showClose?: boolean;
   onClose(): void;
   'aria-label'?: string;
-};
-export function Dialog({ open = true, title, description, children, footer, className, width = 640, closeLabel, dismissible = true, showClose = true, onClose, 'aria-label': label }: DialogProps) {
+} & Pick<ComponentPropsWithoutRef<typeof Primitive.Content>, 'onCloseAutoFocus'>;
+export function Dialog({ open = true, title, description, children, footer, className, width = 640, closeLabel, dismissible = true, showClose = true, onClose, onCloseAutoFocus, 'aria-label': label }: DialogProps) {
   const labels = useUiLabels();
   const closeText = closeLabel ?? labels.close;
   const contentRef = useRef<HTMLElement | null>(null);
@@ -39,7 +39,12 @@ export function Dialog({ open = true, title, description, children, footer, clas
           event.preventDefault();
           contentRef.current?.focus({ preventScroll: true });
         }}
-        onCloseAutoFocus={(event) => { event.preventDefault(); previousFocus.current?.focus({ preventScroll: true }); }}
+        onCloseAutoFocus={(event) => {
+          onCloseAutoFocus?.(event);
+          if (event.defaultPrevented) return;
+          event.preventDefault();
+          previousFocus.current?.focus({ preventScroll: true });
+        }}
         onEscapeKeyDown={(event) => { if (!dismissible) event.preventDefault(); }}
         onPointerDownOutside={(event) => { if (!dismissible) event.preventDefault(); }}>
         <section ref={contentRef} className={cn('sd-dialog', className)} style={{ width }}>

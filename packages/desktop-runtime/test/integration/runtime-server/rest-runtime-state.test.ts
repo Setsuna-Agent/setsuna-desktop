@@ -7,7 +7,7 @@ import {
 import { mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRuntimeServerTestHarness, type RuntimeServerTestHarness } from '../../support/runtime-server/harness.js';
 
 describe('runtime server REST runtime state', () => {
@@ -387,7 +387,15 @@ describe('runtime server REST runtime state', () => {
           (message) => message.role === 'assistant' && message.status === 'complete',
         ),
       );
-      const firstPage = await harness.runtimeFetch(`${debugPath}/0`);
+      // Message completion precedes the terminal event and its final stream trace.
+      const firstPage = await vi.waitFor(async () => {
+        const page = await harness.runtimeFetch(`${debugPath}/0`);
+        expect(page.traces).toContainEqual(expect.objectContaining({
+          kind: 'stream.pipeline.summary',
+          payload: expect.objectContaining({ terminalEventType: 'turn.completed' }),
+        }));
+        return page;
+      }, { timeout: harness.threadStateWaitTimeoutMs });
       expect(firstPage.traces).toContainEqual(expect.objectContaining({
         kind: 'model.history.normalized',
         threadId: thread.id,

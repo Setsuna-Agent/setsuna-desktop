@@ -4,6 +4,7 @@ import type { RuntimePluginSummary, RuntimeSkillSummary } from '@setsuna-desktop
 import {
   createSelectedSkillSlot,
   createSelectedPluginSlot,
+  createPluginAppMentionSlot,
   createBrowserTabMentionSlot,
   createTextSlot,
   createWorkspaceMentionReferenceSlot,
@@ -82,7 +83,11 @@ export function createChatComposerClipboardPastePlan(
     if (part.type === 'plugin') {
       const plugin = plugins.find((item) => item.id === part.pluginId);
       if (!plugin) return null;
-      slots.push(createSelectedPluginSlot(plugin));
+      const page = plugin.extension?.rendererUi?.contributions.find((item) => item.id === part.contributionId && item.slot === 'renderer.plugin.page');
+      if (part.contributionId && !page) return null;
+      slots.push(page
+        ? createPluginAppMentionSlot({ pluginId: plugin.id, contributionId: page.id, name: page.navigation?.label ?? plugin.name })
+        : createSelectedPluginSlot(plugin));
       continue;
     }
 
@@ -240,7 +245,8 @@ function isClipboardPart(value: unknown): value is ChatComposerClipboardPart {
   if (!isRecord(value) || typeof value.type !== 'string') return false;
   if (value.type === 'text') return typeof value.value === 'string';
   if (value.type === 'skill') return typeof value.skillId === 'string' && Boolean(value.skillId);
-  if (value.type === 'plugin') return typeof value.pluginId === 'string' && Boolean(value.pluginId);
+  if (value.type === 'plugin') return typeof value.pluginId === 'string' && Boolean(value.pluginId)
+    && (value.contributionId === undefined || (typeof value.contributionId === 'string' && Boolean(value.contributionId)));
   if (value.type === 'browser-tab') return isBrowserTabReference(value.tab);
   if (value.type !== 'workspace' || !isRecord(value.entry)) return false;
   return (value.entry.kind === 'file' || value.entry.kind === 'directory')

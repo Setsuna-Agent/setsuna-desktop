@@ -1,5 +1,8 @@
 import type { RuntimeExtensionEventName } from '@setsuna-desktop/contracts';
 
+// Includes an 8 MiB runtime response and the base64/JSON transport overhead.
+export const MAX_EXTENSION_PROTOCOL_LINE_BYTES = 16 * 1024 * 1024;
+
 export type ExtensionWorkerTool = {
   name: string;
   description: string;

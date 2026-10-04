@@ -56,6 +56,12 @@ export const OPENAI_VISION_RECOGNITION_PLUGIN_ID = 'openai-vision-recognition';
 export const OPENAI_VISION_RECOGNITION_TOOL_NAME = 'analyze_image';
 export const WEB_SEARCH_PLUGIN_ID = 'web-search';
 export const WEB_SEARCH_TOOL_NAME = 'web_search';
+export const APP_BUILDER_PLUGIN_ID = 'app-builder';
+
+/** Required host components; same-ID local/repository bundles remain user-managed. */
+export function isRequiredBuiltinPlugin(plugin: Pick<RuntimePluginSummary, 'id' | 'installationSource'>): boolean {
+  return plugin.id === APP_BUILDER_PLUGIN_ID && plugin.installationSource === 'marketplace';
+}
 
 export type RuntimePluginSkill = {
   id: string;
