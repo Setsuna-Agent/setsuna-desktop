@@ -73,6 +73,8 @@ export type ThreadStore = {
   getThread(threadId: string): Promise<RuntimeThread | null>;
   /** Recovery can inspect live turns without copying the full transcript and model diagnostics. */
   getActiveTurnIds?(threadId: string): Promise<string[]>;
+  /** Managed image references can be read from checkpoint metadata without loading message bodies. */
+  getGeneratedImageAssetIds?(threadId: string): Promise<string[]>;
   getSamplingState?(threadId: string): Promise<RuntimeThreadSamplingState | null>;
   getTurnActivity(threadId: string, turnId: string): Promise<RuntimeTurnActivityProjection | null>;
   getThreadPage(threadId: string, query?: RuntimeMessagePageQuery): Promise<RuntimeThread | null>;

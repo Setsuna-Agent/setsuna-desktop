@@ -9,6 +9,8 @@ type ThreadMessages = Pick<RuntimeThread, 'messages'>;
 type GeneratedImageReferenceReader = {
   listThreads(query?: { includeArchived?: boolean; includeSide?: boolean; includeFeatures?: boolean }): Promise<readonly { id: string }[]>;
   getThread(threadId: string): Promise<ThreadMessages | null>;
+  getSamplingState?(threadId: string): Promise<ThreadMessages | null>;
+  getGeneratedImageAssetIds?(threadId: string): Promise<string[]>;
 };
 
 /** Collects new opaque generated assets plus legacy inline attachments that still own a local copy. */
@@ -27,7 +29,7 @@ export function managedGeneratedImageAssetIds(thread: ThreadMessages | null | un
 }
 
 /**
- * Scans snapshots one at a time to avoid concurrently cloning every thread history.
+ * Prefers checkpoint reference IDs; older stores can read a coherent message snapshot.
  * When candidates are supplied, the scan stops as soon as every candidate is found.
  */
 export async function managedGeneratedImageAssetIdsFromStore(
@@ -40,8 +42,10 @@ export async function managedGeneratedImageAssetIdsFromStore(
 
   const threads = await store.listThreads({ includeArchived: true, includeSide: true, includeFeatures: true });
   for (const thread of threads) {
-    const snapshot = await store.getThread(thread.id);
-    for (const assetId of managedGeneratedImageAssetIds(snapshot)) {
+    const references = store.getGeneratedImageAssetIds
+      ? await store.getGeneratedImageAssetIds(thread.id)
+      : managedGeneratedImageAssetIds(await (store.getSamplingState ? store.getSamplingState(thread.id) : store.getThread(thread.id)));
+    for (const assetId of references) {
       if (remaining && !remaining.has(assetId)) continue;
       assetIds.add(assetId);
       remaining?.delete(assetId);

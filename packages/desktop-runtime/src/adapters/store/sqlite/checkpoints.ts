@@ -1,8 +1,12 @@
 import type { RuntimeThread, RuntimeThreadTurn, StoredThreadEvent } from '@setsuna-desktop/contracts';
 import type { DatabaseSync } from 'node:sqlite';
+import { numberColumn, stringColumn } from '../sqlite-thread-row.js';
+import { assertThreadSnapshot, normalizeThreadAfterEventReplay, normalizeThreadSnapshot } from '../thread-store-state.js';
 import { decodeSqliteJson, encodeSqliteJson } from './json.js';
+import { checkpointRecoveryState } from './recovery-state.js';
 
 type TurnCheckpoint = { turn: RuntimeThreadTurn; stepCount?: number };
+type ThreadCheckpoint = { thread: RuntimeThread; messageCount: number; turnCount: number; recovery?: unknown };
 
 /** The checkpoint header contains small thread state; ordered messages and turns live in rows. */
 export function threadCheckpointHeader(thread: RuntimeThread): string {
@@ -10,6 +14,7 @@ export function threadCheckpointHeader(thread: RuntimeThread): string {
     thread: { ...thread, messages: [], turns: thread.turns ? [] : undefined },
     messageCount: thread.messages.length,
     turnCount: thread.turns?.length ?? 0,
+    recovery: checkpointRecoveryState(thread),
   });
 }
 
@@ -18,6 +23,43 @@ export function readThreadCheckpoint(
   threadId: string,
   json: string,
   format: number,
+): RuntimeThread {
+  return readCheckpoint(database, threadId, json, format, true);
+}
+
+/** Read message/activity state without restoring model request diagnostics or populating the full-thread cache. */
+export function readCheckpointTranscript(database: DatabaseSync, threadId: string): RuntimeThread | null {
+  const checkpoint = readCompleteCheckpointHeader(database, threadId);
+  if (!checkpoint) return null;
+  const thread = readCheckpoint(database, threadId, JSON.stringify(checkpoint), 2, false);
+  return normalizeThreadAfterEventReplay(normalizeThreadSnapshot(thread).thread).thread;
+}
+
+/** Null requires the normal migration/replay path; a header is usable only at the current watermark. */
+export function readCompleteCheckpointHeader(database: DatabaseSync, threadId: string): ThreadCheckpoint | null {
+  const row = database.prepare(`
+    SELECT snapshot_json, snapshot_seq, last_seq, message_index_seq, snapshot_format
+    FROM threads WHERE id = ?
+  `).get(threadId);
+  if (!row) return null;
+  const snapshotSeq = numberColumn(row, 'snapshot_seq');
+  // Legacy snapshots still need migration; an uncheckpointed tail must use normal event replay.
+  if (numberColumn(row, 'snapshot_format') !== 2 || snapshotSeq !== numberColumn(row, 'last_seq')) return null;
+  if (numberColumn(row, 'message_index_seq') !== snapshotSeq) throw new Error(`Invalid SQLite message checkpoint: ${threadId}`);
+  const checkpoint = JSON.parse(stringColumn(row, 'snapshot_json')) as ThreadCheckpoint;
+  assertThreadSnapshot(checkpoint.thread, threadId);
+  if (checkpoint.thread.lastSeq !== snapshotSeq) throw new Error(`Invalid SQLite thread checkpoint sequence: ${threadId}`);
+  if (!Number.isInteger(checkpoint.messageCount) || checkpoint.messageCount < 0
+    || !Number.isInteger(checkpoint.turnCount) || checkpoint.turnCount < 0) throw new Error(`Invalid SQLite checkpoint counts: ${threadId}`);
+  return checkpoint;
+}
+
+function readCheckpoint(
+  database: DatabaseSync,
+  threadId: string,
+  json: string,
+  format: number,
+  includeStepSnapshots: boolean,
 ): RuntimeThread {
   if (format === 1) return JSON.parse(json) as RuntimeThread;
   if (format !== 2) throw new Error(`Unsupported SQLite checkpoint format: ${format}`);
@@ -32,7 +74,7 @@ export function readThreadCheckpoint(
       SELECT turn_json FROM thread_turn_checkpoints WHERE thread_id = ? ORDER BY turn_index
     `).all(threadId).map((row) => {
       const { turn, stepCount } = decodeSqliteJson<TurnCheckpoint>(row.turn_json);
-      if (stepCount !== undefined) {
+      if (includeStepSnapshots && stepCount !== undefined) {
         const steps = database.prepare(`
           SELECT event_json FROM runtime_events
           WHERE thread_id = ? AND type = 'turn.step_snapshot' AND turn_id = ? AND seq <= ?

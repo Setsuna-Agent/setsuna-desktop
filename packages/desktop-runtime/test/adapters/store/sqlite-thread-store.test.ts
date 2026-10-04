@@ -22,7 +22,7 @@ afterEach(async () => {
 });
 
 describe('sqlite thread store', () => {
-  it('recovers active turn IDs from an uncheckpointed tail without cloning transcript diagnostics', async () => {
+  it.each(['checkpoint', 'unindexed-checkpoint', 'event-tail'])('recovers active turn IDs from %s without cloning transcript diagnostics', async (source) => {
     const dataDir = await temporaryDirectory();
     const first = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
     const thread = await first.createThread({ title: 'Recovery projection' });
@@ -43,13 +43,21 @@ describe('sqlite thread store', () => {
     }));
     await first.close();
 
-    // Simulate a crash after the event commit but before its delayed snapshot.
-    const database = new DatabaseSync(path.join(dataDir, 'threads.sqlite'));
-    try {
-      database.prepare('UPDATE threads SET snapshot_json = ?, snapshot_seq = ?, snapshot_format = 1 WHERE id = ?')
-        .run(JSON.stringify(checkpoint), checkpoint!.lastSeq, thread.id);
-    } finally {
+    if (source === 'unindexed-checkpoint') {
+      const database = new DatabaseSync(path.join(dataDir, 'threads.sqlite'));
+      database.prepare("UPDATE threads SET snapshot_json = json_remove(snapshot_json, '$.recovery') WHERE id = ?").run(thread.id);
       database.close();
+    }
+
+    if (source === 'event-tail') {
+      // Simulate a crash after the event commit but before its delayed snapshot.
+      const database = new DatabaseSync(path.join(dataDir, 'threads.sqlite'));
+      try {
+        database.prepare('UPDATE threads SET snapshot_json = ?, snapshot_seq = ?, snapshot_format = 1 WHERE id = ?')
+          .run(JSON.stringify(checkpoint), checkpoint!.lastSeq, thread.id);
+      } finally {
+        database.close();
+      }
     }
 
     const reopened = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
@@ -117,6 +125,15 @@ describe('sqlite thread store', () => {
     }
     const reopened = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
     try {
+      await reopened.recover();
+      const prepare = vi.spyOn(DatabaseSync.prototype, 'prepare');
+      try {
+        expect(await reopened.listMessages(thread.id, { before: 2, limit: 2 })).toEqual({ messages: [], nextBefore: null, total: 0 });
+        await expect(reopened.getActiveTurnIds(thread.id)).resolves.toEqual(['turn_steps']);
+        await expect(reopened.getSamplingState(thread.id)).resolves.toMatchObject({ messages: [], lastSeq: 41 });
+        expect(prepare.mock.calls.some(([sql]) => sql.includes('runtime_events'))).toBe(false);
+      } finally { prepare.mockRestore(); }
+      // Recovery must not put a partial transcript in the full-thread cache.
       expect((await reopened.getThread(thread.id))?.turns?.[0]?.stepSnapshots).toHaveLength(40);
     } finally { await reopened.close(); }
   });
@@ -428,7 +445,7 @@ describe('sqlite thread store', () => {
 
   it('pages indexed messages newest-first without loading duplicate boundaries', async () => {
     const dataDir = await temporaryDirectory();
-    const store = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    let store = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
     await store.recover();
     const thread = await store.createThread({ title: 'Paged SQLite chat' });
     for (let index = 1; index <= 5; index += 1) {
@@ -441,6 +458,8 @@ describe('sqlite thread store', () => {
     const latestThread = await store.getThreadPage(thread.id, { limit: 2 });
     expect(latestThread?.messagePage).toEqual({ nextBefore: 3, total: 5 });
     expect(latestThread?.messages.map((message) => message.id)).toEqual(['msg_4', 'msg_5']);
+    await store.close();
+    store = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
     const latest = await store.listMessages(thread.id, { limit: 2 });
     const middle = await store.listMessages(thread.id, { before: latest.nextBefore!, limit: 2 });
     expect(middle).toMatchObject({ nextBefore: 1, total: 5 });
