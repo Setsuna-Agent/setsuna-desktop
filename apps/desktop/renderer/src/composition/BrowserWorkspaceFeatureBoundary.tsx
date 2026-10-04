@@ -19,6 +19,7 @@ export type {
 };
 
 export { BrowserFavicon, BrowserFeatureIcon };
+export { BrowserSettingsNavigationProvider } from '@setsuna-desktop/feature-browser/renderer';
 
 export function BrowserWorkspaceFeatureBoundary({
   children,

@@ -174,6 +174,14 @@
   line-height: 18px;
 }
 
+.sd-settings-page { min-width: 0; }
+.sd-settings-page__content { width: min(720px, 100%); margin-inline: auto; }
+.sd-settings-page__breadcrumbs { display: flex; align-items: center; gap: 8px; min-height: 28px; margin-bottom: 30px; color: var(--app-text-muted); font-size: 12px; line-height: 20px; }
+.sd-settings-page__breadcrumbs > svg { flex-shrink: 0; }
+.sd-settings-page__breadcrumbs > .sd-button { min-height: 28px; padding: 0 2px; font-size: 12px; }
+.sd-settings-page__breadcrumbs > .sd-icon-button { width: 28px; height: 28px; margin-inline-end: 4px; padding: 0; }
+.sd-settings-page__breadcrumbs > [aria-current] { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--app-text); }
+
 .desktop-settings-panel .chat-user-settings__section {
   display: grid;
   min-width: 0;
@@ -316,26 +324,20 @@
 
 .desktop-settings-panel .chat-user-settings__toggle-row {
   grid-template-columns: minmax(0, 1fr) auto;
-  min-height: 72px;
-  padding-top: 10px;
-  padding-bottom: 10px;
-}
-
-.desktop-settings-panel .chat-user-settings__toggle-label {
-  align-items: flex-start;
 }
 
 .desktop-settings-panel .sd-settings-field-row {
   grid-template-columns: minmax(0, 1fr) minmax(220px, var(--settings-standard-control-width));
 }
 
-.desktop-settings-panel .sd-settings-field-row--described {
+/* Row height follows its text content, regardless of the control type. */
+.desktop-settings-panel .sd-settings-row--described {
   min-height: 78px;
   padding-top: 10px;
   padding-bottom: 10px;
 }
 
-.desktop-settings-panel .sd-settings-field-row--described .sd-settings-row__label {
+.desktop-settings-panel .sd-settings-row--described .sd-settings-row__label {
   align-items: flex-start;
 }
 
@@ -367,6 +369,14 @@
   min-width: 0;
   justify-self: end;
   max-width: 360px;
+}
+
+/* Rows reserve a control column; align its contents as well as the column itself. */
+.desktop-settings-panel .sd-settings-row__control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .desktop-settings-panel .chat-user-settings__row.chat-user-settings__path-row {

@@ -1,5 +1,6 @@
 import { BROWSER_HOME_URL, DEFAULT_BROWSER_URL } from '../contracts/index.js';
 import type { BrowserTranslate } from './messages.js';
+import type { BrowserSearchEngine } from '../contracts/settings.js';
 
 const browserZoomFactors = [0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3] as const;
 
@@ -18,7 +19,7 @@ export function nextBrowserZoomFactor(current: number, direction: BrowserZoomDir
   return browserZoomFactors[0];
 }
 
-export function normalizeBrowserInput(input: string): string {
+export function normalizeBrowserInput(input: string, searchEngine: BrowserSearchEngine = 'bing'): string {
   const value = input.trim();
   if (!value) return DEFAULT_BROWSER_URL;
   if (/^https?:\/\//i.test(value)) return value;
@@ -26,11 +27,15 @@ export function normalizeBrowserInput(input: string): string {
     return `http://${value}`;
   }
   if (/^[\w.-]+\.[a-z]{2,}(?::\d+)?(?:\/|$)/i.test(value)) return `https://${value}`;
-  return browserSearchUrl(value);
+  return browserSearchUrl(value, searchEngine);
 }
 
-export function browserSearchUrl(query: string): string {
-  return `https://www.bing.com/search?q=${encodeURIComponent(query.trim())}`;
+export function browserSearchUrl(query: string, searchEngine: BrowserSearchEngine = 'bing'): string {
+  const prefixes: Record<BrowserSearchEngine, string> = {
+    bing: 'https://www.bing.com/search?q=', google: 'https://www.google.com/search?q=',
+    baidu: 'https://www.baidu.com/s?wd=', duckduckgo: 'https://duckduckgo.com/?q=',
+  };
+  return `${prefixes[searchEngine]}${encodeURIComponent(query.trim())}`;
 }
 
 export function isBrowserHomeUrl(url: string): boolean {

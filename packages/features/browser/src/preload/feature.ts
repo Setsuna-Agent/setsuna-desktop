@@ -2,11 +2,14 @@ import { definePreloadFeature } from '@setsuna-desktop/feature-core/preload';
 import { ipcRenderer, type IpcRendererEvent } from 'electron';
 import {
   BROWSER_IPC_CHANNELS,
+  BROWSER_SETTINGS_CHANNELS,
   browserFeature,
   type BrowserDesktopBridge,
   type BrowserContextMenuRequest,
   type BrowserOpenNewTabRequest,
   type BrowserPreloadBridgeContribution,
+  type BrowserPasswordState,
+  type BrowserExtension,
 } from '../contracts/index.js';
 
 export const browserPreloadFeature = definePreloadFeature<BrowserPreloadBridgeContribution>({
@@ -14,6 +17,42 @@ export const browserPreloadFeature = definePreloadFeature<BrowserPreloadBridgeCo
   bridgeKeys: ['browser'],
   contribute(writer) {
     const browser: BrowserDesktopBridge = {
+      getBrowserPreferences: () => ipcRenderer.invoke(BROWSER_SETTINGS_CHANNELS.get),
+      updateBrowserPreferences: (patch) => ipcRenderer.invoke(BROWSER_SETTINGS_CHANNELS.update, patch),
+      clearBrowserData: (selection) => ipcRenderer.invoke(BROWSER_SETTINGS_CHANNELS.clearData, selection),
+      chooseBrowserDownloadDirectory: () => ipcRenderer.invoke(BROWSER_SETTINGS_CHANNELS.chooseDownloadDirectory),
+      listBrowserPasswords: () => ipcRenderer.invoke(BROWSER_SETTINGS_CHANNELS.listPasswords),
+      saveBrowserPassword: (input) => ipcRenderer.invoke(BROWSER_SETTINGS_CHANNELS.savePassword, input),
+      deleteBrowserPassword: (origin, id) => ipcRenderer.invoke(BROWSER_SETTINGS_CHANNELS.deletePassword, { origin, id }),
+      onBrowserPreferencesChanged(callback) {
+        const listener = (_event: IpcRendererEvent, value: import('../contracts/settings.js').BrowserPreferences) => callback(value);
+        ipcRenderer.on(BROWSER_SETTINGS_CHANNELS.changed, listener);
+        return () => ipcRenderer.off(BROWSER_SETTINGS_CHANNELS.changed, listener);
+      },
+      getExtensions: () => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.getExtensions),
+      removeExtension: (id) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.removeExtension, { id }),
+      openExtension: (id, view, anchor, webContentsId) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.openExtension, { id, view, anchor, webContentsId }),
+      getExtensionActions: (webContentsId) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.getExtensionActions, { webContentsId }),
+      onExtensionActionsChanged(callback) {
+        const listener = (_event: IpcRendererEvent, webContentsId: number | null) => callback(webContentsId);
+        ipcRenderer.on(BROWSER_IPC_CHANNELS.extensionActionsChanged, listener);
+        return () => ipcRenderer.off(BROWSER_IPC_CHANNELS.extensionActionsChanged, listener);
+      },
+      onExtensionsChanged(callback) {
+        const listener = (_event: IpcRendererEvent, items: readonly BrowserExtension[]) => callback(items);
+        ipcRenderer.on(BROWSER_IPC_CHANNELS.extensionsChanged, listener);
+        return () => ipcRenderer.off(BROWSER_IPC_CHANNELS.extensionsChanged, listener);
+      },
+      getPasswordState: (tabId) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.getPasswordState, { tabId }),
+      savePassword: (tabId, id) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.savePassword, { tabId, id }),
+      dismissPassword: (tabId, id) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.dismissPassword, { tabId, id }),
+      fillPassword: (tabId, id) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.fillPassword, { tabId, id }),
+      deletePassword: (tabId, id) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.deletePassword, { tabId, id }),
+      onPasswordState(callback) {
+        const listener = (_event: IpcRendererEvent, state: BrowserPasswordState) => callback(state);
+        ipcRenderer.on(BROWSER_IPC_CHANNELS.passwordState, listener);
+        return () => ipcRenderer.off(BROWSER_IPC_CHANNELS.passwordState, listener);
+      },
       pickAnnotation: (tabId) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.pickAnnotation, { tabId }),
       cancelAnnotation: (tabId) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.cancelAnnotation, { tabId }),
       setAnnotationMarkers: (tabId, markers) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.setAnnotationMarkers, { tabId, markers }),

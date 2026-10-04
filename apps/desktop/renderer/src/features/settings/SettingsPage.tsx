@@ -24,6 +24,7 @@ import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../shared/i18n/messages.js';
 import { ArchivedThreadsSettings } from './sections/ArchivedThreadsSettings.js';
 import { GeneralSettings } from './sections/GeneralSettings.js';
+import { BrowserLinkSettings } from './sections/BrowserLinkSettings.js';
 import { PersonalizationSettings } from './sections/PersonalizationSettings.js';
 import { RuntimeAdvancedSettings, RuntimePolicySettings } from './sections/RuntimeSettings.js';
 import { TaskModelSettings } from './sections/TaskModelSettings.js';
@@ -87,6 +88,8 @@ export function SettingsPage({
 
   const defaultContent = resolvedSection === 'general' ? (
       <GeneralSettings config={config} onSave={onSaveRuntimePreferences} />
+    ) : resolvedSection === 'browser' ? (
+      <BrowserLinkSettings config={config} onSave={onSaveRuntimePreferences} />
     ) : resolvedSection === 'shortcuts' ? (
       <KeyboardShortcutsSettings />
     ) : resolvedSection === 'taskModels' ? (
@@ -149,12 +152,6 @@ export function SettingsPage({
           }`}
           data-settings-feature={selectedPage?.owner.featureId}
         >
-          {selectedPage?.metadata.pageHeading !== 'view' ? (
-            <SettingsPageHeading
-              description={description}
-              title={title}
-            />
-          ) : null}
           <SettingsSectionExtensionOutlet
             key={resolvedSection}
             sectionId={resolvedSection}
@@ -162,6 +159,9 @@ export function SettingsPage({
             translate={translateFeature}
             ui={settingsViewUi}
           >
+            {selectedPage?.metadata.pageHeading !== 'view' ? (
+              <SettingsPageHeading description={description} title={title} />
+            ) : null}
             {selectedPage ? (
               <RendererOwnedKeyedSlot
                 entryKey={selectedPage.key}

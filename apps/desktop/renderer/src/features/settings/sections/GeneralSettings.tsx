@@ -7,7 +7,6 @@ import type {
 import {
   Bold,
   Code2,
-  Globe2,
   Languages,
   Monitor,
   Moon,
@@ -52,7 +51,6 @@ import { useThemeTransition, type ThemeMode } from '../../../shared/preferences/
 import { normalizeAppLocale, useI18n } from '../../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../../shared/i18n/messages.js';
 import { SelectField } from '../../../shared/ui/primitives.js';
-import { markdownLinkOpenModeFromConfig } from '../../chat/markdown/markdownLinkPreference.js';
 import { SettingsChoiceGroup, type SettingsChoiceOption } from '../components/SettingsControls.js';
 import type { RuntimePreferenceInput } from '../settings-types.js';
 import { useDesktopWindowCloseBehavior } from './useDesktopWindowCloseBehavior.js';
@@ -140,16 +138,6 @@ export function GeneralSettings({
   const fontSizeIndex = Math.max(0, fontSizeOptions.indexOf(fontSize));
   const scaleMarkMaxIndex = Math.max(fontSizeOptions.length - 1, 1);
   const fontSizeProgress = `${(fontSizeIndex / scaleMarkMaxIndex) * 100}%`;
-  const markdownLinkOpenMode = markdownLinkOpenModeFromConfig(config);
-  const setMarkdownLinkOpenMode = (nextValue: string) => {
-    if (!config || (nextValue !== 'in-app' && nextValue !== 'external')) return;
-    void onSave({
-      desktopSettings: {
-        ...(config.desktopSettings ?? {}),
-        markdownLinkOpenMode: nextValue,
-      },
-    });
-  };
   const setInterfaceLanguage = (nextValue: string) => {
     const nextLocale = normalizeAppLocale(nextValue);
     if (!config || !nextLocale) return;
@@ -365,28 +353,6 @@ export function GeneralSettings({
             </span>
             <SettingsChoiceGroup ariaLabel={t('settings.general.accentColor')} options={accentColorChoiceOptions} value={accentColor} onChange={setAccentColor} />
           </div>
-        </div>
-      </div>
-
-      <div className="chat-user-settings__section-block">
-        <div className="chat-user-settings__group-title">{t('settings.general.links')}</div>
-        <div className="chat-user-settings__group chat-user-settings__general-section">
-          <label className="chat-user-settings__row sd-settings-field-row">
-            <span className="chat-user-settings__row-label">
-              <Globe2 size={14} />
-              <span>{t('settings.general.markdownLinks')}</span>
-            </span>
-            <SelectField
-              aria-label={t('settings.general.markdownLinksMode')}
-              className="settings-local-control"
-              disabled={!config}
-              value={markdownLinkOpenMode}
-              onValueChange={setMarkdownLinkOpenMode}
-            >
-              <option value="in-app">{t('settings.general.openInApp')}</option>
-              <option value="external">{t('settings.general.openExternal')}</option>
-            </SelectField>
-          </label>
         </div>
       </div>
     </div>

@@ -13,6 +13,7 @@ import {
 } from '@setsuna-desktop/feature-core/main';
 import type { ComputerConnection } from '@setsuna-desktop/feature-computer-use/contracts';
 import { writeJsonAtomically } from '../data-root/atomic-json.js';
+import type { CredentialVault } from '../security/credential-vault.js';
 import { computerMainFeature, computerMainHostCapability, computerConnectionCapability, computerMainLifecycleCapability, diagnoseComputerUse, type ComputerMainLifecycle } from '@setsuna-desktop/feature-computer-use/main';
 import type { BrowserControlConnection } from '@setsuna-desktop/feature-browser/contracts';
 import {
@@ -70,7 +71,8 @@ import {
   type WindowsSandboxMainHost,
   type WindowsSandboxMainService,
 } from '@setsuna-desktop/feature-windows-sandbox/main';
-import type { BrowserWindow } from 'electron';
+import { app, type BrowserWindow } from 'electron';
+import path from 'node:path';
 import type { DesktopNativeBridgeServer } from '../runtime/native-bridge-server.js';
 import { desktopWindows } from '../window/registry.js';
 import { desktopShellPath } from '../runtime/desktop-environment.js';
@@ -78,9 +80,10 @@ import { resolveWorkspaceFilePreview } from '../workspace/file-opening.js';
 
 const mainFeatures = defineMainFeatureHost({
   required: [
+    // Apply the browser session proxy before restored extensions start workers.
+    networkProxyMainFeature,
     browserMainFeature,
     computerMainFeature,
-    networkProxyMainFeature,
     pluginManagementMainFeature,
     reviewMainFeature,
     terminalMainFeature,
@@ -104,6 +107,7 @@ export type ActivatedBuiltinMainFeatures = Readonly<{
 }>;
 
 export async function activateBuiltinMainFeatures(input: Readonly<{
+  credentialVault: CredentialVault;
   activeKeyboardShortcutBindings(senderId: number): ReadonlySet<string>;
   interfaceLanguage(): RuntimeInterfaceLanguage;
   nativeBridge: DesktopNativeBridgeServer;
@@ -132,6 +136,11 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
       provideHostCapability(
         browserMainHostCapability,
         Object.freeze({
+          extensionPreloadPath: path.join(app.getAppPath(), 'dist', 'electron', 'preload', 'browser-extensions.cjs'),
+          passwordStorage: {
+            read: () => input.credentialVault.get('browser.passwords.v1'),
+            write: (value: string) => input.credentialVault.set('browser.passwords.v1', value),
+          },
           activeKeyboardShortcutBindings: input.activeKeyboardShortcutBindings,
           interfaceLanguage: input.interfaceLanguage,
           focusedWindow: () => desktopWindows.all().find((window) => window.isFocused()) ?? desktopWindows.all()[0] ?? null,

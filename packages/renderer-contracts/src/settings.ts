@@ -170,6 +170,11 @@ export type SettingsPageHeadingProps = Readonly<{
   title: string;
 }>;
 
+export type SettingsPageLayoutProps = SettingsPageHeadingProps & Readonly<{
+  children: ReactNode;
+  parent?: Readonly<{ label: string; onBack(): void }>;
+}>;
+
 export type SettingsPageHeaderProps = Readonly<{
   actions?: ReactNode;
   className?: string;
@@ -263,6 +268,7 @@ export type SettingsViewUi = Readonly<{
   NavigationRow: ComponentType<SettingsNavigationRowProps>;
   PageHeader: ComponentType<SettingsPageHeaderProps>;
   PageHeading: ComponentType<SettingsPageHeadingProps>;
+  PageLayout: ComponentType<SettingsPageLayoutProps>;
   PageOutlet: ComponentType<SettingsPageOutletProps>;
   PluginIcon: ComponentType<SettingsPluginIconProps>;
   Row: ComponentType<SettingsRowProps>;

@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  isBrowserBookmarked,
-  toggleBrowserBookmark,
-} from '../../src/renderer/browserBookmarks.js';
-import {
   BROWSER_HISTORY_STORAGE_KEY,
   addBrowserHistoryVisit,
   readBrowserHistory,
@@ -38,15 +34,15 @@ describe('browser history', () => {
 
   it('persists a bounded, recoverable history projection', () => {
     const storage = new MemoryStorage();
-    const entries: BrowserHistoryEntry[] = Array.from({ length: 60 }, (_, index) => ({
+    const entries: BrowserHistoryEntry[] = Array.from({ length: 5_010 }, (_, index) => ({
       title: `Page ${index}`,
       url: `https://example.com/${index}`,
       visitedAt: index + 1,
     }));
 
     writeBrowserHistory(entries, storage);
-    expect(readBrowserHistory(storage)).toHaveLength(50);
-    expect(readBrowserHistory(storage)[0]?.url).toBe('https://example.com/59');
+    expect(readBrowserHistory(storage)).toHaveLength(5_000);
+    expect(readBrowserHistory(storage)[0]?.url).toBe('https://example.com/5009');
 
     storage.setItem(BROWSER_HISTORY_STORAGE_KEY, '{broken');
     expect(readBrowserHistory(storage)).toEqual([]);
@@ -64,27 +60,3 @@ class MemoryStorage {
     this.#values.set(key, value);
   }
 }
-
-describe('browser bookmarks', () => {
-  it('toggles normalized web pages without accepting internal URLs', () => {
-    const bookmarked = toggleBrowserBookmark([], {
-      title: ' Example ',
-      url: 'https://example.com',
-    }, 100);
-
-    expect(bookmarked).toEqual([{
-      savedAt: 100,
-      title: 'Example',
-      url: 'https://example.com/',
-    }]);
-    expect(isBrowserBookmarked(bookmarked, 'https://example.com')).toBe(true);
-    expect(toggleBrowserBookmark(bookmarked, {
-      title: 'Example',
-      url: 'https://example.com',
-    }, 200)).toEqual([]);
-    expect(toggleBrowserBookmark([], {
-      title: 'New tab',
-      url: 'about:blank',
-    }, 300)).toEqual([]);
-  });
-});

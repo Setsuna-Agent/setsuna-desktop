@@ -304,6 +304,7 @@ async function createWindow(): Promise<void> {
   let nativeBridge: Awaited<ReturnType<typeof currentDesktopNativeBridgeServer.start>>;
   try {
     activatedMainFeatures = await activateBuiltinMainFeatures({
+      credentialVault,
       activeKeyboardShortcutBindings: (senderId) => activeKeyboardShortcutBindings.get(senderId) ?? new Set<string>(),
       interfaceLanguage: () => interfaceLanguage,
       nativeBridge: currentDesktopNativeBridgeServer,

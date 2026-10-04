@@ -15,6 +15,8 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 
 ### 页面编排
 
+二级管理页面使用 `SettingsViewUi.PageLayout`（宿主实现为 `shared/ui/SettingsPageLayout.tsx`），统一设置面包屑、返回动作、标题和 720px 内容宽度。浏览器的管理页与「个性化 → 记忆预览」共用此布局。父页面标题置于 `SettingsSectionExtensionOutlet` 的默认内容内，进入扩展子页时一同替换，避免同时显示父、子两套标题。业务 Feature 继续持有列表、编辑表单与操作状态。
+
 `SettingsPage.tsx` 负责宿主 section 导航和数据/回调分发，并消费 `renderer.settings.page` keyed Slot 与当前 page 拥有的 `renderer.settings.page.extensions` Slot。页面 metadata 和 renderer 来自同一 contribution，导航不再维护第二份 Feature catalog。具体宿主内容位于：
 
 - `sections/`

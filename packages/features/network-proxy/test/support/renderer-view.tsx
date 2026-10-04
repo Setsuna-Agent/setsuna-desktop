@@ -45,6 +45,7 @@ export const testSettingsViewUi: SettingsViewUi = Object.freeze({
   PageHeading: ({ action, description, title }) => (
     <header><h1>{title}</h1>{description}{action}</header>
   ),
+  PageLayout: ({ children, title, parent }) => <section>{parent ? <button onClick={parent.onBack}>{parent.label}</button> : null}<h1>{title}</h1>{children}</section>,
   Row: ({ children, description, label }) => <div>{label}{description}{children}</div>,
   Section: ({ children, className, featureId }) => (
     <section className={className} data-feature-id={featureId}>{children}</section>

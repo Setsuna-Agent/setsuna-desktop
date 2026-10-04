@@ -1,0 +1,50 @@
+.browser-extensions { position: relative; display: inline-flex; flex-shrink: 0; align-items: center; gap: 3px; }
+
+.browser-extensions__pinned img { width: 16px; height: 16px; object-fit: contain; }
+.browser-extensions__pin[aria-pressed="true"] { color: var(--app-primary); }
+
+.browser-extensions__menu {
+  width: 256px;
+  max-width: calc(var(--app-scaled-viewport-width) - 32px);
+}
+
+.browser-extensions__list {
+  max-height: 320px;
+  margin: 0 0 4px;
+  padding: 0 0 4px;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--app-border);
+  list-style: none;
+}
+
+.browser-extensions__list li { display: flex; align-items: center; gap: 2px; }
+
+.browser-extensions__item,
+.browser-extensions__item.sd-button {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-width: 0;
+  min-height: 32px;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  color: var(--app-text);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.browser-extensions__item img,
+.browser-extensions__item svg { flex: 0 0 16px; width: 16px; height: 16px; object-fit: contain; }
+.browser-extensions__item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.browser-extensions__list .sd-icon-button { width: 26px; height: 26px; min-height: 26px; padding: 0; }
+
+.browser-extensions__store.sd-button {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 30px;
+  padding: 5px 8px;
+  font-size: 12px;
+}

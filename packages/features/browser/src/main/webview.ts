@@ -27,6 +27,9 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
   interfaceLanguage(): RuntimeInterfaceLanguage;
   mainWindow: BrowserWindow;
   contextMenus: BrowserContextMenuSession;
+  isAllowedExtensionUrl?(url: string): boolean;
+  onGuestAttached?(contents: WebContents): () => void;
+  permissionsManaged?: boolean;
 }>): () => void {
   const { mainWindow } = input;
   // Closed windows no longer expose native properties; retain the event emitter
@@ -34,9 +37,10 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
   const hostContents = mainWindow.webContents;
   const guestDisposers = new Map<number, () => void>();
   const browserSession = session.fromPartition(DESKTOP_BROWSER_PARTITION);
+  const allowedUrl = (url: string) => isAllowedEmbeddedBrowserUrl(url) || input.isAllowedExtensionUrl?.(url) === true;
   // Keep this deny handler for the process lifetime. Clearing it while guest views
   // are still draining would temporarily broaden their permission surface.
-  browserSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+  if (!input.permissionsManaged) browserSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
 
   const handleWillAttachWebview = (
     event: Event,
@@ -50,12 +54,13 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
     webPreferences.sandbox = true;
     // Chromium's built-in PDF viewer is exposed as a plugin inside webview guests.
     webPreferences.plugins = true;
-    if (!isAllowedEmbeddedBrowserUrl(params.src ?? '')) event.preventDefault();
+    if (!allowedUrl(params.src ?? '')) event.preventDefault();
   };
 
   const handleDidAttachWebview = (_event: Event, guestContents: WebContents) => {
     const guestId = guestContents.id;
     guestDisposers.get(guestId)?.();
+    const disposeExtensionActions = input.onGuestAttached?.(guestContents);
 
     const handleInput = (event: Event, keyboardInput: Input) => {
       const shortcut = embeddedBrowserKeyboardShortcut(
@@ -98,10 +103,11 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
       }), browserMenuPoint(mainWindow));
     };
     const handleWillNavigate = (event: Event, url: string) => {
-      if (!isAllowedEmbeddedBrowserUrl(url)) event.preventDefault();
+      if (!allowedUrl(url)) event.preventDefault();
     };
     const handleDestroyed = () => disposeGuest();
     const disposeGuest = () => {
+      disposeExtensionActions?.();
       guestContents.off('before-input-event', handleInput);
       guestContents.off('context-menu', handleContextMenu);
       guestContents.off('will-navigate', handleWillNavigate);

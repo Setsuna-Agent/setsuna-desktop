@@ -10,7 +10,7 @@ vi.mock('electron', () => ({
 import { BrowserContextMenuSession } from '../../src/main/context-menu-session.js';
 import { installEmbeddedBrowserWebviews } from '../../src/main/webview.js';
 
-function windowFixture() {
+function windowFixture(isAllowedExtensionUrl?: (url: string) => boolean) {
   let destroyed = false;
   const contents = new EventEmitter();
   const window = Object.assign(new EventEmitter(), {
@@ -26,6 +26,7 @@ function windowFixture() {
     browserTabIdForWebContents: () => null,
     interfaceLanguage: () => 'zh-CN',
     contextMenus: new BrowserContextMenuSession(vi.fn()),
+    isAllowedExtensionUrl,
   });
   window.once('closed', dispose);
   return { contents, dispose, close: () => {
@@ -34,6 +35,20 @@ function windowFixture() {
     window.emit('closed');
   } };
 }
+
+it('only attaches extension documents authorized by the installed-extension service', () => {
+  const extensionUrl = `chrome-extension://${'a'.repeat(32)}/newtab.html`;
+  const host = windowFixture((url) => url === extensionUrl);
+  for (const [src, blocked] of [[extensionUrl, false], [`chrome-extension://${'b'.repeat(32)}/newtab.html`, true], ['file:///private/test', true]] as const) {
+    const event = { preventDefault: vi.fn() };
+    const preferences = { preload: '/desktop/preload.js', nodeIntegration: true, contextIsolation: false, sandbox: false };
+    host.contents.emit('will-attach-webview', event, preferences, { src });
+    expect(event.preventDefault).toHaveBeenCalledTimes(blocked ? 1 : 0);
+    expect(preferences).toMatchObject({ nodeIntegration: false, contextIsolation: true, sandbox: true });
+    expect(preferences.preload).toBeUndefined();
+  }
+  host.close();
+});
 
 it('cleans up a closed secondary window without touching the surviving window', () => {
   const primary = windowFixture();

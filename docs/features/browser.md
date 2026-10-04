@@ -13,6 +13,7 @@ Browser 是纵向内置 Feature：共享 contract、runtime 工具语义、main 
 | `main/control-server.ts` | 带 bearer token 的 loopback HTTP 控制面 |
 | `main/cdp/*` | CDP attach、快照、target/frame、输入动作和设备模拟 |
 | `main/ipc.ts` / `main/webview.ts` | 固定 IPC、guest 校验、安全配置、右键菜单与新标签拦截 |
+| `main/extensions/` / `renderer/extensions/` | Chrome 扩展商店安装、权限确认、扩展持久化和管理菜单 |
 | `preload/feature.ts` | Typed Browser bridge contribution |
 | `runtime/browser-runtime-tools.ts` | 工具 schema、审批、外部上下文与结果格式化 |
 | `runtime/http-browser-control-client.ts` | runtime 到 main loopback 控制面的窄 client |
@@ -48,15 +49,65 @@ Tab 销毁、导航和重新注册都会清理 snapshot/ref 与 CDP 状态。
 
 `will-attach-webview` 强制：
 
-- 删除 preload。
+- 删除 webview 自行指定的 preload；session 只注册受控的商店 preload，且仅向商店顶层页面暴露安装接口。
 - 禁用 Node integration。
 - 开启 context isolation 和 sandbox。
 - 只允许受支持 URL scheme。
-- 默认拒绝网页权限请求。
+- 默认拒绝网页权限请求；用户可在浏览器设置中按权限或站点启用询问/允许策略。
 
 新窗口请求被 main 拦截并通知 renderer 创建新标签，不能让 guest 自己创建拥有不同配置的窗口。
 
 网页与刷新按钮的右键菜单通过 `BrowserContextMenuSession` 发布到宿主 renderer，统一使用 renderer-ui 的 beUI 动画菜单。主进程只发送菜单文案、禁用状态、快捷键和一次性操作 ID，复制、编辑、下载与刷新仍由捕获原始 guest 的主进程回调执行；IPC 校验宿主身份，旧菜单、重复选择和导航/关闭后的操作失效。屏幕坐标转换为宿主视口坐标，避免 guest 缩放和设备模拟影响弹出位置。
+
+## 浏览器设置
+
+应用设置中的「浏览器」由 Feature 注册独立页面；浏览器右上角菜单也可进入，新标签页上同样可用。Feature 自行管理页面标题，宿主 `ui.PageLayout` 统一内容宽度和二级页的返回、面包屑导航；历史记录、书签、密码、站点例外与扩展管理在设置内容区切换，保留宿主设置侧栏。选择器、开关等控件复用宿主，清除浏览数据仍使用确认对话框。业务按 `renderer/settings/`、`main/settings/`、`contracts/settings.ts` 分层维护。
+
+工具栏提供历史记录与书签按钮，右上角菜单也可进入；不依赖内置新标签页，因此扩展接管新标签页后仍可使用。内容从工具栏下方展开，点击外部或 Escape 收起，也能固定到浏览器右侧，固定后导航不会关闭面板。设置中的历史记录使用独立的日期折叠卡片、搜索和清空操作；书签复用 `renderer/records/` 的目录编辑与数据逻辑，以页面样式展示。设置内容随整页滚动，不套用工具栏面板的固定高度。
+
+历史记录按本地日期分组，支持搜索、逐条删除、删除当天以及确认后全部清空；只清理历史记录，不影响书签、密码或网站登录。偏好读取完成前不写入访问记录，避免默认值绕过用户已关闭的历史记录设置。持久化保留最近 5,000 个网址，主页仍只展示最近 50 条。书签支持文件夹、子文件夹、编辑名称和网址、选择目标文件夹移动，以及确认删除整个文件夹。
+
+书签 DTO 位于 `contracts/bookmarks.ts`，v2 使用稳定 ID、parentId、节点类型、创建时间与同级顺序，保留不同文件夹中的相同网址，便于后续接入 Chromium 书签树。`bookmarkTree.ts` 校验父目录、环、保留根目录和 URL；读旧 v1 集合时映射到收藏夹栏，首次修改写入 v2 并保留 v1 备份。不再以 50 条截断书签。所有修改先读取共享存储；损坏数据或持久化失败会返回错误，不覆盖成空集合。当前未读取 Edge/Chrome 配置目录，也未接入账户同步或导入入口。
+
+- 常规与外观：默认搜索引擎（Bing、Google、百度、DuckDuckGo）、主页地址、扩展新标签页接管、主页按钮、完整网址、网页缩放和拼写检查。地址栏编辑时始终显示完整地址；主页地址只影响主页按钮，新标签页仍遵循内置页或扩展接管设置。
+- 链接：Markdown Web 链接选择内置或外部浏览器打开；宿主通过设置槽的 `renderDefault` 注入 `BrowserLinkSettings`，继续保存到既有 runtime 配置 `desktopSettings.markdownLinkOpenMode`，不迁移到 browser partition。
+- 浏览数据：历史记录开关、历史与收藏查找/打开/删除；按用户勾选清理历史、Cookie、缓存、网站存储或密码。清理只作用于 browser partition，并排除已安装扩展的 origin，不修改宿主存储；历史/收藏变化同步到已挂载的面板。
+- 密码：保存提示和自动填充独立控制，全站账号管理在二级页面中支持搜索、新增、修改密码、删除，编辑表单在页内展示。已有密码不发往 renderer；编辑已有条目时输入新密码，站点和账号保持绑定。`useBrowserSavedPasswords` 将元数据读取与写入操作锁分开，允许 React StrictMode 重放初始化，并区分加载、失败和空列表。
+- 网站权限：摄像头、麦克风、位置、通知、读取剪贴板分别支持询问/允许/禁止，以及完整 origin 匹配的站点例外。默认保持禁止；仅接受受管 guest 的安全顶层来源，跨源 iframe、未知权限和不安全远程来源拒绝。「允许此次」按当前 guest 文档、origin 和权限类型保存在内存，供后续请求与权限检查使用；替换文档的导航（包括同地址刷新）、销毁、进程退出或对应策略变更会清理授权和待答复请求，同文档跳转与子 frame 导航不影响顶层授权。macOS 仍遵循系统的摄像头、麦克风和位置授权。
+- 下载：选择下载目录、每次询问保存位置；自动下载使用独占文件创建预留名称，重名自动编号，目录失效时回退原生保存对话框。
+- 管理：扩展固定、设置页与卸载入口，以及现有网络代理设置入口。Agent 控制开关作用于 main 的 Browser control server，不影响手动浏览。
+
+偏好保存于 browser partition 下的版本化 `browser-settings.json`，主进程串行、原子写入并广播更新；IPC 校验桌面主 frame 与已登记的宿主窗口。下载路径仅由原生目录选择器写入；权限、URL、缩放与偏好字段在 main 统一校验。密码仍由现有系统加密 vault 管理。
+
+业务验证覆盖偏好并发与重启恢复、权限粒度与过期授权、密码开关、IPC 身份边界、下载防覆盖、设置入口和搜索导航；真实 Electron 集成测试验证网站清理不影响扩展或宿主存储。
+
+## 记住密码
+
+`main/passwords/` 负责登录表单识别、页面生命周期和凭据读写；`renderer/passwords/` 只接收账号及保存提示元数据。钥匙入口提供当前站点的账号填充和删除，提交登录表单时询问保存或更新；关闭提示不保存，未确认的密码五分钟后从待保存状态移除。单账号在空白登录表单出现时自动填充，多账号由用户选择，不覆盖用户已经输入的内容，也不自动提交。
+
+凭据通过宿主注入的窄 storage port 写入 `DesktopCredentialVault` 的 `browser.passwords.v1` 加密条目，复用 macOS/Windows 的系统加密；该命名空间禁止从 runtime 的通用 credential bridge 访问。保存、删除串行更新，解密失败不覆盖原数据。明文密码只用于主进程与目标网页间的填写，不进入 renderer bridge、Browser control server 或工具结果。
+
+页面逻辑使用专用 isolated world 的固定随包函数，不安装 guest preload、不暴露网页 IPC。凭据按完整 origin（协议、主机、端口）匹配，仅支持 HTTPS 和 HTTP loopback 开发站点；导航、刷新、关闭后的旧填充结果作废。提交时已捕获的提示可以经过登录重定向保留，仍绑定原始站点；保存由一次性提示 ID 确认。自动采集针对顶层页面的普通登录表单及动态插入、切换显示的表单，忽略不可填写的隐藏占位框，跳过多个可填写密码框、明确标记新密码和跨站提交的表单；目前不扫描 iframe 或 Shadow DOM。
+
+验证包含凭据并发与隔离、页面表单行为、IPC 身份边界和隐藏窗口的 Electron 集成测试，后者覆盖真实提交跳转及保存后再次填充，无需启动完整应用或做视觉验证。
+
+## Chrome 扩展商店
+
+工具栏拼图菜单进入 Chrome Web Store，商店详情页的添加按钮调用主进程安装。采用 MIT 的 `electron-chrome-web-store@0.13.0`，保持 Electron 原生扩展 API 的兼容范围；未引入 `electron-chrome-extensions`。目前支持 Manifest V3，依赖未实现的 Chrome API 的扩展可能安装成功但无法完整工作。
+
+菜单内图钉可固定或取消固定扩展，固定图标显示在工具栏拼图入口旁，点击沿用扩展弹窗/设置入口；没有可打开页面的扩展返回管理菜单。管理弹层与固定图标的右键菜单使用共享组件的 modal 行为，让网页视图上方的外部点击先关闭菜单，避免 guest 内的指针事件无法冒泡到宿主。右键菜单提供扩展设置（有设置页时）、取消固定和卸载。固定顺序以选择顺序保存到 renderer 的版本化 localStorage，跨标签页及窗口同步，重启后恢复；只展示仍安装的扩展。
+
+工具栏以 `action.default_icon`（兼容旧清单的 `browser_action` / `page_action`）为初始图标，缺失时回退到应用图标；列表和新标签页保留应用图标。独立扩展 preload 观察扩展页面及 MV3 worker 中成功的原生 `chrome.action.setIcon`、`setPopup`、`setTitle` 调用，保留 Chromium 的校验、Promise 与回调行为。框架检测由扩展自身完成，宿主按 guest WebContents ID 保存图标、提示及弹窗覆盖值，并在主文档导航提交、标签页销毁或扩展卸载时清理；全局覆盖值和标签页覆盖值按 Chrome 的优先级合并。图标支持路径、尺寸字典和 ImageData，读取仍受扩展目录边界、来源身份与体积限制；普通网站不暴露更新通道。此桥接不补齐其他 Chrome API。
+
+安装确认列出权限、host permissions 和静态 content script 的网站匹配范围。商店 preload 和 IPC 都严格限制到 `https://chromewebstore.google.com` 的顶层页面；安装还校验 guest 所属桌面窗口、session 和确认期间的导航状态。下载沿用 browser session 的代理，宿主 composition 在 Browser Feature 前初始化代理，以便恢复的后台 worker 也使用正确路由。
+
+扩展保存在 browser partition 的 `Extensions/<id>/<version>_0/`，属于既有 browser-data 数据目录；启动恢复已安装扩展，菜单提供打开弹窗、设置页和卸载。扩展页面使用独立沙箱窗口及同一 browser session，不加载桌面 preload；HTTP(S) 新窗口请求回到内置浏览器。弹窗通过 renderer 传入的图标位置贴近工具栏显示，采用无标题栏窗口，以 Electron 的 preferred size 随内容调整大小（上限 800 × 600，并限制在屏幕可用区域）；失焦、Escape 或宿主移动/缩放时关闭，同一宿主只保留一个扩展弹窗。设置页仍使用普通窗口。图标经过目录、符号链接和体积检查后才转换为图片数据发往 renderer。
+
+支持 `chrome_url_overrides.newtab`：新标签页和首页按钮加载扩展声明的本地页面；多个扩展声明时，以安装目录创建时间选择最近安装者，重启后保持一致。页面沿用受限 webview，仅放行已安装且已加载的扩展 origin，不开放任意 `chrome-extension:` 地址。新标签页仍以内部首页地址持久化；卸载后切换到剩余的新标签页扩展或内置首页，异步扩展元数据不会覆盖用户已打开的网站。此接管不补齐扩展需要的其他 Chrome API。
+
+`patches/electron-chrome-web-store@0.13.0.patch` 修正上游的 origin 前缀校验、ID/版本路径校验、下载代理和超时；下载 manifest 必须与确认的版本一致且不能新增权限或网站匹配范围，失败清理临时解包目录。自动更新暂未启用，后续需要先实现新增权限的重新确认。当前没有启停开关、Chrome 账号同步或完整的 tabs/action API 兼容层。
+
+隐藏窗口集成测试走真实 Electron webview 和商店 bridge，覆盖取消安装、权限不一致拒绝、CRX 安装、content script/storage、MV3 worker 的动态 action 更新及导航清理、按标签页选择弹窗、扩展页面隔离、第二次启动恢复和卸载；网络使用固定测试协议响应，不访问真实商店。单元测试聚焦桌面及扩展 IPC 身份边界、manifest URL/图标路径、权限展示的数据来源、标签页 action 覆盖优先级和新标签页导航/卸载状态流转。
 
 ## Browser control server
 

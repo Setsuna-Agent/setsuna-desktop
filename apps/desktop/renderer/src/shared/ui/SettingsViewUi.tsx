@@ -2,7 +2,6 @@ import type {
   SettingsActionMenuProps,
   SettingsGroupProps,
   SettingsNavigationRowProps,
-  SettingsPageHeadingProps,
   SettingsPageOutletProps,
   SettingsRowProps,
   SettingsSectionProps,
@@ -33,6 +32,8 @@ import {
   TextField,
 } from './primitives.js';
 import { SettingsDialog } from './SettingsDialog.js';
+import { SettingsPageHeading, SettingsPageLayout } from './SettingsPageLayout.js';
+export { SettingsPageHeading } from './SettingsPageLayout.js';
 import { SettingsMarkdownDocument } from './SettingsMarkdownDocument.js';
 import { SettingsDirectoryList } from './SettingsListFields.js';
 import { PluginIcon } from './PluginIcon.js';
@@ -61,6 +62,7 @@ export const settingsViewUi = Object.freeze({
   NavigationRow: SettingsNavigationRow,
   PageHeader,
   PageHeading: SettingsPageHeading,
+  PageLayout: SettingsPageLayout,
   PageOutlet: SettingsFeaturePageOutlet,
   PluginIcon,
   Row: SettingsRow,
@@ -152,18 +154,6 @@ class SettingsOutletErrorBoundary extends Component<
   }
 }
 
-export function SettingsPageHeading({ action, description, title }: SettingsPageHeadingProps) {
-  return (
-    <header className="chat-user-settings__page-heading">
-      <div className="chat-user-settings__page-heading-copy">
-        <h1>{title}</h1>
-        {description ? <p>{description}</p> : null}
-      </div>
-      {action}
-    </header>
-  );
-}
-
 export function SettingsSection({ children, className = '', featureId }: SettingsSectionProps) {
   return (
     <div
@@ -195,7 +185,7 @@ export function SettingsRow({ children, className = '', description, icon, label
       'chat-user-settings__row',
       'sd-settings-row',
       'sd-settings-field-row',
-      description ? 'sd-settings-field-row--described' : '',
+      description ? 'sd-settings-row--described' : '',
       className,
     )}>
       <span className="chat-user-settings__row-label sd-settings-row__label">
@@ -220,12 +210,15 @@ export function SettingsToggle({
 }: SettingsToggleProps) {
   const accessibleLabel = typeof label === 'string' ? label : undefined;
   return (
-    <div className="chat-user-settings__row chat-user-settings__toggle-row sd-settings-row sd-settings-toggle">
+    <div className={classNames(
+      'chat-user-settings__row chat-user-settings__toggle-row sd-settings-row sd-settings-toggle',
+      description ? 'sd-settings-row--described' : '',
+    )}>
       <span className="chat-user-settings__row-label chat-user-settings__toggle-label sd-settings-row__label">
         {icon}
         <span className="chat-user-settings__toggle-copy sd-settings-row__copy">
           <span>{label}</span>
-          <small>{description}</small>
+          {description ? <small>{description}</small> : null}
         </span>
       </span>
       <Switch label={accessibleLabel} checked={checked} disabled={disabled} onCheckedChange={onChange} />

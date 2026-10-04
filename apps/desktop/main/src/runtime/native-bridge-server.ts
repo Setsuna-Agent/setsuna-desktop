@@ -369,6 +369,9 @@ function credentialInput(value: unknown, requiresValue: boolean): { key: string;
   if (key.trim().toLocaleLowerCase().startsWith('network-proxy.')) {
     throw new Error('Credential key is reserved for the desktop network proxy service.');
   }
+  if (key.trim().toLowerCase().startsWith('browser.')) {
+    throw new Error('Credential key is reserved for the desktop browser.');
+  }
   if (requiresValue && typeof input.value !== 'string') throw new Error('Credential value is required.');
   return { key, value: credentialValue };
 }

@@ -1,0 +1,19 @@
+.browser-history-page__days { display: flex; flex-direction: column; gap: 8px; }
+.browser-history-page__header { display: flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 14px; transition: background 150ms ease; }
+.browser-history-page__header:hover,
+.browser-history-page__header:has(.browser-history-page__date:focus-visible) { background: color-mix(in srgb, var(--app-text) 3%, var(--app-surface)); }
+.browser-history-page__date { display: flex; flex: 1; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; min-height: 44px; padding: 10px 0; border: 0; border-radius: 0; color: var(--app-text); font-size: 13px; text-align: start; }
+/* The date header owns hover feedback, so its button must not paint a second surface. */
+.browser-history-page__header .browser-history-page__date:is(:hover, :active):not(:disabled) { background: transparent; }
+.browser-history-page__date > svg { flex-shrink: 0; color: var(--app-text-muted); }
+.browser-history-page__entries { margin: 0; padding: 0 14px; list-style: none; }
+.browser-history-page__entries > li { display: grid; grid-template-columns: minmax(0, 1fr) 48px 28px; align-items: center; gap: 8px; min-height: 44px; border-top: 1px solid var(--app-border); }
+.browser-history-page__link { display: flex; align-items: center; justify-content: flex-start; gap: 10px; min-width: 0; min-height: 44px; padding: 8px 0; border: 0; font-size: 13px; font-weight: 400; text-align: start; }
+.browser-history-page__link > svg { flex-shrink: 0; color: var(--app-text-muted); }
+.browser-history-page__title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.browser-history-page__hostname { flex-shrink: 1; max-width: 140px; overflow: hidden; text-overflow: ellipsis; color: var(--app-text-muted); font-size: 12px; }
+.browser-history-page__entries time { color: var(--app-text-muted); font-size: 12px; font-variant-numeric: tabular-nums; text-align: end; }
+.browser-history-page__day .sd-icon-button { width: 28px; height: 28px; }
+@media (max-width: 640px) {
+  .browser-history-page__hostname { display: none; }
+}

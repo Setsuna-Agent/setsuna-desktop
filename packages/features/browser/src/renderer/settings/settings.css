@@ -1,0 +1,12 @@
+.browser-settings { display: flex; flex-direction: column; gap: 28px; }
+.browser-settings__actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; width: 100%; min-width: 0; }
+.browser-settings__actions input { min-width: 0; flex: 1; }
+.browser-settings__form { display: flex; flex-direction: column; gap: 16px; }
+.browser-settings__form > label { display: flex; flex-direction: column; gap: 6px; }
+.browser-settings__form > .sd-checkbox { flex-direction: row; }
+.browser-settings__path { min-width: 0; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: end; color: var(--app-text-muted); }
+.browser-settings__entry { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; overflow: hidden; }
+.browser-settings__entry > strong, .browser-settings__entry > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.browser-settings__entry > strong { font-size: 13px; font-weight: 500; }
+.browser-settings__entry > span { color: var(--app-text-muted); font-size: 12px; }
+.browser-settings__extension-icon { width: 20px; height: 20px; object-fit: contain; }

@@ -290,10 +290,20 @@
   line-height: 18px;
 }
 
+.sd-settings-toggle:not(.sd-settings-row--described) > .sd-settings-row__label {
+  align-items: center;
+}
+
 .sd-settings-row__copy {
   display: grid;
   min-width: 0;
   gap: 4px;
+}
+
+.sd-settings-select--compact {
+  width: 160px;
+  max-width: 100%;
+  margin-inline-start: auto;
 }
 
 .sd-settings-row__copy small {
