@@ -1,5 +1,6 @@
 import type { RuntimePluginUiData } from '@setsuna-desktop/contracts';
 import type { RuntimeSandboxedUiSource } from '@setsuna-desktop/contracts';
+import { sandboxDialogBootstrap, sandboxDialogEndpoint } from './sandbox-dialogs.js';
 
 export const SANDBOXED_UI_CHANNEL = 'setsuna.sandboxed-ui.v1' as const;
 
@@ -13,6 +14,7 @@ export type SandboxedUiInvokeMessage = Readonly<{
 export type SandboxedUiFrameMessage =
   | Readonly<{ type: 'ready' }>
   | Readonly<{ type: 'resize'; height: number }>
+  | Readonly<{ type: 'runtime-request'; requestId: string; request: unknown }>
   | SandboxedUiInvokeMessage;
 
 const SANDBOX_CSP = [
@@ -108,15 +110,31 @@ const BOOTSTRAP = `(() => {
       }
       return;
     }
-    if (message.type !== 'action-result' || typeof message.requestId !== 'string') return;
+    if ((message.type !== 'action-result' && message.type !== 'runtime-result') || typeof message.requestId !== 'string') return;
     const request = pending.get(message.requestId);
     if (!request) return;
     pending.delete(message.requestId);
-    if (message.ok) request.resolve(Object.freeze({ status: 'completed' }));
+    clearTimeout(request.timeout);
+    if (message.ok) request.resolve(message.type === 'runtime-result' ? message.result : Object.freeze({ status: 'completed' }));
     else request.reject(new Error(message.error || 'Host action failed.'));
   });
+  const requestHost = (type, fields) => {
+    const requestId = 'request_' + (++sequence);
+    return new Promise((resolve, reject) => {
+      // invoke may wait for user confirmation. Only the host can time out its
+      // execution; rejecting here would leave a live action behind the failure.
+      const timeout = type === 'runtime-request' ? setTimeout(() => {
+        pending.delete(requestId);
+        reject(new Error('Host request timed out.'));
+      }, 130000) : undefined;
+      pending.set(requestId, { resolve, reject, timeout });
+      try { send({ type, requestId, ...fields }); }
+      catch (error) { clearTimeout(timeout); pending.delete(requestId); reject(error); }
+    });
+  };
   const api = Object.freeze({
     ready,
+    runtime: Object.freeze({ request: (request) => requestHost('runtime-request', { request }) }),
     getSnapshot: () => snapshot,
     subscribe(listener) {
       if (typeof listener !== 'function') throw new TypeError('subscribe requires a function.');
@@ -125,11 +143,7 @@ const BOOTSTRAP = `(() => {
     },
     invoke(actionId, payload = {}) {
       if (typeof actionId !== 'string' || !actionId) return Promise.reject(new Error('Invalid action id.'));
-      const requestId = 'action_' + (++sequence);
-      return new Promise((resolve, reject) => {
-        pending.set(requestId, { resolve, reject });
-        send({ type: 'invoke', requestId, actionId, payload });
-      });
+      return requestHost('invoke', { actionId, payload });
     },
   });
   Object.defineProperty(window, 'setsunaUI', {
@@ -148,6 +162,9 @@ const BOOTSTRAP = `(() => {
     if (!resizeFrame) resizeFrame = requestAnimationFrame(reportSize);
   };
   const startSizing = () => {
+    // Full-page applications own their viewport and scrolling. Measuring their
+    // content back into the host would create a resize feedback loop.
+    if (document.documentElement.dataset.sizing === 'fill') return;
     new ResizeObserver(scheduleSize).observe(document.documentElement);
     scheduleSize();
   };
@@ -156,12 +173,24 @@ const BOOTSTRAP = `(() => {
   send({ type: 'ready' });
 })();`;
 
-export function createSandboxedUiDocument(source: RuntimeSandboxedUiSource): string {
+export function createSandboxedUiDocument(
+  source: RuntimeSandboxedUiSource,
+  { libraryScripts = [], size = 'content', dialogUrl }: Readonly<{
+    libraryScripts?: readonly string[];
+    size?: 'content' | 'fill';
+    dialogUrl?: string;
+  }> = {},
+): string {
+  const endpoint = sandboxDialogEndpoint(dialogUrl);
+  const csp = endpoint ? SANDBOX_CSP.replace("connect-src 'none'", `connect-src ${endpoint}`) : SANDBOX_CSP;
   return [
-    '<!doctype html><html><head><meta charset="utf-8">',
-    `<meta http-equiv="Content-Security-Policy" content="${escapeAttribute(SANDBOX_CSP)}">`,
+    `<!doctype html><html data-sizing="${size === 'fill' ? 'fill' : 'content'}"><head><meta charset="utf-8">`,
+    `<meta http-equiv="Content-Security-Policy" content="${escapeAttribute(csp)}">`,
     '<meta name="viewport" content="width=device-width,initial-scale=1">',
     `<script>${BOOTSTRAP}</script>`,
+    `<script>${sandboxDialogBootstrap(endpoint)}</script>`,
+    ...libraryScripts.map((script) => `<script>${escapeScriptSource(script)}</script>`),
+    ...(size === 'fill' ? ['<style>html,body{height:100%}</style>'] : []),
     `<style>${BASE_STYLE}\n${escapeStyleSource(source.css)}</style>`,
     '</head><body>',
     source.html,
@@ -178,6 +207,11 @@ export function parseSandboxedUiFrameMessage(value: unknown): SandboxedUiFrameMe
   if (message.type === 'resize') {
     return typeof message.height === 'number' && Number.isFinite(message.height)
       ? Object.freeze({ type: 'resize', height: message.height })
+      : null;
+  }
+  if (message.type === 'runtime-request') {
+    return typeof message.requestId === 'string' && message.requestId.length <= 96
+      ? Object.freeze({ type: 'runtime-request', requestId: message.requestId, request: message.request })
       : null;
   }
   if (

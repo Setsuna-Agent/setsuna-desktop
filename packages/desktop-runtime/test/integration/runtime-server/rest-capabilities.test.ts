@@ -21,10 +21,20 @@ describe('runtime server REST skills and capabilities', () => {
     await harness.close();
   });
 
+  it('rejects uninstalling the built-in app builder through the backend API', async () => {
+    await expect(harness.runtimeFetch('/v1/features/plugin-management/installed/app-builder', { method: 'DELETE' }))
+      .rejects.toThrow('Built-in plugin cannot be uninstalled');
+    expect(await harness.runtimeFetch('/v1/features/plugin-management')).toMatchObject({
+      plugins: expect.arrayContaining([expect.objectContaining({ id: 'app-builder', installationSource: 'marketplace' })]),
+    });
+  });
+
   it('lists and updates local skills', async () => {
     const list = await harness.runtimeFetch('/v1/features/skills');
     expect(list.skills.some((skill: { id: string }) => skill.id === 'create-skill-in-chat')).toBe(true);
-    expect(list.skills.some((skill: { id: string }) => skill.id === 'create-plugin-in-chat')).toBe(true);
+    expect(list.skills).toEqual(expect.arrayContaining([expect.objectContaining({
+      id: 'app-builder.create-plugin-in-chat', kind: 'plugin', enabled: true,
+    })]));
 
     const updated = await harness.runtimeFetch('/v1/features/skills/create-skill-in-chat', {
       method: 'PATCH',
@@ -282,10 +292,10 @@ describe('runtime server REST skills and capabilities', () => {
         })],
       });
       await expect(harness.runtimeFetch('/v1/features/plugin-management')).resolves.toMatchObject({
-        plugins: [expect.objectContaining({ id: 'context7-docs' })],
+        plugins: expect.arrayContaining([expect.objectContaining({ id: 'context7-docs' })]),
       });
       await expect(harness.runtimeFetch('/v1/features/plugin-management/installed')).resolves.toMatchObject({
-        plugins: [expect.objectContaining({ id: 'context7-docs' })],
+        plugins: expect.arrayContaining([expect.objectContaining({ id: 'context7-docs' })]),
       });
       await expect(harness.runtimeFetch('/v1/features/plugin-management/installed/context7-docs/items/skill/context7-docs.context7-docs')).resolves.toMatchObject({
         pluginId: 'context7-docs',
@@ -318,7 +328,9 @@ describe('runtime server REST skills and capabilities', () => {
         removedMcpServers: ['context7'],
         preservedMcpServers: [],
       });
-      await expect(harness.runtimeFetch('/v1/features/plugin-management')).resolves.toMatchObject({ plugins: [] });
+      await expect(harness.runtimeFetch('/v1/features/plugin-management')).resolves.toMatchObject({
+        plugins: [expect.objectContaining({ id: 'app-builder' })],
+      });
       await expect(harness.runtimeFetch('/v1/features/plugin-management')).resolves.toMatchObject({
         marketplace: expect.arrayContaining([expect.objectContaining({ id: 'context7-docs', installed: false })]),
       });
@@ -426,7 +438,7 @@ describe('runtime server REST skills and capabilities', () => {
         },
       });
       await expect(harness.runtimeFetch('/v1/features/plugin-management')).resolves.toMatchObject({
-        plugins: [expect.objectContaining({ id: 'local-extension' })],
+        plugins: expect.arrayContaining([expect.objectContaining({ id: 'local-extension' })]),
       });
     });
   

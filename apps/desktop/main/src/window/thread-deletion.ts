@@ -1,6 +1,7 @@
 import {
   THREAD_DELETION_CHANNELS,
   runtimeText,
+  type DesktopThreadDeletionResult,
   type DesktopThreadDeletionState,
   type RuntimeInterfaceLanguage,
   type RuntimeRequestInput,
@@ -14,18 +15,21 @@ import { desktopWindows } from './registry.js';
 /** Serialize deletion so every desktop window can finish checking before any data is removed. */
 export function createThreadDeletionHandler(host: Pick<RuntimeHost, 'request'>, language: () => RuntimeInterfaceLanguage) {
   let queue: Promise<unknown> = Promise.resolve();
-  return (sender: WebContents, input: RuntimeRequestInput): Promise<unknown> => {
-    const deletion = queue.then(() => deleteThread(sender, input));
+  return (sender: WebContents | null, input: RuntimeRequestInput, signal?: AbortSignal): Promise<DesktopThreadDeletionResult> => {
+    const deletion = queue.then(() => deleteThread(sender, input, signal));
     queue = deletion.catch(() => undefined);
     return deletion;
   };
 
-  async function deleteThread(sender: WebContents, input: RuntimeRequestInput): Promise<unknown> {
-    const window = desktopWindows.get(sender.id);
+  async function deleteThread(sender: WebContents | null, input: RuntimeRequestInput, signal?: AbortSignal): Promise<DesktopThreadDeletionResult> {
+    signal?.throwIfAborted();
+    const windows = desktopWindows.all();
+    // Runtime-originated requests have no renderer sender, but share the same
+    // queue and all-window checks; an unregistered renderer still fails closed.
+    const window = sender ? desktopWindows.get(sender.id) : windows.find((entry) => entry.isFocused()) ?? windows[0];
     if (!window) throw new Error('Desktop window is unavailable.');
     const threadId = decodeURIComponent(input.path.slice('/v1/threads/'.length));
     const threadIds = [threadId];
-    const windows = desktopWindows.all();
     const t = runtimeText(language());
     let deleted = false;
     try {
@@ -47,6 +51,7 @@ export function createThreadDeletionHandler(host: Pick<RuntimeHost, 'request'>, 
         if (id === threadId && state.threadId && !threadIds.includes(state.threadId)) threadIds.push(state.threadId);
       }
       const affected = states.filter((state) => state.threadId && threadIds.includes(state.threadId));
+      signal?.throwIfAborted();
       if (affected.some((state) => state.busy)) {
         throw new Error(t('Wait for the file operation to finish before deleting this conversation.', '请等待文件操作完成后再删除对话。'));
       }
@@ -60,9 +65,11 @@ export function createThreadDeletionHandler(host: Pick<RuntimeHost, 'request'>, 
         if (response !== 1) return { cancelled: true };
       }
       if (window.isDestroyed()) return { cancelled: true };
-      const result = await host.request(input);
+      // A timed-out/disconnected app must not delete later when its dialog is answered.
+      signal?.throwIfAborted();
+      await host.request(input);
       deleted = true;
-      return result;
+      return { ok: true };
     } finally {
       for (const entry of windows) {
         if (!entry.webContents.isDestroyed()) {

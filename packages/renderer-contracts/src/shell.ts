@@ -4,6 +4,7 @@ import {
   defineSingleRendererSlot,
 } from '@setsuna-desktop/feature-core/renderer';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
+import type { RuntimePluginAppReference } from '@setsuna-desktop/contracts';
 import type { ButtonHTMLAttributes, ComponentType, ReactNode } from 'react';
 
 export type RendererAppRouteId = 'capabilities' | 'chat' | 'plugin' | 'settings' | 'pull-requests' | 'automation';
@@ -29,6 +30,8 @@ export type ShellSidebarPluginEntrySlotProps = Readonly<{
   projectId?: string;
   threadId?: string;
   onOpen(viewKey: RendererPluginViewKey): void;
+  onViewPlugin(pluginId: string): void;
+  onModifyApp(app: RuntimePluginAppReference): void;
 }>;
 
 export type ShellPluginPageSlotProps = Readonly<{

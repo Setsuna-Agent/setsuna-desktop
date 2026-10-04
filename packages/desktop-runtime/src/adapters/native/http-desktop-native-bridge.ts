@@ -10,7 +10,10 @@ import {
   DESKTOP_SYSTEM_PROXY_FETCH_METADATA_PREFIX_BYTES,
   DESKTOP_SYSTEM_PROXY_FETCH_PATH,
   DESKTOP_CLIPBOARD_WRITE_PATH,
+  DESKTOP_THREAD_DELETE_PATH,
   type DesktopClipboardWriteInput,
+  type DesktopThreadDeletionInput,
+  type DesktopThreadDeletionResult,
 } from '@setsuna-desktop/contracts';
 import {
   DESKTOP_SANDBOX_NETWORK_ENVIRONMENT_PATH,
@@ -70,6 +73,11 @@ export class HttpDesktopNativeBridge implements DesktopNativeBridge {
     await this.request(DESKTOP_CLIPBOARD_WRITE_PATH, { body, method: 'POST' });
   }
 
+  deleteThread(threadId: string, signal?: AbortSignal): Promise<DesktopThreadDeletionResult> {
+    const body: DesktopThreadDeletionInput = { threadId };
+    return this.request(DESKTOP_THREAD_DELETE_PATH, { body, method: 'POST', signal, timeoutMs: 120_000 });
+  }
+
   async fetchWithSystemProxy(input: string | URL, init?: RequestInit): Promise<Response> {
     const targetRequest = new Request(input, init);
     const metadata: DesktopSystemProxyFetchRequest = {
@@ -120,9 +128,11 @@ export class HttpDesktopNativeBridge implements DesktopNativeBridge {
     });
   }
 
-  private async request<T>(pathname: string, options: { body?: unknown; method: 'GET' | 'POST' }): Promise<T> {
+  private async request<T>(pathname: string, options: {
+    body?: unknown; method: 'GET' | 'POST'; signal?: AbortSignal; timeoutMs?: number;
+  }): Promise<T> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(new Error('Desktop native bridge request timed out.')), DEFAULT_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(new Error('Desktop native bridge request timed out.')), options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
     timer.unref?.();
     try {
       const response = await fetch(new URL(pathname, `${this.baseUrl.replace(/\/$/u, '')}/`), {
@@ -132,7 +142,7 @@ export class HttpDesktopNativeBridge implements DesktopNativeBridge {
           ...(options.body === undefined ? {} : { 'Content-Type': 'application/json' }),
         },
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
-        signal: controller.signal,
+        signal: options.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal,
         dispatcher: this.directAgent,
       } as unknown as RequestInit);
       const text = await response.text();
@@ -147,6 +157,10 @@ export class HttpDesktopNativeBridge implements DesktopNativeBridge {
 
 export class UnavailableDesktopNativeBridge implements DesktopNativeBridge {
   async close(): Promise<void> {}
+
+  async deleteThread(_threadId: string): Promise<DesktopThreadDeletionResult> {
+    throw new Error('Deleting a conversation requires the Setsuna Desktop host.');
+  }
 
   async writeClipboardText(_text: string): Promise<void> {
     throw new Error('Copying to the clipboard requires the Setsuna Desktop host.');

@@ -11,9 +11,11 @@ import type {
   RuntimePluginUiStateResult,
   RuntimePluginUiDataInput,
   RuntimePluginUiDataResult,
+  RuntimePluginUiRuntimeRequest,
 } from '@setsuna-desktop/contracts';
 import {
   parseRuntimePluginUiData,
+  parseRuntimeApiRequest,
   RUNTIME_EXTENSION_EVENT_NAMES,
 } from '@setsuna-desktop/contracts';
 import { createHash } from 'node:crypto';
@@ -66,6 +68,8 @@ import {
 } from './extension-worker-client.js';
 import { safeWorkerContext, workerRequestContext, safeEventContext, eventWorkerRequestContext } from './extension-request-context.js';
 import { protocolRecord } from './extension-worker-protocol.js';
+import type { RuntimeApi } from '../ports/runtime-api.js';
+import { requestPluginRuntimeApi } from './extension-runtime-api.js';
 import { installedPluginMessages, localizePluginDisplayFields, pluginText } from '../adapters/plugin/bundled-plugin-localization.js';
 
 type ActiveExtension = {
@@ -77,6 +81,7 @@ type ActiveExtension = {
 };
 
 type ExtensionManagerOptions = {
+  runtimeApi?: RuntimeApi;
   bundledPluginsDir?: string;
   getLanguage?(): Promise<RuntimeInterfaceLanguage>;
   workerEntryPath?: string;
@@ -441,6 +446,14 @@ export class ExtensionManager implements ExtensionRuntime {
     return this.toolTimeoutMs;
   }
 
+  requestRuntimeApi(input: RuntimePluginUiRuntimeRequest, signal?: AbortSignal) {
+    if (this.shuttingDown) throw new Error('Extension runtime is shutting down.');
+    return requestPluginRuntimeApi(input, {
+      api: this.options.runtimeApi, plugins: this.plugins,
+      verify: (plugin) => this.assertRendererUiBundleTrusted(plugin),
+    }, signal);
+  }
+
   private async assertRendererUiBundleTrusted(plugin: InstalledPluginRecord): Promise<void> {
     if (await this.bundleTrust.verify(plugin)) return;
     await this.stopActive(plugin.id);
@@ -645,6 +658,10 @@ export class ExtensionManager implements ExtensionRuntime {
         await this.state.delete(plugin.id, scope, key);
         return null;
       }
+    }
+    if (method === 'runtime.request') {
+      if (!this.options.runtimeApi) throw new Error('Runtime API transport is unavailable.');
+      return this.options.runtimeApi.request(parseRuntimeApiRequest(params), context.signal);
     }
     if (method.startsWith('ui.')) {
       requireCapability(extension, 'ui');

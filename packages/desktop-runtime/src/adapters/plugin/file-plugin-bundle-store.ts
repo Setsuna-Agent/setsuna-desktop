@@ -10,6 +10,7 @@ import type {
   RuntimePluginSkill
 } from '@setsuna-desktop/contracts';
 import {
+  isRequiredBuiltinPlugin,
   parseRuntimePluginUiManifest,
 } from '@setsuna-desktop/contracts';
 import type { McpStore } from '@setsuna-desktop/feature-mcp/contracts';
@@ -625,6 +626,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
       const index = await this.readIndex();
       const plugin = index.plugins.find((item) => item.id === id);
       if (!plugin) throw new Error(`Plugin not found: ${id}`);
+      if (isRequiredBuiltinPlugin(plugin)) throw new Error(`Built-in plugin cannot be uninstalled: ${id}`);
       const expectedInstallPath = strictPluginInstallPath(this.pluginsDir, plugin.id);
       if (!samePath(plugin.installPath, expectedInstallPath)) {
         throw new Error(`Installed plugin path is invalid: ${plugin.id}`);

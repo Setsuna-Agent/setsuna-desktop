@@ -29,7 +29,7 @@ export function usePluginManagementFeatureSnapshot(): PluginManagementSnapshot {
   return usePluginManagementSnapshot(usePluginManagementFeatureService());
 }
 
-function usePluginManagementFeatureService(): PluginManagementRendererService {
+export function usePluginManagementFeatureService(): PluginManagementRendererService {
   const service = useContext(PluginManagementFeatureContext);
   if (!service) throw new Error('PluginManagementFeatureServiceBoundary is missing.');
   return service;

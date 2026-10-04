@@ -10,6 +10,7 @@ import { handleRuntimeThreadCommandRequest } from './runtime-thread-command-rout
 import { handleRuntimeThreadRequest } from './runtime-thread-routes.js';
 import { handleRuntimeTurnRequest } from './runtime-turn-routes.js';
 import { handleRuntimeWorkspaceRequest } from './runtime-workspace-routes.js';
+import { handleRuntimeApiRequest } from './runtime-api-routes.js';
 import type { RuntimeFactory } from './types.js';
 
 /**
@@ -23,6 +24,7 @@ export async function handleRuntimeRestRequest(
   response: ServerResponse,
   url: URL,
 ): Promise<boolean> {
+  if (await handleRuntimeApiRequest(runtime, request, response, url)) return true;
   if (await runtime.featureRoutes.handle(request, response, url)) return true;
   if (await handleRuntimeFeatureManagementRequest(runtime, request, response, url)) return true;
   if (await handleRuntimeThreadCommandRequest(runtime, request, response, url)) {

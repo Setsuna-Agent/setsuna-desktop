@@ -1,10 +1,9 @@
-import type { RuntimeToolRun } from '@setsuna-desktop/contracts';
+import type { RuntimePluginReference, RuntimeToolRun } from '@setsuna-desktop/contracts';
 import {
   AlertCircle,
   CheckCircle2,
   Clock3,
   FileText,
-  Play,
   Search,
   ShieldAlert,
   SquareTerminal,
@@ -17,6 +16,8 @@ import {
   type Translate,
 } from '../../../shared/i18n/I18nProvider.js';
 import { EditIcon } from '../../../shared/ui/EditIcon.js';
+import { PluginIcon } from '../../../shared/ui/PluginIcon.js';
+import { usePluginReferenceCatalog } from '../references/PluginReference.js';
 import type { ToolRunGroupKind } from './runtime-tool-run-types.js';
 import { isRuntimeFileMutationRun } from './runtimeFileChanges.js';
 
@@ -64,11 +65,13 @@ export function statusTextFromStatus(
 export function toolRunGroupIcon(
   kind: ToolRunGroupKind,
   status: RuntimeToolRun['status'],
+  plugin?: RuntimePluginReference,
 ) {
   if (status === 'pending_approval') return <ShieldAlert size={14} />;
   if (status === 'running') return <Clock3 size={14} />;
   if (status === 'error' || status === 'cancelled') return <XCircle size={14} />;
   if (status === 'rejected') return <AlertCircle size={14} />;
+  if (plugin) return <ToolRunPluginIcon plugin={plugin} />;
   return toolRunKindIcon(kind);
 }
 
@@ -85,13 +88,25 @@ export function toolRunIcon(run: RuntimeToolRun) {
   if (run.status === 'running') return <Clock3 size={14} />;
   if (run.status === 'error' || run.status === 'cancelled') return <XCircle size={14} />;
   if (run.status === 'rejected') return <AlertCircle size={14} />;
+  if (run.plugin) return <ToolRunPluginIcon plugin={run.plugin} />;
   if (run.name.includes('search')) return <Search size={14} />;
   if (run.name.includes('shell')) return <SquareTerminal size={14} />;
   if (isRuntimeFileMutationRun(run)) return <EditIcon size={14} />;
   if (run.name.includes('file') || run.name.includes('workspace')) return <FileText size={14} />;
-  if (run.name.includes('run')) return <Play size={14} />;
   if (run.status === 'success') return <CheckCircle2 size={14} />;
   return <Wrench size={14} />;
+}
+
+function ToolRunPluginIcon({ plugin }: { plugin: RuntimePluginReference }) {
+  const installed = usePluginReferenceCatalog().find((item) => item.id === plugin.id);
+  return (
+    <PluginIcon
+      name={installed?.icon ?? plugin.icon}
+      iconImage={installed?.iconImage}
+      pluginId={plugin.id}
+      variant="inline"
+    />
+  );
 }
 
 export function toolRunKindIcon(kind: ToolRunGroupKind) {

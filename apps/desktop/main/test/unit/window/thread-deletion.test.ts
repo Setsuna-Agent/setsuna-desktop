@@ -20,32 +20,61 @@ afterEach(() => {
   native.ipcMain.removeAllListeners();
 });
 
-it('waits for both windows and explicit consent before deleting, including a child conversation', async () => {
+it.each(['renderer', 'runtime'] as const)('waits for both windows and explicit consent for %s deletion, including a child conversation', async (origin) => {
   const source = windowFixture(1, { threadId: 'parent', dirty: false, busy: false });
   const other = windowFixture(2, { threadId: 'child', dirty: true, busy: false });
   let answer!: (result: { response: number }) => void;
   native.showMessageBox.mockImplementation(() => new Promise((resolve) => { answer = resolve; }));
   const { remove, request } = setup();
-  const pending = remove(source.window.webContents, deletion);
+  const pending = remove(origin === 'renderer' ? source.window.webContents : null, deletion);
   await vi.waitFor(() => expect(native.showMessageBox).toHaveBeenCalledOnce());
   expect(request).not.toHaveBeenCalledWith(deletion);
   expect(other.send).not.toHaveBeenCalledWith(THREAD_DELETION_CHANNELS.finished, expect.anything());
   answer({ response: 1 });
-  await expect(pending).resolves.toEqual({ deleted: true });
+  await expect(pending).resolves.toEqual({ ok: true });
   expect(request).toHaveBeenCalledWith(deletion);
   expect(other.send).toHaveBeenLastCalledWith(THREAD_DELETION_CHANNELS.finished, { deletedThreadIds: ['parent', 'child'] });
 });
 
-it.each(['cancel', 'failure', 'busy'] as const)('releases every window without discarding drafts on %s', async (scenario) => {
+it.each([
+  ['renderer', 'cancel'], ['renderer', 'failure'], ['renderer', 'busy'],
+  ['runtime', 'cancel'], ['runtime', 'failure'], ['runtime', 'busy'],
+] as const)('releases every window without discarding drafts on %s %s', async (origin, scenario) => {
   const source = windowFixture(1, { threadId: 'parent', dirty: false, busy: false });
   const other = windowFixture(2, { threadId: 'parent', dirty: true, busy: scenario === 'busy' });
   native.showMessageBox.mockResolvedValue({ response: scenario === 'cancel' ? 0 : 1 });
   const { remove, request } = setup(scenario === 'failure');
-  if (scenario === 'cancel') await expect(remove(source.window.webContents, deletion)).resolves.toEqual({ cancelled: true });
-  else await expect(remove(source.window.webContents, deletion)).rejects.toThrow();
+  const sender = origin === 'renderer' ? source.window.webContents : null;
+  if (scenario === 'cancel') await expect(remove(sender, deletion)).resolves.toEqual({ cancelled: true });
+  else await expect(remove(sender, deletion)).rejects.toThrow();
   if (scenario !== 'failure') expect(request).not.toHaveBeenCalledWith(deletion);
   if (scenario === 'busy') expect(native.showMessageBox).not.toHaveBeenCalled();
   expect(other.send).toHaveBeenLastCalledWith(THREAD_DELETION_CHANNELS.finished, { deletedThreadIds: [] });
+});
+
+it('shares the deletion queue between runtime and renderer and never deletes an aborted request after confirmation', async () => {
+  const source = windowFixture(1, { threadId: 'parent', dirty: true, busy: false });
+  let answer!: (result: { response: number }) => void;
+  native.showMessageBox.mockImplementation(() => new Promise((resolve) => { answer = resolve; }));
+  const { remove, request } = setup();
+  const controller = new AbortController();
+  const cancelled = expect(remove(null, deletion, controller.signal)).rejects.toThrow();
+  await vi.waitFor(() => expect(native.showMessageBox).toHaveBeenCalledOnce());
+  const queued = remove(source.window.webContents, deletion);
+  controller.abort();
+  answer({ response: 1 });
+  await cancelled;
+  expect(request).not.toHaveBeenCalledWith(deletion);
+  await vi.waitFor(() => expect(native.showMessageBox).toHaveBeenCalledTimes(2));
+  answer({ response: 1 });
+  await expect(queued).resolves.toEqual({ ok: true });
+  expect(request).toHaveBeenCalledExactlyOnceWith(deletion);
+});
+
+it('refuses runtime deletion when no desktop window is available', async () => {
+  const { remove, request } = setup();
+  await expect(remove(null, deletion)).rejects.toThrow('unavailable');
+  expect(request).not.toHaveBeenCalled();
 });
 
 it('ignores edits in unrelated windows and rejects requests from unregistered renderers', async () => {
@@ -76,7 +105,7 @@ function setup(fail = false) {
   const request = vi.fn(async (input: RuntimeRequestInput) => {
     if (input.method !== 'DELETE') return { parentThreadId: input.path.includes('/child?') ? 'parent' : undefined };
     if (fail) throw new Error('Delete failed');
-    return { deleted: true };
+    return { ok: true };
   });
   return { request, remove: createThreadDeletionHandler({ request: request as never }, () => 'zh-CN') };
 }
@@ -90,7 +119,7 @@ function windowFixture(id: number, state: DesktopThreadDeletionState | null, reg
   });
   const webContents = Object.assign(new EventEmitter(), { id, send, isDestroyed: () => destroyed });
   const window = Object.assign(new EventEmitter(), {
-    webContents, isDestroyed: () => destroyed,
+    webContents, isDestroyed: () => destroyed, isFocused: () => id === 1,
     destroy: () => { destroyed = true; webContents.emit('destroyed'); window.emit('closed'); },
   }) as unknown as BrowserWindow;
   if (registered) desktopWindows.add(window);

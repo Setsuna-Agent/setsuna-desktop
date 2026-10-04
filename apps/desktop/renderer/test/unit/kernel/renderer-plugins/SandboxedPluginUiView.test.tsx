@@ -10,11 +10,12 @@ import { SandboxedPluginUiView } from '../../../../src/kernel/declarative-plugin
 describe('SandboxedPluginUiView', () => {
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
-  it('loads declared resources and routes whitelisted bridge actions through approval', async () => {
-    const { contribution, manifest } = createWeatherUi();
+  it.each([false, true])('routes declared bridge actions (extra confirmation: %s)', async (confirmAction) => {
+    const { contribution, manifest } = createWeatherUi(confirmAction);
     const readRendererUiDocument = vi.fn(async () => ({
       revision: 'trusted-weather-hash',
       html: '<main class="weather">Weather</main>',
@@ -62,20 +63,33 @@ describe('SandboxedPluginUiView', () => {
     expect(frame.srcdoc).toContain('<main class="weather">Weather</main>');
     expect(frame.srcdoc).toContain('.weather { color: orange; }');
 
-    fireEvent(window, new MessageEvent('message', {
+    const invoke = (requestId: string) => fireEvent(window, new MessageEvent('message', {
       source: frame.contentWindow,
       data: {
         channel: 'setsuna.sandboxed-ui.v1',
         type: 'invoke',
-        requestId: 'action_1',
+        requestId,
         actionId: 'weather.refresh',
         payload: { city: '杭州' },
       },
     }));
 
-    await screen.findByRole('dialog');
-    expect(runRendererUiAction).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: '确认' }));
+    invoke('action_1');
+    if (confirmAction) {
+      await screen.findByRole('dialog');
+      vi.useFakeTimers();
+      await act(async () => { await vi.advanceTimersByTimeAsync(300_000); });
+      vi.useRealTimers();
+      expect(runRendererUiAction).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole('button', { name: '取消' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      expect(runRendererUiAction).not.toHaveBeenCalled();
+      invoke('action_2');
+      await screen.findByRole('dialog');
+      fireEvent.click(screen.getByRole('button', { name: '确认' }));
+    } else {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    }
 
     await waitFor(() => expect(runRendererUiAction).toHaveBeenCalledWith({
       pluginId: 'weather-plugin',
@@ -87,6 +101,7 @@ describe('SandboxedPluginUiView', () => {
         surface: 'renderer.plugin.page',
       },
     }));
+    expect(runRendererUiAction).toHaveBeenCalledTimes(1);
   });
 
   it('waits for the first data snapshot before mounting the sandboxed document', async () => {
@@ -155,10 +170,10 @@ describe('SandboxedPluginUiView', () => {
   });
 });
 
-function createWeatherUi() {
+function createWeatherUi(confirmAction = false) {
   const manifest = parseRuntimePluginUiManifest({
     schemaVersion: 2,
-    actions: [{ id: 'weather.refresh', approval: { message: 'Refresh weather?' } }],
+    actions: [{ id: 'weather.refresh', ...(confirmAction ? { approval: { message: 'Refresh weather?' } } : {}) }],
     contributions: [{
       id: 'weather.page',
       slot: 'renderer.plugin.page',

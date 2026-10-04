@@ -514,6 +514,11 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   color: var(--chat-tool-run-icon-color);
 }
 
+.chat-tool-run__icon:has(> .desktop-plugin-icon) {
+  width: var(--desktop-inline-icon-size);
+  flex-basis: var(--desktop-inline-icon-size);
+}
+
 .chat-tool-run__summary-text {
   display: flex;
   flex: 0 1 auto;

@@ -36,7 +36,7 @@ import { SettingsPageHeading, SettingsPageLayout } from './SettingsPageLayout.js
 export { SettingsPageHeading } from './SettingsPageLayout.js';
 import { SettingsMarkdownDocument } from './SettingsMarkdownDocument.js';
 import { SettingsDirectoryList } from './SettingsListFields.js';
-import { PluginIcon } from './PluginIcon.js';
+import { SettingsPluginIcon } from '../../kernel/declarative-plugin-ui/app-appearance/SettingsPluginIcon.js';
 import { SkillIcon } from './SkillIcon.js';
 import {
   RendererOwnedKeyedSlot,
@@ -64,7 +64,7 @@ export const settingsViewUi = Object.freeze({
   PageHeading: SettingsPageHeading,
   PageLayout: SettingsPageLayout,
   PageOutlet: SettingsFeaturePageOutlet,
-  PluginIcon,
+  PluginIcon: SettingsPluginIcon,
   Row: SettingsRow,
   SandboxedUiFrame,
   Section: SettingsSection,

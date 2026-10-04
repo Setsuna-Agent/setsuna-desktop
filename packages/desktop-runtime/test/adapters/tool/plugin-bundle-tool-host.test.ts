@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, realpath, rm, symlink } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { RuntimePluginSummary } from '@setsuna-desktop/contracts';
@@ -10,6 +10,8 @@ import {
 } from '../../../src/adapters/tool/configure-plugin-tool.js';
 import type { InstalledPluginRecord, PluginBundleStore } from '../../../src/ports/plugin-bundle-store.js';
 import type { PluginDraftStore } from '../../../src/ports/plugin-draft-store.js';
+import type { ToolExecutionContext } from '../../../src/ports/tool-host.js';
+import { installedAppBuilder } from '../../support/app-builder.js';
 
 const ONE_PIXEL_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
@@ -21,6 +23,7 @@ describe('plugin bundle tool host', () => {
     expect(configurePluginRendererUiSchema).toMatchObject({
       additionalProperties: false,
       properties: {
+        actions: { items: { required: ['id'] } },
         contributions: {
           items: {
             additionalProperties: false,
@@ -46,14 +49,14 @@ describe('plugin bundle tool host', () => {
           capabilities: ['ui', 'state'],
           rendererUi: {
             schemaVersion: 2,
-            actions: [],
+            actions: [{ id: 'release.refresh' }],
             contributions: [{
               id: 'release.page',
               slot: 'renderer.plugin.page',
               stateKey: 'release.view',
               scope: 'project',
               navigation: { label: 'Release Checker' },
-              tree: { type: 'text', text: 'Not run' },
+              tree: { type: 'button', actionId: 'release.refresh', label: 'Refresh' },
             }],
           },
         },
@@ -64,6 +67,7 @@ describe('plugin bundle tool host', () => {
     expect(normalized.manifest).toMatchObject({
       extension: {
         rendererUi: {
+          actions: [{ id: 'release.refresh' }],
           contributions: [{
             data: { scope: 'project', stateKey: 'release.view' },
           }],
@@ -112,6 +116,10 @@ describe('plugin bundle tool host', () => {
   it('gates plugin tools by feature and requires approval for capability mutations', async () => {
     const store = pluginStoreFixture();
     const host = new PluginBundleToolHost(store, pluginDraftStoreFixture());
+
+    await expect(host.approvalForTool('remove_plugin_bundle', { pluginId: ' APP-BUILDER ' }))
+      .rejects.toThrow('Built-in plugin cannot be uninstalled');
+    expect(store.removePlugin).not.toHaveBeenCalled();
 
     await expect(host.listTools({ threadId: 'thread_1', features: { plugins: false } })).resolves.toEqual([]);
     await expect(host.listTools({ threadId: 'thread_1', features: { plugins: true } })).resolves.toEqual(
@@ -292,6 +300,38 @@ describe('plugin bundle tool host', () => {
     expect(drafts.writeDraft).not.toHaveBeenCalled();
   });
 
+  it('installs exact workspace source bytes and rejects changes after the preview', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-source-'));
+    try {
+      const store = pluginStoreFixture();
+      const drafts = pluginDraftStoreFixture();
+      const host = new PluginBundleToolHost(store, drafts);
+      const context: ToolExecutionContext = {
+        threadId: 'thread_1',
+        environment: { id: 'workspace', cwd: root, workspaceRoot: root, workspaceRoots: [root] },
+      };
+      const content = '<main title="中文 &amp; &lt;">${value} \\ </main>\n';
+      await writeFile(path.join(root, 'page.html'), content);
+      const input = {
+        manifest: { id: 'demo', name: 'Demo', resources: [{ id: 'page', path: 'ui/page.html' }] },
+        files: [{ path: 'ui/page.html', sourcePath: 'page.html' }],
+      };
+      const approval = await host.approvalForTool('configure_plugin', input, context);
+      expect(JSON.parse(approval!.argumentsPreview!).files).toEqual([{ path: 'ui/page.html', content }]);
+      const preview = await host.previewToolCall('configure_plugin', input, context);
+      await host.runTool('configure_plugin', input, { ...context, expectedPreviewIntegrityToken: preview!.integrityToken });
+      expect(drafts.writeDraft).toHaveBeenCalledWith(expect.objectContaining({ files: [{ path: 'ui/page.html', content }] }));
+      vi.mocked(drafts.writeDraft).mockClear();
+      await writeFile(path.join(root, 'page.html'), '<main>changed</main>');
+      await expect(host.runTool('configure_plugin', input, {
+        ...context, expectedPreviewIntegrityToken: preview!.integrityToken,
+      })).rejects.toMatchObject({ failureKind: 'preview_changed' });
+      expect(drafts.writeDraft).not.toHaveBeenCalled();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('rejects invalid extension JavaScript before requesting approval', async () => {
     const store = pluginStoreFixture();
     const host = new PluginBundleToolHost(store, pluginDraftStoreFixture());
@@ -411,7 +451,7 @@ function pluginStoreFixture(): PluginBundleStore {
   return {
     catalogRevision: vi.fn(async () => 'catalog-1'),
     listPlugins: vi.fn(async () => ({
-      plugins: [{
+      plugins: [installedAppBuilder(), {
         id: 'demo',
         name: 'Demo',
         installedAt: '2026-07-15T00:00:00.000Z',

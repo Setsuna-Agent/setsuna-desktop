@@ -1,4 +1,6 @@
 import type {
+  RuntimeApiResponse,
+  RuntimePluginUiRuntimeRequest,
   RuntimeExtensionStatusList,
   RuntimePluginInstallResult,
   RuntimePluginConnectorStatus,
@@ -37,6 +39,7 @@ export type PluginManagementHookMutationResult =
 
 /** Existing runtime adapters exposed through one management-only seam. */
 export interface PluginManagementRuntimeHost {
+  requestRuntimeApi(input: RuntimePluginUiRuntimeRequest, signal?: AbortSignal): Promise<RuntimeApiResponse>;
   catalogRevision(): Promise<string>;
   readConnectorStatuses(input: PluginManagementPluginTarget): Promise<RuntimePluginConnectorStatus[]>;
   getInstalledItem(input: PluginManagementItemTarget): Promise<RuntimePluginItemContent>;
@@ -82,6 +85,7 @@ export const pluginManagementRendererHostCapability: CapabilityToken<PluginManag
 export type PluginManagementRendererListener = () => void;
 
 export interface PluginManagementRendererService {
+  requestRuntimeApi(input: RuntimePluginUiRuntimeRequest, options?: Readonly<{ signal?: AbortSignal }>): Promise<RuntimeApiResponse>;
   getSnapshot(): PluginManagementSnapshot;
   readConnectorStatuses(input: PluginManagementPluginTarget, options?: Readonly<{ signal?: AbortSignal }>): Promise<RuntimePluginConnectorStatus[]>;
   getHookSnapshot(): PluginManagementHookSnapshot;

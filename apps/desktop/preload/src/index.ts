@@ -59,6 +59,9 @@ const runtime: DesktopRuntimeBridge = {
 };
 
 const desktop: SetsunaDesktopBridge['desktop'] = {
+  createSandboxDialogSession: (title) => ipcRenderer.invoke('desktop:create-sandbox-dialog-session', title),
+  updateSandboxDialogSession: (id, title) => ipcRenderer.invoke('desktop:update-sandbox-dialog-session', id, title),
+  releaseSandboxDialogSession: (id) => ipcRenderer.invoke('desktop:release-sandbox-dialog-session', id),
   platform: process.platform,
   whenReady: () => ipcRenderer.invoke('desktop:when-ready'),
   watchWorkspaceEntries,

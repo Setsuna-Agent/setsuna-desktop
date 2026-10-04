@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { parsePluginMentions, pluginMentionText } from '../src/plugin-reference.js';
+import { parsePluginMentions, pluginAppMentionText, pluginMentionText } from '../src/plugin-reference.js';
 
 describe('plugin references', () => {
+  it('preserves the owning plugin and exact app identity across serialized drafts', () => {
+    const app = { pluginId: 'custom/table#one', contributionId: 'page/(main)', name: '我的表格' };
+    const reference = pluginAppMentionText(app);
+    expect(parsePluginMentions(`修改 ${reference}`)).toEqual([{
+      pluginId: app.pluginId, contributionId: app.contributionId, label: app.name, start: 3, end: reference.length + 3,
+    }]);
+    expect(parsePluginMentions('[$app](plugin://table#app=) [$app](plugin://table#app=%00)')).toEqual([]);
+    expect(parsePluginMentions(`\`${reference}\``)).toEqual([]);
+  });
   it('round trips plugin identities and exact offsets through message text', () => {
     const plugin = { id: 'repo/github(enterprise)', name: 'GitHub Enterprise' };
     const reference = pluginMentionText(plugin);

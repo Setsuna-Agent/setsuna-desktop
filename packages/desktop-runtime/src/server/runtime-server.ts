@@ -19,6 +19,7 @@ import { handleAppServerNotificationSse, runtimeEventStreamExperimentalApi } fro
 import type { RuntimeServer, RuntimeServerOptions } from './types.js';
 import { InFlightRequestTracker } from './in-flight-requests.js';
 import { RuntimeMaintenanceGate } from './runtime-maintenance-gate.js';
+import { createRuntimeApiClient } from './runtime-api-client.js';
 
 export type { RuntimeServer, RuntimeServerOptions } from './types.js';
 
@@ -30,6 +31,15 @@ export type { RuntimeServer, RuntimeServerOptions } from './types.js';
 export async function createRuntimeServer(options: RuntimeServerOptions): Promise<RuntimeServer> {
   const startedAt = new Date().toISOString();
   const runtime = createRuntimeFactory({
+    runtimeApi: createRuntimeApiClient({
+      token: options.token,
+      deleteThread: (threadId, signal) => runtime.nativeBridge.deleteThread(threadId, signal),
+      baseUrl: () => {
+        const address = server.address();
+        if (!address || typeof address === 'string') throw new Error('Runtime server is not listening.');
+        return `http://127.0.0.1:${address.port}`;
+      },
+    }),
     dataDir: options.dataDir,
     appVersion: options.version,
     builtinSkillsDir: options.builtinSkillsDir,
@@ -41,6 +51,7 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
   let featureComposition: RuntimeFeatureComposition | null = null;
   try {
     await runtime.mcpStore.migrateLegacySecrets();
+    await runtime.installDefaultPlugins();
     await runtime.threadStore.recover();
     const recoveredThreads = await runtime.threadStore.listThreads({ includeArchived: true, includeSide: true, includeFeatures: true });
     const imageCandidates = new Set(await runtime.generatedImageStore.listAssetIds());

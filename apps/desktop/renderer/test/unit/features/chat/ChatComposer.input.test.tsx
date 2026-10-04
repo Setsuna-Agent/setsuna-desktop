@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import type { DesktopRuntimeClient, RuntimeMessage, RuntimeSkillSummary, RuntimeThread } from '@setsuna-desktop/contracts';
+import { parsePluginMentions, pluginAppMentionText, type DesktopRuntimeClient, type RuntimeMessage, type RuntimePluginSummary, type RuntimeSkillSummary, type RuntimeThread } from '@setsuna-desktop/contracts';
 import { browserTabMentionText, type BrowserTabReference } from '@setsuna-desktop/feature-browser/contracts';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
@@ -12,7 +12,42 @@ import { CHAT_COMPOSER_CLIPBOARD_TYPE } from '../../../../src/features/chat/comp
 import { MAX_INLINE_PASTE_CHARACTERS } from '../../../../src/features/chat/composer/useChatComposerClipboard.js';
 import { RendererPluginTestHost } from '../../support/RendererPluginTestHost.js';
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); localStorage.clear(); });
+
+it('attaches an app by @ without a project, restores its draft and preserves its identity when sent', async () => {
+  const plugin: RuntimePluginSummary = {
+    id: 'editable-table', name: 'Tables', installedAt: '', skills: [], hooks: [], hookCount: 0, resources: [], mcpServers: [],
+    extension: { apiVersion: 1, runtime: 'node-worker', trust: 'trusted', capabilities: ['ui'],
+      rendererUi: { schemaVersion: 2, actions: [], contributions: [{ id: 'table.page', slot: 'renderer.plugin.page',
+        navigation: { label: '我的表格' }, document: { htmlResourceId: 'html', actionIds: [] } }] } },
+  };
+  const send = vi.fn<(...args: unknown[]) => Promise<boolean>>(async () => true);
+  const view = render(<Harness initialDraft="@表格" plugins={[plugin]} send={send} />);
+  const input = screen.getByRole('textbox');
+  act(() => placeCaret(input, 3));
+  const option = await screen.findByRole('option', { name: '我的表格' });
+  fireEvent.mouseDown(option);
+  const clipboard = new Map<string, string>();
+  const clipboardData = { files: [], getData: (type: string) => clipboard.get(type) ?? '',
+    setData: (type: string, value: string) => { clipboard.set(type, value); } };
+  const range = document.createRange();
+  range.selectNodeContents(input);
+  document.getSelection()?.removeAllRanges();
+  document.getSelection()?.addRange(range);
+  fireEvent.cut(input, { clipboardData });
+  fireEvent.paste(input, { clipboardData });
+  expect(send).not.toHaveBeenCalled();
+  fireEvent.keyDown(input, { key: 'Enter' });
+  await waitFor(() => expect(send).toHaveBeenCalledOnce());
+  const serialized = send.mock.calls[0][0] as unknown as string;
+  expect(parsePluginMentions(serialized)).toEqual([expect.objectContaining({ pluginId: plugin.id, contributionId: 'table.page' })]);
+  view.unmount();
+  send.mockClear();
+  render(<Harness initialDraft={`${serialized} 修改表头`} plugins={[plugin]} send={send} />);
+  fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
+  await waitFor(() => expect(send).toHaveBeenCalledWith(`${serialized} 修改表头`, expect.anything()));
+  expect(serialized.trim()).toBe(pluginAppMentionText({ pluginId: plugin.id, contributionId: 'table.page', name: '我的表格' }));
+});
 
 it('uploads a long paste verbatim as TXT, preserves the draft, and sends the stored attachment', async () => {
   const text = '中文 🙂\r\n'.repeat(MAX_INLINE_PASTE_CHARACTERS);
@@ -312,11 +347,12 @@ function SessionHarness({ target, client, send, skills }: {
   return <Harness client={client} session={session} send={send} skills={skills} />;
 }
 
-function Harness({ initialDraft = '', client = {} as DesktopRuntimeClient, messages = [], skills = [], tabs = [], threadId = 'thread-1', send = async () => false, session }: {
+function Harness({ initialDraft = '', client = {} as DesktopRuntimeClient, messages = [], skills = [], plugins = [], tabs = [], threadId = 'thread-1', send = async () => false, session }: {
   initialDraft?: string;
   client?: DesktopRuntimeClient;
   messages?: RuntimeMessage[];
   skills?: RuntimeSkillSummary[];
+  plugins?: RuntimePluginSummary[];
   tabs?: BrowserTabReference[];
   threadId?: string;
   send?: (...args: unknown[]) => Promise<boolean>;
@@ -329,7 +365,7 @@ function Harness({ initialDraft = '', client = {} as DesktopRuntimeClient, messa
     activeTurnId={null} client={client} config={null} canClearContext={false}
     contextUsage={{ compactedMessageCount: 0, percent: 0, totalTokens: 256_000, triggerScopes: [], usedTokens: 0, visiblePercent: 0 }}
     currentThread={{ id: threadId, messages, queuedTurnInputs: [] } as unknown as RuntimeThread}
-    draft={session?.draft ?? draft} skills={skills} onDraftChange={session?.setDraft ?? setDraft} onSend={send}
+    draft={session?.draft ?? draft} skills={skills} plugins={plugins} onDraftChange={session?.setDraft ?? setDraft} onSend={send}
     queuedTurnActions={{ deleteQueuedTurnInput: vi.fn(), releaseQueuedTurnInputEdit: vi.fn(), retrieveQueuedTurnInput: vi.fn(), sendQueuedTurnInputNow: vi.fn(), updateQueuedTurnInput: vi.fn() }}
     onAccessModeChange={vi.fn()} onCancelActiveTurn={vi.fn()} onClearContext={vi.fn()} onCompactContext={vi.fn()}
     onSelectModel={vi.fn()} onSetMultiAgentEnabled={vi.fn()} onStartThreadReview={vi.fn()} onSearchProjectEntries={vi.fn()}

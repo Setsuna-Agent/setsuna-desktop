@@ -70,6 +70,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     searchTriggerRef,
     selectSkillForChat,
     selectPluginForChat,
+    startPluginAppChat,
     setActiveView,
     setDraft,
     setSidebarCollapsed,
@@ -417,6 +418,8 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       showSidebarToggle={activeView === 'chat' || activeView === 'capabilities'}
       navigationRail={(
         <AppNavigationRail
+          onCreateApp={startPluginAppChat}
+          onFocusComposer={() => setFocusComposerRequest((request) => request + 1)}
           activeView={activeView}
           activeProjectId={activeProjectId}
           activeThreadId={currentThread?.id}
@@ -428,6 +431,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
           onOpenPullRequests={openPullRequests}
           onOpenAutomation={openAutomation}
           onOpenPluginView={openPluginView}
+          onViewPlugin={openCapabilitiesPlugin}
           onOpenRuntimeActivity={() => setRuntimeActivityOpen(true)}
           onOpenSettings={openSettings}
         />

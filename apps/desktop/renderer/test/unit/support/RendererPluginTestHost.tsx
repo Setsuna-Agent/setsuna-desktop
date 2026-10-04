@@ -21,6 +21,7 @@ const ownedSlots: RendererOwnedSlotRenderer = Object.freeze({
   chain: () => null as never,
   keyed: () => null,
   keyedEntries: () => Object.freeze([]),
+  listEntryIds: () => Object.freeze([]),
   list: () => null,
   single: () => null,
 });

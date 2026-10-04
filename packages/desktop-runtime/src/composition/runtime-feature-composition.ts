@@ -314,6 +314,7 @@ export async function activateBuiltinRuntimeFeatures(
           listMarketplace: (options) => runtime.pluginMarketplace.listPlugins(options),
           listPlugins: () => runtime.pluginStore.listPlugins(),
           readRendererUiState: (input) => runtime.extensionManager.readRendererUiState(input),
+          requestRuntimeApi: (input, signal) => runtime.extensionManager.requestRuntimeApi(input, signal),
           runRendererUiAction: (input, signal) => (
             runtime.extensionManager.runRendererUiAction(input, signal)
           ),

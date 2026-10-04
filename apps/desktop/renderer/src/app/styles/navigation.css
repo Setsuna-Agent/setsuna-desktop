@@ -1,4 +1,5 @@
 .app-navigation {
+  position: relative;
   display: flex;
   grid-column: 1;
   grid-row: 2;
@@ -21,23 +22,27 @@
   width: 100%;
 }
 
-.app-navigation__routes {
+.app-navigation__viewport {
   flex: 1 1 auto;
   min-height: 0;
-  padding-bottom: 8px;
+  width: 100%;
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-width: none;
+}
+
+.app-navigation__viewport::-webkit-scrollbar {
+  display: none;
+}
+
+.app-navigation__routes {
+  padding-bottom: 8px;
 }
 
 .app-navigation__plugins {
   position: relative;
   margin-top: 4px;
   padding-top: 12px;
-}
-
-.app-navigation__plugins:empty {
-  display: none;
 }
 
 .app-navigation__plugins::before {
@@ -50,6 +55,7 @@
 }
 
 .app-navigation__button.sd-button {
+  position: relative;
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
@@ -76,6 +82,34 @@
 
 .app-navigation__button > svg {
   stroke-width: 1.7;
+}
+
+.app-navigation__button[draggable='true'] {
+  cursor: grab;
+}
+
+.app-navigation__button[data-dragging='true'] {
+  opacity: 0.45;
+  cursor: grabbing;
+}
+
+.app-navigation__button[data-drop-position]::after {
+  position: absolute;
+  right: 2px;
+  left: 2px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--app-text);
+  pointer-events: none;
+  content: '';
+}
+
+.app-navigation__button[data-drop-position='before']::after {
+  top: -5px;
+}
+
+.app-navigation__button[data-drop-position='after']::after {
+  bottom: -5px;
 }
 
 .app-navigation__avatar {

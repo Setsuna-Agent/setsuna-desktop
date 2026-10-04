@@ -180,7 +180,7 @@ function useRendererPluginSnapshot(): RendererPluginSnapshot {
   return useSyncExternalStore(runtime.subscribe, runtime.getSnapshot, runtime.getSnapshot);
 }
 
-function useRendererPluginRuntime(): RendererPluginRuntime {
+export function useRendererPluginRuntime(): RendererPluginRuntime {
   const runtime = useContext(RendererPluginRuntimeContext);
   if (!runtime) throw new Error('RendererKernelProvider is missing.');
   return runtime;
@@ -347,6 +347,9 @@ function createOwnedSlotRenderer(
         slot={slot}
         snapshot={snapshot}
       />
+    ),
+    listEntryIds: <TProps extends object>(slot: RendererListSlot<TProps>) => (
+      snapshot.resolveList(slot, parent).entries.map((entry) => entry.entryId)
     ),
     keyed: <TKey extends string, TProps extends object, TMetadata>(
       slot: RendererKeyedSlot<TKey, TProps, TMetadata>,

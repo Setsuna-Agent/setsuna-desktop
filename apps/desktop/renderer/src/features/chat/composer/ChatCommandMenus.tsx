@@ -1,6 +1,7 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
 import { LoaderCircle } from 'lucide-react';
 import { Fragment } from 'react';
+import { PluginAppAvatar } from '../../../kernel/declarative-plugin-ui/app-appearance/PluginAppAvatar.js';
 import { BrowserFavicon } from '../../../composition/BrowserWorkspaceFeatureBoundary.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { WorkspaceEntryIcon } from '../../workspace/WorkspaceEntryIcon.js';
@@ -24,16 +25,17 @@ export function ChatMentionCommandMenu({
     activeItem ? chatMentionItemKey(activeItem) : null,
   );
   const hasFiles = items.some((item) => item.kind === 'workspace');
-  const showSectionTitles = items.some((item) => item.kind === 'browser-tab');
+  const showSectionTitles = items.some((item) => item.kind !== 'workspace');
   return (
     <div className="chat-command-menu chat-project-entry-command-menu" role="listbox" aria-label={t('chat.command.mentions')}>
       <div ref={scrollContainerRef} className="chat-command-menu__list">
         {items.map((item, index) => {
           const entry = item.kind === 'workspace' ? item.entry : null;
           const tab = item.kind === 'browser-tab' ? item.tab : null;
+          const app = item.kind === 'app' ? item.app : null;
           return <Fragment key={chatMentionItemKey(item)}>
             {showSectionTitles && (index === 0 || items[index - 1].kind !== item.kind) ? (
-              <div className="chat-command-menu__title">{t(tab ? 'chat.command.browserTabs' : 'chat.command.projectFiles')}</div>
+              <div className="chat-command-menu__title">{t(app ? 'chat.command.apps' : tab ? 'chat.command.browserTabs' : 'chat.command.projectFiles')}</div>
             ) : null}
             <Button variant="ghost"
               ref={index === activeIndex ? activeOptionRef : undefined}
@@ -41,14 +43,15 @@ export function ChatMentionCommandMenu({
               className={`chat-command-menu__item ${index === activeIndex ? 'is-active' : ''}`}
               role="option"
               aria-selected={index === activeIndex}
-              title={entry?.path ?? tab?.url}
+              title={app?.name ?? entry?.path ?? tab?.url}
               onMouseDown={(event) => { event.preventDefault(); onSelect(item); }}
               onMouseMove={() => onHover(index)}
             >
-              {entry ? <WorkspaceEntryIcon className="chat-command-menu__item-icon" path={entry.path} type={entry.kind} />
+              {app ? <PluginAppAvatar avatar={app.avatar} variant="inline" className="chat-command-menu__item-icon" />
+                : entry ? <WorkspaceEntryIcon className="chat-command-menu__item-icon" path={entry.path} type={entry.kind} />
                 : <span className="chat-command-menu__item-icon"><BrowserFavicon faviconUrl={tab?.faviconUrl ?? null} loading={false} /></span>}
               <span className="chat-command-menu__item-main">
-                <span className="chat-command-menu__item-title">{tab ? tab.title || tab.url : entry?.name}</span>
+                <span className="chat-command-menu__item-title">{app?.name ?? (tab ? tab.title || tab.url : entry?.name)}</span>
                 {tab?.url || entry?.parent ? <span className="chat-command-menu__item-desc">{tab?.url ?? entry?.parent}</span> : null}
               </span>
             </Button>

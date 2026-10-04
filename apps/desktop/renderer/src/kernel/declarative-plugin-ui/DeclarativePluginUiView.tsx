@@ -129,14 +129,15 @@ function DeclarativePluginUiViewInstance({
       setActionState({ actionId: action.id, reason: 'required', state: 'error' });
       return;
     }
-    setActionState({ actionId: action.id, state: 'confirming' });
+    if (action.approval) {
+      setActionState({ actionId: action.id, state: 'confirming' });
+    } else {
+      void runAction(action);
+    }
   };
   const cancelAction = () => setActionState({ state: 'idle' });
-  const confirmAction = async () => {
-    if (actionState.state !== 'confirming') return;
-    const action = actions.get(actionState.actionId);
-    if (!action) return;
-    actionController.current?.abort();
+  const runAction = async (action: RuntimePluginUiAction) => {
+    if (actionController.current) return;
     const controller = new AbortController();
     actionController.current = controller;
     setActionState({ actionId: action.id, state: 'running' });
@@ -208,11 +209,11 @@ function DeclarativePluginUiViewInstance({
         updateValue,
         values,
       })}
-      {pendingAction ? (
+      {pendingAction?.approval ? (
         <ActionApproval
-          action={pendingAction}
+          approval={pendingAction.approval}
           onCancel={cancelAction}
-          onConfirm={() => void confirmAction()}
+          onConfirm={() => void runAction(pendingAction)}
           settingsUi={settingsUi}
           translate={translateFeature}
         />
@@ -355,19 +356,19 @@ function renderNode(node: RuntimePluginUiNode, path: string, context: RenderCont
 }
 
 function ActionApproval({
-  action,
+  approval,
   onCancel,
   onConfirm,
   settingsUi,
   translate,
 }: Readonly<{
-  action: RuntimePluginUiAction;
+  approval: NonNullable<RuntimePluginUiAction['approval']>;
   onCancel(): void;
   onConfirm(): void;
   settingsUi?: SettingsViewUi;
   translate: RendererTranslate;
 }>) {
-  const title = action.approval.title
+  const title = approval.title
     ?? translate('feature.pluginManagement.rendererUi.approvalTitle');
   const actions = settingsUi ? (
     <>
@@ -391,7 +392,7 @@ function ActionApproval({
   return (
     <div aria-label={title} className="declarative-plugin-ui__approval" role="group">
       <strong>{title}</strong>
-      <span>{action.approval.message}</span>
+      <span>{approval.message}</span>
       <div className="declarative-plugin-ui__approval-actions">{actions}</div>
     </div>
   );

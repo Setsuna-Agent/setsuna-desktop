@@ -161,6 +161,16 @@ export function useChatComposerSession(targetIdentity: ChatComposerTargetIdentit
     };
   }, [sessionId, targetIdentity]);
 
+  const initializeThreadDraft = useCallback((threadId: string, draft: string) => {
+    const identity = chatComposerTargetIdentity(threadId, null);
+    const next: RetainedComposerSession = {
+      draft, skillReferences: [], sessionId: nextSessionIdRef.current++, targetIdentity: identity,
+      attachments: createChatAttachmentStore(servicesRef.current.client, servicesRef.current.t),
+    };
+    // Seed the destination before navigation; never write through the source editor's callback.
+    setStoredSessions((current) => ({ ...current, entries: new Map(current.entries).set(identity, next) }));
+  }, []);
+
   const claimForProject = useCallback((projectId: string | null) => {
     if (!targetIdentity.startsWith('new-thread-slot:')) return;
     // Choosing a workspace for the same unsent message must keep its draft and attachments.
@@ -178,6 +188,7 @@ export function useChatComposerSession(targetIdentity: ChatComposerTargetIdentit
     composerKey: `chat-composer-session:${sessionId}`,
     draft: session.draft,
     draftSkillReferences: session.skillReferences,
+    initializeThreadDraft,
     reset,
     setDraft,
   };

@@ -19,6 +19,7 @@ import { NativeBridgeProxyFetch } from '../adapters/network/native-bridge-proxy-
 import { FilePluginBundleStore } from '../adapters/plugin/file-plugin-bundle-store.js';
 import { FilePluginDraftStore } from '../adapters/plugin/file-plugin-draft-store.js';
 import { FilePluginMarketplace } from '../adapters/plugin/file-plugin-marketplace.js';
+import { installDefaultPlugins } from '../adapters/plugin/install-default-plugins.js';
 import { CompositePluginMarketplace } from '../adapters/plugin/composite-plugin-marketplace.js';
 import { RepositoryPluginMarketplace } from '../adapters/plugin/repository-plugin-marketplace.js';
 import { createWorkspaceSearchEngine } from '../adapters/search/create-workspace-search-engine.js';
@@ -47,6 +48,8 @@ import { PluginVerificationToolHost } from '../adapters/tool/plugin-verification
 import { SkillManagementToolHost } from '../adapters/tool/skill-management-tool-host.js';
 import { UserInputToolHost } from '../adapters/tool/user-input-tool-host.js';
 import { WorkspaceImageToolHost } from '../adapters/tool/workspace-image-tool-host.js';
+import { RuntimeApiToolHost } from '../adapters/tool/runtime-api-tool-host.js';
+import type { RuntimeApi } from '../ports/runtime-api.js';
 import { FileProjectInstructionLoader } from '../adapters/workspace/file-project-instruction-loader.js';
 import { FileProjectWorkflowResolver } from '../adapters/workspace/file-project-workflow-resolver.js';
 import { FileWorkspaceProjectStore } from '../adapters/workspace/file-workspace-project-store.js';
@@ -68,6 +71,7 @@ import type { DesktopNativeBridge } from '../ports/secret-store.js';
 import { EventCoordinatedThreadStore } from './event-coordinated-thread-store.js';
 
 export type RuntimeFactoryOptions = {
+  runtimeApi?: RuntimeApi;
   dataDir: string;
   /** Desktop supplies its installed version; source-only embedders default to dev. */
   appVersion?: string;
@@ -151,8 +155,9 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     builtinPluginsDir,
   );
   const pluginDraftStore = new FilePluginDraftStore(path.join(runtimeDataDir, 'plugin-drafts'));
+  const bundledPluginMarketplace = new FilePluginMarketplace(builtinPluginsDir, pluginStore);
   const pluginMarketplace = new CompositePluginMarketplace(
-    new FilePluginMarketplace(builtinPluginsDir, pluginStore),
+    bundledPluginMarketplace,
     new RepositoryPluginMarketplace(path.join(runtimeDataDir, 'plugin-repositories', 'openai-plugins'), pluginStore, networkProxyFetch.forRoute()),
   );
   const workspaceSearchEngine = createWorkspaceSearchEngine({
@@ -181,6 +186,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   });
   const extensionUi = new ExtensionUiCoordinator(approvalGate, eventWriter, clock, ids);
   const extensionManager = new ExtensionManager(pluginStore, extensionState, extensionUi, {
+    runtimeApi: options.runtimeApi,
     bundledPluginsDir: builtinPluginsDir,
     getLanguage: async () => (await configStore.getConfig()).desktopSettings?.interfaceLanguage ?? 'zh-CN',
     networkFetch: networkProxyFetch.forRoute(),
@@ -209,6 +215,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const memoryToolHost = new MemoryToolHost();
   // ToolHost 顺序会影响模型看到的能力面：先管理能力，再运行 MCP，最后是本地 workspace/memory 工具。
   const toolHost = new CompositeToolHost([
+    ...(options.runtimeApi ? [new RuntimeApiToolHost(options.runtimeApi, pluginStore)] : []),
     new UserInputToolHost(approvalGate, eventWriter, clock, ids),
     automationToolHost,
     browserToolHost,
@@ -304,6 +311,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     policyAmendmentStore,
     pluginStore,
     pluginMarketplace,
+    installDefaultPlugins: () => installDefaultPlugins(runtimeDataDir, bundledPluginMarketplace),
     projectWorkflow,
     reviewControl,
     reviewRuntimeHost,

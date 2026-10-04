@@ -1,6 +1,6 @@
 import type { ComposerSlot } from './editor/types.js';
 import { browserTabMentionText, parseBrowserTabMentions, type BrowserTabReference } from '@setsuna-desktop/feature-browser/contracts';
-import { normalizeRuntimeSkillReferences, parsePluginMentions, pluginMentionText, type RuntimeMessage, type RuntimePluginSummary } from '@setsuna-desktop/contracts';
+import { normalizeRuntimeSkillReferences, parsePluginMentions, pluginAppMentionText, pluginMentionText, type RuntimeMessage, type RuntimePluginAppReference, type RuntimePluginSummary } from '@setsuna-desktop/contracts';
 import type {
   RuntimeSkillReference,
   RuntimeSkillSummary,
@@ -10,6 +10,7 @@ import { WorkspaceMentionLabel } from '../mentions/WorkspaceMentionLabel.js';
 import { BrowserTabReferenceLabel } from '../mentions/BrowserTabReference.js';
 import { SkillReferenceLabel } from '../skills/SkillReference.js';
 import { PluginReferenceLabel } from '../references/PluginReference.js';
+import { PluginAppReferenceLabel } from '../references/PluginAppReferenceLabel.js';
 import { entryLabel, skillDisplayText } from './chatCommandUtils.js';
 
 const workspaceMentionSlotKeyPrefix = 'workspace:';
@@ -17,7 +18,7 @@ const selectedSkillSlotKeyPrefix = 'skill:';
 
 export type ChatComposerSlotReference =
   | { type: 'skill'; skillId: string }
-  | { type: 'plugin'; pluginId: string }
+  | { type: 'plugin'; pluginId: string; contributionId?: string }
   | { type: 'browser-tab'; tab: BrowserTabReference }
   | { type: 'workspace'; entry: WorkspaceEntrySearchItem };
 
@@ -53,6 +54,14 @@ export function createSelectedPluginSlot(plugin: RuntimePluginSummary): ChatComp
     key: createReferenceSlotKey('plugin:'),
     composerReference: { type: 'plugin', pluginId: plugin.id },
     props: { label: <PluginReferenceLabel plugin={plugin} label={plugin.name} />, value: pluginMentionText(plugin) },
+  };
+}
+
+export function createPluginAppMentionSlot(app: RuntimePluginAppReference): ChatComposerReferenceSlot {
+  return {
+    type: 'tag', key: createReferenceSlotKey('plugin:'),
+    composerReference: { type: 'plugin', pluginId: app.pluginId, contributionId: app.contributionId },
+    props: { label: <PluginAppReferenceLabel app={app} />, value: pluginAppMentionText(app) },
   };
 }
 
@@ -111,7 +120,9 @@ export function createPluginDraftSlots(value: string, plugins: readonly RuntimeP
     const plugin = plugins.find((item) => item.id === mention.pluginId);
     if (!plugin) continue;
     if (mention.start > offset) slots.push(createTextSlot(value.slice(offset, mention.start)));
-    const slot = createSelectedPluginSlot(plugin);
+    const slot = mention.contributionId
+      ? createPluginAppMentionSlot({ pluginId: plugin.id, contributionId: mention.contributionId, name: mention.label })
+      : createSelectedPluginSlot(plugin);
     // Keep the exact serialized text so rehydration does not change the draft or other slot offsets.
     slot.props.value = value.slice(mention.start, mention.end);
     slots.push(slot);

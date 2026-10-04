@@ -4,10 +4,12 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   DESKTOP_CLIPBOARD_WRITE_PATH,
+  DESKTOP_THREAD_DELETE_PATH,
   DESKTOP_SYSTEM_PROXY_FETCH_METADATA_PREFIX_BYTES,
   DESKTOP_SYSTEM_PROXY_FETCH_PATH,
   defaultDesktopNetworkProxyRouting,
   type DesktopSystemProxyFetchRequest,
+  type DesktopThreadDeletionResult,
 } from '@setsuna-desktop/contracts';
 import { DesktopNativeBridgeServer } from '../../../src/runtime/native-bridge-server.js';
 import type { CredentialVault } from '../../../src/security/credential-vault.js';
@@ -29,6 +31,7 @@ describe('DesktopNativeBridgeServer', () => {
     };
     const openExternal = vi.fn(async () => undefined);
     const writeClipboardText = vi.fn();
+    const deleteThread = vi.fn(async (_threadId: string, _signal: AbortSignal): Promise<DesktopThreadDeletionResult> => ({ cancelled: true }));
     const resolveNetworkProxy = vi.fn(async () => ({
       mode: 'proxy' as const,
       proxyServerId: 'proxy-example',
@@ -50,6 +53,7 @@ describe('DesktopNativeBridgeServer', () => {
     const server = new DesktopNativeBridgeServer({
       credentialVault,
       writeClipboardText,
+      deleteThread,
       deleteNetworkProxy,
       openExternal,
       resolveNetworkProxy,
@@ -78,6 +82,34 @@ describe('DesktopNativeBridgeServer', () => {
     });
     expect(invalidCopy.status).toBe(400);
     expect(writeClipboardText).toHaveBeenCalledTimes(1);
+
+    const unauthorizedDelete = await fetch(`${connection.url}${DESKTOP_THREAD_DELETE_PATH}`, {
+      method: 'POST', body: JSON.stringify({ threadId: 'thread_1' }),
+    });
+    expect(unauthorizedDelete.status).toBe(401);
+    expect(deleteThread).not.toHaveBeenCalled();
+    const invalidDelete = await fetch(`${connection.url}${DESKTOP_THREAD_DELETE_PATH}`, {
+      method: 'POST', headers: { Authorization: `Bearer ${connection.token}` },
+      body: JSON.stringify({ threadId: 42 }),
+    });
+    expect(invalidDelete.status).toBe(400);
+    expect(deleteThread).not.toHaveBeenCalled();
+    await expect(nativeRequest(connection, DESKTOP_THREAD_DELETE_PATH, { threadId: 'thread_1' }))
+      .resolves.toEqual({ cancelled: true });
+    expect(deleteThread).toHaveBeenCalledExactlyOnceWith('thread_1', expect.any(AbortSignal));
+
+    deleteThread.mockImplementationOnce((_threadId, signal) => new Promise((resolve) => {
+      signal.addEventListener('abort', () => resolve({ cancelled: true }), { once: true });
+    }));
+    const controller = new AbortController();
+    const disconnected = expect(fetch(`${connection.url}${DESKTOP_THREAD_DELETE_PATH}`, {
+      method: 'POST', headers: { Authorization: `Bearer ${connection.token}` },
+      body: JSON.stringify({ threadId: 'thread_1' }), signal: controller.signal,
+    })).rejects.toThrow();
+    await vi.waitFor(() => expect(deleteThread).toHaveBeenCalledTimes(2));
+    controller.abort();
+    await disconnected;
+    await vi.waitFor(() => expect(deleteThread.mock.calls[1][1].aborted).toBe(true));
 
     await expect(nativeRequest(connection, '/v1/credentials/set', { key: 'mcp.oauth.test', value: 'secret' }))
       .resolves.toEqual({ ok: true });
@@ -250,6 +282,7 @@ describe('DesktopNativeBridgeServer', () => {
 
 function createFilePreviewServer(maxFilePreviewContentBytes?: number): DesktopNativeBridgeServer {
   const server = new DesktopNativeBridgeServer({
+    deleteThread: async () => ({ cancelled: true }),
     writeClipboardText: () => undefined,
     credentialVault: {
       status: async () => ({ available: true, backend: 'test' }),

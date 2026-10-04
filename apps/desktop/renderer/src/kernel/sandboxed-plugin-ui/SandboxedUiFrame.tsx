@@ -10,6 +10,8 @@ import {
   SANDBOXED_UI_CHANNEL,
 } from './sandbox-document.js';
 import './sandboxed-ui-frame.css';
+import { useSandboxedRuntimeRequests } from './useSandboxedRuntimeRequests.js';
+import { useSandboxDialogSession } from './useSandboxDialogSession.js';
 
 const MIN_FRAME_HEIGHT = 96;
 const MAX_FRAME_HEIGHT = 2_000;
@@ -20,7 +22,10 @@ export function SandboxedUiFrame({
   className,
   context = Object.freeze({}),
   data = Object.freeze({}),
+  libraryScripts,
   onAction,
+  onRuntimeRequest,
+  size = 'content',
   source,
   title,
 }: SandboxedUiFrameProps) {
@@ -28,12 +33,14 @@ export function SandboxedUiFrame({
   const actionRunning = useRef(false);
   const messageBudget = useRef({ count: 0, startedAt: 0 });
   const [height, setHeight] = useState(240);
-  const srcDoc = useMemo(() => createSandboxedUiDocument(source), [source]);
+  const dialogs = useSandboxDialogSession(title);
+  const srcDoc = useMemo(() => createSandboxedUiDocument(source, { libraryScripts, size, dialogUrl: dialogs.url }), [dialogs.url, libraryScripts, size, source]);
   const allowedActions = useMemo(() => new Set(allowedActionIds), [allowedActionIds]);
 
   const postToFrame = useCallback((message: Record<string, unknown>) => {
     frameRef.current?.contentWindow?.postMessage({ channel: SANDBOXED_UI_CHANNEL, ...message }, '*');
   }, []);
+  const requestRuntime = useSandboxedRuntimeRequests(onRuntimeRequest, postToFrame, srcDoc);
   const postSnapshot = useCallback(() => {
     postToFrame({
       type: 'snapshot',
@@ -53,7 +60,11 @@ export function SandboxedUiFrame({
         return;
       }
       if (message.type === 'resize') {
-        setHeight(clamp(Math.ceil(message.height), MIN_FRAME_HEIGHT, MAX_FRAME_HEIGHT));
+        if (size === 'content') setHeight(clamp(Math.ceil(message.height), MIN_FRAME_HEIGHT, MAX_FRAME_HEIGHT));
+        return;
+      }
+      if (message.type === 'runtime-request') {
+        requestRuntime(message.requestId, message.request);
         return;
       }
       if (!onAction || !allowedActions.has(message.actionId)) {
@@ -101,7 +112,7 @@ export function SandboxedUiFrame({
     };
     window.addEventListener('message', receive);
     return () => window.removeEventListener('message', receive);
-  }, [allowedActions, onAction, postSnapshot, postToFrame]);
+  }, [allowedActions, onAction, postSnapshot, postToFrame, requestRuntime, size]);
 
   useEffect(() => {
     postSnapshot();
@@ -116,16 +127,18 @@ export function SandboxedUiFrame({
     return () => observer.disconnect();
   }, [postSnapshot]);
 
+  if (dialogs.error) return <div role="alert">{dialogs.error}</div>;
+  if (!dialogs.ready) return null;
   return (
     <iframe
       allow="camera 'none'; microphone 'none'; geolocation 'none'; clipboard-read 'none'; clipboard-write 'none'"
-      className={['sandboxed-ui-frame', className].filter(Boolean).join(' ')}
+      className={['sandboxed-ui-frame', size === 'fill' && 'sandboxed-ui-frame--fill', className].filter(Boolean).join(' ')}
       onLoad={postSnapshot}
       ref={frameRef}
       referrerPolicy="no-referrer"
       sandbox="allow-scripts"
       srcDoc={srcDoc}
-      style={{ height }}
+      style={size === 'content' ? { height } : undefined}
       title={title}
     />
   );

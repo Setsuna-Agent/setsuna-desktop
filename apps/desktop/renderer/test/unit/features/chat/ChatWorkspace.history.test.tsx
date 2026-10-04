@@ -175,7 +175,7 @@ const longSnapshot: RuntimeThread = {
   messagePage: { nextBefore: null, total: 82 }, messageCount: 82,
 };
 const slots: RendererOwnedSlotRenderer = {
-  chain: () => null as never, keyed: () => null, keyedEntries: () => [], list: () => null,
+  chain: () => null as never, keyed: () => null, keyedEntries: () => [], list: () => null, listEntryIds: () => [],
   single: (_slot, props) => (props as { renderDefault?: () => ReactNode }).renderDefault?.() ?? null,
 };
 const noop = () => undefined;

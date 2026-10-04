@@ -4,13 +4,19 @@ export type RuntimePluginReference = {
   icon?: string;
 };
 
-export type RuntimePluginMention = { pluginId: string; label: string; start: number; end: number };
+export type RuntimePluginAppReference = { pluginId: string; contributionId: string; name: string };
+export type RuntimePluginMention = { pluginId: string; contributionId?: string; label: string; start: number; end: number };
 
 /** A textual reference survives draft restore, queued turns, retries and thread copies. */
-export function pluginMentionText(plugin: Pick<RuntimePluginReference, 'id' | 'name'>): string {
+export function pluginMentionText(plugin: Pick<RuntimePluginReference, 'id' | 'name'>, contributionId?: string): string {
   const label = plugin.name.replace(/[[\]\r\n]/gu, ' ').trim() || plugin.id;
   const id = encodeURIComponent(plugin.id).replace(/[!'()*]/gu, (character) => `%${character.charCodeAt(0).toString(16)}`);
-  return `[$${label}](plugin://${id})`;
+  const app = contributionId ? `#app=${encodeURIComponent(contributionId).replace(/[!'()*]/gu, (character) => `%${character.charCodeAt(0).toString(16)}`)}` : '';
+  return `[$${label}](plugin://${id}${app})`;
+}
+
+export function pluginAppMentionText(app: RuntimePluginAppReference): string {
+  return pluginMentionText({ id: app.pluginId, name: app.name }, app.contributionId);
 }
 
 export function parsePluginMentions(content: string): RuntimePluginMention[] {
@@ -60,9 +66,13 @@ function appendLineMentions(line: string, offset: number, mentions: RuntimePlugi
     if (targetEnd === targetStart || line[targetEnd] !== ')') continue;
     cursor = targetEnd + 1;
     try {
-      const pluginId = decodeURIComponent(line.slice(targetStart, targetEnd));
+      const target = line.slice(targetStart, targetEnd);
+      const appStart = target.indexOf('#app=');
+      const pluginId = decodeURIComponent(appStart < 0 ? target : target.slice(0, appStart));
+      const contributionId = appStart < 0 ? undefined : decodeURIComponent(target.slice(appStart + 5));
       if (!pluginId || /[\s\p{Cc}]/u.test(pluginId)) continue;
-      mentions.push({ pluginId, label: line.slice(start + 2, labelEnd), start: offset + start, end: offset + cursor });
+      if (contributionId !== undefined && (!contributionId || /[\s\p{Cc}]/u.test(contributionId))) continue;
+      mentions.push({ pluginId, ...(contributionId ? { contributionId } : {}), label: line.slice(start + 2, labelEnd), start: offset + start, end: offset + cursor });
     } catch { /* Malformed links remain ordinary text. */ }
   }
 }

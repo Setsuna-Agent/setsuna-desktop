@@ -1,4 +1,6 @@
 import type {
+  RuntimeApiResponse,
+  RuntimePluginUiRuntimeRequest,
   RuntimeExtensionEventName,
   RuntimeExtensionStatusList,
   RuntimePluginReference,
@@ -55,6 +57,7 @@ export type ExtensionStateStore = {
 };
 
 export type ExtensionRuntime = {
+  requestRuntimeApi(input: RuntimePluginUiRuntimeRequest, signal?: AbortSignal): Promise<RuntimeApiResponse>;
   listTools(context: ToolExecutionContext): Promise<ExtensionRegisteredTool[]>;
   runTool(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult>;
   dispatch(eventName: RuntimeExtensionEventName, context: ExtensionEventContext): Promise<ExtensionEventOutcome>;

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import type { DesktopRuntimeClient, RuntimeThread, WorkspaceProject } from '@setsuna-desktop/contracts';
+import { parsePluginMentions, pluginMentionText, type DesktopRuntimeClient, type RuntimeThread, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import { browserTabMentionText } from '@setsuna-desktop/feature-browser/contracts';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { useState } from 'react';
@@ -21,7 +21,9 @@ const automationThread: RuntimeThread = {
 function setupAutomationNavigation(initialThread: RuntimeThread | null, projectId: string | null = null) {
   const getThread = vi.fn(async (id: string): Promise<RuntimeThread> => id === initialThread?.id ? initialThread : automationThread);
   const confirmDiscardProjectFile = vi.fn(async () => true);
-  const client = { getThread } as unknown as DesktopRuntimeClient;
+  const createThread = vi.fn(async (): Promise<RuntimeThread> => ({ ...automationThread, id: 'created', featureId: undefined }));
+  const startTurn = vi.fn();
+  const client = { getThread, createThread, startTurn } as unknown as DesktopRuntimeClient;
   const hook = renderHook(() => {
     const [activeView, setActiveView] = useState<MainView>('chat');
     const [activeProjectId, setActiveProjectId] = useState(projectId);
@@ -35,8 +37,43 @@ function setupAutomationNavigation(initialThread: RuntimeThread | null, projectI
     });
     return { navigation, activeView, currentThread, activeProjectId, composer, setCurrentThread };
   });
-  return { ...hook, getThread, confirmDiscardProjectFile };
+  return { ...hook, getThread, createThread, startTurn, confirmDiscardProjectFile };
 }
+
+it.each([null, 'project'])('opens a prefilled projectless app chat while retaining the previous draft (%s)', async (projectId) => {
+  const { result, createThread, startTurn } = setupAutomationNavigation(null, projectId);
+  act(() => result.current.composer.setDraft('Keep my unsent message'));
+  const oldComposerKey = result.current.composer.composerKey;
+  const oldAttachments = result.current.composer.attachmentStore;
+  const plugin = { id: 'app-builder', name: '应用构建器' };
+  const prompt = '创建一个对话汇总应用';
+  await act(async () => {
+    expect(await result.current.navigation.createGlobalThread((threadId) => {
+      result.current.composer.initializeThreadDraft(threadId, `${pluginMentionText(plugin)} ${prompt}`);
+    })).toBe(true);
+  });
+  expect(createThread).toHaveBeenCalledWith({});
+  expect(result.current.activeView).toBe('chat');
+  expect(result.current.activeProjectId).toBeNull();
+  expect(result.current.currentThread?.projectId).toBeUndefined();
+  expect(result.current.composer.composerKey).not.toBe(oldComposerKey);
+  expect(result.current.composer.draft).toBe(`${pluginMentionText(plugin)} ${prompt}`);
+  expect(parsePluginMentions(result.current.composer.draft)).toEqual([expect.objectContaining({ pluginId: 'app-builder' })]);
+  expect(startTurn).not.toHaveBeenCalled();
+  await act(() => projectId ? result.current.navigation.startProjectThread(projectId) : result.current.navigation.startGlobalThread());
+  expect(result.current.composer.draft).toBe('Keep my unsent message');
+  expect(result.current.composer.attachmentStore).toBe(oldAttachments);
+});
+
+it('does not create or prefill an app chat when the workspace transition is cancelled', async () => {
+  const { result, createThread, confirmDiscardProjectFile } = setupAutomationNavigation(null, 'project');
+  confirmDiscardProjectFile.mockResolvedValueOnce(false);
+  const prefill = vi.fn();
+  await act(async () => expect(await result.current.navigation.createGlobalThread(prefill)).toBe(false));
+  expect(createThread).not.toHaveBeenCalled();
+  expect(prefill).not.toHaveBeenCalled();
+  expect(result.current.activeProjectId).toBe('project');
+});
 
 it.each(['loaded', 'failed'] as const)('commits the chat route only with its requested conversation: %s', async (outcome) => {
   const original = { ...automationThread, id: 'ordinary', featureId: undefined };

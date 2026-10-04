@@ -1,5 +1,10 @@
 import {
   DESKTOP_CLIPBOARD_WRITE_PATH,
+  DESKTOP_THREAD_DELETE_PATH,
+  SANDBOX_DIALOG_PATH,
+  type SandboxDialogSession,
+  type DesktopThreadDeletionInput,
+  type DesktopThreadDeletionResult,
   type DesktopClipboardWriteInput,
   DESKTOP_NETWORK_PROXY_SCOPES,
   DESKTOP_SYSTEM_PROXY_FETCH_PATH,
@@ -18,12 +23,14 @@ import { createReadStream } from 'node:fs';
 import { realpath, stat } from 'node:fs/promises';
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import path from 'node:path';
+import type { BrowserWindow } from 'electron';
 import type { CredentialVault } from '../security/credential-vault.js';
 import { workspaceFilePreviewMimeType } from '../workspace/file-opening.js';
 import {
   serveDesktopSystemProxyFetch,
   type DesktopSystemProxyFetch,
 } from './native-bridge-system-fetch.js';
+import { SandboxDialogSessions, type ShowSandboxDialog } from './sandbox-dialog-sessions.js';
 
 const MAX_REQUEST_BYTES = 1024 * 1024;
 const MAX_FILE_PREVIEWS = 256;
@@ -35,7 +42,9 @@ export type DesktopNativeBridgeConnection = {
 };
 
 type DesktopNativeBridgeOptions = {
+  showSandboxDialog?: ShowSandboxDialog;
   credentialVault: CredentialVault;
+  deleteThread(threadId: string, signal: AbortSignal): Promise<DesktopThreadDeletionResult>;
   writeClipboardText(text: string): void;
   deleteNetworkProxy(proxyServerId: string): Promise<DesktopNetworkProxyState>;
   openExternal(url: string): Promise<void>;
@@ -74,8 +83,27 @@ export class DesktopNativeBridgeServer {
   private readonly filePreviews = new Map<string, DesktopFilePreview>();
   private filePreviewContentBytes = 0;
   private connection: DesktopNativeBridgeConnection | null = null;
+  private readonly sandboxDialogs: SandboxDialogSessions;
 
-  constructor(private readonly options: DesktopNativeBridgeOptions) {}
+  constructor(private readonly options: DesktopNativeBridgeOptions) {
+    this.sandboxDialogs = new SandboxDialogSessions(options.showSandboxDialog ?? (async () => {
+      throw new Error('Desktop dialogs are unavailable.');
+    }));
+  }
+
+  registerSandboxDialogSession(owner: BrowserWindow, title: string): SandboxDialogSession {
+    if (!this.connection) throw new Error('Desktop native bridge is not running.');
+    const id = this.sandboxDialogs.register(owner, title);
+    return { id, url: `${this.connection.url}${SANDBOX_DIALOG_PATH}${id}` };
+  }
+
+  releaseSandboxDialogSession(ownerId: number, id: string): void {
+    this.sandboxDialogs.release(ownerId, id);
+  }
+
+  updateSandboxDialogSession(ownerId: number, id: string, title: string): void {
+    this.sandboxDialogs.updateTitle(ownerId, id, title);
+  }
 
   async start(): Promise<DesktopNativeBridgeConnection> {
     if (this.connection) return this.connection;
@@ -88,6 +116,7 @@ export class DesktopNativeBridgeServer {
   }
 
   async stop(): Promise<void> {
+    this.sandboxDialogs.dispose();
     this.filePreviews.clear();
     this.filePreviewContentBytes = 0;
     if (!this.server.listening) {
@@ -150,6 +179,23 @@ export class DesktopNativeBridgeServer {
         sendJson(response, 200, { ok: true });
         return;
       }
+      const dialogSession = request.url?.match(/^\/v1\/sandbox-dialogs\/([a-f0-9]{64})$/u);
+      if (request.method === 'POST' && dialogSession) {
+        // Opaque sandbox frames have Origin: null. This capability endpoint only
+        // opens dialogs; it cannot dispatch arbitrary native/runtime requests.
+        response.setHeader('Access-Control-Allow-Origin', 'null');
+        response.setHeader('Cache-Control', 'no-store');
+        const controller = new AbortController();
+        const onClose = () => { if (!response.writableEnded) controller.abort(); };
+        response.once('close', onClose);
+        try {
+          const value = await this.sandboxDialogs.request(dialogSession[1], await readJsonBody(request), controller.signal);
+          sendJson(response, 200, { value });
+        } finally {
+          response.removeListener('close', onClose);
+        }
+        return;
+      }
       const previewRequest = filePreviewRequest(request.url);
       if ((request.method === 'GET' || request.method === 'HEAD') && previewRequest) {
         await this.serveFilePreview(previewRequest, request, response);
@@ -193,6 +239,20 @@ export class DesktopNativeBridgeServer {
         const input: DesktopClipboardWriteInput = { text: body.text };
         this.options.writeClipboardText(input.text);
         sendJson(response, 200, { ok: true });
+        return;
+      }
+      if (request.method === 'POST' && request.url === DESKTOP_THREAD_DELETE_PATH) {
+        const controller = new AbortController();
+        const onClose = () => { if (!response.writableEnded) controller.abort(); };
+        response.once('close', onClose);
+        try {
+          const body = recordInput(await readJsonBody(request));
+          if (typeof body.threadId !== 'string' || !body.threadId.trim()) throw new Error('Thread id is required.');
+          const input: DesktopThreadDeletionInput = { threadId: body.threadId };
+          sendJson(response, 200, await this.options.deleteThread(input.threadId, controller.signal));
+        } finally {
+          response.removeListener('close', onClose);
+        }
         return;
       }
       if (request.method === 'POST' && request.url === '/v1/network-proxy/resolve') {

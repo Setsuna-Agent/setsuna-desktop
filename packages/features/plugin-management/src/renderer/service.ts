@@ -1,5 +1,6 @@
 import type { FeatureScope } from '@setsuna-desktop/feature-core/scope';
 import type {
+  RuntimePluginUiRuntimeRequest,
   RuntimePluginUiActionInput,
   RuntimePluginUiStateInput,
   RuntimePluginUiDataInput,
@@ -251,6 +252,12 @@ export class RendererPluginManagementService implements PluginManagementRenderer
     return this.options.scope.runOperation(
       (signal) => this.options.client.readRendererUiDocument(input, { signal }),
       options,
+    );
+  }
+
+  requestRuntimeApi(input: RuntimePluginUiRuntimeRequest, options?: Readonly<{ signal?: AbortSignal }>) {
+    return this.options.scope.runOperation(
+      (signal) => this.options.client.requestRuntimeApi(input, { signal }), options,
     );
   }
 

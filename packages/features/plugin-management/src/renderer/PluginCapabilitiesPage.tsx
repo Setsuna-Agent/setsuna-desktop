@@ -1,4 +1,5 @@
 import { TextField, Button as UiButton, useConfirm } from '@setsuna-desktop/renderer-ui';
+import { APP_BUILDER_PLUGIN_ID } from '@setsuna-desktop/contracts';
 
 import type {
   RuntimePluginMarketplaceItem,
@@ -32,6 +33,7 @@ import { PluginDetailSection, PluginRepositoryLink } from './PluginDetailPrimiti
 import {
   installedPluginsOutsideCatalog,
   installedPluginCatalogId,
+  pluginIconProps,
   pluginMatchesQuery,
 } from './pluginPresentation.js';
 
@@ -264,7 +266,15 @@ export function PluginCapabilitiesPage({
                   description: t('feature.pluginManagement.createChatDescription'),
                   icon: <MessageSquare size={14} />,
                   id: 'chat-plugin',
-                  onSelect: () => capabilities.openChat('create-plugin-in-chat'),
+                  disabled: Boolean(pendingAction),
+                  onSelect: () => void run('create', async () => {
+                    const installed = await service.refreshInstalled();
+                    if (!installed.plugins.some((plugin) => plugin.id === APP_BUILDER_PLUGIN_ID)) {
+                      await service.installMarketplace({ pluginId: APP_BUILDER_PLUGIN_ID });
+                      await capabilitiesRefresh.refresh(['skills']);
+                    }
+                    capabilities.openPluginChat(APP_BUILDER_PLUGIN_ID);
+                  }),
                   title: t('feature.pluginManagement.createChat'),
                 },
                 {
@@ -308,7 +318,7 @@ export function PluginCapabilitiesPage({
                 </header>
                 <div className="desktop-plugin-market__installed-list">
                   {installedMarketplacePlugins.map((plugin) => (
-                    <InstalledPluginShortcut key={`installed-marketplace:${plugin.id}`} plugin={plugin} ui={ui} onOpen={() => openPlugin(plugin.id)} />
+                    <InstalledPluginShortcut key={`installed-marketplace:${plugin.id}`} plugin={plugin} installed={installedById.get(plugin.id)} ui={ui} onOpen={() => openPlugin(plugin.id)} />
                   ))}
                   {localPlugins.map((plugin) => (
                     <InstalledPluginShortcut key={`installed-local:${plugin.id}`} plugin={plugin} ui={ui} onOpen={() => openPlugin(plugin.id)} />
@@ -375,16 +385,17 @@ function PluginSection({ children, title, trailing }: Readonly<{ children: React
   );
 }
 
-function InstalledPluginShortcut({ onOpen, plugin, ui }: Readonly<{
+function InstalledPluginShortcut({ onOpen, plugin, installed, ui }: Readonly<{
   onOpen(): void;
   plugin: RuntimePluginMarketplaceItem | RuntimePluginSummary;
+  installed?: RuntimePluginSummary;
   ui: SettingsPageSlotProps['ui'];
 }>) {
   const updateAvailable = 'updateAvailable' in plugin && plugin.updateAvailable;
   return (
     <article className={`desktop-plugin-installed-shortcut${updateAvailable ? ' has-update' : ''}`}>
       <UiButton variant="ghost" aria-label={plugin.name} type="button" onClick={onOpen}>
-        <ui.PluginIcon iconImage={plugin.iconImage} name={plugin.icon} pluginId={plugin.id} variant="installed" />
+        <ui.PluginIcon {...pluginIconProps(plugin, installed)} variant="installed" />
         {updateAvailable ? <span aria-hidden="true" className="desktop-plugin-installed-shortcut__update" /> : null}
       </UiButton>
       <span aria-hidden="true" className="desktop-plugin-installed-shortcut__name">{plugin.name}</span>
@@ -433,7 +444,7 @@ function PluginCard({ installed, marketplace, onInstall, onOpen, pending, transl
   return (
     <article className="desktop-capability-list-item">
       <UiButton variant="ghost" className="desktop-capability-list-item__identity" type="button" onClick={onOpen}>
-        <ui.PluginIcon iconImage={plugin.iconImage} name={plugin.icon} pluginId={plugin.id} variant="list" />
+        <ui.PluginIcon {...pluginIconProps(plugin, installed)} variant="list" />
         <span className="desktop-capability-list-item__copy"><strong>{plugin.name}</strong><span>{plugin.description ?? plugin.id}</span></span>
       </UiButton>
       <UiButton variant="ghost"

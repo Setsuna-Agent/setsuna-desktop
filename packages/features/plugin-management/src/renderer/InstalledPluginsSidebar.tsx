@@ -2,7 +2,7 @@ import type { CapabilitiesSidebarSlotProps } from '@setsuna-desktop/renderer-con
 import { useMemo, useSyncExternalStore } from 'react';
 import type { PluginManagementRendererService } from '../contracts/index.js';
 import type { PluginManagementTranslate } from './messages.js';
-import { installedPluginCatalogId, pluginMatchesQuery } from './pluginPresentation.js';
+import { installedPluginCatalogId, pluginIconProps, pluginMatchesQuery } from './pluginPresentation.js';
 
 export function InstalledPluginsSidebar({
   service,
@@ -39,7 +39,7 @@ export function InstalledPluginsSidebar({
             title={plugin.name}
             onClick={() => onSelectPlugin(catalogId)}
           >
-            <ui.PluginIcon name={plugin.name} iconImage={plugin.iconImage} pluginId={plugin.id} variant="inline" />
+            <ui.PluginIcon {...pluginIconProps(plugin)} variant="inline" />
             <span>{plugin.name}</span>
           </ui.Button>
         );

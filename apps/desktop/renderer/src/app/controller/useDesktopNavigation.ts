@@ -166,6 +166,22 @@ export function useDesktopNavigation({
     setCurrentThread(null);
   }, [confirmDiscardProjectFile, navigationRequests, resetProjectWorkspaceState, setActiveProjectId, setActiveView, setCurrentThread]);
 
+  const createGlobalThread = useCallback(async (onCreated: (threadId: string) => void): Promise<boolean> => {
+    const isLatest = navigationRequests.begin();
+    if (!await confirmDiscardProjectFile() || !isLatest()) return false;
+    const thread = await client.createThread({});
+    await reloadThreads();
+    if (!isLatest()) return false;
+    onCreated(thread.id);
+    resetProjectWorkspaceState();
+    closeNavigationMenus();
+    setSessionsCollapsed(false);
+    setActiveProjectId(null);
+    setCurrentThread(thread);
+    setActiveView('chat');
+    return true;
+  }, [client, closeNavigationMenus, confirmDiscardProjectFile, navigationRequests, reloadThreads, resetProjectWorkspaceState, setActiveProjectId, setActiveView, setCurrentThread]);
+
   const startProjectThread = useCallback(
     async (projectId: string) => {
       if (!await confirmDiscardProjectFile()) return;
@@ -487,6 +503,7 @@ export function useDesktopNavigation({
     sidebarSearchValue,
     startCurrentThread,
     startGlobalThread,
+    createGlobalThread,
     startProjectThread,
     threadActionMenuId,
     toggleProjectCollapsed,

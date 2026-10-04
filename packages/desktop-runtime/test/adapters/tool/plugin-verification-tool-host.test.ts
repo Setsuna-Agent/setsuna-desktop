@@ -7,11 +7,35 @@ import {
   PluginVerificationToolHost,
   VERIFY_PLUGIN_TOOL,
 } from '../../../src/adapters/tool/plugin-verification-tool-host.js';
-import type { ExtensionRegisteredTool, ExtensionRuntime } from '../../../src/ports/extension-runtime.js';
+import type { ExtensionRegisteredTool } from '../../../src/ports/extension-runtime.js';
 import type { InstalledPluginRecord } from '../../../src/ports/plugin-bundle-store.js';
+import { installedAppBuilder } from '../../support/app-builder.js';
 
 describe('plugin verification tool host', () => {
-  it('runs real tool and UI action paths before declaring a Plugin usable', async () => {
+  it('verifies direct application API reads without inventing a tool or UI action', async () => {
+    const plugin = weatherPlugin();
+    plugin.tools = [];
+    plugin.extension!.rendererUi = parseRuntimePluginUiManifest({
+      schemaVersion: 2, actions: [], contributions: [{
+        id: 'app.page', slot: 'renderer.plugin.page', navigation: { label: 'App' },
+        document: { htmlResourceId: 'html', actionIds: [] },
+      }],
+    });
+    const requestRuntimeApi = vi.fn(async () => ({ ok: true, status: 200, data: { projects: [] } }));
+    const extensions = verificationRuntime({ requestRuntimeApi });
+    const host = new PluginVerificationToolHost(verificationStore(plugin), extensions);
+    const input = { pluginId: plugin.id, checks: [{ kind: 'runtime-api', name: '/v1/projects', contributionId: 'app.page' }] };
+    const signal = new AbortController().signal;
+    await expect(host.runTool(VERIFY_PLUGIN_TOOL, input, { threadId: 'chat', signal })).resolves.toMatchObject({
+      data: { checksPassed: true, pageInteractionsVerified: false, checks: [{ kind: 'runtime-api', name: '/v1/projects', contributionId: 'app.page', status: 'passed' }] },
+    });
+    expect(requestRuntimeApi).toHaveBeenCalledWith({
+      pluginId: plugin.id, contributionId: 'app.page', request: { path: '/v1/projects' },
+    }, signal);
+    requestRuntimeApi.mockResolvedValueOnce({ ok: false, status: 404, data: { projects: [] } });
+    await expect(host.runTool(VERIFY_PLUGIN_TOOL, input, { threadId: 'chat' })).rejects.toThrow(/HTTP 404/u);
+  });
+  it('verifies host handlers without claiming page interactions were tested', async () => {
     const plugin = weatherPlugin();
     const registeredTool = weatherTool();
     const extensions = verificationRuntime({
@@ -30,7 +54,7 @@ describe('plugin verification tool host', () => {
       })),
     });
     const host = new PluginVerificationToolHost(
-      { listInstalledRecords: vi.fn(async () => [plugin]) },
+      verificationStore(plugin),
       extensions,
     );
     const input = weatherVerificationInput();
@@ -47,16 +71,17 @@ describe('plugin verification tool host', () => {
       reason: expect.stringContaining('实际执行 2 个扩展路径'),
       rejectWhenApprovalDisabled: true,
     });
-    expect(host.toolRuntimeProfile(VERIFY_PLUGIN_TOOL)).toMatchObject({
+    expect(await host.toolRuntimeProfile(VERIFY_PLUGIN_TOOL, context)).toMatchObject({
+      plugin: { id: 'app-builder' },
       approvalMode: 'orchestrated',
       requiresSandboxBypassApproval: true,
     });
 
     await expect(host.runTool(VERIFY_PLUGIN_TOOL, input, context)).resolves.toMatchObject({
-      content: expect.stringContaining('Verified and usable: true.'),
       data: {
         pluginId: 'hangzhou-weather',
-        verified: true,
+        checksPassed: true,
+        pageInteractionsVerified: false,
         checks: [
           expect.objectContaining({ kind: 'tool', name: 'get_weather', resultKind: 'plugin.ui-card' }),
           expect.objectContaining({ kind: 'ui-action', name: 'weather.refresh', statePaths: ['summary.label'] }),
@@ -86,7 +111,7 @@ describe('plugin verification tool host', () => {
       runTool: vi.fn(async () => ({ content: 'plain text only' })),
     });
     const host = new PluginVerificationToolHost(
-      { listInstalledRecords: vi.fn(async () => [plugin]) },
+      verificationStore(plugin),
       extensions,
     );
 
@@ -115,7 +140,7 @@ describe('plugin verification tool host', () => {
       readRendererUiData: vi.fn(async () => ({ data: {} })),
     });
     const host = new PluginVerificationToolHost(
-      { listInstalledRecords: vi.fn(async () => [plugin]) },
+      verificationStore(plugin),
       extensions,
     );
 
@@ -137,7 +162,7 @@ describe('plugin verification tool host', () => {
       readRendererUiData: vi.fn(async () => ({ data: {} })),
     });
     const host = new PluginVerificationToolHost(
-      { listInstalledRecords: vi.fn(async () => [plugin]) },
+      verificationStore(plugin),
       extensions,
     );
 
@@ -159,7 +184,7 @@ describe('plugin verification tool host', () => {
       listTools: vi.fn(async () => [weatherTool()]),
     });
     const host = new PluginVerificationToolHost(
-      { listInstalledRecords: vi.fn(async () => [plugin]) },
+      verificationStore(plugin),
       extensions,
     );
 
@@ -174,6 +199,13 @@ describe('plugin verification tool host', () => {
     expect(extensions.runRendererUiAction).not.toHaveBeenCalled();
   });
 });
+
+function verificationStore(plugin: InstalledPluginRecord) {
+  return {
+    listInstalledRecords: vi.fn(async () => [plugin]),
+    listPlugins: async () => ({ plugins: [installedAppBuilder()] }),
+  };
+}
 
 function weatherPlugin(): InstalledPluginRecord {
   return {
@@ -236,12 +268,10 @@ function weatherTool(): ExtensionRegisteredTool {
 }
 
 function verificationRuntime(
-  overrides: Partial<Pick<
-    ExtensionRuntime,
-    'listTools' | 'readRendererUiData' | 'runRendererUiAction' | 'runTool'
-  >>,
-): Pick<ExtensionRuntime, 'listTools' | 'readRendererUiData' | 'runRendererUiAction' | 'runTool'> {
+  overrides: Partial<ConstructorParameters<typeof PluginVerificationToolHost>[1]>,
+): ConstructorParameters<typeof PluginVerificationToolHost>[1] {
   return {
+    requestRuntimeApi: vi.fn(async () => ({ ok: true, status: 200, data: {} })),
     listTools: vi.fn(async () => []),
     runTool: vi.fn(async () => ({ content: 'ok' })),
     runRendererUiAction: vi.fn(async () => ({ status: 'completed' as const })),

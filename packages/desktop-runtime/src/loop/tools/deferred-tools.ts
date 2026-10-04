@@ -7,6 +7,7 @@ const MANAGEMENT_TOOLS = new Set([
   'configure_mcp_server',
   'list_plugin_resources', 'read_plugin_resource', 'configure_plugin',
   'install_plugin_bundle', 'remove_plugin_bundle', 'verify_plugin',
+  'read_runtime_api',
   'configure_skill', 'install_skill_mcp_dependencies', 'authenticate_skill_mcp_dependency',
 ]);
 
@@ -18,12 +19,17 @@ function isDeferred(tool: RuntimeToolDefinition): boolean {
 export class DeferredTools {
   private readonly deferred: RuntimeToolDefinition[];
 
-  constructor(catalog: RuntimeToolDefinition[], private readonly loaded: Set<string>) {
+  constructor(
+    catalog: RuntimeToolDefinition[],
+    private readonly loaded: Set<string>,
+    private readonly selectedPluginIds: ReadonlySet<string> = new Set(),
+  ) {
     this.deferred = catalog.filter(isDeferred);
   }
 
   isVisible(tool: RuntimeToolDefinition): boolean {
-    return !isDeferred(tool) || this.loaded.has(tool.name);
+    return !isDeferred(tool) || this.loaded.has(tool.name)
+      || Boolean(tool.source?.plugins?.some((plugin) => this.selectedPluginIds.has(plugin.id)));
   }
 
   definition(): RuntimeToolDefinition[] {

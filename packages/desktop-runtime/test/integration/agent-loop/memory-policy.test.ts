@@ -4,6 +4,8 @@ import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.
 import { FileMemoryStore } from '../../../src/adapters/store/file-memory-store.js';
 import { createTestThreadStore } from '../../support/thread-store.js';
 import { MemoryToolHost } from '../../../src/adapters/tool/memory-tool-host.js';
+import { RuntimeApiToolHost } from '../../../src/adapters/tool/runtime-api-tool-host.js';
+import { installedAppBuilder } from '../../support/app-builder.js';
 import { TestMemoryAgentLoop as AgentLoop } from '../../support/agent-loop/memory-feature.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import {
@@ -356,13 +358,15 @@ describe('agent loop memory policy', () => {
       await expect(memoryStore.previewMemories()).resolves.toMatchObject({ total: 0, items: [] });
     });
   
-  it('marks threads polluted when tool output contains external context', async () => {
+  it.each(['external_search', 'read_runtime_api'])('marks threads polluted when %s output contains external context', async (toolName) => {
       const ids = new RandomIdGenerator();
       const dataDir = await mkDataDir();
       const threadStore = createTestThreadStore(dataDir, systemClock, ids);
       const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
       const thread = await threadStore.createThread({ title: 'External output marker', memoryMode: 'enabled' });
-      const modelClient = new ExternalContextMemoryModelClient('external_search');
+      const modelClient = new ExternalContextMemoryModelClient(toolName, toolName === 'read_runtime_api'
+        ? '{"path":"/v1/threads/history/tool-results/result"}' : undefined);
+      const apiRequest = vi.fn(async () => ({ ok: true, status: 200, data: { content: 'External MCP output from another conversation' } }));
       const loop = new AgentLoop({
         threadStore,
         modelClient,
@@ -370,7 +374,9 @@ describe('agent loop memory policy', () => {
         clock: systemClock,
         ids,
         memoryStore,
-        toolHost: new ExternalContextToolHost('external_search', true),
+        toolHost: toolName === 'read_runtime_api'
+          ? new RuntimeApiToolHost({ request: apiRequest }, { listPlugins: async () => ({ plugins: [installedAppBuilder()] }) })
+          : new ExternalContextToolHost(toolName, true),
         configStore: new MemorySettingsConfigStore({
           useMemories: true,
           generateMemories: true,
@@ -379,6 +385,7 @@ describe('agent loop memory policy', () => {
       });
   
       await loop.sendTurn(thread.id, { input: 'search external context' });
+      if (toolName === 'read_runtime_api') expect(apiRequest).toHaveBeenCalledTimes(1);
   
       const saved = await threadStore.getThread(thread.id);
       const events = await threadStore.listEvents(thread.id);
@@ -388,7 +395,7 @@ describe('agent loop memory policy', () => {
           type: 'thread.memory_mode_updated',
           payload: {
             mode: 'polluted',
-            reason: 'external_context:external_search',
+            reason: `external_context:${toolName}`,
           },
         }),
       ]));
