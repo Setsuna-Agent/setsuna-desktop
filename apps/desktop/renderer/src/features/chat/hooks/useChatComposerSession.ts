@@ -5,7 +5,7 @@ import { createChatAttachmentStore, type ChatAttachmentClient, type ChatAttachme
 
 const globalNewThreadSlot = 'global';
 
-export type ChatComposerTargetIdentity = `thread:${string}` | `new-thread-slot:${string}`;
+export type ChatComposerTargetIdentity = `thread:${string}` | `new-thread-slot:${string}` | `new-thread-draft:${string}`;
 
 export type ChatComposerSessionState = {
   draft: string;
@@ -25,10 +25,23 @@ export type ChatComposerSessionClaim = {
 export function chatComposerTargetIdentity(
   threadId: string | null | undefined,
   projectId: string | null | undefined,
+  draftId?: string | null,
 ): ChatComposerTargetIdentity {
   return threadId
     ? `thread:${threadId}`
-    : `new-thread-slot:${projectId || globalNewThreadSlot}`;
+    : draftId
+      ? `new-thread-draft:${draftId}:${encodeURIComponent(projectId ?? '')}`
+      : `new-thread-slot:${projectId || globalNewThreadSlot}`;
+}
+
+export function chatComposerNewThreadTarget(identity: ChatComposerTargetIdentity): { projectId: string | null; draftId: string | null } | null {
+  if (identity.startsWith('thread:')) return null;
+  if (identity.startsWith('new-thread-draft:')) {
+    const [draftId, projectId] = identity.slice('new-thread-draft:'.length).split(':');
+    return { draftId, projectId: projectId ? decodeURIComponent(projectId) : null };
+  }
+  const projectId = identity.slice('new-thread-slot:'.length);
+  return { projectId: projectId === globalNewThreadSlot ? null : projectId, draftId: null };
 }
 
 export function transitionChatComposerSession(
@@ -161,23 +174,28 @@ export function useChatComposerSession(targetIdentity: ChatComposerTargetIdentit
     };
   }, [sessionId, targetIdentity]);
 
-  const initializeThreadDraft = useCallback((threadId: string, draft: string) => {
-    const identity = chatComposerTargetIdentity(threadId, null);
+  const initializeNewThreadDraft = useCallback((projectId: string | null, draft: string) => {
+    const sessionId = nextSessionIdRef.current++;
+    const draftId = String(sessionId);
+    const identity = chatComposerTargetIdentity(null, projectId, draftId);
+    claimRef.current = null;
     const next: RetainedComposerSession = {
-      draft, skillReferences: [], sessionId: nextSessionIdRef.current++, targetIdentity: identity,
+      draft, skillReferences: [], sessionId, targetIdentity: identity,
       attachments: createChatAttachmentStore(servicesRef.current.client, servicesRef.current.t),
     };
-    // Seed the destination before navigation; never write through the source editor's callback.
+    // Prefills get a local identity so neither visible nor hidden unsent input is replaced.
     setStoredSessions((current) => ({ ...current, entries: new Map(current.entries).set(identity, next) }));
+    return draftId;
   }, []);
 
   const claimForProject = useCallback((projectId: string | null) => {
-    if (!targetIdentity.startsWith('new-thread-slot:')) return;
+    const target = chatComposerNewThreadTarget(targetIdentity);
+    if (!target) return;
     // Choosing a workspace for the same unsent message must keep its draft and attachments.
     claimRef.current = {
       fromIdentity: targetIdentity,
       sessionId,
-      toIdentity: chatComposerTargetIdentity(null, projectId),
+      toIdentity: chatComposerTargetIdentity(null, projectId, target.draftId),
     };
   }, [sessionId, targetIdentity]);
 
@@ -188,7 +206,7 @@ export function useChatComposerSession(targetIdentity: ChatComposerTargetIdentit
     composerKey: `chat-composer-session:${sessionId}`,
     draft: session.draft,
     draftSkillReferences: session.skillReferences,
-    initializeThreadDraft,
+    initializeNewThreadDraft,
     reset,
     setDraft,
   };

@@ -2,12 +2,13 @@
 import { parsePluginMentions, pluginMentionText, type DesktopRuntimeClient, type RuntimeThread, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import { browserTabMentionText } from '@setsuna-desktop/feature-browser/contracts';
 import { act, cleanup, renderHook } from '@testing-library/react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { useDesktopNavigation } from '../../../../src/app/controller/useDesktopNavigation.js';
 import { RuntimeClientError } from '../../../../src/services/runtime-client/runtimeClientErrors.js';
 import type { MainView } from '../../../../src/app/types.js';
 import { chatComposerTargetIdentity, useChatComposerSession } from '../../../../src/features/chat/hooks/useChatComposerSession.js';
+import { useChatTurnActions } from '../../../../src/features/chat/hooks/useChatTurnActions.js';
 import { desktopWorkspaceBrowserPanelInstances, useDesktopWorkspacePanelSession } from '../../../../src/features/workspace/hooks/useDesktopWorkspacePanelSession.js';
 import { addPanelToSlotState, createBrowserPanel } from '../../../../src/features/workspace/model.js';
 
@@ -22,57 +23,127 @@ function setupAutomationNavigation(initialThread: RuntimeThread | null, projectI
   const getThread = vi.fn(async (id: string): Promise<RuntimeThread> => id === initialThread?.id ? initialThread : automationThread);
   const confirmDiscardProjectFile = vi.fn(async () => true);
   const createThread = vi.fn(async (): Promise<RuntimeThread> => ({ ...automationThread, id: 'created', featureId: undefined }));
-  const startTurn = vi.fn();
-  const client = { getThread, createThread, startTurn } as unknown as DesktopRuntimeClient;
+  const sendTurn = vi.fn(async () => ({ turnId: 'turn-1' }));
+  const reloadThreads = vi.fn(async () => []);
+  const client = { getThread, createThread, sendTurn } as unknown as DesktopRuntimeClient;
   const hook = renderHook(() => {
     const [activeView, setActiveView] = useState<MainView>('chat');
     const [activeProjectId, setActiveProjectId] = useState(projectId);
     const [currentThread, setCurrentThread] = useState(initialThread);
-    const composer = useChatComposerSession(chatComposerTargetIdentity(currentThread?.id, activeProjectId), client);
+    const [newThreadDraftId, setNewThreadDraftId] = useState<string | null>(null);
+    const composer = useChatComposerSession(chatComposerTargetIdentity(currentThread?.id, activeProjectId, newThreadDraftId), client);
+    const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
+    const terminalTurnIdsRef = useRef(new Set<string>());
     const navigation = useDesktopNavigation({
       activeView, setActiveView, activeProjectId, setActiveProjectId, currentThread, setCurrentThread, client,
-      confirmDiscardProjectFile, projects: [], setProjects: vi.fn(), globalThreads: [],
-      threadsByProjectId: new Map(), reloadThreads: async () => [], resetProjectWorkspaceState: vi.fn(),
+      confirmDiscardProjectFile, projects: [{ id: 'project', name: 'Project', createdAt: '', updatedAt: '' }], setProjects: vi.fn(), globalThreads: [],
+      onNewThreadProjectChange: composer.claimForProject,
+      setNewThreadDraftId,
+      threadsByProjectId: new Map(), reloadThreads, resetProjectWorkspaceState: vi.fn(),
       resetNewThreadWorkspacePanels: vi.fn(), resetThreadWorkspacePanels: vi.fn(),
     });
-    return { navigation, activeView, currentThread, activeProjectId, composer, setCurrentThread };
+    const actions = useChatTurnActions({
+      activeProjectId, activeTurnId, client, composerKey: composer.composerKey, currentThread,
+      draft: composer.draft, claimComposerForThread: (threadId) => {
+        composer.claimForThread(threadId);
+        setNewThreadDraftId(null);
+      }, reloadThreads,
+      setActiveTurnId, setCurrentThread, setDraft: composer.setDraft, setError: vi.fn(), terminalTurnIdsRef,
+    });
+    return { navigation, activeView, currentThread, activeProjectId, newThreadDraftId, composer, actions, setCurrentThread };
   });
-  return { ...hook, getThread, createThread, startTurn, confirmDiscardProjectFile };
+  return { ...hook, getThread, createThread, sendTurn, reloadThreads, confirmDiscardProjectFile };
 }
 
-it.each([null, 'project'])('opens a prefilled projectless app chat while retaining the previous draft (%s)', async (projectId) => {
-  const { result, createThread, startTurn } = setupAutomationNavigation(null, projectId);
+it.each(['global', 'project', 'thread'])('opens an unsent app draft while retaining the source input (%s)', async (source) => {
+  const projectId = source === 'project' ? 'project' : null;
+  const original = source === 'thread' ? { ...automationThread, id: 'ordinary', featureId: undefined } : null;
+  const { result, createThread, sendTurn, reloadThreads } = setupAutomationNavigation(original, projectId);
   act(() => result.current.composer.setDraft('Keep my unsent message'));
   const oldComposerKey = result.current.composer.composerKey;
   const oldAttachments = result.current.composer.attachmentStore;
   const plugin = { id: 'app-builder', name: '应用构建器' };
   const prompt = '创建一个对话汇总应用';
   await act(async () => {
-    expect(await result.current.navigation.createGlobalThread((threadId) => {
-      result.current.composer.initializeThreadDraft(threadId, `${pluginMentionText(plugin)} ${prompt}`);
+    expect(await result.current.navigation.startGlobalThread(() => {
+      return result.current.composer.initializeNewThreadDraft(null, `${pluginMentionText(plugin)} ${prompt}`);
     })).toBe(true);
   });
-  expect(createThread).toHaveBeenCalledWith({});
+  expect(createThread).not.toHaveBeenCalled();
+  expect(reloadThreads).not.toHaveBeenCalled();
   expect(result.current.activeView).toBe('chat');
   expect(result.current.activeProjectId).toBeNull();
-  expect(result.current.currentThread?.projectId).toBeUndefined();
+  expect(result.current.currentThread).toBeNull();
   expect(result.current.composer.composerKey).not.toBe(oldComposerKey);
   expect(result.current.composer.draft).toBe(`${pluginMentionText(plugin)} ${prompt}`);
   expect(parsePluginMentions(result.current.composer.draft)).toEqual([expect.objectContaining({ pluginId: 'app-builder' })]);
-  expect(startTurn).not.toHaveBeenCalled();
-  await act(() => projectId ? result.current.navigation.startProjectThread(projectId) : result.current.navigation.startGlobalThread());
+  expect(sendTurn).not.toHaveBeenCalled();
+  const appDraftId = result.current.newThreadDraftId;
+  await act(async () => {
+    if (original) await result.current.navigation.selectThread(original.id);
+    else if (projectId) await result.current.navigation.startProjectThread(projectId);
+    else await result.current.navigation.startGlobalThread();
+  });
   expect(result.current.composer.draft).toBe('Keep my unsent message');
   expect(result.current.composer.attachmentStore).toBe(oldAttachments);
+  // History can return to the unsent app without replacing the original draft.
+  await act(() => result.current.navigation.startGlobalThread(() => appDraftId));
+  expect(result.current.composer.draft).toBe(`${pluginMentionText(plugin)} ${prompt}`);
+  expect(createThread).not.toHaveBeenCalled();
 });
 
 it('does not create or prefill an app chat when the workspace transition is cancelled', async () => {
   const { result, createThread, confirmDiscardProjectFile } = setupAutomationNavigation(null, 'project');
   confirmDiscardProjectFile.mockResolvedValueOnce(false);
   const prefill = vi.fn();
-  await act(async () => expect(await result.current.navigation.createGlobalThread(prefill)).toBe(false));
+  await act(async () => expect(await result.current.navigation.startGlobalThread(prefill)).toBe(false));
   expect(createThread).not.toHaveBeenCalled();
   expect(prefill).not.toHaveBeenCalled();
   expect(result.current.activeProjectId).toBe('project');
+});
+
+it('creates the app conversation only on send, using the project and location selected after prefilling', async () => {
+  const { result, createThread, sendTurn } = setupAutomationNavigation(null);
+  act(() => result.current.composer.setDraft('Original projectless input'));
+  await act(() => result.current.navigation.startProjectThread('project'));
+  act(() => result.current.composer.setDraft('Original project input'));
+  const draft = `${pluginMentionText({ id: 'app-builder', name: '应用构建器' })} 创建表格`;
+  await act(() => result.current.navigation.startGlobalThread(() => {
+    return result.current.composer.initializeNewThreadDraft(null, draft);
+  }));
+  const composerKey = result.current.composer.composerKey;
+  await act(() => result.current.navigation.selectNewThreadProject('project'));
+  expect(result.current.currentThread).toBeNull();
+  expect(result.current.composer.draft).toBe(draft);
+  expect(result.current.composer.composerKey).toBe(composerKey);
+  expect(createThread).not.toHaveBeenCalled();
+  expect(sendTurn).not.toHaveBeenCalled();
+
+  await act(async () => expect(await result.current.actions.sendInput(undefined, { workspaceMode: 'worktree' })).toBe(true));
+  expect(createThread).toHaveBeenCalledExactlyOnceWith({ projectId: 'project', workspaceMode: 'worktree' });
+  expect(sendTurn).toHaveBeenCalledExactlyOnceWith('created', expect.objectContaining({ input: draft }));
+  expect(result.current.currentThread?.id).toBe('created');
+  expect(result.current.composer.composerKey).toBe(composerKey);
+  expect(result.current.composer.draft).toBe('');
+  await act(() => result.current.navigation.startProjectThread('project'));
+  expect(result.current.composer.draft).toBe('Original project input');
+  await act(() => result.current.navigation.startGlobalThread());
+  expect(result.current.composer.draft).toBe('Original projectless input');
+});
+
+it('ignores a pending app draft navigation after another conversation is selected', async () => {
+  const original = { ...automationThread, id: 'ordinary', featureId: undefined };
+  const { result, createThread, confirmDiscardProjectFile } = setupAutomationNavigation(original);
+  let finish!: (confirmed: boolean) => void;
+  confirmDiscardProjectFile.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  const prefill = vi.fn();
+  let pending!: Promise<boolean>;
+  act(() => { pending = result.current.navigation.startGlobalThread(prefill); });
+  await act(() => result.current.navigation.selectThread(original.id));
+  await act(async () => { finish(true); expect(await pending).toBe(false); });
+  expect(prefill).not.toHaveBeenCalled();
+  expect(createThread).not.toHaveBeenCalled();
+  expect(result.current.currentThread?.id).toBe(original.id);
 });
 
 it.each(['loaded', 'failed'] as const)('commits the chat route only with its requested conversation: %s', async (outcome) => {
@@ -456,11 +527,11 @@ it.each([
   await act(() => result.current.navigation.selectThread(otherThread.id));
   expect(result.current.composer.draft).toBe('');
 
-  await act(() => entry === 'global'
-    ? result.current.navigation.startGlobalThread()
-    : entry === 'project'
-      ? result.current.navigation.startProjectThread(projectId!)
-      : result.current.navigation.startCurrentThread());
+  await act(async () => {
+    if (entry === 'global') await result.current.navigation.startGlobalThread();
+    else if (entry === 'project') await result.current.navigation.startProjectThread(projectId!);
+    else await result.current.navigation.startCurrentThread();
+  });
 
   expect(result.current.composer.composerKey).toBe(originalKey);
   expect(result.current.composer.draft).toBe(draft);

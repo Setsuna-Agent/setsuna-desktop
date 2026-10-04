@@ -111,6 +111,46 @@ it('finishes an upload in its original draft while another conversation is activ
   expect(client.deleteAttachment).not.toHaveBeenCalled();
 });
 
+it.each([false, true])('keeps existing text, Skill references and an upload when prefilling an app (source hidden: %s)', async (hidden) => {
+  const upload = deferred<RuntimeStoredMessageAttachment>();
+  const client = attachmentClient();
+  client.uploadAttachment.mockImplementationOnce(() => upload.promise);
+  const view = renderHook(({ target }) => useChatComposerSession(target, client), {
+    initialProps: { target: chatComposerTargetIdentity(null, null) },
+  });
+  const references = [{ skillId: 'skill', start: 0, end: 5 }];
+  act(() => view.result.current.setDraft('Skill original input', references));
+  const original = view.result.current;
+  let pending!: Promise<void>;
+  act(() => { pending = original.attachmentStore.addFiles([new File(['A'], 'A.txt', { type: 'text/plain' })]); });
+  if (hidden) view.rerender({ target: 'thread:ordinary' });
+
+  let draftId!: string;
+  act(() => { draftId = view.result.current.initializeNewThreadDraft(null, 'Create an app'); });
+  const appIdentity = chatComposerTargetIdentity(null, null, draftId);
+  view.rerender({ target: appIdentity });
+  const app = view.result.current;
+  expect(app.draft).toBe('Create an app');
+  expect(app.attachmentStore.getSnapshot().items).toEqual([]);
+  await act(async () => { upload.resolve(attachment('A.txt')); await pending; });
+
+  view.rerender({ target: chatComposerTargetIdentity(null, null) });
+  expect(view.result.current.composerKey).toBe(original.composerKey);
+  expect(view.result.current.draft).toBe('Skill original input');
+  expect(view.result.current.draftSkillReferences).toEqual(references);
+  expect(view.result.current.attachmentStore).toBe(original.attachmentStore);
+  expect(view.result.current.attachmentStore.getSnapshot().items[0]).toMatchObject({ status: 'ready', attachment: attachment('A.txt') });
+
+  view.rerender({ target: appIdentity });
+  act(() => view.result.current.claimForThread('app-thread'));
+  view.rerender({ target: 'thread:app-thread' });
+  expect(view.result.current.composerKey).toBe(app.composerKey);
+  view.rerender({ target: chatComposerTargetIdentity(null, null) });
+  expect(view.result.current.draft).toBe('Skill original input');
+  expect(view.result.current.attachmentStore).toBe(original.attachmentStore);
+  expect(client.deleteAttachment).not.toHaveBeenCalled();
+});
+
 it.each([false, true])('moves an unsent draft through project selection and first-thread creation without duplicating it (StrictMode: %s)', async (reactStrictMode) => {
   const client = attachmentClient();
   const view = renderHook(({ target }) => useChatComposerSession(target, client), {

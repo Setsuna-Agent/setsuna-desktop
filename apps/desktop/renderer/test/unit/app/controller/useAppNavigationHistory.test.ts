@@ -8,6 +8,7 @@ import { useAppNavigationHistory, type AppNavigationLocation } from '../../../..
 afterEach(cleanup);
 
 const draft: AppNavigationLocation = { view: 'chat', threadId: null, projectId: 'project-a' };
+const appDraft: AppNavigationLocation = { ...draft, draftId: '2' };
 const threadA: AppNavigationLocation = { view: 'chat', threadId: 'thread-a', projectId: 'project-a' };
 const threadB: AppNavigationLocation = { view: 'chat', threadId: 'thread-b', projectId: null };
 const settings: AppNavigationLocation = { view: 'settings' };
@@ -31,15 +32,15 @@ describe('app navigation history', () => {
     const { result, onNavigate } = setup();
     expect(result.current.canGoBack).toBe(false);
     expect(result.current.canGoForward).toBe(false);
-    for (const location of [threadA, settings, plugin]) act(() => result.current.visit(location));
+    for (const location of [appDraft, threadA, settings, plugin]) act(() => result.current.visit(location));
 
-    for (const location of [settings, threadA, draft]) {
+    for (const location of [settings, threadA, appDraft, draft]) {
       await act(async () => result.current.goBack());
       expect(result.current.location).toEqual(location);
       expect(onNavigate).toHaveBeenLastCalledWith(location);
     }
     expect(result.current.canGoBack).toBe(false);
-    for (const location of [threadA, settings, plugin]) {
+    for (const location of [appDraft, threadA, settings, plugin]) {
       await act(async () => result.current.goForward());
       expect(result.current.location).toEqual(location);
     }

@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   chatComposerTargetIdentity,
+  chatComposerNewThreadTarget,
   type ChatComposerTargetIdentity,
 } from '../../chat/hooks/useChatComposerSession.js';
 import {
@@ -57,9 +58,8 @@ export function desktopWorkspacePanelTargetContext(
       threadId,
     };
   }
-  const projectId = targetIdentity.slice('new-thread-slot:'.length);
   return {
-    projectId: projectId === 'global' ? null : projectId,
+    projectId: chatComposerNewThreadTarget(targetIdentity)!.projectId,
     threadId: null,
   };
 }
@@ -90,7 +90,7 @@ export function claimDesktopWorkspacePanelLayout(
   fromIdentity: ChatComposerTargetIdentity,
   threadId: string,
 ): DesktopWorkspacePanelLayouts {
-  if (!fromIdentity.startsWith('new-thread-slot:')) return layouts;
+  if (!chatComposerNewThreadTarget(fromIdentity)) return layouts;
   const toIdentity = chatComposerTargetIdentity(threadId, null);
   const sourceLayout = layouts[fromIdentity];
   if (!sourceLayout) return layouts;
