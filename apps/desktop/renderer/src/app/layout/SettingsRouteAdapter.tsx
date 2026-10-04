@@ -18,6 +18,7 @@ export function SettingsRouteAdapter({
   return (
     <Suspense fallback={<RouteLoadingState label={t('common.loading')} />}>
       <SettingsPage
+        key={settingsInitialSection ?? 'general'}
         archivedThreads={runtime.archivedThreads}
         config={runtime.config}
         initialSection={settingsInitialSection ?? undefined}

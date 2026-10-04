@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { BrowserSettingsNavigationProvider } from '../../composition/BrowserWorkspaceFeatureBoundary.js';
 import {
   shellOverlaySlot,
   shellRouteSlot,
@@ -400,9 +401,13 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   ]);
   useAppKeyboardShortcuts(shortcutHandlers);
   useSecondaryRoutePrefetch();
+  const browserSettingsNavigation = useMemo(() => ({
+    openSettings: (section: string) => { setSettingsInitialSection(section); setActiveView('settings'); },
+    openPage: (url: string) => { workspacePanels.openBrowserPanel(url); setActiveView('chat'); },
+  }), [setActiveView, workspacePanels.openBrowserPanel]);
 
   return (
-    <ShellFrame
+    <BrowserSettingsNavigationProvider value={browserSettingsNavigation}><ShellFrame
       applicationMenu={<AppMenuBar handlers={shortcutHandlers} />}
       rootRef={shellRef}
       inspectorOpen={workspacePanelReservesLayout}
@@ -618,6 +623,6 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
           ),
         }}
       />
-    </ShellFrame>
+    </ShellFrame></BrowserSettingsNavigationProvider>
   );
 }

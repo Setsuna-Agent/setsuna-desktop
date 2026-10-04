@@ -131,6 +131,12 @@ dev 启动流程：
 - `extraResources`：
   - `.cache/ripgrep/${os}-${arch}` -> `resources/setsuna-path`
 
+macOS 的 `entitlements` 和 `entitlementsInherit` 均显式使用
+`assets/build/entitlements.mac.plist`，覆盖主应用和 Electron Helpers。该文件保留
+electron-builder 26 的 JIT、可执行内存与动态库权限，并增加摄像头和音频输入权限；
+`mac.extendInfo` 提供对应用途说明。两者共同支持启用 Hardened Runtime 的签名应用访问媒体设备，
+实际访问仍需用户授予网站权限及 macOS 系统权限。变更 entitlements 后需重新打包签名，重启开发应用不会更新正式包的权限。
+
 ### Bundled ripgrep
 
 项目内容搜索和 Agent `search_text` 不依赖用户机器上预装的 `rg`：

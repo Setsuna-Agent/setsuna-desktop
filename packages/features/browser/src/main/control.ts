@@ -24,9 +24,13 @@ import {
 } from './cdp/device-emulation.js';
 import { dispatchNativeBrowserKey } from './native-keyboard.js';
 import { BrowserAnnotationSession } from './annotations/session.js';
+import { BrowserPasswordSession } from './passwords/session.js';
+import type { BrowserPasswordStore } from './passwords/store.js';
+import type { BrowserPreferences } from '../contracts/settings.js';
 
 type RegisteredBrowserTab = {
   annotations: BrowserAnnotationSession;
+  passwords: BrowserPasswordSession | null;
   automation: BrowserAutomation;
   contents: WebContents;
   defaultUserAgent: string;
@@ -53,6 +57,8 @@ export class DesktopBrowserController implements BrowserControlExecutor {
   private readonly createAutomation: (contents: WebContents) => BrowserAutomation;
   private readonly createDeviceEmulator: (contents: WebContents) => BrowserDeviceEmulator;
   private readonly openTab: ((url: string) => boolean | Promise<boolean>) | null;
+  private readonly passwordStore: BrowserPasswordStore | null;
+  private readonly preferences?: () => BrowserPreferences;
   private readonly snapshotRevisions = new Map<string, number>();
   private readonly tabs = new Map<string, RegisteredBrowserTab>();
 
@@ -60,12 +66,16 @@ export class DesktopBrowserController implements BrowserControlExecutor {
     createAutomation?: (contents: WebContents) => BrowserAutomation;
     createDeviceEmulator?: (contents: WebContents) => BrowserDeviceEmulator;
     openTab?: (url: string) => boolean | Promise<boolean>;
+    passwordStore?: BrowserPasswordStore;
+    preferences?: () => BrowserPreferences;
   } = {}) {
     this.createAutomation = options.createAutomation ?? ((contents) =>
       new ElectronBrowserCdpAutomation(contents.debugger as unknown as BrowserDebuggerTransport));
     this.createDeviceEmulator = options.createDeviceEmulator ?? ((contents) =>
       new ElectronBrowserCdpDeviceEmulator(contents.debugger as unknown as BrowserDebuggerTransport));
     this.openTab = options.openTab ?? null;
+    this.passwordStore = options.passwordStore ?? null;
+    this.preferences = options.preferences;
   }
 
   registerTab(tabId: string, contents: WebContents): void {
@@ -89,6 +99,7 @@ export class DesktopBrowserController implements BrowserControlExecutor {
     contents.on('did-start-navigation', navigationListener);
     this.tabs.set(normalizedTabId, {
       annotations,
+      passwords: this.passwordStore ? new BrowserPasswordSession(normalizedTabId, contents, this.passwordStore, this.preferences) : null,
       automation,
       contents,
       defaultUserAgent,
@@ -106,6 +117,7 @@ export class DesktopBrowserController implements BrowserControlExecutor {
     entry.contents.off('did-start-navigation', entry.navigationListener);
     entry.automation.dispose();
     entry.annotations.dispose();
+    entry.passwords?.dispose();
     entry.deviceEmulator.dispose();
     this.tabs.delete(tabId);
     this.snapshotRevisions.delete(tabId);
@@ -114,6 +126,15 @@ export class DesktopBrowserController implements BrowserControlExecutor {
 
   setActiveTab(tabId: string | null): void {
     this.activeTabId = tabId ? normalizeTabId(tabId) : null;
+  }
+
+  passwordSession(tabId: string, senderId: number): BrowserPasswordSession | null {
+    const entry = this.tabs.get(tabId);
+    return entry && !entry.contents.isDestroyed() && entry.contents.hostWebContents?.id === senderId ? entry.passwords : null;
+  }
+
+  refreshPasswordPreferences(): void {
+    for (const entry of this.tabs.values()) entry.passwords?.refreshPreferences();
   }
 
   pickAnnotation(tabId: string, senderId: number, signal?: AbortSignal): Promise<BrowserAnnotationTarget | null> {

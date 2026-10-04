@@ -1,9 +1,11 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
 import {
   BROWSER_HOME_URL,
+  BROWSER_WEB_STORE_URL,
   DEFAULT_BROWSER_URL,
   DESKTOP_BROWSER_PARTITION,
   type BrowserDesktopBridge,
+  type BrowserExtension,
   type BrowserPanelDescriptor,
   type BrowserPanelMetadataPatch,
   type BrowserReloadShortcutBindings,
@@ -24,6 +26,10 @@ import { BrowserDeviceViewport } from './BrowserDeviceViewport.js';
 import { BrowserHomePage } from './BrowserHomePage.js';
 import { BrowserLoadErrorPage } from './load-error/BrowserLoadErrorPage.js';
 import { BrowserWindowMenu } from './BrowserWindowMenu.js';
+import { BrowserPasswords } from './passwords/BrowserPasswords.js';
+import { BrowserExtensions } from './extensions/BrowserExtensions.js';
+import { useBrowserExtensions } from './extensions/useBrowserExtensions.js';
+import { isExtensionNewTab, useBrowserNewTab } from './extensions/useBrowserNewTab.js';
 import { isBrowserBookmarked } from './browserBookmarks.js';
 import type { BrowserHistoryVisit } from './browserHistory.js';
 import {
@@ -58,6 +64,11 @@ import { BrowserAnnotationPanel } from './annotations/BrowserAnnotationPanel.js'
 import { useBrowserAnnotations } from './annotations/useBrowserAnnotations.js';
 import type { BrowserAnnotationSendHandler } from '../contracts/index.js';
 import './browser.css';
+import { useBrowserPreferences } from './settings/useBrowserPreferences.js';
+import { useBrowserSettingsNavigation } from './settings/context.js';
+import { BrowserRecordsToolbar } from './records/BrowserRecordsToolbar.js';
+import { BrowserRecordsManager } from './records/BrowserRecordsManager.js';
+import { useBrowserRecordsPanel } from './records/useBrowserRecordsPanel.js';
 
 export { resolveBrowserFaviconUrl, resolveBrowserFaviconUrls };
 export { nextBrowserZoomFactor, normalizeBrowserInput };
@@ -150,18 +161,39 @@ export function BrowserPanel({
   const webviewRef = useRef<BrowserWebviewElement | null>(null);
   const registeredTabIdRef = useRef<string | null>(null);
   const [tab, setTab] = useState<BrowserTab>(() => createBrowserTab(panel, translate));
+  const [extensionWebContentsId, setExtensionWebContentsId] = useState<number>();
+  const extensions = useBrowserExtensions(bridge, notify, translate, extensionWebContentsId);
+  const { preferences, ready: preferencesReady } = useBrowserPreferences(bridge);
+  const settingsNavigation = useBrowserSettingsNavigation();
+  const records = useBrowserRecordsPanel(hidden);
+  const showingNewTab = tab.showingHome || isExtensionNewTab(tab.url, extensions.newTabUrl);
+  const resolveNewTab = useCallback((extension: BrowserExtension | null) => {
+    const url = extension?.newTabUrl ?? BROWSER_HOME_URL;
+    setTab((current) => ({
+      ...current, url, initialUrl: url, showingHome: !extension,
+      draftUrl: current.showingHome ? current.draftUrl : '',
+      title: extension?.name ?? translate('feature.browser.newTab'), faviconUrl: extension?.icon ?? null,
+      loading: Boolean(extension), error: null, canGoBack: false, canGoForward: false, zoomFactor: 1,
+    }));
+  }, [translate]);
+  useBrowserNewTab({ ready: extensions.ready && (preferencesReady || !bridge?.getBrowserPreferences), enabled: preferences.useExtensionNewTab,
+    extensions: extensions.extensions, showingHome: tab.showingHome, url: tab.url, onResolve: resolveNewTab });
   const {
     entries: browserHistory,
     recordVisit: recordBrowserVisit,
     refresh: refreshBrowserHistory,
     removeEntry: removeBrowserHistoryEntry,
   } = useBrowserHistory();
+  const recordVisit = useCallback((visit: BrowserHistoryVisit, updateOnly = false) => {
+    // Defaults are only for rendering; they cannot authorize writes before the saved preference arrives.
+    if (preferencesReady && preferences.rememberHistory) recordBrowserVisit(visit, updateOnly);
+  }, [preferencesReady, preferences.rememberHistory, recordBrowserVisit]);
   const {
     entries: browserBookmarks,
     refresh: refreshBrowserBookmarks,
     toggle: toggleBrowserBookmark,
   } = useBrowserBookmarks();
-  const activePageBookmarked = !tab.showingHome && isBrowserBookmarked(browserBookmarks, tab.url);
+  const activePageBookmarked = !showingNewTab && isBrowserBookmarked(browserBookmarks, tab.url);
   const {
     captureScreenshot,
     capturing: screenshotCapturing,
@@ -180,14 +212,17 @@ export function BrowserPanel({
   const updateTab = useCallback((tabId: string, patch: Partial<BrowserTab>) => {
     setTab((current) => (current.id === tabId ? { ...current, ...patch } : current));
   }, []);
+  useEffect(() => { updateTab(tab.id, { zoomFactor: preferences.defaultZoom }); }, [preferences.defaultZoom, tab.id, updateTab]);
   const setWebview = useCallback((node: BrowserWebviewElement | null) => {
     webviewRef.current = node;
   }, []);
   const updateBrowserRegistration = useCallback((tabId: string, registered: boolean) => {
     if (registered) {
       registeredTabIdRef.current = tabId;
+      setExtensionWebContentsId(webviewRef.current?.getWebContentsId());
     } else if (registeredTabIdRef.current === tabId) {
       registeredTabIdRef.current = null;
+      setExtensionWebContentsId(undefined);
     }
   }, []);
   const reportBrowserActionFailure = useCallback((message: string, error?: unknown) => {
@@ -233,13 +268,18 @@ export function BrowserPanel({
       browser: {
         faviconUrl: tab.faviconUrl,
         loading: tab.loading,
-        url: tab.url,
+        url: showingNewTab ? BROWSER_HOME_URL : tab.url,
       },
       title: tab.title,
     });
-  }, [onPanelMetadataChange, panel.id, tab.faviconUrl, tab.loading, tab.title, tab.url]);
+  }, [onPanelMetadataChange, panel.id, showingNewTab, tab.faviconUrl, tab.loading, tab.title, tab.url]);
 
   const showBrowserHome = () => {
+    if (preferences.homeUrl) { navigateToUrl(preferences.homeUrl); return; }
+    if (preferences.useExtensionNewTab && extensions.newTabUrl) {
+      navigateToUrl(extensions.newTabUrl);
+      return;
+    }
     annotations.clear();
     refreshBrowserHistory();
     refreshBrowserBookmarks();
@@ -287,10 +327,11 @@ export function BrowserPanel({
 
   const toggleActivePageBookmark = () => {
     if (tab.showingHome) return;
-    toggleBrowserBookmark({
+    const saved = toggleBrowserBookmark({
       title: tab.title || browserHostLabel(tab.url, translate),
       url: tab.url,
     });
+    if (!saved) notify('warning', translate('feature.browser.settings.failed'));
   };
 
   const navigateHistory = (direction: 'back' | 'forward') => {
@@ -364,7 +405,7 @@ export function BrowserPanel({
     } catch (error) {
       console.warn('[browser] could not read embedded page zoom', error);
     }
-    const nextZoomFactor = nextBrowserZoomFactor(currentZoomFactor, direction);
+    const nextZoomFactor = direction === 'reset' ? preferences.defaultZoom : nextBrowserZoomFactor(currentZoomFactor, direction);
     if (!runAttachedWebviewAction(webview, (attachedWebview) => attachedWebview.setZoomFactor(nextZoomFactor))) {
       reportBrowserActionFailure(translate('feature.browser.zoomFailed'));
       return;
@@ -407,18 +448,20 @@ export function BrowserPanel({
         <Button variant="ghost" className="desktop-browser-navigation__button" type="button" disabled={tab.showingHome} aria-label={translate(tab.loading ? 'feature.browser.stop' : 'feature.browser.refresh')} onClick={reload} onContextMenu={showReloadMenu}>
           {tab.loading ? <X size={13} /> : <RefreshCw size={13} />}
         </Button>
-        <Button variant="ghost"
+        {preferences.showHomeButton ? <Button variant="ghost"
           aria-label={translate('feature.browser.home')}
-          aria-pressed={tab.showingHome}
-          className={`desktop-browser-navigation__button ${tab.showingHome ? 'is-active' : ''}`}
+          aria-pressed={showingNewTab}
+          className={`desktop-browser-navigation__button ${showingNewTab ? 'is-active' : ''}`}
           title={translate('feature.browser.home')}
           type="button"
           onClick={showBrowserHome}
         >
           <House size={13} />
-        </Button>
+        </Button> : null}
         <BrowserAddressBar
-          externalUrl={tab.showingHome ? null : tab.url}
+          showFullUrl={preferences.showFullUrl}
+          searchEngine={preferences.searchEngine}
+          externalUrl={showingNewTab || tab.url.startsWith('chrome-extension:') ? null : tab.url}
           hidden={hidden}
           history={browserHistory}
           value={tab.draftUrl}
@@ -433,7 +476,7 @@ export function BrowserPanel({
           aria-label={translate(activePageBookmarked ? 'feature.browser.removeBookmark' : 'feature.browser.addBookmark')}
           aria-pressed={activePageBookmarked}
           className={`desktop-browser-navigation__button ${activePageBookmarked ? 'is-active' : ''}`}
-          disabled={tab.showingHome}
+          disabled={showingNewTab}
           title={translate(activePageBookmarked ? 'feature.browser.removeBookmark' : 'feature.browser.addBookmark')}
           type="button"
           onClick={toggleActivePageBookmark}
@@ -444,7 +487,14 @@ export function BrowserPanel({
           aria-label={translate('feature.browser.annotation.label')} title={translate('feature.browser.annotation.label')}
           aria-pressed={annotations.open} disabled={tab.showingHome || tab.loading || annotations.sending}
           onClick={annotations.toggle}><SquareDashedMousePointer size={13} /></Button>
+        <BrowserPasswords bridge={bridge} tabId={tab.id} active={!tab.showingHome} hidden={hidden} notify={notify} translate={translate} />
+        <BrowserExtensions extensions={extensions} hidden={hidden} translate={translate} onOpenStore={() => navigateToUrl(BROWSER_WEB_STORE_URL)} />
+        <BrowserRecordsToolbar state={records} hidden={hidden} translate={translate} onNavigate={navigateToUrl}
+          currentPage={showingNewTab ? undefined : { title: tab.title, url: tab.url }} />
         <BrowserWindowMenu
+          hidden={hidden}
+          onOpenRecords={records.open}
+          onOpenSettings={settingsNavigation ? () => settingsNavigation.openSettings('browser') : undefined}
           capturingScreenshot={screenshotCapturing}
           deviceToolbarVisible={tab.deviceEmulation.enabled}
           disabled={tab.showingHome}
@@ -485,12 +535,13 @@ export function BrowserPanel({
               active={!hidden}
               bridge={bridge}
               tab={tab}
+              newTabUrl={extensions.newTabUrl}
               onDeviceEmulationFailure={reportDeviceEmulationFailure}
               onPageChange={annotations.clear}
               onRegistrationChange={updateBrowserRegistration}
               onRef={setWebview}
               onUpdate={updateTab}
-              onVisit={recordBrowserVisit}
+              onVisit={recordVisit}
               translate={translate}
             />
           )}
@@ -498,6 +549,11 @@ export function BrowserPanel({
         </div>
         <BrowserAnnotationPanel state={annotations} translate={translate} bridge={bridge} tabId={tab.id}
           hidden={hidden} surfaceRef={annotationSurfaceRef} webviewRef={webviewRef} />
+        {records.kind && records.pinned ? <aside className="browser-records__sidebar">
+          <BrowserRecordsManager key={records.kind} kind={records.kind} pinned translate={translate}
+            currentPage={showingNewTab ? undefined : { title: tab.title, url: tab.url }}
+            onClose={records.close} onTogglePinned={records.togglePinned} onNavigate={navigateToUrl} />
+        </aside> : null}
       </div>
       <BrowserContextMenu bridge={bridge} active={!hidden && !tab.showingHome} webviewRef={webviewRef} />
     </aside>
@@ -514,6 +570,7 @@ function BrowserWebview({
   onUpdate,
   onVisit,
   tab,
+  newTabUrl,
   translate,
 }: {
   active: boolean;
@@ -523,8 +580,9 @@ function BrowserWebview({
   onRegistrationChange: (tabId: string, registered: boolean) => void;
   onRef: (node: BrowserWebviewElement | null) => void;
   onUpdate: (tabId: string, patch: Partial<BrowserTab>) => void;
-  onVisit: (visit: BrowserHistoryVisit) => void;
+  onVisit: (visit: BrowserHistoryVisit, updateOnly?: boolean) => void;
   tab: BrowserTab;
+  newTabUrl: string | null;
   translate: BrowserTranslate;
 }) {
   const nodeRef = useRef<BrowserWebviewElement | null>(null);
@@ -548,16 +606,16 @@ function BrowserWebview({
       onUpdate(tab.id, {
         canGoBack: node.canGoBack(),
         canGoForward: node.canGoForward(),
-        draftUrl: url,
+        draftUrl: isExtensionNewTab(url, newTabUrl) ? '' : url,
         url,
         zoomFactor: node.getZoomFactor(),
       });
     };
-    const recordCurrentPage = () => onVisit({
+    const recordCurrentPage = (updateOnly = false) => onVisit({
       title: currentTitle,
       url: currentUrl,
       visitedAt: currentVisitedAt,
-    });
+    }, updateOnly);
     const faviconCoordinator = createBrowserFaviconCoordinator({
       onChange: (faviconUrl) => onUpdate(tab.id, { faviconUrl }),
       resolve: (faviconUrls) => requestBrowserFavicon(bridge, node, faviconUrls),
@@ -575,13 +633,14 @@ function BrowserWebview({
     };
     const handleNavigate = () => {
       syncNavigation();
+      currentVisitedAt = Date.now();
       recordCurrentPage();
     };
     const handleTitle = (event: BrowserPageTitleUpdatedEvent) => {
       syncNavigation();
       currentTitle = event.title || browserHostLabel(currentUrl, translate);
       onUpdate(tab.id, { title: currentTitle });
-      recordCurrentPage();
+      recordCurrentPage(true);
     };
     const handleFavicon = (event: BrowserPageFaviconUpdatedEvent) => faviconCoordinator.faviconUpdated(resolveBrowserFaviconUrls(event.favicons));
     const handleFailure = (event: BrowserDidFailLoadEvent) => {
@@ -607,7 +666,7 @@ function BrowserWebview({
       node.removeEventListener('page-favicon-updated', handleFavicon);
       node.removeEventListener('did-fail-load', handleFailure);
     };
-  }, [bridge, onPageChange, onUpdate, onVisit, tab.id, tab.initialUrl, translate]);
+  }, [bridge, newTabUrl, onPageChange, onUpdate, onVisit, tab.id, tab.initialUrl, translate]);
 
   useEffect(() => {
     const node = nodeRef.current;

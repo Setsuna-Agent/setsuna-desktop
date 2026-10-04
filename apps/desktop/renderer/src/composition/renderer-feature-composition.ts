@@ -23,7 +23,7 @@ import { approvalReviewRendererFeature } from '@setsuna-desktop/feature-approval
 import { artifactRendererFeature } from '@setsuna-desktop/feature-artifact/renderer';
 import { computerBridgeCapability } from '@setsuna-desktop/feature-computer-use/contracts';
 import { computerRendererFeature } from '@setsuna-desktop/feature-computer-use/renderer';
-import { browserRendererFeature } from '@setsuna-desktop/feature-browser/renderer';
+import { browserRendererFeature, browserRendererHostCapability } from '@setsuna-desktop/feature-browser/renderer';
 import {
   collaborationRendererStateCapability,
   createNoopCollaborationRendererStateService,
@@ -241,6 +241,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
         networkProxyRendererHostCapability,
         Object.freeze({ bridge: window.setsunaDesktop?.networkProxy ?? null }),
       ),
+      provideHostCapability(browserRendererHostCapability, Object.freeze({ bridge: window.setsunaDesktop?.browser ?? null })),
       provideHostCapability(
         pluginManagementRendererHostCapability,
         Object.freeze({

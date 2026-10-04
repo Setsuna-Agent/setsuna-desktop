@@ -1,4 +1,5 @@
 import type { BrowserHistoryEntry } from '../browserHistory.js';
+import type { BrowserSearchEngine } from '../../contracts/settings.js';
 import { browserSearchUrl, normalizeBrowserInput } from '../browserNavigation.js';
 
 export type BrowserAddressSuggestion = Readonly<{
@@ -13,6 +14,7 @@ const maximumSuggestions = 8;
 export function browserAddressSuggestions(
   value: string,
   history: readonly BrowserHistoryEntry[],
+  searchEngine: BrowserSearchEngine = 'bing',
 ): BrowserAddressSuggestion[] {
   const query = value.trim();
   const terms = searchableText(query).split(/\s+/).filter(Boolean);
@@ -22,8 +24,8 @@ export function browserAddressSuggestions(
   });
   if (!query) return matches.slice(0, maximumSuggestions).map(historySuggestion);
 
-  const searchUrl = browserSearchUrl(query);
-  const destination = normalizeBrowserInput(query);
+  const searchUrl = browserSearchUrl(query, searchEngine);
+  const destination = normalizeBrowserInput(query, searchEngine);
   const suggestions: BrowserAddressSuggestion[] = [];
   if (destination !== searchUrl) {
     // URL serialization makes a bare origin match its stored trailing-slash form.

@@ -1,6 +1,7 @@
 export const BROWSER_HISTORY_STORAGE_KEY = 'setsuna.desktop.browser.history.v1';
+export const BROWSER_HISTORY_CHANGED = 'setsuna:browser-history-changed';
 
-const maxBrowserHistoryEntries = 50;
+const maxBrowserHistoryEntries = 5_000;
 const maxBrowserHistoryTitleLength = 240;
 const maxBrowserHistoryUrlLength = 8_192;
 
@@ -35,15 +36,18 @@ export function readBrowserHistory(
 export function writeBrowserHistory(
   entries: readonly BrowserHistoryEntry[],
   storage: BrowserHistoryStorage | null = browserHistoryStorage(),
-): void {
-  if (!storage) return;
+): boolean {
+  if (!storage) return false;
   try {
     storage.setItem(
       BROWSER_HISTORY_STORAGE_KEY,
       JSON.stringify(normalizeBrowserHistoryEntries(entries)),
     );
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event(BROWSER_HISTORY_CHANGED));
+    return true;
   } catch {
     // Browsing must keep working when local storage is unavailable or full.
+    return false;
   }
 }
 
@@ -86,6 +90,7 @@ function normalizeBrowserHistoryEntry(value: unknown): BrowserHistoryEntry | nul
     || typeof candidate.visitedAt !== 'number'
     || !Number.isFinite(candidate.visitedAt)
     || candidate.visitedAt <= 0
+    || !Number.isFinite(new Date(candidate.visitedAt).getTime())
   ) return null;
 
   const title = normalizeBrowserHistoryTitle(candidate.title) || new URL(url).hostname;

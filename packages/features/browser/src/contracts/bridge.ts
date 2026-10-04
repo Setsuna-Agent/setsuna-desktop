@@ -1,7 +1,22 @@
 import type { DesktopBrowserDeviceEmulation, DesktopBrowserScreenshot } from './browser-control.js';
 import type { BrowserAnnotationAnchor, BrowserAnnotationMarkers, BrowserAnnotationTarget } from './annotations.js';
+import type { BrowserPasswordBridge } from './passwords.js';
+import type { BrowserExtensionsBridge } from './extensions.js';
+import type { BrowserSettingsBridge } from './settings.js';
 
 export const BROWSER_IPC_CHANNELS = Object.freeze({
+  getExtensions: 'browser:get-extensions',
+  removeExtension: 'browser:remove-extension',
+  openExtension: 'browser:open-extension',
+  extensionsChanged: 'browser:extensions-changed',
+  getExtensionActions: 'browser:get-extension-actions',
+  extensionActionsChanged: 'browser:extension-actions-changed',
+  passwordState: 'browser:password-state',
+  getPasswordState: 'browser:get-password-state',
+  savePassword: 'browser:save-password',
+  dismissPassword: 'browser:dismiss-password',
+  fillPassword: 'browser:fill-password',
+  deletePassword: 'browser:delete-password',
   pickAnnotation: 'browser:pick-annotation',
   cancelAnnotation: 'browser:cancel-annotation',
   setAnnotationMarkers: 'browser:set-annotation-markers',
@@ -41,7 +56,7 @@ export type BrowserReloadShortcutBindings = Readonly<{
   normal: string | null;
 }>;
 
-export interface BrowserDesktopBridge {
+export interface BrowserDesktopBridge extends BrowserPasswordBridge, BrowserExtensionsBridge, BrowserSettingsBridge {
   pickAnnotation(tabId: string): Promise<BrowserAnnotationTarget | null>;
   cancelAnnotation(tabId: string): Promise<void>;
   setAnnotationMarkers(tabId: string, markers: BrowserAnnotationMarkers): Promise<boolean>;

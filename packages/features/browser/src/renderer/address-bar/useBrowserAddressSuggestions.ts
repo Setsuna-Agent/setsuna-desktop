@@ -2,8 +2,10 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import type { BrowserHistoryEntry } from '../browserHistory.js';
 import { normalizeBrowserInput } from '../browserNavigation.js';
 import { browserAddressSuggestions } from './browserAddressCandidates.js';
+import type { BrowserSearchEngine } from '../../contracts/settings.js';
 
-export function useBrowserAddressSuggestions({ hidden, history, onChange, onNavigate, onRefreshHistory, onRemoveHistory, value }: {
+export function useBrowserAddressSuggestions({ hidden, history, onChange, onNavigate, onRefreshHistory, onRemoveHistory, value, searchEngine }: {
+  searchEngine?: BrowserSearchEngine;
   hidden: boolean;
   history: readonly BrowserHistoryEntry[];
   onChange: (value: string) => void;
@@ -16,7 +18,7 @@ export function useBrowserAddressSuggestions({ hidden, history, onChange, onNavi
   const composing = useRef(false);
   const [open, setOpen] = useState(false);
   const [selection, setSelection] = useState<{ query: string; id: string } | null>(null);
-  const suggestions = browserAddressSuggestions(value, history);
+  const suggestions = browserAddressSuggestions(value, history, searchEngine);
   const activeIndex = Math.max(0, suggestions.findIndex((item) => selection?.query === value && item.id === selection.id));
   const visible = open && !hidden && suggestions.length > 0;
 
@@ -62,7 +64,7 @@ export function useBrowserAddressSuggestions({ hidden, history, onChange, onNavi
     change: (next: string) => { setOpen(true); setSelection(null); onChange(next); },
     focus: () => { setOpen(true); setSelection(null); onRefreshHistory(); },
     submit: () => {
-      if (!composing.current) navigate(visible ? suggestions[activeIndex].url : normalizeBrowserInput(value));
+      if (!composing.current) navigate(visible ? suggestions[activeIndex].url : normalizeBrowserInput(value, searchEngine));
     },
   };
 }

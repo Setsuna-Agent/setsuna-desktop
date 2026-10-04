@@ -97,6 +97,7 @@
     "corepack": "0.34.7",
     "katex": "^0.16.22",
     "lenis": "1.3.26",
+    "electron-chrome-web-store": "0.13.0",
     "lucide-react": "^0.468.0",
     "marked": "^17.0.1",
     "node-pty": "^1.1.0",
@@ -155,7 +156,8 @@
     },
     "patchedDependencies": {
       "node-pty@1.1.0": "patches/node-pty@1.1.0.patch",
-      "@pierre/diffs@1.3.3": "patches/@pierre__diffs@1.3.3.patch"
+      "@pierre/diffs@1.3.3": "patches/@pierre__diffs@1.3.3.patch",
+      "electron-chrome-web-store@0.13.0": "patches/electron-chrome-web-store@0.13.0.patch"
     }
   },
   "build": {
@@ -203,6 +205,13 @@
       }
     ],
     "mac": {
+      "entitlements": "assets/build/entitlements.mac.plist",
+      "entitlementsInherit": "assets/build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSCameraUsageDescription": "Allow websites you approve in the built-in browser to use the camera.",
+        "NSMicrophoneUsageDescription": "Allow websites you approve in the built-in browser to use the microphone.",
+        "NSLocationWhenInUseUsageDescription": "Allow websites you approve in the built-in browser to access your location."
+      },
       "extraResources": [
         { "from": "dist/computer-use/macos/${arch}/setsuna-computer", "to": "computer-use/setsuna-computer" },
         { "from": "native/computer-use-macos/LICENSE", "to": "computer-use/LICENSE-background-computer-use" }

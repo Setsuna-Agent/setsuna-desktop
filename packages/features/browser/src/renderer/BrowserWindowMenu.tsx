@@ -1,7 +1,8 @@
-import { Button, MenuSurface } from '@setsuna-desktop/renderer-ui';
-import { EllipsisVertical, Minus, Plus } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { Button, Popover } from '@setsuna-desktop/renderer-ui';
+import { EllipsisVertical, History, Minus, Plus, Settings2, Star } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import type { BrowserTranslate } from './messages.js';
+import type { BrowserRecordsKind } from './records/BrowserRecordsManager.js';
 
 const minimumBrowserZoomFactor = 0.5;
 const maximumBrowserZoomFactor = 3;
@@ -10,6 +11,7 @@ export function BrowserWindowMenu({
   capturingScreenshot,
   deviceToolbarVisible,
   disabled,
+  hidden = false,
   loading,
   onOpenDevTools,
   onCaptureScreenshot,
@@ -19,12 +21,15 @@ export function BrowserWindowMenu({
   onZoomIn,
   onZoomOut,
   onZoomReset,
+  onOpenSettings,
+  onOpenRecords,
   translate,
   zoomFactor,
 }: {
   capturingScreenshot: boolean;
   deviceToolbarVisible: boolean;
   disabled: boolean;
+  hidden?: boolean;
   loading: boolean;
   onOpenDevTools: () => void;
   onCaptureScreenshot: () => void;
@@ -34,31 +39,13 @@ export function BrowserWindowMenu({
   onZoomIn: () => void;
   onZoomOut: () => void;
   onZoomReset: () => void;
+  onOpenSettings?: () => void;
+  onOpenRecords: (kind: BrowserRecordsKind) => void;
   translate: BrowserTranslate;
   zoomFactor: number;
 }) {
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLSpanElement | null>(null);
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const handlePointerDown = (event: PointerEvent) => {
-      if (rootRef.current?.contains(event.target as Node)) return;
-      setOpen(false);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      setOpen(false);
-      triggerRef.current?.focus();
-    };
-    window.addEventListener('pointerdown', handlePointerDown);
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('pointerdown', handlePointerDown);
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [open]);
+  useEffect(() => { if (hidden) setOpen(false); }, [hidden]);
 
   const runAndClose = (action: () => void) => {
     setOpen(false);
@@ -66,37 +53,32 @@ export function BrowserWindowMenu({
   };
 
   return (
-    <span className="desktop-browser-window-menu" ref={rootRef}>
-      <Button variant="ghost"
-        aria-expanded={open}
-        aria-haspopup="menu"
-        aria-label={translate('feature.browser.menu')}
-        className={`desktop-browser-navigation__button ${open ? 'is-active' : ''}`}
-        disabled={disabled}
-        ref={triggerRef}
-        title={translate('feature.browser.menu')}
-        type="button"
-        onClick={() => setOpen((current) => !current)}
-      >
-        <EllipsisVertical size={16} />
-      </Button>
-      {open ? <MenuSurface className="desktop-browser-window-menu__popover" role="menu" aria-label={translate('feature.browser.menuSettings')}>
-        <Button variant="ghost" type="button" role="menuitem" onClick={() => runAndClose(onReload)}>
+    <span className="desktop-browser-window-menu">
+      <Popover open={open && !hidden} onOpenChange={setOpen} modal placement="bottomRight" className="sd-menu-surface desktop-browser-window-menu__popover"
+        contentLabel={translate('feature.browser.menuSettings')} content={<>
+        <Button variant="ghost" type="button" role="menuitem" onClick={() => runAndClose(() => onOpenRecords('history'))}>
+          <History size={14} />{translate('feature.browser.settings.history')}
+        </Button>
+        <Button variant="ghost" type="button" role="menuitem" onClick={() => runAndClose(() => onOpenRecords('bookmarks'))}>
+          <Star size={14} />{translate('feature.browser.settings.bookmarks')}
+        </Button>
+        <span className="desktop-browser-window-menu__separator" role="separator" />
+        <Button variant="ghost" type="button" disabled={disabled} role="menuitem" onClick={() => runAndClose(onReload)}>
           {translate(loading ? 'feature.browser.stop' : 'feature.browser.reload')}
         </Button>
-        <Button variant="ghost" type="button" role="menuitem" onClick={() => runAndClose(onPrint)}>
+        <Button variant="ghost" type="button" disabled={disabled} role="menuitem" onClick={() => runAndClose(onPrint)}>
           {translate('feature.browser.print')}
         </Button>
         <Button variant="ghost"
           aria-busy={capturingScreenshot}
-          disabled={capturingScreenshot}
+          disabled={disabled || capturingScreenshot}
           type="button"
           role="menuitem"
           onClick={() => runAndClose(onCaptureScreenshot)}
         >
           {translate(capturingScreenshot ? 'feature.browser.capturingScreenshot' : 'feature.browser.captureScreenshot')}
         </Button>
-        <Button variant="ghost" type="button" role="menuitem" onClick={() => runAndClose(onToggleDeviceToolbar)}>
+        <Button variant="ghost" type="button" disabled={disabled} role="menuitem" onClick={() => runAndClose(onToggleDeviceToolbar)}>
           {translate(deviceToolbarVisible ? 'feature.browser.hideDeviceToolbar' : 'feature.browser.showDeviceToolbar')}
         </Button>
         <span className="desktop-browser-window-menu__separator" role="separator" />
@@ -105,19 +87,19 @@ export function BrowserWindowMenu({
           <span className="desktop-browser-window-menu__zoom-controls">
             <Button variant="ghost"
               aria-label={translate('feature.browser.zoomOut')}
-              disabled={zoomFactor <= minimumBrowserZoomFactor}
+              disabled={disabled || zoomFactor <= minimumBrowserZoomFactor}
               role="menuitem"
               type="button"
               onClick={onZoomOut}
             >
               <Minus size={13} />
             </Button>
-            <Button variant="ghost" aria-label={translate('feature.browser.zoomReset')} role="menuitem" title={translate('feature.browser.zoomReset')} type="button" onClick={onZoomReset}>
+            <Button variant="ghost" disabled={disabled} aria-label={translate('feature.browser.zoomReset')} role="menuitem" title={translate('feature.browser.zoomReset')} type="button" onClick={onZoomReset}>
               {Math.round(zoomFactor * 100)}%
             </Button>
             <Button variant="ghost"
               aria-label={translate('feature.browser.zoomIn')}
-              disabled={zoomFactor >= maximumBrowserZoomFactor}
+              disabled={disabled || zoomFactor >= maximumBrowserZoomFactor}
               role="menuitem"
               type="button"
               onClick={onZoomIn}
@@ -127,10 +109,17 @@ export function BrowserWindowMenu({
           </span>
         </span>
         <span className="desktop-browser-window-menu__separator" role="separator" />
-        <Button variant="ghost" type="button" role="menuitem" onClick={() => runAndClose(onOpenDevTools)}>
+        <Button variant="ghost" type="button" disabled={disabled} role="menuitem" onClick={() => runAndClose(onOpenDevTools)}>
           {translate('feature.browser.openDevTools')}
         </Button>
-      </MenuSurface> : null}
+        {onOpenSettings ? <>
+          <span className="desktop-browser-window-menu__separator" role="separator" />
+          <Button variant="ghost" type="button" role="menuitem" onClick={() => runAndClose(onOpenSettings)}><Settings2 size={14} />{translate('feature.browser.settings.open')}</Button>
+        </> : null}
+      </>}>
+        <Button variant="ghost" aria-label={translate('feature.browser.menu')} title={translate('feature.browser.menu')}
+          className={`desktop-browser-navigation__button ${open ? 'is-active' : ''}`}><EllipsisVertical size={16} /></Button>
+      </Popover>
     </span>
   );
 }

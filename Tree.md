@@ -75,8 +75,8 @@ apps/desktop/preload/ — 0 direct / 5 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 692 total files
-├── src/ — 2 direct / 501 total files
+apps/desktop/renderer/ — 0 direct / 694 total files
+├── src/ — 2 direct / 503 total files
 │   ├── app/ — 3 direct / 69 total files
 │   │   ├── controller/ — 8 direct / 8 total files
 │   │   ├── layout/ — 27 direct / 27 total files
@@ -87,7 +87,7 @@ apps/desktop/renderer/ — 0 direct / 692 total files
 │   ├── composition/ — 35 direct / 40 total files
 │   │   ├── automation/ — 4 direct / 4 total files
 │   │   └── renderer-plugins/ — 1 direct / 1 total files
-│   ├── features/ — 273 files
+│   ├── features/ — 274 files
 │   │   ├── capabilities/ — 3 direct / 12 total files
 │   │   │   └── styles/ — 9 direct / 9 total files
 │   │   ├── chat/ — 8 direct / 178 total files
@@ -109,10 +109,10 @@ apps/desktop/renderer/ — 0 direct / 692 total files
 │   │   │   ├── subagents/ — 1 files
 │   │   │   │   └── avatars/ — 1 direct / 1 total files
 │   │   │   └── tool-runs/ — 22 direct / 22 total files
-│   │   ├── settings/ — 5 direct / 36 total files
+│   │   ├── settings/ — 5 direct / 37 total files
 │   │   │   ├── components/ — 2 direct / 2 total files
 │   │   │   ├── data-root/ — 12 direct / 12 total files
-│   │   │   ├── sections/ — 7 direct / 7 total files
+│   │   │   ├── sections/ — 8 direct / 8 total files
 │   │   │   ├── shortcuts/ — 1 direct / 1 total files
 │   │   │   └── styles/ — 9 direct / 9 total files
 │   │   └── workspace/ — 17 direct / 47 total files
@@ -126,7 +126,7 @@ apps/desktop/renderer/ — 0 direct / 692 total files
 │   │   └── sandboxed-plugin-ui/ — 3 direct / 3 total files
 │   ├── services/ — 9 files
 │   │   └── runtime-client/ — 9 direct / 9 total files
-│   └── shared/ — 92 files
+│   └── shared/ — 93 files
 │       ├── assets/ — 1 direct / 21 total files
 │       │   └── provider-logos/ — 20 direct / 20 total files
 │       ├── branding/ — 4 direct / 4 total files
@@ -137,7 +137,7 @@ apps/desktop/renderer/ — 0 direct / 692 total files
 │       ├── preferences/ — 6 direct / 6 total files
 │       ├── shortcuts/ — 3 direct / 3 total files
 │       ├── styles/ — 12 direct / 12 total files
-│       └── ui/ — 16 direct / 16 total files
+│       └── ui/ — 17 direct / 17 total files
 └── test/ — 191 files
     ├── integration/ — 2 direct / 2 total files
     └── unit/ — 189 files
@@ -231,7 +231,7 @@ packages/renderer-ui/ — 3 direct / 51 total files
 ### `packages/features/`
 
 ```text
-packages/features/ — 0 direct / 1209 total files
+packages/features/ — 0 direct / 1290 total files
 ├── approval-review/ — 2 direct / 20 total files
 │   ├── src/ — 17 files
 │   │   ├── contracts/ — 5 direct / 5 total files
@@ -256,27 +256,40 @@ packages/features/ — 0 direct / 1209 total files
 │   └── test/ — 7 files
 │       ├── renderer/ — 5 direct / 5 total files
 │       └── runtime/ — 2 direct / 2 total files
-├── browser/ — 2 direct / 102 total files
-│   ├── src/ — 74 files
-│   │   ├── contracts/ — 11 direct / 11 total files
-│   │   ├── main/ — 14 direct / 20 total files
+├── browser/ — 2 direct / 183 total files
+│   ├── src/ — 135 files
+│   │   ├── contracts/ — 15 direct / 15 total files
+│   │   ├── main/ — 14 direct / 38 total files
 │   │   │   ├── annotations/ — 3 direct / 3 total files
-│   │   │   └── cdp/ — 3 direct / 3 total files
-│   │   ├── preload/ — 2 direct / 2 total files
-│   │   ├── renderer/ — 25 direct / 37 total files
+│   │   │   ├── cdp/ — 3 direct / 3 total files
+│   │   │   ├── extensions/ — 7 direct / 7 total files
+│   │   │   ├── passwords/ — 6 direct / 6 total files
+│   │   │   └── settings/ — 5 direct / 5 total files
+│   │   ├── preload/ — 3 direct / 3 total files
+│   │   ├── renderer/ — 25 direct / 75 total files
 │   │   │   ├── address-bar/ — 4 direct / 4 total files
 │   │   │   ├── annotations/ — 5 direct / 5 total files
-│   │   │   └── load-error/ — 3 direct / 3 total files
+│   │   │   ├── extensions/ — 6 direct / 6 total files
+│   │   │   ├── load-error/ — 3 direct / 3 total files
+│   │   │   ├── passwords/ — 3 direct / 3 total files
+│   │   │   ├── records/ — 13 direct / 13 total files
+│   │   │   └── settings/ — 16 direct / 16 total files
 │   │   └── runtime/ — 4 direct / 4 total files
-│   └── test/ — 26 files
+│   └── test/ — 46 files
 │       ├── contracts/ — 2 direct / 2 total files
-│       ├── main/ — 9 direct / 12 total files
+│       ├── integration/ — 4 direct / 4 total files
+│       ├── main/ — 9 direct / 22 total files
 │       │   ├── annotations/ — 1 direct / 1 total files
-│       │   └── cdp/ — 2 direct / 2 total files
-│       ├── renderer/ — 6 direct / 10 total files
+│       │   ├── cdp/ — 2 direct / 2 total files
+│       │   ├── extensions/ — 2 direct / 2 total files
+│       │   ├── passwords/ — 4 direct / 4 total files
+│       │   └── settings/ — 4 direct / 4 total files
+│       ├── renderer/ — 8 direct / 16 total files
 │       │   ├── address-bar/ — 2 direct / 2 total files
 │       │   ├── annotations/ — 1 direct / 1 total files
-│       │   └── load-error/ — 1 direct / 1 total files
+│       │   ├── extensions/ — 1 direct / 1 total files
+│       │   ├── load-error/ — 1 direct / 1 total files
+│       │   └── settings/ — 3 direct / 3 total files
 │       └── runtime/ — 2 direct / 2 total files
 ├── collaboration/ — 2 direct / 32 total files
 │   ├── src/ — 25 files

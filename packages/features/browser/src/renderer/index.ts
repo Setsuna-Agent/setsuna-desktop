@@ -4,6 +4,7 @@ export {
   BrowserPanel,
 } from './BrowserPanel.js';
 export { browserRendererFeature } from './feature.js';
+export { browserRendererHostCapability, BrowserSettingsNavigationProvider } from './settings/context.js';
 export {
   BrowserWorkspacePanel,
   BrowserWorkspacePanelHostProvider,

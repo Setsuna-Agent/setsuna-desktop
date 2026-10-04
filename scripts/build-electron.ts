@@ -83,6 +83,11 @@ export async function buildElectron(): Promise<void> {
       sourcemap: true,
       external: ['electron'],
     }),
+    build({
+      entryPoints: [resolve(rootDir, 'packages/features/browser/src/preload/extension-actions.ts')],
+      outfile: resolve(rootDir, 'dist/electron/preload/browser-extensions.cjs'),
+      bundle: true, platform: 'node', target: 'node22', format: 'cjs', external: ['electron'],
+    }),
     ...createRuntimeBuildOptions(rootDir).map((options) => build(options)),
   ]);
 }

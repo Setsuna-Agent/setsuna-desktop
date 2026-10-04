@@ -1,0 +1,281 @@
+diff --git a/dist/chrome-web-store.preload.js b/dist/chrome-web-store.preload.js
+index 94fb2b4c5d240bc80aba0d8e72b526b12684daf9..2346e655be791f3ec3171574be7389db6911cf4e 100644
+--- a/dist/chrome-web-store.preload.js
++++ b/dist/chrome-web-store.preload.js
+@@ -292,7 +292,7 @@
+       window.navigation.addEventListener("navigate", maybeUpdateBranding);
+     }
+   }
+-  if (location.href.startsWith("https://chromewebstore.google.com")) {
++  if (location.origin === "https://chromewebstore.google.com" && process.isMainFrame) {
+     log("Injecting Chrome Web Store API");
+     setupChromeWebStoreApi();
+   }
+diff --git a/dist/cjs/browser/index.js b/dist/cjs/browser/index.js
+index 4580b782dcf28a2d8d9ec2f0318276365cf2b957..2260d39b432cdeb4275f3c046ffd85b933179275 100644
+--- a/dist/cjs/browser/index.js
++++ b/dist/cjs/browser/index.js
+@@ -1062,8 +1062,8 @@ async function readCrx(crxPath) {
+   const crxBuffer = await fs2.promises.readFile(crxPath);
+   return parseCrx(crxBuffer);
+ }
+-async function downloadCrx(url, dest) {
+-  const response = await fetch(url);
++async function downloadCrx(url, dest, request = fetch) {
++  const response = await request(url, { signal: AbortSignal.timeout(120000) });
+   if (!response.ok) {
+     throw new Error("Failed to download extension");
+   }
+@@ -1071,22 +1071,36 @@ async function downloadCrx(url, dest) {
+   const downloadStream = import_node_stream.Readable.fromWeb(response.body);
+   await (0, import_promises.pipeline)(downloadStream, fileStream);
+ }
+-async function downloadExtensionFromURL(url, extensionsDir, expectedExtensionId) {
++function assertApprovedManifest(manifest, approved) {
++  if (!approved) return;
++  const permissions = (value) => [
++    ...(value.permissions || []), ...(value.host_permissions || []),
++    ...(value.content_scripts || []).flatMap((script) => script.matches || [])
++  ];
++  const allowed = new Set(permissions(approved));
++  if (manifest.manifest_version !== approved.manifest_version || manifest.version !== approved.version ||
++      permissions(manifest).some((permission) => !allowed.has(permission))) {
++    throw new Error("Downloaded extension differs from the approved manifest. Reload the store page and try again.");
++  }
++}
++async function downloadExtensionFromURL(url, extensionsDir, expectedExtensionId, request = fetch, approvedManifest) {
+   d2("downloading %s", url);
+   const installUuid = crypto.randomUUID();
+   const crxPath = path3.join(os.tmpdir(), `electron-cws-download_${installUuid}.crx`);
++  let unpackedPath;
+   try {
+-    await downloadCrx(url, crxPath);
++    await downloadCrx(url, crxPath, request);
+     const crx = await readCrx(crxPath);
+     if (expectedExtensionId && expectedExtensionId !== crx.extensionId) {
+       throw new Error(
+         `CRX mismatches expected extension ID: ${expectedExtensionId} !== ${crx.extensionId}`
+       );
+     }
+-    const unpackedPath = path3.join(extensionsDir, crx.extensionId, installUuid);
++    unpackedPath = path3.join(extensionsDir, crx.extensionId, installUuid);
+     await fs2.promises.mkdir(unpackedPath, { recursive: true });
+     const manifest = await unpackCrx(crx, unpackedPath);
+-    if (!manifest.version) {
++    assertApprovedManifest(manifest, approvedManifest);
++    if (typeof manifest.version !== "string" || !/^\d+(?:\.\d+){0,3}$/.test(manifest.version)) {
+       throw new Error("Installed extension is missing manifest version");
+     }
+     const versionedPath = path3.join(extensionsDir, crx.extensionId, `${manifest.version}_0`);
+@@ -1094,13 +1108,16 @@ async function downloadExtensionFromURL(url, extensionsDir, expectedExtensionId)
+     return versionedPath;
+   } finally {
+     await fs2.promises.rm(crxPath, { force: true });
++    if (unpackedPath) await fs2.promises.rm(unpackedPath, { recursive: true, force: true });
+   }
+ }
+-async function downloadExtension(extensionId, extensionsDir) {
++async function downloadExtension(extensionId, extensionsDir, request = fetch, approvedManifest) {
++  if (typeof extensionId !== "string" || !/^[a-p]{32}$/.test(extensionId)) throw new Error("Invalid extension ID");
+   const url = getExtensionCrxURL(extensionId);
+-  return await downloadExtensionFromURL(url, extensionsDir, extensionId);
++  return await downloadExtensionFromURL(url, extensionsDir, extensionId, request, approvedManifest);
+ }
+ async function installExtension(extensionId, opts = {}) {
++  if (typeof extensionId !== "string" || !/^[a-p]{32}$/.test(extensionId)) throw new Error("Invalid extension ID");
+   d2("installing %s", extensionId);
+   const session = opts.session || import_electron2.session.defaultSession;
+   const sessionExtensions = session.extensions || session;
+@@ -1113,17 +1130,19 @@ async function installExtension(extensionId, opts = {}) {
+   const existingExtensionInfo = await findExtensionInstall(extensionId, extensionsPath);
+   if (existingExtensionInfo && existingExtensionInfo.type === "store") {
+     d2("%s already installed", extensionId);
++    assertApprovedManifest(JSON.parse(await fs2.promises.readFile(path3.join(existingExtensionInfo.path, "manifest.json"), "utf8")), opts.approvedManifest);
+     return await sessionExtensions.loadExtension(
+       existingExtensionInfo.path,
+       opts.loadExtensionOptions
+     );
+   }
+-  const extensionPath = await downloadExtension(extensionId, extensionsPath);
++  const extensionPath = await downloadExtension(extensionId, extensionsPath, session.fetch.bind(session), opts.approvedManifest);
+   const extension = await sessionExtensions.loadExtension(extensionPath, opts.loadExtensionOptions);
+   d2("installed %s", extensionId);
+   return extension;
+ }
+ async function uninstallExtension(extensionId, opts = {}) {
++  if (typeof extensionId !== "string" || !/^[a-p]{32}$/.test(extensionId)) throw new Error("Invalid extension ID");
+   d2("uninstalling %s", extensionId);
+   const session = opts.session || import_electron2.session.defaultSession;
+   const sessionExtensions = session.extensions || session;
+@@ -1196,7 +1215,8 @@ function getExtensionInstallStatus(state, extensionId, manifest) {
+   return ExtensionInstallStatus.ENABLED;
+ }
+ async function beginInstall({ sender, senderFrame }, state, details) {
+-  const extensionId = details.id;
++  const extensionId = details?.id;
++  if (typeof extensionId !== "string" || !/^[a-p]{32}$/.test(extensionId)) return { result: Result.INVALID_ID };
+   try {
+     if (state.installing.has(extensionId)) {
+       return { result: Result.INSTALL_IN_PROGRESS };
+@@ -1227,7 +1247,8 @@ async function beginInstall({ sender, senderFrame }, state, details) {
+     }
+     let icon;
+     try {
+-      const response = await fetch(iconUrl.href);
++      if (iconUrl.protocol !== "https:") return { result: Result.INVALID_ICON_URL };
++      const response = await state.session.fetch(iconUrl.href, { signal: AbortSignal.timeout(15000) });
+       const imageBuffer = Buffer.from(await response.arrayBuffer());
+       icon = import_electron3.nativeImage.createFromBuffer(imageBuffer);
+     } catch {
+@@ -1253,7 +1274,7 @@ async function beginInstall({ sender, senderFrame }, state, details) {
+       }
+     }
+     state.installing.add(extensionId);
+-    await installExtension(extensionId, state);
++    await installExtension(extensionId, { ...state, approvedManifest: manifest });
+     return { result: Result.SUCCESS };
+   } catch (error) {
+     console.error("Extension installation failed:", error);
+@@ -1275,7 +1296,7 @@ function registerWebStoreApi(webStoreState) {
+       import_electron3.ipcMain.handle(channel, async function handleWebStoreIpc(event, ...args) {
+         d3("received %s", channel);
+         const senderOrigin = event.senderFrame?.origin;
+-        if (!senderOrigin || !senderOrigin.startsWith(WEBSTORE_URL)) {
++        if (senderOrigin !== WEBSTORE_URL || event.senderFrame !== event.sender.mainFrame) {
+           d3("ignoring webstore request from %s", senderOrigin);
+           return;
+         }
+diff --git a/dist/esm/browser/index.mjs b/dist/esm/browser/index.mjs
+index 85ba0e0023ea491e8d07b9a8effd01cfc89ee977..087aa24efff56085ebcd858b9ce0bc5b97ddaf7e 100644
+--- a/dist/esm/browser/index.mjs
++++ b/dist/esm/browser/index.mjs
+@@ -339,8 +339,8 @@ async function readCrx(crxPath) {
+   const crxBuffer = await fs2.promises.readFile(crxPath);
+   return parseCrx(crxBuffer);
+ }
+-async function downloadCrx(url, dest) {
+-  const response = await fetch(url);
++async function downloadCrx(url, dest, request = fetch) {
++  const response = await request(url, { signal: AbortSignal.timeout(120000) });
+   if (!response.ok) {
+     throw new Error("Failed to download extension");
+   }
+@@ -348,22 +348,36 @@ async function downloadCrx(url, dest) {
+   const downloadStream = Readable.fromWeb(response.body);
+   await pipeline(downloadStream, fileStream);
+ }
+-async function downloadExtensionFromURL(url, extensionsDir, expectedExtensionId) {
++function assertApprovedManifest(manifest, approved) {
++  if (!approved) return;
++  const permissions = (value) => [
++    ...(value.permissions || []), ...(value.host_permissions || []),
++    ...(value.content_scripts || []).flatMap((script) => script.matches || [])
++  ];
++  const allowed = new Set(permissions(approved));
++  if (manifest.manifest_version !== approved.manifest_version || manifest.version !== approved.version ||
++      permissions(manifest).some((permission) => !allowed.has(permission))) {
++    throw new Error("Downloaded extension differs from the approved manifest. Reload the store page and try again.");
++  }
++}
++async function downloadExtensionFromURL(url, extensionsDir, expectedExtensionId, request = fetch, approvedManifest) {
+   d2("downloading %s", url);
+   const installUuid = crypto.randomUUID();
+   const crxPath = path3.join(os.tmpdir(), `electron-cws-download_${installUuid}.crx`);
++  let unpackedPath;
+   try {
+-    await downloadCrx(url, crxPath);
++    await downloadCrx(url, crxPath, request);
+     const crx = await readCrx(crxPath);
+     if (expectedExtensionId && expectedExtensionId !== crx.extensionId) {
+       throw new Error(
+         `CRX mismatches expected extension ID: ${expectedExtensionId} !== ${crx.extensionId}`
+       );
+     }
+-    const unpackedPath = path3.join(extensionsDir, crx.extensionId, installUuid);
++    unpackedPath = path3.join(extensionsDir, crx.extensionId, installUuid);
+     await fs2.promises.mkdir(unpackedPath, { recursive: true });
+     const manifest = await unpackCrx(crx, unpackedPath);
+-    if (!manifest.version) {
++    assertApprovedManifest(manifest, approvedManifest);
++    if (typeof manifest.version !== "string" || !/^\d+(?:\.\d+){0,3}$/.test(manifest.version)) {
+       throw new Error("Installed extension is missing manifest version");
+     }
+     const versionedPath = path3.join(extensionsDir, crx.extensionId, `${manifest.version}_0`);
+@@ -371,13 +385,16 @@ async function downloadExtensionFromURL(url, extensionsDir, expectedExtensionId)
+     return versionedPath;
+   } finally {
+     await fs2.promises.rm(crxPath, { force: true });
++    if (unpackedPath) await fs2.promises.rm(unpackedPath, { recursive: true, force: true });
+   }
+ }
+-async function downloadExtension(extensionId, extensionsDir) {
++async function downloadExtension(extensionId, extensionsDir, request = fetch, approvedManifest) {
++  if (typeof extensionId !== "string" || !/^[a-p]{32}$/.test(extensionId)) throw new Error("Invalid extension ID");
+   const url = getExtensionCrxURL(extensionId);
+-  return await downloadExtensionFromURL(url, extensionsDir, extensionId);
++  return await downloadExtensionFromURL(url, extensionsDir, extensionId, request, approvedManifest);
+ }
+ async function installExtension(extensionId, opts = {}) {
++  if (typeof extensionId !== "string" || !/^[a-p]{32}$/.test(extensionId)) throw new Error("Invalid extension ID");
+   d2("installing %s", extensionId);
+   const session = opts.session || electronSession.defaultSession;
+   const sessionExtensions = session.extensions || session;
+@@ -390,17 +407,19 @@ async function installExtension(extensionId, opts = {}) {
+   const existingExtensionInfo = await findExtensionInstall(extensionId, extensionsPath);
+   if (existingExtensionInfo && existingExtensionInfo.type === "store") {
+     d2("%s already installed", extensionId);
++    assertApprovedManifest(JSON.parse(await fs2.promises.readFile(path3.join(existingExtensionInfo.path, "manifest.json"), "utf8")), opts.approvedManifest);
+     return await sessionExtensions.loadExtension(
+       existingExtensionInfo.path,
+       opts.loadExtensionOptions
+     );
+   }
+-  const extensionPath = await downloadExtension(extensionId, extensionsPath);
++  const extensionPath = await downloadExtension(extensionId, extensionsPath, session.fetch.bind(session), opts.approvedManifest);
+   const extension = await sessionExtensions.loadExtension(extensionPath, opts.loadExtensionOptions);
+   d2("installed %s", extensionId);
+   return extension;
+ }
+ async function uninstallExtension(extensionId, opts = {}) {
++  if (typeof extensionId !== "string" || !/^[a-p]{32}$/.test(extensionId)) throw new Error("Invalid extension ID");
+   d2("uninstalling %s", extensionId);
+   const session = opts.session || electronSession.defaultSession;
+   const sessionExtensions = session.extensions || session;
+@@ -473,7 +492,8 @@ function getExtensionInstallStatus(state, extensionId, manifest) {
+   return ExtensionInstallStatus.ENABLED;
+ }
+ async function beginInstall({ sender, senderFrame }, state, details) {
+-  const extensionId = details.id;
++  const extensionId = details?.id;
++  if (typeof extensionId !== "string" || !/^[a-p]{32}$/.test(extensionId)) return { result: Result.INVALID_ID };
+   try {
+     if (state.installing.has(extensionId)) {
+       return { result: Result.INSTALL_IN_PROGRESS };
+@@ -504,7 +524,8 @@ async function beginInstall({ sender, senderFrame }, state, details) {
+     }
+     let icon;
+     try {
+-      const response = await fetch(iconUrl.href);
++      if (iconUrl.protocol !== "https:") return { result: Result.INVALID_ICON_URL };
++      const response = await state.session.fetch(iconUrl.href, { signal: AbortSignal.timeout(15000) });
+       const imageBuffer = Buffer.from(await response.arrayBuffer());
+       icon = nativeImage.createFromBuffer(imageBuffer);
+     } catch {
+@@ -530,7 +551,7 @@ async function beginInstall({ sender, senderFrame }, state, details) {
+       }
+     }
+     state.installing.add(extensionId);
+-    await installExtension(extensionId, state);
++    await installExtension(extensionId, { ...state, approvedManifest: manifest });
+     return { result: Result.SUCCESS };
+   } catch (error) {
+     console.error("Extension installation failed:", error);
+@@ -552,7 +573,7 @@ function registerWebStoreApi(webStoreState) {
+       ipcMain.handle(channel, async function handleWebStoreIpc(event, ...args) {
+         d3("received %s", channel);
+         const senderOrigin = event.senderFrame?.origin;
+-        if (!senderOrigin || !senderOrigin.startsWith(WEBSTORE_URL)) {
++        if (senderOrigin !== WEBSTORE_URL || event.senderFrame !== event.sender.mainFrame) {
+           d3("ignoring webstore request from %s", senderOrigin);
+           return;
+         }

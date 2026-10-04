@@ -35,7 +35,7 @@ export function BrowserHomePage({
         emptyDescription={translate('feature.browser.bookmarksEmptyDescription')}
         emptyIcon={Star}
         emptyTitle={translate('feature.browser.bookmarksEmptyTitle')}
-        entries={bookmarks.map((entry) => ({ ...entry, timestamp: entry.savedAt }))}
+        entries={bookmarks.slice(0, 50).map((entry) => ({ ...entry, timestamp: entry.savedAt }))}
         id="desktop-browser-bookmarks-title"
         itemIcon={<Star size={15} />}
         onNavigate={onNavigate}
@@ -46,7 +46,7 @@ export function BrowserHomePage({
         emptyDescription={translate('feature.browser.historyEmptyDescription')}
         emptyIcon={History}
         emptyTitle={translate('feature.browser.historyEmptyTitle')}
-        entries={entries.map((entry) => ({ ...entry, timestamp: entry.visitedAt }))}
+        entries={entries.slice(0, 50).map((entry) => ({ ...entry, id: entry.url, timestamp: entry.visitedAt }))}
         id="desktop-browser-history-title"
         itemIcon={<BrowserFeatureIcon size={15} />}
         onNavigate={onNavigate}
@@ -60,6 +60,7 @@ export function BrowserHomePage({
 }
 
 type BrowserHomeEntry = Readonly<{
+  id: string;
   timestamp: number;
   title: string;
   url: string;
@@ -98,7 +99,7 @@ function BrowserHomeSection({
       {entries.length > 0 ? (
         <ol className="desktop-browser-home-section__list">
           {entries.map((entry) => (
-            <li className={onRemove ? 'has-action' : undefined} key={entry.url}>
+            <li className={onRemove ? 'has-action' : undefined} key={entry.id}>
               <Button variant="ghost"
                 aria-label={`${openLabel} ${entry.title}`}
                 className="desktop-browser-home-section__link"

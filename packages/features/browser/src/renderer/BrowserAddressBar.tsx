@@ -1,7 +1,8 @@
 import { TextField, Button } from '@setsuna-desktop/renderer-ui';
 
 import { ExternalLink } from 'lucide-react';
-import { useId } from 'react';
+import { useId, useLayoutEffect, useState } from 'react';
+import type { BrowserSearchEngine } from '../contracts/settings.js';
 import type { BrowserHistoryEntry } from './browserHistory.js';
 import type { BrowserTranslate } from './messages.js';
 import { BrowserAddressSuggestions } from './address-bar/BrowserAddressSuggestions.js';
@@ -19,7 +20,11 @@ export function BrowserAddressBar({
   onRemoveHistory,
   translate,
   value,
+  showFullUrl = true,
+  searchEngine,
 }: {
+  showFullUrl?: boolean;
+  searchEngine?: BrowserSearchEngine;
   externalUrl: string | null;
   hidden: boolean;
   history: readonly BrowserHistoryEntry[];
@@ -32,12 +37,20 @@ export function BrowserAddressBar({
   value: string;
 }) {
   const suggestionsId = useId();
-  const suggestions = useBrowserAddressSuggestions({ hidden, history, onChange, onNavigate, onRefreshHistory, onRemoveHistory, value });
+  const [focused, setFocused] = useState(false);
+  const suggestions = useBrowserAddressSuggestions({ hidden, history, onChange, onNavigate, onRefreshHistory, onRemoveHistory, value, searchEngine });
+  useLayoutEffect(() => {
+    if (focused) suggestions.inputRef.current?.select();
+  }, [focused, suggestions.inputRef]);
+  let displayValue = value;
+  if (!showFullUrl && !focused && externalUrl === value) {
+    try { displayValue = new URL(value).host; } catch { /* Keep partially entered text intact. */ }
+  }
   return (
     <form
       className="desktop-browser-address-form"
       onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) suggestions.close();
+        if (!event.currentTarget.contains(event.relatedTarget)) { suggestions.close(); setFocused(false); }
       }}
       onSubmit={(event) => {
         event.preventDefault();
@@ -57,12 +70,12 @@ export function BrowserAddressBar({
           ref={suggestions.inputRef}
           role="combobox"
           spellCheck={false}
-          value={value}
+          value={displayValue}
           onChange={(event) => suggestions.change(event.currentTarget.value)}
           onCompositionStart={() => { suggestions.composing.current = true; }}
           onCompositionEnd={() => { suggestions.composing.current = false; }}
           onKeyDown={suggestions.onKeyDown}
-          onFocus={(event) => { event.currentTarget.select(); suggestions.focus(); }}
+          onFocus={() => { setFocused(true); suggestions.focus(); }}
         />
         {externalUrl ? (
           <Button variant="ghost"

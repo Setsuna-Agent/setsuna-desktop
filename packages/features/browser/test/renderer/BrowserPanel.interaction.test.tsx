@@ -6,20 +6,24 @@ import type { WebviewTag } from 'electron';
 import { useCallback, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  DEFAULT_BROWSER_URL, parseBrowserAnnotationMessage, type BrowserAnnotationSendHandler,
-  type BrowserAnnotationTarget, type BrowserContextMenuRequest, type BrowserDesktopBridge,
+  DEFAULT_BROWSER_URL, DEFAULT_BROWSER_PREFERENCES, parseBrowserAnnotationMessage, type BrowserAnnotationSendHandler,
+  type BrowserAnnotationTarget, type BrowserContextMenuRequest, type BrowserDesktopBridge, type BrowserExtension,
 } from '../../src/contracts/index.js';
 import { BrowserPanel } from '../../src/renderer/BrowserPanel.js';
 import {
   BROWSER_BOOKMARKS_STORAGE_KEY,
   readBrowserBookmarks,
+  writeBrowserBookmarkTree,
 } from '../../src/renderer/browserBookmarks.js';
+import { BOOKMARK_BAR_ID, OTHER_BOOKMARKS_ID, emptyBookmarkTree, removeBookmarkNode, saveBookmarkNode } from '../../src/renderer/records/bookmarkTree.js';
 import {
   BROWSER_HISTORY_STORAGE_KEY,
   readBrowserHistory,
   writeBrowserHistory,
 } from '../../src/renderer/browserHistory.js';
 import { translateBrowserMessage } from '../../src/renderer/messages.js';
+import { BROWSER_EXTENSION_PINS_KEY } from '../../src/renderer/extensions/useBrowserExtensionPins.js';
+import { BrowserSettingsNavigationProvider } from '../../src/renderer/settings/context.js';
 
 const translate = (key: Parameters<typeof translateBrowserMessage>[1]) => (
   translateBrowserMessage('en-US', key)
@@ -31,10 +35,199 @@ afterEach(() => {
   vi.restoreAllMocks();
   window.localStorage.removeItem(BROWSER_BOOKMARKS_STORAGE_KEY);
   window.localStorage.removeItem(BROWSER_HISTORY_STORAGE_KEY);
+  window.localStorage.removeItem(BROWSER_EXTENSION_PINS_KEY);
   browserBridge = createBrowserBridge();
 });
 
 describe('BrowserPanel interactions', () => {
+  it('opens browser settings from the internal home page and uses the configured search engine', async () => {
+    browserBridge = createBrowserBridge({ getBrowserPreferences: async () => ({ ...DEFAULT_BROWSER_PREFERENCES, searchEngine: 'baidu' }) });
+    const openSettings = vi.fn();
+    render(<BrowserSettingsNavigationProvider value={{ openSettings, openPage: vi.fn() }}><BrowserPanelHarness url={DEFAULT_BROWSER_URL} /></BrowserSettingsNavigationProvider>);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Browser menu' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Browser settings' }));
+    expect(openSettings).toHaveBeenCalledWith('browser');
+    const address = screen.getByRole('combobox', { name: 'Address or search' });
+    await user.type(address, 'test browser{Enter}');
+    await waitFor(() => expect(document.querySelector('webview')?.getAttribute('src')).toBe('https://www.baidu.com/s?wd=test%20browser'));
+  });
+  const newTabExtension: BrowserExtension = {
+    id: 'a'.repeat(32), name: 'Test new tab', version: '1', icon: null, actionIcon: null, hasOptions: false, hasPopup: false,
+    newTabUrl: `chrome-extension://${'a'.repeat(32)}/newtab.html`,
+  };
+
+  it('searches, removes and reopens history from the menu when an extension owns the new tab page', async () => {
+    writeBrowserHistory([
+      { title: 'Documentation', url: 'https://example.org/docs', visitedAt: 200 },
+      { title: 'Home page', url: 'https://example.org/', visitedAt: 100 },
+    ]);
+    browserBridge = createBrowserBridge({ getExtensions: async () => [newTabExtension] });
+    renderBrowserPanel(DEFAULT_BROWSER_URL);
+    await waitFor(() => expect(document.querySelector('webview')?.getAttribute('src')).toBe(newTabExtension.newTabUrl));
+    const loadURL = vi.fn(async () => undefined);
+    Object.assign(document.querySelector('webview')!, { loadURL });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Browser menu' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Browsing history' }));
+    await user.type(screen.getByRole('textbox', { name: 'Search' }), 'docs');
+    expect(screen.queryByRole('button', { name: 'Open Home page' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Delete Documentation' }));
+    expect(readBrowserHistory().map((entry) => entry.url)).toEqual(['https://example.org/']);
+    await user.clear(screen.getByRole('textbox', { name: 'Search' }));
+    await user.click(screen.getByRole('button', { name: 'Open Home page' }));
+    await waitFor(() => expect(loadURL).toHaveBeenCalledWith('https://example.org/'));
+    expect(screen.queryByRole('dialog', { name: 'Browsing history' })).toBeNull();
+  });
+
+  it('edits a saved bookmark from the menu, synchronizes the star, and opens the edited address', async () => {
+    renderBrowserPanel();
+    const loadURL = vi.fn(async () => undefined);
+    Object.assign(document.querySelector('webview')!, { loadURL });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Bookmark current page' }));
+    await user.click(screen.getByRole('button', { name: 'Browser menu' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Bookmarks' }));
+    await user.click(screen.getByRole('button', { name: 'Edit New tab' }));
+    await user.clear(screen.getByRole('textbox', { name: 'Name' }));
+    await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Example docs');
+    await user.clear(screen.getByRole('textbox', { name: 'URL' }));
+    await user.type(screen.getByRole('textbox', { name: 'URL' }), 'https://example.org/docs');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(readBrowserBookmarks()).toMatchObject([{ title: 'Example docs', url: 'https://example.org/docs' }]);
+    await user.click(screen.getByRole('button', { name: 'Open Example docs' }));
+    await waitFor(() => expect(loadURL).toHaveBeenCalledWith('https://example.org/docs'));
+    expect(screen.getByRole('button', { name: 'Remove current bookmark' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Browser menu' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Bookmarks' }));
+    await user.click(screen.getByRole('button', { name: 'Delete Example docs' }));
+    expect(readBrowserBookmarks()).toEqual([]);
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('button', { name: 'Bookmark current page' })).toBeTruthy();
+  });
+
+  it('clears all history after confirmation even when search is filtered, without deleting bookmarks', async () => {
+    writeBrowserHistory([
+      { title: 'Docs', url: 'https://example.org/docs', visitedAt: Date.now() },
+      { title: 'Home', url: 'https://example.org/', visitedAt: Date.now() - 86_400_000 },
+    ]);
+    renderBrowserPanel();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Bookmark current page' }));
+    await user.click(screen.getByRole('button', { name: 'Browsing history' }));
+    await user.type(screen.getByRole('textbox', { name: 'Search' }), 'docs');
+    await user.click(screen.getByRole('button', { name: 'Clear all history' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(readBrowserHistory()).toHaveLength(2);
+    await user.click(screen.getByRole('button', { name: 'Clear all history' }));
+    await user.click(screen.getByRole('button', { name: 'Confirm deletion' }));
+    expect(readBrowserHistory()).toEqual([]);
+    expect(readBrowserBookmarks()).toHaveLength(1);
+    const webview = document.querySelector('webview')!;
+    Object.assign(webview, { getURL: () => 'https://example.com/', getZoomFactor: () => 1, canGoBack: () => false, canGoForward: () => false });
+    act(() => webview.dispatchEvent(Object.assign(new Event('page-title-updated'), { title: 'Late title' })));
+    expect(readBrowserHistory()).toEqual([]);
+    act(() => webview.dispatchEvent(new Event('did-navigate')));
+    expect(readBrowserHistory()).toMatchObject([{ url: 'https://example.com/' }]);
+  });
+
+  it('keeps a pinned history panel open while navigating and closes it from its toolbar button', async () => {
+    writeBrowserHistory([{ title: 'Docs', url: 'https://example.org/docs', visitedAt: Date.now() }]);
+    renderBrowserPanel();
+    const loadURL = vi.fn(async () => undefined);
+    Object.assign(document.querySelector('webview')!, { loadURL });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Browsing history' }));
+    await user.click(screen.getByRole('button', { name: 'Pin to sidebar' }));
+    await user.click(screen.getByRole('button', { name: 'Open Docs' }));
+    await waitFor(() => expect(loadURL).toHaveBeenCalledWith('https://example.org/docs'));
+    expect(screen.getByRole('region', { name: 'Browsing history' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Browsing history' }));
+    expect(screen.queryByRole('region', { name: 'Browsing history' })).toBeNull();
+  });
+
+  it('keeps extension controls usable, then dismisses the menu on outside pointer input or Escape', async () => {
+    browserBridge = createBrowserBridge({ getExtensions: async () => [{ ...newTabExtension, newTabUrl: null }] });
+    renderBrowserPanel('https://example.com');
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Extensions', exact: true }));
+    await user.click(await screen.findByRole('button', { name: `Pin to toolbar ${newTabExtension.name}` }));
+    expect(screen.getByRole('dialog', { name: 'Extensions' })).toBeTruthy();
+    await user.click(document.documentElement);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Extensions' })).toBeNull());
+    await user.click(screen.getByRole('button', { name: 'Extensions', exact: true }));
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Extensions' })).toBeNull());
+  });
+
+  it.each(['options', 'unpin', 'remove'])('runs %s from a pinned extension context menu without opening its popup', async (action) => {
+    const extension = { ...newTabExtension, hasPopup: true, hasOptions: true, newTabUrl: null };
+    const openExtension = vi.fn(async () => true);
+    const removeExtension = vi.fn(async () => true);
+    window.localStorage.setItem(BROWSER_EXTENSION_PINS_KEY, JSON.stringify([extension.id]));
+    browserBridge = createBrowserBridge({ getExtensions: async () => [extension], openExtension, removeExtension });
+    renderBrowserPanel(DEFAULT_BROWSER_URL);
+    fireEvent.contextMenu(await screen.findByRole('button', { name: extension.name, exact: true }), { clientX: 120, clientY: 30 });
+    expect(openExtension).not.toHaveBeenCalled();
+    const label = { options: 'Extension options', unpin: 'Unpin from toolbar', remove: 'Remove extension' }[action];
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('menuitem', { name: label }));
+    if (action === 'options') expect(openExtension).toHaveBeenCalledExactlyOnceWith(extension.id, 'options', undefined, undefined);
+    if (action === 'remove') expect(removeExtension).toHaveBeenCalledExactlyOnceWith(extension.id);
+    if (action === 'unpin') expect(JSON.parse(window.localStorage.getItem(BROWSER_EXTENSION_PINS_KEY)!)).toEqual([]);
+    expect(openExtension).not.toHaveBeenCalledWith(extension.id, 'popup');
+  });
+
+  it('pins an extension, invokes its popup from the toolbar, and removes the shortcut on uninstall', async () => {
+    const extension = { ...newTabExtension, hasPopup: true, newTabUrl: null };
+    let changed: (extensions: readonly BrowserExtension[]) => void = () => undefined;
+    const openExtension = vi.fn(async () => true);
+    browserBridge = createBrowserBridge({
+      getExtensions: async () => [extension], openExtension,
+      onExtensionsChanged: (listener) => { changed = listener; return () => undefined; },
+    });
+    renderBrowserPanel(DEFAULT_BROWSER_URL);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Extensions', exact: true }));
+    await user.click(await screen.findByRole('button', { name: `Pin to toolbar ${extension.name}` }));
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('button', { name: extension.name, exact: true }));
+    await waitFor(() => expect(openExtension).toHaveBeenCalledExactlyOnceWith(extension.id, 'popup', expect.any(Object), undefined));
+    expect(JSON.parse(window.localStorage.getItem(BROWSER_EXTENSION_PINS_KEY)!)).toEqual([extension.id]);
+    act(() => changed([]));
+    expect(screen.queryByRole('button', { name: extension.name, exact: true })).toBeNull();
+  });
+
+  it('opens the extension for a new tab and Home, then falls back after uninstall', async () => {
+    let changed: (extensions: readonly BrowserExtension[]) => void = () => undefined;
+    browserBridge = createBrowserBridge({
+      getExtensions: async () => [newTabExtension],
+      onExtensionsChanged: (listener) => { changed = listener; return () => undefined; },
+    });
+    renderBrowserPanel(DEFAULT_BROWSER_URL);
+    await waitFor(() => expect(document.querySelector('webview')?.getAttribute('src')).toBe(newTabExtension.newTabUrl));
+    const webview = document.querySelector('webview') as unknown as WebviewTag;
+    const loadURL = vi.fn(async () => undefined);
+    Object.assign(webview, { loadURL });
+    const user = userEvent.setup();
+    await user.type(screen.getByRole('combobox', { name: 'Address or search' }), 'https://example.com{Enter}');
+    await waitFor(() => expect(loadURL).toHaveBeenCalledWith('https://example.com'));
+    await user.click(screen.getByRole('button', { name: 'Home' }));
+    await waitFor(() => expect(loadURL).toHaveBeenLastCalledWith(newTabExtension.newTabUrl));
+    act(() => changed([]));
+    await waitFor(() => expect(document.querySelector('webview')).toBeNull());
+  });
+
+  it('does not replace a website when installed-extension metadata arrives after navigation', async () => {
+    let resolve: (extensions: readonly BrowserExtension[]) => void = () => undefined;
+    browserBridge = createBrowserBridge({ getExtensions: () => new Promise((done) => { resolve = done; }) });
+    renderBrowserPanel(DEFAULT_BROWSER_URL);
+    const user = userEvent.setup();
+    await user.type(screen.getByRole('combobox', { name: 'Address or search' }), 'https://example.com{Enter}');
+    act(() => resolve([newTabExtension]));
+    await waitFor(() => expect(document.querySelector('webview')?.getAttribute('src')).toBe('https://example.com'));
+  });
+
   it.each(['reload', 'navigation', 'in-page navigation', 'home'])('starts a fresh annotation batch after %s without capturing old node IDs', async (navigation) => {
     const target: BrowserAnnotationTarget = {
       id: '27f0b1c9-8c70-452e-8cce-2dd7e029f084', url: 'https://example.com/', title: 'Example',
@@ -159,8 +352,28 @@ describe('BrowserPanel interactions', () => {
     expect(screen.getByRole('button', { name: 'Open New tab' })).toBeTruthy();
   });
 
+  it('keeps same-URL bookmarks distinct on home when another folder adds or removes a bookmark', async () => {
+    let tree = saveBookmarkNode(emptyBookmarkTree(), { title: 'Work docs', url: 'https://example.com/docs', parentId: BOOKMARK_BAR_ID },
+      { id: 'work-docs', type: 'bookmark', create: true, dateAdded: 100 })!;
+    tree = saveBookmarkNode(tree, { title: 'Personal docs', url: 'https://example.com/docs', parentId: OTHER_BOOKMARKS_ID },
+      { id: 'personal-docs', type: 'bookmark', create: true, dateAdded: 200 })!;
+    writeBrowserBookmarkTree(tree);
+    await act(async () => { renderBrowserPanel(DEFAULT_BROWSER_URL); });
+    expect(screen.getAllByRole('button', { name: /^Open / })).toHaveLength(2);
+
+    tree = saveBookmarkNode(tree, { title: 'New page', url: 'https://example.org/', parentId: BOOKMARK_BAR_ID },
+      { id: 'new-page', type: 'bookmark', create: true, dateAdded: 300 })!;
+    act(() => writeBrowserBookmarkTree(tree));
+    expect(screen.getAllByRole('button', { name: /^Open / })).toHaveLength(3);
+    act(() => writeBrowserBookmarkTree(removeBookmarkNode(tree, 'work-docs')));
+    expect(screen.getAllByRole('button', { name: /^Open / })).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: 'Open Work docs' })).toBeNull();
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Open Personal docs' }));
+    expect(document.querySelector('webview')?.getAttribute('src')).toBe('https://example.com/docs');
+  });
+
   it('records successful main-frame navigations with their page title', async () => {
-    renderBrowserPanel();
+    await act(async () => { renderBrowserPanel(); });
     const webview = document.querySelector('webview') as unknown as WebviewTag;
     Object.assign(webview, {
       canGoBack: () => false,
@@ -180,6 +393,27 @@ describe('BrowserPanel interactions', () => {
     }));
   });
 
+  it.each([false, true])('waits for the saved history preference (%s) before recording navigation', async (rememberHistory) => {
+    let resolve!: (value: typeof DEFAULT_BROWSER_PREFERENCES) => void;
+    browserBridge = createBrowserBridge({ getBrowserPreferences: () => new Promise((done) => { resolve = done; }) });
+    renderBrowserPanel();
+    const webview = document.querySelector('webview')!;
+    let url = 'https://example.com/before-preferences';
+    Object.assign(webview, {
+      getURL: () => url, getZoomFactor: () => 1, canGoBack: () => false, canGoForward: () => false,
+    });
+    fireEvent(webview, new Event('did-navigate'));
+    fireEvent(webview, Object.assign(new Event('page-title-updated'), { title: 'Before preferences' }));
+    expect(readBrowserHistory()).toEqual([]);
+
+    await act(async () => resolve({ ...DEFAULT_BROWSER_PREFERENCES, rememberHistory }));
+    expect(readBrowserHistory()).toEqual([]);
+    url = 'https://example.com/after-preferences';
+    fireEvent(webview, new Event('did-navigate'));
+    fireEvent(webview, Object.assign(new Event('page-title-updated'), { title: 'After preferences' }));
+    expect(readBrowserHistory().map((entry) => entry.url)).toEqual(rememberHistory ? [url] : []);
+  });
+
   it('commits the requested zoom only after the webview accepts it', async () => {
     const setZoomFactor = vi.fn();
     renderBrowserPanel();
@@ -187,8 +421,7 @@ describe('BrowserPanel interactions', () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Browser menu' }));
-    // Menu contents mount on opening so the reveal animation starts with the interaction.
-    expect(screen.getByRole('menu', { name: 'Browser window settings' })).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Browser window settings' })).toBeTruthy();
     for (const name of ['Print page', 'Capture screenshot', 'Show device toolbar', 'Open developer tools']) {
       expect(screen.getByRole('menuitem', { name })).toBeTruthy();
     }
@@ -350,6 +583,26 @@ function installBrowserBridge({
 
 function createBrowserBridge(overrides: Partial<BrowserDesktopBridge> = {}): BrowserDesktopBridge {
   return {
+    getBrowserPreferences: vi.fn(async () => DEFAULT_BROWSER_PREFERENCES),
+    updateBrowserPreferences: vi.fn(async () => DEFAULT_BROWSER_PREFERENCES),
+    onBrowserPreferencesChanged: vi.fn(() => () => undefined),
+    clearBrowserData: vi.fn(async () => undefined),
+    chooseBrowserDownloadDirectory: vi.fn(async () => DEFAULT_BROWSER_PREFERENCES),
+    listBrowserPasswords: vi.fn(async () => []),
+    saveBrowserPassword: vi.fn(async () => undefined),
+    deleteBrowserPassword: vi.fn(async () => undefined),
+    getPasswordState: vi.fn(async () => null),
+    getExtensions: vi.fn(async () => []),
+    onExtensionsChanged: vi.fn(() => () => undefined),
+    openExtension: vi.fn(async () => true),
+    getExtensionActions: vi.fn(async () => []),
+    onExtensionActionsChanged: vi.fn(() => () => undefined),
+    removeExtension: vi.fn(async () => true),
+    savePassword: vi.fn(async () => true),
+    dismissPassword: vi.fn(async () => undefined),
+    fillPassword: vi.fn(async () => true),
+    deletePassword: vi.fn(async () => true),
+    onPasswordState: vi.fn(() => () => undefined),
     pickAnnotation: vi.fn(async () => null),
     cancelAnnotation: vi.fn(async () => undefined),
     setAnnotationMarkers: vi.fn(async () => true),

@@ -97,6 +97,15 @@ describe('DesktopNativeBridgeServer', () => {
     await expect(reservedCredential.json()).resolves.toMatchObject({
       error: expect.stringContaining('reserved'),
     });
+    for (const operation of ['get', 'set', 'delete']) {
+      const browserCredential = await fetch(`${connection.url}/v1/credentials/${operation}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${connection.token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: ' Browser.passwords.v1 ', value: 'replacement' }),
+      });
+      expect(browserCredential.status).toBe(400);
+      await expect(browserCredential.json()).resolves.toMatchObject({ error: expect.stringContaining('reserved') });
+    }
 
     await nativeRequest(connection, '/v1/external/open', { url: 'https://example.com/login' });
     expect(openExternal).toHaveBeenCalledWith('https://example.com/login');

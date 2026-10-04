@@ -52,7 +52,7 @@ describe('SettingsSectionExtensionOutlet', () => {
     expect(screen.queryByText('Advanced settings')).toBeNull();
     expect(screen.getByText('Memory preview page')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Back to personalization' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Personalization' }));
 
     expect(screen.getByText('Personalization overview')).toBeTruthy();
     expect(screen.getByText('Advanced settings')).toBeTruthy();
@@ -93,11 +93,10 @@ function createSettingsFixtureRuntime() {
     ),
     subpages: [{
       id: 'preview',
-      render: ({ onBack }) => (
-        <div>
+      render: ({ onBack, ui }) => (
+        <ui.PageLayout title="Memory preview" parent={{ label: 'Personalization', onBack }}>
           <span>Memory preview page</span>
-          <button type="button" onClick={onBack}>Back to personalization</button>
-        </div>
+        </ui.PageLayout>
       ),
     }],
   });

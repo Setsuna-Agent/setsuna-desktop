@@ -5,7 +5,7 @@ import type {
 import type {
   SettingsViewUi,
 } from '@setsuna-desktop/renderer-contracts/settings';
-import { ArrowLeft, Loader2, RefreshCw, Trash2 } from 'lucide-react';
+import { Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import type {
   MemoryModelOption,
@@ -75,7 +75,7 @@ export function MemoryPreviewSettingsView({
   translate,
   ui,
 }: MemorySettingsViewProps & Readonly<{ onBack(): void }>) {
-  const { Button, EmptyState, Section } = ui;
+  const { Button, EmptyState, PageLayout, Section } = ui;
   const confirm = useConfirm();
   const [preview, setPreview] = useState<RuntimeMemoryPreview | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
@@ -130,59 +130,52 @@ export function MemoryPreviewSettingsView({
   }
 
   return (
-    <Section className="feature-memory feature-memory--preview" featureId="memory">
-      <div className="feature-memory__toolbar">
-        <Button
-          icon={<ArrowLeft size={14} />}
-          variant="ghost"
-          onClick={onBack}
-        >
-          {translate('feature.memory.settings.back')}
-        </Button>
-        <Button
-          disabled={previewBusy}
-          icon={previewBusy
-            ? <Loader2 className="is-spinning" size={14} />
-            : <RefreshCw size={14} />}
-          onClick={() => void loadPreview()}
-        >
-          {translate(previewBusy ? 'feature.memory.settings.refreshing' : 'feature.memory.settings.refresh')}
-        </Button>
-      </div>
-      <header className="feature-memory__preview-heading">
-        <div>
-          <h2>{translate('feature.memory.settings.preview')}</h2>
-          <p>{translate('feature.memory.settings.previewDescription')}</p>
-        </div>
-        <strong>{translate('feature.memory.settings.previewCount', { count: preview?.total ?? 0 })}</strong>
-      </header>
-      {previewError ? <p className="feature-memory__error" role="alert">{previewError}</p> : null}
-      <div className="feature-memory__list">
-        {preview?.items.map((item) => (
-          <MemoryPreviewCard
-            key={item.id}
-            item={item}
+    <PageLayout
+      title={translate('feature.memory.settings.preview')}
+      description={translate('feature.memory.settings.previewDescription')}
+      parent={{ label: translate('feature.memory.settings.personalization'), onBack }}
+    >
+      <Section className="feature-memory feature-memory--preview" featureId="memory">
+        <div className="feature-memory__toolbar">
+          <span>{translate('feature.memory.settings.previewCount', { count: preview?.total ?? 0 })}</span>
+          <Button
             disabled={previewBusy}
-            translate={translate}
-            ui={ui}
-            onDelete={deleteItem}
-          />
-        ))}
-        {!previewBusy && !preview?.items.length ? (
-          <EmptyState title={translate('feature.memory.settings.empty')} />
-        ) : null}
-      </div>
-      <div className="feature-memory__danger-zone">
-        <Button
-          disabled={previewBusy}
-          icon={<Trash2 size={14} />}
-          variant="danger"
-          onClick={() => void clear()}
-        >
-          {translate('feature.memory.settings.reset')}
-        </Button>
-      </div>
-    </Section>
+            icon={previewBusy
+              ? <Loader2 className="is-spinning" size={14} />
+              : <RefreshCw size={14} />}
+            onClick={() => void loadPreview()}
+          >
+            {translate(previewBusy ? 'feature.memory.settings.refreshing' : 'feature.memory.settings.refresh')}
+          </Button>
+        </div>
+        {previewError ? <p className="feature-memory__error" role="alert">{previewError}</p> : null}
+        <div className="feature-memory__list">
+          {preview?.items.map((item) => (
+            <MemoryPreviewCard
+              key={item.id}
+              item={item}
+              disabled={previewBusy}
+              translate={translate}
+              ui={ui}
+              onDelete={deleteItem}
+            />
+          ))}
+          {!previewBusy && !preview?.items.length ? (
+            <div className="feature-memory__empty"><EmptyState title={translate('feature.memory.settings.empty')} /></div>
+          ) : null}
+        </div>
+        <div className="feature-memory__danger-zone">
+          <Button
+            disabled={previewBusy}
+            icon={<Trash2 size={14} />}
+            variant="danger"
+            onClick={() => void clear()}
+          >
+            {translate('feature.memory.settings.reset')}
+          </Button>
+        </div>
+      </Section>
+    </PageLayout>
   );
 }
 
