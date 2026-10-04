@@ -52,7 +52,7 @@ describe('remote model catalog', () => {
     expect(findNewModel(catalog)).toBeUndefined();
     await catalog.refresh('opencode-go', fetch);
     expect(findNewModel(catalog)).toMatchObject({
-      code: 'deepseek-v4.1-flash', supportsImages: true, contextWindowTokens: 1_000_000,
+      code: 'setsuna-catalog-test-model', supportsImages: true, contextWindowTokens: 1_000_000,
       thinkingEfforts: ['high', 'max'],
     });
     expect(findNewModel(independent)).toBeUndefined();
@@ -64,7 +64,7 @@ describe('remote model catalog', () => {
     expect(createPiModel({
       id: 'go', catalogProviderId: 'opencode-go', name: 'Go', provider: 'openai-compatible',
       baseUrl: 'https://opencode.ai/zen/go/v1', apiKey: 'private', enabled: true, models: [],
-    }, 'deepseek-v4.1-flash', { providers: restored.providers })).toMatchObject({
+    }, 'setsuna-catalog-test-model', { providers: restored.providers })).toMatchObject({
       api: 'openai-completions', input: ['text', 'image'], thinkingLevelMap: remoteModel().thinkingLevelMap,
       compat: { requiresReasoningContentOnAssistantMessages: true, thinkingFormat: 'deepseek' },
     });
@@ -143,7 +143,7 @@ async function temporaryDirectory() {
 
 function findNewModel(catalog: RemoteModelCatalog) {
   return catalog.snapshot().providers.find((provider) => provider.id === 'opencode-go')?.plans
-    .flatMap((plan) => plan.models).find((model) => model.code === 'deepseek-v4.1-flash');
+    .flatMap((plan) => plan.models).find((model) => model.code === 'setsuna-catalog-test-model');
 }
 
 function remoteResponse() {
@@ -152,7 +152,7 @@ function remoteResponse() {
 
 function remoteModel(overrides: Record<string, unknown> = {}) {
   return {
-    id: 'deepseek-v4.1-flash', name: 'DeepSeek V4.1 Flash', api: 'openai-completions',
+    id: 'setsuna-catalog-test-model', name: 'Catalog test model', api: 'openai-completions',
     baseUrl: 'https://opencode.ai/zen/go/v1', provider: 'opencode-go', reasoning: true, input: ['text', 'image'],
     contextWindow: 1_000_000, maxTokens: 384_000, cost: { input: 0.15, output: 0.6, cacheRead: 0.003, cacheWrite: 0 },
     thinkingLevelMap: { minimal: null, low: null, medium: null, high: 'high', max: 'max' },

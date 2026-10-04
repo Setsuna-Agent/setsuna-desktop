@@ -531,9 +531,9 @@ function parseJsonValue(value: string): RuntimeJsonValue {
   }
 }
 
-function cloneJsonObject(value: RuntimeJsonValue): Record<string, unknown> {
+function cloneJsonObject(value: RuntimeJsonValue): Record<string, RuntimeJsonValue> {
   return value && typeof value === 'object' && !Array.isArray(value)
-    ? structuredClone(value) as Record<string, unknown>
+    ? structuredClone(value)
     : {};
 }
 
