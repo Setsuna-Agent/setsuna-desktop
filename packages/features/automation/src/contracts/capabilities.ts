@@ -26,7 +26,7 @@ export interface AutomationToolService {
   pendingMutationCount(): number;
   setMaintenancePaused(paused: boolean): void;
   listTools(): RuntimeToolDefinition[];
-  systemPrompt(threadId: string): Promise<string>;
+  systemPrompt(): string;
   runTool(input: unknown, threadId: string): Promise<{ content: string; preview?: string; data?: unknown }>;
 }
 

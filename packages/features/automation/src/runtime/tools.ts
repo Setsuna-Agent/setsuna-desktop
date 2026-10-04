@@ -11,7 +11,7 @@ export class AutomationTools implements AutomationToolService {
   listTools(): RuntimeToolDefinition[] {
     return [{
       name: 'manage_automation',
-      description: '创建、查询、编辑、暂停、恢复、删除或立即运行本机定时任务。任务触发时以完全访问权限运行无人值守对话，不向用户请求表单。',
+      description: '创建、查询、编辑、暂停、恢复、删除或立即运行本机定时任务。list 返回当前本机时间、当前对话 ID、可用模型、项目及任务。任务触发时以完全访问权限运行无人值守对话，不向用户请求表单。',
       inputSchema: {
         type: 'object', additionalProperties: false, required: ['mode'],
         properties: {
@@ -41,23 +41,26 @@ export class AutomationTools implements AutomationToolService {
     }];
   }
 
-  async systemPrompt(threadId: string): Promise<string> {
-    const snapshot = await this.service.snapshot();
+  systemPrompt(): string {
+    // Live clock/catalog/task state belongs in tool results so it cannot invalidate the system prompt cache on every sampling step.
     return [
       'Use manage_automation only when the user requests a scheduled task or its management. Saving a schedule does not execute its task immediately.',
+      'Before creating or managing a task, call manage_automation with mode="list" for the current local time, available models and projects, and tasks. Use its conversationThreadId to identify tasks created in this conversation.',
       'Gather missing prompt and timing through a short request_user_input form. Infer the task title and use the current conversation model unless the user requests another.',
       'Task dates and clock times use this computer\'s local time automatically. Never ask the user to choose a timezone, and confirm run times in local time without timezone labels.',
       'When the task refers to a project, select its actual project_id from the available projects. Ask only if the project is ambiguous or missing. Never infer an ID or rely on mentioning a project name in the saved prompt to select its workspace.',
-      `Current local time: ${this.now().toString()}.`,
-      `Available models and efforts: ${JSON.stringify(snapshot.models)}.`,
-      `Available projects: ${JSON.stringify(snapshot.projects)}.`,
-      `Tasks created in this conversation: ${JSON.stringify(snapshot.tasks.filter((task) => task.conversationThreadId === threadId).map((task) => ({ id: task.id, title: task.title, schedule: task.schedule, status: task.status, projectId: task.projectId })))}`,
     ].join('\n');
   }
 
   async runTool(value: unknown, threadId: string) {
     const input = record(value);
-    if (input.mode === 'list') return { content: JSON.stringify(await this.service.snapshot()), preview: '已读取定时任务' };
+    if (input.mode === 'list') {
+      const snapshot = await this.service.snapshot();
+      return {
+        content: JSON.stringify({ ...snapshot, currentLocalTime: this.now().toString(), conversationThreadId: threadId }),
+        preview: '已读取定时任务',
+      };
+    }
     const taskId = input.mode === 'create' ? undefined : identity(input.task_id);
     if (input.mode === 'delete') return { content: JSON.stringify(await this.service.delete(taskId!)), preview: '已删除定时任务' };
     const task = input.mode === 'pause' || input.mode === 'resume'

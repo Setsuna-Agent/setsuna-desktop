@@ -35,6 +35,44 @@ async function fixture() {
 }
 
 describe('local scheduled conversations', () => {
+  it('keeps sampling instructions stable while list returns fresh scheduling context', async () => {
+    const f = await fixture();
+    const snapshot = vi.spyOn(f.service, 'snapshot');
+    const now = vi.fn(f.host.now);
+    const tools = new AutomationTools(f.service, now);
+    const prompt = tools.systemPrompt();
+    expect(snapshot).not.toHaveBeenCalled();
+    expect(now).not.toHaveBeenCalled();
+
+    const initial = JSON.parse((await tools.runTool({ mode: 'list' }, 'conversation_1')).content);
+    expect(initial.tasks).toEqual([]);
+    expect(new Date(initial.currentLocalTime).toISOString()).toBe('2026-09-30T00:00:00.000Z');
+
+    const task = await f.service.create('conversation_1', f.draft);
+    const otherTask = await f.service.create('conversation_2', f.draft);
+    await f.service.setStatus(task.id, 'paused');
+    const models = [{ providerId: 'provider', modelId: 'new_model', name: 'New model', thinkingEfforts: ['low'] }];
+    const projects = [{ id: 'new_project', name: 'New project', path: '/projects/new' }];
+    vi.spyOn(f.host, 'listModels').mockResolvedValue(models);
+    vi.spyOn(f.host, 'listProjects').mockResolvedValue(projects);
+    f.advance('2026-09-30T01:02:03Z');
+    snapshot.mockClear();
+    now.mockClear();
+
+    expect(tools.systemPrompt()).toBe(prompt);
+    expect(snapshot).not.toHaveBeenCalled();
+    expect(now).not.toHaveBeenCalled();
+    const latest = JSON.parse((await tools.runTool({ mode: 'list' }, 'conversation_1')).content);
+    expect(new Date(latest.currentLocalTime).toISOString()).toBe('2026-09-30T01:02:03.000Z');
+    expect(latest).toMatchObject({
+      conversationThreadId: 'conversation_1', models, projects,
+      tasks: [
+        { id: task.id, conversationThreadId: 'conversation_1', status: 'paused' },
+        { id: otherTask.id, conversationThreadId: 'conversation_2', status: 'active' },
+      ],
+    });
+  });
+
   it('counts running and queued mutations until every durable operation settles, including rejection', async () => {
     const f = await fixture();
     const task = await f.service.create('conversation_1', f.draft);

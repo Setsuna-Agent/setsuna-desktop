@@ -16,7 +16,7 @@ export class AutomationToolHost implements ToolHost {
     return name === 'manage_automation' ? { supportsParallel: false, approvalMode: 'selfManaged' as const } : null;
   }
   systemPrompt(context: ToolExecutionContext) {
-    return context.readOnly || context.unattended ? null : this.service?.systemPrompt(context.threadId) ?? null;
+    return context.readOnly || context.unattended ? null : this.service?.systemPrompt() ?? null;
   }
   async runTool(name: string, input: unknown, context: ToolExecutionContext) {
     if (name !== 'manage_automation' || !this.service || context.readOnly || context.unattended) throw new Error('Automation management is unavailable in this turn.');
