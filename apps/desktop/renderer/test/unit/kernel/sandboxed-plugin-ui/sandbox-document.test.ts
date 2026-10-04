@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
   createSandboxedUiDocument,
@@ -53,7 +54,7 @@ function bootstrapBridge() {
   };
   // Execute the generated iframe bridge, rather than checking source strings.
   const source = createSandboxedUiDocument({ html: '', css: '', js: '' });
-  const bootstrap = source.match(/<script>([\s\S]*?)<\/script>/u)?.[1];
+  const bootstrap = new DOMParser().parseFromString(source, 'text/html').querySelector('script')?.textContent;
   if (!bootstrap) throw new Error('Sandbox bootstrap is missing.');
   new Function('window', 'parent', 'document', 'setTimeout', 'clearTimeout', bootstrap)(
     window, parent, { readyState: 'loading', addEventListener: vi.fn() }, setTimeout, clearTimeout,
