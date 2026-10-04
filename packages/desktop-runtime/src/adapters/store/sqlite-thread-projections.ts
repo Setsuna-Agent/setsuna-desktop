@@ -46,9 +46,13 @@ export function threadMessagePage(
 ): RuntimeMessagePage {
   // The cache includes the committed event tail that has not reached the checkpoint yet.
   const total = messages.length;
-  const before = normalizedMessageBefore(query.before, total);
-  const start = Math.max(0, before - normalizedMessageLimit(query.limit));
+  const { before, start } = threadMessagePageBounds(total, query);
   return { messages: structuredClone(messages.slice(start, before)), nextBefore: start > 0 ? start : null, total };
+}
+
+export function threadMessagePageBounds(total: number, query: RuntimeMessagePageQuery) {
+  const before = normalizedMessageBefore(query.before, total);
+  return { before, start: Math.max(0, before - normalizedMessageLimit(query.limit)) };
 }
 
 export function insertThreadProjection(

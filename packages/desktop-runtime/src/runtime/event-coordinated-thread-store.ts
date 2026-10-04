@@ -45,9 +45,19 @@ export class EventCoordinatedThreadStore implements ThreadStore {
     return this.inner.getThread(threadId);
   }
 
+  async getSamplingState(threadId: string) {
+    if (this.inner.getSamplingState) return this.inner.getSamplingState(threadId);
+    return this.inner.getThread(threadId);
+  }
+
   async getActiveTurnIds(threadId: string) {
     if (this.inner.getActiveTurnIds) return this.inner.getActiveTurnIds(threadId);
     return activeTurnIdsInThread(await this.inner.getThread(threadId));
+  }
+
+  async getGeneratedImageAssetIds(threadId: string) {
+    if (this.inner.getGeneratedImageAssetIds) return this.inner.getGeneratedImageAssetIds(threadId);
+    return [...managedGeneratedImageAssetIds(await this.getSamplingState(threadId))];
   }
 
   getTurnActivity(threadId: string, turnId: string) {

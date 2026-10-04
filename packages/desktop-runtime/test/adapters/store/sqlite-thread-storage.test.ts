@@ -45,7 +45,7 @@ function stepSnapshot(threadId: string): RuntimeModelRequestStepSnapshot {
 }
 
 describe('incremental SQLite thread storage', () => {
-  it('keeps checkpoints small, leaves old rows untouched, and recovers a committed tail after a crash', async () => {
+  it.each(['messages', 'image-references'])('keeps checkpoints small and recovers a committed tail when %s is read first', async (firstRead) => {
     const directory = await temporaryDirectory();
     const store = openStore(directory);
     const thread = await store.createThread();
@@ -81,7 +81,9 @@ describe('incremental SQLite thread storage', () => {
       });
       await store.appendEvent(thread.id, {
         id: 'new_message_event', threadId: thread.id, turnId: 'new_turn', type: 'message.created', createdAt,
-        payload: { message: { id: 'new_message', turnId: 'new_turn', role: 'assistant', content: '', status: 'streaming', createdAt } },
+        payload: { message: { id: 'new_message', turnId: 'new_turn', role: 'assistant', content: '', status: 'streaming', createdAt,
+          attachments: [{ id: 'generated', source: 'generated', assetId: 'asset_tail', name: 'tail.png', type: 'image/png', size: 68, modelVisible: false }],
+        } },
       });
       await store.appendEvent(thread.id, {
         id: 'delta', threadId: thread.id, turnId: 'new_turn', type: 'message.delta', createdAt,
@@ -99,6 +101,12 @@ describe('incremental SQLite thread storage', () => {
       crashed.exec('DELETE FROM runtime_owner');
       crashed.close();
       const recovered = openStore(crashDirectory);
+      if (firstRead === 'messages') {
+        expect((await recovered.listMessages(thread.id, { limit: 1 })).messages[0]?.content).toBe('Committed but not checkpointed');
+      }
+      expect(await recovered.getGeneratedImageAssetIds(thread.id)).toEqual(['asset_tail']);
+      expect(await recovered.getActiveTurnIds(thread.id)).toEqual(['new_turn', 'old_turn']);
+      expect((await recovered.getSamplingState(thread.id))?.messages).toEqual(expected!.messages);
       expect(await recovered.getThread(thread.id)).toEqual(expected);
       await recovered.close();
       const reopened = openStore(crashDirectory);

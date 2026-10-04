@@ -2,7 +2,6 @@ import type {
   MessageDeleteInput,
   MessagePatch,
   PendingStoredThreadEvent,
-  RuntimeMessagePage,
   RuntimeMessagePageQuery,
   RuntimeThread,
   RuntimeThreadMemoryMode,
@@ -25,7 +24,6 @@ import type {
   ThreadStoreQuery,
 } from '../../ports/thread-store.js';
 import { assertSafeRuntimeId } from '../../security/runtime-id.js';
-import { activeTurnIdsInThread } from '../../utils/runtime-turn-state.js';
 import { readLegacyJsonThreads } from './legacy-json-thread-reader.js';
 import {
   archiveTransientEvents,
@@ -42,13 +40,12 @@ import { normalizeRuntimeMessagePatch } from './runtime-message-patch.js';
 import {
   insertRuntimeEvent,
   insertThreadProjection,
-  threadMessagePage,
   replaceMessageIndex,
   syncMessageIndex,
-  threadTranscriptPage,
   updateThreadProjection,
 } from './sqlite-thread-projections.js';
 import { readThreadCheckpoint, syncTurnCheckpoints } from './sqlite/checkpoints.js';
+import { SqliteThreadReader } from './sqlite/thread-reader.js';
 import { ensureSqliteThreadSchema } from './sqlite-thread-schema.js';
 import { SqliteFeatureProjectionCheckpoints } from './sqlite-feature-projection-checkpoints.js';
 import {
@@ -67,8 +64,6 @@ import {
   normalizeThreadSnapshot,
   normalizeThreadSummary,
   optionalSafeRuntimeId,
-  projectRuntimeThreadSamplingState,
-  projectRuntimeTurnActivity,
   threadHasAncestor,
 } from './thread-store-state.js';
 import {
@@ -112,6 +107,16 @@ export class SqliteThreadStore implements ThreadStore {
     await this.ensureReady();
     this.assertOwnership();
     return operation(this.requireDatabase());
+  });
+  private readonly reader = new SqliteThreadReader({
+    withDatabase: async (operation) => {
+      await this.ensureReady();
+      this.assertOwnership();
+      return operation(this.requireDatabase());
+    },
+    cached: (threadId) => this.threadCache.get(threadId),
+    load: (threadId) => this.loadThread(threadId),
+    write: (operation) => this.withWriteTransaction(operation),
   });
 
   private readonly ownerId: string;
@@ -241,16 +246,19 @@ export class SqliteThreadStore implements ThreadStore {
   }
 
   async getThread(threadId: string): Promise<RuntimeThread | null> {
-    const { thread } = await this.readThread(threadId);
-    return thread ? cloneThread(thread) : null;
+    return this.reader.getThread(threadId);
   }
 
   async getSamplingState(threadId: string) {
-    return projectRuntimeThreadSamplingState((await this.readThread(threadId)).thread);
+    return this.reader.getSamplingState(threadId);
   }
 
   async getActiveTurnIds(threadId: string): Promise<string[]> {
-    return activeTurnIdsInThread((await this.readThread(threadId)).thread);
+    return this.reader.getActiveTurnIds(threadId);
+  }
+
+  getGeneratedImageAssetIds(threadId: string): Promise<string[]> {
+    return this.reader.getGeneratedImageAssetIds(threadId);
   }
 
   async getThreadLastSeq(threadId: string): Promise<number> {
@@ -261,34 +269,21 @@ export class SqliteThreadStore implements ThreadStore {
   }
 
   async getTurnActivity(threadId: string, turnId: string) {
-    const { thread } = await this.readThread(threadId);
-    return thread ? projectRuntimeTurnActivity(thread, turnId) : null;
+    return this.reader.getTurnActivity(threadId, turnId);
   }
 
   async listMessages(
     threadId: string,
     query: RuntimeMessagePageQuery = {},
-  ): Promise<RuntimeMessagePage> {
-    const { safeThreadId, thread } = await this.readThread(threadId);
-    // Loading once also repairs a v1 database whose message index has not been backfilled yet.
-    if (!thread) throw new Error(`Thread not found: ${safeThreadId}`);
-    return threadMessagePage(thread.messages, query);
+  ) {
+    return this.reader.listMessages(threadId, query);
   }
 
   async getThreadPage(
     threadId: string,
     query: RuntimeMessagePageQuery = {},
   ): Promise<RuntimeThread | null> {
-    const { thread } = await this.readThread(threadId);
-    if (!thread) return null;
-    // The cached SQLite projection is already available. Slice at prompt boundaries
-    // before cloning; raw listMessages retains its strict indexed-record pagination.
-    const page = threadTranscriptPage(thread.messages, query);
-    return cloneThread({
-      ...thread,
-      messages: page.messages,
-      messagePage: { nextBefore: page.nextBefore, total: page.total },
-    });
+    return this.reader.getThreadPage(threadId, query);
   }
 
   async createThread(input: ThreadStoreCreateInput = {}): Promise<RuntimeThread> {
@@ -650,14 +645,6 @@ export class SqliteThreadStore implements ThreadStore {
     // checkpoint queue prevents compression work from delaying lifecycle publication.
     this.scheduleCheckpoint(threadId);
     return events;
-  }
-
-  private async readThread(threadId: string) {
-    const safeThreadId = assertSafeRuntimeId(threadId, 'Thread id');
-    await this.ensureReady();
-    this.assertOwnership();
-    const thread = this.threadCache.get(safeThreadId) ?? this.loadThread(safeThreadId);
-    return { safeThreadId, thread };
   }
 
   private loadThread(threadId: string): RuntimeThread | null {

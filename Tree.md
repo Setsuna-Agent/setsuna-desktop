@@ -534,9 +534,9 @@ packages/features/ — 0 direct / 1290 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 612 total files
-├── src/ — 2 direct / 357 total files
-│   ├── adapters/ — 148 files
+packages/desktop-runtime/ — 4 direct / 615 total files
+├── src/ — 2 direct / 359 total files
+│   ├── adapters/ — 150 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── event/ — 2 direct / 2 total files
 │   │   ├── feature/ — 8 direct / 8 total files
@@ -548,8 +548,8 @@ packages/desktop-runtime/ — 4 direct / 612 total files
 │   │   ├── plugin/ — 25 direct / 25 total files
 │   │   ├── search/ — 5 direct / 5 total files
 │   │   ├── skill/ — 6 direct / 6 total files
-│   │   ├── store/ — 35 direct / 37 total files
-│   │   │   └── sqlite/ — 2 direct / 2 total files
+│   │   ├── store/ — 35 direct / 39 total files
+│   │   │   └── sqlite/ — 4 direct / 4 total files
 │   │   ├── tool/ — 17 direct / 43 total files
 │   │   │   └── pc-local/ — 26 direct / 26 total files
 │   │   └── workspace/ — 9 direct / 9 total files
@@ -575,8 +575,8 @@ packages/desktop-runtime/ — 4 direct / 612 total files
 │   │   └── app-server/ — 23 direct / 23 total files
 │   ├── shared/ — 3 direct / 3 total files
 │   └── utils/ — 8 direct / 8 total files
-└── test/ — 251 files
-    ├── adapters/ — 66 files
+└── test/ — 252 files
+    ├── adapters/ — 67 files
     │   ├── approval/ — 1 direct / 1 total files
     │   ├── feature/ — 1 direct / 1 total files
     │   ├── mcp/ — 2 direct / 2 total files
@@ -587,7 +587,8 @@ packages/desktop-runtime/ — 4 direct / 612 total files
     │   │   └── support/ — 3 direct / 3 total files
     │   ├── search/ — 4 direct / 4 total files
     │   ├── skill/ — 1 direct / 1 total files
-    │   ├── store/ — 16 direct / 16 total files
+    │   ├── store/ — 16 direct / 17 total files
+    │   │   └── sqlite/ — 1 direct / 1 total files
     │   ├── tool/ — 9 direct / 16 total files
     │   │   └── pc-local/ — 7 direct / 7 total files
     │   └── workspace/ — 7 direct / 7 total files

@@ -40,12 +40,14 @@ export async function reconcileAutomationConversations(runtime: RuntimeContainer
       }
       continue;
     }
-    const [seed, welcome] = summary.memoryMode === 'disabled'
-      ? (await runtime.threadStore.listMessages(summary.id, { before: 2, limit: 2 })).messages : [];
+    if (summary.memoryMode !== 'disabled') continue;
+    // Most threads are unrelated; only inspect the second message after the private seed matches.
+    const [seed] = (await runtime.threadStore.listMessages(summary.id, { before: 1, limit: 1 })).messages;
     const seeded = seed?.role === 'developer' && seed.visibility === 'model'
       && (seed.content === instructions || seed.content === LEGACY_SETUP_POLICY);
     if (!seeded) continue;
     if (!summary.featureId) await runtime.threadStore.updateThread(summary.id, { featureId: 'automation' });
+    const [, welcome] = (await runtime.threadStore.listMessages(summary.id, { before: 2, limit: 2 })).messages;
     // Retire only the old generated opening; real turns and execution transcripts stay intact.
     if (seeded && welcome?.role === 'assistant' && welcome.status === 'complete'
       && welcome.content === LEGACY_SETUP_WELCOME && !welcome.turnId

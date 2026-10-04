@@ -45,9 +45,11 @@ Runtime 的 `src/cli.ts` 创建 server；`src/runtime/runtime-factory.ts` 组装
 
 Goal 和 Collaboration 的 Feature 投影使用 SQLite `feature_projection_checkpoints` 保存状态与已处理事件序号。重启时先校验 Feature 自己的 codec 和带 reducer 版本的 key，再回放检查点之后的事件；首次启动、版本变化或缓存损坏时从历史事件重建。检查点只是可重建缓存，历史事件仍是真源，异常任务结算仍在 runtime ready 前完成。事件高水位直接查询线程序号，不加载或复制完整聊天记录。
 
-异常 turn 结算从 store 内部投影提取活动 turn ID，仍检查旧版消息、工具和 item 的残留运行状态，但不向调用方复制完整历史和模型请求诊断。Goal 启动恢复直接读取已枚举线程的 Feature 投影，不为检查线程存在而再次读取完整会话。
+异常 turn 结算从 store 提取活动 turn ID。分区 checkpoint 的小型 recovery 摘要随 checkpoint 一起保存活动 turn ID 和生成图片引用；只有 checkpoint 序号等于最新事件序号时才能使用。旧 checkpoint 缺少摘要时读取一次消息/turn 状态并补齐摘要，不还原历史模型请求快照或填充完整会话缓存；旧版快照或尚未 checkpoint 的事件尾仍走完整迁移和回放。Goal 启动恢复直接读取已枚举线程的 Feature 投影，不为检查线程存在而再次读取完整会话。
 
-生成图片清理先枚举本地 asset ID，再检查会话引用；没有本地图片时不读取历史，已找到全部候选引用时提前结束扫描。
+生成图片清理先枚举本地 asset ID，再读取 checkpoint 的图片引用摘要；旧 store 可回退到单个会话的一致消息快照，避免分页期间消息变动导致漏掉引用。没有本地图片时不读取历史，已找到全部候选引用时提前结束扫描。
+
+消息分页在完整 checkpoint 上按消息索引只读取请求区间。页面含需要推断阶段的旧助手消息或需要结算取消状态的工具时，回退到完整消息投影；未完成 checkpoint 的事件尾仍先回放，保证分页与完整会话的内容一致。Automation 启动迁移先只检查首条消息，私有 seed 匹配后才读取旧欢迎消息，避免读取无关会话的后续正文。
 
 ## Renderer 初始化
 
