@@ -10,8 +10,13 @@ export function applyProviderRequestHeaders(
   context: Readonly<{ appVersion: string; sessionId?: string }>,
   providers?: readonly Provider[],
 ): void {
-  const templates = normalizeProviderRequestHeaders(provider.requestHeaders)
-    ?? defaultProviderRequestHeaders(builtinCatalogProviderIdForConfig(provider, providers));
+  const defaults = defaultProviderRequestHeaders(builtinCatalogProviderIdForConfig(provider, providers));
+  const templates = normalizeProviderRequestHeaders(provider.requestHeaders) ?? defaults;
+  // Pi also adds session headers. Clear the preset ones first so removing them in
+  // user configuration still disables them, then apply the chosen templates below.
+  for (const [name, template] of Object.entries(defaults)) {
+    if (template.includes('{{sessionId}}')) headers.delete(name);
+  }
   for (const [name, template] of Object.entries(templates)) {
     // Model discovery has no conversation. Never send a literal placeholder or invent a session.
     if (template.includes('{{sessionId}}') && !context.sessionId) {

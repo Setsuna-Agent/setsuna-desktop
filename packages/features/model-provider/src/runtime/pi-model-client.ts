@@ -4,10 +4,10 @@ import {
 } from '@earendil-works/pi-ai/api/anthropic-messages';
 import { stream as streamOpenAiCompletions } from '@earendil-works/pi-ai/api/openai-completions';
 import { stream as streamOpenAiResponses } from '@earendil-works/pi-ai/api/openai-responses';
+import { normalizeContext, type TranscriptContext } from '@earendil-works/pi-ai/utils/transcript';
 import type {
   AnthropicOptions,
   AssistantMessageEvent,
-  Context,
   Model,
   ModelThinkingLevel,
   OpenAICompletionsOptions,
@@ -129,7 +129,8 @@ export class PiModelClient implements ModelProviderSamplingService {
       forceAdaptiveThinking: usesAdaptiveAnthropicThinking(request),
       providers: this.providers,
     });
-    const context = toPiContext(request, replayContext);
+    // Direct provider/API streams require prompts and tools in transcript system messages.
+    const context = normalizeContext(toPiContext(request, replayContext));
     diagnostics.record('provider.ready', {
       thinking: request.thinking, reasoningEffort: request.reasoningEffort,
       maxOutputTokens: request.maxOutputTokens,
@@ -226,7 +227,7 @@ function isBuiltInLocalSmokeProvider(provider: ModelProviderRuntimeConfig): bool
 
 function streamForProvider(
   model: Model<PiApi>,
-  context: Context,
+  context: TranscriptContext,
   input: ModelRequest & Readonly<{ apiKey: string; fetch: typeof fetch; signal: AbortSignal }>,
   catalogProvider?: Provider,
 ): AsyncIterable<AssistantMessageEvent> {

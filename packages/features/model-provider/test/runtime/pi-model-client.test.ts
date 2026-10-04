@@ -12,6 +12,35 @@ afterEach(() => {
 
 describe('Pi model client protocol integration', () => {
   it.each([
+    ['openai-compatible', openAiCompletionsSse, null],
+    ['openai-compatible', openAiCompletionsSse, 'opencode-go'],
+    ['anthropic', anthropicSse, null],
+    ['anthropic', anthropicSse, 'opencode-go'],
+    ['openai-responses', responsesSse, null],
+    ['openai-responses', responsesSse, 'opencode-go'],
+  ] as const)('sends instructions and tool schemas through %s (case %#)', async (kind, sse, catalogProviderId) => {
+    const capture = captureFetch(sse());
+    const client = new PiModelClient(host({ ...providerFixture(kind), catalogProviderId }, capture.fetch));
+    const inputSchema = { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] };
+    const tool = { name: 'read_file', description: 'Read a file.', inputSchema };
+
+    await collect(client.stream(requestFixture({ tools: [tool] })));
+
+    const body = capture.body();
+    if (kind === 'anthropic') {
+      expect(body.system).toEqual([{ type: 'text', text: 'Return JSON.' }]);
+      expect(body.tools).toMatchObject([{ name: tool.name, description: tool.description, input_schema: inputSchema }]);
+    } else {
+      expect(kind === 'openai-responses' ? body.input : body.messages)
+        .toContainEqual({ role: 'system', content: 'Return JSON.' });
+      const definition = { name: tool.name, description: tool.description, parameters: inputSchema };
+      expect(body.tools).toMatchObject([kind === 'openai-responses'
+        ? { type: 'function', ...definition }
+        : { type: 'function', function: definition }]);
+    }
+  });
+
+  it.each([
     [null, undefined, 'developer'],
     [null, false, 'system'],
     [null, true, 'developer'],
@@ -227,10 +256,14 @@ describe('Pi model client protocol integration', () => {
     expect(capture.headers().get(kind === 'anthropic' ? 'x-api-key' : 'authorization')).toBe('custom-credential');
   });
 
-  it('allows an empty header configuration to disable the Go preset', async () => {
-    const capture = captureFetch(openAiCompletionsSse());
+  it.each([
+    ['openai-compatible', openAiCompletionsSse],
+    ['anthropic', anthropicSse],
+    ['openai-responses', responsesSse],
+  ] as const)('allows an empty header configuration to disable the Go preset for %s', async (kind, sse) => {
+    const capture = captureFetch(sse());
     const client = new PiModelClient(host({
-      ...providerFixture('openai-compatible'), catalogProviderId: 'opencode-go', requestHeaders: {},
+      ...providerFixture(kind), catalogProviderId: 'opencode-go', requestHeaders: {},
     }, capture.fetch));
     await collect(client.stream(requestFixture({ sessionId: 'thread-1' })));
     expect(capture.headers().get('user-agent')).toMatch(/^pi\b/u);

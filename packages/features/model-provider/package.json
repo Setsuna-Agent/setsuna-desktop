@@ -28,7 +28,7 @@
     "@setsuna-desktop/renderer-ui": "workspace:*"
   },
   "devDependencies": {
-    "@earendil-works/pi-ai": "0.85.1"
+    "@earendil-works/pi-ai": "1.0.2"
   },
   "scripts": {
     "build": "tsc -b tsconfig.build.json",

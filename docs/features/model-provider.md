@@ -19,7 +19,7 @@ AgentLoop / Review / Vision / Thread title / Memory
                          │
        feature-model-provider/runtime
                          │
-          @earendil-works/pi-ai 0.85.1
+          @earendil-works/pi-ai 1.0.2
 ```
 
 `model-provider` 是 required runtime/renderer Feature。Runtime factory 先创建 `BindableModelClient`，Feature 激活完成后把 sampling capability 绑定进去；激活失败不会退回旧协议栈。
@@ -53,6 +53,8 @@ AgentLoop / Review / Vision / Thread title / Memory
 - `@earendil-works/pi-ai/api/openai-completions`
 - `@earendil-works/pi-ai/api/openai-responses`
 - `@earendil-works/pi-ai/api/anthropic-messages`
+
+直接调用 provider/API stream 前，统一通过 Pi `normalizeContext()` 把系统提示词和工具声明转换为 transcript system message；不把 Pi transcript 类型扩散到共享 contracts 或持久存储。
 
 Setsuna provider ID 是配置和 metadata 身份。预置配置的 Pi model 保留 `deepseek`、`openrouter`、`openai`、`anthropic` 等真实 provider identity 和模型 compat；自定义配置使用 canonical `openai`/`anthropic` fallback。
 
