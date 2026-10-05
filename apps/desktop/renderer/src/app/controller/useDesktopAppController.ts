@@ -43,6 +43,7 @@ import { useThreadDeletionGuard } from './useThreadDeletionGuard.js';
 export function useDesktopAppController() {
   const { t } = useI18n();
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [newThreadDraftId, setNewThreadDraftId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<MainView>('chat');
   const [sidebarManuallyCollapsed, setSidebarManuallyCollapsed] = useState(false);
   const [sidebarManuallyExpanded, setSidebarManuallyExpanded] = useState(false);
@@ -98,6 +99,7 @@ export function useDesktopAppController() {
   const chatTargetIdentity = chatComposerTargetIdentity(
     currentThread?.id,
     currentThread ? null : activeProjectId,
+    newThreadDraftId,
   );
   const composerSession = useChatComposerSession(chatTargetIdentity, client);
   const {
@@ -230,6 +232,7 @@ export function useDesktopAppController() {
   const navigation = useDesktopNavigation({
     activeProjectId,
     activeView,
+    setNewThreadDraftId,
     client,
     confirmDiscardProjectFile: projectWorkspace.fileDraft.confirmDiscardChanges,
     currentThread,
@@ -264,6 +267,7 @@ export function useDesktopAppController() {
   const claimConversationSessionForThread = useCallback((threadId: string) => {
     claimComposerForThread(threadId);
     claimWorkspacePanelsForThread(threadId);
+    setNewThreadDraftId(null);
   }, [claimComposerForThread, claimWorkspacePanelsForThread]);
 
   const chatActions = useChatTurnActions({
@@ -308,11 +312,11 @@ export function useDesktopAppController() {
   }, []);
 
   const startPluginAppChat = useCallback((plugin: RuntimePluginReference, prompt: string) => (
-    navigation.createGlobalThread((threadId) => {
+    navigation.startGlobalThread(() => {
       setCapabilitySelectionRequest(null);
-      composerSession.initializeThreadDraft(threadId, `${pluginMentionText(plugin)} ${prompt}`);
+      return composerSession.initializeNewThreadDraft(null, `${pluginMentionText(plugin)} ${prompt}`);
     })
-  ), [composerSession.initializeThreadDraft, navigation.createGlobalThread]);
+  ), [composerSession.initializeNewThreadDraft, navigation.startGlobalThread]);
 
   const startCurrentThreadReview = useCallback((
     target: ReviewTarget,
@@ -358,6 +362,7 @@ export function useDesktopAppController() {
   const toolbarTitle = activeView === 'chat' ? currentThread?.title ?? t('app.newChat') : undefined;
 
   return {
+    newThreadDraftId,
     activeProject: effectiveProject,
     activeWorkspace,
     worktreeRecovery: {

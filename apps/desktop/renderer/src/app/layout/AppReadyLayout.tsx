@@ -64,6 +64,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     handleWorkspaceResizeStep,
     handleWorkspaceResizeStart,
     navigation,
+    newThreadDraftId,
     projectWorkspace,
     attachmentStore,
     runtime,
@@ -140,7 +141,11 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     onError: runtime.setError,
   });
   const historyLocation: AppNavigationLocation = activeView === 'chat'
-    ? { view: activeView, threadId: currentThread?.id ?? null, projectId: currentThread ? currentThread.projectId ?? null : activeProjectId }
+    ? {
+        view: activeView, threadId: currentThread?.id ?? null,
+        projectId: currentThread ? currentThread.projectId ?? null : activeProjectId,
+        ...(!currentThread && newThreadDraftId ? { draftId: newThreadDraftId } : {}),
+      }
     : activeView === 'capabilities'
       ? { view: activeView, pluginId: selectedCapabilitiesPluginId }
       : activeView === 'plugin'
@@ -151,19 +156,19 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       if (location.threadId) {
         if (currentThread?.id === location.threadId) await navigation.changeView('chat');
         else await navigation.selectThreadInView(location.threadId, 'chat');
-      } else if (!currentThread && activeProjectId === location.projectId) {
+      } else if (!currentThread && activeProjectId === location.projectId && newThreadDraftId === (location.draftId ?? null)) {
         await navigation.changeView('chat');
       } else if (location.projectId && runtime.projects.some((project) => project.id === location.projectId)) {
-        await navigation.startProjectThread(location.projectId);
+        await navigation.startProjectThread(location.projectId, location.draftId);
       } else {
-        await navigation.startGlobalThread();
+        await navigation.startGlobalThread(() => location.draftId);
       }
       return;
     }
     if (location.view === 'capabilities') setSelectedCapabilitiesPluginId(location.pluginId);
     if (location.view === 'plugin') setSelectedPluginViewKey(location.viewKey);
     await navigation.changeView(location.view);
-  }, [activeProjectId, currentThread, navigation, runtime.projects]);
+  }, [activeProjectId, currentThread, navigation, newThreadDraftId, runtime.projects]);
   const reportHistoryError = useCallback((error: unknown) => {
     runtime.setError(error instanceof Error ? error.message : String(error));
   }, [runtime.setError]);

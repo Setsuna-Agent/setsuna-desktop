@@ -92,6 +92,14 @@ describe('desktop workspace panel sessions', () => {
       projectId: null,
       threadId: null,
     });
+    expect(desktopWorkspacePanelTargetContext('new-thread-draft:2:', projectIdByThreadId)).toEqual({
+      projectId: null,
+      threadId: null,
+    });
+    expect(desktopWorkspacePanelTargetContext('new-thread-draft:2:project%3AC', projectIdByThreadId)).toEqual({
+      projectId: 'project:C',
+      threadId: null,
+    });
   });
 
   it('keeps a browser mounted and active in the bottom slot', () => {
@@ -108,8 +116,7 @@ describe('desktop workspace panel sessions', () => {
     })).toEqual([{ active: true, panel: browser, placement: 'bottom', targetIdentity: thread }]);
   });
 
-  it('moves a new-thread layout to the created thread', () => {
-    const draftIdentity = 'new-thread-slot:project-1' as const;
+  it.each(['new-thread-slot:project-1', 'new-thread-draft:2:project-1'] as const)('moves a new-thread layout to the created thread (%s)', (draftIdentity) => {
     let layouts = updateDesktopWorkspacePanelLayout({}, draftIdentity, (current) => ({
       ...current,
       sidePanelExpanded: true,

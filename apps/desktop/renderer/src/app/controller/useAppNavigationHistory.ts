@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MainView } from '../types.js';
 
 export type AppNavigationLocation =
-  | { view: 'chat'; threadId: string | null; projectId: string | null }
+  | { view: 'chat'; threadId: string | null; projectId: string | null; draftId?: string }
   | { view: 'capabilities'; pluginId: string | null }
   | { view: 'plugin'; viewKey: string | null }
   | { view: Exclude<MainView, 'chat' | 'capabilities' | 'plugin'> };
