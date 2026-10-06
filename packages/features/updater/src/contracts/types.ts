@@ -46,6 +46,8 @@ export type DesktopUpdateState = Readonly<{
   platform: string;
   arch: string;
   installMode: DesktopUpdateInstallMode;
+  /** Checking release metadata can be enabled independently of downloading and installing. */
+  canCheckForUpdates: boolean;
   canUpdate: boolean;
   feedUrl: string | null;
   activeDownloadSourceId: string;

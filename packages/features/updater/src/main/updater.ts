@@ -34,6 +34,7 @@ type DesktopUpdaterOptions = {
   downloadsDir: string;
   sourceConfigPath: string;
   enabled: boolean;
+  allowManualChecks?: boolean;
   installUpdate: (quitAndInstall: () => void) => Promise<boolean>;
   fetch?: typeof globalThis.fetch;
   checkIntervalMs?: number;
@@ -79,6 +80,7 @@ export class DesktopUpdater {
       platform: process.platform,
       arch: process.arch,
       installMode: updateInstallMode(process.platform),
+      canCheckForUpdates: options.enabled || options.allowManualChecks === true,
       canUpdate: options.enabled,
       feedUrl: `https://github.com/${options.repository}/releases/latest`,
       activeDownloadSourceId: GITHUB_DIRECT_DOWNLOAD_SOURCE.id,
@@ -166,7 +168,7 @@ export class DesktopUpdater {
   }
 
   private async runCheckAndDownload(): Promise<DesktopUpdateState> {
-    if (!this.enabled) {
+    if (!this.state.canCheckForUpdates) {
       this.setState({ status: 'unsupported', error: '当前环境不支持在线更新。', progress: null });
       return this.getState();
     }
@@ -186,6 +188,19 @@ export class DesktopUpdater {
           downloadedVersion: undefined,
           releaseUrl: release.html_url ?? undefined,
           updateInfo: null,
+          progress: null,
+        });
+        return this.getState();
+      }
+
+      // Development builds may inspect releases without downloading or staging a packaged app.
+      if (!this.enabled) {
+        this.setState({
+          status: 'available',
+          availableVersion,
+          downloadedVersion: undefined,
+          releaseUrl: release.html_url ?? undefined,
+          updateInfo: updateInfoFromRelease(release),
           progress: null,
         });
         return this.getState();

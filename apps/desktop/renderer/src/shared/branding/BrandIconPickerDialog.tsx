@@ -3,7 +3,7 @@ import type { BrandIconConfig } from '@setsuna-desktop/contracts';
 import { Check, ImagePlus, Sparkles, Upload } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { useI18n } from '../i18n/I18nProvider.js';
-import { Button } from '../ui/primitives.js';
+import { Button, TextField } from '../ui/primitives.js';
 import { SettingsDialog } from '../ui/SettingsDialog.js';
 import { BrandIconMark } from './BrandIconMark.js';
 import {
@@ -15,6 +15,7 @@ import {
   PROVIDER_BRAND_CATALOG,
   localizedProviderBrandLabel,
   resolveBrandIcon,
+  searchProviderBrands,
   type ProviderBrandAsset,
 } from './providerBranding.js';
 
@@ -45,6 +46,8 @@ export function BrandIconPickerDialog({
   );
   const [uploadError, setUploadError] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const visibleBrands = searchProviderBrands(searchQuery, t);
   const customBrand = customIcon ? resolveBrandIcon(customIcon, null) : null;
   const subjectLabel = t(subject === 'provider' ? 'settings.brand.provider' : 'settings.brand.model');
   const displayName = name || t('settings.brand.unnamed', { subject: subjectLabel });
@@ -106,6 +109,14 @@ export function BrandIconPickerDialog({
               <strong id={`${titleId}-presets`}>{t('settings.brand.presets')}</strong>
               <span>{t('settings.brand.brandCount', { count: PROVIDER_BRAND_CATALOG.length })}</span>
             </div>
+            <TextField
+              aria-label={t('settings.brand.search')}
+              className="settings-provider-icon-search"
+              placeholder={t('settings.brand.search')}
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.currentTarget.value)}
+            />
             <div className="settings-provider-icon-grid" role="radiogroup" aria-label={t('settings.brand.iconLabel', { subject: subjectLabel })}>
               <UiButton variant="ghost"
                 aria-checked={draftIcon === undefined}
@@ -121,7 +132,7 @@ export function BrandIconPickerDialog({
                 <span>{t('settings.brand.automatic')}</span>
                 {draftIcon === undefined ? <Check className="settings-provider-icon-option__check" size={12} /> : null}
               </UiButton>
-              {PROVIDER_BRAND_CATALOG.map((brand) => {
+              {visibleBrands.map((brand) => {
                 const selected = draftIcon?.type === 'preset' && draftIcon.key === brand.key;
                 const label = localizedProviderBrandLabel(brand, t);
                 return (
@@ -134,7 +145,7 @@ export function BrandIconPickerDialog({
                     onClick={() => setDraftIcon({ type: 'preset', key: brand.key })}
                   >
                     <span className="settings-provider-icon-option__mark">
-                      <BrandIconMark brand={brand} fallbackName={label} size="large" />
+                      <BrandIconMark brand={brand} fallbackName={label} loading="lazy" size="large" />
                     </span>
                     <span title={label}>{label}</span>
                     {selected ? <Check className="settings-provider-icon-option__check" size={12} /> : null}

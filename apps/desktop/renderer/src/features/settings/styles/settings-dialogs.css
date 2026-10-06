@@ -43,10 +43,19 @@
   white-space: nowrap;
 }
 
+.settings-provider-icon-search {
+  width: 100%;
+}
+
 .settings-provider-icon-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(102px, 1fr));
+  align-content: start;
   gap: 7px;
+  max-height: min(320px, 40vh);
+  padding: 2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .settings-provider-icon-option {

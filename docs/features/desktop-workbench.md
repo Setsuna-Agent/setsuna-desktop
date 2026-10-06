@@ -118,7 +118,7 @@ idle → checking → available → downloading → downloaded → installing（
 - 下载包和 `SHA256SUMS` 可走默认或用户自定义下载源；metadata 本身不被镜像改写。
 - 安装前必须校验 SHA-256，失败文件不能进入 ready 状态。
 - 下载中切换源要取消当前请求，再按新源重试。
-- Packaged app 默认启用；开发环境只有显式环境变量才启用更新。
+- Packaged app 默认启用自动检查与下载；开发环境支持手动检查版本，只有显式设置 `SETSUNA_DESKTOP_ENABLE_UPDATES=1` 才启用自动检查、下载和安装。`canCheckForUpdates` 与 `canUpdate` 分别表示这两种能力。
 - 下载/安装动作与状态事件都由 Main Feature owner 管理，renderer 不能自行下载或打开任意 URL。
 
 macOS 优先下载同架构 ZIP，要求 `SHA256SUMS` 中存在其校验值；旧 Release 只有 DMG 时仍显示手动安装。

@@ -15,6 +15,7 @@ import {
   lazy,
   Suspense,
   useCallback,
+  useMemo,
   useState,
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
@@ -154,6 +155,7 @@ export function WorkspacePanel({
     treeTruncated, treeVisible, treeWidth, query, toggleDirectory, updateTreeQuery,
     toggleTreeVisible, setTreeWidth, fileListRef, onFileListScroll,
   } = fileTree;
+  const treeLayoutDependency = useMemo(() => ({ tree, expandedPaths, query }), [tree, expandedPaths, query]);
   const [contextMenu, setContextMenu] = useState<WorkspaceFileContextTarget | null>(null);
   const [entryDialog, setEntryDialog] = useState<WorkspaceEntryDialogRequest | null>(null);
   const entryDrag = useWorkspaceEntryDrag({
@@ -207,6 +209,7 @@ export function WorkspacePanel({
         <FileTreeRow
           className={`desktop-file-row ${entryDrag.draggingPath === node.path ? 'is-dragging' : ''}`}
           depth={level}
+          animateEntry={level > 0}
           expanded={directory ? expanded : undefined}
           selected={selected}
           label={node.name}
@@ -354,7 +357,10 @@ export function WorkspacePanel({
       <aside className={`desktop-workspace-panel${placement === 'bottom' ? ' desktop-workspace-panel--bottom-embedded' : ''}`}>
         <div
           className={`desktop-workspace-body ${showsFileExplorer ? 'desktop-workspace-body--file-explorer' : 'desktop-workspace-body--single'}`}
-          style={showsFileExplorer ? ({ '--desktop-file-tree-width': `${treeVisible ? treeWidth : 0}px` } as CSSProperties) : undefined}
+          style={showsFileExplorer ? ({
+            '--desktop-file-tree-width': `${treeWidth}px`,
+            '--desktop-file-tree-track-width': `${treeVisible ? treeWidth : 0}px`,
+          } as CSSProperties) : undefined}
         >
           {fileEditorHeader}
           {mainPanel}
@@ -393,6 +399,7 @@ export function WorkspacePanel({
                 </div>
                 {activeProject ? (
                   <FileTreeSurface className={`desktop-file-list ${entryDrag.dropPath === '' ? 'is-drop-target' : ''}`} ref={fileListRef} onScroll={onFileListScroll}
+                    layoutDependency={treeLayoutDependency}
                     onDragOver={(event) => entryDrag.dragOver(event, '')}
                     onDragLeave={entryDrag.clearDropTarget}
                     onDrop={(event) => entryDrag.drop(event, '')}

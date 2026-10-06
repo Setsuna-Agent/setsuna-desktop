@@ -6,7 +6,7 @@ import type {
   SettingsViewUi,
 } from '@setsuna-desktop/renderer-contracts/settings';
 
-import { Info, Monitor, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { ArrowUpRight, Download, Info, Monitor, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import type {
   DesktopUpdateDownloadSource,
@@ -35,10 +35,10 @@ export function UpdaterSettingsView({
   const updatePercent = updater.ready ? 100 : Math.round(state?.progress?.percent ?? 0);
   const updateBusy = updater.checking
     || state?.status === 'checking'
-    || state?.status === 'available'
+    || (state?.status === 'available' && state.canUpdate)
     || state?.status === 'downloading'
     || updater.installing;
-  const updateUnsupported = state?.canUpdate === false || state?.status === 'unsupported';
+  const updateUnsupported = state?.canCheckForUpdates === false || state?.status === 'unsupported';
   const showCheckButton = updater.available && !updater.ready && !updater.installing;
   const showProgress = updateBusy || updater.ready;
   const releaseUrl = state?.releaseUrl ?? state?.feedUrl ?? null;
@@ -62,10 +62,10 @@ export function UpdaterSettingsView({
         </Row>
       </Group>
 
-      <Group
-        className="updater-settings__update-group"
-        title={translate('feature.updater.settings.updates')}
-      >
+      <div className="updater-settings__update-group">
+        <div className="updater-settings__update-group-title">
+          {translate('feature.updater.settings.updates')}
+        </div>
         <div className="updater-settings__update-panel">
           <div className="updater-settings__update-main">
             {showProgress ? (
@@ -75,14 +75,18 @@ export function UpdaterSettingsView({
               >
                 <span>{updatePercent}%</span>
               </span>
-            ) : null}
+            ) : (
+              <span className="updater-settings__update-icon" aria-hidden="true">
+                <Download size={20} />
+              </span>
+            )}
             <div className="updater-settings__update-copy">
-              <strong>
-                {updater.statusTitle}
+              <div className="updater-settings__update-heading">
+                <strong>{updater.statusTitle}</strong>
                 <UpdaterStatusBadge tone={updateBadgeTone(state)}>
                   {updateBadgeText(state, translate)}
                 </UpdaterStatusBadge>
-              </strong>
+              </div>
               <span>{updater.statusText}</span>
               {updater.updateVersion ? (
                 <span>
@@ -95,13 +99,15 @@ export function UpdaterSettingsView({
                 <span>{translate('feature.updater.settings.package', { name: state.assetName })}</span>
               ) : null}
               {releaseUrl ? (
-                <UiButton variant="ghost"
+                <UiButton
+                  variant="ghost"
                   className="updater-settings__release-link"
                   type="button"
                   title={releaseUrl}
                   onClick={() => void openExternal(releaseUrl)}
                 >
-                  {translate('feature.updater.settings.releaseNotes')}<span>{releaseUrl}</span>
+                  {translate('feature.updater.settings.releaseNotes')}
+                  <ArrowUpRight size={13} aria-hidden="true" />
                 </UiButton>
               ) : null}
             </div>
@@ -132,7 +138,7 @@ export function UpdaterSettingsView({
             ) : null}
           </div>
         </div>
-      </Group>
+      </div>
       <UpdateDownloadSourceSettings updater={updater} translate={translate} ui={ui} />
     </Section>
   );
@@ -351,8 +357,10 @@ function updateBadgeText(state: DesktopUpdateState | null, t: RendererTranslate)
   if (state?.status === 'downloaded') return t('feature.updater.settings.badge.pending');
   if (state?.status === 'downloading') return t('feature.updater.settings.badge.downloading');
   if (state?.status === 'checking') return t('feature.updater.settings.badge.checking');
+  if (state?.status === 'available') return t('feature.updater.settings.badge.available');
   if (state?.status === 'not-available') return t('feature.updater.settings.badge.latest');
   if (state?.status === 'error') return t('feature.updater.settings.badge.failed');
-  if (state?.status === 'unsupported') return t('feature.updater.settings.badge.unavailable');
+  if (state?.status === 'unsupported' || state?.canCheckForUpdates === false) return t('feature.updater.settings.badge.unavailable');
+  if (state?.canUpdate === false) return t('feature.updater.settings.badge.manual');
   return t('feature.updater.settings.badge.automatic');
 }

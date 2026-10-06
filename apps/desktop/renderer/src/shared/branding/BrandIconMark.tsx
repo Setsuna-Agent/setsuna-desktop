@@ -5,10 +5,11 @@ import { localizedProviderBrandLabel, providerInitials } from './providerBrandin
 type BrandIconMarkProps = {
   brand: ProviderBrandAsset | null;
   fallbackName: string;
+  loading?: 'eager' | 'lazy';
   size?: 'compact' | 'default' | 'large';
 };
 
-export function BrandIconMark({ brand, fallbackName, size = 'default' }: BrandIconMarkProps) {
+export function BrandIconMark({ brand, fallbackName, loading, size = 'default' }: BrandIconMarkProps) {
   const { t } = useI18n();
   const classes = [
     'brand-icon-mark',
@@ -25,8 +26,8 @@ export function BrandIconMark({ brand, fallbackName, size = 'default' }: BrandIc
     >
       {brand ? (
         <>
-          <img alt="" className={brand.darkSrc ? 'is-light-variant' : undefined} draggable={false} src={brand.src} />
-          {brand.darkSrc ? <img alt="" className="is-dark-variant" draggable={false} src={brand.darkSrc} /> : null}
+          <img alt="" className={brand.darkSrc ? 'is-light-variant' : undefined} draggable={false} loading={loading} src={brand.src} />
+          {brand.darkSrc ? <img alt="" className="is-dark-variant" draggable={false} loading={loading} src={brand.darkSrc} /> : null}
         </>
       ) : <span>{providerInitials(fallbackName)}</span>}
     </span>

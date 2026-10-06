@@ -27,6 +27,7 @@ export const updaterMainFeature = defineMainFeature({
       currentVersion: host.currentVersion,
       downloadsDir: host.downloadsDir,
       enabled: host.enabled,
+      allowManualChecks: host.allowManualChecks,
       fetch: (input, init) => host.fetch(input, init),
       repository: host.repository,
       sourceConfigPath: host.sourceConfigPath,

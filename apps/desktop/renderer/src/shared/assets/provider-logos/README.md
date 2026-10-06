@@ -1,8 +1,14 @@
 # Provider logo assets
 
-Most SVG files in this directory were copied from `@lobehub/icons-static-svg@1.94.0` on 2026-07-20.
-The package is published by LobeHub under the MIT license; see `LICENSE.lobehub.txt`.
-Color variants are used whenever the package publishes one; providers whose official marks are monochrome keep the monochrome asset.
+The main catalog uses the installed `@lobehub/icons-static-svg@1.95.1` package from [LobeHub](https://github.com/lobehub/lobe-icons).
+Vite bundles its primary SVG marks as local image assets, with color variants preferred where available.
+The library is MIT licensed; see `LICENSE.lobehub.txt` and the packaged `THIRD_PARTY_NOTICES.md`.
+
+`lobehub-catalog.json` contains names and search aliases from the installed release's source commit.
+After upgrading the dependency, run `pnpm sync:brand-icons` to refresh this metadata.
+The sync command validates that every primary SVG has metadata; icon lookup and search do not access the network at runtime.
+
+Local overrides preserve existing preset keys and the following assets:
 
 `kimi.svg` and `kimi-dark.svg` come from Kimi's official brand guide and provide the intended light- and dark-theme marks.
 

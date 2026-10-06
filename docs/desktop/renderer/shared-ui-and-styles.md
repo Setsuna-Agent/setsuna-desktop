@@ -94,6 +94,8 @@
 
 `branding/providerBranding.ts` 把 provider/model 信息映射到内置 token 或用户 data URL 图标。`BrandIconMark.tsx` 负责安全渲染。
 
+- 厂商自动匹配按名称、预置厂商 ID、API 域名依次查询完整图库；模型按模型 ID、名称匹配，未命中时沿用厂商图标。手动指定的预设或上传图标优先。
+- `brandNameMatcher.ts` 从图库名称和中文别名生成词边界匹配规则，复用既有品牌别名；API URL 只检查域名，模型命名空间从模型本身向外匹配。
 - SVG provider assets 是随应用构建的可信资源。
 - 用户图标只接受受限 PNG/JPEG/WebP data URL。
 - 未知品牌使用稳定 fallback。
@@ -147,7 +149,7 @@
 
 ## Assets
 
-`shared/assets/provider-logos/` 包含第三方品牌资源和 license/README。新增资源时：
+品牌选择器通过 `@lobehub/icons-static-svg` 的完整静态图库提供图标；品牌名称和中文搜索别名由 `pnpm sync:brand-icons` 从已安装版本的源码提交生成。`shared/assets/provider-logos/` 保留目录元数据、本地覆盖图标和 license/README。新增资源时：
 
 - 保留来源与许可。
 - 优先构建期静态 asset。
