@@ -7,8 +7,17 @@
 }
 
 .desktop-workspace-body--file-explorer {
-  grid-template-columns: minmax(280px, 1fr) var(--desktop-file-tree-width, 248px);
+  grid-template-columns: minmax(280px, 1fr) var(--desktop-file-tree-track-width, 248px);
   grid-template-rows: 34px minmax(0, 1fr);
+  transition: grid-template-columns var(--app-sidebar-motion-duration) var(--app-sidebar-motion-easing);
+}
+
+body.desktop-file-tree-resizing .desktop-workspace-body--file-explorer {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .desktop-workspace-body--file-explorer { transition: none; }
 }
 
 .desktop-workspace-body--single {

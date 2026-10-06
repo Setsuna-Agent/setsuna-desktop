@@ -40,7 +40,13 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-async function fixture(options: { extension?: string; checksum?: 'missing' | 'wrong' } = {}) {
+async function fixture(options: {
+  extension?: string;
+  checksum?: 'missing' | 'wrong';
+  enabled?: boolean;
+  allowManualChecks?: boolean;
+  currentVersion?: string;
+} = {}) {
   const root = await mkdtemp(path.join(tmpdir(), 'setsuna-updater-'));
   roots.push(root);
   const extension = options.extension ?? 'zip';
@@ -52,7 +58,9 @@ async function fixture(options: { extension?: string; checksum?: 'missing' | 'wr
   const fetch = vi.fn(async (input: Parameters<typeof globalThis.fetch>[0]) => {
     const url = String(input);
     if (url === LATEST_RELEASE_URL) return Response.json({
-      tag_name: RELEASE_TAG, assets: [
+      tag_name: RELEASE_TAG,
+      html_url: `https://github.com/Setsuna-Agent/setsuna-desktop/releases/tag/${RELEASE_TAG}`,
+      assets: [
         { name, browser_download_url: `${base}/${name}` },
         ...(options.checksum === 'missing' ? [] : [{ name: 'SHA256SUMS', browser_download_url: `${base}/SHA256SUMS` }]),
       ],
@@ -63,13 +71,59 @@ async function fixture(options: { extension?: string; checksum?: 'missing' | 'wr
   });
   const installUpdate = vi.fn(async (quitAndInstall: () => void) => { quitAndInstall(); return true; });
   const updater = new DesktopUpdater({
-    currentVersion: CURRENT_VERSION, repository: 'Setsuna-Agent/setsuna-desktop', enabled: true,
+    currentVersion: options.currentVersion ?? CURRENT_VERSION,
+    repository: 'Setsuna-Agent/setsuna-desktop',
+    enabled: options.enabled ?? true,
+    allowManualChecks: options.allowManualChecks,
     downloadsDir: root, sourceConfigPath: path.join(root, 'sources.json'), fetch, installUpdate,
   });
   updaters.push(updater);
   await updater.initialize();
   return { updater, fetch, name, base, installUpdate };
 }
+
+describe('development update checks', () => {
+  it.each(['darwin', 'win32'])('checks releases manually on %s without starting a download or installer', async (targetPlatform) => {
+    Object.defineProperty(process, 'platform', { value: targetPlatform });
+    const { updater, fetch, installUpdate } = await fixture({ enabled: false, allowManualChecks: true, checksum: 'missing' });
+    vi.useFakeTimers();
+    updater.start();
+    await vi.advanceTimersByTimeAsync(4 * 60 * 60 * 1000);
+    expect(fetch).not.toHaveBeenCalled();
+
+    const checking = updater.checkAndDownload();
+    expect(updater.checkAndDownload()).toBe(checking);
+    const state = await checking;
+    expect(state).toMatchObject({
+      status: 'available',
+      canCheckForUpdates: true,
+      canUpdate: false,
+      availableVersion: RELEASE_TAG,
+      releaseUrl: `https://github.com/Setsuna-Agent/setsuna-desktop/releases/tag/${RELEASE_TAG}`,
+    });
+    expect(state.downloadedFilePath).toBeUndefined();
+    expect(fetch.mock.calls.map(([url]) => String(url))).toEqual([LATEST_RELEASE_URL]);
+    expect(await updater.installReady()).toMatchObject({ ok: false, action: 'none' });
+    expect(installUpdate).not.toHaveBeenCalled();
+    expect(native.prepare).not.toHaveBeenCalled();
+  });
+
+  it('reports the current version as latest during a manual check', async () => {
+    const { updater, fetch } = await fixture({
+      enabled: false,
+      allowManualChecks: true,
+      currentVersion: AVAILABLE_VERSION,
+    });
+    expect(await updater.checkAndDownload()).toMatchObject({ status: 'not-available', availableVersion: undefined });
+    expect(fetch.mock.calls.map(([url]) => String(url))).toEqual([LATEST_RELEASE_URL]);
+  });
+
+  it('makes no network requests when both updates and manual checks are disabled', async () => {
+    const { updater, fetch } = await fixture({ enabled: false });
+    expect(await updater.checkAndDownload()).toMatchObject({ status: 'unsupported', canCheckForUpdates: false });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
 
 describe('desktop update installation', () => {
   it('downloads through the selected source, then stages once and delegates shutdown before restarting', async () => {

@@ -47,6 +47,7 @@ function updateState(patch: Partial<DesktopUpdateState>): DesktopUpdateState {
     platform: 'darwin',
     arch: 'arm64',
     installMode: 'open-finder',
+    canCheckForUpdates: true,
     canUpdate: true,
     feedUrl: 'https://github.com/Setsuna-Agent/setsuna-desktop/releases/latest',
     activeDownloadSourceId: 'github-direct',

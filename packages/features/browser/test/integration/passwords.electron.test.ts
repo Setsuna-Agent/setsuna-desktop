@@ -75,7 +75,9 @@ it.skipIf(!supported).each(['standard', 'dynamic-widget'])('captures %s login na
               guest.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' });
             }
             const prompt = await until(async () => (await session.getState()).prompt, 'save prompt after native submit');
-            await until(() => guest.getURL() === origin + '/done', 'form navigation');
+            // URL commitment precedes load completion; an early reload aborts /done
+            // and Electron can report that failure to the next loadURL promise.
+            await until(() => guest.getURL() === origin + '/done' && !guest.isLoadingMainFrame(), 'form navigation completion');
             assert.equal(prompt.update, true);
             assert.equal((await store.list(origin))[0].password, 'initial');
             assert.equal(await session.save(prompt.id), true);

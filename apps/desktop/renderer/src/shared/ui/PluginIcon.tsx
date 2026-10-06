@@ -21,7 +21,7 @@ import {
   Shrink,
   Sparkles,
 } from 'lucide-react';
-import openaiLogoUrl from '../assets/provider-logos/openai.svg';
+import openaiLogoUrl from '@lobehub/icons-static-svg/icons/openai.svg';
 
 const pluginIconNames = [
   'app-builder',

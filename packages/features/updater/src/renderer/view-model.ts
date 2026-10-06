@@ -80,7 +80,7 @@ function updateStatusTitle(
   if (status === 'checking' || checking) return t('feature.updater.title.checking');
   if (status === 'not-available') return t('feature.updater.title.latest');
   if (status === 'error') return t('feature.updater.title.error');
-  if (status === 'unsupported' || state?.canUpdate === false) {
+  if (status === 'unsupported' || state?.canCheckForUpdates === false) {
     return t('feature.updater.title.unsupported');
   }
   return t('feature.updater.title.default');
@@ -106,6 +106,11 @@ function updateStatusText(
       : t('feature.updater.text.downloading');
   }
   if (status === 'available') {
+    if (state?.canUpdate === false) {
+      return updateVersion
+        ? t('feature.updater.text.availableVersionManual', { version: updateVersion })
+        : t('feature.updater.title.available');
+    }
     return updateVersion
       ? t('feature.updater.text.availableVersion', { version: updateVersion })
       : t('feature.updater.text.available');
@@ -113,8 +118,9 @@ function updateStatusText(
   if (status === 'checking' || checking) return t('feature.updater.text.checking');
   if (status === 'not-available') return t('feature.updater.text.latest');
   if (status === 'error') return state?.error || t('feature.updater.text.retry');
-  if (status === 'unsupported' || state?.canUpdate === false) {
+  if (status === 'unsupported' || state?.canCheckForUpdates === false) {
     return t('feature.updater.text.unsupported');
   }
+  if (state?.canUpdate === false) return t('feature.updater.text.development');
   return hasUpdater ? t('feature.updater.text.default') : t('feature.updater.text.desktopOnly');
 }

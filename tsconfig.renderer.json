@@ -51,6 +51,7 @@
   },
   "include": [
     "package.json",
+    "apps/desktop/renderer/src/shared/assets/provider-logos/lobehub-catalog.json",
     "apps/desktop/renderer/src/**/*.ts",
     "apps/desktop/renderer/src/**/*.tsx",
     "apps/desktop/renderer/test/**/*.ts",

@@ -26,21 +26,50 @@
   line-height: 18px;
 }
 
+/* The update card owns its surface independently of the host's compact settings groups. */
+[data-feature-id='updater'] .updater-settings__update-group {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+[data-feature-id='updater'] .updater-settings__update-group-title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
 [data-feature-id='updater'] .updater-settings__update-panel {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 72px;
-  padding: 12px 14px;
+  gap: 20px;
+  min-height: 96px;
+  padding: 20px;
+  border: 1px solid color-mix(in srgb, var(--sd-color-border, GrayText) 60%, transparent);
+  border-radius: var(--app-radius-xl);
+  background: color-mix(in srgb, var(--sd-color-surface-muted, Canvas) 72%, var(--sd-color-surface, Canvas));
+  box-shadow: var(--sd-shadow-card, none);
 }
 
 [data-feature-id='updater'] .updater-settings__update-main {
   display: flex;
-  flex: 1 1 260px;
   align-items: center;
   min-width: 0;
-  gap: 10px;
+  gap: 14px;
+}
+
+[data-feature-id='updater'] .updater-settings__update-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--app-radius-xl);
+  color: var(--sd-color-text-muted, GrayText);
+  background: var(--sd-color-surface, Canvas);
+  box-shadow: var(--sd-shadow-card, none);
 }
 
 [data-feature-id='updater'] .updater-settings__update-progress {
@@ -49,11 +78,11 @@
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--app-radius-full);
   background: conic-gradient(
-    var(--sd-color-warning, #ea580c) var(--updater-progress),
+    var(--sd-color-accent, Highlight) var(--updater-progress),
     color-mix(in srgb, var(--sd-color-border, GrayText) 72%, transparent) 0
   );
 }
@@ -62,8 +91,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   border-radius: var(--app-radius-full);
   color: var(--sd-color-text-muted, GrayText);
   background: var(--sd-color-surface, Canvas);
@@ -74,27 +103,30 @@
 [data-feature-id='updater'] .updater-settings__update-copy {
   display: grid;
   min-width: 0;
-  gap: 3px;
+  gap: 6px;
 }
 
-[data-feature-id='updater'] .updater-settings__update-copy strong {
-  display: inline-flex;
+[data-feature-id='updater'] .updater-settings__update-heading {
+  display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   min-width: 0;
+}
+
+[data-feature-id='updater'] .updater-settings__update-heading strong {
   color: var(--sd-color-text, CanvasText);
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 600;
   line-height: 20px;
 }
 
 [data-feature-id='updater'] .updater-settings__update-copy > span {
   min-width: 0;
-  overflow: hidden;
   color: var(--sd-color-text-muted, GrayText);
   font-size: 12px;
-  line-height: 18px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 19px;
+  overflow-wrap: anywhere;
 }
 
 [data-feature-id='updater'] .updater-settings__release-link {
@@ -103,28 +135,24 @@
   gap: 4px;
   width: fit-content;
   max-width: 100%;
+  min-height: 0;
   padding: 0;
   border: 0;
   color: var(--sd-color-text-muted, GrayText);
   background: transparent;
   font: inherit;
   font-size: 11px;
-  line-height: 16px;
+  font-weight: 500;
+  line-height: 18px;
   text-align: left;
-}
-
-[data-feature-id='updater'] .updater-settings__release-link span {
-  min-width: 0;
-  overflow: hidden;
-  color: currentColor;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 [data-feature-id='updater'] .updater-settings__release-link:hover,
 [data-feature-id='updater'] .updater-settings__release-link:focus-visible {
   color: var(--sd-color-text, CanvasText);
+  background: transparent;
   text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 [data-feature-id='updater'] .updater-settings__update-actions,
@@ -136,13 +164,14 @@
   gap: 8px;
 }
 
-[data-feature-id='updater'] .updater-settings__update-action,
 [data-feature-id='updater'] .updater-settings__compact-action {
   min-height: 30px;
 }
 
 [data-feature-id='updater'] .updater-settings__update-action {
-  padding: 0 10px;
+  min-height: 34px;
+  padding: 0 14px;
+  font-size: 12px;
 }
 
 [data-feature-id='updater'] .updater-settings__download-source-panel {
@@ -223,17 +252,18 @@
 
 [data-feature-id='updater'] .updater-settings__status {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   height: 22px;
-  padding: 0 7px;
-  border: 1px solid var(--sd-color-border, GrayText);
+  padding: 0 8px;
   border-radius: var(--app-radius-full);
   color: var(--sd-color-text-muted, GrayText);
-  background: var(--sd-color-surface, Canvas);
-  font-size: 12px;
-  font-weight: 400;
+  background: color-mix(in srgb, currentColor 10%, var(--sd-color-surface, Canvas));
+  font-size: 11px;
+  font-weight: 500;
   line-height: 1;
+  white-space: nowrap;
 }
 
 [data-feature-id='updater'] .updater-settings__status::before {
@@ -246,24 +276,23 @@
 
 [data-feature-id='updater'] .updater-settings__status--success {
   color: var(--sd-color-success, #16803d);
-  border-color: color-mix(in srgb, var(--sd-color-success, #16803d) 26%, transparent);
-  background: color-mix(in srgb, var(--sd-color-success, #16803d) 10%, var(--sd-color-surface, Canvas));
 }
 
 [data-feature-id='updater'] .updater-settings__status--warning {
   color: var(--sd-color-warning, #ea580c);
-  border-color: color-mix(in srgb, var(--sd-color-warning, #ea580c) 26%, transparent);
-  background: color-mix(in srgb, var(--sd-color-warning, #ea580c) 10%, var(--sd-color-surface, Canvas));
 }
 
 [data-feature-id='updater'] .updater-settings__status--danger {
   color: var(--sd-color-danger, #d92d20);
-  border-color: color-mix(in srgb, var(--sd-color-danger, #d92d20) 26%, transparent);
-  background: color-mix(in srgb, var(--sd-color-danger, #d92d20) 10%, var(--sd-color-surface, Canvas));
 }
 
 @media (max-width: 760px) {
-  [data-feature-id='updater'] .updater-settings__update-panel,
+  [data-feature-id='updater'] .updater-settings__update-panel {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    padding: 16px;
+  }
+
   [data-feature-id='updater'] .updater-settings__download-source-main {
     align-items: stretch;
     flex-direction: column;

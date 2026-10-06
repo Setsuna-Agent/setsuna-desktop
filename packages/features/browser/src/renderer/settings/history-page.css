@@ -1,13 +1,17 @@
 .browser-history-page__days { display: flex; flex-direction: column; gap: 8px; }
-.browser-history-page__header { display: flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 14px; transition: background 150ms ease; }
+.browser-history-page__day { --browser-history-page-inset: 14px; }
+.browser-history-page__header { display: flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 var(--browser-history-page-inset); transition: background 150ms ease; }
 .browser-history-page__header:hover,
-.browser-history-page__header:has(.browser-history-page__date:focus-visible) { background: color-mix(in srgb, var(--app-text) 3%, var(--app-surface)); }
+.browser-history-page__header:has(.browser-history-page__date:focus-visible),
+.browser-history-page__entries > li:hover,
+.browser-history-page__entries > li:has(.browser-history-page__link:focus-visible) { background: color-mix(in srgb, var(--app-text) 3%, var(--app-surface)); }
 .browser-history-page__date { display: flex; flex: 1; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; min-height: 44px; padding: 10px 0; border: 0; border-radius: 0; color: var(--app-text); font-size: 13px; text-align: start; }
-/* The date header owns hover feedback, so its button must not paint a second surface. */
-.browser-history-page__header .browser-history-page__date:is(:hover, :active):not(:disabled) { background: transparent; }
+/* Row containers own hover feedback; inner buttons must not paint a second surface. */
+.browser-history-page__header .browser-history-page__date:is(:hover, :active):not(:disabled),
+.browser-history-page__entries .browser-history-page__link:is(:hover, :active):not(:disabled) { background: transparent; }
 .browser-history-page__date > svg { flex-shrink: 0; color: var(--app-text-muted); }
-.browser-history-page__entries { margin: 0; padding: 0 14px; list-style: none; }
-.browser-history-page__entries > li { display: grid; grid-template-columns: minmax(0, 1fr) 48px 28px; align-items: center; gap: 8px; min-height: 44px; border-top: 1px solid var(--app-border); }
+.browser-history-page__entries { margin: 0; padding: 0; list-style: none; }
+.browser-history-page__entries > li { display: grid; grid-template-columns: minmax(0, 1fr) 48px 28px; align-items: center; gap: 8px; min-height: 44px; padding: 0 var(--browser-history-page-inset); border-top: 1px solid var(--app-border); transition: background 150ms ease; }
 .browser-history-page__link { display: flex; align-items: center; justify-content: flex-start; gap: 10px; min-width: 0; min-height: 44px; padding: 8px 0; border: 0; font-size: 13px; font-weight: 400; text-align: start; }
 .browser-history-page__link > svg { flex-shrink: 0; color: var(--app-text-muted); }
 .browser-history-page__title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

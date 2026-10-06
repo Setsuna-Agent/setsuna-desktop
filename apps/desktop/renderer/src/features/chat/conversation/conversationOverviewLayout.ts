@@ -1,6 +1,6 @@
 const overviewPanelWidthPx = 284;
 const overviewPanelRightInsetPx = 10;
-const overviewContentGapPx = 60;
+const overviewContentGapPx = overviewPanelRightInsetPx;
 const overviewRightLaneWidthPx = overviewPanelWidthPx + overviewPanelRightInsetPx;
 const overviewRequiredGutterPx = overviewRightLaneWidthPx + overviewContentGapPx;
 const overviewContentCenterShiftPx = overviewRightLaneWidthPx / 2;

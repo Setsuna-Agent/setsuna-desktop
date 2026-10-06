@@ -4,6 +4,7 @@ export interface UpdaterMainHost {
   readonly currentVersion: string;
   readonly downloadsDir: string;
   readonly enabled: boolean;
+  readonly allowManualChecks: boolean;
   readonly repository: string;
   readonly sourceConfigPath: string;
   installUpdate(quitAndInstall: () => void): Promise<boolean>;

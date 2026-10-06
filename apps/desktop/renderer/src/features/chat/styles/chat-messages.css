@@ -145,7 +145,7 @@
   transition: transform var(--app-sidebar-motion-duration, 220ms) var(--app-sidebar-motion-easing, cubic-bezier(0.2, 0.8, 0.2, 1));
 }
 
-/* 将正文放到概览卡片左侧的可用区域正中，左右保留相等且至少 60px 的间距。
+/* 将正文放到概览卡片左侧的可用区域正中，最小间距与卡片右边距一致。
    命令菜单保留自身的居中变换，并通过变量获得相同偏移。 */
 .chat-main-conversation--overview-shifted {
   --chat-overview-expanded-shift: 147px;

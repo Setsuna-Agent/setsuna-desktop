@@ -351,6 +351,7 @@ async function createWindow(): Promise<void> {
         downloadsDir: path.join(app.getPath('downloads'), 'Setsuna Desktop Updates'),
         sourceConfigPath: dataLayout.updateSourcesPath,
         enabled: !isComputerUseLab && (app.isPackaged || process.env.SETSUNA_DESKTOP_ENABLE_UPDATES === '1'),
+        allowManualChecks: !isComputerUseLab,
         installUpdate: (quitAndInstall: () => void) => updateInstallCoordinator.install(quitAndInstall),
         fetch: (
           input: Parameters<typeof globalThis.fetch>[0],
