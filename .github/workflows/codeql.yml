@@ -60,10 +60,10 @@ jobs:
           build-mode: ${{ matrix.build-mode }}
 
       # The Swift helper uses swiftc directly; there is no Xcode or SwiftPM project for autobuild.
-      # This script only needs Node built-ins, so no dependency installation or build cache is needed.
+      # Extract all sources in one unoptimized compilation; release builds still use -O.
       - name: Build macOS computer helper
         if: matrix.language == 'swift'
-        run: pnpm build:computer-use:mac
+        run: pnpm build:computer-use:mac --codeql
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4

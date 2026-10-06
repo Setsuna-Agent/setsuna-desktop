@@ -199,7 +199,7 @@ Windows `windows-sandbox` job 对原生 sidecar 执行 Rust 格式、Clippy、�
 
 `.github/workflows/codeql.yml` 使用 advanced setup，在 `master` push、面向 `master` 的 PR、每周定时和手动触发时扫描 Actions、JavaScript/TypeScript、Python、Rust 和 Swift。启用该工作流前，须关闭仓库设置中的 CodeQL default setup，避免 GitHub 拒绝 advanced setup 的结果上传。
 
-Swift 使用 macOS runner 和 `manual` build mode，在 CodeQL 初始化后执行 `pnpm build:computer-use:mac`。原生助手由脚本直接调用 `swiftc` 编译，没有 Xcode 或 SwiftPM 项目，因此不能使用 `autobuild`。该构建仅依赖 Node 内置模块，不安装应用依赖，也不复用原生构建产物，确保 CodeQL 能跟踪实际编译。
+Swift 使用 macOS runner 和 `manual` build mode，在 CodeQL 初始化后执行 `pnpm build:computer-use:mac --codeql`。原生助手由脚本直接调用 `swiftc` 编译，没有 Xcode 或 SwiftPM 项目，因此不能使用 `autobuild`。扫描构建使用 `-Onone -whole-module-optimization`，一次编译整个模块，避免逐文件编译重复解析源码和提取 SDK；发布构建仍使用 `-O`。扫描产物单独写入 `dist/computer-use/codeql/<arch>`，每次都重新编译，确保 CodeQL 能跟踪全部源码。该构建仅依赖 Node 内置模块，不安装应用依赖。
 
 ## Release Workflow
 
