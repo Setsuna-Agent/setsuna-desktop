@@ -7,13 +7,14 @@ import { defaultGitSettings } from '../../src/contracts/index.js';
 import type { ReviewClient } from '../../src/renderer/client.js';
 import { GitTaskModelSettings } from '../../src/renderer/GitTaskModelSettings.js';
 import { translateReviewMessage, type ReviewMessageKey } from '../../src/renderer/messages.js';
+import { TestModelPicker } from './model-picker-test-ui.js';
 
 afterEach(cleanup);
 const ui: ComponentProps<typeof GitTaskModelSettings>['ui'] = {
   Group: ({ title, children }) => <section><h2>{title}</h2>{children}</section>,
   Row: ({ label, children }) => <div>{label}{children}</div>,
   Section: ({ children }) => <div>{children}</div>,
-  SelectField: ({ children, onValueChange, ...props }) => <select {...props} onChange={(event) => onValueChange(event.currentTarget.value)}>{children}</select>,
+  ModelPicker: TestModelPicker,
   Toast: ({ message }) => <p role="alert">{message}</p>,
   Button: ({ children, onClick, disabled }) => <button disabled={disabled} onClick={onClick}>{children}</button>,
 };

@@ -8,7 +8,7 @@ import { ReviewModelSelect } from '../ReviewModelSelect.js';
 import { useGitSettings } from './useGitSettings.js';
 
 export function GitSettingsDialog({ onClose }: { onClose: () => void }) {
-  const { translate: t, ui: { Dialog, SelectField, Toggle } } = useReviewRendererHost();
+  const { translate: t, ui: { Dialog, ModelPicker, Toggle } } = useReviewRendererHost();
   const { draft, setDraft, ready, pending, error, load, save, availableModels } = useGitSettings();
   const busy = pending !== null;
   const disabled = !ready || busy;
@@ -30,7 +30,7 @@ export function GitSettingsDialog({ onClose }: { onClose: () => void }) {
           <h3><Sparkles size={15} />{t('feature.review.git.commitMessageSection')}</h3>
           <div className="git-settings__model-row">
             <span>{t('feature.review.settings.commitMessageModel')}</span>
-            <ReviewModelSelect SelectField={SelectField} translate={t} label={t('feature.review.settings.commitMessageModel')}
+            <ReviewModelSelect ModelPicker={ModelPicker} translate={t} label={t('feature.review.settings.commitMessageModel')}
               disabled={disabled} selection={draft.commitMessageModel} models={availableModels}
               onChange={(commitMessageModel) => setDraft((current) => ({ ...current, commitMessageModel }))} />
           </div>
@@ -47,7 +47,7 @@ export function GitSettingsDialog({ onClose }: { onClose: () => void }) {
             <>
               <div className="git-settings__model-row">
                 <span>{t('feature.review.settings.conflictModel')}</span>
-                <ReviewModelSelect SelectField={SelectField} translate={t} label={t('feature.review.settings.conflictModel')}
+                <ReviewModelSelect ModelPicker={ModelPicker} translate={t} label={t('feature.review.settings.conflictModel')}
                   disabled={disabled} selection={draft.conflictResolutionModel} models={availableModels}
                   onChange={(conflictResolutionModel) => setDraft((current) => ({ ...current, conflictResolutionModel }))} />
               </div>

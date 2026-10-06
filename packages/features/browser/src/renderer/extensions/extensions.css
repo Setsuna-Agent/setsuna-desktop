@@ -40,7 +40,7 @@
 .browser-extensions__item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .browser-extensions__list .sd-icon-button { width: 26px; height: 26px; min-height: 26px; padding: 0; }
 
-.browser-extensions__store.sd-button {
+.browser-extensions__action.sd-button {
   display: flex;
   justify-content: space-between;
   width: 100%;

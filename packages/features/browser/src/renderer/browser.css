@@ -133,6 +133,17 @@
   flex: 0 0 28px;
 }
 
+.desktop-browser-records-toolbar {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 3px;
+}
+
+.desktop-browser-records-toolbar[hidden],
+.desktop-browser-records-toolbar .desktop-browser-navigation__button[hidden] {
+  display: none;
+}
+
 .desktop-browser-window-menu__popover {
   display: grid;
   width: 220px;

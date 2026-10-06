@@ -1,0 +1,137 @@
+.configured-model-picker.sd-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.configured-model-picker__value {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.configured-model-picker__value > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-picker-menu.sd-menu {
+  width: 300px;
+  max-width: min(300px, calc(100vw - 24px));
+  overflow: hidden;
+}
+
+.model-picker-menu__search.sd-field {
+  width: 100%;
+  height: 26px;
+  padding-inline: 0;
+  border: 0;
+  color: var(--app-text);
+  background: transparent;
+  box-shadow: none;
+  font-size: 12px;
+}
+
+.model-picker-menu__search.sd-field:focus {
+  box-shadow: none;
+}
+
+.model-picker-menu__list {
+  /* Keep search visible even when a provider exposes hundreds of models. */
+  max-height: min(320px, calc(var(--radix-dropdown-menu-content-available-height, 70vh) - 56px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.model-picker-menu__provider + .model-picker-menu__provider {
+  margin-top: 6px;
+}
+
+.model-picker-menu__provider > .sd-menu__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-picker-menu__model {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 7px;
+  min-width: 0;
+}
+
+.model-picker-menu__model-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-details-tooltip.sd-tooltip {
+  /* Model details share the menu surface and the current theme's text palette. */
+  --app-text: inherit;
+  --app-text-muted: inherit;
+  --app-text-secondary: inherit;
+
+  padding: 10px 12px;
+  border: 1px solid var(--app-menu-border);
+  border-radius: var(--app-menu-radius);
+  background: var(--app-menu-bg);
+  box-shadow: var(--app-menu-shadow);
+  backdrop-filter: var(--app-menu-backdrop-filter);
+}
+
+.model-details {
+  display: grid;
+  gap: 6px;
+  min-width: 200px;
+  max-width: 300px;
+}
+
+.model-details__name {
+  font-weight: 600;
+}
+
+.model-details__code {
+  color: var(--app-text-muted);
+  font-family: var(--app-code-font-family);
+  font-size: 11px;
+}
+
+.model-details__parameters {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.model-details__parameters > div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 16px;
+}
+
+.model-details__parameters dt {
+  color: var(--app-text-muted);
+}
+
+.model-details__parameters dd {
+  margin: 0;
+  text-align: right;
+}
+
+.model-details__capabilities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: var(--app-text-secondary);
+}
+
+.model-details__capabilities > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}

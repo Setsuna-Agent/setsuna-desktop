@@ -10,7 +10,7 @@ import {
   type BrowserPanelMetadataPatch,
   type BrowserReloadShortcutBindings,
 } from '../contracts/index.js';
-import { ArrowLeft, ArrowRight, House, RefreshCw, SquareDashedMousePointer, Star, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, House, RefreshCw, SquareDashedMousePointer, X } from 'lucide-react';
 import {
   useCallback,
   useEffect,
@@ -69,6 +69,9 @@ import { useBrowserSettingsNavigation } from './settings/context.js';
 import { BrowserRecordsToolbar } from './records/BrowserRecordsToolbar.js';
 import { BrowserRecordsManager } from './records/BrowserRecordsManager.js';
 import { useBrowserRecordsPanel } from './records/useBrowserRecordsPanel.js';
+import { BrowserFavoritesIcon } from './records/recordIcons.js';
+import { BrowserFindBar } from './find/BrowserFindBar.js';
+import { useBrowserFind, type BrowserFindWebview } from './find/useBrowserFind.js';
 
 export { resolveBrowserFaviconUrl, resolveBrowserFaviconUrls };
 export { nextBrowserZoomFactor, normalizeBrowserInput };
@@ -93,9 +96,7 @@ type BrowserTab = {
   zoomFactor: number;
 };
 
-type BrowserWebviewElement = {
-  readonly isConnected: boolean;
-  addEventListener(type: string, listener: (event: any) => void): void;
+type BrowserWebviewElement = BrowserFindWebview & {
   canGoBack(): boolean;
   canGoForward(): boolean;
   getURL(): string;
@@ -108,7 +109,6 @@ type BrowserWebviewElement = {
   openDevTools(): void;
   print(): Promise<void>;
   reload(): void;
-  removeEventListener(type: string, listener: (event: any) => void): void;
   setZoomFactor(value: number): void;
   stop(): void;
 };
@@ -160,6 +160,7 @@ export function BrowserPanel({
   const annotationSurfaceRef = useRef<HTMLDivElement>(null);
   const webviewRef = useRef<BrowserWebviewElement | null>(null);
   const registeredTabIdRef = useRef<string | null>(null);
+  const menuButtonRef = useRef<HTMLElement>(null);
   const [tab, setTab] = useState<BrowserTab>(() => createBrowserTab(panel, translate));
   const [extensionWebContentsId, setExtensionWebContentsId] = useState<number>();
   const extensions = useBrowserExtensions(bridge, notify, translate, extensionWebContentsId);
@@ -208,6 +209,8 @@ export function BrowserPanel({
     bridge, tabId: tab.id, url: tab.url, available: !tab.showingHome && !tab.loading,
     hidden, notify, translate, onSend: onSendAnnotations,
   });
+  const find = useBrowserFind({ available: !hidden && !tab.showingHome, bridge, notify, tabId: tab.id, translate, webviewRef });
+  const pageChanged = useCallback(() => { annotations.clear(); find.reset(); }, [annotations.clear, find.reset]);
 
   const updateTab = useCallback((tabId: string, patch: Partial<BrowserTab>) => {
     setTab((current) => (current.id === tabId ? { ...current, ...patch } : current));
@@ -280,7 +283,7 @@ export function BrowserPanel({
       navigateToUrl(extensions.newTabUrl);
       return;
     }
-    annotations.clear();
+    pageChanged();
     refreshBrowserHistory();
     refreshBrowserBookmarks();
     updateTab(tab.id, {
@@ -431,6 +434,8 @@ export function BrowserPanel({
       ref={panelRef}
       className={`desktop-workspace-panel desktop-browser-panel${placement === 'bottom' ? ' desktop-workspace-panel--bottom-floating' : ''}`}
       aria-label={translate('feature.browser.label')}
+      data-browser-tab-id={tab.id}
+      onKeyDownCapture={find.onKeyDown}
       aria-hidden={hidden || undefined}
       hidden={hidden}
       {...(hidden ? { inert: '' } : {})}
@@ -481,18 +486,21 @@ export function BrowserPanel({
           type="button"
           onClick={toggleActivePageBookmark}
         >
-          <Star fill={activePageBookmarked ? 'currentColor' : 'none'} size={13} />
+          <BrowserFavoritesIcon aria-hidden="true" fill={activePageBookmarked ? 'currentColor' : 'none'} size={13} />
         </Button>
         <Button variant="ghost" type="button" className={`desktop-browser-navigation__button${annotations.open ? ' is-active' : ''}`}
           aria-label={translate('feature.browser.annotation.label')} title={translate('feature.browser.annotation.label')}
           aria-pressed={annotations.open} disabled={tab.showingHome || tab.loading || annotations.sending}
           onClick={annotations.toggle}><SquareDashedMousePointer size={13} /></Button>
         <BrowserPasswords bridge={bridge} tabId={tab.id} active={!tab.showingHome} hidden={hidden} notify={notify} translate={translate} />
-        <BrowserExtensions extensions={extensions} hidden={hidden} translate={translate} onOpenStore={() => navigateToUrl(BROWSER_WEB_STORE_URL)} />
-        <BrowserRecordsToolbar state={records} hidden={hidden} translate={translate} onNavigate={navigateToUrl}
+        <BrowserExtensions extensions={extensions} hidden={hidden} translate={translate}
+          onOpenSettings={settingsNavigation?.openExtensionSettings} onOpenStore={() => navigateToUrl(BROWSER_WEB_STORE_URL)} />
+        <BrowserRecordsToolbar state={records} hidden={hidden} menuButtonRef={menuButtonRef}
+          translate={translate} onNavigate={navigateToUrl}
           currentPage={showingNewTab ? undefined : { title: tab.title, url: tab.url }} />
         <BrowserWindowMenu
           hidden={hidden}
+          menuButtonRef={menuButtonRef}
           onOpenRecords={records.open}
           onOpenSettings={settingsNavigation ? () => settingsNavigation.openSettings('browser') : undefined}
           capturingScreenshot={screenshotCapturing}
@@ -521,6 +529,7 @@ export function BrowserPanel({
         />
       ) : null}
       <div className="desktop-browser-page" ref={annotationSurfaceRef}>
+        {find.open ? <BrowserFindBar find={find} translate={translate} /> : null}
         <div className={`desktop-browser-content${tab.showingHome ? ' is-home' : tab.deviceEmulation.enabled ? ' is-device-emulation' : ''}`}>
           {tab.showingHome ? (
             <BrowserHomePage
@@ -537,7 +546,7 @@ export function BrowserPanel({
               tab={tab}
               newTabUrl={extensions.newTabUrl}
               onDeviceEmulationFailure={reportDeviceEmulationFailure}
-              onPageChange={annotations.clear}
+              onPageChange={pageChanged}
               onRegistrationChange={updateBrowserRegistration}
               onRef={setWebview}
               onUpdate={updateTab}

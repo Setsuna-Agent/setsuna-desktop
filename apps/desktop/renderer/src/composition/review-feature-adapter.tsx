@@ -23,7 +23,8 @@ import { codeDiffLinesToPatch } from '../shared/code/diffPatch.js';
 import { useI18n } from '../shared/i18n/I18nProvider.js';
 import { copyTextToClipboard } from '../shared/lib/clipboard.js';
 import { SettingsToggle } from '../shared/ui/SettingsViewUi.js';
-import { Checkbox, SelectField } from '../shared/ui/primitives.js';
+import { Checkbox } from '../shared/ui/primitives.js';
+import { SettingsModelPicker } from './ModelProviderFeatureBoundary.js';
 import { ReviewCommitMessageInput } from './ReviewCommitMessageInput.js';
 import { ReviewConflictTaskProgress } from './ReviewConflictTaskProgress.js';
 import { ScrollOverlay } from '../shared/ui/ScrollOverlay.js';
@@ -34,7 +35,7 @@ import { useReviewWorkspaceEntries } from './useReviewWorkspaceEntries.js';
 
 const reviewUi: ReviewRendererHost['ui'] = Object.freeze({
   Dialog: SettingsDialog,
-  SelectField,
+  ModelPicker: SettingsModelPicker,
   Toggle: SettingsToggle,
   Checkbox,
   ContextMenu,

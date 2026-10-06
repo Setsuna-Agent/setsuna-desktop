@@ -6,7 +6,7 @@ import type {
 } from '@setsuna-desktop/renderer-contracts/settings';
 import { useEffect, useState } from 'react';
 import type {
-  ApprovalReviewModelOption,
+  ApprovalReviewModelSelection,
   ApprovalReviewSettingsState,
 } from '../contracts/index.js';
 import type { ApprovalReviewClient } from './client.js';
@@ -20,7 +20,7 @@ export function ApprovalReviewSettingsView({
   translate: RendererTranslate;
   ui: SettingsViewUi;
 }>) {
-  const { Group, Row, Section, SelectField, Toast } = ui;
+  const { Group, Row, Section, ModelPicker, Toast } = ui;
   const [state, setState] = useState<ApprovalReviewSettingsState | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,22 +33,14 @@ export function ApprovalReviewSettingsView({
     return () => abort.abort();
   }, [client]);
 
-  const selectedValue = state?.selection ? referenceValue(state.selection) : '';
-  const selectionAvailable = !selectedValue || Boolean(
-    state?.availableModels.some((option) => referenceValue(option) === selectedValue),
-  );
-
-  async function save(value: string) {
+  async function save(selection: ApprovalReviewModelSelection) {
     if (!state) return;
     setSaving(true);
     setError(null);
     try {
-      const selected = state.availableModels.find((option) => referenceValue(option) === value);
       setState(await client.updateSettings({
         expectedRevision: state.revision,
-        selection: selected
-          ? { providerId: selected.providerId, modelId: selected.modelId }
-          : null,
+        selection,
       }));
     } catch (saveError) {
       setError(errorMessage(saveError));
@@ -64,24 +56,15 @@ export function ApprovalReviewSettingsView({
           label={translate('feature.approvalReview.settings.model')}
           description={translate('feature.approvalReview.settings.description')}
         >
-          <SelectField
+          <ModelPicker
             aria-label={translate('feature.approvalReview.settings.model')}
             disabled={!state || saving}
-            value={selectedValue}
-            onValueChange={(value) => { void save(value); }}
-          >
-            <option value="">{translate('feature.approvalReview.settings.followCurrent')}</option>
-            {!selectionAvailable ? (
-              <option value={selectedValue} disabled>
-                {translate('feature.approvalReview.settings.unavailable')}
-              </option>
-            ) : null}
-            {state?.availableModels.map((option) => (
-              <option key={referenceValue(option)} value={referenceValue(option)}>
-                {modelOptionLabel(option)}
-              </option>
-            ))}
-          </SelectField>
+            models={state?.availableModels ?? []}
+            value={state?.selection ?? null}
+            defaultLabel={translate('feature.approvalReview.settings.followCurrent')}
+            unavailableLabel={translate('feature.approvalReview.settings.unavailable')}
+            onChange={(selection) => { void save(selection); }}
+          />
         </Row>
         {state && state.availableModels.length === 0 ? (
           <Toast tone="info" message={translate('feature.approvalReview.settings.empty')} />
@@ -90,17 +73,6 @@ export function ApprovalReviewSettingsView({
       </Group>
     </Section>
   );
-}
-
-function referenceValue(reference: Readonly<{ providerId: string; modelId: string }>): string {
-  return JSON.stringify([reference.providerId, reference.modelId]);
-}
-
-function modelOptionLabel(option: ApprovalReviewModelOption): string {
-  const model = option.modelName && option.modelName !== option.modelCode
-    ? `${option.modelName} (${option.modelCode})`
-    : option.modelCode;
-  return `${option.providerName} · ${model}`;
 }
 
 function errorMessage(error: unknown): string {

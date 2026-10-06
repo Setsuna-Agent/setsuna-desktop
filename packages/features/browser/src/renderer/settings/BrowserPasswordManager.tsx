@@ -1,14 +1,17 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Plus, Pencil, Globe, Trash2 } from 'lucide-react';
+import type { BrowserSavedPassword } from '../../contracts/settings.js';
 import type { BrowserSettingsContentProps } from './types.js';
 import { useBrowserSavedPasswords } from './useBrowserSavedPasswords.js';
 import { BrowserSettingsSearch } from './BrowserSettingsSearch.js';
+import { groupBrowserSavedPasswords, type BrowserPasswordGroup } from './passwordGroups.js';
+import './password-manager.css';
 
 export function BrowserPasswordManager({ bridge, translate: t, ui }: BrowserSettingsContentProps) {
   const { items, status, busy, error, save, remove } = useBrowserSavedPasswords(bridge);
   const [query, setQuery] = useState('');
   const [editor, setEditor] = useState<{ origin: string; username: string; password: string; existing: boolean } | null>(null);
-  const filtered = items.filter((item) => `${item.origin} ${item.username}`.toLowerCase().includes(query.trim().toLowerCase()));
+  const groups = useMemo(() => groupBrowserSavedPasswords(items, query), [items, query]);
   const saveEditor = async () => {
     if (!editor) return;
     if (await save({ origin: editor.origin, username: editor.username, password: editor.password })) setEditor(null);
@@ -25,15 +28,49 @@ export function BrowserPasswordManager({ bridge, translate: t, ui }: BrowserSett
       <div className="browser-settings-page__toolbar">
         <div className="browser-settings-page__actions"><ui.Button disabled={busy} icon={<Plus size={14} />} onClick={() => setEditor({ origin: '', username: '', password: '', existing: false })}>{t('feature.browser.settings.add')}</ui.Button></div>
       </div>
-      <div className="browser-settings-page__card">{status === 'ready' && filtered.length ? <ul className="browser-settings-page__list">{filtered.map((item) => <li key={item.id}>
-        <Globe size={16} aria-hidden="true" />
-        <div className="browser-settings__entry"><strong>{item.origin}</strong><span>{item.username || t('feature.browser.password.noUsername')}</span></div>
-        <ui.IconButton label={t('feature.browser.settings.edit')} disabled={busy} onClick={() => setEditor({ ...item, password: '', existing: true })}><Pencil size={14} /></ui.IconButton>
-        <ui.IconButton label={t('feature.browser.settings.remove')} disabled={busy} onClick={() => void remove(item)}><Trash2 size={14} /></ui.IconButton>
-      </li>)}</ul> : <p className="browser-settings-page__status" role={status === 'error' ? 'alert' : 'status'}>
-        {t(status === 'loading' ? 'feature.browser.settings.loading' : status === 'error' ? 'feature.browser.settings.failed' : 'feature.browser.settings.empty')}
-      </p>}</div>
+      {status === 'ready' && groups.length ? (
+        <div className="browser-password-manager__sites">
+          {groups.map((group) => (
+            <BrowserPasswordSite key={group.origin} group={group} busy={busy} translate={t} ui={ui}
+              onEdit={(item) => setEditor({ ...item, password: '', existing: true })}
+              onRemove={(item) => { void remove(item); }} />
+          ))}
+        </div>
+      ) : (
+        <div className="browser-settings-page__card">
+          <p className="browser-settings-page__status" role={status === 'error' ? 'alert' : 'status'}>
+            {t(status === 'loading' ? 'feature.browser.settings.loading' : status === 'error' ? 'feature.browser.settings.failed' : 'feature.browser.settings.empty')}
+          </p>
+        </div>
+      )}
     </>}
     {error ? <ui.Toast tone="error" message={t('feature.browser.settings.failed')} /> : null}
   </div>;
+}
+
+function BrowserPasswordSite({ group, busy, translate: t, ui, onEdit, onRemove }: {
+  group: BrowserPasswordGroup;
+  busy: boolean;
+  translate: BrowserSettingsContentProps['translate'];
+  ui: Pick<BrowserSettingsContentProps['ui'], 'IconButton'>;
+  onEdit(item: BrowserSavedPassword): void;
+  onRemove(item: BrowserSavedPassword): void;
+}) {
+  return (
+    <section className="browser-settings-page__card" aria-label={group.origin}>
+      <header className="browser-password-manager__site-header">
+        <Globe size={16} aria-hidden="true" />
+        <h2 title={group.origin}>{group.origin}</h2>
+      </header>
+      <ul className="browser-settings-page__list browser-password-manager__accounts">
+        {group.items.map((item) => (
+          <li key={item.id}>
+            <span className="browser-password-manager__username">{item.username || t('feature.browser.password.noUsername')}</span>
+            <ui.IconButton label={t('feature.browser.settings.edit')} disabled={busy} onClick={() => onEdit(item)}><Pencil size={14} /></ui.IconButton>
+            <ui.IconButton label={t('feature.browser.settings.remove')} disabled={busy} onClick={() => onRemove(item)}><Trash2 size={14} /></ui.IconButton>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }

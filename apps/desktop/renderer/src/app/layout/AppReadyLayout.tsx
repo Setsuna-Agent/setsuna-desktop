@@ -236,6 +236,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   const activeBrowserPanelId = workspacePanels.browserPanelInstances.find((instance) => (
     instance.active && instance.panel.browser?.url !== BROWSER_HOME_URL
   ))?.panel.id ?? null;
+  const hasActiveBrowserPanel = workspacePanels.browserPanelInstances.some((instance) => instance.active);
   const reloadBrowserPanel = useCallback((
     mode: BrowserReloadMode,
     event?: AppKeyboardShortcutEvent,
@@ -317,8 +318,15 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       },
     },
     'chat.find': {
-      enabled: activeView === 'chat' && Boolean(runtime.currentThread?.messages.length),
-      execute: () => setFindInChatRequest((request) => request + 1),
+      enabled: activeView === 'chat' && (Boolean(runtime.currentThread?.messages.length) || hasActiveBrowserPanel),
+      execute: (event) => {
+        const tabId = browserShortcutTabId(event, null);
+        if (tabId) {
+          void window.setsunaDesktop?.browser.requestFindInPage(tabId).catch(() => undefined);
+        } else if (!(event && 'source' in event && event.source?.kind === 'embedded-browser') && runtime.currentThread?.messages.length) {
+          setFindInChatRequest((request) => request + 1);
+        }
+      },
     },
     'chat.cancelTurn': {
       allowInModal: true,
@@ -377,6 +385,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     chatActions,
     handleToggleConversationOverview,
     handleToggleSidebar,
+    hasActiveBrowserPanel,
     navigation,
     openCapabilities,
     openChat,

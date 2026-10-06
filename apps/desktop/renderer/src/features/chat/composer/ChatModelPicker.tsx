@@ -6,9 +6,9 @@ import { BrandIconMark } from '../../../shared/branding/BrandIconMark.js';
 import { resolveModelBrand } from '../../../shared/branding/providerBranding.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { AppTooltip } from '../../../shared/ui/primitives.js';
-import { chatModelOptionKey, chatModelOptions } from './chatModelOptions.js';
+import { modelOptionKey, modelOptions } from '../../../shared/ui/model-picker/modelOptions.js';
 import { createChatThinkingMenu, type ChatThinkingControl } from './chatThinkingMenu.js';
-import { createChatModelMenu } from './model-picker/chatModelMenu.js';
+import { createModelMenu } from '../../../shared/ui/model-picker/modelMenu.js';
 
 export function ChatModelPicker({
   config,
@@ -34,8 +34,8 @@ export function ChatModelPicker({
   const [query, setQuery] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
   const handledOpenSignalRef = useRef(0);
-  const options = useMemo(() => chatModelOptions(config), [config]);
-  const selectedKey = provider && model ? `model:${chatModelOptionKey(provider.id, model.id)}` : '';
+  const options = useMemo(() => modelOptions(config), [config]);
+  const selectedKey = provider && model ? `model:${modelOptionKey(provider.id, model.id)}` : '';
   const thinkingMenu = createChatThinkingMenu(thinkingControl, t);
   const modelSelectorTitle = t(model ? 'chat.model.switch' : 'chat.model.select');
   const modelBrand = provider && model ? resolveModelBrand(model, provider) : null;
@@ -69,9 +69,9 @@ export function ChatModelPicker({
     key: 'models',
     label: t('chat.model.label'),
     extra: <span className="chat-model-menu__current-model">{model?.name ?? fallbackModelCode ?? t('chat.model.noneSelected')}</span>,
-    submenuClassName: 'chat-model-menu__models sd-menu-surface--neutral',
+    submenuClassName: 'model-picker-menu sd-menu-surface--neutral',
     submenuInitialFocusRef: searchRef,
-    children: createChatModelMenu({
+    children: createModelMenu({
       options, query, onQueryChange: setQuery, searchRef, translate: t,
       emptyLabel: t(config ? 'chat.model.noMatch' : 'chat.model.notConfigured'),
       onSelect: (option, event) => {

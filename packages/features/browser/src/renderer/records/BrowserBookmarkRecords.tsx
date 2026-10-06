@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { IconButton, TextField } from '@setsuna-desktop/renderer-ui';
-import { BookmarkPlus, FolderPlus, Search } from 'lucide-react';
+import { FolderPlus, Search } from 'lucide-react';
 import type { BrowserBookmarkNode } from '../../contracts/bookmarks.js';
 import { useBrowserBookmarks } from '../useBrowserBookmarks.js';
 import type { BrowserRecordsProps } from './BrowserRecordsManager.js';
@@ -10,6 +10,7 @@ import { BrowserBookmarkEditor, type BrowserBookmarkEdit } from './BrowserBookma
 import { BrowserBookmarkList } from './BrowserBookmarkList.js';
 import { BOOKMARK_BAR_ID, OTHER_BOOKMARKS_ID } from './bookmarkTree.js';
 import { BrowserSettingsSearch } from '../settings/BrowserSettingsSearch.js';
+import { BrowserFavoritesIcon } from './recordIcons.js';
 
 export function BrowserBookmarkRecords(props: BrowserRecordsProps) {
   const { translate: t, onNavigate, onClose, pinned, currentPage, presentation } = props;
@@ -25,7 +26,7 @@ export function BrowserBookmarkRecords(props: BrowserRecordsProps) {
     ? t(edit.node ? 'feature.browser.records.editFolder' : 'feature.browser.records.addFolder')
     : t(edit?.node ? 'feature.browser.records.editBookmark' : 'feature.browser.records.addBookmark');
   const actions = !edit && !removing ? <>
-      <IconButton label={t('feature.browser.records.addBookmark')} onClick={() => setEdit({ type: 'bookmark', parentId, ...currentPage })}><BookmarkPlus size={14} /></IconButton>
+      <IconButton label={t('feature.browser.records.addBookmark')} onClick={() => setEdit({ type: 'bookmark', parentId, ...currentPage })}><BrowserFavoritesIcon aria-hidden="true" size={14} /></IconButton>
       <IconButton label={t('feature.browser.records.addFolder')} onClick={() => setEdit({ type: 'folder', parentId })}><FolderPlus size={14} /></IconButton>
     </> : null;
   return <>

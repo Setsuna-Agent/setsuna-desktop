@@ -8,7 +8,7 @@ export function registerBrowserExtensionIpc(
   scope: FeatureScope, service: BrowserExtensionService, resolveOwner: (senderId: number) => BrowserWindow | null,
 ): () => void {
   const channels = [BROWSER_IPC_CHANNELS.getExtensions, BROWSER_IPC_CHANNELS.getExtensionActions,
-    BROWSER_IPC_CHANNELS.removeExtension, BROWSER_IPC_CHANNELS.openExtension];
+    BROWSER_IPC_CHANNELS.removeExtension, BROWSER_IPC_CHANNELS.openExtension, BROWSER_IPC_CHANNELS.setExtensionEnabled];
   for (const channel of channels) {
     ipcMain.removeHandler(channel);
     ipcMain.handle(channel, (event, input) => scope.runOperation(async (signal) => {
@@ -24,6 +24,9 @@ export function registerBrowserExtensionIpc(
       if (channel === BROWSER_IPC_CHANNELS.getExtensionActions) return service.actions.snapshot(guestId);
       if (typeof input?.id !== 'string') return false;
       try {
+        if (channel === BROWSER_IPC_CHANNELS.setExtensionEnabled) {
+          return typeof input.enabled === 'boolean' && await service.setEnabled(input.id, input.enabled);
+        }
         if (channel === BROWSER_IPC_CHANNELS.removeExtension) return await service.remove(input.id);
         if (input.view !== 'popup' && input.view !== 'options') return false;
         if (input.anchor !== undefined && !validAnchor(input.anchor)) return false;

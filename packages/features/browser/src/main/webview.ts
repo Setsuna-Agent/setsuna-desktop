@@ -21,6 +21,8 @@ import {
   requestEmbeddedBrowserNewTab,
 } from './new-tab.js';
 
+const browserFindBindings = new Set(['Control+KeyF', 'Meta+KeyF']);
+
 export function installEmbeddedBrowserWebviews(input: Readonly<{
   activeKeyboardShortcutBindings(): ReadonlySet<string>;
   browserTabIdForWebContents(webContentsId: number): string | null;
@@ -63,17 +65,25 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
     const disposeExtensionActions = input.onGuestAttached?.(guestContents);
 
     const handleInput = (event: Event, keyboardInput: Input) => {
+      const hostWebContents = guestContents.hostWebContents;
+      if (!hostWebContents || hostWebContents.isDestroyed()) return;
+      const tabId = input.browserTabIdForWebContents(guestId);
+      // Page find belongs to the focused guest, even when the conversation is empty.
+      // Handle it before forwarding application shortcuts to avoid opening chat search.
+      if (embeddedBrowserKeyboardShortcut(keyboardInput, browserFindBindings)) {
+        event.preventDefault();
+        if (tabId) hostWebContents.send(BROWSER_IPC_CHANNELS.findInPageRequested, tabId);
+        return;
+      }
       const shortcut = embeddedBrowserKeyboardShortcut(
         keyboardInput,
         input.activeKeyboardShortcutBindings(),
         {
           kind: 'embedded-browser',
-          tabId: input.browserTabIdForWebContents(guestId),
+          tabId,
         },
       );
       if (!shortcut) return;
-      const hostWebContents = guestContents.hostWebContents;
-      if (!hostWebContents || hostWebContents.isDestroyed()) return;
       event.preventDefault();
       hostWebContents.send('desktop:keyboard-shortcut-input', shortcut.input);
     };

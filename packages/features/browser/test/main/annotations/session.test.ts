@@ -68,6 +68,10 @@ describe('browser annotation session', () => {
     await session.cancel();
     expect(await session.anchor(target!.id)).not.toBeNull();
     expect(await session.anchor(second!.id)).not.toBeNull();
+    for (const element of [button, other]) {
+      vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(new DOMRect(100, 100, 40, 20));
+      vi.spyOn(element, 'scrollIntoView').mockImplementation(() => { vi.mocked(document.elementFromPoint).mockReturnValue(element); });
+    }
     const capture = vi.fn(async () => screenshot);
     await session.sync({ ids: [target!.id, second!.id], visible: false });
     expect(await session.captureScreenshots([target!.id, second!.id], capture)).toEqual([screenshot, screenshot]);
@@ -174,6 +178,7 @@ describe('browser annotation session', () => {
       vi.spyOn(button, 'scrollIntoView').mockImplementation(() => {
         outer.scrollTop = 200 + index;
         inner.scrollLeft = 100 + index;
+        hitTest.mockReturnValue(button);
       });
       hitTest.mockReturnValue(button);
       const pick = session.pick();

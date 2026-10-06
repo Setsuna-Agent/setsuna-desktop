@@ -11,17 +11,19 @@ export type BrowserExtension = Readonly<{
   id: string;
   name: string;
   version: string;
+  enabled: boolean;
   icon: string | null;
   /** Toolbar artwork declared by action.default_icon, falling back to the app icon. */
   actionIcon: string | null;
   hasPopup: boolean;
   hasOptions: boolean;
-  /** Non-null only for the installed extension currently selected for new tabs. */
+  /** Non-null only for the enabled extension currently selected for new tabs. */
   newTabUrl: string | null;
 }>;
 
 export interface BrowserExtensionsBridge {
   getExtensions(): Promise<readonly BrowserExtension[]>;
+  setExtensionEnabled(id: string, enabled: boolean): Promise<boolean>;
   removeExtension(id: string): Promise<boolean>;
   openExtension(id: string, view: 'popup' | 'options', anchor?: BrowserExtensionPopupAnchor, webContentsId?: number): Promise<boolean>;
   getExtensionActions(webContentsId?: number): Promise<readonly BrowserExtensionAction[]>;

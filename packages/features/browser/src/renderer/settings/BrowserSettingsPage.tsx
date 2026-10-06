@@ -4,6 +4,7 @@ import { BROWSER_PERMISSIONS, type BrowserPreferences, type BrowserSearchEngine,
 import type { BrowserDesktopBridge } from '../../contracts/bridge.js';
 import type { BrowserTranslate } from '../messages.js';
 import { BrowserFeatureIcon } from '../BrowserFeatureIcon.js';
+import { BrowserFavoritesIcon, BrowserHistoryIcon } from '../records/recordIcons.js';
 import { BrowserClearDataDialog } from './BrowserClearDataDialog.js';
 import { BrowserSettingsDetail, type BrowserSettingsDetailKind } from './BrowserSettingsDetail.js';
 import { useBrowserSettingsNavigation } from './context.js';
@@ -18,13 +19,21 @@ export function BrowserSettingsPage({ bridge, children, translate: t, ui }: { br
   const { preferences, ready, busy, error, run, update } = useBrowserPreferences(bridge);
   const navigation = useBrowserSettingsNavigation();
   const [manager, setManager] = useState<Manager | null>(null);
+  const extensionsRequested = navigation?.extensionsRequested;
+  const consumeExtensionsRequest = navigation?.consumeExtensionsRequest;
+  useEffect(() => {
+    // The host selects the browser section; its nested management route stays Feature-owned.
+    if (extensionsRequested) { setManager('extensions'); consumeExtensionsRequest?.(); }
+  }, [extensionsRequested, consumeExtensionsRequest]);
   const [home, setHome] = useState('');
   useEffect(() => { setHome(preferences.homeUrl); }, [preferences.homeUrl]);
   if (!bridge?.getBrowserPreferences) return <ui.EmptyState title={t('feature.browser.settings.unavailable')} />;
   if (!ready) return <ui.EmptyState title={t(error ? 'feature.browser.settings.failed' : 'feature.browser.settings.loading')} />;
   if (manager && manager !== 'clear') return <BrowserSettingsDetail kind={manager} bridge={bridge} translate={t} ui={ui} onBack={() => setManager(null)} />;
   const toggle = (key: ToggleSetting) => <ui.Toggle key={key} label={t(`feature.browser.settings.${key}`)} description={null} checked={preferences[key]} disabled={busy} onChange={(value) => void update({ [key]: value })} />;
-  const manage = (label: Parameters<BrowserTranslate>[0], target: Manager) => <ui.NavigationRow label={t(label)} actionLabel={t('feature.browser.settings.manage')} onClick={() => setManager(target)} />;
+  const manage = (label: Parameters<BrowserTranslate>[0], target: Manager) => <ui.NavigationRow
+    icon={target === 'bookmarks' ? <BrowserFavoritesIcon aria-hidden="true" size={18} /> : target === 'history' ? <BrowserHistoryIcon aria-hidden="true" size={18} /> : undefined}
+    label={t(label)} actionLabel={t('feature.browser.settings.manage')} onClick={() => setManager(target)} />;
   const dialogProps = { bridge, translate: t, ui, onClose: () => setManager(null) };
   return <ui.PageLayout title={t('feature.browser.settings.title')}>
     <ui.Section className="browser-settings" featureId="browser">

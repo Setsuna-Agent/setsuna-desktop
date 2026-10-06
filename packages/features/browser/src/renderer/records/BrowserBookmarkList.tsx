@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
 import { Button, IconButton } from '@setsuna-desktop/renderer-ui';
-import { ChevronDown, ChevronRight, Folder, Globe, Pencil, Star, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Folder, Globe, Pencil, Trash2 } from 'lucide-react';
 import type { BrowserBookmarkNode, BrowserBookmarkTree } from '../../contracts/bookmarks.js';
 import type { BrowserTranslate } from '../messages.js';
 import { bookmarkNodeTitle } from './bookmarkLabels.js';
 import { bookmarkDescendants } from './bookmarkTree.js';
+import { BrowserFavoritesIcon } from './recordIcons.js';
 
 export function BrowserBookmarkList({ tree, query, expanded, selected, onToggleFolder, onOpen, onEdit, onRemove, translate: t }: {
   tree: BrowserBookmarkTree; query: string; expanded: ReadonlySet<string>; selected: string;
@@ -42,7 +43,7 @@ export function BrowserBookmarkList({ tree, query, expanded, selected, onToggleF
           onClick={() => isFolder ? onToggleFolder(node.id) : onOpen?.(node.url)}>
           <span className="browser-records__disclosure" aria-hidden="true">{isFolder ? open ? <ChevronDown size={10} /> : <ChevronRight size={10} /> : null}</span>
           <span className="browser-records__item-icon" aria-hidden="true">
-            {isFolder ? node.root === 'bar' ? <Star size={14} /> : <Folder size={14} /> : <Globe size={14} />}
+            {isFolder ? node.root === 'bar' ? <BrowserFavoritesIcon size={14} /> : <Folder size={14} /> : <Globe size={14} />}
           </span>
           <span className="browser-records__title">{title}</span>
         </Button>

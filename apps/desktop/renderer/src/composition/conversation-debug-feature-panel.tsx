@@ -54,9 +54,9 @@ export function ConversationDebugFeaturePanel({
 
 const conversationDebugCodeStyle = {
   '--diffs-dark-bg': 'transparent',
-  '--diffs-font-size': '10px',
+  '--diffs-font-size': '11px',
   '--diffs-light-bg': 'transparent',
-  '--diffs-line-height': '17px',
+  '--diffs-line-height': '19px',
 } as CSSProperties;
 
 function ConversationDebugCodeView({

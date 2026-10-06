@@ -75,7 +75,7 @@ it('allows wheel scrolling in the task model menu while keeping the background l
   const editor = await openEditor(user);
   await user.click(within(editor).getByRole('button', { name: 'feature.automation.model' }));
   const menu = await screen.findByRole('menu');
-  const list = menu.querySelector<HTMLElement>('.chat-model-menu__list')!;
+  const list = menu.querySelector<HTMLElement>('.model-picker-menu__list')!;
   // happy-dom has no layout; simulate a list with room to scroll in either direction.
   list.style.overflowY = 'auto';
   Object.defineProperties(list, {

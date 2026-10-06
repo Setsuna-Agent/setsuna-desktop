@@ -1,0 +1,54 @@
+.browser-find {
+  position: absolute;
+  z-index: 4;
+  top: 8px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: min(340px, calc(100% - 24px));
+  min-height: 42px;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  color: var(--app-text);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-popover);
+  -webkit-app-region: no-drag;
+}
+
+.browser-find > svg {
+  flex: 0 0 auto;
+  color: var(--app-text-muted);
+}
+
+.browser-find input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  box-shadow: none;
+}
+
+.browser-find .sd-icon-button {
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+  color: var(--app-text-secondary);
+}
+
+.browser-find__count {
+  flex: 0 0 auto;
+  color: var(--app-text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}

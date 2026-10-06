@@ -6,15 +6,17 @@ import type { BrowserTranslate } from '../messages.js';
 import type { useBrowserExtensions } from './useBrowserExtensions.js';
 import './extensions.css';
 
-export function BrowserExtensions({ extensions, hidden, translate: t, onOpenStore }: {
+export function BrowserExtensions({ extensions, hidden, translate: t, onOpenSettings, onOpenStore }: {
   extensions: ReturnType<typeof useBrowserExtensions>;
   hidden: boolean;
   translate: BrowserTranslate;
+  onOpenSettings?(): void;
   onOpenStore(): void;
 }) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const visible = open && !hidden;
+  const enabledExtensions = extensions.extensions.filter((extension) => extension.enabled);
   const activate = (extension: BrowserExtension, button: HTMLButtonElement | null) => {
     const view = extension.hasPopup ? 'popup' : extension.hasOptions ? 'options' : null;
     if (!view) { setOpen(true); return; }
@@ -49,7 +51,7 @@ export function BrowserExtensions({ extensions, hidden, translate: t, onOpenStor
     )) : null}
     <Popover open={visible} onOpenChange={setOpen} modal placement="bottomRight" className="sd-menu-surface browser-extensions__menu"
       contentLabel={t('feature.browser.extension.label')} content={<>
-      {extensions.extensions.length ? <ul className="browser-extensions__list">{extensions.extensions.map((extension) => {
+      {enabledExtensions.length ? <ul className="browser-extensions__list">{enabledExtensions.map((extension) => {
         const content = <><BrowserExtensionIcon icon={extension.icon} /><span>{extension.name}</span></>;
         const view = extension.hasPopup ? 'popup' : extension.hasOptions ? 'options' : null;
         const pinned = extensions.pinnedIds.includes(extension.id);
@@ -66,7 +68,10 @@ export function BrowserExtensions({ extensions, hidden, translate: t, onOpenStor
             onClick={() => { void extensions.remove(extension.id); }}><Trash2 size={13} /></IconButton>
         </li>;
       })}</ul> : null}
-      <Button variant="ghost" className="browser-extensions__store" onClick={() => { setOpen(false); onOpenStore(); }}>
+      <Button variant="ghost" className="browser-extensions__action" disabled={!onOpenSettings} onClick={() => { setOpen(false); onOpenSettings?.(); }}>
+        <span>{t('feature.browser.extension.manage')}</span><ArrowUpRight size={14} />
+      </Button>
+      <Button variant="ghost" className="browser-extensions__action" onClick={() => { setOpen(false); onOpenStore(); }}>
         <span>{t('feature.browser.extension.store')}</span><ArrowUpRight size={14} />
       </Button>
       </>}>

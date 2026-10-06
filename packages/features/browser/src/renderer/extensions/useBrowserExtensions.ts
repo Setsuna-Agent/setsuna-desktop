@@ -48,13 +48,14 @@ export function useBrowserExtensions(bridge: BrowserDesktopBridge | null, notify
   return {
     extensions, busy, ready, available: Boolean(bridge?.getExtensions),
     pinnedIds: pins.pinnedIds,
-    pinnedExtensions: pins.pinnedIds.flatMap((id) => extensions.filter((extension) => extension.id === id)),
+    pinnedExtensions: pins.pinnedIds.flatMap((id) => extensions.filter((extension) => extension.enabled && extension.id === id)),
     togglePin: (id: string) => {
       if (!extensions.some((extension) => extension.id === id)) return;
       try { pins.togglePin(id); }
       catch { notify('error', translate('feature.browser.extension.failed')); }
     },
-    newTabUrl: extensions.find((extension) => extension.newTabUrl)?.newTabUrl ?? null,
+    newTabUrl: extensions.find((extension) => extension.enabled && extension.newTabUrl)?.newTabUrl ?? null,
+    setEnabled: (id: string, enabled: boolean) => bridge ? run(() => bridge.setExtensionEnabled(id, enabled)) : Promise.resolve(false),
     open: (id: string, view: 'popup' | 'options', anchor?: BrowserExtensionPopupAnchor) => bridge
       ? run(() => bridge.openExtension(id, view, anchor, webContentsId)) : Promise.resolve(false),
     remove: (id: string) => bridge ? run(() => bridge.removeExtension(id)) : Promise.resolve(false),

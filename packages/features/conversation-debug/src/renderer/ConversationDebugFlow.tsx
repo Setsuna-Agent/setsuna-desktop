@@ -1,5 +1,4 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
-import { Minus, Plus } from 'lucide-react';
 import {
   useCallback,
   useEffect,
@@ -21,6 +20,7 @@ import {
   conversationDebugStatusLabel,
 } from './conversationDebugCopy.js';
 import { ConversationDebugTurnNavigator } from './ConversationDebugTurnNavigator.js';
+import { ConversationDebugCanvasToolbar } from './flow/ConversationDebugCanvasToolbar.js';
 import { calculateFixedVirtualWindow } from './useConversationDebugVirtualWindow.js';
 import {
   conversationDebugHorizontalScrollProgress,
@@ -36,7 +36,7 @@ const FLOW_LANE_TOP: Record<ConversationDebugLane, number> = {
   tool: 544,
 };
 const FLOW_NODE_WIDTH = 228;
-const FLOW_NODE_HEIGHT = 112;
+const FLOW_NODE_HEIGHT = 128;
 const FLOW_LANE_NAV_PADDING = 24;
 const FLOW_COLUMN_WIDTH = 272;
 const FLOW_CONTENT_LEFT = 150;
@@ -213,177 +213,192 @@ export function ConversationDebugFlow({
       className="conversation-debug-flow"
       role="region"
       aria-label={t('feature.conversationDebug.mode.flow')}
+      style={{
+        '--conversation-debug-node-width': `${FLOW_NODE_WIDTH}px`,
+        '--conversation-debug-node-height': `${FLOW_NODE_HEIGHT}px`,
+      } as CSSProperties}
     >
-      {horizontalScrollProgress.visible ? (
-        <div aria-hidden="true" className="conversation-debug-flow__scroll-progress">
-          <span
-            style={{
-              transform: `translateX(${horizontalScrollProgress.left}px)`,
-              width: horizontalScrollProgress.width,
-            }}
-          />
-        </div>
-      ) : null}
-      <div
-        ref={canvasNavigation.viewportRef}
-        className={[
-          'conversation-debug-flow__viewport',
-          canvasNavigation.isPanning ? 'is-panning' : '',
-        ].filter(Boolean).join(' ')}
-        onLostPointerCapture={canvasNavigation.handleLostPointerCapture}
-        onDoubleClick={(event) => {
-          if (
-            event.target instanceof Element
-            && event.target.closest('.conversation-debug-node')
-          ) return;
-          resetCurrentView();
-        }}
-        onPointerCancel={canvasNavigation.handlePointerCancel}
-        onPointerDown={canvasNavigation.handlePointerDown}
-        onPointerMove={canvasNavigation.handlePointerMove}
-        onPointerUp={canvasNavigation.handlePointerUp}
-      >
+      <ConversationDebugCanvasToolbar
+        canZoomIn={canvasNavigation.canZoomIn}
+        canZoomOut={canvasNavigation.canZoomOut}
+        zoom={canvasNavigation.zoom}
+        onReset={resetCurrentView}
+        onZoomIn={canvasNavigation.zoomIn}
+        onZoomOut={canvasNavigation.zoomOut}
+      />
+      <div className="conversation-debug-flow__canvas-area">
+        {horizontalScrollProgress.visible ? (
+          <div aria-hidden="true" className="conversation-debug-flow__scroll-progress">
+            <span
+              style={{
+                transform: `translateX(${horizontalScrollProgress.left}px)`,
+                width: horizontalScrollProgress.width,
+              }}
+            />
+          </div>
+        ) : null}
         <div
-          className="conversation-debug-flow__stage"
-          style={{
-            height: canvasHeight * canvasNavigation.zoom,
-            width: canvasWidth * canvasNavigation.zoom,
+          ref={canvasNavigation.viewportRef}
+          className={[
+            'conversation-debug-flow__viewport',
+            canvasNavigation.isPanning ? 'is-panning' : '',
+          ].filter(Boolean).join(' ')}
+          onLostPointerCapture={canvasNavigation.handleLostPointerCapture}
+          onDoubleClick={(event) => {
+            if (
+              event.target instanceof Element
+              && event.target.closest('.conversation-debug-node')
+            ) return;
+            resetCurrentView();
           }}
+          onPointerCancel={canvasNavigation.handlePointerCancel}
+          onPointerDown={canvasNavigation.handlePointerDown}
+          onPointerMove={canvasNavigation.handlePointerMove}
+          onPointerUp={canvasNavigation.handlePointerUp}
         >
           <div
-            className="conversation-debug-flow__canvas"
+            className="conversation-debug-flow__stage"
             style={{
-              height: canvasHeight,
-              transform: `scale(${canvasNavigation.zoom})`,
-              width: canvasWidth,
+              height: canvasHeight * canvasNavigation.zoom,
+              width: canvasWidth * canvasNavigation.zoom,
             }}
           >
-            {visibleTurnLayouts.map(({ index, left, turn, width }) => (
-              <div
-                className={`conversation-debug-flow__turn-band conversation-debug-flow__turn-band--${turn.status}`}
-                key={turn.id}
-                style={{
-                  height: canvasHeight - 56,
-                  left,
-                  top: 28,
-                  width,
-                }}
-              >
-                <span title={turn.inputPreview}>
-                  {t('feature.conversationDebug.turnLabel', { index: index + 1 })}
-                </span>
-              </div>
-            ))}
-
-            <svg
-              aria-hidden="true"
-              className="conversation-debug-flow__edges"
-              height={canvasHeight}
-              viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
-              width={canvasWidth}
+            <div
+              className="conversation-debug-flow__canvas"
+              style={{
+                height: canvasHeight,
+                transform: `scale(${canvasNavigation.zoom})`,
+                width: canvasWidth,
+              }}
             >
-              <defs>
-                <marker id="conversation-debug-arrow" markerHeight="6" markerWidth="6" orient="auto" refX="5" refY="3">
-                  <path d="M0,0 L6,3 L0,6 Z" />
-                </marker>
-                <marker id="conversation-debug-arrow-causal" markerHeight="6" markerWidth="6" orient="auto" refX="5" refY="3">
-                  <path d="M0,0 L6,3 L0,6 Z" />
-                </marker>
-              </defs>
-              {visibleEdges.map((edge) => {
-                const sourceIndex = nodeIndexes.get(edge.from);
-                const targetIndex = nodeIndexes.get(edge.to);
-                if (sourceIndex === undefined || targetIndex === undefined) return null;
-                const source = debugNodePosition(nodes[sourceIndex], sourceIndex);
-                const target = debugNodePosition(nodes[targetIndex], targetIndex);
-                const sourceX = source.left + FLOW_NODE_WIDTH;
-                const targetX = target.left;
-                const distance = targetX - sourceX;
-                const direction = distance >= 0 ? 1 : -1;
-                const bend = direction * Math.max(24, Math.min(90, Math.abs(distance) / 2));
+              {visibleTurnLayouts.map(({ index, left, turn, width }) => (
+                <div
+                  className={`conversation-debug-flow__turn-band conversation-debug-flow__turn-band--${turn.status}`}
+                  key={turn.id}
+                  style={{
+                    height: canvasHeight - 56,
+                    left,
+                    top: 28,
+                    width,
+                  }}
+                >
+                  <span title={turn.inputPreview}>
+                    {t('feature.conversationDebug.turnLabel', { index: index + 1 })}
+                  </span>
+                </div>
+              ))}
+
+              <svg
+                aria-hidden="true"
+                className="conversation-debug-flow__edges"
+                height={canvasHeight}
+                viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
+                width={canvasWidth}
+              >
+                <defs>
+                  <marker id="conversation-debug-arrow" markerHeight="6" markerWidth="6" orient="auto" refX="5" refY="3">
+                    <path d="M0,0 L6,3 L0,6 Z" />
+                  </marker>
+                  <marker id="conversation-debug-arrow-causal" markerHeight="6" markerWidth="6" orient="auto" refX="5" refY="3">
+                    <path d="M0,0 L6,3 L0,6 Z" />
+                  </marker>
+                </defs>
+                {visibleEdges.map((edge) => {
+                  const sourceIndex = nodeIndexes.get(edge.from);
+                  const targetIndex = nodeIndexes.get(edge.to);
+                  if (sourceIndex === undefined || targetIndex === undefined) return null;
+                  const source = debugNodePosition(nodes[sourceIndex], sourceIndex);
+                  const target = debugNodePosition(nodes[targetIndex], targetIndex);
+                  const sourceX = source.left + FLOW_NODE_WIDTH;
+                  const targetX = target.left;
+                  const distance = targetX - sourceX;
+                  const direction = distance >= 0 ? 1 : -1;
+                  const bend = direction * Math.max(24, Math.min(90, Math.abs(distance) / 2));
+                  return (
+                    <path
+                      className={`conversation-debug-flow__edge conversation-debug-flow__edge--${edge.kind}`}
+                      d={`M ${sourceX} ${source.centerY} C ${sourceX + bend} ${source.centerY}, ${targetX - bend} ${target.centerY}, ${targetX} ${target.centerY}`}
+                      key={edge.id}
+                      markerEnd={`url(#conversation-debug-arrow${edge.kind === 'causal' ? '-causal' : ''})`}
+                    />
+                  );
+                })}
+              </svg>
+
+              {CONVERSATION_DEBUG_LANES.map((lane) => (
+                <span
+                  aria-hidden="true"
+                  className={`conversation-debug-flow__spine conversation-debug-flow__spine--${lane}`}
+                  key={lane}
+                  style={{
+                    left: 0,
+                    top: FLOW_LANE_TOP[lane] + FLOW_NODE_HEIGHT / 2,
+                    width: canvasWidth,
+                  }}
+                />
+              ))}
+
+              {visibleNodes.map((node, visibleIndex) => {
+                const nodeIndex = startIndex + visibleIndex;
+                const position = debugNodePosition(node, nodeIndex);
+                const title = conversationDebugNodeTitle(node, t);
+                const statusLabel = conversationDebugStatusLabel(node.status, t);
+                const recordCount = node.eventIds.length + node.traceIds.length;
+                const sequenceLabel = `${node.source === 'trace' ? 'D' : 'E'}#${node.seqStart}${
+                  node.seqEnd > node.seqStart ? `–${node.seqEnd}` : ''
+                }`;
                 return (
-                  <path
-                    className={`conversation-debug-flow__edge conversation-debug-flow__edge--${edge.kind}`}
-                    d={`M ${sourceX} ${source.centerY} C ${sourceX + bend} ${source.centerY}, ${targetX - bend} ${target.centerY}, ${targetX} ${target.centerY}`}
-                    key={edge.id}
-                    markerEnd={`url(#conversation-debug-arrow${edge.kind === 'causal' ? '-causal' : ''})`}
-                  />
+                  <Button
+                    variant="ghost"
+                    aria-pressed={selectedNodeId === node.id}
+                    className={[
+                      'conversation-debug-node',
+                      `conversation-debug-node--${node.lane}`,
+                      `conversation-debug-node--${node.status}`,
+                      selectedNodeId === node.id ? 'is-selected' : '',
+                    ].filter(Boolean).join(' ')}
+                    key={node.id}
+                    style={{
+                      '--conversation-debug-node-left': `${position.left}px`,
+                      '--conversation-debug-node-top': `${position.top}px`,
+                    } as CSSProperties}
+                    title={node.summary || title}
+                    type="button"
+                    onClick={() => onSelectNode(node)}
+                  >
+                    <span className="conversation-debug-node__heading">
+                      <span className="conversation-debug-node__lane">
+                        <i aria-hidden="true" />
+                        {conversationDebugLaneLabel(node.lane, t)}
+                      </span>
+                      <span className="conversation-debug-node__status" title={statusLabel}>
+                        <i aria-hidden="true" />
+                        {statusLabel}
+                      </span>
+                    </span>
+                    <strong className="conversation-debug-node__title" title={title}>
+                      {title}
+                    </strong>
+                    <span className="conversation-debug-node__summary">
+                      {node.summary || node.eventTypes.join(', ')}
+                    </span>
+                    <span className="conversation-debug-node__meta">
+                      <code title={sequenceLabel}>{sequenceLabel}</code>
+                      <time dateTime={node.startedAt}>
+                        {new Date(node.startedAt).toLocaleTimeString(locale, {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          second: '2-digit',
+                        })}
+                      </time>
+                      <em title={t('feature.conversationDebug.recordsInNode', { count: recordCount })}>
+                        {t('feature.conversationDebug.recordCountShort', { count: recordCount })}
+                      </em>
+                    </span>
+                  </Button>
                 );
               })}
-            </svg>
-
-            {CONVERSATION_DEBUG_LANES.map((lane) => (
-              <span
-                aria-hidden="true"
-                className={`conversation-debug-flow__spine conversation-debug-flow__spine--${lane}`}
-                key={lane}
-                style={{
-                  left: 0,
-                  top: FLOW_LANE_TOP[lane] + FLOW_NODE_HEIGHT / 2,
-                  width: canvasWidth,
-                }}
-              />
-            ))}
-
-            {visibleNodes.map((node, visibleIndex) => {
-              const nodeIndex = startIndex + visibleIndex;
-              const position = debugNodePosition(node, nodeIndex);
-              const title = conversationDebugNodeTitle(node, t);
-              const statusLabel = conversationDebugStatusLabel(node.status, t);
-              const recordCount = node.eventIds.length + node.traceIds.length;
-              const sequenceLabel = `${node.source === 'trace' ? 'D' : 'E'}#${node.seqStart}${
-                node.seqEnd > node.seqStart ? `–${node.seqEnd}` : ''
-              }`;
-              return (
-                <Button variant="ghost"
-                  aria-pressed={selectedNodeId === node.id}
-                  className={[
-                    'conversation-debug-node',
-                    `conversation-debug-node--${node.lane}`,
-                    `conversation-debug-node--${node.status}`,
-                    selectedNodeId === node.id ? 'is-selected' : '',
-                  ].filter(Boolean).join(' ')}
-                  key={node.id}
-                  style={{
-                    '--conversation-debug-node-left': `${position.left}px`,
-                    '--conversation-debug-node-top': `${position.top}px`,
-                  } as CSSProperties}
-                  title={node.summary || title}
-                  type="button"
-                  onClick={() => onSelectNode(node)}
-                >
-                  <span className="conversation-debug-node__heading">
-                    <span className="conversation-debug-node__lane">
-                      <i aria-hidden="true" />
-                      {conversationDebugLaneLabel(node.lane, t)}
-                    </span>
-                    <span className="conversation-debug-node__status" title={statusLabel}>
-                      <i aria-hidden="true" />
-                      {statusLabel}
-                    </span>
-                  </span>
-                  <strong className="conversation-debug-node__title" title={title}>
-                    {title}
-                  </strong>
-                  <span className="conversation-debug-node__summary">
-                    {node.summary || node.eventTypes.join(', ')}
-                  </span>
-                  <span className="conversation-debug-node__meta">
-                    <code title={sequenceLabel}>{sequenceLabel}</code>
-                    <time dateTime={node.startedAt}>
-                      {new Date(node.startedAt).toLocaleTimeString(locale, {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit',
-                      })}
-                    </time>
-                    <em title={t('feature.conversationDebug.recordsInNode', { count: recordCount })}>
-                      {t('feature.conversationDebug.recordCountShort', { count: recordCount })}
-                    </em>
-                  </span>
-                </Button>
-              );
-            })}
+            </div>
           </div>
         </div>
       </div>
@@ -394,54 +409,6 @@ export function ConversationDebugFlow({
           turns={turns}
           onNavigate={handleNavigateTurn}
         />
-        <div
-          aria-label={t('feature.conversationDebug.canvas.legend')}
-          className="conversation-debug-flow__legend"
-          role="group"
-        >
-          {CONVERSATION_DEBUG_LANES.map((lane) => (
-            <span
-              className={`conversation-debug-flow__legend-item conversation-debug-flow__legend-item--${lane}`}
-              key={lane}
-            >
-              <i aria-hidden="true" />
-              {conversationDebugLaneLabel(lane, t)}
-            </span>
-          ))}
-        </div>
-        <div
-          aria-label={t('feature.conversationDebug.canvas.controls')}
-          className="conversation-debug-flow__controls"
-          role="group"
-        >
-          <Button variant="ghost"
-            aria-label={t('feature.conversationDebug.canvas.zoomOut')}
-            disabled={!canvasNavigation.canZoomOut}
-            title={t('feature.conversationDebug.canvas.zoomOut')}
-            type="button"
-            onClick={canvasNavigation.zoomOut}
-          >
-            <Minus aria-hidden="true" size={14} strokeWidth={1.8} />
-          </Button>
-          <Button variant="ghost"
-            aria-label={t('feature.conversationDebug.canvas.zoomReset')}
-            className="conversation-debug-flow__zoom-value"
-            title={t('feature.conversationDebug.canvas.zoomReset')}
-            type="button"
-            onClick={resetCurrentView}
-          >
-            {Math.round(canvasNavigation.zoom * 100)}%
-          </Button>
-          <Button variant="ghost"
-            aria-label={t('feature.conversationDebug.canvas.zoomIn')}
-            disabled={!canvasNavigation.canZoomIn}
-            title={t('feature.conversationDebug.canvas.zoomIn')}
-            type="button"
-            onClick={canvasNavigation.zoomIn}
-          >
-            <Plus aria-hidden="true" size={14} strokeWidth={1.8} />
-          </Button>
-        </div>
       </div>
     </div>
   );

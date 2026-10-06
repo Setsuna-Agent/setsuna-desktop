@@ -30,6 +30,7 @@ export const browserPreloadFeature = definePreloadFeature<BrowserPreloadBridgeCo
         return () => ipcRenderer.off(BROWSER_SETTINGS_CHANNELS.changed, listener);
       },
       getExtensions: () => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.getExtensions),
+      setExtensionEnabled: (id, enabled) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.setExtensionEnabled, { id, enabled }),
       removeExtension: (id) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.removeExtension, { id }),
       openExtension: (id, view, anchor, webContentsId) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.openExtension, { id, view, anchor, webContentsId }),
       getExtensionActions: (webContentsId) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.getExtensionActions, { webContentsId }),
@@ -54,6 +55,12 @@ export const browserPreloadFeature = definePreloadFeature<BrowserPreloadBridgeCo
         return () => ipcRenderer.off(BROWSER_IPC_CHANNELS.passwordState, listener);
       },
       pickAnnotation: (tabId) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.pickAnnotation, { tabId }),
+      requestFindInPage: (tabId) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.requestFindInPage, { tabId }),
+      onFindInPageRequested(callback) {
+        const listener = (_event: IpcRendererEvent, tabId: string) => callback(tabId);
+        ipcRenderer.on(BROWSER_IPC_CHANNELS.findInPageRequested, listener);
+        return () => ipcRenderer.off(BROWSER_IPC_CHANNELS.findInPageRequested, listener);
+      },
       cancelAnnotation: (tabId) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.cancelAnnotation, { tabId }),
       setAnnotationMarkers: (tabId, markers) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.setAnnotationMarkers, { tabId, markers }),
       getAnnotationAnchor: (tabId, annotationId) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.getAnnotationAnchor, { tabId, annotationId }),
