@@ -2,6 +2,7 @@ import { readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { nativeImage, type Extension } from 'electron';
 import type { BrowserExtension } from '../../contracts/extensions.js';
+import { localizedExtensionName } from './localization.js';
 
 export function validExtensionId(value: unknown): value is string {
   return typeof value === 'string' && /^[a-p]{32}$/.test(value);
@@ -25,13 +26,14 @@ export function resolveExtensionPage(id: string, page: unknown): string | null {
   } catch { return null; }
 }
 
-export async function extensionMetadata(extension: Extension): Promise<BrowserExtension> {
+export async function extensionMetadata(extension: Extension, enabled = true, locale = ''): Promise<BrowserExtension> {
   const action = extension.manifest.action ?? extension.manifest.browser_action ?? extension.manifest.page_action;
-  const [icon, actionIcon] = await Promise.all([
+  const [icon, actionIcon, name] = await Promise.all([
     extensionIcon(extension, extension.manifest.icons), extensionIcon(extension, action?.default_icon),
+    localizedExtensionName(extension, locale),
   ]);
   return {
-    id: extension.id, name: extension.name, version: extension.version,
+    id: extension.id, name, version: extension.version, enabled,
     icon, actionIcon: actionIcon ?? icon,
     hasPopup: Boolean(extensionPageUrl(extension, 'popup')),
     hasOptions: Boolean(extensionPageUrl(extension, 'options')),

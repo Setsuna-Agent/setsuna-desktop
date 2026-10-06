@@ -1,6 +1,6 @@
 import type { ProviderConfigState, ProviderModelConfig, RuntimeConfigState } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
-import { chatModelOptions } from '../../../../../src/features/chat/composer/chatModelOptions.js';
+import { configuredModelOptions, modelOptions } from '../../../../../src/shared/ui/model-picker/modelOptions.js';
 
 describe('chat model options', () => {
   it('excludes models from disabled providers while retaining every model from enabled providers', () => {
@@ -20,7 +20,7 @@ describe('chat model options', () => {
       models: [model({ id: 'hidden', name: 'Hidden', enabled: true })],
     });
 
-    const options = chatModelOptions(config([disabled, enabled]));
+    const options = modelOptions(config([disabled, enabled]));
 
     expect(options.map((option) => option.key)).toEqual([
       'enabled-provider:alternate',
@@ -29,7 +29,23 @@ describe('chat model options', () => {
   });
 
   it('returns no selectable models when every provider is disabled', () => {
-    expect(chatModelOptions(config([provider({ enabled: false })]))).toEqual([]);
+    expect(modelOptions(config([provider({ enabled: false })]))).toEqual([]);
+  });
+
+  it('uses the task availability list even when provider metadata is missing or contains extra models', () => {
+    const options = configuredModelOptions([
+      { providerId: 'provider', providerName: 'Provider', modelId: 'current', modelName: 'Current', modelCode: 'current-code' },
+      { providerId: 'new-provider', providerName: 'New provider', modelId: 'current', modelName: 'New model', modelCode: 'new-code' },
+    ], config([provider({ models: [model({ id: 'current', maxOutputTokens: 8_192 }), model({ id: 'not-allowed' })] })]));
+
+    expect(options.map((option) => [option.provider.id, option.model.id, option.model.code])).toEqual([
+      ['new-provider', 'current', 'new-code'],
+      ['provider', 'current', 'current-code'],
+    ]);
+    expect(options.find((option) => option.provider.id === 'provider')?.model.maxOutputTokens).toBe(8_192);
+    expect(configuredModelOptions([
+      { providerId: 'new-provider', providerName: 'New provider', modelId: 'current', modelName: 'New model', modelCode: 'new-code' },
+    ], null).map((option) => option.key)).toEqual(['new-provider:current']);
   });
 });
 

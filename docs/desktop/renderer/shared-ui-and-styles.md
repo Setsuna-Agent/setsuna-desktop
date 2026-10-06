@@ -30,6 +30,7 @@
 - 应用内菜单由 `MenuSurface` 与 `menu.css` 统一为紧凑圆角面板、细边框、柔和阴影和即时蓝底白字高亮；右键、按钮下拉、坐标菜单、子菜单、侧栏、添加面板、浏览器窗口与能力创建菜单共用视觉层。Select、项目/分支选择器也使用相同菜单样式。底色采用独立的冷灰半透明 `--app-menu-bg`，浅色与深色分别配置，背景模糊由 `--app-menu-backdrop-filter` 统一控制。输入框上方的命令、插件、Skill 与 @ 候选列表由聊天样式持有，使用不透明面板和中性选中背景，避免下方页面文字透出。菜单直接显示/关闭，不使用展开、裁切、缩放或滑动高亮动画；键盘导航、禁用项与危险项仍由原组件管理。系统托盘菜单由操作系统绘制。
 - 菜单高亮时普通图标、描述和快捷键跟随白色文字；拥有独立底色的 Skill/Plugin 图标通过 `data-menu-color="preserve"` 保留自身及子元素配色，避免白色图形与浅色图标底板混在一起。
 - `ui/primitives.tsx` / `SelectField.tsx` 保留宿主导出；`SettingsViewUi.tsx` 将同一实现注入 Feature 的 Settings UI contract。
+- `shared/ui/model-picker/` 持有聊天、自动任务和设置页共用的模型搜索、服务分组、品牌图标与悬停详情。Feature 通过 `SettingsViewUi.ModelPicker` 传入可用模型和引用，宿主 `composition/ModelProviderFeatureBoundary.tsx` 只补充模型服务投影中的元数据；候选范围仍由各任务的可用列表决定，缺少元数据不隐藏候选。
 - 插件配置表单复用 `settings-form.css` 的 `sd-settings-form`：浅灰圆角卡片、统一输入控件间距、图标底板和中性分隔线。图片生成、视觉识别与声明式插件设置共用这层外观；各 Feature 只维护字段排布、业务状态和结果展示，不再各自绘制外框。
 - `I18nProvider` 同步共享控件的中英文标签；外观和字体继续由宿主偏好控制。
 - 业务专用内容仍留在所属 Feature，弹窗外壳使用共享 `Dialog`，不要复制 backdrop、Escape 监听或 focus trap。

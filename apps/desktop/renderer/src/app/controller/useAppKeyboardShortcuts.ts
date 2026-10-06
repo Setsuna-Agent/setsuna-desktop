@@ -28,6 +28,7 @@ export function useAppKeyboardShortcuts(handlers: AppKeyboardShortcutHandlers): 
 
   useEffect(() => {
     const executeShortcut = (event: KeyboardEvent | DesktopKeyboardShortcutInput) => {
+      if ('defaultPrevented' in event && event.defaultPrevented) return;
       if (document.body.inert || recording || event.repeat || event.isComposing || event.key === 'Process') return;
       const commandId = matchingKeyboardShortcutCommand(event, bindingsFor);
       if (!commandId) return;
@@ -87,6 +88,10 @@ export function browserShortcutTabId(
   fallbackTabId: string | null,
 ): string | null {
   if (event && 'source' in event && event.source?.kind === 'embedded-browser') return event.source.tabId;
+  if (event && 'target' in event && event.target instanceof Element) {
+    const panel = event.target.closest('[data-browser-tab-id]');
+    if (panel) return panel.getAttribute('data-browser-tab-id');
+  }
   return fallbackTabId;
 }
 

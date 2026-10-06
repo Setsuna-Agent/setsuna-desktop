@@ -19,6 +19,7 @@ import { Dropdown, Switch, type MenuProps } from '@setsuna-desktop/renderer-ui';
 import { ChevronRight, MoreHorizontal } from 'lucide-react';
 import { Component, useEffect, type ErrorInfo, type ReactNode } from 'react';
 import { useToast } from '../../app/providers/ToastProvider.js';
+import { SettingsModelPicker } from '../../composition/ModelProviderFeatureBoundary.js';
 import { SandboxedUiFrame } from '../../kernel/sandboxed-plugin-ui/SandboxedUiFrame.js';
 import {
   Button,
@@ -59,6 +60,7 @@ export const settingsViewUi = Object.freeze({
   Group: SettingsGroup,
   IconButton,
   MarkdownDocument: SettingsMarkdownDocument,
+  ModelPicker: SettingsModelPicker,
   NavigationRow: SettingsNavigationRow,
   PageHeader,
   PageHeading: SettingsPageHeading,

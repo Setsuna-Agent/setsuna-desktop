@@ -99,6 +99,14 @@ export function ConversationDebugPanel({
     setSelectedNodeId(node.id);
     setSelectedRecordId(records.at(-1)?.id ?? null);
   };
+  const closeInspector = () => {
+    setSelectedNodeId(null);
+    setSelectedRecordId(null);
+  };
+  const selectMode = (nextMode: 'events' | 'flow') => {
+    setMode(nextMode);
+    closeInspector();
+  };
 
   return (
     <aside
@@ -119,39 +127,46 @@ export function ConversationDebugPanel({
           <>
             <header className="conversation-debug-toolbar">
               <div className="conversation-debug-toolbar__modes" role="group" aria-label={t('feature.conversationDebug.title')}>
-                <Button variant="ghost"
+                <Button
+                  variant="ghost"
                   aria-pressed={mode === 'flow'}
                   className={mode === 'flow' ? 'is-active' : ''}
                   type="button"
-                  onClick={() => setMode('flow')}
+                  onClick={() => selectMode('flow')}
                 >
-                  <GitBranch size={13} />
+                  <GitBranch aria-hidden="true" size={15} />
                   {t('feature.conversationDebug.mode.flow')}
                 </Button>
-                <Button variant="ghost"
+                <Button
+                  variant="ghost"
                   aria-pressed={mode === 'events'}
                   className={mode === 'events' ? 'is-active' : ''}
                   type="button"
-                  onClick={() => setMode('events')}
+                  onClick={() => selectMode('events')}
                 >
-                  <List size={13} />
+                  <List aria-hidden="true" size={15} />
                   {t('feature.conversationDebug.mode.events')}
                 </Button>
               </div>
-              <SelectField
-                aria-label={t('feature.conversationDebug.turn.all')}
-                className="conversation-debug-toolbar__turn-scope"
-                disabled={graph.turns.length < 2}
-                value={turnScope}
-                onValueChange={(value) => setTurnScope(value === 'latest' ? 'latest' : 'all')}
-              >
-                <option value="all">{t('feature.conversationDebug.turn.all')}</option>
-                <option value="latest">{t('feature.conversationDebug.turn.latest')}</option>
-              </SelectField>
-              <span className={`conversation-debug-toolbar__status ${eventState.syncing ? 'is-syncing' : 'is-live'}`}>
-                <Activity size={12} />
-                {t(eventState.syncing ? 'feature.conversationDebug.syncing' : 'feature.conversationDebug.live')}
-              </span>
+              <div className="conversation-debug-toolbar__context">
+                <SelectField
+                  aria-label={t('feature.conversationDebug.turn.all')}
+                  className="conversation-debug-toolbar__turn-scope"
+                  disabled={graph.turns.length < 2}
+                  value={turnScope}
+                  onValueChange={(value) => {
+                    setTurnScope(value === 'latest' ? 'latest' : 'all');
+                    closeInspector();
+                  }}
+                >
+                  <option value="all">{t('feature.conversationDebug.turn.all')}</option>
+                  <option value="latest">{t('feature.conversationDebug.turn.latest')}</option>
+                </SelectField>
+                <span className={`conversation-debug-toolbar__status ${eventState.syncing ? 'is-syncing' : 'is-live'}`}>
+                  <Activity aria-hidden="true" size={14} />
+                  {t(eventState.syncing ? 'feature.conversationDebug.syncing' : 'feature.conversationDebug.live')}
+                </span>
+              </div>
             </header>
 
             {eventState.error ? (
@@ -174,47 +189,48 @@ export function ConversationDebugPanel({
               </div>
             ) : null}
 
-            {visibleGraph.nodes.length ? (
-              mode === 'flow' ? (
-                <ConversationDebugFlow
-                  initialViewKey={`${thread.id}:${turnScope}:${
-                    turnScope === 'latest' ? latestTurnId ?? 'none' : 'all'
-                  }`}
-                  initialViewReady={!eventState.syncing}
-                  edges={visibleGraph.edges}
-                  nodes={visibleGraph.nodes}
-                  selectedNodeId={selectedNode?.id ?? null}
-                  turns={visibleGraph.turns}
-                  onSelectNode={selectNode}
-                />
-              ) : (
-                <ConversationDebugActivityList
-                  nodes={visibleGraph.nodes}
-                  selectedNodeId={selectedNode?.id ?? null}
-                  onSelectNode={selectNode}
-                />
-              )
-            ) : eventState.syncing ? (
-              <ConversationDebugLoadingState label={t('feature.conversationDebug.preparing')} />
-            ) : (
-              <EmptyState
-                title={t('feature.conversationDebug.noEvents')}
-                body={t('feature.conversationDebug.noEventsDescription')}
-              />
-            )}
+            <div className={`conversation-debug-workspace${selectedNode ? ' has-inspector' : ''}`}>
+              <div className="conversation-debug-workspace__main">
+                {visibleGraph.nodes.length ? (
+                  mode === 'flow' ? (
+                    <ConversationDebugFlow
+                      initialViewKey={`${thread.id}:${turnScope}:${
+                        turnScope === 'latest' ? latestTurnId ?? 'none' : 'all'
+                      }`}
+                      initialViewReady={!eventState.syncing}
+                      edges={visibleGraph.edges}
+                      nodes={visibleGraph.nodes}
+                      selectedNodeId={selectedNode?.id ?? null}
+                      turns={visibleGraph.turns}
+                      onSelectNode={selectNode}
+                    />
+                  ) : (
+                    <ConversationDebugActivityList
+                      nodes={visibleGraph.nodes}
+                      selectedNodeId={selectedNode?.id ?? null}
+                      onSelectNode={selectNode}
+                    />
+                  )
+                ) : eventState.syncing ? (
+                  <ConversationDebugLoadingState label={t('feature.conversationDebug.preparing')} />
+                ) : (
+                  <EmptyState
+                    title={t('feature.conversationDebug.noEvents')}
+                    body={t('feature.conversationDebug.noEventsDescription')}
+                  />
+                )}
+              </div>
 
-            {selectedNode ? (
-              <ConversationDebugInspector
-                contextEvents={graph.events}
-                node={selectedNode}
-                selectedRecordId={selectedRecordId}
-                onClose={() => {
-                  setSelectedNodeId(null);
-                  setSelectedRecordId(null);
-                }}
-                onSelectRecord={(record) => setSelectedRecordId(record.id)}
-              />
-            ) : null}
+              {selectedNode ? (
+                <ConversationDebugInspector
+                  contextEvents={graph.events}
+                  node={selectedNode}
+                  selectedRecordId={selectedRecordId}
+                  onClose={closeInspector}
+                  onSelectRecord={(record) => setSelectedRecordId(record.id)}
+                />
+              ) : null}
+            </div>
           </>
         ) : (
           <EmptyState

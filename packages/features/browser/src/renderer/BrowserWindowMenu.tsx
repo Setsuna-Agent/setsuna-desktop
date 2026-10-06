@@ -1,8 +1,9 @@
 import { Button, Popover } from '@setsuna-desktop/renderer-ui';
-import { EllipsisVertical, History, Minus, Plus, Settings2, Star } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { EllipsisVertical, Minus, Plus, Settings2 } from 'lucide-react';
+import { useEffect, useState, type RefObject } from 'react';
 import type { BrowserTranslate } from './messages.js';
 import type { BrowserRecordsKind } from './records/BrowserRecordsManager.js';
+import { BrowserFavoritesIcon, BrowserHistoryIcon } from './records/recordIcons.js';
 
 const minimumBrowserZoomFactor = 0.5;
 const maximumBrowserZoomFactor = 3;
@@ -13,6 +14,7 @@ export function BrowserWindowMenu({
   disabled,
   hidden = false,
   loading,
+  menuButtonRef,
   onOpenDevTools,
   onCaptureScreenshot,
   onPrint,
@@ -31,6 +33,7 @@ export function BrowserWindowMenu({
   disabled: boolean;
   hidden?: boolean;
   loading: boolean;
+  menuButtonRef: RefObject<HTMLElement>;
   onOpenDevTools: () => void;
   onCaptureScreenshot: () => void;
   onPrint: () => void;
@@ -54,13 +57,13 @@ export function BrowserWindowMenu({
 
   return (
     <span className="desktop-browser-window-menu">
-      <Popover open={open && !hidden} onOpenChange={setOpen} modal placement="bottomRight" className="sd-menu-surface desktop-browser-window-menu__popover"
+      <Popover ref={menuButtonRef} open={open && !hidden} onOpenChange={setOpen} modal placement="bottomRight" className="sd-menu-surface desktop-browser-window-menu__popover"
         contentLabel={translate('feature.browser.menuSettings')} content={<>
         <Button variant="ghost" type="button" role="menuitem" onClick={() => runAndClose(() => onOpenRecords('history'))}>
-          <History size={14} />{translate('feature.browser.settings.history')}
+          <BrowserHistoryIcon aria-hidden="true" size={14} />{translate('feature.browser.settings.history')}
         </Button>
         <Button variant="ghost" type="button" role="menuitem" onClick={() => runAndClose(() => onOpenRecords('bookmarks'))}>
-          <Star size={14} />{translate('feature.browser.settings.bookmarks')}
+          <BrowserFavoritesIcon aria-hidden="true" size={14} />{translate('feature.browser.settings.bookmarks')}
         </Button>
         <span className="desktop-browser-window-menu__separator" role="separator" />
         <Button variant="ghost" type="button" disabled={disabled} role="menuitem" onClick={() => runAndClose(onReload)}>

@@ -1,5 +1,5 @@
 import type { ProviderConfigState, ProviderModelConfig } from '@setsuna-desktop/contracts';
-import { chatModelOptionKey } from './chatModelOptions.js';
+import { modelOptionKey } from '../../../shared/ui/model-picker/modelOptions.js';
 
 export type ChatComposerSendIntent = 'message' | 'goal' | 'review';
 
@@ -45,7 +45,7 @@ export function createChatComposerModelCapabilities(
 
   return {
     preferenceKey: provider && model
-      ? chatModelOptionKey(provider.id, model.id)
+      ? modelOptionKey(provider.id, model.id)
       : null,
     name: model?.name ?? null,
     supportsImageInput: Boolean(model?.supportsImages),

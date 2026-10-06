@@ -11,14 +11,14 @@ export function useBrowserNewTab({ ready, extensions, showingHome, url, onResolv
 }) {
   useEffect(() => {
     if (!ready) return;
-    const selected = enabled ? extensions.find((extension) => extension.newTabUrl) ?? null : null;
-    // Only an untouched home or a removed extension is redirected. A late IPC
+    const selected = enabled ? extensions.find((extension) => extension.enabled && extension.newTabUrl) ?? null : null;
+    // Only an untouched home or a removed/disabled extension is redirected. A late IPC
     // response must not replace a website the user has already navigated to.
     if (showingHome) {
       if (selected) onResolve(selected);
     } else if (url.startsWith('chrome-extension://')) {
       const id = new URL(url).hostname;
-      if (!extensions.some((extension) => extension.id === id)
+      if (!extensions.some((extension) => extension.enabled && extension.id === id)
         || (!enabled && extensions.some((extension) => isExtensionNewTab(url, extension.newTabUrl)))) onResolve(selected);
     }
   }, [enabled, extensions, onResolve, ready, showingHome, url]);

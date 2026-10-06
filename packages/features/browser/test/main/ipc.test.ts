@@ -23,7 +23,7 @@ function fixture() {
     createDeviceEmulator: () => ({ dispose: vi.fn() }) as unknown as BrowserDeviceEmulator,
   });
   const contents = Object.assign(new EventEmitter(), {
-    id: 2, hostWebContents: { id: 1 }, session: { getUserAgent: () => '' },
+    id: 2, hostWebContents: { id: 1, isDestroyed: () => false, send: vi.fn() }, session: { getUserAgent: () => '' },
     focus: vi.fn(), isDestroyed: () => false,
     // A guest that does not respond must not keep the application's drain open.
     executeJavaScriptInIsolatedWorld: vi.fn((_world: number, _scripts: Array<{ code: string }>) => new Promise<unknown>(() => undefined)),
@@ -33,17 +33,29 @@ function fixture() {
   });
   controller.registerTab('tab-1', contents as unknown as WebContents);
   scope.scope.add(() => controller.clear());
-  scope.scope.add(registerBrowserIpc(scope.scope, controller, new Map([[1, {
+  const windowSession = {
     window: { isDestroyed: () => false } as BrowserWindow,
     contextMenus: {} as BrowserContextMenuSession,
-  }]]), () => 'en-US'));
+  };
+  scope.scope.add(registerBrowserIpc(scope.scope, controller, new Map([[1, windowSession], [3, windowSession]]), () => 'en-US'));
   scope.activate();
-  const invoke = (channel: string, input: Record<string, unknown> = {}) => {
+  const invoke = (channel: string, input: Record<string, unknown> = {}, senderId = 1) => {
     const handler = vi.mocked(ipcMain.handle).mock.calls.find(([registered]) => registered === channel)![1];
-    return handler({ sender: { id: 1 } } as IpcMainInvokeEvent, { tabId: 'tab-1', ...input });
+    return handler({ sender: { id: senderId } } as IpcMainInvokeEvent, { tabId: 'tab-1', ...input });
   };
   return { scope, controller, contents, invoke };
 }
+
+it('opens page find only for a registered tab owned by the requesting window', async () => {
+  const { scope, contents, invoke } = fixture();
+  await expect(invoke(BROWSER_IPC_CHANNELS.requestFindInPage)).resolves.toBe(true);
+  expect(contents.hostWebContents.send).toHaveBeenCalledExactlyOnceWith(BROWSER_IPC_CHANNELS.findInPageRequested, 'tab-1');
+  await expect(invoke(BROWSER_IPC_CHANNELS.requestFindInPage, { tabId: 'missing' })).resolves.toBe(false);
+  await expect(invoke(BROWSER_IPC_CHANNELS.requestFindInPage, {}, 3)).resolves.toBe(false);
+  await expect(invoke(BROWSER_IPC_CHANNELS.requestFindInPage, {}, 99)).resolves.toBe(false);
+  expect(contents.hostWebContents.send).toHaveBeenCalledOnce();
+  await scope.finishDispose();
+});
 
 it.each([false, true])('drains annotation IPC without waiting for guest script cleanup (explicit cancel: %s)', async (explicitCancel) => {
   const { scope, controller, contents, invoke } = fixture();

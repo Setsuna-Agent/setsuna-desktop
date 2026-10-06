@@ -96,6 +96,25 @@ export type SettingsSelectFieldProps = Readonly<{
   valueContent?: ReactNode;
 }>;
 
+export type SettingsModelOption = Readonly<{
+  providerId: string;
+  providerName: string;
+  modelId: string;
+  modelName: string;
+  modelCode: string;
+}>;
+
+export type SettingsModelPickerProps = Readonly<{
+  'aria-label': string;
+  className?: string;
+  defaultLabel: string;
+  disabled?: boolean;
+  models: readonly SettingsModelOption[];
+  onChange(value: Pick<SettingsModelOption, 'providerId' | 'modelId'> | null): void;
+  unavailableLabel: string;
+  value: Pick<SettingsModelOption, 'providerId' | 'modelId'> | null;
+}>;
+
 export type SettingsSectionProps = Readonly<{
   children: ReactNode;
   className?: string;
@@ -267,6 +286,7 @@ export type SettingsViewUi = Readonly<{
   Group: ComponentType<SettingsGroupProps>;
   IconButton: ComponentType<SettingsIconButtonProps>;
   MarkdownDocument: ComponentType<SettingsMarkdownDocumentProps>;
+  ModelPicker: ComponentType<SettingsModelPickerProps>;
   NavigationRow: ComponentType<SettingsNavigationRowProps>;
   PageHeader: ComponentType<SettingsPageHeaderProps>;
   PageHeading: ComponentType<SettingsPageHeadingProps>;

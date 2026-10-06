@@ -11,6 +11,7 @@ import {
 } from '../../src/renderer/host.js';
 import { translateReviewMessage } from '../../src/renderer/messages.js';
 import { createElement, useMemo, type PropsWithChildren, type ReactNode } from 'react';
+import { TestModelPicker } from './model-picker-test-ui.js';
 
 const ignoreCopy = async () => undefined;
 const ignoreError = () => undefined;
@@ -43,7 +44,7 @@ export function ReviewRendererTestHost({
       : translateReviewMessage(locale, key, params),
     ui: {
       Dialog: ({ children: content, title, subtitle, footer }) => <section role="dialog" aria-label={String(title)}><h2>{title}</h2><p>{subtitle}</p>{content}{footer}</section>,
-      SelectField: ({ onValueChange, value, children: options, ...props }) => <select {...props} value={value} onChange={(event) => onValueChange(event.currentTarget.value)}>{options}</select>,
+      ModelPicker: TestModelPicker,
       Toggle: ({ checked, disabled, label, description, onChange }) => <label>{label}<small>{description}</small><input type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange(event.currentTarget.checked)} /></label>,
       ContextMenu: Dropdown,
       Checkbox: ({

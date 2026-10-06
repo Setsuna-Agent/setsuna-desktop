@@ -184,6 +184,7 @@ Browser Renderer Feature 通过 `BrowserWorkspacePanel.tsx` 注册 `renderer.wor
 Conversation Debug Feature 开启后，`packages/features/conversation-debug/src/renderer/` 提供：
 
 - `ConversationDebugFlow.tsx`：事件/工具/模型关系图。
+- `flow/ConversationDebugCanvasToolbar.tsx`：画布图例与缩放操作；底部单独保留轮次导航。
 - `ConversationDebugActivityList.tsx`：面向人的语义化活动列表；复用 graph 节点，不直接展示 event type 和序号。
 - `ConversationDebugDiagnostics.tsx` / `conversationDebugInspectorModel.ts` / `conversationDebugNotices.ts`：把节点 payload 自动投影为结构化字段，并提升 runtime、模型、工具、Hook、审批、压缩和重放异常。
 - `ConversationDebugRecordPicker.tsx`：Inspector 高级详情中的可展开、无损压缩底层记录选择器。
@@ -194,6 +195,8 @@ Conversation Debug Feature 开启后，`packages/features/conversation-debug/src
 - `conversationDebugGraph.ts`：图投影。
 - `conversationDebugTraceBuffer.ts`：D# 有界缓存和 dropped watermark。
 - `useConversationDebugVirtualWindow.ts`：长列表/图窗口化。
+
+面板顶部负责视图切换和轮次范围，切换时关闭当前节点详情。内容区按面板宽度适配：宽面板让画布/活动列表与详情并排，窄面板打开详情后专注显示节点内容，关闭后返回原视图。详情使用独立滚动区域，面板较矮时允许整体滚动，避免记录选择器和 payload 被截断。
 
 ### E# 与 D#
 
@@ -231,7 +234,7 @@ Workspace 使用：
 
 Review 样式和 renderer 测试分别位于 `packages/features/review/src/renderer/styles/` 与 `packages/features/review/test/renderer/`，不再由 Workspace/Chat 样式入口持有。
 
-Conversation debug 有独立 `conversation-debug.css`，不要把图和虚拟列表样式放入 workspace 全局入口。
+Conversation debug 的独立 `conversation-debug.css` 仅导入 `styles/` 下的 panel、flow、activity、inspector 和 diagnostics 样式。控件与卡片的圆角、留白和状态样式由 Feature 持有；图节点尺寸和活动行高从窗口化布局常量传入 CSS，保持绘制与滚动坐标一致。不要把图和虚拟列表样式放入 workspace 全局入口。
 
 ## 测试
 

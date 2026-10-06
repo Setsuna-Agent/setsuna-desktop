@@ -12,6 +12,7 @@ import type {
   BrowserAnnotationTarget,
 } from '../contracts/index.js';
 import type { WebContents } from 'electron';
+import { BROWSER_IPC_CHANNELS } from '../contracts/bridge.js';
 import {
   ElectronBrowserCdpAutomation,
   type BrowserAutomation,
@@ -135,6 +136,14 @@ export class DesktopBrowserController implements BrowserControlExecutor {
 
   refreshPasswordPreferences(): void {
     for (const entry of this.tabs.values()) entry.passwords?.refreshPreferences();
+  }
+
+  requestFindInPage(tabId: string, senderId: number): boolean {
+    const contents = this.tabs.get(tabId)?.contents;
+    const host = contents?.hostWebContents;
+    if (!contents || contents.isDestroyed() || !host || host.id !== senderId || host.isDestroyed()) return false;
+    host.send(BROWSER_IPC_CHANNELS.findInPageRequested, tabId);
+    return true;
   }
 
   pickAnnotation(tabId: string, senderId: number, signal?: AbortSignal): Promise<BrowserAnnotationTarget | null> {

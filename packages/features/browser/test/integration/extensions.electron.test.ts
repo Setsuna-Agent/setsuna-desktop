@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 import { build } from 'esbuild';
 import { expect, it } from 'vitest';
 
-it.skipIf(!['darwin', 'win32'].includes(process.platform))('installs through the store bridge, isolates origins, restores and removes a native extension', async () => {
+it.skipIf(!['darwin', 'win32'].includes(process.platform))('installs through the store bridge, disables, restores, re-enables and removes a native extension', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'setsuna-extensions-test-'));
   try {
     const fixture = new URL('./extensions.fixture.ts', import.meta.url);
@@ -24,9 +24,9 @@ it.skipIf(!['darwin', 'win32'].includes(process.platform))('installs through the
     const electron = createRequire(import.meta.url)('electron') as string;
     const env = { ...process.env };
     delete env.ELECTRON_RUN_AS_NODE;
-    for (const phase of ['install', 'restore']) {
+    for (const phase of ['install', 'disabled', 'restore']) {
       const { stdout } = await promisify(execFile)(electron, [entry, directory, phase], { env, timeout: 25_000, maxBuffer: 1024 * 1024 });
       expect(stdout).toContain(`EXTENSIONS_${phase.toUpperCase()}_OK`);
     }
   } finally { await rm(directory, { recursive: true, force: true }); }
-}, 60_000);
+}, 90_000);

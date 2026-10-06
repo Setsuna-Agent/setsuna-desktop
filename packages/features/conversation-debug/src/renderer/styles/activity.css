@@ -1,0 +1,115 @@
+.conversation-debug-activity {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: var(--app-surface-subtle);
+  overscroll-behavior: contain;
+}
+
+.conversation-debug-activity__canvas {
+  position: relative;
+  min-width: 0;
+  margin: 0;
+  padding: 0 10px;
+  list-style: none;
+}
+
+.conversation-debug-activity__canvas li {
+  position: absolute;
+  top: var(--conversation-debug-activity-top);
+  right: 10px;
+  left: 10px;
+  height: var(--conversation-debug-activity-row-height);
+}
+
+.conversation-debug-activity__item.sd-button {
+  box-sizing: border-box;
+  display: grid;
+  width: 100%;
+  height: calc(var(--conversation-debug-activity-row-height) - 8px);
+  grid-template-columns: 3px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-xl);
+  color: var(--app-text);
+  text-align: left;
+  background: var(--app-surface);
+}
+
+.conversation-debug-activity__item.sd-button:is(:hover, :active):not(:disabled) {
+  border-color: var(--app-border-strong);
+  background: var(--app-surface);
+}
+
+.conversation-debug-activity__item.sd-button.is-selected:not(:disabled) {
+  border-color: var(--app-primary);
+  background: var(--conversation-debug-selection);
+}
+
+.conversation-debug-activity__item.sd-button:focus-visible {
+  outline: 0;
+  box-shadow: var(--app-focus-ring);
+}
+
+.conversation-debug-activity__marker {
+  width: 3px;
+  height: 26px;
+  border-radius: var(--app-radius-full);
+  background: var(--app-border-strong);
+}
+
+.conversation-debug-activity__item--warning .conversation-debug-activity__marker {
+  background: var(--app-warning);
+}
+
+.conversation-debug-activity__item--error .conversation-debug-activity__marker {
+  background: var(--app-danger);
+}
+
+.conversation-debug-activity__body,
+.conversation-debug-activity__meta {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.conversation-debug-activity__body strong {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-debug-activity__body small {
+  overflow: hidden;
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-debug-activity__meta {
+  justify-items: end;
+  color: var(--app-text-subtle);
+  font-size: 10px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.conversation-debug-activity__meta > span:last-child {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.conversation-debug-activity__meta time,
+.conversation-debug-activity__meta em {
+  font: inherit;
+  font-style: normal;
+}

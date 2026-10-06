@@ -21,6 +21,7 @@ import { loadBrowserFavicon } from './favicon.js';
 import { parseAnnotationMarkers } from './annotations/session.js';
 
 const handlerChannels = [
+  BROWSER_IPC_CHANNELS.requestFindInPage,
   BROWSER_IPC_CHANNELS.pickAnnotation,
   BROWSER_IPC_CHANNELS.cancelAnnotation,
   BROWSER_IPC_CHANNELS.setAnnotationMarkers,
@@ -47,6 +48,10 @@ export function registerBrowserIpc(
   interfaceLanguage: () => RuntimeInterfaceLanguage,
 ): () => void {
   for (const channel of handlerChannels) ipcMain.removeHandler(channel);
+  ipcMain.handle(BROWSER_IPC_CHANNELS.requestFindInPage, (event, input) => scope.runOperation(() => {
+    if (!isDesktopRendererSender(event.sender, windows)) return false;
+    return controller.requestFindInPage(String(input?.tabId ?? ''), event.sender.id);
+  }));
   ipcMain.handle(BROWSER_IPC_CHANNELS.pickAnnotation, (event, input) => scope.runOperation((signal) => {
     if (!isDesktopRendererSender(event.sender, windows)) return null;
     return controller.pickAnnotation(String(input?.tabId ?? ''), event.sender.id, signal);

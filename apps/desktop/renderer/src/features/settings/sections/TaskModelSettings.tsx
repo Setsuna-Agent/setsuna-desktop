@@ -4,12 +4,9 @@ import type {
 } from '@setsuna-desktop/contracts';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../../shared/i18n/messages.js';
-import { SelectField } from '../../../shared/ui/primitives.js';
+import { SettingsModelPicker } from '../../../composition/ModelProviderFeatureBoundary.js';
 import { SettingsRow } from '../../../shared/ui/SettingsViewUi.js';
-import {
-  configuredTaskModelOptions,
-  configuredTaskModelReferenceValue,
-} from './task-model-options.js';
+import { configuredTaskModelOptions } from './task-model-options.js';
 import type { RuntimePreferenceInput } from '../settings-types.js';
 
 type TaskModelField = {
@@ -63,38 +60,24 @@ export function TaskModelSettings({
                 {t(group.labelKey)}
               </h3>
               <div className="chat-user-settings__group task-model-settings__card">
-                {group.fields.map((field) => {
-                  const selectedValue = configuredTaskModelReferenceValue(config.taskModels?.[field.id]);
-                  const selectionAvailable = !selectedValue || options.some((option) => option.value === selectedValue);
-                  return (
-                    <SettingsRow
-                      key={field.id}
-                      label={t(field.labelKey)}
-                      description={t(field.descriptionKey)}
-                    >
-                      <SelectField
-                        aria-label={t(field.labelKey)}
-                        value={selectedValue}
-                        onValueChange={(nextValue) => {
-                          const selection = options.find((option) => option.value === nextValue)?.reference ?? null;
-                          void onSave({ taskModels: { [field.id]: selection } });
-                        }}
-                      >
-                        <option value="">{t('settings.taskModels.followCurrent')}</option>
-                        {!selectionAvailable ? (
-                          <option value={selectedValue} disabled>
-                            {t('settings.taskModels.unavailable')}
-                          </option>
-                        ) : null}
-                        {options.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </SelectField>
-                    </SettingsRow>
-                  );
-                })}
+                {group.fields.map((field) => (
+                  <SettingsRow
+                    key={field.id}
+                    label={t(field.labelKey)}
+                    description={t(field.descriptionKey)}
+                  >
+                    <SettingsModelPicker
+                      aria-label={t(field.labelKey)}
+                      models={options}
+                      value={config.taskModels?.[field.id] ?? null}
+                      defaultLabel={t('settings.taskModels.followCurrent')}
+                      unavailableLabel={t('settings.taskModels.unavailable')}
+                      onChange={(selection) => {
+                        void onSave({ taskModels: { [field.id]: selection } });
+                      }}
+                    />
+                  </SettingsRow>
+                ))}
               </div>
             </section>
           ))}

@@ -1,12 +1,14 @@
 import {
   ModelProviderRendererProvider,
   useModelProviderRendererService,
+  useModelProviderSnapshot,
   type ModelProviderBrandIconPickerProps,
   type ModelProviderBrandIconProps,
   type ModelProviderRendererHost,
   type ModelProviderRendererStateService,
 } from '@setsuna-desktop/feature-model-provider/renderer';
-import type { ReactNode } from 'react';
+import type { SettingsModelPickerProps } from '@setsuna-desktop/renderer-contracts/settings';
+import { useMemo, type ReactNode } from 'react';
 import { BrandIconMark } from '../shared/branding/BrandIconMark.js';
 import { BrandIconPickerDialog } from '../shared/branding/BrandIconPickerDialog.js';
 import {
@@ -15,6 +17,8 @@ import {
   resolveModelBrand,
   resolveProviderBrand,
 } from '../shared/branding/providerBranding.js';
+import { ConfiguredModelPicker } from '../shared/ui/model-picker/ConfiguredModelPicker.js';
+import { configuredModelOptions } from '../shared/ui/model-picker/modelOptions.js';
 
 export const modelProviderRendererHost: Pick<ModelProviderRendererHost, 'BrandIcon' | 'BrandIconPicker'> = Object.freeze({
   BrandIcon: ModelProviderBrandIcon,
@@ -33,6 +37,12 @@ export function ModelProviderFeatureServiceBoundary({
 
 export function useModelProviderFeatureService(): ModelProviderRendererStateService {
   return useModelProviderRendererService();
+}
+
+export function SettingsModelPicker({ models, ...props }: SettingsModelPickerProps) {
+  const { state } = useModelProviderSnapshot();
+  const options = useMemo(() => configuredModelOptions(models, state), [models, state]);
+  return <ConfiguredModelPicker {...props} options={options} />;
 }
 
 function ModelProviderBrandIcon({ model, provider, size = 'default' }: ModelProviderBrandIconProps) {

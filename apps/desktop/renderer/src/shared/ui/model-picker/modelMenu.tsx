@@ -1,46 +1,47 @@
 import { TextField, type MenuItem } from '@setsuna-desktop/renderer-ui';
-import type { Translate } from '../../../../shared/i18n/I18nProvider.js';
+import type { Translate } from '../../i18n/I18nProvider.js';
 import type { KeyboardEvent, ReactNode, RefObject } from 'react';
-import { BrandIconMark } from '../../../../shared/branding/BrandIconMark.js';
-import { resolveModelBrand } from '../../../../shared/branding/providerBranding.js';
-import { ChatModelDetails } from './ChatModelDetails.js';
-import { chatModelSearchText, groupChatModelOptions, type ChatModelOption } from '../chatModelOptions.js';
+import { BrandIconMark } from '../../branding/BrandIconMark.js';
+import { resolveModelBrand } from '../../branding/providerBranding.js';
+import { ModelDetails } from './ModelDetails.js';
+import { modelSearchText, groupModelOptions, type ModelOption } from './modelOptions.js';
+import './model-picker.css';
 
 /** Chat and task forms share search, provider groups, branding and keyboard selection. */
-export function createChatModelMenu({ options, query, onQueryChange, onSelect, searchRef, translate: t, emptyLabel, leadingItems = [] }: {
-  options: readonly ChatModelOption[];
+export function createModelMenu({ options, query, onQueryChange, onSelect, searchRef, translate: t, emptyLabel, leadingItems = [] }: {
+  options: readonly ModelOption[];
   query: string;
   onQueryChange(query: string): void;
-  onSelect(option: ChatModelOption, event: Event): void;
+  onSelect(option: ModelOption, event: Event): void;
   searchRef: RefObject<HTMLInputElement>;
   translate: Translate;
   emptyLabel: ReactNode;
   leadingItems?: readonly MenuItem[];
 }): MenuItem[] {
   const normalizedQuery = query.trim().toLowerCase();
-  const visibleOptions = normalizedQuery ? options.filter((option) => chatModelSearchText(option).includes(normalizedQuery)) : options;
-  const groups: MenuItem[] = groupChatModelOptions(visibleOptions).map((group) => ({
+  const visibleOptions = normalizedQuery ? options.filter((option) => modelSearchText(option).includes(normalizedQuery)) : options;
+  const groups: MenuItem[] = groupModelOptions(visibleOptions).map((group) => ({
     key: `provider:${group.provider.id}`, type: 'group',
     label: group.provider.name || t('chat.model.unnamedProvider'),
-    className: 'chat-model-menu__provider',
+    className: 'model-picker-menu__provider',
     children: group.options.map((option) => ({
       key: `model:${option.key}`,
-      label: <span className="chat-model-menu__model">
+      label: <span className="model-picker-menu__model">
         <BrandIconMark brand={resolveModelBrand(option.model, option.provider)} fallbackName={option.model.name || option.model.code} size="compact" />
-        <span className="chat-model-menu__model-name">{option.model.name || option.model.code}</span>
+        <span className="model-picker-menu__model-name">{option.model.name || option.model.code}</span>
       </span>,
-      tooltip: <ChatModelDetails option={option} />,
-      tooltipClassName: 'chat-model-details-tooltip',
+      tooltip: <ModelDetails option={option} />,
+      tooltipClassName: 'model-details-tooltip',
       onClick: ({ domEvent }) => onSelect(option, domEvent),
     })),
   }));
   return [{
     key: 'model-search', type: 'group',
-    label: <TextField ref={searchRef} className="chat-model-menu__search"
+    label: <TextField ref={searchRef} className="model-picker-menu__search"
       aria-label={t('chat.model.search')} placeholder={t('chat.model.search')} value={query}
       onChange={(event) => onQueryChange(event.target.value)} onKeyDown={handleModelSearchKeyDown} />,
     children: [{
-      key: 'model-list', type: 'group', className: 'chat-model-menu__list',
+      key: 'model-list', type: 'group', className: 'model-picker-menu__list',
       children: [...leadingItems, ...(groups.length ? groups : [{ key: 'empty', disabled: true, label: emptyLabel }])],
     }],
   }];

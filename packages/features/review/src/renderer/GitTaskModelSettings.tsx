@@ -8,10 +8,10 @@ import { ReviewModelSelect } from './ReviewModelSelect.js';
 export function GitTaskModelSettings({ client, translate: t, ui }: {
   client: Pick<ReviewClient, 'readGitSettings' | 'updateGitSettings'>;
   translate: RendererTranslate;
-  ui: Pick<SettingsViewUi, 'Group' | 'Row' | 'Section' | 'SelectField' | 'Toast' | 'Button'>;
+  ui: Pick<SettingsViewUi, 'Group' | 'Row' | 'Section' | 'ModelPicker' | 'Toast' | 'Button'>;
 }) {
   const { draft, setDraft, ready, pending, availableModels, error, load, save } = useGitSettings(client);
-  const { Group, Row, Section, SelectField, Toast, Button } = ui;
+  const { Group, Row, Section, ModelPicker, Toast, Button } = ui;
   return (
     <Section featureId="desktop-review">
       <Group title={t('feature.review.settings.commitMessageGroup')}>
@@ -19,7 +19,7 @@ export function GitTaskModelSettings({ client, translate: t, ui }: {
           const label = t(key === 'commitMessageModel' ? 'feature.review.settings.commitMessageModel' : 'feature.review.settings.conflictModel');
           return (
             <Row key={key} label={label} description={t(key === 'commitMessageModel' ? 'feature.review.settings.commitMessageDescription' : 'feature.review.settings.conflictDescription')}>
-              <ReviewModelSelect SelectField={SelectField} translate={t} label={label} models={availableModels}
+              <ReviewModelSelect ModelPicker={ModelPicker} translate={t} label={label} models={availableModels}
                 selection={draft[key]} disabled={!ready || pending !== null || error === 'conflict'} onChange={(selection) => {
                   const next = { ...draft, [key]: selection };
                   setDraft(next);

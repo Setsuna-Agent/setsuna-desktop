@@ -8,13 +8,9 @@ describe('TaskModelSettings', () => {
   it('offers configured models from every enabled provider', () => {
     const options = configuredTaskModelOptions(configFixture);
 
-    expect(options.map((option) => option.reference)).toEqual([
-      { providerId: 'provider-minimax', modelId: 'minimax-m3' },
-      { providerId: 'provider-kimi', modelId: 'kimi-k2' },
-    ]);
-    expect(options.map((option) => option.label)).toEqual([
-      'MiniMax · MiniMax M3 (MiniMax-M3)',
-      '火山方舟 · Kimi K2.7 (kimi-k2.7)',
+    expect(options).toEqual([
+      { providerId: 'provider-minimax', providerName: 'MiniMax', modelId: 'minimax-m3', modelName: 'MiniMax M3', modelCode: 'MiniMax-M3' },
+      { providerId: 'provider-kimi', providerName: '火山方舟', modelId: 'kimi-k2', modelName: 'Kimi K2.7', modelCode: 'kimi-k2.7' },
     ]);
   });
 });

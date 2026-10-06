@@ -1,6 +1,6 @@
 import type { FileDiff, PostRenderPhase } from '@pierre/diffs';
 import type { DiffLineAnnotation } from '@pierre/diffs/react';
-import type { CheckboxProps, SettingsDialogProps, SettingsSelectFieldProps, SettingsToggleProps } from '@setsuna-desktop/renderer-contracts/settings';
+import type { CheckboxProps, SettingsDialogProps, SettingsModelPickerProps, SettingsToggleProps } from '@setsuna-desktop/renderer-contracts/settings';
 import type { DropdownProps } from '@setsuna-desktop/renderer-ui';
 import type { DesktopWorkspaceApp } from '@setsuna-desktop/feature-workspace-apps/contracts';
 import { createContext, useContext, type ComponentType, type ReactNode, type RefObject } from 'react';
@@ -75,7 +75,7 @@ export type ReviewRendererHost = Readonly<{
   translate: ReviewTranslate;
   ui: Readonly<{
     Dialog: ComponentType<SettingsDialogProps>;
-    SelectField: ComponentType<SettingsSelectFieldProps>;
+    ModelPicker: ComponentType<SettingsModelPickerProps>;
     Toggle: ComponentType<SettingsToggleProps>;
     Checkbox: ComponentType<CheckboxProps>;
     ContextMenu: ComponentType<Pick<DropdownProps, 'align' | 'children' | 'disabled' | 'menu' | 'onOpenChange' | 'placement' | 'trigger'>>;

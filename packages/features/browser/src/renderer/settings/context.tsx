@@ -1,5 +1,5 @@
 import { defineCapability } from '@setsuna-desktop/feature-core/capability';
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import type { BrowserDesktopBridge } from '../../contracts/bridge.js';
 
 export const browserRendererHostCapability = defineCapability<Readonly<{ bridge: BrowserDesktopBridge | null }>>({
@@ -7,8 +7,20 @@ export const browserRendererHostCapability = defineCapability<Readonly<{ bridge:
 });
 
 type BrowserSettingsNavigation = { openSettings(section: string): void; openPage(url: string): void };
-const NavigationContext = createContext<BrowserSettingsNavigation | null>(null);
+const NavigationContext = createContext<(BrowserSettingsNavigation & {
+  extensionsRequested: boolean;
+  openExtensionSettings(): void;
+  consumeExtensionsRequest(): void;
+}) | null>(null);
 export function BrowserSettingsNavigationProvider({ children, value }: { children: ReactNode; value: BrowserSettingsNavigation }) {
-  return <NavigationContext.Provider value={value}>{children}</NavigationContext.Provider>;
+  const [extensionsRequested, setExtensionsRequested] = useState(false);
+  const openExtensionSettings = useCallback(() => {
+    setExtensionsRequested(true);
+    value.openSettings('browser');
+  }, [value.openSettings]);
+  const consumeExtensionsRequest = useCallback(() => setExtensionsRequested(false), []);
+  const navigation = useMemo(() => ({ ...value, extensionsRequested, openExtensionSettings, consumeExtensionsRequest }),
+    [value, extensionsRequested, openExtensionSettings, consumeExtensionsRequest]);
+  return <NavigationContext.Provider value={navigation}>{children}</NavigationContext.Provider>;
 }
 export function useBrowserSettingsNavigation() { return useContext(NavigationContext); }

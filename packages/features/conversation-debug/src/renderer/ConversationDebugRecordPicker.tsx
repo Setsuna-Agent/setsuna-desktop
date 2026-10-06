@@ -61,7 +61,7 @@ export function ConversationDebugRecordPicker({
       </header>
       <div className="conversation-debug-inspector__record-navigation">
         <IconButton
-          className="app-shell-icon-control conversation-debug-inspector__record-step"
+          className="conversation-debug-inspector__record-step"
           disabled={selectedIndex <= 0}
           label={t('feature.conversationDebug.inspector.previousRecord')}
           onClick={() => {
@@ -85,7 +85,7 @@ export function ConversationDebugRecordPicker({
           ))}
         </SelectField>
         <IconButton
-          className="app-shell-icon-control conversation-debug-inspector__record-step"
+          className="conversation-debug-inspector__record-step"
           disabled={!options.length || selectedIndex >= options.length - 1}
           label={t('feature.conversationDebug.inspector.nextRecord')}
           onClick={() => {

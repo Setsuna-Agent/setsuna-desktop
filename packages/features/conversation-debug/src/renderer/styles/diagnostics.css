@@ -1,0 +1,180 @@
+.conversation-debug-diagnostics {
+  display: grid;
+  min-width: 0;
+  gap: 20px;
+  padding: 16px;
+}
+
+.conversation-debug-diagnostics__section,
+.conversation-debug-diagnostics__notices {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+}
+
+.conversation-debug-diagnostics h3 {
+  margin: 0;
+  color: var(--app-text);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 18px;
+}
+
+.conversation-debug-diagnostics__section dl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-xl);
+  background: var(--app-surface-subtle);
+}
+
+.conversation-debug-diagnostics__section dl > div {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(100px, 0.45fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--app-border);
+}
+
+.conversation-debug-diagnostics__section dl > div:first-child {
+  border-top: 0;
+}
+
+.conversation-debug-diagnostics__section dl > div.is-wide {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.conversation-debug-diagnostics__section dt {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.conversation-debug-diagnostics__section dt > span {
+  color: var(--app-text-muted);
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 16px;
+}
+
+.conversation-debug-diagnostics__section dt > code {
+  overflow: hidden;
+  color: var(--app-text-subtle);
+  font-size: 9px;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-debug-diagnostics__section dd {
+  min-width: 0;
+  max-height: 180px;
+  margin: 0;
+  overflow: auto;
+  color: var(--app-text);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.conversation-debug-diagnostics__section .is-monospace dd {
+  font-family: var(--app-code-font-family);
+  font-size: 11px;
+}
+
+.conversation-debug-diagnostics__section .has-code dd {
+  max-height: none;
+  overflow: hidden;
+}
+
+.conversation-debug-diagnostics__code {
+  width: 100%;
+  max-height: 220px;
+  box-sizing: border-box;
+  overflow: auto;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-surface);
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.conversation-debug-diagnostics__code:focus-visible {
+  outline: 0;
+  box-shadow: var(--app-focus-ring);
+}
+
+.conversation-debug-diagnostics__notices > div {
+  display: grid;
+  gap: 8px;
+}
+
+.conversation-debug-diagnostics__notice {
+  --conversation-debug-notice-color: var(--app-text-muted);
+
+  display: grid;
+  grid-template-columns: 3px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-xl);
+  background: var(--app-surface-subtle);
+}
+
+.conversation-debug-diagnostics__notice--warning {
+  --conversation-debug-notice-color: var(--app-warning);
+}
+
+.conversation-debug-diagnostics__notice--error {
+  --conversation-debug-notice-color: var(--app-danger);
+}
+
+.conversation-debug-diagnostics__notice > i {
+  align-self: stretch;
+  width: 3px;
+  min-height: 24px;
+  border-radius: var(--app-radius-full);
+  background: var(--conversation-debug-notice-color);
+}
+
+.conversation-debug-diagnostics__notice > span {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.conversation-debug-diagnostics__notice strong {
+  color: var(--app-text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.conversation-debug-diagnostics__notice p {
+  margin: 0;
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 17px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.conversation-debug-diagnostics__notice > code {
+  max-width: 120px;
+  padding: 3px 6px;
+  overflow: hidden;
+  border-radius: var(--app-radius-full);
+  color: var(--app-text-muted);
+  font-size: 10px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: var(--app-surface);
+}

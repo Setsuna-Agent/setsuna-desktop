@@ -9,8 +9,9 @@ vi.mock('electron', () => ({
 }));
 import { BrowserContextMenuSession } from '../../src/main/context-menu-session.js';
 import { installEmbeddedBrowserWebviews } from '../../src/main/webview.js';
+import { BROWSER_IPC_CHANNELS } from '../../src/contracts/bridge.js';
 
-function windowFixture(isAllowedExtensionUrl?: (url: string) => boolean) {
+function windowFixture(isAllowedExtensionUrl?: (url: string) => boolean, tabId: string | null = null) {
   let destroyed = false;
   const contents = new EventEmitter();
   const window = Object.assign(new EventEmitter(), {
@@ -23,7 +24,7 @@ function windowFixture(isAllowedExtensionUrl?: (url: string) => boolean) {
   const dispose = installEmbeddedBrowserWebviews({
     mainWindow: window,
     activeKeyboardShortcutBindings: () => new Set(),
-    browserTabIdForWebContents: () => null,
+    browserTabIdForWebContents: () => tabId,
     interfaceLanguage: () => 'zh-CN',
     contextMenus: new BrowserContextMenuSession(vi.fn()),
     isAllowedExtensionUrl,
@@ -47,6 +48,33 @@ it('only attaches extension documents authorized by the installed-extension serv
     expect(preferences).toMatchObject({ nodeIntegration: false, contextIsolation: true, sandbox: true });
     expect(preferences.preload).toBeUndefined();
   }
+  host.close();
+});
+
+it('routes Ctrl+F and Command+F to the focused guest instead of forwarding chat search, without requiring active chat bindings', () => {
+  const host = windowFixture(undefined, 'browser-tab');
+  const send = vi.fn();
+  const guest = Object.assign(new EventEmitter(), {
+    id: 42, setWindowOpenHandler: vi.fn(), hostWebContents: { isDestroyed: () => false, send },
+  });
+  host.contents.emit('did-attach-webview', {}, guest);
+  const key = { type: 'keyDown', code: 'KeyF', key: 'f', alt: false, control: false, shift: false, meta: false,
+    isAutoRepeat: false, isComposing: false, modifiers: [] };
+  for (const modifier of ['control', 'meta']) {
+    const event = { preventDefault: vi.fn() };
+    guest.emit('before-input-event', event, { ...key, [modifier]: true });
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+  }
+  expect(send.mock.calls).toEqual([
+    [BROWSER_IPC_CHANNELS.findInPageRequested, 'browser-tab'],
+    [BROWSER_IPC_CHANNELS.findInPageRequested, 'browser-tab'],
+  ]);
+  for (const changes of [{ shift: true }, { alt: true }, { isComposing: true }, { isAutoRepeat: true }]) {
+    const event = { preventDefault: vi.fn() };
+    guest.emit('before-input-event', event, { ...key, control: true, ...changes });
+    expect(event.preventDefault).not.toHaveBeenCalled();
+  }
+  expect(send).toHaveBeenCalledTimes(2);
   host.close();
 });
 

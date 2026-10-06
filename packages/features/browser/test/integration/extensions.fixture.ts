@@ -50,7 +50,7 @@ async function main() {
     language: () => 'en-US', publish: () => undefined, openWebPage: () => undefined,
   });
   const manifest = {
-    manifest_version: 3, name: 'Setsuna extension test', version: '1.0.0', permissions: ['storage'],
+    manifest_version: 3, name: '__MSG_appName__', default_locale: 'en', version: '1.0.0', permissions: ['storage'],
     content_scripts: [{ matches: ['https://example.test/*'], js: ['content.js'] }],
     action: { default_popup: 'popup.html' }, options_ui: { page: 'options.html' },
     background: { service_worker: 'worker.js' },
@@ -95,12 +95,26 @@ async function main() {
       assert.equal(service.list()[0].id, fixture.id);
       assert.equal(service.list()[0].hasPopup, true);
       assert.equal(service.list()[0].hasOptions, true);
+      assert.equal(service.list()[0].enabled, true);
       await writeFile(path.join(directory, 'extension-id'), fixture.id);
     } else {
       const id = await readFile(path.join(directory, 'extension-id'), 'utf8');
       assert.equal(service.list()[0]?.id, id);
       assert.equal(downloads, 0);
+      if (phase === 'disabled') {
+        assert.equal(service.list()[0].enabled, false);
+        assert.equal(service.list()[0].name, 'Setsuna extension test');
+        assert.equal(browserSession.extensions.getExtension(id), null);
+        assert.equal(await service.open(id, 'popup', owner), false);
+        await guest.loadURL('https://example.test/disabled');
+        assert.equal(await guest.executeJavaScript('document.documentElement.dataset.extensionReady'), undefined);
+        assert.deepEqual(await Promise.all([
+          service.setEnabled(id, true), service.setEnabled(id, false), service.setEnabled(id, true),
+        ]), [true, true, true]);
+      }
+      assert.equal(service.list()[0].enabled, true);
     }
+    assert.equal(service.list()[0].name, 'Setsuna extension test');
     await guest.loadURL('https://example.test/');
     await until(() => guest.executeJavaScript('document.documentElement.dataset.extensionReady === "yes"'), 'native content script and storage');
     assert.equal(await guest.executeJavaScript('typeof window.electronWebstore'), 'undefined');
@@ -121,6 +135,7 @@ async function main() {
     await until(() => newTab.executeJavaScript('document.documentElement.dataset.extensionReady === "yes"'), 'native extension new tab');
     assert.equal(await newTab.executeJavaScript('chrome.runtime.id'), id);
     assert.equal(await newTab.executeJavaScript('typeof window.setsunaDesktop'), 'undefined');
+    if (phase === 'disabled') assert.equal(await newTab.executeJavaScript('localStorage.getItem("settings-test")'), 'extension');
     await guest.loadURL('https://example.test/detected');
     await until(() => {
       const state = service.actions.snapshot(guest.id).find((item) => item.id === id);
@@ -165,7 +180,24 @@ async function main() {
     assert.equal(await newTab.executeJavaScript('localStorage.getItem("settings-test")'), 'extension');
     assert.equal((await browserSession.cookies.get({ name: 'settings-test' })).length, 0);
     assert.equal((await session.defaultSession.cookies.get({ name: 'settings-test' }))[0].value, 'desktop');
+    if (phase === 'install') {
+      assert.equal(await service.setEnabled('../outside', false), false);
+      assert.equal(await service.setEnabled(id, false), true);
+      assert.equal(service.list().length, 1);
+      assert.equal(service.list()[0].enabled, false);
+      assert.equal(service.list()[0].name, 'Setsuna extension test');
+      assert.equal(service.list()[0].newTabUrl, null);
+      assert.equal(service.allowsPage(newTabUrl), false);
+      assert.equal(service.actions.snapshot().some((item) => item.id === id), false);
+      assert.equal(popup.isDestroyed(), true);
+      assert.equal(await service.open(id, 'options', owner), false);
+      await guest.loadURL('https://example.test/disabled');
+      assert.equal(await guest.executeJavaScript('document.documentElement.dataset.extensionReady'), undefined);
+      // Disabled extensions must retain their own data when website storage is cleared.
+      await clearBrowserSessionData(browserSession, {} as BrowserPasswordStore, { siteStorage: true });
+    }
     if (phase === 'restore') {
+      assert.equal(await service.setEnabled(id, false), true);
       assert.equal(await service.remove(id), true);
       assert.equal(service.list().length, 0);
       assert.equal(service.allowsPage(newTabUrl), false);
@@ -185,6 +217,7 @@ function createCrx(manifest: unknown) {
   const Zip = createRequire(require.resolve('electron-chrome-web-store'))('adm-zip');
   const zip = new Zip();
   zip.addFile('manifest.json', Buffer.from(JSON.stringify(manifest)));
+  zip.addFile('_locales/en/messages.json', Buffer.from(JSON.stringify({ appName: { message: 'Setsuna extension test' } })));
   zip.addFile('worker.js', Buffer.from(`chrome.action.setTitle({ title: 'Extension default' });
   chrome.runtime.onMessage.addListener((message, sender, reply) => {
     if (message !== 'detected') return;

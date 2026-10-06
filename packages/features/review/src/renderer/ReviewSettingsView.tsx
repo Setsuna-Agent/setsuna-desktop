@@ -28,7 +28,7 @@ export function ReviewSettingsView({
   modelKey?: ReviewMessageKey;
   descriptionKey?: ReviewMessageKey;
 }>) {
-  const { Group, Row, Section, SelectField, Toast } = ui;
+  const { Group, Row, Section, ModelPicker, Toast } = ui;
   const [state, setState] = useState<ReviewSettingsState | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +64,7 @@ export function ReviewSettingsView({
           label={translate(modelKey)}
           description={translate(descriptionKey)}
         >
-          <ReviewModelSelect SelectField={SelectField} translate={translate} label={translate(modelKey)}
+          <ReviewModelSelect ModelPicker={ModelPicker} translate={translate} label={translate(modelKey)}
             disabled={!state || saving} selection={state?.selection ?? null} models={state?.availableModels ?? []}
             onChange={(selection) => { void save(selection); }} />
         </Row>

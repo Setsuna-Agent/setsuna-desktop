@@ -97,11 +97,11 @@ export function ConversationDebugInspector({
           <p title={description}>{description}</p>
         </div>
         <IconButton
-          className="app-shell-icon-control conversation-debug-inspector__close"
+          className="conversation-debug-inspector__close"
           label={t('feature.conversationDebug.inspector.close')}
           onClick={onClose}
         >
-          <X size={14} />
+          <X aria-hidden="true" size={16} />
         </IconButton>
       </header>
 

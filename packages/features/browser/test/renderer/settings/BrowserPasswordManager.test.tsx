@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { StrictMode } from 'react';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { SettingsViewUi } from '@setsuna-desktop/renderer-contracts/settings';
@@ -57,4 +57,31 @@ it('refreshes saved accounts after deleting and adding a password', async () => 
   await user.click(screen.getByRole('button', { name: 'Save' }));
   expect(await screen.findByText('new-user')).toBeTruthy();
   expect(saveBrowserPassword).toHaveBeenCalledWith({ origin: login.origin, username: 'new-user', password: 'test-secret' });
+});
+
+it('edits and deletes the intended account when a website has multiple saved accounts', async () => {
+  const second = { ...login, id: 'second-login', username: 'second-user' };
+  const other = { ...login, id: 'other-site', origin: 'https://other.org', username: 'other-user' };
+  let entries = [login, second, other];
+  const saveBrowserPassword = vi.fn(async () => undefined);
+  const deleteBrowserPassword = vi.fn(async (origin: string, id: string) => {
+    entries = entries.filter((entry) => entry.origin !== origin || entry.id !== id);
+  });
+  openManager(async () => entries, { saveBrowserPassword, deleteBrowserPassword });
+  const user = userEvent.setup();
+  const accountRow = (username: string) => within(screen.getByText(username).closest('li')!);
+  await screen.findByText(second.username);
+  await user.click(accountRow(second.username).getByRole('button', { name: 'Edit' }));
+  expect((screen.getByLabelText('Website URL') as HTMLInputElement).value).toBe(second.origin);
+  expect((screen.getByLabelText('Username') as HTMLInputElement).value).toBe(second.username);
+  await user.type(screen.getByLabelText('Password'), 'updated-secret');
+  await user.click(screen.getByRole('button', { name: 'Save' }));
+  await screen.findByText(second.username);
+  expect(saveBrowserPassword).toHaveBeenCalledWith({ origin: second.origin, username: second.username, password: 'updated-secret' });
+
+  await user.click(accountRow(second.username).getByRole('button', { name: 'Delete' }));
+  await waitFor(() => expect(screen.queryByText(second.username)).toBeNull());
+  expect(deleteBrowserPassword).toHaveBeenCalledWith(second.origin, second.id);
+  expect(screen.getByText(login.username)).toBeTruthy();
+  expect(screen.getByText(other.username)).toBeTruthy();
 });

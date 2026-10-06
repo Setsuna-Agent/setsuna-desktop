@@ -53,6 +53,20 @@ export function annotationPageOverlay(
     veil.style.pointerEvents = 'auto';
     return element === host ? null : element;
   };
+  const isExposed = (element: Element): boolean => {
+    const rect = element.getBoundingClientRect();
+    const left = Math.max(0, rect.left), right = Math.min(innerWidth, rect.right);
+    const top = Math.max(0, rect.top), bottom = Math.min(innerHeight, rect.bottom);
+    if (!element.isConnected || right <= left || bottom <= top) return false;
+    let hit = atPoint((left + right) / 2, (top + bottom) / 2);
+    // Hit testing descends open shadow roots; walk their hosts to recognize the target's content.
+    while (hit) {
+      if (element.contains(hit)) return true;
+      const root = hit.getRootNode();
+      hit = root instanceof ShadowRoot ? root.host : null;
+    }
+    return false;
+  };
   const position = (node: HTMLElement, element: Element) => {
     const rect = element.getBoundingClientRect();
     const shown = element.isConnected && rect.width > 0 && rect.height > 0
@@ -186,11 +200,12 @@ export function annotationPageOverlay(
         const root = ancestor.getRootNode();
         ancestor = ancestor.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
       }
-      element.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+      // Edge alignment can leave the target behind fixed/sticky site navigation.
+      element.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
       cancelAnimationFrame(frame);
       paint();
-      // Let the isolated marker layer reach the compositor before capturePage reads it.
-      return new Promise<boolean>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))));
+      // Let scrolling and the marker reach the compositor, then reject obscured content.
+      return new Promise<boolean>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(isExposed(element)))));
     }
     if (next.kind === 'finish-screenshot') {
       finishCapture();

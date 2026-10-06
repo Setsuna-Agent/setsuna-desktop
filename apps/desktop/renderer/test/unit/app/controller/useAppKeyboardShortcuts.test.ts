@@ -1,3 +1,5 @@
+// @vitest-environment happy-dom
+
 import { describe, expect, it } from 'vitest';
 import {
   activeKeyboardShortcutBindings,
@@ -47,6 +49,14 @@ describe('activeKeyboardShortcutBindings', () => {
 });
 
 describe('browserShortcutTabId', () => {
+  it('uses the focused browser toolbar and find input without redirecting shortcuts from the chat area', () => {
+    const browser = document.createElement('aside');
+    browser.setAttribute('data-browser-tab-id', 'browser-tab');
+    const input = document.createElement('input');
+    browser.append(input);
+    expect(browserShortcutTabId({ ...keyEvent({ code: 'KeyF', ctrlKey: true }), target: input } as KeyboardEvent, null)).toBe('browser-tab');
+    expect(browserShortcutTabId({ ...keyEvent({ code: 'KeyF', ctrlKey: true }), target: document.createElement('textarea') } as KeyboardEvent, null)).toBeNull();
+  });
   it('uses the browser tab that forwarded the shortcut instead of another active surface', () => {
     expect(browserShortcutTabId({
       ...keyEvent({ code: 'KeyR', ctrlKey: true, key: 'r' }),

@@ -1,10 +1,11 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
-import { ArrowUpRight, History, Star, X, type LucideIcon } from 'lucide-react';
+import { ArrowUpRight, X, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { BrowserBookmarkEntry } from './browserBookmarks.js';
 import type { BrowserHistoryEntry } from './browserHistory.js';
 import { BrowserFeatureIcon } from './BrowserFeatureIcon.js';
 import type { BrowserTranslate } from './messages.js';
+import { BrowserFavoritesIcon, BrowserHistoryIcon } from './records/recordIcons.js';
 
 export function BrowserHomePage({
   bookmarks,
@@ -23,7 +24,7 @@ export function BrowserHomePage({
     <main className="desktop-browser-home">
       <div className="desktop-browser-home__intro">
         <span className="desktop-browser-home__mark" aria-hidden="true">
-          <History size={18} />
+          <BrowserHistoryIcon size={18} />
         </span>
         <div>
           <h1>{translate('feature.browser.homeTitle')}</h1>
@@ -33,18 +34,18 @@ export function BrowserHomePage({
 
       <BrowserHomeSection
         emptyDescription={translate('feature.browser.bookmarksEmptyDescription')}
-        emptyIcon={Star}
+        emptyIcon={BrowserFavoritesIcon}
         emptyTitle={translate('feature.browser.bookmarksEmptyTitle')}
         entries={bookmarks.slice(0, 50).map((entry) => ({ ...entry, timestamp: entry.savedAt }))}
         id="desktop-browser-bookmarks-title"
-        itemIcon={<Star size={15} />}
+        itemIcon={<BrowserFavoritesIcon size={15} />}
         onNavigate={onNavigate}
         openLabel={translate('feature.browser.historyOpen')}
         title={translate('feature.browser.bookmarksTitle')}
       />
       <BrowserHomeSection
         emptyDescription={translate('feature.browser.historyEmptyDescription')}
-        emptyIcon={History}
+        emptyIcon={BrowserHistoryIcon}
         emptyTitle={translate('feature.browser.historyEmptyTitle')}
         entries={entries.slice(0, 50).map((entry) => ({ ...entry, id: entry.url, timestamp: entry.visitedAt }))}
         id="desktop-browser-history-title"

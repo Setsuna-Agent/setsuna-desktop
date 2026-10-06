@@ -19,7 +19,7 @@ it('creates nested folders, moves a subtree, and confirms deletion of its saved 
     await user.click(screen.getByRole('button', { name: 'Save' }));
     await user.click(screen.getByRole('button', { name, exact: true }));
   }
-  await user.click(screen.getByRole('button', { name: 'Add bookmark' }));
+  await user.click(screen.getByRole('button', { name: 'Add favorite' }));
   await user.click(screen.getByRole('button', { name: 'Save' }));
   const created = readBrowserBookmarkTree();
   const work = created.nodes.find((node) => node.title === 'Work')!;
@@ -29,7 +29,7 @@ it('creates nested folders, moves a subtree, and confirms deletion of its saved 
   expect(page.parentId).toBe(docs.id);
   await user.click(screen.getByRole('button', { name: 'Edit Work' }));
   await user.click(screen.getByRole('combobox', { name: 'Folder' }));
-  await user.click(screen.getByRole('option', { name: 'Other bookmarks', exact: true }));
+  await user.click(screen.getByRole('option', { name: 'Other favorites', exact: true }));
   await user.click(screen.getByRole('button', { name: 'Save' }));
   const moved = readBrowserBookmarkTree();
   expect(moved.nodes.find((node) => node.id === work.id)?.parentId).toBe(OTHER_BOOKMARKS_ID);

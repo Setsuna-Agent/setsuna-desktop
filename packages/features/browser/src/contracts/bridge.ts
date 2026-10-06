@@ -6,6 +6,7 @@ import type { BrowserSettingsBridge } from './settings.js';
 
 export const BROWSER_IPC_CHANNELS = Object.freeze({
   getExtensions: 'browser:get-extensions',
+  setExtensionEnabled: 'browser:set-extension-enabled',
   removeExtension: 'browser:remove-extension',
   openExtension: 'browser:open-extension',
   extensionsChanged: 'browser:extensions-changed',
@@ -23,6 +24,8 @@ export const BROWSER_IPC_CHANNELS = Object.freeze({
   getAnnotationAnchor: 'browser:get-annotation-anchor',
   captureAnnotationScreenshots: 'browser:capture-annotation-screenshots',
   captureScreenshot: 'browser:capture-screenshot',
+  requestFindInPage: 'browser:request-find-in-page',
+  findInPageRequested: 'browser:find-in-page-requested',
   contextMenu: 'browser:context-menu',
   dismissContextMenu: 'browser:dismiss-context-menu',
   runContextMenuAction: 'browser:run-context-menu-action',
@@ -57,6 +60,8 @@ export type BrowserReloadShortcutBindings = Readonly<{
 }>;
 
 export interface BrowserDesktopBridge extends BrowserPasswordBridge, BrowserExtensionsBridge, BrowserSettingsBridge {
+  requestFindInPage(tabId: string): Promise<boolean>;
+  onFindInPageRequested(callback: (tabId: string) => void): () => void;
   pickAnnotation(tabId: string): Promise<BrowserAnnotationTarget | null>;
   cancelAnnotation(tabId: string): Promise<void>;
   setAnnotationMarkers(tabId: string, markers: BrowserAnnotationMarkers): Promise<boolean>;

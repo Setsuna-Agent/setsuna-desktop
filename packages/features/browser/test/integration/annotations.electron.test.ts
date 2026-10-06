@@ -1,0 +1,26 @@
+import { execFile } from 'node:child_process';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+import { build } from 'esbuild';
+import { expect, it } from 'vitest';
+
+it.skipIf(!['darwin', 'win32'].includes(process.platform))('captures selected content without sticky-header occlusion and restores the original scroll position', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'setsuna-annotations-test-'));
+  try {
+    const fixture = new URL('./annotations.fixture.ts', import.meta.url);
+    const entry = path.join(directory, 'test.cjs');
+    await build({
+      entryPoints: [fileURLToPath(fixture)], outfile: entry, bundle: true, platform: 'node', format: 'cjs',
+      target: 'node22', external: ['electron'],
+    });
+    const electron = createRequire(import.meta.url)('electron') as string;
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const { stdout } = await promisify(execFile)(electron, [entry, directory], { env, timeout: 20_000, maxBuffer: 1024 * 1024 });
+    expect(stdout).toContain('ANNOTATIONS_OK');
+  } finally { await rm(directory, { recursive: true, force: true }); }
+}, 30_000);

@@ -35,7 +35,11 @@ export function ConversationDebugActivityList({
   const visibleNodes = nodes.slice(virtualWindow.startIndex, virtualWindow.endIndex);
 
   return (
-    <div ref={virtualWindow.viewportRef} className="conversation-debug-activity">
+    <div
+      ref={virtualWindow.viewportRef}
+      className="conversation-debug-activity"
+      style={{ '--conversation-debug-activity-row-height': `${ACTIVITY_ROW_HEIGHT}px` } as CSSProperties}
+    >
       <ol
         className="conversation-debug-activity__canvas"
         aria-label={t('feature.conversationDebug.mode.events')}
@@ -58,7 +62,8 @@ export function ConversationDebugActivityList({
               key={node.id}
               style={top}
             >
-              <Button variant="ghost"
+              <Button
+                variant="ghost"
                 aria-pressed={selected}
                 className={[
                   'conversation-debug-activity__item',

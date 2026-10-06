@@ -8,7 +8,7 @@ import { Eye, Loader2, Play } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import {
   VISION_RECOGNITION_PROMPT_MAX_CHARS,
-  type VisionRecognitionModelOption,
+  type VisionRecognitionModelSelection,
   type VisionRecognitionSettingsState,
   type VisionRecognitionTestResult,
 } from '../contracts/index.js';
@@ -24,7 +24,7 @@ export function VisionRecognitionSettingsView({
   translate: RendererTranslate;
   ui: SettingsViewUi;
 }>) {
-  const { SelectField } = ui;
+  const { ModelPicker } = ui;
   const [state, setState] = useState<VisionRecognitionSettingsState | null>(null);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -39,23 +39,21 @@ export function VisionRecognitionSettingsView({
     return () => abort.abort();
   }, [client]);
 
-  const selectedValue = referenceValue(state?.selection);
   const selectionAvailable = Boolean(
-    selectedValue && state?.availableModels.some((option) => referenceValue(option) === selectedValue),
+    state?.selection && state.availableModels.some((option) => (
+      option.providerId === state.selection?.providerId && option.modelId === state.selection?.modelId
+    )),
   );
 
-  async function selectModel(value: string) {
+  async function selectModel(selection: VisionRecognitionModelSelection) {
     if (!state) return;
     setSaving(true);
     setSaved(false);
     setError(null);
     try {
-      const selected = state.availableModels.find((option) => referenceValue(option) === value);
       const next = await client.updateSettings({
         expectedRevision: state.revision,
-        selection: selected
-          ? { providerId: selected.providerId, modelId: selected.modelId }
-          : null,
+        selection,
       });
       setState(next);
       setSaved(true);
@@ -92,25 +90,16 @@ export function VisionRecognitionSettingsView({
 
       <label className="feature-vision-recognition-settings__field">
         <span>{translate('feature.visionRecognition.settings.model')}</span>
-        <SelectField
+        <ModelPicker
           aria-label={translate('feature.visionRecognition.settings.model')}
           className="feature-vision-recognition-settings__select"
           disabled={saving || testing || !state}
-          value={selectedValue}
-          onValueChange={(value) => void selectModel(value)}
-        >
-          <option value="">{translate('feature.visionRecognition.settings.modelPlaceholder')}</option>
-          {selectedValue && !selectionAvailable ? (
-            <option value={selectedValue} disabled>
-              {translate('feature.visionRecognition.settings.modelUnavailable')}
-            </option>
-          ) : null}
-          {state?.availableModels.map((option) => (
-            <option key={referenceValue(option)} value={referenceValue(option)}>
-              {modelOptionLabel(option)}
-            </option>
-          ))}
-        </SelectField>
+          models={state?.availableModels ?? []}
+          value={state?.selection ?? null}
+          defaultLabel={translate('feature.visionRecognition.settings.modelPlaceholder')}
+          unavailableLabel={translate('feature.visionRecognition.settings.modelUnavailable')}
+          onChange={(selection) => void selectModel(selection)}
+        />
         <small>{translate(state?.availableModels.length
           ? 'feature.visionRecognition.settings.modelHelp'
           : 'feature.visionRecognition.settings.modelEmpty')}</small>
@@ -225,17 +214,6 @@ function VisionRecognitionTestView({
       ) : null}
     </section>
   );
-}
-
-function referenceValue(reference: Readonly<{ providerId: string; modelId: string }> | null | undefined): string {
-  return reference ? JSON.stringify([reference.providerId, reference.modelId]) : '';
-}
-
-function modelOptionLabel(option: VisionRecognitionModelOption): string {
-  const model = option.modelName && option.modelName !== option.modelCode
-    ? `${option.modelName} (${option.modelCode})`
-    : option.modelCode;
-  return `${option.providerName} · ${model}`;
 }
 
 function formatDuration(durationMs: number): string {
