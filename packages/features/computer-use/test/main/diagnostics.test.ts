@@ -12,7 +12,9 @@ describe('bounded local diagnostic metadata', () => {
     journal.record({ event: 'command', run: 1, token: 'secret-token', threadId: 'private-task', dataUrl: 'private-image', nativeWindow: { supported: true, occlusion: 'unknown', title: 'private-title', pid: 999 } } as ComputerDiagnostic);
     journal.record({ event: 'stopped', reason: 'indicator-hidden', run: 1 }); await journal.flush();
     const text = await readFile(target, 'utf8'); const rows = text.trim().split('\n').map((line) => JSON.parse(line));
-    expect(rows.map((row) => row.sequence)).toEqual([1, 2]); expect(text).not.toMatch(/secret|private|999/u);
+    expect(rows.map((row) => row.sequence)).toEqual([1, 2]);
+    // Validate the projection: the journal's own PID or timestamp may legitimately contain 999.
+    expect(rows[0]).toEqual({ version: 4, sequence: 1, at: expect.any(String), pid: process.pid, event: 'command', run: 1 });
     expect(rows[1]).toMatchObject({ event: 'stopped', reason: 'indicator-hidden' });
     if (process.platform !== 'win32') expect((await stat(target)).mode & 0o777).toBe(0o600);
   });
