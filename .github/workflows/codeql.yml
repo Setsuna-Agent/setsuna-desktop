@@ -17,8 +17,41 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  languages:
+    name: Select CodeQL languages
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+    steps:
+      - id: select
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const languages = ['actions', 'javascript-typescript', 'python', 'rust'];
+            let scanSwift = true;
+            if (context.eventName === 'pull_request') {
+              const files = await github.paginate(github.rest.pulls.listFiles, {
+                ...context.repo, pull_number: context.issue.number, per_page: 100,
+              });
+              const buildPaths = new Set([
+                'scripts/build-computer-use-mac.mjs', 'package.json', '.github/workflows/codeql.yml',
+              ]);
+              const affectsSwift = (filename) => filename?.endsWith('.swift') || buildPaths.has(filename);
+              // The files API is capped at 3,000 entries; scan if the list may be incomplete.
+              scanSwift = files.length >= 3000 || files.some((file) =>
+                affectsSwift(file.filename) || affectsSwift(file.previous_filename));
+            }
+            if (scanSwift) languages.push('swift');
+            core.setOutput('matrix', JSON.stringify({ include: languages.map((language) => ({
+              language, 'build-mode': language === 'swift' ? 'manual' : 'none',
+            })) }));
+
   analyze:
     name: Analyze (${{ matrix.language }})
+    needs: languages
     runs-on: ${{ matrix.language == 'swift' && 'macos-15' || 'ubuntu-latest' }}
     timeout-minutes: 30
     permissions:
@@ -27,18 +60,7 @@ jobs:
       security-events: write
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - language: actions
-            build-mode: none
-          - language: javascript-typescript
-            build-mode: none
-          - language: python
-            build-mode: none
-          - language: rust
-            build-mode: none
-          - language: swift
-            build-mode: manual
+      matrix: ${{ fromJSON(needs.languages.outputs.matrix) }}
 
     steps:
       - uses: actions/checkout@v4
@@ -60,10 +82,10 @@ jobs:
           build-mode: ${{ matrix.build-mode }}
 
       # The Swift helper uses swiftc directly; there is no Xcode or SwiftPM project for autobuild.
-      # Extract all sources in one unoptimized compilation; release builds still use -O.
+      # This script only needs Node built-ins, so no dependency installation or build cache is needed.
       - name: Build macOS computer helper
         if: matrix.language == 'swift'
-        run: pnpm build:computer-use:mac --codeql
+        run: pnpm build:computer-use:mac
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
