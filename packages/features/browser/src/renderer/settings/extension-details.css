@@ -1,0 +1,12 @@
+.browser-extension-details__open { align-items: flex-start; padding: 0; border: 0; border-radius: 4px; background: transparent; color: inherit; text-align: start; font: inherit; cursor: pointer; }
+.browser-extension-details__open:hover { color: var(--app-primary); }
+.browser-extension-details__open:focus-visible { outline: 2px solid var(--app-primary); outline-offset: 4px; }
+.browser-extension-details__header { display: flex; align-items: center; gap: 10px; padding: 16px 18px; flex-wrap: wrap; }
+.browser-extension-details__header h2 { flex: 1; min-width: 120px; margin: 0; font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+.browser-extension-details__controls { display: flex; align-items: center; gap: 8px; margin-inline-start: auto; }
+.browser-extension-details__fields { margin: 0; font-size: 13px; }
+.browser-extension-details__fields > div { padding: 16px 18px; border-top: 1px solid var(--app-border); }
+.browser-extension-details__fields dt { margin-bottom: 8px; font-weight: 500; }
+.browser-extension-details__fields dd { margin: 0; color: var(--app-text-muted); line-height: 1.6; overflow-wrap: anywhere; }
+.browser-extension-details__fields ul { margin: 0; padding-inline-start: 20px; }
+.browser-extension-details__permission { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 18px; border-top: 1px solid var(--app-border); font-size: 13px; }

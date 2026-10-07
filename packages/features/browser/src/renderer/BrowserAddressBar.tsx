@@ -3,6 +3,7 @@ import { TextField, Button } from '@setsuna-desktop/renderer-ui';
 import { ExternalLink } from 'lucide-react';
 import { useId, useLayoutEffect, useState } from 'react';
 import type { BrowserSearchEngine } from '../contracts/settings.js';
+import type { BrowserBookmarkEntry } from './browserBookmarks.js';
 import type { BrowserHistoryEntry } from './browserHistory.js';
 import type { BrowserTranslate } from './messages.js';
 import { BrowserAddressSuggestions } from './address-bar/BrowserAddressSuggestions.js';
@@ -13,10 +14,12 @@ export function BrowserAddressBar({
   externalUrl,
   hidden,
   history,
+  bookmarks,
   onChange,
   onNavigate,
   onOpenExternal,
   onRefreshHistory,
+  onRefreshBookmarks,
   onRemoveHistory,
   translate,
   value,
@@ -28,17 +31,20 @@ export function BrowserAddressBar({
   externalUrl: string | null;
   hidden: boolean;
   history: readonly BrowserHistoryEntry[];
+  bookmarks: readonly BrowserBookmarkEntry[];
   onChange: (value: string) => void;
   onNavigate: (url: string) => void;
   onOpenExternal: (url: string) => void;
   onRefreshHistory: () => void;
+  onRefreshBookmarks: () => void;
   onRemoveHistory: (url: string) => void;
   translate: BrowserTranslate;
   value: string;
 }) {
   const suggestionsId = useId();
   const [focused, setFocused] = useState(false);
-  const suggestions = useBrowserAddressSuggestions({ hidden, history, onChange, onNavigate, onRefreshHistory, onRemoveHistory, value, searchEngine });
+  const suggestions = useBrowserAddressSuggestions({ hidden, history, bookmarks, onChange, onNavigate,
+    onRefreshHistory, onRefreshBookmarks, onRemoveHistory, value, searchEngine });
   useLayoutEffect(() => {
     if (focused) suggestions.inputRef.current?.select();
   }, [focused, suggestions.inputRef]);

@@ -125,8 +125,8 @@ export function ChatRouteAdapter({
   }, [markdownLinkOpenMode, openBrowserUrl, runtime.setError]);
 
   useEffect(
-    () => window.setsunaDesktop?.browser.onOpenNewTab(({ url }) => openBrowserUrl(url)),
-    [openBrowserUrl],
+    () => window.setsunaDesktop?.browser.onOpenNewTab(({ url, tabId }) => openBrowserPanel(url, 'side', tabId)),
+    [openBrowserPanel],
   );
   useEffect(() => {
     if (!pendingBrowserOpenRequest || handledBrowserOpenRequestIdRef.current === pendingBrowserOpenRequest.id) return;

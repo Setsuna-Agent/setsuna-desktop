@@ -1,4 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import { initializeUserScripts } from './user-scripts.js';
+import { initializeExtensionTabs } from './extension-tabs.js';
+import { initializeExtensionUi } from './extension-ui.js';
+import { initializeExtensionSystem } from './extension-system.js';
 import { BROWSER_EXTENSION_ACTION_CHANNEL } from '../contracts/extensions.js';
 
 /** Runs before extension scripts, including MV3 workers. Ordinary websites get no bridge. */
@@ -52,3 +56,7 @@ function installActionObserver(send: (update: unknown) => Promise<unknown>): voi
     return { ...update, dataUrl: `data:image/png;base64,${btoa(binary)}` };
   }
 }
+initializeExtensionTabs();
+initializeExtensionUi();
+initializeExtensionSystem();
+initializeUserScripts();

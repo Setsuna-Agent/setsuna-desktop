@@ -3,6 +3,7 @@ import { ipcRenderer, type IpcRendererEvent } from 'electron';
 import {
   BROWSER_IPC_CHANNELS,
   BROWSER_SETTINGS_CHANNELS,
+  BROWSER_IMPORT_CHANNELS,
   browserFeature,
   type BrowserDesktopBridge,
   type BrowserContextMenuRequest,
@@ -17,6 +18,10 @@ export const browserPreloadFeature = definePreloadFeature<BrowserPreloadBridgeCo
   bridgeKeys: ['browser'],
   contribute(writer) {
     const browser: BrowserDesktopBridge = {
+      listBrowserImportProfiles: () => ipcRenderer.invoke(BROWSER_IMPORT_CHANNELS.profiles),
+      previewBrowserImport: (profileId) => ipcRenderer.invoke(BROWSER_IMPORT_CHANNELS.preview, { profileId }),
+      importBrowserExtensions: (profileId, extensionIds) => ipcRenderer.invoke(BROWSER_IMPORT_CHANNELS.extensions, { profileId, extensionIds }),
+      chooseBrowserBookmarkFile: () => ipcRenderer.invoke(BROWSER_IMPORT_CHANNELS.bookmarkFile),
       getBrowserPreferences: () => ipcRenderer.invoke(BROWSER_SETTINGS_CHANNELS.get),
       updateBrowserPreferences: (patch) => ipcRenderer.invoke(BROWSER_SETTINGS_CHANNELS.update, patch),
       clearBrowserData: (selection) => ipcRenderer.invoke(BROWSER_SETTINGS_CHANNELS.clearData, selection),
@@ -31,9 +36,17 @@ export const browserPreloadFeature = definePreloadFeature<BrowserPreloadBridgeCo
       },
       getExtensions: () => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.getExtensions),
       setExtensionEnabled: (id, enabled) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.setExtensionEnabled, { id, enabled }),
+      setExtensionUserScriptsAllowed: (id, allowed) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.setExtensionUserScriptsAllowed, { id, allowed }),
       removeExtension: (id) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.removeExtension, { id }),
       openExtension: (id, view, anchor, webContentsId) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.openExtension, { id, view, anchor, webContentsId }),
       getExtensionActions: (webContentsId) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.getExtensionActions, { webContentsId }),
+      getExtensionPanel: (webContentsId) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.getExtensionPanel, { webContentsId }),
+      closeExtensionPanel: () => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.closeExtensionPanel),
+      onExtensionPanelChanged(callback) {
+        const listener = () => callback();
+        ipcRenderer.on(BROWSER_IPC_CHANNELS.extensionPanelChanged, listener);
+        return () => ipcRenderer.off(BROWSER_IPC_CHANNELS.extensionPanelChanged, listener);
+      },
       onExtensionActionsChanged(callback) {
         const listener = (_event: IpcRendererEvent, webContentsId: number | null) => callback(webContentsId);
         ipcRenderer.on(BROWSER_IPC_CHANNELS.extensionActionsChanged, listener);

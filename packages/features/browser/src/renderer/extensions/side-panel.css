@@ -1,0 +1,82 @@
+.browser-extension-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+  border-left: 1px solid var(--desktop-agent-subtle-divider);
+  background: var(--desktop-agent-main-bg);
+}
+
+.browser-extension-panel--window {
+  position: fixed;
+  z-index: 19;
+}
+
+.browser-extension-panel--window.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.browser-extension-panel__slot {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.browser-extension-panel__resize-handle {
+  position: absolute;
+  inset: 0 auto 0 -5px;
+  z-index: 4;
+  width: 10px;
+  cursor: col-resize;
+}
+
+.browser-extension-panel__resize-handle::after {
+  position: absolute;
+  inset: 0 auto 0 4px;
+  width: 1px;
+  background: transparent;
+  content: '';
+}
+
+body.browser-extension-panel-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+body.browser-extension-panel-resizing webview {
+  pointer-events: none;
+}
+
+.browser-extension-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--desktop-agent-subtle-divider);
+  color: var(--app-text);
+}
+
+.browser-extension-panel__header img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.browser-extension-panel__header span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.browser-extension-panel__content {
+  display: flex;
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}

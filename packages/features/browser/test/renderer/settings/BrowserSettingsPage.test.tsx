@@ -43,6 +43,8 @@ function ExtensionSettingsShortcut() {
 it('opens the requested extension subpage, toggles without uninstalling and returns to browser preferences', async () => {
   const extension: BrowserExtension = {
     id: 'a'.repeat(32), name: 'Test extension', version: '1', enabled: true,
+    description: 'Test extension description', permissions: ['userScripts'], hostPermissions: ['https://example.org/*'],
+    supportsUserScripts: true, allowUserScripts: false,
     icon: null, actionIcon: null, hasPopup: true, hasOptions: true, newTabUrl: null,
   };
   let changed: (items: readonly BrowserExtension[]) => void = () => undefined;
@@ -51,12 +53,15 @@ it('opens the requested extension subpage, toggles without uninstalling and retu
     return true;
   });
   const removeExtension = vi.fn(async () => true);
+  const setExtensionUserScriptsAllowed = vi.fn(async (_id: string, allowUserScripts: boolean) => {
+    changed([{ ...extension, allowUserScripts }]); return true;
+  });
   const bridge = {
     getBrowserPreferences: async () => DEFAULT_BROWSER_PREFERENCES,
     onBrowserPreferencesChanged: () => () => undefined,
     getExtensions: async () => [extension],
     onExtensionsChanged: (listener: typeof changed) => { changed = listener; return () => undefined; },
-    setExtensionEnabled, removeExtension,
+    setExtensionEnabled, setExtensionUserScriptsAllowed, removeExtension,
   } as unknown as BrowserDesktopBridge;
   const openSettings = vi.fn();
   function Harness() {
@@ -79,6 +84,10 @@ it('opens the requested extension subpage, toggles without uninstalling and retu
   await user.click(screen.getByRole('switch', { name: `Enable extension ${extension.name}` }));
   expect(setExtensionEnabled).toHaveBeenLastCalledWith(extension.id, true);
   expect(removeExtension).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('button', { name: extension.name, exact: true }));
+  await user.click(screen.getByRole('switch', { name: 'Allow user scripts' }));
+  expect(setExtensionUserScriptsAllowed).toHaveBeenCalledExactlyOnceWith(extension.id, true);
+  await user.click(screen.getByRole('button', { name: 'Back to extensions' }));
   await user.click(screen.getByRole('button', { name: 'Back', exact: true }));
   await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Allow AI to control the built-in browser' })).toBeTruthy());
 });

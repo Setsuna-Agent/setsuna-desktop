@@ -1,16 +1,19 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import type { BrowserBookmarkEntry } from '../browserBookmarks.js';
 import type { BrowserHistoryEntry } from '../browserHistory.js';
 import { normalizeBrowserInput } from '../browserNavigation.js';
 import { browserAddressSuggestions } from './browserAddressCandidates.js';
 import type { BrowserSearchEngine } from '../../contracts/settings.js';
 
-export function useBrowserAddressSuggestions({ hidden, history, onChange, onNavigate, onRefreshHistory, onRemoveHistory, value, searchEngine }: {
+export function useBrowserAddressSuggestions({ hidden, history, bookmarks, onChange, onNavigate, onRefreshHistory, onRefreshBookmarks, onRemoveHistory, value, searchEngine }: {
   searchEngine?: BrowserSearchEngine;
   hidden: boolean;
   history: readonly BrowserHistoryEntry[];
+  bookmarks: readonly BrowserBookmarkEntry[];
   onChange: (value: string) => void;
   onNavigate: (url: string) => void;
   onRefreshHistory: () => void;
+  onRefreshBookmarks: () => void;
   onRemoveHistory: (url: string) => void;
   value: string;
 }) {
@@ -18,7 +21,7 @@ export function useBrowserAddressSuggestions({ hidden, history, onChange, onNavi
   const composing = useRef(false);
   const [open, setOpen] = useState(false);
   const [selection, setSelection] = useState<{ query: string; id: string } | null>(null);
-  const suggestions = browserAddressSuggestions(value, history, searchEngine);
+  const suggestions = useMemo(() => browserAddressSuggestions(value, history, bookmarks, searchEngine), [value, history, bookmarks, searchEngine]);
   const activeIndex = Math.max(0, suggestions.findIndex((item) => selection?.query === value && item.id === selection.id));
   const visible = open && !hidden && suggestions.length > 0;
 
@@ -62,7 +65,7 @@ export function useBrowserAddressSuggestions({ hidden, history, onChange, onNavi
   return {
     activeIndex, close, composing, inputRef, navigate, onKeyDown, select, suggestions, visible,
     change: (next: string) => { setOpen(true); setSelection(null); onChange(next); },
-    focus: () => { setOpen(true); setSelection(null); onRefreshHistory(); },
+    focus: () => { setOpen(true); setSelection(null); onRefreshHistory(); onRefreshBookmarks(); },
     submit: () => {
       if (!composing.current) navigate(visible ? suggestions[activeIndex].url : normalizeBrowserInput(value, searchEngine));
     },

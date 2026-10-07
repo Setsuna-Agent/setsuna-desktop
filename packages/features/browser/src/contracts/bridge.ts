@@ -3,15 +3,20 @@ import type { BrowserAnnotationAnchor, BrowserAnnotationMarkers, BrowserAnnotati
 import type { BrowserPasswordBridge } from './passwords.js';
 import type { BrowserExtensionsBridge } from './extensions.js';
 import type { BrowserSettingsBridge } from './settings.js';
+import type { BrowserImportBridge } from './import.js';
 
 export const BROWSER_IPC_CHANNELS = Object.freeze({
   getExtensions: 'browser:get-extensions',
   setExtensionEnabled: 'browser:set-extension-enabled',
+  setExtensionUserScriptsAllowed: 'browser:set-extension-user-scripts-allowed',
   removeExtension: 'browser:remove-extension',
   openExtension: 'browser:open-extension',
   extensionsChanged: 'browser:extensions-changed',
   getExtensionActions: 'browser:get-extension-actions',
   extensionActionsChanged: 'browser:extension-actions-changed',
+  getExtensionPanel: 'browser:get-extension-panel',
+  closeExtensionPanel: 'browser:close-extension-panel',
+  extensionPanelChanged: 'browser:extension-panel-changed',
   passwordState: 'browser:password-state',
   getPasswordState: 'browser:get-password-state',
   savePassword: 'browser:save-password',
@@ -42,6 +47,8 @@ export const BROWSER_IPC_CHANNELS = Object.freeze({
 export type BrowserOpenNewTabRequest = Readonly<{
   openerWebContentsId: number;
   url: string;
+  /** Main-assigned workspace tab ID, bound to the guest when it registers. */
+  tabId?: string;
 }>;
 
 export type BrowserReloadMode = 'normal' | 'hard';
@@ -59,7 +66,7 @@ export type BrowserReloadShortcutBindings = Readonly<{
   normal: string | null;
 }>;
 
-export interface BrowserDesktopBridge extends BrowserPasswordBridge, BrowserExtensionsBridge, BrowserSettingsBridge {
+export interface BrowserDesktopBridge extends BrowserPasswordBridge, BrowserExtensionsBridge, BrowserSettingsBridge, BrowserImportBridge {
   requestFindInPage(tabId: string): Promise<boolean>;
   onFindInPageRequested(callback: (tabId: string) => void): () => void;
   pickAnnotation(tabId: string): Promise<BrowserAnnotationTarget | null>;

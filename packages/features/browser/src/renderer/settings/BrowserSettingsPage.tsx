@@ -57,6 +57,7 @@ export function BrowserSettingsPage({ bridge, children, translate: t, ui }: { br
       </form></ui.Row>
       {toggle('useExtensionNewTab')}
       {navigation ? <ui.NavigationRow label={t('feature.browser.settings.network')} actionLabel={t('feature.browser.settings.manage')} onClick={() => navigation.openSettings('network-proxy')} /> : null}
+      {manage('feature.browser.import.title', 'import')}
     </ui.Group>
     {children}
     <ui.Group title={t('feature.browser.settings.appearance')}>

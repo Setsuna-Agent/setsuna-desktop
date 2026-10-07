@@ -38,3 +38,26 @@ it('rejects corrupt saved state without resetting or replacing the file', async 
     }
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+it('defaults user scripts to denied, migrates old preferences and preserves grants while disabled', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'setsuna-script-grants-'));
+  const file = path.join(directory, 'state.json');
+  const id = 'b'.repeat(32);
+  try {
+    await writeFile(file, JSON.stringify({ version: 1, disabled: [id] }));
+    const state = new BrowserExtensionState(file);
+    await state.load();
+    expect(state.allowsUserScripts(id)).toBe(false);
+    await state.setUserScriptsAllowed(id, true);
+    const restored = new BrowserExtensionState(file);
+    await restored.load();
+    expect(restored.isEnabled(id)).toBe(false);
+    expect(restored.allowsUserScripts(id)).toBe(true);
+    await restored.setEnabled(id, true);
+    expect(restored.allowsUserScripts(id)).toBe(true);
+    await rm(file); await mkdir(file);
+    await expect(restored.setUserScriptsAllowed(id, false)).rejects.toThrow();
+    expect(restored.allowsUserScripts(id)).toBe(true);
+    await expect(restored.setUserScriptsAllowed('../outside', true)).rejects.toThrow();
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});

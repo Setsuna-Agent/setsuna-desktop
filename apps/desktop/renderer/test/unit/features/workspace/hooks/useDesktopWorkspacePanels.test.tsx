@@ -307,8 +307,9 @@ it('restores a hidden non-terminal tab and reveals it only for an explicit navig
       <ToastProvider><ReviewFeatureHostBoundary>{children}</ReviewFeatureHostBoundary></ToastProvider>
     </I18nProvider>,
   });
-  act(() => view.result.current.openBrowserPanel('https://example.com', 'bottom'));
+  act(() => view.result.current.openBrowserPanel('https://example.com', 'bottom', 'browser-issued-id'));
   const tab = view.result.current.bottomActivePanel!;
+  expect(tab.id).toBe('browser-issued-id');
   act(() => view.result.current.hideBottomPanel());
   act(() => view.result.current.updateDesktopPanel(tab.id, { title: 'Updated in background' }));
   expect(view.result.current.bottomPanelVisible).toBe(false);

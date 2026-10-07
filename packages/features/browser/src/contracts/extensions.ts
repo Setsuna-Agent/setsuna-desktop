@@ -6,17 +6,26 @@ export type BrowserExtensionAction = Readonly<{ id: string; icon?: string; popup
 
 /** Trigger bounds in the desktop renderer's viewport CSS pixels. */
 export type BrowserExtensionPopupAnchor = Readonly<{ x: number; y: number; width: number; height: number }>;
+export type BrowserExtensionView = 'action' | 'popup' | 'options';
+export type BrowserExtensionPanel = Readonly<{ id: string; url: string; webContentsId?: number }>;
 
 export type BrowserExtension = Readonly<{
   id: string;
   name: string;
   version: string;
+  description: string;
+  permissions: readonly string[];
+  hostPermissions: readonly string[];
+  supportsUserScripts: boolean;
+  allowUserScripts: boolean;
   enabled: boolean;
   icon: string | null;
   /** Toolbar artwork declared by action.default_icon, falling back to the app icon. */
   actionIcon: string | null;
   hasPopup: boolean;
   hasOptions: boolean;
+  hasAction?: boolean;
+  hasSidePanel?: boolean;
   /** Non-null only for the enabled extension currently selected for new tabs. */
   newTabUrl: string | null;
 }>;
@@ -24,8 +33,12 @@ export type BrowserExtension = Readonly<{
 export interface BrowserExtensionsBridge {
   getExtensions(): Promise<readonly BrowserExtension[]>;
   setExtensionEnabled(id: string, enabled: boolean): Promise<boolean>;
+  setExtensionUserScriptsAllowed(id: string, allowed: boolean): Promise<boolean>;
   removeExtension(id: string): Promise<boolean>;
-  openExtension(id: string, view: 'popup' | 'options', anchor?: BrowserExtensionPopupAnchor, webContentsId?: number): Promise<boolean>;
+  openExtension(id: string, view: BrowserExtensionView, anchor?: BrowserExtensionPopupAnchor, webContentsId?: number): Promise<boolean>;
+  getExtensionPanel(webContentsId?: number): Promise<BrowserExtensionPanel | null>;
+  closeExtensionPanel(): Promise<boolean>;
+  onExtensionPanelChanged(callback: () => void): () => void;
   getExtensionActions(webContentsId?: number): Promise<readonly BrowserExtensionAction[]>;
   onExtensionActionsChanged(callback: (webContentsId: number | null) => void): () => void;
   onExtensionsChanged(callback: (extensions: readonly BrowserExtension[]) => void): () => void;

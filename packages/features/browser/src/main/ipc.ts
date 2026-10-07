@@ -46,6 +46,7 @@ export function registerBrowserIpc(
   controller: DesktopBrowserController,
   windows: ReadonlyMap<number, BrowserWindowSession>,
   interfaceLanguage: () => RuntimeInterfaceLanguage,
+  onTabRegistered?: (tabId: string, contents: WebContents) => void,
 ): () => void {
   for (const channel of handlerChannels) ipcMain.removeHandler(channel);
   ipcMain.handle(BROWSER_IPC_CHANNELS.requestFindInPage, (event, input) => scope.runOperation(() => {
@@ -101,6 +102,7 @@ export function registerBrowserIpc(
     const guest = resolveEmbeddedBrowserGuest(event.sender, webContentsId, windows);
     if (!guest) return false;
     controller.registerTab(tabId, guest);
+    onTabRegistered?.(tabId, guest);
     return true;
   }));
   ipcMain.handle(BROWSER_IPC_CHANNELS.unregisterTab, (event, input) => scope.runOperation(() => {

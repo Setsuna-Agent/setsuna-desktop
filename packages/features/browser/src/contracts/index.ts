@@ -1,5 +1,6 @@
 export * from './bridge.js';
 export * from './bookmarks.js';
+export * from './import.js';
 export * from './settings.js';
 export * from './passwords.js';
 export * from './extensions.js';

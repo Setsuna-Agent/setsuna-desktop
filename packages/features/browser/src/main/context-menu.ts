@@ -29,6 +29,7 @@ type BrowserContextMenuOptions = {
   copyText(value: string): void;
   locale?: RuntimeInterfaceLanguage;
   openInNewTab(url: string): void;
+  extensionItems?: readonly BrowserMenuEntry[];
 };
 
 export function createBrowserContextMenuTemplate(
@@ -42,7 +43,9 @@ export function createBrowserContextMenuTemplate(
   appendMenuGroup(items, linkMenuItems(params, options, t));
   appendMenuGroup(items, imageMenuItems(contents, params, options, t));
   appendMenuGroup(items, editMenuItems(contents, params, t));
+  appendMenuGroup(items, [...(options.extensionItems ?? [])]);
   appendMenuGroup(items, navigationMenuItems(contents, t));
+  appendMenuGroup(items, [guestCommand(contents, t('browser.inspect'), true, () => contents.inspectElement(params.x, params.y))]);
 
   return items;
 }

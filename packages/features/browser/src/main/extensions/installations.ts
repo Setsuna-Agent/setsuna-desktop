@@ -5,7 +5,7 @@ import type { Extension } from 'electron';
 import { validExtensionId } from './metadata.js';
 
 /** Installed files also describe disabled extensions, which Electron no longer lists. */
-export async function readInstalledExtensions(directory: string): Promise<Extension[]> {
+export async function readInstalledExtensions(directory: string, minimumManifestVersion = 3): Promise<Extension[]> {
   const entries = await readDirectories(directory);
   if (!entries.length) return [];
   const canonicalDirectory = await realpath(directory);
@@ -20,7 +20,8 @@ export async function readInstalledExtensions(directory: string): Promise<Extens
         if (!within(canonicalDirectory, location) || !within(location, manifestFile)) continue;
         const manifest = JSON.parse(await readFile(manifestFile, 'utf8'));
         if (typeof manifest.key !== 'string' || typeof manifest.name !== 'string'
-          || manifest.version !== version.name.slice(0, -2) || manifest.manifest_version !== 3) continue;
+          || manifest.version !== version.name.slice(0, -2)
+          || ![2, 3].includes(manifest.manifest_version) || manifest.manifest_version < minimumManifestVersion) continue;
         const keyId = createHash('sha256').update(Buffer.from(manifest.key, 'base64')).digest('hex').slice(0, 32)
           .replace(/[0-9a-f]/g, (digit) => String.fromCharCode(97 + parseInt(digit, 16)));
         if (keyId !== id) continue;

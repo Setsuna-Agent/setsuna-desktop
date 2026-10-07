@@ -11,13 +11,14 @@ describe('embedded browser new-tab routing', () => {
     const routed = requestEmbeddedBrowserNewTab({
       isDestroyed: () => false,
       send,
-    }, 42, 'https://example.com/docs');
+    }, 42, 'https://example.com/docs', 'browser-issued-id');
 
     expect(routed).toBe(true);
     expect(send).toHaveBeenCalledOnce();
     expect(send).toHaveBeenCalledWith('browser:open-new-tab', {
       openerWebContentsId: 42,
       url: 'https://example.com/docs',
+      tabId: 'browser-issued-id',
     });
   });
 

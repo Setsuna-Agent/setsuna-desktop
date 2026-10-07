@@ -24,6 +24,7 @@ class FakeWebContents {
   goBack(): void { this.calls.push('back'); }
   goForward(): void { this.calls.push('forward'); }
   isDestroyed(): boolean { return this.destroyed; }
+  inspectElement(x: number, y: number): void { this.calls.push(`inspect:${x}:${y}`); }
   paste(): void { this.calls.push('paste'); }
   redo(): void { this.calls.push('redo'); }
   reload(): void { this.calls.push('reload'); }
@@ -58,12 +59,14 @@ describe('browser context menu', () => {
       '后退',
       '前进',
       '重新加载',
+      '检查',
     ]);
     click(template, '在新标签页中打开图片');
     click(template, '复制图片');
     click(template, '复制图片地址');
     click(template, '下载图片');
     click(template, '后退');
+    click(template, '检查');
 
     expect(opened).toEqual([imageUrl]);
     expect(copied).toEqual([imageUrl]);
@@ -71,6 +74,7 @@ describe('browser context menu', () => {
       'copy-image:32:48',
       `download:${imageUrl}`,
       'back',
+      'inspect:32:48',
     ]);
     expect(template.find((item) => item.label === '前进')?.enabled).toBe(false);
   });
@@ -129,6 +133,7 @@ describe('browser context menu', () => {
       'Back',
       'Forward',
       'Reload',
+      'Inspect',
     ]);
   });
 
@@ -142,6 +147,7 @@ describe('browser context menu', () => {
     contents.destroyed = true;
 
     click(template, '重新加载');
+    click(template, '检查');
 
     expect(contents.calls).toEqual([]);
   });

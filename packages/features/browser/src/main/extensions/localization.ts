@@ -6,7 +6,13 @@ const messageReference = /__MSG_([\w@]+?)__/gi;
 
 /** Disabled extensions need the same manifest-name lookup that Chromium performs when loading. */
 export async function localizedExtensionName(extension: Pick<Extension, 'id' | 'name' | 'path' | 'manifest'>, locale = ''): Promise<string> {
-  if (!extension.name.match(messageReference)) return extension.name;
+  const shortName = extension.manifest.short_name;
+  const fallback = typeof shortName === 'string' && shortName && !shortName.match(messageReference) ? shortName : extension.id;
+  return localizedExtensionText(extension, extension.name, locale, fallback);
+}
+
+export async function localizedExtensionText(extension: Pick<Extension, 'path' | 'manifest'>, text: string, locale = '', fallback = ''): Promise<string> {
+  if (!text.match(messageReference)) return text;
   const preferred = locale.replaceAll('-', '_');
   const candidates = [...new Set([preferred, preferred.split('_')[0], extension.manifest.default_locale])]
     .filter((value): value is string => typeof value === 'string' && /^[a-z]{2,3}(?:_[a-z\d]{2,4})?$/i.test(value));
@@ -19,13 +25,12 @@ export async function localizedExtensionName(extension: Pick<Extension, 'id' | '
         if (entry && typeof entry === 'object' && 'message' in entry && typeof entry.message === 'string'
           && !messages.has(key.toLowerCase())) messages.set(key.toLowerCase(), entry.message);
       }
-      const name = extension.name.replace(messageReference, (reference, key: string) => messages.get(key.toLowerCase()) ?? reference);
+      const name = text.replace(messageReference, (reference, key: string) => messages.get(key.toLowerCase()) ?? reference);
       if (!name.match(messageReference)) return name;
     }
   }
   // A missing or damaged catalog must not expose manifest placeholders as a name.
-  const shortName = extension.manifest.short_name;
-  return typeof shortName === 'string' && shortName && !shortName.match(messageReference) ? shortName : extension.id;
+  return fallback;
 }
 
 async function readMessages(root: string, locale: string): Promise<Record<string, unknown>> {

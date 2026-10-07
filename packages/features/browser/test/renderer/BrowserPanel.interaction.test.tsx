@@ -101,6 +101,7 @@ describe('BrowserPanel interactions', () => {
   });
   const newTabExtension: BrowserExtension = {
     id: 'a'.repeat(32), name: 'Test new tab', version: '1', enabled: true, icon: null, actionIcon: null, hasOptions: false, hasPopup: false,
+    description: '', permissions: [], hostPermissions: [], supportsUserScripts: false, allowUserScripts: false,
     newTabUrl: `chrome-extension://${'a'.repeat(32)}/newtab.html`,
   };
 
@@ -232,8 +233,8 @@ describe('BrowserPanel interactions', () => {
     expect(openExtension).not.toHaveBeenCalledWith(extension.id, 'popup');
   });
 
-  it('pins an extension, invokes its popup from the toolbar, and preserves its pin across disabling and re-enabling', async () => {
-    const extension = { ...newTabExtension, hasPopup: true, newTabUrl: null };
+  it('invokes an action-only extension from the menu and pinned toolbar, preserving its pin across disabling and re-enabling', async () => {
+    const extension = { ...newTabExtension, hasPopup: false, hasOptions: false, hasAction: true, hasSidePanel: true, newTabUrl: null };
     let changed: (extensions: readonly BrowserExtension[]) => void = () => undefined;
     const openExtension = vi.fn(async () => true);
     browserBridge = createBrowserBridge({
@@ -243,10 +244,14 @@ describe('BrowserPanel interactions', () => {
     renderBrowserPanel(DEFAULT_BROWSER_URL);
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Extensions', exact: true }));
+    await user.click(await screen.findByRole('button', { name: extension.name, exact: true }));
+    await waitFor(() => expect(openExtension).toHaveBeenCalledExactlyOnceWith(extension.id, 'action', expect.any(Object), undefined));
+    openExtension.mockClear();
+    await user.click(screen.getByRole('button', { name: 'Extensions', exact: true }));
     await user.click(await screen.findByRole('button', { name: `Pin to toolbar ${extension.name}` }));
     await user.keyboard('{Escape}');
     await user.click(screen.getByRole('button', { name: extension.name, exact: true }));
-    await waitFor(() => expect(openExtension).toHaveBeenCalledExactlyOnceWith(extension.id, 'popup', expect.any(Object), undefined));
+    await waitFor(() => expect(openExtension).toHaveBeenCalledExactlyOnceWith(extension.id, 'action', expect.any(Object), undefined));
     expect(JSON.parse(window.localStorage.getItem(BROWSER_EXTENSION_PINS_KEY)!)).toEqual([extension.id]);
     act(() => changed([{ ...extension, enabled: false }]));
     expect(JSON.parse(window.localStorage.getItem(BROWSER_EXTENSION_PINS_KEY)!)).toEqual([extension.id]);
