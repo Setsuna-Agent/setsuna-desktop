@@ -246,7 +246,7 @@ packages/renderer-ui/ — 3 direct / 51 total files
 ### `packages/features/`
 
 ```text
-packages/features/ — 0 direct / 1411 total files
+packages/features/ — 0 direct / 1413 total files
 ├── approval-review/ — 2 direct / 20 total files
 │   ├── src/ — 17 files
 │   │   ├── contracts/ — 5 direct / 5 total files
@@ -271,13 +271,13 @@ packages/features/ — 0 direct / 1411 total files
 │   └── test/ — 8 files
 │       ├── renderer/ — 6 direct / 6 total files
 │       └── runtime/ — 2 direct / 2 total files
-├── browser/ — 2 direct / 288 total files
-│   ├── src/ — 202 files
+├── browser/ — 2 direct / 290 total files
+│   ├── src/ — 203 files
 │   │   ├── contracts/ — 20 direct / 20 total files
-│   │   ├── main/ — 14 direct / 69 total files
+│   │   ├── main/ — 14 direct / 70 total files
 │   │   │   ├── annotations/ — 3 direct / 3 total files
 │   │   │   ├── cdp/ — 3 direct / 3 total files
-│   │   │   ├── extensions/ — 25 direct / 33 total files
+│   │   │   ├── extensions/ — 26 direct / 34 total files
 │   │   │   │   ├── native-messaging/ — 3 direct / 3 total files
 │   │   │   │   └── user-scripts/ — 5 direct / 5 total files
 │   │   │   ├── import/ — 5 direct / 5 total files
@@ -295,13 +295,13 @@ packages/features/ — 0 direct / 1411 total files
 │   │   │   ├── records/ — 14 direct / 14 total files
 │   │   │   └── settings/ — 23 direct / 23 total files
 │   │   └── runtime/ — 4 direct / 4 total files
-│   └── test/ — 84 files
+│   └── test/ — 85 files
 │       ├── contracts/ — 2 direct / 2 total files
 │       ├── integration/ — 22 direct / 22 total files
-│       ├── main/ — 9 direct / 35 total files
+│       ├── main/ — 9 direct / 36 total files
 │       │   ├── annotations/ — 1 direct / 1 total files
 │       │   ├── cdp/ — 2 direct / 2 total files
-│       │   ├── extensions/ — 8 direct / 14 total files
+│       │   ├── extensions/ — 9 direct / 15 total files
 │       │   │   ├── native-messaging/ — 3 direct / 3 total files
 │       │   │   └── user-scripts/ — 3 direct / 3 total files
 │       │   ├── import/ — 1 direct / 1 total files

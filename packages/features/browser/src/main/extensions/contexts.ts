@@ -1,5 +1,6 @@
 import { ipcMain, type Extension, type IpcMainEvent, type IpcMainInvokeEvent, type IpcMainServiceWorkerEvent, type IpcMainServiceWorkerInvokeEvent, type Session, type WebContents } from 'electron';
 import type { ExtensionApiResult } from '../../contracts/extension-api.js';
+import { startExtensionWorker } from './worker-startup.js';
 
 export interface ExtensionEndpoint<T> { key: string; send(event: T): void; hold(): () => void }
 
@@ -33,7 +34,7 @@ export class ExtensionContexts<T> {
   async endpoints(id: string): Promise<ExtensionEndpoint<T>[]> {
     const extension = this.options.session.extensions.getExtension(id);
     if (extension?.manifest.background?.service_worker) {
-      await this.options.session.serviceWorkers.startWorkerForScope(`chrome-extension://${id}/`).catch(() => undefined);
+      await startExtensionWorker(this.options.session, id).catch(() => undefined);
     }
     const result: ExtensionEndpoint<T>[] = [];
     for (const context of this.contexts.values()) {

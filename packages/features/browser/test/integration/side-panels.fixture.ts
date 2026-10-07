@@ -169,7 +169,10 @@ async function writeExtension(storagePath: string): Promise<string> {
   await writeFile(path.join(root, 'manifest.json'), JSON.stringify({ key: key.toString('base64'), manifest_version: 3,
     name: 'Side panel fixture', version: '1.0.0', permissions: ['storage', 'tabs', 'sidePanel', 'debugger', 'contextMenus', 'webNavigation', 'nativeMessaging'], action: {},
     side_panel: { default_path: 'panel.html' }, background: { service_worker: 'worker.js' } }));
-  await writeFile(path.join(root, 'worker.js'), `chrome.action.onClicked.addListener(async (tab) => {
+  // Keep registration in flight while the worker evaluates its startup code.
+  // Opening a default panel must not stand in for delivering the first action click.
+  await writeFile(path.join(root, 'worker.js'), `const started = Date.now(); while (Date.now() - started < 1000) {}
+  chrome.action.onClicked.addListener(async (tab) => {
     await chrome.storage.local.set({clickedTab:tab}); await chrome.sidePanel.open({tabId:tab.id});
   }); chrome.sidePanel.setPanelBehavior({openPanelOnActionClick:false});
   chrome.contextMenus.onClicked.addListener((info, tab) => chrome.storage.local.set({menuClick:{info,tab}}));

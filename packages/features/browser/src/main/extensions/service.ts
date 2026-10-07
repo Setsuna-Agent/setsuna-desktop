@@ -16,6 +16,7 @@ import { BrowserExtensionTabs } from './tabs.js';
 import { BrowserExtensionUi } from './ui.js';
 import { BrowserExtensionSystemApis } from './system-apis.js';
 import { BrowserExtensionActiveTabs } from './active-tabs.js';
+import { startExtensionWorker } from './worker-startup.js';
 
 // Load the package's CJS entry intact so its packaged preload resolves beside it.
 const webStore: typeof import('electron-chrome-web-store') = createRequire(import.meta.url)('electron-chrome-web-store');
@@ -307,8 +308,8 @@ export class BrowserExtensionService {
   private async load(extension: Extension): Promise<void> {
     const loaded = await this.options.session.extensions.loadExtension(extension.path);
     if (loaded.manifest.background?.service_worker) {
-      await this.options.session.serviceWorkers.startWorkerForScope(`chrome-extension://${loaded.id}/`)
-        .catch(() => console.error(`Failed to start worker for extension ${loaded.id}`));
+      await startExtensionWorker(this.options.session, loaded.id)
+        .catch((error: unknown) => console.error(`Failed to start worker for extension ${loaded.id}`, error));
     }
   }
 
