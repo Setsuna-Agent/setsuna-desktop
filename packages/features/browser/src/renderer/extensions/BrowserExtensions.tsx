@@ -18,9 +18,9 @@ export function BrowserExtensions({ extensions, hidden, translate: t, onOpenSett
   const visible = open && !hidden;
   const enabledExtensions = extensions.extensions.filter((extension) => extension.enabled);
   const activate = (extension: BrowserExtension, button: HTMLButtonElement | null) => {
-    const view = extension.hasPopup ? 'popup' : extension.hasOptions ? 'options' : null;
+    const view = extension.hasPopup || extension.hasAction || extension.hasSidePanel ? 'action' : extension.hasOptions ? 'options' : null;
     if (!view) { setOpen(true); return; }
-    const rect = view === 'popup' ? button?.getBoundingClientRect() : undefined;
+    const rect = view === 'action' ? button?.getBoundingClientRect() : undefined;
     const anchor = rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : undefined;
     setOpen(false);
     void extensions.open(extension.id, view, anchor);
@@ -53,7 +53,7 @@ export function BrowserExtensions({ extensions, hidden, translate: t, onOpenSett
       contentLabel={t('feature.browser.extension.label')} content={<>
       {enabledExtensions.length ? <ul className="browser-extensions__list">{enabledExtensions.map((extension) => {
         const content = <><BrowserExtensionIcon icon={extension.icon} /><span>{extension.name}</span></>;
-        const view = extension.hasPopup ? 'popup' : extension.hasOptions ? 'options' : null;
+        const view = extension.hasPopup || extension.hasAction || extension.hasSidePanel ? 'action' : extension.hasOptions ? 'options' : null;
         const pinned = extensions.pinnedIds.includes(extension.id);
         return <li key={extension.id}>
           {view ? <Button className="browser-extensions__item" variant="ghost" disabled={extensions.busy} title={extension.name}

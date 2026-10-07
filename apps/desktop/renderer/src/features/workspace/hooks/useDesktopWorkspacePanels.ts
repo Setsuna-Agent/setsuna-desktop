@@ -250,9 +250,9 @@ export function useDesktopWorkspacePanels({
     );
   }, [t]);
 
-  const createBrowserPanelTab = useCallback((url?: string): DesktopPanelTab => {
+  const createBrowserPanelTab = useCallback((url?: string, tabId?: string): DesktopPanelTab => {
     browserPanelSeqRef.current += 1;
-    return createBrowserPanel(`browser-${Date.now()}-${browserPanelSeqRef.current}`, url);
+    return createBrowserPanel(tabId ?? `browser-${Date.now()}-${browserPanelSeqRef.current}`, url);
   }, []);
 
   const addPanelToDesktopSlot = useCallback((slot: DesktopPanelSlot, panel: DesktopPanelTab) => {
@@ -266,9 +266,9 @@ export function useDesktopWorkspacePanels({
     setBottomPanelSlot(updater);
   }, [setBottomPanelExpanded, setBottomPanelSlot, setSidePanelExpanded, setSidePanelSlot]);
 
-  const openBrowserPanel = useCallback((url?: string, slot: DesktopPanelSlot = 'side') => {
+  const openBrowserPanel = useCallback((url?: string, slot: DesktopPanelSlot = 'side', tabId?: string) => {
     closeWorkspaceMenus();
-    addPanelToDesktopSlot(slot, createBrowserPanelTab(url));
+    addPanelToDesktopSlot(slot, createBrowserPanelTab(url, tabId));
   }, [addPanelToDesktopSlot, closeWorkspaceMenus, createBrowserPanelTab]);
 
   const openTerminalSessionForPanel = useCallback(

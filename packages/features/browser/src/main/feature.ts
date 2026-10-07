@@ -3,7 +3,7 @@ import {
   requiredCapability,
 } from '@setsuna-desktop/feature-core/capability';
 import { defineMainDependencies, defineMainFeature } from '@setsuna-desktop/feature-core/main';
-import { session } from 'electron';
+import { app, session } from 'electron';
 import path from 'node:path';
 import { BROWSER_SETTINGS_CHANNELS } from '../contracts/settings.js';
 import { BrowserPreferencesStore } from './settings/preferences.js';
@@ -20,6 +20,9 @@ import { BrowserPasswordStore } from './passwords/store.js';
 import { registerBrowserPasswordIpc } from './passwords/ipc.js';
 import { BrowserExtensionService } from './extensions/service.js';
 import { registerBrowserExtensionIpc } from './extensions/ipc.js';
+import { BrowserImportService } from './import/service.js';
+import { browserProfileRoots } from './import/profiles.js';
+import { registerBrowserImportIpc } from './import/ipc.js';
 import { isAllowedEmbeddedBrowserUrl } from './new-tab.js';
 import { DesktopBrowserController } from './control.js';
 import { BrowserContextMenuSession } from './context-menu-session.js';
@@ -59,6 +62,8 @@ export const browserMainFeature = defineMainFeature({
       session: session.fromPartition(DESKTOP_BROWSER_PARTITION),
       language: () => host.interfaceLanguage(),
       owner: (contents) => windows.get(contents.hostWebContents?.id ?? -1)?.window ?? null,
+      activeOwner: () => host.focusedWindow(),
+      windows: () => [...windows.values()].map(({ window }) => window),
       publish: (items) => {
         for (const { window } of windows.values()) {
           if (!window.isDestroyed()) window.webContents.send(BROWSER_IPC_CHANNELS.extensionsChanged, items);
@@ -77,6 +82,9 @@ export const browserMainFeature = defineMainFeature({
     });
     context.scope.add(() => extensions.dispose());
     await extensions.start();
+    const importer = new BrowserImportService(browserProfileRoots(process.platform, app.getPath('home'), process.env.LOCALAPPDATA),
+      extensions, () => app.getLocale());
+    context.scope.add(registerBrowserImportIpc(context.scope, importer, resolveOwner));
     const controller = new DesktopBrowserController({
       passwordStore: passwords,
       preferences: () => preferences.get(),
@@ -100,6 +108,8 @@ export const browserMainFeature = defineMainFeature({
         interfaceLanguage: () => host.interfaceLanguage(),
         mainWindow: window,
         contextMenus,
+        extensionMenuItems: (contents, params) => extensions.contextMenuItems(contents, params),
+        onNewTabRequested: (contents, url) => extensions.requestNavigationTarget(contents, url),
         permissionsManaged: true,
         isAllowedExtensionUrl: (url) => extensions.allowsPage(url),
         onGuestAttached: (contents) => {
@@ -111,7 +121,7 @@ export const browserMainFeature = defineMainFeature({
             lastZoom = value.defaultZoom;
             zoom();
           });
-          const untrack = extensions.actions.track(contents);
+          const untrack = extensions.track(contents);
           return () => { contents.off('did-navigate', zoom); unsubscribe(); untrack(); };
         },
       });
@@ -139,6 +149,7 @@ export const browserMainFeature = defineMainFeature({
       controller,
       windows,
       () => host.interfaceLanguage(),
+      (tabId, contents) => extensions.registerNavigationTarget(tabId, contents),
     ));
     context.scope.add(registerBrowserPasswordIpc(context.scope, (tabId, senderId) => (
       windows.has(senderId) ? controller.passwordSession(tabId, senderId) : null

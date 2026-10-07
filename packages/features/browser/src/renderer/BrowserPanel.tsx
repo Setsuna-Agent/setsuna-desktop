@@ -28,6 +28,7 @@ import { BrowserLoadErrorPage } from './load-error/BrowserLoadErrorPage.js';
 import { BrowserWindowMenu } from './BrowserWindowMenu.js';
 import { BrowserPasswords } from './passwords/BrowserPasswords.js';
 import { BrowserExtensions } from './extensions/BrowserExtensions.js';
+import { useBrowserExtensionPanelSlot } from './extensions/useBrowserExtensionPanelSlot.js';
 import { useBrowserExtensions } from './extensions/useBrowserExtensions.js';
 import { isExtensionNewTab, useBrowserNewTab } from './extensions/useBrowserNewTab.js';
 import { isBrowserBookmarked } from './browserBookmarks.js';
@@ -158,12 +159,15 @@ export function BrowserPanel({
 }) {
   const panelRef = useBrowserBackgroundViewport(hidden);
   const annotationSurfaceRef = useRef<HTMLDivElement>(null);
+  const browserContentRef = useRef<HTMLDivElement>(null);
   const webviewRef = useRef<BrowserWebviewElement | null>(null);
   const registeredTabIdRef = useRef<string | null>(null);
   const menuButtonRef = useRef<HTMLElement>(null);
   const [tab, setTab] = useState<BrowserTab>(() => createBrowserTab(panel, translate));
   const [extensionWebContentsId, setExtensionWebContentsId] = useState<number>();
   const extensions = useBrowserExtensions(bridge, notify, translate, extensionWebContentsId);
+  const extensionPanelSlot = useBrowserExtensionPanelSlot({ id: panel.id, visible: !hidden,
+    webContentsId: extensionWebContentsId, contentRef: browserContentRef, translate });
   const { preferences, ready: preferencesReady } = useBrowserPreferences(bridge);
   const settingsNavigation = useBrowserSettingsNavigation();
   const records = useBrowserRecordsPanel(hidden);
@@ -436,6 +440,8 @@ export function BrowserPanel({
       aria-label={translate('feature.browser.label')}
       data-browser-tab-id={tab.id}
       onKeyDownCapture={find.onKeyDown}
+      onPointerDownCapture={extensionPanelSlot.activate}
+      onFocusCapture={extensionPanelSlot.activate}
       aria-hidden={hidden || undefined}
       hidden={hidden}
       {...(hidden ? { inert: '' } : {})}
@@ -469,12 +475,14 @@ export function BrowserPanel({
           externalUrl={showingNewTab || tab.url.startsWith('chrome-extension:') ? null : tab.url}
           hidden={hidden}
           history={browserHistory}
+          bookmarks={browserBookmarks}
           value={tab.draftUrl}
           translate={translate}
           onChange={(value) => updateTab(tab.id, { draftUrl: value })}
           onNavigate={navigateToUrl}
           onOpenExternal={(url) => openExternal?.(url)}
           onRefreshHistory={refreshBrowserHistory}
+          onRefreshBookmarks={refreshBrowserBookmarks}
           onRemoveHistory={removeBrowserHistoryEntry}
         />
         <Button variant="ghost"
@@ -530,7 +538,7 @@ export function BrowserPanel({
       ) : null}
       <div className="desktop-browser-page" ref={annotationSurfaceRef}>
         {find.open ? <BrowserFindBar find={find} translate={translate} /> : null}
-        <div className={`desktop-browser-content${tab.showingHome ? ' is-home' : tab.deviceEmulation.enabled ? ' is-device-emulation' : ''}`}>
+        <div ref={browserContentRef} className={`desktop-browser-content${tab.showingHome ? ' is-home' : tab.deviceEmulation.enabled ? ' is-device-emulation' : ''}`}>
           {tab.showingHome ? (
             <BrowserHomePage
               bookmarks={browserBookmarks}
@@ -563,6 +571,8 @@ export function BrowserPanel({
             currentPage={showingNewTab ? undefined : { title: tab.title, url: tab.url }}
             onClose={records.close} onTogglePinned={records.togglePinned} onNavigate={navigateToUrl} />
         </aside> : null}
+        <div ref={extensionPanelSlot.slotRef} className="browser-extension-panel__slot" aria-hidden="true"
+          style={{ width: extensionPanelSlot.width }} />
       </div>
       <BrowserContextMenu bridge={bridge} active={!hidden && !tab.showingHome} webviewRef={webviewRef} />
     </aside>

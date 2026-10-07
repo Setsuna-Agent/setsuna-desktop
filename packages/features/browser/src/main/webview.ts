@@ -8,12 +8,13 @@ import {
   screen,
   session,
   type BrowserWindow,
+  type ContextMenuParams,
   type Event,
   type Input,
   type WebContents,
   type WebPreferences,
 } from 'electron';
-import { createBrowserContextMenuTemplate } from './context-menu.js';
+import { createBrowserContextMenuTemplate, type BrowserMenuEntry } from './context-menu.js';
 import type { BrowserContextMenuSession } from './context-menu-session.js';
 import { embeddedBrowserKeyboardShortcut } from './keyboard-shortcuts.js';
 import {
@@ -29,8 +30,10 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
   interfaceLanguage(): RuntimeInterfaceLanguage;
   mainWindow: BrowserWindow;
   contextMenus: BrowserContextMenuSession;
+  extensionMenuItems?(contents: WebContents, params: ContextMenuParams): readonly BrowserMenuEntry[];
   isAllowedExtensionUrl?(url: string): boolean;
   onGuestAttached?(contents: WebContents): () => void;
+  onNewTabRequested?(contents: WebContents, url: string): string | undefined;
   permissionsManaged?: boolean;
 }>): () => void {
   const { mainWindow } = input;
@@ -52,6 +55,8 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
     // Browser guests must never inherit the desktop renderer preload or Node capabilities.
     delete webPreferences.preload;
     webPreferences.nodeIntegration = false;
+    // Sandboxed preloads relay per-frame userscript plans; website frames receive no Node API.
+    webPreferences.nodeIntegrationInSubFrames = true;
     webPreferences.contextIsolation = true;
     webPreferences.sandbox = true;
     // Chromium's built-in PDF viewer is exposed as a plugin inside webview guests.
@@ -63,6 +68,12 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
     const guestId = guestContents.id;
     guestDisposers.get(guestId)?.();
     const disposeExtensionActions = input.onGuestAttached?.(guestContents);
+    const enablePinchZoom = () => {
+      // Electron disables visual zoom by default; each new document needs its limits.
+      void guestContents.setVisualZoomLevelLimits(1, 5).catch((error) => {
+        if (!guestContents.isDestroyed()) console.warn('[browser] could not enable pinch zoom', error);
+      });
+    };
 
     const handleInput = (event: Event, keyboardInput: Input) => {
       const hostWebContents = guestContents.hostWebContents;
@@ -89,7 +100,8 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
     };
     const requestNewTab = (url: string): boolean => {
       const hostWebContents = guestContents.hostWebContents;
-      if (requestEmbeddedBrowserNewTab(hostWebContents, guestId, url)) {
+      const tabId = input.onNewTabRequested?.(guestContents, url);
+      if (requestEmbeddedBrowserNewTab(hostWebContents, guestId, url, tabId)) {
         console.info('[browser] intercepted new-window request', {
           openerWebContentsId: guestId,
           url,
@@ -110,6 +122,7 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
         copyText: (value) => clipboard.writeText(value),
         locale: input.interfaceLanguage(),
         openInNewTab: (url) => { requestNewTab(url); },
+        extensionItems: input.extensionMenuItems?.(guestContents, params),
       }), browserMenuPoint(mainWindow));
     };
     const handleWillNavigate = (event: Event, url: string) => {
@@ -118,6 +131,7 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
     const handleDestroyed = () => disposeGuest();
     const disposeGuest = () => {
       disposeExtensionActions?.();
+      guestContents.off('dom-ready', enablePinchZoom);
       guestContents.off('before-input-event', handleInput);
       guestContents.off('context-menu', handleContextMenu);
       guestContents.off('will-navigate', handleWillNavigate);
@@ -125,6 +139,7 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
       guestDisposers.delete(guestId);
     };
 
+    guestContents.on('dom-ready', enablePinchZoom);
     guestContents.on('before-input-event', handleInput);
     guestContents.on('context-menu', handleContextMenu);
     guestContents.on('will-navigate', handleWillNavigate);

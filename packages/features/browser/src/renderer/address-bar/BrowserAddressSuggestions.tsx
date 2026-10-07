@@ -1,6 +1,6 @@
 import { Button, IconButton, MenuSurface } from '@setsuna-desktop/renderer-ui';
 import { Search, X } from 'lucide-react';
-import { BrowserHistoryIcon } from '../records/recordIcons.js';
+import { BrowserFavoritesIcon, BrowserHistoryIcon } from '../records/recordIcons.js';
 import { useEffect, useRef } from 'react';
 import { BrowserFeatureIcon } from '../BrowserFeatureIcon.js';
 import type { BrowserTranslate } from '../messages.js';
@@ -40,10 +40,12 @@ export function BrowserAddressSuggestions({ activeIndex, id, onNavigate, onRemov
         >
           <div className="desktop-browser-address-suggestions__destination" role="gridcell">
             <Button variant="ghost" className="desktop-browser-address-suggestions__link" tabIndex={-1} onClick={() => onNavigate(item.url)}>
-              {item.kind === 'search' ? <Search size={14} aria-hidden="true" /> : item.kind === 'history' ? <BrowserHistoryIcon size={14} aria-hidden="true" /> : <BrowserFeatureIcon size={14} />}
+              {item.kind === 'search' ? <Search size={14} aria-hidden="true" />
+                : item.kind === 'bookmark' ? <BrowserFavoritesIcon size={14} role="img" aria-label={translate('feature.browser.bookmarksTitle')} />
+                  : item.kind === 'history' ? <BrowserHistoryIcon size={14} aria-hidden="true" /> : <BrowserFeatureIcon size={14} />}
               <span className="desktop-browser-address-suggestions__text">
                 <span className="desktop-browser-address-suggestions__title">{item.title}</span>
-                {item.kind === 'history' ? <span className="desktop-browser-address-suggestions__url"> — {item.url}</span> : null}
+                {item.kind === 'history' || item.kind === 'bookmark' ? <span className="desktop-browser-address-suggestions__url"> — {item.url}</span> : null}
               </span>
               {item.kind === 'search' ? <span className="desktop-browser-address-suggestions__search">{translate('feature.browser.searchWeb')}</span> : null}
             </Button>

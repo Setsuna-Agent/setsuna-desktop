@@ -54,7 +54,7 @@ it('includes website access from content scripts in installation consent', () =>
 it('restricts management to desktop main frames and hides internal operation errors', async () => {
   const scope = createFeatureScope({ featureId: 'browser', scopeId: 'extensions', process: 'main' });
   const owner = { isDestroyed: () => false } as BrowserWindow;
-  const service = { list: vi.fn(() => []), remove: vi.fn(async () => true), setEnabled: vi.fn(async () => true), open: vi.fn(async () => { throw new Error('/private/path'); }) };
+  const service = { list: vi.fn(() => []), remove: vi.fn(async () => true), setEnabled: vi.fn(async () => true), setUserScriptsAllowed: vi.fn(async () => true), open: vi.fn(async () => { throw new Error('/private/path'); }) };
   scope.scope.add(registerBrowserExtensionIpc(scope.scope, service as unknown as BrowserExtensionService, (senderId) => senderId === 1 ? owner : null));
   scope.activate();
   const mainFrame = {};
@@ -63,7 +63,7 @@ it('restricts management to desktop main frames and hides internal operation err
     return handler({ sender: { id: senderId, mainFrame }, senderFrame: frame } as IpcMainInvokeEvent, input);
   };
   try {
-    for (const channel of [BROWSER_IPC_CHANNELS.getExtensions, BROWSER_IPC_CHANNELS.removeExtension, BROWSER_IPC_CHANNELS.openExtension, BROWSER_IPC_CHANNELS.setExtensionEnabled]) {
+    for (const channel of [BROWSER_IPC_CHANNELS.getExtensions, BROWSER_IPC_CHANNELS.removeExtension, BROWSER_IPC_CHANNELS.openExtension, BROWSER_IPC_CHANNELS.setExtensionEnabled, BROWSER_IPC_CHANNELS.setExtensionUserScriptsAllowed]) {
       await expect(invoke(channel, 2, mainFrame, { id, view: 'popup' })).resolves.toBeNull();
       await expect(invoke(channel, 1, {}, { id, view: 'popup' })).resolves.toBeNull();
     }
@@ -71,6 +71,12 @@ it('restricts management to desktop main frames and hides internal operation err
     expect(service.remove).not.toHaveBeenCalled();
     expect(service.open).not.toHaveBeenCalled();
     expect(service.setEnabled).not.toHaveBeenCalled();
+    expect(service.setUserScriptsAllowed).not.toHaveBeenCalled();
+    for (const allowed of [undefined, 'false', 0, null]) {
+      await expect(invoke(BROWSER_IPC_CHANNELS.setExtensionUserScriptsAllowed, 1, mainFrame, { id, allowed })).resolves.toBe(false);
+    }
+    await expect(invoke(BROWSER_IPC_CHANNELS.setExtensionUserScriptsAllowed, 1, mainFrame, { id, allowed: true })).resolves.toBe(true);
+    expect(service.setUserScriptsAllowed).toHaveBeenCalledExactlyOnceWith(id, true);
     for (const enabled of [undefined, 'false', 0, null]) {
       await expect(invoke(BROWSER_IPC_CHANNELS.setExtensionEnabled, 1, mainFrame, { id, enabled })).resolves.toBe(false);
     }

@@ -2,15 +2,15 @@ import { readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { nativeImage, type Extension } from 'electron';
 import type { BrowserExtension } from '../../contracts/extensions.js';
-import { localizedExtensionName } from './localization.js';
+import { localizedExtensionName, localizedExtensionText } from './localization.js';
 
 export function validExtensionId(value: unknown): value is string {
   return typeof value === 'string' && /^[a-p]{32}$/.test(value);
 }
 
-export function extensionPageUrl(extension: Extension, view: 'popup' | 'options' | 'newtab'): string | null {
+export function extensionPageUrl(extension: Extension, view: 'popup' | 'options' | 'newtab' | 'sidepanel'): string | null {
   const manifest = extension.manifest;
-  const page = view === 'newtab' ? manifest.chrome_url_overrides?.newtab : view === 'popup'
+  const page = view === 'sidepanel' ? manifest.side_panel?.default_path : view === 'newtab' ? manifest.chrome_url_overrides?.newtab : view === 'popup'
     ? (manifest.action ?? manifest.browser_action ?? manifest.page_action)?.default_popup
     : manifest.options_ui?.page ?? manifest.options_page;
   return resolveExtensionPage(extension.id, page);
@@ -26,17 +26,22 @@ export function resolveExtensionPage(id: string, page: unknown): string | null {
   } catch { return null; }
 }
 
-export async function extensionMetadata(extension: Extension, enabled = true, locale = ''): Promise<BrowserExtension> {
+export async function extensionMetadata(extension: Extension, enabled = true, locale = '', allowUserScripts = false): Promise<BrowserExtension> {
   const action = extension.manifest.action ?? extension.manifest.browser_action ?? extension.manifest.page_action;
-  const [icon, actionIcon, name] = await Promise.all([
+  const [icon, actionIcon, name, description] = await Promise.all([
     extensionIcon(extension, extension.manifest.icons), extensionIcon(extension, action?.default_icon),
     localizedExtensionName(extension, locale),
+    localizedExtensionText(extension, extension.manifest.description ?? '', locale),
   ]);
   return {
     id: extension.id, name, version: extension.version, enabled,
+    description, permissions: extension.manifest.permissions ?? [], hostPermissions: extension.manifest.host_permissions ?? [],
+    supportsUserScripts: extension.manifest.permissions?.includes('userScripts') ?? false, allowUserScripts,
     icon, actionIcon: actionIcon ?? icon,
     hasPopup: Boolean(extensionPageUrl(extension, 'popup')),
     hasOptions: Boolean(extensionPageUrl(extension, 'options')),
+    hasAction: Boolean(action),
+    hasSidePanel: Boolean(extensionPageUrl(extension, 'sidepanel')),
     newTabUrl: extensionPageUrl(extension, 'newtab'),
   };
 }

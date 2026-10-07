@@ -8,7 +8,8 @@ export function registerBrowserExtensionIpc(
   scope: FeatureScope, service: BrowserExtensionService, resolveOwner: (senderId: number) => BrowserWindow | null,
 ): () => void {
   const channels = [BROWSER_IPC_CHANNELS.getExtensions, BROWSER_IPC_CHANNELS.getExtensionActions,
-    BROWSER_IPC_CHANNELS.removeExtension, BROWSER_IPC_CHANNELS.openExtension, BROWSER_IPC_CHANNELS.setExtensionEnabled];
+    BROWSER_IPC_CHANNELS.removeExtension, BROWSER_IPC_CHANNELS.openExtension, BROWSER_IPC_CHANNELS.setExtensionEnabled,
+    BROWSER_IPC_CHANNELS.setExtensionUserScriptsAllowed, BROWSER_IPC_CHANNELS.getExtensionPanel, BROWSER_IPC_CHANNELS.closeExtensionPanel];
   for (const channel of channels) {
     ipcMain.removeHandler(channel);
     ipcMain.handle(channel, (event, input) => scope.runOperation(async (signal) => {
@@ -22,13 +23,18 @@ export function registerBrowserExtensionIpc(
           || !service.ownsGuest(guest)) return null;
       }
       if (channel === BROWSER_IPC_CHANNELS.getExtensionActions) return service.actions.snapshot(guestId);
+      if (channel === BROWSER_IPC_CHANNELS.getExtensionPanel) return service.ui.panels.snapshot(owner, guestId);
+      if (channel === BROWSER_IPC_CHANNELS.closeExtensionPanel) return service.ui.panels.close(owner);
       if (typeof input?.id !== 'string') return false;
       try {
+        if (channel === BROWSER_IPC_CHANNELS.setExtensionUserScriptsAllowed) {
+          return typeof input.allowed === 'boolean' && await service.setUserScriptsAllowed(input.id, input.allowed);
+        }
         if (channel === BROWSER_IPC_CHANNELS.setExtensionEnabled) {
           return typeof input.enabled === 'boolean' && await service.setEnabled(input.id, input.enabled);
         }
         if (channel === BROWSER_IPC_CHANNELS.removeExtension) return await service.remove(input.id);
-        if (input.view !== 'popup' && input.view !== 'options') return false;
+        if (input.view !== 'action' && input.view !== 'popup' && input.view !== 'options') return false;
         if (input.anchor !== undefined && !validAnchor(input.anchor)) return false;
         return await service.open(input.id, input.view, owner, input.anchor, guestId);
       } catch { throw new Error('Browser extension operation failed.'); }

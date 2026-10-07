@@ -8,6 +8,7 @@ import type {
 import type { WorkspacePanelSlotProps } from '@setsuna-desktop/renderer-contracts/workspace';
 import { createContext, useContext, type ReactNode } from 'react';
 import { BrowserPanel } from './BrowserPanel.js';
+import { BrowserExtensionPanelHost } from './extensions/BrowserExtensionPanelHost.js';
 import type {
   BrowserNotify,
   BrowserScreenshotAttachmentHandler,
@@ -42,7 +43,9 @@ export function BrowserWorkspacePanelHostProvider({
 }>) {
   return (
     <BrowserWorkspacePanelHostContext.Provider value={host}>
-      {children}
+      <BrowserExtensionPanelHost bridge={host.bridge} notify={host.notify}>
+        {children}
+      </BrowserExtensionPanelHost>
     </BrowserWorkspacePanelHostContext.Provider>
   );
 }
