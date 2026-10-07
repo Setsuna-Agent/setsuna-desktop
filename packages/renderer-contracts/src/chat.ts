@@ -13,6 +13,13 @@ import type { Disposer } from '@setsuna-desktop/feature-core/scope';
 import type { ComponentType } from 'react';
 import type { ReactNode } from 'react';
 
+/** A committed navigation request can revisit a turn even when its thread is already open. */
+export type ChatTurnNavigationRequest = Readonly<{
+  requestId: number;
+  threadId: string;
+  turnId: string;
+}>;
+
 export type ChatSurfaceSlotProps = Readonly<{
   /** Distinguishes the primary conversation from side/subagent surfaces. */
   surfaceInstanceId: string;

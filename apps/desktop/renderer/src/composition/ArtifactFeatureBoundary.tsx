@@ -1,5 +1,5 @@
 import {
-  ArtifactBrowserNavigationProvider,
+  ArtifactNavigationProvider,
   type ArtifactBrowserOpenHandler,
 } from '@setsuna-desktop/feature-artifact/renderer';
 import type { PropsWithChildren } from 'react';
@@ -7,10 +7,16 @@ import type { PropsWithChildren } from 'react';
 export function ArtifactFeatureNavigationBoundary({
   children,
   onOpenBrowser,
-}: PropsWithChildren<Readonly<{ onOpenBrowser: ArtifactBrowserOpenHandler }>>) {
+  projectId,
+  onShowInFiles,
+}: PropsWithChildren<Readonly<{
+  onOpenBrowser: ArtifactBrowserOpenHandler;
+  projectId?: string;
+  onShowInFiles(filePath: string): Promise<void>;
+}>>) {
   return (
-    <ArtifactBrowserNavigationProvider onOpenBrowser={onOpenBrowser}>
+    <ArtifactNavigationProvider onOpenBrowser={onOpenBrowser} projectId={projectId} onShowInFiles={onShowInFiles}>
       {children}
-    </ArtifactBrowserNavigationProvider>
+    </ArtifactNavigationProvider>
   );
 }

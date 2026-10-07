@@ -71,6 +71,7 @@ export function ReviewRendererTestHost({
       FileContextMenu: () => null,
       FileIcon: ({ className }) => <span aria-hidden="true" className={className} />,
       FindingMarkdown: TestFindingMarkdown,
+      FileDocument: ({ content, filePath }) => <section role="region" aria-label={filePath}>{content}</section>,
     },
   }), [bridge, locale, copyText, notifyError, openExternal]);
   return <ReviewRendererHostProvider host={host}>{children}</ReviewRendererHostProvider>;

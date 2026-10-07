@@ -2,7 +2,7 @@ import type { RuntimeArtifact } from '../contracts/index.js';
 
 type ArtifactTranslate = (key: `feature.${string}`, params?: Record<string, string | number>) => string;
 
-const documentExtensions = new Set(['doc', 'docx', 'md', 'odt', 'pdf', 'rtf', 'txt']);
+const documentExtensions = new Set(['doc', 'docx', 'md', 'markdown', 'mdown', 'mkd', 'odt', 'pdf', 'rtf', 'txt']);
 const spreadsheetExtensions = new Set(['csv', 'ods', 'xls', 'xlsx']);
 const presentationExtensions = new Set(['key', 'ppt', 'pptx']);
 const imageExtensions = new Set(['avif', 'bmp', 'gif', 'ico', 'jpeg', 'jpg', 'png', 'svg', 'tif', 'tiff', 'webp']);
@@ -10,6 +10,11 @@ const archiveExtensions = new Set(['7z', 'gz', 'rar', 'tar', 'zip']);
 const audioExtensions = new Set(['aac', 'flac', 'm4a', 'mp3', 'ogg', 'wav']);
 const videoExtensions = new Set(['avi', 'mkv', 'mov', 'mp4', 'webm']);
 const dataExtensions = new Set(['json', 'xml', 'yaml', 'yml']);
+
+export function isMarkdownArtifact(artifact: RuntimeArtifact): boolean {
+  return /\.(md|markdown|mdown|mkd)$/i.test(artifact.path)
+    || /^text\/(?:x-)?markdown(?:;|$)/i.test(artifact.mimeType);
+}
 
 export function artifactTypeLabel(artifact: RuntimeArtifact, translate: ArtifactTranslate): string {
   const extension = fileExtension(artifact.name || artifact.path);

@@ -46,7 +46,7 @@ import type { ChatModelSelectionHandler } from '../../features/chat/chatModelSel
 import type { DesktopBrowserPanelInstance } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
 import { desktopWorkspacePanelTargetContext } from '../../features/workspace/hooks/useDesktopWorkspacePanelSession.js';
 import type { WorkspaceFileDraftState } from '../../features/workspace/hooks/useWorkspaceFileDraft.js';
-import { useWorkspaceFileTree } from '../../features/workspace/hooks/useWorkspaceFileTree.js';
+import { useWorkspaceFileTree, type WorkspaceFileRevealRequest } from '../../features/workspace/hooks/useWorkspaceFileTree.js';
 import { isFileWorkspacePanel } from '../../features/workspace/model.js';
 import type {
   DesktopPanelDropPlacement,
@@ -167,7 +167,7 @@ export type DesktopWorkspacePanelModel = Readonly<{
     onOpenFilesPanel(): void;
     onOpenFileWithApp(appId: string, filePath: string, line?: number): void;
     onOpenMarkdownWebLink(url: string): void;
-    onOpenProjectFile(filePath: string, line?: number): void;
+    onOpenProjectFile(filePath: string, line?: number): Promise<boolean>;
     onOpenSideChat(): void;
     onOpenSideTerminalPanel(): void;
     onOpenWorkspaceDirectory(directoryPath: string): void;
@@ -189,12 +189,14 @@ export type DesktopWorkspacePanelModel = Readonly<{
 
 export function DesktopWorkspacePanelLayer({
   model,
+  fileRevealRequest,
   onAddWorkspaceMention,
   onCloseFileContextMenu,
   requestImageAttachment,
   workspaceFileContextTarget,
 }: Readonly<{
   model: DesktopWorkspacePanelModel;
+  fileRevealRequest?: WorkspaceFileRevealRequest | null;
   onAddWorkspaceMention(entry: WorkspaceEntrySearchItem): void;
   onCloseFileContextMenu(): void;
   requestImageAttachment: BrowserScreenshotAttachmentHandler;
@@ -216,6 +218,7 @@ export function DesktopWorkspacePanelLayer({
     searchEntries: actions.onSearchProjectEntries,
     watchEntries,
     paused: context.entryOperationPending,
+    revealRequest: fileRevealRequest,
   });
   const toast = useToast();
   const { bindingsFor } = useKeyboardShortcuts();

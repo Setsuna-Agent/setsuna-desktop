@@ -4,6 +4,12 @@
   background: var(--app-bg);
 }
 
+.desktop-review-document-status {
+  padding: 20px;
+  color: var(--app-text-muted);
+  font-size: 13px;
+}
+
 .desktop-review-diff {
   display: block;
   width: 100%;

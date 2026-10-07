@@ -1,4 +1,5 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
+import type { ChatTurnNavigationRequest } from '@setsuna-desktop/renderer-contracts/chat';
 import type {
   RuntimeMessage,
   WorkspaceFileChangeAction,
@@ -37,6 +38,7 @@ import {
 import { TranscriptWindowDivider } from './TranscriptWindowDivider.js';
 import { usePinnedChatScroll } from './ChatWorkspaceScroll.js';
 import { ChatMessageRail } from './navigation/ChatMessageRail.js';
+import { useChatTurnNavigation } from './navigation/useChatTurnNavigation.js';
 import { ChatFindBar } from './search/ChatFindBar.js';
 import { createChatMessageNavigation } from './navigation/chatMessageNavigation.js';
 import { ContextCompactionStatus } from './ContextCompactionStatus.js';
@@ -72,6 +74,7 @@ type ChatTranscriptMutationProps =
     };
 
 type ChatTranscriptProps = ChatTranscriptMutationProps & {
+  turnNavigationRequest?: ChatTurnNavigationRequest;
   findRequest?: number;
   onFindRequestConsumed?(requestId: number): void;
   activeTurnId: string | null;
@@ -101,6 +104,7 @@ type ChatTranscriptProps = ChatTranscriptMutationProps & {
  * contentRef 由父级注入；节点挂载/替换通过回调通知外层环境面板重绑尺寸监听。
  */
 export function ChatTranscript({
+  turnNavigationRequest,
   findRequest = 0,
   onFindRequestConsumed,
   activeTurnId,
@@ -243,7 +247,8 @@ export function ChatTranscript({
         onSubmitEdit: submitEditingMessage,
         onToggleDelete: toggleDeleteSelection,
       };
-  const renderWindow = useMemo(() => createChatRenderWindow(displayItems, { activeTurnId, enabled: !deleteMode && !showFullHistory && !findOpen }), [activeTurnId, deleteMode, displayItems, findOpen, showFullHistory]);
+  const navigatingToTurn = Boolean(turnNavigationRequest && turnNavigationRequest.threadId === currentThread?.id);
+  const renderWindow = useMemo(() => createChatRenderWindow(displayItems, { activeTurnId, enabled: !deleteMode && !showFullHistory && !findOpen && !navigatingToTurn }), [activeTurnId, deleteMode, displayItems, findOpen, navigatingToTurn, showFullHistory]);
   const renderedDisplayItems = renderWindow.items;
   const navigationItems = useMemo(() => createChatMessageNavigation(renderedDisplayItems), [renderedDisplayItems]);
   const activeAssistantItemId = useMemo(() => activeAssistantRunItemId(renderedDisplayItems, activeTurnId), [activeTurnId, renderedDisplayItems]);
@@ -309,6 +314,17 @@ export function ChatTranscript({
     scrollToOffset(anchor.top + (scrollNode.scrollHeight - anchor.height), 'auto');
     if (!messageHistory.loading) historyScrollAnchorRef.current = null;
   }, [messageHistory.loading, messages.length, scrollRefInternal, scrollToOffset, showFullHistory]);
+
+  useChatTurnNavigation({
+    request: turnNavigationRequest,
+    threadId: currentThread?.id,
+    items: renderedDisplayItems,
+    history: messageHistory,
+    contentRef,
+    scrollRef: scrollRefInternal,
+    onLoadOlder: loadEarlierMessages,
+    onScrollToOffset: scrollToReadingOffset,
+  });
 
   return (
     <>

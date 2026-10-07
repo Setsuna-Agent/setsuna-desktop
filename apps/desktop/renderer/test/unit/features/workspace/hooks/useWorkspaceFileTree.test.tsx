@@ -3,9 +3,55 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import type { WorkspaceEntrySearchResponse } from '@setsuna-desktop/contracts';
 import { afterEach, expect, it, vi } from 'vitest';
-import { useWorkspaceFileTree } from '../../../../../src/features/workspace/hooks/useWorkspaceFileTree.js';
+import { useWorkspaceFileTree, type WorkspaceFileRevealRequest } from '../../../../../src/features/workspace/hooks/useWorkspaceFileTree.js';
 
 afterEach(cleanup);
+
+it('reveals a nested file through a hidden and filtered tree, keeps siblings and supports later expansion', async () => {
+  const response = (parent: string, paths: string[]): WorkspaceEntrySearchResponse => ({
+    entries: paths.map((path) => ({ kind: path.includes('.') ? 'file' : 'directory', path, name: path.split('/').pop()!, parent })),
+    query: '', scanned: paths.length, truncated: false, workspaceRoot: '/repo',
+  });
+  const searchEntries = vi.fn(async (query = '', parent = '') => {
+    if (query) return response('', []);
+    if (parent === 'docs') return response(parent, ['docs/reports', 'docs/other']);
+    if (parent === 'docs/reports') return response(parent, ['docs/reports/daily.md', 'docs/reports/another.md']);
+    if (parent === 'docs/other') return response(parent, ['docs/other/README.md']);
+    return response('', ['docs']);
+  });
+  const view = renderHook(({ revealRequest }) => useWorkspaceFileTree({ workspaceKey: '/repo', enabled: true, searchEntries, revealRequest }), {
+    initialProps: { revealRequest: null as WorkspaceFileRevealRequest | null },
+  });
+  await waitFor(() => expect(view.result.current.loadedQuery).toBe(''));
+  act(() => { view.result.current.toggleTreeVisible(); view.result.current.updateTreeQuery('no-match'); });
+  await waitFor(() => expect(view.result.current.loadedQuery).toBe('no-match'));
+  const request = { workspaceKey: '/repo', path: 'docs/reports/daily.md', version: 1 };
+  view.rerender({ revealRequest: request });
+  await waitFor(() => expect(view.result.current.revealTarget).toEqual(request));
+  expect(view.result.current.treeVisible).toBe(true);
+  expect(view.result.current.query).toBe('');
+  expect([...view.result.current.expandedPaths]).toEqual(['docs', 'docs/reports']);
+  expect(view.result.current.treeEntries.map((entry) => entry.path)).toContain('docs/reports/another.md');
+  act(() => view.result.current.toggleDirectory('docs/other'));
+  await waitFor(() => expect(view.result.current.treeEntries.some((entry) => entry.path === 'docs/other/README.md')).toBe(true));
+});
+
+it('ignores a pending file reveal after switching workspaces', async () => {
+  let finish!: (value: WorkspaceEntrySearchResponse) => void;
+  const pending = new Promise<WorkspaceEntrySearchResponse>((resolve) => { finish = resolve; });
+  const empty: WorkspaceEntrySearchResponse = { entries: [], query: '', scanned: 0, truncated: false, workspaceRoot: '/repo' };
+  const searchEntries = vi.fn(async (_query = '', parent = '') => parent === 'docs' ? pending : empty);
+  const request = { workspaceKey: 'first', path: 'docs/report.md', version: 1 };
+  const view = renderHook(({ workspaceKey }) => useWorkspaceFileTree({ workspaceKey, enabled: true, searchEntries, revealRequest: request }), {
+    initialProps: { workspaceKey: 'first' },
+  });
+  await waitFor(() => expect(searchEntries).toHaveBeenCalledWith('', 'docs'));
+  view.rerender({ workspaceKey: 'second' });
+  await act(async () => { finish({ ...empty, entries: [{ kind: 'file', path: request.path, name: 'report.md', parent: 'docs' }] }); await pending; });
+  expect(view.result.current.treeEntries).toEqual([]);
+  expect(view.result.current.revealTarget).toBeNull();
+  expect(view.result.current.expandedPaths.size).toBe(0);
+});
 
 it('coalesces changes during a background refresh and keeps the last tree visible on failure', async () => {
   const response = (paths: string[]): WorkspaceEntrySearchResponse => ({

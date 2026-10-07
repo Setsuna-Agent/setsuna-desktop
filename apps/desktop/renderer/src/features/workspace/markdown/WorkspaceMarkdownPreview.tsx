@@ -10,8 +10,9 @@ import { MarkdownCodeBlock } from '../../chat/markdown/MarkdownCodeBlock.js';
 import { resolveWorkspaceMarkdownTarget } from './workspaceMarkdownLinks.js';
 
 type PreviewOptions = {
-  file: Pick<WorkspaceFileRead, 'projectId' | 'path'>;
+  file: Pick<WorkspaceFileRead, 'path'> & Partial<Pick<WorkspaceFileRead, 'projectId'>>;
   onOpenFile?: (path: string, line?: number) => void;
+  loadImage?: (path: string) => Promise<{ src: string; dispose?(): void } | null>;
 };
 type ElementProps<Tag extends keyof JSX.IntrinsicElements> = JSX.IntrinsicElements[Tag] & ExtraProps;
 const PreviewContext = createContext<PreviewOptions | null>(null);
@@ -20,7 +21,7 @@ const remarkPlugins = [remarkGfm];
 const rehypePlugins = [rehypeRaw, rehypeSlug, rehypeSanitize];
 const components = { a: PreviewLink, img: PreviewImage, pre: PreviewCodeBlock, table: PreviewTable } satisfies Components;
 
-export function WorkspaceMarkdownPreview({ content, file, onOpenFile }: PreviewOptions & { content: string }) {
+export function WorkspaceMarkdownPreview({ content, file, onOpenFile, loadImage }: PreviewOptions & { content: string }) {
   const rootRef = useRef<HTMLDivElement>(null);
   return (
     <div className="desktop-markdown-preview" ref={rootRef} role="region" aria-label={file.path} tabIndex={0}
@@ -34,7 +35,7 @@ export function WorkspaceMarkdownPreview({ content, file, onOpenFile }: PreviewO
           .find((element) => element.id === `user-content-${anchor.id}` || element.id === anchor.id);
         heading?.scrollIntoView({ block: 'start' });
       }}>
-      <PreviewContext.Provider value={{ file, onOpenFile }}>
+      <PreviewContext.Provider value={{ file, onOpenFile, loadImage }}>
         <article className="chat-markdown desktop-markdown-preview__document">
           <ReactMarkdown components={components} remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins}>
             {content}
@@ -60,27 +61,35 @@ function PreviewLink({ children, href, node: _node, ...props }: ElementProps<'a'
 }
 
 function PreviewImage({ src, alt = '', node: _node, ...props }: ElementProps<'img'>) {
-  const { file } = useContext(PreviewContext)!;
+  const { file, loadImage } = useContext(PreviewContext)!;
   const target = resolveWorkspaceMarkdownTarget(src, file.path);
   const path = target.kind === 'file' ? target.path : null;
-  const [image, setImage] = useState<{ key: string; src: string } | null>(null);
+  const [image, setImage] = useState<{ key: string; src: string; loadImage?: PreviewOptions['loadImage'] } | null>(null);
   const key = JSON.stringify([file.projectId, path]);
   useEffect(() => {
     if (!path) return;
     let cancelled = false;
+    let dispose: (() => void) | undefined;
     async function load() {
       try {
-        const result = await createDesktopRuntimeClient().readProjectFile(file.projectId, path!);
-        if (!cancelled && result.preview?.kind === 'image') {
-          setImage({ key, src: `data:${result.preview.mimeType};base64,${result.preview.base64}` });
+        if (loadImage) {
+          const result = await loadImage(path!);
+          if (cancelled) { result?.dispose?.(); return; }
+          dispose = result?.dispose;
+          setImage(result ? { key, src: result.src, loadImage } : null);
+        } else if (file.projectId) {
+          const result = await createDesktopRuntimeClient().readProjectFile(file.projectId, path!);
+          if (!cancelled && result.preview?.kind === 'image') {
+            setImage({ key, src: `data:${result.preview.mimeType};base64,${result.preview.base64}` });
+          }
         }
       } catch { /* Missing or unsupported images retain their accessible alternate text. */ }
     }
     void load();
-    return () => { cancelled = true; };
-  }, [file.projectId, key, path]);
+    return () => { cancelled = true; dispose?.(); };
+  }, [file.projectId, key, loadImage, path]);
   const imageSrc = target.kind === 'external' && /^https?:/i.test(target.href)
-    ? target.href : image?.key === key ? image.src : undefined;
+    ? target.href : image?.key === key && image.loadImage === loadImage ? image.src : undefined;
   return imageSrc
     ? <img {...props} src={imageSrc} alt={alt} loading="lazy" decoding="async" referrerPolicy="no-referrer" />
     : <span className="desktop-markdown-preview__image-alt">{alt || src}</span>;

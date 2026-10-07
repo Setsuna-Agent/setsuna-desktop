@@ -6,6 +6,7 @@ import type { DesktopDiffFile, DesktopGitCommitDetails } from '../../contracts/i
 import { useReviewRendererHost } from '../host.js';
 import { ReviewIconButton } from '../primitives.js';
 import { ReviewSummarySection } from '../ReviewDiffView.js';
+import { canPreviewReviewMarkdown, ReviewMarkdownViewControls, type ReviewMarkdownViewMode } from '../ReviewFileDocument.js';
 import type { ReviewPathContext } from '../review-types.js';
 import { GitAuthorAvatar } from './GitAuthorAvatar.js';
 
@@ -33,14 +34,16 @@ export const GitHistoryDiff = memo(function GitHistoryDiff({
   const { translate: t } = useReviewRendererHost();
   const [layout, setLayout] = useState<'unified' | 'split'>('unified');
   const [wrap, setWrap] = useState(true);
+  const [markdownView, setMarkdownView] = useState<ReviewMarkdownViewMode>('source');
+  const hasMarkdown = files.some((file) => canPreviewReviewMarkdown(file, pathContext));
   const summary = useMemo(() => ({
     files,
     additions: files.reduce((total, file) => total + file.additions, 0),
     deletions: files.reduce((total, file) => total + file.deletions, 0),
   }), [files]);
-  const title = details?.commit.subject ?? (files.length > 1 ? t('feature.review.history.files', { count: files.length }) : files[0]?.path) ?? t('feature.review.history.title');
-  // A worktree file already has a header; share it instead of repeating its path above the diff.
-  const useFileToolbar = !details && files.length === 1 && !loading && !error;
+  const title = details?.commit.subject ?? (files.length > 1 ? t('feature.review.history.files', { count: files.length }) : hasMarkdown ? null : files[0]?.path) ?? t('feature.review.history.title');
+  // Markdown uses the panel toolbar so its mode remains shared across files and selections.
+  const useFileToolbar = !hasMarkdown && !details && files.length === 1 && !loading && !error;
   const backButton = <ReviewIconButton className="app-shell-icon-control git-history-diff__back" label={t('feature.review.history.back')} onClick={onBack}><ArrowLeft size={15} /></ReviewIconButton>;
   const viewControls = (
     <DiffViewControls
@@ -58,7 +61,10 @@ export const GitHistoryDiff = memo(function GitHistoryDiff({
           {backButton}
           <span className="git-history-diff__title" title={title}>{title}</span>
         </div>
-        {!loading && !error && files.length > 0 ? viewControls : null}
+        {!loading && !error && files.length > 0 ? <div className="desktop-review-panel__actions">
+          {hasMarkdown ? <ReviewMarkdownViewControls mode={markdownView} onChange={setMarkdownView} /> : null}
+          {viewControls}
+        </div> : null}
       </div> : null}
       {details ? (
         <div className="git-history-diff__commit">
@@ -79,6 +85,7 @@ export const GitHistoryDiff = memo(function GitHistoryDiff({
                   {...actions}
                   summary={summary}
                   diffLayout={layout}
+                  markdownView={markdownView}
                   lineWrap={wrap}
                   pathContext={pathContext}
                   emptyText={{ title: t('feature.review.history.emptyFiles'), description: '' }}

@@ -1,4 +1,5 @@
 import type { WorkspaceFileChangeAction } from '@setsuna-desktop/contracts';
+import type { ChatTurnNavigationRequest } from '@setsuna-desktop/renderer-contracts/chat';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { latestBrowserFeatureOpenRequest } from '../../composition/BrowserWorkspaceFeatureBoundary.js';
 import { usePluginManagementFeatureSnapshot } from '../../composition/PluginManagementFeatureBoundary.js';
@@ -35,10 +36,11 @@ type ChatRouteAdapterProps = Omit<
   | 'selectedCapabilitiesPluginId'
   | 'setActiveView'
   | 'settingsInitialSection'
-> & { starterPresentation?: ChatStarterPresentation };
+> & { starterPresentation?: ChatStarterPresentation; turnNavigationRequest?: ChatTurnNavigationRequest };
 
 export function ChatRouteAdapter({
   starterPresentation,
+  turnNavigationRequest,
   starterProjectSelection,
   activeProject,
   activeWorkspace,
@@ -179,6 +181,7 @@ export function ChatRouteAdapter({
   });
   const conversation: ChatConversationSurfaceModel = {
     starterPresentation,
+    turnNavigationRequest,
     starterProjectSelection,
     starterLocationSelection: starterLocation.selection,
     activeTurnId: runtime.activeTurnId,

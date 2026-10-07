@@ -12,6 +12,8 @@ import {
 import { isWorkspaceEntryWithin, renamedWorkspaceEntryPath, workspaceEntryAncestors, workspaceEntryParent } from '../workspaceEntryPaths.js';
 import { useWorkspaceEntriesSync, type WorkspaceEntriesWatcher } from './useWorkspaceEntriesSync.js';
 
+export type WorkspaceFileRevealRequest = { workspaceKey: string; path: string; version: number };
+
 function initialTreeState(workspaceKey: string | null) {
   return {
     workspaceKey,
@@ -26,19 +28,23 @@ function initialTreeState(workspaceKey: string | null) {
     treeTruncated: false,
     treeVisible: true,
     treeWidth: 248,
+    pendingReveal: null as WorkspaceFileRevealRequest | null,
+    revealTarget: null as WorkspaceFileRevealRequest | null,
   };
 }
 
 /** Owned above the per-tab renderer slots so every file detail shares one directory navigator. */
-export function useWorkspaceFileTree({ workspaceKey, enabled, searchEntries, watchEntries, paused = false }: {
+export function useWorkspaceFileTree({ workspaceKey, enabled, searchEntries, watchEntries, paused = false, revealRequest }: {
   workspaceKey: string | null;
   enabled: boolean;
   searchEntries(query?: string, parent?: string | null): Promise<WorkspaceEntrySearchResponse>;
   watchEntries?: WorkspaceEntriesWatcher;
   paused?: boolean;
+  revealRequest?: WorkspaceFileRevealRequest | null;
 }) {
   const [state, setState] = useState(() => initialTreeState(workspaceKey));
   const scrollTop = useRef(0);
+  const handledReveal = useRef<WorkspaceFileRevealRequest | null>(null);
   // Reset before children commit; entries and pending reads belong to the workspace, not the tab.
   if (state.workspaceKey !== workspaceKey) {
     setState(initialTreeState(workspaceKey));
@@ -50,7 +56,7 @@ export function useWorkspaceFileTree({ workspaceKey, enabled, searchEntries, wat
   const tree = useMemo(() => buildProjectEntryTree(state.treeEntries), [state.treeEntries]);
 
   useEffect(() => {
-    if (!enabled || !workspaceKey || state.loadedQuery === query) return;
+    if (!enabled || !workspaceKey || state.pendingReveal || state.loadedQuery === query) return;
     const isCurrent = requests.begin();
     directoryRequestScope.current = isCurrent;
     setState((current) => ({ ...current, treeSearching: true, treeError: null, treeTruncated: false }));
@@ -72,7 +78,57 @@ export function useWorkspaceFileTree({ workspaceKey, enabled, searchEntries, wat
         treeError: error instanceof Error ? error.message : String(error),
       }));
     });
-  }, [enabled, workspaceKey, query, state.loadedQuery, requests, searchEntries]);
+  }, [enabled, workspaceKey, query, state.loadedQuery, state.pendingReveal, requests, searchEntries]);
+
+  useEffect(() => {
+    if (!enabled || !revealRequest || revealRequest.workspaceKey !== workspaceKey || handledReveal.current === revealRequest) return;
+    handledReveal.current = revealRequest;
+    requests.invalidate();
+    setState((current) => ({
+      ...current, pendingReveal: revealRequest, revealTarget: null, treeVisible: true,
+      treeEntries: current.treeQuery.trim() ? [] : current.treeEntries,
+      loadedDirectoryPaths: current.treeQuery.trim() ? new Set() : current.loadedDirectoryPaths,
+      treeQuery: '', loadedQuery: null, treeSearching: true, treeError: null,
+    }));
+  }, [enabled, requests, revealRequest, workspaceKey]);
+
+  useEffect(() => {
+    const target = state.pendingReveal;
+    if (!enabled || paused || !target || query) return;
+    const isLatest = requests.begin();
+    let cancelled = false;
+    const isCurrent = () => !cancelled && isLatest();
+    directoryRequestScope.current = isCurrent;
+    const ancestors = workspaceEntryAncestors(target.path);
+    const directories = ['', ...ancestors];
+    // Read complete parent listings so revealing a file also preserves its siblings.
+    void Promise.all(directories.map((directory) => searchEntries('', directory))).then((results) => {
+      if (!isCurrent()) return;
+      directoryRequestScope.current = isLatest;
+      setState((current) => {
+        let entries = current.treeEntries;
+        results.forEach((result, index) => {
+          entries = replaceDirectoryEntries(entries, directories[index], result.entries.map(searchItemToWorkspaceEntry));
+        });
+        return {
+          ...current, treeEntries: entries, treeSearching: false, loadedQuery: '',
+          loadedDirectoryPaths: new Set([...current.loadedDirectoryPaths, ...directories]),
+          loadingDirectoryPaths: new Set(),
+          expandedPaths: new Set([...current.expandedPaths, ...ancestors]),
+          treeTruncated: results.some((result) => result.truncated),
+          pendingReveal: null, revealTarget: target,
+        };
+      });
+    }).catch((error: unknown) => {
+      if (!isCurrent()) return;
+      directoryRequestScope.current = isLatest;
+      setState((current) => ({
+        ...current, pendingReveal: null, treeSearching: false, loadedQuery: '',
+        treeError: error instanceof Error ? error.message : String(error),
+      }));
+    });
+    return () => { cancelled = true; };
+  }, [enabled, paused, query, requests, searchEntries, state.pendingReveal]);
 
   const loadDirectory = async (path: string, force = false) => {
     if (!workspaceKey || query || (!force && (state.loadedDirectoryPaths.has(path) || state.loadingDirectoryPaths.has(path)))) return;
@@ -161,7 +217,7 @@ export function useWorkspaceFileTree({ workspaceKey, enabled, searchEntries, wat
     });
   };
   useWorkspaceEntriesSync({
-    enabled: enabled && Boolean(workspaceKey) && !paused && state.loadedQuery === query,
+    enabled: enabled && Boolean(workspaceKey) && !paused && !state.pendingReveal && state.loadedQuery === query,
     identity: JSON.stringify([workspaceKey, query]),
     directoryPaths: query
       ? ['', ...state.treeEntries.flatMap((entry) => [
@@ -231,6 +287,8 @@ export function useWorkspaceFileTree({ workspaceKey, enabled, searchEntries, wat
       setState((current) => ({
         ...current,
         treeQuery,
+        pendingReveal: null,
+        revealTarget: null,
         // Clearing an in-flight search must start a fresh listing, even if the last result was the root.
         loadedQuery: current.treeQuery.trim().toLowerCase() === treeQuery.trim().toLowerCase()
           ? current.loadedQuery : null,

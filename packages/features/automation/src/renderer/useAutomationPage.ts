@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ChatTurnNavigationRequest } from '@setsuna-desktop/renderer-contracts/chat';
 import type { AutomationSnapshot, AutomationTask } from '../contracts/index.js';
 import type { AutomationClient } from './client.js';
 import { automationActivity } from './activity.js';
 
 export function useAutomationPage(client: AutomationClient, currentThreadId: string | undefined, openConversation: (threadId: string) => Promise<boolean>) {
   const [snapshot, setSnapshot] = useState<AutomationSnapshot>({ tasks: [], models: [], projects: [] });
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [conversationId, setConversationId] = useState<string | null>(null);
+  // Reused execution conversations can contain multiple runs; selection belongs to a run, not its thread.
+  const [selection, setSelection] = useState<{
+    taskId: string | null; runId: string | null; threadId: string; requestId: number;
+  } | null>(null);
+  const conversationId = selection?.threadId ?? null;
+  const selectedRunId = selection?.runId ?? null;
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [reload, setReload] = useState(0);
@@ -21,12 +26,12 @@ export function useAutomationPage(client: AutomationClient, currentThreadId: str
     return state;
   }, [client]);
 
-  const select = useCallback(async (threadId: string, taskId: string | null) => {
+  const select = useCallback(async (threadId: string, taskId: string | null, runId: string | null = null) => {
     const request = ++requests.current;
     setBusy(true); setError(null);
     try {
       if (await openRef.current(threadId) && request === requests.current) {
-        setSelectedTaskId(taskId); setConversationId(threadId);
+        setSelection({ taskId, runId, threadId, requestId: request });
       }
     } catch (error) { if (request === requests.current) setError(errorMessage(error)); }
     finally { if (request === requests.current) setBusy(false); }
@@ -73,11 +78,15 @@ export function useAutomationPage(client: AutomationClient, currentThreadId: str
     else setReload((current) => current + 1);
   };
   // A task created by the agent appears without requiring a page reload.
-  const selectedTask: AutomationTask | undefined = snapshot.tasks.find((task) => task.id === selectedTaskId)
+  const selectedTask: AutomationTask | undefined = snapshot.tasks.find((task) => task.id === selection?.taskId)
     ?? [...snapshot.tasks].reverse().find((task) => task.conversationThreadId === conversationId);
+  const selectedRun = selectedTask?.runs.find((run) => run.id === selectedRunId);
+  const turnNavigationRequest: ChatTurnNavigationRequest | undefined = selection && selectedRun?.turnId
+    ? { requestId: selection.requestId, threadId: selection.threadId, turnId: selectedRun.turnId }
+    : undefined;
   const activity = useMemo(() => automationActivity(snapshot.tasks), [snapshot.tasks]);
 
-  return { snapshot, selectedTask, activity, conversationId, error, busy, select, newConversation, refresh, perform, retry };
+  return { snapshot, selectedTask, selectedRunId, turnNavigationRequest, activity, conversationId, error, busy, select, newConversation, refresh, perform, retry };
 }
 
 function errorMessage(error: unknown): string { return error instanceof Error ? error.message : String(error); }

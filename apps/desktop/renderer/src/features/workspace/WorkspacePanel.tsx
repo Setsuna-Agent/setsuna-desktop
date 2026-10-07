@@ -15,7 +15,9 @@ import {
   lazy,
   Suspense,
   useCallback,
+  useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
@@ -166,6 +168,13 @@ export function WorkspacePanel({
     onMoved: fileTree.applyEntryChange,
   });
   const showsFileExplorer = activePanel.type === 'files' || activePanel.type === 'file';
+  const revealedFileRef = useRef<HTMLButtonElement>(null);
+  const revealTarget = fileTree.revealTarget;
+  useEffect(() => {
+    if (!treeVisible || !revealTarget || activePanel.type !== 'file' || activePanel.filePath !== revealTarget.path) return;
+    revealedFileRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    revealedFileRef.current?.focus({ preventScroll: true });
+  }, [activePanel.filePath, activePanel.type, revealTarget, treeVisible]);
   // Selection can change before its file read settles. Never render another tab's document or draft here.
   const filePreview = workspaceFilePreview && activePanel.type === 'file' && activePanel.filePath === workspaceFilePreview.path
     && activeProject?.id === workspaceFilePreview.projectId ? workspaceFilePreview : null;
@@ -207,6 +216,7 @@ export function WorkspacePanel({
     return (
       <div className={`desktop-file-tree-node ${directory && entryDrag.dropPath === node.path ? 'is-drop-target' : ''}`} key={node.path}>
         <FileTreeRow
+          ref={node.path === revealTarget?.path ? revealedFileRef : undefined}
           className={`desktop-file-row ${entryDrag.draggingPath === node.path ? 'is-dragging' : ''}`}
           depth={level}
           animateEntry={level > 0}
@@ -244,10 +254,10 @@ export function WorkspacePanel({
       </span>
       <span className="desktop-editor__crumb-actions">
         {fileView.canPreviewMarkdown ? (
-          <span className="desktop-editor__view-toggle" role="group" aria-label={t('workspace.files.markdownView')}>
+          <span className="sd-markdown-view-toggle desktop-editor__view-toggle" role="group" aria-label={t('workspace.files.markdownView')}>
             {(['source', 'preview'] as const).map((mode) => (
               <Button key={mode} variant="ghost" type="button" aria-pressed={fileView.mode === mode}
-                className="desktop-editor__view-option" onClick={() => fileView.setMode(mode)}>
+                className="sd-markdown-view-option" onClick={() => fileView.setMode(mode)}>
                 {t(mode === 'source' ? 'workspace.files.viewSource' : 'workspace.files.viewPreview')}
               </Button>
             ))}
