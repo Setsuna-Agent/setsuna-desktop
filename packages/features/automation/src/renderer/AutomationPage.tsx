@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
+import type { ChatTurnNavigationRequest } from '@setsuna-desktop/renderer-contracts/chat';
 import { Button } from '@setsuna-desktop/renderer-ui';
 import type { AutomationClient } from './client.js';
 import { TaskEditor } from './TaskEditor.js';
@@ -17,7 +18,8 @@ export function AutomationPage({ client, threadId, openConversation, onSelectSta
   onSelectStarterPrompt(prompt: string): void;
   ModelPicker: AutomationRendererHost['ModelPicker'];
   renderToolbar(props: AutomationToolbarProps): ReactNode;
-  renderConversation(starterContent?: ReactNode, starterFooter?: ReactNode): ReactNode; translate: RendererTranslate; locale: string;
+  renderConversation(starterContent?: ReactNode, starterFooter?: ReactNode, turnNavigationRequest?: ChatTurnNavigationRequest): ReactNode;
+  translate: RendererTranslate; locale: string;
 }) {
   const page = useAutomationPage(client, threadId, openConversation);
   const actions = useAutomationTaskActions(client, page.perform, t);
@@ -30,9 +32,9 @@ export function AutomationPage({ client, threadId, openConversation, onSelectSta
           onCreateForm={() => void actions.create(task ? undefined : page.conversationId ?? undefined)} />
       </header>
       <div className="automation-sidebar__tasks">
-        {page.snapshot.tasks.map((item) => <AutomationTaskRow key={item.id} task={item} active={item.id === task?.id} busy={page.busy} actions={actions} onSelect={page.select} translate={t} locale={locale} />)}
+        {page.snapshot.tasks.map((item) => <AutomationTaskRow key={item.id} task={item} active={page.selectedRunId === null && item.id === task?.id} busy={page.busy} actions={actions} onSelect={page.select} translate={t} locale={locale} />)}
       </div>
-      <AutomationActivity entries={page.activity} threadId={threadId} translate={t} locale={locale} onSelect={page.select} />
+      <AutomationActivity entries={page.activity} selectedRunId={page.selectedRunId} translate={t} locale={locale} onSelect={page.select} />
     </aside>
     <section className="automation-main">
       {page.error ? <div className="automation-error" role="alert">{page.error}<Button variant="ghost" disabled={page.busy} onClick={page.retry}>{t('feature.automation.retry')}</Button></div> : null}
@@ -40,6 +42,7 @@ export function AutomationPage({ client, threadId, openConversation, onSelectSta
         {page.conversationId && threadId === page.conversationId ? renderConversation(
           task ? undefined : <AutomationStarter translate={t} />,
           task ? undefined : <AutomationStarterSuggestions translate={t} onSelect={onSelectStarterPrompt} />,
+          page.turnNavigationRequest,
         ) : <div className="automation-loading" role="status">{t('feature.automation.loading')}</div>}
       </div>
     </section>

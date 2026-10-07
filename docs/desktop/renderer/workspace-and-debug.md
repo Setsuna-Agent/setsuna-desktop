@@ -46,6 +46,8 @@ Shell 退出时，`useTerminalPanelExit` 自动移除对应终端标签并释放
 
 Markdown 文件在路径栏的目录按钮旁提供“查看源码 / 查看预览”。默认打开预览；预览使用当前编辑草稿，切换时保留编辑器实例、尺寸和撤销记录。带行号的定位请求自动回到源码。`WorkspaceMarkdownPreview` 复用 Markdown 排版和代码块，支持 GFM、标题锚点和经过清理的 HTML；相对链接按当前文档目录解析，本地图片经 runtime client 的工作区文件读取接口加载。脚本、事件属性及越界路径不会进入预览。
 
+产物卡片提供“在文件中显示”，通过当前项目的文件打开链路选中文件，再由 `useWorkspaceFileTree` 清除筛选、展开父目录并滚动到对应行。定位请求绑定工作区身份；取消打开、读取失败或切换项目时不会应用旧定位。Markdown 产物不提供内置浏览器入口，保留文件定位和系统默认应用打开。
+
 `patches/@pierre__diffs@1.3.3.patch` 修正 Pierre 纯文本编辑时的缓存更新：编辑会话内复用实时行缓存，不能在重绘时用初始 `file.contents` 覆盖它，否则无扩展名文件或 `.txt` 会丢失刚输入的内容，换行后还会触发 `Line doesnt exist`。补丁通过 pnpm 的 `patchedDependencies` 安装；升级 Pierre 时需验证连续输入、换行、重绘和保存后的焦点与撤销记录，再判断是否移除。
 
 `useWorkspaceFilePanelLifecycle` 按当前文件标签的路径同步共享文档，覆盖点击、关闭后的回退和会话恢复。关闭按钮、快捷键与关闭整个槽位共用未保存确认；取消时保留标签和草稿。标签切换会使旧读取失效，文件页在路径匹配前不会展示上一份内容，因此连续关闭也不会让延迟响应重新打开已关闭的文件。
@@ -115,6 +117,8 @@ Review presentation 与 Workspace 级 Git 状态由 `packages/features/review/sr
 宿主 `composition/review-feature-adapter.tsx` 只注入 preload bridge、i18n、通知和通用 diff/Markdown/文件菜单 UI；`review-feature-panel-adapter.ts` 单独承接 Workspace 懒加载的 Review panel 入口。Workspace panel 与 Chat overview 均通过 composition adapter 使用 Review 的公开 surface。`runtimeReviewSummary.ts` 留在宿主侧，负责把 chat tool-run 投影转换为 Review contract。
 
 Review preference 按 workspace 持久化在 localStorage。Main 才执行 Git 操作；renderer 不拼 Git 命令。
+
+审查和变更在面板顶部提供统一的“预览 / 源码”切换，作用于面板中的所有 Markdown，切换文件和分组后保持选择。源码模式保留原有增删对照；行号或审查发现定位会将整个面板切回源码。`ReviewFileDocument` 经 preload 的 `readTextFile` 读取完整预览内容，不从 diff 片段拼接文档；Main 的 `file-version.ts` 与图片预览共用工作区、暂存区和固定提交版本的选择。删除文件读取删除前版本，最近改动中没有删除前快照的文件仍展示源码对照。读取限制在 workspace 内，拒绝越界链接、二进制及超过 2 MiB 的文本。宿主通过 `composition/review/ReviewFileDocument.tsx` 注入已有 Markdown 预览；相对图片读取相同版本，并在切换或关闭预览时释放临时资源。
 
 新对话的项目与分支选择共用 renderer-ui 的 `picker.css`，选项保持单行。分支菜单的“创建并检出新分支”通过 `stageUnstaged: true` 请求 Main 创建分支并暂存当前修改；Main 先校验名称、重名与未解决冲突，成功创建并检出后再暂存，不自动提交。创建失败时保留原有暂存与未暂存状态。
 活动 workspace 会通过 preload 订阅 Main 的 Git worktree 变更；`useDesktopReviewState` 合并连续失效通知，并始终使用当前保存的比较基准重新获取状态。因此概览、Git 控件和 review panel 即使在 panel 关闭时也共享最新快照。普通刷新只重新读取状态，只有显式选择比较基准才会更新对应 preference。

@@ -6,7 +6,7 @@ export type DesktopReviewImagePreviewResult =
   | { ok: true; previewId: string; url: string }
   | { ok: false; error: string };
 
-export type DesktopReviewImagePreviewInput = {
+export type DesktopReviewFileVersionInput = {
   baseRef?: string | null;
   filePath: string;
   side: 'before' | 'after';
@@ -14,6 +14,9 @@ export type DesktopReviewImagePreviewInput = {
   /** Fixed historical object pair; independent of the current worktree and index. */
   revisions?: { before: string | null; after: string };
 };
+
+export type DesktopReviewImagePreviewInput = DesktopReviewFileVersionInput;
+export type DesktopReviewTextFileResult = { ok: true; content: string } | { ok: false; error: string };
 
 export type DesktopReviewBranch = {
   name: string;
@@ -126,6 +129,7 @@ export interface DesktopReviewBridge {
   getCommitAuthorAvatar(githubCommitUrl: string): Promise<string | null>;
   getCommitFileDiff(workspaceRoot: string, input: DesktopGitCommitFileInput): Promise<DesktopDiffFile>;
   getState(workspaceRoot: string, options?: DesktopReviewStateOptions): Promise<DesktopReviewState>;
+  readTextFile(workspaceRoot: string, input: DesktopReviewFileVersionInput): Promise<DesktopReviewTextFileResult>;
   createImagePreview(workspaceRoot: string, input: DesktopReviewImagePreviewInput): Promise<DesktopReviewImagePreviewResult>;
   releaseImagePreview(previewId: string): Promise<boolean>;
   watchChanges(workspaceRoot: string, callback: () => void): () => void;
@@ -151,6 +155,7 @@ export const REVIEW_IPC_CHANNELS = Object.freeze({
   getCommitAuthorAvatar: 'desktop-review:get-commit-author-avatar',
   getCommitFileDiff: 'desktop-review:get-commit-file-diff',
   getState: 'desktop-review:get-state',
+  readTextFile: 'desktop-review:read-text-file',
   createImagePreview: 'desktop-review:create-image-preview',
   releaseImagePreview: 'desktop-review:release-image-preview',
   subscribeChanges: 'desktop-review:subscribe-changes',

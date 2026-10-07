@@ -1,23 +1,31 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, type ReactNode } from 'react';
 
 export type ArtifactBrowserOpenHandler = (url: string) => void;
 
-const ArtifactBrowserNavigationContext = createContext<ArtifactBrowserOpenHandler | null>(null);
+type ArtifactNavigation = {
+  onOpenBrowser: ArtifactBrowserOpenHandler;
+  projectId?: string;
+  onShowInFiles?: (filePath: string) => void | Promise<void>;
+};
 
-export function ArtifactBrowserNavigationProvider({
+const ArtifactNavigationContext = createContext<ArtifactNavigation | null>(null);
+
+export function ArtifactNavigationProvider({
   children,
   onOpenBrowser,
-}: Readonly<{
+  projectId,
+  onShowInFiles,
+}: Readonly<ArtifactNavigation & {
   children: ReactNode;
-  onOpenBrowser: ArtifactBrowserOpenHandler;
 }>) {
+  const value = useMemo(() => ({ onOpenBrowser, projectId, onShowInFiles }), [onOpenBrowser, projectId, onShowInFiles]);
   return (
-    <ArtifactBrowserNavigationContext.Provider value={onOpenBrowser}>
+    <ArtifactNavigationContext.Provider value={value}>
       {children}
-    </ArtifactBrowserNavigationContext.Provider>
+    </ArtifactNavigationContext.Provider>
   );
 }
 
-export function useArtifactBrowserNavigation(): ArtifactBrowserOpenHandler | null {
-  return useContext(ArtifactBrowserNavigationContext);
+export function useArtifactNavigation(): ArtifactNavigation | null {
+  return useContext(ArtifactNavigationContext);
 }

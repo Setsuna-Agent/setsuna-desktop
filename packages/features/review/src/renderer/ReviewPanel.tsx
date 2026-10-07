@@ -45,6 +45,7 @@ import { ReviewChangeCounts } from './ReviewChangeCounts.js';
 import { canCompareReviewBranch } from './reviewChanges.js';
 import { ReviewSummarySection } from './ReviewDiffView.js';
 import { ReviewFileBrowser } from './ReviewFileBrowser.js';
+import { canPreviewReviewMarkdown, ReviewMarkdownViewControls, type ReviewMarkdownViewMode } from './ReviewFileDocument.js';
 import { reviewFindingKey, reviewPathsMatch } from './review-findings.js';
 
 export type { BranchCompareRefOption, DesktopReviewSource, ReviewPathContext } from './review-types.js';
@@ -132,6 +133,7 @@ export function DesktopReviewPanel({
   onRevealFile?: (filePath: string) => void;
 }) {
   const { translate: t } = useReviewRendererHost();
+  const [markdownView, setMarkdownView] = useState<ReviewMarkdownViewMode>('source');
   const [reviewSourceByKey, setReviewSourceByKey] = useState<Record<string, DesktopReviewSource>>({});
   const [reviewDiffLayoutByKey, setReviewDiffLayoutByKey] = useState<Record<string, DesktopReviewDiffLayout>>({});
   const [reviewLineWrapByKey, setReviewLineWrapByKey] = useState<Record<string, boolean>>({});
@@ -240,13 +242,15 @@ export function DesktopReviewPanel({
     );
     handledFocusRequestKeyRef.current = consumption.nextHandledRequestKey;
     if (!consumption.shouldApply || !focusTargetSource) return;
+    // Line/finding navigation needs the source diff; the whole panel changes modes together.
+    if (focusRequest?.line !== undefined || focusRequest?.finding) setMarkdownView('source');
     if (focusTargetSource !== activeSource && reviewSourceStorageKey) {
       setReviewSourceByKey((current) => (
         current[reviewSourceStorageKey] === focusTargetSource ? current : { ...current, [reviewSourceStorageKey]: focusTargetSource }
       ));
       writeReviewSourcePreference(reviewSourceStorageKey, focusTargetSource);
     }
-  }, [activeSource, focusRequestKey, focusTargetSource, reviewSourceStorageKey]);
+  }, [activeSource, focusRequest?.finding, focusRequest?.line, focusRequestKey, focusTargetSource, reviewSourceStorageKey]);
 
   if (!activeProject) {
     return (
@@ -357,6 +361,9 @@ export function DesktopReviewPanel({
           <ReviewChangeCounts additions={activeSummary?.additions ?? 0} deletions={activeSummary?.deletions ?? 0} />
         </div>
         <div className="desktop-review-panel__actions">
+          {activeSummary?.files.some((file) => canPreviewReviewMarkdown(file, pathContext)) ? (
+            <ReviewMarkdownViewControls mode={markdownView} onChange={setMarkdownView} />
+          ) : null}
           <div className="desktop-review-panel__action-group" role="group" aria-label={t('feature.review.workspace.diffDisplay')}>
             {!fileBrowserVisible ? (
               <ActionTooltip title={reviewFileExpansionTip}>
@@ -443,6 +450,7 @@ export function DesktopReviewPanel({
             description: t(reviewEmptyTextKeys[activeSource].description),
           }}
           diffLayout={reviewDiffLayout}
+          markdownView={markdownView}
           findings={visibleFindings}
           focusRequest={focusTargetSource === activeSource ? focusRequest : null}
           lineWrap={reviewLineWrap}
@@ -469,6 +477,7 @@ export function DesktopReviewPanel({
               description: t(reviewEmptyTextKeys[activeSource].description),
             }}
             diffLayout={reviewDiffLayout}
+            markdownView={markdownView}
             fileExpansionRequest={effectiveFileExpansionRequest}
             findings={visibleFindings}
             focusRequest={focusTargetSource === activeSource ? focusRequest : null}

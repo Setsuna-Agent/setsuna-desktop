@@ -13,6 +13,7 @@ import type {
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
 import type { ReviewTarget } from '@setsuna-desktop/feature-review/contracts';
+import type { ChatTurnNavigationRequest } from '@setsuna-desktop/renderer-contracts/chat';
 import type { ReactNode } from 'react';
 import type { ChatAttachmentStore } from '../../features/chat/composer/chatAttachmentStore.js';
 import type { ChatComposerSendOptions } from '../../features/chat/composer/chatComposerSendOptions.js';
@@ -38,6 +39,7 @@ import type {
 
 export type ChatConversationSurfaceModel = Readonly<{
   starterPresentation?: ChatStarterPresentation;
+  turnNavigationRequest?: ChatTurnNavigationRequest;
   starterProjectSelection: ChatStarterProjectSelection;
   starterLocationSelection: ChatStarterLocationSelection;
   activeTurnId: string | null;
@@ -120,6 +122,7 @@ export function ChatConversationSurface({
       onSearchWorkspaceEntries={model.onSearchProjectEntries}
     >
       <ChatWorkspace
+        turnNavigationRequest={model.turnNavigationRequest}
         activeProject={model.activeWorkspace}
         activeTurnId={model.activeTurnId}
         canClearContext={model.canClearContext}

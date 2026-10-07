@@ -33,6 +33,7 @@ import {
 } from './review-paths.js';
 import type { DesktopReviewDiffLayout, ReviewFileExpansionRequest, ReviewPathContext } from './review-types.js';
 import { ReviewChangeCounts } from './ReviewChangeCounts.js';
+import { canPreviewReviewMarkdown, ReviewFileDocument, type ReviewMarkdownViewMode } from './ReviewFileDocument.js';
 import { ReviewFileIcon, ReviewFilePath } from './ReviewFileVisuals.js';
 import {
   reviewFindingKey,
@@ -62,6 +63,7 @@ type ReviewFileHeaderControls = {
 
 export function ReviewSummarySection({
   diffLayout,
+  markdownView = 'source',
   emptyText,
   fileExpansionRequest,
   fileHeaderControls,
@@ -80,6 +82,7 @@ export function ReviewSummarySection({
   onRevealFile,
 }: {
   diffLayout: DesktopReviewDiffLayout;
+  markdownView?: ReviewMarkdownViewMode;
   emptyText: { title: string; description: string };
   fileExpansionRequest: ReviewFileExpansionRequest;
   fileHeaderControls?: ReviewFileHeaderControls;
@@ -172,6 +175,7 @@ export function ReviewSummarySection({
           {files.map((file) => (
             <ReviewFileCard
               diffLayout={diffLayout}
+              markdownView={markdownView}
               fileExpansionRequest={fileExpansionRequest}
               fileHeaderControls={fileHeaderControls}
               file={file}
@@ -212,6 +216,7 @@ export function ReviewSummarySection({
 
 const ReviewFileCard = memo(function ReviewFileCard({
   diffLayout,
+  markdownView,
   fileExpansionRequest,
   fileHeaderControls,
   file,
@@ -233,6 +238,7 @@ const ReviewFileCard = memo(function ReviewFileCard({
   onRevealFile,
 }: {
   diffLayout: DesktopReviewDiffLayout;
+  markdownView: ReviewMarkdownViewMode;
   fileExpansionRequest: ReviewFileExpansionRequest;
   fileHeaderControls?: ReviewFileHeaderControls;
   file: DesktopDiffFile;
@@ -271,6 +277,7 @@ const ReviewFileCard = memo(function ReviewFileCard({
     ReviewFileContextTarget | null
   >(null);
   const workspaceFilePath = reviewWorkspaceFilePath(file.path, pathContext);
+  const documentPreview = markdownView === 'preview' && canPreviewReviewMarkdown(file, pathContext);
   const canOpenFile = Boolean(workspaceFilePath);
   const focusedByRequest = Boolean(
     focusRequest
@@ -445,7 +452,10 @@ const ReviewFileCard = memo(function ReviewFileCard({
           </div>
           {fileHeaderControls ? <div className="desktop-review-file-card__view-controls">{fileHeaderControls.actions}</div> : null}
         </header>
-        {imagePreview ? (
+        {expanded && documentPreview && workspaceFilePath ? (
+          <ReviewFileDocument file={file} filePath={workspaceFilePath} pathContext={pathContext}
+            onOpenFile={onOpenProjectFile} />
+        ) : imagePreview ? (
           <ReviewImageDiffPreview
             diffLayout={diffLayout}
             file={file}

@@ -106,6 +106,32 @@
   flex-shrink: 0;
 }
 
+/* File, review and changes toolbars share the same source/preview switch. */
+.sd-markdown-view-toggle {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface-muted);
+}
+
+.sd-markdown-view-option.sd-button {
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: var(--app-radius-xs);
+  color: var(--app-text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.sd-markdown-view-option[aria-pressed="true"] {
+  color: var(--app-text);
+  background: var(--app-bg);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 8%);
+}
+
 :where(.sd-icon-button) {
   justify-content: center;
   width: var(--app-control-height);

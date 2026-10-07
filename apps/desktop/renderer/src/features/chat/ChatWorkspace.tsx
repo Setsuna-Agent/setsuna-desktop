@@ -16,6 +16,7 @@ import {
   chatComposerSlot,
   chatConversationSlot,
   chatDetailsSlot,
+  type ChatTurnNavigationRequest,
 } from '@setsuna-desktop/renderer-contracts/chat';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type {
@@ -50,6 +51,7 @@ import { useThreadMessageHistory } from './hooks/useThreadMessageHistory.js';
 import { RendererOwnedSingleSlot } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
 
 export function ChatWorkspace({
+  turnNavigationRequest,
   activeTurnId,
   activeProject,
   canClearContext,
@@ -101,6 +103,7 @@ export function ChatWorkspace({
   plugins = [],
   variant = 'main',
 }: {
+  turnNavigationRequest?: ChatTurnNavigationRequest;
   activeTurnId: string | null;
   activeProject?: WorkspaceProject;
   canClearContext: boolean;
@@ -318,6 +321,7 @@ export function ChatWorkspace({
             </div>
           ) : conversation(() => (
             <ChatTranscript
+              turnNavigationRequest={turnNavigationRequest}
               findRequest={findInChatRequest}
               onFindRequestConsumed={onFindInChatRequestConsumed}
               activeTurnId={activeTurnId}

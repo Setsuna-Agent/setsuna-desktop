@@ -26,7 +26,8 @@ export function AutomationRouteAdapter(props: AppRouteContentProps) {
     ModelPicker={AutomationModelPicker}
     onSelectStarterPrompt={props.setDraft}
     renderToolbar={(toolbar) => <AutomationTopbar {...toolbar} />}
-    renderConversation={(starterContent, starterFooter) => <ChatRouteAdapter {...props}
+    renderConversation={(starterContent, starterFooter, turnNavigationRequest) => <ChatRouteAdapter {...props}
+      turnNavigationRequest={turnNavigationRequest}
       conversationOverviewVisibility={starterContent ? 'hidden' : props.conversationOverviewVisibility}
       starterPresentation={starterContent ? { content: starterContent, footer: starterFooter, visible: automationSetupPending(props.runtime.currentThread) } : undefined}
     />} translate={t} locale={locale} />;

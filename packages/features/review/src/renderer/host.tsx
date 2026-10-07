@@ -48,6 +48,13 @@ export type ReviewFindingMarkdownProps = {
   onOpenWorkspaceFile: (filePath: string, line?: number) => void;
 };
 
+export type ReviewFileDocumentProps = {
+  content: string;
+  filePath: string;
+  onOpenFile(filePath: string, line?: number): void;
+  loadImage(filePath: string): Promise<{ src: string; dispose(): void } | null>;
+};
+
 export type ReviewCommitMessageInputProps = {
   content: string;
   onChange(content: string): void;
@@ -86,6 +93,7 @@ export type ReviewRendererHost = Readonly<{
     FileContextMenu: ComponentType<ReviewFileContextMenuProps>;
     FileIcon: ComponentType<{ className?: string; path: string }>;
     FindingMarkdown: ComponentType<ReviewFindingMarkdownProps>;
+    FileDocument: ComponentType<ReviewFileDocumentProps>;
   }>;
 }>;
 

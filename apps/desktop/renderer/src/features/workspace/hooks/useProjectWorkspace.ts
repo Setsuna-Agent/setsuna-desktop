@@ -102,8 +102,8 @@ export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel, 
   );
 
   const openProjectFile = useCallback(
-    async (filePath: string, line?: number) => {
-      if (!activeProjectId) return;
+    async (filePath: string, line?: number): Promise<boolean> => {
+      if (!activeProjectId) return false;
       const projectId = activeProjectId;
       const isLatest = filePreviewRequests.begin();
       if (filePreview?.path === filePath && filePreview.projectId === activeProjectId) {
@@ -113,13 +113,13 @@ export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel, 
           current,
         ));
         onOpenFilePanel(filePreview.path);
-        return;
+        return true;
       }
-      if (!await confirmDiscardChanges()) return;
-      if (!isLatest() || activeProjectIdRef.current !== projectId) return;
+      if (!await confirmDiscardChanges()) return false;
+      if (!isLatest() || activeProjectIdRef.current !== projectId) return false;
       try {
         const file = await client.readProjectFile(projectId, filePath);
-        if (!isLatest() || activeProjectIdRef.current !== projectId) return;
+        if (!isLatest() || activeProjectIdRef.current !== projectId) return false;
         setFilePreview(file);
         setFileFocusRequest((current) => createFileFocusRequest(
           file.path,
@@ -127,10 +127,12 @@ export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel, 
           current,
         ));
         onOpenFilePanel(file.path);
+        return true;
       } catch (error) {
-        if (!isLatest() || activeProjectIdRef.current !== projectId) return;
+        if (!isLatest() || activeProjectIdRef.current !== projectId) return false;
         const feedback = workspaceFileOpenFailureFeedback(filePath, error, t);
         toast[feedback.tone](feedback.message);
+        return false;
       }
     },
     [activeProjectId, client, confirmDiscardChanges, filePreview, filePreviewRequests, onOpenFilePanel, t, toast],

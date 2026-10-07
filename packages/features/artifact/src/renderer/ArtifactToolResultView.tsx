@@ -1,12 +1,12 @@
 import type { ChatToolResultViewProps } from '@setsuna-desktop/renderer-contracts/chat';
 import { Button, Dropdown, type MenuProps } from '@setsuna-desktop/renderer-ui';
-import { ChevronDown, ExternalLink, Globe2 } from 'lucide-react';
+import { ChevronDown, ExternalLink, FolderOpen, Globe2 } from 'lucide-react';
 import { useState } from 'react';
 import type { ArtifactRendererHost, RuntimeArtifact } from '../contracts/index.js';
 import { openArtifactInBrowser, openArtifactWithDefaultApp } from './artifact-actions.js';
-import { artifactTypeLabel } from './artifact-model.js';
+import { artifactTypeLabel, isMarkdownArtifact } from './artifact-model.js';
 import { ArtifactFileIcon } from './ArtifactFileIcon.js';
-import { useArtifactBrowserNavigation } from './context.js';
+import { useArtifactNavigation } from './context.js';
 import './artifact.css';
 
 export function ArtifactToolResultView({
@@ -14,11 +14,18 @@ export function ArtifactToolResultView({
   payload,
   translate,
 }: ChatToolResultViewProps<RuntimeArtifact> & Readonly<{ host: ArtifactRendererHost }>) {
-  const onOpenBrowser = useArtifactBrowserNavigation();
+  const navigation = useArtifactNavigation();
+  const onOpenBrowser = navigation?.onOpenBrowser;
+  const onShowInFiles = navigation?.projectId === payload.projectId ? navigation.onShowInFiles : undefined;
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const canOpenInBrowser = Boolean(onOpenBrowser && host.createWorkspaceFilePreview);
+  const canOpenInBrowser = Boolean(!isMarkdownArtifact(payload) && onOpenBrowser && host.createWorkspaceFilePreview);
   const openMenuItems: MenuProps['items'] = [
+    ...(onShowInFiles ? [{
+      key: 'show-in-files',
+      icon: <FolderOpen size={14} />,
+      label: translate('feature.artifact.showInFiles'),
+    }] : []),
     ...(canOpenInBrowser ? [{
       key: 'built-in-browser',
       icon: <Globe2 size={14} />,
@@ -30,6 +37,19 @@ export function ArtifactToolResultView({
       label: translate('feature.artifact.openDefault'),
     },
   ];
+
+  const handleShowInFiles = async () => {
+    if (opening || !onShowInFiles) return;
+    setOpening(true);
+    setError(null);
+    try {
+      await onShowInFiles(payload.path);
+    } catch (openError) {
+      setError(openError instanceof Error ? openError.message : translate('feature.artifact.openFailed'));
+    } finally {
+      setOpening(false);
+    }
+  };
 
   const handleOpenWithDefaultApp = async () => {
     if (opening) return;
@@ -83,6 +103,7 @@ export function ArtifactToolResultView({
             menu={{
               items: openMenuItems,
               onClick: ({ key }) => {
+                if (key === 'show-in-files') void handleShowInFiles();
                 if (key === 'built-in-browser') void handleOpenInBrowser();
                 if (key === 'system-default') void handleOpenWithDefaultApp();
               },

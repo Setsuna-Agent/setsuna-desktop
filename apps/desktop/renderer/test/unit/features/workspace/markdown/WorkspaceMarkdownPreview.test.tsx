@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { WorkspaceMarkdownPreview } from '../../../../../src/features/workspace/markdown/WorkspaceMarkdownPreview.js';
 import { resolveWorkspaceMarkdownTarget } from '../../../../../src/features/workspace/markdown/workspaceMarkdownLinks.js';
@@ -60,6 +60,25 @@ it('ignores a pending image read when switching to another document', async () =
   resolveFirst({ preview: { kind: 'image', mimeType: 'image/png', base64: 'b2xk' } });
   await first;
   expect(screen.getByRole('img').getAttribute('src')).toContain('bmV3');
+});
+
+it('releases versioned images when a read finishes after switching versions and when the preview closes', async () => {
+  const disposeOld = vi.fn();
+  const disposeNew = vi.fn();
+  let resolveOld!: (image: { src: string; dispose(): void }) => void;
+  const pending = new Promise<{ src: string; dispose(): void }>((resolve) => { resolveOld = resolve; });
+  const loadOld = vi.fn().mockReturnValue(pending);
+  const loadNew = vi.fn().mockResolvedValue({ src: 'https://example.test/new.png', dispose: disposeNew });
+  const props = { file: { path: file.path }, content: '![Logo](./logo.png)' };
+  const view = render(<WorkspaceMarkdownPreview {...props} loadImage={loadOld} />);
+  view.rerender(<WorkspaceMarkdownPreview {...props} loadImage={loadNew} />);
+  await screen.findByRole('img', { name: 'Logo' });
+  expect(loadNew).toHaveBeenCalledExactlyOnceWith('docs/logo.png');
+  await act(async () => { resolveOld({ src: 'https://example.test/old.png', dispose: disposeOld }); await pending; });
+  expect(disposeOld).toHaveBeenCalledOnce();
+  expect(screen.getByRole('img').getAttribute('src')).toBe('https://example.test/new.png');
+  view.unmount();
+  expect(disposeNew).toHaveBeenCalledOnce();
 });
 
 it.each(['../../secret.txt', '%2e%2e/%2e%2e/secret.txt', 'file:///secret.txt', 'javascript:alert(1)', 'C:\\secret.txt', '%ZZ'])(

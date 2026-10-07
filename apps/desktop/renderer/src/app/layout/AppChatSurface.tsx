@@ -13,6 +13,8 @@ import {
   type OpenRuntimePluginHandler,
 } from '../../features/chat/plugin-usage/RuntimePluginNavigation.js';
 import type { WorkspaceFileContextTarget } from '../../features/workspace/WorkspaceFileContextMenu.js';
+import type { WorkspaceFileRevealRequest } from '../../features/workspace/hooks/useWorkspaceFileTree.js';
+import { normalizeProjectTreePath } from '../../features/workspace/workspaceEntryPaths.js';
 import type { ChatWorkspaceMentionRequest } from '../types.js';
 import {
   ChatConversationSurface,
@@ -42,6 +44,17 @@ export function AppChatSurface({
     request: ChatWorkspaceMentionRequest;
   } | null>(null);
   const [workspaceFileContextTarget, setWorkspaceFileContextTarget] = useState<WorkspaceFileContextTarget | null>(null);
+  const [fileRevealRequest, setFileRevealRequest] = useState<WorkspaceFileRevealRequest | null>(null);
+  const activeWorkspace = workspace.context.activeWorkspace;
+  const showInFiles = useCallback(async (filePath: string) => {
+    const path = normalizeProjectTreePath(filePath);
+    if (!activeWorkspace || !await workspace.actions.onOpenProjectFile(path)) return;
+    setFileRevealRequest((current) => ({
+      workspaceKey: JSON.stringify([activeWorkspace.id, activeWorkspace.path]),
+      path,
+      version: (current?.version ?? 0) + 1,
+    }));
+  }, [activeWorkspace, workspace.actions.onOpenProjectFile]);
   const workspaceMentionRequestIdRef = useRef(0);
   const workspaceMentionRequest = scopedWorkspaceMentionRequest?.composerKey === conversation.composerKey
     ? scopedWorkspaceMentionRequest.request
@@ -71,6 +84,8 @@ export function AppChatSurface({
     >
       <ChatNavigationBoundaries
         onOpenBrowser={conversation.onOpenBrowser}
+        projectId={activeWorkspace?.id}
+        onShowInFiles={showInFiles}
         onOpenPlugin={onOpenPlugin}
       >
         <ChatConversationSurface
@@ -109,6 +124,7 @@ export function AppChatSurface({
         />
         <DesktopWorkspacePanelLayer
           model={workspace}
+          fileRevealRequest={fileRevealRequest}
           requestImageAttachment={requestImageAttachment}
           workspaceFileContextTarget={workspaceFileContextTarget}
           onAddWorkspaceMention={requestWorkspaceMention}
@@ -123,13 +139,17 @@ function ChatNavigationBoundaries({
   children,
   onOpenBrowser,
   onOpenPlugin,
+  projectId,
+  onShowInFiles,
 }: Readonly<{
   children: ReactNode;
   onOpenBrowser(url?: string): void;
   onOpenPlugin: OpenRuntimePluginHandler;
+  projectId?: string;
+  onShowInFiles(filePath: string): Promise<void>;
 }>) {
   return (
-    <ArtifactFeatureNavigationBoundary onOpenBrowser={onOpenBrowser}>
+    <ArtifactFeatureNavigationBoundary onOpenBrowser={onOpenBrowser} projectId={projectId} onShowInFiles={onShowInFiles}>
       <RuntimePluginNavigationProvider onOpenPlugin={onOpenPlugin}>
         {children}
       </RuntimePluginNavigationProvider>
