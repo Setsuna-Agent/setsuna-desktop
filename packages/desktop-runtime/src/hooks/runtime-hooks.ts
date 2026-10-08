@@ -7,11 +7,10 @@ import type {
   RuntimeHookRunEventName,
   RuntimeHookRunStatus
 } from '@setsuna-desktop/contracts';
-import { spawn } from 'node:child_process';
 import path from 'node:path';
 import type { ToolExecutionResult } from '../ports/tool-host.js';
+import { runCommandHook } from './runtime-hook-command.js';
 import {
-  appendCapped,
   hookTrustStatus,
   joinTextChunks,
   parseCompactRun,
@@ -24,12 +23,10 @@ import {
   parseUserPromptSubmitRun,
   recordValue,
   sha256CanonicalJson,
-  shellCommand,
   stringValue,
   toHookJson
 } from './runtime-hook-output.js';
 import type {
-  CommandProcessRunResult,
   CommandRunResult,
   ParsedCompactOutput,
   ParsedPermissionRequestOutput,
@@ -148,7 +145,7 @@ export function createRuntimeToolHookRunner(config: RuntimeConfigState | null | 
       const hooks = matchingToolHooks(executableHooks, 'PreToolUse', input.toolCall.name);
       if (!hooks.length) return { action: 'continue', additionalContexts: [] };
       const payload = hookToolPayload('PreToolUse', config, input);
-      const runs = await runCommandHooks('PreToolUse', hooks, payload, input);
+      const runs = await runCommandHooks('PreToolUse', hooks, payload, input, config.dataPath);
       const additionalContexts = runs.flatMap((run) => parsePreToolUseRun(run).additionalContext ?? []);
       const blocking = runs.map(parsePreToolUseRun).find((parsed) => parsed.blockReason);
       if (blocking?.blockReason) {
@@ -168,7 +165,7 @@ export function createRuntimeToolHookRunner(config: RuntimeConfigState | null | 
       const hooks = matchingToolHooks(executableHooks, 'PermissionRequest', input.toolCall.name);
       if (!hooks.length) return { decision: 'none' };
       const payload = hookToolPayload('PermissionRequest', config, input);
-      const runs = await runCommandHooks('PermissionRequest', hooks, payload, input);
+      const runs = await runCommandHooks('PermissionRequest', hooks, payload, input, config.dataPath);
       let allowSeen = false;
       for (const run of runs) {
         const parsed = parsePermissionRequestRun(run);
@@ -181,7 +178,7 @@ export function createRuntimeToolHookRunner(config: RuntimeConfigState | null | 
       const hooks = matchingToolHooks(executableHooks, 'PostToolUse', input.toolCall.name);
       if (!hooks.length) return { additionalContexts: [], shouldBlock: false };
       const payload = hookToolPayload('PostToolUse', config, input);
-      const runs = await runCommandHooks('PostToolUse', hooks, payload, input);
+      const runs = await runCommandHooks('PostToolUse', hooks, payload, input, config.dataPath);
       const parsedRuns = runs.map(parsePostToolUseRun);
       const additionalContexts = parsedRuns.flatMap((parsed) => parsed.additionalContext ?? []);
       const feedbackMessage = joinTextChunks(parsedRuns.map((parsed) => parsed.feedbackMessage).filter((item): item is string => Boolean(item)));
@@ -195,7 +192,7 @@ export function createRuntimeToolHookRunner(config: RuntimeConfigState | null | 
       const hooks = matchingEventHooks(executableHooks, 'PreCompact', input.trigger);
       if (!hooks.length) return { shouldStop: false };
       const payload = hookCompactPayload('PreCompact', config, input);
-      const runs = await runCommandHooks('PreCompact', hooks, payload, input);
+      const runs = await runCommandHooks('PreCompact', hooks, payload, input, config.dataPath);
       const parsedRuns = runs.map((run) => parseCompactRun('PreCompact', run));
       const stopReason = parsedRuns.find((parsed) => parsed.shouldStop && parsed.stopReason)?.stopReason;
       return {
@@ -207,7 +204,7 @@ export function createRuntimeToolHookRunner(config: RuntimeConfigState | null | 
       const hooks = matchingEventHooks(executableHooks, 'PostCompact', input.trigger);
       if (!hooks.length) return { shouldStop: false };
       const payload = hookCompactPayload('PostCompact', config, input);
-      const runs = await runCommandHooks('PostCompact', hooks, payload, input);
+      const runs = await runCommandHooks('PostCompact', hooks, payload, input, config.dataPath);
       const parsedRuns = runs.map((run) => parseCompactRun('PostCompact', run));
       const stopReason = parsedRuns.find((parsed) => parsed.shouldStop && parsed.stopReason)?.stopReason;
       return {
@@ -219,7 +216,7 @@ export function createRuntimeToolHookRunner(config: RuntimeConfigState | null | 
       const hooks = matchingEventHooks(executableHooks, 'SessionStart', input.source);
       if (!hooks.length) return { additionalContexts: [], shouldStop: false };
       const payload = hookSessionStartPayload(config, input);
-      const runs = await runCommandHooks('SessionStart', hooks, payload, input);
+      const runs = await runCommandHooks('SessionStart', hooks, payload, input, config.dataPath);
       const parsedRuns = runs.map(parseSessionStartRun);
       const additionalContexts = parsedRuns.flatMap((parsed) => parsed.additionalContext ?? []);
       const stopReason = parsedRuns.find((parsed) => parsed.shouldStop && parsed.stopReason)?.stopReason;
@@ -233,7 +230,7 @@ export function createRuntimeToolHookRunner(config: RuntimeConfigState | null | 
       const hooks = matchingEventHooks(executableHooks, 'SubagentStart', input.agentType);
       if (!hooks.length) return { additionalContexts: [] };
       const payload = hookSubagentStartPayload(config, input);
-      const runs = await runCommandHooks('SubagentStart', hooks, payload, input);
+      const runs = await runCommandHooks('SubagentStart', hooks, payload, input, config.dataPath);
       const parsedRuns = runs.map(parseSubagentStartRun);
       return {
         additionalContexts: parsedRuns.flatMap((parsed) => parsed.additionalContext ?? []),
@@ -243,7 +240,7 @@ export function createRuntimeToolHookRunner(config: RuntimeConfigState | null | 
       const hooks = executableHooks.filter((hook) => hook.configEventName === 'UserPromptSubmit');
       if (!hooks.length) return { additionalContexts: [], shouldStop: false };
       const payload = hookUserPromptSubmitPayload(config, input);
-      const runs = await runCommandHooks('UserPromptSubmit', hooks, payload, input);
+      const runs = await runCommandHooks('UserPromptSubmit', hooks, payload, input, config.dataPath);
       const parsedRuns = runs.map(parseUserPromptSubmitRun);
       const additionalContexts = parsedRuns.flatMap((parsed) => parsed.additionalContext ?? []);
       const stopReason = parsedRuns.find((parsed) => parsed.shouldStop && parsed.stopReason)?.stopReason;
@@ -257,7 +254,7 @@ export function createRuntimeToolHookRunner(config: RuntimeConfigState | null | 
       const hooks = matchingEventHooks(executableHooks, 'SubagentStop', input.agentType);
       if (!hooks.length) return { shouldBlock: false, shouldStop: false };
       const payload = hookSubagentStopPayload(config, input);
-      const runs = await runCommandHooks('SubagentStop', hooks, payload, input);
+      const runs = await runCommandHooks('SubagentStop', hooks, payload, input, config.dataPath);
       const parsedRuns = runs.map((run) => parseStopRun(run, 'SubagentStop'));
       const shouldStop = parsedRuns.some((parsed) => parsed.shouldStop);
       const blockReasons = shouldStop ? [] : parsedRuns.map((parsed) => parsed.blockReason).filter((item): item is string => Boolean(item));
@@ -273,7 +270,7 @@ export function createRuntimeToolHookRunner(config: RuntimeConfigState | null | 
       const hooks = executableHooks.filter((hook) => hook.configEventName === 'Stop');
       if (!hooks.length) return { shouldBlock: false, shouldStop: false };
       const payload = hookStopPayload(config, input);
-      const runs = await runCommandHooks('Stop', hooks, payload, input);
+      const runs = await runCommandHooks('Stop', hooks, payload, input, config.dataPath);
       const parsedRuns = runs.map((run) => parseStopRun(run));
       const shouldStop = parsedRuns.some((parsed) => parsed.shouldStop);
       const blockReasons = shouldStop ? [] : parsedRuns.map((parsed) => parsed.blockReason).filter((item): item is string => Boolean(item));
@@ -516,7 +513,7 @@ function hookStopPayload(config: RuntimeConfigState, input: RuntimeStopHookInput
 
 type RuntimeCommandHookInput = RuntimeToolPostHookInput | RuntimeToolHookInput | RuntimeCompactHookInput | RuntimeSessionStartHookInput | RuntimeSubagentStartHookInput | RuntimeUserPromptSubmitHookInput | RuntimeSubagentStopHookInput | RuntimeStopHookInput;
 
-async function runCommandHooks(eventName: RuntimeHookRunEventName, hooks: RuntimeDiscoveredHook[], payload: Record<string, unknown>, input: RuntimeCommandHookInput): Promise<CommandRunResult[]> {
+async function runCommandHooks(eventName: RuntimeHookRunEventName, hooks: RuntimeDiscoveredHook[], payload: Record<string, unknown>, input: RuntimeCommandHookInput, dataPath: string): Promise<CommandRunResult[]> {
   let completionOrder = 0;
   return Promise.all(hooks.map(async (hook) => {
     const startedAtDate = new Date();
@@ -528,7 +525,7 @@ async function runCommandHooks(eventName: RuntimeHookRunEventName, hooks: Runtim
       startedAt,
       status: 'running',
     }));
-    const result = await runCommandHook(hook, JSON.stringify(payload), input.environment.cwd, input.context.signal);
+    const result = await runCommandHook(hook, JSON.stringify(payload), input.environment.cwd, dataPath, input.context.signal);
     const completedAtDate = new Date();
     const completedAt = completedAtDate.toISOString();
     completionOrder += 1;
@@ -725,54 +722,4 @@ function previewHookOutput(value: string): string | undefined {
 function previewHookPrompt(value: string): string {
   const trimmed = value.trim();
   return trimmed.length <= 2000 ? trimmed : `${trimmed.slice(0, 2000)}...`;
-}
-
-async function runCommandHook(hook: RuntimeDiscoveredHook, stdin: string, cwd: string, signal: AbortSignal | undefined): Promise<CommandProcessRunResult> {
-  const command = hook.command ?? '';
-  const shell = shellCommand(command);
-  return new Promise((resolve) => {
-    let stdout = '';
-    let stderr = '';
-    let timedOut = false;
-    let settled = false;
-    const child = spawn(shell.file, shell.args, {
-      cwd,
-      env: process.env,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
-    const finish = (result: CommandProcessRunResult) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      signal?.removeEventListener('abort', abort);
-      resolve(result);
-    };
-    const abort = () => {
-      child.kill();
-      finish({ exitCode: null, stdout, stderr, error: 'hook aborted' });
-    };
-    const timeout = setTimeout(() => {
-      timedOut = true;
-      child.kill();
-    }, Math.max(1, hook.timeoutSec) * 1000);
-    signal?.addEventListener('abort', abort, { once: true });
-    child.stdout.on('data', (chunk) => {
-      stdout = appendCapped(stdout, chunk);
-    });
-    child.stderr.on('data', (chunk) => {
-      stderr = appendCapped(stderr, chunk);
-    });
-    child.on('error', (error) => finish({ exitCode: null, stdout, stderr, error: error.message }));
-    child.on('close', (code) => {
-      finish({
-        exitCode: code,
-        stdout,
-        stderr,
-        ...(timedOut ? { error: `hook timed out after ${hook.timeoutSec}s` } : {}),
-      });
-    });
-    child.stdin.on('error', () => undefined);
-    child.stdin.end(stdin);
-  });
 }

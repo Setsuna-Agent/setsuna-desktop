@@ -1,6 +1,5 @@
 import type { RuntimeHookMetadata } from '@setsuna-desktop/contracts';
 import { createHash } from 'node:crypto';
-import { powershellCommand } from '../utils/windows-shell.js';
 import type {
   CommandRunResult,
   ParsedCompactOutput,
@@ -12,8 +11,6 @@ import type {
   ParsedSubagentStartOutput,
   ParsedUserPromptSubmitOutput,
 } from './runtime-hook-types.js';
-
-const HOOK_OUTPUT_BYTES_CAP = 1024 * 1024;
 
 export function parsePreToolUseRun(run: CommandRunResult): ParsedPreToolUseOutput {
   if (run.error) return {};
@@ -426,22 +423,6 @@ export function canonicalJson(value: unknown): unknown {
       .sort()
       .map((key) => [key, canonicalJson((value as Record<string, unknown>)[key])]),
   );
-}
-
-export function shellCommand(command: string): { file: string; args: string[] } {
-  if (process.platform === 'win32') {
-    return {
-      file: process.env.SETSUNA_WINDOWS_SHELL || process.env.SHELL || 'powershell.exe',
-      args: ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', powershellCommand(command)],
-    };
-  }
-  return { file: '/bin/sh', args: ['-lc', command] };
-}
-
-export function appendCapped(current: string, chunk: Buffer): string {
-  if (current.length >= HOOK_OUTPUT_BYTES_CAP) return current;
-  const next = current + chunk.toString('utf8');
-  return next.length > HOOK_OUTPUT_BYTES_CAP ? next.slice(0, HOOK_OUTPUT_BYTES_CAP) : next;
 }
 
 export function parseJsonRecord(value: string): Record<string, unknown> | null {

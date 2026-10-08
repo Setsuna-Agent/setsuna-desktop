@@ -1,7 +1,7 @@
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
 import { CheckCircle2, Grip } from 'lucide-react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
-import { RuntimeHookRuns } from '../tool-runs/RuntimeToolRuns.js';
+import { RuntimeHookRuns } from '../tool-runs/RuntimeHookRunDetails.js';
 
 type ContextCompactionStatusProps = {
   active?: boolean;

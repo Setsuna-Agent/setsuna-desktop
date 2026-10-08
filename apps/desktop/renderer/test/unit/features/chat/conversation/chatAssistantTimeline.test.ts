@@ -789,6 +789,7 @@ function workItemOrder(items: Extract<ReturnType<typeof createAssistantRunTimeli
     if (item.type === 'contextCompaction') return [`compaction:${item.id}`];
     if (item.type === 'thinking') return [`thinking:${item.segment.id}`];
     if (item.type === 'pluginUses') return [`plugins:${item.id}`];
+    if (item.type === 'hookRuns') return item.runs.map((run) => `hook:${run.id}`);
     return item.toolRuns.map((run) => `tool:${run.id}`);
   });
 }

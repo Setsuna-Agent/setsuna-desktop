@@ -23,7 +23,7 @@ describe('createAssistantGuidanceTimelinePlan', () => {
     expect(plan.nodes[0].entries.map((entry) =>
       entry.type === 'guidance'
         ? entry.messages.map((message) => message.id).join(',')
-        : entry.item.type === 'pluginUses'
+        : entry.item.type === 'pluginUses' || entry.item.type === 'hookRuns'
           ? entry.item.id
           : entry.item.type === 'contextCompaction'
             ? entry.item.id
@@ -47,7 +47,7 @@ describe('createAssistantGuidanceTimelinePlan', () => {
     expect(plan.nodes[0].entries.map((entry) =>
       entry.type === 'guidance'
         ? entry.messages.map((message) => message.id).join(',')
-        : entry.item.type === 'pluginUses'
+        : entry.item.type === 'pluginUses' || entry.item.type === 'hookRuns'
           ? entry.item.id
           : entry.item.type === 'contextCompaction'
             ? entry.item.id

@@ -390,12 +390,18 @@ Memory 写入带 thread/turn 来源，PC-local host 不再保存第二份 Memory
 - 从 config/project/plugin 发现 hooks。
 - 匹配 event/tool/cwd。
 - 计算 command hash 和 trust status。
-- 运行受限 command。
+- 编排 command 执行与 Hook 生命周期事件。
+
+`runtime-hook-command.ts` / `runtime-hook-node-environment.ts`：
+
+- 首次执行可信 Hook 时按需准备私有 `node` 入口，始终调用应用内置 Node，不依赖宿主安装或工作区工具链。
+- 只为 Hook 子进程前置私有 PATH；入口准备在进程内复用，不参与 runtime 启动就绪，不做版本探测或下载。
+- Windows PowerShell 的输入、输出统一为 UTF-8；stdout/stderr 按流解码，保留跨数据块的中文字符。
+- 执行超时、取消、环境准备失败与输出收集。
 
 `runtime-hook-output.ts`：
 
 - 解析 JSON/legacy 输出。
-- 截断 stdout/stderr。
 - 拒绝不支持的 universal/specific 字段。
 - 生成 canonical hash。
 

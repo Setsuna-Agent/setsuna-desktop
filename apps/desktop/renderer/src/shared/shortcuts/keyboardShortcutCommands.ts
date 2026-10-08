@@ -16,6 +16,7 @@ export const KEYBOARD_SHORTCUT_COMMAND_IDS = [
   'app.openCapabilities',
   'app.openChat',
   'app.openPullRequests',
+  'app.openAutomation',
   'app.toggleTheme',
   'app.toggleRuntimeActivity',
   'navigation.goBack',
@@ -105,6 +106,13 @@ export const keyboardShortcutCommands: readonly KeyboardShortcutCommand[] = [
     labelKey: 'shortcuts.command.openPullRequests',
     descriptionKey: 'shortcuts.command.openPullRequestsDescription',
     defaultBindings: primaryBinding('Digit2'),
+  },
+  {
+    id: 'app.openAutomation',
+    group: 'navigation',
+    labelKey: 'shortcuts.command.openAutomation',
+    descriptionKey: 'shortcuts.command.openAutomationDescription',
+    defaultBindings: primaryBinding('Digit3'),
   },
   {
     id: 'app.toggleTheme',

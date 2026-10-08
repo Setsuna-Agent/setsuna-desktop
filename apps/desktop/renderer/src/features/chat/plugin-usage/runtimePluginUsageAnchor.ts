@@ -10,18 +10,22 @@ export type RuntimePluginUseAnchor = {
 export function createRuntimePluginUseAnchors(messages: RuntimeMessage[]) {
   const messageIndexes = new Map(messages.map((message, index) => [message.id, index]));
   const positions = new Map<string, { before: number; after: number }>();
+  const assistantsByTurn = new Map<string | undefined, RuntimeMessage[]>();
   let order = 0;
   for (const message of messages) {
     const before = order++;
     for (const run of message.toolRuns ?? []) positions.set(run.id, { before: order++, after: order++ });
     positions.set(message.id, { before, after: order++ });
+    if (message.role === 'assistant' && message.visibility !== 'model') {
+      const assistants = assistantsByTurn.get(message.turnId) ?? [];
+      assistants.push(message);
+      assistantsByTurn.set(message.turnId, assistants);
+    }
   }
   const position = (anchor: RuntimePluginUseAnchor | undefined) => anchor
     ? positions.get(anchor.toolRunId ?? anchor.messageId)?.[anchor.placement] ?? Infinity
     : Infinity;
-  const assistants = (turnId: string | undefined) => messages.filter((message) => (
-    message.turnId === turnId && message.role === 'assistant' && message.visibility !== 'model'
-  ));
+  const assistants = (turnId: string | undefined) => assistantsByTurn.get(turnId) ?? [];
 
   return {
     first(left: RuntimePluginUseAnchor | undefined, right: RuntimePluginUseAnchor | undefined) {
@@ -48,15 +52,27 @@ export function createRuntimePluginUseAnchors(messages: RuntimeMessage[]) {
       const preceding = [...candidates].reverse().find((candidate) => (
         !run.startedAt || candidate.createdAt <= run.startedAt
       ));
+      let placement: RuntimePluginUseAnchor['placement'] =
+        ['PostToolUse', 'PostCompact', 'Stop', 'SubagentStop'].includes(run.eventName) ? 'after' : 'before';
+      let owner = message?.role === 'assistant' ? message : undefined;
+      // A steered prompt can trigger the same lifecycle Hook later in a turn.
+      // Anchor it after that input, instead of moving it above the first response.
+      if (run.eventName === 'UserPromptSubmit' && message?.role === 'user') {
+        const followingInput = candidates.find((candidate) => messageIndexes.get(candidate.id)! > messageIndexes.get(message.id)!);
+        owner = followingInput ?? preceding ?? candidates[0];
+        placement = !followingInput && preceding ? 'after' : 'before';
+      }
       // Non-tool Hooks are stored on the turn's user message, including Stop Hooks
       // that run after the answer. That storage owner is not their display position.
-      const owner = message?.role === 'assistant' ? message : startsTurn ? candidates[0] : preceding ?? candidates[0];
+      if (!owner) {
+        owner = startsTurn ? candidates[0] : preceding ?? candidates[0];
+        if (!startsTurn && preceding) placement = 'after';
+      }
       if (!owner) return undefined;
       return {
         messageId: owner.id,
         ...(run.toolCallId ? { toolRunId: run.toolCallId } : {}),
-        placement: !startsTurn && ((message?.role !== 'assistant' && preceding)
-          || ['PostToolUse', 'PostCompact', 'Stop', 'SubagentStop'].includes(run.eventName)) ? 'after' : 'before',
+        placement,
       };
     },
   };
