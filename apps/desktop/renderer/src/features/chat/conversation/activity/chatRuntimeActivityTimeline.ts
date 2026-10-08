@@ -1,20 +1,25 @@
 import type { RuntimeMessage, RuntimeToolRun } from '@setsuna-desktop/contracts';
-import type { AssistantWorkItem } from '../conversation/chatAssistantTimeline.js';
-import { isTranscriptHiddenRuntimeToolRun } from '../tool-runs/runtimeToolRunVisibility.js';
-import type { RuntimePluginUse } from './runtimePluginUsage.js';
+import type { AssistantWorkItem } from '../chatAssistantTimeline.js';
+import type { RuntimeHookUse } from './runtimeHookUsage.js';
+import { isTranscriptHiddenRuntimeToolRun } from '../../tool-runs/runtimeToolRunVisibility.js';
+import type { RuntimePluginUse } from '../../plugin-usage/runtimePluginUsage.js';
 
-/** Keep plugin records beside their source, splitting a tool group only at a usage boundary. */
-export function interleaveRuntimePluginUses(
+/** Plugin and Hook records share event positions, outside tool result disclosures. */
+export function interleaveRuntimeActivities(
   segment: RuntimeMessage,
   body: AssistantWorkItem[],
   pluginUses: RuntimePluginUse[],
   includeUnanchored: boolean,
+  hookUses: RuntimeHookUse[],
 ): AssistantWorkItem[] {
   const uses = pluginUses.filter((plugin) => plugin.anchor
     ? plugin.anchor.messageId === segment.id
     : includeUnanchored);
   const items: AssistantWorkItem[] = [];
-  const appendPlugins = (placement: 'before' | 'after', toolRunId?: string) => {
+  const hooks = hookUses.filter(({ anchor }) => anchor
+    ? anchor.messageId === segment.id
+    : includeUnanchored);
+  const appendActivity = (placement: 'before' | 'after', toolRunId?: string) => {
     const plugins = uses.filter(({ anchor }) => (
       (anchor?.placement ?? 'before') === placement && anchor?.toolRunId === toolRunId
     ));
@@ -24,9 +29,18 @@ export function interleaveRuntimePluginUses(
       messageId: segment.id,
       plugins,
     });
+    const runs = hooks.filter(({ anchor }) => (
+      (anchor?.placement ?? 'before') === placement && anchor?.toolRunId === toolRunId
+    )).map(({ run }) => run);
+    if (runs.length) items.push({
+      type: 'hookRuns',
+      id: `${segment.id}:hooks:${toolRunId ?? 'message'}:${placement}`,
+      messageId: segment.id,
+      runs,
+    });
   };
 
-  appendPlugins('before');
+  appendActivity('before');
   items.push(...body);
   let runs: RuntimeToolRun[] = [];
   let groupCount = 0;
@@ -41,17 +55,18 @@ export function interleaveRuntimePluginUses(
     runs = [];
   };
   for (const run of segment.toolRuns ?? []) {
-    if (uses.some(({ anchor }) => anchor?.toolRunId === run.id)) {
+    if (uses.some(({ anchor }) => anchor?.toolRunId === run.id)
+      || hooks.some(({ anchor }) => anchor?.toolRunId === run.id)) {
       flushRuns();
-      appendPlugins('before', run.id);
+      appendActivity('before', run.id);
       if (!isTranscriptHiddenRuntimeToolRun(run)) runs.push(run);
       flushRuns();
-      appendPlugins('after', run.id);
+      appendActivity('after', run.id);
     } else if (!isTranscriptHiddenRuntimeToolRun(run)) {
       runs.push(run);
     }
   }
   flushRuns();
-  appendPlugins('after');
+  appendActivity('after');
   return items;
 }

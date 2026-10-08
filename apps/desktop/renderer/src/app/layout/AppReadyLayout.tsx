@@ -289,6 +289,9 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     'app.openPullRequests': {
       execute: openPullRequests,
     },
+    'app.openAutomation': {
+      execute: openAutomation,
+    },
     'app.toggleTheme': {
       // Use the same toggle and transition origin as pointer activation.
       execute: () => themeToggleTriggerRef.current?.click(),
@@ -387,6 +390,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     handleToggleSidebar,
     hasActiveBrowserPanel,
     navigation,
+    openAutomation,
     openCapabilities,
     openChat,
     openPullRequests,

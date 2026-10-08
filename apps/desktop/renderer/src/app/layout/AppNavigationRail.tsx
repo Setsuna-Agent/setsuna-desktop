@@ -61,7 +61,7 @@ export function AppNavigationRail({
           <NavigationButton label="Pull Request" commandId="app.openPullRequests" active={activeView === 'pull-requests'} onClick={onOpenPullRequests}>
             <GitPullRequest size={18} />
           </NavigationButton>
-          <NavigationButton label={t('feature.automation.title')} active={activeView === 'automation'} onClick={onOpenAutomation}>
+          <NavigationButton label={t('feature.automation.title')} commandId="app.openAutomation" active={activeView === 'automation'} onClick={onOpenAutomation}>
             <Clock3 size={18} />
           </NavigationButton>
           <NavigationButton label={t('sidebar.plugins')} commandId="app.openCapabilities" active={activeView === 'capabilities'} onClick={onOpenCapabilities}>

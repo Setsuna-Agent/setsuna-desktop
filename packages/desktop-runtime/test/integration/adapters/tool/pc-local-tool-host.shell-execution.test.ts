@@ -88,18 +88,18 @@ describe('pc local shell execution', () => {
       onToolOutputDelta: () => undefined,
     };
     const running = await host.runTool('run_shell_command', {
-      command: `${nodeCommand()} -e "setTimeout(() => process.stdout.write('x'.repeat(500000)), 20); setInterval(() => {}, 1000)"`,
+      command: `${nodeCommand()} -e "process.stdout.write('x'.repeat(500000) + 'done'); setInterval(() => {}, 1000)"`,
       risk_level: 'low',
       yield_time_ms: 1,
     }, context);
     const processId = String((running.data as Record<string, unknown>).process_id || '');
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 200));
       const processStore = (host as unknown as {
         shellProcessStore: { sessions: Map<string, { pendingStdout: string; pendingStderr: string; stdout: string }> };
       }).shellProcessStore;
       const session = processStore.sessions.get(processId);
+      await expect.poll(() => session?.stdout.endsWith('done')).toBe(true);
       expect(session?.pendingStdout).toBe('');
       expect(session?.pendingStderr).toBe('');
       expect(session?.stdout.length).toBeLessThanOrEqual(240_000);

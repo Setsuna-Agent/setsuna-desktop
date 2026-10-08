@@ -1,6 +1,7 @@
-import type { RuntimeMessage, RuntimeToolRun } from '@setsuna-desktop/contracts';
+import type { RuntimeHookRun, RuntimeMessage, RuntimeToolRun } from '@setsuna-desktop/contracts';
 import type { RuntimePluginUse } from '../plugin-usage/runtimePluginUsage.js';
-import { interleaveRuntimePluginUses } from '../plugin-usage/runtimePluginUsageTimeline.js';
+import { interleaveRuntimeActivities } from './activity/chatRuntimeActivityTimeline.js';
+import type { RuntimeHookUse } from './activity/runtimeHookUsage.js';
 import { isTranscriptHiddenRuntimeToolRun } from '../tool-runs/runtimeToolRunVisibility.js';
 import { isActiveRuntimeToolRun } from '../tool-runs/runtimeToolRunState.js';
 import { hasRenderableThinkingContent, splitThinkingContent } from './chatThinkingContent.js';
@@ -39,6 +40,7 @@ export type AssistantWorkItem =
   | { type: 'contextCompaction'; active: boolean; id: string; message?: RuntimeMessage }
   | { type: 'thinking'; segment: AssistantWorkThinkingSegment }
   | { type: 'pluginUses'; id: string; messageId: string; plugins: RuntimePluginUse[] }
+  | { type: 'hookRuns'; id: string; messageId: string; runs: RuntimeHookRun[] }
   | { type: 'toolRuns'; id: string; segment: RuntimeMessage; toolRuns: NonNullable<RuntimeMessage['toolRuns']> };
 
 export function createAssistantRunTimeline(
@@ -47,6 +49,7 @@ export function createAssistantRunTimeline(
   options: {
     contextCompactionActive?: boolean;
     contextCompactions?: RuntimeMessage[];
+    hookUses?: RuntimeHookUse[];
     isTimelineToolResult?: (run: RuntimeToolRun) => boolean;
     messageOrderIds?: string[];
     showThinkingInTranscript?: boolean;
@@ -57,6 +60,7 @@ export function createAssistantRunTimeline(
     options.showThinkingInTranscript === true,
     pluginUses,
     index === 0,
+    options.hookUses ?? [],
   ));
   const finalStartIndex = assistantFinalStartIndex(parsedSegments);
   const finalStarted = finalStartIndex >= 0;
@@ -162,7 +166,7 @@ export function createAssistantRunTimeline(
         });
         return;
       }
-      if (item.type === 'pluginUses') {
+      if (item.type === 'pluginUses' || item.type === 'hookRuns') {
         appendWork(parsed.segment, { items: [item] });
         return;
       }
@@ -277,6 +281,7 @@ function parseAssistantSegment(
   showThinkingInTranscript: boolean,
   pluginUses: RuntimePluginUse[],
   includeUnanchoredPlugins: boolean,
+  hookUses: RuntimeHookUse[],
 ): ParsedAssistantSegment {
   const contentSegments: AssistantWorkContentSegment[] = [];
   const items: AssistantWorkItem[] = [];
@@ -351,7 +356,7 @@ function parseAssistantSegment(
   return {
     segment,
     contentSegments,
-    items: interleaveRuntimePluginUses(segment, items, pluginUses, includeUnanchoredPlugins),
+    items: interleaveRuntimeActivities(segment, items, pluginUses, includeUnanchoredPlugins, hookUses),
     thinkingSegments,
     toolRuns,
   };

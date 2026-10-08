@@ -24,9 +24,10 @@ import {
 import {
   FileChangesSummaryCard,
   RuntimeAssistantTailToolResults,
-  RuntimeHookRuns,
   RuntimeToolRuns,
 } from '../tool-runs/RuntimeToolRuns.js';
+import { RuntimeHookRuns } from '../tool-runs/RuntimeHookRunDetails.js';
+import type { RuntimeHookUse } from './activity/runtimeHookUsage.js';
 import { isDisplayableRuntimeToolRun } from '../tool-runs/runtimeToolRunVisibility.js';
 import { isActiveRuntimeToolRun } from '../tool-runs/runtimeToolRunState.js';
 import { formatGoalExitSummary } from '../goalFormatting.js';
@@ -88,6 +89,7 @@ export const MessageItem = memo(function MessageItem({
   onSubmitEdit,
   onToggleDelete,
   onWorkHistoryExpandedChange,
+  hookUses,
   pluginUses,
   selectedForDelete,
   showThinkingInTranscript = false,
@@ -113,6 +115,7 @@ export const MessageItem = memo(function MessageItem({
   onSubmitEdit?: (messageId: string) => void;
   onToggleDelete?: (itemId: string, checked: boolean) => void;
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
+  hookUses?: RuntimeHookUse[];
   pluginUses: RuntimePluginUse[];
   selectedForDelete: boolean;
   showThinkingInTranscript?: boolean;
@@ -132,6 +135,7 @@ export const MessageItem = memo(function MessageItem({
         onStartDelete={onStartDelete}
         onToggleDelete={onToggleDelete}
         onWorkHistoryExpandedChange={onWorkHistoryExpandedChange}
+        hookUses={hookUses}
         pluginUses={pluginUses}
         selectedForDelete={selectedForDelete}
         showThinkingInTranscript={showThinkingInTranscript}
@@ -178,7 +182,6 @@ export const MessageItem = memo(function MessageItem({
           align="end"
           variant="soft"
         />
-        <RuntimeHookRuns runs={message.hookRuns} />
         {showExtractedGuidance ? <GuidanceMessageList handledMessageIds={new Set(item.handledSteerMessageIds)} messages={fallbackGuidanceMessages} /> : null}
       </div>
     </article>
@@ -197,6 +200,7 @@ function AssistantRunItem({
   onStartDelete,
   onToggleDelete,
   onWorkHistoryExpandedChange,
+  hookUses,
   pluginUses,
   selectedForDelete,
   showThinkingInTranscript,
@@ -212,6 +216,7 @@ function AssistantRunItem({
   onStartDelete?: (itemId: string) => void;
   onToggleDelete?: (itemId: string, checked: boolean) => void;
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
+  hookUses?: RuntimeHookUse[];
   pluginUses: RuntimePluginUse[];
   selectedForDelete: boolean;
   showThinkingInTranscript: boolean;
@@ -231,7 +236,7 @@ function AssistantRunItem({
       {deleteMode && onToggleDelete ? <MessageSelectionControl checked={selectedForDelete} label={t('chat.delete.selectReply')} onChange={(checked) => onToggleDelete(item.id, checked)} /> : null}
       <MessageBubble
         className="chat-ai-bubble"
-        content={<AssistantRunContent active={active} contextCompactionActive={contextCompactionActive} item={item} onAnswerApproval={onAnswerApproval} onFileChangesAction={onFileChangesAction} onOpenFileReview={onOpenFileReview} onWorkHistoryExpandedChange={onWorkHistoryExpandedChange} pluginUses={pluginUses} showThinkingInTranscript={showThinkingInTranscript} />}
+        content={<AssistantRunContent active={active} contextCompactionActive={contextCompactionActive} item={item} onAnswerApproval={onAnswerApproval} onFileChangesAction={onFileChangesAction} onOpenFileReview={onOpenFileReview} onWorkHistoryExpandedChange={onWorkHistoryExpandedChange} hookUses={hookUses} pluginUses={pluginUses} showThinkingInTranscript={showThinkingInTranscript} />}
         footer={belongsToActiveTurn ? undefined : <ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} message={footerMessage} forkMessageId={item.messageIds.at(-1)} onDelete={onStartDelete ? () => onStartDelete(item.id) : undefined} timePosition="after-actions" />}
         align="start"
         variant="ghost"
@@ -300,6 +305,7 @@ function AssistantRunContent({
   onFileChangesAction,
   onOpenFileReview,
   onWorkHistoryExpandedChange,
+  hookUses,
   pluginUses,
   showThinkingInTranscript,
 }: {
@@ -310,6 +316,7 @@ function AssistantRunContent({
   onFileChangesAction?: (toolCallIds: string[], action: WorkspaceFileChangeAction) => void | Promise<void | ThreadFileChangesResult>;
   onOpenFileReview?: DesktopReviewOpenHandler;
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
+  hookUses?: RuntimeHookUse[];
   pluginUses: RuntimePluginUse[];
   showThinkingInTranscript: boolean;
 }) {
@@ -325,6 +332,7 @@ function AssistantRunContent({
     () => createAssistantRunTimeline(displaySegments, pluginUses, {
       contextCompactionActive,
       contextCompactions: item.contextCompactions ?? [],
+      hookUses,
       isTimelineToolResult: (run) => run.status === 'success' && (
         resolveRuntimeFeatureToolResult(resolveFeatureToolResult, run)
           ?.contribution.placement === 'assistant-timeline'
@@ -332,7 +340,7 @@ function AssistantRunContent({
       messageOrderIds: item.messageIds,
       showThinkingInTranscript,
     }),
-    [contextCompactionActive, displaySegments, item.contextCompactions, item.messageIds, pluginUses, resolveFeatureToolResult, showThinkingInTranscript],
+    [contextCompactionActive, displaySegments, hookUses, item.contextCompactions, item.messageIds, pluginUses, resolveFeatureToolResult, showThinkingInTranscript],
   );
   const toolAttachments = item.toolAttachments ?? [];
   const toolRuns = useMemo(() => displaySegments.flatMap((segment) => segment.toolRuns ?? []), [displaySegments]);
@@ -396,9 +404,22 @@ function AssistantRunContent({
     );
   }
   if (planSegment) {
+    const activityItems = timelineBlocks.flatMap((block) => block.type === 'work'
+      ? block.items.filter((entry) => entry.type === 'pluginUses' || entry.type === 'hookRuns')
+      : []);
     return (
       <div className="chat-assistant-run">
-        {pluginUses.length ? <RuntimePluginUses plugins={pluginUses} /> : null}
+        {activityItems.length ? <ChatWorkHistoryTimeline
+          active={active}
+          defaultExpanded={workHistoryState.expanded}
+          itemId={chatDisplayItemRenderKey(item)}
+          onExpandedChange={onWorkHistoryExpandedChange}
+          sections={[{
+            type: 'work', id: `${planSegment.id}:activity`, hasDetails: true,
+            hasFollowingContent: false, segments: displaySegments,
+            children: activityItems.flatMap((entry) => assistantWorkItemNodes(entry, onAnswerApproval)),
+          }]}
+        /> : null}
         <PlanCard message={planSegment} />
       </div>
     );
@@ -894,6 +915,9 @@ function assistantWorkItemNodes(
   }
   if (item.type === 'pluginUses') {
     return [<RuntimePluginUses key={item.id} plugins={item.plugins} />];
+  }
+  if (item.type === 'hookRuns') {
+    return [<RuntimeHookRuns key={item.id} runs={item.runs} />];
   }
   if (item.type === 'thinking') {
     return item.segment.content.trim()

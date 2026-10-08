@@ -31,10 +31,11 @@ import { MarkdownViewportProvider } from '../markdown/MarkdownViewportProvider.j
 import { SkillReferenceCatalogProvider } from '../skills/SkillReference.js';
 import { PluginReferenceCatalogProvider } from '../references/PluginReference.js';
 import {
-  ActiveWorkPlaceholder,
   DeleteSelectionBar,
   MessageItem,
 } from './ChatMessageItem.js';
+import { ChatTurnStartWork } from './activity/ChatTurnStartWork.js';
+import { runtimeHookUsesByTurn, type RuntimeHookUse } from './activity/runtimeHookUsage.js';
 import { TranscriptWindowDivider } from './TranscriptWindowDivider.js';
 import { usePinnedChatScroll } from './ChatWorkspaceScroll.js';
 import { ChatMessageRail } from './navigation/ChatMessageRail.js';
@@ -57,6 +58,7 @@ import {
 export type ChatTranscriptMessageHistory = ReturnType<typeof useThreadMessageHistory>;
 
 const emptyRuntimePluginUses: RuntimePluginUse[] = [];
+const emptyRuntimeHookUses: RuntimeHookUse[] = [];
 const emptyPendingMessages: RuntimeMessage[] = [];
 
 type ChatTranscriptMutationProps =
@@ -165,6 +167,12 @@ export function ChatTranscript({
     },
     [historyThread, plugins, skills],
   );
+  const hookUsesByTurnIdRef = useRef(new Map<string, RuntimeHookUse[]>());
+  const hookUsesByTurnId = useMemo(() => {
+    const next = runtimeHookUsesByTurn(historyThread, hookUsesByTurnIdRef.current);
+    hookUsesByTurnIdRef.current = next;
+    return next;
+  }, [historyThread]);
   const {
     actionError,
     allDeleteSelected,
@@ -367,18 +375,28 @@ export function ChatTranscript({
                           onOpenFileReview={onOpenFileReview}
                           onWorkHistoryExpandedChange={handleWorkHistoryExpandedChange}
                           pluginUses={item.type === 'assistant' && item.turnId ? (pluginUsesByTurnId.get(item.turnId) ?? emptyRuntimePluginUses) : emptyRuntimePluginUses}
+                          hookUses={item.type === 'assistant' && item.turnId ? (hookUsesByTurnId.get(item.turnId) ?? emptyRuntimeHookUses) : emptyRuntimeHookUses}
                           selectedForDelete={!readOnly && selectedDeleteItemIds.has(item.id)}
                           showThinkingInTranscript={showThinkingInTranscript}
                         />
-                        {item.type === 'user' && item.id === activePlaceholderUserItemId ? (
-                          <ActiveWorkPlaceholder
+                        {item.type === 'user' && (item.id === activePlaceholderUserItemId || (
+                          item.message.turnId && !assistantItemIdByTurnId.has(item.message.turnId)
+                          && hookUsesByTurnId.has(item.message.turnId)
+                        )) ? (
+                          <ChatTurnStartWork
+                            active={item.id === activePlaceholderUserItemId}
+                            hookUses={hookUsesByTurnId.get(item.message.turnId ?? '') ?? emptyRuntimeHookUses}
+                            pluginUses={pluginUsesByTurnId.get(item.message.turnId ?? '') ?? emptyRuntimePluginUses}
                             segments={[item.message]}
                           />
                         ) : null}
                       </ChatThreadProvider>
                     ))}
                     {showActiveTurnPlaceholder && !activeUserVisible ? (
-                      <ActiveWorkPlaceholder
+                      <ChatTurnStartWork
+                        active
+                        hookUses={hookUsesByTurnId.get(activeTurnId ?? '') ?? emptyRuntimeHookUses}
+                        pluginUses={pluginUsesByTurnId.get(activeTurnId ?? '') ?? emptyRuntimePluginUses}
                         segments={[]}
                       />
                     ) : null}

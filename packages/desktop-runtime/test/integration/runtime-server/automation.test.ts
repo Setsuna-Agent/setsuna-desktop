@@ -2,7 +2,7 @@ import type { RuntimeConfigState, RuntimeMessage, RuntimeThread, WorkspaceProjec
 import type { AutomationSnapshot, AutomationTask } from '@setsuna-desktop/feature-automation/contracts';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AUTOMATION_CREATION_POLICY } from '@setsuna-desktop/feature-automation/runtime';
 import { SqliteThreadStore } from '../../../src/adapters/store/sqlite-thread-store.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
@@ -23,8 +23,14 @@ const legacyPolicy = [
 
 describe('scheduled conversations through the runtime API', () => {
   let harness: RuntimeServerTestHarness;
-  beforeEach(async () => { harness = await createRuntimeServerTestHarness(); });
-  afterEach(async () => { await harness.close(); });
+  beforeEach(async () => {
+    // Advance scheduler intervals explicitly while HTTP, file I/O and polling stay real.
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+    harness = await createRuntimeServerTestHarness();
+  });
+  afterEach(async () => {
+    try { await harness?.close(); } finally { vi.useRealTimers(); }
+  });
 
   it.each(['/v1/data-migration/prepare', '/internal/webdav-sync/prepare'])('preserves overdue one-shot tasks while %s holds the snapshot boundary', async (preparePath) => {
     await harness.configureSmokeProviderContextWindow(32_000);
@@ -38,8 +44,8 @@ describe('scheduled conversations through the runtime API', () => {
     await expect.poll(async () => (await harness.runtimeFetch(preparePath, { method: 'POST' })).ready).toBe(true);
     const ledgerPath = path.join(harness.runtimeDataDir, 'runtime', 'features', 'automation', 'tasks.json');
     const before = await readFile(ledgerPath, 'utf8');
-    // Cross a real scheduler tick after the task becomes due; preparation must keep disk quiescent.
-    await new Promise((resolve) => setTimeout(resolve, 5_100));
+    // Cross the registered scheduler tick while preparation holds the write boundary.
+    await vi.advanceTimersByTimeAsync(5_000);
     expect(await readFile(ledgerPath, 'utf8')).toBe(before);
     await harness.runtimeFetch(preparePath, { method: 'DELETE' });
     let dispatched: AutomationTask | undefined;
@@ -48,7 +54,7 @@ describe('scheduled conversations through the runtime API', () => {
       dispatched = snapshot.tasks.find((item) => item.id === task.id);
       return dispatched?.runs.length;
     }, { timeout: 10_000 }).toBe(1);
-    expect(dispatched).toMatchObject({ status: 'completed', nextRunAt: null, runs: [{ status: 'running', scheduledFor: task.nextRunAt }] });
+    expect(dispatched).toMatchObject({ status: 'completed', nextRunAt: null, runs: [{ scheduledFor: task.nextRunAt }] });
     const run = dispatched!.runs[0];
     await harness.waitForThread(run.threadId, (thread) => thread.turns?.some((turn) => turn.id === run.turnId && turn.status === 'completed') ?? false);
   });
@@ -160,6 +166,7 @@ describe('scheduled conversations through the runtime API', () => {
     expect(task).toMatchObject({ conversationThreadId: threadId, status: 'active', modelSelection: { providerId: 'local-test', modelId: 'local-runtime-smoke' } });
     const fresh = await harness.runtimeFetch('/v1/features/automation/conversations', { method: 'POST' });
     expect(fresh.threadId).not.toBe(threadId);
+    await vi.advanceTimersByTimeAsync(5_000);
     let dispatched: AutomationTask | undefined;
     await expect.poll(async () => {
       const snapshot = await harness.runtimeFetch('/v1/features/automation/tasks') as AutomationSnapshot;

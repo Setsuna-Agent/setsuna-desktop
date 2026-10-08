@@ -191,7 +191,7 @@ Enter / Shift+Enter 循环跳转，Esc 或关闭按钮清理观察器和高亮�
 - `RuntimeToolRunPresentation.tsx`、`runtimeToolRunPresentationUtils.ts`、`runtimeToolRunChangeCounts.ts`：展示映射与共享解析。
 - `RuntimeToolRuns.tsx`：分组和 disclosure 编排。
 - `RuntimeFileChangesSummaryCard.tsx`：文件摘要、撤销状态和滚动计数。
-- `RuntimeHookRunDetails.tsx`：Hook lifecycle 展示。
+- `RuntimeHookRunDetails.tsx`：复用工具活动行展示 Hook 调用，命令与输出放在折叠详情中。
 - `RuntimeToolApprovalActions.tsx`：普通审批与 MCP elicitation。
 - `RuntimeShellToolRun.tsx`：Shell result 展示。
 
@@ -200,6 +200,8 @@ Enter / Shift+Enter 循环跳转，Esc 或关闭按钮清理观察器和高亮�
 工具摘要与命令标题只展示实际命令、文件等可读目标；读取命令输出时，没有命令信息就展示动作状态，不使用进程或会话 ID 补位。内部编号仅保留在按需展开的运行详情中。
 
 展示组件不解析任意工具原始 payload；审批、撤销和 Hook 等不同交互状态也不再共居于同一个协调组件。
+
+`conversation/activity/` 将插件使用与 Hook 调用放进同一工作时间线。Hook 的持久化 owner 不等于展示位置：用户消息上的生命周期 Hook、工具前后 Hook 和待归属 Hook 都按触发点显示为“调用了 hook 名称”，不在用户气泡下面或工具详情中重复挂卡片。首条助手消息生成前的活动由 `ChatTurnStartWork` 放在工作面板内；Hook 提前终止轮次时仍保留记录。独立压缩消息继续承载自己的 Hook 活动行。
 
 文件改动卡片的按钮在“撤销”和“重新应用”之间切换，传递本卡片对应的 tool-call IDs 和方向，经 `applyThreadFileChanges` 由 runtime 读取持久化工具结果和所属项目。工具 diff 单独保存原始文本的逆向修改、被替换的文本及修改前后内容 hash；折叠/截断后的展示 diff 不参与文件还原。撤销按操作逆序执行，重新应用按原顺序执行；Runtime 先校验全部文件，再通过同一个文件事务写入。任意文件在撤销后发生变化时，整批重新应用失败并弹窗报错，按钮保留原状态；活动回合和缺少所需文本的旧记录同样拒绝操作。该链路与 Review 的 Git“丢弃未暂存修改”独立，不能把文件路径交给 `discardUnstaged` 实现卡片撤销。
 

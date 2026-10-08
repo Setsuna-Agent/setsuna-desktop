@@ -194,7 +194,7 @@ function blockOrderIds(block: AssistantRunTimelineBlock): string[] {
 }
 
 function assistantWorkItemMessageId(item: AssistantWorkItem): string | undefined {
-  if (item.type === 'pluginUses') return item.messageId;
+  if (item.type === 'pluginUses' || item.type === 'hookRuns') return item.messageId;
   if (item.type === 'content') return item.segment.segment.id;
   if (item.type === 'contextCompaction') return item.message?.id;
   if (item.type === 'thinking') return item.segment.segment.id;

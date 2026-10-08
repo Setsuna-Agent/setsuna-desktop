@@ -1,6 +1,5 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
 import type {
-  RuntimeHookRun,
   RuntimeToolRun,
 } from '@setsuna-desktop/contracts';
 import type { ResolvedChatToolResult } from '@setsuna-desktop/renderer-contracts/chat';
@@ -42,11 +41,6 @@ import {
   resolveRuntimeFeatureToolResult,
   useRuntimeFeatureToolResultResolver,
 } from './runtimeFeatureToolResults.js';
-import {
-  GroupedHookRunList,
-  hasHookRuns,
-  HookRunList,
-} from './RuntimeHookRunDetails.js';
 import {
   McpElicitationActions,
   PermissionApprovalDetails,
@@ -170,15 +164,6 @@ export function RuntimeAssistantTailToolResults({ runs }: Readonly<{ runs: Runti
   );
 }
 
-export function RuntimeHookRuns({ runs }: { runs?: RuntimeHookRun[] }) {
-  if (!runs?.length) return null;
-  return (
-    <div className="chat-hook-runs">
-      <HookRunList runs={runs} />
-    </div>
-  );
-}
-
 function ToolRunDisclosure({
   autoOpenKey,
   children,
@@ -253,7 +238,7 @@ function ToolRunDisplayPanel({
       );
     }
   }
-  if (group.type === 'single' && isFileOperationRun(group.run) && !hasHookRuns(group.run)) {
+  if (group.type === 'single' && isFileOperationRun(group.run)) {
     if (fileOperationEntries([group.run]).length > 1) {
       return toolRunGroupPanelNode(
         { type: 'group', id: `${group.run.id}:files`, kind: 'fileMutation', runs: [group.run] },
@@ -264,7 +249,7 @@ function ToolRunDisplayPanel({
     }
     return <FileMutationRunRow run={group.run} nestedDetails={nestedDetails} onAnswerApproval={onAnswerApproval} />;
   }
-  if (group.type === 'single' && isFlatInspectionRun(group.run) && !hasHookRuns(group.run)) {
+  if (group.type === 'single' && isFlatInspectionRun(group.run)) {
     return <FlatToolRunRow run={group.run} nestedDetails={nestedDetails} />;
   }
   if (group.type === 'single') {
@@ -386,13 +371,11 @@ function toolRunGroupPanelNode(
         {group.kind === 'inspection' ? (
           <>
             <InspectionTargetList runs={group.runs} />
-            <GroupedHookRunList runs={group.runs} />
             <ToolRunGroupApprovals runs={group.runs} onAnswerApproval={onAnswerApproval} />
           </>
         ) : fileOperationGroup ? (
           <>
             <FileOperationTargetList runs={group.runs} />
-            <GroupedHookRunList runs={group.runs} />
             <ToolRunGroupApprovals runs={group.runs} onAnswerApproval={onAnswerApproval} />
           </>
         ) : shellGroup ? (
@@ -491,7 +474,6 @@ function renderMixedToolRunChildGroup(
     return (
       <div className="chat-tool-run__mixed-file-operation" key={toolRunDisplayStableKey(group)}>
         <FileOperationTargetList runs={runs} />
-        <GroupedHookRunList runs={runs} />
         <ToolRunGroupApprovals runs={runs} onAnswerApproval={onAnswerApproval} />
       </div>
     );
@@ -608,7 +590,6 @@ function FileMutationRunRow({
             onAnswerApproval={onAnswerApproval}
           />
           {error ? <div className="chat-tool-run__file-error">{error}</div> : null}
-          <HookRunList runs={run.hookRuns} />
           {nestedDetails}
         </div>
       </ToolRunDisclosure>
@@ -629,7 +610,6 @@ function FileMutationRunRow({
             onAnswerApproval={onAnswerApproval}
           />
           {error ? <div className="chat-tool-run__file-error">{error}</div> : null}
-          <HookRunList runs={run.hookRuns} />
           {nestedDetails}
         </div>
       </ToolRunDisclosure>
@@ -647,7 +627,6 @@ function FileMutationRunRow({
         onAnswerApproval={onAnswerApproval}
       />
       {error ? <div className="chat-tool-run__file-error">{error}</div> : null}
-      <HookRunList runs={run.hookRuns} />
     </div>
   );
 }
@@ -745,7 +724,6 @@ function ToolRunDetails({
   const execPolicySummary = execPolicyApprovalSummary(run);
   const permissionDetails = <PermissionApprovalDetails run={run} />;
   const networkSummary = networkApprovalSummary(run);
-  const hookRuns = <HookRunList runs={run.hookRuns} />;
   const approvalActions = run.userInput && pendingApprovalId
     ? <RuntimeUserInputActions approvalId={pendingApprovalId} run={run} onAnswerApproval={onAnswerApproval} />
     : run.elicitation && pendingApprovalId
@@ -764,7 +742,6 @@ function ToolRunDetails({
         {execPolicySummary ? <ToolPreview label={t('toolRun.preview.execPolicy')} value={execPolicySummary} /> : null}
         {networkSummary ? <ToolPreview label={t('toolRun.preview.network')} value={networkSummary} /> : null}
         {permissionDetails}
-        {hookRuns}
         {approvalActions}
       </>
     );
@@ -775,7 +752,6 @@ function ToolRunDetails({
         {execPolicySummary ? <ToolPreview label={t('toolRun.preview.execPolicy')} value={execPolicySummary} /> : null}
         {networkSummary ? <ToolPreview label={t('toolRun.preview.network')} value={networkSummary} /> : null}
         {permissionDetails}
-        {hookRuns}
         {approvalActions}
       </>
     );
@@ -794,7 +770,6 @@ function ToolRunDetails({
         {execPolicySummary ? <ToolPreview label={t('toolRun.preview.execPolicy')} value={execPolicySummary} /> : null}
         {networkSummary ? <ToolPreview label={t('toolRun.preview.network')} value={networkSummary} /> : null}
         {permissionDetails}
-        {hookRuns}
         {approvalActions}
       </>
     );
@@ -810,7 +785,6 @@ function ToolRunDetails({
         : run.status === 'rejected'
           ? 'toolRun.preview.rejected'
           : 'toolRun.preview.error')} value={diagnostic} /> : null}
-      {hookRuns}
       {approvalActions}
     </>
   );
@@ -822,7 +796,6 @@ function toolRunHasDetails(run: RuntimeToolRun, pendingApprovalId: string | unde
   if (run.proposedExecPolicyAmendment?.length) return true;
   if (run.networkApprovalContext) return true;
   if (run.permissionApprovalContext) return true;
-  if (run.hookRuns?.length) return true;
   if (run.approvalReviewAssessment?.status === 'denied') return true;
   return Boolean(displayedGenericToolRunDiagnostic(run, t));
 }

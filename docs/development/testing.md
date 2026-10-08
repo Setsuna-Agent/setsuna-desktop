@@ -56,12 +56,12 @@ pnpm test
 先确认 package script 和 Vitest config，再从已有命令派生：
 
 ```bash
-pnpm test:unit -- packages/contracts/test/thread-events.test.ts
-pnpm test:unit -- apps/desktop/renderer/test/unit/services/runtime-client/client.test.ts
-pnpm test:integration -- packages/desktop-runtime/test/integration/agent-loop/queued-turn-inputs.test.ts
+pnpm test:unit packages/contracts/test/thread-events.test.ts
+pnpm test:unit apps/desktop/renderer/test/unit/services/runtime-client/client.test.ts
+pnpm test:integration packages/desktop-runtime/test/integration/agent-loop/queued-turn-inputs.test.ts
 ```
 
-保留 pnpm、runner 和 config，不直接用 `npx vitest`。
+保留 pnpm、runner 和 config，不直接用 `npx vitest`。文件过滤器直接跟在 script 后面；不要额外插入 `--`，当前 runner 会因此忽略文件过滤并运行全套。
 
 ## 模块对应
 
@@ -151,6 +151,9 @@ pnpm benchmark:feature-projection -- --events=10000,50000,100000 --runs=3
 - Cleanup 放 `finally/afterEach`。
 - 不依赖用户 home、全局 Git config、系统 rg 或现有数据根。
 - 时间、ID、provider、port 尽量注入 fake。
+- 下一步依赖哪个状态，就等待那个状态：消息完成不代表 turn task 已退出；连续启动轮次或修改历史使用 harness 的 `waitForCompletedTurn`。
+- 取消/迟到回复测试先通过信号确认目标处理函数已进入，再触发取消；不要用固定 sleep 猜测子进程启动进度。
+- 调度器测试显式推进受控时钟，保留真实 HTTP/文件 I/O；事件流读取先消费已有缓冲，超时后复用未完成的读取，并清理定时器。
 - 同时测试失败/取消/recovery，不只 happy path。
 
 ## 文档-only 交付

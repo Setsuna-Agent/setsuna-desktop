@@ -350,10 +350,7 @@ describe('runtime server AppServer thread lifecycle', () => {
         threadId: startedThread.thread.id,
         input: [{ type: 'text', text: 'First local smoke response.' }],
       });
-      await harness.waitForThread(
-        startedThread.thread.id,
-        (item) => item.messages.some((message) => message.turnId === firstTurn.turn.id && message.role === 'assistant' && message.status === 'complete'),
-      );
+      await harness.waitForCompletedTurn(startedThread.thread.id, firstTurn.turn.id);
       let releaseFinalization!: () => void;
       const finalizationGate = new Promise<void>((resolve) => { releaseFinalization = resolve; });
       let finalizationStarted!: () => void;
@@ -380,6 +377,7 @@ describe('runtime server AppServer thread lifecycle', () => {
           threadId: startedThread.thread.id,
           input: [{ type: 'text', text: 'Second local smoke response.' }],
         });
+        expect(secondTurn).toMatchObject({ turn: { id: expect.any(String) } });
         await finalizing;
         if (alreadyCancelled) {
           await harness.appServerRpc('turn/interrupt', {

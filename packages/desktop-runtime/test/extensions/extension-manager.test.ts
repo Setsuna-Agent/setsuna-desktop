@@ -98,7 +98,8 @@ describe('extension manager', () => {
         toolCallId: 'call_blocked',
         signal: abort.signal,
       });
-      setTimeout(() => abort.abort(new Error('cancelled by test')), 30);
+      await expect.poll(() => readFile(fixture.startedPath, 'utf8'), { timeout: 5_000 }).toContain('blocked');
+      abort.abort(new Error('cancelled by test'));
       await expect(execution).rejects.toThrow('cancelled by test');
       await expect(manager.listStatuses()).resolves.toMatchObject({
         extensions: [{ pluginId: 'worker-demo', state: 'stopped' }],
@@ -138,7 +139,8 @@ describe('extension manager', () => {
         signal: abort.signal,
         payload: { input: 'cancel me' },
       });
-      setTimeout(() => abort.abort(new Error('lifecycle cancelled by test')), 30);
+      await expect.poll(() => readFile(fixture.startedPath, 'utf8'), { timeout: 5_000 }).toContain('prompt.before');
+      abort.abort(new Error('lifecycle cancelled by test'));
 
       await expect(dispatch).rejects.toThrow('lifecycle cancelled by test');
       await expect(manager.listStatuses()).resolves.toMatchObject({
@@ -152,6 +154,8 @@ describe('extension manager', () => {
 
   it('ignores a host UI reply that arrives after its parent request is cancelled', async () => {
     const fixture = await extensionFixture({ includeDelayedUiTool: true });
+    let notifyUiStarted!: () => void;
+    const uiStarted = new Promise<void>((resolve) => { notifyUiStarted = resolve; });
     let resolveUi!: (value: unknown) => void;
     const delayedUi = new Promise<unknown>((resolve) => {
       resolveUi = resolve;
@@ -163,7 +167,7 @@ describe('extension manager', () => {
         set: vi.fn(async () => undefined),
         delete: vi.fn(async () => undefined),
       },
-      { handle: vi.fn(async () => delayedUi) },
+      { handle: vi.fn(async () => { notifyUiStarted(); return delayedUi; }) },
     );
     try {
       const tools = await manager.listTools({ threadId: 'thread_1' });
@@ -175,11 +179,11 @@ describe('extension manager', () => {
         toolCallId: 'call_delayed_ui',
         signal: abort.signal,
       });
-      setTimeout(() => abort.abort(new Error('cancelled while waiting for UI')), 30);
+      await uiStarted;
+      abort.abort(new Error('cancelled while waiting for UI'));
       await expect(execution).rejects.toThrow('cancelled while waiting for UI');
 
       resolveUi(true);
-      await new Promise((resolve) => setTimeout(resolve, 50));
       const restartedTools = await manager.listTools({ threadId: 'thread_1' });
       const echo = restartedTools.find((tool) => tool.localName === 'echo')!;
       await expect(manager.runTool(echo.name, { text: 'still-alive' }, {
@@ -226,17 +230,22 @@ describe('extension manager', () => {
     try {
       const tools = await manager.listTools({ threadId: 'thread_1' });
       const delayed = tools.find((tool) => tool.localName === 'delayed-ui')!;
+      // Freeze only parent request deadlines; child-process I/O remains real.
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       const execution = manager.runTool(delayed.name, {}, {
         threadId: 'thread_1',
         turnId: 'turn_1',
         toolCallId: 'call_delayed_ui',
       });
+      const rejected = expect(execution).rejects.toThrow('timed out after 75ms');
       const signal = await uiStarted;
+      await vi.advanceTimersByTimeAsync(75);
 
-      await expect(execution).rejects.toThrow('timed out after 75ms');
+      await rejected;
       expect(signal.aborted).toBe(true);
       expect(signal.reason).toEqual(expect.objectContaining({ message: 'Extension request timed out after 75ms.' }));
     } finally {
+      vi.useRealTimers();
       await manager.shutdown();
       await rm(fixture.root, { recursive: true, force: true });
     }
@@ -432,9 +441,8 @@ describe('extension manager', () => {
 
     try {
       await expect(manager.listTools({ threadId: 'thread_1' })).resolves.not.toEqual([]);
-      await new Promise((resolve) => setTimeout(resolve, 150));
-
-      await expect(manager.listStatuses()).resolves.toMatchObject({
+      await writeFile(fixture.exitPath, 'exit');
+      await expect.poll(() => manager.listStatuses()).toMatchObject({
         extensions: [{
           pluginId: 'worker-demo',
           state: 'failed',

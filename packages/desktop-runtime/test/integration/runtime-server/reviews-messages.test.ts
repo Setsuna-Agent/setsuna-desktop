@@ -233,7 +233,7 @@ describe('runtime server reviews and message mutations', () => {
           skillReferences: [{ skillId: 'skill_http', start: 0, end: 'Skill HTTP'.length }],
         }),
       });
-      const populated = await harness.waitForThread(thread.id, (item) => item.messages.some((message) => message.role === 'assistant' && message.status === 'complete'));
+      const populated = await harness.waitForThread(thread.id, (item) => !item.activeTurnId && item.messages.some((message) => message.role === 'assistant' && message.status === 'complete'));
       const userMessage = populated.messages.find((message) => message.role === 'user');
       const assistantMessage = populated.messages.find((message) => message.role === 'assistant');
   
