@@ -24,7 +24,7 @@ it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('preser
     const result = await promisify(execFile)(electron as unknown as string, [output, root, path.join(root, 'document.cjs')], {
       env, windowsHide: true, timeout: 30_000, maxBuffer: 1024 * 1024,
     });
-    expect(result.stdout).toContain('SANDBOX_DIALOGS_PASSED');
+    expect(result.stdout, result.stderr).toContain('SANDBOX_DIALOGS_PASSED');
   } finally {
     await rm(root, { recursive: true, force: true });
   }
