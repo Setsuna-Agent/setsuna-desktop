@@ -72,8 +72,10 @@ export class AutomationService {
 
   async snapshot(): Promise<AutomationSnapshot> {
     await this.pending;
+    // Capture settled state before context loading can overlap the next dispatch's reservation.
+    const state = structuredClone(this.state);
     const [models, projects] = await Promise.all([this.host.listModels(), this.host.listProjects()]);
-    return { ...structuredClone(this.state), models, projects };
+    return { ...state, models, projects };
   }
 
   createConversation(): Promise<{ threadId: string }> {

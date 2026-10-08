@@ -73,6 +73,38 @@ describe('local scheduled conversations', () => {
     });
   });
 
+  it('returns settled tasks when scheduling context loads across a dispatch reservation', async () => {
+    const f = await fixture();
+    const task = await f.service.create('conversation_1', f.draft);
+    const models = await f.host.listModels();
+    let finishModels: () => void = () => undefined;
+    const modelsReady = new Promise<void>((resolve) => { finishModels = resolve; });
+    const listModels = vi.spyOn(f.host, 'listModels').mockImplementationOnce(async () => {
+      await modelsReady;
+      return models;
+    });
+    let finishExecution: (threadId: string) => void = () => undefined;
+    vi.mocked(f.host.createExecutionThread).mockImplementationOnce(() => new Promise((resolve) => { finishExecution = resolve; }));
+
+    const snapshot = f.service.snapshot();
+    await vi.waitFor(() => expect(listModels).toHaveBeenCalledOnce());
+    f.advance('2026-09-30T00:10:00Z');
+    const dispatch = f.service.tick();
+    try {
+      await vi.waitFor(() => expect(f.host.createExecutionThread).toHaveBeenCalledOnce());
+      finishModels();
+      expect((await snapshot).tasks).toEqual([task]);
+    } finally {
+      finishModels();
+      finishExecution('execution_1');
+      await dispatch;
+    }
+    expect((await f.service.snapshot()).tasks[0]).toMatchObject({
+      executionThreadId: 'execution_1',
+      runs: [{ threadId: 'execution_1', turnId: expect.any(String), status: 'running' }],
+    });
+  });
+
   it('counts running and queued mutations until every durable operation settles, including rejection', async () => {
     const f = await fixture();
     const task = await f.service.create('conversation_1', f.draft);
