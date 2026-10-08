@@ -3,6 +3,7 @@ import readline from 'node:readline';
 const input = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
 const pending = new Map();
 let statefulCalls = 0;
+let cancelledCalls = 0;
 
 function send(message) {
   process.stdout.write(`${JSON.stringify(message)}\n`);
@@ -59,7 +60,7 @@ input.on('line', (line) => {
     send({
       jsonrpc: '2.0',
       id,
-      result: { contents: [{ uri: params.uri, mimeType: 'text/plain', text: `read ${params.uri}` }] },
+      result: { contents: [{ uri: params.uri, mimeType: 'text/plain', text: params.uri === 'memo://slow-status' ? JSON.stringify({ pending: pending.size, cancelled: cancelledCalls }) : `read ${params.uri}` }] },
     });
     return;
   }
@@ -85,6 +86,7 @@ input.on('line', (line) => {
     if (timer) {
       clearTimeout(timer);
       pending.delete(params.requestId);
+      cancelledCalls += 1;
     }
   }
 });

@@ -109,9 +109,11 @@ describe('McpOAuthCoordinator', () => {
 
   it('coalesces concurrent refresh token requests', async () => {
     let refreshCount = 0;
+    let releaseResponse!: () => void;
+    const responseGate = new Promise<void>((resolve) => { releaseResponse = resolve; });
     const server = createServer(async (_request, response) => {
       refreshCount += 1;
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await responseGate;
       response.writeHead(200, { 'Content-Type': 'application/json' });
       response.end(JSON.stringify({ access_token: 'refreshed', token_type: 'Bearer' }));
     });
@@ -129,16 +131,21 @@ describe('McpOAuthCoordinator', () => {
     ).fetchFor('docs');
     const body = new URLSearchParams({ grant_type: 'refresh_token', refresh_token: 'refresh' });
 
+    const responses = Promise.all([
+      fetchFn(`http://127.0.0.1:${address.port}/token`, { body, method: 'POST' }),
+      fetchFn(`http://127.0.0.1:${address.port}/token`, { body, method: 'POST' }),
+    ]);
     try {
-      const [first, second] = await Promise.all([
-        fetchFn(`http://127.0.0.1:${address.port}/token`, { body, method: 'POST' }),
-        fetchFn(`http://127.0.0.1:${address.port}/token`, { body, method: 'POST' }),
-      ]);
+      await expect.poll(() => refreshCount).toBe(1);
+      releaseResponse();
+      const [first, second] = await responses;
       await expect(first.json()).resolves.toMatchObject({ access_token: 'refreshed' });
       await expect(second.json()).resolves.toMatchObject({ access_token: 'refreshed' });
       expect(refreshCount).toBe(1);
       expect(routedFetchCount).toBe(1);
     } finally {
+      releaseResponse();
+      await responses.catch(() => undefined);
       await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     }
   });

@@ -135,12 +135,17 @@ export async function readRequestText(request: IncomingMessage): Promise<string>
 }
 
 export async function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
-  return Promise.race([
-    promise,
-    sleep(ms).then(() => {
-      throw new Error(message);
-    }),
-  ]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function sleep(ms: number): Promise<void> {

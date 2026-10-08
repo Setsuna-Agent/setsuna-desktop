@@ -166,12 +166,17 @@ describe('bundled media extensions', () => {
   });
 
   it('lets vision recognition outlive the generic extension timeout', async () => {
+    let notifyStarted!: () => void;
+    const started = new Promise<void>((resolve) => { notifyStarted = resolve; });
+    let releaseAnalysis!: () => void;
+    const analysisGate = new Promise<void>((resolve) => { releaseAnalysis = resolve; });
     const root = path.resolve('plugins/openai-vision-recognition');
     const manager = await extensionManager(root, {
       visionRecognition: {
         isAvailable: async () => true,
         analyze: async () => {
-          await new Promise((resolve) => setTimeout(resolve, 50));
+          notifyStarted();
+          await analysisGate;
           return {
             content: 'Slow but healthy vision result.',
             attachmentId: 'attachment_asset_1',
@@ -191,13 +196,20 @@ describe('bundled media extensions', () => {
 
     try {
       await host.listTools(context);
-      await expect(host.runTool(OPENAI_VISION_RECOGNITION_TOOL_NAME, {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const completed = expect(host.runTool(OPENAI_VISION_RECOGNITION_TOOL_NAME, {
         attachment_id: 'attachment_asset_1',
         prompt: 'Describe the dialog.',
       }, context)).resolves.toMatchObject({
         content: expect.stringContaining('Slow but healthy vision result.'),
       });
+      await started;
+      await vi.advanceTimersByTimeAsync(50);
+      releaseAnalysis();
+      await completed;
     } finally {
+      releaseAnalysis();
+      vi.useRealTimers();
       await manager.shutdown();
     }
   });

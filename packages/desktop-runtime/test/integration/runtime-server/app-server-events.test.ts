@@ -101,7 +101,7 @@ describe('runtime server AppServer events and shell turns', () => {
         method: 'POST',
         body: JSON.stringify({ input: 'Write a local smoke response.' }),
       });
-      const populated = await harness.waitForThread(thread.id, (item) => item.messages.some((message) => message.role === 'assistant' && message.status === 'complete'));
+      const populated = await harness.waitForThread(thread.id, (item) => !item.activeTurnId && item.messages.some((message) => message.role === 'assistant' && message.status === 'complete'));
   
       const cleared = await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/context`, { method: 'DELETE' });
       const hasClearedEvent = await harness.readRuntimeEvent(thread.id, populated.lastSeq, 'thread.context_cleared');
@@ -223,7 +223,7 @@ describe('runtime server AppServer events and shell turns', () => {
       });
       await harness.waitForThread(
         thread.id,
-        (item) => item.messages.some((message) => message.role === 'assistant' && message.status === 'complete'),
+        (item) => !item.activeTurnId && item.messages.some((message) => message.role === 'assistant' && message.status === 'complete'),
       );
   
       await expect(harness.appServerRpc('thread/compact/start', { threadId: thread.id })).resolves.toEqual({});

@@ -119,10 +119,7 @@ describe('runtime server AppServer catalog and thread listing', () => {
         },
       });
   
-      await harness.waitForThread(
-        startedThread.thread.id,
-        (item) => item.messages.some((message) => message.turnId === startedTurn.turn.id && message.role === 'assistant' && message.status === 'complete'),
-      );
+      await harness.waitForCompletedTurn(startedThread.thread.id, startedTurn.turn.id);
       const read = await harness.appServerRpc('thread/read', { threadId: startedThread.thread.id, includeTurns: true });
       expect(read.thread.turns).toEqual([expect.objectContaining({
         id: startedTurn.turn.id,
@@ -214,10 +211,7 @@ describe('runtime server AppServer catalog and thread listing', () => {
         model: 'app-model-a-code',
       });
       await expect(providerA.nextBody).resolves.toMatchObject({ model: 'app-model-a-code' });
-      await harness.waitForThread(
-        startedThread.thread.id,
-        (thread) => thread.turns?.some((turn) => turn.id === first.turn.id && turn.status === 'completed') === true,
-      );
+      await harness.waitForCompletedTurn(startedThread.thread.id, first.turn.id);
 
       const second = await harness.appServerRpc('turn/start', {
         threadId: startedThread.thread.id,
@@ -225,10 +219,7 @@ describe('runtime server AppServer catalog and thread listing', () => {
         model: 'app-model-b-code',
       });
       await expect(providerB.nextBody).resolves.toMatchObject({ model: 'app-model-b-code' });
-      const switched = await harness.waitForThread(
-        startedThread.thread.id,
-        (thread) => thread.turns?.some((turn) => turn.id === second.turn.id && turn.status === 'completed') === true,
-      );
+      const switched = await harness.waitForCompletedTurn(startedThread.thread.id, second.turn.id);
 
       expect(switched.modelBinding).toEqual({
         providerId: 'app-provider-b',
@@ -259,18 +250,12 @@ describe('runtime server AppServer catalog and thread listing', () => {
         threadId: startedThread.thread.id,
         input: [{ type: 'text', text: 'First paged turn.' }],
       });
-      await harness.waitForThread(
-        startedThread.thread.id,
-        (item) => item.messages.some((message) => message.turnId === firstTurn.turn.id && message.role === 'assistant' && message.status === 'complete'),
-      );
+      await harness.waitForCompletedTurn(startedThread.thread.id, firstTurn.turn.id);
       const secondTurn = await harness.appServerRpc('turn/start', {
         threadId: startedThread.thread.id,
         input: [{ type: 'text', text: 'Second paged turn.' }],
       });
-      await harness.waitForThread(
-        startedThread.thread.id,
-        (item) => item.messages.some((message) => message.turnId === secondTurn.turn.id && message.role === 'assistant' && message.status === 'complete'),
-      );
+      await harness.waitForCompletedTurn(startedThread.thread.id, secondTurn.turn.id);
   
       const newestPage = await harness.appServerRpc('thread/turns/list', {
         threadId: startedThread.thread.id,

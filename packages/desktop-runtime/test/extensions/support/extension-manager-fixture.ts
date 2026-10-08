@@ -20,6 +20,8 @@ export async function extensionFixture(options: {
   includeRendererUiCard?: boolean;
 } = {}): Promise<{
   activationPath: string;
+  startedPath: string;
+  exitPath: string;
   entryPath: string;
   record: InstalledPluginRecord;
   root: string;
@@ -29,6 +31,9 @@ export async function extensionFixture(options: {
   const entryDirectory = path.join(pluginRoot, 'extension');
   const entryPath = path.join(entryDirectory, 'entry.mjs');
   const activationPath = path.join(root, 'activations.log');
+  const startedPath = path.join(root, 'started.log');
+  const exitPath = path.join(root, 'exit');
+  await writeFile(startedPath, '', 'utf8');
   const failOncePath = path.join(root, 'fail-once');
   await mkdir(entryDirectory, { recursive: true });
   if (options.failFirstActivation) await writeFile(failOncePath, '1', 'utf8');
@@ -71,7 +76,7 @@ export default function activate(api) {
       }
     }
   });` : ''}
-  ${options.exitAfterActivation ? 'setTimeout(() => process.exit(17), 50);' : ''}
+  ${options.exitAfterActivation ? `setInterval(() => { if (existsSync(${JSON.stringify(exitPath)})) process.exit(17); }, 10);` : ''}
   api.registerTool({
     name: 'echo',
     description: 'Echo a value and update state.',
@@ -93,6 +98,7 @@ export default function activate(api) {
     description: 'Ignore cancellation while blocking the worker event loop.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     execute() {
+      appendFileSync(${JSON.stringify(startedPath)}, 'blocked\\n');
       for (;;) { /* deliberately CPU-bound for cancellation recovery coverage */ }
     },
   });
@@ -202,6 +208,7 @@ export default function activate(api) {
   ${options.includePendingEvent ? `api.on('prompt.before', (_payload, context) => (
     new Promise((_resolve, reject) => {
       context.signal.addEventListener('abort', () => reject(context.signal.reason), { once: true });
+      appendFileSync(${JSON.stringify(startedPath)}, 'prompt.before\\n');
     })
   ));` : ''}
   ${options.includeRendererUiAction ? `api.onUiAction('profile.save', async (input, context) => {
@@ -247,6 +254,8 @@ export default function activate(api) {
   const { bundleHash } = await inspectBundleTree(pluginRoot);
   return {
     activationPath,
+    startedPath,
+    exitPath,
     entryPath,
     root,
     record: {

@@ -1,3 +1,4 @@
+import { createAppServerNotificationReader, createRuntimeEventReader } from './event-stream.js';
 import type { RuntimeThread } from '@setsuna-desktop/contracts';
 import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -330,9 +331,9 @@ export async function createRuntimeServerTestHarness() {
       predicate: (thread: RuntimeThread) => boolean,
       timeoutMs = threadStateWaitTimeoutMs,
     ): Promise<RuntimeThread> {
-      const deadline = Date.now() + timeoutMs;
+      const deadline = performance.now() + timeoutMs;
       let lastThread: RuntimeThread | undefined;
-      while (Date.now() < deadline) {
+      while (performance.now() < deadline) {
         const currentThread = (await runtimeFetch(`/v1/threads/${encodeURIComponent(threadId)}`)) as RuntimeThread;
         lastThread = currentThread;
         if (predicate(currentThread)) return currentThread;
@@ -340,6 +341,12 @@ export async function createRuntimeServerTestHarness() {
       }
       throw new Error(`Timed out waiting for thread state: ${JSON.stringify(lastThread)}`);
     }
+  function waitForCompletedTurn(threadId: string, turnId: string): Promise<RuntimeThread> {
+    // Message/turn events are persisted before the task leaves the registry.
+    // Callers starting another turn or mutating history must wait for both.
+    return waitForThread(threadId, (thread) => !thread.activeTurnId
+      && thread.turns?.some((turn) => turn.id === turnId && turn.status === 'completed') === true);
+  }
   async function readRuntimeEvent(
       threadId: string,
       sinceSeq: number,
@@ -378,24 +385,12 @@ export async function createRuntimeServerTestHarness() {
       if (!response.ok) throw new Error(await response.text());
       if (!response.body) throw new Error('Expected runtime event response body');
   
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
+      const stream = createRuntimeEventReader(response.body.getReader(), eventStreamTimeoutMs);
       return {
-        async readContains(needle, readOptions = {}) {
-          const deadline = Date.now() + (readOptions.timeoutMs ?? eventStreamTimeoutMs);
-          while (Date.now() < deadline) {
-            const result = await Promise.race([reader.read(), sleep(Math.max(1, deadline - Date.now())).then(() => null)]);
-            if (!result) break;
-            if (result.done) break;
-            buffer += decoder.decode(result.value, { stream: true });
-            if (buffer.includes(needle)) return true;
-          }
-          return false;
-        },
+        ...stream,
         async close() {
           controller.abort();
-          await reader.cancel().catch(() => undefined);
+          await stream.close().catch(() => undefined);
         },
       };
     }
@@ -414,22 +409,12 @@ export async function createRuntimeServerTestHarness() {
       if (!response.ok) throw new Error(await response.text());
       if (!response.body) throw new Error('Expected app-server notification response body');
   
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      const deadline = Date.now() + (options.timeoutMs ?? eventStreamTimeoutMs);
+      const stream = createRuntimeEventReader(response.body.getReader(), eventStreamTimeoutMs);
       try {
-        while (Date.now() < deadline) {
-          const result = await Promise.race([reader.read(), sleep(deadline - Date.now()).then(() => null)]);
-          if (!result) break;
-          if (result.done) break;
-          buffer += decoder.decode(result.value, { stream: true });
-          if (buffer.includes(needle)) return true;
-        }
-        return false;
+        return await stream.readContains(needle, options);
       } finally {
         controller.abort();
-        await reader.cancel().catch(() => undefined);
+        await stream.close().catch(() => undefined);
       }
     }
   async function readAppServerNotificationDecodedOutputContains(
@@ -458,64 +443,12 @@ export async function createRuntimeServerTestHarness() {
       if (!response.ok) throw new Error(await response.text());
       if (!response.body) throw new Error('Expected app-server notification response body');
   
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let eventBuffer = '';
-      let output = '';
-      let pendingRead: Promise<ReadableStreamReadResult<Uint8Array>> | null = null;
-      const readNextChunk = async (deadline: number): Promise<ReadableStreamReadResult<Uint8Array> | null> => {
-        if (!pendingRead) pendingRead = reader.read();
-        const result = await Promise.race([pendingRead, sleep(Math.max(1, deadline - Date.now())).then(() => null)]);
-        if (!result) return null;
-        pendingRead = null;
-        return result;
-      };
-      const readNotification = async (
-        predicate: (notification: AppServerStreamNotification) => boolean,
-        readOptions: { timeoutMs?: number } = {},
-      ): Promise<AppServerStreamNotification | null> => {
-        const deadline = Date.now() + (readOptions.timeoutMs ?? eventStreamTimeoutMs);
-        while (Date.now() < deadline) {
-          const result = await readNextChunk(deadline);
-          if (!result) break;
-          if (result.done) break;
-          eventBuffer += decoder.decode(result.value, { stream: true });
-          let separator = eventBuffer.indexOf('\n\n');
-          while (separator !== -1) {
-            const rawEvent = eventBuffer.slice(0, separator);
-            eventBuffer = eventBuffer.slice(separator + 2);
-            separator = eventBuffer.indexOf('\n\n');
-            const data = rawEvent
-              .split('\n')
-              .filter((line) => line.startsWith('data: '))
-              .map((line) => line.slice('data: '.length))
-              .join('\n');
-            if (!data) continue;
-            const notification = JSON.parse(data) as AppServerStreamNotification;
-            if (predicate(notification)) return notification;
-          }
-        }
-        return null;
-      };
+      const stream = createAppServerNotificationReader(response.body.getReader(), eventStreamTimeoutMs);
       return {
-        async readDecodedOutputContains(method, idKey, idValue, needle, readOptions = {}) {
-          const deadline = Date.now() + (readOptions.timeoutMs ?? eventStreamTimeoutMs);
-          while (Date.now() < deadline) {
-            const notification = await readNotification((item) => (
-              item.method === method
-              && item.params?.[idKey] === idValue
-              && typeof item.params.deltaBase64 === 'string'
-            ), { timeoutMs: Math.max(1, deadline - Date.now()) });
-            if (!notification || typeof notification.params?.deltaBase64 !== 'string') break;
-            output += Buffer.from(notification.params.deltaBase64, 'base64').toString('utf8');
-            if (output.includes(needle)) return true;
-          }
-          return false;
-        },
-        readNotification,
+        ...stream,
         async close() {
           controller.abort();
-          await reader.cancel().catch(() => undefined);
+          await stream.close().catch(() => undefined);
         },
       };
     }
@@ -573,6 +506,7 @@ export async function createRuntimeServerTestHarness() {
     appServerRpcEnvelope,
     appServerRpcResponseEnvelope,
     waitForThread,
+    waitForCompletedTurn,
     readRuntimeEvent,
     readEventStreamContains,
     openRuntimeEventStream,

@@ -566,7 +566,7 @@ packages/features/ — 0 direct / 1437 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 632 total files
+packages/desktop-runtime/ — 4 direct / 634 total files
 ├── src/ — 2 direct / 369 total files
 │   ├── adapters/ — 154 files
 │   │   ├── approval/ — 1 direct / 1 total files
@@ -607,7 +607,7 @@ packages/desktop-runtime/ — 4 direct / 632 total files
 │   │   └── app-server/ — 23 direct / 23 total files
 │   ├── shared/ — 3 direct / 3 total files
 │   └── utils/ — 8 direct / 8 total files
-└── test/ — 259 files
+└── test/ — 261 files
     ├── adapters/ — 69 files
     │   ├── approval/ — 1 direct / 1 total files
     │   ├── feature/ — 1 direct / 1 total files
@@ -655,9 +655,9 @@ packages/desktop-runtime/ — 4 direct / 632 total files
     ├── server/ — 7 direct / 12 total files
     │   └── app-server/ — 5 direct / 5 total files
     ├── shared/ — 2 direct / 2 total files
-    ├── support/ — 4 direct / 43 total files
+    ├── support/ — 4 direct / 45 total files
     │   ├── agent-loop/ — 22 direct / 22 total files
-    │   └── runtime-server/ — 17 direct / 17 total files
+    │   └── runtime-server/ — 19 direct / 19 total files
     └── utils/ — 3 direct / 3 total files
 ```
 

@@ -106,8 +106,15 @@ describe('SdkMcpConnectionManager', () => {
 
       const cancellation = new AbortController();
       const slowCall = manager.callTool(server, 'slow', {}, { ...context, signal: cancellation.signal });
-      setTimeout(() => cancellation.abort(), 20);
-      await expect(slowCall).rejects.toMatchObject({ name: 'AbortError' });
+      const rejected = expect(slowCall).rejects.toMatchObject({ name: 'AbortError' });
+      const slowStatus = async () => {
+        const result = await manager.readResource(server, 'memo://slow-status', context);
+        return JSON.parse(String(result.contents[0].text));
+      };
+      await expect.poll(slowStatus).toEqual({ pending: 1, cancelled: 0 });
+      cancellation.abort();
+      await rejected;
+      await expect.poll(slowStatus).toEqual({ pending: 0, cancelled: 1 });
       await expect(manager.callTool(server, 'stateful', {}, context)).resolves.toMatchObject({
         content: [{ type: 'text', text: 'stateful call 3' }],
       });
