@@ -132,6 +132,8 @@ jobs:
           RUN_WITH_LOG_TIMEOUT_MINUTES: "25"
         run: |
           pnpm build:contracts
+          # Electron fixtures resolve workspace Feature exports outside Vitest aliases.
+          pnpm build:features
           node scripts/run-with-log.mjs release-logs/test-integration.log pnpm test:integration
 
       - uses: actions/upload-artifact@v4
