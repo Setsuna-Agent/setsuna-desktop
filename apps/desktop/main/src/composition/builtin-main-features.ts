@@ -20,6 +20,7 @@ import {
   browserControlConnectionCapability,
   browserMainFeature,
   browserMainHostCapability,
+  registerExtensionFaviconScheme,
 } from '@setsuna-desktop/feature-browser/main';
 import {
   networkProxyMainFeature,
@@ -94,6 +95,11 @@ const mainFeatures = defineMainFeatureHost({
   ],
   optional: [],
 });
+
+/** Protocol privileges must be declared before Electron creates any renderer or worker. */
+export function registerBuiltinMainFeatureSchemes(): void {
+  registerExtensionFaviconScheme();
+}
 
 export type ActivatedBuiltinMainFeatures = Readonly<{
   browserControl: BrowserControlConnection;

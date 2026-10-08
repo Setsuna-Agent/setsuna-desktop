@@ -50,12 +50,12 @@
   </label>
   <p id="save-error" class="sa-error" role="alert" hidden></p>
   <div class="sa-toolbar">
-    <button id="save-record" type="button" class="sa-button sa-button--primary">保存</button>
+    <button id="save-record" type="submit" class="sa-button sa-button--primary">保存</button>
   </div>
 </form>
 ```
 
-沙箱禁止原生表单提交。保存按钮的 handler 先调用 `form.reportValidity()`，再读取 `FormData`、校验并调用已声明的 `setsunaUI.invoke`。阻止 form 的原生 submit，需要支持回车时走同一保存函数。pending 时禁用保存按钮，错误时保留草稿，不因主题快照重建表单。
+表单支持正常的 `submit` 事件和原生 HTTP(S) 提交。通过 `setsunaUI.invoke` 保存本地数据时，在 form 的 `submit` handler 中调用 `event.preventDefault()`，再读取 `FormData`、校验并保存；点击提交按钮和输入框回车共用这条路径，`required` 等原生校验正常生效。需要向服务端提交时按应用需求声明 `action` 与 `method`。pending 时禁用保存按钮，错误时保留草稿，不因主题快照重建表单。
 
 ## ECharts
 

@@ -1,6 +1,7 @@
 import { ipcMain, type Extension, type IpcMainEvent, type IpcMainInvokeEvent, type IpcMainServiceWorkerEvent, type IpcMainServiceWorkerInvokeEvent, type Session, type WebContents } from 'electron';
 import type { ExtensionApiResult } from '../../contracts/extension-api.js';
 import { startExtensionWorker } from './worker-startup.js';
+import { observeExtensionContents } from './contents-lifecycle.js';
 
 export interface ExtensionEndpoint<T> { key: string; send(event: T): void; hold(): () => void }
 
@@ -8,7 +9,7 @@ type ContextEvent = IpcMainEvent | IpcMainInvokeEvent | IpcMainServiceWorkerEven
 type Context<T> = ExtensionEndpoint<T> & { extensionId: string; contents?: WebContents; alive(): boolean; dispose(): void };
 type Options = {
   channels: { bootstrap: string; call: string; event: string };
-  bootstrap(extension: Extension): unknown | null;
+  bootstrap(extension: Extension, key: string): unknown | null;
   session: Session; resolve(url: string): Extension | null;
   call(extension: Extension, key: string, method: string, args: unknown[]): Promise<unknown>;
   closed?(key: string): void;
@@ -77,7 +78,7 @@ export class ExtensionContexts<T> {
       const extension = this.options.resolve(event.serviceWorker.scriptURL);
       return extension ? { extension, key: `worker:${event.versionId}` } : null;
     }
-    if (event.sender.session !== this.options.session || !event.senderFrame || event.senderFrame.isDestroyed()) return null;
+    if (event.sender.isDestroyed() || event.sender.session !== this.options.session || !event.senderFrame || event.senderFrame.isDestroyed()) return null;
     const frame = event.senderFrame;
     const extension = this.options.resolve(frame.url);
     return extension ? { extension, key: `frame:${frame.processId}:${frame.routingId}` } : null;
@@ -85,7 +86,8 @@ export class ExtensionContexts<T> {
 
   private readonly bootstrap = (event: IpcMainEvent | IpcMainServiceWorkerEvent) => {
     const resolved = this.context(event);
-    const result = resolved ? this.options.bootstrap(resolved.extension) : null;
+    if (resolved) this.forget(resolved.key);
+    const result = resolved ? this.options.bootstrap(resolved.extension, resolved.key) : null;
     if (resolved && result !== null) {
       const { extension, key } = resolved;
       const frame = event.type === 'frame' ? event.senderFrame : null;
@@ -95,12 +97,11 @@ export class ExtensionContexts<T> {
         : frame && !frame.isDestroyed() && this.options.resolve(frame.url)?.id === extension.id);
       const changed = () => { if (!alive()) this.forget(key); };
       const destroyed = () => this.forget(key);
-      this.forget(key);
-      contents?.on('did-frame-navigate', changed).once('destroyed', destroyed);
+      const unobserve = contents ? observeExtensionContents(contents, { changed, destroyed }) : () => undefined;
       this.contexts.set(key, {
         key, extensionId: extension.id,
         ...(contents ? { contents } : {}), alive,
-        dispose: () => { contents?.off('did-frame-navigate', changed).off('destroyed', destroyed); },
+        dispose: unobserve,
         send: (value: T) => { try { (worker ?? frame)?.send(this.channels.event, value); } catch { this.forget(key); } },
         hold: () => {
           if (!worker || worker.isDestroyed()) return () => undefined;

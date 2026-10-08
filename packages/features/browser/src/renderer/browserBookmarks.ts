@@ -1,9 +1,8 @@
 import type { BrowserBookmarkTree } from '../contracts/bookmarks.js';
 import { decodeBookmarkTree, emptyBookmarkTree, normalizeBrowserBookmarkUrl } from './records/bookmarkTree.js';
 
-export const BROWSER_BOOKMARKS_STORAGE_KEY = 'setsuna.desktop.browser.bookmarks.v2';
-export const LEGACY_BROWSER_BOOKMARKS_STORAGE_KEY = 'setsuna.desktop.browser.bookmarks.v1';
-export const BROWSER_BOOKMARKS_CHANGED = 'setsuna:browser-bookmarks-changed';
+import { BROWSER_BOOKMARKS_STORAGE_KEY, LEGACY_BROWSER_BOOKMARKS_STORAGE_KEY, BROWSER_BOOKMARKS_CHANGED } from '../contracts/bookmarks.js';
+export { BROWSER_BOOKMARKS_STORAGE_KEY, LEGACY_BROWSER_BOOKMARKS_STORAGE_KEY, BROWSER_BOOKMARKS_CHANGED };
 export type BrowserBookmarkEntry = Readonly<{ id: string; savedAt: number; title: string; url: string }>;
 export type BrowserBookmarkInput = Readonly<{ title: string; url: string }>;
 type BookmarkStorage = Pick<Storage, 'getItem' | 'setItem'>;

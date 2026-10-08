@@ -41,11 +41,12 @@ it('retains the runtime API transport timeout', async () => {
 });
 
 function bootstrapBridge() {
-  const post = vi.fn<(message: Record<string, unknown>, target: string) => void>();
-  const parent = { postMessage: post };
-  let receive!: (event: { source: unknown; data: unknown }) => void;
+  const post = vi.fn<(message: Record<string, unknown>) => void>();
+  const parent = { postMessage: vi.fn() };
+  const port = { postMessage: post, onmessage: null as ((event: { data: unknown }) => void) | null,
+    start: vi.fn(), close: vi.fn() };
   const window = {
-    addEventListener: (_type: string, listener: typeof receive) => { receive = listener; },
+    addEventListener: vi.fn(),
   } as unknown as {
     setsunaUI: {
       invoke(actionId: string, payload: unknown): Promise<unknown>;
@@ -56,12 +57,13 @@ function bootstrapBridge() {
   const source = createSandboxedUiDocument({ html: '', css: '', js: '' });
   const bootstrap = new DOMParser().parseFromString(source, 'text/html').querySelector('script')?.textContent;
   if (!bootstrap) throw new Error('Sandbox bootstrap is missing.');
-  new Function('window', 'parent', 'document', 'setTimeout', 'clearTimeout', bootstrap)(
+  new Function('window', 'parent', 'document', 'setTimeout', 'clearTimeout', 'MessageChannel', bootstrap)(
     window, parent, { readyState: 'loading', addEventListener: vi.fn() }, setTimeout, clearTimeout,
+    class { port1 = port; port2 = {}; },
   );
   return {
     api: window.setsunaUI,
     post,
-    reply: (data: Record<string, unknown>) => receive({ source: parent, data: { channel: SANDBOXED_UI_CHANNEL, ...data } }),
+    reply: (data: Record<string, unknown>) => port.onmessage?.({ data: { channel: SANDBOXED_UI_CHANNEL, ...data } }),
   };
 }

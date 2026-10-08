@@ -100,6 +100,8 @@ export class ModelDiscoveryInputError extends Error {
 
 function anthropicModelListUrl(base: string): string {
   if (base.endsWith('/v1/models') || base.endsWith('/models')) return base;
+  // Gateways may expose a versioned API root; keep /v1 only once.
+  if (base.endsWith('/v1')) return `${base}/models`;
   if (base.endsWith('/v1/messages')) return `${base.slice(0, -'/v1/messages'.length)}/v1/models`;
   if (base.endsWith('/messages')) return `${base.slice(0, -'/messages'.length)}/models`;
   return `${base}/v1/models`;

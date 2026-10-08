@@ -28,9 +28,9 @@ export function registerMainWindowNavigationGuards(
       if (event.initiator && event.initiator !== window.webContents.mainFrame) event.preventDefault();
       return;
     }
-    if (isInitialSandboxFrameUrl(event.url)) return;
-    // Free-form Plugin UI runs in srcdoc iframes. It may update its own hash,
-    // but it must not turn navigation into an undeclared network channel.
+    if (isSupportedFrameNavigationUrl(event.url)) return;
+    // Plugin forms may navigate their own isolated frame to an HTTP(S) response.
+    // Keep local privileged documents out of that frame and the main renderer in place.
     event.preventDefault();
   });
 }
@@ -60,6 +60,12 @@ export function isTrustedRendererNavigation(currentUrl: string, targetUrl: strin
   }
 }
 
-function isInitialSandboxFrameUrl(url: string): boolean {
-  return url === 'about:blank' || url === 'about:srcdoc';
+function isSupportedFrameNavigationUrl(url: string): boolean {
+  if (url === 'about:blank' || url === 'about:srcdoc') return true;
+  try {
+    const protocol = new URL(url).protocol;
+    return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
 }

@@ -5,6 +5,11 @@ import type { PiApi } from './pi-context.js';
 const RESPONSE_FORMAT_ERROR_PATTERN = /\b(?:response[_ -]?format|json[_ -]?schema|json[_ -]?object|structured output)\b/iu;
 const ANTHROPIC_OUTPUT_CONFIG_ERROR_PATTERN = /\boutput[_ -]?config\b/iu;
 
+/** Request-local transport corrections; never persist these as model/user settings. */
+export type PiModelRequest = ModelRequest & {
+  anthropicThinkingMode?: 'adaptive' | 'default';
+};
+
 /**
  * Pi exposes canonical provider identity, while response-format support still
  * lives outside its current sampling API. Apply only capabilities that are
@@ -14,7 +19,12 @@ const ANTHROPIC_OUTPUT_CONFIG_ERROR_PATTERN = /\boutput[_ -]?config\b/iu;
 export function withKnownPiRequestCompatibility(
   request: ModelRequest,
   model: Model<PiApi>,
-): ModelRequest {
+): PiModelRequest {
+  if (model.api === 'anthropic-messages' && model.reasoning
+    && model.thinkingLevelMap?.off === null && !request.thinking) {
+    // Turning thinking off is only a preference when the model cannot disable it.
+    return { ...request, anthropicThinkingMode: 'default', temperature: undefined };
+  }
   if (
     request.responseFormat?.schema
     && model.api === 'openai-completions'
@@ -31,11 +41,15 @@ export function withKnownPiRequestCompatibility(
  * unrelated failures and requests that already emitted output are not retried.
  */
 export function nextPiCompatibilityRetry(
-  request: ModelRequest,
+  request: PiModelRequest,
   error: unknown,
   api: PiApi,
-): ModelRequest | null {
+): PiModelRequest | null {
   const details = providerErrorDetails(error).toLowerCase();
+  const thinkingRetry = anthropicThinkingRetry(request, error, details, api);
+  // Thinking errors may mention output_config.effort; that does not invalidate
+  // the caller's independent output_config.format/schema constraint.
+  if (thinkingRetry) return thinkingRetry;
   let next = request;
   if (shouldRetryWithoutTemperature(request, details)) {
     next = { ...next, temperature: undefined };
@@ -44,6 +58,31 @@ export function nextPiCompatibilityRetry(
     next = weakerResponseFormat(next, api);
   }
   return next === request ? null : next;
+}
+
+function anthropicThinkingRetry(
+  request: PiModelRequest,
+  error: unknown,
+  details: string,
+  api: PiApi,
+): PiModelRequest | null {
+  const status = providerHttpStatus(error);
+  // SSE errors arrive after HTTP 200, so Pi preserves the validation type but no failing HTTP status.
+  const validationError = status === 400 || status === 422
+    || (status === undefined && /\binvalid_request_error\b/u.test(details));
+  if (api !== 'anthropic-messages' || !validationError || !details.includes('not supported')) {
+    return null;
+  }
+  if (request.thinking && request.anthropicThinkingMode !== 'adaptive'
+    && details.includes('thinking.type.enabled') && details.includes('thinking.type.adaptive')) {
+    return { ...request, anthropicThinkingMode: 'adaptive' };
+  }
+  if (!request.thinking && request.anthropicThinkingMode !== 'default' && details.includes('thinking.type.disabled')) {
+    // Always-on models must choose their own thinking mode, including defaults
+    // that disallow the title task's otherwise valid sampling temperature.
+    return { ...request, anthropicThinkingMode: 'default', temperature: undefined };
+  }
+  return null;
 }
 
 export function piResponseFormatPayload(
@@ -111,7 +150,7 @@ function shouldRetryWithoutTemperature(
 ): boolean {
   if (typeof request.temperature !== 'number') return false;
   return details.includes('temperature')
-    && /\b(?:invalid|unsupported|not supported|not allowed|only|must(?:\s+be)?|does not support|unknown|unrecognized)\b/u.test(details);
+    && /\b(?:invalid|unsupported|deprecated|not supported|not allowed|only|must(?:\s+be)?|does not support|unknown|unrecognized)\b/u.test(details);
 }
 
 function shouldRetryWithWeakerResponseFormat(
@@ -123,7 +162,8 @@ function shouldRetryWithWeakerResponseFormat(
   if (!request.responseFormat) return false;
   const status = providerHttpStatus(error);
   const formatError = RESPONSE_FORMAT_ERROR_PATTERN.test(details)
-    || (api === 'anthropic-messages' && ANTHROPIC_OUTPUT_CONFIG_ERROR_PATTERN.test(details));
+    || (api === 'anthropic-messages' && ANTHROPIC_OUTPUT_CONFIG_ERROR_PATTERN.test(details)
+      && !details.includes('output_config.effort') && !details.includes('thinking.type'));
   return (status === 400 || status === 422) && formatError;
 }
 
@@ -161,7 +201,7 @@ function providerErrorDetails(value: unknown, seen = new Set<object>(), depth = 
   if (typeof value !== 'object' || seen.has(value)) return '';
   seen.add(value);
   const record = value as Record<string, unknown>;
-  return ['name', 'message', 'responseBody', 'data', 'error', 'cause']
+  return ['name', 'message', 'type', 'responseBody', 'data', 'error', 'cause']
     .map((key) => providerErrorDetails(record[key], seen, depth + 1))
     .filter(Boolean)
     .join(' ');

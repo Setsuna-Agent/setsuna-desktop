@@ -57,6 +57,7 @@ import { electronCredentialEncryption } from './security/credential-encryption.j
 import { DesktopCredentialVault } from './security/credential-vault.js';
 import {
   activateBuiltinMainFeatures,
+  registerBuiltinMainFeatureSchemes,
   type ActivatedBuiltinMainFeatures,
 } from './composition/builtin-main-features.js';
 import {
@@ -89,6 +90,7 @@ import { diagnoseBuiltinComputerUse } from './composition/builtin-main-features.
 if (process.platform !== 'darwin' && process.platform !== 'win32') {
   throw new Error(`Setsuna Desktop supports macOS and Windows only. Unsupported platform: ${process.platform}.`);
 }
+registerBuiltinMainFeatureSchemes();
 
 // Keep diagnostics outside normal startup so they never load user data or the Agent.
 if (process.argv.includes('--computer-use-diagnostics')) {

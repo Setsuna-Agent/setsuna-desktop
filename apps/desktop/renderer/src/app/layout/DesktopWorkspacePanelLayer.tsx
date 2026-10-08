@@ -75,6 +75,7 @@ import type { RuntimeAccessModeSelection } from '../../shared/lib/runtimeAccessM
 import { CODE_APPEARANCE_CHANGE_EVENT_NAME } from '../../shared/preferences/useCodeAppearancePreferences.js';
 import { useKeyboardShortcuts } from '../../shared/shortcuts/KeyboardShortcutsProvider.js';
 import { SelectField } from '../../shared/ui/primitives.js';
+import { webLinkMenuItems } from '../../shared/ui/webLinkMenuItems.js';
 import { useToast } from '../providers/ToastProvider.js';
 import { FloatingWorkspacePanelSlot } from './FloatingWorkspacePanelSlot.js';
 import { SideWorkspacePanelSlot } from './SideWorkspacePanelSlot.js';
@@ -203,6 +204,7 @@ export function DesktopWorkspacePanelLayer({
   workspaceFileContextTarget: WorkspaceFileContextTarget | null;
 }>) {
   const { actions, context, layout, panels } = model;
+  const { t } = useI18n();
   const workspaceRoot = context.activeWorkspace?.path;
   const watchEntries = useCallback((directoryPaths: string[], callback: () => void) => {
     if (!workspaceRoot) return () => undefined;
@@ -319,11 +321,12 @@ export function DesktopWorkspacePanelLayer({
   }), [bindingsFor, browserBindings, notifyBrowser]);
   const terminalHost = useMemo<TerminalWorkspacePanelHost>(() => ({
     bridge: window.setsunaDesktop?.terminal ?? null,
-    openExternal: window.setsunaDesktop?.links.openExternal,
+    openLink: actions.onOpenMarkdownWebLink,
+    linkMenuItems: (url) => webLinkMenuItems(url, t, actions.onOpenBrowser),
     resolveSession: (panelId) => panels.terminalSessionsByPanelId[panelId] ?? null,
     subscribeAppearanceChange,
     updateTitle: (panelId, title) => actions.onUpdateDesktopPanel(panelId, { title }),
-  }), [actions, panels.terminalSessionsByPanelId]);
+  }), [actions, panels.terminalSessionsByPanelId, t]);
 
   return (
     <BrowserWorkspaceFeatureBoundary host={browserHost}>

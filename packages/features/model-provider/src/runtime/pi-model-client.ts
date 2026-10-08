@@ -42,6 +42,7 @@ import {
   nextPiCompatibilityRetry,
   piResponseFormatPayload,
   withKnownPiRequestCompatibility,
+  type PiModelRequest,
 } from './pi-request-compatibility.js';
 import { builtinCatalogProviderIdForConfig, getBuiltinCatalogProvider } from './provider-catalog.js';
 import { applyProviderRequestHeaders } from './provider-request-headers.js';
@@ -120,13 +121,13 @@ export class PiModelClient implements ModelProviderSamplingService {
 
   private async *streamConfigured(
     provider: ModelProviderRuntimeConfig,
-    request: ModelRequest,
+    request: PiModelRequest,
     diagnostics: ModelRequestDiagnostics,
   ): AsyncGenerator<ModelStreamEvent> {
     const replayContext = createPiReplayContext(provider, request.model, this.providers);
     this.publishProviderReplayDebug(request, replayContext);
     const model = createPiModel(provider, request.model, {
-      forceAdaptiveThinking: usesAdaptiveAnthropicThinking(request),
+      forceAdaptiveThinking: request.anthropicThinkingMode === 'adaptive' || usesAdaptiveAnthropicThinking(request),
       providers: this.providers,
     });
     // Direct provider/API streams require prompts and tools in transcript system messages.
@@ -228,7 +229,7 @@ function isBuiltInLocalSmokeProvider(provider: ModelProviderRuntimeConfig): bool
 function streamForProvider(
   model: Model<PiApi>,
   context: TranscriptContext,
-  input: ModelRequest & Readonly<{ apiKey: string; fetch: typeof fetch; signal: AbortSignal }>,
+  input: PiModelRequest & Readonly<{ apiKey: string; fetch: typeof fetch; signal: AbortSignal }>,
   catalogProvider?: Provider,
 ): AsyncIterable<AssistantMessageEvent> {
   const common = {
@@ -290,7 +291,7 @@ function withProviderDefaults(
   model: string,
 ): ModelRequest {
   const configuredModel = provider.activeModel;
-  const thinking = request.thinking === true;
+  const thinking = request.thinking === true && configuredModel?.thinkingEnabled === true;
   const defaultEffort = configuredModel?.defaultThinkingEffort
     || configuredModel?.thinkingEfforts.find((effort) => effort.trim());
   return {
@@ -301,9 +302,7 @@ function withProviderDefaults(
       ?? configuredModel?.maxOutputTokens
       ?? DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
     thinking,
-    ...(thinking && !request.reasoningEffort && defaultEffort
-      ? { reasoningEffort: defaultEffort }
-      : {}),
+    reasoningEffort: thinking ? request.reasoningEffort || defaultEffort : undefined,
   };
 }
 
@@ -316,9 +315,10 @@ function reasoningEffort(request: Pick<ModelRequest, 'thinking' | 'reasoningEffo
 }
 
 function anthropicThinkingOptions(
-  request: ModelRequest,
+  request: PiModelRequest,
   model: Model<'anthropic-messages'>,
 ): Partial<AnthropicOptions> {
+  if (request.anthropicThinkingMode === 'default') return {};
   if (!request.thinking) return { thinkingEnabled: false };
   if (model.compat?.forceAdaptiveThinking === true) {
     const effort = anthropicAdaptiveEffort(request.reasoningEffort, model);

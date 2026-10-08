@@ -1,9 +1,11 @@
 /** Chrome match patterns, shared by registration validation and host permission checks. */
-export function compileMatchPattern(pattern: string): { test(url: string): boolean } | null {
-  if (pattern === '<all_urls>') return { test: (url) => /^(https?|file|ftp|wss?):/.test(url) };
-  const match = /^(\*|https?|file|ftp|wss?):\/\/([^/]*)(\/.*)$/.exec(pattern);
+export function compileMatchPattern(pattern: string, allSchemes = false): { test(url: string): boolean } | null {
+  if (pattern === '<all_urls>') return { test: (url) => (allSchemes ? /^[a-z][a-z0-9+.-]*:/i : /^(https?|file|ftp|wss?):/).test(url) };
+  const match = /^(\*|[a-z][a-z0-9+.-]*):\/\/([^/]*)(\/.*)$/.exec(pattern);
   if (!match) return null;
   const [, scheme, host, pathname] = match;
+  // Native tabs.query accepts additional schemes, while script registrations stay restricted.
+  if (!allSchemes && !['*', 'http', 'https', 'file', 'ftp', 'ws', 'wss'].includes(scheme)) return null;
   if (scheme !== 'file' && (!host || (host.includes('*') && host !== '*' && !/^\*\.[^*]+$/.test(host)))) return null;
   if (scheme === 'file' && host !== '' && host !== '*') return null;
   const pathPattern = glob(pathname);

@@ -101,6 +101,10 @@ Tab 销毁、导航和重新注册都会清理 snapshot/ref 与 CDP 状态。
 
 工具栏的扩展菜单和设置的扩展管理页均可进入 Chrome Web Store，商店详情页的添加按钮调用主进程安装。采用 MIT 的 `electron-chrome-web-store@0.13.0`，保持 Electron 原生扩展 API 的兼容范围；未引入 `electron-chrome-extensions`。目前支持 Manifest V3，依赖未实现的 Chrome API 的扩展可能安装成功但无法完整工作。
 
+遵守全局 [启动性能硬性约束](../architecture/runtime-flows.md#启动性能约束硬性)：`main/feature.ts` 完成浏览器控制 server、IPC 和安全边界后启动独立的扩展恢复任务，不等待安装扫描、原生扩展加载或后台 worker。元数据通过既有事件更新；扩展安装/启停/权限修改只在自身操作链中等待恢复完成，避免覆盖已保存的停用或授权状态。`service.ts` 加载原生扩展后交给 `worker-startup.ts` 的后台队列，最多同时启动 4 个 worker；队列不进入原生加载或主界面就绪等待，排队期间不创建注册监听和超时，卸载时移除对应任务。冷注册保留有界等待，匹配扩展 origin 的未捕获 JavaScript 启动异常会立即结束等待并释放名额。[Electron 43.7.7 的原生启动拒绝](https://github.com/electron/electron/blob/v43.7.7/shell/browser/api/electron_api_service_worker_context.cc#L244-L249) 不区分注册竞态与脚本失败，不能直接把普通拒绝判为确定失败。服务的 lifetime 同时绑定 Feature scope，draining 会取消排队操作和 worker 等待，释放时移除监听/定时器并卸载迟到完成的原生加载，不等待后台超时，也不会在关闭后重新注册 preload。
+
+`test/integration/extension-startup.electron.test.ts` 使用隔离 profile 和无窗口的真实 Main Feature activation：挂起扩展加载仍可调用浏览器控制接口，坏 worker 不拖住其他 worker，恢复 12 个慢 worker 时只保留 4 组启动监听，卸载或关闭会丢弃等待项，关闭期间的迟到加载不能复活服务。测试不启动完整工作台、不修改原安装数据；对启动链路的其他改动也必须按全局约束验证核心可用耗时和外围失败隔离。
+
 菜单内图钉可固定或取消固定扩展，固定图标显示在工具栏拼图入口旁；菜单名称与固定图标共用 action 入口，先打开声明或动态设置的弹窗，没有弹窗则交给扩展的 `action.onClicked` 或侧边栏行为。设置入口独立保留。管理弹层与固定图标的右键菜单使用共享组件的 modal 行为，让网页视图上方的外部点击先关闭菜单，避免 guest 内的指针事件无法冒泡到宿主。右键菜单提供扩展设置（有设置页时）、取消固定和卸载。固定顺序以选择顺序保存到 renderer 的版本化 localStorage，跨标签页及窗口同步，重启后恢复；工具栏及快捷菜单只展示启用的扩展，停用不移除固定记录，重新启用后恢复原有位置。
 
 `main/extensions/ui.ts` 与 `side-panels.ts` 承载 `chrome.sidePanel` 的配置、启停、打开/关闭事件以及 `setPanelBehavior` 的图标切换行为。扩展侧栏在当前浏览器页面右侧使用同一 partition 的受限 webview，沿用扩展 preload，不能访问桌面 preload；只接受调用扩展自己的页面和已登记来宾/宿主窗口。renderer 的 `BrowserExtensionPanelHost` 由工作区窗口持有，标签页通过 slot 预留空间；固定窗口层跟随可见 slot，不移动或重建 guest DOM。全局侧栏跨标签复用同一个 guest，切换或隐藏浏览器时保留草稿、滚动和连接。全局配置与按 WebContents ID 指定的配置分开维护，窗口查询返回当前面板，带标签 ID 的查询仍过滤归属；停用、卸载、所属窗口关闭或指定标签页销毁时清理对应面板。Worker 启动后订阅打开事件时，通过 RPC 回复同步已打开面板，避免初始化期间丢失异步事件。普通网站不能获取此 API。补齐的 `windows.get/getCurrent/getLastFocused/getAll/onFocusChanged` 仅描述已登记桌面浏览器窗口；扩展页面的当前窗口由真实所属窗口决定，不随其他窗口中的点击变化。
@@ -108,6 +112,30 @@ Tab 销毁、导航和重新注册都会清理 snapshot/ref 与 CDP 状态。
 全局侧栏的图标切换按窗口与扩展判断，不绑定最初打开的标签；只有标签专属面板比较标签 ID。`windows.getLastFocused` 使用窗口聚焦记录，不受上次工具栏点击归属影响。
 
 `main/extensions/system-apis.ts` 与 `preload/extension-system.ts` 按清单权限承载缺失的扩展 API，复用来自真实 frame/worker 的身份校验。Debugger 只允许已登记 HTTP(S)/空白网页的单独 CDP 会话，拒绝桌面和扩展页面、Browser/Target 全局命令与本地文件导航；释放扩展时断开会话。Commands 读取平台快捷键并路由真实来宾输入；ContextMenus 支持平铺菜单及点击事件；Downloads 提供当前运行期间真实下载的查询、变更与显示位置；WebNavigation 提供网页 frame 查询和实际新标签创建事件。未实现的方法不返回伪造成功，其他 Chrome API 仍受 Electron 的兼容范围限制。
+
+`main/extensions/permissions/` 提供 `permissions.getAll/contains/request/remove` 和权限增删事件。必需权限来自原始清单，可选权限只在主进程确认后写入 `extensions-state.json`，与启停、用户脚本授权共用服务的串行修改队列。查询比较完整的网站范围并忽略路径，不能用单个 URL 的匹配冒充通配符授权；取消、清单未声明的范围和未实现的可选 API 都不会获得授权。停用保留授权，卸载清除授权；清单更新后过滤不再声明的授权。兼容层每次调用读取实际授权，静态 content script 的匹配范围不会自行变成 Cookie 等 API 的网站授权。
+
+`getAll/contains` 可以报告脚本匹配范围；`request/remove/effective` 的 API 网站授权计算只使用显式必需网站权限与已确认的可选授权。脚本匹配范围与可选网站范围重叠时，仍需确认并持久化 API 网站授权，撤销该授权不影响脚本本身的匹配声明。标签事件保留导航时的原始快照与顺序，等待 worker 启动后重新读取网站、`tabs` 和 `activeTab` 授权，再过滤 URL、标题和待导航地址。
+
+API 桥按必需与可选权限声明在文档和 worker 首次加载时安装，包含 `sidePanel`；安装 namespace 不授予调用权限，首次批准后当前页面即可调用，撤销后调用继续拒绝。撤销 `contextMenus` 成功时同步删除该扩展的菜单；菜单构建、已打开菜单的点击和唤醒 worker 后的事件投递都重新检查权限，重新授权也不会恢复旧菜单或旧点击回调。
+
+`tabs.get/query` 保留原生参数校验、标签身份与非敏感字段，URL 和标题由宿主按当前 `tabs`、网站及 `activeTab` 授权补齐，不能读取其他 partition。带 URL/标题条件的查询先经原生校验，再由宿主筛选候选标签，避免 Chromium 尚未同步可选授权时提前过滤；Promise、回调与 `runtime.lastError` 语义保持一致。工具栏点击事件在 worker 就绪后使用同一有效授权集；撤销全局 `tabs` 后，仅已授权网站及自身扩展文档仍可读取。
+
+撤销 `nativeMessaging` 成功时同步关闭该扩展的已有 Port、终止本机宿主并释放 worker 任务；尚在查询本机宿主注册信息的连接也会关闭，查询的迟到结果不能再启动进程。这些资源清理不等待权限事件的 worker 唤醒与投递。
+
+`main/extensions/favicons.ts` 提供 MV3 的 `favicon` 权限及 `runtime.getURL('/_favicon/')` 图标资源（[Chrome 文档](https://developer.chrome.com/docs/extensions/how-to/ui/favicons)）。Electron 的原生入口缺少图标后端；兼容 preload 仅将调用者自己的这一资源映射到图片专用协议，其他 `getURL` 调用仍走原生实现。地址由真实 frame/worker 的 bootstrap 发放并绑定其生命周期，加载前后都检查实际权限、安装版本和上下文是否仍存活；普通网页不能获取该通道。图片请求沿用网站所属 session，从当前页面的图标候选或 `/favicon.ico` 按需读取；不允许本地文件、页面导航或脚本资源，撤销/卸载或关闭上下文后连进行中的读取也不能交付。网络超时、响应体积和并发数都有上限，图片解码留在 guest，启动时不预取网站图标。宿主在 `app.ready` 前经 main composition 调用 `registerExtensionFaviconScheme`，实际 session handler 则在加载扩展前安装；协议仅为已授权图片绕过扩展的 image CSP，不能返回其他内容。不注册 session 的 `webRequest` 钩子，原生验证发现这会干扰油猴的脚本安装拦截。当前不处理直接拼接的 `chrome-extension://.../_favicon/`、旧版 `chrome://favicon/` 或普通网站中的原生 content script 资源请求。iTab 授权使用的 `tabs`、`favicon` 和 `<all_urls>` 已接入，搜索面板使用标准 `getURL('/_favicon/')` 调用。
+
+图标最多并发读取 16 个，超出部分按请求顺序排队，出队时重新检查上下文、安装版本和权限；关闭上下文、取消请求或释放服务会立即移除相应等待请求。普通图片加载无需重试，批量请求也不会因暂时满额返回 429。
+
+恢复启用扩展时，worker 就绪后由宿主投递一次 `runtime.onStartup`，使用原有身份认证通道；首次安装、停用后重新启用、worker 再次唤醒都不会重复投递。Electron 当前把每次加载当作 fresh install（[原生实现](https://github.com/electron/electron/blob/v43.7.7/shell/browser/extensions/electron_extension_loader.cc)），原生验证中没有触发此启动事件；仅暴露事件对象不能替代实际生命周期通知。事件仍随后台恢复执行，不进入主界面就绪等待。Vue Telescope 依靠该事件清理跨重启的标签 ID 缓存，否则新进程的 iTab 标签可能复用旧网站 ID，导致它向不存在的网页脚本发消息。宿主不改写第三方脚本或清空其存储；Vue Telescope 原版在同一运行期间从已检测网站导航到扩展页面时仍可能产生未处理的消息拒绝，这属于其自身未校验接收端的行为，原生 `tabs.sendMessage` 的拒绝语义保持不变。
+
+`main/extensions/cookies.ts` 提供 `cookies.get/getAll/getAllCookieStores/set/remove/onChanged`，只访问内置浏览器 partition，读写与事件同时检查 `cookies` 权限和网站范围，拒绝其他 cookie store。写入结果按域、名称和实际路径查询，允许创建 URL 与指定 Cookie 路径不同。Chrome 和 Electron 的事件原因统一映射；删除按目标 Cookie 的域和路径精确过期，避免 Electron 的原生 remove 同时删除多个同名条目。Electron 当前 Cookie API 不提供 partition key，明确拒绝指定 partition key 的操作。`main/extensions/bookmarks.ts` 提供收藏夹树查询、搜索、更新和删除，读写现有桌面收藏夹集合；固定脚本仅在已登记桌面窗口中访问该集合，不向扩展暴露桌面 API，比较并写入旧值以避免覆盖其他窗口的并发编辑，保留迁移备份并拒绝修改根目录或覆盖损坏数据。`storage.managed` 按未配置企业策略的只读空集合提供查询和默认值，不再调用 Electron 必然失败的 managed 后端；不提供企业策略配置或写入。
+
+`main/extensions/capabilities.ts` 集中声明已接入兼容层的权限，与 API bootstrap 和可选授权共用。`load-diagnostics.ts` 只整理受管安装的 Electron `ExtensionLoadWarning`：兼容层已提供的权限不重复报告 unknown，真正未支持的权限（含 MV3 的 `webRequestBlocking`）按扩展与安装版本汇总一次；未知格式或其他清单问题仍输出原始警告。保留普通进程警告、加载失败和 worker 异常，启用 `--trace-warnings` 时输出完整原生诊断。诊断路由随扩展服务启动/释放，多个服务共享路由，不修改扩展清单和权限授权。
+
+`main/extensions/contents-lifecycle.ts` 让来宾跟踪、各 API 通道和扩展子 frame 共用每个 WebContents 的导航/销毁观察入口，保持模块各自的清理回调。取消最后一个订阅即移除原生监听；销毁时清理所有 frame、授权、消息和面板状态。重复跟踪同一页面不会叠加 action 或用户脚本监听，释放用户脚本服务也会停止仍存活页面的跟踪。真实 Electron 集成测试检查导航、停用/启用、弹窗和关闭期间不再产生 `MaxListenersExceededWarning`，不提高监听上限。
+
+`test/integration/extension-apis.electron.test.ts` 使用隔离 profile 和隐藏窗口验证原生 frame/worker 的权限确认、重启恢复、撤销、Cookie 分区隔离与精确删除，以及共享收藏夹修改、managed 默认值、图标读取与 CSP、一次性 profile 启动事件，同时检查真实加载日志的分类。设置 `SETSUNA_COOKIE_EDITOR_EXTENSION_DIRECTORY`、`SETSUNA_ITAB_EXTENSION_DIRECTORY`、`SETSUNA_TAMPERMONKEY_EXTENSION_DIRECTORY` 可验证本机原版扩展的 worker 启动和对应调用；`SETSUNA_VUE_TELESCOPE_EXTENSION_DIRECTORY` 验证 Vue Telescope 原版网页脚本与 worker 交换检测数据，并确认发送到未注入脚本的空白页面仍按原生语义拒绝。原版组合还会执行 iTab 授权按钮的真实权限处理函数，在重启复用相同标签 ID 时验证 Vue Telescope 自行清理旧缓存，检查没有未处理的连接错误。只复制安装文件到临时 profile，网络使用本地响应，不修改原安装或用户数据。
 
 `main/extensions/native-messaging/` 实现 `runtime.connectNative/sendNativeMessage`。宿主来自应用数据目录的 `NativeMessagingHosts` 注册清单，或当前用户/系统 Chrome、Edge、Chromium 的 macOS 注册文件和 Windows 注册表；扩展不能通过 IPC 指定可执行路径。连接前检查 `nativeMessaging` 权限、清单名称、stdio 类型及精确 `allowed_origins`，以无 shell 子进程交换带长度前缀的 UTF-8 JSON。消息大小遵循原生协议限制，不记录宿主输出；Port 保持所属 MV3 worker 存活，关闭文档、停用/卸载扩展或退出应用时释放进程和任务。ChatGPT 扩展保留原版后台与侧栏，通过已注册的本机宿主启动其聊天服务，不把等待页替换成独立聊天实现。
 

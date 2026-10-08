@@ -58,6 +58,7 @@ export const browserMainFeature = defineMainFeature({
     context.scope.add(installBrowserDownloads(browserSession, preferences));
     context.scope.add(registerBrowserSettingsIpc(context.scope, preferences, passwords, browserSession, resolveOwner));
     const extensions = new BrowserExtensionService({
+      signal: context.scope.signal,
       preloadPath: host.extensionPreloadPath,
       session: session.fromPartition(DESKTOP_BROWSER_PARTITION),
       language: () => host.interfaceLanguage(),
@@ -81,7 +82,6 @@ export const browserMainFeature = defineMainFeature({
       },
     });
     context.scope.add(() => extensions.dispose());
-    await extensions.start();
     const importer = new BrowserImportService(browserProfileRoots(process.platform, app.getPath('home'), process.env.LOCALAPPDATA),
       extensions, () => app.getLocale());
     context.scope.add(registerBrowserImportIpc(context.scope, importer, resolveOwner));
@@ -156,5 +156,9 @@ export const browserMainFeature = defineMainFeature({
     )));
     context.scope.add(registerBrowserExtensionIpc(context.scope, extensions, (senderId) => windows.get(senderId)?.window ?? null));
     context.provide(declareCapabilityProvider(browserControlConnectionCapability), connection);
+    // Third-party restoration must never gate the control server, runtime or first paint.
+    void extensions.start().catch((error: unknown) => {
+      if (!context.scope.signal.aborted) console.error('[browser-extensions] failed to restore extensions', error);
+    });
   },
 });

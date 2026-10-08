@@ -1,10 +1,10 @@
-import { Button } from '@setsuna-desktop/renderer-ui';
+import { Button, PointMenu, type MenuItem } from '@setsuna-desktop/renderer-ui';
 import { FitAddon } from '@xterm/addon-fit';
-import { Terminal as XTermTerminal, type ILink, type ILinkProvider, type ITheme } from '@xterm/xterm';
+import { Terminal as XTermTerminal, type ITheme } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { SquareTerminal } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   DesktopTerminalEvent,
   DesktopTerminalSession,
@@ -18,17 +18,16 @@ import {
 import { subscribeTerminalEvents } from './terminalEventSubscription.js';
 import { createTerminalOutput, type TerminalOutput } from './terminalOutput.js';
 import { terminalDisplayTitle } from './terminalTitle.js';
+import { registerTerminalLinks, type TerminalLinkContextTarget } from './terminalLinks.js';
 import './terminal.css';
-
-const TERMINAL_URL_PATTERN = /\bhttps?:\/\/[^\s<>"'`]+/gi;
-const TERMINAL_URL_TRAILING_PUNCTUATION_PATTERN = /[),.;:!?]+$/;
 
 export type TerminalPaneProps = Readonly<{
   bridge: TerminalDesktopBridge | null;
   session: DesktopTerminalSession | null;
   translate: RendererTranslate;
   onTitleChange?: (title: string) => void;
-  openExternal?: (url: string) => Promise<unknown>;
+  openLink: (url: string) => void | Promise<unknown>;
+  linkMenuItems: (url: string) => MenuItem[];
   subscribeAppearanceChange?: (listener: () => void) => () => void;
 }>;
 
@@ -37,7 +36,8 @@ export function TerminalPane({
   session,
   translate,
   onTitleChange,
-  openExternal,
+  openLink,
+  linkMenuItems,
   subscribeAppearanceChange,
 }: TerminalPaneProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -45,14 +45,20 @@ export function TerminalPane({
   const [exited, setExited] = useState(() => Boolean(session && terminalSessionExited(session.sessionId)));
   const [restarting, setRestarting] = useState(false);
   const [restartError, setRestartError] = useState<string | null>(null);
+  const [linkContextTarget, setLinkContextTarget] = useState<TerminalLinkContextTarget | null>(null);
+  const closeLinkContextMenu = useCallback(() => setLinkContextTarget(null), []);
   const onTitleChangeRef = useRef(onTitleChange);
   onTitleChangeRef.current = onTitleChange;
+  // A preference change updates routing without disposing the live terminal.
+  const openLinkRef = useRef(openLink);
+  openLinkRef.current = openLink;
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container || !session || !bridge) return undefined;
     setExited(terminalSessionExited(session.sessionId));
     setRestartError(null);
+    setLinkContextTarget(null);
 
     const restored = terminalRestoreBuffer(session.sessionId);
     const initialGrid = restored?.initialGrid ?? session;
@@ -73,8 +79,10 @@ export function TerminalPane({
     terminal.loadAddon(fitAddon);
     terminal.open(container);
     const output = createTerminalOutput(terminal, session.sessionId, restored);
-    const linkProviderDisposable = terminal.registerLinkProvider(
-      createTerminalLinkProvider(terminal, openExternal),
+    const unregisterLinks = registerTerminalLinks(
+      terminal,
+      (url) => openLinkRef.current(url),
+      setLinkContextTarget,
     );
     const titleDisposable = terminal.onTitleChange((title) => {
       onTitleChangeRef.current?.(terminalDisplayTitle(title, session.shell));
@@ -184,7 +192,7 @@ export function TerminalPane({
       unsubscribe();
       unsubscribeAppearance();
       dataDisposable.dispose();
-      linkProviderDisposable.dispose();
+      unregisterLinks();
       titleDisposable.dispose();
       resizeObserver.disconnect();
       appearanceObserver.disconnect();
@@ -192,7 +200,7 @@ export function TerminalPane({
       terminal.dispose();
       terminalRef.current = null;
     };
-  }, [bridge, openExternal, session, subscribeAppearanceChange, translate]);
+  }, [bridge, session, subscribeAppearanceChange, translate]);
 
   const restartTerminal = async () => {
     if (!session || !bridge || restarting) return;
@@ -221,6 +229,15 @@ export function TerminalPane({
   return (
     <div data-feature-id="terminal" className="feature-terminal">
       <div ref={containerRef} className="feature-terminal__frame" />
+      {linkContextTarget ? (
+        <PointMenu
+          key={`${linkContextTarget.x}:${linkContextTarget.y}:${linkContextTarget.url}`}
+          x={linkContextTarget.x}
+          y={linkContextTarget.y}
+          menu={{ items: linkMenuItems(linkContextTarget.url) }}
+          onClose={closeLinkContextMenu}
+        />
+      ) : null}
       {exited ? (
         <div className="feature-terminal__restart" role="status">
           <span>{restartError ?? translate('feature.terminal.shellExited')}</span>
@@ -270,76 +287,6 @@ function terminalFontSize(): number {
 
 function writeTerminalSystemLine(output: TerminalOutput, text: string): void {
   output.write(`\r\n${text}\r\n`);
-}
-
-function normalizeTerminalLink(rawText: string): { text: string; url: string } | null {
-  let text = rawText;
-  while (TERMINAL_URL_TRAILING_PUNCTUATION_PATTERN.test(text)) text = text.slice(0, -1);
-  if (!text) return null;
-
-  try {
-    const url = new URL(text);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
-    return { text, url: url.href };
-  } catch {
-    return null;
-  }
-}
-
-function openExternalTerminalLink(
-  value: string,
-  openExternal: TerminalPaneProps['openExternal'],
-): void {
-  const normalized = normalizeTerminalLink(value);
-  if (!normalized) return;
-  if (openExternal) {
-    void openExternal(normalized.url).catch((error: unknown) => {
-      console.error('[TerminalPane] failed to open terminal link', error);
-    });
-    return;
-  }
-  window.open(normalized.url, '_blank', 'noopener,noreferrer');
-}
-
-function createTerminalLinkProvider(
-  terminal: XTermTerminal,
-  openExternal: TerminalPaneProps['openExternal'],
-): ILinkProvider {
-  return {
-    provideLinks(bufferLineNumber, callback) {
-      const line = terminal.buffer.active.getLine(bufferLineNumber - 1);
-      if (!line) {
-        callback(undefined);
-        return;
-      }
-
-      const lineText = line.translateToString(true);
-      TERMINAL_URL_PATTERN.lastIndex = 0;
-      const links: ILink[] = [];
-      for (const match of lineText.matchAll(TERMINAL_URL_PATTERN)) {
-        const rawText = match[0];
-        const index = match.index;
-        if (index === undefined) continue;
-        const normalized = normalizeTerminalLink(rawText);
-        if (!normalized) continue;
-
-        links.push({
-          range: {
-            start: { x: index + 1, y: bufferLineNumber },
-            end: { x: index + normalized.text.length + 1, y: bufferLineNumber },
-          },
-          text: normalized.url,
-          decorations: { pointerCursor: true, underline: true },
-          activate(event, text) {
-            event.preventDefault();
-            event.stopPropagation();
-            openExternalTerminalLink(text, openExternal);
-          },
-        });
-      }
-      callback(links.length ? links : undefined);
-    },
-  };
 }
 
 function errorMessage(error: unknown): string {

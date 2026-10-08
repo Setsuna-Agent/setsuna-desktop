@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
 
-import { act, cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { Terminal } from '@xterm/xterm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DesktopTerminalEvent, DesktopTerminalSession, TerminalDesktopBridge } from '../../src/contracts/index.js';
-import { TerminalPane } from '../../src/renderer/TerminalPane.js';
+import { TerminalPane, type TerminalPaneProps } from '../../src/renderer/TerminalPane.js';
 import { clearTerminalRestoreBuffer } from '../../src/renderer/terminalRestoreBuffer.js';
 
 const terminalState = vi.hoisted(() => ({
@@ -26,7 +26,15 @@ vi.mock('@xterm/xterm', async (importOriginal) => {
         terminalState.terminals.push(this);
       }
 
-      open() {}
+      open(container: HTMLElement) {
+        const element = document.createElement('div');
+        const screen = document.createElement('div');
+        screen.className = 'xterm-screen';
+        screen.getBoundingClientRect = () => new DOMRect(0, 0, this.cols * 8, this.rows * 18);
+        element.append(screen);
+        container.append(element);
+        Object.defineProperty(this, 'element', { value: element });
+      }
       focus() {}
     },
   };
@@ -48,6 +56,11 @@ const session: DesktopTerminalSession = {
   cols: 100,
   rows: 24,
   windowsPty: { backend: 'conpty', buildNumber: 22631 },
+};
+
+const linkProps: Pick<TerminalPaneProps, 'openLink' | 'linkMenuItems'> = {
+  openLink: () => undefined,
+  linkMenuItems: () => [],
 };
 
 beforeEach(() => {
@@ -73,7 +86,7 @@ afterEach(() => {
 describe('terminal startup protocol', () => {
   it.each(['first query', 'in-flight', 'queued', 'split escape'] as const)('answers an unparsed %s query once across interrupted remounts', async (pending) => {
     const bridge = createBridge(Promise.resolve([]));
-    const props = { bridge, session, translate: (key: string) => key };
+    const props = { ...linkProps, bridge, session, translate: (key: string) => key };
     const view = render(<TerminalPane {...props} />);
     await waitFor(() => expect(bridge.resize).toHaveBeenCalledWith(session.sessionId, 80, 6));
     const historyReplies = pending === 'first query' ? [] : [[session.sessionId, '\u001b[2;3R']];
@@ -112,7 +125,7 @@ describe('terminal startup protocol', () => {
 
   it.each([false, true])('preserves scrollback across remount after clear-screen and resize (resize=%s)', async (resize) => {
     const bridge = createBridge(Promise.resolve([]));
-    const props = { bridge, session, translate: (key: string) => key };
+    const props = { ...linkProps, bridge, session, translate: (key: string) => key };
     const view = render(<TerminalPane {...props} />);
     await waitFor(() => expect(bridge.resize).toHaveBeenCalledWith(session.sessionId, 80, 6));
     bridge.emit({ seq: 1, event: 'ready', data: { cols: 80, rows: 6 } });
@@ -150,7 +163,7 @@ describe('terminal startup protocol', () => {
       bridge.emit({ seq: 2, event: 'output', data: { text: '\u001b[2;1HC:\\workspace> \u001b[6n' } });
       return true;
     });
-    render(<TerminalPane bridge={bridge} session={session} translate={(key) => key} />);
+    render(<TerminalPane {...linkProps} bridge={bridge} session={session} translate={(key) => key} />);
     expect(bridge.attach).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -167,7 +180,7 @@ describe('terminal startup protocol', () => {
   it('retains the Windows prompt and answers cursor queries before fitting a smaller pane', async () => {
     const snapshot = deferred<DesktopTerminalEvent[]>();
     const bridge = createBridge(snapshot.promise);
-    render(<TerminalPane bridge={bridge} session={session} translate={(key) => key} />);
+    render(<TerminalPane {...linkProps} bridge={bridge} session={session} translate={(key) => key} />);
 
     expect(bridge.resize).not.toHaveBeenCalled();
     await act(async () => {
@@ -194,7 +207,7 @@ describe('terminal startup protocol', () => {
   it('does not resize or send protocol replies after closing during the history read', async () => {
     const snapshot = deferred<DesktopTerminalEvent[]>();
     const bridge = createBridge(snapshot.promise);
-    const view = render(<TerminalPane bridge={bridge} session={session} translate={(key) => key} />);
+    const view = render(<TerminalPane {...linkProps} bridge={bridge} session={session} translate={(key) => key} />);
     view.unmount();
 
     snapshot.resolve([{ seq: 1, event: 'output', data: { text: '\u001b[6n' } }]);
@@ -204,6 +217,44 @@ describe('terminal startup protocol', () => {
     expect(bridge.attach).not.toHaveBeenCalled();
     expect(bridge.write).not.toHaveBeenCalled();
   });
+});
+
+it('uses updated link routing without replaying the terminal, and selects or dismisses a menu without navigating', async () => {
+  const bridge = createBridge(Promise.resolve([]));
+  const openInApp = vi.fn();
+  const openExternal = vi.fn();
+  const copyLink = vi.fn();
+  const url = 'https://example.com/path?q=1#anchor';
+  const props: TerminalPaneProps = {
+    bridge, session, translate: (key) => key, openLink: openInApp,
+    linkMenuItems: (href) => [{ key: 'copy-link', label: 'Copy link', onClick: () => copyLink(href) }],
+  };
+  const view = render(<TerminalPane {...props} />);
+  await waitFor(() => expect(bridge.attach).toHaveBeenCalledOnce());
+  act(() => bridge.emit({ seq: 1, event: 'output', data: { text: `Visit ${url}` } }));
+  const terminal = terminalState.terminals[0];
+  await waitFor(() => expect(bufferText(terminal)[0]).toBe(`Visit ${url}`));
+  const range = { start: { x: 7, y: 1 }, end: { x: 39, y: 1 } };
+  terminal.options.linkHandler!.activate(new MouseEvent('mouseup', { button: 0 }), url, range);
+  expect(openInApp).toHaveBeenCalledExactlyOnceWith(url);
+
+  view.rerender(<TerminalPane {...props} openLink={openExternal} />);
+  terminal.options.linkHandler!.activate(new MouseEvent('mouseup', { button: 0 }), url, range);
+  expect(openExternal).toHaveBeenCalledExactlyOnceWith(url);
+  expect(terminalState.terminals).toHaveLength(1);
+  expect(bridge.attach).toHaveBeenCalledOnce();
+  expect(bridge.read).toHaveBeenCalledOnce();
+  expect(bufferText(terminal)[0]).toBe(`Visit ${url}`);
+
+  fireEvent.contextMenu(terminal.element!, { clientX: 60, clientY: 9 });
+  fireEvent.keyDown(await screen.findByRole('menuitem', { name: 'Copy link' }), { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+  expect(copyLink).not.toHaveBeenCalled();
+  fireEvent.contextMenu(terminal.element!, { clientX: 60, clientY: 9 });
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Copy link' }));
+  expect(copyLink).toHaveBeenCalledExactlyOnceWith(url);
+  expect(openInApp).toHaveBeenCalledOnce();
+  expect(openExternal).toHaveBeenCalledOnce();
 });
 
 function bufferText(terminal: Terminal): string[] {

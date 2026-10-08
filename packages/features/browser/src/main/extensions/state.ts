@@ -2,11 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { validExtensionId } from './metadata.js';
+import type { ExtensionPermissions } from '../../contracts/extension-api.js';
+import { parseExtensionPermissions } from './permissions/model.js';
 
 /** Extension preferences survive native unload; userscript permission is opt-in per extension. */
 export class BrowserExtensionState {
   private disabled = new Set<string>();
   private userScriptsAllowed = new Set<string>();
+  private optionalPermissions: Record<string, ExtensionPermissions> = {};
   constructor(private readonly file: string) {}
 
   async load(): Promise<void> {
@@ -20,11 +23,28 @@ export class BrowserExtensionState {
         throw new Error('Invalid user scripts permission state.');
       }
       this.userScriptsAllowed = new Set(data.userScriptsAllowed ?? []);
+      if (data.optionalPermissions !== undefined && (!data.optionalPermissions || typeof data.optionalPermissions !== 'object'
+        || Array.isArray(data.optionalPermissions))) throw new Error('Invalid optional permission state.');
+      this.optionalPermissions = Object.fromEntries(Object.entries(data.optionalPermissions ?? {}).map(([id, permissions]) => {
+        if (!validExtensionId(id)) throw new Error('Invalid extension ID.');
+        return [id, parseExtensionPermissions(permissions)];
+      }));
     } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   }
 
   isEnabled(id: string): boolean { return !this.disabled.has(id); }
   allowsUserScripts(id: string): boolean { return this.userScriptsAllowed.has(id); }
+  grantedPermissions(id: string): ExtensionPermissions {
+    return structuredClone(this.optionalPermissions[id] ?? { permissions: [], origins: [] });
+  }
+
+  async setGrantedPermissions(id: string, permissions: ExtensionPermissions): Promise<void> {
+    if (!validExtensionId(id)) throw new Error('Invalid extension ID.');
+    const next = { ...this.optionalPermissions };
+    if (permissions.permissions.length || permissions.origins.length) next[id] = parseExtensionPermissions(permissions);
+    else delete next[id];
+    await this.save(this.disabled, this.userScriptsAllowed, next);
+  }
 
   // The service serializes all installation mutations before calling this store.
   async setEnabled(id: string, enabled: boolean): Promise<void> {
@@ -42,13 +62,13 @@ export class BrowserExtensionState {
     await this.save(this.disabled, next);
   }
 
-  private async save(disabled: Set<string>, userScriptsAllowed: Set<string>): Promise<void> {
+  private async save(disabled: Set<string>, userScriptsAllowed: Set<string>, optionalPermissions = this.optionalPermissions): Promise<void> {
     const temporary = `${this.file}.${randomUUID()}.tmp`;
     await mkdir(path.dirname(this.file), { recursive: true });
     try {
-      await writeFile(temporary, JSON.stringify({ version: 1, disabled: [...disabled], userScriptsAllowed: [...userScriptsAllowed] }), { mode: 0o600 });
+      await writeFile(temporary, JSON.stringify({ version: 1, disabled: [...disabled], userScriptsAllowed: [...userScriptsAllowed], optionalPermissions }), { mode: 0o600 });
       await rename(temporary, this.file);
     } finally { await rm(temporary, { force: true }); }
-    this.disabled = disabled; this.userScriptsAllowed = userScriptsAllowed;
+    this.disabled = disabled; this.userScriptsAllowed = userScriptsAllowed; this.optionalPermissions = optionalPermissions;
   }
 }

@@ -193,7 +193,7 @@ renderConversations(response.data.threads);
 - `tree` node 只允许 `stack/text/badge/notice/button/field/select`，未知字段直接拒绝；它不接受 HTML、CSS、`className`、script、函数 handler 或任意 URL。
 - `document` 只接受已声明的 `.html/.htm`、`.css`、`.js/.mjs` 文本资源，并沿用交互卡片的单文件和总源码上限。宿主从一次完整 Bundle hash 快照中同时取得源码字节；当前 hash 与用户信任的 hash 不一致时拒绝返回，避免校验和读取之间出现可执行内容替换。
 - `document.libraries` 可选，目前只允许 `echarts`。宿主按需读取随应用打包的库源码，在隔离 frame 内先加载库、再执行页面源码，以 `window.echarts` 提供图表 API。库源码不占 Plugin 源码额度，不进入主 Renderer 的执行环境，不允许 URL、CDN 或任意包名。图表容器需要明确尺寸，随容器变化调用 `chart.resize()`，移除时调用 `chart.dispose()`。
-- document iframe 只带 `sandbox="allow-scripts"`，绝不带 `allow-same-origin`。CSP 禁止直接网络、远程资源、worker、嵌套 frame、对象、媒体和原生表单提交；HTML 表单控件仍可使用，通过 bridge action 保存。Electron 主窗口另外阻止子 frame 离开 `about:srcdoc/about:blank`。页面没有 Node、Electron、preload、文件系统或宿主 DOM，只能使用 `window.setsunaUI`。
+- document iframe 带 `sandbox="allow-scripts allow-forms"`，不带 `allow-same-origin`。表单支持正常的 `submit` 事件、原生校验及向 HTTP(S) 地址提交；通过 bridge action 保存本地数据时，由页面在 `submit` handler 中调用 `preventDefault()`。Electron 允许子 frame 在 HTTP(S) 地址间导航，提交结果留在应用的 iframe 内，不替换宿主主页面。CSP 继续限制脚本直接联网、远程资源、worker、嵌套 frame、对象和媒体。页面没有 Node、Electron、preload、文件系统或宿主 DOM，宿主能力通过 `window.setsunaUI` 使用。
 - 动态值只能使用 `{ "path": "summary.label", "fallback": "未运行" }` 从 contribution 声明的 `data.stateKey` 读取。数据 scope 只能是 `global/project/thread`，JSON 大小、深度和条目数均受限；renderer 不能自行选择 state key。
 - 单个 manifest 最多 16 个 contribution、32 个 action、128 个 node、24 个字段，树深最多 8 层；文本、选项和提交值也都有独立上限。
 - UI 只在安装记录与当前 Bundle hash 仍处于 `trusted` 时挂载；更新、卸载或撤销信任会通过 Renderer transaction 替换/撤销整个 Plugin UI。

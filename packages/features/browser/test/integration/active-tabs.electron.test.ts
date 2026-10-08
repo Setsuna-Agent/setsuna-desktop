@@ -18,9 +18,10 @@ it.skipIf(!['darwin', 'win32'].includes(process.platform))('authorizes scripting
     await build({ entryPoints: [fileURLToPath(fixture)], outfile: entry, bundle: true, platform: 'node', format: 'cjs',
       target: 'node22', external: ['electron'], define: { 'import.meta.url': JSON.stringify(fixture.href) } });
     const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
-    const { stdout } = await promisify(execFile)(createRequire(import.meta.url)('electron') as string, [entry, directory], {
+    const { stdout, stderr } = await promisify(execFile)(createRequire(import.meta.url)('electron') as string, [entry, directory], {
       env, timeout: 30_000, maxBuffer: 1024 * 1024,
     }).catch(error => { throw new Error(`${error.message}\n${error.stdout}`); });
     expect(stdout).toContain('EXTENSION_ACTIVE_TAB_OK');
+    expect(stderr).not.toContain('MaxListenersExceededWarning');
   } finally { await rm(directory, { recursive: true, force: true }); }
 }, 40_000);

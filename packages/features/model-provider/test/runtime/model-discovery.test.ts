@@ -4,12 +4,17 @@ import { fetchAvailableModels } from '../../src/runtime/model-discovery.js';
 afterEach(() => vi.useRealTimers());
 
 describe('model discovery', () => {
-  it.each([undefined, '2023-01-01'])('sends Anthropic versioning with custom authentication (version override: %s)', async (version) => {
+  it.each([
+    ['https://models.test', undefined],
+    ['https://models.test', '2023-01-01'],
+    ['https://models.test/v1', undefined],
+    ['https://models.test/v1/', undefined],
+  ])('discovers Anthropic models with custom authentication (base: %s, version override: %s)', async (baseUrl, version) => {
     const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => (
       Response.json({ data: [{ id: 'claude-model' }] })
     ));
     await fetchAvailableModels({
-      provider: 'anthropic', baseUrl: 'https://models.test', apiKey: '',
+      provider: 'anthropic', baseUrl, apiKey: '',
       requestHeaders: { 'x-api-key': 'custom-key', ...(version ? { 'anthropic-version': version } : {}) },
     }, null, fetchImpl);
 

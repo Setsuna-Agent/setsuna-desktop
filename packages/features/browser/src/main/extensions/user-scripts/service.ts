@@ -10,6 +10,7 @@ import { scriptSources, UserScriptStore } from './store.js';
 import { ExtensionContexts } from '../contexts.js';
 import { extensionFrameId as frameId } from '../frame-id.js';
 import type { UserScriptsExtensionEvent } from '../../../contracts/user-scripts.js';
+import { observeExtensionContents } from '../contents-lifecycle.js';
 
 type Document = { contents: WebContents; frame: WebFrameMain; id: string; key: string; worlds: Map<string, Set<string | null>>; lifetime: MessagePortMain };
 type Pending = { document: Document; extensionId: string; resolve(answer: WireAnswer | null): void; timer: ReturnType<typeof setTimeout> };
@@ -22,6 +23,7 @@ export class BrowserUserScripts {
   private readonly pending = new Map<number, Pending>();
   private readonly messaging = new UserScriptMessaging();
   private readonly contexts: ExtensionContexts<UserScriptsExtensionEvent>;
+  private readonly tracked = new Map<number, () => void>();
   private readonly store: UserScriptStore;
   private queue: Promise<unknown> = Promise.resolve();
   private sequence = 0;
@@ -87,6 +89,7 @@ export class BrowserUserScripts {
   }
 
   track(contents: WebContents): () => void {
+    if (contents.isDestroyed() || this.tracked.has(contents.id)) return () => undefined;
     const replacing = new Map<number, readonly Document[]>();
     const navigating = (event: Electron.Event<Electron.WebContentsDidStartNavigationEventParams>) => {
       if (event.isSameDocument) return;
@@ -114,17 +117,21 @@ export class BrowserUserScripts {
       for (const document of this.documents.values()) if (document.contents === contents) this.forget(document);
     };
     const dispose = () => {
+      this.tracked.delete(contents.id); unobserve();
       contents.off('did-start-navigation', navigating).off('did-frame-navigate', committed)
-        .off('render-process-gone', clear).off('destroyed', dispose);
+        .off('render-process-gone', clear);
       clear();
     };
+    this.tracked.set(contents.id, dispose);
     contents.on('did-start-navigation', navigating).on('did-frame-navigate', committed)
-      .on('render-process-gone', clear).once('destroyed', dispose);
+      .on('render-process-gone', clear);
+    const unobserve = observeExtensionContents(contents, { destroyed: dispose });
     return dispose;
   }
 
   dispose(): void {
     this.disposed = true; this.contexts.dispose(); this.messaging.dispose();
+    for (const dispose of [...this.tracked.values()]) dispose();
     ipcMain.off(channels.plan, this.plan); ipcMain.removeHandler(channels.message);
     ipcMain.off(channels.port, this.port); ipcMain.off(channels.answer, this.answer);
     for (const document of this.documents.values()) this.forget(document);

@@ -764,7 +764,11 @@ export function toolRunSummary(run: RuntimeToolRun, t: Translate = defaultTransl
   if (name === 'remember_memory') return { title: runningAware(run, t('toolRun.action.saveMemory'), t('toolRun.action.saveMemoryDone'), t) };
   if (name === 'recall_memory') return { title: runningAware(run, t('toolRun.action.recallMemory'), t('toolRun.action.recallMemoryDone'), t), target: query };
   const displayName = toolRunDisplayName(run, t);
-  return { title: runningAware(run, displayName, t('toolRun.action.used', { name: displayName }), t) };
+  const title = runningAware(run, displayName, t('toolRun.action.used', { name: displayName }), t);
+  if (name === 'read_plugin_resource') {
+    return { title, target: [stringField(args.pluginId), stringField(args.resourceId)].filter(Boolean).join('/') };
+  }
+  return { title };
 }
 
 export function searchRunSummary(

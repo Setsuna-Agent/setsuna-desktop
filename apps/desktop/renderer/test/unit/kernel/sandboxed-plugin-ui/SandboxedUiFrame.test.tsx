@@ -9,7 +9,7 @@ import {
 } from '../../../../src/kernel/sandboxed-plugin-ui/sandbox-document.js';
 
 describe('SandboxedUiFrame', () => {
-  it('runs free-form source only inside an opaque, network-disabled iframe', () => {
+  it('runs free-form source inside an opaque iframe while keeping host access isolated', () => {
     render(
       <SandboxedUiFrame
         data={{ condition: '晴' }}
@@ -23,11 +23,10 @@ describe('SandboxedUiFrame', () => {
     );
 
     const frame = screen.getByTitle('杭州天气') as HTMLIFrameElement;
-    expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
+    expect(frame.getAttribute('sandbox')).toBe('allow-scripts allow-forms');
     expect(frame.getAttribute('sandbox')).not.toContain('allow-same-origin');
     expect(frame.getAttribute('referrerpolicy')).toBe('no-referrer');
     expect(frame.srcdoc).toContain("connect-src 'none'");
-    expect(frame.srcdoc).toContain("navigate-to 'none'");
     expect(frame.srcdoc).toContain("['RTCPeerConnection', 'webkitRTCPeerConnection', 'RTCIceTransport']");
     expect(frame.srcdoc).toContain('Object.defineProperty(window, name');
     expect(frame.srcdoc).toContain('background: transparent');
