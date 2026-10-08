@@ -9,6 +9,8 @@ import {
   type RuntimeUsage,
 } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
+import type { ModelProviderRuntimeHost } from '@setsuna-desktop/feature-model-provider/contracts';
+import { PiModelClient } from '../../../../features/model-provider/src/runtime/pi-model-client.js';
 import { estimateRuntimeMessageTokens, type RuntimeContextCompactionCandidate } from '../../../src/loop/context/context-compaction.js';
 import { RuntimeContextCompactor } from '../../../src/loop/context/runtime-context-compactor.js';
 import type { ModelClient, ModelCompactionRequest } from '../../../src/ports/model-client.js';
@@ -18,6 +20,69 @@ import { InMemoryConversationDebugTraceStore } from '@setsuna-desktop/feature-co
 import { CapturingUsageStore } from '../../support/agent-loop/shared.js';
 
 describe('RuntimeContextCompactor', () => {
+  it.each([
+    { model: 'claude-haiku-5-5', effort: 'minimal', expectedEffort: 'low', rejectThinking: false },
+    { model: 'custom-compaction-alias', effort: 'high', expectedEffort: 'high', rejectThinking: true },
+  ])('compacts with adaptive thinking through the real provider for $model', async ({ model, effort, expectedEffort, rejectThinking }) => {
+    const runtimeConfig = contextCompactionTaskModelConfig();
+    const providerState = runtimeConfig.providers[1]!;
+    providerState.provider = 'anthropic';
+    providerState.catalogProviderId = rejectThinking ? null : 'anthropic';
+    providerState.baseUrl = 'https://opencode.ai/zen/go/v1';
+    providerState.requestHeaders = { 'x-opencode-session': '{{sessionId}}' };
+    const activeModel = providerState.models[0]!;
+    Object.assign(activeModel, {
+      code: model, thinkingEnabled: true, thinkingEfforts: ['minimal', 'low', 'medium', 'high'],
+      defaultThinkingEffort: effort, contextWindowTokens: 200_000, maxOutputTokens: 64_000,
+    });
+    const provider = { ...providerState, apiKey: 'test-key', activeModel };
+    const bodies: Record<string, unknown>[] = [];
+    const sessionIds: Array<string | null> = [];
+    const fetch: typeof globalThis.fetch = async (_input, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      sessionIds.push(new Headers(init?.headers).get('x-opencode-session'));
+      const events = rejectThinking && bodies.length === 1 ? [{
+        type: 'error',
+        error: { type: 'invalid_request_error', message: '"thinking.type.enabled" is not supported for this model. Use "thinking.type.adaptive" and "output_config.effort" to control thinking behavior.' },
+      }] : [
+        { type: 'message_start', message: { id: 'summary', model, role: 'assistant', content: [], usage: { input_tokens: 100, output_tokens: 0 } } },
+        { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+        { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Preserve the user goal and continue the implementation.' } },
+        { type: 'content_block_stop', index: 0 },
+        { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 20 } },
+        { type: 'message_stop' },
+      ];
+      return new Response(events.map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(''), {
+        headers: { 'Content-Type': 'text/event-stream' },
+      });
+    };
+    const host: ModelProviderRuntimeHost = {
+      appVersion: 'test', dataDir: '', fetchForRoute: () => fetch,
+      resolveProvider: async () => provider,
+      readProviderState: async () => ({ activeProviderId: provider.id, providers: [providerState] }),
+      saveProviderState: async () => ({ activeProviderId: provider.id, providers: [providerState] }),
+      writeClipboardText: async () => undefined,
+    };
+    const result = await createCompactor(new PiModelClient(host)).generateContextCompactionSummary({
+      ...summaryInput(), runtimeConfig,
+    });
+
+    expect(result.text).toBe('Preserve the user goal and continue the implementation.');
+    expect(bodies).toHaveLength(rejectThinking ? 2 : 1);
+    const body = bodies.at(-1)!;
+    expect(body).toMatchObject({ model, thinking: { type: 'adaptive' } });
+    expect(body.thinking).not.toHaveProperty('budget_tokens');
+    // Native Anthropic carries active effort in a system message; gateways use the request-level field.
+    const messages = body.messages as Record<string, unknown>[];
+    const effortConfig = messages.filter((message) => message.output_config).at(-1)?.output_config ?? body.output_config;
+    expect(effortConfig).toMatchObject({ effort: expectedEffort });
+    expect(sessionIds).toEqual(bodies.map(() => 'thread_1'));
+    if (rejectThinking) {
+      expect(bodies[0]).toMatchObject({ thinking: { type: 'enabled' } });
+      expect(bodies[1]!.messages).toEqual(bodies[0]!.messages);
+    }
+  });
+
   it('allows reasoning beyond 8k while persisting only a bounded visible summary', async () => {
     const config = contextCompactionTaskModelConfig();
     const model = config.providers[1]!.models[0]!;

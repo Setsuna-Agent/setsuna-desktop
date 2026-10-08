@@ -1,6 +1,7 @@
 import { ipcMain, nativeImage, type Extension, type IpcMainInvokeEvent, type Session, type WebContents } from 'electron';
 import { BROWSER_EXTENSION_ACTION_CHANNEL, type BrowserExtensionAction } from '../../contracts/extensions.js';
 import { extensionIcon, resolveExtensionPage } from './metadata.js';
+import { observeExtensionContents } from './contents-lifecycle.js';
 
 /** Mirrors successful native chrome.action calls; framework detection stays in the extension. */
 export class BrowserExtensionActions {
@@ -23,6 +24,7 @@ export class BrowserExtensionActions {
 
   track(contents: WebContents): () => void {
     const id = contents.id;
+    if (contents.isDestroyed() || this.tabs.has(id)) return () => undefined;
     const reset = () => {
       const tab = this.tabs.get(id);
       if (tab) ++tab.revision;
@@ -32,12 +34,13 @@ export class BrowserExtensionActions {
     const dispose = () => {
       if (!this.tabs.has(id)) return;
       reset(); this.tabs.delete(id);
-      contents.off('did-navigate', reset).off('destroyed', dispose);
+      contents.off('did-navigate', reset); unobserve();
       for (const key of this.writes.keys()) if (key.split(':')[1] === String(id)) this.writes.delete(key);
     };
     this.tabs.set(id, { revision: 0, dispose });
     // A committed main-document navigation resets tab overrides; hash changes do not.
-    contents.on('did-navigate', reset).once('destroyed', dispose);
+    contents.on('did-navigate', reset);
+    const unobserve = observeExtensionContents(contents, { destroyed: dispose });
     return dispose;
   }
 

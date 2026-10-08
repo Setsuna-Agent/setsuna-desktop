@@ -32,6 +32,9 @@ export interface ExtensionTab {
   title?: string;
 }
 
+export type ExtensionTabReadQuery = { url?: string | string[]; title?: string };
+export type ExtensionTabReadDetails = Pick<ExtensionTab, 'id' | 'url' | 'title'>;
+
 export type ExtensionTabEvent =
   | { kind: 'updated'; tabId: number; changeInfo: { status?: ExtensionTab['status']; url?: string }; tab: ExtensionTab }
   | { kind: 'removed'; tabId: number; removeInfo: { windowId: number; isWindowClosing: boolean } };
@@ -42,9 +45,24 @@ export const EXTENSION_SYSTEM_CHANNELS = {
   event: 'browser-extension-system:event',
 } as const;
 
-export type ExtensionSystemBootstrap = { debugger: boolean; contextMenus: boolean; downloads: boolean; webNavigation: boolean; nativeMessaging: boolean; scripting: boolean };
+export type ExtensionSystemBootstrap = {
+  debugger: boolean; contextMenus: boolean; downloads: boolean; webNavigation: boolean;
+  nativeMessaging: boolean; scripting: boolean; cookies: boolean; bookmarks: boolean; storage: boolean;
+  faviconUrl?: string;
+};
+export type ExtensionPermissions = { permissions: string[]; origins: string[] };
+export type ExtensionCookie = {
+  name: string; value: string; domain: string; hostOnly: boolean; path: string;
+  secure: boolean; httpOnly: boolean; session: boolean; expirationDate?: number;
+  sameSite: 'unspecified' | 'no_restriction' | 'lax' | 'strict'; storeId: string;
+};
+export type ExtensionCookieChange = {
+  cookie: ExtensionCookie; removed: boolean;
+  cause: 'explicit' | 'overwrite' | 'expired' | 'evicted' | 'expired_overwrite';
+};
 export type ExtensionDebuggee = { tabId: number; sessionId?: string };
 export type ExtensionSystemEvent =
+  | { kind: 'startup' }
   | { kind: 'debuggerEvent'; source: ExtensionDebuggee; method: string; params: unknown }
   | { kind: 'debuggerDetach'; source: ExtensionDebuggee; reason: 'target_closed' | 'canceled_by_user' }
   | { kind: 'command'; command: string; tab: ExtensionTab }
@@ -52,5 +70,8 @@ export type ExtensionSystemEvent =
   | { kind: 'downloadCreated'; item: Record<string, unknown> }
   | { kind: 'downloadChanged'; delta: Record<string, unknown> }
   | { kind: 'navigationTargetCreated'; details: Record<string, unknown> }
+  | { kind: 'cookieChanged'; changeInfo: ExtensionCookieChange }
+  | { kind: 'permissionsAdded'; permissions: ExtensionPermissions }
+  | { kind: 'permissionsRemoved'; permissions: ExtensionPermissions }
   | { kind: 'nativeMessage'; portId: string; message: unknown }
   | { kind: 'nativeDisconnect'; portId: string; error?: string };

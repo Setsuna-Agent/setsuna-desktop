@@ -6,6 +6,7 @@ import type { PluginManagementRendererService } from '@setsuna-desktop/feature-p
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SandboxedPluginUiView } from '../../../../src/kernel/declarative-plugin-ui/SandboxedPluginUiView.js';
+import { connectSandboxedUiFrame } from '../../../fixtures/sandboxed-ui-bridge.js';
 
 describe('SandboxedPluginUiView', () => {
   afterEach(() => {
@@ -63,16 +64,13 @@ describe('SandboxedPluginUiView', () => {
     expect(frame.srcdoc).toContain('<main class="weather">Weather</main>');
     expect(frame.srcdoc).toContain('.weather { color: orange; }');
 
-    const invoke = (requestId: string) => fireEvent(window, new MessageEvent('message', {
-      source: frame.contentWindow,
-      data: {
-        channel: 'setsuna.sandboxed-ui.v1',
-        type: 'invoke',
-        requestId,
-        actionId: 'weather.refresh',
-        payload: { city: '杭州' },
-      },
-    }));
+    const { send } = connectSandboxedUiFrame(frame);
+    const invoke = (requestId: string) => send({
+      type: 'invoke',
+      requestId,
+      actionId: 'weather.refresh',
+      payload: { city: '杭州' },
+    });
 
     invoke('action_1');
     if (confirmAction) {

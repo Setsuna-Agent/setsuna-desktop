@@ -14,8 +14,8 @@ it('accepts only installed extension origins and managed tabs, and isolates over
   const session = { serviceWorkers: workers, registerPreloadScript: vi.fn(() => 'preload'), unregisterPreloadScript: vi.fn() } as unknown as Session;
   const actions = new BrowserExtensionActions(session, (url) => url.startsWith(origin) ? extension : null, vi.fn());
   actions.start('/extension-preload.cjs');
-  const first = Object.assign(new EventEmitter(), { id: 1 }) as unknown as WebContents;
-  const second = Object.assign(new EventEmitter(), { id: 2 }) as unknown as WebContents;
+  const first = Object.assign(new EventEmitter(), { id: 1, isDestroyed: () => false }) as unknown as WebContents;
+  const second = Object.assign(new EventEmitter(), { id: 2, isDestroyed: () => false }) as unknown as WebContents;
   actions.track(first); actions.track(second);
   const handler = vi.mocked(ipcMain.handle).mock.calls.find(([channel]) => channel === BROWSER_EXTENSION_ACTION_CHANNEL)![1];
   const invoke = (input: unknown, url = `${origin}popup.html`, senderSession = session) => handler({

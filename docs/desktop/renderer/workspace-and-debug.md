@@ -148,7 +148,7 @@ Review preference 按 workspace 持久化在 localStorage。Main 才执行 Git �
 
 ## Terminal
 
-Terminal presentation 位于 `packages/features/terminal/src/renderer/`。Renderer Feature 通过 `TerminalWorkspacePanel.tsx` 注册 `renderer.workspace.panel/terminal`；宿主 `apps/desktop/renderer/src/composition/TerminalWorkspaceFeatureBoundary.tsx` 只提供 panel 与 session 的映射、preload bridge、外链和外观变更。Workspace hook 继续拥有 panel/project 对 session 的编排：
+Terminal presentation 位于 `packages/features/terminal/src/renderer/`。Renderer Feature 通过 `TerminalWorkspacePanel.tsx` 注册 `renderer.workspace.panel/terminal`；宿主 `apps/desktop/renderer/src/composition/TerminalWorkspaceFeatureBoundary.tsx` 提供 panel 与 session 的映射、preload bridge、链接动作和外观变更。Workspace hook 继续拥有 panel/project 对 session 的编排：
 
 1. 通过 preload 打开 main `node-pty` session。
 2. 订阅有 sequence 的 terminal event。
@@ -156,6 +156,8 @@ Terminal presentation 位于 `packages/features/terminal/src/renderer/`。Render
 4. Panel/thread 关闭时释放 session/listener。
 
 UI resize 要与 pty cols/rows 同步，但不能在每个像素变化中无节制 invoke。
+
+终端 HTTP(S) 链接（包括 OSC 8 超链接）与聊天链接共用浏览器打开设置 `desktopSettings.markdownLinkOpenMode`。右键菜单复用宿主 `shared/ui/webLinkMenuItems.tsx`，提供复制链接、在内置浏览器打开和在外部浏览器打开；明确选择不受默认打开设置影响。`terminalLinks.ts` 负责链接识别与点击位置映射，按真实 buffer cell 处理宽字符、自动换行和滚动。链接回调通过 ref 读取最新宿主动作，修改打开设置不会重建终端或重放输出。
 
 ## 内置浏览器
 

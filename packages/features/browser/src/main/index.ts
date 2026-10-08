@@ -4,3 +4,4 @@ export {
   type BrowserMainHost,
 } from './capabilities.js';
 export { browserMainFeature } from './feature.js';
+export { registerExtensionFaviconScheme } from './extensions/favicons.js';

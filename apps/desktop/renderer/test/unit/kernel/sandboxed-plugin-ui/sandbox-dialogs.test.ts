@@ -9,6 +9,8 @@ it('preserves synchronous branching and fails explicitly on transport errors ins
   let status = 200;
   let response: unknown = false;
   const window = {
+    document: { documentElement: {} },
+    getComputedStyle: () => ({ colorScheme: 'light', getPropertyValue: () => '' }),
     XMLHttpRequest: class {
       open = open;
       send = send;
@@ -26,7 +28,7 @@ it('preserves synchronous branching and fails explicitly on transport errors ins
   expect(deletions).toBe(1);
   expect(open).toHaveBeenCalledWith('POST', endpoint, false);
   for (response of ['', null, 'New  name']) expect(window.prompt('Rename', 'Old')).toBe(response);
-  expect(JSON.parse(send.mock.lastCall![0])).toEqual({ kind: 'prompt', message: 'Rename', defaultValue: 'Old' });
+  expect(JSON.parse(send.mock.lastCall![0])).toEqual(expect.objectContaining({ kind: 'prompt', message: 'Rename', defaultValue: 'Old' }));
   response = { confirmed: true };
   expect(() => window.confirm('Delete?')).toThrow('Invalid confirmation');
   status = 400;

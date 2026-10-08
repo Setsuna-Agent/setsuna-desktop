@@ -1,5 +1,6 @@
 import { dialog, type BrowserWindow } from 'electron';
 import type { RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
+import type { ExtensionPermissions } from '../../contracts/extension-api.js';
 
 const permissionLabels: Record<string, [string, string]> = {
   tabs: ['读取浏览器标签页', 'Read browser tabs'],
@@ -15,6 +16,7 @@ const permissionLabels: Record<string, [string, string]> = {
   nativeMessaging: ['与本机应用通信', 'Communicate with native applications'],
   cookies: ['访问网站 Cookie', 'Access website cookies'],
   history: ['访问浏览记录', 'Access browsing history'],
+  favicon: ['读取网站图标', 'Read website icons'],
 };
 
 export function extensionPermissions(manifest: Record<string, unknown>, language: RuntimeInterfaceLanguage): string[] {
@@ -38,6 +40,20 @@ export async function confirmExtensionInstall(
       ? `${chinese ? '此扩展请求以下权限：' : 'This extension requests these permissions:'}\n\n${permissions.join('\n')}`
       : undefined,
     buttons: chinese ? ['取消', '添加扩展'] : ['Cancel', 'Add extension'],
+    defaultId: 0, cancelId: 0, noLink: true,
+  });
+  return result.response === 1;
+}
+
+export async function confirmExtensionPermissions(
+  window: BrowserWindow, name: string, requested: ExtensionPermissions, language: RuntimeInterfaceLanguage,
+): Promise<boolean> {
+  const chinese = language === 'zh-CN';
+  const permissions = extensionPermissions({ permissions: requested.permissions, host_permissions: requested.origins }, language);
+  const result = await dialog.showMessageBox(window, {
+    type: 'question', title: chinese ? '扩展权限' : 'Extension permissions',
+    message: chinese ? `允许“${name.slice(0, 160)}”访问以下内容？` : `Allow “${name.slice(0, 160)}” to access the following?`,
+    detail: permissions.join('\n'), buttons: chinese ? ['取消', '允许'] : ['Cancel', 'Allow'],
     defaultId: 0, cancelId: 0, noLink: true,
   });
   return result.response === 1;

@@ -71,10 +71,20 @@ export function createPiModel(
   const planModels = sameEndpointModels.length ? sameEndpointModels : apiModels;
   const inheritedHeaders = catalogBase?.headers ?? commonRecord(planModels.map((model) => model.headers));
   const inheritedCompat = catalogBase?.compat ?? commonRecord(planModels.map((model) => model.compat));
+  // A custom gateway keeps its transport identity, but exact Anthropic model IDs
+  // still carry model-level thinking rules. Do not inherit native tools or headers.
+  const anthropicThinkingBase = api === 'anthropic-messages'
+    ? (catalogBase ?? getBuiltinCatalogModel('anthropic', modelId, options.providers)) as Model<'anthropic-messages'> | undefined
+    : undefined;
+  const thinkingCompat = anthropicThinkingBase?.compat && {
+    forceAdaptiveThinking: anthropicThinkingBase.compat.forceAdaptiveThinking,
+    supportsTemperature: anthropicThinkingBase.compat.supportsTemperature,
+  };
+  const modelCompat = thinkingCompat ? { ...thinkingCompat, ...inheritedCompat } : inheritedCompat;
   // Explicit endpoint compatibility overrides catalog metadata without changing reasoning support.
   const compat = api === 'openai-completions' && typeof provider.supportsDeveloperRole === 'boolean'
-    ? { ...inheritedCompat, supportsDeveloperRole: provider.supportsDeveloperRole }
-    : inheritedCompat;
+    ? { ...modelCompat, supportsDeveloperRole: provider.supportsDeveloperRole }
+    : modelCompat;
   return {
     ...(catalogBase ?? {}),
     id: modelId,
@@ -91,7 +101,8 @@ export function createPiModel(
     cost: catalogBase?.cost ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: activeModel?.contextWindowTokens ?? catalogBase?.contextWindow ?? DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
     maxTokens: activeModel?.maxOutputTokens ?? catalogBase?.maxTokens ?? 8_192,
-    thinkingLevelMap: catalogBase?.thinkingLevelMap ?? thinkingLevelMap(activeModel?.thinkingEfforts ?? []),
+    thinkingLevelMap: catalogBase?.thinkingLevelMap ?? anthropicThinkingBase?.thinkingLevelMap
+      ?? thinkingLevelMap(activeModel?.thinkingEfforts ?? []),
     ...(inheritedHeaders ? { headers: inheritedHeaders as Record<string, string> } : {}),
     ...(compat ? { compat } : {}),
     ...(provider.provider === 'anthropic' && options.forceAdaptiveThinking

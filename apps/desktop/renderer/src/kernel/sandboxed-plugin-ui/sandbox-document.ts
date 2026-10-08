@@ -3,6 +3,7 @@ import type { RuntimeSandboxedUiSource } from '@setsuna-desktop/contracts';
 import { sandboxDialogBootstrap, sandboxDialogEndpoint } from './sandbox-dialogs.js';
 
 export const SANDBOXED_UI_CHANNEL = 'setsuna.sandboxed-ui.v1' as const;
+export const SANDBOXED_UI_FRAME_PERMISSIONS = 'allow-scripts allow-forms' as const;
 
 export type SandboxedUiInvokeMessage = Readonly<{
   type: 'invoke';
@@ -24,13 +25,11 @@ const SANDBOX_CSP = [
   'img-src data: blob:',
   'font-src data:',
   "connect-src 'none'",
-  "navigate-to 'none'",
   "media-src 'none'",
   "object-src 'none'",
   "frame-src 'none'",
   "worker-src 'none'",
   "base-uri 'none'",
-  "form-action 'none'",
 ].join('; ');
 
 const BASE_STYLE = `
@@ -61,7 +60,7 @@ body {
 }
 `;
 
-const BOOTSTRAP = `(() => {
+const bootstrap = (documentId: string) => `(() => {
   // Chromium does not apply connect-src to WebRTC. Lock the direct WebRTC
   // connection entry points before any untrusted Plugin markup is parsed.
   for (const name of ['RTCPeerConnection', 'webkitRTCPeerConnection', 'RTCIceTransport']) {
@@ -73,6 +72,9 @@ const BOOTSTRAP = `(() => {
     });
   }
   const channel = ${JSON.stringify(SANDBOXED_UI_CHANNEL)};
+  const documentId = ${JSON.stringify(documentId)};
+  const connection = new MessageChannel();
+  const port = connection.port1;
   let sequence = 0;
   let snapshot = Object.freeze({ data: Object.freeze({}), context: Object.freeze({}) });
   let resolveReady;
@@ -80,7 +82,7 @@ const BOOTSTRAP = `(() => {
   const ready = new Promise((resolve) => { resolveReady = resolve; });
   const listeners = new Set();
   const pending = new Map();
-  const send = (message) => parent.postMessage({ channel, ...message }, '*');
+  const send = (message) => port.postMessage({ channel, ...message });
   const applyTheme = (theme) => {
     if (!theme || typeof theme !== 'object') return;
     for (const [name, value] of Object.entries(theme.variables || {})) {
@@ -92,8 +94,8 @@ const BOOTSTRAP = `(() => {
       document.documentElement.style.colorScheme = theme.colorScheme;
     }
   };
-  window.addEventListener('message', (event) => {
-    if (event.source !== parent || !event.data || event.data.channel !== channel) return;
+  port.onmessage = (event) => {
+    if (!event.data || event.data.channel !== channel) return;
     const message = event.data;
     if (message.type === 'snapshot') {
       snapshot = Object.freeze({
@@ -117,7 +119,12 @@ const BOOTSTRAP = `(() => {
     clearTimeout(request.timeout);
     if (message.ok) request.resolve(message.type === 'runtime-result' ? message.result : Object.freeze({ status: 'completed' }));
     else request.reject(new Error(message.error || 'Host action failed.'));
-  });
+  };
+  port.start();
+  window.addEventListener('pagehide', () => {
+    send({ type: 'unload' });
+    port.close();
+  }, { once: true });
   const requestHost = (type, fields) => {
     const requestId = 'request_' + (++sequence);
     return new Promise((resolve, reject) => {
@@ -170,15 +177,16 @@ const BOOTSTRAP = `(() => {
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startSizing, { once: true });
   else startSizing();
-  send({ type: 'ready' });
+  parent.postMessage({ channel, type: 'ready', documentId }, '*', [connection.port2]);
 })();`;
 
 export function createSandboxedUiDocument(
   source: RuntimeSandboxedUiSource,
-  { libraryScripts = [], size = 'content', dialogUrl }: Readonly<{
+  { libraryScripts = [], size = 'content', dialogUrl, documentId = '' }: Readonly<{
     libraryScripts?: readonly string[];
     size?: 'content' | 'fill';
     dialogUrl?: string;
+    documentId?: string;
   }> = {},
 ): string {
   const endpoint = sandboxDialogEndpoint(dialogUrl);
@@ -187,7 +195,7 @@ export function createSandboxedUiDocument(
     `<!doctype html><html data-sizing="${size === 'fill' ? 'fill' : 'content'}"><head><meta charset="utf-8">`,
     `<meta http-equiv="Content-Security-Policy" content="${escapeAttribute(csp)}">`,
     '<meta name="viewport" content="width=device-width,initial-scale=1">',
-    `<script>${BOOTSTRAP}</script>`,
+    `<script>${bootstrap(documentId)}</script>`,
     `<script>${sandboxDialogBootstrap(endpoint)}</script>`,
     ...libraryScripts.map((script) => `<script>${escapeScriptSource(script)}</script>`),
     ...(size === 'fill' ? ['<style>html,body{height:100%}</style>'] : []),

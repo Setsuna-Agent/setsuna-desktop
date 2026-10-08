@@ -1,4 +1,5 @@
 import type { Extension, WebContents } from 'electron';
+import { observeExtensionContents } from './contents-lifecycle.js';
 
 type Tab = { origins: Map<string, string>; dispose(): void };
 
@@ -8,19 +9,20 @@ export class BrowserExtensionActiveTabs {
   constructor(private readonly ownsGuest: (contents: WebContents) => boolean) {}
 
   track(contents: WebContents): () => void {
-    if (this.tabs.has(contents.id)) return () => undefined;
+    if (contents.isDestroyed() || this.tabs.has(contents.id)) return () => undefined;
     const changed = (_event: Electron.Event, url: string) => {
       const origin = scriptableOrigin(url);
       for (const [id, granted] of tab.origins) if (granted !== origin) tab.origins.delete(id);
     };
     const dispose = () => {
       this.tabs.delete(contents.id); tab.origins.clear();
-      contents.off('did-navigate', changed).off('destroyed', dispose);
+      contents.off('did-navigate', changed); unobserve();
     };
     const tab: Tab = { origins: new Map(), dispose };
     this.tabs.set(contents.id, tab);
     // Navigation attempts, downloads, same-document changes and child frames do not revoke it.
-    contents.on('did-navigate', changed).once('destroyed', dispose);
+    contents.on('did-navigate', changed);
+    const unobserve = observeExtensionContents(contents, { destroyed: dispose });
     return dispose;
   }
 

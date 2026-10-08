@@ -8,7 +8,8 @@ const CONTEXTS = new Set(['all', 'page', 'frame', 'selection', 'link', 'editable
 
 export class BrowserExtensionContextMenus {
   private readonly items = new Map<string, Map<string | number, MenuItem>>();
-  constructor(private readonly publish: (id: string, event: ExtensionSystemEvent) => void) {}
+  constructor(private readonly publish: (id: string, event: ExtensionSystemEvent) => void,
+    private readonly hasPermission: (id: string) => boolean) {}
 
   call(extension: Extension, method: string, args: unknown[]): unknown {
     if (!extension.manifest.permissions?.includes('contextMenus')) throw new Error('contextMenus permission required.');
@@ -37,10 +38,11 @@ export class BrowserExtensionContextMenus {
       ...(params.isEditable ? ['editable'] : []), ...(params.mediaType !== 'none' ? [params.mediaType] : []), ...(params.frameURL !== params.pageURL ? ['frame'] : [])]);
     const entries: BrowserMenuEntry[] = [];
     for (const [extensionId, items] of this.items) {
+      if (!this.hasPermission(extensionId)) continue;
       for (const item of items.values()) {
         if (!item.visible || !item.contexts.some((context) => contexts.has(context))) continue;
         entries.push({ label: item.title.replace(/%s/g, params.selectionText), enabled: item.enabled, click: () => {
-          if (contents.isDestroyed()) return;
+          if (contents.isDestroyed() || !this.hasPermission(extensionId) || this.items.get(extensionId)?.get(item.id) !== item) return;
           this.publish(extensionId, { kind: 'contextMenuClicked',
             info: { menuItemId: item.id, pageUrl: params.pageURL, frameUrl: params.frameURL,
               ...(params.linkURL ? { linkUrl: params.linkURL } : {}), ...(params.selectionText ? { selectionText: params.selectionText } : {}),

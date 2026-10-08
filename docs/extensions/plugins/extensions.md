@@ -191,7 +191,11 @@ Plugin 详情 contribution 若声明 `stateKey`，host 会从同名 global state
 
 已信任的扩展 handler 始终提供 `ctx.runtime.request({ path, method?, body? })`。已安装的侧栏 document 页面提供相同的 `window.setsunaUI.runtime.request(...)`。两者均返回 `{ ok, status, data }`，`data` 是已解析的 JSON；非 JSON 资源返回文本或 `{ mimeType, base64 }`。4xx/5xx 保留原状态和错误数据，传输错误或无权限才 reject。
 
-沙箱页面的 `window.alert/confirm/prompt` 在源码执行前接入主进程弹窗通道，保留同步返回值，已有 `if (confirm(...))`、`const name = prompt(..., oldName)` 无需改成 Promise。iframe 仍只有 `allow-scripts`；CSP 只额外允许当前 frame 的随机、可撤销弹窗地址，不开放通用网络或宿主 DOM。该地址不能调用其他原生接口，也不含 runtime bearer token。重命名应用只更新所属会话的弹窗标题，保留会话地址和当前 iframe 文档。页面卸载、窗口关闭或 renderer 退出会撤销弹窗会话并取消待处理弹窗。复杂表单仍使用页面内 `SetsunaComponents.dialog`。
+沙箱页面的 `window.alert/confirm/prompt` 在源码执行前接入主进程弹窗通道，保留同步返回值，已有 `if (confirm(...))`、`const name = prompt(..., oldName)` 无需改成 Promise。iframe 使用 `allow-scripts allow-forms`，支持普通表单回调与 HTTP(S) 提交；CSP 的脚本连接规则只额外允许当前 frame 的随机、可撤销弹窗地址，不开放通用脚本网络或宿主 DOM。该地址不能调用其他原生接口，也不含 runtime bearer token。重命名应用只更新所属会话的弹窗标题，保留会话地址和当前 iframe 文档。页面卸载、窗口关闭或 renderer 退出会撤销弹窗会话并取消待处理弹窗。复杂表单仍使用页面内 `SetsunaComponents.dialog`。
+
+`setsunaUI` 消息桥由原始 `srcdoc` 文档通过随机文档标识和独立 MessagePort 建立；快照、action 与 runtime 回应只走该通道，不投递给导航后复用的 `contentWindow`。文档离开或后续加载会撤销桥接并取消未完成的 runtime 请求，HTTP(S) 表单响应页无法继承插件权限；替换源码才创建新的文档授权。
+
+这三种同步弹窗共用主进程创建的隔离页面，沿用沙箱已收到的宿主主题、强调色、字体和控件圆角，并在显示前按内容调整窗口高度。主题只传递有界、白名单内的展示 token，不插入外部 HTML 或加载外部样式；独立 renderer 保证调用页面同步等待时，弹窗仍可交互。取消、Esc、关闭窗口或会话撤销时，`confirm` 返回 `false`，`prompt` 返回 `null`。
 
 - 支持 `/v1/` 后端路由的 GET、POST、PUT、PATCH、DELETE、HEAD，包括跨项目的项目、对话、消息、调用记录、功能操作和设置；不逐个维护业务接口白名单，也不要求选择当前项目。
 - 本地插件导入 `/v1/features/plugin-management/install-local` 是主进程专用入口，应用桥禁止调用，继续通过原生目录选择器导入。`DELETE /v1/threads/:id` 通过已认证的 native bridge 进入与桌面 IPC 共用的删除队列，检查所有窗口（含子对话）的未保存修改和文件操作，并按需确认；取消返回 `{ok:false,status:409,data:{cancelled:true}}`。主进程不可用时拒绝删除，不回退到直接请求。应用桥禁止使用 `thread/delete` RPC 绕过此流程。

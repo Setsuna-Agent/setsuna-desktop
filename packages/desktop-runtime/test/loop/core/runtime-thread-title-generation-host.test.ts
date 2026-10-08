@@ -5,10 +5,65 @@ import type {
   RuntimeUsage,
 } from '@setsuna-desktop/contracts';
 import { describe, expect, it, vi } from 'vitest';
+import type { ModelProviderRuntimeHost } from '@setsuna-desktop/feature-model-provider/contracts';
+import { PiModelClient } from '../../../../features/model-provider/src/runtime/pi-model-client.js';
+import { generateThreadTitle } from '../../../../features/thread-title-generation/src/runtime/thread-title-generator.js';
 import { createRuntimeThreadTitleGenerationHost } from '../../../src/loop/core/runtime-thread-title-generation-host.js';
 import type { ConfigStore, RuntimeProviderConfig } from '../../../src/ports/config-store.js';
 
 describe('runtime thread title generation host', () => {
+  it('generates a title through the real provider and collector when temperature is deprecated', async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      if (bodies.length === 1) return Response.json({
+        type: 'error',
+        error: {
+          type: 'invalid_request_error',
+          message: 'Upstream request failed: [invalid_request_error] `temperature` is deprecated for this model.',
+        },
+      }, { status: 400 });
+      const events = [
+        { type: 'message_start', message: { id: 'msg-1', model: 'title-model', role: 'assistant', content: [], usage: { input_tokens: 4, output_tokens: 0 } } },
+        { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+        { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: '{"title":"日常问候"}' } },
+        { type: 'content_block_stop', index: 0 },
+        { type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 6 } },
+        { type: 'message_stop' },
+      ];
+      return new Response(events.map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(''), {
+        headers: { 'Content-Type': 'text/event-stream' },
+      });
+    }) as typeof globalThis.fetch;
+    // An unknown gateway model exercises provider rejection instead of catalog temperature rules.
+    const model = 'gateway-title-model';
+    const configStore = keylessConfigStore(model);
+    const configuredProvider = (await configStore.getActiveProviderConfig())!;
+    const provider = { ...configuredProvider, provider: 'anthropic' as const, catalogProviderId: null };
+    const providerState = { ...provider, apiKeySet: false, apiKeyPreview: '' };
+    const providerHost: ModelProviderRuntimeHost = {
+      appVersion: 'test', dataDir: '', fetchForRoute: () => fetch,
+      resolveProvider: async () => provider,
+      readProviderState: async () => ({ activeProviderId: provider.id, providers: [providerState] }),
+      saveProviderState: async () => ({ activeProviderId: provider.id, providers: [providerState] }),
+      writeClipboardText: async () => undefined,
+    };
+    const host = titleHost(configStore, { modelClient: new PiModelClient(providerHost) });
+
+    const result = await generateThreadTitle({
+      host, attachmentCount: 0, model, providerId: provider.id,
+      now: host.now(), sessionId: 'thread-title-owner', userContent: 'hello',
+      signal: new AbortController().signal,
+    });
+
+    expect(result.title).toBe('日常问候');
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]).toHaveProperty('temperature', 0);
+    expect(bodies[1]).not.toHaveProperty('temperature');
+    expect(bodies[1].output_config).toEqual(bodies[0].output_config);
+    expect(bodies[1].messages).toEqual(bodies[0].messages);
+  });
+
   it('publishes a usage invalidation only after the background usage write succeeds', async () => {
     let finishWrite!: () => void;
     const pendingWrite = new Promise<void>((resolve) => { finishWrite = resolve; });

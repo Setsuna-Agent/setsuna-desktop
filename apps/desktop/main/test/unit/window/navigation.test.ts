@@ -45,7 +45,18 @@ describe('main window navigation guards', () => {
     frameNavigate?.({
       preventDefault: preventFrameNavigation,
       isMainFrame: false,
-      url: 'https://example.com/leak?payload=secret',
+      url: 'https://example.com/submit',
+    });
+    frameNavigate?.({
+      preventDefault: preventFrameNavigation,
+      isMainFrame: false,
+      url: 'http://127.0.0.1:3000/submit',
+    });
+    expect(preventFrameNavigation).not.toHaveBeenCalled();
+    frameNavigate?.({
+      preventDefault: preventFrameNavigation,
+      isMainFrame: false,
+      url: 'file:///app/dist/renderer/index.html',
     });
     expect(preventFrameNavigation).toHaveBeenCalledOnce();
     expect(openExternal).toHaveBeenCalledTimes(1);

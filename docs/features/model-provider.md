@@ -19,7 +19,7 @@ AgentLoop / Review / Vision / Thread title / Memory
                          │
        feature-model-provider/runtime
                          │
-          @earendil-works/pi-ai 1.0.2
+          @earendil-works/pi-ai 1.1.0
 ```
 
 `model-provider` 是 required runtime/renderer Feature。Runtime factory 先创建 `BindableModelClient`，Feature 激活完成后把 sampling capability 绑定进去；激活失败不会退回旧协议栈。
@@ -57,6 +57,8 @@ AgentLoop / Review / Vision / Thread title / Memory
 直接调用 provider/API stream 前，统一通过 Pi `normalizeContext()` 把系统提示词和工具声明转换为 transcript system message；不把 Pi transcript 类型扩散到共享 contracts 或持久存储。
 
 Setsuna provider ID 是配置和 metadata 身份。预置配置的 Pi model 保留 `deepseek`、`openrouter`、`openai`、`anthropic` 等真实 provider identity 和模型 compat；自定义配置使用 canonical `openai`/`anthropic` fallback。
+
+思考参数以选中模型的能力为准。不支持思考的模型不发送思考控制；自定义 Anthropic 连接中精确匹配目录的模型复用思考模式、effort 映射和温度约束，不继承厂商请求头或原生工具能力。标题请求优先关闭思考，目录标记无法关闭的模型保留其默认模式。未知模型别名明确拒绝旧式 `enabled` 时改用 adaptive，拒绝 `disabled` 时省略思考控制；兼容重试覆盖 HTTP 参数错误和 HTTP 200 后 SSE 中的 `invalid_request_error`，仅发生在没有输出时，保留结构化输出 schema 和已选 effort。压缩使用压缩模型配置中的思考能力与默认 effort，不受聊天输入框的思考开关影响；其请求共用同一适配与兼容重试链路。
 
 模型采样与原生压缩保留单次请求 15 分钟总超时，用户取消会立即中止等待。流式请求不再按 SDK 输出事件设置空闲超时：首个事件较慢、思考期间没有输出或心跳未透传为 SDK 事件，都不能单独触发轮次失败。该上限针对每次模型请求，不是整个任务的运行时长。
 

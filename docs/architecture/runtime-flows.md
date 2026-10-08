@@ -30,6 +30,14 @@
 
 维护模式只创建数据迁移/恢复所需窗口，不启动 runtime、terminal、内置浏览器和 updater。
 
+### 启动性能约束（硬性）
+
+启动速度是所有现有功能与后续新增功能的验收指标。检查的终点是核心服务可用、`desktop.whenReady()` 放行和 renderer 首帧揭示，不能只计量 native window 或 Logo 出现时间。任何新增初始化都必须说明它是否属于主界面可用的必要依赖；外围功能的恢复、扫描、预热、自动检查和网络请求必须后台或按需执行，不能把自身完成 Promise 接到这些就绪条件上，也不能通过同步计算或无界并发争用把成本转嫁给首屏。
+
+外围任务异常或超时只影响所属功能，多个任务不能把等待时间串行累加到 Logo loading；后台任务必须有明确的生命周期和取消/迟到清理。修改启动链路时，用可控的慢任务、永不返回和失败场景验证核心 provider 仍可用，并对比相关就绪阶段耗时。必要的安全隔离和核心数据一致性继续在关键路径完成，外围功能不得借性能优化扩大权限或跳过数据校验。
+
+Browser Feature 只把 controller、控制 server、权限边界和 IPC 接入核心激活，扩展恢复独立在后台进行。`test/integration/extension-startup.electron.test.ts` 使用真实 Electron、隔离 profile 和无窗口场景：人为挂起原生扩展加载时，Browser provider 的健康检查和认证命令已经可用；两个启动脚本失败及一个卡住的 worker 均不阻止健康 worker 启动，释放 composition 会取消等待并清理迟到加载。这个案例落实全局约束，后续功能同样必须验证自己的启动边界。
+
 ### 3. 启动 runtime 子进程
 
 `apps/desktop/main/src/runtime/host.ts`：

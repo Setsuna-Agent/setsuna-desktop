@@ -5,9 +5,9 @@ import { ExtensionContexts } from './contexts.js';
 import { BrowserExtensionSidePanels } from './side-panels.js';
 import { panelTabId } from './side-panel-options.js';
 import { extensionPageUrl } from './metadata.js';
-import { matchesHost } from './user-scripts/match-pattern.js';
-import { extensionTabDetails } from './tabs.js';
+import { extensionTabDetails, extensionTabForExtension } from './tabs.js';
 import type { BrowserExtensionActiveTabs } from './active-tabs.js';
+import { observeExtensionContents } from './contents-lifecycle.js';
 
 type Options = {
   session: Session;
@@ -30,7 +30,9 @@ export class BrowserExtensionUi {
 
   constructor(private readonly options: Options) {
     this.contexts = new ExtensionContexts({ ...options, channels,
-      bootstrap: (extension) => ({ sidePanel: extension.manifest.permissions?.includes('sidePanel') ?? false }),
+      // Install declared optional APIs before approval; each call still reads the current grants.
+      bootstrap: (extension) => ({ sidePanel: [...(extension.manifest.permissions ?? []),
+        ...(extension.manifest.optional_permissions ?? [])].includes('sidePanel') }),
       call: (extension, key, method, args) => this.call(extension, key, method, args),
       closed: (key) => this.actionListeners.delete(key) });
     this.panels = new BrowserExtensionSidePanels((owner) => {
@@ -44,13 +46,14 @@ export class BrowserExtensionUi {
   }
 
   track(contents: WebContents): () => void {
-    if (this.guests.has(contents.id)) return () => undefined;
+    if (contents.isDestroyed() || this.guests.has(contents.id)) return () => undefined;
     this.guests.set(contents.id, contents);
     const dispose = () => {
       this.guests.delete(contents.id); this.disposers.delete(contents.id);
-      contents.off('destroyed', dispose); this.panels.forgetTab(contents.id);
+      unobserve(); this.panels.forgetTab(contents.id);
     };
-    this.disposers.set(contents.id, dispose); contents.once('destroyed', dispose);
+    this.disposers.set(contents.id, dispose);
+    const unobserve = observeExtensionContents(contents, { destroyed: dispose });
     return dispose;
   }
 
@@ -61,17 +64,16 @@ export class BrowserExtensionUi {
     this.clicks.set(extension.id, owner);
     const endpoints = await this.contexts.endpoints(extension.id);
     // A dormant worker must restore its setOptions/setPanelBehavior calls before activation.
-    if (owner.isDestroyed() || !this.options.resolve(`chrome-extension://${extension.id}/`)) return false;
-    if (this.panels.options.togglesOnAction(extension.id)) return this.panels.show(extension, owner, tabId, true);
+    const current = this.options.resolve(`chrome-extension://${extension.id}/`);
+    if (owner.isDestroyed() || !current) return false;
+    if (this.panels.options.togglesOnAction(extension.id)) return this.panels.show(current, owner, tabId, true);
     const listeners = endpoints.filter(({ key }) => this.actionListeners.has(key));
     if (listeners.length) {
       const contents = tabId === undefined ? null : this.guest(tabId);
       const tab = contents ? { ...extensionTabDetails(contents, 'complete', undefined, owner.id), active: true, highlighted: true }
         : { id: -1, windowId: owner.id, index: 0, active: true, highlighted: true, pinned: false, incognito: false, status: 'complete' as const };
-      const { url, pendingUrl: _pendingUrl, title: _title, ...limitedTab } = tab;
-      const canRead = extension.manifest.permissions?.includes('tabs') || Boolean(contents && this.options.activeTabs.has(extension.id, contents))
-        || Boolean(url && matchesHost(url, extension.manifest.host_permissions ?? []));
-      for (const endpoint of listeners) endpoint.send({ kind: 'actionClicked', tab: canRead ? tab : limitedTab });
+      const filtered = extensionTabForExtension(current, tab, Boolean(contents && this.options.activeTabs.has(current.id, contents)));
+      for (const endpoint of listeners) endpoint.send({ kind: 'actionClicked', tab: filtered });
       return true;
     }
     return Boolean(extensionPageUrl(extension, 'sidepanel')) && this.panels.show(extension, owner, tabId, true);

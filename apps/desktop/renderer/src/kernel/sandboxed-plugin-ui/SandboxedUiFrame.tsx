@@ -7,8 +7,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   createSandboxedUiDocument,
   parseSandboxedUiFrameMessage,
-  SANDBOXED_UI_CHANNEL,
+  SANDBOXED_UI_FRAME_PERMISSIONS,
 } from './sandbox-document.js';
+import { SandboxedUiDocumentBridge } from './sandbox-document-bridge.js';
 import './sandboxed-ui-frame.css';
 import { useSandboxedRuntimeRequests } from './useSandboxedRuntimeRequests.js';
 import { useSandboxDialogSession } from './useSandboxDialogSession.js';
@@ -30,17 +31,21 @@ export function SandboxedUiFrame({
   title,
 }: SandboxedUiFrameProps) {
   const frameRef = useRef<HTMLIFrameElement>(null);
-  const actionRunning = useRef(false);
-  const messageBudget = useRef({ count: 0, startedAt: 0 });
   const [height, setHeight] = useState(240);
   const dialogs = useSandboxDialogSession(title);
-  const srcDoc = useMemo(() => createSandboxedUiDocument(source, { libraryScripts, size, dialogUrl: dialogs.url }), [dialogs.url, libraryScripts, size, source]);
+  const libraryKey = useMemo(() => JSON.stringify(libraryScripts ?? []), [libraryScripts]);
+  const bridge = useMemo(() => new SandboxedUiDocumentBridge(), [dialogs.url, libraryKey, size, source.css, source.html, source.js]);
+  const actionRunning = useMemo(() => ({ current: false }), [bridge]);
+  const messageBudget = useMemo(() => ({ count: 0, startedAt: 0 }), [bridge]);
+  const srcDoc = useMemo(() => createSandboxedUiDocument(source, {
+    libraryScripts, size, dialogUrl: dialogs.url, documentId: bridge.id,
+  }), [bridge, dialogs.url, libraryScripts, size, source]);
   const allowedActions = useMemo(() => new Set(allowedActionIds), [allowedActionIds]);
 
   const postToFrame = useCallback((message: Record<string, unknown>) => {
-    frameRef.current?.contentWindow?.postMessage({ channel: SANDBOXED_UI_CHANNEL, ...message }, '*');
-  }, []);
-  const requestRuntime = useSandboxedRuntimeRequests(onRuntimeRequest, postToFrame, srcDoc);
+    bridge.post(message);
+  }, [bridge]);
+  const requestRuntime = useSandboxedRuntimeRequests(onRuntimeRequest, postToFrame, bridge);
   const postSnapshot = useCallback(() => {
     postToFrame({
       type: 'snapshot',
@@ -51,8 +56,15 @@ export function SandboxedUiFrame({
   }, [context, data, postToFrame]);
 
   useEffect(() => {
+    bridge.start();
+    const connect = (event: MessageEvent) => bridge.connect(event, frameRef.current?.contentWindow);
+    window.addEventListener('message', connect);
+    return () => { window.removeEventListener('message', connect); bridge.revoke(); };
+  }, [bridge]);
+
+  useEffect(() => {
     const receive = (event: MessageEvent) => {
-      if (event.source !== frameRef.current?.contentWindow || !consumeMessageBudget(messageBudget.current)) return;
+      if (!consumeMessageBudget(messageBudget)) return;
       const message = parseSandboxedUiFrameMessage(event.data);
       if (!message) return;
       if (message.type === 'ready') {
@@ -110,9 +122,8 @@ export function SandboxedUiFrame({
         actionRunning.current = false;
       });
     };
-    window.addEventListener('message', receive);
-    return () => window.removeEventListener('message', receive);
-  }, [allowedActions, onAction, postSnapshot, postToFrame, requestRuntime, size]);
+    return bridge.listen(receive);
+  }, [actionRunning, allowedActions, bridge, messageBudget, onAction, postSnapshot, postToFrame, requestRuntime, size]);
 
   useEffect(() => {
     postSnapshot();
@@ -133,10 +144,11 @@ export function SandboxedUiFrame({
     <iframe
       allow="camera 'none'; microphone 'none'; geolocation 'none'; clipboard-read 'none'; clipboard-write 'none'"
       className={['sandboxed-ui-frame', size === 'fill' && 'sandboxed-ui-frame--fill', className].filter(Boolean).join(' ')}
-      onLoad={postSnapshot}
+      key={bridge.id}
+      onLoad={() => bridge.onLoad()}
       ref={frameRef}
       referrerPolicy="no-referrer"
-      sandbox="allow-scripts"
+      sandbox={SANDBOXED_UI_FRAME_PERMISSIONS}
       srcDoc={srcDoc}
       style={size === 'content' ? { height } : undefined}
       title={title}
@@ -165,12 +177,16 @@ function hostThemeSnapshot(): Readonly<{
     ['--setsuna-color-surface', '--app-surface'],
     ['--setsuna-color-surface-muted', '--app-surface-muted'],
     ['--setsuna-color-border', '--app-border'],
+    ['--setsuna-color-border-strong', '--app-border-strong'],
     ['--setsuna-color-accent', '--app-primary'],
+    ['--setsuna-color-accent-hover', '--app-primary-hover'],
     ['--setsuna-color-accent-text', '--app-primary-text'],
     ['--setsuna-color-danger', '--app-danger'],
     ['--setsuna-color-success', '--app-success'],
     ['--setsuna-color-warning', '--app-warning'],
     ['--setsuna-font-family', '--app-font-family'],
+    ['--setsuna-radius-control', '--app-radius-control'],
+    ['--setsuna-radius-field', '--app-radius-sm'],
   ].map(([target, source]) => [target, styles.getPropertyValue(source).trim()]).filter(([, value]) => value)));
   return Object.freeze({
     colorScheme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',

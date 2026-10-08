@@ -15,14 +15,16 @@ export function initializeExtensionSystem(): void {
   if (bootstrap.scripting) contextBridge.executeInMainWorld({ func: installExtensionScripting, args: [transport] });
 }
 
-function installExtensionSystem(bootstrap: ExtensionSystemBootstrap, transport: {
+export function installExtensionSystem(bootstrap: ExtensionSystemBootstrap, transport: {
   call(method: string, args: unknown[]): Promise<ExtensionApiResult>;
   onEvent(listener: (event: ExtensionSystemEvent) => void): void;
 }): void {
   type Listener = (...args: unknown[]) => void;
   const scope = globalThis as unknown as { chrome?: { debugger?: Record<string, unknown>; commands?: Record<string, unknown>;
     contextMenus?: Record<string, unknown>; downloads?: Record<string, unknown>; webNavigation?: Record<string, unknown>;
-    runtime?: { lastError?: { message: string } } } };
+    cookies?: Record<string, unknown>; bookmarks?: Record<string, unknown>; permissions?: Record<string, unknown>;
+    storage?: { managed?: Record<string, unknown> };
+    runtime?: { lastError?: { message: string }; onStartup?: unknown; id?: string; getURL?: (path: string) => string } } };
   const chrome = scope.chrome;
   const runtime = chrome?.runtime;
   if (!chrome || !runtime) return;
@@ -50,6 +52,18 @@ function installExtensionSystem(bootstrap: ExtensionSystemBootstrap, transport: 
       hasListener: (listener: Listener) => listeners.has(listener), hasListeners: () => listeners.size > 0,
     };
   };
+  // Electron exposes this event but treats restored installations as fresh loads.
+  // The host emits it once after the restored worker has registered its listeners.
+  runtime.onStartup = eventObject('startup');
+  if (bootstrap.faviconUrl && runtime.getURL) {
+    const nativeGetUrl = runtime.getURL.bind(runtime);
+    runtime.getURL = (path: string) => {
+      const original = nativeGetUrl(path);
+      const url = new URL(original);
+      return url.hostname === runtime.id && url.pathname === '/_favicon/'
+        ? `${bootstrap.faviconUrl}${url.search}${url.hash}` : original;
+    };
+  }
   if (bootstrap.debugger && !chrome.debugger) {
     chrome.debugger = { onEvent: eventObject('debuggerEvent'), onDetach: eventObject('debuggerDetach') };
     for (const method of ['attach', 'detach', 'sendCommand', 'getTargets']) chrome.debugger[method] = (...args: unknown[]) => call(`debugger.${method}`, args);
@@ -75,14 +89,36 @@ function installExtensionSystem(bootstrap: ExtensionSystemBootstrap, transport: 
     getAllFrames: (...args: unknown[]) => call('webNavigation.getAllFrames', args),
     onCreatedNavigationTarget: eventObject('navigationTargetCreated'),
   };
+  if (!chrome.permissions) {
+    chrome.permissions = { onAdded: eventObject('permissionsAdded'), onRemoved: eventObject('permissionsRemoved') };
+    for (const method of ['getAll', 'contains', 'request', 'remove']) chrome.permissions[method] = (...args: unknown[]) => call(`permissions.${method}`, args);
+  }
+  if (bootstrap.cookies && !chrome.cookies) {
+    chrome.cookies = { onChanged: eventObject('cookieChanged') };
+    for (const method of ['get', 'getAll', 'getAllCookieStores', 'set', 'remove']) chrome.cookies[method] = (...args: unknown[]) => call(`cookies.${method}`, args);
+  }
+  if (bootstrap.bookmarks && !chrome.bookmarks) {
+    chrome.bookmarks = {};
+    for (const method of ['get', 'getTree', 'getSubTree', 'getChildren', 'search', 'update', 'remove', 'removeTree']) chrome.bookmarks[method] = (...args: unknown[]) => call(`bookmarks.${method}`, args);
+  }
+  if (bootstrap.storage && chrome.storage) {
+    // Electron creates this namespace but every native read fails. With no enterprise
+    // policy backend the managed area has no values and all writes remain forbidden.
+    const managed: Record<string, unknown> = {};
+    for (const method of ['get', 'getKeys', 'getBytesInUse', 'set', 'remove', 'clear']) managed[method] = (...args: unknown[]) => call(`storage.managed.${method}`, args);
+    chrome.storage.managed = managed;
+  }
   transport.onEvent((event) => {
     if (event.kind === 'nativeMessage' || event.kind === 'nativeDisconnect') return;
-    const args = event.kind === 'debuggerEvent' ? [event.source, event.method, event.params]
+    const args = event.kind === 'startup' ? []
+      : event.kind === 'debuggerEvent' ? [event.source, event.method, event.params]
       : event.kind === 'debuggerDetach' ? [event.source, event.reason]
       : event.kind === 'command' ? [event.command, event.tab]
       : event.kind === 'contextMenuClicked' ? [event.info, event.tab]
       : event.kind === 'downloadCreated' ? [event.item]
-      : event.kind === 'downloadChanged' ? [event.delta] : [event.details];
+      : event.kind === 'downloadChanged' ? [event.delta]
+      : event.kind === 'cookieChanged' ? [event.changeInfo]
+      : event.kind === 'permissionsAdded' || event.kind === 'permissionsRemoved' ? [event.permissions] : [event.details];
     for (const listener of [...(events.get(event.kind) ?? [])]) {
       try { listener(...args); } catch (error) { console.error(error); }
     }

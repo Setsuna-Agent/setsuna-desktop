@@ -4,7 +4,7 @@ import { rm } from 'node:fs/promises';
 import { app, webContents, type BrowserWindow, type ContextMenuParams, type Extension, type Session, type WebContents } from 'electron';
 import type { RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import { BROWSER_WEB_STORE_URL, type BrowserExtension, type BrowserExtensionPopupAnchor, type BrowserExtensionView } from '../../contracts/extensions.js';
-import { confirmExtensionInstall } from './confirmation.js';
+import { confirmExtensionInstall, confirmExtensionPermissions } from './confirmation.js';
 import { extensionMetadata, newestNewTabExtension, validExtensionId } from './metadata.js';
 import { BrowserExtensionPages } from './pages.js';
 import { BrowserExtensionActions } from './actions.js';
@@ -16,7 +16,10 @@ import { BrowserExtensionTabs } from './tabs.js';
 import { BrowserExtensionUi } from './ui.js';
 import { BrowserExtensionSystemApis } from './system-apis.js';
 import { BrowserExtensionActiveTabs } from './active-tabs.js';
-import { startExtensionWorker } from './worker-startup.js';
+import { BrowserExtensionWorkerStartup } from './worker-startup.js';
+import { BrowserExtensionPermissions } from './permissions/service.js';
+import { BrowserExtensionLoadDiagnostics } from './load-diagnostics.js';
+import { BrowserExtensionFavicons } from './favicons.js';
 
 // Load the package's CJS entry intact so its packaged preload resolves beside it.
 const webStore: typeof import('electron-chrome-web-store') = createRequire(import.meta.url)('electron-chrome-web-store');
@@ -27,18 +30,25 @@ export class BrowserExtensionService {
   private readonly directory: string;
   private readonly pages: BrowserExtensionPages;
   private readonly state: BrowserExtensionState;
+  private readonly permissions: BrowserExtensionPermissions;
+  private readonly diagnostics: BrowserExtensionLoadDiagnostics;
+  private readonly favicons: BrowserExtensionFavicons;
   readonly actions: BrowserExtensionActions;
   readonly ui: BrowserExtensionUi;
   private readonly userScripts: BrowserUserScripts;
   private readonly tabs: BrowserExtensionTabs;
   private readonly system: BrowserExtensionSystemApis;
   private readonly activeTabs: BrowserExtensionActiveTabs;
+  private readonly workerStartup: BrowserExtensionWorkerStartup;
   private readonly pending = new Set<string>();
   private preloadIds: string[] = [];
   private disposed = false;
   private revision = 0;
   private extensions: readonly BrowserExtension[] = [];
   private queue: Promise<unknown> = Promise.resolve();
+  private startup: Promise<void> | null = null;
+  private readonly lifetime = new AbortController();
+  private readonly signal: AbortSignal;
 
   constructor(private readonly options: {
     session: Session;
@@ -50,10 +60,25 @@ export class BrowserExtensionService {
     openWebPage(owner: BrowserWindow, url: string): void;
     activeOwner?(): BrowserWindow | null;
     windows?(): readonly BrowserWindow[];
+    signal?: AbortSignal;
   }) {
     if (!options.session.storagePath) throw new Error('Browser extensions require persistent storage.');
     this.directory = path.join(options.session.storagePath, 'Extensions');
+    this.signal = options.signal ? AbortSignal.any([options.signal, this.lifetime.signal]) : this.lifetime.signal;
     this.state = new BrowserExtensionState(path.join(options.session.storagePath, 'extensions-state.json'));
+    this.diagnostics = new BrowserExtensionLoadDiagnostics({ directory: this.directory,
+      resolve: (id) => this.nativeExtension(`chrome-extension://${id}/`), report: (message) => console.warn(message) });
+    this.favicons = new BrowserExtensionFavicons({ session: options.session, resolve: url => this.managedExtension(url) });
+    this.permissions = new BrowserExtensionPermissions({
+      state: this.state, serialize: (operation) => this.mutate(operation),
+      current: (id) => this.nativeExtension(`chrome-extension://${id}/`),
+      confirm: (extension, requested) => {
+        const owner = options.activeOwner?.() ?? options.windows?.()[0];
+        if (!owner || owner.isDestroyed()) throw new Error('Browser window unavailable.');
+        return confirmExtensionPermissions(owner, extension.name, requested, options.language());
+      },
+      publish: (id, event) => this.system.publish(id, event),
+    });
     this.activeTabs = new BrowserExtensionActiveTabs(contents => this.ownsGuest(contents));
     this.pages = new BrowserExtensionPages(options.session, options.openWebPage, (contents) => this.tabs.track(contents));
     this.tabs = new BrowserExtensionTabs({ session: options.session, pages: this.pages,
@@ -63,18 +88,29 @@ export class BrowserExtensionService {
       owner: options.owner, windows: () => options.windows?.() ?? [options.activeOwner?.()].filter((window): window is BrowserWindow => Boolean(window)),
       activeOwner: () => options.activeOwner?.() ?? null, activeTabs: this.activeTabs });
     this.actions = new BrowserExtensionActions(options.session, (url) => this.managedExtension(url), options.actionsChanged);
-    this.system = new BrowserExtensionSystemApis({ session: options.session, resolve: (url) => this.managedExtension(url),
+    this.system = new BrowserExtensionSystemApis({ session: options.session, resolve: (url) => this.managedExtension(url), permissions: this.permissions, favicons: this.favicons,
+      windows: () => options.windows?.() ?? [options.activeOwner?.()].filter((window): window is BrowserWindow => Boolean(window)),
       ownsGuest: (contents) => this.ownsGuest(contents), owner: options.owner, activeTabs: this.activeTabs,
       executeScript: (...args) => this.userScripts.executeScript(...args), activate: (extension, contents) => {
         const owner = options.owner(contents); if (owner) void this.open(extension.id, 'action', owner, undefined, contents.id);
       } });
     this.userScripts = new BrowserUserScripts({ session: options.session, directory: path.join(options.session.storagePath, 'UserScripts'),
       resolve: (url) => this.managedExtension(url), allowed: (id) => this.state.allowsUserScripts(id), ownsGuest: (contents) => this.ownsGuest(contents) });
+    this.workerStartup = new BrowserExtensionWorkerStartup({ session: options.session, signal: this.signal,
+      profileStarted: (id) => this.system.profileStarted(id) });
   }
 
-  async start(): Promise<void> {
+  start(): Promise<void> {
+    if (this.signal.aborted) return Promise.resolve();
+    return this.startup ??= this.restore();
+  }
+
+  private async restore(): Promise<void> {
     const { session } = this.options;
     await this.state.load();
+    if (this.signal.aborted) return;
+    this.diagnostics.start();
+    this.favicons.start();
     this.userScripts.start();
     this.tabs.start();
     this.ui.start();
@@ -83,17 +119,23 @@ export class BrowserExtensionService {
     session.extensions.on('extension-loaded', this.changed);
     session.extensions.on('extension-unloaded', this.unloaded);
     const preloads = new Set(session.getPreloadScripts().map(({ id }) => id));
-    await webStore.installChromeWebStore({
-      session, extensionsPath: this.directory, minimumManifestVersion: 3,
-      // Do not silently install a later manifest with newly requested permissions.
-      autoUpdate: false, allowUnpackedExtensions: false, loadExtensions: false,
-      beforeInstall: (details) => this.beforeInstall(details),
-    });
-    this.preloadIds = session.getPreloadScripts().map(({ id }) => id).filter((id) => !preloads.has(id));
+    try {
+      await webStore.installChromeWebStore({
+        session, extensionsPath: this.directory, minimumManifestVersion: 3,
+        // Do not silently install a later manifest with newly requested permissions.
+        autoUpdate: false, allowUnpackedExtensions: false, loadExtensions: false,
+        beforeInstall: (details) => this.beforeInstall(details),
+      });
+    } finally {
+      this.preloadIds = session.getPreloadScripts().map(({ id }) => id).filter((id) => !preloads.has(id));
+      if (this.signal.aborted) for (const id of this.preloadIds) session.unregisterPreloadScript(id);
+    }
+    if (this.signal.aborted) return;
     // Restore only enabled installations, so disabled workers never briefly run at startup.
     for (const extension of await readInstalledExtensions(this.directory)) {
+      if (this.signal.aborted) return;
       if (!this.state.isEnabled(extension.id)) continue;
-      try { await this.load(extension); }
+      try { await this.load(extension, true); }
       catch (error) { console.error(`Failed to load browser extension ${extension.id}`, error); }
     }
     await this.refresh();
@@ -139,7 +181,8 @@ export class BrowserExtensionService {
     const untrackTabs = this.tabs.track(contents);
     const untrackUi = this.ui.track(contents);
     const untrackSystem = this.system.track(contents);
-    return () => { untrackActions(); untrackScripts(); untrackTabs(); untrackUi(); untrackSystem(); untrackActiveTabs(); };
+    const untrackFavicons = this.favicons.track(contents);
+    return () => { untrackActions(); untrackScripts(); untrackTabs(); untrackUi(); untrackSystem(); untrackActiveTabs(); untrackFavicons(); };
   }
 
   ownsGuest(contents: WebContents): boolean {
@@ -166,6 +209,7 @@ export class BrowserExtensionService {
         await webStore.uninstallExtension(id, { session: this.options.session, extensionsPath: this.directory });
       } catch (error) { await this.state.setEnabled(id, enabled); throw error; }
       await this.state.setUserScriptsAllowed(id, false);
+      await this.state.setGrantedPermissions(id, { permissions: [], origins: [] });
       await this.userScripts.remove(id);
       await this.refresh();
       return true;
@@ -237,7 +281,9 @@ export class BrowserExtensionService {
   }
 
   dispose(): void {
+    if (this.disposed) return;
     this.disposed = true;
+    this.lifetime.abort();
     ++this.revision;
     this.pages.close();
     this.actions.dispose();
@@ -246,6 +292,8 @@ export class BrowserExtensionService {
     this.userScripts.dispose();
     this.tabs.dispose();
     this.activeTabs.dispose();
+    this.diagnostics.dispose();
+    this.favicons.dispose();
     this.options.session.extensions.off('extension-loaded', this.changed);
     this.options.session.extensions.off('extension-unloaded', this.unloaded);
     for (const id of this.preloadIds) this.options.session.unregisterPreloadScript(id);
@@ -260,6 +308,7 @@ export class BrowserExtensionService {
     }
   };
   private readonly unloaded = (_event: Electron.Event, extension: Electron.Extension) => {
+    this.workerStartup.remove(extension.id);
     this.activeTabs.remove(extension.id);
     this.actions.remove(extension.id); this.pages.close(extension.id); this.changed();
     this.userScripts.unload(extension.id);
@@ -269,7 +318,12 @@ export class BrowserExtensionService {
   };
 
   private managedExtension(rawUrl: string): Electron.Extension | null {
-    if (this.disposed) return null;
+    const extension = this.nativeExtension(rawUrl);
+    return extension ? this.permissions.effective(extension) : null;
+  }
+
+  private nativeExtension(rawUrl: string): Electron.Extension | null {
+    if (this.signal.aborted) return null;
     try {
       const url = new URL(rawUrl);
       if (url.protocol !== 'chrome-extension:' || !validExtensionId(url.hostname)) return null;
@@ -299,17 +353,33 @@ export class BrowserExtensionService {
   }
 
   private mutate(operation: () => Promise<boolean>): Promise<boolean> {
-    // Multiple windows can toggle or uninstall the same extension concurrently.
-    const result = this.queue.then(() => this.disposed ? false : operation());
+    // Wait only extension operations for restoration; never the desktop readiness path.
+    const result = this.queue.then(async () => {
+      if (!await this.readyForMutation()) return false;
+      return operation();
+    });
     this.queue = result.catch(() => undefined);
     return result;
   }
 
-  private async load(extension: Extension): Promise<void> {
+  private readyForMutation(): Promise<boolean> {
+    if (this.signal.aborted) return Promise.resolve(false);
+    // Scope draining precedes disposer execution. Cancel this wait so an IPC queued
+    // behind slow restoration cannot deadlock the Feature scope's operation drain.
+    return new Promise((resolve, reject) => {
+      const cancelled = () => { this.signal.removeEventListener('abort', cancelled); resolve(false); };
+      this.signal.addEventListener('abort', cancelled, { once: true });
+      Promise.resolve(this.startup).then(() => {
+        this.signal.removeEventListener('abort', cancelled); resolve(!this.signal.aborted);
+      }, error => { this.signal.removeEventListener('abort', cancelled); reject(error); });
+    });
+  }
+
+  private async load(extension: Extension, profileStartup = false): Promise<void> {
     const loaded = await this.options.session.extensions.loadExtension(extension.path);
+    if (this.signal.aborted) { this.options.session.extensions.removeExtension(loaded.id); return; }
     if (loaded.manifest.background?.service_worker) {
-      await startExtensionWorker(this.options.session, loaded.id)
-        .catch((error: unknown) => console.error(`Failed to start worker for extension ${loaded.id}`, error));
+      this.workerStartup.enqueue(loaded.id, profileStartup);
     }
   }
 
