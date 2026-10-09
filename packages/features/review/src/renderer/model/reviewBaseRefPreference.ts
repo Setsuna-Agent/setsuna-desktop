@@ -6,7 +6,12 @@ import {
 } from '../preferences.js';
 
 export function reviewBaseRefPreferenceKey(project: WorkspaceProject): string {
-  return `setsuna-desktop:review-base-ref:${project.id || project.path}`;
+  return `setsuna-desktop:review-base-ref:${reviewProjectPreferenceIdentity(project)}`;
+}
+
+export function reviewProjectPreferenceIdentity(project: WorkspaceProject): string {
+  const root = project.roots?.find((candidate) => candidate.path === project.path);
+  return root && root.id !== 'primary' ? `${project.id}:${root.id}` : project.id || project.path || '';
 }
 
 export function readReviewBaseRefPreference(key: string | null): string | null {

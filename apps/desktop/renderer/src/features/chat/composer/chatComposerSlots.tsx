@@ -209,7 +209,7 @@ export function createWorkspaceMentionReferenceSlot(
       label: (
         <WorkspaceMentionLabel
           name={entry.name}
-          path={entry.path}
+          path={entry.absolutePath ?? entry.path}
           serializedText={resultText}
           type={entry.kind}
         />

@@ -1,5 +1,7 @@
 import {
   WORKSPACE_ENTRY_EXISTS_ERROR_CODE,
+  workspaceTarget,
+  type WorkspaceProjectTarget,
   WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES,
   type WorkspaceFileSaveInput,
   type WorkspaceEntryCreateInput,
@@ -25,7 +27,7 @@ const PROJECT_CONTENT_SEARCH_SUPERSEDE_KEY = 'project-content-search';
 
 export async function searchWorkspaceProjectForRest(
   workspaceProjects: Pick<WorkspaceProjectStore, 'search'>,
-  projectId: string,
+  projectId: WorkspaceProjectTarget,
   query: string,
 ): Promise<WorkspaceSearchResponse> {
   try {
@@ -80,13 +82,14 @@ export async function handleRuntimeWorkspaceRequest(
           threadId,
           createdAt: thread.createdAt,
         })).id;
-      sendJson(response, 200, await runtime.workspaceProjects.getStatus(projectId));
+      sendJson(response, 200, await runtime.workspaceProjects.getStatus(workspaceTarget(projectId, url.searchParams.get('rootId')), thread.workspaceId ? thread.projectId : undefined));
       return true;
     }
     sendJson(
       response,
       200,
-      await runtime.workspaceProjects.getStatus(url.searchParams.get('projectId') ?? undefined),
+      await runtime.workspaceProjects.getStatus(url.searchParams.has('projectId')
+        ? workspaceTarget(url.searchParams.get('projectId')!, url.searchParams.get('rootId')) : undefined),
     );
     return true;
   }
@@ -114,7 +117,7 @@ export async function handleRuntimeWorkspaceRequest(
       response,
       200,
       await runtime.workspaceProjects.listEntries(
-        decodeURIComponent(projectFilesMatch[1]),
+        workspaceTarget(decodeURIComponent(projectFilesMatch[1]), url.searchParams.get('rootId')),
         url.searchParams.get('path') ?? '.',
       ),
     );
@@ -124,20 +127,20 @@ export async function handleRuntimeWorkspaceRequest(
   const projectEntriesMatch = url.pathname.match(/^\/v1\/projects\/([^/]+)\/entries$/u);
   if (projectEntriesMatch && request.method === 'POST') {
     sendJson(response, 201, await workspaceEntryMutationForRest(runtime.workspaceProjects.createEntry(
-      decodeURIComponent(projectEntriesMatch[1]), await readBody<WorkspaceEntryCreateInput>(request),
+      workspaceTarget(decodeURIComponent(projectEntriesMatch[1]), url.searchParams.get('rootId')), await readBody<WorkspaceEntryCreateInput>(request),
     )));
     return true;
   }
   if (projectEntriesMatch && request.method === 'PATCH') {
     sendJson(response, 200, await workspaceEntryMutationForRest(runtime.workspaceProjects.renameEntry(
-      decodeURIComponent(projectEntriesMatch[1]), url.searchParams.get('path') ?? '',
+      workspaceTarget(decodeURIComponent(projectEntriesMatch[1]), url.searchParams.get('rootId')), url.searchParams.get('path') ?? '',
       await readBody<WorkspaceEntryRenameInput>(request),
     )));
     return true;
   }
   if (projectEntriesMatch && request.method === 'DELETE') {
     await runtime.workspaceProjects.deleteEntry(
-      decodeURIComponent(projectEntriesMatch[1]), url.searchParams.get('path') ?? '',
+      workspaceTarget(decodeURIComponent(projectEntriesMatch[1]), url.searchParams.get('rootId')), url.searchParams.get('path') ?? '',
     );
     sendJson(response, 200, { ok: true });
     return true;
@@ -145,7 +148,7 @@ export async function handleRuntimeWorkspaceRequest(
   const projectEntryMoveMatch = url.pathname.match(/^\/v1\/projects\/([^/]+)\/entries\/move$/u);
   if (projectEntryMoveMatch && request.method === 'POST') {
     sendJson(response, 200, await workspaceEntryMutationForRest(runtime.workspaceProjects.moveEntry(
-      decodeURIComponent(projectEntryMoveMatch[1]), url.searchParams.get('path') ?? '',
+      workspaceTarget(decodeURIComponent(projectEntryMoveMatch[1]), url.searchParams.get('rootId')), url.searchParams.get('path') ?? '',
       await readBody<WorkspaceEntryMoveInput>(request),
     )));
     return true;
@@ -158,7 +161,7 @@ export async function handleRuntimeWorkspaceRequest(
       response,
       200,
       await runtime.workspaceProjects.searchEntries(
-        decodeURIComponent(projectEntriesSearchMatch[1]),
+        workspaceTarget(decodeURIComponent(projectEntriesSearchMatch[1]), url.searchParams.get('rootId')),
         url.searchParams.get('q') ?? '',
         url.searchParams.has('parent') ? url.searchParams.get('parent') : undefined,
       ),
@@ -172,7 +175,7 @@ export async function handleRuntimeWorkspaceRequest(
       response,
       200,
       await runtime.workspaceProjects.readFile(
-        decodeURIComponent(projectReadMatch[1]),
+        workspaceTarget(decodeURIComponent(projectReadMatch[1]), url.searchParams.get('rootId')),
         url.searchParams.get('path') ?? '',
         // CodeView virtualizes long files, so the regular preview can use the
         // same complete-content budget as edit mode instead of the legacy
@@ -190,7 +193,7 @@ export async function handleRuntimeWorkspaceRequest(
       200,
       await saveRuntimeWorkspaceFile(
         runtime.workspaceProjects,
-        decodeURIComponent(projectWriteMatch[1]),
+        workspaceTarget(decodeURIComponent(projectWriteMatch[1]), url.searchParams.get('rootId')),
         url.searchParams.get('path') ?? '',
         await readBody<WorkspaceFileSaveInput>(request),
       ),
@@ -206,7 +209,7 @@ export async function handleRuntimeWorkspaceRequest(
       200,
       await searchWorkspaceProjectForRest(
         runtime.workspaceProjects,
-        decodeURIComponent(projectSearchMatch[1]),
+        workspaceTarget(decodeURIComponent(projectSearchMatch[1]), url.searchParams.get('rootId')),
         query,
       ),
     );

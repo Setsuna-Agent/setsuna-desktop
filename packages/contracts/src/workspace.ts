@@ -47,10 +47,23 @@ export type WorkspaceProject = {
   /** Device-local directory binding. Missing for a restored project awaiting association. */
   path?: string;
   gitRoot?: string;
+  /** Ordered source directories. The first is primary; path/gitRoot mirror it for older consumers. */
+  roots?: WorkspaceProjectRoot[];
   archivedAt?: string;
   createdAt: string;
   updatedAt: string;
 };
+
+export type WorkspaceProjectRoot = {
+  id: string;
+  path: string;
+  gitRoot?: string;
+};
+
+/** File operations select a source directory without changing logical project ownership. */
+export type WorkspaceProjectTarget = string | { projectId: string; rootId: string };
+
+export type WorkspaceProjectRootInput = { id?: string; path: string };
 
 export type WorkspaceProjectList = {
   projects: WorkspaceProject[];
@@ -59,12 +72,14 @@ export type WorkspaceProjectList = {
 export type AddWorkspaceProjectInput = {
   path?: string;
   name?: string;
+  roots?: WorkspaceProjectRootInput[];
 };
 
 export type UpdateWorkspaceProjectInput = {
   name?: string;
   /** `null` explicitly removes the device-local directory binding. */
   path?: string | null;
+  roots?: WorkspaceProjectRootInput[];
 };
 
 export type WorkspaceStatus = {
@@ -77,6 +92,7 @@ export type WorkspaceStatus = {
 
 export type WorkspaceStatusQuery = {
   projectId?: string;
+  rootId?: string;
   threadId?: string;
 };
 
@@ -126,6 +142,10 @@ export type WorkspaceEntrySearchItem = {
   name: string;
   path: string;
   parent: string;
+  rootId?: string;
+  rootName?: string;
+  /** Absolute reference given to the model; UI operations use rootId and path. */
+  absolutePath?: string;
 };
 
 export type WorkspaceEntrySearchResponse = {
@@ -289,6 +309,7 @@ export const WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES = 8 * 1024 * 1024;
 
 export type WorkspaceFileRead = {
   projectId: string;
+  rootId?: string;
   path: string;
   content: string;
   size: number;
@@ -330,6 +351,8 @@ export type WorkspaceFileChangePatch = {
 
 export type WorkspaceFileChange = {
   path: string;
+  /** Canonical target from a persisted tool result, never supplied by a client undo request. */
+  absolutePath?: string;
   patch: WorkspaceFileChangePatch;
 };
 
@@ -344,6 +367,7 @@ export type ThreadFileChangesResult = {
 
 export type WorkspaceFileWrite = {
   projectId: string;
+  rootId?: string;
   path: string;
   size: number;
   modifiedAt?: string;

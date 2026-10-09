@@ -1,9 +1,11 @@
+import { assessFileMutationApproval } from './tool-file-approval.js';
 import type {
   RuntimeApprovalDecision,
   RuntimeApprovalReviewer,
   RuntimeConfigState,
   RuntimeExecPolicyAmendment,
   RuntimeToolCall,
+  RuntimeSandboxWorkspaceWrite,
 } from '@setsuna-desktop/contracts';
 import type {
   RuntimeToolHookEvents,
@@ -28,7 +30,6 @@ import {
 import { ToolApprovalStore } from './tool-approval-store.js';
 import {
   assessAdditionalSandboxPermissionsApproval,
-  assessFileMutationApproval,
   decisionGrantsSessionReuse,
   effectiveToolCallFor,
   execApprovalApprovalKeys,
@@ -56,6 +57,7 @@ export type ToolApprovalCoordinatorEvents =
 type ToolApprovalResult = {
   decision: RuntimeApprovalDecision;
   sandboxBypass: boolean;
+  fileAccessGrant?: RuntimeSandboxWorkspaceWrite;
 };
 
 export type ToolApprovalCoordinatorOptions = {
@@ -115,10 +117,17 @@ export class ToolApprovalCoordinator {
       environment,
       runtimeProfile,
     );
-    const result = (decision: RuntimeApprovalDecision): ToolApprovalResult => ({
-      decision,
-      sandboxBypass: decision !== 'reject' && requirement.action === 'ask' && requirement.retryKind === 'sandbox_bypass',
-    });
+    const result = (decision: RuntimeApprovalDecision): ToolApprovalResult => {
+      const fileAccessGrant = decision !== 'reject' && requirement.action === 'ask' ? requirement.fileAccessGrant : undefined;
+      if (fileAccessGrant && decisionGrantsSessionReuse(decision)) {
+        this.options.approvalStore?.grantSandboxPermissions('session', context.turnId, environment.id, fileAccessGrant);
+      }
+      return {
+        decision,
+        sandboxBypass: decision !== 'reject' && requirement.action === 'ask' && requirement.retryKind === 'sandbox_bypass',
+        ...(fileAccessGrant ? { fileAccessGrant } : {}),
+      };
+    };
     if (requirement.action === 'skip') return result('approve');
     if (requirement.action === 'reject') {
       throw new ToolPolicyRejectedError(requirement.reason);

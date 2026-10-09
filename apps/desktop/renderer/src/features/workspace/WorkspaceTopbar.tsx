@@ -8,6 +8,7 @@ export function WorkspaceTopbar({
   availablePanelTypes,
   panels,
   unsavedFilePath,
+  isFileDirty,
   bottomPanelOpen,
   onClosePanel,
   onOpenBrowser,
@@ -28,6 +29,7 @@ export function WorkspaceTopbar({
   availablePanelTypes: DesktopPanelType[];
   panels: DesktopPanelTab[];
   unsavedFilePath?: string | null;
+  isFileDirty?: (path: string, rootId?: string) => boolean;
   bottomPanelOpen: boolean;
   onClosePanel: (panelId: string) => void;
   onOpenBrowser: () => void;
@@ -97,6 +99,7 @@ export function WorkspaceTopbar({
         panels={panels}
         placement="side"
         unsavedFilePath={unsavedFilePath}
+        isFileDirty={isFileDirty}
       />
     </div>
   );

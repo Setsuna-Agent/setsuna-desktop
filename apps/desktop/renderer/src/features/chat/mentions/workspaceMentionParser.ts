@@ -10,7 +10,7 @@ export type WorkspaceMentionTextPart =
     type: 'mention';
   };
 
-const serializedWorkspaceMentionPattern = /(^|\s)@([^@\s][^\s]*)/gu;
+const serializedWorkspaceMentionPattern = /(^|\s)@("(?:\\.|[^"\\])*"|[^@\s][^\s]*)/gu;
 
 export function parseWorkspaceMentionText(content: string): WorkspaceMentionTextPart[] {
   const parts: WorkspaceMentionTextPart[] = [];
@@ -19,7 +19,11 @@ export function parseWorkspaceMentionText(content: string): WorkspaceMentionText
   for (const match of content.matchAll(serializedWorkspaceMentionPattern)) {
     const matchStart = match.index ?? 0;
     const boundary = match[1] ?? '';
-    const path = match[2] ?? '';
+    const value = match[2] ?? '';
+    let path = value;
+    if (value.startsWith('"')) {
+      try { path = JSON.parse(value) as string; } catch { continue; }
+    }
     const mentionStart = matchStart + boundary.length;
     const mentionEnd = matchStart + match[0].length;
 

@@ -20,7 +20,6 @@ import {
   type ToolRuntimeProfile,
 } from '../../ports/tool-host.js';
 import {
-  assessFileMutationPolicy,
   protectedWorkspaceMetadataPathForPath
 } from '../../security/file-system-policy.js';
 import {
@@ -44,6 +43,7 @@ export type ToolApprovalRequirement =
       environmentId?: string;
       additionalPermissions?: RequestPermissionProfileOutput;
       retryKind?: RuntimeApprovalRetryKind;
+      fileAccessGrant?: RuntimeSandboxWorkspaceWrite;
     }
   | { action: 'reject'; reason: string };
 
@@ -321,25 +321,6 @@ export function combineShellApplyPatchWorkdirs(shellWorkdir: string, commandWork
   if (!base) return child || undefined;
   if (!child) return base;
   return path.isAbsolute(child) ? child : path.join(base, child);
-}
-
-export function assessFileMutationApproval(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext, approvalPolicy: RuntimeConfigState['approvalPolicy']): ToolApprovalRequirement | null {
-  const assessment = assessFileMutationPolicy({
-    args: parsedArguments,
-    approvalPolicy,
-    permissionProfile: context.permissionProfile,
-    projectId: context.projectId ?? context.environment.id,
-    toolName: toolCall.name,
-  });
-  if (!assessment) return null;
-  if (assessment.action === 'allow') return { action: 'skip' };
-  if (assessment.action === 'reject') return { action: 'reject', reason: assessment.reason };
-  return {
-    action: 'ask',
-    approvalKeys: assessment.approvalKeys,
-    argumentsPreview: previewArguments(parsedArguments),
-    reason: assessment.reason,
-  };
 }
 
 export type AdditionalSandboxPermissions = {

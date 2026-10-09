@@ -14,10 +14,11 @@ export function runtimePermissionsPrompt({
   const environment = context.environment;
   const sandbox = context.sandboxWorkspaceWrite ?? {};
   const unrestrictedFileSystem = context.permissionProfile === 'danger-full-access';
-  const readableRoots = sandbox.readableRoots?.length ? sandbox.readableRoots : [environment.workspaceRoot];
+  const roots = environment.workspaceRoots.length ? environment.workspaceRoots : [environment.workspaceRoot];
+  const readableRoots = [...new Set([...roots, ...(sandbox.readableRoots ?? []), ...(sandbox.writableRoots ?? [])])];
   const writableRoots = context.permissionProfile === 'read-only'
     ? []
-    : sandbox.writableRoots?.length ? sandbox.writableRoots : [environment.workspaceRoot];
+    : [...new Set([...roots, ...(sandbox.writableRoots ?? [])])];
   const networkAccess = unrestrictedFileSystem || sandbox.networkAccess === true;
   const canRequestPermissions = tools.some((tool) => tool.name === 'request_permissions');
   const canEscalateExec = tools.some((tool) => tool.name === 'exec_command');

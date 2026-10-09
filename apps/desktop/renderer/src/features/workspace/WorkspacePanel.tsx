@@ -2,6 +2,7 @@ import { FileTreeToggle, FileTreeSurface, FileTreeRow, ResizeHandle, TextField, 
 
 import {
   WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES,
+  workspaceFileKey,
   type WorkspaceEntry,
   type WorkspaceEntryCreateInput,
   type WorkspaceEntrySearchItem,
@@ -79,6 +80,7 @@ export function WorkspacePanel({
   placement = 'side',
   activeProject,
   entryOperationPending,
+  sourceRootPicker,
   fileDraft,
   fileTree,
   fileFocusRequest,
@@ -116,6 +118,7 @@ export function WorkspacePanel({
   activePanel: DesktopPanelTab;
   placement?: DesktopPanelSlot;
   activeProject?: WorkspaceProject;
+  sourceRootPicker?: ReactNode;
   entryOperationPending: boolean;
   fileDraft: WorkspaceFileDraftState;
   fileTree: WorkspaceFileTreeState;
@@ -177,7 +180,7 @@ export function WorkspacePanel({
   }, [activePanel.filePath, activePanel.type, revealTarget, treeVisible]);
   // Selection can change before its file read settles. Never render another tab's document or draft here.
   const filePreview = workspaceFilePreview && activePanel.type === 'file' && activePanel.filePath === workspaceFilePreview.path
-    && activeProject?.id === workspaceFilePreview.projectId ? workspaceFilePreview : null;
+    && activeProject?.id === workspaceFilePreview.projectId && activePanel.rootId === workspaceFilePreview.rootId ? workspaceFilePreview : null;
   const fileView = useWorkspaceFileViewMode(filePreview, fileFocusRequest);
   const activeProjectLabel = activeProject?.name ?? t('workspace.files.noProject');
   const editorPath = activePanel.type === 'file' && activePanel.filePath
@@ -288,6 +291,7 @@ export function WorkspacePanel({
       />
     ) : (activePanel.type === 'changes' || activePanel.type === 'commit-message') && activeProject?.path ? (
       <GitChangesFeaturePanel
+        sourceRootPicker={sourceRootPicker}
         editingMessage={activePanel.type === 'commit-message'}
         workspaceRoot={activeProject.path}
         reviewState={reviewState}
@@ -307,6 +311,7 @@ export function WorkspacePanel({
       />
     ) : activePanel.type === 'review' ? (
       <ReviewFeaturePanel
+        sourceRootPicker={sourceRootPicker}
         activeProject={activeProject}
         error={reviewError}
         focusRequest={reviewFocusRequest}
@@ -398,6 +403,7 @@ export function WorkspacePanel({
                     }
                   }}
                 />
+                {sourceRootPicker ? <div className="workspace-root-toolbar">{sourceRootPicker}</div> : null}
                 <div className="desktop-file-search">
                   <Search size={13} />
                   <TextField
@@ -639,7 +645,7 @@ export function WorkspaceFilePreviewContent({
       <CodeEditorPreview file={file} fileFocusRequest={activeFocusRequest} />
     )}>
       <LazyEditableWorkspaceFile
-        key={`${file.projectId}:${file.path}`}
+        key={workspaceFileKey(file)}
         content={fileDraft.content}
         file={file}
         fileFocusRequest={activeFocusRequest}
@@ -658,7 +664,7 @@ export function WorkspaceFilePreviewContent({
       </div>
       {previewing ? (
         <Suspense fallback={<div className="desktop-markdown-preview" role="status">{t('workspace.files.loadingPreview')}</div>}>
-          <LazyWorkspaceMarkdownPreview key={`${file.projectId}:${file.path}`} file={file}
+          <LazyWorkspaceMarkdownPreview key={workspaceFileKey(file)} file={file}
             content={fileDraft?.editing ? fileDraft.content : file.content} onOpenFile={onOpenFile} />
         </Suspense>
       ) : null}
@@ -683,7 +689,7 @@ function CodeEditorPreview({
     >
       <div className="desktop-code-editor__viewport">
         <CodeFileView
-          cacheKey={`${file.projectId}:${file.path}:${file.revision ?? file.modifiedAt ?? file.size}`}
+          cacheKey={`${workspaceFileKey(file)}:${file.revision ?? file.modifiedAt ?? file.size}`}
           className="desktop-code-editor__pierre"
           codeViewLayout={workspaceCodeViewLayout}
           containerRef={codeViewSurface.codeViewContainerRef}

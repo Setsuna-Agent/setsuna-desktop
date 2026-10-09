@@ -110,6 +110,7 @@ export function DesktopPanelHeader({
   panels,
   placement,
   unsavedFilePath,
+  isFileDirty,
 }: {
   actions?: ReactNode;
   activePanel: DesktopPanelType;
@@ -131,6 +132,7 @@ export function DesktopPanelHeader({
   panels?: DesktopPanelTab[];
   placement: DesktopPanelPlacement;
   unsavedFilePath?: string | null;
+  isFileDirty?: (path: string, rootId?: string) => boolean;
 }) {
   const { t } = useI18n();
   const [launcherOpen, setLauncherOpen] = useState(false);
@@ -397,7 +399,7 @@ export function DesktopPanelHeader({
     <>
       <DesktopPanelIcon panel={panel} />
       <span className="chat-file-review-panel__tab-label">{desktopPanelTitle(panel, t)}</span>
-      {unsavedFilePath && panel.type === 'file' && panel.filePath === unsavedFilePath ? (
+      {panel.type === 'file' && panel.filePath && (isFileDirty ? isFileDirty(panel.filePath, panel.rootId) : panel.filePath === unsavedFilePath) ? (
         <span
           className="chat-file-review-panel__tab-unsaved"
           role="img"

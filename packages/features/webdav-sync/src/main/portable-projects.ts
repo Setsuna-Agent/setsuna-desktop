@@ -34,6 +34,7 @@ export type PortableProjectRecord = {
 export type LocalProjectRecord = PortableProjectRecord & {
   path?: string;
   gitRoot?: string;
+  roots?: WorkspaceProject['roots'];
 };
 
 type PortableProjectCatalog = {
@@ -84,6 +85,7 @@ export async function readLocalProjects(dataRoot: string): Promise<LocalProjectR
     ...toPortableProject(project),
     ...(project.path ? { path: project.path } : {}),
     ...(project.gitRoot ? { gitRoot: project.gitRoot } : {}),
+    ...(project.roots ? { roots: project.roots } : {}),
   }));
 }
 
@@ -129,6 +131,7 @@ export async function stageMergedProjectIndex(input: {
     ...toPortableProject(project),
     ...(project.path ? { path: project.path } : {}),
     ...(project.gitRoot ? { gitRoot: project.gitRoot } : {}),
+    ...(project.roots ? { roots: project.roots } : {}),
   }));
   assertUniqueProjectNames(input.remoteProjects, '备份');
   assertUniqueProjectNames(localProjects, '本机');
@@ -152,6 +155,7 @@ export async function stageMergedProjectIndex(input: {
       name: remote.name,
       ...(local?.path ? { path: local.path } : {}),
       ...(local?.gitRoot ? { gitRoot: local.gitRoot } : {}),
+      ...(local?.roots ? { roots: local.roots } : {}),
       // Reusing a project must not change whether the local project is visible.
       // Only newly created records inherit the backup's archive state.
       ...(local
@@ -227,6 +231,12 @@ function normalizeLocalProject(value: unknown): WorkspaceProject {
     name: normalizeWorkspaceProjectName(value.name),
     ...(localPath ? { path: localPath } : {}),
     ...(gitRoot ? { gitRoot } : {}),
+    ...(Array.isArray(value.roots) ? { roots: value.roots.map((root) => {
+      if (!isRecord(root) || typeof root.path !== 'string' || !root.path.trim()) throw new Error('本机源文件夹条目无效。');
+      return { id: portableProjectId(root.id), path: root.path,
+        ...(typeof root.gitRoot === 'string' && root.gitRoot ? { gitRoot: root.gitRoot } : {}),
+      };
+    }) } : {}),
     ...(optionalIsoDate(value.archivedAt) ? { archivedAt: optionalIsoDate(value.archivedAt) } : {}),
     createdAt: requiredIsoDate(value.createdAt, '项目创建时间'),
     updatedAt: requiredIsoDate(value.updatedAt, '项目更新时间'),

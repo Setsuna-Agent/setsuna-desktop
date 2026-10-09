@@ -1,4 +1,4 @@
-import type { WorkspaceProject } from '@setsuna-desktop/contracts';
+import { workspaceProjectRoots, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { copyFile, lstat, mkdir, readlink, realpath, rm, symlink, writeFile } from 'node:fs/promises';
@@ -9,27 +9,37 @@ import { readJsonFile, writeJsonFile } from '../store/json-file.js';
 
 const execFileAsync = promisify(execFile);
 const WORKTREE_ID = /^worktree_([a-f0-9-]{36})$/u;
-type WorktreeMetadata = { prefix: string; name: string; createdAt: string };
+type WorktreeMetadata = { prefix: string; name: string; createdAt: string; sourceProjectId?: string; primaryRootId?: string };
 
 /** Copies the current checkout without stashing, checking out, or changing its index. */
 export class GitWorkspaceFork implements WorkspaceFork {
   constructor(private readonly root: string) {}
 
-  async getWorkspace(workspaceId: string): Promise<WorkspaceProject | undefined> {
+  async getWorkspace(workspaceId: string, sourceProject?: WorkspaceProject): Promise<(WorkspaceProject & { sourceProjectId?: string }) | undefined> {
     const id = WORKTREE_ID.exec(workspaceId)?.[1];
     if (!id) return undefined;
     const metadata = await readJsonFile<WorktreeMetadata | null>(path.join(this.root, `${id}.json`), null);
     if (!metadata) return undefined;
+    // Older worktrees predate directory identities. Thread ownership supplies the
+    // missing link once, before root-targeted file APIs use this managed workspace.
+    if (!metadata.sourceProjectId && sourceProject) {
+      metadata.sourceProjectId = sourceProject.id;
+      metadata.primaryRootId = workspaceProjectRoots(sourceProject).find((root) => root.id === 'primary')?.id
+        ?? workspaceProjectRoots(sourceProject)[0]?.id;
+      await writeJsonFile(path.join(this.root, `${id}.json`), metadata);
+    }
     const gitRoot = path.join(await realpath(this.root), id);
     const workspacePath = path.resolve(gitRoot, metadata.prefix);
     relativeWithin(gitRoot, workspacePath);
     return {
       id: workspaceId, name: metadata.name, path: workspacePath, gitRoot,
       createdAt: metadata.createdAt, updatedAt: metadata.createdAt,
+      ...(metadata.sourceProjectId ? { sourceProjectId: metadata.sourceProjectId } : {}),
+      ...(metadata.primaryRootId ? { roots: [{ id: metadata.primaryRootId, path: workspacePath, gitRoot }] } : {}),
     };
   }
 
-  async createWorktree(workspacePath: string): Promise<CreatedWorkspaceFork> {
+  async createWorktree(workspacePath: string, project?: WorkspaceProject): Promise<CreatedWorkspaceFork> {
     const source = await realpath(workspacePath);
     const repository = await realpath((await git(source, ['rev-parse', '--show-toplevel'])).trim());
     const prefix = relativeWithin(repository, source);
@@ -71,7 +81,10 @@ export class GitWorkspaceFork implements WorkspaceFork {
       relativeWithin(destination, await realpath(forkPath));
       // Keep the directory binding outside Git and the project index. Several
       // conversations may share it, so deleting a conversation must not remove it.
-      await writeJsonFile(metadataFile, { prefix, name: path.basename(source), createdAt: new Date().toISOString() } satisfies WorktreeMetadata);
+      await writeJsonFile(metadataFile, {
+        prefix, name: path.basename(source), createdAt: new Date().toISOString(),
+        ...(project ? { sourceProjectId: project.id, primaryRootId: workspaceProjectRoots(project)[0]?.id } : {}),
+      } satisfies WorktreeMetadata);
       return { workspaceId: `worktree_${id}`, path: forkPath, rollback };
     } catch (error) {
       try { await rollback(); } catch (cleanupError) {

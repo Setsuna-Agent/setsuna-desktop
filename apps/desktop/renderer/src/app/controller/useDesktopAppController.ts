@@ -1,3 +1,4 @@
+import { workspaceProjectRoots, workspaceProjectForRoot } from '@setsuna-desktop/contracts';
 import {
   pluginMentionText,
   type CreateThreadInput,
@@ -203,7 +204,13 @@ export function useDesktopAppController() {
     setSidebarManuallyExpanded(false);
   }, [sidebarCanExpand]);
 
+  const filePanel = [sideActivePanel, bottomActivePanel].find((panel) => panel?.type === 'file' || panel?.type === 'files');
+  const fileRootId = filePanel?.rootId ?? workspaceProjectRoots(activeWorkspace)[0]?.id;
+  const fileRoot = workspaceProjectRoots(activeWorkspace).find((root) => root.id === fileRootId);
+  const fileWorkspace = activeWorkspace && fileRoot ? workspaceProjectForRoot(activeWorkspace, fileRoot.id) : undefined;
   const projectWorkspace = useProjectWorkspace({
+    rootId: fileRootId,
+    project: activeWorkspace,
     activeProjectId: activeWorkspace?.id ?? null,
     client,
     onOpenFilePanel: openFilePanel,
@@ -214,13 +221,14 @@ export function useDesktopAppController() {
     panels: workspacePanels,
     workspace: projectWorkspace,
     projectId: activeWorkspace?.id ?? null,
-    workspaceRoot: activeWorkspace?.path,
+    workspaceRoot: fileWorkspace?.path,
+    rootId: fileRootId,
     targetIdentity: chatTargetIdentity,
   });
   const { globalThreads, threadsByProjectId } = useThreadGroups(threads);
   useThreadDeletionGuard({
     threadId: currentThread?.id ?? null,
-    dirty: projectWorkspace.fileDraft.dirty,
+    dirty: projectWorkspace.fileDraft.hasUnsavedChanges,
     busy: projectWorkspace.fileDraft.saving || projectWorkspace.entryOperationPending,
   });
 
@@ -234,7 +242,7 @@ export function useDesktopAppController() {
     activeView,
     setNewThreadDraftId,
     client,
-    confirmDiscardProjectFile: projectWorkspace.fileDraft.confirmDiscardChanges,
+    confirmDiscardProjectFile: projectWorkspace.fileDraft.confirmDiscardAllChanges,
     currentThread,
     globalThreads,
     onNewThreadProjectChange: composerSession.claimForProject,
@@ -365,6 +373,7 @@ export function useDesktopAppController() {
     newThreadDraftId,
     activeProject: effectiveProject,
     activeWorkspace,
+    fileWorkspace,
     worktreeRecovery: {
       open: activeWorkspaceState.missingWorktreePromptOpen,
       dismiss: activeWorkspaceState.dismissMissingWorktreePrompt,

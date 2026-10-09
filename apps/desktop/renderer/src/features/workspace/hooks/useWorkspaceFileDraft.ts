@@ -1,5 +1,7 @@
 import {
   WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES,
+  workspaceTarget,
+  workspaceFileKey,
   type DesktopRuntimeClient,
   type WorkspaceFileRead,
 } from '@setsuna-desktop/contracts';
@@ -13,6 +15,7 @@ type WorkspaceFileDraftOptions = {
   isSaveBlocked?: () => boolean;
   onFilePrepared: (file: WorkspaceFileRead) => void;
   onFileSaved: (file: WorkspaceFileRead) => void;
+  onBackgroundFileSaved?: (file: WorkspaceFileRead) => void;
 };
 
 type WorkspaceFileDraftSession = {
@@ -30,10 +33,11 @@ export function useWorkspaceFileDraft({
   isSaveBlocked,
   onFilePrepared,
   onFileSaved,
+  onBackgroundFileSaved,
 }: WorkspaceFileDraftOptions) {
   const { t } = useI18n();
   const confirm = useConfirm();
-  const [session, setSession] = useState<WorkspaceFileDraftSession | null>(null);
+  const [sessions, setSessions] = useState<Record<string, WorkspaceFileDraftSession>>({});
   const [prepareError, setPrepareError] = useState<string | null>(null);
   const [preparingFileKey, setPreparingFileKey] = useState<string | null>(null);
   const fileKey = file ? workspaceFileKey(file) : null;
@@ -42,7 +46,27 @@ export function useWorkspaceFileDraft({
   const editRequestRef = useRef<object | null>(null);
   const saveRequestRef = useRef<object | null>(null);
   currentFileKeyRef.current = fileKey;
-  const activeSession = session?.fileKey === fileKey ? session : null;
+  const activeSession = fileKey ? sessions[fileKey] ?? null : null;
+  const updateSession = useCallback((key: string | null, value: WorkspaceFileDraftSession | null | ((current: WorkspaceFileDraftSession | null) => WorkspaceFileDraftSession | null)) => {
+    if (!key) return;
+    setSessions((current) => {
+      const previous = current[key] ?? null;
+      const next = typeof value === 'function' ? value(previous) : value;
+      if (next === previous) return current;
+      const result = { ...current };
+      if (next) result[next.fileKey] = next;
+      if (!next || next.fileKey !== key) delete result[key];
+      return result;
+    });
+  }, []);
+  const setSession = useCallback((value: WorkspaceFileDraftSession | null | ((current: WorkspaceFileDraftSession | null) => WorkspaceFileDraftSession | null)) => {
+    updateSession(currentFileKeyRef.current, value);
+  }, [updateSession]);
+  const hasUnsavedChanges = Object.values(sessions).some((item) => item.content !== item.originalContent);
+  const isFileDirty = useCallback((target: Pick<WorkspaceFileRead, 'projectId' | 'rootId' | 'path'>) => {
+    const draft = sessions[workspaceFileKey(target)];
+    return Boolean(draft && draft.content !== draft.originalContent);
+  }, [sessions]);
   const editing = Boolean(activeSession);
   const dirty = Boolean(activeSession && activeSession.content !== activeSession.originalContent);
   const canEdit = canEditWorkspaceFile(file);
@@ -52,10 +76,8 @@ export function useWorkspaceFileDraft({
     if (previousFileKeyRef.current === fileKey) return;
     previousFileKeyRef.current = fileKey;
     editRequestRef.current = null;
-    saveRequestRef.current = null;
     setPrepareError(null);
     setPreparingFileKey(null);
-    setSession(null);
   }, [fileKey]);
 
   useEffect(() => () => {
@@ -73,29 +95,28 @@ export function useWorkspaceFileDraft({
         ...current, content: file.content, originalContent: file.content, expectedRevision: file.revision, error: null,
       } : null;
     });
-  }, [file, fileKey]);
+  }, [file, fileKey, setSession]);
 
   useEffect(() => {
-    if (!dirty) return undefined;
+    if (!hasUnsavedChanges) return undefined;
     const preventCloseWithUnsavedChanges = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = '';
     };
     window.addEventListener('beforeunload', preventCloseWithUnsavedChanges);
     return () => window.removeEventListener('beforeunload', preventCloseWithUnsavedChanges);
-  }, [dirty]);
+  }, [hasUnsavedChanges]);
 
   const prepareEditing = useCallback(async (): Promise<void> => {
     if (!file || !canEditWorkspaceFile(file) || editRequestRef.current) return;
     const editingFileKey = workspaceFileKey(file);
     const editRequest = {};
     editRequestRef.current = editRequest;
-    saveRequestRef.current = null;
     setPrepareError(null);
     setPreparingFileKey(editingFileKey);
     try {
       const editableFile = file.truncated
-        ? await client.readProjectFileForEdit(file.projectId, file.path)
+        ? await client.readProjectFileForEdit(workspaceTarget(file.projectId, file.rootId), file.path)
         : file;
       if (editRequestRef.current !== editRequest || currentFileKeyRef.current !== editingFileKey) return;
       if (!isCompleteEditableWorkspaceFile(editableFile)) {
@@ -118,7 +139,7 @@ export function useWorkspaceFileDraft({
       setPreparingFileKey(null);
       setPrepareError(error instanceof Error ? error.message : String(error));
     }
-  }, [client, file, onFilePrepared, t]);
+  }, [client, file, onFilePrepared, setSession, t]);
 
   useEffect(() => {
     if (canEdit && !editing && !preparing && !prepareError) void prepareEditing();
@@ -126,7 +147,7 @@ export function useWorkspaceFileDraft({
 
   const updateContent = useCallback((content: string) => {
     setSession((current) => current ? { ...current, content, error: null } : current);
-  }, []);
+  }, [setSession]);
 
   // Mutations also check the request ref, because React may not have rendered saving=true yet.
   const isSaving = useCallback(() => saveRequestRef.current !== null, []);
@@ -140,29 +161,45 @@ export function useWorkspaceFileDraft({
     setPrepareError(null);
     setPreparingFileKey(null);
     // A filesystem rename changes identity, not the document or its saved revision.
-    setSession((current) => current?.fileKey === previousKey ? { ...current, fileKey: nextKey } : current);
-  }, []);
+    updateSession(previousKey, (current) => current ? { ...current, fileKey: nextKey } : current);
+  }, [updateSession]);
 
-  const confirmDiscardChanges = useCallback(async (): Promise<boolean> => {
-    if (!dirty) {
+  const discardFile = useCallback((target: Pick<WorkspaceFileRead, 'path' | 'projectId' | 'rootId'>) => {
+    const key = workspaceFileKey(target);
+    if (key === currentFileKeyRef.current) {
       editRequestRef.current = null;
       setPrepareError(null);
       setPreparingFileKey(null);
-      if (editing) {
-        saveRequestRef.current = null;
-        setSession(null);
-      }
-      return true;
     }
-    if (!await confirm({ title: t('workspace.files.unsavedConfirm'), danger: true })) return false;
-    if (currentFileKeyRef.current !== fileKey) return false;
+    updateSession(key, null);
+  }, [updateSession]);
+
+  const confirmDiscardChanges = useCallback(async (target?: Pick<WorkspaceFileRead, 'path' | 'projectId' | 'rootId'>): Promise<boolean> => {
+    if (saveRequestRef.current) return false;
+    const key = target ? workspaceFileKey(target) : fileKey;
+    const draft = key ? sessions[key] : null;
+    if (draft && draft.content !== draft.originalContent
+      && !await confirm({ title: t('workspace.files.unsavedConfirm'), danger: true })) return false;
+    if (!target && currentFileKeyRef.current !== key) return false;
+    if (key === currentFileKeyRef.current) {
+      editRequestRef.current = null;
+      setPrepareError(null);
+      setPreparingFileKey(null);
+    }
+    updateSession(key, null);
+    return true;
+  }, [confirm, fileKey, sessions, t, updateSession]);
+
+  const confirmDiscardAllChanges = useCallback(async (): Promise<boolean> => {
+    if (saveRequestRef.current) return false;
+    if (hasUnsavedChanges && !await confirm({ title: t('workspace.files.unsavedConfirm'), danger: true })) return false;
     editRequestRef.current = null;
     saveRequestRef.current = null;
+    setSessions({});
     setPrepareError(null);
     setPreparingFileKey(null);
-    setSession(null);
     return true;
-  }, [confirm, dirty, editing, fileKey, t]);
+  }, [confirm, hasUnsavedChanges, t]);
 
   const save = useCallback(async (): Promise<boolean> => {
     if (!file || !activeSession || activeSession.saving || saveRequestRef.current
@@ -176,38 +213,29 @@ export function useWorkspaceFileDraft({
       ? { ...current, error: null, saving: true }
       : current);
     try {
-      const saved = await client.saveProjectFile(file.projectId, file.path, {
+      const saved = await client.saveProjectFile(workspaceTarget(file.projectId, file.rootId), file.path, {
         content: savingContent,
         expectedRevision: activeSession.expectedRevision,
       });
-      // Navigation may have discarded this draft while the write was pending.
-      // Never let a stale response replace the file that is currently visible.
-      if (saveRequestRef.current !== saveRequest || currentFileKeyRef.current !== savingFileKey) {
-        if (saveRequestRef.current === saveRequest) saveRequestRef.current = null;
-        return true;
-      }
+      if (saveRequestRef.current !== saveRequest) return true;
       saveRequestRef.current = null;
-      onFileSaved(saved);
-      setSession((current) => reconcileWorkspaceFileDraftAfterSave(current, {
-        saved,
-        savingContent,
-        savingFileKey,
+      if (currentFileKeyRef.current === savingFileKey) onFileSaved(saved);
+      else onBackgroundFileSaved?.(saved);
+      updateSession(savingFileKey, (current) => reconcileWorkspaceFileDraftAfterSave(current, {
+        saved, savingContent, savingFileKey,
       }));
       return true;
     } catch (error) {
-      if (saveRequestRef.current !== saveRequest || currentFileKeyRef.current !== savingFileKey) {
-        if (saveRequestRef.current === saveRequest) saveRequestRef.current = null;
-        return false;
-      }
+      if (saveRequestRef.current !== saveRequest) return false;
       saveRequestRef.current = null;
-      setSession((current) => current?.fileKey === savingFileKey ? {
+      updateSession(savingFileKey, (current) => current?.fileKey === savingFileKey ? {
         ...current,
         error: error instanceof Error ? error.message : String(error),
         saving: false,
       } : current);
       return false;
     }
-  }, [activeSession, client, dirty, file, isSaveBlocked, onFileSaved]);
+  }, [activeSession, client, dirty, file, isSaveBlocked, onFileSaved, onBackgroundFileSaved, setSession, updateSession]);
 
   const saveError = activeSession?.error ?? null;
   const error = prepareError ?? saveError;
@@ -220,6 +248,10 @@ export function useWorkspaceFileDraft({
   return useMemo(() => ({
     canEdit,
     confirmDiscardChanges,
+    confirmDiscardAllChanges,
+    hasUnsavedChanges,
+    isFileDirty,
+    discardFile,
     content: activeSession?.content ?? file?.content ?? '',
     dirty,
     editing,
@@ -235,6 +267,10 @@ export function useWorkspaceFileDraft({
     activeSession,
     canEdit,
     confirmDiscardChanges,
+    confirmDiscardAllChanges,
+    hasUnsavedChanges,
+    isFileDirty,
+    discardFile,
     dirty,
     editing,
     error,
@@ -263,9 +299,6 @@ function isCompleteEditableWorkspaceFile(
   return canEditWorkspaceFile(file) && !file.truncated;
 }
 
-function workspaceFileKey(file: Pick<WorkspaceFileRead, 'path' | 'projectId'>): string {
-  return `${file.projectId}:${file.path}`;
-}
 
 export function reconcileWorkspaceFileDraftAfterSave(
   current: WorkspaceFileDraftSession | null,

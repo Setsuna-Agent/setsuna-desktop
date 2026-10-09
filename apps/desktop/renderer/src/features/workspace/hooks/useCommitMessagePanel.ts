@@ -11,10 +11,10 @@ export function useCommitMessagePanel({ targetIdentity, addPanel, updateLayout }
   updateLayout(identity: ChatComposerTargetIdentity, update: (layout: DesktopWorkspacePanelLayout) => DesktopWorkspacePanelLayout): void;
 }) {
   const handlers = useRef(new Map<string, Parameters<CommitMessageEditorLauncher>[0]>());
-  const open = useCallback<CommitMessageEditorLauncher>((events) => {
+  const open = useCallback((events: Parameters<CommitMessageEditorLauncher>[0], rootId?: string) => {
     const id = `commit-message:${crypto.randomUUID()}`;
     handlers.current.set(id, events);
-    addPanel('side', { id, type: 'commit-message', title: 'COMMIT_EDITMSG' });
+    addPanel('side', { id, type: 'commit-message', rootId, title: 'COMMIT_EDITMSG' });
     return () => {
       handlers.current.delete(id);
       // Disposal also removes a tab moved to the other slot, without accepting its draft.

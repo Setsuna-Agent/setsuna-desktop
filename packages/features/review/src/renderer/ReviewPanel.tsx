@@ -1,3 +1,4 @@
+import { reviewProjectPreferenceIdentity } from './model/reviewBaseRefPreference.js';
 import { FileTreeToggle, TextField, Button, Dropdown, type MenuProps } from '@setsuna-desktop/renderer-ui';
 
 import { Virtualizer } from '@pierre/diffs/react';
@@ -15,7 +16,7 @@ import {
   Search,
   WrapText,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type {
   DesktopDiffSummary,
   DesktopReviewFocusRequest,
@@ -95,6 +96,7 @@ const noopReviewSourceChange = (_source: DesktopReviewSource) => undefined;
 
 export function DesktopReviewPanel({
   activeProject,
+  sourceRootPicker,
   error,
   findings = EMPTY_REVIEW_FINDINGS,
   focusRequest,
@@ -114,6 +116,7 @@ export function DesktopReviewPanel({
   onRevealFile = noopWorkspaceFileAction,
 }: {
   activeProject?: WorkspaceProject;
+  sourceRootPicker?: ReactNode;
   error: string | null;
   findings?: RuntimeReviewFinding[];
   focusRequest?: DesktopReviewFocusRequest | null;
@@ -339,6 +342,7 @@ export function DesktopReviewPanel({
     <section className="desktop-review-panel">
       <header className={`desktop-review-panel__toolbar${branchCompareVisible ? ' desktop-review-panel__toolbar--branch' : ''}`}>
         <div className="chat-file-review-panel__toolbar">
+          {sourceRootPicker}
           {hasGit ? (
             <Dropdown
               rootClassName="chat-file-review-panel__source-menu"
@@ -590,15 +594,15 @@ function mergeFocusedReviewFinding(
 }
 
 function reviewSourcePreferenceKey(project: WorkspaceProject): string {
-  return `setsuna-desktop:review-source:${project.id || project.path}`;
+  return `setsuna-desktop:review-source:${reviewProjectPreferenceIdentity(project)}`;
 }
 
 function reviewDiffLayoutPreferenceKey(project: WorkspaceProject): string {
-  return `setsuna-desktop:review-diff-layout:${project.id || project.path}`;
+  return `setsuna-desktop:review-diff-layout:${reviewProjectPreferenceIdentity(project)}`;
 }
 
 function reviewLineWrapPreferenceKey(project: WorkspaceProject): string {
-  return `setsuna-desktop:review-line-wrap:${project.id || project.path}`;
+  return `setsuna-desktop:review-line-wrap:${reviewProjectPreferenceIdentity(project)}`;
 }
 
 function readReviewSourcePreference(key: string | null): DesktopReviewSource | null {

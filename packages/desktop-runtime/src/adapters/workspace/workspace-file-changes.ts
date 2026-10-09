@@ -8,6 +8,7 @@ import { invalidateFileMentionIndex } from '../tool/file-mentions.js';
 import { commitFileChanges, type LocalFileChange } from '../tool/pc-local/pc-local-tool-file-transaction.js';
 import { realWorkspaceRoot, resolveWorkspaceDeletionPath } from '../tool/pc-local/pc-local-tool-paths.js';
 import { groupFileChangePaths } from './workspace-file-change-paths.js';
+import { canonicalFilesystemPath } from '../../security/workspace-path-policy.js';
 
 type ChangeSource = { content: string; mode?: number } | null;
 
@@ -20,12 +21,12 @@ export async function applyWorkspaceFileChanges(
 ): Promise<void> {
   const root = realWorkspaceRoot(workspaceRoot);
   await withFileStateUpdate(root, async () => {
-    const paths = changes.map((change) => resolveChangePath(root, change.path));
+    const paths = changes.map((change) => resolveRecordedChangePath(root, change));
     const groupedPaths = await groupFileChangePaths(paths);
     const files = new Map<string, { original: ChangeSource; restored: ChangeSource }>();
     // Undo walks back through the operations; reapply restores their original order.
     for (const change of action === 'undo' ? [...changes].reverse() : changes) {
-      const filePath = groupedPaths.get(resolveChangePath(root, change.path))!;
+      const filePath = groupedPaths.get(resolveRecordedChangePath(root, change))!;
       let file = files.get(filePath);
       if (!file) {
         const original = await readChangeSource(filePath);
@@ -59,9 +60,20 @@ export async function applyWorkspaceFileChanges(
     }
     // The existing transaction rechecks file contents and identities after staging,
     // then rolls back the entire set if a write fails or another process races it.
-    await commitFileChanges(mutations, { root }, persist);
-    invalidateFileMentionIndex(root);
+    // Explicit undo authorizes only the exact recorded targets. Hash and identity
+    // checks still protect unrelated edits and parent-directory symlink changes.
+    await commitFileChanges(mutations, { root, sandboxWorkspaceWrite: { writableRoots: paths } }, persist);
+    for (const filePath of paths) invalidateFileMentionIndex(filePath);
   });
+}
+
+function resolveRecordedChangePath(root: string, change: WorkspaceFileChange): string {
+  if (!change.absolutePath) return resolveChangePath(root, change.path);
+  const target = change.absolutePath;
+  if (target.includes('\0') || !path.isAbsolute(target) || canonicalFilesystemPath(target) !== target) {
+    throw new RuntimeUseCaseError('invalid_request', 'The original file location changed. No files were changed.');
+  }
+  return target;
 }
 
 function resolveChangePath(root: string, value: string): string {

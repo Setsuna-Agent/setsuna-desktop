@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import type { DesktopRuntimeClient, WorkspaceEntry, WorkspaceFileRead } from '@setsuna-desktop/contracts';
+import { workspaceTargetRootId, type DesktopRuntimeClient, type WorkspaceEntry, type WorkspaceFileRead } from '@setsuna-desktop/contracts';
 import { ConfirmationProvider } from '@setsuna-desktop/renderer-ui';
 import { act, cleanup, fireEvent, renderHook, screen, waitFor } from '@testing-library/react';
 import { createElement, useState, type PropsWithChildren } from 'react';
@@ -19,6 +19,39 @@ afterEach(cleanup);
 function WorkspaceProviders({ children }: PropsWithChildren) {
   return createElement(ToastProvider, null, createElement(ConfirmationProvider, null, children));
 }
+
+it('keeps same-named drafts separate while switching directories and saves to the original source', async () => {
+  const project = { id: 'project', name: 'Workspace', path: '/main', createdAt: '', updatedAt: '',
+    roots: [{ id: 'main', path: '/main' }, { id: 'child', path: '/agent' }],
+  };
+  const file: WorkspaceFileRead = { projectId: project.id, path: 'same.txt', content: 'original',
+    size: 8, revision: 'original', preview: { kind: 'text' }, truncated: false };
+  const client = {
+    readProjectFile: vi.fn(async (target) => ({ ...file, rootId: workspaceTargetRootId(target) })),
+    saveProjectFile: vi.fn(async (target, _path, input) => ({ ...file, rootId: workspaceTargetRootId(target), content: input.content, revision: 'saved' })),
+  };
+  const view = renderHook(() => {
+    const [rootId, setRootId] = useState('main');
+    return useProjectWorkspace({ project, activeProjectId: project.id, rootId,
+      client: client as unknown as DesktopRuntimeClient,
+      onOpenFilePanel: (_path, nextRootId) => setRootId(nextRootId!),
+    });
+  }, { wrapper: WorkspaceProviders });
+  await act(async () => { expect(await view.result.current.openProjectFile('/main/same.txt')).toBe(true); });
+  act(() => view.result.current.fileDraft.updateContent('main draft'));
+  await act(async () => { expect(await view.result.current.openProjectFile('/agent/same.txt')).toBe(true); });
+  expect(view.result.current.fileDraft.content).toBe('original');
+  act(() => view.result.current.fileDraft.updateContent('child draft'));
+  await act(async () => { expect(await view.result.current.openProjectFile('/main/same.txt')).toBe(true); });
+  expect(view.result.current.fileDraft.content).toBe('main draft');
+  expect(view.result.current.isFileDirty('same.txt', 'child')).toBe(true);
+  await act(async () => { expect(await view.result.current.fileDraft.save()).toBe(true); });
+  expect(client.saveProjectFile).toHaveBeenCalledExactlyOnceWith({ projectId: 'project', rootId: 'main' }, 'same.txt', {
+    content: 'main draft', expectedRevision: 'original',
+  });
+  await act(async () => { expect(await view.result.current.openProjectFile('/agent/same.txt')).toBe(true); });
+  expect(view.result.current.fileDraft.content).toBe('child draft');
+});
 
 it('renames and moves open descendants, preserving the active draft for saving at its new path', async () => {
   const file: WorkspaceFileRead = {
@@ -128,7 +161,7 @@ it('moves a file only after confirmation and ignores cancellation, duplicate req
   fireEvent.click(screen.getByRole('button', { name: '移动' }));
   await act(async () => { expect(await moving).toEqual(entry); });
   expect(client.moveProjectEntry).toHaveBeenCalledExactlyOnceWith('second', 'src/main.ts', { parentPath: 'archive' });
-  expect(onEntryRenamed).toHaveBeenCalledExactlyOnceWith('src/main.ts', 'archive/main.ts');
+  expect(onEntryRenamed).toHaveBeenCalledExactlyOnceWith('src/main.ts', 'archive/main.ts', undefined);
   expect(view.result.current.entryOperationPending).toBe(false);
 });
 
@@ -313,6 +346,7 @@ it('retains the draft on cancelled or failed deletion and closes affected tabs o
   expect(view.result.current.workspace.filePreview).toBeNull();
   expect(view.result.current.workspace.fileDraft.dirty).toBe(false);
   expect(view.result.current.workspace.entryOperationPending).toBe(false);
+  expect(view.result.current.workspace.fileDraft.hasUnsavedChanges).toBe(false);
   expect(view.result.current.slot.panels.map((panel) => panel.id)).toEqual(['file:keep.ts', 'files']);
   expect(view.result.current.slot.active).toBe('files');
 });

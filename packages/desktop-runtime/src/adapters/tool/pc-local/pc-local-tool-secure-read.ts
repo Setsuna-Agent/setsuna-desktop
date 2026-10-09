@@ -35,7 +35,7 @@ export async function openValidatedReadableFile(
   state: ReadPolicyState,
 ): Promise<ValidatedReadableFile> {
   const canonicalPath = resolveReadablePath(filePath, state);
-  const allowedRoot = readableRootsForState(state)
+  const allowedRoot = readableRootsForState(state, canonicalPath)
     .map(realPathIfExists)
     .find((root: string) => isPathInsideRoot(canonicalPath, root));
   if (!allowedRoot) throw new Error('路径不在当前工作区或已批准 readable_roots 内。');

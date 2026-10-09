@@ -56,7 +56,7 @@ export function AppWorkspaceToolbar({
       activePanelId={workspacePanels.sidePanelSlot.active}
       availablePanelTypes={workspacePanels.panelLauncherTypes}
       panels={workspacePanels.sidePanelSlot.panels}
-      unsavedFilePath={projectWorkspace.fileDraft.dirty ? projectWorkspace.filePreview?.path : null}
+      isFileDirty={projectWorkspace.isFileDirty}
       bottomPanelOpen={workspacePanels.bottomPanelVisible}
       onClosePanel={(panelId) => workspacePanels.closeDesktopPanelItem('side', panelId)}
       onOpenBrowser={() => {
@@ -94,7 +94,7 @@ export function AppWorkspaceToolbar({
       onSelectPanel={async (panelId) => {
         const panel = workspacePanels.sidePanelSlot.panels.find((item) => item.id === panelId);
         if (panel?.type === 'file' && panel.filePath) {
-          void projectWorkspace.openProjectFile(panel.filePath);
+          void projectWorkspace.openProjectFile(panel.filePath, undefined, panel.rootId);
           return;
         }
         if (panel?.type === 'files' && !await projectWorkspace.setFilePreview(null)) return;

@@ -1,6 +1,7 @@
 import {
   WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES,
   type WorkspaceFileRead,
+  type WorkspaceProjectTarget,
   type WorkspaceFileSaveInput,
 } from '@setsuna-desktop/contracts';
 import { Buffer } from 'node:buffer';
@@ -47,7 +48,7 @@ export async function archiveRuntimeWorkspaceProject(
  */
 export async function saveRuntimeWorkspaceFile(
   workspaceProjects: Pick<WorkspaceProjectStore, 'readFile' | 'writeFile'>,
-  projectId: string,
+  projectId: WorkspaceProjectTarget,
   relativePath: string,
   input: WorkspaceFileSaveInput,
 ): Promise<WorkspaceFileRead> {

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import { composeRendererMessages } from '@setsuna-desktop/feature-core/renderer';
+import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import type { DesktopReviewBridge, DesktopReviewState } from '@setsuna-desktop/feature-review/contracts';
 import { reviewRendererFeature } from '@setsuna-desktop/feature-review/renderer';
 import { WorkspaceGitCommitProvider, useWorkspaceGitCommitDialog } from '@setsuna-desktop/feature-review/renderer/git';
@@ -346,8 +347,32 @@ describe('useSidePanelTransition', () => {
   });
 });
 
-function renderTerminalWorkspace(targetIdentity: ChatComposerTargetIdentity = 'thread:A') {
-  const project = { id: 'project', path: '/repo', name: 'Repository', createdAt: '', updatedAt: '' };
+it('reuses each directory shell and keeps the other shell alive when one exits', async () => {
+  const { view, terminal, emit } = renderTerminalWorkspace('thread:A', {
+    id: 'project', path: '/repo', name: 'Repository', createdAt: '', updatedAt: '',
+    roots: [{ id: 'main', path: '/repo' }, { id: 'child', path: '/agent' }],
+  });
+  act(() => view.result.current.openDesktopPanel('side', 'terminal'));
+  const panelId = view.result.current.sidePanelSlot.active!;
+  await waitFor(() => expect(view.result.current.terminalSessionsByPanelId[panelId]?.sessionId).toBe('session-1'));
+  act(() => view.result.current.updateDesktopPanel(panelId, { rootId: 'child' }));
+  await waitFor(() => expect(view.result.current.terminalSessionsByPanelId[panelId]?.sessionId).toBe('session-2'));
+  expect(terminal.open).toHaveBeenLastCalledWith('/agent', 100, 24);
+  act(() => view.result.current.updateDesktopPanel(panelId, { rootId: 'main' }));
+  expect(view.result.current.terminalSessionsByPanelId[panelId]?.sessionId).toBe('session-1');
+  act(() => emit('session-2', { seq: 1, event: 'exit', data: { exitCode: 0 } }));
+  expect(view.result.current.sidePanelSlot.panels).toHaveLength(1);
+  expect(view.result.current.terminalSessionsByPanelId[panelId]?.sessionId).toBe('session-1');
+  act(() => view.result.current.updateDesktopPanel(panelId, { rootId: 'child' }));
+  await waitFor(() => expect(view.result.current.terminalSessionsByPanelId[panelId]?.sessionId).toBe('session-3'));
+  act(() => emit('session-3', { seq: 1, event: 'exit', data: { exitCode: 0 } }));
+  expect(view.result.current.sideActivePanel?.rootId).toBe('main');
+  expect(view.result.current.terminalSessionsByPanelId[panelId]?.sessionId).toBe('session-1');
+  expect(terminal.open).toHaveBeenCalledTimes(3);
+});
+
+function renderTerminalWorkspace(targetIdentity: ChatComposerTargetIdentity = 'thread:A',
+  project: WorkspaceProject = { id: 'project', path: '/repo', name: 'Repository', createdAt: '', updatedAt: '' }) {
   const listeners = new Map<string, Set<(event: DesktopTerminalEvent) => void>>();
   let sequence = 0;
   const terminal = {

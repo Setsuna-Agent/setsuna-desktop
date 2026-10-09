@@ -328,7 +328,7 @@ const panelProps = {
   activeProject: { id: 'project_1', name: 'Fixture', path: '/repo', createdAt: '', updatedAt: '' },
   entryOperationPending: false,
   fileDraft: {
-    canEdit: false, confirmDiscardChanges: async () => true, content: '',
+    canEdit: false, confirmDiscardChanges: async () => true, confirmDiscardAllChanges: async () => true, hasUnsavedChanges: false, discardFile: () => undefined, isFileDirty: () => false, content: '',
     dirty: false, editing: false, error: null, errorMessage: null, preparing: false,
     save: async () => false, saving: false, isSaving: () => false, updateContent: noop, relocateFile: noop,
   },

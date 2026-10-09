@@ -15,6 +15,7 @@ export function BottomToolsPanel({
   children,
   panels,
   unsavedFilePath,
+  isFileDirty,
   onActivatePanel,
   onClosePanel,
   onHide,
@@ -32,6 +33,7 @@ export function BottomToolsPanel({
   children?: ReactNode;
   panels: DesktopPanelTab[];
   unsavedFilePath?: string | null;
+  isFileDirty?: (path: string, rootId?: string) => boolean;
   onActivatePanel: (panelId: string) => void;
   onClosePanel: (panelId: string) => void;
   onHide: () => void;
@@ -81,6 +83,7 @@ export function BottomToolsPanel({
         panels={panels}
         placement="bottom"
         unsavedFilePath={unsavedFilePath}
+        isFileDirty={isFileDirty}
         onClose={onHide}
         onClosePanel={onClosePanel}
         onMovePanel={onMovePanel}

@@ -17,11 +17,21 @@ import {
   findDesktopPanelLocationByType,
   movePanelBetweenSlotStates,
   removePanelFromSlotState,
+  reconcilePanelRoots,
   reorderPanelInSlotState,
   updatePanelInSlotState,
 } from '../../../../src/features/workspace/model.js';
 
 describe('desktop workspace panel model', () => {
+  it('closes files from removed roots instead of redirecting them to a same-named primary file', () => {
+    const main = createFilePanel('same.ts', 'main');
+    const child = createFilePanel('same.ts', 'child');
+    const files = { ...createFilesPanel(), rootId: 'child' };
+    const reconciled = reconcilePanelRoots({ active: child.id, panels: [main, child, files] }, new Set(['main']));
+    expect(reconciled.panels).toEqual([main, { ...files, rootId: undefined }]);
+    expect(reconciled.active).toBe(files.id);
+    expect(reconcilePanelRoots(reconciled, new Set(['main']))).toBe(reconciled);
+  });
   it('opens the direct side panel on the workspace overview', () => {
     expect(createDefaultSidePanelSlot()).toEqual({
       active: WORKSPACE_OVERVIEW_PANEL_ID,

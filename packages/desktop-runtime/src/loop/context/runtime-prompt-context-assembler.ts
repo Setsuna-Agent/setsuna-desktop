@@ -390,7 +390,7 @@ function projectInstructionFragment(source: Awaited<ReturnType<ProjectInstructio
     sourcePath: source.path,
     content: [
       index === 0
-        ? text('Project instruction files are ordered from the workspace root to the working directory. Later files have narrower scope and override conflicting earlier project instructions.', "项目指令按工作区根目录到当前工作目录排序；后面的文件作用范围更小，冲突时覆盖前面的项目指令。")
+        ? text('Each instruction file applies only to its directory and descendants. Within a directory tree, deeper files override conflicting ancestor instructions; instructions from separate workspace directories do not override each other.', "每份项目指令仅适用于其所在目录及后代目录。同一目录树中，更深层的指令覆盖冲突的上级指令；不同源文件夹的指令互不覆盖。")
         : '',
       `# ${escapeSkillAttribute(source.path.split(/[\\/]/).pop() || 'AGENTS.md')} instructions for ${escapeSkillAttribute(source.directory)}`,
       '<INSTRUCTIONS>',

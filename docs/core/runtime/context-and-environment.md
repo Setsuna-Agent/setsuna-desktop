@@ -27,7 +27,7 @@ Contract 包含：
 - `cwd` 是 shell 默认目录。
 - `workspaceRoot` 是文件工具相对路径基准。
 - 两者即使当前相同也不能互相推断。
-- `workspaceRoots` 描述层级，不自动扩大权限。
+- `workspaceRoots` 是项目已绑定源文件夹的并集；主目录提供默认 cwd，各目录在当前权限模式下拥有同等读写权限。面板目录选择不改变这个集合。
 - Repository 只描述 Git worktree 关系，不是额外可访问根。
 - Environment 回答“在哪里”，permission prompt 回答“能访问哪里”。
 
@@ -55,6 +55,10 @@ Workspace、shell、artifact 和图片生成扩展的 host bridge 共享该环�
 `runtime-environment-resolver.ts` 提供缺省/兼容封装，使 AgentLoop 测试可以注入 fake resolver。
 
 每个 sampling step 只解析一次；同一结果同时传给 prompt、ToolHost、sandbox、project workflow 和 step snapshot。
+
+项目以有序 `roots` 保存稳定目录 ID，第一项为主目录；旧 `path/gitRoot` 继续镜像主目录，旧记录按 `primary` 目录兼容读取。工作树仅替换创建时的主仓库；其余目录从源项目读取最新绑定，继续共享原目录。解析环境只检查主目录，其他目录在操作时校验，不增加启动目录扫描。
+
+文件工具与 shell 使用全部已绑定目录；项目外文件写入在受限模式下请求精确目标授权，完全访问模式直接执行。授权路径按真实路径校验，符号链接不能隐式扩大权限。跨目录变更记录保存实际目标，撤销/重做继续按内容校验并作为一批事务提交。项目指令分别读取各源目录的 AGENTS 文件，其作用域限定在对应目录树。
 
 ## 请求耗时日志
 

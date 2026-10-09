@@ -15,9 +15,18 @@ export class FileProjectInstructionLoader implements ProjectInstructionLoader {
     let remainingBytes = Math.max(0, Math.floor(maxBytes));
     const sources: ProjectInstructionSource[] = [];
 
-    for (const directory of directoriesFromRoot(root, scopedCwd)) {
+    const roots = [...new Set([root, ...environment.workspaceRoots])];
+    const scopes = await Promise.all(roots.map(async (sourceRoot) => {
+      const canonicalRoot = await realpath(sourceRoot).catch(() => path.resolve(sourceRoot));
+      return directoriesFromRoot(canonicalRoot, canonicalRoot === root ? scopedCwd : canonicalRoot)
+        .map((directory) => ({ root: canonicalRoot, directory }));
+    }));
+    const seen = new Set<string>();
+    for (const { root: sourceRoot, directory } of scopes.flat()) {
+      if (seen.has(directory)) continue;
+      seen.add(directory);
       if (!remainingBytes) break;
-      const loaded = await readFirstInstruction(root, directory, filenames, remainingBytes);
+      const loaded = await readFirstInstruction(sourceRoot, directory, filenames, remainingBytes);
       if (!loaded) continue;
       const content = truncateUtf8(loaded.content.trim(), remainingBytes);
       if (!content) continue;

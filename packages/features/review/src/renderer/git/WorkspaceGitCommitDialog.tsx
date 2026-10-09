@@ -85,6 +85,9 @@ const WorkspaceGitCommitDialogContext = createContext<WorkspaceGitCommitDialogCo
   workspaceGitCommitDialogDefaultValue,
 );
 
+/** Reuse a repository's controller when its surfaces live in different workspace slots. */
+export const WorkspaceGitCommitScope = WorkspaceGitCommitDialogContext.Provider;
+
 export function useWorkspaceGitCommitDialog(): WorkspaceGitCommitDialogContextValue {
   return useContext(WorkspaceGitCommitDialogContext);
 }

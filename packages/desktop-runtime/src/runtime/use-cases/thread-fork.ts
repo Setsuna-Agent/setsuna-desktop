@@ -29,7 +29,9 @@ export async function forkRuntimeThread(
           projectId: source.projectId, workspaceId: source.workspaceId, threadId, threadCreatedAt: source.createdAt,
         });
         if (!environment.repository) throw new RuntimeUseCaseError('invalid_request', 'A Git workspace is required to create a worktree.');
-        worktree = await runtime.workspaceFork.createWorktree(environment.cwd);
+        const { project } = await runtime.workspaceProjects.getStatus(source.workspaceId ?? source.projectId);
+        worktree = await runtime.workspaceFork.createWorktree(environment.cwd,
+          project && source.projectId ? { ...project, id: source.projectId } : project);
       }
       return await copyRuntimeThread(runtime, source, messages, { workspaceId: worktree?.workspaceId });
     } catch (error) {

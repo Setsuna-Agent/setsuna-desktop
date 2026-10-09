@@ -1,10 +1,13 @@
 import { Button as UiButton, ConfirmDialogTrigger, Dialog } from '@setsuna-desktop/renderer-ui';
 import {
   WORKSPACE_PROJECT_NAME_MAX_CHARS,
+  workspaceProjectRoots,
+  workspaceRootName,
+  type WorkspaceProjectRoot,
   type UpdateWorkspaceProjectInput,
   type WorkspaceProject,
 } from '@setsuna-desktop/contracts';
-import { Folder, FolderPlus, Link2Off, X } from 'lucide-react';
+import { Folder, FolderPlus, Link2Off, Star, X } from 'lucide-react';
 import { useId, useState, type FormEvent } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { Button, IconButton, TextField } from '../../shared/ui/primitives.js';
@@ -25,7 +28,7 @@ export function ProjectEditorDialog({
   const { t } = useI18n();
   const formId = useId();
   const [name, setName] = useState(project?.name ?? '');
-  const [directoryPath, setDirectoryPath] = useState<string | undefined>(project?.path);
+  const [roots, setRoots] = useState<WorkspaceProjectRoot[]>(() => workspaceProjectRoots(project));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,7 +43,8 @@ export function ProjectEditorDialog({
     try {
       const selectedPath = await selectDirectory({ title: t('sidebar.projectDirectoryPickerTitle') });
       if (!selectedPath) return;
-      setDirectoryPath(selectedPath);
+      setRoots((current) => current.some((root) => root.path === selectedPath) ? current
+        : [...current, { id: `root_${crypto.randomUUID().replaceAll('-', '')}`, path: selectedPath }]);
       setName((current) => current.trim() ? current : directoryName(selectedPath));
     } catch (unknownError) {
       setError(errorMessage(unknownError));
@@ -55,7 +59,7 @@ export function ProjectEditorDialog({
     setBusy(true);
     setError(null);
     try {
-      const saved = await onSave({ name: name.trim(), path: directoryPath ?? null });
+      const saved = await onSave({ name: name.trim(), roots });
       if (saved) onClose();
       else setBusy(false);
     } catch (unknownError) {
@@ -102,7 +106,7 @@ export function ProjectEditorDialog({
 
   return (
     <Dialog title={t(project ? 'sidebar.editProject' : 'sidebar.createProject')}
-      description={t('sidebar.projectEditorDescription')} className="desktop-project-editor"
+      className="desktop-project-editor"
       width={520} footer={footer} dismissible={!busy} onClose={onClose}>
       <form id={formId} aria-busy={busy} onSubmit={(event) => void submit(event)}>
         <div className="desktop-project-editor__body">
@@ -125,19 +129,22 @@ export function ProjectEditorDialog({
           <div className="desktop-project-editor__field">
             <span>{t('sidebar.projectDirectory')}</span>
             <div className="desktop-project-editor__directory">
-              {directoryPath ? (
-                <div className="desktop-project-editor__directory-row">
+              {roots.length ? roots.map((root, index) => (
+                <div className="desktop-project-editor__directory-row" key={root.id}>
                   <Folder size={15} aria-hidden="true" />
-                  <span title={directoryPath}>{directoryPath}</span>
-                  <IconButton
-                    label={t('sidebar.unbindProjectDirectory')}
-                    disabled={busy}
-                    onClick={() => setDirectoryPath(undefined)}
-                  >
+                  <span title={root.path}>{workspaceRootName(root)}</span>
+                  {index === 0 ? <span className="desktop-project-editor__primary">{t('sidebar.primaryDirectory')}</span> : (
+                    <IconButton label={t('sidebar.makePrimaryDirectory')} disabled={busy}
+                      onClick={() => setRoots((current) => [root, ...current.filter((item) => item.id !== root.id)])}>
+                      <Star size={14} />
+                    </IconButton>
+                  )}
+                  <IconButton label={t('sidebar.unbindProjectDirectory')} disabled={busy}
+                    onClick={() => setRoots((current) => current.filter((item) => item.id !== root.id))}>
                     <X size={14} />
                   </IconButton>
                 </div>
-              ) : (
+              )) : (
                 <div className="desktop-project-editor__directory-empty">
                   <Link2Off size={15} aria-hidden="true" />
                   <span>{t('sidebar.projectDirectoryUnbound')}</span>
@@ -150,7 +157,7 @@ export function ProjectEditorDialog({
                 onClick={() => void chooseDirectory()}
               >
                 <FolderPlus size={15} aria-hidden="true" />
-                <span>{t(directoryPath ? 'sidebar.changeProjectDirectory' : 'sidebar.bindProjectDirectory')}</span>
+                <span>{t('sidebar.addProjectDirectory')}</span>
               </UiButton>
             </div>
           </div>

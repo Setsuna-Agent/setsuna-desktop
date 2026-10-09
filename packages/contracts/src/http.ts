@@ -48,6 +48,7 @@ import type {
   WorkspaceFileRead,
   WorkspaceFileSaveInput,
   WorkspaceProject,
+  WorkspaceProjectTarget,
   WorkspaceProjectList,
   WorkspaceSearchResponse,
   WorkspaceStatus,
@@ -122,17 +123,17 @@ export type DesktopRuntimeClient = {
   archiveProject(projectId: string): Promise<void>;
   removeProject(projectId: string): Promise<void>;
   getWorkspaceStatus(query?: WorkspaceStatusQuery): Promise<WorkspaceStatus>;
-  listProjectEntries(projectId: string, path?: string): Promise<WorkspaceEntryList>;
-  createProjectEntry(projectId: string, input: WorkspaceEntryCreateInput): Promise<WorkspaceEntry>;
-  renameProjectEntry(projectId: string, path: string, input: WorkspaceEntryRenameInput): Promise<WorkspaceEntry>;
-  moveProjectEntry(projectId: string, path: string, input: WorkspaceEntryMoveInput): Promise<WorkspaceEntry>;
-  deleteProjectEntry(projectId: string, path: string): Promise<void>;
-  searchProjectEntries(projectId: string, query?: string, parent?: string | null): Promise<WorkspaceEntrySearchResponse>;
-  readProjectFile(projectId: string, path: string): Promise<WorkspaceFileRead>;
-  readProjectFileForEdit(projectId: string, path: string): Promise<WorkspaceFileRead>;
-  saveProjectFile(projectId: string, path: string, input: WorkspaceFileSaveInput): Promise<WorkspaceFileRead>;
+  listProjectEntries(projectId: WorkspaceProjectTarget, path?: string): Promise<WorkspaceEntryList>;
+  createProjectEntry(projectId: WorkspaceProjectTarget, input: WorkspaceEntryCreateInput): Promise<WorkspaceEntry>;
+  renameProjectEntry(projectId: WorkspaceProjectTarget, path: string, input: WorkspaceEntryRenameInput): Promise<WorkspaceEntry>;
+  moveProjectEntry(projectId: WorkspaceProjectTarget, path: string, input: WorkspaceEntryMoveInput): Promise<WorkspaceEntry>;
+  deleteProjectEntry(projectId: WorkspaceProjectTarget, path: string): Promise<void>;
+  searchProjectEntries(projectId: WorkspaceProjectTarget, query?: string, parent?: string | null): Promise<WorkspaceEntrySearchResponse>;
+  readProjectFile(projectId: WorkspaceProjectTarget, path: string): Promise<WorkspaceFileRead>;
+  readProjectFileForEdit(projectId: WorkspaceProjectTarget, path: string): Promise<WorkspaceFileRead>;
+  saveProjectFile(projectId: WorkspaceProjectTarget, path: string, input: WorkspaceFileSaveInput): Promise<WorkspaceFileRead>;
   applyThreadFileChanges(threadId: string, input: ThreadFileChangesInput, action: WorkspaceFileChangeAction): Promise<ThreadFileChangesResult>;
-  searchProject(projectId: string, query: string): Promise<WorkspaceSearchResponse>;
+  searchProject(projectId: WorkspaceProjectTarget, query: string): Promise<WorkspaceSearchResponse>;
   listApprovals(): Promise<RuntimeApprovalList>;
   answerApproval(approvalId: string, input: AnswerRuntimeApprovalInput): Promise<void>;
 };

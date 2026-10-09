@@ -23,7 +23,7 @@ it('catches an exit before subscription, deduplicates its live event, and ignore
   Object.defineProperty(window, 'setsunaDesktop', { configurable: true, value: { terminal: { read, onEvent } } });
   const onExit = vi.fn();
   const view = renderHook(({ items }) => useTerminalPanelExit(items, onExit), { initialProps: { items: sessions } });
-  await waitFor(() => expect(onExit).toHaveBeenCalledExactlyOnceWith('tab'));
+  await waitFor(() => expect(onExit).toHaveBeenCalledExactlyOnceWith('tab', 'project', 'shell'));
   act(() => listener(exit));
   expect(onExit).toHaveBeenCalledTimes(1);
 
@@ -55,5 +55,5 @@ it('ignores a disposed history response and still observes live exit events if h
   view.rerender({ items: sessions });
   await act(async () => undefined);
   act(() => listener(exit));
-  expect(onExit).toHaveBeenCalledExactlyOnceWith('tab');
+  expect(onExit).toHaveBeenCalledExactlyOnceWith('tab', 'project', 'shell');
 });
