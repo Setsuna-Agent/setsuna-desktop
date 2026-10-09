@@ -143,7 +143,9 @@ export const browserMainFeature = defineMainFeature({
           }
           if (command.kind === 'install-extension') {
             // The authenticated runtime enforces its tool approval policy before dispatch.
-            return extensions.installUnpacked(command.directory, scopeSignal).then((result) => ({ kind: 'extension-install' as const, ...result }));
+            if (!command.workspaceRoot) throw new Error('A local workspace is required to install browser extensions.');
+            return extensions.installUnpacked(command.directory, scopeSignal, undefined, command.workspaceRoot)
+              .then((result) => ({ kind: 'extension-install' as const, ...result }));
           }
           return controller.execute(command, scopeSignal);
         },

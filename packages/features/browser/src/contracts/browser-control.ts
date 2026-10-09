@@ -79,7 +79,9 @@ export type DesktopBrowserControlCommand =
   | { kind: 'open'; url: string }
   | { kind: 'tabs' }
   | { kind: 'extensions' }
-  | { kind: 'install-extension'; directory: string }
+  | { kind: 'install-extension'; directory: string;
+      /** Runtime-owned metadata; required by main after the tool input is resolved. */
+      workspaceRoot?: string }
   | { kind: 'snapshot'; maxElements?: number; tabId?: string }
   | { kind: 'screenshot'; tabId?: string }
   | { kind: 'click'; ref: string; tabId?: string }

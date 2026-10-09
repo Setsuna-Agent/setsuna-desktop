@@ -11,9 +11,18 @@ export class BrowserExtensionInstallError extends Error {
 }
 
 /** Snapshot before consent so only the manifest the user approved can be loaded. */
-export async function prepareUnpackedExtension(source: string, directory: string, signal: AbortSignal) {
+export async function prepareUnpackedExtension(source: string, directory: string, signal: AbortSignal, workspaceRoot?: string) {
   signal.throwIfAborted();
   const canonicalSource = await realpath(source);
+  if (workspaceRoot !== undefined) {
+    // Keep the runtime's approved root fixed across the process/queue boundary;
+    // resolving a replaced root must not authorize its new symlink target.
+    const relative = path.relative(workspaceRoot, canonicalSource);
+    if (!path.isAbsolute(workspaceRoot) || path.relative(workspaceRoot, await realpath(workspaceRoot)) !== ''
+      || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+      throw new BrowserExtensionInstallError('invalid-extension');
+    }
+  }
   await mkdir(directory, { recursive: true });
   const relative = path.relative(canonicalSource, await realpath(directory));
   if (relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))) {

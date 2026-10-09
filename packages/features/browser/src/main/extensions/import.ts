@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, rename, rm } from 'node:fs/promises';
+import { mkdir, realpath, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import type { Extension } from 'electron';
 import { readInstalledExtensions } from './installations.js';
@@ -17,7 +17,7 @@ export async function copyImportedExtension(source: Extension, directory: string
   const target = path.join(directory, source.id);
   let created = false;
   try {
-    await copyExtensionFiles(source.path, staged, signal);
+    await copyExtensionFiles(await realpath(source.path), staged, signal);
     const copied = (await readInstalledExtensions(staging, 3)).find((extension) => extension.id === source.id);
     if (!copied || copied.version !== source.version) throw new Error('Extension changed during import.');
     signal.throwIfAborted();

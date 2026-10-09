@@ -103,7 +103,7 @@ Tab 销毁、导航和重新注册都会清理 snapshot/ref 与 CDP 状态。
 
 本地安装由 `main/extensions/installation/` 负责文件快照与原子提交，复用导入链路的文件数量/体积限制和符号链接拒绝策略。先复制并校验快照，再确认其中声明的权限；确认期间修改源目录不会改变将要加载的代码。文件保存到 browser partition 的 `Extensions/<id>/<version>_0`，源目录清理后仍可运行。保留 manifest key；没有 key 时根据规范化的原始目录生成稳定身份，并只写入应用自己的副本。已有 ID 不覆盖、不重新启用；原生加载失败或取消时卸载并删除此次提交，迟到加载不能复活取消的安装。取消后原生请求尚未完成时仍保留该 ID 的加载占用，阻止重试与旧请求的卸载竞态，其他扩展不受影响。启停、卸载和后台重启恢复沿用现有扩展服务。
 
-Agent 通过 `browser_install_extension` 安装、`browser_extensions` 查询已安装与停用扩展，无需访问 `chrome://extensions`。工具由 runtime 遵循既有审批策略，禁止只读 turn 安装；源目录按真实路径限制在当前工作区内，再通过已认证 Browser control bridge 交给 main。手动安装使用原生权限确认，Agent 安装沿用工具审批。查询与安装只在自身请求中等待扩展恢复，不进入主界面就绪链路。`test/integration/unpacked.electron.test.ts` 覆盖真实 runtime → HTTP bridge → Main Feature → native session 加载、MV2 后台请求拦截、MV2/MV3 内容脚本、源文件清理后的重启恢复、重复安装、拒绝确认、快照隔离与失败/取消回滚。
+Agent 通过 `browser_install_extension` 安装、`browser_extensions` 查询已安装与停用扩展，无需访问 `chrome://extensions`。工具由 runtime 遵循既有审批策略，禁止只读 turn 安装；源目录按真实路径限制在当前工作区内，再通过已认证 Browser control bridge 将目录与匹配的规范化工作区根交给 main。Main 在生成快照时重新校验归属，复制逐项拒绝被替换为符号链接的路径，不能把 runtime 校验后的目录替换成工作区外目标。手动安装使用原生权限确认，Agent 安装沿用工具审批。查询与安装只在自身请求中等待扩展恢复，不进入主界面就绪链路。`test/integration/unpacked.electron.test.ts` 覆盖真实 runtime → HTTP bridge → Main Feature → native session 加载、MV2 后台请求拦截、MV2/MV3 内容脚本、源文件清理后的重启恢复、重复安装、拒绝确认、快照隔离与失败/取消回滚。
 
 Electron 原生 MV2 后台页面使用共享 preload world，直接调用 `contextBridge.executeInMainWorld` 会让整个扩展 preload 失败。`preload/extension-world.ts` 按现有 `process.contextIsolated` 选择执行方式；扩展 API 仍先通过 main 的真实 frame 身份认证，不修改网页或弹窗的安全配置。缺失的 MV2 `browserAction` 使用宿主 action 状态提供图标、标题、弹窗读写和点击事件，原生 MV3 action 保留原有行为；未提供徽标功能时返回明确错误。声明 `privacy` 的扩展可发现常用网络预测、WebRTC 与 hyperlink auditing 的 ChromeSettings 入口，但读写均返回未支持错误，不伪造设置成功或隐私保证。
 

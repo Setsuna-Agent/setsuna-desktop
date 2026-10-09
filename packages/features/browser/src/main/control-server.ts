@@ -83,7 +83,8 @@ export function parseBrowserControlCommand(value: unknown): DesktopBrowserContro
     case 'extensions':
       return { kind: 'extensions' };
     case 'install-extension':
-      return { kind: 'install-extension', directory: requiredString(input.directory, 'directory') };
+      return { kind: 'install-extension', directory: requiredString(input.directory, 'directory'),
+        workspaceRoot: requiredString(input.workspaceRoot, 'workspaceRoot') };
     case 'snapshot':
       return { kind: 'snapshot', maxElements: optionalNumber(input.maxElements, 'maxElements'), tabId };
     case 'screenshot':

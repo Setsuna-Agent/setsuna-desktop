@@ -188,7 +188,8 @@ describe('BrowserRuntimeTools', () => {
         data: { kind: 'extension-install', status: 'failed', reason: 'load-failed' },
         content: expect.stringContaining('failed'), containsExternalContext: true,
       });
-      expect(execute).toHaveBeenCalledExactlyOnceWith({ kind: 'install-extension', directory: await realpath(source) }, undefined);
+      expect(execute).toHaveBeenCalledExactlyOnceWith({ kind: 'install-extension', directory: await realpath(source),
+        workspaceRoot: await realpath(workspace) }, undefined);
       execute.mockClear();
       await expect(host.runTool('browser_install_extension', { directory: '../outside' }, context)).rejects.toThrow('inside the current workspace');
       if (process.platform !== 'win32') {

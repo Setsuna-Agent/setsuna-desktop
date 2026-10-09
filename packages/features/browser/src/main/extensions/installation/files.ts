@@ -1,4 +1,4 @@
-import { cp, lstat, readdir } from 'node:fs/promises';
+import { cp, lstat, readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 
 /** Validate both sides of the copy: the source may change while it is being read. */
@@ -13,8 +13,14 @@ export async function copyExtensionFiles(source: string, destination: string, si
     }
     return info;
   };
+  const assertSourcePath = async (file: string) => {
+    // Callers provide a canonical source. Do not follow a root/ancestor replaced
+    // after approval while traversing its files.
+    if (path.relative(path.resolve(file), await realpath(file)) !== '') throw new Error('Invalid extension files.');
+  };
   await cp(source, destination, { recursive: true, dereference: false, verbatimSymlinks: true,
-    filter: async (file) => { await inspectEntry(file); return true; } });
+    filter: async (file) => { await assertSourcePath(file); await inspectEntry(file); return true; } });
+  await assertSourcePath(source);
   files = 0; bytes = 0;
   const inspect = async (file: string): Promise<void> => {
     if ((await inspectEntry(file)).isDirectory()) {

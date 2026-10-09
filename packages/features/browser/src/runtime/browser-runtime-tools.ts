@@ -18,7 +18,7 @@ import {
   type DesktopBrowserKeyModifier,
   type RuntimeBrowserOpenAction,
 } from '../contracts/index.js';
-import { resolveExtensionDirectory } from './extension-path.js';
+import { resolveExtensionSource } from './extension-path.js';
 import type { RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 import type {
   BrowserControlPort,
@@ -320,7 +320,7 @@ export class BrowserRuntimeTools implements BrowserRuntimeToolService {
     let command = browserControlCommand(name, input);
     if (command.kind === 'install-extension') {
       if (context.readOnly) throw new Error('Browser extension installation is unavailable in read-only turns.');
-      command = { ...command, directory: await resolveExtensionDirectory(command.directory, context.environment) };
+      command = { ...command, ...await resolveExtensionSource(command.directory, context.environment) };
       context.signal?.throwIfAborted();
     }
     const result = await this.control.execute(command, context.signal);

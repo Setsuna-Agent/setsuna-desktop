@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import { once } from 'node:events';
 import path from 'node:path';
@@ -100,7 +100,8 @@ async function main() {
   ] });
   try {
     const { connection } = composition.resolveHostDependencies({ connection: requiredCapability(browserControlConnectionCapability) });
-    const tools = new BrowserRuntimeTools(new HttpBrowserControlClient(connection.url, connection.token));
+    const client = new HttpBrowserControlClient(connection.url, connection.token);
+    const tools = new BrowserRuntimeTools(client);
     const context = { environment: { id: 'local', cwd: directory, workspaceRoot: directory, workspaceRoots: [directory] } };
     const install = async (source: string) => (await tools.runTool('browser_install_extension', { directory: source }, context)).data as BrowserExtensionInstallResult;
     const installedRoot = path.join(browser.storagePath!, 'Extensions');
@@ -109,6 +110,22 @@ async function main() {
       const v2 = await sourceExtension('Local v2', 2); const v3 = await sourceExtension('Local v3', 3);
       assert.deepEqual(await extensions.installUnpacked(v2, new AbortController().signal, async () => false), { status: 'cancelled' });
       assert.deepEqual(await readdir(installedRoot), []);
+      // Swap the approved pathname at the runtime/main boundary. Main must not
+      // rebase workspace ownership onto the replacement's external target.
+      const scopedRoot = path.join(directory, 'workspace');
+      const selected = await sourceExtension(path.join('workspace', 'Selected extension'), 3);
+      const outside = await sourceExtension('Outside extension', 3);
+      const swapped = new BrowserRuntimeTools({ execute: async (command, signal) => {
+        await rename(selected, `${selected}-original`);
+        await symlink(await realpath(outside), selected, process.platform === 'win32' ? 'junction' : 'dir');
+        return client.execute(command, signal);
+      } });
+      const rejected = await swapped.runTool('browser_install_extension', { directory: selected }, {
+        environment: { id: 'local', cwd: scopedRoot, workspaceRoot: scopedRoot, workspaceRoots: [scopedRoot] },
+      });
+      assert.deepEqual(rejected.data, { kind: 'extension-install', status: 'failed', reason: 'invalid-extension' });
+      assert.deepEqual(await readdir(installedRoot), []);
+      assert.equal(browser.extensions.getAllExtensions().length, 0);
       const result2 = await install(v2); assert.equal(result2.status, 'installed');
       const result3 = await extensions.installUnpacked(v3, new AbortController().signal, async (snapshot) => {
         assert.deepEqual(snapshot.manifest.permissions, ['storage']);

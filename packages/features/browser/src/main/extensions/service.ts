@@ -157,7 +157,7 @@ export class BrowserExtensionService {
   }
 
   installUnpacked(directory: string, operationSignal: AbortSignal,
-    confirm?: (extension: Extension) => Promise<boolean>): Promise<BrowserExtensionInstallResult> {
+    confirm?: (extension: Extension) => Promise<boolean>, workspaceRoot?: string): Promise<BrowserExtensionInstallResult> {
     const signal = AbortSignal.any([this.signal, operationSignal]);
     return this.enqueue(async () => {
       if (!await this.readyForMutation(signal)) return { status: 'cancelled' };
@@ -166,7 +166,7 @@ export class BrowserExtensionService {
       let wasEnabled = true;
       let reserved = false;
       try {
-        prepared = await prepareUnpackedExtension(directory, this.directory, signal);
+        prepared = await prepareUnpackedExtension(directory, this.directory, signal, workspaceRoot);
         const { extension } = prepared;
         if (this.pending.has(extension.id) || this.loading.has(extension.id)) return { status: 'failed', reason: 'installation-pending' };
         if ((await readInstalledExtensions(this.directory)).some(({ id }) => id === extension.id)) {
