@@ -119,7 +119,7 @@ Electron 原生 MV2 后台页面使用共享 preload world，直接调用 `conte
 
 全局侧栏的图标切换按窗口与扩展判断，不绑定最初打开的标签；只有标签专属面板比较标签 ID。`windows.getLastFocused` 使用窗口聚焦记录，不受上次工具栏点击归属影响。
 
-`main/extensions/system-apis.ts` 与 `preload/extension-system.ts` 按清单权限承载缺失的扩展 API，复用来自真实 frame/worker 的身份校验。Debugger 只允许已登记 HTTP(S)/空白网页的单独 CDP 会话，拒绝桌面和扩展页面、Browser/Target 全局命令与本地文件导航；释放扩展时断开会话。Commands 读取平台快捷键并路由真实来宾输入；ContextMenus 支持平铺菜单及点击事件；Downloads 提供当前运行期间真实下载的查询、变更与显示位置；WebNavigation 提供 `getFrame/getAllFrames`、实际新标签创建和网页 frame 提交事件，使用统一的 extension frame ID；Electron 未提供的提交 transition 信息不猜测填充。未实现的方法不返回伪造成功，其他 Chrome API 仍受 Electron 的兼容范围限制。
+`main/extensions/system-apis.ts` 与 `preload/extension-system.ts` 按清单权限承载缺失的扩展 API，复用来自真实 frame/worker 的身份校验。Debugger 只允许已登记 HTTP(S)/空白网页的单独 CDP 会话，拒绝桌面和扩展页面、Browser/Target 全局命令与本地文件导航；释放扩展时断开会话。Commands 读取平台快捷键并路由真实来宾输入；ContextMenus 支持平铺菜单及点击事件；Downloads 提供当前运行期间真实下载的查询、变更与显示位置；WebNavigation 提供 `getFrame/getAllFrames`、实际新标签创建和网页 frame 提交事件，使用统一的 extension frame ID。导航监听器分别保存注册时的 URL 过滤条件，条件内取交集、条件间取并集；支持 host/path/query/url 字符串、scheme/port 和可由 JavaScript 处理的 RE2 正则子集，未支持的 CIDR 或正则条件在注册时明确报错。Electron 的 [did-frame-navigate](https://www.electronjs.org/docs/latest/api/web-contents#event-did-frame-navigate) 未提供 Chrome 的 `transitionType` 和 `transitionQualifiers`；此兼容事件不填入猜测值，依赖这些字段的扩展仍不兼容。未实现的方法不返回伪造成功，其他 Chrome API 仍受 Electron 的兼容范围限制。
 
 `main/extensions/permissions/` 提供 `permissions.getAll/contains/request/remove` 和权限增删事件。必需权限来自原始清单，可选权限只在主进程确认后写入 `extensions-state.json`，与启停、用户脚本授权共用服务的串行修改队列。查询比较完整的网站范围并忽略路径，不能用单个 URL 的匹配冒充通配符授权；取消、清单未声明的范围和未实现的可选 API 都不会获得授权。停用保留授权，卸载清除授权；清单更新后过滤不再声明的授权。兼容层每次调用读取实际授权，静态 content script 的匹配范围不会自行变成 Cookie 等 API 的网站授权。
 

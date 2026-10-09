@@ -52,6 +52,9 @@ async function sourceExtension(name: string, version: number, broken = false) {
       chrome.webNavigation.onCommitted.addListener(details => {
         if (details.frameId === 0) chrome.storage.local.set({ committed: details });
       });
+      chrome.webNavigation.onCommitted.addListener(details => {
+        chrome.storage.local.set({ filteredNavigation: details.url });
+      }, { url: [{ hostEquals: '127.0.0.1', pathEquals: '/filtered-target', schemes: ['http'] }] });
       chrome.runtime.onMessage.addListener((message, _sender, reply) => {
         if (message !== 'popup-data') return;
         chrome.tabs.query({ active: true, currentWindow: true }).then(tabs => reply(tabs[0]));
@@ -157,6 +160,13 @@ async function main() {
     assert.equal(stored.committed.tabId, guest.id); assert.equal(stored.committed.url, url);
     assert.match(stored.privacyError, /Unsupported extension browser API/);
     assert.equal(await popup.webContents.executeJavaScript('chrome.browserAction.getTitle({})'), 'Local MV2 ready');
+    await popup.webContents.executeJavaScript('chrome.storage.local.remove("filteredNavigation")');
+    await guest.loadURL(`${url}unmatched`);
+    assert.equal((await popup.webContents.executeJavaScript('chrome.storage.local.get("filteredNavigation")')).filteredNavigation, undefined);
+    await guest.loadURL(`${url}filtered-target`);
+    await until(() => popup.webContents.executeJavaScript(`chrome.storage.local.get('filteredNavigation').then(data => data.filteredNavigation === ${JSON.stringify(`${url}filtered-target`)})`),
+      'filtered navigation listener receives only the matching page');
+    await guest.loadURL(url);
 
     assert.equal(await extensions.open(ids.v2, 'options', owner), true);
     const optionsUrl = `chrome-extension://${ids.v2}/options.html`;
@@ -233,6 +243,12 @@ async function main() {
     assert.equal(await background.executeJavaScript('chrome.windows.get(-2).then(window => window.id)'), otherOwner.id);
     for (const query of [{ lastFocusedWindow: true }, { currentWindow: true }, { windowId: -2 }]) {
       assert.deepEqual(await backgroundActiveIds(query), [otherGuest.id]);
+    }
+    for (const query of [{ lastFocusedWindow: false }, { currentWindow: false }]) {
+      assert.deepEqual(await backgroundActiveIds(query), [guest.id]);
+      const outside = await background.executeJavaScript(`chrome.tabs.query(${JSON.stringify(query)})
+        .then(tabs => tabs.filter(tab => [${guest.id}, ${second.id}, ${otherGuest.id}].includes(tab.id)).map(tab => tab.id))`);
+      assert.deepEqual(outside.sort(), [guest.id, second.id].sort());
     }
     assert.deepEqual(await activeIds(), [guest.id]);
     const focusedTabs = (await tools.runTool('browser_tabs', {}, context)).data as { tabs: { id: string; active: boolean }[] };

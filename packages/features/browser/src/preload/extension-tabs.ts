@@ -51,7 +51,7 @@ export function installExtensionTabs(transport: {
       const withoutPrivateFilters = filters && (filters.title !== undefined || filters.url !== undefined)
         ? { ...query, title: undefined, url: undefined } : null;
       const candidatesQuery = filters && (filters.active !== undefined || filters.highlighted !== undefined
-        || filters.currentWindow || filters.lastFocusedWindow || filters.windowId !== undefined)
+        || filters.currentWindow !== undefined || filters.lastFocusedWindow !== undefined || filters.windowId !== undefined)
         ? { ...query, title: undefined, url: undefined, active: undefined, highlighted: undefined,
           currentWindow: undefined, lastFocusedWindow: undefined, windowId: undefined } : null;
       const result = Promise.resolve(requested).then(async value => {

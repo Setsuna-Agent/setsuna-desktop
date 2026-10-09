@@ -3,6 +3,7 @@ import { executeInExtensionWorld } from './extension-world.js';
 import { EXTENSION_SYSTEM_CHANNELS as channels, type ExtensionApiResult, type ExtensionSystemBootstrap, type ExtensionSystemEvent } from '../contracts/extension-api.js';
 import { installNativeMessaging } from './native-messaging.js';
 import { installExtensionScripting } from './extension-scripting.js';
+import { installExtensionNavigationEvents } from './extension-navigation-events.js';
 
 export function initializeExtensionSystem(): void {
   const bootstrap = ipcRenderer.sendSync(channels.bootstrap) as ExtensionSystemBootstrap | null;
@@ -12,6 +13,7 @@ export function initializeExtensionSystem(): void {
     onEvent: (listener: (event: ExtensionSystemEvent) => void) => ipcRenderer.on(channels.event, (_event, value) => listener(value)),
   };
   executeInExtensionWorld(installExtensionSystem, [bootstrap, transport]);
+  if (bootstrap.webNavigation) executeInExtensionWorld(installExtensionNavigationEvents, [transport]);
   if (bootstrap.nativeMessaging) executeInExtensionWorld(installNativeMessaging, [transport]);
   if (bootstrap.scripting) executeInExtensionWorld(installExtensionScripting, [transport]);
 }
@@ -89,8 +91,6 @@ export function installExtensionSystem(bootstrap: ExtensionSystemBootstrap, tran
   if (bootstrap.webNavigation && !chrome.webNavigation) chrome.webNavigation = {
     getFrame: (...args: unknown[]) => call('webNavigation.getFrame', args),
     getAllFrames: (...args: unknown[]) => call('webNavigation.getAllFrames', args),
-    onCreatedNavigationTarget: eventObject('navigationTargetCreated'),
-    onCommitted: eventObject('navigationCommitted'),
   };
   if (bootstrap.privacy && !chrome.privacy) {
     // Electron cannot configure these ChromeSettings. Preserve API discovery, but

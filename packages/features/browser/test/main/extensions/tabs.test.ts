@@ -103,6 +103,8 @@ it('keeps selection within its browser owner and forgets a destroyed target', as
     expect(tabs.select(owner, 99)).toBe(false);
     expect(tabs.select(owner, contents.id)).toBe(true);
     expect(await active({ currentWindow: true })).toEqual([{ id: contents.id, windowId: owner.id }]);
+    expect(await active({ currentWindow: false })).toEqual([]);
+    expect(await active({ lastFocusedWindow: false })).toEqual([]);
     expect(await active({ windowId: -2 })).toEqual([{ id: contents.id, windowId: owner.id }]);
     expect(await active({ windowId: 2 })).toEqual([]);
     contents.emit('destroyed');

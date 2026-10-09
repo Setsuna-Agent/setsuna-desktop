@@ -164,8 +164,8 @@ export class BrowserExtensionTabs {
       if (selection && (active !== undefined && selection.active !== active
         || highlighted !== undefined && selection.highlighted !== highlighted
         || requestedWindowId !== undefined && selection.windowId !== requestedWindowId
-        || currentWindow && selection.windowId !== currentId
-        || lastFocusedWindow && selection.windowId !== focusedId)) continue;
+        || currentWindow !== undefined && (selection.windowId === currentId) !== currentWindow
+        || lastFocusedWindow !== undefined && (selection.windowId === focusedId) !== lastFocusedWindow)) continue;
       const tab: ExtensionTabReadDetails = available
         ? extensionTabForExtension(extension, extensionTabDetails(contents, 'complete'),
           Boolean(this.options.activeTabAccess?.(extension.id, contents))) : { id };
