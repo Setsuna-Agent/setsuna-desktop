@@ -39,7 +39,7 @@ Main 注册时校验：
 - Guest 使用内置浏览器专用 partition。
 - `webContents.id` 尚未被冲突 tab 占用。
 
-Active tab 在 main 按桌面 renderer 分别保存选择，激活先于 guest 注册或 guest 被替换时保留待注册的 tab ID，其他窗口清空或切换选择不会覆盖它。实际查询仍校验 guest 的所属 renderer；窗口关闭时清理其选择。Agent 的“当前页面”按窗口焦点记录解析，不能只依赖 renderer 传来的任意 ID。
+Active tab 在 main 按桌面 renderer 分别保存选择，激活先于 guest 注册或 guest 被替换时保留待注册的 tab ID，其他窗口清空或切换选择不会覆盖它。实际查询仍校验 guest 的所属 renderer；窗口关闭时清理其选择。Agent 的“当前页面”按窗口焦点记录解析，不能只依赖 renderer 传来的任意 ID。焦点窗口没有选中网页时，`browser_tabs` 不标记活动标签，省略 `tabId` 的页面操作返回错误，不能回退到其他窗口或后台网页；显式指定 `tabId` 仍可操作该标签。
 
 Tab 销毁、导航和重新注册都会清理 snapshot/ref 与 CDP 状态。
 

@@ -311,7 +311,7 @@ export class DesktopBrowserController implements BrowserControlExecutor {
 
   private listTabs(): DesktopBrowserTab[] {
     this.removeDestroyedTabs();
-    const activeId = this.activeTabId() ?? this.tabs.keys().next().value as string | undefined;
+    const activeId = this.activeTabId();
     return [...this.tabs].map(([id, { contents }]) => ({
       active: id === activeId,
       id,
@@ -489,8 +489,9 @@ export class DesktopBrowserController implements BrowserControlExecutor {
     this.removeDestroyedTabs();
     const tabId = requestedTabId
       ? normalizeTabId(requestedTabId)
-      : this.activeTabId() ?? this.tabs.keys().next().value as string | undefined;
-    if (!tabId) throw new Error('No controllable browser tab is open.');
+      : this.activeTabId();
+    // A home/closed-tab selection must not route an implicit action to a hidden guest.
+    if (!tabId) throw new Error('No controllable browser tab is selected. Specify a tabId or select a browser tab.');
     const entry = this.tabs.get(tabId);
     if (!entry) throw new Error(`Browser tab ${tabId} is not available.`);
     return [tabId, entry];

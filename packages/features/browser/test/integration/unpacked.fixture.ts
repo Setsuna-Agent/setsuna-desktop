@@ -253,6 +253,12 @@ async function main() {
     assert.deepEqual(await activeIds(), [guest.id]);
     const focusedTabs = (await tools.runTool('browser_tabs', {}, context)).data as { tabs: { id: string; active: boolean }[] };
     assert.equal(focusedTabs.tabs.find(tab => tab.active)?.id, 'other');
+    await otherOwner.webContents.executeJavaScript('navigationFixture.setActiveTab(null)');
+    const homeTabs = (await tools.runTool('browser_tabs', {}, context)).data as { tabs: { id: string; active: boolean }[] };
+    assert.equal(homeTabs.tabs.some(tab => tab.active), false);
+    const firstUrl = guest.getURL(); const otherUrl = otherGuest.getURL();
+    await assert.rejects(tools.runTool('browser_navigate', { url: `${url}unscoped` }, context), /No controllable browser tab is selected/);
+    assert.equal(guest.getURL(), firstUrl); assert.equal(otherGuest.getURL(), otherUrl);
     otherPopup.destroy();
     otherOwner.destroy();
     assert.deepEqual(await backgroundActiveIds({ lastFocusedWindow: true }), [guest.id]);

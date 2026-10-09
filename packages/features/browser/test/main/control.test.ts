@@ -215,8 +215,9 @@ describe('DesktopBrowserController', () => {
     second.destroy();
     expect(automations.get(11)?.disposed).toBe(true);
     await expect(controller.execute({ kind: 'tabs' })).resolves.toMatchObject({
-      tabs: [{ active: true, id: 'tab-1' }],
+      tabs: [{ active: false, id: 'tab-1' }],
     });
+    await expect(controller.execute({ kind: 'snapshot' })).rejects.toThrow('No controllable browser tab is selected');
   });
 
   it('retains each window selection while browser control follows focus and rejects a foreign target', async () => {
@@ -238,8 +239,13 @@ describe('DesktopBrowserController', () => {
       };
       expect(await active()).toBe('first'); focused = 3;
       expect(await active()).toBe('second');
-      controller.unregisterTab('first', first.id);
       controller.setActiveTab(null, 3);
+      expect(await active()).toBeUndefined();
+      await expect(controller.execute({ kind: 'navigate', url: 'example.org' })).rejects.toThrow('No controllable browser tab is selected');
+      expect(first.getURL()).toBe('https://example.com/');
+      expect(second.getURL()).toBe('https://example.com/');
+      await expect(controller.execute({ kind: 'snapshot', tabId: 'first' })).resolves.toMatchObject({ tabId: 'first' });
+      controller.unregisterTab('first', first.id);
       controller.registerTab('first', asWebContents(first));
       expect(controller.activeTabContents(1)).toBe(first);
       controller.forgetWindow(1);
@@ -377,6 +383,7 @@ describe('DesktopBrowserController', () => {
     const controller = new DesktopBrowserController({ createAutomation: () => automation });
     controller.registerTab('tab-1', asWebContents(contents));
 
+    controller.setActiveTab('tab-1', 1);
     await expect(controller.execute({ kind: 'snapshot', maxElements: 10 })).resolves.toMatchObject({
       elements: [{ name: 'Mail subject', ref: 's1:t0:n4', role: 'text' }],
       kind: 'snapshot',
@@ -426,6 +433,7 @@ describe('DesktopBrowserController', () => {
     const contents = new FakeWebContents(21);
     const controller = new DesktopBrowserController({ createAutomation: () => automation });
     controller.registerTab('game', asWebContents(contents));
+    controller.setActiveTab('game', 1);
 
     await expect(controller.execute({
       key: 'ArrowRight',
