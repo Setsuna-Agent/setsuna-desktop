@@ -42,7 +42,7 @@ async function main() {
     mainWindow: owner, interfaceLanguage: () => 'en-US', activeKeyboardShortcutBindings: () => new Set(),
     browserTabIdForWebContents: () => 'test-tab', contextMenus: {} as BrowserContextMenuSession,
     isAllowedExtensionUrl: (url) => service.allowsPage(url),
-    onGuestAttached: (contents) => service.actions.track(contents),
+    onGuestAttached: (contents) => service.track(contents),
   });
   const service = new BrowserExtensionService({
     preloadPath: path.join(directory, 'actions.cjs'), actionsChanged: () => undefined,

@@ -1,10 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { BrowserRuntimeTools, normalizeBrowserToolUrl } from '../../src/runtime/browser-runtime-tools.js';
 import {
   READ_TOOL_RESULT_TOOL_NAME,
   RuntimeToolRouter,
 } from '../../../../desktop-runtime/src/loop/tools/tool-router.js';
 import type { BrowserControlPort } from '../../src/contracts/index.js';
+import { mkdtemp, mkdir, realpath, rm, symlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 describe('BrowserRuntimeTools', () => {
   it('exposes an unapproved browser tool with a structured UI action', async () => {
@@ -65,6 +68,8 @@ describe('BrowserRuntimeTools', () => {
 
     expect(tools.map((tool) => tool.name)).toEqual([
       'open_browser',
+      'browser_extensions',
+      'browser_install_extension',
       'browser_tabs',
       'browser_snapshot',
       'browser_click',
@@ -109,6 +114,8 @@ describe('BrowserRuntimeTools', () => {
     });
     expect(router.tools.map((tool) => tool.name)).toEqual([
       'open_browser',
+      'browser_extensions',
+      'browser_install_extension',
       'browser_tabs',
       'browser_snapshot',
       'browser_screenshot',
@@ -164,5 +171,35 @@ describe('BrowserRuntimeTools', () => {
       reason: expect.stringContaining('提交表单'),
     });
     await expect(host.approvalForTool('browser_key', { key: 'Tab' })).resolves.toBeNull();
+  });
+
+  it('installs only workspace-owned directories, with approval and read-only enforcement', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'setsuna-browser-tool-install-'));
+    const workspace = path.join(directory, 'workspace');
+    const source = path.join(workspace, 'extension');
+    const outside = path.join(directory, 'outside');
+    await mkdir(source, { recursive: true }); await mkdir(outside);
+    const execute = vi.fn<BrowserControlPort['execute']>(async () => ({ kind: 'extension-install', status: 'failed', reason: 'load-failed' }));
+    const host = new BrowserRuntimeTools({ execute });
+    const context = { environment: { id: 'local', cwd: workspace, workspaceRoot: workspace, workspaceRoots: [workspace] } };
+    try {
+      await expect(host.approvalForTool('browser_install_extension', { directory: 'extension' })).resolves.toMatchObject({ reason: expect.stringContaining('持久运行扩展代码') });
+      await expect(host.runTool('browser_install_extension', { directory: 'extension' }, context)).resolves.toMatchObject({
+        data: { kind: 'extension-install', status: 'failed', reason: 'load-failed' },
+        content: expect.stringContaining('failed'), containsExternalContext: true,
+      });
+      expect(execute).toHaveBeenCalledExactlyOnceWith({ kind: 'install-extension', directory: await realpath(source),
+        workspaceRoot: await realpath(workspace) }, undefined);
+      execute.mockClear();
+      await expect(host.runTool('browser_install_extension', { directory: '../outside' }, context)).rejects.toThrow('inside the current workspace');
+      if (process.platform !== 'win32') {
+        await symlink(outside, path.join(workspace, 'linked'));
+        await expect(host.runTool('browser_install_extension', { directory: 'linked' }, context)).rejects.toThrow('inside the current workspace');
+      }
+      await expect(host.runTool('browser_install_extension', { directory: source }, {})).rejects.toThrow('workspace is required');
+      await expect(host.runTool('browser_install_extension', { directory: source }, { ...context, readOnly: true })).rejects.toThrow('read-only');
+      expect((await host.listTools({ readOnly: true })).map(({ name }) => name)).not.toContain('browser_install_extension');
+      expect(execute).not.toHaveBeenCalled();
+    } finally { await rm(directory, { recursive: true, force: true }); }
   });
 });

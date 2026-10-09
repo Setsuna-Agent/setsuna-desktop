@@ -1,5 +1,6 @@
 import type {
   RuntimeInterfaceLanguage,
+  RuntimeEnvironment,
   RuntimeMessageAttachment,
   RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
@@ -10,10 +11,13 @@ export type BrowserToolExecutionContext = Readonly<{
   modelCapabilities?: Readonly<{ supportsImages: boolean }>;
   signal?: AbortSignal;
   toolCallId?: string;
+  environment?: RuntimeEnvironment;
+  readOnly?: boolean;
 }>;
 
 export type BrowserToolRuntimeProfile = Readonly<{
   modelOutputTokenLimit?: number;
+  supportsParallel?: boolean;
 }>;
 
 export type BrowserToolApprovalRequirement = Readonly<{

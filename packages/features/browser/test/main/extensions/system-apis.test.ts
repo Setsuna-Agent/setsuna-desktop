@@ -28,6 +28,30 @@ function createSystem(resolve: () => Extension) {
   return new BrowserExtensionSystemApis(options as unknown as ConstructorParameters<typeof BrowserExtensionSystemApis>[0]);
 }
 
+it.each(['navigationCommitted', 'navigationTargetCreated'] as const)(
+  'drops %s when optional webNavigation is revoked while its worker starts', async kind => {
+    let extension = { id: 'a'.repeat(32), manifest: { permissions: ['webNavigation'], optional_permissions: ['webNavigation'] } } as Extension;
+    const system = createSystem(() => extension);
+    const send = vi.fn();
+    const endpoint = { key: 'worker', send, hold: () => () => {} } satisfies ExtensionEndpoint<ExtensionSystemEvent>;
+    let resume!: (endpoints: ExtensionEndpoint<ExtensionSystemEvent>[]) => void;
+    const starting = new Promise<ExtensionEndpoint<ExtensionSystemEvent>[]>(done => { resume = done; });
+    transport.endpoints.mockReturnValueOnce(starting);
+    const event = { kind, details: { tabId: 10, url: 'https://private.test/after-revocation', frameId: 0 } };
+    try {
+      system.publish(extension.id, event);
+      extension = { ...extension, manifest: { ...extension.manifest, permissions: [] } };
+      resume([endpoint]); await starting;
+      expect(send).not.toHaveBeenCalled();
+
+      extension = { ...extension, manifest: { ...extension.manifest, permissions: ['webNavigation'] } };
+      transport.endpoints.mockResolvedValueOnce([endpoint]);
+      system.publish(extension.id, event); await Promise.resolve();
+      expect(send).toHaveBeenCalledExactlyOnceWith(event);
+    } finally { system.dispose(); }
+  },
+);
+
 it('clears revoked menus before replying, rejects captured clicks and rechecks permission after worker startup', async () => {
   let extension = { id: 'a'.repeat(32), manifest: { permissions: ['contextMenus'] } } as Extension;
   const system = createSystem(() => extension);

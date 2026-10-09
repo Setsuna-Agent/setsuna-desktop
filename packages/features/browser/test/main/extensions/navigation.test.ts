@@ -1,4 +1,5 @@
-import type { WebContents } from 'electron';
+import { EventEmitter } from 'node:events';
+import type { Extension, WebContents, WebFrameMain } from 'electron';
 import { afterEach, expect, it, vi } from 'vitest';
 import { BrowserExtensionNavigation } from '../../../src/main/extensions/navigation.js';
 
@@ -34,6 +35,28 @@ it('binds concurrent same-URL targets one-to-one to their issued IDs and rejects
     { sourceTabId: 1, sourceProcessId: 11, sourceFrameId: 0, tabId: 2, url: 'https://example.com/', timeStamp: Date.now() },
   ]);
   navigation.dispose();
+});
+
+it('reports committed guest frames with the shared extension IDs and gates frame reads by permission and ownership', () => {
+  const main = { parent: null, processId: 1, routingId: 1, frameTreeNodeId: 8, url: 'https://top.test/', isDestroyed: () => false };
+  const child = { parent: main, processId: 2, routingId: 1, frameTreeNodeId: 19, url: 'https://child.test/', isDestroyed: () => false };
+  const contents = Object.assign(new EventEmitter(), { id: 10, getURL: () => main.url, isDestroyed: () => false,
+    mainFrame: { ...main, framesInSubtree: [main, child] as unknown as WebFrameMain[] } }) as unknown as WebContents;
+  const publish = vi.fn();
+  const navigation = new BrowserExtensionNavigation(() => [contents], publish);
+  const extension = { manifest: { permissions: ['webNavigation'] } } as Extension;
+  const stop = navigation.track(contents);
+  contents.emit('did-frame-navigate', {}, child.url, 200, 'OK', false, 2, 1);
+  expect(publish).toHaveBeenCalledWith({ kind: 'navigationCommitted', details: {
+    tabId: 10, frameId: 19, processId: 2, url: child.url, timeStamp: expect.any(Number),
+  } });
+  expect(navigation.getFrame(extension, { tabId: 10, frameId: 0 })).toMatchObject({ url: main.url, parentFrameId: -1 });
+  expect(navigation.getFrame(extension, { tabId: 10, frameId: 19 })).toMatchObject({ url: child.url, parentFrameId: 0 });
+  expect(navigation.getFrame(extension, { tabId: 10, frameId: 99 })).toBeNull();
+  expect(() => navigation.getFrame(extension, { tabId: 20, frameId: 0 })).toThrow('Browser tab unavailable');
+  expect(() => navigation.getFrame({ manifest: {} } as Extension, { tabId: 10, frameId: 0 })).toThrow('permission required');
+  stop(); contents.emit('did-frame-navigate', {}, main.url, 200, 'OK', true, 1, 1);
+  expect(publish).toHaveBeenCalledOnce(); navigation.dispose();
 });
 
 it('discards cancelled, expired and closed-opener requests without publishing navigation events', () => {

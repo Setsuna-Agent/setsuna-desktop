@@ -54,7 +54,9 @@ export type BrowserControlExecutor = {
 
 /** 维护渲染进程标签页 ID 到 Electron 来宾 WebContents 的可信映射。 */
 export class DesktopBrowserController implements BrowserControlExecutor {
-  private activeTabId: string | null = null;
+  private readonly selectedTabs = new Map<number, string | null>();
+  private lastActiveSenderId: number | null = null;
+  private readonly focusedSenderId?: () => number | null;
   private readonly createAutomation: (contents: WebContents) => BrowserAutomation;
   private readonly createDeviceEmulator: (contents: WebContents) => BrowserDeviceEmulator;
   private readonly openTab: ((url: string) => boolean | Promise<boolean>) | null;
@@ -69,6 +71,7 @@ export class DesktopBrowserController implements BrowserControlExecutor {
     openTab?: (url: string) => boolean | Promise<boolean>;
     passwordStore?: BrowserPasswordStore;
     preferences?: () => BrowserPreferences;
+    focusedSenderId?: () => number | null;
   } = {}) {
     this.createAutomation = options.createAutomation ?? ((contents) =>
       new ElectronBrowserCdpAutomation(contents.debugger as unknown as BrowserDebuggerTransport));
@@ -77,6 +80,7 @@ export class DesktopBrowserController implements BrowserControlExecutor {
     this.openTab = options.openTab ?? null;
     this.passwordStore = options.passwordStore ?? null;
     this.preferences = options.preferences;
+    this.focusedSenderId = options.focusedSenderId;
   }
 
   registerTab(tabId: string, contents: WebContents): void {
@@ -122,11 +126,30 @@ export class DesktopBrowserController implements BrowserControlExecutor {
     entry.deviceEmulator.dispose();
     this.tabs.delete(tabId);
     this.snapshotRevisions.delete(tabId);
-    if (this.activeTabId === tabId) this.activeTabId = null;
   }
 
-  setActiveTab(tabId: string | null): void {
-    this.activeTabId = tabId ? normalizeTabId(tabId) : null;
+  setActiveTab(tabId: string | null, senderId: number): boolean {
+    const selected = tabId ? normalizeTabId(tabId) : null;
+    const contents = selected ? this.tabs.get(selected)?.contents : undefined;
+    if (contents && contents.hostWebContents?.id !== senderId) return false;
+    // The renderer's selection can precede native registration or survive guest
+    // replacement. Keep it per owner until that renderer clears it or closes.
+    this.selectedTabs.set(senderId, selected);
+    this.lastActiveSenderId = senderId;
+    return true;
+  }
+
+  activeTabContents(senderId: number): WebContents | null {
+    const selected = this.selectedTabs.get(senderId);
+    const contents = selected ? this.tabs.get(selected)?.contents : undefined;
+    return contents && !contents.isDestroyed() && contents.hostWebContents?.id === senderId ? contents : null;
+  }
+
+  forgetWindow(senderId: number): void { this.selectedTabs.delete(senderId); }
+
+  private activeTabId(): string | null {
+    const senderId = this.focusedSenderId ? this.focusedSenderId() : this.lastActiveSenderId;
+    return senderId !== null && this.activeTabContents(senderId) ? this.selectedTabs.get(senderId)! : null;
   }
 
   passwordSession(tabId: string, senderId: number): BrowserPasswordSession | null {
@@ -254,12 +277,15 @@ export class DesktopBrowserController implements BrowserControlExecutor {
 
   clear(): void {
     for (const tabId of [...this.tabs.keys()]) this.unregisterTab(tabId);
-    this.activeTabId = null;
+    this.selectedTabs.clear(); this.lastActiveSenderId = null;
   }
 
   async execute(command: DesktopBrowserControlCommand, signal?: AbortSignal): Promise<DesktopBrowserControlResult> {
     throwIfAborted(signal);
     switch (command.kind) {
+      case 'extensions':
+      case 'install-extension':
+        throw new Error('Extension commands require the browser extension service.');
       case 'open':
         return this.open(command.url, signal);
       case 'tabs':
@@ -285,9 +311,7 @@ export class DesktopBrowserController implements BrowserControlExecutor {
 
   private listTabs(): DesktopBrowserTab[] {
     this.removeDestroyedTabs();
-    const activeId = this.activeTabId && this.tabs.has(this.activeTabId)
-      ? this.activeTabId
-      : this.tabs.keys().next().value as string | undefined;
+    const activeId = this.activeTabId();
     return [...this.tabs].map(([id, { contents }]) => ({
       active: id === activeId,
       id,
@@ -309,8 +333,9 @@ export class DesktopBrowserController implements BrowserControlExecutor {
       this.removeDestroyedTabs();
       const openedTab = [...this.tabs].find(([tabId]) => !existingTabIds.has(tabId));
       if (openedTab) {
-        const [tabId] = openedTab;
-        this.activeTabId = tabId;
+        const [tabId, entry] = openedTab;
+        const senderId = entry.contents.hostWebContents?.id;
+        if (senderId !== undefined) this.setActiveTab(tabId, senderId);
         return { kind: 'action', message: `Opened ${url} in a new side-browser tab.`, tabId, url };
       }
       await abortableDelay(Math.min(50, deadline - Date.now()), signal);
@@ -464,10 +489,9 @@ export class DesktopBrowserController implements BrowserControlExecutor {
     this.removeDestroyedTabs();
     const tabId = requestedTabId
       ? normalizeTabId(requestedTabId)
-      : this.activeTabId && this.tabs.has(this.activeTabId)
-        ? this.activeTabId
-        : this.tabs.keys().next().value as string | undefined;
-    if (!tabId) throw new Error('No controllable browser tab is open.');
+      : this.activeTabId();
+    // A home/closed-tab selection must not route an implicit action to a hidden guest.
+    if (!tabId) throw new Error('No controllable browser tab is selected. Specify a tabId or select a browser tab.');
     const entry = this.tabs.get(tabId);
     if (!entry) throw new Error(`Browser tab ${tabId} is not available.`);
     return [tabId, entry];

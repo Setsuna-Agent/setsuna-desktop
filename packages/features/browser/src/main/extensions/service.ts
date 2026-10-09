@@ -3,7 +3,7 @@ import path from 'node:path';
 import { rm } from 'node:fs/promises';
 import { app, webContents, type BrowserWindow, type ContextMenuParams, type Extension, type Session, type WebContents } from 'electron';
 import type { RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
-import { BROWSER_WEB_STORE_URL, type BrowserExtension, type BrowserExtensionPopupAnchor, type BrowserExtensionView } from '../../contracts/extensions.js';
+import { BROWSER_WEB_STORE_URL, type BrowserExtension, type BrowserExtensionInstallResult, type BrowserExtensionPopupAnchor, type BrowserExtensionView } from '../../contracts/extensions.js';
 import { confirmExtensionInstall, confirmExtensionPermissions } from './confirmation.js';
 import { extensionMetadata, newestNewTabExtension, validExtensionId } from './metadata.js';
 import { BrowserExtensionPages } from './pages.js';
@@ -17,9 +17,12 @@ import { BrowserExtensionUi } from './ui.js';
 import { BrowserExtensionSystemApis } from './system-apis.js';
 import { BrowserExtensionActiveTabs } from './active-tabs.js';
 import { BrowserExtensionWorkerStartup } from './worker-startup.js';
+import { BrowserExtensionPageStartup } from './page-startup.js';
 import { BrowserExtensionPermissions } from './permissions/service.js';
 import { BrowserExtensionLoadDiagnostics } from './load-diagnostics.js';
 import { BrowserExtensionFavicons } from './favicons.js';
+import { BrowserExtensionInstallError, commitUnpackedExtension, prepareUnpackedExtension } from './installation/unpacked.js';
+import { waitForExtensionOperation } from './installation/operation.js';
 
 // Load the package's CJS entry intact so its packaged preload resolves beside it.
 const webStore: typeof import('electron-chrome-web-store') = createRequire(import.meta.url)('electron-chrome-web-store');
@@ -40,7 +43,9 @@ export class BrowserExtensionService {
   private readonly system: BrowserExtensionSystemApis;
   private readonly activeTabs: BrowserExtensionActiveTabs;
   private readonly workerStartup: BrowserExtensionWorkerStartup;
+  private readonly pageStartup: BrowserExtensionPageStartup;
   private readonly pending = new Set<string>();
+  private readonly loading = new Set<string>();
   private preloadIds: string[] = [];
   private disposed = false;
   private revision = 0;
@@ -82,11 +87,12 @@ export class BrowserExtensionService {
     this.activeTabs = new BrowserExtensionActiveTabs(contents => this.ownsGuest(contents));
     this.pages = new BrowserExtensionPages(options.session, options.openWebPage, (contents) => this.tabs.track(contents));
     this.tabs = new BrowserExtensionTabs({ session: options.session, pages: this.pages,
-      resolve: (url) => this.managedExtension(url), owner: options.owner, activeOwner: () => options.activeOwner?.() ?? null,
+      resolve: (url) => this.managedExtension(url), owner: options.owner, activeOwner: () => this.ui.lastFocusedWindow(),
       activeTabAccess: (id, contents) => this.activeTabs.has(id, contents) });
     this.ui = new BrowserExtensionUi({ session: options.session, resolve: (url) => this.managedExtension(url),
       owner: options.owner, windows: () => options.windows?.() ?? [options.activeOwner?.()].filter((window): window is BrowserWindow => Boolean(window)),
-      activeOwner: () => options.activeOwner?.() ?? null, activeTabs: this.activeTabs });
+      activeOwner: () => options.activeOwner?.() ?? null, activeTabs: this.activeTabs,
+      browserAction: (extension, method, args) => this.actions.legacyCall(extension, method, args) });
     this.actions = new BrowserExtensionActions(options.session, (url) => this.managedExtension(url), options.actionsChanged);
     this.system = new BrowserExtensionSystemApis({ session: options.session, resolve: (url) => this.managedExtension(url), permissions: this.permissions, favicons: this.favicons,
       windows: () => options.windows?.() ?? [options.activeOwner?.()].filter((window): window is BrowserWindow => Boolean(window)),
@@ -97,6 +103,8 @@ export class BrowserExtensionService {
     this.userScripts = new BrowserUserScripts({ session: options.session, directory: path.join(options.session.storagePath, 'UserScripts'),
       resolve: (url) => this.managedExtension(url), allowed: (id) => this.state.allowsUserScripts(id), ownsGuest: (contents) => this.ownsGuest(contents) });
     this.workerStartup = new BrowserExtensionWorkerStartup({ session: options.session, signal: this.signal,
+      profileStarted: (id) => this.system.profileStarted(id) });
+    this.pageStartup = new BrowserExtensionPageStartup({ session: options.session, signal: this.signal,
       profileStarted: (id) => this.system.profileStarted(id) });
   }
 
@@ -143,13 +151,70 @@ export class BrowserExtensionService {
 
   list(): readonly BrowserExtension[] { return this.extensions; }
 
+  async listInstalled(signal?: AbortSignal): Promise<readonly BrowserExtension[]> {
+    if (!await this.readyForMutation(signal)) throw new Error('Browser extensions are unavailable.');
+    return this.list();
+  }
+
+  installUnpacked(directory: string, operationSignal: AbortSignal,
+    confirm?: (extension: Extension) => Promise<boolean>, workspaceRoot?: string): Promise<BrowserExtensionInstallResult> {
+    const signal = AbortSignal.any([this.signal, operationSignal]);
+    return this.enqueue(async () => {
+      if (!await this.readyForMutation(signal)) return { status: 'cancelled' };
+      let prepared: Awaited<ReturnType<typeof prepareUnpackedExtension>> | undefined;
+      let location: string | undefined;
+      let wasEnabled = true;
+      let reserved = false;
+      try {
+        prepared = await prepareUnpackedExtension(directory, this.directory, signal, workspaceRoot);
+        const { extension } = prepared;
+        if (this.pending.has(extension.id) || this.loading.has(extension.id)) return { status: 'failed', reason: 'installation-pending' };
+        if ((await readInstalledExtensions(this.directory)).some(({ id }) => id === extension.id)) {
+          return { status: 'failed', reason: 'already-installed' };
+        }
+        this.pending.add(extension.id);
+        reserved = true;
+        if (confirm && !await waitForExtensionOperation(confirm(extension), signal)) return { status: 'cancelled' };
+        signal.throwIfAborted();
+        location = await commitUnpackedExtension(extension, this.directory, signal);
+        wasEnabled = this.state.isEnabled(extension.id);
+        await this.state.setEnabled(extension.id, true);
+        signal.throwIfAborted();
+        await waitForExtensionOperation(this.load({ ...extension, path: location }, false, signal), signal);
+        signal.throwIfAborted();
+        await this.refresh();
+        signal.throwIfAborted();
+        const installed = this.extensions.find(({ id }) => id === extension.id);
+        if (!installed?.enabled) throw new Error('Extension did not load.');
+        return { status: 'installed', extension: installed };
+      } catch (error) {
+        if (location && prepared) {
+          const id = prepared.extension.id;
+          try { this.pages.close(id); await this.unload(id); }
+          finally { await rm(path.dirname(location), { recursive: true, force: true }); }
+          await this.state.setEnabled(id, wasEnabled);
+          await this.refresh();
+        }
+        if (signal.aborted) return { status: 'cancelled' };
+        return { status: 'failed', reason: error instanceof BrowserExtensionInstallError
+          ? error.reason : location ? 'load-failed' : 'invalid-extension' };
+      } finally {
+        if (prepared) {
+          if (reserved) this.pending.delete(prepared.extension.id);
+          await prepared.dispose();
+        }
+      }
+    });
+  }
+
   contextMenuItems(contents: WebContents, params: ContextMenuParams) { return this.system.contextMenuItems(contents, params); }
   requestNavigationTarget(contents: WebContents, url: string) { return this.system.requestNavigationTarget(contents, url); }
   registerNavigationTarget(tabId: string, contents: WebContents): void { this.system.registerNavigationTarget(tabId, contents); }
 
   importInstallation(source: Extension, enabled: boolean, signal: AbortSignal): Promise<boolean> {
     return this.mutate(async () => {
-      if (!validExtensionId(source.id) || this.pending.has(source.id) || this.extensions.some((item) => item.id === source.id)) return false;
+      if (!validExtensionId(source.id) || this.pending.has(source.id) || this.loading.has(source.id)
+        || this.extensions.some((item) => item.id === source.id)) return false;
       this.pending.add(source.id);
       let location: string | null = null;
       try {
@@ -184,6 +249,12 @@ export class BrowserExtensionService {
     const untrackFavicons = this.favicons.track(contents);
     return () => { untrackActions(); untrackScripts(); untrackTabs(); untrackUi(); untrackSystem(); untrackActiveTabs(); untrackFavicons(); };
   }
+
+  selectTab(owner: BrowserWindow, webContentsId: number | null): boolean {
+    return this.tabs.select(owner, webContentsId);
+  }
+
+  forgetWindow(owner: BrowserWindow): void { this.tabs.forgetWindow(owner); }
 
   ownsGuest(contents: WebContents): boolean {
     return !this.disposed && !contents.isDestroyed() && contents.session === this.options.session && Boolean(this.options.owner(contents));
@@ -269,6 +340,7 @@ export class BrowserExtensionService {
     const extension = this.options.session.extensions.getExtension(id);
     const popup = this.actions.snapshot(webContentsId).find((action) => action.id === id)?.popup;
     if (!extension) return false;
+    if (webContentsId !== undefined) this.tabs.select(owner, webContentsId);
     if (view === 'action') {
       if (popup === undefined ? this.extensions.find((item) => item.id === id)?.hasPopup : Boolean(popup)) {
         this.ui.grantActiveTab(extension, owner, webContentsId);
@@ -309,6 +381,7 @@ export class BrowserExtensionService {
   };
   private readonly unloaded = (_event: Electron.Event, extension: Electron.Extension) => {
     this.workerStartup.remove(extension.id);
+    this.pageStartup.remove(extension.id);
     this.activeTabs.remove(extension.id);
     this.actions.remove(extension.id); this.pages.close(extension.id); this.changed();
     this.userScripts.unload(extension.id);
@@ -354,33 +427,47 @@ export class BrowserExtensionService {
 
   private mutate(operation: () => Promise<boolean>): Promise<boolean> {
     // Wait only extension operations for restoration; never the desktop readiness path.
-    const result = this.queue.then(async () => {
+    return this.enqueue(async () => {
       if (!await this.readyForMutation()) return false;
       return operation();
     });
+  }
+
+  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.queue.then(operation);
     this.queue = result.catch(() => undefined);
     return result;
   }
 
-  private readyForMutation(): Promise<boolean> {
-    if (this.signal.aborted) return Promise.resolve(false);
+  private readyForMutation(signal: AbortSignal = this.signal): Promise<boolean> {
+    if (signal.aborted) return Promise.resolve(false);
     // Scope draining precedes disposer execution. Cancel this wait so an IPC queued
     // behind slow restoration cannot deadlock the Feature scope's operation drain.
     return new Promise((resolve, reject) => {
-      const cancelled = () => { this.signal.removeEventListener('abort', cancelled); resolve(false); };
-      this.signal.addEventListener('abort', cancelled, { once: true });
+      const cancelled = () => { signal.removeEventListener('abort', cancelled); resolve(false); };
+      signal.addEventListener('abort', cancelled, { once: true });
       Promise.resolve(this.startup).then(() => {
-        this.signal.removeEventListener('abort', cancelled); resolve(!this.signal.aborted);
-      }, error => { this.signal.removeEventListener('abort', cancelled); reject(error); });
+        signal.removeEventListener('abort', cancelled); resolve(!signal.aborted);
+      }, error => { signal.removeEventListener('abort', cancelled); reject(error); });
     });
   }
 
-  private async load(extension: Extension, profileStartup = false): Promise<void> {
-    const loaded = await this.options.session.extensions.loadExtension(extension.path);
-    if (this.signal.aborted) { this.options.session.extensions.removeExtension(loaded.id); return; }
-    if (loaded.manifest.background?.service_worker) {
-      this.workerStartup.enqueue(loaded.id, profileStartup);
-    }
+  private async load(extension: Extension, profileStartup = false, operationSignal?: AbortSignal): Promise<void> {
+    // A cancelled native request can finish after its installation was removed.
+    // Keep that ID reserved until cleanup, so a retry cannot be unloaded by the old request.
+    this.loading.add(extension.id);
+    try {
+      const loaded = await this.options.session.extensions.loadExtension(extension.path);
+      if (this.signal.aborted || operationSignal?.aborted) { this.options.session.extensions.removeExtension(loaded.id); return; }
+      if (loaded.id !== extension.id) {
+        this.options.session.extensions.removeExtension(loaded.id);
+        throw new Error('Loaded extension identity does not match its installation.');
+      }
+      if (loaded.manifest.background?.service_worker) this.workerStartup.enqueue(loaded.id, profileStartup);
+      else if (profileStartup && (loaded.manifest.background?.page || loaded.manifest.background?.scripts?.length)) {
+        this.pageStartup.enqueue(loaded.id);
+      }
+    } finally { this.loading.delete(extension.id); }
   }
 
   private async unload(id: string): Promise<void> {
@@ -406,7 +493,7 @@ export class BrowserExtensionService {
     const current = () => !this.disposed && contents && !contents.isDestroyed()
       && contents.session === this.options.session && contents.mainFrame === frame && !frame.isDestroyed()
       && frame.origin === new URL(BROWSER_WEB_STORE_URL).origin && frame.url === url;
-    if (!owner || !current() || !validExtensionId(details.id) || this.pending.has(details.id)) return { action: 'deny' };
+    if (!owner || !current() || !validExtensionId(details.id) || this.pending.has(details.id) || this.loading.has(details.id)) return { action: 'deny' };
     this.pending.add(details.id);
     try {
       const allowed = await confirmExtensionInstall(owner, details.localizedName || details.manifest.name,

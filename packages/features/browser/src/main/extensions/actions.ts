@@ -48,6 +48,22 @@ export class BrowserExtensionActions {
     return [...this.states].map(([id, states]) => ({ id, ...states.get(null), ...states.get(webContentsId ?? null) }));
   }
 
+  async legacyCall(extension: Extension, method: string, args: unknown[]): Promise<unknown> {
+    if (extension.manifest.manifest_version !== 2 || !extension.manifest.browser_action) throw new Error('browserAction unavailable.');
+    const input = args[0];
+    if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid action details.');
+    const details = input as Record<string, unknown>;
+    const tabId = details.tabId;
+    if (tabId !== undefined && (typeof tabId !== 'number' || !this.tabs.has(tabId))) throw new Error('Browser tab unavailable.');
+    if (method === 'getTitle' || method === 'getPopup') {
+      const state = this.snapshot(tabId as number | undefined).find(({ id }) => id === extension.id);
+      return method === 'getTitle' ? state?.title ?? extension.manifest.browser_action.default_title ?? extension.name
+        : state?.popup ?? resolveExtensionPage(extension.id, extension.manifest.browser_action.default_popup) ?? '';
+    }
+    if (!['setIcon', 'setTitle', 'setPopup'].includes(method)) throw new Error(`Unsupported browserAction method: ${method}.`);
+    if (!await this.update(extension, { ...details, method })) throw new Error('Invalid action details.');
+  }
+
   remove(id: string): void {
     this.states.delete(id);
     for (const key of this.writes.keys()) if (key.startsWith(`${id}:`)) this.writes.delete(key);

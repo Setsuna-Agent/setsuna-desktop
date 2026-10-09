@@ -38,6 +38,7 @@ export class BrowserExtensionSystemApis {
       bootstrap: (extension, key) => {
         const declared = [...(extension.manifest.permissions ?? []), ...(extension.manifest.optional_permissions ?? [])];
         return { ...Object.fromEntries(SYSTEM_EXTENSION_PERMISSIONS.map(permission => [permission, declared.includes(permission)])),
+          privacy: declared.includes('privacy'),
           ...(declared.includes('favicon') ? { faviconUrl: options.favicons.resourceUrl(extension, key) } : {}) };
       },
       call: (extension, key, method, args) => this.call(extension, key, method, args),
@@ -61,8 +62,9 @@ export class BrowserExtensionSystemApis {
   track(contents: WebContents): () => void {
     if (contents.isDestroyed() || this.guests.has(contents.id)) return () => undefined;
     const untrackCommands = this.commands.track(contents);
+    const untrackNavigation = this.navigation.track(contents);
     const dispose = () => {
-      this.guests.delete(contents.id); unobserve(); untrackCommands(); this.navigation.forget(contents);
+      this.guests.delete(contents.id); unobserve(); untrackCommands(); untrackNavigation(); this.navigation.forget(contents);
     };
     this.guests.set(contents.id, { contents, dispose });
     const unobserve = observeExtensionContents(contents, { destroyed: dispose });
@@ -100,6 +102,7 @@ export class BrowserExtensionSystemApis {
     if (method.startsWith('contextMenus.')) return this.menus.call(extension, method.slice(13), args);
     if (method.startsWith('downloads.')) return this.downloads.call(extension, method.slice(10), args);
     if (method === 'webNavigation.getAllFrames') return this.navigation.getAllFrames(extension, args[0]);
+    if (method === 'webNavigation.getFrame') return this.navigation.getFrame(extension, args[0]);
     throw new Error(`Unsupported extension browser API: ${method}.`);
   }
 
@@ -111,10 +114,14 @@ export class BrowserExtensionSystemApis {
       if (event.permissions.permissions.includes('nativeMessaging')) this.nativeMessaging.remove(id);
     }
     void this.contexts.endpoints(id).then((endpoints) => {
+      // Starting a dormant worker may outlive revocation of optional permissions.
+      // Resolve the current grant set immediately before delivering sensitive data.
       const extension = this.options.resolve(`chrome-extension://${id}/`);
       if (!extension || event.kind === 'cookieChanged' && (!extension.manifest.permissions?.includes('cookies')
         || !canReadCookie(extension, event.changeInfo.cookie))
-        || event.kind === 'contextMenuClicked' && !extension.manifest.permissions?.includes('contextMenus')) return;
+        || event.kind === 'contextMenuClicked' && !extension.manifest.permissions?.includes('contextMenus')
+        || (event.kind === 'navigationCommitted' || event.kind === 'navigationTargetCreated')
+          && !extension.manifest.permissions?.includes('webNavigation')) return;
       for (const endpoint of endpoints) endpoint.send(event);
     })
       .catch(() => undefined);

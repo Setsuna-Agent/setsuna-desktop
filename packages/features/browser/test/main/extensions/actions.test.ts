@@ -43,3 +43,21 @@ it('accepts only installed extension origins and managed tabs, and isolates over
     expect(actions.snapshot(2)).toEqual([]);
   } finally { actions.dispose(); }
 });
+
+it('uses MV2 toolbar state for legacy getters and rejects invalid tabs, external popups and unsupported badges', async () => {
+  const extension = { id: 'b'.repeat(32), name: 'Legacy', manifest: { manifest_version: 2,
+    browser_action: { default_title: 'Default', default_popup: 'popup.html' } } } as Extension;
+  const actions = new BrowserExtensionActions({} as Session, () => extension, vi.fn());
+  const tab = Object.assign(new EventEmitter(), { id: 10, isDestroyed: () => false }) as unknown as WebContents;
+  actions.track(tab);
+  expect(await actions.legacyCall(extension, 'getTitle', [{}])).toBe('Default');
+  expect(await actions.legacyCall(extension, 'getPopup', [{}])).toBe(`chrome-extension://${extension.id}/popup.html`);
+  await actions.legacyCall(extension, 'setTitle', [{ tabId: 10, title: 'Selected' }]);
+  expect(await actions.legacyCall(extension, 'getTitle', [{ tabId: 10 }])).toBe('Selected');
+  await expect(actions.legacyCall(extension, 'setTitle', [{ tabId: 99, title: 'Foreign' }])).rejects.toThrow('Browser tab unavailable');
+  await expect(actions.legacyCall(extension, 'setPopup', [{ popup: 'https://external.test/' }])).rejects.toThrow('Invalid action details');
+  await expect(actions.legacyCall(extension, 'setBadgeText', [{ text: '1' }])).rejects.toThrow('Unsupported browserAction method');
+  await expect(actions.legacyCall({ ...extension, manifest: { manifest_version: 3 } }, 'setTitle', [{ title: 'MV3' }])).rejects.toThrow('browserAction unavailable');
+  tab.emit('destroyed');
+  await expect(actions.legacyCall(extension, 'getTitle', [{ tabId: 10 }])).rejects.toThrow('Browser tab unavailable');
+});

@@ -1,18 +1,19 @@
-import { contextBridge, ipcRenderer, webFrame } from 'electron';
-import { USER_SCRIPTS_CHANNELS as channels, type UserScriptsBootstrap } from '../contracts/user-scripts.js';
+import { ipcRenderer, webFrame } from 'electron';
+import { executeInExtensionWorld } from './extension-world.js';
+import { USER_SCRIPTS_CHANNELS as channels, type UserScriptsBootstrap, type UserScriptsExtensionEvent } from '../contracts/user-scripts.js';
 import { installUserScriptsApi } from './user-scripts-shim.js';
 import { installUserScripts } from './user-scripts-runner.js';
 import { initializeContentScripts } from './content-scripts.js';
 
 export function initializeUserScripts(): void {
   const url = typeof location === 'object' ? location.href
-    : String(contextBridge.executeInMainWorld({ func: () => globalThis.location.href }));
+    : String(executeInExtensionWorld(() => globalThis.location.href, []));
   if (url.startsWith('chrome-extension://')) {
     const bootstrap: UserScriptsBootstrap | null = ipcRenderer.sendSync(channels.bootstrap);
-    if (bootstrap) contextBridge.executeInMainWorld({ func: installUserScriptsApi, args: [{
+    if (bootstrap) executeInExtensionWorld(installUserScriptsApi, [{
       call: (method: string, args: unknown[]) => ipcRenderer.invoke(channels.call, method, args),
-      onEvent: (listener: (value: unknown) => void) => ipcRenderer.on(channels.event, (_event, value) => listener(value)),
-    }, bootstrap] });
+      onEvent: (listener: (value: UserScriptsExtensionEvent) => void) => { ipcRenderer.on(channels.event, (_event, value) => listener(value)); },
+    }, bootstrap]);
   } else if (typeof document === 'object' && /^https?:/.test(url)) {
     // Keep the remote lifetime port in this preload, away from page/user-script worlds.
     // Destroying the document closes it, including when an iframe is removed from the DOM.

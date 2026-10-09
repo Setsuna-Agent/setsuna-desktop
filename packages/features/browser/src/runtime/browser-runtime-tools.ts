@@ -1,6 +1,8 @@
 import { runtimeText, type RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import {
   BROWSER_CLICK_TOOL_NAME,
+  BROWSER_EXTENSIONS_TOOL_NAME,
+  BROWSER_INSTALL_EXTENSION_TOOL_NAME,
   BROWSER_KEY_TOOL_NAME,
   BROWSER_NAVIGATE_TOOL_NAME,
   BROWSER_SCREENSHOT_TOOL_NAME,
@@ -16,6 +18,7 @@ import {
   type DesktopBrowserKeyModifier,
   type RuntimeBrowserOpenAction,
 } from '../contracts/index.js';
+import { resolveExtensionSource } from './extension-path.js';
 import type { RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 import type {
   BrowserControlPort,
@@ -52,6 +55,20 @@ function browserToolDefinitions(language?: RuntimeInterfaceLanguage) {
   };
 
   const CONTROL_TOOLS: RuntimeToolDefinition[] = [
+    {
+      name: BROWSER_EXTENSIONS_TOOL_NAME,
+      description: text('List installed built-in browser extensions, including disabled extensions.', '列出内置浏览器已安装的扩展，包括已停用的扩展。'),
+      inputSchema: { type: 'object', additionalProperties: false, properties: {} },
+    },
+    {
+      name: BROWSER_INSTALL_EXTENSION_TOOL_NAME,
+      description: text('Install an unpacked Manifest V2 or V3 extension in the built-in browser. Files are copied into persistent application storage. Native loading does not guarantee compatibility with every Chrome API. Use this tool instead of chrome://extensions; it follows the tool approval policy.', '在内置浏览器安装已解压的 Manifest V2 或 V3 扩展。文件会复制到应用的持久目录。原生加载成功不保证所有 Chrome API 均兼容。安装时使用此工具，无需访问 chrome://extensions；遵循工具审批策略。'),
+      inputSchema: {
+        type: 'object', additionalProperties: false,
+        properties: { directory: { type: 'string', description: text('Extension directory containing manifest.json, inside the current workspace. Accepts an absolute path or a path relative to the workspace root. Extract ZIP files first.', '当前工作区内包含 manifest.json 的扩展目录。接受绝对路径或相对于工作区根目录的路径。ZIP 文件需要先解压。') } },
+        required: ['directory'],
+      },
+    },
     {
       name: BROWSER_TABS_TOOL_NAME,
       description: text('List controllable side-browser tabs and identify the active tab.', "列出可控制的侧边浏览器标签页，并标识当前标签页。"),
@@ -180,6 +197,7 @@ export class BrowserRuntimeTools implements BrowserRuntimeToolService {
   }
 
   toolRuntimeProfile(name: string): BrowserToolRuntimeProfile | null {
+    if (name === BROWSER_INSTALL_EXTENSION_TOOL_NAME) return { supportsParallel: false };
     return name === BROWSER_SNAPSHOT_TOOL_NAME
       ? { modelOutputTokenLimit: browserSnapshotOutputTokenLimit }
       : null;
@@ -217,10 +235,20 @@ export class BrowserRuntimeTools implements BrowserRuntimeToolService {
     }
     if (advertised.has('browser_key')) lines.push(text('Use browser_key for keyboard navigation only when the page does not expose a suitable element ref.', "只有页面没有提供合适的元素 ref 时，才用 browser_key 进行键盘导航。"));
     if (advertised.has('browser_navigate')) lines.push(text('Use browser_navigate to reuse an existing tab.', "使用 browser_navigate 复用已有标签页。"));
+    if (advertised.has(BROWSER_INSTALL_EXTENSION_TOOL_NAME)) lines.push(text(
+      'When the user requests extension installation, use browser_install_extension with an unpacked directory in the workspace. Use browser_extensions to inspect installations. Download and extract releases with file tools if needed; browser navigation cannot open chrome://extensions. Installation success confirms native loading, not the extension\'s behavior on websites.',
+      '用户要求安装浏览器扩展时，使用 browser_install_extension 并传入工作区内已解压的扩展目录。使用 browser_extensions 查看安装列表；如有需要，通过文件工具下载和解压发布包。网页导航不能打开 chrome://extensions。安装成功仅确认原生加载，不能据此声称网站上的扩展行为已经验证。',
+    ));
     return lines.join(' ');
   }
 
   async approvalForTool(name = '', input?: unknown): Promise<BrowserToolApprovalRequirement | null> {
+    if (name === BROWSER_INSTALL_EXTENSION_TOOL_NAME) {
+      return {
+        reason: '安装浏览器扩展会持久运行扩展代码，并授予 manifest 声明的网站访问权限。',
+        argumentsPreview: JSON.stringify(browserControlCommand(name, input)),
+      };
+    }
     if (name === BROWSER_CLICK_TOOL_NAME) {
       const command = browserControlCommand(name, input);
       return {
@@ -289,7 +317,12 @@ export class BrowserRuntimeTools implements BrowserRuntimeToolService {
     if (name === BROWSER_SCREENSHOT_TOOL_NAME && context.modelCapabilities?.supportsImages !== true) {
       throw new Error('The active model does not support browser screenshot input.');
     }
-    const command = browserControlCommand(name, input);
+    let command = browserControlCommand(name, input);
+    if (command.kind === 'install-extension') {
+      if (context.readOnly) throw new Error('Browser extension installation is unavailable in read-only turns.');
+      command = { ...command, ...await resolveExtensionSource(command.directory, context.environment) };
+      context.signal?.throwIfAborted();
+    }
     const result = await this.control.execute(command, context.signal);
     if (result.kind === 'screenshot') {
       const { dataUrl, ...metadata } = result;
@@ -325,6 +358,10 @@ export function browserControlCommand(name: string, input: unknown): DesktopBrow
   const record = objectInput(input);
   const tabId = optionalString(record.tabId, 'tabId');
   switch (name) {
+    case BROWSER_EXTENSIONS_TOOL_NAME:
+      return { kind: 'extensions' };
+    case BROWSER_INSTALL_EXTENSION_TOOL_NAME:
+      return { kind: 'install-extension', directory: requiredString(record.directory, 'directory') };
     case BROWSER_TABS_TOOL_NAME:
       return { kind: 'tabs' };
     case BROWSER_SNAPSHOT_TOOL_NAME:
@@ -372,6 +409,14 @@ export function browserControlCommand(name: string, input: unknown): DesktopBrow
 }
 
 function formatBrowserControlResult(result: DesktopBrowserControlResult): string {
+  if (result.kind === 'extensions') {
+    return JSON.stringify(result.extensions.map(({ id, name, version, enabled, permissions, hostPermissions }) => ({ id, name, version, enabled, permissions, hostPermissions })));
+  }
+  if (result.kind === 'extension-install') {
+    if (result.status === 'cancelled') return 'Browser extension installation was cancelled.';
+    if (result.status === 'failed') return `Browser extension installation failed: ${result.reason}.`;
+    return `Installed ${compact(result.extension.name, 160)} (${result.extension.id}, version ${result.extension.version}). Native loading succeeded; website behavior has not been verified.`;
+  }
   if (result.kind === 'tabs') {
     if (!result.tabs.length) return 'No controllable side-browser tabs are open.';
     return result.tabs.map((tab) =>
@@ -416,6 +461,8 @@ function formatBrowserElement(element: DesktopBrowserElement): string {
 
 function browserCommandPreview(command: DesktopBrowserControlCommand): string {
   switch (command.kind) {
+    case 'extensions': return '查看内置浏览器扩展';
+    case 'install-extension': return `安装浏览器扩展 ${command.directory}`;
     case 'open': return `在侧边浏览器打开 ${command.url}`;
     case 'tabs': return '列出侧边浏览器标签页';
     case 'snapshot': return '读取侧边浏览器页面内容';
@@ -430,9 +477,8 @@ function browserCommandPreview(command: DesktopBrowserControlCommand): string {
 }
 
 function controlToolsForContext(controlTools: RuntimeToolDefinition[], context?: BrowserToolExecutionContext): RuntimeToolDefinition[] {
-  return context?.modelCapabilities?.supportsImages === true
-    ? controlTools
-    : controlTools.filter((tool) => tool.name !== BROWSER_SCREENSHOT_TOOL_NAME);
+  return controlTools.filter((tool) => (tool.name !== BROWSER_SCREENSHOT_TOOL_NAME || context?.modelCapabilities?.supportsImages === true)
+    && (tool.name !== BROWSER_INSTALL_EXTENSION_TOOL_NAME || !context?.readOnly));
 }
 
 function objectInput(input: unknown): Record<string, unknown> {

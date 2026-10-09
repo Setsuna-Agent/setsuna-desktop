@@ -19,6 +19,27 @@ export class BrowserExtensionNavigation {
       processId: frame.processId, url: frame.url, errorOccurred: false }));
   }
 
+  getFrame(extension: Extension, input: unknown): unknown {
+    const frameId = input && typeof input === 'object' ? (input as { frameId?: unknown }).frameId : undefined;
+    if (typeof frameId !== 'number' || !Number.isSafeInteger(frameId) || frameId < 0) throw new Error('Invalid frame ID.');
+    const frames = this.getAllFrames(extension, input) as Array<{ frameId: number }>;
+    return frames.find(frame => frame.frameId === frameId) ?? null;
+  }
+
+  track(contents: WebContents): () => void {
+    const committed = (_event: Electron.Event, url: string, _code: number, _text: string, isMainFrame: boolean,
+      processId: number, routingId: number) => {
+      if (contents.isDestroyed() || !this.guests().includes(contents)) return;
+      const frame = isMainFrame ? contents.mainFrame : contents.mainFrame.framesInSubtree
+        .find(frame => frame.processId === processId && frame.routingId === routingId);
+      if (!frame || frame.isDestroyed()) return;
+      this.publish({ kind: 'navigationCommitted', details: { tabId: contents.id, url, timeStamp: Date.now(),
+        processId, frameId: extensionFrameId(frame) } });
+    };
+    contents.on('did-frame-navigate', committed);
+    return () => contents.off('did-frame-navigate', committed);
+  }
+
   requestTarget(source: WebContents, url: string): string | undefined {
     if (!isAllowedEmbeddedBrowserUrl(url) || source.isDestroyed() || !this.guests().includes(source)
       || !source.hostWebContents || source.hostWebContents.isDestroyed()) return;

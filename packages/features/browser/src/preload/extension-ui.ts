@@ -1,21 +1,27 @@
-import { contextBridge, ipcRenderer } from 'electron';
-import { EXTENSION_UI_CHANNELS as channels, type ExtensionApiResult, type ExtensionUiEvent } from '../contracts/extension-api.js';
+import { ipcRenderer } from 'electron';
+import { EXTENSION_UI_CHANNELS as channels, type ExtensionApiResult, type ExtensionUiBootstrap, type ExtensionUiEvent } from '../contracts/extension-api.js';
+import { BROWSER_EXTENSION_ACTION_CHANNEL } from '../contracts/extensions.js';
+import { executeInExtensionWorld } from './extension-world.js';
+import { installExtensionActionApi } from './extension-action-api.js';
 
 export function initializeExtensionUi(): void {
-  const bootstrap = ipcRenderer.sendSync(channels.bootstrap) as { sidePanel: boolean } | null;
+  const bootstrap = ipcRenderer.sendSync(channels.bootstrap) as ExtensionUiBootstrap | null;
   if (!bootstrap) return;
-  contextBridge.executeInMainWorld({ func: installExtensionUi, args: [bootstrap, {
-    call: (method: string, args: unknown[]) => ipcRenderer.invoke(channels.call, method, args),
+  const call = (method: string, args: unknown[]) => ipcRenderer.invoke(channels.call, method, args);
+  executeInExtensionWorld(installExtensionActionApi, [bootstrap.browserAction,
+    (update: unknown) => ipcRenderer.invoke(BROWSER_EXTENSION_ACTION_CHANNEL, update), call]);
+  executeInExtensionWorld(installExtensionUi, [bootstrap, {
+    call,
     onEvent: (listener: (event: ExtensionUiEvent) => void) => ipcRenderer.on(channels.event, (_event, value) => listener(value)),
-  }] });
+  }]);
 }
 
-function installExtensionUi(bootstrap: { sidePanel: boolean }, transport: {
+function installExtensionUi(bootstrap: ExtensionUiBootstrap, transport: {
   call(method: string, args: unknown[]): Promise<ExtensionApiResult>;
   onEvent(listener: (event: ExtensionUiEvent) => void): void;
 }): void {
   type Listener = (...args: unknown[]) => void;
-  const scope = globalThis as unknown as { chrome?: { action?: Record<string, unknown>; windows?: Record<string, unknown>;
+  const scope = globalThis as unknown as { chrome?: { action?: Record<string, unknown>; browserAction?: Record<string, unknown>; windows?: Record<string, unknown>;
     sidePanel?: Record<string, unknown>; runtime?: { lastError?: { message: string } } } };
   const chrome = scope.chrome;
   const runtime = chrome?.runtime;
@@ -56,10 +62,11 @@ function installExtensionUi(bootstrap: { sidePanel: boolean }, transport: {
       hasListener: (listener: Listener) => listeners.has(listener), hasListeners: () => listeners.size > 0,
     };
   };
-  if (chrome.action) {
+  const action = chrome.action ?? chrome.browserAction;
+  if (action) {
     // Chromium has no toolbar for the desktop's webview tabs, so the host delivers its
     // clicks to the same listeners registered by the extension's background worker.
-    chrome.action.onClicked = eventObject('actionClicked', (listening) => {
+    action.onClicked = eventObject('actionClicked', (listening) => {
       void transport.call('actionListen', [listening]).catch(() => undefined);
     });
   }

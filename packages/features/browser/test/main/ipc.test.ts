@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { createFeatureScope } from '@setsuna-desktop/feature-core/scope';
-import { ipcMain, type BrowserWindow, type IpcMainInvokeEvent, type WebContents } from 'electron';
+import { ipcMain, session, webContents, type BrowserWindow, type IpcMainInvokeEvent, type WebContents } from 'electron';
 import { afterEach, expect, it, vi } from 'vitest';
 import { BROWSER_IPC_CHANNELS } from '../../src/contracts/index.js';
 import type { BrowserAutomation } from '../../src/main/cdp/automation.js';
@@ -11,7 +11,7 @@ import { registerBrowserIpc } from '../../src/main/ipc.js';
 
 vi.mock('electron', () => ({
   ipcMain: { handle: vi.fn(), removeHandler: vi.fn() },
-  clipboard: {}, nativeImage: {}, session: {}, webContents: {}, Menu: {}, screen: {},
+  clipboard: {}, nativeImage: {}, session: { fromPartition: vi.fn() }, webContents: { fromId: vi.fn() }, Menu: {}, screen: {},
 }));
 
 afterEach(() => vi.clearAllMocks());
@@ -37,14 +37,43 @@ function fixture() {
     window: { isDestroyed: () => false } as BrowserWindow,
     contextMenus: {} as BrowserContextMenuSession,
   };
-  scope.scope.add(registerBrowserIpc(scope.scope, controller, new Map([[1, windowSession], [3, windowSession]]), () => 'en-US'));
+  const selectionChanged = vi.fn();
+  scope.scope.add(registerBrowserIpc(scope.scope, controller, new Map([[1, windowSession], [3, windowSession]]),
+    () => 'en-US', undefined, selectionChanged));
   scope.activate();
   const invoke = (channel: string, input: Record<string, unknown> = {}, senderId = 1) => {
     const handler = vi.mocked(ipcMain.handle).mock.calls.find(([registered]) => registered === channel)![1];
     return handler({ sender: { id: senderId } } as IpcMainInvokeEvent, { tabId: 'tab-1', ...input });
   };
-  return { scope, controller, contents, invoke };
+  return { scope, controller, contents, invoke, selectionChanged, owner: windowSession.window };
 }
+
+it('propagates tab activation and late registration through the owned guest mapping, including clearing it', async () => {
+  const { scope, contents, invoke, selectionChanged, owner } = fixture();
+  const second = Object.assign(new EventEmitter(), { id: 4, hostWebContents: contents.hostWebContents,
+    session: contents.session, isDestroyed: () => false, executeJavaScriptInIsolatedWorld: contents.executeJavaScriptInIsolatedWorld });
+  vi.mocked(session.fromPartition).mockReturnValue(contents.session as unknown as Electron.Session);
+  vi.mocked(webContents.fromId).mockImplementation(id => id === second.id ? second as unknown as WebContents : null);
+  try {
+    await invoke(BROWSER_IPC_CHANNELS.setActiveTab);
+    expect(selectionChanged).toHaveBeenLastCalledWith(owner, contents);
+    await invoke(BROWSER_IPC_CHANNELS.setActiveTab, { tabId: 'late' });
+    expect(selectionChanged).toHaveBeenLastCalledWith(owner, null);
+    // Another renderer's home page must not erase this owner's pending selection.
+    await invoke(BROWSER_IPC_CHANNELS.setActiveTab, { tabId: null }, 3);
+    expect(await invoke(BROWSER_IPC_CHANNELS.registerTab, { tabId: 'late', webContentsId: second.id }, 3)).toBe(false);
+    expect(await invoke(BROWSER_IPC_CHANNELS.registerTab, { tabId: 'late', webContentsId: second.id })).toBe(true);
+    expect(selectionChanged).toHaveBeenLastCalledWith(owner, second);
+    await invoke(BROWSER_IPC_CHANNELS.unregisterTab, { tabId: 'late', webContentsId: contents.id });
+    expect(selectionChanged).toHaveBeenCalledTimes(4);
+    await invoke(BROWSER_IPC_CHANNELS.unregisterTab, { tabId: 'late', webContentsId: second.id });
+    expect(selectionChanged).toHaveBeenLastCalledWith(owner, null);
+    await invoke(BROWSER_IPC_CHANNELS.setActiveTab, { tabId: null });
+    expect(selectionChanged).toHaveBeenCalledTimes(6);
+    expect(await invoke(BROWSER_IPC_CHANNELS.setActiveTab, {}, 99)).toBe(false);
+    expect(selectionChanged).toHaveBeenCalledTimes(6);
+  } finally { await scope.finishDispose(); }
+});
 
 it('opens page find only for a registered tab owned by the requesting window', async () => {
   const { scope, contents, invoke } = fixture();

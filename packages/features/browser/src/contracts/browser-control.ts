@@ -1,4 +1,8 @@
+import type { BrowserExtension, BrowserExtensionInstallResult } from './extensions.js';
+
 export const BROWSER_TABS_TOOL_NAME = 'browser_tabs';
+export const BROWSER_EXTENSIONS_TOOL_NAME = 'browser_extensions';
+export const BROWSER_INSTALL_EXTENSION_TOOL_NAME = 'browser_install_extension';
 export const BROWSER_SNAPSHOT_TOOL_NAME = 'browser_snapshot';
 export const BROWSER_SCREENSHOT_TOOL_NAME = 'browser_screenshot';
 export const BROWSER_CLICK_TOOL_NAME = 'browser_click';
@@ -74,6 +78,10 @@ export type DesktopBrowserSnapshot = {
 export type DesktopBrowserControlCommand =
   | { kind: 'open'; url: string }
   | { kind: 'tabs' }
+  | { kind: 'extensions' }
+  | { kind: 'install-extension'; directory: string;
+      /** Runtime-owned metadata; required by main after the tool input is resolved. */
+      workspaceRoot?: string }
   | { kind: 'snapshot'; maxElements?: number; tabId?: string }
   | { kind: 'screenshot'; tabId?: string }
   | { kind: 'click'; ref: string; tabId?: string }
@@ -85,6 +93,8 @@ export type DesktopBrowserControlCommand =
 
 export type DesktopBrowserControlResult =
   | { kind: 'tabs'; tabs: DesktopBrowserTab[] }
+  | { kind: 'extensions'; extensions: readonly BrowserExtension[] }
+  | ({ kind: 'extension-install' } & BrowserExtensionInstallResult)
   | ({ kind: 'snapshot'; tabId: string } & DesktopBrowserSnapshot)
   | ({ kind: 'screenshot'; tabId: string; title: string; url: string } & DesktopBrowserScreenshot)
   | { kind: 'action'; message: string; tabId: string; url: string }

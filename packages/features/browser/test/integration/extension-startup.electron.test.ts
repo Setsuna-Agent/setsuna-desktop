@@ -10,7 +10,7 @@ import { expect, it } from 'vitest';
 
 const supported = ['darwin', 'win32'].includes(process.platform);
 
-it.skipIf(!supported)('keeps the browser provider usable during stalled restoration, bounds worker starts and cancels late startup', async () => {
+it.skipIf(!supported)('keeps the browser provider usable during stalled MV2/MV3 restoration, bounds worker starts and cancels late startup', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'setsuna-extension-startup-'));
   try {
     const fixture = new URL('./extension-startup.fixture.ts', import.meta.url);
@@ -20,7 +20,7 @@ it.skipIf(!supported)('keeps the browser provider usable during stalled restorat
     await build({ entryPoints: [fileURLToPath(fixture)], outfile: entry, bundle: true, platform: 'node', format: 'cjs',
       target: 'node22', external: ['electron'], define: { 'import.meta.url': JSON.stringify(fixture.href) } });
     const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
-    for (const phase of ['workers', 'queue', 'dispose']) {
+    for (const phase of ['workers', 'queue', 'dispose', 'pages']) {
       const { stdout, stderr } = await promisify(execFile)(createRequire(import.meta.url)('electron'), [entry, directory, phase],
         { env, timeout: 8000, maxBuffer: 1024 * 1024 }).catch(error => { throw new Error(`${error.message}\n${error.stdout}`); });
       expect(stdout).toContain(`EXTENSION_STARTUP_${phase.toUpperCase()}_OK`);

@@ -30,8 +30,15 @@ export type BrowserExtension = Readonly<{
   newTabUrl: string | null;
 }>;
 
+export type BrowserExtensionInstallFailure = 'invalid-extension' | 'unsupported-manifest' | 'already-installed' | 'installation-pending' | 'load-failed';
+export type BrowserExtensionInstallResult =
+  | Readonly<{ status: 'installed'; extension: BrowserExtension }>
+  | Readonly<{ status: 'cancelled' }>
+  | Readonly<{ status: 'failed'; reason: BrowserExtensionInstallFailure }>;
+
 export interface BrowserExtensionsBridge {
   getExtensions(): Promise<readonly BrowserExtension[]>;
+  installUnpackedExtension(): Promise<BrowserExtensionInstallResult>;
   setExtensionEnabled(id: string, enabled: boolean): Promise<boolean>;
   setExtensionUserScriptsAllowed(id: string, allowed: boolean): Promise<boolean>;
   removeExtension(id: string): Promise<boolean>;

@@ -1,7 +1,9 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { ipcRenderer } from 'electron';
+import { executeInExtensionWorld } from './extension-world.js';
 import { EXTENSION_SYSTEM_CHANNELS as channels, type ExtensionApiResult, type ExtensionSystemBootstrap, type ExtensionSystemEvent } from '../contracts/extension-api.js';
 import { installNativeMessaging } from './native-messaging.js';
 import { installExtensionScripting } from './extension-scripting.js';
+import { installExtensionNavigationEvents } from './extension-navigation-events.js';
 
 export function initializeExtensionSystem(): void {
   const bootstrap = ipcRenderer.sendSync(channels.bootstrap) as ExtensionSystemBootstrap | null;
@@ -10,9 +12,10 @@ export function initializeExtensionSystem(): void {
     call: (method: string, args: unknown[]) => ipcRenderer.invoke(channels.call, method, args),
     onEvent: (listener: (event: ExtensionSystemEvent) => void) => ipcRenderer.on(channels.event, (_event, value) => listener(value)),
   };
-  contextBridge.executeInMainWorld({ func: installExtensionSystem, args: [bootstrap, transport] });
-  if (bootstrap.nativeMessaging) contextBridge.executeInMainWorld({ func: installNativeMessaging, args: [transport] });
-  if (bootstrap.scripting) contextBridge.executeInMainWorld({ func: installExtensionScripting, args: [transport] });
+  executeInExtensionWorld(installExtensionSystem, [bootstrap, transport]);
+  if (bootstrap.webNavigation) executeInExtensionWorld(installExtensionNavigationEvents, [transport]);
+  if (bootstrap.nativeMessaging) executeInExtensionWorld(installNativeMessaging, [transport]);
+  if (bootstrap.scripting) executeInExtensionWorld(installExtensionScripting, [transport]);
 }
 
 export function installExtensionSystem(bootstrap: ExtensionSystemBootstrap, transport: {
@@ -23,7 +26,7 @@ export function installExtensionSystem(bootstrap: ExtensionSystemBootstrap, tran
   const scope = globalThis as unknown as { chrome?: { debugger?: Record<string, unknown>; commands?: Record<string, unknown>;
     contextMenus?: Record<string, unknown>; downloads?: Record<string, unknown>; webNavigation?: Record<string, unknown>;
     cookies?: Record<string, unknown>; bookmarks?: Record<string, unknown>; permissions?: Record<string, unknown>;
-    storage?: { managed?: Record<string, unknown> };
+    storage?: { managed?: Record<string, unknown> }; privacy?: Record<string, Record<string, unknown>>;
     runtime?: { lastError?: { message: string }; onStartup?: unknown; id?: string; getURL?: (path: string) => string } } };
   const chrome = scope.chrome;
   const runtime = chrome?.runtime;
@@ -53,7 +56,7 @@ export function installExtensionSystem(bootstrap: ExtensionSystemBootstrap, tran
     };
   };
   // Electron exposes this event but treats restored installations as fresh loads.
-  // The host emits it once after the restored worker has registered its listeners.
+  // The host emits it once after the restored background has registered its listeners.
   runtime.onStartup = eventObject('startup');
   if (bootstrap.faviconUrl && runtime.getURL) {
     const nativeGetUrl = runtime.getURL.bind(runtime);
@@ -86,9 +89,19 @@ export function installExtensionSystem(bootstrap: ExtensionSystemBootstrap, tran
     for (const method of ['search', 'show']) chrome.downloads[method] = (...args: unknown[]) => call(`downloads.${method}`, args);
   }
   if (bootstrap.webNavigation && !chrome.webNavigation) chrome.webNavigation = {
+    getFrame: (...args: unknown[]) => call('webNavigation.getFrame', args),
     getAllFrames: (...args: unknown[]) => call('webNavigation.getAllFrames', args),
-    onCreatedNavigationTarget: eventObject('navigationTargetCreated'),
   };
+  if (bootstrap.privacy && !chrome.privacy) {
+    // Electron cannot configure these ChromeSettings. Preserve API discovery, but
+    // return explicit RPC errors for reads/writes rather than claiming a privacy change.
+    chrome.privacy = { network: {}, websites: {} };
+    for (const [category, setting] of [['network', 'networkPredictionEnabled'], ['network', 'webRTCIPHandlingPolicy'],
+      ['websites', 'hyperlinkAuditingEnabled']]) {
+      chrome.privacy[category][setting] = Object.fromEntries(['get', 'set', 'clear'].map(method =>
+        [method, (...args: unknown[]) => call(`privacy.${category}.${setting}.${method}`, args)]));
+    }
+  }
   if (!chrome.permissions) {
     chrome.permissions = { onAdded: eventObject('permissionsAdded'), onRemoved: eventObject('permissionsRemoved') };
     for (const method of ['getAll', 'contains', 'request', 'remove']) chrome.permissions[method] = (...args: unknown[]) => call(`permissions.${method}`, args);

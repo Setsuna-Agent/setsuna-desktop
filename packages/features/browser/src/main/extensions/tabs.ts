@@ -19,16 +19,29 @@ type Options = {
 export class BrowserExtensionTabs {
   private readonly contexts: ExtensionContexts<ExtensionTabEvent>;
   private readonly tracked = new Map<number, () => void>();
+  private readonly selected = new Map<number, number | null>();
   private queue: Promise<unknown> = Promise.resolve();
   private disposed = false;
 
   constructor(private readonly options: Options) {
     this.contexts = new ExtensionContexts({ ...options, channels, bootstrap: () => true,
-      call: (extension, _key, method, args) => this.call(extension, method, args) });
+      call: (extension, key, method, args) => this.call(extension, key, method, args) });
   }
 
   start(): void { this.contexts.start(); }
   remove(id: string): void { this.contexts.remove(id); }
+
+  select(owner: BrowserWindow, id: number | null): boolean {
+    if (this.disposed || owner.isDestroyed()) return false;
+    if (id === null) { this.selected.set(owner.id, null); return true; }
+    const contents = webContents.fromId(id);
+    if (!contents || contents.isDestroyed() || contents.getType() !== 'webview'
+      || !this.tracked.has(id) || this.options.owner(contents) !== owner) return false;
+    this.selected.set(owner.id, id);
+    return true;
+  }
+
+  forgetWindow(owner: BrowserWindow): void { this.selected.delete(owner.id); }
 
   track(contents: WebContents): () => void {
     if (contents.isDestroyed() || this.tracked.has(contents.id)) return () => undefined;
@@ -39,7 +52,7 @@ export class BrowserExtensionTabs {
     const windowId = owner.id;
     const updated = (status: ExtensionTab['status'], pendingUrl?: string) => {
       if (contents.isDestroyed()) return;
-      const tab = extensionTabDetails(contents, status, pendingUrl, windowId);
+      const tab = this.details(contents, status, pendingUrl, windowId);
       this.publish({ kind: 'updated', tabId: contents.id, changeInfo: { status, ...(status === 'complete' ? { url: tab.url } : {}) }, tab });
     };
     const navigating = (event: Electron.Event<Electron.WebContentsDidStartNavigationEventParams>) => {
@@ -48,7 +61,7 @@ export class BrowserExtensionTabs {
     const complete = () => updated('complete');
     const inPage = (_event: Electron.Event, url: string, isMainFrame: boolean) => {
       if (!isMainFrame || contents.isDestroyed()) return;
-      const tab = extensionTabDetails(contents, contents.isLoadingMainFrame() ? 'loading' : 'complete', undefined, windowId);
+      const tab = this.details(contents, contents.isLoadingMainFrame() ? 'loading' : 'complete', undefined, windowId);
       // SPA routing changes only the URL, without a loading/complete transition.
       this.publish({ kind: 'updated', tabId: contents.id, changeInfo: { url }, tab });
     };
@@ -58,6 +71,8 @@ export class BrowserExtensionTabs {
     };
     const dispose = () => {
       this.tracked.delete(contents.id);
+      if (owner.isDestroyed()) this.selected.delete(windowId);
+      else if (this.selected.get(windowId) === contents.id) this.selected.set(windowId, null);
       contents.off('did-start-navigation', navigating).off('did-finish-load', complete)
         .off('did-navigate-in-page', inPage);
       unobserve();
@@ -72,11 +87,12 @@ export class BrowserExtensionTabs {
   dispose(): void {
     this.disposed = true; this.contexts.dispose();
     for (const dispose of [...this.tracked.values()]) dispose();
+    this.selected.clear();
   }
 
-  private async call(extension: Extension, method: string, args: unknown[]): Promise<unknown> {
+  private async call(extension: Extension, key: string, method: string, args: unknown[]): Promise<unknown> {
     if (this.disposed) throw new Error('Extension context unavailable.');
-    if (method === 'read') return this.read(extension, args[0], args[1]);
+    if (method === 'read') return this.read(extension, key, args[0], args[1]);
     if (method === 'create') {
       const properties = args[0];
       if (!properties || typeof properties !== 'object' || Array.isArray(properties)) throw new Error('Invalid createProperties.');
@@ -100,11 +116,29 @@ export class BrowserExtensionTabs {
     throw new Error(`Unsupported tabs method: ${method}.`);
   }
 
-  private read(extension: Extension, ids: unknown, query: unknown): ExtensionTabReadDetails[] {
+  private selection(contents: WebContents): Pick<ExtensionTab, 'windowId' | 'active' | 'highlighted'> | null {
+    if (contents.session !== this.options.session || contents.getType() !== 'webview' || !this.tracked.has(contents.id)) return null;
+    const owner = this.options.owner(contents);
+    if (!owner || owner.isDestroyed()) return null;
+    // Explicit selection includes null: home and a closed guest must not select
+    // an arbitrary hidden page merely because it retains native focus.
+    const active = this.selected.has(owner.id) ? this.selected.get(owner.id) === contents.id : contents.isFocused();
+    return { windowId: owner.id, active, highlighted: active };
+  }
+
+  private details(contents: WebContents, status: ExtensionTab['status'], pendingUrl?: string, windowId = 0): ExtensionTab {
+    return { ...extensionTabDetails(contents, status, pendingUrl, windowId), ...this.selection(contents) };
+  }
+
+  private read(extension: Extension, key: string, ids: unknown, query: unknown): ExtensionTabReadDetails[] {
     if (!Array.isArray(ids) || !ids.every(id => typeof id === 'number' && Number.isSafeInteger(id) && id > 0)) throw new Error('Invalid tab IDs.');
     const filters = query === undefined ? {} : query;
     if (!filters || typeof filters !== 'object' || Array.isArray(filters)) throw new Error('Invalid tab query.');
-    const { url, title } = filters as ExtensionTabReadQuery;
+    const { url, title, active, highlighted, currentWindow, lastFocusedWindow, windowId } = filters as ExtensionTabReadQuery;
+    for (const value of [active, highlighted, currentWindow, lastFocusedWindow]) {
+      if (value !== undefined && typeof value !== 'boolean') throw new Error('Invalid tab query.');
+    }
+    if (windowId !== undefined && !Number.isSafeInteger(windowId)) throw new Error('Invalid window ID.');
     if (title !== undefined && typeof title !== 'string') throw new Error('Invalid tab title pattern.');
     const patterns = url === undefined ? [] : typeof url === 'string' ? [url] : url;
     if (!Array.isArray(patterns) || !patterns.every(pattern => typeof pattern === 'string')) throw new Error('Invalid tab URL patterns.');
@@ -113,19 +147,33 @@ export class BrowserExtensionTabs {
       if (!compiled) throw new Error('Invalid tab URL pattern.');
       return compiled;
     });
-    const titlePattern = title ? compileTabTitlePattern(title) : null;
+    const titlePattern = title !== undefined ? compileTabTitlePattern(title) : null;
+    const context = this.contexts.frameContents(key);
+    const currentOwner = context ? this.options.owner(context) ?? BrowserWindow.fromWebContents(context)?.getParentWindow() : null;
+    const focusedId = this.options.activeOwner()?.id ?? -1;
+    const currentId = currentOwner && !currentOwner.isDestroyed() ? currentOwner.id : focusedId;
+    const requestedWindowId = windowId === -2 ? currentId : windowId;
     const result: ExtensionTabReadDetails[] = [];
     for (const id of ids) {
       const contents = webContents.fromId(id);
       // IDs and queries come from the extension. All private fields come from the owned partition.
-      const tab: ExtensionTabReadDetails = contents && !contents.isDestroyed() && contents.session === this.options.session
+      const available = contents && !contents.isDestroyed() && contents.session === this.options.session;
+      const selection = available ? this.selection(contents) : null;
+      // Extension documents keep Chromium's filtering and window identity. Only
+      // owned guests have a host selection to apply; preload retains native matches.
+      if (selection && (active !== undefined && selection.active !== active
+        || highlighted !== undefined && selection.highlighted !== highlighted
+        || requestedWindowId !== undefined && selection.windowId !== requestedWindowId
+        || currentWindow !== undefined && (selection.windowId === currentId) !== currentWindow
+        || lastFocusedWindow !== undefined && (selection.windowId === focusedId) !== lastFocusedWindow)) continue;
+      const tab: ExtensionTabReadDetails = available
         ? extensionTabForExtension(extension, extensionTabDetails(contents, 'complete'),
           Boolean(this.options.activeTabAccess?.(extension.id, contents))) : { id };
       const tabUrl = tab.url;
       if ((urls.length || titlePattern) && (tabUrl === undefined
         || urls.length && !urls.some(pattern => pattern.test(tabUrl))
         || titlePattern && !titlePattern.test(tab.title ?? ''))) continue;
-      result.push({ id, ...(tab.url !== undefined ? { url: tab.url, title: tab.title } : {}) });
+      result.push({ id, ...selection, ...(tab.url !== undefined ? { url: tab.url, title: tab.title } : {}) });
     }
     return result;
   }

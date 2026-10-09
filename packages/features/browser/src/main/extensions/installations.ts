@@ -5,7 +5,7 @@ import type { Extension } from 'electron';
 import { validExtensionId } from './metadata.js';
 
 /** Installed files also describe disabled extensions, which Electron no longer lists. */
-export async function readInstalledExtensions(directory: string, minimumManifestVersion = 3): Promise<Extension[]> {
+export async function readInstalledExtensions(directory: string, minimumManifestVersion = 2): Promise<Extension[]> {
   const entries = await readDirectories(directory);
   if (!entries.length) return [];
   const canonicalDirectory = await realpath(directory);
@@ -22,8 +22,7 @@ export async function readInstalledExtensions(directory: string, minimumManifest
         if (typeof manifest.key !== 'string' || typeof manifest.name !== 'string'
           || manifest.version !== version.name.slice(0, -2)
           || ![2, 3].includes(manifest.manifest_version) || manifest.manifest_version < minimumManifestVersion) continue;
-        const keyId = createHash('sha256').update(Buffer.from(manifest.key, 'base64')).digest('hex').slice(0, 32)
-          .replace(/[0-9a-f]/g, (digit) => String.fromCharCode(97 + parseInt(digit, 16)));
+        const keyId = extensionIdForKey(manifest.key);
         if (keyId !== id) continue;
         return { id, path: path.join(root, version.name), manifest, name: manifest.name, version: manifest.version, url: `chrome-extension://${id}/` };
       } catch { /* An incomplete or invalid installation must never be loaded. */ }
@@ -31,6 +30,19 @@ export async function readInstalledExtensions(directory: string, minimumManifest
     return null;
   }));
   return installed.filter((extension): extension is Extension => extension !== null);
+}
+
+export function validExtensionVersion(value: unknown): value is string {
+  return typeof value === 'string' && /^\d+(?:\.\d+){0,3}$/.test(value)
+    && value.split('.').every((part) => Number(part) <= 65_535 && (part === '0' || !part.startsWith('0')));
+}
+
+export function extensionIdForKey(key: unknown): string | null {
+  if (typeof key !== 'string' || !key || key.length > 100 * 1024 || !/^[A-Za-z0-9+/\s]+={0,2}$/.test(key)) return null;
+  const bytes = Buffer.from(key, 'base64');
+  if (!bytes.length) return null;
+  return createHash('sha256').update(bytes).digest('hex').slice(0, 32)
+    .replace(/[0-9a-f]/g, (digit) => String.fromCharCode(97 + parseInt(digit, 16)));
 }
 
 async function readDirectories(directory: string) {
