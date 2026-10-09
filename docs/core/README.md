@@ -1,12 +1,14 @@
 # Core
 
-Core 保存多个无关业务共同依赖、不能随单个 Feature 一起删除的技术与领域基础。当前由三个主要 package 组成：
+Core 保存多个无关业务共同依赖、不能随单个 Feature 一起删除的技术与领域基础：
 
 | Package | 文档 | 职责 |
 | --- | --- | --- |
 | `packages/contracts` | [Contracts](contracts/README.md) | Core 跨进程 DTO、线程事件、HTTP/bridge、SWE 映射 |
 | `packages/feature-core` | [Feature Core](feature-core/README.md) | Feature identity、Capability、Scope、operation、settings、进程组合协议 |
 | `packages/desktop-runtime` | [Desktop Runtime](runtime/README.md) | Agent loop、server、ports/adapters、Core stores 与 Feature 宿主组合 |
+| `packages/renderer-contracts` | [Renderer Plugin Runtime](../designs/current/renderer-plugin-runtime.md) | 仅 renderer 使用的 Shell、Chat、Settings、Workspace 与能力刷新契约 |
+| `packages/renderer-ui` | [共享 UI 与样式](../desktop/renderer/shared-ui-and-styles.md) | 仅 renderer 使用的通用控件和主题样式 |
 
 ## Core 与 Feature 的判断线
 
@@ -36,6 +38,7 @@ desktop host composition
 - `feature-core` 不导入具体 Feature，也不解释业务 event/settings/tool result。
 - `desktop-runtime` 可以在唯一 composition root 导入 Feature runtime entry；通用 loop、port 和 adapter 不能反向依赖 Feature 实现。
 - Feature 之间只导入 `/contracts`，不导入对方 runtime/renderer/main/preload。
+- `renderer-contracts` 和 `renderer-ui` 只被 renderer 使用；具体 Feature 的业务状态不进入这两个共享包。
 
 精确规则由 `scripts/check-feature-boundaries.mjs` 与 `pnpm check:architecture` 校验。
 

@@ -104,7 +104,6 @@ Factory 接受 data root、builtin Skill/Plugin 和 bundled ripgrep 等 options�
 | `adapters/plugin/` | Bundle store、manifest model、marketplace |
 | `adapters/workspace/` | Project store、environment、instructions、workflow、dependencies |
 | `adapters/search/` | Ripgrep/JS search、policy、supersession |
-| `adapters/browser/` | Main browser control HTTP client |
 | `adapters/native/` | Main native bridge HTTP client |
 | `adapters/approval/` | In-memory approval gate |
 | `adapters/event/` | In-memory buses |
@@ -171,8 +170,8 @@ Runtime 不能 import Electron：
 
 ## 测试
 
-- `test/runtime/runtime-factory.test.ts` 验证 wiring。
-- `test/runtime/event-coordinated-thread-store.test.ts`。
-- `test/adapters/<domain>/`。
-- `test/integration/adapters/`。
+- `packages/desktop-runtime/test/runtime/runtime-factory.test.ts` 验证 wiring。
+- `packages/desktop-runtime/test/runtime/event-coordinated-thread-store.test.ts`。
+- `packages/desktop-runtime/test/adapters/<domain>/`。
+- `packages/desktop-runtime/test/integration/adapters/`。
 - Core/loop tests 使用 support fake/harness。

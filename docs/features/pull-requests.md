@@ -70,4 +70,4 @@ REST 文件数超过 3,000、列表不完整、patch 缺失或增删行数不完
 - `apps/desktop/renderer/src/shared/ui/DocumentMarkdown.tsx`：统一 GFM、HTML 清洗、相对链接、标题锚点和图片处理；插件/Skill 文档和 PR 描述/评论复用。
 - 宿主 `PullRequestsFeatureBoundary.tsx` 注入现有 PageHeader、CodePatchView、对话输入框、外链和剪贴板接口。`PullRequestCommentInput.tsx` 将持久化评论草稿适配到 ChatPromptInput，程序回填不触发用户编辑或改变发布确认状态。PR 样式仅在 feature 自身维护布局与状态差异。
 
-测试位于 feature 的 `test/runtime`、`test/renderer`，覆盖分页、过期请求、评论幂等和导航、合并版本校验、Git 文件补全与工作区不变性；CLI adapter 测试覆盖账号状态、stdin 正文、HTTP/GraphQL 错误与进程失败边界。
+测试位于 `packages/features/pull-requests/test/runtime/`、`packages/features/pull-requests/test/renderer/`，覆盖分页、过期请求、评论幂等和导航、合并版本校验、Git 文件补全与工作区不变性；CLI adapter 测试覆盖账号状态、stdin 正文、HTTP/GraphQL 错误与进程失败边界。

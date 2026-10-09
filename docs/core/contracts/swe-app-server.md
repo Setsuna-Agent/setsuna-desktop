@@ -116,12 +116,12 @@ Capability 分支集中在 `swe/capabilities.ts` 和 server connection registry�
 Contracts：
 
 - `packages/contracts/test/swe-events/`
-- `support/swe-events.ts`
+- `packages/contracts/test/support/swe-events.ts`
 
 Runtime：
 
 - `packages/desktop-runtime/test/server/app-server/`
 - `packages/desktop-runtime/test/integration/runtime-server/app-server-*.test.ts`
-- `test/support/runtime-server/app-server-*`
+- `packages/desktop-runtime/test/support/runtime-server/app-server-*`
 
 测试需覆盖历史 projection、live stream、不同 capabilities、connection teardown、approval、file changes、shell 和 collaboration。

@@ -74,7 +74,7 @@
 
 - 不在组件中堆长的中英文条件表达式。
 - 参数化文案保留结构，不通过字符串拼接改变词序。
-- Main 原生菜单的少量文案位于 main `src/i18n/`，两边共享 language contract，但不是同一运行时 catalog。
+- Main 原生菜单的少量文案位于 `apps/desktop/main/src/i18n/`，两边共享 language contract，但不是同一运行时 catalog。
 - 安全确认文本的语义由可信代码决定，不能直接展示外部工具/网页给出的 markup。
 
 ## Preferences
@@ -160,4 +160,4 @@ Workspace app 图标属于 Workspace Apps Feature，保留在 `packages/features
 
 ## 测试
 
-`test/unit/shared/` 镜像 branding、hooks、i18n、lib、preferences 和 UI。纯 CSS 改动没有专用截图测试时，至少运行 lint/build；本仓库默认不要求主动打开浏览器做视觉验证。
+`apps/desktop/renderer/test/unit/shared/` 镜像 branding、hooks、i18n、lib、preferences 和 UI。测试只覆盖业务行为、状态、数据和实际交互，不新增 CSS、类名、图标、布局或动画断言。验证按改动影响选择 lint/typecheck，涉及资源或打包时才构建；只有用户明确要求时才打开浏览器做视觉确认。

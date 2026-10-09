@@ -6,12 +6,14 @@ Runtime 把不同数据域分开持久化，使迁移、恢复和排障可以按
 
 ## 数据布局
 
-`runtime-factory.ts` 把选定 data root 的 `runtime/` 作为 store 根：
+`runtime-factory.ts` 把选定 data root 的 `runtime/` 作为 store 根。主要数据域如下，按首次使用创建，并非完整文件清单：
 
 ```text
 runtime/
 ├── config.json
 ├── secrets.json
+├── features/                # Feature settings documents
+├── secrets/                 # versioned Feature secrets
 ├── projects.json
 ├── mcp.json
 ├── skills.json
@@ -19,6 +21,7 @@ runtime/
 ├── user-skills/
 ├── plugin-skill-overrides/
 ├── plugins/
+├── plugin-repositories/     # marketplace cache
 ├── attachments/
 ├── generated-images/
 ├── pc-local-policies/
@@ -26,6 +29,8 @@ runtime/
 ├── usage.jsonl
 ├── threads.sqlite
 ├── threads/                 # legacy import source
+├── worktrees/               # managed workspace forks
+├── workspace-dependencies/  # managed toolchains and package cache
 └── temporary-workspace/
 ```
 
@@ -65,9 +70,15 @@ Store 自己负责 schema normalize，不能把任意 parsed object 直接当 co
 - 对外 state 脱敏。
 - Global prompt 等字段长度限制。
 
-`config.json` 不保存明文 provider key；`secrets.json` 保存 runtime secret，写入后尝试 `chmod 0600`，并可通过 main native bridge 管理 OS-backed secret。
+`config.json` 不保存 provider key；`secrets.json` 保存 provider API key 等 runtime 凭据，写入后尝试 `chmod 0600`，内容未经过 OS 加密。MCP 等使用 main credential vault 的凭据通过 native bridge 读写，不能把两种存储混为一谈。
 
 Input 中未提供 key 表示不覆盖；不能把 UI 空输入误解释为删除已有 key。
+
+### Feature settings 与 secret revisions
+
+`packages/desktop-runtime/src/features/settings/file-feature-settings-registry.ts` 将文档写入 `features/<feature-id>/settings/<document-id>.json`，记录 schema version、revision 和 secret revision 引用。配置的校验、迁移及 portable 属性由所属 Feature 声明，Core config store 只保留兼容迁移所需字段。
+
+`versioned-file-secret-store.ts` 将敏感字段分离到 `secrets/<feature-id>/<document-id>/` 下的版本文件，使用 `0600` 权限和 staged/finalize/recover 流程。它同样是本机 JSON 存储，不等同于 main 的 `safeStorage` vault；公开 settings 投影只包含脱敏信息。
 
 ## SQLite thread store
 
@@ -289,10 +300,10 @@ Conversation Debug Feature 的 `InMemoryConversationDebugTraceStore` 故意不�
 
 ## 测试
 
-- `test/adapters/store/`
-- `test/integration/adapters/store/file-memory-store.test.ts`
-- `test/runtime/event-coordinated-thread-store.test.ts`
-- `test/integration/runtime-server/rest-runtime-state.test.ts`
-- Contracts `thread-events.test.ts`
+- `packages/desktop-runtime/test/adapters/store/`
+- `packages/desktop-runtime/test/integration/adapters/store/file-memory-store.test.ts`
+- `packages/desktop-runtime/test/runtime/event-coordinated-thread-store.test.ts`
+- `packages/desktop-runtime/test/integration/runtime-server/rest-runtime-state.test.ts`
+- Contracts `packages/contracts/test/thread-events.*.test.ts`
 
 SQLite 修改还要覆盖 owner fencing、checkpoint tail、legacy import 和 close/WAL。

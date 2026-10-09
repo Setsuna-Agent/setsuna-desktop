@@ -62,6 +62,14 @@ Feature setup 只创建 manager 和 idle cleanup timer，不主动连接 server�
 
 MCP server 的启用状态和 allow/deny 工具范围是执行边界。工具结果、resource 和 server instructions 始终按外部不可信上下文处理。
 
+## OAuth 接入边界
+
+`packages/features/mcp/src/runtime/adapters/sdk/mcp-oauth-callback-server.ts` 在每次登录时监听 `127.0.0.1` 的动态端口，回调路径为 `/oauth/callback`；不能把该端口当成固定平台注册值。监听器校验随机 state，支持取消，默认等待上限为 5 分钟，并在流程结束后关闭。
+
+手填配置支持 Client ID 和 Resource；静态 Client Secret、显式 scopes 和固定回调端口没有对应配置面。需要这些能力的平台必须先适配实际认证链路。插件导入成功只代表声明兼容，不证明平台准入、账号权限或 OAuth 登录已经验证。
+
+默认市场的筛选策略由 `packages/desktop-runtime/src/adapters/plugin/repository-plugin-catalog.ts` 维护，见 [仓库插件接入](../extensions/plugins/bundles.md#从-openai-仓库安装)。重新接入被排除的平台时，应重新核实平台要求与授权链路，不沿用历史申请步骤。
+
 ## 验证
 
 - `packages/features/mcp/test/`：operation codec、renderer 收敛、SDK transport、OAuth、elicitation、control 事务、Tool service 与 Feature lifecycle。

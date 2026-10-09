@@ -266,7 +266,7 @@ Markdown 内联代码只将单一路径作为文件候选，命令、Git 状态�
 
 ## 测试
 
-镜像位于 `test/unit/features/chat/`：
+镜像位于 `apps/desktop/renderer/test/unit/features/chat/`：
 
 - `composer/`：draft、attachment、model、queue、menu、options。
 - `conversation/`：display、timeline、guidance、thinking、usage、scroll。

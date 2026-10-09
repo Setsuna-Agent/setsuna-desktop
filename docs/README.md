@@ -13,7 +13,7 @@ docs/
 └── designs/        # 跨模块状态机；区分 current 与 history
 ```
 
-根目录 [Tree.md](../Tree.md) 回答“文件在哪里”，本目录回答“为什么这样分、谁拥有状态、改动要穿过哪些边界”。
+本目录回答“为什么这样分、谁拥有状态、改动要穿过哪些边界”。实际文件位置使用 `rg --files` 或按符号搜索，不维护逐文件目录索引。
 
 ## 当前架构结论
 
@@ -24,7 +24,7 @@ Setsuna Desktop 不是传统的 `main → preload → renderer` 三层 Electron 
 
 四个进程各有且只有一个 Feature composition root。业务 Feature 只在真实参与的进程提供入口，Feature 之间只能依赖对方 `/contracts`；`packages/feature-core` 只提供组合内核，不能知道具体业务。
 
-这也是本次文档重组的依据：Browser、Review、MCP、Model Provider 等不再归档到某个宿主目录下，而是从 [Feature 总览](features/README.md) 进入；Desktop 与 Runtime 文档只说明宿主接缝。
+Browser、Review、MCP、Model Provider 等业务从 [Feature 总览](features/README.md) 进入；Desktop 与 Runtime 文档说明宿主接缝。Renderer 专用的插槽契约和共享控件分别由 `packages/renderer-contracts`、`packages/renderer-ui` 持有，不进入 runtime/main/preload。
 
 ## 推荐阅读顺序
 
@@ -32,7 +32,7 @@ Setsuna Desktop 不是传统的 `main → preload → renderer` 三层 Electron 
 
 1. [总体架构](architecture/README.md)：两条组织轴、进程边界、数据真源和关键原则。
 2. [Feature Composition](architecture/feature-composition.md)：Capability、Scope、状态、失败和持久兼容语义。
-3. [Feature 总览](features/README.md)：22 个业务 owner、参与进程和启动关键级别。
+3. [Feature 总览](features/README.md)：业务 owner、参与进程和启动关键级别。
 4. [运行链路](architecture/runtime-flows.md)：启动、REST、SSE、Agent turn、浏览器和关闭流程。
 5. [Desktop 宿主](desktop/README.md) 与 [Runtime Core](core/runtime/README.md)：进入具体实现。
 
@@ -61,6 +61,7 @@ Setsuna Desktop 不是传统的 `main → preload → renderer` 三层 Electron 
 | [core/feature-core](core/feature-core/README.md) | `packages/feature-core` | Feature 如何声明依赖、激活、贡献视图并安全退出 |
 | [core/runtime](core/runtime/README.md) | `packages/desktop-runtime` | Agent loop、server、ports/adapters、存储和工具宿主如何工作 |
 | [desktop](desktop/README.md) | `apps/desktop` | main、preload、renderer 如何构成可信桌面宿主 |
+| [共享 UI 与样式](desktop/renderer/shared-ui-and-styles.md) | `packages/renderer-ui`、`packages/renderer-contracts`、renderer shared | 控件、主题和 UI 插槽契约分别由谁维护 |
 | [features](features/README.md) | `packages/features/*` | 每个业务闭环由谁拥有、在哪些进程运行 |
 | [extensions](extensions/README.md) | `plugins`、`skills`、runtime extension adapters | 用户和 Bundle 如何扩展 Agent 能力 |
 | [development](development/README.md) | `package.json`、`scripts`、workflows | 如何开发、验证、构建和发布 |
@@ -91,6 +92,7 @@ Setsuna Desktop 不是传统的 `main → preload → renderer` 三层 Electron 
 - `architecture/`、`core/`、`desktop/`、`features/`、`extensions/` 描述已落地现状；未实现方案必须明确标注 proposal。
 - `designs/current/` 保存仍影响实现的跨模块状态机；`designs/history/` 只解释迁移背景和已删除方案，不能当作当前规范。
 - Feature 的业务规则写在 `features/`；Desktop/Runtime 文档只描述宿主如何注入 Capability、桥接 transport 或展示 contribution，避免双重所有权。
-- 源码路径统一从仓库根写起，文档间使用相对链接；目录树不手写，统一由 `pnpm docs:tree` 生成。
+- 源码和测试入口统一从仓库根写起；明确标注了所属源码目录的局部文件表可使用相对路径。文档间使用相对链接；示意树只解释分层和所有权，不镜像文件数量或完整目录。
+- 同一规则只在所属模块或设计文档完整维护，入口页用摘要和链接引用。已完成的施工步骤、一次性验收数字和失效草案应删除；仍有价值的历史决策保留在 `designs/history/`，不继续同步当前实现。
 - 修改目录、composition root、公开 contract、持久格式或关键状态机时，应同步更新对应 owner 文档和 [Feature 总览](features/README.md)。
-- 文档改动至少运行 `pnpm docs:tree` 与 `git diff --check`；结构变化还应运行 `pnpm check:architecture`。
+- 文档改动检查本地链接、源码入口和 `git diff --check`；涉及源码分层或检查链路时再运行 `pnpm check:architecture`。验证范围见 [测试与验证](development/testing.md)。

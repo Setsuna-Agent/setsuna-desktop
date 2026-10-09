@@ -7,12 +7,11 @@
 ## 环境
 
 - Node.js `>=22.19.0`（满足 Pi runtime 与内置 `node:sqlite` 的共同要求）
-- pnpm `>=7`
-- CI 固定 pnpm `7.33.7`
-- 原生依赖：`node-pty`
+- pnpm `7.33.7`（本地与 CI 一致）
+- 原生依赖：`node-pty`、`sharp`
 - Electron：`43.x`
 
-Windows x64 源码开发和打包另需 Rust/Cargo `>=1.85`、`x86_64-pc-windows-msvc` 工具链、MSVC C++ 构建工具及 Windows SDK，安装和排错见 [Windows 开发环境](README.md#windows-x64)。发布版已携带编译后的沙箱程序，运行发布版不需要 Rust。
+macOS 开发需要 macOS 14+ 和 Xcode Command Line Tools，见 [macOS 开发环境](README.md#macos)。Windows x64 源码开发和打包另需 Rust/Cargo `>=1.85`、`x86_64-pc-windows-msvc` 工具链、MSVC C++ 构建工具及 Windows SDK，安装和排错见 [Windows 开发环境](README.md#windows-x64)。发布版已携带编译后的原生助手，运行发布版不需要编译工具。
 
 如果本地 pnpm 版本过高导致 lockfile 或 modules-dir 兼容问题，优先使用：
 
@@ -20,13 +19,14 @@ Windows x64 源码开发和打包另需 Rust/Cargo `>=1.85`、`x86_64-pc-windows
 corepack pnpm@7.33.7 <command>
 ```
 
-或直接调用 `node_modules/.bin/*` 做单项验证。
+从该入口运行仓库已有 script，保留其 runner 与 config。
 
 ## Workspace
 
 `pnpm-workspace.yaml` 纳入：
 
 - `packages/*`
+- `packages/features/*`
 
 `apps/desktop` 不是独立 workspace package，根 package 脚本直接构建。
 
@@ -39,14 +39,13 @@ corepack pnpm@7.33.7 <command>
 - `pnpm prepare:electron`：检查并准备当前平台的 Electron 二进制；默认使用 Electron
   文档推荐的中国镜像，可通过 `ELECTRON_MIRROR` 覆盖下载源。CI 和 Release workflow
   显式使用 Electron 官方 GitHub 下载源，避免海外 runner 访问国内镜像时下载缓慢或超时。
-- `pnpm dev:electron`：先准备 Electron，再构建 contracts/runtime/electron bundle 并启动。
-- `pnpm build`：clean 后构建 contracts、runtime、electron、renderer。
+- `pnpm dev:electron`：先准备 Electron，再构建 contracts、feature-core、Feature packages、runtime 和 Electron bundle 并启动。
+- `pnpm build`：clean 后依次构建 contracts、feature-core、renderer-contracts、renderer-ui、Feature packages、runtime、Electron 与 renderer。
 - `pnpm build:contracts`：只编译 `packages/contracts/src`，测试由独立 test tsconfig 类型检查。
 - `pnpm build:runtime`：只编译 `packages/desktop-runtime/src`，不会把测试发进 `dist`。
 - `pnpm build:electron`：运行 `scripts/build-electron.ts`。
 - `pnpm build:renderer`：Vite build。
-- `pnpm check:architecture`：检查分层依赖、contracts 循环引用、测试隔离、文件体积和目录密度，并验证 `Tree.md` 已同步。
-- `pnpm docs:tree`：从真实目录重新生成 `Tree.md`。
+- `pnpm check:architecture`：检查分层依赖、contracts 循环引用、测试隔离、文件体积和目录密度。
 - `pnpm typecheck`：先运行架构检查，再运行 TypeScript project references。
 - `pnpm test`：先跑稳定单元/轻量测试，再串行跑重集成测试。
 - `pnpm test:all`：用默认全量 Vitest 配置一次性跑全部测试，配置上仍保持串行重链路。
@@ -64,6 +63,10 @@ corepack pnpm@7.33.7 <command>
 - `dist/electron/main/index.js`：Electron main，ESM。
 - `dist/electron/preload/index.cjs`：preload，CJS。
 - `dist/runtime/cli.cjs`：runtime CLI，CJS。
+- `dist/runtime/extension-worker-entry.js`：可执行 Plugin worker。
+- `dist/electron/preload/browser-extensions.cjs`：浏览器扩展的隔离 preload。
+
+同一脚本还准备当前平台的桌面控制 helper；打包时由 `before-pack.cjs` 按目标架构再次准备和校验。
 
 external：
 
@@ -71,6 +74,7 @@ external：
   依赖，不能内联到 ESM main bundle，否则 Node 内置模块调用会被转换为不可用的动态
   `require`。
 - preload external `electron`。
+- runtime external `node-pty`、`sharp`，保留平台原生模块及其依赖树。
 
 约束：
 
@@ -128,8 +132,12 @@ dev 启动流程：
   - `plugins/**/*`
 - `asarUnpack`：
   - `**/node_modules/node-pty/prebuilds/**/*`
+  - `**/node_modules/sharp/**/*`
+  - `**/node_modules/@img/**/*`
 - `extraResources`：
   - `.cache/ripgrep/${os}-${arch}` -> `resources/setsuna-path`
+  - 当前平台的桌面控制助手 -> `resources/computer-use`
+  - Windows 的沙箱程序 -> `resources/setsuna-sandbox`，curl 与证书/许可证 -> `resources/setsuna-path`
 
 macOS 的 `entitlements` 和 `entitlementsInherit` 均显式使用
 `assets/build/entitlements.mac.plist`，覆盖主应用和 Electron Helpers。该文件保留
@@ -183,7 +191,7 @@ DMG 是包含已签名、公证 app 的分发容器，不单独提交公证。
 
 ## CI
 
-`.github/workflows/ci.yml` 在面向 `master` 的 pull request 和手动运行时触发。分支保护要求 PR 基于最新基线通过 `CI / typecheck, lint, test`。
+`.github/workflows/ci.yml` 在面向 `master` 的 pull request 和手动运行时触发。常规验证由 `typecheck, lint, test` job 执行；远端分支保护配置以 GitHub 仓库设置为准。
 
 macOS `verify` job 固定 pnpm `7.33.7`、Node.js `22` 和 Python `3.11`，依次执行：
 
@@ -261,47 +269,14 @@ ZIP 与 DMG 来自同一签名、公证 app，ZIP 用于 Electron 原生自动�
 
 ## 验证分层
 
-文档-only：
+通用策略见 [测试与验证](testing.md)。先运行受影响的定向检查，再选择所需构建层：
 
-```bash
-pnpm docs:tree
-git diff --check
-```
+| 改动 | 相关验证 |
+| --- | --- |
+| 文档 | 本地链接、源码入口、命令核对与 `git diff --check` |
+| Runtime/server/contract | 定向 unit/integration、`pnpm typecheck`；需要确认产物时 `pnpm build:runtime` |
+| Renderer | 相关业务行为测试、typecheck/lint；涉及打包或资源时 `pnpm build:renderer` |
+| 打包/路径/发布 | 相关脚本与 `pnpm test:release`，再执行所需目标的 `pnpm package:*` |
+| 本地发布清单预览 | `pnpm release:dry-run` |
 
-runtime/server/contract：
-
-```bash
-pnpm typecheck
-pnpm test:unit
-pnpm test:integration
-pnpm build:runtime
-```
-
-renderer/UI：
-
-```bash
-pnpm typecheck
-pnpm test:unit
-pnpm build:renderer
-```
-
-打包/路径/发布：
-
-```bash
-pnpm build
-pnpm test:release
-pnpm package
-pnpm release:dry-run
-```
-
-最终合并前建议：
-
-```bash
-pnpm typecheck
-pnpm test
-pnpm lint
-pnpm build
-git diff --check
-```
-
-如果 `pnpm lint` 因既有遗留问题失败，要明确区分是否引入了新错误。
+`pnpm package`、各 `package:*` 和 `release:dry-run` 已包含完整 build。不要为了同一个验证目的把这些命令串行全跑，或在它们前面重复 `pnpm build`。发布验收仍需各受支持平台的实际打包门禁，本地单平台结果不能替代。

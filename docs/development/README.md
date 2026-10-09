@@ -6,8 +6,14 @@
 
 - Node.js `>=22.19.0`
 - pnpm `7.33.7`（仓库 `packageManager`）
-- 原生依赖 `node-pty`
+- 原生依赖 `node-pty`、`sharp`
 - Git
+
+### macOS
+
+桌面控制助手要求 macOS 14+。源码开发还需要 Xcode Command Line Tools，可通过 `xcode-select --install` 安装，并用 `xcrun swiftc --version` 确认 Swift 编译器可用。
+
+`pnpm dev` 和 `pnpm build:electron` 会通过 `scripts/build-computer-use-mac.mjs` 准备当前架构的原生助手；源码、编译参数和编译器版本未变化时复用已有产物。下载发布版不需要编译工具。助手的协议和权限边界见 [原生模块说明](../../native/computer-use-macos/README.md)。
 
 ### Windows x64
 
@@ -47,7 +53,7 @@ pnpm dev
 并行启动：
 
 - Vite renderer：`127.0.0.1:5174`
-- Electron supervisor：构建 contracts、Feature packages 和 runtime；Windows x64 还会编译沙箱并准备 curl，再构建 main/preload、启动桌面
+- Electron supervisor：构建 contracts、Feature packages 和 runtime；Windows x64 还会编译沙箱并准备 curl，再构建 main/preload 和当前平台桌面控制助手、启动桌面
 
 如果没有 provider，runtime 使用 test/smoke model 验证完整链路。
 
@@ -79,11 +85,10 @@ pnpm build
 
 ## 目录/文档变更
 
-目录变化后：
+同步更新受影响的 owner 文档、导航和源码链接，并检查：
 
 ```bash
-pnpm docs:tree
 git diff --check
 ```
 
-`pnpm typecheck` 会通过 `check:architecture` 验证 `Tree.md` 未过期。
+源码分层、包导出或构建图变化时，运行 `pnpm check:architecture`；跨包类型变化再运行 `pnpm typecheck`。纯文档调整不要求构建应用。

@@ -1,9 +1,6 @@
 # Runtime 边界与事件去向
 
-状态：当前实现（协议边界、事件完整性 P0 已完成）  
-基线提交：`a372b1fb9`（2026-07-30）  
-实施更新：2026-08-22
-配套评审：[架构复杂度收敛评审](../designs/history/architecture-complexity-review.md)
+状态：当前实现。历史取舍见 [架构复杂度收敛决策](../designs/history/architecture-complexity-review.md)。
 
 本文描述已经落地的协议边界与事件投影约束。成员和事件的完整 inventory 由类型化源码持有；本文只记录选择规则和不变量，不再复制会随功能增长而漂移的数量清单。
 
@@ -74,7 +71,7 @@ Side Conversation 创建也已退出 `DesktopRuntimeClient`。`@setsuna-desktop/
 
 `project` 表示消费者明确拥有该事件类型，但具体 payload 仍可能合法地产生空通知。`RUNTIME_EVENT_TYPES` 与三个 disposition record 由 TypeScript 校验完整键集合；thread reducer 和 SWE mapper 还使用 ignore type guard 与 `never` fallback，防止新增事件静默落空。
 
-Feature 持久状态使用 opaque `feature.event` envelope。Core 只持久化、排序、转发并推进全局 `seq`，不解析 Feature payload；所属 Feature 注册 codec/migration/reducer，并用同一 reducer 处理 replay 与 live。历史 Goal 事件仍可读取，但不属于可写 `RuntimeEvent`。
+Feature 持久状态使用 opaque `feature.event` envelope。Core 只持久化、排序、转发并推进全局 `seq`，不解析 Feature payload；所属 Feature 的 runtime projection 用 codec/migration/reducer 从固定 durable high-water 重放。Renderer 只在 Core 接受事件或 resync 后重读 typed snapshot，不维护 live payload reducer。历史 Goal 事件仍可读取，但不属于可写 `CoreRuntimeEvent`。
 
 ### 显式边界
 

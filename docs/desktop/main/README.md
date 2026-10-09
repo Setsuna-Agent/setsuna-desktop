@@ -13,7 +13,7 @@ Electron main 是桌面可信边界。它负责应用生命周期、窗口、IPC
 | `src/data-root/` | 数据根定位、迁移、恢复、旧根清理 | [数据根](data-root.md) |
 | `src/runtime/` | RuntimeHost、bundled tools、native bridge、进程环境 | [Runtime 与 IPC](runtime-and-ipc.md) |
 | `src/ipc/` | 按能力注册 main IPC 与 sender 校验 | [Runtime 与 IPC](runtime-and-ipc.md) |
-| `src/browser/` | `<webview>` 注册、CDP 自动化、控制 server | [浏览器](../../features/browser.md) |
+| `packages/features/browser/src/main/` | `<webview>` 注册、CDP 自动化、控制 server 与浏览器扩展 | [浏览器](../../features/browser.md) |
 | `src/security/` | `safeStorage` 加解密和 credential vault | [Runtime 与 IPC](runtime-and-ipc.md) |
 | `src/window/` | frame、窗口状态、surface、splash | [本机能力](native-capabilities.md) |
 | `packages/features/review/src/main` | Git review 状态、watcher、IPC 与 stage/unstage/discard | [本机能力](native-capabilities.md) |
@@ -109,12 +109,12 @@ Windows 用户可选择关闭窗口时直接退出或隐藏到系统托盘。托
 
 ## 测试入口
 
-- `test/unit/data-root/`
-- `test/unit/browser/`
-- `test/unit/runtime/`
-- `test/unit/security/`
-- `test/unit/window/`
-- `test/unit/workspace/`
+- `apps/desktop/main/test/unit/data-root/`
+- `packages/features/browser/test/main/`
+- `apps/desktop/main/test/unit/runtime/`
+- `apps/desktop/main/test/unit/security/`
+- `apps/desktop/main/test/unit/window/`
+- `apps/desktop/main/test/unit/workspace/`
 - `packages/features/review/test/{main,integration/main}/`
 - `packages/features/workspace-apps/test/{main,renderer}/`
 - `packages/features/terminal/test/integration/main/`

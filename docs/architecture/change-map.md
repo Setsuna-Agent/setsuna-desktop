@@ -28,7 +28,7 @@ Core Event：
 2. 在 `thread-events.ts` 或 `thread-event-projection.ts` 定义可重放投影。
 3. 在 runtime 通过 `RuntimeEventWriter` 写事件，保证先落盘后广播。
 4. 检查 SQLite checkpoint 和 legacy normalization 是否需要兼容。
-5. 检查 renderer `runtimeEvents.ts` 与相关 display helper。
+5. 检查 renderer 的 `services/runtime-client/runtimeThreadState.ts`、`useRuntimeThreadState.ts` 与相关 display helper；activity 分类复用 contracts 的 disposition。
 6. 如果 app-server 需要感知，再更新 `packages/contracts/src/swe/` mapper。
 7. 先补 contracts reducer 测试，再补 runtime 与 renderer 测试。
 
@@ -119,7 +119,7 @@ threads.ts / events.ts
 
 1. 通过 `defineRendererFeature` 声明依赖、messages 和 setup。
 2. 用 typed Feature client/controller 持有业务状态，不进入全局 runtime facade。
-3. 通过 Settings、Tool Result、Composer Status 等已有 Registry 贡献业务视图。
+3. 在 setup 中通过 scope-bound `context.ui` 向 `packages/renderer-contracts` 的 Settings、Tool Result、Composer Status 等 typed Slot 注册业务视图。
 4. 只接收明确 host props；不得 raw fetch、访问 runtime URL/token、完整 App store 或 `window.setsunaDesktop`。
 5. 文案、业务 view 与 scoped styles 留在 Feature；标准控件和主题由宿主提供。
 6. 在 renderer composition root 的 `defineRendererFeatureHost` 中登记一次，并把测试放在 Feature package 的镜像 `test/renderer`。
@@ -171,7 +171,6 @@ Active turn 队列的完整设计见 [queued turn inputs](../designs/current/que
 文档或目录变更：
 
 ```bash
-pnpm docs:tree
 git diff --check
 ```
 

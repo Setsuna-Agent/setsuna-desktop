@@ -26,13 +26,39 @@
 </p>
 
 <p align="center">
-  <img src="assets/readme/setsuna-home.png" alt="Start a new task in Setsuna Desktop" width="100%">
+  <a href="assets/readme/setsuna-home.png"><img src="assets/readme/setsuna-home.png" alt="Start a new task in Setsuna Desktop" width="960"></a>
 </p>
 
 ## Product tour
 
+### Coding workspace
+
 <p align="center">
-  <img src="assets/readme/chat-review.png" alt="Setsuna Desktop conversation with code review open" width="100%">
+  <a href="assets/readme/chat-review.png"><img src="assets/readme/chat-review.png" alt="Setsuna Desktop conversation, code review, and integrated terminal" width="960"></a>
+</p>
+
+### Pull requests
+
+<p align="center">
+  <a href="assets/readme/pull-requests.png"><img src="assets/readme/pull-requests.png" alt="Browse pull requests and review code changes" width="960"></a>
+</p>
+
+### Automations
+
+<p align="center">
+  <a href="assets/readme/automations.png"><img src="assets/readme/automations.png" alt="Create scheduled tasks in Setsuna Desktop" width="960"></a>
+</p>
+
+### Plugins
+
+<p align="center">
+  <a href="assets/readme/plugins.png"><img src="assets/readme/plugins.png" alt="Discover and manage plugins" width="960"></a>
+</p>
+
+### App builder
+
+<p align="center">
+  <a href="assets/readme/app-builder.png"><img src="assets/readme/app-builder.png" alt="Create a sidebar app from a template or an idea" width="960"></a>
 </p>
 
 ## Download
@@ -53,7 +79,7 @@ After opening the app, add your model provider in **Settings → Model providers
 
 ## Run from source
 
-Requires Git, Node.js `>=22.19.0`, and pnpm `7.33.7`. On Windows, also install Rust and the C++ build tools; see [Windows setup](docs/development/README.md#windows-x64).
+Requires Git, Node.js `>=22.19.0`, and pnpm `7.33.7`. macOS development requires macOS 14+ and Xcode Command Line Tools for the native desktop control helper; see [macOS setup](docs/development/README.md#macos). On Windows, also install Rust and the C++ build tools; see [Windows setup](docs/development/README.md#windows-x64).
 
 ```bash
 git clone https://github.com/Setsuna-Agent/setsuna-desktop.git

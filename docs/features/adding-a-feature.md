@@ -527,7 +527,6 @@ const rendererFeatures = defineRendererFeatureHost({
 
 ```bash
 corepack pnpm@7.33.7 test:unit packages/features/word-count/test
-corepack pnpm@7.33.7 docs:tree
 corepack pnpm@7.33.7 check:architecture
 corepack pnpm@7.33.7 typecheck
 corepack pnpm@7.33.7 test

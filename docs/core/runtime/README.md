@@ -109,7 +109,7 @@ packages/desktop-runtime/test/
 └── fixtures/
 ```
 
-生产 `src/` 不放 `*.test.*`。Integration suite 的大型 setup 放 `test/support/`，不要复制到每个场景。
+生产 `src/` 不放 `*.test.*`。Integration suite 的大型 setup 放 `packages/desktop-runtime/test/support/`，不要复制到每个场景。
 
 ## 常见入口
 

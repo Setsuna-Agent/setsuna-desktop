@@ -103,7 +103,7 @@ Tab 销毁、导航和重新注册都会清理 snapshot/ref 与 CDP 状态。
 
 本地安装由 `main/extensions/installation/` 负责文件快照与原子提交，复用导入链路的文件数量/体积限制和符号链接拒绝策略。先复制并校验快照，再确认其中声明的权限；确认期间修改源目录不会改变将要加载的代码。文件保存到 browser partition 的 `Extensions/<id>/<version>_0`，源目录清理后仍可运行。保留 manifest key；没有 key 时根据规范化的原始目录生成稳定身份，并只写入应用自己的副本。已有 ID 不覆盖、不重新启用；原生加载失败或取消时卸载并删除此次提交，迟到加载不能复活取消的安装。取消后原生请求尚未完成时仍保留该 ID 的加载占用，阻止重试与旧请求的卸载竞态，其他扩展不受影响。启停、卸载和后台重启恢复沿用现有扩展服务。
 
-Agent 通过 `browser_install_extension` 安装、`browser_extensions` 查询已安装与停用扩展，无需访问 `chrome://extensions`。工具由 runtime 遵循既有审批策略，禁止只读 turn 安装；源目录按真实路径限制在当前工作区内，再通过已认证 Browser control bridge 将目录与匹配的规范化工作区根交给 main。Main 在生成快照时重新校验归属，复制逐项拒绝被替换为符号链接的路径，不能把 runtime 校验后的目录替换成工作区外目标。手动安装使用原生权限确认，Agent 安装沿用工具审批。查询与安装只在自身请求中等待扩展恢复，不进入主界面就绪链路。`test/integration/unpacked.electron.test.ts` 覆盖真实 runtime → HTTP bridge → Main Feature → native session 加载、MV2 后台请求拦截、MV2/MV3 内容脚本、源文件清理后的重启恢复、重复安装、拒绝确认、快照隔离与失败/取消回滚。
+Agent 通过 `browser_install_extension` 安装、`browser_extensions` 查询已安装与停用扩展，无需访问 `chrome://extensions`。工具由 runtime 遵循既有审批策略，禁止只读 turn 安装；源目录按真实路径限制在当前工作区内，再通过已认证 Browser control bridge 将目录与匹配的规范化工作区根交给 main。Main 在生成快照时重新校验归属，复制逐项拒绝被替换为符号链接的路径，不能把 runtime 校验后的目录替换成工作区外目标。手动安装使用原生权限确认，Agent 安装沿用工具审批。查询与安装只在自身请求中等待扩展恢复，不进入主界面就绪链路。`packages/features/browser/test/integration/unpacked.electron.test.ts` 覆盖真实 runtime → HTTP bridge → Main Feature → native session 加载、MV2 后台请求拦截、MV2/MV3 内容脚本、源文件清理后的重启恢复、重复安装、拒绝确认、快照隔离与失败/取消回滚。
 
 Electron 原生 MV2 后台页面使用共享 preload world，直接调用 `contextBridge.executeInMainWorld` 会让整个扩展 preload 失败。`preload/extension-world.ts` 按现有 `process.contextIsolated` 选择执行方式；扩展 API 仍先通过 main 的真实 frame 身份认证，不修改网页或弹窗的安全配置。缺失的 MV2 `browserAction` 使用宿主 action 状态提供图标、标题、弹窗读写和点击事件，原生 MV3 action 保留原有行为；未提供徽标功能时返回明确错误。声明 `privacy` 的扩展可发现常用网络预测、WebRTC 与 hyperlink auditing 的 ChromeSettings 入口，但读写均返回未支持错误，不伪造设置成功或隐私保证。
 
@@ -111,7 +111,7 @@ Electron 原生 MV2 后台页面使用共享 preload world，直接调用 `conte
 
 遵守全局 [启动性能硬性约束](../architecture/runtime-flows.md#启动性能约束硬性)：`main/feature.ts` 完成浏览器控制 server、IPC 和安全边界后启动独立的扩展恢复任务，不等待安装扫描、原生扩展加载或后台 worker。元数据通过既有事件更新；扩展安装/启停/权限修改只在自身操作链中等待恢复完成，避免覆盖已保存的停用或授权状态。`service.ts` 加载原生扩展后交给 `worker-startup.ts` 的后台队列，最多同时启动 4 个 worker；队列不进入原生加载或主界面就绪等待，排队期间不创建注册监听和超时，卸载时移除对应任务。冷注册保留有界等待，匹配扩展 origin 的未捕获 JavaScript 启动异常会立即结束等待并释放名额。[Electron 43.7.7 的原生启动拒绝](https://github.com/electron/electron/blob/v43.7.7/shell/browser/api/electron_api_service_worker_context.cc#L244-L249) 不区分注册竞态与脚本失败，不能直接把普通拒绝判为确定失败。服务的 lifetime 同时绑定 Feature scope，draining 会取消排队操作和 worker 等待，释放时移除监听/定时器并卸载迟到完成的原生加载，不等待后台超时，也不会在关闭后重新注册 preload。
 
-`test/integration/extension-startup.electron.test.ts` 使用隔离 profile 和无窗口的真实 Main Feature activation：挂起扩展加载仍可调用浏览器控制接口；MV2 后台页的远程脚本挂起时，恢复与健康后台页的启动事件均可完成；坏 worker 不拖住其他 worker，恢复 12 个慢 worker 时只保留 4 组启动监听，卸载或关闭会丢弃等待项，关闭期间的迟到加载不能复活服务。测试不启动完整工作台、不修改原安装数据；对启动链路的其他改动也必须按全局约束验证核心可用耗时和外围失败隔离。
+`packages/features/browser/test/integration/extension-startup.electron.test.ts` 使用隔离 profile 和无窗口的真实 Main Feature activation：挂起扩展加载仍可调用浏览器控制接口；MV2 后台页的远程脚本挂起时，恢复与健康后台页的启动事件均可完成；坏 worker 不拖住其他 worker，恢复 12 个慢 worker 时只保留 4 组启动监听，卸载或关闭会丢弃等待项，关闭期间的迟到加载不能复活服务。测试不启动完整工作台、不修改原安装数据；对启动链路的其他改动也必须按全局约束验证核心可用耗时和外围失败隔离。
 
 菜单内图钉可固定或取消固定扩展，固定图标显示在工具栏拼图入口旁；菜单名称与固定图标共用 action 入口，先打开声明或动态设置的弹窗，没有弹窗则交给扩展的 `action.onClicked` 或侧边栏行为。设置入口独立保留。管理弹层与固定图标的右键菜单使用共享组件的 modal 行为，让网页视图上方的外部点击先关闭菜单，避免 guest 内的指针事件无法冒泡到宿主。右键菜单提供扩展设置（有设置页时）、取消固定和卸载。固定顺序以选择顺序保存到 renderer 的版本化 localStorage，跨标签页及窗口同步，重启后恢复；工具栏及快捷菜单只展示启用的扩展，停用不移除固定记录，重新启用后恢复原有位置。
 
@@ -145,7 +145,7 @@ API 桥按必需与可选权限声明在文档和 worker 首次加载时安装�
 
 `main/extensions/contents-lifecycle.ts` 让来宾跟踪、各 API 通道和扩展子 frame 共用每个 WebContents 的导航/销毁观察入口，保持模块各自的清理回调。取消最后一个订阅即移除原生监听；销毁时清理所有 frame、授权、消息和面板状态。重复跟踪同一页面不会叠加 action 或用户脚本监听，释放用户脚本服务也会停止仍存活页面的跟踪。真实 Electron 集成测试检查导航、停用/启用、弹窗和关闭期间不再产生 `MaxListenersExceededWarning`，不提高监听上限。
 
-`test/integration/extension-apis.electron.test.ts` 使用隔离 profile 和隐藏窗口验证原生 frame/worker 的权限确认、重启恢复、撤销、Cookie 分区隔离与精确删除，以及共享收藏夹修改、managed 默认值、图标读取与 CSP、一次性 profile 启动事件，同时检查真实加载日志的分类。设置 `SETSUNA_COOKIE_EDITOR_EXTENSION_DIRECTORY`、`SETSUNA_ITAB_EXTENSION_DIRECTORY`、`SETSUNA_TAMPERMONKEY_EXTENSION_DIRECTORY` 可验证本机原版扩展的 worker 启动和对应调用；`SETSUNA_VUE_TELESCOPE_EXTENSION_DIRECTORY` 验证 Vue Telescope 原版网页脚本与 worker 交换检测数据，并确认发送到未注入脚本的空白页面仍按原生语义拒绝。原版组合还会执行 iTab 授权按钮的真实权限处理函数，在重启复用相同标签 ID 时验证 Vue Telescope 自行清理旧缓存，检查没有未处理的连接错误。只复制安装文件到临时 profile，网络使用本地响应，不修改原安装或用户数据。
+`packages/features/browser/test/integration/extension-apis.electron.test.ts` 使用隔离 profile 和隐藏窗口验证原生 frame/worker 的权限确认、重启恢复、撤销、Cookie 分区隔离与精确删除，以及共享收藏夹修改、managed 默认值、图标读取与 CSP、一次性 profile 启动事件，同时检查真实加载日志的分类。设置 `SETSUNA_COOKIE_EDITOR_EXTENSION_DIRECTORY`、`SETSUNA_ITAB_EXTENSION_DIRECTORY`、`SETSUNA_TAMPERMONKEY_EXTENSION_DIRECTORY` 可验证本机原版扩展的 worker 启动和对应调用；`SETSUNA_VUE_TELESCOPE_EXTENSION_DIRECTORY` 验证 Vue Telescope 原版网页脚本与 worker 交换检测数据，并确认发送到未注入脚本的空白页面仍按原生语义拒绝。原版组合还会执行 iTab 授权按钮的真实权限处理函数，在重启复用相同标签 ID 时验证 Vue Telescope 自行清理旧缓存，检查没有未处理的连接错误。只复制安装文件到临时 profile，网络使用本地响应，不修改原安装或用户数据。
 
 `main/extensions/native-messaging/` 实现 `runtime.connectNative/sendNativeMessage`。宿主来自应用数据目录的 `NativeMessagingHosts` 注册清单，或当前用户/系统 Chrome、Edge、Chromium 的 macOS 注册文件和 Windows 注册表；扩展不能通过 IPC 指定可执行路径。连接前检查 `nativeMessaging` 权限、清单名称、stdio 类型及精确 `allowed_origins`，以无 shell 子进程交换带长度前缀的 UTF-8 JSON。消息大小遵循原生协议限制，不记录宿主输出；Port 保持所属 MV3 worker 存活，关闭文档、停用/卸载扩展或退出应用时释放进程和任务。ChatGPT 扩展保留原版后台与侧栏，通过已注册的本机宿主启动其聊天服务，不把等待页替换成独立聊天实现。
 

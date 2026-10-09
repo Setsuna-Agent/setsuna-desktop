@@ -1,6 +1,6 @@
 # Setsuna Windows Sandbox
 
-`setsuna-sandbox-win.exe` is the single native Windows sidecar used by Setsuna
+`setsuna-sandbox-win.exe` is the native sandbox sidecar used by Setsuna
 Desktop. It deliberately has no daemon or Windows service. One executable owns
 installation checks, elevated setup, sandboxed process creation, repair, and
 uninstall.
@@ -59,11 +59,12 @@ single-binary implementation and its own versioned protocol.
 
 The locked dependency graph requires Rust/Cargo 1.85 or newer.
 
-```text
-cargo test --manifest-path native/windows-sandbox/Cargo.toml
-cargo check --manifest-path native/windows-sandbox/Cargo.toml --target x86_64-pc-windows-msvc
+Run the repository scripts from its root on Windows x64:
+
+```powershell
+pnpm test:windows-sandbox
+pnpm build:windows-sandbox
 ```
 
-The second command validates Win32 bindings but does not replace the Windows
-integration tests. Account, ACL, firewall, cancellation, and network tests must
+A successful build does not replace the Windows integration tests. Account, ACL, firewall, cancellation, and network tests must
 run on a disposable Windows CI host.

@@ -14,23 +14,7 @@ Setsuna Desktop 的安全模型不是强隔离沙箱，而是在本地桌面应�
 ├── secure-credentials.json
 ├── update-download-sources.json
 ├── Chromium / Electron profile data
-└── runtime/
-    ├── config.json
-    ├── secrets.json
-    ├── projects.json
-    ├── mcp.json
-    ├── skills.json
-    ├── plugins.json
-    ├── user-skills/
-    ├── plugin-skill-overrides/
-    ├── plugins/
-    ├── attachments/
-    ├── generated-images/
-    ├── pc-local-policies/
-    ├── memories/
-    ├── usage.jsonl
-    ├── threads.sqlite
-    └── threads/            # legacy 导入源/人工备份
+└── runtime/                # thread、config、Feature settings 与其他领域 store
 ```
 
 具体文件由 store 负责，详见 [Runtime 存储](../core/runtime/storage.md)。
@@ -73,7 +57,7 @@ Setsuna Desktop 的安全模型不是强隔离沙箱，而是在本地桌面应�
 - Main 使用 Electron `safeStorage` 封装凭据加解密。
 - Runtime 通过独立的原生 bridge port 访问所需 secret。
 - Renderer 只得到 `apiKeySet`、preview 或认证状态，不得到明文。
-- `secrets.json` 写入后尝试设置 `0600`。
+- Provider key 所在的 `runtime/secrets.json` 和 Feature secret revision 所在的 `runtime/secrets/` 仍是未经过 OS 加密的 JSON 文件，写入后尝试设置 `0600`；它们不通过 main vault 保存。详见 [Runtime 存储](../core/runtime/storage.md#config-与-secrets)。
 
 ## Renderer 与 preload
 

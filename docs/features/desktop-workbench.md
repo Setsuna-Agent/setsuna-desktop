@@ -166,7 +166,7 @@ Windows Sandbox 横跨 runtime/main/preload/renderer，并拥有 Rust sidecar、
 关键边界：
 
 - Main 定位并校验受信 sidecar，管理需要提权的安装/修复/卸载状态机。
-- Sandbox egress 使用固定认证 gateway；上游 proxy 由 Network Proxy 的窄 Capability 解析。
+- Sandbox egress 使用固定认证 gateway 和受控直连出口；无法绑定已校验 DNS 结果的上游代理配置会被拒绝，不静默绕过出口限制。
 - Runtime 通过 `ShellSandboxProvider`/Feature service 使用隔离能力，不 import Windows 原生实现。
 - 无法验证 sidecar、ACL、curl trust snapshot 或 gateway 时 fail-closed，不能静默退回不受限执行。
 - Renderer 只能读取状态和触发固定 action，不能指定可执行文件、任意账户或网络策略。

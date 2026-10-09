@@ -1,6 +1,6 @@
 # Setsuna Desktop Agent Guide
 
-本文件面向后续在本仓库工作的 coding agent。模块级细节放在 `docs/` 下；如果需要更完整的目录级索引，先读 `Tree.md`。
+本文件面向后续在本仓库工作的 coding agent。模块职责和阅读路径从 `docs/README.md` 进入；实际文件位置使用 `rg --files` 或按符号搜索。
 
 ## 基本原则
 
@@ -10,6 +10,7 @@
 - 保持现有分层，不把业务逻辑塞进单个组件、hook 或 server 文件。优先抽到已有同层 helper、hook、adapter、port 或样式文件。
 - 不要写屎山代码；开发相关需求要尽可能做好组件、样式、hook、helper 的封装，并在复杂逻辑处添加必要注释。
 - 保留用户现有 WIP。开始前看 `git status --short`，只改请求相关文件，不回滚不属于自己的改动。
+- 未经用户明确要求，不使用子代理，也不在界面追加解释性文字、辅助说明、状态摘要或引导文案；图标含义沿用 tooltip 和 aria-label。
 - 仅支持 macOS 和 Windows；不再维护 Linux 的开发、运行和发布兼容。路径、runtime 启动、打包和终端能力要按两个受支持平台考虑，优先用 `path.join`、`path.resolve`、`path.relative` 和规范化比较。
 - renderer 不应直接访问本地 runtime 端口、token、模型供应商或文件系统；这些能力必须通过 preload 暴露的窄 API 或 runtime client。
 
@@ -30,41 +31,41 @@
 
 `setsuna-desktop` 是 local-first Electron 桌面工作台：
 
-- `apps/desktop/main` 承载 Electron 窗口、本机 IPC、runtime 子进程、review、terminal、workspace app、updater。
+- `apps/desktop/main` 承载 Electron 窗口、本机 IPC、runtime 子进程，并为 Review、Terminal、Updater 等 Feature 注入本机能力。
 - `apps/desktop/preload` 暴露 `window.setsunaDesktop`，是 renderer 与本机能力之间的安全桥。
 - `apps/desktop/renderer` 是 React UI、状态投影和交互编排。
 - `packages/contracts` 是 main、preload、renderer、runtime 共享 DTO、事件和 client contract。
-- `packages/desktop-runtime` 是本地 Agent runtime service，包含 HTTP/SSE server、agent loop、ports/adapters、模型、工具、MCP、Skill、memory、usage 和本地存储。
+- `packages/feature-core` 提供组合内核；`packages/features/*` 持有跨进程业务闭环及其私有 contracts。
+- `packages/renderer-contracts` 定义宿主 UI 插槽契约；`packages/renderer-ui` 提供共享控件和样式，两者仅用于 renderer。
+- `packages/desktop-runtime` 是本地 Agent runtime service，拥有 HTTP/SSE server、agent loop、ports/adapters 和 Core 存储，并组合模型、MCP、Skill、Memory、Usage 等 Feature。
 - `skills` 是随应用打包的内置 Skill，用户 Skill 写入 runtime 数据目录。
 
 ## 文档入口
 
 - `docs/README.md`：按源码模块、学习目标和改动类型组织的总导航。
-- `docs/architecture/`：总体边界、启动/请求/SSE/turn 链路、数据安全和变更扩散图。
 - `docs/architecture/`：总体边界、启动/请求/SSE/turn 链路、Feature composition 与变更扩散图。
 - `docs/core/`：contracts、feature-core 和 desktop-runtime 的技术基础。
 - `docs/desktop/`：Electron main、preload、renderer 宿主。
 - `docs/features/`：`packages/features/*` 的纵向业务 owner、参与进程和详细链路。
 - `docs/{extensions,development,designs}/`：Plugin/Skill、仓库脚本、构建发布和跨模块设计。
-- `Tree.md`：由 `pnpm docs:tree` 生成的目录索引，适合定位入口；职责说明仍以 `docs/` 为准。
 
 ## 常见改动入口
 
 - 改窗口、IPC、本机能力：先看 `apps/desktop/main/src/index.ts`、对应 main 模块、`apps/desktop/preload/src/index.ts`，再补 renderer 类型/调用。
-- 改 runtime REST API：同步改 `packages/contracts/src/http.ts`、`apps/desktop/renderer/src/services/runtime-client/client.ts`、`packages/desktop-runtime/src/server/runtime-rest-routes.ts` 和相关测试。
-- 改线程事件或消息投影：同步看 `packages/contracts/src/events.ts`、`packages/contracts/src/thread-events.ts`、`packages/contracts/src/thread-event-projection.ts`、`packages/desktop-runtime/src/adapters/store/sqlite-thread-store.ts`、`packages/desktop-runtime/src/adapters/store/legacy-json-thread-reader.ts`、`apps/desktop/renderer/src/services/runtime-client/runtimeEvents.ts`。
+- 改 runtime REST API：Core 通用能力同步看 `packages/contracts/src/http.ts`、`apps/desktop/renderer/src/services/runtime-client/client.ts` 和 runtime route；Feature 专用能力走所属包的 contracts typed operation、runtime route 和 renderer client，不扩充 Core facade。
+- 改线程事件或消息投影：同步看 `packages/contracts/src/events.ts`、`packages/contracts/src/thread-events.ts`、`packages/contracts/src/thread-event-projection.ts`、`packages/desktop-runtime/src/adapters/store/sqlite-thread-store.ts`、`packages/desktop-runtime/src/adapters/store/legacy-json-thread-reader.ts`、`apps/desktop/renderer/src/services/runtime-client/runtimeThreadState.ts` 和 `useRuntimeThreadState.ts`。
 - 改 agent 行为：从 `packages/desktop-runtime/src/loop/core/agent-loop.ts` 入手，再按 `context/lifecycle/memory/tools` 找对应 coordinator；保持事件先落盘再发布，注意取消、审批、usage、memory 和 context compaction。
 - 改本地工具：优先走 `ToolHost` 抽象，重点看 `packages/desktop-runtime/src/adapters/tool/pc-local/`、approval/preview 流程和对应测试。
 - 改模型供应商：先看 `packages/features/model-provider/`；配置与 typed operation 在 `contracts/`，Pi 协议适配、stream/replay/compaction 在 `runtime/`，设置页与状态服务在 `renderer/`。宿主只在 `runtime-feature-composition.ts` 注入配置、代理 fetch 并绑定采样 capability。
 - 改聊天 UI：从 `apps/desktop/renderer/src/features/chat/` 进入，页面编排在根目录，消息、输入、工具、产物、mention 分别在 `conversation/composer/tool-runs/artifacts/mentions`。
-- 改项目/文件/review/terminal：看 `apps/desktop/renderer/src/features/workspace/` 及其 `hooks/`，main 侧对应 `src/review/`、`src/terminal/`、`src/workspace/`。
+- 改项目/文件/review/terminal：宿主编排看 `apps/desktop/renderer/src/features/workspace/` 及其 `hooks/`；Review、Terminal 业务在 `packages/features/review/`、`packages/features/terminal/`，宿主文件能力在 `apps/desktop/main/src/workspace/`。
 - 改设置或能力管理：宿主导航看 `SettingsPage.tsx` 与 `CapabilitiesShell.tsx`；Plugin、Skill、MCP 页面和状态分别由 `packages/features/{plugin-management,skills,mcp}/src/renderer/` 持有，跨目录刷新走 capabilities refresh coordinator。
 - 改发布流程：看 `package.json` 的 `build` 配置、`scripts/*release*`、`.github/workflows/*`。
 
 ## 设计约束
 
-- Contract 先行：跨进程、跨包数据结构先落在 `packages/contracts`，不要在 renderer/runtime 各写一套相似类型。
-- 事件驱动：线程状态以 append-only `RuntimeEvent` 为真源，snapshot 是投影结果。新增事件必须有 reducer 和测试。
+- Contract 先行：Core 通用跨进程结构放在 `packages/contracts`；业务专用 DTO、operation、event 和 settings 放在所属 Feature 的 `/contracts`；UI 插槽契约放在 `packages/renderer-contracts`。不要在 renderer/runtime 各写一套相似类型。
+- 事件驱动：线程状态以持久化的 `StoredThreadEvent` 为真源，包含 Core 事件和 Feature envelope；snapshot/checkpoint 是可恢复投影。新增事件必须有所属领域的 codec、reducer 和行为验证。
 - 窄桥接：preload 只暴露明确方法；Electron main 持有 runtime token、端口和系统能力。
 - Ports/adapters：runtime 业务逻辑依赖 ports，文件系统、模型、MCP、Skill、本地工具作为 adapter 注入。
 - UI 编排下沉到 hook：跨页面状态放 hook，展示组件只接收明确 props。复杂逻辑拆到纯函数；仅对其中高收益的业务逻辑配测试。
@@ -90,4 +91,4 @@ pnpm lint
 pnpm build
 ```
 
-当前仓库要求 Node.js `22+`，CI 使用 pnpm `7.33.7`。如果本地 PATH 上的 pnpm 版本与锁文件不兼容，优先使用 `corepack pnpm@7.33.7 ...` 或直接调用 `node_modules/.bin/*` 做验证。
+当前仓库要求 Node.js `>=22.19.0`、pnpm `7.33.7`。如果本地 PATH 上的 pnpm 版本不符，使用 `corepack pnpm@7.33.7 <script>`，保留仓库 script 的 runner 与 config。

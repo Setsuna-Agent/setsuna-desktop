@@ -265,7 +265,7 @@ Trace 失败不能影响 context build；内容先脱敏/截断，且只在 deve
 
 ## 测试
 
-`test/loop/context/`：
+`packages/desktop-runtime/test/loop/context/`：
 
 - Compaction。
 - Prompt compiler/assembler。
@@ -273,7 +273,7 @@ Trace 失败不能影响 context build；内容先脱敏/截断，且只在 deve
 - Environment/permissions/workflow prompt。
 - Attachment context。
 
-`test/adapters/workspace/`：
+`packages/desktop-runtime/test/adapters/workspace/`：
 
 - Environment resolver。
 - Instruction loader。

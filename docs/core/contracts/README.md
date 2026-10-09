@@ -13,7 +13,7 @@ Contracts 是 main、preload、renderer 和 runtime 的共享协议层。它只�
 - Event 写入成功但 reducer 不认识。
 - SWE/app-server 与普通 runtime 对同一状态产生不同解释。
 
-因此新跨边界能力先修改 contracts，再实现上下游。
+因此新跨边界能力先定义 contract，再实现上下游。Core 通用协议进入本包；单一业务 Feature 的协议进入其 `/contracts`，renderer UI 插槽契约进入 `packages/renderer-contracts`。
 
 ## 模块分组
 
@@ -21,8 +21,8 @@ Contracts 是 main、preload、renderer 和 runtime 的共享协议层。它只�
 
 | 文件 | 内容 |
 | --- | --- |
-| `threads.ts` | Thread、message、tool run、turn input、goal、review、compaction |
-| `events.ts` | `RuntimeEvent` discriminated union 与 SSE envelope |
+| `threads.ts` | Thread、message、tool run、turn input、review、compaction 与历史兼容元数据；当前 Goal 状态归 Goal Feature |
+| `events.ts` | `CoreRuntimeEvent`、`StoredThreadEvent` 与 SSE envelope；`RuntimeEvent` 保留为 Core 兼容别名 |
 | `thread-events.ts` | Event → `RuntimeThread` reducer facade |
 | `thread-event-projection.ts` | 细分 projection helper |
 | `thread-title.ts` | 自动/手动标题相关类型与纯规则 |
@@ -50,7 +50,6 @@ Contracts 是 main、preload、renderer 和 runtime 的共享协议层。它只�
 | --- | --- |
 | `http.ts` | `RuntimeRequestInput`、`DesktopRuntimeClient` |
 | `desktop.ts` | `SetsunaDesktopBridge` 与 main/preload 能力 |
-| `browser-control.ts` | Runtime ↔ main 浏览器控制协议 |
 | `data-root.ts` | 数据根扫描、迁移、恢复与 cleanup |
 | `ui-actions.ts` | Runtime 可投影给桌面的受限 UI action |
 
@@ -64,7 +63,7 @@ Contracts 是 main、preload、renderer 和 runtime 的共享协议层。它只�
 | `attachments.ts` | 上传、持久化附件与引用 |
 | `background-shell-processes.ts` | pc-local 后台 shell process 生命周期 DTO |
 | `hooks.ts` | Hook event、matcher、input 和 result |
-| `mcp.ts` | Server、transport、tool、resource、OAuth、审批 |
+| `mcp.ts` | MCP 配置与兼容 DTO；control、typed operation 与执行语义归 MCP Feature |
 | `memory.ts` | 持久 transcript 需要的 Memory citation 元数据；Memory record、query、preview 由 Memory Feature contracts 拥有 |
 | `plugins.ts` / `plugin-reference.ts` | Bundle、marketplace、归因与配置 |
 | `skills.ts` | Skill summary/detail/input/dependency |
@@ -133,7 +132,7 @@ Event 表达状态变化，snapshot 表达 reducer 结果。不要把整个可�
 
 `packages/contracts/test/`：
 
-- `thread-events.test.ts`：线程投影真源。
+- `thread-events.*.test.ts`：按事件域拆分的线程投影测试。
 - `message-metadata.test.ts`：metadata normalize/replay shape。
 - `config.test.ts`：配置 contract。
 - `thread-title.test.ts`：标题规则。

@@ -25,7 +25,7 @@
 
 在主 native window 内用临时 `WebContentsView` 显示启动页，等待 renderer 首帧后揭示，避免 OS 做窗口交换动画。Splash 必须 sandbox，且不能加载业务 preload。
 
-测试位于 `test/unit/window/`。
+测试位于 `apps/desktop/main/test/unit/window/`。
 
 ## Review
 
@@ -167,7 +167,7 @@ Updater 是纵向 Feature：状态 DTO、IPC channel、main 状态机、preload 
 - macOS ZIP 经原生验证后，由宿主 `window/update-install.ts` 协调未保存文件、窗口关闭与 runtime 停机，再交给 Squirrel 安装；DMG 仍打开文件位置。Windows 打开 installer。
 - 下载期间切换源会取消并按新源重试。
 
-Updater 默认只在 packaged 或 `SETSUNA_DESKTOP_ENABLE_UPDATES=1` 时启用。测试位于 `packages/features/updater/test/`。
+常规开发实例允许手动检查版本；自动检查、下载和安装只在 packaged 或 `SETSUNA_DESKTOP_ENABLE_UPDATES=1` 时启用。Computer Use Lab 禁用更新。测试位于 `packages/features/updater/test/`。
 
 ## Desktop IPC 辅助能力
 

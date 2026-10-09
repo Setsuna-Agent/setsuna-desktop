@@ -98,7 +98,7 @@
 
 ## Renderer 交互
 
-Goal renderer controller 先订阅当前线程的刷新信号，再读取强类型 state snapshot。Core sequence gate 接受 Goal event 时只传递最低 `throughSeq`，SSE resync 时也触发重读；controller 不接收 Goal payload。当前 Goal（除 `complete`）通过静态 composer-status contribution 显示在输入框上方：
+Goal renderer controller 先订阅当前线程的刷新信号，再读取强类型 state snapshot。Core sequence gate 接受 Goal event 时只传递最低 `throughSeq`，SSE resync 时也触发重读；controller 不接收 Goal payload。当前 Goal（除 `complete`）通过 composer-status Slot contribution 显示在输入框上方：
 
 - 状态与单行 objective；
 - 累计耗时，active turn 期间每秒更新；
@@ -122,7 +122,7 @@ Goal renderer controller 先订阅当前线程的刷新信号，再读取强类�
 - Feature event/projection：runtime 固定高水位 replay、增量 cache、cache dispose、旧事件 decoder 和未知版本诊断。
 - runtime integration：自动续轮与最终计量、取消/clear 迟到结算、用户 steer、编辑保留状态、restart reconcile、无进展保护、队列 Goal 替换与单写 envelope。
 - renderer unit：subscribe-before-query、请求期间到达刷新信号、迟到 snapshot、resync 重读、状态栏操作和退出数据展示。
-- Skill：`quick_validate.py` 校验 frontmatter 和 interface metadata；registry integration 负责实际发现与加载。
+- Skill：`packages/desktop-runtime/test/adapters/skill/` 校验元数据、发现与加载，目标行为由 Goal runtime integration 覆盖。
 
 ## 相关文件
 

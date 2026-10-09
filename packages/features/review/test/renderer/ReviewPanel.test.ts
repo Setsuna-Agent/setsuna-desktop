@@ -34,7 +34,7 @@ describe('DesktopReviewPanel', () => {
         additions: 3,
         deletions: 3,
         files: [
-          { ...templateFile, path: 'Tree.md' },
+          { ...templateFile, path: 'CONTRIBUTING.md' },
           { ...templateFile, path: 'apps/file10.ts' },
           { ...templateFile, path: 'apps/File2.ts' },
         ],
@@ -49,10 +49,10 @@ describe('DesktopReviewPanel', () => {
 
     const file2Index = html.indexOf('apps/File2.ts');
     const file10Index = html.indexOf('apps/file10.ts');
-    const treeIndex = html.indexOf('Tree.md');
+    const contributingIndex = html.indexOf('CONTRIBUTING.md');
     expect(file2Index).toBeGreaterThan(-1);
     expect(file10Index).toBeGreaterThan(file2Index);
-    expect(treeIndex).toBeGreaterThan(file10Index);
+    expect(contributingIndex).toBeGreaterThan(file10Index);
   });
 
   it('renders every diff line returned by the review state', () => {
