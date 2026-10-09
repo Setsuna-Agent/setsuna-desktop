@@ -2,7 +2,7 @@
 
 源码目录：`plugins/`
 
-第三方平台接入依据见 [OAuth 应用注册与 MCP 准入调研记录](./oauth-registration-checklist.md)，包含默认市场排除范围、直接授权路线和当前 Setsuna 认证适配边界。
+第三方平台接入的当前边界见 [仓库插件兼容规则](bundles.md#从-openai-仓库安装) 和 [MCP OAuth](../../features/mcp.md#oauth-接入边界)。
 
 仓库根 `plugins/` 是随应用打包的只读精选市场源。每个子目录是一个 Plugin Bundle；runtime 安装时会完整校验并复制到用户数据根，不从源码/应用目录原地运行可变状态。
 
@@ -42,7 +42,7 @@ Renderer 看不到：
 - 可执行扩展：Bundle v2 在受管 Node worker 中注册动态工具和 Agent 生命周期中间件。
 - Setsuna 原生工具：结构化提问、会话任务清单和 Claude Rules 兼容；设计参考与许可记录保留在 Bundle 源码内部，不作为用户侧品牌或能力资源。
 
-目录内容以 `plugins/` 实际文件和各 Bundle manifest 为准，生成索引见根 [Tree.md](../../../Tree.md)。
+目录内容以 `plugins/` 实际文件和各 Bundle manifest 为准；可用 `rg --files plugins` 定位内置资源。
 
 ## 内置插件语言
 
@@ -91,7 +91,7 @@ Skill 入口和 Markdown 参考资源可在同目录提供 `SKILL.<locale>.md`�
 - 应用目录是默认可信市场来源，但每个 Bundle 仍执行完整结构校验。
 - Bundle MCP/Hook 不因来自市场就自动获得运行权限。
 - Hook 默认按 command hash 单独信任。
-- MCP 默认审批。
+- MCP 安装与启用遵循管理操作授权；执行范围由 server 启用状态和允许工具决定，不再逐次弹出调用确认。
 - Resource 作为外部不可信上下文。
 - 内置 Plugin 全部使用 Bundle v2；没有 `extension` 的 Bundle 保持纯声明式。内置扩展在安装和升级时自动校验并启用，本地侧载扩展才需要用户信任完整包哈希；扩展代码始终只在独立 worker 中运行。
 - Agent 创建的 Plugin 必须先通过内容绑定审批；批准后该版本会直接安装并启用，Hook 命令与可执行扩展的信任仅覆盖审批时展示的内容哈希。

@@ -59,13 +59,13 @@ Electron dev 和 packaged 都使用同一个 CLI；差异由 main 注入的 entr
 
 `runtime-rest-routes.ts` 是小型有序分发入口，只组合窄 domain handler：
 
-- `runtime-config-routes.ts`：Config 与 provider model discovery。
+- `runtime-config-routes.ts`：Core Config 与兼容配置投影；供应商设置和模型发现由 Model Provider typed operations 持有。
 - `runtime-extension-routes.ts`：MCP 和 Approvals 兼容入口。
 - `runtime-resource-routes.ts`：Attachment 创建、读取与清理。
 - `RuntimeRouteRegistry`：由 Skills、Usage、Runtime Activity、Plugin Management 等 runtime Feature setup 登记 typed operations；在中央 route family 之前分发。
-- `runtime-thread-routes.ts`：Thread、message、attachment、context、queue 和 debug trace。
+- `runtime-thread-routes.ts`：Thread、message、attachment、context 与 queue；debug trace 由 Conversation Debug typed operations 持有。
 - `runtime-turn-routes.ts`：Turn start/steer/cancel 与 review。
-- `runtime-thread-command-routes.ts`：删除、Goal、Review 等共享 thread command。
+- `runtime-thread-command-routes.ts`：删除和 Review 兼容入口；Goal 状态操作由 Goal Feature 持有。
 - `runtime-capability-routes.ts`：旧 Hook query 与 MCP status/resource/tool 兼容入口。
 - `runtime-workspace-routes.ts`：Projects、entries、read/search 和 workspace status。
 - `runtime-memory-routes.ts`：旧 Memory REST 兼容入口；新 renderer 管理面走 Memory typed Feature operations。
@@ -214,28 +214,28 @@ Contract 映射详见 [SWE/app-server](../contracts/swe-app-server.md)。
 3. 复用现有 container service；必要时先加 port/adapter。
 4. 不在 route 内直接读取私有 JSON 文件。
 5. 确认 shutdown/data migration 准入语义。
-6. 添加对应 `test/server/runtime-*-routes.test.ts` 的边界测试。
-7. 添加 `test/integration/runtime-server/` 的协议场景。
+6. 添加对应 `packages/desktop-runtime/test/server/runtime-*-routes.test.ts` 的边界测试。
+7. 添加 `packages/desktop-runtime/test/integration/runtime-server/` 的协议场景。
 8. 更新宿主 renderer client 或 Feature-owned typed client。
 
 ## 测试
 
 单元：
 
-- `test/server/runtime-workspace-routes.test.ts`
-- `test/runtime/use-cases/workspace-operations.test.ts`
+- `packages/desktop-runtime/test/server/runtime-workspace-routes.test.ts`
+- `packages/desktop-runtime/test/runtime/use-cases/workspace-operations.test.ts`
 - `sse.test.ts`
 - `http-utils.test.ts`
 - `in-flight-requests.test.ts`
 - `runtime-thread-events.test.ts`
-- `test/server/app-server/`
+- `packages/desktop-runtime/test/server/app-server/`
 
 Integration：
 
-- `test/integration/runtime-server/rest-*.test.ts`
+- `packages/desktop-runtime/test/integration/runtime-server/rest-*.test.ts`
 - `app-server-*.test.ts`
 - `mcp.test.ts`
 - `memory.test.ts`
 - `reviews-messages.test.ts`
 
-Harness 位于 `test/support/runtime-server/`。
+Harness 位于 `packages/desktop-runtime/test/support/runtime-server/`。

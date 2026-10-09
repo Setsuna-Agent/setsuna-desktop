@@ -36,8 +36,8 @@ local runtime
 
 1. Main 在 profile 初始化前决定数据根和维护模式。
 2. 正常模式创建主窗口、splash、浏览器控制与原生 bridge。
-3. `RuntimeHost` 启动本地 runtime，等待 ready 与 health。
-4. Main 注册 IPC，加载 renderer。
+3. `RuntimeHost` 启动本地 runtime，renderer 资源同步加载。
+4. Main 完成必要的 IPC 与核心服务准备，通过 `desktop.whenReady()` 放行 renderer 业务初始化；外围恢复继续在后台执行。
 5. Renderer 的 `DesktopDataRootGate` 再确认显示维护页面还是正常工作台。
 6. 正常工作台创建 runtime client，拉取 snapshot 并订阅当前线程 SSE。
 

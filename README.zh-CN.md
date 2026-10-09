@@ -26,13 +26,39 @@
 </p>
 
 <p align="center">
-  <img src="assets/readme/setsuna-home.png" alt="在 Setsuna Desktop 中发起新任务" width="100%">
+  <a href="assets/readme/setsuna-home.png"><img src="assets/readme/setsuna-home.png" alt="在 Setsuna Desktop 中发起新任务" width="960"></a>
 </p>
 
 ## 产品界面
 
+### 编程工作区
+
 <p align="center">
-  <img src="assets/readme/chat-review.png" alt="Setsuna Desktop 对话与代码审查工作区" width="100%">
+  <a href="assets/readme/chat-review.png"><img src="assets/readme/chat-review.png" alt="Setsuna Desktop 对话、代码审查与集成终端工作区" width="960"></a>
+</p>
+
+### Pull Request
+
+<p align="center">
+  <a href="assets/readme/pull-requests.png"><img src="assets/readme/pull-requests.png" alt="浏览 Pull Request 并审查代码变更" width="960"></a>
+</p>
+
+### 自动化
+
+<p align="center">
+  <a href="assets/readme/automations.png"><img src="assets/readme/automations.png" alt="在 Setsuna Desktop 中创建定时任务" width="960"></a>
+</p>
+
+### 插件
+
+<p align="center">
+  <a href="assets/readme/plugins.png"><img src="assets/readme/plugins.png" alt="发现和管理插件" width="960"></a>
+</p>
+
+### 应用构建
+
+<p align="center">
+  <a href="assets/readme/app-builder.png"><img src="assets/readme/app-builder.png" alt="从模板或想法创建侧边栏应用" width="960"></a>
 </p>
 
 ## 下载
@@ -53,7 +79,7 @@
 
 ## 从源码运行
 
-需要 Git、Node.js `>=22.19.0` 和 pnpm `7.33.7`。Windows 还需要 Rust 和 C++ 构建工具，安装步骤见 [Windows 开发环境](docs/development/README.md#windows-x64)。
+需要 Git、Node.js `>=22.19.0` 和 pnpm `7.33.7`。macOS 开发需要 macOS 14+ 和 Xcode Command Line Tools，用于编译桌面控制助手，见 [macOS 开发环境](docs/development/README.md#macos)。Windows 还需要 Rust 和 C++ 构建工具，见 [Windows 开发环境](docs/development/README.md#windows-x64)。
 
 ```bash
 git clone https://github.com/Setsuna-Agent/setsuna-desktop.git

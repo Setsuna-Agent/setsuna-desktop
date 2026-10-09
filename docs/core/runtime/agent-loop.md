@@ -56,14 +56,14 @@ Facade 负责依赖组装、准入和窄事件桥接。新增横切能力时先�
 | `runtime-event-writer.ts` | 事件落盘后发布 |
 | `runtime-turn-input-coordinator.ts` | 用户输入、steer、mailbox |
 | `runtime-queued-turn-coordinator.ts` | 持久化 FIFO、edit token、调度 |
-| `runtime-goal-coordinator.ts` | Goal 建立、计量和 continuation |
-| `collaboration-coordinator.ts` | 子 Agent 协作与 mailbox |
 | `runtime-compaction-turn-coordinator.ts` | 显式 compaction task |
 | `runtime-hook-coordinator.ts` | Session/UserPrompt/Stop/Compact hooks |
 | `runtime-turn-finalizer.ts` | Usage、message、Feature title commit、memory、completed |
 | `runtime-turn-termination-coordinator.ts` | Cancel/error terminal event 串行化 |
 | `runtime-background-task-queue.ts` | 可取消后台任务 |
 | `turn-input-queue.ts` | Active turn 内部 steer 队列 |
+
+Goal 与 Collaboration 的 coordinator 分别位于 `packages/features/goal/src/runtime/runtime-goal-coordinator.ts` 和 `packages/features/collaboration/src/runtime/runtime-collaboration-coordinator.ts`，通过窄宿主 capability 接入调度；业务状态和恢复语义见 [Agent 状态 Feature](../../features/agent-state.md)。
 
 ## 一次普通 turn
 
@@ -305,7 +305,7 @@ Memory mode 与 citation 仍属于 thread/message 持久 contract：前者参与
 
 ## 测试
 
-Integration：`test/integration/agent-loop/`
+Integration：`packages/desktop-runtime/test/integration/agent-loop/`
 
 - Turn execution、tool、approval、cancel。
 - Queue/steer/collaboration/goal。
@@ -314,8 +314,8 @@ Integration：`test/integration/agent-loop/`
 - Hooks。
 - Permissions/sandbox/network。
 
-单元：`test/loop/{core,lifecycle,tools}/` 与 `packages/features/memory/test/runtime/`
+单元：`packages/desktop-runtime/test/loop/{core,lifecycle,tools}/` 与 `packages/features/memory/test/runtime/`
 
-共享 harness：`test/support/agent-loop/`。
+共享 harness：`packages/desktop-runtime/test/support/agent-loop/`。
 
 修改 turn 生命周期时，优先增加一个精确 integration 场景，再给可独立协作者补单元测试。

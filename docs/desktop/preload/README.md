@@ -12,13 +12,16 @@ Preload 是 renderer 唯一能接触 Electron IPC 的地方。它使用 `context
 | `dataRoot` | 状态、扫描、迁移、恢复、旧根清理 | `ipc/data-root-ipc.ts` |
 | `desktop` | 平台、目录选择、profile、图片、workspace 文件、本地路径 | `ipc/desktop-ipc.ts` |
 | `links` | 打开受控外链 | `ipc/desktop-ipc.ts` |
-| `browser` | tab 注册、截图、favicon、设备模拟、新标签事件 | `ipc/browser-ipc.ts` |
-| `desktopReview` | review state、stage、unstage、discard | `packages/features/review/{preload,main}` |
-| `terminal` | session open/write/read/resize/restart/close、事件 | `packages/features/terminal/{preload,main}` |
-| `webdavSync` | 连接、备份、还原、取消与状态事件 | `packages/features/webdav-sync/{preload,main}` |
-| `workspaceApps` | 应用列表与打开 workspace/file | `packages/features/workspace-apps/{preload,main}` |
-| `updater` | 状态、检查、下载源、安装包打开与状态事件 | `packages/features/updater/{preload,main}` |
-| `windowsSandbox` | 状态检测与安装、修复、卸载 | `packages/features/windows-sandbox/{preload,main}` |
+| `browser` | tab 注册、截图、favicon、设备模拟、新标签事件 | `packages/features/browser/src/{preload,main}/` |
+| `computerUse` | 授权设置、状态、预览与停止 | `packages/features/computer-use/src/{preload,main}/` |
+| `networkProxy` | 代理设置、路由与状态 | `packages/features/network-proxy/src/{preload,main}/` |
+| `plugins` | 用户选择本地 Bundle 目录并安装 | `packages/features/plugin-management/src/{preload,main}/` |
+| `desktopReview` | review state、stage、unstage、discard | `packages/features/review/src/{preload,main}/` |
+| `terminal` | session open/write/read/resize/restart/close、事件 | `packages/features/terminal/src/{preload,main}/` |
+| `webdavSync` | 连接、备份、还原、取消与状态事件 | `packages/features/webdav-sync/src/{preload,main}/` |
+| `workspaceApps` | 应用列表与打开 workspace/file | `packages/features/workspace-apps/src/{preload,main}/` |
+| `updater` | 状态、检查、下载源、安装包打开与状态事件 | `packages/features/updater/src/{preload,main}/` |
+| `windowsSandbox` | 状态检测与安装、修复、卸载 | `packages/features/windows-sandbox/src/{preload,main}/` |
 | `windowControls` | minimize/maximize/close/scale 与状态事件 | `ipc/window-ipc.ts` |
 
 准确方法面由 `packages/contracts/src/desktop.ts`、`http.ts` 和相关 Feature/领域 contract 定义；Updater、Workspace Apps 等 bridge 由各自 Feature contracts 定义。Host namespaces 与 Feature contributions 由 `src/composition/builtin-preload-features.ts` 组装，最后只调用一次 `contextBridge.exposeInMainWorld`。
@@ -64,14 +67,14 @@ unsubscribe();
 
 1. 在共享 contracts 或 Feature contracts 声明窄子对象。
 2. 在 main domain 模块实现能力。
-3. 在 main `src/ipc/` 注册固定 handler/event。
+3. 在所属 main 模块注册固定 handler/event；Feature 通过自己的 scope 释放 handler，宿主公共能力留在 main `src/ipc/`。
 4. 在 host preload namespace 添加明确映射，或由 Feature preload module 向 `PreloadBridgeBuilder` 贡献子对象。
 5. 在 renderer 增加 hook/helper。
 6. 测试 main 行为和 renderer 调用。
 
 如果方法需要大量本地状态机，状态机应留在 main service；preload 只做代理和 listener cleanup。
 
-如果方法其实访问 runtime 数据，应扩展 `DesktopRuntimeClient`，不要新建直达 main 文件存储的桥。
+如果方法访问 runtime 数据，Core 使用 `DesktopRuntimeClient`，Feature 使用 typed operation transport；不要新建直达 main 文件存储的桥。
 
 ## 类型来源
 
@@ -79,7 +82,7 @@ Renderer 的 `window.setsunaDesktop` 类型来自 host contract 与已安装 Fea
 
 ## 验证
 
-Preload 当前只有一个生产文件，验证重点是：
+宿主 preload 由入口、Feature composition 和少量事件辅助模块组成，业务子桥位于各 Feature。验证重点是：
 
 - `pnpm typecheck` 确认 bridge 两端一致。
 - Main 对应模块单元测试。

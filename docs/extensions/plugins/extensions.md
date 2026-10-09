@@ -312,4 +312,4 @@ const value = await ctx.ui.input({ message: 'Name', placeholder: 'example' });
 - 动态工具：`packages/desktop-runtime/src/adapters/tool/extension-tool-host.ts`
 - 生命周期：`packages/desktop-runtime/src/loop/{core,lifecycle,tools}/`
 - 管理 UI：`packages/features/plugin-management/src/renderer/PluginDetail.tsx`
-- 回归测试：`packages/desktop-runtime/test/extensions/`、`test/integration/agent-loop/extensions.test.ts`
+- 回归测试：`packages/desktop-runtime/test/extensions/`、`packages/desktop-runtime/test/integration/agent-loop/extensions.test.ts`

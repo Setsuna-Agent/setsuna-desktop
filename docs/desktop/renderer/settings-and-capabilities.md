@@ -127,7 +127,7 @@ renderer 只负责范围选择与展示，不重新计算计费真源。年度 A
 
 Workspace Dependencies 是独立纵向 Feature，源码位于 `packages/features/workspace-dependencies/`。renderer setup 通过 Settings extension Slot 把设置追加到“运行时”区域；设置视图、controller、文案和 scoped CSS 都由 Feature 自己持有，宿主页不读取包源或工具链状态。
 
-Windows Sandbox 同样由 `packages/features/windows-sandbox/` 纵向拥有。renderer setup 仅在 Windows 返回“运行时”设置扩展；状态 controller、安装/修复/卸载动作、文案和 scoped CSS 均留在 Feature 内，宿主 Runtime Settings 不再读取平台或 sandbox bridge。
+Windows Sandbox 同样由 `packages/features/windows-sandbox/` 纵向拥有。renderer setup 仅在 Windows 注册“运行时”设置扩展；状态 controller、安装/修复/卸载动作、文案和 scoped CSS 均留在 Feature 内，宿主 Runtime Settings 不再读取平台或 sandbox bridge。
 
 Feature 的 typed operations 读取 Node.js/Python/uv 状态、更新 npm/Python 包源，并执行诊断或修复。修复会复用健康的本机或托管工具，只补齐缺失、损坏或版本过低的环境；实际下载、校验和安装在 Feature runtime，不在 renderer 执行进程。旧 `config.json.desktopSettings` 包源字段只作为一次性迁移输入，迁移成功后退役，不再通过统一 `DesktopRuntimeClient` 或根 Config 修改。
 
@@ -159,7 +159,7 @@ Capabilities 的分类导航在 macOS、Windows 上共用左侧插件侧栏，�
 
 页面标题栏分别提供“用对话创建插件”和“导入本地插件”；不属于默认市场的已安装 Plugin 在本地来源分区单独展示。
 
-图片生成和视觉识别第一方 Plugin 的配置不在 Plugin Management 页面中硬编码。各自的 renderer Feature 在 setup 时静态返回对应 Plugin 详情的设置与测试视图：
+图片生成和视觉识别第一方 Plugin 的配置不在 Plugin Management 页面中硬编码。各自的 renderer Feature 在 setup 中通过 `context.ui` 向对应 Plugin 详情的 typed Slot 注册设置与测试视图：
 
 - `packages/features/image-generation/src/renderer/`
 - `packages/features/vision-recognition/src/renderer/`
@@ -229,7 +229,7 @@ Skills 的 renderer snapshot 与命令由 `packages/features/skills/src/renderer
 
 Settings：
 
-- `test/unit/features/settings/SettingsPage.test.ts`
+- `apps/desktop/renderer/test/unit/features/settings/SettingsPage.test.ts`
 - `packages/features/model-provider/test/renderer/`
 - `packages/features/webdav-sync/test/renderer/`
 - `packages/features/network-proxy/test/renderer/`

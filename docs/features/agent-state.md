@@ -51,7 +51,7 @@ Side Conversation 拥有从主线程创建临时、时间点快照的业务事�
 
 源码：`packages/features/goal/`
 
-Goal 拥有持久目标、状态、token budget、自动续轮和用户更新/清除操作。Runtime coordinator 通过 `goalRuntimeHostCapability` 与 AgentLoop 调度、取消和上下文注入协作；Goal 的 projection 是判断后续动作的真源。
+Goal 拥有持久目标、状态、累计用量、自动续轮和用户更新/清除操作。产品不提供 Goal Token 预算，旧字段仅供兼容读取。Runtime coordinator 通过 `goalRuntimeHostCapability` 与 AgentLoop 调度、取消和上下文注入协作；Goal 的 projection 是判断后续动作的真源。
 
 关键边界：
 
@@ -59,7 +59,7 @@ Goal 拥有持久目标、状态、token budget、自动续轮和用户更新/�
 - Event codec/reducer 和 `RuntimeGoalCoordinator` 留在 Feature；Core 只保存 `feature.event` envelope 和全局 sequence。
 - 更新使用冲突语义保护当前 Goal，不能让迟到写入覆盖已变化状态。
 - Renderer 提供 composer status/goal 状态呈现与控制，业务状态不进入 App controller。
-- Goal 自动续轮仍必须服从 turn queue、取消、预算、终态和 tool approval 的 Core 规则。
+- Goal 自动续轮仍必须服从 turn queue、取消、用量限制、终态和 tool approval 的 Core 规则。
 
 完整状态机见 [持久化 Goal](../designs/current/persistent-goals.md)；与 active turn 输入的交互见 [Active turn 发送队列](../designs/current/queued-turn-inputs.md)。
 

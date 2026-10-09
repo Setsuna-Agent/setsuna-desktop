@@ -14,18 +14,19 @@ Renderer 是桌面工作台 UI。它只依赖共享 contracts 和 preload 暴露
 | `src/composition/` | 唯一 Renderer Feature composition root、内置 Renderer Plugin 与 host capability 投影 | [Feature Composition](../../architecture/feature-composition.md) |
 | `src/kernel/renderer-plugins/` | Slot registry、transaction、selection、layout preference、outlet 与 inspection | [Renderer Plugin Runtime](../../designs/current/renderer-plugin-runtime.md) |
 | `src/kernel/declarative-plugin-ui/` | 普通 Plugin host tree 与 sandbox page 到白名单 Slot 的安全 gateway | [Plugin Bundles](../../extensions/plugins/bundles.md) |
-| `packages/features/ui-card/src/renderer/` | 独立页面/对话卡片共享的 opaque-origin iframe 与 typed card renderer | [Plugin Bundles](../../extensions/plugins/bundles.md) |
+| `src/kernel/sandboxed-plugin-ui/` | 独立页面与对话卡片共用的 opaque-origin iframe 宿主 | [Plugin Bundles](../../extensions/plugins/bundles.md) |
+| `packages/features/ui-card/src/renderer/` | 校验 Plugin 来源并展示 typed card result，沙箱组件由宿主注入 | [UI Card](../../features/tools-and-content.md#ui-card) |
 | `packages/features/review/src/renderer/` | Review panel、Git 控件、状态、文案与样式 | [Workspace 与 debug](workspace-and-debug.md) |
 | `packages/features/conversation-debug/src/renderer/` | 事件/trace 图、列表、inspector 与 Feature settings | [Workspace 与 debug](workspace-and-debug.md) |
 | `packages/features/runtime-activity/src/renderer/` | 跨线程运行任务、后台服务管理与全局 Overlay | [App 与 runtime 状态](app-and-runtime-state.md) |
 | `packages/features/plugin-management/src/renderer/` | Plugin catalog、Hook projection、安装与 extension 状态 | [Settings 与 capabilities](settings-and-capabilities.md) |
 | `packages/features/mcp/src/renderer/` | MCP server snapshot、管理动作与迟到请求收敛 | [Settings 与 capabilities](settings-and-capabilities.md) |
-| `src/features/settings/` | 外观、模型、runtime、数据根与 Feature 设置宿主 | [Settings 与 capabilities](settings-and-capabilities.md) |
+| `src/features/settings/` | 外观、Core runtime、数据根与 Feature 设置宿主；模型供应商设置归 Model Provider Feature | [Settings 与 capabilities](settings-and-capabilities.md) |
 | `packages/features/usage/src/renderer/` | Usage 设置、会话投影、状态服务与样式 | [Settings 与 capabilities](settings-and-capabilities.md) |
 | `src/features/capabilities/` | Plugin/MCP/Skill 的宿主 presentation 与 Hook view adapter | [Settings 与 capabilities](settings-and-capabilities.md) |
 | `src/services/runtime-client/` | 类型化 client、snapshot + SSE 状态 | [App 与 runtime 状态](app-and-runtime-state.md) |
 | `src/shared/` | UI primitive、i18n、偏好、branding、通用 helper | [Shared UI 与样式](shared-ui-and-styles.md) |
-| `test/unit/` | 镜像 `src/` 的单元/组件测试 | [测试与验证](../../development/testing.md) |
+| `apps/desktop/renderer/test/unit/` | 镜像 `src/` 的单元/组件测试 | [测试与验证](../../development/testing.md) |
 
 ## 顶层数据流
 
@@ -84,7 +85,7 @@ Runtime state、导航状态、feature 临时状态分开持有：
 - `hooks/` 持有异步交互与跨组件状态。
 - 纯 `.ts` helper 负责 projection、format、parser、model。
 - `styles/` 有稳定入口。
-- 测试位于镜像 `test/unit/features/<feature>/`。
+- 测试位于镜像 `apps/desktop/renderer/test/unit/features/<feature>/`。
 
 只有多个 feature 都需要且无业务归属的代码才进入 `shared/`。Runtime client 属于跨 feature service，不属于 shared。
 

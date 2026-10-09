@@ -128,7 +128,7 @@ Review preference 按 workspace 持久化在 localStorage。Main 才执行 Git �
 `changes` 是与审查并列的 Workspace 单例面板，由 Review Feature 的 `renderer/history/GitChangesPanel.tsx` 提供。导航上方展示工作区的暂存/未暂存文件，选择提交后展示该次提交的文件；下方为可折叠的冲突历史与提交图。外侧分隔线调整整个历史区域的高度，两栏之间的分隔线调整各自高度；折叠时只保留圆角标题行，另一栏填满剩余空间，两栏都折叠则标题行在底部按分区间距排列。点击分支或标签只浏览其历史，不执行 checkout。窄面板通过返回按钮回到原来的导航位置，宽面板左侧显示 diff、冲突处理或提交消息编辑器，右侧保留导航；拖动导航左边缘或使用左右方向键调整宽度。
 
 - 导航采用紧凑布局：顶部保留刷新与「…」菜单，提交消息框内整合 AI 生成和提交分体按钮，筛选框常驻文件列表上方。提交操作统一放在提交按钮及其菜单中，「…」保留分支浏览、拉取、推送、提交对话框和设置。侧栏使用跟随主题的柔和底色，提交区、文件列表与底部提交图用独立 12px 圆角表面和轻阴影区分；筛选框与提交按钮采用胶囊轮廓，文件分组沿用文件树的字体、圆角选中态和左右留白，文件行只在 hover/focus 时显示打开、丢弃、暂存或取消暂存；提交行作者保留在悬浮详情中。
-- 新增的 Git 菜单通过 renderer host 的 `ContextMenu` 使用宿主菜单封装；根菜单和挂载到 body 的多级子菜单都与文件右键菜单共用 `shared/styles/context-menu.css`，外观和明暗主题只在这一处维护。
+- 新增的 Git 菜单通过 renderer host 的 `ContextMenu` 使用宿主菜单封装；根菜单和挂载到 body 的多级子菜单都与文件右键菜单共用 `packages/renderer-ui/src/styles/menu.css`，外观和明暗主题只在这一处维护。
 - 「… → 设置」使用齿轮图标，弹窗复用宿主 `SettingsDialog`、模型选择器和 Toggle，分为提交消息与冲突处理两组；模型与“专用模型”配置共用存储。自动解决冲突默认关闭，打开后展开冲突模型与自定义提示词。提示词可单独恢复默认；取消保留原设置，保存以一次 revision 更新整个表单，失败时保留编辑。拉取/同步出现实际冲突后，runtime 启动独立的隐藏处理任务，过程在变更左侧详情区展示；冲突历史和转录由 runtime 持久保存，重新打开时按工作区加载，界面缓存合并新任务以避免旧加载响应覆盖刚启动的记录。重启会将未完成的任务结算为已停止，保留已有内容供查看。Git 错误默认显示可关闭的简短提示，完整错误及 stash 恢复命令保留在折叠详情中；自动处理启动后仍保留提示，直到用户关闭或开始下一次操作。
 - `GitChangesGroupHeader` 在 hover/focus 时提供整组操作：打开整组 diff、暂存或取消全部暂存，未暂存组还可批量丢弃。筛选自动展开匹配分组，清空后恢复原折叠状态；筛选只影响可见行，组计数和操作范围仍是完整分组。批量 Git 操作合并路径后调用一次 bridge，丢弃统一确认。
 - `GitChangesCommitComposer` 与原提交对话框共享 `WorkspaceGitCommitProvider` 的草稿和操作状态。输入框复用 `Input.TextArea` 的自动高度：按内容及宽度在 1–3 行间伸缩，超出后内部滚动；下边框支持拖拽或方向键调整高度，手动高度在编辑时保留，双击下边框或按 Home 恢复自动高度。Enter 换行，Cmd/Ctrl+Enter 提交。侧栏的提交及 AI 消息生成严格使用暂存区；无暂存更改时禁用普通提交。仅在对话框显式勾选「包含未暂存的更改」才会暂存全部再提交，该选项不影响侧栏且关闭对话框后重置。Main / IPC / preload 的默认范围同样为暂存区。AI 生成按钮将模型的实时输出逐步填入草稿，完成后可编辑；提交失败保留消息，切换项目会忽略旧请求结果。
@@ -144,7 +144,7 @@ Review preference 按 workspace 持久化在 localStorage。Main 才执行 Git �
 - `main/diff-parser.ts` 与 `main/git-command.ts` 供现有审查和历史查询共用；展示沿用 `ReviewSummarySection`，保留单列/双列、换行和图片预览。
 - 历史通过现有 Review 状态失效刷新，不额外占用 worktree 订阅。相同历史起点保留已加载页，项目、分支和文件切换均丢弃过期响应。
 
-测试位于 `packages/features/review/test/integration/main/git-history.test.ts` 和 `test/renderer/history/`，覆盖真实 Git 的根提交、合并、重命名、删除、worktree、固定起点分页，以及导航和异步响应隔离。
+测试位于 `packages/features/review/test/integration/main/git-history.test.ts` 和 `packages/features/review/test/renderer/history/`，覆盖真实 Git 的根提交、合并、重命名、删除、worktree、固定起点分页，以及导航和异步响应隔离。
 
 ## Terminal
 
@@ -244,7 +244,7 @@ Conversation debug 的独立 `conversation-debug.css` 仅导入 `styles/` 下的
 
 ## 测试
 
-Workspace 测试位于 `test/unit/features/workspace/`，覆盖 panel、文件、hooks、model 与 resize。Review、Workspace Apps 和 Terminal 自有 renderer 测试分别位于 `packages/features/review/test/renderer/`、`packages/features/workspace-apps/test/renderer/`、`packages/features/terminal/test/renderer/`。
+Workspace 测试位于 `apps/desktop/renderer/test/unit/features/workspace/`，覆盖 panel、文件、hooks、model 与 resize。Review、Workspace Apps 和 Terminal 自有 renderer 测试分别位于 `packages/features/review/test/renderer/`、`packages/features/workspace-apps/test/renderer/`、`packages/features/terminal/test/renderer/`。
 
 Conversation debug 测试位于 `packages/features/conversation-debug/test/`，重点覆盖分页切换 SSE、语义化活动展示、record folding、graph identity、serialization 脱敏、trace watermark、turn filtering、canvas navigation、virtual window 和内存 store 边界。
 

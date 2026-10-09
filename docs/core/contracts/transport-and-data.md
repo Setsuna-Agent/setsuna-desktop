@@ -11,8 +11,12 @@ type RuntimeRequestInput = {
   path: string;
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
+  requestId?: string;
+  responseMode?: 'body' | 'feature-operation';
 };
 ```
+
+`requestId` 关联 renderer 的取消信号与 main 持有的本地请求；`responseMode` 让 typed Feature failure 跨 IPC 保留结构化错误。它们都不授予任意网络访问能力。
 
 它故意不包含：
 
@@ -28,14 +32,12 @@ Main 的 `RuntimeHost` 再限制 path 为 `/health` 或 `/v1/*`。
 
 `http.ts` 用方法级 interface 描述 renderer 可用的 runtime 能力。方法按数据域覆盖：
 
-- Threads、messages、turns、queue、goal、review、context。
+- Threads、messages、turns、queue、context。
 - Attachments。
-- Config、provider models、task models。
-- Hooks。
+- Core config 与共享模型选择投影。
 - Projects、files、search、workspace status。
-- Skills、Usage、Memory、MCP、Plugin Management、Workspace Dependencies 等管理面通过独立 typed Feature operations，不扩展统一 client。
+- Goal、Review、Model Provider、Skills、Usage、Memory、MCP、Plugin/Hook 管理、Conversation Debug、Workspace Dependencies 等业务通过独立 typed Feature operations，不扩展统一 client。
 - Approvals。
-- Debug traces。
 
 Renderer 的 `services/runtime-client/client.ts` 必须完整实现它。纵向 Feature 依赖自己的 operation contract 与宿主 transport，不依赖统一 interface method 或具体 path。
 
@@ -46,9 +48,7 @@ Renderer 的 `services/runtime-client/client.ts` 必须完整实现它。纵向 
 - Runtime bridge。
 - Data-root。
 - Desktop/system。
-- Browser。
-- Feature-owned bridge（Review、Terminal、Workspace Apps 等）通过对应 Feature contracts 与 host bridge 显式组合。
-- Updater。
+- Feature-owned bridge（Browser、Computer Use、Review、Terminal、Network Proxy、Plugin Management、Updater、WebDAV、Windows Sandbox、Workspace Apps）通过对应 Feature contracts 与 host bridge 显式组合。
 - Window controls。
 
 Bridge 类型约束 preload 和 renderer；main handler 的输入输出也应复用同一 DTO。
@@ -69,7 +69,7 @@ Bridge 类型约束 preload 和 renderer；main handler 的输入输出也应复
 
 ### Thread SSE
 
-只发送 `RuntimeEvent`。订阅输入：
+传输 `StoredThreadEvent`（Core 事件、Feature envelope 与可读取的历史事件），main/preload 向 renderer 转发 `RuntimeEventBatch`，必要时携带 canonical snapshot `resync`。订阅输入：
 
 - `threadId`
 - `sinceSeq`

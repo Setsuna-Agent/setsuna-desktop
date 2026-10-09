@@ -41,7 +41,7 @@ pnpm test:integration
 pnpm test:release
 ```
 
-先准备固定版本 bundled ripgrep，再运行必须在各打包平台验证的 Main、Git、路径、Shell、Store、workspace 和构建脚本门禁。完整 unit 套件由 release workflow 的单独 quality-gate job 运行一次，不在四个平台重复执行纯 Contract/Renderer 测试。
+先准备固定版本 bundled ripgrep，再运行必须在各打包平台验证的 Main、Git、路径、Shell、Store、workspace 和构建脚本门禁。完整 unit 套件由 release workflow 的单独 quality-gate job 运行一次，不在三个打包目标重复执行纯 Contract/Renderer 测试。
 
 ### All
 
@@ -56,7 +56,7 @@ pnpm test
 先确认 package script 和 Vitest config，再从已有命令派生：
 
 ```bash
-pnpm test:unit packages/contracts/test/thread-events.test.ts
+pnpm test:unit packages/contracts/test/thread-events.thread-state.test.ts
 pnpm test:unit apps/desktop/renderer/test/unit/services/runtime-client/client.test.ts
 pnpm test:integration packages/desktop-runtime/test/integration/agent-loop/queued-turn-inputs.test.ts
 ```
@@ -69,8 +69,8 @@ pnpm test:integration packages/desktop-runtime/test/integration/agent-loop/queue
 | --- | --- |
 | Contract/event | `packages/contracts/test/` |
 | Runtime loop | `packages/desktop-runtime/test/loop/` + `integration/agent-loop/` |
-| Runtime route | `test/server/` + `integration/runtime-server/` |
-| Store | `test/adapters/store/` + legacy/recovery fixture |
+| Runtime route | `packages/desktop-runtime/test/server/` + `packages/desktop-runtime/test/integration/runtime-server/` |
+| Store | `packages/desktop-runtime/test/adapters/store/` + legacy/recovery fixture |
 | Provider | `packages/features/model-provider/test/` + runtime history/compaction integration |
 | Tool/MCP/Skill/Plugin | 对应 adapter + AgentLoop integration |
 | Main | `apps/desktop/main/test/unit/<domain>/` |
@@ -91,7 +91,6 @@ pnpm typecheck
 - `src/` 测试隔离。
 - Build artifact 测试隔离。
 - 单文件/目录密度。
-- `Tree.md` 同步。
 
 然后运行 TypeScript project references。
 
@@ -113,40 +112,36 @@ Lint 检查源码规范。Build 验证：
 
 ## 文档验证
 
-最低：
+纯文档修改检查相对链接、源码/测试入口、命令是否仍有效，并运行：
 
 ```bash
-pnpm docs:tree
 git diff --check
 ```
 
+涉及包边界或架构检查脚本时，运行 `pnpm check:architecture`；修改 TypeScript、package script 或构建图时按影响面追加 `pnpm typecheck` 和相关脚本测试。文档中的示意树只解释职责，不做目录镜像校验。
+
 ## Feature projection 冷重放基准
 
-Feature projection checkpoint 以实测恢复成本为准，不进入普通 CI 门禁。手动运行真实 SQLite reader 基准：
+手动运行真实 SQLite reader 基准：
 
 ```bash
 pnpm benchmark:feature-projection
-pnpm benchmark:feature-projection -- --events=10000,50000,100000 --runs=3
+pnpm benchmark:feature-projection --events=10000,50000,100000 --runs=3
 ```
 
-输出比较单个与两个并行 projection 的 process-cold 重放耗时、读取页数和记录数。它不会清除 OS page cache，也不声明跨机器性能结论；应在目标平台和代表性硬件上保存结果。只有实际历史规模超过已测范围，或冷恢复持续超过产品约定预算时，才设计持久 checkpoint、版本与失效协议。
+基准比较单个与两个并行 projection 的全量重放，以及已有 durable checkpoint 时的新 projection 恢复，输出耗时、读取页数和记录数。它在同一进程中创建新的 projection store，不清除 OS page cache，也不等价于完整应用冷启动。
 
-还应检查：
+Goal 与 Collaboration 已使用版本化、可校验的持久 checkpoint；基准用于评估现有缓存效果与历史规模变化，不再作为“是否首次引入 checkpoint”的待办。检查点可重建，不能代替事件真源；修改其 key、codec 或恢复逻辑时验证旧缓存、损坏缓存和事件尾回放。
 
-- Markdown 相对链接存在。
-- 源码路径仍存在。
-- 没有旧文档路径引用。
-- `Tree.md` 展示新的 docs 目录。
-
-大规模文档重组建议再运行 `pnpm typecheck`，确认 generated tree 和 AGENTS 导航一致。
+基准不进入普通 CI；在目标平台和代表性硬件上保存对比结果，不把跨机器数字当作统一阈值。启动链路变更还需遵循 [启动性能约束](../architecture/runtime-flows.md#启动性能约束硬性)，验证慢任务、失败和取消不阻塞核心就绪。
 
 ## 测试编写规则
 
 - 不新增 UI 展示和样式单测：不锁定 CSS、类名、颜色、字体、图标、DOM 排列、布局尺寸或动画效果。混合用例只保留业务行为、数据处理、安全边界和实际功能交互断言。
 - Production 与 test 严格分离。
 - Test 路径镜像 source path。
-- 共享大型 setup 放 `test/support/`。
-- Integration fixture 放 `test/fixtures/`。
+- 共享大型 setup 放对应模块的 `test/support/`。
+- Integration fixture 放对应模块的 `test/fixtures/`。
 - 使用临时目录和随机 loopback port。
 - Cleanup 放 `finally/afterEach`。
 - 不依赖用户 home、全局 Git config、系统 rg 或现有数据根。
@@ -155,14 +150,3 @@ pnpm benchmark:feature-projection -- --events=10000,50000,100000 --runs=3
 - 取消/迟到回复测试先通过信号确认目标处理函数已进入，再触发取消；不要用固定 sleep 猜测子进程启动进度。
 - 调度器测试显式推进受控时钟，保留真实 HTTP/文件 I/O；事件流读取先消费已有缓冲，超时后复用未完成的读取，并清理定时器。
 - 同时测试失败/取消/recovery，不只 happy path。
-
-## 文档-only 交付
-
-通常运行：
-
-```bash
-pnpm docs:tree
-git diff --check
-```
-
-如果还修改 `AGENTS.md`、生成器、package script 或构建说明，追加 `pnpm typecheck`。

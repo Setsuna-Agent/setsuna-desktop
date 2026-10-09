@@ -34,7 +34,7 @@ packages/features/<feature>/
 | `collaboration` | `collaboration` | O | — | — | O | 子任务/协作线程状态、投影与 spawn result |
 | `computer-use` | `computer-use` | R | R | B | R | 独立会话授权、受监督主桌面截图/基础输入与急停 |
 | `conversation-debug` | `conversation-debug` | O | — | — | O | 调试设置、事件/trace 查询与时间线面板 |
-| `goal` | `goal` | O | — | — | O | 持久 Goal、自动续轮、预算/状态与 UI |
+| `goal` | `goal` | O | — | — | O | 持久 Goal、自动续轮、用量/状态与 UI |
 | `image-generation` | `image-generation` | O | — | — | O | 图片生成配置、服务、资产结果与 Plugin 详情贡献 |
 | `mcp` | `mcp` | R | — | — | R | MCP transport、OAuth、tools/resources 与管理面 |
 | `memory` | `memory` | O | — | — | O | 记忆设置、CRUD、后台提取与上下文注入 |
@@ -48,6 +48,7 @@ packages/features/<feature>/
 | `skills` | `skills` | R | — | — | R | Skill catalog、CRUD、extra roots 与 MCP 依赖安装 |
 | `terminal` | `terminal` | — | R | B | R | PTY session、事件恢复、Terminal pane |
 | `thread-title-generation` | `thread-title-generation` | O | — | — | O | 首轮自动标题、专用模型设置与重命名竞争保护 |
+| `ui-card` | `ui-card` | — | — | — | R | Plugin UI 卡片契约、来源校验与对话结果展示；沙箱 iframe 由宿主注入 |
 | `updater` | `updater` | — | R | B | R | 更新检查、下载源、校验、安装与 UI 状态 |
 | `usage` | `usage` | O | — | — | O | Usage 持久化、聚合、线程实时补齐与统计 UI |
 | `vision-recognition` | `vision-recognition` | O | — | — | O | 视觉模型选择、附件识别、测试与 Plugin 详情贡献 |
@@ -69,7 +70,7 @@ Inventory 的事实来源不是这张表，而是四个 composition root 和各 
 
 ### 工具、内容与能力管理
 
-- [Artifact、Image/Vision、Skills 与 Plugin Management](tools-and-content.md)
+- [Artifact、UI Card、Image/Vision、Skills 与 Plugin Management](tools-and-content.md)
 - [MCP](mcp.md)
 - [Runtime 工具宿主](../core/runtime/tools-and-capabilities.md)
 
@@ -139,7 +140,7 @@ Collaboration、Goal 等私有持久状态使用 owner codec 包装为 Core `fea
 
 ### Renderer contribution
 
-Settings、tool result、composer status 等视图由 Feature setup 静态返回。宿主负责统一布局、导航、主题和 UI primitives，Feature 负责业务 state/controller/messages/scoped CSS。
+Settings、tool result、composer status 等视图由 Feature setup 通过 scope-bound `context.ui` 注册到 typed Slot，启动注册由 Renderer Plugin Runtime 原子提交。具体 Slot contract 在 `packages/renderer-contracts`；宿主负责布局、导航、主题和 UI primitives，Feature 负责业务 state/controller/messages/scoped CSS。React component/hook/effect 不执行注册，详见 [Renderer Plugin Runtime](../designs/current/renderer-plugin-runtime.md)。
 
 ## Required 与 Optional 的判断
 

@@ -292,7 +292,7 @@ Bundle 是否执行代码由 `extension` 字段决定，而不是由 schema 版�
 - 缓存位于 runtime 数据目录的 `plugin-repositories/openai-plugins/`，已安装副本仍写入 `plugins/<plugin-id>`。renderer 只接收公开仓库地址、插件相对路径、revision 和能力元数据。
 - 仓库目录项使用 `openai-plugins:<name>` 作为市场 ID，安装后保留原 Bundle ID。索引记录 `installationSource: repository` 和来源信息；同名插件若已从其他来源安装，会明确提示冲突，不能直接覆盖。
 - 更新根据插件文件内容哈希判断，因此上游未提升 manifest 版本号的 Skill/MCP 改动也能发现。更新由用户点击执行，沿用 Bundle 事务和用户 MCP 配置保留规则。
-- 默认市场排除尚需为 Setsuna 注册应用或申请客户端准入的 10 个条目：Figma、Canva、Vercel、monday.com、Gmail、Google Calendar、Google Drive、Slack、Dropbox、Zoom。读取旧缓存和刷新仓库时使用同一筛选，预览、安装和更新也只能访问筛选后的目录。已注册的 GitHub 和可直接授权的服务继续保留；已有安装仍可管理、卸载，本地导入保持现有流程。平台核对依据见 [注册与准入调研记录](oauth-registration-checklist.md)。
+- 默认市场排除尚需为 Setsuna 注册应用或申请客户端准入的条目，名单以 `packages/desktop-runtime/src/adapters/plugin/repository-plugin-catalog.ts` 为准。读取旧缓存和刷新仓库时使用同一筛选，预览、安装和更新也只能访问筛选后的目录。其他通过兼容检查的条目继续保留；已有安装仍可管理、卸载，本地导入保持现有流程。认证适配限制见 [MCP OAuth](../../features/mcp.md#oauth-接入边界)。
 - 市场仅显示当前可安装的条目；兼容检查失败、来源不受支持、配置无效或同名来源冲突的条目不展示，内部保留原因并拒绝直接安装请求。当前只安装索引中位于该仓库 `plugins/` 下、通过 Skill/MCP 兼容检查的包；没有对应 MCP 的必需 OpenAI App、可执行扩展及指向其他仓库的条目不会自动安装。附带的 Codex Hooks、agents、commands 不注册，详情单独提示这些未接入的能力，不阻止独立 Skill/MCP 安装。
 - 归档在写入插件目录前校验路径、重复条目、链接和体积；压缩下载上限 64 MiB，解压上限 192 MiB。仓库插件不会获得仅应用内置插件拥有的 Hook/extension 信任或模型宿主权限。
 
@@ -443,7 +443,7 @@ CLI 连接器的 `command` 也用于工具调用归属：runtime 按本轮已安
 - `packages/desktop-runtime/test/adapters/plugin/file-plugin-draft-store.test.ts`
 - `file-plugin-marketplace.test.ts`
 - `bundled-hook-plugins.test.ts`
-- `test/adapters/tool/plugin-bundle-tool-host.test.ts`
+- `packages/desktop-runtime/test/adapters/tool/plugin-bundle-tool-host.test.ts`
 - `packages/desktop-runtime/test/extensions/`
 - `packages/desktop-runtime/test/integration/agent-loop/extensions.test.ts`
 - `packages/features/plugin-management/test/renderer/`

@@ -96,11 +96,12 @@ Runtime 的 `secrets.json` 只保存适合 runtime 管理的 secret 状态；需
 | `runtime-ipc.ts` | runtime request、attachment upload、SSE subscribe/unsubscribe |
 | `data-root-ipc.ts` | 数据根状态、扫描、迁移、恢复、旧根清理 |
 | `desktop-ipc.ts` | 目录选择、profile、clipboard、图片、本地路径与外链 |
-| `browser-ipc.ts` | browser tab 注册、active tab、截图、favicon、设备模拟 |
 | `window-ipc.ts` | minimize/maximize/close、标题栏 scale |
 | `sender.ts` | 已登记桌面窗口的 sender 校验，拒绝未登记窗口与 webview guest |
 
 `window/thread-windows.ts` 提供 `window-control:open-thread` 和 `window-control:get-initial-thread-id`：校验来源窗口与目标会话，创建共享 runtime 的桌面窗口，并为各窗口保留独立的启动会话。`desktop:when-ready` 按 sender 保存 readiness，关闭一个窗口不会撤销其他窗口的 handler。
+
+Browser 的 tab 注册、active tab、截图、favicon、设备模拟和扩展 IPC 由 `packages/features/browser/src/main/` 持有，固定桥在该 Feature 的 preload 入口组装，不再有宿主 `browser-ipc.ts`。
 
 `window/thread-deletion.ts` 在转发线程 DELETE 前串行检查所有桌面窗口。目标会话及子会话存在文件草稿时，在发起窗口确认是否放弃修改并删除；文件操作未完成或窗口无法响应时不执行删除。取消以结构化结果返回，renderer 不将其当成操作失败或已删除。
 
@@ -168,11 +169,11 @@ Main handler 要确认请求来自 `DesktopWindowRegistry` 登记的可信桌面
 
 重点测试：
 
-- `test/unit/runtime/host.test.ts`
-- `test/unit/runtime/bundled-tools.test.ts`
-- `test/unit/runtime/desktop-environment.test.ts`
-- `test/unit/runtime/native-bridge-server.test.ts`
-- `test/unit/security/credential-encryption.test.ts`
-- `test/unit/security/credential-vault.test.ts`
+- `apps/desktop/main/test/unit/runtime/host.test.ts`
+- `apps/desktop/main/test/unit/runtime/bundled-tools.test.ts`
+- `apps/desktop/main/test/unit/runtime/desktop-environment.test.ts`
+- `apps/desktop/main/test/unit/runtime/native-bridge-server.test.ts`
+- `apps/desktop/main/test/unit/security/credential-encryption.test.ts`
+- `apps/desktop/main/test/unit/security/credential-vault.test.ts`
 
 IPC 的领域行为通常由被调用 service 的测试和 renderer bridge/client 测试共同覆盖；新增复杂校验时应为 IPC helper 提取可测试的纯函数。

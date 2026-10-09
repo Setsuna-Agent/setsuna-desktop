@@ -29,7 +29,7 @@ const skill: RuntimeSkillSummary = {
   kind: 'builtin',
   enabled: true,
 };
-const workspaceMentionPaths = ['package.json', 'README.md', 'Tree.md', 'tsconfig.json', 'pnpm-lock.yaml'];
+const workspaceMentionPaths = ['package.json', 'README.md', 'CONTRIBUTING.md', 'tsconfig.json', 'pnpm-lock.yaml'];
 const plugin: RuntimePluginSummary = {
   id: 'github', name: 'GitHub', installedAt: '2026-09-13',
   skills: [], mcpServers: [], hooks: [], hookCount: 0, resources: [],

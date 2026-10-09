@@ -192,12 +192,11 @@ Reducer 不能删除用户历史来模拟压缩。
 
 Portable semantic history仍是 `RuntimeMessage[]`。`providerMetadata` 只是可选增强：
 
-- V2 metadata 带 provider ID/kind/model 和 endpoint fingerprint。
+- 新写入使用 v3 metadata，带 provider ID/kind/model、endpoint fingerprint 与 replay blocks；v2 仅保留只读兼容。
 - Semantic fingerprint 绑定最终 portable message。
 - Provider/context 任一不匹配即回退 semantic conversion。
-- OpenAI-compatible Chat 保持 semantic-only。
-- Anthropic 可保存 signed/redacted content blocks。
-- OpenAI Responses 可保存白名单 output/reasoning/function/compaction items。
+- 三种受支持协议都经 Model Provider Feature 转换，允许保留各自支持的 text/thinking/tool-call 签名与 ID。
+- Anthropic 的 signed/redacted thinking 和 Responses 的 native replay/compaction 仍受同一 source 与 semantic fingerprint 边界约束。
 - 不认识、超限或部分无法安全保存时整包省略。
 
 `item.started/delta/completed` 等流 UI 事件不构成第二套模型历史。
@@ -229,8 +228,8 @@ Debug trace 由 `packages/features/conversation-debug/src/contracts/` 定义，�
 
 首先运行 `packages/contracts/test/thread-events.*.test.ts` 中与事件域最相关的文件。然后按改动补：
 
-- Runtime `test/loop/lifecycle/runtime-event-writer.test.ts`
+- `packages/desktop-runtime/test/loop/lifecycle/runtime-event-writer.test.ts`
 - Runtime AgentLoop integration。
-- `test/adapters/store/sqlite-thread-store.test.ts`
-- Renderer `services/runtime-client/runtimeEvents.test.ts`
+- `packages/desktop-runtime/test/adapters/store/sqlite-thread-store.test.ts`
+- `apps/desktop/renderer/test/unit/services/runtime-client/runtimeThreadState.test.ts`
 - Chat display/timeline tests。

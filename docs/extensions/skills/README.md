@@ -167,7 +167,7 @@ Skill 本身不能把 secret 写入 manifest；认证仍走 MCP/native secret �
 ## 测试
 
 - `packages/desktop-runtime/test/integration/adapters/skill/file-skill-registry.test.ts`
-- `test/adapters/skill/skill-mcp-dependency-coordinator.test.ts`
-- `test/adapters/tool/skill-management-tool-host.test.ts`
+- `packages/desktop-runtime/test/adapters/skill/skill-mcp-dependency-coordinator.test.ts`
+- `packages/desktop-runtime/test/adapters/tool/skill-management-tool-host.test.ts`
 - Runtime server capabilities tests。
 - `packages/features/skills/test/renderer/`。

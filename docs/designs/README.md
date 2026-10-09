@@ -14,10 +14,10 @@
 
 ## 评审与治理
 
-- [Feature Composition 决策概览](../architecture/feature-composition.md)：当前试运行边界、统一 FeatureHost API 与结果门槛。
-- [Feature Composition 历史评审记录](history/feature-composition-architecture.md)：记录首轮方案、复杂度复审及被删除机制；不再作为当前规范。
-- [Model Provider Pi 迁移记录](history/model-provider-pi-migration.md)：替换旧协议栈时的执行计划与验收记录；当前 owner 规则以 [Model Provider Feature](../features/model-provider.md) 为准。
-- [架构复杂度收敛评审](history/architecture-complexity-review.md)：协议边界与事件完整性实施状态、协调层热点和分阶段治理计划。
+- [Feature Composition 决策概览](../architecture/feature-composition.md)：当前所有权边界、统一 FeatureHost API 与生命周期规则。
+- [Feature Composition 历史评审记录](history/feature-composition-architecture.md)：保留业务收拢的取舍和被后续实现替代的方案，不再包含施工计划。
+- [Model Provider Pi 迁移记录](history/model-provider-pi-migration.md)：替换旧协议栈时的所有权与持久兼容决策；当前 owner 规则以 [Model Provider Feature](../features/model-provider.md) 为准。
+- [架构复杂度收敛评审](history/architecture-complexity-review.md)：保留协议、事件完整性与职责拆分的决策依据，不维护历史热点清单。
 - [Runtime 边界与事件去向](../architecture/runtime-boundary-matrix.md)：`DesktopRuntimeClient` 的传输规则和 RuntimeEvent 的显式投影边界。
 
 ## 何时新增设计文档

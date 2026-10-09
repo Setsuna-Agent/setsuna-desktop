@@ -1,6 +1,6 @@
 # 工具、内容与能力管理 Features
 
-本页覆盖 Approval Review、Artifact、Image Generation、Vision Recognition、Skills 和 Plugin Management。MCP 有独立的[详细文档](mcp.md)；通用工具审批与执行链见 [Runtime 工具宿主](../core/runtime/tools-and-capabilities.md)。
+本页覆盖 Approval Review、Artifact、UI Card、Image Generation、Vision Recognition、Skills 和 Plugin Management。MCP 有独立的[详细文档](mcp.md)；通用工具审批与执行链见 [Runtime 工具宿主](../core/runtime/tools-and-capabilities.md)。
 
 ## Approval Review
 
@@ -25,6 +25,19 @@ Artifact 拥有 `publish_artifact` 工具语义和持久结果展示。Runtime �
 - 打开、预览和复制仍通过宿主注入的受限文件能力，不把本地绝对路径变成 renderer 权限。
 
 Runtime Core 的 `ArtifactToolHost` 只是绑定 Feature service 的薄 adapter，不应复制 schema、审批或结果格式化。
+
+## UI Card
+
+源码：`packages/features/ui-card/`
+
+UI Card 只有 contracts 与 renderer 入口，拥有 `plugin.ui-card@1` 结果的 schema、大小边界、Plugin 来源要求和对话卡片展示。Runtime 的 extension 结果归一化复用其 contract；它不提供独立 runtime service。
+
+- Renderer required：通过 Chat tool-result chain 注册卡片解析器，要求工具记录与卡片具有一致的 Plugin 来源。
+- 卡片放在对应 tool run 的持久 timeline 位置，历史加载和 SSE 重连复用同一投影。
+- `SandboxedUiFrame` 由宿主 `apps/desktop/renderer/src/kernel/sandboxed-plugin-ui/` 持有，经 capability 注入 Feature；独立 Plugin 页面也复用该宿主实现。
+- 卡片脚本只在 opaque-origin iframe 内执行，没有主窗口 DOM、preload、网络或 host action 权限。
+
+Envelope 与 Bundle 声明见 [Plugin Bundles](../extensions/plugins/bundles.md#对话-htmlcssjs-卡片)。
 
 ## Image Generation
 

@@ -80,7 +80,7 @@
 - `useDesktopSidebarAutoCollapse.ts`：窗口/布局条件下的 sidebar 自动收起。
 - `useGlobalEscapeMenus.ts`：全局 Esc 收敛浮层。
 
-Updater 不再进入 App controller。Renderer composition 解析 Feature 提供的单例状态服务，`UpdaterFeatureServiceBoundary.tsx` 只负责把它接到 React context 和宿主顶栏插槽；设置内容通过静态 settings extension catalog 挂载。
+Updater 不进入 App controller。Renderer composition 注入宿主 capability，Feature setup 持有状态服务并注册顶栏与设置 Slot contribution；状态、操作与视图实现在 `packages/features/updater/src/renderer/`。
 
 ## Layout
 
@@ -147,9 +147,9 @@ Layout 只组合已经定义清楚的状态和 callback，不在 render 中发�
 4. State hook 或 feature
 5. Tests
 
-### `runtimeEvents.ts`
+### `runtimeThreadState.ts`
 
-把 contracts 的 `RuntimeEvent` 应用到当前 thread，并提供 activity event 分类。核心 reducer 仍在 contracts；这里处理 renderer 层包装，不能另写一套不同投影。
+`applyCurrentThreadEventBatch` 统一处理当前线程的 batch、sequence gate 与 resync snapshot，内部复用 contracts 的 reducer。Activity 分类使用 contracts 的 `isRuntimeActivityEvent`；这里不另建事件分类表或不同投影。
 
 ### `useRuntimeClientState.ts`
 
@@ -171,7 +171,7 @@ Renderer 的薄 runtime facade，只持有：
 - Active turn、terminal turn IDs 与 polling recovery。
 - Activity、context compaction、approval 和 thread mutation。
 
-该 hook 只依赖 12 个 thread/review/approval client 方法。一个 bridge batch 只提交一次 current-thread React state；batch 内的 SSE projection、activity、runtime error、turn transition 和跨域刷新共用同一个 thread + sequence 接受判定。旧线程或不前进的事件不会产生任何副作用。REST snapshot 也必须同时匹配请求 owner 且不回退 sequence。
+该 hook 通过 `RuntimeThreadClient` 只依赖必要的 Core thread/context/approval 方法；Review 使用独立 Feature service。一个 bridge batch 共用一次 thread + sequence 接受判定，驱动 SSE projection、activity、runtime error、turn transition 和跨域刷新。旧线程或不前进的事件不会产生任何副作用。REST snapshot 也必须同时匹配请求 owner 且不回退 sequence；流式视图提交可按动画帧合并，终态与删除立即收敛。
 
 纯状态规则位于 `runtimeThreadState.ts`，覆盖 initial selection、SSE gate、snapshot adoption 和 active-turn inference。Turn settlement 通过窄 callback 通知 facade 刷新 capability；Usage Feature 根据 thread 终态刷新自己的持久化投影。
 
@@ -254,15 +254,14 @@ snapshot 把完成 turn 恢复成 active。Snapshot、Feature projection、capab
 
 ## 测试
 
-- `test/unit/services/runtime-client/client.test.ts`
-- `runtimeEvents.test.ts`
+- `apps/desktop/renderer/test/unit/services/runtime-client/client.test.ts`
 - `runtimeThreadState.test.ts`
 - `useRuntimeClientState.test.ts`
 - `useRuntimeConfigState.test.ts`
 - `packages/features/plugin-management/test/renderer/`
 - `packages/features/usage/test/renderer/`
-- `test/unit/app/controller/`
-- `test/unit/app/layout/`
-- `test/unit/app/sidebar/`
+- `apps/desktop/renderer/test/unit/app/controller/`
+- `apps/desktop/renderer/test/unit/app/layout/`
+- `apps/desktop/renderer/test/unit/app/sidebar/`
 
 重点覆盖 bootstrap 部分失败、SSE 去重、线程切换迟到响应、终态与 polling 竞争、listener cleanup 和 feature callback wiring。

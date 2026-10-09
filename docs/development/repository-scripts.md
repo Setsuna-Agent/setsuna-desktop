@@ -10,9 +10,9 @@
 
 `pnpm dev:electron` 的 supervisor：
 
-1. 构建 contracts。
-2. 构建 runtime。
-3. 调用 Electron bundle build。
+1. 依次构建 contracts、feature-core、Feature packages 和 runtime。
+2. Windows x64 准备原生沙箱与 curl。
+3. 调用 Electron bundle build，并准备当前平台的桌面控制 helper。
 4. 注入 Vite URL 和 runtime entry。
 5. 启动 Electron。
 6. 识别应用内 dev relaunch 专用退出码并原地重启，不结束 Vite。
@@ -24,6 +24,8 @@
 - `dist/electron/main/index.js`
 - `dist/electron/preload/index.cjs`
 - `dist/runtime/cli.cjs`
+- `dist/runtime/extension-worker-entry.js`
+- `dist/electron/preload/browser-extensions.cjs`
 
 Main/preload/runtime 的 external、format 和 platform 设置在这里统一维护。
 
@@ -60,20 +62,9 @@ Vite 与 Vitest 共用的 build-time Feature source alias。它从 `packages/fea
 
 Feature 边界检查只判断 exact import 与 AST 可证明的调用，不根据变量名或字符串内容猜测 owner。持久 identifier 的 rename/delete 兼容由对应 Feature 的 decoder/migration 和 review 负责。
 
-### `generate-tree.mjs`
-
-扫描主要源码根，生成 `Tree.md`：
-
-- 忽略 dependency/build/cache。
-- 统计直属/递归文件数。
-- 展示有限深度的目录。
-- 支持 `--check` 验证未过期。
-
-模块职责写在 `docs/`；不要把长设计说明塞进生成器模板。
-
 ### `benchmark-feature-projection.ts`
 
-使用真实 SQLite ThreadStore 与 `ThreadStoreEventReader`，手动测量一个或两个 Feature projection 的 process-cold 全量重放。该命令不进入 CI、不清除 OS page cache，也不设置统一阈值；它只为是否需要持久 checkpoint 提供同机可重复证据。
+使用真实 SQLite ThreadStore 与 `ThreadStoreEventReader`，比较新建 projection store 的全量重放与 durable checkpoint 恢复。基准不进入 CI、不清除 OS page cache，也不等价于完整应用冷启动；具体口径见 [测试与验证](testing.md#feature-projection-冷重放基准)。
 
 ## Native dependency
 
@@ -138,19 +129,19 @@ Electron Builder 收集文件前：
 
 ### `release-assets.mjs`
 
-定义 macOS 两个架构的 DMG 和 Windows x64 EXE 名称，供收集、发布校验和本地预览共用。
+定义 macOS 两个架构的 DMG、原生更新 ZIP 和 Windows x64 EXE 名称，供收集、发布校验和本地预览共用。
 
 ### `release-dry-run.mjs`
 
-生成本地 `release-artifacts/dry-run/release-manifest.json`，预览安装包及 `SHA256SUMS` 的公开清单，不创建 GitHub Release，也不为预览生成校验文件。
+生成本地 `release-artifacts/dry-run/release-manifest.json`，预览安装包、macOS 更新 ZIP 及 `SHA256SUMS` 的公开清单，不创建 GitHub Release，也不为预览生成校验文件。
 
 ### `collect-release-job-assets.mjs`
 
-在单个平台 job 中仅收集对应安装包，形成 workflow artifact。日志由独立的 `diagnostic-*` artifact 保存。
+在单个平台 job 中收集对应安装包和 macOS 更新 ZIP，形成 workflow artifact。日志由独立的 `diagnostic-*` artifact 保存。
 
 ### `prepare-github-release-assets.mjs`
 
-Publish job 只接收清单中的三个安装包，拒绝缺失或重名的安装包，生成 `SHA256SUMS`。ZIP、内部 manifest、日志和 electron-builder metadata 均不进入公开下载区。
+Publish job 只接收清单中的三个安装包和两个 macOS 更新 ZIP，拒绝缺失或重名产物，生成 `SHA256SUMS`。内部 manifest、日志、blockmap 和 electron-builder 更新 metadata 不进入公开下载区。
 
 ## Package scripts 对照
 
@@ -158,8 +149,7 @@ Publish job 只接收清单中的三个安装包，拒绝缺失或重名的安�
 | --- | --- |
 | `pnpm dev` | Vite + `start-electron-dev.ts` |
 | `pnpm build:electron` | `build-electron.ts` |
-| `pnpm check:architecture` | `check-architecture.mjs` + `generate-tree.mjs --check` |
-| `pnpm docs:tree` | `generate-tree.mjs` |
+| `pnpm check:architecture` | `check-architecture.mjs`（含 Feature 边界检查） |
 | `pnpm package:*` | version validate + build + electron-builder pack hooks |
 | `pnpm test:release` | prepare ripgrep + 跨平台边界 Release Gate |
 | `pnpm release:dry-run` | validate + build + `release-dry-run.mjs` |

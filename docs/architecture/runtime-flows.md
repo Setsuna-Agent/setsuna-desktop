@@ -36,7 +36,7 @@
 
 外围任务异常或超时只影响所属功能，多个任务不能把等待时间串行累加到 Logo loading；后台任务必须有明确的生命周期和取消/迟到清理。修改启动链路时，用可控的慢任务、永不返回和失败场景验证核心 provider 仍可用，并对比相关就绪阶段耗时。必要的安全隔离和核心数据一致性继续在关键路径完成，外围功能不得借性能优化扩大权限或跳过数据校验。
 
-Browser Feature 只把 controller、控制 server、权限边界和 IPC 接入核心激活，扩展恢复独立在后台进行。`test/integration/extension-startup.electron.test.ts` 使用真实 Electron、隔离 profile 和无窗口场景：人为挂起原生扩展加载时，Browser provider 的健康检查和认证命令已经可用；两个启动脚本失败及一个卡住的 worker 均不阻止健康 worker 启动，释放 composition 会取消等待并清理迟到加载。这个案例落实全局约束，后续功能同样必须验证自己的启动边界。
+Browser Feature 只把 controller、控制 server、权限边界和 IPC 接入核心激活，扩展恢复独立在后台进行。`packages/features/browser/test/integration/extension-startup.electron.test.ts` 使用真实 Electron、隔离 profile 和无窗口场景：人为挂起原生扩展加载时，Browser provider 的健康检查和认证命令已经可用；两个启动脚本失败及一个卡住的 worker 均不阻止健康 worker 启动，释放 composition 会取消等待并清理迟到加载。这个案例落实全局约束，后续功能同样必须验证自己的启动边界。
 
 ### 3. 启动 runtime 子进程
 

@@ -431,12 +431,12 @@ Hook output 是外部输入，不能直接修改任意 runtime state。Coordinat
 
 ## 测试
 
-- `test/loop/tools/`
-- `test/adapters/tool/`
-- `test/adapters/mcp/`
-- `test/adapters/skill/`
-- `test/adapters/plugin/`
-- `test/security/`
-- `test/integration/agent-loop/tool-execution.test.ts`
+- `packages/desktop-runtime/test/loop/tools/`
+- `packages/desktop-runtime/test/adapters/tool/`
+- `packages/desktop-runtime/test/adapters/mcp/`
+- `packages/desktop-runtime/test/adapters/skill/`
+- `packages/desktop-runtime/test/adapters/plugin/`
+- `packages/desktop-runtime/test/security/`
+- `packages/desktop-runtime/test/integration/agent-loop/tool-execution.test.ts`
 - Approval、hook、policy、sandbox integration。
-- `test/integration/adapters/tool/pc-local-tool-host.test.ts`
+- `packages/desktop-runtime/test/integration/adapters/tool/pc-local-tool-host.*.test.ts`
