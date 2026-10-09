@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import { createHash, generateKeyPairSync } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
+import http from 'node:http';
+import { once } from 'node:events';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { provideHostCapability, requiredCapability } from '@setsuna-desktop/feature-core/capability';
 import { defineMainFeatureHost } from '@setsuna-desktop/feature-core/main';
 import type { FeatureScope } from '@setsuna-desktop/feature-core/scope';
-import { app, session } from 'electron';
+import { app, session, webContents } from 'electron';
 import { DESKTOP_BROWSER_PARTITION } from '../../src/contracts/index.js';
 import { browserMainFeature } from '../../src/main/feature.js';
 import { browserControlConnectionCapability, browserMainHostCapability } from '../../src/main/capabilities.js';
@@ -16,37 +18,48 @@ const directory = process.argv[2]; const phase = process.argv[3];
 app.setPath('userData', path.join(directory, 'profile', phase));
 app.disableHardwareAcceleration(); app.dock?.hide();
 
-async function until(read: () => boolean, label: string) {
+async function until(read: () => boolean | Promise<boolean>, label: string) {
   const deadline = performance.now() + 2500;
   while (performance.now() < deadline) {
-    if (read()) return;
+    if (await read()) return;
     await new Promise(resolve => setTimeout(resolve, 10));
   }
   throw new Error(`Timed out: ${label}`);
 }
 
-async function writeExtension(root: string, name: string, script: string) {
+async function writeExtension(root: string, name: string, script: string, mv2 = false, scriptUrl?: string) {
   const { publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
   const key = publicKey.export({ type: 'spki', format: 'der' });
   const id = createHash('sha256').update(key).digest('hex').slice(0, 32)
     .replace(/[0-9a-f]/g, value => String.fromCharCode(97 + parseInt(value, 16)));
   const location = path.join(root, 'Extensions', id, '1.0.0_0');
   await mkdir(location, { recursive: true });
-  await writeFile(path.join(location, 'manifest.json'), JSON.stringify({ manifest_version: 3, name, version: '1.0.0',
-    key: key.toString('base64'), background: { service_worker: 'worker.js' } }));
+  await writeFile(path.join(location, 'manifest.json'), JSON.stringify({ manifest_version: mv2 ? 2 : 3, name, version: '1.0.0',
+    key: key.toString('base64'), background: mv2 ? scriptUrl ? { page: 'background.html' } : { scripts: ['worker.js'] }
+      : { service_worker: 'worker.js' },
+    ...(scriptUrl ? { content_security_policy: `script-src 'self' ${new URL(scriptUrl).origin}; object-src 'self'` } : {}),
+  }));
   await writeFile(path.join(location, 'worker.js'), script);
+  if (scriptUrl) await writeFile(path.join(location, 'background.html'), `<script src="${scriptUrl}"></script>`);
   return id;
 }
 
 async function main() {
   await app.whenReady();
   const browser = session.fromPartition(DESKTOP_BROWSER_PARTITION);
-  const broken = await Promise.all((phase === 'queue' ? [] : [1, 2]).map(index => writeExtension(browser.storagePath!, `Broken ${index}`,
+  const startupScript = 'globalThis.startupCount = 0; chrome.runtime.onStartup.addListener(() => { globalThis.startupCount++; });';
+  let pageResponse: http.ServerResponse | undefined;
+  const pageServer = phase === 'pages' ? http.createServer((_request, response) => { pageResponse = response; }) : undefined;
+  if (pageServer) { pageServer.listen(0, '127.0.0.1'); await once(pageServer, 'listening'); }
+  const pageAddress = pageServer?.address();
+  const pageScriptUrl = pageAddress && typeof pageAddress !== 'string' ? `http://127.0.0.1:${pageAddress.port}/gate.js` : undefined;
+  const pageId = pageScriptUrl ? await writeExtension(browser.storagePath!, 'Slow MV2 page', startupScript, true, pageScriptUrl) : undefined;
+  const broken = await Promise.all((['queue', 'pages'].includes(phase) ? [] : [1, 2]).map(index => writeExtension(browser.storagePath!, `Broken ${index}`,
     'chrome.unimplementedEvent.addListener(() => undefined);')));
-  const slow = await Promise.all(Array.from({ length: phase === 'queue' ? 12 : 1 }, (_, index) =>
+  const slow = await Promise.all(Array.from({ length: phase === 'queue' ? 12 : phase === 'pages' ? 0 : 1 }, (_, index) =>
     writeExtension(browser.storagePath!, `Stalled startup ${index}`, 'console.log("stalled fixture loaded");')));
   const healthy = phase === 'queue' ? slow[0]
-    : await writeExtension(browser.storagePath!, 'Healthy startup', 'console.log("healthy fixture loaded");');
+    : await writeExtension(browser.storagePath!, 'Healthy startup', phase === 'pages' ? startupScript : 'console.log("healthy fixture loaded");', phase === 'pages');
   const preloads = browser.getPreloadScripts().map(({ id }) => id);
   const registrations = browser.serviceWorkers.listenerCount('registration-completed');
   const diagnostics = browser.serviceWorkers.listenerCount('console-message');
@@ -124,6 +137,23 @@ async function main() {
       await composition.dispose();
       await new Promise(resolve => setImmediate(resolve));
       assert.equal(attempted.size, 5);
+    } else if (phase === 'pages') {
+      release();
+      // A network-stalled MV2 document must not hold extension restoration or
+      // prevent a healthy background page from receiving its own startup event.
+      await extensions.start();
+      await until(() => Boolean(pageResponse), 'MV2 background waits for its script');
+      const background = (id: string) => webContents.getAllWebContents().find(contents => contents.session === browser
+        && contents.getType() === 'backgroundPage' && contents.getURL().startsWith(`chrome-extension://${id}/`));
+      assert.equal(background(pageId!)?.isLoadingMainFrame(), true);
+      await until(async () => await background(healthy)?.executeJavaScript('globalThis.startupCount === 1') === true,
+        'healthy MV2 background startup while another page is still loading');
+      const liveHealth = await fetch(`${connection.url}/health`); assert.equal(liveHealth.status, 200);
+      pageResponse!.setHeader('Content-Type', 'application/javascript'); pageResponse!.end(startupScript);
+      await until(async () => await background(pageId!)?.executeJavaScript('globalThis.startupCount === 1') === true,
+        'slow MV2 page receives startup after its script is ready');
+      assert.equal(attempted.size, 0);
+      await composition.dispose();
     } else {
       release();
       await until(() => attempted.size === 4, 'a stalled worker does not block the other worker starts');
@@ -137,7 +167,10 @@ async function main() {
     assert.equal(browser.serviceWorkers.listenerCount('registration-completed'), registrations);
     assert.equal(browser.serviceWorkers.listenerCount('console-message'), diagnostics);
     console.log(`EXTENSION_STARTUP_${phase.toUpperCase()}_OK`);
-  } finally { release(); await composition.dispose(); console.error = nativeError; }
+  } finally {
+    release(); await composition.dispose(); console.error = nativeError;
+    pageResponse?.end(); pageServer?.closeAllConnections(); pageServer?.close();
+  }
 }
 
 main().then(() => app.exit(0), error => { console.error(error); app.exit(1); });

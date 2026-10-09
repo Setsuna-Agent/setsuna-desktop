@@ -80,6 +80,10 @@ export function parseBrowserControlCommand(value: unknown): DesktopBrowserContro
       return { kind: 'open', url: requiredString(input.url, 'url') };
     case 'tabs':
       return { kind: 'tabs' };
+    case 'extensions':
+      return { kind: 'extensions' };
+    case 'install-extension':
+      return { kind: 'install-extension', directory: requiredString(input.directory, 'directory') };
     case 'snapshot':
       return { kind: 'snapshot', maxElements: optionalNumber(input.maxElements, 'maxElements'), tabId };
     case 'screenshot':

@@ -60,5 +60,7 @@ describe('parseBrowserControlCommand', () => {
       kind: 'screenshot',
       tabId: 'tab-2',
     });
+    expect(parseBrowserControlCommand({ kind: 'install-extension', directory: '/workspace/extension' })).toEqual({ kind: 'install-extension', directory: '/workspace/extension' });
+    expect(() => parseBrowserControlCommand({ kind: 'install-extension' })).toThrow('directory must be a string');
   });
 });

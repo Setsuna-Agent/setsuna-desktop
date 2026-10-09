@@ -47,6 +47,7 @@ export function registerBrowserIpc(
   windows: ReadonlyMap<number, BrowserWindowSession>,
   interfaceLanguage: () => RuntimeInterfaceLanguage,
   onTabRegistered?: (tabId: string, contents: WebContents) => void,
+  onActiveTabChanged?: (owner: BrowserWindow, contents: WebContents | null) => void,
 ): () => void {
   for (const channel of handlerChannels) ipcMain.removeHandler(channel);
   ipcMain.handle(BROWSER_IPC_CHANNELS.requestFindInPage, (event, input) => scope.runOperation(() => {
@@ -103,20 +104,29 @@ export function registerBrowserIpc(
     if (!guest) return false;
     controller.registerTab(tabId, guest);
     onTabRegistered?.(tabId, guest);
+    // Selection can arrive before dom-ready registers the native guest.
+    if (controller.activeTabContents(event.sender.id) === guest) {
+      onActiveTabChanged?.(windows.get(event.sender.id)!.window, guest);
+    }
     return true;
   }));
   ipcMain.handle(BROWSER_IPC_CHANNELS.unregisterTab, (event, input) => scope.runOperation(() => {
     if (!isDesktopRendererSender(event.sender, windows)) return false;
     const webContentsId = Number(input?.webContentsId);
+    const active = controller.activeTabContents(event.sender.id);
     controller.unregisterTab(
       String(input?.tabId ?? ''),
       Number.isSafeInteger(webContentsId) ? webContentsId : undefined,
     );
+    if (active && !controller.activeTabContents(event.sender.id)) {
+      onActiveTabChanged?.(windows.get(event.sender.id)!.window, null);
+    }
     return true;
   }));
   ipcMain.handle(BROWSER_IPC_CHANNELS.setActiveTab, (event, input) => scope.runOperation(() => {
     if (!isDesktopRendererSender(event.sender, windows)) return false;
-    controller.setActiveTab(typeof input?.tabId === 'string' ? input.tabId : null);
+    if (!controller.setActiveTab(typeof input?.tabId === 'string' ? input.tabId : null, event.sender.id)) return false;
+    onActiveTabChanged?.(windows.get(event.sender.id)!.window, controller.activeTabContents(event.sender.id));
     return true;
   }));
   ipcMain.handle(BROWSER_IPC_CHANNELS.setDeviceEmulation, (event, input) => scope.runOperation(() => {

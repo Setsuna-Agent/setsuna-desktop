@@ -88,8 +88,9 @@ export const browserMainFeature = defineMainFeature({
     const controller = new DesktopBrowserController({
       passwordStore: passwords,
       preferences: () => preferences.get(),
+      focusedSenderId: () => extensions.ui.lastFocusedWindow()?.webContents.id ?? null,
       openTab: (url) => {
-        const window = host.focusedWindow();
+        const window = extensions.ui.lastFocusedWindow();
         return window ? publishBrowserOpenNewTab(window, url) : false;
       },
     });
@@ -127,6 +128,8 @@ export const browserMainFeature = defineMainFeature({
       });
       return () => {
         windows.delete(senderId);
+        controller.forgetWindow(senderId);
+        extensions.forgetWindow(window);
         contextMenus.dismiss();
         uninstall();
       };
@@ -135,6 +138,13 @@ export const browserMainFeature = defineMainFeature({
       execute: (command, signal) => context.scope.runOperation(
         (scopeSignal) => {
           if (!preferences.get().agentControl) throw new Error('Browser control is disabled in browser settings.');
+          if (command.kind === 'extensions') {
+            return extensions.listInstalled(scopeSignal).then((items) => ({ kind: 'extensions' as const, extensions: items }));
+          }
+          if (command.kind === 'install-extension') {
+            // The authenticated runtime enforces its tool approval policy before dispatch.
+            return extensions.installUnpacked(command.directory, scopeSignal).then((result) => ({ kind: 'extension-install' as const, ...result }));
+          }
           return controller.execute(command, scopeSignal);
         },
         { signal },
@@ -150,11 +160,12 @@ export const browserMainFeature = defineMainFeature({
       windows,
       () => host.interfaceLanguage(),
       (tabId, contents) => extensions.registerNavigationTarget(tabId, contents),
+      (owner, contents) => extensions.selectTab(owner, contents?.id ?? null),
     ));
     context.scope.add(registerBrowserPasswordIpc(context.scope, (tabId, senderId) => (
       windows.has(senderId) ? controller.passwordSession(tabId, senderId) : null
     )));
-    context.scope.add(registerBrowserExtensionIpc(context.scope, extensions, (senderId) => windows.get(senderId)?.window ?? null));
+    context.scope.add(registerBrowserExtensionIpc(context.scope, extensions, (senderId) => windows.get(senderId)?.window ?? null, () => host.interfaceLanguage()));
     context.provide(declareCapabilityProvider(browserControlConnectionCapability), connection);
     // Third-party restoration must never gate the control server, runtime or first paint.
     void extensions.start().catch((error: unknown) => {

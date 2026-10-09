@@ -6,6 +6,8 @@ export const EXTENSION_UI_CHANNELS = {
   event: 'browser-extension-ui:event',
 } as const;
 
+export type ExtensionUiBootstrap = { sidePanel: boolean; browserAction: boolean };
+
 export type ExtensionUiEvent =
   | { kind: 'actionClicked'; tab: ExtensionTab }
   | { kind: 'windowFocusChanged'; windowId: number }
@@ -32,8 +34,13 @@ export interface ExtensionTab {
   title?: string;
 }
 
-export type ExtensionTabReadQuery = { url?: string | string[]; title?: string };
-export type ExtensionTabReadDetails = Pick<ExtensionTab, 'id' | 'url' | 'title'>;
+export type ExtensionTabReadQuery = {
+  url?: string | string[]; title?: string; active?: boolean; highlighted?: boolean;
+  currentWindow?: boolean; lastFocusedWindow?: boolean; windowId?: number;
+};
+/** Host selection overrides native focus only for owned browser guests. */
+export type ExtensionTabReadDetails = Pick<ExtensionTab, 'id' | 'url' | 'title'>
+  & Partial<Pick<ExtensionTab, 'windowId' | 'active' | 'highlighted'>>;
 
 export type ExtensionTabEvent =
   | { kind: 'updated'; tabId: number; changeInfo: { status?: ExtensionTab['status']; url?: string }; tab: ExtensionTab }
@@ -49,6 +56,7 @@ export type ExtensionSystemBootstrap = {
   debugger: boolean; contextMenus: boolean; downloads: boolean; webNavigation: boolean;
   nativeMessaging: boolean; scripting: boolean; cookies: boolean; bookmarks: boolean; storage: boolean;
   faviconUrl?: string;
+  privacy?: boolean;
 };
 export type ExtensionPermissions = { permissions: string[]; origins: string[] };
 export type ExtensionCookie = {
@@ -70,6 +78,7 @@ export type ExtensionSystemEvent =
   | { kind: 'downloadCreated'; item: Record<string, unknown> }
   | { kind: 'downloadChanged'; delta: Record<string, unknown> }
   | { kind: 'navigationTargetCreated'; details: Record<string, unknown> }
+  | { kind: 'navigationCommitted'; details: Record<string, unknown> }
   | { kind: 'cookieChanged'; changeInfo: ExtensionCookieChange }
   | { kind: 'permissionsAdded'; permissions: ExtensionPermissions }
   | { kind: 'permissionsRemoved'; permissions: ExtensionPermissions }

@@ -16,6 +16,7 @@ type Options = {
   windows(): readonly BrowserWindow[];
   activeOwner(): BrowserWindow | null;
   activeTabs: BrowserExtensionActiveTabs;
+  browserAction?(extension: Extension, method: string, args: unknown[]): Promise<unknown>;
 };
 
 /** Toolbar activation and sidePanel share extension-authenticated frame/worker endpoints. */
@@ -32,7 +33,8 @@ export class BrowserExtensionUi {
     this.contexts = new ExtensionContexts({ ...options, channels,
       // Install declared optional APIs before approval; each call still reads the current grants.
       bootstrap: (extension) => ({ sidePanel: [...(extension.manifest.permissions ?? []),
-        ...(extension.manifest.optional_permissions ?? [])].includes('sidePanel') }),
+        ...(extension.manifest.optional_permissions ?? [])].includes('sidePanel'),
+        browserAction: extension.manifest.manifest_version === 2 && Boolean(extension.manifest.browser_action) }),
       call: (extension, key, method, args) => this.call(extension, key, method, args),
       closed: (key) => this.actionListeners.delete(key) });
     this.panels = new BrowserExtensionSidePanels((owner) => {
@@ -43,6 +45,16 @@ export class BrowserExtensionUi {
   start(): void {
     this.contexts.start(); this.lastFocused = this.options.activeOwner();
     app.on('browser-window-focus', this.focused);
+  }
+
+  lastFocusedWindow(): BrowserWindow | null {
+    const windows = this.options.windows().filter((window) => !window.isDestroyed());
+    const active = this.options.activeOwner();
+    // Popup focus leaves desktop windows unfocused. Keep the same owner history
+    // for windows.getLastFocused(), background tab queries and browser control.
+    return windows.find((window) => window.isFocused())
+      ?? (this.lastFocused && windows.includes(this.lastFocused) ? this.lastFocused : null)
+      ?? (active && windows.includes(active) ? active : windows[0] ?? null);
   }
 
   track(contents: WebContents): () => void {
@@ -109,6 +121,7 @@ export class BrowserExtensionUi {
   }
 
   private async call(extension: Extension, key: string, method: string, args: unknown[]): Promise<unknown> {
+    if (method.startsWith('browserAction.') && this.options.browserAction) return this.options.browserAction(extension, method.slice(14), args);
     if (method === 'actionListen') {
       if (args[0] === true) this.actionListeners.add(key); else this.actionListeners.delete(key);
       return;
@@ -147,13 +160,8 @@ export class BrowserExtensionUi {
     };
     if (method === 'getAll') return this.options.windows().filter((window) => !window.isDestroyed()).map(describe);
     if (method === 'getLastFocused') {
-      const windows = this.options.windows().filter((window) => !window.isDestroyed());
-      const active = this.options.activeOwner();
-      // Toolbar clicks select an action's owner, not the browser's focus history.
-      const selected = windows.find((window) => window.isFocused())
-        ?? (this.lastFocused && windows.includes(this.lastFocused) ? this.lastFocused : null)
-        ?? (active && windows.includes(active) ? active : windows[0]);
-      if (!selected || !windows.includes(selected)) throw new Error('Browser window unavailable.');
+      const selected = this.lastFocusedWindow();
+      if (!selected) throw new Error('Browser window unavailable.');
       return describe(selected);
     }
     if (method === 'get' || method === 'getCurrent') {
@@ -162,16 +170,19 @@ export class BrowserExtensionUi {
       const frameOwner = contents ? this.options.owner(contents) ?? documentWindow?.getParentWindow() : null;
       // Extension pages belong to their containing browser window; a click in another
       // desktop window must not change getCurrent() for an already-open panel.
-      return describe(this.owner(extension.id, method === 'get' ? args[0] : method === 'getCurrent' ? frameOwner?.id : undefined));
+      const current = method === 'getCurrent' || args[0] === -2;
+      return describe(this.owner(extension.id, current ? (frameOwner ?? this.lastFocusedWindow())?.id : args[0]));
     }
     throw new Error(`Unsupported windows method: ${method}.`);
   }
 
   private readonly focused = (_event: Electron.Event, window: BrowserWindow) => {
-    if (!this.options.windows().includes(window)) return;
-    this.lastFocused = window;
+    const windows = this.options.windows();
+    const owner = windows.includes(window) ? window : window.getParentWindow();
+    if (!owner || !windows.includes(owner) || owner.isDestroyed()) return;
+    this.lastFocused = owner;
     for (const extension of this.options.session.extensions.getAllExtensions()) {
-      this.contexts.notify(extension.id, { kind: 'windowFocusChanged', windowId: window.id });
+      this.contexts.notify(extension.id, { kind: 'windowFocusChanged', windowId: owner.id });
     }
   };
 }

@@ -20,6 +20,7 @@ export function BrowserExtensionManager({ bridge, translate: t, ui }: BrowserSet
   return <div className="browser-settings-collection">
     {!selected ? <BrowserSettingsSearch label={t('feature.browser.settings.search')} value={query} onChange={setQuery} /> : null}
     <div className="browser-settings-page__toolbar"><div className="browser-settings-page__actions">
+      <ui.Button disabled={extensions.busy || !extensions.canInstall} onClick={() => void extensions.install()}>{t('feature.browser.extension.installUnpacked')}</ui.Button>
       <ui.Button disabled={!navigation} onClick={() => navigation?.openPage(BROWSER_WEB_STORE_URL)}>{t('feature.browser.extension.store')}</ui.Button>
     </div></div>
     {selected ? <BrowserExtensionDetails item={selected} controller={extensions} onBack={() => setSelectedId(null)} ui={ui} translate={t} />

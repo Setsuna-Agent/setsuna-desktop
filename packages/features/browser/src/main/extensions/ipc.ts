@@ -1,21 +1,44 @@
-import { ipcMain, webContents, type BrowserWindow } from 'electron';
+import { dialog, ipcMain, webContents, type BrowserWindow } from 'electron';
 import type { FeatureScope } from '@setsuna-desktop/feature-core/scope';
 import { BROWSER_IPC_CHANNELS } from '../../contracts/bridge.js';
 import type { BrowserExtensionService } from './service.js';
 import type { BrowserExtensionPopupAnchor } from '../../contracts/extensions.js';
+import { confirmExtensionInstall } from './confirmation.js';
+import { localizedExtensionName } from './localization.js';
+import type { RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
+import { waitForExtensionOperation } from './installation/operation.js';
 
 export function registerBrowserExtensionIpc(
   scope: FeatureScope, service: BrowserExtensionService, resolveOwner: (senderId: number) => BrowserWindow | null,
+  language: () => RuntimeInterfaceLanguage,
 ): () => void {
   const channels = [BROWSER_IPC_CHANNELS.getExtensions, BROWSER_IPC_CHANNELS.getExtensionActions,
     BROWSER_IPC_CHANNELS.removeExtension, BROWSER_IPC_CHANNELS.openExtension, BROWSER_IPC_CHANNELS.setExtensionEnabled,
-    BROWSER_IPC_CHANNELS.setExtensionUserScriptsAllowed, BROWSER_IPC_CHANNELS.getExtensionPanel, BROWSER_IPC_CHANNELS.closeExtensionPanel];
+    BROWSER_IPC_CHANNELS.setExtensionUserScriptsAllowed, BROWSER_IPC_CHANNELS.getExtensionPanel, BROWSER_IPC_CHANNELS.closeExtensionPanel,
+    BROWSER_IPC_CHANNELS.installUnpackedExtension];
   for (const channel of channels) {
     ipcMain.removeHandler(channel);
     ipcMain.handle(channel, (event, input) => scope.runOperation(async (signal) => {
       const owner = resolveOwner(event.sender.id);
       if (!owner || owner.isDestroyed() || event.senderFrame !== event.sender.mainFrame || signal.aborted) return null;
       if (channel === BROWSER_IPC_CHANNELS.getExtensions) return service.list();
+      if (channel === BROWSER_IPC_CHANNELS.installUnpackedExtension) {
+        try {
+          // Only the native picker supplies a path; renderer input cannot select host files.
+          const result = await waitForExtensionOperation(dialog.showOpenDialog(owner, { properties: ['openDirectory'] }), signal);
+          if (result.canceled || !result.filePaths[0] || signal.aborted || owner.isDestroyed()) return { status: 'cancelled' };
+          return await service.installUnpacked(result.filePaths[0], signal, async (extension) => {
+            if (owner.isDestroyed() || signal.aborted) return false;
+            const name = await localizedExtensionName(extension, language());
+            if (owner.isDestroyed() || signal.aborted) return false;
+            const allowed = await confirmExtensionInstall(owner, name, extension.manifest, language());
+            return allowed && !owner.isDestroyed() && !signal.aborted;
+          });
+        } catch {
+          if (signal.aborted) return { status: 'cancelled' };
+          throw new Error('Browser extension operation failed.');
+        }
+      }
       const guestId = input?.webContentsId;
       if (guestId !== undefined) {
         const guest = typeof guestId === 'number' && Number.isSafeInteger(guestId) ? webContents.fromId(guestId) : null;

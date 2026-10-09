@@ -7,6 +7,7 @@ import type { BrowserImportBridge } from './import.js';
 
 export const BROWSER_IPC_CHANNELS = Object.freeze({
   getExtensions: 'browser:get-extensions',
+  installUnpackedExtension: 'browser:install-unpacked-extension',
   setExtensionEnabled: 'browser:set-extension-enabled',
   setExtensionUserScriptsAllowed: 'browser:set-extension-user-scripts-allowed',
   removeExtension: 'browser:remove-extension',

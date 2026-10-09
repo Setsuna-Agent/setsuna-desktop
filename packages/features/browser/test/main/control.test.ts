@@ -69,7 +69,7 @@ class FakeWebContents extends EventEmitter {
   hostFocusCount = 0;
   readonly inputEvents: KeyboardInputEvent[] = [];
   reloadCount = 0;
-  readonly hostWebContents = { focus: () => { this.hostFocusCount += 1; } };
+  readonly hostWebContents = { id: 1, focus: () => { this.hostFocusCount += 1; } };
   userAgent = 'Desktop Chrome/140.0.0.0';
   readonly session = { getUserAgent: () => 'Desktop Chrome/140.0.0.0' };
   private destroyed = false;
@@ -185,6 +185,9 @@ describe('DesktopBrowserController', () => {
       tabId: 'new-tab',
       url: 'https://example.com/docs',
     });
+    await expect(controller.execute({ kind: 'tabs' })).resolves.toMatchObject({ tabs: [{ id: 'new-tab', active: true }] });
+    expect(controller.activeTabContents(1)?.id).toBe(9);
+    controller.clear();
   });
 
   it('lists registered tabs, tracks the active tab, and disposes destroyed sessions', async () => {
@@ -200,7 +203,7 @@ describe('DesktopBrowserController', () => {
     const second = new FakeWebContents(11);
     controller.registerTab('tab-1', asWebContents(first));
     controller.registerTab('tab-2', asWebContents(second));
-    controller.setActiveTab('tab-2');
+    controller.setActiveTab('tab-2', 1);
 
     await expect(controller.execute({ kind: 'tabs' })).resolves.toMatchObject({
       tabs: [
@@ -214,6 +217,34 @@ describe('DesktopBrowserController', () => {
     await expect(controller.execute({ kind: 'tabs' })).resolves.toMatchObject({
       tabs: [{ active: true, id: 'tab-1' }],
     });
+  });
+
+  it('retains each window selection while browser control follows focus and rejects a foreign target', async () => {
+    let focused = 1;
+    const controller = new DesktopBrowserController({ focusedSenderId: () => focused,
+      createAutomation: () => new FakeAutomation() });
+    const first = new FakeWebContents(10); const second = new FakeWebContents(11);
+    second.hostWebContents.id = 3;
+    try {
+      controller.registerTab('first', asWebContents(first)); controller.registerTab('second', asWebContents(second));
+      expect(controller.setActiveTab('first', 1)).toBe(true);
+      expect(controller.setActiveTab('second', 3)).toBe(true);
+      expect(controller.activeTabContents(1)).toBe(first);
+      expect(controller.activeTabContents(3)).toBe(second);
+      expect(controller.setActiveTab('first', 3)).toBe(false);
+      const active = async () => {
+        const result = await controller.execute({ kind: 'tabs' });
+        return result.kind === 'tabs' ? result.tabs.find(tab => tab.active)?.id : null;
+      };
+      expect(await active()).toBe('first'); focused = 3;
+      expect(await active()).toBe('second');
+      controller.unregisterTab('first', first.id);
+      controller.setActiveTab(null, 3);
+      controller.registerTab('first', asWebContents(first));
+      expect(controller.activeTabContents(1)).toBe(first);
+      controller.forgetWindow(1);
+      expect(controller.activeTabContents(1)).toBeNull();
+    } finally { controller.clear(); }
   });
 
   it('applies validated device emulation and mobile request identity to the registered guest', async () => {
@@ -275,7 +306,7 @@ describe('DesktopBrowserController', () => {
     const controller = new DesktopBrowserController({ createAutomation: () => new FakeAutomation() });
     controller.registerTab('tab-1', asWebContents(contents));
     controller.registerTab('tab-2', asWebContents(foreground));
-    controller.setActiveTab('tab-2');
+    controller.setActiveTab('tab-2', 1);
 
     await expect(controller.captureScreenshot('tab-1')).resolves.toEqual({
       dataUrl: 'data:image/png;base64,aW1hZ2U=',

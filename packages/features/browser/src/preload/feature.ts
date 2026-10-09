@@ -35,6 +35,7 @@ export const browserPreloadFeature = definePreloadFeature<BrowserPreloadBridgeCo
         return () => ipcRenderer.off(BROWSER_SETTINGS_CHANNELS.changed, listener);
       },
       getExtensions: () => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.getExtensions),
+      installUnpackedExtension: () => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.installUnpackedExtension),
       setExtensionEnabled: (id, enabled) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.setExtensionEnabled, { id, enabled }),
       setExtensionUserScriptsAllowed: (id, allowed) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.setExtensionUserScriptsAllowed, { id, allowed }),
       removeExtension: (id) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.removeExtension, { id }),
