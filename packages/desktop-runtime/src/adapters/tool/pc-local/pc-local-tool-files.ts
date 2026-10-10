@@ -167,7 +167,7 @@ export async function findFiles(args: ToolArguments, state: PcLocalFileState) {
   const scopedIndex = filterFilesByScope(index, scopePath, searchRoot)
     .filter((file) => !deniedSandboxRuleForPath(path.join(searchRoot, ...file.path.split('/')), state));
   const matches = findFileMentionSuggestions(scopedIndex, query, maxResults);
-  const files = matches.map((file) => file.path);
+  const files = matches.map((file) => formatAccessiblePath(path.resolve(searchRoot, file.path), state));
 
   return okResult(
     [
@@ -220,7 +220,9 @@ export async function searchText(
   return okResult(
     truncateText([
       `Text search for ${matcherLabel}${ignoredNote} under ${formatPath(scopePath, state.root)}: ${response.matches.length} match${response.matches.length === 1 ? '' : 'es'}`,
-      response.matches.map(formatSearchMatch).join('\n') || '(no matches)',
+      response.matches.map((match) => formatSearchMatch({
+        ...match, path: formatAccessiblePath(path.resolve(searchRoot, match.path), state),
+      })).join('\n') || '(no matches)',
       response.truncated ? `Showing first ${maxResults} matches.` : '',
       details,
     ].filter(Boolean).join('\n'), MAX_TEXT_BYTES),

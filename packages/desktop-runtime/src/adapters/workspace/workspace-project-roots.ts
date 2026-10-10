@@ -40,6 +40,13 @@ export function projectWithRoots(project: WorkspaceProject, roots: WorkspaceProj
   return next;
 }
 
+export function assertProjectRootsAvailable(project: WorkspaceProject, projects: WorkspaceProject[]): void {
+  const roots = workspaceProjectRoots(project);
+  const conflicts = projects.some((other) => other.id !== project.id
+    && workspaceProjectRoots(other).some((bound) => roots.some((root) => path.relative(bound.path, root.path) === '')));
+  if (conflicts) throw new Error('That directory is already associated with another project.');
+}
+
 export async function findGitRoot(startPath: string): Promise<string | undefined> {
   let current = startPath;
   for (;;) {

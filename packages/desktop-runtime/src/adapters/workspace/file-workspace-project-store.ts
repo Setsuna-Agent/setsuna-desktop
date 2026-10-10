@@ -64,7 +64,7 @@ import { readJsonFile, writeJsonFile } from '../store/json-file.js';
 import { createWorkspaceEntry, deleteWorkspaceEntry, moveWorkspaceEntry, renameWorkspaceEntry } from './workspace-entry-mutations.js';
 import { applyWorkspaceFileChanges } from './workspace-file-changes.js';
 
-import { findGitRoot, normalizeProjectPath, normalizeProjectRoots, projectWithRoots } from './workspace-project-roots.js';
+import { assertProjectRootsAvailable, findGitRoot, normalizeProjectPath, normalizeProjectRoots, projectWithRoots } from './workspace-project-roots.js';
 
 const MAX_LIST_ENTRIES = 200;
 export const MAX_WORKSPACE_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -147,6 +147,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
       };
       if (requestedRoots) project = projectWithRoots(project, requestedRoots);
       else if (existing?.roots) project = projectWithRoots(project, existing.roots);
+      assertProjectRootsAvailable(project, index.projects);
       await this.writeIndex({
         version: 1,
         projects: [project, ...index.projects.filter((item) => (
@@ -179,11 +180,6 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
       ))) {
         throw new Error(`A project named "${name}" already exists.`);
       }
-      if (!roots && nextPath && index.projects.some((project) => (
-        project.id !== projectId && project.path === nextPath
-      ))) {
-        throw new Error('That directory is already associated with another project.');
-      }
       let updated: WorkspaceProject = {
         ...existing,
         name,
@@ -202,6 +198,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
         delete updated.path;
         delete updated.gitRoot;
       }
+      assertProjectRootsAvailable(updated, index.projects);
       await this.writeIndex({
         version: 1,
         projects: index.projects.map((project) => project.id === projectId ? updated : project),

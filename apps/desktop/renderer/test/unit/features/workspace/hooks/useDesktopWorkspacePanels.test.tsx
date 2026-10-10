@@ -371,6 +371,56 @@ it('reuses each directory shell and keeps the other shell alive when one exits',
   expect(terminal.open).toHaveBeenCalledTimes(3);
 });
 
+it.each(['/repo', 'C:\\repo'])('passes root-relative paths to native file actions for %s', async (mainPath) => {
+  const childPath = `${mainPath}-child`;
+  const { view } = renderTerminalWorkspace('thread:A', {
+    id: 'project', name: 'Repository', path: mainPath, createdAt: '', updatedAt: '',
+    roots: [{ id: 'main', path: mainPath }, { id: 'child', path: childPath }],
+  });
+  const desktop = {
+    copyWorkspaceFilePath: vi.fn().mockResolvedValue({ ok: true }),
+    revealWorkspaceFile: vi.fn().mockResolvedValue({ ok: true }),
+    openWorkspaceDirectory: vi.fn().mockResolvedValue({ ok: true }),
+  };
+  Object.assign(window.setsunaDesktop!.desktop, desktop);
+  for (const root of [mainPath, childPath]) {
+    await act(async () => {
+      await view.result.current.copyWorkspaceFilePath(`${root}/src/same.ts`);
+      await view.result.current.revealWorkspaceFile(`${root}/src/same.ts`);
+      await view.result.current.openWorkspaceDirectory(`${root}/src`);
+    });
+    expect(desktop.copyWorkspaceFilePath).toHaveBeenLastCalledWith(root, 'src/same.ts');
+    expect(desktop.revealWorkspaceFile).toHaveBeenLastCalledWith(root, 'src/same.ts');
+    expect(desktop.openWorkspaceDirectory).toHaveBeenLastCalledWith(root, 'src');
+  }
+});
+
+it.each([false, true])('closes removed-directory terminals, including hidden sessions (pending: %s)', async (pending) => {
+  const project: WorkspaceProject = {
+    id: 'project', name: 'Repository', path: '/repo', createdAt: '', updatedAt: '',
+    roots: [{ id: 'main', path: '/repo' }, { id: 'child', path: '/agent' }],
+  };
+  const { view, terminal } = renderTerminalWorkspace('thread:A', project);
+  act(() => view.result.current.openDesktopPanel('side', 'terminal'));
+  const panelId = view.result.current.sidePanelSlot.active!;
+  await waitFor(() => expect(view.result.current.terminalSessionsByPanelId[panelId]?.sessionId).toBe('session-1'));
+  let resolvePending!: (session: Awaited<ReturnType<typeof terminal.open>>) => void;
+  if (pending) terminal.open.mockImplementationOnce(() => new Promise((resolve) => { resolvePending = resolve; }));
+  act(() => view.result.current.updateDesktopPanel(panelId, { rootId: 'child' }));
+  await waitFor(() => expect(terminal.open).toHaveBeenCalledTimes(2));
+  if (!pending) await waitFor(() => expect(view.result.current.terminalSessionsByPanelId[panelId]?.sessionId).toBe('session-2'));
+  // Cached sessions in another conversation must also lose removed directory bindings.
+  view.rerender({ targetIdentity: 'thread:B', project: { ...project, roots: project.roots!.slice(0, 1) } });
+  if (pending) await act(async () => resolvePending({ sessionId: 'session-2', workspaceRoot: '/agent', shell: 'zsh', cols: 100, rows: 24 }));
+  await waitFor(() => expect(terminal.close).toHaveBeenCalledExactlyOnceWith('session-2'));
+  view.rerender({ targetIdentity: 'thread:A', project: { ...project, roots: project.roots!.slice(0, 1) } });
+  await waitFor(() => expect(view.result.current.terminalSessionsByPanelId[panelId]?.sessionId).toBe('session-1'));
+  expect(view.result.current.sideActivePanel?.rootId).toBeUndefined();
+  expect(terminal.open).toHaveBeenCalledTimes(2);
+  act(() => view.result.current.closeDesktopPanelItem('side', panelId));
+  expect(terminal.close).toHaveBeenCalledTimes(2);
+});
+
 function renderTerminalWorkspace(targetIdentity: ChatComposerTargetIdentity = 'thread:A',
   project: WorkspaceProject = { id: 'project', path: '/repo', name: 'Repository', createdAt: '', updatedAt: '' }) {
   const listeners = new Map<string, Set<(event: DesktopTerminalEvent) => void>>();
@@ -390,11 +440,12 @@ function renderTerminalWorkspace(targetIdentity: ChatComposerTargetIdentity = 't
     configurable: true,
     value: { desktop: { platform: 'darwin' }, terminal, workspaceApps: { list: vi.fn().mockResolvedValue([]) } },
   });
-  const view = renderHook(({ targetIdentity: identity }) => useDesktopWorkspacePanels({
-    activeProject: project, activeView: 'chat', conversationDebugEnabled: false,
+  const initialProps: { targetIdentity: ChatComposerTargetIdentity; project?: WorkspaceProject } = { targetIdentity };
+  const view = renderHook(({ targetIdentity: identity, project: currentProject }) => useDesktopWorkspacePanels({
+    activeProject: currentProject ?? project, activeView: 'chat', conversationDebugEnabled: false,
     targetIdentity: identity, workspaceStatus: 'ready', setError: vi.fn(),
   }), {
-    initialProps: { targetIdentity },
+    initialProps,
     wrapper: ({ children }) => <I18nProvider initialLocale="zh-CN" messageCatalog={messageCatalog}>
       <ToastProvider><ReviewFeatureHostBoundary>{children}</ReviewFeatureHostBoundary></ToastProvider>
     </I18nProvider>,

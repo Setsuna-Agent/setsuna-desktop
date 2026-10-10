@@ -120,6 +120,49 @@ it('grants only approved external targets, supports full access, and restores a 
   expect(await readFile(path.join(main, 'same.txt'), 'utf8')).toBe('main\n');
 });
 
+it('rejects directory ownership conflicts across primary, secondary, and legacy bindings', async () => {
+  const { main, child, outside, project, store } = await fixture();
+  const other = await store.addProject({ name: 'Other', path: outside });
+  const roots = workspaceProjectRoots(project);
+  for (const conflict of [main, child]) {
+    await expect(store.updateProject(other.id, { roots: [{ path: outside }, { path: conflict }] }))
+      .rejects.toThrow('already associated');
+    await expect(store.updateProject(other.id, { roots: [{ path: conflict }, { path: outside }] }))
+      .rejects.toThrow('already associated');
+    await expect(store.updateProject(other.id, { path: conflict })).rejects.toThrow('already associated');
+  }
+  await expect(store.addProject({ name: 'Other', roots: [{ path: outside }, { path: child }] }))
+    .rejects.toThrow('already associated');
+  await expect(store.addProject({ name: 'Duplicate child', path: child })).rejects.toThrow('already associated');
+  await expect(store.updateProject(project.id, { roots: [...roots].reverse() })).resolves.toMatchObject({ path: child });
+  expect((await store.getStatus(other.id)).project?.path).toBe(outside);
+});
+
+it('returns search paths that read and edit the matching directory even when names collide', async () => {
+  const { main, child, host, context } = await fixture();
+  await Promise.all([main, child].map(async (root) => {
+    await mkdir(path.join(root, 'src'));
+    await writeFile(path.join(root, 'src', 'same.txt'), `${root === main ? 'main' : 'child'} before\nneedle\nafter\n`);
+  }));
+  for (const root of [main, child]) {
+    const file = path.join(root, 'src', 'same.txt');
+    const expected = root === main ? 'src/same.txt' : file;
+    const found = await host.runTool('find_files', { path: path.join(root, 'src'), query: 'same' }, context);
+    const reference = found.content.split('\n')[1];
+    expect(reference).toBe(expected);
+    expect((await host.runTool('read_file', { file_path: reference }, context)).content).toContain(`${root === main ? 'main' : 'child'} before`);
+    for (const scope of [root, file]) {
+      const search = await host.runTool('search_text', { path: scope, query: 'needle', context_lines: 1 }, context);
+      expect(search.content).toContain(`${expected}:2:1: needle`);
+      expect(search.content).toContain(`${expected}-1-`);
+      expect(search.content).toContain(`${expected}-3-after`);
+    }
+    if (root === child) await host.runTool('edit_file', { file_path: reference, old_string: 'needle', new_string: 'edited' }, context);
+  }
+  expect(await readFile(path.join(main, 'src', 'same.txt'), 'utf8')).toContain('needle');
+  expect(await readFile(path.join(child, 'src', 'same.txt'), 'utf8')).toContain('edited');
+});
+
 it('does not turn a directory symlink into implicit external write authority', async () => {
   const { child, outside, host, context } = await fixture();
   await symlink(outside, path.join(child, 'escape'), process.platform === 'win32' ? 'junction' : 'dir');
