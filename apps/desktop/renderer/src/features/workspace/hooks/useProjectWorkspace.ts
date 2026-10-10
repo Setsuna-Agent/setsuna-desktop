@@ -230,25 +230,24 @@ export function useProjectWorkspace({ activeProjectId, rootId, project, client, 
   ), [client, rootId, runEntryMutation]);
 
   const relocateEntry = useCallback((entryPath: string, relocate: (projectId: string, isCurrent: () => boolean) => Promise<WorkspaceEntry | null>) => runEntryMutation(async (projectId, isCurrent) => {
-    const preview = filePreviewRef.current;
-    const affectsPreview = preview?.rootId === rootId && preview && isWorkspaceEntryWithin(preview.path, entryPath);
-    if (affectsPreview && fileDraft.isSaving()) throw new Error(t('workspace.files.renameWhileSaving'));
+    const target = { projectId, rootId, path: entryPath };
+    if (fileDraftRef.current.isSaving(target)) throw new Error(t('workspace.files.renameWhileSaving'));
     const entry = await relocate(projectId, isCurrent);
     if (!entry || !isCurrent()) return null;
     filePreviewRequests.invalidate();
+    fileDraftRef.current.relocateEntry(target, entry.path);
     const current = filePreviewRef.current;
     if (current?.projectId === projectId && current.rootId === rootId) {
       const nextPath = renamedWorkspaceEntryPath(current.path, entryPath, entry.path);
       if (nextPath !== current.path) {
         const nextFile = { ...current, path: nextPath };
-        fileDraft.relocateFile(nextFile);
         setFilePreview(nextFile);
         setFileFocusRequest((focus) => focus ? { ...focus, path: nextPath } : null);
       }
     }
     onEntryRenamed?.(entryPath, entry.path, rootId);
     return entry;
-  }), [fileDraft, filePreviewRequests, onEntryRenamed, rootId, runEntryMutation, t]);
+  }), [filePreviewRequests, onEntryRenamed, rootId, runEntryMutation, t]);
 
   const renameEntry = useCallback((entryPath: string, name: string) => relocateEntry(
     entryPath, (projectId) => client.renameProjectEntry(workspaceTarget(projectId, rootId), entryPath, { name }),
@@ -271,15 +270,14 @@ export function useProjectWorkspace({ activeProjectId, rootId, project, client, 
 
   const deleteEntry = useCallback(async (entryPath: string): Promise<boolean> => (await runEntryMutation(async (projectId, isCurrent) => {
     if (!entryPath) return false;
-    const preview = filePreviewRef.current;
-    const affectsPreview = preview?.rootId === rootId && preview && isWorkspaceEntryWithin(preview.path, entryPath);
-    if (affectsPreview && fileDraft.isSaving()) {
+    const target = { projectId, rootId, path: entryPath };
+    if (fileDraftRef.current.isSaving(target)) {
       toast.error(t('workspace.files.deleteWhileSaving'));
       return false;
     }
     const approved = await confirm({
       title: t('workspace.files.deleteConfirm', { path: entryPath }),
-      description: t('workspace.files.deletePermanent') + (affectsPreview && fileDraft.dirty
+      description: t('workspace.files.deletePermanent') + (fileDraftRef.current.hasDirtyEntry(target)
         ? ` ${t('workspace.files.deleteUnsaved')}` : ''),
       danger: true, confirmLabel: t('workspace.fileMenu.delete'),
     });
@@ -288,9 +286,9 @@ export function useProjectWorkspace({ activeProjectId, rootId, project, client, 
       await client.deleteProjectEntry(workspaceTarget(projectId, rootId), entryPath);
       if (!isCurrent()) return false;
       filePreviewRequests.invalidate();
+      fileDraftRef.current.discardEntry(target);
       const current = filePreviewRef.current;
       if (current?.projectId === projectId && current.rootId === rootId && isWorkspaceEntryWithin(current.path, entryPath)) {
-        fileDraft.discardFile(current);
         previewsByScope.current.delete(JSON.stringify([projectId, rootId]));
         setFilePreview(null);
         setFileFocusRequest(null);
@@ -301,7 +299,7 @@ export function useProjectWorkspace({ activeProjectId, rootId, project, client, 
       if (isCurrent()) toast.error(t('workspace.files.deleteFailed', { error: runtimeClientErrorMessage(error) }));
       return false;
     }
-  })) ?? false, [client, confirm, fileDraft, filePreviewRequests, onEntryDeleted, rootId, runEntryMutation, t, toast]);
+  })) ?? false, [client, confirm, filePreviewRequests, onEntryDeleted, rootId, runEntryMutation, t, toast]);
 
   const isFileDirty = useCallback((filePath: string, fileRootId?: string) => activeProjectId !== null
     && fileDraft.isFileDirty({ projectId: activeProjectId, rootId: fileRootId, path: filePath }), [activeProjectId, fileDraft.isFileDirty]);

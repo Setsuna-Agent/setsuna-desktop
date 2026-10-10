@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { workspaceTargetRootId, type DesktopRuntimeClient, type WorkspaceEntry, type WorkspaceFileRead } from '@setsuna-desktop/contracts';
+import { workspaceTargetRootId, type DesktopRuntimeClient, type WorkspaceEntry, type WorkspaceFileRead, type WorkspaceFileSaveInput, type WorkspaceProjectTarget } from '@setsuna-desktop/contracts';
 import { ConfirmationProvider } from '@setsuna-desktop/renderer-ui';
 import { act, cleanup, fireEvent, renderHook, screen, waitFor } from '@testing-library/react';
 import { createElement, useState, type PropsWithChildren } from 'react';
@@ -51,6 +51,127 @@ it('keeps same-named drafts separate while switching directories and saves to th
   });
   await act(async () => { expect(await view.result.current.openProjectFile('/agent/same.txt')).toBe(true); });
   expect(view.result.current.fileDraft.content).toBe('child draft');
+});
+
+async function openInactiveDrafts() {
+  const project = { id: 'project', name: 'Workspace', path: '/main', createdAt: '', updatedAt: '',
+    roots: [{ id: 'main', path: '/main' }, { id: 'child', path: '/agent' }],
+  };
+  const file = (target: WorkspaceProjectTarget, filePath: string): WorkspaceFileRead => ({
+    projectId: project.id, rootId: workspaceTargetRootId(target), path: filePath,
+    content: 'original', size: 8, revision: 'original', preview: { kind: 'text' }, truncated: false,
+  });
+  const client = {
+    readProjectFile: vi.fn(async (target: WorkspaceProjectTarget, filePath: string) => file(target, filePath)),
+    saveProjectFile: vi.fn(async (target: WorkspaceProjectTarget, filePath: string, input: WorkspaceFileSaveInput): Promise<WorkspaceFileRead> => ({
+      ...file(target, filePath), content: input.content, revision: 'saved',
+    })),
+    renameProjectEntry: vi.fn().mockResolvedValue({ path: 'lib', name: 'lib', type: 'directory' }),
+    moveProjectEntry: vi.fn().mockResolvedValue({ path: 'archive/lib', name: 'lib', type: 'directory' }),
+    deleteProjectEntry: vi.fn().mockResolvedValue(undefined),
+  };
+  const view = renderHook(() => {
+    const [rootId, setRootId] = useState('main');
+    return useProjectWorkspace({ project, activeProjectId: project.id, rootId,
+      client: client as unknown as DesktopRuntimeClient,
+      onOpenFilePanel: (_path, nextRootId) => setRootId(nextRootId!),
+    });
+  }, { wrapper: WorkspaceProviders });
+  for (const [filePath, content] of [
+    ['/agent/src/one.ts', 'first child draft'],
+    ['/main/src/one.ts', 'primary draft'],
+    ['/agent/src/two.ts', 'second child draft'],
+  ]) {
+    await act(async () => { expect(await view.result.current.openProjectFile(filePath)).toBe(true); });
+    act(() => view.result.current.fileDraft.updateContent(content));
+  }
+  await act(async () => { await view.result.current.openProjectFile('/main/keep.ts'); });
+  await act(async () => { await view.result.current.openProjectFile('/agent/keep.ts'); });
+  return { view, client };
+}
+
+it('relocates all inactive descendant drafts and preserves same-named drafts in other roots', async () => {
+  const { view, client } = await openInactiveDrafts();
+  await act(async () => { await view.result.current.renameEntry('src', 'lib'); });
+  let moving!: Promise<WorkspaceEntry | null>;
+  act(() => { moving = view.result.current.moveEntry('lib', 'archive'); });
+  fireEvent.click(screen.getByRole('button', { name: '移动' }));
+  await act(async () => { await moving; });
+  expect(view.result.current.filePreview?.path).toBe('keep.ts');
+  expect(view.result.current.isFileDirty('src/one.ts', 'child')).toBe(false);
+  expect(view.result.current.isFileDirty('lib/one.ts', 'child')).toBe(false);
+  expect(view.result.current.isFileDirty('archive/lib/one.ts', 'child')).toBe(true);
+  expect(view.result.current.isFileDirty('src/one.ts', 'main')).toBe(true);
+
+  for (const [filePath, content] of [
+    ['archive/lib/one.ts', 'first child draft'], ['archive/lib/two.ts', 'second child draft'],
+  ]) {
+    await act(async () => { await view.result.current.openProjectFile(filePath); });
+    expect(view.result.current.fileDraft).toMatchObject({ content, dirty: true });
+    await act(async () => { expect(await view.result.current.fileDraft.save()).toBe(true); });
+    expect(client.saveProjectFile).toHaveBeenLastCalledWith({ projectId: 'project', rootId: 'child' }, filePath, {
+      content, expectedRevision: 'original',
+    });
+  }
+  await act(async () => { await view.result.current.openProjectFile('/main/src/one.ts'); });
+  expect(view.result.current.fileDraft.content).toBe('primary draft');
+  await act(async () => { await view.result.current.fileDraft.save(); });
+  expect(view.result.current.fileDraft.hasUnsavedChanges).toBe(false);
+});
+
+it('warns for inactive drafts and discards only deleted descendants after successful deletion', async () => {
+  const { view, client } = await openInactiveDrafts();
+  let deleting!: Promise<boolean>;
+  act(() => { deleting = view.result.current.deleteEntry('src'); });
+  expect(await screen.findByText(/其中有未保存的修改/)).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: '取消' }));
+  await act(async () => { expect(await deleting).toBe(false); });
+  expect(client.deleteProjectEntry).not.toHaveBeenCalled();
+  expect(view.result.current.isFileDirty('src/one.ts', 'child')).toBe(true);
+  expect(view.result.current.isFileDirty('src/two.ts', 'child')).toBe(true);
+
+  client.deleteProjectEntry.mockRejectedValueOnce(new Error('permission denied'));
+  act(() => { deleting = view.result.current.deleteEntry('src'); });
+  fireEvent.click(screen.getByRole('button', { name: '删除' }));
+  await act(async () => { expect(await deleting).toBe(false); });
+  expect(view.result.current.isFileDirty('src/one.ts', 'child')).toBe(true);
+  expect(view.result.current.isFileDirty('src/two.ts', 'child')).toBe(true);
+
+  act(() => { deleting = view.result.current.deleteEntry('src'); });
+  fireEvent.click(screen.getByRole('button', { name: '删除' }));
+  await act(async () => { expect(await deleting).toBe(true); });
+  expect(view.result.current.filePreview?.path).toBe('keep.ts');
+  expect(view.result.current.isFileDirty('src/one.ts', 'child')).toBe(false);
+  expect(view.result.current.isFileDirty('src/two.ts', 'child')).toBe(false);
+  expect(view.result.current.isFileDirty('src/one.ts', 'main')).toBe(true);
+  await act(async () => { await view.result.current.openProjectFile('/main/src/one.ts'); });
+  expect(view.result.current.fileDraft.content).toBe('primary draft');
+  await act(async () => { await view.result.current.fileDraft.save(); });
+  expect(view.result.current.fileDraft.hasUnsavedChanges).toBe(false);
+});
+
+it('blocks moving or deleting a file that is still saving in an inactive tab', async () => {
+  const { view, client } = await openInactiveDrafts();
+  await act(async () => { await view.result.current.openProjectFile('src/one.ts'); });
+  let finishSave!: (file: WorkspaceFileRead) => void;
+  client.saveProjectFile.mockImplementationOnce(() => new Promise((resolve) => { finishSave = resolve; }));
+  let saving!: Promise<boolean>;
+  act(() => { saving = view.result.current.fileDraft.save(); });
+  await act(async () => { await view.result.current.openProjectFile('/main/keep.ts'); });
+  await act(async () => { await view.result.current.openProjectFile('/agent/keep.ts'); });
+  await act(async () => {
+    await expect(view.result.current.moveEntry('src', 'archive')).rejects.toThrow();
+    expect(await view.result.current.deleteEntry('src')).toBe(false);
+  });
+  expect(client.moveProjectEntry).not.toHaveBeenCalled();
+  expect(client.deleteProjectEntry).not.toHaveBeenCalled();
+  await act(async () => {
+    finishSave({ projectId: 'project', rootId: 'child', path: 'src/one.ts', content: 'first child draft',
+      size: 17, revision: 'saved', preview: { kind: 'text' }, truncated: false });
+    expect(await saving).toBe(true);
+  });
+  await act(async () => { await view.result.current.openProjectFile('src/one.ts'); });
+  expect(view.result.current.fileDraft.dirty).toBe(false);
 });
 
 it('renames and moves open descendants, preserving the active draft for saving at its new path', async () => {

@@ -190,6 +190,7 @@ export function DesktopReviewPanel({
   }, [autoExpandReviewFiles, fileExpansionRequest]);
   const pathContext = useMemo<ReviewPathContext>(() => ({
     projectId: activeProject?.id,
+    rootId: activeProject?.roots?.find((root) => root.path === activeProject.path)?.id,
     baseRef: reviewState?.baseRef ?? null,
     source: activeSource,
     workspaceRoot: reviewState?.workspaceRoot ?? activeProject?.path ?? null,
@@ -197,6 +198,7 @@ export function DesktopReviewPanel({
   }), [
     activeProject?.id,
     activeProject?.path,
+    activeProject?.roots,
     activeSource,
     reviewState?.baseRef,
     reviewState?.gitRoot,

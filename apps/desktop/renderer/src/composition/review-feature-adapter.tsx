@@ -95,11 +95,12 @@ function ReviewFileIcon(props: ComponentProps<ReviewRendererHost['ui']['FileIcon
 function ReviewFindingMarkdown({
   content,
   projectId,
+  rootId,
   onOpenWorkspaceFile,
   workspaceRoot,
 }: ComponentProps<ReviewRendererHost['ui']['FindingMarkdown']>) {
   const [client] = useState(createDesktopRuntimeClient);
-  const searchEntries = useReviewWorkspaceEntries(client, { projectId });
+  const searchEntries = useReviewWorkspaceEntries(client, { projectId, rootId });
   return (
     <MarkdownNavigationProvider
       workspaceRoot={workspaceRoot}

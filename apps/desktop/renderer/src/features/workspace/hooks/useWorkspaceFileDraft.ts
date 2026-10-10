@@ -8,6 +8,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useConfirm } from '@setsuna-desktop/renderer-ui';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
+import { isWorkspaceEntryWithin, renamedWorkspaceEntryPath } from '../workspaceEntryPaths.js';
 
 type WorkspaceFileDraftOptions = {
   client: Pick<DesktopRuntimeClient, 'readProjectFileForEdit' | 'saveProjectFile'>;
@@ -18,11 +19,13 @@ type WorkspaceFileDraftOptions = {
   onBackgroundFileSaved?: (file: WorkspaceFileRead) => void;
 };
 
+type WorkspaceFileDraftTarget = Pick<WorkspaceFileRead, 'projectId' | 'rootId' | 'path'>;
+
 type WorkspaceFileDraftSession = {
   content: string;
   error: string | null;
   expectedRevision: string;
-  fileKey: string;
+  file: WorkspaceFileDraftTarget;
   originalContent: string;
   saving: boolean;
 };
@@ -44,7 +47,7 @@ export function useWorkspaceFileDraft({
   const currentFileKeyRef = useRef(fileKey);
   const previousFileKeyRef = useRef(fileKey);
   const editRequestRef = useRef<object | null>(null);
-  const saveRequestRef = useRef<object | null>(null);
+  const saveRequestRef = useRef<{ file: WorkspaceFileDraftTarget } | null>(null);
   currentFileKeyRef.current = fileKey;
   const activeSession = fileKey ? sessions[fileKey] ?? null : null;
   const updateSession = useCallback((key: string | null, value: WorkspaceFileDraftSession | null | ((current: WorkspaceFileDraftSession | null) => WorkspaceFileDraftSession | null)) => {
@@ -54,8 +57,8 @@ export function useWorkspaceFileDraft({
       const next = typeof value === 'function' ? value(previous) : value;
       if (next === previous) return current;
       const result = { ...current };
-      if (next) result[next.fileKey] = next;
-      if (!next || next.fileKey !== key) delete result[key];
+      if (next) result[workspaceFileKey(next.file)] = next;
+      if (!next || workspaceFileKey(next.file) !== key) delete result[key];
       return result;
     });
   }, []);
@@ -67,6 +70,8 @@ export function useWorkspaceFileDraft({
     const draft = sessions[workspaceFileKey(target)];
     return Boolean(draft && draft.content !== draft.originalContent);
   }, [sessions]);
+  const hasDirtyEntry = useCallback((target: WorkspaceFileDraftTarget) => Object.values(sessions)
+    .some((draft) => isDraftWithinEntry(draft.file, target) && draft.content !== draft.originalContent), [sessions]);
   const editing = Boolean(activeSession);
   const dirty = Boolean(activeSession && activeSession.content !== activeSession.originalContent);
   const canEdit = canEditWorkspaceFile(file);
@@ -88,7 +93,7 @@ export function useWorkspaceFileDraft({
   useEffect(() => {
     if (!file) return;
     setSession((current) => {
-      if (!current || current.fileKey !== fileKey || current.saving
+      if (!current || workspaceFileKey(current.file) !== fileKey || current.saving
         || current.content !== current.originalContent || current.expectedRevision === file.revision) return current;
       // External changes update a clean editor in place; local edits keep their original revision for conflict checks.
       return isCompleteEditableWorkspaceFile(file) ? {
@@ -129,7 +134,7 @@ export function useWorkspaceFileDraft({
         content: editableFile.content,
         error: null,
         expectedRevision: editableFile.revision,
-        fileKey: editingFileKey,
+        file: { projectId: editableFile.projectId, rootId: editableFile.rootId, path: editableFile.path },
         originalContent: editableFile.content,
         saving: false,
       });
@@ -150,29 +155,43 @@ export function useWorkspaceFileDraft({
   }, [setSession]);
 
   // Mutations also check the request ref, because React may not have rendered saving=true yet.
-  const isSaving = useCallback(() => saveRequestRef.current !== null, []);
+  const isSaving = useCallback((target?: WorkspaceFileDraftTarget) => {
+    const request = saveRequestRef.current;
+    return Boolean(request && (!target || isDraftWithinEntry(request.file, target)));
+  }, []);
 
-  const relocateFile = useCallback((nextFile: WorkspaceFileRead) => {
-    const previousKey = currentFileKeyRef.current;
-    const nextKey = workspaceFileKey(nextFile);
-    editRequestRef.current = null;
-    currentFileKeyRef.current = nextKey;
-    previousFileKeyRef.current = nextKey;
-    setPrepareError(null);
-    setPreparingFileKey(null);
-    // A filesystem rename changes identity, not the document or its saved revision.
-    updateSession(previousKey, (current) => current ? { ...current, fileKey: nextKey } : current);
-  }, [updateSession]);
+  const relocateEntry = useCallback((target: WorkspaceFileDraftTarget, nextPath: string) => {
+    if (file && isDraftWithinEntry(file, target)) {
+      const nextKey = workspaceFileKey({ ...file, path: renamedWorkspaceEntryPath(file.path, target.path, nextPath) });
+      editRequestRef.current = null;
+      currentFileKeyRef.current = nextKey;
+      previousFileKeyRef.current = nextKey;
+      setPrepareError(null);
+      setPreparingFileKey(null);
+    }
+    // Rename every open descendant in this directory, including drafts in inactive tabs.
+    // Only identity changes: content and the saved revision remain valid at the new path.
+    setSessions((current) => {
+      const next = { ...current };
+      for (const [key, draft] of Object.entries(current)) {
+        if (!isDraftWithinEntry(draft.file, target)) continue;
+        const nextFile = { ...draft.file, path: renamedWorkspaceEntryPath(draft.file.path, target.path, nextPath) };
+        delete next[key];
+        next[workspaceFileKey(nextFile)] = { ...draft, file: nextFile };
+      }
+      return next;
+    });
+  }, [file]);
 
-  const discardFile = useCallback((target: Pick<WorkspaceFileRead, 'path' | 'projectId' | 'rootId'>) => {
-    const key = workspaceFileKey(target);
-    if (key === currentFileKeyRef.current) {
+  const discardEntry = useCallback((target: WorkspaceFileDraftTarget) => {
+    if (file && isDraftWithinEntry(file, target)) {
       editRequestRef.current = null;
       setPrepareError(null);
       setPreparingFileKey(null);
     }
-    updateSession(key, null);
-  }, [updateSession]);
+    setSessions((current) => Object.fromEntries(Object.entries(current)
+      .filter(([, draft]) => !isDraftWithinEntry(draft.file, target))));
+  }, [file]);
 
   const confirmDiscardChanges = useCallback(async (target?: Pick<WorkspaceFileRead, 'path' | 'projectId' | 'rootId'>): Promise<boolean> => {
     if (saveRequestRef.current) return false;
@@ -203,13 +222,13 @@ export function useWorkspaceFileDraft({
 
   const save = useCallback(async (): Promise<boolean> => {
     if (!file || !activeSession || activeSession.saving || saveRequestRef.current
-      || isSaveBlocked?.() || currentFileKeyRef.current !== activeSession.fileKey) return false;
+      || isSaveBlocked?.() || currentFileKeyRef.current !== workspaceFileKey(activeSession.file)) return false;
     if (!dirty) return true;
-    const savingFileKey = activeSession.fileKey;
+    const savingFileKey = workspaceFileKey(activeSession.file);
     const savingContent = activeSession.content;
-    const saveRequest = {};
+    const saveRequest = { file: activeSession.file };
     saveRequestRef.current = saveRequest;
-    setSession((current) => current?.fileKey === savingFileKey
+    setSession((current) => current && workspaceFileKey(current.file) === savingFileKey
       ? { ...current, error: null, saving: true }
       : current);
     try {
@@ -228,7 +247,7 @@ export function useWorkspaceFileDraft({
     } catch (error) {
       if (saveRequestRef.current !== saveRequest) return false;
       saveRequestRef.current = null;
-      updateSession(savingFileKey, (current) => current?.fileKey === savingFileKey ? {
+      updateSession(savingFileKey, (current) => current && workspaceFileKey(current.file) === savingFileKey ? {
         ...current,
         error: error instanceof Error ? error.message : String(error),
         saving: false,
@@ -250,8 +269,9 @@ export function useWorkspaceFileDraft({
     confirmDiscardChanges,
     confirmDiscardAllChanges,
     hasUnsavedChanges,
+    hasDirtyEntry,
     isFileDirty,
-    discardFile,
+    discardEntry,
     content: activeSession?.content ?? file?.content ?? '',
     dirty,
     editing,
@@ -259,7 +279,7 @@ export function useWorkspaceFileDraft({
     errorMessage,
     isSaving,
     preparing,
-    relocateFile,
+    relocateEntry,
     save,
     saving: activeSession?.saving ?? false,
     updateContent,
@@ -269,8 +289,9 @@ export function useWorkspaceFileDraft({
     confirmDiscardChanges,
     confirmDiscardAllChanges,
     hasUnsavedChanges,
+    hasDirtyEntry,
     isFileDirty,
-    discardFile,
+    discardEntry,
     dirty,
     editing,
     error,
@@ -278,7 +299,7 @@ export function useWorkspaceFileDraft({
     isSaving,
     file?.content,
     preparing,
-    relocateFile,
+    relocateEntry,
     save,
     updateContent,
   ]);
@@ -312,7 +333,7 @@ export function reconcileWorkspaceFileDraftAfterSave(
     savingFileKey: string;
   },
 ): WorkspaceFileDraftSession | null {
-  if (!current || current.fileKey !== savingFileKey) return current;
+  if (!current || workspaceFileKey(current.file) !== savingFileKey) return current;
   // Keep the editor mounted after saving, including any input made while the
   // write was pending. The next save uses the revision that just landed.
   return {
@@ -326,3 +347,8 @@ export function reconcileWorkspaceFileDraftAfterSave(
 }
 
 export type WorkspaceFileDraftState = ReturnType<typeof useWorkspaceFileDraft>;
+
+function isDraftWithinEntry(file: WorkspaceFileDraftTarget, entry: WorkspaceFileDraftTarget): boolean {
+  return file.projectId === entry.projectId && file.rootId === entry.rootId
+    && isWorkspaceEntryWithin(file.path, entry.path);
+}

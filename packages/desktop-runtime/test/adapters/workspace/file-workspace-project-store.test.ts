@@ -87,16 +87,18 @@ describe('file workspace project store', () => {
     expect(unboundAgain).not.toHaveProperty('path');
   });
 
-  it('uses the project name as a unique portable identity', async () => {
+  it.each([undefined, []])('rebinds a portable project by name (roots=%j) and enforces name uniqueness', async (roots) => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-workspace-test-'));
     const first = path.join(root, 'first');
     const second = path.join(root, 'second');
     await Promise.all([mkdir(first), mkdir(second)]);
     const store = new FileWorkspaceProjectStore(path.join(root, 'data'), systemClock);
-    const placeholder = await store.addProject({ name: 'Demo' });
+    const placeholder = await store.addProject({ name: 'Demo', roots });
 
     const associated = await store.addProject({ name: 'demo', path: first });
     expect(associated.id).toBe(placeholder.id);
+    expect(associated.path).toBe(await realpath(first));
+    await expect(store.getStatus(associated.id)).resolves.toMatchObject({ exists: true, readable: true });
     await expect(store.addProject({ name: 'Ｄｅｍｏ', path: second }))
       .rejects.toThrow('already exists');
   });

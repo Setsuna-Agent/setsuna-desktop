@@ -146,7 +146,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
         updatedAt: now,
       };
       if (requestedRoots) project = projectWithRoots(project, requestedRoots);
-      else if (existing?.roots) project = projectWithRoots(project, existing.roots);
+      else if (existing?.roots?.length) project = projectWithRoots(project, existing.roots);
       assertProjectRootsAvailable(project, index.projects);
       await this.writeIndex({
         version: 1,

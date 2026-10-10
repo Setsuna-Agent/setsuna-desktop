@@ -1,3 +1,4 @@
+import { workspaceProjectRoots } from '@setsuna-desktop/contracts';
 import { watch, type FSWatcher } from 'node:fs';
 import { cp, lstat, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -259,7 +260,7 @@ async function resolveAppServerFsWatchPath(
 
 async function workspaceRoots(runtime: RuntimeFactory): Promise<string[]> {
   const projectPaths = (await runtime.workspaceProjects.listProjects()).projects
-    .flatMap((project) => project.path ? [project.path] : []);
+    .flatMap((project) => workspaceProjectRoots(project).map((root) => root.path));
   const roots = await Promise.all(projectPaths.map((projectPath) => (
     realpath(projectPath).catch(() => path.resolve(projectPath))
   )));

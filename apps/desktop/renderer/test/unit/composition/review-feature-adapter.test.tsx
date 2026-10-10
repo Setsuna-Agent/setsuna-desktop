@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import type { DesktopRuntimeClient, RuntimeReviewFinding } from '@setsuna-desktop/contracts';
+import { workspaceTargetRootId, type DesktopRuntimeClient, type RuntimeReviewFinding, type WorkspaceProjectTarget } from '@setsuna-desktop/contracts';
 import type { ReviewCodePatchViewProps } from '@setsuna-desktop/feature-review/renderer/host';
 import { composeRendererMessages } from '@setsuna-desktop/feature-core/renderer';
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
@@ -20,9 +20,12 @@ vi.mock('../../../src/shared/code/PierreCode.js', () => ({
 }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); window.localStorage.clear(); });
 
-it.each([true, false])('validates and opens review finding links in the reviewed project (anchored=%s)', async (anchored) => {
-  const searchProjectEntries = vi.fn(async () => ({
-    workspaceRoot: '/review', query: '', scanned: 1, truncated: false,
+it.each([
+  { anchored: true, secondary: false }, { anchored: false, secondary: false },
+  { anchored: true, secondary: true }, { anchored: false, secondary: true },
+])('validates and opens review finding links (anchored=$anchored, secondary=$secondary)', async ({ anchored, secondary }) => {
+  const searchProjectEntries = vi.fn(async (target: WorkspaceProjectTarget) => ({
+    workspaceRoot: workspaceTargetRootId(target) === 'secondary' ? '/secondary' : '/review', query: '', scanned: 1, truncated: false,
     entries: [{ name: 'README.md', path: 'README.md', parent: '', kind: 'file' as const }],
   }));
   vi.mocked(createDesktopRuntimeClient).mockReturnValue({ searchProjectEntries } as unknown as DesktopRuntimeClient);
@@ -33,7 +36,9 @@ it.each([true, false])('validates and opens review finding links in the reviewed
   const open = vi.fn();
   const view = render(<I18nProvider initialLocale="zh-CN" messageCatalog={composeRendererMessages(hostMessages, [{ module: reviewRendererFeature }])}><ToastProvider><ReviewFeatureHostBoundary>
     <ReviewFeaturePanel
-      activeProject={{ id: 'review-project', path: '/review', name: 'Review', createdAt: '', updatedAt: '' }}
+      activeProject={{ id: 'review-project', path: secondary ? '/secondary' : '/review', name: 'Review', createdAt: '', updatedAt: '',
+        ...(secondary ? { roots: [{ id: 'primary', path: '/review' }, { id: 'secondary', path: '/secondary' }] } : {}),
+      }}
       error={null} loading={false} reviewState={null}
       findings={[finding]} focusRequest={{ path: finding.path, line: 1, version: 1, finding }}
       latestSummary={{ additions: 1, deletions: 0, files: anchored ? [{
@@ -44,7 +49,8 @@ it.each([true, false])('validates and opens review finding links in the reviewed
     />
   </ReviewFeatureHostBoundary></ToastProvider></I18nProvider>);
   await waitFor(() => expect(view.getAllByRole('link')).toHaveLength(2));
-  expect(searchProjectEntries).toHaveBeenCalledExactlyOnceWith('review-project', '', '');
+  expect(searchProjectEntries).toHaveBeenCalledExactlyOnceWith(secondary
+    ? { projectId: 'review-project', rootId: 'secondary' } : 'review-project', '', '');
   expect(view.getByText('missing.ts').closest('a')).toBeNull();
   fireEvent.click(view.getByRole('link', { name: 'README.md:12' }));
   fireEvent.click(view.getByRole('link', { name: 'readme' }));
