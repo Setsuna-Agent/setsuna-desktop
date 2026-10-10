@@ -47,6 +47,15 @@ body.desktop-file-tree-resizing .desktop-file-tree__resize-handle::after {
   background: var(--app-border-strong);
 }
 
+.desktop-file-tree__controls {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+}
+
 .desktop-file-search {
   flex: 0 0 auto;
   display: grid;
@@ -54,7 +63,7 @@ body.desktop-file-tree-resizing .desktop-file-tree__resize-handle::after {
   align-items: center;
   gap: 6px;
   height: 30px;
-  margin: 8px;
+  margin: 0;
   padding: 0 9px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-md);

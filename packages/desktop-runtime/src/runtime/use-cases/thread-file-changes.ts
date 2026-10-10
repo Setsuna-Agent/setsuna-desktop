@@ -47,7 +47,9 @@ export async function applyThreadFileChanges(
       return diffs.map((value) => {
         const file = record(value);
         if (!file || file.partial || typeof file.path !== 'string' || !isFileChangePatch(file.undo)) throw unavailableChange();
-        return { path: file.path, patch: file.undo };
+        return { path: file.path, patch: file.undo,
+          ...(typeof file.absolutePath === 'string' ? { absolutePath: file.absolutePath } : {}),
+        };
       });
     });
     const projectId = thread.workspaceId ?? thread.projectId ?? (await runtime.workspaceProjects.ensureTemporaryWorkspace({

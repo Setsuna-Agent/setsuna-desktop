@@ -50,6 +50,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     activeProject,
     activeProjectId,
     activeWorkspace,
+    fileWorkspace,
     activeView,
     chatActions,
     clearCapabilitySelectionRequest,
@@ -567,6 +568,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         }}
         activeProject={activeProject}
         activeWorkspace={activeWorkspace}
+        fileWorkspace={fileWorkspace}
         activeView={activeView}
         selectedCapabilitiesPluginId={selectedCapabilitiesPluginId}
         selectedPluginViewKey={selectedPluginViewKey}

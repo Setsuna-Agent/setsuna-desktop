@@ -8,7 +8,7 @@ export type CreatedWorkspaceFork = {
 };
 
 export type WorkspaceFork = {
-  createWorktree(workspacePath: string): Promise<CreatedWorkspaceFork>;
+  createWorktree(workspacePath: string, project?: WorkspaceProject): Promise<CreatedWorkspaceFork>;
   /** Resolves managed workspaces without registering sidebar projects. */
-  getWorkspace(workspaceId: string): Promise<WorkspaceProject | undefined>;
+  getWorkspace(workspaceId: string, sourceProject?: WorkspaceProject): Promise<(WorkspaceProject & { sourceProjectId?: string }) | undefined>;
 };

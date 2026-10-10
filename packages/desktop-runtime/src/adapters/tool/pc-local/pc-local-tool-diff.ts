@@ -23,6 +23,7 @@ export type FileDiff = {
   type: 'file_diff';
   action: FileDiffAction;
   path: string;
+  absolutePath?: string;
   additions: number;
   deletions: number;
   truncated: boolean;
@@ -149,6 +150,8 @@ export function buildFileDiff({
     type: 'file_diff',
     action: existed ? 'Edited' : 'Created',
     path: workspaceRelativePath(filePath, root),
+    // Persist the actual target: the project's primary directory can change later.
+    absolutePath: filePath,
     additions,
     deletions,
     truncated: false,

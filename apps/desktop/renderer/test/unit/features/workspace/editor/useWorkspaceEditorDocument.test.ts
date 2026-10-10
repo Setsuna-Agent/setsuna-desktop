@@ -47,7 +47,7 @@ it('publishes external document replacements while keeping input and save echoes
 
   view.rerender({ content: '# External edit', revision: 'revision-3' });
   const refreshedItems = view.result.current.items;
-  expect(refreshedItems[0]).toMatchObject({ id: 'project:README.md', edit: true, version: 1,
+  expect(refreshedItems[0]).toMatchObject({ id: JSON.stringify(['project', null, 'README.md']), edit: true, version: 1,
     file: { name: 'README.md', contents: '# External edit' } });
   expect(refreshedItems).not.toBe(initialItems);
   act(() => view.result.current.onEditorChange(refreshedItems[0]!, { name: 'README.md', contents: '# Next edit' }));

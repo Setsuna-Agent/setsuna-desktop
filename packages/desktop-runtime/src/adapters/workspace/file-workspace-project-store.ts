@@ -1,5 +1,10 @@
 import {
   normalizeWorkspaceProjectName,
+  workspaceProjectForRoot,
+  workspaceProjectRoots,
+  workspaceTargetProjectId,
+  workspaceTargetRootId,
+  type WorkspaceProjectTarget,
   parseTemporaryWorkspaceProjectId,
   TEMPORARY_WORKSPACE_PROJECT_ID,
   temporaryWorkspaceProjectId,
@@ -59,6 +64,8 @@ import { readJsonFile, writeJsonFile } from '../store/json-file.js';
 import { createWorkspaceEntry, deleteWorkspaceEntry, moveWorkspaceEntry, renameWorkspaceEntry } from './workspace-entry-mutations.js';
 import { applyWorkspaceFileChanges } from './workspace-file-changes.js';
 
+import { assertProjectRootsAvailable, findGitRoot, normalizeProjectPath, normalizeProjectRoots, projectWithRoots } from './workspace-project-roots.js';
+
 const MAX_LIST_ENTRIES = 200;
 export const MAX_WORKSPACE_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_ENTRY_SEARCH_RESULTS = 80;
@@ -104,7 +111,8 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
   }
 
   async addProject(input: AddWorkspaceProjectInput): Promise<WorkspaceProject> {
-    const projectPath = input.path === undefined ? undefined : await normalizeProjectPath(input.path);
+    const requestedRoots = input.roots === undefined ? undefined : await normalizeProjectRoots(input.roots);
+    const projectPath = requestedRoots ? requestedRoots[0]?.path : input.path === undefined ? undefined : await normalizeProjectPath(input.path);
     if (projectPath) await assertProjectDirectory(projectPath);
     const requestedName = input.name === undefined
       ? projectPath ? path.basename(projectPath) || projectPath : undefined
@@ -130,13 +138,16 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
         }
       }
       const existing = existingByPath ?? (existingByName?.path ? undefined : existingByName);
-      const project: WorkspaceProject = {
+      let project: WorkspaceProject = {
         id: existing?.id ?? `project_${randomUUID().replaceAll('-', '').slice(0, 20)}`,
         name: projectName,
-        ...(projectPath ? { path: projectPath, gitRoot: await findGitRoot(projectPath) } : {}),
+        ...(projectPath ? { path: projectPath, gitRoot: requestedRoots ? requestedRoots[0]?.gitRoot : await findGitRoot(projectPath) } : {}),
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       };
+      if (requestedRoots) project = projectWithRoots(project, requestedRoots);
+      else if (existing?.roots?.length) project = projectWithRoots(project, existing.roots);
+      assertProjectRootsAvailable(project, index.projects);
       await this.writeIndex({
         version: 1,
         projects: [project, ...index.projects.filter((item) => (
@@ -161,28 +172,33 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
       const name = input.name === undefined
         ? existing.name
         : normalizeWorkspaceProjectName(input.name);
-      const nextPath = projectPath === undefined ? existing.path : projectPath ?? undefined;
+      const roots = input.roots === undefined ? undefined : await normalizeProjectRoots(input.roots, existing);
+      const nextPath = roots ? roots[0]?.path : projectPath === undefined ? existing.path : projectPath ?? undefined;
       const nameKey = workspaceProjectNameKey(name);
       if (index.projects.some((project) => (
         project.id !== projectId && workspaceProjectNameKey(project.name) === nameKey
       ))) {
         throw new Error(`A project named "${name}" already exists.`);
       }
-      if (nextPath && index.projects.some((project) => (
-        project.id !== projectId && project.path === nextPath
-      ))) {
-        throw new Error('That directory is already associated with another project.');
-      }
-      const updated: WorkspaceProject = {
+      let updated: WorkspaceProject = {
         ...existing,
         name,
-        ...(nextPath ? { path: nextPath, gitRoot: await findGitRoot(nextPath) } : {}),
+        ...(nextPath ? { path: nextPath, gitRoot: roots ? roots[0]?.gitRoot
+          : projectPath === undefined ? existing.gitRoot : await findGitRoot(nextPath) } : {}),
         updatedAt: this.clock.now().toISOString(),
       };
+      if (roots) updated = projectWithRoots(updated, roots);
+      else if (existing.roots && projectPath !== undefined) {
+        const previous = workspaceProjectRoots(existing);
+        updated = projectWithRoots(updated, nextPath
+          ? [{ id: previous[0]?.id ?? 'primary', path: nextPath, gitRoot: updated.gitRoot }, ...previous.slice(1).filter((root) => root.path !== nextPath)]
+          : []);
+      }
       if (!nextPath) {
         delete updated.path;
         delete updated.gitRoot;
       }
+      assertProjectRootsAvailable(updated, index.projects);
       await this.writeIndex({
         version: 1,
         projects: index.projects.map((project) => project.id === projectId ? updated : project),
@@ -288,8 +304,9 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     }
   }
 
-  async getStatus(projectId?: string): Promise<WorkspaceStatus> {
-    const project = await this.findProject(projectId);
+  async getStatus(projectId?: WorkspaceProjectTarget, sourceProjectId?: string): Promise<WorkspaceStatus> {
+    const original = await this.findProject(projectId === undefined ? undefined : workspaceTargetProjectId(projectId), sourceProjectId);
+    const project = original && workspaceProjectForRoot(original, projectId === undefined ? undefined : workspaceTargetRootId(projectId));
     if (!project) return { exists: false, readable: false };
     if (!project.path) return { project, exists: false, readable: false };
     try {
@@ -307,7 +324,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     }
   }
 
-  async listEntries(projectId: string, relativePath = '.'): Promise<WorkspaceEntryList> {
+  async listEntries(projectId: WorkspaceProjectTarget, relativePath = '.'): Promise<WorkspaceEntryList> {
     const project = await this.requireProject(projectId);
     const target = await safeResolve(project.path, relativePath);
     const targetStat = await stat(target);
@@ -336,12 +353,12 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     };
   }
 
-  async applyFileChanges(projectId: string, changes: WorkspaceFileChange[], action: WorkspaceFileChangeAction, persist?: () => Promise<void>): Promise<void> {
+  async applyFileChanges(projectId: WorkspaceProjectTarget, changes: WorkspaceFileChange[], action: WorkspaceFileChangeAction, persist?: () => Promise<void>): Promise<void> {
     const project = await this.requireProject(projectId);
     await applyWorkspaceFileChanges(project.path, changes, action, persist);
   }
 
-  async searchEntries(projectId: string, query = '', parent?: string | null): Promise<WorkspaceEntrySearchResponse> {
+  async searchEntries(projectId: WorkspaceProjectTarget, query = '', parent?: string | null): Promise<WorkspaceEntrySearchResponse> {
     const project = await this.requireProject(projectId);
     const search = normalizeEntrySearchText(query);
     const parentScoped = parent !== undefined && parent !== null;
@@ -419,13 +436,13 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     };
   }
 
-  async inspectFile(projectId: string, relativePath: string): Promise<WorkspaceFileMetadata> {
+  async inspectFile(projectId: WorkspaceProjectTarget, relativePath: string): Promise<WorkspaceFileMetadata> {
     const project = await this.requireProject(projectId);
     const target = await safeResolve(project.path, relativePath);
     const targetStat = await stat(target);
     if (!targetStat.isFile()) throw new Error('Path is not a file.');
     return {
-      projectId,
+      ...workspaceFileIdentity(projectId),
       path: toProjectRelative(project.path, target),
       size: targetStat.size,
       modifiedAt: targetStat.mtime.toISOString(),
@@ -433,7 +450,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
   }
 
   async readFile(
-    projectId: string,
+    projectId: WorkspaceProjectTarget,
     relativePath: string,
     options: WorkspaceFileReadOptions = {},
   ): Promise<WorkspaceFileRead> {
@@ -449,7 +466,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     if (imageMimeType) {
       if (buffer.byteLength > MAX_WORKSPACE_IMAGE_BYTES) {
         return {
-          projectId,
+          ...workspaceFileIdentity(projectId),
           path,
           content: '',
           size: buffer.byteLength,
@@ -460,7 +477,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
         };
       }
       return {
-        projectId,
+        ...workspaceFileIdentity(projectId),
         path,
         content: '',
         size: buffer.byteLength,
@@ -472,7 +489,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     }
     if (isProbablyBinaryWorkspaceFile(buffer)) {
       return {
-        projectId,
+        ...workspaceFileIdentity(projectId),
         path,
         content: '',
         size: buffer.byteLength,
@@ -485,7 +502,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     const maxTextBytes = options.maxTextBytes ?? WORKSPACE_TEXT_FILE_MAX_BYTES;
     const truncated = buffer.byteLength > maxTextBytes;
     return {
-      projectId,
+      ...workspaceFileIdentity(projectId),
       path,
       content: buffer.subarray(0, maxTextBytes).toString('utf8'),
       size: buffer.byteLength,
@@ -496,7 +513,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     };
   }
 
-  async readImage(projectId: string, relativePath: string): Promise<WorkspaceImageRead> {
+  async readImage(projectId: WorkspaceProjectTarget, relativePath: string): Promise<WorkspaceImageRead> {
     const project = await this.requireProject(projectId);
     const target = await safeResolve(project.path, relativePath);
     const targetStat = await stat(target);
@@ -509,7 +526,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     const mimeType = detectSafeImageMimeType(buffer);
     if (!mimeType) throw new Error('Unsupported image format. Use PNG, JPEG, GIF, or WebP.');
     return {
-      projectId,
+      ...workspaceFileIdentity(projectId),
       path: toProjectRelative(project.path, target),
       mimeType,
       size: buffer.byteLength,
@@ -518,35 +535,35 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     };
   }
 
-  async writeFile(projectId: string, relativePath: string, content: string): Promise<WorkspaceFileWrite> {
+  async writeFile(projectId: WorkspaceProjectTarget, relativePath: string, content: string): Promise<WorkspaceFileWrite> {
     return this.writeWorkspaceFile(projectId, relativePath, content);
   }
 
-  async createEntry(projectId: string, input: WorkspaceEntryCreateInput): Promise<WorkspaceEntry> {
+  async createEntry(projectId: WorkspaceProjectTarget, input: WorkspaceEntryCreateInput): Promise<WorkspaceEntry> {
     const project = await this.requireProject(projectId);
     return createWorkspaceEntry(project.path, input);
   }
 
-  async renameEntry(projectId: string, relativePath: string, input: WorkspaceEntryRenameInput): Promise<WorkspaceEntry> {
+  async renameEntry(projectId: WorkspaceProjectTarget, relativePath: string, input: WorkspaceEntryRenameInput): Promise<WorkspaceEntry> {
     const project = await this.requireProject(projectId);
     return renameWorkspaceEntry(project.path, relativePath, input);
   }
 
-  async deleteEntry(projectId: string, relativePath: string): Promise<void> {
+  async deleteEntry(projectId: WorkspaceProjectTarget, relativePath: string): Promise<void> {
     const project = await this.requireProject(projectId);
     return deleteWorkspaceEntry(project.path, relativePath);
   }
 
-  async moveEntry(projectId: string, relativePath: string, input: WorkspaceEntryMoveInput): Promise<WorkspaceEntry> {
+  async moveEntry(projectId: WorkspaceProjectTarget, relativePath: string, input: WorkspaceEntryMoveInput): Promise<WorkspaceEntry> {
     const project = await this.requireProject(projectId);
     return moveWorkspaceEntry(project.path, relativePath, input);
   }
 
-  async writeBinaryFile(projectId: string, relativePath: string, content: Uint8Array): Promise<WorkspaceFileWrite> {
+  async writeBinaryFile(projectId: WorkspaceProjectTarget, relativePath: string, content: Uint8Array): Promise<WorkspaceFileWrite> {
     return this.writeWorkspaceFile(projectId, relativePath, content);
   }
 
-  async deleteFile(projectId: string, relativePath: string): Promise<void> {
+  async deleteFile(projectId: WorkspaceProjectTarget, relativePath: string): Promise<void> {
     const project = await this.requireProject(projectId);
     const target = await safeResolve(project.path, relativePath);
     const targetStat = await stat(target);
@@ -555,7 +572,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
   }
 
   private async writeWorkspaceFile(
-    projectId: string,
+    projectId: WorkspaceProjectTarget,
     relativePath: string,
     content: string | Uint8Array,
   ): Promise<WorkspaceFileWrite> {
@@ -567,7 +584,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     else await writeFileFs(target, content);
     const targetStat = await stat(target);
     return {
-      projectId,
+      ...workspaceFileIdentity(projectId),
       path: toProjectRelative(project.path, target),
       size: targetStat.size,
       modifiedAt: targetStat.mtime.toISOString(),
@@ -577,7 +594,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
   }
 
   async search(
-    projectId: string,
+    projectId: WorkspaceProjectTarget,
     query: string,
     options: WorkspaceProjectSearchOptions = {},
   ): Promise<WorkspaceSearchResponse> {
@@ -605,10 +622,22 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     };
   }
 
-  private async findProject(projectId?: string): Promise<WorkspaceProject | undefined> {
+  private async findProject(projectId?: string, sourceProjectId?: string): Promise<WorkspaceProject | undefined> {
     if (!projectId || projectId === TEMPORARY_WORKSPACE_PROJECT_ID) return this.legacyTemporaryWorkspace();
-    const worktree = await this.options.worktrees?.getWorkspace(projectId);
-    if (worktree) return worktree;
+    const sourceHint = sourceProjectId ? (await this.readIndex()).projects.find((item) => item.id === sourceProjectId) : undefined;
+    const worktree = await this.options.worktrees?.getWorkspace(projectId, sourceHint);
+    if (worktree) {
+      const { sourceProjectId, ...workspace } = worktree;
+      const source = sourceHint?.id === sourceProjectId ? sourceHint
+        : sourceProjectId ? (await this.readIndex()).projects.find((item) => item.id === sourceProjectId) : undefined;
+      // Only the original primary repository is isolated. Other bindings remain live,
+      // including additions/removals made after this worktree conversation was created.
+      const primary = workspaceProjectRoots(workspace)[0];
+      return source && primary ? {
+        ...workspace, updatedAt: source.updatedAt,
+        roots: [primary, ...workspaceProjectRoots(source).filter((root) => root.id !== primary.id)],
+      } : workspace;
+    }
     const temporaryReference = parseTemporaryWorkspaceProjectId(projectId);
     if (temporaryReference) {
       const threadId = assertSafeRuntimeId(temporaryReference.threadId, 'Thread id');
@@ -659,8 +688,9 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     return null;
   }
 
-  private async requireProject(projectId: string): Promise<WorkspaceProject & { path: string }> {
-    const project = await this.findProject(projectId);
+  private async requireProject(projectId: WorkspaceProjectTarget): Promise<WorkspaceProject & { path: string }> {
+    const original = await this.findProject(workspaceTargetProjectId(projectId));
+    const project = original && workspaceProjectForRoot(original, workspaceTargetRootId(projectId));
     if (!project) throw new Error(`Project not found: ${projectId}`);
     if (!project.path) throw new Error(`Project directory is not associated: ${projectId}`);
     return project as WorkspaceProject & { path: string };
@@ -677,13 +707,6 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
 
 function workspaceFileRevision(content: string | Uint8Array): string {
   return createHash('sha256').update(content).digest('hex');
-}
-
-async function normalizeProjectPath(inputPath: string): Promise<string> {
-  const trimmed = inputPath.trim();
-  if (!trimmed) throw new Error('Project path is required.');
-  const expanded = trimmed.startsWith('~/') ? path.join(process.env.HOME ?? '', trimmed.slice(2)) : trimmed;
-  return realpath(path.resolve(expanded));
 }
 
 async function assertProjectDirectory(projectPath: string): Promise<void> {
@@ -789,20 +812,7 @@ function parentForRelativePath(relativePath: string): string {
   return index >= 0 ? relativePath.slice(0, index) : '';
 }
 
-async function findGitRoot(startPath: string): Promise<string | undefined> {
-  let current = startPath;
-  for (;;) {
-    try {
-      const gitStat = await stat(path.join(current, '.git'));
-      if (gitStat.isDirectory() || gitStat.isFile()) return current;
-    } catch {
-      // 持续向上查找，直到文件系统根目录。
-    }
-    const parent = path.dirname(current);
-    if (parent === current) return undefined;
-    current = parent;
-  }
-}
+
 
 async function countEntries(root: string): Promise<number> {
   let count = 0;
@@ -825,4 +835,9 @@ export async function walkWorkspaceFiles(root: string, onFile: (filePath: string
     }
   }
   return true;
+}
+
+function workspaceFileIdentity(target: WorkspaceProjectTarget): { projectId: string; rootId?: string } {
+  const rootId = workspaceTargetRootId(target);
+  return { projectId: workspaceTargetProjectId(target), ...(rootId ? { rootId } : {}) };
 }

@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRuntimeFactory } from '../../../src/runtime/runtime-factory.js';
 import { createSideConversationRuntimeHost } from '../../../src/composition/side-conversation-runtime-host.js';
 import { forkRuntimeThread } from '../../../src/runtime/use-cases/thread-fork.js';
+import { applyThreadFileChanges } from '../../../src/runtime/use-cases/thread-file-changes.js';
 import { createRuntimeThread } from '../../../src/runtime/use-cases/thread-create.js';
 import { deleteRuntimeThread } from '../../../src/runtime/use-cases/thread-operations.js';
 import { InMemoryDesktopNativeBridge } from '../../support/in-memory-secret-store.js';
@@ -269,6 +270,42 @@ describe('conversation forks', () => {
     await deleteRuntimeThread(runtime, source.id);
     await deleteRuntimeThread(runtime, fork.id);
     expect(await readFile(path.join(destination, 'tracked.txt'), 'utf8')).toBe('fork only\n');
+  });
+
+  it('relocates undo targets into each fork while secondary directories keep their original targets', async () => {
+    const repository = await createRepository(root);
+    const nested = path.join(repository, 'nested');
+    const sibling = path.join(root, 'sibling');
+    await Promise.all([nested, sibling].map((directory) => mkdir(directory)));
+    const project = await runtime.workspaceProjects.addProject({ roots: [repository, nested, sibling, root].map((directory) => ({ path: directory })) });
+    const source = await runtime.threadStore.createThread({ projectId: project.id });
+    const environment = await runtime.environmentResolver.resolve({ projectId: project.id, threadId: source.id });
+    const context = { threadId: source.id, turnId: 'edit', projectId: project.id, environment };
+    await runtime.toolHost.runTool('read_file', { file_path: 'tracked.txt' }, context);
+    const result = await runtime.toolHost.runTool('apply_patch', { patch: [
+      '*** Begin Patch', '*** Update File: tracked.txt', '@@', '-original', '+changed',
+      `*** Add File: ${path.join(nested, 'shared.txt')}`, '+nested',
+      `*** Add File: ${path.join(sibling, 'shared.txt')}`, '+sibling', '*** End Patch',
+    ].join('\n') }, context);
+    expect(result.data).toMatchObject({ ok: true });
+    await append(source, 'answer', 'assistant', { toolRuns: [{ id: 'edit', name: 'apply_patch', status: 'success', data: result.data }] });
+    const sourceBefore = await runtime.threadStore.getThread(source.id);
+    const fork = await forkRuntimeThread(runtime, source.id, { messageId: 'answer', target: 'worktree' });
+    const destination = (await runtime.workspaceProjects.getStatus(fork.workspaceId)).project!.path!;
+    await applyThreadFileChanges(runtime, fork.id, { toolCallIds: ['edit'] }, 'undo');
+    expect(await readFile(path.join(destination, 'tracked.txt'), 'utf8')).toBe('original\n');
+    expect(await readFile(path.join(repository, 'tracked.txt'), 'utf8')).toBe('changed\n');
+    for (const directory of [nested, sibling]) await expect(access(path.join(directory, 'shared.txt'))).rejects.toThrow();
+    await applyThreadFileChanges(runtime, fork.id, { toolCallIds: ['edit'] }, 'redo');
+    expect(await readFile(path.join(nested, 'shared.txt'), 'utf8')).toBe('nested\n');
+    expect(await readFile(path.join(sibling, 'shared.txt'), 'utf8')).toBe('sibling\n');
+    const second = await forkRuntimeThread(runtime, fork.id, { messageId: 'answer', target: 'worktree' });
+    const secondDirectory = (await runtime.workspaceProjects.getStatus(second.workspaceId)).project!.path!;
+    await applyThreadFileChanges(runtime, second.id, { toolCallIds: ['edit'] }, 'undo');
+    expect(await readFile(path.join(secondDirectory, 'tracked.txt'), 'utf8')).toBe('original\n');
+    expect(await readFile(path.join(destination, 'tracked.txt'), 'utf8')).toBe('changed\n');
+    expect(await readFile(path.join(repository, 'tracked.txt'), 'utf8')).toBe('changed\n');
+    expect(await runtime.threadStore.getThread(source.id)).toEqual(sourceBefore);
   });
 
   it('forks a subdirectory of an existing linked worktree and rolls back Git, workspace and thread state on copy failure', async () => {

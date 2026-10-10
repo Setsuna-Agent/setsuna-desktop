@@ -1,3 +1,5 @@
+import { resolveWorkspaceFileReference } from '@setsuna-desktop/contracts';
+import { searchWorkspaceMentions } from './mentions/searchWorkspaceMentions.js';
 import type {
   DesktopRuntimeClient,
   RuntimeConfigState,
@@ -108,24 +110,26 @@ export function SideChatPanel({
       if (!sideWorkspace) {
         return { entries: [], query: query.trim().toLowerCase(), scanned: 0, truncated: false, workspaceRoot: '' };
       }
-      return client.searchProjectEntries(sideWorkspace.id, query, parent);
+      return searchWorkspaceMentions(client, sideWorkspace, query, parent);
     },
     [client, sideWorkspace],
   );
   const openSideWorkspaceFile = useCallback((filePath: string, line?: number) => {
     if (!sideWorkspace?.path) return;
+    const reference = resolveWorkspaceFileReference(sideWorkspace, filePath);
+    if (!reference) return;
     if (sideWorkspace.id === activeWorkspace?.id) {
-      onOpenWorkspaceFile(filePath, line);
+      onOpenWorkspaceFile(`${reference.root.path}/${reference.path}`, line);
       return;
     }
     void openSideWorkspaceFileAtRoot({
-      filePath,
+      filePath: reference.path,
       line,
       openInWorkspaceApp: window.setsunaDesktop?.workspaceApps.open,
       openWithDefaultApp: window.setsunaDesktop?.desktop?.openWorkspaceFile,
       selectedWorkspaceApp,
       t,
-      workspaceRoot: sideWorkspace.path,
+      workspaceRoot: reference.root.path,
     }).then((openError) => {
       if (openError) onError(openError);
     }).catch((error: unknown) => {
@@ -134,15 +138,17 @@ export function SideChatPanel({
   }, [activeWorkspace?.id, onError, onOpenWorkspaceFile, selectedWorkspaceApp, sideWorkspace, t]);
   const openSideWorkspaceDirectory = useCallback((directoryPath: string) => {
     if (!sideWorkspace?.path) return;
+    const reference = resolveWorkspaceFileReference(sideWorkspace, directoryPath);
+    if (!reference) return;
     if (sideWorkspace.id === activeWorkspace?.id) {
-      onOpenWorkspaceDirectory(directoryPath);
+      onOpenWorkspaceDirectory(`${reference.root.path}/${reference.path}`);
       return;
     }
     void openSideWorkspaceDirectoryAtRoot({
-      directoryPath,
+      directoryPath: reference.path,
       openDirectory: window.setsunaDesktop?.desktop?.openWorkspaceDirectory,
       t,
-      workspaceRoot: sideWorkspace.path,
+      workspaceRoot: reference.root.path,
     }).then((openError) => {
       if (openError) onError(openError);
     }).catch((error: unknown) => {

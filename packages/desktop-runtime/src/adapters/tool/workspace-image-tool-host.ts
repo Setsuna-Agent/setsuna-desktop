@@ -1,4 +1,4 @@
-import { runtimeText, type RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
+import { resolveWorkspaceFileReference, workspaceTarget, runtimeText, type RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import type { RuntimeToolDefinition, WorkspaceProject } from '@setsuna-desktop/contracts';
 import path from 'node:path';
 import type { ToolExecutionContext, ToolExecutionResult, ToolHost } from '../../ports/tool-host.js';
@@ -18,7 +18,7 @@ function viewImageTool(language?: RuntimeInterfaceLanguage): RuntimeToolDefiniti
       additionalProperties: false,
       properties: {
         projectId: { type: 'string', description: text('Optional registered project id. Defaults to the current project thread, then the temporary workspace.', "可选已注册项目 ID，默认当前项目任务，其次使用临时工作区。") },
-        path: { type: 'string', description: text('Image path relative to the project root.', "相对于项目根目录的图片路径。") },
+        path: { type: 'string', description: text('Image path relative to the primary directory, or an absolute path inside any bound project directory.', "相对于主目录的图片路径，或任一已绑定源文件夹内的绝对路径。") },
       },
       required: ['path'],
     },
@@ -48,7 +48,9 @@ export class WorkspaceImageToolHost implements ToolHost {
     const args = objectInput(input);
     const project = await this.projectFor(workspaceProjectIdForToolContext(optionalProjectId(args.projectId), context));
     const relativePath = requiredStringArg(args.path, 'path');
-    const image = await this.projects.readImage(project.id, relativePath);
+    const reference = resolveWorkspaceFileReference(project, relativePath);
+    if (!reference) throw new Error('Image path is outside the bound project directories.');
+    const image = await this.projects.readImage(workspaceTarget(project.id, reference.root.id), reference.path);
     const namePart = path.basename(image.path) || 'workspace-image';
     const attachmentId = safeIdPart(context.toolCallId ?? `${Date.now()}`);
     return {

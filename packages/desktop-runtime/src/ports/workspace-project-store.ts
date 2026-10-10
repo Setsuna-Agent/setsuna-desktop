@@ -12,6 +12,7 @@ import type {
   WorkspaceFileChangeAction,
   WorkspaceFileWrite,
   WorkspaceProject,
+  WorkspaceProjectTarget,
   WorkspaceProjectList,
   WorkspaceSearchResponse,
   WorkspaceStatus,
@@ -20,6 +21,7 @@ import type { SafeImageMimeType } from '../utils/safe-image.js';
 
 export type WorkspaceImageRead = {
   projectId: string;
+  rootId?: string;
   path: string;
   mimeType: SafeImageMimeType;
   size: number;
@@ -29,6 +31,7 @@ export type WorkspaceImageRead = {
 
 export type WorkspaceFileMetadata = {
   projectId: string;
+  rootId?: string;
   path: string;
   size: number;
   modifiedAt?: string;
@@ -57,23 +60,23 @@ export type WorkspaceProjectStore = {
   removeProject(projectId: string): Promise<void>;
   ensureTemporaryWorkspace(input: TemporaryWorkspaceInput): Promise<WorkspaceProject>;
   removeTemporaryWorkspace(input: TemporaryWorkspaceInput): Promise<void>;
-  getStatus(projectId?: string): Promise<WorkspaceStatus>;
-  listEntries(projectId: string, relativePath?: string): Promise<WorkspaceEntryList>;
-  createEntry(projectId: string, input: WorkspaceEntryCreateInput): Promise<WorkspaceEntry>;
-  renameEntry(projectId: string, relativePath: string, input: WorkspaceEntryRenameInput): Promise<WorkspaceEntry>;
-  moveEntry(projectId: string, relativePath: string, input: WorkspaceEntryMoveInput): Promise<WorkspaceEntry>;
-  deleteEntry(projectId: string, relativePath: string): Promise<void>;
-  searchEntries(projectId: string, query?: string, parent?: string | null): Promise<WorkspaceEntrySearchResponse>;
-  inspectFile(projectId: string, relativePath: string): Promise<WorkspaceFileMetadata>;
+  getStatus(projectId?: WorkspaceProjectTarget, sourceProjectId?: string): Promise<WorkspaceStatus>;
+  listEntries(projectId: WorkspaceProjectTarget, relativePath?: string): Promise<WorkspaceEntryList>;
+  createEntry(projectId: WorkspaceProjectTarget, input: WorkspaceEntryCreateInput): Promise<WorkspaceEntry>;
+  renameEntry(projectId: WorkspaceProjectTarget, relativePath: string, input: WorkspaceEntryRenameInput): Promise<WorkspaceEntry>;
+  moveEntry(projectId: WorkspaceProjectTarget, relativePath: string, input: WorkspaceEntryMoveInput): Promise<WorkspaceEntry>;
+  deleteEntry(projectId: WorkspaceProjectTarget, relativePath: string): Promise<void>;
+  searchEntries(projectId: WorkspaceProjectTarget, query?: string, parent?: string | null): Promise<WorkspaceEntrySearchResponse>;
+  inspectFile(projectId: WorkspaceProjectTarget, relativePath: string): Promise<WorkspaceFileMetadata>;
   readFile(
-    projectId: string,
+    projectId: WorkspaceProjectTarget,
     relativePath: string,
     options?: WorkspaceFileReadOptions,
   ): Promise<WorkspaceFileRead>;
-  readImage(projectId: string, relativePath: string): Promise<WorkspaceImageRead>;
-  writeFile(projectId: string, relativePath: string, content: string): Promise<WorkspaceFileWrite>;
-  writeBinaryFile(projectId: string, relativePath: string, content: Uint8Array): Promise<WorkspaceFileWrite>;
-  deleteFile(projectId: string, relativePath: string): Promise<void>;
-  applyFileChanges(projectId: string, changes: WorkspaceFileChange[], action: WorkspaceFileChangeAction, persist?: () => Promise<void>): Promise<void>;
-  search(projectId: string, query: string, options?: WorkspaceProjectSearchOptions): Promise<WorkspaceSearchResponse>;
+  readImage(projectId: WorkspaceProjectTarget, relativePath: string): Promise<WorkspaceImageRead>;
+  writeFile(projectId: WorkspaceProjectTarget, relativePath: string, content: string): Promise<WorkspaceFileWrite>;
+  writeBinaryFile(projectId: WorkspaceProjectTarget, relativePath: string, content: Uint8Array): Promise<WorkspaceFileWrite>;
+  deleteFile(projectId: WorkspaceProjectTarget, relativePath: string): Promise<void>;
+  applyFileChanges(projectId: WorkspaceProjectTarget, changes: WorkspaceFileChange[], action: WorkspaceFileChangeAction, persist?: () => Promise<void>): Promise<void>;
+  search(projectId: WorkspaceProjectTarget, query: string, options?: WorkspaceProjectSearchOptions): Promise<WorkspaceSearchResponse>;
 };

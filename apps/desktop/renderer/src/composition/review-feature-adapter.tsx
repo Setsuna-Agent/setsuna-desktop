@@ -1,6 +1,8 @@
 import {
   ConversationGitControls,
   WorkspaceGitCommitProvider,
+  WorkspaceGitCommitScope,
+  useWorkspaceGitCommitDialog,
 } from '@setsuna-desktop/feature-review/renderer/git';
 import {
   ReviewRendererHostProvider,
@@ -93,11 +95,12 @@ function ReviewFileIcon(props: ComponentProps<ReviewRendererHost['ui']['FileIcon
 function ReviewFindingMarkdown({
   content,
   projectId,
+  rootId,
   onOpenWorkspaceFile,
   workspaceRoot,
 }: ComponentProps<ReviewRendererHost['ui']['FindingMarkdown']>) {
   const [client] = useState(createDesktopRuntimeClient);
-  const searchEntries = useReviewWorkspaceEntries(client, { projectId });
+  const searchEntries = useReviewWorkspaceEntries(client, { projectId, rootId });
   return (
     <MarkdownNavigationProvider
       workspaceRoot={workspaceRoot}
@@ -112,6 +115,8 @@ function ReviewFindingMarkdown({
 export {
   ConversationGitControls as ReviewFeatureConversationGitControls,
   WorkspaceGitCommitProvider as ReviewFeatureGitCommitProvider,
+  WorkspaceGitCommitScope as ReviewFeatureGitCommitScope,
+  useWorkspaceGitCommitDialog as useReviewFeatureGitCommit,
   latestCompletedReview as latestCompletedFeatureReview,
   localReviewChangeStats as localFeatureReviewChangeStats,
   useDesktopReviewState as useReviewFeatureState,

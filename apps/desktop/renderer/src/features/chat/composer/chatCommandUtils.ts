@@ -10,6 +10,11 @@ export type TextCommand = {
 };
 
 export function parseMentionCommand(value: string, cursorOffset?: number | null): TextCommand | null {
+  const cursor = clampCursorOffset(value, cursorOffset);
+  const quoted = value.slice(0, cursor).match(/(^|\s)@"((?:\\.|[^"\\\n])*)$/u);
+  if (quoted?.index !== undefined && isCommandBoundary(value.charAt(cursor))) {
+    return { start: quoted.index + quoted[1].length, end: cursor, query: quoted[2].replace(/\\(["\\])/gu, '$1') };
+  }
   return parseCursorCommand(value, '@', cursorOffset);
 }
 
@@ -18,7 +23,9 @@ export function parseSlashCommand(value: string, cursorOffset?: number | null): 
 }
 
 export function entryLabel(entry: WorkspaceEntrySearchItem): string {
-  return entry.kind === 'directory' ? `${entry.path.replace(/\/$/, '')}/` : entry.path;
+  const path = entry.absolutePath ?? entry.path;
+  const value = entry.kind === 'directory' ? `${path.replace(/\/$/, '')}/` : path;
+  return /[\s"]/u.test(value) ? JSON.stringify(value) : value;
 }
 
 function parseCursorCommand(value: string, marker: '@' | '/', cursorOffset?: number | null): TextCommand | null {

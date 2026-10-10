@@ -40,12 +40,13 @@ export type DesktopPanelTab = {
   type: DesktopPanelType;
   title?: string;
   filePath?: string;
+  rootId?: string;
   subagent?: {
     threadId: string;
     parentThreadId: string;
   };
 };
-export type DesktopPanelTabPatch = Partial<Pick<DesktopPanelTab, 'browser' | 'title'>>;
+export type DesktopPanelTabPatch = Partial<Pick<DesktopPanelTab, 'browser' | 'title' | 'rootId'>>;
 export type DesktopPanelDropPlacement = 'before' | 'after';
 export type DesktopPanelSlotState = {
   active: string | null;
@@ -90,7 +91,9 @@ export const createBrowserPanel = (id: string, url = DEFAULT_BROWSER_URL): Deskt
 export const createReviewPanel = (): DesktopPanelTab => ({ id: REVIEW_PANEL_ID, type: 'review', title: '审查' });
 export const createChangesPanel = (): DesktopPanelTab => ({ id: 'changes', type: 'changes', title: '变更' });
 export const createFilesPanel = (): DesktopPanelTab => ({ id: FILES_PANEL_ID, type: 'files', title: '打开文件' });
-export const createFilePanel = (filePath: string): DesktopPanelTab => ({ id: `file:${filePath}`, type: 'file', title: fileName(filePath), filePath });
+export const createFilePanel = (filePath: string, rootId?: string): DesktopPanelTab => ({
+  id: rootId ? `file:${rootId}:${filePath}` : `file:${filePath}`, type: 'file', title: fileName(filePath), filePath, ...(rootId ? { rootId } : {}),
+});
 export const activePanelInSlot = (slot: DesktopPanelSlotState) => slot.panels.find((panel) => panel.id === slot.active) ?? null;
 export const slotHasPanelType = (slot: DesktopPanelSlotState, type: DesktopPanelType) => slot.panels.some((panel) => panel.type === type);
 export const isFileWorkspacePanel = (panel: DesktopPanelTab): boolean => panel.type === 'files' || panel.type === 'file';
@@ -169,20 +172,21 @@ export const updatePanelInSlotState = (
       && panel.browser?.url === patch.browser.url
     );
   const titleUnchanged = patch.title === undefined || panel.title === patch.title;
-  if (browserUnchanged && titleUnchanged) return slot;
+  const rootUnchanged = !Object.hasOwn(patch, 'rootId') || panel.rootId === patch.rootId;
+  if (browserUnchanged && titleUnchanged && rootUnchanged) return slot;
 
   const panels = [...slot.panels];
   panels[panelIndex] = { ...panel, ...patch };
   return { ...slot, panels };
 };
 
-export function renameFilePanelsInSlot(slot: DesktopPanelSlotState, previousPath: string, nextPath: string): DesktopPanelSlotState {
+export function renameFilePanelsInSlot(slot: DesktopPanelSlotState, previousPath: string, nextPath: string, rootId?: string): DesktopPanelSlotState {
   let active = slot.active;
   const panels = slot.panels.map((panel) => {
-    if (panel.type !== 'file' || !panel.filePath) return panel;
+    if (panel.type !== 'file' || !panel.filePath || panel.rootId !== rootId) return panel;
     const filePath = renamedWorkspaceEntryPath(panel.filePath, previousPath, nextPath);
     if (filePath === panel.filePath) return panel;
-    const renamed = { ...panel, ...createFilePanel(filePath) };
+    const renamed = { ...panel, ...createFilePanel(filePath, panel.rootId) };
     if (active === panel.id) active = renamed.id;
     return renamed;
   });
@@ -191,9 +195,9 @@ export function renameFilePanelsInSlot(slot: DesktopPanelSlotState, previousPath
   };
 }
 
-export function deleteFilePanelsInSlot(slot: DesktopPanelSlotState, entryPath: string): DesktopPanelSlotState {
+export function deleteFilePanelsInSlot(slot: DesktopPanelSlotState, entryPath: string, rootId?: string): DesktopPanelSlotState {
   const panels = slot.panels.filter((panel) => panel.type !== 'file'
-    || !panel.filePath || !isWorkspaceEntryWithin(panel.filePath, entryPath));
+    || panel.rootId !== rootId || !panel.filePath || !isWorkspaceEntryWithin(panel.filePath, entryPath));
   if (panels.length === slot.panels.length) return slot;
   if (panels.some((panel) => panel.id === slot.active)) return { ...slot, panels };
   // Return to the directory navigator when the displayed file was removed.
@@ -251,6 +255,18 @@ export const removePanelFromSlotState = (slot: DesktopPanelSlotState, panelId: s
   const active = slot.active === panelId ? panels[fallbackIndex]?.id ?? null : slot.active;
   return { active, panels };
 };
+
+/** An unbound file must never silently reopen as the same relative path in the primary directory. */
+export function reconcilePanelRoots(slot: DesktopPanelSlotState, rootIds: ReadonlySet<string>): DesktopPanelSlotState {
+  let next = slot;
+  for (const panel of slot.panels) {
+    if (!panel.rootId || rootIds.has(panel.rootId)) continue;
+    next = panel.type === 'file' || panel.type === 'commit-message'
+      ? removePanelFromSlotState(next, panel.id)
+      : updatePanelInSlotState(next, panel.id, { rootId: undefined });
+  }
+  return next;
+}
 
 export type WorkspaceFileFocusRequest = {
   line: number;

@@ -11,6 +11,7 @@ import { managedGeneratedImageAssetIds } from '../../utils/generated-image-asset
 import type { RuntimeContainer } from '../runtime-factory.js';
 import { randomRuntimeId } from '../runtime-id.js';
 import { runtimeMessageCopyEvents } from './thread-fork-history.js';
+import { relocateForkFileChanges, type ForkFileChangeRelocation } from './thread-fork-file-changes.js';
 
 /**
  * Copies an immutable message snapshot into a new thread while giving generated
@@ -24,14 +25,14 @@ export async function copyRuntimeMessagesToThread(
   sourceThreadId: string,
   destinationThreadId: string,
   messages: RuntimeMessage[],
-  options: { preserveForkHistory?: boolean } = {},
+  options: { preserveForkHistory?: boolean; fileChangeRelocation?: ForkFileChangeRelocation } = {},
 ): Promise<void> {
   const events = options.preserveForkHistory && messages.some((message) => message.contextCompaction)
     ? await runtime.threadStore.listEvents(sourceThreadId) : [];
   const history = runtimeMessageCopyEvents(events, messages);
   const cloned = await cloneForkMessages(runtime, history.flatMap((event) => (
     event.type === 'message.created' ? [event.payload.message] : event.payload.messages
-  )));
+  )), options.fileChangeRelocation);
   const committedAssetIds = new Set<string>();
   let appendAttempted = false;
   try {
@@ -94,13 +95,14 @@ export async function copyRuntimeMessagesToThread(
 async function cloneForkMessages(
   runtime: RuntimeContainer,
   messages: RuntimeMessage[],
+  fileChangeRelocation?: ForkFileChangeRelocation,
 ): Promise<{ assetIds: string[]; messages: RuntimeMessage[] }> {
   const clonedAssetIds: string[] = [];
   const clonesBySourceId = new Map<string, string>();
   try {
     const clonedMessages: RuntimeMessage[] = [];
     for (const message of messages) {
-      const clonedMessage = cloneRuntimeMessage(message);
+      const clonedMessage = cloneRuntimeMessage(message, fileChangeRelocation);
       const attachments: RuntimeMessageAttachment[] = [];
       for (const attachment of clonedMessage.attachments ?? []) {
         if (isRuntimeGeneratedMessageAttachment(attachment)) {
@@ -130,7 +132,7 @@ async function cloneForkMessages(
   }
 }
 
-function cloneRuntimeMessage(message: RuntimeMessage): RuntimeMessage {
+function cloneRuntimeMessage(message: RuntimeMessage, fileChangeRelocation?: ForkFileChangeRelocation): RuntimeMessage {
   return {
     ...message,
     attachments: message.attachments?.map((attachment) => ({ ...attachment })),
@@ -151,6 +153,8 @@ function cloneRuntimeMessage(message: RuntimeMessage): RuntimeMessage {
       findings: message.reviewMode.findings?.map((finding) => ({ ...finding })),
     } : undefined,
     toolCalls: message.toolCalls?.map((toolCall) => ({ ...toolCall })),
-    toolRuns: message.toolRuns?.map((toolRun) => ({ ...toolRun })),
+    toolRuns: message.toolRuns?.map((toolRun) => ({ ...toolRun,
+      ...(fileChangeRelocation ? { data: relocateForkFileChanges(toolRun.data, fileChangeRelocation) } : {}),
+    })),
   };
 }

@@ -125,3 +125,15 @@
   align-items: center;
   gap: 8px;
 }
+
+.desktop-project-editor__directory-row + .desktop-project-editor__directory-row {
+  border-top: 1px solid var(--desktop-agent-subtle-divider);
+}
+
+.desktop-project-editor__directory-row > .desktop-project-editor__primary {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border: 1px solid var(--desktop-agent-subtle-divider);
+  border-radius: var(--app-radius-sm);
+  color: var(--app-text-muted);
+}

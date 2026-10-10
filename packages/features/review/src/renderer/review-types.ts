@@ -5,6 +5,7 @@ export type DesktopReviewDiffLayout = 'unified' | 'split';
 
 export type ReviewPathContext = {
   projectId?: string;
+  rootId?: string;
   revisions?: { before: string | null; after: string };
   baseRef?: string | null;
   source: DesktopReviewSource | 'commit';

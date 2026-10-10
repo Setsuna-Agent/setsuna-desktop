@@ -1,4 +1,4 @@
-import type { WorkspaceEntrySearchItem } from '@setsuna-desktop/contracts';
+import { resolveWorkspaceFileReference, type WorkspaceEntrySearchItem } from '@setsuna-desktop/contracts';
 import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { ArtifactFeatureNavigationBoundary } from '../../composition/ArtifactFeatureBoundary.js';
 import {
@@ -14,7 +14,6 @@ import {
 } from '../../features/chat/plugin-usage/RuntimePluginNavigation.js';
 import type { WorkspaceFileContextTarget } from '../../features/workspace/WorkspaceFileContextMenu.js';
 import type { WorkspaceFileRevealRequest } from '../../features/workspace/hooks/useWorkspaceFileTree.js';
-import { normalizeProjectTreePath } from '../../features/workspace/workspaceEntryPaths.js';
 import type { ChatWorkspaceMentionRequest } from '../types.js';
 import {
   ChatConversationSurface,
@@ -47,11 +46,12 @@ export function AppChatSurface({
   const [fileRevealRequest, setFileRevealRequest] = useState<WorkspaceFileRevealRequest | null>(null);
   const activeWorkspace = workspace.context.activeWorkspace;
   const showInFiles = useCallback(async (filePath: string) => {
-    const path = normalizeProjectTreePath(filePath);
-    if (!activeWorkspace || !await workspace.actions.onOpenProjectFile(path)) return;
+    if (!activeWorkspace) return;
+    const reference = resolveWorkspaceFileReference(activeWorkspace, filePath);
+    if (!reference || !await workspace.actions.onOpenProjectFile(`${reference.root.path}/${reference.path}`)) return;
     setFileRevealRequest((current) => ({
-      workspaceKey: JSON.stringify([activeWorkspace.id, activeWorkspace.path]),
-      path,
+      workspaceKey: JSON.stringify([activeWorkspace.id, reference.root.path]),
+      path: reference.path,
       version: (current?.version ?? 0) + 1,
     }));
   }, [activeWorkspace, workspace.actions.onOpenProjectFile]);

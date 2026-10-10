@@ -7,6 +7,7 @@ import type {
 import { existsSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
+import { canonicalFilesystemPath, canonicalFilesystemRoots, pathWithinRoot } from '../../../security/workspace-path-policy.js';
 import { protectedWorkspaceMetadataPathForPath } from '../../../security/file-system-policy.js';
 import { isNodeErrorCode } from '../../../shared/node-errors.js';
 import {
@@ -72,12 +73,35 @@ function canonicalParentTargetPath(lexicalPath: string, workspaceRoot: string): 
   return path.join(parent, path.basename(lexicalPath));
 }
 
+/** Writes use the union of workspace and approved roots; full access still canonicalizes paths. */
+export function resolveWritablePath(value: unknown, state: PcLocalPathState, base = state.root, preserveLeaf = false): string {
+  const raw = String(value ?? '').trim();
+  if (!raw) throw new Error('Path is required.');
+  if (normalizePermissionProfile(state.permissionProfile) === 'read-only') throw new Error('Writing is blocked by the read-only permission profile.');
+  const absolute = path.resolve(base || process.cwd(), raw);
+  const target = preserveLeaf
+    ? path.join(canonicalFilesystemPath(path.dirname(absolute)), path.basename(absolute))
+    : canonicalFilesystemPath(absolute);
+  const unrestricted = normalizePermissionProfile(state.permissionProfile) === 'danger-full-access';
+  const roots = unrestricted ? [] : canonicalFilesystemRoots(
+    [state.root || process.cwd(), ...(state.sandboxWorkspaceWrite?.writableRoots ?? [])], state.root || process.cwd(),
+  );
+  if (!unrestricted && !roots.some((root) => pathWithinRoot(target, root))) {
+    throw new Error('路径不在当前工作区内或已批准 writable_roots 内。');
+  }
+  const denied = deniedSandboxRuleForPath(target, state);
+  if (denied) throw new Error(`路径被 sandbox filesystem deny 规则拒绝：${target} (${denied})`);
+  const protectedPath = protectedWorkspaceMetadataPathForPath(target, normalizePermissionProfile(state.permissionProfile));
+  if (protectedPath) throw new Error(`写入受保护的工作区元数据被阻止：${protectedPath}。`);
+  return target;
+}
+
 export function resolveReadablePath(value: unknown, state: PcLocalPathState): string {
   const raw = String(value || '').trim();
   if (!raw) throw new Error('Path is required.');
   const workspaceRoot = realWorkspaceRoot(state?.root);
   const absolutePath = path.resolve(workspaceRoot, raw);
-  for (const root of readableRootsForState(state)) {
+  for (const root of readableRootsForState(state, absolutePath)) {
     const realRoot = realPathIfExists(root);
     try {
       const targetPath = realWorkspaceTargetPath(absolutePath, realRoot);
@@ -95,7 +119,8 @@ export function resolveReadablePath(value: unknown, state: PcLocalPathState): st
   throw new Error('路径不在当前工作区或已批准 readable_roots 内。');
 }
 
-export function readableRootsForState(state: PcLocalPathState): string[] {
+export function readableRootsForState(state: PcLocalPathState, targetPath?: string): string[] {
+  if (normalizePermissionProfile(state.permissionProfile) === 'danger-full-access') return [path.parse(path.resolve(targetPath ?? state.root ?? process.cwd())).root];
   const roots = sandboxReadableRootsForState(state);
   const directToolRoots = Array.isArray(state?.directToolReadableRoots)
     ? state.directToolReadableRoots
@@ -113,7 +138,8 @@ export function sandboxReadableRootsForState(state: PcLocalPathState): string[] 
   const configuredRoots = Array.isArray(state?.sandboxWorkspaceWrite?.readableRoots)
     ? state.sandboxWorkspaceWrite.readableRoots
     : [];
-  for (const rawRoot of configuredRoots) {
+  const writable = state?.sandboxWorkspaceWrite?.writableRoots ?? [];
+  for (const rawRoot of [...configuredRoots, ...writable]) {
     const text = String(rawRoot || '').trim();
     if (!text) continue;
     roots.push(resolvePolicyPath(text, state?.root || process.cwd()));
@@ -198,10 +224,10 @@ export function deniedRootPathForFileMutationTool(
 ): string {
   for (const rawPath of fileMutationPathCandidates(name, args)) {
     try {
-      const base = name === 'apply_patch' && args?.workdir ? resolveWorkspacePath(args.workdir, state.root) : state.root;
+      const base = name === 'apply_patch' && args?.workdir ? path.resolve(state.root || process.cwd(), String(args.workdir)) : state.root;
       const filePath = name === 'apply_patch'
-        ? resolveWorkspacePathFromBase(rawPath, base, state.root)
-        : resolveWorkspacePath(rawPath, state.root);
+        ? resolveWritablePath(rawPath, state, base)
+        : resolveWritablePath(rawPath, state);
       if (deniedSandboxRuleForPath(filePath, state)) return formatPath(filePath, state.root);
     } catch {
       // 由常规路径校验报告格式错误或超出工作区的路径。
@@ -217,10 +243,10 @@ export function protectedPathForFileMutationTool(
 ): string {
   for (const rawPath of fileMutationPathCandidates(name, args)) {
     try {
-      const base = name === 'apply_patch' && args?.workdir ? resolveWorkspacePath(args.workdir, state.root) : state.root;
+      const base = name === 'apply_patch' && args?.workdir ? path.resolve(state.root || process.cwd(), String(args.workdir)) : state.root;
       const filePath = name === 'apply_patch'
-        ? resolveWorkspacePathFromBase(rawPath, base, state.root)
-        : resolveWorkspacePath(rawPath, state.root);
+        ? resolveWritablePath(rawPath, state, base)
+        : resolveWritablePath(rawPath, state);
       const protectedPath = protectedWorkspaceMetadataPathForPath(
         filePath,
         normalizePermissionProfile(state?.permissionProfile),

@@ -22,13 +22,14 @@ describe('runtime server AppServer file system', () => {
     await harness.close();
   });
 
-  it('supports AppServer fs methods inside registered workspaces', async () => {
+  it('supports AppServer fs methods in secondary roots and copies across registered roots', async () => {
       const projectDir = await mkdtemp(path.join(tmpdir(), 'setsuna-appserver-fs-'));
+      const secondaryDir = await mkdtemp(path.join(tmpdir(), 'setsuna-appserver-fs-secondary-'));
       await harness.runtimeFetch('/v1/projects', {
         method: 'POST',
-        body: JSON.stringify({ path: projectDir, name: 'AppServer fs' }),
+        body: JSON.stringify({ roots: [{ path: projectDir }, { path: secondaryDir }], name: 'AppServer fs' }),
       });
-      const sourceDir = path.join(projectDir, 'source');
+      const sourceDir = path.join(secondaryDir, 'source');
       const nestedDir = path.join(sourceDir, 'nested');
       const nestedFile = path.join(nestedDir, 'blob.bin');
       const copiedFile = path.join(projectDir, 'copy.bin');
@@ -83,11 +84,12 @@ describe('runtime server AppServer file system', () => {
   
   it('streams AppServer fs/watch changes and scopes fs/unwatch to the owner connection', async () => {
       const projectDir = await mkdtemp(path.join(tmpdir(), 'setsuna-appserver-fs-watch-'));
+      const secondaryDir = await mkdtemp(path.join(tmpdir(), 'setsuna-appserver-fs-watch-secondary-'));
       await harness.runtimeFetch('/v1/projects', {
         method: 'POST',
-        body: JSON.stringify({ path: projectDir, name: 'AppServer fs watch' }),
+        body: JSON.stringify({ roots: [{ path: projectDir }, { path: secondaryDir }], name: 'AppServer fs watch' }),
       });
-      const watchDir = path.join(projectDir, '.git');
+      const watchDir = path.join(secondaryDir, '.git');
       const changedFile = path.join(watchDir, 'FETCH_HEAD');
       await mkdir(watchDir, { recursive: true });
       await writeFile(changedFile, 'old\n');

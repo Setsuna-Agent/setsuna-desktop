@@ -36,5 +36,5 @@ export function chatMentionItems(
 
 export function chatMentionItemKey(item: ChatMentionItem): string {
   if (item.kind === 'app') return `app:${JSON.stringify([item.app.pluginId, item.app.contributionId])}`;
-  return item.kind === 'browser-tab' ? `browser:${item.tab.id}` : `${item.entry.kind}:${item.entry.path}`;
+  return item.kind === 'browser-tab' ? `browser:${item.tab.id}` : `${item.entry.rootId ?? ''}:${item.entry.kind}:${item.entry.path}`;
 }

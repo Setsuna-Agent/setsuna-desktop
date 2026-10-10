@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { DesktopTerminalEvent, DesktopTerminalSession } from '../model.js';
 
 export type TerminalSessionsByPanelId = Record<string, Record<string, DesktopTerminalSession>>;
@@ -6,13 +6,16 @@ export type TerminalSessionsByPanelId = Record<string, Record<string, DesktopTer
 /** Observe session lifetime even when its panel is hidden or in another conversation. */
 export function useTerminalPanelExit(
   sessionsByPanel: TerminalSessionsByPanelId,
-  onExit: (panelId: string) => void,
+  onExit: (panelId: string, projectKey: string, sessionId: string) => void,
 ) {
+  // Layout changes update the callback without rereading every background shell.
+  const onExitRef = useRef(onExit);
+  onExitRef.current = onExit;
   useEffect(() => {
     const bridge = window.setsunaDesktop?.terminal;
     if (!bridge) return;
     const unsubscribers = Object.entries(sessionsByPanel).flatMap(([panelId, sessionsByProject]) =>
-      Object.values(sessionsByProject).map((session) => {
+      Object.entries(sessionsByProject).map(([projectKey, session]) => {
         let disposed = false;
         let exited = false;
         let lifecycleSeq = 0;
@@ -22,7 +25,7 @@ export function useTerminalPanelExit(
           lifecycleSeq = event.seq;
           if (event.event === 'exit') {
             exited = true;
-            onExit(panelId);
+            onExitRef.current(panelId, projectKey, session.sessionId);
           }
         };
         const unsubscribe = bridge.onEvent(session.sessionId, handleEvent);
@@ -41,5 +44,5 @@ export function useTerminalPanelExit(
       }),
     );
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
-  }, [onExit, sessionsByPanel]);
+  }, [sessionsByPanel]);
 }

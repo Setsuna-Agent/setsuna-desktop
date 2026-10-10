@@ -1,3 +1,5 @@
+import { resolveWorkspaceFileReference, workspaceProjectRoots } from '@setsuna-desktop/contracts';
+import { searchWorkspaceMentions } from '../../features/chat/mentions/searchWorkspaceMentions.js';
 import type { WorkspaceFileChangeAction } from '@setsuna-desktop/contracts';
 import type { ChatTurnNavigationRequest } from '@setsuna-desktop/renderer-contracts/chat';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -44,6 +46,7 @@ export function ChatRouteAdapter({
   starterProjectSelection,
   activeProject,
   activeWorkspace,
+  fileWorkspace,
   chatActions,
   composerKey,
   attachmentStore,
@@ -79,6 +82,8 @@ export function ChatRouteAdapter({
   const { t } = useI18n();
   const pluginManagement = usePluginManagementFeatureSnapshot();
   const skills = useSkillsFeatureSnapshot();
+  const searchMentions = useCallback((query = '', parent?: string | null) =>
+    searchWorkspaceMentions(runtime.client, activeWorkspace, query, parent), [activeWorkspace, runtime.client]);
   const chatIdentity = `${composerKey}:${activeProject?.id ?? 'global'}`;
   const starterLocation = useChatStarterLocation({
     identity: chatIdentity,
@@ -136,7 +141,8 @@ export function ChatRouteAdapter({
 
   const openFileReviewPanel: DesktopReviewOpenHandler = (filePath, line, finding) => {
     if (!activeWorkspace) return;
-    const normalizedFilePath = filePath?.trim();
+    const reference = filePath ? resolveWorkspaceFileReference(activeWorkspace, filePath.trim()) : null;
+    const normalizedFilePath = reference ? `${reference.root.path}/${reference.path}` : filePath?.trim();
     setScopedReviewFocusRequest((current) => normalizedFilePath ? {
       ownerKey: reviewFocusOwnerKey,
       request: {
@@ -152,20 +158,22 @@ export function ChatRouteAdapter({
     } else {
       workspacePanels.openDesktopPanel('side', 'review');
     }
+    workspacePanels.updateDesktopPanel('review', { rootId: reference?.root.id ?? workspaceProjectRoots(activeWorkspace)[0]?.id });
     void workspacePanels.loadReviewState();
   };
   const applyFileChanges = async (toolCallIds: string[], action: WorkspaceFileChangeAction) => {
     const thread = runtime.currentThread;
     if (!thread) throw new Error(t('workspace.error.unavailable'));
-    const file = projectWorkspace.filePreview;
-    // Disk hashes cannot see an unsaved editor buffer for one of the affected files.
-    if (action === 'redo' && file && file.projectId === activeWorkspace?.id
-      && (projectWorkspace.fileDraft.dirty || projectWorkspace.fileDraft.saving)) {
+    // Disk hashes cannot see unsaved buffers, including those in an inactive directory.
+    if (action === 'redo' && activeWorkspace) {
       const requested = new Set(toolCallIds);
       const affectsDraft = thread.messages.some((message) => message.toolRuns?.some((run) => (
-        requested.has(run.id) && fileChangesFromToolRun(run).some((change) => change.path === file.path)
+        requested.has(run.id) && fileChangesFromToolRun(run).some((change) => {
+          const reference = resolveWorkspaceFileReference(activeWorkspace, change.path);
+          return reference && projectWorkspace.isFileDirty(reference.path, reference.root.id);
+        })
       )));
-      if (affectsDraft) throw new Error(t('toolRun.changes.unsavedConflict'));
+      if (affectsDraft || projectWorkspace.fileDraft.isSaving()) throw new Error(t('toolRun.changes.unsavedConflict'));
     }
     const result = await runtime.client.applyThreadFileChanges(thread.id, { toolCallIds }, action);
     void workspacePanels.loadReviewState();
@@ -220,10 +228,10 @@ export function ChatRouteAdapter({
     onOpenFileReview: openFileReviewPanel,
     onOpenMarkdownWebLink: openMarkdownWebLink,
     onOpenModelSettings,
-    onOpenProjectFile: projectWorkspace.openProjectFile,
+    onOpenProjectFile: (filePath, line) => projectWorkspace.openProjectFile(filePath, line, workspaceProjectRoots(activeWorkspace)[0]?.id),
     onOpenSideChat: () => workspacePanels.openDesktopPanel('side', 'chat'),
     onOpenWorkspaceDirectory: (directoryPath) => { void workspacePanels.openWorkspaceDirectory(directoryPath); },
-    onSearchProjectEntries: projectWorkspace.searchProjectEntries,
+    onSearchProjectEntries: searchMentions,
     onSelectModel: runtime.selectConversationModel,
     onSend: sendInput,
     onSetMultiAgentEnabled: setMultiAgentEnabled,
@@ -237,10 +245,12 @@ export function ChatRouteAdapter({
       activeProject,
       activeTurnId: runtime.activeTurnId,
       activeWorkspace,
+      fileWorkspace,
       config: runtime.config,
       currentThread: runtime.currentThread,
       entryOperationPending: projectWorkspace.entryOperationPending,
       fileDraft: projectWorkspace.fileDraft,
+      isFileDirty: projectWorkspace.isFileDirty,
       fileFocusRequest: projectWorkspace.fileFocusRequest,
       filePreview: projectWorkspace.filePreview,
       plugins: [...pluginManagement.plugins],
@@ -284,7 +294,7 @@ export function ChatRouteAdapter({
       onActivateBottomPanel: async (panelId) => {
         const panel = workspacePanels.bottomPanelSlot.panels.find((item) => item.id === panelId);
         if (panel?.type === 'file' && panel.filePath) {
-          void projectWorkspace.openProjectFile(panel.filePath);
+          void projectWorkspace.openProjectFile(panel.filePath, undefined, panel.rootId);
           return;
         }
         if (panel?.type === 'files' && !await projectWorkspace.setFilePreview(null)) return;
@@ -311,6 +321,7 @@ export function ChatRouteAdapter({
       onOpenChangesPanel: () => workspacePanels.openDesktopPanel('side', 'changes'),
       onOpenEntry: (entry) => { void projectWorkspace.openEntry(entry); },
       onOpenFileReviewPanel: openFileReviewPanel,
+      onSelectFileRoot: workspacePanels.openFilesPanelForRoot,
       onOpenFilesPanel: async () => {
         if (!await projectWorkspace.setFilePreview(null)) return;
         workspacePanels.openDesktopPanel('side', 'files');

@@ -167,6 +167,7 @@ export function ReviewSummarySection({
             )}
             workspaceRoot={pathContext.workspaceRoot}
             projectId={pathContext.projectId}
+            rootId={pathContext.rootId}
           />
         </div>
       ) : null}
@@ -318,6 +319,7 @@ const ReviewFileCard = memo(function ReviewFileCard({
             )}
             workspaceRoot={pathContext.workspaceRoot}
             projectId={pathContext.projectId}
+            rootId={pathContext.rootId}
           />
         ),
       }];
@@ -330,6 +332,7 @@ const ReviewFileCard = memo(function ReviewFileCard({
     onOpenWorkspaceFile,
     pathContext.workspaceRoot,
     pathContext.projectId,
+    pathContext.rootId,
   ]);
   // Keep collapsed files cheap; Pierre/Shiki only receives a patch after expansion.
   const patch = useMemo(() => {
@@ -677,6 +680,7 @@ function ReviewUnanchoredFindingCard({
   locationAvailable,
   onOpenWorkspaceFile,
   projectId,
+  rootId,
   target,
   targetRef,
   workspaceRoot,
@@ -685,6 +689,7 @@ function ReviewUnanchoredFindingCard({
   locationAvailable: boolean;
   onOpenWorkspaceFile: (filePath: string, line?: number) => void;
   projectId?: string;
+  rootId?: string;
   target: ReviewFindingTarget;
   targetRef: RefCallback<HTMLElement>;
   workspaceRoot?: string | null;
@@ -697,6 +702,7 @@ function ReviewUnanchoredFindingCard({
         locationAvailable={locationAvailable}
         onOpenWorkspaceFile={onOpenWorkspaceFile}
         projectId={projectId}
+        rootId={rootId}
         targetRef={targetRef}
         workspaceRoot={workspaceRoot}
       />
@@ -710,6 +716,7 @@ function ReviewFindingAnnotation({
   locationAvailable,
   onOpenWorkspaceFile,
   projectId,
+  rootId,
   targetRef,
   workspaceRoot,
 }: {
@@ -718,6 +725,7 @@ function ReviewFindingAnnotation({
   locationAvailable: boolean;
   onOpenWorkspaceFile: (filePath: string, line?: number) => void;
   projectId?: string;
+  rootId?: string;
   targetRef: RefCallback<HTMLElement>;
   workspaceRoot?: string | null;
 }) {
@@ -764,6 +772,7 @@ function ReviewFindingAnnotation({
           <FindingMarkdown
             content={finding.body}
             projectId={projectId}
+            rootId={rootId}
             workspaceRoot={workspaceRoot ?? undefined}
             onOpenWorkspaceFile={onOpenWorkspaceFile}
           />

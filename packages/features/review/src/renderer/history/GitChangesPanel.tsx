@@ -1,6 +1,6 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { DesktopDiffFile, DesktopGitCommit, DesktopGitRef, DesktopReviewState } from '../../contracts/index.js';
 import { useReviewRendererHost } from '../host.js';
 import { useWorkspaceGitCommitDialog } from '../git/WorkspaceGitCommitDialog.js';
@@ -25,6 +25,7 @@ const EMPTY_FILES: DesktopDiffFile[] = [];
 
 export type GitChangesPanelProps = {
   workspaceRoot: string;
+  sourceRootPicker?: ReactNode;
   editingMessage?: boolean;
   reviewState: DesktopReviewState | null;
   reviewError: string | null;
@@ -38,7 +39,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   return <GitChangesWorkspace key={props.workspaceRoot} {...props} />;
 }
 
-function GitChangesWorkspace({ workspaceRoot, editingMessage = false, reviewState, reviewError, reviewLoading, onRefresh, actions }: GitChangesPanelProps) {
+function GitChangesWorkspace({ workspaceRoot, sourceRootPicker, editingMessage = false, reviewState, reviewError, reviewLoading, onRefresh, actions }: GitChangesPanelProps) {
   const { bridge, translate: t, ui: { ConflictTaskProgress } } = useReviewRendererHost();
   const { composer, messageEditor, conflictTasks, conflictOpenRequest } = useWorkspaceGitCommitDialog();
   const showMessageEditor = editingMessage && Boolean(messageEditor);
@@ -109,14 +110,21 @@ function GitChangesWorkspace({ workspaceRoot, editingMessage = false, reviewStat
   const emptyRepository = page && !page.gitRoot;
 
   if (!bridge) return <div className="git-history-status">{t('feature.review.git.unsupported')}</div>;
-  if (emptyRepository) return <div className="git-history-status">{t('feature.review.history.noGit')}</div>;
+  if (emptyRepository) return (
+    <section className="desktop-review-panel git-changes-panel" aria-label={t('feature.review.history.title')}>
+      {sourceRootPicker ? <header className="desktop-review-panel__toolbar">{sourceRootPicker}</header> : null}
+      <div className="git-history-status">{t('feature.review.history.noGit')}</div>
+    </section>
+  );
 
   return (
     <section className="desktop-review-panel git-changes-panel" aria-label={t('feature.review.history.title')}>
       <GitChangesSplit detailOpen={detailOpen} editingMessage={showMessageEditor} navigation={
         <nav className="git-changes-nav" aria-label={t('feature.review.history.title')}>
           <div className="git-changes-nav__header">
-            <h2 className="git-changes-nav__title">{t('feature.review.history.title')}</h2>
+            <div className="git-changes-nav__project">
+              {sourceRootPicker ?? <h2 className="git-changes-nav__title">{t('feature.review.history.title')}</h2>}
+            </div>
             <ReviewIconButton tooltip className="app-shell-icon-control" label={t('feature.review.workspace.refresh')} onClick={refresh} disabled={history.loading || reviewLoading}><RefreshCw size={13} /></ReviewIconButton>
             <GitChangesMenu refs={refs} selectedRef={history.selectedRef} busy={fileActions.busy} currentBranch={page?.currentBranch ?? reviewState?.currentBranch ?? null} onSelectRef={selectRef} onSelectHead={() => {
               history.selectRef('');

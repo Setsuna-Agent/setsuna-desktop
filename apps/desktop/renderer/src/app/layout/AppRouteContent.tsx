@@ -35,6 +35,7 @@ export type AppRouteContentProps = Readonly<{
   starterProjectSelection: ChatStarterProjectSelection;
   activeProject?: WorkspaceProject;
   activeWorkspace?: WorkspaceProject;
+  fileWorkspace?: WorkspaceProject;
   activeView: MainView;
   chatActions: ChatTurnActions;
   composerKey: string;

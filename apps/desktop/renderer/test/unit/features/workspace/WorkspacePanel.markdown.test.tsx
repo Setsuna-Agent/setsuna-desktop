@@ -26,7 +26,7 @@ function Document({ currentFile = file, initialContent = currentFile.content, fo
     filePreview={currentFile} fileFocusRequest={focus} fileTree={tree} entryOperationPending={false}
     fileDraft={{ content, editing, canEdit: editing, dirty: content !== currentFile.content,
       error: null, errorMessage: null, preparing: false, saving: false, isSaving: () => false,
-      save: async () => true, confirmDiscardChanges: async () => true, updateContent: setContent, relocateFile: noop }}
+      save: async () => true, confirmDiscardChanges: async () => true, confirmDiscardAllChanges: async () => true, hasUnsavedChanges: false, hasDirtyEntry: () => false, discardEntry: () => undefined, isFileDirty: () => false, updateContent: setContent, relocateEntry: noop }}
     latestReviewSummary={null} latestReviewFindings={[]} reviewError={null} reviewFocusRequest={null}
     reviewLoading={false} reviewState={null} selectedWorkspaceApp={null} workspaceApps={[]}
     onAddFileToConversation={noop} onCopyFilePath={noop} onCreateEntry={async () => null}

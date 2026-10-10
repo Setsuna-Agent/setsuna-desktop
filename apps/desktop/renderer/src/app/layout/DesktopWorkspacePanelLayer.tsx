@@ -1,3 +1,7 @@
+import { workspaceProjectRoots, workspaceProjectForRoot, workspaceRootName } from '@setsuna-desktop/contracts';
+import { WorkspaceReviewScope, WorkspaceReviewScopes } from '../../features/workspace/WorkspaceReviewScope.js';
+import { chatThreadModelSelection } from '../../features/chat/chatModelSelection.js';
+import { WorkspaceRootPicker } from '../../features/workspace/WorkspaceRootPicker.js';
 import type {
   DesktopRuntimeClient,
   RuntimeConfiguredModelReference,
@@ -62,7 +66,7 @@ import type {
   DesktopWorkspaceApp,
   WorkspaceFileFocusRequest,
 } from '../../features/workspace/model.js';
-import { latestDesktopReviewSummaryFromMessages } from '../../features/workspace/runtimeReviewSummary.js';
+import { latestDesktopReviewSummaryFromMessages, scopeReviewSummary, scopeReviewPaths } from '../../features/workspace/runtimeReviewSummary.js';
 import {
   WorkspaceFileContextMenu,
   type WorkspaceFileContextTarget,
@@ -104,10 +108,12 @@ export type DesktopWorkspacePanelModel = Readonly<{
     activeProject?: WorkspaceProject;
     activeTurnId: string | null;
     activeWorkspace?: WorkspaceProject;
+    fileWorkspace?: WorkspaceProject;
     config: RuntimeConfigState | null;
     currentThread: RuntimeThread | null;
     entryOperationPending: boolean;
     fileDraft: WorkspaceFileDraftState;
+    isFileDirty?: (path: string, rootId?: string) => boolean;
     fileFocusRequest: WorkspaceFileFocusRequest | null;
     filePreview: WorkspaceFileRead | null;
     plugins: RuntimePluginSummary[];
@@ -162,10 +168,11 @@ export type DesktopWorkspacePanelModel = Readonly<{
     onOpenBrowser(url?: string): void;
     onOpenConversationDebug(): void;
     onOpenChangesPanel?(): void;
-    onOpenCommitMessageEditor?: CommitMessageEditorLauncher;
+    onOpenCommitMessageEditor?: (events: Parameters<CommitMessageEditorLauncher>[0], rootId?: string) => () => void;
     onOpenEntry(entry: WorkspaceEntry): void;
     onOpenFileReviewPanel?: DesktopReviewOpenHandler;
     onOpenFilesPanel(): void;
+    onSelectFileRoot(rootId: string): void;
     onOpenFileWithApp(appId: string, filePath: string, line?: number): void;
     onOpenMarkdownWebLink(url: string): void;
     onOpenProjectFile(filePath: string, line?: number): Promise<boolean>;
@@ -205,15 +212,15 @@ export function DesktopWorkspacePanelLayer({
 }>) {
   const { actions, context, layout, panels } = model;
   const { t } = useI18n();
-  const workspaceRoot = context.activeWorkspace?.path;
+  const workspaceRoot = context.fileWorkspace?.path;
   const watchEntries = useCallback((directoryPaths: string[], callback: () => void) => {
     if (!workspaceRoot) return () => undefined;
     return window.setsunaDesktop?.desktop.watchWorkspaceEntries?.(workspaceRoot, directoryPaths, callback)
       ?? (() => undefined);
   }, [workspaceRoot]);
   const fileTree = useWorkspaceFileTree({
-    workspaceKey: context.activeWorkspace
-      ? JSON.stringify([context.activeWorkspace.id, context.activeWorkspace.path])
+    workspaceKey: context.fileWorkspace
+      ? JSON.stringify([context.fileWorkspace.id, context.fileWorkspace.path])
       : null,
     enabled: panels.sidePanelSlot.panels.some(isFileWorkspacePanel)
       || panels.bottomPanelSlot.panels.some(isFileWorkspacePanel),
@@ -287,6 +294,50 @@ export function DesktopWorkspacePanelLayer({
     onRevealFile: actions.onRevealFile,
   } satisfies Omit<ComponentProps<typeof WorkspacePanel>, 'activePanel' | 'placement'>;
 
+  const rootPicker = (panel: DesktopPanelTab) => {
+    if (workspaceProjectRoots(context.activeWorkspace).length < 2) return undefined;
+    return <WorkspaceRootPicker
+      project={context.activeWorkspace} rootId={panel.rootId}
+      variant={isFileWorkspacePanel(panel) ? 'field' : 'toolbar'}
+      disabled={isFileWorkspacePanel(panel) && (context.entryOperationPending || context.fileDraft.saving)}
+      onChange={(rootId) => isFileWorkspacePanel(panel)
+        ? actions.onSelectFileRoot(rootId) : actions.onUpdateDesktopPanel(panel.id, { rootId })}
+    />;
+  };
+  const propsForPanel = (panel: DesktopPanelTab) => {
+    const project = context.activeWorkspace;
+    const root = workspaceProjectRoots(project).find((item) => item.id === panel.rootId) ?? workspaceProjectRoots(project)[0];
+    const scoped = project && root ? workspaceProjectForRoot(project, root.id) : project;
+    const absolute = (filePath: string) => root && !/^(?:\/|[a-zA-Z]:[\\/])/u.test(filePath)
+      ? `${root.path.replace(/[\\/]+$/u, '')}/${filePath}` : filePath;
+    return {
+      ...workspacePanelProps,
+      activeProject: scoped,
+      reviewFocusRequest: project && root && context.reviewFocusRequest
+        ? scopeReviewPaths([context.reviewFocusRequest], project, root.id)[0] ?? null : context.reviewFocusRequest,
+      latestReviewSummary: project && root ? scopeReviewSummary(latestReviewSummary, project, root.id) : latestReviewSummary,
+      latestReviewFindings: project && root ? scopeReviewPaths(latestReviewFindings, project, root.id) : latestReviewFindings,
+      sourceRootPicker: ['file', 'files', 'review', 'changes'].includes(panel.type) ? rootPicker(panel) : undefined,
+      onOpenProjectFile: (filePath: string, line?: number) => actions.onOpenProjectFile(absolute(filePath), line),
+      onExternalOpenFile: (filePath?: string | null, line?: number) => actions.onExternalOpenFile(absolute(filePath ?? '.'), line),
+      onOpenFileWithApp: (appId: string, filePath: string, line?: number) => actions.onOpenFileWithApp(appId, absolute(filePath), line),
+      onCopyFilePath: (filePath: string) => actions.onCopyFilePath(absolute(filePath)),
+      onRevealFile: (filePath: string) => actions.onRevealFile(absolute(filePath)),
+      onAddFileToConversation: (entry: WorkspaceEntrySearchItem) => onAddWorkspaceMention({
+        ...entry, rootId: root?.id, rootName: root ? workspaceRootName(root) : undefined, absolutePath: absolute(entry.path),
+      }),
+    };
+  };
+
+  const renderWorkspacePanel = (panel: DesktopPanelTab, placement: DesktopPanelSlot) => {
+    const props = propsForPanel(panel);
+    return <WorkspaceReviewScope panel={panel}>{(review) => <WorkspacePanelRenderer
+      toolbar={panel.type === 'terminal' && workspaceProjectRoots(context.activeWorkspace).length > 1 ? <div className="workspace-root-toolbar">{rootPicker(panel)}</div> : undefined}
+      panel={panel} placement={placement} projectId={context.activeProject?.id ?? null}
+      threadId={context.currentThread?.id ?? null} visible
+    ><WorkspacePanel {...props} {...review} activePanel={panel} placement={placement} /></WorkspacePanelRenderer>}</WorkspaceReviewScope>;
+  };
+
   const browserBindings = useMemo(() => new Map<string, BrowserWorkspacePanelBinding>(
     panels.browserPanelInstances.map((instance) => {
       const surfaceInstanceId = instance.panel.id;
@@ -331,6 +382,11 @@ export function DesktopWorkspacePanelLayer({
   return (
     <BrowserWorkspaceFeatureBoundary host={browserHost}>
       <TerminalWorkspaceFeatureBoundary host={terminalHost}>
+        <WorkspaceReviewScopes project={context.activeWorkspace}
+          panels={[...panels.sidePanelSlot.panels, ...panels.bottomPanelSlot.panels]}
+          threadId={context.currentThread?.id}
+          modelSelection={chatThreadModelSelection(context.config, context.currentThread).reference ?? undefined}
+          onOpenMessageEditor={actions.onOpenCommitMessageEditor}>
         <WorkspaceFileContextMenu
           selectedWorkspaceApp={context.selectedWorkspaceApp}
           target={workspaceFileContextTarget}
@@ -350,9 +406,7 @@ export function DesktopWorkspacePanelLayer({
             onResizeStep={layout.onWorkspaceResizeStep}
           >
             <Suspense fallback={null}>
-              <WorkspacePanelRenderer panel={panels.sideActivePanel} placement="side" projectId={context.activeProject?.id ?? null} threadId={context.currentThread?.id ?? null} visible>
-                <WorkspacePanel {...workspacePanelProps} activePanel={panels.sideActivePanel} placement="side" />
-              </WorkspacePanelRenderer>
+              {renderWorkspacePanel(panels.sideActivePanel, 'side')}
             </Suspense>
           </SideWorkspacePanelSlot>
         ) : null}
@@ -362,7 +416,7 @@ export function DesktopWorkspacePanelLayer({
               activePanel={panels.bottomActivePanel}
               availablePanelTypes={panels.panelLauncherTypes}
               panels={panels.bottomPanelSlot.panels}
-              unsavedFilePath={context.fileDraft.dirty ? context.filePreview?.path : null}
+              isFileDirty={context.isFileDirty}
               resizeMax={layout.terminalMaxHeight}
               resizeMin={layout.terminalMinHeight}
               resizeValue={layout.terminalHeight}
@@ -375,11 +429,7 @@ export function DesktopWorkspacePanelLayer({
               onResizeStart={layout.onTerminalResizeStart}
               onResizeStep={layout.onTerminalResizeStep}
             >
-              {!isFloatingPanelType(panels.bottomActivePanel.type) ? (
-                <WorkspacePanelRenderer panel={panels.bottomActivePanel} placement="bottom" projectId={context.activeProject?.id ?? null} threadId={context.currentThread?.id ?? null} visible>
-                  <WorkspacePanel {...workspacePanelProps} activePanel={panels.bottomActivePanel} placement="bottom" />
-                </WorkspacePanelRenderer>
-              ) : null}
+              {!isFloatingPanelType(panels.bottomActivePanel.type) ? (renderWorkspacePanel(panels.bottomActivePanel, 'bottom')) : null}
             </BottomToolsPanel>
           </Suspense>
         ) : null}
@@ -485,13 +535,15 @@ export function DesktopWorkspacePanelLayer({
             </Suspense>
           </FloatingWorkspacePanelSlot>
         ) : null}
+        </WorkspaceReviewScopes>
       </TerminalWorkspaceFeatureBoundary>
     </BrowserWorkspaceFeatureBoundary>
   );
 }
 
-function WorkspacePanelRenderer({ children, panel, placement, projectId, surfaceInstanceId: explicitSurfaceInstanceId, threadId, visible }: Readonly<{
+function WorkspacePanelRenderer({ children, toolbar, panel, placement, projectId, surfaceInstanceId: explicitSurfaceInstanceId, threadId, visible }: Readonly<{
   children: ReactNode;
+  toolbar?: ReactNode;
   panel: DesktopPanelTab;
   placement: DesktopPanelSlot;
   projectId: string | null;
@@ -501,7 +553,7 @@ function WorkspacePanelRenderer({ children, panel, placement, projectId, surface
 }>) {
   const { t } = useI18n();
   const surfaceInstanceId = explicitSurfaceInstanceId ?? `${placement}:${panel.id}`;
-  return (
+  const content = (
     <RendererOwnedKeyedSlot
       entryKey={panel.type}
       instanceKey={explicitSurfaceInstanceId ?? JSON.stringify([projectId, threadId, surfaceInstanceId])}
@@ -509,6 +561,7 @@ function WorkspacePanelRenderer({ children, panel, placement, projectId, surface
       props={{ panelId: panel.id, panelType: panel.type, placement, projectId, renderDefault: () => children, surfaceInstanceId, threadId, translate: t, visible }}
     />
   );
+  return toolbar ? <div className="workspace-root-surface">{toolbar}<div className="workspace-root-surface__content">{content}</div></div> : content;
 }
 
 function panelInstances(panels: DesktopWorkspacePanelModel['panels'], type: DesktopPanelType) {

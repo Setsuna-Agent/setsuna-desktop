@@ -1,3 +1,4 @@
+import { workspaceProjectRoots } from '@setsuna-desktop/contracts';
 import type {
   DesktopRuntimeClient,
   ForkThreadInput,
@@ -369,10 +370,13 @@ export function useDesktopNavigation({
   const saveProject = useCallback(async (input: UpdateWorkspaceProjectInput) => {
     if (!projectEditor) return false;
     const existingProject = projectEditor.mode === 'edit' ? projectEditor.project : null;
-    const nextPath = input.path === undefined
+    const nextPath = input.roots ? input.roots[0]?.path : input.path === undefined
       ? existingProject?.path
       : input.path ?? undefined;
-    const pathChanged = existingProject !== null && existingProject.path !== nextPath;
+    const rootsChanged = input.roots !== undefined
+      && JSON.stringify(input.roots.map(({ id, path }) => ({ id, path })))
+        !== JSON.stringify(workspaceProjectRoots(existingProject).map(({ id, path }) => ({ id, path })));
+    const pathChanged = existingProject !== null && (existingProject.path !== nextPath || rootsChanged);
     const changesCurrentWorkspace = existingProject === null
       || (existingProject.id === currentProjectId && pathChanged);
     if (changesCurrentWorkspace && !await confirmDiscardProjectFile()) {
@@ -382,6 +386,7 @@ export function useDesktopNavigation({
       ? await client.updateProject(existingProject.id, input)
       : await client.addProject({
           ...(input.name ? { name: input.name } : {}),
+          ...(input.roots ? { roots: input.roots } : {}),
           ...(nextPath ? { path: nextPath } : {}),
         });
     const list = await client.listProjects();

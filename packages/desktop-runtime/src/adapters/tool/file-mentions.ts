@@ -2,6 +2,7 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { workspaceIgnoreRulesCaseInsensitive } from '../search/workspace-search-policy.js';
 import { isNodeError } from '../../shared/node-errors.js';
+import { pathWithinRoot } from '../../security/workspace-path-policy.js';
 
 export type FileMentionEntry = {
   path: string;
@@ -76,7 +77,10 @@ export async function buildFileMentionIndex(
 }
 
 export function invalidateFileMentionIndex(root = process.cwd()): void {
-  indexCache.delete(path.resolve(root));
+  const changed = path.resolve(root);
+  for (const indexedRoot of indexCache.keys()) {
+    if (pathWithinRoot(changed, indexedRoot) || pathWithinRoot(indexedRoot, changed)) indexCache.delete(indexedRoot);
+  }
 }
 
 export function findFileMentionSuggestions(

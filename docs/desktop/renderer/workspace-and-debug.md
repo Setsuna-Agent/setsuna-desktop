@@ -30,9 +30,17 @@ Workspace host 管理右侧/底部工作区 surface 和项目文件；Review、T
 
 Panel 选择和 session 生命周期在 hooks，不应由各 tab 各自维护一份打开状态。
 
+项目编辑器支持添加、移除和指定主要源文件夹。多目录时，文件、审查、变更和终端使用共享 `WorkspaceRootPicker`；每个面板分别记录 `rootId`，对话的 Git 控件仍使用主目录。`WorkspaceReviewScope` 为子目录注入对应的审查状态与 Git 操作上下文，审查偏好按目录隔离。
+
+各目录的审查控制器并列挂载，通过独立 registry 向面板提供状态；目录增删、排序及项目切换不改变缓存面板的组件层级。文件重命名、移动和删除绑定发起操作时的目录，在同项目内切换目录后仍更新原目录的草稿、预览缓存和标签。
+
+“最新变更”使用记录中的实际目标路径分组，再投影为所选目录的相对路径；目录排序不会合并不同目录的同名文件或改变定位目标。终端初始化时记录实际选中的目录，后台退出回调更新其所属聊天的缓存布局，并选中仍存活的目录会话。
+
+文件接口使用 `WorkspaceProjectTarget` 同时传递项目与目录 ID；文件标签、草稿、保存、目录监听和异步响应都包含目录身份。同名文件互不覆盖，切换目录保留未保存草稿，关闭及离开项目仍执行既有确认。`@` 展示绑定目录，支持以目录名加 `/` 筛选；多目录引用使用实际路径序列化，含空格路径使用引号。搜索按需限流，一个不可用目录不会隐藏其他目录的结果。
+
 底栏右上角的向下箭头只隐藏底栏。显隐状态按对话保存在 panel layout 中，与标签及终端 session 生命周期分开；顶部入口和快捷键重新展开时恢复原来的选中标签，空底栏才创建终端。单个标签上的关闭按钮仍移除该标签并释放对应资源。
 
-Shell 退出时，`useTerminalPanelExit` 自动移除对应终端标签并释放 session；关闭最后一个标签时收起所在面板。监听跟随 session 生命周期，底栏隐藏、标签未选中或切到其他对话时仍生效，不依赖终端内容是否挂载。
+终端 session 按标签、项目和源目录保存，切换目录复用已启动的 shell。移除源目录时关闭对应 session，并取消尚未完成的创建请求；迟到的创建结果也会立即关闭。Shell 退出时，`useTerminalPanelExit` 只释放该 session；同一标签仍有其他目录的 shell 时保留标签，否则移除标签，关闭最后一个标签时收起所在面板。监听跟随 session 生命周期，底栏隐藏、标签未选中或切到其他对话时仍生效，不依赖终端内容是否挂载。
 
 文件详情与「打开文件」标签共用工作区层的 `useWorkspaceFileTree`：目录加载结果、展开状态、筛选、宽度、显隐和滚动位置不随标签重建。切换工作区时重置目录，并丢弃旧工作区或旧筛选条件下的异步响应。
 
@@ -183,7 +191,7 @@ Browser Renderer Feature 通过 `BrowserWorkspacePanel.tsx` 注册 `renderer.wor
 
 `packages/features/workspace-apps/src/renderer/` 拥有「打开方式」子菜单、glyph、应用图标、用户偏好和作用域样式。对话标题旁的三个点菜单与文件右键菜单通过 `composition/workspace-apps-feature-adapter.ts` 共用该子菜单；顶部不再单独显示应用打开按钮。Workspace hook 继续拥有 project/panel 状态和打开动作编排；选择对话菜单中的应用会打开当前对话工作区并保存应用偏好。
 
-打开 workspace/file 时只传结构化 app ID、workspace root、relative path 和可选 line；平台命令由 main 构造。
+打开 workspace/file 时只传结构化 app ID、workspace root、relative path 和可选 line；平台命令由 main 构造。`useWorkspaceFileActions` 将 UI 中的绝对引用拆成所属目录和相对路径，供外部打开、复制路径和在文件夹中显示等本机操作使用。
 
 ## Conversation Debug
 

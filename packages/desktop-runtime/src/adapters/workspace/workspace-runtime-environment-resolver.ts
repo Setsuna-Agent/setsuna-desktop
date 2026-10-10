@@ -1,4 +1,4 @@
-import type { RuntimeEnvironment } from '@setsuna-desktop/contracts';
+import { workspaceProjectRoots, type RuntimeEnvironment } from '@setsuna-desktop/contracts';
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import type { RuntimeEnvironmentResolver } from '../../ports/runtime-environment-resolver.js';
@@ -12,7 +12,7 @@ export class WorkspaceRuntimeEnvironmentResolver implements RuntimeEnvironmentRe
     const resolvedProjectId = projectId ?? workspaceId
       ?? (await this.projects.ensureTemporaryWorkspace({ threadId, createdAt: threadCreatedAt })).id;
     let workspaceProjectId = workspaceId ?? resolvedProjectId;
-    let status = await this.projects.getStatus(workspaceProjectId);
+    let status = await this.projects.getStatus(workspaceProjectId, workspaceId ? projectId : undefined);
     if (!workspaceId && projectId && status.project && !status.project.path) {
       const temporaryWorkspace = await this.projects.ensureTemporaryWorkspace({
         threadId,
@@ -39,7 +39,8 @@ export class WorkspaceRuntimeEnvironmentResolver implements RuntimeEnvironmentRe
       ...(workspaceProjectId !== resolvedProjectId ? { workspaceProjectId } : {}),
       cwd: workspaceRoot,
       workspaceRoot,
-      workspaceRoots: [workspaceRoot],
+      // Directory bindings are already canonical. Do not scan every source tree on turn startup.
+      workspaceRoots: [...new Set([workspaceRoot, ...workspaceProjectRoots(status.project).map((root) => root.path)])],
       shell: runtimeShellPath(),
       ...(worktreeRoot && workspacePrefix !== null
         ? {

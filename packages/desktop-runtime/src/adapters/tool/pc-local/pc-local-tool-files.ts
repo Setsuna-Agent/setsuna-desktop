@@ -55,12 +55,10 @@ import {
   formatPath,
   normalizePermissionProfile,
   resolveReadablePath,
-  resolveWorkspaceDeletionPath,
-  resolveWorkspaceDeletionPathFromBase,
-  resolveWorkspacePath,
-  resolveWorkspacePathFromBase,
+  resolveWritablePath,
   workspaceRelativePath,
 } from './pc-local-tool-paths.js';
+import { pathWithinRoot } from '../../../security/workspace-path-policy.js';
 import { openValidatedReadableFile, readValidatedFileBytes, readValidatedFileText } from './pc-local-tool-secure-read.js';
 import {
   boundedInteger,
@@ -157,18 +155,19 @@ export async function listDirectory(args: ToolArguments, state: PcLocalFileState
 export async function findFiles(args: ToolArguments, state: PcLocalFileState) {
   const query = String(args?.query ?? '');
   const maxResults = boundedInteger(args?.max_results, DEFAULT_FIND_RESULTS, 1, MAX_FIND_RESULTS);
-  const scopePath = args?.path ? resolveWorkspacePath(args.path, state.root) : state.root;
+  const scopePath = args?.path ? resolveReadablePath(args.path, state) : state.root;
   if (deniedSandboxRuleForPath(scopePath, state)) {
     return errorResult(`Search path is denied by sandbox filesystem policy: ${formatPath(scopePath, state.root)}`);
   }
   const scopeInfo = await stat(scopePath);
   if (!scopeInfo.isDirectory()) return errorResult(`Search path is not a directory: ${formatPath(scopePath, state.root)}`);
 
-  const index = await buildFileMentionIndex(state.root);
-  const scopedIndex = filterFilesByScope(index, scopePath, state.root)
-    .filter((file) => !deniedSandboxRuleForPath(path.join(state.root, ...file.path.split('/')), state));
+  const searchRoot = pathWithinRoot(scopePath, state.root) ? state.root : scopePath;
+  const index = await buildFileMentionIndex(searchRoot);
+  const scopedIndex = filterFilesByScope(index, scopePath, searchRoot)
+    .filter((file) => !deniedSandboxRuleForPath(path.join(searchRoot, ...file.path.split('/')), state));
   const matches = findFileMentionSuggestions(scopedIndex, query, maxResults);
-  const files = matches.map((file) => file.path);
+  const files = matches.map((file) => formatAccessiblePath(path.resolve(searchRoot, file.path), state));
 
   return okResult(
     [
@@ -191,14 +190,16 @@ export async function searchText(
   const maxResults = boundedInteger(args?.max_results, DEFAULT_SEARCH_RESULTS, 1, MAX_SEARCH_RESULTS);
   const contextLines = boundedInteger(args?.context_lines, 0, 0, MAX_SEARCH_CONTEXT_LINES);
   const regex = args?.regex !== false;
-  const scopePath = args?.path ? resolveWorkspacePath(args.path, state.root) : state.root;
+  const scopePath = args?.path ? resolveReadablePath(args.path, state) : state.root;
   if (deniedSandboxRuleForPath(scopePath, state)) {
     return errorResult(`Search path is denied by sandbox filesystem policy: ${formatPath(scopePath, state.root)}`);
   }
   if (!state.workspaceSearchEngine) return errorResult('Workspace search engine is unavailable.');
   const appliesSandboxDenyRules = normalizePermissionProfile(state.permissionProfile) !== 'danger-full-access';
+  const searchRoot = pathWithinRoot(scopePath, state.root) ? state.root
+    : (await stat(scopePath)).isDirectory() ? scopePath : path.dirname(scopePath);
   const response = await state.workspaceSearchEngine.search({
-    root: state.root,
+    root: searchRoot,
     scopePath,
     query,
     regex,
@@ -219,7 +220,9 @@ export async function searchText(
   return okResult(
     truncateText([
       `Text search for ${matcherLabel}${ignoredNote} under ${formatPath(scopePath, state.root)}: ${response.matches.length} match${response.matches.length === 1 ? '' : 'es'}`,
-      response.matches.map(formatSearchMatch).join('\n') || '(no matches)',
+      response.matches.map((match) => formatSearchMatch({
+        ...match, path: formatAccessiblePath(path.resolve(searchRoot, match.path), state),
+      })).join('\n') || '(no matches)',
       response.truncated ? `Showing first ${maxResults} matches.` : '',
       details,
     ].filter(Boolean).join('\n'), MAX_TEXT_BYTES),
@@ -339,8 +342,8 @@ export async function applyLocalPatch(args: ToolArguments, state: PcLocalFileSta
   await commitFileChanges(result.changes, state);
   for (const change of result.changes) {
     state.reads.delete(change.filePath);
+    invalidateFileMentionIndex(change.filePath);
   }
-  invalidateFileMentionIndex(state.root);
 
   return okResult(
     `Successfully applied patch to ${result.changes.length} file${result.changes.length === 1 ? '' : 's'}.\n${formatFileMutationReceipt(result.diffs)}`,
@@ -366,7 +369,7 @@ export async function writeLocalFile(args: ToolArguments, state: PcLocalFileStat
     previousContent: result.previousContent,
     nextContent: result.nextContent,
   }], state);
-  invalidateFileMentionIndex(state.root);
+  invalidateFileMentionIndex(result.filePath);
   state.reads.delete(result.filePath);
 
   return okResult(
@@ -383,7 +386,7 @@ export async function calculateWriteFile(
   args: ToolArguments,
   state: PcLocalFileState,
 ): Promise<FileMutationCalculation | FileCalculationFailure> {
-  const filePath = resolveWorkspacePath(args?.file_path, state.root);
+  const filePath = resolveWritablePath(args?.file_path, state);
   const content = String(args?.content ?? '');
   let existed = false;
   let existingStats = null;
@@ -432,14 +435,14 @@ export async function calculateApplyPatch(
   if (environmentId && !activeEnvironmentId) {
     return { ok: false, error: `apply_patch environment_id ${environmentId} cannot be used without an active environment.` };
   }
-  const patchRoot = args?.workdir ? resolveWorkspacePath(args.workdir, state.root) : state.root;
+  const patchRoot = args?.workdir ? path.resolve(state.root || process.cwd(), String(args.workdir)) : state.root;
 
   const changes: LocalFileChange[] = [];
   const touched = new Set<string>();
   for (const operation of operations.operations) {
     const filePath = operation.type === 'delete'
-      ? resolveWorkspaceDeletionPathFromBase(operation.path, patchRoot, state.root)
-      : resolveWorkspacePathFromBase(operation.path, patchRoot, state.root);
+      ? resolveWritablePath(operation.path, state, patchRoot, true)
+      : resolveWritablePath(operation.path, state, patchRoot);
     if (touched.has(filePath)) return { ok: false, error: `同一个补丁中重复修改了文件：${formatPath(filePath, state.root)}` };
     touched.add(filePath);
 
@@ -455,7 +458,7 @@ export async function calculateApplyPatch(
       continue;
     }
 
-    const moveToPath = operation.moveTo ? resolveWorkspacePathFromBase(operation.moveTo, patchRoot, state.root) : null;
+    const moveToPath = operation.moveTo ? resolveWritablePath(operation.moveTo, state, patchRoot) : null;
     if (moveToPath) {
       if (touched.has(moveToPath)) return { ok: false, error: `同一个补丁中重复修改了文件：${formatPath(moveToPath, state.root)}` };
       touched.add(moveToPath);
@@ -561,7 +564,7 @@ export async function appendLocalFile(args: ToolArguments, state: PcLocalFileSta
     previousContent: result.previousContent,
     nextContent: result.nextContent,
   }], state);
-  invalidateFileMentionIndex(state.root);
+  invalidateFileMentionIndex(result.filePath);
   state.reads.delete(result.filePath);
 
   return okResult(
@@ -587,7 +590,7 @@ export async function deleteLocalFile(args: ToolArguments, state: PcLocalFileSta
     symbolicLink: result.symbolicLink,
     previousMode: result.previousMode,
   }], state);
-  invalidateFileMentionIndex(state.root);
+  invalidateFileMentionIndex(result.filePath);
   state.reads.delete(result.filePath);
 
   return okResult(
@@ -608,7 +611,7 @@ export async function editLocalFile(args: ToolArguments, state: PcLocalFileState
     previousContent: result.previousContent,
     nextContent: result.nextContent,
   }], state);
-  invalidateFileMentionIndex(state.root);
+  invalidateFileMentionIndex(result.filePath);
   state.reads.delete(result.filePath);
 
   return okResult(
@@ -626,7 +629,7 @@ export async function calculateEditFile(
   state: PcLocalFileState,
   options: PriorReadOptions = {},
 ): Promise<FileMutationCalculation | FileCalculationFailure> {
-  const filePath = resolveWorkspacePath(args?.file_path, state.root);
+  const filePath = resolveWritablePath(args?.file_path, state);
   const parsed = parseTextEditRequest(args);
   if (!parsed.ok) return parsed;
   const { request } = parsed;
@@ -683,7 +686,7 @@ export async function calculateAppendFile(
   state: PcLocalFileState,
   options: PriorReadOptions = {},
 ): Promise<FileMutationCalculation | FileCalculationFailure> {
-  const filePath = resolveWorkspacePath(args?.file_path, state.root);
+  const filePath = resolveWritablePath(args?.file_path, state);
   const content = String(args?.content ?? '');
   let existed = false;
   let existingStats = null;
@@ -741,7 +744,7 @@ export async function calculateDeleteFile(
   state: PcLocalFileState,
   options: PriorReadOptions = {},
 ): Promise<FileDeleteCalculation | FileCalculationFailure> {
-  const filePath = resolveWorkspaceDeletionPath(args?.file_path, state.root);
+  const filePath = resolveWritablePath(args?.file_path, state, state.root, true);
   let existingStats = null;
 
   try {

@@ -27,6 +27,7 @@ import {
   realPathIfExists,
   realWorkspaceRoot,
   resolvePolicyPath,
+  sandboxReadableRootsForState,
 } from './pc-local-tool-paths.js';
 import {
   _usesShellApplyPatch,
@@ -314,7 +315,7 @@ function resolveShellDirectoryPath(value: unknown, state: ShellProcessState): st
   const resolved = resolvePolicyPath(raw, workspaceRoot);
   if (normalizePermissionProfile(state?.permissionProfile) === 'danger-full-access') return resolved;
   const target = realPathIfExists(resolved);
-  const allowedRoots = shellWorkspaceWriteRoots(state).map(realPathIfExists);
+  const allowedRoots = [...shellWorkspaceWriteRoots(state), ...sandboxReadableRootsForState(state)].map(realPathIfExists);
   if (allowedRoots.some((root) => isPathInsideRoot(target, root))) return target;
   throw new Error('Shell directory escapes the workspace and configured writable roots.');
 }

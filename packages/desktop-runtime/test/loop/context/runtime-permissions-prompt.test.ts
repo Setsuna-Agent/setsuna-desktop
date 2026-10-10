@@ -25,7 +25,7 @@ describe('runtimePermissionsPrompt', () => {
     expect(prompt).toContain('Permission profile: workspace-write');
     expect(prompt).toContain('Approval policy: strict');
     expect(prompt).toContain('Network access: restricted');
-    expect(prompt).toContain('Writable roots: "/workspace/src"');
+    expect(prompt).toContain('Writable roots: "/workspace", "/workspace/src"');
     expect(prompt).toContain('request_permissions');
     expect(prompt).not.toContain('Working directory');
   });

@@ -23,7 +23,7 @@ export async function createRuntimeThread(runtime: RuntimeContainer, input: Crea
   if (!status.project?.path || !status.gitRoot || !status.exists || !status.readable) {
     throw new RuntimeUseCaseError('invalid_request', 'An available Git project is required to create a worktree.');
   }
-  const worktree = await runtime.workspaceFork.createWorktree(status.project.path);
+  const worktree = await runtime.workspaceFork.createWorktree(status.project.path, status.project);
   try {
     return await runtime.threadStore.createThread({ ...threadInput, workspaceId: worktree.workspaceId });
   } catch (error) {

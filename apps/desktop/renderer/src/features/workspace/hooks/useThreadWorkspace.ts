@@ -52,7 +52,7 @@ export function useThreadWorkspace({ client, projectWorkspace, setError, thread 
       setError?.(error instanceof Error ? error.message : String(error));
     });
     return () => requests.invalidate();
-  }, [client, requests, setError, threadId, threadProjectId, threadWorkspaceId]);
+  }, [client, projectWorkspace?.updatedAt, requests, setError, threadId, threadProjectId, threadWorkspaceId]);
 
   const ensureAvailableForSend = useCallback(async () => {
     if (!threadId || !threadWorkspaceId) return true;

@@ -153,7 +153,7 @@ export class ToolOrchestrator {
     let runToolCall = effective.toolCall;
     let runArguments = effective.parsedArguments;
     const environment = context.environment;
-    const stepContext = context;
+    const stepContext = { ...context, sandboxWorkspaceWrite: this.sandboxWorkspaceWriteForRun(context, undefined) };
     if (runToolCall.name === REQUEST_PERMISSIONS_TOOL_NAME) {
       return this.runRequestPermissionsTool(runToolCall, runArguments, stepContext, approvalPolicy, environment);
     }
@@ -235,7 +235,7 @@ export class ToolOrchestrator {
         ? null
         : (await this.options.toolHost.toolRuntimeProfile?.(runToolCall.name, stepContext) ?? null);
       const approval = runOptions.checkApproval === false
-        ? { decision: 'approve' as const, sandboxBypass: false }
+        ? { decision: 'approve' as const, sandboxBypass: false, fileAccessGrant: undefined }
         : await this.approvals.approveToolCall(
             runToolCall,
             runArguments,
@@ -254,7 +254,7 @@ export class ToolOrchestrator {
       }
 
       throwIfAborted(stepContext.signal);
-      const sandboxWorkspaceWrite = this.sandboxWorkspaceWriteForRun(stepContext, additionalSandboxPermissions?.sandboxWorkspaceWrite);
+      const sandboxWorkspaceWrite = this.sandboxWorkspaceWriteForRun(stepContext, mergeSandboxWorkspaceWrite(additionalSandboxPermissions?.sandboxWorkspaceWrite, approval.fileAccessGrant));
       const networkAccessApprovedForSession = this.options.approvalStore?.hasAny(networkRetryApprovalKeys(runToolCall, runArguments, stepContext), stepContext.turnId) ?? false;
       const fullAccess = approvalPolicy === 'full' && stepContext.permissionProfile === 'danger-full-access';
       const firstRunSandbox = fullAccess || requestedSandboxBypass(runToolCall.name, runArguments) || approval.sandboxBypass

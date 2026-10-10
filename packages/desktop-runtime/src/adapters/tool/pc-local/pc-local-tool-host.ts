@@ -33,6 +33,8 @@ import { compatToolDefinitions } from './pc-local-tool-compat-definitions.js';
 import { shellPermissionBlockReason } from './pc-local-tool-shell-policy.js';
 import { shellResultMetadata } from './pc-local-tool-shell-output.js';
 import { gitInspectDefinition, inspectGit } from './pc-local-tool-git-inspect.js';
+import { resolveReadablePath } from './pc-local-tool-paths.js';
+import { canonicalFilesystemRoots, pathWithinRoot } from '../../../security/workspace-path-policy.js';
 import * as pcTools from './pc-local-tools.js';
 
 type PcToolState = Omit<ReturnType<typeof pcTools.createLocalToolState>, 'sandboxWorkspaceWrite'> & {
@@ -211,6 +213,7 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
     if (context.readOnly) return null;
     const normalized = this.normalizeToolCall(name, input);
     if (EXCLUDED_PC_TOOLS.has(normalized.name)) return null;
+    context = { ...context, environment: context.environment ?? await this.environmentForToolContext(context) };
     const projectState = await this.projectStateFor(context);
     const toolState = this.toolStateForContext(projectState, context);
     if (FILE_MUTATION_TOOL_NAMES.has(normalized.name)) return null;
@@ -259,6 +262,7 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
   async previewToolCall(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionPreview | null> {
     const normalized = this.normalizeToolCall(name, input);
     if (EXCLUDED_PC_TOOLS.has(normalized.name)) return null;
+    context = { ...context, environment: context.environment ?? await this.environmentForToolContext(context) };
     const projectState = await this.projectStateFor(context);
     const toolState = this.toolStateForContext(projectState, context);
     assertLocalFileMutationPolicy(normalized.name, normalized.args, toolState);
@@ -280,6 +284,7 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
   async previewPartialToolCall(name: string, rawArguments: string, context: ToolExecutionContext): Promise<ToolExecutionPreview | null> {
     const normalizedName = this.normalizeToolName(name);
     if (EXCLUDED_PC_TOOLS.has(normalizedName)) return null;
+    context = { ...context, environment: context.environment ?? await this.environmentForToolContext(context) };
     const projectState = await this.projectStateFor(context);
     const toolState = this.toolStateForContext(projectState, context);
     const partialArgs = normalizePartialToolArgs(normalizedName, parsePartialArguments(normalizedName, rawArguments));
@@ -302,11 +307,15 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
   async runTool(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult> {
     const normalized = this.normalizeToolCall(name, input);
     if (EXCLUDED_PC_TOOLS.has(normalized.name)) throw new Error(`Unknown tool: ${name}`);
+    context = { ...context, environment: context.environment ?? await this.environmentForToolContext(context) };
     const projectState = await this.projectStateFor(context);
     const toolState = this.toolStateForContext(projectState, context);
     if (normalized.name === 'git_inspect') {
       if (!context.readOnly || this.shellSandboxCapability().supported) throw new Error(`Unknown tool: ${name}`);
-      return inspectGit(normalized.args, toolState.root, context.signal);
+      const target = resolveReadablePath(normalized.args.path ?? '.', toolState);
+      const roots = canonicalFilesystemRoots(context.environment?.workspaceRoots ?? [toolState.root], toolState.root);
+      const root = roots.sort((left, right) => right.length - left.length).find((candidate) => pathWithinRoot(target, candidate)) ?? toolState.root;
+      return inspectGit({ ...normalized.args, path: target }, root, context.signal);
     }
     if (!context.readOnly && normalized.name === 'run_shell_command' && context.sandbox?.mode === 'bypass') {
       // The orchestrator grants this exact shell attempt; never alter the shared project or turn profile.
@@ -524,7 +533,14 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
       samplingStepId: context.samplingStepId,
       environmentId: context.environment?.id ?? projectState.toolState.environmentId,
       permissionProfile: context.readOnly ? 'read-only' : context.permissionProfile ?? 'workspace-write',
-      sandboxWorkspaceWrite: cloneSandboxWorkspaceWrite(context.sandboxWorkspaceWrite),
+      sandboxWorkspaceWrite: {
+        ...cloneSandboxWorkspaceWrite(context.sandboxWorkspaceWrite),
+        readableRoots: [...new Set([...(context.environment?.workspaceRoots ?? []), ...(context.sandboxWorkspaceWrite?.readableRoots ?? [])])],
+        writableRoots: context.readOnly ? [] : [...new Set([
+          ...(context.permissionProfile === 'read-only' ? [] : context.environment?.workspaceRoots ?? []),
+          ...(context.sandboxWorkspaceWrite?.writableRoots ?? []),
+        ])],
+      },
       directToolReadableRoots: [...(context.directToolReadableRoots ?? [])],
       osSandbox: context.readOnly || context.sandbox?.mode !== 'bypass',
       shellPolicyRules: [...(projectState.toolState.shellPolicyRules ?? [])],

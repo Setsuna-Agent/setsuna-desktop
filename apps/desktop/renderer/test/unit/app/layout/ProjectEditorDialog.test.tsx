@@ -16,7 +16,7 @@ describe('ProjectEditorDialog', () => {
     expect(screen.queryByRole('button', { name: '移除项目' })).toBeNull();
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'New project' } });
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
-    await waitFor(() => expect(actions.onSave).toHaveBeenCalledWith({ name: 'New project', path: null }));
+    await waitFor(() => expect(actions.onSave).toHaveBeenCalledWith({ name: 'New project', roots: [] }));
     view.unmount();
 
     const project: WorkspaceProject = {
@@ -25,7 +25,7 @@ describe('ProjectEditorDialog', () => {
     };
     render(<ProjectEditorDialog {...actions} project={project} />);
     expect(screen.getByRole('dialog', { name: '编辑项目' })).toBeTruthy();
-    expect(screen.getByText('/workspace/demo')).toBeTruthy();
+    expect(screen.getByTitle('/workspace/demo')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '移除项目' }));
     expect(actions.onRemove).not.toHaveBeenCalled();
     fireEvent.click(screen.getAllByRole('button', { name: '移除项目' }).at(-1)!);

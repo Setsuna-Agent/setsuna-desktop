@@ -1,3 +1,4 @@
+import { workspaceTargetProjectId, workspaceTargetRootId, type WorkspaceProjectTarget } from '@setsuna-desktop/contracts';
 import type {
   WorkspaceFileChangeAction,
   AddWorkspaceProjectInput,
@@ -261,66 +262,67 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     getWorkspaceStatus(query = {}) {
       const params = new URLSearchParams();
       if (query.projectId) params.set('projectId', query.projectId);
+      if (query.rootId) params.set('rootId', query.rootId);
       if (query.threadId) params.set('threadId', query.threadId);
       const suffix = params.size ? `?${params}` : '';
       return request<WorkspaceStatus>({ path: `/v1/workspace/status${suffix}` });
     },
-    listProjectEntries(projectId: string, path = '.') {
+    listProjectEntries(projectId: WorkspaceProjectTarget, path = '.') {
       return request<WorkspaceEntryList>({
-        path: `/v1/projects/${encodeURIComponent(projectId)}/files?path=${encodeURIComponent(path)}`,
+        path: workspaceRequestPath(projectId, `/files?path=${encodeURIComponent(path)}`),
       });
     },
-    searchProjectEntries(projectId: string, query = '', parent?: string | null) {
+    searchProjectEntries(projectId: WorkspaceProjectTarget, query = '', parent?: string | null) {
       const params = new URLSearchParams();
       params.set('q', query);
       if (parent !== undefined && parent !== null) params.set('parent', parent);
       return request<WorkspaceEntrySearchResponse>({
-        path: `/v1/projects/${encodeURIComponent(projectId)}/entries/search?${params}`,
+        path: workspaceRequestPath(projectId, `/entries/search?${params}`),
       });
     },
-    readProjectFile(projectId: string, path: string) {
+    readProjectFile(projectId: WorkspaceProjectTarget, path: string) {
       return request<WorkspaceFileRead>({
-        path: `/v1/projects/${encodeURIComponent(projectId)}/read?path=${encodeURIComponent(path)}`,
+        path: workspaceRequestPath(projectId, `/read?path=${encodeURIComponent(path)}`),
       });
     },
-    createProjectEntry(projectId: string, input: WorkspaceEntryCreateInput) {
+    createProjectEntry(projectId: WorkspaceProjectTarget, input: WorkspaceEntryCreateInput) {
       return requestEntryMutation<WorkspaceEntry>({
-        path: `/v1/projects/${encodeURIComponent(projectId)}/entries`, method: 'POST', body: input,
+        path: workspaceRequestPath(projectId, `/entries`), method: 'POST', body: input,
       });
     },
-    renameProjectEntry(projectId: string, path: string, input: WorkspaceEntryRenameInput) {
+    renameProjectEntry(projectId: WorkspaceProjectTarget, path: string, input: WorkspaceEntryRenameInput) {
       return requestEntryMutation<WorkspaceEntry>({
-        path: `/v1/projects/${encodeURIComponent(projectId)}/entries?path=${encodeURIComponent(path)}`,
+        path: workspaceRequestPath(projectId, `/entries?path=${encodeURIComponent(path)}`),
         method: 'PATCH', body: input,
       });
     },
-    moveProjectEntry(projectId: string, path: string, input: WorkspaceEntryMoveInput) {
+    moveProjectEntry(projectId: WorkspaceProjectTarget, path: string, input: WorkspaceEntryMoveInput) {
       return requestEntryMutation<WorkspaceEntry>({
-        path: `/v1/projects/${encodeURIComponent(projectId)}/entries/move?path=${encodeURIComponent(path)}`,
+        path: workspaceRequestPath(projectId, `/entries/move?path=${encodeURIComponent(path)}`),
         method: 'POST', body: input,
       });
     },
-    deleteProjectEntry(projectId: string, path: string) {
+    deleteProjectEntry(projectId: WorkspaceProjectTarget, path: string) {
       return request<void>({
-        path: `/v1/projects/${encodeURIComponent(projectId)}/entries?path=${encodeURIComponent(path)}`,
+        path: workspaceRequestPath(projectId, `/entries?path=${encodeURIComponent(path)}`),
         method: 'DELETE',
       });
     },
-    readProjectFileForEdit(projectId: string, path: string) {
+    readProjectFileForEdit(projectId: WorkspaceProjectTarget, path: string) {
       return request<WorkspaceFileRead>({
-        path: `/v1/projects/${encodeURIComponent(projectId)}/read?path=${encodeURIComponent(path)}&mode=edit`,
+        path: workspaceRequestPath(projectId, `/read?path=${encodeURIComponent(path)}&mode=edit`),
       });
     },
-    saveProjectFile(projectId: string, path: string, input: WorkspaceFileSaveInput) {
+    saveProjectFile(projectId: WorkspaceProjectTarget, path: string, input: WorkspaceFileSaveInput) {
       return request<WorkspaceFileRead>({
-        path: `/v1/projects/${encodeURIComponent(projectId)}/write?path=${encodeURIComponent(path)}`,
+        path: workspaceRequestPath(projectId, `/write?path=${encodeURIComponent(path)}`),
         method: 'PUT',
         body: input,
       });
     },
-    searchProject(projectId: string, query: string) {
+    searchProject(projectId: WorkspaceProjectTarget, query: string) {
       return request<WorkspaceSearchResponse>({
-        path: `/v1/projects/${encodeURIComponent(projectId)}/search?q=${encodeURIComponent(query)}`,
+        path: workspaceRequestPath(projectId, `/search?q=${encodeURIComponent(query)}`),
       });
     },
     listApprovals() {
@@ -330,4 +332,11 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
       return request<void>({ path: `/v1/approvals/${encodeURIComponent(approvalId)}`, method: 'POST', body: input });
     },
   };
+}
+
+/** Keep directory selection explicit on the wire while preserving single-directory callers. */
+function workspaceRequestPath(target: WorkspaceProjectTarget, suffix: string): string {
+  const rootId = workspaceTargetRootId(target);
+  const rootQuery = rootId ? `${suffix.includes('?') ? '&' : '?'}rootId=${encodeURIComponent(rootId)}` : '';
+  return `/v1/projects/${encodeURIComponent(workspaceTargetProjectId(target))}${suffix}${rootQuery}`;
 }

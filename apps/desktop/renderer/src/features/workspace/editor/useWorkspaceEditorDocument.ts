@@ -1,14 +1,14 @@
-import type { WorkspaceFileRead } from '@setsuna-desktop/contracts';
+import { workspaceFileKey, type WorkspaceFileRead } from '@setsuna-desktop/contracts';
 import type { CodeViewItem, FileContents } from '@pierre/diffs/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 export function useWorkspaceEditorDocument({ content, file, language, onChange }: {
   content: string;
-  file: Pick<WorkspaceFileRead, 'projectId' | 'path' | 'revision'>;
+  file: Pick<WorkspaceFileRead, 'projectId' | 'rootId' | 'path' | 'revision'>;
   language?: string;
   onChange(content: string): void;
 }) {
-  const itemId = `${file.projectId}:${file.path}`;
+  const itemId = workspaceFileKey(file);
   const receivedDocument = useRef({ content, itemId, language });
   const pendingEdits = useRef<string[]>([]);
   const [items, setItems] = useState<readonly CodeViewItem<undefined>[]>(() => [{

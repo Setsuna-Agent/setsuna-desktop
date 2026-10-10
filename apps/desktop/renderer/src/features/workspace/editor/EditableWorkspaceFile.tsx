@@ -1,4 +1,4 @@
-import type { WorkspaceFileRead } from '@setsuna-desktop/contracts';
+import { workspaceFileKey, type WorkspaceFileRead } from '@setsuna-desktop/contracts';
 import { Editor, type EditorOptions } from '@pierre/diffs/edit';
 import {
   CodeView,
@@ -23,7 +23,7 @@ import { useWorkspaceEditorDocument } from './useWorkspaceEditorDocument.js';
 type EditableWorkspaceFileProps = {
   active?: boolean;
   content: string;
-  file: Pick<WorkspaceFileRead, 'projectId' | 'path' | 'revision'>;
+  file: Pick<WorkspaceFileRead, 'projectId' | 'rootId' | 'path' | 'revision'>;
   fileFocusRequest?: WorkspaceFileFocusRequest;
   language?: string;
   onChange: (content: string) => void;
@@ -47,7 +47,7 @@ export function EditableWorkspaceFile({
     layout: workspaceCodeViewLayout,
     unsafeCSS: workspaceCodeViewUnsafeCSS,
   });
-  const itemId = `${file.projectId}:${file.path}`;
+  const itemId = workspaceFileKey(file);
   const { items, onEditorChange } = useWorkspaceEditorDocument({ content, file, language, onChange });
   const editorOptions = useMemo<Omit<EditorOptions<undefined>, 'onChange'>>(() => ({
     onAttach: (editor) => {

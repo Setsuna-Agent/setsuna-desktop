@@ -1,4 +1,4 @@
-import type { WorkspaceFileRead } from '@setsuna-desktop/contracts';
+import { workspaceTarget, type WorkspaceFileRead } from '@setsuna-desktop/contracts';
 import { Children, createContext, isValidElement, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
@@ -10,7 +10,7 @@ import { MarkdownCodeBlock } from '../../chat/markdown/MarkdownCodeBlock.js';
 import { resolveWorkspaceMarkdownTarget } from './workspaceMarkdownLinks.js';
 
 type PreviewOptions = {
-  file: Pick<WorkspaceFileRead, 'path'> & Partial<Pick<WorkspaceFileRead, 'projectId'>>;
+  file: Pick<WorkspaceFileRead, 'path'> & Partial<Pick<WorkspaceFileRead, 'projectId' | 'rootId'>>;
   onOpenFile?: (path: string, line?: number) => void;
   loadImage?: (path: string) => Promise<{ src: string; dispose?(): void } | null>;
 };
@@ -65,7 +65,7 @@ function PreviewImage({ src, alt = '', node: _node, ...props }: ElementProps<'im
   const target = resolveWorkspaceMarkdownTarget(src, file.path);
   const path = target.kind === 'file' ? target.path : null;
   const [image, setImage] = useState<{ key: string; src: string; loadImage?: PreviewOptions['loadImage'] } | null>(null);
-  const key = JSON.stringify([file.projectId, path]);
+  const key = JSON.stringify([file.projectId, file.rootId, path]);
   useEffect(() => {
     if (!path) return;
     let cancelled = false;
@@ -78,7 +78,7 @@ function PreviewImage({ src, alt = '', node: _node, ...props }: ElementProps<'im
           dispose = result?.dispose;
           setImage(result ? { key, src: result.src, loadImage } : null);
         } else if (file.projectId) {
-          const result = await createDesktopRuntimeClient().readProjectFile(file.projectId, path!);
+          const result = await createDesktopRuntimeClient().readProjectFile(workspaceTarget(file.projectId, file.rootId), path!);
           if (!cancelled && result.preview?.kind === 'image') {
             setImage({ key, src: `data:${result.preview.mimeType};base64,${result.preview.base64}` });
           }
@@ -87,7 +87,7 @@ function PreviewImage({ src, alt = '', node: _node, ...props }: ElementProps<'im
     }
     void load();
     return () => { cancelled = true; dispose?.(); };
-  }, [file.projectId, key, loadImage, path]);
+  }, [file.projectId, file.rootId, key, loadImage, path]);
   const imageSrc = target.kind === 'external' && /^https?:/i.test(target.href)
     ? target.href : image?.key === key && image.loadImage === loadImage ? image.src : undefined;
   return imageSrc

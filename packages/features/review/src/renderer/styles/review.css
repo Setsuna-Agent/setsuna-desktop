@@ -40,6 +40,7 @@
 }
 
 .desktop-review-panel > .desktop-review-panel__toolbar {
+  min-height: 40px;
   padding-block: 4px;
 }
 
@@ -48,6 +49,7 @@
 }
 
 .desktop-review-panel .chat-file-review-panel__toolbar {
+  flex: 1 1 auto;
   min-width: 0;
   min-height: 30px;
   display: flex;
@@ -56,9 +58,22 @@
   gap: 8px;
 }
 
+.chat-file-review-panel__scope {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* The directory and comparison source share one outline and one text baseline. */
+.chat-file-review-panel__scope--multi-root {
+  border: 1px solid var(--desktop-agent-subtle-divider);
+  border-radius: var(--app-radius-full);
+  background: var(--app-bg);
+}
+
 .desktop-review-panel .chat-file-review-panel__source-button.sd-button,
 .desktop-review-branch-compare__button.sd-button {
-  height: 30px;
   padding: 0 8px;
 }
 
@@ -70,31 +85,45 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: var(--app-font-weight);}
+  height: 28px;
+  min-height: 28px;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: var(--app-font-weight);
+}
 
 .desktop-review-panel .chat-file-review-panel__source-button.sd-button > span {
   min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  line-height: 1;}
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: inherit;
+}
 
 .desktop-review-panel .chat-file-review-panel__source-title {
   display: inline-flex;
   align-items: center;
-  min-height: 30px;
+  min-height: 28px;
   color: var(--app-text);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 18px;
+}
+
+.desktop-review-panel .chat-file-review-panel__scope--multi-root :is(.chat-file-review-panel__source-button.sd-button, .chat-file-review-panel__source-title) {
+  flex: 0 0 auto;
+  padding-inline: 8px;
+  border: 0;
+  border-left: 1px solid var(--desktop-agent-subtle-divider);
+  border-radius: 0 var(--app-radius-full) var(--app-radius-full) 0;
 }
 
 .desktop-review-panel .chat-file-review-panel__source-button .chat-file-review-panel__source-caret {
   width: 12px;
   height: 12px;
   color: color-mix(in srgb, var(--app-text-secondary) 82%, transparent);
-  transform: translateY(0.5px);
+  display: block;
+  flex: 0 0 auto;
 }
 
 .chat-file-review-panel__source-menu.sd-menu {
@@ -103,6 +132,7 @@
 
 .desktop-review-change-counts {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 6px;
   color: var(--app-text-muted);
@@ -197,6 +227,7 @@
   width: fit-content;
   max-width: 100%;
   min-width: 0;
+  height: 30px;
   font-size: 13px;
   line-height: 18px;
   font-weight: var(--app-font-weight);

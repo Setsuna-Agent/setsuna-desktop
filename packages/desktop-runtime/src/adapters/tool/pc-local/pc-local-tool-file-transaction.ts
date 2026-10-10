@@ -12,8 +12,8 @@ import {
 import path from 'node:path';
 import {
   realWorkspaceRoot,
-  resolveWorkspaceDeletionPath,
-  resolveWorkspacePath,
+  resolveWritablePath,
+  type PcLocalPathState,
 } from './pc-local-tool-paths.js';
 
 export type LocalFileChange = {
@@ -31,7 +31,7 @@ export type FileMutationCoordinator = {
   tail: Promise<void>;
 };
 
-export type FileMutationState = {
+export type FileMutationState = PcLocalPathState & {
   root?: string;
   expectedMutationIntegrityToken?: unknown;
   fileMutationCoordinator?: FileMutationCoordinator;
@@ -95,7 +95,7 @@ export async function commitFileChanges(
 ): Promise<void> {
   await withMutationLock(state, async () => {
     const root = realWorkspaceRoot(state.root);
-    for (const change of changes) assertMutationPath(change, root);
+    for (const change of changes) assertMutationPath(change, state);
 
     const rootIdentity = identityFromStat(await bigintFileStat(root));
     if (!rootIdentity) throw new Error('Workspace root disappeared before file mutation.');
@@ -120,7 +120,7 @@ export async function commitFileChanges(
     let committed = false;
     try {
       for (const entry of entries) {
-        if (entry.change.action === 'write') await stageWrite(entry, root);
+        if (entry.change.action === 'write') await stageWrite(entry, state);
       }
 
       // Staging may take time for large patches, so check approved sources once
@@ -175,10 +175,10 @@ export async function commitFileChanges(
   });
 }
 
-async function stageWrite(entry: TransactionEntry, root: string): Promise<void> {
+async function stageWrite(entry: TransactionEntry, state: FileMutationState): Promise<void> {
   const parent = path.dirname(entry.change.filePath);
   await mkdir(parent, { recursive: true });
-  assertMutationPath(entry.change, root);
+  assertMutationPath(entry.change, state);
 
   entry.stagePath = transactionSiblingPath(entry.change.filePath, 'stage');
   const mode = entry.change.nextMode ?? (entry.snapshot.mode === null
@@ -243,14 +243,9 @@ async function cleanupUnusedStages(entries: TransactionEntry[]): Promise<void> {
   }));
 }
 
-function assertMutationPath(change: LocalFileChange, root: string): void {
-  const relativePath = path.relative(root, path.resolve(change.filePath));
-  if (!relativePath || relativePath === '..' || relativePath.startsWith(`..${path.sep}`) || path.isAbsolute(relativePath)) {
-    throw new Error(`Mutation path escapes the workspace: ${change.filePath}`);
-  }
-  const validated = change.action === 'delete' && change.symbolicLink
-    ? resolveWorkspaceDeletionPath(relativePath, root)
-    : resolveWorkspacePath(relativePath, root);
+function assertMutationPath(change: LocalFileChange, state: FileMutationState): void {
+  if (path.resolve(change.filePath) === realWorkspaceRoot(state.root)) throw new Error('Cannot mutate the workspace root.');
+  const validated = resolveWritablePath(change.filePath, state, state.root, change.action === 'delete' && change.symbolicLink);
   if (path.resolve(validated) !== path.resolve(change.filePath)) {
     throw new Error(`Mutation path changed after validation: ${change.filePath}`);
   }
