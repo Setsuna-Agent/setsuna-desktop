@@ -110,14 +110,21 @@ function GitChangesWorkspace({ workspaceRoot, sourceRootPicker, editingMessage =
   const emptyRepository = page && !page.gitRoot;
 
   if (!bridge) return <div className="git-history-status">{t('feature.review.git.unsupported')}</div>;
-  if (emptyRepository) return <div>{sourceRootPicker}<div className="git-history-status">{t('feature.review.history.noGit')}</div></div>;
+  if (emptyRepository) return (
+    <section className="desktop-review-panel git-changes-panel" aria-label={t('feature.review.history.title')}>
+      {sourceRootPicker ? <header className="desktop-review-panel__toolbar">{sourceRootPicker}</header> : null}
+      <div className="git-history-status">{t('feature.review.history.noGit')}</div>
+    </section>
+  );
 
   return (
     <section className="desktop-review-panel git-changes-panel" aria-label={t('feature.review.history.title')}>
       <GitChangesSplit detailOpen={detailOpen} editingMessage={showMessageEditor} navigation={
         <nav className="git-changes-nav" aria-label={t('feature.review.history.title')}>
           <div className="git-changes-nav__header">
-            {sourceRootPicker ?? <h2 className="git-changes-nav__title">{t('feature.review.history.title')}</h2>}
+            <div className="git-changes-nav__project">
+              {sourceRootPicker ?? <h2 className="git-changes-nav__title">{t('feature.review.history.title')}</h2>}
+            </div>
             <ReviewIconButton tooltip className="app-shell-icon-control" label={t('feature.review.workspace.refresh')} onClick={refresh} disabled={history.loading || reviewLoading}><RefreshCw size={13} /></ReviewIconButton>
             <GitChangesMenu refs={refs} selectedRef={history.selectedRef} busy={fileActions.busy} currentBranch={page?.currentBranch ?? reviewState?.currentBranch ?? null} onSelectRef={selectRef} onSelectHead={() => {
               history.selectRef('');

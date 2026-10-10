@@ -84,8 +84,15 @@
   align-items: center;
   gap: 4px;
   min-width: 0;
-  height: 34px;
+  height: 40px;
   padding: 0 var(--app-topbar-item-gap) 0 var(--git-gutter);
+}
+
+.git-changes-nav__project {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
 }
 
 .git-changes-nav__title {

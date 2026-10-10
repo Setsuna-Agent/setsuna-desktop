@@ -4,10 +4,11 @@ import { ChevronDown, Folder } from 'lucide-react';
 import { ContextMenu } from '../../shared/ui/ContextMenu.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 
-export function WorkspaceRootPicker({ project, rootId, disabled, onChange }: {
+export function WorkspaceRootPicker({ project, rootId, disabled, variant = 'toolbar', onChange }: {
   project?: WorkspaceProject;
   rootId?: string;
   disabled?: boolean;
+  variant?: 'toolbar' | 'field';
   onChange(rootId: string): void;
 }) {
   const { t } = useI18n();
@@ -15,7 +16,7 @@ export function WorkspaceRootPicker({ project, rootId, disabled, onChange }: {
   if (roots.length < 2) return null;
   const selected = roots.find((root) => root.id === rootId) ?? roots[0];
   return (
-    <ContextMenu trigger={['click']} placement="bottomLeft" disabled={disabled} menu={{
+    <ContextMenu rootClassName="workspace-root-menu" trigger={['click']} placement="bottomLeft" disabled={disabled} menu={{
       selectedKeys: [selected.id],
       items: roots.map((root) => ({
         key: root.id, icon: <Folder size={14} />,
@@ -23,11 +24,11 @@ export function WorkspaceRootPicker({ project, rootId, disabled, onChange }: {
         onClick: () => onChange(root.id),
       })),
     }}>
-      <Button variant="ghost" className="workspace-root-picker" disabled={disabled}
+      <Button variant="ghost" size="small" className={`workspace-root-picker workspace-root-picker--${variant}`} disabled={disabled}
         aria-label={t('sidebar.selectProjectDirectory')} title={selected.path}>
-        <Folder size={14} aria-hidden="true" />
-        <span>{workspaceRootName(selected)}</span>
-        <ChevronDown size={12} aria-hidden="true" />
+        {variant === 'field' ? <Folder className="workspace-root-picker__icon" size={14} aria-hidden="true" /> : null}
+        <span className="workspace-root-picker__label">{workspaceRootName(selected)}</span>
+        <ChevronDown className="workspace-root-picker__caret" size={12} aria-hidden="true" />
       </Button>
     </ContextMenu>
   );

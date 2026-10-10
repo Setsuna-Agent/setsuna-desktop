@@ -342,26 +342,28 @@ export function DesktopReviewPanel({
     <section className="desktop-review-panel">
       <header className={`desktop-review-panel__toolbar${branchCompareVisible ? ' desktop-review-panel__toolbar--branch' : ''}`}>
         <div className="chat-file-review-panel__toolbar">
-          {sourceRootPicker}
-          {hasGit ? (
-            <Dropdown
-              rootClassName="chat-file-review-panel__source-menu"
-              trigger={['click']}
-              placement="bottomLeft"
-              menu={{
-                items: sourceMenuItems,
-                selectedKeys: [activeSource],
-                onClick: handleSourceMenuClick,
-              }}
-            >
-              <Button className="chat-file-review-panel__source-button" variant="ghost" size="small">
-                <span>{reviewSourceLabel(activeSource, t)}</span>
-                <ChevronDown className="chat-file-review-panel__source-caret" size={12} />
-              </Button>
-            </Dropdown>
-          ) : (
-            <span className="chat-file-review-panel__source-title">{t('feature.review.workspace.source.latestChanges')}</span>
-          )}
+          <div className={`chat-file-review-panel__scope${sourceRootPicker ? ' chat-file-review-panel__scope--multi-root' : ''}`}>
+            {sourceRootPicker}
+            {hasGit ? (
+              <Dropdown
+                rootClassName="chat-file-review-panel__source-menu"
+                trigger={['click']}
+                placement="bottomLeft"
+                menu={{
+                  items: sourceMenuItems,
+                  selectedKeys: [activeSource],
+                  onClick: handleSourceMenuClick,
+                }}
+              >
+                <Button className="chat-file-review-panel__source-button" variant="ghost" size="small">
+                  <span>{reviewSourceLabel(activeSource, t)}</span>
+                  <ChevronDown className="chat-file-review-panel__source-caret" size={12} />
+                </Button>
+              </Dropdown>
+            ) : (
+              <span className="chat-file-review-panel__source-title">{t('feature.review.workspace.source.latestChanges')}</span>
+            )}
+          </div>
           <ReviewChangeCounts additions={activeSummary?.additions ?? 0} deletions={activeSummary?.deletions ?? 0} />
         </div>
         <div className="desktop-review-panel__actions">

@@ -298,6 +298,7 @@ export function DesktopWorkspacePanelLayer({
     if (workspaceProjectRoots(context.activeWorkspace).length < 2) return undefined;
     return <WorkspaceRootPicker
       project={context.activeWorkspace} rootId={panel.rootId}
+      variant={isFileWorkspacePanel(panel) ? 'field' : 'toolbar'}
       disabled={isFileWorkspacePanel(panel) && (context.entryOperationPending || context.fileDraft.saving)}
       onChange={(rootId) => isFileWorkspacePanel(panel)
         ? actions.onSelectFileRoot(rootId) : actions.onUpdateDesktopPanel(panel.id, { rootId })}

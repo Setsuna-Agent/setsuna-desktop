@@ -403,15 +403,17 @@ export function WorkspacePanel({
                     }
                   }}
                 />
-                {sourceRootPicker ? <div className="workspace-root-toolbar">{sourceRootPicker}</div> : null}
-                <div className="desktop-file-search">
-                  <Search size={13} />
-                  <TextField
-                    value={treeQuery}
-                    disabled={entryOperationPending}
-                    onChange={(event) => updateTreeQuery(event.target.value)}
-                    placeholder={t('workspace.files.filter')}
-                  />
+                <div className="desktop-file-tree__controls">
+                  {sourceRootPicker}
+                  <div className="desktop-file-search">
+                    <Search size={14} />
+                    <TextField
+                      value={treeQuery}
+                      disabled={entryOperationPending}
+                      onChange={(event) => updateTreeQuery(event.target.value)}
+                      placeholder={t('workspace.files.filter')}
+                    />
+                  </div>
                 </div>
                 {activeProject ? (
                   <FileTreeSurface className={`desktop-file-list ${entryDrag.dropPath === '' ? 'is-drop-target' : ''}`} ref={fileListRef} onScroll={onFileListScroll}
