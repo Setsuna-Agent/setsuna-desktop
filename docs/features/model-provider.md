@@ -58,7 +58,7 @@ AgentLoop / Review / Vision / Thread title / Memory
 
 Setsuna provider ID 是配置和 metadata 身份。预置配置的 Pi model 保留 `deepseek`、`openrouter`、`openai`、`anthropic` 等真实 provider identity 和模型 compat；自定义配置使用 canonical `openai`/`anthropic` fallback。
 
-思考参数以选中模型的能力为准。不支持思考的模型不发送思考控制；自定义 Anthropic 连接中精确匹配目录的模型复用思考模式、effort 映射和温度约束，不继承厂商请求头或原生工具能力。标题请求优先关闭思考，目录标记无法关闭的模型保留其默认模式。未知模型别名明确拒绝旧式 `enabled` 时改用 adaptive，拒绝 `disabled` 时省略思考控制；兼容重试覆盖 HTTP 参数错误和 HTTP 200 后 SSE 中的 `invalid_request_error`，仅发生在没有输出时，保留结构化输出 schema 和已选 effort。压缩使用压缩模型配置中的思考能力与默认 effort，不受聊天输入框的思考开关影响；其请求共用同一适配与兼容重试链路。
+思考参数以选中模型的能力为准。OpenAI 兼容协议保留用户填写的 effort 字符串（包括 `none`），只去除首尾空白，由供应商校验取值，不按 SDK 的类型枚举静默过滤。自定义 OpenAI 连接关闭思考时，精确匹配 OpenAI 目录或用户声明 `none` 的模型显式发送关闭参数，模型设置中的思考能力关闭也不丢失这个语义；其余未知模型不推断关闭值。不支持思考且没有明确关闭值的模型不发送思考控制。自定义 Anthropic 连接中精确匹配目录的模型复用思考模式、effort 映射和温度约束，不继承厂商请求头或原生工具能力。标题请求优先关闭思考，目录标记无法关闭的模型保留其默认模式。未知模型别名明确拒绝旧式 `enabled` 时改用 adaptive，拒绝 `disabled` 时省略思考控制；兼容重试覆盖 HTTP 参数错误和 HTTP 200 后 SSE 中的 `invalid_request_error`，仅发生在没有输出时，保留结构化输出 schema 和已选 effort。压缩使用压缩模型配置中的思考能力与默认 effort，不受聊天输入框的思考开关影响；其请求共用同一适配与兼容重试链路。
 
 模型采样与原生压缩保留单次请求 15 分钟总超时，用户取消会立即中止等待。流式请求不再按 SDK 输出事件设置空闲超时：首个事件较慢、思考期间没有输出或心跳未透传为 SDK 事件，都不能单独触发轮次失败。该上限针对每次模型请求，不是整个任务的运行时长。
 
@@ -73,6 +73,8 @@ Setsuna provider ID 是配置和 metadata 身份。预置配置的 Pi model 保�
 预置服务的主流程是厂商、接入方案、API Key 和模型目录；协议、Base URL、代理、请求头、图标与模型 token/capability override 位于高级配置。选择“自定义兼容服务”后才展开协议、URL、同步模型和手动模型入口。
 
 Provider projection 仍合入共享 `RuntimeConfigState`，供聊天模型选择和 Core task-model 设置读取；写 provider 配置只走 Feature operation。
+
+同步模型时，runtime 从已加载的内置与缓存目录补齐接口未返回的上下文窗口、输出上限、思考档位和图片能力，不额外刷新目录或增加启动等待。已指定或唯一识别厂商的连接只查该厂商；自定义网关按完整模型 ID 精确匹配，多个目录记录的能力必须一致才使用，未知型号、别名及有歧义的记录不推断。接口明确返回的能力值优先于目录，包括 `false` 和空思考档位列表；只返回默认思考档位时，补全的档位列表会包含该默认值。补全不改变连接协议、厂商身份、请求头或模型 ID。确认同步时保留已有模型的名称与能力配置，仅补缺失字段，因此已保存的 `false` 和空档位列表也不会被目录覆盖。
 
 ## 远程模型目录
 

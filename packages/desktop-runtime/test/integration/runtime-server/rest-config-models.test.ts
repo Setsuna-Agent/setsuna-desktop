@@ -343,7 +343,7 @@ describe('runtime server REST config and model discovery', () => {
       expect(JSON.stringify(catalog)).not.toContain('apiKey');
     });
 
-  it('refreshes public catalog metadata through the selected route and applies it to actual sampling', async () => {
+  it('uses refreshed catalog metadata for discovery, saved configuration and actual sampling', async () => {
     const modelServer = await createOpenAiCaptureServer('feat: use refreshed model');
     const remoteHeaders: Headers[] = [];
     const transport = vi.spyOn(NativeBridgeProxyFetch.prototype, 'forRoute').mockReturnValue(async (input, init) => {
@@ -356,6 +356,9 @@ describe('runtime server REST config and model discovery', () => {
           cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
           compat: { thinkingFormat: 'deepseek', supportsDeveloperRole: false },
         }]);
+      }
+      if (String(input) === `${modelServer.baseUrl}/models`) {
+        return Response.json({ data: [{ id: 'deepseek-v4.1-flash', name: 'Gateway model' }] });
       }
       return fetch(input, init);
     });
@@ -378,11 +381,23 @@ describe('runtime server REST config and model discovery', () => {
       const catalogHeaders: Record<string, string> = {};
       remoteHeaders[0].forEach((value, name) => { catalogHeaders[name] = value; });
       expect(catalogHeaders).toEqual({ accept: 'application/json', 'user-agent': 'setsuna-desktop/test' });
+      const discovery = await harness.runtimeFetch('/v1/features/model-provider/models', {
+        method: 'POST', body: JSON.stringify({ providerId: 'go' }),
+      });
+      const discovered = discovery.models[0];
+      expect(discovered).toMatchObject({
+        id: 'deepseek-v4.1-flash', name: 'Gateway model', contextWindowTokens: 1_000_000,
+        maxOutputTokens: 384_000, thinkingEnabled: true, supportsImages: true,
+      });
+      expect(remoteHeaders).toHaveLength(1);
       await harness.runtimeFetch('/v1/features/model-provider/settings', {
         method: 'PUT', body: JSON.stringify({ providers: [{ id: 'go', models: [{
-          id: 'new-model', code: 'deepseek-v4.1-flash', name: 'DeepSeek V4.1 Flash', enabled: true,
-          thinkingEnabled: true, thinkingEfforts: ['high'], supportsImages: true,
+          ...discovered, id: 'new-model', code: discovered.id, enabled: true,
         }] }] }),
+      });
+      const saved = await harness.runtimeFetch('/v1/features/model-provider/settings');
+      expect(saved.providers[0].models[0]).toMatchObject({
+        contextWindowTokens: 1_000_000, maxOutputTokens: 384_000, thinkingEnabled: true, supportsImages: true,
       });
       expect(await harness.runtimeFetch('/v1/features/desktop-review/commit-message', {
         method: 'POST', body: JSON.stringify({ branch: 'master', status: ' M src/app.ts', diff: '+const updated = true;' }),

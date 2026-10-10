@@ -101,8 +101,13 @@ export function createPiModel(
     cost: catalogBase?.cost ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: activeModel?.contextWindowTokens ?? catalogBase?.contextWindow ?? DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
     maxTokens: activeModel?.maxOutputTokens ?? catalogBase?.maxTokens ?? 8_192,
-    thinkingLevelMap: catalogBase?.thinkingLevelMap ?? anthropicThinkingBase?.thinkingLevelMap
-      ?? thinkingLevelMap(activeModel?.thinkingEfforts ?? []),
+    thinkingLevelMap: thinkingLevelMap(
+      activeModel?.thinkingEfforts ?? [],
+      catalogBase?.thinkingLevelMap ?? anthropicThinkingBase?.thinkingLevelMap,
+      api !== 'anthropic-messages' && (!catalogProvider || catalogProvider.id === 'openai')
+        ? getBuiltinCatalogModel('openai', modelId, options.providers)?.thinkingLevelMap?.off
+        : undefined,
+    ),
     ...(inheritedHeaders ? { headers: inheritedHeaders as Record<string, string> } : {}),
     ...(compat ? { compat } : {}),
     ...(provider.provider === 'anthropic' && options.forceAdaptiveThinking
@@ -591,14 +596,23 @@ function commonRecord(values: readonly (object | undefined)[]): Record<string, u
   return entries.length ? Object.fromEntries(entries.map(([key, value]) => [key, structuredClone(value)])) : undefined;
 }
 
-function thinkingLevelMap(efforts: readonly string[]) {
-  const supported = new Set(efforts.map((effort) => effort.trim().toLowerCase()));
-  if (!supported.size) return undefined;
-  return Object.fromEntries(
+function thinkingLevelMap(
+  efforts: readonly string[],
+  catalogMap?: Model<PiApi>['thinkingLevelMap'],
+  openAiOff?: string | null,
+): Model<PiApi>['thinkingLevelMap'] {
+  const supported = new Set(efforts.map((effort) => effort.trim()));
+  const levels = catalogMap ?? Object.fromEntries(
     ['minimal', 'low', 'medium', 'high', 'xhigh', 'max']
       .filter((effort) => supported.has(effort))
       .map((effort) => [effort, effort]),
   );
+  // `none` is a wire value for Pi's `off` level. Custom OpenAI connections
+  // may reuse the exact model's off switch without inheriting transport metadata.
+  const off = supported.has('none') ? 'none'
+    : catalogMap && Object.hasOwn(catalogMap, 'off') ? catalogMap.off : openAiOff;
+  const result = off === undefined ? levels : { ...levels, off };
+  return Object.keys(result).length ? result : undefined;
 }
 
 function normalizedPiBaseUrl(provider: ModelProviderRuntimeConfig): string {

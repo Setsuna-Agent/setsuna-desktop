@@ -15,7 +15,6 @@ import {
   clearChatComposerReviewMode,
   createChatComposerModelCapabilities,
   emptyChatComposerLocalModes,
-  emptyChatThinkingSelection,
   enableChatComposerGoalMode,
   enableChatComposerReviewMode,
   normalizeChatThinkingSelection,
@@ -28,7 +27,7 @@ import {
   type ChatComposerSendOptions,
 } from './chatComposerSendOptions.js';
 import {
-  readChatThinkingPreference,
+  readChatModelThinkingSelection,
   writeChatThinkingPreference,
 } from './chatThinkingPreferences.js';
 
@@ -183,14 +182,8 @@ export function useChatComposerModeController({
 function createModelThinkingSelectionState(
   modelCapabilities: ReturnType<typeof createChatComposerModelCapabilities>,
 ): ModelThinkingSelectionState {
-  const storedSelection = modelCapabilities.preferenceKey
-    ? readChatThinkingPreference(modelCapabilities.preferenceKey)
-    : null;
   return {
     modelKey: modelCapabilities.preferenceKey,
-    selection: normalizeChatThinkingSelection(
-      storedSelection ?? emptyChatThinkingSelection,
-      modelCapabilities.thinking,
-    ),
+    selection: readChatModelThinkingSelection(modelCapabilities),
   };
 }

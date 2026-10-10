@@ -6,6 +6,7 @@ import {
 } from '@setsuna-desktop/contracts';
 import type { ModelProviderRuntimeConfig } from '../contracts/index.js';
 import { applyProviderRequestHeaders } from './provider-request-headers.js';
+import { supplementDiscoveredModels } from './model-discovery-catalog.js';
 import type { Provider } from '@earendil-works/pi-ai';
 
 const MODEL_LIST_TIMEOUT_MS = 10_000;
@@ -33,14 +34,15 @@ export async function fetchAvailableModels(
 
   try {
     const headers = new Headers(modelListHeaders(provider, apiKey));
-    applyProviderRequestHeaders(headers, {
+    const connection = {
       provider,
       baseUrl,
       catalogProviderId: Object.hasOwn(input, 'catalogProviderId') ? input.catalogProviderId : savedProvider?.catalogProviderId,
       requestHeaders: normalizeProviderRequestHeaders(
         Object.hasOwn(input, 'requestHeaders') ? input.requestHeaders : savedProvider?.requestHeaders,
       ),
-    }, { appVersion }, providers);
+    };
+    applyProviderRequestHeaders(headers, connection, { appVersion }, providers);
     const response = await fetchImpl(modelListUrl(provider, baseUrl), {
       method: 'GET',
       headers,
@@ -55,7 +57,7 @@ export async function fetchAvailableModels(
     }
     const models = parseAvailableModels(parseJsonResponse(text));
     if (!models.length) throw new Error('没有从模型列表响应中找到可用模型。');
-    return models;
+    return supplementDiscoveredModels(models, connection, providers);
   } finally {
     clearTimeout(timeout);
   }
@@ -142,12 +144,12 @@ function parseAvailableModel(value: unknown): RuntimeAvailableModel | null {
 
 function availableModelCapabilities(object: Record<string, unknown>): Partial<RuntimeAvailableModel> {
   const capabilities = objectValue(object.capabilities);
-  const thinkingEfforts = stringListValue(
+  const rawThinkingEfforts =
     object.thinkingEfforts ?? object.thinking_efforts ?? object.reasoningEfforts
       ?? object.reasoning_efforts ?? capabilities.thinkingEfforts
       ?? capabilities.thinking_efforts ?? capabilities.reasoningEfforts
-      ?? capabilities.reasoning_efforts,
-  );
+      ?? capabilities.reasoning_efforts;
+  const thinkingEfforts = stringListValue(rawThinkingEfforts);
   const defaultThinkingEffort = nonEmptyStringValue(
     object.defaultThinkingEffort ?? object.default_thinking_effort ?? object.reasoningEffort
       ?? object.reasoning_effort ?? capabilities.defaultThinkingEffort
@@ -182,7 +184,7 @@ function availableModelCapabilities(object: Record<string, unknown>): Partial<Ru
     ...(contextWindowTokens ? { contextWindowTokens } : {}),
     ...(maxOutputTokens ? { maxOutputTokens } : {}),
     ...(thinkingEnabled !== undefined ? { thinkingEnabled } : {}),
-    ...(thinkingEfforts.length ? { thinkingEfforts } : {}),
+    ...(thinkingEfforts.length || Array.isArray(rawThinkingEfforts) ? { thinkingEfforts } : {}),
     ...(defaultThinkingEffort ? { defaultThinkingEffort } : {}),
     ...(supportsImages !== undefined ? { supportsImages } : {}),
   };
