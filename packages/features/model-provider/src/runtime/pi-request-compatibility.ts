@@ -85,6 +85,38 @@ function anthropicThinkingRetry(
   return null;
 }
 
+export function piOpenAiRequestPayload(
+  payload: unknown,
+  request: ModelRequest,
+  model: Model<'openai-completions' | 'openai-responses'>,
+): unknown {
+  const formatted = piResponseFormatPayload(payload, request, model.api);
+  const disableThinking = request.thinking
+    ? request.reasoningEffort?.trim() === 'none'
+    : model.thinkingLevelMap?.off === 'none';
+  if (model.provider !== 'openai' || !disableThinking
+    || !payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return formatted;
+  }
+
+  // Removing an effort leaves the provider's default active. Preserve an
+  // explicit off even when the configured model's reasoning capability is off.
+  const body = { ...objectRecord(formatted ?? payload) };
+  if (model.api === 'openai-completions') {
+    body.reasoning_effort = 'none';
+  } else {
+    const reasoning: Record<string, unknown> = { ...objectRecord(body.reasoning), effort: 'none' };
+    delete reasoning.summary;
+    body.reasoning = reasoning;
+    if (Array.isArray(body.include)) {
+      const include = body.include.filter((item) => item !== 'reasoning.encrypted_content');
+      if (include.length) body.include = include;
+      else delete body.include;
+    }
+  }
+  return body;
+}
+
 export function piResponseFormatPayload(
   payload: unknown,
   request: ModelRequest,

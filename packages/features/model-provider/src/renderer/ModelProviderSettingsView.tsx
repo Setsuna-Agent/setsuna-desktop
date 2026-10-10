@@ -1,5 +1,4 @@
 import {
-  defaultModelMaxOutputTokens,
   type ProviderConfigInput,
   type ProviderConfigState,
   type ProviderModelConfig,
@@ -16,6 +15,7 @@ import type { ModelProviderRendererHost } from './capabilities.js';
 import { useModelProviderSnapshot } from './context.js';
 import { ProviderEditor } from './ProviderEditor.js';
 import { ProviderRail } from './ProviderRail.js';
+import { mergeDiscoveredModels } from './model-sync.js';
 import {
   attachInferredCatalogProviders,
   createProvider,
@@ -273,43 +273,6 @@ function matchesDiscoveryInput(
     && (apiKey || undefined) === input.apiKey
     && JSON.stringify(provider.requestHeaders ?? null) === JSON.stringify(input.requestHeaders)
     && JSON.stringify(provider.proxyRoute ?? null) === JSON.stringify(input.proxyRoute ?? null);
-}
-
-function mergeDiscoveredModels(
-  current: readonly ProviderModelConfig[],
-  discovered: readonly Readonly<{
-    id: string;
-    name: string;
-    contextWindowTokens?: number;
-    maxOutputTokens?: number;
-    thinkingEnabled?: boolean;
-    thinkingEfforts?: string[];
-    defaultThinkingEffort?: string;
-    supportsImages?: boolean;
-  }>[],
-  provider: ProviderConfigState['provider'],
-): ProviderModelConfig[] {
-  const existing = new Map(current.map((model) => [model.code, model]));
-  const retainedEnabledModel = discovered.some((item) => existing.get(item.id)?.enabled);
-  const merged = discovered.map((item, index) => {
-    const previous = existing.get(item.id);
-    return {
-      id: previous?.id ?? `model-${crypto.randomUUID()}`,
-      name: item.name,
-      code: item.id,
-      enabled: previous?.enabled === true || (index === 0 && !retainedEnabledModel),
-      icon: previous?.icon,
-      contextWindowTokens: item.contextWindowTokens ?? previous?.contextWindowTokens,
-      maxOutputTokens: item.maxOutputTokens ?? previous?.maxOutputTokens ?? defaultModelMaxOutputTokens(provider),
-      thinkingEnabled: item.thinkingEnabled
-        ?? (Boolean(item.thinkingEfforts?.length || item.defaultThinkingEffort)
-          || previous?.thinkingEnabled === true),
-      thinkingEfforts: item.thinkingEfforts ?? previous?.thinkingEfforts ?? [],
-      defaultThinkingEffort: item.defaultThinkingEffort ?? previous?.defaultThinkingEffort,
-      supportsImages: item.supportsImages ?? previous?.supportsImages,
-    };
-  });
-  return merged;
 }
 
 function errorMessage(error: unknown): string {

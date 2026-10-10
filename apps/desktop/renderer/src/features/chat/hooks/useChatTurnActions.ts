@@ -17,6 +17,8 @@ import { useQueuedTurnInputActions } from './useQueuedTurnInputActions.js';
 import { chatThreadModelSelection } from '../chatModelSelection.js';
 import type { SetChatComposerDraft } from './useChatComposerSession.js';
 import type { ChatComposerSendOptions } from '../composer/chatComposerSendOptions.js';
+import { createChatComposerModelCapabilities } from '../composer/chatComposerModeState.js';
+import { readChatModelThinkingSelection } from '../composer/chatThinkingPreferences.js';
 
 type ChatTurnSendOptions = ChatComposerSendOptions & {
   workspaceMode?: CreateThreadInput['workspaceMode'];
@@ -243,7 +245,14 @@ export function useChatTurnActions({
       const isCurrentRequest = actionRequests.begin();
       try {
         setError(null);
-        const response = await client.regenerateFromMessage(currentThread.id, messageId, { content: nextContent });
+        const { provider, model } = chatThreadModelSelection(config, currentThread);
+        // Regeneration bypasses composer submission, so read its model preference at click time.
+        const thinking = readChatModelThinkingSelection(createChatComposerModelCapabilities(provider, model));
+        const response = await client.regenerateFromMessage(currentThread.id, messageId, {
+          content: nextContent,
+          thinking: thinking.enabled,
+          ...(thinking.enabled && thinking.effort ? { thinkingEffort: thinking.effort } : {}),
+        });
         const updated = await client.getThread(currentThread.id);
         if (isCurrentRequest()) setCurrentThread(updated);
         await reloadThreads();
@@ -257,7 +266,7 @@ export function useChatTurnActions({
         throw new Error(message);
       }
     },
-    [actionRequests, activeTurnId, client, currentThread, reloadThreads, setActiveTurnId, setCurrentThread, setError, t, terminalTurnIdsRef],
+    [actionRequests, activeTurnId, client, config, currentThread, reloadThreads, setActiveTurnId, setCurrentThread, setError, t, terminalTurnIdsRef],
   );
 
   return {

@@ -5,12 +5,26 @@ import {
   type StorageWriter,
   writeStorageValue,
 } from '../../../shared/preferences/browserStorage.js';
-import type { ChatThinkingSelection } from './chatComposerModeState.js';
+import {
+  emptyChatThinkingSelection,
+  normalizeChatThinkingSelection,
+  type ChatComposerModelCapabilities,
+  type ChatThinkingSelection,
+} from './chatComposerModeState.js';
 
 export const CHAT_THINKING_PREFERENCES_STORAGE_KEY = 'setsuna.chat.thinkingPreferences.v1';
 
 type ChatThinkingPreferenceStorage = StorageReader & Pick<StorageWriter, 'setItem'>;
 type ChatThinkingPreferences = Record<string, ChatThinkingSelection>;
+
+export function readChatModelThinkingSelection(
+  capabilities: ChatComposerModelCapabilities,
+): ChatThinkingSelection {
+  const stored = capabilities.preferenceKey
+    ? readChatThinkingPreference(capabilities.preferenceKey)
+    : null;
+  return normalizeChatThinkingSelection(stored ?? emptyChatThinkingSelection, capabilities.thinking);
+}
 
 export function readChatThinkingPreference(
   modelKey: string,

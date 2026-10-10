@@ -110,7 +110,7 @@ export function createModelProviderCatalog(source: readonly Provider[] = support
       name: planName(group.api),
       provider: API_KIND[group.api],
       baseUrl: group.baseUrl,
-      models: group.models.map(catalogModel),
+      models: group.models.map((model) => ({ code: model.id, name: model.name, ...catalogModelCapabilities(model) })),
     }));
     if (!plans.length) return [];
     return [{ id: runtimeProvider.id, name: runtimeProvider.name, plans }];
@@ -164,12 +164,10 @@ export function supportedProviders(): readonly Provider[] {
   return supportedProvidersCache;
 }
 
-function catalogModel(model: Model<Api>): ModelProviderCatalogModel {
+export function catalogModelCapabilities(model: Model<Api>): Omit<ModelProviderCatalogModel, 'code' | 'name'> {
   const thinkingEfforts = getSupportedThinkingLevels(model).filter((level) => level !== 'off');
   const defaultThinkingEffort = preferredThinkingEffort(thinkingEfforts);
   return {
-    code: model.id,
-    name: model.name,
     contextWindowTokens: model.contextWindow,
     maxOutputTokens: model.maxTokens,
     thinkingEnabled: model.reasoning,

@@ -40,6 +40,7 @@ import {
 } from './pi-stream-bridge.js';
 import {
   nextPiCompatibilityRetry,
+  piOpenAiRequestPayload,
   piResponseFormatPayload,
   withKnownPiRequestCompatibility,
   type PiModelRequest,
@@ -51,7 +52,6 @@ import { ModelRequestDiagnostics } from './model-request-diagnostics.js';
 
 const EMPTY_API_KEY = 'setsuna-no-provider-api-key';
 const LOCAL_SMOKE_MODEL = 'local-runtime-smoke';
-const PI_REASONING_EFFORTS = new Set(['minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
 
 export class PiModelClient implements ModelProviderSamplingService {
   constructor(
@@ -254,7 +254,7 @@ function streamForProvider(
       toolChoice: openAiResponsesToolChoice(input.toolChoice),
       reasoningEffort: reasoningEffort(input),
       reasoningSummary: input.thinking ? 'auto' : null,
-      onPayload: (payload) => piResponseFormatPayload(payload, input, 'openai-responses'),
+      onPayload: (payload) => piOpenAiRequestPayload(payload, input, typedModel),
     } satisfies OpenAIResponsesOptions;
     return builtinProvider
       ? builtinProvider.stream(typedModel, context, options)
@@ -278,7 +278,7 @@ function streamForProvider(
     ...common,
     toolChoice: openAiCompletionsToolChoice(input.toolChoice),
     reasoningEffort: reasoningEffort(input),
-    onPayload: (payload) => piResponseFormatPayload(payload, input, 'openai-completions'),
+    onPayload: (payload) => piOpenAiRequestPayload(payload, input, typedModel),
   } satisfies OpenAICompletionsOptions;
   return builtinProvider
     ? builtinProvider.stream(typedModel, context, options)
@@ -306,12 +306,13 @@ function withProviderDefaults(
   };
 }
 
-function reasoningEffort(request: Pick<ModelRequest, 'thinking' | 'reasoningEffort'>) {
+function reasoningEffort(
+  request: Pick<ModelRequest, 'thinking' | 'reasoningEffort'>,
+): OpenAICompletionsOptions['reasoningEffort'] {
   if (!request.thinking || !request.reasoningEffort) return undefined;
-  const effort = request.reasoningEffort.trim().toLowerCase();
-  return PI_REASONING_EFFORTS.has(effort)
-    ? effort as 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
-    : undefined;
+  // Pi accepts wire values at runtime; its narrower type must not silently
+  // discard user-configured levels such as `none` or a gateway-specific value.
+  return (request.reasoningEffort.trim() || undefined) as OpenAICompletionsOptions['reasoningEffort'];
 }
 
 function anthropicThinkingOptions(

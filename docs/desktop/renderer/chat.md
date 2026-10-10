@@ -108,6 +108,8 @@ Command controller 只拥有输入菜单交互，不负责发送、附件、Goal
 
 Mode controller 只拥有本地 Goal 选择和发送参数快照；切换 thread 会重置 thread-scoped Goal 和 usage panel，成功发送后重置 Goal，thinking 继续保留。附件 begin/settle、实际 `onSend`、queued-edit token 和 Sender clear 仍由各自原 owner 管理。
 
+编辑消息后重新生成和重试在 `useChatTurnActions` 中读取该线程绑定模型的最新 thinking 偏好，沿用 composer 的模型能力归一化规则，并显式传递 `thinking` / `thinkingEffort`，避免重试遗漏参数而回落为关闭思考。
+
 Footer 和 overlays 不拥有 state、ref 或异步生命周期。它们通过分组控制面接收 controller 状态和回调；主操作保持 `queue > stop > attachment-only send > Sender default action` 的既有优先级。组件级 characterization test 固化该矩阵及模式徽标、菜单和 usage thread gate。
 
 ## Message display 与 timeline

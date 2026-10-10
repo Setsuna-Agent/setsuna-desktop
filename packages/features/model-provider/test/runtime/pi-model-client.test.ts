@@ -438,13 +438,13 @@ describe('Pi model client protocol integration', () => {
     expect(events.at(-1)).toMatchObject({ type: 'done' });
   });
 
-  it('uses inferred Pi compatibility for synchronized DeepSeek models outside the catalog', async () => {
+  it('uses inferred Pi compatibility and a default effort without a list for synchronized DeepSeek models', async () => {
     const capture = captureFetch(openAiCompletionsSse());
     const base = providerFixture('openai-compatible', {
       code: 'deepseek-v4-flash-vision-exp',
       name: 'DeepSeek V4 Flash Vision Exp',
       thinkingEnabled: true,
-      thinkingEfforts: ['low', 'high', 'max'],
+      thinkingEfforts: [],
       defaultThinkingEffort: 'high',
     });
     const client = new PiModelClient(host({
@@ -454,6 +454,7 @@ describe('Pi model client protocol integration', () => {
 
     const events = await collect(client.stream(requestFixture({
       model: 'deepseek-v4-flash-vision-exp',
+      thinking: true,
       responseFormat: {
         type: 'json',
         name: 'approval',
@@ -466,6 +467,7 @@ describe('Pi model client protocol integration', () => {
     expect(capture.body()).toMatchObject({
       model: 'deepseek-v4-flash-vision-exp',
       response_format: { type: 'json_object' },
+      reasoning_effort: 'high',
     });
     expect(events.find((event) => event.type === 'item_completed')).toMatchObject({
       item: { kind: 'agent_message', content: 'catalog response' },
