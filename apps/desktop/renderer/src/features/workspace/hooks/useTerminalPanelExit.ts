@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { DesktopTerminalEvent, DesktopTerminalSession } from '../model.js';
 
 export type TerminalSessionsByPanelId = Record<string, Record<string, DesktopTerminalSession>>;
@@ -8,6 +8,9 @@ export function useTerminalPanelExit(
   sessionsByPanel: TerminalSessionsByPanelId,
   onExit: (panelId: string, projectKey: string, sessionId: string) => void,
 ) {
+  // Layout changes update the callback without rereading every background shell.
+  const onExitRef = useRef(onExit);
+  onExitRef.current = onExit;
   useEffect(() => {
     const bridge = window.setsunaDesktop?.terminal;
     if (!bridge) return;
@@ -22,7 +25,7 @@ export function useTerminalPanelExit(
           lifecycleSeq = event.seq;
           if (event.event === 'exit') {
             exited = true;
-            onExit(panelId, projectKey, session.sessionId);
+            onExitRef.current(panelId, projectKey, session.sessionId);
           }
         };
         const unsubscribe = bridge.onEvent(session.sessionId, handleEvent);
@@ -41,5 +44,5 @@ export function useTerminalPanelExit(
       }),
     );
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
-  }, [onExit, sessionsByPanel]);
+  }, [sessionsByPanel]);
 }

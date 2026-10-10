@@ -14,6 +14,7 @@ export type RuntimeFileDiffLine = {
 
 export type RuntimeFileChange = {
   path: string;
+  absolutePath?: string;
   action?: string | null;
   additions: number;
   deletions: number;
@@ -104,13 +105,25 @@ export function fileMutationDisplayPath(run: RuntimeToolRun, t: Translate = defa
 }
 
 export function fileMutationDisplayKey(run: RuntimeToolRun): string {
+  const changes = fileChangesFromToolRun(run);
+  if (changes.length === 1) return normalizePathKey(changes[0].absolutePath ?? changes[0].path);
   return normalizePathKey(fileMutationDisplayPath(run));
 }
 
 export function fileChangesFromToolRun(run: RuntimeToolRun): RuntimeFileChange[] {
   if (run.status === 'error' || run.status === 'rejected' || run.status === 'cancelled') return [];
   const previewChanges = extractFileChanges(parseJson(run.resultPreview));
-  if (previewChanges.length) return previewChanges;
+  if (previewChanges.length) {
+    const diff = asDiffRecord(run.data);
+    // Read target metadata without normalizing the potentially large stored diff a second time.
+    const targets = new Map((Array.isArray(diff?.diffs) ? diff.diffs : [diff]).filter(isRecord)
+      .map((file) => [stringField(file.path), stringField(file.absolutePath)]));
+    // A fork may relocate the stored target while keeping the original display preview.
+    return previewChanges.map((change) => {
+      const absolutePath = targets.get(change.path);
+      return absolutePath ? { ...change, absolutePath } : change;
+    });
+  }
   // 旧快照中的 resultPreview 可能被按文本截断。工具数据仍保留完整的结构化差异，
   // 因此用它修复文件行、审查视图和最终变更卡片。
   return extractFileChanges(run.data);
@@ -127,8 +140,9 @@ export function fileChangeSummaryFromRuns(runs: RuntimeToolRun[]): RuntimeFileCh
     if (!isRuntimeFileMutationRun(run) || run.status !== 'success') continue;
     for (const file of fileChangesFromToolRun(run)) {
       if (!file.path) continue;
-      const current = byPath.get(file.path);
-      byPath.set(file.path, current ? mergeFileChange(current, file) : normalizeFileChange(file));
+      const key = file.absolutePath ?? file.path;
+      const current = byPath.get(key);
+      byPath.set(key, current ? mergeFileChange(current, file) : normalizeFileChange(file));
     }
   }
 
@@ -179,6 +193,7 @@ function extractFileChange(value: unknown): RuntimeFileChange | null {
   if (!path) return null;
   return normalizeFileChange({
     path,
+    ...(stringField(value.absolutePath) ? { absolutePath: stringField(value.absolutePath) } : {}),
     action: typeof value.action === 'string' ? value.action : null,
     additions: count(value.additions),
     deletions: count(value.deletions),

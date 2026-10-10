@@ -206,6 +206,20 @@ export function useDesktopWorkspacePanels({
     setPanelLauncherMenuOpen(false);
   }, []);
 
+  const updateBrowserPanel = useCallback((
+    identity: ChatComposerTargetIdentity,
+    panelId: string,
+    patch: DesktopPanelTabPatch,
+  ) => {
+    updateLayoutForIdentity(identity, (current) => {
+      const sidePanelSlot = updatePanelInSlotState(current.sidePanelSlot, panelId, patch);
+      const bottomPanelSlot = updatePanelInSlotState(current.bottomPanelSlot, panelId, patch);
+      return sidePanelSlot === current.sidePanelSlot && bottomPanelSlot === current.bottomPanelSlot
+        ? current
+        : { ...current, bottomPanelSlot, sidePanelSlot };
+    });
+  }, [updateLayoutForIdentity]);
+
   const closeTerminalSessionsForPanel = useCallback((panelId: string) => {
     for (const key of pendingTerminalSessionsRef.current.keys()) {
       if (key.startsWith(`${panelId}:`)) pendingTerminalSessionsRef.current.delete(key);
@@ -236,12 +250,19 @@ export function useDesktopWorkspacePanels({
     else {
       const remainingKey = Object.keys(sessions).find((key) => key !== projectKey)!;
       const rootId = (JSON.parse(remainingKey) as [string, string | null])[1] ?? undefined;
+      const exitedRootId = (JSON.parse(projectKey) as [string, string | null])[1] ?? undefined;
       const selectRemaining = (slot: DesktopPanelSlotState) => {
         const panel = slot.panels.find((item) => item.id === panelId);
-        return panel && terminalKey(panel.rootId) === projectKey ? updatePanelInSlotState(slot, panelId, { rootId }) : slot;
+        return panel && panel.rootId === exitedRootId ? updatePanelInSlotState(slot, panelId, { rootId }) : slot;
       };
-      setSidePanelSlot(selectRemaining);
-      setBottomPanelSlot(selectRemaining);
+      // A background shell belongs to its cached conversation, not the active project's root selector.
+      const owner = (Object.keys(layouts) as ChatComposerTargetIdentity[]).find((identity) => {
+        const layout = layouts[identity]!;
+        return [...layout.sidePanelSlot.panels, ...layout.bottomPanelSlot.panels].some((panel) => panel.id === panelId);
+      });
+      if (owner) updateLayoutForIdentity(owner, (layout) => ({ ...layout,
+        sidePanelSlot: selectRemaining(layout.sidePanelSlot), bottomPanelSlot: selectRemaining(layout.bottomPanelSlot),
+      }));
     }
     setTerminalSessionsByPanelId((current) => {
       const remaining = { ...current[panelId] };
@@ -250,7 +271,7 @@ export function useDesktopWorkspacePanels({
       if (!Object.keys(remaining).length) delete next[panelId];
       return next;
     });
-  }, [removePanel, setBottomPanelSlot, setSidePanelSlot, terminalKey, terminalSessionsByPanelId]);
+  }, [layouts, removePanel, terminalSessionsByPanelId, updateLayoutForIdentity]);
   useTerminalPanelExit(terminalSessionsByPanelId, closeExitedTerminalPanel);
 
   useEffect(() => {
@@ -331,6 +352,11 @@ export function useDesktopWorkspacePanels({
         ? readyThreadWorkspacePath(workspaceProjectForRoot(activeProject, root.id), workspaceStatus) : null;
       // Loading/error/empty states must never fall back to terminal.open(null), which starts in the user home directory.
       if (!activeProject || !root || !terminalWorkspacePath) return;
+      // Resolve the implicit primary selection while the owning project is available.
+      // Exit events can then identify that selection even while another project is active.
+      const layout = layoutForIdentity(targetIdentity);
+      const panel = [...layout.sidePanelSlot.panels, ...layout.bottomPanelSlot.panels].find((item) => item.id === panelId);
+      if (panel && !panel.rootId) updateBrowserPanel(targetIdentity, panelId, { rootId: root.id });
       const sessionKey = terminalSessionKey(panelId, terminalProjectKey);
       if (terminalSessionsByPanelId[panelId]?.[terminalProjectKey]) return;
       if (pendingTerminalSessionsRef.current.has(sessionKey)) return;
@@ -366,7 +392,7 @@ export function useDesktopWorkspacePanels({
         if (pendingTerminalSessionsRef.current.get(sessionKey) === pending) pendingTerminalSessionsRef.current.delete(sessionKey);
       }
     },
-    [activeProject, setError, terminalKey, terminalRoot, terminalSessionsByPanelId, workspaceStatus],
+    [activeProject, layoutForIdentity, setError, targetIdentity, terminalKey, terminalRoot, terminalSessionsByPanelId, updateBrowserPanel, workspaceStatus],
   );
 
   const openDesktopPanel = useCallback(
@@ -511,20 +537,6 @@ export function useDesktopWorkspacePanels({
     activateDesktopPanel(location.slot, location.panelId);
     return true;
   }, [activateDesktopPanel, bottomPanelSlot, sidePanelSlot]);
-
-  const updateBrowserPanel = useCallback((
-    identity: ChatComposerTargetIdentity,
-    panelId: string,
-    patch: DesktopPanelTabPatch,
-  ) => {
-    updateLayoutForIdentity(identity, (current) => {
-      const sidePanelSlot = updatePanelInSlotState(current.sidePanelSlot, panelId, patch);
-      const bottomPanelSlot = updatePanelInSlotState(current.bottomPanelSlot, panelId, patch);
-      return sidePanelSlot === current.sidePanelSlot && bottomPanelSlot === current.bottomPanelSlot
-        ? current
-        : { ...current, bottomPanelSlot, sidePanelSlot };
-    });
-  }, [updateLayoutForIdentity]);
 
   const updateDesktopPanel = useCallback((panelId: string, patch: DesktopPanelTabPatch) => {
     updateBrowserPanel(targetIdentity, panelId, patch);

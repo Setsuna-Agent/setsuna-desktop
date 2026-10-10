@@ -15,7 +15,7 @@ export function latestDesktopReviewSummaryFromMessages(messages: RuntimeMessage[
   return desktopDiffSummaryFromRuntimeFileChanges(latestFileChangeSummaryFromMessages(messages));
 }
 
-/** Tool paths are relative to the primary cwd; each panel projects them into its own directory. */
+/** Project recorded targets into the selected directory; legacy relative paths use the primary cwd. */
 export function scopeReviewPaths<T extends { path: string }>(items: T[], project: WorkspaceProject, rootId: string): T[] {
   const roots = workspaceProjectRoots(project);
   const root = roots.find((item) => item.id === rootId);
@@ -49,7 +49,7 @@ export function desktopDiffSummaryFromRuntimeFileChanges(summary: RuntimeFileCha
 
 function desktopDiffFileFromRuntimeChange(file: RuntimeFileChange): DesktopDiffFile {
   return {
-    path: file.path,
+    path: file.absolutePath ?? file.path,
     action: file.action || 'Modified',
     additions: file.additions,
     deletions: file.deletions,

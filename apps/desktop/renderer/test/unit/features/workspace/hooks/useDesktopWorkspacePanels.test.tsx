@@ -371,6 +371,32 @@ it('reuses each directory shell and keeps the other shell alive when one exits',
   expect(terminal.open).toHaveBeenCalledTimes(3);
 });
 
+it.each([
+  ['side', 'main', 'session-1', 'session-2'],
+  ['bottom', 'child', 'session-2', 'session-1'],
+] as const)('reuses the surviving directory when the selected %s terminal exits in a background chat', async (slot, exitedRoot, exitedSession, remainingSession) => {
+  const project: WorkspaceProject = { id: 'project', path: '/repo', name: 'Repository', createdAt: '', updatedAt: '',
+    roots: [{ id: 'main', path: '/repo' }, { id: 'child', path: '/agent' }],
+  };
+  const { view, terminal, emit } = renderTerminalWorkspace('thread:A', project);
+  const slotKey = slot === 'side' ? 'sidePanelSlot' : 'bottomPanelSlot';
+  act(() => view.result.current.openDesktopPanel(slot, 'terminal'));
+  const panelId = view.result.current[slotKey].active!;
+  await waitFor(() => expect(view.result.current.terminalSessionsByPanelId[panelId]?.sessionId).toBe('session-1'));
+  act(() => view.result.current.updateDesktopPanel(panelId, { rootId: 'child' }));
+  await waitFor(() => expect(view.result.current.terminalSessionsByPanelId[panelId]?.sessionId).toBe('session-2'));
+  act(() => view.result.current.updateDesktopPanel(panelId, { rootId: exitedRoot }));
+  view.rerender({ targetIdentity: 'thread:B', project: { ...project, id: 'other-project', path: '/other', roots: [{ id: 'main', path: '/other' }] } });
+  act(() => view.result.current.openDesktopPanel(slot, 'chat'));
+  const backgroundLayout = view.result.current[slotKey];
+  act(() => emit(exitedSession, { seq: 1, event: 'exit', data: { exitCode: 0 } }));
+  expect(view.result.current[slotKey]).toBe(backgroundLayout);
+  expect(terminal.close).toHaveBeenCalledExactlyOnceWith(exitedSession);
+  view.rerender({ targetIdentity: 'thread:A', project });
+  await waitFor(() => expect(view.result.current.terminalSessionsByPanelId[panelId]?.sessionId).toBe(remainingSession));
+  expect(terminal.open).toHaveBeenCalledTimes(2);
+});
+
 it.each(['/repo', 'C:\\repo'])('passes root-relative paths to native file actions for %s', async (mainPath) => {
   const childPath = `${mainPath}-child`;
   const { view } = renderTerminalWorkspace('thread:A', {
@@ -415,7 +441,7 @@ it.each([false, true])('closes removed-directory terminals, including hidden ses
   await waitFor(() => expect(terminal.close).toHaveBeenCalledExactlyOnceWith('session-2'));
   view.rerender({ targetIdentity: 'thread:A', project: { ...project, roots: project.roots!.slice(0, 1) } });
   await waitFor(() => expect(view.result.current.terminalSessionsByPanelId[panelId]?.sessionId).toBe('session-1'));
-  expect(view.result.current.sideActivePanel?.rootId).toBeUndefined();
+  expect(view.result.current.sideActivePanel?.rootId).toBe('main');
   expect(terminal.open).toHaveBeenCalledTimes(2);
   act(() => view.result.current.closeDesktopPanelItem('side', panelId));
   expect(terminal.close).toHaveBeenCalledTimes(2);

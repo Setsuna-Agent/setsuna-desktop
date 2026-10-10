@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { composeRendererMessages } from '@setsuna-desktop/feature-core/renderer';
-import type { WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { RuntimeMessage, RuntimeToolRun, WorkspaceProject } from '@setsuna-desktop/contracts';
 import type { DesktopReviewState } from '@setsuna-desktop/feature-review/contracts';
 import { reviewRendererFeature } from '@setsuna-desktop/feature-review/renderer';
 import { WorkspaceGitCommitProvider, useWorkspaceGitCommitDialog } from '@setsuna-desktop/feature-review/renderer/git';
@@ -10,7 +10,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { ToastProvider } from '../../../../src/app/providers/ToastProvider.js';
 import { ReviewFeatureHostBoundary } from '../../../../src/composition/review-feature-adapter.js';
 import { WorkspaceReviewScope, WorkspaceReviewScopes } from '../../../../src/features/workspace/WorkspaceReviewScope.js';
-import { scopeReviewPaths } from '../../../../src/features/workspace/runtimeReviewSummary.js';
+import { latestDesktopReviewSummaryFromMessages, scopeReviewPaths, scopeReviewSummary } from '../../../../src/features/workspace/runtimeReviewSummary.js';
 import type { DesktopPanelTab } from '../../../../src/features/workspace/model.js';
 import { I18nProvider } from '../../../../src/shared/i18n/I18nProvider.js';
 import { hostMessages } from '../../../../src/shared/i18n/messages.js';
@@ -28,6 +28,30 @@ it('projects primary-relative tool paths into nested and sibling review director
   expect(scopeReviewPaths(paths, project, 'main')).toEqual([{ path: 'agent/file.ts' }]);
   expect(scopeReviewPaths(paths, project, 'nested')).toEqual([{ path: 'file.ts' }]);
   expect(scopeReviewPaths(paths, project, 'sibling')).toEqual([{ path: 'file.ts' }]);
+});
+
+it('keeps latest changes assigned to their recorded directories after promotion and worktree relocation', () => {
+  const project: WorkspaceProject = { id: 'project', name: 'Workspace', path: '/agent', createdAt: '', updatedAt: '',
+    roots: [{ id: 'child', path: '/agent' }, { id: 'main', path: '/repo' }],
+  };
+  const run = (id: string, absolutePath: string, additions: number): RuntimeToolRun => {
+    const diff = { path: 'same.txt', absolutePath, additions, deletions: 0, lines: [] };
+    return { id, name: 'write_file', status: 'success', resultPreview: JSON.stringify({ diff }), data: { ok: true, diff } };
+  };
+  const message: RuntimeMessage = { id: 'message', role: 'assistant', content: '', status: 'complete', createdAt: '',
+    toolRuns: [run('main-1', '/repo/same.txt', 1), run('child', '/agent/same.txt', 2), run('main-2', '/repo/same.txt', 3)],
+  };
+  const summary = latestDesktopReviewSummaryFromMessages([message]);
+  expect(scopeReviewSummary(summary, project, 'main')).toMatchObject({ files: [{ path: 'same.txt', additions: 4 }], additions: 4 });
+  expect(scopeReviewSummary(summary, project, 'child')).toMatchObject({ files: [{ path: 'same.txt', additions: 2 }], additions: 2 });
+  expect(summary?.files).toHaveLength(2);
+
+  const forkRun = run('fork', '/repo/same.txt', 1);
+  forkRun.data = { ok: true, diff: { path: 'same.txt', absolutePath: '/worktree/same.txt', additions: 1, lines: [] } };
+  const forkSummary = latestDesktopReviewSummaryFromMessages([{ ...message, toolRuns: [forkRun] }]);
+  expect(scopeReviewSummary(forkSummary, project, 'main')).toBeNull();
+  expect(scopeReviewSummary(forkSummary, { ...project, path: '/worktree', roots: [{ id: 'main', path: '/worktree' }] }, 'main'))
+    .toMatchObject({ files: [{ path: 'same.txt', additions: 1 }] });
 });
 
 it('keeps cached panel sessions alive while directories are added, reordered, removed or replaced', () => {

@@ -60,9 +60,10 @@ export async function applyWorkspaceFileChanges(
     }
     // The existing transaction rechecks file contents and identities after staging,
     // then rolls back the entire set if a write fails or another process races it.
-    // Explicit undo authorizes only the exact recorded targets. Hash and identity
-    // checks still protect unrelated edits and parent-directory symlink changes.
-    await commitFileChanges(mutations, { root, sandboxWorkspaceWrite: { writableRoots: paths } }, persist);
+    // Explicit restoration uses server-recorded targets, including configuration
+    // files written with full access. Hash, type and canonical-path checks above,
+    // plus transaction identity checks, still protect unrelated files and edits.
+    await commitFileChanges(mutations, { root, permissionProfile: 'danger-full-access' }, persist);
     for (const filePath of paths) invalidateFileMentionIndex(filePath);
   });
 }

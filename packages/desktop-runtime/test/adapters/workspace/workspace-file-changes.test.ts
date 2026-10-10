@@ -16,6 +16,23 @@ describe('workspace operation undo', () => {
   });
   afterEach(async () => { await rm(root, { recursive: true, force: true }); });
 
+  it('restores full-access configuration edits without relaxing the tool write policy', async () => {
+    for (const filePath of ['.agents/settings.json', '.codex/config.toml']) {
+      await expect(writeLocalFile({ file_path: filePath, content: 'blocked' }, state)).rejects.toThrow('受保护');
+      const written = await writeLocalFile({ file_path: filePath, content: 'authorized' }, {
+        ...state, permissionProfile: 'danger-full-access',
+      });
+      const changes = capturedChanges(written);
+      await applyWorkspaceFileChanges(root, changes, 'undo');
+      await expect(lstat(path.join(root, filePath))).rejects.toMatchObject({ code: 'ENOENT' });
+      await applyWorkspaceFileChanges(root, changes, 'redo');
+      expect(await readFile(path.join(root, filePath), 'utf8')).toBe('authorized');
+      await writeFile(path.join(root, filePath), 'user edit');
+      await expect(applyWorkspaceFileChanges(root, changes, 'undo')).rejects.toThrow('No files were changed');
+      expect(await readFile(path.join(root, filePath), 'utf8')).toBe('user edit');
+    }
+  });
+
   it('undoes an edit to an existing untracked file without deleting it or resetting other edits', async () => {
     const before = '# 游戏中心 · 本地小游戏合集\n\nPreviously written content\n';
     await writeFile(path.join(root, 'README.md'), before);
