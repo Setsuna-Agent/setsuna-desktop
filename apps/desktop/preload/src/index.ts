@@ -83,6 +83,7 @@ const desktop: SetsunaDesktopBridge['desktop'] = {
   copyImageToClipboard: (input) => ipcRenderer.invoke('desktop:copy-image-to-clipboard', input),
   readImageAsset: (assetId) => ipcRenderer.invoke('desktop:read-image-asset', assetId),
   revealImageInFolder: (input) => ipcRenderer.invoke('desktop:reveal-image-in-folder', input),
+  saveImageAs: (input) => ipcRenderer.invoke('desktop:save-image-as', input),
   openPath: (targetPath) => ipcRenderer.invoke('desktop:open-path', targetPath),
   openWorkspaceDirectory: (workspaceRoot, directoryPath) =>
     ipcRenderer.invoke('desktop:open-workspace-directory', { workspaceRoot, directoryPath }),

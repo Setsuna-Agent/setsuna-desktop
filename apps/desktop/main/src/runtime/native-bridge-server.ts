@@ -81,6 +81,7 @@ export class DesktopNativeBridgeServer {
   });
   private readonly token = randomBytes(32).toString('hex');
   private readonly filePreviews = new Map<string, DesktopFilePreview>();
+  private readonly featureRequests = new Map<string, (value: unknown, signal: AbortSignal) => Promise<unknown>>();
   private filePreviewContentBytes = 0;
   private connection: DesktopNativeBridgeConnection | null = null;
   private readonly sandboxDialogs: SandboxDialogSessions;
@@ -89,6 +90,15 @@ export class DesktopNativeBridgeServer {
     this.sandboxDialogs = new SandboxDialogSessions(options.showSandboxDialog ?? (async () => {
       throw new Error('Desktop dialogs are unavailable.');
     }));
+  }
+
+  /** Feature-owned native operations share the existing authenticated loopback listener. */
+  registerFeatureRequest(requestPath: string, handler: (value: unknown, signal: AbortSignal) => Promise<unknown>): () => void {
+    if (!/^\/v1\/features\/[a-z0-9-]+\/[a-z0-9-]+$/u.test(requestPath) || this.featureRequests.has(requestPath)) {
+      throw new Error('Invalid or duplicate native Feature route.');
+    }
+    this.featureRequests.set(requestPath, handler);
+    return () => { if (this.featureRequests.get(requestPath) === handler) this.featureRequests.delete(requestPath); };
   }
 
   registerSandboxDialogSession(owner: BrowserWindow, title: string): SandboxDialogSession {
@@ -203,6 +213,18 @@ export class DesktopNativeBridgeServer {
       }
       if (request.headers.authorization !== `Bearer ${this.token}`) {
         sendJson(response, 401, { error: 'Unauthorized.' });
+        return;
+      }
+      const featureRequest = request.method === 'POST' ? this.featureRequests.get(request.url ?? '') : undefined;
+      if (featureRequest) {
+        const controller = new AbortController();
+        const onClose = () => { if (!response.writableEnded) controller.abort(); };
+        response.once('close', onClose);
+        try {
+          sendJson(response, 200, await featureRequest(await readJsonBody(request), controller.signal));
+        } finally {
+          response.removeListener('close', onClose);
+        }
         return;
       }
       if (request.method === 'GET' && request.url === '/v1/credentials/status') {

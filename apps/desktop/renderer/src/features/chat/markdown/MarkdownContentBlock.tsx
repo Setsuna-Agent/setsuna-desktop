@@ -1,7 +1,6 @@
-import { Button } from '@setsuna-desktop/renderer-ui';
+import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import {
   Children,
-  createContext,
   isValidElement,
   memo,
   useContext,
@@ -11,21 +10,20 @@ import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown'
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
-import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { MarkdownCodeBlock } from './MarkdownCodeBlock.js';
 import { MarkdownExternalLink } from './MarkdownExternalLink.js';
 import { useMarkdownNavigation } from './MarkdownNavigationProvider.js';
 import { WorkspaceFileLink } from './WorkspaceFileLink.js';
 import { markdownUrlTransform, resolveMarkdownFileReference, resolveMarkdownLinkTarget } from './markdownLinks.js';
 import { remarkAutolinkBoundaries } from './remarkAutolinkBoundaries.js';
-import { useAvailableMarkdownFile } from './useMarkdownWorkspaceFiles.js';
+import { MarkdownImage } from './MarkdownImage.js';
+import { MarkdownLinkLabelContext } from './MarkdownLinkLabelContext.js';
 
 type MarkdownElementProps<Tag extends keyof JSX.IntrinsicElements> = JSX.IntrinsicElements[Tag] & ExtraProps;
 type MarkdownCodeChildProps = { children?: ReactNode; className?: string };
 
 const rehypePlugins = [rehypeKatex];
 const remarkPlugins = [remarkGfm, remarkAutolinkBoundaries, remarkMath];
-const MarkdownLinkLabelContext = createContext(false);
 
 export const MarkdownContentBlock = memo(function MarkdownContentBlock({ content }: { content: string }) {
   return (
@@ -88,41 +86,6 @@ function MarkdownLink({ children, href, node: _node, onClick, ...props }: Markdo
   }
 
   return <span className="chat-markdown__unavailable-link">{label}</span>;
-}
-
-function MarkdownImage({ alt = '', node: _node, src, ...props }: MarkdownElementProps<'img'>) {
-  const { t } = useI18n();
-  const { onOpenWorkspaceFile, workspaceRoot, workspaceFiles } = useMarkdownNavigation();
-  const target = resolveMarkdownLinkTarget(src, workspaceRoot);
-  const availablePath = useAvailableMarkdownFile(target.kind === 'workspace' ? target.path : null, workspaceFiles);
-
-  if (target.kind === 'external' && /^https?:/i.test(target.href)) {
-    return (
-      <img
-        {...props}
-        alt={alt}
-        decoding="async"
-        loading="lazy"
-        referrerPolicy="no-referrer"
-        src={target.href}
-      />
-    );
-  }
-
-  if (target.kind === 'workspace' && availablePath && onOpenWorkspaceFile) {
-    return (
-      <Button variant="ghost"
-        className="chat-markdown__local-image"
-        type="button"
-        onClick={() => onOpenWorkspaceFile(availablePath, target.line)}
-      >
-        <span aria-hidden="true">{t('chat.markdown.image')}</span>
-        <span>{alt || target.path}</span>
-      </Button>
-    );
-  }
-
-  return <span className="chat-markdown__image-alt">{alt || t('chat.markdown.imageUnavailable')}</span>;
 }
 
 function MarkdownInlineCode({ children, node: _node, ...props }: MarkdownElementProps<'code'>) {

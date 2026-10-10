@@ -171,6 +171,9 @@ export function ProviderModelList({
                     {translate('feature.modelProvider.batchManageModels')}
                   </ui.Button>
                 ) : null}
+                <ui.Button icon={<Plus size={14} />} onClick={addCustomModel}>
+                  {translate('feature.modelProvider.addCustomModel')}
+                </ui.Button>
                 <ui.Button
                   disabled={!availableModels.length}
                   icon={<Plus size={14} />}

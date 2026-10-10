@@ -1,3 +1,4 @@
+import { PullRequestReactions } from './discussions/PullRequestReactions.js';
 import { Button } from '@setsuna-desktop/renderer-ui';
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import type { PullRequestDetail, PullRequestReference, PullRequestSummary } from '../contracts/index.js';
@@ -52,6 +53,7 @@ function DetailBody({ client, detail, account, session, revision, onUpdated, onR
     <PullRequestScrollArea className="pr-detail__body" contentClassName="pr-detail__main" scrollRef={scroll} scrollable={tab !== 'diff'} onScroll={(event) => session.detailScroll.set(scrollKey, event.currentTarget.scrollTop)}>
       <section id="pr-panel-overview" className="pr-detail__panel--overview" role="tabpanel" aria-labelledby="pr-tab-overview" hidden={tab !== 'overview'}>
         <div className="pr-markdown" aria-label={t('description')}><Markdown content={detail.body || t('noDescription')} baseUrl={`https://github.com/${detail.headRepository ?? detail.repository}/blob/${detail.headSha}/`} /></div>
+        <PullRequestReactions reactions={detail.reactions} />
         <DiscussionTimeline client={client} detail={detail} account={account} discussions={discussions} onPublished={onUpdated} onDiff={(discussion) => { setFocus({ discussion, version: Date.now() }); selectTab('diff'); }} />
       </section>
       <section id="pr-panel-diff" className="pr-detail__panel--diff" role="tabpanel" aria-labelledby="pr-tab-diff" hidden={tab !== 'diff'}>{visited.has('diff') ? <PullRequestDiff client={client} detail={detail} account={account} discussions={discussions} focus={focus} onPublished={onUpdated} /> : null}</section>

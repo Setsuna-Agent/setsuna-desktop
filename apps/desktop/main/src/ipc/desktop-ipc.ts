@@ -12,13 +12,14 @@ import {
   openWorkspaceFileWithDefaultApp,
   revealWorkspaceFileInFolder,
 } from '../workspace/file-opening.js';
-import { copyChatImage, readGeneratedImageAsset, revealChatImage } from '../workspace/generated-image-actions.js';
+import { copyChatImage, readGeneratedImageAsset, revealChatImage, saveChatImage, type AttachmentImageReader } from '../workspace/generated-image-actions.js';
 import { desktopWindows } from '../window/registry.js';
 import { isDesktopRendererSender } from './sender.js';
 import { registerWorkspaceEntryWatchIpc } from './workspace-entry-watch-ipc.js';
 
 type DesktopIpcOptions = {
   nativeBridge: DesktopNativeBridgeServer;
+  readAttachmentImage: AttachmentImageReader;
   onActiveKeyboardShortcutBindingsChange: (bindings: readonly string[], senderId: number) => void;
   onInterfaceLanguageChange: (locale: RuntimeInterfaceLanguage) => void;
   userDataPath: string;
@@ -26,6 +27,7 @@ type DesktopIpcOptions = {
 
 export function registerDesktopIpc({
   nativeBridge,
+  readAttachmentImage,
   onActiveKeyboardShortcutBindingsChange,
   onInterfaceLanguageChange,
   userDataPath,
@@ -43,6 +45,7 @@ export function registerDesktopIpc({
     'desktop:copy-image-to-clipboard',
     'desktop:read-image-asset',
     'desktop:reveal-image-in-folder',
+    'desktop:save-image-as',
     'desktop:open-path',
     'desktop:open-workspace-directory',
     'desktop:open-workspace-file',
@@ -123,6 +126,7 @@ export function registerDesktopIpc({
       (value) => nativeImage.createFromDataURL(value),
       (value) => nativeImage.createFromPath(value),
       (image) => clipboard.writeImage(image),
+      readAttachmentImage,
     );
   });
   ipcMain.handle('desktop:read-image-asset', async (event, assetId) => {
@@ -131,7 +135,17 @@ export function registerDesktopIpc({
   });
   ipcMain.handle('desktop:reveal-image-in-folder', async (event, input) => {
     if (!isDesktopRendererSender(event.sender)) return { ok: false, error: 'Desktop renderer is unavailable.' };
-    return revealChatImage(userDataPath, input, (targetPath) => shell.showItemInFolder(targetPath));
+    return revealChatImage(userDataPath, input, (targetPath) => shell.showItemInFolder(targetPath), readAttachmentImage);
+  });
+  ipcMain.handle('desktop:save-image-as', async (event, input) => {
+    const owner = desktopWindows.get(event.sender.id);
+    if (!owner || event.senderFrame !== event.sender.mainFrame) return { ok: false, error: 'Desktop renderer is unavailable.' };
+    return saveChatImage(userDataPath, input, async (name, extension) => {
+      const result = await dialog.showSaveDialog(owner, {
+        defaultPath: name, filters: [{ name: extension.toUpperCase(), extensions: [extension] }],
+      });
+      return result.canceled ? null : result.filePath ?? null;
+    }, readAttachmentImage);
   });
   ipcMain.handle('desktop:open-path', async (_event, targetPath) => {
     const localPath = String(targetPath ?? '').trim();

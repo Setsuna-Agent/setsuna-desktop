@@ -1,11 +1,12 @@
+import { reactionFields, reactions, type ReactionNode } from './reactions.js';
 import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
 import type { PullRequestComment, PullRequestDiscussion, PullRequestDiscussionInput, PullRequestDiscussionResult, PullRequestReference, PullRequestRepliesInput } from '../contracts/index.js';
 import { actor, actorFields, GitHubApi, nextCursor, pageFields, repoVariables, type Actor, type Page } from './github-api.js';
 
-export const commentFields = `id databaseId body createdAt url author { ${actorFields} }`;
-export type CommentNode = { id: string; databaseId: number | null; body: string; createdAt: string; url: string; author: Actor };
+export const commentFields = `id databaseId body createdAt url author { ${actorFields} } ${reactionFields}`;
+export type CommentNode = { id: string; databaseId: number | null; body: string; createdAt: string; url: string; author: Actor; reactionGroups?: ReactionNode[] };
 export function comment(node: CommentNode): PullRequestComment {
-  return { ...node, author: actor(node.author), body: node.body.replace(/\n?<!-- setsuna-pr-comment:[a-zA-Z0-9_-]+ -->/gu, '') };
+  return { ...node, reactions: reactions(node.reactionGroups), author: actor(node.author), body: node.body.replace(/\n?<!-- setsuna-pr-comment:[a-zA-Z0-9_-]+ -->/gu, '') };
 }
 const blankThread = {
   state: null, resolved: false, outdated: false, canReply: true, path: null, line: null, side: null,

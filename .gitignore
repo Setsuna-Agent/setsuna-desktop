@@ -2,6 +2,7 @@
 node_modules/
 dist/
 coverage/
+.cache/electron-dev/
 .cache/ripgrep/
 .cache/sandbox-curl/
 .cache/windows-sandbox/

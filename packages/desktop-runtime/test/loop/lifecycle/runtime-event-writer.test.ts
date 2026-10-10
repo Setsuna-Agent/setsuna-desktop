@@ -11,6 +11,37 @@ import { RuntimeEventWriter } from '../../../src/loop/lifecycle/runtime-event-wr
 import { systemClock } from '../../../src/ports/clock.js';
 
 describe('runtime event writer', () => {
+  it('publishes live persisted events to global observers without letting observer failure disrupt thread delivery', async () => {
+    const store = createTestThreadStore(
+      await mkdtemp(path.join(tmpdir(), 'setsuna-global-event-observers-')), systemClock, new RandomIdGenerator(),
+    );
+    const bus = new InMemoryEventBus();
+    const writer = new RuntimeEventWriter(store, bus);
+    const first = await store.createThread({ title: 'First' });
+    const second = await store.createThread({ title: 'Second' });
+    const globalEvents: StoredThreadEvent[] = [];
+    const threadEvents: StoredThreadEvent[] = [];
+    const persistedReads: Promise<boolean>[] = [];
+    bus.subscribeAll(() => { throw new Error('Optional observer failed'); });
+    const unsubscribe = bus.subscribeAll((event) => {
+      globalEvents.push(event);
+      persistedReads.push(store.listEvents(event.threadId).then((events) => events.some((saved) => saved.id === event.id)));
+    });
+    bus.subscribe(first.id, (event) => { threadEvents.push(event); });
+    const append = (threadId: string, id: string) => writer.append(threadId, {
+      id, threadId, turnId: 'turn_1', type: 'turn.completed', createdAt: systemClock.now().toISOString(), payload: {},
+    });
+    await append(first.id, 'event_first');
+    await append(second.id, 'event_second');
+    expect(await Promise.all(persistedReads)).toEqual([true, true]);
+    expect(globalEvents.map((event) => event.id)).toEqual(['event_first', 'event_second']);
+    expect(threadEvents.map((event) => event.id)).toEqual(['event_first']);
+    unsubscribe();
+    await append(first.id, 'event_late');
+    expect(globalEvents).toHaveLength(2);
+    expect(threadEvents).toHaveLength(2);
+  });
+
   it('records per-turn stream coalescing metrics without adding transcript events', async () => {
     const ids = new RandomIdGenerator();
     const store = createTestThreadStore(

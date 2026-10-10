@@ -1,3 +1,4 @@
+import { useNotificationNavigation } from '../composition/notifications/useNotificationNavigation.js';
 import { Component, useCallback, useEffect, type ErrorInfo, type ReactNode } from 'react';
 import { appReadySlot } from '@setsuna-desktop/renderer-contracts/shell';
 import { CollaborationFeatureNavigationBoundary } from '../composition/CollaborationFeatureBoundary.js';
@@ -9,7 +10,7 @@ import { AppReadyLayout } from './layout/AppReadyLayout.js';
 import { DesktopDataRootGate } from './layout/DesktopDataRootGate.js';
 import { ShellFrame } from './layout/ShellFrame.js';
 import { DesktopDataRootProvider } from './providers/DesktopDataRootProvider.js';
-import { ToastProvider } from './providers/ToastProvider.js';
+import { ToastProvider, useToast } from './providers/ToastProvider.js';
 import { RendererRootSingleSlot } from '../kernel/renderer-plugins/RendererKernelProvider.js';
 import { ThreadFileChangesProvider } from '../features/chat/hooks/ThreadFileChangesProvider.js';
 
@@ -80,6 +81,8 @@ function AppContent() {
 function ReadyAppContent({ controller }: Readonly<{
   controller: ReturnType<typeof useDesktopAppController>;
 }>) {
+  const toast = useToast();
+  useNotificationNavigation(controller.navigation.selectThread, toast.error);
   const openCollaborationTask = useCallback(
     (parentThreadId: string, task: Parameters<typeof controller.workspacePanels.openSubagentPanel>[1]) => {
       controller.workspacePanels.openSubagentPanel(parentThreadId, task);

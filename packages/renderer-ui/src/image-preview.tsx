@@ -5,8 +5,13 @@ import { IconButton } from './button.js';
 import { overlayContainer } from './portal.js';
 import { useUiLabels } from './locale.js';
 import { cn } from './utils.js';
+import { Dropdown, type MenuProps } from './menu.js';
 
-type PreviewImage = { id: string; src: string; alt: string };
+type PreviewActions = {
+  previewMenu?: MenuProps;
+  onContextMenu?: ImgHTMLAttributes<HTMLImageElement>['onContextMenu'];
+};
+type PreviewImage = { id: string; src: string; alt: string } & PreviewActions;
 type Gallery = { register(image: PreviewImage): () => void; show(id: string): void };
 const GalleryContext = createContext<Gallery | null>(null);
 
@@ -26,17 +31,17 @@ export function ImagePreviewGroup({ children }: { children: ReactNode }) {
   return <GalleryContext.Provider value={gallery}>{children}{preview ? <ImageViewer {...preview} onClose={() => setPreview(null)} /> : null}</GalleryContext.Provider>;
 }
 
-export function ImagePreview({ src = '', alt = '', className, ...props }: ImgHTMLAttributes<HTMLImageElement>) {
+export function ImagePreview({ src = '', alt = '', className, previewMenu, onContextMenu, ...props }: ImgHTMLAttributes<HTMLImageElement> & PreviewActions) {
   const labels = useUiLabels();
   const gallery = useContext(GalleryContext);
   const id = useId();
   const [open, setOpen] = useState(false);
-  useEffect(() => gallery?.register({ id, src, alt }), [gallery, id, src, alt]);
+  useEffect(() => gallery?.register({ id, src, alt, previewMenu, onContextMenu }), [gallery, id, src, alt, previewMenu, onContextMenu]);
   return <>
     <button type="button" className="sd-image" aria-label={alt || labels.preview} onClick={() => gallery ? gallery.show(id) : setOpen(true)}>
-      <img {...props} src={src} alt={alt} className={cn('sd-image__content', className)} />
+      <img {...props} src={src} alt={alt} onContextMenu={onContextMenu} className={cn('sd-image__content', className)} />
     </button>
-    {open ? <ImageViewer images={[{ id, src, alt }]} index={0} onClose={() => setOpen(false)} /> : null}
+    {open ? <ImageViewer images={[{ id, src, alt, previewMenu, onContextMenu }]} index={0} onClose={() => setOpen(false)} /> : null}
   </>;
 }
 
@@ -53,13 +58,15 @@ function ImageViewer({ images, index: initialIndex, onClose }: { images: Preview
       <Primitive.Overlay className="sd-image-viewer__overlay" />
       <Primitive.Content className="sd-image-viewer" aria-describedby={undefined} onCloseAutoFocus={(event) => { event.preventDefault(); focus.current?.focus({ preventScroll: true }); }}
         onKeyDown={(event) => {
+          // Portalled menu keys still bubble through React; they must not switch the action's image.
+          if (event.defaultPrevented || (event.target instanceof Element && event.target.closest('[role="menu"]'))) return;
           if (event.key === 'ArrowLeft' && index > 0) changeImage(index - 1);
           if (event.key === 'ArrowRight' && index < images.length - 1) changeImage(index + 1);
         }}>
         <Primitive.Title className="sd-image-viewer__title">{current.alt || labels.preview}</Primitive.Title>
         <Primitive.Close asChild><IconButton className="sd-image-viewer__close" label={labels.close}><X size={20} /></IconButton></Primitive.Close>
         <div className="sd-image-viewer__canvas" onWheel={(event) => setScale((value) => Math.min(5, Math.max(0.25, value + (event.deltaY < 0 ? 0.1 : -0.1))))}>
-          <img src={current.src} alt={current.alt} style={{ transform: `scale(${scale}) rotate(${rotation}deg)` }} draggable={false} />
+          <PreviewImageContent image={current} scale={scale} rotation={rotation} />
         </div>
         <div className="sd-image-viewer__toolbar">
           <IconButton label={labels.previous} disabled={index === 0} onClick={() => changeImage(index - 1)}><ChevronLeft size={18} /></IconButton>
@@ -72,4 +79,13 @@ function ImageViewer({ images, index: initialIndex, onClose }: { images: Preview
       </Primitive.Content>
     </Primitive.Portal>
   </Primitive.Root>;
+}
+
+function PreviewImageContent({ image, scale, rotation }: { image: PreviewImage; scale: number; rotation: number }) {
+  const content = <img src={image.src} alt={image.alt} onContextMenu={image.onContextMenu}
+    style={{ transform: `scale(${scale}) rotate(${rotation}deg)` }} draggable={false} />;
+  // Group previews live outside each thumbnail's menu; bind actions to the visible image.
+  return image.previewMenu
+    ? <Dropdown trigger={['contextMenu']} menu={image.previewMenu} modal>{content}</Dropdown>
+    : content;
 }

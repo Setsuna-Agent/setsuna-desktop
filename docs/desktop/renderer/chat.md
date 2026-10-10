@@ -230,6 +230,8 @@ Enter / Shift+Enter 循环跳转，Esc 或关闭按钮清理观察器和高亮�
 
 `MarkdownNavigationProvider` 统一导航，`WorkspaceFileLink` 走 workspace 能力，不能让 Markdown 任意调用 `window.open` 或本地 shell。
 
+`MarkdownImage` 将已确认存在的工作区图片交给 main 的文件预览桥，使用受控 URL 内嵌展示并支持点击放大；路径或工作区切换会忽略旧请求结果。链接标签内的图片保持普通图片，点击只执行外层导航，不创建预览弹窗。本地图片在缩略图和放大预览中均沿用文件右键动作；附件图库的预览菜单携带当前图片的操作，切换图片后保存、复制和显示文件夹的目标随之切换。HTTP(S) 图片直接使用无 referrer 的图片请求，失败时保留替代文本。
+
 `MarkdownExternalLink` 为 Web 链接提供复制链接、在内置浏览器打开、在外部浏览器打开的右键菜单；菜单显式选择不修改默认打开偏好，普通点击继续遵循该偏好。`MarkdownWebLinkIcon` 在文字前加载站点根路径的 `/favicon.ico`，不发送 referrer，加载失败时回退到地球图标。
 
 Markdown 内联代码只将单一路径作为文件候选，命令、Git 状态、通配符和表达式保留代码；含空格的路径可以使用显式 Markdown 链接。候选文件、显式本地链接和本地图片都由 `useMarkdownWorkspaceFiles` 通过现有目录 API 确认是当前工作区的文件后才可点击，目录和不存在的路径保留原文，不猜测同名文件的位置。目录读取和监听由同目录内的引用共享，引用卸载时释放，目录变动和窗口聚焦时重新校验；切换工作区会隔离旧请求。显式链接的标签内不再自动生成嵌套文件链接，行号仍传给文件打开入口。
@@ -242,7 +244,7 @@ Markdown 内联代码只将单一路径作为文件候选，命令、Git 状态�
 - 文件选择器中的本地文件通过 preload 从 Electron `File` 提取可信路径并登记为 runtime 引用；renderer 和线程事件只保留不透明 attachment ID，不读取或复制文件字节。
 - runtime 将被引用的原文件作为该 turn 的 direct-tool-only readable root 暴露给 Agent，但不会把动态附件根加入 shell sandbox plan，也不会新增写权限；文件若本来位于 workspace 或已配置的 writable root 内，仍遵循原有 workspace 权限。文件移动或删除后引用变为不可用，不会生成第二份副本。
 - 原生视觉模型由 runtime 在 provider 请求边界临时读取并复验本地图片；剪贴板图片和超长粘贴生成的 TXT 写入受管 attachment store。TXT 上传要求 `.txt`、`text/plain` 与有效 UTF-8 内容一致，并沿用线程归属和工具只读访问边界。
-- 已发送图片通过带 thread 归属校验的窄 bridge 按需读取并继续使用消息图片画廊预览；Base64 不进入 renderer 持久状态或线程事件。
+- 已发送图片通过带 thread 归属校验的窄 bridge 按需读取并继续使用消息图片画廊预览；右键支持复制、显示目录和另存为，原始附件 ID 在 main 重新验证后使用。Base64 不进入 renderer 持久状态或线程事件。
 - Thread/project 切换时迟到的引用登记或图片存储不得附加到新 composer。
 - 仅附件输入也是合法输入。
 

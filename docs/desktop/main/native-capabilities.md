@@ -108,9 +108,13 @@ Plugin Management 是 Plugin catalog 和管理事务的纵向 Feature。runtime 
 
 ### `generated-image-actions.ts`
 
-处理生成图片复制、显示目录或相关本机动作。输入是 runtime 管理的 asset/路径 contract，main 再次校验格式和边界。
+处理聊天图片的复制、显示目录和另存为。生成图片使用 runtime 管理的 asset contract；用户图片附件只传 thread ID 和 attachment ID，由 main 通过 runtime 再次验证线程归属并读取。Main 校验图片魔数、MIME、大小和管理目录边界；另存为使用原生保存对话框和原始图片字节，取消不产生错误提示。
 
 宿主文件动作测试位于 `apps/desktop/main/test/unit/workspace/`。
+
+## 系统通知
+
+`packages/features/notifications/` 通过 Electron `Notification` 发送 macOS / Windows 原生通知，系统负责横幅和通知中心展示。Main 接收已有认证 native bridge 上的 Feature 请求；preload 只传递点击通知后的对话导航事件。详细边界见 [系统通知](../../features/notifications.md)。
 
 ## Network Proxy
 

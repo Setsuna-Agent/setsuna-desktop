@@ -113,6 +113,7 @@ function createHarness() {
   const eventBus = {
     publish: () => undefined,
     subscribe: () => () => undefined,
+    subscribeAll: () => () => undefined,
   } satisfies EventBus;
   const eventWriter = new RuntimeEventWriter(threadStore, eventBus);
   return {

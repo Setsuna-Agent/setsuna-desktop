@@ -1,3 +1,4 @@
+import { PullRequestReactions } from './discussions/PullRequestReactions.js';
 import { Button, DetailSection } from '@setsuna-desktop/renderer-ui';
 import { MessageSquare, GitCommitHorizontal } from 'lucide-react';
 import { useState } from 'react';
@@ -26,10 +27,10 @@ export function DiscussionTimeline({ client, detail, account, discussions, onPub
   </section>;
 }
 
-export function DiscussionCard({ discussion, client, detail, account, onPublished, onDiff, onQuote, moreReplies, repliesPending = false }: {
+export function DiscussionCard({ discussion, client, detail, account, onPublished, onDiff, onQuote, moreReplies, repliesPending = false, inline = false }: {
   discussion: PullRequestDiscussion; client: PullRequestsClient; detail: PullRequestDetail; account: string;
   onPublished(): void; onDiff(discussion: PullRequestDiscussion): void; onQuote?(comment: PullRequestComment): void;
-  moreReplies?(): void; repliesPending?: boolean;
+  moreReplies?(): void; repliesPending?: boolean; inline?: boolean;
 }) {
   const t = usePrText();
   const { Markdown, openExternal } = usePullRequestsHost();
@@ -39,8 +40,8 @@ export function DiscussionCard({ discussion, client, detail, account, onPublishe
     : discussion.kind === 'review' ? stateLabel(discussion.state ?? 'COMMENTED', t)
       : discussion.kind === 'commit' ? `${t('commitComment')} ${discussion.commitSha?.slice(0, 7)}` : t('comment');
   return <DetailSection title={title} icon={discussion.kind === 'commit' ? <GitCommitHorizontal size={15} /> : <MessageSquare size={15} />} count={discussion.resolved ? t('resolved') : discussion.outdated ? t('outdated') : discussion.comments.length} defaultExpanded={!discussion.resolved} className="pr-discussion">
-    {thread && discussion.diffHunk ? <pre className="pr-discussion__snippet">{discussion.diffHunk}</pre> : null}
-    {thread ? <div className="pr-discussion__location"><Button size="small" variant="ghost" onClick={() => onDiff(discussion)}>{discussion.outdated ? t('viewCurrentFile') : t('viewDiff')}</Button>{discussion.outdated ? <span>{t('outdatedLocation')}</span> : null}</div> : null}
+    {thread && !inline && discussion.diffHunk ? <pre className="pr-discussion__snippet">{discussion.diffHunk}</pre> : null}
+    {thread && !inline ? <div className="pr-discussion__location"><Button size="small" variant="ghost" onClick={() => onDiff(discussion)}>{discussion.outdated ? t('viewCurrentFile') : t('viewDiff')}</Button>{discussion.outdated ? <span>{t('outdatedLocation')}</span> : null}</div> : null}
     {discussion.comments.map((comment) => <article className="pr-comment" key={comment.id} id={`pr-comment-${comment.id}`}>
       <header>
         {comment.author.avatarUrl ? <img src={comment.author.avatarUrl} alt="" width={22} height={22} loading="lazy" referrerPolicy="no-referrer" /> : null}
@@ -48,6 +49,7 @@ export function DiscussionCard({ discussion, client, detail, account, onPublishe
         <Button size="small" variant="ghost" onClick={() => void openExternal(comment.url)}>{t('permalink')}</Button>
       </header>
       {comment.body ? <div className="pr-markdown"><Markdown content={comment.body} baseUrl={`https://github.com/${detail.headRepository ?? detail.repository}/blob/${detail.headSha}/`} /></div> : null}
+      <PullRequestReactions reactions={comment.reactions} />
       {detail.canComment && discussion.canReply ? <Button size="small" variant="ghost" onClick={() => thread ? setReplying(true) : onQuote?.(comment)}>{thread ? t('reply') : t('quoteReply')}</Button> : null}
     </article>)}
     {repliesPending ? <PullRequestSkeleton kind="discussion" label={t('loading')} /> : null}

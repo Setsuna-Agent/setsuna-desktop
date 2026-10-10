@@ -8,7 +8,7 @@ import {
   type RuntimeStoredMessageAttachment,
 } from '@setsuna-desktop/contracts';
 import { Dropdown, ImagePreview, ImagePreviewGroup, type MenuProps } from '@setsuna-desktop/renderer-ui';
-import { Copy, FolderOpen } from 'lucide-react';
+import { Copy, Download, FolderOpen } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { useDesktopImageAction, type DesktopImageAction } from '../../workspace/hooks/useDesktopImageAction.js';
@@ -56,7 +56,7 @@ export function ChatMessageImageGallery({
   };
 
   const runAction = (action: DesktopImageAction, attachment: ChatImageAttachment) => {
-    const input = desktopImageInput(attachment);
+    const input = desktopImageInput(attachment, threadId);
     if (input) runDesktopImageAction(action, input);
   };
 
@@ -68,7 +68,7 @@ export function ChatMessageImageGallery({
           aria-label={t('chat.image.count', { count: attachments.length })}
         >
           {attachments.map((attachment) => {
-            const supportsDesktopActions = !isRuntimeStoredMessageAttachment(attachment);
+            const supportsDesktopActions = (!isRuntimeStoredMessageAttachment(attachment) || Boolean(threadId));
             return (
               <ChatMessageImage
                 attachment={attachment}
@@ -101,6 +101,7 @@ function ChatMessageImage({
   const reservesLayout = !source && reservedAspectRatio !== null;
 
   const items: MenuProps['items'] = [
+    { key: 'save', icon: <Download size={14} />, label: t('chat.image.save') },
     {
       key: 'copy',
       icon: <Copy size={14} />,
@@ -112,6 +113,10 @@ function ChatMessageImage({
       label: t('chat.image.reveal'),
     },
   ];
+  const menu: MenuProps = {
+    items,
+    onClick: ({ key }) => onAction?.(key as DesktopImageAction),
+  };
 
   const image = (
     <div
@@ -125,6 +130,7 @@ function ChatMessageImage({
           src={source}
           alt={attachment.name}
           className="chat-message-image__content"
+          previewMenu={onAction ? menu : undefined}
         />
       ) : (
         <div className="chat-message-image__placeholder" role={loadError ? 'alert' : 'status'}>
@@ -138,10 +144,7 @@ function ChatMessageImage({
     <Dropdown
       rootClassName="chat-image-context-menu-root"
       trigger={['contextMenu']}
-      menu={{
-        items,
-        onClick: ({ key }) => onAction(key as DesktopImageAction),
-      }}
+      menu={menu}
     >
       {image}
     </Dropdown>
@@ -234,7 +237,10 @@ function useChatImageSource(
   return { loadError, reservedAspectRatio, source: inlineSource ?? loadedSource };
 }
 
-function desktopImageInput(attachment: ChatImageAttachment): DesktopImageInput | null {
+function desktopImageInput(attachment: ChatImageAttachment, threadId: string | null): DesktopImageInput | null {
+  if (isRuntimeStoredMessageAttachment(attachment) && threadId) {
+    return { attachment: { threadId, assetId: attachment.assetId }, name: attachment.name };
+  }
   if (isRuntimeGeneratedMessageAttachment(attachment)) {
     return { assetId: attachment.assetId, name: attachment.name };
   }

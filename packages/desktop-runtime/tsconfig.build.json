@@ -15,6 +15,7 @@
   },
   "include": ["src/**/*.ts"],
   "references": [
+    { "path": "../features/notifications/tsconfig.build.json" },
     { "path": "../contracts/tsconfig.build.json" },
     { "path": "../feature-core/tsconfig.build.json" },
     { "path": "../features/automation/tsconfig.build.json" },

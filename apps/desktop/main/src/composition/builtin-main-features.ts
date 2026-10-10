@@ -1,3 +1,5 @@
+import { notificationsMainFeature, notificationsMainHostCapability } from '@setsuna-desktop/feature-notifications/main';
+import { notificationChannels } from '@setsuna-desktop/feature-notifications/contracts';
 import type {
   RuntimeInterfaceLanguage,
   RuntimeRequestInput,
@@ -72,7 +74,7 @@ import {
   type WindowsSandboxMainHost,
   type WindowsSandboxMainService,
 } from '@setsuna-desktop/feature-windows-sandbox/main';
-import { app, type BrowserWindow } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
 import type { DesktopNativeBridgeServer } from '../runtime/native-bridge-server.js';
 import { desktopWindows } from '../window/registry.js';
@@ -93,7 +95,7 @@ const mainFeatures = defineMainFeatureHost({
     windowsSandboxMainFeature,
     workspaceAppsMainFeature,
   ],
-  optional: [],
+  optional: [notificationsMainFeature],
 });
 
 /** Protocol privileges must be declared before Electron creates any renderer or worker. */
@@ -128,6 +130,19 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
 }>): Promise<ActivatedBuiltinMainFeatures> {
   const composition = await mainFeatures.activate({
     hostCapabilities: [
+      provideHostCapability(notificationsMainHostCapability, {
+        isForeground: () => BrowserWindow.getFocusedWindow() !== null,
+        registerNativeRequest: (requestPath: string, handler: (value: unknown, signal: AbortSignal) => Promise<unknown>) =>
+          input.nativeBridge.registerFeatureRequest(requestPath, handler),
+        openThread: (threadId: string) => {
+          const window = desktopWindows.all().find((window) => window.isFocused()) ?? desktopWindows.all()[0];
+          if (!window || window.isDestroyed()) return;
+          if (window.isMinimized()) window.restore();
+          window.show();
+          window.focus();
+          window.webContents.send(notificationChannels.openThread, threadId);
+        },
+      }),
       provideHostCapability(computerMainHostCapability, {
         isAllowedSender: (senderId: number) => Boolean(desktopWindows.get(senderId)),
         interfaceLanguage: input.interfaceLanguage,

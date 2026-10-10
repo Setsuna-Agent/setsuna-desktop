@@ -6,6 +6,22 @@ import { listRequests, readRequest } from '../../src/runtime/pull-requests.js';
 import { base, checkNode, commentNode, githubFixture, head, page, reference, repositoryNode, summaryNode } from '../support/github-fixture.js';
 
 describe('GitHub PR projections', () => {
+  it('keeps emoji text and reaction counts on PR descriptions and paginated discussion comments', async () => {
+    const groups = [{ content: 'HEART', users: { totalCount: 2 } }, { content: 'EYES', users: { totalCount: 0 } }];
+    const { api } = githubFixture(({ query }) => {
+      expect(query).toContain('reactionGroups');
+      if (query.includes('viewerPermission')) {
+        const repository = repositoryNode();
+        return { repository: { ...repository, pullRequest: { ...repository.pullRequest, body: ':rocket: ✅', reactionGroups: groups } } };
+      }
+      return { repository: { pullRequest: { comments: page([{ ...commentNode('C1', ':heart: 👍'), reactionGroups: groups }], 'next') } } };
+    });
+    const detail = detailCodec.parse(await readRequest(api, reference));
+    expect(detail).toMatchObject({ body: ':rocket: ✅', reactions: [{ content: 'HEART', count: 2 }] });
+    const result = await readDiscussions(api, { ...reference, kind: 'comments', cursor: null });
+    expect(result).toMatchObject({ cursor: 'next', items: [{ comments: [{ body: ':heart: 👍', reactions: [{ content: 'HEART', count: 2 }] }] }] });
+  });
+
   it('uses any released request slot and cancels queued work before it reaches GitHub', async () => {
     const gates = new Map<string, (value: unknown) => void>();
     const { api, request } = githubFixture(({ path }) => new Promise((resolve) => { gates.set(path, resolve); }));

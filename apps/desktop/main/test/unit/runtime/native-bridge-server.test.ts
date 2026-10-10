@@ -64,6 +64,22 @@ describe('DesktopNativeBridgeServer', () => {
     servers.push(server);
     const connection = await server.start();
 
+    const featureHandler = vi.fn(async (value: unknown) => ({ received: value }));
+    const unregister = server.registerFeatureRequest('/v1/features/notifications/send', featureHandler);
+    const unauthenticatedFeature = await fetch(`${connection.url}/v1/features/notifications/send`, {
+      method: 'POST', body: JSON.stringify({ title: 'Ignored' }),
+    });
+    expect(unauthenticatedFeature.status).toBe(401);
+    expect(featureHandler).not.toHaveBeenCalled();
+    await expect(nativeRequest(connection, '/v1/features/notifications/send', { title: 'Ready' }))
+      .resolves.toEqual({ received: { title: 'Ready' } });
+    expect(featureHandler).toHaveBeenCalledWith({ title: 'Ready' }, expect.any(AbortSignal));
+    unregister();
+    const removedFeature = await fetch(`${connection.url}/v1/features/notifications/send`, {
+      method: 'POST', headers: { Authorization: `Bearer ${connection.token}` }, body: '{}',
+    });
+    expect(removedFeature.status).toBe(404);
+
     const unauthorized = await fetch(`${connection.url}/v1/credentials/status`);
     expect(unauthorized.status).toBe(401);
 

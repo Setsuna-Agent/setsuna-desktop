@@ -70,7 +70,7 @@ Setsuna provider ID 是配置和 metadata 身份。预置配置的 Pi model 保�
 
 `packages/features/model-provider/src/renderer/` 持有 provider settings state、Pi 目录 typed client、自动保存、模型发现和 `model-provider` 设置视图。Host 设置页只负责 contribution 布局与品牌图标渲染，不再拥有 provider CRUD controller。
 
-预置服务的主流程是厂商、接入方案、API Key 和模型目录；协议、Base URL、代理、请求头、图标与模型 token/capability override 位于高级配置。选择“自定义兼容服务”后才展开协议、URL、同步模型和手动模型入口。
+预置服务的主流程是厂商、接入方案、API Key 和模型目录；协议、Base URL、代理、请求头、图标与模型 token/capability override 位于高级配置。预置服务也提供手动添加模型入口，复用模型编辑器填写 ID 与能力，目录外的型号沿用当前厂商和接入方案。选择“自定义兼容服务”后展开协议、URL、同步模型和手动模型入口。
 
 Provider projection 仍合入共享 `RuntimeConfigState`，供聊天模型选择和 Core task-model 设置读取；写 provider 配置只走 Feature operation。
 

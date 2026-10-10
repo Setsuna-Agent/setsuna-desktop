@@ -54,6 +54,8 @@ PR 功能独立使用本机 GitHub CLI，不依赖 MCP 或插件的 OAuth sessio
 
 ## 完整 Diff
 
+行评论按 GitHub 的 `diffSide` 和行号挂到实际 patch 行下，使用同一套讨论与回复组件；同一行的多个讨论保持分组。过时评论、文件级评论及不在当前 hunk 内的评论保留在 Diff 后方，不移动到邻近行。评论跳转等待目标 patch 加载后定位，左右两侧的行号分别匹配。
+
 `files.ts` 缓存按 repository、PR、base SHA、head SHA 标识的快照。文件列表全量分页，patch 按文件加载；读取前后确认远端仍是同一版本。
 
 REST 文件数超过 3,000、列表不完整、patch 缺失或增删行数不完整时，`git-diff.ts` 使用 GitHub 返回的 merge base 和 head 对象计算三点 Diff。只补取缺失对象，不 checkout、不改分支或暂存区、不写 FETCH_HEAD。Git 调用固定参数、禁用 external diff/textconv，文件名使用 NUL 分隔和 literal pathspec。二进制文件明确展示无文本 Diff；读取失败明确报错，不静默截断。
@@ -67,7 +69,7 @@ REST 文件数超过 3,000、列表不完整、patch 缺失或增删行数不完
 - `packages/renderer-ui/src/detail-section.tsx`：插件详情和 PR 共用可折叠详情分区。
 - `packages/renderer-ui/src/diff-view-controls.tsx`：变更面板与 PR Diff 共用左右对比、自动换行图标控件；文件标题旁展示文件图标与增删统计，文件树不重复显示文件数量。
 - `packages/renderer-ui/src/styles/detail.css`：统一详情容器、元数据、Markdown 阅读面板及分区样式。
-- `apps/desktop/renderer/src/shared/ui/DocumentMarkdown.tsx`：统一 GFM、HTML 清洗、相对链接、标题锚点和图片处理；插件/Skill 文档和 PR 描述/评论复用。
+- `apps/desktop/renderer/src/shared/ui/DocumentMarkdown.tsx`：统一 GFM、emoji shortcode、HTML 清洗、相对链接、标题锚点和图片处理；插件/Skill 文档和 PR 描述/评论复用。PR 描述和评论的 GitHub reactions 由 runtime 读取八种原生 reaction 及计数，renderer 只展示非零项。
 - 宿主 `PullRequestsFeatureBoundary.tsx` 注入现有 PageHeader、CodePatchView、对话输入框、外链和剪贴板接口。`PullRequestCommentInput.tsx` 将持久化评论草稿适配到 ChatPromptInput，程序回填不触发用户编辑或改变发布确认状态。PR 样式仅在 feature 自身维护布局与状态差异。
 
 测试位于 `packages/features/pull-requests/test/runtime/`、`packages/features/pull-requests/test/renderer/`，覆盖分页、过期请求、评论幂等和导航、合并版本校验、Git 文件补全与工作区不变性；CLI adapter 测试覆盖账号状态、stdin 正文、HTTP/GraphQL 错误与进程失败边界。

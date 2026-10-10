@@ -13,7 +13,7 @@ export function checkNode(id: number, name = 'test', conclusion: string | null =
     checkSuite: { createdAt: '2026-09-15T04:00:00Z', app: { id: 'APP1', name: 'GitHub Actions' }, workflowRun: { event: 'pull_request', workflow: { id: 'CI' } } },
   };
 }
-export const commentNode = (id: string, body = id) => ({ id, databaseId: 1, body, createdAt: '2026-09-14T01:00:00Z', url: 'https://github.com/owner/repo/pull/12#comment', author: { login: 'alice', avatarUrl: 'https://avatars.githubusercontent.com/u/1' } });
+export const commentNode = (id: string, body = id) => ({ id, databaseId: 1, body, reactions: [], createdAt: '2026-09-14T01:00:00Z', url: 'https://github.com/owner/repo/pull/12#comment', author: { login: 'alice', avatarUrl: 'https://avatars.githubusercontent.com/u/1' } });
 export const summaryNode = (number: number, login = 'alice') => ({
   id: `PR_${number}`, number, title: `Change ${number}`, url: `https://github.com/owner/repo/pull/${number}`,
   state: 'OPEN' as const, isDraft: false, updatedAt: '2026-09-14T01:00:00Z', headRefOid: head,

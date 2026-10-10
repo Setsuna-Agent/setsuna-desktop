@@ -52,6 +52,10 @@ Runtime 的核心业务依赖 port；文件、网络和平台实现放 adapter�
 - `SecretStore` / `DesktopNativeBridge`
 - `SandboxExecutionPlan`
 
+`EventBus.subscribe(threadId, listener)` 服务线程级 SSE；`subscribeAll(listener)` 观察
+各线程已持久化的实时事件，不回放历史。全局观察者的同步异常与线程投递隔离，异步
+副作用由所属 Feature scope 负责错误处理和取消，不得阻塞事件发布。
+
 ## Port 设计规则
 
 - 描述 runtime 需要的最小能力，不复制 adapter API。

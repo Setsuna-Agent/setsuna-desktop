@@ -1,3 +1,4 @@
+import { NotificationToolHost } from '../adapters/tool/notification-tool-host.js';
 import path from 'node:path';
 import { InMemoryApprovalGate } from '../adapters/approval/in-memory-approval-gate.js';
 import { ConversationDebugRuntimeSink } from '../adapters/feature/conversation-debug-runtime-sink.js';
@@ -210,6 +211,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   );
   const artifactToolHost = new ArtifactToolHost();
   const automationToolHost = new AutomationToolHost();
+  const notificationToolHost = new NotificationToolHost();
   const browserToolHost = new BrowserToolHost();
   const computerToolHost = new ComputerToolHost();
   const memoryToolHost = new MemoryToolHost();
@@ -218,6 +220,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     ...(options.runtimeApi ? [new RuntimeApiToolHost(options.runtimeApi, pluginStore)] : []),
     new UserInputToolHost(approvalGate, eventWriter, clock, ids),
     automationToolHost,
+    notificationToolHost,
     browserToolHost,
     computerToolHost,
     mcpToolHost,
@@ -275,6 +278,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     appVersion: options.appVersion ?? 'dev',
     artifactToolHost,
     automationToolHost,
+    notificationToolHost,
     attachmentStore,
     approvalGate,
     appServerNotificationBus,

@@ -8,6 +8,7 @@ import {
   readGeneratedImageAsset,
   resolveGeneratedImageAssetPath,
   revealChatImage,
+  saveChatImage,
 } from '../../../src/workspace/generated-image-actions.js';
 
 const ONE_PIXEL_PNG = Buffer.from(
@@ -22,6 +23,28 @@ afterEach(async () => {
 });
 
 describe('generated image desktop actions', () => {
+  it('copies and saves a thread-scoped attachment without losing its original bytes, and does not write on cancellation', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'setsuna-save-image-'));
+    testDirectories.push(directory);
+    const input = { name: '../photo.jpg', attachment: { threadId: 'thread-1', assetId: 'asset-1' } };
+    const read = vi.fn(async () => ({ ok: true as const, data: Uint8Array.from(ONE_PIXEL_PNG), type: 'image/png' }));
+    const choose = vi.fn(async () => path.join(directory, 'chosen.png'));
+    const writeImage = vi.fn();
+    await expect(copyChatImage(directory, input, () => ({ isEmpty: () => false }), vi.fn(), writeImage, read))
+      .resolves.toEqual({ ok: true });
+    expect(read).toHaveBeenCalledWith('thread-1', 'asset-1');
+    expect(writeImage).toHaveBeenCalledTimes(1);
+    await expect(saveChatImage(directory, input, choose, read)).resolves.toEqual({ ok: true });
+    expect(choose).toHaveBeenCalledWith('photo.png', 'png');
+    expect(await readFile(path.join(directory, 'chosen.png'))).toEqual(ONE_PIXEL_PNG);
+    await expect(saveChatImage(directory, input, async () => null, read)).resolves.toEqual({ ok: true, cancelled: true });
+    await expect(saveChatImage(directory, input, choose, async () => ({ ok: false, error: 'Asset is not linked to this thread.' })))
+      .resolves.toEqual({ ok: false, error: 'Asset is not linked to this thread.' });
+    await expect(saveChatImage(directory, { ...input, dataUrl: 'data:image/png;base64,AA==' }, choose, read))
+      .resolves.toMatchObject({ ok: false });
+    expect(choose).toHaveBeenCalledTimes(1);
+  });
+
   it('copies a validated image data URL through the native clipboard adapter', () => {
     const image = { isEmpty: () => false };
     const createImage = vi.fn(() => image);

@@ -184,7 +184,7 @@
 .pr-diff__scroll-content > * { flex-shrink: 0; }
 .pr-diff__patch { min-width: 0; overflow: hidden; border-radius: var(--app-radius-sm); }
 .pr-diff__threads { display: grid; gap: 12px; }
-.pr-diff-annotation { margin: 6px 12px; }
+.pr-diff__inline-discussions { display: grid; gap: 8px; padding: 10px 12px; min-width: 0; color: var(--app-text); font-family: var(--app-font-family); font-size: 13px; line-height: 1.6; white-space: normal; }
 
 @container pr-detail (max-width: 850px) {
   .pr-detail { --pr-detail-gutter: 16px; }
@@ -195,3 +195,6 @@
 @media (max-width: 760px) {
   .pr-workbench { grid-column: 1 / -1; }
 }
+
+.pr-reactions { display: flex; flex-wrap: wrap; gap: 6px; }
+.pr-reactions > span { padding: 2px 8px; border-radius: var(--app-radius-full); background: var(--app-surface-muted); font-size: 12px; }
