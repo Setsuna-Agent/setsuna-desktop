@@ -92,6 +92,11 @@ if (process.platform !== 'darwin' && process.platform !== 'win32') {
 }
 registerBuiltinMainFeatureSchemes();
 
+// Match the NSIS shortcut identity so Windows attributes native notifications to this app.
+if (process.platform === 'win32') {
+  app.setAppUserModelId(app.isPackaged ? 'dev.setsuna.desktop' : process.execPath);
+}
+
 // Keep diagnostics outside normal startup so they never load user data or the Agent.
 if (process.argv.includes('--computer-use-diagnostics')) {
   void diagnoseBuiltinComputerUse().then((result) => {
@@ -467,6 +472,7 @@ async function createWindow(): Promise<void> {
       await currentWebDavSyncLifecycle.start();
       await currentDesktopUpdaterLifecycle.initialize();
       registerDesktopIpc({
+        readAttachmentImage: (threadId, assetId) => currentRuntimeHost.readAttachmentImage(threadId, assetId),
         nativeBridge: currentDesktopNativeBridgeServer,
         onActiveKeyboardShortcutBindingsChange: (bindings, senderId) => {
           activeKeyboardShortcutBindings.set(senderId, new Set(bindings));

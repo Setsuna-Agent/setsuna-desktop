@@ -3,7 +3,7 @@ import { useCallback } from 'react';
 import { useToast } from '../../../app/providers/ToastProvider.js';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 
-export type DesktopImageAction = 'copy' | 'reveal';
+export type DesktopImageAction = 'copy' | 'reveal' | 'save';
 
 export function useDesktopImageAction() {
   const toast = useToast();
@@ -18,11 +18,12 @@ export function useDesktopImageAction() {
     try {
       const result = action === 'copy'
         ? await desktop.copyImageToClipboard(input)
-        : await desktop.revealImageInFolder(input);
+        : action === 'save' ? await desktop.saveImageAs(input) : await desktop.revealImageInFolder(input);
       if (!result.ok) {
         toast.error(result.error);
         return false;
       }
+      if (result.cancelled) return false;
       toast.success(desktopImageActionSuccessMessage(action, t));
       return true;
     } catch (unknownError) {
@@ -33,5 +34,5 @@ export function useDesktopImageAction() {
 }
 
 function desktopImageActionSuccessMessage(action: DesktopImageAction, t: Translate): string {
-  return t(action === 'copy' ? 'workspace.image.copied' : 'workspace.image.revealed');
+  return t(action === 'copy' ? 'workspace.image.copied' : action === 'save' ? 'workspace.image.saved' : 'workspace.image.revealed');
 }

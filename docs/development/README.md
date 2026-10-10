@@ -59,6 +59,11 @@ pnpm dev
 
 Renderer 支持热更新；runtime、Electron main/preload 和原生代码不随窗口刷新重载。修改这些代码后，停止并重新运行 `pnpm dev`，让启动脚本重新构建并创建新进程。
 
+macOS 的 `pnpm dev` 自动在后台准备并缓存独立签名的 `Setsuna Desktop Dev.app`，无需
+发布打包或开发者证书。有缓存时立即使用；首次或缓存失效时先启动原 Electron，终端
+提示准备完成后重启 Electron 即可使用系统通知。首次发送通知时，在系统提示中允许该应用通知；曾拒绝时在系统设置
+「通知」中开启。开发数据目录保持不变，详见 [开发启动链路](build-and-release.md#scriptsstart-electron-devts)。
+
 ## 常用验证
 
 ```bash

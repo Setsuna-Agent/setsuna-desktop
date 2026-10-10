@@ -4,8 +4,9 @@ import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import rehypeSlug from 'rehype-slug';
 import remarkGfm from 'remark-gfm';
+import remarkEmoji from 'remark-emoji';
 
-const remarkPlugins = [remarkGfm];
+const remarkPlugins = [remarkGfm, remarkEmoji];
 const rehypePlugins = [rehypeRaw, rehypeSlug, rehypeSanitize];
 
 /** Shared sanitized GFM reading surface for plugin documents and remote repository content. */

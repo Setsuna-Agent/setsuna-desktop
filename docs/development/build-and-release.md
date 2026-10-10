@@ -90,8 +90,10 @@ dev 启动流程：
 2. 复用当前 pnpm entrypoint 构建 contracts、Feature packages 和 runtime。
 3. Windows x64 调用 `build:windows-sandbox` 编译并校验 Rust 沙箱程序，再通过 `prepare:windows-sandbox-curl` 准备 curl；任一步失败都会阻止 Electron 启动。
 4. 调用 `buildElectron()`。
-5. 通过开发 supervisor 启动 Electron；应用内计划重启使用专用退出码原地拉起，
-   不结束 Vite renderer。
+5. macOS 只检查少量缓存元数据，有有效的 `Setsuna Desktop Dev.app` 时立即使用；
+   缓存缺失或失效则立即启动原 Electron，随后后台复制、签名并注册开发应用。
+   准备成功后供下一次启动或应用内计划重启使用，不中断当前窗口；Windows 继续使用原 Electron。
+   应用内计划重启使用专用退出码原地拉起，不等待后台准备，也不结束 Vite renderer。
 6. 注入：
    - `SETSUNA_DESKTOP_DEV_SERVER_URL=http://127.0.0.1:5174`
    - `SETSUNA_DESKTOP_RUNTIME_ENTRY=packages/desktop-runtime/dist/cli.js`
@@ -100,6 +102,19 @@ dev 启动流程：
 `Setsuna Desktop Development/`。它拥有独立的数据根、Chromium session、runtime
 存储和 bootstrap 实例锁，因此可以和已安装的正式版同时运行，也不会读写正式版数据。
 打包应用继续使用原有目录，不受该开发隔离影响。
+
+macOS 开发应用缓存在仓库 `.cache/electron-dev/`，系统标识为
+`dev.setsuna.desktop.development`。首次启动、Electron 或应用图标变化时后台准备，
+其余启动复用缓存，不重复复制、签名或系统注册。失效缓存不会用于当前进程，避免
+后台替换运行中的应用。外部命令异步串行执行，退出开发时取消命令并清理临时目录，
+迟到结果不再注册或切换启动入口。应用继续从仓库加载源码构建产物，
+`app.isPackaged` 仍为 `false`，不需要开发者证书或发布打包，也不修改 pnpm 中的 Electron。
+准备失败只在终端报告，不阻止开发。首次或缓存失效时，当前原 Electron 实例的系统
+通知可能不可用；终端提示准备完成后重启 Electron 即可使用通知应用。
+
+第一次发送通知时，由 macOS 向用户申请通知授权。允许 `Setsuna Desktop Dev` 后可在
+系统通知中心接收开发通知；如果曾拒绝，需在系统设置的「通知」中重新允许。
+应用不会自行更改系统授权。
 
 ## Vite
 

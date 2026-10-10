@@ -1,4 +1,5 @@
 import { array, boolean, choice, codec, cursor, httpsUrl, integer, nodeId, nullable, object, oid, positiveInteger, repositoryId, text, filePath } from './schema.js';
+import { readReactions } from './reactions.js';
 
 export const actor = object({ login: text(200), avatarUrl: nullable(httpsUrl) });
 export const reference = object({ repository: repositoryId, number: positiveInteger });
@@ -36,7 +37,7 @@ export const listResultCodec = codec(object({ items: array(summary), cursor }));
 export type PullRequestListResult = ReturnType<typeof listResultCodec.parse>;
 
 export const detailCodec = codec(object({
-  ...summaryShape, body: text(1_000_000), createdAt: text(50),
+  ...summaryShape, body: text(1_000_000), createdAt: text(50), reactions: readReactions,
   baseBranch: text(1024), headBranch: text(1024), baseSha: oid, headRepository: nullable(repositoryId),
   additions: integer, deletions: integer, fileCount: integer, commentCount: integer,
   mergeable: text(80), mergeState: text(80), reviewDecision: nullable(text(80)),
@@ -50,7 +51,7 @@ export type PullRequestDetail = ReturnType<typeof detailCodec.parse>;
 
 const comment = object({
   id: nodeId, databaseId: nullable(positiveInteger), author: actor,
-  body: text(1_000_000), createdAt: text(50), url: httpsUrl,
+  body: text(1_000_000), createdAt: text(50), url: httpsUrl, reactions: readReactions,
 });
 export type PullRequestComment = ReturnType<typeof comment>;
 export const discussion = object({

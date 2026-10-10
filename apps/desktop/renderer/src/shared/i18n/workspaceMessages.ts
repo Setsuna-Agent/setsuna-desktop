@@ -137,6 +137,7 @@ export const workspaceZhCN = {
   'workspace.image.unsupported': '当前环境无法执行图片操作。',
   'workspace.image.failed': '图片操作失败。',
   'workspace.image.copied': '图片已复制',
+  'workspace.image.saved': '图片已保存',
   'workspace.image.revealed': '已在文件夹中显示图片',
 } as const;
 
@@ -279,5 +280,6 @@ export const workspaceEnUS = {
   'workspace.image.unsupported': 'Image actions are unavailable in this environment.',
   'workspace.image.failed': 'Image action failed.',
   'workspace.image.copied': 'Image copied',
+  'workspace.image.saved': 'Image saved',
   'workspace.image.revealed': 'Image shown in folder',
 } satisfies Record<keyof typeof workspaceZhCN, string>;

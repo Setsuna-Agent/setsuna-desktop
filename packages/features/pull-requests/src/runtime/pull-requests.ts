@@ -1,3 +1,4 @@
+import { reactionFields, reactions, type ReactionNode } from './reactions.js';
 import type { PullRequestDetail, PullRequestListInput, PullRequestListResult, PullRequestReference, PullRequestSummary, MergeMethod } from '../contracts/index.js';
 import { actor, actorFields, GitHubApi, nextCursor, pageFields, repoVariables, type Actor, type Page } from './github-api.js';
 import { collectChecks, summarizeChecks, checkRollupFields, type CheckRollup } from './checks.js';
@@ -49,7 +50,7 @@ const requestedReviewerFields = `requestedReviewer { ... on User { ${actorFields
 type Reviewer = { requestedReviewer: { login?: string; name?: string; avatarUrl?: string; teamAvatarUrl?: string | null } | null };
 type Review = { author: Actor; state: string };
 type DetailNode = SummaryNode<CheckRollup> & {
-  body: string; createdAt: string; baseRefName: string; headRefName: string; baseRefOid: string;
+  reactionGroups?: ReactionNode[]; body: string; createdAt: string; baseRefName: string; headRefName: string; baseRefOid: string;
   headRepository: { nameWithOwner: string } | null; additions: number; deletions: number; changedFiles: number;
   comments: { totalCount: number }; reviewThreads: { totalCount: number };
   mergeable: string; mergeStateStatus: string; reviewDecision: string | null; viewerCanEnableAutoMerge: boolean;
@@ -69,7 +70,7 @@ export async function readRequest(api: GitHubApi, input: PullRequestReference, s
       repository(owner: $owner, name: $name) {
         viewerPermission isArchived mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed
         pullRequest(number: $number) {
-          ${summaryFields(checkRollupFields)} body createdAt baseRefName headRefName baseRefOid headRepository { nameWithOwner }
+          ${summaryFields(checkRollupFields)} ${reactionFields} body createdAt baseRefName headRefName baseRefOid headRepository { nameWithOwner }
           additions deletions changedFiles comments { totalCount } reviewThreads { totalCount }
           mergeable mergeStateStatus reviewDecision viewerCanEnableAutoMerge viewerCanDisableAutoMerge locked
           autoMergeRequest { mergeMethod enabledBy { ${actorFields} } }
@@ -92,7 +93,7 @@ export async function readRequest(api: GitHubApi, input: PullRequestReference, s
   const checksCommit = node.potentialMergeCommit?.statusCheckRollup ? node.potentialMergeCommit.oid : node.headRefOid;
   const checks = await collectChecks(api, { ...input, commitSha: checksCommit, cursor: null }, rollup, signal);
   return {
-    ...summary(node, input.repository), ...summarizeChecks(checks), body: node.body, createdAt: node.createdAt,
+    ...summary(node, input.repository), ...summarizeChecks(checks), body: node.body, reactions: reactions(node.reactionGroups), createdAt: node.createdAt,
     baseBranch: node.baseRefName, headBranch: node.headRefName, baseSha: node.baseRefOid,
     headRepository: node.headRepository?.nameWithOwner ?? null, additions: node.additions, deletions: node.deletions,
     fileCount: node.changedFiles, commentCount: node.comments.totalCount + node.reviewThreads.totalCount,

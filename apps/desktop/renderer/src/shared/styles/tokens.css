@@ -105,8 +105,8 @@
   --app-radius-control: var(--app-radius-full);
   --app-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --app-z-dialog: 1500;
-  --app-z-popover: 1600;
   --app-z-image: 1700;
+  --app-z-popover: 1800;
   --app-z-toast: 2000;
   /* Win11 DWM 按约 8px 裁剪 HWND 外沿；窗口壳圆角必须与系统圆角同心，
      不能跟随卡片圆角令牌放大，否则壳边框与系统裁剪之间露出底色带。 */

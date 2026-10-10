@@ -1,6 +1,7 @@
 {
   "files": [],
   "references": [
+    { "path": "./packages/features/notifications/tsconfig.build.json" },
     { "path": "./packages/contracts" },
     { "path": "./packages/feature-core" },
     { "path": "./packages/renderer-contracts/tsconfig.build.json" },

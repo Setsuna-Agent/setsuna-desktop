@@ -14,8 +14,21 @@
 2. Windows x64 准备原生沙箱与 curl。
 3. 调用 Electron bundle build，并准备当前平台的桌面控制 helper。
 4. 注入 Vite URL 和 runtime entry。
-5. 启动 Electron。
+5. macOS 优先启动有效的签名开发应用缓存；否则先启动原 Electron，再后台准备通知应用。
 6. 识别应用内 dev relaunch 专用退出码并原地重启，不结束 Vite。
+
+### `prepare-electron-dev-app.ts`
+
+只用于 macOS dev：复制 Electron 为独立的 `Setsuna Desktop Dev.app`，写入开发
+bundle ID 和应用图标，完成本机 ad-hoc 签名及 Launch Services 注册，使开发实例可以
+请求原生通知授权。保留 `Electron` 可执行文件和默认入口，以继续使用未打包的开发
+profile；不修改依赖包，不需要开发者证书。
+
+缓存位于 `.cache/electron-dev/`，按 Electron 路径、内容版本和图标变化失效。
+启动前只读取缓存元数据；复制、签名和注册在 Electron 启动后异步串行执行，准备结果
+只用于下次启动或计划重启。签名验证成功后才替换旧应用，注册成功后才写缓存标记；
+暖启动不执行外部命令。准备失败由 supervisor 报告，当前窗口继续运行；退出时取消
+外部命令并清理临时目录，迟到结果不再注册或更新入口。Windows 不执行此准备。
 
 ### `build-electron.ts`
 

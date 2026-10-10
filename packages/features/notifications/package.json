@@ -1,0 +1,37 @@
+{
+  "name": "@setsuna-desktop/feature-notifications",
+  "version": "0.1.0",
+  "description": "Native macOS and Windows system notifications.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./contracts": {
+      "types": "./dist/contracts/index.d.ts",
+      "default": "./dist/contracts/index.js"
+    },
+    "./main": {
+      "types": "./dist/main/index.d.ts",
+      "default": "./dist/main/index.js"
+    },
+    "./preload": {
+      "types": "./dist/preload/index.d.ts",
+      "default": "./dist/preload/index.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "default": "./dist/runtime/index.js"
+    }
+  },
+  "dependencies": {
+    "@setsuna-desktop/contracts": "workspace:*",
+    "@setsuna-desktop/feature-core": "workspace:*",
+    "undici": "7.29.1"
+  },
+  "devDependencies": {
+    "electron": "^43.7.7"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "typecheck": "tsc -b --pretty false"
+  }
+}

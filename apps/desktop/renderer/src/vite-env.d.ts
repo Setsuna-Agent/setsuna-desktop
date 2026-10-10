@@ -1,3 +1,4 @@
+import type { NotificationsPreloadContribution } from '@setsuna-desktop/feature-notifications/contracts';
 /// <reference types="vite/client" />
 
 import type {
@@ -17,6 +18,7 @@ import type { WindowsSandboxPreloadBridgeContribution } from '@setsuna-desktop/f
 declare global {
   interface Window {
     setsunaDesktop?: SetsunaDesktopBridge
+      & NotificationsPreloadContribution
       & BrowserPreloadBridgeContribution
       & ComputerPreloadContribution
       & NetworkProxyPreloadBridgeContribution

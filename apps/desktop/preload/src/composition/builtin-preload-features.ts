@@ -1,3 +1,5 @@
+import { notificationsPreloadFeature } from '@setsuna-desktop/feature-notifications/preload';
+import type { NotificationsPreloadContribution } from '@setsuna-desktop/feature-notifications/contracts';
 import type { SetsunaDesktopBridge } from '@setsuna-desktop/contracts';
 import {
   definePreloadFeatureHost,
@@ -24,6 +26,7 @@ import type { WindowsSandboxPreloadBridgeContribution } from '@setsuna-desktop/f
 import { windowsSandboxPreloadFeature } from '@setsuna-desktop/feature-windows-sandbox/preload';
 
 export type DesktopPreloadBridge = SetsunaDesktopBridge
+  & NotificationsPreloadContribution
   & BrowserPreloadBridgeContribution
   & ComputerPreloadContribution
   & NetworkProxyPreloadBridgeContribution
@@ -43,6 +46,7 @@ const desktopPreloadBridgeKeys = [
   'desktopReview',
   'links',
   'networkProxy',
+  'notifications',
   'plugins',
   'runtime',
   'terminal',
@@ -56,6 +60,7 @@ const desktopPreloadBridgeKeys = [
 const preloadFeatures = definePreloadFeatureHost<DesktopPreloadBridge>({
   bridgeKeys: desktopPreloadBridgeKeys,
   features: [
+    notificationsPreloadFeature,
     browserPreloadFeature,
     computerPreloadFeature,
     networkProxyPreloadFeature,

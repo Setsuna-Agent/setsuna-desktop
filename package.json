@@ -57,6 +57,8 @@
     "format:computer-use:windows": "cargo fmt --manifest-path native/computer-use-windows/Cargo.toml"
   },
   "dependencies": {
+    "@setsuna-desktop/feature-notifications": "workspace:*",
+    "remark-emoji": "5.0.2",
     "@fontsource/geist-mono": "^5.2.8",
     "@fontsource/geist-sans": "^5.2.5",
     "@fontsource/inter": "^5.2.8",

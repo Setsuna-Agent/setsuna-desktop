@@ -1,3 +1,5 @@
+import { notificationsFeature, notificationToolServiceCapability, notificationsRuntimeHostCapability } from '@setsuna-desktop/feature-notifications/contracts';
+import { notificationsRuntimeFeature } from '@setsuna-desktop/feature-notifications/runtime';
 import { pullRequestsRuntimeFeature } from '@setsuna-desktop/feature-pull-requests/runtime';
 import { automationFeature, automationRuntimeHostCapability, automationToolServiceCapability } from '@setsuna-desktop/feature-automation/contracts';
 import { automationRuntimeFeature } from '@setsuna-desktop/feature-automation/runtime';
@@ -149,6 +151,7 @@ const runtimeFeatures = defineRuntimeFeatureHost({
     mcpRuntimeFeature,
   ],
   optional: [
+    notificationsRuntimeFeature,
     automationRuntimeFeature,
     pullRequestsRuntimeFeature,
     approvalReviewRuntimeFeature,
@@ -171,6 +174,10 @@ export async function activateBuiltinRuntimeFeatures(
   const composition = await runtimeFeatures.activate({
     settingsRegistry: runtime.featureSettings,
     hostCapabilities: [
+      provideHostCapability(notificationsRuntimeHostCapability, {
+        subscribe: (listener) => runtime.eventBus.subscribeAll(listener),
+        getThread: (threadId: string) => runtime.threadStore.getThread(threadId),
+      }),
       provideHostCapability(automationRuntimeHostCapability, createAutomationRuntimeHost(runtime)),
       provideHostCapability(pullRequestsWorkspaceCapability, runtime.workspaceProjects),
       provideHostCapability(githubCliInstallationHostCapability, { dataDir: runtime.dataDir, fetch: runtime.networkProxyFetch.forRoute() }),
@@ -541,6 +548,9 @@ export async function activateBuiltinRuntimeFeatures(
       },
     }));
 
+    host.bindWhenFeatureAvailable(notificationsFeature.id, {
+      tools: requiredCapability(notificationToolServiceCapability),
+    }, ({ tools }) => runtime.notificationToolHost.bind(tools));
     host.add(runtime.featureManagement.attach(host.composition));
     host.bindWhenFeatureAvailable(automationFeature.id, {
       tools: requiredCapability(automationToolServiceCapability),

@@ -9,6 +9,8 @@ const MAX_ENCODED_IMAGE_CHARS = Math.ceil((MAX_IMAGE_BYTES * 4) / 3) + 1_024;
 const SAFE_IMAGE_DATA_URL = /^data:image\/(?:gif|jpeg|png|webp);base64,/iu;
 const SAFE_ASSET_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,191}$/u;
 
+export type AttachmentImageReader = (threadId: string, assetId: string) => Promise<DesktopImageDataResult>;
+
 type NativeImageLike = { isEmpty(): boolean };
 
 class GeneratedImageActionError extends Error {}
@@ -19,9 +21,10 @@ export async function copyChatImage<TImage extends NativeImageLike>(
   createImageFromDataUrl: (dataUrl: string) => TImage,
   createImageFromPath: (imagePath: string) => TImage,
   writeImage: (image: TImage) => void,
+  readAttachment?: AttachmentImageReader,
 ): Promise<DesktopImageActionResult> {
   try {
-    const input = normalizeImageInput(inputValue);
+    const input = await resolveChatImageInput(inputValue, readAttachment);
     if (!input.assetId) return copyImageDataUrlToClipboard(input.dataUrl, createImageFromDataUrl, writeImage);
     try {
       const image = createImageFromPath(await resolveGeneratedImageAssetPath(userDataDir, input.assetId));
@@ -62,9 +65,10 @@ export async function revealChatImage(
   userDataDir: string,
   inputValue: unknown,
   showItemInFolder: (targetPath: string) => void,
+  readAttachment?: AttachmentImageReader,
 ): Promise<DesktopImageActionResult> {
   try {
-    const input = normalizeImageInput(inputValue);
+    const input = await resolveChatImageInput(inputValue, readAttachment);
     let imagePath: string;
     if (input.assetId) {
       try {
@@ -80,6 +84,31 @@ export async function revealChatImage(
     return { ok: true };
   } catch (error) {
     return { ok: false, error: publicImageActionError(error, 'Failed to locate generated image.') };
+  }
+}
+
+export async function saveChatImage(
+  userDataDir: string,
+  inputValue: unknown,
+  chooseDestination: (name: string, extension: string) => Promise<string | null>,
+  readAttachment?: AttachmentImageReader,
+): Promise<DesktopImageActionResult> {
+  try {
+    const input = await resolveChatImageInput(inputValue, readAttachment);
+    let source = input.dataUrl;
+    if (input.assetId) {
+      const result = await readGeneratedImageAsset(userDataDir, input.assetId);
+      if (result.ok) source = `data:${result.type};base64,${Buffer.from(result.data).toString('base64')}`;
+      else if (!source) throw new GeneratedImageActionError(result.error);
+    }
+    const { data, extension } = decodeSafeImageDataUrl(validatedImageDataUrl(source));
+    const destination = await chooseDestination(safeImageFileName(input.name, extension), extension);
+    if (!destination) return { ok: true, cancelled: true };
+    // The native save dialog authorizes this destination. Keep the original encoded bytes.
+    await writeFile(destination, data);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: publicImageActionError(error, 'Failed to save image.') };
   }
 }
 
@@ -178,12 +207,25 @@ async function persistInlineImage(userDataDir: string, input: DesktopImageInput)
   }
 }
 
-function normalizeImageInput(value: unknown): DesktopImageInput {
+async function resolveChatImageInput(value: unknown, readAttachment?: AttachmentImageReader): Promise<DesktopImageInput> {
   if (!value || typeof value !== 'object') throw new GeneratedImageActionError('Image input is invalid.');
   const record = value as Record<string, unknown>;
   const dataUrl = typeof record.dataUrl === 'string' && record.dataUrl.trim() ? record.dataUrl : undefined;
   const name = typeof record.name === 'string' && record.name.trim() ? record.name.trim() : 'image';
   const assetId = typeof record.assetId === 'string' && record.assetId.trim() ? record.assetId.trim() : undefined;
+  if (record.attachment !== undefined) {
+    const attachment = record.attachment as Record<string, unknown> | null;
+    if (!readAttachment || !attachment || typeof attachment.threadId !== 'string'
+      || !attachment.threadId.trim() || typeof attachment.assetId !== 'string' || !attachment.assetId.trim()
+      || assetId || dataUrl) throw new GeneratedImageActionError('Image attachment reference is invalid.');
+    // Read through the runtime's thread-scoped asset boundary, never a renderer-supplied path.
+    const result = await readAttachment(attachment.threadId, attachment.assetId);
+    if (!result.ok) throw new GeneratedImageActionError(result.error);
+    if (result.data.byteLength > MAX_IMAGE_BYTES) throw new GeneratedImageActionError('Image data is too large.');
+    const source = `data:${result.type};base64,${Buffer.from(result.data).toString('base64')}`;
+    decodeSafeImageDataUrl(source);
+    return { dataUrl: source, name };
+  }
   if (!assetId && !dataUrl) throw new GeneratedImageActionError('Image input has no readable source.');
   return { ...(dataUrl ? { dataUrl } : {}), name, ...(assetId ? { assetId } : {}) };
 }

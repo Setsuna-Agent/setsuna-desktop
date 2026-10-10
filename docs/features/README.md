@@ -40,6 +40,7 @@ packages/features/<feature>/
 | `memory` | `memory` | O | — | — | O | 记忆设置、CRUD、后台提取与上下文注入 |
 | `model-provider` | `model-provider` | R | — | — | R | Pi 模型协议、provider 配置、发现、stream/replay |
 | `network-proxy` | `network-proxy` | — | R | B | R | 代理配置、凭据引用、loopback relay 与路由状态 |
+| `notifications` | `notifications` | O | O | B | — | 后台任务完成系统通知、模型发送工具与点击导航 |
 | `plugin-management` | `plugin-management` | R | R | B | R | Plugin catalog、安装事务、Hook/extension trust 与管理状态 |
 | `pull-requests` | `pull-requests` | O | — | — | O | 已添加 GitHub 仓库的 PR 聚合、评论、checks、Diff 与合并操作 |
 | `review` | `desktop-review` | R | R | B | R | Agent Review 策略/模型设置，以及 Git diff、stage/discard、commit message 与 Review UI |
@@ -82,6 +83,7 @@ Inventory 的事实来源不是这张表，而是四个 composition root 和各 
 - [桌面控制](computer-use.md)
 - [Pull Request 工作台](pull-requests.md)
 - [自动化](automation.md)
+- [系统通知](notifications.md)
 - [Review、Terminal、Network、Updater、WebDAV、Sandbox 与 Workspace Apps](desktop-workbench.md)
 - [Desktop 宿主](../desktop/README.md)
 

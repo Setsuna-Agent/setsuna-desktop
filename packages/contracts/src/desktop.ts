@@ -46,10 +46,11 @@ export const WORKSPACE_ENTRIES_WATCH_CHANNELS = {
 } as const;
 
 export type DesktopImageActionResult =
-  | { ok: true }
+  | { ok: true; cancelled?: boolean }
   | { ok: false; error: string };
 
 export type DesktopImageInput = {
+  attachment?: { threadId: string; assetId: string };
   assetId?: string;
   dataUrl?: string;
   name: string;
@@ -145,6 +146,7 @@ export type SetsunaDesktopBridge = {
     copyImageToClipboard(input: DesktopImageInput): Promise<DesktopImageActionResult>;
     readImageAsset(assetId: string): Promise<DesktopImageDataResult>;
     revealImageInFolder(input: DesktopImageInput): Promise<DesktopImageActionResult>;
+    saveImageAs(input: DesktopImageInput): Promise<DesktopImageActionResult>;
     openPath(targetPath: string): Promise<DesktopOpenPathResult>;
     openWorkspaceDirectory(workspaceRoot: string, directoryPath: string): Promise<DesktopOpenPathResult>;
     openWorkspaceFile(workspaceRoot: string, filePath: string): Promise<DesktopOpenPathResult>;
