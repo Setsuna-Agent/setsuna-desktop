@@ -90,6 +90,32 @@ async function openInactiveDrafts() {
   return { view, client };
 }
 
+it('finishes a pending rename in its original directory after switching to another directory', async () => {
+  const { view, client } = await openInactiveDrafts();
+  await act(async () => { await view.result.current.openProjectFile('/agent/src/one.ts'); });
+  let finishRename!: (entry: WorkspaceEntry) => void;
+  client.renameProjectEntry.mockImplementationOnce(() => new Promise((resolve) => { finishRename = resolve; }));
+  let renaming!: Promise<WorkspaceEntry | null>;
+  act(() => { renaming = view.result.current.renameEntry('src', 'lib'); });
+  await act(async () => { expect(await view.result.current.openProjectFile('/main/keep.ts')).toBe(true); });
+  expect(view.result.current.entryOperationPending).toBe(true);
+  await act(async () => {
+    finishRename({ path: 'lib', name: 'lib', type: 'directory' });
+    expect(await renaming).toMatchObject({ path: 'lib' });
+  });
+  expect(view.result.current.entryOperationPending).toBe(false);
+  expect(view.result.current.filePreview).toMatchObject({ rootId: 'main', path: 'keep.ts' });
+  expect(view.result.current.isFileDirty('src/one.ts', 'main')).toBe(true);
+  expect(view.result.current.isFileDirty('src/one.ts', 'child')).toBe(false);
+  expect(view.result.current.isFileDirty('lib/one.ts', 'child')).toBe(true);
+  await act(async () => { await view.result.current.openProjectFile('/agent/lib/one.ts'); });
+  expect(view.result.current.fileDraft.content).toBe('first child draft');
+  await act(async () => { expect(await view.result.current.fileDraft.save()).toBe(true); });
+  expect(client.saveProjectFile).toHaveBeenLastCalledWith({ projectId: 'project', rootId: 'child' }, 'lib/one.ts', {
+    content: 'first child draft', expectedRevision: 'original',
+  });
+});
+
 it('relocates all inactive descendant drafts and preserves same-named drafts in other roots', async () => {
   const { view, client } = await openInactiveDrafts();
   await act(async () => { await view.result.current.renameEntry('src', 'lib'); });

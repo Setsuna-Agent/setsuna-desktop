@@ -1,7 +1,6 @@
 /** Line-oriented file diff generation and compaction. */
 
 import type { WorkspaceFileChangePatch } from '@setsuna-desktop/contracts';
-import path from 'node:path';
 import { createFileChangePatch } from '../../../utils/file-change-patch.js';
 import {
   DIFF_CONTEXT_LINES,
@@ -151,10 +150,8 @@ export function buildFileDiff({
     type: 'file_diff',
     action: existed ? 'Edited' : 'Created',
     path: workspaceRelativePath(filePath, root),
-    // A secondary directory or approved external file must remain addressable when
-    // the conversation is reopened or forked into a worktree of the primary repo.
-    ...(path.relative(root, filePath).startsWith(`..${path.sep}`) || path.isAbsolute(path.relative(root, filePath))
-      ? { absolutePath: filePath } : {}),
+    // Persist the actual target: the project's primary directory can change later.
+    absolutePath: filePath,
     additions,
     deletions,
     truncated: false,

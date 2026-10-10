@@ -3,6 +3,7 @@ import type { CreatedWorkspaceFork } from '../../ports/workspace-fork.js';
 import type { RuntimeContainer } from '../runtime-factory.js';
 import { RuntimeUseCaseError } from './errors.js';
 import { copyRuntimeMessagesToThread } from './thread-copy.js';
+import type { ForkFileChangeRelocation } from './thread-fork-file-changes.js';
 import { runtimeMessagesThroughMessage } from './thread-fork-history.js';
 import { requireRuntimeThread } from './thread-operations.js';
 
@@ -23,6 +24,7 @@ export async function forkRuntimeThread(
     }
     const messages = await runtimeMessagesThroughMessage(runtime.threadStore, source, input.messageId);
     let worktree: CreatedWorkspaceFork | undefined;
+    let fileChangeRelocation: ForkFileChangeRelocation | undefined;
     try {
       if (input.target === 'worktree') {
         const environment = await runtime.environmentResolver.resolve({
@@ -32,8 +34,11 @@ export async function forkRuntimeThread(
         const { project } = await runtime.workspaceProjects.getStatus(source.workspaceId ?? source.projectId);
         worktree = await runtime.workspaceFork.createWorktree(environment.cwd,
           project && source.projectId ? { ...project, id: source.projectId } : project);
+        fileChangeRelocation = { sourceRoot: environment.cwd, destinationRoot: worktree.path,
+          sharedRoots: (environment.workspaceRoots ?? []).filter((root) => root !== environment.workspaceRoot),
+        };
       }
-      return await copyRuntimeThread(runtime, source, messages, { workspaceId: worktree?.workspaceId });
+      return await copyRuntimeThread(runtime, source, messages, { workspaceId: worktree?.workspaceId, fileChangeRelocation });
     } catch (error) {
       // The new workspace has never been handed to the user, so only its own resources
       // may be removed. Successful worktrees keep their files independently of chats.
@@ -54,7 +59,7 @@ export async function copyRuntimeThread(
   runtime: RuntimeContainer,
   source: RuntimeThread,
   messages: RuntimeMessage[],
-  options: { workspaceId?: string; title?: string } = {},
+  options: { workspaceId?: string; title?: string; fileChangeRelocation?: ForkFileChangeRelocation } = {},
 ): Promise<RuntimeThread> {
   const thread = await runtime.threadStore.createThread({
     title: options.title ?? source.title,
@@ -66,7 +71,9 @@ export async function copyRuntimeThread(
   });
   try {
     await runtime.attachmentStore.retainForThread(thread.id, messages.flatMap((message) => message.attachments ?? []));
-    await copyRuntimeMessagesToThread(runtime, source.id, thread.id, messages, { preserveForkHistory: true });
+    await copyRuntimeMessagesToThread(runtime, source.id, thread.id, messages, {
+      preserveForkHistory: true, fileChangeRelocation: options.fileChangeRelocation,
+    });
     return await requireRuntimeThread(runtime, thread.id);
   } catch (error) {
     await Promise.allSettled([

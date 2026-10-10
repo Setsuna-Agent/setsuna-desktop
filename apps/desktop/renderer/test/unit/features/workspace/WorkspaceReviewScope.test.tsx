@@ -5,7 +5,7 @@ import type { DesktopReviewState } from '@setsuna-desktop/feature-review/contrac
 import { reviewRendererFeature } from '@setsuna-desktop/feature-review/renderer';
 import { WorkspaceGitCommitProvider, useWorkspaceGitCommitDialog } from '@setsuna-desktop/feature-review/renderer/git';
 import { act, cleanup, render, waitFor } from '@testing-library/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ToastProvider } from '../../../../src/app/providers/ToastProvider.js';
 import { ReviewFeatureHostBoundary } from '../../../../src/composition/review-feature-adapter.js';
@@ -28,6 +28,44 @@ it('projects primary-relative tool paths into nested and sibling review director
   expect(scopeReviewPaths(paths, project, 'main')).toEqual([{ path: 'agent/file.ts' }]);
   expect(scopeReviewPaths(paths, project, 'nested')).toEqual([{ path: 'file.ts' }]);
   expect(scopeReviewPaths(paths, project, 'sibling')).toEqual([{ path: 'file.ts' }]);
+});
+
+it('keeps cached panel sessions alive while directories are added, reordered, removed or replaced', () => {
+  const primary = { id: 'main', path: '/repo' };
+  const child = { id: 'child', path: '/agent' };
+  const project: WorkspaceProject = { id: 'project', name: 'Workspace', path: primary.path,
+    createdAt: '', updatedAt: '', roots: [primary],
+  };
+  const disposed = vi.fn();
+  let session!: { draft: string; edit: (value: string) => void };
+  function CachedPanel() {
+    const [draft, edit] = useState('');
+    session = { draft, edit };
+    useEffect(() => disposed, []);
+    return null;
+  }
+  function Workspace({ project: current }: { project?: WorkspaceProject }) {
+    return <ToastProvider><ReviewFeatureHostBoundary><WorkspaceReviewScopes project={current} panels={[]}>
+      <WorkspaceReviewScope panel={{ id: 'changes', type: 'changes', rootId: 'child' }}>
+        {() => <CachedPanel />}
+      </WorkspaceReviewScope>
+    </WorkspaceReviewScopes></ReviewFeatureHostBoundary></ToastProvider>;
+  }
+  const view = render(<Workspace project={project} />);
+  act(() => session.edit('Unsaved page state'));
+  for (const current of [
+    { ...project, roots: [primary, child] },
+    { ...project, path: child.path, roots: [child, primary] },
+    project,
+    undefined,
+    { ...project, id: 'another-project', roots: [primary, child] },
+  ]) {
+    view.rerender(<Workspace project={current} />);
+    expect(session.draft).toBe('Unsaved page state');
+    expect(disposed).not.toHaveBeenCalled();
+  }
+  view.unmount();
+  expect(disposed).toHaveBeenCalledOnce();
 });
 
 it('loads secondary review on demand and keeps one amend controller across slots while preserving the primary context', async () => {

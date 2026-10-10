@@ -120,6 +120,24 @@ it('grants only approved external targets, supports full access, and restores a 
   expect(await readFile(path.join(main, 'same.txt'), 'utf8')).toBe('main\n');
 });
 
+it('undoes and reapplies the original file after another directory becomes primary', async () => {
+  const { main, child, host, context, store, project } = await fixture();
+  await writeFile(path.join(main, 'same.txt'), 'before');
+  // Matching content must not let the undo hash check authorize the wrong directory.
+  await writeFile(path.join(child, 'same.txt'), 'after');
+  await host.runTool('read_file', { file_path: 'same.txt' }, context);
+  const result = await host.runTool('write_file', { file_path: 'same.txt', content: 'after' }, context);
+  const { diff } = result.data as { diff: { path: string; absolutePath?: string; undo: WorkspaceFileChange['patch'] } };
+  const changes = [{ path: diff.path, absolutePath: diff.absolutePath, patch: diff.undo }];
+  await store.updateProject(project.id, { roots: [...workspaceProjectRoots(project)].reverse() });
+  await store.applyFileChanges(project.id, changes, 'undo');
+  expect(await readFile(path.join(main, 'same.txt'), 'utf8')).toBe('before');
+  expect(await readFile(path.join(child, 'same.txt'), 'utf8')).toBe('after');
+  await store.applyFileChanges(project.id, changes, 'redo');
+  expect(await readFile(path.join(main, 'same.txt'), 'utf8')).toBe('after');
+  expect(await readFile(path.join(child, 'same.txt'), 'utf8')).toBe('after');
+});
+
 it('rejects directory ownership conflicts across primary, secondary, and legacy bindings', async () => {
   const { main, child, outside, project, store } = await fixture();
   const other = await store.addProject({ name: 'Other', path: outside });

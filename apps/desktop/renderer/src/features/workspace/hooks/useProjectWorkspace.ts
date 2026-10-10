@@ -42,11 +42,12 @@ export function useProjectWorkspace({ activeProjectId, rootId, project, client, 
   const entryOperationRef = useRef(false);
   const scopeKey = JSON.stringify([activeProjectId, rootId]);
   const previewsByScope = useRef(new Map<string, WorkspaceFileRead>());
-  const previousProjectIdRef = useRef(scopeKey);
+  const previousScopeRef = useRef({ key: scopeKey, projectId: activeProjectId });
   const activeProjectIdRef = useRef(scopeKey);
   const filePreviewRequests = useLatestRequestGuard();
   const contentSearchRequests = useLatestRequestGuard();
-  const entryMutationRequests = useIdentityRequestGuard(scopeKey);
+  // Entry mutations own their original directory even when another directory's tab is selected.
+  const entryMutationRequests = useIdentityRequestGuard(activeProjectId ?? '');
   activeProjectIdRef.current = scopeKey;
   const isSaveBlocked = useCallback(() => entryOperationRef.current, []);
   const fileDraft = useWorkspaceFileDraft({
@@ -61,26 +62,31 @@ export function useProjectWorkspace({ activeProjectId, rootId, project, client, 
   const fileDraftRef = useRef(fileDraft);
   fileDraftRef.current = fileDraft;
 
-  const resetProjectWorkspaceState = useCallback(() => {
+  const resetFileWorkspaceState = useCallback(() => {
     filePreviewRequests.invalidate();
     contentSearchRequests.invalidate();
-    entryMutationRequests.invalidate();
-    entryOperationRef.current = false;
-    setEntryOperationPending(false);
     setFilePreview(null);
     setFileFocusRequest(null);
     setSearchQuery('');
     setSearchResults([]);
-  }, [contentSearchRequests, entryMutationRequests, filePreviewRequests]);
+  }, [contentSearchRequests, filePreviewRequests]);
+
+  const resetProjectWorkspaceState = useCallback(() => {
+    entryMutationRequests.invalidate();
+    entryOperationRef.current = false;
+    setEntryOperationPending(false);
+    resetFileWorkspaceState();
+  }, [entryMutationRequests, resetFileWorkspaceState]);
 
   useEffect(() => {
-    if (previousProjectIdRef.current === scopeKey) return;
+    if (previousScopeRef.current.key === scopeKey) return;
     const current = filePreviewRef.current;
     if (current) previewsByScope.current.set(JSON.stringify([current.projectId, current.rootId]), current);
-    previousProjectIdRef.current = scopeKey;
-    resetProjectWorkspaceState();
+    if (previousScopeRef.current.projectId === activeProjectId) resetFileWorkspaceState();
+    else resetProjectWorkspaceState();
+    previousScopeRef.current = { key: scopeKey, projectId: activeProjectId };
     setFilePreview(previewsByScope.current.get(scopeKey) ?? null);
-  }, [scopeKey, resetProjectWorkspaceState]);
+  }, [scopeKey, activeProjectId, resetFileWorkspaceState, resetProjectWorkspaceState]);
 
   useEffect(() => {
     if (filePreview) previewsByScope.current.set(JSON.stringify([filePreview.projectId, filePreview.rootId]), filePreview);
@@ -236,6 +242,9 @@ export function useProjectWorkspace({ activeProjectId, rootId, project, client, 
     if (!entry || !isCurrent()) return null;
     filePreviewRequests.invalidate();
     fileDraftRef.current.relocateEntry(target, entry.path);
+    const previewKey = JSON.stringify([projectId, rootId]);
+    const cached = previewsByScope.current.get(previewKey);
+    if (cached) previewsByScope.current.set(previewKey, { ...cached, path: renamedWorkspaceEntryPath(cached.path, entryPath, entry.path) });
     const current = filePreviewRef.current;
     if (current?.projectId === projectId && current.rootId === rootId) {
       const nextPath = renamedWorkspaceEntryPath(current.path, entryPath, entry.path);
@@ -287,9 +296,11 @@ export function useProjectWorkspace({ activeProjectId, rootId, project, client, 
       if (!isCurrent()) return false;
       filePreviewRequests.invalidate();
       fileDraftRef.current.discardEntry(target);
+      const previewKey = JSON.stringify([projectId, rootId]);
+      const cached = previewsByScope.current.get(previewKey);
+      if (cached && isWorkspaceEntryWithin(cached.path, entryPath)) previewsByScope.current.delete(previewKey);
       const current = filePreviewRef.current;
       if (current?.projectId === projectId && current.rootId === rootId && isWorkspaceEntryWithin(current.path, entryPath)) {
-        previewsByScope.current.delete(JSON.stringify([projectId, rootId]));
         setFilePreview(null);
         setFileFocusRequest(null);
       }
