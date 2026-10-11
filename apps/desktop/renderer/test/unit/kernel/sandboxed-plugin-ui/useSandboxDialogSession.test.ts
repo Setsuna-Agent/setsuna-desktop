@@ -5,6 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import type { SandboxDialogSession } from '@setsuna-desktop/contracts';
 import { useSandboxDialogSession } from '../../../../src/kernel/sandboxed-plugin-ui/useSandboxDialogSession.js';
 import { SandboxedUiFrame } from '../../../../src/kernel/sandboxed-plugin-ui/SandboxedUiFrame.js';
+import { mockPluginUiDocuments } from '../../../fixtures/sandboxed-ui-bridge.js';
 
 const original = Object.getOwnPropertyDescriptor(window, 'setsunaDesktop');
 afterEach(() => {
@@ -19,19 +20,19 @@ it('keeps the document and unsaved inputs intact across renames while updating d
   const updateSandboxDialogSession = vi.fn(async () => undefined);
   const releaseSandboxDialogSession = vi.fn(async () => undefined);
   Object.defineProperty(window, 'setsunaDesktop', { configurable: true, value: {
-    desktop: { createSandboxDialogSession, updateSandboxDialogSession, releaseSandboxDialogSession },
+    desktop: { ...mockPluginUiDocuments(), createSandboxDialogSession, updateSandboxDialogSession, releaseSandboxDialogSession },
   } });
   const source = { html: '<main>Table</main>', css: '', js: '' };
   const view = render(createElement(SandboxedUiFrame, { title: 'Table', source }));
   const frame = await screen.findByTitle('Table') as HTMLIFrameElement;
-  const srcdoc = frame.srcdoc;
+  const url = frame.src;
   const draft = frame.contentDocument!.createElement('input');
   frame.contentDocument!.body.append(draft);
   draft.value = 'Unsaved row';
   for (const title of ['Renamed table', 'Table']) {
     view.rerender(createElement(SandboxedUiFrame, { title, source }));
     expect(screen.getByTitle(title)).toBe(frame);
-    expect(frame.srcdoc).toBe(srcdoc);
+    expect(frame.src).toBe(url);
     expect(frame.contentDocument!.querySelector('input')?.value).toBe('Unsaved row');
     await waitFor(() => expect(updateSandboxDialogSession).toHaveBeenLastCalledWith(session.id, title));
   }

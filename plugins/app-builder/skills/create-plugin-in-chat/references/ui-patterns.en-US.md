@@ -55,7 +55,7 @@ Place labels above controls and keep the save action content-sized. Start with o
 </form>
 ```
 
-Native form submission is blocked by the sandbox. The save handler calls `form.reportValidity()`, reads `FormData`, validates, then calls a declared `setsunaUI.invoke` action. Prevent native submit; route Enter through the same save function when supported. Disable save while pending, keep drafts on failure, and do not rebuild forms on theme snapshots.
+Forms support native validation and HTTP(S) submission. For local bridge saves, preventDefault in the submit handler, read FormData, validate, and call the declared setsunaUI.invoke action. Button clicks and Enter use the same path. Disable save while pending, preserve drafts on failure, and do not rebuild forms on theme snapshots.
 
 ## ECharts
 

@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   BROWSER_WEB_STORE_URL, DEFAULT_BROWSER_URL, DEFAULT_BROWSER_PREFERENCES, parseBrowserAnnotationMessage, type BrowserAnnotationSendHandler,
   type BrowserAnnotationTarget, type BrowserContextMenuRequest, type BrowserDesktopBridge, type BrowserExtension,
+  type BrowserWindowOpenMode,
 } from '../../src/contracts/index.js';
 import { BrowserPanel } from '../../src/renderer/BrowserPanel.js';
 import {
@@ -554,7 +555,7 @@ describe('BrowserPanel interactions', () => {
     expect(screen.getByText('Could not change the current page zoom')).toBeTruthy();
   });
 
-  it('defers device emulation warnings until the webview is registered', async () => {
+  it.each(['tab', 'current-tab'] as const)('registers %s opening mode and defers device emulation warnings until the webview is registered', async (windowOpenMode) => {
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const registerTab = vi.fn(async () => true);
     const setDeviceEmulation = vi.fn()
@@ -562,7 +563,7 @@ describe('BrowserPanel interactions', () => {
       .mockResolvedValueOnce(false)
       .mockResolvedValueOnce(true);
     installBrowserBridge({ registerTab, setDeviceEmulation });
-    renderBrowserPanel();
+    renderBrowserPanel('https://example.com', windowOpenMode);
 
     const webview = document.querySelector('webview') as unknown as WebviewTag;
     const loadURL = vi.fn(async () => undefined);
@@ -593,17 +594,17 @@ describe('BrowserPanel interactions', () => {
     Object.assign(webview, { getWebContentsId: () => 42 });
     webview.dispatchEvent(new Event('dom-ready'));
 
-    await waitFor(() => expect(registerTab).toHaveBeenCalledWith('browser-interaction', 42));
+    await waitFor(() => expect(registerTab).toHaveBeenCalledWith('browser-interaction', 42, windowOpenMode));
     await waitFor(() => expect(setDeviceEmulation).toHaveBeenCalledTimes(3));
     expect(screen.queryByText('Device emulation could not be applied; the page will keep its current settings')).toBeNull();
   });
 });
 
-function renderBrowserPanel(url = 'https://example.com') {
-  return render(<BrowserPanelHarness url={url} />);
+function renderBrowserPanel(url = 'https://example.com', windowOpenMode: BrowserWindowOpenMode = 'tab') {
+  return render(<BrowserPanelHarness url={url} windowOpenMode={windowOpenMode} />);
 }
 
-function BrowserPanelHarness({ url, onSendAnnotations }: { url: string; onSendAnnotations?: BrowserAnnotationSendHandler }) {
+function BrowserPanelHarness({ url, onSendAnnotations, windowOpenMode }: { url: string; onSendAnnotations?: BrowserAnnotationSendHandler; windowOpenMode?: BrowserWindowOpenMode }) {
   const [notification, setNotification] = useState<string | null>(null);
   const notify = useCallback((_tone: string, message: string) => setNotification(message), []);
   return (
@@ -622,6 +623,7 @@ function BrowserPanelHarness({ url, onSendAnnotations }: { url: string; onSendAn
           normal: 'Control+KeyR',
         }}
         translate={translate}
+        windowOpenMode={windowOpenMode}
         onPanelMetadataChange={() => undefined}
         onSendAnnotations={onSendAnnotations}
       />
@@ -687,6 +689,7 @@ function createBrowserBridge(overrides: Partial<BrowserDesktopBridge> = {}): Bro
     reloadTab: vi.fn(async () => true),
     registerTab: vi.fn(async () => false),
     resolveFavicon: vi.fn(async () => null),
+    getWebsiteFavicon: vi.fn(async () => null),
     setActiveTab: vi.fn(async () => true),
     setDeviceEmulation: vi.fn(async () => true),
     showReloadMenu: vi.fn(async () => true),

@@ -39,6 +39,7 @@ export const BROWSER_IPC_CHANNELS = Object.freeze({
   reloadTab: 'browser:reload-tab',
   registerTab: 'browser:register-tab',
   resolveFavicon: 'browser:resolve-favicon',
+  getWebsiteFavicon: 'browser:get-website-favicon',
   setActiveTab: 'browser:set-active-tab',
   setDeviceEmulation: 'browser:set-device-emulation',
   showReloadMenu: 'browser:show-reload-menu',
@@ -53,6 +54,7 @@ export type BrowserOpenNewTabRequest = Readonly<{
 }>;
 
 export type BrowserReloadMode = 'normal' | 'hard';
+export type BrowserWindowOpenMode = 'tab' | 'current-tab';
 
 export type BrowserContextMenuRequest = Readonly<{
   id: string;
@@ -78,7 +80,8 @@ export interface BrowserDesktopBridge extends BrowserPasswordBridge, BrowserExte
   captureScreenshot(tabId: string): Promise<DesktopBrowserScreenshot | null>;
   reloadTab(tabId: string, mode: BrowserReloadMode): Promise<boolean>;
   resolveFavicon(webContentsId: number, faviconUrls: readonly string[]): Promise<string | null>;
-  registerTab(tabId: string, webContentsId: number): Promise<boolean>;
+  getWebsiteFavicon(url: string): Promise<string | null>;
+  registerTab(tabId: string, webContentsId: number, windowOpenMode?: BrowserWindowOpenMode): Promise<boolean>;
   unregisterTab(tabId: string, webContentsId: number): Promise<boolean>;
   setActiveTab(tabId: string | null): Promise<boolean>;
   setDeviceEmulation(tabId: string, emulation: DesktopBrowserDeviceEmulation | null): Promise<boolean>;

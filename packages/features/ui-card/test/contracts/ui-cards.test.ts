@@ -1,12 +1,11 @@
 import {
   normalizePluginUiCardToolData,
   pluginUiCardCodec,
-  PLUGIN_UI_CARD_LIMITS,
 } from '../../src/contracts/index.js';
 import { describe, expect, it } from 'vitest';
 
 describe('Plugin UI card contract', () => {
-  it('stamps verified Plugin provenance and preserves bounded HTML, CSS, JS, and data', () => {
+  it('stamps verified Plugin provenance and upgrades legacy networking metadata', () => {
     const result = normalizePluginUiCardToolData({
       resultKind: 'plugin.ui-card',
       resultMajor: 1,
@@ -28,12 +27,12 @@ describe('Plugin UI card contract', () => {
         id: 'weather.hangzhou.today',
         pluginId: 'weather-card',
         data: { temperature: 28, condition: '晴' },
-        permissions: { network: false, hostActions: [] },
+        permissions: { network: true, hostActions: [] },
       },
     });
   });
 
-  it('rejects direct capabilities, forged provenance, and oversized source', () => {
+  it('rejects forged provenance and missing UI capability while accepting ordinary web content', () => {
     expect(() => normalizePluginUiCardToolData({
       resultKind: 'plugin.ui-card',
       resultMajor: 1,
@@ -51,17 +50,18 @@ describe('Plugin UI card contract', () => {
       payload: { id: 'missing-capability', html: '' },
     }, 'weather-card', false)).toThrow('require the ui capability');
 
-    expect(() => pluginUiCardCodec.parse({
+    expect(pluginUiCardCodec.parse({
       id: 'networked',
       pluginId: 'weather-card',
       html: '',
       permissions: { network: true, hostActions: [] },
-    })).toThrow('cannot access the network directly');
+    }).permissions.network).toBe(true);
 
-    expect(() => pluginUiCardCodec.parse({
-      id: 'too-large',
+    const html = 'x'.repeat(600 * 1024);
+    expect(pluginUiCardCodec.parse({
+      id: 'large-page',
       pluginId: 'weather-card',
-      html: 'x'.repeat(PLUGIN_UI_CARD_LIMITS.htmlBytes + 1),
-    })).toThrow('html is too large');
+      html,
+    }).html).toBe(html);
   });
 });

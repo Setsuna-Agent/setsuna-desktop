@@ -13,10 +13,6 @@ export const PLUGIN_UI_CARD_DECLARATION_LIMITS = Object.freeze({
 });
 
 export const PLUGIN_UI_CARD_LIMITS = Object.freeze({
-  cssBytes: 128 * 1024,
-  htmlBytes: 192 * 1024,
-  jsBytes: 256 * 1024,
-  sourceBytes: 512 * 1024,
   titleCharacters: 200,
 });
 
@@ -35,7 +31,7 @@ export type RuntimePluginUiCard = Readonly<{
   js: string;
   data: RuntimePluginUiData;
   permissions: Readonly<{
-    network: false;
+    network: boolean;
     hostActions: readonly string[];
   }>;
 }>;
@@ -129,11 +125,9 @@ export function parseSandboxedUiSource(
   label = 'Sandboxed UI source',
 ): RuntimeSandboxedUiSource {
   const source = objectRecord(value, `${label} must be an object.`);
-  const html = boundedSource(source.html ?? '', `${label} html`, PLUGIN_UI_CARD_LIMITS.htmlBytes);
-  const css = boundedSource(source.css ?? '', `${label} css`, PLUGIN_UI_CARD_LIMITS.cssBytes);
-  const js = boundedSource(source.js ?? '', `${label} js`, PLUGIN_UI_CARD_LIMITS.jsBytes);
-  const bytes = utf8Bytes(html) + utf8Bytes(css) + utf8Bytes(js);
-  if (bytes > PLUGIN_UI_CARD_LIMITS.sourceBytes) throw new Error(`${label} is too large.`);
+  const html = sourceText(source.html ?? '', `${label} html`);
+  const css = sourceText(source.css ?? '', `${label} css`);
+  const js = sourceText(source.js ?? '', `${label} js`);
   return Object.freeze({ html, css, js });
 }
 
@@ -172,21 +166,25 @@ export function normalizePluginUiCardToolData(
 }
 
 function parseCardPermissions(value: unknown): RuntimePluginUiCard['permissions'] {
-  if (value === undefined) return Object.freeze({ network: false, hostActions: Object.freeze([]) });
+  if (value === undefined) return Object.freeze({ network: true, hostActions: Object.freeze([]) });
   const permissions = exactRecord(
     value,
     ['network', 'hostActions'],
     'Plugin UI card permissions must be an object.',
   );
-  if (permissions.network !== false) throw new Error('Plugin UI cards cannot access the network directly.');
+  if (permissions.network !== undefined && typeof permissions.network !== 'boolean') {
+    throw new Error('Plugin UI card network permission must be a boolean.');
+  }
   if (!Array.isArray(permissions.hostActions) || permissions.hostActions.length > 0) {
     throw new Error('Plugin UI card hostActions are not enabled in this schema version.');
   }
-  return Object.freeze({ network: false, hostActions: Object.freeze([]) });
+  // Older persisted cards declared network:false. Web networking is now available
+  // to every isolated page; normalize that legacy field to the current capability.
+  return Object.freeze({ network: true, hostActions: Object.freeze([]) });
 }
 
-function boundedSource(value: unknown, label: string, maxBytes: number): string {
-  if (typeof value !== 'string' || utf8Bytes(value) > maxBytes) throw new Error(`${label} is too large.`);
+function sourceText(value: unknown, label: string): string {
+  if (typeof value !== 'string') throw new Error(`${label} must be a string.`);
   return value;
 }
 
@@ -209,10 +207,6 @@ function requiredText(value: unknown, label: string, max: number): string {
   const normalized = optionalText(value, label, max);
   if (!normalized) throw new Error(`${label} is required.`);
   return normalized;
-}
-
-function utf8Bytes(value: string): number {
-  return new TextEncoder().encode(value).byteLength;
 }
 
 function exactRecord(value: unknown, keys: readonly string[], message: string): Record<string, unknown> {

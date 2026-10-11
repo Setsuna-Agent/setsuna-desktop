@@ -111,6 +111,7 @@ export const browserMainFeature = defineMainFeature({
         contextMenus,
         extensionMenuItems: (contents, params) => extensions.contextMenuItems(contents, params),
         onNewTabRequested: (contents, url) => extensions.requestNavigationTarget(contents, url),
+        windowOpenMode: (webContentsId) => controller.windowOpenModeForWebContents(webContentsId),
         permissionsManaged: true,
         isAllowedExtensionUrl: (url) => extensions.allowsPage(url),
         onGuestAttached: (contents) => {

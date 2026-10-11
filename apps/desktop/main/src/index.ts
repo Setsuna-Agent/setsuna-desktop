@@ -13,7 +13,6 @@ import {
   clipboard,
   dialog,
   Menu,
-  nativeImage,
   safeStorage,
   screen,
   session,
@@ -23,7 +22,7 @@ import {
   type NativeImage,
   type Rectangle,
 } from 'electron';
-import { existsSync, mkdirSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -72,6 +71,12 @@ import {
   prepareDesktopWindowsSandbox,
 } from './composition/windows-sandbox-feature-host.js';
 import { registerWindowsTitlebarDoubleClick } from './window/frame.js';
+import { loadDesktopIcon } from './window/icon.js';
+import {
+  configureDesktopAppIdentity,
+  configureDesktopWindowIdentity,
+  prepareDesktopAppIdentity,
+} from './app-identity.js';
 import { registerMainWindowNavigationGuards } from './window/navigation.js';
 import { desktopWindows } from './window/registry.js';
 import { registerThreadWindowIpc } from './window/thread-windows.js';
@@ -92,10 +97,7 @@ if (process.platform !== 'darwin' && process.platform !== 'win32') {
 }
 registerBuiltinMainFeatureSchemes();
 
-// Match the NSIS shortcut identity so Windows attributes native notifications to this app.
-if (process.platform === 'win32') {
-  app.setAppUserModelId(app.isPackaged ? 'dev.setsuna.desktop' : process.execPath);
-}
+configureDesktopAppIdentity();
 
 // Keep diagnostics outside normal startup so they never load user data or the Agent.
 if (process.argv.includes('--computer-use-diagnostics')) {
@@ -105,10 +107,6 @@ if (process.argv.includes('--computer-use-diagnostics')) {
   }).catch((error) => { console.error(error); app.exit(1); });
 } else {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// Windows already constrains taskbar and tray icons, so use artwork without the
-// platform-style transparent inset applied to the macOS source image.
-const desktopIconFileName = process.platform === 'win32' ? 'icon-windows.png' : 'icon.png';
-const desktopIconRelativePath = path.join('assets', 'build', desktopIconFileName);
 const mainWindowDefaultWidth = 1320;
 const mainWindowDefaultHeight = 860;
 const mainWindowMinWidth = 880;
@@ -531,6 +529,7 @@ async function createWindow(): Promise<void> {
   await waitForRendererFirstPaint(currentMainWindow);
   startupInProgress = false;
   startupSplashLayer.reveal();
+  prepareDesktopAppIdentity();
   currentDesktopUpdaterLifecycle.start();
 }
 
@@ -575,6 +574,7 @@ async function createDataRootMaintenanceWindow(): Promise<void> {
   });
   await waitForRendererFirstPaint(currentMainWindow);
   currentMainWindow.show();
+  prepareDesktopAppIdentity();
 }
 
 async function requestDesktopRelaunch(): Promise<void> {
@@ -601,7 +601,7 @@ async function requestDesktopRelaunch(): Promise<void> {
 }
 
 function createMainBrowserWindow(desktopIcon: NativeImage | undefined, bounds: Rectangle): BrowserWindow {
-  return new BrowserWindow({
+  const window = new BrowserWindow({
     ...bounds,
     minWidth: mainWindowMinWidth,
     minHeight: mainWindowMinHeight,
@@ -624,6 +624,8 @@ function createMainBrowserWindow(desktopIcon: NativeImage | undefined, bounds: R
       webviewTag: true,
     },
   });
+  configureDesktopWindowIdentity(window);
+  return window;
 }
 
 function desktopDisplayWorkAreas(): Rectangle[] {
@@ -634,22 +636,6 @@ function desktopDisplayWorkAreas(): Rectangle[] {
       .filter((display) => display.id !== primaryDisplay.id)
       .map((display) => display.workArea),
   ];
-}
-
-function loadDesktopIcon(): NativeImage | undefined {
-  const iconPath = resolveDesktopIconPath();
-  if (!iconPath) return undefined;
-  const image = nativeImage.createFromPath(iconPath);
-  return image.isEmpty() ? undefined : image;
-}
-
-function resolveDesktopIconPath(): string | undefined {
-  const candidates = [
-    path.join(app.getAppPath(), desktopIconRelativePath),
-    path.join(process.resourcesPath, desktopIconFileName),
-    path.join(process.resourcesPath, desktopIconRelativePath),
-  ];
-  return candidates.find((candidate) => existsSync(candidate));
 }
 
 function getMacTrafficLightPosition(pageScale: number): { x: number; y: number } {

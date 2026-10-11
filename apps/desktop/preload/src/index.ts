@@ -5,6 +5,7 @@ import type {
   SetsunaDesktopBridge,
 } from '@setsuna-desktop/contracts';
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import { PLUGIN_UI_DOCUMENT_CHANNELS } from '@setsuna-desktop/contracts';
 import { composeBuiltinPreloadBridge } from './composition/builtin-preload-features.js';
 import { watchWorkspaceEntries } from './workspace-entry-watch.js';
 import { onThreadDeletionCheck } from './thread-deletion.js';
@@ -59,6 +60,8 @@ const runtime: DesktopRuntimeBridge = {
 };
 
 const desktop: SetsunaDesktopBridge['desktop'] = {
+  createPluginUiDocument: (input) => ipcRenderer.invoke(PLUGIN_UI_DOCUMENT_CHANNELS.create, input),
+  releasePluginUiDocument: (id) => ipcRenderer.invoke(PLUGIN_UI_DOCUMENT_CHANNELS.release, id),
   createSandboxDialogSession: (title) => ipcRenderer.invoke('desktop:create-sandbox-dialog-session', title),
   updateSandboxDialogSession: (id, title) => ipcRenderer.invoke('desktop:update-sandbox-dialog-session', id, title),
   releaseSandboxDialogSession: (id) => ipcRenderer.invoke('desktop:release-sandbox-dialog-session', id),

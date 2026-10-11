@@ -4,15 +4,21 @@ import { ConfirmationProvider } from '@setsuna-desktop/renderer-ui';
 import { parseRuntimePluginUiManifest } from '@setsuna-desktop/contracts';
 import type { PluginManagementRendererService } from '@setsuna-desktop/feature-plugin-management/contracts';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SandboxedPluginUiView } from '../../../../src/kernel/declarative-plugin-ui/SandboxedPluginUiView.js';
-import { connectSandboxedUiFrame } from '../../../fixtures/sandboxed-ui-bridge.js';
+import { connectSandboxedUiFrame, mockPluginUiDocuments } from '../../../fixtures/sandboxed-ui-bridge.js';
 
+const original = Object.getOwnPropertyDescriptor(window, 'setsunaDesktop');
 describe('SandboxedPluginUiView', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'setsunaDesktop', { configurable: true, value: { desktop: mockPluginUiDocuments() } });
+  });
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
     vi.restoreAllMocks();
+    if (original) Object.defineProperty(window, 'setsunaDesktop', original);
+    else delete window.setsunaDesktop;
   });
 
   it.each([false, true])('routes declared bridge actions (extra confirmation: %s)', async (confirmAction) => {
@@ -61,8 +67,6 @@ describe('SandboxedPluginUiView', () => {
       pluginId: 'weather-plugin',
       contributionId: 'weather.page',
     }, { signal: expect.any(AbortSignal) });
-    expect(frame.srcdoc).toContain('<main class="weather">Weather</main>');
-    expect(frame.srcdoc).toContain('.weather { color: orange; }');
 
     const { send } = connectSandboxedUiFrame(frame);
     const invoke = (requestId: string) => send({

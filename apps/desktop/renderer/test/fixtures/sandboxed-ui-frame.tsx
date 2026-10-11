@@ -6,7 +6,7 @@ const root = createRoot(document.body);
 let revision = 0;
 
 const forms = {
-  async run(source: RuntimeSandboxedUiSource) {
+  async run(source: RuntimeSandboxedUiSource, storageKey = 'forms') {
     const current = ++revision;
     const stats = { actions: 0, runtimeRequests: 0, cancelled: false };
     return new Promise((resolve, reject) => {
@@ -18,6 +18,7 @@ const forms = {
       };
       window.addEventListener('message', receive);
       const render = (updated = false) => root.render(<SandboxedUiFrame key={current} title="Forms" source={source}
+        storageKey={storageKey}
         data={{ private: updated ? 'updated snapshot' : 'initial snapshot' }} context={{ private: 'context' }}
         allowedActionIds={['todo.add']} onAction={async () => { stats.actions++; }} onRuntimeRequest={request} />);
       const request = (_input: unknown, signal: AbortSignal) => {

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { protocol, type Extension, type Session, type WebContents } from 'electron';
+import { protocol, type CustomScheme, type Extension, type Session, type WebContents } from 'electron';
 import { loadBrowserFavicon } from '../favicon.js';
 import { observeExtensionContents } from './contents-lifecycle.js';
 
@@ -8,12 +8,13 @@ const maxConcurrentRequests = 16;
 type Context = { extension: Extension; key: string };
 type WaitingRequest = { token: string; context: Context; signal: AbortSignal; finish(acquired: boolean): void };
 
+// Mapped _favicon resources must work with an extension's self-only image CSP.
+export const extensionFaviconScheme: CustomScheme = { scheme, privileges: {
+  standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, bypassCSP: true, allowServiceWorkers: true,
+} };
+
 export function registerExtensionFaviconScheme(): void {
-  // Mapped _favicon resources must work with an extension's self-only image CSP.
-  // This scheme serves only validated images through authenticated extension contexts.
-  protocol.registerSchemesAsPrivileged([{ scheme, privileges: {
-    standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, bypassCSP: true, allowServiceWorkers: true,
-  } }]);
+  protocol.registerSchemesAsPrivileged([extensionFaviconScheme]);
 }
 
 /** Electron's native _favicon loader has no backend; getURL maps that resource to this reader. */

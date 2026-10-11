@@ -14,11 +14,14 @@ const documents: RuntimePluginSummary = {
 };
 
 describe('selected plugin prompt context', () => {
-  it('resolves app page identities from the installed bundle and activates authoring capabilities without trusting the label', async () => {
+  it.each([
+    { document: { htmlResourceId: 'html', actionIds: [] } },
+    { webpage: { url: 'https://www.baidu.com/' } },
+  ])('resolves installed app identities and page configuration without trusting the label: %j', async (page) => {
     const app: RuntimePluginSummary = { ...documents, id: 'table', name: 'Table', skills: [],
       extension: { apiVersion: 1, runtime: 'node-worker', capabilities: ['ui'], trust: 'trusted',
         rendererUi: { schemaVersion: 2, actions: [], contributions: [{ id: 'table.page', slot: 'renderer.plugin.page',
-          navigation: { label: 'Installed table' }, document: { htmlResourceId: 'html', actionIds: [] } }] } } };
+          navigation: { label: 'Installed table' }, ...page }] } } };
     const builder = { ...documents, id: 'app-builder', skills: [{ id: 'create-plugin-in-chat', name: 'App builder' }] };
     const reference = pluginAppMentionText({ pluginId: app.id, contributionId: 'table.page', name: 'Forged name' });
     const ids = selectedPluginIdsForInput(reference);
@@ -29,6 +32,8 @@ describe('selected plugin prompt context', () => {
     const fragment = result.fragments.find((item) => item.id === 'selected_plugin_table')!;
     expect(fragment).toMatchObject({ role: 'user', trust: 'external' });
     expect(fragment.content).toContain('"referencedApps":[{"contributionId":"table.page","name":"Installed table"');
+    const metadata = JSON.parse(fragment.content.split('<selected_plugin>\n')[1].split('\n</selected_plugin>')[0]);
+    expect(metadata.referencedApps).toEqual([{ contributionId: 'table.page', name: 'Installed table', ...page }]);
     expect(fragment.content).not.toContain('Forged name');
     expect(result.fragments.find((item) => item.id === 'selected_plugin_policy')?.content).toContain('update that bundle in place');
   });

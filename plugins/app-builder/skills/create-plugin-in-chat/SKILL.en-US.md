@@ -9,12 +9,12 @@ This Skill ships with the default-installed App Builder plugin. The sidebar “+
 
 ## UI design resources
 
-Before creating or changing an app UI, read this plugin's resources, then write HTML/CSS. Default to Setsuna's compact desktop style. Explicit user choices for branding, layout, or style take precedence; preserve an existing app's design when updating it.
+Read these resources only when creating or changing a local HTML/CSS/JS app UI. For a sidebar entry opening an existing website, configure `webpage.url` directly, skipping design resources, page generation and iframe embedding checks. Default to Setsuna's compact desktop style. Explicit user choices for branding, layout, or style take precedence; preserve an existing app's design when updating it.
 
 - Read the [design guidelines](references/ui-design.en-US.md) with `read_plugin_resource({pluginId:'app-builder',resourceId:'ui-design'})` and the [base CSS](assets/ui-base.css) with `resourceId:'ui-base'`. If unavailable, find `read_plugin_resource` through `search_tools` first.
 - Read the relevant [table, form, and ECharts patterns](references/ui-patterns.en-US.md) through `resourceId:'ui-patterns'`; adopt only the parts the app needs. Host-rendered `tree` pages already use system components and do not need copied CSS.
 - For buttons, fields, selects, tabs, dialogs, or icons, read the [component guide](references/ui-components.en-US.md) through `resourceId:'ui-component-guide'` and reuse `ui-components` and `ui-icons`. The latter supplies 80 Lucide icons from the same source as the host; do not invent SVG paths. Include the scripts in the app's JS as documented, without React or new dependencies.
-- Write the base CSS into the generated app's `ui/app.css`, append app-specific styles, and deliver it through that app's own `resources` and `document.cssResourceId`. These are authoring resources, not cross-plugin runtime imports. Relative `<link>`, `@import`, and CDN loading do not work in the sandbox.
+- Write base CSS into the app's `ui/app.css`, append app styles, and deliver local files through resource IDs. Browser pages may also load remote stylesheets, `@import`, and CDN resources.
 - The guidelines govern color, typography, spacing, alignment, and interaction states without forcing one business layout. Do not put the guidelines, sample sections, unrelated fields, or decorative data into the user's UI.
 
 ## Choose the capability
@@ -23,7 +23,7 @@ Before creating or changing an app UI, read this plugin's resources, then write 
 - For external services, use `mcpServers`; never embed API keys, fixed secrets, authentication headers, or credential-bearing URLs.
 - For local commands around the Agent lifecycle, use `hooks` and reference bundled scripts through `{{pluginRoot}}`.
 - For dynamic tools, lifecycle events, state, or structured user questions, use `extension`.
-- For sidebar entries or standalone pages, use Renderer UI v2 in `extension.rendererUi`. Use host-rendered `tree` for simple forms and status, or a sandboxed HTML/CSS/JS `document` for custom layout and interaction.
+- For sidebar entries or standalone pages, use Renderer UI v2 in `extension.rendererUi`. Use `webpage: { url: "https://…" }` to load an existing website directly in the native browser, host-rendered `tree` for simple forms and status, or HTML/CSS/JS `document` for a local app with custom layout and interaction.
 - For interactive cards after a tool runs, declare the card name, tool, and static sandbox preview in `extension.uiCards`, then return `plugin.ui-card@1` from the tool. One Plugin can provide both cards and persistent sidebar pages.
 - `tools` is display metadata and does not register executable tools; use `api.registerTool` in the extension.
 - `resources` declares Agent-readable resources and the HTML/CSS/JS files referenced by sandboxed pages.
@@ -40,7 +40,7 @@ Submit a complete snapshot to `configure_plugin`:
 - Every Skill directory must contain a complete `SKILL.md`, without TODOs, placeholders, or omitted content.
 - Hook commands should reference bundled scripts; provide `commandWindows` when needed.
 - The extension entry must be a bundled `.mjs`, using `apiVersion: 1`, `runtime: node-worker`, and only the capabilities actually used: `tools`, `events`, `state`, `ui`, `network`.
-- `rendererUi`, `uiCards`, and `plugin.ui-card` require `ui`. Put `uiCards` only at `manifest.extension.uiCards`, never at the manifest root. Each `uiCards[].toolName` must match a top-level `tools` entry. Each preview must contain static offline HTML/JS and bounded example data; it neither executes the tool nor replaces the real card source returned on each call. Data or state bindings also require `state`. Do not generate React bundles, remote iframes, or access the host DOM.
+- `rendererUi`, `uiCards`, and `plugin.ui-card` require `ui`. Put cards at `manifest.extension.uiCards` with each toolName matching a top-level tool. Previews use static, side-effect-free example source and bounded data; they do not execute tools or replace real tool results. Runtime state bindings also require `state`. Local pages use HTML/CSS/JS resources; existing websites should use direct webpage mode. Keep host DOM access isolated.
 - Do not declare `image-generation` or `vision-recognition`; these private host bridges are reserved for the bundled marketplace and cannot be installed in local or chat-created plugins.
 - `network` requires exact HTTP(S) origins without paths or credentials in `extension.network.allowedOrigins`. Call `context.network.request(...)` on the handler's second argument to use app proxying, cancellation, timeouts, and response-size limits. `response.body` is always a string: check `response.ok`/`response.status`, then use `await response.json()` or `JSON.parse(response.body)` before accessing fields. There is no `api.network`.
 - v1 runs no install scripts or package managers. Include dependencies in the Bundle text files.
@@ -111,6 +111,38 @@ Handler capabilities:
 Declare only supported events with verified behavior. Do not add nonessential automatic synchronization just for completeness; incorrect events and unverified payload assumptions reduce reliability.
 
 ## Renderer UI
+
+### Open an existing website
+
+For a website sidebar entry, configure a schema v2 contribution with `webpage`. Do not generate an iframe, replica, or proxy. Submit this complete `configure_plugin` input directly, adapting IDs, labels and the URL to the request:
+
+```json
+{
+  "manifest": {
+    "id": "baidu",
+    "name": "Baidu",
+    "extension": {
+      "apiVersion": 1,
+      "runtime": "node-worker",
+      "entry": "extension/entry.mjs",
+      "capabilities": ["ui"],
+      "rendererUi": {
+        "schemaVersion": 2,
+        "actions": [],
+        "contributions": [{
+          "id": "baidu.page",
+          "slot": "renderer.plugin.page",
+          "navigation": { "label": "Baidu" },
+          "webpage": { "url": "https://www.baidu.com/" }
+        }]
+      }
+    }
+  },
+  "files": [{ "path": "extension/entry.mjs", "content": "export default function activate() {}\n" }]
+}
+```
+
+Choose exactly one of `tree`, `document`, or `webpage`. Webpage mode requires `ui` and an HTTP(S) URL, with no document resources, state binding, or UI actions. Clicking the sidebar opens the native browser page with existing login, downloads, and browser settings. Remote websites receive no `setsunaUI` bridge. Use `document` for local apps and Setsuna backend access.
 
 ### Reuse Setsuna backend data
 
@@ -259,7 +291,7 @@ window.setsunaUI.subscribe(({ data }) => render(data));
 await window.setsunaUI.invoke('weather.refresh', { city: 'Hangzhou' });
 ```
 
-Pages run in an opaque-origin sandbox iframe. They cannot directly fetch, read files, access Node/Electron/preload, open windows, download, submit forms, or navigate. Put network and project operations in worker actions using `ctx.network.request(...)` or approved host capabilities. `input.payload` is bounded JSON from the page.
+Pages have a separate `setsuna-plugin-ui://` browser origin and support fetch, remote scripts/styles, localStorage/IndexedDB, workers, nested frames, media, downloads, external links, and HTTP(S) form submission. Browser CORS and website embedding policies still apply; use `webpage` for an existing website. Pages cannot read local files, access Node/Electron/preload or the host DOM. Use the document bridge or worker capabilities for project/runtime operations.
 
 The host provides compatible `window.alert`, `window.confirm` and `window.prompt`, also callable without the `window.` prefix. They retain synchronous semantics: `confirm` returns true on confirmation and false on cancellation; `prompt` supports a default value and returns a string (including an empty string) on confirmation or null on cancellation; `alert` waits until dismissed. The current window's script waits for the user, so do not call them in render or refresh loops. Use the shared `SetsunaComponents.dialog` or a page-local `<dialog>` for complex forms; see `ui-component-guide`. Close after persistence succeeds, preserve input on failure, and do not mutate data on cancellation.
 
@@ -267,17 +299,17 @@ The host provides compatible `window.alert`, `window.confirm` and `window.prompt
 
 - For “make a customer table with an entry form and a sales chart”, generate one complete app with its page, interactions, and save action. Tables, forms, and charts can be combined freely; do not ask the user to choose a tech stack or write a manifest.
 - Compose layout, columns, filtering, validation, and interaction for the request, reusing the design guidelines and base styles by default. Implement requested features only, without adding persistent explanations or summaries. Use `--setsuna-*` variables for the host theme. The page owns its full viewport; use `height:100%`, flex/grid, and internal scrolling as needed.
-- Default to `data: { stateKey: "app.view", scope: "global" }` unless the user wants project- or conversation-specific data. Worker reads and writes must use the same key/scope. Do not persist business data in `localStorage`.
+- Default to `data: { stateKey: "app.view", scope: "global" }` for business data shared with workers, using the same key/scope. Use project/conversation scopes when requested. Browser-only applications may use localStorage/IndexedDB; keep plugin and page IDs stable to preserve their storage origin.
 - Use stable row IDs. Keep sorting, filtering, and edit drafts in the page and submit bounded payloads with `setsunaUI.invoke`. Ordinary saves, app data updates and refreshes declare only the action `id`, omitting optional `approval`, and execute directly. Batch or debounce autosaves. Validate fields, types, record counts and data size in the worker before writing `context.state`; no per-save approval or separate storage channel is needed.
 - Use `approval: { title?, message }` only for interactions needing extra confirmation, such as deletion. If the page already confirms with `confirm` or `UI.dialog`, omit action `approval` to avoid duplicate dialogs. For an existing app, remove the save action's old `approval` to save directly. This does not change installation trust, tool approvals or the host's unsaved-edit checks when deleting conversations.
-- HTML form controls work; native form submission is blocked. Use a `type="button"` save button, call `reportValidity()`, and save through the bridge. Preserve drafts on failure; update tables and charts from the canonical host snapshot after success.
+- Forms support submit events, native validation, and HTTP(S) submission. For bridge saves, preventDefault in the submit handler so button clicks and Enter share the same path. Preserve drafts on failure and update tables/charts after persistence succeeds.
 - Both `ready` and `subscribe` can deliver snapshots, including theme notifications. Do not recreate forms, overwrite unsaved inputs, or register duplicate handlers on every notification. Update saved-data views only when their data changes.
 - Keep plugin ID, state key, scope, and record IDs stable across app updates. New fields must tolerate old records. Never replace existing data with examples. Snapshots are limited to 64 KiB and 512 data entries; design for small local apps, without promising unlimited tables.
 - After installation, use `verify_plugin` for actual save/read paths without damaging data. For new apps, use only user-requested initial records. For updates, use an explicitly implemented dry-run or save the unchanged current state; never insert test records or clear existing data.
 
 #### ECharts
 
-Declare `"libraries": ["echarts"]` in `document` to receive offline `window.echarts` before page scripts. Generate chart options and interaction code only; do not copy ECharts source, reference a CDN, or run a package manager. Other libraries are not allowlisted. Use the themed chart in the `ui-patterns` resource: explicit container dimensions, container-based resize, colors updated on host snapshots, and unsubscribe/dispose on unload. Adapt fields, dimensions, and units to actual data; the example structure is not a backend API contract.
+Declare `"libraries": ["echarts"]` in `document` for host-bundled offline `window.echarts`. Generate chart options and interaction code without copying ECharts or running a package manager. Other browser libraries can load as remote resources. Use the themed chart template with container resize, theme updates, unsubscribe/dispose on unload, and actual data fields and units.
 
 ### Conversation cards
 
@@ -326,13 +358,13 @@ return {
       css: '#weather { padding: 20px; border-radius: 18px; }',
       js: 'window.setsunaUI.ready.then(({data}) => { document.querySelector("#weather").textContent = `${data.temperature}°C`; });',
       data: { temperature: 28, condition: 'Sunny' },
-      permissions: { network: false, hostActions: [] }
+      permissions: { network: true, hostActions: [] }
     }
   }
 };
 ```
 
-Card JavaScript can modify only its own sandbox DOM and read this tool result through `window.setsunaUI.ready`. The card is anchored at the tool call's persisted timeline position, naturally producing text → card → text around the tool call. Do not fake placeholders in Markdown. v1 cards cannot invoke host actions; provide a standalone page for refresh, configuration, or persistent state. A weather tool should say when to call it in its description, fetch data through allowlisted worker networking, and return both results and the card. The card itself must not access the network.
+Card JavaScript can modify only its own sandbox DOM and read this tool result through `window.setsunaUI.ready`. The card is anchored at the tool call's persisted timeline position, naturally producing text → card → text around the tool call. Do not fake placeholders in Markdown. v1 cards cannot invoke host actions; provide a standalone page for refresh, configuration, or persistent state. A weather tool should say when to call it in its description, fetch data through allowlisted worker networking, and return both results and the card. Cards may also access the network subject to normal browser CORS.
 
 For collecting release artifacts from conversation, subscribe to `tool.after` or `turn.settled` via `events`, extract explicit artifact fields, deduplicate, and save a bounded summary in `global` or `project` state. Do not store entire conversations or unbounded tool results.
 

@@ -1,4 +1,4 @@
-import { Notification } from 'electron';
+import { Notification, type NativeImage } from 'electron';
 import type { NotificationInput, NotificationReceipt } from '../contracts/index.js';
 import { waitForNotificationDelivery } from './delivery.js';
 
@@ -8,14 +8,14 @@ export class NativeNotifications {
   private readonly pending = new Map<string, Promise<void>>();
   constructor(private readonly open: (threadId: string) => void, private readonly report: (error: unknown) => void) {}
 
-  async show(item: NotificationInput, signal?: AbortSignal): Promise<NotificationReceipt['systemNotification']> {
+  async show(item: NotificationInput, signal?: AbortSignal, icon?: NativeImage | string): Promise<NotificationReceipt['systemNotification']> {
     signal?.throwIfAborted();
     if (this.sent.has(item.id)) return 'duplicate';
     const previous = this.pending.get(item.id);
     if (previous) { await previous; signal?.throwIfAborted(); return 'duplicate'; }
     if (!Notification.isSupported()) throw new Error('System notifications are unavailable on this device.');
     try {
-      const notification = new Notification({ title: item.title, body: item.body });
+      const notification = new Notification({ title: item.title, body: item.body, ...(icon ? { icon } : {}) });
       const release = () => { notification.removeAllListeners(); this.active.delete(item.id); };
       notification.once('click', () => { this.open(item.threadId); release(); });
       // Windows times out the banner while keeping the notification clickable in Action Center.

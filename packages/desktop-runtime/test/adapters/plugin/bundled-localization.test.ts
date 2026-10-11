@@ -5,11 +5,13 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FilePluginBundleStore } from '../../../src/adapters/plugin/file-plugin-bundle-store.js';
+import { FilePluginDraftStore } from '../../../src/adapters/plugin/file-plugin-draft-store.js';
 import { FilePluginMarketplace } from '../../../src/adapters/plugin/file-plugin-marketplace.js';
 import { installDefaultPlugins } from '../../../src/adapters/plugin/install-default-plugins.js';
 import { inspectBundleTree } from '../../../src/adapters/plugin/file-plugin-bundle-model.js';
 import { localizePluginDisplayFields, readBundledPluginMessages } from '../../../src/adapters/plugin/bundled-plugin-localization.js';
 import { FileSkillRegistry } from '../../../src/adapters/skill/file-skill-registry.js';
+import { PluginBundleToolHost } from '../../../src/adapters/tool/plugin-bundle-tool-host.js';
 import { FileConfigStore } from '../../../src/adapters/store/file-config-store.js';
 import { FileMcpStore } from '../../../src/adapters/store/file-mcp-store.js';
 import { FileExtensionStateStore } from '../../../src/extensions/file-extension-state-store.js';
@@ -68,16 +70,20 @@ describe('bundled content localization', () => {
     const indexPath = path.join(root, 'plugins.json');
     const index = JSON.parse(await readFile(indexPath, 'utf8'));
     const builder = index.plugins.find((plugin: { id: string }) => plugin.id === 'app-builder');
-    builder.version = '1.0.0';
+    builder.version = '1.4.4';
     builder.resources = [];
     await writeFile(indexPath, JSON.stringify(index));
     const stylesheet = 'skills/create-plugin-in-chat/assets/ui-base.css';
     await rm(path.join(builder.installPath, stylesheet));
+    const skillPath = 'skills/create-plugin-in-chat/SKILL.md';
+    await writeFile(path.join(builder.installPath, skillPath), '# Older builder: use an iframe.');
     await installDefaultPlugins(root, marketplace);
-    expect((await plugins.listPlugins()).plugins[0]).toMatchObject({ version: '1.4.4' });
+    expect((await plugins.listPlugins()).plugins[0]).toMatchObject({ version: '1.4.5' });
     expect(await plugins.readResource('app-builder', 'ui-base')).toMatchObject({
       text: await readFile(path.join(catalogRoot, 'app-builder', stylesheet), 'utf8'),
     });
+    expect(await readFile(path.join(builder.installPath, skillPath), 'utf8'))
+      .toBe(await readFile(path.join(catalogRoot, 'app-builder', skillPath), 'utf8'));
     expect(await skills.getSkill(skillId)).toMatchObject({ content: '# My builder', enabled: false });
   });
 
@@ -86,8 +92,35 @@ describe('bundled content localization', () => {
     await writeFile(path.join(root, 'default-plugins.json'), JSON.stringify({ installedIds: ['app-builder'] }));
     await installDefaultPlugins(root, marketplace);
     expect((await plugins.listPlugins()).plugins).toEqual([
-      expect.objectContaining({ id: 'app-builder', installationSource: 'marketplace', version: '1.4.4' }),
+      expect.objectContaining({ id: 'app-builder', installationSource: 'marketplace', version: '1.4.5' }),
     ]);
+  });
+
+  it.each(['SKILL.md', 'SKILL.en-US.md'])('installs the native website example from %s through configure_plugin without page resources', async (filename) => {
+    const { root, marketplace, plugins } = await fixture();
+    await installDefaultPlugins(root, marketplace);
+    const skill = await readFile(path.join(catalogRoot, 'app-builder/skills/create-plugin-in-chat', filename), 'utf8');
+    const example = [...skill.matchAll(/```json\r?\n([\s\S]*?)\r?\n```/gu)]
+      .find((match) => match[1].includes('"manifest"') && match[1].includes('"webpage"'));
+    expect(example).toBeDefined();
+    const input: unknown = JSON.parse(example![1]);
+    const host = new PluginBundleToolHost(plugins, new FilePluginDraftStore(path.join(root, 'drafts')));
+    const context = { threadId: 'thread_1' };
+    expect(await host.approvalForTool('configure_plugin', input, context)).not.toBeNull();
+    const preview = await host.previewToolCall('configure_plugin', input, context);
+    const result = await host.runTool('configure_plugin', input, {
+      ...context, expectedPreviewIntegrityToken: preview?.integrityToken,
+    });
+    expect(result).toMatchObject({ data: {
+      action: 'create',
+      plugin: {
+        id: 'baidu', resources: [],
+        extension: { trust: 'trusted', capabilities: ['ui'], rendererUi: {
+          actions: [], contributions: [{ id: 'baidu.page', slot: 'renderer.plugin.page', webpage: { url: 'https://www.baidu.com/' } }],
+        } },
+      },
+      verification: { required: false },
+    } });
   });
 
   it('allows removing a local bundle that reuses the builder ID', async () => {

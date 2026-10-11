@@ -425,6 +425,11 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     openSettings: (section: string) => { setSettingsInitialSection(section); setActiveView('settings'); },
     openPage: (url: string) => { workspacePanels.openBrowserPanel(url); setActiveView('chat'); },
   }), [setActiveView, workspacePanels.openBrowserPanel]);
+  useEffect(() => window.setsunaDesktop?.browser.onOpenNewTab(({ url, tabId }) => {
+    // Browser guests also live in sidebar website pages, outside the chat route.
+    workspacePanels.openBrowserPanel(url, 'side', tabId);
+    setActiveView('chat');
+  }), [setActiveView, workspacePanels.openBrowserPanel]);
 
   return (
     <BrowserSettingsNavigationProvider value={browserSettingsNavigation}><ShellFrame

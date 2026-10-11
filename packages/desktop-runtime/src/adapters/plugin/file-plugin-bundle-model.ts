@@ -20,7 +20,6 @@ import {
   parseRuntimePluginUiManifest,
   RUNTIME_EXTENSION_API_VERSION,
 } from '@setsuna-desktop/contracts';
-import { PLUGIN_UI_CARD_LIMITS } from '@setsuna-desktop/contracts';
 import { createHash } from 'node:crypto';
 import { chmod, copyFile, mkdir, readFile, readdir, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -293,28 +292,19 @@ async function normalizePluginExtension(
     const documentResources: ReadonlyArray<Readonly<{
       resourceId?: string;
       extensions: readonly string[];
-      maxBytes: number;
       label: string;
     }>> = [
-      { resourceId: contribution.document.htmlResourceId, extensions: ['.html', '.htm'], maxBytes: PLUGIN_UI_CARD_LIMITS.htmlBytes, label: 'HTML' },
-      { resourceId: contribution.document.cssResourceId, extensions: ['.css'], maxBytes: PLUGIN_UI_CARD_LIMITS.cssBytes, label: 'CSS' },
-      { resourceId: contribution.document.jsResourceId, extensions: ['.js', '.mjs'], maxBytes: PLUGIN_UI_CARD_LIMITS.jsBytes, label: 'JavaScript' },
+      { resourceId: contribution.document.htmlResourceId, extensions: ['.html', '.htm'], label: 'HTML' },
+      { resourceId: contribution.document.cssResourceId, extensions: ['.css'], label: 'CSS' },
+      { resourceId: contribution.document.jsResourceId, extensions: ['.js', '.mjs'], label: 'JavaScript' },
     ];
-    let totalBytes = 0;
-    for (const { resourceId, extensions, maxBytes, label } of documentResources) {
+    for (const { resourceId, extensions, label } of documentResources) {
       if (!resourceId) continue;
       const resource = resources.find((candidate) => candidate.id === resourceId);
       if (!resource) throw new Error(`Plugin extension Renderer UI resource is not declared: ${resourceId}`);
       if (!extensions.includes(path.extname(resource.path).toLowerCase())) {
         throw new Error(`Plugin extension Renderer UI ${label} resource has an invalid file type.`);
       }
-      if (resource.size > maxBytes) {
-        throw new Error(`Plugin extension Renderer UI ${label} resource is too large.`);
-      }
-      totalBytes += resource.size;
-    }
-    if (totalBytes > PLUGIN_UI_CARD_LIMITS.sourceBytes) {
-      throw new Error('Plugin extension Renderer UI document source is too large.');
     }
   }
   return {

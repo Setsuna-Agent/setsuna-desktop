@@ -12,7 +12,9 @@ export type SandboxedUiFrameProps = Readonly<{
   title: string;
   className?: string;
   size?: 'content' | 'fill';
-  /** Trusted library source supplied by the host, separate from bounded Plugin source. */
+  /** Stable, per-surface origin for browser storage; previews default to a temporary origin. */
+  storageKey?: string;
+  /** Trusted library source supplied by the host. */
   libraryScripts?: readonly string[];
   allowedActionIds?: readonly string[];
   onAction?(actionId: string, payload: RuntimePluginUiData): Promise<void>;

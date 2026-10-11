@@ -6,12 +6,50 @@ const maxFaviconCandidateCount = 8;
 const maxInspectedFaviconCandidateCount = 32;
 const maxNetworkFaviconUrlLength = 8_192;
 const faviconRequestTimeoutMs = 3_000;
+const maxWebsiteHtmlBytes = 1_024_000;
 
 type FaviconSession = Pick<Session, 'fetch'>;
 type FaviconResponse = Awaited<ReturnType<Session['fetch']>>;
 type NormalizedFaviconCandidate =
   | { kind: 'data'; value: string }
   | { kind: 'network'; value: string };
+
+/** Discover icons on demand, without opening a guest or executing website scripts. */
+export async function loadWebsiteFavicon(
+  browserSession: FaviconSession,
+  websiteUrl: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  const normalizedUrl = normalizeNetworkUrl(websiteUrl);
+  if (!normalizedUrl || signal?.aborted) return null;
+  let pageUrl = normalizedUrl;
+  let candidates: string[] = [];
+  const abortController = new AbortController();
+  const timeout = setTimeout(() => abortController.abort(), faviconRequestTimeoutMs);
+  try {
+    const response = await browserSession.fetch(pageUrl, {
+      credentials: 'include',
+      headers: { Accept: 'text/html,application/xhtml+xml' },
+      signal: signal ? AbortSignal.any([signal, abortController.signal]) : abortController.signal,
+    });
+    pageUrl = normalizeNetworkUrl(response.url) ?? pageUrl;
+    if (response.ok && /^(?:text\/html|application\/xhtml\+xml)(?:;|$)/i.test(response.headers.get('content-type') ?? '')) {
+      const html = await readBoundedResponse(response, maxWebsiteHtmlBytes);
+      if (html && !signal?.aborted) {
+        // Keep the HTML parser off the desktop startup path.
+        const { websiteFaviconCandidates } = await import('./website-favicon-candidates.js');
+        candidates = websiteFaviconCandidates(html.toString('utf8'), pageUrl);
+      }
+    } else {
+      await response.body?.cancel().catch(() => undefined);
+    }
+  } catch {
+    // A page may require login or reject HTML requests while its favicon is public.
+  } finally {
+    clearTimeout(timeout);
+  }
+  return signal?.aborted ? null : loadBrowserFavicon(browserSession, pageUrl, candidates, signal);
+}
 
 /**
  * 通过来宾会话获取页面提供的网站图标候选项，确保 Cookie、代理设置、
@@ -21,9 +59,10 @@ export async function loadBrowserFavicon(
   browserSession: FaviconSession,
   pageUrl: string,
   rawCandidates: readonly unknown[],
+  signal?: AbortSignal,
 ): Promise<string | null> {
   const normalizedPageUrl = normalizeNetworkUrl(pageUrl);
-  if (!normalizedPageUrl) return null;
+  if (!normalizedPageUrl || signal?.aborted) return null;
 
   const candidates = normalizeFaviconCandidates(rawCandidates);
   const conventionalFaviconUrl = new URL('/favicon.ico', normalizedPageUrl).href;
@@ -40,7 +79,7 @@ export async function loadBrowserFavicon(
   const attempts = candidates
     .filter((candidate): candidate is Extract<NormalizedFaviconCandidate, { kind: 'network' }> => candidate.kind === 'network')
     .map(async (candidate) => {
-      const favicon = await fetchFaviconAsDataUrl(browserSession, normalizedPageUrl, candidate.value);
+      const favicon = await fetchFaviconAsDataUrl(browserSession, normalizedPageUrl, candidate.value, signal);
       if (!favicon) throw new Error('Favicon candidate was unavailable.');
       return favicon;
     });
@@ -110,7 +149,7 @@ function normalizeNetworkUrl(value: string): string | null {
   if (!value || value.length > maxNetworkFaviconUrlLength) return null;
   try {
     const url = new URL(value);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null;
+    return !url.username && !url.password && (url.protocol === 'https:' || url.protocol === 'http:') ? url.href : null;
   } catch {
     return null;
   }
@@ -120,6 +159,7 @@ async function fetchFaviconAsDataUrl(
   browserSession: FaviconSession,
   pageUrl: string,
   faviconUrl: string,
+  signal?: AbortSignal,
 ): Promise<string | null> {
   const abortController = new AbortController();
   const timeout = setTimeout(() => abortController.abort(), faviconRequestTimeoutMs);
@@ -128,7 +168,7 @@ async function fetchFaviconAsDataUrl(
       credentials: 'include',
       headers: { Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8' },
       referrer: pageUrl,
-      signal: abortController.signal,
+      signal: signal ? AbortSignal.any([signal, abortController.signal]) : abortController.signal,
     });
     if (!response.ok) {
       await response.body?.cancel().catch(() => undefined);
@@ -146,9 +186,9 @@ async function fetchFaviconAsDataUrl(
   }
 }
 
-async function readBoundedResponse(response: FaviconResponse): Promise<Buffer | null> {
+async function readBoundedResponse(response: FaviconResponse, maxBytes = maxFaviconBytes): Promise<Buffer | null> {
   const declaredLength = Number(response.headers.get('content-length'));
-  if (Number.isFinite(declaredLength) && declaredLength > maxFaviconBytes) {
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
     await response.body?.cancel().catch(() => undefined);
     return null;
   }
@@ -162,7 +202,7 @@ async function readBoundedResponse(response: FaviconResponse): Promise<Buffer | 
       const { done, value } = await reader.read();
       if (done) break;
       totalBytes += value.byteLength;
-      if (totalBytes > maxFaviconBytes) {
+      if (totalBytes > maxBytes) {
         await reader.cancel().catch(() => undefined);
         return null;
       }

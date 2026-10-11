@@ -27,7 +27,7 @@ export type PluginUiSurface = Readonly<{
   description?: string;
   toolName?: string;
   preview?: RuntimePluginUiCardPreview;
-  renderMode: 'host' | 'sandbox';
+  renderMode: 'host' | 'sandbox' | 'webpage';
   sidebarEntry?: boolean;
 }>;
 
@@ -135,7 +135,7 @@ export function pluginUiSurfaces(
       kind,
       ...(contribution.navigation?.label ? { title: contribution.navigation.label } : {}),
       description: contribution.id,
-      renderMode: contribution.document ? 'sandbox' : 'host',
+      renderMode: contribution.webpage ? 'webpage' : contribution.document ? 'sandbox' : 'host',
       ...(contribution.slot === 'renderer.plugin.page' ? { sidebarEntry: true } : {}),
     };
   });

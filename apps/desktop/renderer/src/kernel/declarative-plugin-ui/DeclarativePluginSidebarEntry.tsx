@@ -66,6 +66,7 @@ export function DeclarativePluginSidebarEntry({ active, contribution, entryId, m
       </Tooltip>
       {editing ? (
         <PluginAppAppearanceDialog appearance={appearance} defaultName={defaultName} pluginName={plugin.name}
+          websiteUrl={contribution.webpage?.url}
           onClose={() => setEditing(false)} onSave={save} onViewPlugin={onViewPlugin} />
       ) : null}
       {deleting ? <DeletePluginAppDialog name={label} pluginName={plugin.name}

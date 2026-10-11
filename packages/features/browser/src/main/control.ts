@@ -5,6 +5,7 @@ import type {
   DesktopBrowserDeviceUserAgentProfile,
   DesktopBrowserKeyModifier,
   BrowserReloadMode,
+  BrowserWindowOpenMode,
   DesktopBrowserScreenshot,
   DesktopBrowserTab,
   BrowserAnnotationMarkers,
@@ -30,6 +31,7 @@ import type { BrowserPasswordStore } from './passwords/store.js';
 import type { BrowserPreferences } from '../contracts/settings.js';
 
 type RegisteredBrowserTab = {
+  windowOpenMode: BrowserWindowOpenMode;
   annotations: BrowserAnnotationSession;
   passwords: BrowserPasswordSession | null;
   automation: BrowserAutomation;
@@ -83,10 +85,13 @@ export class DesktopBrowserController implements BrowserControlExecutor {
     this.focusedSenderId = options.focusedSenderId;
   }
 
-  registerTab(tabId: string, contents: WebContents): void {
+  registerTab(tabId: string, contents: WebContents, windowOpenMode: BrowserWindowOpenMode = 'tab'): void {
     const normalizedTabId = normalizeTabId(tabId);
     const current = this.tabs.get(normalizedTabId);
-    if (current?.contents.id === contents.id && !contents.isDestroyed()) return;
+    if (current?.contents.id === contents.id && !contents.isDestroyed()) {
+      current.windowOpenMode = windowOpenMode;
+      return;
+    }
     this.unregisterTab(normalizedTabId);
     for (const [existingId, entry] of this.tabs) {
       if (entry.contents.id === contents.id) this.unregisterTab(existingId, contents.id);
@@ -103,6 +108,7 @@ export class DesktopBrowserController implements BrowserControlExecutor {
     contents.once('destroyed', destroyedListener);
     contents.on('did-start-navigation', navigationListener);
     this.tabs.set(normalizedTabId, {
+      windowOpenMode,
       annotations,
       passwords: this.passwordStore ? new BrowserPasswordSession(normalizedTabId, contents, this.passwordStore, this.preferences) : null,
       automation,
@@ -113,6 +119,11 @@ export class DesktopBrowserController implements BrowserControlExecutor {
       navigationListener,
     });
     this.snapshotRevisions.set(normalizedTabId, 0);
+  }
+
+  windowOpenModeForWebContents(webContentsId: number): BrowserWindowOpenMode {
+    const tabId = this.tabIdForWebContents(webContentsId);
+    return tabId ? this.tabs.get(tabId)!.windowOpenMode : 'tab';
   }
 
   unregisterTab(tabId: string, expectedWebContentsId?: number): void {

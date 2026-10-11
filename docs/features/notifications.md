@@ -27,7 +27,13 @@
 
 ## 平台与生命周期
 
-Windows main 在通知前设置与 NSIS 开始菜单快捷方式一致的 AppUserModelID；开发实例使用 Electron 可执行文件路径，当前 Electron 在首次创建通知 presenter 时注册快捷方式及激活器。macOS 使用 Electron 原生通知接口，应用必须有有效的 bundle 签名并取得系统通知授权。`pnpm dev` 自动在后台准备独立的 `Setsuna Desktop Dev.app`，以开发 bundle ID、本机 ad-hoc 签名和固定缓存路径注册到系统；不需要 Developer ID 证书，仍使用未打包的开发 profile。有效缓存直接用于启动；首次或缓存失效时先启动原 Electron，准备完成后重启 Electron 才使用通知应用。复制、签名或注册的慢任务及失败均不阻塞窗口；退出时取消准备并忽略迟到结果。首次发送时需用户允许该应用通知，曾拒绝时需在系统设置中开启。开发 supervisor 的完整时序见 [开发启动链路](../development/build-and-release.md#scriptsstart-electron-devts)。
+Windows main 为正式版设置与 NSIS 开始菜单快捷方式一致的 `dev.setsuna.desktop` AppUserModelID；开发版使用独立的 `dev.setsuna.desktop.development`。首次发送开发通知时，宿主异步将 `Setsuna Desktop Dev` 名称和 logo 登记到当前用户的 `Software\Classes\AppUserModelId`，覆盖原 Electron 可执行文件的默认通知品牌；Electron 继续负责快捷方式与激活器。正式版和开发版都显式传入通知 `icon`，与任务栏、托盘共用 `window/icon.ts` 的资源解析，支持仓库和打包资源路径。
+
+`app-identity.ts` 同时配置开发窗口的任务栏身份和开始菜单入口。窗口的 AppUserModelID、`icon.ico` 与 relaunch 信息在显示前设置；首帧后后台准备与该身份匹配的 `Electron.lnk`，只更新目标为当前 Electron、身份为开发 ID 或旧可执行文件路径的入口，保留通知激活 CLSID。Electron 按可执行文件的产品名寻找该入口，宿主为它提供 Setsuna 图标和应用参数，并保留 Electron 校验要求的工作目录，后续通知不会将其改回默认图标。通知发送共享这项准备，失败可重试；Feature 取消会停止当前等待，共享后台任务保留到应用退出时取消。
+
+宿主通过 Main Capability 的 `prepareNotification` 按需提供图标。Feature 在同一生命周期内共享准备结果，失败后允许重试；前台抑制不会触发准备，单次调用取消不会取消其他通知共用的准备，Feature 关闭则取消注册并拒绝迟到发送。注册命令使用独立参数、隐藏窗口与有限超时，只有开发版写入自身的当前用户应用身份，不修改正式版身份或 Electron 二进制。
+
+macOS 使用 Electron 原生通知接口，应用必须有有效的 bundle 签名并取得系统通知授权。`pnpm dev` 自动在后台准备独立的 `Setsuna Desktop Dev.app`，以开发 bundle ID、本机 ad-hoc 签名和固定缓存路径注册到系统；不需要 Developer ID 证书，仍使用未打包的开发 profile。有效缓存直接用于启动；首次或缓存失效时先启动原 Electron，准备完成后重启 Electron 才使用通知应用。复制、签名或注册的慢任务及失败均不阻塞窗口；退出时取消准备并忽略迟到结果。首次发送时需用户允许该应用通知，曾拒绝时需在系统设置中开启。开发 supervisor 的完整时序见 [开发启动链路](../development/build-and-release.md#scriptsstart-electron-devts)。
 
 `Notification.isSupported()` 不代表已获权限，`UNErrorDomain 1` 表示当前应用不允许提交通知；操作系统仍可根据通知授权及专注模式决定横幅展示。平台要求参见 [Electron 通知指南](https://www.electronjs.org/docs/latest/tutorial/notifications)、[Notification API](https://www.electronjs.org/docs/latest/api/notification) 和 [Apple 的通知权限错误说明](https://developer.apple.com/documentation/usernotifications/unerror/notificationsnotallowed)。
 
@@ -37,6 +43,6 @@ Feature 激活只登记服务、实时事件订阅与回调，没有磁盘恢复
 
 ## 验证
 
-`test/main/feature.test.ts` 覆盖前台抑制与后台发送、按需调用、并发去重、Windows 横幅超时后的点击、异步权限拒绝、未确认超时与取消/关闭；同时记录空 host 与通知 Feature 的激活耗时。`test/runtime/` 覆盖精确轮次的最终回答、Unicode 截断、终态与内部任务过滤、启动零读取/发送、慢请求取消及关闭后不补发，以及来源绑定、只读边界、loopback 鉴权、重定向拒绝、回执校验与错误传播。
+`test/main/feature.test.ts` 覆盖前台抑制与后台发送、按需调用、并发去重、慢/失败准备不影响激活、准备共享与失败重试、关闭时取消准备和迟到结果、Windows 横幅超时后的点击、异步权限拒绝、未确认超时与取消/关闭；同时记录空 host 与通知 Feature 的激活耗时。`test/runtime/` 覆盖精确轮次的最终回答、Unicode 截断、终态与内部任务过滤、启动零读取/发送、慢请求取消及关闭后不补发，以及来源绑定、只读边界、loopback 鉴权、重定向拒绝、回执校验与错误传播。
 
 `scripts/test/prepare-electron-dev-app.test.ts` 覆盖独立签名应用、缓存复用与 Electron 更新、签名失败保留旧应用及重试、慢命令取消和临时目录清理、Windows 不执行 macOS 准备。`scripts/test/start-electron-dev.test.ts` 覆盖 Electron 启动和计划重启不等待准备、后台失败隔离、下次启动使用准备结果及关闭后忽略迟到结果。真实横幅、系统权限及系统通知中心点击需要在 macOS 开发/签名应用和 Windows 应用验证；mock 测试只验证接线与生命周期。

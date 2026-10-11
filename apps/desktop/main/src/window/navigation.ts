@@ -1,4 +1,5 @@
 import type { BrowserWindow } from 'electron';
+import { PLUGIN_UI_DOCUMENT_SCHEME } from '@setsuna-desktop/contracts';
 
 type OpenExternal = (url: string) => Promise<unknown>;
 
@@ -64,7 +65,8 @@ function isSupportedFrameNavigationUrl(url: string): boolean {
   if (url === 'about:blank' || url === 'about:srcdoc') return true;
   try {
     const protocol = new URL(url).protocol;
-    return protocol === 'http:' || protocol === 'https:';
+    return protocol === 'http:' || protocol === 'https:' || protocol === `${PLUGIN_UI_DOCUMENT_SCHEME}:`
+      || protocol === 'blob:' || protocol === 'data:';
   } catch {
     return false;
   }

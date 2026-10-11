@@ -15,7 +15,7 @@ export function contributionUsesAction(
 ): boolean {
   return contribution.document
     ? contribution.document.actionIds.includes(actionId)
-    : treeUsesAction(contribution.tree, actionId);
+    : Boolean(contribution.tree && treeUsesAction(contribution.tree, actionId));
 }
 
 export function validateRendererUiActionValues(

@@ -2,6 +2,7 @@ import type { RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import {
   BROWSER_IPC_CHANNELS,
   DESKTOP_BROWSER_PARTITION,
+  type BrowserWindowOpenMode,
 } from '../contracts/index.js';
 import {
   clipboard,
@@ -10,6 +11,7 @@ import {
   type BrowserWindow,
   type ContextMenuParams,
   type Event,
+  type HandlerDetails,
   type Input,
   type WebContents,
   type WebPreferences,
@@ -19,6 +21,7 @@ import type { BrowserContextMenuSession } from './context-menu-session.js';
 import { embeddedBrowserKeyboardShortcut } from './keyboard-shortcuts.js';
 import {
   isAllowedEmbeddedBrowserUrl,
+  navigateEmbeddedBrowserCurrentTab,
   requestEmbeddedBrowserNewTab,
 } from './new-tab.js';
 
@@ -34,6 +37,7 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
   isAllowedExtensionUrl?(url: string): boolean;
   onGuestAttached?(contents: WebContents): () => void;
   onNewTabRequested?(contents: WebContents, url: string): string | undefined;
+  windowOpenMode?(webContentsId: number): BrowserWindowOpenMode;
   permissionsManaged?: boolean;
 }>): () => void {
   const { mainWindow } = input;
@@ -98,7 +102,10 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
       event.preventDefault();
       hostWebContents.send('desktop:keyboard-shortcut-input', shortcut.input);
     };
-    const requestNewTab = (url: string): boolean => {
+    const requestNewTab = (url: string, details?: Pick<HandlerDetails, 'referrer' | 'postBody'>): boolean => {
+      if (input.windowOpenMode?.(guestId) === 'current-tab') {
+        return navigateEmbeddedBrowserCurrentTab(guestContents, url, details);
+      }
       const hostWebContents = guestContents.hostWebContents;
       const tabId = input.onNewTabRequested?.(guestContents, url);
       if (requestEmbeddedBrowserNewTab(hostWebContents, guestId, url, tabId)) {
@@ -144,8 +151,8 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
     guestContents.on('context-menu', handleContextMenu);
     guestContents.on('will-navigate', handleWillNavigate);
     guestContents.once('destroyed', handleDestroyed);
-    guestContents.setWindowOpenHandler(({ url }) => {
-      requestNewTab(url);
+    guestContents.setWindowOpenHandler((details) => {
+      requestNewTab(details.url, details);
       return { action: 'deny' };
     });
     guestDisposers.set(guestId, disposeGuest);

@@ -1,13 +1,28 @@
 import { act, fireEvent } from '@testing-library/react';
 import { vi, type Mock } from 'vitest';
+import type { PluginUiDocumentInput } from '@setsuna-desktop/contracts';
 import { SANDBOXED_UI_CHANNEL } from '../../src/kernel/sandboxed-plugin-ui/sandbox-document.js';
+
+const documents = new Map<string, string>();
+
+export function mockPluginUiDocuments() {
+  documents.clear();
+  const createPluginUiDocument = vi.fn(async ({ html }: PluginUiDocumentInput) => {
+    const id = crypto.randomUUID();
+    const url = `about:blank#${id}`;
+    documents.set(url, html);
+    return { id, url };
+  });
+  const releasePluginUiDocument = vi.fn(async () => undefined);
+  return { createPluginUiDocument, releasePluginUiDocument };
+}
 
 export function connectSandboxedUiFrame(frame: HTMLIFrameElement): {
   post: Mock<(message: Record<string, unknown>) => void>;
   closed: Mock<() => void>;
   send(data: Record<string, unknown>): void;
 } {
-  const bootstrap = new DOMParser().parseFromString(frame.srcdoc, 'text/html').querySelector('script')?.textContent;
+  const bootstrap = new DOMParser().parseFromString(documents.get(frame.src) ?? frame.srcdoc, 'text/html').querySelector('script')?.textContent;
   const documentId = bootstrap?.match(/const documentId = ("[^"]*");/u)?.[1];
   if (!documentId) throw new Error('Document bridge identity is missing.');
   const port = {

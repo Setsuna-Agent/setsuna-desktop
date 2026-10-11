@@ -22,6 +22,7 @@ export function PluginUiCardView({
         className="plugin-ui-card__frame"
         data={payload.data}
         source={payload}
+        storageKey={`${payload.pluginId}:card:${payload.id}`}
         title={payload.title ?? plugin.name}
       />
       <footer className="plugin-ui-card__attribution">

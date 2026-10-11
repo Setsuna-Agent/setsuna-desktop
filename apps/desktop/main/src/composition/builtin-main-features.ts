@@ -22,7 +22,7 @@ import {
   browserControlConnectionCapability,
   browserMainFeature,
   browserMainHostCapability,
-  registerExtensionFaviconScheme,
+  extensionFaviconScheme,
 } from '@setsuna-desktop/feature-browser/main';
 import {
   networkProxyMainFeature,
@@ -74,12 +74,14 @@ import {
   type WindowsSandboxMainHost,
   type WindowsSandboxMainService,
 } from '@setsuna-desktop/feature-windows-sandbox/main';
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, protocol } from 'electron';
 import path from 'node:path';
 import type { DesktopNativeBridgeServer } from '../runtime/native-bridge-server.js';
 import { desktopWindows } from '../window/registry.js';
 import { desktopShellPath } from '../runtime/desktop-environment.js';
 import { resolveWorkspaceFilePreview } from '../workspace/file-opening.js';
+import { prepareDesktopNotification } from '../app-identity.js';
+import { pluginUiDocumentScheme } from '../window/plugin-ui-documents.js';
 
 const mainFeatures = defineMainFeatureHost({
   required: [
@@ -100,7 +102,7 @@ const mainFeatures = defineMainFeatureHost({
 
 /** Protocol privileges must be declared before Electron creates any renderer or worker. */
 export function registerBuiltinMainFeatureSchemes(): void {
-  registerExtensionFaviconScheme();
+  protocol.registerSchemesAsPrivileged([extensionFaviconScheme, pluginUiDocumentScheme]);
 }
 
 export type ActivatedBuiltinMainFeatures = Readonly<{
@@ -131,6 +133,7 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
   const composition = await mainFeatures.activate({
     hostCapabilities: [
       provideHostCapability(notificationsMainHostCapability, {
+        prepareNotification: prepareDesktopNotification,
         isForeground: () => BrowserWindow.getFocusedWindow() !== null,
         registerNativeRequest: (requestPath: string, handler: (value: unknown, signal: AbortSignal) => Promise<unknown>) =>
           input.nativeBridge.registerFeatureRequest(requestPath, handler),

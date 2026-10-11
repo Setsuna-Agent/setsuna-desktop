@@ -85,11 +85,11 @@ my-plugin/
 - `mcpServers` 支持 `stdio` 和 `streamable_http`。HTTP 必须是 HTTPS，或仅限 loopback 的 HTTP。
 - `hooks` 使用现有 Hook 事件与 matcher。`id`、`name`、`description`、触发事件和 matcher 会安全投影到插件详情页；命令和本地路径不会发送给 renderer。`{{pluginRoot}}` 安装时替换为私有安装目录，并按当前平台安全引用。
 - `resources` 必须显式声明。Agent 只能读取不超过 8 MiB 的受支持图片，或不超过 512 KiB 的 UTF-8 文本。
-- `extension.uiCards` 是运行时对话卡片的安装目录信息；每项包含稳定 `id`、用户可见 `label`、可选 `description`、顶层 `tools` 中存在的 `toolName`，以及必需的静态 `preview`。预览带有示例 HTML/CSS/JS 和有界 JSON 数据，只在无网络、无 host action 的沙箱中展示；工具运行时的真实卡片源码仍在工具结果中动态产生。
+- `extension.uiCards` 是运行时对话卡片的安装目录信息；每项包含稳定 `id`、用户可见 `label`、可选 `description`、顶层 `tools` 中存在的 `toolName`，以及必需的静态 `preview`。预览使用示例 HTML/CSS/JS 和有界 JSON 数据，不执行工具或 host action；工具运行时的真实卡片源码仍在工具结果中动态产生。页面与卡片都可以使用普通浏览器网络能力。
 
 ### Renderer UI：宿主组件与沙箱页面
 
-需要在 Setsuna 宿主界面中显示配置或状态时，Bundle 可以在 manifest 的 `extension` 对象内增加 `rendererUi`。它必须同时声明 `extension.capabilities` 中的 `ui`；使用动态数据时还要声明 `state`。每个 contribution 二选一：`tree` 由宿主组件渲染，适合紧凑状态和普通表单；`document` 把 Bundle 内的 HTML/CSS/JS 作为 opaque-origin sandbox iframe 渲染，适合自由布局的独立功能页。两者都由宿主管理侧栏入口、数据 scope、action allowlist 与可选的操作确认。
+需要在 Setsuna 宿主界面中显示配置或状态时，Bundle 可以在 manifest 的 `extension` 对象内增加 `rendererUi`。它必须声明 `ui`；使用 runtime 状态时还要声明 `state`。每个 contribution 选择一种模式：`tree` 使用宿主组件；`document` 加载 Bundle 的 HTML/CSS/JS，自由页面拥有独立的浏览器 origin；`webpage: { "url": "https://www.baidu.com/" }` 在 `renderer.plugin.page` 中直接打开原生浏览器页面。已有网站优先使用 `webpage`，点击 `navigation.label` 生成的侧栏入口即可打开，不经过 iframe 嵌套，也不受网站的 iframe 嵌入策略影响。网页显示完整浏览器导航条，复用浏览器的登录、下载、扩展和设置；新标签页链接、带网址的 `window.open()` 和新窗口表单在当前网页内跳转，保留表单数据并支持后退。网页不获得 Plugin action 或 runtime bridge。
 
 ```json
 {
@@ -191,9 +191,9 @@ renderConversations(response.data.threads);
 - schemaVersion 1 继续兼容插件详情设置和紧凑 Chat contribution；早期 `renderer.settings.page.extensions` 的 `general/about` 输入会归一化到所属插件详情。详情 contribution 可用 `stateKey` 绑定一条 global state，且至少包含一个字段。
 - schemaVersion 2 新增 `renderer.plugin.page`、宿主侧栏入口、作用域数据和绑定；允许的 Slot 为 `renderer.capabilities.plugin.details`、`renderer.plugin.page`、`renderer.settings.page.extensions` 和 `renderer.chat.composer.status`。Settings target 只允许 `general/about`，Chat 区域不允许 `field/select`。
 - `tree` node 只允许 `stack/text/badge/notice/button/field/select`，未知字段直接拒绝；它不接受 HTML、CSS、`className`、script、函数 handler 或任意 URL。
-- `document` 只接受已声明的 `.html/.htm`、`.css`、`.js/.mjs` 文本资源，并沿用交互卡片的单文件和总源码上限。宿主从一次完整 Bundle hash 快照中同时取得源码字节；当前 hash 与用户信任的 hash 不一致时拒绝返回，避免校验和读取之间出现可执行内容替换。
-- `document.libraries` 可选，目前只允许 `echarts`。宿主按需读取随应用打包的库源码，在隔离 frame 内先加载库、再执行页面源码，以 `window.echarts` 提供图表 API。库源码不占 Plugin 源码额度，不进入主 Renderer 的执行环境，不允许 URL、CDN 或任意包名。图表容器需要明确尺寸，随容器变化调用 `chart.resize()`，移除时调用 `chart.dispose()`。
-- document iframe 带 `sandbox="allow-scripts allow-forms"`，不带 `allow-same-origin`。表单支持正常的 `submit` 事件、原生校验及向 HTTP(S) 地址提交；通过 bridge action 保存本地数据时，由页面在 `submit` handler 中调用 `preventDefault()`。Electron 允许子 frame 在 HTTP(S) 地址间导航，提交结果留在应用的 iframe 内，不替换宿主主页面。CSP 继续限制脚本直接联网、远程资源、worker、嵌套 frame、对象和媒体。页面没有 Node、Electron、preload、文件系统或宿主 DOM，宿主能力通过 `window.setsunaUI` 使用。
+- `document` 接受已声明的 `.html/.htm`、`.css`、`.js/.mjs` 文本资源，不再额外限制单文件或合计 UI 源码大小。宿主从完整 Bundle hash 快照同时取得源码字节；当前 hash 与用户信任的 hash 不一致时拒绝返回。Bundle 的整体安装预算仍适用。
+- `document.libraries` 可选，目前提供随应用打包的 `echarts`。宿主按需在隔离 frame 内先加载库、再执行页面源码，以 `window.echarts` 提供离线图表 API。页面也可按需要加载远程脚本、样式和其他浏览器库。图表随容器变化调用 `chart.resize()`，移除时调用 `chart.dispose()`。
+- document 由 `setsuna-plugin-ui://` 独立 origin 加载，不再设置 iframe sandbox 或额外 CSP 禁用浏览器能力。支持直接联网、远程资源、浏览器存储、worker、嵌套 frame、媒体、下载及 HTTP(S) 表单提交，仍遵循网站 CORS、嵌入策略和操作系统权限。同一 Plugin 页面或卡片 ID 保持稳定存储 origin。页面没有 Node、Electron、preload、文件系统或宿主 DOM；宿主能力通过文档绑定的 `window.setsunaUI` 使用，导航离开会撤销授权。
 - 动态值只能使用 `{ "path": "summary.label", "fallback": "未运行" }` 从 contribution 声明的 `data.stateKey` 读取。数据 scope 只能是 `global/project/thread`，JSON 大小、深度和条目数均受限；renderer 不能自行选择 state key。
 - 单个 manifest 最多 16 个 contribution、32 个 action、128 个 node、24 个字段，树深最多 8 层；文本、选项和提交值也都有独立上限。
 - UI 只在安装记录与当前 Bundle hash 仍处于 `trusted` 时挂载；更新、卸载或撤销信任会通过 Renderer transaction 替换/撤销整个 Plugin UI。
@@ -229,7 +229,7 @@ renderConversations(response.data.threads);
 }
 ```
 
-卡片和上面的独立页面共用沙箱 frame，但卡片源码随工具结果持久化，并显示宿主持有的 Plugin 来源标题；Chat 会把卡片放在该工具调用的真实时间线位置，因此工具前后的 assistant 文本可以稳定显示为 `文字 → 卡片 → 文字`。v1 卡片没有 host action，也不能直接联网：
+卡片和上面的独立页面共用隔离 frame，但卡片源码随工具结果持久化，并显示宿主持有的 Plugin 来源标题；Chat 会把卡片放在该工具调用的真实时间线位置。v1 卡片支持联网和浏览器存储，不提供 host action：
 
 ```js
 return {
@@ -244,13 +244,13 @@ return {
       css: '#weather { padding: 20px; }',
       js: 'window.setsunaUI.ready.then(({data}) => render(data));',
       data: { temperature: 28, condition: '晴' },
-      permissions: { network: false, hostActions: [] }
+      permissions: { network: true, hostActions: [] }
     }
   }
 };
 ```
 
-worker 不应填写 `pluginId`；runtime 只接受来自真实 Plugin tool run 的卡片，用已验证的 Plugin ID 盖章并在持久化前校验 envelope、JSON 数据和 HTML/CSS/JS 大小，动态返回的卡片 JavaScript 还会做语法检查。`uiCards` 只负责安装摘要和静态详情预览，不授权执行，也不限制同一模板每次返回不同数据和源码。预览不会执行工具、联网或发起 host action。升级前没有 `uiCards` 的 Bundle 会根据 `ui` 能力与已声明工具做兼容展示，但必须更新清单补充 `uiCards.preview` 后才能看到真实预览。需要天气、搜索等实时数据时，工具必须从 handler 的第二个参数调用 `context.network.request` 查询 allowlist origin；响应 `body` 是字符串，应检查状态后调用 `response.json()`/`response.text()` 或显式 `JSON.parse`，再把纯结果投影给卡片。卡片自身不能请求网络。
+worker 不应填写 `pluginId`；runtime 只接受真实 Plugin tool run 的卡片，用已验证的 Plugin ID 盖章，并在持久化前校验 envelope、有界 JSON 数据和源码类型；动态卡片 JavaScript 还会做语法检查。`uiCards` 负责安装摘要和静态详情预览，不限制同一模板每次返回不同数据和源码。预览不执行工具或 host action，推荐使用无副作用的示例数据。实时数据可由工具通过 `context.network.request` 获取，也可由页面遵循 CORS 直接请求。旧卡片的 `permissions.network: false` 兼容归一化为 `true`，不再作为联网禁用开关。
 
 完整所有权与安全决策见 [Renderer Plugin Runtime](../../designs/current/renderer-plugin-runtime.md)，worker 动作 API 见 [可执行扩展 API v1](extensions.md#apionuiactionactionid-handler)。
 
@@ -274,7 +274,7 @@ runtime 会用当前 turn 的用户文本、附件名和附件 MIME 类型匹配
 
 ### 随应用实现的原生能力
 
-Bundle 是否执行代码由 `extension` 字段决定，而不是由 schema 版本决定。没有 `extension` 的 v2 Bundle 仍是纯声明式插件；extension 入口只在独立 Node worker 中运行，并受完整包哈希信任、能力声明、JSONL 协议和标准工具审批约束。可选的 document/card JavaScript 只在上述 opaque-origin iframe 中运行，不进入主 Renderer module graph。Node worker 不等同于 OS 沙箱，完整契约见 [可执行扩展 API v1](extensions.md)。
+Bundle 是否执行代码由 `extension` 字段决定，而不是由 schema 版本决定。没有 `extension` 的 v2 Bundle 仍是纯声明式插件；extension 入口只在独立 Node worker 中运行，并受完整包哈希信任、能力声明、JSONL 协议和标准工具审批约束。可选的 document/card JavaScript 只在上述独立 web origin 中运行，不进入主 Renderer module graph。Node worker 不等同于 OS 沙箱，完整契约见 [可执行扩展 API v1](extensions.md)。
 
 需要 runtime 凭据或受管附件的第一方插件也必须由 Bundle extension 注册和实现工具，不能在 runtime 里配一套隐藏 ToolHost。`openai-image-generation` 的 `generate_image` schema、输入校验、结果格式位于插件 `extension/`，只通过 marketplace 专用的 `image-generation` bridge 请求 host 使用私有 Images API 配置并保存受管资产；`openai-vision-recognition` 同样在 Bundle 内实现 `analyze_image`，通过 `vision-recognition` bridge 传递附件 ID 和问题。host 只负责密钥、代理、provider adapter、thread 归属校验和二进制落盘，不持有工具定义或面向模型的结果语义。
 

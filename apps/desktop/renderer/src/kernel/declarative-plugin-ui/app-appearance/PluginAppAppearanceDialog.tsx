@@ -1,18 +1,20 @@
 import type { BrandIconConfig } from '@setsuna-desktop/contracts';
 import { Button, Dialog, TextField, Tooltip } from '@setsuna-desktop/renderer-ui';
-import { Upload } from 'lucide-react';
-import { useEffect, useId, useRef, useState } from 'react';
-import { brandIconFileAccept, brandIconMaxSizeLabel, readBrandIconFile } from '../../../shared/branding/brandIconUpload.js';
+import { Download, Upload } from 'lucide-react';
+import { useId, useRef, useState } from 'react';
+import { brandIconFileAccept } from '../../../shared/branding/brandIconUpload.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { PluginAppAvatar } from './PluginAppAvatar.js';
 import { PLUGIN_APP_NAME_MAX_LENGTH, type PluginAppAppearance } from './preferences.js';
 import { APP_AVATAR_PRESETS } from './app-avatar-presets.js';
+import { usePluginAppAvatarDraft } from './usePluginAppAvatarDraft.js';
 import './app-appearance.css';
 
-export function PluginAppAppearanceDialog({ appearance, defaultName, pluginName, onClose, onSave, onViewPlugin }: Readonly<{
+export function PluginAppAppearanceDialog({ appearance, defaultName, pluginName, websiteUrl, onClose, onSave, onViewPlugin }: Readonly<{
   appearance: PluginAppAppearance & { avatar: BrandIconConfig };
   defaultName: string;
   pluginName: string;
+  websiteUrl?: string;
   onClose(): void;
   onSave(appearance: PluginAppAppearance): boolean;
   onViewPlugin(): void;
@@ -20,39 +22,9 @@ export function PluginAppAppearanceDialog({ appearance, defaultName, pluginName,
   const { t } = useI18n();
   const nameId = useId();
   const fileInput = useRef<HTMLInputElement>(null);
-  const mounted = useRef(true);
   const [name, setName] = useState(appearance.name ?? defaultName);
-  const [avatar, setAvatar] = useState(appearance.avatar);
-  const [customAvatar, setCustomAvatar] = useState<Extract<BrandIconConfig, { type: 'custom' }> | undefined>(
-    appearance.avatar.type === 'custom' ? appearance.avatar : undefined,
-  );
-  const [reading, setReading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    mounted.current = true;
-    return () => { mounted.current = false; };
-  }, []);
-
-  const upload = async (file: File) => {
-    setReading(true);
-    setError(null);
-    try {
-      const image = await readBrandIconFile(file, {
-        emptyFile: t('settings.brand.emptyFile'),
-        invalidContent: t('settings.brand.invalidContent'),
-        invalidType: t('settings.brand.invalidType'),
-        readError: t('settings.brand.readError'),
-        tooLarge: t('settings.brand.tooLarge', { size: brandIconMaxSizeLabel }),
-      });
-      if (!mounted.current) return;
-      setCustomAvatar(image);
-      setAvatar(image);
-    } catch (cause) {
-      if (mounted.current) setError(cause instanceof Error ? cause.message : t('settings.brand.readError'));
-    } finally {
-      if (mounted.current) setReading(false);
-    }
-  };
+  const { avatar, setAvatar, customAvatar, loading, error, setError, upload, fetchWebsiteIcon } = usePluginAppAvatarDraft(appearance.avatar);
+  const reading = loading !== null;
 
   return (
     <Dialog title={t('pluginUi.editApp')} width={560} onClose={onClose}>
@@ -94,9 +66,16 @@ export function PluginAppAppearanceDialog({ appearance, defaultName, pluginName,
               </Tooltip>
             ) : null}
           </div>
-          <Button type="button" variant="secondary" onClick={() => fileInput.current?.click()}>
-            <Upload size={14} />{reading ? t('settings.brand.reading') : t('pluginUi.uploadAvatar')}
-          </Button>
+          <div className="plugin-app-appearance__image-actions">
+            <Button type="button" variant="secondary" onClick={() => fileInput.current?.click()}>
+              <Upload size={14} />{loading === 'upload' ? t('settings.brand.reading') : t('pluginUi.uploadAvatar')}
+            </Button>
+            {websiteUrl ? (
+              <Button type="button" variant="secondary" onClick={() => { void fetchWebsiteIcon(websiteUrl); }}>
+                <Download size={14} />{loading === 'website' ? t('pluginUi.fetchingAvatar') : t('pluginUi.fetchAvatar')}
+              </Button>
+            ) : null}
+          </div>
           <input ref={fileInput} type="file" hidden accept={brandIconFileAccept} onChange={(event) => {
             const file = event.target.files?.[0];
             event.target.value = '';

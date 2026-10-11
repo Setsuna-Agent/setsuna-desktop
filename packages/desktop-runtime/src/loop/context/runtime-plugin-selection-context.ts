@@ -56,7 +56,7 @@ export async function runtimePluginSelectionContext(
             extensionTrust: plugin.extension?.trust,
             referencedApps: plugin.extension?.rendererUi?.contributions
               .filter((page) => page.slot === 'renderer.plugin.page' && mentions.some((mention) => mention.pluginId === plugin.id && mention.contributionId === page.id))
-              .map((page) => ({ contributionId: page.id, name: page.navigation?.label ?? plugin.name, document: page.document })),
+              .map((page) => ({ contributionId: page.id, name: page.navigation?.label ?? plugin.name, document: page.document, webpage: page.webpage })),
             unsupportedApps: plugin.unsupportedApps,
             unsupportedComponents: plugin.unsupportedComponents,
           }), ['selected_plugin']),

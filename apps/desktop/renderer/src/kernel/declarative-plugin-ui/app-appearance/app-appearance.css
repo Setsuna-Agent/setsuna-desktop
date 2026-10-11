@@ -111,6 +111,12 @@
   background: var(--sd-color-surface-muted);
 }
 
+.plugin-app-appearance__image-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .plugin-app-appearance__error {
   color: var(--sd-color-danger);
   font-size: 12px;

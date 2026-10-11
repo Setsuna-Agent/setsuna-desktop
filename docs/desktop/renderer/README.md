@@ -14,7 +14,7 @@ Renderer 是桌面工作台 UI。它只依赖共享 contracts 和 preload 暴露
 | `src/composition/` | 唯一 Renderer Feature composition root、内置 Renderer Plugin 与 host capability 投影 | [Feature Composition](../../architecture/feature-composition.md) |
 | `src/kernel/renderer-plugins/` | Slot registry、transaction、selection、layout preference、outlet 与 inspection | [Renderer Plugin Runtime](../../designs/current/renderer-plugin-runtime.md) |
 | `src/kernel/declarative-plugin-ui/` | 普通 Plugin host tree 与 sandbox page 到白名单 Slot 的安全 gateway | [Plugin Bundles](../../extensions/plugins/bundles.md) |
-| `src/kernel/sandboxed-plugin-ui/` | 独立页面与对话卡片共用的 opaque-origin iframe 宿主 | [Plugin Bundles](../../extensions/plugins/bundles.md) |
+| `src/kernel/sandboxed-plugin-ui/` | 独立页面与对话卡片共用的 独立 web origin 页面宿主 | [Plugin Bundles](../../extensions/plugins/bundles.md) |
 | `packages/features/ui-card/src/renderer/` | 校验 Plugin 来源并展示 typed card result，沙箱组件由宿主注入 | [UI Card](../../features/tools-and-content.md#ui-card) |
 | `packages/features/review/src/renderer/` | Review panel、Git 控件、状态、文案与样式 | [Workspace 与 debug](workspace-and-debug.md) |
 | `packages/features/conversation-debug/src/renderer/` | 事件/trace 图、列表、inspector 与 Feature settings | [Workspace 与 debug](workspace-and-debug.md) |

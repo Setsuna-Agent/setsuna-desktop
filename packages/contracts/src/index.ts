@@ -5,6 +5,7 @@ export * from './config.js';
 export * from './data-root.js';
 export * from './desktop.js';
 export * from './desktop/sandbox-dialogs.js';
+export * from './desktop/plugin-ui-documents.js';
 export * from './environment.js';
 export * from './event-projections/dispositions.js';
 export * from './event-projections/assistant-phase.js';

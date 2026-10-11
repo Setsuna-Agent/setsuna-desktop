@@ -16,6 +16,7 @@ Electron main 是桌面可信边界。它负责应用生命周期、窗口、IPC
 | `packages/features/browser/src/main/` | `<webview>` 注册、CDP 自动化、控制 server 与浏览器扩展 | [浏览器](../../features/browser.md) |
 | `src/security/` | `safeStorage` 加解密和 credential vault | [Runtime 与 IPC](runtime-and-ipc.md) |
 | `src/window/` | frame、窗口状态、surface、splash | [本机能力](native-capabilities.md) |
+| `src/app-identity.ts` | Windows 应用、任务栏和开始菜单身份、按需注册开发通知品牌 | [系统通知](../../features/notifications.md) |
 | `packages/features/review/src/main` | Git review 状态、watcher、IPC 与 stage/unstage/discard | [本机能力](native-capabilities.md) |
 | `packages/features/workspace-apps/src/main` | 外部应用检测、平台启动参数与 IPC | [本机能力](native-capabilities.md) |
 | `packages/features/updater/src/main` | release metadata、下载源、checksum、安装包与 IPC | [本机能力](native-capabilities.md) |
@@ -47,6 +48,8 @@ Electron main 是桌面可信边界。它负责应用生命周期、窗口、IPC
 - 等待 renderer 首帧后揭示工作台。
 
 Windows 任务栏和系统托盘使用无透明外边距的 `assets/build/icon-windows.png`，安装包/可执行文件使用由同一画面生成的多尺寸 `assets/build/icon.ico`；macOS 继续使用保留平台留白的 `icon.icns` / `icon.png`。
+
+Windows 开发窗口在显示前通过 `setAppDetails` 配置开发 AppUserModelID、`icon.ico` 和完整的 relaunch 信息。首帧后后台准备该身份的开始菜单快捷方式：Windows 优先读取匹配快捷方式的图标，单独设置窗口属性不足以覆盖 Electron 自动创建的入口。宿主保留 Electron 的快捷方式文件名、目标、工作目录与通知激活 CLSID，更新 Setsuna 图标和应用参数；不会修改其他应用的入口。正式版由安装器快捷方式和应用可执行文件提供任务栏身份。
 
 ### 3. 本机服务组装
 
