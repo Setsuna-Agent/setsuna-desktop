@@ -7,12 +7,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   createSandboxedUiDocument,
   parseSandboxedUiFrameMessage,
-  SANDBOXED_UI_FRAME_PERMISSIONS,
 } from './sandbox-document.js';
 import { SandboxedUiDocumentBridge } from './sandbox-document-bridge.js';
 import './sandboxed-ui-frame.css';
 import { useSandboxedRuntimeRequests } from './useSandboxedRuntimeRequests.js';
 import { useSandboxDialogSession } from './useSandboxDialogSession.js';
+import { usePluginUiDocument } from './usePluginUiDocument.js';
 
 const MIN_FRAME_HEIGHT = 96;
 const MAX_FRAME_HEIGHT = 2_000;
@@ -28,6 +28,7 @@ export function SandboxedUiFrame({
   onRuntimeRequest,
   size = 'content',
   source,
+  storageKey,
   title,
 }: SandboxedUiFrameProps) {
   const frameRef = useRef<HTMLIFrameElement>(null);
@@ -40,6 +41,7 @@ export function SandboxedUiFrame({
   const srcDoc = useMemo(() => createSandboxedUiDocument(source, {
     libraryScripts, size, dialogUrl: dialogs.url, documentId: bridge.id,
   }), [bridge, dialogs.url, libraryScripts, size, source]);
+  const pageDocument = usePluginUiDocument(dialogs.ready ? srcDoc : undefined, storageKey ?? bridge.id);
   const allowedActions = useMemo(() => new Set(allowedActionIds), [allowedActionIds]);
 
   const postToFrame = useCallback((message: Record<string, unknown>) => {
@@ -139,17 +141,17 @@ export function SandboxedUiFrame({
   }, [postSnapshot]);
 
   if (dialogs.error) return <div role="alert">{dialogs.error}</div>;
-  if (!dialogs.ready) return null;
+  if (pageDocument.error) return <div role="alert">{pageDocument.error}</div>;
+  if (!dialogs.ready || !pageDocument.url) return null;
   return (
     <iframe
-      allow="camera 'none'; microphone 'none'; geolocation 'none'; clipboard-read 'none'; clipboard-write 'none'"
+      allow="camera *; microphone *; geolocation *; clipboard-read *; clipboard-write *; fullscreen *; autoplay *; display-capture *"
       className={['sandboxed-ui-frame', size === 'fill' && 'sandboxed-ui-frame--fill', className].filter(Boolean).join(' ')}
       key={bridge.id}
       onLoad={() => bridge.onLoad()}
       ref={frameRef}
       referrerPolicy="no-referrer"
-      sandbox={SANDBOXED_UI_FRAME_PERMISSIONS}
-      srcDoc={srcDoc}
+      src={pageDocument.url}
       style={size === 'content' ? { height } : undefined}
       title={title}
     />

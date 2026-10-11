@@ -5,7 +5,7 @@ import {
   type RuntimePluginUiManifest,
   type RuntimePluginUiNode,
 } from '@setsuna-desktop/contracts';
-import { defineRendererPlugin, type RendererPluginDefinition } from '@setsuna-desktop/feature-core/renderer';
+import { declareRendererChildSlot, defineRendererPlugin, type RendererPluginDefinition } from '@setsuna-desktop/feature-core/renderer';
 import type { Disposer } from '@setsuna-desktop/feature-core/scope';
 import type { PluginManagementRendererService } from '@setsuna-desktop/feature-plugin-management/contracts';
 import { chatComposerStatusSlot } from '@setsuna-desktop/renderer-contracts/chat';
@@ -19,13 +19,18 @@ import {
   shellPluginPageSlot,
   shellSidebarPluginEntrySlot,
 } from '@setsuna-desktop/renderer-contracts/shell';
+import { workspacePanelSlot } from '@setsuna-desktop/renderer-contracts/workspace';
 import type { RendererPluginRuntime } from '../renderer-plugins/runtime.js';
+import { RendererOwnedSlotsProvider } from '../renderer-plugins/RendererKernelProvider.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { DeclarativePluginSidebarEntry } from './DeclarativePluginSidebarEntry.js';
 import { PluginAppAvatar } from './app-appearance/PluginAppAvatar.js';
 import { usePluginAppAppearance } from './app-appearance/usePluginAppAppearance.js';
 import { DeclarativePluginUiView } from './DeclarativePluginUiView.js';
 import { SandboxedPluginUiView } from './SandboxedPluginUiView.js';
+import { lazy, Suspense } from 'react';
+
+const PluginWebPageView = lazy(async () => ({ default: (await import('./PluginWebPageView.js')).PluginWebPageView }));
 
 const SETTINGS_TARGET_ALLOWLIST = new Set(['about', 'general']);
 const CHAT_NODE_ALLOWLIST = new Set<RuntimePluginUiNode['type']>([
@@ -249,17 +254,23 @@ function declarativeRendererPlugin(
           id: `${entryId}.page`,
           key: viewKey,
           priority: 0,
-          render: ({ cwd, projectId, threadId }) => (
-            <DeclarativePluginPage
-              contribution={contribution}
-              cwd={cwd}
-              manifest={manifest}
-              plugin={plugin}
-              projectId={projectId}
-              revision={revision}
-              service={service}
-              threadId={threadId}
-            />
+          // A standalone web app owns its Browser outlet independently of the chat route.
+          children: contribution.webpage
+            ? [declareRendererChildSlot(workspacePanelSlot, { requiredKeys: ['browser'] })]
+            : [],
+          render: ({ cwd, projectId, threadId }, slots) => (
+            <RendererOwnedSlotsProvider slots={slots}>
+              <DeclarativePluginPage
+                contribution={contribution}
+                cwd={cwd}
+                manifest={manifest}
+                plugin={plugin}
+                projectId={projectId}
+                revision={revision}
+                service={service}
+                threadId={threadId}
+              />
+            </RendererOwnedSlotsProvider>
           ),
         });
       }
@@ -328,16 +339,17 @@ function DeclarativePluginPage({
   const { appearance } = usePluginAppAppearance(plugin.id, contribution.id);
   const label = appearance.name ?? contribution.navigation?.label ?? plugin.name;
   const missingContext = missingContributionContext(contribution, projectId, threadId);
+  const fullPage = Boolean(contribution.document || contribution.webpage);
   return (
-    <main className={`declarative-plugin-page${contribution.document ? ' declarative-plugin-page--app' : ''}`}>
-      {!contribution.document ? <header className="declarative-plugin-page__header">
+    <main className={`declarative-plugin-page${fullPage ? ' declarative-plugin-page--app' : ''}`}>
+      {!fullPage ? <header className="declarative-plugin-page__header">
         <PluginAppAvatar avatar={appearance.avatar} variant="list" />
         <div>
           <h1>{label}</h1>
           {plugin.description ? <p>{plugin.description}</p> : null}
         </div>
       </header> : null}
-      <section className={`declarative-plugin-page__content${contribution.document ? ' is-sandboxed' : ''}`}>
+      <section className={`declarative-plugin-page__content${fullPage ? ' is-sandboxed' : ''}`}>
         {missingContext ? (
           <div className="declarative-plugin-ui">
             <div className="declarative-plugin-ui__notice is-warning" role="status">
@@ -352,7 +364,12 @@ function DeclarativePluginPage({
             </div>
           </div>
         ) : (
-          contribution.document ? (
+          contribution.webpage ? (
+            <Suspense fallback={null}>
+              <PluginWebPageView key={`${plugin.id}:${contribution.id}:${contribution.webpage.url}`}
+                id={`plugin-web-${plugin.id}-${contribution.id}`} title={label} url={contribution.webpage.url} />
+            </Suspense>
+          ) : contribution.document ? (
             <SandboxedPluginUiView
               title={label}
               contribution={contribution}

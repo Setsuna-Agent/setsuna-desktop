@@ -9,12 +9,12 @@ description: "通过对话创建或更新 Setsuna Plugin Bundle，包括左侧�
 
 ## 界面设计资源
 
-创建或修改有界面的应用前，先读取本插件资源，再写 HTML/CSS。默认沿用 Setsuna 的紧凑桌面风格；用户明确指定的品牌、布局或风格优先，更新已有应用时保留其既有设计。
+仅创建或修改本地 HTML/CSS/JS 应用界面时，先读取本插件资源，再写页面。侧栏打开已有网站直接配置 `webpage.url`，跳过设计资源和页面生成，也不需要检查网站能否被 iframe 嵌入。默认沿用 Setsuna 的紧凑桌面风格；用户明确指定的品牌、布局或风格优先，更新已有应用时保留其既有设计。
 
 - 调用 `read_plugin_resource({pluginId:'app-builder',resourceId:'ui-design'})` 读取[设计规范](references/ui-design.md)，以及 `resourceId:'ui-base'` 读取[基础 CSS](assets/ui-base.css)。工具未加载时先用 `search_tools` 查找 `read_plugin_resource`。
 - 按页面需要读取 `resourceId:'ui-patterns'` 中的[表格、表单和 ECharts 模板](references/ui-patterns.md)，只采用相关部分。使用宿主 `tree` 时沿用宿主组件，不必复制 CSS。
 - 需要按钮、字段、下拉选择、标签页、弹窗或图标时，先读 `resourceId:'ui-component-guide'` 的[组件用法](references/ui-components.md)，复用 `ui-components` 和 `ui-icons` 资源。后者提供与系统同源的 80 个 Lucide 图标，不自行编造 SVG 路径。组件与图标脚本按用法文档并入应用 JS，不需要 React 或新依赖。
-- 将基础 CSS 内容写入生成应用的 `ui/app.css`，再追加该应用需要的样式，并通过它自己的 `resources` / `document.cssResourceId` 交付。这些资源供创作时读取，页面不能跨插件引用，也不能用相对 `<link>`、`@import` 或 CDN 加载。
+- 将基础 CSS 内容写入生成应用的 `ui/app.css`，追加应用样式，通过它自己的 `resources` / `document.cssResourceId` 交付。包内文件仍通过资源 ID 交付；浏览器可以加载远程 `<link>`、`@import` 和 CDN。
 - 规范约束颜色、字号、间距、对齐和交互状态，不要求统一业务布局。不要把规范文字、示例区块、无关字段或装饰性数据写进用户界面。
 
 ## 选择能力形式
@@ -23,7 +23,7 @@ description: "通过对话创建或更新 Setsuna Plugin Bundle，包括左侧�
 - 需要连接外部服务时，使用 manifest 的 `mcpServers`；不得写入 API key、固定密钥、认证 header 或带凭据 URL。
 - 需要在 Agent 生命周期前后运行本地命令时，使用 `hooks`，脚本路径通过 `{{pluginRoot}}` 引用。
 - 需要注册动态工具、订阅生命周期事件、保存状态或结构化询问用户时，使用 `extension`。
-- 需要侧栏入口或独立功能页时，在 `extension.rendererUi` 使用 Renderer UI v2。简单表单/状态使用宿主渲染的 `tree`；需要自由布局和交互时使用由 HTML/CSS/JS 资源组成的沙箱 `document`。
+- 需要侧栏入口或独立功能页时，在 `extension.rendererUi` 使用 Renderer UI v2。打开已有网站使用 `webpage: { url: "https://…" }`，原生浏览器直接加载；简单表单/状态使用宿主渲染的 `tree`；本地应用需要自由布局和交互时使用由 HTML/CSS/JS 资源组成的 `document`。
 - 需要在工具执行后把结果显示成自由交互卡片时，在 `extension.uiCards` 声明卡片名称、对应工具和静态沙箱预览，并让该工具返回 `plugin.ui-card@1`；卡片与持久侧栏页面可以由同一个 Plugin 同时提供。
 - `tools` 只是展示元数据，不会注册可执行工具；动态工具必须由 extension 的 `api.registerTool` 注册。
 - `resources` 声明 Agent 可读资源以及沙箱页面引用的 HTML/CSS/JS 文件。
@@ -40,7 +40,7 @@ description: "通过对话创建或更新 Setsuna Plugin Bundle，包括左侧�
 - Skill 目录必须包含完整 `SKILL.md`，不能保留 TODO、占位符或省略内容。
 - Hook 命令应引用 Bundle 内脚本，同时按需要提供 `commandWindows`。
 - extension 入口必须是 Bundle 内的 `.mjs`，使用 `apiVersion: 1`、`runtime: node-worker`，并只声明实际使用的 `tools`、`events`、`state`、`ui`、`network` 能力。
-- `rendererUi`、`uiCards` 和 `plugin.ui-card` 必须声明 `ui`；`uiCards` 只能放在 `manifest.extension.uiCards`，绝不能放在 manifest 顶层。每个 `uiCards[].toolName` 必须引用顶层 `tools` 中的同名工具。`uiCards[].preview` 必须提供可离线展示的静态示例 HTML/JS 和有界示例数据；它不会执行工具或联网，也不替代工具每次动态返回的真实卡片源码。使用 `data` 或状态绑定时还必须声明 `state`。不要生成 React bundle、远程 iframe，或尝试进入宿主 DOM。
+- `rendererUi`、`uiCards` 和 `plugin.ui-card` 必须声明 `ui`；`uiCards` 只能放在 `manifest.extension.uiCards`，每个 `toolName` 必须引用顶层工具。预览使用无副作用的静态示例 HTML/JS 和有界数据，不执行工具，也不替代真实工具结果。使用 runtime 状态绑定还需 `state`。不要进入宿主 DOM；本地页面使用 HTML/CSS/JS 资源，已有网站优先使用直接网页模式。
 - 不要声明 `image-generation` 或 `vision-recognition`；它们是随应用 marketplace Bundle 专用的私有 host bridge，本地或对话创建的插件不能安装。
 - 使用 `network` 时必须在 `extension.network.allowedOrigins` 声明无路径、无凭据的精确 HTTP(S) origin，并在 handler 的第二个参数上调用 `context.network.request(...)`，以复用应用代理、取消、超时和响应大小限制。`response.body` 永远是字符串；读取字段前必须先用 `await response.json()` 或 `JSON.parse(response.body)`，并先检查 `response.ok`/`response.status`。绝不能使用不存在的 `api.network`。
 - v1 不运行安装脚本或包管理器；依赖必须已包含在 Bundle 文本文件中。
@@ -111,6 +111,38 @@ Handler 能力如下：
 只声明实际存在并经过功能验证的事件。非核心的自动同步不要为了“看起来完整”而加入；错误事件名或未经验证的 payload 假设会降低一次生成成功率。
 
 ## Renderer UI
+
+### 直接打开网页
+
+用户要求侧栏打开已有网站时，在 schema v2 contribution 配置 `webpage`，不生成 iframe、网站仿制页或代理。可直接提交以下完整 `configure_plugin` 参数，按需求修改 ID、名称和 URL：
+
+```json
+{
+  "manifest": {
+    "id": "baidu",
+    "name": "百度",
+    "extension": {
+      "apiVersion": 1,
+      "runtime": "node-worker",
+      "entry": "extension/entry.mjs",
+      "capabilities": ["ui"],
+      "rendererUi": {
+        "schemaVersion": 2,
+        "actions": [],
+        "contributions": [{
+          "id": "baidu.page",
+          "slot": "renderer.plugin.page",
+          "navigation": { "label": "百度" },
+          "webpage": { "url": "https://www.baidu.com/" }
+        }]
+      }
+    }
+  },
+  "files": [{ "path": "extension/entry.mjs", "content": "export default function activate() {}\n" }]
+}
+```
+
+`tree`、`document`、`webpage` 只选一种。网页模式只需 `ui`，不需要页面资源、状态绑定或 UI action；URL 使用 HTTP(S)。侧栏点击直接加载原生浏览器网页，复用登录、下载和浏览器设置，远程网站没有 `setsunaUI` bridge。新建本地应用和读取 Setsuna 后端时继续使用 `document`。
 
 ### 复用 Setsuna 后端数据
 
@@ -259,7 +291,7 @@ window.setsunaUI.subscribe(({ data }) => render(data));
 await window.setsunaUI.invoke('weather.refresh', { city: '杭州' });
 ```
 
-页面运行在 opaque-origin sandbox iframe 中，不能直接 `fetch`、读文件、访问 Node/Electron/preload、打开窗口、下载、提交表单或导航。联网和项目操作必须放在 worker action 中，分别使用 `ctx.network.request(...)` 或已批准的 host 能力；`input.payload` 是页面传来的有界 JSON。
+页面拥有独立 `setsuna-plugin-ui://` 浏览器 origin，支持直接 `fetch`、远程脚本和样式、localStorage/IndexedDB、worker、嵌套网页、媒体、下载、打开外部链接和 HTTP(S) 表单提交。请求仍遵循网站 CORS，嵌套网页仍遵循网站嵌入策略；需要直接打开现有网站时使用 `webpage`。页面不能读本地文件、访问 Node/Electron/preload 或宿主 DOM；项目/runtime 操作通过 `setsunaUI` bridge 或 worker 的受控能力执行。
 
 宿主为 `window.alert`、`window.confirm`、`window.prompt` 提供弹窗兼容，省略 `window.` 也可直接调用。保留同步语义：`confirm` 确认返回 `true`、取消返回 `false`；`prompt` 确认返回字符串（可能为空串）、取消返回 `null`，支持默认值；`alert` 等待关闭后返回。弹窗期间当前窗口脚本等待用户操作，不要在渲染或刷新循环中调用。复杂表单使用公共 `SetsunaComponents.dialog` 或页面自己的 `<dialog>`，参见 `ui-component-guide`；等待持久化成功再关闭，失败保留输入，取消不修改数据。
 
@@ -267,17 +299,17 @@ await window.setsunaUI.invoke('weather.refresh', { city: '杭州' });
 
 - 用户说“做一个客户表格，支持录入和成交额图表”时，直接生成同一个应用的完整页面、交互和保存 action。表格、表单、图表可以自由组合；不要让用户选择技术栈或填写 manifest。
 - 应用按需求组合布局、列定义、筛选、校验与交互，默认复用上述设计规范和基础样式；只实现用户需要的功能，不附加常驻解释或状态摘要。用 `--setsuna-*` 变量适配宿主主题。页面拥有完整视口，按需要使用 `height:100%`、flex/grid 和内部滚动。
-- 默认使用 `data: { stateKey: "app.view", scope: "global" }`，只有用户要求与项目或对话绑定时才改 scope。worker 的读写使用同一 key/scope，不能用 `localStorage` 保存业务数据。
+- 默认使用 `data: { stateKey: "app.view", scope: "global" }` 与 worker 共享业务数据，读写使用同一 key/scope；项目或对话绑定按用户需求选择。纯浏览器应用也可使用 localStorage/IndexedDB，保持插件及页面 ID 稳定以保留存储 origin。
 - 表格行使用稳定 ID；筛选、排序、编辑草稿留在页面本地，通过 `setsunaUI.invoke` 提交有界 payload。普通保存、应用数据更新和刷新只声明 action 的 `id`，省略可选的 `approval`，直接执行；自动保存应合并或防抖提交。worker 校验字段、类型、记录数量和数据大小后写入 `context.state`，不需要逐次审批或另建存储通道。
 - `approval: { title?, message }` 只用于删除等需要二次确认的交互。页面已经用 `confirm` 或 `UI.dialog` 确认时，不要再声明 action 的 `approval` 造成重复弹窗。修改旧应用的保存操作时，移除该 action 原有的 `approval` 即可；这不改变安装信任、工具审批或宿主删除对话时的未保存修改检查。
-- HTML 表单控件可用，原生表单提交被禁止。使用 `type="button"` 的保存按钮并调用 `reportValidity()`，再走 bridge 保存。保存失败保留草稿，不宣称已保存；成功后以宿主状态快照更新表格和图表。
+- HTML 表单支持 `submit` 事件、原生校验和 HTTP(S) 提交。通过 bridge 保存时，在 submit handler 中调用 `preventDefault()`，让提交按钮和回车走同一保存路径；失败保留草稿，成功再更新表格与图表。
 - `ready` 和 `subscribe` 均可能收到快照；主题更新也会通知订阅者。不要每次通知都重建表单、覆盖未保存输入或重复注册事件。仅在数据实际改变时更新已保存的数据视图。
 - 更新应用时保持插件 ID、state key、scope 和记录 ID 稳定；新增字段兼容旧记录，不写入示例数据覆盖已有记录。状态快照上限为 64 KiB、512 个数据条目，设计适合小型本地应用的数据；不要承诺无限行表格。
 - 安装后用 `verify_plugin` 验证保存、读取等实际路径。检查必须无损：新应用只使用用户要求的初始记录；更新已有应用使用明确实现的 dry-run，或读取后原样保存，不新增测试记录或清空状态。
 
 #### ECharts
 
-图表应用在 `document` 中声明 `"libraries": ["echarts"]`，宿主会在页面脚本之前提供离线 `window.echarts`。只生成图表配置和交互代码，不复制 ECharts 源码、不引用 CDN、不运行包管理器。其他库不在白名单中。采用 `ui-patterns` 资源中的主题图表模板：容器尺寸明确、随容器 resize、颜色随宿主快照更新，页面卸载时取消订阅并 dispose。按真实数据修改字段、维度和单位，不能把模板数据结构当作后端接口。
+图表应用可在 `document` 声明 `"libraries": ["echarts"]`，由宿主在页面脚本之前提供离线 `window.echarts`。无需复制 ECharts 源码或运行包管理器；需要其他浏览器库时可以加载远程资源。采用 `ui-patterns` 中的主题图表模板，随容器 resize、随主题更新，卸载时取消订阅并 dispose，按真实数据修改字段、维度和单位。
 
 ### 对话交互卡片
 
@@ -326,13 +358,13 @@ return {
       css: '#weather { padding: 20px; border-radius: 18px; }',
       js: 'window.setsunaUI.ready.then(({data}) => { document.querySelector("#weather").textContent = `${data.temperature}°C`; });',
       data: { temperature: 28, condition: '晴' },
-      permissions: { network: false, hostActions: [] }
+      permissions: { network: true, hostActions: [] }
     }
   }
 };
 ```
 
-卡片 JavaScript 也只能在沙箱内操作自己的 DOM，并从 `window.setsunaUI.ready` 读取这次工具结果。卡片会锚定在该工具调用的持久化时间线位置；模型在调用工具前输出的介绍和拿到结果后的后续回答会自然形成 `文字 → 卡片 → 文字`，不要在 Markdown 中伪造占位标签。v1 卡片不允许 host action；需要刷新、配置或长期状态时同时提供上面的独立页面。天气类插件应把“当用户询问某地当前天气时调用”写进工具 description，由工具在 worker 中通过 allowlist 网络查询，再把结果数据和卡片一起返回；卡片本身不得联网。
+卡片 JavaScript 也只能在沙箱内操作自己的 DOM，并从 `window.setsunaUI.ready` 读取这次工具结果。卡片会锚定在该工具调用的持久化时间线位置；模型在调用工具前输出的介绍和拿到结果后的后续回答会自然形成 `文字 → 卡片 → 文字`，不要在 Markdown 中伪造占位标签。v1 卡片不允许 host action；需要刷新、配置或长期状态时同时提供上面的独立页面。天气类插件应把“当用户询问某地当前天气时调用”写进工具 description，由工具在 worker 中通过 allowlist 网络查询，再把结果数据和卡片一起返回；卡片也可以遵循 CORS 直接联网。
 
 对“汇总对话中的发布产物”这类需求，使用 `events` 订阅 `tool.after` 或 `turn.settled`，从事件 payload 中提取明确的产物字段，再将去重后的有界摘要写入 `global` 或 `project` 状态；不要保存整段对话或未经约束的工具结果。
 

@@ -1,14 +1,15 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, protocol } from 'electron';
 import assert from 'node:assert/strict';
 import { defaultDesktopNetworkProxyRouting, type RuntimeSandboxedUiSource, type SandboxDialogRequest } from '@setsuna-desktop/contracts';
 import { DesktopNativeBridgeServer } from '../../src/runtime/native-bridge-server.js';
 import { showSandboxDialog } from '../../src/window/sandbox-dialogs.js';
+import { PluginUiDocuments, pluginUiDocumentScheme } from '../../src/window/plugin-ui-documents.js';
 
-const { createSandboxedUiDocument, SANDBOXED_UI_FRAME_PERMISSIONS } = require(process.argv[3]) as {
+const { createSandboxedUiDocument } = require(process.argv[3]) as {
   createSandboxedUiDocument(source: RuntimeSandboxedUiSource, options: { size: 'fill'; dialogUrl: string }): string;
-  SANDBOXED_UI_FRAME_PERMISSIONS: string;
 };
 
+protocol.registerSchemesAsPrivileged([pluginUiDocumentScheme]);
 app.setPath('userData', process.argv[2]);
 if (process.platform === 'darwin') app.setActivationPolicy('prohibited');
 
@@ -45,7 +46,10 @@ async function main() {
       }).catch((error: unknown) => { if (!window.isDestroyed()) throw error; });
     });
   });
-  const owner = new BrowserWindow({ show: false, webPreferences: { sandbox: true, nodeIntegration: false, contextIsolation: true } });
+  const owner = new BrowserWindow({ show: false, webPreferences: {
+    sandbox: true, nodeIntegration: false, contextIsolation: true, backgroundThrottling: false,
+  } });
+  owner.webContents.on('console-message', event => { if (event.level === 'error') console.error(event.message); });
   const server = new DesktopNativeBridgeServer({
     credentialVault: { status: async () => ({ available: true, backend: 'test' }), get: async () => undefined, set: async () => undefined, delete: async () => undefined },
     deleteThread: async () => ({ cancelled: true }), writeClipboardText: () => undefined,
@@ -76,20 +80,18 @@ async function main() {
       const alertReturnedVoid = alert('Done') === undefined;
       let isolated = false;
       try { parent.document.body; } catch { isolated = true; }
-      let networkBlocked = false;
-      try { const request = new XMLHttpRequest(); request.open('GET', ${JSON.stringify(`${connection.url}/health`)}, false); request.send(); }
-      catch { networkBlocked = true; }
-      parent.postMessage({type:'test-result', mutations, escapedConfirmation, closedConfirmation, name, cancelled, empty, escaped, closed, alertReturnedVoid, isolated, networkBlocked, node: typeof process}, '*');
+      parent.postMessage({type:'test-result', mutations, escapedConfirmation, closedConfirmation, name, cancelled, empty, escaped, closed, alertReturnedVoid, isolated, node: typeof process}, '*');
     ` }, { size: 'fill', dialogUrl: session.url });
+    const document = new PluginUiDocuments().create(owner, { html: source, storageKey: 'dialogs' });
     const result = await owner.webContents.executeJavaScript(`new Promise(resolve => {
       window.addEventListener('message', event => { if (event.data?.type === 'test-result') resolve(event.data); });
-      const frame = document.createElement('iframe'); frame.sandbox = ${JSON.stringify(SANDBOXED_UI_FRAME_PERMISSIONS)};
-      frame.srcdoc = ${JSON.stringify(source)}; document.body.append(frame);
+      const frame = document.createElement('iframe');
+      frame.src = ${JSON.stringify(document.url)}; document.body.append(frame);
     })`);
     assert.deepEqual(result, {
       type: 'test-result', mutations: 1, name: 'New  name ', cancelled: null, empty: '', escaped: null, closed: null,
       escapedConfirmation: false, closedConfirmation: false,
-      alertReturnedVoid: true, isolated: true, networkBlocked: true, node: 'undefined',
+      alertReturnedVoid: true, isolated: true, node: 'undefined',
     });
     assert.deepEqual(defaults, ['Old  name ', '</script><script>window.injected=true</script>', 'Old', '', '']);
     assert.equal(answers.length, 0);

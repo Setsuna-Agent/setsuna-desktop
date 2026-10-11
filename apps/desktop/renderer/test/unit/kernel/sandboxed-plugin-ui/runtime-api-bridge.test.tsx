@@ -5,12 +5,20 @@ import type { PluginManagementRendererService } from '@setsuna-desktop/feature-p
 import type { SandboxedUiFrameProps } from '@setsuna-desktop/feature-ui-card/contracts';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { StrictMode } from 'react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { SandboxedPluginUiView } from '../../../../src/kernel/declarative-plugin-ui/SandboxedPluginUiView.js';
 import { SandboxedUiFrame } from '../../../../src/kernel/sandboxed-plugin-ui/SandboxedUiFrame.js';
-import { connectSandboxedUiFrame } from '../../../fixtures/sandboxed-ui-bridge.js';
+import { connectSandboxedUiFrame, mockPluginUiDocuments } from '../../../fixtures/sandboxed-ui-bridge.js';
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+const original = Object.getOwnPropertyDescriptor(window, 'setsunaDesktop');
+beforeEach(() => {
+  Object.defineProperty(window, 'setsunaDesktop', { configurable: true, value: { desktop: mockPluginUiDocuments() } });
+});
+afterEach(() => {
+  cleanup(); vi.restoreAllMocks();
+  if (original) Object.defineProperty(window, 'setsunaDesktop', original);
+  else delete window.setsunaDesktop;
+});
 
 it('binds API requests to the installed app, replies to its frame, and cancels on unmount', async () => {
   const manifest = parseRuntimePluginUiManifest({
@@ -62,7 +70,7 @@ it('binds API requests to the installed app, replies to its frame, and cancels o
 
 it('keeps preview and conversation cards without an application bridge inert', async () => {
   render(<SandboxedUiFrame title="Preview" source={{ html: '', css: '', js: '' }} />);
-  const frame = screen.getByTitle('Preview') as HTMLIFrameElement;
+  const frame = await screen.findByTitle('Preview') as HTMLIFrameElement;
   const { post, send } = connectSandboxedUiFrame(frame);
   send({ type: 'runtime-request', requestId: 'read', request: { path: '/v1/projects' } });
   await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: 'runtime-result', ok: false })));
@@ -75,7 +83,7 @@ it.each(['pagehide', 'load'])('revokes a navigated document, cancels pending req
   const source = { html: '<main/>', css: '', js: '' };
   const { rerender } = render(<SandboxedUiFrame source={source} title="App" data={{ private: 'snapshot' }}
     allowedActionIds={['save']} onAction={onAction} onRuntimeRequest={onRuntimeRequest} />);
-  const frame = screen.getByTitle('App') as HTMLIFrameElement;
+  const frame = await screen.findByTitle('App') as HTMLIFrameElement;
   const windowPost = vi.spyOn(frame.contentWindow!, 'postMessage');
   const original = connectSandboxedUiFrame(frame);
   expect(original.post).toHaveBeenCalledWith(expect.objectContaining({ type: 'snapshot', data: { private: 'snapshot' } }));
@@ -103,7 +111,7 @@ it.each(['pagehide', 'load'])('revokes a navigated document, cancels pending req
   expect(windowPost).not.toHaveBeenCalled();
 
   rerender(<SandboxedUiFrame source={{ ...source, html: '<main>Replacement</main>' }} title="App" onRuntimeRequest={onRuntimeRequest} />);
-  const replacement = connectSandboxedUiFrame(screen.getByTitle('App') as HTMLIFrameElement);
+  const replacement = connectSandboxedUiFrame(await screen.findByTitle('App') as HTMLIFrameElement);
   replacement.send({ type: 'runtime-request', requestId: 'new', request: { path: '/v1/projects' } });
   expect(onRuntimeRequest).toHaveBeenCalledTimes(2);
   expect(onRuntimeRequest.mock.calls[1][1].aborted).toBe(false);

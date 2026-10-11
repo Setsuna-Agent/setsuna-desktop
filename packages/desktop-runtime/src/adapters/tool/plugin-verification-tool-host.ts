@@ -337,7 +337,7 @@ function requiredVerificationPaths(plugin: PluginVerificationSurface): ReadonlyM
   for (const contribution of plugin.extension?.rendererUi?.contributions ?? []) {
     const actionIds = contribution.document
       ? contribution.document.actionIds
-      : collectNodeActionIds(contribution.tree);
+      : contribution.tree ? collectNodeActionIds(contribution.tree) : [];
     for (const actionId of actionIds) {
       paths.set(
         verificationPathKey('ui-action', actionId, contribution.id),

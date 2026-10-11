@@ -30,12 +30,12 @@ Runtime Core 的 `ArtifactToolHost` 只是绑定 Feature service 的薄 adapter�
 
 源码：`packages/features/ui-card/`
 
-UI Card 只有 contracts 与 renderer 入口，拥有 `plugin.ui-card@1` 结果的 schema、大小边界、Plugin 来源要求和对话卡片展示。Runtime 的 extension 结果归一化复用其 contract；它不提供独立 runtime service。
+UI Card 只有 contracts 与 renderer 入口，拥有 `plugin.ui-card@1` 结果的 schema、有界 JSON 数据、Plugin 来源要求和对话卡片展示。Runtime 的 extension 结果归一化复用其 contract；它不提供独立 runtime service。
 
 - Renderer required：通过 Chat tool-result chain 注册卡片解析器，要求工具记录与卡片具有一致的 Plugin 来源。
 - 卡片放在对应 tool run 的持久 timeline 位置，历史加载和 SSE 重连复用同一投影。
 - `SandboxedUiFrame` 由宿主 `apps/desktop/renderer/src/kernel/sandboxed-plugin-ui/` 持有，经 capability 注入 Feature；独立 Plugin 页面也复用该宿主实现。
-- 卡片脚本只在 opaque-origin iframe 内执行，没有主窗口 DOM、preload、网络或 host action 权限。
+- 卡片脚本在独立 `setsuna-plugin-ui://` origin 执行，支持普通浏览器联网、存储及远程资源；没有主窗口 DOM、preload 或 host action 权限。侧栏配置 `webpage.url` 时直接复用 Browser Feature 的原生网页。
 
 Envelope 与 Bundle 声明见 [Plugin Bundles](../extensions/plugins/bundles.md#对话-htmlcssjs-卡片)。
 

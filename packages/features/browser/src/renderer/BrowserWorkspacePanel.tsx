@@ -4,6 +4,7 @@ import type {
   BrowserPanelMetadataPatch,
   BrowserReloadShortcutBindings,
   BrowserAnnotationSendHandler,
+  BrowserWindowOpenMode,
 } from '../contracts/index.js';
 import type { WorkspacePanelSlotProps } from '@setsuna-desktop/renderer-contracts/workspace';
 import { createContext, useContext, type ReactNode } from 'react';
@@ -18,6 +19,7 @@ import type {
 export type BrowserWorkspacePanelBinding = Readonly<{
   panel: BrowserPanelDescriptor;
   resizeHandle?: ReactNode;
+  windowOpenMode?: BrowserWindowOpenMode;
   onPanelMetadataChange(panelId: string, patch: BrowserPanelMetadataPatch): void;
   onScreenshotAttachment?: BrowserScreenshotAttachmentHandler;
   onSendAnnotations?: BrowserAnnotationSendHandler;
@@ -66,6 +68,7 @@ export function BrowserWorkspacePanel(props: WorkspacePanelSlotProps) {
       resizeHandle={binding.resizeHandle}
       selectField={host.selectField}
       translate={props.translate}
+      windowOpenMode={binding.windowOpenMode}
       onPanelMetadataChange={binding.onPanelMetadataChange}
       onScreenshotAttachment={binding.onScreenshotAttachment}
       onSendAnnotations={binding.onSendAnnotations}

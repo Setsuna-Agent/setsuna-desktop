@@ -25,15 +25,12 @@ describe('sandbox libraries', () => {
     expect(globalThis).not.toHaveProperty('echarts');
   });
 
-  it('loads libraries after network lockdown and before plugin code without allowing script escape', () => {
+  it('loads libraries before plugin code without allowing script escape', () => {
     const source = { html: '<main></main>', css: '', js: 'window.appReady = Boolean(window.echarts);' };
     const library = 'window.echarts = {}; const text = "</script><script src=https://example.com>";';
     const document = createSandboxedUiDocument(source, { libraryScripts: [library], size: 'fill' });
-    expect(document.indexOf("['RTCPeerConnection'")).toBeLessThan(document.indexOf('window.echarts = {}'));
     expect(document.indexOf('window.echarts = {}')).toBeLessThan(document.indexOf(source.html));
     expect(document.indexOf('window.echarts = {}')).toBeLessThan(document.indexOf(source.js));
     expect(document).not.toContain(library);
-    expect(document).toContain("connect-src 'none'");
-    expect(document).toContain("script-src 'unsafe-inline'");
   });
 });

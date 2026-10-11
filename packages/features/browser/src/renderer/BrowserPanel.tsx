@@ -9,6 +9,7 @@ import {
   type BrowserPanelDescriptor,
   type BrowserPanelMetadataPatch,
   type BrowserReloadShortcutBindings,
+  type BrowserWindowOpenMode,
 } from '../contracts/index.js';
 import { ArrowLeft, ArrowRight, House, RefreshCw, SquareDashedMousePointer, X } from 'lucide-react';
 import {
@@ -142,6 +143,7 @@ export function BrowserPanel({
   resizeHandle,
   selectField,
   translate,
+  windowOpenMode = 'tab',
 }: {
   bridge: BrowserDesktopBridge | null;
   hidden: boolean;
@@ -156,6 +158,7 @@ export function BrowserPanel({
   resizeHandle?: ReactNode;
   selectField?: BrowserSelectFieldComponent;
   translate: BrowserTranslate;
+  windowOpenMode?: BrowserWindowOpenMode;
 }) {
   const panelRef = useBrowserBackgroundViewport(hidden);
   const annotationSurfaceRef = useRef<HTMLDivElement>(null);
@@ -560,6 +563,7 @@ export function BrowserPanel({
               onUpdate={updateTab}
               onVisit={recordVisit}
               translate={translate}
+              windowOpenMode={windowOpenMode}
             />
           )}
           {tab.error ? <BrowserLoadErrorPage error={tab.error} url={tab.url} onReload={reload} translate={translate} /> : null}
@@ -591,6 +595,7 @@ function BrowserWebview({
   tab,
   newTabUrl,
   translate,
+  windowOpenMode,
 }: {
   active: boolean;
   bridge: BrowserDesktopBridge | null;
@@ -603,6 +608,7 @@ function BrowserWebview({
   tab: BrowserTab;
   newTabUrl: string | null;
   translate: BrowserTranslate;
+  windowOpenMode: BrowserWindowOpenMode;
 }) {
   const nodeRef = useRef<BrowserWebviewElement | null>(null);
   const registeredRef = useRef(false);
@@ -697,7 +703,7 @@ function BrowserWebview({
         const webContentsId = node.getWebContentsId();
         if (!Number.isSafeInteger(webContentsId) || webContentsId <= 0) return;
         registeredWebContentsId = webContentsId;
-        void bridge?.registerTab(tab.id, webContentsId).then(async (registered) => {
+        void bridge?.registerTab(tab.id, webContentsId, windowOpenMode).then(async (registered) => {
           if (!registered || disposed) return;
           registeredRef.current = true;
           onRegistrationChange(tab.id, true);
@@ -728,7 +734,7 @@ function BrowserWebview({
         void bridge?.unregisterTab(tab.id, registeredWebContentsId);
       }
     };
-  }, [bridge, onDeviceEmulationFailure, onRegistrationChange, tab.id]);
+  }, [bridge, onDeviceEmulationFailure, onRegistrationChange, tab.id, windowOpenMode]);
 
   useEffect(() => {
     if (!registeredRef.current) return;

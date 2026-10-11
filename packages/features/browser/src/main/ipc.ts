@@ -17,7 +17,7 @@ import type { DesktopBrowserController } from './control.js';
 import { createBrowserReloadMenuTemplate } from './context-menu.js';
 import type { BrowserContextMenuSession } from './context-menu-session.js';
 import { browserMenuPoint } from './webview.js';
-import { loadBrowserFavicon } from './favicon.js';
+import { loadBrowserFavicon, loadWebsiteFavicon } from './favicon.js';
 import { parseAnnotationMarkers } from './annotations/session.js';
 
 const handlerChannels = [
@@ -30,6 +30,7 @@ const handlerChannels = [
   BROWSER_IPC_CHANNELS.captureScreenshot,
   BROWSER_IPC_CHANNELS.reloadTab,
   BROWSER_IPC_CHANNELS.resolveFavicon,
+  BROWSER_IPC_CHANNELS.getWebsiteFavicon,
   BROWSER_IPC_CHANNELS.registerTab,
   BROWSER_IPC_CHANNELS.unregisterTab,
   BROWSER_IPC_CHANNELS.setActiveTab,
@@ -97,12 +98,18 @@ export function registerBrowserIpc(
     const faviconUrls = Array.isArray(input?.faviconUrls) ? input.faviconUrls : [];
     return loadBrowserFavicon(guest.session, guest.getURL(), faviconUrls);
   }));
+  ipcMain.handle(BROWSER_IPC_CHANNELS.getWebsiteFavicon, (event, input) => scope.runOperation((signal) => {
+    if (!isDesktopRendererSender(event.sender, windows) || typeof input?.url !== 'string') return null;
+    return loadWebsiteFavicon(session.fromPartition(DESKTOP_BROWSER_PARTITION), input.url, signal);
+  }));
   ipcMain.handle(BROWSER_IPC_CHANNELS.registerTab, (event, input) => scope.runOperation(() => {
     const webContentsId = Number(input?.webContentsId);
     const tabId = String(input?.tabId ?? '');
+    const windowOpenMode = input?.windowOpenMode ?? 'tab';
+    if (windowOpenMode !== 'tab' && windowOpenMode !== 'current-tab') return false;
     const guest = resolveEmbeddedBrowserGuest(event.sender, webContentsId, windows);
     if (!guest) return false;
-    controller.registerTab(tabId, guest);
+    controller.registerTab(tabId, guest, windowOpenMode);
     onTabRegistered?.(tabId, guest);
     // Selection can arrive before dom-ready registers the native guest.
     if (controller.activeTabContents(event.sender.id) === guest) {

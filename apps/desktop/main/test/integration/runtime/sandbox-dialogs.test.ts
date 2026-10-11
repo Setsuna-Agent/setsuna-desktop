@@ -7,7 +7,7 @@ import electron from 'electron';
 import { build } from 'esbuild';
 import { expect, it } from 'vitest';
 
-it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('preserves native dialog return values in a real opaque Electron iframe without opening the sandbox', async () => {
+it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('preserves native dialog return values from a separate plugin web origin', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'setsuna-sandbox-dialogs-'));
   const output = path.join(root, 'main.cjs');
   try {
@@ -23,7 +23,7 @@ it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('preser
     delete env.ELECTRON_RUN_AS_NODE;
     const result = await promisify(execFile)(electron as unknown as string, [output, root, path.join(root, 'document.cjs')], {
       env, windowsHide: true, timeout: 30_000, maxBuffer: 1024 * 1024,
-    });
+    }).catch(error => { console.error(error.stdout); throw error; });
     expect(result.stdout).toContain('SANDBOX_DIALOGS_PASSED');
   } finally {
     await rm(root, { recursive: true, force: true });

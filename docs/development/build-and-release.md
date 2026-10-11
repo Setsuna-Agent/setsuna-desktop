@@ -92,7 +92,11 @@ dev 启动流程：
 4. 调用 `buildElectron()`。
 5. macOS 只检查少量缓存元数据，有有效的 `Setsuna Desktop Dev.app` 时立即使用；
    缓存缺失或失效则立即启动原 Electron，随后后台复制、签名并注册开发应用。
-   准备成功后供下一次启动或应用内计划重启使用，不中断当前窗口；Windows 继续使用原 Electron。
+   准备成功后供下一次启动或应用内计划重启使用，不中断当前窗口；Windows 继续使用原 Electron，
+   main 采用独立开发 AppUserModelID，首次发送通知时才异步登记 `Setsuna Desktop Dev` 名称与 logo，
+   不等待登记完成才启动桌面，也不修改 Electron 二进制。
+   开发窗口显示前同步设置任务栏 AppUserModelID、ICO 与 relaunch 信息；首帧后后台准备匹配的开始菜单入口，
+   保留通知激活 CLSID 并提供 Setsuna 图标，避免 Shell 仍读取 Electron 默认快捷方式的图标。
    应用内计划重启使用专用退出码原地拉起，不等待后台准备，也不结束 Vite renderer。
 6. 注入：
    - `SETSUNA_DESKTOP_DEV_SERVER_URL=http://127.0.0.1:5174`

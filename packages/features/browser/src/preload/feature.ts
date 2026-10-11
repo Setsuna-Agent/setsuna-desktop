@@ -88,8 +88,9 @@ export const browserPreloadFeature = definePreloadFeature<BrowserPreloadBridgeCo
           faviconUrls: [...faviconUrls],
           webContentsId,
         }),
-      registerTab: (tabId, webContentsId) =>
-        ipcRenderer.invoke(BROWSER_IPC_CHANNELS.registerTab, { tabId, webContentsId }),
+      getWebsiteFavicon: (url) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.getWebsiteFavicon, { url }),
+      registerTab: (tabId, webContentsId, windowOpenMode) =>
+        ipcRenderer.invoke(BROWSER_IPC_CHANNELS.registerTab, { tabId, webContentsId, windowOpenMode }),
       unregisterTab: (tabId, webContentsId) =>
         ipcRenderer.invoke(BROWSER_IPC_CHANNELS.unregisterTab, { tabId, webContentsId }),
       setActiveTab: (tabId) =>

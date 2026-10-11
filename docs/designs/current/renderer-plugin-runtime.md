@@ -13,7 +13,7 @@ Setsuna 采用以下方向：
 3. 在 Renderer 内增加轻量 Plugin Runtime。宿主 UI 与 Feature UI 都通过作用域绑定的激活上下文注册，不在 React 组件生命周期中注册。
 4. UI 组合使用有父子所有权的 typed Slot Tree，支持 `single / list / keyed / chain`。
 5. 所有内置 React 插件均静态编译进 Desktop bundle；不实现独立 client bundle、Module Federation、import map 或远程代码加载。
-6. 普通第三方 Plugin 继续运行在 Node worker。简单 UI 通过声明式 gateway 进入白名单 Slot；自由 HTML/CSS/JavaScript 只进入 opaque-origin sandbox iframe，不能向主 Renderer 注入 React、脚本或全局样式。
+6. 普通第三方 Plugin 继续运行在 Node worker。简单 UI 通过声明式 gateway 进入白名单 Slot；自由 HTML/CSS/JavaScript 使用独立 web origin，配置已有网站时直接使用原生浏览器网页，不能向主 Renderer 注入 React、脚本或全局样式。
 7. `preload` 继续是窄桥接。Renderer Plugin 只能获得显式注入的 Capability，不能直接访问 runtime token、端口、文件系统或完整的 `window.setsunaDesktop`。
 8. 布局偏好是 Slot Runtime 之上的可迁移投影，不是插件 inventory、Slot 声明或业务状态的第二真源。
 9. 安全审批、凭据、更新完整性、顶层恢复与桥接授权属于不可替换 Kernel；“万物可修改”只覆盖产品组合层。
@@ -474,7 +474,7 @@ type RendererSlotInspection = Readonly<{
 | Kernel | Desktop 固定代码 | 安全根、恢复、bridge gate | 宿主内部 | 不可被 Slot 替换 |
 | 内置 Renderer Plugin | 随 Desktop 编译 | 完整 typed Slot | 显式 Feature/host Capability | 不能直接访问完整 preload bridge |
 | 应用签名 Renderer Plugin（未来） | Setsuna 签名并随受控渠道发布 | 只进入 manifest allowlist Slot | 版本化、显式 Capability | 不能仅凭用户点“信任”获得主 Renderer 执行权 |
-| 普通第三方 Plugin | Node worker + opaque-origin UI iframe | 白名单 Slot 中的 host tree 或 sandbox document；对话 `ui-card` | worker host API、声明 action 与审批策略 | 主 Renderer React/DOM、preload、任意 IPC、卡片直连网络 |
+| 普通第三方 Plugin | Node worker + 独立 origin 页面或原生网页 | 白名单 Slot 中的 host tree、document、webpage；对话 `ui-card` | worker host API、声明 action 与审批策略 | 主 Renderer React/DOM、preload、任意 IPC |
 
 以下 surface 永不向普通第三方 schema 开放：
 
@@ -487,11 +487,13 @@ type RendererSlotInspection = Readonly<{
 
 tree UI action 只能引用 manifest 中声明的 action ID，由 host 携带当前 `contributionId` 转成受控 operation。Sandbox document 还必须在自身 `actionIds` 中列出该 action，桥接 payload 经过有界 JSON 校验。Runtime 必须按当前 contribution 精确校验 Slot、字段、action 和 state scope，不能把复用同一 action ID 的其他 contribution 权限合并进来。tree schema 不能携带函数、事件脚本、URL handler、style 字符串或 raw markup；document/card 源码只能进入下述隔离 frame。
 
-自由 UI frame 使用 `srcdoc` 与 `<iframe sandbox="allow-scripts">`，明确不启用 `allow-same-origin`。宿主生成 CSP，禁止 connect、远程脚本/样式、form、frame、worker、object 和 media；主进程阻止子 frame 导航到 `about:srcdoc/about:blank` 之外。frame 不继承 preload/Node，消息只接受当前 `contentWindow` 的版本化 channel，并限制 action allowlist、JSON 体积、消息频率和高度。独立页源码从参与完整可信 Bundle hash 的同一批字节中读取；对话卡片源码在 Plugin 工具结果持久化前由 runtime 盖上真实来源并校验。
+自由 UI document/card 通过按需注册的 `setsuna-plugin-ui://<storage-origin>/<document-id>/index.html` 加载。主进程只在内存中提供当前窗口注册的文档，不暴露文件路径；卸载、关闭或 renderer 崩溃撤销文档地址。同一 Plugin 页面/卡片保持稳定存储 origin，文档地址和 MessagePort 授权每次独立。页面支持标准浏览器网络、存储、资源、worker、嵌套 frame、媒体和 HTTP(S) 表单，不设置额外 CSP 或 iframe sandbox 禁用规则。浏览器同源策略隔离宿主 DOM，页面没有 preload/Node；随机文档身份建立私有 MessagePort，导航离开撤销 bridge，保留 action allowlist、有界 JSON 与消息频率限制。`webpage.url` 的侧栏入口直接复用 Browser Feature 原生网页，不提供 Plugin/runtime bridge。独立页面源码仍来自完整可信 Bundle hash 快照，卡片由 runtime 校验真实 Plugin 来源。
+
+网页 contribution 自己声明并提供 `workspacePanelSlot` 子插槽，以稳定的页面 ID 作为 Browser outlet 的 `instanceKey`；它不继承聊天路由的插槽所有权，也不依赖当前 project/thread。移除网页 contribution 时，其 Browser 实例和本机 tab 注册随页面一起释放。
 
 ## 样式与主题规则
 
-- 主 Renderer Slot Runtime 不接收 raw CSS 字符串，也不动态插入第三方 `<style>`；sandbox document/card 的 CSS 只存在于其 opaque-origin frame。
+- 主 Renderer Slot Runtime 不接收 raw CSS 字符串，也不动态插入第三方 `<style>`；sandbox document/card 的 CSS 只存在于其独立 origin frame。
 - 内置 Plugin 样式仍由 Vite 静态打包，但必须使用稳定 plugin root class、CSS Module 或明确域前缀，禁止无 owner 的全局 selector。
 - 全局 token 仍只在 `shared/styles/tokens.css`；Plugin 可以消费 token，不能在自己的样式中重定义全局安全/布局 token。
 - Slot outlet 默认不为了注册系统增加可见布局 wrapper；调试属性仅附着到已有 owner root，必要的 ErrorBoundary wrapper 不改变语义标签。
@@ -507,7 +509,7 @@ tree UI action 只能引用 manifest 中声明的 action ID，由 host 携带当
 - 非法 preference/mount transaction 保留旧 snapshot；关闭后拒绝新 mutation。
 - `single/keyed/list` 的失败隔离与明确 fallback，不把错误静默变成其他候选。
 - Gateway 刷新失败后的恢复、信任变化撤销、取消与迟到结果清理。
-- Sandbox 来源、CSP、消息身份、action allowlist、scope 与 JSON 上限。
+- 页面 origin 隔离、文档撤销、浏览器联网/存储/表单、消息身份、action allowlist、scope 与 JSON 上限。
 
 不新增 CSS、图标、DOM 排列或动画快照测试，也不为每个 Slot 常量复制类型断言。架构门禁检查唯一 composition root、跨 Feature import 和 renderer contract 的进程边界；验证命令按 [测试与验证](../../development/testing.md) 选择。
 

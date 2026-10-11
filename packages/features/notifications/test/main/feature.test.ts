@@ -24,14 +24,14 @@ import { notificationsMainFeature, notificationsMainHostCapability } from '../..
 
 afterEach(() => { vi.clearAllMocks(); vi.useRealTimers(); mocks.created.length = 0; mocks.manual = false; });
 
-async function activate() {
+async function activate(prepareNotification?: (signal: AbortSignal) => Promise<undefined>) {
   const routes = new Map<string, (value: unknown, signal: AbortSignal) => Promise<unknown>>();
   const openThread = vi.fn();
   const isForeground = vi.fn(() => false);
   const started = performance.now();
   const composition = await defineMainFeatureHost({ required: [], optional: [notificationsMainFeature] }).activate({
     hostCapabilities: [provideHostCapability(notificationsMainHostCapability, {
-      openThread, isForeground,
+      openThread, isForeground, prepareNotification,
       registerNativeRequest: (path: string, handler: (value: unknown, signal: AbortSignal) => Promise<unknown>) => {
         routes.set(path, handler); return () => { routes.delete(path); };
       },
@@ -43,8 +43,81 @@ async function activate() {
 const input = { id: 'n1', threadId: 't1', title: 'Done', body: 'Ready' };
 
 describe('native system notifications', () => {
+  it('defers slow OS preparation until a send and shares it without letting one cancelled caller cancel other sends', async () => {
+    let ready!: () => void;
+    let preparationSignal!: AbortSignal;
+    const prepare = vi.fn((signal: AbortSignal) => {
+      preparationSignal = signal;
+      return new Promise<undefined>((resolve) => { ready = () => resolve(undefined); });
+    });
+    const host = await activate(prepare);
+    expect(prepare).not.toHaveBeenCalled();
+    try {
+      const send = host.routes.get(NOTIFICATION_PATH)!;
+      host.isForeground.mockReturnValue(true);
+      await expect(send({ ...input, onlyWhenBackground: true }, new AbortController().signal))
+        .resolves.toMatchObject({ systemNotification: 'suppressed' });
+      expect(prepare).not.toHaveBeenCalled();
+      host.isForeground.mockReturnValue(false);
+
+      const caller = new AbortController();
+      const cancelled = expect(send(input, caller.signal)).rejects.toThrow();
+      const first = send(input, new AbortController().signal);
+      const duplicate = send(input, new AbortController().signal);
+      const other = send({ ...input, id: 'n2' }, new AbortController().signal);
+      await vi.waitFor(() => expect(prepare).toHaveBeenCalledOnce());
+      expect(mocks.created).toHaveLength(0);
+      caller.abort();
+      expect(preparationSignal.aborted).toBe(false);
+      ready();
+      await cancelled;
+      await expect(first).resolves.toMatchObject({ systemNotification: 'shown' });
+      await expect(duplicate).resolves.toMatchObject({ systemNotification: 'duplicate' });
+      await expect(other).resolves.toMatchObject({ systemNotification: 'shown' });
+      expect(mocks.shown).toHaveBeenCalledTimes(2);
+      console.info(`main activation with deferred OS preparation: ${host.activationMs.toFixed(2)} ms; startup OS calls: 0`);
+    } finally { await host.composition.dispose(); }
+  });
+
+  it('isolates failed OS preparation from startup and permits a later send to retry', async () => {
+    const prepare = vi.fn<(signal: AbortSignal) => Promise<undefined>>()
+      .mockRejectedValueOnce(new Error('Registration failed')).mockResolvedValue(undefined);
+    const host = await activate(prepare);
+    expect(prepare).not.toHaveBeenCalled();
+    try {
+      const send = host.routes.get(NOTIFICATION_PATH)!;
+      await expect(send(input, new AbortController().signal)).rejects.toThrow('Registration failed');
+      expect(mocks.created).toHaveLength(0);
+      await expect(send(input, new AbortController().signal)).resolves.toMatchObject({ systemNotification: 'shown' });
+      expect(prepare).toHaveBeenCalledTimes(2);
+      expect(mocks.shown).toHaveBeenCalledOnce();
+    } finally { await host.composition.dispose(); }
+  });
+
+  it('cancels pending OS preparation on disposal and ignores a late result', async () => {
+    let preparationSignal!: AbortSignal;
+    let ready!: () => void;
+    const prepare = vi.fn((signal: AbortSignal) => {
+      preparationSignal = signal;
+      return new Promise<undefined>((resolve, reject) => {
+        ready = () => resolve(undefined);
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      });
+    });
+    const host = await activate(prepare);
+    const pending = expect(host.routes.get(NOTIFICATION_PATH)!(input, new AbortController().signal)).rejects.toThrow();
+    await vi.waitFor(() => expect(prepare).toHaveBeenCalledOnce());
+    await host.composition.dispose();
+    await pending;
+    expect(preparationSignal.aborted).toBe(true);
+    ready();
+    expect(mocks.created).toHaveLength(0);
+    expect(host.routes.size).toBe(0);
+  });
+
   it('suppresses automatic completion notifications in the foreground, but delivers background completions and explicit notifications', async () => {
-    const host = await activate();
+    let ready!: () => void;
+    const host = await activate(() => new Promise<undefined>((resolve) => { ready = () => resolve(undefined); }));
     try {
       const send = host.routes.get(NOTIFICATION_PATH)!;
       const signal = new AbortController().signal;
@@ -53,6 +126,14 @@ describe('native system notifications', () => {
         .resolves.toMatchObject({ systemNotification: 'suppressed' });
       expect(mocks.created).toHaveLength(0);
       expect(mocks.supported).not.toHaveBeenCalled();
+
+      host.isForeground.mockReturnValue(false);
+      const pending = send({ ...input, onlyWhenBackground: true }, signal);
+      await vi.waitFor(() => expect(ready).toBeTypeOf('function'));
+      host.isForeground.mockReturnValue(true);
+      ready();
+      await expect(pending).resolves.toMatchObject({ systemNotification: 'suppressed' });
+      expect(mocks.created).toHaveLength(0);
       await expect(send({ ...input, id: 'explicit' }, signal))
         .resolves.toMatchObject({ systemNotification: 'shown' });
 

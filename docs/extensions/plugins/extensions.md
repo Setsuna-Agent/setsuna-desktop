@@ -2,7 +2,7 @@
 
 Setsuna 的可执行扩展允许插件动态注册工具、订阅 Agent 生命周期、保存隔离状态，并通过受控 UI 与用户交互。v1 是 Setsuna 原生协议，不直接兼容任意第三方扩展源码。
 
-可执行扩展属于 Plugin Bundle v2。它与 Skill、MCP、命令 Hook 和资源共用安装事务；extension 入口只在独立 Node worker 中加载，不进入 runtime 或主 Renderer。可选的自由页面/卡片脚本由另一条 sandbox iframe 链路隔离。
+可执行扩展属于 Plugin Bundle v2。它与 Skill、MCP、命令 Hook 和资源共用安装事务；extension 入口只在独立 Node worker 中加载，不进入 runtime 或主 Renderer。自由页面/卡片脚本由独立 web origin 隔离，侧栏 `webpage` 使用现有原生浏览器。
 
 ## 内置 Setsuna 工具
 
@@ -101,7 +101,7 @@ export default function activate(api) {
 
 扩展工具默认串行执行、支持 turn 取消，并进入 Setsuna 的标准工具审批。因为 worker 不在 OS 沙箱内，workspace-write 模式还会明确请求无沙箱执行授权；用户已经选择 `danger-full-access` 或完整免确认策略时，沿用该全局授权。只有应用控制的 marketplace Bundle 可以通过已校验 manifest 放宽单个工具的并行和审批策略。
 
-声明 `ui` 后，工具的 `data` 可以返回 `plugin.ui-card@1` HTML/CSS/JS 卡片。新 Bundle 还应在 `extension.uiCards` 声明卡片的 `id/label/description/toolName/preview`，让插件详情页在“界面”分组中列出这项动态能力并用静态示例数据安全预览；真实卡片源码仍由每次工具结果产生。runtime 在结果持久化前验证 schema 和源码上限、覆盖真实 `pluginId`；Renderer 只在工具运行记录也带有同一 Plugin 来源时解析，并把源码放入 opaque-origin sandbox iframe，再按该 tool run 的持久位置插入 assistant timeline。卡片及预览都没有网络或 host action；实时数据应由工具先通过 `ctx.network.request` 获取，再作为有界 JSON 传给卡片。完整 envelope 见 [Plugin Bundles](bundles.md#对话-htmlcssjs-卡片)。
+声明 `ui` 后，工具的 `data` 可以返回 `plugin.ui-card@1` HTML/CSS/JS 卡片。新 Bundle 在 `extension.uiCards` 声明 `id/label/description/toolName/preview`，供详情页展示并使用示例数据预览。runtime 验证 schema、覆盖真实 `pluginId`；Renderer 要求 tool run 与卡片来源一致，并在独立 web origin 加载源码，插入对应 assistant timeline。卡片与预览支持普通浏览器联网、存储和远程资源，没有 host action；需要 runtime 数据和持久操作时使用独立 Plugin document。完整 envelope 见 [Plugin Bundles](bundles.md#对话-htmlcssjs-卡片)。
 
 ### `api.on(eventName, handler)`
 
@@ -191,9 +191,9 @@ Plugin 详情 contribution 若声明 `stateKey`，host 会从同名 global state
 
 已信任的扩展 handler 始终提供 `ctx.runtime.request({ path, method?, body? })`。已安装的侧栏 document 页面提供相同的 `window.setsunaUI.runtime.request(...)`。两者均返回 `{ ok, status, data }`，`data` 是已解析的 JSON；非 JSON 资源返回文本或 `{ mimeType, base64 }`。4xx/5xx 保留原状态和错误数据，传输错误或无权限才 reject。
 
-沙箱页面的 `window.alert/confirm/prompt` 在源码执行前接入主进程弹窗通道，保留同步返回值，已有 `if (confirm(...))`、`const name = prompt(..., oldName)` 无需改成 Promise。iframe 使用 `allow-scripts allow-forms`，支持普通表单回调与 HTTP(S) 提交；CSP 的脚本连接规则只额外允许当前 frame 的随机、可撤销弹窗地址，不开放通用脚本网络或宿主 DOM。该地址不能调用其他原生接口，也不含 runtime bearer token。重命名应用只更新所属会话的弹窗标题，保留会话地址和当前 iframe 文档。页面卸载、窗口关闭或 renderer 退出会撤销弹窗会话并取消待处理弹窗。复杂表单仍使用页面内 `SetsunaComponents.dialog`。
+自由页面的 `window.alert/confirm/prompt` 接入主进程弹窗通道，保留同步返回值。页面使用独立 `setsuna-plugin-ui://` origin，支持普通浏览器网络、存储、worker、嵌套 frame 和 HTTP(S) 表单提交；没有额外 iframe sandbox 或 CSP 禁用开关。页面不能访问宿主 DOM、preload 或 runtime token。弹窗使用随机、可撤销的专用地址，只能请求当前所属窗口的弹窗。重命名只更新弹窗标题，保留文档与未保存输入；页面卸载、窗口关闭或 renderer 退出撤销会话并取消待处理弹窗。复杂表单仍使用页面内 `SetsunaComponents.dialog`。
 
-`setsunaUI` 消息桥由原始 `srcdoc` 文档通过随机文档标识和独立 MessagePort 建立；快照、action 与 runtime 回应只走该通道，不投递给导航后复用的 `contentWindow`。文档离开或后续加载会撤销桥接并取消未完成的 runtime 请求，HTTP(S) 表单响应页无法继承插件权限；替换源码才创建新的文档授权。
+`setsunaUI` 消息桥由原始 Plugin 文档通过随机文档标识和独立 MessagePort 建立；快照、action 与 runtime 回应只走该通道，不投递给导航后复用的 `contentWindow`。文档离开或后续加载会撤销桥接并取消未完成的 runtime 请求，HTTP(S) 表单响应页无法继承插件权限；替换源码才创建新的文档授权。
 
 这三种同步弹窗共用主进程创建的隔离页面，沿用沙箱已收到的宿主主题、强调色、字体和控件圆角，并在显示前按内容调整窗口高度。主题只传递有界、白名单内的展示 token，不插入外部 HTML 或加载外部样式；独立 renderer 保证调用页面同步等待时，弹窗仍可交互。取消、Esc、关闭窗口或会话撤销时，`confirm` 返回 `false`，`prompt` 返回 `null`。
 

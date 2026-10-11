@@ -46,6 +46,34 @@ describe('Plugin UI card declarations', () => {
 });
 
 describe('Plugin declarative Renderer UI contract', () => {
+  it('opens an HTTP(S) sidebar website without requiring document resources or a UI tree', () => {
+    const manifest = parseRuntimePluginUiManifest({
+      schemaVersion: 2, actions: [], contributions: [{
+        id: 'search.page', slot: 'renderer.plugin.page', navigation: { label: 'Search' },
+        webpage: { url: 'https://www.baidu.com' },
+      }],
+    });
+    expect(manifest.contributions[0]).toEqual({
+      id: 'search.page', slot: 'renderer.plugin.page', navigation: { label: 'Search' },
+      webpage: { url: 'https://www.baidu.com/' },
+    });
+  });
+
+  it('rejects website configurations that cross native boundaries or mix rendering modes', () => {
+    const page = {
+      id: 'web.page', slot: 'renderer.plugin.page', navigation: { label: 'Website' },
+      webpage: { url: 'https://example.com' },
+    };
+    const parse = (contribution: unknown) => parseRuntimePluginUiManifest({ schemaVersion: 2, actions: [], contributions: [contribution] });
+    for (const url of ['file:///C:/private.html', 'javascript:alert(1)', 'data:text/html,hello', 'https://user:password@example.com', 'invalid']) {
+      expect(() => parse({ ...page, webpage: { url } })).toThrow();
+    }
+    expect(() => parse({ ...page, tree: { type: 'text', text: 'Website' } })).toThrow('exactly one');
+    expect(() => parse({ ...page, document: { htmlResourceId: 'html', actionIds: [] } })).toThrow('exactly one');
+    expect(() => parse({ ...page, slot: 'renderer.chat.composer.status', navigation: undefined })).toThrow('standalone');
+    expect(() => parse({ ...page, webpage: { url: 'https://example.com', preload: 'private.js' } })).toThrow();
+  });
+
   it.each([1, 2])('accepts optional confirmations without accepting malformed approvals in schema v%s', (schemaVersion) => {
     const input = {
       schemaVersion,

@@ -109,6 +109,7 @@ export function SandboxedPluginUiView({
       onRuntimeRequest={contribution.slot === 'renderer.plugin.page' ? requestRuntime : undefined}
       size="fill"
       source={sourceState.source}
+      storageKey={`${pluginId}:page:${contribution.id}`}
       title={title ?? contribution.navigation?.label ?? pluginId}
     />
   );

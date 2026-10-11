@@ -39,6 +39,9 @@ export class SandboxedUiDocumentBridge {
   }
 
   onLoad(): void {
+    // A URL-backed iframe may load its initial about:blank before the Plugin
+    // document connects. Only track loads after that document's handshake.
+    if (!this.port) return;
     // pagehide normally revokes at departure; subsequent loads also revoke if the
     // old document did not deliver that notification. Never send data to a WindowProxy.
     if (this.loaded) this.revoke();

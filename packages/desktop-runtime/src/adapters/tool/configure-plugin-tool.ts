@@ -53,10 +53,11 @@ function rendererUiSchema(language?: RuntimeInterfaceLanguage): Record<string, u
     type: 'object',
     additionalProperties: false,
     description: [
-      text('Renderer UI v2 supports two modes.', "Renderer UI v2 支持两种模式。"),
+      text('Renderer UI v2 supports three modes.', 'Renderer UI v2 支持三种模式。'),
+      text('webpage opens an existing HTTP(S) website directly in the native browser from a sidebar entry. Use webpage.url for website shortcuts; no iframe or HTML/CSS/JS resources are needed.', 'webpage 从侧栏入口直接在原生浏览器中打开已有 HTTP(S) 网站。网站快捷入口使用 webpage.url，无需 iframe 或 HTML/CSS/JS 资源。'),
       text('tree is a bounded host-rendered UI.', "tree 是由宿主渲染的受限 UI。"),
-      text('document is a full-page sandboxed app backed by HTML/CSS/JS resources, with an entry below Plugins in the left sidebar. Use it for editable tables, forms, charts and custom layouts.', "document 是占满主区域的 HTML/CSS/JS 沙箱应用，入口位于左侧栏插件下方。可用于可编辑表格、表单、图表和自定义布局。"),
-      text('Trusted apps can call all backend APIs via window.setsunaUI.runtime.request({path,method,body}), returning {ok,status,data}. Worker handlers use context.runtime.request. No extra capability, origin allowlist or active project is required. Inspect /v1/runtime-api with read_runtime_api before using existing projects or conversations.', "已信任应用通过 window.setsunaUI.runtime.request({path,method,body}) 调用全部后端 API，返回 {ok,status,data}；worker handler 使用 context.runtime.request。无需额外 capability、origin 白名单或当前项目。复用已有项目/对话前先用 read_runtime_api 读取 /v1/runtime-api。"),
+      text('document is a local full-page app backed by HTML/CSS/JS resources on its own origin, with an entry below Plugins in the left sidebar. Use it for editable tables, forms, charts and custom layouts.', 'document 是具有独立来源、占满主区域的本地 HTML/CSS/JS 应用，入口位于左侧栏插件下方。可用于可编辑表格、表单、图表和自定义布局。'),
+      text('Trusted document apps can call all backend APIs via window.setsunaUI.runtime.request({path,method,body}), returning {ok,status,data}. Worker handlers use context.runtime.request. No extra capability, origin allowlist or active project is required. Inspect /v1/runtime-api with read_runtime_api before using existing projects or conversations.', '已信任的 document 本地应用通过 window.setsunaUI.runtime.request({path,method,body}) 调用全部后端 API，返回 {ok,status,data}；worker handler 使用 context.runtime.request。无需额外 capability、origin 白名单或当前项目。复用已有项目/对话前先用 read_runtime_api 读取 /v1/runtime-api。'),
       text('A contribution must declare exactly one mode.', "每个 contribution 必须且只能声明一种模式。"),
     ].join(' '),
     properties: {
@@ -126,12 +127,21 @@ function rendererUiSchema(language?: RuntimeInterfaceLanguage): Record<string, u
               required: ['stateKey', 'scope'],
             },
             tree: rendererUiTreeSchema,
+            webpage: {
+              type: 'object',
+              additionalProperties: false,
+              description: text('Existing website opened directly in the native browser. Only available in renderer.plugin.page. Uses the browser login, downloads and settings; has no Setsuna backend bridge, state binding or UI actions.', '直接在原生浏览器中打开已有网站，仅用于 renderer.plugin.page。复用浏览器登录、下载及设置，不提供 Setsuna 后端桥、状态绑定或 UI action。'),
+              properties: {
+                url: { type: 'string', maxLength: 8_192, description: text('HTTP(S) URL without embedded credentials.', '不含内嵌凭据的 HTTP(S) URL。') },
+              },
+              required: ['url'],
+            },
             document: {
               type: 'object',
               additionalProperties: false,
               description: [
-                text('Free-form standalone UI loaded in an opaque-origin iframe.', "在不透明来源的 iframe 中加载的自由形式独立 UI。"),
-                text('Network, Node, Electron, host DOM, native form submission, popups, downloads, and top navigation remain unavailable. HTML form controls work; save with declared host actions.', "无法使用网络、Node、Electron、宿主 DOM、原生表单提交、弹窗、下载或顶层导航。可以使用 HTML 表单控件，通过已声明的宿主操作保存。"),
+                text('Local free-form UI loaded on its own persistent origin. For an existing website use webpage instead.', '具有独立持久来源的本地自由形式 UI；打开已有网站使用 webpage。'),
+                text('Supports ordinary browser networking, remote resources, storage, workers and HTML form submission. Node, Electron and host DOM access remain unavailable.', '支持普通浏览器联网、远程资源、存储、Worker 和 HTML 表单提交，不开放 Node、Electron 或宿主 DOM。'),
                 text('JavaScript uses window.setsunaUI for state snapshots and declared host actions.', "JavaScript 通过 window.setsunaUI 读取状态快照和调用已声明的宿主操作。"),
               ].join(' '),
               properties: {
@@ -143,7 +153,7 @@ function rendererUiSchema(language?: RuntimeInterfaceLanguage): Record<string, u
                   maxItems: RUNTIME_PLUGIN_UI_LIBRARIES.length,
                   uniqueItems: true,
                   items: { type: 'string', enum: [...RUNTIME_PLUGIN_UI_LIBRARIES] },
-                  description: text('Optional offline host libraries. ["echarts"] exposes window.echarts before page scripts; do not include library source or load a CDN.', '可选的宿主离线库。["echarts"] 在页面脚本前提供 window.echarts；不要提交库源码或加载 CDN。'),
+                  description: text('Optional offline host libraries. ["echarts"] exposes window.echarts before page scripts, avoiding a bundled copy or CDN dependency.', '可选的宿主离线库。["echarts"] 在页面脚本前提供 window.echarts，无需额外打包库源码或依赖 CDN。'),
                 },
                 actionIds: { type: 'array', maxItems: 32, items: { type: 'string' } },
               },
@@ -154,6 +164,7 @@ function rendererUiSchema(language?: RuntimeInterfaceLanguage): Record<string, u
           anyOf: [
             { required: ['tree'] },
             { required: ['document'] },
+            { required: ['webpage'] },
           ],
         },
       },
@@ -170,7 +181,7 @@ export function configurePluginDefinition(language?: RuntimeInterfaceLanguage): 
   const text = runtimeText(language);
   return {
     name: CONFIGURE_PLUGIN_TOOL,
-    description: text('Create or update a managed local Setsuna Plugin Bundle from a complete manifest and UTF-8 text files. Prefer files[].sourcePath for files already written in the workspace; do not resend or XML/HTML-encode their contents. Requires user approval.', '用完整清单及 UTF-8 文本文件创建或更新受管理的本地 Setsuna 插件包。已写入工作区的文件优先通过 files[].sourcePath 引用，不要重复发送源码或做 XML/HTML 转义。需要用户审批。'),
+    description: text('Create or update a managed local Setsuna Plugin Bundle from a complete manifest and UTF-8 text files. For a sidebar website shortcut, use rendererUi contribution webpage.url to open the native browser directly. Prefer files[].sourcePath for files already written in the workspace; do not resend or XML/HTML-encode their contents. Requires user approval.', '用完整清单及 UTF-8 文本文件创建或更新受管理的本地 Setsuna 插件包。侧栏网站入口使用 rendererUi contribution 的 webpage.url，直接在原生浏览器中打开。已写入工作区的文件优先通过 files[].sourcePath 引用，不要重复发送源码或做 XML/HTML 转义。需要用户审批。'),
     inputSchema: {
       type: 'object',
       additionalProperties: false,

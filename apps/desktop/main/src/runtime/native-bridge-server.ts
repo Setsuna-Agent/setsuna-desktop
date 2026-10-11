@@ -191,9 +191,9 @@ export class DesktopNativeBridgeServer {
       }
       const dialogSession = request.url?.match(/^\/v1\/sandbox-dialogs\/([a-f0-9]{64})$/u);
       if (request.method === 'POST' && dialogSession) {
-        // Opaque sandbox frames have Origin: null. This capability endpoint only
-        // opens dialogs; it cannot dispatch arbitrary native/runtime requests.
-        response.setHeader('Access-Control-Allow-Origin', 'null');
+        // Independent plugin origins use a revocable dialog capability. This
+        // endpoint cannot dispatch arbitrary native/runtime requests.
+        response.setHeader('Access-Control-Allow-Origin', '*');
         response.setHeader('Cache-Control', 'no-store');
         const controller = new AbortController();
         const onClose = () => { if (!response.writableEnded) controller.abort(); };

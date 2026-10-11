@@ -48,8 +48,22 @@ function fixture() {
   return { scope, controller, contents, invoke, selectionChanged, owner: windowSession.window };
 }
 
+it('fetches a configured website icon without a guest only for a desktop renderer', async () => {
+  const { scope, invoke } = fixture();
+  const fetch = vi.fn(async (url: string) => url.endsWith('/favicon.ico')
+    ? new Response(Buffer.from([0x89, 0x50, 0x4e, 0x47])) : new Response(null, { status: 403 }));
+  vi.mocked(session.fromPartition).mockReturnValue({ fetch } as unknown as Electron.Session);
+  try {
+    await expect(invoke(BROWSER_IPC_CHANNELS.getWebsiteFavicon, { url: 'https://example.com/' }, 99)).resolves.toBeNull();
+    await expect(invoke(BROWSER_IPC_CHANNELS.getWebsiteFavicon, { url: 42 })).resolves.toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+    await expect(invoke(BROWSER_IPC_CHANNELS.getWebsiteFavicon, { url: 'https://example.com/' })).resolves.toBe('data:image/png;base64,iVBORw==');
+    expect(fetch).toHaveBeenCalledTimes(2);
+  } finally { await scope.finishDispose(); }
+});
+
 it('propagates tab activation and late registration through the owned guest mapping, including clearing it', async () => {
-  const { scope, contents, invoke, selectionChanged, owner } = fixture();
+  const { scope, controller, contents, invoke, selectionChanged, owner } = fixture();
   const second = Object.assign(new EventEmitter(), { id: 4, hostWebContents: contents.hostWebContents,
     session: contents.session, isDestroyed: () => false, executeJavaScriptInIsolatedWorld: contents.executeJavaScriptInIsolatedWorld });
   vi.mocked(session.fromPartition).mockReturnValue(contents.session as unknown as Electron.Session);
@@ -61,12 +75,18 @@ it('propagates tab activation and late registration through the owned guest mapp
     expect(selectionChanged).toHaveBeenLastCalledWith(owner, null);
     // Another renderer's home page must not erase this owner's pending selection.
     await invoke(BROWSER_IPC_CHANNELS.setActiveTab, { tabId: null }, 3);
-    expect(await invoke(BROWSER_IPC_CHANNELS.registerTab, { tabId: 'late', webContentsId: second.id }, 3)).toBe(false);
-    expect(await invoke(BROWSER_IPC_CHANNELS.registerTab, { tabId: 'late', webContentsId: second.id })).toBe(true);
+    const registration = { tabId: 'late', webContentsId: second.id, windowOpenMode: 'current-tab' };
+    expect(await invoke(BROWSER_IPC_CHANNELS.registerTab, registration, 3)).toBe(false);
+    expect(controller.windowOpenModeForWebContents(second.id)).toBe('tab');
+    expect(await invoke(BROWSER_IPC_CHANNELS.registerTab, registration)).toBe(true);
+    expect(controller.windowOpenModeForWebContents(second.id)).toBe('current-tab');
+    expect(await invoke(BROWSER_IPC_CHANNELS.registerTab, { ...registration, windowOpenMode: 'invalid' })).toBe(false);
+    expect(controller.windowOpenModeForWebContents(second.id)).toBe('current-tab');
     expect(selectionChanged).toHaveBeenLastCalledWith(owner, second);
     await invoke(BROWSER_IPC_CHANNELS.unregisterTab, { tabId: 'late', webContentsId: contents.id });
     expect(selectionChanged).toHaveBeenCalledTimes(4);
     await invoke(BROWSER_IPC_CHANNELS.unregisterTab, { tabId: 'late', webContentsId: second.id });
+    expect(controller.windowOpenModeForWebContents(second.id)).toBe('tab');
     expect(selectionChanged).toHaveBeenLastCalledWith(owner, null);
     await invoke(BROWSER_IPC_CHANNELS.setActiveTab, { tabId: null });
     expect(selectionChanged).toHaveBeenCalledTimes(6);

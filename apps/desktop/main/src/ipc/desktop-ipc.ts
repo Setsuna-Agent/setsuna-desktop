@@ -16,6 +16,7 @@ import { copyChatImage, readGeneratedImageAsset, revealChatImage, saveChatImage,
 import { desktopWindows } from '../window/registry.js';
 import { isDesktopRendererSender } from './sender.js';
 import { registerWorkspaceEntryWatchIpc } from './workspace-entry-watch-ipc.js';
+import { registerPluginUiDocumentIpc } from './plugin-ui-document-ipc.js';
 
 type DesktopIpcOptions = {
   nativeBridge: DesktopNativeBridgeServer;
@@ -61,6 +62,7 @@ export function registerDesktopIpc({
     return () => keyboards.delete(senderId);
   });
   registerWorkspaceEntryWatchIpc();
+  registerPluginUiDocumentIpc();
 
   ipcMain.handle('desktop:create-sandbox-dialog-session', (event, title: unknown) => {
     const owner = desktopWindows.get(event.sender.id);

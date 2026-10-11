@@ -3,7 +3,6 @@ import type { RuntimeSandboxedUiSource } from '@setsuna-desktop/contracts';
 import { sandboxDialogBootstrap, sandboxDialogEndpoint } from './sandbox-dialogs.js';
 
 export const SANDBOXED_UI_CHANNEL = 'setsuna.sandboxed-ui.v1' as const;
-export const SANDBOXED_UI_FRAME_PERMISSIONS = 'allow-scripts allow-forms' as const;
 
 export type SandboxedUiInvokeMessage = Readonly<{
   type: 'invoke';
@@ -17,20 +16,6 @@ export type SandboxedUiFrameMessage =
   | Readonly<{ type: 'resize'; height: number }>
   | Readonly<{ type: 'runtime-request'; requestId: string; request: unknown }>
   | SandboxedUiInvokeMessage;
-
-const SANDBOX_CSP = [
-  "default-src 'none'",
-  "script-src 'unsafe-inline'",
-  "style-src 'unsafe-inline'",
-  'img-src data: blob:',
-  'font-src data:',
-  "connect-src 'none'",
-  "media-src 'none'",
-  "object-src 'none'",
-  "frame-src 'none'",
-  "worker-src 'none'",
-  "base-uri 'none'",
-].join('; ');
 
 const BASE_STYLE = `
 :root {
@@ -61,16 +46,6 @@ body {
 `;
 
 const bootstrap = (documentId: string) => `(() => {
-  // Chromium does not apply connect-src to WebRTC. Lock the direct WebRTC
-  // connection entry points before any untrusted Plugin markup is parsed.
-  for (const name of ['RTCPeerConnection', 'webkitRTCPeerConnection', 'RTCIceTransport']) {
-    Object.defineProperty(window, name, {
-      configurable: false,
-      enumerable: false,
-      value: undefined,
-      writable: false,
-    });
-  }
   const channel = ${JSON.stringify(SANDBOXED_UI_CHANNEL)};
   const documentId = ${JSON.stringify(documentId)};
   const connection = new MessageChannel();
@@ -190,10 +165,8 @@ export function createSandboxedUiDocument(
   }> = {},
 ): string {
   const endpoint = sandboxDialogEndpoint(dialogUrl);
-  const csp = endpoint ? SANDBOX_CSP.replace("connect-src 'none'", `connect-src ${endpoint}`) : SANDBOX_CSP;
   return [
     `<!doctype html><html data-sizing="${size === 'fill' ? 'fill' : 'content'}"><head><meta charset="utf-8">`,
-    `<meta http-equiv="Content-Security-Policy" content="${escapeAttribute(csp)}">`,
     '<meta name="viewport" content="width=device-width,initial-scale=1">',
     `<script>${bootstrap(documentId)}</script>`,
     `<script>${sandboxDialogBootstrap(endpoint)}</script>`,
@@ -241,10 +214,6 @@ export type SandboxedUiSnapshot = Readonly<{
   data: RuntimePluginUiData;
   context: RuntimePluginUiData;
 }>;
-
-function escapeAttribute(value: string): string {
-  return value.replaceAll('&', '&amp;').replaceAll('"', '&quot;');
-}
 
 function escapeScriptSource(value: string): string {
   return value.replace(/<\/script/giu, '<\\/script');

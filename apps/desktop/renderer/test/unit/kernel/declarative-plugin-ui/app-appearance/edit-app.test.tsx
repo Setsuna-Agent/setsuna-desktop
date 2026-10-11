@@ -9,6 +9,9 @@ import { DeclarativePluginSidebarEntry } from '../../../../../src/kernel/declara
 import { pluginAppAppearanceKey } from '../../../../../src/kernel/declarative-plugin-ui/app-appearance/preferences.js';
 import { usePluginAppAppearance } from '../../../../../src/kernel/declarative-plugin-ui/app-appearance/usePluginAppAppearance.js';
 import { isAppAvatarPresetKey } from '../../../../../src/kernel/declarative-plugin-ui/app-appearance/app-avatar-presets.js';
+import { websiteIconToAvatar } from '../../../../../src/shared/branding/websiteIcon.js';
+
+vi.mock('../../../../../src/shared/branding/websiteIcon.js', () => ({ websiteIconToAvatar: vi.fn() }));
 
 const plugin: RuntimePluginSummary = {
   id: 'notes', name: 'Notes', installedAt: '2026-10-05',
@@ -20,8 +23,8 @@ const contribution: RuntimePluginUiContribution = {
 const service = {} as PluginManagementRendererService;
 const key = pluginAppAppearanceKey(plugin.id, contribution.id);
 
-function entry(onOpen = vi.fn(), onRemove: () => Promise<void> = vi.fn(async () => undefined), onViewPlugin = vi.fn()) {
-  return <DeclarativePluginSidebarEntry active={false} contribution={contribution} entryId="third-party.notes.app.navigation" missingContext={null}
+function entry(onOpen = vi.fn(), onRemove: () => Promise<void> = vi.fn(async () => undefined), onViewPlugin = vi.fn(), app = contribution) {
+  return <DeclarativePluginSidebarEntry active={false} contribution={app} entryId="third-party.notes.app.navigation" missingContext={null}
     plugin={plugin} service={service} onOpen={onOpen} onRemove={onRemove} onViewPlugin={onViewPlugin} onModifyApp={vi.fn()} />;
 }
 
@@ -35,7 +38,57 @@ describe('edit sidebar app', () => {
   afterEach(async () => {
     await act(async () => cleanup());
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    vi.mocked(websiteIconToAvatar).mockReset();
     window.localStorage.clear();
+  });
+
+  it('fetches the configured website icon on demand and applies the draft only after saving', async () => {
+    const avatar = { type: 'custom' as const, dataUrl: 'data:image/png;base64,AQID' };
+    let finish!: (value: string) => void;
+    const getWebsiteFavicon = vi.fn(() => new Promise<string>(resolve => { finish = resolve; }));
+    vi.stubGlobal('setsunaDesktop', { browser: { getWebsiteFavicon } });
+    vi.mocked(websiteIconToAvatar).mockResolvedValue(avatar);
+    render(entry(undefined, undefined, undefined, { ...contribution, slot: 'renderer.plugin.page', tree: undefined, webpage: { url: 'https://example.com/app' } }));
+    const original = window.localStorage.getItem(key);
+    await openEditor();
+    expect(getWebsiteFavicon).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '自动获取' }));
+    fireEvent.click(screen.getByRole('button', { name: '获取中…' }));
+    expect(getWebsiteFavicon).toHaveBeenCalledExactlyOnceWith('https://example.com/app');
+    expect((screen.getByRole('button', { name: '保存' }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => finish('data:image/vnd.microsoft.icon;base64,AAABAA=='));
+    expect(websiteIconToAvatar).toHaveBeenCalledWith('data:image/vnd.microsoft.icon;base64,AAABAA==');
+    expect(window.localStorage.getItem(key)).toBe(original);
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+    expect(window.localStorage.getItem(key)).toBe(original);
+    await openEditor();
+    fireEvent.click(screen.getByRole('button', { name: '自动获取' }));
+    await act(async () => finish('data:image/png;base64,AQID'));
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    expect(JSON.parse(window.localStorage.getItem(key)!)).toEqual({ avatar });
+  });
+
+  it('preserves the draft after fetch failure and ignores results after canceling the editor', async () => {
+    const getWebsiteFavicon = vi.fn<() => Promise<string | null>>().mockRejectedValueOnce(new Error('Offline'));
+    vi.stubGlobal('setsunaDesktop', { browser: { getWebsiteFavicon } });
+    render(entry(undefined, undefined, undefined, { ...contribution, slot: 'renderer.plugin.page', tree: undefined, webpage: { url: 'https://example.com/' } }));
+    await openEditor();
+    fireEvent.click(screen.getByRole('button', { name: '内置头像 2' }));
+    fireEvent.click(screen.getByRole('button', { name: '自动获取' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('未能获取网站图标，请重试或上传图片。');
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    const saved = window.localStorage.getItem(key);
+    expect(JSON.parse(saved!)).toEqual({ avatar: { type: 'preset', key: 'table' } });
+    let finish!: (value: string) => void;
+    getWebsiteFavicon.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    await openEditor();
+    fireEvent.click(screen.getByRole('button', { name: '自动获取' }));
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+    await openEditor();
+    await act(async () => finish('data:image/png;base64,AQID'));
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    expect(window.localStorage.getItem(key)).toBe(saved);
   });
 
   it('opens plugin details from the menu and linked plugin text without saving the editing draft', async () => {
@@ -113,6 +166,7 @@ describe('edit sidebar app', () => {
   it('reads an uploaded image into the saved avatar and can switch back to a preset', async () => {
     render(entry());
     await openEditor();
+    expect(screen.queryByRole('button', { name: '自动获取' })).toBeNull();
     const data = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aRZkAAAAASUVORK5CYII=';
     const file = new File([Uint8Array.from(atob(data), (character) => character.charCodeAt(0))], 'avatar.png', { type: 'image/png' });
     const input = screen.getByRole('dialog').querySelector('input[type="file"]')!;

@@ -1,226 +1,12 @@
-export const RUNTIME_PLUGIN_UI_SCHEMA_VERSION = 2 as const;
-export const RUNTIME_PLUGIN_UI_LEGACY_SCHEMA_VERSION = 1 as const;
-
-export const RUNTIME_PLUGIN_UI_LIMITS = Object.freeze({
-  actions: 32,
-  contributions: 16,
-  dataBytes: 64 * 1024,
-  dataDepth: 8,
-  dataEntries: 512,
-  depth: 8,
-  fields: 24,
-  nodes: 128,
-  optionsPerSelect: 20,
-  textCharacters: 16_384,
-  valueCharacters: 4_000,
-});
-
-export type RuntimePluginUiSlotId =
-  | 'renderer.chat.composer.status'
-  | 'renderer.capabilities.plugin.details'
-  | 'renderer.settings.page.extensions'
-  | 'renderer.plugin.page';
-
-export type RuntimePluginUiTone = 'default' | 'muted' | 'success' | 'warning' | 'danger';
-
-export type RuntimePluginUiBinding = Readonly<{
-  /** Dot-separated path resolved against the contribution's bounded state snapshot. */
-  path: string;
-  fallback?: string;
-}>;
-
-export type RuntimePluginUiTextSource = string | RuntimePluginUiBinding;
-export type RuntimePluginUiDataScope = 'global' | 'project' | 'thread';
-export type RuntimePluginUiSettingsTarget = 'about' | 'general';
-
-export type RuntimePluginUiStackNode = Readonly<{
-  type: 'stack';
-  direction?: 'column' | 'row';
-  gap?: 'compact' | 'normal';
-  children: readonly RuntimePluginUiNode[];
-}>;
-
-export type RuntimePluginUiTextNode = Readonly<{
-  type: 'text';
-  text: RuntimePluginUiTextSource;
-  tone?: RuntimePluginUiTone;
-}>;
-
-export type RuntimePluginUiBadgeNode = Readonly<{
-  type: 'badge';
-  text: RuntimePluginUiTextSource;
-  tone?: RuntimePluginUiTone;
-}>;
-
-export type RuntimePluginUiNoticeNode = Readonly<{
-  type: 'notice';
-  text: RuntimePluginUiTextSource;
-  title?: RuntimePluginUiTextSource;
-  tone?: Exclude<RuntimePluginUiTone, 'muted'>;
-}>;
-
-export type RuntimePluginUiButtonNode = Readonly<{
-  type: 'button';
-  actionId: string;
-  label: string;
-  variant?: 'primary' | 'secondary' | 'danger';
-}>;
-
-export type RuntimePluginUiFieldNode = Readonly<{
-  type: 'field';
-  name: string;
-  label: string;
-  defaultValue?: RuntimePluginUiTextSource;
-  placeholder?: string;
-  required?: boolean;
-  maxLength?: number;
-}>;
-
-export type RuntimePluginUiSelectNode = Readonly<{
-  type: 'select';
-  name: string;
-  label: string;
-  defaultValue?: RuntimePluginUiTextSource;
-  options: readonly Readonly<{ label: string; value: string }>[];
-}>;
-
-export type RuntimePluginUiNode =
-  | RuntimePluginUiStackNode
-  | RuntimePluginUiTextNode
-  | RuntimePluginUiBadgeNode
-  | RuntimePluginUiNoticeNode
-  | RuntimePluginUiButtonNode
-  | RuntimePluginUiFieldNode
-  | RuntimePluginUiSelectNode;
-
-export type RuntimePluginUiAction = Readonly<{
-  id: string;
-  /** Optional interaction confirmation, independent of bundle trust and tool approval. */
-  approval?: Readonly<{
-    message: string;
-    title?: string;
-  }>;
-}>;
-
-export const RUNTIME_PLUGIN_UI_LIBRARIES = ['echarts'] as const;
-export type RuntimePluginUiLibrary = typeof RUNTIME_PLUGIN_UI_LIBRARIES[number];
-
-export type RuntimePluginUiDocument = Readonly<{
-  htmlResourceId: string;
-  cssResourceId?: string;
-  jsResourceId?: string;
-  /** Host-bundled libraries loaded inside the sandbox before Plugin source. */
-  libraries?: readonly RuntimePluginUiLibrary[];
-  /** Exact manifest actions that the isolated document may request from its host page. */
-  actionIds: readonly string[];
-}>;
-
-type RuntimePluginUiContributionBase = Readonly<{
-  id: string;
-  slot: RuntimePluginUiSlotId;
-  /**
-   * Optional global extension-state record used to hydrate declared fields.
-   * The host projects only valid string values for fields in this contribution.
-  */
-  stateKey?: string;
-  /** Host-owned settings page target for schema v2 settings contributions. */
-  target?: RuntimePluginUiSettingsTarget;
-  order?: number;
-  /** Required for a standalone Plugin page; rendered by the host in the sidebar. */
-  navigation?: Readonly<{
-    label: string;
-    badge?: RuntimePluginUiTextSource;
-  }>;
-  /** State projection used by bindings and as the default action state scope. */
-  data?: Readonly<{
-    stateKey: string;
-    scope: RuntimePluginUiDataScope;
-  }>;
-}>;
-
-export type RuntimePluginUiTreeContribution = Readonly<RuntimePluginUiContributionBase & {
-  tree: RuntimePluginUiNode;
-  document?: never;
-}>;
-
-export type RuntimePluginUiDocumentContribution = Readonly<RuntimePluginUiContributionBase & {
-  document: RuntimePluginUiDocument;
-  tree?: never;
-}>;
-
-export type RuntimePluginUiContribution =
-  | RuntimePluginUiTreeContribution
-  | RuntimePluginUiDocumentContribution;
-
-export type RuntimePluginUiManifest = Readonly<{
-  schemaVersion: typeof RUNTIME_PLUGIN_UI_LEGACY_SCHEMA_VERSION | typeof RUNTIME_PLUGIN_UI_SCHEMA_VERSION;
-  actions: readonly RuntimePluginUiAction[];
-  contributions: readonly RuntimePluginUiContribution[];
-}>;
-
-export type RuntimePluginUiActionInput = Readonly<{
-  pluginId: string;
-  actionId: string;
-  values: Readonly<Record<string, string>>;
-  /** Bounded JSON supplied by an isolated Plugin document. */
-  payload?: RuntimePluginUiData;
-  context: Readonly<{
-    contributionId: string;
-    cwd?: string;
-    surface: RuntimePluginUiSlotId;
-    projectId?: string;
-    threadId?: string;
-  }>;
-}>;
-
-export type RuntimePluginUiActionResult = Readonly<{ status: 'completed' }>;
-
-export type RuntimePluginUiStateInput = Readonly<{
-  pluginId: string;
-  contributionId: string;
-}>;
-
-export type RuntimePluginUiStateResult = Readonly<{
-  values: Readonly<Record<string, string>>;
-}>;
-
-export type RuntimePluginUiDataValue =
-  | boolean
-  | null
-  | number
-  | string
-  | readonly RuntimePluginUiDataValue[]
-  | Readonly<{ [key: string]: RuntimePluginUiDataValue }>;
-
-export type RuntimePluginUiData = Readonly<Record<string, RuntimePluginUiDataValue>>;
-
-export type RuntimePluginUiDataInput = Readonly<{
-  pluginId: string;
-  context: Readonly<{
-    contributionId: string;
-    surface: RuntimePluginUiSlotId;
-    projectId?: string;
-    threadId?: string;
-  }>;
-}>;
-
-export type RuntimePluginUiDataResult = Readonly<{ data: RuntimePluginUiData }>;
-
-export type RuntimePluginUiDocumentReadInput = Readonly<{
-  pluginId: string;
-  contributionId: string;
-}>;
-
-/**
- * Source bytes read from the same bundle snapshot whose hash was checked
- * against the user's trusted Plugin revision.
- */
-export type RuntimePluginUiDocumentReadResult = Readonly<{
-  revision: string;
-  html: string;
-  css: string;
-  js: string;
-}>;
+import {
+  RUNTIME_PLUGIN_UI_SCHEMA_VERSION, RUNTIME_PLUGIN_UI_LEGACY_SCHEMA_VERSION,
+  RUNTIME_PLUGIN_UI_LIMITS, RUNTIME_PLUGIN_UI_LIBRARIES, parsePluginUiWebpage,
+  type RuntimePluginUiManifest, type RuntimePluginUiContribution, type RuntimePluginUiData,
+  type RuntimePluginUiDataValue, type RuntimePluginUiNode, type RuntimePluginUiSlotId,
+  type RuntimePluginUiDocument, type RuntimePluginUiLibrary, type RuntimePluginUiTextSource,
+  type RuntimePluginUiBinding,
+} from './plugin-ui/model.js';
+export * from './plugin-ui/model.js';
 
 type ParseBudget = {
   fields: number;
@@ -285,7 +71,7 @@ export function parseRuntimePluginUiManifest(value: unknown): RuntimePluginUiMan
     const contribution = exactRecord(
       item,
       schemaVersion === RUNTIME_PLUGIN_UI_SCHEMA_VERSION
-        ? ['id', 'slot', 'target', 'order', 'navigation', 'data', 'tree', 'document']
+        ? ['id', 'slot', 'target', 'order', 'navigation', 'data', 'tree', 'document', 'webpage']
         : ['id', 'slot', 'target', 'stateKey', 'order', 'tree'],
       `Plugin rendererUi contributions[${index}]`,
     );
@@ -343,11 +129,15 @@ export function parseRuntimePluginUiManifest(value: unknown): RuntimePluginUiMan
     }
     const hasTree = contribution.tree !== undefined;
     const hasDocument = contribution.document !== undefined;
-    if (hasTree === hasDocument) {
-      throw new Error(`Plugin rendererUi contribution ${id} must declare exactly one of tree or document.`);
+    const hasWebpage = contribution.webpage !== undefined;
+    if (Number(hasTree) + Number(hasDocument) + Number(hasWebpage) !== 1) {
+      throw new Error(`Plugin rendererUi contribution ${id} must declare exactly one of tree or document or webpage.`);
     }
     if (hasDocument && slot !== 'renderer.plugin.page') {
       throw new Error(`Plugin rendererUi contribution ${id} documents require the standalone Plugin page Slot.`);
+    }
+    if (hasWebpage && slot !== 'renderer.plugin.page') {
+      throw new Error(`Plugin rendererUi contribution ${id} webpages require the standalone Plugin page Slot.`);
     }
     const fieldNames = new Set<string>();
     const tree = hasTree
@@ -356,6 +146,7 @@ export function parseRuntimePluginUiManifest(value: unknown): RuntimePluginUiMan
     const document = hasDocument
       ? parseDocument(contribution.document, id, actionIds)
       : undefined;
+    const webpage = hasWebpage ? parsePluginUiWebpage(contribution.webpage) : undefined;
     if (!data && ((tree && treeUsesBinding(tree)) || (navigation?.badge && isBinding(navigation.badge)))) {
       throw new Error(`Plugin rendererUi contribution ${id} uses bindings without a data declaration.`);
     }
@@ -374,6 +165,7 @@ export function parseRuntimePluginUiManifest(value: unknown): RuntimePluginUiMan
       ...(data ? { data } : {}),
       ...(tree ? { tree } : {}),
       ...(document ? { document } : {}),
+      ...(webpage ? { webpage } : {}),
     }) as RuntimePluginUiContribution;
   });
   return Object.freeze({

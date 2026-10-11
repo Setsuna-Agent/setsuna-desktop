@@ -414,7 +414,9 @@ function pluginUiSurfaceBadges(
         : 'feature.pluginManagement.interface.previewMissing'),
       translate('feature.pluginManagement.interface.runtimeGenerated'),
     ] : [
-      translate(surface.renderMode === 'sandbox'
+      translate(surface.renderMode === 'webpage'
+        ? 'feature.pluginManagement.interface.webpage'
+        : surface.renderMode === 'sandbox'
         ? 'feature.pluginManagement.interface.sandboxed'
         : 'feature.pluginManagement.interface.hostRendered'),
     ]),

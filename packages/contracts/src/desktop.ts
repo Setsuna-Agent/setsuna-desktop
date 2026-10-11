@@ -3,6 +3,7 @@ import type { RuntimeEventBatch } from './events.js';
 import type { RuntimeRequestInput } from './http.js';
 import type { RuntimeInterfaceLanguage } from './config.js';
 import type { SandboxDialogSession } from './desktop/sandbox-dialogs.js';
+import type { PluginUiDocument, PluginUiDocumentInput } from './desktop/plugin-ui-documents.js';
 import type {
   DesktopDataMigrationPlan,
   DesktopDataRootActionResult,
@@ -131,6 +132,8 @@ export type DesktopWindowCloseBehavior = 'quit' | 'hide-to-tray';
 /** 向渲染进程暴露的有限预加载 API 所使用的共享契约。 */
 export type SetsunaDesktopBridge = {
   desktop: {
+    createPluginUiDocument(input: PluginUiDocumentInput): Promise<PluginUiDocument>;
+    releasePluginUiDocument(id: string): Promise<void>;
     createSandboxDialogSession(title: string): Promise<SandboxDialogSession>;
     updateSandboxDialogSession(id: string, title: string): Promise<void>;
     releaseSandboxDialogSession(id: string): Promise<void>;
