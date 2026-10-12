@@ -35,7 +35,7 @@ describe('bundled content localization', () => {
     expect(installed).toEqual([expect.objectContaining({ id: 'app-builder', installationSource: 'marketplace' })]);
     expect(installed[0].tools?.map((tool) => tool.name)).toEqual(['read_runtime_api', 'configure_plugin', 'verify_plugin']);
     expect(installed[0].resources.map((resource) => resource.id)).toEqual([
-      'ui-design', 'ui-base', 'ui-patterns', 'ui-component-guide', 'ui-components', 'ui-icons',
+      'ui-design', 'ui-base', 'ui-patterns', 'ui-component-guide', 'ui-components', 'ui-icons', 'react-app-guide',
     ]);
     for (const resource of installed[0].resources) {
       expect(await plugins.readResource('app-builder', resource.id)).toMatchObject({
@@ -78,7 +78,7 @@ describe('bundled content localization', () => {
     const skillPath = 'skills/create-plugin-in-chat/SKILL.md';
     await writeFile(path.join(builder.installPath, skillPath), '# Older builder: use an iframe.');
     await installDefaultPlugins(root, marketplace);
-    expect((await plugins.listPlugins()).plugins[0]).toMatchObject({ version: '1.4.5' });
+    expect((await plugins.listPlugins()).plugins[0]).toMatchObject({ version: '1.5.6' });
     expect(await plugins.readResource('app-builder', 'ui-base')).toMatchObject({
       text: await readFile(path.join(catalogRoot, 'app-builder', stylesheet), 'utf8'),
     });
@@ -92,7 +92,7 @@ describe('bundled content localization', () => {
     await writeFile(path.join(root, 'default-plugins.json'), JSON.stringify({ installedIds: ['app-builder'] }));
     await installDefaultPlugins(root, marketplace);
     expect((await plugins.listPlugins()).plugins).toEqual([
-      expect.objectContaining({ id: 'app-builder', installationSource: 'marketplace', version: '1.4.5' }),
+      expect.objectContaining({ id: 'app-builder', installationSource: 'marketplace', version: '1.5.6' }),
     ]);
   });
 

@@ -25,7 +25,7 @@ const key = pluginAppAppearanceKey(plugin.id, contribution.id);
 
 function entry(onOpen = vi.fn(), onRemove: () => Promise<void> = vi.fn(async () => undefined), onViewPlugin = vi.fn(), app = contribution) {
   return <DeclarativePluginSidebarEntry active={false} contribution={app} entryId="third-party.notes.app.navigation" missingContext={null}
-    plugin={plugin} service={service} onOpen={onOpen} onRemove={onRemove} onViewPlugin={onViewPlugin} onModifyApp={vi.fn()} />;
+    plugin={plugin} service={service} onOpen={onOpen} onRefresh={vi.fn()} onRemove={onRemove} onViewPlugin={onViewPlugin} onModifyApp={vi.fn()} />;
 }
 
 async function openEditor(name = '笔记') {

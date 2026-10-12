@@ -51,6 +51,11 @@ export function createRuntimeBuildOptions(projectRoot: string): BuildOptions[] {
       format: 'esm',
       sourcemap: true,
     },
+    {
+      entryPoints: [resolve(projectRoot, 'packages/desktop-runtime/src/adapters/plugin-app/build-worker.ts')],
+      outfile: resolve(projectRoot, 'dist/runtime/plugin-app-build-worker.js'),
+      bundle: true, platform: 'node', target: 'node22', format: 'esm', sourcemap: true, external: ['vite'],
+    },
   ];
 }
 

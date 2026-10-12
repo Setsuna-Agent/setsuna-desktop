@@ -1,6 +1,7 @@
 import {
   parseSandboxedUiSource,
   type RuntimePluginUiDocumentContribution,
+  type RuntimePluginUiReactAppContribution,
   type RuntimeSandboxedUiSource,
 } from '@setsuna-desktop/contracts';
 import type { PluginManagementRendererService } from '@setsuna-desktop/feature-plugin-management/contracts';
@@ -21,7 +22,7 @@ export function useSandboxedPluginUiSource({
   revision,
   service,
 }: Readonly<{
-  contribution: RuntimePluginUiDocumentContribution;
+  contribution: RuntimePluginUiDocumentContribution | RuntimePluginUiReactAppContribution;
   pluginId: string;
   revision: string;
   service: PluginManagementRendererService;
@@ -37,7 +38,7 @@ export function useSandboxedPluginUiSource({
         pluginId,
         contributionId: contribution.id,
       }, { signal: controller.signal }),
-      loadSandboxedUiLibraries(contribution.document.libraries),
+      loadSandboxedUiLibraries(contribution.document?.libraries),
     ]).then(([result, libraryScripts]) => {
       if (!current) return;
       setState({ source: parseSandboxedUiSource(result, 'Plugin page source'), libraryScripts, status: 'ready' });
@@ -48,7 +49,7 @@ export function useSandboxedPluginUiSource({
       current = false;
       controller.abort();
     };
-  }, [contribution.id, contribution.document.libraries, pluginId, revision, service]);
+  }, [contribution.id, contribution.document?.libraries, pluginId, revision, service]);
 
   return state;
 }

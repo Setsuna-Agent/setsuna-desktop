@@ -1,7 +1,6 @@
 import type { SettingsMarkdownDocumentProps } from '@setsuna-desktop/renderer-contracts/settings';
-import { Button } from '@setsuna-desktop/renderer-ui';
+import { Button, DocumentMarkdown } from '@setsuna-desktop/renderer-ui';
 import { useState } from 'react';
-import { DocumentMarkdown } from './DocumentMarkdown.js';
 
 /** Plugin and Skill documents share the same sanitized reading surface as PR content. */
 export function SettingsMarkdownDocument({ content, name, previewLabel, sourceLabel }: SettingsMarkdownDocumentProps) {

@@ -9,12 +9,13 @@ This Skill ships with the default-installed App Builder plugin. The sidebar “+
 
 ## UI design resources
 
-Read these resources only when creating or changing a local HTML/CSS/JS app UI. For a sidebar entry opening an existing website, configure `webpage.url` directly, skipping design resources, page generation and iframe embedding checks. Default to Setsuna's compact desktop style. Explicit user choices for branding, layout, or style take precedence; preserve an existing app's design when updating it.
+Read these resources only when creating or changing a local React or HTML/CSS/JS app UI. For a sidebar entry opening an existing website, configure `webpage.url` directly, skipping design resources, page generation and iframe embedding checks. Default to Setsuna's compact desktop style. Explicit user choices for branding, layout, or style take precedence; preserve an existing app's design when updating it.
 
 - Read the [design guidelines](references/ui-design.en-US.md) with `read_plugin_resource({pluginId:'app-builder',resourceId:'ui-design'})` and the [base CSS](assets/ui-base.css) with `resourceId:'ui-base'`. If unavailable, find `read_plugin_resource` through `search_tools` first.
 - Read the relevant [table, form, and ECharts patterns](references/ui-patterns.en-US.md) through `resourceId:'ui-patterns'`; adopt only the parts the app needs. Host-rendered `tree` pages already use system components and do not need copied CSS.
-- For buttons, fields, selects, tabs, dialogs, or icons, read the [component guide](references/ui-components.en-US.md) through `resourceId:'ui-component-guide'` and reuse `ui-components` and `ui-icons`. The latter supplies 80 Lucide icons from the same source as the host; do not invent SVG paths. Include the scripts in the app's JS as documented, without React or new dependencies.
-- Write base CSS into the app's `ui/app.css`, append app styles, and deliver local files through resource IDs. Browser pages may also load remote stylesheets, `@import`, and CDN resources.
+- For new React apps, read the [React project and component guide](references/react-app.en-US.md) through `resourceId:'react-app-guide'`. Reuse the host's public components through `@setsuna/app` and icons from `lucide-react`; base styles load automatically. Use SelectField with onValueChange, Checkbox and Markdown instead of native controls or copied implementations.
+- For buttons, fields, selects, tabs, dialogs or icons in existing HTML documents, read the [component guide](references/ui-components.en-US.md) through `resourceId:'ui-component-guide'` and reuse `ui-components` and `ui-icons`. The latter supplies 80 Lucide icons from the same source as the host; do not invent SVG paths. Include the scripts in the app's JS as documented, without React or new dependencies.
+- For HTML documents, write base CSS into the app's `ui/app.css`, append app styles, and deliver local files through resource IDs. Browser pages may also load remote stylesheets, `@import`, and CDN resources.
 - The guidelines govern color, typography, spacing, alignment, and interaction states without forcing one business layout. Do not put the guidelines, sample sections, unrelated fields, or decorative data into the user's UI.
 
 ## Choose the capability
@@ -23,7 +24,7 @@ Read these resources only when creating or changing a local HTML/CSS/JS app UI. 
 - For external services, use `mcpServers`; never embed API keys, fixed secrets, authentication headers, or credential-bearing URLs.
 - For local commands around the Agent lifecycle, use `hooks` and reference bundled scripts through `{{pluginRoot}}`.
 - For dynamic tools, lifecycle events, state, or structured user questions, use `extension`.
-- For sidebar entries or standalone pages, use Renderer UI v2 in `extension.rendererUi`. Use `webpage: { url: "https://…" }` to load an existing website directly in the native browser, host-rendered `tree` for simple forms and status, or HTML/CSS/JS `document` for a local app with custom layout and interaction.
+- For sidebar entries or standalone pages, use Renderer UI v2 in `extension.rendererUi`. Use `webpage: { url: "https://…" }` to load an existing website directly in the native browser, host-rendered `tree` for simple forms and status, or an independent React/Vite `reactApp` project for new local apps. Existing HTML/CSS/JS `document` pages remain compatible; migrate only when appropriate for the requested update.
 - For interactive cards after a tool runs, declare the card name, tool, and static sandbox preview in `extension.uiCards`, then return `plugin.ui-card@1` from the tool. One Plugin can provide both cards and persistent sidebar pages.
 - `tools` is display metadata and does not register executable tools; use `api.registerTool` in the extension.
 - `resources` declares Agent-readable resources and the HTML/CSS/JS files referenced by sandboxed pages.
@@ -34,16 +35,16 @@ Submit a complete snapshot to `configure_plugin`:
 
 - `manifest` must include at least a stable lowercase `id` and user-facing `name`; use Bundle v2 fields.
 - `files` includes every UTF-8 text file except `.setsuna-plugin/plugin.json`. Updating removes files omitted from the new snapshot.
-- For HTML/CSS/JS apps, prefer writing and editing files in the current workspace (the current temporary workspace when no project is selected), then submit `{ "path": "ui/app.html", "sourcePath": "ui/app.html" }`. `path` is the bundle destination; `sourcePath` is workspace-relative or an absolute path within approved readable roots. The host reads the original file directly; do not read back and copy all source into the call.
+- For apps, prefer writing and editing files in the current workspace (the current temporary workspace when no project is selected), then submit `{ "path": "ui/app.html", "sourcePath": "ui/app.html" }`. `path` is the bundle destination; `sourcePath` is workspace-relative or an absolute path within approved readable roots. The host reads the original file directly; do not read back and copy all source into the call.
 - Each item must provide exactly one of `sourcePath` or `content`. Small snippets may use `content` as an ordinary JSON string. Do not add XML/HTML entity escaping or Base64 encoding; preserve source entities such as `&amp;`, tags, quotes, and newlines. For `$text`, non-string content, or malformed file arrays, retry with `sourcePath` instead of repeatedly generating JSON/XML payload files, guessing ports, or searching for tokens.
 - The limit is 64 text files and 512 KiB in total. This tool cannot create binary assets such as images.
 - Every Skill directory must contain a complete `SKILL.md`, without TODOs, placeholders, or omitted content.
 - Hook commands should reference bundled scripts; provide `commandWindows` when needed.
 - The extension entry must be a bundled `.mjs`, using `apiVersion: 1`, `runtime: node-worker`, and only the capabilities actually used: `tools`, `events`, `state`, `ui`, `network`.
-- `rendererUi`, `uiCards`, and `plugin.ui-card` require `ui`. Put cards at `manifest.extension.uiCards` with each toolName matching a top-level tool. Previews use static, side-effect-free example source and bounded data; they do not execute tools or replace real tool results. Runtime state bindings also require `state`. Local pages use HTML/CSS/JS resources; existing websites should use direct webpage mode. Keep host DOM access isolated.
+- `rendererUi`, `uiCards`, and `plugin.ui-card` require `ui`. Put cards at `manifest.extension.uiCards` with each toolName matching a top-level tool. Previews use static, side-effect-free example source and bounded data; they do not execute tools or replace real tool results. Runtime state bindings also require `state`. Local pages default to React projects; existing websites should use direct webpage mode. Keep host DOM access isolated.
 - Do not declare `image-generation` or `vision-recognition`; these private host bridges are reserved for the bundled marketplace and cannot be installed in local or chat-created plugins.
 - `network` requires exact HTTP(S) origins without paths or credentials in `extension.network.allowedOrigins`. Call `context.network.request(...)` on the handler's second argument to use app proxying, cancellation, timeouts, and response-size limits. `response.body` is always a string: check `response.ok`/`response.status`, then use `await response.json()` or `JSON.parse(response.body)` before accessing fields. There is no `api.network`.
-- v1 runs no install scripts or package managers. Include dependencies in the Bundle text files.
+- React projects support their own package.json and registry packages. The host installs and builds during approved install/update, without running lifecycle scripts. Do not submit node_modules. HTML documents and backend workers remain self-contained.
 - Before calling, verify `extension.entry`, all `resources[].path` values, every Skill's `SKILL.md`, and every `{{pluginRoot}}` reference exist in this same complete `files` snapshot. Do not probe validation one error at a time with incomplete snapshots.
 
 Minimal dynamic tool entry:
@@ -142,7 +143,7 @@ For a website sidebar entry, configure a schema v2 contribution with `webpage`. 
 }
 ```
 
-Choose exactly one of `tree`, `document`, or `webpage`. Webpage mode requires `ui` and an HTTP(S) URL, with no document resources, state binding, or UI actions. Clicking the sidebar opens the native browser page with existing login, downloads, and browser settings. Remote websites receive no `setsunaUI` bridge. Use `document` for local apps and Setsuna backend access.
+Choose exactly one of `tree`, `document`, `webpage`, or `reactApp`. Webpage mode requires `ui` and an HTTP(S) URL, with no document resources, state binding, or UI actions. Clicking the sidebar opens the native browser page with existing login, downloads, and browser settings. Remote websites receive no `setsunaUI` bridge. Default to `reactApp` for new local apps; both `reactApp` and `document` support Setsuna backend access.
 
 ### Reuse Setsuna backend data
 
@@ -241,9 +242,15 @@ export default function activate(api) {
 }
 ```
 
-### Custom standalone pages
+### React standalone apps
 
-For standalone apps, editable tables, forms, dashboards, charts, complex layouts, or custom interaction, use `document` instead of `tree` in a `renderer.plugin.page` contribution. The entry appears below Plugins in the left sidebar. The app fills the main area without a host title, description, card border, or width limit. Submit HTML/CSS/JS as Bundle text files and declare them in `resources`:
+React/document `invokeAction(id, data)` passes `data` unchanged to the worker's `input.payload`; `input.values` is only for host-rendered tree forms. Validate input before writes and throw on missing or invalid arguments instead of substituting an empty list and overwriting data. Use declared SDK props; TS/TSX is checked before building. Empty initial state does not mean the bridge is unready: do not keep inputs disabled because business fields are missing, and preserve drafts across snapshot refreshes.
+
+Default to `reactApp` for new standalone apps. Read `react-app-guide`, prepare an independent project with default-exported page components and routes as needed, and reuse SDK components, theme styles and state/action/runtime hooks. Submit source and package.json in the complete snapshot; page files do not need individual resource declarations.
+
+### Compatible HTML standalone pages
+
+Keep `document` in the `renderer.plugin.page` contribution when maintaining an existing HTML/CSS/JS app. The entry appears below Plugins in the left sidebar. The app fills the main area without a host title, description, card border, or width limit. Submit HTML/CSS/JS as Bundle text files and declare them in `resources`:
 
 ```json
 {
@@ -375,10 +382,10 @@ For collecting release artifacts from conversation, subscribe to `tool.after` or
 3. Generate the complete manifest and prepare all text files in the current workspace, preferring `sourcePath` for submission. Do not ask the user to prepare a local directory or call `install_plugin_bundle`.
 4. Call `configure_plugin`. Before approval, briefly describe the Skills, MCP servers, Hooks, resources, and extension to install, including whether it contains executable code.
 5. If preflight fails, fix every listed field and file and submit a new complete snapshot. Do not end the turn with promises to finish later.
-6. `Installed and enabled: true` confirms only manifest, syntax, and worker activation. For extensions with tools or UI actions, immediately call `verify_plugin` using representative, read-only inputs covering every user-facing execution path. Tools declaring `uiCards` are required to return a valid `plugin.ui-card`.
-7. For UI actions, provide `contributionId` and verify required view state with `expectStatePaths`, such as `summary.label`. External writes must use the plugin's dry-run; if no safe test is available, obtain explicit user authorization. Never use a real destructive operation as a test.
+6. `Installed and enabled: true` confirms only manifest, syntax, React type checking/building and worker activation. For extensions with tools or UI actions, immediately call `verify_plugin` using representative, read-only inputs covering every user-facing execution path. Tools declaring `uiCards` are required to return a valid `plugin.ui-card`.
+7. For UI actions, provide `contributionId`. React/document checks must use the actual page's `payload` with empty `values`. Save checks must assert submitted values with `expectStateValues`; `expectStatePaths` proves only existence, and an empty array passing does not prove adding works. Never insert test records or clear user data. Use a user-requested real write, an implemented dry-run, or read existing data and save it unchanged. External writes must use dry-run; obtain explicit user authorization when no safe method exists.
 8. `verify_plugin` returning `checksPassed:true` proves only the listed host-handler or API checks. A `ui-action` check calls the worker directly without executing page JavaScript, clicking buttons or testing dialogs; `pageInteractionsVerified:false` means page interactions remain unverified. Report the actual scope, without claiming that buttons, dialogs or the entire app were verified. On failure, repair the complete snapshot, call `configure_plugin` again and recheck. Claim page behavior was verified only with separate interaction evidence; do not use a browser or computer-use without the user's authorization just to obtain it.
-9. Updates also require complete snapshots. The tool rejects overwriting an identically named plugin from the built-in marketplace or another directory; explain the conflict instead of modifying its source.
+9. Updates also require complete snapshots. If the same plugin ID belongs to the built-in marketplace or another directory, explicitly tell the user that installation failed because a same-name plugin already exists and to choose a different name before reinstalling. A new app must change both `pluginId` and `manifest.id`; changing only `manifest.name` will fail again. Do not alter the existing plugin's source or retry its ID unchanged.
 
 If a weather plugin provides both a conversation card and sidebar refresh, verify both real paths after installation:
 

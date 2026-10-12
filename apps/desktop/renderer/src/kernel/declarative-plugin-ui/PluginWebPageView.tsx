@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { workspacePanelSlot } from '@setsuna-desktop/renderer-contracts/workspace';
 import type { BrowserPanelDescriptor, BrowserPanelMetadataPatch } from '@setsuna-desktop/feature-browser/contracts';
 import {
@@ -11,7 +11,9 @@ import { useToast } from '../../app/providers/ToastProvider.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { SelectField } from '../../shared/ui/primitives.js';
 
-export function PluginWebPageView({ id, title, url }: Readonly<{ id: string; title: string; url: string }>) {
+export function PluginWebPageView({ id, title, url, visible, reloadRequest }: Readonly<{
+  id: string; title: string; url: string; visible: boolean; reloadRequest: number;
+}>) {
   const { t } = useI18n();
   const toast = useToast();
   const [panel, setPanel] = useState<BrowserPanelDescriptor>(() => ({
@@ -21,6 +23,15 @@ export function PluginWebPageView({ id, title, url }: Readonly<{ id: string; tit
     setPanel(current => ({ ...current, ...patch }));
   }, []);
   const notify = useCallback<BrowserNotify>((tone, message) => { toast.show(message, { tone }); }, [toast]);
+  const previousReload = useRef(reloadRequest);
+  useEffect(() => {
+    if (previousReload.current === reloadRequest) return;
+    previousReload.current = reloadRequest;
+    // Refresh the current native page, preserving its URL and navigation history.
+    void window.setsunaDesktop?.browser?.reloadTab(id, 'normal').then(ok => {
+      if (!ok) notify('warning', t('feature.browser.reloadFailed'));
+    }, () => notify('warning', t('feature.browser.reloadFailed')));
+  }, [id, notify, reloadRequest, t]);
   const host = useMemo<BrowserWorkspacePanelHost>(() => ({
     bridge: window.setsunaDesktop?.browser ?? null,
     notify,
@@ -33,7 +44,7 @@ export function PluginWebPageView({ id, title, url }: Readonly<{ id: string; tit
       <div className="plugin-webpage">
         <RendererOwnedKeyedSlot entryKey="browser" instanceKey={id} slot={workspacePanelSlot} props={{
           panelId: id, panelType: 'browser', placement: 'side', projectId: null, surfaceInstanceId: id,
-          threadId: null, translate: t, visible: true, renderDefault: () => null,
+          threadId: null, translate: t, visible, renderDefault: () => null,
         }} />
       </div>
     </BrowserWorkspaceFeatureBoundary>

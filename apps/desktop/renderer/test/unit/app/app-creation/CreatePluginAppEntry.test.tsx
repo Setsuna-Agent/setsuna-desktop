@@ -32,7 +32,7 @@ function Entries({ onCreateApp, onFocusComposer }: { onCreateApp: CreatePluginAp
   return <><CreatePluginAppEntry creation={creation} />
     <DeclarativePluginSidebarEntry active={false} contribution={contribution} entryId="table" missingContext={null}
       plugin={{ ...plugin, id: 'editable-table' }} service={{} as PluginManagementRendererService}
-      onOpen={() => undefined} onRemove={async () => undefined} onViewPlugin={() => undefined}
+      onOpen={() => undefined} onRefresh={() => undefined} onRemove={async () => undefined} onViewPlugin={() => undefined}
       onModifyApp={(app) => { void creation.modify(app); }} />
   </>;
 }

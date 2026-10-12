@@ -233,7 +233,7 @@ function declarativeRendererPlugin(
         ui.list(shellSidebarPluginEntrySlot, {
           id: `${entryId}.navigation`,
           order: contribution.order ?? 0,
-          render: ({ activeViewKey, onOpen, onViewPlugin, onModifyApp, projectId, threadId }) => (
+          render: ({ activeViewKey, onOpen, onRefresh, onViewPlugin, onModifyApp, projectId, threadId }) => (
             <DeclarativePluginSidebarEntry
               active={activeViewKey === viewKey}
               entryId={`${entryId}.navigation`}
@@ -244,6 +244,7 @@ function declarativeRendererPlugin(
               service={service}
               threadId={threadId}
               onOpen={() => onOpen(viewKey)}
+              onRefresh={() => onRefresh(viewKey)}
               onRemove={() => removeApp(plugin.id)}
               onViewPlugin={() => onViewPlugin(plugin.id)}
               onModifyApp={onModifyApp}
@@ -258,7 +259,7 @@ function declarativeRendererPlugin(
           children: contribution.webpage
             ? [declareRendererChildSlot(workspacePanelSlot, { requiredKeys: ['browser'] })]
             : [],
-          render: ({ cwd, projectId, threadId }, slots) => (
+          render: ({ cwd, projectId, threadId, visible = true, reloadRequest = 0 }, slots) => (
             <RendererOwnedSlotsProvider slots={slots}>
               <DeclarativePluginPage
                 contribution={contribution}
@@ -267,6 +268,8 @@ function declarativeRendererPlugin(
                 plugin={plugin}
                 projectId={projectId}
                 revision={revision}
+                visible={visible}
+                reloadRequest={reloadRequest}
                 service={service}
                 threadId={threadId}
               />
@@ -323,6 +326,8 @@ function DeclarativePluginPage({
   plugin,
   projectId,
   revision,
+  visible,
+  reloadRequest,
   service,
   threadId,
 }: Readonly<{
@@ -332,6 +337,8 @@ function DeclarativePluginPage({
   plugin: RuntimePluginSummary;
   projectId?: string;
   revision: string;
+  visible: boolean;
+  reloadRequest: number;
   service: PluginManagementRendererService;
   threadId?: string;
 }>) {
@@ -339,7 +346,7 @@ function DeclarativePluginPage({
   const { appearance } = usePluginAppAppearance(plugin.id, contribution.id);
   const label = appearance.name ?? contribution.navigation?.label ?? plugin.name;
   const missingContext = missingContributionContext(contribution, projectId, threadId);
-  const fullPage = Boolean(contribution.document || contribution.webpage);
+  const fullPage = Boolean(contribution.document || contribution.reactApp || contribution.webpage);
   return (
     <main className={`declarative-plugin-page${fullPage ? ' declarative-plugin-page--app' : ''}`}>
       {!fullPage ? <header className="declarative-plugin-page__header">
@@ -367,10 +374,12 @@ function DeclarativePluginPage({
           contribution.webpage ? (
             <Suspense fallback={null}>
               <PluginWebPageView key={`${plugin.id}:${contribution.id}:${contribution.webpage.url}`}
-                id={`plugin-web-${plugin.id}-${contribution.id}`} title={label} url={contribution.webpage.url} />
+                id={`plugin-web-${plugin.id}-${contribution.id}`} title={label} url={contribution.webpage.url}
+                visible={visible} reloadRequest={reloadRequest} />
             </Suspense>
-          ) : contribution.document ? (
+          ) : contribution.document || contribution.reactApp ? (
             <SandboxedPluginUiView
+              key={reloadRequest}
               title={label}
               contribution={contribution}
               cwd={cwd}
@@ -383,6 +392,7 @@ function DeclarativePluginPage({
             />
           ) : (
             <DeclarativePluginUiView
+              key={reloadRequest}
               contribution={contribution}
               cwd={cwd}
               manifest={manifest}

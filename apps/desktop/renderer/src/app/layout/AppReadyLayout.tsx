@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserSettingsNavigationProvider } from '../../composition/BrowserWorkspaceFeatureBoundary.js';
 import {
   shellOverlaySlot,
-  shellRouteSlot,
   shellSidebarSlot,
   shellTopbarActionsSlot,
   shellTopbarTitleSlot,
@@ -29,6 +28,8 @@ import { useThreadMenu } from '../thread-menu/useThreadMenu.js';
 import { AppOverlays } from './AppOverlays.js';
 import { AppChatToolbarTitle } from './AppChatToolbarTitle.js';
 import { AppRouteContent } from './AppRouteContent.js';
+import { AppRouteSurface } from './AppRouteSurface.js';
+import { usePluginPageRefreshRequests } from './usePluginPageSessions.js';
 import { AppSidebarSurface } from './AppSidebarSurface.js';
 import { AppNavigationRail } from './AppNavigationRail.js';
 import { AppTopbarActions } from './AppTopbarActions.js';
@@ -41,11 +42,9 @@ import { AppMenuBar } from './AppMenuBar.js';
 import { useSecondaryRoutePrefetch } from './useSecondaryRoutePrefetch.js';
 import {
   RendererOwnedSingleSlot,
-  useRendererOwnedSlots,
 } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
 
 export function AppReadyLayout({ controller }: { controller: DesktopAppController }) {
-  const slots = useRendererOwnedSlots();
   const {
     activeProject,
     activeProjectId,
@@ -102,6 +101,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   const [conversationOverviewRendered, setConversationOverviewRendered] = useState(false);
   const [selectedCapabilitiesPluginId, setSelectedCapabilitiesPluginId] = useState<string | null>(null);
   const [selectedPluginViewKey, setSelectedPluginViewKey] = useState<string | null>(null);
+  const pluginPageRefresh = usePluginPageRefreshRequests();
   // 记录下一次进入设置页时应定位到的分区；普通入口会先清空，避免上一次的直达请求残留。
   const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSectionId | null>(null);
   const [runtimeActivityOpen, setRuntimeActivityOpen] = useState(false);
@@ -455,6 +455,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
           onOpenPullRequests={openPullRequests}
           onOpenAutomation={openAutomation}
           onOpenPluginView={openPluginView}
+          onRefreshPluginView={pluginPageRefresh.refresh}
           onViewPlugin={openCapabilitiesPlugin}
           onOpenRuntimeActivity={() => setRuntimeActivityOpen(true)}
           onOpenSettings={openSettings}
@@ -561,61 +562,68 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         }}
       />
 
-      {slots.keyed(shellRouteSlot, activeView, {
-        routeId: activeView,
-        renderDefault: () => (
-          <AppRouteContent
-        onSelectConversation={navigation.selectThreadInView}
-        starterProjectSelection={{
-          projects: runtime.projects,
-          onSelectProject: navigation.selectNewThreadProject,
-          onCreateProject: navigation.openCreateProject,
-        }}
-        activeProject={activeProject}
-        activeWorkspace={activeWorkspace}
-        fileWorkspace={fileWorkspace}
+      <AppRouteSurface
         activeView={activeView}
-        selectedCapabilitiesPluginId={selectedCapabilitiesPluginId}
-        selectedPluginViewKey={selectedPluginViewKey}
-        settingsInitialSection={settingsInitialSection}
-        chatActions={chatActions}
-        onForkThread={navigation.forkThread}
-        composerKey={composerKey}
-        attachmentStore={attachmentStore}
-        focusComposerRequest={focusComposerRequest}
-        findInChatRequest={findInChatRequest}
-        onFindInChatRequestConsumed={consumeFindInChatRequest}
-        conversationOverviewVisibility={conversationOverviewVisibility}
-        draft={draft}
-        draftSkillReferences={draftSkillReferences}
-        projectWorkspace={projectWorkspace}
-        runtime={runtime}
-        setActiveView={setActiveView}
-        setDraft={setDraft}
-        capabilitySelectionRequest={capabilitySelectionRequest}
-        startCurrentThreadReview={startCurrentThreadReview}
-        workspacePanels={workspacePanels}
-        onSelectSkillForChat={selectSkillForChat}
-        onSelectPluginForChat={selectPluginForChat}
-        onOpenPlugin={openCapabilitiesPlugin}
-        onSelectedCapabilitiesPluginIdChange={setSelectedCapabilitiesPluginId}
-        onConversationOverviewRenderedChange={setConversationOverviewRendered}
-        onFocusComposerRequestConsumed={consumeFocusComposerRequest}
-        onOpenModelSettings={openModelSettings}
-        onCapabilitySelectionRequestConsumed={clearCapabilitySelectionRequest}
-        onTerminalResizeStart={handleTerminalResizeStart}
-        onTerminalResizeStep={handleTerminalResizeStep}
-        terminalHeight={terminalHeight}
-        terminalMaxHeight={terminalMaxHeight}
-        terminalMinHeight={terminalMinHeight}
-        onWorkspaceResizeStart={handleWorkspaceResizeStart}
-        onWorkspaceResizeStep={handleWorkspaceResizeStep}
-        workspaceMaxWidth={workspaceMaxWidth}
-        workspaceMinWidth={workspaceMinWidth}
+        pluginProps={{
+          activeProjectId: activeProject?.id,
+          activeProjectPath: activeProject?.path,
+          activeThreadId: currentThread?.id,
+          selectedViewKey: selectedPluginViewKey,
+          refreshRequests: pluginPageRefresh.requests,
+          onBack: openChat,
+        }}
+        renderDefault={(routeId) => (
+          <AppRouteContent
+            onSelectConversation={navigation.selectThreadInView}
+            starterProjectSelection={{
+              projects: runtime.projects,
+              onSelectProject: navigation.selectNewThreadProject,
+              onCreateProject: navigation.openCreateProject,
+            }}
+            activeProject={activeProject}
+            activeWorkspace={activeWorkspace}
+            fileWorkspace={fileWorkspace}
+            activeView={routeId}
+            selectedCapabilitiesPluginId={selectedCapabilitiesPluginId}
+            settingsInitialSection={settingsInitialSection}
+            chatActions={chatActions}
+            onForkThread={navigation.forkThread}
+            composerKey={composerKey}
+            attachmentStore={attachmentStore}
+            focusComposerRequest={focusComposerRequest}
+            findInChatRequest={findInChatRequest}
+            onFindInChatRequestConsumed={consumeFindInChatRequest}
+            conversationOverviewVisibility={conversationOverviewVisibility}
+            draft={draft}
+            draftSkillReferences={draftSkillReferences}
+            projectWorkspace={projectWorkspace}
+            runtime={runtime}
+            setActiveView={setActiveView}
+            setDraft={setDraft}
+            capabilitySelectionRequest={capabilitySelectionRequest}
+            startCurrentThreadReview={startCurrentThreadReview}
+            workspacePanels={workspacePanels}
+            onSelectSkillForChat={selectSkillForChat}
+            onSelectPluginForChat={selectPluginForChat}
+            onOpenPlugin={openCapabilitiesPlugin}
+            onSelectedCapabilitiesPluginIdChange={setSelectedCapabilitiesPluginId}
+            onConversationOverviewRenderedChange={setConversationOverviewRendered}
+            onFocusComposerRequestConsumed={consumeFocusComposerRequest}
+            onOpenModelSettings={openModelSettings}
+            onCapabilitySelectionRequestConsumed={clearCapabilitySelectionRequest}
+            onTerminalResizeStart={handleTerminalResizeStart}
+            onTerminalResizeStep={handleTerminalResizeStep}
+            terminalHeight={terminalHeight}
+            terminalMaxHeight={terminalMaxHeight}
+            terminalMinHeight={terminalMinHeight}
+            onWorkspaceResizeStart={handleWorkspaceResizeStart}
+            onWorkspaceResizeStep={handleWorkspaceResizeStep}
+            workspaceMaxWidth={workspaceMaxWidth}
+            workspaceMinWidth={workspaceMinWidth}
             workspaceWidth={workspaceWidth}
           />
-        ),
-      })}
+        )}
+      />
 
       {visibleRuntimeError ? (
         <RuntimeErrorNotice message={visibleRuntimeError} />

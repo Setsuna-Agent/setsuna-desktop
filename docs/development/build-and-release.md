@@ -39,9 +39,10 @@ corepack pnpm@7.33.7 <command>
 - `pnpm prepare:electron`：检查并准备当前平台的 Electron 二进制；默认使用 Electron
   文档推荐的中国镜像，可通过 `ELECTRON_MIRROR` 覆盖下载源。CI 和 Release workflow
   显式使用 Electron 官方 GitHub 下载源，避免海外 runner 访问国内镜像时下载缓慢或超时。
-- `pnpm dev:electron`：先准备 Electron，再构建 contracts、feature-core、Feature packages、runtime 和 Electron bundle 并启动。
-- `pnpm build`：clean 后依次构建 contracts、feature-core、renderer-contracts、renderer-ui、Feature packages、runtime、Electron 与 renderer。
+- `pnpm dev:electron`：先准备 Electron，再构建 contracts、feature-core、app-sdk、Feature packages、runtime 和 Electron bundle 并启动。
+- `pnpm build`：clean 后依次构建 contracts、feature-core、renderer-contracts、renderer-ui、app-sdk、Feature packages、runtime、Electron 与 renderer。
 - `pnpm build:contracts`：只编译 `packages/contracts/src`，测试由独立 test tsconfig 类型检查。
+- `pnpm build:app-sdk`：编译自定义 React 应用的 SDK 及其共享 UI 依赖，打包组件、类型、宿主 token/CSS 和独立项目安装清单。
 - `pnpm build:runtime`：只编译 `packages/desktop-runtime/src`，不会把测试发进 `dist`。
 - `pnpm build:electron`：运行 `scripts/build-electron.ts`。
 - `pnpm build:renderer`：Vite build。
@@ -64,6 +65,7 @@ corepack pnpm@7.33.7 <command>
 - `dist/electron/preload/index.cjs`：preload，CJS。
 - `dist/runtime/cli.cjs`：runtime CLI，CJS。
 - `dist/runtime/extension-worker-entry.js`：可执行 Plugin worker。
+- `dist/runtime/plugin-app-build-worker.js`：按需执行的 Vite compiler worker。
 - `dist/electron/preload/browser-extensions.cjs`：浏览器扩展的隔离 preload。
 
 同一脚本还准备当前平台的桌面控制 helper；打包时由 `before-pack.cjs` 按目标架构再次准备和校验。
@@ -75,6 +77,7 @@ external：
   `require`。
 - preload external `electron`。
 - runtime external `node-pty`、`sharp`，保留平台原生模块及其依赖树。
+- app compiler external `vite`；其 production 依赖和 esbuild/Rollup 平台二进制随应用发布，二进制放在 asarUnpack，worker 在加载 Vite 前将 ESBUILD_BINARY_PATH 指向实际解包路径。
 
 约束：
 

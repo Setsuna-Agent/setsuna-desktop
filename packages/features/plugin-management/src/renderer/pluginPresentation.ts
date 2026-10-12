@@ -135,7 +135,7 @@ export function pluginUiSurfaces(
       kind,
       ...(contribution.navigation?.label ? { title: contribution.navigation.label } : {}),
       description: contribution.id,
-      renderMode: contribution.webpage ? 'webpage' : contribution.document ? 'sandbox' : 'host',
+      renderMode: contribution.webpage ? 'webpage' : contribution.document || contribution.reactApp ? 'sandbox' : 'host',
       ...(contribution.slot === 'renderer.plugin.page' ? { sidebarEntry: true } : {}),
     };
   });

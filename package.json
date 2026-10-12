@@ -16,11 +16,12 @@
     "dev": "concurrently -k -s command-electron -n renderer,electron \"pnpm dev:renderer\" \"wait-on tcp:5174 && pnpm dev:electron\"",
     "dev:renderer": "vite --host 127.0.0.1 --port 5174",
     "dev:electron": "pnpm prepare:electron && tsx scripts/start-electron-dev.ts",
-    "build": "pnpm clean && pnpm build:contracts && pnpm build:feature-core && pnpm build:renderer-contracts && pnpm build:renderer-ui && pnpm build:features && pnpm build:runtime && pnpm build:electron && pnpm build:renderer",
+    "build": "pnpm clean && pnpm build:contracts && pnpm build:feature-core && pnpm build:renderer-contracts && pnpm build:renderer-ui && pnpm build:app-sdk && pnpm build:features && pnpm build:runtime && pnpm build:electron && pnpm build:renderer",
     "build:contracts": "tsc -b packages/contracts/tsconfig.build.json",
     "build:feature-core": "tsc -b packages/feature-core/tsconfig.build.json",
     "build:renderer-contracts": "tsc -b packages/renderer-contracts/tsconfig.build.json",
     "build:renderer-ui": "tsc -b packages/renderer-ui/tsconfig.build.json",
+    "build:app-sdk": "pnpm --filter @setsuna/app run build",
     "build:features": "pnpm --recursive --filter \"./packages/features/*\" run build",
     "build:runtime": "tsc -b packages/desktop-runtime/tsconfig.build.json",
     "build:electron": "tsx scripts/build-electron.ts",
@@ -57,6 +58,8 @@
     "format:computer-use:windows": "cargo fmt --manifest-path native/computer-use-windows/Cargo.toml"
   },
   "dependencies": {
+    "@setsuna/app": "workspace:*",
+    "vite": "^6.0.5",
     "@setsuna-desktop/feature-notifications": "workspace:*",
     "remark-emoji": "5.0.2",
     "@fontsource/geist-mono": "^5.2.8",
@@ -141,7 +144,6 @@
     "tailwindcss": "^4.1.8",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "vite": "^6.0.5",
     "vitest": "^4.1.11",
     "wait-on": "^8.0.1"
   },
@@ -191,6 +193,8 @@
       "packages/contracts/package.json",
       "packages/feature-core/package.json",
       "packages/feature-core/dist/**/*",
+      "packages/app-sdk/package.json",
+      "packages/app-sdk/dist/**/*",
       "packages/features/*/package.json",
       "packages/features/*/dist/**/*",
       "packages/desktop-runtime/package.json",
@@ -199,6 +203,8 @@
     ],
     "asarUnpack": [
       "**/node_modules/node-pty/prebuilds/**/*",
+      "**/node_modules/@esbuild/**/*",
+      "**/node_modules/@rollup/**/*",
       "**/node_modules/sharp/**/*",
       "**/node_modules/@img/**/*"
     ],

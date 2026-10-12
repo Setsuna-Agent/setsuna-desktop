@@ -40,6 +40,26 @@ it('retains the runtime API transport timeout', async () => {
   expect(reject).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ message: 'Host request timed out.' }));
 });
 
+it('retains data identity across cloned/theme snapshots while still notifying canvas subscribers and publishing real changes', async () => {
+  const { api, reply } = bootstrapBridge();
+  reply({ type: 'snapshot', data: {todos:[]}, context: {pluginId:'todos'}, theme: {} });
+  await api.ready;
+  const initial = api.getSnapshot();
+  const listener = vi.fn(); const unsubscribe = api.subscribe(listener);
+  reply({ type: 'snapshot', data: {todos:[]}, context: {pluginId:'todos'}, theme: {colorScheme:'dark'} });
+  expect(api.getSnapshot()).toBe(initial);
+  expect(listener).toHaveBeenCalledWith(initial);
+  reply({ type: 'snapshot', data: {todos:[]}, context: {pluginId:'todos', threadId:'thread_2'}, theme: {} });
+  expect(api.getSnapshot().data).toBe(initial.data);
+  expect(api.getSnapshot().context).toEqual({pluginId:'todos', threadId:'thread_2'});
+  reply({ type: 'snapshot', data: {todos:[{title:'Saved'}]}, context: {pluginId:'todos'}, theme: {} });
+  expect(api.getSnapshot().data).toEqual({todos:[{title:'Saved'}]});
+  expect(api.getSnapshot().data).not.toBe(initial.data);
+  unsubscribe(); const calls = listener.mock.calls.length;
+  reply({ type:'snapshot', data:{todos:[]}, context:{}, theme:{} });
+  expect(listener).toHaveBeenCalledTimes(calls);
+});
+
 function bootstrapBridge() {
   const post = vi.fn<(message: Record<string, unknown>) => void>();
   const parent = { postMessage: vi.fn() };
@@ -49,6 +69,9 @@ function bootstrapBridge() {
     addEventListener: vi.fn(),
   } as unknown as {
     setsunaUI: {
+      ready: Promise<unknown>;
+      getSnapshot(): {data: unknown; context: unknown};
+      subscribe(listener: (snapshot: unknown) => void): () => void;
       invoke(actionId: string, payload: unknown): Promise<unknown>;
       runtime: { request(input: unknown): Promise<unknown> };
     };
@@ -58,7 +81,7 @@ function bootstrapBridge() {
   const bootstrap = new DOMParser().parseFromString(source, 'text/html').querySelector('script')?.textContent;
   if (!bootstrap) throw new Error('Sandbox bootstrap is missing.');
   new Function('window', 'parent', 'document', 'setTimeout', 'clearTimeout', 'MessageChannel', bootstrap)(
-    window, parent, { readyState: 'loading', addEventListener: vi.fn() }, setTimeout, clearTimeout,
+    window, parent, { readyState: 'loading', addEventListener: vi.fn(), documentElement:{dataset:{},style:{setProperty:vi.fn()}} }, setTimeout, clearTimeout,
     class { port1 = port; port2 = {}; },
   );
   return {

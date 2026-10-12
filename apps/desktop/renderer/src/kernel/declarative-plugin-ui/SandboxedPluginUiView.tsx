@@ -4,6 +4,7 @@ import type {
   RuntimePluginUiActionInput,
   RuntimePluginUiData,
   RuntimePluginUiDocumentContribution,
+  RuntimePluginUiReactAppContribution,
   RuntimePluginUiManifest,
 } from '@setsuna-desktop/contracts';
 import type { PluginManagementRendererService } from '@setsuna-desktop/feature-plugin-management/contracts';
@@ -24,7 +25,7 @@ export function SandboxedPluginUiView({
   threadId,
   title,
 }: Readonly<{
-  contribution: RuntimePluginUiDocumentContribution;
+  contribution: RuntimePluginUiDocumentContribution | RuntimePluginUiReactAppContribution;
   cwd?: string;
   manifest: RuntimePluginUiManifest;
   pluginId: string;
@@ -50,7 +51,7 @@ export function SandboxedPluginUiView({
 
   const runAction = useCallback(async (actionId: string, payload: RuntimePluginUiData) => {
     const action = actions.get(actionId);
-    if (!action || !contribution.document.actionIds.includes(actionId)) {
+    if (!action || !(contribution.document ?? contribution.reactApp).actionIds.includes(actionId)) {
       throw new Error('Plugin page action is not declared.');
     }
     if (action.approval && !await confirm({
@@ -100,7 +101,7 @@ export function SandboxedPluginUiView({
   }
   return (
     <SandboxedUiFrame
-      allowedActionIds={contribution.document.actionIds}
+      allowedActionIds={(contribution.document ?? contribution.reactApp).actionIds}
       className="sandboxed-plugin-ui__frame"
       context={context}
       data={dataState.data}

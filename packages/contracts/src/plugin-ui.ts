@@ -7,6 +7,8 @@ import {
   type RuntimePluginUiBinding,
 } from './plugin-ui/model.js';
 export * from './plugin-ui/model.js';
+import { parsePluginUiReactApp } from './plugin-ui/react-app.js';
+export { pluginAppRelativePath } from './plugin-ui/react-app.js';
 
 type ParseBudget = {
   fields: number;
@@ -71,7 +73,7 @@ export function parseRuntimePluginUiManifest(value: unknown): RuntimePluginUiMan
     const contribution = exactRecord(
       item,
       schemaVersion === RUNTIME_PLUGIN_UI_SCHEMA_VERSION
-        ? ['id', 'slot', 'target', 'order', 'navigation', 'data', 'tree', 'document', 'webpage']
+        ? ['id', 'slot', 'target', 'order', 'navigation', 'data', 'tree', 'document', 'webpage', 'reactApp']
         : ['id', 'slot', 'target', 'stateKey', 'order', 'tree'],
       `Plugin rendererUi contributions[${index}]`,
     );
@@ -130,8 +132,9 @@ export function parseRuntimePluginUiManifest(value: unknown): RuntimePluginUiMan
     const hasTree = contribution.tree !== undefined;
     const hasDocument = contribution.document !== undefined;
     const hasWebpage = contribution.webpage !== undefined;
-    if (Number(hasTree) + Number(hasDocument) + Number(hasWebpage) !== 1) {
-      throw new Error(`Plugin rendererUi contribution ${id} must declare exactly one of tree or document or webpage.`);
+    const hasReactApp = contribution.reactApp !== undefined;
+    if (Number(hasTree) + Number(hasDocument) + Number(hasWebpage) + Number(hasReactApp) !== 1) {
+      throw new Error(`Plugin rendererUi contribution ${id} must declare exactly one of tree or document or webpage or reactApp.`);
     }
     if (hasDocument && slot !== 'renderer.plugin.page') {
       throw new Error(`Plugin rendererUi contribution ${id} documents require the standalone Plugin page Slot.`);
@@ -139,6 +142,7 @@ export function parseRuntimePluginUiManifest(value: unknown): RuntimePluginUiMan
     if (hasWebpage && slot !== 'renderer.plugin.page') {
       throw new Error(`Plugin rendererUi contribution ${id} webpages require the standalone Plugin page Slot.`);
     }
+    if (hasReactApp && slot !== 'renderer.plugin.page') throw new Error('React apps require the standalone Plugin page Slot.');
     const fieldNames = new Set<string>();
     const tree = hasTree
       ? parseNode(contribution.tree, 1, budget, actionIds, fieldNames, schemaVersion)
@@ -147,6 +151,7 @@ export function parseRuntimePluginUiManifest(value: unknown): RuntimePluginUiMan
       ? parseDocument(contribution.document, id, actionIds)
       : undefined;
     const webpage = hasWebpage ? parsePluginUiWebpage(contribution.webpage) : undefined;
+    const reactApp = hasReactApp ? parsePluginUiReactApp(contribution.reactApp, actionIds) : undefined;
     if (!data && ((tree && treeUsesBinding(tree)) || (navigation?.badge && isBinding(navigation.badge)))) {
       throw new Error(`Plugin rendererUi contribution ${id} uses bindings without a data declaration.`);
     }
@@ -166,6 +171,7 @@ export function parseRuntimePluginUiManifest(value: unknown): RuntimePluginUiMan
       ...(tree ? { tree } : {}),
       ...(document ? { document } : {}),
       ...(webpage ? { webpage } : {}),
+      ...(reactApp ? { reactApp } : {}),
     }) as RuntimePluginUiContribution;
   });
   return Object.freeze({

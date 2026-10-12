@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "composite": true, "declaration": true, "declarationMap": true,
+    "target": "ES2022", "module": "NodeNext", "moduleResolution": "NodeNext",
+    "lib": ["ES2022", "DOM"], "strict": true, "skipLibCheck": true,
+    "jsx": "react-jsx", "rootDir": "src", "outDir": "dist", "types": ["react"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "references": [{ "path": "../renderer-ui/tsconfig.build.json" }]
+}

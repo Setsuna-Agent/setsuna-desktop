@@ -26,7 +26,6 @@ import type {
 import { CapabilitiesRouteAdapter } from './CapabilitiesRouteAdapter.js';
 import { ChatRouteAdapter } from './ChatRouteAdapter.js';
 import { SettingsRouteAdapter } from './SettingsRouteAdapter.js';
-import { PluginRouteAdapter } from './PluginRouteAdapter.js';
 import { AutomationRouteAdapter } from '../../composition/automation/AutomationFeatureBoundary.js';
 import type { ChatStarterProjectSelection } from '../../features/chat/conversation/ChatStarterWorkspace.js';
 
@@ -36,7 +35,7 @@ export type AppRouteContentProps = Readonly<{
   activeProject?: WorkspaceProject;
   activeWorkspace?: WorkspaceProject;
   fileWorkspace?: WorkspaceProject;
-  activeView: MainView;
+  activeView: Exclude<MainView, 'plugin'>;
   chatActions: ChatTurnActions;
   composerKey: string;
   attachmentStore?: ChatAttachmentStore;
@@ -49,7 +48,6 @@ export type AppRouteContentProps = Readonly<{
   projectWorkspace: ProjectWorkspaceState;
   runtime: RuntimeClientState;
   selectedCapabilitiesPluginId: string | null;
-  selectedPluginViewKey: string | null;
   settingsInitialSection?: SettingsSectionId | null;
   setActiveView: Dispatch<SetStateAction<MainView>>;
   setDraft: SetChatComposerDraft;
@@ -85,16 +83,5 @@ export function AppRouteContent(props: AppRouteContentProps) {
   if (props.activeView === 'automation') return <AutomationRouteAdapter {...props} />;
   if (props.activeView === 'settings') return <SettingsRouteAdapter {...props} />;
   if (props.activeView === 'capabilities') return <CapabilitiesRouteAdapter {...props} />;
-  if (props.activeView === 'plugin') {
-    return (
-      <PluginRouteAdapter
-        activeProjectId={props.activeProject?.id}
-        activeProjectPath={props.activeProject?.path}
-        activeThreadId={props.runtime.currentThread?.id}
-        selectedViewKey={props.selectedPluginViewKey}
-        onBack={() => props.setActiveView('chat')}
-      />
-    );
-  }
   return <ChatRouteAdapter {...props} />;
 }

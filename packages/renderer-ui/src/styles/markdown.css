@@ -1,0 +1,213 @@
+/* Shared Markdown typography; chat-only file links and streaming blocks stay with Chat. */
+.chat-markdown {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--app-text);
+  font-family: var(--app-font-family);
+  font-feature-settings: 'kern';
+  font-kerning: normal;
+  font-optical-sizing: auto;
+  font-size: var(--app-font-size, 14px);
+  font-weight: var(--app-font-weight);
+  line-height: 1.72;
+  overflow-wrap: break-word;
+  text-rendering: optimizeLegibility;
+}
+
+.chat-markdown :where(p, ul, ol, blockquote, pre) {
+  margin: 0 0 var(--chat-markdown-block-gap, 0.9em);
+}
+
+.chat-markdown :where(h1, h2, h3, h4, h5, h6) {
+  margin: 1.45em 0 0.58em;
+  color: var(--app-text);
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.012em;
+}
+
+.chat-markdown h1 {
+  font-size: 1.5em;
+}
+
+.chat-markdown h2 {
+  font-size: 1.34em;
+}
+
+.chat-markdown h3 {
+  font-size: 1.18em;
+}
+
+.chat-markdown h4,
+.chat-markdown h5,
+.chat-markdown h6 {
+  font-size: 1em;
+}
+
+.chat-markdown :where(strong, b) {
+  color: var(--app-text);
+  font-weight: 600;
+}
+
+.chat-markdown :where(ul, ol) {
+  padding-left: 1.55em;
+}
+
+.chat-markdown li {
+  padding-left: 0.12em;
+}
+
+.chat-markdown li + li {
+  margin-top: 0.24em;
+}
+
+.chat-markdown li > :where(p, ul, ol) {
+  margin-top: 0.35em;
+  margin-bottom: 0.35em;
+}
+
+.chat-markdown :where(ol > li)::marker {
+  color: var(--app-text);
+  font-weight: 600;
+}
+
+.chat-markdown :where(ul > li)::marker {
+  color: var(--app-text-muted);
+}
+
+.chat-markdown blockquote {
+  padding: 0.05em 0 0.05em 1em;
+  border-left: 2px solid color-mix(in srgb, var(--app-text-muted) 42%, var(--app-border));
+  color: var(--app-text-secondary);
+}
+
+.chat-markdown blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+.chat-markdown hr {
+  height: 1px;
+  margin: 1.55em 0;
+  border: 0;
+  background: var(--app-border);
+}
+
+.chat-markdown a {
+  color: color-mix(in srgb, var(--app-primary) 76%, var(--app-text));
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 38%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.chat-markdown a:hover {
+  color: color-mix(in srgb, var(--app-primary-hover) 82%, var(--app-text));
+  text-decoration-color: currentColor;
+}
+
+.chat-markdown code:not(pre code) {
+  padding: 0.14em 0.4em;
+  border: 0;
+  border-radius: var(--app-radius-xs);
+  color: var(--app-text);
+  background: var(--app-mono-chip-bg);
+  font-family: var(--app-code-font-family);
+  font-size: 0.91em;
+  line-height: inherit;
+}
+
+.chat-markdown .katex-display {
+  margin: 0.9em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.chat-markdown pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.chat-markdown__table-scroll {
+  width: 100%;
+  margin: var(--chat-markdown-block-start-gap, 1em) 0 var(--chat-markdown-block-gap, 1.15em);
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: auto !important;
+}
+
+.chat-markdown__table-scroll:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--app-primary) 46%, transparent);
+  outline-offset: 4px;
+}
+
+.chat-markdown__table-scroll::-webkit-scrollbar {
+  display: block !important;
+  width: var(--chat-scrollbar-width) !important;
+  height: var(--chat-scrollbar-width) !important;
+}
+
+.chat-markdown__table-scroll::-webkit-scrollbar-thumb {
+  border: 0 !important;
+  border-radius: 999px;
+  background: var(--sd-scrollbar-thumb) !important;
+  background-clip: content-box !important;
+}
+
+.chat-markdown__table-scroll::-webkit-scrollbar-thumb:hover,
+.chat-markdown__table-scroll::-webkit-scrollbar-thumb:active {
+  background: var(--chat-scrollbar-thumb-hover) !important;
+  background-clip: content-box !important;
+}
+
+.chat-markdown table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 1em;
+  line-height: 1.62;
+}
+
+.chat-markdown th {
+  padding: 0.56em 2.25em 0.56em 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 86%, transparent);
+  color: var(--app-text);
+  background: transparent;
+  font-weight: 650;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.chat-markdown td {
+  padding: 0.72em 2.25em 0.72em 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 52%, transparent);
+  color: var(--app-text);
+  vertical-align: top;
+}
+
+.chat-markdown :where(th, td):last-child {
+  padding-right: 0;
+}
+
+.chat-markdown tr:last-child td {
+  border-bottom: 0;
+}
+
+.chat-markdown img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0.9em 0;
+  border-radius: var(--app-radius-sm);
+}
+
+.sd-document-markdown > :first-child { margin-top: 0; }
+.sd-document-markdown > :last-child { margin-bottom: 0; }
+.sd-document-markdown pre {
+  padding: 12px 16px;
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface-muted);
+  font-family: var(--app-code-font-family);
+  overflow-x: auto;
+}

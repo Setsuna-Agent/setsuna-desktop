@@ -115,6 +115,15 @@ export type RuntimePluginUiDocument = Readonly<{
   actionIds: readonly string[];
 }>;
 
+export type RuntimePluginUiReactApp = Readonly<{
+  /** Bundle-relative independent project directory, excluding dependencies and build output. */
+  root: string;
+  /** Project-relative default React component. Additional routes export default components too. */
+  entry: string;
+  routes?: readonly Readonly<{ path: string; entry: string }>[];
+  actionIds: readonly string[];
+}>;
+
 export type RuntimePluginUiManifest = Readonly<{
   schemaVersion: typeof RUNTIME_PLUGIN_UI_LEGACY_SCHEMA_VERSION | typeof RUNTIME_PLUGIN_UI_SCHEMA_VERSION;
   actions: readonly RuntimePluginUiAction[];
@@ -175,8 +184,8 @@ export type RuntimePluginUiDocumentReadInput = Readonly<{
 }>;
 
 /**
- * Source bytes read from the same bundle snapshot whose hash was checked
- * against the user's trusted Plugin revision.
+ * Document bytes from a verified Bundle snapshot, or hash-bound compiled
+ * application output published with the user's trusted Plugin revision.
  */
 export type RuntimePluginUiDocumentReadResult = Readonly<{
   revision: string;
@@ -203,11 +212,21 @@ export type RuntimePluginUiTreeContribution = Readonly<RuntimePluginUiContributi
   tree: RuntimePluginUiNode;
   document?: never;
   webpage?: never;
+  reactApp?: never;
 }>;
 
 export type RuntimePluginUiDocumentContribution = Readonly<RuntimePluginUiContributionBase & {
   document: RuntimePluginUiDocument;
   tree?: never;
+  webpage?: never;
+  reactApp?: never;
+}>;
+
+export type RuntimePluginUiReactAppContribution = Readonly<RuntimePluginUiContributionBase & {
+  slot: 'renderer.plugin.page';
+  reactApp: RuntimePluginUiReactApp;
+  tree?: never;
+  document?: never;
   webpage?: never;
 }>;
 
@@ -217,11 +236,13 @@ export type RuntimePluginUiWebpageContribution = Readonly<RuntimePluginUiContrib
   webpage: Readonly<{ url: string }>;
   tree?: never;
   document?: never;
+  reactApp?: never;
 }>;
 
 export type RuntimePluginUiContribution =
   | RuntimePluginUiTreeContribution
   | RuntimePluginUiDocumentContribution
+  | RuntimePluginUiReactAppContribution
   | RuntimePluginUiWebpageContribution;
 
 export function parsePluginUiWebpage(value: unknown): Readonly<{ url: string }> {

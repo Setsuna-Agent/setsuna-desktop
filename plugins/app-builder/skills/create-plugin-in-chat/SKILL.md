@@ -9,12 +9,13 @@ description: "通过对话创建或更新 Setsuna Plugin Bundle，包括左侧�
 
 ## 界面设计资源
 
-仅创建或修改本地 HTML/CSS/JS 应用界面时，先读取本插件资源，再写页面。侧栏打开已有网站直接配置 `webpage.url`，跳过设计资源和页面生成，也不需要检查网站能否被 iframe 嵌入。默认沿用 Setsuna 的紧凑桌面风格；用户明确指定的品牌、布局或风格优先，更新已有应用时保留其既有设计。
+仅创建或修改本地 React 或 HTML/CSS/JS 应用界面时，先读取本插件资源，再写页面。侧栏打开已有网站直接配置 `webpage.url`，跳过设计资源和页面生成，也不需要检查网站能否被 iframe 嵌入。默认沿用 Setsuna 的紧凑桌面风格；用户明确指定的品牌、布局或风格优先，更新已有应用时保留其既有设计。
 
 - 调用 `read_plugin_resource({pluginId:'app-builder',resourceId:'ui-design'})` 读取[设计规范](references/ui-design.md)，以及 `resourceId:'ui-base'` 读取[基础 CSS](assets/ui-base.css)。工具未加载时先用 `search_tools` 查找 `read_plugin_resource`。
 - 按页面需要读取 `resourceId:'ui-patterns'` 中的[表格、表单和 ECharts 模板](references/ui-patterns.md)，只采用相关部分。使用宿主 `tree` 时沿用宿主组件，不必复制 CSS。
-- 需要按钮、字段、下拉选择、标签页、弹窗或图标时，先读 `resourceId:'ui-component-guide'` 的[组件用法](references/ui-components.md)，复用 `ui-components` 和 `ui-icons` 资源。后者提供与系统同源的 80 个 Lucide 图标，不自行编造 SVG 路径。组件与图标脚本按用法文档并入应用 JS，不需要 React 或新依赖。
-- 将基础 CSS 内容写入生成应用的 `ui/app.css`，追加应用样式，通过它自己的 `resources` / `document.cssResourceId` 交付。包内文件仍通过资源 ID 交付；浏览器可以加载远程 `<link>`、`@import` 和 CDN。
+- 新建 React 应用先用 `resourceId:'react-app-guide'` 读取[React 项目与组件用法](references/react-app.md)，复用 `@setsuna/app` 的宿主公共组件和 `lucide-react`，基础样式自动加载。下拉使用 `SelectField` 的 `onValueChange`，复选框使用 `Checkbox`，Markdown 阅读使用 `Markdown`；不要退回原生控件或复制实现。
+- 维护已有 HTML document 的按钮、字段、下拉选择、标签页、弹窗或图标时，先读 `resourceId:'ui-component-guide'` 的[组件用法](references/ui-components.md)，复用 `ui-components` 和 `ui-icons` 资源。后者提供与系统同源的 80 个 Lucide 图标，不自行编造 SVG 路径。组件与图标脚本按用法文档并入应用 JS，不需要 React 或新依赖。
+- 维护 HTML document 时将基础 CSS 内容写入应用的 `ui/app.css`，追加应用样式，通过它自己的 `resources` / `document.cssResourceId` 交付。包内文件仍通过资源 ID 交付；浏览器可以加载远程 `<link>`、`@import` 和 CDN。
 - 规范约束颜色、字号、间距、对齐和交互状态，不要求统一业务布局。不要把规范文字、示例区块、无关字段或装饰性数据写进用户界面。
 
 ## 选择能力形式
@@ -23,7 +24,7 @@ description: "通过对话创建或更新 Setsuna Plugin Bundle，包括左侧�
 - 需要连接外部服务时，使用 manifest 的 `mcpServers`；不得写入 API key、固定密钥、认证 header 或带凭据 URL。
 - 需要在 Agent 生命周期前后运行本地命令时，使用 `hooks`，脚本路径通过 `{{pluginRoot}}` 引用。
 - 需要注册动态工具、订阅生命周期事件、保存状态或结构化询问用户时，使用 `extension`。
-- 需要侧栏入口或独立功能页时，在 `extension.rendererUi` 使用 Renderer UI v2。打开已有网站使用 `webpage: { url: "https://…" }`，原生浏览器直接加载；简单表单/状态使用宿主渲染的 `tree`；本地应用需要自由布局和交互时使用由 HTML/CSS/JS 资源组成的 `document`。
+- 需要侧栏入口或独立功能页时，在 `extension.rendererUi` 使用 Renderer UI v2。打开已有网站使用 `webpage: { url: "https://…" }`，原生浏览器直接加载；简单表单/状态使用宿主渲染的 `tree`；新建本地应用默认使用独立 React/Vite 项目的 `reactApp`；已有 HTML/CSS/JS `document` 保持兼容，更新时按用户需求决定是否迁移。
 - 需要在工具执行后把结果显示成自由交互卡片时，在 `extension.uiCards` 声明卡片名称、对应工具和静态沙箱预览，并让该工具返回 `plugin.ui-card@1`；卡片与持久侧栏页面可以由同一个 Plugin 同时提供。
 - `tools` 只是展示元数据，不会注册可执行工具；动态工具必须由 extension 的 `api.registerTool` 注册。
 - `resources` 声明 Agent 可读资源以及沙箱页面引用的 HTML/CSS/JS 文件。
@@ -34,16 +35,16 @@ description: "通过对话创建或更新 Setsuna Plugin Bundle，包括左侧�
 
 - `manifest` 至少包含稳定的小写 `id` 和用户可见 `name`；使用 Bundle v2 字段。
 - `files` 包含除 `.setsuna-plugin/plugin.json` 之外的全部 UTF-8 文本文件。更新时未再次提交的文件会被删除。
-- HTML/CSS/JS 应用优先在当前工作区（无项目时使用当前临时工作区）写入和编辑文件，再提交 `{ "path": "ui/app.html", "sourcePath": "ui/app.html" }`。`path` 是包内目标路径，`sourcePath` 相对当前工作区，也可使用已批准可读范围内的绝对路径。宿主直接读取原始文件，不需要读回整份源码再复制到调用中。
+- 应用优先在当前工作区（无项目时使用当前临时工作区）写入和编辑文件，再提交 `{ "path": "ui/app.html", "sourcePath": "ui/app.html" }`。`path` 是包内目标路径，`sourcePath` 相对当前工作区，也可使用已批准可读范围内的绝对路径。宿主直接读取原始文件，不需要读回整份源码再复制到调用中。
 - 每项必须且只能提供 `sourcePath` 或 `content`。小片段可用 `content`，它是普通 JSON 字符串；不要额外做 XML/HTML 实体转义或 Base64 编码，保留源码中的 `&amp;`、标签、引号和换行。若收到 `$text`、非字符串 content 或文件数组结构错误，改用 `sourcePath` 重试，不要反复生成 JSON/XML 中间文件、猜端口或寻找 token。
 - 最多提交 64 个文本文件、合计 512 KiB。图片等二进制资源不能通过本工具创建。
 - Skill 目录必须包含完整 `SKILL.md`，不能保留 TODO、占位符或省略内容。
 - Hook 命令应引用 Bundle 内脚本，同时按需要提供 `commandWindows`。
 - extension 入口必须是 Bundle 内的 `.mjs`，使用 `apiVersion: 1`、`runtime: node-worker`，并只声明实际使用的 `tools`、`events`、`state`、`ui`、`network` 能力。
-- `rendererUi`、`uiCards` 和 `plugin.ui-card` 必须声明 `ui`；`uiCards` 只能放在 `manifest.extension.uiCards`，每个 `toolName` 必须引用顶层工具。预览使用无副作用的静态示例 HTML/JS 和有界数据，不执行工具，也不替代真实工具结果。使用 runtime 状态绑定还需 `state`。不要进入宿主 DOM；本地页面使用 HTML/CSS/JS 资源，已有网站优先使用直接网页模式。
+- `rendererUi`、`uiCards` 和 `plugin.ui-card` 必须声明 `ui`；`uiCards` 只能放在 `manifest.extension.uiCards`，每个 `toolName` 必须引用顶层工具。预览使用无副作用的静态示例 HTML/JS 和有界数据，不执行工具，也不替代真实工具结果。使用 runtime 状态绑定还需 `state`。不要进入宿主 DOM；本地页面默认使用 React 项目，已有网站优先使用直接网页模式。
 - 不要声明 `image-generation` 或 `vision-recognition`；它们是随应用 marketplace Bundle 专用的私有 host bridge，本地或对话创建的插件不能安装。
 - 使用 `network` 时必须在 `extension.network.allowedOrigins` 声明无路径、无凭据的精确 HTTP(S) origin，并在 handler 的第二个参数上调用 `context.network.request(...)`，以复用应用代理、取消、超时和响应大小限制。`response.body` 永远是字符串；读取字段前必须先用 `await response.json()` 或 `JSON.parse(response.body)`，并先检查 `response.ok`/`response.status`。绝不能使用不存在的 `api.network`。
-- v1 不运行安装脚本或包管理器；依赖必须已包含在 Bundle 文本文件中。
+- React 项目支持自己的 package.json 和 registry packages，获批安装/更新时由宿主安装并构建，详见 React 项目指南；不运行安装脚本，不提交 node_modules。HTML document 与后端 worker 仍使用自包含源码。
 - 调用前先核对 manifest 的 `extension.entry`、每个 `resources[].path`、每个 Skill 的 `SKILL.md` 以及 `{{pluginRoot}}` 引用都存在于同一次 `files` 完整快照中。不要用残缺快照逐个试探校验错误。
 
 最小动态工具入口：
@@ -142,7 +143,7 @@ Handler 能力如下：
 }
 ```
 
-`tree`、`document`、`webpage` 只选一种。网页模式只需 `ui`，不需要页面资源、状态绑定或 UI action；URL 使用 HTTP(S)。侧栏点击直接加载原生浏览器网页，复用登录、下载和浏览器设置，远程网站没有 `setsunaUI` bridge。新建本地应用和读取 Setsuna 后端时继续使用 `document`。
+`tree`、`document`、`webpage`、`reactApp` 只选一种。网页模式只需 `ui`，不需要页面资源、状态绑定或 UI action；URL 使用 HTTP(S)。侧栏点击直接加载原生浏览器网页，复用登录、下载和浏览器设置，远程网站没有 `setsunaUI` bridge。新建本地应用默认使用 `reactApp`；`reactApp` 和 `document` 都可读取 Setsuna 后端。
 
 ### 复用 Setsuna 后端数据
 
@@ -241,9 +242,15 @@ export default function activate(api) {
 }
 ```
 
-### 自由独立页面
+### React 独立应用
 
-当用户要求独立应用、可编辑表格、表单、仪表盘、图表、复杂布局或自定义交互时，在 `renderer.plugin.page` contribution 中用 `document` 替代 `tree`。入口自动位于左侧栏“插件”下方；点击后应用铺满主区域，没有宿主标题、描述、卡片边框或宽度限制。HTML/CSS/JS 必须作为 Bundle 文本文件提交，并在 manifest `resources` 中声明：
+React/document 的 `invokeAction(id, data)` 将 `data` 原样交给 worker 的 `input.payload`；`input.values` 仅用于宿主 tree 表单。写入前校验参数，缺失或类型错误时抛错，不能兜底为空列表后覆盖数据。使用 SDK 已声明的组件参数；安装时会先检查 TS/TSX 类型再构建。新应用空状态不代表 bridge 未 ready，不能因缺少业务字段一直禁用输入；快照刷新时保留未保存草稿。
+
+新建独立应用默认使用 `reactApp`。先读取 `react-app-guide`，准备独立项目、默认导出页面组件和按需路由，使用 `@setsuna/app` 的组件、主题样式及状态/action/runtime hooks。项目源码与 package.json 随完整快照提交，无需逐个声明页面 resources。
+
+### 兼容 HTML 独立页面
+
+维护已有 HTML/CSS/JS 应用时，在 `renderer.plugin.page` contribution 中保留 `document`。入口自动位于左侧栏“插件”下方；点击后应用铺满主区域，没有宿主标题、描述、卡片边框或宽度限制。HTML/CSS/JS 必须作为 Bundle 文本文件提交，并在 manifest `resources` 中声明：
 
 ```json
 {
@@ -375,10 +382,10 @@ return {
 3. 生成完整 manifest，在当前工作区准备全部文本文件，优先使用 `sourcePath` 提交；不要要求用户准备本地目录，也不要调用 `install_plugin_bundle`。
 4. 调用 `configure_plugin`。审批前简短说明将安装的 Skill、MCP、Hook、资源和 extension，以及是否包含可执行代码。
 5. 如果工具返回预检错误，一次性修正错误中列出的全部字段和文件，再提交新的完整快照。不得以“让我补全”“稍后继续”等未来时表述结束 turn。
-6. `Installed and enabled: true` 只代表清单、语法和 worker 激活通过。只要插件包含 extension 工具或 UI Action，紧接着调用 `verify_plugin`，用代表性、默认只读的输入覆盖每个用户可见执行路径；声明了 `uiCards` 的工具会被自动要求返回合法 `plugin.ui-card`。
-7. UI Action 检查应提供其 `contributionId`，并用 `expectStatePaths` 验证页面实际依赖的关键状态，例如 `summary.label`。外部写操作必须使用插件的 dry-run；没有安全测试方式时先取得用户明确授权，不得用真实破坏性操作冒充验证。
+6. `Installed and enabled: true` 只代表清单、语法、React 类型检查/构建和 worker 激活通过。只要插件包含 extension 工具或 UI Action，紧接着调用 `verify_plugin`，用代表性、默认只读的输入覆盖每个用户可见执行路径；声明了 `uiCards` 的工具会被自动要求返回合法 `plugin.ui-card`。
+7. UI Action 检查应提供其 `contributionId`，React/document 使用与真实页面一致的 `payload`，`values` 留空。保存检查用 `expectStateValues` 核对实际提交的关键值；`expectStatePaths` 只证明字段存在，空数组通过不证明新增成功。验证不能插入测试记录或清空用户数据，使用用户要求的真实写入、明确实现的 dry-run 或读取后原样保存已有数据；外部写操作使用 dry-run，没有安全方式时取得用户明确授权。
 8. `verify_plugin` 的 `checksPassed:true` 仅证明列出的宿主处理函数或接口检查通过。`ui-action` 直接调用 worker，不执行页面 JavaScript，不点击按钮，也不检查弹窗；`pageInteractionsVerified:false` 表示页面交互未验证。报告实际检查范围，不能据此声称按钮、弹窗或整个应用已验证可用。如果检查失败，修复完整快照、重新调用 `configure_plugin` 并再次验证。页面行为只有在另有真实交互证据时才能报告已验证，不为补证据擅自使用用户未授权的浏览器或 computer-use。
-9. 更新受管插件时仍提交完整快照。若同名插件来自内置市场或其他目录，工具会拒绝覆盖；应说明冲突，而不是尝试改写来源。
+9. 更新受管插件时仍提交完整快照。若同名插件来自内置市场或其他目录，工具会拒绝覆盖；必须明确告知用户“已有同名插件，安装失败，请换个名字重新安装”。新应用同步更换 `pluginId` 和 `manifest.id`；只修改 `manifest.name` 会再次冲突。不要改写已有插件来源或用原 ID 反复重试。
 
 天气插件同时有对话卡片和侧栏刷新时，安装后至少执行这两个真实路径：
 

@@ -512,9 +512,11 @@ export async function activateBuiltinRuntimeFeatures(
 
     host.bindWhenFeatureAvailable(workspaceDependenciesFeature.id, {
       workspaceDependencies: requiredCapability(workspaceDependenciesControlCapability),
-    }, ({ workspaceDependencies }) => (
-      runtime.backgroundShellProcesses.bindWorkspaceDependencies(workspaceDependencies)
-    ));
+    }, ({ workspaceDependencies }) => {
+      const unbindShell = runtime.backgroundShellProcesses.bindWorkspaceDependencies(workspaceDependencies);
+      const unbindApps = runtime.pluginStore.bindAppToolchain(workspaceDependencies);
+      return () => { unbindApps(); unbindShell(); };
+    });
 
     host.bind({
       windowsSandbox: requiredCapability(windowsSandboxRuntimeServiceCapability),

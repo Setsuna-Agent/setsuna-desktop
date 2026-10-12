@@ -598,13 +598,33 @@ describe('BrowserPanel interactions', () => {
     await waitFor(() => expect(setDeviceEmulation).toHaveBeenCalledTimes(3));
     expect(screen.queryByText('Device emulation could not be applied; the page will keep its current settings')).toBeNull();
   });
+  it('loads the website only after current-tab registration and preserves it when callbacks change', async () => {
+    let complete!: (registered: boolean) => void;
+    const registerTab = vi.fn(() => new Promise<boolean>(resolve => { complete = resolve; }));
+    installBrowserBridge({ registerTab });
+    const rendered = renderBrowserPanel('https://example.com', 'current-tab');
+    const webview = document.querySelector('webview') as unknown as WebviewTag;
+    const loadURL = vi.fn(async () => undefined);
+    Object.assign(webview, { getWebContentsId: () => 42, loadURL });
+    webview.dispatchEvent(new Event('dom-ready'));
+    expect(loadURL).not.toHaveBeenCalled();
+    await act(async () => { complete(true); });
+    expect(loadURL).toHaveBeenCalledWith('https://example.com');
+    rendered.rerender(<BrowserPanelHarness url="https://example.com" windowOpenMode="current-tab"
+      translateOverride={(...args) => translate(...args)} />);
+    await waitFor(() => expect(registerTab).toHaveBeenCalledTimes(2));
+    await act(async () => { complete(true); });
+    expect(loadURL).toHaveBeenCalledOnce();
+  });
 });
 
 function renderBrowserPanel(url = 'https://example.com', windowOpenMode: BrowserWindowOpenMode = 'tab') {
   return render(<BrowserPanelHarness url={url} windowOpenMode={windowOpenMode} />);
 }
 
-function BrowserPanelHarness({ url, onSendAnnotations, windowOpenMode }: { url: string; onSendAnnotations?: BrowserAnnotationSendHandler; windowOpenMode?: BrowserWindowOpenMode }) {
+function BrowserPanelHarness({ url, onSendAnnotations, windowOpenMode, translateOverride }: {
+  url: string; onSendAnnotations?: BrowserAnnotationSendHandler; windowOpenMode?: BrowserWindowOpenMode; translateOverride?: typeof translate;
+}) {
   const [notification, setNotification] = useState<string | null>(null);
   const notify = useCallback((_tone: string, message: string) => setNotification(message), []);
   return (
@@ -622,7 +642,7 @@ function BrowserPanelHarness({ url, onSendAnnotations, windowOpenMode }: { url: 
           hard: 'Control+Shift+KeyR',
           normal: 'Control+KeyR',
         }}
-        translate={translate}
+        translate={translateOverride ?? translate}
         windowOpenMode={windowOpenMode}
         onPanelMetadataChange={() => undefined}
         onSendAnnotations={onSendAnnotations}

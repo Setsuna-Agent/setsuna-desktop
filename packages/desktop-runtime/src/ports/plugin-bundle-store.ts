@@ -25,7 +25,11 @@ export type InstalledPluginRecord = Omit<RuntimePluginSummary, 'extension'> & {
   skillEntries: Array<{ id: string; relativePath: string }>;
   mcpServerInputs: RuntimeMcpServerInput[];
   extension?: InstalledPluginExtensionRecord;
+  /** Hash-bound compiler output approved with this installed bundle; never exposed to renderer. */
+  reactAppBuilds?: Readonly<Record<string, PluginAppBuildReference>>;
 };
+
+export type PluginAppBuildReference = Readonly<{ cacheKey: string; sourceHash: string }>;
 
 export type PluginResourceRead = {
   pluginId: string;
@@ -48,6 +52,7 @@ export type PluginBundleInspection = Omit<
 };
 
 export type PluginBundleMutationOptions = {
+  signal?: AbortSignal;
   /** Records whether the installed snapshot came from the bundled catalog or a local bundle. */
   installationSource?: 'local' | 'marketplace' | 'repository';
   repository?: RuntimePluginSummary['repository'];

@@ -8,10 +8,18 @@ import { promisify } from 'node:util';
 import { build } from 'esbuild';
 import { expect, it } from 'vitest';
 
-it.skipIf(!['darwin', 'win32'].includes(process.platform))('navigates popup links and POST forms in the original guest with history and no new windows', async () => {
+it.skipIf(!['darwin', 'win32'].includes(process.platform))('navigates startup popups, links and POST forms in the registered original guest', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'setsuna-current-tab-'));
   try {
     const entry = path.join(directory, 'test.cjs');
+    await build({ entryPoints: [fileURLToPath(new URL('./navigation.preload.fixture.ts', import.meta.url))],
+      outfile: path.join(directory, 'navigation.cjs'), bundle: true, platform: 'node', format: 'cjs', external: ['electron'] });
+    await build({ entryPoints: [fileURLToPath(new URL('./current-tab-host.fixture.tsx', import.meta.url))],
+      outfile: path.join(directory, 'host.js'), bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic',
+      loader: { '.css': 'empty' }, define: { 'process.env.NODE_ENV': '"production"' },
+      alias: { '@setsuna-desktop/renderer-ui': path.resolve('packages/renderer-ui/src/index.ts'),
+        '@setsuna-desktop/contracts': path.resolve('packages/contracts/src/index.ts'),
+        '@setsuna-desktop/feature-core': path.resolve('packages/feature-core/src') } });
     await build({
       entryPoints: [fileURLToPath(new URL('./current-tab-navigation.fixture.ts', import.meta.url))], outfile: entry,
       bundle: true, platform: 'node', format: 'cjs', target: 'node22', external: ['electron'],

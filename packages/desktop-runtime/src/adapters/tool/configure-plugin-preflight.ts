@@ -9,6 +9,7 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { Script } from 'node:vm';
 import type { PluginDraftInput } from '../../ports/plugin-draft-store.js';
+import { validateAppProjectFiles } from '../plugin-app/project-manifest.js';
 import {
   normalizeResourceId,
   pluginRootFileReferences,
@@ -235,6 +236,10 @@ function validateExtension(
     addIssue('manifest.extension.rendererUi data requires the state capability.');
   }
   for (const contribution of rendererUi?.contributions ?? []) {
+    if (contribution.reactApp) {
+      try { validateAppProjectFiles(contribution.reactApp, filesByPath); }
+      catch (error) { addIssue(errorMessage(error)); }
+    }
     if (!contribution.document) continue;
     for (const resourceId of [
       contribution.document.htmlResourceId,

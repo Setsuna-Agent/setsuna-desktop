@@ -32,8 +32,8 @@ The sandbox inherits neither `--app-*` variables nor `.sd-*` styles. Use these h
 | --- | --- |
 | `--setsuna-color-surface` / `--setsuna-color-surface-muted` | Page/control backgrounds / headers and secondary surfaces |
 | `--setsuna-color-text` / `--setsuna-color-text-muted` | Body / secondary text |
-| `--setsuna-color-border` | Dividers and borders |
-| `--setsuna-color-accent` / `--setsuna-color-accent-text` | Primary action/focus / primary action text |
+| `--setsuna-color-border` / `--setsuna-color-border-strong` | Dividers and borders / focused field borders |
+| `--setsuna-color-accent` / `--setsuna-color-accent-text` | Primary actions and keyboard focus for buttons/checkboxes / primary action text |
 | `--setsuna-color-danger` / `--setsuna-color-success` / `--setsuna-color-warning` | Actual error, success, and warning states |
 | `--setsuna-font-family` | User-selected font stack |
 
@@ -44,9 +44,9 @@ ECharts canvas/SVG options require concrete colors, not `var(...)`. Read variabl
 ## Components
 
 - **Tables:** muted headers, light dividers, aligned headings and cells; deliberately truncate or wrap long text. Add sorting/filtering/selection only when requested. Use consistent action icons and tooltips.
-- **Forms:** labels above controls, 8px label gaps and 16px field gaps; require fields based on actual business rules. Show errors at the field or submit location when needed; retain inputs after failures. No default permanent helper copy.
+- **Forms:** labels above controls, 8px label gaps and 16px field gaps; require fields based on actual business rules. Inputs, selects and textareas keep a 1px neutral border; focus changes that border's color without adding a black outer ring, double border or shadow. Show errors at the field or submit location when needed; retain inputs after failures. No default permanent helper copy.
 - **Charts:** use requested dimensions only; prefer the host accent for a single series and stable color ordering for multiple series. Light grids, 12px axis labels, transparent backgrounds, and clear units; no 3D, glow, or decorative graphics.
-- **Interaction:** retain focus-visible and native button/control semantics. Prevent duplicate submission while pending. Hover changes color without moving controls; respect reduced-motion.
+- **Interaction:** preserve visible keyboard focus. Fields use a thin neutral border; buttons and checkboxes retain focus-visible. Keep native button/control semantics and prevent duplicate submission while pending. Hover changes color without moving controls; respect reduced-motion.
 - **States:** show loading, empty, and error states only when they actually apply. Never invent records/charts for missing data or present draft/sample data as saved.
 
 ## Before delivery

@@ -21,6 +21,8 @@
 
 `@setsuna-desktop/renderer-ui` 是宿主和 Feature 共用的控件入口，源码按 [beUI](https://beui.dev) 的可复制组件方式维护。按钮、字段、复选框、开关、滑块、选择器、菜单、Popover、Tooltip、Dialog、图片预览、消息气泡和通知栈均由这个包持有；React 版本继续保持 18。
 
+独立 React 应用通过 `@setsuna/app` 使用同一份公共组件与样式，详见 [React 自定义应用](../../extensions/plugins/react-apps.md)。`DocumentMarkdown` 也由共享 UI 包持有，供宿主文档阅读和应用的 `Markdown` 入口复用；通用排版在 `renderer-ui/src/styles/markdown.css`，聊天流式块、文件导航和代码操作仍归 Chat。SDK 只打包纯 UI，不包含宿主本机 API 或业务服务。
+
 - Motion 负责复选框、开关和通知动画；`motion.ts` 提供复选框与通知使用的 spring 参数，开关的参数随组件维护。
 - `FileIcon` 使用 Symbols，统一按跨平台路径的文件名选择文件类型图标；workspace、artifact 和插件卡片复用这个入口，尺寸由各自样式控制。
 - `FileTreeSurface` / `FileTreeRow` 为文件面板、审查和 PR Diff 文件树共用的 beUI 视觉层：26px 行高、12px 字号、16px 层级缩进、展开箭头、引导线与选中背景滑动。目录行默认只显示展开箭头，文件行保留类型图标并省略空白箭头占位，同层名称对齐；每行按深度延续所有祖先层级的引导线，展开多层目录后外层线段保持连续。每个 surface 隔离布局动画并跟踪自身滚动，减少动态效果时关闭移动动画。Surface 挂载时直接显示现有行，避免文件标签切换导致的重新挂载重播整树入场动画；目录展开后新增的行仍有入场过渡。目录加载、筛选、拖放、文件选择仍由各 Feature 持有。

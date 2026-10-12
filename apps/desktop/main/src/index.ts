@@ -470,6 +470,7 @@ async function createWindow(): Promise<void> {
       await currentWebDavSyncLifecycle.start();
       await currentDesktopUpdaterLifecycle.initialize();
       registerDesktopIpc({
+        interfaceLanguage: () => interfaceLanguage,
         readAttachmentImage: (threadId, assetId) => currentRuntimeHost.readAttachmentImage(threadId, assetId),
         nativeBridge: currentDesktopNativeBridgeServer,
         onActiveKeyboardShortcutBindingsChange: (bindings, senderId) => {

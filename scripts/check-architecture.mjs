@@ -14,6 +14,7 @@ const layerRoots = new Map([
   ['contracts', path.join(repositoryRoot, 'packages/contracts/src')],
   ['feature-core', path.join(repositoryRoot, 'packages/feature-core/src')],
   ['renderer-ui', path.join(repositoryRoot, 'packages/renderer-ui/src')],
+  ['app-sdk', path.join(repositoryRoot, 'packages/app-sdk/src')],
   ['runtime', path.join(repositoryRoot, 'packages/desktop-runtime/src')],
   ['main', path.join(repositoryRoot, 'apps/desktop/main/src')],
   ['preload', path.join(repositoryRoot, 'apps/desktop/preload/src')],
@@ -21,6 +22,7 @@ const layerRoots = new Map([
 ]);
 const testRoots = [
   path.join(repositoryRoot, 'packages/renderer-ui/test'),
+  path.join(repositoryRoot, 'packages/app-sdk/test'),
   path.join(repositoryRoot, 'packages/contracts/test'),
   path.join(repositoryRoot, 'packages/desktop-runtime/test'),
   path.join(repositoryRoot, 'apps/desktop/main/test'),
@@ -36,6 +38,7 @@ const allowedLayerDependencies = new Map([
   ['main', new Set(['contracts', 'feature-core', 'runtime'])],
   ['preload', new Set(['contracts', 'feature-core'])],
   ['renderer-ui', new Set()],
+  ['app-sdk', new Set(['renderer-ui'])],
   ['renderer', new Set(['contracts', 'feature-core', 'renderer-ui'])],
 ]);
 const sourceExtensions = new Set(['.cjs', '.css', '.cts', '.js', '.jsx', '.mjs', '.mts', '.ts', '.tsx']);
@@ -51,9 +54,11 @@ const maxDirectSourceFiles = 35;
 const rendererRoot = layerRoots.get('renderer');
 const rendererAppServerPath = '/v1/swe/app-server';
 const productionEntrypoints = new Set([
+  path.join(repositoryRoot, 'packages/app-sdk/src/index.ts'),
   path.join(repositoryRoot, 'packages/renderer-ui/src/index.ts'),
   path.join(repositoryRoot, 'packages/contracts/src/index.ts'),
   path.join(repositoryRoot, 'packages/desktop-runtime/src/cli.ts'),
+  path.join(repositoryRoot, 'packages/desktop-runtime/src/adapters/plugin-app/build-worker.ts'),
   path.join(repositoryRoot, 'packages/desktop-runtime/src/index.ts'),
   path.join(repositoryRoot, 'apps/desktop/main/src/index.ts'),
   path.join(repositoryRoot, 'apps/desktop/preload/src/index.ts'),
@@ -118,6 +123,7 @@ function sourceLayerForPath(filePath) {
 }
 
 function sourceLayerForSpecifier(specifier) {
+  if (specifier === '@setsuna/app' || specifier.startsWith('@setsuna/app/')) return 'app-sdk';
   if (specifier === '@setsuna-desktop/renderer-ui' || specifier.startsWith('@setsuna-desktop/renderer-ui/')) return 'renderer-ui';
   if (specifier === '@setsuna-desktop/contracts' || specifier.startsWith('@setsuna-desktop/contracts/')) {
     return 'contracts';
@@ -351,6 +357,7 @@ for (const component of stronglyConnectedComponents(contractGraph)) {
 const buildRoots = [
   path.join(repositoryRoot, 'dist'),
   path.join(repositoryRoot, 'packages/contracts/dist'),
+  path.join(repositoryRoot, 'packages/app-sdk/dist'),
   path.join(repositoryRoot, 'packages/feature-core/dist'),
   path.join(repositoryRoot, 'packages/desktop-runtime/dist'),
   ...featureDirectories.map((directory) => path.join(directory, 'dist')),

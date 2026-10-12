@@ -32,8 +32,8 @@ CSS 已提供 `sa-app`、`sa-page-header`、`sa-toolbar`、`sa-stack`、`sa-grid
 | --- | --- |
 | `--setsuna-color-surface` / `--setsuna-color-surface-muted` | 页面、控件背景 / 表头、次级背景 |
 | `--setsuna-color-text` / `--setsuna-color-text-muted` | 正文 / 次级文字 |
-| `--setsuna-color-border` | 分隔线、边框 |
-| `--setsuna-color-accent` / `--setsuna-color-accent-text` | 主操作、焦点 / 主操作文字 |
+| `--setsuna-color-border` / `--setsuna-color-border-strong` | 分隔线、边框 / 输入框焦点边框 |
+| `--setsuna-color-accent` / `--setsuna-color-accent-text` | 主操作、按钮与复选框的键盘焦点 / 主操作文字 |
 | `--setsuna-color-danger` / `--setsuna-color-success` / `--setsuna-color-warning` | 真实的错误、成功、警告状态 |
 | `--setsuna-font-family` | 用户选择的字体栈 |
 
@@ -44,9 +44,9 @@ ECharts 的画布/SVG 配置需要实际颜色字符串，不直接填 `var(...)
 ## 按组件使用
 
 - **表格**：表头浅底，分隔线轻，列标题与内容对齐；长文本有明确的截断或换行策略。排序/筛选/选择只在需求包含时实现。操作图标沿用整页尺寸与 tooltip。
-- **表单**：标签在字段上方，标签与字段间距 8px、字段间距 16px；必填项按真实业务设置。错误在对应字段或提交位置按需出现；失败保留输入。默认不添加常驻说明。
+- **表单**：标签在字段上方，标签与字段间距 8px、字段间距 16px；必填项按真实业务设置。输入框、选择框和文本域保留 1px 中性边框，聚焦只调整这条边框的颜色，不追加黑色外圈、双重边框或阴影。错误在对应字段或提交位置按需出现；失败保留输入。默认不添加常驻说明。
 - **图表**：只画用户需要的维度；一条序列优先宿主强调色，多序列使用固定顺序的配色。轻网格、12px 坐标轴标签、透明背景、明确单位；不使用 3D、阴影发光或无意义装饰。
-- **交互**：保留 focus-visible，使用原生按钮和表单控件。禁用或加载时避免重复提交；hover 只改变颜色，不让控件跳动。尊重 reduced-motion。
+- **交互**：保留可辨认的键盘焦点反馈；输入类控件用细的中性边框反馈，按钮和复选框沿用 focus-visible。使用原生按钮和表单控件。禁用或加载时避免重复提交；hover 只改变颜色，不让控件跳动。尊重 reduced-motion。
 - **状态**：真实加载、空结果、错误才显示对应状态；无数据时不伪造记录或图表。不把草稿或静态样例当已保存数据。
 
 ## 交付前核对

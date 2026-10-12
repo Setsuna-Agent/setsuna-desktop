@@ -101,7 +101,7 @@ export default function activate(api) {
 
 扩展工具默认串行执行、支持 turn 取消，并进入 Setsuna 的标准工具审批。因为 worker 不在 OS 沙箱内，workspace-write 模式还会明确请求无沙箱执行授权；用户已经选择 `danger-full-access` 或完整免确认策略时，沿用该全局授权。只有应用控制的 marketplace Bundle 可以通过已校验 manifest 放宽单个工具的并行和审批策略。
 
-声明 `ui` 后，工具的 `data` 可以返回 `plugin.ui-card@1` HTML/CSS/JS 卡片。新 Bundle 在 `extension.uiCards` 声明 `id/label/description/toolName/preview`，供详情页展示并使用示例数据预览。runtime 验证 schema、覆盖真实 `pluginId`；Renderer 要求 tool run 与卡片来源一致，并在独立 web origin 加载源码，插入对应 assistant timeline。卡片与预览支持普通浏览器联网、存储和远程资源，没有 host action；需要 runtime 数据和持久操作时使用独立 Plugin document。完整 envelope 见 [Plugin Bundles](bundles.md#对话-htmlcssjs-卡片)。
+声明 `ui` 后，工具的 `data` 可以返回 `plugin.ui-card@1` HTML/CSS/JS 卡片。新 Bundle 在 `extension.uiCards` 声明 `id/label/description/toolName/preview`，供详情页展示并使用示例数据预览。runtime 验证 schema、覆盖真实 `pluginId`；Renderer 要求 tool run 与卡片来源一致，并在独立 web origin 加载源码，插入对应 assistant timeline。卡片与预览支持普通浏览器联网、存储和远程资源，没有 host action；需要 runtime 数据和持久操作时使用独立 Plugin document 或 reactApp。完整 envelope 见 [Plugin Bundles](bundles.md#对话-htmlcssjs-卡片)。
 
 ### `api.on(eventName, handler)`
 
@@ -134,7 +134,7 @@ handler 可以返回：
 
 ### `api.onUiAction(actionId, handler)`
 
-声明 `ui` capability 且 manifest 包含 [`rendererUi`](bundles.md#renderer-ui宿主组件与沙箱页面) 时，extension 可以为已声明的 tree button 或 sandbox document action 注册 handler：
+声明 `ui` capability 且 manifest 包含 [`rendererUi`](bundles.md#renderer-ui宿主组件与沙箱页面) 时，extension 可以为已声明的 tree button 或 sandbox document/reactApp action 注册 handler：
 
 ```js
 export default function activate(api) {
@@ -149,7 +149,7 @@ export default function activate(api) {
 
 host 会用 `contributionId` 把 action 精确绑定到触发它的 contribution，再校验提交字段、必填值、最大长度、select option、Slot surface 和 Chat thread ID。同一 action ID 即使被多个 contribution 复用，也不会混用它们的字段集合；handler 只有在 worker 实际注册同名 action 时才会执行。
 
-tree action 的字段位于 `input.values`；sandbox document 通过 `window.setsunaUI.invoke(actionId, payload)` 提交的有界 JSON 位于 `input.payload`。两种输入都不能改变 action ID、contribution、scope 或 host 上下文。
+tree action 的字段位于 `input.values`；sandbox document/reactApp 通过 `window.setsunaUI.invoke(actionId, payload)` 提交的有界 JSON 位于 `input.payload`。两种输入都不能改变 action ID、contribution、scope 或 host 上下文。
 
 `rendererUi.actions` 中的 `approval` 是可选的交互确认，不是权限授权。普通保存、应用本地数据更新和刷新声明 `{ "id": "table.save" }` 即可直接执行，handler 使用 `ctx.state.set` 持久化。需要二次确认时才添加 `approval: { title?, message }`；页面已确认的操作不应再添加它。旧 manifest 中显式声明的确认继续生效，移除保存 action 的 `approval` 即可取消逐次弹窗，无需改存储实现。安装信任、Agent 工具审批及主进程的业务检查独立生效。
 

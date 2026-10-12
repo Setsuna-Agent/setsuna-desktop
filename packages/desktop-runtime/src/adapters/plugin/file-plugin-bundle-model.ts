@@ -288,6 +288,13 @@ async function normalizePluginExtension(
     throw new Error('Plugin extension rendererUi state binding requires the state capability.');
   }
   for (const contribution of rendererUi?.contributions ?? []) {
+    if (contribution.reactApp) {
+      const app = contribution.reactApp;
+      for (const entry of [app.entry, ...(app.routes ?? []).map(route => route.entry)]) {
+        const entryPath = await safeExistingPath(sourcePath, path.join(app.root, entry));
+        if (!(await stat(entryPath)).isFile()) throw new Error('React app entries must be files inside the project.');
+      }
+    }
     if (!contribution.document) continue;
     const documentResources: ReadonlyArray<Readonly<{
       resourceId?: string;
@@ -697,6 +704,7 @@ export function publicPluginSummary(plugin: InstalledPluginRecord): RuntimePlugi
     skillEntries: _skillEntries,
     sourcePath: _sourcePath,
     extension,
+    reactAppBuilds: _reactAppBuilds,
     ...summary
   } = plugin;
   return {

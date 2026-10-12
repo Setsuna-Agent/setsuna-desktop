@@ -89,7 +89,7 @@ my-plugin/
 
 ### Renderer UI：宿主组件与沙箱页面
 
-需要在 Setsuna 宿主界面中显示配置或状态时，Bundle 可以在 manifest 的 `extension` 对象内增加 `rendererUi`。它必须声明 `ui`；使用 runtime 状态时还要声明 `state`。每个 contribution 选择一种模式：`tree` 使用宿主组件；`document` 加载 Bundle 的 HTML/CSS/JS，自由页面拥有独立的浏览器 origin；`webpage: { "url": "https://www.baidu.com/" }` 在 `renderer.plugin.page` 中直接打开原生浏览器页面。已有网站优先使用 `webpage`，点击 `navigation.label` 生成的侧栏入口即可打开，不经过 iframe 嵌套，也不受网站的 iframe 嵌入策略影响。网页显示完整浏览器导航条，复用浏览器的登录、下载、扩展和设置；新标签页链接、带网址的 `window.open()` 和新窗口表单在当前网页内跳转，保留表单数据并支持后退。网页不获得 Plugin action 或 runtime bridge。
+需要在 Setsuna 宿主界面中显示配置或状态时，Bundle 可以在 manifest 的 `extension` 对象内增加 `rendererUi`。它必须声明 `ui`；使用 runtime 状态时还要声明 `state`。每个 contribution 选择一种模式：`reactApp` 提供独立 React/Vite 项目、多文件 TSX、路由与 package 安装，详见[React 自定义应用](react-apps.md)；`tree` 使用宿主组件；`document` 加载 Bundle 的 HTML/CSS/JS，自由页面拥有独立的浏览器 origin；`webpage: { "url": "https://www.baidu.com/" }` 在 `renderer.plugin.page` 中直接打开原生浏览器页面。已有网站优先使用 `webpage`，点击 `navigation.label` 生成的侧栏入口即可打开，不经过 iframe 嵌套，也不受网站的 iframe 嵌入策略影响。网页显示完整浏览器导航条，复用浏览器的登录、下载、扩展和设置；新标签页链接、带网址的 `window.open()` 和新窗口表单在当前网页内跳转，保留表单数据并支持后退。网页不获得 Plugin action 或 runtime bridge。
 
 ```json
 {
@@ -128,7 +128,7 @@ my-plugin/
 }
 ```
 
-自由应用页面只允许进入 `renderer.plugin.page`，入口自动出现在左侧栏“插件”下方。应用占满主内容区，自行控制标题、布局和滚动；宿主不追加标题、描述或卡片外框。表格、表单和图表可以在同一页面中组合，其源码必须是已声明资源：
+自由应用页面只允许进入 `renderer.plugin.page`，入口自动出现在左侧栏“插件”下方。应用占满主内容区，自行控制标题、布局和滚动；宿主不追加标题、描述或卡片外框。表格、表单和图表可以在同一页面中组合，新应用默认使用 `reactApp`；下面是兼容 HTML document 的资源声明：
 
 ```json
 {
@@ -383,11 +383,11 @@ GitHub / GitHub Enterprise 的可选 OpenAI App ID 通过兼容数据映射为 g
 - `manifest` 是完整的 Bundle v2 manifest；runtime 负责生成 `.setsuna-plugin/plugin.json`。
 - `files` 只接受 UTF-8 文本，最多 64 个、合计最多 512 KiB；更新时未再次提交的旧文件会被删除。图片等二进制资源仍应通过本地开发 Bundle 或内置市场分发。
 - 每个文件使用 `{path, sourcePath}` 或 `{path, content}`，两者互斥。`path` 是包内目标路径；`sourcePath` 相对当前工作区或位于已批准可读范围，沿用本地文件工具的 canonical path、符号链接目标和 deny 规则检查。HTML/CSS/JS 应用优先先写工作区文件，再传路径，避免重复传输和转义整份源码；内联 `content` 仅使用普通 JSON 字符串，不附加 XML/HTML 或 Base64 编码。
-- 草稿写入 runtime 私有的 `plugin-drafts/<plugin-id>`，再复用标准 Bundle 校验和事务式安装链路。模型不能指定目标目录，也不能覆盖从内置市场或其他本地目录安装的同名 Plugin。
+- 草稿写入 runtime 私有的 `plugin-drafts/<plugin-id>`，再复用标准 Bundle 校验和事务式安装链路。模型不能指定目标目录，也不能覆盖从内置市场或其他本地目录安装的同名 Plugin。同名/ID 冲突会明确返回安装失败与换名称、换 ID 后重新安装的指引；构建器必须将失败原因告知用户，新应用同步修改 `pluginId` 和 `manifest.id`，不能仅改显示名称后重复提交。
 - 审批预览包含规范化后的 manifest、完整文件内容、能力数量和每个文件的 SHA-256。执行时会重新计算完整性 token；审批后内容或动作发生变化会以 `preview_changed` 拒绝执行。
 - `sourcePath` 在预览及执行前分别读取，审批绑定实际内容而非路径；源文件被修改后必须重新预览。落盘和安装只使用本次解析得到的内存快照。
 - 一次批准同时授权安装和启用审批中展示的版本。若其中包含 Hook 或可执行扩展，当前命令/Bundle 哈希会随安装写入信任状态，不再弹出第二次“信任”确认；任何后续内容更新都需要新的 `configure_plugin` 审批。
-- extension 安装前会检查入口、页面与静态卡片脚本语法，并在 staged 目录临时启动 worker，核对声明工具和 UI action 已注册；这仍只证明“能加载”。Agent 随后用 `verify_plugin` 实际执行声明工具/UI action 处理函数或 runtime API 检查；`checksPassed:true` 仅代表这些检查通过，`pageInteractionsVerified:false` 明确页面交互未验证。该工具不会运行页面 JavaScript、点击按钮或打开弹窗，不能据此宣称整个应用可用。验证调用可能联网或更新 Plugin 状态，因此展示完整输入并单独审批。
+- extension 安装前会检查入口、页面与静态卡片脚本语法，React 项目先检查类型再构建，并在 staged 目录临时启动 worker，核对声明工具和 UI action 已注册；这仍只证明“能加载”。Agent 随后用 `verify_plugin` 实际执行声明工具/UI action 处理函数或 runtime API 检查；保存可用 `expectStateValues` 核对写入后的 JSON 值（支持点路径和数组下标），`expectStatePaths` 仅检查字段存在。`checksPassed:true` 仅代表这些检查通过，`pageInteractionsVerified:false` 明确页面交互未验证。该工具不会运行页面 JavaScript、点击按钮或打开弹窗，不能据此宣称整个应用可用。验证调用可能联网或更新 Plugin 状态，因此展示完整输入并单独审批。
 
 这项授权只适用于 Agent 受管草稿。`install_plugin_bundle` 和能力页的本地目录导入仍按开发者侧载处理，不会因为目录存在就自动信任 Hook 或可执行扩展；随应用发布的内置市场继续使用应用控制的可信来源规则。
 

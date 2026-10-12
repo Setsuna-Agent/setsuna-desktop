@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   createSandboxedUiDocument,
   parseSandboxedUiFrameMessage,
+  SANDBOXED_UI_THEME_PREFIXES,
 } from './sandbox-document.js';
 import { SandboxedUiDocumentBridge } from './sandbox-document-bridge.js';
 import './sandboxed-ui-frame.css';
@@ -173,7 +174,13 @@ function hostThemeSnapshot(): Readonly<{
   variables: Readonly<Record<string, string>>;
 }> {
   const styles = getComputedStyle(document.documentElement);
-  const variables = Object.freeze(Object.fromEntries([
+  // The iframe is already scaled by its host. Its own overlay geometry must use
+  // local viewport dimensions and a scale of one, rather than scaling twice.
+  const localViewport = new Set(['--app-page-scale', '--app-page-scale-inverse', '--app-visual-viewport-height',
+    '--app-scaled-viewport-width', '--app-scaled-viewport-height']);
+  const shared = Array.from(styles).filter(name => !localViewport.has(name)
+    && SANDBOXED_UI_THEME_PREFIXES.some(prefix => name.startsWith(prefix)));
+  const aliases = [
     ['--setsuna-color-text', '--app-text'],
     ['--setsuna-color-text-muted', '--app-text-muted'],
     ['--setsuna-color-surface', '--app-surface'],
@@ -189,7 +196,11 @@ function hostThemeSnapshot(): Readonly<{
     ['--setsuna-font-family', '--app-font-family'],
     ['--setsuna-radius-control', '--app-radius-control'],
     ['--setsuna-radius-field', '--app-radius-sm'],
-  ].map(([target, source]) => [target, styles.getPropertyValue(source).trim()]).filter(([, value]) => value)));
+  ].map(([target, source]) => [target, styles.getPropertyValue(source).trim()]);
+  const variables = Object.freeze(Object.fromEntries([
+    ...shared.map(name => [name, styles.getPropertyValue(name).trim()]),
+    ...aliases,
+  ].filter(([, value]) => value)));
   return Object.freeze({
     colorScheme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
     variables,

@@ -29,7 +29,7 @@ function setup() {
     id: 'test.shell', children: [declareRendererChildSlot(shellSidebarPluginEntrySlot)],
     render: (_props, slots) => <RendererOwnedSlotsProvider slots={slots}>
       <PluginAppOrderProvider>
-        <RendererOwnedListSlot slot={shellSidebarPluginEntrySlot} props={{ activeViewKey: null, onOpen, onViewPlugin: vi.fn(), onModifyApp: vi.fn() }} />
+        <RendererOwnedListSlot slot={shellSidebarPluginEntrySlot} props={{ activeViewKey: null, onOpen, onRefresh: vi.fn(), onViewPlugin: vi.fn(), onModifyApp: vi.fn() }} />
       </PluginAppOrderProvider>
       <button type="button">Create app</button>
     </RendererOwnedSlotsProvider>,

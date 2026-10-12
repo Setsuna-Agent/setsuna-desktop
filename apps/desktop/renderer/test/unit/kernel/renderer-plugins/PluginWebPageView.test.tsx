@@ -9,11 +9,12 @@ import { workspacePanelSlot } from '@setsuna-desktop/renderer-contracts/workspac
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { PluginRouteAdapter } from '../../../../src/app/layout/PluginRouteAdapter.js';
+import { AppRouteSurface } from '../../../../src/app/layout/AppRouteSurface.js';
+import { usePluginPageRefreshRequests } from '../../../../src/app/layout/usePluginPageSessions.js';
 import { ToastProvider } from '../../../../src/app/providers/ToastProvider.js';
 import { activateDeclarativePluginUiGateway } from '../../../../src/kernel/declarative-plugin-ui/gateway.js';
 import {
-  RendererKernelProvider, RendererOwnedKeyedSlot, RendererOwnedListSlot,
+  RendererKernelProvider, RendererOwnedListSlot,
   RendererOwnedSlotsProvider, RendererRootSingleSlot,
 } from '../../../../src/kernel/renderer-plugins/RendererKernelProvider.js';
 import { createRendererPluginRuntime } from '../../../../src/kernel/renderer-plugins/runtime.js';
@@ -34,6 +35,7 @@ it('opens a sidebar web app through its page owner and registers a native browse
     getExtensionActions: vi.fn(async () => []), onExtensionActionsChanged: () => () => undefined,
     registerTab: vi.fn(async () => true), unregisterTab: vi.fn(async () => true),
     setActiveTab: vi.fn(async () => true), setDeviceEmulation: vi.fn(async () => true),
+    reloadTab: vi.fn(async () => true),
     cancelAnnotation: vi.fn(async () => undefined), setAnnotationMarkers: vi.fn(async () => true),
     onContextMenu: () => () => undefined, dismissContextMenu: vi.fn(async () => undefined),
   };
@@ -89,15 +91,31 @@ it('opens a sidebar web app through its page owner and registers a native browse
     fireEvent.click(await screen.findByRole('button', { name: 'Web app' }));
     await waitFor(() => expect(document.querySelector('webview')).not.toBeNull());
     const guest = document.querySelector('webview')!;
-    expect(guest.getAttribute('src')).toBe(url);
+    const loadURL = vi.fn(async () => undefined);
     Object.assign(guest, {
-      getWebContentsId: () => 42, getURL: () => url, getZoomFactor: () => 1,
+      getWebContentsId: () => 42, getURL: () => url, getZoomFactor: () => 1, loadURL,
       canGoBack: () => false, canGoForward: () => false,
     });
     fireEvent(guest, new Event('dom-ready'));
     fireEvent(guest, new Event('did-stop-loading'));
     await waitFor(() => expect(bridge.registerTab).toHaveBeenCalledExactlyOnceWith('plugin-web-web-app-home.page', 42, 'current-tab'));
+    expect(loadURL).toHaveBeenCalledExactlyOnceWith(url);
     expect(runtime.getSnapshot().inspect().renderErrors).toEqual([]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Chats' }));
+    await waitFor(() => expect(bridge.setActiveTab).toHaveBeenLastCalledWith(null));
+    fireEvent.click(screen.getByRole('button', { name: 'Web app' }));
+    await waitFor(() => expect(bridge.setActiveTab).toHaveBeenLastCalledWith('plugin-web-web-app-home.page'));
+    expect(document.querySelector('webview')).toBe(guest);
+    expect(bridge.unregisterTab).not.toHaveBeenCalled();
+    expect(bridge.registerTab).toHaveBeenCalledTimes(1);
+    expect(loadURL).toHaveBeenCalledTimes(1);
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Web app' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Refresh' }));
+    await waitFor(() => expect(bridge.reloadTab).toHaveBeenCalledExactlyOnceWith('plugin-web-web-app-home.page', 'normal'));
+    expect(document.querySelector('webview')).toBe(guest);
+    expect(bridge.unregisterTab).not.toHaveBeenCalled();
 
     await act(async () => { await disposeGateway(); });
     await waitFor(() => expect(bridge.unregisterTab).toHaveBeenCalledExactlyOnceWith('plugin-web-web-app-home.page', 42));
@@ -111,12 +129,16 @@ it('opens a sidebar web app through its page owner and registers a native browse
 
 function PluginNavigation() {
   const [viewKey, setViewKey] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState<'chat' | 'plugin'>('chat');
+  const refresh = usePluginPageRefreshRequests();
   return <>
+    <button onClick={() => setActiveView('chat')}>Chats</button>
     <RendererOwnedListSlot slot={shellSidebarPluginEntrySlot} props={{
-      activeViewKey: viewKey, onOpen: setViewKey, onModifyApp: () => undefined, onViewPlugin: () => undefined,
+      activeViewKey: activeView === 'plugin' ? viewKey : null,
+      onOpen: key => { setViewKey(key); setActiveView('plugin'); }, onRefresh: refresh.refresh,
+      onModifyApp: () => undefined, onViewPlugin: () => undefined,
     }} />
-    {viewKey ? <RendererOwnedKeyedSlot entryKey="plugin" slot={shellRouteSlot} props={{
-      routeId: 'plugin', renderDefault: () => <PluginRouteAdapter selectedViewKey={viewKey} onBack={() => setViewKey(null)} />,
-    }} /> : null}
+    <AppRouteSurface activeView={activeView} pluginProps={{ selectedViewKey: viewKey, refreshRequests: refresh.requests,
+      onBack: () => setActiveView('chat') }} renderDefault={() => null} />
   </>;
 }

@@ -1,7 +1,7 @@
 import { Button, Dropdown, Tooltip } from '@setsuna-desktop/renderer-ui';
 import type { RuntimePluginAppReference, RuntimePluginSummary, RuntimePluginUiContribution } from '@setsuna-desktop/contracts';
 import type { PluginManagementRendererService } from '@setsuna-desktop/feature-plugin-management/contracts';
-import { Blocks, Pencil, SquarePen, Trash2 } from 'lucide-react';
+import { Blocks, Pencil, RefreshCw, SquarePen, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { PluginAppAppearanceDialog } from './app-appearance/PluginAppAppearanceDialog.js';
@@ -11,7 +11,7 @@ import { resolveRuntimePluginUiText, useDeclarativePluginUiData } from './useDec
 import { DeletePluginAppDialog } from './DeletePluginAppDialog.js';
 import { usePluginAppOrderEntry } from './app-order/PluginAppOrderProvider.js';
 
-export function DeclarativePluginSidebarEntry({ active, contribution, entryId, missingContext, plugin, projectId, service, threadId, onOpen, onRemove, onViewPlugin, onModifyApp }: Readonly<{
+export function DeclarativePluginSidebarEntry({ active, contribution, entryId, missingContext, plugin, projectId, service, threadId, onOpen, onRefresh, onRemove, onViewPlugin, onModifyApp }: Readonly<{
   active: boolean;
   contribution: RuntimePluginUiContribution;
   entryId: string;
@@ -21,6 +21,7 @@ export function DeclarativePluginSidebarEntry({ active, contribution, entryId, m
   service: PluginManagementRendererService;
   threadId?: string;
   onOpen(): void;
+  onRefresh(): void;
   onRemove(): Promise<void>;
   onViewPlugin(): void;
   onModifyApp(app: RuntimePluginAppReference): void;
@@ -46,6 +47,7 @@ export function DeclarativePluginSidebarEntry({ active, contribution, entryId, m
           handingOffFocus.current = false;
           event.preventDefault();
         }} menu={{ items: [
+          { key: 'refresh', label: t('pluginUi.refreshApp'), icon: <RefreshCw size={14} />, onClick: onRefresh },
           { key: 'edit', label: t('pluginUi.editApp'), icon: <Pencil size={14} />, onClick: () => setEditing(true) },
           { key: 'modify-plugin', label: t('pluginUi.modifyPlugin'), icon: <SquarePen size={14} />,
             onClick: () => {

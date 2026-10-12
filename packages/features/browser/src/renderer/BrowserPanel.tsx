@@ -612,6 +612,7 @@ function BrowserWebview({
 }) {
   const nodeRef = useRef<BrowserWebviewElement | null>(null);
   const registeredRef = useRef(false);
+  const initialPageWebContentsIdRef = useRef<number | null>(null);
   const deviceEmulationRef = useRef(tab.deviceEmulation);
   deviceEmulationRef.current = tab.deviceEmulation;
 
@@ -707,6 +708,11 @@ function BrowserWebview({
           if (!registered || disposed) return;
           registeredRef.current = true;
           onRegistrationChange(tab.id, true);
+          if (windowOpenMode === 'current-tab' && initialPageWebContentsIdRef.current !== webContentsId) {
+            // The blank guest cannot run website scripts before main knows its opening mode.
+            initialPageWebContentsIdRef.current = webContentsId;
+            void node.loadURL(tab.initialUrl).catch(() => undefined);
+          }
           const deviceEmulation = deviceEmulationRef.current;
           try {
             const applied = await applyBrowserDeviceEmulation(bridge, tab.id, deviceEmulation);
@@ -734,7 +740,7 @@ function BrowserWebview({
         void bridge?.unregisterTab(tab.id, registeredWebContentsId);
       }
     };
-  }, [bridge, onDeviceEmulationFailure, onRegistrationChange, tab.id, windowOpenMode]);
+  }, [bridge, onDeviceEmulationFailure, onRegistrationChange, tab.id, tab.initialUrl, windowOpenMode]);
 
   useEffect(() => {
     if (!registeredRef.current) return;
@@ -776,7 +782,7 @@ function BrowserWebview({
         }}
         className="desktop-browser-webview"
         partition={DESKTOP_BROWSER_PARTITION}
-        src={tab.initialUrl}
+        src={windowOpenMode === 'current-tab' ? 'about:blank' : tab.initialUrl}
       />
     </BrowserDeviceViewport>
   );

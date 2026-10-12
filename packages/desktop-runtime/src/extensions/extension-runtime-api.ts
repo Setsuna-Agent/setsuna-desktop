@@ -15,7 +15,7 @@ export async function requestPluginRuntimeApi(
   const plugin = (await host.plugins.listInstalledRecords()).find((item) => item.id === input.pluginId);
   if (!plugin?.extension?.capabilities.includes('ui')) throw new Error('Plugin application is not installed.');
   const contribution = plugin.extension.rendererUi?.contributions.find((item) => item.id === input.contributionId);
-  if (contribution?.slot !== 'renderer.plugin.page' || !contribution.document) {
+  if (contribution?.slot !== 'renderer.plugin.page' || (!contribution.document && !contribution.reactApp)) {
     throw new Error('Runtime API access requires an installed sidebar application.');
   }
   // Identity is bound by the renderer host. Recheck the installed hash on every
