@@ -3,6 +3,7 @@ import type { RuntimeSandboxedUiSource } from '@setsuna-desktop/contracts';
 import { sandboxDialogBootstrap, sandboxDialogEndpoint } from './sandbox-dialogs.js';
 
 export const SANDBOXED_UI_CHANNEL = 'setsuna.sandboxed-ui.v1' as const;
+export const SANDBOXED_UI_THEME_PREFIXES = ['--setsuna-', '--app-', '--desktop-agent-control-'] as const;
 
 export type SandboxedUiInvokeMessage = Readonly<{
   type: 'invoke';
@@ -61,21 +62,28 @@ const bootstrap = (documentId: string) => `(() => {
   const applyTheme = (theme) => {
     if (!theme || typeof theme !== 'object') return;
     for (const [name, value] of Object.entries(theme.variables || {})) {
-      if (name.startsWith('--setsuna-') && typeof value === 'string') {
+      if (${JSON.stringify(SANDBOXED_UI_THEME_PREFIXES)}.some((prefix) => name.startsWith(prefix)) && typeof value === 'string') {
         document.documentElement.style.setProperty(name, value);
       }
     }
     if (theme.colorScheme === 'dark' || theme.colorScheme === 'light') {
       document.documentElement.style.colorScheme = theme.colorScheme;
+      document.documentElement.dataset.theme = theme.colorScheme;
     }
   };
   port.onmessage = (event) => {
     if (!event.data || event.data.channel !== channel) return;
     const message = event.data;
     if (message.type === 'snapshot') {
-      snapshot = Object.freeze({
-        data: message.data && typeof message.data === 'object' ? message.data : Object.freeze({}),
-        context: message.context && typeof message.context === 'object' ? message.context : Object.freeze({}),
+      const data = message.data && typeof message.data === 'object' ? message.data : Object.freeze({});
+      const context = message.context && typeof message.context === 'object' ? message.context : Object.freeze({});
+      // MessagePort clones every delivery. Preserve unchanged state identities so a
+      // theme notification or repeated read does not reset React form drafts.
+      const sameData = JSON.stringify(data) === JSON.stringify(snapshot.data);
+      const sameContext = JSON.stringify(context) === JSON.stringify(snapshot.context);
+      if (!sameData || !sameContext) snapshot = Object.freeze({
+        data: sameData ? snapshot.data : data,
+        context: sameContext ? snapshot.context : context,
       });
       applyTheme(message.theme);
       if (!didResolveReady) {

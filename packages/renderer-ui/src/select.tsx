@@ -20,7 +20,7 @@ type SelectOption = {
   value: string;
 };
 
-type SelectFieldProps = {
+export type SelectFieldProps = {
   'aria-label'?: string;
   'aria-labelledby'?: string;
   children: ReactNode;

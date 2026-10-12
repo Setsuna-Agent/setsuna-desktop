@@ -115,6 +115,21 @@
   padding: 4px 8px;
 }
 
+.plugin-route-layer,
+.plugin-page-session:not([hidden]) {
+  display: contents;
+}
+
+.plugin-page-session[hidden] {
+  /* Retain a viewport for cached iframe/webview pages, as workspace browsers do. */
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .declarative-plugin-page {
   /* Standalone apps own the workbench; auto-placement can land in the hidden sidebar column. */
   grid-column: 1 / -1;

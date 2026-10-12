@@ -5,7 +5,7 @@ import { copyTextToClipboard } from '../shared/lib/clipboard.js';
 import { CodePatchView } from '../shared/code/PierreCode.js';
 import { PageHeader } from '../shared/ui/primitives.js';
 import { ScrollOverlay } from '../shared/ui/ScrollOverlay.js';
-import { DocumentMarkdown } from '../shared/ui/DocumentMarkdown.js';
+import { DocumentMarkdown } from '@setsuna-desktop/renderer-ui';
 import { PullRequestCommentInput } from './PullRequestCommentInput.js';
 import { useToast } from '../app/providers/ToastProvider.js';
 

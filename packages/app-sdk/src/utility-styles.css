@@ -1,0 +1,5 @@
+/* Compile the shared controls' utilities once; independent apps need no Tailwind toolchain. */
+@import '../../../apps/desktop/renderer/src/shared/styles/beui.css';
+@import 'tailwindcss/preflight.css' layer(base);
+
+@source '../../renderer-ui/src';

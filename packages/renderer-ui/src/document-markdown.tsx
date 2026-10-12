@@ -5,37 +5,45 @@ import rehypeSanitize from 'rehype-sanitize';
 import rehypeSlug from 'rehype-slug';
 import remarkGfm from 'remark-gfm';
 import remarkEmoji from 'remark-emoji';
+import { CheckField } from './selection-controls.js';
 
 const remarkPlugins = [remarkGfm, remarkEmoji];
 const rehypePlugins = [rehypeRaw, rehypeSlug, rehypeSanitize];
 
-/** Shared sanitized GFM reading surface for plugin documents and remote repository content. */
-export function DocumentMarkdown({ content, baseUrl, className = '', onOpenLink }: {
-  content: string; baseUrl?: string; className?: string; onOpenLink(url: string): void;
-}) {
+export type DocumentMarkdownProps = {
+  content: string; baseUrl?: string; className?: string; onOpenLink?(url: string): void;
+};
+
+/** Sanitized GFM for both the host and isolated apps; native link handling is injected. */
+export function DocumentMarkdown({ content, baseUrl, className = '', onOpenLink }: DocumentMarkdownProps) {
   const root = useRef<HTMLDivElement>(null);
   const components = useMemo<Components>(() => ({
     a: ({ children, href }) => {
       const target = documentUrl(href, baseUrl);
-      return target ? <a href={target}>{children}</a> : <span>{children}</span>;
+      return target ? <a href={target} target={!onOpenLink && !target.startsWith('#') ? '_blank' : undefined}
+        rel="noopener noreferrer">{children}</a> : <span>{children}</span>;
     },
     img: ({ src, alt }) => {
       const target = documentUrl(src, baseUrl, true);
       return target ? <img src={target} alt={alt ?? ''} loading="lazy" decoding="async" referrerPolicy="no-referrer" /> : <span>{alt || src}</span>;
     },
+    input: ({ checked, disabled }) => <CheckField checked={Boolean(checked)} disabled={disabled} readOnly />,
     table: ({ children }) => <div className="chat-markdown__table-scroll"><table>{children}</table></div>,
-  }), [baseUrl]);
-  return <div ref={root} className={`chat-markdown ${className}`} tabIndex={0} onClick={(event) => {
+  }), [baseUrl, onOpenLink]);
+  return <div ref={root} className={`chat-markdown sd-document-markdown ${className}`} tabIndex={0} onClick={(event) => {
     const link = event.target instanceof Element ? event.target.closest('a') : null;
     const href = link?.getAttribute('href');
     if (!href) return;
-    event.preventDefault();
     if (href.startsWith('#')) {
+      event.preventDefault();
       let id: string;
       try { id = decodeURIComponent(href.slice(1)); } catch { return; }
-      const heading = [...(root.current?.querySelectorAll('[id]') ?? [])].find((element) => element.id === id || element.id === `user-content-${id}`);
+      const heading = Array.from(root.current?.querySelectorAll('[id]') ?? []).find((element) => element.id === id || element.id === `user-content-${id}`);
       heading?.scrollIntoView({ block: 'start' });
-    } else onOpenLink(href);
+    } else if (onOpenLink) {
+      event.preventDefault();
+      onOpenLink(href);
+    }
   }}><ReactMarkdown components={components} remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins}>{content}</ReactMarkdown></div>;
 }
 

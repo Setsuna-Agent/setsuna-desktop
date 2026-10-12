@@ -1,6 +1,6 @@
 # Renderer Plugin Runtime
 
-状态：当前实现。内置 React UI 静态编译；第三方 UI 通过声明式 gateway 或隔离 iframe 接入。独立 React client bundle 尚未实现。
+状态：当前实现。内置 React UI 静态编译；第三方 UI 通过声明式 gateway 或隔离 iframe 接入。自定义 React 应用由受管 Vite 构建并在隔离页面运行，见[React 自定义应用](../../extensions/plugins/react-apps.md)。
 
 本文描述 Renderer 内的 UI 所有权、注册事务、Slot 选择、恢复与安全边界。跨进程业务生命周期仍由 [Feature Composition](../../architecture/feature-composition.md) 管理。已完成的迁移步骤和一次性测试统计不再作为当前规范保留。
 
@@ -12,8 +12,8 @@ Setsuna 采用以下方向：
 2. `/renderer` 就是 Feature 的浏览器端入口，不增加语义重复的 `/client` export。
 3. 在 Renderer 内增加轻量 Plugin Runtime。宿主 UI 与 Feature UI 都通过作用域绑定的激活上下文注册，不在 React 组件生命周期中注册。
 4. UI 组合使用有父子所有权的 typed Slot Tree，支持 `single / list / keyed / chain`。
-5. 所有内置 React 插件均静态编译进 Desktop bundle；不实现独立 client bundle、Module Federation、import map 或远程代码加载。
-6. 普通第三方 Plugin 继续运行在 Node worker。简单 UI 通过声明式 gateway 进入白名单 Slot；自由 HTML/CSS/JavaScript 使用独立 web origin，配置已有网站时直接使用原生浏览器网页，不能向主 Renderer 注入 React、脚本或全局样式。
+5. 所有内置 React 插件均静态编译进 Desktop bundle；不向主 Renderer 动态装载第三方 client bundle、Module Federation 或 import map。
+6. 普通第三方 Plugin 继续运行在 Node worker。简单 UI 通过声明式 gateway 进入白名单 Slot；自由 HTML/CSS/JavaScript 和受管 React 应用使用独立 web origin，配置已有网站时直接使用原生浏览器网页，不能向主 Renderer 注入 React、脚本或全局样式。
 7. `preload` 继续是窄桥接。Renderer Plugin 只能获得显式注入的 Capability，不能直接访问 runtime token、端口、文件系统或完整的 `window.setsunaDesktop`。
 8. 布局偏好是 Slot Runtime 之上的可迁移投影，不是插件 inventory、Slot 声明或业务状态的第二真源。
 9. 安全审批、凭据、更新完整性、顶层恢复与桥接授权属于不可替换 Kernel；“万物可修改”只覆盖产品组合层。
@@ -50,7 +50,7 @@ Setsuna 采用以下方向：
 
 ## 非目标
 
-- 不支持运行时下载、构建或执行第三方 React bundle。
+- 不在主 Renderer 下载、构建或执行第三方 React bundle；自定义应用的受管构建与执行由隔离页面链路拥有。
 - 不用 Slot Runtime 代替 React Router、业务 controller、Feature event projection、tool-result codec 或持久状态 reducer。
 - 不让每个 DOM 容器都成为 Slot，也不为没有真实替换场景的位置预留扩展点。
 - 不建立全局可任意查询 Capability 的 React service locator。
@@ -474,7 +474,7 @@ type RendererSlotInspection = Readonly<{
 | Kernel | Desktop 固定代码 | 安全根、恢复、bridge gate | 宿主内部 | 不可被 Slot 替换 |
 | 内置 Renderer Plugin | 随 Desktop 编译 | 完整 typed Slot | 显式 Feature/host Capability | 不能直接访问完整 preload bridge |
 | 应用签名 Renderer Plugin（未来） | Setsuna 签名并随受控渠道发布 | 只进入 manifest allowlist Slot | 版本化、显式 Capability | 不能仅凭用户点“信任”获得主 Renderer 执行权 |
-| 普通第三方 Plugin | Node worker + 独立 origin 页面或原生网页 | 白名单 Slot 中的 host tree、document、webpage；对话 `ui-card` | worker host API、声明 action 与审批策略 | 主 Renderer React/DOM、preload、任意 IPC |
+| 普通第三方 Plugin | Node worker + 独立 origin 页面或原生网页 | 白名单 Slot 中的 host tree、document、reactApp、webpage；对话 `ui-card` | worker host API、声明 action 与审批策略 | 主 Renderer React/DOM、preload、任意 IPC |
 
 以下 surface 永不向普通第三方 schema 开放：
 
@@ -485,11 +485,15 @@ type RendererSlotInspection = Readonly<{
 - Kernel error/recovery；
 - preload/native capability 授权。
 
-tree UI action 只能引用 manifest 中声明的 action ID，由 host 携带当前 `contributionId` 转成受控 operation。Sandbox document 还必须在自身 `actionIds` 中列出该 action，桥接 payload 经过有界 JSON 校验。Runtime 必须按当前 contribution 精确校验 Slot、字段、action 和 state scope，不能把复用同一 action ID 的其他 contribution 权限合并进来。tree schema 不能携带函数、事件脚本、URL handler、style 字符串或 raw markup；document/card 源码只能进入下述隔离 frame。
+tree UI action 只能引用 manifest 中声明的 action ID，由 host 携带当前 `contributionId` 转成受控 operation。Sandbox document/reactApp 还必须在自身 `actionIds` 中列出该 action，桥接 payload 经过有界 JSON 校验。Runtime 必须按当前 contribution 精确校验 Slot、字段、action 和 state scope，不能把复用同一 action ID 的其他 contribution 权限合并进来。tree schema 不能携带函数、事件脚本、URL handler、style 字符串或 raw markup；document/card 源码只能进入下述隔离 frame。
 
 自由 UI document/card 通过按需注册的 `setsuna-plugin-ui://<storage-origin>/<document-id>/index.html` 加载。主进程只在内存中提供当前窗口注册的文档，不暴露文件路径；卸载、关闭或 renderer 崩溃撤销文档地址。同一 Plugin 页面/卡片保持稳定存储 origin，文档地址和 MessagePort 授权每次独立。页面支持标准浏览器网络、存储、资源、worker、嵌套 frame、媒体和 HTTP(S) 表单，不设置额外 CSP 或 iframe sandbox 禁用规则。浏览器同源策略隔离宿主 DOM，页面没有 preload/Node；随机文档身份建立私有 MessagePort，导航离开撤销 bridge，保留 action allowlist、有界 JSON 与消息频率限制。`webpage.url` 的侧栏入口直接复用 Browser Feature 原生网页，不提供 Plugin/runtime bridge。独立页面源码仍来自完整可信 Bundle hash 快照，卡片由 runtime 校验真实 Plugin 来源。
 
+`apps/desktop/main/src/window/plugin-ui-permissions.ts` 在首次创建文档时同步安装该 session 的权限检查与请求处理器。摄像头、麦克风、位置、通知和剪贴板读写必须经过原生「允许此次」审批；授权绑定当前窗口、确切文档与直接 iframe，不按共享存储 origin 扩散。替换文档的导航、卸载、关闭或 renderer 崩溃撤销授权并取消待审批请求。同文档导航保留授权，未知权限、远程响应页、worker、嵌套或无法唯一定位的 frame 默认拒绝。宿主主 frame 的复制和全屏操作仍可使用，处理器不会恢复 Electron 的默认自动授权行为。权限初始化按需执行，不进入桌面启动就绪链路。
+
 网页 contribution 自己声明并提供 `workspacePanelSlot` 子插槽，以稳定的页面 ID 作为 Browser outlet 的 `instanceKey`；它不继承聊天路由的插槽所有权，也不依赖当前 project/thread。移除网页 contribution 时，其 Browser 实例和本机 tab 注册随页面一起释放。
+
+侧栏独立应用由宿主保留访问过的页面实例，页面贡献的注册身份仍受 Slot 生命周期控制；导航切换不会撤销同一个文档的 bridge 或本机 tab。宿主的按需挂载、上下文、可见性、右键刷新和释放规则见 [App Layout](../../desktop/renderer/app-and-runtime-state.md#layout)。
 
 ## 样式与主题规则
 

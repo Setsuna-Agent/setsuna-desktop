@@ -23,6 +23,7 @@ type DesktopIpcOptions = {
   readAttachmentImage: AttachmentImageReader;
   onActiveKeyboardShortcutBindingsChange: (bindings: readonly string[], senderId: number) => void;
   onInterfaceLanguageChange: (locale: RuntimeInterfaceLanguage) => void;
+  interfaceLanguage: () => RuntimeInterfaceLanguage;
   userDataPath: string;
 };
 
@@ -31,6 +32,7 @@ export function registerDesktopIpc({
   readAttachmentImage,
   onActiveKeyboardShortcutBindingsChange,
   onInterfaceLanguageChange,
+  interfaceLanguage,
   userDataPath,
 }: DesktopIpcOptions): void {
   const channels = [
@@ -62,7 +64,7 @@ export function registerDesktopIpc({
     return () => keyboards.delete(senderId);
   });
   registerWorkspaceEntryWatchIpc();
-  registerPluginUiDocumentIpc();
+  registerPluginUiDocumentIpc(interfaceLanguage);
 
   ipcMain.handle('desktop:create-sandbox-dialog-session', (event, title: unknown) => {
     const owner = desktopWindows.get(event.sender.id);

@@ -537,6 +537,11 @@ function hookCommandSummary(hook: PluginManagementHook): string {
 
 function pluginErrorMessage(error: unknown, translate: PluginManagementTranslate): string {
   const detail = error instanceof Error ? error.message : String(error);
+  const installedPrefix = 'Plugin is already installed:';
+  if (detail.startsWith(installedPrefix)) {
+    const pluginId = detail.slice(installedPrefix.length).split('\n')[0].trim();
+    return translate('feature.pluginManagement.error.installed', { pluginId });
+  }
   return translate('feature.pluginManagement.withDetail', {
     detail,
     fallback: translate('feature.pluginManagement.error.generic'),

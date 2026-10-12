@@ -13,8 +13,9 @@ export function contributionUsesAction(
   contribution: RuntimePluginUiContribution,
   actionId: string,
 ): boolean {
-  return contribution.document
-    ? contribution.document.actionIds.includes(actionId)
+  const app = contribution.document ?? contribution.reactApp;
+  return app
+    ? app.actionIds.includes(actionId)
     : Boolean(contribution.tree && treeUsesAction(contribution.tree, actionId));
 }
 

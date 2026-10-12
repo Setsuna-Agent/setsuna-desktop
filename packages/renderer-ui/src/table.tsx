@@ -17,16 +17,18 @@ export type TableProps<T> = Pick<TableHTMLAttributes<HTMLTableElement>, 'aria-la
   getRowId: (row: T) => string;
   loading?: boolean;
   emptyState?: ReactNode;
+  caption?: ReactNode;
   className?: string;
 };
 
 export function Table<T>({
-  data, columns, getRowId, loading = false, emptyState, className, ...props
+  data, columns, getRowId, loading = false, emptyState, caption, className, ...props
 }: TableProps<T>) {
   return (
     <div className={cn('sd-table', className)}>
       <div className="sd-table__scroller">
         <table {...props} aria-busy={loading} className="sd-table__content">
+          {caption === undefined ? null : <caption>{caption}</caption>}
           <colgroup>
             {columns.map((column) => <col key={column.key} style={{ width: column.width }} />)}
           </colgroup>

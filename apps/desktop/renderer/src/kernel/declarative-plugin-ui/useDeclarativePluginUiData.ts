@@ -29,7 +29,10 @@ export function useDeclarativePluginUiData({
   service: PluginManagementRendererService;
   threadId?: string;
 }>): DeclarativePluginUiDataState {
-  const identity = `${pluginId}\u0000${contribution.id}\u0000${projectId ?? ''}\u0000${threadId ?? ''}`;
+  // Global data must not discard a cached page's draft when the chat context changes.
+  const scope = contribution.data?.scope;
+  const scopeId = scope === 'project' ? projectId : scope === 'thread' ? threadId : undefined;
+  const identity = `${pluginId}\u0000${contribution.id}\u0000${scope ?? 'global'}\u0000${scopeId ?? ''}`;
   const [state, setState] = useState<InternalDataState>(() => Object.freeze({
     data: EMPTY_DATA,
     hasSnapshot: false,

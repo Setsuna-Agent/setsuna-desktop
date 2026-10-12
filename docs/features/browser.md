@@ -57,7 +57,7 @@ Tab 销毁、导航和重新注册都会清理 snapshot/ref 与 CDP 状态。
 
 工作区浏览器默认把新窗口请求转为新标签。Main 为请求分配工作区 tab ID；renderer 沿用该 ID 创建面板，真实 guest 经所属窗口校验并注册后，才发布 `webNavigation.onCreatedNavigationTarget`，携带实际源/目标 WebContents ID。同网址并发请求独立对应，重复注册不重发事件；关闭来源、请求超时和退出时清理尚未创建的目标。
 
-侧栏 `webpage` 应用复用完整 BrowserPanel 导航条，包括前进、后退、刷新、地址栏和扩展入口，布局占满应用内容区。注册 guest 时通过窄 Browser bridge 声明 `windowOpenMode: current-tab`；main 校验 renderer、guest 归属和 browser session 后保存该模式。`target=_blank`、带网址的 `window.open()`、新窗口表单和右键新标签页操作都转为原 guest 内导航，不创建窗口或额外标签。转发时保留 Referrer、POST 数据及表单 Content-Type/multipart boundary，浏览历史、登录状态和扩展沿用当前 guest；导航仍限制为 HTTP(S)/about:blank。
+侧栏 `webpage` 应用复用完整 BrowserPanel 导航条，包括前进、后退、刷新、地址栏和扩展入口，布局占满应用内容区。guest 先加载 `about:blank`，通过窄 Browser bridge 声明 `windowOpenMode: current-tab`；main 校验 renderer、guest 归属和 browser session 并保存该模式后，renderer 才加载实际网址。每个 guest 只执行一次初始导航，重新绑定回调不会重置当前页面。这样首次 HTML 解析阶段的弹窗也遵循当前页模式。`target=_blank`、带网址的 `window.open()`、新窗口表单和右键新标签页操作都转为原 guest 内导航，不创建窗口或额外标签。转发时保留 Referrer、POST 数据及表单 Content-Type/multipart boundary，浏览历史、登录状态和扩展沿用当前 guest；导航仍限制为 HTTP(S)/about:blank。
 
 侧栏网站应用的「编辑应用」支持按配置网址「自动获取」图标。宿主通过 `browser.getWebsiteFavicon` 窄桥调用 main，按需使用浏览器 session 读取网页声明的图标及 `/favicon.ico`，无需先打开应用；HTML 解析器延迟加载，不执行网站脚本。请求设有超时和响应体积上限，只向 renderer 返回图片 data URL。编辑器将 ICO、SVG 等解码为 PNG 草稿，点击保存后才沿用应用外观偏好持久化，取消或获取失败不覆盖原图标。启动和打开编辑器均不预取。
 

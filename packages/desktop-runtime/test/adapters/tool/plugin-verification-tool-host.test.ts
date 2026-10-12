@@ -177,6 +177,26 @@ describe('plugin verification tool host', () => {
     }, { threadId: 'thread_1' })).rejects.toThrow('Expected state path was not written: constructor');
   });
 
+  it('rejects successful saves that silently lose payload data, and checks actual retained values including array items', async () => {
+    const plugin = weatherPlugin(); plugin.tools = [];
+    plugin.extension!.rendererUi = parseRuntimePluginUiManifest({ schemaVersion:2, actions:[{id:'todo.save'}], contributions:[{
+      id:'todo.page', slot:'renderer.plugin.page', navigation:{label:'Todos'}, data:{stateKey:'view',scope:'global'},
+      reactApp:{root:'app',entry:'Home.tsx',actionIds:['todo.save']},
+    }] });
+    const todo = {id:'user-todo',title:'User input',done:false};
+    const readRendererUiData = vi.fn(async () => ({data:{todos:[] as typeof todo[]}}));
+    const runRendererUiAction = vi.fn(async () => ({status:'completed' as const}));
+    const host = new PluginVerificationToolHost(verificationStore(plugin), verificationRuntime({readRendererUiData,runRendererUiAction}));
+    const input = {pluginId:plugin.id, checks:[{kind:'ui-action',name:'todo.save',contributionId:'todo.page',values:{},
+      payload:{todos:[todo]}, expectStatePaths:['todos'], expectStateValues:{todos:[todo],'todos.0.title':'User input','todos.0.done':false}}]};
+    await expect(host.runTool(VERIFY_PLUGIN_TOOL,input,{threadId:'chat'})).rejects.toThrow('Saved state value does not match');
+    expect(runRendererUiAction).toHaveBeenCalledWith(expect.objectContaining({values:{},payload:{todos:[todo]}}),undefined);
+    readRendererUiData.mockResolvedValue({data:{todos:[todo]}});
+    await expect(host.runTool(VERIFY_PLUGIN_TOOL,input,{threadId:'chat'})).resolves.toMatchObject({data:{checksPassed:true,pageInteractionsVerified:false}});
+    await expect(host.runTool(VERIFY_PLUGIN_TOOL,{...input,checks:[{...input.checks[0],expectStateValues:{constructor:'inherited'}}]}, {threadId:'chat'}))
+      .rejects.toThrow('Saved state value does not match');
+  });
+
   it('rejects partial coverage before executing any Plugin path', async () => {
     const plugin = weatherPlugin();
     plugin.tools = [...(plugin.tools ?? []), { name: 'get_forecast', description: 'Get forecast.' }];

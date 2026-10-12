@@ -229,7 +229,11 @@ describe('plugin bundle tool host', () => {
     );
 
     vi.mocked(store.listInstalledRecords).mockResolvedValue([installedRecordFixture('/bundled/plugins/demo')]);
-    await expect(host.approvalForTool('configure_plugin', input)).rejects.toThrow('installed from another source');
+    await expect(host.approvalForTool('configure_plugin', input)).rejects.toThrow('Choose a different plugin name');
+    const writesBeforeConflict = vi.mocked(drafts.writeDraft).mock.calls.length;
+    await expect(host.runTool('configure_plugin', input, { threadId: 'thread_1', interfaceLanguage: 'zh-CN' }))
+      .rejects.toThrow('请换个名称和新的插件 ID 后重新安装');
+    expect(drafts.writeDraft).toHaveBeenCalledTimes(writesBeforeConflict);
   });
 
   it('requests functional verification only when the installed extension exposes a verifiable path', async () => {

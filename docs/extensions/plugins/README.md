@@ -71,7 +71,7 @@ Skill 入口和 Markdown 参考资源可在同目录提供 `SKILL.<locale>.md`�
 - `resources/`
 - `extension/`
 
-完整 manifest、限制、安装和卸载规则见 [Plugin Bundles](bundles.md)；动态代码的作者 API、信任模型和限制见 [可执行扩展 API v1](extensions.md)。
+完整 manifest、限制、安装和卸载规则见 [Plugin Bundles](bundles.md)；动态代码的作者 API、信任模型和限制见 [可执行扩展 API v1](extensions.md)；独立前端项目见 [React 自定义应用](react-apps.md)。
 
 用户也可以直接在对话中让 Agent 创建或修改插件。Agent 通过 `configure_plugin` 提交完整的 Bundle v2 manifest 和 UTF-8 文本文件快照，runtime 将内容写入自己的受管草稿目录并完成安装；用户不需要先创建、下载或选择一个本地目录。包含 Hook 或可执行扩展时，审批卡片会展示本次完整内容摘要和文件哈希，批准只信任这一版内容，后续修改必须重新审批。
 

@@ -20,6 +20,7 @@ import {
   type ToolHost,
 } from '../../ports/tool-host.js';
 import { normalizePluginId } from '../plugin/file-plugin-bundle-model.js';
+import { isDeepStrictEqual } from 'node:util';
 import { appBuilderToolOwner, requireAppBuilderTool } from './app-builder-tool-owner.js';
 
 export const VERIFY_PLUGIN_TOOL = 'verify_plugin';
@@ -63,14 +64,16 @@ function verifyPluginDefinition(language?: RuntimeInterfaceLanguage): RuntimeToo
               input: { type: 'object', description: text('Tool arguments when kind is tool.', "kind 为 tool 时的工具参数。") },
               expectUiCard: { type: 'boolean', description: text('Require a plugin.ui-card result. Automatically true for declared uiCards tools.', "要求返回 plugin.ui-card；对声明为 uiCards 的工具自动启用。") },
               contributionId: { type: 'string', description: text('Renderer UI contribution that exposes the action.', "公开该操作的 Renderer UI contribution。") },
-              values: { type: 'object', description: text('String form values supplied to a Renderer UI action.', "提供给 Renderer UI 操作的字符串表单值。") },
-              payload: { type: 'object', description: text('Bounded JSON payload supplied by a sandboxed document.', "沙箱文档提供的有大小限制的 JSON 数据。") },
+              values: { type: 'object', description: text('String fields for host tree forms only. For document/reactApp invokeAction(id, data), leave values empty and pass data as payload.', '仅用于宿主 tree 表单的字符串字段。document/reactApp 的 invokeAction(id, data) 应将 data 放在 payload，values 留空。') },
+              payload: { type: 'object', description: text('The exact second argument of document invoke or React invokeAction. The worker reads input.payload, not input.values.', 'document invoke 或 React invokeAction 的第二个参数原样放在这里；worker 读取 input.payload，不能读取 input.values。') },
               expectStatePaths: {
                 type: 'array',
                 maxItems: 16,
                 items: { type: 'string' },
                 description: text('Dot-separated state paths that must exist after a UI action.', "UI 操作后必须存在的状态路径，以点分隔。"),
               },
+              expectStateValues: { type: 'object', maxProperties: 16, additionalProperties: true,
+                description: text('Expected saved JSON values by dot-separated state path, including array indexes. Use to prove that submitted data was retained; path existence alone does not prove a save.', '按点分隔状态路径断言保存后的 JSON 值，可使用数组下标。用于证明提交的数据确实保留；仅有字段存在不能证明保存正确。') },
             },
             required: ['kind', 'name'],
           },
@@ -95,6 +98,7 @@ type UiActionVerificationCheck = Readonly<{
   values: Record<string, string>;
   payload?: RuntimePluginUiData;
   expectStatePaths: string[];
+  expectStateValues: RuntimePluginUiData;
 }>;
 
 type RuntimeApiVerificationCheck = Readonly<{ kind: 'runtime-api'; name: string; contributionId: string }>;
@@ -274,7 +278,8 @@ export class PluginVerificationToolHost implements ToolHost {
       context: rendererUiContext(contribution.id, contribution.slot, context),
     }, context.signal);
 
-    if (contribution.data && check.expectStatePaths.length) {
+    const expectedValues = Object.entries(check.expectStateValues);
+    if (contribution.data && (check.expectStatePaths.length || expectedValues.length)) {
       const state = await this.extensions.readRendererUiData({
         pluginId: plugin.id,
         context: rendererUiContext(contribution.id, contribution.slot, context),
@@ -282,7 +287,12 @@ export class PluginVerificationToolHost implements ToolHost {
       for (const statePath of check.expectStatePaths) {
         if (!hasPath(state.data, statePath)) throw new Error(`Expected state path was not written: ${statePath}.`);
       }
-    } else if (check.expectStatePaths.length) {
+      for (const [statePath, expected] of expectedValues) {
+        if (!isDeepStrictEqual(valueAtPath(state.data, statePath), expected)) {
+          throw new Error(`Saved state value does not match the submitted expectation: ${statePath}.`);
+        }
+      }
+    } else if (check.expectStatePaths.length || expectedValues.length) {
       throw new Error(`Contribution ${contribution.id} does not declare a data state binding.`);
     }
     return {
@@ -290,7 +300,8 @@ export class PluginVerificationToolHost implements ToolHost {
       name: check.name,
       status: 'passed',
       contributionId: contribution.id,
-      ...(check.expectStatePaths.length ? { statePaths: [...check.expectStatePaths] } : {}),
+      ...((check.expectStatePaths.length || expectedValues.length)
+        ? { statePaths: [...new Set([...check.expectStatePaths, ...Object.keys(check.expectStateValues)])] } : {}),
     };
   }
 
@@ -335,8 +346,9 @@ function requiredVerificationPaths(plugin: PluginVerificationSurface): ReadonlyM
     paths.set(verificationPathKey('tool', tool.name), `tool ${tool.name}`);
   }
   for (const contribution of plugin.extension?.rendererUi?.contributions ?? []) {
-    const actionIds = contribution.document
-      ? contribution.document.actionIds
+    const app = contribution.document ?? contribution.reactApp;
+    const actionIds = app
+      ? app.actionIds
       : contribution.tree ? collectNodeActionIds(contribution.tree) : [];
     for (const actionId of actionIds) {
       paths.set(
@@ -409,7 +421,7 @@ function normalizeVerificationInput(input: unknown): PluginVerificationInput {
     if (check.kind === 'ui-action') {
       assertExactKeys(
         check,
-        ['kind', 'name', 'contributionId', 'values', 'payload', 'expectStatePaths'],
+        ['kind', 'name', 'contributionId', 'values', 'payload', 'expectStatePaths', 'expectStateValues'],
         `checks[${index}]`,
       );
       return {
@@ -421,6 +433,7 @@ function normalizeVerificationInput(input: unknown): PluginVerificationInput {
           payload: parseRuntimePluginUiData(check.payload),
         }),
         expectStatePaths: statePaths(check.expectStatePaths, `checks[${index}].expectStatePaths`),
+        expectStateValues: expectedStateValues(check.expectStateValues, `checks[${index}].expectStateValues`),
       };
     }
     throw new Error(`checks[${index}].kind must be tool, ui-action or runtime-api.`);
@@ -454,17 +467,27 @@ function toolResultKind(value: unknown): string | undefined {
 }
 
 function hasPath(value: unknown, statePath: string): boolean {
+  return valueAtPath(value, statePath) !== undefined;
+}
+
+function valueAtPath(value: unknown, statePath: string): unknown {
   let current: unknown = value;
   for (const segment of statePath.split('.')) {
     if (
       !current
       || typeof current !== 'object'
-      || Array.isArray(current)
       || !Object.hasOwn(current, segment)
-    ) return false;
+    ) return undefined;
     current = (current as Record<string, unknown>)[segment];
   }
-  return current !== undefined;
+  return current;
+}
+
+function expectedStateValues(value: unknown, label: string): RuntimePluginUiData {
+  if (value === undefined) return {};
+  const values = parseRuntimePluginUiData(value);
+  statePaths(Object.keys(values), label);
+  return values;
 }
 
 function statePaths(value: unknown, label: string): string[] {

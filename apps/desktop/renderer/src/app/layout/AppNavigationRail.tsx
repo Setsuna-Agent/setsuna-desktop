@@ -25,6 +25,7 @@ export function AppNavigationRail({
   onOpenPullRequests,
   onOpenAutomation,
   onOpenPluginView,
+  onRefreshPluginView,
   onViewPlugin,
   onCreateApp,
   onFocusComposer,
@@ -42,6 +43,7 @@ export function AppNavigationRail({
   onOpenPullRequests: () => void;
   onOpenAutomation: () => void;
   onOpenPluginView: (viewKey: string) => void;
+  onRefreshPluginView: (viewKey: string) => void;
   onViewPlugin: (pluginId: string) => void;
   onCreateApp: CreatePluginAppChat;
   onFocusComposer: () => void;
@@ -76,6 +78,7 @@ export function AppNavigationRail({
                   ...(activeProjectId ? { projectId: activeProjectId } : {}),
                   ...(activeThreadId ? { threadId: activeThreadId } : {}),
                   onOpen: onOpenPluginView,
+                  onRefresh: onRefreshPluginView,
                   onViewPlugin,
                   onModifyApp: (app) => { void creation.modify(app); },
                 }}

@@ -5,7 +5,9 @@ import { PluginUiDocuments } from '../../../src/window/plugin-ui-documents.js';
 
 function owner(id: number) {
   const handle = vi.fn();
-  const contents = Object.assign(new EventEmitter(), { id, session: { protocol: { handle } } });
+  const contents = Object.assign(new EventEmitter(), { id, session: {
+    protocol: { handle }, setPermissionCheckHandler: vi.fn(), setPermissionRequestHandler: vi.fn(),
+  } });
   const window = Object.assign(new EventEmitter(), { webContents: contents, isDestroyed: () => false });
   return { window: window as unknown as BrowserWindow, contents, handle };
 }

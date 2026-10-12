@@ -30,11 +30,15 @@ export type ShellSidebarPluginEntrySlotProps = Readonly<{
   projectId?: string;
   threadId?: string;
   onOpen(viewKey: RendererPluginViewKey): void;
+  onRefresh(viewKey: RendererPluginViewKey): void;
   onViewPlugin(pluginId: string): void;
   onModifyApp(app: RuntimePluginAppReference): void;
 }>;
 
 export type ShellPluginPageSlotProps = Readonly<{
+  /** Cached pages stay mounted; only the selected page owns foreground browser controls. */
+  visible?: boolean;
+  reloadRequest?: number;
   cwd?: string;
   projectId?: string;
   threadId?: string;

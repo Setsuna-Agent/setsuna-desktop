@@ -11,10 +11,9 @@ import type {
 } from '@setsuna-desktop/contracts';
 import {
   isRequiredBuiltinPlugin,
-  parseRuntimePluginUiManifest,
 } from '@setsuna-desktop/contracts';
 import type { McpStore } from '@setsuna-desktop/feature-mcp/contracts';
-import { parseSandboxedUiSource } from '@setsuna-desktop/contracts';
+import type { WorkspaceDependenciesControl } from '@setsuna-desktop/feature-workspace-dependencies/contracts';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, realpath, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -55,7 +54,6 @@ import {
   publicPluginSummary,
   pathIsInside,
   publicManifestExtension,
-  readBundleFileSnapshot,
   readPluginFilePreview,
   readPluginManifest,
   removePluginHooks,
@@ -64,7 +62,9 @@ import {
   stagedPluginRecord,
   trustPluginHooks
 } from './file-plugin-bundle-model.js';
-import { decodePluginUiText, readManifestItemContent } from './file-plugin-item-content.js';
+import { readManifestItemContent } from './file-plugin-item-content.js';
+import { PluginAppProjectService } from '../plugin-app/project-service.js';
+import { readPluginUiDocument } from './plugin-ui-document-reader.js';
 import { sameLegacyMarketplaceSource, samePath } from './legacy-marketplace-source.js';
 import { installedPluginMessages, localizeBundledPlugin, localizedPluginMarkdownPath, pluginText, readBundledPluginMessages } from './bundled-plugin-localization.js';
 import { projectLegacyRootUiCards } from './legacy-plugin-ui-card-metadata.js';
@@ -72,6 +72,7 @@ import { projectLegacyRootUiCards } from './legacy-plugin-ui-card-metadata.js';
 export class FilePluginBundleStore implements PluginBundleStore {
   private readonly indexPath: string;
   private readonly pluginsDir: string;
+  private readonly appProjects: PluginAppProjectService;
   private runtimeMutation: PluginRuntimeMutationCoordinator = {
     validatePluginActivation: async () => undefined,
     beginPluginMutation: async () => async () => undefined,
@@ -88,7 +89,10 @@ export class FilePluginBundleStore implements PluginBundleStore {
   ) {
     this.indexPath = path.join(dataDir, 'plugins.json');
     this.pluginsDir = path.join(dataDir, 'plugins');
+    this.appProjects = new PluginAppProjectService(dataDir);
   }
+
+  bindAppToolchain(toolchain: WorkspaceDependenciesControl): () => void { return this.appProjects.bindToolchain(toolchain); }
 
   setRuntimeMutationCoordinator(coordinator: PluginRuntimeMutationCoordinator): void {
     this.runtimeMutation = coordinator;
@@ -233,7 +237,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
       assertRepositorySnapshot(options, sourceBundle.bundleHash);
       const index = await this.readIndex();
       if (index.plugins.some((plugin) => plugin.id === manifest.id)) {
-        throw new Error(`Plugin is already installed: ${manifest.id}`);
+        throw new Error(`Plugin is already installed: ${manifest.id}\nChoose a different plugin name and ID, then install again.`);
       }
       const existingSkillIds = new Set((await this.skills.listSkills()).skills.map((skill) => skill.id));
       const conflictingSkill = manifest.skillEntries.find((skill) => existingSkillIds.has(skill.id));
@@ -308,9 +312,11 @@ export class FilePluginBundleStore implements PluginBundleStore {
           throw new Error('Plugin bundle changed while staging the install.');
         }
         if (options.trustExtension && record.extension) {
+          record.reactAppBuilds = await this.appProjects.prepare(stagedPluginRecord(record, stagingPath), options.signal);
           await this.runtimeMutation.validatePluginActivation(stagedPluginRecord(record, stagingPath));
           await assertStagedBundleUnchanged(stagingPath, stagedBundle.bundleHash);
         }
+        options.signal?.throwIfAborted();
         await renameWithRetry(stagingPath, installPath);
         installActivated = true;
         for (const ownership of mcpOwnership) {
@@ -336,6 +342,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
         await Promise.allSettled([
           rm(stagingPath, { force: true, recursive: true }),
           ...(installActivated ? [rm(installPath, { force: true, recursive: true })] : []),
+          this.appProjects.remove(record.id),
         ]);
         throw error;
       } finally {
@@ -383,6 +390,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
       let staged = true;
       const finishRuntimeMutation = await this.runtimeMutation.beginPluginMutation(plugin.id);
       let finishPluginDirectoryMutation: (() => Promise<void>) | undefined;
+      let retainedBuilds = plugin.reactAppBuilds;
 
       try {
         finishPluginDirectoryMutation = this.skills.beginPluginDirectoryMutation(plugin.installPath);
@@ -515,9 +523,15 @@ export class FilePluginBundleStore implements PluginBundleStore {
         };
 
         if (options.trustExtension && record.extension) {
+          // Reuse hash-matched approved output so a failed update cannot delete the old page's cache.
+          record.reactAppBuilds = await this.appProjects.prepare({
+            ...stagedPluginRecord(record, stagingPath),
+            reactAppBuilds: plugin.reactAppBuilds,
+          }, options.signal);
           await this.runtimeMutation.validatePluginActivation(stagedPluginRecord(record, stagingPath));
           await assertStagedBundleUnchanged(stagingPath, stagedBundle.bundleHash);
         }
+        options.signal?.throwIfAborted();
 
         let oldDirectoryMoved = false;
         let newDirectoryActivated = false;
@@ -554,6 +568,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
             version: 1,
             plugins: index.plugins.map((item) => item.id === plugin.id ? record : item),
           } satisfies PluginIndexFile);
+          retainedBuilds = record.reactAppBuilds;
         } catch (error) {
           const rollbackErrors: unknown[] = [];
           if (hookSaveStarted) {
@@ -599,6 +614,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
           throw error;
         }
 
+        await this.appProjects.retain(record).catch(error => console.warn('Could not prune application builds:', error));
         await rm(backupPath, { recursive: true, force: true }).catch(() => undefined);
         await Promise.allSettled(
           [...new Set([...plugin.mcpServers.map(({ key }) => key), ...nextMcpInputs.map(({ key }) => key)])]
@@ -609,6 +625,10 @@ export class FilePluginBundleStore implements PluginBundleStore {
           installedMcpServers,
           reusedMcpServers,
         };
+      } catch (error) {
+        await this.appProjects.retain({ id: plugin.id, reactAppBuilds: retainedBuilds })
+          .catch(cleanup => console.warn('Could not prune application builds:', cleanup));
+        throw error;
       } finally {
         if (staged) await rm(stagingPath, { recursive: true, force: true }).catch(() => undefined);
         try {
@@ -713,6 +733,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
       }
       if (directoryMoved) await rm(removalPath, { recursive: true, force: true }).catch(() => undefined);
       await Promise.allSettled(plugin.mcpServers.map(({ key }) => this.mcpClient.invalidateServer(key)));
+      await this.appProjects.remove(plugin.id).catch(error => console.warn('[plugin-apps] Could not remove app cache', error));
       return { pluginId: plugin.id, removedMcpServers, preservedMcpServers };
     });
   }
@@ -758,10 +779,16 @@ export class FilePluginBundleStore implements PluginBundleStore {
           delete extension.trustedHash;
         }
 
+        const reactAppBuilds = trusted ? await this.appProjects.prepare({ ...plugin, extension }) : plugin.reactAppBuilds;
+        if (trusted) await assertStagedBundleUnchanged(plugin.installPath, extension.trustedHash!);
         await writeJsonFile(this.indexPath, {
           version: 1,
-          plugins: index.plugins.map((item) => item.id === id ? { ...item, extension } : item),
+          plugins: index.plugins.map((item) => item.id === id ? { ...item, extension, reactAppBuilds } : item),
         } satisfies PluginIndexFile);
+        await this.appProjects.retain({ id, reactAppBuilds }).catch(error => console.warn('Could not prune application builds:', error));
+      } catch (error) {
+        await this.appProjects.retain(plugin).catch(cleanup => console.warn('Could not prune application builds:', cleanup));
+        throw error;
       } finally {
         await finishRuntimeMutation();
       }
@@ -792,53 +819,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
   async readTrustedRendererUiDocument(pluginId: string, contributionId: string) {
     const plugin = (await this.readIndex()).plugins.find((item) => item.id === normalizePluginId(pluginId));
     if (!plugin?.extension) throw new Error(`Extension plugin is not installed: ${pluginId}`);
-    if (!plugin.extension.capabilities.includes('ui') || !plugin.extension.trustedHash) {
-      throw new Error(`Extension bundle is not trusted for Renderer UI: ${plugin.id}`);
-    }
-    const rendererUi = parseRuntimePluginUiManifest(plugin.extension.rendererUi);
-    const contribution = rendererUi.contributions.find((candidate) => (
-      candidate.id === contributionId
-      && candidate.slot === 'renderer.plugin.page'
-      && candidate.document
-    ));
-    if (!contribution?.document) {
-      throw new Error(`Sandboxed Plugin page not found: ${plugin.id}/${contributionId}`);
-    }
-
-    const resourceIds = [
-      contribution.document.htmlResourceId,
-      contribution.document.cssResourceId,
-      contribution.document.jsResourceId,
-    ].filter((value): value is string => Boolean(value));
-    const resources = resourceIds.map((resourceId) => {
-      const resource = plugin.resources.find((candidate) => candidate.id === resourceId);
-      if (!resource) throw new Error(`Plugin UI resource not found: ${plugin.id}/${resourceId}`);
-      return resource;
-    });
-    const snapshot = await readBundleFileSnapshot(
-      plugin.installPath,
-      resources.map((resource) => resource.path),
-    );
-    if (snapshot.bundleHash !== plugin.extension.trustedHash) {
-      throw new Error(`Extension bundle is no longer trusted: ${plugin.id}`);
-    }
-
-    const sourceById = new Map(resources.map((resource) => {
-      const key = path.normalize(resource.path).split(path.sep).join('/');
-      const content = snapshot.files.get(key);
-      if (!content) throw new Error(`Plugin UI resource was not captured: ${plugin.id}/${resource.id}`);
-      return [resource.id, decodePluginUiText(content, resource.id)] as const;
-    }));
-    const source = parseSandboxedUiSource({
-      html: sourceById.get(contribution.document.htmlResourceId) ?? '',
-      css: contribution.document.cssResourceId
-        ? sourceById.get(contribution.document.cssResourceId) ?? ''
-        : '',
-      js: contribution.document.jsResourceId
-        ? sourceById.get(contribution.document.jsResourceId) ?? ''
-        : '',
-    }, 'Plugin page source');
-    return Object.freeze({ revision: snapshot.bundleHash, ...source });
+    return readPluginUiDocument(plugin, contributionId, this.appProjects);
   }
 
   async readItemContent(

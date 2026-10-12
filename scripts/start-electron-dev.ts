@@ -29,6 +29,7 @@ function runPnpm(args: string[]): void {
 
 runPnpm(['build:contracts']);
 runPnpm(['build:feature-core']);
+runPnpm(['build:app-sdk']);
 runPnpm(['build:features']);
 runPnpm(['build:runtime']);
 if (process.platform === 'win32' && process.arch === 'x64') {

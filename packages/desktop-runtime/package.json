@@ -10,6 +10,7 @@
     "setsuna-desktop-runtime": "dist/cli.js"
   },
   "dependencies": {
+    "vite": "^6.0.5",
     "@setsuna-desktop/contracts": "workspace:*",
     "@setsuna-desktop/feature-core": "workspace:*",
     "@setsuna-desktop/feature-approval-review": "workspace:*",

@@ -55,9 +55,10 @@ function rendererUiSchema(language?: RuntimeInterfaceLanguage): Record<string, u
     description: [
       text('Renderer UI v2 supports three modes.', 'Renderer UI v2 支持三种模式。'),
       text('webpage opens an existing HTTP(S) website directly in the native browser from a sidebar entry. Use webpage.url for website shortcuts; no iframe or HTML/CSS/JS resources are needed.', 'webpage 从侧栏入口直接在原生浏览器中打开已有 HTTP(S) 网站。网站快捷入口使用 webpage.url，无需 iframe 或 HTML/CSS/JS 资源。'),
+      text('For new local apps, reactApp declares an independent React/Vite project with root, entry, optional routes and actionIds. Submit multi-file TSX and package.json; approved install/update prepares default React/Router/Lucide packages, @setsuna/app components/styles and additional browser-compatible registry packages. Normal opens read compiled cache. Package scripts and custom build configurations do not run.', '新建本地应用使用 reactApp 声明独立 React/Vite 项目：root、entry、可选 routes 和 actionIds。提交多文件 TSX 和 package.json；获批安装/更新时准备默认 React/Router/Lucide 包、@setsuna/app 组件/样式及其他浏览器兼容 registry 包，普通打开读取构建缓存，不运行包脚本或自定义构建配置。'),
       text('tree is a bounded host-rendered UI.', "tree 是由宿主渲染的受限 UI。"),
-      text('document is a local full-page app backed by HTML/CSS/JS resources on its own origin, with an entry below Plugins in the left sidebar. Use it for editable tables, forms, charts and custom layouts.', 'document 是具有独立来源、占满主区域的本地 HTML/CSS/JS 应用，入口位于左侧栏插件下方。可用于可编辑表格、表单、图表和自定义布局。'),
-      text('Trusted document apps can call all backend APIs via window.setsunaUI.runtime.request({path,method,body}), returning {ok,status,data}. Worker handlers use context.runtime.request. No extra capability, origin allowlist or active project is required. Inspect /v1/runtime-api with read_runtime_api before using existing projects or conversations.', '已信任的 document 本地应用通过 window.setsunaUI.runtime.request({path,method,body}) 调用全部后端 API，返回 {ok,status,data}；worker handler 使用 context.runtime.request。无需额外 capability、origin 白名单或当前项目。复用已有项目/对话前先用 read_runtime_api 读取 /v1/runtime-api。'),
+      text('document preserves existing HTML/CSS/JS full-page applications on their own origin.', 'document 保持现有独立来源的 HTML/CSS/JS 全页应用兼容。'),
+      text('Trusted document/reactApp apps can call all backend APIs via window.setsunaUI.runtime.request({path,method,body}), returning {ok,status,data}; React uses requestRuntime from @setsuna/app. Worker handlers use context.runtime.request. No extra capability, origin allowlist or active project is required. Inspect /v1/runtime-api with read_runtime_api before using existing projects or conversations.', '已信任的 document/reactApp 本地应用通过 window.setsunaUI.runtime.request({path,method,body}) 调用全部后端 API，返回 {ok,status,data}；React 可从 @setsuna/app 导入 requestRuntime；worker handler 使用 context.runtime.request。无需额外 capability、origin 白名单或当前项目。复用已有项目/对话前先用 read_runtime_api 读取 /v1/runtime-api。'),
       text('A contribution must declare exactly one mode.', "每个 contribution 必须且只能声明一种模式。"),
     ].join(' '),
     properties: {
@@ -127,6 +128,17 @@ function rendererUiSchema(language?: RuntimeInterfaceLanguage): Record<string, u
               required: ['stateKey', 'scope'],
             },
             tree: rendererUiTreeSchema,
+            reactApp: {
+              type: 'object', additionalProperties: false,
+              description: text('Independent React/Vite application project. Packages are installed and the app is built during approved installation; the page reuses Plugin data, actions and permissions.', '独立 React/Vite 应用项目。获批安装时安装依赖并构建，页面复用 Plugin 数据、action 和权限。'),
+              properties: {
+                root: { type: 'string', description: text('Bundle-relative project directory. Source files do not include node_modules or build output.', 'Bundle 内的项目目录。源码快照不包含 node_modules 或构建产物。') },
+                entry: { type: 'string', description: text('Project-relative module exporting the default React page.', '项目内默认导出 React 页面的模块路径。') },
+                routes: { type: 'array', maxItems: 32, items: { type: 'object', additionalProperties: false,
+                  properties: { path: { type: 'string' }, entry: { type: 'string' } }, required: ['path', 'entry'] } },
+                actionIds: { type: 'array', maxItems: 32, items: { type: 'string' } },
+              }, required: ['root', 'entry', 'actionIds'],
+            },
             webpage: {
               type: 'object',
               additionalProperties: false,
@@ -165,6 +177,7 @@ function rendererUiSchema(language?: RuntimeInterfaceLanguage): Record<string, u
             { required: ['tree'] },
             { required: ['document'] },
             { required: ['webpage'] },
+            { required: ['reactApp'] },
           ],
         },
       },
