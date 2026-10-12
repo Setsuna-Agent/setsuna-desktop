@@ -1,5 +1,5 @@
-import { Button, MenuSurface, Tooltip } from '@setsuna-desktop/renderer-ui';
-import { Bug, ChevronDown, FileDiff, FolderOpen, GitBranch, MessageSquare, Plus, SquareTerminal } from 'lucide-react';
+import { Button, Tooltip } from '@setsuna-desktop/renderer-ui';
+import { ChevronDown, Plus } from 'lucide-react';
 import {
   useEffect,
   useRef,
@@ -10,12 +10,8 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
-import { createPortal } from 'react-dom';
-import { BrowserFeatureIcon } from '../../composition/BrowserWorkspaceFeatureBoundary.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
-import type { MessageKey } from '../../shared/i18n/messages.js';
-import type { KeyboardShortcutCommandId } from '../../shared/shortcuts/keyboardShortcutCommands.js';
-import { ShortcutHint, ShortcutTooltip, ShortcutTooltipContent } from '../../shared/ui/ShortcutTooltip.js';
+import { ShortcutTooltip, ShortcutTooltipContent } from '../../shared/ui/ShortcutTooltip.js';
 import { usePanelTabCloseTransition } from './hooks/usePanelTabCloseTransition.js';
 import { DesktopPanelIcon, desktopPanelTitle } from './PanelChrome.js';
 import { PanelPlacementIcon } from './PanelPlacementIcon.js';
@@ -27,30 +23,6 @@ import {
 } from './model.js';
 
 export type DesktopPanelPlacement = 'side' | 'bottom';
-
-const panelLauncherItems: Array<{ key: DesktopPanelType; labelKey: MessageKey; icon: JSX.Element }> = [
-  { key: 'review', labelKey: 'workspace.panel.launcher.review', icon: <FileDiff size={14} /> },
-  { key: 'changes', labelKey: 'workspace.panel.launcher.changes', icon: <GitBranch size={14} /> },
-  { key: 'files', labelKey: 'workspace.panel.launcher.files', icon: <FolderOpen size={14} /> },
-  { key: 'terminal', labelKey: 'workspace.panel.launcher.terminal', icon: <SquareTerminal size={14} /> },
-  { key: 'chat', labelKey: 'workspace.panel.launcher.sideChat', icon: <MessageSquare size={14} /> },
-  {
-    key: 'browser',
-    labelKey: 'workspace.panel.launcher.browser',
-    icon: <BrowserFeatureIcon size={14} />,
-  },
-  { key: 'conversation-debug', labelKey: 'workspace.panel.launcher.conversationDebug', icon: <Bug size={14} /> },
-];
-
-const panelLauncherShortcutCommands: Partial<Record<DesktopPanelType, KeyboardShortcutCommandId>> = {
-  browser: 'workspace.openBrowser',
-  chat: 'workspace.openSideChat',
-  changes: 'workspace.openChanges',
-  'conversation-debug': 'workspace.openConversationDebug',
-  files: 'workspace.openFiles',
-  review: 'workspace.openReview',
-  terminal: 'workspace.openTerminal',
-};
 
 type PanelPointerDrag = {
   active: boolean;
@@ -90,20 +62,17 @@ type PanelCrossSlotDropTarget = {
 };
 
 const PANEL_DRAG_START_DISTANCE = 4;
-const PANEL_LAUNCHER_MENU_WIDTH = 276;
-const PANEL_LAUNCHER_VIEWPORT_INSET = 8;
 const PANEL_TAB_EXIT_ANIMATION_NAME = 'desktop-panel-tab-exit';
 
 export function DesktopPanelHeader({
   actions,
   activePanel,
   activePanelId,
-  availablePanelTypes,
   bottomBarActive = false,
   onClose,
   onClosePanel,
   onMovePanel,
-  onOpenPanel,
+  onAddPanel,
   onReorderPanels,
   onSelectPanel,
   onToggleBottomTerminal,
@@ -115,7 +84,6 @@ export function DesktopPanelHeader({
   actions?: ReactNode;
   activePanel: DesktopPanelType;
   activePanelId?: string | null;
-  availablePanelTypes?: DesktopPanelType[];
   bottomBarActive?: boolean;
   onClose: () => void;
   onClosePanel?: (panelId: string) => void;
@@ -125,7 +93,7 @@ export function DesktopPanelHeader({
     targetPanelId: string | null,
     position: DesktopPanelDropPlacement,
   ) => void;
-  onOpenPanel?: (panel: DesktopPanelType) => void;
+  onAddPanel?: () => void;
   onReorderPanels?: (panelId: string, targetPanelId: string, placement: DesktopPanelDropPlacement) => void;
   onSelectPanel?: (panelId: string) => void;
   onToggleBottomTerminal?: () => void;
@@ -135,17 +103,12 @@ export function DesktopPanelHeader({
   isFileDirty?: (path: string, rootId?: string) => boolean;
 }) {
   const { t } = useI18n();
-  const [launcherOpen, setLauncherOpen] = useState(false);
-  const [launcherPosition, setLauncherPosition] = useState({ left: 0, top: 0 });
   const [dragOverlay, setDragOverlay] = useState<PanelDragOverlay | null>(null);
   const pointerDragRef = useRef<PanelPointerDrag | null>(null);
   const dragPreviewRef = useRef<HTMLSpanElement | null>(null);
   const headerRef = useRef<HTMLDivElement | null>(null);
   const suppressNextClickRef = useRef(false);
   const tabsRef = useRef<HTMLSpanElement | null>(null);
-  const launcherRef = useRef<HTMLSpanElement | null>(null);
-  const launcherButtonRef = useRef<HTMLButtonElement | null>(null);
-  const launcherMenuRef = useRef<HTMLDivElement | null>(null);
   const {
     closingPanelWidths,
     finishPanelClose,
@@ -153,25 +116,11 @@ export function DesktopPanelHeader({
   } = usePanelTabCloseTransition(onClosePanel);
   const activeId = activePanelId || activePanel;
   const tabPanels = panels?.length ? panels : [{ id: activeId, type: activePanel }];
-  const availableTypeSet = new Set(availablePanelTypes || panelLauncherItems.map((item) => item.key));
-  const hasReviewPanel = tabPanels.some((panel) => panel.type === 'review');
-  const hasFilesPanel = tabPanels.some((panel) => panel.type === 'files');
-  const launcherItems = panelLauncherItems.filter(
-    (item) => availableTypeSet.has(item.key)
-      && (item.key !== 'review' || !hasReviewPanel)
-      && (item.key !== 'changes' || !tabPanels.some((panel) => panel.type === 'changes'))
-      && (item.key !== 'files' || !hasFilesPanel),
-  );
+  const addPanelLabel = t(placement === 'side' ? 'workspace.panel.openOverview' : 'workspace.panel.newTerminal');
   const sortable = Boolean(onReorderPanels && tabPanels.length > 1);
   const canDragPanel = (panel: DesktopPanelTab) =>
     sortable || Boolean(onMovePanel && canMoveDesktopPanelAcrossSlots(panel, tabPanels));
   const draggedPanelId = dragOverlay?.panel.id ?? null;
-
-  const updateLauncherPosition = () => {
-    const rect = launcherButtonRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    setLauncherPosition(panelLauncherMenuPosition(rect, window.innerWidth, pageScaleInverse()));
-  };
 
   const suppressFollowingClick = () => {
     suppressNextClickRef.current = true;
@@ -234,7 +183,6 @@ export function DesktopPanelHeader({
     drag.active = true;
     drag.previewLeft = position.left;
     drag.previewTop = position.top;
-    setLauncherOpen(false);
     setDragOverlay({
       ...position,
       panel: drag.panel,
@@ -265,30 +213,6 @@ export function DesktopPanelHeader({
       updateSameSlotReorderPreview(drag);
     });
   };
-
-  useEffect(() => {
-    if (!launcherOpen) return undefined;
-    updateLauncherPosition();
-    const handlePointerDown = (event: PointerEvent) => {
-      if (launcherRef.current?.contains(event.target as Node)) return;
-      if (launcherMenuRef.current?.contains(event.target as Node)) return;
-      setLauncherOpen(false);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setLauncherOpen(false);
-    };
-    const handleReposition = () => updateLauncherPosition();
-    window.addEventListener('pointerdown', handlePointerDown);
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('resize', handleReposition);
-    window.addEventListener('scroll', handleReposition, true);
-    return () => {
-      window.removeEventListener('pointerdown', handlePointerDown);
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('resize', handleReposition);
-      window.removeEventListener('scroll', handleReposition, true);
-    };
-  }, [launcherOpen]);
 
   useEffect(() => {
     return () => {
@@ -482,59 +406,17 @@ export function DesktopPanelHeader({
               </span>
             );
           })}
-          {onOpenPanel && launcherItems.length ? (
-            <span className="desktop-panel-launcher" ref={launcherRef}>
+          {onAddPanel ? (
+            <span className="desktop-panel-launcher">
               <Button variant="ghost"
-                ref={launcherButtonRef}
-                aria-expanded={launcherOpen}
-                aria-haspopup="menu"
-                aria-label={t('workspace.panel.add')}
+                aria-label={addPanelLabel}
+                title={addPanelLabel}
                 className="app-shell-icon-control chat-file-review-panel__heading-action"
                 type="button"
-                onClick={() => {
-                  updateLauncherPosition();
-                  setLauncherOpen((value) => !value);
-                }}
+                onClick={() => onAddPanel()}
               >
                 <Plus size={14} />
               </Button>
-              {launcherOpen
-                ? createPortal(
-                    <MenuSurface
-                      className="desktop-panel-launcher-menu desktop-panel-launcher-menu--native"
-                      ref={launcherMenuRef}
-                      role="menu"
-                      style={{ left: launcherPosition.left, top: launcherPosition.top }}
-                    >
-                      {launcherItems.map((item) => {
-                        const shortcutCommandId = panelLauncherShortcutCommands[item.key];
-                        return (
-                          <Button variant="ghost"
-                            key={item.key}
-                            type="button"
-                            role="menuitem"
-                            onClick={() => {
-                              setLauncherOpen(false);
-                              onOpenPanel(item.key);
-                            }}
-                          >
-                            <span className="desktop-panel-launcher-menu__item-main">
-                              {item.icon}
-                              <span>{t(item.labelKey)}</span>
-                            </span>
-                            {shortcutCommandId ? (
-                              <ShortcutHint
-                                className="desktop-panel-launcher-menu__shortcut"
-                                commandId={shortcutCommandId}
-                              />
-                            ) : null}
-                          </Button>
-                        );
-                      })}
-                    </MenuSurface>,
-                    document.body,
-                  )
-                : null}
             </span>
           ) : null}
         </span>
@@ -617,22 +499,6 @@ export function DesktopPanelHeader({
       ) : null}
     </div>
   );
-}
-
-export function panelLauncherMenuPosition(
-  rect: Pick<DOMRect, 'bottom' | 'left'>,
-  viewportWidth: number,
-  scaleInverse = 1,
-): { left: number; top: number } {
-  const viewportCssWidth = viewportWidth * scaleInverse;
-  const rectLeftCss = rect.left * scaleInverse;
-  const rectBottomCss = rect.bottom * scaleInverse;
-  const maxLeft = Math.max(PANEL_LAUNCHER_VIEWPORT_INSET, viewportCssWidth - PANEL_LAUNCHER_MENU_WIDTH - PANEL_LAUNCHER_VIEWPORT_INSET);
-  const preferredLeft = rectLeftCss;
-  return {
-    left: Math.min(Math.max(PANEL_LAUNCHER_VIEWPORT_INSET, preferredLeft), maxLeft),
-    top: rectBottomCss + 6,
-  };
 }
 
 export function panelDragPreviewPosition(

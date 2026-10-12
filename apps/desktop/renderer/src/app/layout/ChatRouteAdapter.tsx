@@ -266,7 +266,6 @@ export function ChatRouteAdapter({
       bottomPanelVisible: workspacePanels.bottomPanelVisible,
       browserPanelInstances: workspacePanels.browserPanelInstances,
       conversationDebugEnabled: workspacePanels.conversationDebugEnabled,
-      panelLauncherTypes: workspacePanels.panelLauncherTypes,
       sideActivePanel: workspacePanels.sideActivePanel,
       sidePanelPresent: workspacePanels.sidePanelPresent,
       sidePanelSlot: workspacePanels.sidePanelSlot,
@@ -308,10 +307,7 @@ export function ChatRouteAdapter({
       onMoveBottomPanel: (panelId, targetPlacement, targetPanelId, placement) => {
         workspacePanels.moveDesktopPanel('bottom', panelId, targetPlacement, targetPanelId, placement);
       },
-      onOpenBottomPanel: async (panelType) => {
-        if (panelType === 'files' && !await projectWorkspace.setFilePreview(null)) return;
-        workspacePanels.openDesktopPanel('bottom', panelType);
-      },
+      onNewTerminal: () => workspacePanels.openDesktopPanel('bottom', 'terminal'),
       onOpenBrowser: workspacePanels.openBrowserPanel,
       onOpenConversationDebug: () => workspacePanels.openDesktopPanel('side', 'conversation-debug'),
       onOpenChangesPanel: () => workspacePanels.openDesktopPanel('side', 'changes'),

@@ -133,7 +133,6 @@ export type DesktopWorkspacePanelModel = Readonly<{
     bottomPanelVisible: boolean;
     browserPanelInstances: DesktopBrowserPanelInstance[];
     conversationDebugEnabled: boolean;
-    panelLauncherTypes: DesktopPanelType[];
     sideActivePanel?: DesktopPanelTab | null;
     sidePanelPresent: boolean;
     sidePanelSlot: DesktopPanelSlotState;
@@ -164,7 +163,7 @@ export type DesktopWorkspacePanelModel = Readonly<{
     onDeleteEntry(entryPath: string): Promise<boolean>;
     onExternalOpenFile(filePath?: string | null, line?: number): void;
     onMoveBottomPanel(panelId: string, targetPlacement: DesktopPanelSlot, targetPanelId: string | null, placement: DesktopPanelDropPlacement): void;
-    onOpenBottomPanel(panel: DesktopPanelType): void;
+    onNewTerminal(): void;
     onOpenBrowser(url?: string): void;
     onOpenConversationDebug(): void;
     onOpenChangesPanel?(): void;
@@ -414,7 +413,6 @@ export function DesktopWorkspacePanelLayer({
           <Suspense fallback={null}>
             <BottomToolsPanel
               activePanel={panels.bottomActivePanel}
-              availablePanelTypes={panels.panelLauncherTypes}
               panels={panels.bottomPanelSlot.panels}
               isFileDirty={context.isFileDirty}
               resizeMax={layout.terminalMaxHeight}
@@ -424,7 +422,7 @@ export function DesktopWorkspacePanelLayer({
               onClosePanel={(panelId) => actions.onClosePanel('bottom', panelId)}
               onHide={actions.onHideBottomSlot}
               onMovePanel={actions.onMoveBottomPanel}
-              onOpenPanel={actions.onOpenBottomPanel}
+              onNewTerminal={actions.onNewTerminal}
               onReorderPanels={actions.onReorderBottomPanels}
               onResizeStart={layout.onTerminalResizeStart}
               onResizeStep={layout.onTerminalResizeStep}

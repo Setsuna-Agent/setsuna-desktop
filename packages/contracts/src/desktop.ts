@@ -26,6 +26,8 @@ export type DesktopApplicationMenuInput = {
   items: DesktopApplicationMenuItem[];
 };
 
+export type DesktopTextEditCommand = 'cut' | 'copy' | 'paste';
+
 export const DESKTOP_CLIPBOARD_WRITE_PATH = '/v1/clipboard/write-text';
 
 export type DesktopClipboardWriteInput = Readonly<{ text: string }>;
@@ -177,6 +179,7 @@ export type SetsunaDesktopBridge = {
   runtime: DesktopRuntimeBridge;
   windowControls: {
     showApplicationMenu(input: DesktopApplicationMenuInput): Promise<string | null>;
+    executeTextEdit(command: DesktopTextEditCommand): Promise<boolean>;
     openThread(threadId: string): Promise<void>;
     getInitialThreadId(): Promise<string | null>;
     minimize(): Promise<boolean>;

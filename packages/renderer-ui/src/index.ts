@@ -25,3 +25,4 @@ export { Skeleton } from './skeleton.js';
 export { Tabs, TabsList, TabsTrigger } from './tabs/tabs.js';
 export { Table, type TableColumn, type TableProps } from './table.js';
 export { DocumentMarkdown, documentUrl, type DocumentMarkdownProps } from './document-markdown.js';
+export { MermaidDiagram } from './mermaid-diagram.js';

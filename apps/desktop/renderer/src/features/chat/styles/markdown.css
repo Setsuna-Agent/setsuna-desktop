@@ -134,6 +134,15 @@ a.chat-markdown__file-link:focus-visible {
   line-height: 18px;
 }
 
+.chat-code-highlighter--diagram {
+  border: 1px solid var(--app-border);
+  background: var(--app-surface);
+}
+
+.chat-code-highlighter--diagram .chat-code-highlighter__header {
+  padding: 8px 12px 0;
+}
+
 .chat-code-highlighter__language {
   min-width: 0;
   overflow: hidden;

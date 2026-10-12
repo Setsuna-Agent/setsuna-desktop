@@ -211,3 +211,40 @@
   font-family: var(--app-code-font-family);
   overflow-x: auto;
 }
+
+.sd-mermaid-diagram {
+  display: flex;
+  justify-content: center;
+  max-width: 100%;
+  padding: 20px 24px 24px;
+  box-sizing: border-box;
+}
+
+.sd-mermaid-diagram > .sd-image {
+  display: block;
+  min-width: 0;
+}
+
+.chat-markdown .sd-mermaid-diagram img {
+  max-width: 100%;
+  height: auto;
+  margin: 0;
+  border-radius: 0;
+  object-fit: contain;
+}
+
+.sd-document-markdown .sd-mermaid-diagram {
+  margin-bottom: var(--chat-markdown-block-gap, 0.9em);
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface);
+}
+
+/* Mermaid needs connected, measurable SVG nodes during layout. */
+.sd-mermaid-measure {
+  position: fixed;
+  top: 0;
+  left: -100000px;
+  visibility: hidden;
+  pointer-events: none;
+}

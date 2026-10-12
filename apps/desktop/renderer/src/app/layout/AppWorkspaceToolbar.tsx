@@ -39,7 +39,7 @@ export function AppWorkspaceToolbar({
   );
   const sidePanels = workspacePanels.sidePanelSlot.panels;
   const activePanel = sidePanels.find((panel) => panel.id === workspacePanels.sidePanelSlot.active) ?? null;
-  if (activePanel?.type === 'overview') {
+  if (activePanel?.type === 'overview' && sidePanels.length === 1) {
     return (
       <WorkspaceOverviewToolbar
         actions={actions}
@@ -54,37 +54,11 @@ export function AppWorkspaceToolbar({
     <WorkspaceTopbar
       actions={actions}
       activePanelId={workspacePanels.sidePanelSlot.active}
-      availablePanelTypes={workspacePanels.panelLauncherTypes}
       panels={workspacePanels.sidePanelSlot.panels}
       isFileDirty={projectWorkspace.isFileDirty}
       bottomPanelOpen={workspacePanels.bottomPanelVisible}
       onClosePanel={(panelId) => workspacePanels.closeDesktopPanelItem('side', panelId)}
-      onOpenBrowser={() => {
-        workspacePanels.openBrowserPanel();
-      }}
-      onOpenConversationDebug={() => {
-        workspacePanels.closeWorkspaceMenus();
-        workspacePanels.openDesktopPanel('side', 'conversation-debug');
-      }}
-      onOpenFilesPanel={async () => {
-        workspacePanels.closeWorkspaceMenus();
-        if (!await projectWorkspace.setFilePreview(null)) return;
-        workspacePanels.openDesktopPanel('side', 'files');
-      }}
-      onOpenReviewPanel={() => {
-        workspacePanels.closeWorkspaceMenus();
-        workspacePanels.openDesktopPanel('side', 'review');
-        void workspacePanels.loadReviewState();
-      }}
-      onOpenChangesPanel={() => workspacePanels.openDesktopPanel('side', 'changes')}
-      onOpenSideChat={() => {
-        workspacePanels.closeWorkspaceMenus();
-        workspacePanels.openDesktopPanel('side', 'chat');
-      }}
-      onOpenTerminalPanel={() => {
-        workspacePanels.closeWorkspaceMenus();
-        workspacePanels.openDesktopPanel('side', 'terminal');
-      }}
+      onOpenOverview={() => workspacePanels.openDesktopPanel('side', 'overview')}
       onMovePanel={(panelId, targetPlacement, targetPanelId, placement) => {
         workspacePanels.moveDesktopPanel('side', panelId, targetPlacement, targetPanelId, placement);
       }}

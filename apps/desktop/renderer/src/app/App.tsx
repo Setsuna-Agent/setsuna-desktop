@@ -7,6 +7,7 @@ import { Button, EmptyState, StatusBadge } from '../shared/ui/primitives.js';
 import { interfaceLanguageFromConfig, useI18n } from '../shared/i18n/I18nProvider.js';
 import { useDesktopAppController } from './controller/useDesktopAppController.js';
 import { AppReadyLayout } from './layout/AppReadyLayout.js';
+import { AppTextContextMenu } from './layout/AppTextContextMenu.js';
 import { DesktopDataRootGate } from './layout/DesktopDataRootGate.js';
 import { ShellFrame } from './layout/ShellFrame.js';
 import { DesktopDataRootProvider } from './providers/DesktopDataRootProvider.js';
@@ -22,6 +23,7 @@ export function App() {
     <ToastProvider>
       <ReviewFeatureHostBoundary>
         <AppErrorBoundary>
+          <AppTextContextMenu />
           <DesktopDataRootProvider>
             <DesktopDataRootGate>
               <ThreadFileChangesProvider>

@@ -1,4 +1,4 @@
-import { Button } from '@setsuna-desktop/renderer-ui';
+import { Button, MermaidDiagram } from '@setsuna-desktop/renderer-ui';
 import { Check, Copy } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { CodeFileView } from '../../../shared/code/PierreCode.js';
@@ -48,6 +48,7 @@ const codeLanguageDisplayNames: Record<string, string> = {
   jsx: 'JSX',
   json: 'JSON',
   markdown: 'Markdown',
+  mermaid: 'Mermaid',
   python: 'Python',
   rust: 'Rust',
   text: 'Plain Text',
@@ -61,19 +62,28 @@ const codeLanguageDisplayNames: Record<string, string> = {
 export function MarkdownCodeBlock({ code, language = '' }: MarkdownCodeBlockProps) {
   const copiedCode = normalizeMarkdownCodeBlockContents(code);
   const normalizedLanguage = normalizeMarkdownCodeLanguage(language);
-  const shouldHighlight = normalizedLanguage.length > 0 && shouldSyntaxHighlightMarkdownCode(copiedCode);
+  const isDiagram = normalizedLanguage === 'mermaid';
+  const shouldHighlight = !isDiagram && normalizedLanguage.length > 0 && shouldSyntaxHighlightMarkdownCode(copiedCode);
+  const className = [
+    'chat-code-highlighter',
+    !shouldHighlight ? 'chat-code-highlighter--plain' : '',
+    isDiagram ? 'chat-code-highlighter--diagram' : '',
+  ].filter(Boolean).join(' ');
+  const source = (
+    <CodeFileView
+      contents={copiedCode}
+      disableBackground
+      language={shouldHighlight ? normalizedLanguage : 'text'}
+      name={`snippet.${normalizedLanguage || 'txt'}`}
+      showLineNumbers={false}
+      style={chatCodeSurfaceStyle}
+      unsafeCSS={chatCodeUnsafeCSS}
+    />
+  );
   return (
-    <div className={`chat-code-highlighter ${shouldHighlight ? '' : 'chat-code-highlighter--plain'}`.trim()}>
+    <div className={className}>
       <CodeBlockHeader code={copiedCode} language={language} />
-      <CodeFileView
-        contents={copiedCode}
-        disableBackground
-        language={shouldHighlight ? normalizedLanguage : 'text'}
-        name={`snippet.${normalizedLanguage || 'txt'}`}
-        showLineNumbers={false}
-        style={chatCodeSurfaceStyle}
-        unsafeCSS={chatCodeUnsafeCSS}
-      />
+      {isDiagram ? <MermaidDiagram code={copiedCode} fallback={source} /> : source}
     </div>
   );
 }

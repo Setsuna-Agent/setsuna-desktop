@@ -133,7 +133,14 @@ function handleMenuControlNavigation(event: KeyboardEvent<HTMLDivElement>, contr
 }
 
 /** Electron file and editor surfaces report viewport coordinates instead of a DOM trigger. */
-export function PointMenu({ x, y, menu, modal = false, onClose }: { x: number; y: number; menu: MenuProps; modal?: boolean; onClose(): void }) {
+export function PointMenu({ x, y, menu, modal = false, onClose, onCloseAutoFocus }: {
+  x: number;
+  y: number;
+  menu: MenuProps;
+  modal?: boolean;
+  onClose(): void;
+  onCloseAutoFocus?(event: Event): void;
+}) {
   const returnFocus = useRef(document.activeElement as HTMLElement | null);
   useEffect(() => {
     window.addEventListener('resize', onClose);
@@ -148,7 +155,12 @@ export function PointMenu({ x, y, menu, modal = false, onClose }: { x: number; y
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal container={container}>
         <DropdownMenu.Content asChild className="sd-menu" align="start" sideOffset={2} collisionPadding={8}
-          onCloseAutoFocus={(event) => { event.preventDefault(); returnFocus.current?.focus({ preventScroll: true }); }}>
+          onCloseAutoFocus={(event) => {
+            onCloseAutoFocus?.(event);
+            if (event.defaultPrevented) return;
+            event.preventDefault();
+            returnFocus.current?.focus({ preventScroll: true });
+          }}>
           <MenuSurface><MenuItems menu={menu} context={false} /></MenuSurface>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>

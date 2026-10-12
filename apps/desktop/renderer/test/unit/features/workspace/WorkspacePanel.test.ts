@@ -1,11 +1,8 @@
-import { temporaryWorkspaceProjectId, type WorkspaceFileRead, type WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { WorkspaceFileRead, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
-import {
-  WorkspaceFilePreviewContent,
-  WorkspaceOverviewPanel,
-} from '../../../../src/features/workspace/WorkspacePanel.js';
+import { describe, expect, it } from 'vitest';
+import { WorkspaceFilePreviewContent } from '../../../../src/features/workspace/WorkspacePanel.js';
 import { I18nProvider } from '../../../../src/shared/i18n/I18nProvider.js';
 
 describe('WorkspaceFilePreviewContent', () => {
@@ -52,94 +49,6 @@ describe('WorkspaceFilePreviewContent', () => {
 
 });
 
-describe('WorkspaceOverviewPanel', () => {
-  it('routes review, changes, side-chat, and browser actions without forwarding click events', () => {
-    const onOpenReviewPanel = vi.fn();
-    const onOpenChangesPanel = vi.fn();
-    const onOpenSideChat = vi.fn();
-    const onOpenBrowser = vi.fn();
-    const panel = captureWorkspaceOverviewPanel({
-      activeProject: project,
-      isGitRepository: true,
-      onOpenBrowser,
-      onOpenFilesPanel: () => undefined,
-      onOpenReviewPanel,
-      onOpenChangesPanel,
-      onOpenSideChat,
-      onOpenTerminalPanel: () => undefined,
-    });
-    const actions = panel.props.children.props.children;
-    for (const key of ['review', 'changes', 'side-chat', 'browser']) {
-      actions.find((action: { props: { 'data-workspace-overview-action': string } }) => action.props['data-workspace-overview-action'] === key).props.onClick({ type: 'click' });
-    }
-
-    expect(onOpenReviewPanel).toHaveBeenCalledWith();
-    expect(onOpenChangesPanel).toHaveBeenCalledWith();
-    expect(onOpenSideChat).toHaveBeenCalledOnce();
-    expect(onOpenBrowser).toHaveBeenCalledOnce();
-  });
-
-  it('shows conversation debug only when the developer action is provided', () => {
-    const baseProps: WorkspaceOverviewProps = {
-      activeProject: project,
-      isGitRepository: false,
-      onOpenBrowser: () => undefined,
-      onOpenFilesPanel: () => undefined,
-      onOpenReviewPanel: () => undefined,
-      onOpenSideChat: () => undefined,
-      onOpenTerminalPanel: () => undefined,
-    };
-
-    expect(renderWorkspaceOverviewPanel(baseProps)).not.toContain('对话调试');
-    expect(renderWorkspaceOverviewPanel({
-      ...baseProps,
-      onOpenConversationDebug: () => undefined,
-    })).toContain('对话调试');
-  });
-
-  it.each([false, true])('shows the changes entry only for a Git repository (isGitRepository=%s)', (isGitRepository) => {
-    const html = renderWorkspaceOverviewPanel({
-      activeProject: project,
-      isGitRepository,
-      onOpenBrowser: () => undefined,
-      onOpenFilesPanel: () => undefined,
-      onOpenReviewPanel: () => undefined,
-      onOpenChangesPanel: () => undefined,
-      onOpenSideChat: () => undefined,
-      onOpenTerminalPanel: () => undefined,
-    });
-
-    expect(html.includes('data-workspace-overview-action="changes"')).toBe(isGitRepository);
-    for (const action of ['review', 'files', 'terminal']) {
-      expect(html).toContain(`data-workspace-overview-action="${action}"`);
-    }
-  });
-
-  it('在普通对话的临时目录中开放工作区操作', () => {
-    const panel = captureWorkspaceOverviewPanel({
-      isGitRepository: false,
-      activeProject: {
-        ...project,
-        id: temporaryWorkspaceProjectId({ date: '2026-07-18', threadId: 'thread_1' }),
-        name: '临时目录',
-      },
-      onOpenBrowser: () => undefined,
-      onOpenFilesPanel: () => undefined,
-      onOpenReviewPanel: () => undefined,
-      onOpenSideChat: () => undefined,
-      onOpenTerminalPanel: () => undefined,
-    });
-    const actions = panel.props.children.props.children;
-
-    for (const key of ['review', 'files', 'terminal']) {
-      const action = actions.find((item: { props: { 'data-workspace-overview-action': string } }) => item.props['data-workspace-overview-action'] === key);
-      expect(action.props.disabled).toBe(false);
-    }
-  });
-
-});
-
-type WorkspaceOverviewProps = Parameters<typeof WorkspaceOverviewPanel>[0];
 type WorkspaceFilePreviewProps = Parameters<typeof WorkspaceFilePreviewContent>[0];
 
 function renderWorkspaceFilePreview(props: WorkspaceFilePreviewProps): string {
@@ -148,25 +57,6 @@ function renderWorkspaceFilePreview(props: WorkspaceFilePreviewProps): string {
     { initialLocale: 'zh-CN' },
     createElement(WorkspaceFilePreviewContent, props),
   ));
-}
-
-function renderWorkspaceOverviewPanel(props: WorkspaceOverviewProps): string {
-  return renderToStaticMarkup(createElement(
-    I18nProvider,
-    { initialLocale: 'zh-CN' },
-    createElement(WorkspaceOverviewPanel, props),
-  ));
-}
-
-function captureWorkspaceOverviewPanel(props: WorkspaceOverviewProps) {
-  const captured: { panel?: ReturnType<typeof WorkspaceOverviewPanel> } = {};
-  function Capture() {
-    captured.panel = WorkspaceOverviewPanel(props);
-    return captured.panel;
-  }
-  renderToStaticMarkup(createElement(I18nProvider, { initialLocale: 'zh-CN' }, createElement(Capture)));
-  if (!captured.panel) throw new Error('Workspace overview panel did not render.');
-  return captured.panel;
 }
 
 const project: WorkspaceProject = {

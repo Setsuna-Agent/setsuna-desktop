@@ -17,6 +17,7 @@ Workspace host 管理右侧/底部工作区 surface 和项目文件；Review、T
 ### 根组件
 
 - `WorkspacePanel.tsx`：右侧文件/overview/review 等主面板。
+- `WorkspaceOverviewPanel.tsx`：初始汇总目录，保留工作区快捷入口并组合 Browser Feature 的历史、书签和固定网址。
 - `BottomToolsPanel.tsx`：terminal/browser 等底部工具面板。
 - `PanelChrome.tsx` / `DesktopPanelHeader.tsx`：共享 panel 外壳。
 - `WorkspaceTopbar.tsx`：项目级工具栏。
@@ -29,6 +30,12 @@ Workspace host 管理右侧/底部工作区 surface 和项目文件；Review、T
 折叠、展开左侧栏不会更改尺寸管理模式；未手动调宽时继续等分，已有自定义宽度只按展开后的可用空间收紧。
 
 Panel 选择和 session 生命周期在 hooks，不应由各 tab 各自维护一份打开状态。
+
+右侧标签栏的「+」直接打开汇总目录作为导航标签，复用已存在的导航页；与其他页面共存时保留标签栏，方便切回。底部标签栏的「+」只新建终端，不再显示面板类型菜单。主目录是 Git 仓库或项目包含多个目录时，汇总目录保留「变更」入口；多目录项目可在变更面板内选择附加仓库，不受主目录 Git 状态限制。
+
+汇总目录的 `overview/WorkspaceOverviewHeader` 显示本地时间、日期与 Browser Feature 的搜索框。右上角 `overview/WorkspaceOverviewSettings` 提供“显示时间和搜索框”开关，默认开启；`useWorkspaceHeaderVisibility` 独立持久化该偏好并同步到其他面板和窗口，关闭时卸载整个顶部区域。时钟按分钟边界刷新，窗口重新可见时立即校时，卸载时清理计时器。搜索结果沿用工作区的浏览器打开回调。
+
+汇总目录的本地图片背景由 `overview/` 持有：用户选取 PNG/JPEG/WebP 后按最长边 1920 px 压缩为 WebP，使用宿主 IndexedDB 保存 Blob，恢复默认只删除背景。背景在面板挂载后异步读取，不参与桌面就绪；跨窗口通过 BroadcastChannel 刷新，迟到读取不覆盖新选择，替换或卸载时释放图片 URL。工具栏弹出控件支持 0–100% 背景透明度并实时预览；数值独立保存在宿主 localStorage，同步当前面板和其他窗口，拖动不会重新读取或写入图片 Blob。
 
 项目编辑器支持添加、移除和指定主要源文件夹。多目录时，文件、审查、变更和终端使用共享 `WorkspaceRootPicker`；每个面板分别记录 `rootId`，对话的 Git 控件仍使用主目录。`WorkspaceReviewScope` 为子目录注入对应的审查状态与 Git 操作上下文，审查偏好按目录隔离。
 

@@ -126,6 +126,7 @@ const dataRoot: SetsunaDesktopBridge['dataRoot'] = {
 
 const windowControls: SetsunaDesktopBridge['windowControls'] = {
   showApplicationMenu: (input) => ipcRenderer.invoke('window-control:show-application-menu', input),
+  executeTextEdit: (command) => ipcRenderer.invoke('window-control:execute-text-edit', command),
   openThread: (threadId) => ipcRenderer.invoke('window-control:open-thread', threadId),
   getInitialThreadId: () => ipcRenderer.invoke('window-control:get-initial-thread-id'),
   minimize: () => ipcRenderer.invoke('window-control:minimize'),

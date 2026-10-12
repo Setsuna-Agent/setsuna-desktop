@@ -17,6 +17,7 @@ export function registerWindowIpc({
 }: WindowIpcOptions): void {
   const channels = [
     'window-control:show-application-menu',
+    'window-control:execute-text-edit',
     'window-control:minimize',
     'window-control:toggle-maximize',
     'window-control:close',
@@ -31,6 +32,15 @@ export function registerWindowIpc({
     if (!isDesktopRendererSender(event.sender)) return null;
     const window = BrowserWindow.fromWebContents(event.sender);
     return window ? showApplicationMenu(window, input) : null;
+  });
+
+  ipcMain.handle('window-control:execute-text-edit', (event, command: unknown) => {
+    if (!isDesktopRendererSender(event.sender) || event.sender.isDestroyed()
+      || event.senderFrame !== event.sender.mainFrame) return false;
+    if (command !== 'cut' && command !== 'copy' && command !== 'paste') return false;
+    // Native editing dispatches clipboard events, including composer tag/file handling.
+    event.sender[command]();
+    return true;
   });
 
   ipcMain.handle('window-control:minimize', (event) => {

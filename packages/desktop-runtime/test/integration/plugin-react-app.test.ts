@@ -18,6 +18,10 @@ import { verifyPackagedAppCompiler } from '../support/plugin-app-compiler-packag
 const require = createRequire(import.meta.url);
 const context = { contributionId: 'notes.page', surface: 'renderer.plugin.page' as const };
 
+// Budget the full lifecycle: two app installs, ASAR compilation and repeated updates with the Mermaid SDK.
+// Individual production builds still retain their own 180 s timeout.
+const appLifecycleTimeoutMs = 240_000;
+
 it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('installs a multi-file React app with packages, routes and the existing state/action bridge; reopens from cache and preserves a failed update', async () => {
   const { root, bundleDir } = await createPluginFixture();
   const runtime = await createPluginRuntime(root);
@@ -223,4 +227,4 @@ it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('instal
     if (server) await new Promise<void>(resolve => server!.close(() => resolve()));
     await rm(root, { recursive: true, force: true });
   }
-}, 120_000);
+}, appLifecycleTimeoutMs);

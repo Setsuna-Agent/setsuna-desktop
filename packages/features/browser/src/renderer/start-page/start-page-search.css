@@ -1,0 +1,36 @@
+.browser-start-search {
+  --desktop-agent-control-hover-bg: transparent;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 600px;
+  min-height: 46px;
+  padding: 4px 10px 4px 18px;
+  border: 1px solid color-mix(in srgb, var(--app-border) 65%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-surface) 88%, transparent);
+  box-shadow: var(--app-shadow-card);
+  backdrop-filter: blur(12px);
+  box-sizing: border-box;
+}
+
+.browser-start-search:focus-within {
+  border-color: var(--app-border-strong);
+  box-shadow: 0 0 0 1px var(--app-border-strong), var(--app-shadow-card);
+}
+
+.browser-start-search__icon { flex: 0 0 auto; color: var(--app-text-muted); }
+.browser-start-search .browser-start-search__input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  font-size: 14px;
+}
+.browser-start-search .browser-start-search__submit {
+  flex: 0 0 auto;
+  color: var(--app-text-muted);
+}
+.browser-start-search .browser-start-search__submit:hover:not(:disabled) { color: var(--app-text); }
