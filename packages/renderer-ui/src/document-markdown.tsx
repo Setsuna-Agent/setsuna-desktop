@@ -1,11 +1,12 @@
-import { useMemo, useRef } from 'react';
-import ReactMarkdown, { type Components } from 'react-markdown';
+import { Children, isValidElement, useMemo, useRef, type ComponentPropsWithoutRef, type ReactNode } from 'react';
+import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import rehypeSlug from 'rehype-slug';
 import remarkGfm from 'remark-gfm';
 import remarkEmoji from 'remark-emoji';
 import { CheckField } from './selection-controls.js';
+import { MermaidDiagram } from './mermaid-diagram.js';
 
 const remarkPlugins = [remarkGfm, remarkEmoji];
 const rehypePlugins = [rehypeRaw, rehypeSlug, rehypeSanitize];
@@ -28,6 +29,7 @@ export function DocumentMarkdown({ content, baseUrl, className = '', onOpenLink 
       return target ? <img src={target} alt={alt ?? ''} loading="lazy" decoding="async" referrerPolicy="no-referrer" /> : <span>{alt || src}</span>;
     },
     input: ({ checked, disabled }) => <CheckField checked={Boolean(checked)} disabled={disabled} readOnly />,
+    pre: DocumentCodeBlock,
     table: ({ children }) => <div className="chat-markdown__table-scroll"><table>{children}</table></div>,
   }), [baseUrl, onOpenLink]);
   return <div ref={root} className={`chat-markdown sd-document-markdown ${className}`} tabIndex={0} onClick={(event) => {
@@ -45,6 +47,16 @@ export function DocumentMarkdown({ content, baseUrl, className = '', onOpenLink 
       onOpenLink(href);
     }
   }}><ReactMarkdown components={components} remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins}>{content}</ReactMarkdown></div>;
+}
+
+function DocumentCodeBlock({ children, node: _node, ...props }: ComponentPropsWithoutRef<'pre'> & ExtraProps) {
+  const source = <pre {...props}>{children}</pre>;
+  const child = Children.toArray(children)[0];
+  if (!isValidElement<{ children?: ReactNode; className?: string }>(child)) return source;
+  const language = child.props.className?.match(/language-([\w-]+)/)?.[1]?.toLowerCase();
+  return language === 'mermaid'
+    ? <MermaidDiagram code={String(child.props.children ?? '')} fallback={source} />
+    : source;
 }
 
 export function documentUrl(value: string | undefined, base?: string, image = false): string | null {

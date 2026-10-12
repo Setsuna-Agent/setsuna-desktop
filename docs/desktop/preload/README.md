@@ -22,9 +22,11 @@ Preload 是 renderer 唯一能接触 Electron IPC 的地方。它使用 `context
 | `workspaceApps` | 应用列表与打开 workspace/file | `packages/features/workspace-apps/src/{preload,main}/` |
 | `updater` | 状态、检查、下载源、安装包打开与状态事件 | `packages/features/updater/src/{preload,main}/` |
 | `windowsSandbox` | 状态检测与安装、修复、卸载 | `packages/features/windows-sandbox/src/{preload,main}/` |
-| `windowControls` | minimize/maximize/close/scale 与状态事件 | `ipc/window-ipc.ts` |
+| `windowControls` | minimize/maximize/close/scale、应用菜单、原生文本编辑与状态事件 | `ipc/window-ipc.ts` |
 
 准确方法面由 `packages/contracts/src/desktop.ts`、`http.ts` 和相关 Feature/领域 contract 定义；Updater、Workspace Apps 等 bridge 由各自 Feature contracts 定义。Host namespaces 与 Feature contributions 由 `src/composition/builtin-preload-features.ts` 组装，最后只调用一次 `contextBridge.exposeInMainWorld`。
+
+`windowControls.executeTextEdit` 只接受 `cut`、`copy`、`paste`，Main 校验调用来自登记的宿主窗口主 frame，并在该窗口执行原生编辑命令。Renderer 在菜单关闭后恢复原选区；剪贴板数据继续经过现有编辑器的 clipboard 事件，不通过此 API 直接读写。
 
 ## Runtime SSE 的细节
 

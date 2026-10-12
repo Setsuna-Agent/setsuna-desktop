@@ -161,32 +161,6 @@ export function useDesktopWorkspacePanels({
     [bottomPanelVisible, layouts, sidePanelPresent, targetIdentity],
   );
   const bottomTerminalPanelOpen = slotHasPanelType(bottomPanelSlot, 'terminal');
-  const panelLauncherTypes = useMemo(() => [
-    'chat',
-    'browser',
-    conversationDebugEnabled === true
-      && !slotHasPanelType(sidePanelSlot, 'conversation-debug')
-      && !slotHasPanelType(bottomPanelSlot, 'conversation-debug')
-      ? 'conversation-debug'
-      : null,
-    activeProject
-      && !slotHasPanelType(sidePanelSlot, 'review')
-      && !slotHasPanelType(bottomPanelSlot, 'review')
-      ? 'review'
-      : null,
-    activeProject?.path
-      && (reviewState?.isGitRepository === true || workspaceProjectRoots(activeProject).length > 1)
-      && !slotHasPanelType(sidePanelSlot, 'changes')
-      && !slotHasPanelType(bottomPanelSlot, 'changes')
-      ? 'changes'
-      : null,
-    activeProject?.path
-      && !slotHasPanelType(sidePanelSlot, 'files')
-      && !slotHasPanelType(bottomPanelSlot, 'files')
-      ? 'files'
-      : null,
-    'terminal',
-  ].filter(Boolean) as DesktopPanelType[], [activeProject, bottomPanelSlot, conversationDebugEnabled, reviewState?.isGitRepository, sidePanelSlot]);
   const terminalRoot = useCallback((rootId?: string) => activeProject
     ? workspaceProjectRoots(activeProject).find((root) => root.id === rootId) ?? workspaceProjectRoots(activeProject)[0] : undefined, [activeProject]);
   const terminalKey = useCallback((rootId?: string) => workspaceTargetKey(workspaceTarget(
@@ -721,7 +695,6 @@ export function useDesktopWorkspacePanels({
       openSubagentPanel,
       openWorkspaceDirectory,
       openWorkspaceInApp,
-      panelLauncherTypes,
       panelLauncherMenuOpen,
       resetNewThreadPanelSession,
       resetThreadPanelSession,
@@ -777,7 +750,6 @@ export function useDesktopWorkspacePanels({
       openSubagentPanel,
       openWorkspaceDirectory,
       openWorkspaceInApp,
-      panelLauncherTypes,
       panelLauncherMenuOpen,
       resetNewThreadPanelSession,
       resetThreadPanelSession,

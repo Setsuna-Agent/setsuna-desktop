@@ -23,6 +23,8 @@
 
 独立 React 应用通过 `@setsuna/app` 使用同一份公共组件与样式，详见 [React 自定义应用](../../extensions/plugins/react-apps.md)。`DocumentMarkdown` 也由共享 UI 包持有，供宿主文档阅读和应用的 `Markdown` 入口复用；通用排版在 `renderer-ui/src/styles/markdown.css`，聊天流式块、文件导航和代码操作仍归 Chat。SDK 只打包纯 UI，不包含宿主本机 API 或业务服务。
 
+`MermaidDiagram` 为聊天、工作区文件预览和 `DocumentMarkdown` 的 `mermaid` 代码块提供图表。Mermaid 按需加载，流式更新合并后串行布局，卸载或源码变化会取消尚未开始的任务并丢弃迟到结果；加载或语法失败保留各入口的源码视图。渲染使用 strict 安全模式，生成的 SVG 作为图片展示，不绑定图表中的链接或脚本。`mermaid-theme.ts` 将宿主字体与颜色 token 转成图片内可用的主题，使用无渐变、无阴影的扁平节点；主题和字体改变时重新渲染。图表在正文中按可用宽度完整展示，点击复用 `ImagePreview` 放大查看。
+
 - Motion 负责复选框、开关和通知动画；`motion.ts` 提供复选框与通知使用的 spring 参数，开关的参数随组件维护。
 - `FileIcon` 使用 Symbols，统一按跨平台路径的文件名选择文件类型图标；workspace、artifact 和插件卡片复用这个入口，尺寸由各自样式控制。
 - `FileTreeSurface` / `FileTreeRow` 为文件面板、审查和 PR Diff 文件树共用的 beUI 视觉层：26px 行高、12px 字号、16px 层级缩进、展开箭头、引导线与选中背景滑动。目录行默认只显示展开箭头，文件行保留类型图标并省略空白箭头占位，同层名称对齐；每行按深度延续所有祖先层级的引导线，展开多层目录后外层线段保持连续。每个 surface 隔离布局动画并跟踪自身滚动，减少动态效果时关闭移动动画。Surface 挂载时直接显示现有行，避免文件标签切换导致的重新挂载重播整树入场动画；目录展开后新增的行仍有入场过渡。目录加载、筛选、拖放、文件选择仍由各 Feature 持有。
@@ -31,6 +33,7 @@
 - Radix 提供浮层定位、焦点约束、嵌套子菜单、键盘操作和关闭行为。控件遵循本项目的窄 API，不提供 Ant Design 兼容层。
 - 应用内菜单由 `MenuSurface` 与 `menu.css` 统一为紧凑圆角面板、细边框、柔和阴影和即时蓝底白字高亮；右键、按钮下拉、坐标菜单、子菜单、侧栏、添加面板、浏览器窗口与能力创建菜单共用视觉层。Select、项目/分支选择器也使用相同菜单样式。底色采用独立的冷灰半透明 `--app-menu-bg`，浅色与深色分别配置，背景模糊由 `--app-menu-backdrop-filter` 统一控制。输入框上方的命令、插件、Skill 与 @ 候选列表由聊天样式持有，使用不透明面板和中性选中背景，避免下方页面文字透出。菜单直接显示/关闭，不使用展开、裁切、缩放或滑动高亮动画；键盘导航、禁用项与危险项仍由原组件管理。系统托盘菜单由操作系统绘制。
 - 菜单高亮时普通图标、描述和快捷键跟随白色文字；拥有独立底色的 Skill/Plugin 图标通过 `data-menu-color="preserve"` 保留自身及子元素配色，避免白色图形与浅色图标底板混在一起。
+- `AppTextContextMenu` 使用 `PointMenu` 为输入框提供剪切、复制、粘贴，为正文选区提供复制；已处理的专用右键菜单优先。菜单关闭后恢复原焦点与选区，通过 preload 的 `windowControls.executeTextEdit` 调用当前宿主窗口的原生编辑命令，复用编辑器已有的结构化剪贴板、附件粘贴和撤销链路。
 - `ui/primitives.tsx` / `SelectField.tsx` 保留宿主导出；`SettingsViewUi.tsx` 将同一实现注入 Feature 的 Settings UI contract。
 - `shared/ui/model-picker/` 持有聊天、自动任务和设置页共用的模型搜索、服务分组、品牌图标与悬停详情。Feature 通过 `SettingsViewUi.ModelPicker` 传入可用模型和引用，宿主 `composition/ModelProviderFeatureBoundary.tsx` 只补充模型服务投影中的元数据；候选范围仍由各任务的可用列表决定，缺少元数据不隐藏候选。
 - 插件配置表单复用 `settings-form.css` 的 `sd-settings-form`：浅灰圆角卡片、统一输入控件间距、图标底板和中性分隔线。图片生成、视觉识别与声明式插件设置共用这层外观；各 Feature 只维护字段排布、业务状态和结果展示，不再各自绘制外框。

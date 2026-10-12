@@ -1,0 +1,108 @@
+.browser-quick-links {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.browser-quick-links__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 24px;
+  margin-bottom: 6px;
+}
+
+.browser-quick-links__header h2 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: var(--app-text);
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.browser-quick-links__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(160px, 100%), 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.browser-quick-links__grid li {
+  position: relative;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--app-border) 65%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--app-surface) 88%, transparent);
+  box-shadow: var(--app-shadow-card);
+}
+
+.browser-quick-links__page {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 28px 8px 10px;
+  border-radius: inherit;
+  text-align: left;
+}
+
+.browser-quick-links__icon {
+  display: grid;
+  flex: 0 0 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--app-text-muted);
+  background: var(--app-surface-muted);
+}
+
+.browser-quick-links__icon img { width: 18px; height: 18px; object-fit: contain; }
+.browser-quick-links__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.browser-quick-links__pin {
+  position: absolute;
+  top: 50%;
+  right: 2px;
+  width: 24px;
+  height: 24px;
+  color: var(--app-text-muted);
+  transform: translateY(-50%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.browser-quick-links__grid li:hover .browser-quick-links__pin,
+.browser-quick-links__grid li:focus-within .browser-quick-links__pin { opacity: 1; pointer-events: auto; }
+
+.browser-quick-links__header .browser-quick-links__more {
+  --desktop-agent-control-hover-bg: transparent;
+  gap: 3px;
+  min-height: 24px;
+  padding: 2px 6px;
+  border-color: transparent;
+  border-radius: 6px;
+  color: var(--app-text-muted);
+  background: transparent;
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.browser-quick-links__header .browser-quick-links__more:is(:hover, :active):not(:disabled) {
+  color: var(--app-text);
+}

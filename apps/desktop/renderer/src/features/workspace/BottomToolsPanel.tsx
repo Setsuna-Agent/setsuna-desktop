@@ -6,12 +6,10 @@ import type {
   DesktopPanelDropPlacement,
   DesktopPanelSlot,
   DesktopPanelTab,
-  DesktopPanelType,
 } from './model.js';
 
 export function BottomToolsPanel({
   activePanel,
-  availablePanelTypes,
   children,
   panels,
   unsavedFilePath,
@@ -20,7 +18,7 @@ export function BottomToolsPanel({
   onClosePanel,
   onHide,
   onMovePanel,
-  onOpenPanel,
+  onNewTerminal,
   onReorderPanels,
   onResizeStep,
   onResizeStart,
@@ -29,7 +27,6 @@ export function BottomToolsPanel({
   resizeValue,
 }: {
   activePanel: DesktopPanelTab;
-  availablePanelTypes: DesktopPanelType[];
   children?: ReactNode;
   panels: DesktopPanelTab[];
   unsavedFilePath?: string | null;
@@ -43,7 +40,7 @@ export function BottomToolsPanel({
     targetPanelId: string | null,
     placement: DesktopPanelDropPlacement,
   ) => void;
-  onOpenPanel: (panel: DesktopPanelType) => void;
+  onNewTerminal: () => void;
   onReorderPanels: (panelId: string, targetPanelId: string, placement: DesktopPanelDropPlacement) => void;
   onResizeStep: (delta: number) => void;
   onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
@@ -79,7 +76,6 @@ export function BottomToolsPanel({
       <DesktopPanelHeader
         activePanel={activePanel.type}
         activePanelId={activePanel.id}
-        availablePanelTypes={availablePanelTypes}
         panels={panels}
         placement="bottom"
         unsavedFilePath={unsavedFilePath}
@@ -87,7 +83,7 @@ export function BottomToolsPanel({
         onClose={onHide}
         onClosePanel={onClosePanel}
         onMovePanel={onMovePanel}
-        onOpenPanel={onOpenPanel}
+        onAddPanel={onNewTerminal}
         onReorderPanels={onReorderPanels}
         onSelectPanel={onActivatePanel}
       />

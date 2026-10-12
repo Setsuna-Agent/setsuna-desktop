@@ -6,12 +6,15 @@ import type { DesktopReviewBridge, DesktopReviewState } from '@setsuna-desktop/f
 import { reviewRendererFeature } from '@setsuna-desktop/feature-review/renderer';
 import { WorkspaceGitCommitProvider, useWorkspaceGitCommitDialog } from '@setsuna-desktop/feature-review/renderer/git';
 import { DESKTOP_WORKSPACE_APP_STORAGE_KEY } from '@setsuna-desktop/feature-workspace-apps/renderer';
-import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import type { PropsWithChildren } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '../../../../../src/app/providers/ToastProvider.js';
+import { AppWorkspaceToolbar } from '../../../../../src/app/layout/AppWorkspaceToolbar.js';
 import { ReviewFeatureHostBoundary } from '../../../../../src/composition/review-feature-adapter.js';
+import { BottomToolsPanel } from '../../../../../src/features/workspace/BottomToolsPanel.js';
 import { useDesktopWorkspacePanels, useSidePanelTransition } from '../../../../../src/features/workspace/hooks/useDesktopWorkspacePanels.js';
+import type { ProjectWorkspaceState } from '../../../../../src/features/workspace/hooks/useProjectWorkspace.js';
 import type { ChatComposerTargetIdentity } from '../../../../../src/features/chat/hooks/useChatComposerSession.js';
 import type { DesktopTerminalEvent } from '../../../../../src/features/workspace/model.js';
 import { I18nProvider } from '../../../../../src/shared/i18n/I18nProvider.js';
@@ -112,42 +115,52 @@ it('opens the selected app at the current conversation workspace and remembers t
   expect(open).toHaveBeenLastCalledWith('/repo/.worktrees/b', 'vscode', null, null);
 });
 
-it('updates the shared panel launcher when Git repository detection changes', async () => {
-  const project = { id: 'launcher-project', path: '/launcher-repo', name: 'Repository', createdAt: '', updatedAt: '' };
-  const state: DesktopReviewState = {
-    isGitRepository: true, workspaceRoot: project.path, gitRoot: project.path, currentBranch: 'main',
-    currentRemoteRef: null, baseRef: null, baseRefs: [], branches: [],
-    currentRemoteSummary: null, branchSummary: null, stagedSummary: null, unstagedSummary: null,
-  };
-  const getState = vi.fn().mockResolvedValue(state);
-  Object.defineProperty(window, 'setsunaDesktop', {
-    configurable: true,
-    value: {
-      desktopReview: { getState, watchChanges: vi.fn(() => () => undefined) },
-      desktop: { platform: 'darwin' },
-      workspaceApps: { list: vi.fn().mockResolvedValue([]) },
-    },
-  });
-  const view = renderHook(() => useDesktopWorkspacePanels({
-    activeProject: project, activeView: 'chat', conversationDebugEnabled: false,
-    targetIdentity: 'new-thread-slot:launcher-project', workspaceStatus: 'ready', setError: vi.fn(),
-  }), {
+it('opens navigation from the side add button and creates only terminals from the bottom add button', () => {
+  let panels!: ReturnType<typeof useDesktopWorkspacePanels>;
+  function Workspace() {
+    panels = useDesktopWorkspacePanels({
+      activeProject: null, activeView: 'chat', conversationDebugEnabled: false,
+      targetIdentity: 'new-thread-slot:global', workspaceStatus: 'ready', setError: vi.fn(),
+    });
+    return <>
+      <AppWorkspaceToolbar workspacePanels={panels} projectWorkspace={{} as ProjectWorkspaceState}
+        workspaceMaximized={false} onToggleMaximized={vi.fn()} />
+      {panels.bottomActivePanel ? <BottomToolsPanel
+        activePanel={panels.bottomActivePanel} panels={panels.bottomPanelSlot.panels}
+        onActivatePanel={(id) => panels.activateDesktopPanel('bottom', id)}
+        onClosePanel={(id) => panels.closeDesktopPanelItem('bottom', id)}
+        onHide={panels.hideBottomPanel} onMovePanel={vi.fn()} onReorderPanels={vi.fn()}
+        onNewTerminal={() => panels.openDesktopPanel('bottom', 'terminal')}
+        onResizeStep={vi.fn()} onResizeStart={vi.fn()} resizeMin={100} resizeMax={500} resizeValue={200}
+      /> : null}
+    </>;
+  }
+  render(<Workspace />, {
     wrapper: ({ children }) => <I18nProvider initialLocale="zh-CN" messageCatalog={messageCatalog}>
       <ToastProvider><ReviewFeatureHostBoundary>{children}</ReviewFeatureHostBoundary></ToastProvider>
     </I18nProvider>,
   });
+  act(() => panels.openDesktopPanel('side', 'chat'));
+  const sideChat = panels.sideActivePanel!;
+  fireEvent.click(screen.getByRole('button', { name: '打开导航页' }));
+  expect(panels.sideActivePanel?.type).toBe('overview');
+  expect(panels.sidePanelSlot.panels).toContainEqual(sideChat);
+  fireEvent.click(screen.getByRole('button', { name: '打开导航页' }));
+  expect(panels.sidePanelSlot.panels.filter((panel) => panel.type === 'overview')).toHaveLength(1);
+  fireEvent.click(screen.getByRole('button', { name: '侧边对话' }));
+  expect(panels.sideActivePanel?.id).toBe(sideChat.id);
 
-  expect(view.result.current.panelLauncherTypes).not.toContain('changes');
-  await waitFor(() => expect(view.result.current.panelLauncherTypes).toContain('changes'));
-
-  getState.mockResolvedValue({ ...state, isGitRepository: false, gitRoot: null, currentBranch: null });
-  await act(async () => { await view.result.current.loadReviewState(); });
-  expect(view.result.current.panelLauncherTypes).not.toContain('changes');
-  expect(view.result.current.panelLauncherTypes).toEqual(expect.arrayContaining(['review', 'files', 'terminal']));
-
-  getState.mockResolvedValue(state);
-  await act(async () => { await view.result.current.loadReviewState(); });
-  expect(view.result.current.panelLauncherTypes).toContain('changes');
+  act(() => panels.openDesktopPanel('bottom', 'chat'));
+  const bottomChat = panels.bottomActivePanel!;
+  fireEvent.click(screen.getByRole('button', { name: '新建终端' }));
+  const firstTerminal = panels.bottomActivePanel!;
+  expect(firstTerminal.type).toBe('terminal');
+  fireEvent.click(screen.getByRole('button', { name: '新建终端' }));
+  expect(panels.bottomActivePanel?.type).toBe('terminal');
+  expect(panels.bottomActivePanel?.id).not.toBe(firstTerminal.id);
+  expect(panels.bottomPanelSlot.panels).toEqual([bottomChat, firstTerminal, panels.bottomActivePanel]);
+  expect(panels.sideActivePanel?.id).toBe(sideChat.id);
+  expect(screen.queryByRole('menu')).toBeNull();
 });
 
 it('closes only the visible active side tab, leaving bottom and collapsed tabs intact', () => {

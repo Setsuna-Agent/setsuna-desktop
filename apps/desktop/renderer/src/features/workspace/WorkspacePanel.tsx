@@ -1,3 +1,4 @@
+import { WorkspaceOverviewPanel } from './WorkspaceOverviewPanel.js';
 import { FileTreeToggle, FileTreeSurface, FileTreeRow, ResizeHandle, TextField, Button } from '@setsuna-desktop/renderer-ui';
 
 import {
@@ -11,7 +12,7 @@ import {
   type RuntimeReviewFinding,
 } from '@setsuna-desktop/contracts';
 import type { DesktopReviewSource } from '@setsuna-desktop/feature-review/contracts';
-import { Bug, FileDiff, FolderOpen, Folders, GitBranch, MessageSquare, Search, SquareTerminal } from 'lucide-react';
+import { Folders, Search } from 'lucide-react';
 import {
   lazy,
   Suspense,
@@ -25,12 +26,9 @@ import {
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import { BrowserFeatureIcon } from '../../composition/BrowserWorkspaceFeatureBoundary.js';
 import { GitChangesFeaturePanel, ReviewFeaturePanel } from '../../composition/review-feature-panel-adapter.js';
 import { CodeFileView } from '../../shared/code/PierreCode.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
-import type { KeyboardShortcutCommandId } from '../../shared/shortcuts/keyboardShortcutCommands.js';
-import { ShortcutHint } from '../../shared/ui/ShortcutTooltip.js';
 import { EmptyState } from '../../shared/ui/primitives.js';
 import {
   useWorkspaceCodeViewSurface,
@@ -143,7 +141,7 @@ export function WorkspacePanel({
   onOpenEntry: (entry: WorkspaceEntry) => void;
   onOpenProjectFile: (filePath: string, line?: number) => void;
   onOpenFilesPanel: () => void;
-  onOpenBrowser: () => void;
+  onOpenBrowser: (url?: string) => void;
   onOpenConversationDebug?: () => void;
   onOpenReviewPanel?: () => void;
   onOpenChangesPanel?: () => void;
@@ -485,119 +483,6 @@ export function WorkspacePanel({
         />
       ) : null}
     </>
-  );
-}
-
-export function WorkspaceOverviewPanel({
-  activeProject,
-  isGitRepository,
-  onOpenFilesPanel,
-  onOpenBrowser,
-  onOpenConversationDebug,
-  onOpenReviewPanel,
-  onOpenChangesPanel,
-  onOpenSideChat,
-  onOpenTerminalPanel,
-}: {
-  activeProject?: WorkspaceProject;
-  isGitRepository: boolean;
-  onOpenFilesPanel: () => void;
-  onOpenBrowser: () => void;
-  onOpenConversationDebug?: () => void;
-  onOpenReviewPanel?: () => void;
-  onOpenChangesPanel?: () => void;
-  onOpenSideChat: () => void;
-  onOpenTerminalPanel: () => void;
-}) {
-  const { t } = useI18n();
-  const actions: Array<{
-    key: string;
-    label: string;
-    icon: JSX.Element;
-    disabled: boolean;
-    onClick: () => void;
-    shortcutCommandId?: KeyboardShortcutCommandId;
-  }> = [
-    {
-      key: 'review',
-      label: t('workspace.overview.review'),
-      icon: <FileDiff size={15} />,
-      disabled: !activeProject || !onOpenReviewPanel,
-      onClick: () => onOpenReviewPanel?.(),
-      shortcutCommandId: 'workspace.openReview',
-    },
-    ...(isGitRepository ? [{
-      key: 'changes',
-      label: t('workspace.panel.changes'),
-      icon: <GitBranch size={15} />,
-      disabled: !activeProject?.path || !onOpenChangesPanel,
-      onClick: () => onOpenChangesPanel?.(),
-      shortcutCommandId: 'workspace.openChanges' as const,
-    }] : []),
-    {
-      key: 'files',
-      label: t('workspace.overview.files'),
-      icon: <FolderOpen size={15} />,
-      disabled: !activeProject?.path,
-      onClick: onOpenFilesPanel,
-      shortcutCommandId: 'workspace.openFiles',
-    },
-    {
-      key: 'terminal',
-      label: t('workspace.overview.terminal'),
-      icon: <SquareTerminal size={15} />,
-      disabled: !activeProject?.path,
-      onClick: onOpenTerminalPanel,
-      shortcutCommandId: 'workspace.openTerminal',
-    },
-    {
-      key: 'side-chat',
-      label: t('workspace.overview.sideChat'),
-      icon: <MessageSquare size={15} />,
-      disabled: false,
-      onClick: onOpenSideChat,
-      shortcutCommandId: 'workspace.openSideChat',
-    },
-    {
-      key: 'browser',
-      label: t('workspace.overview.browser'),
-      icon: <BrowserFeatureIcon size={15} />,
-      disabled: false,
-      onClick: () => onOpenBrowser(),
-      shortcutCommandId: 'workspace.openBrowser',
-    },
-    ...(onOpenConversationDebug ? [{
-      key: 'conversation-debug',
-      label: t('workspace.overview.conversationDebug'),
-      icon: <Bug size={15} />,
-      disabled: false,
-      onClick: onOpenConversationDebug,
-      shortcutCommandId: 'workspace.openConversationDebug' as const,
-    }] : []),
-  ];
-
-  return (
-    <section className="desktop-workspace-overview" aria-label={t('workspace.overview.label')}>
-      <div className="desktop-workspace-overview__actions">
-        {actions.map((action) => (
-          <Button variant="ghost"
-            className="desktop-workspace-overview__action"
-            data-workspace-overview-action={action.key}
-            disabled={action.disabled}
-            key={action.key}
-            type="button"
-            onClick={action.onClick}
-          >
-            <span className="desktop-workspace-overview__action-icon">{action.icon}</span>
-            <span className="desktop-workspace-overview__action-label">{action.label}</span>
-            {action.shortcutCommandId ? <ShortcutHint
-              className="desktop-workspace-overview__action-shortcut"
-              commandId={action.shortcutCommandId}
-            /> : null}
-          </Button>
-        ))}
-      </div>
-    </section>
   );
 }
 

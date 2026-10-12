@@ -1,5 +1,7 @@
 export { BrowserFavicon } from './BrowserFavicon.js';
 export { BrowserFeatureIcon } from './BrowserFeatureIcon.js';
+export { BrowserQuickLinks } from './start-page/BrowserQuickLinks.js';
+export { BrowserStartPageSearch } from './start-page/BrowserStartPageSearch.js';
 export {
   BrowserPanel,
 } from './BrowserPanel.js';

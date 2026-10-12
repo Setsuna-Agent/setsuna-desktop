@@ -1,23 +1,16 @@
 import type { ReactNode } from 'react';
 import { DesktopPanelHeader, type DesktopPanelPlacement } from './DesktopPanelHeader.js';
-import type { DesktopPanelDropPlacement, DesktopPanelTab, DesktopPanelType } from './model.js';
+import type { DesktopPanelDropPlacement, DesktopPanelTab } from './model.js';
 
 export function WorkspaceTopbar({
   actions,
   activePanelId,
-  availablePanelTypes,
   panels,
   unsavedFilePath,
   isFileDirty,
   bottomPanelOpen,
   onClosePanel,
-  onOpenBrowser,
-  onOpenConversationDebug,
-  onOpenFilesPanel,
-  onOpenReviewPanel,
-  onOpenChangesPanel,
-  onOpenSideChat,
-  onOpenTerminalPanel,
+  onOpenOverview,
   onMovePanel,
   onSelectPanel,
   onReorderPanels,
@@ -26,19 +19,12 @@ export function WorkspaceTopbar({
 }: {
   actions?: ReactNode;
   activePanelId: string | null;
-  availablePanelTypes: DesktopPanelType[];
   panels: DesktopPanelTab[];
   unsavedFilePath?: string | null;
   isFileDirty?: (path: string, rootId?: string) => boolean;
   bottomPanelOpen: boolean;
   onClosePanel: (panelId: string) => void;
-  onOpenBrowser: () => void;
-  onOpenConversationDebug: () => void;
-  onOpenFilesPanel: () => void;
-  onOpenReviewPanel: () => void;
-  onOpenChangesPanel?: () => void;
-  onOpenSideChat: () => void;
-  onOpenTerminalPanel: () => void;
+  onOpenOverview: () => void;
   onMovePanel: (
     panelId: string,
     targetPlacement: DesktopPanelPlacement,
@@ -51,33 +37,6 @@ export function WorkspaceTopbar({
   onToggleWorkspace: () => void;
 }) {
   const activePanel = panels.find((panel) => panel.id === activePanelId) ?? panels[0] ?? null;
-  const handleOpenPanel = (panel: DesktopPanelType) => {
-    if (panel === 'changes') {
-      onOpenChangesPanel?.();
-      return;
-    }
-    if (panel === 'browser') {
-      onOpenBrowser();
-      return;
-    }
-    if (panel === 'chat') {
-      onOpenSideChat();
-      return;
-    }
-    if (panel === 'conversation-debug') {
-      onOpenConversationDebug();
-      return;
-    }
-    if (panel === 'review') {
-      onOpenReviewPanel();
-      return;
-    }
-    if (panel === 'files') {
-      onOpenFilesPanel();
-      return;
-    }
-    if (panel === 'terminal') onOpenTerminalPanel();
-  };
 
   if (!activePanel) return null;
 
@@ -87,12 +46,11 @@ export function WorkspaceTopbar({
         actions={actions}
         activePanel={activePanel.type}
         activePanelId={activePanel.id}
-        availablePanelTypes={availablePanelTypes}
         bottomBarActive={bottomPanelOpen}
         onClose={onToggleWorkspace}
         onClosePanel={onClosePanel}
         onMovePanel={onMovePanel}
-        onOpenPanel={handleOpenPanel}
+        onAddPanel={onOpenOverview}
         onReorderPanels={onReorderPanels}
         onSelectPanel={onSelectPanel}
         onToggleBottomTerminal={onToggleTerminal}
