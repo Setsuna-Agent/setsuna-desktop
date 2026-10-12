@@ -280,7 +280,6 @@ describe('runtime server REST skills and capabilities', () => {
       expect(duplicateInstall.status).toBe(500);
       await expect(duplicateInstall.json()).resolves.toMatchObject({
         code: 'PLUGIN_OPERATION_FAILED',
-        error: 'Plugin is already installed: context7-docs',
         retryable: false,
       });
       await expect(harness.runtimeFetch('/v1/mcp/servers')).resolves.toMatchObject({

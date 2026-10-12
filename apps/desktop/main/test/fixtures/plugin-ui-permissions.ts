@@ -6,6 +6,8 @@ import { PluginUiDocuments, pluginUiDocumentScheme } from '../../src/window/plug
 
 app.setPath('userData', process.argv[2]);
 app.disableHardwareAcceleration();
+// Exercise permission denial even on CI machines without physical capture devices.
+app.commandLine.appendSwitch('use-fake-device-for-media-stream');
 app.dock?.hide();
 protocol.registerSchemesAsPrivileged([pluginUiDocumentScheme]);
 
