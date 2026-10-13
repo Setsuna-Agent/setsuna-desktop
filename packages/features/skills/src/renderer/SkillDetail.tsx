@@ -16,6 +16,7 @@ export function SkillDetail({
   onToggle,
   onUseInChat,
   pendingDependencies,
+  pending,
   summary,
   translate,
   ui,
@@ -31,6 +32,7 @@ export function SkillDetail({
   onToggle(enabled: boolean): void;
   onUseInChat?: () => void;
   pendingDependencies: ReadonlySet<string>;
+  pending: boolean;
   summary: RuntimeSkillSummary;
   translate: SkillsTranslate;
   ui: SettingsViewUi;
@@ -38,11 +40,13 @@ export function SkillDetail({
   const active = detail ?? summary;
   const actionItems = [
     ...(onEdit ? [{
+      disabled: pending || !detail,
       icon: <Pencil size={14} />,
       id: 'edit',
       label: translate('feature.skills.edit'),
     }] : []),
     ...(onDelete ? [{
+      disabled: pending,
       danger: true,
       icon: <Trash2 size={14} />,
       id: 'delete',
@@ -69,7 +73,7 @@ export function SkillDetail({
             leading={<ui.SkillIcon skill={active} variant="list" />}
             actions={(
               <>
-                <span className="sd-toggle-label"><Switch label={translate('feature.skills.enableHint')} checked={active.enabled} onCheckedChange={(checked) => onToggle(checked)} /><span>{translate('feature.skills.enabled')}</span></span>
+                <span className="sd-toggle-label"><Switch disabled={pending || loading} label={translate('feature.skills.enableHint')} checked={active.enabled} onCheckedChange={(checked) => onToggle(checked)} /><span>{translate('feature.skills.enabled')}</span></span>
                 <ui.ActionMenu
                   items={actionItems}
                   label={translate('feature.skills.actions')}
@@ -102,7 +106,7 @@ export function SkillDetail({
                       <code>{dependency.value}</code>
                       <span>{translate(dependencyStatusKey(dependency.status))}</span>
                       {['missing', 'disabled', 'unchecked'].includes(dependency.status) ? (
-                        <ui.Button disabled={installPending} icon={installPending ? <Loader2 className="is-spinning" size={14} /> : <Plug size={14} />} onClick={() => void onInstallDependencies()}>
+                        <ui.Button disabled={pending} icon={installPending ? <Loader2 className="is-spinning" size={14} /> : <Plug size={14} />} onClick={() => void onInstallDependencies()}>
                           {translate('feature.skills.installAndEnable')}
                         </ui.Button>
                       ) : ['authRequired', 'error'].includes(dependency.status) ? (

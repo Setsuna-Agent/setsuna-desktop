@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { Button, IconButton } from '@setsuna-desktop/renderer-ui';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { Button, ConfirmationProvider, IconButton } from '@setsuna-desktop/renderer-ui';
 import type { SettingsViewUi } from '@setsuna-desktop/renderer-contracts/settings';
 import type { CapabilitiesRefreshCoordinator } from '@setsuna-desktop/renderer-contracts/capabilities';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -9,6 +9,43 @@ import type { PluginManagementRendererService, PluginManagementSnapshot } from '
 import { PluginCapabilitiesPage } from '../../src/renderer/PluginCapabilitiesPage.js';
 
 afterEach(cleanup);
+
+it('keeps plugin details and the error after a failed uninstall, then closes them after a successful retry', async () => {
+  const plugin = { id: 'local-tools', name: 'Local tools', installationSource: 'local' as const,
+    installedAt: '2026-01-01T00:00:00Z', hookCount: 0, hooks: [], skills: [], mcpServers: [], resources: [] };
+  const snapshot: PluginManagementSnapshot = { catalogRevision: 'local', extensions: [], plugins: [plugin], marketplace: [], marketplaceErrors: [] };
+  const hooks = { hooks: [] };
+  const service = {
+    getSnapshot: () => snapshot, getHookSnapshot: () => hooks, subscribe: () => () => undefined,
+    refresh: vi.fn(async () => snapshot), refreshHooks: vi.fn(async () => hooks),
+    remove: vi.fn().mockRejectedValueOnce(new Error('Plugin is busy')).mockResolvedValueOnce(undefined),
+  } as unknown as PluginManagementRendererService;
+  const ui = {
+    Button, IconButton, PluginIcon: () => null,
+    PageHeader: ({ title, actions }) => <header><h2>{title}</h2>{actions}</header>,
+    ActionMenu: ({ items, onSelect }) => <>{items.map((item) => <Button key={item.id} disabled={item.disabled} onClick={() => onSelect(item.id)}>{item.label}</Button>)}</>,
+    Toast: ({ message }) => <div role="alert">{message}</div>,
+  } as SettingsViewUi;
+  await act(async () => {
+    render(<ConfirmationProvider><PluginCapabilitiesPage sectionId="plugins" service={service} ui={ui}
+      capabilitiesRefresh={{ refresh: vi.fn() } as unknown as CapabilitiesRefreshCoordinator}
+      openExternal={async () => true} translate={(key, params) => params?.detail ? String(params.detail) : key} /></ConfirmationProvider>);
+  });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Local tools', exact: true })); });
+  const uninstall = async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'feature.pluginManagement.uninstall' }));
+    await act(async () => {
+      fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'feature.pluginManagement.remove' }));
+    });
+  };
+  await uninstall();
+  expect(screen.getByRole('alert').textContent).toBe('Plugin is busy');
+  expect(screen.getByRole('heading', { name: 'Local tools' })).toBeTruthy();
+  await uninstall();
+  expect(service.remove).toHaveBeenCalledTimes(2);
+  expect(screen.queryByRole('heading', { name: 'Local tools' })).toBeNull();
+  expect(screen.queryByRole('alert')).toBeNull();
+});
 
 it.each(['install', 'import', 'refresh'] as const)('reports a catalog %s failure through Toast and allows retry', async (operation) => {
   const snapshot: PluginManagementSnapshot = {

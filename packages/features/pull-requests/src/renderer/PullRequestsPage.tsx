@@ -62,6 +62,7 @@ function Workbench({ client, connectionState, session }: Omit<PullRequestsPagePr
       }} />
       <PullRequestScrollArea className="pr-list" contentClassName="pr-list__content" scrollRef={scroll} onScroll={(event) => { session.listScroll = event.currentTarget.scrollTop; }} aria-label={t('pullRequests')}>
         {list.error ? <p className="sd-control-error" role="alert">{list.error}</p> : null}
+        {list.inventory.issues.map((issue) => <p className="sd-control-error" role="alert" key={issue.project}>{issue.project}: {issue.message}</p>)}
         {list.errors.map((issue) => <p className="sd-control-error" role="alert" key={issue.repository}>{issue.repository}: {issue.message}</p>)}
         {list.items.map((pr) => <Button key={pr.id} variant="ghost" className={`pr-list-item${selected?.repository === pr.repository && selected.number === pr.number ? ' is-selected' : ''}`} aria-current={selected?.repository === pr.repository && selected.number === pr.number ? 'true' : undefined} onClick={() => select({ repository: pr.repository, number: pr.number })}>
           <span className="pr-list-item__meta"><PullRequestState pr={pr} label={false} /><span>#{pr.number}</span><Timestamp value={pr.updatedAt} /><CheckState state={pr.checksState} label={false} /></span>
@@ -69,7 +70,7 @@ function Workbench({ client, connectionState, session }: Omit<PullRequestsPagePr
           <span className="pr-list-item__footer"><GitHubIdentity login={pr.author.login} avatarUrl={pr.author.avatarUrl} /><span className="pr-list-item__repository" title={pr.repository}>{pr.repository}</span></span>
         </Button>)}
         {list.loading && !list.items.length ? <PullRequestSkeleton kind="list" label={t('loading')} /> : null}
-        {!list.loading && account && !list.items.length ? <p className="pr-empty">{list.inventory.repositories.length ? t('noResults') : t('noRepositories')}</p> : null}
+        {!list.loading && !list.error && !list.errors.length && !list.inventory.issues.length && account && !list.items.length ? <p className="pr-empty">{list.inventory.repositories.length ? t('noResults') : t('noRepositories')}</p> : null}
         {list.hasMore ? <Button disabled={list.loading} onClick={() => void list.more()}>{t('loadMore')}</Button> : null}
       </PullRequestScrollArea>
     </aside> : null

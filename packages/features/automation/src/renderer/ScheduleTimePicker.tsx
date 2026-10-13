@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CalendarDays, ChevronDown, Clock3 } from 'lucide-react';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { Button, Popover, WheelPicker, type WheelPickerOption } from '@setsuna-desktop/renderer-ui';
@@ -6,6 +6,7 @@ import { daysInScheduleMonth, scheduleTimeParts, updateScheduleTime, type Schedu
 import './schedule-time-picker.css';
 
 type ScheduleTimePickerProps = {
+  disabled?: boolean;
   value: string;
   onChange(value: string): void;
   translate: RendererTranslate;
@@ -15,8 +16,9 @@ const MONTHS = numberOptions(1, 12);
 const HOURS = numberOptions(0, 23);
 const MINUTES = numberOptions(0, 59);
 
-export function ScheduleTimePicker({ value, onChange, translate: t }: ScheduleTimePickerProps) {
+export function ScheduleTimePicker({ disabled, value, onChange, translate: t }: ScheduleTimePickerProps) {
   const [open, setOpen] = useState(false);
+  useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
   const parts = scheduleTimeParts(value);
   const date = parts.date;
   const displayValue = value.replace('T', ' ').replaceAll('-', '/');
@@ -31,7 +33,7 @@ export function ScheduleTimePicker({ value, onChange, translate: t }: ScheduleTi
   );
 
   return (
-    <Popover open={open} onOpenChange={setOpen} placement="bottomRight"
+    <Popover open={open && !disabled} onOpenChange={setOpen} placement="bottomRight"
       className={`automation-time-picker__popover${date ? ' automation-time-picker__popover--date' : ''}`}
       content={(
         <div className="automation-time-picker__panel">
@@ -48,7 +50,7 @@ export function ScheduleTimePicker({ value, onChange, translate: t }: ScheduleTi
           <footer><Button type="button" size="small" onClick={() => setOpen(false)}>{t('feature.automation.time.done')}</Button></footer>
         </div>
       )}>
-      <Button type="button" className="automation-time-picker" aria-label={`${t('feature.automation.time')}: ${displayValue}`} aria-expanded={open}>
+      <Button disabled={disabled} type="button" className="automation-time-picker" aria-label={`${t('feature.automation.time')}: ${displayValue}`} aria-expanded={open && !disabled}>
         <TimeIcon size={15} aria-hidden="true" />
         <span>{displayValue}</span>
         <ChevronDown size={14} aria-hidden="true" />

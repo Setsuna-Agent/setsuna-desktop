@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ConfirmationProvider } from '@setsuna-desktop/renderer-ui';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
@@ -8,9 +8,41 @@ import type { AutomationTask } from '../../src/contracts/index.js';
 import { AutomationPage } from '../../src/renderer/AutomationPage.js';
 import type { AutomationClient } from '../../src/renderer/client.js';
 import { automationMessages } from '../../src/renderer/messages.js';
+import { TaskEditor } from '../../src/renderer/TaskEditor.js';
 
 afterEach(cleanup);
 const t: RendererTranslate = (key) => automationMessages.messages['en-US'][key] ?? key;
+
+it('locks the submitted task draft, retains it on failure, and allows a corrected retry', async () => {
+  const user = userEvent.setup();
+  let rejectSave!: (reason: Error) => void;
+  const create = vi.fn().mockImplementationOnce(() => new Promise((_, reject) => { rejectSave = reject; }))
+    .mockResolvedValueOnce({ id: 'saved' });
+  const onClose = vi.fn();
+  const onSaved = vi.fn();
+  render(<TaskEditor threadId="draft" client={{ create } as unknown as AutomationClient} models={[]} projects={[]}
+    ModelPicker={() => null} translate={t} onClose={onClose} onSaved={onSaved} />);
+  const title = screen.getByRole('textbox', { name: t('feature.automation.taskTitle') }) as HTMLInputElement;
+  const prompt = screen.getByRole('textbox', { name: t('feature.automation.prompt') }) as HTMLTextAreaElement;
+  await user.type(title, 'Task draft');
+  await user.type(prompt, 'Original prompt');
+  await user.click(screen.getByRole('button', { name: t('feature.automation.create') }));
+  fireEvent.submit(title.form!);
+  await user.type(prompt, ' should not be added');
+  await user.keyboard('{Escape}');
+  expect(create).toHaveBeenCalledOnce();
+  expect(prompt.value).toBe('Original prompt');
+  expect(onClose).not.toHaveBeenCalled();
+  await act(async () => rejectSave(new Error('Save failed')));
+  expect(screen.getByRole('alert').textContent).toBe('Save failed');
+  expect(title.value).toBe('Task draft');
+  await user.clear(prompt);
+  await user.type(prompt, 'Corrected prompt');
+  await user.click(screen.getByRole('button', { name: t('feature.automation.create') }));
+  expect(create).toHaveBeenLastCalledWith('draft', expect.objectContaining({ title: 'Task draft', prompt: 'Corrected prompt' }));
+  expect(onSaved).toHaveBeenCalledExactlyOnceWith({ id: 'saved' });
+  expect(onClose).toHaveBeenCalledOnce();
+});
 
 it.each(['edit', 'status', 'run', 'delete'] as const)('applies the context-menu %s action to the clicked task without changing the conversation', async (action) => {
   const at = '2026-09-30T00:00:00Z';

@@ -3,13 +3,81 @@
 import type { RuntimeSkillDetail } from '@setsuna-desktop/contracts';
 import type { CapabilitiesRefreshCoordinator } from '@setsuna-desktop/renderer-contracts/capabilities';
 import type { CapabilitiesPageNavigation, SettingsViewUi } from '@setsuna-desktop/renderer-contracts/settings';
-import { Button, IconButton } from '@setsuna-desktop/renderer-ui';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { Button, IconButton, TextArea, TextField } from '@setsuna-desktop/renderer-ui';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { SkillsRendererService } from '../../src/contracts/index.js';
 import { SkillsCapabilitiesPage } from '../../src/renderer/SkillsCapabilitiesPage.js';
 
 afterEach(cleanup);
+
+const skillUi: SettingsViewUi = {
+  Button, IconButton, TextArea, TextField, SkillIcon: () => null,
+  PageHeader: ({ title, actions }) => <header><h2>{title}</h2>{actions}</header>,
+  ActionMenu: ({ items, onSelect }) => <>{items.map((item) => <Button key={item.id} disabled={item.disabled} onClick={() => onSelect(item.id)}>{item.label}</Button>)}</>,
+  MarkdownDocument: ({ content }) => <div>{content}</div>,
+  Toast: ({ message }) => <div role="alert">{message}</div>,
+} as SettingsViewUi;
+
+function skill(id: string): RuntimeSkillDetail {
+  return { id, name: id, kind: 'user', enabled: true, content: `# ${id}`, references: [] };
+}
+
+it('keeps a failed Skill draft editable and prevents duplicate saves before retry', async () => {
+  const snapshot = { skills: [skill('existing')], extraRoots: [] };
+  let rejectSave!: (error: Error) => void;
+  const createSkill = vi.fn().mockImplementationOnce(() => new Promise((_, reject) => { rejectSave = reject; }))
+    .mockResolvedValueOnce({ ...skill('new'), name: 'New skill', content: '# Draft' });
+  const service = { getSnapshot: () => snapshot, subscribe: () => () => undefined, createSkill } as unknown as SkillsRendererService;
+  render(<SkillsCapabilitiesPage sectionId="skills" service={service} translate={(key) => key} ui={skillUi}
+    capabilitiesRefresh={{ refresh: vi.fn() } as unknown as CapabilitiesRefreshCoordinator} />);
+  fireEvent.click(screen.getByRole('button', { name: 'feature.skills.add' }));
+  const name = screen.getByRole('textbox', { name: 'feature.skills.editor.name' }) as HTMLInputElement;
+  const content = screen.getByRole('textbox', { name: 'feature.skills.editor.content' }) as HTMLTextAreaElement;
+  fireEvent.change(name, { target: { value: 'New skill' } });
+  fireEvent.change(content, { target: { value: '# Draft' } });
+  const save = screen.getByRole('button', { name: 'feature.skills.save' });
+  fireEvent.click(save);
+  fireEvent.click(save);
+  expect(createSkill).toHaveBeenCalledOnce();
+  expect(content.disabled).toBe(true);
+  await act(async () => rejectSave(new Error('Disk full')));
+  expect(screen.getByRole('alert').textContent).toBe('Disk full');
+  expect(name.value).toBe('New skill');
+  expect(content.value).toBe('# Draft');
+  expect(content.disabled).toBe(false);
+  fireEvent.click(screen.getByRole('button', { name: 'feature.skills.save' }));
+  await waitFor(() => expect(screen.queryByRole('textbox', { name: 'feature.skills.editor.content' })).toBeNull());
+  expect(createSkill).toHaveBeenCalledTimes(2);
+  expect(screen.getByText('# Draft')).toBeTruthy();
+});
+
+it('keeps the selected Skill when dependency installation finishes after navigation', async () => {
+  const first = { ...skill('First'), mcpDependencies: [{ type: 'mcp' as const, value: 'github', status: 'missing' as const }] };
+  const second = skill('Second');
+  const snapshot = { skills: [first, second], extraRoots: [] };
+  let finish!: (result: { skill: RuntimeSkillDetail }) => void;
+  const service = {
+    getSnapshot: () => snapshot, subscribe: () => () => undefined,
+    getSkill: vi.fn(async (id) => id === first.id ? first : second),
+    installMcpDependencies: vi.fn(() => new Promise((resolve) => { finish = resolve; })),
+  } as unknown as SkillsRendererService;
+  const capabilities = {
+    renderBreadcrumb: ({ onBack }) => <Button onClick={onBack}>Back</Button>,
+    renderCreateMenu: () => null,
+  } as CapabilitiesPageNavigation;
+  render(<SkillsCapabilitiesPage sectionId="skills" service={service} translate={(key) => key} ui={skillUi} capabilities={capabilities}
+    capabilitiesRefresh={{ refresh: vi.fn(async () => undefined) } as unknown as CapabilitiesRefreshCoordinator} />);
+  fireEvent.click(screen.getByRole('button', { name: /^First/u }));
+  fireEvent.click(await screen.findByRole('button', { name: 'feature.skills.installAndEnable' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+  fireEvent.click(screen.getByRole('button', { name: /^Second/u }));
+  await screen.findByText('# Second');
+  await act(async () => finish({ skill: { ...first, content: '# First updated' } }));
+  expect(screen.getByRole('heading', { name: 'Second' })).toBeTruthy();
+  expect(screen.getByText('# Second')).toBeTruthy();
+  expect(screen.queryByText('# First updated')).toBeNull();
+});
 
 it('opens the dependency MCP authorization page without starting a hidden Skill login', async () => {
   const skill: RuntimeSkillDetail = {

@@ -28,6 +28,7 @@ import {
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
   type Dispatch,
@@ -101,12 +102,18 @@ export function McpCapabilitiesPage({
   const [query, setQuery] = useState('');
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [selectedKey, setSelectedKey] = useState<string | null>(capabilities?.activeItemId ?? null);
-  useEffect(() => {
-    setSelectedKey(capabilities?.activeItemId ?? null);
-  }, [capabilities?.activeItemId]);
   const [editingServer, setEditingServer] = useState<RuntimeMcpServer | null>(null);
   const [draft, setDraft] = useState<McpDraft>(emptyDraft);
-  const [saving, setSaving] = useState(false);
+  const [operationError, setOperationError] = useState<string | null>(null);
+  const [pendingServers, setPendingServers] = useState<ReadonlySet<string>>(new Set());
+  const pendingServersRef = useRef(new Set<string>());
+  const navigationVersion = useRef(0);
+  useEffect(() => () => { navigationVersion.current += 1; }, []);
+  useEffect(() => {
+    navigationVersion.current += 1;
+    setOperationError(null);
+    setSelectedKey(capabilities?.activeItemId ?? null);
+  }, [capabilities?.activeItemId]);
   const authentication = useMcpAuthentication(service, translate);
 
   useEffect(() => {
@@ -126,73 +133,92 @@ export function McpCapabilitiesPage({
   const serverGroups = useMemo(() => groupMcpServersBySource(visibleServers), [visibleServers]);
 
   const closeEditor = () => {
+    navigationVersion.current += 1;
+    setOperationError(null);
     setEditingServer(null);
     setDraft(emptyDraft);
   };
   const openCreate = () => {
+    navigationVersion.current += 1;
+    setOperationError(null);
     setSelectedKey(null);
     setEditingServer(null);
     setDraft({ ...emptyDraft });
   };
   const openEditor = (server: RuntimeMcpServer) => {
+    navigationVersion.current += 1;
+    setOperationError(null);
     setEditingServer(server);
     setDraft(draftFromServer(server));
   };
-  const save = async () => {
-    const key = draft.key.trim();
-    if (!key || saving) return;
-    setSaving(true);
+  const selectServer = (key: string | null) => {
+    navigationVersion.current += 1;
+    setOperationError(null);
+    setSelectedKey(key);
+  };
+  const runServerAction = async (key: string, operation: () => Promise<unknown>, onSuccess?: () => void) => {
+    if (pendingServersRef.current.has(key)) return;
+    const view = navigationVersion.current;
+    pendingServersRef.current.add(key);
+    setPendingServers(new Set(pendingServersRef.current));
+    setOperationError(null);
     try {
-      await service.saveServer(draftToInput(draft, key, editingServer, translate));
-      closeEditor();
+      await operation();
+      if (view === navigationVersion.current) onSuccess?.();
+    } catch (cause) {
+      if (view === navigationVersion.current) setOperationError(errorMessage(cause));
     } finally {
-      setSaving(false);
+      pendingServersRef.current.delete(key);
+      setPendingServers(new Set(pendingServersRef.current));
     }
   };
 
   if (editingServer || draft !== emptyDraft) {
     return (
       <McpServerEditor
+        key={editingServer?.key ?? '$create'}
         capabilities={capabilities}
         draft={draft}
         editingServer={editingServer}
-        saving={saving}
         service={service}
         setDraft={setDraft}
         translate={translate}
         ui={ui}
         onBack={closeEditor}
-        onSave={save}
+        onSaved={closeEditor}
       />
     );
   }
 
   if (selectedServer) {
     return (
-      <McpServerDetail
-        capabilities={capabilities}
-        authAction={authentication.pendingActions.get(selectedServer.key)}
-        authError={authentication.errors.get(selectedServer.key)}
-        onCancelLogin={() => authentication.cancel(selectedServer.key)}
-        openExternal={openExternal}
-        server={selectedServer}
-        translate={translate}
-        ui={ui}
-        onBack={() => setSelectedKey(null)}
-        onDelete={async () => {
-          if (!await confirm({
-            title: translate('feature.mcp.confirmDelete', { name: selectedServer.label }),
-            confirmLabel: translate('feature.mcp.delete'),
-            danger: true,
-          })) return;
-          await service.deleteServer(selectedServer.key);
-          setSelectedKey(null);
-        }}
-        onEdit={() => openEditor(selectedServer)}
-        onLogin={() => authentication.run(selectedServer.key, 'login')}
-        onLogout={() => authentication.run(selectedServer.key, 'logout')}
-        onUpdate={(enabled) => service.updateServer(selectedServer.key, { enabled })}
-      />
+      <>
+        <McpServerDetail
+          pending={pendingServers.has(selectedServer.key)}
+          capabilities={capabilities}
+          authAction={authentication.pendingActions.get(selectedServer.key)}
+          authError={authentication.errors.get(selectedServer.key)}
+          onCancelLogin={() => authentication.cancel(selectedServer.key)}
+          openExternal={openExternal}
+          server={selectedServer}
+          translate={translate}
+          ui={ui}
+          onBack={() => selectServer(null)}
+          onDelete={async () => {
+            if (!await confirm({
+              title: translate('feature.mcp.confirmDelete', { name: selectedServer.label }),
+              confirmLabel: translate('feature.mcp.delete'),
+              danger: true,
+            })) return;
+            await runServerAction(selectedServer.key, () => service.deleteServer(selectedServer.key), () => selectServer(null));
+          }}
+          onEdit={() => openEditor(selectedServer)}
+          onLogin={() => authentication.run(selectedServer.key, 'login')}
+          onLogout={() => authentication.run(selectedServer.key, 'logout')}
+          onUpdate={(enabled) => runServerAction(selectedServer.key, () => service.updateServer(selectedServer.key, { enabled }))}
+        />
+        {operationError ? <ui.Toast message={operationError} tone="error" /> : null}
+      </>
     );
   }
 
@@ -203,7 +229,7 @@ export function McpCapabilitiesPage({
         <header className="desktop-capabilities-header">
           <div className="desktop-capabilities-title"><h2>MCP</h2></div>
           <div className="desktop-capabilities-actions">
-            <ui.IconButton label={translate('feature.mcp.refresh')} onClick={() => void service.refresh()}>
+            <ui.IconButton label={translate('feature.mcp.refresh')} disabled={pendingServers.has('$catalog')} onClick={() => void runServerAction('$catalog', () => service.refresh())}>
               <RefreshCw size={15} />
             </ui.IconButton>
             {capabilities ? capabilities.renderCreateMenu({
@@ -255,14 +281,15 @@ export function McpCapabilitiesPage({
                       key={server.key}
                       server={server}
                       translate={translate}
-                      onOpen={() => setSelectedKey(server.key)}
-                      onUpdate={(enabled) => void service.updateServer(server.key, { enabled })}
+                      pending={pendingServers.has(server.key)}
+                      onOpen={() => selectServer(server.key)}
+                      onUpdate={(enabled) => void runServerAction(server.key, () => service.updateServer(server.key, { enabled }))}
                     />
                   ))}
                 </div>
               </section>
             ))}
-            {!visibleServers.length ? (
+            {!visibleServers.length && !operationError && !pendingServers.has('$catalog') && !snapshot?.errors.length ? (
               <div className="desktop-capabilities-empty">{translate('feature.mcp.empty')}</div>
             ) : null}
           </div>
@@ -273,16 +300,19 @@ export function McpCapabilitiesPage({
           </div>
         ) : null}
       </section>
+      {operationError ? <ui.Toast message={operationError} tone="error" /> : null}
     </main>
   );
 }
 
 function McpServerListItem({
+  pending,
   onOpen,
   onUpdate,
   server,
   translate,
 }: Readonly<{
+  pending: boolean;
   onOpen(): void;
   onUpdate(enabled: boolean): void;
   server: RuntimeMcpServer;
@@ -303,7 +333,7 @@ function McpServerListItem({
       </UiButton>
       <div className="desktop-capability-list-item__aside">
         <div className="desktop-capability-list-item__settings">
-          <span className="sd-toggle-label"><Switch label={translate('feature.mcp.enableHint')} checked={server.enabled} disabled={server.readOnly} onCheckedChange={(checked) => onUpdate(checked)} /></span>
+          <span className="sd-toggle-label"><Switch label={translate('feature.mcp.enableHint')} checked={server.enabled} disabled={server.readOnly || pending} onCheckedChange={(checked) => onUpdate(checked)} /></span>
         </div>
       </div>
     </article>
@@ -315,8 +345,7 @@ function McpServerEditor({
   draft,
   editingServer,
   onBack,
-  onSave,
-  saving,
+  onSaved,
   service,
   setDraft,
   translate,
@@ -326,32 +355,65 @@ function McpServerEditor({
   draft: McpDraft;
   editingServer: RuntimeMcpServer | null;
   onBack(): void;
-  onSave(): Promise<void>;
-  saving: boolean;
+  onSaved(): void;
   service: McpRendererService;
   setDraft: Dispatch<SetStateAction<McpDraft>>;
   translate: McpTranslate;
   ui: SettingsViewUi;
 }>) {
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const savingRef = useRef(false);
+  const mounted = useRef(true);
+  const discovery = useRef<AbortController | null>(null);
   const [discovering, setDiscovering] = useState(false);
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+  useEffect(() => {
+    setDiscovering(false);
+    // Connection edits and leaving the editor invalidate tools from the previous draft.
+    return () => { discovery.current?.abort(); discovery.current = null; };
+  }, [draft]);
   const title = editingServer?.label || translate('feature.mcp.editor.new');
+  const save = async () => {
+    const key = draft.key.trim();
+    if (!key || savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    setSaveError(null);
+    discovery.current?.abort();
+    discovery.current = null;
+    setDiscovering(false);
+    try {
+      await service.saveServer(draftToInput(draft, key, editingServer, translate));
+      if (mounted.current) onSaved();
+    } catch (cause) {
+      if (mounted.current) setSaveError(errorMessage(cause));
+    } finally {
+      savingRef.current = false;
+      if (mounted.current) setSaving(false);
+    }
+  };
   const discover = async () => {
+    if (discovery.current || savingRef.current) return;
+    const request = new AbortController();
+    discovery.current = request;
     setDiscovering(true);
     setDiscoveryError(null);
     try {
       const result = await service.discoverTools(draftToInput(
-        draft,
-        draft.key.trim() || 'preview',
-        editingServer,
-        translate,
-      ));
-      setDraft((current) => ({ ...current, tools: result.tools }));
+        draft, draft.key.trim() || 'preview', editingServer, translate,
+      ), { signal: request.signal });
+      if (request.signal.aborted) return;
+      setDraft((current) => current === draft ? { ...current, tools: result.tools } : current);
       if (result.errors.length) setDiscoveryError(result.errors.join('\n'));
-    } catch (error) {
-      setDiscoveryError(errorMessage(error));
+    } catch (cause) {
+      if (!request.signal.aborted) setDiscoveryError(errorMessage(cause));
     } finally {
-      setDiscovering(false);
+      if (discovery.current === request) { discovery.current = null; setDiscovering(false); }
     }
   };
 
@@ -370,7 +432,7 @@ function McpServerEditor({
                 disabled={saving || !draft.key.trim() || editingServer?.readOnly}
                 icon={<Save size={15} />}
                 variant="primary"
-                onClick={() => void onSave()}
+                onClick={() => void save()}
               >
                 {translate(saving ? 'feature.mcp.saving' : 'feature.mcp.save')}
               </ui.Button>
@@ -380,7 +442,7 @@ function McpServerEditor({
               : 'feature.mcp.editor.localOnly')}
             title={title}
           />
-          <div className="mcp-form desktop-capabilities-mcp-form desktop-capabilities-mcp-form--page">
+          <fieldset disabled={saving} className="mcp-form desktop-capabilities-mcp-form desktop-capabilities-mcp-form--page">
             <FormField help={translate('feature.mcp.keyHelp')} label={translate('feature.mcp.key')}>
               <ui.TextField
                 disabled={Boolean(editingServer)}
@@ -393,7 +455,7 @@ function McpServerEditor({
               <ui.TextField placeholder="Search MCP" value={draft.label} onChange={(event) => setDraftField(setDraft, 'label', event.currentTarget.value)} />
             </FormField>
             <FormField label={translate('feature.mcp.transport')}>
-              <ui.SelectField value={draft.transport} onValueChange={(value) => setDraftField(setDraft, 'transport', value as RuntimeMcpTransport)}>
+              <ui.SelectField disabled={saving} value={draft.transport} onValueChange={(value) => setDraftField(setDraft, 'transport', value as RuntimeMcpTransport)}>
                 <option value="stdio">stdio</option>
                 <option value="streamableHttp">streamable HTTP</option>
               </ui.SelectField>
@@ -495,9 +557,10 @@ function McpServerEditor({
                 </>
               ) : <div className="desktop-capabilities-mcp-tools__empty">{translate('feature.mcp.fetchToolsHint')}</div>}
             </section>
-          </div>
+          </fieldset>
         </section>
       </section>
+      {saveError ? <ui.Toast message={saveError} tone="error" /> : null}
     </main>
   );
 }

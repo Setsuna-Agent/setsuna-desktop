@@ -34,6 +34,25 @@ const clientWith = (methods: Partial<PullRequestsClient>) => methods as PullRequ
 const detail = () => readRequest(githubFixture(() => ({ repository: repositoryNode() })).api, reference);
 
 describe('PR navigation and drafts', () => {
+  it.each(['repositories', 'project', 'list'] as const)('reports a %s failure without presenting an empty result and recovers on refresh', async (operation) => {
+    const repositories = vi.fn(async () => ({ repositories: [{ id: 'owner/repo', fullName: 'owner/repo', projects: [], remotes: [] }], issues: [] as { project: string; message: string }[] }));
+    const list = vi.fn(async () => ({ items: [], cursor: null }));
+    if (operation === 'project') repositories.mockResolvedValueOnce({ repositories: [], issues: [{ project: 'Project', message: 'Request failed' }] });
+    else (operation === 'repositories' ? repositories : list).mockRejectedValueOnce(new Error('Request failed'));
+    const client = clientWith({
+      connection: vi.fn(async () => ({ state: 'connected', login: 'alice', avatarUrl: null, error: null, loginCommand: '' })),
+      installation: vi.fn(async () => ({ phase: 'idle', receivedBytes: 0, totalBytes: null, error: null })),
+      repositories, list,
+    });
+    render(<PullRequestsPage client={client} connectionState={new PullRequestConnectionState(client)} host={host} session={createPullRequestSession()} />);
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Request failed'));
+    expect(screen.queryByText('noResults')).toBeNull();
+    expect(screen.queryByText('noRepositories')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'refresh' }));
+    await screen.findByText('noResults');
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it.each([true, false])('prefers current paths when selecting diffs, with old paths as a fallback (reused: %s)', async (reused) => {
     const pr = await detail();
     const renamed = { path: 'a.ts', previousPath: 'z.ts', status: 'renamed', additions: 1, deletions: 1 };

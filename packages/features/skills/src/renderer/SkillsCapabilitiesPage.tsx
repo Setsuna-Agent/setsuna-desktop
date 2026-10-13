@@ -1,10 +1,8 @@
-import { useConfirm } from '@setsuna-desktop/renderer-ui';
 import { TextField as UiTextField, Button as UiButton, Switch } from '@setsuna-desktop/renderer-ui';
 
 import type {
   RuntimeSkillDetail,
   RuntimeSkillInput,
-  RuntimeSkillPatch,
   RuntimeSkillSummary,
 } from '@setsuna-desktop/contracts';
 import type { CapabilitiesRefreshCoordinator } from '@setsuna-desktop/renderer-contracts/capabilities';
@@ -24,16 +22,14 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   useSyncExternalStore,
 } from 'react';
 import type { SkillsRendererService } from '../contracts/index.js';
 import type { SkillsTranslate } from './messages.js';
 import { SkillDetail } from './SkillDetail.js';
+import { useSkillPageActions } from './useSkillPageActions.js';
 import { groupSkillsBySource, skillDirectoryPresets } from './skillCatalog.js';
-
-type SkillPageMode = 'catalog' | 'create' | 'detail' | 'edit';
 
 type SkillEditorDraft = Readonly<{
   content: string;
@@ -53,22 +49,15 @@ export function SkillsCapabilitiesPage({
   capabilitiesRefresh: CapabilitiesRefreshCoordinator;
   service: SkillsRendererService;
 }>) {
-  const confirm = useConfirm();
   const snapshot = useSyncExternalStore(
     (listener) => service.subscribe(listener),
     () => service.getSnapshot(),
     () => service.getSnapshot(),
   );
-  const [mode, setMode] = useState<SkillPageMode>('catalog');
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [summary, setSummary] = useState<RuntimeSkillSummary | null>(null);
-  const [detail, setDetail] = useState<RuntimeSkillDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [pendingDependencies, setPendingDependencies] = useState<ReadonlySet<string>>(new Set());
-  const requestVersion = useRef(0);
+  const actions = useSkillPageActions(service, capabilitiesRefresh, translate);
+  const { mode, summary, detail, error, loading, saving, operationError, pending } = actions;
 
   useEffect(() => {
     if (snapshot.skills.length) return;
@@ -85,125 +74,46 @@ export function SkillsCapabilitiesPage({
     [visibleSkills, snapshot.extraRoots, translate],
   );
 
-  const closeDetail = () => {
-    requestVersion.current += 1;
-    setMode('catalog');
-    setSummary(null);
-    setDetail(null);
-    setError(null);
-  };
-  const openSkill = async (skill: RuntimeSkillSummary) => {
-    const request = ++requestVersion.current;
-    setMode('detail');
-    setSummary(skill);
-    setDetail(null);
-    setError(null);
-    setLoading(true);
-    try {
-      const loaded = await service.getSkill(skill.id);
-      if (request !== requestVersion.current) return;
-      setSummary(loaded);
-      setDetail(loaded);
-    } catch (unknownError) {
-      if (request === requestVersion.current) setError(errorMessage(unknownError));
-    } finally {
-      if (request === requestVersion.current) setLoading(false);
-    }
-  };
-  const refreshPluginCatalog = async (skill: RuntimeSkillSummary) => {
-    if (skill.kind === 'plugin') await capabilitiesRefresh.refresh(['plugin-management']);
-  };
-  const updateSkill = async (skill: RuntimeSkillSummary, patch: RuntimeSkillPatch) => {
-    const updated = await service.updateSkill(skill.id, patch);
-    await refreshPluginCatalog(skill);
-    if (summary?.id === updated.id) {
-      setSummary(updated);
-      setDetail(updated);
-    }
-    return updated;
-  };
-  const saveSkill = async (input: RuntimeSkillInput) => {
-    if (saving) return;
-    setSaving(true);
-    try {
-      const saved = mode === 'create'
-        ? await service.createSkill(input)
-        : summary
-          ? await updateSkill(summary, skillPatch(input))
-          : null;
-      if (!saved) return;
-      setSummary(saved);
-      setDetail(saved);
-      setMode('detail');
-    } finally {
-      setSaving(false);
-    }
-  };
-  const deleteSkill = async (skill: RuntimeSkillSummary) => {
-    if (!await confirm({
-      title: translate('feature.skills.confirmDelete', { name: skill.name }),
-      confirmLabel: translate('feature.skills.delete'),
-      danger: true,
-    })) return;
-    await service.deleteSkill(skill.id);
-    await refreshPluginCatalog(skill);
-    closeDetail();
-  };
-  const updateDependency = async (
-    key: string,
-    operation: () => Promise<RuntimeSkillDetail>,
-  ) => {
-    setPendingDependencies((current) => new Set(current).add(key));
-    try {
-      const updated = await operation();
-      setSummary(updated);
-      setDetail(updated);
-      await capabilitiesRefresh.refresh(['mcp']);
-    } finally {
-      setPendingDependencies((current) => {
-        const next = new Set(current);
-        next.delete(key);
-        return next;
-      });
-    }
-  };
-
   if (mode === 'create' || mode === 'edit') {
     return (
-      <SkillEditor
-        capabilities={capabilities}
-        mode={mode}
-        saving={saving}
-        skill={mode === 'edit' ? detail : null}
-        translate={translate}
-        ui={ui}
-        onBack={() => detail ? setMode('detail') : closeDetail()}
-        onSave={saveSkill}
-      />
+      <>
+        <SkillEditor
+          capabilities={capabilities}
+          mode={mode}
+          saving={saving}
+          skill={mode === 'edit' ? detail : null}
+          translate={translate}
+          ui={ui}
+          onBack={actions.closeEditor}
+          onSave={actions.saveSkill}
+        />
+        {operationError ? <ui.Toast message={operationError} tone="error" /> : null}
+      </>
     );
   }
 
   if (mode === 'detail' && summary) {
     return (
-      <SkillDetail
-        capabilities={capabilities}
-        detail={detail}
-        error={error}
-        loading={loading}
-        pendingDependencies={pendingDependencies}
-        summary={summary}
-        translate={translate}
-        ui={ui}
-        onBack={closeDetail}
-        onDelete={summary.kind === 'builtin' ? undefined : () => deleteSkill(summary)}
-        onEdit={summary.kind === 'builtin' ? undefined : () => setMode('edit')}
-        onInstallDependencies={() => updateDependency(
-          'install',
-          () => service.installMcpDependencies(summary.id).then((result) => result.skill),
-        )}
-        onToggle={(enabled) => void updateSkill(summary, { enabled })}
-        onUseInChat={capabilities ? () => capabilities.openChat(summary.id) : undefined}
-      />
+      <>
+        <SkillDetail
+          capabilities={capabilities}
+          detail={detail}
+          error={error}
+          loading={loading}
+          pendingDependencies={new Set(pending.get(summary.id) === 'install' ? ['install'] : [])}
+          pending={pending.has(summary.id)}
+          summary={summary}
+          translate={translate}
+          ui={ui}
+          onBack={actions.closeDetail}
+          onDelete={summary.kind === 'builtin' ? undefined : () => actions.deleteSkill(summary)}
+          onEdit={summary.kind === 'builtin' ? undefined : actions.openEditor}
+          onInstallDependencies={() => actions.installDependencies(summary)}
+          onToggle={(enabled) => void actions.toggleSkill(summary, enabled)}
+          onUseInChat={capabilities ? () => capabilities.openChat(summary.id) : undefined}
+        />
+        {operationError ? <ui.Toast message={operationError} tone="error" /> : null}
+      </>
     );
   }
 
@@ -214,7 +124,7 @@ export function SkillsCapabilitiesPage({
         <header className="desktop-capabilities-header">
           <div className="desktop-capabilities-title"><h2>{translate('feature.skills.title')}</h2></div>
           <div className="desktop-capabilities-actions">
-            <ui.IconButton label={translate('feature.skills.refresh')} onClick={() => void service.refresh()}>
+            <ui.IconButton label={translate('feature.skills.refresh')} disabled={actions.refreshing} onClick={() => void actions.refresh()}>
               <RefreshCw size={15} />
             </ui.IconButton>
             {capabilities ? capabilities.renderCreateMenu({
@@ -231,14 +141,14 @@ export function SkillsCapabilitiesPage({
                   description: translate('feature.skills.createFormDescription'),
                   icon: <FilePlus2 size={14} />,
                   id: 'form-skill',
-                  onSelect: () => setMode('create'),
+                  onSelect: actions.openCreate,
                   title: translate('feature.skills.createForm'),
                 },
               ],
               onOpenChange: setCreateMenuOpen,
               open: createMenuOpen,
             }) : (
-              <ui.Button variant="primary" icon={<FilePlus2 size={14} />} onClick={() => setMode('create')}>
+              <ui.Button variant="primary" icon={<FilePlus2 size={14} />} onClick={actions.openCreate}>
                 {translate('feature.skills.add')}
               </ui.Button>
             )}
@@ -268,18 +178,20 @@ export function SkillsCapabilitiesPage({
                         skill={skill}
                         translate={translate}
                         ui={ui}
-                        onOpen={() => void openSkill(skill)}
-                        onToggle={(enabled) => void updateSkill(skill, { enabled })}
+                        pending={pending.has(skill.id)}
+                        onOpen={() => void actions.openSkill(skill)}
+                        onToggle={(enabled) => void actions.toggleSkill(skill, enabled)}
                       />
                     ))}
                   </div>
                 </section>
               ))}
-              {!visibleSkills.length ? <div className="desktop-capabilities-empty">{translate('feature.skills.empty')}</div> : null}
+              {!visibleSkills.length && !actions.refreshing && !operationError ? <div className="desktop-capabilities-empty">{translate('feature.skills.empty')}</div> : null}
             </div>
           </div>
         </div>
       </section>
+      {operationError ? <ui.Toast message={operationError} tone="error" /> : null}
     </main>
   );
 }
@@ -328,12 +240,14 @@ export function SkillsExtraRootsSettings({
 }
 
 function SkillListItem({
+  pending,
   onOpen,
   onToggle,
   skill,
   translate,
   ui,
 }: Readonly<{
+  pending: boolean;
   onOpen(): void;
   onToggle(enabled: boolean): void;
   skill: RuntimeSkillSummary;
@@ -348,7 +262,7 @@ function SkillListItem({
       </UiButton>
       <div className="desktop-capability-list-item__aside">
         <div className="desktop-capability-list-item__settings">
-          <span className="sd-toggle-label"><Switch label={translate('feature.skills.enableHint')} checked={skill.enabled} onCheckedChange={(checked) => onToggle(checked)} /></span>
+          <span className="sd-toggle-label"><Switch label={translate('feature.skills.enableHint')} checked={skill.enabled} disabled={pending} onCheckedChange={(checked) => onToggle(checked)} /></span>
         </div>
       </div>
     </article>
@@ -402,12 +316,12 @@ function SkillEditor({
             title={title}
           />
           <div className="desktop-capabilities-skill-form">
-            <label><span>{translate('feature.skills.editor.name')}</span><ui.TextField placeholder={translate('feature.skills.editor.namePlaceholder')} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.currentTarget.value })} /></label>
-            <label><span>{translate('feature.skills.editor.id')}</span><ui.TextField disabled={!creating} placeholder={translate('feature.skills.editor.idPlaceholder')} value={draft.id} onChange={(event) => setDraft({ ...draft, id: event.currentTarget.value })} /></label>
-            <label className="desktop-capabilities-skill-form__full"><span>{translate('feature.skills.editor.description')}</span><ui.TextArea placeholder={translate('feature.skills.editor.descriptionPlaceholder')} value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.currentTarget.value })} /></label>
-            <label className="desktop-capabilities-skill-form__full"><span>{translate('feature.skills.editor.content')}</span><ui.TextArea className="desktop-capabilities-skill-form__content" placeholder={translate('feature.skills.editor.contentPlaceholder')} spellCheck={false} value={draft.content} onChange={(event) => setDraft({ ...draft, content: event.currentTarget.value })} /></label>
+            <label><span>{translate('feature.skills.editor.name')}</span><ui.TextField disabled={saving} placeholder={translate('feature.skills.editor.namePlaceholder')} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.currentTarget.value })} /></label>
+            <label><span>{translate('feature.skills.editor.id')}</span><ui.TextField disabled={saving || !creating} placeholder={translate('feature.skills.editor.idPlaceholder')} value={draft.id} onChange={(event) => setDraft({ ...draft, id: event.currentTarget.value })} /></label>
+            <label className="desktop-capabilities-skill-form__full"><span>{translate('feature.skills.editor.description')}</span><ui.TextArea disabled={saving} placeholder={translate('feature.skills.editor.descriptionPlaceholder')} value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.currentTarget.value })} /></label>
+            <label className="desktop-capabilities-skill-form__full"><span>{translate('feature.skills.editor.content')}</span><ui.TextArea disabled={saving} className="desktop-capabilities-skill-form__content" placeholder={translate('feature.skills.editor.contentPlaceholder')} spellCheck={false} value={draft.content} onChange={(event) => setDraft({ ...draft, content: event.currentTarget.value })} /></label>
             <div className="desktop-capabilities-skill-form__checks">
-              <span className="sd-toggle-label"><Switch label={translate('feature.skills.enableHint')} checked={draft.enabled} onCheckedChange={(checked) => setDraft({ ...draft, enabled: checked })} /><span>{translate('feature.skills.enabled')}</span></span>
+              <span className="sd-toggle-label"><Switch label={translate('feature.skills.enableHint')} checked={draft.enabled} disabled={saving} onCheckedChange={(checked) => setDraft({ ...draft, enabled: checked })} /><span>{translate('feature.skills.enabled')}</span></span>
             </div>
           </div>
         </section>
@@ -434,13 +348,4 @@ function skillInput(draft: SkillEditorDraft, includeId: boolean): RuntimeSkillIn
     enabled: draft.enabled,
     name: draft.name.trim(),
   };
-}
-
-function skillPatch(input: RuntimeSkillInput): RuntimeSkillPatch {
-  const { id: _id, ...patch } = input;
-  return patch;
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

@@ -314,6 +314,8 @@
 }
 
 .mcp-form {
+  margin: 0;
+  border: 0;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: start;
