@@ -48,10 +48,10 @@ corepack pnpm@7.33.7 <command>
 - `pnpm build:renderer`：Vite build。
 - `pnpm check:architecture`：检查分层依赖、contracts 循环引用、测试隔离、文件体积和目录密度。
 - `pnpm typecheck`：先运行架构检查，再运行 TypeScript project references。
-- `pnpm test`：先跑稳定单元/轻量测试，再串行跑重集成测试。
+- `pnpm test`：依次运行单元/轻量测试和集成测试，各层使用对应的并发配置。
 - `pnpm test:all`：用默认全量 Vitest 配置一次性跑全部测试，配置上仍保持串行重链路。
 - `pnpm test:unit`：排除重集成文件的 Vitest 测试层。
-- `pnpm test:integration`：agent loop、runtime server、真实 git/shell/PTY、文件 watcher 等重集成测试，串行执行。
+- `pnpm test:integration`：agent loop、runtime server、真实 git/shell/PTY、文件 watcher 等重集成测试，最多两个隔离进程并行执行文件。
 - `pnpm test:release`：先下载并校验当前平台固定版本的 ripgrep，再运行需要在每个打包平台验证的 Main、Git、路径、Shell、Store、workspace 和构建脚本门禁。
 - `pnpm lint`：ESLint；架构规则由 `pnpm typecheck` 前置执行。
 - `pnpm package:*`：按平台打包。
@@ -213,15 +213,15 @@ DMG 是包含已签名、公证 app 的分发容器，不单独提交公证。
 
 ## CI
 
-`.github/workflows/ci.yml` 在面向 `master` 的 pull request 和手动运行时触发。常规验证由 `typecheck, lint, test` job 执行；远端分支保护配置以 GitHub 仓库设置为准。
+`.github/workflows/ci.yml` 在面向 `master` 的 pull request 和手动运行时触发。常规验证通过 `checks` matrix 并行运行；远端分支保护配置以 GitHub 仓库设置为准。
 
-macOS `verify` job 固定 pnpm `7.33.7`、Node.js `22` 和 Python `3.11`，依次执行：
+四个 macOS job 固定 pnpm `7.33.7`、Node.js `22` 和 Python `3.11`，各自配置 node-gyp Python 并执行 `pnpm install --frozen-lockfile`，然后分别执行：
 
-1. `node scripts/configure-node-gyp-python.mjs`。
-2. `pnpm install --frozen-lockfile`。
-3. `pnpm typecheck`（包含 architecture check）。
-4. `pnpm lint`。
-5. `pnpm test`（unit + integration）。
+1. `typecheck, lint`：`pnpm typecheck`（包含 architecture check），再运行 `pnpm lint`。
+2. 两份 `unit tests` 分片：`pnpm build:contracts`，再分别运行 `pnpm test:unit --shard=1/2`、`pnpm test:unit --shard=2/2`，覆盖完整单测套件。
+3. `integration tests`：`pnpm build:contracts`、`pnpm build:features`，再运行 `pnpm test:integration`。
+
+测试 job 显式准备真实 Worker/Electron fixture 需要的包导出，不依赖另一个 job 的 typecheck 产物。矩阵不会因一个任务失败而取消其他检查。`verify` 保留原有 `CI / typecheck, lint, test` 检查名，始终汇总 matrix 结果，只有所有检查成功才通过；失败、取消或跳过均不能通过汇总门禁。
 
 Windows `windows-sandbox` job 对原生 sidecar 执行 Rust 格式、Clippy、测试、协议 smoke test，以及账户、ACL、防火墙和受限进程验证。
 

@@ -18,10 +18,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
-    name: CI / typecheck, lint, test
+  checks:
+    name: CI / ${{ matrix.name }}
     runs-on: macos-15
     timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: typecheck, lint
+            suite: static
+            command: pnpm typecheck && pnpm lint
+          - name: unit tests 1/2
+            suite: unit
+            command: pnpm test:unit --shard=1/2
+          - name: unit tests 2/2
+            suite: unit
+            command: pnpm test:unit --shard=2/2
+          - name: integration tests
+            suite: integration
+            command: pnpm test:integration
 
     steps:
       - uses: actions/checkout@v4
@@ -45,14 +61,31 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Typecheck
-        run: pnpm typecheck
+      # Worker fixtures resolve package exports outside Vitest's source aliases.
+      # These were previously built by the preceding typecheck.
+      - name: Build contracts for worker fixtures
+        if: matrix.suite != 'static'
+        run: pnpm build:contracts
 
-      - name: Lint
-        run: pnpm lint
+      - name: Build Feature packages for Electron fixtures
+        if: matrix.suite == 'integration'
+        run: pnpm build:features
 
-      - name: Test
-        run: pnpm test
+      - name: Run ${{ matrix.name }}
+        run: ${{ matrix.command }}
+
+  # Preserve the existing required check while all independent checks run in parallel.
+  verify:
+    name: CI / typecheck, lint, test
+    needs: checks
+    if: always()
+    runs-on: macos-15
+    timeout-minutes: 2
+    steps:
+      - name: Require every check to pass
+        env:
+          CHECKS_RESULT: ${{ needs.checks.result }}
+        run: test "$CHECKS_RESULT" = success
 
   windows-sandbox:
     name: CI / Windows native sandbox
