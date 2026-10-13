@@ -35,7 +35,9 @@ pnpm test:integration
 - Git/review。
 - Shell/PTY。
 
-集成测试使用最多两个独立 `forks` worker 并行执行文件，同一文件内的测试仍串行。Fixture 必须使用独立临时数据目录、随机 loopback port 和 Electron userData，并负责清理子进程。并发保持较低，避免 Electron、编译器和 PTY 子进程争抢资源。
+CI 使用 Vitest 原生 `--shard=1/2`、`--shard=2/2` 将完整集成测试套件分到两个独立 runner；本地 `pnpm test:integration` 仍运行完整套件。
+
+每个集成测试进程使用最多两个独立 `forks` worker 并行执行文件，同一文件内的测试仍串行。Fixture 必须使用独立临时数据目录、随机 loopback port 和 Electron userData，并负责清理子进程。并发保持较低，避免 Electron、编译器和 PTY 子进程争抢资源。
 
 排查时可用 `pnpm test:integration --no-file-parallelism` 恢复串行执行；不要关闭文件隔离来提速。
 
@@ -53,7 +55,7 @@ pnpm test:release
 pnpm test
 ```
 
-本地依次运行 unit 和 integration。CI 将 typecheck/lint、unit、integration 放在独立 job 中并行运行，最终汇总到原有必需检查；详情见 [CI](build-and-release.md#ci)。`test:all` 使用默认全量串行 Vitest 配置，日常优先使用分层 script。
+本地依次运行 unit 和 integration。CI 将 typecheck/lint、unit、integration 放在独立 job 中并行运行，各项检查直接配置为分支保护的必需检查；详情见 [CI](build-and-release.md#ci)。`test:all` 使用默认全量串行 Vitest 配置，日常优先使用分层 script。
 
 ## 定向测试
 

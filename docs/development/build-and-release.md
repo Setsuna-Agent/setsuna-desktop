@@ -215,15 +215,26 @@ DMG 是包含已签名、公证 app 的分发容器，不单独提交公证。
 
 `.github/workflows/ci.yml` 在面向 `master` 的 pull request 和手动运行时触发。常规验证通过 `checks` matrix 并行运行；远端分支保护配置以 GitHub 仓库设置为准。
 
-四个 macOS job 固定 pnpm `7.33.7`、Node.js `22` 和 Python `3.11`，各自配置 node-gyp Python 并执行 `pnpm install --frozen-lockfile`，然后分别执行：
+五个 macOS job 固定 pnpm `7.33.7`、Node.js `22` 和 Python `3.11`，各自配置 node-gyp Python 并执行 `pnpm install --frozen-lockfile`，然后分别执行：
 
 1. `typecheck, lint`：`pnpm typecheck`（包含 architecture check），再运行 `pnpm lint`。
 2. 两份 `unit tests` 分片：`pnpm build:contracts`，再分别运行 `pnpm test:unit --shard=1/2`、`pnpm test:unit --shard=2/2`，覆盖完整单测套件。
-3. `integration tests`：`pnpm build:contracts`、`pnpm build:features`，再运行 `pnpm test:integration`。
+3. 两份 `integration tests` 分片：`pnpm build:contracts`、`pnpm build:features`，再分别运行 `pnpm test:integration --shard=1/2`、`pnpm test:integration --shard=2/2`，覆盖完整集成测试套件。
 
-测试 job 显式准备真实 Worker/Electron fixture 需要的包导出，不依赖另一个 job 的 typecheck 产物。矩阵不会因一个任务失败而取消其他检查。`verify` 保留原有 `CI / typecheck, lint, test` 检查名，始终汇总 matrix 结果，只有所有检查成功才通过；失败、取消或跳过均不能通过汇总门禁。
+测试 job 显式准备真实 Worker/Electron fixture 需要的包导出，不依赖另一个 job 的 typecheck 产物。矩阵不会因一个任务失败而取消其他检查。
 
 Windows `windows-sandbox` job 对原生 sidecar 执行 Rust 格式、Clippy、测试、协议 smoke test，以及账户、ACL、防火墙和受限进程验证。
+
+`master` 分支保护直接要求以下检查通过，不再设置汇总 job：
+
+- `CI / typecheck, lint`
+- `CI / unit tests 1/2`
+- `CI / unit tests 2/2`
+- `CI / integration tests 1/2`
+- `CI / integration tests 2/2`
+- `CI / Windows native sandbox`
+
+检查来源限定为 GitHub Actions，并保留合并前分支必须更新到最新的要求。修改 job 名称或分片数量时，必须同步更新 GitHub 分支保护中的必需检查列表。
 
 ### CodeQL
 

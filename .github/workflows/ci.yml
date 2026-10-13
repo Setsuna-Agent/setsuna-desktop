@@ -35,9 +35,12 @@ jobs:
           - name: unit tests 2/2
             suite: unit
             command: pnpm test:unit --shard=2/2
-          - name: integration tests
+          - name: integration tests 1/2
             suite: integration
-            command: pnpm test:integration
+            command: pnpm test:integration --shard=1/2
+          - name: integration tests 2/2
+            suite: integration
+            command: pnpm test:integration --shard=2/2
 
     steps:
       - uses: actions/checkout@v4
@@ -73,19 +76,6 @@ jobs:
 
       - name: Run ${{ matrix.name }}
         run: ${{ matrix.command }}
-
-  # Preserve the existing required check while all independent checks run in parallel.
-  verify:
-    name: CI / typecheck, lint, test
-    needs: checks
-    if: always()
-    runs-on: macos-15
-    timeout-minutes: 2
-    steps:
-      - name: Require every check to pass
-        env:
-          CHECKS_RESULT: ${{ needs.checks.result }}
-        run: test "$CHECKS_RESULT" = success
 
   windows-sandbox:
     name: CI / Windows native sandbox
