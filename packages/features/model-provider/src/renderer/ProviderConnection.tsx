@@ -9,9 +9,10 @@ import type { RendererTranslate,
 import type {
   SettingsViewUi,
 } from '@setsuna-desktop/renderer-contracts/settings';
-import { ChevronRight, LoaderCircle, PlugZap, SlidersHorizontal } from 'lucide-react';
+import { ChevronRight, LoaderCircle, PlugZap, Server, SlidersHorizontal } from 'lucide-react';
 import { useId, useState } from 'react';
 import type { ModelProviderCatalog } from '../contracts/index.js';
+import type { ModelProviderRendererHost } from './capabilities.js';
 import { ProviderApiKeyField } from './ProviderApiKeyField.js';
 import { ProviderRequestHeadersField } from './ProviderRequestHeadersField.js';
 import { useProviderConnectionTest, type ProviderConnectionTester } from './useProviderConnectionTest.js';
@@ -25,6 +26,7 @@ import {
 } from './provider-catalog.js';
 
 export function ProviderConnection({
+  BrandIcon,
   apiKey,
   catalog,
   onApiKeyChange,
@@ -36,6 +38,7 @@ export function ProviderConnection({
   translate,
   ui,
 }: Readonly<{
+  BrandIcon: ModelProviderRendererHost['BrandIcon'];
   apiKey: string;
   catalog: ModelProviderCatalog;
   onApiKeyChange(value: string): void;
@@ -50,6 +53,7 @@ export function ProviderConnection({
   const catalogProvider = catalogProviderForConfig(provider, catalog);
   const plan = catalogPlanForConfig(provider, catalogProvider);
   const custom = !catalogProvider;
+  const catalogProvidersById = new Map(catalog.providers.map((candidate) => [candidate.id, candidate]));
   const advancedId = useId();
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [headersValid, setHeadersValid] = useState(true);
@@ -66,6 +70,15 @@ export function ProviderConnection({
         <Field label={translate('feature.modelProvider.vendor')}>
           <ui.SelectField
             value={catalogProvider?.id ?? CUSTOM_PROVIDER_ID}
+            renderOptionIcon={(value) => {
+              const candidate = catalogProvidersById.get(value);
+              // Catalog choices use the vendor identity, not the edited service's custom name or icon.
+              return candidate ? <BrandIcon size="compact" provider={{
+                name: candidate.name,
+                catalogProviderId: candidate.id,
+                baseUrl: candidate.plans[0]?.baseUrl ?? '',
+              }} /> : <Server size={16} />;
+            }}
             onValueChange={(value) => {
               const next = catalog.providers.find((candidate) => candidate.id === value);
               if (next) onChange(selectCatalogProvider(provider, next));

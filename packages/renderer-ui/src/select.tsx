@@ -31,6 +31,7 @@ export type SelectFieldProps = {
   menuMinWidth?: number;
   name?: string;
   onValueChange: (value: string) => boolean | void;
+  renderOptionIcon?: (value: string) => ReactNode;
   required?: boolean;
   style?: CSSProperties;
   title?: string;
@@ -53,6 +54,7 @@ export function SelectField({
   menuMinWidth,
   name,
   onValueChange,
+  renderOptionIcon,
   required = false,
   style,
   title,
@@ -78,7 +80,7 @@ export function SelectField({
         <Primitive.Trigger
           id={id}
           type="button"
-          className={['sd-field', 'sd-select-field', open ? 'is-open' : '', className].filter(Boolean).join(' ')}
+          className={['sd-field', 'sd-select-field', renderOptionIcon ? 'sd-select-field--with-icon' : '', open ? 'is-open' : '', className].filter(Boolean).join(' ')}
           aria-haspopup="listbox"
           aria-label={ariaLabel}
           aria-labelledby={ariaLabelledBy}
@@ -87,6 +89,7 @@ export function SelectField({
           style={style}
           title={title}
         >
+          {renderOptionIcon && selectedOption ? <span className="sd-select-field__icon" aria-hidden="true">{renderOptionIcon(selectedOption.value)}</span> : null}
           <span className="sd-select-field__value">{valueContent ?? selectedOption?.label ?? ''}</span>
           <ChevronDown className="sd-select-field__chevron" size={15} aria-hidden="true" />
         </Primitive.Trigger>
@@ -103,7 +106,9 @@ export function SelectField({
             <Primitive.Viewport className="sd-select-menu__viewport">
               {options.map((option, index) => (
                 <Primitive.Item key={`${option.value}:${index}`} value={`${OPTION_VALUE_PREFIX}${option.value}`}
-                  className="sd-select-menu__option" disabled={option.disabled}>
+                  className={`sd-select-menu__option${renderOptionIcon ? ' sd-select-menu__option--with-icon' : ''}`} disabled={option.disabled}>
+                  {/* Keep decorative glyphs out of the text used for keyboard typeahead. */}
+                  {renderOptionIcon ? <span className="sd-select-field__icon" aria-hidden="true">{renderOptionIcon(option.value)}</span> : null}
                   <Primitive.ItemText>{option.label}</Primitive.ItemText>
                   <Primitive.ItemIndicator asChild><Check size={15} aria-hidden="true" /></Primitive.ItemIndicator>
                 </Primitive.Item>

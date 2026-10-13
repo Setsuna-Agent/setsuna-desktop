@@ -5,7 +5,7 @@ import type { ComponentType } from 'react';
 import type { ModelProviderRendererStateService } from './service.js';
 
 export type ModelProviderBrandIconProps = Readonly<{
-  provider: ProviderConfigState;
+  provider: Pick<ProviderConfigState, 'baseUrl' | 'catalogProviderId' | 'icon' | 'name'>;
   model?: ProviderModelConfig;
   size?: 'compact' | 'default' | 'large';
 }>;

@@ -873,7 +873,7 @@ const testUi = {
   Section: ({ children, featureId: _featureId, ...props }: ComponentProps<SettingsViewUi['Section']>) => (
     <section {...props}>{children}</section>
   ),
-  SelectField: ({ children, onValueChange, ...props }: ComponentProps<SettingsViewUi['SelectField']>) => (
+  SelectField: ({ children, onValueChange, renderOptionIcon: _renderOptionIcon, ...props }: ComponentProps<SettingsViewUi['SelectField']>) => (
     <select {...props} onChange={(event) => onValueChange(event.currentTarget.value)}>{children}</select>
   ),
   Tooltip: ({ children }: ComponentProps<SettingsViewUi['Tooltip']>) => children,
