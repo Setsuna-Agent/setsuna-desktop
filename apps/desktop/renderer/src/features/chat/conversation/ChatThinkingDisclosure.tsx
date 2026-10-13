@@ -38,47 +38,40 @@ export function ChatThinkingDisclosure({
         <ChevronDown aria-hidden="true" className="chat-thinking-disclosure__chevron" size={12} />
       </summary>
       {expanded ? (
-        active
-          ? <ActiveThinkingContent content={content} label={label} scrollStateKey={scrollStateKey} />
-          : <ThinkingContent content={content} label={label} />
+        <ThinkingContent active={active} content={content} label={label} scrollStateKey={scrollStateKey} />
       ) : null}
     </details>
   );
 }
 
-function ThinkingContent({ content, label }: { content: string; label: string }) {
-  return (
-    <ThinkingPanel label={label}>
-      <div className="chat-thinking-disclosure__content">
-        <MarkdownRenderer content={content} legacyThinkingTags={false} streaming={false} />
-      </div>
-    </ThinkingPanel>
-  );
-}
-
-function ActiveThinkingContent({
+function ThinkingContent({
+  active,
   content,
   label,
   scrollStateKey,
 }: {
+  active: boolean;
   content: string;
   label: string;
   scrollStateKey: string;
 }) {
-  const { handlePointerDown, handleScroll, handleTouchMove, handleWheel, scrollRef } = useStreamingScrollPin(content, scrollStateKey);
+  const { contentRef, handleKeyDown, handlePointerDown, handleScroll, handleTouchMove, handleWheel, scrollRef } = useStreamingScrollPin(content, scrollStateKey, active);
 
   return (
     <ThinkingPanel label={label}>
       <div
         className="chat-thinking-disclosure__content"
         ref={scrollRef}
-        aria-live="polite"
+        aria-live={active ? 'polite' : undefined}
+        onKeyDownCapture={handleKeyDown}
         onPointerDownCapture={handlePointerDown}
         onScroll={handleScroll}
         onTouchMoveCapture={handleTouchMove}
         onWheelCapture={handleWheel}
       >
-        <MarkdownRenderer content={content} legacyThinkingTags={false} streaming />
+        <div ref={contentRef}>
+          <MarkdownRenderer content={content} legacyThinkingTags={false} streaming={active} />
+        </div>
       </div>
     </ThinkingPanel>
   );
