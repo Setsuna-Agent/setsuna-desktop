@@ -11,13 +11,13 @@
 ## 设计目标
 
 - active turn 期间的普通提交默认排队，避免补充输入在用户没有明确选择时改变当前模型执行。
-- 队列可见、可持久化，支持立即发送、取回编辑和删除。
+- 队列可见、可持久化，支持拖动排序、立即发送、取回编辑和删除。
 - 当前 turn 只有正常完成时才自动发送队首；取消或错误后保留并暂停队列。
 - 每个自动发送项创建独立 turn，usage、memory、工具链路和错误状态独立结算。
 - 普通消息的“立即发送”仍共享当前 `turnId`，并在下一个安全模型检查点被消费。
 - 普通、Goal 作为显式队列类型持久化，不能在排队过程中丢失执行语义。
 - renderer、REST 和 runtime 共享同一套 contract 与事件投影，不维护平行状态。
-- 并发的自动调度、取回更新、立即发送和删除必须保证不丢、不重、FIFO 不越序。
+- 并发的自动调度、排序、取回更新、立即发送和删除必须保证不丢、不重；默认 FIFO，显式排序后按新顺序发送。
 
 非目标：
 
@@ -39,6 +39,7 @@
 ```text
 turn.input_queued
 turn.input_updated
+turn.inputs_reordered
 turn.input_deleted
 ```
 
@@ -98,6 +99,7 @@ HTTP 入口：
 
 ```text
 POST   /v1/threads/:threadId/queued-turn-inputs
+POST   /v1/threads/:threadId/queued-turn-inputs/reorder
 POST   /v1/threads/:threadId/queued-turn-inputs/:inputId/retrieve
 POST   /v1/threads/:threadId/queued-turn-inputs/:inputId/release
 PATCH  /v1/threads/:threadId/queued-turn-inputs/:inputId
@@ -152,6 +154,12 @@ POST /v1/threads/:threadId/turns/:turnId/steer
 - `message`：启动普通独立 turn。
 - `goal`：通过 `RuntimeGoalCoordinator.startQueuedGoal()` 原子建立目标、写入带 Goal 类型的可见用户消息并启动 goal turn；附件、Skill 和 thinking 选项随目标持久化，并在后续自动续轮中保持。首轮模型请求直接复用可见消息中的附件，避免在合成续轮输入上重复附加；后续计量和状态事件只标记复用既有执行选项。
 
+### 排序
+
+reorder 接收 `ReorderQueuedTurnInputsInput.inputIds`，必须恰好包含当前队列的所有 ID，且不能重复。校验与落盘和自动调度共用线程串行锁；拖动过程中发生入队、删除或发送时，旧请求会被整体拒绝，不会丢项或恢复已发送的内容。编辑占用和调度中的项也不允许排序。
+
+`turn.inputs_reordered` 只保存新顺序，投影器保留每项的文本、附件、模型、Skill 与 thinking 设置。重复提交同一顺序不写新事件。排序不主动发送，也不会解除取消或失败后的暂停；下一次正常调度按新队首执行。
+
 ### 立即发送
 
 如果队列项是普通消息，且 active task 是仍可接收 steer 的普通、goal 或 review turn，send-now 调用 `RuntimeTurnInputCoordinator.steerQueuedInput()`：
@@ -187,7 +195,9 @@ release 也必须携带同一令牌。旧页面或旧请求的迟到 release 无
 
 composer 上方渲染 `ChatSendQueue`：
 
-- 队列按 FIFO 顺序以紧凑单行列表展示，不额外占用标题卡片空间。
+- 队列按待发送顺序以紧凑单行列表展示，默认 FIFO，不额外占用标题卡片空间。
+- 拖动左侧图标调整顺序，显示浮起的整行预览和虚线占位，相邻项用共享弹簧让位；靠近列表上下边缘时自动滚动。手柄获得焦点时也可用方向键调整。
+- 队列 ID 或顺序变化、切换线程、开始编辑时取消未完成的拖动；落下后通过排序 API 写入，显示顺序以 SSE 事件为准。
 - 每项展示文本和附件名；普通、Goal 分别使用消息和目标图标。消息真正进入 transcript 后仍保留 `inputKind`，Goal 用户消息继续显示目标语义图标。
 - 普通项的“立即发送”调用 send-now API；Goal 在 active turn 期间等待自动调度。
 - “编辑”调用 retrieve 后把文本与附件放入主输入框并隐藏原行；可删除或补充附件，再通过 PATCH 原子更新原队列项。

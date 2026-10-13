@@ -197,7 +197,7 @@ function Harness({ loadOlder, find = false, thread = snapshot }: {
       findInChatRequest={request} onFindInChatRequestConsumed={() => setRequest(0)}
       onDraftChange={setDraft} onSend={async () => false} onAnswerApproval={async () => undefined}
       onDeleteMessages={noop} onEditUserMessage={noop}
-      queuedTurnActions={{ deleteQueuedTurnInput: vi.fn(), releaseQueuedTurnInputEdit: vi.fn(), retrieveQueuedTurnInput: vi.fn(), sendQueuedTurnInputNow: vi.fn(), updateQueuedTurnInput: vi.fn() }}
+      queuedTurnActions={{ deleteQueuedTurnInput: vi.fn(), releaseQueuedTurnInputEdit: vi.fn(), retrieveQueuedTurnInput: vi.fn(), reorderQueuedTurnInputs: vi.fn(), sendQueuedTurnInputNow: vi.fn(), updateQueuedTurnInput: vi.fn() }}
       onAccessModeChange={noop} onCancelActiveTurn={noop} onClearContext={noop} onCompactContext={noop}
       onSelectModel={noop} onSetMultiAgentEnabled={noop} onStartThreadReview={vi.fn()} onSearchProjectEntries={vi.fn()}
     />

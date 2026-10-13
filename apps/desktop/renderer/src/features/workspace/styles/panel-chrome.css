@@ -275,7 +275,9 @@
 .desktop-panel-chrome .chat-file-review-panel__title.is-dragging {
   color: transparent;
   border-color: transparent;
-  background: transparent;
+  background: var(--sd-drag-placeholder);
+  outline: 1px dashed var(--sd-drag-outline);
+  outline-offset: -1px;
   box-shadow: none;
 }
 
@@ -292,7 +294,10 @@
   flex: 0 0 auto;
   min-width: 0;
   border: 0;
-  background: transparent;
+  border-radius: var(--app-radius-sm);
+  background: var(--sd-drag-placeholder);
+  outline: 1px dashed var(--sd-drag-outline);
+  outline-offset: -1px;
   pointer-events: none;
 }
 
@@ -302,7 +307,9 @@
   display: inline-flex;
   min-width: 0;
   max-width: none;
-  box-shadow: var(--app-shadow-popover);
+  background: var(--app-surface);
+  box-shadow: var(--sd-drag-shadow);
+  scale: 1.025;
   pointer-events: none;
   cursor: grabbing;
   will-change: transform;
@@ -312,4 +319,8 @@
 .desktop-panel-chrome .chat-file-review-panel__title--drag-preview .chat-file-review-panel__tab-close {
   opacity: 1;
   pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .desktop-panel-chrome .chat-file-review-panel__title--drag-preview { scale: 1; }
 }

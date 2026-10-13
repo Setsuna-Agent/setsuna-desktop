@@ -1,4 +1,5 @@
 import type { WorkspaceEntry } from '@setsuna-desktop/contracts';
+import { useNativeDragPreview } from '@setsuna-desktop/renderer-ui';
 import { useRef, useState, type DragEvent } from 'react';
 import { useToast } from '../../../app/providers/ToastProvider.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
@@ -17,16 +18,18 @@ export function useWorkspaceEntryDrag({ projectId, disabled, entries, moveEntry,
   const { t } = useI18n();
   const toast = useToast();
   const sourceRef = useRef<WorkspaceEntry | null>(null);
+  const preview = useNativeDragPreview();
   const [draggingPath, setDraggingPath] = useState<string | null>(null);
   const [dropPath, setDropPath] = useState<string | null>(null);
   const internalDrag = (event: DragEvent<HTMLElement>) => Array.from(event.dataTransfer.types).includes(ENTRY_DRAG_TYPE);
-  const endDrag = () => { sourceRef.current = null; setDraggingPath(null); setDropPath(null); };
+  const endDrag = () => { preview.end(); sourceRef.current = null; setDraggingPath(null); setDropPath(null); };
   const startDrag = (event: DragEvent<HTMLElement>, entry: WorkspaceEntry) => {
     if (disabled || !projectId) { event.preventDefault(); return; }
     sourceRef.current = entry;
     setDraggingPath(entry.path);
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData(ENTRY_DRAG_TYPE, JSON.stringify({ projectId, path: entry.path }));
+    preview.start(event);
   };
   const dragOver = (event: DragEvent<HTMLElement>, parentPath: string) => {
     if (!internalDrag(event)) return;
@@ -65,7 +68,8 @@ export function useWorkspaceEntryDrag({ projectId, disabled, entries, moveEntry,
     }
   };
   return {
-    draggingPath, dropPath, startDrag, endDrag, dragOver,
+    draggingPath: preview.dragging ? draggingPath : null,
+    dropPath, startDrag, endDrag, dragOver,
     clearDropTarget: () => setDropPath(null),
     drop: (event: DragEvent<HTMLElement>, parentPath: string) => { void drop(event, parentPath); },
   };

@@ -59,6 +59,7 @@ function transfer() {
     get types() { return [...values.keys()]; },
     setData: (type: string, value: string) => values.set(type, value),
     getData: (type: string) => values.get(type) ?? '',
+    setDragImage: vi.fn(),
     effectAllowed: 'none', dropEffect: 'none',
   };
 }
@@ -78,7 +79,9 @@ it('commits a drop, restores the saved app order, and keeps creation outside the
   fireEvent.dragStart(source, { dataTransfer });
   drag('dragover', target, { dataTransfer, clientY: -1 });
   expect(view.order()).toEqual(['app.a', 'app.b', 'app.c']);
-  drag('drop', target, { dataTransfer, clientY: -1 });
+  // The source placeholder moves into the gap; dropping on it must keep that insertion point.
+  drag('dragover', source, { dataTransfer, clientY: -1 });
+  drag('drop', source, { dataTransfer, clientY: -1 });
   await waitFor(() => expect(view.store.load().preferences.listPreferences[shellSidebarPluginEntrySlot.id]?.order).toEqual(['app.c', 'app.a', 'app.b']));
   expect(view.order()).toEqual(['app.c', 'app.a', 'app.b']);
   expect(view.onOpen).not.toHaveBeenCalled();

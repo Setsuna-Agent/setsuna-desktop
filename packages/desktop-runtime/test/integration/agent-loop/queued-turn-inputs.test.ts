@@ -100,6 +100,32 @@ describe('agent loop queued turn inputs', () => {
     });
   });
 
+  it('sends reordered inputs exactly once with their original generation settings', async () => {
+    const { loop, modelClient, threadStore, threadId } = await createBlockedLoop();
+    await loop.startTurn(threadId, { input: 'Initial prompt' });
+    await waitForModelRequestCount(modelClient, 1);
+    const first = await loop.queueTurnInput(threadId, {
+      input: 'First queued prompt', skillIds: ['skill_step'], thinking: true, thinkingEffort: 'high',
+    });
+    const second = await loop.queueTurnInput(threadId, { input: 'Second queued prompt' });
+    const before = await threadStore.getThread(threadId);
+    await expect(loop.reorderQueuedTurnInputs(threadId, {
+      inputIds: [second.queuedInputId, first.queuedInputId],
+    })).resolves.toEqual({ reordered: true });
+    const reordered = await threadStore.getThread(threadId);
+    expect(reordered?.queuedTurnInputs).toEqual([...before!.queuedTurnInputs!].reverse());
+    expect(reordered?.messages).toEqual(before?.messages);
+    expect(modelClient.requests).toHaveLength(1);
+
+    modelClient.releaseFirstResponse();
+    const completed = await waitForQueueDrain(threadStore, threadId, 3);
+    expect(completed.messages.filter((message) => message.role === 'user').map((message) => message.content))
+      .toEqual(['Initial prompt', 'Second queued prompt', 'First queued prompt']);
+    expect(modelClient.requests).toHaveLength(3);
+    expect(modelClient.requests[2]).toMatchObject({ thinking: true, reasoningEffort: 'high' });
+    expect(modelClient.requests[2]?.stepSnapshot?.messageIds).toContain('skill_skill_step');
+  });
+
   it('persists active-turn input and automatically sends queued items in FIFO order', async () => {
     const { loop, modelClient, threadStore, threadId } = await createBlockedLoop();
     const started = await loop.startTurn(threadId, {

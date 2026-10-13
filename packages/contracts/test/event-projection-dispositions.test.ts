@@ -26,6 +26,7 @@ const SWE_IGNORED_EVENT_TYPES = [
   'thread.context_cleared',
   'turn.input_queued',
   'turn.input_updated',
+  'turn.inputs_reordered',
   'turn.input_deleted',
   'message.updated',
   'messages.deleted',
@@ -54,7 +55,7 @@ const ACTIVITY_INCLUDED_EVENT_TYPES = [
 
 describe('runtime event projection dispositions', () => {
   it('classifies every runtime event exactly once for each consumer', () => {
-    expect(RUNTIME_EVENT_TYPES).toHaveLength(45);
+    expect(RUNTIME_EVENT_TYPES).toHaveLength(46);
 
     for (const dispositions of [
       RUNTIME_THREAD_EVENT_DISPOSITIONS,

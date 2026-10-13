@@ -257,6 +257,7 @@ function dragEntry(source: Element, target: Element) {
     types: [] as string[], effectAllowed: 'none', dropEffect: 'none',
     setData(type: string, value: string) { this.types.push(type); values.set(type, value); },
     getData(type: string) { return values.get(type) ?? ''; },
+    setDragImage: vi.fn(),
   };
   fireEvent.dragStart(source, { dataTransfer });
   fireEvent.dragOver(target, { dataTransfer });

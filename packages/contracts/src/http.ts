@@ -21,6 +21,8 @@ import type {
   RuntimeMessagePageQuery,
   QueuedTurnInputEditSession,
   QueuedTurnInputPatch,
+  ReorderQueuedTurnInputsInput,
+  ReorderQueuedTurnInputsResponse,
   QueuedTurnInputResponse,
   QueueTurnInput,
   RegenerateMessageInput,
@@ -101,6 +103,7 @@ export type DesktopRuntimeClient = {
   sendTurn(threadId: string, input: SendTurnInput): Promise<StartTurnResponse>;
   steerTurn(threadId: string, turnId: string, input: SteerTurnInput): Promise<SendTurnResponse>;
   queueTurnInput(threadId: string, input: QueueTurnInput): Promise<QueuedTurnInputResponse>;
+  reorderQueuedTurnInputs(threadId: string, input: ReorderQueuedTurnInputsInput): Promise<ReorderQueuedTurnInputsResponse>;
   retrieveQueuedTurnInput(threadId: string, inputId: string): Promise<QueuedTurnInputEditSession>;
   releaseQueuedTurnInputEdit(threadId: string, inputId: string, input: QueuedTurnInputEditRelease): Promise<QueuedTurnInputEditReleaseResponse>;
   updateQueuedTurnInput(threadId: string, inputId: string, patch: QueuedTurnInputPatch): Promise<QueuedTurnInputResponse>;

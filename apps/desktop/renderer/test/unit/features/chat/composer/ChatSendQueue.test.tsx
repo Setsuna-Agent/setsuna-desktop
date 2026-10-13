@@ -73,6 +73,7 @@ function renderQueue(
         items={items}
         onDelete={vi.fn(async () => true)}
         onEdit={vi.fn(async () => true)}
+        onReorder={vi.fn(async () => true)}
         onSendNow={vi.fn(async () => true)}
       />
     </I18nProvider>,

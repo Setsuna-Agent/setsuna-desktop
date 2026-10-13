@@ -13,6 +13,7 @@
 
 .app-navigation__routes,
 .app-navigation__plugins,
+.app-navigation__app-order,
 .app-navigation__footer {
   display: flex;
   flex-direction: column;
@@ -44,6 +45,9 @@
   margin-top: 4px;
   padding-top: 12px;
 }
+
+.app-navigation__app-order { position: relative; }
+.app-navigation__app-order:empty { display: none; }
 
 .app-navigation__plugins::before {
   position: absolute;
@@ -89,27 +93,14 @@
 }
 
 .app-navigation__button[data-dragging='true'] {
-  opacity: 0.45;
+  background: var(--sd-drag-placeholder) !important;
+  outline: 1px dashed var(--sd-drag-outline);
+  outline-offset: -1px;
   cursor: grabbing;
 }
 
-.app-navigation__button[data-drop-position]::after {
-  position: absolute;
-  right: 2px;
-  left: 2px;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--app-text);
-  pointer-events: none;
-  content: '';
-}
-
-.app-navigation__button[data-drop-position='before']::after {
-  top: -5px;
-}
-
-.app-navigation__button[data-drop-position='after']::after {
-  bottom: -5px;
+.app-navigation__button[data-dragging='true'] > * {
+  opacity: 0;
 }
 
 .app-navigation__avatar {

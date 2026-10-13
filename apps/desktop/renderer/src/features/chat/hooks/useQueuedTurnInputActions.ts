@@ -13,6 +13,7 @@ export type ChatQueuedTurnActions = {
     session: ChatQueuedTurnEditSession,
     options?: { silent?: boolean },
   ) => Promise<boolean>;
+  reorderQueuedTurnInputs: (inputIds: string[]) => Promise<boolean>;
   retrieveQueuedTurnInput: (inputId: string) => Promise<ChatQueuedTurnEditSession | null>;
   sendQueuedTurnInputNow: (inputId: string) => Promise<boolean>;
   updateQueuedTurnInput: (
@@ -81,6 +82,20 @@ export function useQueuedTurnInputActions({
       return false;
     }
   }, [actionRequests, client, setCurrentThread, setError, threadId]);
+
+  const reorderQueuedTurnInputs = useCallback(async (inputIds: string[]) => {
+    if (!threadId) return false;
+    const isCurrentRequest = actionRequests.begin();
+    try {
+      if (isCurrentRequest()) setError(null);
+      await client.reorderQueuedTurnInputs(threadId, { inputIds });
+      // The sequenced SSE event owns queue order, including changes made while this request ran.
+      return isCurrentRequest();
+    } catch (unknownError) {
+      if (isCurrentRequest()) setError(runtimeActionError(unknownError));
+      return false;
+    }
+  }, [actionRequests, client, setError, threadId]);
 
   const retrieveQueuedTurnInput = useCallback(async (inputId: string) => {
     if (!threadId) return null;
@@ -222,6 +237,7 @@ export function useQueuedTurnInputActions({
   return {
     deleteQueuedTurnInput,
     releaseQueuedTurnInputEdit,
+    reorderQueuedTurnInputs,
     retrieveQueuedTurnInput,
     sendQueuedTurnInputNow,
     updateQueuedTurnInput,

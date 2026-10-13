@@ -206,7 +206,7 @@ Core 保留 sandbox/policy、人工审批、事件投影和审计 DTO；Feature 
 
 - 每线程 promise tail 串行操作。
 - 最多 20 个持久化队列项。
-- FIFO。
+- 默认 FIFO；显式排序以事件持久化，后续调度遵循新顺序。
 - Retrieve/edit 使用随机 token。
 - 自动调度隔离旧 run 的迟到结算。
 - Cancel/error 后暂停自动发送。

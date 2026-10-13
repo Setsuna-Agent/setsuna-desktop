@@ -158,7 +158,6 @@ export function SidebarThreadRow({
       ) : null}
       {menuOpen ? <SidebarThreadMenu anchor={menuAnchorPoint} thread={thread} pinned={pinned} running={isRunning}
         actions={threadMenu} onRename={onRename} onTogglePin={onTogglePin} onArchive={onArchive} onOpenInNewWindow={onOpenInNewWindow} /> : null}
-      {threadDrag.preview}
     </div>
   );
 }

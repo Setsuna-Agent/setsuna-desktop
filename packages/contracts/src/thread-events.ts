@@ -223,6 +223,14 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
     return next;
   }
 
+  if (event.type === 'turn.inputs_reordered') {
+    const positions = new Map(event.payload.inputIds.map((id, index) => [id, index]));
+    next.queuedTurnInputs = next.queuedTurnInputs?.slice().sort((left, right) => (
+      (positions.get(left.id) ?? positions.size) - (positions.get(right.id) ?? positions.size)
+    ));
+    return next;
+  }
+
   if (event.type === 'turn.input_deleted') {
     next.queuedTurnInputs = next.queuedTurnInputs?.filter((input) => input.id !== event.payload.inputId);
     return next;

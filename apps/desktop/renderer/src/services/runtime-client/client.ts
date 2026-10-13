@@ -18,6 +18,8 @@ import type {
   QueuedTurnInputEditSession,
   QueuedTurnInputPatch,
   QueuedTurnInputResponse,
+  ReorderQueuedTurnInputsInput,
+  ReorderQueuedTurnInputsResponse,
   DeleteQueuedTurnInputResponse,
   RegenerateMessageInput,
   RuntimeApprovalList,
@@ -168,6 +170,13 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     queueTurnInput(threadId: string, input: QueueTurnInput) {
       return request<QueuedTurnInputResponse>({
         path: `/v1/threads/${encodeURIComponent(threadId)}/queued-turn-inputs`,
+        method: 'POST',
+        body: input,
+      });
+    },
+    reorderQueuedTurnInputs(threadId: string, input: ReorderQueuedTurnInputsInput) {
+      return request<ReorderQueuedTurnInputsResponse>({
+        path: `/v1/threads/${encodeURIComponent(threadId)}/queued-turn-inputs/reorder`,
         method: 'POST',
         body: input,
       });

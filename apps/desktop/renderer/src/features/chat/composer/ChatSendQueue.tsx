@@ -7,6 +7,7 @@ import {
 import {
   Forward,
   Goal as GoalIcon,
+  GripVertical,
   MessageSquareText,
   Paperclip,
   Trash2,
@@ -15,6 +16,7 @@ import { memo, useState } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { EditIcon } from '../../../shared/ui/EditIcon.js';
 import { BrowserAnnotationReference } from '../mentions/BrowserAnnotationReference.js';
+import { useChatSendQueueReorder } from './useChatSendQueueReorder.js';
 
 type QueueAction = 'delete' | 'edit' | 'send';
 
@@ -25,6 +27,7 @@ export const ChatSendQueue = memo(function ChatSendQueue({
   items,
   onDelete,
   onEdit,
+  onReorder,
   onSendNow,
 }: {
   disabled?: boolean;
@@ -33,10 +36,12 @@ export const ChatSendQueue = memo(function ChatSendQueue({
   items: RuntimeQueuedTurnInput[];
   onDelete: (inputId: string) => Promise<boolean>;
   onEdit: (input: RuntimeQueuedTurnInput) => Promise<boolean>;
+  onReorder: (inputIds: string[]) => Promise<boolean>;
   onSendNow: (inputId: string) => Promise<boolean>;
 }) {
   const { t } = useI18n();
   const [pendingAction, setPendingAction] = useState<{ inputId: string; type: QueueAction } | null>(null);
+  const reorder = useChatSendQueueReorder({ disabled: disabled || Boolean(pendingAction), items, onReorder });
 
   if (!items.length) return null;
 
@@ -45,7 +50,7 @@ export const ChatSendQueue = memo(function ChatSendQueue({
     type: QueueAction,
     action: () => Promise<unknown>,
   ) => {
-    if (pendingAction) return;
+    if (pendingAction || reorder.saving || reorder.draggedInputId) return;
     setPendingAction({ inputId, type });
     try {
       await action();
@@ -55,8 +60,8 @@ export const ChatSendQueue = memo(function ChatSendQueue({
   };
 
   return (
-    <section className="chat-send-queue" aria-label={t('chat.queue.label')}>
-      <ol className="chat-send-queue__list">
+    <section className="chat-send-queue" aria-label={t('chat.queue.label')} aria-busy={reorder.saving}>
+      <ol className="chat-send-queue__list" ref={reorder.listRef} {...reorder.listProps}>
         {items.map((item) => {
           const annotationMessage = parseBrowserAnnotationMessage(item.input);
           const kind = normalizeRuntimeQueuedTurnInputKind(item.kind);
@@ -66,7 +71,7 @@ export const ChatSendQueue = memo(function ChatSendQueue({
             : t('chat.queue.kind.message');
           const itemPending = pendingAction?.inputId === item.id;
           const attachments = item.attachments ?? [];
-          const actionsDisabled = disabled || Boolean(pendingAction);
+          const actionsDisabled = disabled || Boolean(pendingAction) || reorder.saving || Boolean(reorder.draggedInputId);
           const sendNowWaitsForCurrent = hasActiveTurn && kind !== 'message';
           const sendNowLabel = sendNowWaitsForCurrent
             ? t('chat.queue.sendNowWaitForCurrent')
@@ -76,18 +81,26 @@ export const ChatSendQueue = memo(function ChatSendQueue({
             : t('chat.queue.edit');
           return (
             <li
-              className={`chat-send-queue__item ${itemPending ? 'is-pending' : ''}`}
+              className={[
+                'chat-send-queue__item',
+                itemPending ? 'is-pending' : '',
+                reorder.previewInputId === item.id ? 'is-dragging' : '',
+              ].filter(Boolean).join(' ')}
+              data-queue-id={item.id}
+              data-reorder-id={item.id}
               data-queue-kind={kind}
               key={item.id}
             >
-              <span
-                className={`chat-send-queue__marker is-${kind}`}
-                role="img"
-                aria-label={kindLabel}
-                title={kindLabel}
+              <Button
+                variant="ghost"
+                className={`chat-send-queue__marker chat-send-queue__drag-handle is-${kind}`}
+                aria-label={`${kindLabel} · ${t('chat.queue.reorder')}`}
+                title={t('chat.queue.reorder')}
+                {...reorder.handleProps(item.id)}
               >
-                <MarkerIcon size={14} aria-hidden="true" />
-              </span>
+                <MarkerIcon className="chat-send-queue__kind-icon" size={14} aria-hidden="true" />
+                <GripVertical className="chat-send-queue__grip-icon" size={14} aria-hidden="true" />
+              </Button>
               <div className="chat-send-queue__content">
                 {annotationMessage ? <BrowserAnnotationReference message={annotationMessage} /> : <p className="chat-send-queue__text" title={item.input}>
                   {item.input || t('chat.queue.attachmentOnly')}

@@ -284,6 +284,7 @@ function renderComposer(overrides: Partial<Parameters<typeof ChatComposer>[0]> =
     deleteQueuedTurnInput: vi.fn(async () => true),
     releaseQueuedTurnInputEdit: vi.fn(async () => true),
     retrieveQueuedTurnInput: vi.fn(async () => null),
+    reorderQueuedTurnInputs: vi.fn(async () => true),
     sendQueuedTurnInputNow: vi.fn(async () => true),
     updateQueuedTurnInput: vi.fn(async () => 'updated' as const),
   };
@@ -297,6 +298,7 @@ function composerElement(
     deleteQueuedTurnInput: vi.fn(async () => true),
     releaseQueuedTurnInputEdit: vi.fn(async () => true),
     retrieveQueuedTurnInput: vi.fn(async () => null),
+    reorderQueuedTurnInputs: vi.fn(async () => true),
     sendQueuedTurnInputNow: vi.fn(async () => true),
     updateQueuedTurnInput: vi.fn(async () => 'updated' as const),
   },

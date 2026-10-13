@@ -85,7 +85,7 @@ Tool run 是 UI/审计投影，包含：
 - Thread create/update/delete/archive/metadata。
 - Memory mode、context clear/compact。
 - Turn start/complete/cancel。
-- Queued input create/update/delete。
+- Queued input create/update/reorder/delete。
 - Message create/delta/update/complete/delete/truncate。
 - Tool start/output delta/complete。
 - Approval request/resolve。
@@ -136,6 +136,7 @@ Sequence 是恢复顺序，不是跨线程全局时间。
 ```text
 turn.input_queued
 turn.input_updated
+turn.inputs_reordered
 turn.input_deleted
 ```
 

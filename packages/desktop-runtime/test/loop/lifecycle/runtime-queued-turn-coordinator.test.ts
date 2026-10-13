@@ -9,6 +9,51 @@ import { RuntimeTurnTaskRegistry } from '../../../src/loop/lifecycle/turn-task-r
 import { systemClock } from '../../../src/ports/clock.js';
 
 describe('runtime queued turn coordinator', () => {
+  it('persists reorder without resuming a cancelled queue, then dispatches its new head', async () => {
+    const harness = await createHarness();
+    await appendQueuedInput(harness, 'queued_first', 'Originally first');
+    await appendQueuedInput(harness, 'queued_second', 'Move to the front');
+    await appendTerminalEvent(harness, 'turn_cancelled', 'turn.cancelled');
+    harness.coordinator.observeRun(harness.threadId, 'turn_cancelled', 'regular', Promise.resolve());
+    await Promise.resolve();
+
+    await expect(harness.coordinator.reorder(harness.threadId, ['queued_second', 'queued_first']))
+      .resolves.toBe(true);
+    expect(harness.startRegularTurn).not.toHaveBeenCalled();
+    // A new user input explicitly resumes the queue; reordering itself must not do so.
+    await harness.coordinator.enqueue(harness.threadId, { input: 'New last input' });
+    expect(harness.startRegularTurn).toHaveBeenCalledExactlyOnceWith(
+      harness.threadId, expect.objectContaining({ input: 'Move to the front' }), 'queued_second',
+    );
+    const persisted = (await harness.threadStore.getThread(harness.threadId))?.queuedTurnInputs;
+    await harness.threadStore.close();
+    const restored = createTestThreadStore(harness.dataDir, systemClock, new RandomIdGenerator());
+    expect(persisted?.slice(0, 2).map((item) => item.id)).toEqual(['queued_second', 'queued_first']);
+    expect((await restored.getThread(harness.threadId))?.queuedTurnInputs).toEqual(persisted);
+    await restored.close();
+  });
+
+  it('rejects incomplete, duplicate and stale orders without dropping or reviving inputs', async () => {
+    const harness = await createHarness();
+    await appendQueuedInput(harness, 'queued_a', 'Keep A');
+    await appendQueuedInput(harness, 'queued_b', 'Keep B');
+    const before = await harness.threadStore.getThread(harness.threadId);
+    for (const order of [['queued_a'], ['queued_a', 'queued_a'], ['queued_a', 'unknown']]) {
+      await expect(harness.coordinator.reorder(harness.threadId, order)).rejects.toThrow('queue has changed');
+    }
+    await expect(harness.coordinator.reorder(harness.threadId, ['queued_a', 'queued_b'])).resolves.toBe(false);
+    expect(await harness.threadStore.getThread(harness.threadId)).toEqual(before);
+
+    await harness.coordinator.delete(harness.threadId, 'queued_a');
+    await expect(harness.coordinator.reorder(harness.threadId, ['queued_b', 'queued_a']))
+      .rejects.toThrow('queue has changed');
+    expect((await harness.threadStore.getThread(harness.threadId))?.queuedTurnInputs?.map((item) => item.id))
+      .toEqual(['queued_b']);
+    await harness.coordinator.retrieveForEditing(harness.threadId, 'queued_b');
+    await expect(harness.coordinator.reorder(harness.threadId, ['queued_b'])).rejects.toThrow('being edited');
+    expect(harness.startRegularTurn).not.toHaveBeenCalled();
+  });
+
   it('keeps send-now durable while a review is finalizing and dispatches after it settles', async () => {
     const harness = await createHarness();
     const task = harness.turnTasks.start({
@@ -133,8 +178,9 @@ describe('runtime queued turn coordinator', () => {
 
 async function createHarness() {
   const ids = new RandomIdGenerator();
+  const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-queued-turn-coordinator-test-'));
   const threadStore = createTestThreadStore(
-    await mkdtemp(path.join(tmpdir(), 'setsuna-queued-turn-coordinator-test-')),
+    dataDir,
     systemClock,
     ids,
   );
@@ -176,6 +222,7 @@ async function createHarness() {
   });
   return {
     coordinator,
+    dataDir,
     startRegularTurn,
     steerQueuedInput,
     threadId: thread.id,

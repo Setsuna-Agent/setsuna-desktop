@@ -124,6 +124,7 @@ describe('desktop runtime client advanced thread methods', () => {
     };
 
     await client.queueTurnInput('thread / 1', queuedInput);
+    await client.reorderQueuedTurnInputs('thread / 1', { inputIds: ['input / 2', 'input / 1'] });
     await client.retrieveQueuedTurnInput('thread / 1', 'input / 1');
     await client.releaseQueuedTurnInputEdit('thread / 1', 'input / 1', { editToken: 'edit_1' });
     await client.updateQueuedTurnInput('thread / 1', 'input / 1', {
@@ -139,6 +140,11 @@ describe('desktop runtime client advanced thread methods', () => {
         path: '/v1/threads/thread%20%2F%201/queued-turn-inputs',
         method: 'POST',
         body: queuedInput,
+      },
+      {
+        path: '/v1/threads/thread%20%2F%201/queued-turn-inputs/reorder',
+        method: 'POST',
+        body: { inputIds: ['input / 2', 'input / 1'] },
       },
       {
         path: '/v1/threads/thread%20%2F%201/queued-turn-inputs/input%20%2F%201/retrieve',
