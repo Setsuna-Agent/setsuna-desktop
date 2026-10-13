@@ -16,8 +16,8 @@ export class RuntimeApiToolHost implements ToolHost {
     return [{
       name: TOOL_NAME,
       description: text(
-        'Read live Setsuna backend data: projects, conversations, message history, tool calls, events, settings and feature APIs. Start with /v1/runtime-api for available routes. No active project is required. Workspace file and attachment endpoints are excluded; use file tools with the current read permissions.',
-        '读取 Setsuna 后端的真实项目列表、所有对话、历史消息、工具调用、事件、设置和功能 API。先读 /v1/runtime-api 查看接口。无需绑定当前项目。工作区文件和附件接口不开放给此工具；读取文件请使用遵守当前读取权限的文件工具。',
+        'Inspect live Setsuna backend APIs and data when building apps or integrations. Start with /v1/runtime-api for available routes. Use read_thread for conversation history. No active project is required. Workspace file and attachment endpoints are excluded; use file tools with the current read permissions.',
+        '构建应用或集成时查看 Setsuna 后端的真实 API 和数据。先读 /v1/runtime-api 查看接口。会话历史使用 read_thread 读取。无需绑定当前项目。工作区文件和附件接口不开放给此工具；读取文件请使用遵守当前读取权限的文件工具。',
       ),
       inputSchema: {
         type: 'object', additionalProperties: false,
@@ -28,7 +28,7 @@ export class RuntimeApiToolHost implements ToolHost {
   }
 
   systemPrompt(): string {
-    return 'Use read_runtime_api to inspect existing Setsuna projects, conversations, history and tool calls. Workspace file and attachment endpoints are not available through this agent tool; use file tools with the current readable roots and deny rules. Never guess environment variables or read private runtime files to find this data. Trusted sidebar apps can call window.setsunaUI.runtime.request({path, method, body}); extension handlers can call context.runtime.request with the same input. Both return {ok, status, data}, support all backend HTTP methods and do not need a selected project.';
+    return 'Use read_runtime_api to inspect Setsuna backend APIs and data when building apps or integrations. Read conversation history with the built-in read_thread tool. Workspace file and attachment endpoints are not available through this agent tool; use file tools with the current readable roots and deny rules. Never guess environment variables or read private runtime files to find this data. Trusted sidebar apps can call window.setsunaUI.runtime.request({path, method, body}); extension handlers can call context.runtime.request with the same input. Both return {ok, status, data}, support all backend HTTP methods and do not need a selected project.';
   }
 
   async toolRuntimeProfile(name: string, context: ToolExecutionContext) {

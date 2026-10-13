@@ -38,6 +38,8 @@ import {
 import { runtimeSkillCatalogPrompt } from './runtime-skill-catalog-prompt.js';
 import { runtimePluginSelectionContext } from './runtime-plugin-selection-context.js';
 import type { PluginBundleStore } from '../../ports/plugin-bundle-store.js';
+import type { ThreadStore } from '../../ports/thread-store.js';
+import { runtimeThreadReferenceContext } from './runtime-thread-reference-context.js';
 
 const DEFAULT_SKILL_PROMPT_MAX_BYTES = 48 * 1024;
 const DEFAULT_TOOL_EXTERNAL_CONTEXT_MAX_BYTES = 64 * 1024;
@@ -48,6 +50,7 @@ type RuntimePromptContextAssemblerOptions = {
   projectWorkflow?: ProjectWorkflowResolver;
   skillRegistry?: Pick<SkillRegistry, 'resolvePromptContext'>;
   pluginStore?: Pick<PluginBundleStore, 'listPlugins'>;
+  threadStore?: Pick<ThreadStore, 'listMessages'>;
   toolHost?: ToolHost;
 };
 
@@ -66,6 +69,7 @@ export class RuntimePromptContextAssembler {
     responseLanguage,
     skillCatalogContextWindowTokens,
     skillActivationText = '',
+    referenceMessages = [],
     skillIds,
     thread,
     toolContext,
@@ -78,6 +82,7 @@ export class RuntimePromptContextAssembler {
     responseLanguage?: RuntimeInterfaceLanguage;
     skillCatalogContextWindowTokens?: number;
     skillActivationText?: string;
+    referenceMessages?: RuntimeMessage[];
     skillIds: string[];
     thread: RuntimeThread;
     toolContext: RuntimeToolExecutionContext;
@@ -91,7 +96,7 @@ export class RuntimePromptContextAssembler {
     const permissionToolNames = catalogTools ?? tools;
     const pluginContext = await runtimePluginSelectionContext(skillActivationText,
       config?.features?.plugins === false ? undefined : this.options.pluginStore, language, catalogTools ?? tools);
-    const [skillContext, memoryMessages, projectInstructions, projectWorkflow, toolPrompt, toolExternalContext] = await Promise.all([
+    const [skillContext, memoryMessages, projectInstructions, projectWorkflow, toolPrompt, toolExternalContext, threadReferences] = await Promise.all([
       this.skillContext(
         [...new Set([...skillIds, ...pluginContext.skillIds])],
         config,
@@ -109,6 +114,7 @@ export class RuntimePromptContextAssembler {
       this.options.projectWorkflow?.resolve({ environment }).catch(() => null) ?? null,
       this.toolSystemPrompt(toolContext, toolRouter, tools),
       this.toolExternalContext(toolContext, toolRouter, tools),
+      runtimeThreadReferenceContext({ messages: referenceMessages, threadId: thread.id, store: this.options.threadStore, language }),
     ]);
 
     return {
@@ -125,6 +131,7 @@ export class RuntimePromptContextAssembler {
         ...toolExternalContextFragments(toolExternalContext, config, language),
         ...skillContext.fragments,
         ...pluginContext.fragments,
+        ...threadReferences,
         // 目标或邮箱式轮次上下文与当前请求最接近，因此应排在项目规则或 Skill 等
         // 可复用用户上下文之后。
         ...runtimeContextFragments(hookContextMessages),

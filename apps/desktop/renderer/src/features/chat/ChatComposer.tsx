@@ -62,6 +62,7 @@ import { useChatAttachments } from './composer/useChatAttachments.js';
 import type { ChatMentionItem } from './mentions/chatMentionItems.js';
 import { useChatCommandController } from './composer/useChatCommandController.js';
 import { useChatComposerClipboard } from './composer/useChatComposerClipboard.js';
+import { useChatThreadDrop } from './composer/useChatThreadDrop.js';
 import { useChatComposerHistory } from './composer/useChatComposerHistory.js';
 import { useChatComposerModeController } from './composer/useChatComposerModeController.js';
 import { useQueuedTurnComposerEdit } from './composer/useQueuedTurnComposerEdit.js';
@@ -335,6 +336,10 @@ export function ChatComposer({
     || submitting
     || queuedTurnEdit.retrieving
     || modeController.reviewModeEnabled;
+  const threadDrop = useChatThreadDrop({
+    disabled: submitting || queuedTurnEdit.retrieving || modeController.reviewModeEnabled,
+    getEditor: getComposerEditor,
+  });
   const clipboardHandlers = useChatComposerClipboard({
     allowStructuredPaste: !modeController.reviewModeEnabled,
     disabled: submitting || queuedTurnEdit.retrieving,
@@ -735,6 +740,8 @@ export function ChatComposer({
   return (
     <div
       className={`chat-sender ${starter ? 'chat-sender--starter' : ''}`}
+      data-thread-drop-active={threadDrop.active || undefined}
+      {...threadDrop.handlers}
       {...clipboardHandlers}
     >
       <input

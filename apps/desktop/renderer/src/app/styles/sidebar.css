@@ -413,6 +413,50 @@
   outline: 0;
 }
 
+.desktop-agent-session__select[draggable] {
+  cursor: grab;
+}
+
+.desktop-agent-session[data-dragging] {
+  opacity: 0.45;
+}
+
+.desktop-agent-session[data-dragging] .desktop-agent-session__select {
+  cursor: grabbing;
+}
+
+.desktop-thread-drag-preview {
+  position: fixed;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 280px;
+  padding: 8px 12px;
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-md);
+  color: var(--app-text);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-raised);
+  font: 13px / 20px var(--app-font-family);
+  pointer-events: none;
+}
+
+.desktop-thread-drag-preview[hidden] {
+  display: none;
+}
+
+.desktop-thread-drag-preview > svg {
+  flex-shrink: 0;
+  color: var(--app-text-muted);
+}
+
+.desktop-thread-drag-preview > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .desktop-agent-session__title,
 .desktop-agent-session__meta {
   min-width: 0;

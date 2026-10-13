@@ -1,4 +1,5 @@
 const RUNTIME_READ_ONLY_TOOL_NAMES = new Set([
+  'read_thread',
   'read_runtime_api',
   'list_directory',
   'find_files',
