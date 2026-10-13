@@ -21,10 +21,10 @@ const remarkPlugins = [remarkGfm];
 const rehypePlugins = [rehypeRaw, rehypeSlug, rehypeSanitize];
 const components = { a: PreviewLink, img: PreviewImage, pre: PreviewCodeBlock, table: PreviewTable } satisfies Components;
 
-export function WorkspaceMarkdownPreview({ content, file, onOpenFile, loadImage }: PreviewOptions & { content: string }) {
+export function WorkspaceMarkdownPreview({ content, file, onOpenFile, loadImage, embedded = false }: PreviewOptions & { content: string; embedded?: boolean }) {
   const rootRef = useRef<HTMLDivElement>(null);
   return (
-    <div className="desktop-markdown-preview" ref={rootRef} role="region" aria-label={file.path} tabIndex={0}
+    <div className={`desktop-markdown-preview${embedded ? ' desktop-markdown-preview--embedded' : ''}`} ref={rootRef} role="region" aria-label={file.path} tabIndex={0}
       onClick={(event) => {
         const target = event.target instanceof Element ? event.target.closest('a[href^="#"]') : null;
         const anchor = target && resolveWorkspaceMarkdownTarget(target.getAttribute('href') ?? '', file.path);
