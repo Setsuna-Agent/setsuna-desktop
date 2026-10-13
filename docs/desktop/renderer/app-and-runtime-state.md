@@ -109,6 +109,8 @@ Layout 只组合已经定义清楚的状态和 callback，不在 render 中发�
 
 全局图标栏的对话主页、Pull Request 与明暗主题切换分别默认绑定 `Cmd/Ctrl+1`、`Cmd/Ctrl+2`、`Cmd/Ctrl+Shift+M`。三项沿用统一快捷键注册、设置与悬停提示；主页保留当前对话，主题快捷键复用图标按钮的切换逻辑和动画起点。
 
+对话、Pull Request、自动任务、能力管理和设置入口由 `AppNavigationIcon` 统一切换线框与实心图标，选中状态直接来自现有导航状态。实心变体保留时钟指针、房门和齿轮中心的透明留白，适配浅色、深色与自定义侧栏背景；插件应用继续使用自己的头像。
+
 置顶分组标题与项目分组一样支持折叠。置顶会话复用普通会话行的悬停、键盘聚焦和选中效果；图钉只在悬停或键盘聚焦时显示，以实心表示已置顶，不因置顶而常亮或高亮整行。
 
 `packages/features/runtime-activity/src/renderer/` 同时实现全局运行中心和当前对话的后台服务列表。全局入口位于图标栏底部的“更多操作”菜单且不显示计数角标；两个视图都每两秒通过 typed Feature operation 拉取各自的投影。Feature 自己拥有 DTO、聚合/按对话查询、终止操作、轮询、乐观移除、文案和样式；Core 继续拥有 turn、approval、thread 与后台进程生命周期。宿主 `composition/RuntimeActivityFeatureBoundary.tsx` 只注入标准按钮、i18n、项目名称和线程导航，layout 只持有开关状态与入口位置。
