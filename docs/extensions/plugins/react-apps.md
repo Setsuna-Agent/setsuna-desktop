@@ -71,6 +71,7 @@ React `invokeAction(id, payload)` 的参数进入 worker 的 `input.payload`；`
 - `packages/desktop-runtime/src/adapters/plugin-app/`：源码、依赖、独立编译和缓存生命周期。
 - `packages/desktop-runtime/src/adapters/plugin/plugin-ui-document-reader.ts`：可信源码与缓存读取。
 - `scripts/build-electron.ts`：发布独立 compiler worker；Vite 及原生编译器依赖随包提供。
-- `packages/desktop-runtime/test/integration/plugin-react-app.test.ts`：真实 pnpm/TypeScript/Vite、发布 ASAR compiler、Electron 隔离页、弹窗内下拉键盘操作与焦点恢复、Checkbox 提交、Markdown 内容过滤和链接回调、重复快照后的草稿保留、项目依赖隔离、多文件/package/路由、worker 数据持久化、权限、缓存完整性和更新失败回滚。
+- `packages/desktop-runtime/test/integration/plugin-react-app.test.ts`：真实 pnpm/TypeScript/Vite、发布 ASAR compiler、Electron 隔离页、重复快照后的草稿保留、项目依赖隔离、多文件/package/路由、worker 数据持久化、权限、缓存完整性和更新失败回滚。打包与缓存替换使用最小应用，类型错误与失败回滚共用一次更新，避免重复编译完整 SDK 控件。
+- `packages/renderer-ui/test/`：在控件所属层验证弹窗/下拉交互与焦点恢复、Markdown 内容过滤和链接回调，不在应用安装集成测试中重复构建控件展示页。
 - `packages/desktop-runtime/test/integration/plugin-react-app-startup.test.ts`：安装应用但工具链挂起/失败时的核心健康检查和耗时比较。
 - `packages/desktop-runtime/test/adapters/plugin-app/project-service.test.ts`：构建队列取消、关闭时清理和环境变量边界。

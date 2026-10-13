@@ -219,9 +219,9 @@ DMG 是包含已签名、公证 app 的分发容器，不单独提交公证。
 
 1. `typecheck, lint`：`pnpm typecheck`（包含 architecture check），再运行 `pnpm lint`。
 2. 两份 `unit tests` 分片：`pnpm build:contracts`，再分别运行 `pnpm test:unit --shard=1/2`、`pnpm test:unit --shard=2/2`，覆盖完整单测套件。
-3. 两份 `integration tests` 分片：`pnpm build:contracts`、`pnpm build:features`，再分别运行 `pnpm test:integration --shard=1/2`、`pnpm test:integration --shard=2/2`，覆盖完整集成测试套件。
+3. 两份 `integration tests` 分片：`pnpm build:contracts`、`pnpm build:feature-core`、`pnpm build:renderer-ui`，再分别运行 `pnpm test:integration --shard=1/2`、`pnpm test:integration --shard=2/2`，覆盖完整集成测试套件。
 
-测试 job 显式准备真实 Worker/Electron fixture 需要的包导出，不依赖另一个 job 的 typecheck 产物。矩阵不会因一个任务失败而取消其他检查。
+测试 job 只准备真实 Worker/Electron fixture 需要的共享包导出；Feature 代码通过源码别名加载，不为测试预先编译全部 Feature 包，也不依赖另一个 job 的 typecheck 产物。矩阵不会因一个任务失败而取消其他检查。
 
 Windows `windows-sandbox` job 对原生 sidecar 执行 Rust 格式、Clippy、测试、协议 smoke test，以及账户、ACL、防火墙和受限进程验证。
 

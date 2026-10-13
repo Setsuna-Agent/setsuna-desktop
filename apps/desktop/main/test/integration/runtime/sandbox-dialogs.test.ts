@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import electron from 'electron';
 import { build } from 'esbuild';
 import { expect, it } from 'vitest';
+import { createFeaturePackageSourceAliases } from '../../../../../../scripts/feature-package-aliases.js';
 
 it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('preserves native dialog return values from a separate plugin web origin', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'setsuna-sandbox-dialogs-'));
@@ -17,7 +18,11 @@ it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('preser
         document: path.resolve('apps/desktop/renderer/test/fixtures/sandbox-dialog-document.ts'),
       },
       outdir: root, outExtension: { '.js': '.cjs' }, platform: 'node', format: 'cjs', bundle: true, external: ['electron'],
-      alias: { '@setsuna-desktop/contracts': path.resolve('packages/contracts/src/index.ts') },
+      // Native fixtures bypass Vitest, so resolve Feature imports from source here too.
+      alias: {
+        '@setsuna-desktop/contracts': path.resolve('packages/contracts/src/index.ts'),
+        ...createFeaturePackageSourceAliases(process.cwd()),
+      },
     });
     const env = { ...process.env };
     delete env.ELECTRON_RUN_AS_NODE;

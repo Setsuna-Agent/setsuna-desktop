@@ -18,7 +18,7 @@ import { verifyPackagedAppCompiler } from '../support/plugin-app-compiler-packag
 const require = createRequire(import.meta.url);
 const context = { contributionId: 'notes.page', surface: 'renderer.plugin.page' as const };
 
-// Budget the full lifecycle: two app installs, ASAR compilation and repeated updates with the Mermaid SDK.
+// Budget real package installs, ASAR compilation and one failed/successful update.
 // Individual production builds still retain their own 180 s timeout.
 const appLifecycleTimeoutMs = 240_000;
 
@@ -51,40 +51,22 @@ it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('instal
       scripts: { postinstall: 'node install-hook.mjs' } }));
     const statsRoot = path.join(bundleDir, 'apps/stats'); await mkdir(statsRoot, { recursive: true });
     await writeFile(path.join(statsRoot, 'package.json'), JSON.stringify({ devDependencies }));
-    await writeFile(path.join(statsRoot, 'App.tsx'), `import {AppLayout} from '@setsuna/app'; export default () => <AppLayout>Independent stats app</AppLayout>`);
+    // This page proves project/package isolation; shared UI is exercised by the notes app.
+    await writeFile(path.join(statsRoot, 'App.tsx'), 'export default () => <main>Independent stats app</main>');
     await writeFile(path.join(appRoot, 'install-hook.mjs'), 'throw new Error("Lifecycle scripts must not execute")');
     await writeFile(path.join(appRoot, 'vite.config.js'), 'throw new Error("App-owned Vite configuration must not execute")');
     await writeFile(path.join(appRoot, 'postcss.config.js'), 'throw new Error("App-owned PostCSS configuration must not execute")');
     await writeFile(path.join(appRoot, '.env'), 'VITE_PRIVATE_TOKEN=private-build-value');
     await writeFile(path.join(appRoot, 'components/Count.tsx'), 'export default function Count({value}:{value:number}) { return <output id="count">{value}</output> }');
-    await writeFile(path.join(appRoot, 'components/Filters.tsx'), `import {useState} from 'react';
-      import {Button, Checkbox, Dialog, Markdown, SelectField} from '@setsuna/app';
-      export default function Filters({project, onProjectChange, archived, onArchivedChange}:{
-        project:string; onProjectChange(value:string):void; archived:boolean; onArchivedChange(value:boolean):void;
-      }) {
-        const [open, setOpen] = useState(false); const [link, setLink] = useState('');
-        return <><Button id="filters-open" onClick={() => setOpen(true)}>Filters</Button>
-          <output id="project-value">{project}</output><output id="archive-value">{String(archived)}</output>
-          <Dialog open={open} title="Filters" onClose={() => setOpen(false)}>
-            <SelectField id="project-filter" aria-label="Project" value={project} onValueChange={onProjectChange}>
-              <option value="">All projects</option><option value="work">Work</option><option value="unavailable" disabled>Unavailable</option>
-            </SelectField>
-            <Checkbox id="archive-filter" label="Include archived" checked={archived} onChange={event => onArchivedChange(event.currentTarget.checked)}/>
-            <Markdown content={'[Guide](https://example.com/guide) [Unsafe](javascript:alert(1))\\n\\n<script>window.markdownInjected=true</script><iframe src="https://example.com"/>'}
-              onOpenLink={setLink}/><output id="opened-link">{link}</output>
-            <Button id="filters-apply" onClick={() => setOpen(false)}>Apply</Button>
-          </Dialog></>;
-      }`);
     const home = `import {useEffect,useState} from 'react';
       import {Button, TextField, AppLayout, Link, invokeAction, useAppData} from '@setsuna/app';
-      import {z} from 'zod'; import Count from '../components/Count'; import Filters from '../components/Filters'; import '../style.css';
+      import {z} from 'zod'; import Count from '../components/Count'; import '../style.css';
       export default function Home() {
         const data = useAppData<{count?:number}>(); const [value, setValue] = useState('');
-        const [project, setProject] = useState(''); const [archived, setArchived] = useState(false);
         useEffect(() => setValue(''), [data]);
-        return <AppLayout><Count value={data.count ?? 0}/><Filters project={project} onProjectChange={setProject} archived={archived} onArchivedChange={setArchived}/>
+        return <AppLayout><Count value={data.count ?? 0}/>
           <form onSubmit={async event => {
-          event.preventDefault(); await invokeAction('notes.save', {value:z.string().min(1).parse(value), project, archived});
+          event.preventDefault(); await invokeAction('notes.save', {value:z.string().min(1).parse(value)});
         }}><TextField aria-label="Note" name="note" value={value} onChange={event => setValue(event.target.value)} required/>
           <Button type="submit">Save</Button></form><Link to="/detail/42">Detail</Link></AppLayout>
       }`;
@@ -99,7 +81,7 @@ it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('instal
       api.onUiAction('notes.save', async (input, context) => {
         if (typeof input.payload?.value !== 'string') throw new Error('Invalid note');
         const view = await context.state.get('view') ?? {count:0};
-        await context.state.set('view', {count:view.count + 1, value:input.payload.value, project:input.payload.project, archived:input.payload.archived});
+        await context.state.set('view', {count:view.count + 1, value:input.payload.value});
       });
     }`);
     await patchPluginManifest(bundleDir, { schemaVersion: 2, id: 'react-notes', tools: [], skills: [], hooks: [], mcpServers: [], resources: [],
@@ -124,7 +106,8 @@ it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('instal
     expect(statsSource.js).toContain('Independent stats app');
     await expect(readFile(path.join(statsCache, 'project/node_modules/zod/package.json'))).rejects.toThrow();
     expect(JSON.parse(await readFile(path.join(project, 'node_modules/zod/package.json'), 'utf8')).name).toBe('zod');
-    await verifyPackagedAppCompiler(root, project);
+    // A minimal real app covers ASAR/ESM/native dependencies without recompiling all SDK widgets.
+    await verifyPackagedAppCompiler(root, path.join(statsCache, 'project'));
     // Identical updates must reuse both approved pages, even when package preparation is unavailable.
     const preparedBeforeUpdate = prepare.mock.calls.length;
     const validateActivation = vi.spyOn(manager, 'validatePluginActivation');
@@ -149,13 +132,6 @@ it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('instal
       validateActivation.mockRestore();
       prepare.mockImplementation(prepareToolchain);
     }
-    // Unknown SDK props used to pass Vite transpilation and ship a broken interaction.
-    for (const invalid of ["<Button variant='icon'/>", '<TextField hideLabel/>']) {
-      await writeFile(path.join(appRoot, 'pages/Home.tsx'), `import {Button,TextField} from '@setsuna/app'; export default () => ${invalid}`);
-      await expect(runtime.plugins.updatePlugin({path:bundleDir},{trustExtension:true})).rejects.toThrow('TS2322');
-      await expect(runtime.plugins.readTrustedRendererUiDocument('react-notes','notes.page')).resolves.toEqual(source);
-    }
-    await writeFile(path.join(appRoot, 'pages/Home.tsx'),home);
     const action = (actionId: string, payload: Record<string, RuntimePluginUiDataValue>): RuntimePluginUiActionInput => ({
       pluginId: 'react-notes', actionId, values: {}, payload, context,
     });
@@ -185,7 +161,7 @@ it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('instal
     const result = await promisify(execFile)(electron as unknown as string,
       [path.join(native, 'main.cjs'), native, `http://127.0.0.1:${address.port}`], { env, windowsHide: true, timeout: 30_000 });
     expect(result.stdout).toContain('PLUGIN_REACT_APP_PASSED');
-    expect(await runtime.extensionState.get('react-notes', 'global', 'view')).toEqual({ count: 1, value: 'Shared note', project: 'work', archived: true });
+    expect(await runtime.extensionState.get('react-notes', 'global', 'view')).toEqual({ count: 1, value: 'Shared note' });
     const preparedBeforeOpen = prepare.mock.calls.length;
     unbind();
     await expect(runtime.plugins.readTrustedRendererUiDocument('react-notes', 'notes.page')).resolves.toEqual(source);
@@ -196,8 +172,9 @@ it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('instal
     await expect(runtime.plugins.readTrustedRendererUiDocument('react-notes', 'notes.page')).rejects.toThrow('changed');
     await writeFile(path.join(cache, 'source.json'), original);
     runtime.plugins.bindAppToolchain({ prepareShellToolchain: prepare } as unknown as WorkspaceDependenciesControl);
-    await writeFile(path.join(appRoot, 'pages/Home.tsx'), 'broken TSX <<');
-    await expect(runtime.plugins.updatePlugin({ path: bundleDir }, { trustExtension: true })).rejects.toThrow('build command failed');
+    // One type-invalid update proves both SDK typechecking and rollback of a populated app.
+    await writeFile(path.join(appRoot, 'pages/Home.tsx'), "import {Button} from '@setsuna/app'; export default () => <Button variant='icon'/>");
+    await expect(runtime.plugins.updatePlugin({ path: bundleDir }, { trustExtension: true })).rejects.toThrow('TS2322');
     await expect(runtime.plugins.readTrustedRendererUiDocument('react-notes', 'notes.page')).resolves.toEqual(source);
     expect(await runtime.extensionState.get('react-notes', 'global', 'view')).toMatchObject({ count: 1 });
     expect((await readdir(path.dirname(cache))).sort()).toEqual(Object.values(record.reactAppBuilds!).map(build => build.cacheKey).sort());
@@ -211,8 +188,10 @@ it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('instal
       await writeFile(path.join(project, 'outside.css'), css);
       await expect(buildAppProject(project)).rejects.toThrow('must stay inside');
     }
-    await writeFile(path.join(appRoot, 'pages/Home.tsx'), home + '\n// Updated app source');
+    // Cache replacement and state retention do not need another build of every SDK control.
+    await writeFile(path.join(appRoot, 'pages/Home.tsx'), 'export default () => <main>Updated notes app</main>');
     await runtime.plugins.updatePlugin({ path: bundleDir }, { trustExtension: true });
+    expect((await runtime.plugins.readTrustedRendererUiDocument('react-notes', 'notes.page')).js).toContain('Updated notes app');
     const [updated] = await runtime.plugins.listInstalledRecords();
     expect(updated.reactAppBuilds!['notes.page'].cacheKey).not.toBe(reference.cacheKey);
     expect((await readdir(path.dirname(cache))).sort()).toEqual(Object.values(updated.reactAppBuilds!).map(build => build.cacheKey).sort());

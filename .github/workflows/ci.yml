@@ -70,9 +70,11 @@ jobs:
         if: matrix.suite != 'static'
         run: pnpm build:contracts
 
-      - name: Build Feature packages for Electron fixtures
+      - name: Build shared packages for Electron fixtures
         if: matrix.suite == 'integration'
-        run: pnpm build:features
+        run: |
+          pnpm build:feature-core
+          pnpm build:renderer-ui
 
       - name: Run ${{ matrix.name }}
         run: ${{ matrix.command }}
