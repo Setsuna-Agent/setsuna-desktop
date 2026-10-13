@@ -1,10 +1,12 @@
 import { createVitestConfig, integrationTestGlobs } from './vitest.shared.config';
 
 export default createVitestConfig({
-  fileParallelism: false,
+  // Fixtures own temporary data roots and ephemeral ports; keep process isolation
+  // and bound concurrency because suites also spawn Electron, compilers and PTYs.
+  fileParallelism: true,
   hookTimeout: 45_000,
   include: integrationTestGlobs,
-  maxWorkers: 1,
+  maxWorkers: 2,
   pool: 'forks',
   sequence: {
     shuffle: false,

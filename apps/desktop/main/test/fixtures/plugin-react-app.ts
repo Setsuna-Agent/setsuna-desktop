@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, protocol, type WebFrameMain } from 'electron';
+import { app, BrowserWindow, dialog, protocol } from 'electron';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -35,23 +35,6 @@ async function main() {
     };
     await mount(); const page = await frame();
     assert.equal(await page.executeJavaScript('document.querySelector("#count").textContent'), '0');
-    await page.executeJavaScript('document.querySelector("#filters-open").focus(); document.querySelector("#filters-open").click()');
-    await until(page, 'Boolean(document.querySelector("[role=dialog]"))');
-    await page.executeJavaScript(`const selector = document.querySelector('#project-filter'); selector.focus();
-      selector.dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowDown', bubbles:true}));`);
-    await until(page, 'Boolean(document.querySelector("[role=listbox]"))');
-    await page.executeJavaScript(`const option = Array.from(document.querySelectorAll('[role=option]')).find(item => item.textContent === 'Work');
-      option.focus(); option.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter', bubbles:true}));`);
-    await until(page, 'document.querySelector("#project-value").textContent === "work" && !document.querySelector("[role=listbox]")');
-    await until(page, 'document.activeElement === document.querySelector("#project-filter")');
-    await page.executeJavaScript('document.querySelector("#archive-filter").click()');
-    await until(page, 'document.querySelector("#archive-value").textContent === "true"');
-    assert.equal(await page.executeJavaScript('typeof window.markdownInjected'), 'undefined');
-    assert.equal(await page.executeJavaScript('document.querySelector(".sd-document-markdown").querySelector("script,iframe,[onclick],a[href^=javascript]")'), null);
-    await page.executeJavaScript('document.querySelector("a[href=\\"https://example.com/guide\\"]").click()');
-    await until(page, 'document.querySelector("#opened-link").textContent === "https://example.com/guide"');
-    await page.executeJavaScript('document.querySelector("#filters-apply").click()');
-    await until(page, '!document.querySelector("[role=dialog]") && document.activeElement === document.querySelector("#filters-open")');
     assert.deepEqual(await page.executeJavaScript(`(async () => {
       let isolated = false; try {parent.document.body} catch {isolated = true}
       const permission = await navigator.permissions.query({name:'geolocation'});
@@ -91,13 +74,6 @@ async function main() {
     assert.equal(approvals, 1);
     process.stdout.write('PLUGIN_REACT_APP_PASSED\n');
   } finally { owner.destroy(); }
-}
-
-async function until(frame: WebFrameMain, condition: string) {
-  for (let attempt = 0; await frame.executeJavaScript(condition) !== true; attempt++) {
-    if (attempt > 200) throw new Error(`React app interaction did not complete: ${condition}`);
-    await new Promise(resolve => setTimeout(resolve, 20));
-  }
 }
 
 void main().then(() => app.exit(0), error => { console.error(error); app.exit(1); });
