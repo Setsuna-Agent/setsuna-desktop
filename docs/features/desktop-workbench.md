@@ -62,6 +62,8 @@ Review 是跨四个运行面参与的完整业务闭环：
 
 Workspace 宿主决定 panel、当前 project 和导航；Review Feature 决定 review state、Git 操作和具体视图。
 
+审查、工作区变更与提交历史共用 `desktop-review-panel__sections` 作为纵向虚拟滚动视口。宿主注入的 `ReviewFileDocument` 以嵌入模式复用 `WorkspaceMarkdownPreview`，让外层面板持有滚动；独立文件预览仍持有自己的滚动容器。嵌入文档不能保留内层 `overflow: auto` 与 `overscroll-behavior: contain`，否则即使自身没有滚动范围，也会阻断滚轮向外层传递，出现只能拖动外层滚动条的情况。
+
 ## Terminal
 
 源码：`packages/features/terminal/`
