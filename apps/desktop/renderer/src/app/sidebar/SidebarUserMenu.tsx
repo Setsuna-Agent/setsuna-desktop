@@ -1,6 +1,6 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
 import { shellSidebarAvatarSlot } from '@setsuna-desktop/renderer-contracts/shell';
-import { Info, Moon, Settings, Sun } from 'lucide-react';
+import { Info, Moon, Sun } from 'lucide-react';
 import { useCallback, useState, type RefObject } from 'react';
 import appIcon from '../../../../../../assets/build/icon.png';
 import { RuntimeActivityFeatureMenuItem } from '../../composition/RuntimeActivityFeatureBoundary.js';
@@ -10,6 +10,7 @@ import { useResolvedThemeMode, useThemeTransition } from '../../shared/preferenc
 import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
 import { AppTooltip } from '../../shared/ui/primitives.js';
 import { AboutDialog } from '../layout/AboutDialog.js';
+import { AppNavigationIcon } from '../layout/AppNavigationIcon.js';
 import { SidebarFloatingMenu } from './SidebarFloatingMenu.js';
 
 export function SidebarUserMenu({
@@ -55,7 +56,7 @@ export function SidebarUserMenu({
           aria-current={settingsActive ? 'page' : undefined}
           onClick={onOpenSettings}
         >
-          <Settings size={18} />
+          <AppNavigationIcon name="settings" active={settingsActive} />
         </Button>
       </ShortcutTooltip>
       <AppTooltip title={t('sidebar.moreActions')} placement="right">
