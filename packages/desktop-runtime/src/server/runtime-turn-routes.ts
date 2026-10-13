@@ -129,6 +129,21 @@ export async function handleRuntimeTurnRequest(
     return true;
   }
 
+  const queuedTurnInputReorderMatch = url.pathname.match(
+    /^\/v1\/threads\/([^/]+)\/queued-turn-inputs\/reorder$/u,
+  );
+  if (queuedTurnInputReorderMatch && request.method === 'POST') {
+    const threadId = decodeRuntimeId(queuedTurnInputReorderMatch[1], 'Thread id');
+    const input = await readBody<{ inputIds?: unknown }>(request);
+    if (!Array.isArray(input.inputIds) || input.inputIds.some((id) => typeof id !== 'string' || !id)) {
+      throw new RuntimeHttpError(400, 'inputIds must be an array of queued input IDs.');
+    }
+    sendJson(response, 200, await runtime.agentLoop.reorderQueuedTurnInputs(threadId, {
+      inputIds: input.inputIds,
+    }));
+    return true;
+  }
+
   const queuedTurnInputSendNowMatch = url.pathname.match(
     /^\/v1\/threads\/([^/]+)\/queued-turn-inputs\/([^/]+)\/send-now$/u,
   );

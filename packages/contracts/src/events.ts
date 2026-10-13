@@ -50,6 +50,7 @@ export const RUNTIME_EVENT_TYPES = [
   'thread.context_compacted',
   'turn.input_queued',
   'turn.input_updated',
+  'turn.inputs_reordered',
   'turn.input_deleted',
   'turn.started',
   'turn.step_snapshot',
@@ -143,6 +144,7 @@ export type CoreRuntimeEvent =
   | RuntimeEventBase<'thread.context_compacted', { messages: RuntimeMessage[]; notice: NonNullable<RuntimeMessage['contextCompaction']> }>
   | RuntimeEventBase<'turn.input_queued', { input: RuntimeQueuedTurnInput }>
   | RuntimeEventBase<'turn.input_updated', { input: RuntimeQueuedTurnInput }>
+  | RuntimeEventBase<'turn.inputs_reordered', { inputIds: string[] }>
   | RuntimeEventBase<'turn.input_deleted', { inputId: string }>
   | RuntimeEventBase<'turn.started', { input: string; taskKind?: RuntimeTaskKind; modelBinding?: RuntimeThreadModelBinding }>
   | RuntimeEventBase<'turn.step_snapshot', { snapshot: RuntimeModelRequestStepSnapshot }>

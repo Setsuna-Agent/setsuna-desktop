@@ -18,6 +18,8 @@ export { WheelPicker, type WheelPickerOption, type WheelPickerProps } from './wh
 export { ResizeHandle } from './resize-handle.js';
 export { FileTreeToggle } from './file-tree-toggle.js';
 export { FileTreeSurface, FileTreeRow } from './file-tree.js';
+export { useNativeDragPreview, useDragReorderPreview } from './drag/drag-feedback.js';
+export { useReorderLayout, animateReorderLayout, reorderItemRect } from './drag/reorder-layout.js';
 export { FileIcon } from './file-icon.js';
 export { DetailSection } from './detail-section.js';
 export { DiffViewControls } from './diff-view-controls.js';

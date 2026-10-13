@@ -787,12 +787,14 @@ export function ChatComposer({
           />
         ) : null}
         <ChatSendQueue
+          key={currentThread?.id ?? "new-thread"}
           disabled={submitting || queuedTurnEdit.editing}
           editDisabled={queuedTurnEdit.editDisabled}
           hasActiveTurn={Boolean(activeTurnId)}
           items={queuedTurnEdit.visibleQueuedTurnInputs}
           onDelete={deleteQueuedTurnInput}
           onEdit={queuedTurnEdit.edit}
+          onReorder={queuedTurnActions.reorderQueuedTurnInputs}
           onSendNow={sendQueuedTurnInputNow}
         />
       </div>

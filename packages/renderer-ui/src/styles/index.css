@@ -12,6 +12,7 @@
 @import './picker.css';
 @import './menu.css';
 @import './file-tree.css';
+@import './drag-feedback.css';
 @import './wheel-picker.css';
 @import './table.css';
 @import './markdown.css';

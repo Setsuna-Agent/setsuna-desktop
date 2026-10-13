@@ -856,6 +856,15 @@ export type DeleteQueuedTurnInputResponse = {
   deleted: boolean;
 };
 
+export type ReorderQueuedTurnInputsInput = {
+  /** Complete queue order; stale, missing or duplicate IDs are rejected atomically. */
+  inputIds: string[];
+};
+
+export type ReorderQueuedTurnInputsResponse = {
+  reordered: boolean;
+};
+
 export type SendTurnResponse = {
   accepted: true;
   turnId: string;

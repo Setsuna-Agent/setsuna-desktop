@@ -1,0 +1,41 @@
+:root {
+  --sd-drag-shadow: 0 12px 28px rgb(0 0 0 / 16%), 0 3px 8px rgb(0 0 0 / 10%);
+  --sd-drag-placeholder: color-mix(in srgb, var(--app-primary) 7%, transparent);
+  --sd-drag-outline: color-mix(in srgb, var(--app-primary) 32%, transparent);
+}
+
+.sd-drag-preview {
+  --sd-file-tree-indent: 16px;
+  position: fixed;
+  z-index: 1200;
+  overflow: hidden;
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-md);
+  color: var(--app-text);
+  background: var(--app-surface);
+  box-shadow: var(--sd-drag-shadow);
+  pointer-events: none;
+  scale: 1.025;
+  transform-origin: top left;
+}
+
+.sd-drag-preview[hidden] { display: none; }
+
+.sd-drag-preview > .sd-drag-preview__content {
+  --sd-file-tree-depth: 0 !important;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  opacity: 1 !important;
+  transform: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  animation: none !important;
+}
+
+.sd-drag-preview .sd-file-tree__branch,
+.sd-drag-preview .sd-file-tree__selection { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sd-drag-preview { scale: 1; }
+}

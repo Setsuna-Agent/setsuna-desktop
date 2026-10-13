@@ -472,6 +472,16 @@ describe('runtime server AppServer steering and dynamic tools', () => {
         });
         expect(first).toMatchObject({ disposition: 'queued', turnId: null });
         expect(second).toMatchObject({ disposition: 'queued', turnId: null });
+        const reorderPath = `/v1/threads/${encodeURIComponent(thread.id)}/queued-turn-inputs/reorder`;
+        await expect(harness.runtimeFetch(reorderPath, {
+          method: 'POST', body: JSON.stringify({ inputIds: 'invalid' }),
+        })).rejects.toThrow('inputIds must be an array');
+        await expect(harness.runtimeFetch(reorderPath, {
+          method: 'POST', body: JSON.stringify({ inputIds: [second.queuedInputId, first.queuedInputId] }),
+        })).resolves.toEqual({ reordered: true });
+        const reordered = await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}`);
+        expect(reordered.queuedTurnInputs.map((item: { id: string }) => item.id))
+          .toEqual([second.queuedInputId, first.queuedInputId]);
 
         const firstEditSession = await harness.runtimeFetch(
           `/v1/threads/${encodeURIComponent(thread.id)}/queued-turn-inputs/${encodeURIComponent(first.queuedInputId)}/retrieve`,
@@ -494,7 +504,7 @@ describe('runtime server AppServer steering and dynamic tools', () => {
           released: true,
           resumed: {
             disposition: 'queued',
-            queuedInputId: first.queuedInputId,
+            queuedInputId: second.queuedInputId,
           },
         });
         const editSession = await harness.runtimeFetch(

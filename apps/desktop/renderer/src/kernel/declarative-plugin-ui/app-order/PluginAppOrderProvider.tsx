@@ -5,7 +5,9 @@ const PluginAppOrderContext = createContext<ReturnType<typeof usePluginAppOrder>
 
 export function PluginAppOrderProvider({ children }: { children: ReactNode }) {
   const order = usePluginAppOrder();
-  return <PluginAppOrderContext.Provider value={order}>{children}</PluginAppOrderContext.Provider>;
+  return <PluginAppOrderContext.Provider value={order}>
+    <div className="app-navigation__app-order" ref={order.rootRef}>{children}</div>
+  </PluginAppOrderContext.Provider>;
 }
 
 export function usePluginAppOrderEntry(entryId: string) {

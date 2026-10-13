@@ -171,6 +171,35 @@ export class RuntimeQueuedTurnCoordinator {
     });
   }
 
+  reorder(threadId: string, inputIds: string[]): Promise<boolean> {
+    return this.runExclusive(threadId, async () => {
+      this.assertRunning();
+      if (this.editingClaimsByThread.has(threadId)) {
+        throw new Error('Cannot reorder queued inputs while an input is being edited.');
+      }
+      const thread = await this.requireThread(threadId);
+      const queued = thread.queuedTurnInputs ?? [];
+      const requestedIds = new Set(inputIds);
+      // Automatic dispatch shares this lock. Reject a stale drag instead of losing newly
+      // queued items or restoring an input that has already been sent.
+      if (inputIds.length !== queued.length || requestedIds.size !== queued.length
+        || queued.some((item) => !requestedIds.has(item.id))) {
+        throw new Error('The send queue has changed. Please try reordering it again.');
+      }
+      queued.forEach((item) => this.assertNotDispatching(item.id));
+      if (queued.every((item, index) => item.id === inputIds[index])) return false;
+      await this.options.appendEvent(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        type: 'turn.inputs_reordered',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: { inputIds: [...inputIds] },
+      });
+      // Reordering never resumes a queue paused by cancellation or failure.
+      return true;
+    });
+  }
+
   delete(threadId: string, inputId: string): Promise<boolean> {
     return this.runExclusive(threadId, async () => {
       this.assertRunning();

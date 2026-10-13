@@ -1,4 +1,4 @@
-import { Button, Tooltip } from '@setsuna-desktop/renderer-ui';
+import { Button, Tooltip, useReorderLayout, animateReorderLayout, reorderItemRect } from '@setsuna-desktop/renderer-ui';
 import { ChevronDown, Plus } from 'lucide-react';
 import {
   useEffect,
@@ -116,6 +116,7 @@ export function DesktopPanelHeader({
   } = usePanelTabCloseTransition(onClosePanel);
   const activeId = activePanelId || activePanel;
   const tabPanels = panels?.length ? panels : [{ id: activeId, type: activePanel }];
+  useReorderLayout(tabsRef, JSON.stringify(tabPanels.map((panel) => panel.id)), Boolean(dragOverlay));
   const addPanelLabel = t(placement === 'side' ? 'workspace.panel.openOverview' : 'workspace.panel.newTerminal');
   const sortable = Boolean(onReorderPanels && tabPanels.length > 1);
   const canDragPanel = (panel: DesktopPanelTab) =>
@@ -145,7 +146,7 @@ export function DesktopPanelHeader({
       .map((element) => {
         const targetPanelId = element.dataset.desktopPanelTabId;
         if (!targetPanelId || targetPanelId === panelId) return null;
-        const rect = element.getBoundingClientRect();
+        const rect = reorderItemRect(element);
         return {
           centerX: rect.left + rect.width / 2,
           panelId: targetPanelId,
@@ -366,6 +367,7 @@ export function DesktopPanelHeader({
                   .filter(Boolean)
                   .join(' ')}
                 data-desktop-panel-tab-id={panel.id}
+                data-reorder-id={panel.id}
                 key={panel.id}
                 onAnimationEnd={closing ? (event) => handleTabExitAnimationEnd(event, panel.id) : undefined}
                 onPointerDown={(event) => handlePointerDown(event, panel)}
@@ -530,14 +532,14 @@ export function panelCrossSlotDropTargetAtPoint(
   const tabs = Array.from(header.querySelectorAll<HTMLElement>('[data-desktop-panel-tab-id]'));
   const nearestTab = tabs.length
     ? tabs.reduce((nearest, candidate) => {
-        const candidateRect = candidate.getBoundingClientRect();
-        const nearestRect = nearest.getBoundingClientRect();
+        const candidateRect = reorderItemRect(candidate);
+        const nearestRect = reorderItemRect(nearest);
         const candidateDistance = Math.abs(clientX - (candidateRect.left + candidateRect.width / 2));
         const nearestDistance = Math.abs(clientX - (nearestRect.left + nearestRect.width / 2));
         return candidateDistance < nearestDistance ? candidate : nearest;
       })
     : null;
-  const tabRect = nearestTab?.getBoundingClientRect();
+  const tabRect = nearestTab ? reorderItemRect(nearestTab) : null;
   const position: DesktopPanelDropPlacement = tabRect && clientX < tabRect.left + tabRect.width / 2 ? 'before' : 'after';
 
   return {
@@ -571,14 +573,15 @@ function updatePanelCrossSlotPlaceholder(drag: PanelPointerDrag, target: PanelCr
   const reference = targetTab
     ? target.position === 'before' ? targetTab : targetTab.nextSibling
     : tabs.querySelector('.desktop-panel-launcher');
-  tabs.insertBefore(placeholder, reference);
+  animateReorderLayout(tabs, () => tabs.insertBefore(placeholder, reference));
   drag.sourceElement.classList.add('is-cross-slot-targeting');
   drag.crossSlotPlaceholder = placeholder;
   drag.crossSlotTarget = targetKey;
 }
 
 function clearPanelCrossSlotPlaceholder(drag: PanelPointerDrag): void {
-  drag.crossSlotPlaceholder?.remove();
+  const placeholder = drag.crossSlotPlaceholder;
+  if (placeholder?.parentElement) animateReorderLayout(placeholder.parentElement, () => placeholder.remove());
   drag.sourceElement.classList.remove('is-cross-slot-targeting');
   drag.crossSlotPlaceholder = null;
   drag.crossSlotTarget = null;

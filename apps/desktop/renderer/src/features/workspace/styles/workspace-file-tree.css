@@ -104,14 +104,17 @@ body.desktop-file-tree-resizing .desktop-file-tree__resize-handle::after {
 .desktop-file-tree-node.is-drop-target,
 .desktop-file-list.is-drop-target {
   border-radius: var(--app-radius-sm);
-  background: var(--app-surface-muted);
-  outline: 1px solid var(--app-border-strong);
+  background: var(--sd-drag-placeholder);
+  outline: 1px dashed var(--sd-drag-outline);
   outline-offset: -1px;
 }
 
 .desktop-file-row.is-dragging {
-  opacity: 0.5;
+  opacity: 0.4;
 }
+
+.desktop-file-row[draggable='true'] { cursor: grab; }
+.desktop-file-row.is-dragging { cursor: grabbing; }
 
 .desktop-file-row__icon {
   display: inline-flex;

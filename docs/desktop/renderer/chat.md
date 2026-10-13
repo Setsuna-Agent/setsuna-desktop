@@ -67,7 +67,7 @@ Renderer Slot 的实例身份沿用这套 session 语义：Conversation/Details 
 
 ### `useQueuedTurnInputActions.ts`
 
-负责持久化队列的 retrieve、release、update、delete、send-now，并与 composer identity guard 协作。
+负责持久化队列的 retrieve、release、update、reorder、delete、send-now，并与 composer identity guard 协作。
 
 Active turn 时普通提交默认排队；显式立即发送才尝试 steer。Goal 保持独立调度。完整状态机见 [Active turn 发送队列](../../designs/current/queued-turn-inputs.md)。
 
@@ -96,6 +96,8 @@ Active turn 时普通提交默认排队；显式立即发送才尝试 steer。Go
 粘贴超过 10,000 个 UTF-16 字符的文本时，`useChatComposerClipboard` 将原文转换为 UTF-8 TXT 附件，沿用附件准备、发送和清理流程；附件已满或当前模式不允许附件时保留为内联文本。普通文本和结构化引用粘贴后，光标移到输入末尾，仅滚动输入框到底部。
 
 输入框上方的 `chat-composer-stack` 统一承载状态贡献和 `ChatSendQueue`：目标状态与单条、多条队列共享一张向内收窄的卡片，底部留白与输入框重叠，呈现从后方露出的层次。状态贡献只绘制行内容，不再持有独立边框、阴影和外部间距；目标在队列上方，队列限高后内部滚动。两者都无内容时容器不占空间，主对话、侧边对话与概览偏移共用这套布局。
+
+`useChatSendQueueReorder` 管理拖动、插入位置、边缘滚动和方向键排序；队列变化时取消旧拖动，落下后以持久化事件更新顺序。
 
 取回队列项不会先删除持久化数据。Runtime 返回 edit token，renderer 暂时把内容接管到 composer；提交、取消、卸载和失败路径都要 release 或携 token 更新。
 

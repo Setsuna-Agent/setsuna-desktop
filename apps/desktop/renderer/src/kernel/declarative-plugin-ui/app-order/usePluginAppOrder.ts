@@ -1,4 +1,5 @@
 import { shellSidebarPluginEntrySlot } from '@setsuna-desktop/renderer-contracts/shell';
+import { useDragReorderPreview, useNativeDragPreview } from '@setsuna-desktop/renderer-ui';
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import { useToast } from '../../../app/providers/ToastProvider.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
@@ -19,17 +20,28 @@ export function usePluginAppOrder() {
   const toast = useToast();
   const { t } = useI18n();
   const sourceRef = useRef<string | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const originOrder = useRef<string | null>(null);
+  const nativePreview = useNativeDragPreview();
   const pendingRef = useRef(false);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [target, setTarget] = useState<{ id: string; position: ListDropPosition } | null>(null);
+  const orderKey = JSON.stringify(entryIds);
+  const activeId = originOrder.current === orderKey ? draggingId : null;
+  const otherIds = entryIds.filter((id) => id !== activeId);
+  const beforeId = target
+    ? target.position === 'before' ? target.id : otherIds[otherIds.indexOf(target.id) + 1] ?? null
+    : entryIds[entryIds.indexOf(activeId ?? '') + 1] ?? null;
+  useDragReorderPreview(rootRef, { draggedId: activeId, beforeId, orderKey });
   const reset = useCallback(() => {
     sourceRef.current = null;
+    originOrder.current = null;
     setDraggingId(null);
     setTarget(null);
   }, []);
   useEffect(() => {
-    if (sourceRef.current && !entryIds.includes(sourceRef.current)) reset();
-  }, [entryIds, reset]);
+    if (originOrder.current !== null && originOrder.current !== orderKey) reset();
+  }, [orderKey, reset]);
   const isInternalDrag = (event: DragEvent<HTMLButtonElement>) => (
     sourceRef.current !== null && entryIds.includes(sourceRef.current)
     && Array.from(event.dataTransfer.types).includes(APP_DRAG_TYPE)
@@ -44,10 +56,10 @@ export function usePluginAppOrder() {
     event.stopPropagation();
     const sourceId = sourceRef.current!;
     const payload = event.dataTransfer.getData(APP_DRAG_TYPE);
-    const position = dropPosition(event);
+    const dropTarget = target ?? { id: targetId, position: dropPosition(event) };
     reset();
     if (pendingRef.current || payload !== sourceId) return;
-    const next = reorderListPreferences(controller.get(), shellSidebarPluginEntrySlot.id, entryIds, sourceId, targetId, position);
+    const next = reorderListPreferences(controller.get(), shellSidebarPluginEntrySlot.id, entryIds, sourceId, dropTarget.id, dropTarget.position);
     if (!next) return;
     pendingRef.current = true;
     try {
@@ -61,16 +73,19 @@ export function usePluginAppOrder() {
   };
 
   return {
+    rootRef,
     dragging: draggingId !== null,
     buttonProps: (id: string) => ({
       draggable: entryIds.length > 1,
+      'data-reorder-id': id,
       'data-dragging': draggingId === id || undefined,
-      'data-drop-position': target?.id === id ? target.position : undefined,
       onDragStart: (event: DragEvent<HTMLButtonElement>) => {
         if (pendingRef.current || !entryIds.includes(id)) { event.preventDefault(); return; }
         event.stopPropagation();
         event.dataTransfer.effectAllowed = 'move';
         event.dataTransfer.setData(APP_DRAG_TYPE, id);
+        nativePreview.start(event);
+        originOrder.current = orderKey;
         sourceRef.current = id;
         setDraggingId(id);
       },
@@ -79,17 +94,13 @@ export function usePluginAppOrder() {
         event.preventDefault();
         event.stopPropagation();
         event.dataTransfer.dropEffect = 'move';
-        if (sourceRef.current === id) { setTarget(null); return; }
+        // Dropping over the moving placeholder keeps the last valid insertion position.
+        if (sourceRef.current === id) return;
         const position = dropPosition(event);
         setTarget((current) => current?.id === id && current.position === position ? current : { id, position });
       },
-      onDragLeave: (event: DragEvent<HTMLButtonElement>) => {
-        // Crossing the icon's SVG/image descendants still stays on the same app.
-        if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
-        setTarget((current) => current?.id === id ? null : current);
-      },
       onDrop: (event: DragEvent<HTMLButtonElement>) => { void drop(event, id); },
-      onDragEnd: reset,
+      onDragEnd: () => { nativePreview.end(); reset(); },
     }),
   };
 }

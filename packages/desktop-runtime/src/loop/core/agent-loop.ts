@@ -6,11 +6,11 @@ import type {
   QueuedTurnInputEditSession,
   QueuedTurnInputPatch,
   QueuedTurnInputResponse,
+  ReorderQueuedTurnInputsInput,
+  ReorderQueuedTurnInputsResponse,
   RegenerateMessageInput,
   RuntimeDynamicToolDefinition,
-  RuntimeMemoryCitation,
   RuntimeDataMigrationReadiness,
-  RuntimeMessage,
   PendingRuntimeEvent,
   RuntimeEvent,
   StoredThreadEvent,
@@ -18,8 +18,6 @@ import type {
   RuntimeThreadGoal,
   RuntimeThreadGoalPatch,
   RuntimeTaskKind,
-  RuntimeToolCall,
-  RuntimeUsage,
   SendTurnInput,
   SendTurnResponse,
   StartTurnResponse,
@@ -128,7 +126,7 @@ export class AgentLoop {
       goalCoordinator: () => this.featureControls.goals,
       threadStore: options.threadStore,
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
-      publishMessage: (threadId, turnId, message) => this.publishMessage(threadId, turnId, message),
+      publishMessage: (threadId, turnId, message) => this.modelStreamEvents.publishMessage(threadId, turnId, message),
     });
     this.hooks = new RuntimeHookCoordinator({
       clock: options.clock,
@@ -219,7 +217,7 @@ export class AgentLoop {
         return run;
       },
       publishMessage: (threadId, turnId, message, publishOptions) =>
-        this.publishMessage(threadId, turnId, message, publishOptions),
+        this.modelStreamEvents.publishMessage(threadId, turnId, message, publishOptions),
     });
     this.turnRunner = new RuntimeAgentTurnRunner({
       clock: options.clock,
@@ -239,11 +237,11 @@ export class AgentLoop {
       turnTermination: this.turnTermination,
       extensions: options.extensionManager,
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
-      completeMessage: (threadId, turnId, messageId, payload) => this.completeMessage(threadId, turnId, messageId, payload),
-      publishAssistantDelta: (threadId, turnId, messageId, text) => this.publishAssistantDelta(threadId, turnId, messageId, text),
+      completeMessage: (threadId, turnId, messageId, payload) => this.modelStreamEvents.completeMessage(threadId, turnId, messageId, payload),
+      publishAssistantDelta: (threadId, turnId, messageId, text) => this.modelStreamEvents.publishAssistantDelta(threadId, turnId, messageId, text),
       publishAssistantItemDelta: (threadId, turnId, messageId, text) => this.modelStreamEvents.publishAssistantItemDelta(threadId, turnId, messageId, text),
       publishMessage: (threadId, turnId, message, publishOptions) =>
-        this.publishMessage(threadId, turnId, message, publishOptions),
+        this.modelStreamEvents.publishMessage(threadId, turnId, message, publishOptions),
     });
     this.turnRuns = new RuntimeTurnRunFactory({
       clock: options.clock,
@@ -293,7 +291,7 @@ export class AgentLoop {
       toolHost: options.toolHost,
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
       cleanupTurn: (context, outcome) => this.turnRunner.cleanupToolHostTurn(context, outcome),
-      completeMessage: (threadId, turnId, messageId) => this.completeMessage(
+      completeMessage: (threadId, turnId, messageId) => this.modelStreamEvents.completeMessage(
         threadId,
         turnId,
         messageId,
@@ -671,6 +669,15 @@ export class AgentLoop {
     return this.withThreadMutation(threadId, () => this.queuedTurns.enqueue(threadId, input));
   }
 
+  async reorderQueuedTurnInputs(
+    threadId: string,
+    input: ReorderQueuedTurnInputsInput,
+  ): Promise<ReorderQueuedTurnInputsResponse> {
+    return this.withThreadMutation(threadId, async () => ({
+      reordered: await this.queuedTurns.reorder(threadId, input.inputIds),
+    }));
+  }
+
   async retrieveQueuedTurnInput(
     threadId: string,
     inputId: string,
@@ -782,29 +789,6 @@ export class AgentLoop {
    */
   compactThreadContext(threadId: string, force = true): Promise<RuntimeThread> {
     return this.withThreadMutation(threadId, () => this.compactionTurns.compact(threadId, force));
-  }
-  /**
-   * 以 message.created 事件写入并广播一条完整消息。
-   *
-   * @param threadId 目标线程 ID。
-   * @param turnId 消息所属 turn ID。
-   * @param message 要写入线程的 runtime message。
-   */
-  private publishMessage(
-    threadId: string,
-    turnId: string,
-    message: RuntimeMessage,
-    options: { queuedInputId?: string } = {},
-  ): Promise<void> {
-    return this.modelStreamEvents.publishMessage(threadId, turnId, message, options);
-  }
-
-  private publishAssistantDelta(threadId: string, turnId: string, messageId: string, text: string): Promise<void> {
-    return this.modelStreamEvents.publishAssistantDelta(threadId, turnId, messageId, text);
-  }
-
-  private completeMessage(threadId: string, turnId: string, messageId: string, payload: { content?: string; phase: NonNullable<RuntimeMessage['phase']>; usage?: RuntimeUsage; toolCalls?: RuntimeToolCall[]; memoryCitation?: RuntimeMemoryCitation; providerMetadata?: RuntimeMessage['providerMetadata'] }): Promise<void> {
-    return this.modelStreamEvents.completeMessage(threadId, turnId, messageId, payload);
   }
   /**
    * 追加事件到线程存储后广播给订阅者。
