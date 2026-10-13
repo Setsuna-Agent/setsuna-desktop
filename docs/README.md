@@ -61,6 +61,7 @@ Browser、Review、MCP、Model Provider 等业务从 [Feature 总览](features/R
 | [core/feature-core](core/feature-core/README.md) | `packages/feature-core` | Feature 如何声明依赖、激活、贡献视图并安全退出 |
 | [core/runtime](core/runtime/README.md) | `packages/desktop-runtime` | Agent loop、server、ports/adapters、存储和工具宿主如何工作 |
 | [desktop](desktop/README.md) | `apps/desktop` | main、preload、renderer 如何构成可信桌面宿主 |
+| [UI/UX 设计规范](design.md) | Renderer、共享 UI 与第一方 Feature | 信息层级、视觉基础、组件交互、窗口适配与体验验收如何统一 |
 | [共享 UI 与样式](desktop/renderer/shared-ui-and-styles.md) | `packages/renderer-ui`、`packages/renderer-contracts`、renderer shared | 控件、主题和 UI 插槽契约分别由谁维护 |
 | [features](features/README.md) | `packages/features/*` | 每个业务闭环由谁拥有、在哪些进程运行 |
 | [extensions](extensions/README.md) | `plugins`、`skills`、runtime extension adapters | 用户和 Bundle 如何扩展 Agent 能力 |

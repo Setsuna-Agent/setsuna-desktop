@@ -15,11 +15,6 @@
   box-sizing: border-box;
 }
 
-.browser-start-search:focus-within {
-  border-color: var(--app-border-strong);
-  box-shadow: 0 0 0 1px var(--app-border-strong), var(--app-shadow-card);
-}
-
 .browser-start-search__icon { flex: 0 0 auto; color: var(--app-text-muted); }
 .browser-start-search .browser-start-search__input {
   flex: 1;

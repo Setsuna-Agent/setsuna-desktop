@@ -22,7 +22,7 @@ import {
   Trash2,
   Workflow,
 } from 'lucide-react';
-import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import type {
   PluginManagementHook,
   PluginManagementRendererService,
@@ -66,8 +66,11 @@ export function PluginCapabilitiesPage({
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [repositoryRefreshing, setRepositoryRefreshing] = useState(true);
+  const navigationVersion = useRef(0);
+  const pendingActionRef = useRef<string | null>(null);
   const t = translate as PluginManagementTranslate;
   const confirm = useConfirm();
+  useEffect(() => () => { navigationVersion.current += 1; }, []);
 
   useEffect(() => {
     let active = true;
@@ -93,7 +96,10 @@ export function PluginCapabilitiesPage({
   }, [capabilities?.workspacePath, service]);
 
   useEffect(() => {
-    if (capabilities?.activeItemId !== undefined) setSelectedPluginId(capabilities.activeItemId);
+    if (capabilities?.activeItemId !== undefined) {
+      navigationVersion.current += 1;
+      setSelectedPluginId(capabilities.activeItemId);
+    }
   }, [capabilities?.activeItemId]);
 
   const installedById = useMemo(
@@ -116,44 +122,52 @@ export function PluginCapabilitiesPage({
   const standaloneHooks = hookSnapshot.hooks.filter((hook) => !hook.pluginId && !hook.isManaged);
 
   const openPlugin = (pluginId: string) => {
+    navigationVersion.current += 1;
     setLegacyHooksOpen(false);
     setSelectedPluginId(pluginId);
     capabilities?.setActiveItemId(pluginId);
     setError(null);
   };
   const closePlugin = () => {
+    navigationVersion.current += 1;
     setSelectedPluginId(null);
     capabilities?.setActiveItemId(null);
     setError(null);
   };
   const run = async (key: string, operation: () => Promise<unknown>, refreshCatalogs = false) => {
-    if (pendingAction) return;
+    if (pendingActionRef.current) return false;
+    const view = navigationVersion.current;
+    pendingActionRef.current = key;
     setPendingAction(key);
     setError(null);
     try {
       await operation();
       if (refreshCatalogs) await capabilitiesRefresh.refresh(['skills', 'mcp']);
+      return view === navigationVersion.current;
     } catch (unknownError) {
-      setError(pluginErrorMessage(unknownError, t));
+      if (view === navigationVersion.current) setError(pluginErrorMessage(unknownError, t));
+      return false;
     } finally {
+      pendingActionRef.current = null;
       setPendingAction(null);
     }
   };
-  const installMarketplace = async (plugin: RuntimePluginMarketplaceItem) => run(
-    `${plugin.updateAvailable ? 'update' : 'install'}:${plugin.id}`,
-    () => plugin.updateAvailable
-      ? service.updateMarketplace({ pluginId: plugin.id })
-      : service.installMarketplace({ pluginId: plugin.id }),
-    true,
-  );
+  const installMarketplace = async (plugin: RuntimePluginMarketplaceItem) => {
+    await run(
+      `${plugin.updateAvailable ? 'update' : 'install'}:${plugin.id}`,
+      () => plugin.updateAvailable
+        ? service.updateMarketplace({ pluginId: plugin.id })
+        : service.installMarketplace({ pluginId: plugin.id }),
+      true,
+    );
+  };
   const removePlugin = async (plugin: RuntimePluginSummary) => {
     if (!await confirm({
       title: t('feature.pluginManagement.confirmRemove', { name: plugin.name }),
       confirmLabel: t('feature.pluginManagement.remove'),
       danger: true,
     })) return;
-    await run(`remove:${plugin.id}`, () => service.remove({ pluginId: plugin.id }), true);
-    closePlugin();
+    if (await run(`remove:${plugin.id}`, () => service.remove({ pluginId: plugin.id }), true)) closePlugin();
   };
   const setExtensionTrust = async (plugin: RuntimePluginSummary, trusted: boolean) => {
     if (trusted && !await confirm({
@@ -163,10 +177,9 @@ export function PluginCapabilitiesPage({
     })) return;
     await run(`trust:${plugin.id}`, () => service.setExtensionTrust({ pluginId: plugin.id, trusted }));
   };
-  const setHookEnabled = (hook: PluginManagementHook, enabled: boolean) => run(
-    `hook:${hook.managementId}`,
-    () => service.setHookEnabled(hook, enabled),
-  );
+  const setHookEnabled = async (hook: PluginManagementHook, enabled: boolean) => {
+    await run(`hook:${hook.managementId}`, () => service.setHookEnabled(hook, enabled));
+  };
   const setHookTrust = async (hook: PluginManagementHook, trusted: boolean) => {
     if (trusted && !await confirm({
       title: t('feature.pluginManagement.trustHook'),

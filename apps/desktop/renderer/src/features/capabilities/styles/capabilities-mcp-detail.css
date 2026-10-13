@@ -101,10 +101,6 @@
   box-shadow: none;
 }
 
-.desktop-mcp-detail__search:focus-within {
-  box-shadow: var(--app-focus-ring);
-}
-
 .desktop-mcp-detail__tools {
   flex: 1 1 auto;
   min-height: 0;

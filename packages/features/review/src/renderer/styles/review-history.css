@@ -127,10 +127,6 @@
 
 .git-changes-composer__surface {
   padding: 8px;
-  transition: box-shadow 120ms ease;
-}
-.git-changes-composer__surface:focus-within {
-  box-shadow: 0 0 0 1px var(--app-border-strong), var(--desktop-agent-composer-shadow);
 }
 .git-changes-composer__input { position: relative; }
 .git-changes-composer textarea {

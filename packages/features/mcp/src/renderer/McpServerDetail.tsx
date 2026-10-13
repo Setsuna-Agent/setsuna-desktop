@@ -8,7 +8,7 @@ import { mcpConnectionPresentation, mcpServerCategory, mcpToolDisplayName } from
 import type { McpTranslate } from './messages.js';
 
 export function McpServerDetail({ server, authAction, authError, onCancelLogin, openExternal, capabilities,
-  onBack, onDelete, onEdit, onLogin, onLogout, onUpdate, translate, ui,
+  onBack, onDelete, onEdit, onLogin, onLogout, onUpdate, pending, translate, ui,
 }: Readonly<{
   server: RuntimeMcpServer;
   authAction?: 'login' | 'logout';
@@ -22,6 +22,7 @@ export function McpServerDetail({ server, authAction, authError, onCancelLogin, 
   onLogin(): Promise<void>;
   onLogout(): Promise<void>;
   onUpdate(enabled: boolean): Promise<unknown>;
+  pending: boolean;
   translate: McpTranslate;
   ui: SettingsViewUi;
 }>) {
@@ -33,10 +34,10 @@ export function McpServerDetail({ server, authAction, authError, onCancelLogin, 
       <div className="sd-detail desktop-mcp-detail">
         <ui.PageHeader className="sd-detail__header" title={name} subtitle={translate('feature.mcp.detail.subtitle')}
           actions={<>
-            <span className="sd-toggle-label"><Switch label={translate('feature.mcp.enabled')} checked={server.enabled} disabled={server.readOnly} onCheckedChange={(checked) => void onUpdate(checked)} /><span>{translate('feature.mcp.enabled')}</span></span>
+            <span className="sd-toggle-label"><Switch label={translate('feature.mcp.enabled')} checked={server.enabled} disabled={server.readOnly || pending} onCheckedChange={(checked) => void onUpdate(checked)} /><span>{translate('feature.mcp.enabled')}</span></span>
             <ui.ActionMenu label={translate('feature.mcp.actions')} items={[
-              { id: 'edit', label: translate('feature.mcp.edit'), icon: <Pencil size={14} />, disabled: server.readOnly },
-              { id: 'delete', label: translate('feature.mcp.delete'), icon: <Trash2 size={14} />, danger: true, disabled: server.readOnly },
+              { id: 'edit', label: translate('feature.mcp.edit'), icon: <Pencil size={14} />, disabled: server.readOnly || pending },
+              { id: 'delete', label: translate('feature.mcp.delete'), icon: <Trash2 size={14} />, danger: true, disabled: server.readOnly || pending },
             ]} onSelect={(action) => { if (action === 'edit') onEdit(); if (action === 'delete') void onDelete(); }} />
           </>}
         />
