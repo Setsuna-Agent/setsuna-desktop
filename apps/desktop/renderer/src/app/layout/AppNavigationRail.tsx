@@ -1,5 +1,4 @@
-import { Blocks, Clock3, GitPullRequest, Home } from 'lucide-react';
-import { useRef, type ReactNode, type RefObject } from 'react';
+import { useRef, type RefObject } from 'react';
 import { shellSidebarPluginEntrySlot } from '@setsuna-desktop/renderer-contracts/shell';
 import { RendererOwnedListSlot } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
@@ -12,6 +11,7 @@ import { CreatePluginAppEntry } from '../app-creation/CreatePluginAppEntry.js';
 import { usePluginAppCreation, type CreatePluginAppChat } from '../app-creation/usePluginAppCreation.js';
 import { SidebarUserMenu } from '../sidebar/SidebarUserMenu.js';
 import type { MainView } from '../types.js';
+import { AppNavigationIcon, type AppNavigationIconName } from './AppNavigationIcon.js';
 
 export function AppNavigationRail({
   activeView,
@@ -57,18 +57,10 @@ export function AppNavigationRail({
     <div className="app-navigation">
       <div className="app-navigation__viewport" ref={scrollRef}>
         <nav className="app-navigation__routes">
-          <NavigationButton label={t('sidebar.chats')} commandId="app.openChat" active={activeView === 'chat'} onClick={onOpenChat}>
-            <Home size={18} />
-          </NavigationButton>
-          <NavigationButton label="Pull Request" commandId="app.openPullRequests" active={activeView === 'pull-requests'} onClick={onOpenPullRequests}>
-            <GitPullRequest size={18} />
-          </NavigationButton>
-          <NavigationButton label={t('feature.automation.title')} commandId="app.openAutomation" active={activeView === 'automation'} onClick={onOpenAutomation}>
-            <Clock3 size={18} />
-          </NavigationButton>
-          <NavigationButton label={t('sidebar.plugins')} commandId="app.openCapabilities" active={activeView === 'capabilities'} onClick={onOpenCapabilities}>
-            <Blocks size={18} />
-          </NavigationButton>
+          <NavigationButton icon="chat" label={t('sidebar.chats')} commandId="app.openChat" active={activeView === 'chat'} onClick={onOpenChat} />
+          <NavigationButton icon="pull-requests" label="Pull Request" commandId="app.openPullRequests" active={activeView === 'pull-requests'} onClick={onOpenPullRequests} />
+          <NavigationButton icon="automation" label={t('feature.automation.title')} commandId="app.openAutomation" active={activeView === 'automation'} onClick={onOpenAutomation} />
+          <NavigationButton icon="capabilities" label={t('sidebar.plugins')} commandId="app.openCapabilities" active={activeView === 'capabilities'} onClick={onOpenCapabilities} />
           <div className="app-navigation__plugins" role="group" aria-label={t('sidebar.pluginFeatures')}>
             <PluginAppOrderProvider>
               <RendererOwnedListSlot
@@ -102,13 +94,13 @@ export function AppNavigationRail({
 
 function NavigationButton({
   active,
-  children,
+  icon,
   commandId,
   label,
   onClick,
 }: {
   active: boolean;
-  children: ReactNode;
+  icon: AppNavigationIconName;
   commandId?: KeyboardShortcutCommandId;
   label: string;
   onClick: () => void;
@@ -122,7 +114,7 @@ function NavigationButton({
       aria-current={active ? 'page' : undefined}
       onClick={onClick}
     >
-      {children}
+      <AppNavigationIcon name={icon} active={active} />
     </Button>
   );
   return commandId
