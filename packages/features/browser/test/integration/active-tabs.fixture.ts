@@ -9,11 +9,13 @@ import { installEmbeddedBrowserWebviews } from '../../src/main/webview.js';
 import type { BrowserContextMenuSession } from '../../src/main/context-menu-session.js';
 
 const directory = process.argv[2];
+let stage = 'application startup';
 app.setPath('userData', path.join(directory, 'profile'));
 app.disableHardwareAcceleration(); app.dock?.hide();
 BrowserWindow.prototype.show = () => undefined;
 
 async function until<T>(read: () => Promise<T> | T, label: string): Promise<NonNullable<T>> {
+  stage = label;
   const deadline = Date.now() + 7000;
   while (Date.now() < deadline) {
     const value = await read(); if (value) return value as NonNullable<T>;
@@ -23,6 +25,9 @@ async function until<T>(read: () => Promise<T> | T, label: string): Promise<NonN
 }
 
 async function main() {
+  // A pending native Promise can outlive polling deadlines; report its phase before
+  // the parent kills Electron, including on slower headless CI runners.
+  const timeout = setTimeout(() => { console.error(`Active tab fixture timed out during ${stage}`); app.exit(1); }, 25_000);
   await app.whenReady();
   const browserSession = session.fromPartition(DESKTOP_BROWSER_PARTITION);
   browserSession.protocol.handle('https', request => new Response(`<!doctype html><title>Private ${new URL(request.url).hostname}</title><body>page</body>`,
@@ -41,6 +46,7 @@ async function main() {
     browserTabIdForWebContents: () => null, contextMenus: {} as BrowserContextMenuSession,
     isAllowedExtensionUrl: url => service.allowsPage(url), onGuestAttached: contents => service.track(contents) }));
   try {
+    stage = 'extension restoration';
     await service.start();
     const primary = await createGuest(owner, 'https://example.test/');
     const sibling = await createGuest(owner, 'https://example.test/sibling');
@@ -59,11 +65,15 @@ async function main() {
     assert.equal(await primary.executeJavaScript('window.activeTabValue'), undefined, 'isolated execution does not leak globals to the page');
     await assert.rejects(inject(unrelated, primary.id), /Cannot access contents/);
     await assert.rejects(inject(control, sibling.id), /Cannot access contents/);
+    stage = 'popup grant';
     await verifyPopupGrant(service, unrelated, second, primary, owner);
+    stage = 'main-world script execution';
     const main = await control.executeJavaScript(`chrome.scripting.executeScript({target:{tabId:${primary.id}},world:'MAIN',func:() => window.activeTabValue = 7})`);
     assert.equal(main[0].result, 7); assert.equal(await primary.executeJavaScript('window.activeTabValue'), 7);
+    stage = 'script file execution';
     const files = await control.executeJavaScript(`chrome.scripting.executeScript({target:{tabId:${primary.id}},files:['first.js','second.js']})`);
     assert.equal(files[0].result, 43, 'file sources share the extension world and run in order');
+    stage = 'callback script execution';
     const callback = await control.executeJavaScript(`new Promise(resolve => chrome.scripting.executeScript({target:{tabId:${primary.id}},func:() => 44}, result => resolve({result,error:chrome.runtime.lastError?.message})))`);
     assert.equal(callback.error, undefined); assert.equal(callback.result[0].result, 44);
     await assert.rejects(control.executeJavaScript(`chrome.scripting.executeScript({target:{tabId:${primary.id}},files:['../private.js']})`), /Could not load/);
@@ -76,22 +86,27 @@ async function main() {
     }, 'child frames load');
     const same = frames.find(frame => frame.origin === primary.mainFrame.origin)!;
     const cross = frames.find(frame => frame.origin !== primary.mainFrame.origin)!;
+    stage = 'targeted frame injection';
     const targeted = await control.executeJavaScript(`chrome.scripting.executeScript({target:{tabId:${primary.id},frameIds:[${same.frameTreeNodeId}]},func:() => location.hostname})`);
     assert.equal(targeted[0].result, 'example.test'); assert.equal(targeted[0].frameId, same.frameTreeNodeId);
     await assert.rejects(control.executeJavaScript(`chrome.scripting.executeScript({target:{tabId:${primary.id},frameIds:[${cross.frameTreeNodeId}]},func:() => location.hostname})`), /Cannot access contents/);
     const originalDocument = (await inject(control, primary.id))[0].documentId;
+    stage = 'same-origin navigation';
     await primary.loadURL('https://example.test/next');
     const retained = await inject(control, primary.id);
     assert.equal(retained[0].result, 42); assert.notEqual(retained[0].documentId, originalDocument);
     await primary.executeJavaScript("history.pushState({},'', '/spa#hash')");
     assert.equal((await inject(control, primary.id))[0].result, 42);
+    stage = 'cross-origin navigation';
     await primary.loadURL('https://other.test/');
     await assert.rejects(inject(control, primary.id), /Cannot access contents/);
     await primary.loadURL('https://example.test/');
     await assert.rejects(inject(control, primary.id), /Cannot access contents/);
     await service.open(first, 'action', owner, undefined, primary.id);
     assert.equal((await inject(control, primary.id))[0].result, 42);
+    stage = 'extension disable';
     assert.equal(await service.setEnabled(first, false), true);
+    stage = 'extension re-enable';
     assert.equal(await service.setEnabled(first, true), true);
     control = await createGuest(owner, `chrome-extension://${first}/control.html`);
     await assert.rejects(inject(control, primary.id), /Cannot access contents/);
@@ -102,10 +117,11 @@ async function main() {
     await until(() => primary.isDestroyed(), 'tab closes');
     await assert.rejects(inject(control, closedId));
     console.log('EXTENSION_ACTIVE_TAB_OK');
-  } finally { for (const dispose of cleanup) dispose(); service.dispose(); owner.destroy(); other.destroy(); }
+  } finally { clearTimeout(timeout); for (const dispose of cleanup) dispose(); service.dispose(); owner.destroy(); other.destroy(); }
 }
 
 async function inject(control: WebContents, tabId: number): Promise<Array<{ frameId: number; documentId: string; result: unknown }>> {
+  stage = `script injection from ${control.id} into ${tabId}`;
   return control.executeJavaScript(`chrome.scripting.executeScript({target:{tabId:${tabId}},func:(a,b) => a+b,args:[20,22]})`);
 }
 
@@ -125,6 +141,7 @@ async function verifyPopupGrant(service: BrowserExtensionService, control: WebCo
 }
 
 async function createGuest(owner: BrowserWindow, url: string): Promise<WebContents> {
+  stage = `guest attachment: ${url}`;
   const attached = new Promise<WebContents>(resolve => owner.webContents.once('did-attach-webview', (_event, contents) => resolve(contents)));
   if (!owner.webContents.getURL()) await owner.loadURL('data:text/html,<!doctype html><body></body>');
   await owner.webContents.executeJavaScript(`(() => { const view = document.createElement('webview');
