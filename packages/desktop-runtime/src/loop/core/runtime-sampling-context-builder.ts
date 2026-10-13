@@ -116,6 +116,7 @@ export class RuntimeSamplingContextBuilder {
       projectWorkflow: options.projectWorkflow,
       skillRegistry: options.skillRegistry,
       pluginStore: options.pluginStore,
+      threadStore: options.threadStore,
       toolHost: options.toolHost,
     });
   }
@@ -323,6 +324,7 @@ export class RuntimeSamplingContextBuilder {
       skillCatalogContextWindowTokens: contextBudget?.maxContextTokens,
       skillActivationText,
       skillIds,
+      referenceMessages: orderedConversationMessages,
       thread,
       toolContext,
       toolRouter,

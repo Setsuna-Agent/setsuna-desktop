@@ -11,6 +11,7 @@ import { SidebarThreadHoverCard } from './SidebarThreadHoverCard.js';
 import { SidebarThreadTitle } from './SidebarThreadTitle.js';
 import { SidebarThreadWorktreeBadge } from './SidebarThreadWorktreeBadge.js';
 import { SidebarThreadAutomationBadge } from './SidebarThreadAutomationBadge.js';
+import { useSidebarThreadDrag } from './useSidebarThreadDrag.js';
 
 export function SidebarThreadRow({
   menuOpen,
@@ -44,8 +45,9 @@ export function SidebarThreadRow({
   onTogglePin: (thread: RuntimeThreadSummary) => void;
 }) {
   const { t } = useI18n();
+  const threadDrag = useSidebarThreadDrag(thread);
   const sidebarMenuOpen = useContext(SidebarMenuOpenContext);
-  const hoverDisabled = sidebarMenuOpen || menuOpen;
+  const hoverDisabled = sidebarMenuOpen || menuOpen || threadDrag.dragging;
   // 线程列表快照包含整个 runtime 的活动状态；在经过防抖的侧边栏快照尚未更新时，
   // 当前打开线程仍可回退使用显式属性。
   const isRunning = running || Boolean(thread.activeTurnId);
@@ -123,15 +125,22 @@ export function SidebarThreadRow({
   return (
     <div
       className={className}
+      data-dragging={threadDrag.dragging || undefined}
       onContextMenu={handleContextMenu}
       onMouseEnter={() => setHovered(!hoverDisabled)}
       onMouseLeave={() => setHovered(false)}
     >
-      <SidebarThreadHoverCard disabled={menuOpen} projectName={projectName} thread={thread}>
+      <SidebarThreadHoverCard disabled={menuOpen || threadDrag.dragging} projectName={projectName} thread={thread}>
         <Button variant="ghost"
           className="desktop-agent-session__select"
           data-sidebar-thread-id={thread.id}
           type="button"
+          draggable
+          onDragStart={(event) => {
+            setHovered(false);
+            threadDrag.onDragStart(event);
+          }}
+          onDragEnd={threadDrag.onDragEnd}
           onClick={() => onSelect(thread.id)}
           onKeyDown={handleSelectKeyDown}
         >
@@ -149,6 +158,7 @@ export function SidebarThreadRow({
       ) : null}
       {menuOpen ? <SidebarThreadMenu anchor={menuAnchorPoint} thread={thread} pinned={pinned} running={isRunning}
         actions={threadMenu} onRename={onRename} onTogglePin={onTogglePin} onArchive={onArchive} onOpenInNewWindow={onOpenInNewWindow} /> : null}
+      {threadDrag.preview}
     </div>
   );
 }

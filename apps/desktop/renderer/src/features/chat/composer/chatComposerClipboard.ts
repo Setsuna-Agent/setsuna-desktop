@@ -1,11 +1,13 @@
 import type { ComposerSlot } from './editor/types.js';
 import { isBrowserTabReference } from '@setsuna-desktop/feature-browser/contracts';
+import { isRuntimeThreadReference } from '@setsuna-desktop/contracts';
 import type { RuntimePluginSummary, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import {
   createSelectedSkillSlot,
   createSelectedPluginSlot,
   createPluginAppMentionSlot,
   createBrowserTabMentionSlot,
+  createThreadMentionSlot,
   createTextSlot,
   createWorkspaceMentionReferenceSlot,
   getChatComposerSlotReference,
@@ -78,6 +80,10 @@ export function createChatComposerClipboardPastePlan(
     }
     if (part.type === 'browser-tab') {
       slots.push(createBrowserTabMentionSlot(part.tab));
+      continue;
+    }
+    if (part.type === 'thread') {
+      slots.push(createThreadMentionSlot(part.thread));
       continue;
     }
     if (part.type === 'plugin') {
@@ -248,6 +254,7 @@ function isClipboardPart(value: unknown): value is ChatComposerClipboardPart {
   if (value.type === 'plugin') return typeof value.pluginId === 'string' && Boolean(value.pluginId)
     && (value.contributionId === undefined || (typeof value.contributionId === 'string' && Boolean(value.contributionId)));
   if (value.type === 'browser-tab') return isBrowserTabReference(value.tab);
+  if (value.type === 'thread') return isRuntimeThreadReference(value.thread);
   if (value.type !== 'workspace' || !isRecord(value.entry)) return false;
   return (value.entry.kind === 'file' || value.entry.kind === 'directory')
     && typeof value.entry.name === 'string'

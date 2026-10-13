@@ -3,7 +3,7 @@ import { parseBrowserTabMentions, type BrowserTabReference } from '@setsuna-desk
 import { BrowserFavicon } from '../../../composition/BrowserWorkspaceFeatureBoundary.js';
 import { composerCursorOffsetAdjustment } from '../composer/chatComposerCursorOffset.js';
 import { ChatInlineReference } from '../references/ChatInlineReference.js';
-import { WorkspaceMentionText } from './WorkspaceMentionText.js';
+import { ThreadReferenceText } from './ThreadReference.js';
 import type { BrowserTabMentionCandidate } from './chatMentionItems.js';
 
 const BrowserTabs = createContext<readonly BrowserTabMentionCandidate[]>([]);
@@ -29,10 +29,10 @@ export function BrowserTabReferenceText({ content }: { content: string }) {
   const parts: ReactNode[] = [];
   let offset = 0;
   for (const mention of parseBrowserTabMentions(content)) {
-    parts.push(<WorkspaceMentionText key={`text:${offset}`} content={content.slice(offset, mention.start)} />);
+    parts.push(<ThreadReferenceText key={`text:${offset}`} content={content.slice(offset, mention.start)} />);
     parts.push(<BrowserTabReferenceLabel key={`tab:${mention.start}`} tab={mention.tab} />);
     offset = mention.end;
   }
-  parts.push(<WorkspaceMentionText key={`text:${offset}`} content={content.slice(offset)} />);
+  parts.push(<ThreadReferenceText key={`text:${offset}`} content={content.slice(offset)} />);
   return <Fragment>{parts}</Fragment>;
 }

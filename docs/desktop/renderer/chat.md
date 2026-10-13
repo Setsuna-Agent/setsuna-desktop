@@ -88,7 +88,8 @@ Active turn 时普通提交默认排队；显式立即发送才尝试 steer。Go
 - `chatProjectEntrySearch.ts`：可取消的 project entry 搜索，迟到结果不能覆盖最新 query。
 - `chatSlashCommandItems.ts`：quick action 与可用 Skill 的纯列表映射。
 - `chatComposerCursorOffset.ts`：菜单定位需要的光标偏移。
-- `chatComposerSlots.tsx`：workspace mention、Skill 和文本输入 slots。
+- `chatComposerSlots.tsx`：workspace、Skill、Plugin、浏览器标签页、会话引用和文本输入 slots。
+- `useChatThreadDrop.ts`：接收侧栏会话拖拽，追加去重的结构化会话引用，保留现有草稿和选区内的文字。侧栏拖动时显示会话标题浮标，进入 composer 区域后高亮输入卡片；移出、结束拖动或窗口失焦时清除接收状态。引用采用 Core contract 的 `thread://` 格式，草稿、队列编辑和结构化复制粘贴共用同一解析器。
 - `useQueuedTurnComposerEdit.ts`：带 token 的队列项取回编辑。
 - `useChatComposerHistory.ts`：光标折叠在首行开头时，用上下箭头遍历当前对话已加载的用户提问；消息来自 `ChatWorkspace` 合并后的分页历史，按消息 ID 保持浏览位置，分页新增的旧提问可继续向上取回。向下越过最新提问时恢复原草稿及结构化引用。输入法、修饰键、命令菜单和队列编辑保留原有键盘行为。
 
@@ -242,6 +243,7 @@ Markdown 内联代码只将单一路径作为文件候选，命令、Git 状态�
 
 - Workspace mention 使用明确 parser，不从渲染后的 Markdown 反推。
 - `@` 同时提供当前会话打开的浏览器标签页，通过 Browser contract 序列化稳定 ID、标题和网址；候选、输入槽位和历史消息共用该引用格式。
+- 侧栏会话可拖入输入框。runtime 只在采样时解析模型历史中用户显式输入的会话引用，经 `ThreadStore.listMessages` 按需读取最近记录，最多解析最近引用的五个会话并限制正文总量。引用作为外部资料参与上下文预算，不复制思考、工具结果、model-only 消息或附件，也不递归展开其中的引用；会话删除或读取失败会标记不可用。需要补读时使用独立的内置 `read_thread` 工具分页读取历史，并按需包含工具输出，不依赖应用构建器插件。
 - 文件打开仍走 main/workspace API。
 - 文件选择器中的本地文件通过 preload 从 Electron `File` 提取可信路径并登记为 runtime 引用；renderer 和线程事件只保留不透明 attachment ID，不读取或复制文件字节。
 - runtime 将被引用的原文件作为该 turn 的 direct-tool-only readable root 暴露给 Agent，但不会把动态附件根加入 shell sandbox plan，也不会新增写权限；文件若本来位于 workspace 或已配置的 writable root 内，仍遵循原有 workspace 权限。文件移动或删除后引用变为不可用，不会生成第二份副本。

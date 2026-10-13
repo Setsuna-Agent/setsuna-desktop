@@ -1,13 +1,15 @@
 import type { ComposerSlot } from './editor/types.js';
 import { browserTabMentionText, parseBrowserTabMentions, type BrowserTabReference } from '@setsuna-desktop/feature-browser/contracts';
-import { normalizeRuntimeSkillReferences, parsePluginMentions, pluginAppMentionText, pluginMentionText, type RuntimeMessage, type RuntimePluginAppReference, type RuntimePluginSummary } from '@setsuna-desktop/contracts';
+import { normalizeRuntimeSkillReferences, parsePluginMentions, parseThreadMentions, pluginAppMentionText, pluginMentionText, threadMentionText, type RuntimeMessage, type RuntimePluginAppReference, type RuntimePluginSummary } from '@setsuna-desktop/contracts';
 import type {
   RuntimeSkillReference,
   RuntimeSkillSummary,
+  RuntimeThreadReference,
   WorkspaceEntrySearchItem,
 } from '@setsuna-desktop/contracts';
 import { WorkspaceMentionLabel } from '../mentions/WorkspaceMentionLabel.js';
 import { BrowserTabReferenceLabel } from '../mentions/BrowserTabReference.js';
+import { ThreadReferenceLabel } from '../mentions/ThreadReference.js';
 import { SkillReferenceLabel } from '../skills/SkillReference.js';
 import { PluginReferenceLabel } from '../references/PluginReference.js';
 import { PluginAppReferenceLabel } from '../references/PluginAppReferenceLabel.js';
@@ -20,6 +22,7 @@ export type ChatComposerSlotReference =
   | { type: 'skill'; skillId: string }
   | { type: 'plugin'; pluginId: string; contributionId?: string }
   | { type: 'browser-tab'; tab: BrowserTabReference }
+  | { type: 'thread'; thread: RuntimeThreadReference }
   | { type: 'workspace'; entry: WorkspaceEntrySearchItem };
 
 export type ChatComposerReferenceSlot = Extract<ComposerSlot, { type: 'tag' }> & {
@@ -75,6 +78,15 @@ export function createBrowserTabMentionSlot(tab: BrowserTabReference): ChatCompo
   };
 }
 
+export function createThreadMentionSlot(thread: RuntimeThreadReference): ChatComposerReferenceSlot {
+  const value = threadMentionText(thread);
+  return {
+    type: 'tag', key: createReferenceSlotKey('thread:'),
+    composerReference: { type: 'thread', thread: { id: thread.id, title: thread.title } },
+    props: { label: <ThreadReferenceLabel thread={thread} serializedText={value} />, value },
+  };
+}
+
 export function createReferenceDraftSlots(
   value: string,
   plugins: readonly RuntimePluginSummary[],
@@ -88,11 +100,25 @@ export function createReferenceDraftSlots(
   });
   for (const reference of references) {
     const skill = skills.find((item) => item.id === reference.skillId)!;
-    slots.push(...createBrowserAndPluginDraftSlots(value.slice(offset, reference.start), plugins));
+    slots.push(...createThreadDraftSlots(value.slice(offset, reference.start), plugins));
     const slot = createSelectedSkillSlot(skill);
     slot.props.value = value.slice(reference.start, reference.end);
     slots.push(slot);
     offset = reference.end;
+  }
+  slots.push(...createThreadDraftSlots(value.slice(offset), plugins));
+  return slots;
+}
+
+function createThreadDraftSlots(value: string, plugins: readonly RuntimePluginSummary[]): ComposerSlot[] {
+  const slots: ComposerSlot[] = [];
+  let offset = 0;
+  for (const mention of parseThreadMentions(value)) {
+    slots.push(...createBrowserAndPluginDraftSlots(value.slice(offset, mention.start), plugins));
+    const slot = createThreadMentionSlot(mention.thread);
+    slot.props.value = value.slice(mention.start, mention.end);
+    slots.push(slot);
+    offset = mention.end;
   }
   slots.push(...createBrowserAndPluginDraftSlots(value.slice(offset), plugins));
   return slots;

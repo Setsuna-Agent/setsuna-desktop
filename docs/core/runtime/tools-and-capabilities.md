@@ -29,7 +29,7 @@ ToolHost 不直接发布 React UI；它返回结构化结果，由 tool executor
 
 ## CompositeToolHost
 
-Factory 当前按顺序组合：
+Factory 组合内置会话读取、按需启用的应用构建器 API，以及以下能力：
 
 1. `UserInputToolHost`
 2. `BrowserToolHost`（Browser Feature service 的通用 adapter）
@@ -51,6 +51,19 @@ Factory 当前按顺序组合：
 - Preview。
 - Cleanup。
 - Plugin/Skill 归因。
+
+## 内置会话读取
+
+`ThreadReadToolHost` 提供常驻只读工具 `read_thread`，通过注入的 `ThreadStore.listMessages`
+分页读取指定会话，不依赖项目、插件安装或 runtime HTTP API。参数为 `thread_id`、可选
+`before` 和 `limit`；默认读取最近 20 条存储记录，上限 100，返回 `next_before` 供向前翻页。
+分页游标沿用存储位置，过滤后的空页不代表历史结束。
+
+结果只投影正文、消息状态和工具调用；`include_tool_results` 可按需包含工具输出。
+内部提示词、model-only 消息、思考、附件与模型诊断不会复制到目标会话。
+正文过滤与会话引用上下文共用同一个 helper，输出标记为外部资料，沿用通用工具结果预算与分页机制。
+引用附带的最近正文足够时直接使用，需要补读时调用 `read_thread`；应用构建器的
+`read_runtime_api` 保留在应用开发的数据/API 检查场景。
 
 ## Loop tool pipeline
 
