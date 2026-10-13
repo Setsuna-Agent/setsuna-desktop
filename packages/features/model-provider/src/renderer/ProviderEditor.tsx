@@ -105,6 +105,7 @@ export function ProviderEditor({
       </header>
       <div className="model-provider-settings__editor-body">
         <ProviderConnection
+          BrandIcon={BrandIcon}
           apiKey={apiKey}
           catalog={catalog}
           provider={provider}

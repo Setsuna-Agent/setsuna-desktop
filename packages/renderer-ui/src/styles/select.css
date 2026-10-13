@@ -28,6 +28,19 @@
   white-space: nowrap;
 }
 
+.sd-select-field--with-icon .sd-select-field__value {
+  flex: 1;
+}
+
+.sd-select-field__icon {
+  display: inline-flex;
+  flex: 0 0 18px;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+
 .sd-select-field__chevron {
   flex: 0 0 auto;
   color: var(--app-text-muted);
@@ -95,6 +108,10 @@
   text-align: left;
   outline: none;
   cursor: pointer;
+}
+
+.sd-select-menu__option--with-icon {
+  grid-template-columns: 18px minmax(0, 1fr) 16px;
 }
 
 .sd-select-menu__option > span {

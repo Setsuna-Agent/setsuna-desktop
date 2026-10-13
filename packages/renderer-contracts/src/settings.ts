@@ -90,6 +90,7 @@ export type SettingsSelectFieldProps = Readonly<{
   id?: string;
   name?: string;
   onValueChange(value: string): boolean | void;
+  renderOptionIcon?(value: string): ReactNode;
   required?: boolean;
   title?: string;
   value: string;
