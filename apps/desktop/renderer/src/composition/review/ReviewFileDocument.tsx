@@ -10,6 +10,6 @@ const MarkdownPreview = lazy(async () => {
 export function ReviewFileDocument({ content, filePath, onOpenFile, loadImage }: ReviewFileDocumentProps) {
   const { t } = useI18n();
   return <Suspense fallback={<div className="desktop-review-document-status" role="status">{t('workspace.files.loadingPreview')}</div>}>
-    <MarkdownPreview content={content} file={{ path: filePath }} onOpenFile={onOpenFile} loadImage={loadImage} />
+    <MarkdownPreview embedded content={content} file={{ path: filePath }} onOpenFile={onOpenFile} loadImage={loadImage} />
   </Suspense>;
 }
