@@ -7,6 +7,13 @@
   background: var(--app-bg);
 }
 
+.desktop-markdown-preview--embedded {
+  /* Review owns scrolling; an inner contain boundary traps wheel input even
+     when the document has no scroll range of its own. */
+  overflow: visible;
+  overscroll-behavior: auto;
+}
+
 .desktop-markdown-preview .desktop-markdown-preview__document {
   max-width: 900px;
   margin: 0 auto;
