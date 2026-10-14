@@ -26,6 +26,23 @@ async function until<T>(read: () => Promise<T> | T, label: string): Promise<NonN
 async function main() {
   await app.whenReady();
   const browserSession = session.fromPartition(DESKTOP_BROWSER_PARTITION);
+  // Native startup errors omit the registration/worker phase. Keep that evidence on
+  // failure so an intermittent CI failure can be diagnosed without retrying it blind.
+  const workers = browserSession.serviceWorkers;
+  const startedAt = Date.now();
+  const workerEvents: unknown[] = [];
+  const recordWorkerEvent = (name: string, details: unknown) => {
+    workerEvents.push({ elapsedMs: Date.now() - startedAt, name, details });
+    if (workerEvents.length > 32) workerEvents.shift();
+  };
+  const registered = (_event: Electron.Event, details: Electron.RegistrationCompletedDetails) => recordWorkerEvent('registered', details);
+  const statusChanged = (event: Electron.Event<Electron.ServiceWorkersRunningStatusChangedEventParams>) => {
+    recordWorkerEvent('status', { versionId: event.versionId, runningStatus: event.runningStatus });
+  };
+  const message = (_event: Electron.Event, details: Electron.MessageDetails) => recordWorkerEvent('console', details);
+  workers.on('registration-completed', registered);
+  workers.on('running-status-changed', statusChanged);
+  workers.on('console-message', message);
   browserSession.protocol.handle('https', () => new Response('<!doctype html><title>Browser tab</title>', { headers: { 'Content-Type': 'text/html' } }));
   const owner = new BrowserWindow({ show: false, webPreferences: { preload: path.join(directory, 'navigation.cjs'), webviewTag: true, contextIsolation: true, sandbox: true } });
   const other = new BrowserWindow({ show: false, webPreferences: { preload: path.join(directory, 'navigation.cjs'), webviewTag: true, contextIsolation: true, sandbox: true } });
@@ -110,7 +127,15 @@ async function main() {
       await verifyInstalledExtension(service, owner, primary);
     }
     console.log('EXTENSION_SIDEPANEL_OK');
+  } catch (error) {
+    console.error('EXTENSION_SIDEPANEL_WORKER_STATE', JSON.stringify({
+      id, events: workerEvents, running: workers.getAllRunning(),
+    }));
+    throw error;
   } finally {
+    workers.off('registration-completed', registered);
+    workers.off('running-status-changed', statusChanged);
+    workers.off('console-message', message);
     for (const dispose of cleanup) dispose();
     service.dispose(); owner.destroy(); other.destroy();
   }

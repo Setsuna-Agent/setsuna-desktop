@@ -67,6 +67,10 @@ pnpm test:unit apps/desktop/renderer/test/unit/services/runtime-client/client.te
 pnpm test:integration packages/desktop-runtime/test/integration/agent-loop/queued-turn-inputs.test.ts
 ```
 
+定向检查用于开发阶段定位问题。修改共享 Renderer 组件或跨进程 Contract 后，提交 PR 前需再运行完整 `pnpm test`、`pnpm typecheck` 与 `pnpm lint`，覆盖间接受影响的使用方；只通过新增或修改文件的测试不能代表 CI 通过。需要复现 CI 时，按 workflow 分别运行 unit/integration 的两个分片，并准备 workflow 声明的依赖构建。
+
+原生 Electron 集成测试偶发失败时保留注册、启动和错误事件等阶段信息。单次重跑成功只能说明未复现，不能作为根因已修复的依据；不要通过跳过用例、放宽断言或增加重试掩盖失败。
+
 保留 pnpm、runner 和 config，不直接用 `npx vitest`。文件过滤器直接跟在 script 后面；不要额外插入 `--`，当前 runner 会因此忽略文件过滤并运行全套。
 
 ## 模块对应

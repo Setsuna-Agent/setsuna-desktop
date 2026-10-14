@@ -188,7 +188,7 @@ it('lets a trusted projectless application read and mutate real backend data, an
     // Only the host-approved path may reach the authenticated backend deletion route.
     deleteThread.mockImplementationOnce((threadId) => harness.runtimeFetch(`/v1/threads/${threadId}`, { method: 'DELETE' }));
     expect(await call(remove)).toMatchObject({ ok: true, status: 200 });
-    expect(deleteThread).toHaveBeenLastCalledWith(second.data.id, expect.any(AbortSignal));
+    expect(deleteThread).toHaveBeenLastCalledWith(second.data.id, expect.any(AbortSignal), {});
     expect(await call({ path: `/v1/threads/${second.data.id}` })).toMatchObject({ status: 404 });
 
     await harness.runtimeFetch(`${base}/extension-trust`, { method: 'PUT', body: JSON.stringify({ trusted: false }) });
