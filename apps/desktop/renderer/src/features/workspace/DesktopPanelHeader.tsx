@@ -1,7 +1,8 @@
 import { Button, Tooltip, useReorderLayout, animateReorderLayout, reorderItemRect } from '@setsuna-desktop/renderer-ui';
-import { ChevronDown, Plus } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import {
   useEffect,
+  useId,
   useRef,
   useState,
   type AnimationEvent as ReactAnimationEvent,
@@ -13,6 +14,7 @@ import {
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { ShortcutTooltip, ShortcutTooltipContent } from '../../shared/ui/ShortcutTooltip.js';
 import { usePanelTabCloseTransition } from './hooks/usePanelTabCloseTransition.js';
+import { usePanelTabScroll } from './hooks/usePanelTabScroll.js';
 import { DesktopPanelIcon, desktopPanelTitle } from './PanelChrome.js';
 import { PanelPlacementIcon } from './PanelPlacementIcon.js';
 import {
@@ -109,6 +111,7 @@ export function DesktopPanelHeader({
   const headerRef = useRef<HTMLDivElement | null>(null);
   const suppressNextClickRef = useRef(false);
   const tabsRef = useRef<HTMLSpanElement | null>(null);
+  const tabsId = useId();
   const {
     closingPanelWidths,
     finishPanelClose,
@@ -116,7 +119,9 @@ export function DesktopPanelHeader({
   } = usePanelTabCloseTransition(onClosePanel);
   const activeId = activePanelId || activePanel;
   const tabPanels = panels?.length ? panels : [{ id: activeId, type: activePanel }];
-  useReorderLayout(tabsRef, JSON.stringify(tabPanels.map((panel) => panel.id)), Boolean(dragOverlay));
+  const tabOrderKey = JSON.stringify(tabPanels.map((panel) => panel.id));
+  useReorderLayout(tabsRef, tabOrderKey, Boolean(dragOverlay));
+  const { canScrollLeft, canScrollRight, scrollTabs } = usePanelTabScroll(tabsRef, activeId, tabOrderKey, Boolean(dragOverlay));
   const addPanelLabel = t(placement === 'side' ? 'workspace.panel.openOverview' : 'workspace.panel.newTerminal');
   const sortable = Boolean(onReorderPanels && tabPanels.length > 1);
   const canDragPanel = (panel: DesktopPanelTab) =>
@@ -345,81 +350,107 @@ export function DesktopPanelHeader({
       onPointerUp={handlePointerEnd}
     >
       <div className="chat-file-review-panel__heading">
-        <span className="chat-file-review-panel__tabs" ref={tabsRef}>
-          {tabPanels.map((panel) => {
-            const closingWidth = closingPanelWidths[panel.id];
-            const closing = closingWidth !== undefined;
-            const closeLabel = t('workspace.panel.closeNamed', { title: desktopPanelTitle(panel, t) });
-            const draggable = canDragPanel(panel);
-            const tabStyle = closing
-              ? { '--desktop-panel-tab-exit-width': `${closingWidth}px` } as CSSProperties
-              : undefined;
-            return (
-              <span
-                className={[
-                  'chat-file-review-panel__title',
-                  activeId === panel.id ? 'chat-file-review-panel__title--active' : '',
-                  onClosePanel ? 'chat-file-review-panel__title--closable' : '',
-                  draggable ? 'chat-file-review-panel__title--sortable' : '',
-                  draggedPanelId === panel.id ? 'is-dragging' : '',
-                  closing ? 'is-closing' : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
-                data-desktop-panel-tab-id={panel.id}
-                data-reorder-id={panel.id}
-                key={panel.id}
-                onAnimationEnd={closing ? (event) => handleTabExitAnimationEnd(event, panel.id) : undefined}
-                onPointerDown={(event) => handlePointerDown(event, panel)}
-                style={tabStyle}
-              >
-                <Button variant="ghost"
-                  className="chat-file-review-panel__tab-button"
-                  disabled={closing}
-                  type="button"
-                  title={desktopPanelTitle(panel, t)}
-                  onClick={(event) => handleTabClick(event, panel.id)}
+        <span className="chat-file-review-panel__tab-strip">
+          {(canScrollLeft || canScrollRight) ? (
+            <Button variant="ghost"
+              aria-label={t('workspace.panel.scrollTabsLeft')}
+              aria-controls={tabsId}
+              title={t('workspace.panel.scrollTabsLeft')}
+              className="chat-file-review-panel__tab-scroll chat-file-review-panel__tab-scroll--left"
+              disabled={!canScrollLeft}
+              onClick={() => scrollTabs(-1)}
+            >
+              <ChevronLeft size={16} aria-hidden="true" />
+            </Button>
+          ) : null}
+          <span className="chat-file-review-panel__tabs" id={tabsId} ref={tabsRef}>
+            {tabPanels.map((panel) => {
+              const closingWidth = closingPanelWidths[panel.id];
+              const closing = closingWidth !== undefined;
+              const closeLabel = t('workspace.panel.closeNamed', { title: desktopPanelTitle(panel, t) });
+              const draggable = canDragPanel(panel);
+              const tabStyle = closing
+                ? { '--desktop-panel-tab-exit-width': `${closingWidth}px` } as CSSProperties
+                : undefined;
+              return (
+                <span
+                  className={[
+                    'chat-file-review-panel__title',
+                    activeId === panel.id ? 'chat-file-review-panel__title--active' : '',
+                    onClosePanel ? 'chat-file-review-panel__title--closable' : '',
+                    draggable ? 'chat-file-review-panel__title--sortable' : '',
+                    draggedPanelId === panel.id ? 'is-dragging' : '',
+                    closing ? 'is-closing' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                  data-desktop-panel-tab-id={panel.id}
+                  data-reorder-id={panel.id}
+                  key={panel.id}
+                  onAnimationEnd={closing ? (event) => handleTabExitAnimationEnd(event, panel.id) : undefined}
+                  onPointerDown={(event) => handlePointerDown(event, panel)}
+                  style={tabStyle}
                 >
-                  {renderTabLabel(panel)}
-                </Button>
-                {onClosePanel ? (
-                  <Tooltip
-                    placement="bottom"
-                    disabled={closing || Boolean(dragOverlay)}
-                    title={placement === 'side' && activeId === panel.id
-                      ? <ShortcutTooltipContent commandId="workspace.closeActiveSidePanel" label={closeLabel} />
-                      : closeLabel}
+                  <Button variant="ghost"
+                    className="chat-file-review-panel__tab-button"
+                    disabled={closing}
+                    type="button"
+                    title={desktopPanelTitle(panel, t)}
+                    onClick={(event) => handleTabClick(event, panel.id)}
                   >
-                    <Button variant="ghost"
-                      className="chat-file-review-panel__tab-close"
-                      disabled={closing}
-                      type="button"
-                      aria-label={closeLabel}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        const visualWidth = event.currentTarget.parentElement?.getBoundingClientRect().width ?? 0;
-                        startPanelClose(panel.id, visualWidth * pageScaleInverse());
-                      }}
+                    {renderTabLabel(panel)}
+                  </Button>
+                  {onClosePanel ? (
+                    <Tooltip
+                      placement="bottom"
+                      disabled={closing || Boolean(dragOverlay)}
+                      title={placement === 'side' && activeId === panel.id
+                        ? <ShortcutTooltipContent commandId="workspace.closeActiveSidePanel" label={closeLabel} />
+                        : closeLabel}
                     >
-                      <span className="chat-file-review-panel__tab-close-glyph" aria-hidden="true" />
-                    </Button>
-                  </Tooltip>
-                ) : null}
+                      <Button variant="ghost"
+                        className="chat-file-review-panel__tab-close"
+                        disabled={closing}
+                        type="button"
+                        aria-label={closeLabel}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          const visualWidth = event.currentTarget.parentElement?.getBoundingClientRect().width ?? 0;
+                          startPanelClose(panel.id, visualWidth * pageScaleInverse());
+                        }}
+                      >
+                        <span className="chat-file-review-panel__tab-close-glyph" aria-hidden="true" />
+                      </Button>
+                    </Tooltip>
+                  ) : null}
+                </span>
+              );
+            })}
+            {onAddPanel ? (
+              <span className="desktop-panel-launcher">
+                <Button variant="ghost"
+                  aria-label={addPanelLabel}
+                  title={addPanelLabel}
+                  className="app-shell-icon-control chat-file-review-panel__heading-action"
+                  type="button"
+                  onClick={() => onAddPanel()}
+                >
+                  <Plus size={14} />
+                </Button>
               </span>
-            );
-          })}
-          {onAddPanel ? (
-            <span className="desktop-panel-launcher">
-              <Button variant="ghost"
-                aria-label={addPanelLabel}
-                title={addPanelLabel}
-                className="app-shell-icon-control chat-file-review-panel__heading-action"
-                type="button"
-                onClick={() => onAddPanel()}
-              >
-                <Plus size={14} />
-              </Button>
-            </span>
+            ) : null}
+          </span>
+          {(canScrollLeft || canScrollRight) ? (
+            <Button variant="ghost"
+              aria-label={t('workspace.panel.scrollTabsRight')}
+              aria-controls={tabsId}
+              title={t('workspace.panel.scrollTabsRight')}
+              className="chat-file-review-panel__tab-scroll chat-file-review-panel__tab-scroll--right"
+              disabled={!canScrollRight}
+              onClick={() => scrollTabs(1)}
+            >
+              <ChevronRight size={16} aria-hidden="true" />
+            </Button>
           ) : null}
         </span>
         <span className="chat-file-review-panel__heading-actions">

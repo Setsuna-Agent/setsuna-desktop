@@ -1,6 +1,6 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
 import type { DiffLineAnnotation } from '@pierre/diffs/react';
-import type { RuntimeReviewFinding } from '@setsuna-desktop/contracts';
+import { getDocumentPreviewFormat, type RuntimeReviewFinding } from '@setsuna-desktop/contracts';
 import type { DesktopWorkspaceApp } from '@setsuna-desktop/feature-workspace-apps/contracts';
 import { Code2, FileDiff, PanelRightOpen } from 'lucide-react';
 import {
@@ -33,8 +33,9 @@ import {
 } from './review-paths.js';
 import type { DesktopReviewDiffLayout, ReviewFileExpansionRequest, ReviewPathContext } from './review-types.js';
 import { ReviewChangeCounts } from './ReviewChangeCounts.js';
-import { canPreviewReviewMarkdown, ReviewFileDocument, type ReviewMarkdownViewMode } from './ReviewFileDocument.js';
+import { canPreviewReviewTextFile, ReviewFileDocument, type ReviewFileViewMode } from './ReviewFileDocument.js';
 import { ReviewFileIcon, ReviewFilePath } from './ReviewFileVisuals.js';
+import { ReviewDocumentDiff } from './ReviewDocumentDiff.js';
 import {
   reviewFindingKey,
   reviewPathsMatch,
@@ -63,7 +64,7 @@ type ReviewFileHeaderControls = {
 
 export function ReviewSummarySection({
   diffLayout,
-  markdownView = 'source',
+  fileView = 'source',
   emptyText,
   fileExpansionRequest,
   fileHeaderControls,
@@ -82,7 +83,7 @@ export function ReviewSummarySection({
   onRevealFile,
 }: {
   diffLayout: DesktopReviewDiffLayout;
-  markdownView?: ReviewMarkdownViewMode;
+  fileView?: ReviewFileViewMode;
   emptyText: { title: string; description: string };
   fileExpansionRequest: ReviewFileExpansionRequest;
   fileHeaderControls?: ReviewFileHeaderControls;
@@ -176,7 +177,7 @@ export function ReviewSummarySection({
           {files.map((file) => (
             <ReviewFileCard
               diffLayout={diffLayout}
-              markdownView={markdownView}
+              fileView={fileView}
               fileExpansionRequest={fileExpansionRequest}
               fileHeaderControls={fileHeaderControls}
               file={file}
@@ -217,7 +218,7 @@ export function ReviewSummarySection({
 
 const ReviewFileCard = memo(function ReviewFileCard({
   diffLayout,
-  markdownView,
+  fileView,
   fileExpansionRequest,
   fileHeaderControls,
   file,
@@ -239,7 +240,7 @@ const ReviewFileCard = memo(function ReviewFileCard({
   onRevealFile,
 }: {
   diffLayout: DesktopReviewDiffLayout;
-  markdownView: ReviewMarkdownViewMode;
+  fileView: ReviewFileViewMode;
   fileExpansionRequest: ReviewFileExpansionRequest;
   fileHeaderControls?: ReviewFileHeaderControls;
   file: DesktopDiffFile;
@@ -272,13 +273,17 @@ const ReviewFileCard = memo(function ReviewFileCard({
     ui: { CodePatchView, FileContextMenu },
   } = useReviewRendererHost();
   const imagePreview = file.contentKind === 'image';
+  const documentFormat = getDocumentPreviewFormat(file.path);
+  const textFilePreview = fileView === 'preview' && canPreviewReviewTextFile(file, pathContext);
+  // CSV keeps its source diff so annotations and line navigation use the same path as Markdown.
+  const documentDiffPreview = Boolean(documentFormat) && (documentFormat !== 'csv' || textFilePreview);
   const unsupportedPreview = file.contentKind === 'binary';
   const [expanded, setExpanded] = useState(fileExpansionRequest.expanded);
   const [lineContextMenu, setLineContextMenu] = useState<
     ReviewFileContextTarget | null
   >(null);
   const workspaceFilePath = reviewWorkspaceFilePath(file.path, pathContext);
-  const documentPreview = markdownView === 'preview' && canPreviewReviewMarkdown(file, pathContext);
+  const markdownPreview = !documentFormat && textFilePreview;
   const canOpenFile = Boolean(workspaceFilePath);
   const focusedByRequest = Boolean(
     focusRequest
@@ -336,12 +341,12 @@ const ReviewFileCard = memo(function ReviewFileCard({
   ]);
   // Keep collapsed files cheap; Pierre/Shiki only receives a patch after expansion.
   const patch = useMemo(() => {
-    if (!expanded || imagePreview || unsupportedPreview) return '';
+    if (!expanded || imagePreview || documentDiffPreview || unsupportedPreview) return '';
     // A raw patch cannot be sliced safely. Rebuild valid hunks from the retained
     // lines so truncated previews remain parseable and syntax-highlighted.
     if (file.truncated) return buildPatch(file);
     return file.patch ?? buildPatch(file);
-  }, [buildPatch, expanded, file, imagePreview, unsupportedPreview]);
+  }, [buildPatch, expanded, file, imagePreview, documentDiffPreview, unsupportedPreview]);
 
   useEffect(() => {
     setExpanded(fileExpansionRequest.expanded);
@@ -455,7 +460,9 @@ const ReviewFileCard = memo(function ReviewFileCard({
           </div>
           {fileHeaderControls ? <div className="desktop-review-file-card__view-controls">{fileHeaderControls.actions}</div> : null}
         </header>
-        {expanded && documentPreview && workspaceFilePath ? (
+        {expanded && documentDiffPreview ? (
+          <ReviewDocumentDiff file={file} pathContext={pathContext} />
+        ) : expanded && markdownPreview && workspaceFilePath ? (
           <ReviewFileDocument file={file} filePath={workspaceFilePath} pathContext={pathContext}
             onOpenFile={onOpenProjectFile} />
         ) : imagePreview ? (

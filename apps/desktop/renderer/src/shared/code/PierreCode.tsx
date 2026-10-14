@@ -179,6 +179,9 @@ export function CodePatchView({
   });
   const fileDiff = useMemo(() => {
     const parsed = getSingularPatch(patch);
+    // Pierre otherwise keys highlights by path, even without workers. The same
+    // file can have different patches across review sources and refreshes.
+    parsed.cacheKey = patch;
     const language = inferPatchLanguageOverride(parsed.name, patch);
     return language ? setLanguageOverride(parsed, language) : parsed;
   }, [patch]);

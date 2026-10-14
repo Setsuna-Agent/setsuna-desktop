@@ -3,6 +3,7 @@ import { FileTreeToggle, FileTreeSurface, FileTreeRow, ResizeHandle, TextField, 
 
 import {
   WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES,
+  getDocumentPreviewFormat,
   workspaceFileKey,
   type WorkspaceEntry,
   type WorkspaceEntryCreateInput,
@@ -58,6 +59,7 @@ import {
 } from './WorkspaceFileContextMenu.js';
 import { WorkspaceFileIcon, WorkspaceFilePath } from './WorkspaceFileIcon.js';
 import { WorkspaceEntryDialog, type WorkspaceEntryDialogRequest } from './WorkspaceEntryDialog.js';
+import { WorkspaceDocumentPreview } from './documents/WorkspaceDocumentPreview.js';
 import {
   workspaceDirectoryMentionEntry,
   workspaceFileMentionEntry,
@@ -72,6 +74,8 @@ const LazyWorkspaceMarkdownPreview = lazy(async () => {
   const module = await import('./markdown/WorkspaceMarkdownPreview.js');
   return { default: module.WorkspaceMarkdownPreview };
 });
+
+const LazyWorkspaceVideoPreview = lazy(() => import('./media/WorkspaceVideoPreview.js'));
 
 export function WorkspacePanel({
   activePanel,
@@ -254,8 +258,8 @@ export function WorkspacePanel({
         <WorkspaceFilePath path={editorPath} />
       </span>
       <span className="desktop-editor__crumb-actions">
-        {fileView.canPreviewMarkdown ? (
-          <span className="sd-markdown-view-toggle desktop-editor__view-toggle" role="group" aria-label={t('workspace.files.markdownView')}>
+        {fileView.canPreview ? (
+          <span className="sd-markdown-view-toggle desktop-editor__view-toggle" role="group" aria-label={t('workspace.files.previewMode')}>
             {(['source', 'preview'] as const).map((mode) => (
               <Button key={mode} variant="ghost" type="button" aria-pressed={fileView.mode === mode}
                 className="sd-markdown-view-option" onClick={() => fileView.setMode(mode)}>
@@ -351,6 +355,7 @@ export function WorkspacePanel({
         {filePreview ? (
           <WorkspaceFilePreviewContent
             file={filePreview}
+            workspaceRoot={activeProject?.path}
             fileDraft={fileDraft}
             fileFocusRequest={fileFocusRequest}
             viewMode={fileView.mode}
@@ -488,12 +493,14 @@ export function WorkspacePanel({
 
 export function WorkspaceFilePreviewContent({
   file,
+  workspaceRoot,
   fileDraft,
   fileFocusRequest,
   viewMode = 'source',
   onOpenFile,
 }: {
   file: WorkspaceFileRead;
+  workspaceRoot?: string;
   fileDraft?: WorkspaceFileDraftState;
   fileFocusRequest?: WorkspaceFileFocusRequest | null;
   viewMode?: WorkspaceFileViewMode;
@@ -503,6 +510,15 @@ export function WorkspaceFilePreviewContent({
   const activeFocusRequest = fileFocusRequest?.path === file.path
     ? fileFocusRequest
     : undefined;
+  const documentFormat = getDocumentPreviewFormat(file.path);
+  if (documentFormat && documentFormat !== 'csv') {
+    return <WorkspaceDocumentPreview file={file} workspaceRoot={workspaceRoot} />;
+  }
+  if (file.preview?.kind === 'video') {
+    return <Suspense fallback={<div role="status">{t('workspace.files.loadingPreview')}</div>}>
+      <LazyWorkspaceVideoPreview file={file} workspaceRoot={workspaceRoot} />
+    </Suspense>;
+  }
   if (file.preview?.kind === 'image') {
     return (
       <div className="desktop-file-preview desktop-file-preview--image">
@@ -551,8 +567,11 @@ export function WorkspaceFilePreviewContent({
       </div>
       {previewing ? (
         <Suspense fallback={<div className="desktop-markdown-preview" role="status">{t('workspace.files.loadingPreview')}</div>}>
-          <LazyWorkspaceMarkdownPreview key={workspaceFileKey(file)} file={file}
-            content={fileDraft?.editing ? fileDraft.content : file.content} onOpenFile={onOpenFile} />
+          {documentFormat === 'csv' ? <div className="desktop-file-document__preview">
+            <WorkspaceDocumentPreview file={file} workspaceRoot={workspaceRoot}
+              content={fileDraft?.editing ? fileDraft.content : !file.truncated ? file.content : undefined} />
+          </div> : <LazyWorkspaceMarkdownPreview key={workspaceFileKey(file)} file={file}
+            content={fileDraft?.editing ? fileDraft.content : file.content} onOpenFile={onOpenFile} />}
         </Suspense>
       ) : null}
     </div>

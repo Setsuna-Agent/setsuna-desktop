@@ -6,8 +6,16 @@ import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react
 import { useState } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { EditableWorkspaceFile } from '../../../../../src/features/workspace/editor/EditableWorkspaceFile.js';
+import { CodeAppearanceProvider } from '../../../../../src/shared/code/CodeAppearanceProvider.js';
+import { useThemeTransition } from '../../../../../src/shared/preferences/useThemeTransition.js';
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  window.localStorage.clear();
+  delete document.documentElement.dataset.theme;
+  delete document.documentElement.dataset.themePreference;
+});
 
 it.each(['test123', 'notes.txt', 'main.ts'])('retains edited rows when the renderer refreshes %s after a newline', async (name) => {
   const file = { name, contents: '123', cacheKey: `project:${name}:revision-1` };
@@ -27,12 +35,13 @@ it.each(['test123', 'notes.txt', 'main.ts'])('retains edited rows when the rende
   } finally { renderer.cleanUp(); }
 });
 
-it('keeps the editable surface focused while typing and inserting a newline', async () => {
+it('keeps the draft, focus and undo history while typing, changing theme and saving', async () => {
   // happy-dom has no canvas; the editor only needs deterministic character widths here.
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
     measureText: (text: string) => ({ width: text.length * 8 }),
   } as CanvasRenderingContext2D);
   let editor!: Editor<undefined>;
+  let setThemeMode!: ReturnType<typeof useThemeTransition>['setThemeMode'];
   let fileInstance!: Parameters<Editor<undefined>['edit']>[0];
   const edit = Editor.prototype.edit;
   vi.spyOn(Editor.prototype, 'edit').mockImplementation(function (this: Editor<undefined>, instance) {
@@ -43,10 +52,11 @@ it('keeps the editable surface focused while typing and inserting a newline', as
   function Document() {
     const [content, setContent] = useState('123');
     const [revision, setRevision] = useState(1);
+    setThemeMode = useThemeTransition().setThemeMode;
     return <EditableWorkspaceFile content={content} file={{ projectId: 'project', path: 'test123', revision: `r${revision}` }}
       onChange={setContent} onSave={async () => { setRevision((current) => current + 1); return true; }} />;
   }
-  const view = render(<Document />);
+  const view = render(<CodeAppearanceProvider><Document /></CodeAppearanceProvider>);
   const getInput = () => view.container.querySelector('diffs-container')?.shadowRoot?.querySelector<HTMLElement>('[role="textbox"]');
   await waitFor(() => expect(getInput()).toBeTruthy());
   act(() => editor.focus({ lineNumber: 1 }));
@@ -64,6 +74,15 @@ it('keeps the editable surface focused while typing and inserting a newline', as
   }
   expect(editor.getText()).toContain('ab\nc');
   const beforeSave = editor.getText();
+  for (const mode of ['dark', 'light', 'dark', 'light'] as const) {
+    act(() => setThemeMode(mode));
+    await waitFor(() => expect(fileInstance.options.themeType).toBe(mode));
+    await act(async () => { fileInstance.rerender(); });
+    expect(editor.getText()).toBe(beforeSave);
+    expect(getInput()).toBe(input);
+    expect((input.getRootNode() as ShadowRoot).activeElement).toBe(input);
+    expect(editor.canUndo).toBe(true);
+  }
   await act(async () => { fireEvent.keyDown(input, { key: 's', ctrlKey: true, composed: true }); });
   expect(getInput()).toBe(input);
   expect((input.getRootNode() as ShadowRoot).activeElement).toBe(input);

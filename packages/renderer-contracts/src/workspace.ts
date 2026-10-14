@@ -2,6 +2,13 @@ import { defineKeyedRendererSlot } from '@setsuna-desktop/feature-core/renderer'
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import type { ReactNode } from 'react';
 
+/** The host supplies bytes; document surfaces never receive filesystem or runtime access. */
+export type DocumentPreviewProps = Readonly<{
+  filePath: string;
+  label?: string;
+  load(): Promise<Uint8Array>;
+}>;
+
 /** Shared by panel state and host registration so every panel type has an outlet. */
 export const RENDERER_WORKSPACE_PANEL_TYPES = Object.freeze([
   'overview',

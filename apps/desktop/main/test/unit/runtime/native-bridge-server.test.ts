@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, realpath, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, open, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -15,6 +16,11 @@ import { DesktopNativeBridgeServer } from '../../../src/runtime/native-bridge-se
 import type { CredentialVault } from '../../../src/security/credential-vault.js';
 
 const servers: DesktopNativeBridgeServer[] = [];
+
+vi.mock('node:fs', async (importOriginal) => {
+  const fs = await importOriginal<typeof import('node:fs')>();
+  return { ...fs, createReadStream: vi.fn(fs.createReadStream) };
+});
 
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.stop()));
@@ -293,6 +299,43 @@ describe('DesktopNativeBridgeServer', () => {
 
     const escapedResourceResponse = await fetch(new URL('../linked-outside/secret.txt', previewUrl));
     expect(escapedResourceResponse.status).toBe(404);
+  });
+
+  it('streams ranges of a large video and stops disk reads when the player disconnects', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-video-stream-'));
+    try {
+      const targetPath = path.join(root, 'large.mp4');
+      const size = 1024 * 1024 * 1024;
+      const file = await open(targetPath, 'w');
+      try {
+        await file.truncate(size);
+        await file.write(Buffer.from('tail'), 0, 4, size - 4);
+      } finally { await file.close(); }
+      const server = createFilePreviewServer();
+      await server.start();
+      const preview = server.registerManagedFilePreview({ targetPath, name: 'large.mp4', mimeType: 'video/mp4' });
+      const head = await fetch(preview.url, { method: 'HEAD' });
+      expect(head.headers.get('content-length')).toBe(String(size));
+      const suffix = await fetch(preview.url, { headers: { Range: 'bytes=-4' } });
+      expect(suffix.status).toBe(206);
+      expect(suffix.headers.get('content-range')).toBe(`bytes ${size - 4}-${size - 1}/${size}`);
+      expect(await suffix.text()).toBe('tail');
+      const suffixStream = vi.mocked(createReadStream).mock.results.at(-1)!.value;
+      await vi.waitFor(() => expect(suffixStream.closed).toBe(true));
+      expect(suffixStream.bytesRead).toBe(4);
+
+      const controller = new AbortController();
+      const response = await fetch(preview.url, { signal: controller.signal });
+      const stream = vi.mocked(createReadStream).mock.results.at(-1)!.value;
+      const reader = response.body!.getReader();
+      await reader.read();
+      controller.abort();
+      await reader.cancel().catch(() => undefined);
+      await vi.waitFor(() => expect(stream.closed).toBe(true));
+      expect(stream.bytesRead).toBeLessThan(size);
+      expect(server.releaseFilePreview(preview.previewId)).toBe(true);
+      expect((await fetch(preview.url)).status).toBe(404);
+    } finally { await rm(root, { recursive: true, force: true }); }
   });
 });
 

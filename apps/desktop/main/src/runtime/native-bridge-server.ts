@@ -356,7 +356,12 @@ export class DesktopNativeBridgeServer {
       return;
     }
     const stream = createReadStream(resource.targetPath, { start, end });
+    // Seeking or closing a media preview aborts the old HTTP request. Stop disk I/O too.
+    const stopReading = () => { stream.destroy(); };
+    response.once('close', stopReading);
+    stream.once('close', () => response.removeListener('close', stopReading));
     stream.on('error', () => response.destroy());
+    if (response.destroyed) { stream.destroy(); return; }
     stream.pipe(response);
   }
 }

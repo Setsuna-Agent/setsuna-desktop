@@ -165,13 +165,22 @@ export type WorkspaceFilePreviewImageMimeType =
   | 'image/webp'
   | 'image/x-icon';
 
+export type DocumentPreviewFormat = 'docx' | 'pptx' | 'xlsx' | 'csv' | 'pdf';
+
 export type WorkspaceFilePreview =
   | { kind: 'text' }
+  | { kind: 'document'; format: Exclude<DocumentPreviewFormat, 'csv'> }
+  | { kind: 'video'; mimeType: 'video/mp4' }
   | { kind: 'image'; base64: string; mimeType: WorkspaceFilePreviewImageMimeType }
   | { kind: 'unsupported'; reason: 'binary' | 'image-too-large' };
 
 const BINARY_SAMPLE_BYTES = 8 * 1024;
 const SVG_SAMPLE_BYTES = 64 * 1024;
+
+/** MP4 is streamed by the native player; only its container header is needed here. */
+export function detectWorkspacePreviewVideoMimeType(filePath: string, content: Uint8Array): 'video/mp4' | null {
+  return /\.mp4$/iu.test(filePath) && matchesAsciiAt(content, 4, 'ftyp') ? 'video/mp4' : null;
+}
 
 /** Detect browser-previewable images by content instead of trusting a spoofable extension. */
 export function detectWorkspacePreviewImageMimeType(content: Uint8Array): WorkspaceFilePreviewImageMimeType | null {
@@ -314,7 +323,7 @@ export type WorkspaceFileRead = {
   content: string;
   size: number;
   modifiedAt?: string;
-  /** Content hash used for optimistic concurrency when saving an editor draft. */
+  /** Content hash for editable text; metadata token for previews that do not read the complete file. */
   revision?: string;
   /** Optional for compatibility with runtimes that predate typed file previews. */
   preview?: WorkspaceFilePreview;

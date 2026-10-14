@@ -46,3 +46,4 @@ export * from './threads/deletion.js';
 export * from './usage.js';
 export * from './workspace.js';
 export * from './workspace/roots.js';
+export * from './workspace/document-preview.js';

@@ -17,6 +17,7 @@ import { desktopWindows } from '../window/registry.js';
 import { isDesktopRendererSender } from './sender.js';
 import { registerWorkspaceEntryWatchIpc } from './workspace-entry-watch-ipc.js';
 import { registerPluginUiDocumentIpc } from './plugin-ui-document-ipc.js';
+import { readWorkspaceDocument } from '../workspace/document-preview.js';
 
 type DesktopIpcOptions = {
   nativeBridge: DesktopNativeBridgeServer;
@@ -55,6 +56,8 @@ export function registerDesktopIpc({
     'desktop:copy-workspace-file-path',
     'desktop:reveal-workspace-file',
     'desktop:create-workspace-file-preview',
+    'desktop:release-workspace-file-preview',
+    'desktop:read-workspace-document',
   ];
   for (const channel of channels) ipcMain.removeHandler(channel);
   const keyboards = new Map<number, ReturnType<typeof registerWindowKeyboardShortcuts>>();
@@ -181,12 +184,25 @@ export function registerDesktopIpc({
     return revealWorkspaceFileInFolder(input?.workspaceRoot, input?.filePath, (targetPath) => shell.showItemInFolder(targetPath));
   });
   ipcMain.handle('desktop:create-workspace-file-preview', async (event, input) => {
-    if (!isDesktopRendererSender(event.sender)) return { ok: false, error: 'Desktop renderer is unavailable.' };
+    if (!isDesktopRendererSender(event.sender) || event.senderFrame !== event.sender.mainFrame) {
+      return { ok: false, error: 'Desktop renderer is unavailable.' };
+    }
     return createWorkspaceFilePreviewUrl(
       input?.workspaceRoot,
       input?.filePath,
-      (preview) => nativeBridge.registerFilePreview(preview),
+      (preview) => nativeBridge.registerManagedFilePreview(preview),
     );
+  });
+  ipcMain.handle('desktop:release-workspace-file-preview', (event, previewId: unknown) => {
+    if (!isDesktopRendererSender(event.sender) || event.senderFrame !== event.sender.mainFrame
+      || typeof previewId !== 'string') return false;
+    return nativeBridge.releaseFilePreview(previewId);
+  });
+  ipcMain.handle('desktop:read-workspace-document', (event, input) => {
+    if (!isDesktopRendererSender(event.sender) || event.senderFrame !== event.sender.mainFrame) {
+      return { ok: false, error: 'Desktop renderer is unavailable.' };
+    }
+    return readWorkspaceDocument(input?.workspaceRoot, input?.filePath);
   });
 }
 

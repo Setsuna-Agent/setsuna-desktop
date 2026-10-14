@@ -1,4 +1,4 @@
-import type { RuntimeConfiguredModelReference } from '@setsuna-desktop/contracts';
+import type { DocumentPreviewReadResult, RuntimeConfiguredModelReference } from '@setsuna-desktop/contracts';
 import type { DesktopDiffFile, DesktopDiffSummary } from './diff.js';
 import type { DesktopGitCommitDetails, DesktopGitCommitFileInput, DesktopGitHistoryOptions, DesktopGitHistoryPage } from './history.js';
 
@@ -130,6 +130,7 @@ export interface DesktopReviewBridge {
   getCommitFileDiff(workspaceRoot: string, input: DesktopGitCommitFileInput): Promise<DesktopDiffFile>;
   getState(workspaceRoot: string, options?: DesktopReviewStateOptions): Promise<DesktopReviewState>;
   readTextFile(workspaceRoot: string, input: DesktopReviewFileVersionInput): Promise<DesktopReviewTextFileResult>;
+  readDocumentFile(workspaceRoot: string, input: DesktopReviewFileVersionInput): Promise<DocumentPreviewReadResult>;
   createImagePreview(workspaceRoot: string, input: DesktopReviewImagePreviewInput): Promise<DesktopReviewImagePreviewResult>;
   releaseImagePreview(previewId: string): Promise<boolean>;
   watchChanges(workspaceRoot: string, callback: () => void): () => void;
@@ -156,6 +157,7 @@ export const REVIEW_IPC_CHANNELS = Object.freeze({
   getCommitFileDiff: 'desktop-review:get-commit-file-diff',
   getState: 'desktop-review:get-state',
   readTextFile: 'desktop-review:read-text-file',
+  readDocumentFile: 'desktop-review:read-document-file',
   createImagePreview: 'desktop-review:create-image-preview',
   releaseImagePreview: 'desktop-review:release-image-preview',
   subscribeChanges: 'desktop-review:subscribe-changes',

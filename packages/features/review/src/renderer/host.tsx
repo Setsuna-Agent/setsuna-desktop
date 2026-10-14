@@ -1,6 +1,7 @@
 import type { FileDiff, PostRenderPhase } from '@pierre/diffs';
 import type { DiffLineAnnotation } from '@pierre/diffs/react';
 import type { CheckboxProps, SettingsDialogProps, SettingsModelPickerProps, SettingsToggleProps } from '@setsuna-desktop/renderer-contracts/settings';
+import type { DocumentPreviewProps } from '@setsuna-desktop/renderer-contracts/workspace';
 import type { DropdownProps } from '@setsuna-desktop/renderer-ui';
 import type { DesktopWorkspaceApp } from '@setsuna-desktop/feature-workspace-apps/contracts';
 import { createContext, useContext, type ComponentType, type ReactNode, type RefObject } from 'react';
@@ -95,6 +96,7 @@ export type ReviewRendererHost = Readonly<{
     FileIcon: ComponentType<{ className?: string; path: string }>;
     FindingMarkdown: ComponentType<ReviewFindingMarkdownProps>;
     FileDocument: ComponentType<ReviewFileDocumentProps>;
+    DocumentPreview: ComponentType<DocumentPreviewProps>;
   }>;
 }>;
 

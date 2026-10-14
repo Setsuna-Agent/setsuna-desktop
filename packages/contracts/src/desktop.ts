@@ -6,6 +6,7 @@ import type { RuntimeInterfaceLanguage } from './config.js';
 import type { DesktopStorageCleanupCategory, DesktopStorageCleanupResult, DesktopStorageUsage } from './desktop/storage.js';
 import type { SandboxDialogSession } from './desktop/sandbox-dialogs.js';
 import type { PluginUiDocument, PluginUiDocumentInput } from './desktop/plugin-ui-documents.js';
+import type { DocumentPreviewReadResult } from './workspace/document-preview.js';
 import type {
   DesktopDataMigrationPlan,
   DesktopDataRootActionResult,
@@ -35,7 +36,7 @@ export const DESKTOP_CLIPBOARD_WRITE_PATH = '/v1/clipboard/write-text';
 export type DesktopClipboardWriteInput = Readonly<{ text: string }>;
 
 export type DesktopWorkspaceFilePreviewResult =
-  | { ok: true; url: string }
+  | { ok: true; url: string; previewId: string }
   | { ok: false; error: string };
 
 export type DesktopWorkspaceEntriesWatchInput = {
@@ -160,6 +161,8 @@ export type SetsunaDesktopBridge = {
     copyWorkspaceFilePath(workspaceRoot: string, filePath: string): Promise<DesktopOpenPathResult>;
     revealWorkspaceFile(workspaceRoot: string, filePath: string): Promise<DesktopOpenPathResult>;
     createWorkspaceFilePreview(workspaceRoot: string, filePath: string): Promise<DesktopWorkspaceFilePreviewResult>;
+    releaseWorkspaceFilePreview(previewId: string): Promise<boolean>;
+    readWorkspaceDocument(workspaceRoot: string, filePath: string): Promise<DocumentPreviewReadResult>;
     watchWorkspaceEntries(workspaceRoot: string, directoryPaths: string[], callback: () => void): () => void;
   };
   dataRoot: {

@@ -8,7 +8,7 @@ type RegisterPreview = (input: {
   name: string;
   targetPath: string;
   workspaceRoot: string;
-}) => string;
+}) => { url: string; previewId: string };
 type WorkspacePathAction = (targetPath: string) => void | Promise<void>;
 
 type WorkspacePathKind = 'directory' | 'entry' | 'file';
@@ -101,7 +101,7 @@ export async function createWorkspaceFilePreviewUrl(
   try {
     return {
       ok: true,
-      url: registerPreview(resolved.preview),
+      ...registerPreview(resolved.preview),
     };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'Failed to create workspace file preview.' };

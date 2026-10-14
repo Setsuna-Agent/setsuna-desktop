@@ -19,8 +19,11 @@ overrides:
 
 patchedDependencies:
   '@pierre/diffs@1.3.3':
-    hash: ac5755nbtac3ltqfexhaxiqwpa
+    hash: j5q3yf2u3knkwnyd3yvaiewbzq
     path: patches/@pierre__diffs@1.3.3.patch
+  '@silurus/ooxml@0.88.0':
+    hash: f5fn2wpfe2uiya5zr6vazx7hv4
+    path: patches/@silurus__ooxml@0.88.0.patch
   electron-chrome-web-store@0.13.0:
     hash: y73l3obx2zq7jqmqjdruke5fzy
     path: patches/electron-chrome-web-store@0.13.0.patch
@@ -73,6 +76,7 @@ importers:
       '@setsuna-desktop/renderer-contracts': workspace:*
       '@setsuna-desktop/renderer-ui': workspace:*
       '@setsuna/app': workspace:*
+      '@silurus/ooxml': 0.88.0
       '@tailwindcss/vite': ^4.1.8
       '@testing-library/react': ^16.3.2
       '@testing-library/user-event': ^14.6.3
@@ -124,7 +128,7 @@ importers:
       '@fontsource/inter': 5.3.0
       '@fontsource/jetbrains-mono': 5.3.0
       '@lobehub/icons-static-svg': 1.95.1
-      '@pierre/diffs': 1.3.3_ac5755nbtac3ltqfexhaxiqwpa_nnrd3gsncyragczmpvfhocinkq
+      '@pierre/diffs': 1.3.3_j5q3yf2u3knkwnyd3yvaiewbzq_nnrd3gsncyragczmpvfhocinkq
       '@setsuna-desktop/contracts': link:packages/contracts
       '@setsuna-desktop/feature-approval-review': link:packages/features/approval-review
       '@setsuna-desktop/feature-artifact': link:packages/features/artifact
@@ -160,6 +164,7 @@ importers:
       '@setsuna-desktop/renderer-contracts': link:packages/renderer-contracts
       '@setsuna-desktop/renderer-ui': link:packages/renderer-ui
       '@setsuna/app': link:packages/app-sdk
+      '@silurus/ooxml': 0.88.0_f5fn2wpfe2uiya5zr6vazx7hv4
       '@xterm/addon-fit': 0.11.0
       '@xterm/xterm': 6.0.0
       corepack: 0.34.7
@@ -573,7 +578,7 @@ importers:
       lucide-react: ^0.468.0
       react: ^18.3.1
     dependencies:
-      '@pierre/diffs': 1.3.3_ac5755nbtac3ltqfexhaxiqwpa_nnrd3gsncyragczmpvfhocinkq
+      '@pierre/diffs': 1.3.3_j5q3yf2u3knkwnyd3yvaiewbzq_nnrd3gsncyragczmpvfhocinkq
       '@setsuna-desktop/contracts': link:../../contracts
       '@setsuna-desktop/feature-core': link:../../feature-core
       '@setsuna-desktop/renderer-contracts': link:../../renderer-contracts
@@ -595,7 +600,7 @@ importers:
       react: ^18.3.1
       react-dom: ^18.3.1
     dependencies:
-      '@pierre/diffs': 1.3.3_ac5755nbtac3ltqfexhaxiqwpa_nnrd3gsncyragczmpvfhocinkq
+      '@pierre/diffs': 1.3.3_j5q3yf2u3knkwnyd3yvaiewbzq_nnrd3gsncyragczmpvfhocinkq
       '@setsuna-desktop/contracts': link:../../contracts
       '@setsuna-desktop/feature-core': link:../../feature-core
       '@setsuna-desktop/feature-workspace-apps': link:../workspace-apps
@@ -2541,7 +2546,7 @@ packages:
       webcrypto-core: 1.9.2
     dev: true
 
-  /@pierre/diffs/1.3.3_ac5755nbtac3ltqfexhaxiqwpa_nnrd3gsncyragczmpvfhocinkq:
+  /@pierre/diffs/1.3.3_j5q3yf2u3knkwnyd3yvaiewbzq_nnrd3gsncyragczmpvfhocinkq:
     resolution: {integrity: sha512-LPoRv3vkfhrZbdRe/aPhJFjD1XK2JD9ALAdvral6ThG3qAcMDSytGbAXk3WQlt5+AZDOQXflHQwBWhw+89Ttzg==}
     peerDependencies:
       react: ^18.3.1 || ^19.0.0
@@ -4180,6 +4185,11 @@ packages:
   /@shikijs/vscode-textmate/10.0.2:
     resolution: {integrity: sha512-83yeghZ2xxin3Nj8z1NMd/NCuca+gsYXswywDy5bHvwlWL8tpTQmzGeUuHd9FC3E/SBEMvzJRwWEOz5gGes9Qg==}
     dev: false
+
+  /@silurus/ooxml/0.88.0_f5fn2wpfe2uiya5zr6vazx7hv4:
+    resolution: {integrity: sha512-dhMs1/U5fB5bh/Hv8BNTgCsHVNOl+qkquohsROblku7jghsmd1BZAE//LR6omB7aCVLGJ3sp4IqzqdkgT5wicQ==}
+    dev: false
+    patched: true
 
   /@sindresorhus/is/4.6.0:
     resolution: {integrity: sha512-t09vSN3MdfsyCHoFcTRCH/iUtG7OJ0CsjzB8cjAmKc/va/kIgeDI/TxsigdncE/4be734m0cvIYwNaV4i2XqAw==}

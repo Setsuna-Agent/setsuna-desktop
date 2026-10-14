@@ -29,6 +29,7 @@ import { Checkbox } from '../shared/ui/primitives.js';
 import { SettingsModelPicker } from './ModelProviderFeatureBoundary.js';
 import { ReviewCommitMessageInput } from './ReviewCommitMessageInput.js';
 import { ReviewFileDocument } from './review/ReviewFileDocument.js';
+import { DocumentPreview } from '../features/workspace/documents/DocumentPreview.js';
 import { ReviewConflictTaskProgress } from './ReviewConflictTaskProgress.js';
 import { ScrollOverlay } from '../shared/ui/ScrollOverlay.js';
 import { ContextMenu } from '../shared/ui/ContextMenu.js';
@@ -50,6 +51,7 @@ const reviewUi: ReviewRendererHost['ui'] = Object.freeze({
   FileIcon: ReviewFileIcon,
   FindingMarkdown: ReviewFindingMarkdown,
   FileDocument: ReviewFileDocument,
+  DocumentPreview,
 });
 
 /** Connects the portable Review renderer to app-owned UI and preload services. */

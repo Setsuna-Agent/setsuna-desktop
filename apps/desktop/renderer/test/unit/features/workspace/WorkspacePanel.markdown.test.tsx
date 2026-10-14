@@ -50,7 +50,7 @@ it('opens Markdown in preview by default and switches to source for a line navig
   expect(screen.getByRole('button', { name: '查看预览' }).getAttribute('aria-pressed')).toBe('true');
   await screen.findByRole('heading', { name: 'Original' });
   view.rerender(<Document currentFile={{ ...file, path: 'main.ts' }} />);
-  expect(screen.queryByRole('group', { name: 'Markdown 显示模式' })).toBeNull();
+  expect(screen.queryByRole('group', { name: '文件显示模式' })).toBeNull();
 });
 
 it('previews unsaved input and keeps the live editor, selection and undo history when switching back', async () => {

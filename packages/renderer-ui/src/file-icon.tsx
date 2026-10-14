@@ -2,7 +2,7 @@ import { Vue } from '@react-symbols/icons/files';
 import { FileIcon as SymbolsFileIcon } from '@react-symbols/icons/utils';
 import type { ComponentProps } from 'react';
 
-// Symbols omits Vue's extension mapping and has no Word document glyph.
+// Symbols omits Vue's extension mapping and has no Word or PowerPoint glyphs.
 const fileIconExtensions = {
   vue: Vue,
   doc: WordDocumentIcon,
@@ -11,6 +11,15 @@ const fileIconExtensions = {
   dot: WordDocumentIcon,
   dotx: WordDocumentIcon,
   dotm: WordDocumentIcon,
+  ppt: PowerPointDocumentIcon,
+  pptx: PowerPointDocumentIcon,
+  pptm: PowerPointDocumentIcon,
+  pot: PowerPointDocumentIcon,
+  potx: PowerPointDocumentIcon,
+  potm: PowerPointDocumentIcon,
+  pps: PowerPointDocumentIcon,
+  ppsx: PowerPointDocumentIcon,
+  ppsm: PowerPointDocumentIcon,
 };
 
 function WordDocumentIcon(props: ComponentProps<'svg'>) {
@@ -20,6 +29,17 @@ function WordDocumentIcon(props: ComponentProps<'svg'>) {
       <path d="M14 7h5M14 11h5M14 15h5" stroke="#FFFFFF" strokeWidth="1.5" />
       <rect x="1" y="6" width="13" height="13" rx="1.5" fill="#185ABD" />
       <path d="m3.5 9 1.6 7 2.4-5 2.4 5 1.6-7" stroke="#FFFFFF" strokeWidth="1.4" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function PowerPointDocumentIcon(props: ComponentProps<'svg'>) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" {...props}>
+      <circle cx="14" cy="12" r="9" fill="#D35230" />
+      <path d="M14 3a9 9 0 0 1 9 9h-9V3Z" fill="#FF8F6B" />
+      <rect x="1" y="6" width="13" height="13" rx="1.5" fill="#C43E1C" />
+      <path d="M6 16V9h3a2 2 0 0 1 0 4H6" stroke="#FFFFFF" strokeWidth="1.5" strokeLinejoin="round" />
     </svg>
   );
 }

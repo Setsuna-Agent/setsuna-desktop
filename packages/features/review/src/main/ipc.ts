@@ -13,6 +13,7 @@ import { DesktopReviewChangeMonitor } from './change-monitor.js';
 import { createGitHubCommitAvatarLoader } from './github-commit-avatar.js';
 import { createReviewImagePreviewUrl } from './image-preview.js';
 import { readReviewTextFile } from './text-file.js';
+import { readReviewDocumentFile } from './document-file.js';
 import { getDesktopGitCommitDetails, getDesktopGitCommitFileDiff, getDesktopGitHistory } from './history.js';
 import {
   checkoutReviewBranch,
@@ -41,6 +42,7 @@ const handlerChannels = [
   REVIEW_IPC_CHANNELS.getCommitFileDiff,
   REVIEW_IPC_CHANNELS.getState,
   REVIEW_IPC_CHANNELS.readTextFile,
+  REVIEW_IPC_CHANNELS.readDocumentFile,
   REVIEW_IPC_CHANNELS.createImagePreview,
   REVIEW_IPC_CHANNELS.releaseImagePreview,
   REVIEW_IPC_CHANNELS.subscribeChanges,
@@ -124,6 +126,13 @@ export function registerReviewIpc(scope: FeatureScope, dependencies: ReviewIpcDe
     if (!dependencies.rendererSender.isAllowed(event.sender.id)) return { ok: false, error: 'Desktop renderer is unavailable.' };
     const input = inputRecord(value);
     return readReviewTextFile(input.workspaceRoot, input.version);
+  });
+  registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.readDocumentFile, (event, value) => {
+    if (!dependencies.rendererSender.isAllowed(event.sender.id) || event.senderFrame !== event.sender.mainFrame) {
+      return { ok: false, error: 'Desktop renderer is unavailable.' };
+    }
+    const input = inputRecord(value);
+    return readReviewDocumentFile(input.workspaceRoot, input.version);
   });
   registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.createImagePreview, (event, value) => {
     const input = inputRecord(value);

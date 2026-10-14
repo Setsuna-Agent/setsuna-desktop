@@ -72,6 +72,7 @@ export function ReviewRendererTestHost({
       FileIcon: ({ className }) => <span aria-hidden="true" className={className} />,
       FindingMarkdown: TestFindingMarkdown,
       FileDocument: ({ content, filePath }) => <section role="region" aria-label={filePath}>{content}</section>,
+      DocumentPreview: ({ filePath, label }) => <section aria-label={label ?? filePath} />,
     },
   }), [bridge, locale, copyText, notifyError, openExternal]);
   return <ReviewRendererHostProvider host={host}>{children}</ReviewRendererHostProvider>;

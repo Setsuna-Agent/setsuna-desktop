@@ -11,6 +11,7 @@ import type {
 import type {
   DesktopDiffSummary,
   DesktopReviewBridge,
+  DesktopReviewFocusRequest,
   DesktopReviewState,
 } from '../../src/contracts/index.js';
 import {
@@ -77,7 +78,7 @@ describe('DesktopReviewPanel interactions', () => {
       additions: 0,
       deletions: 0,
       files: [{
-        path: 'docs/spec.docx',
+        path: 'docs/spec.bin',
         action: 'Created',
         additions: 0,
         deletions: 0,
@@ -277,6 +278,65 @@ describe('DesktopReviewPanel interactions', () => {
       path: 'src/helper.ts',
       line: 7,
     });
+  });
+
+  it.each(['finding', 'line'] as const)('returns CSV previews to source for a new %s request and preserves annotations', async (target) => {
+    const finding: RuntimeReviewFinding = {
+      priority: 'P2', title: 'Invalid CSV value', body: 'This value needs correction.',
+      path: 'data/report.csv', startLine: 28,
+    };
+    const file = {
+      ...diffFile('packages/app/data/report.csv', 28),
+      lines: [{ type: 'added' as const, lineNumber: 28, newLine: 28, content: 'item,invalid' }],
+    };
+    const summary: DesktopDiffSummary = { additions: 1, deletions: 0, files: [file] };
+    const state = {
+      ...reviewState, workspaceRoot: nestedProject.path!, gitRoot: project.path!, unstagedSummary: summary,
+    };
+    const onOpenProjectFile = vi.fn();
+    const { virtualizerScrollTo } = mockReviewScroller({
+      deferFindingLayout: true,
+      diffs: [{ path: file.path, top: 250 }],
+      findings: [{ path: finding.path, line: 28, top: 550 }],
+      linePositions: { 28: { top: 300, height: 20 } },
+    });
+    const focusRequest = (version: number): DesktopReviewFocusRequest => ({
+      path: finding.path, line: 28, version, ...(target === 'finding' ? { finding } : {}),
+    });
+    const panel = (focus?: DesktopReviewFocusRequest) => (
+      <ReviewRendererTestHost locale="en-US">
+        <DesktopReviewPanel activeProject={nestedProject} error={null} latestSummary={summary} loading={false}
+          reviewState={state} focusRequest={focus} findings={[]}
+          onOpenProjectFile={onOpenProjectFile} onExternalOpenFile={() => undefined}
+          onRefresh={() => undefined} onSelectBaseRef={() => undefined} />
+      </ReviewRendererTestHost>
+    );
+    const view = render(panel());
+    const sourceDiff = () => document.querySelector(`[data-review-file-path="${file.path}"] diffs-container`);
+    await waitFor(() => expect(sourceDiff()).not.toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: 'Preview', exact: true }));
+    expect(screen.getByRole('region', { name: `Before: ${file.path}` })).toBeTruthy();
+    expect(screen.getByRole('region', { name: `After: ${file.path}` })).toBeTruthy();
+    expect(sourceDiff()).toBeNull();
+
+    view.rerender(panel(focusRequest(1)));
+    await waitFor(() => expect(sourceDiff()).not.toBeNull());
+    expect(screen.queryByRole('region', { name: `After: ${file.path}` })).toBeNull();
+    if (target === 'finding') {
+      await waitFor(() => expect(sourceDiff()?.querySelector('[slot="annotation-additions-28"]')?.textContent)
+        .toContain(finding.body));
+      await waitFor(() => expect(virtualizerScrollTo).toHaveBeenCalledWith({ top: 500, behavior: 'auto' }));
+      fireEvent.click(screen.getByRole('button', { name: 'report.csv:28', exact: true }));
+      expect(onOpenProjectFile).toHaveBeenCalledWith(finding.path, 28);
+    }
+
+    // A consumed request must not lock the user in source mode, but a new request must switch back.
+    fireEvent.click(screen.getByRole('button', { name: 'Preview', exact: true }));
+    view.rerender(panel(focusRequest(1)));
+    expect(screen.getByRole('region', { name: `After: ${file.path}` })).toBeTruthy();
+    view.rerender(panel(focusRequest(2)));
+    await waitFor(() => expect(sourceDiff()).not.toBeNull());
+    expect(screen.queryByRole('region', { name: `After: ${file.path}` })).toBeNull();
   });
 
   it('renders an unavailable location for a focused finding outside the project', async () => {

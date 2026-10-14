@@ -121,6 +121,25 @@ describe('file workspace project store', () => {
     expect(editable.revision).toBe(preview.revision);
   });
 
+  it('classifies Office containers without decoding their binary bytes and keeps CSV editable as text', async () => {
+    const fixture = await createWorkspaceFixture();
+    const store = new FileWorkspaceProjectStore(fixture.dataDir, systemClock);
+    const project = await store.addProject({ path: fixture.projectDir });
+    const zipHeader = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0, 0xff]);
+    for (const format of ['docx', 'pptx', 'xlsx']) {
+      const filePath = `sample.${format}`;
+      await writeFile(path.join(fixture.projectDir, filePath), zipHeader);
+      await expect(store.readFile(project.id, filePath)).resolves.toMatchObject({
+        content: '', preview: { kind: 'document', format }, size: zipHeader.length, truncated: false,
+      });
+    }
+    const csv = 'name,value\nexample,00123\n';
+    await writeFile(path.join(fixture.projectDir, 'sample.csv'), csv);
+    await expect(store.readFile(project.id, 'sample.csv')).resolves.toMatchObject({
+      content: csv, preview: { kind: 'text' }, truncated: false,
+    });
+  });
+
   it('reads bounded workspace images by file signature', async () => {
     const fixture = await createWorkspaceFixture();
     await writeFile(path.join(fixture.projectDir, 'preview.bin'), ONE_PIXEL_PNG);

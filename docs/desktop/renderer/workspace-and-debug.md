@@ -59,7 +59,15 @@ Panel 选择和 session 生命周期在 hooks，不应由各 tab 各自维护一
 
 可编辑的文本文件打开后自动进入编辑状态；预览内容被截断时，`useWorkspaceFileDraft` 先读取完整内容。`Ctrl+S` / `⌘S` 保存当前草稿，保存后继续编辑，保存期间新增的输入仍保留为未保存内容。对应侧栏或底栏标签在关闭按钮旁显示未保存小点；保存失败保留草稿与错误提示。文件页不再提供进入编辑、取消或保存按钮。
 
+Runtime 的 `workspace-file-preview-reader.ts` 先通过文件句柄读取最多 64 KiB 文件头判断格式，不支持的二进制和超限图片直接返回，不读取正文或计算全文件哈希。Office 的完整字节留到预览组件按需读取；图片最多读取 8 MiB，文本最多读取编辑预算 8 MiB，超过预算的文本只返回请求范围内的前缀。可编辑文本仍使用完整内容哈希保证保存冲突检查；未完整读取的预览使用文件元数据版本供外部修改刷新。
+
 Markdown 文件在路径栏的目录按钮旁提供“查看源码 / 查看预览”。默认打开预览；预览使用当前编辑草稿，切换时保留编辑器实例、尺寸和撤销记录。带行号的定位请求自动回到源码。`WorkspaceMarkdownPreview` 复用 Markdown 排版和代码块，支持 GFM、标题锚点和经过清理的 HTML；相对链接按当前文档目录解析，本地图片经 runtime client 的工作区文件读取接口加载。脚本、事件属性及越界路径不会进入预览。
+
+`documents/` 持有 DOCX、PPTX、XLSX、CSV 和 PDF 预览。CSV 默认展示表格，并沿用源码切换与文本草稿；其他格式只读。`DocumentPreview` 首次挂载才加载预览组件，组件再按格式动态导入 `@silurus/ooxml`，以本地 Worker/WASM 解析；PDF 使用本地 Blob 和 Electron 内置阅读器，不加载 Office 引擎。关闭或切换时销毁实例并释放 Blob URL；这些操作不参与 runtime ready、窗口就绪或首屏初始化，也不加载远程字体。原始字节通过 preload 的 `desktop.readWorkspaceDocument` 读取，Main 校验工作区边界、文件类型和 32 MiB 上限，renderer 不直接读取文件系统。
+
+DOCX 连续分节的浮点边界误判通过固定版本的依赖补丁修正，说明见 [`patches/README.md`](../../../patches/README.md)。渐进排版在首屏之后报错时也会立即销毁解析器，避免只展示错误而留下 Worker。
+
+`media/` 持有按需加载的 MP4 预览，复用 Chromium 原生播放控件。Runtime 只识别文件头，renderer 通过 `desktop.createWorkspaceFilePreview` 获取受工作区边界约束的临时 URL，由 Main 的文件服务按 HTTP Range 流式读取，完整视频不经过 IPC 或 Base64。切换文件或关闭预览会停止播放器、取消旧请求并调用 `releaseWorkspaceFilePreview` 撤销 URL；Main 在请求断开时关闭文件流。编码支持取决于 Electron 内置解码器，不引入转码器或启动预热。
 
 产物卡片提供“在文件中显示”，通过当前项目的文件打开链路选中文件，再由 `useWorkspaceFileTree` 清除筛选、展开父目录并滚动到对应行。定位请求绑定工作区身份；取消打开、读取失败或切换项目时不会应用旧定位。Markdown 产物不提供内置浏览器入口，保留文件定位和系统默认应用打开。
 
@@ -133,7 +141,9 @@ Review presentation 与 Workspace 级 Git 状态由 `packages/features/review/sr
 
 Review preference 按 workspace 持久化在 localStorage。Main 才执行 Git 操作；renderer 不拼 Git 命令。
 
-审查和变更在面板顶部提供统一的“预览 / 源码”切换，作用于面板中的所有 Markdown，切换文件和分组后保持选择。源码模式保留原有增删对照；行号或审查发现定位会将整个面板切回源码。`ReviewFileDocument` 经 preload 的 `readTextFile` 读取完整预览内容，不从 diff 片段拼接文档；Main 的 `file-version.ts` 与图片预览共用工作区、暂存区和固定提交版本的选择。删除文件读取删除前版本，最近改动中没有删除前快照的文件仍展示源码对照。读取限制在 workspace 内，拒绝越界链接、二进制及超过 2 MiB 的文本。宿主通过 `composition/review/ReviewFileDocument.tsx` 注入已有 Markdown 预览；相对图片读取相同版本，并在切换或关闭预览时释放临时资源。
+审查和变更在面板顶部提供统一的“预览 / 源码”切换，作用于面板中的所有 Markdown 和 CSV，默认使用源码，切换文件和分组后保持选择。源码模式保留原有增删对照和行级批注；行号或审查发现定位会将整个面板切回源码。`ReviewFileDocument` 经 preload 的 `readTextFile` 读取完整 Markdown 预览内容，不从 diff 片段拼接文档；Main 的 `file-version.ts` 与图片预览共用工作区、暂存区和固定提交版本的选择。删除文件读取删除前版本，最近改动中没有删除前快照的文件仍展示源码对照。读取限制在 workspace 内，拒绝越界链接、二进制及超过 2 MiB 的文本。宿主通过 `composition/review/ReviewFileDocument.tsx` 注入已有 Markdown 预览；相对图片读取相同版本，并在切换或关闭预览时释放临时资源。
+
+Office/PDF 变更，以及切到预览模式的 CSV，由 `ReviewDocumentDiff` 在文件展开后加载，复用宿主文档预览并排展示修改前后内容，不做单元格或文字差异标注。`readDocumentFile` 与现有 `file-version.ts` 共用 Git 版本选择，重命名的旧侧使用旧路径，新增/删除只读取存在的一侧；没有旧快照的最近改动只展示当前版本。两侧分别限制在 32 MiB，折叠文件或切回源码会释放解析 Worker 或 PDF Blob URL。
 
 新对话的项目与分支选择共用 renderer-ui 的 `picker.css`，选项保持单行。分支菜单的“创建并检出新分支”通过 `stageUnstaged: true` 请求 Main 创建分支并暂存当前修改；Main 先校验名称、重名与未解决冲突，成功创建并检出后再暂存，不自动提交。创建失败时保留原有暂存与未暂存状态。
 活动 workspace 会通过 preload 订阅 Main 的 Git worktree 变更；`useDesktopReviewState` 合并连续失效通知，并始终使用当前保存的比较基准重新获取状态。因此概览、Git 控件和 review panel 即使在 panel 关闭时也共享最新快照。普通刷新只重新读取状态，只有显式选择比较基准才会更新对应 preference。

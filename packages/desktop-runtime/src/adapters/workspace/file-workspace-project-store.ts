@@ -8,7 +8,6 @@ import {
   parseTemporaryWorkspaceProjectId,
   TEMPORARY_WORKSPACE_PROJECT_ID,
   temporaryWorkspaceProjectId,
-  WORKSPACE_TEXT_FILE_MAX_BYTES,
   workspaceProjectNameKey,
   type AddWorkspaceProjectInput,
   type UpdateWorkspaceProjectInput,
@@ -53,21 +52,18 @@ import type { WorkspaceSearchEngine } from '../../ports/workspace-search-engine.
 import type { WorkspaceFork } from '../../ports/workspace-fork.js';
 import { assertSafeRuntimeId } from '../../security/runtime-id.js';
 import { detectSafeImageMimeType } from '../../utils/safe-image.js';
-import {
-  detectWorkspacePreviewImageMimeType,
-  isProbablyBinaryWorkspaceFile,
-} from '../../utils/workspace-file-preview.js';
 import { JavaScriptWorkspaceSearchEngine } from '../search/javascript-workspace-search-engine.js';
 import { isPathWithin } from '../search/workspace-search-policy.js';
 import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from '../store/json-file.js';
 import { createWorkspaceEntry, deleteWorkspaceEntry, moveWorkspaceEntry, renameWorkspaceEntry } from './workspace-entry-mutations.js';
 import { applyWorkspaceFileChanges } from './workspace-file-changes.js';
+import { MAX_WORKSPACE_IMAGE_BYTES, readWorkspaceFilePreview } from './workspace-file-preview-reader.js';
 
 import { assertProjectRootsAvailable, findGitRoot, normalizeProjectPath, normalizeProjectRoots, projectWithRoots } from './workspace-project-roots.js';
 
 const MAX_LIST_ENTRIES = 200;
-export const MAX_WORKSPACE_IMAGE_BYTES = 8 * 1024 * 1024;
+export { MAX_WORKSPACE_IMAGE_BYTES } from './workspace-file-preview-reader.js';
 const MAX_ENTRY_SEARCH_RESULTS = 80;
 const MAX_ENTRY_SEARCH_SCAN = 12000;
 const MAX_SEARCH_RESULTS = 100;
@@ -456,60 +452,12 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
   ): Promise<WorkspaceFileRead> {
     const project = await this.requireProject(projectId);
     const target = await safeResolve(project.path, relativePath);
-    const targetStat = await stat(target);
-    if (!targetStat.isFile()) throw new Error('Path is not a file.');
-    const buffer = await readFile(target);
-    const path = toProjectRelative(project.path, target);
-    const modifiedAt = targetStat.mtime.toISOString();
-    const revision = workspaceFileRevision(buffer);
-    const imageMimeType = detectWorkspacePreviewImageMimeType(buffer);
-    if (imageMimeType) {
-      if (buffer.byteLength > MAX_WORKSPACE_IMAGE_BYTES) {
-        return {
-          ...workspaceFileIdentity(projectId),
-          path,
-          content: '',
-          size: buffer.byteLength,
-          modifiedAt,
-          revision,
-          preview: { kind: 'unsupported', reason: 'image-too-large' },
-          truncated: false,
-        };
-      }
-      return {
-        ...workspaceFileIdentity(projectId),
-        path,
-        content: '',
-        size: buffer.byteLength,
-        modifiedAt,
-        revision,
-        preview: { kind: 'image', base64: buffer.toString('base64'), mimeType: imageMimeType },
-        truncated: false,
-      };
-    }
-    if (isProbablyBinaryWorkspaceFile(buffer)) {
-      return {
-        ...workspaceFileIdentity(projectId),
-        path,
-        content: '',
-        size: buffer.byteLength,
-        modifiedAt,
-        revision,
-        preview: { kind: 'unsupported', reason: 'binary' },
-        truncated: false,
-      };
-    }
-    const maxTextBytes = options.maxTextBytes ?? WORKSPACE_TEXT_FILE_MAX_BYTES;
-    const truncated = buffer.byteLength > maxTextBytes;
+    const filePath = toProjectRelative(project.path, target);
+    const preview = await readWorkspaceFilePreview(target, filePath, options.maxTextBytes);
     return {
       ...workspaceFileIdentity(projectId),
-      path,
-      content: buffer.subarray(0, maxTextBytes).toString('utf8'),
-      size: buffer.byteLength,
-      modifiedAt,
-      revision,
-      preview: { kind: 'text' },
-      truncated,
+      path: filePath,
+      ...preview,
     };
   }
 
