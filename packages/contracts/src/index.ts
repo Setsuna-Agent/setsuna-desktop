@@ -3,6 +3,7 @@ export * from './attachments.js';
 export * from './background-shell-processes.js';
 export * from './config.js';
 export * from './data-root.js';
+export * from './desktop/storage.js';
 export * from './desktop.js';
 export * from './desktop/sandbox-dialogs.js';
 export * from './desktop/plugin-ui-documents.js';

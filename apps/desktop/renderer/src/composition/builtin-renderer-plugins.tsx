@@ -22,6 +22,7 @@ import {
 import {
   Archive,
   Bot,
+  HardDrive,
   Info,
   Keyboard,
   SlidersHorizontal,
@@ -66,6 +67,7 @@ const CORE_SETTINGS_PAGES = Object.freeze([
   ['personalization', 'preferences', 300, 'settings.section.personalization', Sparkles],
   ['taskModels', 'models-and-services', 300, 'settings.section.taskModels', Bot, 'settings.section.taskModelsDescription'],
   ['archives', 'data-and-system', 100, 'settings.section.archives', Archive],
+  ['storage', 'data-and-system', 150, 'storage.title', HardDrive],
   ['runtime', 'data-and-system', 200, 'settings.section.runtime', Wrench],
   ['about', 'data-and-system', 300, 'settings.section.about', Info],
 ] as const);

@@ -21,10 +21,13 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 
 - `sections/`
 - `data-root/`
+- `storage/`
 - `components/`
 - `styles/`
 
 页面根不应包含 provider normalize、calendar 聚合或数据根错误翻译等纯逻辑。
+
+“存储空间”是设置侧栏“数据与系统”组中的独立页面，点击后直接进入管理视图。`StorageUsageOverview` 用分段占用条和分类图例展示实际文件大小；历史对话、缓存与日志使用独立选择弹窗。历史对话可按最后更新时间、归档状态和标题筛选，切换筛选清空旧选择，避免删除不可见的目标。`useStorageManagement` 负责按需加载和操作状态；清理前使用共享确认对话框，批量删除遇到跨窗口取消会停止后续操作，关联附件沿用原有 owner 清理。部分失败保留未完成选择，刷新实际占用。只有进入存储空间页面或手动刷新才触发扫描。
 
 ### Sections
 
@@ -35,6 +38,7 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 | `RuntimeSettings.tsx` | Approval、permission、developer features、runtime 行为 |
 | `TaskModelSettings.tsx` | 标题、代码审查、审批审查与上下文压缩等宿主任务的模型选择 |
 | `ArchivedThreadsSettings.tsx` | 归档线程管理 |
+| `StorageSettings.tsx` | 分类磁盘占用、历史对话及附件、缓存和日志清理 |
 
 Memory 是独立 renderer Feature，但不单独占用设置导航。它在 setup 中通过 `registerSettingsPageExtension(context.ui, ...)` 注册两个 keyed extension，把启用/生成/外部上下文策略和记忆管理入口追加到“个性化”，把抽取/整理模型追加到“专用模型”；preview、delete、clear 和保存状态仍由 Feature 自己持有，`SettingsPage` 不接收任何 Memory 专用 prop。标准 Section/Group/Row、Switch、Select 和 Button 由宿主通过 Slot props 中的 `ui` 注入，因此业务所有权独立不等于信息架构或视觉系统独立。
 

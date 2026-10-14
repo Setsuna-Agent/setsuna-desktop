@@ -28,6 +28,7 @@ import { BrowserLinkSettings } from './sections/BrowserLinkSettings.js';
 import { PersonalizationSettings } from './sections/PersonalizationSettings.js';
 import { RuntimeAdvancedSettings, RuntimePolicySettings } from './sections/RuntimeSettings.js';
 import { TaskModelSettings } from './sections/TaskModelSettings.js';
+import { StorageSettings } from './storage/StorageSettings.js';
 import type {
   RuntimePreferenceInput,
   SettingsSectionId,
@@ -105,6 +106,8 @@ export function SettingsPage({
         onDelete={onDeleteArchivedThread}
         onRestore={onRestoreArchivedThread}
       />
+    ) : resolvedSection === 'storage' ? (
+      <StorageSettings />
     ) : resolvedSection === 'personalization' ? (
       config ? (
         <PersonalizationSettings config={config} onSavePreferences={onSaveRuntimePreferences} />

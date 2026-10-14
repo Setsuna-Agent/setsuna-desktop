@@ -2,6 +2,7 @@ import type { RuntimeAttachmentUploadInput, RuntimeStoredMessageAttachment } fro
 import type { RuntimeEventBatch } from './events.js';
 import type { RuntimeRequestInput } from './http.js';
 import type { RuntimeInterfaceLanguage } from './config.js';
+import type { DesktopStorageCleanupCategory, DesktopStorageCleanupResult, DesktopStorageUsage } from './desktop/storage.js';
 import type { SandboxDialogSession } from './desktop/sandbox-dialogs.js';
 import type { PluginUiDocument, PluginUiDocumentInput } from './desktop/plugin-ui-documents.js';
 import type {
@@ -162,6 +163,8 @@ export type SetsunaDesktopBridge = {
   };
   dataRoot: {
     getState(): Promise<DesktopDataRootState>;
+    getStorageUsage(): Promise<DesktopStorageUsage>;
+    clearStorage(categories: DesktopStorageCleanupCategory[]): Promise<DesktopStorageCleanupResult>;
     scanTarget(targetRoot: string): Promise<DesktopDataMigrationPlan>;
     beginMigration(planId: string): Promise<DesktopDataRootActionResult>;
     runMigration(): Promise<DesktopDataRootActionResult>;

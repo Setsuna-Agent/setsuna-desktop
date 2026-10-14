@@ -3,6 +3,7 @@ import { chatSupplementEnUS, chatSupplementZhCN } from './chatSupplementMessages
 import { capabilitiesManagementEnUS, capabilitiesManagementZhCN } from './capabilitiesManagementMessages.js';
 import { capabilitiesEnUS, capabilitiesZhCN } from './capabilitiesMessages.js';
 import { dataRootCleanupEnUS, dataRootCleanupZhCN } from './dataRootCleanupMessages.js';
+import { storageEnUS, storageZhCN } from './storageMessages.js';
 import { settingsNavigationEnUS, settingsNavigationZhCN } from './settingsNavigationMessages.js';
 import { keyboardShortcutEnUS, keyboardShortcutZhCN } from './keyboardShortcutMessages.js';
 import { taskModelEnUS, taskModelZhCN } from './taskModelMessages.js';
@@ -147,6 +148,7 @@ const zhCN = {
   'dataRoot.plan.scanning': '正在扫描迁移清单与磁盘空间…',
   'dataRoot.plan.notice': '迁移期间应用会重启。原目录会暂时保留，迁移成功启动后可确认删除；凭据仅保证同一机器、同一系统用户可用。',
   ...dataRootCleanupZhCN,
+  ...storageZhCN,
   'dataRoot.totalSize': '数据大小',
   'dataRoot.requiredSpace': '所需空间',
   'dataRoot.availableSpace': '可用空间',
@@ -684,6 +686,7 @@ const enUS = {
   'dataRoot.plan.scanning': 'Scanning the migration manifest and available disk space…',
   'dataRoot.plan.notice': 'The app restarts for migration. The old location is retained temporarily and can be removed after Setsuna starts successfully. Credentials remain usable only for the same OS user on this machine.',
   ...dataRootCleanupEnUS,
+  ...storageEnUS,
   'dataRoot.totalSize': 'Data size',
   'dataRoot.requiredSpace': 'Required space',
   'dataRoot.availableSpace': 'Available space',

@@ -1,5 +1,7 @@
-import { ipcMain } from 'electron';
+import { DESKTOP_BROWSER_PARTITION } from '@setsuna-desktop/feature-browser/contracts';
+import { ipcMain, session, webContents } from 'electron';
 import type { DesktopDataRootCoordinator } from '../data-root/coordinator.js';
+import { DesktopStorageService } from '../data-root/storage.js';
 import { desktopWindows } from '../window/registry.js';
 import { isDesktopRendererSender } from './sender.js';
 
@@ -8,8 +10,19 @@ const DATA_ROOT_STATE_CHANNEL = 'desktop-data-root:state-change';
 export function registerDataRootIpc(
   coordinator: DesktopDataRootCoordinator,
 ): () => void {
+  const storage = new DesktopStorageService(() => {
+    const state = coordinator.getState();
+    if (state.mode !== 'normal') throw new Error('Storage is unavailable during data migration.');
+    return state.activeRoot;
+  }, () => [
+    session.defaultSession,
+    session.fromPartition(DESKTOP_BROWSER_PARTITION),
+    ...webContents.getAllWebContents().map((contents) => contents.session),
+  ]);
   const channels = [
     'desktop-data-root:get-state',
+    'desktop-data-root:storage-usage',
+    'desktop-data-root:clear-storage',
     'desktop-data-root:scan-target',
     'desktop-data-root:begin-migration',
     'desktop-data-root:run-migration',
@@ -27,6 +40,14 @@ export function registerDataRootIpc(
   ipcMain.handle('desktop-data-root:get-state', (event) => {
     if (!trusted(event.sender)) throw new Error('Desktop renderer is unavailable.');
     return coordinator.getState();
+  });
+  ipcMain.handle('desktop-data-root:storage-usage', (event) => {
+    if (!trusted(event.sender)) throw new Error('Desktop renderer is unavailable.');
+    return storage.getUsage();
+  });
+  ipcMain.handle('desktop-data-root:clear-storage', (event, categories) => {
+    if (!trusted(event.sender)) throw new Error('Desktop renderer is unavailable.');
+    return storage.clear(categories);
   });
   ipcMain.handle('desktop-data-root:scan-target', (event, targetRoot) => {
     if (!trusted(event.sender)) throw new Error('Desktop renderer is unavailable.');

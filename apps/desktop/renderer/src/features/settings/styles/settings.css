@@ -3,5 +3,6 @@
 @import './settings-task-models.css';
 @import './settings-dialogs.css';
 @import './settings-runtime.css';
+@import './settings-storage.css';
 @import './settings-renderer-inspector.css';
 @import './settings-shortcuts.css';

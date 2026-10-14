@@ -22,6 +22,15 @@
 | `legacy-import-plan.ts` | 旧 memory / policy 导入预检 |
 | `legacy-import.ts` | 旧数据导入、staging、receipt 和恢复 |
 | `retained-backups.ts` | 迁移后旧根登记、检查、保留和安全删除 |
+| `storage.ts` / `storage-files.ts` | 按需统计当前数据根占用，清理 Electron 缓存和受管日志 |
+
+## 磁盘空间管理
+
+`dataRoot.getStorageUsage()` 只在用户打开设置中的空间管理面板或主动刷新时扫描；服务构造和 IPC 注册不扫描目录、不创建 session。统计复用迁移分类并补充缓存与日志，异步逐项读取，不跟随符号链接，不完整读取会显式标记。迁移后的旧根仍由 `retained-backups.ts` 单独管理。
+
+`dataRoot.clearStorage()` 只接受缓存、日志枚举，不接收文件路径。缓存通过 Electron session 的 HTTP cache、code cache 和 shader cache API 清理，保留 cookies、站点存储和草稿；日志仅删除数据根 `logs/` 与 `runtime/logs/` 下的普通文件，保留目录并拒绝通过链接越界。请求合并正在进行的占用扫描，清理后的刷新等待所选操作完成，部分失败按类别返回。
+
+历史对话和附件使用现有 runtime client 删除入口，经过 main 的跨窗口未保存编辑检查及 runtime 删除屏障。附件由原有 owner 释放，仍被其他对话引用的资源和用户原文件保留。磁盘统计读取实际文件大小，不把 SQLite 可复用页当作已返还给文件系统的空间。
 
 ## 启动模式
 
