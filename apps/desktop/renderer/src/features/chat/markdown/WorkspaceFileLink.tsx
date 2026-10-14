@@ -1,8 +1,9 @@
 import type { WorkspaceEntry } from '@setsuna-desktop/contracts';
 import type { AnchorHTMLAttributes, HTMLAttributes, MouseEvent, ReactNode } from 'react';
+import { AppTooltip } from '../../../shared/ui/primitives.js';
 import { WorkspaceFileIcon } from '../../workspace/WorkspaceFileIcon.js';
 import { useMarkdownNavigation } from './MarkdownNavigationProvider.js';
-import { resolveMarkdownLinkTarget } from './markdownLinks.js';
+import { formatMarkdownWorkspacePath, resolveMarkdownLinkTarget } from './markdownLinks.js';
 import { useAvailableMarkdownFile } from './useMarkdownWorkspaceFiles.js';
 
 type WorkspaceFileLinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, 'children' | 'href'> & {
@@ -49,9 +50,14 @@ export function WorkspaceFileLink({
   const verifiedPath = useAvailableMarkdownFile(checkFile ? candidate : null, workspaceFiles);
   const availablePath = checkFile ? verifiedPath : candidate;
   const label = children ?? (target.kind === 'workspace' ? target.path : filePath);
+  const pathHint = target.kind === 'workspace' ? formatMarkdownWorkspacePath(target, workspaceRoot, line) : undefined;
 
   if (target.kind !== 'workspace' || !availablePath || (!workspaceRoot && !onOpenWorkspaceFile)) {
-    return <span className={[unavailableClassName, className].filter(Boolean).join(' ') || undefined}>{unavailableContent ?? label}</span>;
+    return (
+      <AppTooltip placement="topLeft" title={pathHint}>
+        <span className={[unavailableClassName, className].filter(Boolean).join(' ') || undefined}>{unavailableContent ?? label}</span>
+      </AppTooltip>
+    );
   }
 
   const handleWorkspaceClick = (event: MouseEvent<HTMLAnchorElement>) => {
@@ -73,18 +79,20 @@ export function WorkspaceFileLink({
   };
 
   return (
-    <a
-      {...props}
-      className={['chat-markdown__file-link', className].filter(Boolean).join(' ')}
-      data-markdown-link={linkKind}
-      href={href ?? filePath}
-      title={availablePath}
-      onClick={handleWorkspaceClick}
-      onContextMenu={handleWorkspaceContextMenu}
-    >
-      <WorkspaceFileIcon className="chat-markdown__file-icon" path={availablePath} type="file" />
-      <span>{label}</span>
-    </a>
+    <AppTooltip placement="topLeft" title={pathHint}>
+      <a
+        {...props}
+        className={['chat-markdown__file-link', className].filter(Boolean).join(' ')}
+        data-markdown-link={linkKind}
+        href={href ?? filePath}
+        title={undefined}
+        onClick={handleWorkspaceClick}
+        onContextMenu={handleWorkspaceContextMenu}
+      >
+        <WorkspaceFileIcon className="chat-markdown__file-icon" path={availablePath} type="file" />
+        <span>{label}</span>
+      </a>
+    </AppTooltip>
   );
 }
 
@@ -93,15 +101,17 @@ export function WorkspacePathLabel({ children, className, path, title, type, ...
   const { workspaceRoot } = useMarkdownNavigation();
   const target = resolveMarkdownLinkTarget(path, workspaceRoot);
   const resolvedPath = target.kind === 'workspace' ? target.path : path;
+  const pathHint = target.kind === 'workspace' ? formatMarkdownWorkspacePath(target, workspaceRoot) : path;
   return (
-    <span
-      {...props}
-      className={['chat-workspace-path-label', className].filter(Boolean).join(' ')}
-      title={title ?? resolvedPath}
-    >
-      <WorkspaceFileIcon className="chat-markdown__file-icon" path={resolvedPath} type={type} />
-      <span>{children ?? resolvedPath}</span>
-    </span>
+    <AppTooltip placement="topLeft" title={title ?? pathHint}>
+      <span
+        {...props}
+        className={['chat-workspace-path-label', className].filter(Boolean).join(' ')}
+      >
+        <WorkspaceFileIcon className="chat-markdown__file-icon" path={resolvedPath} type={type} />
+        <span>{children ?? resolvedPath}</span>
+      </span>
+    </AppTooltip>
   );
 }
 
