@@ -1,3 +1,10 @@
+export class ThreadBusyError extends Error {
+  constructor(threadId: string) {
+    super(`Thread ${threadId} is busy and cannot be deleted while work is pending.`);
+    this.name = 'ThreadBusyError';
+  }
+}
+
 export class TurnCancelledError extends Error {
   constructor(message = 'Turn cancelled.') {
     super(message);

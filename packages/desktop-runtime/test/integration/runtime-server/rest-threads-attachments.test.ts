@@ -24,6 +24,56 @@ describe('runtime server REST threads and attachments', () => {
     await harness.close();
   });
 
+  it('rechecks idle-only deletion after a turn starts without cancelling it, while ordinary deletion can still cancel', async () => {
+    const capture = await createDelayedOpenAiCaptureServer();
+    try {
+      await harness.configureOpenAiProvider('cleanup-provider', capture.baseUrl);
+      const thread = await harness.runtimeFetch('/v1/threads', {
+        method: 'POST', body: JSON.stringify({ title: 'Started after cleanup selection' }),
+      });
+      const threadPath = `/v1/threads/${encodeURIComponent(thread.id)}`;
+      const inventory = await harness.runtimeFetch('/v1/threads?includeArchived=true');
+      expect(inventory.threads.find((item: { id: string }) => item.id === thread.id).activeTurnId).toBeNull();
+      await harness.runtimeFetch(`${threadPath}/turns`, {
+        method: 'POST', body: JSON.stringify({ input: 'Keep this turn active.' }),
+      });
+      await withTimeout(capture.nextBody, harness.providerCaptureTimeoutMs, 'Timed out waiting for cleanup provider request');
+      const running = await harness.runtimeFetch(threadPath);
+      expect(running.activeTurnId).toEqual(expect.any(String));
+
+      const deletion = await fetch(`${harness.baseUrl}${threadPath}`, {
+        method: 'DELETE', headers: { Authorization: `Bearer ${harness.token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ onlyIfIdle: true }),
+      });
+      expect(deletion.status).toBe(409);
+      await expect(deletion.json()).resolves.toMatchObject({ code: 'conflict' });
+      await expect(harness.runtimeFetch(threadPath)).resolves.toMatchObject({ activeTurnId: running.activeTurnId });
+
+      await expect(harness.runtimeFetch(threadPath, { method: 'DELETE' })).resolves.toEqual({ ok: true });
+      await expect(harness.runtimeFetch(threadPath)).rejects.toThrow('Thread not found');
+    } finally {
+      capture.release();
+      await capture.close();
+    }
+  });
+
+  it('deletes an idle conversation only after validating the cleanup condition', async () => {
+    const thread = await harness.runtimeFetch('/v1/threads', {
+      method: 'POST', body: JSON.stringify({ title: 'Idle cleanup' }),
+    });
+    const threadPath = `/v1/threads/${encodeURIComponent(thread.id)}`;
+    const invalid = await fetch(`${harness.baseUrl}${threadPath}`, {
+      method: 'DELETE', headers: { Authorization: `Bearer ${harness.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ onlyIfIdle: 'true' }),
+    });
+    expect(invalid.status).toBe(400);
+    await expect(harness.runtimeFetch(threadPath)).resolves.toMatchObject({ id: thread.id });
+    await expect(harness.runtimeFetch(threadPath, {
+      method: 'DELETE', body: JSON.stringify({ onlyIfIdle: true }),
+    })).resolves.toEqual({ ok: true });
+    await expect(harness.runtimeFetch(threadPath)).rejects.toThrow('Thread not found');
+  });
+
   it.each(['local', 'worktree'])('starts a new chat in its selected %s workspace and sends its first turn there', async (workspaceMode) => {
     const repository = path.join(harness.runtimeDataDir, 'repository');
     const git = async (...args: string[]) => (await promisify(execFile)('git', args, { cwd: repository })).stdout;

@@ -9,7 +9,7 @@ import type {
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
 import { closeTestThreadStores, createTestThreadStore } from '../../support/thread-store.js';
@@ -47,10 +47,17 @@ describe('agent loop thread deletion barrier', () => {
     const turnId = loop.activeTurnId(thread.id);
     expect(turnId).toEqual(expect.any(String));
 
+    const cleanup = vi.fn(async () => threadStore.deleteThread(thread.id));
+    await expect(loop.withThreadDeletionBarrier(thread.id, cleanup, { onlyIfIdle: true })).rejects.toThrow('busy');
+    expect(cleanup).not.toHaveBeenCalled();
+    expect(loop.activeTurnId(thread.id)).toBe(turnId);
+
     // This is the dangerous boundary: cancellation hides the task from activeTurnId while its
     // non-cooperative provider generator and goal observer are still unsettled.
     await loop.cancelTurn(thread.id, turnId!);
     expect(loop.activeTurnId(thread.id)).toBeNull();
+    await expect(loop.withThreadDeletionBarrier(thread.id, cleanup, { onlyIfIdle: true })).rejects.toThrow('busy');
+    expect(cleanup).not.toHaveBeenCalled();
 
     let enteredDelete = false;
     const deletion = loop.withThreadDeletionBarrier(thread.id, async () => {
@@ -93,8 +100,9 @@ describe('agent loop thread deletion barrier', () => {
     });
 
     await expect(loop.withThreadDeletionBarrier(thread.id, async () => {
+      await expect(loop.startTurn(thread.id, { input: 'must not slip past the idle check' })).rejects.toThrow('being deleted');
       throw new Error('delete commit failed');
-    })).rejects.toThrow('delete commit failed');
+    }, { onlyIfIdle: true })).rejects.toThrow('delete commit failed');
 
     await expect(loop.sendTurn(thread.id, { input: 'work may resume' })).resolves.toBeUndefined();
     expect((await threadStore.getThread(thread.id))?.messages.at(-1)?.content).toBe('completed after deletion');
@@ -126,6 +134,11 @@ describe('agent loop thread deletion barrier', () => {
     const starting = loop.startTurn(thread.id, { input: 'Use the attachment.', attachments: [attachment] });
     const startingResult = expect(starting).rejects.toThrow('being deleted');
     await attachmentStore.waitUntilClaimStarted();
+
+    expect(loop.activeTurnId(thread.id)).toBeNull();
+    const cleanup = vi.fn(async () => threadStore.deleteThread(thread.id));
+    await expect(loop.withThreadDeletionBarrier(thread.id, cleanup, { onlyIfIdle: true })).rejects.toThrow('busy');
+    expect(cleanup).not.toHaveBeenCalled();
 
     let enteredDelete = false;
     const deletion = loop.withThreadDeletionBarrier(thread.id, async () => {

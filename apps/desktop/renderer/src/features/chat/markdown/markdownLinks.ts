@@ -68,6 +68,15 @@ export function resolveMarkdownFileReference(
   return target;
 }
 
+/** Display a resolved reference using the workspace's path separator, without filesystem access. */
+export function formatMarkdownWorkspacePath(target: MarkdownWorkspaceLinkTarget, workspaceRoot?: string, line = target.line): string {
+  const separator = workspaceRoot?.includes('\\') ? '\\' : '/';
+  const path = workspaceRoot
+    ? `${workspaceRoot.replace(/[\\/]+$/u, '')}${separator}${target.path.replace(/\//gu, separator)}`
+    : target.path;
+  return line === undefined ? path : `${path}:${line}`;
+}
+
 function looksLikeWorkspaceFile(filePath: string): boolean {
   const fileName = filePath.split('/').at(-1)?.toLowerCase() ?? '';
   if (!fileName) return false;

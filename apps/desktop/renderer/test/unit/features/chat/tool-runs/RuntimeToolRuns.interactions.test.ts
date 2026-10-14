@@ -480,21 +480,21 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
     ]);
 
     expect(renderedTextFromHtml(groupedHtml)).not.toContain(workspaceRoot);
-    expect(groupedHtml).toContain('title="src"');
-    expect(groupedHtml).toContain('title="src/components"');
-    expect(groupedHtml).toContain('title="index.html"');
-    expect(groupedHtml).toContain('title="src/components/Grid.tsx"');
+    expect(renderedTextFromHtml(groupedHtml)).toContain('已查看目录src');
+    expect(renderedTextFromHtml(groupedHtml)).toContain('已查看目录components');
+    expect(groupedHtml).toContain(`href="${workspaceRoot}/index.html"`);
+    expect(groupedHtml).toContain(`href="${workspaceRoot}/src/components/Grid.tsx"`);
     expect(groupedHtml).toContain('<span>Grid.tsx</span>');
 
     expect(renderedTextFromHtml(flatHtml)).toContain('已读取文件index.css');
     expect(renderedTextFromHtml(flatHtml)).not.toContain(workspaceRoot);
     expect(flatHtml).toContain('data-markdown-link="workspace-tool"');
-    expect(flatHtml).toContain('title="src/index.css"');
+    expect(flatHtml).toContain(`href="${workspaceRoot}/src/index.css"`);
 
     const runningSummaryHtml = firstToolRunSummaryHtml(runningGroupHtml);
     expect(renderedTextFromHtml(runningSummaryHtml)).toContain('正在读取文件App.tsx');
     expect(renderedTextFromHtml(runningSummaryHtml)).not.toContain(workspaceRoot);
-    expect(runningSummaryHtml).toContain('title="src/App.tsx"');
+    expect(runningSummaryHtml).toContain(`href="${workspaceRoot}/src/App.tsx"`);
   });
 
   it('summarizes web-content MCP runs without exposing raw arguments or fetched page text', () => {

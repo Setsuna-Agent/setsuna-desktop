@@ -47,6 +47,14 @@
   opacity: 0.72;
 }
 
+.chat-markdown__link-tooltip {
+  gap: 3px;
+}
+
+.chat-markdown__link-tooltip-title {
+  font-weight: 500;
+}
+
 a.chat-markdown__file-link {
   display: inline;
   margin: 0;

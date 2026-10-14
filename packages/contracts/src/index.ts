@@ -3,6 +3,7 @@ export * from './attachments.js';
 export * from './background-shell-processes.js';
 export * from './config.js';
 export * from './data-root.js';
+export * from './desktop/storage.js';
 export * from './desktop.js';
 export * from './desktop/sandbox-dialogs.js';
 export * from './desktop/plugin-ui-documents.js';
@@ -41,6 +42,7 @@ export { restoreNativeCompactionHistory } from './event-projections/native-compa
 export * from './thread-title.js';
 export * from './threads/reference.js';
 export * from './threads.js';
+export * from './threads/deletion.js';
 export * from './usage.js';
 export * from './workspace.js';
 export * from './workspace/roots.js';

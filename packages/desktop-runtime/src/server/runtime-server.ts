@@ -33,7 +33,7 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
   const runtime = createRuntimeFactory({
     runtimeApi: createRuntimeApiClient({
       token: options.token,
-      deleteThread: (threadId, signal) => runtime.nativeBridge.deleteThread(threadId, signal),
+      deleteThread: (threadId, signal, options) => runtime.nativeBridge.deleteThread(threadId, signal, options),
       baseUrl: () => {
         const address = server.address();
         if (!address || typeof address === 'string') throw new Error('Runtime server is not listening.');

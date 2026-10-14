@@ -66,10 +66,10 @@ describe('runtime API transport', () => {
     const deleteThread = vi.fn().mockResolvedValueOnce({ ok: true }).mockResolvedValueOnce({ cancelled: true })
       .mockRejectedValueOnce(new Error('Other window is saving'));
     const api = createRuntimeApiClient({ baseUrl: () => 'http://127.0.0.1:9999', token: 'host-secret', deleteThread });
-    const input = { path: '/v1/projects/../threads/%74hread_1?source=app', method: 'DELETE' as const };
+    const input = { path: '/v1/projects/../threads/%74hread_1?source=app', method: 'DELETE' as const, body: { onlyIfIdle: true } };
     const controller = new AbortController();
     await expect(api.request(input, controller.signal)).resolves.toEqual({ ok: true, status: 200, data: { ok: true } });
-    expect(deleteThread).toHaveBeenLastCalledWith('thread_1', expect.any(AbortSignal));
+    expect(deleteThread).toHaveBeenLastCalledWith('thread_1', expect.any(AbortSignal), { onlyIfIdle: true });
     controller.abort();
     expect(deleteThread.mock.calls[0][1].aborted).toBe(true);
     await expect(api.request(input)).resolves.toEqual({ ok: false, status: 409, data: { cancelled: true } });

@@ -110,9 +110,9 @@ describe('DesktopNativeBridgeServer', () => {
     });
     expect(invalidDelete.status).toBe(400);
     expect(deleteThread).not.toHaveBeenCalled();
-    await expect(nativeRequest(connection, DESKTOP_THREAD_DELETE_PATH, { threadId: 'thread_1' }))
+    await expect(nativeRequest(connection, DESKTOP_THREAD_DELETE_PATH, { threadId: 'thread_1', onlyIfIdle: true }))
       .resolves.toEqual({ cancelled: true });
-    expect(deleteThread).toHaveBeenCalledExactlyOnceWith('thread_1', expect.any(AbortSignal));
+    expect(deleteThread).toHaveBeenCalledExactlyOnceWith('thread_1', expect.any(AbortSignal), { onlyIfIdle: true });
 
     deleteThread.mockImplementationOnce((_threadId, signal) => new Promise((resolve) => {
       signal.addEventListener('abort', () => resolve({ cancelled: true }), { once: true });

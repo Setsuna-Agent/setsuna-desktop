@@ -5,6 +5,7 @@ import type {
   RuntimeThreadGoalPatch,
   RuntimeThreadGoalStatus,
   SendTurnResponse,
+  ThreadDeletionOptions,
 } from '@setsuna-desktop/contracts';
 import {
   startReviewInputCodec,
@@ -12,6 +13,7 @@ import {
   type StartReviewInput,
 } from '@setsuna-desktop/feature-review/contracts';
 import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
+import { ThreadBusyError } from '../../loop/core/runtime-turn-errors.js';
 import type { RuntimeContainer } from '../runtime-factory.js';
 import { randomRuntimeId } from '../runtime-id.js';
 import { RuntimeUseCaseError, runtimeUseCaseErrorMessage } from './errors.js';
@@ -61,6 +63,7 @@ export async function validateRuntimeThreadWorkspaceReset(runtime: RuntimeContai
 export async function deleteRuntimeThread(
   runtime: Pick<RuntimeContainer, 'agentLoop' | 'threadStore' | 'eventBus' | 'mcpControl' | 'attachmentStore' | 'toolResultStore' | 'workspaceProjects'>,
   threadId: string,
+  options: ThreadDeletionOptions = {},
 ): Promise<void> {
   await runtime.agentLoop.withThreadDeletionBarrier(threadId, async () => {
     // The parent barrier prevents a running parent turn from spawning another child between this
@@ -118,6 +121,9 @@ export async function deleteRuntimeThread(
         );
       }
     });
+  }, options).catch((error: unknown) => {
+    if (error instanceof ThreadBusyError) throw new RuntimeUseCaseError('conflict', error.message, { threadId });
+    throw error;
   });
 }
 

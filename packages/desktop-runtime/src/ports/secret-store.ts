@@ -3,6 +3,7 @@ import type {
   DesktopNetworkProxyState,
   DesktopResolveNetworkProxyInput,
   DesktopResolvedNetworkProxy,
+  ThreadDeletionOptions,
 } from '@setsuna-desktop/contracts';
 import type { DesktopSandboxNetworkEnvironment } from '@setsuna-desktop/feature-windows-sandbox/contracts';
 
@@ -20,7 +21,7 @@ export interface SecretStore {
 
 export interface DesktopNativeBridge extends SecretStore {
   close(): Promise<void>;
-  deleteThread(threadId: string, signal?: AbortSignal): Promise<DesktopThreadDeletionResult>;
+  deleteThread(threadId: string, signal?: AbortSignal, options?: ThreadDeletionOptions): Promise<DesktopThreadDeletionResult>;
   writeClipboardText(text: string): Promise<void>;
   deleteNetworkProxy(proxyServerId: string): Promise<DesktopNetworkProxyState>;
   fetchWithSystemProxy(input: string | URL, init?: RequestInit): Promise<Response>;

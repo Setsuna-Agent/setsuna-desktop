@@ -300,8 +300,8 @@ async function createWindow(): Promise<void> {
   const currentDesktopNativeBridgeServer = new DesktopNativeBridgeServer({
     credentialVault,
     showSandboxDialog: (owner, input, options) => showSandboxDialog(owner, input, { ...options, language: interfaceLanguage }),
-    deleteThread: (threadId, signal) => deleteThread(null, {
-      method: 'DELETE', path: `/v1/threads/${encodeURIComponent(threadId)}`,
+    deleteThread: (threadId, signal, options) => deleteThread(null, {
+      method: 'DELETE', path: `/v1/threads/${encodeURIComponent(threadId)}`, body: options,
     }, signal),
     writeClipboardText: (text) => clipboard.writeText(text),
     deleteNetworkProxy: (proxyServerId) => requireNetworkProxyMainService().deleteServer(proxyServerId),

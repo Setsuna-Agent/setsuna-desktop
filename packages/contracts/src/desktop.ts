@@ -1,7 +1,9 @@
 import type { RuntimeAttachmentUploadInput, RuntimeStoredMessageAttachment } from './attachments.js';
 import type { RuntimeEventBatch } from './events.js';
 import type { RuntimeRequestInput } from './http.js';
+import type { ThreadDeletionOptions } from './threads/deletion.js';
 import type { RuntimeInterfaceLanguage } from './config.js';
+import type { DesktopStorageCleanupCategory, DesktopStorageCleanupResult, DesktopStorageUsage } from './desktop/storage.js';
 import type { SandboxDialogSession } from './desktop/sandbox-dialogs.js';
 import type { PluginUiDocument, PluginUiDocumentInput } from './desktop/plugin-ui-documents.js';
 import type {
@@ -98,7 +100,7 @@ export type DesktopThreadDeletionState = {
 
 export type DesktopThreadDeletionFinished = { deletedThreadIds: string[] };
 export const DESKTOP_THREAD_DELETE_PATH = '/v1/threads/delete';
-export type DesktopThreadDeletionInput = Readonly<{ threadId: string }>;
+export type DesktopThreadDeletionInput = Readonly<{ threadId: string } & ThreadDeletionOptions>;
 export type DesktopThreadDeletionResult = { ok: true; cancelled?: false } | { cancelled: true; ok?: false };
 
 export type DesktopRuntimeEventPayload =
@@ -162,6 +164,8 @@ export type SetsunaDesktopBridge = {
   };
   dataRoot: {
     getState(): Promise<DesktopDataRootState>;
+    getStorageUsage(): Promise<DesktopStorageUsage>;
+    clearStorage(categories: DesktopStorageCleanupCategory[]): Promise<DesktopStorageCleanupResult>;
     scanTarget(targetRoot: string): Promise<DesktopDataMigrationPlan>;
     beginMigration(planId: string): Promise<DesktopDataRootActionResult>;
     runMigration(): Promise<DesktopDataRootActionResult>;

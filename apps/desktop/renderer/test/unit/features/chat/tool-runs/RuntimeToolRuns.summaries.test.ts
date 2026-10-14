@@ -211,9 +211,9 @@ describe('RuntimeToolRuns compact summaries', () => {
     ]);
 
     expect(html).toContain('data-markdown-link="workspace-tool"');
-    expect(html).toContain('title="src/index.css"');
+    expect(html).toContain('href="/Users/dev/project/src/index.css"');
     expect(html).toContain('<span>index.css</span>');
-    expect(html).not.toContain('title="/Users/dev/project/src/index.css"');
+    expect(renderedTextFromHtml(html)).not.toContain('/Users/dev/project');
   });
 
   it('uses the shared file renderer in grouped, mixed, and hook-backed summaries', () => {
@@ -239,7 +239,7 @@ describe('RuntimeToolRuns compact summaries', () => {
     for (const html of [groupedHtml, mixedHtml, hookBackedHtml]) {
       const summaryHtml = firstToolRunSummaryHtml(html);
       expect(summaryHtml).toContain('data-markdown-link="workspace-tool"');
-      expect(summaryHtml).toContain('title="src/index.css"');
+      expect(summaryHtml).toContain(`href="${absolutePath}"`);
       expect(summaryHtml).toContain('<span>index.css</span>');
       expect(renderedTextFromHtml(summaryHtml)).not.toContain(absolutePath);
     }

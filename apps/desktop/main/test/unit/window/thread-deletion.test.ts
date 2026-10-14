@@ -100,7 +100,7 @@ it('fails closed when a window cannot answer and removes its pending listeners',
   expect(unresponsive.send).toHaveBeenLastCalledWith(THREAD_DELETION_CHANNELS.finished, { deletedThreadIds: [] });
 });
 
-const deletion: RuntimeRequestInput = { path: '/v1/threads/parent', method: 'DELETE' };
+const deletion: RuntimeRequestInput = { path: '/v1/threads/parent', method: 'DELETE', body: { onlyIfIdle: true } };
 function setup(fail = false) {
   const request = vi.fn(async (input: RuntimeRequestInput) => {
     if (input.method !== 'DELETE') return { parentThreadId: input.path.includes('/child?') ? 'parent' : undefined };

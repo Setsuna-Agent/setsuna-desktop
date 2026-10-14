@@ -3,6 +3,7 @@ import type {
   DesktopNetworkProxyState,
   DesktopResolveNetworkProxyInput,
   DesktopResolvedNetworkProxy,
+  ThreadDeletionOptions,
 } from '@setsuna-desktop/contracts';
 import {
   DESKTOP_SYSTEM_PROXY_FETCH_ERROR_HEADER,
@@ -73,8 +74,8 @@ export class HttpDesktopNativeBridge implements DesktopNativeBridge {
     await this.request(DESKTOP_CLIPBOARD_WRITE_PATH, { body, method: 'POST' });
   }
 
-  deleteThread(threadId: string, signal?: AbortSignal): Promise<DesktopThreadDeletionResult> {
-    const body: DesktopThreadDeletionInput = { threadId };
+  deleteThread(threadId: string, signal?: AbortSignal, options?: ThreadDeletionOptions): Promise<DesktopThreadDeletionResult> {
+    const body: DesktopThreadDeletionInput = { ...options, threadId };
     return this.request(DESKTOP_THREAD_DELETE_PATH, { body, method: 'POST', signal, timeoutMs: 120_000 });
   }
 
