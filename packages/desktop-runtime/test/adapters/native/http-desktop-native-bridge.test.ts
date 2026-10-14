@@ -41,9 +41,9 @@ describe('HttpDesktopNativeBridge', () => {
       await expect(client.get('mcp.test')).resolves.toBe('secret');
       await client.openExternal('https://example.com/login');
       await expect(client.writeClipboardText('secret-key')).resolves.toBeUndefined();
-      await expect(client.deleteThread('thread_1')).resolves.toMatchObject({ ok: true });
+      await expect(client.deleteThread('thread_1', undefined, { onlyIfIdle: true })).resolves.toMatchObject({ ok: true });
       expect(calls).toContainEqual({
-        authorization: 'Bearer bridge-token', body: { threadId: 'thread_1' }, url: DESKTOP_THREAD_DELETE_PATH,
+        authorization: 'Bearer bridge-token', body: { threadId: 'thread_1', onlyIfIdle: true }, url: DESKTOP_THREAD_DELETE_PATH,
       });
       expect(calls).toContainEqual({
         authorization: 'Bearer bridge-token', body: { text: 'secret-key' }, url: DESKTOP_CLIPBOARD_WRITE_PATH,

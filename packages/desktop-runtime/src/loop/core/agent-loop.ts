@@ -22,6 +22,7 @@ import type {
   SendTurnResponse,
   StartTurnResponse,
   SteerTurnInput,
+  ThreadDeletionOptions,
 } from '@setsuna-desktop/contracts';
 import { isCoreRuntimeEvent } from '@setsuna-desktop/contracts';
 import type { ApprovalReviewControl } from '@setsuna-desktop/feature-approval-review/contracts';
@@ -67,7 +68,7 @@ import { RuntimeModelSampler } from './runtime-model-sampler.js';
 import { RuntimeModelStreamEventPublisher } from './runtime-model-stream-event-publisher.js';
 import { RuntimeSamplingContextBuilder } from './runtime-sampling-context-builder.js';
 import { createRuntimeThreadTitleGenerationHost } from './runtime-thread-title-generation-host.js';
-import { TurnCancelledError } from './runtime-turn-errors.js';
+import { ThreadBusyError, TurnCancelledError } from './runtime-turn-errors.js';
 import { RuntimeTurnRunFactory } from './runtime-turn-run-factory.js';
 import { ThreadMutationAdmissions } from './thread-mutation-admissions.js';
 
@@ -499,8 +500,16 @@ export class AgentLoop {
    * Prevents new turns, drains even an already-aborted registered task, then runs the destructive
    * thread operation. The operation is never reached while task or cancellation writes can arrive.
    */
-  async withThreadDeletionBarrier<T>(threadId: string, operation: () => Promise<T>): Promise<T> {
+  async withThreadDeletionBarrier<T>(
+    threadId: string, operation: () => Promise<T>, options: ThreadDeletionOptions = {},
+  ): Promise<T> {
     if (this.deletingThreads.has(threadId)) throw new Error(`thread ${threadId} is already being deleted`);
+    // Check and block in one synchronous admission step, before cancelling or pausing any work.
+    if (options.onlyIfIdle && (
+      this.turnTasks.registeredForThread(threadId) || this.threadMutationAdmissions.hasPending(threadId)
+    )) {
+      throw new ThreadBusyError(threadId);
+    }
     this.deletingThreads.add(threadId);
     try {
       this.turnTasks.blockThread(threadId);

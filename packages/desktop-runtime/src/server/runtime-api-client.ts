@@ -1,4 +1,4 @@
-import { parseRuntimeApiRequest, RUNTIME_API_MAX_BYTES, type RuntimeApiResponse } from '@setsuna-desktop/contracts';
+import { parseRuntimeApiRequest, parseThreadDeletionOptions, RUNTIME_API_MAX_BYTES, type RuntimeApiResponse } from '@setsuna-desktop/contracts';
 import { installLocalPlugin } from '@setsuna-desktop/feature-plugin-management/contracts';
 import type { RuntimeApi } from '../ports/runtime-api.js';
 import type { DesktopNativeBridge } from '../ports/secret-store.js';
@@ -30,7 +30,9 @@ export function createRuntimeApiClient(options: {
       const threadMatch = input.method === 'DELETE' && pathname.match(/^\/v1\/threads\/([^/]+)$/u);
       if (threadMatch) {
         if (!options.deleteThread) throw new Error('Deleting a conversation requires the Setsuna Desktop host.');
-        const data = await options.deleteThread(decodeRuntimeId(threadMatch[1], 'Thread id'), requestSignal);
+        const data = await options.deleteThread(
+          decodeRuntimeId(threadMatch[1], 'Thread id'), requestSignal, parseThreadDeletionOptions(input.body),
+        );
         return { ok: !data.cancelled, status: data.cancelled ? 409 : 200, data };
       }
       const response = await fetch(`${options.baseUrl()}${input.path}`, {

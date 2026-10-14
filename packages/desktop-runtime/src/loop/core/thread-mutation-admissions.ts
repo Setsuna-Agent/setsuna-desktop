@@ -2,6 +2,10 @@
 export class ThreadMutationAdmissions {
   private readonly pendingByThread = new Map<string, Set<Promise<void>>>();
 
+  hasPending(threadId: string): boolean {
+    return Boolean(this.pendingByThread.get(threadId)?.size);
+  }
+
   count(): number {
     return [...this.pendingByThread.values()].reduce((total, pending) => total + pending.size, 0);
   }

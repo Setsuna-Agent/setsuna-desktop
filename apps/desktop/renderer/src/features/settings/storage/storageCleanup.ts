@@ -34,7 +34,7 @@ export async function cleanStorageSelection(
     try {
       // This client uses the normal main-process deletion guard, including unsaved editors in
       // other windows. Runtime owns child conversations, shared attachments, and image cleanup.
-      await client.deleteThread(id);
+      await client.deleteThread(id, { onlyIfIdle: true });
       deletedThreadIds.push(id);
     } catch (error) {
       if (isThreadDeletionCancelled(error)) {

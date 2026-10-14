@@ -215,11 +215,17 @@ describe('desktop runtime client advanced thread methods', () => {
     const client = createDesktopRuntimeClient();
 
     await client.deleteThread('thread / 1');
+    await client.deleteThread('thread / 2', { onlyIfIdle: true });
 
     expect(request.mock.calls.map(([input]) => input)).toEqual([
       {
         path: '/v1/threads/thread%20%2F%201',
         method: 'DELETE',
+      },
+      {
+        path: '/v1/threads/thread%20%2F%202',
+        method: 'DELETE',
+        body: { onlyIfIdle: true },
       },
     ]);
   });

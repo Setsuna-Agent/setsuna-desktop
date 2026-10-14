@@ -1,5 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { URL } from 'node:url';
+import { parseThreadDeletionOptions, type ThreadDeletionOptions } from '@setsuna-desktop/contracts';
+import { RuntimeUseCaseError, runtimeUseCaseErrorMessage } from '../runtime/use-cases/errors.js';
 import {
   deleteRuntimeThread,
   startRuntimeReview,
@@ -20,7 +22,14 @@ export async function handleRuntimeThreadCommandRequest(
   const threadMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)$/u);
   if (threadMatch && request.method === 'DELETE') {
     const threadId = decodeRuntimeId(threadMatch[1], 'Thread id');
-    await deleteRuntimeThread(runtime, threadId);
+    const input = await readBody(request);
+    let options: ThreadDeletionOptions;
+    try {
+      options = parseThreadDeletionOptions(input);
+    } catch (error) {
+      throw new RuntimeUseCaseError('invalid_input', runtimeUseCaseErrorMessage(error));
+    }
+    await deleteRuntimeThread(runtime, threadId, options);
     sendJson(response, 200, { ok: true });
     return true;
   }

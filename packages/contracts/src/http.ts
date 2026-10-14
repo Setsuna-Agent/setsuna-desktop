@@ -9,6 +9,7 @@ import type {
   RuntimeConfigState,
 } from './config.js';
 import type { RuntimeEventBatch } from './events.js';
+import type { ThreadDeletionOptions } from './threads/deletion.js';
 import type {
   CreateThreadInput,
   ForkThreadInput,
@@ -97,7 +98,7 @@ export type DesktopRuntimeClient = {
   createThread(input?: CreateThreadInput): Promise<RuntimeThread>;
   forkThread(threadId: string, input: ForkThreadInput): Promise<RuntimeThread>;
   updateThread(threadId: string, patch: ThreadPatch): Promise<RuntimeThread>;
-  deleteThread(threadId: string): Promise<void>;
+  deleteThread(threadId: string, options?: ThreadDeletionOptions): Promise<void>;
   clearThreadContext(threadId: string): Promise<RuntimeThread>;
   compactThreadContext(threadId: string): Promise<RuntimeThread>;
   sendTurn(threadId: string, input: SendTurnInput): Promise<StartTurnResponse>;

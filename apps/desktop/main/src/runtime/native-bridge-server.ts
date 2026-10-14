@@ -5,6 +5,8 @@ import {
   type SandboxDialogSession,
   type DesktopThreadDeletionInput,
   type DesktopThreadDeletionResult,
+  type ThreadDeletionOptions,
+  parseThreadDeletionOptions,
   type DesktopClipboardWriteInput,
   DESKTOP_NETWORK_PROXY_SCOPES,
   DESKTOP_SYSTEM_PROXY_FETCH_PATH,
@@ -44,7 +46,7 @@ export type DesktopNativeBridgeConnection = {
 type DesktopNativeBridgeOptions = {
   showSandboxDialog?: ShowSandboxDialog;
   credentialVault: CredentialVault;
-  deleteThread(threadId: string, signal: AbortSignal): Promise<DesktopThreadDeletionResult>;
+  deleteThread(threadId: string, signal: AbortSignal, options?: ThreadDeletionOptions): Promise<DesktopThreadDeletionResult>;
   writeClipboardText(text: string): void;
   deleteNetworkProxy(proxyServerId: string): Promise<DesktopNetworkProxyState>;
   openExternal(url: string): Promise<void>;
@@ -271,7 +273,7 @@ export class DesktopNativeBridgeServer {
           const body = recordInput(await readJsonBody(request));
           if (typeof body.threadId !== 'string' || !body.threadId.trim()) throw new Error('Thread id is required.');
           const input: DesktopThreadDeletionInput = { threadId: body.threadId };
-          sendJson(response, 200, await this.options.deleteThread(input.threadId, controller.signal));
+          sendJson(response, 200, await this.options.deleteThread(input.threadId, controller.signal, parseThreadDeletionOptions(body)));
         } finally {
           response.removeListener('close', onClose);
         }

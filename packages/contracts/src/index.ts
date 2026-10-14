@@ -42,6 +42,7 @@ export { restoreNativeCompactionHistory } from './event-projections/native-compa
 export * from './thread-title.js';
 export * from './threads/reference.js';
 export * from './threads.js';
+export * from './threads/deletion.js';
 export * from './usage.js';
 export * from './workspace.js';
 export * from './workspace/roots.js';
