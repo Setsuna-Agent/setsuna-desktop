@@ -12,7 +12,7 @@ import {
 import {
   Puzzle,
 } from 'lucide-react';
-import { useState } from 'react';
+import { startTransition, Suspense, useCallback, useState } from 'react';
 import {
   RendererOwnedKeyedSlot,
   useRendererOwnedKeyedEntries,
@@ -82,6 +82,11 @@ export function SettingsPage({
   // initialSection 支持从聊天页引导卡片直达某个分区；设置页每次进入都会重新挂载，
   // 所以这里只需在挂载时取一次初始值。
   const [activeSection, setActiveSection] = useState<SettingsSectionId>(initialSection ?? 'general');
+  // Feature 分区多为 lazy chunk；用 transition 切换，首次加载期间保留当前分区，
+  // 而不是让路由级 Suspense 把整页替换成加载态。
+  const selectSection = useCallback((section: SettingsSectionId) => {
+    startTransition(() => setActiveSection(section));
+  }, []);
   const selectedPage = pages.find((entry) => entry.metadata.sectionId === activeSection)
     ?? pages.find((entry) => entry.metadata.sectionId === 'general');
   const resolvedSection = selectedPage?.metadata.sectionId ?? 'general';
@@ -146,7 +151,7 @@ export function SettingsPage({
       <SettingsSidebar
         activeSection={resolvedSection}
         pages={pages}
-        onSelectSection={setActiveSection}
+        onSelectSection={selectSection}
       />
       <main className="desktop-settings-panel">
         <section
@@ -155,29 +160,33 @@ export function SettingsPage({
           }`}
           data-settings-feature={selectedPage?.owner.featureId}
         >
-          <SettingsSectionExtensionOutlet
-            key={resolvedSection}
-            sectionId={resolvedSection}
-            trailingContent={trailingContent}
-            translate={translateFeature}
-            ui={settingsViewUi}
-          >
-            {selectedPage?.metadata.pageHeading !== 'view' ? (
-              <SettingsPageHeading description={description} title={title} />
-            ) : null}
-            {selectedPage ? (
-              <RendererOwnedKeyedSlot
-                entryKey={selectedPage.key}
-                slot={settingsPageSlot}
-                props={{
-                  renderDefault: () => defaultContent,
-                  sectionId: resolvedSection,
-                  translate: translateFeature,
-                  ui: settingsViewUi,
-                }}
-              />
-            ) : defaultContent}
-          </SettingsSectionExtensionOutlet>
+          {/* 常驻于分区之外：首次进入时 lazy 分区只留空内容区，不冒泡到路由级兜底；
+              页内切换时配合 transition 保留旧分区直到 chunk 就绪。 */}
+          <Suspense fallback={null}>
+            <SettingsSectionExtensionOutlet
+              key={resolvedSection}
+              sectionId={resolvedSection}
+              trailingContent={trailingContent}
+              translate={translateFeature}
+              ui={settingsViewUi}
+            >
+              {selectedPage?.metadata.pageHeading !== 'view' ? (
+                <SettingsPageHeading description={description} title={title} />
+              ) : null}
+              {selectedPage ? (
+                <RendererOwnedKeyedSlot
+                  entryKey={selectedPage.key}
+                  slot={settingsPageSlot}
+                  props={{
+                    renderDefault: () => defaultContent,
+                    sectionId: resolvedSection,
+                    translate: translateFeature,
+                    ui: settingsViewUi,
+                  }}
+                />
+              ) : defaultContent}
+            </SettingsSectionExtensionOutlet>
+          </Suspense>
         </section>
       </main>
     </>

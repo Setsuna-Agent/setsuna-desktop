@@ -1,7 +1,7 @@
 import { capabilitiesSidebarSlot } from '@setsuna-desktop/renderer-contracts/capabilities';
 import type { SettingsPageEntryDescriptor } from '@setsuna-desktop/renderer-contracts/settings';
 import { Search } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { Suspense, useRef, useState } from 'react';
 import { RendererOwnedSingleSlot } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { settingsViewUi } from '../../shared/ui/SettingsViewUi.js';
@@ -74,16 +74,19 @@ export function CapabilitiesSidebar({
         })}
       </nav>
       <div className="capabilities-sidebar__installed">
-        <RendererOwnedSingleSlot
-          slot={capabilitiesSidebarSlot}
-          props={{
-            selectedPluginId,
-            query,
-            onSelectPlugin: (pluginId) => onOpenSection('plugins', pluginId),
-            translate: t,
-            ui: settingsViewUi,
-          }}
-        />
+        {/* 侧栏列表可能是 lazy chunk；局部兜住挂起，避免首次进入时冒泡到路由级兜底屏。 */}
+        <Suspense fallback={null}>
+          <RendererOwnedSingleSlot
+            slot={capabilitiesSidebarSlot}
+            props={{
+              selectedPluginId,
+              query,
+              onSelectPlugin: (pluginId) => onOpenSection('plugins', pluginId),
+              translate: t,
+              ui: settingsViewUi,
+            }}
+          />
+        </Suspense>
       </div>
     </AppSidebar>
   );

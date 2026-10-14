@@ -8,7 +8,7 @@ import {
   type CapabilitiesPageNavigation,
 } from '@setsuna-desktop/renderer-contracts/settings';
 import { ChevronRight, Plus } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { startTransition, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   RendererOwnedKeyedSlot,
   useRendererOwnedKeyedEntries,
@@ -57,11 +57,16 @@ export function CapabilitiesShell({
 
   const openSection = useCallback((sectionId: string, itemId?: string) => {
     if (!catalogEntries.some((entry) => entry.metadata.sectionId === sectionId)) return;
+    // 选中插件属于 App 级导航历史状态，立即提交，不随 transition 延后。
     onSelectedPluginIdChange(sectionId === 'plugins' ? itemId ?? null : null);
-    setSectionItemId(itemId ?? null);
-    setActiveSectionId(sectionId);
-    // 一级入口返回目录，同时清理各 Feature 自己持有的详情或编辑模式。
-    if (!itemId) setCatalogVisit((visit) => visit + 1);
+    // Feature 页面多为 lazy chunk；仅对页内分区状态用 transition，首次加载期间保留当前页面，
+    // 而不是让路由级 Suspense 把整页替换成加载态。
+    startTransition(() => {
+      setSectionItemId(itemId ?? null);
+      setActiveSectionId(sectionId);
+      // 一级入口返回目录，同时清理各 Feature 自己持有的详情或编辑模式。
+      if (!itemId) setCatalogVisit((visit) => visit + 1);
+    });
   }, [catalogEntries, onSelectedPluginIdChange]);
   const renderBreadcrumb = useCallback(({
     currentLabel,
@@ -112,17 +117,21 @@ export function CapabilitiesShell({
         selectedPluginId={selectedPluginId}
         onOpenSection={openSection}
       />
-      <RendererOwnedKeyedSlot
-        key={`${activeSectionId}:${catalogVisit}`}
-        entryKey={settingsPageKey('capabilities', activeSectionId)}
-        slot={settingsPageSlot}
-        props={{
-          capabilities: navigation,
-          sectionId: activeSectionId,
-          translate: t,
-          ui: settingsViewUi,
-        }}
-      />
+      {/* 常驻于分区之外：首次进入时 lazy 页面只留空内容区，不冒泡到路由级兜底；
+          页内切换时配合 transition 保留旧页面直到 chunk 就绪。 */}
+      <Suspense fallback={null}>
+        <RendererOwnedKeyedSlot
+          key={`${activeSectionId}:${catalogVisit}`}
+          entryKey={settingsPageKey('capabilities', activeSectionId)}
+          slot={settingsPageSlot}
+          props={{
+            capabilities: navigation,
+            sectionId: activeSectionId,
+            translate: t,
+            ui: settingsViewUi,
+          }}
+        />
+      </Suspense>
     </>
   );
 }
