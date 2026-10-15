@@ -62,7 +62,7 @@ import { useChatAttachments } from './composer/useChatAttachments.js';
 import type { ChatMentionItem } from './mentions/chatMentionItems.js';
 import { useChatCommandController } from './composer/useChatCommandController.js';
 import { useChatComposerClipboard } from './composer/useChatComposerClipboard.js';
-import { useChatThreadDrop } from './composer/useChatThreadDrop.js';
+import { useChatComposerDrop } from './composer/useChatComposerDrop.js';
 import { useChatComposerHistory } from './composer/useChatComposerHistory.js';
 import { useChatComposerModeController } from './composer/useChatComposerModeController.js';
 import { useQueuedTurnComposerEdit } from './composer/useQueuedTurnComposerEdit.js';
@@ -336,9 +336,11 @@ export function ChatComposer({
     || submitting
     || queuedTurnEdit.retrieving
     || modeController.reviewModeEnabled;
-  const threadDrop = useChatThreadDrop({
+  const composerDrop = useChatComposerDrop({
     disabled: submitting || queuedTurnEdit.retrieving || modeController.reviewModeEnabled,
+    filesDisabled: attachmentPickerDisabled,
     getEditor: getComposerEditor,
+    onFiles: (files) => { void addAttachmentFiles(files); },
   });
   const clipboardHandlers = useChatComposerClipboard({
     allowStructuredPaste: !modeController.reviewModeEnabled,
@@ -740,8 +742,8 @@ export function ChatComposer({
   return (
     <div
       className={`chat-sender ${starter ? 'chat-sender--starter' : ''}`}
-      data-thread-drop-active={threadDrop.active || undefined}
-      {...threadDrop.handlers}
+      data-drop-active={composerDrop.active || undefined}
+      {...composerDrop.handlers}
       {...clipboardHandlers}
     >
       <input

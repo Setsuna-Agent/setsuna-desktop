@@ -92,6 +92,13 @@ const desktop: SetsunaDesktopBridge['desktop'] = {
     ipcRenderer.invoke('desktop:open-workspace-directory', { workspaceRoot, directoryPath }),
   openWorkspaceFile: (workspaceRoot, filePath) =>
     ipcRenderer.invoke('desktop:open-workspace-file', { workspaceRoot, filePath }),
+  startFileDrag: (input) => ipcRenderer.invoke('desktop:start-file-drag', input),
+  resolveWorkspaceFileDrop: (workspaceRoot, file) => {
+    const filePath = webUtils.getPathForFile(file);
+    return filePath
+      ? ipcRenderer.invoke('desktop:resolve-workspace-file-drop', { workspaceRoot, filePath })
+      : Promise.resolve(null);
+  },
   copyWorkspaceFilePath: (workspaceRoot, filePath) =>
     ipcRenderer.invoke('desktop:copy-workspace-file-path', { workspaceRoot, filePath }),
   revealWorkspaceFile: (workspaceRoot, filePath) =>

@@ -107,6 +107,10 @@ vi.mock('../../../../../src/features/workspace/hooks/useDesktopImageAction.js', 
   useDesktopImageAction: () => imageActionHarness,
 }));
 
+vi.mock('../../../../../src/features/workspace/hooks/useDesktopFileDrag.js', () => ({
+  useDesktopFileDrag: () => () => undefined,
+}));
+
 const generatedAttachment: RuntimeGeneratedMessageAttachment = {
   id: 'generated_1',
   source: 'generated',

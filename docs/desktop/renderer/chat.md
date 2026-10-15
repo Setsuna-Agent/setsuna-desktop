@@ -90,7 +90,7 @@ Active turn 时普通提交默认排队；显式立即发送才尝试 steer。Go
 - `chatSlashCommandItems.ts`：quick action 与可用 Skill 的纯列表映射。
 - `chatComposerCursorOffset.ts`：菜单定位需要的光标偏移。
 - `chatComposerSlots.tsx`：workspace、Skill、Plugin、浏览器标签页、会话引用和文本输入 slots。
-- `useChatThreadDrop.ts`：接收侧栏会话拖拽，追加去重的结构化会话引用，保留现有草稿和选区内的文字。侧栏拖动时显示会话标题浮标，进入 composer 区域后高亮输入卡片；移出、结束拖动或窗口失焦时清除接收状态。引用采用 Core contract 的 `thread://` 格式，草稿、队列编辑和结构化复制粘贴共用同一解析器。
+- `useChatComposerDrop.ts`：统一接收侧栏会话引用与系统文件拖拽，保留现有草稿和选区内的文字。文件在 drop 事件内读取为 `File` 并交给现有附件 store，沿用文件选择器的本地引用、托管上传、数量限制与错误处理；不递归导入目录。禁用或附件已满时仍拦截文件默认行为，避免导航或把文件 URL 插入草稿。进入 composer 区域后高亮输入卡片，移出、结束拖动或窗口失焦时清除接收状态。会话引用追加去重，采用 Core contract 的 `thread://` 格式，草稿、队列编辑和结构化复制粘贴共用同一解析器。
 - `useQueuedTurnComposerEdit.ts`：带 token 的队列项取回编辑。
 - `useChatComposerHistory.ts`：光标折叠在首行开头时，用上下箭头遍历当前对话已加载的用户提问；消息来自 `ChatWorkspace` 合并后的分页历史，按消息 ID 保持浏览位置，分页新增的旧提问可继续向上取回。向下越过最新提问时恢复原草稿及结构化引用。输入法、修饰键、命令菜单和队列编辑保留原有键盘行为。
 

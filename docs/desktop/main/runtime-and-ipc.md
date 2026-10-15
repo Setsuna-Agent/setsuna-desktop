@@ -96,6 +96,7 @@ Runtime 的 `secrets.json` 只保存适合 runtime 管理的 secret 状态；需
 | `runtime-ipc.ts` | runtime request、attachment upload、SSE subscribe/unsubscribe |
 | `data-root-ipc.ts` | 数据根状态、扫描、迁移、恢复、旧根清理 |
 | `desktop-ipc.ts` | 目录选择、profile、clipboard、图片、本地路径与外链 |
+| `file-drag-ipc.ts` | 宿主主 frame 的原生文件拖出、工作区内文件 drop 解析；路径与图片资产校验由 `workspace/file-drag.ts` 复用现有 owner |
 | `window-ipc.ts` | minimize/maximize/close、标题栏 scale |
 | `sender.ts` | 已登记桌面窗口的 sender 校验，拒绝未登记窗口与 webview guest |
 

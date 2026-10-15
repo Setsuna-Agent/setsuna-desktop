@@ -18,6 +18,7 @@ export const artifactMessages = defineRendererMessageBundle({
       'feature.artifact.type.webpage': '网页 · {format}',
       'feature.artifact.type.generic': '文件 · {format}',
       'feature.artifact.openFailed': '无法打开文件。',
+      'feature.artifact.dragFailed': '无法拖出文件。',
       'feature.artifact.openInBrowser': '在内置浏览器打开',
       'feature.artifact.showInFiles': '在文件中显示',
       'feature.artifact.openDefault': '使用系统默认应用打开',
@@ -26,7 +27,7 @@ export const artifactMessages = defineRendererMessageBundle({
       'feature.artifact.browserOpenFailed': '无法在内置浏览器中打开文件。',
       'feature.artifact.openMode': '{name} 打开方式',
       'feature.artifact.openWith': '打开方式',
-      'feature.artifact.error': '打开失败：{error}',
+      'feature.artifact.error': '操作失败：{error}',
     },
     'en-US': {
       'feature.artifact.list': 'Generated artifacts',
@@ -42,6 +43,7 @@ export const artifactMessages = defineRendererMessageBundle({
       'feature.artifact.type.webpage': 'Webpage · {format}',
       'feature.artifact.type.generic': 'File · {format}',
       'feature.artifact.openFailed': 'Could not open the file.',
+      'feature.artifact.dragFailed': 'Could not drag the file.',
       'feature.artifact.openInBrowser': 'Open in in-app browser',
       'feature.artifact.showInFiles': 'Show in Files',
       'feature.artifact.openDefault': 'Open with system default app',
@@ -50,7 +52,7 @@ export const artifactMessages = defineRendererMessageBundle({
       'feature.artifact.browserOpenFailed': 'Could not open the file in the in-app browser.',
       'feature.artifact.openMode': 'Open options for {name}',
       'feature.artifact.openWith': 'Open with',
-      'feature.artifact.error': 'Open failed: {error}',
+      'feature.artifact.error': 'Action failed: {error}',
     },
   },
 });

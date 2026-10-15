@@ -13,7 +13,7 @@
   transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
 }
 
-.chat-sender[data-thread-drop-active] > .chat-prompt {
+.chat-sender[data-drop-active] > .chat-prompt {
   border-color: var(--app-primary);
   background: var(--app-accent-subtle);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-primary) 18%, transparent), var(--chat-prompt-shadow);

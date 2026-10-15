@@ -125,7 +125,7 @@ export async function resolveWorkspaceFilePreview(
   };
 }
 
-async function resolveWorkspaceFile(
+export async function resolveWorkspaceFile(
   workspaceRootValue: unknown,
   filePathValue: unknown,
 ): Promise<WorkspacePathResolution> {
