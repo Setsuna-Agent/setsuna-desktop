@@ -28,7 +28,7 @@ packages/features/<feature>/
 | Package | 稳定 Feature ID | Runtime | Main | Preload | Renderer | 业务所有权 |
 | --- | --- | :---: | :---: | :---: | :---: | --- |
 | `approval-review` | `approval-review` | O | — | — | O | 自动审批的模型判定、策略约束、专用模型设置与人工回退 |
-| `artifact` | `artifact` | R | — | — | R | 发布 workspace 文件、持久工具结果与 Artifact 展示 |
+| `artifact` | `artifact` | R | — | — | R | 发布 workspace 文件、持久工具结果、Artifact 展示与宿主原生拖出 |
 | `automation` | `automation` | O | — | — | O | 对话创建定时任务、本机调度、无人值守执行与运行记录 |
 | `browser` | `browser` | R | R | B | R | 内置浏览器、guest/CDP 控制、Agent Browser tools |
 | `collaboration` | `collaboration` | O | — | — | O | 子任务/协作线程状态、投影与 spawn result |

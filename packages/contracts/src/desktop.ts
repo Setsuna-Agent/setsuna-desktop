@@ -62,6 +62,10 @@ export type DesktopImageInput = {
   name: string;
 };
 
+export type DesktopFileDragInput =
+  | { kind: 'workspace-file'; workspaceRoot: string; filePath: string }
+  | { kind: 'image'; image: DesktopImageInput };
+
 export type DesktopImageDataResult =
   | { ok: true; data: Uint8Array; type: string }
   | { ok: false; error: string };
@@ -158,6 +162,9 @@ export type SetsunaDesktopBridge = {
     openPath(targetPath: string): Promise<DesktopOpenPathResult>;
     openWorkspaceDirectory(workspaceRoot: string, directoryPath: string): Promise<DesktopOpenPathResult>;
     openWorkspaceFile(workspaceRoot: string, filePath: string): Promise<DesktopOpenPathResult>;
+    startFileDrag(input: DesktopFileDragInput): Promise<DesktopOpenPathResult>;
+    /** Resolve an OS drop back into this workspace; foreign files and directories return null. */
+    resolveWorkspaceFileDrop(workspaceRoot: string, file: File): Promise<string | null>;
     copyWorkspaceFilePath(workspaceRoot: string, filePath: string): Promise<DesktopOpenPathResult>;
     revealWorkspaceFile(workspaceRoot: string, filePath: string): Promise<DesktopOpenPathResult>;
     createWorkspaceFilePreview(workspaceRoot: string, filePath: string): Promise<DesktopWorkspaceFilePreviewResult>;

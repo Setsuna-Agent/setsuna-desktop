@@ -167,6 +167,7 @@ export function WorkspacePanel({
   const [entryDialog, setEntryDialog] = useState<WorkspaceEntryDialogRequest | null>(null);
   const entryDrag = useWorkspaceEntryDrag({
     projectId: activeProject?.id,
+    workspaceRoot: activeProject?.path,
     disabled: entryOperationPending || treeSearching || !activeProject,
     entries: fileTree.treeEntries,
     moveEntry: onMoveEntry,

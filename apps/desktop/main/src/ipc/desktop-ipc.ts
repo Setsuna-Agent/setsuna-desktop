@@ -17,6 +17,7 @@ import { desktopWindows } from '../window/registry.js';
 import { isDesktopRendererSender } from './sender.js';
 import { registerWorkspaceEntryWatchIpc } from './workspace-entry-watch-ipc.js';
 import { registerPluginUiDocumentIpc } from './plugin-ui-document-ipc.js';
+import { registerFileDragIpc } from './file-drag-ipc.js';
 import { readWorkspaceDocument } from '../workspace/document-preview.js';
 
 type DesktopIpcOptions = {
@@ -67,6 +68,7 @@ export function registerDesktopIpc({
     return () => keyboards.delete(senderId);
   });
   registerWorkspaceEntryWatchIpc();
+  registerFileDragIpc(userDataPath, readAttachmentImage);
   registerPluginUiDocumentIpc(interfaceLanguage);
 
   ipcMain.handle('desktop:create-sandbox-dialog-session', (event, title: unknown) => {

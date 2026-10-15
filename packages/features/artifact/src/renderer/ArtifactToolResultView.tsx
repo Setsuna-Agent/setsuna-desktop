@@ -1,7 +1,7 @@
 import type { ChatToolResultViewProps } from '@setsuna-desktop/renderer-contracts/chat';
 import { Button, Dropdown, type MenuProps } from '@setsuna-desktop/renderer-ui';
 import { ChevronDown, ExternalLink, FolderOpen, Globe2 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, type DragEvent } from 'react';
 import type { ArtifactRendererHost, RuntimeArtifact } from '../contracts/index.js';
 import { openArtifactInBrowser, openArtifactWithDefaultApp } from './artifact-actions.js';
 import { artifactTypeLabel, isMarkdownArtifact } from './artifact-model.js';
@@ -19,6 +19,15 @@ export function ArtifactToolResultView({
   const onShowInFiles = navigation?.projectId === payload.projectId ? navigation.onShowInFiles : undefined;
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const handleDragStart = (event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!host.startFileDrag) return;
+    setError(null);
+    void host.startFileDrag({ kind: 'workspace-file', workspaceRoot: payload.workspaceRoot, filePath: payload.path })
+      .then((result) => { if (!result.ok) setError(result.error); })
+      .catch((error: unknown) => setError(error instanceof Error ? error.message : translate('feature.artifact.dragFailed')));
+  };
   const canOpenInBrowser = Boolean(!isMarkdownArtifact(payload) && onOpenBrowser && host.createWorkspaceFilePreview);
   const openMenuItems: MenuProps['items'] = [
     ...(onShowInFiles ? [{
@@ -89,7 +98,7 @@ export function ArtifactToolResultView({
 
   return (
     <section className="artifact-result" aria-label={translate('feature.artifact.list')}>
-      <article className="artifact-card">
+      <article className="artifact-card" draggable={Boolean(host.startFileDrag)} onDragStart={handleDragStart}>
         <div className="artifact-card__body">
           <span className="artifact-card__icon"><ArtifactFileIcon path={payload.path} /></span>
           <span className="artifact-card__metadata">

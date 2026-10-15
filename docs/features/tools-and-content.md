@@ -22,7 +22,7 @@ Artifact 拥有 `publish_artifact` 工具语义和持久结果展示。Runtime �
 - Runtime required：向 CompositeToolHost 提供 `artifactRuntimeToolServiceCapability`。
 - Renderer required：注册 `artifact.file` v1 tool-result view，并兼容旧结果格式。
 - Result identity 使用 workspace root + path，避免同一文件的旧发布结果重复占据 transcript。
-- 打开、预览和复制仍通过宿主注入的受限文件能力，不把本地绝对路径变成 renderer 权限。
+- 打开、预览和原生拖出通过宿主注入的受限文件能力，不把本地绝对路径变成 renderer 权限。拖动产物卡片时以 workspace root + 相对路径调用 `startFileDrag`，由 Main 验证真实文件并发起系统拖拽；文件不存在或越界时沿用卡片错误展示。
 
 Runtime Core 的 `ArtifactToolHost` 只是绑定 Feature service 的薄 adapter，不应复制 schema、审批或结果格式化。
 
@@ -47,7 +47,7 @@ Image Generation 拥有图片服务设置、连接测试、生成服务、资产
 
 - Settings 使用独立 Feature document，并从旧 `RuntimeConfig` 字段一次性迁移。
 - API key/secret 不进入 renderer public state；更新走 revisioned typed operation。
-- 生成结果引用 runtime 管理的 asset ID，renderer 通过窄 desktop asset bridge 读取、复制或 reveal。
+- 生成结果引用 runtime 管理的 asset ID，renderer 通过窄 desktop asset bridge 读取、复制、reveal 或原生拖出。对话图片缩略图复用同一图片输入契约；旧内联图片与线程附件沿用受管图片缓存，不拖出 blob URL。
 - Plugin 未安装时不在 Plugin 详情显示配置；安装后 renderer contribution 才进入对应详情面。
 - Feature optional 失败不能破坏普通 Chat；通用工具结果仍要有 fallback。
 

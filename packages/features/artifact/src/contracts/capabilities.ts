@@ -1,6 +1,7 @@
 import type {
   RuntimeInterfaceLanguage,
   DesktopOpenPathResult,
+  DesktopFileDragInput,
   DesktopWorkspaceFilePreviewResult,
   RuntimeEnvironment,
   RuntimeToolDefinition,
@@ -71,6 +72,7 @@ export const artifactWorkspaceFilesCapability: CapabilityToken<ArtifactWorkspace
 });
 
 export interface ArtifactRendererHost {
+  readonly startFileDrag: ((input: DesktopFileDragInput) => Promise<DesktopOpenPathResult>) | null;
   readonly createWorkspaceFilePreview: ((
     workspaceRoot: string,
     filePath: string,

@@ -70,6 +70,24 @@ it('uploads a long paste verbatim as TXT, preserves the draft, and sends the sto
   await waitFor(() => expect(send).toHaveBeenCalledWith('请分析', expect.objectContaining({ attachments: [uploaded] })));
 });
 
+it('links dropped local files through the attachment pipeline and sends them with the existing draft', async () => {
+  const file = new File(['pdf'], 'report.pdf', { type: 'application/pdf' });
+  const attachment = { id: 'drop', assetId: 'drop', source: 'runtime' as const, name: file.name, type: file.type, size: file.size };
+  const linkAttachment = vi.fn(async () => attachment);
+  const uploadAttachment = vi.fn();
+  const send = vi.fn(async () => true);
+  render(<Harness initialDraft="请分析" client={{ linkAttachment, uploadAttachment, deleteAttachment: vi.fn() } as unknown as DesktopRuntimeClient} send={send} />);
+  const input = screen.getByRole('textbox');
+  const data = new DataTransfer();
+  data.items.add(file);
+  await act(async () => { fireEvent.drop(input, { dataTransfer: data }); });
+  expect(linkAttachment).toHaveBeenCalledExactlyOnceWith(file);
+  expect(uploadAttachment).not.toHaveBeenCalled();
+  expect(input.textContent).toBe('请分析');
+  await act(async () => { fireEvent.keyDown(input, { key: 'Enter' }); });
+  expect(send).toHaveBeenCalledWith('请分析', expect.objectContaining({ attachments: [attachment] }));
+});
+
 it('inserts a regular paste at the selection then places the caret at the end', () => {
   render(<Harness initialDraft="before after" />);
   const input = screen.getByRole('textbox');

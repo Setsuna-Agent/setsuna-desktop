@@ -1,4 +1,5 @@
 export const workspaceZhCN = {
+  'workspace.files.dragFailed': '无法拖出文件。',
   'workspace.worktree.missing': '找不到工作树',
   'workspace.worktree.switchDescription': '切换到项目「{project}」继续此对话。',
   'workspace.worktree.switchToProject': '切换到当前项目',
@@ -148,6 +149,7 @@ export const workspaceZhCN = {
 } as const;
 
 export const workspaceEnUS = {
+  'workspace.files.dragFailed': 'Could not drag the file.',
   'workspace.worktree.missing': 'Worktree not found',
   'workspace.worktree.switchDescription': 'Switch to “{project}” to continue this conversation.',
   'workspace.worktree.switchToProject': 'Switch to current project',

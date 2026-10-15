@@ -12,6 +12,7 @@ import { Copy, Download, FolderOpen } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { useDesktopImageAction, type DesktopImageAction } from '../../workspace/hooks/useDesktopImageAction.js';
+import { useDesktopFileDrag } from '../../workspace/hooks/useDesktopFileDrag.js';
 
 type ChatImageAttachment = RuntimeGeneratedMessageAttachment | RuntimeInlineMessageAttachment | RuntimeStoredMessageAttachment;
 type GalleryStyle = CSSProperties & {
@@ -97,6 +98,8 @@ function ChatMessageImage({
 }) {
   const { t } = useI18n();
   const imageRef = useRef<HTMLDivElement>(null);
+  const startFileDrag = useDesktopFileDrag();
+  const dragInput = desktopImageInput(attachment, threadId);
   const { loadError, reservedAspectRatio, source } = useChatImageSource(attachment, imageRef, threadId);
   const reservesLayout = !source && reservedAspectRatio !== null;
 
@@ -131,6 +134,10 @@ function ChatMessageImage({
           alt={attachment.name}
           className="chat-message-image__content"
           previewMenu={onAction ? menu : undefined}
+          draggable={Boolean(dragInput && window.setsunaDesktop?.desktop.startFileDrag)}
+          onDragStart={(event) => {
+            if (dragInput) startFileDrag(event, { kind: 'image', image: dragInput });
+          }}
         />
       ) : (
         <div className="chat-message-image__placeholder" role={loadError ? 'alert' : 'status'}>

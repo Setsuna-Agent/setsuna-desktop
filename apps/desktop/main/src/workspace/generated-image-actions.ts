@@ -68,23 +68,28 @@ export async function revealChatImage(
   readAttachment?: AttachmentImageReader,
 ): Promise<DesktopImageActionResult> {
   try {
-    const input = await resolveChatImageInput(inputValue, readAttachment);
-    let imagePath: string;
-    if (input.assetId) {
-      try {
-        imagePath = await resolveGeneratedImageAssetPath(userDataDir, input.assetId);
-      } catch (error) {
-        if (!input.dataUrl) throw error;
-        imagePath = await persistInlineImage(userDataDir, input);
-      }
-    } else {
-      imagePath = await persistInlineImage(userDataDir, input);
-    }
-    showItemInFolder(imagePath);
+    showItemInFolder(await resolveChatImagePath(userDataDir, inputValue, readAttachment));
     return { ok: true };
   } catch (error) {
     return { ok: false, error: publicImageActionError(error, 'Failed to locate generated image.') };
   }
+}
+
+/** Reveal and native drag share the same validated asset boundary and inline-image cache. */
+export async function resolveChatImagePath(
+  userDataDir: string,
+  inputValue: unknown,
+  readAttachment?: AttachmentImageReader,
+): Promise<string> {
+  const input = await resolveChatImageInput(inputValue, readAttachment);
+  if (input.assetId) {
+    try {
+      return await resolveGeneratedImageAssetPath(userDataDir, input.assetId);
+    } catch (error) {
+      if (!input.dataUrl) throw error;
+    }
+  }
+  return persistInlineImage(userDataDir, input);
 }
 
 export async function saveChatImage(
