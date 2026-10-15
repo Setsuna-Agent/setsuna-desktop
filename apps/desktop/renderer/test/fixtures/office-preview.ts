@@ -1,5 +1,8 @@
 import { loadDocumentPreviewFactory } from '../../src/features/workspace/documents/document-preview-engine.js';
 import { checkVideoPreview } from './video-preview.js';
+import '../../src/shared/styles/tokens.css';
+import '../../src/shared/styles/base.css';
+import '../../src/features/workspace/documents/document-preview.css';
 
 const activeWorkers = new Set<Worker>();
 const NativeWorker = window.Worker;
@@ -22,18 +25,24 @@ async function checkOfficePreviews() {
   const errors: string[] = [];
   const container = document.getElementById('document')!;
   for (const format of ['docx', 'pptx', 'xlsx', 'csv'] as const) {
+    document.documentElement.dataset.fontSize = '85';
+    const surface = document.createElement('div');
+    surface.className = 'desktop-document-preview__surface desktop-document-preview__surface--office';
+    container.replaceChildren(surface);
     const factory = await loadDocumentPreviewFactory(format);
-    const viewer = factory(container, (error) => errors.push(error.message));
+    const viewer = factory(surface, (error) => errors.push(error.message));
     try {
       const data = await (await fetch(`./office/sample.${format}`)).arrayBuffer();
       await viewer.load(data);
       if ('waitUntilLayoutComplete' in viewer && typeof viewer.waitUntilLayoutComplete === 'function') {
         await viewer.waitUntilLayoutComplete();
       }
+      if (format === 'xlsx' || format === 'csv') await checkSheetSelectionAcrossScales(surface, format);
       parsed.push(format);
     } finally {
       viewer.destroy();
       container.replaceChildren();
+      document.documentElement.dataset.fontSize = '100';
     }
     if (activeWorkers.size) throw new Error(`${format} left a worker alive after closing.`);
   }
@@ -45,6 +54,41 @@ async function checkOfficePreviews() {
   finally { invalid.destroy(); }
   const continuousSections = await checkContinuousDocxSections();
   return { parsed, errors, createdWorkers, activeWorkers: activeWorkers.size, rejectedInvalid, continuousSections };
+}
+
+async function checkSheetSelectionAcrossScales(surface: HTMLElement, format: 'xlsx' | 'csv') {
+  const input = surface.querySelector<HTMLElement>('[data-xlsx-viewport-input]')!;
+  const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+  let copied: string | undefined;
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText: async (text: string) => { copied = text; } },
+  });
+  const copySelection = async (): Promise<string | undefined> => {
+    copied = undefined;
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', ctrlKey: true, bubbles: true, cancelable: true }));
+    await Promise.resolve();
+    return copied;
+  };
+  try {
+    input.focus();
+    // The hidden fixture window may not deliver focus; an arrow key also initializes A1.
+    const keys = format === 'csv' ? ['ArrowLeft', 'ArrowDown', 'ArrowRight'] : ['ArrowLeft', 'ArrowRight'];
+    for (const key of keys) input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    const expected = format === 'csv' ? '00123' : '42';
+    const initial = await copySelection();
+    if (initial !== expected) throw new Error(`${format}: keyboard selection copied ${JSON.stringify(initial)}, expected ${expected}.`);
+    const workersBefore = createdWorkers;
+    for (const scale of ['80', '105', '120', '100']) {
+      document.documentElement.dataset.fontSize = scale;
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      if (await copySelection() !== expected) throw new Error(`${format}: changing interface scale lost the selected cell.`);
+      if (createdWorkers !== workersBefore) throw new Error(`${format}: changing interface scale restarted the parser.`);
+    }
+  } finally {
+    if (clipboardDescriptor) Object.defineProperty(navigator, 'clipboard', clipboardDescriptor);
+    else Reflect.deleteProperty(navigator, 'clipboard');
+  }
 }
 
 async function checkContinuousDocxSections() {

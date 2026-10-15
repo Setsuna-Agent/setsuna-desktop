@@ -15,6 +15,12 @@
   min-height: 0;
 }
 
+.desktop-document-preview__surface--office {
+  /* Office sizes its canvases with devicePixelRatio and expects unscaled pointer coordinates.
+     Cancel body zoom here; sheets use native zoom and paged viewers refit on resize. */
+  zoom: calc(1 / var(--app-page-scale, 1));
+}
+
 .desktop-document-preview__surface > canvas {
   display: block;
   width: 100%;
