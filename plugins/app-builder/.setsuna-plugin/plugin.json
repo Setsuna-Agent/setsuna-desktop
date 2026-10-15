@@ -3,7 +3,7 @@
   "id": "app-builder",
   "name": "应用构建器",
   "icon": "app-builder",
-  "version": "1.5.6",
+  "version": "1.5.7",
   "description": "用一句话创建侧栏应用，支持表格、表单、ECharts 看板和对话汇总，也可创建或更新其他 Setsuna 插件。",
   "publisher": "Setsuna",
   "tags": ["应用", "创作"],
@@ -16,7 +16,8 @@
     { "id": "ui-component-guide", "label": "公共组件与图标用法", "path": "skills/create-plugin-in-chat/references/ui-components.md" },
     { "id": "ui-components", "label": "公共交互组件", "path": "skills/create-plugin-in-chat/assets/ui-components.js" },
     { "id": "ui-icons", "label": "Lucide 离线图标库", "path": "skills/create-plugin-in-chat/assets/ui-icons.js" },
-    { "id": "react-app-guide", "label": "React 项目与组件用法", "path": "skills/create-plugin-in-chat/references/react-app.md" }
+    { "id": "react-app-guide", "label": "React 项目与组件用法", "path": "skills/create-plugin-in-chat/references/react-app.md" },
+    { "id": "openui-guide", "label": "OpenUI 展示组件用法", "path": "skills/create-plugin-in-chat/references/openui.md" }
   ],
   "tools": [
     { "name": "read_runtime_api", "description": "读取项目、对话、历史消息与工具调用等真实后端数据。" },

@@ -68,6 +68,26 @@ async function main() {
     assert.equal(await page.executeJavaScript('document.querySelector("#route")?.textContent'), '42');
     assert.equal(await page.executeJavaScript('document.querySelector("#saved")?.textContent'), '1');
     assert.ok(page.url.endsWith('#/detail/42'));
+    await page.executeJavaScript('location.hash = "#/openui"');
+    for (let attempt = 0; await page.executeJavaScript('Boolean(document.querySelector("[role=option]"))') !== true; attempt++) {
+      if (attempt > 200) throw new Error('OpenUI guide page failed to mount');
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    const selection = () => page.executeJavaScript(`({
+      period: document.querySelector('[role=option][aria-selected=true]')?.textContent,
+      chart: document.querySelector('[role=radio][aria-checked=true]')?.textContent,
+    })`);
+    assert.deepEqual(await selection(), { period: '本周', chart: '柱状图' });
+    await page.executeJavaScript(`Array.from(document.querySelectorAll('[role=option]')).find(el => el.textContent === '本月').click();
+      Array.from(document.querySelectorAll('[role=radio]')).find(el => el.textContent === '折线图').click();`);
+    assert.deepEqual(await selection(), { period: '本月', chart: '折线图' });
+    const beforeTheme = await page.executeJavaScript('window.snapshotNotifications');
+    await owner.webContents.executeJavaScript("document.documentElement.dataset.theme = 'light'");
+    for (let attempt = 0; await page.executeJavaScript(`window.snapshotNotifications > ${beforeTheme}`) !== true; attempt++) {
+      if (attempt > 200) throw new Error('OpenUI did not receive the theme notification');
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    assert.deepEqual(await selection(), { period: '本月', chart: '折线图' });
     await owner.webContents.executeJavaScript('window.reactApp.unmount()');
     await mount(); assert.equal(await (await frame()).executeJavaScript('document.querySelector("#count").textContent'), '1');
     assert.equal(owner.webContents.getURL(), pathToFileURL(host).href);

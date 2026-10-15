@@ -1,0 +1,26 @@
+// Shared tokens only; importing the regular UI package must not load OpenUI.
+export const openUiTheme = {
+  fontBody: 'var(--app-font-family)',
+  fontHeading: 'var(--app-font-family)',
+  fontLabel: 'var(--app-font-family)',
+  fontNumbers: 'var(--app-font-family)',
+  fontCode: 'var(--app-code-font-family)',
+  background: 'var(--app-bg)',
+  foreground: 'var(--app-surface)',
+  popoverBackground: 'var(--app-surface)',
+  sunk: 'var(--app-surface-muted)',
+  sunkLight: 'var(--app-surface-subtle)',
+  textNeutralPrimary: 'var(--app-text)',
+  textNeutralSecondary: 'var(--app-text-muted)',
+  textNeutralTertiary: 'var(--app-text-subtle)',
+  textNeutralLink: 'var(--app-info)',
+  textAccentPrimary: 'var(--app-primary-text)',
+  interactiveAccentDefault: 'var(--app-primary)',
+  interactiveAccentHover: 'var(--app-primary-hover)',
+  interactiveAccentPressed: 'var(--app-primary)',
+  // Keep the upstream neutral selection border paired with Chips/OptionCards' gray fills.
+  borderDefault: 'var(--app-border)',
+  borderInteractive: 'var(--app-border-strong)',
+  radiusM: 'var(--app-radius-md)',
+  radiusL: 'var(--app-radius-lg)',
+} as const;

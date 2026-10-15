@@ -33,6 +33,7 @@ function documentBridge(): DocumentBridge {
 
 const subscribe = (listener: () => void) => documentBridge().subscribe(listener);
 const snapshot = () => documentBridge().getSnapshot();
+const themeMode = (): 'light' | 'dark' => document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
 
 export function useAppSnapshot<Data = Record<string, unknown>>(): AppSnapshot<Data> {
   return useSyncExternalStore(subscribe, snapshot) as AppSnapshot<Data>;
@@ -40,6 +41,8 @@ export function useAppSnapshot<Data = Record<string, unknown>>(): AppSnapshot<Da
 
 export function useAppData<Data = Record<string, unknown>>(): Data { return useAppSnapshot<Data>().data; }
 export function useAppContext(): AppContext { return useAppSnapshot().context; }
+// The bridge applies the theme before notifying, even when the data snapshot is unchanged.
+export function useAppThemeMode(): 'light' | 'dark' { return useSyncExternalStore(subscribe, themeMode); }
 export async function invokeAction(actionId: string, payload: unknown = {}): Promise<void> {
   await documentBridge().invoke(actionId, payload);
 }

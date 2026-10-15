@@ -7,7 +7,7 @@ import type { InstalledPluginRecord } from '../../ports/plugin-bundle-store.js';
 import { pathIsInside, readBundleFileSnapshot, safeExistingPath } from '../plugin/file-plugin-bundle-model.js';
 import { appPackageManifest, validateAppProjectFiles } from './project-manifest.js';
 
-export const APP_BUILD_VERSION = 3;
+export const APP_BUILD_VERSION = 4;
 export const appHash = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
 
 export async function appProjectSnapshot(plugin: InstalledPluginRecord, app: RuntimePluginUiReactApp) {

@@ -80,7 +80,7 @@ function invoke(channel: string, window: BrowserWindow, input?: unknown) {
 function windowFixture(id: number) {
   let destroyed = false;
   const native = Object.assign(new EventEmitter(), {
-    webContents: { id, isDestroyed: () => destroyed, send: vi.fn() },
+    webContents: { id, isDestroyed: () => destroyed, send: vi.fn(), session: { webRequest: { onBeforeRequest: vi.fn() } } },
     isDestroyed: () => destroyed,
     getBounds: () => ({ x: 20, y: 30, width: 1000, height: 700 }),
     loadFile: vi.fn(async () => undefined),

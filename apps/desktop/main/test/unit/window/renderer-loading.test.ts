@@ -97,14 +97,14 @@ function createWindowFixture() {
   let destroyed = false;
   const window = Object.assign(new EventEmitter(), {
     isDestroyed: () => destroyed,
-    webContents: { id: 1 },
+    webContents: { id: 1, session: { webRequest: { onBeforeRequest: vi.fn() } } },
     loadURL: vi.fn(async (_url: string): Promise<void> => undefined),
     loadFile: vi.fn(async (_file: string): Promise<void> => undefined),
   });
   return {
     window,
     browserWindow: window as unknown as BrowserWindow,
-    whenReady: () => handlers.get('desktop:when-ready')!({ sender: window.webContents } as IpcMainInvokeEvent),
+    whenReady: () => handlers.get('desktop:when-ready')!({ sender: window.webContents } as unknown as IpcMainInvokeEvent),
     close: () => { destroyed = true; window.emit('closed'); },
   };
 }

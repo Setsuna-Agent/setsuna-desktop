@@ -31,6 +31,7 @@
     "check:architecture": "node scripts/check-architecture.mjs",
     "clean": "node scripts/clean.mjs",
     "generate:app-icons": "node scripts/generate-app-builder-icons.mjs",
+    "generate:openui-catalog": "tsx scripts/generate-openui-catalog.mjs",
     "sync:brand-icons": "node scripts/sync-brand-icon-catalog.mjs",
     "lint": "eslint . --max-warnings=0",
     "package": "node scripts/validate-release-version.mjs && pnpm build && electron-builder --dir",
@@ -124,7 +125,12 @@
     "sharp": "0.35.4",
     "undici": "7.29.1",
     "@setsuna-desktop/feature-automation": "workspace:*",
-    "@setsuna-desktop/feature-computer-use": "workspace:*"
+    "@setsuna-desktop/feature-computer-use": "workspace:*",
+    "@openuidev/react-headless": "0.18.1",
+    "@openuidev/react-lang": "1.0.1",
+    "@openuidev/react-ui": "0.18.1",
+    "zod": "4.6.7",
+    "zustand": "4.5.7"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.2",

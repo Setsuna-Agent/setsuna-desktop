@@ -204,7 +204,7 @@ function earliestOffset(...offsets: Array<number | null>): number | null {
   return present.length ? Math.min(...present) : null;
 }
 
-function repairStreamingMarkdown(markdown: string): string {
+export function repairStreamingMarkdown(markdown: string): string {
   return remend(markdown, {
     linkMode: 'text-only',
     inlineKatex: false,

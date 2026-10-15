@@ -47,6 +47,7 @@ app/styles.css
 
 ## 默认包、组件和样式
 
+- 图表、展示卡片、Chips、OptionCards、轮播等可选用 OpenUI。先通过 `read_plugin_resource({pluginId:'app-builder',resourceId:'openui-guide'})` 读取[组件指南](openui.md)，按需声明依赖并在应用外层使用 `OpenUiProvider`；普通应用不安装这套依赖。
 - 默认有 React 18、React DOM、React Router 7、Lucide React、TypeScript 和 React 类型。
 - `@setsuna/app` 复用宿主 `renderer-ui` 的公共组件：按钮/图标按钮、字段、下拉、复选框、开关、滑块、菜单、Popover、Tooltip、Dialog/ConfirmDialog、Tabs、表格、图片预览、ToastStack、Skeleton、ProgressRing、文件树等；`AppLayout`、`Panel` 和数据 hooks 继续由 SDK 提供。文案、标签、列和内容由应用提供。
 - `Button.variant` 只有 `primary`、`secondary`、`ghost`、`danger`，另支持 `size`、`icon`、`loading`；图标按钮直接使用 `IconButton label="…"`。`TextField` 透传原生属性并支持可选 `label`、`leadingIcon`；`TextArea` 支持 `autoSize`。字段不支持 `hideLabel`，无可见标签时省略 `label` 并提供 `aria-label`。安装前检查 TS/TSX 类型，不依赖 Vite 忽略错误参数。

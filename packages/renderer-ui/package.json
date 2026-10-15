@@ -11,7 +11,8 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./styles.css": "./src/styles/index.css"
+    "./styles.css": "./src/styles/index.css",
+    "./openui-theme": { "types": "./dist/openui-theme.d.ts", "default": "./dist/openui-theme.js" }
   },
   "scripts": {
     "build": "tsc -b tsconfig.build.json",

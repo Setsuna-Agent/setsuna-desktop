@@ -14,6 +14,7 @@ description: "通过对话创建或更新 Setsuna Plugin Bundle，包括左侧�
 - 调用 `read_plugin_resource({pluginId:'app-builder',resourceId:'ui-design'})` 读取[设计规范](references/ui-design.md)，以及 `resourceId:'ui-base'` 读取[基础 CSS](assets/ui-base.css)。工具未加载时先用 `search_tools` 查找 `read_plugin_resource`。
 - 按页面需要读取 `resourceId:'ui-patterns'` 中的[表格、表单和 ECharts 模板](references/ui-patterns.md)，只采用相关部分。使用宿主 `tree` 时沿用宿主组件，不必复制 CSS。
 - 新建 React 应用先用 `resourceId:'react-app-guide'` 读取[React 项目与组件用法](references/react-app.md)，复用 `@setsuna/app` 的宿主公共组件和 `lucide-react`，基础样式自动加载。下拉使用 `SelectField` 的 `onValueChange`，复选框使用 `Checkbox`，Markdown 阅读使用 `Markdown`；不要退回原生控件或复制实现。
+- 需要 OpenUI 图表、展示卡片、Chips、OptionCards、轮播等组件时，用 `resourceId:'openui-guide'` 读取[OpenUI 用法](references/openui.md)。按指南声明可选依赖，并使用 `@setsuna/app/openui` 的共享主题；应用直接编写 React props 和本地状态，不使用聊天的 `openui` 围栏或 DSL 签名。
 - 维护已有 HTML document 的按钮、字段、下拉选择、标签页、弹窗或图标时，先读 `resourceId:'ui-component-guide'` 的[组件用法](references/ui-components.md)，复用 `ui-components` 和 `ui-icons` 资源。后者提供与系统同源的 80 个 Lucide 图标，不自行编造 SVG 路径。组件与图标脚本按用法文档并入应用 JS，不需要 React 或新依赖。
 - 维护 HTML document 时将基础 CSS 内容写入应用的 `ui/app.css`，追加应用样式，通过它自己的 `resources` / `document.cssResourceId` 交付。包内文件仍通过资源 ID 交付；浏览器可以加载远程 `<link>`、`@import` 和 CDN。
 - 规范约束颜色、字号、间距、对齐和交互状态，不要求统一业务布局。不要把规范文字、示例区块、无关字段或装饰性数据写进用户界面。

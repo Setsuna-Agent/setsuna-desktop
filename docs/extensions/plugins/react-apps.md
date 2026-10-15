@@ -27,6 +27,12 @@ SDK 构建时携带共享 UI 的编译产物、类型和 CSS，生成只引用 S
 
 状态订阅、action 和 runtime request helper 直接包装现有 `setsunaUI`，没有额外存储、权限或全局服务注册。应用可安装其他浏览器兼容的 registry packages；worker extension 仍使用独立、自包含的 Node 源码。
 
+### 可选 OpenUI
+
+`@setsuna/app/openui` 提供 `OpenUiProvider`，组件直接从 `@openuidev/react-ui` 导入。只有使用该入口的应用才需要按[OpenUI 指南](../../../plugins/app-builder/skills/create-plugin-in-chat/references/openui.md)声明依赖；默认 SDK 入口不加载 OpenUI JS/CSS，也不为普通应用安装图表依赖。Provider 自动加载组件样式，通过既有 bridge 订阅深浅主题，颜色、字体和圆角映射由 `renderer-ui/openui-theme` 与聊天共用。`useAppThemeMode` 读取 bridge 已应用的本地主题，避免依赖身份不变的数据快照或重新挂载页面。
+
+独立应用使用 React props 和本地状态处理筛选、切换，不引入聊天 DSL 执行器。SDK 不增加 Agent 回调、业务写入或 runtime 权限，浮层使用 iframe 的本地缩放。构建器的 `openui-guide` 资源提供中英文接入说明和可编译示例。
+
 ## 安装、更新和打开
 
 ```mermaid
@@ -57,7 +63,7 @@ React `invokeAction(id, payload)` 的参数进入 worker 的 `input.payload`；`
 ## 边界
 
 - 页面仍运行在 `setsuna-plugin-ui` 独立 origin，无 Node、preload、宿主 DOM、端口或 token。沿用现有 action allowlist、scope 校验、完整 Bundle 信任、runtime bridge 和页面权限审批。
-- 只使用受管 Vite 配置；不读取应用 env、Vite/PostCSS 配置，不执行 Node CSS preprocessors。支持普通 CSS/CSS modules、相对/动态 import 和内联资产；独立输出资源及 public 目录不自动发布。JS、CSS import 和 CSS url 的本地文件解析都限制在项目内。
+- 只使用受管 Vite 配置；不读取应用 env、Vite/PostCSS 配置，不执行 Node CSS preprocessors。构建时将浏览器依赖的 `process.env` 替换为仅含 `NODE_ENV: "production"` 的公开常量，兼容计算属性访问，不暴露编译进程的环境或 Node 全局对象。支持普通 CSS/CSS modules、相对/动态 import 和内联资产；独立输出资源及 public 目录不自动发布。JS、CSS import 和 CSS url 的本地文件解析都限制在项目内。
 - 应用的依赖声明支持 registry 版本、范围、tag；不支持 file/git/workspace 依赖或本地目录 lockfile。SDK 及其内置共享 UI 是宿主提供的本地依赖，应用不能声明其他本地路径。安装不执行脚本，新增包仍需符合浏览器运行环境。
 - 源码沿用 Bundle 的 1,000 文件/32 MiB 边界；对话 configure_plugin 沿用 64 文件/512 KiB。编译文档最多 8 MiB。
 - 本版不提供开发服务器、HMR、自定义构建插件或前端包共享给 extension worker。应用更新通过已有 configure_plugin 完整快照完成。
