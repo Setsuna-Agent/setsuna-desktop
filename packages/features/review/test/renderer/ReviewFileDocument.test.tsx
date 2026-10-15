@@ -9,7 +9,7 @@ import { ReviewRendererTestHost } from './review-renderer-test-host.js';
 
 afterEach(() => { cleanup(); window.localStorage.clear(); });
 
-it.each(['latest', 'staged', 'commit'] as const)('switches every Markdown document in the %s panel together and keeps the selected version', async (source) => {
+it.each(['latest', 'staged', 'commit'] as const)('switches Markdown and CSV documents in the %s panel together and keeps the selected version', async (source) => {
   const readTextFile = vi.fn().mockImplementation(async (_root, input) => ({ ok: true, content: `# ${input.filePath}\n\nUnchanged text outside the diff.` }));
   const bridge = { readTextFile } as unknown as DesktopReviewBridge;
   const onOpenProjectFile = vi.fn();
@@ -21,7 +21,8 @@ it.each(['latest', 'staged', 'commit'] as const)('switches every Markdown docume
     source, workspaceRoot: '/repo', gitRoot: '/repo',
     ...(source === 'commit' ? { revisions: { before: 'a'.repeat(40), after: 'b'.repeat(40) } } : {}),
   };
-  const files = [file, { ...file, path: 'docs/guide.md' }, { ...file, path: 'src/app.ts' }];
+  const csv = { ...file, path: 'data/report.csv' };
+  const files = [file, { ...file, path: 'docs/guide.md' }, { ...file, path: 'src/app.ts' }, csv];
   const actions = {
     workspaceApps: [],
     onOpenProjectFile, onAddFileToConversation: vi.fn(), onCopyFilePath: vi.fn(), onExternalOpenFile: vi.fn(),
@@ -42,6 +43,8 @@ it.each(['latest', 'staged', 'commit'] as const)('switches every Markdown docume
     expect(readTextFile).toHaveBeenCalledWith('/repo', expect.objectContaining({ source, side: 'after', filePath: entry.path, revisions: pathContext.revisions }));
   }
   expect(readTextFile).toHaveBeenCalledTimes(2);
+  expect(screen.getByRole('region', { name: `After: ${csv.path}` })).toBeTruthy();
+  if (source !== 'latest') expect(screen.getByRole('region', { name: `Before: ${csv.path}` })).toBeTruthy();
   // Changing the selected file/summary must inherit the panel mode, including single-file changes.
   const nextFile = { ...file, path: 'docs/next.md' };
   view.rerender(panel([nextFile]));

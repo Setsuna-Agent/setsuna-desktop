@@ -1,8 +1,13 @@
 diff --git a/dist/renderers/FileRenderer.js b/dist/renderers/FileRenderer.js
-index fb146c3585d1ee374b8d99fefe26867b6384a73a..c183609d77094c0b80af2d937e1b62d3696fd3e0 100644
+index fb146c3585d1ee374b8d99fefe26867b6384a73a..d4f7d163ac10dcc35efd41ee2ab2a69416c7292d 100644
 --- a/dist/renderers/FileRenderer.js
 +++ b/dist/renderers/FileRenderer.js
-@@ -349,7 +349,9 @@ var FileRenderer = class {
+@@ -247 +247,3 @@ var FileRenderer = class {
+-		result.baseThemeType = themeType;
++		// Dual-theme results follow the host's current mode. Editor token updates
++		// must not pin the cached background to the mode of an earlier render.
++		result.baseThemeType = typeof this.getLocalHighlightTheme() === "string" ? themeType : void 0;
+@@ -349,7 +351,9 @@ var FileRenderer = class {
  			const hasThemes = this.highlighter != null && areThemesAttached(options.theme);
  			const hasLangs = this.highlighter != null && areLanguagesAttached(this.computedLang);
  			const canHighlight = !forcePlainText && hasLangs;

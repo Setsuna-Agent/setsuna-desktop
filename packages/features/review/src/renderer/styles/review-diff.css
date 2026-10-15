@@ -61,3 +61,14 @@
   color: var(--app-warning);
   background: var(--app-surface);
 }
+.desktop-review-document-diff {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  height: min(72vh, 720px);
+  min-height: 320px;
+}
+
+.desktop-review-document-diff > * + * {
+  border-left: 1px solid var(--app-border);
+}

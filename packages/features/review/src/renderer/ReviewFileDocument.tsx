@@ -5,15 +5,15 @@ import { useReviewRendererHost } from './host.js';
 import { reviewWorkspaceFilePath } from './review-paths.js';
 import type { ReviewPathContext } from './review-types.js';
 
-export type ReviewMarkdownViewMode = 'preview' | 'source';
+export type ReviewFileViewMode = 'preview' | 'source';
 
-export function canPreviewReviewMarkdown(file: DesktopDiffFile, context: ReviewPathContext): boolean {
-  return Boolean(!file.contentKind && /\.(md|markdown|mdown|mkd)$/i.test(file.path)
+export function canPreviewReviewTextFile(file: DesktopDiffFile, context: ReviewPathContext): boolean {
+  return Boolean(!file.contentKind && /\.(md|markdown|mdown|mkd|csv)$/i.test(file.path)
     && context.workspaceRoot && reviewWorkspaceFilePath(file.path, context)
     && !(file.action === 'Deleted' && context.source === 'latest'));
 }
 
-export function ReviewMarkdownViewControls({ mode, onChange }: { mode: ReviewMarkdownViewMode; onChange(mode: ReviewMarkdownViewMode): void }) {
+export function ReviewFileViewControls({ mode, onChange }: { mode: ReviewFileViewMode; onChange(mode: ReviewFileViewMode): void }) {
   const { translate: t } = useReviewRendererHost();
   return <div className="sd-markdown-view-toggle" role="group" aria-label={t('feature.review.workspace.file.view')}>
     {(['source', 'preview'] as const).map((value) => <Button key={value} variant="ghost" type="button" className="sd-markdown-view-option"

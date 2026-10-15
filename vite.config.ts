@@ -11,6 +11,8 @@ const rootDir = dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   base: './',
   plugins: [react(), tailwindcss()],
+  // Keep the package's relative worker/WASM URLs intact in Vite 6's dev optimizer.
+  optimizeDeps: { exclude: ['@silurus/ooxml'] },
   server: {
     host: '127.0.0.1',
     port: 5174,

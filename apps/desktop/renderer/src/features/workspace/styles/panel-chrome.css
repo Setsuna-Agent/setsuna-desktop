@@ -19,7 +19,36 @@
   height: 32px;
 }
 
+.desktop-panel-chrome .chat-file-review-panel__tab-strip {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.desktop-panel-chrome .chat-file-review-panel__tab-scroll {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 3;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  height: var(--app-topbar-navigation-control-size);
+  padding: 0;
+  border: 0;
+  border-radius: var(--app-toolbar-control-radius);
+  color: var(--app-text-muted);
+  background: var(--app-surface);
+}
+
+.desktop-panel-chrome .chat-file-review-panel__tab-scroll--left { left: 0; }
+.desktop-panel-chrome .chat-file-review-panel__tab-scroll--right { right: 0; }
+.desktop-panel-chrome .chat-file-review-panel__tab-scroll:disabled { visibility: hidden; }
+
 .desktop-panel-chrome .chat-file-review-panel__tabs {
+  position: relative;
   display: flex;
   flex: 1 1 auto;
   align-items: center;

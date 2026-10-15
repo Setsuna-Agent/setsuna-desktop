@@ -98,12 +98,13 @@ describe('openWorkspaceFileWithDefaultApp', () => {
     await writeFile(pdfPath, '%PDF-test');
     await writeFile(htmlPath, '<!doctype html><title>Preview</title>');
     await writeFile(unknownPath, 'custom');
-    const registerPreview = vi.fn(() => 'http://127.0.0.1:1234/v1/file-previews/token/report.pdf');
+    const registerPreview = vi.fn(() => ({ url: 'http://127.0.0.1:1234/v1/file-previews/token/report.pdf', previewId: 'token' }));
     const canonicalWorkspaceRoot = await realpath(workspaceRoot);
 
     await expect(createWorkspaceFilePreviewUrl(workspaceRoot, 'report.pdf', registerPreview)).resolves.toEqual({
       ok: true,
       url: 'http://127.0.0.1:1234/v1/file-previews/token/report.pdf',
+      previewId: 'token',
     });
     expect(registerPreview).toHaveBeenCalledWith({
       mimeType: 'application/pdf',
@@ -114,6 +115,7 @@ describe('openWorkspaceFileWithDefaultApp', () => {
     await expect(createWorkspaceFilePreviewUrl(workspaceRoot, 'index.html', registerPreview)).resolves.toEqual({
       ok: true,
       url: 'http://127.0.0.1:1234/v1/file-previews/token/report.pdf',
+      previewId: 'token',
     });
     expect(registerPreview).toHaveBeenLastCalledWith({
       mimeType: 'text/html',

@@ -25,6 +25,9 @@ export const reviewPreloadFeature = definePreloadFeature<ReviewPreloadBridgeCont
       readTextFile: (workspaceRoot, input) => ipcRenderer.invoke(
         REVIEW_IPC_CHANNELS.readTextFile, { workspaceRoot, version: input },
       ),
+      readDocumentFile: (workspaceRoot, input) => ipcRenderer.invoke(
+        REVIEW_IPC_CHANNELS.readDocumentFile, { workspaceRoot, version: input },
+      ),
       createImagePreview: (workspaceRoot, input) => ipcRenderer.invoke(
         REVIEW_IPC_CHANNELS.createImagePreview,
         { workspaceRoot, preview: input },
