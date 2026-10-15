@@ -22,8 +22,8 @@ import { MarkdownLinkLabelContext } from './MarkdownLinkLabelContext.js';
 type MarkdownElementProps<Tag extends keyof JSX.IntrinsicElements> = JSX.IntrinsicElements[Tag] & ExtraProps;
 type MarkdownCodeChildProps = { children?: ReactNode; className?: string };
 
-const rehypePlugins = [rehypeKatex];
-const remarkPlugins = [remarkGfm, remarkAutolinkBoundaries, remarkMath];
+export const rehypePlugins = [rehypeKatex];
+export const remarkPlugins = [remarkGfm, remarkAutolinkBoundaries, remarkMath];
 
 export const MarkdownContentBlock = memo(function MarkdownContentBlock({ content }: { content: string }) {
   return (
@@ -39,7 +39,7 @@ export const MarkdownContentBlock = memo(function MarkdownContentBlock({ content
   );
 });
 
-const markdownComponents = {
+export const markdownComponents = {
   a: MarkdownLink,
   code: MarkdownInlineCode,
   img: MarkdownImage,

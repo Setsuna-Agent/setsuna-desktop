@@ -24,6 +24,9 @@ export default defineConfig({
   },
   resolve: {
     alias: [
+      // OpenUI's native entry has identical renderer exports without the automatic
+      // web devtools mount/CDN loader. Keep this scoped to OpenUI, not React itself.
+      { find: /^@openuidev\/react-lang$/, replacement: resolve(dirname(createRequire(import.meta.url).resolve('@openuidev/react-lang')), 'index.native.mjs') },
       // xterm 6's pre-minified ESM crashes on Vim's DECRQM after production
       // optimization. Its CJS build preserves the parser; keep CSS paths intact.
       // https://github.com/xtermjs/xterm.js/issues/5800
@@ -34,6 +37,7 @@ export default defineConfig({
         '@setsuna-desktop/feature-core': resolve(rootDir, 'packages/feature-core/src'),
         '@setsuna-desktop/renderer-contracts': resolve(rootDir, 'packages/renderer-contracts/src'),
         '@setsuna-desktop/renderer-ui/styles.css': resolve(rootDir, 'packages/renderer-ui/src/styles/index.css'),
+        '@setsuna-desktop/renderer-ui/openui-theme': resolve(rootDir, 'packages/renderer-ui/src/openui-theme.ts'),
         '@setsuna-desktop/renderer-ui': resolve(rootDir, 'packages/renderer-ui/src/index.ts'),
         ...createFeaturePackageSourceAliases(rootDir),
       }).map(([find, replacement]) => ({ find, replacement })),

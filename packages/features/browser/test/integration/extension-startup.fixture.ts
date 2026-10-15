@@ -15,10 +15,14 @@ import { browserControlConnectionCapability, browserMainHostCapability } from '.
 import { BrowserExtensionService } from '../../src/main/extensions/service.js';
 
 const directory = process.argv[2]; const phase = process.argv[3];
+// Keep evidence even when the parent terminates a stuck native call.
+const trace = (stage: string, details: unknown) => console.log('EXTENSION_STARTUP_EVENT',
+  JSON.stringify({ phase, ms: Math.round(performance.now()), stage, details }));
 app.setPath('userData', path.join(directory, 'profile', phase));
 app.disableHardwareAcceleration(); app.dock?.hide();
 
 async function until(read: () => boolean | Promise<boolean>, label: string) {
+  trace('wait', label);
   const deadline = performance.now() + 2500;
   while (performance.now() < deadline) {
     if (await read()) return;
@@ -60,19 +64,42 @@ async function main() {
     writeExtension(browser.storagePath!, `Stalled startup ${index}`, 'console.log("stalled fixture loaded");')));
   const healthy = phase === 'queue' ? slow[0]
     : await writeExtension(browser.storagePath!, 'Healthy startup', phase === 'pages' ? startupScript : 'console.log("healthy fixture loaded");', phase === 'pages');
+  const scriptErrors = new Map(broken.map(id => {
+    let received!: () => void;
+    const promise = new Promise<void>(resolve => { received = resolve; });
+    return [id, { promise, received }] as const;
+  }));
+  const traceMessage = (_event: Electron.Event, details: Electron.MessageDetails) => {
+    trace('console-message', details);
+    if (details.source === 'javascript' && details.level === 3) {
+      try { scriptErrors.get(new URL(details.sourceUrl).hostname)?.received(); } catch { /* Unidentified native diagnostic. */ }
+    }
+  };
+  const traceRegistration = (_event: Electron.Event, details: Electron.RegistrationCompletedDetails) => trace('registration-completed', details);
+  const traceStatus = (details: Electron.ServiceWorkersRunningStatusChangedEventParams) => trace('running-status-changed', details);
+  browser.serviceWorkers.on('console-message', traceMessage);
+  browser.serviceWorkers.on('registration-completed', traceRegistration);
+  browser.serviceWorkers.on('running-status-changed', traceStatus);
   const preloads = browser.getPreloadScripts().map(({ id }) => id);
   const registrations = browser.serviceWorkers.listenerCount('registration-completed');
   const diagnostics = browser.serviceWorkers.listenerCount('console-message');
   const attempted = new Set<string>(); const failed = new Set<string>();
+  let healthyStarted!: () => void;
+  const healthyReady = new Promise<void>(resolve => { healthyStarted = resolve; });
   const nativeStart = browser.serviceWorkers.startWorkerForScope.bind(browser.serviceWorkers);
   browser.serviceWorkers.startWorkerForScope = scope => {
     const id = new URL(scope).hostname; attempted.add(id);
-    return slow.includes(id) ? new Promise(() => undefined) : nativeStart(scope);
+    trace('startWorkerForScope', id);
+    return slow.includes(id) ? new Promise(() => undefined) : nativeStart(scope).then(worker => {
+      trace('start-resolved', id);
+      if (id === healthy) healthyStarted();
+      return worker;
+    }, error => { trace('start-rejected', { id, error: String(error) }); throw error; });
   };
   const nativeError = console.error;
   console.error = (...args: unknown[]) => {
     const match = /^Failed to start worker for extension ([a-p]{32})$/.exec(String(args[0]));
-    if (match) failed.add(match[1]);
+    if (match) { failed.add(match[1]); trace('failure-reported', match[1]); }
     nativeError(...args);
   };
   let release!: () => void; let loading = false; let loaded = false;
@@ -80,7 +107,15 @@ async function main() {
   const nativeLoad = browser.extensions.loadExtension.bind(browser.extensions);
   browser.extensions.loadExtension = async (...args) => {
     loading = true; await gate;
+    trace('loadExtension', args[0]);
     const extension = await nativeLoad(...args); loaded = true;
+    trace('load-resolved', extension.id);
+    if (phase === 'workers-early' && broken.includes(extension.id)) {
+      // Force the early-error ordering with a real worker, without sleeping or
+      // synthesizing Electron's error event.
+      await scriptErrors.get(extension.id)!.promise;
+    }
+    trace('load-returned', extension.id);
     return extension;
   };
   let extensions!: BrowserExtensionService; let scope!: FeatureScope;
@@ -126,7 +161,7 @@ async function main() {
       assert.equal(browser.extensions.getAllExtensions().length, 12);
       assert.equal(attempted.size, 4);
       assert.equal(browser.serviceWorkers.listenerCount('registration-completed'), registrations + 4);
-      assert.equal(browser.serviceWorkers.listenerCount('console-message'), diagnostics + 4);
+      assert.equal(browser.serviceWorkers.listenerCount('console-message'), diagnostics + 5);
       const queued = slow.find(id => !attempted.has(id))!;
       assert.equal(await extensions.setEnabled(queued, false), true);
       const first = [...attempted][0];
@@ -156,10 +191,18 @@ async function main() {
       await composition.dispose();
     } else {
       release();
-      await until(() => attempted.size === 4, 'a stalled worker does not block the other worker starts');
-      await until(() => broken.every(id => failed.has(id)), 'uncaught startup errors fail immediately');
-      await until(() => Object.values(browser.serviceWorkers.getAllRunning()).some(info => info.scope === `chrome-extension://${healthy}/`),
-        'healthy worker still starts');
+      await extensions.start();
+      assert.ok(attempted.has(slow[0]) && attempted.has(healthy), 'a stalled worker does not block other starts');
+      trace('wait', 'native worker script errors');
+      await Promise.all([...scriptErrors.values()].map(({ promise }) => promise));
+      // Assert handling after the errors actually arrive. Native process startup
+      // is covered by the parent's existing deadline, not an error-handling timer.
+      await new Promise(resolve => setImmediate(resolve));
+      assert.ok(broken.every(id => failed.has(id)), 'uncaught startup errors are handled in the next event-loop turn');
+      trace('wait', 'healthy worker startup');
+      await healthyReady;
+      assert.ok(Object.values(browser.serviceWorkers.getAllRunning()).some(info => info.scope === `chrome-extension://${healthy}/`));
+      if (phase === 'workers-early') assert.ok(broken.every(id => !attempted.has(id)), 'known failures do not occupy startup slots');
       assert.equal(failed.has(slow[0]), false);
       await composition.dispose();
     }
@@ -169,8 +212,11 @@ async function main() {
     console.log(`EXTENSION_STARTUP_${phase.toUpperCase()}_OK`);
   } finally {
     release(); await composition.dispose(); console.error = nativeError;
+    browser.serviceWorkers.off('console-message', traceMessage);
+    browser.serviceWorkers.off('registration-completed', traceRegistration);
+    browser.serviceWorkers.off('running-status-changed', traceStatus);
     pageResponse?.end(); pageServer?.closeAllConnections(); pageServer?.close();
   }
 }
 
-main().then(() => app.exit(0), error => { console.error(error); app.exit(1); });
+main().then(() => app.exit(0), error => { console.error(`Extension startup phase: ${phase}`, error); app.exit(1); });

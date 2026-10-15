@@ -1,4 +1,5 @@
 import type { DocumentPreviewFormat } from '@setsuna-desktop/contracts';
+import { observeOfficeSheetScale, readOfficePageScale } from './office-preview-scale.js';
 
 export type DocumentPreviewViewer = {
   load(data: ArrayBuffer): Promise<void>;
@@ -33,7 +34,15 @@ export async function loadDocumentPreviewFactory(format: DocumentPreviewFormat):
   }
   const { XlsxViewer, XlsxSheetViewer } = await import('@silurus/ooxml/xlsx');
   if (format === 'xlsx') {
-    return (container, onError) => new XlsxViewer(container, { ...commonOptions, onError, showZoomSlider: false });
+    return (container, onError) => {
+      const pageScale = readOfficePageScale();
+      const viewer = new XlsxViewer(container, { ...commonOptions, onError, cellScale: pageScale, showZoomSlider: false });
+      const stopObservingScale = observeOfficeSheetScale(viewer, pageScale);
+      return {
+        load: (data) => viewer.load(data),
+        destroy: () => { stopObservingScale(); viewer.destroy(); },
+      };
+    };
   }
   return (container, onError) => {
     const canvas = document.createElement('canvas');
@@ -41,11 +50,13 @@ export async function loadDocumentPreviewFactory(format: DocumentPreviewFormat):
     canvas.style.width = '100%';
     canvas.style.height = '100%';
     container.append(canvas);
-    const viewer = new XlsxSheetViewer(canvas, { ...commonOptions, onError });
+    const pageScale = readOfficePageScale();
+    const viewer = new XlsxSheetViewer(canvas, { ...commonOptions, onError, cellScale: pageScale });
+    const stopObservingScale = observeOfficeSheetScale(viewer, pageScale);
     return {
       // Preserve CSV fields as text, including leading zeros and formula-looking values.
       load: (data) => viewer.load(data, { format: 'csv' }),
-      destroy: () => { viewer.destroy(); canvas.remove(); },
+      destroy: () => { stopObservingScale(); viewer.destroy(); canvas.remove(); },
     };
   };
 }

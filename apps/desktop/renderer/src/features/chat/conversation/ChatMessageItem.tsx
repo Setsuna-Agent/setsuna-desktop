@@ -516,7 +516,7 @@ function PlanCard({ message }: { message: RuntimeMessage }) {
       ? t('chat.plan.accepted')
       : t('chat.plan.dismissed');
   const body = message.content.trim()
-    ? <MarkdownRenderer content={message.content} streaming={streaming} />
+    ? <MarkdownRenderer allowOpenUi content={message.content} streaming={streaming} />
     : streaming
       ? <AssistantLoadingIndicator label={t('chat.plan.drafting')} />
       : null;
@@ -828,7 +828,7 @@ function assistantTimelineNode(
   if (block.type === 'content') {
     return (
       <div className="chat-assistant-run__segment" key={block.id}>
-        <MarkdownRenderer
+        <MarkdownRenderer allowOpenUi
           content={block.content}
           legacyThinkingTags={block.segment.streamParts === undefined}
           streaming={block.segment.status === 'streaming'}
@@ -905,7 +905,7 @@ function assistantWorkItemNodes(
 ): ReactNode[] {
   if (item.type === 'content') {
     return [
-      <MarkdownRenderer
+      <MarkdownRenderer allowOpenUi
         key={item.segment.id}
         content={item.segment.content}
         legacyThinkingTags={item.segment.segment.streamParts === undefined}

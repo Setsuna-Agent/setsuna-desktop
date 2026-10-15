@@ -15,7 +15,8 @@
     "创作": "Creation",
     "create-plugin-in-chat": "Create Plugin in Chat",
     "通过对话创建或更新 Setsuna Plugin Bundle，包括左侧栏插件下方的独立应用、可编辑表格、表单和 ECharts 视图。根据一句话需求生成完整 manifest 和 UTF-8 文件快照并调用 configure_plugin，也支持 Skill、MCP、Hook 和可执行扩展。": "Create or update a Setsuna Plugin Bundle from a natural-language request, including sidebar apps, editable tables, forms, and ECharts views. Generate a complete manifest and UTF-8 files, then call configure_plugin. Also supports Skills, MCP servers, Hooks, and executable extensions.",
-    "React 项目与组件用法": "React projects and components guide"
+    "React 项目与组件用法": "React projects and components guide",
+    "OpenUI 展示组件用法": "OpenUI presentation components guide"
   },
   "zh-CN": {
     "create-plugin-in-chat": "对话创建插件"

@@ -27,8 +27,8 @@ it('links only verified files, preserving commands and missing paths while batch
   const search = vi.fn(async (_query = '', parent: string | null = '') => listing(files.filter((file) => file.parent === parent)));
   const open = vi.fn();
   const openMenu = vi.fn();
-  const preview = vi.fn(async () => ({ ok: true, url: 'http://127.0.0.1:1234/preview/image' }));
-  Object.defineProperty(window, 'setsunaDesktop', { configurable: true, value: { desktop: { createWorkspaceFilePreview: preview } } });
+  const preview = vi.fn(async () => ({ ok: true, previewId: 'image-preview', url: 'http://127.0.0.1:1234/preview/image' }));
+  Object.defineProperty(window, 'setsunaDesktop', { configurable: true, value: { desktop: { createWorkspaceFilePreview: preview, releaseWorkspaceFilePreview: vi.fn(async () => true) } } });
   const content = [
     '`?? README.md` and `node --experimental-strip-types scripts/snake-logic.test.mjs`',
     '`README.md:12` and `src/main.ts#L8` and `missing.md` and `template.ts` and `process.env`',
@@ -67,8 +67,8 @@ it('links only verified files, preserving commands and missing paths while batch
 it('navigates linked images once without a preview, while standalone image controls stay independent', async () => {
   const openFile = vi.fn();
   const openWeb = vi.fn();
-  const preview = vi.fn(async () => ({ ok: true, url: 'http://127.0.0.1:1234/preview/image' }));
-  Object.defineProperty(window, 'setsunaDesktop', { configurable: true, value: { desktop: { createWorkspaceFilePreview: preview } } });
+  const preview = vi.fn(async () => ({ ok: true, previewId: 'image-preview', url: 'http://127.0.0.1:1234/preview/image' }));
+  Object.defineProperty(window, 'setsunaDesktop', { configurable: true, value: { desktop: { createWorkspaceFilePreview: preview, releaseWorkspaceFilePreview: vi.fn(async () => true) } } });
   const search = vi.fn(async () => listing([entry('image.png'), entry('README.md')]));
   const view = render(<MarkdownNavigationProvider workspaceRoot="/workspace" onSearchWorkspaceEntries={search}
     onOpenWorkspaceFile={openFile} onOpenWebLink={openWeb}>
@@ -92,7 +92,8 @@ it('keeps workspace file menu actions usable inside an image preview', async () 
   const copyPath = vi.fn();
   const search = vi.fn(async () => listing([entry('image.png')]));
   Object.defineProperty(window, 'setsunaDesktop', { configurable: true, value: { desktop: {
-    createWorkspaceFilePreview: vi.fn(async () => ({ ok: true, url: 'http://127.0.0.1:1234/preview/image' })),
+    createWorkspaceFilePreview: vi.fn(async () => ({ ok: true, previewId: 'image-preview', url: 'http://127.0.0.1:1234/preview/image' })),
+    releaseWorkspaceFilePreview: vi.fn(async () => true),
   } } });
   function PreviewWithMenu() {
     const [target, setTarget] = useState<WorkspaceFileContextTarget | null>(null);

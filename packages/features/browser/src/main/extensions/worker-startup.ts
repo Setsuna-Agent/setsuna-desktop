@@ -1,7 +1,17 @@
 import type { Extension, ServiceWorkerMain, Session } from 'electron';
 
 const maxConcurrentStarts = 4;
-type WorkerStartup = { id: string; profileStartup: boolean; running: boolean };
+type WorkerStartup = { id: string; profileStartup: boolean; ready: boolean; running: boolean; failure?: Error };
+
+function failedExtension(details: Electron.MessageDetails): string | null {
+  // Only uncaught JavaScript errors identify a failed startup; console.error and
+  // network diagnostics must not fail unrelated workers.
+  if (details.source !== 'javascript' || details.level !== 3) return null;
+  try {
+    const url = new URL(details.sourceUrl);
+    return url.protocol === 'chrome-extension:' ? url.hostname : null;
+  } catch { return null; }
+}
 
 /** Bound background restoration without making desktop readiness wait for workers. */
 export class BrowserExtensionWorkerStartup {
@@ -11,12 +21,25 @@ export class BrowserExtensionWorkerStartup {
   constructor(private readonly options: {
     session: Session; signal: AbortSignal; profileStarted(id: string): void;
   }) {
-    if (!options.signal.aborted) options.signal.addEventListener('abort', () => this.tasks.clear(), { once: true });
+    if (options.signal.aborted) return;
+    options.session.serviceWorkers.on('console-message', this.loadingError);
+    options.signal.addEventListener('abort', () => {
+      this.tasks.clear();
+      options.session.serviceWorkers.off('console-message', this.loadingError);
+    }, { once: true });
+  }
+
+  prepare(id: string): void {
+    if (this.options.signal.aborted || this.tasks.has(id)) return;
+    this.tasks.set(id, { id, profileStartup: false, ready: false, running: false });
   }
 
   enqueue(id: string, profileStartup: boolean): void {
-    if (this.options.signal.aborted || this.tasks.has(id)) return;
-    this.tasks.set(id, { id, profileStartup, running: false });
+    this.prepare(id);
+    const task = this.tasks.get(id);
+    if (!task || task.ready) return;
+    task.ready = true;
+    task.profileStartup = profileStartup;
     this.startPending();
   }
 
@@ -26,16 +49,26 @@ export class BrowserExtensionWorkerStartup {
     return !this.options.signal.aborted && this.tasks.get(task.id) === task;
   }
 
+  private readonly loadingError = (_event: Electron.Event, details: Electron.MessageDetails) => {
+    const id = failedExtension(details);
+    const task = id && this.tasks.get(id);
+    // Native loading starts the script before loadExtension resolves. Retain errors
+    // while loading or queued using one listener, independent of the startup limit.
+    if (task && !task.running) task.failure ??= new Error(details.message);
+  };
+
   private startPending(): void {
     if (this.options.signal.aborted) return;
     for (const task of this.tasks.values()) {
       if (this.active >= maxConcurrentStarts) return;
-      if (task.running) continue;
+      if (!task.ready || task.running) continue;
       if (!this.options.session.extensions.getExtension(task.id)) { this.tasks.delete(task.id); continue; }
       task.running = true;
       ++this.active;
       // Queued workers acquire registration listeners and their timeout only when a slot opens.
-      void startExtensionWorker(this.options.session, task.id, this.options.signal).then(() => {
+      const started = task.failure ? Promise.reject(task.failure)
+        : startExtensionWorker(this.options.session, task.id, this.options.signal);
+      void started.then(() => {
         if (this.current(task) && task.profileStartup) this.options.profileStarted(task.id);
       }).catch((error: unknown) => {
         if (this.current(task) && this.options.session.extensions.getExtension(task.id)) {
@@ -78,13 +111,7 @@ export function startExtensionWorker(session: Session, id: string, signal?: Abor
       if (details.scope === scope) start();
     };
     const scriptError = (_event: Electron.Event, details: Electron.MessageDetails) => {
-      // An uncaught JavaScript error during startup is conclusive; console.error and
-      // network logs are not. Match the extension origin so unrelated workers stay isolated.
-      if (details.source !== 'javascript' || details.level !== 3) return;
-      try {
-        const url = new URL(details.sourceUrl);
-        if (url.protocol === 'chrome-extension:' && url.hostname === id) finish(new Error(details.message));
-      } catch { /* A diagnostic without a valid origin cannot identify this worker. */ }
+      if (failedExtension(details) === id) finish(new Error(details.message));
     };
     const unloaded = (_event: Electron.Event, extension: Extension) => {
       if (extension.id === id) finish(new Error('Extension unloaded while starting its worker.'));

@@ -15,6 +15,39 @@ const fixture = () => {
 };
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
+it('retains errors before loading returns without starting timers, and forgets failures after removal', async () => {
+  vi.useFakeTimers();
+  const { workers, session } = fixture();
+  workers.startWorkerForScope.mockResolvedValue(worker);
+  const lifetime = new AbortController(); const profileStarted = vi.fn();
+  const report = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  const startup = new BrowserExtensionWorkerStartup({ session, signal: lifetime.signal, profileStarted });
+  const details = { source: 'javascript', level: 3, sourceUrl: `${scope}worker.js`, message: 'Broken during native loading.' };
+  try {
+    startup.prepare(id);
+    workers.emit('console-message', {}, details);
+    expect(workers.startWorkerForScope).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+    startup.enqueue(id, true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(report).toHaveBeenCalledExactlyOnceWith(`Failed to start worker for extension ${id}`, new Error(details.message));
+    expect(profileStarted).not.toHaveBeenCalled();
+    expect(workers.startWorkerForScope).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+
+    startup.prepare(id);
+    workers.emit('console-message', {}, details);
+    startup.remove(id);
+    workers.emit('console-message', {}, details);
+    startup.enqueue(id, true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(workers.startWorkerForScope).toHaveBeenCalledExactlyOnceWith(scope);
+    expect(profileStarted).toHaveBeenCalledExactlyOnceWith(id);
+    expect(report).toHaveBeenCalledOnce();
+  } finally { lifetime.abort(); }
+  expect(workers.listenerCount('console-message')).toBe(0);
+});
+
 it('starts a restored worker batch in FIFO order with bounded listeners and timeouts', async () => {
   vi.useFakeTimers();
   const { workers, extensions, session } = fixture();
@@ -28,7 +61,7 @@ it('starts a restored worker batch in FIFO order with bounded listeners and time
     for (let batch = 0; batch < 3; batch++) {
       expect(workers.startWorkerForScope.mock.calls.map(([scope]) => new URL(scope).hostname)).toEqual(ids.slice(0, (batch + 1) * 4));
       expect(workers.listenerCount('registration-completed')).toBe(4);
-      expect(workers.listenerCount('console-message')).toBe(4);
+      expect(workers.listenerCount('console-message')).toBe(5);
       expect(extensions.listenerCount('extension-unloaded')).toBe(4);
       expect(vi.getTimerCount()).toBe(4);
       completions.splice(0).forEach(complete => complete());
@@ -54,11 +87,15 @@ it('advances past startup failures, drops unloaded queued workers and cancels th
     for (const id of ids) startup.enqueue(id, true);
     startup.remove(ids[4]);
     workers.emit('console-message', {}, { source: 'javascript', level: 3,
+      sourceUrl: `chrome-extension://${ids[5]}/worker.js`, message: 'Failed while queued.' });
+    workers.emit('console-message', {}, { source: 'javascript', level: 3,
       sourceUrl: `chrome-extension://${ids[0]}/worker.js`, message: 'Broken startup.' });
     await vi.advanceTimersByTimeAsync(0);
     expect(workers.startWorkerForScope).toHaveBeenCalledTimes(5);
-    expect(workers.startWorkerForScope).toHaveBeenLastCalledWith(`chrome-extension://${ids[5]}/`);
-    expect(report).toHaveBeenCalledExactlyOnceWith(`Failed to start worker for extension ${ids[0]}`, expect.any(Error));
+    expect(workers.startWorkerForScope).toHaveBeenLastCalledWith(`chrome-extension://${ids[6]}/`);
+    expect(report).toHaveBeenCalledTimes(2);
+    expect(report).toHaveBeenCalledWith(`Failed to start worker for extension ${ids[0]}`, expect.any(Error));
+    expect(report).toHaveBeenCalledWith(`Failed to start worker for extension ${ids[5]}`, new Error('Failed while queued.'));
     lifetime.abort();
     completions.forEach(complete => complete());
     await vi.advanceTimersByTimeAsync(10_000);

@@ -47,7 +47,15 @@ it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('instal
       '@types/react': require('@types/react/package.json').version,
       '@types/react-dom': require('@types/react-dom/package.json').version,
     };
-    await writeFile(path.join(appRoot, 'package.json'), JSON.stringify({ dependencies: { zod: '4.4.3' }, devDependencies,
+    // Compile the actual bilingual builder examples with their documented peers.
+    const guides = await Promise.all(['openui.md', 'openui.en-US.md'].map(name =>
+      readFile(path.resolve('plugins/app-builder/skills/create-plugin-in-chat/references', name), 'utf8')));
+    const packages = guides.map(guide => JSON.parse(guide.match(/```json\n([\s\S]*?)\n```/u)![1]));
+    expect(packages[1]).toEqual(packages[0]);
+    for (const [index, guide] of guides.entries()) {
+      await writeFile(path.join(appRoot, `pages/OpenUi${index}.tsx`), guide.match(/```tsx\n([\s\S]*?)\n```/u)![1]);
+    }
+    await writeFile(path.join(appRoot, 'package.json'), JSON.stringify({ ...packages[0], devDependencies,
       scripts: { postinstall: 'node install-hook.mjs' } }));
     const statsRoot = path.join(bundleDir, 'apps/stats'); await mkdir(statsRoot, { recursive: true });
     await writeFile(path.join(statsRoot, 'package.json'), JSON.stringify({ devDependencies }));
@@ -88,7 +96,10 @@ it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('instal
       extension: { apiVersion: 1, runtime: 'node-worker', entry: 'extension/entry.mjs', capabilities: ['ui', 'state'],
         rendererUi: { schemaVersion: 2, actions: [{ id: 'notes.save' }, { id: 'notes.hidden' }], contributions: [{
           id: 'notes.page', slot: 'renderer.plugin.page', navigation: { label: 'Notes' }, data: { stateKey: 'view', scope: 'global' },
-          reactApp: { root: 'apps/notes', entry: 'pages/Home.tsx', routes: [{path:'/detail/:id', entry:'pages/Detail.tsx'}], actionIds: ['notes.save'] },
+          reactApp: { root: 'apps/notes', entry: 'pages/Home.tsx', routes: [
+            {path:'/detail/:id', entry:'pages/Detail.tsx'},
+            {path:'/openui', entry:'pages/OpenUi0.tsx'}, {path:'/openui-en', entry:'pages/OpenUi1.tsx'},
+          ], actionIds: ['notes.save'] },
         }, { id:'stats.page', slot:'renderer.plugin.page', navigation:{label:'Stats'},
           reactApp: {root:'apps/stats', entry:'App.tsx', actionIds:[]} }] } },
     });
@@ -105,6 +116,7 @@ it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('instal
     const statsSource = await runtime.plugins.readTrustedRendererUiDocument('react-notes', 'stats.page');
     expect(statsSource.js).toContain('Independent stats app');
     await expect(readFile(path.join(statsCache, 'project/node_modules/zod/package.json'))).rejects.toThrow();
+    await expect(readFile(path.join(statsCache, 'project/node_modules/@openuidev/react-ui/package.json'))).rejects.toThrow();
     expect(JSON.parse(await readFile(path.join(project, 'node_modules/zod/package.json'), 'utf8')).name).toBe('zod');
     // A minimal real app covers ASAR/ESM/native dependencies without recompiling all SDK widgets.
     await verifyPackagedAppCompiler(root, path.join(statsCache, 'project'));

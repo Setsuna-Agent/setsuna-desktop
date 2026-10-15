@@ -18,7 +18,9 @@ export async function buildAppProject(project: string): Promise<RuntimeSandboxed
       return resolved;
     } }] },
     esbuild: { jsx: 'automatic' }, css: { postcss: {} },
-    define: { 'process.env.NODE_ENV': '"production"' },
+    // Cover computed access such as process.env["NODE_ENV"] in browser libraries.
+    // Only a public build constant is exposed, never the compiler's environment.
+    define: { 'process.env': JSON.stringify({ NODE_ENV: 'production' }) },
     build: {
       write: false, target: 'chrome130', cssCodeSplit: false, minify: 'esbuild',
       lib: { entry: path.join(root, '.setsuna/main.tsx'), name: 'SetsunaApp', formats: ['iife'] },

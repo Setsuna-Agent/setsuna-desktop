@@ -11,8 +11,11 @@
 | `create-mcp-in-chat/` | 在对话中收集结构化 MCP 配置并调用管理工具 |
 | `create-skill-in-chat/` | 在对话中生成完整 Skill 内容并保存为用户 Skill |
 | `goal-writer/` | 把用户显式 Goal 请求改写成持久、可验证且无 Token 预算的目标 |
+| `display-in-chat/` | 生成对话内的 OpenUI 图表、卡片、表格和本地交互展示 |
 
 具体行为以各目录的 `SKILL.md` 为准。
+
+`display-in-chat` 的组件签名来自 renderer 实际注册的 OpenUI library；升级依赖或调整组件范围后运行 `pnpm generate:openui-catalog`。示例和签名生成到两种语言的 Skill 正文中，Agent 可通过现有 `read_skill` 分块加载，不需要扩大工作区外的文件读取权限。普通回合只注入 Skill 目录元信息。
 
 应用与插件创建 Skill 由默认安装的 `app-builder` 插件提供，源码位于 `plugins/app-builder/skills/create-plugin-in-chat/`，安装后 ID 为 `app-builder.create-plugin-in-chat`。
 

@@ -65,6 +65,8 @@ Markdown 文件在路径栏的目录按钮旁提供“查看源码 / 查看预�
 
 `documents/` 持有 DOCX、PPTX、XLSX、CSV 和 PDF 预览。CSV 默认展示表格，并沿用源码切换与文本草稿；其他格式只读。`DocumentPreview` 首次挂载才加载预览组件，组件再按格式动态导入 `@silurus/ooxml`，以本地 Worker/WASM 解析；PDF 使用本地 Blob 和 Electron 内置阅读器，不加载 Office 引擎。关闭或切换时销毁实例并释放 Blob URL；这些操作不参与 runtime ready、窗口就绪或首屏初始化，也不加载远程字体。原始字节通过 preload 的 `desktop.readWorkspaceDocument` 读取，Main 校验工作区边界、文件类型和 32 MiB 上限，renderer 不直接读取文件系统。
 
+Office 画布所在 surface 抵消全局 CSS `zoom`，使画布像素密度和指针坐标一致。表格通过引擎的 `cellScale` / `setScale` 跟随界面比例，DOCX / PPTX 沿用容器尺寸变化后的重新适配；切换比例不重新读取文件或重建解析器，表格比例监听随 viewer 销毁。
+
 DOCX 连续分节的浮点边界误判通过固定版本的依赖补丁修正，说明见 [`patches/README.md`](../../../patches/README.md)。渐进排版在首屏之后报错时也会立即销毁解析器，避免只展示错误而留下 Worker。
 
 `media/` 持有按需加载的 MP4 预览，复用 Chromium 原生播放控件。Runtime 只识别文件头，renderer 通过 `desktop.createWorkspaceFilePreview` 获取受工作区边界约束的临时 URL，由 Main 的文件服务按 HTTP Range 流式读取，完整视频不经过 IPC 或 Base64。切换文件或关闭预览会停止播放器、取消旧请求并调用 `releaseWorkspaceFilePreview` 撤销 URL；Main 在请求断开时关闭文件流。编码支持取决于 Electron 内置解码器，不引入转码器或启动预热。

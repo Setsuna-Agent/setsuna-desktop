@@ -37,6 +37,10 @@ describe('openWorkspaceFileWithDefaultApp', () => {
       error: 'File path must stay inside the workspace.',
     });
     expect(openPath).not.toHaveBeenCalled();
+    const registerPreview = vi.fn();
+    await expect(createWorkspaceFilePreviewUrl(workspaceRoot, '../secret.txt', registerPreview)).resolves.toMatchObject({ ok: false });
+    await expect(createWorkspaceFilePreviewUrl(workspaceRoot, 'linked-outside/secret.txt', registerPreview)).resolves.toMatchObject({ ok: false });
+    expect(registerPreview).not.toHaveBeenCalled();
   });
 
   it('opens only existing directories inside the workspace with the system file manager', async () => {

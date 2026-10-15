@@ -1,4 +1,6 @@
 import { useMemo, useRef } from 'react';
+import { OpenUiMarkdownDocument } from '../generative-ui/OpenUiMarkdownDocument.js';
+import { splitOpenUiContent } from '../generative-ui/openUiContent.js';
 import {
   literalThinkTagsForMarkdown,
   splitThinkingContent,
@@ -13,10 +15,12 @@ import { useSmoothedStreamingContent } from './useSmoothedStreamingContent.js';
 export function MarkdownRenderer({
   content,
   legacyThinkingTags = true,
+  allowOpenUi = false,
   streaming,
 }: {
   content: string;
   legacyThinkingTags?: boolean;
+  allowOpenUi?: boolean;
   streaming: boolean;
 }) {
   const visibleSegments = useMemo(() => {
@@ -45,6 +49,7 @@ export function MarkdownRenderer({
     <>
       {visibleSegments.map((segment) => (
         <MarkdownSegment
+          allowOpenUi={allowOpenUi}
           content={segment.content}
           key={segment.key}
           segmentKey={segment.key}
@@ -56,6 +61,27 @@ export function MarkdownRenderer({
 }
 
 function MarkdownSegment({
+  allowOpenUi,
+  content,
+  segmentKey,
+  streaming,
+}: {
+  allowOpenUi: boolean;
+  content: string;
+  segmentKey: string;
+  streaming: boolean;
+}) {
+  const parts = useMemo(() => allowOpenUi ? splitOpenUiContent(content) : [
+    { kind: 'markdown' as const, key: 'markdown-0', content },
+  ], [allowOpenUi, content]);
+
+  if (parts.some((part) => part.kind === 'openui')) {
+    return <OpenUiMarkdownDocument content={content} parts={parts} streaming={streaming} />;
+  }
+  return <MarkdownTextSegment content={content} segmentKey={segmentKey} streaming={streaming} />;
+}
+
+function MarkdownTextSegment({
   content,
   segmentKey,
   streaming,

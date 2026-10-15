@@ -15,6 +15,7 @@
     "paths": {
       "@renderer/*": ["apps/desktop/renderer/src/*"],
       "@setsuna-desktop/renderer-ui": ["packages/renderer-ui/src/index.ts"],
+      "@setsuna-desktop/renderer-ui/openui-theme": ["packages/renderer-ui/src/openui-theme.ts"],
       "@setsuna-desktop/contracts": ["packages/contracts/src/index.ts"],
       "@setsuna-desktop/feature-core/*": ["packages/feature-core/src/*"],
       "@setsuna-desktop/renderer-contracts/*": ["packages/renderer-contracts/src/*"],

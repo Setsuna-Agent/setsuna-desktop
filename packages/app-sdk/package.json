@@ -1,17 +1,19 @@
 {
   "name": "@setsuna/app",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "license": "MIT",
   "exports": {
     ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+    "./openui": { "types": "./dist/openui.d.ts", "default": "./dist/openui.js" },
     "./styles.css": "./dist/styles.css",
     "./package.json": "./package.json"
   },
   "files": ["dist"],
   "sideEffects": ["**/*.css"],
-  "peerDependencies": { "react": ">=18", "react-dom": ">=18", "react-router-dom": ">=7" },
-  "devDependencies": { "@setsuna-desktop/renderer-ui": "workspace:*", "react": "18.3.1", "react-dom": "18.3.1", "react-router-dom": "7.18.4", "@types/react": "^18.3.17" },
+  "peerDependencies": { "react": ">=18", "react-dom": ">=18", "react-router-dom": ">=7", "@openuidev/react-ui": "0.18.1" },
+  "peerDependenciesMeta": { "@openuidev/react-ui": { "optional": true } },
+  "devDependencies": { "@setsuna-desktop/renderer-ui": "workspace:*", "react": "18.3.1", "react-dom": "18.3.1", "react-router-dom": "7.18.4", "@types/react": "^18.3.17", "@openuidev/react-ui": "0.18.1" },
   "scripts": { "build": "tsc -b tsconfig.build.json && node ../../scripts/prepare-app-sdk-assets.mjs" }
 }

@@ -14,6 +14,7 @@ Chat feature 把 runtime thread snapshot 投影为对话 UI，并负责 composer
 | `conversation/` | Message display、assistant timeline、overview、scroll、usage |
 | `tool-runs/` | 工具状态、审批、结构化输入、文件变更 |
 | `markdown/` | 流式 Markdown、代码块、虚拟块、workspace link |
+| `generative-ui/` | OpenUI 展示协议、按需加载的组件目录、流式渲染与本地交互 |
 | `mentions/` | Workspace mention 解析与打开 |
 | `plugin-usage/` | Plugin 使用记录与打开导航 |
 | `styles/` | Chat 分域样式入口与实现 |
@@ -235,13 +236,33 @@ Enter / Shift+Enter 循环跳转，Esc 或关闭按钮清理观察器和高亮�
 
 `MarkdownNavigationProvider` 统一导航，`WorkspaceFileLink` 走 workspace 能力，不能让 Markdown 任意调用 `window.open` 或本地 shell。
 
-`MarkdownImage` 将已确认存在的工作区图片交给 main 的文件预览桥，使用受控 URL 内嵌展示并支持点击放大；路径或工作区切换会忽略旧请求结果。链接标签内的图片保持普通图片，点击只执行外层导航，不创建预览弹窗。本地图片在缩略图和放大预览中均沿用文件右键动作；附件图库的预览菜单携带当前图片的操作，切换图片后保存、复制和显示文件夹的目标随之切换。HTTP(S) 图片直接使用无 referrer 的图片请求，失败时保留替代文本。
+`MarkdownImage` 将已确认存在的工作区图片交给 main 的文件预览桥，使用受控 URL 内嵌展示并支持点击放大。`useWorkspaceImageSources` 为每个图片消费者增量维护文件订阅和预览注册：追加或重排图片复用已有及进行中的请求，移除路径、文件删除、工作区切换或卸载时释放不再使用的注册；迟到的 IPC 注册也会立即释放。链接标签内的图片保持普通图片，点击只执行外层导航，不创建预览弹窗。本地图片在缩略图和放大预览中均沿用文件右键动作；附件图库的预览菜单携带当前图片的操作，切换图片后保存、复制和显示文件夹的目标随之切换。HTTP(S) 图片直接使用无 referrer 的图片请求，失败时保留替代文本。
 
 `MarkdownExternalLink` 为 Web 链接提供复制链接、在内置浏览器打开、在外部浏览器打开的右键菜单；菜单显式选择不修改默认打开偏好，普通点击继续遵循该偏好。外链悬停或键盘聚焦时，使用共享 Tooltip 显示链接标题与目标网址，提示内容只读取现有文本，不额外请求网页。`MarkdownWebLinkIcon` 在文字前加载站点根路径的 `/favicon.ico`，不发送 referrer，加载失败时回退到地球图标。
 
 `WorkspaceFileLink` 与 `WorkspacePathLabel` 使用同一 Tooltip 展示当前工作区下的完整路径，文件引用保留行号；正文链接、内联代码引用和工具结果共用该入口。路径提示按工作区保留 macOS/Windows 分隔符，导航和文件校验仍使用原有相对路径。
 
 Markdown 内联代码只将单一路径作为文件候选，命令、Git 状态、通配符和表达式保留代码；含空格的路径可以使用显式 Markdown 链接。候选文件、显式本地链接和本地图片都由 `useMarkdownWorkspaceFiles` 通过现有目录 API 确认是当前工作区的文件后才可点击，目录和不存在的路径保留原文，不猜测同名文件的位置。目录读取和监听由同目录内的引用共享，引用卸载时释放，目录变动和窗口聚焦时重新校验；切换工作区会隔离旧请求。显式链接的标签内不再自动生成嵌套文件链接，行号仍传给文件打开入口。
+
+## OpenUI 展示块
+
+Assistant 正文、工作记录中的可见回复和计划正文可使用顶层 `openui`（兼容 `openui-lang`）围栏。`MarkdownRenderer.allowOpenUi` 默认关闭；思考详情、普通文档、用户消息、引用、列表及外层代码围栏中的示例不会激活组件。持久化仍使用原始消息文本和既有 SSE 链路，不新增事件或跨进程协议。
+
+`splitOpenUiContent` 在 Markdown 修复和逐字平滑之前读取原始围栏，避免合成的结束符把未完成程序当成完整 UI。每块独立持有 OpenUI 状态；真实围栏闭合后即使整条回复仍在生成，也会启用本地交互。后续文字追加不重挂载该块；OpenUI 不参与 Markdown 离屏卸载，避免滚动丢失搜索和切换状态。离开消息导致卸载后，再打开从程序初始状态恢复。
+
+`Input`、`TextArea` 的 DOM id 与 `FormControl` 标签关联使用稳定的块级前缀，不改写字段名或 `$` 状态绑定；不同块使用相同字段名时，标签仍聚焦本块控件，流式追加也不重置输入状态。
+
+包含展示块的正文由 `OpenUiMarkdownDocument` 保留在同一棵 Markdown 解析树中，完成引用链接、图片引用和脚注解析后才拆分样式作用域。跨块引用、脚注编号与回链共用文档上下文，迟到的定义不会重挂载已交互的 OpenUI 块；仅末尾普通文本参与流式修复和平滑。
+
+当前注册 80 个组件及子组件，包含 9 类图表、表格、卡片、图片、布局、折叠、标签页、轮播和本地输入控件。`Form`、`EditableTable` 从 schema 和组件目录中移除；没有 `toolProvider` 或 `onAction`，本地状态操作无法调用 Agent 工具或业务提交。`Query` / `Mutation`、无效、未完成及超过 100,000 字符的程序回退为代码块。生成指导由内置 `display-in-chat` Skill 提供。
+
+组件边界记录渲染异常，包括上游默认忽略的流式异常；成功解析不会清除同一源码的失败，新源码到达后允许重试。图片、图库、图文、列表缩略图和卡片背景通过 `useWorkspaceImageSources` 复用 Markdown 的路径校验、文件确认与预览桥接，只有 HTTP(S) URL 能进入实际图片字段。主进程 `renderer-image-policy` 在页面加载前同步注册文件图片请求限制，除内置 renderer 资源外禁止直接加载本地图片，覆盖第三方内部 Markdown 等额外入口；无目录扫描或新增就绪等待。
+
+`OpenUiBlock` 是局部 lazy / Suspense 边界，OpenUI JS、图表和 CSS 只在出现展示块时加载，不进入 runtime/main 启动链路。ThemeProvider 使用独立作用域和宿主主题 token；映射位于 `renderer-ui/openui-theme`，与独立应用的 `@setsuna/app/openui` 共用。Vite 仅对 `@openuidev/react-lang` 选择其同 API 的 native 入口，避开 web 入口自动挂载 devtools 和远程 CDN 加载；这不是切换应用的 React 平台。
+
+OpenUI 的下拉菜单、日期面板及 tooltip 会 portal 到 `body`，不在 `.chat-openui` 内。`openui.css` 沿用共享控件的缩放约定：定位层抵消 `body` 的页面缩放，内容层恢复应用密度；下拉宽度和可用高度从 Radix 的视口像素换回 CSS 像素。规则仅匹配 OpenUI 的顶层 portal，日历内部已有定位容器的菜单保留自身坐标系。
+
+验证入口：`test/unit/features/chat/generative-ui/`，覆盖消息边界、真实解析器与 Skill 示例兼容、本地交互、流式完成、错误回退和无外部动作；Markdown 现有行为继续由 `test/unit/features/chat/markdown/` 覆盖。
 
 ## Mentions 与附件
 

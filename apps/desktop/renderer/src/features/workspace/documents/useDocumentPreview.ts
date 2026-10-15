@@ -14,6 +14,8 @@ export function useDocumentPreview({ filePath, load }: DocumentPreviewProps) {
     // Each load owns a detached surface so a late result cannot paint over the next document.
     const surface = document.createElement('div');
     surface.className = 'desktop-document-preview__surface';
+    const format = getDocumentPreviewFormat(filePath);
+    if (format && format !== 'pdf') surface.classList.add('desktop-document-preview__surface--office');
     container.replaceChildren(surface);
     setState({ loading: true, error: null });
     const fail = (error: unknown) => {
@@ -25,7 +27,6 @@ export function useDocumentPreview({ filePath, load }: DocumentPreviewProps) {
       setState({ loading: false, error: error instanceof Error ? error.message : String(error) });
     };
     void (async () => {
-      const format = getDocumentPreviewFormat(filePath);
       if (!format) throw new Error('Unsupported document format.');
       const factory = await loadDocumentPreviewFactory(format);
       if (cancelled) return;

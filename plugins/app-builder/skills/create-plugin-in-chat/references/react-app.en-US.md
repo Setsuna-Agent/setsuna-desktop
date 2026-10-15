@@ -47,6 +47,7 @@ app/styles.css
 
 ## Defaults, components and styles
 
+- OpenUI is available for charts, presentation cards, Chips, OptionCards and carousels. Read the [component guide](openui.en-US.md) through `read_plugin_resource({pluginId:'app-builder',resourceId:'openui-guide'})`, declare its optional dependencies and wrap the app in `OpenUiProvider`. Apps that do not use OpenUI need no additional packages.
 - Defaults include React 18, React DOM, React Router 7, Lucide React, TypeScript and React types.
 - `@setsuna/app` reuses the host's public renderer-ui components: buttons/icon buttons, fields, select, checkbox, switch, slider, menus, Popover, Tooltip, Dialog/ConfirmDialog, Tabs, tables, image preview, ToastStack, Skeleton, ProgressRing and file trees. AppLayout, Panel and data hooks remain SDK helpers. Apps supply text, labels, columns and content.
 - `Button.variant` supports only primary, secondary, ghost and danger, plus size, icon and loading props. Use `IconButton label="…"` for icon buttons. TextField accepts native props plus optional label and leadingIcon; TextArea supports autoSize. Fields have no hideLabel prop: omit label and provide aria-label when appropriate. TS/TSX is checked before installation; do not rely on Vite ignoring invalid props.

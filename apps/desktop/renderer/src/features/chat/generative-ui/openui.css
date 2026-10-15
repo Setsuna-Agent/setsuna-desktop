@@ -1,0 +1,49 @@
+.chat-openui {
+  min-width: 0;
+  max-width: 100%;
+  margin-block: 12px;
+  overflow-wrap: anywhere;
+  color: var(--app-text);
+  font-family: var(--app-font-family);
+  font-size: var(--app-font-size);
+}
+
+.chat-openui :where(img, svg) {
+  max-width: 100%;
+}
+
+.chat-openui :where(button, input, select, textarea) {
+  font-family: inherit;
+}
+
+/* OpenUI portals bypass .chat-openui and mount directly under the zoomed body.
+ * Keep their positioning wrappers in viewport pixels, then restore app density
+ * on the contents, as renderer-ui's overlay container does. Restrict this to
+ * body portals: calendar menus nested in a transformed panel use its coordinates. */
+body > [data-radix-popper-content-wrapper]:has(> :is(
+  .openui-select-content,
+  .openui-tooltip-content,
+  .openui-citation-tooltip,
+  .openui-chart-label-tooltip
+)),
+body > .openui-date-picker-renderer-floating-content,
+body > .openui-portal-tooltip {
+  zoom: var(--app-page-scale-inverse, 1);
+}
+
+body > [data-radix-popper-content-wrapper] > :is(
+  .openui-select-content,
+  .openui-tooltip-content,
+  .openui-citation-tooltip,
+  .openui-chart-label-tooltip
+),
+body > .openui-date-picker-renderer-floating-content > .openui-date-picker-renderer-floating-menu,
+body > .openui-portal-tooltip > .openui-chart-tooltip {
+  zoom: var(--app-page-scale, 1);
+}
+
+/* Radix exposes measured viewport dimensions; the scaled content needs CSS pixels. */
+body > [data-radix-popper-content-wrapper] > .openui-select-content {
+  min-width: calc(var(--radix-select-trigger-width) * var(--app-page-scale-inverse, 1));
+  max-height: min(372px, calc(var(--radix-select-content-available-height) * var(--app-page-scale-inverse, 1)));
+}
