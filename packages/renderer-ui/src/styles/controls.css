@@ -47,7 +47,7 @@
 
 .sd-button:disabled {
   cursor: default;
-  opacity: 0.45;
+  opacity: var(--app-disabled-opacity);
 }
 
 .sd-button--primary {
@@ -106,7 +106,8 @@
   flex-shrink: 0;
 }
 
-/* File, review and changes toolbars share the same source/preview switch. */
+/* File, review, settings documents and changes toolbars share one source/preview
+   segmented switch; the selected segment lifts on the theme-aware card shadow. */
 .sd-markdown-view-toggle {
   display: inline-flex;
   flex-shrink: 0;
@@ -114,22 +115,28 @@
   gap: 2px;
   padding: 2px;
   border-radius: var(--app-radius-sm);
-  background: var(--app-surface-muted);
+  background: color-mix(in srgb, var(--app-text) 5%, transparent);
 }
 
 .sd-markdown-view-option.sd-button {
   min-height: 24px;
   padding: 0 8px;
+  border: 0;
   border-radius: var(--app-radius-xs);
   color: var(--app-text-muted);
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
-.sd-markdown-view-option[aria-pressed="true"] {
+.sd-markdown-view-option.sd-button:hover:not(:disabled) {
   color: var(--app-text);
-  background: var(--app-bg);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 8%);
+  background: transparent;
+}
+
+.sd-markdown-view-option.sd-button[aria-pressed="true"] {
+  color: var(--app-text);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-card), 0 0 0 1px color-mix(in srgb, var(--app-text) 6%, transparent);
 }
 
 :where(.sd-icon-button) {
@@ -215,6 +222,42 @@
   padding-left: 32px;
 }
 
+/* Compact filter field for panel toolbars and lists: borderless fill, no focus
+   outline (fields never draw one), only a stronger fill while typing. */
+.sd-field-shell--search {
+  flex: 1 1 auto;
+}
+
+.sd-field-shell--search .sd-field-shell__icon {
+  left: 9px;
+  color: var(--app-text-subtle);
+}
+
+.sd-field-shell--search > .sd-field.sd-field--search {
+  min-height: var(--desktop-panel-search-height, 28px);
+  height: var(--desktop-panel-search-height, 28px);
+  padding: 0 8px 0 28px;
+  border-color: transparent;
+  border-radius: var(--app-radius-sm);
+  background: color-mix(in srgb, var(--app-text) 4%, transparent);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.sd-field-shell--search > .sd-field.sd-field--search:hover:not(:disabled):not(:focus) {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--app-text) 6%, transparent);
+}
+
+.sd-field-shell--search > .sd-field.sd-field--search:focus {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--app-text) 7%, transparent);
+}
+
+.sd-field-shell--search:focus-within .sd-field-shell__icon {
+  color: var(--app-text-muted);
+}
+
 .sd-checkbox {
   display: inline-flex;
   align-items: center;
@@ -282,7 +325,7 @@
 }
 
 .sd-switch:disabled {
-  opacity: 0.45;
+  opacity: var(--app-disabled-opacity);
 }
 
 .sd-switch:focus-visible {
@@ -376,7 +419,7 @@
 }
 
 .sd-slider:disabled {
-  opacity: 0.45;
+  opacity: var(--app-disabled-opacity);
   cursor: default;
 }
 

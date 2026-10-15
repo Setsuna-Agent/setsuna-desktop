@@ -218,16 +218,15 @@ export const ReviewFileNavigator = memo(function ReviewFileNavigator({
         onPointerDown={startResize}
       />
       <div className="desktop-review-file-tree__toolbar">
-        <label className="desktop-review-file-tree__search">
-          <Search size={13} />
-          <TextField
-            aria-label={t('feature.review.workspace.fileBrowser.filter')}
-            placeholder={t('feature.review.workspace.fileBrowser.filter')}
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
+        <TextField
+          appearance="search"
+          leadingIcon={<Search size={13} />}
+          aria-label={t('feature.review.workspace.fileBrowser.filter')}
+          placeholder={t('feature.review.workspace.fileBrowser.filter')}
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
         <ActionTooltip title={layoutToggleLabel}>
           <IconButton
             aria-pressed={layout === 'flat'}

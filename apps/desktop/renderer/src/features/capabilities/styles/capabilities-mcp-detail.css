@@ -7,7 +7,7 @@
 .desktop-mcp-detail__summary,
 .desktop-mcp-detail__tool-section {
   min-width: 0;
-  border-radius: 12px;
+  border-radius: var(--app-radius-group);
   background: var(--app-surface-muted);
 }
 

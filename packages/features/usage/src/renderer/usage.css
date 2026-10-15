@@ -188,7 +188,7 @@
 .desktop-settings-panel .settings-usage-calendar {
   --settings-usage-calendar-gap: 3px;
   --settings-usage-calendar-min-width: 720px;
-  --settings-usage-calendar-color: #3b82f6;
+  --settings-usage-calendar-color: var(--app-info);
 }
 
 .desktop-settings-panel .settings-usage-calendar__summary {
@@ -238,7 +238,7 @@
 .desktop-settings-panel .settings-usage-calendar__months span {
   width: max-content;
   color: var(--app-text-muted);
-  font-size: 9px;
+  font-size: 10px;
   line-height: 14px;
 }
 
@@ -293,7 +293,7 @@
   min-height: 39px;
   padding: 8px 16px 10px;
   color: var(--app-text-muted);
-  font-size: 9px;
+  font-size: 10px;
   line-height: 14px;
 }
 
@@ -340,12 +340,12 @@
 .desktop-settings-panel .settings-usage-breakdown__rank {
   width: 16px;
   color: var(--app-text-muted);
-  font-size: 9px;
+  font-size: 10px;
   text-align: center;
 }
 
 .desktop-settings-panel .settings-usage-breakdown__item:first-child .settings-usage-breakdown__rank {
-  color: #1d4ed8;
+  color: var(--app-info);
   font-weight: 600;
 }
 
@@ -390,7 +390,7 @@
 .desktop-settings-panel .settings-usage-breakdown__label-row span,
 .desktop-settings-panel .settings-usage-breakdown__value span {
   color: var(--app-text-muted);
-  font-size: 9px;
+  font-size: 10px;
   line-height: 13px;
   white-space: nowrap;
 }
@@ -411,7 +411,7 @@
 
 .desktop-settings-panel .settings-usage-breakdown__main progress::-webkit-progress-value {
   border-radius: var(--app-radius-full);
-  background: color-mix(in srgb, #3b82f6 76%, var(--app-text));
+  background: color-mix(in srgb, var(--app-info) 76%, var(--app-text));
 }
 
 .desktop-settings-panel .settings-usage-breakdown__value {

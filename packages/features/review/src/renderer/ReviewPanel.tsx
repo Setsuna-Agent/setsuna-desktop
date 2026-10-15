@@ -377,7 +377,7 @@ export function DesktopReviewPanel({
               <ActionTooltip title={reviewFileExpansionTip}>
                 <IconButton
                   aria-pressed={!effectiveFileExpansionRequest.expanded}
-                  className="desktop-review-panel__file-expansion-toggle"
+                  className="desktop-review-panel__file-expansion-toggle app-shell-icon-control"
                   disabled={!hasReviewFiles || bulkExpandDisabled}
                   label={reviewFileExpansionTip}
                   title=""
@@ -391,7 +391,7 @@ export function DesktopReviewPanel({
             <ActionTooltip title={reviewLayoutToggleTip}>
               <IconButton
                 aria-pressed={reviewDiffLayout === 'split'}
-                className={'desktop-review-panel__layout-toggle app-shell-icon-control' + (reviewDiffLayout === 'split' ? ' is-active' : '')}
+                className="desktop-review-panel__layout-toggle app-shell-icon-control"
                 label={reviewLayoutToggleTip}
                 title=""
                 variant="ghost"
@@ -403,7 +403,7 @@ export function DesktopReviewPanel({
             <ActionTooltip title={reviewLineWrapToggleTip}>
               <IconButton
                 aria-pressed={reviewLineWrap}
-                className="desktop-review-panel__wrap-toggle"
+                className="desktop-review-panel__wrap-toggle app-shell-icon-control"
                 label={reviewLineWrapToggleTip}
                 title=""
                 variant="ghost"
@@ -418,7 +418,7 @@ export function DesktopReviewPanel({
               <IconButton
                 aria-disabled={reviewRefreshing}
                 aria-busy={reviewRefreshing}
-                className={`desktop-review-panel__refresh ${reviewRefreshing ? 'is-refreshing' : ''}`}
+                className={`desktop-review-panel__refresh app-shell-icon-control${reviewRefreshing ? ' is-refreshing' : ''}`}
                 label={reviewRefreshTip}
                 title=""
                 variant="ghost"

@@ -454,7 +454,7 @@
 
 .model-provider-settings__sync-item small {
   color: var(--app-text-subtle);
-  font-size: 9px;
+  font-size: 10px;
   line-height: 13px;
 }
 

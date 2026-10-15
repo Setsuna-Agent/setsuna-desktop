@@ -1,9 +1,11 @@
+/* Also injected into Pierre's shadow roots; the --app-find-* properties inherit
+   from :root there, so light and dark themes stay in sync. */
 ::highlight(content-find-match) {
-  background-color: #ffe69b;
-  color: #242424;
+  background-color: var(--app-find-match-bg);
+  color: var(--app-find-match-text);
 }
 
 ::highlight(content-find-active) {
-  background-color: #ff9632;
-  color: #161616;
+  background-color: var(--app-find-active-bg);
+  color: var(--app-find-active-text);
 }

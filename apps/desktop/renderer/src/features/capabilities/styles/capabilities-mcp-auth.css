@@ -11,7 +11,7 @@
   min-width: 0;
   min-height: 64px;
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: var(--app-radius-group);
   background: var(--app-surface-muted);
 }
 
@@ -51,7 +51,7 @@
   flex-shrink: 0;
   min-height: 30px;
   padding: 4px 10px;
-  border-radius: 9px;
+  border-radius: var(--app-radius-sm);
   font-size: 12px;
   line-height: 18px;
 }
@@ -88,7 +88,6 @@
 
 .desktop-mcp-connection-menu {
   min-width: 160px;
-  border-radius: 14px;
 }
 
 .desktop-mcp-device-authorization {
@@ -120,7 +119,7 @@
   min-height: 64px;
   padding: 12px 16px;
   border: 1px solid var(--app-border);
-  border-radius: 12px;
+  border-radius: var(--app-radius-group);
   background: var(--app-surface-subtle);
 }
 

@@ -6,6 +6,7 @@
 
 .desktop-review-panel {
   --desktop-review-panel-x-padding: 8px;
+  --desktop-review-file-row-height: 32px;
   --desktop-review-file-action-edge: var(--app-topbar-item-gap);
   --desktop-review-file-content-max-width: 80%;
   --desktop-review-file-info-width: 75%;
@@ -21,7 +22,7 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border-right: 1px solid var(--desktop-agent-subtle-divider);
+  border-right: 1px solid var(--desktop-panel-divider);
   background: var(--app-bg);
 }
 
@@ -33,14 +34,14 @@
   justify-content: space-between;
   gap: 8px;
   min-width: 0;
-  min-height: 34px;
+  min-height: var(--desktop-panel-toolbar-height);
   padding: 2px var(--desktop-review-panel-x-padding);
-  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 58%, transparent);
+  border-bottom: 1px solid var(--desktop-panel-divider);
   background: var(--app-bg);
 }
 
 .desktop-review-panel > .desktop-review-panel__toolbar {
-  min-height: 40px;
+  min-height: calc(var(--desktop-panel-toolbar-height) + 4px);
   padding-block: 4px;
 }
 
@@ -67,7 +68,7 @@
 
 /* The directory and comparison source share one outline and one text baseline. */
 .chat-file-review-panel__scope--multi-root {
-  border: 1px solid var(--desktop-agent-subtle-divider);
+  border: 1px solid var(--desktop-panel-divider);
   border-radius: var(--app-radius-full);
   background: var(--app-bg);
 }
@@ -114,7 +115,7 @@
   flex: 0 0 auto;
   padding-inline: 8px;
   border: 0;
-  border-left: 1px solid var(--desktop-agent-subtle-divider);
+  border-left: 1px solid var(--desktop-panel-divider);
   border-radius: 0 var(--app-radius-full) var(--app-radius-full) 0;
 }
 
@@ -155,35 +156,29 @@
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
-  gap: 4px;
+  gap: 2px;
 }
 
 .desktop-review-panel__action-group {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
-.desktop-review-panel__actions :where(.sd-icon-button) {
-  width: 30px;
-  height: 30px;
-  border-radius: var(--app-radius-sm);
-  border-color: transparent;
-  color: var(--app-text-muted);
-  background: transparent;
-  transition: background 140ms ease, color 140ms ease;
+/* A hairline separates display toggles from panel actions instead of a wider gap. */
+.desktop-review-panel__action-group + .desktop-review-panel__action-group::before {
+  width: 1px;
+  height: 16px;
+  margin-inline: 4px;
+  background: var(--desktop-panel-divider);
+  content: '';
 }
 
-.desktop-review-panel__actions .sd-icon-button:disabled {
-  border-color: transparent;
+/* Toolbar icon buttons use the shared .app-shell-icon-control geometry and states;
+   aria-pressed marks toggles that are on. */
+.desktop-review-panel__actions .app-shell-icon-control.sd-button:disabled {
   color: var(--app-text-subtle);
   background: transparent;
-}
-
-.desktop-review-panel__actions .sd-icon-button:hover:not(:disabled) {
-  border-color: transparent;
-  color: var(--app-text);
-  background: var(--desktop-agent-control-hover-bg);
 }
 
 .desktop-review-panel__refresh {
@@ -211,9 +206,9 @@
   flex: 0 0 auto;
   align-items: center;
   min-width: 0;
-  min-height: 34px;
-  padding: 0 var(--desktop-review-panel-x-padding);
-  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 58%, transparent);
+  min-height: 30px;
+  padding: 0 var(--desktop-review-panel-x-padding) 4px;
+  border-bottom: 1px solid var(--desktop-panel-divider);
   background: var(--app-bg);
   overflow: hidden;
 }
@@ -222,38 +217,45 @@
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 8px;
+  gap: 6px;
   box-sizing: border-box;
   width: fit-content;
   max-width: 100%;
   min-width: 0;
-  height: 30px;
-  font-size: 13px;
+  height: 24px;
+  min-height: 24px;
+  font-size: 12px;
   line-height: 18px;
   font-weight: var(--app-font-weight);
   overflow: hidden;}
 
 .desktop-review-branch-compare__button.sd-button:focus-visible {
-  outline: 1px solid var(--desktop-review-focus);
+  outline: 2px solid var(--app-focus-outline);
   outline-offset: 2px;}
 
 .desktop-review-branch-compare__button.sd-button:disabled {
-  opacity: 0.5;}
+  opacity: var(--app-disabled-opacity);}
 
 .desktop-review-branch-compare__current,
 .desktop-review-branch-compare__base {
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
+  font-family: var(--app-code-font-family);
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--app-text-muted);
 }
 
+.desktop-review-branch-compare__button.sd-button:hover:not(:disabled) :is(.desktop-review-branch-compare__current, .desktop-review-branch-compare__base) {
+  color: var(--app-text);
+}
+
 .desktop-review-branch-compare__arrow,
 .desktop-review-branch-compare__caret {
   flex: 0 0 auto;
-  color: var(--app-text-muted);
+  color: var(--app-text-subtle);
 }
 
 .desktop-review-branch-dropdown.sd-menu {
@@ -269,12 +271,12 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  height: 32px;
+  height: var(--desktop-panel-search-height);
   padding: 0 8px;
-  border: 1px solid color-mix(in srgb, var(--app-border) 84%, transparent);
+  border: 0;
   border-radius: var(--app-radius-sm);
-  color: var(--app-text-muted);
-  background: color-mix(in srgb, var(--app-text) 2.5%, transparent);
+  color: var(--app-text-subtle);
+  background: color-mix(in srgb, var(--app-text) 5%, transparent);
 }
 
 .desktop-review-branch-menu__search input {
@@ -349,7 +351,7 @@
   display: grid;
   gap: 8px;
   padding: 10px 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 58%, transparent);
+  border-bottom: 1px solid var(--desktop-panel-divider);
   background: var(--app-bg);
 }
 
@@ -371,11 +373,12 @@
 }
 
 .desktop-review-file-card.is-focused {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--desktop-review-focus) 58%, var(--app-border));
+  /* Focus from a finding link: an accent rail instead of a full outline box. */
+  box-shadow: inset 2px 0 0 var(--desktop-review-focus);
 }
 
 .desktop-review-file-card__summary {
-  --desktop-review-file-row-bg: var(--app-surface);
+  --desktop-review-file-row-bg: var(--app-bg);
 
   position: sticky;
   top: 0;
@@ -384,20 +387,29 @@
   grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: 8px;
-  min-height: 34px;
+  min-height: var(--desktop-review-file-row-height);
   padding: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 58%, transparent);
-  background: var(--desktop-review-file-row-bg);
-  transition: background-color 120ms ease;
+  border-bottom: 1px solid var(--desktop-panel-divider);
+  /* The sticky header stays opaque canvas so scrolled diff lines never show through. */
+  background: var(--app-bg);
 }
 
-.desktop-review-file-card:not(.is-open) .desktop-review-file-card__summary {
-  border-bottom-color: transparent;
+/* Hover is an inset rounded fill like the other panel rows, not an edge-to-edge band.
+   The vertical inset matches the hover actions so their fade blends into the fill. */
+.desktop-review-file-card__summary::before {
+  position: absolute;
+  inset: calc((var(--desktop-review-file-row-height) - 28px) / 2) var(--desktop-panel-row-inset);
+  z-index: -1;
+  border-radius: var(--app-radius-sm);
+  background: var(--desktop-review-file-row-bg);
+  content: '';
+  pointer-events: none;
+  transition: background-color 120ms ease;
 }
 
 .desktop-review-file-card__summary:hover,
 .desktop-review-file-card__summary:focus-within {
-  --desktop-review-file-row-bg: var(--desktop-agent-control-hover-bg);
+  --desktop-review-file-row-bg: color-mix(in srgb, var(--app-text) 5%, var(--app-bg));
 }
 
 .desktop-review-file-card__path-main,
@@ -419,12 +431,14 @@
 
 .desktop-review-file-card__meta {
   position: absolute;
-  top: 3px;
+  top: calc((var(--desktop-review-file-row-height) - 28px) / 2);
   right: var(--desktop-review-file-action-edge);
   justify-content: flex-end;
   gap: 4px;
   height: 28px;
   padding-left: 16px;
+  /* Same corners as the hover fill so the fade never pokes past its rounded edge. */
+  border-radius: var(--app-radius-sm);
   background: linear-gradient(90deg, transparent, var(--desktop-review-file-row-bg) 14px);
   opacity: 0;
   pointer-events: none;
@@ -605,39 +619,53 @@
   box-sizing: border-box;
   width: 100%;
   max-width: none;
-  height: 34px;
+  height: var(--desktop-review-file-row-height);
   padding: 0 calc((100% - var(--desktop-review-file-content-max-width)) + var(--desktop-review-file-action-edge)) 0 12px;
   border: 0;
   border-radius: 0;
   color: var(--app-text-muted);
   background: transparent;
   font-family: var(--app-font-family);
-  font-size: 13px;
+  font-size: 12px;
   text-align: left;
   cursor: pointer;
+}
+
+/* The header's inset ::before owns the hover fill; the shared Button hover would
+   otherwise paint a second, square, edge-to-edge band over it. */
+.desktop-review-file-card__path-main.sd-button:is(:hover, :active):not(:disabled) {
+  background: transparent;
+}
+
+/* Directory recedes; the filename and counts carry the row. */
+.desktop-review-file-card__path-main .desktop-workspace-file-path__directory,
+.desktop-review-file-card__path-main .desktop-workspace-file-path__separator {
+  color: var(--app-text-subtle);
 }
 
 .desktop-review-finding {
   box-sizing: border-box;
   display: grid;
-  gap: 8px;
+  gap: 6px;
   width: min(720px, calc(100% - 20px));
   margin: 8px 10px 10px;
-  padding: 12px 14px;
-  border: 1px solid color-mix(in srgb, var(--app-border) 84%, transparent);
-  border-radius: var(--app-radius-lg);
+  padding: 10px 12px 10px 14px;
+  border: 0;
+  border-radius: var(--app-radius-sm);
   color: var(--app-text);
-  background: var(--app-surface);
+  /* A tinted surface with an accent rail reads as an annotation, not a nested card. */
+  background: color-mix(in srgb, var(--app-warning) 5%, var(--app-bg));
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--app-warning) 70%, transparent);
   font-family: var(--app-font-family);
   font-size: 13px;
   line-height: 1.6;
   white-space: normal;
-  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  transition: background-color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .desktop-review-finding.is-focused {
-  border-color: color-mix(in srgb, var(--desktop-review-focus) 76%, var(--app-border));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--desktop-review-focus) 22%, transparent);
+  background: color-mix(in srgb, var(--app-warning) 9%, var(--app-bg));
+  box-shadow: inset 2px 0 0 var(--app-warning);
 }
 
 .desktop-review-finding__header {

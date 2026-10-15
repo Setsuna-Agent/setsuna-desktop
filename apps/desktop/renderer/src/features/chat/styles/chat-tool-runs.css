@@ -398,7 +398,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 
 .chat-file-changes__action:disabled {
   cursor: default;
-  opacity: 0.48;
+  opacity: var(--app-disabled-opacity);
 }
 
 .chat-file-changes__list {
@@ -569,14 +569,16 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 /* Activity belongs to this row's summary, never its completed descendants. */
 .chat-tool-run--running:not([open]) > .chat-tool-run__summary > .chat-tool-run__summary-text > .chat-tool-run__title,
 .chat-tool-run--pending_approval:not([open]) > .chat-tool-run__summary > .chat-tool-run__summary-text > .chat-tool-run__title {
+  /* Derive from the row's title color so the sweep keeps state hues and works in both themes. */
+  --chat-tool-run-shimmer-highlight: color-mix(in srgb, var(--chat-tool-run-title-color) 45%, var(--app-bg));
   color: transparent;
   background: linear-gradient(
     90deg,
-    #9ca3af 0%,
-    #9ca3af 42%,
-    #d1d5db 50%,
-    #9ca3af 58%,
-    #9ca3af 100%
+    var(--chat-tool-run-title-color) 0%,
+    var(--chat-tool-run-title-color) 42%,
+    var(--chat-tool-run-shimmer-highlight) 50%,
+    var(--chat-tool-run-title-color) 58%,
+    var(--chat-tool-run-title-color) 100%
   );
   background-size: 240% 100%;
   -webkit-background-clip: text;
@@ -1298,11 +1300,7 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
 }
 
 .chat-mcp-terminal__stream--stderr {
-  color: #b91c1c;
-}
-
-:root[data-theme='dark'] .chat-mcp-terminal__stream--stderr {
-  color: #fca5a5;
+  color: var(--app-danger);
 }
 
 .chat-mcp-terminal__footer {
@@ -1318,11 +1316,7 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
 }
 
 .chat-mcp-terminal--error .chat-mcp-terminal__footer {
-  color: #b91c1c;
-}
-
-:root[data-theme='dark'] .chat-mcp-terminal--error .chat-mcp-terminal__footer {
-  color: #fca5a5;
+  color: var(--app-danger);
 }
 
 .chat-plan-card {

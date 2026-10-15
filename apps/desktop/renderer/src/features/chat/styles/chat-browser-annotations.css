@@ -26,7 +26,7 @@
   max-height: min(400px, var(--radix-popover-content-available-height, 70vh));
   overflow: auto;
   padding: 4px;
-  border-radius: 14px;
+  border-radius: var(--app-radius-group);
   color: var(--app-text);
   font-size: 13px;
   line-height: 1.6;

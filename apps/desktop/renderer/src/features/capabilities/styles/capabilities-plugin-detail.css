@@ -112,7 +112,7 @@
   grid-template-columns: minmax(0, 1fr);
   min-width: 0;
   overflow: hidden;
-  border-radius: 12px;
+  border-radius: var(--app-radius-group);
   background: var(--app-surface-muted);
 }
 
@@ -176,7 +176,7 @@
 }
 
 .desktop-plugin-item-dialog__file > pre:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--app-primary) 48%, transparent);
+  outline: 2px solid var(--app-focus-outline);
   outline-offset: -2px;
 }
 
@@ -258,10 +258,10 @@
   max-height: 76px;
   padding: 8px 10px;
   overflow: auto;
-  border: 1px solid color-mix(in srgb, #f43f5e 24%, var(--app-border));
+  border: 1px solid color-mix(in srgb, var(--app-danger) 24%, var(--app-border));
   border-radius: var(--app-radius-md);
-  color: color-mix(in srgb, #f43f5e 78%, var(--app-text));
-  background: color-mix(in srgb, #f43f5e 7%, transparent);
+  color: var(--app-danger);
+  background: color-mix(in srgb, var(--app-danger) 7%, transparent);
   font-size: 13px;
   line-height: 18px;
 }

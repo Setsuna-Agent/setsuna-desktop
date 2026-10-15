@@ -31,6 +31,8 @@
   --app-muted: #a3a3a3;
   --app-focus: rgba(0, 0, 0, 0.12);
   --app-focus-ring: 0 0 0 3px var(--app-focus);
+  /* 非文本控件的 outline 焦点色；共享控件用实色 primary，内嵌文字与行操作用较轻的这一档。 */
+  --app-focus-outline: color-mix(in srgb, var(--app-primary) 50%, transparent);
   --app-shadow-hairline: 0 0 0 1px var(--app-border);
   --app-shadow-workbench: 0 2px 8px color-mix(in srgb, #000000 5%, transparent);
   --app-shadow-scroll-edge: 0 3px 6px -3px color-mix(in srgb, #000000 6%, transparent);
@@ -64,6 +66,11 @@
   --app-tooltip-bg: #1c1e20;
   --app-tooltip-text: #f9fafb;
   --app-tooltip-shadow: 0 2px 8px rgb(0 0 0 / 18%), 0 1px 2px rgb(0 0 0 / 12%);
+  /* 内容查找高亮；也会经继承进入代码查看器的 Shadow DOM。 */
+  --app-find-match-bg: #ffe69b;
+  --app-find-match-text: #242424;
+  --app-find-active-bg: #ff9632;
+  --app-find-active-text: #161616;
   --app-green: #22c55e;
   --app-green-hover: #4ade80;
   --app-green-active: #16a34a;
@@ -80,6 +87,8 @@
   --app-accent-border: color-mix(in srgb, var(--app-primary) 30%, var(--app-border));
   --app-danger: #dc2626;
   --app-danger-bg: #fef2f2;
+  /* 信息色用于数据可视化与运行中状态，不随强调色预设变化。 */
+  --app-info: #3b82f6;
   --app-success-bg: color-mix(in srgb, var(--app-green) 12%, transparent);
   --app-warning-bg: color-mix(in srgb, var(--app-orange) 12%, transparent);
   --app-shadow-card: 0 1px 2px color-mix(in srgb, #000000 4%, transparent);
@@ -101,9 +110,15 @@
   --app-radius-md: 8px;
   --app-radius-lg: 10px;
   --app-radius-xl: 18px;
+  /* 嵌入式内容分组：详情元数据、能力分组、Git 面板卡片等弱表面。 */
+  --app-radius-group: 12px;
   --app-radius-full: 999px;
   --app-radius-control: var(--app-radius-full);
   --app-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  /* 按钮、开关、列表行等可操作控件的统一禁用透明度；字段另有背景变化，不共用此值。 */
+  --app-disabled-opacity: 0.45;
+  /* 拖拽预览浮于工作区之上，但低于 Dialog 等宿主浮层。 */
+  --app-z-drag: 1200;
   --app-z-dialog: 1500;
   --app-z-image: 1700;
   --app-z-popover: 1800;
@@ -146,6 +161,15 @@
     + var(--app-topbar-navigation-divider-inset)
   );
   --desktop-workspace-toolbar-height: 42px;
+  /* 右侧工作区面板（审查、变更、文件）共用的内部几何：一种分隔线、一种工具栏高度、一种搜索框。 */
+  --desktop-panel-divider: color-mix(in srgb, var(--app-border) 70%, transparent);
+  --desktop-panel-toolbar-height: 36px;
+  --desktop-panel-search-height: 28px;
+  --desktop-panel-gutter: 12px;
+  /* 列表行 hover/选中底色距容器左右边缘的内缩；审查、变更、文件三个面板的行都不贴边。 */
+  --desktop-panel-row-inset: 6px;
+  /* 面板内的导航栏（文件树、变更导航）：比内容画布略深一点的同色调，而不是另一种表面色。 */
+  --desktop-panel-nav-bg: color-mix(in srgb, var(--app-text) 2%, var(--app-bg));
   --app-titlebar-text: var(--app-sidebar-text-secondary);
   --app-titlebar-control-width: 0px;
   --app-sidebar-width: 240px;
@@ -301,11 +325,16 @@
     0 8px 28px color-mix(in srgb, #000000 34%, transparent);
   --app-shadow-inset-field: inset 0 1px 2px color-mix(in srgb, #000000 40%, transparent);
   --app-tooltip-bg: #2b2b2b;
+  --app-find-match-bg: #5c4a12;
+  --app-find-match-text: #f5f5f5;
+  --app-find-active-bg: #c2671c;
+  --app-find-active-text: #ffffff;
   --app-primary: #f4f4f5;
   --app-primary-hover: #ffffff;
   --app-primary-text: #181818;
   --app-danger: #f87171;
   --app-danger-bg: rgba(248, 113, 113, 0.11);
+  --app-info: #60a5fa;
   --app-success-bg: color-mix(in srgb, var(--app-green) 16%, transparent);
   --app-warning-bg: color-mix(in srgb, var(--app-orange) 16%, transparent);
   --app-shadow-card: 0 1px 2px color-mix(in srgb, #000000 22%, transparent);

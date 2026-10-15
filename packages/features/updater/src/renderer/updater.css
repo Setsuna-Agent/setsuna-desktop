@@ -242,10 +242,10 @@
 
 [data-feature-id='updater'] .updater-settings__download-source-error {
   padding: 7px 9px;
-  border: 1px solid color-mix(in srgb, var(--sd-color-danger, #d92d20) 28%, transparent);
-  border-radius: var(--sd-radius-sm, 7px);
-  color: var(--sd-color-danger, #d92d20);
-  background: color-mix(in srgb, var(--sd-color-danger, #d92d20) 7%, var(--sd-color-surface, Canvas));
+  border: 1px solid color-mix(in srgb, var(--sd-color-danger) 28%, transparent);
+  border-radius: var(--sd-radius-sm);
+  color: var(--sd-color-danger);
+  background: color-mix(in srgb, var(--sd-color-danger) 7%, var(--sd-color-surface, Canvas));
   font-size: 11px;
   line-height: 17px;
 }
@@ -275,15 +275,15 @@
 }
 
 [data-feature-id='updater'] .updater-settings__status--success {
-  color: var(--sd-color-success, #16803d);
+  color: var(--sd-color-success);
 }
 
 [data-feature-id='updater'] .updater-settings__status--warning {
-  color: var(--sd-color-warning, #ea580c);
+  color: var(--sd-color-warning);
 }
 
 [data-feature-id='updater'] .updater-settings__status--danger {
-  color: var(--sd-color-danger, #d92d20);
+  color: var(--sd-color-danger);
 }
 
 @media (max-width: 760px) {

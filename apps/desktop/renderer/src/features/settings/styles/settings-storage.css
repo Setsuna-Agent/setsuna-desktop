@@ -43,7 +43,7 @@
   width: 100%;
   height: 24px;
   overflow: hidden;
-  border-radius: 9px;
+  border-radius: var(--app-radius-sm);
   background: var(--app-surface-muted);
 }
 
@@ -101,7 +101,7 @@
 .storage-actions {
   padding: 0 16px;
   border: 1px solid var(--app-border);
-  border-radius: 18px;
+  border-radius: var(--app-radius-xl);
 }
 
 .storage-actions__row {
@@ -129,7 +129,6 @@
 
 .storage-review-dialog {
   --sd-dialog-gutter: 20px;
-  border-radius: 20px;
   box-shadow: var(--app-shadow-overlay);
 }
 
@@ -168,7 +167,7 @@
   overflow: hidden;
   padding: 0 16px;
   border: 1px solid var(--app-border);
-  border-radius: 15px;
+  border-radius: var(--app-radius-xl);
   background: var(--app-surface);
 }
 
@@ -193,7 +192,7 @@
   max-width: 65%;
   min-width: 134px;
   min-height: 28px;
-  border-radius: 9px;
+  border-radius: var(--app-radius-sm);
   font-size: 12px;
 }
 
@@ -217,11 +216,6 @@
   background: transparent;
   box-shadow: none;
   font-size: 12px;
-}
-
-.storage-threads__toolbar .sd-field:focus-visible {
-  outline: 1px solid var(--app-border-strong);
-  outline-offset: 2px;
 }
 
 .storage-threads__list {

@@ -8,9 +8,9 @@ export function SettingsMarkdownDocument({ content, name, previewLabel, sourceLa
   return <article className="sd-markdown-document">
     <header>
       <h3>{name}</h3>
-      <div className="sd-markdown-document__view-switch" role="group" aria-label={name}>
-        <Button variant="ghost" aria-pressed={!source} onClick={() => setSource(false)}>{previewLabel}</Button>
-        <Button variant="ghost" aria-pressed={source} onClick={() => setSource(true)}>{sourceLabel}</Button>
+      <div className="sd-markdown-view-toggle" role="group" aria-label={name}>
+        <Button variant="ghost" className="sd-markdown-view-option" aria-pressed={!source} onClick={() => setSource(false)}>{previewLabel}</Button>
+        <Button variant="ghost" className="sd-markdown-view-option" aria-pressed={source} onClick={() => setSource(true)}>{sourceLabel}</Button>
       </div>
     </header>
     {source ? <pre className="sd-markdown-document__source" tabIndex={0}>{content}</pre> : (

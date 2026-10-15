@@ -56,10 +56,12 @@
 | 文本 | `--app-text`、`--app-text-secondary`、`--app-text-muted`、`--app-text-subtle` | 按内容重要性分级；弱化文本仍要可读；当前 secondary 与 muted 是同值别名 |
 | 分隔 | `--app-border`、`--app-border-strong` | 普通边界与交互边界；不能只靠极浅分隔表达关键状态 |
 | 主要操作 | `--app-primary`、`--app-primary-hover`、`--app-primary-text` | 按钮背景与文字成对使用、成对校验 |
-| 反馈 | `--app-success*`、`--app-warning*`、`--app-danger*` | 成功、警告、错误与破坏性操作；不跟随用户强调色改变语义 |
+| 反馈 | `--app-success*`、`--app-warning*`、`--app-danger*` | 成功、警告、错误与破坏性操作；不跟随用户强调色改变语义；错误文字、边框和底色都从 `--app-danger` 派生，不另写红色字面值 |
+| 信息 | `--app-info` | 图表、运行中等中性信息；不跟随强调色，不用于主要操作 |
+| 查找高亮 | `--app-find-*` | 对话与代码查看器共用；亮暗主题各有一组，不跟随强调色 |
 | 中性交互 | `--desktop-agent-control-*-bg`、`--desktop-agent-sidebar-*-bg` | 工具栏、列表与侧栏的 hover / active；不把整行染成强调色 |
 | 菜单 | `--app-menu-*` | 操作菜单的背景、高亮和几何；保留独立于强调色的蓝色选中语义 |
-| 键盘焦点 | `--app-focus-ring`、`--app-primary` | 用于按钮、链接等非文本输入控件的既有反馈；输入框不添加聚焦外框 |
+| 键盘焦点 | `--app-focus-ring`、`--app-primary`、`--app-focus-outline` | 用于按钮、链接等非文本输入控件的既有反馈；输入框不添加聚焦外框。共享控件用 `2px solid var(--app-primary)`；内嵌文字、行操作和可滚动区域用 `2px solid var(--app-focus-outline)`；整行容器承载焦点时用 `box-shadow: var(--app-focus-ring)`。不写 1px 焦点线或自配透明度 |
 
 当前浅色主画布为 `#ffffff`、正文为 `#242424`；深色主画布为 `#181818`、内容表面为 `#202020`、正文为 `#e4e4e4`。这是现有中性基底，不另建品牌配色体系。
 
@@ -70,7 +72,7 @@
 - 普通文字按钮、发送按钮、文字链接分别检查实际前景与背景；选用了 token 不等于已经满足对比度要求。
 - 操作菜单沿用独立蓝色高亮；输入框上方的命令、Skill、插件和 `@` 候选沿用不透明表面与中性选中态，防止下方正文透出。
 - 品牌图标、文件类型图标、代码高亮、Diff 与 Git 分支颜色有各自语义，不机械改成 primary。菜单中的品牌底板使用既有 `data-menu-color="preserve"` 机制。
-- 第一方 scoped Feature 优先消费已有 `--sd-color-*` 映射；共享控件沿用 `--app-*`。Tailwind 由 [beui.css](../apps/desktop/renderer/src/shared/styles/beui.css) 映射，不能成为另一套主题来源。
+- 第一方 scoped Feature 优先消费已有 `--sd-color-*` 映射；共享控件沿用 `--app-*`。必要的兜底只用 `Canvas`、`CanvasText`、`GrayText` 等系统色，不写只适配亮色的 hex。Tailwind 由 [beui.css](../apps/desktop/renderer/src/shared/styles/beui.css) 映射，不能成为另一套主题来源。
 
 ### 3.2 字体与阅读层级
 
@@ -93,6 +95,8 @@
 
 现状的界面字重偏好默认值为 500；CSS 中的 400 是偏好初始化前的兜底值。不要据此再生成一套“默认字体配置”。
 
+字重只使用 400 / 500 / 600（或 `--app-font-weight`）；系统字体的 550、650 与相邻档几乎无法区分，只会制造不一致。界面最小字号为 10px，仅用于图表刻度、计数徽章等非阅读文本；品牌图标内的字形属于图形，不受此限。
+
 正文、用户输入和错误详情允许自然换行。侧栏标题、标签名和紧凑列表可以省略，但完整内容应通过已有 tooltip、详情或打开对象访问。路径与模型 ID 等机器标识不能改变真实复制值。数字对齐优先使用 `font-variant-numeric: tabular-nums`，不是把整段说明换成等宽字体。
 
 对应实现：[Markdown](../packages/renderer-ui/src/styles/markdown.css)、[共享控件](../packages/renderer-ui/src/styles/controls.css)、[详情](../packages/renderer-ui/src/styles/detail.css)、[Settings](../apps/desktop/renderer/src/features/settings/styles/settings-base.css)。
@@ -111,10 +115,11 @@
 | 圆角 xs | 6px | 紧凑 ghost 控件、chip |
 | 圆角 sm / md | 均为 8px | 字段、图标按钮与列表操作；保留已有别名 |
 | 圆角 lg | 10px | 小浮层等现有表面 |
+| 圆角 group | 12px | 嵌入式内容分组（详情元数据、能力分组、Git 卡片）与自定义浮层（查找条、hover 卡片、标注） |
 | 圆角 xl | 18px | Composer、Dialog、设置表单组 |
 | 圆角 control / full | 999px | 普通文字操作按钮；不用于把整个工作区卡片化 |
 
-圆角按控件职责选择。菜单外框 10px、菜单项 5px，Workbench 外框与部分详情分组的 12px 是现有局部几何；Windows 窗口外沿 8px 是系统裁切约束。它们不能通过修改一个全局卡片圆角强行统一。
+圆角按控件职责选择，代码中引用 `--app-radius-*`，不写 7 / 9 / 14 / 15 / 20px 这类介于档位之间的字面值。Dialog 统一使用共享 Dialog 的 xl 圆角，业务弹窗不单独放大。菜单外框 10px、菜单项 5px、Workbench 外框 12px 是现有局部几何；Windows 窗口外沿 8px 是系统裁切约束；插件与品牌图标的圆角随图标尺寸等比设定，属于图形几何。它们不能通过修改一个全局卡片圆角强行统一。
 
 操作图标复用现有 `lucide-react`，按所在控件选择 14 / 16 / 18px；同一工具栏保持尺寸、描边和对齐一致。文件类型复用 `FileIcon`，厂商与模型图标复用已有品牌映射。图标大小与点击范围分开管理，不为追求紧凑把需要明确动作名称的按钮全部改成图标。
 
@@ -123,8 +128,19 @@
 - 主工作区和并排面板用连续画布与细分隔，不为每个区域添加圆角、边框和阴影。
 - 内容分组优先采用空白或一种弱表面；仅在分隔有必要时加边界，避免“底色 + 边框 + 阴影”重复强调。
 - 所有文本输入框、搜索框、多行输入和组合控件的内部输入，聚焦时均不添加 outline、额外描边或光晕；外层容器也不通过 `:focus-within` 补加外框。保留控件原有边框和常驻阴影；Composer 使用 `--chat-prompt-shadow` 常驻阴影，聚焦不跳变。
-- 浮层使用已有 `--app-shadow-popover`、`--app-shadow-modal` 等语义阴影。普通卡片不借用 modal 阴影。
+- 浮层使用已有 `--app-shadow-popover`、`--app-shadow-modal` 等语义阴影，不自写只适配亮色的黑色阴影；暗色主题的阴影强度由 token 提供。普通卡片不借用 modal 阴影。
 - 交互状态只改变必要属性；按钮按下不缩放、不位移，避免菜单锚点和命中位置移动。
+
+**右侧工作区面板（审查、变更、文件）** 共用一套内部几何，由 `--desktop-panel-*` 管理：
+
+- 一种分隔线 `--desktop-panel-divider`；不在面板内另配边框透明度。导航栏（文件树、变更导航、审查文件树）用 `--desktop-panel-nav-bg`，内容画布用 `--app-bg`，不再混入侧栏色或 surface 色。
+- 工具栏高 `--desktop-panel-toolbar-height`，图标按钮统一用 `.app-shell-icon-control`，切换态由 `aria-pressed` 表达；不同用途的按钮组之间用细分隔线，不靠加大间距。
+- 搜索/筛选统一用 `TextField appearance="search"`：无边框浅填充，高 `--desktop-panel-search-height`，面板不自搭搜索外壳。
+- 源码/预览等分段切换统一用 `.sd-markdown-view-toggle`。
+- 列表行（文件行、分组标题、提交行、diff 文件头）的 hover 与选中底色左右各内缩 `--desktop-panel-row-inset` 并带 `--app-radius-sm` 圆角，不贴面板边缘。列表容器用同一值做左右留白；吸顶、通栏的行容器保持不透明画布色，由内缩的 `::before` 绘制底色。
+- 一行只由一层负责 hover/选中底色。行内占满整行的共享 `Button`（如路径、提交主体按钮）必须把自带的 hover 背景置为透明，否则会叠出一条贴边的直角色带；行内独立的小图标按钮不在此列。
+- 路径展示让文件名优先：目录部分用 `--app-text-subtle`，分支、提交号等机器标识用等宽字体。
+- 嵌入在 diff 里的批注（审查发现）以语义色浅底加左侧色条表达，不再套边框卡片；被定位的文件同样用左侧色条，不画整圈轮廓。
 
 ## 4. 布局、密度与窗口适配
 
@@ -310,9 +326,9 @@ Composer 的主操作沿用 [ChatComposerFooter](../apps/desktop/renderer/src/fe
 | Feature renderer | 页面、业务交互、hook、局部样式与状态投影 | 复用公共能力；不以全局 CSS 改别的 Feature |
 | `renderer-contracts` | 宿主插槽与注入的 UI contract | 只有真实组合需求才增加 contract |
 
-CSS 只在所属层维护。Feature 可调布局、宽度与业务状态，不复制基础控件的颜色、禁用和焦点样式。局部例外应有明确场景和 owner；当真正跨多个 Feature 复用时再抽取，不新增万能页面组件、巨大 variant 矩阵或平行 UI 套件。
+CSS 只在所属层维护。Feature 可调布局、宽度与业务状态，不复制基础控件的颜色、禁用和焦点样式。自定义按钮、开关和列表行的禁用态统一使用 `opacity: var(--app-disabled-opacity)` 与默认光标；桌面端不使用 `not-allowed` 光标。字段禁用另有底色变化，由共享字段样式管理。局部例外应有明确场景和 owner；当真正跨多个 Feature 复用时再抽取，不新增万能页面组件、巨大 variant 矩阵或平行 UI 套件。
 
-浮层沿用已有层级：Dialog 1500、图片 1700、Popover 1800、Toast 2000，由 `--app-z-*` 管理。它们是渲染层级，焦点与关闭顺序仍由组件生命周期管理；遇到遮挡先查 portal / stacking context，不盲目增加 z-index。
+浮层沿用已有层级：拖拽预览 1200、Dialog 1500、图片 1700、Popover 1800、Toast 2000，由 `--app-z-*` 管理。局部堆叠只在所属容器内使用小整数。它们是渲染层级，焦点与关闭顺序仍由组件生命周期管理；遇到遮挡先查 portal / stacking context，不盲目增加 z-index。
 
 性能也是体验约束：
 

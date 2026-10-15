@@ -332,7 +332,7 @@
 
 .desktop-panel-chrome .chat-file-review-panel__title--drag-preview {
   position: fixed;
-  z-index: 1200;
+  z-index: var(--app-z-drag);
   display: inline-flex;
   min-width: 0;
   max-width: none;

@@ -283,7 +283,7 @@
 }
 
 .desktop-agent-sidebar__empty-project:disabled {
-  opacity: 0.62;
+  opacity: var(--app-disabled-opacity);
 }
 
 .is-spinning {
@@ -679,7 +679,7 @@
   width: 320px;
   max-width: calc(100vw - 16px);
   padding: 8px 11px;
-  border-radius: 16px;
+  border-radius: var(--app-radius-group);
 }
 
 .desktop-agent-thread-preview__heading {
@@ -728,10 +728,7 @@
 
 .desktop-agent-project-preview.sd-popover {
   padding: 8px;
-  border-radius: 12px;
-  box-shadow:
-    0 6px 16px color-mix(in srgb, #000000 8%, transparent),
-    0 1px 3px color-mix(in srgb, #000000 4%, transparent);
+  border-radius: var(--app-radius-group);
 }
 
 .desktop-agent-project-preview__row {

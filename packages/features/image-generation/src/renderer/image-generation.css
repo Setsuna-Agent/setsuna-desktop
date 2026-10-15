@@ -50,10 +50,10 @@
 
 .feature-image-generation-settings__warning {
   padding: 9px 11px;
-  border: 1px solid color-mix(in srgb, var(--sd-color-warning, #f97316) 34%, var(--sd-color-border, CanvasText));
+  border: 1px solid color-mix(in srgb, var(--sd-color-warning) 34%, var(--sd-color-border, CanvasText));
   border-radius: var(--app-radius-sm);
-  color: var(--sd-color-warning, #f97316);
-  background: color-mix(in srgb, var(--sd-color-warning, #f97316) 7%, transparent);
+  color: var(--sd-color-warning);
+  background: color-mix(in srgb, var(--sd-color-warning) 7%, transparent);
   font-size: 12px;
   line-height: 18px;
 }
@@ -84,12 +84,12 @@
 
 .feature-image-generation-settings__status .is-error,
 .feature-image-generation-test .is-error {
-  color: var(--sd-color-danger, #d92d20);
+  color: var(--sd-color-danger);
 }
 
 .feature-image-generation-settings__status .is-success,
 .feature-image-generation-test .is-success {
-  color: var(--sd-color-success, #16803d);
+  color: var(--sd-color-success);
 }
 
 .feature-image-generation-test > header {

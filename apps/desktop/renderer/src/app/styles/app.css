@@ -15,7 +15,7 @@
   min-height: 0;
   flex: 1;
   place-items: center;
-  color: var(--text-tertiary);
+  color: var(--app-text-subtle);
   font-size: 13px;
 }
 
@@ -100,5 +100,5 @@
 
 .app-bootstrap-fatal__reload:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-primary) 18%, transparent);
+  box-shadow: var(--app-focus-ring);
 }

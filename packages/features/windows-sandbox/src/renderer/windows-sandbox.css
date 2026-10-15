@@ -43,16 +43,16 @@
 }
 
 .feature-windows-sandbox__status.is-success {
-  color: var(--sd-color-success, #16803d);
+  color: var(--sd-color-success);
 }
 
 .feature-windows-sandbox__status.is-warning {
-  color: var(--sd-color-warning, #ea580c);
+  color: var(--sd-color-warning);
 }
 
 .feature-windows-sandbox__status.is-danger,
 .feature-windows-sandbox__error {
-  color: var(--sd-color-danger, #d92d20);
+  color: var(--sd-color-danger);
 }
 
 .feature-windows-sandbox__status.is-neutral {

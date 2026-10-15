@@ -716,7 +716,7 @@
 
 .settings-webdav-restore-project small {
   color: var(--app-text-muted);
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .settings-webdav-restore-changes {
@@ -932,7 +932,7 @@
 
 .settings-webdav-restore-safe__categories small {
   color: var(--app-text-muted);
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .settings-webdav__restore-warning {
