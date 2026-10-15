@@ -42,6 +42,7 @@
   cursor: pointer;
 }
 
+/* 1px keeps the focus mark inside the rail's 2px-tall ticks without covering neighbours. */
 .chat-message-rail__tick:focus-visible {
   outline: 1px solid var(--app-primary);
   outline-offset: 1px;

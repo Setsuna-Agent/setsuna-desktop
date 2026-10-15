@@ -1,7 +1,7 @@
 .computer-use-notice {
   overflow: hidden;
   border: 1px solid var(--app-border);
-  border-radius: 16px;
+  border-radius: var(--app-radius-group);
   background: var(--app-surface);
   color: var(--app-text);
   font-size: 13px;

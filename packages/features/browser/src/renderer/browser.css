@@ -62,7 +62,7 @@
 }
 
 .desktop-browser-navigation__button:disabled {
-  opacity: 0.35;
+  opacity: var(--app-disabled-opacity);
 }
 
 .desktop-browser-navigation form {
@@ -433,7 +433,7 @@
 
 .desktop-browser-home-section__link:focus-visible,
 .desktop-browser-home-section__action:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--app-primary) 55%, transparent);
+  outline: 2px solid var(--app-focus-outline);
   outline-offset: -2px;
 }
 

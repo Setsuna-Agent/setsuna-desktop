@@ -46,15 +46,19 @@
   flex: 0 0 auto;
   width: 100%;
   max-width: none;
+  height: var(--desktop-panel-search-height);
+  min-height: var(--desktop-panel-search-height);
   padding-inline: 9px;
-  border-color: var(--desktop-agent-subtle-divider);
-  border-radius: var(--app-radius-md);
-  background: var(--app-surface-subtle);
+  /* Same filled, borderless field as the panel search below it. */
+  border-color: transparent;
+  border-radius: var(--app-radius-sm);
+  background: color-mix(in srgb, var(--app-text) 4%, transparent);
   font-size: 12px;
 }
 
 .workspace-root-picker--field.sd-button:is(:hover, :active, [data-state='open']):not(:disabled) {
-  border-color: var(--app-border-strong);
+  border-color: transparent;
+  background: color-mix(in srgb, var(--app-text) 7%, transparent);
 }
 
 .workspace-root-menu.sd-menu {
@@ -68,9 +72,9 @@
   flex: 0 0 auto;
   align-items: center;
   min-width: 0;
-  height: 40px;
+  height: var(--desktop-panel-toolbar-height);
   padding: 0 10px;
-  border-bottom: 1px solid var(--desktop-agent-subtle-divider);
+  border-bottom: 1px solid var(--desktop-panel-divider);
   background: var(--app-bg);
 }
 

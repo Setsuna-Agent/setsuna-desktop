@@ -427,7 +427,7 @@
 }
 
 .chat-inline-reference--action:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--app-primary) 42%, transparent);
+  outline: 2px solid var(--app-focus-outline);
   outline-offset: 2px;
 }
 
@@ -592,7 +592,7 @@
 
 .chat-user-message-file__name {
   font-size: 14px;
-  font-weight: 550;
+  font-weight: 500;
   line-height: 18px;
 }
 
@@ -767,23 +767,23 @@
 }
 
 .chat-user-edit__actions button:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--app-primary) 42%, transparent);
+  outline: 2px solid var(--app-focus-outline);
   outline-offset: 2px;
 }
 
 .chat-user-edit__actions button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
+  cursor: default;
+  opacity: var(--app-disabled-opacity);
 }
 
 .chat-action-error {
   width: min(var(--chat-content-max-width), calc(100% - var(--chat-content-inline-padding) * 2));
   margin: 0 auto 8px;
   padding: 7px 10px;
-  border: 1px solid color-mix(in srgb, #ef4444 42%, var(--app-border));
+  border: 1px solid color-mix(in srgb, var(--app-danger) 42%, var(--app-border));
   border-radius: var(--app-radius-xs);
-  color: #b91c1c;
-  background: color-mix(in srgb, #ef4444 8%, var(--app-surface));
+  color: var(--app-danger);
+  background: color-mix(in srgb, var(--app-danger) 8%, var(--app-surface));
   font-size: 12px;
   line-height: 1.45;
 }
@@ -892,8 +892,8 @@
 }
 
 .chat-message-footer button:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
+  cursor: default;
+  opacity: var(--app-disabled-opacity);
 }
 
 .chat-message-footer button.is-copied {

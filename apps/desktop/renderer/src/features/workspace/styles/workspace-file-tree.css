@@ -4,7 +4,7 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  background: var(--app-surface);
+  background: var(--desktop-panel-nav-bg);
 }
 
 .desktop-file-explorer--tree-collapsed {
@@ -51,39 +51,9 @@ body.desktop-file-tree-resizing .desktop-file-tree__resize-handle::after {
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-  padding: 8px;
-}
-
-.desktop-file-search {
-  flex: 0 0 auto;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
   gap: 6px;
-  height: 30px;
-  margin: 0;
-  padding: 0 9px;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-md);
-  color: var(--app-text-subtle);
-  background: var(--app-bg);
-}
-
-.desktop-file-search input {
-  box-shadow: none;
-  width: 100%;
   min-width: 0;
-  min-height: 0;
-  height: 100%;
-  padding: 0;
-  border: 0;
-  outline: 0;
-  color: var(--app-text);
-  background: transparent;
-  font-size: 12px;
-  line-height: 20px;
+  padding: 8px var(--desktop-panel-row-inset);
 }
 
 .desktop-file-list {
@@ -92,7 +62,7 @@ body.desktop-file-tree-resizing .desktop-file-tree__resize-handle::after {
   align-content: start;
   min-width: 0;
   min-height: 0;
-  padding: 2px 6px 12px;
+  padding: 2px var(--desktop-panel-row-inset) 12px;
   overflow: auto;
 }
 

@@ -129,7 +129,7 @@
 .pr-welcome h2 { margin: 0; font-size: 22px; color: var(--app-text); }
 .pr-welcome p { max-width: 480px; margin: 0; }
 .pr-welcome__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; }
-.pr-cli-setup { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; max-width: 100%; padding: 16px; border-radius: 12px; background: var(--app-surface-muted); }
+.pr-cli-setup { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; max-width: 100%; padding: 16px; border-radius: var(--app-radius-group); background: var(--app-surface-muted); }
 .pr-cli-setup code { min-width: 0; overflow-wrap: anywhere; text-align: left; color: var(--app-text); }
 .pr-markdown { min-width: 0; color: var(--app-text); user-select: text; }
 .pr-markdown img { max-width: 100%; height: auto; }

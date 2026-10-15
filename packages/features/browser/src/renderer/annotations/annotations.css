@@ -7,13 +7,13 @@
   color: var(--app-text);
   background: var(--app-surface);
   border: 1px solid var(--desktop-agent-subtle-divider);
-  box-shadow: 0 8px 28px #00000014, 0 2px 6px #0000000a;
+  box-shadow: var(--app-shadow-popover);
 }
 
 .browser-annotation-editor {
   width: min(292px, calc(100% - 24px));
   overflow: auto;
-  border-radius: 14px;
+  border-radius: var(--app-radius-group);
 }
 
 .browser-annotation-editor__header {
@@ -29,6 +29,7 @@
   flex: 0 0 20px;
   place-items: center;
   height: 20px;
+  /* Matches the badge drawn into the page by main/annotations/page-overlay.ts. */
   border-radius: 7px;
   background: #6366f1;
   color: #fff;
@@ -120,7 +121,7 @@
   margin: 0;
   padding: 6px;
   overflow: auto;
-  border-radius: 14px;
+  border-radius: var(--app-radius-group);
   list-style: none;
   transform: translateX(-50%);
 }

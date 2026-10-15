@@ -6,7 +6,7 @@
   min-width: 0;
   padding: 4px 6px 8px;
   margin-bottom: -4px;
-  border-radius: 12px 12px 0 0;
+  border-radius: var(--app-radius-group) var(--app-radius-group) 0 0;
   background: var(--app-surface-muted);
 }
 .chat-starter-workspace__project { max-width: 60%; }

@@ -58,11 +58,11 @@
 }
 
 .subagent-task-status--waiting_approval .subagent-task-status__dot {
-  background: var(--app-warning, #d9a441);
+  background: var(--app-warning);
 }
 
 .subagent-task-status--running .subagent-task-status__dot {
-  background: #3b82f6;
+  background: var(--app-info);
 }
 
 .subagent-task-status--completed .subagent-task-status__dot {

@@ -37,10 +37,9 @@ export function GitChangesFiles({ groups, pathContext, selectedKey, loading, err
   })).filter(({ visibleFiles }) => visibleFiles.length > 0);
   return (
     <div className="git-changes-files">
-      <label className="git-changes-files__search">
-        <Search size={13} />
-        <TextField aria-label={t('feature.review.history.filterFiles')} placeholder={t('feature.review.history.filterFiles')} value={query} onChange={(event) => setQuery(event.target.value)} />
-      </label>
+      <div className="git-changes-files__search">
+        <TextField appearance="search" leadingIcon={<Search size={13} />} aria-label={t('feature.review.history.filterFiles')} placeholder={t('feature.review.history.filterFiles')} value={query} onChange={(event) => setQuery(event.target.value)} />
+      </div>
       <GitHistoryScrollArea className="git-changes-files__scroll">
         {error ? <div className="git-history-status" role="alert">{error}<Button variant="ghost" type="button" onClick={onRetry}>{t('feature.review.history.retry')}</Button></div> : null}
         {loading && !hasFiles ? <p className="git-history-status">{t('feature.review.history.loading')}</p> : null}

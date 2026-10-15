@@ -176,7 +176,7 @@
   color: var(--app-text);
   background: var(--app-surface);
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 18px;
   transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
 }
@@ -291,7 +291,7 @@
   justify-content: space-between;
   gap: 16px;
   padding: 16px;
-  border-radius: 12px;
+  border-radius: var(--app-radius-group);
   background: var(--app-surface-muted);
 }
 

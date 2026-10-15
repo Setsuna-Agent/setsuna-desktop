@@ -188,7 +188,7 @@
 }
 
 .chat-starter__model-setup-notice-dismiss:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--app-warning) 55%, transparent);
+  outline: 2px solid var(--app-focus-outline);
   outline-offset: 2px;
 }
 
@@ -390,7 +390,7 @@
 }
 
 .chat-work-history.is-toggleable .chat-work-history__summary:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--desktop-agent-accent) 52%, transparent);
+  outline: 2px solid var(--app-focus-outline);
   outline-offset: 2px;
 }
 
@@ -488,7 +488,7 @@ button.chat-plugin-use:hover .chat-plugin-use__name {
 }
 
 button.chat-plugin-use:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--desktop-agent-accent) 52%, transparent);
+  outline: 2px solid var(--app-focus-outline);
   outline-offset: 2px;
   border-radius: 3px;
 }

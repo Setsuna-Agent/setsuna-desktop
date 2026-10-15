@@ -138,7 +138,7 @@
 }
 
 .chat-markdown__table-scroll:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--app-primary) 46%, transparent);
+  outline: 2px solid var(--app-focus-outline);
   outline-offset: 4px;
 }
 
@@ -174,7 +174,7 @@
   border-bottom: 1px solid color-mix(in srgb, var(--app-border) 86%, transparent);
   color: var(--app-text);
   background: transparent;
-  font-weight: 650;
+  font-weight: 600;
   text-align: left;
   white-space: nowrap;
 }

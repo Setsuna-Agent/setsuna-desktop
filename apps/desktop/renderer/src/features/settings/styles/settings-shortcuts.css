@@ -213,7 +213,7 @@
 
 .settings-shortcuts__add:disabled,
 .settings-shortcuts__reset:disabled {
-  opacity: 0.42;
+  opacity: var(--app-disabled-opacity);
 }
 
 .settings-shortcuts__recorder {

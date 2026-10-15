@@ -1,7 +1,7 @@
 .desktop-markdown-preview {
   min-width: 0;
   min-height: 0;
-  padding: 24px clamp(16px, 4%, 40px) 40px;
+  padding: 32px clamp(20px, 6%, 56px) 56px;
   overflow: auto;
   overscroll-behavior: contain;
   background: var(--app-bg);
@@ -14,8 +14,9 @@
   overscroll-behavior: auto;
 }
 
+/* Document reading width matches the chat column so long-form files read like prose. */
 .desktop-markdown-preview .desktop-markdown-preview__document {
-  max-width: 900px;
+  max-width: var(--chat-content-max-width);
   margin: 0 auto;
 }
 

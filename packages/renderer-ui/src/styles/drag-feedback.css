@@ -7,7 +7,7 @@
 .sd-drag-preview {
   --sd-file-tree-indent: 16px;
   position: fixed;
-  z-index: 1200;
+  z-index: var(--app-z-drag);
   overflow: hidden;
   border: 1px solid var(--app-border-strong);
   border-radius: var(--app-radius-md);

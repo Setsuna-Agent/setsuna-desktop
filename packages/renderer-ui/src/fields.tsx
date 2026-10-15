@@ -2,10 +2,21 @@
 import { forwardRef, useLayoutEffect, useRef, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from 'react';
 import { cn } from './utils.js';
 
-export type TextFieldProps = InputHTMLAttributes<HTMLInputElement> & { leadingIcon?: ReactNode };
-export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function TextField({ className, leadingIcon, ...props }, ref) {
-  const input = <input {...props} ref={ref} className={cn('sd-field', className)} />;
-  return leadingIcon ? <span className="sd-field-shell"><span className="sd-field-shell__icon" aria-hidden="true">{leadingIcon}</span>{input}</span> : input;
+export type TextFieldProps = InputHTMLAttributes<HTMLInputElement> & {
+  leadingIcon?: ReactNode;
+  /** `search` is the compact, borderless filter field used in panel toolbars and lists. */
+  appearance?: 'default' | 'search';
+};
+export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function TextField({ appearance = 'default', className, leadingIcon, ...props }, ref) {
+  const search = appearance === 'search';
+  const input = <input {...props} ref={ref} className={cn('sd-field', search && 'sd-field--search', className)} />;
+  if (!leadingIcon) return input;
+  return (
+    <span className={cn('sd-field-shell', search && 'sd-field-shell--search')}>
+      <span className="sd-field-shell__icon" aria-hidden="true">{leadingIcon}</span>
+      {input}
+    </span>
+  );
 });
 
 export type TextAreaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {

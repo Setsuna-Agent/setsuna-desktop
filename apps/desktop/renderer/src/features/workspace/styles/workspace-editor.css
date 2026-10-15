@@ -8,7 +8,7 @@
 
 .desktop-workspace-body--file-explorer {
   grid-template-columns: minmax(280px, 1fr) var(--desktop-file-tree-track-width, 248px);
-  grid-template-rows: 34px minmax(0, 1fr);
+  grid-template-rows: var(--desktop-panel-toolbar-height) minmax(0, 1fr);
   transition: grid-template-columns var(--app-sidebar-motion-duration) var(--app-sidebar-motion-easing);
 }
 
@@ -50,7 +50,7 @@ body.desktop-file-tree-resizing .desktop-workspace-body--file-explorer {
 .desktop-editor {
   display: grid;
   grid-template-rows: minmax(0, 1fr);
-  border-right: 1px solid var(--desktop-agent-subtle-divider);
+  border-right: 1px solid var(--desktop-panel-divider);
   background: var(--app-bg);
 }
 
@@ -98,8 +98,8 @@ body.desktop-file-tree-resizing .desktop-workspace-body--file-explorer {
   justify-content: space-between;
   gap: 6px;
   min-width: 0;
-  padding: 0 10px 0 14px;
-  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 58%, transparent);
+  padding: 0 var(--app-topbar-item-gap) 0 var(--desktop-panel-gutter);
+  border-bottom: 1px solid var(--desktop-panel-divider);
   color: var(--app-text-muted);
   background: var(--app-bg);
   font-size: 12px;
@@ -115,15 +115,25 @@ body.desktop-file-tree-resizing .desktop-workspace-body--file-explorer {
   overflow: hidden;
 }
 
+/* Directory recedes so the filename reads first, as in the review file rows. */
+.desktop-editor__crumb-path .desktop-workspace-file-path__directory,
+.desktop-editor__crumb-path .desktop-workspace-file-path__separator {
+  color: var(--app-text-subtle);
+}
+
+.desktop-editor__crumb-path .desktop-workspace-file-path__filename {
+  font-weight: 500;
+}
+
 .desktop-editor__crumb-actions {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 2px;
+  gap: var(--app-toolbar-action-gap);
 }
 
 .desktop-editor__view-toggle {
-  margin-right: 6px;
+  margin-right: 4px;
 }
 
 .desktop-file-document,
@@ -245,11 +255,11 @@ body.desktop-file-tree-resizing .desktop-workspace-body--file-explorer {
   box-sizing: border-box;
   padding: 4px 8px;
   overflow: hidden;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-xs);
+  border: 0;
+  border-radius: var(--app-radius-sm);
   color: var(--app-text-muted);
   background: color-mix(in srgb, var(--app-surface) 94%, transparent);
-  box-shadow: var(--app-shadow-raised);
+  box-shadow: var(--app-shadow-surface);
   font-family: var(--app-font-family);
   font-size: 11px;
   line-height: 16px;

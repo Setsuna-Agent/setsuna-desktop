@@ -16,7 +16,7 @@
   margin: 0;
   color: var(--app-text);
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 18px;
 }
 
@@ -58,14 +58,14 @@
 .conversation-debug-diagnostics__section dt > span {
   color: var(--app-text-muted);
   font-size: 11px;
-  font-weight: 550;
+  font-weight: 500;
   line-height: 16px;
 }
 
 .conversation-debug-diagnostics__section dt > code {
   overflow: hidden;
   color: var(--app-text-subtle);
-  font-size: 9px;
+  font-size: 10px;
   line-height: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
