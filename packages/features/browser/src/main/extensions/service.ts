@@ -456,6 +456,8 @@ export class BrowserExtensionService {
     // A cancelled native request can finish after its installation was removed.
     // Keep that ID reserved until cleanup, so a retry cannot be unloaded by the old request.
     this.loading.add(extension.id);
+    if (extension.manifest.background?.service_worker) this.workerStartup.prepare(extension.id);
+    let enqueued = false;
     try {
       const loaded = await this.options.session.extensions.loadExtension(extension.path);
       if (this.signal.aborted || operationSignal?.aborted) { this.options.session.extensions.removeExtension(loaded.id); return; }
@@ -463,11 +465,17 @@ export class BrowserExtensionService {
         this.options.session.extensions.removeExtension(loaded.id);
         throw new Error('Loaded extension identity does not match its installation.');
       }
-      if (loaded.manifest.background?.service_worker) this.workerStartup.enqueue(loaded.id, profileStartup);
+      if (loaded.manifest.background?.service_worker) {
+        this.workerStartup.enqueue(loaded.id, profileStartup);
+        enqueued = true;
+      }
       else if (profileStartup && (loaded.manifest.background?.page || loaded.manifest.background?.scripts?.length)) {
         this.pageStartup.enqueue(loaded.id);
       }
-    } finally { this.loading.delete(extension.id); }
+    } finally {
+      if (!enqueued) this.workerStartup.remove(extension.id);
+      this.loading.delete(extension.id);
+    }
   }
 
   private async unload(id: string): Promise<void> {
