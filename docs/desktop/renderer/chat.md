@@ -68,6 +68,10 @@ Renderer Slot 的实例身份沿用这套 session 语义：Conversation/Details 
 - Review turn。
 - Goal mode。
 
+历史用户消息的编辑由 `conversation/messages/UserMessageEditor` 与 `useUserMessageEditor` 拥有临时草稿和上传资源，复用底部 Composer 的 `ChatPromptInput`、引用槽位、附件 tray、剪贴板和命令控制器。进入编辑时恢复消息中的应用/插件、Skill、文件、网页、对话引用及附件；`@` 继续选择引用，`/` 提供 Skill、插件和上传附件。提交把裁剪后的文字、Skill ID/范围与完整附件列表交给 regenerate；附件字段省略表示保留，空数组表示移除，允许仅附件消息。Runtime 先验证附件能力与归属，再更新消息、截断后续回复，`message.updated` 同步持久化附件变化。取消只回收未发送资源，提交期间离开页面的上传受发送租约保护；异步结果以当前对话身份隔离。
+
+历史 HTTP(S) 图片附件保留原 URL；仅将内联图片 data URL 转为受管资源。解码和上传失败均进入单个附件的错误状态，不阻断编辑器挂载或其他附件的恢复。
+
 ### `useQueuedTurnInputActions.ts`
 
 负责持久化队列的 retrieve、release、update、reorder、delete、send-now，并与 composer identity guard 协作。

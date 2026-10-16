@@ -310,6 +310,9 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
     const message = draft.mutableMessageById(event.payload.messageId);
     if (message) {
       message.content = event.payload.content;
+      if (event.payload.attachments !== undefined) {
+        message.attachments = event.payload.attachments.map((attachment) => ({ ...attachment }));
+      }
       if (event.payload.skillIds !== undefined) {
         message.skillIds = event.payload.skillIds.length ? [...event.payload.skillIds] : undefined;
       }

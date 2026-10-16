@@ -176,14 +176,9 @@ function timelineMessageItem(completed = true, followupSegments: RuntimeMessage[
       activeTurnId={completed ? null : toolSegment.turnId ?? null}
       assistantItemIdByTurnId={new Map()}
       deleteMode={false}
-      editingDraft=""
-      editingMessageId={null}
-      editingSubmitting={false}
       expandedWorkHistoryItemIds={new Set()}
       item={item}
       onAnswerApproval={async () => undefined}
-      onCancelEdit={() => undefined}
-      onEditDraftChange={() => undefined}
       onWorkHistoryExpandedChange={() => undefined}
       pluginUses={[]}
       selectedForDelete={false}
@@ -226,14 +221,9 @@ function messageItem(completed: boolean, runs = [artifactRun()]) {
       activeTurnId={completed ? null : toolSegment.turnId ?? null}
       assistantItemIdByTurnId={new Map()}
       deleteMode={false}
-      editingDraft=""
-      editingMessageId={null}
-      editingSubmitting={false}
       expandedWorkHistoryItemIds={new Set()}
       item={item}
       onAnswerApproval={async () => undefined}
-      onCancelEdit={() => undefined}
-      onEditDraftChange={() => undefined}
       onWorkHistoryExpandedChange={() => undefined}
       pluginUses={[]}
       selectedForDelete={false}

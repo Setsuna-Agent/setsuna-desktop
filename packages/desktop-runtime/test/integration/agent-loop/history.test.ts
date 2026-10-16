@@ -11,6 +11,7 @@ import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.
 import { createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
+import { ImageCapabilityConfigStore } from '../../support/agent-loop/attachments.js';
 import {
   ItemBasedModelClient,
   NativeItemToolCallModelClient,
@@ -256,10 +257,14 @@ describe('agent loop stream history and regeneration', () => {
         clock: systemClock,
         ids,
         skillRegistry: stepSnapshotSkillRegistry(),
+        configStore: new ImageCapabilityConfigStore(true),
       });
+      const originalImage = { id: 'old', name: 'old.png', type: 'image/png', size: 1, url: 'https://example.test/old.png' };
+      const replacementImage = { ...originalImage, id: 'new', name: 'new.png', url: 'https://example.test/new.png' };
   
       await loop.sendTurn(thread.id, {
         input: 'Step Skill original prompt',
+        attachments: [originalImage],
         skillIds: ['skill_step'],
         skillReferences: [{ skillId: 'skill_step', start: 0, end: 'Step Skill'.length }],
       });
@@ -267,16 +272,18 @@ describe('agent loop stream history and regeneration', () => {
       const userMessageId = firstSaved?.messages.find((message) => message.role === 'user')?.id;
       if (!userMessageId) throw new Error('Expected a user message to regenerate.');
   
-      const regenerated = await loop.regenerateFromMessage(thread.id, userMessageId, { content: 'edited prompt' });
+      const regenerated = await loop.regenerateFromMessage(thread.id, userMessageId, { content: 'edited prompt', attachments: [replacementImage] });
       await waitForTurnCompleted(threadStore, thread.id, regenerated.turnId);
       const cleared = await threadStore.getThread(thread.id);
 
       expect(cleared?.messages[0]).toMatchObject({
         id: userMessageId,
         content: 'edited prompt',
+        attachments: [replacementImage],
         skillIds: ['skill_step'],
       });
       expect(cleared?.messages[0]?.skillReferences).toBeUndefined();
+      expect(modelClient.requests[1].messages.filter((message) => message.role === 'user').at(-1)?.attachments).toEqual([replacementImage]);
       expect(modelClient.requests[1].messages
         .filter((message) => message.role === 'user')
         .some((message) => message.content.includes('id="skill_step"'))).toBe(true);
@@ -316,5 +323,9 @@ describe('agent loop stream history and regeneration', () => {
       expect(events.some((event) => event.type === 'message.updated')).toBe(true);
       expect(events.some((event) => event.type === 'messages.truncated')).toBe(true);
       expect(events.filter((event) => event.type === 'message.created' && event.payload.message.role === 'user')).toHaveLength(1);
+      expect(modelClient.requests[2].messages.filter((message) => message.role === 'user').at(-1)?.attachments).toEqual([replacementImage]);
+      const removed = await loop.regenerateFromMessage(thread.id, userMessageId, { content: 'Text only', attachments: [] });
+      await waitForTurnCompleted(threadStore, thread.id, removed.turnId);
+      expect(modelClient.requests[3].messages.filter((message) => message.role === 'user').at(-1)?.attachments ?? []).toEqual([]);
     });
 });

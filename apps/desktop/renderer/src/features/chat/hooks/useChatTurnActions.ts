@@ -1,6 +1,7 @@
 import {
   isRuntimeInputMessageAttachment,
   type CreateThreadInput,
+  type MessagePatch,
   type DesktopRuntimeClient,
   type RuntimeConfigState,
   type RuntimeThread,
@@ -235,10 +236,10 @@ export function useChatTurnActions({
   );
 
   const editUserMessage = useCallback(
-    async (messageId: string, content: string) => {
+    async (messageId: string, input: MessagePatch) => {
       if (!currentThread || activeTurnId) return;
-      const nextContent = content.trim();
-      if (!nextContent) {
+      const nextContent = input.content.trim();
+      if (!nextContent && !input.attachments?.length) {
         setError(t('chat.action.emptyMessage'));
         return;
       }
@@ -249,6 +250,7 @@ export function useChatTurnActions({
         // Regeneration bypasses composer submission, so read its model preference at click time.
         const thinking = readChatModelThinkingSelection(createChatComposerModelCapabilities(provider, model));
         const response = await client.regenerateFromMessage(currentThread.id, messageId, {
+          ...input,
           content: nextContent,
           thinking: thinking.enabled,
           ...(thinking.enabled && thinking.effort ? { thinkingEffort: thinking.effort } : {}),
@@ -261,8 +263,7 @@ export function useChatTurnActions({
         }
       } catch (unknownError) {
         const message = normalizeRuntimeActionError(unknownError, t('chat.action.editUnavailable'));
-        if (!isCurrentRequest()) return;
-        setError(message);
+        if (isCurrentRequest()) setError(message);
         throw new Error(message);
       }
     },

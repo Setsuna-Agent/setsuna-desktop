@@ -31,7 +31,6 @@ const skillCreator: RuntimeSkillSummary = {
 
 function renderUserMessage(
   inputKind: RuntimeMessage['inputKind'],
-  editing = false,
   content = 'Inspect the queue.',
   options: {
     item?: Partial<Extract<ChatDisplayItem, { type: 'user' }>>;
@@ -55,7 +54,6 @@ function renderUserMessage(
     : {
         onStartEdit: () => undefined,
         onStartDelete: () => undefined,
-        onSubmitEdit: () => undefined,
         onToggleDelete: () => undefined,
       };
   return renderToStaticMarkup(
@@ -67,14 +65,9 @@ function renderUserMessage(
           activeTurnId={null}
           assistantItemIdByTurnId={new Map()}
           deleteMode={false}
-          editingDraft={editing ? message.content : ''}
-          editingMessageId={editing ? message.id : null}
-          editingSubmitting={false}
           expandedWorkHistoryItemIds={new Set()}
           item={{ ...userItem(message), ...options.item }}
           onAnswerApproval={async () => undefined}
-          onCancelEdit={() => undefined}
-          onEditDraftChange={() => undefined}
           onWorkHistoryExpandedChange={() => undefined}
           pluginUses={[]}
           selectedForDelete={false}
@@ -101,9 +94,6 @@ function renderPlanMessage(pluginUses: RuntimePluginUse[]): string {
         activeTurnId={null}
         assistantItemIdByTurnId={new Map()}
         deleteMode={false}
-        editingDraft=""
-        editingMessageId={null}
-        editingSubmitting={false}
         expandedWorkHistoryItemIds={new Set()}
         item={{
           type: 'assistant',
@@ -115,11 +105,8 @@ function renderPlanMessage(pluginUses: RuntimePluginUse[]): string {
           turnId: message.turnId,
         }}
         onAnswerApproval={async () => undefined}
-        onCancelEdit={() => undefined}
-        onEditDraftChange={() => undefined}
         onStartEdit={() => undefined}
         onStartDelete={() => undefined}
-        onSubmitEdit={() => undefined}
         onToggleDelete={() => undefined}
         onWorkHistoryExpandedChange={() => undefined}
         pluginUses={pluginUses}
@@ -143,9 +130,6 @@ function renderAssistantMessage(
         activeTurnId={active ? turnId : null}
         assistantItemIdByTurnId={new Map()}
         deleteMode={false}
-        editingDraft=""
-        editingMessageId={null}
-        editingSubmitting={false}
         expandedWorkHistoryItemIds={new Set()}
         item={{
           type: 'assistant',
@@ -158,11 +142,8 @@ function renderAssistantMessage(
           turnId,
         }}
         onAnswerApproval={async () => undefined}
-        onCancelEdit={() => undefined}
-        onEditDraftChange={() => undefined}
         onStartEdit={() => undefined}
         onStartDelete={() => undefined}
-        onSubmitEdit={() => undefined}
         onToggleDelete={() => undefined}
         onWorkHistoryExpandedChange={() => undefined}
         pluginUses={[]}
@@ -183,7 +164,6 @@ describe('MessageItem user messages', () => {
   it('marks Review inputs distinctly without offering message editing', () => {
     const reviewHtml = renderUserMessage(
       'review',
-      false,
       '请审查当前项目中尚未提交的代码更改',
     );
     expect(reviewHtml).toContain('审查');
@@ -192,7 +172,7 @@ describe('MessageItem user messages', () => {
   });
 
   it('omits edit and delete actions when mutation handlers are not provided', () => {
-    const readOnlyHtml = renderUserMessage('message', false, 'Delegated prompt', {
+    const readOnlyHtml = renderUserMessage('message', 'Delegated prompt', {
       readOnly: true,
     });
 
@@ -211,7 +191,7 @@ describe('MessageItem user messages', () => {
       createdAt: '2026-07-27T00:00:01.000Z',
       status: 'complete',
     };
-    const html = renderUserMessage('message', false, 'initial prompt', {
+    const html = renderUserMessage('message', 'initial prompt', {
       item: {
         guidanceProcessed: true,
         handledSteerMessageIds: [guidance.id],
@@ -233,7 +213,7 @@ describe('MessageItem user messages', () => {
       createdAt: '2026-07-27T00:00:01.000Z',
       status: 'complete',
     };
-    const html = renderUserMessage('message', false, 'initial prompt', {
+    const html = renderUserMessage('message', 'initial prompt', {
       item: {
         assistantTimelineSteerMessageIds: [guidance.id],
         guidanceProcessed: false,
@@ -247,7 +227,7 @@ describe('MessageItem user messages', () => {
   });
 
   it('renders the historical serialized Skill label after the Skill is renamed', () => {
-    const html = renderUserMessage('message', false, '对话创建Skill 历史消息', {
+    const html = renderUserMessage('message', '对话创建Skill 历史消息', {
       skillReferences: [{ skillId: skillCreator.id, start: 0, end: skillCreator.name.length }],
       skills: [{ ...skillCreator, name: '新的 Skill 名称' }],
     });
@@ -256,7 +236,7 @@ describe('MessageItem user messages', () => {
   });
 
   it('keeps a read-only historical Skill reference after the Skill is deleted', () => {
-    const html = renderUserMessage('message', false, '对话创建Skill 历史消息', {
+    const html = renderUserMessage('message', '对话创建Skill 历史消息', {
       skillReferences: [{ skillId: skillCreator.id, start: 0, end: skillCreator.name.length }],
       skills: [],
     });

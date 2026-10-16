@@ -149,6 +149,13 @@ export function createChatSlashCommandItems({
         .toLowerCase()
         .includes(normalizedQuery)
     ));
+  return [...visibleActions, ...createChatCapabilityCommandItems({ query, plugins, selectedPluginIds, selectedSkills, skills })];
+}
+
+export function createChatCapabilityCommandItems({ query, plugins = [], selectedPluginIds = [], selectedSkills, skills }: Pick<
+  ChatSlashCommandItemsOptions, 'query' | 'plugins' | 'selectedPluginIds' | 'selectedSkills' | 'skills'
+>): SlashCommandMenuItem[] {
+  const normalizedQuery = query.trim().toLowerCase();
   const selectedSkillIds = new Set(selectedSkills.map((skill) => skill.id));
   const visibleSkills = skills
     .filter((skill) => skill.enabled && !selectedSkillIds.has(skill.id))
@@ -171,7 +178,7 @@ export function createChatSlashCommandItems({
     .filter((plugin) => !normalizedQuery || `${plugin.id} ${plugin.name} ${plugin.description ?? ''} ${(plugin.tags ?? []).join(' ')}`.toLowerCase().includes(normalizedQuery))
     .map<SlashCommandMenuItem>((plugin) => ({ key: `plugin:${plugin.id}`, kind: 'plugin', plugin }));
 
-  return [...visibleActions, ...visiblePlugins, ...visibleSkills];
+  return [...visiblePlugins, ...visibleSkills];
 }
 
 const SIDE_CONVERSATION_HIDDEN_ACTIONS = new Set([

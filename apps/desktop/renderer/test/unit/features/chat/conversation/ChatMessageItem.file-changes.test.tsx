@@ -121,12 +121,11 @@ function TestConversation({ threadId, toolCallIds = ['edit_title', 'edit_body'],
     <ChatThreadProvider key={threadId} threadId={threadId} fileChangeStates={fileChangeStates}>
       <MessageItem
         activeAssistantItemId={null} activeTurnId={null} assistantItemIdByTurnId={new Map()}
-        deleteMode={false} editingDraft="" editingMessageId={null} editingSubmitting={false}
+        deleteMode={false}
         expandedWorkHistoryItemIds={new Set()} selectedForDelete={false} pluginUses={[]}
         item={{ type: 'assistant', id: message.id, turnId: message.turnId, segments: [message],
           messageIds: [message.id], steerMessages: [], handledSteerMessageIds: [] }}
-        onAnswerApproval={async () => undefined} onCancelEdit={() => undefined}
-        onEditDraftChange={() => undefined} onWorkHistoryExpandedChange={() => undefined}
+        onAnswerApproval={async () => undefined} onWorkHistoryExpandedChange={() => undefined}
         onFileChangesAction={(ids, action) => onApplyChanges(threadId, ids, action)}
       />
     </ChatThreadProvider>

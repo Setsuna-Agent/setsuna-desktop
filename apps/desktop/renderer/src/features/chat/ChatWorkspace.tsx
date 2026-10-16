@@ -1,6 +1,8 @@
+import { UserMessageEditor } from './conversation/messages/UserMessageEditor.js';
 import type { WorkspaceDraftReference } from './session/chatDraftReferences.js';
 import type { SetChatComposerDraft } from './hooks/useChatComposerSession.js';
 import type {
+  MessagePatch,
   WorkspaceFileChangeAction,
   ThreadFileChangesResult,
   DesktopRuntimeClient,
@@ -138,7 +140,7 @@ export function ChatWorkspace({
   onDeleteMessages: (messageIds: string[]) => void | Promise<void>;
   onFileChangesAction?: (toolCallIds: string[], action: WorkspaceFileChangeAction) => void | Promise<void | ThreadFileChangesResult>;
   onDraftChange: SetChatComposerDraft;
-  onEditUserMessage: (messageId: string, content: string) => void | Promise<void>;
+  onEditUserMessage: (messageId: string, input: MessagePatch) => void | Promise<void>;
   onOpenSideChat?: () => void;
   onOpenFileReview?: DesktopReviewOpenHandler;
   onOpenModelSettings?: () => void;
@@ -346,6 +348,8 @@ export function ChatWorkspace({
               onDeleteModeChange={setDeleteModeActive}
               onFileChangesAction={onFileChangesAction}
               onEditUserMessage={onEditUserMessage}
+              renderMessageEditor={(props) => <UserMessageEditor key={props.message.id} {...props} client={client}
+                activeProject={activeProject} skills={skills} plugins={plugins} onSearchProjectEntries={onSearchProjectEntries} />}
               onOpenFileReview={onOpenFileReview}
             />
           ))}

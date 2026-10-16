@@ -1,6 +1,7 @@
 import type { WorkspaceDraftReference } from '../../features/chat/session/chatDraftReferences.js';
 import type { SetChatComposerDraft } from '../../features/chat/hooks/useChatComposerSession.js';
 import type {
+  MessagePatch,
   WorkspaceFileChangeAction,
   ThreadFileChangesResult,
   AnswerRuntimeApprovalInput,
@@ -75,7 +76,7 @@ export type ChatConversationSurfaceModel = Readonly<{
   onDeleteMessages(messageIds: string[]): void | Promise<void>;
   onFileChangesAction?(toolCallIds: string[], action: WorkspaceFileChangeAction): void | Promise<void | ThreadFileChangesResult>;
   onDraftChange: SetChatComposerDraft;
-  onEditUserMessage(messageId: string, content: string): void | Promise<void>;
+  onEditUserMessage(messageId: string, input: MessagePatch): void | Promise<void>;
   onFocusComposerRequestConsumed(requestId: number): void;
   onOpenBrowser(url?: string): void;
   onOpenFileReview?: DesktopReviewOpenHandler;

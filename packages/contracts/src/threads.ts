@@ -877,6 +877,8 @@ export type StartTurnResponse = SendTurnResponse | QueuedTurnInputResponse;
 
 export type MessagePatch = {
   content: string;
+  /** undefined 保留原附件；空数组移除全部附件。 */
+  attachments?: RuntimeInputMessageAttachment[];
   skillIds?: string[];
   skillReferences?: RuntimeSkillReference[];
 };
@@ -887,6 +889,8 @@ export type MessageDeleteInput = {
 
 export type RegenerateMessageInput = {
   content?: string;
+  /** undefined 保留原附件；空数组移除全部附件。 */
+  attachments?: RuntimeInputMessageAttachment[];
   skillIds?: string[];
   skillReferences?: RuntimeSkillReference[];
   thinking?: boolean;

@@ -1,4 +1,4 @@
-import type { RuntimeMessage } from '@setsuna-desktop/contracts';
+import type { MessagePatch, RuntimeMessage } from '@setsuna-desktop/contracts';
 import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import { useIdentityRequestGuard } from '../../../shared/hooks/useIdentityRequestGuard.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
@@ -11,7 +11,7 @@ type ChatMessageOperationsOptions = {
   currentThreadId?: string;
   displayItems: ChatDisplayItem[];
   onDeleteMessages?: (messageIds: string[]) => void | Promise<void>;
-  onEditUserMessage?: (messageId: string, content: string) => void | Promise<void>;
+  onEditUserMessage?: (messageId: string, input: MessagePatch) => void | Promise<void>;
   readOnly?: boolean;
 };
 
@@ -26,17 +26,15 @@ export function useChatMessageOperations({
 }: ChatMessageOperationsOptions) {
   const { t } = useI18n();
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const [editingDraft, setEditingDraft] = useState('');
   const [editingSubmitting, setEditingSubmitting] = useState(false);
   const [deleteMode, setDeleteMode] = useState(false);
   const [deletingMessages, setDeletingMessages] = useState(false);
   const [selectedDeleteItemIds, setSelectedDeleteItemIds] = useState<Set<string>>(() => new Set());
   const [actionError, setActionError] = useState<string | null>(null);
-  const operationRequests = useIdentityRequestGuard(composerKey);
+  const operationRequests = useIdentityRequestGuard(`${composerKey}:${currentThreadId ?? ''}:${readOnly}`);
 
   useLayoutEffect(() => {
     setEditingMessageId(null);
-    setEditingDraft('');
     setEditingSubmitting(false);
     setDeleteMode(false);
     setDeletingMessages(false);
@@ -101,7 +99,6 @@ export function useChatMessageOperations({
     if (readOnly || activeTurnId) return;
     setActionError(null);
     setEditingMessageId(null);
-    setEditingDraft('');
     setEditingSubmitting(false);
     setDeleteMode(true);
     setSelectedDeleteItemIds(new Set(deleteGroupItemIds(itemId)));
@@ -157,39 +154,40 @@ export function useChatMessageOperations({
   }, [cancelDeleteSelection, onDeleteMessages, operationRequests, readOnly, selectedDeleteMessageIds, t]);
 
   const startEditingMessage = useCallback((message: RuntimeMessage) => {
-    if (readOnly) return;
+    if (readOnly || activeTurnId || editingSubmitting) return;
+    operationRequests.invalidate();
     setActionError(null);
     setDeleteMode(false);
     setDeletingMessages(false);
     setSelectedDeleteItemIds(new Set());
     setEditingMessageId(message.id);
-    setEditingDraft(message.content);
-  }, [readOnly]);
+  }, [activeTurnId, editingSubmitting, operationRequests, readOnly]);
 
   const cancelEditingMessage = useCallback(() => {
     setEditingMessageId(null);
-    setEditingDraft('');
     setActionError(null);
   }, []);
 
-  const submitEditingMessage = useCallback(async (messageId: string) => {
-    if (readOnly || !onEditUserMessage) return;
-    const content = editingDraft.trim();
-    if (!content) return;
+  const submitEditingMessage = useCallback(async (messageId: string, input: MessagePatch): Promise<boolean> => {
+    if (readOnly || activeTurnId || !onEditUserMessage || editingSubmitting || messageId !== editingMessageId) return false;
+    const content = input.content.trim();
+    if (!content && !input.attachments?.length) return false;
     const isCurrentOperation = operationRequests.begin();
     setEditingSubmitting(true);
     setActionError(null);
     try {
-      await onEditUserMessage(messageId, content);
+      await onEditUserMessage(messageId, { ...input, content });
       commitChatWorkspaceOperation(isCurrentOperation, cancelEditingMessage);
+      return true;
     } catch (unknownError) {
       commitChatWorkspaceOperation(isCurrentOperation, () => {
         setActionError(unknownError instanceof Error ? unknownError.message : String(unknownError));
       });
+      return false;
     } finally {
       commitChatWorkspaceOperation(isCurrentOperation, () => setEditingSubmitting(false));
     }
-  }, [cancelEditingMessage, editingDraft, onEditUserMessage, operationRequests, readOnly]);
+  }, [activeTurnId, cancelEditingMessage, editingMessageId, editingSubmitting, onEditUserMessage, operationRequests, readOnly]);
 
   return {
     actionError,
@@ -199,14 +197,12 @@ export function useChatMessageOperations({
     confirmDeleteSelection,
     deleteMode,
     deletingMessages,
-    editingDraft,
     editingMessageId,
     editingSubmitting,
     selectedDeleteCount,
     selectableDeleteCount: selectableDeleteItems.length,
     selectedDeleteItemIds,
     selectedDeleteMessageIds,
-    setEditingDraft,
     someDeleteSelected,
     startDeleteSelection,
     startEditingMessage,

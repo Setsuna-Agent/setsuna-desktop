@@ -97,14 +97,9 @@ function messageItem(toolRuns: RuntimeToolRun[], completed = false) {
       activeTurnId={completed ? null : segment.turnId ?? null}
       assistantItemIdByTurnId={new Map()}
       deleteMode={false}
-      editingDraft=""
-      editingMessageId={null}
-      editingSubmitting={false}
       expandedWorkHistoryItemIds={new Set()}
       item={item}
       onAnswerApproval={async () => undefined}
-      onCancelEdit={() => undefined}
-      onEditDraftChange={() => undefined}
       onWorkHistoryExpandedChange={() => undefined}
       pluginUses={[]}
       selectedForDelete={false}

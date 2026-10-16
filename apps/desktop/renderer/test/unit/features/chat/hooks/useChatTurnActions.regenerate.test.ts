@@ -62,15 +62,15 @@ describe('message regeneration thinking settings', () => {
       result.current.composer.setThinkingEnabled(true);
       result.current.composer.setThinkingEffort('xhigh');
     });
-    await act(async () => result.current.actions.editUserMessage('message_1', 'hello'));
+    await act(async () => result.current.actions.editUserMessage('message_1', { content: 'hello' }));
     expect(regenerateFromMessage).toHaveBeenLastCalledWith(currentThread.id, 'message_1', {
       content: 'hello', thinking: true, thinkingEffort: 'xhigh',
     });
 
     act(() => result.current.composer.setThinkingEnabled(false));
-    await act(async () => result.current.actions.editUserMessage('message_1', 'edited hello'));
+    await act(async () => result.current.actions.editUserMessage('message_1', { content: 'edited hello', attachments: [], skillIds: [], skillReferences: [] }));
     expect(regenerateFromMessage).toHaveBeenLastCalledWith(currentThread.id, 'message_1', {
-      content: 'edited hello', thinking: false,
+      content: 'edited hello', attachments: [], skillIds: [], skillReferences: [], thinking: false,
     });
   });
 });
