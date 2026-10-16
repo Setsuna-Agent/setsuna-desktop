@@ -1,4 +1,5 @@
 import { ChatPromptInput } from './composer/editor/ChatPromptInput.js';
+import type { WorkspaceDraftReference } from './session/chatDraftReferences.js';
 import type { ComposerSlot } from './composer/editor/types.js';
 import type {
   DesktopRuntimeClient,
@@ -46,6 +47,7 @@ import { startChatComposerCapabilitySelection, type ChatComposerCapabilitySelect
 import { parsePluginMentions, type RuntimePluginSummary } from '@setsuna-desktop/contracts';
 import {
   createSelectedSkillReferences,
+  createWorkspaceDraftReferences,
   createSelectedSkillSlot,
   createSelectedPluginSlot,
   createPluginAppMentionSlot,
@@ -68,6 +70,7 @@ import { useChatComposerModeController } from './composer/useChatComposerModeCon
 import { useQueuedTurnComposerEdit } from './composer/useQueuedTurnComposerEdit.js';
 import type { ChatContextTokenUsage } from './conversation/chatContextUsage.js';
 import type { ChatQueuedTurnActions } from './hooks/useQueuedTurnInputActions.js';
+import type { SetChatComposerDraft } from './hooks/useChatComposerSession.js';
 import {
   chatThreadModelSelection,
   type ChatModelSelectionHandler,
@@ -75,6 +78,7 @@ import {
 
 const EMPTY_PLUGINS: RuntimePluginSummary[] = [];
 const EMPTY_SKILL_REFERENCES: RuntimeSkillReference[] = [];
+const EMPTY_WORKSPACE_REFERENCES: WorkspaceDraftReference[] = [];
 const EMPTY_QUEUED_TURN_INPUTS: RuntimeQueuedTurnInput[] = [];
 const CAPABILITY_SELECTION_MAX_INSERT_ATTEMPTS = 8;
 
@@ -117,6 +121,7 @@ export function ChatComposer({
   currentThread,
   draft,
   draftSkillReferences = EMPTY_SKILL_REFERENCES,
+  draftWorkspaceReferences = EMPTY_WORKSPACE_REFERENCES,
   attachmentStore,
   focusOnReveal = false,
   focusRequest = 0,
@@ -156,6 +161,7 @@ export function ChatComposer({
   currentThread: RuntimeThread | null;
   draft: string;
   draftSkillReferences?: RuntimeSkillReference[];
+  draftWorkspaceReferences?: WorkspaceDraftReference[];
   attachmentStore?: ChatAttachmentStore;
   focusOnReveal?: boolean;
   focusRequest?: number;
@@ -172,7 +178,7 @@ export function ChatComposer({
   onAccessModeChange: (selection: RuntimeAccessModeSelection) => void;
   onCompactContext: () => void;
   onClearContext: () => void;
-  onDraftChange: (value: string, skillReferences?: RuntimeSkillReference[]) => void;
+  onDraftChange: SetChatComposerDraft;
   onFocusRequestConsumed?: (requestId: number) => void;
   onSelectModel: ChatModelSelectionHandler;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
@@ -190,7 +196,7 @@ export function ChatComposer({
 }) {
   const { t } = useI18n();
   const initialSlotConfigRef = useRef<ComposerSlot[] | null>(null);
-  if (initialSlotConfigRef.current === null) initialSlotConfigRef.current = createReferenceDraftSlots(draft, plugins, skills, draftSkillReferences);
+  if (initialSlotConfigRef.current === null) initialSlotConfigRef.current = createReferenceDraftSlots(draft, plugins, skills, draftSkillReferences, draftWorkspaceReferences);
   const [selectedSkills, setSelectedSkills] = useState(() => filterSelectedSkillsBySlots(skills, initialSlotConfigRef.current!));
   const selectedPluginIds = useMemo(() => [...new Set(parsePluginMentions(draft).map((mention) => mention.pluginId))], [draft]);
   const [pendingModelSelection, setPendingModelSelection] = useState<{
@@ -308,14 +314,14 @@ export function ChatComposer({
   const resetQueuedTurnComposer = useCallback(() => {
     clearAttachments();
     setSelectedSkills([]);
-    onDraftChange('');
+    onDraftChange('', [], [], { source: 'draft' });
     lastEditorDraftRef.current = '';
     senderRef.current?.clear?.();
   }, [clearAttachments, onDraftChange]);
   const replaceQueuedTurnComposer = useCallback((input: RuntimeQueuedTurnInput) => {
     replaceAttachmentsWithExisting(input.attachments ?? []);
     setSelectedSkills([]);
-    onDraftChange(input.input);
+    onDraftChange(input.input, [], [], { source: 'queued-edit' });
     senderRef.current?.focus?.({ cursor: 'end', preventScroll: true });
   }, [
     onDraftChange,
@@ -549,7 +555,7 @@ export function ChatComposer({
     commandController.handleDraftValueChange(value);
     setSelectedSkills(filterSelectedSkillsBySlots(skills, slotConfig));
     lastEditorDraftRef.current = value;
-    onDraftChange(value, createSelectedSkillReferences(slotConfig, { trim: false }));
+    onDraftChange(value, createSelectedSkillReferences(slotConfig, { trim: false }), createWorkspaceDraftReferences(slotConfig));
   };
 
   useEffect(() => {
@@ -575,11 +581,13 @@ export function ChatComposer({
       const offset = syncPlan.type === 'append' ? currentEditorValue.value.length : 0;
       const references = draftSkillReferences.filter((reference) => reference.start >= offset)
         .map((reference) => ({ ...reference, start: reference.start - offset, end: reference.end - offset }));
+      const workspaceReferences = draftWorkspaceReferences.filter((reference) => reference.start >= offset)
+        .map((reference) => ({ ...reference, start: reference.start - offset, end: reference.end - offset }));
       // 先聚焦到末尾，确保外部文件引用插入到当前草稿。
       editor.focus({ cursor: 'end', preventScroll: true });
-      editor.insert(createReferenceDraftSlots(syncPlan.value, plugins, skills, references), 'end', undefined, true);
+      editor.insert(createReferenceDraftSlots(syncPlan.value, plugins, skills, references, workspaceReferences), 'end', undefined, true);
     }
-  }, [draft, draftSkillReferences, plugins, skills]);
+  }, [draft, draftSkillReferences, draftWorkspaceReferences, plugins, skills]);
 
   const handleKeyDown = (event: ReactKeyboardEvent) => {
     if (commandController.slashMenuOpen) {

@@ -19,17 +19,51 @@ const skillUi: SettingsViewUi = {
   Toast: ({ message }) => <div role="alert">{message}</div>,
 } as SettingsViewUi;
 
+const host = { platform: 'darwin', revealFile: vi.fn(async () => undefined) };
+
 function skill(id: string): RuntimeSkillDetail {
-  return { id, name: id, kind: 'user', enabled: true, content: `# ${id}`, references: [] };
+  return { id, name: id, kind: 'user', enabled: true, content: `# ${id}`, sourceContent: `# ${id}`, references: [] };
 }
+
+it.each(['darwin', 'win32'])('reveals the loaded Skill document on %s and reports native failures', async (platform) => {
+  const sourceContent = '---\nname: Document\nmetadata:\n  version: "01"\n---\n\n# Instructions\n';
+  const summary = { ...skill('Document'), path: '/plugins/document/SKILL.md' };
+  const detail = { ...summary, content: '# Instructions', sourceContent, path: '/plugin-skill-overrides/document/SKILL.md' };
+  const snapshot = { skills: [summary], extraRoots: [] };
+  let load!: (detail: RuntimeSkillDetail) => void;
+  const service = {
+    getSnapshot: () => snapshot, subscribe: () => () => undefined,
+    getSkill: vi.fn(() => new Promise<RuntimeSkillDetail>((resolve) => { load = resolve; })),
+  } as unknown as SkillsRendererService;
+  const revealFile = vi.fn().mockRejectedValueOnce(new Error('Skill file no longer exists')).mockResolvedValue(undefined);
+  render(<SkillsCapabilitiesPage sectionId="skills" service={service} host={{ platform, revealFile }} translate={(key) => key} ui={skillUi}
+    capabilitiesRefresh={{ refresh: vi.fn() } as unknown as CapabilitiesRefreshCoordinator} />);
+  fireEvent.click(screen.getByRole('button', { name: /^Document/u }));
+  const reveal = screen.getByRole('button', { name: platform === 'darwin' ? 'feature.skills.revealInFinder' : 'feature.skills.revealInExplorer' });
+  fireEvent.click(reveal);
+  expect(revealFile).not.toHaveBeenCalled();
+  await act(async () => load(detail));
+
+  fireEvent.click(reveal);
+  await screen.findByRole('alert');
+  expect(revealFile).toHaveBeenCalledExactlyOnceWith(detail.path);
+  expect(screen.getByRole('alert').textContent).toBe('Skill file no longer exists');
+  fireEvent.click(reveal);
+  await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  expect(revealFile).toHaveBeenCalledTimes(2);
+  expect(revealFile).toHaveBeenLastCalledWith(detail.path);
+
+  fireEvent.click(screen.getByRole('button', { name: 'feature.skills.edit' }));
+  expect((screen.getByRole('textbox', { name: 'feature.skills.editor.content' }) as HTMLTextAreaElement).value).toBe(detail.content);
+});
 
 it('keeps a failed Skill draft editable and prevents duplicate saves before retry', async () => {
   const snapshot = { skills: [skill('existing')], extraRoots: [] };
   let rejectSave!: (error: Error) => void;
   const createSkill = vi.fn().mockImplementationOnce(() => new Promise((_, reject) => { rejectSave = reject; }))
-    .mockResolvedValueOnce({ ...skill('new'), name: 'New skill', content: '# Draft' });
+    .mockResolvedValueOnce({ ...skill('new'), name: 'New skill', content: '# Draft', sourceContent: '# Draft' });
   const service = { getSnapshot: () => snapshot, subscribe: () => () => undefined, createSkill } as unknown as SkillsRendererService;
-  render(<SkillsCapabilitiesPage sectionId="skills" service={service} translate={(key) => key} ui={skillUi}
+  render(<SkillsCapabilitiesPage sectionId="skills" service={service} host={host} translate={(key) => key} ui={skillUi}
     capabilitiesRefresh={{ refresh: vi.fn() } as unknown as CapabilitiesRefreshCoordinator} />);
   fireEvent.click(screen.getByRole('button', { name: 'feature.skills.add' }));
   const name = screen.getByRole('textbox', { name: 'feature.skills.editor.name' }) as HTMLInputElement;
@@ -66,14 +100,14 @@ it('keeps the selected Skill when dependency installation finishes after navigat
     renderBreadcrumb: ({ onBack }) => <Button onClick={onBack}>Back</Button>,
     renderCreateMenu: () => null,
   } as CapabilitiesPageNavigation;
-  render(<SkillsCapabilitiesPage sectionId="skills" service={service} translate={(key) => key} ui={skillUi} capabilities={capabilities}
+  render(<SkillsCapabilitiesPage sectionId="skills" service={service} host={host} translate={(key) => key} ui={skillUi} capabilities={capabilities}
     capabilitiesRefresh={{ refresh: vi.fn(async () => undefined) } as unknown as CapabilitiesRefreshCoordinator} />);
   fireEvent.click(screen.getByRole('button', { name: /^First/u }));
   fireEvent.click(await screen.findByRole('button', { name: 'feature.skills.installAndEnable' }));
   fireEvent.click(screen.getByRole('button', { name: 'Back' }));
   fireEvent.click(screen.getByRole('button', { name: /^Second/u }));
   await screen.findByText('# Second');
-  await act(async () => finish({ skill: { ...first, content: '# First updated' } }));
+  await act(async () => finish({ skill: { ...first, content: '# First updated', sourceContent: '# First updated' } }));
   expect(screen.getByRole('heading', { name: 'Second' })).toBeTruthy();
   expect(screen.getByText('# Second')).toBeTruthy();
   expect(screen.queryByText('# First updated')).toBeNull();
@@ -82,7 +116,7 @@ it('keeps the selected Skill when dependency installation finishes after navigat
 it('opens the dependency MCP authorization page without starting a hidden Skill login', async () => {
   const skill: RuntimeSkillDetail = {
     id: 'github-review', name: 'Review pull requests', kind: 'user', enabled: true,
-    content: '# Review pull requests', references: [],
+    content: '# Review pull requests', sourceContent: '# Review pull requests', references: [],
     mcpDependencies: [{
       type: 'mcp', value: 'github', transport: 'streamableHttp',
       url: 'https://api.githubcopilot.com/mcp/', status: 'authRequired', authStatus: 'notLoggedIn',
@@ -106,6 +140,7 @@ it('opens the dependency MCP authorization page without starting a hidden Skill 
     capabilities={capabilities}
     capabilitiesRefresh={{ refresh: vi.fn() } as unknown as CapabilitiesRefreshCoordinator}
     service={service}
+    host={host}
     translate={(key) => key}
     ui={{
       Button, IconButton, SkillIcon: () => null, PageHeader: () => null, ActionMenu: () => null,

@@ -25,7 +25,7 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react';
-import type { SkillsRendererService } from '../contracts/index.js';
+import type { SkillsRendererHost, SkillsRendererService } from '../contracts/index.js';
 import type { SkillsTranslate } from './messages.js';
 import { SkillDetail } from './SkillDetail.js';
 import { useSkillPageActions } from './useSkillPageActions.js';
@@ -42,11 +42,13 @@ type SkillEditorDraft = Readonly<{
 export function SkillsCapabilitiesPage({
   capabilities,
   capabilitiesRefresh,
+  host,
   service,
   translate,
   ui,
 }: SettingsPageSlotProps & Readonly<{
   capabilitiesRefresh: CapabilitiesRefreshCoordinator;
+  host: SkillsRendererHost;
   service: SkillsRendererService;
 }>) {
   const snapshot = useSyncExternalStore(
@@ -56,7 +58,7 @@ export function SkillsCapabilitiesPage({
   );
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const actions = useSkillPageActions(service, capabilitiesRefresh, translate);
+  const actions = useSkillPageActions(service, capabilitiesRefresh, translate, host);
   const { mode, summary, detail, error, loading, saving, operationError, pending } = actions;
 
   useEffect(() => {
@@ -102,6 +104,7 @@ export function SkillsCapabilitiesPage({
           loading={loading}
           pendingDependencies={new Set(pending.get(summary.id) === 'install' ? ['install'] : [])}
           pending={pending.has(summary.id)}
+          revealLabel={translate(host.platform === 'darwin' ? 'feature.skills.revealInFinder' : 'feature.skills.revealInExplorer')}
           summary={summary}
           translate={translate}
           ui={ui}
@@ -109,6 +112,7 @@ export function SkillsCapabilitiesPage({
           onDelete={summary.kind === 'builtin' ? undefined : () => actions.deleteSkill(summary)}
           onEdit={summary.kind === 'builtin' ? undefined : actions.openEditor}
           onInstallDependencies={() => actions.installDependencies(summary)}
+          onRevealFile={detail?.path ? () => actions.revealFile(detail) : undefined}
           onToggle={(enabled) => void actions.toggleSkill(summary, enabled)}
           onUseInChat={capabilities ? () => capabilities.openChat(summary.id) : undefined}
         />

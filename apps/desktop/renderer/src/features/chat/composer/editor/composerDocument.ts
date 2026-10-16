@@ -103,9 +103,10 @@ export function composerFragment(document: Document, slots: ComposerSlot[], refe
       references.set(slot.key, slot);
       const tag = document.createElement('span');
       tag.dataset.slotKey = slot.key;
+      tag.dataset.composerValueLength = String(slotText(slot).length);
       tag.contentEditable = 'false';
       tag.className = 'chat-prompt__tag';
-      // The portal label is display-only. Serialization always reads the slot value.
+      // Serialization and cursor offsets use the slot value, even before the portal label mounts.
       tag.textContent = slot.props.value ?? '';
       fragment.append(tag);
     }

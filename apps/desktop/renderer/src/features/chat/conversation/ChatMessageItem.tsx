@@ -1,4 +1,4 @@
-import { TextArea, Button, MessageBubble } from '@setsuna-desktop/renderer-ui';
+import { Button, MessageBubble } from '@setsuna-desktop/renderer-ui';
 
 import {
   normalizeRuntimeReviewNotice,
@@ -9,7 +9,7 @@ import {
   type RuntimeToolRun,
 } from '@setsuna-desktop/contracts';
 import { BookOpen, MessageSquare } from 'lucide-react';
-import { memo, useMemo, type FormEvent, type ReactNode } from 'react';
+import { memo, useMemo, type ReactNode } from 'react';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { Checkbox } from '../../../shared/ui/primitives.js';
 import type { DesktopReviewOpenHandler } from '../../workspace/model.js';
@@ -73,20 +73,15 @@ export const MessageItem = memo(function MessageItem({
   assistantItemIdByTurnId,
   contextCompactionRunning = false,
   deleteMode,
-  editingDraft,
-  editingMessageId,
-  editingSubmitting,
+  editor,
   expandedWorkHistoryItemIds,
   item,
   pending = false,
   onAnswerApproval,
-  onCancelEdit,
   onFileChangesAction,
-  onEditDraftChange,
   onOpenFileReview,
   onStartEdit,
   onStartDelete,
-  onSubmitEdit,
   onToggleDelete,
   onWorkHistoryExpandedChange,
   hookUses,
@@ -99,20 +94,15 @@ export const MessageItem = memo(function MessageItem({
   assistantItemIdByTurnId: Map<string, string>;
   contextCompactionRunning?: boolean;
   deleteMode: boolean;
-  editingDraft: string;
-  editingMessageId: string | null;
-  editingSubmitting: boolean;
+  editor?: ReactNode;
   expandedWorkHistoryItemIds: Set<string>;
   item: ChatDisplayItem;
   pending?: boolean;
   onAnswerApproval: AnswerApprovalHandler;
-  onCancelEdit: () => void;
   onFileChangesAction?: (toolCallIds: string[], action: WorkspaceFileChangeAction) => void | Promise<void | ThreadFileChangesResult>;
-  onEditDraftChange: (value: string) => void;
   onOpenFileReview?: DesktopReviewOpenHandler;
   onStartEdit?: (message: RuntimeMessage) => void;
   onStartDelete?: (itemId: string) => void;
-  onSubmitEdit?: (messageId: string) => void;
   onToggleDelete?: (itemId: string, checked: boolean) => void;
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
   hookUses?: RuntimeHookUse[];
@@ -155,7 +145,6 @@ export const MessageItem = memo(function MessageItem({
   }
   const { message } = item;
   const streaming = message.status === 'streaming';
-  const editing = Boolean(onSubmitEdit && editingMessageId === message.id);
   const steered = item.steered;
   const assistantItemId = message.turnId ? assistantItemIdByTurnId.get(message.turnId) : undefined;
   const workHistoryExpanded = assistantItemId
@@ -167,9 +156,7 @@ export const MessageItem = memo(function MessageItem({
   // Handled guidance belongs to the assistant work timeline at its real event position. Only keep
   // this fallback for a failed/unhandled steer that has no completed assistant response to own it.
   const showExtractedGuidance = Boolean(!steered && message.turnId && message.turnId !== activeTurnId && !item.guidanceProcessed && fallbackGuidanceMessages.length && !workHistoryExpanded);
-  if (editing) {
-    return <UserMessageEditor disabled={Boolean(activeTurnId) || editingSubmitting} submitting={editingSubmitting} value={editingDraft} onCancel={onCancelEdit} onChange={onEditDraftChange} onSubmit={() => onSubmitEdit?.(message.id)} />;
-  }
+  if (editor) return editor;
   const hasAttachments = Boolean(message.attachments?.length);
   return (
     <article data-message-id={chatDisplayItemRenderKey(item)} className={['chat-bubble-item', 'chat-bubble-item--user', deleteMode ? 'chat-bubble-item--selecting' : '', selectedForDelete ? 'is-selected-for-delete' : ''].filter(Boolean).join(' ')}>
@@ -241,33 +228,6 @@ function AssistantRunItem({
         align="start"
         variant="ghost"
       />
-    </article>
-  );
-}
-
-function UserMessageEditor({ disabled, onCancel, onChange, onSubmit, submitting, value }: { disabled: boolean; onCancel: () => void; onChange: (value: string) => void; onSubmit: () => void; submitting: boolean; value: string }) {
-  const { t } = useI18n();
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (!value.trim() || disabled) return;
-    onSubmit();
-  };
-  return (
-    <article className="chat-bubble-item chat-bubble-item--user">
-      <form className="chat-user-edit" onSubmit={submit}>
-        <TextArea autoFocus disabled={disabled} value={value} rows={Math.min(8, Math.max(2, value.split('\n').length))} onChange={(event) => onChange(event.currentTarget.value)} />
-        <div className="chat-user-edit__footer">
-          <span className="chat-user-edit__actions">
-            <Button variant="ghost" type="button" disabled={disabled} onClick={onCancel}>
-              {t('common.cancel')}
-            </Button>
-            <Button variant="primary" type="submit" disabled={disabled || !value.trim()}>
-              {submitting ? t('chat.message.sending') : t('chat.composer.send')}
-            </Button>
-          </span>
-        </div>
-      </form>
     </article>
   );
 }

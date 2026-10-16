@@ -1,7 +1,7 @@
 import type { RuntimeSkillDetail, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import type { CapabilitiesPageNavigation, SettingsViewUi } from '@setsuna-desktop/renderer-contracts/settings';
 import { Switch } from '@setsuna-desktop/renderer-ui';
-import { FileText, Loader2, LogIn, MessageSquare, Pencil, Plug, RefreshCw, Trash2 } from 'lucide-react';
+import { FileText, FolderOpen, Loader2, LogIn, MessageSquare, Pencil, Plug, RefreshCw, Trash2 } from 'lucide-react';
 import type { SkillsTranslate } from './messages.js';
 
 export function SkillDetail({
@@ -13,10 +13,12 @@ export function SkillDetail({
   onDelete,
   onEdit,
   onInstallDependencies,
+  onRevealFile,
   onToggle,
   onUseInChat,
   pendingDependencies,
   pending,
+  revealLabel,
   summary,
   translate,
   ui,
@@ -29,10 +31,12 @@ export function SkillDetail({
   onDelete?: () => Promise<void>;
   onEdit?: () => void;
   onInstallDependencies(): Promise<void>;
+  onRevealFile?: () => Promise<void>;
   onToggle(enabled: boolean): void;
   onUseInChat?: () => void;
   pendingDependencies: ReadonlySet<string>;
   pending: boolean;
+  revealLabel: string;
   summary: RuntimeSkillSummary;
   translate: SkillsTranslate;
   ui: SettingsViewUi;
@@ -52,6 +56,12 @@ export function SkillDetail({
       id: 'delete',
       label: translate('feature.skills.delete'),
     }] : []),
+    {
+      disabled: pending || !onRevealFile,
+      icon: <FolderOpen size={14} />,
+      id: 'reveal-file',
+      label: revealLabel,
+    },
     {
       disabled: !active.enabled || !onUseInChat,
       icon: <MessageSquare size={14} />,
@@ -80,6 +90,7 @@ export function SkillDetail({
                   onSelect={(actionId) => {
                     if (actionId === 'edit') onEdit?.();
                     if (actionId === 'delete') void onDelete?.();
+                    if (actionId === 'reveal-file') void onRevealFile?.();
                     if (actionId === 'use-in-conversation') onUseInChat?.();
                   }}
                 />
@@ -127,7 +138,8 @@ export function SkillDetail({
           ))}
           {detail ? (
             <>
-              <ui.MarkdownDocument key={detail.id} content={detail.content} name="SKILL.md"
+              <ui.MarkdownDocument key={detail.id} content={detail.sourceContent} name="SKILL.md"
+                copyLabels={{ copy: translate('feature.skills.copySource'), copied: translate('feature.skills.copied'), failed: translate('feature.skills.copyFailed') }}
                 previewLabel={translate('feature.skills.preview')} sourceLabel={translate('feature.skills.source')} />
               <section className="desktop-capabilities-skill-section">
                 <header><FileText size={14} /><span>{translate('feature.skills.references')}</span></header>

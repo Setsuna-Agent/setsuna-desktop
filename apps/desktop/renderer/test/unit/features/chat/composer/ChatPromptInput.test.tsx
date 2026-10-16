@@ -5,9 +5,10 @@ import { createRef } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ChatPromptInput } from '../../../../../src/features/chat/composer/editor/ChatPromptInput.js';
 import type { ComposerEditor } from '../../../../../src/features/chat/composer/editor/types.js';
-import { createWorkspaceMentionSlots } from '../../../../../src/features/chat/composer/chatComposerSlots.js';
+import { createReferenceDraftSlots, createTextSlot, createWorkspaceDraftReferences, createWorkspaceMentionSlots, getChatComposerSlotReference } from '../../../../../src/features/chat/composer/chatComposerSlots.js';
+import { useChatComposerSession, type ChatComposerTargetIdentity } from '../../../../../src/features/chat/hooks/useChatComposerSession.js';
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); localStorage.clear(); });
 
 it('keeps IME confirmation and Shift+Enter separate from sending the current draft', () => {
   const editor = createRef<ComposerEditor>();
@@ -65,4 +66,43 @@ it('replaces only the active mention command and submits the full path behind it
   act(() => editor.current?.insert(slots, 'cursor', '@fo'));
   expect(editor.current?.getValue().value).toBe('保留 @foo，然后查看 @src/Foo.tsx ');
   expect(editor.current?.getValue().slotConfig.filter((slot) => slot.type === 'tag')).toHaveLength(1);
+});
+
+it('restores editable drafts with file and directory slots after switching conversations and restarting', () => {
+  const editor = createRef<ComposerEditor>();
+  const client = { uploadAttachment: vi.fn(), deleteAttachment: vi.fn(), linkAttachment: vi.fn() };
+  const submit = vi.fn();
+  function SessionEditor({ target }: { target: ChatComposerTargetIdentity }) {
+    const session = useChatComposerSession(target, client, 'primary:0');
+    return <ChatPromptInput key={session.composerKey} ref={editor} value={session.draft}
+      slotConfig={createReferenceDraftSlots(session.draft, [], [], [], session.draftWorkspaceReferences)}
+      onChange={(value, _event, slots) => session.setDraft(value, [], createWorkspaceDraftReferences(slots))} onSubmit={submit} />;
+  }
+  const view = render(<SessionEditor target="thread:A" />);
+  act(() => editor.current!.insert([
+    ...createWorkspaceMentionSlots({ kind: 'directory', name: 'agent-pc', path: 'src/domain/agent-pc', parent: 'src/domain' }),
+    ...createWorkspaceMentionSlots({ kind: 'file', name: 'spec.md', path: 'spec.md', absolutePath: '/other root/spec.md', parent: '', rootId: 'other-root' }),
+    createTextSlot('1231313213 @src/domain/agent-pc/'),
+  ], 'end'));
+  const draft = editor.current!.getValue().value;
+  view.rerender(<SessionEditor target="thread:B" />);
+  expect(editor.current!.getValue().value).toBe('');
+  act(() => editor.current!.insert([createTextSlot('另一段草稿')]));
+  view.rerender(<SessionEditor target="thread:A" />);
+  const assertRestored = () => {
+    const current = editor.current!.getValue();
+    expect(current.value).toBe(draft);
+    expect(current.slotConfig.map(getChatComposerSlotReference).filter(Boolean)).toEqual([
+      { type: 'workspace', entry: expect.objectContaining({ kind: 'directory', path: 'src/domain/agent-pc' }) },
+      { type: 'workspace', entry: expect.objectContaining({ kind: 'file', path: 'spec.md', absolutePath: '/other root/spec.md', rootId: 'other-root' }) },
+    ]);
+  };
+  assertRestored();
+  view.unmount();
+  render(<SessionEditor target="thread:A" />);
+  assertRestored();
+  editor.current!.focus({ cursor: 'end' });
+  act(() => editor.current!.insert([createTextSlot(' 继续检查')]));
+  fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
+  expect(submit).toHaveBeenCalledExactlyOnceWith(`${draft} 继续检查`);
 });

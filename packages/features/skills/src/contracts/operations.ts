@@ -96,6 +96,7 @@ const skillDetailCodec = defineRuntimeCodec<RuntimeSkillDetail>((value) => {
   return Object.freeze({
     ...skillSummary(record),
     content: text(record.content, 'content'),
+    sourceContent: text(record.sourceContent, 'sourceContent'),
     references: stringArray(record.references, 'references'),
   });
 });

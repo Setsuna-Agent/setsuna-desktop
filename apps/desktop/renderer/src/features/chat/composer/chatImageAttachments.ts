@@ -22,11 +22,17 @@ export function uploadInlineChatImageAttachment(
   attachment: RuntimeInlineMessageAttachment,
   client: Pick<DesktopRuntimeClient, 'uploadAttachment'>,
 ): Promise<RuntimeStoredMessageAttachment> {
-  return client.uploadAttachment({
-    name: attachment.name,
-    type: attachment.type,
-    data: chatImageDataUrlBytes(attachment.url),
-  });
+  try {
+    // Return the upload Promise directly to preserve concurrent completion order.
+    return client.uploadAttachment({
+      name: attachment.name,
+      type: attachment.type,
+      data: chatImageDataUrlBytes(attachment.url),
+    });
+  } catch (error) {
+    // Decoding/client setup can fail synchronously; callers handle upload rejections.
+    return Promise.reject(error);
+  }
 }
 
 export function chatImageDataUrlBytes(url: string): Uint8Array {

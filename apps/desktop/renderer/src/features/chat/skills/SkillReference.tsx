@@ -24,15 +24,17 @@ export function SkillReferenceCatalogProvider({
 export const SkillReferenceLabel = memo(function SkillReferenceLabel({
   displayText,
   skill,
+  skillId,
 }: {
   displayText?: string;
-  skill: RuntimeSkillSummary;
+  skill?: RuntimeSkillSummary;
+  skillId?: string;
 }) {
   return (
     <SkillReferencePresentation
-      displayText={displayText ?? skillDisplayText(skill)}
+      displayText={displayText ?? (skill ? skillDisplayText(skill) : skillId ?? '')}
       skill={skill}
-      title={skill.description || skill.id}
+      title={skill?.description || skill?.id || skillId || displayText || ''}
     />
   );
 });

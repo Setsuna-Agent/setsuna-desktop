@@ -1,6 +1,7 @@
 export { skillsFeature } from './definition.js';
 export {
   skillsControlCapability,
+  skillsRendererHostCapability,
   skillsRendererServiceCapability,
   skillsRuntimeHostCapability,
 } from './capabilities.js';
@@ -14,6 +15,7 @@ export type {
   SkillsControl,
   SkillsOperationOptions,
   SkillsRendererListener,
+  SkillsRendererHost,
   SkillsRendererService,
   SkillsRendererSnapshot,
   SkillsRuntimeHost,

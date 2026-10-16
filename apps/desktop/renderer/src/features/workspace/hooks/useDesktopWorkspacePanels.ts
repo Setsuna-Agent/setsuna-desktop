@@ -31,7 +31,6 @@ import {
   findDesktopPanelLocationByType,
   movePanelBetweenSlotStates,
   removePanelFromSlotState,
-  reconcilePanelRoots,
   reorderPanelInSlotState,
   renameFilePanelsInSlot,
   deleteFilePanelsInSlot,
@@ -70,6 +69,7 @@ type WorkspacePanelsOptions = {
   setError: (message: string | null) => void;
   targetIdentity: ChatComposerTargetIdentity;
   workspaceStatus: ThreadWorkspaceStatus;
+  windowSessionKey?: string | null;
 };
 
 const GLOBAL_TERMINAL_PROJECT_KEY = '__global__';
@@ -81,8 +81,14 @@ export function useDesktopWorkspacePanels({
   setError,
   targetIdentity,
   workspaceStatus,
+  windowSessionKey = null,
 }: WorkspacePanelsOptions) {
   const { t } = useI18n();
+  const rootIds = useMemo(
+    () => activeProject && workspaceStatus === 'ready'
+      ? new Set(workspaceProjectRoots(activeProject).map((root) => root.id)) : undefined,
+    [activeProject, workspaceStatus],
+  );
   const {
     bottomPanelExpanded,
     bottomPanelSlot,
@@ -98,7 +104,7 @@ export function useDesktopWorkspacePanels({
     sidePanelExpanded,
     sidePanelSlot,
     updateLayoutForIdentity,
-  } = useDesktopWorkspacePanelSession(targetIdentity);
+  } = useDesktopWorkspacePanelSession(targetIdentity, windowSessionKey, rootIds);
   const {
     loadReviewState,
     reviewError,
@@ -119,8 +125,7 @@ export function useDesktopWorkspacePanels({
   const sideChatPanelSeqRef = useRef(0);
 
   useEffect(() => {
-    if (!activeProject || workspaceStatus !== 'ready') return;
-    const rootIds = new Set(workspaceProjectRoots(activeProject).map((root) => root.id));
+    if (!activeProject || !rootIds) return;
     // Cancel pending opens as well as live sessions before panels fall back to the primary directory.
     for (const [key, pending] of pendingTerminalSessionsRef.current) {
       if (pending.projectId === activeProject.id && !rootIds.has(pending.rootId)) pendingTerminalSessionsRef.current.delete(key);
@@ -142,9 +147,7 @@ export function useDesktopWorkspacePanels({
       }
       return next;
     });
-    setSidePanelSlot((slot) => reconcilePanelRoots(slot, rootIds));
-    setBottomPanelSlot((slot) => reconcilePanelRoots(slot, rootIds));
-  }, [activeProject, workspaceStatus, setSidePanelSlot, setBottomPanelSlot]);
+  }, [activeProject, rootIds]);
 
   const selectedWorkspaceApp = workspaceApps.find((app) => app.id === selectedWorkspaceAppId) ?? workspaceApps[0] ?? null;
   const sideActivePanel = activePanelInSlot(sidePanelSlot);

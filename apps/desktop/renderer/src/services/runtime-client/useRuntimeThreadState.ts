@@ -27,6 +27,7 @@ import type {
 import { useIdentityRequestGuard } from '../../shared/hooks/useIdentityRequestGuard.js';
 import { useAnimationFrameCommit } from '../../shared/hooks/useAnimationFrameCommit.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import { readInitialChatSelection } from './runtimeSessionSelection.js';
 import { readBrowserStorageValue, removeBrowserStorageValue, writeBrowserStorageValue } from '../../shared/preferences/browserStorage.js';
 import {
   isThreadDeletionCancelled,
@@ -38,7 +39,6 @@ import {
   adoptOwnedThreadSnapshot,
   applyCurrentThreadEventBatch,
   isThreadContextCompacting,
-  selectInitialThreadSummary,
   shouldFrameCoalesceThreadEvents,
   updateThreadApprovalRun,
 } from './runtimeThreadState.js';
@@ -74,6 +74,7 @@ type RuntimeThreadStateOptions = {
   client: RuntimeThreadClient;
   onError: (message: string) => void;
   onThreadDeleted?: (threadId: string) => void;
+  onRestoreNewThreadDraft?: (draftId: string | null) => void;
   onTurnSettled: (settlement: RuntimeTurnSettlement) => void;
   review: ReviewFeatureService;
   setActiveProjectId: Dispatch<SetStateAction<string | null>>;
@@ -90,6 +91,7 @@ export function useRuntimeThreadState({
   client,
   onError,
   onThreadDeleted,
+  onRestoreNewThreadDraft,
   onTurnSettled,
   review,
   setActiveProjectId,
@@ -99,6 +101,7 @@ export function useRuntimeThreadState({
   const [threads, setThreads] = useState<RuntimeThreadSummary[]>([]);
   const [archivedThreads, setArchivedThreads] = useState<RuntimeThreadSummary[]>([]);
   const [currentThread, setCurrentThreadState] = useState<RuntimeThread | null>(null);
+  const [windowSessionKey, setWindowSessionKey] = useState<string | null>(null);
   const currentThreadCommit = useAnimationFrameCommit(setCurrentThreadState);
   const [contextCompactingThreadId, setContextCompactingThreadId] = useState<string | null>(null);
   const [activityEvents, setActivityEvents] = useState<CoreRuntimeEvent[]>([]);
@@ -168,12 +171,16 @@ export function useRuntimeThreadState({
     if (initializedSelectionRef.current) return;
 
     initializedSelectionRef.current = true;
-    const requestedThreadId = await window.setsunaDesktop?.windowControls?.getInitialThreadId?.();
-    const initialThread = selectInitialThreadSummary(
-      primaryThreads,
-      readPersistedActiveThreadId(),
-    );
-    const initialThreadId = requestedThreadId ?? initialThread?.id;
+    const context = await window.setsunaDesktop?.windowControls?.getSessionContext?.()
+      ?? { initialThreadId: null, sessionKey: 'primary:0' };
+    const selection = readInitialChatSelection(context.sessionKey, context.initialThreadId, primaryThreads, projects, readPersistedActiveThreadId());
+    setWindowSessionKey(context.sessionKey);
+    onRestoreNewThreadDraft?.(selection.draftId ?? null);
+    if ('projectId' in selection) {
+      setActiveProjectId(selection.projectId ?? null);
+      return;
+    }
+    const initialThreadId = selection.threadId;
     if (initialThreadId) {
       try {
         const thread = await client.getThread(initialThreadId);
@@ -186,7 +193,7 @@ export function useRuntimeThreadState({
       }
     }
     setActiveProjectId((current) => current ?? projects[0]?.id ?? null);
-  }, [client, setActiveProjectId, setCurrentThread]);
+  }, [client, onRestoreNewThreadDraft, setActiveProjectId, setCurrentThread]);
 
   useEffect(() => {
     if (currentThreadId) persistActiveThreadId(currentThreadId);
@@ -587,6 +594,7 @@ export function useRuntimeThreadState({
     startCurrentThreadReview,
     terminalTurnIdsRef,
     threads,
+    windowSessionKey,
   };
 }
 

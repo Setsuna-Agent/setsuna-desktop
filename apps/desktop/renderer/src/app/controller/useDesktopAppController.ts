@@ -21,10 +21,13 @@ import {
 import { useChatTurnActions } from '../../features/chat/hooks/useChatTurnActions.js';
 import { useDesktopPanelResize } from '../../features/workspace/hooks/useDesktopPanelResize.js';
 import { useDesktopWorkspacePanels } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
+import { useWorkspaceRecoveryKey } from '../../features/workspace/hooks/useWorkspaceRecoveryKey.js';
 import { useProjectWorkspace } from '../../features/workspace/hooks/useProjectWorkspace.js';
 import { useWorkspaceFilePanelLifecycle } from '../../features/workspace/hooks/useWorkspaceFilePanelLifecycle.js';
 import { useThreadWorkspace } from '../../features/workspace/hooks/useThreadWorkspace.js';
 import { useRuntimeClientState } from '../../services/runtime-client/useRuntimeClientState.js';
+import { saveChatSelection } from '../../services/runtime-client/runtimeSessionSelection.js';
+import { isPrimaryConversationThread } from '../../services/runtime-client/runtimeThreadRelations.js';
 import { useIdentityRequestGuard } from '../../shared/hooks/useIdentityRequestGuard.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { useThreadGroups } from '../sidebar/useThreadGroups.js';
@@ -66,6 +69,7 @@ export function useDesktopAppController() {
     activeProjectId,
     modelProvider,
     onThreadDeleted: handleThreadDeleted,
+    onRestoreNewThreadDraft: setNewThreadDraftId,
     onTurnSettled: handleTurnSettled,
     review,
     setActiveProjectId,
@@ -83,6 +87,7 @@ export function useDesktopAppController() {
     setProjects,
     terminalTurnIdsRef,
     threads,
+    windowSessionKey,
   } = runtime;
 
   useEffect(() => {
@@ -102,12 +107,23 @@ export function useDesktopAppController() {
     currentThread ? null : activeProjectId,
     newThreadDraftId,
   );
-  const composerSession = useChatComposerSession(chatTargetIdentity, client);
+  // Recovery is independent of runtime bootstrap; only the selected conversation is read.
+  const recoveredWindowKeyRef = useRef<string | null>(null);
+  if (loadState === 'ready') recoveredWindowKeyRef.current = windowSessionKey;
+  const recoveryWindowKey = recoveredWindowKeyRef.current;
+  const workspaceRecoveryKey = useWorkspaceRecoveryKey(recoveryWindowKey);
+  const composerSession = useChatComposerSession(chatTargetIdentity, client, recoveryWindowKey);
+  const canSaveChatSelection = activeView !== 'automation' && (!currentThread || isPrimaryConversationThread(currentThread));
+  useEffect(() => {
+    if (!recoveryWindowKey || !canSaveChatSelection) return;
+    saveChatSelection(recoveryWindowKey, chatTargetIdentity);
+  }, [canSaveChatSelection, chatTargetIdentity, recoveryWindowKey]);
   const {
     claimForThread: claimComposerForThread,
     composerKey,
     draft,
     draftSkillReferences,
+    draftWorkspaceReferences,
     attachmentStore,
     setDraft,
   } = composerSession;
@@ -128,6 +144,7 @@ export function useDesktopAppController() {
     setError,
     targetIdentity: chatTargetIdentity,
     workspaceStatus: activeWorkspaceState.status,
+    windowSessionKey: workspaceRecoveryKey,
   });
   const {
     bottomActivePanel,
@@ -233,6 +250,7 @@ export function useDesktopAppController() {
   });
 
   function handleThreadDeleted(threadId: string) {
+    composerSession.discardThread(threadId);
     workspacePanels.resetThreadPanelSession(threadId);
     projectWorkspace.resetProjectWorkspaceState();
   }
@@ -397,6 +415,7 @@ export function useDesktopAppController() {
     projectWorkspace,
     attachmentStore,
     draftSkillReferences,
+    draftWorkspaceReferences,
     runtime,
     searchTriggerRef,
     selectSkillForChat,

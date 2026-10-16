@@ -38,6 +38,7 @@ export function inlineImageAttachmentsToStore(
     item.attachment
       && isRuntimeInlineMessageAttachment(item.attachment)
       && item.attachment.type.startsWith('image/')
+      && item.attachment.url.startsWith('data:image/')
       ? [{ item, attachment: item.attachment }]
       : []
   ));
@@ -210,8 +211,8 @@ export function createChatAttachmentStore(client: ChatAttachmentClient, t: Trans
         : {}),
     }));
     commitItems(nextItems);
-    // Queued inputs can contain legacy inline images. Normalize them immediately instead
-    // of relying on a capability effect that has already run before the edit is loaded.
+    // Legacy data URLs need storage, while historical HTTP(S) images retain their URLs.
+    // Normalize on restore because the editor's capability effects may have already run.
     for (const { item, attachment } of inlineImageAttachmentsToStore(nextItems)) {
       storeInlineImage(item, attachment);
     }

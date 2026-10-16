@@ -8,12 +8,14 @@ import type {
   WorkspaceEntrySearchItem,
 } from '@setsuna-desktop/contracts';
 import { WorkspaceMentionLabel } from '../mentions/WorkspaceMentionLabel.js';
+import { parseWorkspaceMentionText } from '../mentions/workspaceMentionParser.js';
 import { BrowserTabReferenceLabel } from '../mentions/BrowserTabReference.js';
 import { ThreadReferenceLabel } from '../mentions/ThreadReference.js';
 import { SkillReferenceLabel } from '../skills/SkillReference.js';
 import { PluginReferenceLabel } from '../references/PluginReference.js';
 import { PluginAppReferenceLabel } from '../references/PluginAppReferenceLabel.js';
 import { entryLabel, skillDisplayText } from './chatCommandUtils.js';
+import { normalizeWorkspaceDraftReferences, type WorkspaceDraftReference } from '../session/chatDraftReferences.js';
 
 const workspaceMentionSlotKeyPrefix = 'workspace:';
 const selectedSkillSlotKeyPrefix = 'skill:';
@@ -39,14 +41,17 @@ export function createTextSlot(value: string): ComposerSlot {
 }
 
 export function createSelectedSkillSlot(skill: RuntimeSkillSummary): ChatComposerReferenceSlot {
-  const tokenText = skillDisplayText(skill);
+  return createSkillReferenceSlot(skill.id, skillDisplayText(skill), skill);
+}
+
+function createSkillReferenceSlot(skillId: string, text: string, skill?: RuntimeSkillSummary): ChatComposerReferenceSlot {
   return {
     type: 'tag',
     key: createReferenceSlotKey(selectedSkillSlotKeyPrefix),
-    composerReference: { type: 'skill', skillId: skill.id },
+    composerReference: { type: 'skill', skillId },
     props: {
-      label: <SkillReferenceLabel skill={skill} />,
-      value: tokenText,
+      label: <SkillReferenceLabel skill={skill} skillId={skillId} displayText={text} />,
+      value: text,
     },
   };
 }
@@ -74,7 +79,7 @@ export function createBrowserTabMentionSlot(tab: BrowserTabReference): ChatCompo
     type: 'tag',
     key: createReferenceSlotKey('browser-tab:'),
     composerReference: { type: 'browser-tab', tab: { id: tab.id, title: tab.title, url: tab.url } },
-    props: { label: <BrowserTabReferenceLabel tab={tab} serializedText={value} />, value },
+    props: { label: <BrowserTabReferenceLabel tab={tab} />, value },
   };
 }
 
@@ -83,7 +88,7 @@ export function createThreadMentionSlot(thread: RuntimeThreadReference): ChatCom
   return {
     type: 'tag', key: createReferenceSlotKey('thread:'),
     composerReference: { type: 'thread', thread: { id: thread.id, title: thread.title } },
-    props: { label: <ThreadReferenceLabel thread={thread} serializedText={value} />, value },
+    props: { label: <ThreadReferenceLabel thread={thread} />, value },
   };
 }
 
@@ -92,16 +97,23 @@ export function createReferenceDraftSlots(
   plugins: readonly RuntimePluginSummary[],
   skills: readonly RuntimeSkillSummary[] = [],
   skillReferences: RuntimeSkillReference[] = [],
+  workspaceReferences: WorkspaceDraftReference[] = [],
 ): ComposerSlot[] {
   const slots: ComposerSlot[] = [];
   let offset = 0;
+  const skillsById = new Map(skills.map((skill) => [skill.id, skill]));
   const references = normalizeRuntimeSkillReferences({
-    content: value, references: skillReferences, skillIds: skills.filter((skill) => skill.enabled).map((skill) => skill.id),
-  });
-  for (const reference of references) {
-    const skill = skills.find((item) => item.id === reference.skillId)!;
+    content: value, references: skillReferences, skillIds: skillReferences.map((reference) => reference.skillId),
+  }).map((reference) => ({ ...reference, slot: createSkillReferenceSlot(reference.skillId, value.slice(reference.start, reference.end), skillsById.get(reference.skillId)) }));
+  const selectedReferences = [
+    ...references,
+    ...normalizeWorkspaceDraftReferences(value, workspaceReferences)
+      .map((reference) => ({ ...reference, slot: createWorkspaceMentionReferenceSlot(reference.entry) })),
+  ].sort((first, second) => first.start - second.start);
+  for (const reference of selectedReferences) {
+    if (reference.start < offset) continue;
     slots.push(...createThreadDraftSlots(value.slice(offset, reference.start), plugins));
-    const slot = createSelectedSkillSlot(skill);
+    const slot = reference.slot;
     slot.props.value = value.slice(reference.start, reference.end);
     slots.push(slot);
     offset = reference.end;
@@ -144,11 +156,11 @@ export function createPluginDraftSlots(value: string, plugins: readonly RuntimeP
   let offset = 0;
   for (const mention of parsePluginMentions(value)) {
     const plugin = plugins.find((item) => item.id === mention.pluginId);
-    if (!plugin) continue;
     if (mention.start > offset) slots.push(createTextSlot(value.slice(offset, mention.start)));
-    const slot = mention.contributionId
-      ? createPluginAppMentionSlot({ pluginId: plugin.id, contributionId: mention.contributionId, name: mention.label })
-      : createSelectedPluginSlot(plugin);
+    const slot: ChatComposerReferenceSlot = mention.contributionId
+      ? createPluginAppMentionSlot({ pluginId: mention.pluginId, contributionId: mention.contributionId, name: mention.label })
+      : { type: 'tag', key: createReferenceSlotKey('plugin:'), composerReference: { type: 'plugin', pluginId: mention.pluginId },
+        props: { label: <PluginReferenceLabel plugin={plugin} label={plugin?.name ?? mention.label} />, value: '' } };
     // Keep the exact serialized text so rehydration does not change the draft or other slot offsets.
     slot.props.value = value.slice(mention.start, mention.end);
     slots.push(slot);
@@ -168,7 +180,35 @@ export function createMessageDraftSlots(
     skillIds: message.skillIds ?? [],
     references: message.skillReferences,
   });
-  return createReferenceDraftSlots(message.content, plugins, skills, references);
+  // Sent messages already interpret @paths as references. Drafts still require explicit
+  // selection metadata so reopening an unfinished @query never turns it into a tag.
+  return createReferenceDraftSlots(message.content, plugins, skills, references).flatMap((slot) => {
+    if (slot.type !== 'text') return [slot];
+    return parseWorkspaceMentionText(slot.value ?? '').map((part) => {
+      if (part.type === 'text') return createTextSlot(part.value);
+      const path = part.path.replace(/[\\/]+$/u, '');
+      const reference = createWorkspaceMentionReferenceSlot({
+        kind: part.entryType,
+        name: path.split(/[\\/]/u).at(-1) || part.path,
+        path: part.path,
+        parent: path.slice(0, Math.max(0, path.lastIndexOf('/'), path.lastIndexOf('\\'))),
+      });
+      reference.props.value = part.serializedText;
+      return reference;
+    });
+  });
+}
+
+export function createWorkspaceDraftReferences(slots: ComposerSlot[] = []): WorkspaceDraftReference[] {
+  const references: WorkspaceDraftReference[] = [];
+  let offset = 0;
+  for (const slot of slots) {
+    const end = offset + serializedSlotValue(slot).length;
+    const reference = getChatComposerSlotReference(slot);
+    if (reference?.type === 'workspace') references.push({ start: offset, end, entry: reference.entry });
+    offset = end;
+  }
+  return references;
 }
 
 export function filterSelectedSkillsBySlots(
@@ -236,7 +276,6 @@ export function createWorkspaceMentionReferenceSlot(
         <WorkspaceMentionLabel
           name={entry.name}
           path={entry.absolutePath ?? entry.path}
-          serializedText={resultText}
           type={entry.kind}
         />
       ),

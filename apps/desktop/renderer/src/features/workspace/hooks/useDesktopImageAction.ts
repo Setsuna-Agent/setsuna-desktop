@@ -9,16 +9,17 @@ export function useDesktopImageAction() {
   const toast = useToast();
   const { t } = useI18n();
 
-  return useCallback(async (action: DesktopImageAction, input: DesktopImageInput): Promise<boolean> => {
+  return useCallback(async (action: DesktopImageAction, input: DesktopImageInput | (() => Promise<DesktopImageInput>)): Promise<boolean> => {
     const desktop = window.setsunaDesktop?.desktop;
     if (!desktop) {
       toast.error(t('workspace.image.unsupported'));
       return false;
     }
     try {
+      const image = typeof input === 'function' ? await input() : input;
       const result = action === 'copy'
-        ? await desktop.copyImageToClipboard(input)
-        : action === 'save' ? await desktop.saveImageAs(input) : await desktop.revealImageInFolder(input);
+        ? await desktop.copyImageToClipboard(image)
+        : action === 'save' ? await desktop.saveImageAs(image) : await desktop.revealImageInFolder(image);
       if (!result.ok) {
         toast.error(result.error);
         return false;

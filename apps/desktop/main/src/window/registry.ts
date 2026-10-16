@@ -4,6 +4,7 @@ type WindowListener = (window: BrowserWindow) => (() => void) | void;
 type WindowEntry = {
   window: BrowserWindow;
   initialThreadId: string | null;
+  sessionKey: string;
   disposers: Set<() => void>;
 };
 
@@ -15,7 +16,13 @@ export class DesktopWindowRegistry {
   add(window: BrowserWindow, initialThreadId: string | null = null): void {
     const senderId = window.webContents.id;
     if (this.entries.has(senderId)) return;
-    const entry: WindowEntry = { window, initialThreadId, disposers: new Set() };
+    // Reopening a window reuses its recovery slot; simultaneous windows never
+    // share drafts, browser IDs or panel state, even for the same conversation.
+    const base = initialThreadId ? `thread:${encodeURIComponent(initialThreadId)}` : 'primary';
+    const occupied = new Set([...this.entries.values()].map((entry) => entry.sessionKey));
+    let slot = 0;
+    while (occupied.has(`${base}:${slot}`)) slot += 1;
+    const entry: WindowEntry = { window, initialThreadId, sessionKey: `${base}:${slot}`, disposers: new Set() };
     this.entries.set(senderId, entry);
     // One native listener owns all registry subscriptions; unsubscribe removes
     // their callbacks too, so service restarts cannot accumulate closed listeners.
@@ -36,8 +43,9 @@ export class DesktopWindowRegistry {
     return [...this.entries.values()].map(({ window }) => window).filter((window) => !window.isDestroyed());
   }
 
-  initialThreadId(senderId: number): string | null {
-    return this.entries.get(senderId)?.initialThreadId ?? null;
+  sessionContext(senderId: number): { initialThreadId: string | null; sessionKey: string } | null {
+    const entry = this.entries.get(senderId);
+    return entry ? { initialThreadId: entry.initialThreadId, sessionKey: entry.sessionKey } : null;
   }
 
   onWindowAdded(listener: WindowListener): () => void {

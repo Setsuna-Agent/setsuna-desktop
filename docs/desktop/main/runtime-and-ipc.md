@@ -100,7 +100,7 @@ Runtime 的 `secrets.json` 只保存适合 runtime 管理的 secret 状态；需
 | `window-ipc.ts` | minimize/maximize/close、标题栏 scale |
 | `sender.ts` | 已登记桌面窗口的 sender 校验，拒绝未登记窗口与 webview guest |
 
-`window/thread-windows.ts` 提供 `window-control:open-thread` 和 `window-control:get-initial-thread-id`：校验来源窗口与目标会话，创建共享 runtime 的桌面窗口，并为各窗口保留独立的启动会话。`desktop:when-ready` 按 sender 保存 readiness，关闭一个窗口不会撤销其他窗口的 handler。
+`window/thread-windows.ts` 提供 `window-control:open-thread` 和 `window-control:get-session-context`：校验来源窗口与目标会话，创建共享 runtime 的桌面窗口，并返回启动会话和窗口恢复键。Registry 为主窗口、按会话打开的附加窗口分配独立槽位；同时打开同一会话的窗口不会共享恢复键，关闭后再次打开复用空闲槽位。槽位分配只使用已登记窗口，不读取磁盘或增加启动等待。`desktop:when-ready` 按 sender 保存 readiness，关闭一个窗口不会撤销其他窗口的 handler。
 
 Browser 的 tab 注册、active tab、截图、favicon、设备模拟和扩展 IPC 由 `packages/features/browser/src/main/` 持有，固定桥在该 Feature 的 preload 入口组装，不再有宿主 `browser-ipc.ts`。
 

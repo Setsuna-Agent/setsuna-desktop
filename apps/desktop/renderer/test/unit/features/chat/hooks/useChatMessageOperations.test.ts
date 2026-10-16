@@ -9,6 +9,26 @@ import { useChatMessageOperations } from '../../../../../src/features/chat/hooks
 afterEach(cleanup);
 
 describe('useChatMessageOperations', () => {
+  it('keeps a new conversation editor intact when an earlier edit finishes after navigation', async () => {
+    const message: RuntimeMessage = { id: 'message-a', role: 'user', content: 'Original', createdAt: '2026-10-16T00:00:00Z' };
+    let complete!: () => void;
+    const onEditUserMessage = vi.fn(() => new Promise<void>((resolve) => { complete = resolve; }));
+    const view = renderHook(({ threadId }) => useChatMessageOperations({
+      activeTurnId: null, composerKey: 'chat-transcript', currentThreadId: threadId,
+      displayItems: createChatDisplayItems([message]), onEditUserMessage,
+    }), { initialProps: { threadId: 'thread-a' } });
+    act(() => view.result.current.startEditingMessage(message));
+    let request!: Promise<boolean>;
+    act(() => { request = view.result.current.submitEditingMessage(message.id, { content: 'Edited', attachments: [] }); });
+    expect(view.result.current.editingSubmitting).toBe(true);
+    view.rerender({ threadId: 'thread-b' });
+    act(() => view.result.current.startEditingMessage({ ...message, id: 'message-b' }));
+    await act(async () => { complete(); expect(await request).toBe(true); });
+    expect(view.result.current.editingMessageId).toBe('message-b');
+    expect(view.result.current.editingSubmitting).toBe(false);
+    expect(view.result.current.actionError).toBeNull();
+  });
+
   it('keeps edit and delete state inert in read-only mode', async () => {
     const message: RuntimeMessage = {
       id: 'message_1',
@@ -37,7 +57,7 @@ describe('useChatMessageOperations', () => {
     });
     await act(async () => {
       await view.result.current.confirmDeleteSelection();
-      await view.result.current.submitEditingMessage(message.id);
+      await view.result.current.submitEditingMessage(message.id, { content: message.content });
     });
 
     expect(view.result.current.deleteMode).toBe(false);

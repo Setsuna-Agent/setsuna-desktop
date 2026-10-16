@@ -156,6 +156,7 @@ export type CoreRuntimeEvent =
       {
         messageId: string;
         content: string;
+        attachments?: RuntimeMessage['attachments'];
         skillIds?: string[];
         skillReferences?: RuntimeSkillReference[];
       }

@@ -5,9 +5,11 @@ import { translate, useI18n, type Translate } from '../../shared/i18n/I18nProvid
 import { WorkspaceAppGlyph, workspaceOpenWithMenu } from '../../composition/workspace-apps-feature-adapter.js';
 import type { DesktopWorkspaceApp } from './model.js';
 import { workspaceEntryParent } from './workspaceEntryPaths.js';
+import type { WorkspaceImageSource } from './media/workspaceImageClipboard.js';
 
 export type WorkspaceFileContextTarget = {
   filePath: string;
+  image?: WorkspaceImageSource;
   line?: number;
   type?: WorkspaceEntry['type'];
   x: number;
@@ -23,6 +25,7 @@ export function WorkspaceFileContextMenu({
   onAddToConversation,
   onClose,
   onCopyPath,
+  onCopyImage,
   onCreateEntry,
   onRenameEntry,
   onDeleteEntry,
@@ -36,6 +39,7 @@ export function WorkspaceFileContextMenu({
   onAddToConversation: (filePath: string, type: WorkspaceEntry['type']) => void;
   onClose: () => void;
   onCopyPath: (filePath: string) => void;
+  onCopyImage?: (source: WorkspaceImageSource) => void;
   onCreateEntry?: (parentPath: string, type: WorkspaceEntry['type']) => void;
   onRenameEntry?: (entryPath: string, type: WorkspaceEntry['type']) => void;
   onDeleteEntry?: (entryPath: string) => void;
@@ -47,7 +51,13 @@ export function WorkspaceFileContextMenu({
   if (!target) return null;
   const directory = target.type === 'directory';
   const workspaceRoot = directory && !target.filePath;
+  const image = target.image;
   const items: MenuItem[] = [
+    ...(image && onCopyImage ? [
+      { key: 'copy-image', label: t('workspace.fileMenu.copyImage'), icon: <Copy size={14} />,
+        onClick: () => onCopyImage(image) },
+      { type: 'divider' as const },
+    ] : []),
     ...(onCreateEntry ? [
       { key: 'new-file', label: t('workspace.fileMenu.newFile'), icon: <FilePlus2 size={14} />, disabled: entryActionsDisabled,
         onClick: () => onCreateEntry(directory ? target.filePath : workspaceEntryParent(target.filePath), 'file') },

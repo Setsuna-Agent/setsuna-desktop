@@ -24,6 +24,7 @@ import { stringInput } from './app-server/input.js';
 import { runtimeSkillReferenceList } from './runtime-skill-reference-input.js';
 import {
   decodeRuntimeId,
+  isRuntimeMessageAttachment,
   optionalNumber,
   readBody,
   sendJson,
@@ -166,19 +167,27 @@ export async function handleRuntimeThreadRequest(
     const input = await readBody<MessagePatch>(request);
     const patch: MessagePatch = {
       content: typeof input.content === 'string' ? input.content : '',
+      attachments: Array.isArray(input.attachments) ? input.attachments.filter(isRuntimeMessageAttachment) : undefined,
       skillIds: Array.isArray(input.skillIds)
         ? input.skillIds.filter((item): item is string => typeof item === 'string')
         : undefined,
       skillReferences: runtimeSkillReferenceList(input.skillReferences),
     };
     const thread = await runtime.agentLoop.withThreadMutation(threadId, async () => {
-      const beforeSeq = (await runtime.threadStore.getThread(threadId))?.lastSeq ?? 0;
+      const before = await runtime.threadStore.getThread(threadId);
+      if (!before) throw new Error(`Thread not found: ${threadId}`);
+      const message = before.messages.find((item) => item.id === messageId);
+      if (!message) throw new Error(`Message not found: ${messageId}`);
+      if (message.role !== 'user' || message.contextCompaction) throw new Error('Only user messages can be edited.');
+      if (patch.attachments !== undefined) {
+        await runtime.attachmentStore.claimForThread(threadId, patch.attachments);
+      }
       const updated = await runtime.threadStore.updateMessage(
         threadId,
         messageId,
         patch,
       );
-      await publishThreadEventsSince(runtime, threadId, beforeSeq);
+      await publishThreadEventsSince(runtime, threadId, before.lastSeq);
       return updated;
     });
     sendJson(
@@ -238,6 +247,7 @@ export async function handleRuntimeThreadRequest(
         decodeURIComponent(regenerateMatch[2]),
         {
           content: typeof input.content === 'string' ? input.content : undefined,
+          attachments: Array.isArray(input.attachments) ? input.attachments.filter(isRuntimeMessageAttachment) : undefined,
           skillIds: Array.isArray(input.skillIds)
             ? input.skillIds.filter(
               (item): item is string => typeof item === 'string',

@@ -1,3 +1,4 @@
+import type { WorkspaceDraftReference } from '../../features/chat/session/chatDraftReferences.js';
 import type {
   CreateThreadInput,
   ForkThreadInput,
@@ -42,6 +43,7 @@ export type AppRouteContentProps = Readonly<{
   conversationOverviewVisibility: ConversationOverviewVisibility;
   draft: string;
   draftSkillReferences?: RuntimeSkillReference[];
+  draftWorkspaceReferences?: WorkspaceDraftReference[];
   focusComposerRequest: number;
   findInChatRequest?: number;
   onFindInChatRequestConsumed?(requestId: number): void;

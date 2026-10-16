@@ -1,6 +1,7 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
 import type { ChatTurnNavigationRequest } from '@setsuna-desktop/renderer-contracts/chat';
 import type {
+  MessagePatch,
   RuntimeMessage,
   WorkspaceFileChangeAction,
   ThreadFileChangesResult,
@@ -25,6 +26,7 @@ import {
   runtimePluginUsesByTurn,
   type RuntimePluginUse,
 } from '../plugin-usage/runtimePluginUsage.js';
+import type { UserMessageEditorStateProps } from './messages/useUserMessageEditor.js';
 import { useChatMessageOperations } from '../hooks/useChatMessageOperations.js';
 import { useThreadMessageHistory } from '../hooks/useThreadMessageHistory.js';
 import { MarkdownViewportProvider } from '../markdown/MarkdownViewportProvider.js';
@@ -67,12 +69,14 @@ type ChatTranscriptMutationProps =
       onDeleteMessages?: never;
       onDeleteModeChange?: never;
       onEditUserMessage?: never;
+      renderMessageEditor?: never;
     }
   | {
       readOnly?: false;
       onDeleteMessages: (messageIds: string[]) => void | Promise<void>;
       onDeleteModeChange?: (active: boolean) => void;
-      onEditUserMessage: (messageId: string, content: string) => void | Promise<void>;
+      onEditUserMessage: (messageId: string, input: MessagePatch) => void | Promise<void>;
+      renderMessageEditor: (props: UserMessageEditorStateProps) => ReactNode;
     };
 
 type ChatTranscriptProps = ChatTranscriptMutationProps & {
@@ -125,6 +129,7 @@ export function ChatTranscript({
   onOpenFileReview,
   plugins,
   readOnly = false,
+  renderMessageEditor,
   showEmptyStarter = false,
   showThinkingInTranscript,
   skills,
@@ -181,14 +186,12 @@ export function ChatTranscript({
     confirmDeleteSelection,
     deleteMode,
     deletingMessages,
-    editingDraft,
     editingMessageId,
     editingSubmitting,
     selectableDeleteCount,
     selectedDeleteCount,
     selectedDeleteItemIds,
     selectedDeleteMessageIds,
-    setEditingDraft,
     someDeleteSelected,
     startDeleteSelection,
     startEditingMessage,
@@ -252,7 +255,6 @@ export function ChatTranscript({
     : {
         onStartEdit: startEditingMessage,
         onStartDelete: startDeleteSelection,
-        onSubmitEdit: submitEditingMessage,
         onToggleDelete: toggleDeleteSelection,
       };
   const navigatingToTurn = Boolean(turnNavigationRequest && turnNavigationRequest.threadId === currentThread?.id);
@@ -362,16 +364,15 @@ export function ChatTranscript({
                           assistantItemIdByTurnId={assistantItemIdByTurnId}
                           contextCompactionRunning={contextCompactionRunning}
                           deleteMode={!readOnly && deleteMode && !pendingMessageIds.has(item.id)}
-                          editingDraft={editingDraft}
-                          editingMessageId={readOnly ? null : editingMessageId}
-                          editingSubmitting={editingSubmitting}
+                          editor={!readOnly && item.type === 'user' && editingMessageId === item.message.id ? renderMessageEditor?.({
+                            message: item.message, disabled: Boolean(activeTurnId), submitting: editingSubmitting,
+                            onCancel: cancelEditingMessage, onSubmit: (input) => submitEditingMessage(item.message.id, input),
+                          }) : undefined}
                           expandedWorkHistoryItemIds={expandedWorkHistoryItemIds}
                           item={item}
                           pending={pendingMessageIds.has(item.id)}
                           onAnswerApproval={onAnswerApproval}
-                          onCancelEdit={cancelEditingMessage}
                           onFileChangesAction={readOnly ? undefined : onFileChangesAction}
-                          onEditDraftChange={setEditingDraft}
                           onOpenFileReview={onOpenFileReview}
                           onWorkHistoryExpandedChange={handleWorkHistoryExpandedChange}
                           pluginUses={item.type === 'assistant' && item.turnId ? (pluginUsesByTurnId.get(item.turnId) ?? emptyRuntimePluginUses) : emptyRuntimePluginUses}

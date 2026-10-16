@@ -121,7 +121,8 @@ export function useProjectWorkspace({ activeProjectId, rootId, project, client, 
   );
 
   const openProjectFile = useCallback(
-    async (filePath: string, line?: number, selectedRootId = rootId): Promise<boolean> => {
+    async (filePath: string, line?: number, selectedRootId = rootId,
+      { revealPanel = true }: { revealPanel?: boolean } = {}): Promise<boolean> => {
       const reference = project ? resolveWorkspaceFileReference(project, filePath, selectedRootId) : null;
       const targetRootId = reference?.root.id ?? selectedRootId;
       filePath = reference?.path ?? filePath;
@@ -134,7 +135,7 @@ export function useProjectWorkspace({ activeProjectId, rootId, project, client, 
           line,
           current,
         ));
-        onOpenFilePanel(filePreview.path, filePreview.rootId);
+        if (revealPanel) onOpenFilePanel(filePreview.path, filePreview.rootId);
         return true;
       }
       if (targetRootId === rootId && !await confirmDiscardChanges()) return false;
@@ -148,7 +149,7 @@ export function useProjectWorkspace({ activeProjectId, rootId, project, client, 
           line,
           current,
         ));
-        onOpenFilePanel(file.path, file.rootId);
+        if (revealPanel) onOpenFilePanel(file.path, file.rootId);
         return true;
       } catch (error) {
         if (!isLatest() || activeProjectIdRef.current !== scopeKey) return false;

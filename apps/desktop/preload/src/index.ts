@@ -88,6 +88,7 @@ const desktop: SetsunaDesktopBridge['desktop'] = {
   revealImageInFolder: (input) => ipcRenderer.invoke('desktop:reveal-image-in-folder', input),
   saveImageAs: (input) => ipcRenderer.invoke('desktop:save-image-as', input),
   openPath: (targetPath) => ipcRenderer.invoke('desktop:open-path', targetPath),
+  revealPath: (targetPath) => ipcRenderer.invoke('desktop:reveal-path', targetPath),
   openWorkspaceDirectory: (workspaceRoot, directoryPath) =>
     ipcRenderer.invoke('desktop:open-workspace-directory', { workspaceRoot, directoryPath }),
   openWorkspaceFile: (workspaceRoot, filePath) =>
@@ -141,7 +142,7 @@ const windowControls: SetsunaDesktopBridge['windowControls'] = {
   showApplicationMenu: (input) => ipcRenderer.invoke('window-control:show-application-menu', input),
   executeTextEdit: (command) => ipcRenderer.invoke('window-control:execute-text-edit', command),
   openThread: (threadId) => ipcRenderer.invoke('window-control:open-thread', threadId),
-  getInitialThreadId: () => ipcRenderer.invoke('window-control:get-initial-thread-id'),
+  getSessionContext: () => ipcRenderer.invoke('window-control:get-session-context'),
   minimize: () => ipcRenderer.invoke('window-control:minimize'),
   toggleMaximize: () => ipcRenderer.invoke('window-control:toggle-maximize'),
   close: () => ipcRenderer.invoke('window-control:close'),

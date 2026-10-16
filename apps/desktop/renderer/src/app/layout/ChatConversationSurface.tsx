@@ -1,4 +1,7 @@
+import type { WorkspaceDraftReference } from '../../features/chat/session/chatDraftReferences.js';
+import type { SetChatComposerDraft } from '../../features/chat/hooks/useChatComposerSession.js';
 import type {
+  MessagePatch,
   WorkspaceFileChangeAction,
   ThreadFileChangesResult,
   AnswerRuntimeApprovalInput,
@@ -53,6 +56,7 @@ export type ChatConversationSurfaceModel = Readonly<{
   currentThread: RuntimeThread | null;
   draft: string;
   draftSkillReferences?: RuntimeSkillReference[];
+  draftWorkspaceReferences?: WorkspaceDraftReference[];
   focusComposerRequest: number;
   findInChatRequest?: number;
   onFindInChatRequestConsumed?(requestId: number): void;
@@ -71,8 +75,8 @@ export type ChatConversationSurfaceModel = Readonly<{
   onConversationOverviewRenderedChange(visible: boolean): void;
   onDeleteMessages(messageIds: string[]): void | Promise<void>;
   onFileChangesAction?(toolCallIds: string[], action: WorkspaceFileChangeAction): void | Promise<void | ThreadFileChangesResult>;
-  onDraftChange(value: string, skillReferences?: RuntimeSkillReference[]): void;
-  onEditUserMessage(messageId: string, content: string): void | Promise<void>;
+  onDraftChange: SetChatComposerDraft;
+  onEditUserMessage(messageId: string, input: MessagePatch): void | Promise<void>;
   onFocusComposerRequestConsumed(requestId: number): void;
   onOpenBrowser(url?: string): void;
   onOpenFileReview?: DesktopReviewOpenHandler;
@@ -135,6 +139,7 @@ export function ChatConversationSurface({
         currentThread={model.currentThread}
         draft={model.draft}
         draftSkillReferences={model.draftSkillReferences}
+        draftWorkspaceReferences={model.draftWorkspaceReferences}
         focusComposerOnReveal
         focusComposerRequest={model.focusComposerRequest}
         findInChatRequest={model.findInChatRequest}

@@ -1,10 +1,28 @@
 import type { RuntimeMessageAttachment, RuntimeStoredMessageAttachment } from '@setsuna-desktop/contracts';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ChatComposerAttachmentItem } from '../../../../../src/features/chat/composer/chatAttachments.js';
 import {
+  createChatAttachmentStore,
   disposableChatAttachments,
   inlineImageAttachmentsToStore,
 } from '../../../../../src/features/chat/composer/chatAttachmentStore.js';
+
+it.each(['data:image/png;base64,%%%', 'data:image/png;base64,a'])(
+  'contains invalid inline image conversion errors while restoring other attachments (%s)', async (url) => {
+    const invalid = { id: 'invalid-image', name: 'broken.png', type: 'image/png', size: 4, url };
+    const valid = { ...invalid, id: 'valid-image', name: 'valid.png', url: 'data:image/png;base64,aW1n' };
+    const uploaded = storedAttachment('uploaded');
+    const client = { uploadAttachment: vi.fn(async () => uploaded), deleteAttachment: vi.fn(), linkAttachment: vi.fn() };
+    const store = createChatAttachmentStore(client, (key) => key);
+    expect(() => store.replaceWithExisting([invalid, valid])).not.toThrow();
+    await vi.waitFor(() => expect(store.getSnapshot().items.map((item) => item.status)).toEqual(['error', 'ready']));
+    expect(store.getSnapshot().items[0]).toMatchObject({ attachment: invalid, error: expect.any(String) });
+    expect(store.getSnapshot().items[1].attachment).toEqual(uploaded);
+    expect(client.uploadAttachment).toHaveBeenCalledExactlyOnceWith({
+      name: valid.name, type: valid.type, data: Uint8Array.from(Buffer.from('img')),
+    });
+  },
+);
 
 describe('disposableChatAttachments', () => {
   it('keeps a leased attachment alive while a send is pending', () => {

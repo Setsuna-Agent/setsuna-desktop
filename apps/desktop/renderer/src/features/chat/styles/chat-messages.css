@@ -693,40 +693,35 @@
 }
 
 .chat-user-edit {
+  position: relative;
   display: grid;
   gap: 8px;
   width: min(680px, 100%);
   max-width: 100%;
   min-width: min(360px, 100%);
   box-sizing: border-box;
-  padding: 9px 11px;
+  padding: 0;
   border: 0;
   border-radius: var(--app-radius-xl);
   background: var(--chat-message-user-bg);
 }
 
-.chat-user-edit textarea {
+.chat-user-edit > .chat-prompt {
   box-shadow: none;
   width: 100%;
-  min-width: 0;
-  padding: 0;
   border: 0;
-  outline: none;
-  color: var(--app-text);
   background: transparent;
-  font: inherit;
-  line-height: 1.65;
-  resize: none;
 }
 
-.chat-user-edit textarea:disabled {
-  opacity: 0.7;
+.chat-user-edit > .chat-command-menu {
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .chat-user-edit__footer {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   min-height: 28px;
 }
 

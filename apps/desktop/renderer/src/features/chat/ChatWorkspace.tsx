@@ -1,4 +1,8 @@
+import { UserMessageEditor } from './conversation/messages/UserMessageEditor.js';
+import type { WorkspaceDraftReference } from './session/chatDraftReferences.js';
+import type { SetChatComposerDraft } from './hooks/useChatComposerSession.js';
 import type {
+  MessagePatch,
   WorkspaceFileChangeAction,
   ThreadFileChangesResult,
   DesktopRuntimeClient,
@@ -64,6 +68,7 @@ export function ChatWorkspace({
   currentThread,
   draft,
   draftSkillReferences,
+  draftWorkspaceReferences,
   focusComposerOnReveal = false,
   focusComposerRequest = 0,
   findInChatRequest,
@@ -116,6 +121,7 @@ export function ChatWorkspace({
   currentThread: RuntimeThread | null;
   draft: string;
   draftSkillReferences?: RuntimeSkillReference[];
+  draftWorkspaceReferences?: WorkspaceDraftReference[];
   focusComposerOnReveal?: boolean;
   focusComposerRequest?: number;
   findInChatRequest?: number;
@@ -133,8 +139,8 @@ export function ChatWorkspace({
   onClearContext: () => void;
   onDeleteMessages: (messageIds: string[]) => void | Promise<void>;
   onFileChangesAction?: (toolCallIds: string[], action: WorkspaceFileChangeAction) => void | Promise<void | ThreadFileChangesResult>;
-  onDraftChange: (value: string, skillReferences?: RuntimeSkillReference[]) => void;
-  onEditUserMessage: (messageId: string, content: string) => void | Promise<void>;
+  onDraftChange: SetChatComposerDraft;
+  onEditUserMessage: (messageId: string, input: MessagePatch) => void | Promise<void>;
   onOpenSideChat?: () => void;
   onOpenFileReview?: DesktopReviewOpenHandler;
   onOpenModelSettings?: () => void;
@@ -253,6 +259,7 @@ export function ChatWorkspace({
             currentThread={historyThread}
             draft={draft}
             draftSkillReferences={draftSkillReferences}
+            draftWorkspaceReferences={draftWorkspaceReferences}
             focusOnReveal={focusComposerOnReveal}
             focusRequest={focusComposerRequest}
             onFocusRequestConsumed={onFocusComposerRequestConsumed}
@@ -341,6 +348,8 @@ export function ChatWorkspace({
               onDeleteModeChange={setDeleteModeActive}
               onFileChangesAction={onFileChangesAction}
               onEditUserMessage={onEditUserMessage}
+              renderMessageEditor={(props) => <UserMessageEditor key={props.message.id} {...props} client={client}
+                activeProject={activeProject} skills={skills} plugins={plugins} onSearchProjectEntries={onSearchProjectEntries} />}
               onOpenFileReview={onOpenFileReview}
             />
           ))}

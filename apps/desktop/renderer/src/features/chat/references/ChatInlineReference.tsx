@@ -4,7 +4,6 @@ import type { ReactNode } from 'react';
 export function ChatInlineReference({
   actionLabel,
   className,
-  composerCursorOffsetAdjustment,
   icon,
   label,
   onActivate,
@@ -12,7 +11,6 @@ export function ChatInlineReference({
 }: {
   actionLabel?: string;
   className?: string;
-  composerCursorOffsetAdjustment?: number;
   icon: ReactNode;
   label: string;
   onActivate?: () => void;
@@ -48,7 +46,6 @@ export function ChatInlineReference({
     <span
       className={classes}
       title={title}
-      data-composer-cursor-offset-adjustment={composerCursorOffsetAdjustment}
     >
       {content}
     </span>

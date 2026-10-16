@@ -274,6 +274,7 @@ export type SettingsMarkdownDocumentProps = Readonly<{
   name: string;
   previewLabel: string;
   sourceLabel: string;
+  copyLabels?: Readonly<{ copy: string; copied: string; failed: string }>;
 }>;
 
 /** Host-owned controls keep Feature settings consistent and accessible. */

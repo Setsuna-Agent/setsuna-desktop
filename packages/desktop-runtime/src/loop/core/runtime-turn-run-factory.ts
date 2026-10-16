@@ -8,6 +8,7 @@ import type {
   RuntimeThreadGoal,
   SendTurnInput,
 } from '@setsuna-desktop/contracts';
+import { isRuntimeInputMessageAttachment } from '@setsuna-desktop/contracts';
 import type { ReviewTurnRequest, WorkspaceTaskTurnRequest } from '@setsuna-desktop/feature-review/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { ConfigStore } from '../../ports/config-store.js';
@@ -338,19 +339,21 @@ export class RuntimeTurnRunFactory {
 
     const text = typeof input.content === 'string' ? input.content.trim() : originalMessage.content.trim();
     const skillIds = input.skillIds ?? originalMessage.skillIds ?? [];
-    if (!text) throw new Error('Message content is required.');
+    let attachments = this.options.normalizeAttachments(input.attachments ?? originalMessage.attachments);
+    if (!text && !attachments.length) throw new Error('Message content is required.');
     const turnModel = await this.resolveTurnModel(originalThread);
-    await this.options.inputGuard.assertAttachmentsSupported(
-      this.options.normalizeAttachments(originalMessage.attachments),
-      turnModel?.model,
-    );
+    await this.options.inputGuard.assertAttachmentsSupported(attachments, turnModel?.model);
+    // Validate ownership before editing or truncating history; a rejected asset must leave it intact.
+    attachments = await this.options.claimAttachments(threadId, attachments);
     if (
       text !== originalMessage.content
+      || input.attachments !== undefined
       || input.skillIds !== undefined
       || input.skillReferences !== undefined
     ) {
       await this.options.threadStore.updateMessage(threadId, messageId, {
         content: text,
+        ...(input.attachments !== undefined ? { attachments: attachments.filter(isRuntimeInputMessageAttachment) } : {}),
         skillIds,
         ...(input.skillReferences !== undefined ? { skillReferences: input.skillReferences } : {}),
       });
@@ -361,10 +364,6 @@ export class RuntimeTurnRunFactory {
     const thread = await this.requireThread(threadId);
     const userMessage = thread.messages.find((message) => message.id === messageId);
     if (!userMessage || userMessage.role !== 'user') throw new Error(`User message not found after regeneration setup: ${messageId}`);
-    const attachments = await this.options.claimAttachments(
-      threadId,
-      this.options.normalizeAttachments(userMessage.attachments),
-    );
     const turnId = this.options.ids.id('turn');
     const run = this.options.turnTasks.run({
       turnId,
