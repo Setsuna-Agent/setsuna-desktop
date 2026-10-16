@@ -1,16 +1,17 @@
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import type { SettingsViewUi } from '@setsuna-desktop/renderer-contracts/settings';
-import { Check, Copy } from 'lucide-react';
+import { Check, Copy, X } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 
 export function ProviderApiKeyField({
-  apiKey, apiKeyPreview, apiKeySet, className = '', onChange, onCopy, translate, ui,
+  apiKey, apiKeyPreview, apiKeySet, className = '', onChange, onClear, onCopy, translate, ui,
 }: Readonly<{
   apiKey: string;
   apiKeyPreview: string;
   apiKeySet: boolean;
   className?: string;
   onChange(value: string): void;
+  onClear(): void;
   onCopy(): Promise<void>;
   translate: RendererTranslate;
   ui: SettingsViewUi;
@@ -42,6 +43,12 @@ export function ProviderApiKeyField({
   const copyLabel = translate(status === 'copied'
     ? 'feature.modelProvider.apiKeyCopied'
     : 'feature.modelProvider.copyApiKey');
+  const clearLabel = translate('feature.modelProvider.clearApiKey');
+  const resetCopy = () => {
+    requestRef.current += 1;
+    clearTimeout(timerRef.current);
+    setStatus('idle');
+  };
 
   return (
     <div className={`model-provider-settings__field ${className}`}>
@@ -57,24 +64,38 @@ export function ProviderApiKeyField({
           type="password"
           value={apiKey}
           onChange={(event) => {
-            requestRef.current += 1;
-            clearTimeout(timerRef.current);
-            setStatus('idle');
+            resetCopy();
             onChange(event.target.value);
           }}
         />
-        <ui.Tooltip title={copyLabel}>
-          <ui.IconButton
-            aria-busy={status === 'copying'}
-            className="model-provider-settings__copy-api-key"
-            disabled={status === 'copying' || (!apiKey.trim() && !apiKeySet)}
-            label={copyLabel}
-            title=""
-            onClick={() => void copy()}
-          >
-            {status === 'copied' ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
-          </ui.IconButton>
-        </ui.Tooltip>
+        <div className="model-provider-settings__api-key-actions">
+          <ui.Tooltip title={copyLabel}>
+            <ui.IconButton
+              aria-busy={status === 'copying'}
+              className="model-provider-settings__api-key-action"
+              disabled={status === 'copying' || (!apiKey.trim() && !apiKeySet)}
+              label={copyLabel}
+              title=""
+              onClick={() => void copy()}
+            >
+              {status === 'copied' ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+            </ui.IconButton>
+          </ui.Tooltip>
+          <ui.Tooltip title={clearLabel}>
+            <ui.IconButton
+              className="model-provider-settings__api-key-action"
+              disabled={!apiKey && !apiKeySet}
+              label={clearLabel}
+              title=""
+              onClick={() => {
+                resetCopy();
+                onClear();
+              }}
+            >
+              <X size={14} aria-hidden="true" />
+            </ui.IconButton>
+          </ui.Tooltip>
+        </div>
       </div>
       {status === 'error' ? <ui.Toast message={translate('feature.modelProvider.copyApiKeyFailed')} tone="error" /> : null}
     </div>

@@ -1,7 +1,7 @@
 import {
   type ProviderConfigInput,
   type ProviderConfigState,
-  type ProviderModelConfig,
+  type RuntimeAvailableModel,
 } from '@setsuna-desktop/contracts';
 import type {
   RendererTranslate,
@@ -15,7 +15,6 @@ import type { ModelProviderRendererHost } from './capabilities.js';
 import { useModelProviderSnapshot } from './context.js';
 import { ProviderEditor } from './ProviderEditor.js';
 import { ProviderRail } from './ProviderRail.js';
-import { mergeDiscoveredModels } from './model-sync.js';
 import {
   attachInferredCatalogProviders,
   createProvider,
@@ -133,7 +132,7 @@ export function ModelProviderSettingsView({
     setApiKeys(nextApiKeys);
     stageProviders(next, nextApiKeys, nextActiveProviderId);
   };
-  const discoverModels = async (): Promise<ProviderModelConfig[] | undefined> => {
+  const discoverModels = async (): Promise<RuntimeAvailableModel[] | undefined> => {
     if (!selectedProvider) return undefined;
     const revision = ++discoveryRevisionRef.current;
     const input = {
@@ -144,6 +143,7 @@ export function ModelProviderSettingsView({
       proxyRoute: selectedProvider.proxyRoute,
       requestHeaders: selectedProvider.requestHeaders ?? null,
       apiKey: apiKeys[selectedProvider.id] || undefined,
+      ...(!apiKeys[selectedProvider.id]?.trim() && !selectedProvider.apiKeySet ? { clearApiKey: true } : {}),
     } satisfies ProviderConfigDiscoveryInput;
     setOperationError('');
     setDiscoveringProviderId(selectedProvider.id);
@@ -155,7 +155,7 @@ export function ModelProviderSettingsView({
         || !currentProvider
         || !matchesDiscoveryInput(currentProvider, apiKeysRef.current[currentProvider.id], input)
       ) return undefined;
-      return mergeDiscoveredModels(currentProvider.models, result.models, currentProvider.provider);
+      return result.models;
     } catch (error) {
       const currentProvider = providersRef.current.find((provider) => provider.id === input.providerId);
       if (
@@ -209,6 +209,13 @@ export function ModelProviderSettingsView({
                 setApiKeys(nextApiKeys);
                 stageProviders(providers, nextApiKeys);
               }}
+              onClearApiKey={() => {
+                const nextApiKeys = { ...apiKeys, [selectedProvider.id]: '' };
+                setApiKeys(nextApiKeys);
+                stageProviders(providers.map((provider) => provider.id === selectedProvider.id
+                  ? { ...provider, apiKeySet: false, apiKeyPreview: '' }
+                  : provider), nextApiKeys);
+              }}
               onChange={replaceProvider}
               onCopyApiKey={() => service.copyApiKey({
                 providerId: selectedProvider.id,
@@ -246,7 +253,7 @@ function providerInput(provider: ProviderConfigState, apiKey: string | undefined
     proxyRoute: provider.proxyRoute,
     requestHeaders: provider.requestHeaders ?? null,
     supportsDeveloperRole: provider.supportsDeveloperRole ?? null,
-    ...(apiKey ? { apiKey } : provider.apiKeySet ? {} : { clearApiKey: true }),
+    ...(apiKey?.trim() ? { apiKey: apiKey.trim() } : provider.apiKeySet ? {} : { clearApiKey: true }),
     models: provider.models,
   };
 }
@@ -259,6 +266,7 @@ type ProviderConfigDiscoveryInput = Readonly<{
   proxyRoute: ProviderConfigState['proxyRoute'];
   requestHeaders: ProviderConfigState['requestHeaders'] | null;
   apiKey: string | undefined;
+  clearApiKey?: boolean;
 }>;
 
 function matchesDiscoveryInput(
@@ -271,6 +279,7 @@ function matchesDiscoveryInput(
     && provider.provider === input.provider
     && provider.baseUrl === input.baseUrl
     && (apiKey || undefined) === input.apiKey
+    && (!apiKey?.trim() && !provider.apiKeySet) === Boolean(input.clearApiKey)
     && JSON.stringify(provider.requestHeaders ?? null) === JSON.stringify(input.requestHeaders)
     && JSON.stringify(provider.proxyRoute ?? null) === JSON.stringify(input.proxyRoute ?? null);
 }

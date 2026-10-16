@@ -5,6 +5,7 @@ export type RuntimeSseFaultPlan = {
   deliveryOrder?: number[];
   dropSequences?: number[];
   duplicateSequences?: number[];
+  disconnectError?: Error;
 };
 
 /** Builds an SSE response with deterministic transport faults for RuntimeHost tests. */
@@ -27,10 +28,13 @@ export function runtimeSseFaultResponse(
     .join('');
   const bytes = new TextEncoder().encode(payload);
   const chunks = splitBytes(bytes, plan.chunkSizes ?? []);
+  let nextChunk = 0;
   const body = new ReadableStream<Uint8Array>({
-    start(controller) {
-      for (const chunk of chunks) controller.enqueue(chunk);
-      controller.close();
+    pull(controller) {
+      const chunk = chunks[nextChunk++];
+      if (chunk) controller.enqueue(chunk);
+      else if (plan.disconnectError) controller.error(plan.disconnectError);
+      else controller.close();
     },
   });
   return new Response(body, {

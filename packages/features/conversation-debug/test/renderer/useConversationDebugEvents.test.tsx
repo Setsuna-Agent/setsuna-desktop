@@ -7,7 +7,10 @@ import type {
 } from '@setsuna-desktop/contracts';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ConversationDebugVisibility } from '../../src/renderer/conversationDebugVisibility.js';
+import {
+  createConversationDebugVisibility,
+  type ConversationDebugVisibility,
+} from '../../src/renderer/conversationDebugVisibility.js';
 import { useConversationDebugEvents } from '../../src/renderer/useConversationDebugEvents.js';
 
 afterEach(cleanup);
@@ -59,6 +62,57 @@ describe('useConversationDebugEvents', () => {
     expect(view.result.current.events.map((item) => item.seq)).toEqual([1, 2, 3]);
     expect(view.result.current.syncing).toBe(false);
     expect(subscribeEvents).toHaveBeenCalledWith('thread_1', 3, expect.any(Function));
+  });
+
+  it('backfills a missed turn from a resync-only batch without reviving the replaced turn', async () => {
+    const recoveryPage = deferred<ReturnType<typeof eventPage>>();
+    const originalEvents = [event(1), event(2), event(3)];
+    const recoveredEvents = [4, 5, 6].map((seq) => ({ ...event(seq), turnId: 'turn_2' }));
+    const listEvents = vi.fn()
+      .mockResolvedValueOnce(eventPage(originalEvents, 3))
+      .mockReturnValueOnce(recoveryPage.promise);
+    const subscribeEvents = vi.fn((
+      _threadId: string,
+      _sinceSeq: number | undefined,
+      _onBatch: (batch: RuntimeEventBatch) => void,
+    ) => () => undefined);
+    const eventSource = { subscribeEvents };
+    const service = { listEvents };
+    const initialThread = { ...runtimeThread(3), activeTurnId: 'turn_1' };
+    const recoveredThread = { ...runtimeThread(6), activeTurnId: 'turn_2' };
+    const view = renderHook(({ thread }) => useConversationDebugEvents(
+      eventSource,
+      service,
+      thread,
+      createConversationDebugVisibility(thread),
+    ), { initialProps: { thread: initialThread } });
+    await act(async () => {});
+    expect(view.result.current.events).toEqual(originalEvents);
+
+    // The chat projection can catch up before the debugger's separate subscription.
+    view.rerender({ thread: recoveredThread });
+    expect(view.result.current.events).toEqual([]);
+    act(() => subscribeEvents.mock.calls[0]![2]({
+      events: [],
+      resync: {
+        reason: 'retention_gap',
+        requestedSinceSeq: 3,
+        retainedFromSeq: 6,
+        thread: recoveredThread,
+      },
+    }));
+    expect(view.result.current.syncing).toBe(true);
+    expect(listEvents).toHaveBeenLastCalledWith('thread_1', {
+      afterSeq: 3,
+      limit: 500,
+      throughSeq: 6,
+    }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+
+    await act(async () => recoveryPage.resolve(eventPage(recoveredEvents, 6)));
+    expect(view.result.current.events).toEqual(recoveredEvents);
+    expect(view.result.current.syncing).toBe(false);
+    expect(view.result.current.error).toBeNull();
+    expect(subscribeEvents).toHaveBeenCalledTimes(1);
   });
 });
 

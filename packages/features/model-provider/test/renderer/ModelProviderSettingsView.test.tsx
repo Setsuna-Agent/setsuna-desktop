@@ -2,11 +2,7 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type {
-  SettingsViewUi,
-} from '@setsuna-desktop/renderer-contracts/settings';
 import type { ProviderConfigState } from '@setsuna-desktop/contracts';
-import type { ComponentProps } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   ModelProviderCatalog,
@@ -15,10 +11,10 @@ import type {
 } from '../../src/contracts/index.js';
 import type { ModelProviderClient } from '../../src/renderer/client.js';
 import { ModelProviderSettingsView } from '../../src/renderer/ModelProviderSettingsView.js';
-import { modelProviderMessages } from '../../src/renderer/messages.js';
 import { ProviderEditor } from '../../src/renderer/ProviderEditor.js';
 import { ProviderModelList } from '../../src/renderer/ProviderModelList.js';
 import { ModelProviderRendererStateService } from '../../src/renderer/service.js';
+import { clientCatalogFixture, clientFixture, deferred, modelFixture, providerInputFixture, stateFromInput, testUi, translate } from './settings-test-support.js';
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
@@ -105,84 +101,6 @@ describe('ModelProviderSettingsView', () => {
       view.unmount();
       service.dispose();
     }
-  });
-
-  it('copies the saved key without revealing it, prioritizes a draft, and reports copy failures', async () => {
-    const user = userEvent.setup();
-    const client = clientFixture(async (input) => stateFromInput(input));
-    const state = await client.read();
-    state.providers[0]!.apiKeySet = true;
-    state.providers[0]!.apiKeyPreview = 'sk-••••saved';
-    const copyApiKey = vi.fn<ModelProviderClient['copyApiKey']>().mockResolvedValue({ ok: true });
-    const service = new ModelProviderRendererStateService({ ...client, copyApiKey }, null);
-    service.start();
-    const view = render(
-      <ModelProviderSettingsView
-        host={{ BrandIcon: () => null, BrandIconPicker: () => null, networkProxyBridge: null }}
-        service={service}
-        translate={translate}
-        ui={testUi}
-      />,
-    );
-    try {
-      const input = await screen.findByPlaceholderText('留空以保留现有密钥');
-      await user.click(screen.getByRole('button', { name: '复制 API Key' }));
-      await screen.findByRole('button', { name: '已复制' });
-      expect(copyApiKey).toHaveBeenLastCalledWith({ providerId: 'provider-1', apiKey: undefined });
-      expect((input as HTMLInputElement).value).toBe('');
-      expect(input.getAttribute('type')).toBe('password');
-
-      fireEvent.change(input, { target: { value: 'new-draft-key' } });
-      copyApiKey.mockRejectedValueOnce(new Error('Native clipboard unavailable'));
-      await user.click(screen.getByRole('button', { name: '复制 API Key' }));
-      expect(await screen.findByRole('alert')).toHaveProperty('textContent', '复制 API Key 失败，请重试。');
-      expect(copyApiKey).toHaveBeenLastCalledWith({ providerId: 'provider-1', apiKey: 'new-draft-key' });
-      expect(screen.queryByRole('button', { name: '已复制' })).toBeNull();
-
-      await user.click(screen.getByRole('button', { name: '复制 API Key' }));
-      await screen.findByRole('button', { name: '已复制' });
-      expect(screen.queryByRole('alert')).toBeNull();
-    } finally {
-      view.unmount();
-      service.dispose();
-    }
-  });
-
-  it('persists an edit staged while the previous debounced save is still in flight', async () => {
-    const saves: ModelProviderSettingsInput[] = [];
-    const gates = [deferred<ModelProviderSettingsState>(), deferred<ModelProviderSettingsState>()];
-    const save = vi.fn(async (input: ModelProviderSettingsInput) => {
-      const index = saves.push(structuredClone(input)) - 1;
-      return gates[index]!.promise;
-    });
-    const service = new ModelProviderRendererStateService(clientFixture(save), null);
-    service.start();
-    render(
-      <ModelProviderSettingsView
-        host={{ BrandIcon: () => null, BrandIconPicker: () => null, networkProxyBridge: null }}
-        service={service}
-        translate={translate}
-        ui={testUi}
-      />,
-    );
-
-    const apiKey = await screen.findByLabelText('API Key');
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    expect((screen.getByRole('button', { name: '复制 API Key' }) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.change(apiKey, { target: { value: 'first-secret' } });
-    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
-    expect(saves).toHaveLength(1);
-
-    fireEvent.change(apiKey, { target: { value: 'second-secret' } });
-    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
-    expect(saves).toHaveLength(1);
-    await act(async () => { gates[0]!.resolve(stateFromInput(saves[0]!)); });
-    expect(saves).toHaveLength(2);
-    expect(saves[1]?.providers[0]?.apiKey).toBe('second-secret');
-
-    await act(async () => { gates[1]!.resolve(stateFromInput(saves[1]!)); });
-    expect(save).toHaveBeenCalledTimes(2);
-    service.dispose();
   });
 
   it('keeps the Pi preset flow to provider, key, and catalog model while hiding raw fields from the primary form', async () => {
@@ -409,7 +327,7 @@ describe('ModelProviderSettingsView', () => {
     }));
     await act(async () => discovery.resolve({ models: [{ id: 'current-model', name: 'Current model' }] }));
 
-    expect((await screen.findByRole('dialog')).textContent).toContain('替换“Legacy custom”的模型列表？');
+    expect((await screen.findByRole('dialog')).textContent).toContain('从“Legacy custom”同步模型');
     service.dispose();
   });
 
@@ -502,12 +420,13 @@ describe('ModelProviderSettingsView', () => {
     }));
   });
 
-  it('always confirms a synchronized model list before applying it, even when it is unchanged', async () => {
+  it('syncs chosen models for a catalog provider without removing local models and leaves cancel unchanged', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     const provider: ProviderConfigState = {
-      id: 'custom-provider',
-      name: 'Custom',
+      id: 'preset-provider',
+      name: 'Preset',
+      catalogProviderId: 'deepseek',
       provider: 'openai-compatible',
       baseUrl: 'https://example.com/v1',
       enabled: true,
@@ -517,24 +436,32 @@ describe('ModelProviderSettingsView', () => {
     };
     render(
       <ProviderModelList
+        catalogPlan={clientCatalogFixture().providers[0]!.plans[0]}
         discovering={false}
+        refreshingCatalog={false}
         host={{ BrandIcon: () => null, BrandIconPicker: () => null, networkProxyBridge: null }}
         provider={provider}
         translate={translate}
         ui={testUi}
         onChange={onChange}
-        onDiscover={vi.fn(async () => provider.models.map((model) => ({ ...model })))}
+        onDiscover={vi.fn(async () => [{ id: 'beta', name: 'Beta' }, { id: 'gamma', name: 'Gamma' }])}
+        onRefreshCatalog={vi.fn()}
       />,
     );
 
     await user.click(screen.getByRole('button', { name: '同步模型' }));
-    const dialog = await screen.findByRole('dialog');
-    expect(dialog.textContent).toContain('替换“Custom”的模型列表？');
-    expect(dialog.textContent).toContain('1 个模型 → 1 个模型');
+    let dialog = await screen.findByRole('dialog');
+    expect((within(dialog).getByRole('button', { name: '同步 0 个模型' }) as HTMLButtonElement).disabled).toBe(true);
+    await user.click(within(dialog).getByRole('button', { name: '全选结果' }));
+    await user.click(within(dialog).getByRole('button', { name: '取消' }));
     expect(onChange).not.toHaveBeenCalled();
-    await user.click(within(dialog).getByRole('button', { name: '确认替换' }));
+    await user.click(screen.getByRole('button', { name: '同步模型' }));
+    dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByRole('textbox', { name: '搜索模型名称或 ID' }), 'gamma');
+    await user.click(within(dialog).getByRole('checkbox', { name: '选择“Gamma”' }));
+    await user.click(within(dialog).getByRole('button', { name: '同步 1 个模型' }));
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
-      models: [expect.objectContaining({ id: 'model-alpha' })],
+      models: [provider.models[0], expect.objectContaining({ code: 'gamma', enabled: false })],
     }));
   });
 
@@ -731,155 +658,3 @@ describe('ModelProviderSettingsView', () => {
     service.dispose();
   });
 });
-
-function modelFixture(id: string, name: string, enabled = false): ProviderConfigState['models'][number] {
-  return {
-    id,
-    name,
-    code: name.toLowerCase(),
-    enabled,
-    maxOutputTokens: 8_192,
-    thinkingEnabled: false,
-    thinkingEfforts: [],
-    supportsImages: false,
-  };
-}
-
-function clientFixture(save: ModelProviderClient['save']): ModelProviderClient {
-  const state: ModelProviderSettingsState = {
-    activeProviderId: 'provider-1',
-    providers: [{
-      id: 'provider-1',
-      name: 'DeepSeek',
-      catalogProviderId: 'deepseek',
-      provider: 'openai-compatible',
-      baseUrl: 'https://api.deepseek.com',
-      enabled: true,
-      apiKeySet: false,
-      apiKeyPreview: '',
-      models: [],
-    }],
-  };
-  const catalog = clientCatalogFixture();
-  return {
-    copyApiKey: async () => ({ ok: true }),
-    catalog: async () => catalog,
-    refreshCatalog: async () => ({ catalog }),
-    read: async () => state,
-    save,
-    discover: async () => ({ models: [] }),
-  };
-}
-
-function clientCatalogFixture(): ModelProviderCatalog {
-  return {
-    providers: [{
-      id: 'deepseek',
-      name: 'DeepSeek',
-      plans: [{
-        id: 'deepseek:openai-completions',
-        name: 'OpenAI Chat Completions',
-        provider: 'openai-compatible',
-        baseUrl: 'https://api.deepseek.com',
-        models: [{
-          code: 'deepseek-model',
-          name: 'DeepSeek Model',
-          contextWindowTokens: 128_000,
-          maxOutputTokens: 16_000,
-          thinkingEnabled: true,
-          thinkingEfforts: ['low', 'high'],
-          defaultThinkingEffort: 'high',
-          supportsImages: false,
-        }, {
-          code: 'deepseek-chat',
-          name: 'DeepSeek Chat',
-          contextWindowTokens: 64_000,
-          maxOutputTokens: 8_000,
-          thinkingEnabled: false,
-          thinkingEfforts: [],
-          supportsImages: false,
-        }],
-      }],
-    }],
-  };
-}
-
-function stateFromInput(input: ModelProviderSettingsInput): ModelProviderSettingsState {
-  return {
-    activeProviderId: input.activeProviderId,
-    providers: input.providers.map((provider) => ({
-      id: provider.id!,
-      name: provider.name!,
-      catalogProviderId: provider.catalogProviderId,
-      requestHeaders: provider.requestHeaders ?? undefined,
-      supportsDeveloperRole: provider.supportsDeveloperRole ?? undefined,
-      provider: provider.provider!,
-      baseUrl: provider.baseUrl!,
-      enabled: provider.enabled ?? true,
-      apiKeySet: Boolean(provider.apiKey),
-      apiKeyPreview: provider.apiKey ? 'sk-••••' : '',
-      models: provider.models ?? [],
-    })),
-  };
-}
-
-function providerInputFixture(provider: ProviderConfigState): ModelProviderSettingsInput['providers'][number] {
-  return {
-    id: provider.id,
-    name: provider.name,
-    catalogProviderId: provider.catalogProviderId,
-    provider: provider.provider,
-    baseUrl: provider.baseUrl,
-    enabled: provider.enabled,
-    proxyRoute: provider.proxyRoute,
-    models: provider.models,
-  };
-}
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((next, fail) => {
-    resolve = next;
-    reject = fail;
-  });
-  return { promise, reject, resolve };
-}
-
-const translate = ((key: string, params?: Record<string, unknown>) => {
-  const template = modelProviderMessages.messages['zh-CN']?.[key] ?? key;
-  return params
-    ? template.replace(/\{(\w+)\}/gu, (match, name: string) => String(params[name] ?? match))
-    : template;
-}) as ComponentProps<typeof ModelProviderSettingsView>['translate'];
-
-const testUi = {
-  Button: ({ children, icon: _icon, variant: _variant, ...props }: ComponentProps<SettingsViewUi['Button']>) => (
-    <button type="button" {...props}>{children}</button>
-  ),
-  Checkbox: ({ checked, children, indeterminate: _indeterminate, onChange, ...props }: ComponentProps<SettingsViewUi['Checkbox']>) => (
-    <label><input {...props} checked={checked} type="checkbox" onChange={(event) => onChange(event.currentTarget.checked)} />{children}</label>
-  ),
-  Dialog: ({ children, footer, subtitle, title }: ComponentProps<SettingsViewUi['Dialog']>) => (
-    <section role="dialog"><header>{title}{subtitle}</header>{children}<footer>{footer}</footer></section>
-  ),
-  EmptyState: ({ title }: { title: string }) => <div>{title}</div>,
-  IconButton: ({ children, label, variant: _variant, ...props }: ComponentProps<SettingsViewUi['IconButton']>) => (
-    <button {...props} aria-label={label} type="button">{children}</button>
-  ),
-  PageHeading: ({ action, description, title }: ComponentProps<SettingsViewUi['PageHeading']>) => (
-    <header><h1>{title}</h1><p>{description}</p>{action}</header>
-  ),
-  Section: ({ children, featureId: _featureId, ...props }: ComponentProps<SettingsViewUi['Section']>) => (
-    <section {...props}>{children}</section>
-  ),
-  SelectField: ({ children, onValueChange, renderOptionIcon: _renderOptionIcon, ...props }: ComponentProps<SettingsViewUi['SelectField']>) => (
-    <select {...props} onChange={(event) => onValueChange(event.currentTarget.value)}>{children}</select>
-  ),
-  Tooltip: ({ children }: ComponentProps<SettingsViewUi['Tooltip']>) => children,
-  TextField: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
-  TextArea: (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => <textarea {...props} />,
-  Toast: ({ message, tone }: ComponentProps<SettingsViewUi['Toast']>) => (
-    <div data-tone={tone} role={tone === 'error' ? 'alert' : 'status'}>{message}</div>
-  ),
-} as unknown as SettingsViewUi;

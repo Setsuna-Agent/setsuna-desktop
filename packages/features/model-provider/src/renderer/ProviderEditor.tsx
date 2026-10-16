@@ -1,6 +1,7 @@
 import { Button as UiButton, Switch } from '@setsuna-desktop/renderer-ui';
 import type {
   DesktopNetworkProxyServerState,
+  RuntimeAvailableModel,
   ProviderConfigState } from '@setsuna-desktop/contracts';
 import type { RendererTranslate,
 } from '@setsuna-desktop/feature-core/renderer';
@@ -26,6 +27,7 @@ export function ProviderEditor({
   refreshingCatalog,
   host,
   onApiKeyChange,
+  onClearApiKey,
   onCopyApiKey,
   onChange,
   onDelete,
@@ -44,10 +46,11 @@ export function ProviderEditor({
   refreshingCatalog: boolean;
   host: ModelProviderRendererHost;
   onApiKeyChange(value: string): void;
+  onClearApiKey(): void;
   onCopyApiKey(): Promise<void>;
   onChange(provider: ProviderConfigState): void;
   onDelete(): void;
-  onDiscover(): Promise<ProviderConfigState['models'] | undefined>;
+  onDiscover(): Promise<RuntimeAvailableModel[] | undefined>;
   onRefreshCatalog(): void;
   onTestConnection: ProviderConnectionTester;
   provider: ProviderConfigState;
@@ -113,6 +116,7 @@ export function ProviderEditor({
           translate={translate}
           ui={ui}
           onApiKeyChange={onApiKeyChange}
+          onClearApiKey={onClearApiKey}
           onCopyApiKey={onCopyApiKey}
           onChange={onChange}
           onTestConnection={onTestConnection}

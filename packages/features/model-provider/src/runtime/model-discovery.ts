@@ -22,7 +22,7 @@ export async function fetchAvailableModels(
   if (typeof fetchImpl !== 'function') throw new Error('当前运行环境不支持网络请求。');
   const provider = input.provider ?? savedProvider?.provider ?? 'openai-compatible';
   const baseUrl = nonEmpty(input.baseUrl) ?? savedProvider?.baseUrl ?? '';
-  const apiKey = nonEmpty(input.apiKey) ?? savedProvider?.apiKey ?? '';
+  const apiKey = input.clearApiKey ? '' : nonEmpty(input.apiKey) ?? savedProvider?.apiKey ?? '';
   const controller = new AbortController();
   const timeout = setTimeout(
     () => controller.abort(new Error('模型列表请求超时。')),

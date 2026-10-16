@@ -55,6 +55,8 @@ React 自定义应用的 service 构造和 Workspace Dependencies 绑定仅保�
 
 Runtime 的 `src/cli.ts` 创建 server；`src/runtime/runtime-factory.ts` 组装 ports/adapters；`src/server/runtime-server.ts` 在监听前完成 store recovery 和 stale turn 结算。
 
+运行后的子进程意外退出由 main 的 `runtime/runtime-process.ts` 在原生资源清理后按有限退避重启；正常关闭和首次启动失败不进入自动恢复。现有 HTTP/SSE Host 保持存活，订阅切换到新端口并保留已接收序号，写请求不重放。新进程仍须等待 Store 独占租约并完成异常 turn 结算，不能为缩短恢复时间绕过数据安全边界。恢复计时器仅在崩溃后创建，不增加首次就绪依赖。状态规则见 [RuntimeHost 异常退出恢复](../desktop/main/runtime-and-ipc.md#异常退出恢复)。
+
 Goal 和 Collaboration 的 Feature 投影使用 SQLite `feature_projection_checkpoints` 保存状态与已处理事件序号。重启时先校验 Feature 自己的 codec 和带 reducer 版本的 key，再回放检查点之后的事件；首次启动、版本变化或缓存损坏时从历史事件重建。检查点只是可重建缓存，历史事件仍是真源，异常任务结算仍在 runtime ready 前完成。事件高水位直接查询线程序号，不加载或复制完整聊天记录。
 
 异常 turn 结算从 store 提取活动 turn ID。分区 checkpoint 的小型 recovery 摘要随 checkpoint 一起保存活动 turn ID 和生成图片引用；只有 checkpoint 序号等于最新事件序号时才能使用。旧 checkpoint 缺少摘要时读取一次消息/turn 状态并补齐摘要，不还原历史模型请求快照或填充完整会话缓存；旧版快照或尚未 checkpoint 的事件尾仍走完整迁移和回放。Goal 启动恢复直接读取已枚举线程的 Feature 投影，不为检查线程存在而再次读取完整会话。

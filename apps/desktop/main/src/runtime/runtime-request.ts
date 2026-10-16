@@ -3,7 +3,7 @@ type RuntimeTransportRequestOptions = {
   label: string;
   retryDelayMs?: number;
   retryOnce?: boolean;
-  runtimeState: () => 'running' | 'stopped' | 'stopping';
+  runtimeState: () => 'running' | 'starting' | 'recovering' | 'stopped' | 'stopping';
 };
 
 const DEFAULT_RUNTIME_GET_RETRY_DELAY_MS = 120;

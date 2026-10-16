@@ -1,6 +1,5 @@
 import {
   RUNTIME_LOCAL_ATTACHMENT_LINK_PATH,
-  RUNTIME_PROCESS_SHUTDOWN_MESSAGE,
   type DesktopImageDataResult,
   type DesktopRuntimeEventPayload,
   type RuntimeDataMigrationReadiness,
@@ -14,8 +13,6 @@ import {
   type RuntimeStoredMessageAttachment,
 } from '@setsuna-desktop/contracts';
 import type { WebContents } from 'electron';
-import type { ComputerConnection } from '@setsuna-desktop/feature-computer-use/contracts';
-import type { BrowserControlConnection } from '@setsuna-desktop/feature-browser/contracts';
 import { installLocalPlugin } from '@setsuna-desktop/feature-plugin-management/contracts';
 import { KERNEL_FEATURE_OPERATION_ERRORS } from '@setsuna-desktop/feature-core/operation';
 import type {
@@ -23,34 +20,21 @@ import type {
   PortableFeatureSettingsDocument,
   PortableFeatureSettingsRestoreTarget,
 } from '@setsuna-desktop/feature-core/settings';
-import { spawn, type ChildProcessByStdio } from 'node:child_process';
-import { randomBytes, randomUUID } from 'node:crypto';
-import { once } from 'node:events';
-import { accessSync, constants as fsConstants } from 'node:fs';
-import net from 'node:net';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import type { Readable, Writable } from 'node:stream';
-import { desktopProcessEnvironment, prependPathDirectory } from './desktop-environment.js';
 import { RuntimeEventBatcher } from './runtime-event-batcher.js';
 import { fetchRuntimeResponse } from './runtime-request.js';
 import { readRuntimeProgressResponse } from './runtime-progress-response.js';
+import { RuntimeProcess, type RuntimeProcessOptions } from './runtime-process.js';
+import { abortableDelay } from './runtime-process-control.js';
+export { stopRuntimeChild, type RuntimeChildProcess } from './runtime-process-control.js';
+export {
+  resolveBuiltinPluginsDir, resolveBuiltinSkillsDir, resolvePackagedRuntimeEntry,
+  resolveRuntimeNodeExecutable, resolveRuntimeSpawnCwd, runtimeProcessEnvironment,
+} from './runtime-process-environment.js';
 
-type RuntimeHostOptions = {
-  appRoot: string;
-  appVersion: string;
-  browserControl?: BrowserControlConnection;
-  computerControl?: ComputerConnection;
-  onExit?: () => void | Promise<void>;
-  nativeBridge?: {
-    token: string;
-    url: string;
-  };
-  dataDir: string;
-  ripgrepPath?: string;
-  requireBundledRipgrep?: boolean;
-  runtimeEntry?: string;
+type RuntimeHostOptions = RuntimeProcessOptions & {
   runtimeRequestRetryDelayMs?: number;
-  shutdownTimeoutMs?: number;
   sseRetryBaseDelayMs?: number;
 };
 
@@ -63,110 +47,26 @@ type Subscription = {
 
 const DEFAULT_SSE_RETRY_BASE_DELAY_MS = 250;
 const MAX_SSE_RETRY_DELAY_MS = 5_000;
-const RUNTIME_READY_TIMEOUT_MS = 30_000;
-// Runtime itself may spend up to five seconds draining turns before checkpointing stores.
-// Main leaves additional time for HTTP handlers, MCP teardown and the final SQLite close.
-const RUNTIME_SHUTDOWN_TIMEOUT_MS = 15_000;
-const RUNTIME_FORCE_EXIT_TIMEOUT_MS = 1_000;
-
-export type RuntimeChildProcess = ChildProcessByStdio<Writable, Readable, Readable>;
 
 /**
  * 管理本地 runtime 子进程，并把它的 HTTP/SSE 能力收敛到 Electron bridge 后面。
  */
 export class RuntimeHost {
-  private child: RuntimeChildProcess | null = null;
-  private stoppingChild: RuntimeChildProcess | null = null;
-  private stoppingPromise: Promise<void> | null = null;
-  private exitCleanup: Promise<void> = Promise.resolve();
-  private port = 0;
-  // 每次启动生成独立 token，避免任意 localhost 调用者绕过 Electron main 访问 runtime。
-  private readonly token = randomBytes(32).toString('hex');
+  private readonly process: RuntimeProcess;
   private readonly subscriptions = new Map<string, Subscription>();
   private readonly rendererRequests = new Map<string, AbortController>();
 
-  constructor(private readonly options: RuntimeHostOptions) {}
-
-  /**
-   * 启动 runtime 子进程并等待 health check 通过。
-   */
-  async start(): Promise<void> {
-    if (this.stoppingPromise) await this.stoppingPromise;
-    await this.exitCleanup;
-    if (this.child) return;
-    this.port = await findAvailablePort();
-    const runtimeEntry = this.options.runtimeEntry ?? resolvePackagedRuntimeEntry(this.options.appRoot);
-    const builtinSkillsDir = resolveBuiltinSkillsDir(this.options.appRoot);
-    const builtinPluginsDir = resolveBuiltinPluginsDir(this.options.appRoot);
-    // macOS 使用 LSUIElement Helper 承载 Node 模式，避免 runtime 和后续 Node 子进程注册额外 Dock 图标。
-    const runtimeExecutable = resolveRuntimeNodeExecutable();
-    const child = spawn(runtimeExecutable, [runtimeEntry, '--port', String(this.port)], {
-      cwd: resolveRuntimeSpawnCwd(this.options.appRoot),
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: {
-        ...runtimeProcessEnvironment(this.options),
-        ...(this.options.computerControl ? {
-          SETSUNA_DESKTOP_COMPUTER_CONTROL_TOKEN: this.options.computerControl.token,
-          SETSUNA_DESKTOP_COMPUTER_CONTROL_URL: this.options.computerControl.url,
-        } : {}),
-        ...(this.options.browserControl ? {
-          SETSUNA_DESKTOP_BROWSER_CONTROL_TOKEN: this.options.browserControl.token,
-          SETSUNA_DESKTOP_BROWSER_CONTROL_URL: this.options.browserControl.url,
-        } : {}),
-        ...(this.options.nativeBridge ? {
-          SETSUNA_DESKTOP_NATIVE_BRIDGE_TOKEN: this.options.nativeBridge.token,
-          SETSUNA_DESKTOP_NATIVE_BRIDGE_URL: this.options.nativeBridge.url,
-        } : {}),
-        SETSUNA_DESKTOP_BUILTIN_SKILLS_DIR: builtinSkillsDir,
-        SETSUNA_DESKTOP_BUILTIN_PLUGINS_DIR: builtinPluginsDir,
-        SETSUNA_DESKTOP_DATA_DIR: this.options.dataDir,
-        SETSUNA_DESKTOP_RUNTIME_TOKEN: this.token,
-      },
-    });
-    this.child = child;
-    child.stderr.on('data', (chunk) => console.error(`[runtime] ${String(chunk).trimEnd()}`));
-    child.once('exit', (code, signal) => {
-      if (this.child === child) {
-        this.child = null;
-        // Idle turns have no open HTTP request to cancel. Revoke main-owned
-        // resources at process exit, and drain them before a replacement starts.
-        this.exitCleanup = this.cleanupAfterExit();
-        void this.exitCleanup.catch((error) => console.error('[runtime] exit cleanup failed', error));
-      }
-      const message = `[runtime] exited code=${code ?? 'null'} signal=${signal ?? 'null'}`;
-      if (this.stoppingChild === child) console.info(message);
-      else console.error(message);
-    });
-    await this.waitForReady(child);
-    await this.healthCheck();
+  constructor(private readonly options: RuntimeHostOptions) {
+    this.process = new RuntimeProcess(options);
   }
 
-  private async cleanupAfterExit(): Promise<void> {
-    await this.options.onExit?.();
+  start(): Promise<void> {
+    return this.process.start();
   }
 
-  /**
-   * 停止 runtime 子进程，并取消所有 SSE 订阅。
-   */
   async stop(): Promise<void> {
     for (const subscriptionId of this.subscriptions.keys()) this.unsubscribe(subscriptionId);
-    if (this.stoppingPromise) return this.stoppingPromise;
-    const child = this.child;
-    if (!child) return this.exitCleanup;
-    this.stoppingChild = child;
-    const stop = stopRuntimeChild(child, this.options.shutdownTimeoutMs ?? RUNTIME_SHUTDOWN_TIMEOUT_MS)
-      .then(() => {
-        if (this.child === child) this.child = null;
-      })
-      .finally(async () => {
-        try { await this.exitCleanup; }
-        finally {
-          if (this.stoppingChild === child) this.stoppingChild = null;
-          if (this.stoppingPromise === stop) this.stoppingPromise = null;
-        }
-      });
-    this.stoppingPromise = stop;
-    return stop;
+    await this.process.stop();
   }
 
   /**
@@ -224,11 +124,11 @@ export class RuntimeHost {
     let response: Response;
     try {
       response = await fetchRuntimeResponse(
-        `http://127.0.0.1:${this.port}${safePath}`,
+        `http://127.0.0.1:${this.process.port}${safePath}`,
         {
           method,
           headers: {
-            Authorization: `Bearer ${this.token}`,
+            Authorization: `Bearer ${this.process.token}`,
             'Content-Type': 'application/json',
             ...(onProgress ? { Accept: 'application/x-ndjson' } : {}),
           },
@@ -239,7 +139,7 @@ export class RuntimeHost {
           label: requestLabel,
           retryDelayMs: this.options.runtimeRequestRetryDelayMs,
           retryOnce: !onProgress && method === 'GET',
-          runtimeState: () => this.runtimeProcessState(),
+          runtimeState: () => this.process.state,
         },
       );
     } catch (error) {
@@ -329,10 +229,10 @@ export class RuntimeHost {
   async uploadAttachment(input: RuntimeAttachmentUploadInput): Promise<RuntimeStoredMessageAttachment> {
     if (!(input.data instanceof Uint8Array)) throw new Error('Attachment bytes are invalid.');
     const params = new URLSearchParams({ name: input.name, type: input.type });
-    const response = await fetch(`http://127.0.0.1:${this.port}/v1/attachments?${params}`, {
+    const response = await fetch(`http://127.0.0.1:${this.process.port}/v1/attachments?${params}`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${this.token}`,
+        Authorization: `Bearer ${this.process.token}`,
         'Content-Type': 'application/octet-stream',
       },
       body: Buffer.from(input.data),
@@ -347,13 +247,13 @@ export class RuntimeHost {
     if (!encodedThreadId || !encodedAssetId) return { ok: false, error: 'Image attachment id is invalid.' };
     const requestPath = `/v1/threads/${encodedThreadId}/attachments/${encodedAssetId}/image`;
     const response = await fetchRuntimeResponse(
-      `http://127.0.0.1:${this.port}${requestPath}`,
-      { headers: { Authorization: `Bearer ${this.token}` } },
+      `http://127.0.0.1:${this.process.port}${requestPath}`,
+      { headers: { Authorization: `Bearer ${this.process.token}` } },
       {
         label: `GET ${requestPath}`,
         retryDelayMs: this.options.runtimeRequestRetryDelayMs,
         retryOnce: true,
-        runtimeState: () => this.runtimeProcessState(),
+        runtimeState: () => this.process.state,
       },
     );
     if (!response.ok) {
@@ -410,59 +310,6 @@ export class RuntimeHost {
   }
 
   /**
-   * 等待 runtime stdout 输出 ready 握手事件。
-   *
-   * @param child 刚启动的 runtime 子进程。
-   */
-  private async waitForReady(child: RuntimeChildProcess): Promise<void> {
-    let buffer = '';
-    const ready = new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(
-        () => reject(new Error('Runtime did not become ready in time')),
-        RUNTIME_READY_TIMEOUT_MS,
-      );
-      child.stdout.on('data', (chunk) => {
-        buffer += String(chunk);
-        // runtime 启动日志按行输出；只有 JSON ready 事件用于握手，其他行仅作为日志透传。
-        for (;;) {
-          const newline = buffer.indexOf('\n');
-          if (newline === -1) break;
-          const line = buffer.slice(0, newline).trim();
-          buffer = buffer.slice(newline + 1);
-          if (!line) continue;
-          try {
-            const payload = JSON.parse(line) as { type?: string; port?: number };
-            if (payload.type === 'ready') {
-              clearTimeout(timer);
-              resolve();
-            }
-          } catch {
-            console.log(`[runtime] ${line}`);
-          }
-        }
-      });
-      child.once('exit', () => {
-        clearTimeout(timer);
-        reject(new Error('Runtime exited before ready'));
-      });
-    });
-    await ready;
-  }
-
-  /**
-   * 检查 runtime HTTP 服务是否可用。
-   */
-  private async healthCheck(): Promise<void> {
-    const response = await fetch(`http://127.0.0.1:${this.port}/health`);
-    if (!response.ok) throw new Error(`Runtime health check failed: ${response.status}`);
-  }
-
-  private runtimeProcessState(): 'running' | 'stopped' | 'stopping' {
-    if (this.stoppingChild || this.stoppingPromise) return 'stopping';
-    return this.child ? 'running' : 'stopped';
-  }
-
-  /**
    * 读取 runtime SSE 流并转成 renderer 事件。
    *
    * @param subscriptionId 当前订阅 ID。
@@ -476,14 +323,16 @@ export class RuntimeHost {
     input: { threadId: string; sinceSeq?: number },
     signal: AbortSignal,
   ): Promise<void> {
-    let lastSeq = input.sinceSeq;
+    // Advance outside the connection promise: a killed process can deliver events
+    // and then reset the socket without ever resolving readSseConnection().
+    const cursor = { seq: input.sinceSeq };
     const baseRetryDelay = Math.max(1, this.options.sseRetryBaseDelayMs ?? DEFAULT_SSE_RETRY_BASE_DELAY_MS);
     let retryDelay = baseRetryDelay;
     try {
       while (!signal.aborted && !webContents.isDestroyed()) {
         let disconnectError: unknown = new Error('Runtime SSE disconnected.');
         try {
-          lastSeq = await this.readSseConnection(subscriptionId, webContents, input.threadId, lastSeq, signal);
+          await this.readSseConnection(subscriptionId, webContents, input.threadId, cursor, signal);
           retryDelay = baseRetryDelay;
         } catch (error) {
           disconnectError = error;
@@ -512,17 +361,17 @@ export class RuntimeHost {
     subscriptionId: string,
     webContents: WebContents,
     threadId: string,
-    sinceSeq: number | undefined,
+    cursor: { seq: number | undefined },
     signal: AbortSignal,
-  ): Promise<number | undefined> {
+  ): Promise<void> {
     const params = new URLSearchParams();
-    if (typeof sinceSeq === 'number') params.set('sinceSeq', String(sinceSeq));
+    if (typeof cursor.seq === 'number') params.set('sinceSeq', String(cursor.seq));
     const suffix = params.size ? `?${params}` : '';
     // SSE 连接由 main 持有，renderer 重载后可以续订，但不会拿到 runtime token。
     const response = await fetch(
-      `http://127.0.0.1:${this.port}/v1/threads/${encodeURIComponent(threadId)}/events${suffix}`,
+      `http://127.0.0.1:${this.process.port}/v1/threads/${encodeURIComponent(threadId)}/events${suffix}`,
       {
-        headers: { Authorization: `Bearer ${this.token}` },
+        headers: { Authorization: `Bearer ${this.process.token}` },
         signal,
       },
     );
@@ -530,7 +379,6 @@ export class RuntimeHost {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    let lastSeq = sinceSeq;
     // SSE 按空行分帧；buffer 保留半截事件，避免流式读取拆包时丢事件。
     try {
       for (;;) {
@@ -544,25 +392,24 @@ export class RuntimeHost {
           const frame = parseSseChunk(chunk);
           if (frame?.resync) {
             if (frame.resync.thread.id !== threadId) continue;
-            if (webContents.isDestroyed()) return lastSeq;
+            if (webContents.isDestroyed()) return;
             this.subscriptions.get(subscriptionId)?.batcher.resync(frame.resync);
-            lastSeq = frame.resync.thread.lastSeq;
+            cursor.seq = frame.resync.thread.lastSeq;
             continue;
           }
           const event = frame?.event;
-          if (event && (lastSeq === undefined || event.seq > lastSeq)) {
-            if (webContents.isDestroyed()) return lastSeq;
+          if (event && (cursor.seq === undefined || event.seq > cursor.seq)) {
+            if (webContents.isDestroyed()) return;
             this.subscriptions.get(subscriptionId)?.batcher.enqueue(event);
-            lastSeq = event.seq;
+            cursor.seq = event.seq;
           }
         }
       }
     } finally {
-      // A reconnect resumes from lastSeq, so every accepted event must leave the
+      // A reconnect resumes from cursor.seq, so every accepted event must leave the
       // pending IPC batch before this connection can advance to a new one.
       this.subscriptions.get(subscriptionId)?.batcher.flush();
     }
-    return lastSeq;
   }
 }
 
@@ -626,97 +473,6 @@ async function runtimeResponseError(response: Response, fallback: string): Promi
   }
 }
 
-export function resolvePackagedRuntimeEntry(appRoot: string): string {
-  return path.join(appRoot, 'dist/runtime/cli.cjs');
-}
-
-export function resolveBuiltinSkillsDir(appRoot: string): string {
-  return path.join(appRoot, 'skills');
-}
-
-export function resolveBuiltinPluginsDir(appRoot: string): string {
-  return path.join(appRoot, 'plugins');
-}
-
-export function resolveRuntimeSpawnCwd(appRoot: string): string {
-  return appRoot.endsWith('.asar') ? path.dirname(appRoot) : appRoot;
-}
-
-/**
- * Electron 的 macOS Helper 与主程序使用相同的 Node ABI，但被标记为 LSUIElement。
- * Node 模式从 Helper 启动后，runtime 内的 process.execPath 也会指向 Helper，因此工作空间
- * 依赖管理器生成的 node 垫片不会在每次 pnpm/test 调用时闪烁 Dock 图标。
- */
-export function resolveRuntimeNodeExecutable(
-  executablePath: string = process.execPath,
-  platform: NodeJS.Platform = process.platform,
-  isExecutable: (candidate: string) => boolean = executableExists,
-): string {
-  if (platform !== 'darwin') return executablePath;
-
-  const macosDir = path.dirname(executablePath);
-  const contentsDir = path.dirname(macosDir);
-  const appBundleDir = path.dirname(contentsDir);
-  if (
-    path.basename(macosDir) !== 'MacOS'
-    || path.basename(contentsDir) !== 'Contents'
-    || path.extname(appBundleDir) !== '.app'
-  ) {
-    return executablePath;
-  }
-
-  // electron-builder 通常按 app bundle 命名 Helper；同时兼容主可执行文件自定义名称。
-  const helperBaseNames = [
-    path.basename(appBundleDir, '.app'),
-    path.basename(executablePath),
-  ];
-  for (const baseName of new Set(helperBaseNames)) {
-    const helperName = `${baseName} Helper`;
-    const helperPath = path.join(
-      contentsDir,
-      'Frameworks',
-      `${helperName}.app`,
-      'Contents',
-      'MacOS',
-      helperName,
-    );
-    if (isExecutable(helperPath)) return helperPath;
-  }
-  return executablePath;
-}
-
-export function runtimeProcessEnvironment(
-  options: Pick<RuntimeHostOptions,
-    | 'appVersion'
-    | 'ripgrepPath'
-    | 'requireBundledRipgrep'
-  >,
-  baseEnv: NodeJS.ProcessEnv = process.env,
-): NodeJS.ProcessEnv {
-  const env = desktopProcessEnvironment(baseEnv);
-  // 主 App 和 macOS Helper 都必须显式进入 Node 模式，否则会启动 Electron 桌面实例。
-  env.ELECTRON_RUN_AS_NODE = '1';
-  env.SETSUNA_DESKTOP_APP_VERSION = options.appVersion;
-  if (options.requireBundledRipgrep && !options.ripgrepPath) {
-    throw new Error('Bundled ripgrep is required for the packaged runtime.');
-  }
-  if (options.ripgrepPath) {
-    env.SETSUNA_DESKTOP_RG_PATH = options.ripgrepPath;
-    prependPathDirectory(env, path.dirname(options.ripgrepPath));
-  }
-  if (options.requireBundledRipgrep) env.SETSUNA_DESKTOP_REQUIRE_BUNDLED_RG = '1';
-  return env;
-}
-
-function executableExists(candidate: string): boolean {
-  try {
-    accessSync(candidate, fsConstants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function normalizeRuntimePath(value: string): string {
   // bridge 必须是窄白名单，避免 renderer 借 runtime host 代理任意 localhost 路径。
   if (!value.startsWith('/')) throw new Error('Runtime path must be absolute.');
@@ -772,91 +528,4 @@ function sendRuntimeEventPayload(
     // remains authoritative and a renderer IPC race must not crash Electron main.
     if (!webContents.isDestroyed()) console.warn('[runtime] failed to deliver event batch', error);
   }
-}
-
-function abortableDelay(delayMs: number, signal: AbortSignal): Promise<void> {
-  if (signal.aborted) return Promise.resolve();
-  return new Promise((resolve) => {
-    const timer = setTimeout(finish, delayMs);
-    function finish() {
-      clearTimeout(timer);
-      signal.removeEventListener('abort', finish);
-      resolve();
-    }
-    signal.addEventListener('abort', finish, { once: true });
-  });
-}
-
-/**
- * Ask the runtime to release durable resources before terminating it. Windows does not
- * deliver POSIX signals to Node child processes, so child.kill('SIGTERM') is only a fallback.
- */
-export async function stopRuntimeChild(
-  child: RuntimeChildProcess,
-  gracefulTimeoutMs = RUNTIME_SHUTDOWN_TIMEOUT_MS,
-): Promise<void> {
-  if (child.exitCode !== null || child.signalCode !== null) {
-    assertCleanRuntimeExit(child);
-    return;
-  }
-
-  const exited = new Promise<void>((resolve) => {
-    child.once('exit', () => resolve());
-  });
-  const ignoreStdinError = () => undefined;
-  child.stdin.once('error', ignoreStdinError);
-  try {
-    try {
-      child.stdin.end(RUNTIME_PROCESS_SHUTDOWN_MESSAGE);
-    } catch {
-      // A process that already closed stdin is handled by the forced-stop fallback below.
-    }
-    if (await settlesWithin(exited, Math.max(0, gracefulTimeoutMs))) {
-      assertCleanRuntimeExit(child);
-      return;
-    }
-
-    if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
-    if (await settlesWithin(exited, RUNTIME_FORCE_EXIT_TIMEOUT_MS)) {
-      throw new Error('Runtime required forced termination after graceful shutdown timed out.');
-    }
-
-    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
-    if (!await settlesWithin(exited, RUNTIME_FORCE_EXIT_TIMEOUT_MS)) {
-      throw new Error('Runtime process did not exit after forced termination.');
-    }
-    throw new Error('Runtime required forced termination after graceful shutdown timed out.');
-  } finally {
-    child.stdin.off('error', ignoreStdinError);
-  }
-}
-
-function assertCleanRuntimeExit(child: RuntimeChildProcess): void {
-  if (child.exitCode === 0 && child.signalCode === null) return;
-  throw new Error(
-    `Runtime reported an unsuccessful graceful shutdown (code=${child.exitCode ?? 'null'}, signal=${child.signalCode ?? 'null'}).`,
-  );
-}
-
-async function settlesWithin(promise: Promise<void>, timeoutMs: number): Promise<boolean> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<false>((resolve) => {
-    timer = setTimeout(() => resolve(false), timeoutMs);
-  });
-  try {
-    return await Promise.race([promise.then(() => true as const), timeout]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
-async function findAvailablePort(): Promise<number> {
-  // 让系统分配空闲端口，再关闭探测 server，交给 runtime 子进程监听。
-  const server = net.createServer();
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  const address = server.address();
-  await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
-  if (!address || typeof address === 'string') throw new Error('Unable to allocate runtime port.');
-  return address.port;
 }

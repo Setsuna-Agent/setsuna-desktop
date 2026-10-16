@@ -18,6 +18,7 @@ export function useProviderConnectionTest(
     proxyRoute: provider.proxyRoute,
     requestHeaders: provider.requestHeaders ?? null,
     apiKey: apiKey.trim() || undefined,
+    ...(!apiKey.trim() && !provider.apiKeySet ? { clearApiKey: true } : {}),
   };
   const connectionKey = JSON.stringify([input, input.apiKey ? null : provider.apiKeyPreview]);
   const currentKey = useRef(connectionKey);

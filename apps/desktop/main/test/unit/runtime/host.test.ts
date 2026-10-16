@@ -130,11 +130,13 @@ describe('runtime host packaging paths', () => {
     )).toThrow('Bundled ripgrep is required');
   });
 
-  it('reconnects a dropped SSE stream from the last delivered sequence', async () => {
+  it.each(['eof', 'reset'])('reconnects an SSE %s from the last delivered sequence', async (disconnect) => {
     const firstEvent = runtimeEvent(1);
     const secondEvent = runtimeEvent(2);
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(sseResponse(firstEvent))
+      .mockResolvedValueOnce(runtimeSseFaultResponse([firstEvent], {
+        disconnectError: disconnect === 'reset' ? new Error('socket reset') : undefined,
+      }))
       .mockResolvedValueOnce(sseResponse(secondEvent));
     vi.stubGlobal('fetch', fetchMock);
     const send = vi.fn();
