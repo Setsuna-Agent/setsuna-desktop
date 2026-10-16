@@ -45,6 +45,20 @@ Tab 销毁、导航和重新注册都会清理 snapshot/ref 与 CDP 状态。
 
 聊天输入框的 `@` 菜单包含当前会话侧栏和底栏中打开的 HTTP(S) 标签页，支持按标题或网址搜索；内部首页不列入候选。引用以 `[@标题](browser-tab://ID?url=URL)` 保存在消息正文，ID 和 URL 按 URI component 编码，因此草稿、排队、历史恢复与复制粘贴均保留标签页身份。模型按引用 ID 调用现有 Browser tools；标题和网址只是外部引用信息，不自动读取页面，也不提升为指令。标签关闭后保留历史引用，main 对已失效 ID 报错，不回退到其他标签页。
 
+## 手动页面休眠
+
+浏览器菜单提供「休眠页面 / 唤醒页面」，网页应用复用相同入口。首版使用 Chromium 页面冻结保留 DOM、历史与内存中的页面状态，主要降低后台执行开销，不卸载 guest，也不保证释放页面进程内存；与宿主共用 renderer 的 React 插件页面不参与冻结。
+
+`main/page-lifecycle.ts` 串行管理休眠与唤醒；浏览器工具和主动截图/标注操作在等待前占用页面，执行前自动唤醒，执行期间拒绝休眠。手动休眠按需检查加载、音视频播放/被捕获状态，以及各 frame 和开放 shadow root 中已填写的表单/编辑器。检查失败、超过两秒、期间发生导航/新操作或页面销毁时保留运行。检查对已有输入保守处理，不能依靠框架是否保留 `defaultValue` 判断未保存状态。
+
+`isBeingCaptured()` 只表示页面自身被捕获，不能用于判断麦克风或摄像头是否正在采集。DOM 检查通过后，`main/cdp/media-capture.ts` 按需查询当前页面及跨进程 frame 的执行上下文，通过 CDP `Runtime.queryObjects` 检查存活的 `MediaStreamTrack`，因此仅被录音器闭包持有、未连接播放元素以及被禁用的 live 轨道也会阻止休眠。自动化单独维护当前 CDP 连接的 target 初始化状态，即使设备模拟已连接调试器，也先等待子 target 自动附加配置完成；断开后重新初始化，并保留原有连接所有权。结束轨道后恢复可休眠；页面脚本无需打补丁，也不注册常驻媒体监听。检查沿用两秒预算，取消或失败会移除临时协议监听并释放远端对象组，不能将未知状态当成没有采集。
+
+`main/page-lifecycle-session.ts` 负责 Electron/CDP 适配：冻结前临时启用后台调度，唤醒、失败或注销时恢复原设置；否则禁用后台节流的 guest 可能接受冻结命令却继续执行定时器。注销时 CDP 分离解除冻结，并为原本休眠的页面发布唤醒事件；切换语言等触发重新注册时，保留的 guest 不继承旧会话的调度设置或休眠遮罩。renderer 用事件投影状态，休眠时隐藏 guest 的原生表面并显示唤醒按钮；切回页签会自动唤醒。被动标注位置/标记刷新不会唤醒休眠页。IPC 校验顶层 sender 和 tab 所属窗口，不能休眠其他窗口的页面。
+
+`test/integration/page-sleep.electron.test.ts` 用真实 Electron guest 验证定时器停止/恢复、现场保留、跨窗口拒绝、工具自动唤醒、后台标记刷新、shadow root/子 frame 输入、静音视频保护与刷新，以及注销重新注册后的唤醒事件，并记录同一多页面负载休眠前后的 CPU/内存；媒体用例先启用设备模拟，再使用模拟麦克风和摄像头，覆盖无播放元素的录音、禁用的 live 视频轨道、跨进程子 frame 中的克隆音轨，以及停止/导航后的恢复。进程数与内存保留属于首版预期。定向命令：`pnpm test:integration packages/features/browser/test/integration/page-sleep.electron.test.ts`。
+
+页面进程被运行中心终止或异常退出时，controller 清除冻结和 snapshot 状态、恢复调度设置；迟到的冻结完成不能重新覆盖退出状态。renderer 接收 `render-process-gone` 后复用错误页呈现进程结束反馈和重新加载入口，不自动重启被用户终止的页面。原生测试覆盖休眠页终止后仍可刷新恢复。
+
 ## Guest 安全配置
 
 `will-attach-webview` 强制：

@@ -1,4 +1,4 @@
-export type BrowserLoadErrorReason = 'refused' | 'notFound' | 'timedOut' | 'offline' | 'certificate' | 'generic';
+export type BrowserLoadErrorReason = 'refused' | 'notFound' | 'timedOut' | 'offline' | 'certificate' | 'generic' | 'processGone';
 
 const errorReasons: Readonly<Record<string, BrowserLoadErrorReason>> = {
   ERR_CONNECTION_REFUSED: 'refused',
@@ -6,6 +6,7 @@ const errorReasons: Readonly<Record<string, BrowserLoadErrorReason>> = {
   ERR_CONNECTION_TIMED_OUT: 'timedOut',
   ERR_TIMED_OUT: 'timedOut',
   ERR_INTERNET_DISCONNECTED: 'offline',
+  ERR_RENDER_PROCESS_GONE: 'processGone',
 };
 
 export function browserLoadErrorInfo(message: string, url: string): {
@@ -21,5 +22,5 @@ export function browserLoadErrorInfo(message: string, url: string): {
     : (code && errorReasons[code]) || 'generic';
   let host = '';
   try { host = new URL(url).hostname; } catch { /* Invalid addresses use the generic description. */ }
-  return { code, host, reason: host ? reason : 'generic' };
+  return { code, host, reason: host || reason === 'processGone' ? reason : 'generic' };
 }

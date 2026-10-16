@@ -29,6 +29,8 @@ const handlerChannels = [
   BROWSER_IPC_CHANNELS.captureAnnotationScreenshots,
   BROWSER_IPC_CHANNELS.captureScreenshot,
   BROWSER_IPC_CHANNELS.reloadTab,
+  BROWSER_IPC_CHANNELS.getPageSleepState,
+  BROWSER_IPC_CHANNELS.setPageSuspended,
   BROWSER_IPC_CHANNELS.resolveFavicon,
   BROWSER_IPC_CHANNELS.getWebsiteFavicon,
   BROWSER_IPC_CHANNELS.registerTab,
@@ -51,6 +53,16 @@ export function registerBrowserIpc(
   onActiveTabChanged?: (owner: BrowserWindow, contents: WebContents | null) => void,
 ): () => void {
   for (const channel of handlerChannels) ipcMain.removeHandler(channel);
+  ipcMain.handle(BROWSER_IPC_CHANNELS.getPageSleepState, (event, input) => scope.runOperation(() => {
+    if (!isDesktopRendererSender(event.sender, windows) || event.senderFrame !== event.sender.mainFrame) return null;
+    return controller.getPageSleepState(String(input?.tabId ?? ''), event.sender.id);
+  }));
+  ipcMain.handle(BROWSER_IPC_CHANNELS.setPageSuspended, (event, input) => scope.runOperation((signal) => {
+    if (!isDesktopRendererSender(event.sender, windows) || event.senderFrame !== event.sender.mainFrame || typeof input?.suspended !== 'boolean') {
+      return { suspended: false, blocker: 'unavailable' } as const;
+    }
+    return controller.setPageSuspended(String(input?.tabId ?? ''), event.sender.id, input.suspended, signal);
+  }));
   ipcMain.handle(BROWSER_IPC_CHANNELS.requestFindInPage, (event, input) => scope.runOperation(() => {
     if (!isDesktopRendererSender(event.sender, windows)) return false;
     return controller.requestFindInPage(String(input?.tabId ?? ''), event.sender.id);

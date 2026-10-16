@@ -2,6 +2,12 @@ import { defineRendererMessageBundle } from '@setsuna-desktop/feature-core/rende
 import { browserSettingsZhCN, browserSettingsEnUS } from './settings/messages.js';
 
 const browserZhCN = {
+  'feature.browser.sleep.action': '休眠页面',
+  'feature.browser.sleep.wake': '唤醒页面',
+  'feature.browser.sleep.busy': '页面正在执行操作，请稍后再休眠',
+  'feature.browser.sleep.media': '页面正在播放或采集媒体，已保留运行',
+  'feature.browser.sleep.unsaved': '页面含有已填写的内容，已保留运行',
+  'feature.browser.sleep.unavailable': '无法更改页面休眠状态，请重试',
   'feature.browser.find.placeholder': '在网页中查找',
   'feature.browser.find.previous': '上一个匹配',
   'feature.browser.find.next': '下一个匹配',
@@ -101,6 +107,7 @@ const browserZhCN = {
   'feature.browser.error.checkProxy': '检查代理、防火墙和 DNS 配置',
   'feature.browser.error.reload': '重新加载',
   'feature.browser.cannotLoad': '无法加载网页',
+  'feature.browser.processGone': '页面进程已结束',
   'feature.browser.reloadFailed': '页面已分离，无法重新加载',
   'feature.browser.printFailed': '无法打印当前页面',
   'feature.browser.devToolsFailed': '无法打开当前页面的开发者工具',
@@ -154,6 +161,12 @@ export type BrowserTranslate = (
 ) => string;
 
 const browserEnUS: Record<BrowserMessageKey, string> = {
+  'feature.browser.sleep.action': 'Sleep page',
+  'feature.browser.sleep.wake': 'Wake page',
+  'feature.browser.sleep.busy': 'The page is busy. Try sleeping it again later.',
+  'feature.browser.sleep.media': 'The page is playing or capturing media and will stay awake.',
+  'feature.browser.sleep.unsaved': 'The page contains filled-in content and will stay awake.',
+  'feature.browser.sleep.unavailable': 'Unable to change the page sleep state. Try again.',
   'feature.browser.find.placeholder': 'Find in page',
   'feature.browser.find.previous': 'Previous match',
   'feature.browser.find.next': 'Next match',
@@ -253,6 +266,7 @@ const browserEnUS: Record<BrowserMessageKey, string> = {
   'feature.browser.error.checkProxy': 'Checking the proxy, firewall, and DNS settings',
   'feature.browser.error.reload': 'Reload',
   'feature.browser.cannotLoad': 'Could not load the web page',
+  'feature.browser.processGone': 'The page process has ended',
   'feature.browser.reloadFailed': 'The page was detached and could not be reloaded',
   'feature.browser.printFailed': 'Could not print the current page',
   'feature.browser.devToolsFailed': 'Could not open developer tools for the current page',

@@ -11,6 +11,7 @@ import {
   type BrowserPreloadBridgeContribution,
   type BrowserPasswordState,
   type BrowserExtension,
+  type BrowserPageSleepState,
 } from '../contracts/index.js';
 
 export const browserPreloadFeature = definePreloadFeature<BrowserPreloadBridgeContribution>({
@@ -83,6 +84,13 @@ export const browserPreloadFeature = definePreloadFeature<BrowserPreloadBridgeCo
         ipcRenderer.invoke(BROWSER_IPC_CHANNELS.captureScreenshot, { tabId }),
       reloadTab: (tabId, mode) =>
         ipcRenderer.invoke(BROWSER_IPC_CHANNELS.reloadTab, { mode, tabId }),
+      getPageSleepState: (tabId) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.getPageSleepState, { tabId }),
+      setPageSuspended: (tabId, suspended) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.setPageSuspended, { tabId, suspended }),
+      onPageSleepStateChanged(callback) {
+        const listener = (_event: IpcRendererEvent, state: BrowserPageSleepState) => callback(state);
+        ipcRenderer.on(BROWSER_IPC_CHANNELS.pageSleepStateChanged, listener);
+        return () => ipcRenderer.off(BROWSER_IPC_CHANNELS.pageSleepStateChanged, listener);
+      },
       resolveFavicon: (webContentsId, faviconUrls) =>
         ipcRenderer.invoke(BROWSER_IPC_CHANNELS.resolveFavicon, {
           faviconUrls: [...faviconUrls],

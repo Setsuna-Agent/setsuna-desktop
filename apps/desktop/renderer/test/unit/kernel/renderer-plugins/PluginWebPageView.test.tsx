@@ -30,6 +30,8 @@ afterEach(() => {
 it('opens a sidebar web app through its page owner and registers a native browser without a chat context', async () => {
   const url = 'https://example.com/';
   const bridge = {
+    getPageSleepState: vi.fn(async () => null), onPageSleepStateChanged: () => () => undefined,
+    setPageSuspended: vi.fn(async () => ({ suspended: false })),
     getPasswordState: vi.fn(async () => null), onPasswordState: () => () => undefined,
     getExtensions: vi.fn(async () => []), onExtensionsChanged: () => () => undefined,
     getExtensionActions: vi.fn(async () => []), onExtensionActionsChanged: () => () => undefined,

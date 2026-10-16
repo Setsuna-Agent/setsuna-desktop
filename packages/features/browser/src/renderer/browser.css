@@ -685,6 +685,19 @@
   height: 100%;
 }
 
+.desktop-browser-webview.is-suspended {
+  visibility: hidden;
+}
+
+.desktop-browser-sleep {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--app-surface) 88%, transparent);
+}
+
 .desktop-browser-panel .is-spinning {
   animation: desktop-browser-spin 900ms linear infinite;
 }
