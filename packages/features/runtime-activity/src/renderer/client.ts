@@ -4,6 +4,8 @@ import {
   listRuntimeActivityServices,
   stopRuntimeActivityService,
   stopRuntimeActivityTask,
+  sampleRuntimeResources,
+  type ProcessResourceSnapshot,
   type RuntimeActivityList,
   type RuntimeActivityServiceList,
   type RuntimeActivityServiceListTarget,
@@ -14,6 +16,7 @@ import {
 import type { RuntimeBackgroundShellProcessTermination } from '@setsuna-desktop/contracts';
 
 export type RuntimeActivityClient = Readonly<{
+  sampleResources(options?: Readonly<{ signal?: AbortSignal }>): Promise<ProcessResourceSnapshot>;
   list(options?: Readonly<{ signal?: AbortSignal }>): Promise<RuntimeActivityList>;
   listServices(
     input: RuntimeActivityServiceListTarget,
@@ -33,6 +36,7 @@ export function createRuntimeActivityClient(
   transport: FeatureOperationTransport,
 ): RuntimeActivityClient {
   return Object.freeze({
+    sampleResources: (options) => transport.call(sampleRuntimeResources, undefined, options),
     list: (options) => transport.call(listRuntimeActivities, undefined, options),
     listServices: (input, options) => transport.call(listRuntimeActivityServices, input, options),
     stopService: (input, options) => transport.call(stopRuntimeActivityService, input, options),

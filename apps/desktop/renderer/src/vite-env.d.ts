@@ -1,4 +1,5 @@
 import type { NotificationsPreloadContribution } from '@setsuna-desktop/feature-notifications/contracts';
+import type { RuntimeActivityPreloadContribution } from '@setsuna-desktop/feature-runtime-activity/contracts';
 /// <reference types="vite/client" />
 
 import type {
@@ -19,6 +20,7 @@ declare global {
   interface Window {
     setsunaDesktop?: SetsunaDesktopBridge
       & NotificationsPreloadContribution
+      & RuntimeActivityPreloadContribution
       & BrowserPreloadBridgeContribution
       & ComputerPreloadContribution
       & NetworkProxyPreloadBridgeContribution

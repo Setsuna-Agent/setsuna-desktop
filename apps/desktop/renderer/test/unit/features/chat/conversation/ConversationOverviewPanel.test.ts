@@ -161,6 +161,7 @@ function renderFeatureBoundaries(children: ReactNode): ReactNode {
 }
 
 const noopRuntimeActivityService: RuntimeActivityRendererService = {
+  sampleResources: async () => ({ sampledAt: 0, processes: [] }),
   list: async () => ({
     backgroundServices: [],
     capturedAt: '2026-07-01T00:00:00.000Z',

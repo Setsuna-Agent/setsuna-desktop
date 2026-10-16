@@ -1,0 +1,65 @@
+.runtime-resources {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--app-surface);
+}
+
+.runtime-resources__table {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.runtime-resources__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 100px 64px 76px 96px 52px;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 16px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.runtime-resources__row > span {
+  text-align: right;
+}
+
+.runtime-resources__header {
+  border-bottom: 1px solid var(--app-border);
+  color: var(--app-text-muted);
+  background: var(--app-surface-subtle);
+}
+
+.runtime-resources__header > span:nth-child(-n + 2),
+.runtime-resources__row > .runtime-resources__type {
+  text-align: left;
+}
+
+.runtime-resources__body {
+  min-height: 0;
+  overflow: auto;
+}
+
+.runtime-resources__identity,
+.runtime-resources__type {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtime-resources__type {
+  color: var(--app-text-muted);
+}
+
+.runtime-resources__error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  color: var(--app-danger);
+  font-size: 11px;
+}

@@ -110,16 +110,17 @@
 
 .sd-dialog.runtime-activity-dialog {
   --sd-dialog-gutter: 16px;
-  height: min(400px, calc(var(--app-scaled-viewport-height) - 48px));
+  height: min(640px, calc(var(--app-scaled-viewport-height) - 48px));
 }
 
 .runtime-activity-dialog > .sd-dialog__header {
-  padding-top: 16px;
+  padding-top: 12px;
+  padding-right: 52px;
   padding-bottom: 12px;
 }
 
 .runtime-activity-dialog > .sd-dialog__close {
-  top: 12px;
+  top: 16px;
   right: 12px;
   border-radius: var(--app-radius-full);
 }
@@ -139,6 +140,8 @@
   align-items: center;
   align-self: flex-start;
   gap: 4px;
+  max-width: 100%;
+  overflow-x: auto;
   padding: 3px;
   border-radius: var(--app-radius-full);
   background: var(--app-surface-muted);

@@ -20,6 +20,12 @@ export class RendererRuntimeActivityService implements RuntimeActivityRendererSe
     );
   }
 
+  sampleResources(options?: Readonly<{ signal?: AbortSignal }>) {
+    return this.options.scope.runOperation(
+      (signal) => this.options.client.sampleResources({ signal }), options,
+    );
+  }
+
   listServices(
     input: RuntimeActivityServiceListTarget,
     options?: Readonly<{ signal?: AbortSignal }>,

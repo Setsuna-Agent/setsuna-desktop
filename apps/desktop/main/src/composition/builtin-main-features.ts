@@ -1,4 +1,5 @@
 import { notificationsMainFeature, notificationsMainHostCapability } from '@setsuna-desktop/feature-notifications/main';
+import { runtimeActivityMainFeature, runtimeActivityMainHostCapability } from '@setsuna-desktop/feature-runtime-activity/main';
 import { notificationChannels } from '@setsuna-desktop/feature-notifications/contracts';
 import type {
   RuntimeInterfaceLanguage,
@@ -97,7 +98,7 @@ const mainFeatures = defineMainFeatureHost({
     windowsSandboxMainFeature,
     workspaceAppsMainFeature,
   ],
-  optional: [notificationsMainFeature],
+  optional: [notificationsMainFeature, runtimeActivityMainFeature],
 });
 
 /** Protocol privileges must be declared before Electron creates any renderer or worker. */
@@ -132,6 +133,9 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
 }>): Promise<ActivatedBuiltinMainFeatures> {
   const composition = await mainFeatures.activate({
     hostCapabilities: [
+      provideHostCapability(runtimeActivityMainHostCapability, {
+        isRendererSender: (senderId: number) => Boolean(desktopWindows.get(senderId)),
+      }),
       provideHostCapability(notificationsMainHostCapability, {
         prepareNotification: prepareDesktopNotification,
         isForeground: () => BrowserWindow.getFocusedWindow() !== null,

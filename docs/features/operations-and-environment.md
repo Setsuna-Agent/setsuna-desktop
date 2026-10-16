@@ -18,6 +18,14 @@ Runtime host 注入：
 
 Feature 暴露 `listRuntimeActivities` 和 `listRuntimeActivityServices` typed operations；renderer service/controller 负责刷新和 mutation 后收敛，Activity Center、菜单项和行组件都由 Feature renderer 拥有。
 
+运行中心的「资源」页按进程展示名称、类型、PID、CPU 与驻留内存。进程类型通过独立 `type` 字段传输，名称优先使用关联页面标题或地址，其次使用原生服务名；共享进程的页面名称合并在同一行，完整标题和地址放在 tooltip。未关联到 WebContents 的页面渲染进程标为「未关联页面」，不把 `Tab` 类型当作页面名称，也不推断其为预留进程。Main 的采样 IPC 使用 `app.getAppMetrics()`，按 PID 关联 WebContents 及跨进程 frame；每个进程只展示一次内存，不把共享值重复归到每个页面。独立 runtime 通过 `sampleRuntimeResources` typed operation 读取自身 CPU 累计时间与 RSS；renderer 合并时按 PID 去重，以进程创建时间区分 PID 复用。CPU 用同一来源相邻采样的累计时间差计算，单核占满为 100%，首次采样显示空值。
+
+资源行可终止受管网页的独立 renderer 进程。确认框打开时固定 PID、进程创建时间及全部关联页面 ID，轮询更新不能替换这份目标；成员变化时要求取消并重新选择。确认后通过独立窄 IPC 再次校验固定目标，成员变化或进程已替换时拒绝执行。只有关联内容全部来自桌面窗口的 webview，且存在以该进程为主 frame 的 guest 时才开放操作；主界面、runtime、GPU、扩展后台页及仅关联子 frame 的进程不开放终止，枚举不完整也保守拒绝。实际操作通过 WebContents 原生接口结束 renderer，不按调用方提供的 PID 向系统任意进程发信号。共享 guest 进程会同时影响确认的全部页面，页面保留入口并可手动刷新恢复。运行任务与后台服务仍由所属业务 owner 的取消/终止动作处理。
+
+Electron 的 `framesInSubtree` 会跨入嵌入的 webview。归属判断只计入 `frame.top === contents.mainFrame` 的存活 frame，避免将 guest 误归为受保护的主窗口内容；已崩溃的 WebContents 和已销毁 frame 不再参与枚举。原生 Electron 集成测试覆盖连续终止独立 guest、主窗口与其他页面保持可用，以及终止后的手动刷新恢复。
+
+Main Feature 为 optional，启动时只注册 IPC，不采样、不扫描页面、不启动定时器。采样只在资源页挂载且文档可见时触发，完成一次后再等待两秒；隐藏、切换页签或关闭时取消当前等待并停止刷新。主进程与 runtime 独立取数，一个来源失败或超时不隐藏另一个来源的数据。IPC 只接受桌面顶层 renderer，网页无权查询应用进程。`test/main/resources.test.ts` 验证零启动采样、IPC 边界和共享进程；renderer 测试覆盖取消、超时恢复、CPU 差值及 PID 去重。
+
 关键边界：
 
 - Runtime Activity 是“当前可操作投影”，不是另一套持久线程真源。

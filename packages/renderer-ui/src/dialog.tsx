@@ -11,6 +11,7 @@ export type DialogProps = {
   open?: boolean;
   title?: ReactNode;
   description?: ReactNode;
+  headerActions?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
   className?: string;
@@ -21,7 +22,7 @@ export type DialogProps = {
   onClose(): void;
   'aria-label'?: string;
 } & Pick<ComponentPropsWithoutRef<typeof Primitive.Content>, 'onCloseAutoFocus'>;
-export function Dialog({ open = true, title, description, children, footer, className, width = 640, closeLabel, dismissible = true, showClose = true, onClose, onCloseAutoFocus, 'aria-label': label }: DialogProps) {
+export function Dialog({ open = true, title, description, headerActions, children, footer, className, width = 640, closeLabel, dismissible = true, showClose = true, onClose, onCloseAutoFocus, 'aria-label': label }: DialogProps) {
   const labels = useUiLabels();
   const closeText = closeLabel ?? labels.close;
   const contentRef = useRef<HTMLElement | null>(null);
@@ -30,6 +31,7 @@ export function Dialog({ open = true, title, description, children, footer, clas
   // Capture before child autoFocus runs; closed dialogs can stay mounted between uses.
   if (open && !wasOpen.current && typeof document !== 'undefined') previousFocus.current = document.activeElement as HTMLElement | null;
   wasOpen.current = open;
+  const heading = <Primitive.Title asChild><div className="sd-dialog__title">{title ?? label ?? closeText}</div></Primitive.Title>;
   return <Primitive.Root open={open} onOpenChange={(next) => { if (!next && dismissible) onClose(); }}>
     <Primitive.Portal container={overlayContainer()}>
       <Primitive.Overlay className="sd-dialog-overlay" />
@@ -49,7 +51,9 @@ export function Dialog({ open = true, title, description, children, footer, clas
         onPointerDownOutside={(event) => { if (!dismissible) event.preventDefault(); }}>
         <section ref={contentRef} className={cn('sd-dialog', className)} style={{ width }}>
           <header className={cn('sd-dialog__header', !title && 'sd-visually-hidden')}>
-            <Primitive.Title asChild><div className="sd-dialog__title">{title ?? label ?? closeText}</div></Primitive.Title>
+            {headerActions ? <div className="sd-dialog__header-row">
+              {heading}<div className="sd-dialog__header-actions">{headerActions}</div>
+            </div> : heading}
             {description ? <Primitive.Description asChild><div className="sd-dialog__description">{description}</div></Primitive.Description> : null}
           </header>
           {showClose ? <Primitive.Close asChild><IconButton className="sd-dialog__close" label={closeText} disabled={!dismissible}><X size={16} /></IconButton></Primitive.Close> : null}

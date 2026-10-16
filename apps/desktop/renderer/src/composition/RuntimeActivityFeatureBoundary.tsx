@@ -23,7 +23,7 @@ export function RuntimeActivityFeatureServiceBoundary({
 }
 
 export function RuntimeActivityFeatureCenter(
-  props: Omit<RuntimeActivityCenterProps, 'service' | 'translate' | 'ui'>,
+  props: Omit<RuntimeActivityCenterProps, 'service' | 'translate' | 'ui' | 'desktopBridge'>,
 ) {
   const { t } = useI18n();
   const service = useRuntimeActivityFeatureService();
@@ -31,6 +31,7 @@ export function RuntimeActivityFeatureCenter(
     <RuntimeActivityCenter
       {...props}
       service={service}
+      desktopBridge={window.setsunaDesktop?.runtimeActivity ?? null}
       translate={t}
       ui={{ Button, IconButton }}
     />

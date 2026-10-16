@@ -25,3 +25,4 @@ export type {
   RuntimeActivityTaskTermination,
   RuntimeBackgroundServiceActivity,
 } from './types.js';
+export * from './resources.js';
