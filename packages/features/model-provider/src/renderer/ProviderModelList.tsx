@@ -1,6 +1,7 @@
 import { Button as UiButton } from '@setsuna-desktop/renderer-ui';
 import type {
   ProviderConfigState,
+  RuntimeAvailableModel,
   ProviderModelConfig } from '@setsuna-desktop/contracts';
 import type { RendererTranslate,
 } from '@setsuna-desktop/feature-core/renderer';
@@ -12,9 +13,9 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ModelProviderCatalogModel, ModelProviderCatalogPlan } from '../contracts/index.js';
 import { withBrandIcon } from './brand-icon.js';
 import type { ModelProviderRendererHost } from './capabilities.js';
-import { CatalogModelPickerDialog } from './CatalogModelPickerDialog.js';
+import { ModelPickerDialog } from './ModelPickerDialog.js';
 import { ModelEditorDialog } from './ModelEditorDialog.js';
-import { ModelSyncConfirmationDialog } from './ModelSyncConfirmationDialog.js';
+import { mergeDiscoveredModels } from './model-sync.js';
 import { configuredModelFromCatalog, createCustomModel } from './provider-catalog.js';
 
 type ModelEditorState = Readonly<{
@@ -39,7 +40,7 @@ export function ProviderModelList({
   refreshingCatalog: boolean;
   host: ModelProviderRendererHost;
   onChange(provider: ProviderConfigState): void;
-  onDiscover(): Promise<readonly ProviderModelConfig[] | undefined>;
+  onDiscover(): Promise<readonly RuntimeAvailableModel[] | undefined>;
   onRefreshCatalog(): void;
   provider: ProviderConfigState;
   translate: RendererTranslate;
@@ -51,7 +52,7 @@ export function ProviderModelList({
   const [batchMode, setBatchMode] = useState(false);
   const [selectedModelIds, setSelectedModelIds] = useState<ReadonlySet<string>>(() => new Set());
   const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false);
-  const [pendingSyncModels, setPendingSyncModels] = useState<readonly ProviderModelConfig[]>();
+  const [pendingSyncModels, setPendingSyncModels] = useState<readonly RuntimeAvailableModel[]>();
   const connectionKey = providerConnectionKey(provider);
   useEffect(() => setPendingSyncModels(undefined), [connectionKey]);
   const iconEditorModel = provider.models.find((model) => model.id === iconEditorModelId);
@@ -157,51 +158,44 @@ export function ProviderModelList({
                   {translate('feature.modelProvider.finishBatchManage')}
                 </ui.Button>
               </>
-            ) : catalogPlan ? (
-              <>
-                <ui.Button
-                  disabled={refreshingCatalog}
-                  icon={<RefreshCw className={refreshingCatalog ? 'is-spinning' : undefined} size={14} />}
-                  onClick={onRefreshCatalog}
-                >
-                  {translate(refreshingCatalog ? 'feature.modelProvider.refreshingCatalog' : 'feature.modelProvider.refreshCatalog')}
-                </ui.Button>
-                {provider.models.length ? (
-                  <ui.Button icon={<ListChecks size={14} />} onClick={() => setBatchMode(true)}>
-                    {translate('feature.modelProvider.batchManageModels')}
-                  </ui.Button>
-                ) : null}
-                <ui.Button icon={<Plus size={14} />} onClick={addCustomModel}>
-                  {translate('feature.modelProvider.addCustomModel')}
-                </ui.Button>
-                <ui.Button
-                  disabled={!availableModels.length}
-                  icon={<Plus size={14} />}
-                  variant="primary"
-                  onClick={() => setCatalogPickerOpen(true)}
-                >
-                  {availableModels.length
-                    ? translate('feature.modelProvider.addModel')
-                    : translate('feature.modelProvider.allModelsAdded')}
-                </ui.Button>
-              </>
             ) : (
               <>
+                {catalogPlan ? (
+                  <ui.Button
+                    disabled={refreshingCatalog}
+                    icon={<RefreshCw className={refreshingCatalog ? 'is-spinning' : undefined} size={14} />}
+                    onClick={onRefreshCatalog}
+                  >
+                    {translate(refreshingCatalog ? 'feature.modelProvider.refreshingCatalog' : 'feature.modelProvider.refreshCatalog')}
+                  </ui.Button>
+                ) : null}
                 {provider.models.length ? (
                   <ui.Button icon={<ListChecks size={14} />} onClick={() => setBatchMode(true)}>
                     {translate('feature.modelProvider.batchManageModels')}
                   </ui.Button>
                 ) : null}
                 <ui.Button
-                  disabled={discovering}
+                  disabled={discovering || !provider.baseUrl.trim()}
                   icon={<RefreshCw className={discovering ? 'is-spinning' : undefined} size={14} />}
                   onClick={() => void requestModelSync()}
                 >
                   {translate('feature.modelProvider.syncModels')}
                 </ui.Button>
-                <ui.Button icon={<Plus size={14} />} variant="primary" onClick={addCustomModel}>
+                <ui.Button icon={<Plus size={14} />} variant={catalogPlan ? 'secondary' : 'primary'} onClick={addCustomModel}>
                   {translate('feature.modelProvider.addCustomModel')}
                 </ui.Button>
+                {catalogPlan ? (
+                  <ui.Button
+                    disabled={!availableModels.length}
+                    icon={<Plus size={14} />}
+                    variant="primary"
+                    onClick={() => setCatalogPickerOpen(true)}
+                  >
+                    {availableModels.length
+                      ? translate('feature.modelProvider.addModel')
+                      : translate('feature.modelProvider.allModelsAdded')}
+                  </ui.Button>
+                ) : null}
               </>
             )}
           </div>
@@ -259,8 +253,10 @@ export function ProviderModelList({
         />
       ) : null}
       {catalogPickerOpen && catalogPlan ? (
-        <CatalogModelPickerDialog
+        <ModelPickerDialog
+          confirmLabel={(count) => translate('feature.modelProvider.addSelectedModels', { count })}
           models={availableModels}
+          title={translate('feature.modelProvider.catalogModelTitle')}
           translate={translate}
           ui={ui}
           onCancel={() => setCatalogPickerOpen(false)}
@@ -292,15 +288,15 @@ export function ProviderModelList({
         </ui.Dialog>
       ) : null}
       {pendingSyncModels ? (
-        <ModelSyncConfirmationDialog
-          currentModels={provider.models}
-          nextModels={pendingSyncModels}
-          providerName={provider.name || provider.id}
+        <ModelPickerDialog
+          confirmLabel={(count) => translate('feature.modelProvider.syncSelectedModels', { count })}
+          models={pendingSyncModels.map((model) => ({ ...model, code: model.id }))}
+          title={translate('feature.modelProvider.syncTitle', { provider: provider.name || provider.id })}
           translate={translate}
           ui={ui}
           onCancel={() => setPendingSyncModels(undefined)}
-          onConfirm={() => {
-            onChange({ ...provider, models: [...pendingSyncModels] });
+          onConfirm={(models) => {
+            onChange({ ...provider, models: mergeDiscoveredModels(provider.models, models, provider.provider) });
             setPendingSyncModels(undefined);
           }}
         />

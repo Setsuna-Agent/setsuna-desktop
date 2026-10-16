@@ -30,6 +30,7 @@ export function ProviderConnection({
   apiKey,
   catalog,
   onApiKeyChange,
+  onClearApiKey,
   onCopyApiKey,
   onChange,
   onTestConnection,
@@ -42,6 +43,7 @@ export function ProviderConnection({
   apiKey: string;
   catalog: ModelProviderCatalog;
   onApiKeyChange(value: string): void;
+  onClearApiKey(): void;
   onCopyApiKey(): Promise<void>;
   onChange(provider: ProviderConfigState): void;
   onTestConnection: ProviderConnectionTester;
@@ -124,6 +126,7 @@ export function ProviderConnection({
           translate={translate}
           ui={ui}
           onChange={onApiKeyChange}
+          onClear={onClearApiKey}
           onCopy={onCopyApiKey}
         />
       </div>

@@ -236,6 +236,8 @@ export type RuntimeFetchModelsInput = {
   provider?: ModelProviderKind;
   baseUrl?: string;
   apiKey?: string;
+  /** Ignore the saved key when testing or syncing a cleared, not-yet-saved draft. */
+  clearApiKey?: boolean;
   proxyRoute?: DesktopNetworkProxyRoute;
   requestHeaders?: ProviderRequestHeaders | null;
 };

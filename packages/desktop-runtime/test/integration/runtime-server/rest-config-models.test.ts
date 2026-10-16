@@ -1,4 +1,4 @@
-import { access, writeFile } from 'node:fs/promises';
+import { access, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryDesktopNativeBridge } from '../../support/in-memory-secret-store.js';
@@ -233,7 +233,7 @@ describe('runtime server REST config and model discovery', () => {
       expect(diagnosed).toMatchObject({ state: status.state });
     });
   
-  it('fetches models with the selected provider saved API key', async () => {
+  it.each(['saved', 'draft-cleared', 'saved-cleared'])('fetches models with the selected provider key %s', async (keyState) => {
       const modelServer = await createModelListCaptureServer();
       try {
         await harness.runtimeFetch('/v1/config', {
@@ -263,18 +263,31 @@ describe('runtime server REST config and model discovery', () => {
           }),
         });
   
+        if (keyState === 'saved-cleared') {
+          await harness.runtimeFetch('/v1/features/model-provider/settings', {
+            method: 'PUT',
+            body: JSON.stringify({
+              activeProviderId: 'active-provider',
+              providers: [{ id: 'active-provider' }, { id: 'local-models', clearApiKey: true }],
+            }),
+          });
+        }
         const result = await harness.runtimeFetch('/v1/features/model-provider/models', {
           method: 'POST',
-          body: JSON.stringify({ providerId: 'local-models' }),
+          body: JSON.stringify({ providerId: 'local-models', clearApiKey: keyState === 'draft-cleared' }),
         });
         const request = await modelServer.nextRequest;
   
         expect(request.url).toBe('/models');
-        expect(request.authorization).toBe('Bearer sk-model-list');
+        expect(request.authorization).toBe(keyState === 'saved' ? 'Bearer sk-model-list' : undefined);
         expect(result.models).toEqual([
           { id: 'llama3.1', name: 'Llama 3.1' },
           { id: 'qwen2.5', name: 'qwen2.5', maxOutputTokens: 8192, thinkingEnabled: true, thinkingEfforts: ['low', 'high'], supportsImages: true },
         ]);
+        const secrets = JSON.parse(await readFile(path.join(harness.runtimeDataDir, 'runtime', 'secrets.json'), 'utf8'));
+        expect(secrets.providerApiKeys['active-provider']).toBe('sk-active');
+        // Testing a cleared draft changes only the request; saving the deletion removes it from disk.
+        expect(secrets.providerApiKeys['local-models']).toBe(keyState === 'saved-cleared' ? undefined : 'sk-model-list');
       } finally {
         await modelServer.close();
       }

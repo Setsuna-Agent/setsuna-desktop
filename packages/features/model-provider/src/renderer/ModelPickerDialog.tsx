@@ -7,18 +7,25 @@ import type {
 } from '@setsuna-desktop/renderer-contracts/settings';
 import { Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import type { ModelProviderCatalogModel } from '../contracts/index.js';
+import type { ProviderModelConfig } from '@setsuna-desktop/contracts';
 
-export function CatalogModelPickerDialog({
+type PickerModel = Pick<ProviderModelConfig, 'code' | 'name'>
+  & Partial<Pick<ProviderModelConfig, 'contextWindowTokens' | 'thinkingEnabled' | 'supportsImages'>>;
+
+export function ModelPickerDialog<Model extends PickerModel>({
+  confirmLabel,
   models,
   onCancel,
   onConfirm,
+  title,
   translate,
   ui,
 }: Readonly<{
-  models: readonly ModelProviderCatalogModel[];
+  confirmLabel(count: number): string;
+  models: readonly Model[];
   onCancel(): void;
-  onConfirm(models: ModelProviderCatalogModel[]): void;
+  onConfirm(models: Model[]): void;
+  title: string;
   translate: RendererTranslate;
   ui: SettingsViewUi;
 }>) {
@@ -49,23 +56,20 @@ export function CatalogModelPickerDialog({
     <Dialog
       className="model-provider-settings__catalog-modal"
       closeLabel={translate('feature.modelProvider.close')}
-      title={translate('feature.modelProvider.catalogModelTitle')}
+      title={title}
       size="large"
       onClose={onCancel}
       footer={(
-        <div className="model-provider-settings__catalog-footer">
-          <span>{translate('feature.modelProvider.selectedModelCount', { count: selectedModels.length })}</span>
-          <div>
-            <ui.Button onClick={onCancel}>{translate('feature.modelProvider.cancel')}</ui.Button>
-            <ui.Button
-              disabled={!selectedModels.length}
-              variant="primary"
-              onClick={() => onConfirm(selectedModels)}
-            >
-              {translate('feature.modelProvider.addSelectedModels', { count: selectedModels.length })}
-            </ui.Button>
-          </div>
-        </div>
+        <>
+          <ui.Button onClick={onCancel}>{translate('feature.modelProvider.cancel')}</ui.Button>
+          <ui.Button
+            disabled={!selectedModels.length}
+            variant="primary"
+            onClick={() => onConfirm(selectedModels)}
+          >
+            {confirmLabel(selectedModels.length)}
+          </ui.Button>
+        </>
       )}
     >
       <div className="model-provider-settings__catalog-picker">
@@ -91,6 +95,7 @@ export function CatalogModelPickerDialog({
           {visibleModels.length ? visibleModels.map((model) => (
             <label key={model.code} className="model-provider-settings__catalog-row">
               <CheckField
+                aria-label={translate('feature.modelProvider.selectModel', { name: model.name || model.code })}
                 checked={selectedCodes.has(model.code)}
                 type="checkbox"
                 onChange={(event) => toggle(model.code, event.currentTarget.checked)}
