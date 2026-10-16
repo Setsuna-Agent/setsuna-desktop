@@ -78,6 +78,16 @@ export const skillsRuntimeHostCapability: CapabilityToken<SkillsRuntimeHost> = d
   description: 'Skill persistence, prompt resolution, MCP dependency, and compatibility notification host',
 });
 
+export interface SkillsRendererHost {
+  readonly platform: string;
+  revealFile(filePath: string): Promise<void>;
+}
+
+export const skillsRendererHostCapability: CapabilityToken<SkillsRendererHost> = defineCapability({
+  id: 'skills.renderer-host',
+  description: 'Native file location action for installed Skill documents',
+});
+
 export const skillsControlCapability: CapabilityToken<SkillsControl> = defineCapability({
   id: 'skills.control',
   description: 'Skill catalog, prompt resolution, dependency, and management operations',

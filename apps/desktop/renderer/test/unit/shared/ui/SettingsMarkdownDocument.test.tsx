@@ -1,11 +1,32 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { SettingsMarkdownDocument } from '../../../../src/shared/ui/SettingsMarkdownDocument.js';
+import { ToastProvider } from '../../../../src/app/providers/ToastProvider.js';
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const labels = { name: 'SKILL.md', previewLabel: '预览', sourceLabel: '源码' };
+
+it('copies the complete original file in either view and reports a rejected clipboard write', async () => {
+  const content = '---\r\n# Metadata comment\r\nname: copy-skill\r\nmetadata:\r\n  version: "01"\r\n---\r\n\r\n# Instructions\r\n';
+  const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
+  render(<ToastProvider><SettingsMarkdownDocument {...labels} content={content}
+    copyLabels={{ copy: '复制源码', copied: '已复制', failed: '复制失败' }} /></ToastProvider>);
+
+  fireEvent.click(screen.getByRole('button', { name: '复制源码' }));
+  await screen.findByRole('button', { name: '已复制' });
+  expect(writeText).toHaveBeenCalledExactlyOnceWith(content);
+  fireEvent.click(screen.getByRole('button', { name: '源码' }));
+  fireEvent.click(screen.getByRole('button', { name: '已复制' }));
+  await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
+  expect(writeText).toHaveBeenLastCalledWith(content);
+
+  writeText.mockRejectedValueOnce(new Error('Clipboard denied'));
+  fireEvent.click(screen.getByRole('button', { name: '已复制' }));
+  await screen.findByRole('button', { name: '复制源码' });
+  expect(screen.getByRole('alert').textContent).toContain('复制失败');
+});
 
 it('previews Skill Markdown and safe HTML by default while keeping the original source intact', () => {
   const content = [

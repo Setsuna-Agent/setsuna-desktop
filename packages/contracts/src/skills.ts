@@ -48,7 +48,10 @@ export type RuntimeSkillSummary = {
 };
 
 export type RuntimeSkillDetail = RuntimeSkillSummary & {
+  /** Instruction body used by the editor and model-facing tools. */
   content: string;
+  /** Complete file text, including frontmatter, for source viewing and copying. */
+  sourceContent: string;
   references: string[];
 };
 

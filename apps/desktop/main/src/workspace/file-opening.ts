@@ -90,6 +90,25 @@ export async function revealWorkspaceFileInFolder(
   );
 }
 
+/** App-managed documents, such as Skills, can live outside any workspace. */
+export async function revealLocalPathInFolder(
+  targetPathValue: unknown,
+  showItemInFolder: WorkspacePathAction,
+): Promise<DesktopOpenPathResult> {
+  if (typeof targetPathValue !== 'string' || !path.isAbsolute(targetPathValue)) {
+    return { ok: false, error: 'Only absolute local paths can be revealed.' };
+  }
+  try {
+    const targetPath = path.normalize(targetPathValue);
+    const stats = await stat(targetPath);
+    if (!stats.isFile() && !stats.isDirectory()) return { ok: false, error: 'Target is not a file or directory.' };
+    await showItemInFolder(targetPath);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Failed to reveal path.' };
+  }
+}
+
 export async function createWorkspaceFilePreviewUrl(
   workspaceRootValue: unknown,
   filePathValue: unknown,

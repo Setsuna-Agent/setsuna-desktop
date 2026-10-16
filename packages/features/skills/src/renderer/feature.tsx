@@ -17,6 +17,7 @@ import { lazy } from 'react';
 import { Sparkles } from 'lucide-react';
 import {
   skillsFeature,
+  skillsRendererHostCapability,
   skillsRendererServiceCapability,
 } from '../contracts/index.js';
 import { createSkillsRendererClient } from './client.js';
@@ -35,6 +36,7 @@ const SkillsExtraRootsSettings = lazy(async () => {
 
 const dependencies = defineRendererDependencies({
   capabilitiesRefresh: requiredCapability(capabilitiesRefreshCoordinatorCapability),
+  host: requiredCapability(skillsRendererHostCapability),
   transport: requiredCapability(rendererFeatureOperationTransportCapability),
 });
 
@@ -65,6 +67,7 @@ export const skillsRendererFeature = defineRendererFeature({
         <SkillsCapabilitiesPage
           {...props}
           capabilitiesRefresh={context.dependencies.capabilitiesRefresh}
+          host={context.dependencies.host}
           service={service}
         />
       ),

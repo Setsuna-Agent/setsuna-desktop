@@ -110,6 +110,12 @@
   overflow-wrap: anywhere;
 }
 
+.sd-markdown-document__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* Keep card insets when the Markdown renderer also applies full-width styles. */
 .sd-markdown-document > .sd-markdown-document__preview,
 .sd-markdown-document > .sd-markdown-document__source {

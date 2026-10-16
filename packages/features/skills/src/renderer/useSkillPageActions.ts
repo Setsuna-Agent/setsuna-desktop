@@ -2,13 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { useConfirm } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import type { CapabilitiesRefreshCoordinator } from '@setsuna-desktop/renderer-contracts/capabilities';
-import type { SkillsRendererService } from '../contracts/index.js';
+import type { SkillsRendererHost, SkillsRendererService } from '../contracts/index.js';
 import type { SkillsTranslate } from './messages.js';
 
 type SkillPageMode = 'catalog' | 'create' | 'detail' | 'edit';
-type SkillAction = 'save' | 'toggle' | 'delete' | 'install' | 'refresh';
+type SkillAction = 'save' | 'toggle' | 'delete' | 'install' | 'refresh' | 'reveal';
 
-export function useSkillPageActions(service: SkillsRendererService, capabilitiesRefresh: CapabilitiesRefreshCoordinator, translate: SkillsTranslate) {
+export function useSkillPageActions(service: SkillsRendererService, capabilitiesRefresh: CapabilitiesRefreshCoordinator, translate: SkillsTranslate, host: SkillsRendererHost) {
   const confirm = useConfirm();
   const [mode, setMode] = useState<SkillPageMode>('catalog');
   const [summary, setSummary] = useState<RuntimeSkillSummary | null>(null);
@@ -115,6 +115,9 @@ export function useSkillPageActions(service: SkillsRendererService, capabilities
     saving: pending.get(mode === 'create' ? '$create' : summary?.id ?? '') === 'save',
     refreshing: pending.has('$catalog'),
     closeDetail, openSkill, toggleSkill, saveSkill, deleteSkill, installDependencies,
+    revealFile: ({ id, path }: RuntimeSkillDetail) => path
+      ? run(id, 'reveal', () => host.revealFile(path))
+      : Promise.resolve(),
     refresh: () => run('$catalog', 'refresh', () => service.refresh()),
     openCreate: () => { navigate('create'); setSummary(null); setDetail(null); },
     openEditor: () => { if (detail) navigate('edit'); },

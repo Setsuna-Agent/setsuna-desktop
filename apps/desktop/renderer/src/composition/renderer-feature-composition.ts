@@ -62,7 +62,7 @@ import {
 } from '@setsuna-desktop/feature-side-conversation/contracts';
 import { sideConversationRendererFeature } from '@setsuna-desktop/feature-side-conversation/renderer';
 import { skillsRendererServiceCapability } from '@setsuna-desktop/feature-skills/contracts';
-import { skillsRendererFeature } from '@setsuna-desktop/feature-skills/renderer';
+import { skillsRendererFeature, skillsRendererHostCapability } from '@setsuna-desktop/feature-skills/renderer';
 import {
   networkProxyRendererFeature,
   networkProxyRendererHostCapability,
@@ -245,6 +245,15 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
         Object.freeze({ bridge: window.setsunaDesktop?.networkProxy ?? null }),
       ),
       provideHostCapability(browserRendererHostCapability, Object.freeze({ bridge: window.setsunaDesktop?.browser ?? null })),
+      provideHostCapability(skillsRendererHostCapability, Object.freeze({
+        platform: window.setsunaDesktop?.desktop.platform ?? 'browser',
+        revealFile: async (filePath: string) => {
+          const desktop = window.setsunaDesktop?.desktop;
+          if (!desktop) throw new Error('Desktop file actions are unavailable.');
+          const result = await desktop.revealPath(filePath);
+          if (!result.ok) throw new Error(result.error);
+        },
+      })),
       provideHostCapability(
         pluginManagementRendererHostCapability,
         Object.freeze({

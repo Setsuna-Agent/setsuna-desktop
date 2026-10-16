@@ -88,6 +88,7 @@ const desktop: SetsunaDesktopBridge['desktop'] = {
   revealImageInFolder: (input) => ipcRenderer.invoke('desktop:reveal-image-in-folder', input),
   saveImageAs: (input) => ipcRenderer.invoke('desktop:save-image-as', input),
   openPath: (targetPath) => ipcRenderer.invoke('desktop:open-path', targetPath),
+  revealPath: (targetPath) => ipcRenderer.invoke('desktop:reveal-path', targetPath),
   openWorkspaceDirectory: (workspaceRoot, directoryPath) =>
     ipcRenderer.invoke('desktop:open-workspace-directory', { workspaceRoot, directoryPath }),
   openWorkspaceFile: (workspaceRoot, filePath) =>

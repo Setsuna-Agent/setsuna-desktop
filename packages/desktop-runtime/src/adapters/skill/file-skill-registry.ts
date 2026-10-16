@@ -45,6 +45,7 @@ type ParsedSkill = {
   kind: RuntimeSkillKind;
   description?: string;
   content: string;
+  sourceContent: string;
   path: string;
   references: string[];
   mcpDependencies: RuntimeSkillMcpDependency[];
@@ -527,6 +528,7 @@ function parseSkill(
     kind,
     description,
     content,
+    sourceContent: rawContent,
     path: skillPath,
     references: referencePaths(content),
     mcpDependencies: dependencyManifest.mcpDependencies,
@@ -854,6 +856,7 @@ function toDetail(skill: ParsedSkill, state: SkillStateFile): RuntimeSkillDetail
   return {
     ...toSummary(skill, state),
     content: skill.content,
+    sourceContent: skill.sourceContent,
     references: skill.references,
   };
 }

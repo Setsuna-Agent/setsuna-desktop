@@ -10,6 +10,7 @@ import {
   createWorkspaceFilePreviewUrl,
   openWorkspaceDirectoryInFileManager,
   openWorkspaceFileWithDefaultApp,
+  revealLocalPathInFolder,
   revealWorkspaceFileInFolder,
 } from '../workspace/file-opening.js';
 import { copyChatImage, readGeneratedImageAsset, revealChatImage, saveChatImage, type AttachmentImageReader } from '../workspace/generated-image-actions.js';
@@ -52,6 +53,7 @@ export function registerDesktopIpc({
     'desktop:reveal-image-in-folder',
     'desktop:save-image-as',
     'desktop:open-path',
+    'desktop:reveal-path',
     'desktop:open-workspace-directory',
     'desktop:open-workspace-file',
     'desktop:copy-workspace-file-path',
@@ -166,6 +168,12 @@ export function registerDesktopIpc({
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : 'Failed to open path.' };
     }
+  });
+  ipcMain.handle('desktop:reveal-path', async (event, targetPath) => {
+    if (!isDesktopRendererSender(event.sender) || event.senderFrame !== event.sender.mainFrame) {
+      return { ok: false, error: 'Desktop renderer is unavailable.' };
+    }
+    return revealLocalPathInFolder(targetPath, (localPath) => shell.showItemInFolder(localPath));
   });
   ipcMain.handle('desktop:open-workspace-file', async (_event, input) => openWorkspaceFileWithDefaultApp(
     input?.workspaceRoot,

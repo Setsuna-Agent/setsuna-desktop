@@ -1,4 +1,5 @@
 import type { ModelRequest, RuntimeMessage } from '@setsuna-desktop/contracts';
+import { readSkill } from '@setsuna-desktop/feature-skills/contracts';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -82,25 +83,37 @@ describe('file skill registry', () => {
     ]);
   });
 
-  it('parses Skill frontmatter checked out with CRLF line endings', async () => {
+  it('preserves the exact source through the detail codec while keeping frontmatter out of instructions and catalog data', async () => {
     const { builtinDir, dataDir } = await createSkillFixture();
     const skillDir = path.join(builtinDir, 'windows-skill');
     await mkdir(skillDir, { recursive: true });
-    await writeFile(path.join(skillDir, 'SKILL.md'), [
+    const sourceContent = [
       '---',
+      '# Preserve this comment and custom metadata verbatim.',
       'name: Windows Skill',
       'description: Parses on every platform.',
+      'metadata:',
+      '  version: "01"',
       '---',
       '',
       '# Windows Skill',
-    ].join('\r\n'));
+      '',
+    ].join('\r\n');
+    const skillPath = path.join(skillDir, 'SKILL.md');
+    await writeFile(skillPath, sourceContent);
     const registry = new FileSkillRegistry(builtinDir, dataDir);
 
-    await expect(registry.getSkill('windows-skill')).resolves.toMatchObject({
+    const detail = readSkill.output.parse(await registry.getSkill('windows-skill'));
+    expect(detail).toMatchObject({
       name: 'Windows Skill',
       description: 'Parses on every platform.',
       content: '# Windows Skill',
+      sourceContent,
+      path: skillPath,
     });
+    const catalog = await registry.listSkills();
+    expect(catalog.skills.find((skill) => skill.id === detail.id)).not.toHaveProperty('sourceContent');
+    expect(await registry.selectedSkillInjections([detail.id])).toMatchObject([{ content: '# Windows Skill' }]);
   });
 
   it('keeps installed Plugin metadata with injected Plugin Skills', async () => {
@@ -166,6 +179,7 @@ describe('file skill registry', () => {
     expect(updatedSkill).toMatchObject({
       path: expect.stringContaining('plugin-skill-overrides'),
     });
+    expect(updatedSkill?.sourceContent).toBe(await readFile(updatedSkill!.path!, 'utf8'));
     const overrideManifest = await readFile(
       path.join(path.dirname(updatedSkill?.path ?? ''), 'agents', 'openai.yaml'),
       'utf8',

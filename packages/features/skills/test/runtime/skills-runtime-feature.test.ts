@@ -140,6 +140,7 @@ function memorySkillsControl(
 function detail(input: RuntimeSkillInput): RuntimeSkillDetail {
   return {
     content: input.content,
+    sourceContent: input.content,
     enabled: input.enabled ?? true,
     id: input.id ?? input.name.trim().toLowerCase().replace(/\s+/gu, '-'),
     kind: 'user',
@@ -166,7 +167,7 @@ function applySkillPatch(
     ...(patch.enabled === undefined ? {} : { enabled: patch.enabled }),
     ...(patch.name === undefined ? {} : { name: patch.name }),
     ...(patch.description === undefined ? {} : { description: patch.description }),
-    ...(patch.content === undefined ? {} : { content: patch.content }),
+    ...(patch.content === undefined ? {} : { content: patch.content, sourceContent: patch.content }),
     ...(patch.mcpDependencies === undefined
       ? {}
       : {

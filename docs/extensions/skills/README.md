@@ -41,6 +41,8 @@ Enable 状态和额外 Skill 目录统一保存在 `runtime/skills.json`。
 
 独立 Skill 详情和插件内的 Markdown 文档通过宿主 `SettingsViewUi.MarkdownDocument` 共用阅读界面，默认预览正文，源码按需切换。预览隐藏开头的 YAML frontmatter，支持 GFM 表格、任务列表和经过清理的 HTML；源码视图保留原始内容。外部链接只在点击后通过桌面桥打开，标题锚点在文档内定位，长文档由所在页面或弹窗滚动。
 
+Skill detail 的 `sourceContent` 保存实际加载文件的完整文本（含 frontmatter、注释与原始换行），供源码展示和复制按钮使用；`content` 仍是编辑器和模型工具使用的正文。目录摘要不携带完整源码。详情菜单的“在访达／资源管理器中显示”通过宿主桥定位 detail 的实际 `path`，因此也适用于语言变体和 Plugin Skill override；文件定位仅在点击后执行。
+
 Plugin、Skill 和 MCP 详情共用标题与页面间距样式；Skill 元信息、依赖和引用文件使用同一套灰底卡片。
 
 ## Runtime 加载链路

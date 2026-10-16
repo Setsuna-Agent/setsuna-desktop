@@ -126,6 +126,7 @@ function dependencySkill(): RuntimeSkillDetail {
     kind: 'builtin',
     enabled: true,
     content: '# Sentry Helper',
+    sourceContent: '# Sentry Helper',
     references: [],
     mcpDependencies: [{
       type: 'mcp',

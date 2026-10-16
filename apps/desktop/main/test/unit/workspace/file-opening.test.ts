@@ -7,11 +7,28 @@ import {
   createWorkspaceFilePreviewUrl,
   openWorkspaceDirectoryInFileManager,
   openWorkspaceFileWithDefaultApp,
+  revealLocalPathInFolder,
   revealWorkspaceFileInFolder,
   workspaceFilePreviewMimeType,
 } from '../../../src/workspace/file-opening.js';
 
 describe('openWorkspaceFileWithDefaultApp', () => {
+  it('reveals app-managed documents outside a workspace and rejects invalid or missing targets', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-skill-reveal-'));
+    const skillPath = path.join(root, 'SKILL.zh-CN.md');
+    await writeFile(skillPath, '# Skill');
+    const showItemInFolder = vi.fn();
+
+    await expect(revealLocalPathInFolder(skillPath, showItemInFolder)).resolves.toEqual({ ok: true });
+    expect(showItemInFolder).toHaveBeenCalledExactlyOnceWith(skillPath);
+    for (const target of ['SKILL.md', 'file:///tmp/SKILL.md', 'https://example.com/SKILL.md', path.join(root, 'missing.md'), null]) {
+      await expect(revealLocalPathInFolder(target, showItemInFolder)).resolves.toMatchObject({ ok: false });
+    }
+    expect(showItemInFolder).toHaveBeenCalledTimes(1);
+    showItemInFolder.mockImplementationOnce(() => { throw new Error('File manager unavailable'); });
+    await expect(revealLocalPathInFolder(skillPath, showItemInFolder)).resolves.toEqual({ ok: false, error: 'File manager unavailable' });
+  });
+
   it('opens an existing workspace file through the supplied platform adapter', async () => {
     const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-open-workspace-file-'));
     await mkdir(path.join(workspaceRoot, 'src'));
