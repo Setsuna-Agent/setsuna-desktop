@@ -6,6 +6,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { RendererFeatureEventHub } from '../../../../src/composition/renderer-feature-event-hub.js';
 import { RendererFeatureEventsProvider } from '../../../../src/composition/renderer-feature-events-context.js';
 import { useRuntimeThreadState, type RuntimeThreadClient } from '../../../../src/services/runtime-client/useRuntimeThreadState.js';
+import { saveChatSelection } from '../../../../src/services/runtime-client/runtimeSessionSelection.js';
 
 afterEach(() => {
   cleanup();
@@ -52,7 +53,7 @@ it('discovers background execution chats from an idle sidebar without selecting 
 it.each(['requested', null])('boots the window into %s, with saved selection only as a fallback', async (requested) => {
   localStorage.setItem('setsuna-desktop:last-active-thread-id', 'saved');
   Object.defineProperty(window, 'setsunaDesktop', { configurable: true, value: {
-    windowControls: { getInitialThreadId: vi.fn(async () => requested) },
+    windowControls: { getSessionContext: vi.fn(async () => ({ initialThreadId: requested, sessionKey: 'primary:0' })) },
   } });
   const threads = ['requested', 'saved'].map((id): RuntimeThread => ({
     id, projectId: `project-${id}`, title: id, createdAt: '', updatedAt: '', archived: false,
@@ -80,4 +81,31 @@ it.each(['requested', null])('boots the window into %s, with saved selection onl
   expect(client.subscribeEvents).toHaveBeenCalledWith(expectedId, 0, expect.any(Function));
   await act(async () => view.result.current.applyBootstrapThreads({ allThreads: threads, visibleThreads: threads, projects: [] }));
   expect(client.getThread).toHaveBeenCalledOnce();
+});
+
+it.each([null, 'project'])('restores an unsent conversation without fetching the previous thread (project: %s)', async (projectId) => {
+  localStorage.setItem('setsuna-desktop:last-active-thread-id', 'old-thread');
+  saveChatSelection('primary:0', `new-thread-draft:unique-draft:${projectId ?? ''}`);
+  const client: RuntimeThreadClient = {
+    answerApproval: vi.fn(), clearThreadContext: vi.fn(), compactThreadContext: vi.fn(),
+    createThread: vi.fn(), deleteThread: vi.fn(), listThreads: vi.fn(), updateThread: vi.fn(),
+    getThread: vi.fn(() => new Promise<RuntimeThread>(() => undefined)),
+    subscribeEvents: vi.fn(() => () => undefined),
+  };
+  const events = new RendererFeatureEventHub();
+  const setActiveProjectId = vi.fn();
+  const onRestoreNewThreadDraft = vi.fn();
+  const view = renderHook(() => useRuntimeThreadState({
+    activeProjectId: null, client, onError: vi.fn(), onTurnSettled: vi.fn(),
+    review: { start: vi.fn() }, setActiveProjectId, onRestoreNewThreadDraft,
+  }), { wrapper: ({ children }: { children: ReactNode }) => (
+    <RendererFeatureEventsProvider events={events}>{children}</RendererFeatureEventsProvider>
+  ) });
+  await act(async () => view.result.current.applyBootstrapThreads({ allThreads: [], visibleThreads: [], projects: [
+    { id: 'project', name: 'Project', path: '/repo', createdAt: '', updatedAt: '' },
+  ] }));
+  expect(view.result.current.windowSessionKey).toBe('primary:0');
+  expect(setActiveProjectId).toHaveBeenCalledExactlyOnceWith(projectId);
+  expect(onRestoreNewThreadDraft).toHaveBeenCalledExactlyOnceWith('unique-draft');
+  expect(client.getThread).not.toHaveBeenCalled();
 });

@@ -29,6 +29,7 @@ type RuntimeClientStateOptions = {
   activeProjectId: string | null;
   modelProvider: ModelProviderProjectionService;
   onThreadDeleted?: (threadId: string) => void;
+  onRestoreNewThreadDraft?: (draftId: string | null) => void;
   onTurnSettled?: (settlement: RuntimeTurnSettlement) => void;
   review: ReviewFeatureService;
   setActiveProjectId: Dispatch<SetStateAction<string | null>>;
@@ -42,6 +43,7 @@ export function useRuntimeClientState({
   activeProjectId,
   modelProvider,
   onThreadDeleted,
+  onRestoreNewThreadDraft,
   onTurnSettled,
   review,
   setActiveProjectId,
@@ -81,6 +83,7 @@ export function useRuntimeClientState({
     client,
     onError: setError,
     onThreadDeleted: forwardThreadDeletion,
+    onRestoreNewThreadDraft,
     onTurnSettled: forwardTurnSettlement,
     review,
     setActiveProjectId,

@@ -27,7 +27,8 @@ export function useWorkspaceFilePanelLifecycle({ panels, workspace, projectId, w
     const current = latest.current.workspace;
     if (projectId && activeFilePath) {
       if (current.filePreview?.projectId !== projectId || current.filePreview.path !== activeFilePath || current.filePreview.rootId !== activeFilePanel?.rootId) {
-        void current.openProjectFile(activeFilePath, undefined, activeFilePanel?.rootId);
+        // Loading an existing selection must not reveal a restored or newly collapsed panel.
+        void current.openProjectFile(activeFilePath, undefined, activeFilePanel?.rootId, { revealPanel: false });
       }
     } else if (!previewIsOpen && current.filePreview && !current.fileDraft.dirty) {
       void current.setFilePreview(null);

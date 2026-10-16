@@ -1,4 +1,6 @@
-import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useSessionWriter } from '../../../shared/preferences/sessionStorage.js';
+import { readWorkspaceLayout, savedWorkspaceLayout } from '../workspaceSessionRecovery.js';
 import {
   chatComposerTargetIdentity,
   chatComposerNewThreadTarget,
@@ -6,6 +8,7 @@ import {
 } from '../../chat/hooks/useChatComposerSession.js';
 import {
   createEmptyPanelSlot,
+  reconcilePanelRoots,
   removePanelFromSlotState,
   type DesktopPanelSlot,
   type DesktopPanelSlotState,
@@ -80,9 +83,7 @@ export function resetDesktopWorkspacePanelLayout(
   targetIdentity: ChatComposerTargetIdentity,
 ): DesktopWorkspacePanelLayouts {
   if (!layouts[targetIdentity]) return layouts;
-  const next = { ...layouts };
-  delete next[targetIdentity];
-  return next;
+  return { ...layouts, [targetIdentity]: { ...EMPTY_PANEL_LAYOUT } };
 }
 
 export function claimDesktopWorkspacePanelLayout(
@@ -131,18 +132,61 @@ export function desktopWorkspaceBrowserPanelInstances(
 }
 
 /** Keeps side and bottom panel layouts isolated by conversation identity. */
-export function useDesktopWorkspacePanelSession(targetIdentity: ChatComposerTargetIdentity) {
+export function useDesktopWorkspacePanelSession(
+  targetIdentity: ChatComposerTargetIdentity,
+  windowKey: string | null = null,
+  rootIds?: ReadonlySet<string>,
+) {
   const targetIdentityRef = useRef(targetIdentity);
   targetIdentityRef.current = targetIdentity;
-  const [layouts, setLayouts] = useState<DesktopWorkspacePanelLayouts>({});
-  const layout = desktopWorkspacePanelLayout(layouts, targetIdentity);
-
+  const writer = useSessionWriter(windowKey, 'panels');
+  const [stored, setStored] = useState(() => ({ windowKey, layouts: {
+    [targetIdentity]: windowKey ? readWorkspaceLayout(windowKey, targetIdentity) : EMPTY_PANEL_LAYOUT,
+  } as DesktopWorkspacePanelLayouts }));
+  // If the user opens or closes tabs before deferred recovery, their edits win.
+  // Unvisited/untouched empty placeholders must still be eligible for recovery.
+  let layouts = stored.windowKey === windowKey ? stored.layouts
+    : Object.fromEntries(Object.entries(stored.layouts).filter(([, layout]) => layout !== EMPTY_PANEL_LAYOUT));
+  if (!layouts[targetIdentity]) {
+    layouts = { ...layouts, [targetIdentity]: windowKey ? readWorkspaceLayout(windowKey, targetIdentity) : EMPTY_PANEL_LAYOUT };
+  }
+  const currentLayout = desktopWorkspacePanelLayout(layouts, targetIdentity);
+  const layout = useMemo(() => {
+    if (!rootIds) return currentLayout;
+    const sidePanelSlot = reconcilePanelRoots(currentLayout.sidePanelSlot, rootIds);
+    const bottomPanelSlot = reconcilePanelRoots(currentLayout.bottomPanelSlot, rootIds);
+    return sidePanelSlot === currentLayout.sidePanelSlot && bottomPanelSlot === currentLayout.bottomPanelSlot
+      ? currentLayout : { ...currentLayout, sidePanelSlot, bottomPanelSlot };
+  }, [currentLayout, rootIds]);
+  // Recovery can finish after the workspace is ready. Validate before publishing
+  // active tabs so preview/terminal effects never consume removed directory bindings.
+  if (layout !== currentLayout) layouts = { ...layouts, [targetIdentity]: layout };
+  if (layouts !== stored.layouts) {
+    setStored({ windowKey, layouts });
+  }
+  const setLayouts = useCallback<Dispatch<SetStateAction<DesktopWorkspacePanelLayouts>>>((update) => {
+    setStored((current) => ({ ...current, layouts: typeof update === 'function' ? update(current.layouts) : update }));
+  }, []);
+  const previousLayoutsRef = useRef({ windowKey, layouts });
+  useEffect(() => {
+    const previous = previousLayoutsRef.current;
+    previousLayoutsRef.current = { windowKey, layouts };
+    for (const identity of Object.keys(layouts) as ChatComposerTargetIdentity[]) {
+      const layout = layouts[identity];
+      const changed = previous.windowKey === windowKey ? layout !== previous.layouts[identity]
+        : layout === previous.layouts[identity] && layout !== EMPTY_PANEL_LAYOUT;
+      if (layout && changed) writer.write(identity, savedWorkspaceLayout(layout));
+    }
+    if (previous.windowKey === windowKey) {
+      for (const identity of Object.keys(previous.layouts)) if (!(identity in layouts)) writer.write(identity, null);
+    }
+  }, [layouts, windowKey, writer]);
   const updateLayoutForIdentity = useCallback((
     identity: ChatComposerTargetIdentity,
     updater: (current: DesktopWorkspacePanelLayout) => DesktopWorkspacePanelLayout,
   ) => {
     setLayouts((current) => updateDesktopWorkspacePanelLayout(current, identity, updater));
-  }, []);
+  }, [setLayouts]);
 
   const updateLayout = useCallback((updater: (current: DesktopWorkspacePanelLayout) => DesktopWorkspacePanelLayout) => {
     updateLayoutForIdentity(targetIdentity, updater);
@@ -182,8 +226,10 @@ export function useDesktopWorkspacePanelSession(targetIdentity: ChatComposerTarg
   );
 
   const resetForIdentity = useCallback((identity: ChatComposerTargetIdentity) => {
+    writer.write(identity, null);
+    // Keep a visited empty entry so a same-render revisit cannot reload a queued old save.
     setLayouts((current) => resetDesktopWorkspacePanelLayout(current, identity));
-  }, []);
+  }, [setLayouts, writer]);
 
   const removePanel = useCallback((panelId: string) => {
     setLayouts((current) => {
@@ -202,11 +248,15 @@ export function useDesktopWorkspacePanelSession(targetIdentity: ChatComposerTarg
       }
       return next;
     });
-  }, []);
+  }, [setLayouts]);
 
   const claimForThread = useCallback((threadId: string) => {
-    setLayouts((current) => claimDesktopWorkspacePanelLayout(current, targetIdentityRef.current, threadId));
-  }, []);
+    setLayouts((current) => {
+      const identity = targetIdentityRef.current;
+      const next = claimDesktopWorkspacePanelLayout(current, identity, threadId);
+      return next === current ? current : { ...next, [identity]: { ...EMPTY_PANEL_LAYOUT } };
+    });
+  }, [setLayouts]);
 
   return {
     bottomPanelExpanded: layout.bottomPanelExpanded,

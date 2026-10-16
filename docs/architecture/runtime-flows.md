@@ -67,6 +67,8 @@ Goal 和 Collaboration 的 Feature 投影使用 SQLite `feature_projection_check
 
 Renderer 模块可以在 runtime 恢复数据时加载，但有 IPC 副作用的偏好设置与 Feature setup 必须等 `desktop.whenReady()`。就绪 handler 保留到窗口关闭，支持 renderer reload；准备失败会同时拒绝 main 与 renderer 的等待。终端包入口只导出懒加载组件与类型，避免通过静态导出把 xterm 提前带入首屏。
 
+窗口的恢复槽位随原有启动上下文 IPC 返回，不引入磁盘扫描或新的就绪等待。主聊天只读取当前会话的文字草稿；工作区标签恢复由 `useWorkspaceRecoveryKey` 推迟到 shell 绘制之后，未访问会话不读恢复记录，也不创建网页或终端。关闭窗口取消待执行的恢复；期间用户对标签的修改优先。生命周期测试覆盖延迟执行、退出取消、早期编辑、存储失败以及大量休眠记录下的按键读取，恢复数据不加入 runtime/bootstrap Promise。
+
 `DesktopDataRootGate` 先读取 main 侧数据根状态：
 
 - 正常模式进入 `App` 和 runtime controller。

@@ -1,26 +1,29 @@
 // @vitest-environment happy-dom
 
-import { parsePluginMentions, pluginAppMentionText, type DesktopRuntimeClient, type RuntimeMessage, type RuntimePluginSummary, type RuntimeSkillSummary, type RuntimeThread } from '@setsuna-desktop/contracts';
+import { parsePluginMentions, pluginAppMentionText, type DesktopRuntimeClient, type RuntimeMessage, type RuntimePluginSummary, type RuntimeQueuedTurnInput, type RuntimeSkillSummary, type RuntimeThread } from '@setsuna-desktop/contracts';
 import { browserTabMentionText, type BrowserTabReference } from '@setsuna-desktop/feature-browser/contracts';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ChatComposer } from '../../../../src/features/chat/ChatComposer.js';
 import { useChatComposerSession, type ChatComposerTargetIdentity } from '../../../../src/features/chat/hooks/useChatComposerSession.js';
+import type { ChatQueuedTurnActions } from '../../../../src/features/chat/hooks/useQueuedTurnInputActions.js';
 import { BrowserTabMentionsProvider } from '../../../../src/features/chat/mentions/BrowserTabReference.js';
 import { CHAT_COMPOSER_CLIPBOARD_TYPE } from '../../../../src/features/chat/composer/chatComposerClipboard.js';
 import { MAX_INLINE_PASTE_CHARACTERS } from '../../../../src/features/chat/composer/useChatComposerClipboard.js';
 import { RendererPluginTestHost } from '../../support/RendererPluginTestHost.js';
+import { readSessionRecord } from '../../../../src/shared/preferences/sessionStorage.js';
 
 afterEach(() => { cleanup(); localStorage.clear(); });
 
+const plugin: RuntimePluginSummary = {
+  id: 'editable-table', name: 'Tables', installedAt: '', skills: [], hooks: [], hookCount: 0, resources: [], mcpServers: [],
+  extension: { apiVersion: 1, runtime: 'node-worker', trust: 'trusted', capabilities: ['ui'],
+    rendererUi: { schemaVersion: 2, actions: [], contributions: [{ id: 'table.page', slot: 'renderer.plugin.page',
+      navigation: { label: '我的表格' }, document: { htmlResourceId: 'html', actionIds: [] } }] } },
+};
+
 it('attaches an app by @ without a project, restores its draft and preserves its identity when sent', async () => {
-  const plugin: RuntimePluginSummary = {
-    id: 'editable-table', name: 'Tables', installedAt: '', skills: [], hooks: [], hookCount: 0, resources: [], mcpServers: [],
-    extension: { apiVersion: 1, runtime: 'node-worker', trust: 'trusted', capabilities: ['ui'],
-      rendererUi: { schemaVersion: 2, actions: [], contributions: [{ id: 'table.page', slot: 'renderer.plugin.page',
-        navigation: { label: '我的表格' }, document: { htmlResourceId: 'html', actionIds: [] } }] } },
-  };
   const send = vi.fn<(...args: unknown[]) => Promise<boolean>>(async () => true);
   const view = render(<Harness initialDraft="@表格" plugins={[plugin]} send={send} />);
   const input = screen.getByRole('textbox');
@@ -47,6 +50,24 @@ it('attaches an app by @ without a project, restores its draft and preserves its
   fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
   await waitFor(() => expect(send).toHaveBeenCalledWith(`${serialized} 修改表头`, expect.anything()));
   expect(serialized.trim()).toBe(pluginAppMentionText({ pluginId: plugin.id, contributionId: 'table.page', name: '我的表格' }));
+});
+
+it('continues selecting @ apps and / Skills after inserting an app reference', async () => {
+  const skill: RuntimeSkillSummary = { id: 'review', name: 'Review', kind: 'builtin', enabled: true };
+  const send = vi.fn(async () => false);
+  render(<Harness plugins={[plugin]} skills={[skill]} send={send} />);
+  const input = screen.getByRole('textbox');
+  paste(input, '@表格');
+  fireEvent.mouseDown(await screen.findByRole('option', { name: '我的表格' }));
+  paste(input, '@表格');
+  await screen.findByRole('option', { name: '我的表格' });
+  fireEvent.keyDown(input, { key: 'Enter' });
+  expect(send).not.toHaveBeenCalled();
+  paste(input, '/Review');
+  fireEvent.mouseDown(await screen.findByRole('option', { name: /Review/ }));
+  await act(async () => fireEvent.keyDown(input, { key: 'Enter' }));
+  const appText = pluginAppMentionText({ pluginId: plugin.id, contributionId: 'table.page', name: '我的表格' });
+  expect(send).toHaveBeenCalledExactlyOnceWith(`${appText} ${appText} Review `, expect.objectContaining({ skillIds: ['review'] }));
 });
 
 it('uploads a long paste verbatim as TXT, preserves the draft, and sends the stored attachment', async () => {
@@ -355,17 +376,63 @@ it('restores selected Skills by ID and exact range after navigation, and removes
   expect(screen.getByRole('textbox').textContent).toBe('');
 });
 
-function SessionHarness({ target, client, send, skills }: {
+it.each([false, true])('excludes a borrowed queue edit from restart recovery and resumes saving after cancellation (attachment only: %s)', async (attachmentOnly) => {
+  const target = 'thread:thread-1';
+  const windowKey = 'primary:0';
+  const queued: RuntimeQueuedTurnInput = {
+    id: 'queued-1', input: attachmentOnly ? '' : 'Queued task', createdAt: '',
+    attachments: [{ id: 'original', assetId: 'original', source: 'runtime', name: 'original.txt', type: 'text/plain', size: 4 }],
+  };
+  const editSession = { threadId: 'thread-1', input: queued, editToken: 'edit-token' };
+  const actions: ChatQueuedTurnActions = {
+    deleteQueuedTurnInput: vi.fn(), reorderQueuedTurnInputs: vi.fn(), sendQueuedTurnInputNow: vi.fn(),
+    retrieveQueuedTurnInput: vi.fn(async () => editSession),
+    releaseQueuedTurnInputEdit: vi.fn(async () => true),
+    updateQueuedTurnInput: vi.fn(async () => 'retained-after-error' as const),
+  };
+  const send = vi.fn(async () => true);
+  const client = { uploadAttachment: vi.fn(), linkAttachment: vi.fn(), deleteAttachment: vi.fn(async () => ({ deleted: true })) } as unknown as DesktopRuntimeClient;
+  const view = render(<SessionHarness target={target} windowKey={windowKey} client={client} send={send}
+    queuedTurnInputs={[queued]} queuedTurnActions={actions} />);
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '编辑' })); });
+  const cancel = screen.getByRole('button', { name: /关闭.*正在编辑队列消息/ });
+  const input = screen.getByRole('textbox');
+  paste(input, ' edited');
+  await act(async () => { fireEvent.keyDown(input, { key: 'Enter' }); });
+  expect(actions.updateQueuedTurnInput).toHaveBeenCalledExactlyOnceWith(editSession, `${queued.input} edited`.trim(), queued.attachments);
+  expect(send).not.toHaveBeenCalled();
+  // Flushing while the edit is live catches reloads/crashes that never run React cleanup.
+  act(() => window.dispatchEvent(new Event('beforeunload')));
+  expect(readSessionRecord(windowKey, 'draft', target)).toBeNull();
+  const restarted = renderHook(() => useChatComposerSession(target, client, windowKey));
+  expect(restarted.result.current.draft).toBe('');
+  expect(restarted.result.current.attachmentStore.getSnapshot().items).toEqual([]);
+  restarted.unmount();
+
+  await act(async () => { fireEvent.click(cancel); });
+  expect(actions.releaseQueuedTurnInputEdit).toHaveBeenCalledExactlyOnceWith(editSession);
+  expect(input.textContent).toBe('');
+  paste(input, 'Ordinary draft');
+  view.unmount();
+  const ordinary = renderHook(() => useChatComposerSession(target, client, windowKey));
+  expect(ordinary.result.current.draft).toBe('Ordinary draft');
+});
+
+function SessionHarness({ target, client, send, skills, windowKey, queuedTurnInputs, queuedTurnActions }: {
   target: ChatComposerTargetIdentity;
   client: DesktopRuntimeClient;
   send: (...args: unknown[]) => Promise<boolean>;
   skills?: RuntimeSkillSummary[];
+  windowKey?: string;
+  queuedTurnInputs?: RuntimeQueuedTurnInput[];
+  queuedTurnActions?: ChatQueuedTurnActions;
 }) {
-  const session = useChatComposerSession(target, client);
-  return <Harness client={client} session={session} send={send} skills={skills} />;
+  const session = useChatComposerSession(target, client, windowKey);
+  return <Harness client={client} session={session} send={send} skills={skills}
+    queuedTurnInputs={queuedTurnInputs} queuedTurnActions={queuedTurnActions} />;
 }
 
-function Harness({ initialDraft = '', client = {} as DesktopRuntimeClient, messages = [], skills = [], plugins = [], tabs = [], threadId = 'thread-1', send = async () => false, session }: {
+function Harness({ initialDraft = '', client = {} as DesktopRuntimeClient, messages = [], skills = [], plugins = [], tabs = [], threadId = 'thread-1', send = async () => false, session, queuedTurnInputs = [], queuedTurnActions }: {
   initialDraft?: string;
   client?: DesktopRuntimeClient;
   messages?: RuntimeMessage[];
@@ -375,16 +442,19 @@ function Harness({ initialDraft = '', client = {} as DesktopRuntimeClient, messa
   threadId?: string;
   send?: (...args: unknown[]) => Promise<boolean>;
   session?: ReturnType<typeof useChatComposerSession>;
+  queuedTurnInputs?: RuntimeQueuedTurnInput[];
+  queuedTurnActions?: ChatQueuedTurnActions;
 }) {
   const [draft, setDraft] = useState(initialDraft);
   return <RendererPluginTestHost><BrowserTabMentionsProvider value={tabs}><ChatComposer
     key={session?.composerKey} attachmentStore={session?.attachmentStore}
     draftSkillReferences={session?.draftSkillReferences}
+    draftWorkspaceReferences={session?.draftWorkspaceReferences}
     activeTurnId={null} client={client} config={null} canClearContext={false}
     contextUsage={{ compactedMessageCount: 0, percent: 0, totalTokens: 256_000, triggerScopes: [], usedTokens: 0, visiblePercent: 0 }}
-    currentThread={{ id: threadId, messages, queuedTurnInputs: [] } as unknown as RuntimeThread}
+    currentThread={{ id: threadId, messages, queuedTurnInputs } as unknown as RuntimeThread}
     draft={session?.draft ?? draft} skills={skills} plugins={plugins} onDraftChange={session?.setDraft ?? setDraft} onSend={send}
-    queuedTurnActions={{ deleteQueuedTurnInput: vi.fn(), releaseQueuedTurnInputEdit: vi.fn(), retrieveQueuedTurnInput: vi.fn(), reorderQueuedTurnInputs: vi.fn(), sendQueuedTurnInputNow: vi.fn(), updateQueuedTurnInput: vi.fn() }}
+    queuedTurnActions={queuedTurnActions ?? { deleteQueuedTurnInput: vi.fn(), releaseQueuedTurnInputEdit: vi.fn(), retrieveQueuedTurnInput: vi.fn(), reorderQueuedTurnInputs: vi.fn(), sendQueuedTurnInputNow: vi.fn(), updateQueuedTurnInput: vi.fn() }}
     onAccessModeChange={vi.fn()} onCancelActiveTurn={vi.fn()} onClearContext={vi.fn()} onCompactContext={vi.fn()}
     onSelectModel={vi.fn()} onSetMultiAgentEnabled={vi.fn()} onStartThreadReview={vi.fn()} onSearchProjectEntries={vi.fn()}
   /></BrowserTabMentionsProvider></RendererPluginTestHost>;

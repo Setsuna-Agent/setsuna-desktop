@@ -45,9 +45,11 @@ Chat feature 把 runtime thread snapshot 投影为对话 UI，并负责 composer
 - `ChatSendQueue`。
 - 取回编辑 footer。
 
-Composer state 由 `useChatComposerSession` 和专用 hooks 管理。应用运行期间，文字草稿、Skill ID 及其未裁剪文本引用范围、`chatAttachmentStore` 按 thread / new-thread-slot 独立保留，切换会话、新建会话或切换页面不会清空原草稿。选择空工作区、首次创建 runtime thread 时转移同一份草稿；目标已有文字或附件（包括上传中）时恢复目标草稿，并将来源草稿保留在原位置。恢复编辑器时按已保存的 Skill ID 和范围重建槽位，发送时再换算为裁剪后的范围。附件上传和发送结果仍归原 session，成功发送只清理已提交附件，失败保留文字、Skill 引用和附件以便重试。`useChatAttachments` 只订阅附件状态，输入框卸载不再删除会话持有的附件；显式丢弃草稿或会话状态 owner 卸载时回收未发送资源。队列编辑仍按原流程释放编辑租约和临时副本。
+Composer state 由 `useChatComposerSession` 和专用 hooks 管理。应用运行期间，文字草稿、Skill ID 及其未裁剪文本引用范围、已选文件/目录的完整 entry 与引用范围、`chatAttachmentStore` 按 thread / new-thread-slot 独立保留，切换会话、新建会话或切换页面不会清空原草稿。选择空工作区、首次创建 runtime thread 时转移同一份草稿；目标已有文字或附件（包括上传中）时恢复目标草稿，并将来源草稿保留在原位置。恢复编辑器时按已保存的引用与范围重建槽位，未选择的 `@` 搜索文字保留为可编辑文本；发送时再把 Skill 范围换算到裁剪后的文本。附件上传和发送结果仍归原 session，成功发送只清理已提交附件，失败保留文字、Skill 引用和附件以便重试。`useChatAttachments` 只订阅附件状态，输入框卸载不再删除会话持有的附件；显式丢弃草稿或会话状态 owner 卸载时回收未发送资源。队列编辑仍按原流程释放编辑租约和临时副本。
 
 Renderer Slot 的实例身份沿用这套 session 语义：Conversation/Details 跟随具体 thread surface，Composer 则使用 `variant + composerKey`。首次发送把 new-thread slot claim 为新 thread 时，Composer Slot 不会因 threadId 出现而中途 remount。空白 starter 的可替换 Conversation 内容与宿主 Composer 是同级所有权；Conversation winner 即使完全替换默认内容，也不能让发送入口消失。
+
+主聊天的未发送文字、Skill 与文件/目录引用由 `session/chatDraftRecovery.ts` 跨重启保存，键包含 main 分配的窗口恢复槽位和 composer target。各窗口独立恢复，首次发送/工作区选择时迁移归属，发送清空或显式重置立即删除旧记录。共享 `shared/preferences/sessionStorage.ts` 合并 200 ms 内的写入，窗口隐藏、退出或 owner 卸载时刷新；按访问的会话单条读取，不扫描全部草稿。首版不持久化附件上传资源、文件编辑内容或侧边对话草稿。预填新对话使用 UUID，避免重启后序号复用覆盖旧草稿。
 
 侧边对话的创建事务、异常退出清理和 owner 竞争由 `packages/features/side-conversation/` 持有；宿主 `SideChatPanel -> ChatWorkspace -> ChatComposer` 只组合通用 thread surface 并传递可见性聚焦信号。只有面板从隐藏变为当前可见面板时才聚焦 Sender，并把光标放到草稿末尾；普通重渲染不会持续抢占焦点。发送入口在提交前把焦点交回编辑器，提交期间的 `contentEditable` 锁通过显式 `tabIndex` 保留可聚焦性；清空草稿只修复仍在编辑器内的光标，不在异步完成后重新抢焦点。
 
@@ -88,8 +90,8 @@ Active turn 时普通提交默认排队；显式立即发送才尝试 steer。Go
 - `useChatCommandController.ts`：菜单 focus、键盘导航、光标监听和 workspace 搜索生命周期。
 - `chatProjectEntrySearch.ts`：可取消的 project entry 搜索，迟到结果不能覆盖最新 query。
 - `chatSlashCommandItems.ts`：quick action 与可用 Skill 的纯列表映射。
-- `chatComposerCursorOffset.ts`：菜单定位需要的光标偏移。
-- `chatComposerSlots.tsx`：workspace、Skill、Plugin、浏览器标签页、会话引用和文本输入 slots。
+- `chatComposerCursorOffset.ts`：菜单定位需要的光标偏移。编辑器在原子引用节点记录序列化值的长度，统一换算所有引用的偏移；不依赖标签显示名称、应用改名或 portal 挂载时机。
+- `chatComposerSlots.tsx`：workspace、Skill、Plugin、浏览器标签页、会话引用和文本输入 slots。切换会话和重启时按草稿引用元数据重建词槽，保留文件根目录身份、引号、完整路径和周围空白。不扫描目录，也不把未选中的草稿搜索文字转换为词槽。
 - `useChatComposerDrop.ts`：统一接收侧栏会话引用与系统文件拖拽，保留现有草稿和选区内的文字。文件在 drop 事件内读取为 `File` 并交给现有附件 store，沿用文件选择器的本地引用、托管上传、数量限制与错误处理；不递归导入目录。禁用或附件已满时仍拦截文件默认行为，避免导航或把文件 URL 插入草稿。进入 composer 区域后高亮输入卡片，移出、结束拖动或窗口失焦时清除接收状态。会话引用追加去重，采用 Core contract 的 `thread://` 格式，草稿、队列编辑和结构化复制粘贴共用同一解析器。
 - `useQueuedTurnComposerEdit.ts`：带 token 的队列项取回编辑。
 - `useChatComposerHistory.ts`：光标折叠在首行开头时，用上下箭头遍历当前对话已加载的用户提问；消息来自 `ChatWorkspace` 合并后的分页历史，按消息 ID 保持浏览位置，分页新增的旧提问可继续向上取回。向下越过最新提问时恢复原草稿及结构化引用。输入法、修饰键、命令菜单和队列编辑保留原有键盘行为。
@@ -101,6 +103,8 @@ Active turn 时普通提交默认排队；显式立即发送才尝试 steer。Go
 `useChatSendQueueReorder` 管理拖动、插入位置、边缘滚动和方向键排序；队列变化时取消旧拖动，落下后以持久化事件更新顺序。
 
 取回队列项不会先删除持久化数据。Runtime 返回 edit token，renderer 暂时把内容接管到 composer；提交、取消、卸载和失败路径都要 release 或携 token 更新。
+
+取回副本在 composer session 中标记为 `queued-edit`，包括后续输入和提交失败后保留的内容，均不写入普通草稿恢复记录；开始编辑时清除该会话待写入的旧记录。结束编辑后恢复普通草稿保存，重载或异常退出仍由持久化队列恢复原项，避免把没有 edit token 的副本再次发送。
 
 Command controller 只拥有输入菜单交互，不负责发送、附件、Goal 或 queued edit 事务。Mention 菜单优先于强制打开的 slash 菜单；dismiss 只绑定当前 draft；queued edit 只阻止 slash menu。Project entry 搜索切换 query 或关闭菜单时会取消旧请求的写回。
 

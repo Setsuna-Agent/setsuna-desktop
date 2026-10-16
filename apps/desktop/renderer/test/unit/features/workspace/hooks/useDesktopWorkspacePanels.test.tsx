@@ -19,13 +19,14 @@ import type { ChatComposerTargetIdentity } from '../../../../../src/features/cha
 import type { DesktopTerminalEvent } from '../../../../../src/features/workspace/model.js';
 import { I18nProvider } from '../../../../../src/shared/i18n/I18nProvider.js';
 import { hostMessages } from '../../../../../src/shared/i18n/messages.js';
+import { writeSessionRecord } from '../../../../../src/shared/preferences/sessionStorage.js';
 
 const messageCatalog = composeRendererMessages(hostMessages, [{ module: reviewRendererFeature }]);
 
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
-  localStorage.removeItem(DESKTOP_WORKSPACE_APP_STORAGE_KEY);
+  localStorage.clear();
   Object.defineProperty(window, 'setsunaDesktop', { configurable: true, value: undefined });
 });
 
@@ -460,8 +461,25 @@ it.each([false, true])('closes removed-directory terminals, including hidden ses
   expect(terminal.close).toHaveBeenCalledTimes(2);
 });
 
+it.each(['/worktree/child', 'C:\\worktree\\child'])('restores a terminal at its selected workspace directory without reusing a process (%s)', async (path) => {
+  const scope = 'primary:0';
+  writeSessionRecord(scope, 'panels', 'thread:A', {
+    bottomPanelExpanded: true,
+    bottomPanelSlot: { active: 'saved-terminal', panels: [{ id: 'saved-terminal', type: 'terminal', rootId: 'child', sessionId: 'old-process' }] },
+  });
+  const project: WorkspaceProject = {
+    id: 'project', name: 'Repository', path: '/repo', createdAt: '', updatedAt: '',
+    roots: [{ id: 'main', path: '/repo' }, { id: 'child', path }],
+  };
+  const { view, terminal } = renderTerminalWorkspace('thread:A', project, scope);
+  await waitFor(() => expect(terminal.open).toHaveBeenCalledExactlyOnceWith(path, 100, 24));
+  expect(view.result.current.terminalSessionsByPanelId['saved-terminal']?.sessionId).toBe('session-1');
+  expect(view.result.current.bottomActivePanel?.rootId).toBe('child');
+});
+
 function renderTerminalWorkspace(targetIdentity: ChatComposerTargetIdentity = 'thread:A',
-  project: WorkspaceProject = { id: 'project', path: '/repo', name: 'Repository', createdAt: '', updatedAt: '' }) {
+  project: WorkspaceProject = { id: 'project', path: '/repo', name: 'Repository', createdAt: '', updatedAt: '' },
+  windowSessionKey: string | null = null) {
   const listeners = new Map<string, Set<(event: DesktopTerminalEvent) => void>>();
   let sequence = 0;
   const terminal = {
@@ -482,7 +500,7 @@ function renderTerminalWorkspace(targetIdentity: ChatComposerTargetIdentity = 't
   const initialProps: { targetIdentity: ChatComposerTargetIdentity; project?: WorkspaceProject } = { targetIdentity };
   const view = renderHook(({ targetIdentity: identity, project: currentProject }) => useDesktopWorkspacePanels({
     activeProject: currentProject ?? project, activeView: 'chat', conversationDebugEnabled: false,
-    targetIdentity: identity, workspaceStatus: 'ready', setError: vi.fn(),
+    targetIdentity: identity, workspaceStatus: 'ready', setError: vi.fn(), windowSessionKey,
   }), {
     initialProps,
     wrapper: ({ children }) => <I18nProvider initialLocale="zh-CN" messageCatalog={messageCatalog}>

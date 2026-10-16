@@ -5,10 +5,13 @@ import { describe, expect, it } from 'vitest';
 import {
   createSelectedSkillReferences,
   createSelectedSkillSlot,
+  createReferenceDraftSlots,
   createTextSlot,
   createWorkspaceMentionInsertion,
+  createWorkspaceDraftReferences,
   createWorkspaceMentionSlots,
   filterSelectedSkillsBySlots,
+  getChatComposerSlotReference,
 } from '../../../../../src/features/chat/composer/chatComposerSlots.js';
 
 const entry: WorkspaceEntrySearchItem = {
@@ -19,6 +22,24 @@ const entry: WorkspaceEntrySearchItem = {
 };
 
 describe('workspace mention slots', () => {
+  it.each([
+    { path: 'src/domain/agent-pc', name: 'agent-pc', kind: 'directory' as const },
+    { path: '/worktree/设计 文档/spec.md', name: 'spec.md', kind: 'file' as const },
+    { path: 'C:\\worktree\\设计 文档\\spec.md', name: 'spec.md', kind: 'file' as const },
+    { path: '\\\\server\\project\\src', name: 'src', kind: 'directory' as const },
+  ])('restores the $kind reference $path without changing its serialized path or adjacent text', (reference) => {
+    const slots = createWorkspaceMentionSlots({ ...reference, parent: '' });
+    const serialize = (items: ComposerSlot[]) => items.map((slot) => slot.type === 'text' ? slot.value : slot.props.value).join('');
+    const completeSlots = [createTextSlot('请检查 '), ...slots, createTextSlot('1231313213\n')];
+    const draft = serialize(completeSlots);
+    const recovered = createReferenceDraftSlots(draft, [], [], [], createWorkspaceDraftReferences(completeSlots));
+    expect(serialize(recovered)).toBe(draft);
+    expect(recovered.map(getChatComposerSlotReference).filter(Boolean)).toEqual([
+      { type: 'workspace', entry: expect.objectContaining(reference) },
+    ]);
+    expect(createWorkspaceMentionInsertion({ ...reference, parent: '' }, draft, recovered)).toBeNull();
+  });
+
   it('creates a highlighted tag slot that submits the full workspace mention', () => {
     const slots = createWorkspaceMentionSlots(entry);
     const mention = slots[0];
@@ -58,7 +79,6 @@ describe('workspace mention slots', () => {
 
     expect(mention?.props?.value).toBe('@src/components/Tile.tsx');
     const labelHtml = renderToStaticMarkup(mention?.props?.label);
-    expect(labelHtml).toContain('data-composer-cursor-offset-adjustment=');
     expect(labelHtml).toContain('>Tile.tsx</span>');
     expect(labelHtml).not.toContain('@Tile.tsx');
   });
@@ -77,7 +97,6 @@ describe('workspace mention slots', () => {
     if (!mention) throw new Error('Expected a workspace mention tag');
     expect(mention.props?.value).toBe('@.trae/');
     const labelHtml = renderToStaticMarkup(mention.props?.label);
-    expect(labelHtml).toContain('data-composer-cursor-offset-adjustment="2"');
     expect(labelHtml).toContain('>.trae</span>');
     expect(labelHtml).not.toContain('>.trae/</span>');
   });

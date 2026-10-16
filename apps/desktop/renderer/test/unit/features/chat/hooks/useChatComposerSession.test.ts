@@ -56,7 +56,7 @@ function session(
   draft: string,
   sessionId: number,
 ): ChatComposerSessionState {
-  return { draft, skillReferences: [], sessionId, targetIdentity };
+  return { draft, skillReferences: [], workspaceReferences: [], sessionId, targetIdentity };
 }
 
 it('restores independent drafts and attachments after switching threads and opening a new chat', async () => {

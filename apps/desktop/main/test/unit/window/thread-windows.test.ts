@@ -32,8 +32,8 @@ it('opens the requested conversation in an independent trusted window and preser
   expect(createWindow).toHaveBeenCalledOnce();
   expect(target.native.show).toHaveBeenCalledOnce();
   expect(target.native.loadFile).toHaveBeenCalledOnce();
-  expect(invoke('window-control:get-initial-thread-id', target.window)).toBe('thread-selected');
-  expect(invoke('window-control:get-initial-thread-id', source.window)).toBeNull();
+  expect(invoke('window-control:get-session-context', target.window)).toEqual({ initialThreadId: 'thread-selected', sessionKey: 'thread:thread-selected:0' });
+  expect(invoke('window-control:get-session-context', source.window)).toEqual({ initialThreadId: null, sessionKey: 'primary:0' });
   expect(attached).toHaveBeenCalledTimes(2);
 
   source.window.destroy();

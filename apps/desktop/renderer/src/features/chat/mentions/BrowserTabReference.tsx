@@ -1,7 +1,6 @@
 import { createContext, Fragment, useContext, type ReactNode } from 'react';
 import { parseBrowserTabMentions, type BrowserTabReference } from '@setsuna-desktop/feature-browser/contracts';
 import { BrowserFavicon } from '../../../composition/BrowserWorkspaceFeatureBoundary.js';
-import { composerCursorOffsetAdjustment } from '../composer/chatComposerCursorOffset.js';
 import { ChatInlineReference } from '../references/ChatInlineReference.js';
 import { ThreadReferenceText } from './ThreadReference.js';
 import type { BrowserTabMentionCandidate } from './chatMentionItems.js';
@@ -10,9 +9,8 @@ const BrowserTabs = createContext<readonly BrowserTabMentionCandidate[]>([]);
 export const BrowserTabMentionsProvider = BrowserTabs.Provider;
 export function useBrowserTabMentions() { return useContext(BrowserTabs); }
 
-export function BrowserTabReferenceLabel({ tab, serializedText }: {
+export function BrowserTabReferenceLabel({ tab }: {
   tab: BrowserTabReference;
-  serializedText?: string;
 }) {
   const label = tab.title || tab.url;
   const source = useBrowserTabMentions().find((candidate) => candidate.id === tab.id && candidate.url === tab.url);
@@ -20,8 +18,6 @@ export function BrowserTabReferenceLabel({ tab, serializedText }: {
     icon={<BrowserFavicon faviconUrl={source?.faviconUrl ?? null} loading={false} />}
     label={label}
     title={tab.url}
-    composerCursorOffsetAdjustment={serializedText === undefined
-      ? undefined : composerCursorOffsetAdjustment(serializedText, label)}
   />;
 }
 

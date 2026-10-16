@@ -195,7 +195,7 @@ export type SetsunaDesktopBridge = {
     showApplicationMenu(input: DesktopApplicationMenuInput): Promise<string | null>;
     executeTextEdit(command: DesktopTextEditCommand): Promise<boolean>;
     openThread(threadId: string): Promise<void>;
-    getInitialThreadId(): Promise<string | null>;
+    getSessionContext(): Promise<{ initialThreadId: string | null; sessionKey: string }>;
     minimize(): Promise<boolean>;
     toggleMaximize(): Promise<boolean>;
     close(): Promise<boolean>;

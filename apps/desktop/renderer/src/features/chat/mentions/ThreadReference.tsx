@@ -1,21 +1,17 @@
 import { Fragment, type ReactNode } from 'react';
 import { MessageSquare } from 'lucide-react';
 import { parseThreadMentions, type RuntimeThreadReference } from '@setsuna-desktop/contracts';
-import { composerCursorOffsetAdjustment } from '../composer/chatComposerCursorOffset.js';
 import { ChatInlineReference } from '../references/ChatInlineReference.js';
 import { WorkspaceMentionText } from './WorkspaceMentionText.js';
 
-export function ThreadReferenceLabel({ thread, serializedText }: {
+export function ThreadReferenceLabel({ thread }: {
   thread: RuntimeThreadReference;
-  serializedText?: string;
 }) {
   const label = thread.title || thread.id;
   return <ChatInlineReference
     icon={<MessageSquare size={14} />}
     label={label}
     title={label}
-    composerCursorOffsetAdjustment={serializedText === undefined
-      ? undefined : composerCursorOffsetAdjustment(serializedText, label)}
   />;
 }
 

@@ -8,11 +8,11 @@ export function registerThreadWindowIpc(options: {
   createWindow(bounds: Rectangle): BrowserWindow;
   validateThread(threadId: string): Promise<unknown>;
 }): void {
-  ipcMain.removeHandler('window-control:get-initial-thread-id');
+  ipcMain.removeHandler('window-control:get-session-context');
   ipcMain.removeHandler('window-control:open-thread');
-  ipcMain.handle('window-control:get-initial-thread-id', (event) => {
+  ipcMain.handle('window-control:get-session-context', (event) => {
     if (!desktopWindows.get(event.sender.id)) throw new Error('Desktop renderer is unavailable.');
-    return desktopWindows.initialThreadId(event.sender.id);
+    return desktopWindows.sessionContext(event.sender.id);
   });
   ipcMain.handle('window-control:open-thread', async (event, value: unknown) => {
     const source = desktopWindows.get(event.sender.id);
