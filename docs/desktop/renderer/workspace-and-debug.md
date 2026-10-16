@@ -65,6 +65,8 @@ Panel 选择和 session 生命周期在 hooks，不应由各 tab 各自维护一
 
 Runtime 的 `workspace-file-preview-reader.ts` 先通过文件句柄读取最多 64 KiB 文件头判断格式，不支持的二进制和超限图片直接返回，不读取正文或计算全文件哈希。Office 的完整字节留到预览组件按需读取；图片最多读取 8 MiB，文本最多读取编辑预算 8 MiB，超过预算的文本只返回请求范围内的前缀。可编辑文本仍使用完整内容哈希保证保存冲突检查；未完整读取的预览使用文件元数据版本供外部修改刷新。
 
+图片预览和文件树中图片文件的右键菜单支持“复制图片”，经已有 preload 图片接口写入系统剪贴板。预览固定使用右键时的内容；文件树按扩展名显示入口，在点击复制时通过 runtime client 读取右键时绑定的项目、目录和路径，并确认内容为可预览图片，不切换当前文件。PNG/JPEG 直接复制，其他预览格式仅在点击复制时转为保留原尺寸与透明度的 PNG；读取或解码失败沿用图片操作错误反馈，不写入剪贴板。
+
 Markdown 文件在路径栏的目录按钮旁提供“查看源码 / 查看预览”。默认打开预览；预览使用当前编辑草稿，切换时保留编辑器实例、尺寸和撤销记录。带行号的定位请求自动回到源码。`WorkspaceMarkdownPreview` 复用 Markdown 排版和代码块，支持 GFM、标题锚点和经过清理的 HTML；相对链接按当前文档目录解析，本地图片经 runtime client 的工作区文件读取接口加载。脚本、事件属性及越界路径不会进入预览。
 
 `documents/` 持有 DOCX、PPTX、XLSX、CSV 和 PDF 预览。CSV 默认展示表格，并沿用源码切换与文本草稿；其他格式只读。`DocumentPreview` 首次挂载才加载预览组件，组件再按格式动态导入 `@silurus/ooxml`，以本地 Worker/WASM 解析；PDF 使用本地 Blob 和 Electron 内置阅读器，不加载 Office 引擎。关闭或切换时销毁实例并释放 Blob URL；这些操作不参与 runtime ready、窗口就绪或首屏初始化，也不加载远程字体。原始字节通过 preload 的 `desktop.readWorkspaceDocument` 读取，Main 校验工作区边界、文件类型和 32 MiB 上限，renderer 不直接读取文件系统。

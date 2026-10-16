@@ -5,6 +5,7 @@ import {
   WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES,
   getDocumentPreviewFormat,
   workspaceFileKey,
+  workspaceTarget,
   type WorkspaceEntry,
   type WorkspaceEntryCreateInput,
   type WorkspaceEntrySearchItem,
@@ -39,6 +40,8 @@ import {
 import { WorkspaceCodeViewScrollbar } from './editor/WorkspaceCodeViewScrollbar.js';
 import type { WorkspaceFileTreeState } from './hooks/useWorkspaceFileTree.js';
 import { useWorkspaceEntryDrag } from './hooks/useWorkspaceEntryDrag.js';
+import { useWorkspaceImageCopy } from './hooks/useWorkspaceImageCopy.js';
+import { isWorkspaceImagePath } from './media/workspaceImageClipboard.js';
 import { workspaceEntryParent } from './workspaceEntryPaths.js';
 import { FILE_TREE_MIN_WIDTH, FILE_TREE_MAX_WIDTH, normalizeProjectTreePath } from './workspaceFileTree.js';
 import type { WorkspaceFileDraftState } from './hooks/useWorkspaceFileDraft.js';
@@ -157,6 +160,7 @@ export function WorkspacePanel({
   onRevealFile: (filePath: string) => void;
 }) {
   const { t } = useI18n();
+  const copyImage = useWorkspaceImageCopy();
   const {
     tree, expandedPaths, loadingDirectoryPaths, treeError, treeQuery, treeSearching,
     treeTruncated, treeVisible, treeWidth, query, toggleDirectory, updateTreeQuery,
@@ -244,7 +248,10 @@ export function WorkspacePanel({
           onContextMenu={(event) => {
             event.preventDefault();
             event.stopPropagation();
-            setContextMenu({ filePath: node.path, type: node.type, x: event.clientX, y: event.clientY });
+            setContextMenu({ filePath: node.path, type: node.type, x: event.clientX, y: event.clientY,
+              image: !directory && activeProject && isWorkspaceImagePath(node.path)
+                ? { filePath: node.path, workspace: workspaceTarget(activeProject.id, activePanel.rootId) } : undefined,
+            });
           }}
           onClick={() => (directory ? toggleDirectory(node.path) : onOpenEntry(node.entry))}
         />
@@ -342,6 +349,8 @@ export function WorkspacePanel({
           const line = workspaceFileLineNumberFromEvent(event);
           setContextMenu({
             filePath: filePreview.path,
+            image: filePreview.preview?.kind === 'image'
+              ? { filePath: filePreview.path, dataUrl: `data:${filePreview.preview.mimeType};base64,${filePreview.preview.base64}` } : undefined,
             line,
             x: event.clientX,
             y: event.clientY,
@@ -464,6 +473,7 @@ export function WorkspacePanel({
         )}
         onClose={() => setContextMenu(null)}
         onCopyPath={onCopyFilePath}
+        onCopyImage={copyImage}
         entryActionsDisabled={treeSearching || entryOperationPending || !activeProject}
         onCreateEntry={(parentPath, type) => setEntryDialog({ mode: 'create', parentPath, type })}
         onRenameEntry={(entryPath, type) => setEntryDialog({ mode: 'rename', entry: {
