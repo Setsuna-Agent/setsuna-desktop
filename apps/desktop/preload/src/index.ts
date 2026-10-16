@@ -29,7 +29,8 @@ const runtime: DesktopRuntimeBridge = {
     const queuedPayloads: DesktopRuntimeEventPayload[] = [];
     const deliver = (payload: DesktopRuntimeEventPayload) => {
       if (payload.subscriptionId !== subscriptionId) return;
-      if (payload.batch?.events.length) onBatch(payload.batch);
+      // Resync snapshots have no events, but must reach the renderer before later deltas.
+      if (payload.batch) onBatch(payload.batch);
       if (payload.error) console.error(payload.error);
     };
     const listener = (_event: Electron.IpcRendererEvent, payload: DesktopRuntimeEventPayload) => {
