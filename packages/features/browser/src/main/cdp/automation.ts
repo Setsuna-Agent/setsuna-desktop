@@ -1,4 +1,5 @@
 import type { DesktopBrowserElement } from '../../contracts/index.js';
+import { hasActiveMediaCapture } from './media-capture.js';
 import {
   browserSnapshotComputedStyles,
   extractCdpPageObservation,
@@ -20,6 +21,8 @@ export type BrowserTypeOptions = {
 };
 
 export type BrowserAutomation = {
+  hasActiveMediaCapture(signal: AbortSignal): Promise<boolean>;
+  setPageFrozen(frozen: boolean): Promise<void>;
   click(ref: string, signal?: AbortSignal): Promise<string>;
   dispose(): void;
   hasText(text: string, signal?: AbortSignal): Promise<boolean>;
@@ -83,13 +86,14 @@ const waitTextComputedStyles = ['visibility', 'opacity'] as const;
  */
 export class ElectronBrowserCdpAutomation implements BrowserAutomation {
   private attachedByThisInstance = false;
-  private attaching: Promise<void> | null = null;
+  private attachmentReady: Promise<void> | null = null;
   private readonly childTargets = new Map<string, CdpTarget>();
   private disposed = false;
   private readonly references = new Map<string, NodeReference>();
 
   private readonly handleDetach = (..._args: unknown[]): void => {
     this.attachedByThisInstance = false;
+    this.attachmentReady = null;
     this.childTargets.clear();
     this.references.clear();
   };
@@ -245,9 +249,21 @@ export class ElectronBrowserCdpAutomation implements BrowserAutomation {
     this.references.clear();
   }
 
+  async setPageFrozen(frozen: boolean): Promise<void> {
+    await this.ensureAttached();
+    await this.send('Page.setWebLifecycleState', { state: frozen ? 'frozen' : 'active' });
+  }
+
+  async hasActiveMediaCapture(signal: AbortSignal): Promise<boolean> {
+    throwIfAborted(signal);
+    await this.ensureAttached();
+    return hasActiveMediaCapture(this.transport, () => this.targets().map(target => target.sessionId), signal);
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.attachmentReady = null;
     this.references.clear();
     this.childTargets.clear();
     this.transport.off('detach', this.handleDetach);
@@ -264,22 +280,27 @@ export class ElectronBrowserCdpAutomation implements BrowserAutomation {
 
   private async ensureAttached(): Promise<void> {
     if (this.disposed) throw new Error('Browser automation session has been disposed.');
-    if (this.transport.isAttached()) return;
-    if (!this.attaching) {
-      this.attaching = (async () => {
-        try {
+    // Device emulation can own the attachment. Target discovery still belongs to
+    // automation, and every caller must await it before using this session.
+    if (!this.attachmentReady) {
+      this.attachmentReady = (async () => {
+        if (!this.transport.isAttached()) {
           this.transport.attach(protocolVersion);
           this.attachedByThisInstance = true;
-          await this.configureAutoAttach();
-        } catch (error) {
-          this.attachedByThisInstance = false;
-          throw new Error(`Could not attach browser automation. Close DevTools for this tab and retry. ${errorMessage(error)}`);
         }
-      })().finally(() => {
-        this.attaching = null;
-      });
+        await this.configureAutoAttach();
+      })();
     }
-    await this.attaching;
+    const ready = this.attachmentReady;
+    try {
+      await ready;
+      if (this.disposed || this.attachmentReady !== ready || !this.transport.isAttached()) {
+        throw new Error('Browser automation session changed during initialization.');
+      }
+    } catch (error) {
+      if (this.attachmentReady === ready) this.attachmentReady = null;
+      throw new Error(`Could not initialize browser automation. Close DevTools for this tab and retry. ${errorMessage(error)}`);
+    }
   }
 
   private async configureAutoAttach(sessionId?: string): Promise<void> {

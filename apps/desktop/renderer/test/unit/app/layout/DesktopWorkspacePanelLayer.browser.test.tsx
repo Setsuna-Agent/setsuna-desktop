@@ -30,6 +30,8 @@ it.each(['ordinary message', 'annotation'])('retains the guest, saved notes and 
   };
   const second = { ...target, id: '69a247d0-0ea1-4d87-9d27-701e850138ee', selector: '#second' };
   const bridge = {
+    getPageSleepState: vi.fn(async () => null), onPageSleepStateChanged: () => () => undefined,
+    setPageSuspended: vi.fn(async () => ({ suspended: false })),
     getPasswordState: vi.fn(async () => null), onPasswordState: () => () => undefined,
     getExtensions: vi.fn(async () => []), onExtensionsChanged: () => () => undefined,
     openExtension: vi.fn(async () => true), removeExtension: vi.fn(async () => true),

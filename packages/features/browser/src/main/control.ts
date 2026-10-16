@@ -11,6 +11,8 @@ import type {
   BrowserAnnotationMarkers,
   BrowserAnnotationAnchor,
   BrowserAnnotationTarget,
+  BrowserPageSleepState,
+  BrowserPageSleepResult,
 } from '../contracts/index.js';
 import type { WebContents } from 'electron';
 import { BROWSER_IPC_CHANNELS } from '../contracts/bridge.js';
@@ -29,16 +31,20 @@ import { BrowserAnnotationSession } from './annotations/session.js';
 import { BrowserPasswordSession } from './passwords/session.js';
 import type { BrowserPasswordStore } from './passwords/store.js';
 import type { BrowserPreferences } from '../contracts/settings.js';
+import type { BrowserPageLifecycle } from './page-lifecycle.js';
+import { createBrowserPageLifecycle } from './page-lifecycle-session.js';
 
 type RegisteredBrowserTab = {
   windowOpenMode: BrowserWindowOpenMode;
   annotations: BrowserAnnotationSession;
   passwords: BrowserPasswordSession | null;
   automation: BrowserAutomation;
+  lifecycle: BrowserPageLifecycle;
   contents: WebContents;
   defaultUserAgent: string;
   deviceEmulator: BrowserDeviceEmulator;
   destroyedListener: () => void;
+  processGoneListener: () => void;
   navigationListener: (_event: unknown, _url: string, _inPlace: boolean, isMainFrame: boolean) => void;
 };
 
@@ -97,25 +103,39 @@ export class DesktopBrowserController implements BrowserControlExecutor {
       if (entry.contents.id === contents.id) this.unregisterTab(existingId, contents.id);
     }
     const automation = this.createAutomation(contents);
+    const lifecycle = createBrowserPageLifecycle(normalizedTabId, contents, automation);
     const annotations = new BrowserAnnotationSession(contents);
     const deviceEmulator = this.createDeviceEmulator(contents);
     const defaultUserAgent = contents.session.getUserAgent();
     const destroyedListener = () => this.unregisterTab(normalizedTabId, contents.id);
+    const processGoneListener = () => {
+      this.invalidateSnapshot(normalizedTabId, automation);
+      annotations.dispose();
+      // The WebContents survives process termination and can be reloaded. Clear
+      // frozen state without attaching CDP to a renderer that no longer exists.
+      lifecycle.reset();
+    };
     const navigationListener = (_event: unknown, _url: string, _inPlace: boolean, isMainFrame: boolean) => {
       this.invalidateSnapshot(normalizedTabId, automation);
-      if (isMainFrame !== false) annotations.dispose();
+      if (isMainFrame !== false) {
+        annotations.dispose();
+        void lifecycle.setSuspended(false);
+      }
     };
     contents.once('destroyed', destroyedListener);
+    contents.on('render-process-gone', processGoneListener);
     contents.on('did-start-navigation', navigationListener);
     this.tabs.set(normalizedTabId, {
       windowOpenMode,
       annotations,
       passwords: this.passwordStore ? new BrowserPasswordSession(normalizedTabId, contents, this.passwordStore, this.preferences) : null,
       automation,
+      lifecycle,
       contents,
       defaultUserAgent,
       deviceEmulator,
       destroyedListener,
+      processGoneListener,
       navigationListener,
     });
     this.snapshotRevisions.set(normalizedTabId, 0);
@@ -130,7 +150,9 @@ export class DesktopBrowserController implements BrowserControlExecutor {
     const entry = this.tabs.get(tabId);
     if (!entry || (expectedWebContentsId !== undefined && entry.contents.id !== expectedWebContentsId)) return;
     entry.contents.off('destroyed', entry.destroyedListener);
+    entry.contents.off('render-process-gone', entry.processGoneListener);
     entry.contents.off('did-start-navigation', entry.navigationListener);
+    entry.lifecycle.dispose();
     entry.automation.dispose();
     entry.annotations.dispose();
     entry.passwords?.dispose();
@@ -158,6 +180,16 @@ export class DesktopBrowserController implements BrowserControlExecutor {
 
   forgetWindow(senderId: number): void { this.selectedTabs.delete(senderId); }
 
+  getPageSleepState(tabId: string, senderId: number): BrowserPageSleepState | null {
+    const entry = this.annotationTab(tabId, senderId);
+    return entry ? { tabId, suspended: entry.lifecycle.isSuspended } : null;
+  }
+
+  setPageSuspended(tabId: string, senderId: number, suspended: boolean, signal?: AbortSignal): Promise<BrowserPageSleepResult> {
+    const entry = this.annotationTab(tabId, senderId);
+    return entry?.lifecycle.setSuspended(suspended, signal) ?? Promise.resolve({ suspended: false, blocker: 'unavailable' });
+  }
+
   private activeTabId(): string | null {
     const senderId = this.focusedSenderId ? this.focusedSenderId() : this.lastActiveSenderId;
     return senderId !== null && this.activeTabContents(senderId) ? this.selectedTabs.get(senderId)! : null;
@@ -183,19 +215,23 @@ export class DesktopBrowserController implements BrowserControlExecutor {
   pickAnnotation(tabId: string, senderId: number, signal?: AbortSignal): Promise<BrowserAnnotationTarget | null> {
     const entry = this.annotationTab(tabId, senderId);
     if (!entry) return Promise.reject(new Error('Browser annotation tab is unavailable.'));
-    return entry.annotations.pick(signal);
+    return entry.lifecycle.run(() => entry.annotations.pick(signal));
   }
 
   cancelAnnotation(tabId: string, senderId: number): Promise<void> {
-    return this.annotationTab(tabId, senderId)?.annotations.cancel() ?? Promise.resolve();
+    const entry = this.annotationTab(tabId, senderId);
+    return entry && !entry.lifecycle.isSuspended ? entry.annotations.cancel() : Promise.resolve();
   }
 
   setAnnotationMarkers(tabId: string, senderId: number, markers: BrowserAnnotationMarkers, signal?: AbortSignal): Promise<boolean> {
-    return this.annotationTab(tabId, senderId)?.annotations.sync(markers, signal) ?? Promise.resolve(false);
+    const entry = this.annotationTab(tabId, senderId);
+    // Marker/anchor refreshes follow viewport visibility and must never wake a sleeping page.
+    return entry && !entry.lifecycle.isSuspended ? entry.lifecycle.run(() => entry.annotations.sync(markers, signal)) : Promise.resolve(false);
   }
 
   getAnnotationAnchor(tabId: string, senderId: number, annotationId: string, signal?: AbortSignal): Promise<BrowserAnnotationAnchor | null> {
-    return this.annotationTab(tabId, senderId)?.annotations.anchor(annotationId, signal) ?? Promise.resolve(null);
+    const entry = this.annotationTab(tabId, senderId);
+    return entry && !entry.lifecycle.isSuspended ? entry.lifecycle.run(() => entry.annotations.anchor(annotationId, signal)) : Promise.resolve(null);
   }
 
   private annotationTab(tabId: string, senderId: number): RegisteredBrowserTab | null {
@@ -207,7 +243,7 @@ export class DesktopBrowserController implements BrowserControlExecutor {
     const entry = this.annotationTab(tabId, senderId);
     if (!entry) return null;
     // Capture only the guest surface: the host's editor and dock are not part of this image.
-    return entry.annotations.captureScreenshots(annotationIds, () => captureBrowserScreenshot(entry.contents), signal).catch(() => null);
+    return entry.lifecycle.run(() => entry.annotations.captureScreenshots(annotationIds, () => captureBrowserScreenshot(entry.contents), signal)).catch(() => null);
   }
 
   tabIdForWebContents(webContentsId: number): string | null {
@@ -217,7 +253,7 @@ export class DesktopBrowserController implements BrowserControlExecutor {
     return null;
   }
 
-  reloadTab(tabId: string, mode: BrowserReloadMode): boolean {
+  async reloadTab(tabId: string, mode: BrowserReloadMode): Promise<boolean> {
     let entry: RegisteredBrowserTab | undefined;
     try {
       entry = this.tabs.get(normalizeTabId(tabId));
@@ -226,8 +262,11 @@ export class DesktopBrowserController implements BrowserControlExecutor {
     }
     if (!entry || entry.contents.isDestroyed()) return false;
     try {
-      if (mode === 'hard') entry.contents.reloadIgnoringCache();
-      else entry.contents.reload();
+      const target = entry;
+      await target.lifecycle.run(() => {
+        if (mode === 'hard') target.contents.reloadIgnoringCache();
+        else target.contents.reload();
+      });
       return true;
     } catch {
       // 快捷键到达主进程前，标签页可能已经关闭或被替换。
@@ -244,7 +283,8 @@ export class DesktopBrowserController implements BrowserControlExecutor {
     }
     if (!entry || entry.contents.isDestroyed()) return null;
 
-    return captureBrowserScreenshot(entry.contents).catch(() => null);
+    const target = entry;
+    return target.lifecycle.run(() => captureBrowserScreenshot(target.contents)).catch(() => null);
   }
 
   async setDeviceEmulation(tabId: string, emulation: DesktopBrowserDeviceEmulation | null): Promise<boolean> {
@@ -292,6 +332,18 @@ export class DesktopBrowserController implements BrowserControlExecutor {
   }
 
   async execute(command: DesktopBrowserControlCommand, signal?: AbortSignal): Promise<DesktopBrowserControlResult> {
+    throwIfAborted(signal);
+    if (command.kind === 'open' || command.kind === 'tabs' || command.kind === 'extensions' || command.kind === 'install-extension') {
+      return this.executeCommand(command, signal);
+    }
+    const [tabId, entry] = this.resolveTab(command.tabId);
+    return entry.lifecycle.run(() => {
+      if (this.tabs.get(tabId) !== entry) throw new Error('Browser tab was replaced.');
+      return this.executeCommand({ ...command, tabId }, signal);
+    });
+  }
+
+  private async executeCommand(command: DesktopBrowserControlCommand, signal?: AbortSignal): Promise<DesktopBrowserControlResult> {
     throwIfAborted(signal);
     switch (command.kind) {
       case 'extensions':

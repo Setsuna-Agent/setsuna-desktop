@@ -14,6 +14,7 @@ import type {
   RuntimeActivityTaskTarget,
   RuntimeActivityTaskTermination,
 } from './types.js';
+import type { ProcessResourceSnapshot } from './resources.js';
 
 export type RuntimeActivityThreadSummary = Readonly<{
   archived: boolean;
@@ -57,6 +58,7 @@ export const runtimeActivityRuntimeHostCapability: CapabilityToken<RuntimeActivi
 });
 
 export interface RuntimeActivityRendererService {
+  sampleResources(options?: Readonly<{ signal?: AbortSignal }>): Promise<ProcessResourceSnapshot>;
   list(options?: Readonly<{ signal?: AbortSignal }>): Promise<RuntimeActivityList>;
   listServices(
     input: RuntimeActivityServiceListTarget,

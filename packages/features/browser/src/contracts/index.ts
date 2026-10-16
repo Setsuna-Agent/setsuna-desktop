@@ -1,4 +1,5 @@
 export * from './bridge.js';
+export * from './page-lifecycle.js';
 export * from './bookmarks.js';
 export * from './import.js';
 export * from './settings.js';

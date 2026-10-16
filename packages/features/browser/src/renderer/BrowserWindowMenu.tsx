@@ -14,6 +14,9 @@ export function BrowserWindowMenu({
   disabled,
   hidden = false,
   loading,
+  suspended,
+  sleepDisabled,
+  onToggleSleep,
   menuButtonRef,
   onOpenDevTools,
   onCaptureScreenshot,
@@ -33,6 +36,9 @@ export function BrowserWindowMenu({
   disabled: boolean;
   hidden?: boolean;
   loading: boolean;
+  suspended: boolean;
+  sleepDisabled: boolean;
+  onToggleSleep: () => void;
   menuButtonRef: RefObject<HTMLElement>;
   onOpenDevTools: () => void;
   onCaptureScreenshot: () => void;
@@ -69,7 +75,10 @@ export function BrowserWindowMenu({
         <Button variant="ghost" type="button" disabled={disabled} role="menuitem" onClick={() => runAndClose(onReload)}>
           {translate(loading ? 'feature.browser.stop' : 'feature.browser.reload')}
         </Button>
-        <Button variant="ghost" type="button" disabled={disabled} role="menuitem" onClick={() => runAndClose(onPrint)}>
+        <Button variant="ghost" type="button" disabled={disabled || loading || sleepDisabled || capturingScreenshot} role="menuitem" onClick={() => runAndClose(onToggleSleep)}>
+          {translate(suspended ? 'feature.browser.sleep.wake' : 'feature.browser.sleep.action')}
+        </Button>
+        <Button variant="ghost" type="button" disabled={disabled || suspended} role="menuitem" onClick={() => runAndClose(onPrint)}>
           {translate('feature.browser.print')}
         </Button>
         <Button variant="ghost"
@@ -112,7 +121,7 @@ export function BrowserWindowMenu({
           </span>
         </span>
         <span className="desktop-browser-window-menu__separator" role="separator" />
-        <Button variant="ghost" type="button" disabled={disabled} role="menuitem" onClick={() => runAndClose(onOpenDevTools)}>
+        <Button variant="ghost" type="button" disabled={disabled || suspended} role="menuitem" onClick={() => runAndClose(onOpenDevTools)}>
           {translate('feature.browser.openDevTools')}
         </Button>
         {onOpenSettings ? <>

@@ -17,9 +17,9 @@ export function BrowserLoadErrorPage({ error, onReload, translate, url }: {
     <div className="desktop-browser-load-error">
       <section className="desktop-browser-load-error__content" role="alert" aria-labelledby={titleId}>
         <BrowserFeatureIcon className="desktop-browser-load-error__icon" size={28} />
-        <h1 id={titleId}>{translate('feature.browser.loadFailed')}</h1>
-        <p className="desktop-browser-load-error__reason">{translate(`feature.browser.error.${reason}`, { host })}</p>
-        {reason !== 'certificate' ? (
+        <h1 id={titleId}>{translate(reason === 'processGone' ? 'feature.browser.processGone' : 'feature.browser.loadFailed')}</h1>
+        {reason !== 'processGone' ? <p className="desktop-browser-load-error__reason">{translate(`feature.browser.error.${reason}`, { host })}</p> : null}
+        {reason !== 'certificate' && reason !== 'processGone' ? (
           <div className="desktop-browser-load-error__suggestions">
             <p>{translate('feature.browser.error.try')}</p>
             <ul>
@@ -28,7 +28,7 @@ export function BrowserLoadErrorPage({ error, onReload, translate, url }: {
             </ul>
           </div>
         ) : null}
-        {code ? <p className="desktop-browser-load-error__code">{code}</p> : null}
+        {code && reason !== 'processGone' ? <p className="desktop-browser-load-error__code">{code}</p> : null}
         <Button className="desktop-browser-load-error__reload" onClick={onReload}>
           {translate('feature.browser.error.reload')}
         </Button>

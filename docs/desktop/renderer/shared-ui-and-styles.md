@@ -42,6 +42,7 @@
 - 插件配置表单复用 `settings-form.css` 的 `sd-settings-form`：浅灰圆角卡片、统一输入控件间距、图标底板和中性分隔线。图片生成、视觉识别与声明式插件设置共用这层外观；各 Feature 只维护字段排布、业务状态和结果展示，不再各自绘制外框。
 - `I18nProvider` 同步共享控件的中英文标签；外观和字体继续由宿主偏好控制。
 - 业务专用内容仍留在所属 Feature，弹窗外壳使用共享 `Dialog`，不要复制 backdrop、Escape 监听或 focus trap。
+- 标题同排的页签或操作使用 `Dialog.headerActions`，与标题保持独立语义；正文提交操作继续放在 `footer`。
 - 确认操作统一使用居中的 `ConfirmDialog`：按钮入口使用 `ConfirmDialogTrigger`，hook/流程入口使用 `useConfirm` 并等待结果。`I18nProvider` 挂载 `ConfirmationProvider`；调用方卸载会取消等待中的确认。不要使用原生 `window.confirm` / `alert`、Electron message box 或按钮旁的确认气泡。
 - 确认组件负责危险按钮、取消、执行中禁用和错误展示，沿用共享弹窗的边距、透明 footer 和初始焦点。原生文件/目录选择器仍由 Electron 持有。
 

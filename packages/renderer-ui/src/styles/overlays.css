@@ -176,6 +176,21 @@
   line-height: 24px;
 }
 
+.sd-dialog__header-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.sd-dialog__header-row > .sd-dialog__title {
+  flex-shrink: 0;
+}
+
+.sd-dialog__header-actions {
+  min-width: 0;
+  margin-left: auto;
+}
+
 .sd-dialog__description {
   margin-top: 6px;
   font-size: 12px;

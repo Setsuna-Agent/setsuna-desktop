@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   ElectronBrowserCdpAutomation,
   type BrowserDebuggerTransport,
@@ -108,7 +108,7 @@ class FakeDebuggerTransport extends EventEmitter implements BrowserDebuggerTrans
   }
 
   attach(): void { this.attached = true; }
-  detach(): void { this.attached = false; }
+  detach(): void { this.attached = false; this.emit('detach'); }
   isAttached(): boolean { return this.attached; }
 
   override on(event: string, listener: (...args: unknown[]) => void): this {
@@ -179,6 +179,30 @@ describe('extractCdpPageObservation', () => {
 });
 
 describe('ElectronBrowserCdpAutomation', () => {
+  it('initializes targets on a shared debugger and waits for setup before concurrent operations', async () => {
+    const transport = new FakeDebuggerTransport(new SnapshotFixture());
+    transport.attach();
+    const automation = new ElectronBrowserCdpAutomation(transport);
+    let initialized!: () => void;
+    const send = vi.spyOn(transport, 'sendCommand').mockImplementationOnce(() => new Promise(resolve => {
+      initialized = () => resolve({});
+    }));
+    const snapshot = automation.snapshot(1, 20);
+    const freezing = automation.setPageFrozen(true);
+    await Promise.resolve();
+    expect(send.mock.calls.map(([method]) => method)).toEqual(['Target.setAutoAttach']);
+    initialized();
+    await Promise.all([snapshot, freezing]);
+    expect(send.mock.calls.filter(([method]) => method === 'Target.setAutoAttach')).toHaveLength(1);
+
+    transport.detach();
+    transport.attach();
+    await automation.snapshot(2, 20);
+    expect(send.mock.calls.filter(([method]) => method === 'Target.setAutoAttach')).toHaveLength(2);
+    automation.dispose();
+    expect(transport.isAttached()).toBe(true);
+  });
+
   it('attaches lazily and dispatches real pointer, wheel, text, and keyboard input', async () => {
     const fixture = new SnapshotFixture();
     const transport = new FakeDebuggerTransport(fixture);

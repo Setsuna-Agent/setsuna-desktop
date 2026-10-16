@@ -62,6 +62,7 @@ import { useBrowserBookmarks } from './useBrowserBookmarks.js';
 import { useBrowserBackgroundViewport } from './useBrowserBackgroundViewport.js';
 import { useBrowserHistory } from './useBrowserHistory.js';
 import { useBrowserScreenshot } from './useBrowserScreenshot.js';
+import { useBrowserPageSleep } from './useBrowserPageSleep.js';
 import { BrowserAnnotationPanel } from './annotations/BrowserAnnotationPanel.js';
 import { useBrowserAnnotations } from './annotations/useBrowserAnnotations.js';
 import type { BrowserAnnotationSendHandler } from '../contracts/index.js';
@@ -212,11 +213,12 @@ export function BrowserPanel({
     onAttachment: onScreenshotAttachment,
     translate,
   });
+  const pageSleep = useBrowserPageSleep({ bridge, tabId: tab.id, available: !tab.showingHome && !tab.error, hidden, notify, translate });
   const annotations = useBrowserAnnotations({
-    bridge, tabId: tab.id, url: tab.url, available: !tab.showingHome && !tab.loading,
-    hidden, notify, translate, onSend: onSendAnnotations,
+    bridge, tabId: tab.id, url: tab.url, available: !tab.showingHome && !tab.loading && !tab.error && !pageSleep.suspended,
+    hidden: hidden || pageSleep.suspended, notify, translate, onSend: onSendAnnotations,
   });
-  const find = useBrowserFind({ available: !hidden && !tab.showingHome, bridge, notify, tabId: tab.id, translate, webviewRef });
+  const find = useBrowserFind({ available: !hidden && !tab.showingHome && !tab.error && !pageSleep.suspended, bridge, notify, tabId: tab.id, translate, webviewRef });
   const pageChanged = useCallback(() => { annotations.clear(); find.reset(); }, [annotations.clear, find.reset]);
 
   const updateTab = useCallback((tabId: string, patch: Partial<BrowserTab>) => {
@@ -517,6 +519,9 @@ export function BrowserPanel({
           capturingScreenshot={screenshotCapturing}
           deviceToolbarVisible={tab.deviceEmulation.enabled}
           disabled={tab.showingHome}
+          suspended={pageSleep.suspended}
+          sleepDisabled={pageSleep.pending || Boolean(tab.error)}
+          onToggleSleep={() => void pageSleep.change(!pageSleep.suspended)}
           key={tab.id}
           loading={tab.loading}
           zoomFactor={tab.zoomFactor}
@@ -553,6 +558,7 @@ export function BrowserPanel({
           ) : (
             <BrowserWebview
               active={!hidden}
+              suspended={pageSleep.suspended}
               bridge={bridge}
               tab={tab}
               newTabUrl={extensions.newTabUrl}
@@ -567,9 +573,14 @@ export function BrowserPanel({
             />
           )}
           {tab.error ? <BrowserLoadErrorPage error={tab.error} url={tab.url} onReload={reload} translate={translate} /> : null}
+          {pageSleep.suspended ? <div className="desktop-browser-sleep">
+            <Button variant="secondary" disabled={pageSleep.pending} onClick={() => void pageSleep.change(false)}>
+              {translate('feature.browser.sleep.wake')}
+            </Button>
+          </div> : null}
         </div>
         <BrowserAnnotationPanel state={annotations} translate={translate} bridge={bridge} tabId={tab.id}
-          hidden={hidden} surfaceRef={annotationSurfaceRef} webviewRef={webviewRef} />
+          hidden={hidden || pageSleep.suspended} surfaceRef={annotationSurfaceRef} webviewRef={webviewRef} />
         {records.kind && records.pinned ? <aside className="browser-records__sidebar">
           <BrowserRecordsManager key={records.kind} kind={records.kind} pinned translate={translate}
             currentPage={showingNewTab ? undefined : { title: tab.title, url: tab.url }}
@@ -585,6 +596,7 @@ export function BrowserPanel({
 
 function BrowserWebview({
   active,
+  suspended,
   bridge,
   onDeviceEmulationFailure,
   onPageChange,
@@ -598,6 +610,7 @@ function BrowserWebview({
   windowOpenMode,
 }: {
   active: boolean;
+  suspended: boolean;
   bridge: BrowserDesktopBridge | null;
   onDeviceEmulationFailure: (error?: unknown) => void;
   onPageChange: () => void;
@@ -673,6 +686,10 @@ function BrowserWebview({
       if (event.errorCode === -3 || event.isMainFrame === false) return;
       onUpdate(tab.id, { error: event.errorDescription || translate('feature.browser.cannotLoad'), loading: false });
     };
+    const handleProcessGone = () => {
+      onPageChange();
+      onUpdate(tab.id, { error: 'ERR_RENDER_PROCESS_GONE', loading: false });
+    };
     node.addEventListener('did-start-navigation', handleNavigationStart);
     node.addEventListener('did-start-loading', handleStart);
     node.addEventListener('did-stop-loading', handleStop);
@@ -681,6 +698,7 @@ function BrowserWebview({
     node.addEventListener('page-title-updated', handleTitle);
     node.addEventListener('page-favicon-updated', handleFavicon);
     node.addEventListener('did-fail-load', handleFailure);
+    node.addEventListener('render-process-gone', handleProcessGone);
     return () => {
       faviconCoordinator.dispose();
       node.removeEventListener('did-start-navigation', handleNavigationStart);
@@ -691,6 +709,7 @@ function BrowserWebview({
       node.removeEventListener('page-title-updated', handleTitle);
       node.removeEventListener('page-favicon-updated', handleFavicon);
       node.removeEventListener('did-fail-load', handleFailure);
+      node.removeEventListener('render-process-gone', handleProcessGone);
     };
   }, [bridge, newTabUrl, onPageChange, onUpdate, onVisit, tab.id, tab.initialUrl, translate]);
 
@@ -780,7 +799,7 @@ function BrowserWebview({
           nodeRef.current = webview;
           onRef(webview);
         }}
-        className="desktop-browser-webview"
+        className={`desktop-browser-webview${suspended ? ' is-suspended' : ''}`}
         partition={DESKTOP_BROWSER_PARTITION}
         src={windowOpenMode === 'current-tab' ? 'about:blank' : tab.initialUrl}
       />

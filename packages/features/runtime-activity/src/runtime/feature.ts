@@ -11,8 +11,10 @@ import {
   runtimeActivityRuntimeHostCapability,
   stopRuntimeActivityService,
   stopRuntimeActivityTask,
+  sampleRuntimeResources,
 } from '../contracts/index.js';
 import { projectRuntimeActivities } from './runtime-activity.js';
+import { sampleRuntimeProcess } from './resources.js';
 
 const dependencies = defineRuntimeDependencies({
   host: requiredCapability(runtimeActivityRuntimeHostCapability),
@@ -24,6 +26,7 @@ export const runtimeActivityRuntimeFeature = defineRuntimeFeature({
   dependencies,
   setup(context) {
     const { host, routes } = context.dependencies;
+    routes.register(context.scope, sampleRuntimeResources, sampleRuntimeProcess);
     routes.register(context.scope, listRuntimeActivities, () => projectRuntimeActivities(host));
     routes.register(context.scope, listRuntimeActivityServices, async ({ threadId }) => ({
       services: await host.listBackgroundShellProcesses(threadId),

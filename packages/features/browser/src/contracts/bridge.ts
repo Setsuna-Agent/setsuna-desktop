@@ -4,6 +4,7 @@ import type { BrowserPasswordBridge } from './passwords.js';
 import type { BrowserExtensionsBridge } from './extensions.js';
 import type { BrowserSettingsBridge } from './settings.js';
 import type { BrowserImportBridge } from './import.js';
+import type { BrowserPageSleepResult, BrowserPageSleepState } from './page-lifecycle.js';
 
 export const BROWSER_IPC_CHANNELS = Object.freeze({
   getExtensions: 'browser:get-extensions',
@@ -37,6 +38,9 @@ export const BROWSER_IPC_CHANNELS = Object.freeze({
   runContextMenuAction: 'browser:run-context-menu-action',
   openNewTab: 'browser:open-new-tab',
   reloadTab: 'browser:reload-tab',
+  getPageSleepState: 'browser:get-page-sleep-state',
+  setPageSuspended: 'browser:set-page-suspended',
+  pageSleepStateChanged: 'browser:page-sleep-state-changed',
   registerTab: 'browser:register-tab',
   resolveFavicon: 'browser:resolve-favicon',
   getWebsiteFavicon: 'browser:get-website-favicon',
@@ -79,6 +83,9 @@ export interface BrowserDesktopBridge extends BrowserPasswordBridge, BrowserExte
   captureAnnotationScreenshots(tabId: string, annotationIds: readonly string[]): Promise<DesktopBrowserScreenshot[] | null>;
   captureScreenshot(tabId: string): Promise<DesktopBrowserScreenshot | null>;
   reloadTab(tabId: string, mode: BrowserReloadMode): Promise<boolean>;
+  getPageSleepState(tabId: string): Promise<BrowserPageSleepState | null>;
+  setPageSuspended(tabId: string, suspended: boolean): Promise<BrowserPageSleepResult>;
+  onPageSleepStateChanged(callback: (state: BrowserPageSleepState) => void): () => void;
   resolveFavicon(webContentsId: number, faviconUrls: readonly string[]): Promise<string | null>;
   getWebsiteFavicon(url: string): Promise<string | null>;
   registerTab(tabId: string, webContentsId: number, windowOpenMode?: BrowserWindowOpenMode): Promise<boolean>;

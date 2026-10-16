@@ -24,10 +24,11 @@ import { resolveRuntimeActivityLoadView } from './runtime-activity-model.js';
 import {
   useRuntimeActivitySnapshot,
 } from './use-runtime-activity-snapshot.js';
-import type { RuntimeActivityRendererService } from '../contracts/index.js';
+import type { RuntimeActivityDesktopBridge, RuntimeActivityRendererService } from '../contracts/index.js';
+import { RuntimeResourcePanel } from './RuntimeResourcePanel.js';
 import './runtime-activity.css';
 
-type RuntimeActivityTab = 'tasks' | 'services';
+type RuntimeActivityTab = 'tasks' | 'services' | 'resources';
 
 export type RuntimeActivityUi = Readonly<{
   Button: ComponentType<SettingsButtonProps>;
@@ -41,6 +42,7 @@ export type RuntimeActivityCenterProps = Readonly<{
   projects: readonly Readonly<{ id: string; name: string }>[];
   returnFocusRef: RefObject<HTMLButtonElement>;
   service: RuntimeActivityRendererService;
+  desktopBridge: RuntimeActivityDesktopBridge | null;
   translate: RendererTranslate;
   ui: RuntimeActivityUi;
 }>;
@@ -52,6 +54,7 @@ export function RuntimeActivityCenter({
   projects,
   returnFocusRef,
   service,
+  desktopBridge,
   translate: t,
   ui: { Button },
 }: RuntimeActivityCenterProps) {
@@ -89,18 +92,9 @@ export function RuntimeActivityCenter({
   }, [closeAndRestoreFocus, onOpenThread]);
 
   return (
-    <Dialog title={t('feature.runtimeActivity.title')} description={t('feature.runtimeActivity.description')}
-      width={680} className="runtime-activity-dialog" onClose={closeAndRestoreFocus}
-      footer={error && snapshot ? (
-        <div className="runtime-activity-dialog__footer">
-          <span className="runtime-activity-dialog__status" role="status" title={error}>
-            {t('feature.runtimeActivity.refreshFailed', { error })}
-          </span>
-          <Button variant="ghost" onClick={() => void refresh(true)}>
-            {t('feature.runtimeActivity.retry')}
-          </Button>
-        </div>
-      ) : null}>
+    <Dialog title={t('feature.runtimeActivity.title')}
+      width={960} className="runtime-activity-dialog" onClose={closeAndRestoreFocus}
+      headerActions={
         <div
           className="runtime-activity-tabs"
           role="tablist"
@@ -121,16 +115,30 @@ export function RuntimeActivityCenter({
             label={t('feature.runtimeActivity.services.title')}
             onSelect={() => setActiveTab('services')}
           />
+          <RuntimeActivityTabButton active={activeTab === 'resources'} count={0} id="resources"
+            label={t('feature.runtimeActivity.resources.title')} onSelect={() => setActiveTab('resources')} />
         </div>
-
+      }
+      footer={activeTab !== 'resources' && error && snapshot ? (
+        <div className="runtime-activity-dialog__footer">
+          <span className="runtime-activity-dialog__status" role="status" title={error}>
+            {t('feature.runtimeActivity.refreshFailed', { error })}
+          </span>
+          <Button variant="ghost" onClick={() => void refresh(true)}>
+            {t('feature.runtimeActivity.retry')}
+          </Button>
+        </div>
+      ) : null}>
         <div
-          aria-busy={loading}
+          aria-busy={activeTab !== 'resources' && loading}
           aria-labelledby={`runtime-activity-tab-${activeTab}`}
           className="runtime-activity-dialog__body"
           id={`runtime-activity-panel-${activeTab}`}
           role="tabpanel"
         >
-          {loadView === 'loading' ? (
+          {activeTab === 'resources' ? (
+            <RuntimeResourcePanel desktopBridge={desktopBridge} service={service} translate={t} />
+          ) : loadView === 'loading' ? (
             <div className="runtime-activity-empty">
               <LoaderCircle className="is-spinning" size={18} />
               <span>{t('feature.runtimeActivity.loading')}</span>

@@ -1,4 +1,6 @@
 import { notificationsPreloadFeature } from '@setsuna-desktop/feature-notifications/preload';
+import { runtimeActivityPreloadFeature } from '@setsuna-desktop/feature-runtime-activity/preload';
+import type { RuntimeActivityPreloadContribution } from '@setsuna-desktop/feature-runtime-activity/contracts';
 import type { NotificationsPreloadContribution } from '@setsuna-desktop/feature-notifications/contracts';
 import type { SetsunaDesktopBridge } from '@setsuna-desktop/contracts';
 import {
@@ -27,6 +29,7 @@ import { windowsSandboxPreloadFeature } from '@setsuna-desktop/feature-windows-s
 
 export type DesktopPreloadBridge = SetsunaDesktopBridge
   & NotificationsPreloadContribution
+  & RuntimeActivityPreloadContribution
   & BrowserPreloadBridgeContribution
   & ComputerPreloadContribution
   & NetworkProxyPreloadBridgeContribution
@@ -49,6 +52,7 @@ const desktopPreloadBridgeKeys = [
   'notifications',
   'plugins',
   'runtime',
+  'runtimeActivity',
   'terminal',
   'updater',
   'webdavSync',
@@ -61,6 +65,7 @@ const preloadFeatures = definePreloadFeatureHost<DesktopPreloadBridge>({
   bridgeKeys: desktopPreloadBridgeKeys,
   features: [
     notificationsPreloadFeature,
+    runtimeActivityPreloadFeature,
     browserPreloadFeature,
     computerPreloadFeature,
     networkProxyPreloadFeature,

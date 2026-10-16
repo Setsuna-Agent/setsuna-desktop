@@ -10,6 +10,8 @@ import type {
 import { DesktopBrowserController } from '../../src/main/control.js';
 
 class FakeAutomation implements BrowserAutomation {
+  async hasActiveMediaCapture(_signal: AbortSignal): Promise<boolean> { return false; }
+  async setPageFrozen(_frozen: boolean): Promise<void> {}
   readonly calls: string[] = [];
   disposed = false;
   invalidated = 0;
@@ -363,16 +365,16 @@ describe('DesktopBrowserController', () => {
     capture.mockRestore();
   });
 
-  it('reloads a registered tab with the requested cache policy', () => {
+  it('reloads a registered tab with the requested cache policy', async () => {
     const contents = new FakeWebContents(14);
     const controller = new DesktopBrowserController({ createAutomation: () => new FakeAutomation() });
     controller.registerTab('tab-1', asWebContents(contents));
 
     expect(controller.tabIdForWebContents(contents.id)).toBe('tab-1');
     expect(controller.tabIdForWebContents(999)).toBeNull();
-    expect(controller.reloadTab('tab-1', 'normal')).toBe(true);
-    expect(controller.reloadTab('tab-1', 'hard')).toBe(true);
-    expect(controller.reloadTab('missing', 'normal')).toBe(false);
+    expect(await controller.reloadTab('tab-1', 'normal')).toBe(true);
+    expect(await controller.reloadTab('tab-1', 'hard')).toBe(true);
+    expect(await controller.reloadTab('missing', 'normal')).toBe(false);
     expect(contents.reloadCount).toBe(1);
     expect(contents.hardReloadCount).toBe(1);
   });

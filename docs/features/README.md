@@ -44,7 +44,7 @@ packages/features/<feature>/
 | `plugin-management` | `plugin-management` | R | R | B | R | Plugin catalog、安装事务、Hook/extension trust 与管理状态 |
 | `pull-requests` | `pull-requests` | O | — | — | O | 已添加 GitHub 仓库的 PR 聚合、评论、checks、Diff 与合并操作 |
 | `review` | `desktop-review` | R | R | B | R | Agent Review 策略/模型设置，以及 Git diff、stage/discard、commit message 与 Review UI |
-| `runtime-activity` | `runtime-activity` | R | — | — | R | 活跃 turn、approval、后台 shell/service 的统一活动中心 |
+| `runtime-activity` | `runtime-activity` | R | O | R | R | 活跃 turn、approval、后台 shell/service 与按需进程资源观察 |
 | `side-conversation` | `side-conversation` | O | — | — | O | 临时侧边线程的快照创建、策略边界、崩溃清理与 renderer 创建生命周期 |
 | `skills` | `skills` | R | — | — | R | Skill catalog、CRUD、extra roots 与 MCP 依赖安装 |
 | `terminal` | `terminal` | — | R | B | R | PTY session、事件恢复、Terminal pane |
