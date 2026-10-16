@@ -1,0 +1,8 @@
+/* OpenUI's default highlighter stays dark in both app themes. Keep the copy
+ * button's tokens local so the light app palette cannot hide its icon. */
+.openui-code-block-wrapper > .openui-code-block-copy-button {
+  --openui-text-neutral-primary: var(--openui-text-white);
+  --openui-border-interactive: rgb(255 255 255 / 24%);
+  --openui-highlight: rgb(255 255 255 / 12%);
+  --openui-text-success-primary: var(--openui-text-success-inverted);
+}
