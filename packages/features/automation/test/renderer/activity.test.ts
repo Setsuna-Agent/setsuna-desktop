@@ -16,9 +16,11 @@ it('merges runs from every task by execution time and retains the task and conve
     { ...task('b', [run('middle', '2026-09-30T02:00:00.000Z', 'failed')]), status: 'paused' as const },
     task('empty', []),
   ];
+  const archivedRuns = [{ taskId: 'deleted', taskTitle: 'Deleted task', run: run('archived', '2026-09-30T02:30:00.000Z', 'completed') }];
 
-  expect(automationActivity(tasks).map(({ taskId, taskTitle, run }) => [taskId, taskTitle, run.id, run.threadId, run.status])).toEqual([
+  expect(automationActivity({ tasks, archivedRuns }).map(({ taskId, taskTitle, run }) => [taskId, taskTitle, run.id, run.threadId, run.status])).toEqual([
     ['a', 'Task a', 'latest', 'thread-latest', 'running'],
+    ['deleted', 'Deleted task', 'archived', 'thread-archived', 'completed'],
     ['b', 'Task b', 'middle', 'thread-middle', 'failed'],
     ['a', 'Task a', 'old', 'thread-old', 'completed'],
   ]);

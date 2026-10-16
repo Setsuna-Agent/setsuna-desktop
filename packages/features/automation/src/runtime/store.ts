@@ -10,7 +10,7 @@ export class AutomationStore {
   async read(): Promise<AutomationState> {
     let raw: string;
     try { raw = await readFile(this.file, 'utf8'); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { tasks: [] }; throw error; }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { tasks: [], archivedRuns: [] }; throw error; }
     const document = JSON.parse(raw) as Record<string, unknown>;
     if (document.schemaVersion !== 1) throw new Error('Unsupported automation storage version.');
     return automationStateCodec.parse(document);

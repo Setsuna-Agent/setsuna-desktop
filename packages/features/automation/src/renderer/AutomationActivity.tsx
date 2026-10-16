@@ -1,5 +1,5 @@
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
-import type { AutomationActivityEntry } from './activity.js';
+import type { AutomationActivityEntry } from '../contracts/index.js';
 import { formatAutomationTime } from './format.js';
 import { AutomationSidebarRow } from './AutomationSidebarRow.js';
 

@@ -28,6 +28,12 @@ export type AutomationRun = {
   error?: string;
 };
 
+export type AutomationActivityEntry = {
+  taskId: string;
+  taskTitle: string;
+  run: AutomationRun;
+};
+
 export type AutomationTask = AutomationDraft & {
   id: string;
   conversationThreadId: string;
@@ -44,6 +50,11 @@ export type AutomationModel = RuntimeConfiguredModelReference & {
   thinkingEfforts: string[];
 };
 
-export type AutomationState = { tasks: AutomationTask[]; draftThreadId?: string };
+export type AutomationState = {
+  tasks: AutomationTask[];
+  /** Settled runs survive deletion of the scheduling definition. */
+  archivedRuns: AutomationActivityEntry[];
+  draftThreadId?: string;
+};
 export type AutomationProject = Pick<WorkspaceProject, 'id' | 'name' | 'path'>;
 export type AutomationSnapshot = AutomationState & { models: AutomationModel[]; projects: AutomationProject[] };

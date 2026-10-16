@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AutomationDraft, AutomationRun, AutomationRuntimeHost } from '../../src/contracts/index.js';
 import { AutomationService } from '../../src/runtime/service.js';
+import { AutomationStore } from '../../src/runtime/store.js';
 import { AutomationTools } from '../../src/runtime/tools.js';
 
 const directories: string[] = [];
@@ -216,6 +217,56 @@ describe('local scheduled conversations', () => {
     expect((await f.service.snapshot()).tasks[0]).toMatchObject({ status: 'paused', nextRunAt: null, runs: [{ status: 'running' }] });
     await expect(f.service.run(task.id)).rejects.toMatchObject({ code: 'TASK_BUSY' });
     await expect(f.service.delete(task.id)).rejects.toMatchObject({ code: 'TASK_BUSY' });
+  });
+
+  it('preserves completed manual runs after task deletion and restart without scheduling them again', async () => {
+    const f = await fixture();
+    const task = await f.service.create('conversation_1', { ...f.draft, newChat: true });
+    await f.service.run(task.id);
+    f.finish(); await f.service.tick();
+    const [run] = (await f.service.snapshot()).tasks[0].runs;
+    const archivedRuns = [{ taskId: task.id, taskTitle: task.title, run }];
+
+    vi.spyOn(AutomationStore.prototype, 'write').mockRejectedValueOnce(new Error('Disk full'));
+    await expect(f.service.delete(task.id)).rejects.toThrow('Disk full');
+    expect(await f.service.snapshot()).toMatchObject({ tasks: [{ id: task.id, runs: [run] }], archivedRuns: [] });
+    expect(await f.service.delete(task.id)).toEqual({ deleted: true });
+    expect(await f.service.snapshot()).toMatchObject({ tasks: [], archivedRuns });
+    expect(await f.service.delete(task.id)).toEqual({ deleted: false });
+    await f.service.dispose();
+
+    const recovered = new AutomationService(f.host);
+    try {
+      await recovered.initialize();
+      f.advance('2026-09-30T01:00:00Z');
+      await recovered.tick();
+      expect(await recovered.snapshot()).toMatchObject({ tasks: [], archivedRuns });
+      expect(f.host.startRun).toHaveBeenCalledOnce();
+    } finally { await recovered.dispose(); }
+  });
+
+  it('bounds deleted-task history by execution time even when an older task is deleted last', async () => {
+    const f = await fixture();
+    const older = await f.service.create('conversation_1', f.draft);
+    const newer = await f.service.create('conversation_2', f.draft);
+    const run = (id: string, minute: number): AutomationRun => ({
+      id, threadId: `execution_${id}`, turnId: `turn_${id}`, status: 'completed',
+      scheduledFor: new Date(Date.UTC(2026, 8, 30, 0, minute)).toISOString(),
+      startedAt: new Date(Date.UTC(2026, 8, 30, 0, minute)).toISOString(),
+    });
+    older.runs = [run('old', 0)];
+    newer.runs = Array.from({ length: 50 }, (_, index) => run(`new_${index}`, index + 1));
+    await f.service.dispose();
+    await new AutomationStore(f.host.dataDir).write({ tasks: [older, newer], archivedRuns: [] });
+    const recovered = new AutomationService(f.host);
+    try {
+      await recovered.initialize();
+      await recovered.delete(newer.id);
+      await recovered.delete(older.id);
+      const history = (await recovered.snapshot()).archivedRuns;
+      expect(history.map((entry) => entry.run.id)).toEqual(newer.runs.map((run) => run.id).reverse());
+      expect(history.every((entry) => entry.taskId === newer.id && entry.taskTitle === newer.title)).toBe(true);
+    } finally { await recovered.dispose(); }
   });
 
   it('does not replay reserved runs after restart and collapses missed intervals', async () => {

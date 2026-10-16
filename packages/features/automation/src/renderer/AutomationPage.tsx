@@ -24,12 +24,13 @@ export function AutomationPage({ client, threadId, openConversation, onSelectSta
   const page = useAutomationPage(client, threadId, openConversation);
   const actions = useAutomationTaskActions(client, page.perform, t);
   const task = page.selectedTask;
+  const isSetupConversation = !task && page.selectedRunId === null;
   return <main className="automation-page">
     {task ? renderToolbar(createAutomationToolbar(task, page.busy, actions, t)) : null}
     <aside className="automation-sidebar">
       <header className="automation-sidebar__header"><h2>{t('feature.automation.title')}</h2>
         <AutomationCreateMenu busy={page.busy} translate={t} onCreateChat={() => void page.newConversation()}
-          onCreateForm={() => void actions.create(task ? undefined : page.conversationId ?? undefined)} />
+          onCreateForm={() => void actions.create(isSetupConversation ? page.conversationId ?? undefined : undefined)} />
       </header>
       <div className="automation-sidebar__tasks">
         {page.snapshot.tasks.map((item) => <AutomationTaskRow key={item.id} task={item} active={page.selectedRunId === null && item.id === task?.id} busy={page.busy} actions={actions} onSelect={page.select} translate={t} locale={locale} />)}
@@ -40,8 +41,8 @@ export function AutomationPage({ client, threadId, openConversation, onSelectSta
       {page.error ? <div className="automation-error" role="alert">{page.error}<Button variant="ghost" disabled={page.busy} onClick={page.retry}>{t('feature.automation.retry')}</Button></div> : null}
       <div className="automation-conversation">
         {page.conversationId && threadId === page.conversationId ? renderConversation(
-          task ? undefined : <AutomationStarter translate={t} />,
-          task ? undefined : <AutomationStarterSuggestions translate={t} onSelect={onSelectStarterPrompt} />,
+          isSetupConversation ? <AutomationStarter translate={t} /> : undefined,
+          isSetupConversation ? <AutomationStarterSuggestions translate={t} onSelect={onSelectStarterPrompt} /> : undefined,
           page.turnNavigationRequest,
         ) : <div className="automation-loading" role="status">{t('feature.automation.loading')}</div>}
       </div>

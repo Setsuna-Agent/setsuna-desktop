@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import type { AutomationTask } from '../../src/contracts/index.js';
+import type { AutomationSnapshot, AutomationTask } from '../../src/contracts/index.js';
 import type { AutomationClient } from '../../src/renderer/client.js';
 import { useAutomationPage } from '../../src/renderer/useAutomationPage.js';
 
@@ -19,7 +19,7 @@ it('keeps run selection distinct from its reused conversation and commits it onl
     })),
   };
   const client: AutomationClient = {
-    snapshot: vi.fn(async () => ({ tasks: [structuredClone(task)], models: [], projects: [] })),
+    snapshot: vi.fn(async () => ({ tasks: [structuredClone(task)], archivedRuns: [], models: [], projects: [] })),
     createConversation: vi.fn(), create: vi.fn(), update: vi.fn(), setStatus: vi.fn(), run: vi.fn(), delete: vi.fn(),
   };
   const openConversation = vi.fn(async () => true);
@@ -54,4 +54,42 @@ it('keeps run selection distinct from its reused conversation and commits it onl
   expect(result.current.selectedRunId).toBeNull();
   expect(result.current.conversationId).toBe('setup');
   expect(result.current.turnNavigationRequest).toBeUndefined();
+
+  await act(() => result.current.select('execution', task.id, 'first'));
+  const selectedBeforeDelete = result.current.turnNavigationRequest;
+  vi.mocked(client.snapshot).mockResolvedValue({
+    tasks: [], models: [], projects: [],
+    archivedRuns: task.runs.map((run) => ({ taskId: task.id, taskTitle: task.title, run })),
+  });
+  await act(async () => { await result.current.refresh(); });
+  expect(result.current.selectedTask).toBeUndefined();
+  expect(result.current.selectedRunId).toBe('first');
+  expect(result.current.turnNavigationRequest).toEqual(selectedBeforeDelete);
+  expect(result.current.activity.map((entry) => entry.run.id)).toEqual(['first', 'second']);
+  await act(() => result.current.select('execution', task.id, 'second'));
+  expect(result.current.turnNavigationRequest?.turnId).toBe('turn-second');
+});
+
+it('opens archived runs without creating a setup chat and retains their turn navigation after refresh', async () => {
+  const at = '2026-10-07T00:00:00Z';
+  const snapshot: AutomationSnapshot = {
+    tasks: [], models: [], projects: [], archivedRuns: [{
+      taskId: 'deleted', taskTitle: 'Deleted task',
+      run: { id: 'run', threadId: 'execution', turnId: 'turn', scheduledFor: at, startedAt: at, status: 'completed' },
+    }],
+  };
+  const client: AutomationClient = {
+    snapshot: vi.fn(async () => structuredClone(snapshot)),
+    createConversation: vi.fn(), create: vi.fn(), update: vi.fn(), setStatus: vi.fn(), run: vi.fn(), delete: vi.fn(),
+  };
+  const openConversation = vi.fn(async () => true);
+  const { result } = renderHook(() => useAutomationPage(client, 'execution', openConversation));
+  await waitFor(() => expect(result.current.selectedRunId).toBe('run'));
+  expect(openConversation).toHaveBeenCalledExactlyOnceWith('execution');
+  expect(client.createConversation).not.toHaveBeenCalled();
+  expect(result.current.selectedTask).toBeUndefined();
+  const request = result.current.turnNavigationRequest;
+  expect(request).toEqual({ requestId: expect.any(Number), threadId: 'execution', turnId: 'turn' });
+  await act(async () => { await result.current.refresh(); });
+  expect(result.current.turnNavigationRequest).toEqual(request);
 });

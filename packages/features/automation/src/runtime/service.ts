@@ -6,6 +6,8 @@ import {
 import { nextAutomationRun } from './schedule.js';
 import { AutomationStore } from './store.js';
 
+const RUN_HISTORY_LIMIT = 50;
+
 export const AUTOMATION_CREATION_POLICY = [
   'You help the user create and edit local scheduled tasks through a friendly conversation.',
   'A scheduled task executes its saved prompt as an unattended agent conversation on this computer.',
@@ -18,7 +20,7 @@ export const AUTOMATION_CREATION_POLICY = [
 ].join(' ');
 
 export class AutomationService {
-  private state: AutomationState = { tasks: [] };
+  private state: AutomationState = { tasks: [], archivedRuns: [] };
   private pending: Promise<unknown> = Promise.resolve();
   private pendingMutations = 0;
   private maintenancePaused = false;
@@ -148,7 +150,12 @@ export class AutomationService {
       const task = this.state.tasks.find((item) => item.id === taskId);
       if (!task) return { deleted: false };
       if (task.runs.some((run) => run.status === 'running')) throw failure('TASK_BUSY', '请先停止正在运行的对话。');
-      await this.commit({ ...this.state, tasks: this.state.tasks.filter((item) => item.id !== taskId) });
+      // Keep transcript links in the same durable write that removes the schedule.
+      // Retain recent executions by run time, not by when their task was deleted.
+      const archivedRuns = [...this.state.archivedRuns,
+        ...task.runs.map((run) => ({ taskId: task.id, taskTitle: task.title, run })),
+      ].sort((left, right) => Date.parse(right.run.startedAt) - Date.parse(left.run.startedAt)).slice(0, RUN_HISTORY_LIMIT);
+      await this.commit({ ...this.state, tasks: this.state.tasks.filter((item) => item.id !== taskId), archivedRuns });
       return { deleted: true };
     });
   }
@@ -191,7 +198,7 @@ export class AutomationService {
       id: this.host.id('automation_run'), threadId: task.executionThreadId ?? task.conversationThreadId,
       scheduledFor, startedAt: this.host.now().toISOString(), status: 'running',
     };
-    task.runs = [...task.runs.slice(-49), run];
+    task.runs = [...task.runs.slice(-(RUN_HISTORY_LIMIT - 1)), run];
     task.updatedAt = run.startedAt;
     if (scheduled) {
       task.nextRunAt = nextAutomationRun(task.schedule, this.host.now(), scheduledFor);

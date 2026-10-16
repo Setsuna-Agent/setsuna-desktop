@@ -29,7 +29,7 @@ packages/features/<feature>/
 | --- | --- | :---: | :---: | :---: | :---: | --- |
 | `approval-review` | `approval-review` | O | — | — | O | 自动审批的模型判定、策略约束、专用模型设置与人工回退 |
 | `artifact` | `artifact` | R | — | — | R | 发布 workspace 文件、持久工具结果、Artifact 展示与宿主原生拖出 |
-| `automation` | `automation` | O | — | — | O | 对话创建定时任务、本机调度、无人值守执行与运行记录 |
+| `automation` | `automation` | O | — | — | O | 对话创建定时任务、本机调度、无人值守执行与删除任务后的运行记录保留 |
 | `browser` | `browser` | R | R | B | R | 内置浏览器、guest/CDP 控制、Agent Browser tools |
 | `collaboration` | `collaboration` | O | — | — | O | 子任务/协作线程状态、投影与 spawn result |
 | `computer-use` | `computer-use` | R | R | B | R | 独立会话授权、受监督主桌面截图/基础输入与急停 |
