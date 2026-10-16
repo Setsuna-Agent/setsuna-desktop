@@ -10,7 +10,7 @@
 
 ## RuntimeHost
 
-入口：`src/runtime/host.ts`
+入口：`src/runtime/host.ts`。HTTP/SSE 代理留在 Host；`runtime-process.ts` 持有子进程与恢复状态，`runtime-process-environment.ts` 解析启动环境，`runtime-process-control.ts` 处理端口、关闭与可取消等待。
 
 ### 启动职责
 
@@ -23,6 +23,14 @@
 - Ready 后请求 `/health`，只有健康检查成功才对外提供 request/subscribe。
 
 开发环境可用 `SETSUNA_DESKTOP_RUNTIME_ENTRY` 指向编译后的 runtime CLI。Packaged 环境需要兼容 `app.asar`、unpacked native dependency 和平台 Helper 路径。
+
+### 异常退出恢复
+
+首次启动失败仍交给启动调用者处理，包括 WebDAV 恢复失败后的回滚。成功就绪的子进程意外退出时，先完成 main 持有的原生输入等资源清理，再按 1、2、4 秒退避尝试重启，最多三次。短暂就绪后再次崩溃不会重置预算；连续稳定运行一分钟后才恢复预算。资源清理失败时停止恢复，不能越过未释放的本机资源启动新进程。
+
+并发 `start()` 共享同一次 ready/health 检查，整个握手最多 30 秒；失败或超时会先回收残留子进程。`stop()` 取消退避和未完成的启动，并等待子进程及原生资源退出；更新、迁移和正常退出不触发自动重启，显式再次启动会等待上次关闭完成。恢复调度不增加冷启动扫描、就绪等待或后台采样。
+
+恢复复用同一 Host 和现有 renderer 订阅，保留页面与输入现场。新进程继续通过 Store 独占租约取得数据根；强制退出时可能要等待原租约到期，不能提前绕过。Runtime 在 ready 前将未完成 turn 持久化为取消并结算协作/Goal 状态，重连只读取状态和事件，不重发原来的写请求或工具操作。
 
 ### 请求代理
 
@@ -45,6 +53,7 @@ Main 为每个 renderer 订阅创建独立 runtime SSE：
 - Approval 与 turn 终态会立即 flush，并与之前待发增量保持同一顺序。
 - unsubscribe、窗口销毁和 host shutdown 都会关闭连接。
 - Event stream 错误通过订阅通道报告，不能让旧订阅污染新线程。
+- 已接受的事件序号随订阅保存，连接异常抛出也不丢失；意外退出后使用新进程端口从该序号继续订阅，不重复派发已收到的事件。
 
 ### 关闭
 
@@ -171,6 +180,8 @@ Main handler 要确认请求来自 `DesktopWindowRegistry` 登记的可信桌面
 重点测试：
 
 - `apps/desktop/main/test/unit/runtime/host.test.ts`
+- `apps/desktop/main/test/unit/runtime/runtime-recovery.test.ts`：退避上限、原生清理、并发启动、超时及关闭取消。
+- `apps/desktop/main/test/integration/runtime/runtime-recovery.test.ts`：真实 CLI 子进程强制退出后的 Store 恢复、原订阅续接和不重放请求。
 - `apps/desktop/main/test/unit/runtime/bundled-tools.test.ts`
 - `apps/desktop/main/test/unit/runtime/desktop-environment.test.ts`
 - `apps/desktop/main/test/unit/runtime/native-bridge-server.test.ts`
