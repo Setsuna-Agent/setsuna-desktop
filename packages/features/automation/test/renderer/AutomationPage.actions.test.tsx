@@ -54,7 +54,7 @@ it.each(['edit', 'status', 'run', 'delete'] as const)('applies the context-menu 
   }));
   const targetTask = tasks[1]!;
   const client: AutomationClient = {
-    snapshot: vi.fn(async () => ({ tasks, models: [], projects: [{ id: 'iriya', name: 'iriya' }] })), createConversation: vi.fn(), create: vi.fn(),
+    snapshot: vi.fn(async () => ({ tasks, archivedRuns: [], models: [], projects: [{ id: 'iriya', name: 'iriya' }] })), createConversation: vi.fn(), create: vi.fn(),
     update: vi.fn(async () => targetTask), setStatus: vi.fn(async () => targetTask),
     run: vi.fn(async () => targetTask), delete: vi.fn(async () => ({ deleted: true })),
   };
@@ -86,7 +86,9 @@ it.each(['edit', 'status', 'run', 'delete'] as const)('applies the context-menu 
   expect(openConversation).toHaveBeenCalledExactlyOnceWith('thread_A');
 });
 
-it.each(['chat', 'form'] as const)('creates a task through the %s menu path while another task is selected', async (method) => {
+it.each([
+  { method: 'chat', archived: false }, { method: 'form', archived: false }, { method: 'form', archived: true },
+] as const)('creates a task through the $method menu path (archived run: $archived)', async ({ method, archived }) => {
   const user = userEvent.setup({ skipHover: true });
   const at = '2026-09-30T00:00:00Z';
   const existing: AutomationTask = {
@@ -95,17 +97,23 @@ it.each(['chat', 'form'] as const)('creates a task through the %s menu path whil
     conversationThreadId: 'existing_thread', status: 'active', nextRunAt: at,
     createdAt: at, updatedAt: at, runs: [],
   };
+  const currentThreadId = archived ? 'archived_execution' : existing.conversationThreadId;
   const client: AutomationClient = {
-    snapshot: vi.fn(async () => ({ tasks: [existing], models: [], projects: [] })),
+    snapshot: vi.fn(async () => ({
+      tasks: archived ? [] : [existing], models: [], projects: [],
+      archivedRuns: archived ? [{ taskId: existing.id, taskTitle: existing.title,
+        run: { id: 'archived_run', threadId: currentThreadId, turnId: 'archived_turn', scheduledFor: at, startedAt: at, status: 'completed' as const },
+      }] : [],
+    })),
     createConversation: vi.fn(async () => ({ threadId: 'setup_draft' })),
     create: vi.fn(async () => ({ ...existing, id: 'new', conversationThreadId: 'setup_draft' })),
     update: vi.fn(), setStatus: vi.fn(), run: vi.fn(), delete: vi.fn(),
   };
   const openConversation = vi.fn(async () => true);
-  render(<ConfirmationProvider><AutomationPage client={client} threadId="existing_thread" openConversation={openConversation}
+  render(<ConfirmationProvider><AutomationPage client={client} threadId={currentThreadId} openConversation={openConversation}
     onSelectStarterPrompt={vi.fn()} ModelPicker={() => null}
     renderConversation={() => null} renderToolbar={() => null} translate={t} locale="en-US" /></ConfirmationProvider>);
-  await waitFor(() => expect(openConversation).toHaveBeenCalledWith('existing_thread'));
+  await waitFor(() => expect(openConversation).toHaveBeenCalledWith(currentThreadId));
   const create = screen.getByRole('button', { name: t('feature.automation.create') });
   await waitFor(() => expect(create.hasAttribute('disabled')).toBe(false));
   await user.click(create);
@@ -119,7 +127,7 @@ it.each(['chat', 'form'] as const)('creates a task through the %s menu path whil
     fireEvent.change(within(editor).getByRole('textbox', { name: t('feature.automation.prompt') }), { target: { value: 'New prompt' } });
     await user.click(within(editor).getByRole('button', { name: t('feature.automation.create') }));
     await waitFor(() => expect(client.create).toHaveBeenCalledWith('setup_draft', expect.objectContaining({ title: 'New task', prompt: 'New prompt' })));
-    expect(openConversation).toHaveBeenCalledExactlyOnceWith('existing_thread');
+    expect(openConversation).toHaveBeenCalledExactlyOnceWith(currentThreadId);
   }
   expect(client.createConversation).toHaveBeenCalledOnce();
   expect(client.update).not.toHaveBeenCalled();

@@ -5,7 +5,7 @@ import type { AutomationClient } from './client.js';
 import { automationActivity } from './activity.js';
 
 export function useAutomationPage(client: AutomationClient, currentThreadId: string | undefined, openConversation: (threadId: string) => Promise<boolean>) {
-  const [snapshot, setSnapshot] = useState<AutomationSnapshot>({ tasks: [], models: [], projects: [] });
+  const [snapshot, setSnapshot] = useState<AutomationSnapshot>({ tasks: [], archivedRuns: [], models: [], projects: [] });
   // Reused execution conversations can contain multiple runs; selection belongs to a run, not its thread.
   const [selection, setSelection] = useState<{
     taskId: string | null; runId: string | null; threadId: string; requestId: number;
@@ -47,9 +47,11 @@ export function useAutomationPage(client: AutomationClient, currentThreadId: str
         const state = await refresh(abort.signal);
         if (initialize && !abort.signal.aborted) {
           const task = state.tasks.find((task) => task.conversationThreadId === initialThreadRef.current || task.runs.some((run) => run.threadId === initialThreadRef.current));
-          const threadId = task?.conversationThreadId ?? state.draftThreadId ?? state.tasks[0]?.conversationThreadId
+          const history = !task ? automationActivity(state).find((entry) => entry.run.threadId === initialThreadRef.current) : undefined;
+          const threadId = history?.run.threadId ?? task?.conversationThreadId ?? state.draftThreadId ?? state.tasks[0]?.conversationThreadId
             ?? (await client.createConversation()).threadId;
-          if (!abort.signal.aborted) await select(threadId, task?.id ?? state.tasks.find((item) => item.conversationThreadId === threadId)?.id ?? null);
+          if (!abort.signal.aborted) await select(threadId, history?.taskId ?? task?.id
+            ?? state.tasks.find((item) => item.conversationThreadId === threadId)?.id ?? null, history?.run.id ?? null);
         }
       } catch (error) { if (!abort.signal.aborted) setError(errorMessage(error)); }
       finally { fetching = false; }
@@ -79,12 +81,12 @@ export function useAutomationPage(client: AutomationClient, currentThreadId: str
   };
   // A task created by the agent appears without requiring a page reload.
   const selectedTask: AutomationTask | undefined = snapshot.tasks.find((task) => task.id === selection?.taskId)
-    ?? [...snapshot.tasks].reverse().find((task) => task.conversationThreadId === conversationId);
-  const selectedRun = selectedTask?.runs.find((run) => run.id === selectedRunId);
+    ?? (selectedRunId === null ? [...snapshot.tasks].reverse().find((task) => task.conversationThreadId === conversationId) : undefined);
+  const activity = useMemo(() => automationActivity(snapshot), [snapshot]);
+  const selectedRun = activity.find((entry) => entry.taskId === selection?.taskId && entry.run.id === selectedRunId)?.run;
   const turnNavigationRequest: ChatTurnNavigationRequest | undefined = selection && selectedRun?.turnId
     ? { requestId: selection.requestId, threadId: selection.threadId, turnId: selectedRun.turnId }
     : undefined;
-  const activity = useMemo(() => automationActivity(snapshot.tasks), [snapshot.tasks]);
 
   return { snapshot, selectedTask, selectedRunId, turnNavigationRequest, activity, conversationId, error, busy, select, newConversation, refresh, perform, retry };
 }

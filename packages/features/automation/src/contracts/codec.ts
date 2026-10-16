@@ -83,7 +83,16 @@ export const automationStateCodec = defineRuntimeCodec<AutomationState>((value) 
   if (!Array.isArray(input.tasks)) throw new Error('Tasks must be an array.');
   const tasks = input.tasks.map((task) => automationTaskCodec.parse(task));
   if (new Set(tasks.map((task) => task.id)).size !== tasks.length) throw new Error('Duplicate task id.');
-  return { tasks, ...(input.draftThreadId ? { draftThreadId: identity(input.draftThreadId) } : {}) };
+  // Documents written before run retention have no archivedRuns field.
+  const history = input.archivedRuns === undefined ? [] : input.archivedRuns;
+  if (!Array.isArray(history)) throw new Error('Archived runs must be an array.');
+  const archivedRuns = history.map((value) => {
+    const entry = record(value);
+    const run = parseRun(entry.run);
+    if (run.status === 'running') throw new Error('Cannot archive an active automation run.');
+    return { taskId: identity(entry.taskId), taskTitle: text(entry.taskTitle, 'title', 120), run };
+  });
+  return { tasks, archivedRuns, ...(input.draftThreadId ? { draftThreadId: identity(input.draftThreadId) } : {}) };
 });
 
 export const automationSnapshotCodec = defineRuntimeCodec<AutomationSnapshot>((value) => {

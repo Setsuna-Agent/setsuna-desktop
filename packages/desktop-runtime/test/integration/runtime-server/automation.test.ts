@@ -198,11 +198,16 @@ describe('scheduled conversations through the runtime API', () => {
       method: 'PATCH', body: JSON.stringify({ status: 'paused' }),
     })).toMatchObject({ status: 'paused', nextRunAt: null });
     expect(await harness.runtimeFetch(`/v1/features/automation/tasks/${task.id}`, { method: 'DELETE' })).toEqual({ deleted: true });
-    expect((await harness.runtimeFetch('/v1/features/automation/tasks')).tasks).toEqual([]);
+    const afterDeletion = await harness.runtimeFetch('/v1/features/automation/tasks') as AutomationSnapshot;
+    expect(afterDeletion.tasks).toEqual([]);
+    expect(afterDeletion.archivedRuns).toEqual([{ taskId: task.id, taskTitle: task.title, run: restored.tasks[0].runs[0] }]);
     expect((await harness.runtimeFetch(`/v1/threads/${run.threadId}`)).turns).toHaveLength(1);
     await harness.server.close();
     await harness.startRuntimeServer(harness.runtimeDataDir);
     expect((await harness.runtimeFetch(listing)).threads).toMatchObject([{ id: run.threadId, origin: transcript.origin }]);
+    const history = await harness.runtimeFetch('/v1/features/automation/tasks') as AutomationSnapshot;
+    expect(history.tasks).toEqual([]);
+    expect(history.archivedRuns).toEqual(afterDeletion.archivedRuns);
   });
 });
 

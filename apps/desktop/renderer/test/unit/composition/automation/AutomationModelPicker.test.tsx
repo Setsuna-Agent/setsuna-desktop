@@ -112,7 +112,7 @@ async function fixture() {
     providerId: provider.id, modelId: model.id, name: model.name, thinkingEfforts: model.thinkingEfforts,
   })));
   const client: AutomationClient = {
-    snapshot: vi.fn(async () => ({ tasks: [task], models, projects: [] })),
+    snapshot: vi.fn(async () => ({ tasks: [task], archivedRuns: [], models, projects: [] })),
     update: vi.fn(async (_id, draft) => {
       task = { ...task, ...draft, modelSelection: draft.modelSelection, thinkingEffort: draft.thinkingEffort };
       return task;
