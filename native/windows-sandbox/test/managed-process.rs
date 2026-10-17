@@ -11,10 +11,12 @@ use windows_sys::Win32::System::StationsAndDesktops::{
 use windows_sys::Win32::System::Threading::{
     GetCurrentThreadId, OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE,
 };
+use windows_sys::Win32::UI::WindowsAndMessaging::IsWindowVisible;
 
 const PROBE_MODE: &str = "SETSUNA_TEST_BACKGROUND_PROBE";
 const CALLER_DESKTOP: &str = "SETSUNA_TEST_CALLER_DESKTOP";
 const EXPECTED_DESKTOP: &str = "SETSUNA_TEST_BACKGROUND_DESKTOP";
+const EXPECTED_CONSOLE: &str = "SETSUNA_TEST_CONSOLE_WINDOW";
 
 mod support;
 use support::{wait_until, ProcessHandle, RunningChild};
@@ -124,19 +126,24 @@ fn background_probe() {
         );
     }
     if mode == "parent" {
-        assert_eq!(
-            unsafe { GetConsoleWindow() },
-            0,
-            "root console must be suppressed"
-        );
+        assert_hidden_console();
         let status = Command::new("cmd.exe")
             .args(["/d", "/s", "/c"])
             .raw_arg(format!("\"{}\"", probe_command()))
             .env(PROBE_MODE, "io")
             .env(EXPECTED_DESKTOP, desktop)
+            .env(EXPECTED_CONSOLE, unsafe { GetConsoleWindow() }.to_string())
             .status()
             .unwrap();
         std::process::exit(status.code().unwrap_or(1));
+    }
+    if mode == "io" {
+        assert_hidden_console();
+        assert_eq!(
+            unsafe { GetConsoleWindow() }.to_string(),
+            std::env::var(EXPECTED_CONSOLE).unwrap(),
+            "nested command allocated another console instead of inheriting its parent"
+        );
     }
     if mode == "sleep" {
         println!("\ndescendant:{}", std::process::id());
@@ -177,6 +184,14 @@ fn background_probe() {
     println!("cwd:{}", std::env::current_dir().unwrap().display());
     eprintln!("stderr:separate");
     std::process::exit(23);
+}
+
+fn assert_hidden_console() {
+    let console = unsafe { GetConsoleWindow() };
+    assert!(
+        console == 0 || unsafe { IsWindowVisible(console) } == 0,
+        "a package-manager child created a visible console"
+    );
 }
 
 fn detached_tree(root: &std::path::Path, supervisors: &[u32]) -> (RunningChild, ProcessHandle) {

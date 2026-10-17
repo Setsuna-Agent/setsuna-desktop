@@ -145,9 +145,9 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependenciesC
     const hints = await projectToolchainHints(environment);
     const hostNode = await this.findSystemNode();
     const bundledNode = await this.resolveNode();
-    const selectedNode = preferredToolForVersion(hostNode, bundledNode, hints.nodeVersion);
-    const useBundledNodeFallback = selectedNode?.source === 'bundled';
-    if (useBundledNodeFallback && selectedNode) await this.ensureNodeShim(selectedNode);
+    const selectedNode = preferredToolForVersion(hostNode, bundledNode, hints.nodeVersion) ?? bundledNode;
+    const useBundledNodeFallback = selectedNode.source === 'bundled';
+    if (useBundledNodeFallback) await this.ensureNodeShim(selectedNode);
 
     await Promise.all([
       mkdir(path.join(this.cacheRoot, 'uv'), { recursive: true }),
@@ -163,7 +163,11 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependenciesC
     const manifest = needsPython ? await this.readManifest() : existingManifest;
     if (needsPython && !manifest) throw new Error('工作空间依赖项安装结果缺少清单。');
     const toolchainBinDir = manifest ? path.join(this.installRoot, 'bin') : null;
-    const packageManagerShims = await this.ensureProjectPackageManagerShims(hints.packageManager, process.env.PATH);
+    const packageManagerShims = await this.ensureProjectPackageManagerShims(
+      hints.packageManager,
+      process.env.PATH,
+      process.platform === 'win32' ? selectedNode : bundledNode,
+    );
     const environmentOverrides = {
       PATH: composePaths([
         packageManagerShims.binDir,
@@ -349,6 +353,7 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependenciesC
   private async ensureProjectPackageManagerShims(
     packageManager: ProjectToolchainHints['packageManager'],
     currentPath: string | undefined,
+    node: ManagedToolManifest,
   ): Promise<PackageManagerShims> {
     const bundledCorepack = resolveBundledCorepackEntrypoints();
     const bundledReadRoots: string[] = [];
@@ -366,10 +371,13 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependenciesC
       // pnpm's Windows .bin wrapper reaches Corepack through a node_modules Junction.
       // Calling the resolved entrypoint directly keeps sandbox grants on the canonical
       // app-owned package instead of requiring access to the developer checkout link.
-      await writeNodeScriptShim(this.projectBinDir, 'corepack', process.execPath, bundledCorepack.corepack);
+      // On Windows, Electron in Node mode can lose the console inherited from
+      // our launcher. Use the selected Node runtime for package-manager children
+      // too, so their ordinary shell processes retain the hidden console.
+      await writeNodeScriptShim(this.projectBinDir, 'corepack', node.path, bundledCorepack.corepack, node.source === 'bundled');
       corepack = commandShimPath(this.projectBinDir, 'corepack');
       wroteShim = true;
-      bundledReadRoots.push(bundledCorepack.root, runtimeExecutableReadRoot(process.execPath));
+      bundledReadRoots.push(bundledCorepack.root, runtimeExecutableReadRoot(node.path));
     }
 
     if (packageManager?.version && packageManager.name !== 'bun') {
@@ -399,15 +407,15 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependenciesC
     // entrypoints provide a deterministic fallback without changing global shims.
     if (!wroteNpmShim && !await findExecutable('npm', currentPath) && bundledCorepack) {
       await mkdir(this.projectBinDir, { recursive: true });
-      await writeNodeScriptShim(this.projectBinDir, 'npm', process.execPath, bundledCorepack.npm);
+      await writeNodeScriptShim(this.projectBinDir, 'npm', node.path, bundledCorepack.npm, node.source === 'bundled');
       wroteShim = true;
-      bundledReadRoots.push(bundledCorepack.root, runtimeExecutableReadRoot(process.execPath));
+      bundledReadRoots.push(bundledCorepack.root, runtimeExecutableReadRoot(node.path));
     }
     if (!wroteNpxShim && !await findExecutable('npx', currentPath) && bundledCorepack) {
       await mkdir(this.projectBinDir, { recursive: true });
-      await writeNodeScriptShim(this.projectBinDir, 'npx', process.execPath, bundledCorepack.npx);
+      await writeNodeScriptShim(this.projectBinDir, 'npx', node.path, bundledCorepack.npx, node.source === 'bundled');
       wroteShim = true;
-      bundledReadRoots.push(bundledCorepack.root, runtimeExecutableReadRoot(process.execPath));
+      bundledReadRoots.push(bundledCorepack.root, runtimeExecutableReadRoot(node.path));
     }
     // pnpm is part of the managed baseline even for non-Node projects. Corepack keeps the
     // package manager version deterministic without writing into the user's global prefix.

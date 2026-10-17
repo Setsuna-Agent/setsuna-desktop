@@ -71,8 +71,15 @@ Workspace Dependencies 管理 Setsuna 托管的 Node.js、Python、uv 和包源�
 - 下载和修复由 runtime 执行，renderer 只调用 typed client。
 - 网络请求使用宿主注入的 proxy-aware fetch 和 sandbox network environment。
 - Repair 优先复用健康工具，只补齐缺失、损坏或版本过低的部分。
+- Windows 的应用内置 Corepack/npm/npx shim 复用按项目版本选定的 Node，不再无条件改用 Electron。
+  这使普通包管理器子进程能够继承 launcher 的无窗口控制台；仅选中内置回退时设置 `ELECTRON_RUN_AS_NODE`，
+  且 Windows shim 用 `setlocal` 限定变量作用域。macOS 保留原有运行时选择。准备工作仍只发生在命令执行时。
 - Renderer 以 runtime settings section extension 注入，controller/messages/scoped CSS 留在 Feature。
 - Feature optional 失败时，普通 Agent 能力可继续运行；依赖托管工具链的具体操作应返回明确不可用错误。
+
+`managed-web.windows.test.ts` 在真实 Electron Node runtime 中准备工具链，通过内置 Corepack 执行 `pnpm dev`，
+验证 Vite HTTP 响应、无窗口控制台、跨回合存活和停止清理。测试使用独立数据目录及当前 pnpm 的本地缓存映射，
+不下载工具链，也不修改用户项目或生产数据。桌面应用显示由 `managed-shell.windows.test.ts` 的 Electron 窗口句柄测试覆盖。
 
 ## 为什么不放在 RuntimeConfig
 
