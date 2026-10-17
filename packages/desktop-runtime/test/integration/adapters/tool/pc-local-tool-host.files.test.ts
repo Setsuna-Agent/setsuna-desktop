@@ -6,6 +6,7 @@ import { PcLocalToolHost } from '../../../../src/adapters/tool/pc-local/pc-local
 import { FileWorkspaceProjectStore } from '../../../../src/adapters/workspace/file-workspace-project-store.js';
 import { systemClock } from '../../../../src/ports/clock.js';
 import { execFileAsync, createHost } from './pc-local-tool-host.support.js';
+import { windowsShellProvider } from '../../../support/windows-shell-provider.js';
 
 describe('pc local file tools and previews', () => {
   it('keeps overwrite observations scoped to actual reads in the current turn', async () => {
@@ -143,6 +144,8 @@ describe('pc local file tools and previews', () => {
     const store = new FileWorkspaceProjectStore(path.join(root, 'data'), systemClock);
     const project = await store.addProject({ path: projectDir });
     const host = new PcLocalToolHost(store);
+    const provider = windowsShellProvider();
+    if (provider) host.bindShellSandboxProvider(provider);
     const environment = await host.environmentForToolContext({ threadId: 'thread_1', projectId: project.id });
     const context = { environment, threadId: 'thread_1', turnId: 'turn_1', projectId: project.id, permissionProfile: 'danger-full-access' as const };
 

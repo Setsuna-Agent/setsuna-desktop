@@ -15,6 +15,7 @@ import { ToolApprovalStore, ToolOrchestrator } from '../../../src/loop/tools/too
 import { systemClock } from '../../../src/ports/clock.js';
 import type { RuntimeToolExecutionContext } from '../../../src/ports/tool-host.js';
 import { expectRestrictedShellUnavailable, restrictedShellExecutionUnavailable } from '../adapters/tool/pc-local-tool-host.support.js';
+import { windowsShellProvider } from '../../support/windows-shell-provider.js';
 
 let directory: string;
 beforeEach(async () => { directory = await realpath(await mkdtemp(path.join(tmpdir(), 'setsuna-multi-root-'))); });
@@ -30,6 +31,8 @@ async function fixture() {
   const project = await store.addProject({ name: 'Workspace', roots: [{ path: main }, { path: child }] });
   const environment = await new WorkspaceRuntimeEnvironmentResolver(store).resolve({ projectId: project.id, threadId: 'thread' });
   const host = new PcLocalToolHost(store);
+  const provider = windowsShellProvider();
+  if (provider) host.bindShellSandboxProvider(provider);
   const context: RuntimeToolExecutionContext = {
     threadId: 'thread', turnId: 'turn', projectId: project.id, environment,
     permissionProfile: 'workspace-write', sandboxWorkspaceWrite: undefined, signal: new AbortController().signal,

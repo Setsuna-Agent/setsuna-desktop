@@ -50,9 +50,25 @@ fn run() -> Result<CommandOutput, SandboxError> {
             let request_path = option_path(&remaining, "--request")?;
             platform::run(&request_path)
         }
-        "run-background" => {
+        "internal-run" => {
+            let request_path = option_path(&remaining, "--request")?;
+            platform::internal_run(&request_path)
+        }
+        "run-managed" => {
             let command = option_string(&remaining, "--command")?;
-            platform::run_background(&command)
+            let supervisors = option_string(&remaining, "--supervisor-pids")?
+                .split(',')
+                .map(|value| {
+                    value.parse::<u32>().map_err(|_| {
+                        SandboxError::new(
+                            SandboxErrorCode::InvalidArguments,
+                            "--supervisor-pids must contain comma-separated process ids",
+                        )
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            protocol::validate_supervisor_pids(&supervisors)?;
+            platform::run_managed(&command, &supervisors)
         }
         "internal-child" => {
             let request_path = option_path(&remaining, "--request")?;

@@ -5,6 +5,19 @@ Desktop. It deliberately has no daemon or Windows service. One executable owns
 installation checks, elevated setup, sandboxed process creation, repair, and
 uninstall.
 
+The `run-managed` entrypoint also owns ordinary host commands without sandbox
+account setup. It inherits the caller's desktop, suppresses the initial console,
+and allows application GUI windows. Only restricted `run` commands use a private
+desktop. The initial suspended process joins a non-breakaway Job atomically via
+`PROC_THREAD_ATTRIBUTE_JOB_LIST`, before it can be resumed. Sandboxed account
+creation runs inside this Job through an internal broker, so cancellation cannot
+leave a suspended cross-account child outside containment. The launcher preserves
+the root exit code and waits for the entire Job
+to become empty; runtime/desktop-host supervisor handles terminate the tree if
+either owner exits. Background persistence never detaches a command from those
+owners. Missing supervision or failed managed startup is an error, not a fallback
+to an unmanaged process.
+
 The security boundary is fail-closed:
 
 - two managed local accounts separate offline and online executions; both are
@@ -64,6 +77,7 @@ Run the repository scripts from its root on Windows x64:
 ```powershell
 pnpm test:windows-sandbox
 pnpm build:windows-sandbox
+pnpm test:integration packages/desktop-runtime/test/integration/adapters/tool/managed-shell.windows.test.ts
 ```
 
 A successful build does not replace the Windows integration tests. Account, ACL, firewall, cancellation, and network tests must

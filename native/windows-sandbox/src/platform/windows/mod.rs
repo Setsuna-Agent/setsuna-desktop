@@ -8,6 +8,7 @@ mod handle;
 mod job;
 mod paths;
 mod process;
+mod supervision;
 mod token;
 mod visibility;
 mod wfp;
@@ -214,11 +215,20 @@ pub fn uninstall_elevated() -> Result<CommandOutput, SandboxError> {
 }
 
 /// Runs with the caller's identity and environment, without sandbox setup or elevation.
-pub fn run_background(command: &str) -> Result<CommandOutput, SandboxError> {
-    process::spawn_background_shell(command).map(CommandOutput::process_exit)
+pub fn run_managed(command: &str, supervisors: &[u32]) -> Result<CommandOutput, SandboxError> {
+    process::spawn_managed_shell(command, supervisors).map(CommandOutput::process_exit)
 }
 
 pub fn run(request_path: &Path) -> Result<CommandOutput, SandboxError> {
+    let request = SandboxRunRequest::from_file(request_path)?;
+    // CreateProcessWithLogonW cannot consume a Job-list startup attribute.
+    // An already-contained broker makes the cross-account child inherit the
+    // outer Job, covering cancellation before assignment to its execution Job.
+    process::spawn_sandbox_broker(request_path, &request.supervisor_pids)
+        .map(CommandOutput::process_exit)
+}
+
+pub fn internal_run(request_path: &Path) -> Result<CommandOutput, SandboxError> {
     let request = SandboxRunRequest::from_file(request_path)?;
     paths::validate_request_paths(&request, request_path)?;
     let store = state_store()?;

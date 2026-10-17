@@ -9,8 +9,8 @@ export type ShellSandboxCapability = Readonly<{
 
 /** Optional OS-specific shell sandbox bound by a runtime Feature. */
 export interface ShellSandboxProvider {
-  /** Optional native window host for bypass commands; does not change permissions. */
-  backgroundCommand?(command: string): { command: string; args: string[] } | null;
+  /** Required for Windows bypass execution: owns the process tree without changing permissions. */
+  managedCommand?(command: string): { command: string; args: string[] } | null;
   capability(): ShellSandboxCapability;
   controlRoot(): string;
   networkEnvironment(): Promise<Record<string, string>>;

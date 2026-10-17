@@ -23,7 +23,11 @@ pub fn run(_request_path: &Path) -> Result<CommandOutput, SandboxError> {
     unsupported()
 }
 
-pub fn run_background(_command: &str) -> Result<CommandOutput, SandboxError> {
+pub fn internal_run(_request_path: &Path) -> Result<CommandOutput, SandboxError> {
+    unsupported()
+}
+
+pub fn run_managed(_command: &str, _supervisors: &[u32]) -> Result<CommandOutput, SandboxError> {
     unsupported()
 }
 

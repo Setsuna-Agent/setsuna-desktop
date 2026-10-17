@@ -17,22 +17,23 @@ afterEach(() => {
 });
 
 describe('Windows native sandbox adapter', () => {
-  it.skipIf(process.platform !== 'win32')('hosts background commands without requiring installed sandbox accounts', async () => {
+  it.skipIf(process.platform !== 'win32')('manages host commands with owner supervision without sandbox account setup', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-background-host-'));
     try {
       const executable = path.join(root, 'sidecar with spaces.exe');
       await writeFile(executable, 'sidecar');
       vi.stubEnv('SETSUNA_DESKTOP_WINDOWS_SANDBOX_PATH', executable);
+      vi.stubEnv('SETSUNA_DESKTOP_HOST_PID', '123');
       const service = new WindowsNativeSandboxService();
       const command = 'node "文件 with spaces.cjs" && echo "done"';
-      expect(service.backgroundCommand(command)).toEqual({
+      expect(service.managedCommand(command)).toEqual({
         command: executable,
-        args: ['run-background', '--command', command],
+        args: ['run-managed', '--command', command, '--supervisor-pids', `${process.pid},123`],
       });
       vi.stubEnv('SETSUNA_DESKTOP_WINDOWS_SANDBOX_PATH', 'relative-sidecar.exe');
-      expect(service.backgroundCommand(command)).toBeNull();
+      expect(() => service.managedCommand(command)).toThrow('managed shell launcher is unavailable');
       vi.stubEnv('SETSUNA_DESKTOP_WINDOWS_SANDBOX_PATH', path.join(root, 'missing.exe'));
-      expect(service.backgroundCommand(command)).toBeNull();
+      expect(() => service.managedCommand(command)).toThrow('managed shell launcher is unavailable');
     } finally {
       await rm(root, { recursive: true, force: true });
     }

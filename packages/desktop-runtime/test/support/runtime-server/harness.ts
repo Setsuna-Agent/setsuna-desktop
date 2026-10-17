@@ -4,6 +4,7 @@ import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { InMemoryDesktopNativeBridge } from '../in-memory-secret-store.js';
+import { configureWindowsShellLauncher } from '../windows-shell-provider.js';
 import type { AppServerPtyFactory } from '../../../src/server/app-server/command-exec.js';
 import { createRuntimeServer, type RuntimeServer } from '../../../src/server/runtime-server.js';
 import {
@@ -96,6 +97,8 @@ export async function createRuntimeServerTestHarness() {
   let runtimeDataDir: string;
   let closePromise: Promise<void> | undefined;
   async function startRuntimeServer(dataDir: string): Promise<void> {
+      // Electron normally supplies this path before runtime Feature composition.
+      configureWindowsShellLauncher();
       const nextServer = await createRuntimeServer({
         dataDir,
         token,

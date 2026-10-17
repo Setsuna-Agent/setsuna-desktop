@@ -107,17 +107,7 @@ impl SandboxRunRequest {
                 "command must be non-empty and cannot contain NUL",
             ));
         }
-        if self.supervisor_pids.is_empty()
-            || self.supervisor_pids.len() > MAX_SUPERVISOR_PROCESSES
-            || self.supervisor_pids.contains(&0)
-            || self.supervisor_pids.iter().collect::<HashSet<_>>().len()
-                != self.supervisor_pids.len()
-        {
-            return Err(SandboxError::new(
-                SandboxErrorCode::InvalidRequest,
-                "supervisorPids must contain 1-4 distinct non-zero process ids",
-            ));
-        }
+        validate_supervisor_pids(&self.supervisor_pids)?;
         for (label, path) in [("cwd", &self.cwd), ("workspaceRoot", &self.workspace_root)] {
             if !path.is_absolute() {
                 return Err(SandboxError::new(
@@ -167,6 +157,20 @@ impl SandboxRunRequest {
         }
         Ok(())
     }
+}
+
+pub fn validate_supervisor_pids(pids: &[u32]) -> Result<(), SandboxError> {
+    if pids.is_empty()
+        || pids.len() > MAX_SUPERVISOR_PROCESSES
+        || pids.contains(&0)
+        || pids.iter().collect::<HashSet<_>>().len() != pids.len()
+    {
+        return Err(SandboxError::new(
+            SandboxErrorCode::InvalidRequest,
+            "supervisorPids must contain 1-4 distinct non-zero process ids",
+        ));
+    }
+    Ok(())
 }
 
 fn validate_roots(label: &str, roots: &[PathBuf]) -> Result<(), SandboxError> {
