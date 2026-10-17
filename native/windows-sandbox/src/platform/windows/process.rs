@@ -1,5 +1,6 @@
 use super::handle::OwnedHandle;
 use super::job::JobObject;
+use super::supervision::{open_supervisors, wait_for_contained_process, wait_for_owned_process};
 use super::token::{
     create_restricted_token, process_impersonation_token, process_logon_sid, process_user_sid,
 };
@@ -9,8 +10,7 @@ use std::collections::BTreeMap;
 use std::ffi::c_void;
 use std::path::{Path, PathBuf};
 use windows_sys::Win32::Foundation::{
-    SetHandleInformation, HANDLE, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE, WAIT_FAILED,
-    WAIT_OBJECT_0,
+    SetHandleInformation, HANDLE, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE,
 };
 use windows_sys::Win32::System::Console::{
     GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
@@ -28,13 +28,16 @@ use windows_sys::Win32::System::StationsAndDesktops::{
 use windows_sys::Win32::System::SystemInformation::GetSystemDirectoryW;
 use windows_sys::Win32::System::Threading::{
     CreateProcessAsUserW, CreateProcessW, CreateProcessWithLogonW, GetCurrentProcess,
-    GetCurrentProcessId, GetExitCodeProcess, OpenProcess, ResumeThread, TerminateProcess,
-    WaitForMultipleObjects, WaitForSingleObject, CREATE_NO_WINDOW, CREATE_SUSPENDED,
-    CREATE_UNICODE_ENVIRONMENT, INFINITE, PROCESS_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION,
-    PROCESS_SYNCHRONIZE, STARTF_USESHOWWINDOW, STARTF_USESTDHANDLES, STARTUPINFOW,
+    GetCurrentProcessId, OpenProcess, TerminateProcess, CREATE_NO_WINDOW, CREATE_SUSPENDED,
+    CREATE_UNICODE_ENVIRONMENT, EXTENDED_STARTUPINFO_PRESENT, PROCESS_INFORMATION,
+    PROCESS_QUERY_LIMITED_INFORMATION, STARTF_USESHOWWINDOW, STARTF_USESTDHANDLES, STARTUPINFOW,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::SW_HIDE;
 use zeroize::{Zeroize, Zeroizing};
+
+#[cfg(test)]
+#[path = "../../../test/restricted-desktop.rs"]
+mod desktop_tests;
 
 pub struct AccountRunnerContext<'a> {
     pub executable: &'a Path,
@@ -46,29 +49,56 @@ pub struct AccountRunnerContext<'a> {
     pub acl_lock_path: &'a Path,
 }
 
-pub fn spawn_background_shell(command: &str) -> Result<i32, SandboxError> {
+pub fn spawn_managed_shell(command: &str, supervisor_pids: &[u32]) -> Result<i32, SandboxError> {
     let executable = system_command_processor()?;
-    let executable_wide = to_wide(executable.as_os_str());
-    let mut command_line = to_wide(format!(
+    let command_line = format!(
         "{} /d /s /c \"{}\"",
         quote_windows_argument(&executable.to_string_lossy()),
         command
-    ));
+    );
+    spawn_managed_program(&executable, command_line, supervisor_pids)
+}
+
+pub fn spawn_sandbox_broker(
+    request_path: &Path,
+    supervisor_pids: &[u32],
+) -> Result<i32, SandboxError> {
+    let executable = std::env::current_exe().map_err(|error| {
+        SandboxError::with_source(
+            SandboxErrorCode::SpawnFailed,
+            "cannot resolve sandbox launcher",
+            error,
+        )
+    })?;
+    let command_line = format!(
+        "{} internal-run --request {}",
+        quote_windows_argument(&executable.to_string_lossy()),
+        quote_windows_argument(&request_path.to_string_lossy())
+    );
+    spawn_managed_program(&executable, command_line, supervisor_pids)
+}
+
+fn spawn_managed_program(
+    executable: &Path,
+    command: String,
+    supervisor_pids: &[u32],
+) -> Result<i32, SandboxError> {
+    let supervisors = open_supervisors(supervisor_pids)?;
+    let executable_wide = to_wide(executable.as_os_str());
+    let mut command_line = to_wide(command);
     let (stdin, stdout, stderr) = inheritable_standard_handles()?;
-    // Hiding the initial console does not cover consoles created later by GUI
-    // runtimes or package managers. Descendants must inherit a non-interactive desktop.
-    let (_desktop, mut desktop_wide) = create_execution_desktop()?;
-    let mut startup: STARTUPINFOW = unsafe { std::mem::zeroed() };
-    startup.cb = std::mem::size_of::<STARTUPINFOW>() as u32;
-    startup.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
-    startup.wShowWindow = SW_HIDE as u16;
+    // Host commands inherit the caller's desktop. CREATE_NO_WINDOW suppresses
+    // the shell console without hiding GUI windows created by the application.
+    let job = JobObject::create()?;
+    let attributes = job.process_attributes()?;
+    let mut extended_startup = attributes.startup_info();
+    let startup = &mut extended_startup.StartupInfo;
+    startup.dwFlags = STARTF_USESTDHANDLES;
     startup.hStdInput = stdin;
     startup.hStdOutput = stdout;
     startup.hStdError = stderr;
-    startup.lpDesktop = desktop_wide.as_mut_ptr();
     let mut process_info: PROCESS_INFORMATION = unsafe { std::mem::zeroed() };
-    let job = JobObject::create()?;
-    // Suspend before assigning the job so cancellation cannot orphan descendants.
+    // The suspended root already belongs to the Job when CreateProcess returns.
     let created = unsafe {
         CreateProcessW(
             executable_wide.as_ptr(),
@@ -76,24 +106,24 @@ pub fn spawn_background_shell(command: &str) -> Result<i32, SandboxError> {
             std::ptr::null(),
             std::ptr::null(),
             1,
-            CREATE_NO_WINDOW | CREATE_SUSPENDED,
+            CREATE_NO_WINDOW | CREATE_SUSPENDED | EXTENDED_STARTUPINFO_PRESENT,
             std::ptr::null(),
             std::ptr::null(),
-            &startup,
+            startup,
             &mut process_info,
         )
     };
     if created == 0 {
         return Err(SandboxError::with_source(
             SandboxErrorCode::SpawnFailed,
-            "CreateProcessW failed for background shell",
+            "CreateProcessW failed for managed process",
             std::io::Error::last_os_error(),
         ));
     }
     let process = OwnedHandle::new(process_info.hProcess).map_err(|error| {
         SandboxError::with_source(
             SandboxErrorCode::SpawnFailed,
-            "invalid background process handle",
+            "invalid managed process handle",
             error,
         )
     })?;
@@ -103,11 +133,11 @@ pub fn spawn_background_shell(command: &str) -> Result<i32, SandboxError> {
         }
         SandboxError::with_source(
             SandboxErrorCode::SpawnFailed,
-            "invalid background thread handle",
+            "invalid managed thread handle",
             error,
         )
     })?;
-    wait_for_contained_process(process, thread, &job, &[])
+    wait_for_contained_process(process, thread, &job, &supervisors)
 }
 
 pub fn spawn_account_runner(
@@ -371,71 +401,11 @@ fn create_execution_desktop() -> Result<(OwnedDesktop, Vec<u16>), SandboxError> 
     if desktop == 0 {
         return Err(SandboxError::with_source(
             SandboxErrorCode::SpawnFailed,
-            "cannot create hidden desktop for background command",
+            "cannot create private desktop for sandbox command",
             std::io::Error::last_os_error(),
         ));
     }
     Ok((OwnedDesktop(desktop), to_wide(format!("winsta0\\{name}"))))
-}
-
-fn wait_for_contained_process(
-    process: OwnedHandle,
-    thread: OwnedHandle,
-    job: &JobObject,
-    supervisors: &[OwnedHandle],
-) -> Result<i32, SandboxError> {
-    if let Err(error) = job.assign(process.raw()) {
-        unsafe {
-            TerminateProcess(process.raw(), 1);
-        }
-        return Err(error);
-    }
-    if unsafe { ResumeThread(thread.raw()) } == u32::MAX {
-        unsafe {
-            TerminateProcess(process.raw(), 1);
-        }
-        return Err(SandboxError::with_source(
-            SandboxErrorCode::SpawnFailed,
-            "ResumeThread failed for sandbox runner",
-            std::io::Error::last_os_error(),
-        ));
-    }
-    let handles = std::iter::once(process.raw())
-        .chain(supervisors.iter().map(OwnedHandle::raw))
-        .collect::<Vec<_>>();
-    let wait =
-        unsafe { WaitForMultipleObjects(handles.len() as u32, handles.as_ptr(), 0, INFINITE) };
-    if wait == WAIT_FAILED {
-        job.terminate(1)?;
-        return Err(SandboxError::with_source(
-            SandboxErrorCode::SpawnFailed,
-            "WaitForMultipleObjects failed for sandbox supervision",
-            std::io::Error::last_os_error(),
-        ));
-    }
-    if wait != WAIT_OBJECT_0 {
-        job.terminate(1)?;
-        return Err(SandboxError::new(
-            SandboxErrorCode::SpawnFailed,
-            "sandbox supervisor exited; the contained process tree was terminated",
-        ));
-    }
-    wait_for_owned_process(process)
-}
-
-fn open_supervisors(pids: &[u32]) -> Result<Vec<OwnedHandle>, SandboxError> {
-    pids.iter()
-        .map(|pid| {
-            let handle = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, 0, *pid) };
-            OwnedHandle::new(handle).map_err(|error| {
-                SandboxError::with_source(
-                    SandboxErrorCode::SpawnFailed,
-                    format!("cannot monitor sandbox supervisor process {pid}"),
-                    error,
-                )
-            })
-        })
-        .collect()
 }
 
 fn wait_for_process(process_info: PROCESS_INFORMATION) -> Result<i32, SandboxError> {
@@ -457,26 +427,6 @@ fn wait_for_process(process_info: PROCESS_INFORMATION) -> Result<i32, SandboxErr
         )
     })?;
     wait_for_owned_process(process)
-}
-
-fn wait_for_owned_process(process: OwnedHandle) -> Result<i32, SandboxError> {
-    let wait = unsafe { WaitForSingleObject(process.raw(), INFINITE) };
-    if wait == u32::MAX {
-        return Err(SandboxError::with_source(
-            SandboxErrorCode::SpawnFailed,
-            "WaitForSingleObject failed for sandbox process",
-            std::io::Error::last_os_error(),
-        ));
-    }
-    let mut exit_code = 0_u32;
-    if unsafe { GetExitCodeProcess(process.raw(), &mut exit_code) } == 0 {
-        return Err(SandboxError::with_source(
-            SandboxErrorCode::SpawnFailed,
-            "GetExitCodeProcess failed for sandbox process",
-            std::io::Error::last_os_error(),
-        ));
-    }
-    Ok(exit_code as i32)
 }
 
 fn inheritable_standard_handles() -> Result<(HANDLE, HANDLE, HANDLE), SandboxError> {

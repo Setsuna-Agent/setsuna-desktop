@@ -459,6 +459,12 @@ export function terminateShellSession(
 ): void {
   const child = session.child;
   if (!child || session.closed) return;
+  if (process.platform === 'win32') {
+    // Every Windows shell session is owned by a native launcher. Closing its
+    // non-inherited Job handle also kills descendants whose parent already exited.
+    try { child.kill(childSignal); } catch { /* The launcher may have already exited. */ }
+    return;
+  }
   killChildProcess(child, childSignal);
   if (childSignal === 'SIGTERM' && !session.killTimer) {
     session.killTimer = setTimeout(

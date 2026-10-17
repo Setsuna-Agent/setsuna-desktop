@@ -15,6 +15,7 @@ import { shellSandboxCapability, shellSandboxUnavailableReason } from '../../../
 import { FileWorkspaceProjectStore } from '../../../../src/adapters/workspace/file-workspace-project-store.js';
 import { systemClock } from '../../../../src/ports/clock.js';
 import type { PolicyAmendmentStore, RuntimePolicyAmendments } from '../../../../src/ports/policy-amendment-store.js';
+import { windowsShellProvider } from '../../../support/windows-shell-provider.js';
 
 export const execFileAsync = promisify(execFile);
 
@@ -49,15 +50,18 @@ export async function createHost(options: {
   // per-thread workspace that the runtime resolver selects for thread_1.
   const projectDir = (await store.ensureTemporaryWorkspace({ threadId: 'thread_1' })).path!;
   const project = await store.addProject({ path: projectDir });
+  const host = new PcLocalToolHost(
+    store,
+    options.policyAmendmentStore,
+    options.workspaceDependencies,
+    undefined,
+    { shellSandboxCapability: options.shellSandboxCapability },
+  );
+  const provider = windowsShellProvider();
+  if (provider) host.bindShellSandboxProvider(provider);
   return {
     fixtureRoot: root,
-    host: new PcLocalToolHost(
-      store,
-      options.policyAmendmentStore,
-      options.workspaceDependencies,
-      undefined,
-      { shellSandboxCapability: options.shellSandboxCapability },
-    ),
+    host,
     projectDir,
     projectId: project.id,
   };

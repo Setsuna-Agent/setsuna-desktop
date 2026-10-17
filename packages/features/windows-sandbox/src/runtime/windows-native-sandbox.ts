@@ -102,11 +102,16 @@ export function clearWindowsNativeSandboxCapabilityCache(): void {
 }
 
 export class WindowsNativeSandboxService implements WindowsSandboxRuntimeService {
-  backgroundCommand(command: string): { command: string; args: string[] } | null {
+  managedCommand(command: string): { command: string; args: string[] } | null {
     if (process.platform !== 'win32') return null;
-    // Window hosting needs only the bundled executable, not installed sandbox accounts.
+    // Host execution needs the bundled launcher, not installed sandbox accounts.
+    // Supervisor handles keep persisted commands owned by this runtime and desktop host.
     const executable = existingAbsoluteFile(process.env[WINDOWS_SANDBOX_EXECUTABLE_ENV]);
-    return executable ? { command: executable, args: ['run-background', '--command', command] } : null;
+    if (!executable) throw new Error('Windows managed shell launcher is unavailable.');
+    return {
+      command: executable,
+      args: ['run-managed', '--command', command, '--supervisor-pids', sandboxSupervisorPids(process.env).join(',')],
+    };
   }
 
   capability(): WindowsNativeSandboxCapability {

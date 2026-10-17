@@ -542,11 +542,15 @@ async function startShellSession({
     const windowsRequestPath = sandboxPlan.provider === 'windows-native'
       ? await writeNativeSandboxRequest(state, command, sandboxPlan, session.id, temporaryRoot)
       : '';
-    const backgroundCommand = process.platform === 'win32' && sandboxPlan.provider === 'bypass'
-      ? state.shellSandboxProvider?.backgroundCommand?.(command)
+    const needsManagedLauncher = process.platform === 'win32' && sandboxPlan.provider === 'bypass';
+    const managedCommand = needsManagedLauncher
+      ? state.shellSandboxProvider?.managedCommand?.(command)
       : null;
-    const spawnSpec = backgroundCommand
-      ? { ...backgroundCommand, shell: false, sandboxed: false, sandboxProvider: 'bypass' }
+    if (needsManagedLauncher && !managedCommand) {
+      throw new Error('Windows managed shell launcher is unavailable.');
+    }
+    const spawnSpec = managedCommand
+      ? { ...managedCommand, shell: false, sandboxed: false, sandboxProvider: 'bypass' }
       : shellSpawnSpec(command, sandboxPlan, windowsRequestPath);
     session.sandboxed = Boolean(spawnSpec.sandboxed);
     session.sandboxProvider = spawnSpec.sandboxProvider;

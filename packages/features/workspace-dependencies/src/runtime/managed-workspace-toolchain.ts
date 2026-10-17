@@ -227,19 +227,22 @@ export async function writeNodeScriptShim(
   name: string,
   nodePath: string,
   scriptPath: string,
+  electronRunAsNode: boolean,
 ): Promise<void> {
   if (process.platform === 'win32') {
+    const environment = electronRunAsNode ? 'set "ELECTRON_RUN_AS_NODE=1"\r\n' : '';
     await writeFile(
       path.join(binDir, `${name}.cmd`),
-      `@echo off\r\nset "ELECTRON_RUN_AS_NODE=1"\r\n"${nodePath}" "${scriptPath}" %*\r\n`,
+      `@echo off\r\nsetlocal\r\n${environment}"${nodePath}" "${scriptPath}" %*\r\n`,
       'utf8',
     );
     return;
   }
   const shimPath = path.join(binDir, name);
+  const environment = electronRunAsNode ? 'ELECTRON_RUN_AS_NODE=1 ' : '';
   await writeFile(
     shimPath,
-    `#!/bin/sh\nELECTRON_RUN_AS_NODE=1 exec ${shellQuote(nodePath)} ${shellQuote(scriptPath)} "$@"\n`,
+    `#!/bin/sh\n${environment}exec ${shellQuote(nodePath)} ${shellQuote(scriptPath)} "$@"\n`,
     { encoding: 'utf8', mode: 0o755 },
   );
   await access(shimPath, fsConstants.X_OK);

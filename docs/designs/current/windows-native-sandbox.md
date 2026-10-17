@@ -50,6 +50,7 @@ runtime Capability，`main` 管理 sidecar、信任快照和认证出口，`prel
 - `install` / `repair`：通过 `ShellExecuteExW(runas)` 执行一次提权安装；
 - `uninstall`：只删除 SID 和管理标记均匹配的 Setsuna 身份；
 - `run --request <absolute-json>`：读取并验证执行请求，配置 ACL，然后在隔离账户中启动命令；
+- `run-managed --command <command> --supervisor-pids <pids>`：使用宿主身份与桌面托管命令，不依赖沙箱账户安装；
 - `internal-child`：在隔离账户登录会话内构造 restricted token 并创建最终 shell。
 
 安装状态位于 `%ProgramData%\Setsuna Desktop\Sandbox`。两个随机账户密码使用 machine-scope DPAPI
@@ -75,6 +76,27 @@ provider 通过 runtime composition 绑定到通用 `ShellSandboxProvider` port�
 请求包含协议版本、命令、cwd、workspace、权限 profile、显式根、网络模式、筛选后的环境和 supervisor
 PID。sidecar 同时监控 runtime 与 Electron main；任一监督进程退出都会终止 Job Object 中的完整进程树，
 避免在线命令在本机认证代理消失后继续存活。
+
+### 宿主执行、桌面与进程生命周期
+
+实际执行计划的 provider 决定启动路径，不能只看权限 profile：关闭 OS sandbox 的受限 profile 也可能得到
+`bypass`。Windows 的 `bypass` 通过 `ShellSandboxProvider.managedCommand` 使用同一 native launcher，
+继承宿主所在桌面；`windows-native` 的 restricted shell 固定使用私有桌面，调用方不能覆盖。macOS 沿用
+现有实现。托管 launcher 缺失、启动失败或 supervisor 不可用时明确失败，不退回无 Job 的直接启动。
+
+launcher 自身使用 Windows GUI subsystem，宿主 shell 使用 `CREATE_NO_WINDOW` 抑制初始控制台；不对宿主
+GUI 设置 `SW_HIDE`，也不通过私有桌面隐藏所有后代。宿主命令主动创建的窗口可以出现。后台与 `persist`
+只描述生命周期，不决定桌面归属，不按命令关键词、执行时长或 `persist` 猜测窗口模式，也没有 `display` 参数。
+
+两条 Windows 路径都保证进程挂起时已经加入不可 breakaway 的 Job，然后才恢复执行。首次创建使用
+`PROC_THREAD_ATTRIBUTE_JOB_LIST` 原子绑定，避免 launcher 在创建与单独分配 Job 之间被杀时留下挂起孤儿。
+`CreateProcessWithLogonW` 不支持该扩展启动参数，因此 `run` 先创建已在 Job 内的 `internal-run` broker；
+跨账户 runner 从 broker 继承外层 Job，再挂起加入原有执行 Job。所有层级均禁止 breakaway。
+根进程退出时记录其退出码，
+但 launcher 持续等待 Job 内全部进程结束，然后返回根退出码。等待期间保留 stdio、临时目录和沙箱资源租约。
+supervisor 在命令执行前打开为进程句柄，此后不重新按 PID 查找；runtime 或 Electron main 退出会终止整棵树。
+用户主动停止时终止 launcher，由 kill-on-close Job 收回包括已失去父进程的后代。`persist: true` 可跨回合，
+不能跨 runtime 或应用重启存活。所有监督只在命令启动时创建，不增加应用冷启动工作。
 
 ### Electron main 与设置页
 
@@ -187,12 +209,19 @@ Windows native sandbox 执行计划会把固定版本、固定 SHA-256 的 curl-
 - before-pack 复制 binary、Apache-2.0 license、NOTICE 和 SHA-256 metadata；
 - after-pack 再校验完整文件清单、哈希、协议、版本和 sidecar `version` 输出；
 - TypeScript 单测覆盖 provider、fail-closed policy、IPC manager、native bridge、代理认证与端口占用。
+- `pnpm test:windows-sandbox` 运行真实宿主进程树测试，覆盖桌面继承、stdio/中文 cwd/退出码、根命令提前退出、
+  launcher 被杀、owner 正常退出与崩溃、跨登录挂起子进程的 Job 继承；受限 token 的实际启动测试验证私有桌面，
+  不修改机器账户或防火墙；
+- Windows 上先运行 `pnpm build:windows-sandbox`，再运行 `pnpm test:integration packages/desktop-runtime/test/integration/adapters/tool`。
+  集成测试消费打包目录中的 release helper，覆盖 provider 分流、失败不回退、创建期间立即停止、跨回合与运行中心停止，
+  并通过 `pnpm dev` 启动 Electron，以原生窗口句柄验证用户桌面、可见性和消息响应；不做样式截图。
 
-现有 smoke test 不会覆盖 UAC UI、崩溃监督和完整网络逃逸矩阵；这些场景仍应在可丢弃的 Windows VM
+现有 smoke test 不会覆盖 UAC UI 和完整网络逃逸矩阵；这些场景仍应在可丢弃的 Windows VM
 中作为发布门禁。交叉编译只能验证 Win32 binding 和类型完整性。
 
 ## 设计依据
 
+- [Microsoft：Assigning a process to a job at creation time](https://devblogs.microsoft.com/oldnewthing/20230209-00/?p=107812)
 - [OpenAI：Building a safe, effective sandbox to enable Codex on Windows](https://openai.com/index/building-codex-windows-sandbox/)
 - [OpenAI Codex：windows-sandbox-rs/token.rs](https://github.com/openai/codex/blob/main/codex-rs/windows-sandbox-rs/src/token.rs)
 - [Microsoft：CreateRestrictedToken](https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-createrestrictedtoken)
