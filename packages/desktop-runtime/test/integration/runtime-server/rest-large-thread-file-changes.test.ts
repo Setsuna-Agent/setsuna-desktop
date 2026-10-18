@@ -1,5 +1,5 @@
 import { FILE_DIFF_PREVIEW_LINES, messageFileChangeGroupId, projectFileChangePreview, threadFileChangeKey, type RuntimeMessage, type RuntimeMessagePage, type RuntimeThread, type ThreadFileChangesResult, type WorkspaceProject } from '@setsuna-desktop/contracts';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { expect, it } from 'vitest';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
@@ -11,7 +11,8 @@ import { createRuntimeServerTestHarness } from '../../support/runtime-server/har
 it.each(['long_turn', undefined])('undoes and reapplies both ends of a paginated 430-message turn after restarting (turnId: %s)', async (turnId) => {
   const harness = await createRuntimeServerTestHarness();
   try {
-    const root = path.join(harness.runtimeDataDir, 'large-turn-project');
+    // Preview requests use recorded paths; macOS temp roots can alias /private/var.
+    const root = path.join(await realpath(harness.runtimeDataDir), 'large-turn-project');
     await mkdir(root);
     const project: WorkspaceProject = await harness.runtimeFetch('/v1/projects', { method: 'POST', body: JSON.stringify({ path: root }) });
     const edits = await Promise.all(['early.txt', 'late.txt'].map(async (file) => {
@@ -84,7 +85,7 @@ it.each([
 ] as const)('keeps later patch files readable after paging, checkpointing and restarting a %s history at message %s', async (source, messageIndex) => {
   const harness = await createRuntimeServerTestHarness();
   try {
-    const root = path.join(harness.runtimeDataDir, 'multi-file-project');
+    const root = path.join(await realpath(harness.runtimeDataDir), 'multi-file-project');
     await mkdir(root);
     const project: WorkspaceProject = await harness.runtimeFetch('/v1/projects', { method: 'POST', body: JSON.stringify({ path: root }) });
     const smallPath = path.join(root, 'small.txt');
