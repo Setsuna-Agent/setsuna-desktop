@@ -3,6 +3,7 @@ node_modules/
 dist/
 coverage/
 .cache/electron-dev/
+.cache/openui-layout-check/
 .cache/ripgrep/
 .cache/sandbox-curl/
 .cache/windows-sandbox/

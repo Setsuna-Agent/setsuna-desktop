@@ -16,6 +16,7 @@ import { TestModelPicker } from './model-picker-test-ui.js';
 const ignoreCopy = async () => undefined;
 const ignoreError = () => undefined;
 const ignoreExternal = async () => false;
+const missingPreview = async (): Promise<DesktopDiffFile> => { throw new Error('No file preview configured.'); };
 
 export function ReviewRendererTestHost({
   bridge = null,
@@ -24,16 +25,19 @@ export function ReviewRendererTestHost({
   copyText = ignoreCopy,
   notifyError = ignoreError,
   openExternal = ignoreExternal,
+  loadFileChangePreview = missingPreview,
 }: PropsWithChildren<{
   bridge?: DesktopReviewBridge | null;
   locale?: 'en-US' | 'zh-CN';
   copyText?: ReviewRendererHost['copyText'];
   notifyError?: ReviewRendererHost['notifyError'];
   openExternal?: ReviewRendererHost['openExternal'];
+  loadFileChangePreview?: ReviewRendererHost['loadFileChangePreview'];
 }>) {
   const host = useMemo<ReviewRendererHost>(() => ({
     bridge,
     buildPatch: testDiffPatch,
+    loadFileChangePreview,
     copyText,
     notifyError,
     openExternal,
@@ -74,7 +78,7 @@ export function ReviewRendererTestHost({
       FileDocument: ({ content, filePath }) => <section role="region" aria-label={filePath}>{content}</section>,
       DocumentPreview: ({ filePath, label }) => <section aria-label={label ?? filePath} />,
     },
-  }), [bridge, locale, copyText, notifyError, openExternal]);
+  }), [bridge, locale, copyText, notifyError, openExternal, loadFileChangePreview]);
   return <ReviewRendererHostProvider host={host}>{children}</ReviewRendererHostProvider>;
 }
 

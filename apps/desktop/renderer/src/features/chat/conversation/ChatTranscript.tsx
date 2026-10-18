@@ -356,7 +356,7 @@ export function ChatTranscript({
                       />
                     ) : null}
                     {renderedDisplayItems.map((item) => (
-                      <ChatThreadProvider key={chatDisplayItemRenderKey(item)} threadId={currentThread?.id ?? null} fileChangeStates={currentThread?.fileChangeStates}>
+                      <ChatThreadProvider key={chatDisplayItemRenderKey(item)} threadId={currentThread?.id ?? null} fileChangeStates={currentThread?.fileChangeStates} fileChangeGroups={messageHistory.fileChangeGroups}>
                         <MessageItem
                           {...messageMutationHandlers}
                           activeAssistantItemId={activeAssistantItemId}

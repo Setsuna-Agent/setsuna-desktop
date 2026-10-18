@@ -34,10 +34,13 @@ import { reviewMarkdownLinksByLabelStart } from './review/markdown-link-scanner.
 import type { RuntimeContextCompactionNotice, RuntimeThreadContextCompactionState } from './thread-context.js';
 import type { RuntimeUsage } from './usage.js';
 import type { ThreadFileChangeState } from './workspace.js';
+import type { RuntimeFileChangeGroups } from './workspace/file-change-group-types.js';
+import type { RuntimeThreadMessagePageInfo } from './threads/message-page.js';
 import { visibleTextOutsideThinkTags } from './swe/think-tag-scanner.js';
 
 export type * from './message-metadata.js';
 export type * from './thread-context.js';
+export type * from './threads/message-page.js';
 
 /** UTF-16 offsets into RuntimeMessage.content for one serialized Skill slot. */
 export type RuntimeSkillReference = {
@@ -97,6 +100,8 @@ export type RuntimeMessage = {
   id: string;
   clientId?: string;
   turnId?: string;
+  /** Display-only operation scope inferred for legacy messages without a turnId. */
+  fileChangeGroupId?: string;
   role: RuntimeMessageRole;
   /** 用户输入的领域类型；普通消息可省略，特殊任务由 transcript 使用独立标识展示。 */
   inputKind?: RuntimeMessageInputKind;
@@ -720,6 +725,8 @@ export type RuntimeThreadSummary = {
 export type RuntimeThread = RuntimeThreadSummary & {
   /** Last successful undo/reapply for each tool-call batch, projected from runtime events. */
   fileChangeStates?: Record<string, ThreadFileChangeState>;
+  /** Display-only complete operation sets for turns in a paged snapshot; no undo bodies. */
+  fileChangeGroups?: RuntimeFileChangeGroups;
   activeTurnId?: string | null;
   contextCompaction?: RuntimeThreadContextCompactionState;
   /** Budgets sampled before this history mutation no longer describe the current context. */
@@ -734,19 +741,9 @@ export type RuntimeThread = RuntimeThreadSummary & {
   messages: RuntimeMessage[];
   lastSeq: number;
 };
-export type RuntimeThreadMessagePageInfo = {
-  nextBefore: number | null;
-  total: number;
-};
-
-export type RuntimeMessagePageQuery = {
-  before?: number;
-  /** Target record count; transcript snapshots extend to the containing prompt's start. */
-  limit?: number;
-};
-
 export type RuntimeMessagePage = RuntimeThreadMessagePageInfo & {
   messages: RuntimeMessage[];
+  fileChangeGroups?: RuntimeFileChangeGroups;
 };
 
 export type ThreadQuery = {
@@ -885,6 +882,8 @@ export type MessagePatch = {
 
 export type MessageDeleteInput = {
   messageIds: string[];
+  /** Chat deletion resolves complete question/answer turns before persisting IDs. */
+  scope?: 'messages' | 'turns';
 };
 
 export type RegenerateMessageInput = {

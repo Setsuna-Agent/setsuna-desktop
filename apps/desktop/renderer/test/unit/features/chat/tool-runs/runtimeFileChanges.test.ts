@@ -1,13 +1,47 @@
 import type { RuntimeMessage, RuntimeToolRun } from '@setsuna-desktop/contracts';
+import { projectMessagePageFileChanges } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import {
   collapseFileMutationRunsInSegments,
   fileChangesFromToolRun,
+  fileChangeRunsForMessages,
+  fileChangeToolCallIds,
   fileChangeSummaryFromRuns,
   latestFileChangeSummaryFromMessages,
 } from '../../../../../src/features/chat/tool-runs/runtimeFileChanges.js';
 
 describe('runtime file changes', () => {
+  it.each(['turn', undefined])('merges the operation index with loaded previews without losing early files or double counting (turnId: %s)', (turnId) => {
+    const run = (id: string, path: string): RuntimeToolRun => ({ id, name: 'edit', status: 'success', data: { diff: {
+      path, additions: 2, deletions: 1, lines: [{ type: 'add', content: id }],
+    } } });
+    const messages: RuntimeMessage[] = ['early', 'late'].map((id) => ({
+      id, turnId, role: 'assistant', content: '', createdAt: '', toolRuns: [run(id, `${id}.ts`)],
+    }));
+    const page = projectMessagePageFileChanges(messages, { messages: messages.slice(-1), total: 2, nextBefore: 1 });
+    const groups = page.fileChangeGroups;
+    const runs = fileChangeRunsForMessages(page.messages, groups);
+    expect(fileChangeToolCallIds(runs)).toEqual(['early', 'late']);
+    expect(fileChangeSummaryFromRuns(runs)).toMatchObject({ additions: 4, deletions: 2,
+      files: [{ path: 'early.ts' }, { path: 'late.ts', lines: [{ type: 'added', content: 'late' }] }],
+    });
+    expect(fileChangeSummaryFromRuns(fileChangeRunsForMessages(messages, groups))).toMatchObject({ additions: 4, deletions: 2 });
+    const continued = [...messages, { ...messages[1], id: 'new', toolRuns: [run('new', 'late.ts')] }];
+    expect(fileChangeToolCallIds(fileChangeRunsForMessages(continued, groups))).toEqual(['early', 'late', 'new']);
+  });
+
+  it('reuses unchanged historical previews and bounds very long lines before normalization', () => {
+    const run: RuntimeToolRun = { id: 'large', name: 'delete_file', status: 'success', data: { diff: {
+      path: 'large.txt', deletions: 16_475, lines: Array.from({ length: 16_475 }, () => ({ type: 'del', content: 'x'.repeat(1000) })),
+    } } };
+    const first = fileChangesFromToolRun(run);
+    expect(fileChangesFromToolRun(run)).toBe(first);
+    expect(first[0]).toMatchObject({ truncated: true, deletions: 16_475 });
+    expect(first[0].lines.reduce((total, line) => total + line.content.length, 0)).toBeLessThanOrEqual(24_000);
+    const updated = fileChangesFromToolRun({ ...run, data: { diff: { path: 'new.txt', lines: [] } } });
+    expect(updated[0].path).toBe('new.txt');
+  });
+
   it('collapses repeated writes for the same path without losing change totals', () => {
     const segments: RuntimeMessage[] = [
       {

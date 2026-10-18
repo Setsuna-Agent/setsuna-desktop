@@ -7,6 +7,7 @@ import type {
 import {
   normalizeLegacyAssistantPhases,
   normalizeRuntimeMessageProviderMetadata,
+  projectThreadFilePreviews,
 } from '@setsuna-desktop/contracts';
 import type { RuntimeThreadSamplingState, RuntimeTurnActivityProjection } from '../../ports/thread-store.js';
 import { assertSafeRuntimeId } from '../../security/runtime-id.js';
@@ -38,7 +39,7 @@ export function cloneThread(thread: RuntimeThread): RuntimeThread {
 /** Model request diagnostics belong to full thread reads, not sampling input. */
 export function projectRuntimeThreadSamplingState(thread: RuntimeThread | null): RuntimeThreadSamplingState | null {
   if (!thread) return null;
-  const { messages, kind, lastSeq, messageCount, updatedAt } = thread;
+  const { messages, kind, lastSeq, messageCount, updatedAt } = projectThreadFilePreviews(thread);
   return structuredClone({ messages, kind, lastSeq, messageCount, updatedAt });
 }
 

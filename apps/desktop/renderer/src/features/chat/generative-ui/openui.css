@@ -16,6 +16,17 @@
   font-family: inherit;
 }
 
+.chat-openui-stack {
+  display: contents;
+}
+
+/* A full-width field otherwise claims an entire line before a row Stack can
+ * shrink it. Give direct fields a readable flex basis, then share the space. */
+.chat-openui-stack[data-direction='row'] > div > :is(.openui-input, .openui-textarea, .openui-form-control) {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
 /* OpenUI portals bypass .chat-openui and mount directly under the zoomed body.
  * Keep their positioning wrappers in viewport pixels, then restore app density
  * on the contents, as renderer-ui's overlay container does. Restrict this to

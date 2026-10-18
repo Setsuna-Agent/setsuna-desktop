@@ -4,12 +4,12 @@ import type {
   RuntimeMessage,
   RuntimeThread,
 } from '@setsuna-desktop/contracts';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { runtimeThreadResponse } from '../../src/server/runtime-thread-response.js';
 import type { RuntimeFactory } from '../../src/server/types.js';
 
 describe('runtime thread response model binding', () => {
-  it('projects a legacy binding from the complete history rather than the paginated message tail', async () => {
+  it.each(['supplied', 'sampling'] as const)('projects a legacy binding from %s history without inferring from only the page', async (source) => {
     const firstMessage = assistantMessage('first', 'provider-a', 'anthropic', 'model-a-code');
     const laterMessages = Array.from({ length: 160 }, (_, index) => (
       assistantMessage(`later-${index}`, 'provider-b', 'openai-responses', 'model-b-code')
@@ -18,12 +18,15 @@ describe('runtime thread response model binding', () => {
     const paginatedThread = {
       ...completeThread,
       messages: completeThread.messages.slice(-160),
+      messagePage: { total: completeThread.messages.length, nextBefore: 1 },
     };
+    const getThread = vi.fn(async () => { throw new Error('Full history is too large'); });
     const runtime = {
       configStore: { getConfig: async () => runtimeConfig() },
+      threadStore: { getSamplingState: async () => completeThread, getThread },
     } as unknown as RuntimeFactory;
 
-    const responseThread = await runtimeThreadResponse(runtime, paginatedThread, completeThread);
+    const responseThread = await runtimeThreadResponse(runtime, paginatedThread, source === 'supplied' ? completeThread : undefined);
 
     expect(responseThread.messages).toHaveLength(160);
     expect(responseThread.modelBinding).toEqual({
@@ -31,6 +34,7 @@ describe('runtime thread response model binding', () => {
       modelId: 'model-a',
       modelCode: 'model-a-code',
     });
+    expect(getThread).not.toHaveBeenCalled();
   });
 });
 

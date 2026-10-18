@@ -5,6 +5,8 @@ import type {
   UpdateWorkspaceProjectInput,
   ThreadFileChangesInput,
   ThreadFileChangesResult,
+  RuntimeFileChangeOperation,
+  RuntimeFileChangePreviewInput,
   AnswerRuntimeApprovalInput,
   CreateThreadInput,
   ForkThreadInput,
@@ -70,6 +72,11 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
   };
 
   return {
+    getThreadFileChangePreview(threadId: string, input: RuntimeFileChangePreviewInput) {
+      return request<RuntimeFileChangeOperation[]>({
+        path: `/v1/threads/${encodeURIComponent(threadId)}/file-changes/preview`, method: 'POST', body: input,
+      });
+    },
     applyThreadFileChanges(threadId: string, input: ThreadFileChangesInput, action: WorkspaceFileChangeAction) {
       return request<ThreadFileChangesResult>({
         path: `/v1/threads/${encodeURIComponent(threadId)}/file-changes/${action}`,
@@ -104,6 +111,17 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
       // Preserve the HTTP missing-thread distinction across Electron's error serialization.
       const response = await request<RuntimeFeatureOperationResponse<RuntimeThread>>({
         path: `/v1/threads/${encodeURIComponent(threadId)}?messageLimit=160`,
+        responseMode: 'feature-operation',
+      });
+      if (!response.ok) throw new RuntimeClientError(
+        response.status === 404 ? 'thread_not_found' : response.error.code, response.error.message,
+      );
+      return response.value;
+    },
+    async getThreadIfChanged(threadId: string, lastSeq: number, activeTurnId: string | null) {
+      const params = new URLSearchParams({ messageLimit: '160', knownSeq: String(lastSeq), knownActiveTurnId: activeTurnId ?? '' });
+      const response = await request<RuntimeFeatureOperationResponse<RuntimeThread | null>>({
+        path: `/v1/threads/${encodeURIComponent(threadId)}?${params}`,
         responseMode: 'feature-operation',
       });
       if (!response.ok) throw new RuntimeClientError(

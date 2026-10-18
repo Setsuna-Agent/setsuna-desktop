@@ -6,6 +6,7 @@ import type {
   RuntimeMessageAttachment,
   RuntimeReviewModeNotice,
 } from '@setsuna-desktop/contracts';
+import { isActiveToolRun, messageFileChangeGroupId, messagesInTranscriptOrder } from '@setsuna-desktop/contracts';
 import {
   DEFAULT_APP_LOCALE,
   translate,
@@ -20,7 +21,7 @@ const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, par
 
 export type ChatTranscriptItem =
   | { type: 'user'; id: string; assistantTimelineSteerMessageIds: string[]; handledSteerMessageIds: string[]; message: RuntimeMessage; messageIds: string[]; guidanceProcessed: boolean; steered: boolean; steerMessages: RuntimeMessage[] }
-  | { type: 'assistant'; id: string; contextCompactions?: RuntimeMessage[]; goalExit?: RuntimeGoalExitNotice; reviewExit?: RuntimeReviewModeNotice; handledSteerMessageIds: string[]; messageIds: string[]; segments: RuntimeMessage[]; steerMessages: RuntimeMessage[]; toolAttachments?: RuntimeMessageAttachment[]; turnId?: string }
+  | { type: 'assistant'; id: string; contextCompactions?: RuntimeMessage[]; goalExit?: RuntimeGoalExitNotice; reviewExit?: RuntimeReviewModeNotice; handledSteerMessageIds: string[]; messageIds: string[]; segments: RuntimeMessage[]; displaySegments?: RuntimeMessage[]; steerMessages: RuntimeMessage[]; toolAttachments?: RuntimeMessageAttachment[]; turnId?: string }
   | { type: 'context'; id: string; message: RuntimeMessage }
   | { type: 'review'; id: string; message: RuntimeMessage };
 
@@ -47,11 +48,6 @@ export type ChatScrollSignalOptions = {
   threadId?: string | null;
 };
 
-type TranscriptMessageEntry = {
-  message: RuntimeMessage;
-  sourceIndex: number;
-};
-
 /**
  * 将存储中的 runtime messages 转成用户可见的 transcript 行，并恢复压缩边界的事件位置。
  *
@@ -66,6 +62,7 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
   let assistantRunMessageIds: string[] = [];
   let assistantRunToolAttachments: RuntimeMessageAttachment[] = [];
   let assistantRunTurnId: string | undefined;
+  let assistantRunFileChangeGroupId: string | undefined;
   const pendingSteerMessagesByTurnId = new Map<string, RuntimeMessage[]>();
   const userItemByTurnId = new Map<string, Extract<ChatTranscriptItem, { type: 'user' }>>();
   const seenUserTurnIds = new Set<string>();
@@ -100,6 +97,7 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
     assistantRunMessageIds = [];
     assistantRunToolAttachments = [];
     assistantRunTurnId = undefined;
+    assistantRunFileChangeGroupId = undefined;
   };
 
   // 压缩结果里的 messages 是模型窗口顺序；分隔符需要恢复到真实 transcript 时间线。
@@ -160,8 +158,12 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
     }
     if (message.role === 'assistant') {
       // 同一 turn 的连续 assistant 消息代表同一个可见 run，只是 runtime 分成了多段。
-      if ((assistantRun.length || assistantRunContextCompactions.length) && !sameTurn(message.turnId, assistantRunTurnId)) flushAssistantRun();
+      // A legacy boundary may live outside this page; retain the server's full-timeline grouping.
+      const fileChangeGroupId = messageFileChangeGroupId(message);
+      if (((assistantRun.length || assistantRunContextCompactions.length) && !sameTurn(message.turnId, assistantRunTurnId))
+        || (assistantRunFileChangeGroupId && fileChangeGroupId && assistantRunFileChangeGroupId !== fileChangeGroupId)) flushAssistantRun();
       assistantRunTurnId = assistantRunTurnId ?? message.turnId;
+      assistantRunFileChangeGroupId ??= fileChangeGroupId;
       const turnId = message.turnId;
       if (turnId && !userItemByTurnId.has(turnId) && lastUserItem && (!lastUserItem.message.turnId || lastUserItem.message.turnId === turnId)) {
         userItemByTurnId.set(turnId, lastUserItem);
@@ -292,45 +294,6 @@ function messageIndex(messageOrder: ReadonlyMap<string, number>, messageId: stri
   return messageOrder.get(messageId) ?? Number.MAX_SAFE_INTEGER;
 }
 
-function messagesInTranscriptOrder(messages: RuntimeMessage[]): RuntimeMessage[] {
-  const entries = messages.map((message, sourceIndex): TranscriptMessageEntry => ({ message, sourceIndex }));
-  const boundaries = entries.filter(({ message }) => Boolean(message.contextCompaction));
-  if (!boundaries.length) return messages;
-
-  const timeline = entries.filter(({ message }) => !message.contextCompaction);
-  boundaries.sort(compareTranscriptBoundaryEntries);
-  for (const boundary of boundaries) {
-    const anchorId = boundary.message.contextCompaction?.transcriptAfterMessageId;
-    const anchorIndex = anchorId ? timeline.findIndex(({ message }) => message.id === anchorId) : -1;
-    const insertAt = anchorIndex >= 0
-      ? anchorIndex + 1
-      : inferredTranscriptBoundaryIndex(timeline, boundary);
-    timeline.splice(insertAt, 0, boundary);
-  }
-  return timeline.map(({ message }) => message);
-}
-
-function compareTranscriptBoundaryEntries(left: TranscriptMessageEntry, right: TranscriptMessageEntry): number {
-  const leftTime = Date.parse(left.message.createdAt);
-  const rightTime = Date.parse(right.message.createdAt);
-  if (Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime) return leftTime - rightTime;
-  return left.sourceIndex - right.sourceIndex;
-}
-
-function inferredTranscriptBoundaryIndex(timeline: TranscriptMessageEntry[], boundary: TranscriptMessageEntry): number {
-  const boundaryTime = Date.parse(boundary.message.createdAt);
-  if (Number.isFinite(boundaryTime)) {
-    let insertAfter = -1;
-    for (const [index, entry] of timeline.entries()) {
-      const entryTime = Date.parse(entry.message.createdAt);
-      if (Number.isFinite(entryTime) && entryTime <= boundaryTime) insertAfter = index;
-    }
-    return insertAfter + 1;
-  }
-  const sourcePosition = timeline.findIndex((entry) => entry.sourceIndex > boundary.sourceIndex);
-  return sourcePosition >= 0 ? sourcePosition : timeline.length;
-}
-
 export function createChatDisplayItems(messages: RuntimeMessage[]): ChatDisplayItem[] {
   return buildChatTranscript(messages);
 }
@@ -418,7 +381,7 @@ export function createChatRenderWindow(
   } = {},
 ): ChatRenderWindow {
   const limit = Math.max(1, Math.floor(tailItemLimit));
-  if (!enabled || items.length <= limit) {
+  if (!enabled) {
     return { hiddenItemCount: 0, hiddenMessageCount: 0, items };
   }
 
@@ -427,10 +390,20 @@ export function createChatRenderWindow(
   // active turn 比尾部更早时，从 active turn 开始渲染，避免流式回答消失在窗口外。
   const start = activeStart >= 0 ? Math.min(tailStart, activeStart) : tailStart;
   const hiddenItems = items.slice(0, start);
+  let hiddenSegments = 0;
+  const visible = items.slice(start).map((item) => {
+    // One tool-heavy turn can grow indefinitely inside a single transcript item.
+    // Window only the timeline. File summaries, undo/redo and copy retain the complete group.
+    if (item.type !== 'assistant' || item.segments.length <= 160) return item;
+    const earlier = item.segments.slice(0, -160);
+    const interactive = earlier.filter((message) => message.toolRuns?.some(isActiveToolRun));
+    hiddenSegments += earlier.length - interactive.length;
+    return { ...item, displaySegments: [...interactive, ...item.segments.slice(-160)] };
+  });
   return {
-    hiddenItemCount: hiddenItems.length,
-    hiddenMessageCount: hiddenItems.length,
-    items: items.slice(start),
+    hiddenItemCount: hiddenItems.length + (hiddenSegments ? 1 : 0),
+    hiddenMessageCount: hiddenItems.length + hiddenSegments,
+    items: hiddenItems.length || hiddenSegments ? visible : items,
   };
 }
 
@@ -580,7 +553,7 @@ function assistantHasProcessingEvidence(message: RuntimeMessage): boolean {
 
 function transcriptItemScrollSignal(item: ChatTranscriptItem): string {
   if (item.type === 'assistant') {
-    return `assistant:${item.id}:${item.segments.map(messageScrollSignal).join(',')}:compaction:${item.contextCompactions?.map(messageScrollSignal).join(',') ?? ''}:tool-attachments:${item.toolAttachments?.length ?? 0}:steer:${item.steerMessages.map(messageScrollSignal).join(',')}:goal-exit:${item.goalExit?.goal.updatedAt ?? ''}`;
+    return `assistant:${item.id}:${(item.displaySegments ?? item.segments).map(messageScrollSignal).join(',')}:compaction:${item.contextCompactions?.map(messageScrollSignal).join(',') ?? ''}:tool-attachments:${item.toolAttachments?.length ?? 0}:steer:${item.steerMessages.map(messageScrollSignal).join(',')}:goal-exit:${item.goalExit?.goal.updatedAt ?? ''}`;
   }
   if (item.type === 'user') {
     return `user:${messageScrollSignal(item.message)}:steer:${item.steerMessages.map(messageScrollSignal).join(',')}:${item.handledSteerMessageIds.join(',')}`;

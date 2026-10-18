@@ -54,6 +54,9 @@ Full snapshot 通常包含：
 
 一轮可以有多条 assistant message；message 不等于 UI display item。
 
+`MessageDeleteInput.scope` 缺省为精确消息删除；聊天入口使用 `turns`，store 根据完整持久化历史解析所选问答，再把消息 ID 写入 `messages.deleted`。可见提问是问答边界，执行 `turnId` 用来归属插入指引和无提问的运行；重新生成、自动续写即使换了执行 ID，也仍归属原始提问。旧格式沿用可见提问边界，不能从当前分页猜测完整删除范围。
+`messages.truncated.removedMessageIds` 是截断投影的删除真源，锚点仅供缺少清单的旧事件兼容。前端分页缓存收到历史变更后失效；序号连续也不能替代一次用于恢复分页窗口的快照读取。
+
 旧版本写入的 `planMode` 消息与 `message.plan_mode_updated` 事件仍保留读取投影兼容，但不再作为可创建、确认或执行的运行模式。
 
 ### `RuntimeToolRun`

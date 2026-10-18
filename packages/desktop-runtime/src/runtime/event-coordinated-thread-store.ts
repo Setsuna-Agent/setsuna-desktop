@@ -4,9 +4,12 @@ import {
   type RuntimeMessagePageQuery,
   type PendingStoredThreadEvent,
   type RuntimeThreadMemoryMode,
+  type RuntimeFileChangePreviewInput,
+  projectFileChangePreview,
 } from '@setsuna-desktop/contracts';
 import { RuntimeEventWriter } from '../loop/lifecycle/runtime-event-writer.js';
 import { activeTurnIdsInThread } from '../utils/runtime-turn-state.js';
+import { readRuntimeThreadMetadata } from './thread-metadata.js';
 import type { GeneratedImageStore } from '../ports/generated-image-store.js';
 import type {
   ThreadStore,
@@ -45,6 +48,10 @@ export class EventCoordinatedThreadStore implements ThreadStore {
     return this.inner.getThread(threadId);
   }
 
+  getThreadMetadata(threadId: string) {
+    return readRuntimeThreadMetadata(this.inner, threadId);
+  }
+
   async getSamplingState(threadId: string) {
     if (this.inner.getSamplingState) return this.inner.getSamplingState(threadId);
     return this.inner.getThread(threadId);
@@ -66,6 +73,12 @@ export class EventCoordinatedThreadStore implements ThreadStore {
 
   getThreadPage(threadId: string, query?: RuntimeMessagePageQuery) {
     return this.inner.getThreadPage(threadId, query);
+  }
+
+  async getFileChangePreview(threadId: string, input: RuntimeFileChangePreviewInput) {
+    if (this.inner.getFileChangePreview) return this.inner.getFileChangePreview(threadId, input);
+    const thread = await this.inner.getThread(threadId);
+    return thread ? projectFileChangePreview(thread.messages, input) : null;
   }
 
   listMessages(threadId: string, query?: RuntimeMessagePageQuery) {

@@ -1,3 +1,4 @@
+import { readRuntimeThreadMetadata } from '../runtime/thread-metadata.js';
 import type {
   CreateThreadInput,
   ForkThreadInput,
@@ -10,12 +11,14 @@ import type {
   ThreadPatch,
   ThreadQuery,
   ThreadFileChangesInput,
+  RuntimeFileChangePreviewInput,
   WorkspaceFileChangeAction,
 } from '@setsuna-desktop/contracts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { URL } from 'node:url';
 import type { ThreadStorePatch } from '../ports/thread-store.js';
 import { applyThreadFileChanges } from '../runtime/use-cases/thread-file-changes.js';
+import { readThreadFileChangePreview } from '../runtime/use-cases/thread-file-change-preview.js';
 import { forkRuntimeThread } from '../runtime/use-cases/thread-fork.js';
 import { createRuntimeThread } from '../runtime/use-cases/thread-create.js';
 import { validateRuntimeThreadWorkspaceReset } from '../runtime/use-cases/thread-operations.js';
@@ -74,6 +77,13 @@ export async function handleRuntimeThreadRequest(
     return true;
   }
   const fileChangesMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/file-changes\/(undo|redo)$/u);
+  const filePreviewMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/file-changes\/preview$/u);
+  if (filePreviewMatch && request.method === 'POST') {
+    sendJson(response, 200, await readThreadFileChangePreview(
+      runtime.threadStore, decodeRuntimeId(filePreviewMatch[1], 'Thread id'), await readBody<RuntimeFileChangePreviewInput>(request),
+    ));
+    return true;
+  }
   if (fileChangesMatch && request.method === 'POST') {
     sendJson(response, 200, await applyThreadFileChanges(
       runtime, decodeRuntimeId(fileChangesMatch[1], 'Thread id'), await readBody<ThreadFileChangesInput>(request),
@@ -83,6 +93,15 @@ export async function handleRuntimeThreadRequest(
   }
   if (threadMatch && request.method === 'GET') {
     const threadId = decodeRuntimeId(threadMatch[1], 'Thread id');
+    const knownSeq = optionalNumber(url.searchParams.get('knownSeq'));
+    if (knownSeq !== undefined && url.searchParams.has('knownActiveTurnId')) {
+      const metadata = await readRuntimeThreadMetadata(runtime.threadStore, threadId);
+      const activeTurnId = runtime.agentLoop.activeTurnId(threadId) ?? '';
+      if (metadata?.lastSeq === knownSeq && activeTurnId === url.searchParams.get('knownActiveTurnId')) {
+        sendJson(response, 200, null);
+        return true;
+      }
+    }
     const messageLimit = optionalNumber(url.searchParams.get('messageLimit'));
     const thread = messageLimit === undefined
       ? await runtime.threadStore.getThread(threadId)
@@ -91,14 +110,7 @@ export async function handleRuntimeThreadRequest(
       sendJson(response, 404, { error: 'Thread not found' });
       return true;
     }
-    // A paginated snapshot cannot authoritatively infer legacy model ownership. Resolve it from
-    // the complete event projection once, then attach that binding to the client-facing page.
-    const completeThread = messageLimit !== undefined
-      && !thread.modelBinding
-      && (thread.messagePage?.nextBefore ?? null) !== null
-      ? await runtime.threadStore.getThread(threadId) ?? thread
-      : thread;
-    const projectedThread = await runtimeThreadResponse(runtime, thread, completeThread);
+    const projectedThread = await runtimeThreadResponse(runtime, thread);
     sendJson(response, 200, withActiveTurn(runtime, projectedThread));
     return true;
   }
@@ -211,6 +223,7 @@ export async function handleRuntimeThreadRequest(
     }
     sendJson(response, 200, {
       messages: thread.messages,
+      fileChangeGroups: thread.fileChangeGroups,
       nextBefore: thread.messagePage?.nextBefore ?? null,
       total: thread.messagePage?.total ?? thread.messages.length,
     });
@@ -225,10 +238,14 @@ export async function handleRuntimeThreadRequest(
       await publishThreadEventsSince(runtime, threadId, beforeSeq);
       return updated;
     });
+    // Chat selections may remove an entire long turn. Refill a bounded tail instead
+    // of shipping every surviving historical message in the mutation response.
+    const responseThread = input.scope === 'turns'
+      ? await runtime.threadStore.getThreadPage(threadId, { limit: 160 }) ?? thread : thread;
     sendJson(
       response,
       200,
-      withActiveTurn(runtime, await runtimeThreadResponse(runtime, thread)),
+      withActiveTurn(runtime, await runtimeThreadResponse(runtime, responseThread, thread)),
     );
     return true;
   }

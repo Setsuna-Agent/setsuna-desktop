@@ -142,6 +142,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
 
   if (event.type === 'thread.context_cleared') {
     delete next.fileChangeStates;
+    delete next.fileChangeGroups;
     next.contextCompaction = undefined;
     next.contextBudgetInvalidatedAtSeq = event.seq;
     delete next.pendingHookRuns;
@@ -431,6 +432,12 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
 
   if (event.type === 'messages.truncated') {
     next.contextBudgetInvalidatedAtSeq = event.seq;
+    // The anchor may be outside a paged snapshot. The persisted removal list is
+    // authoritative; keep anchor-based replay only for older events lacking it.
+    if (Array.isArray(event.payload.removedMessageIds)) {
+      removeThreadMessages(next, new Set(event.payload.removedMessageIds));
+      return next;
+    }
     const index = next.messages.findIndex((message) => message.id === event.payload.messageId);
     if (index >= 0) {
       const keepUntil = event.payload.includeSelf ? index : index + 1;
@@ -660,6 +667,10 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
 }
 
 function removeThreadMessages(thread: RuntimeThread, ids: ReadonlySet<string>): void {
+  if (thread.fileChangeGroups) {
+    thread.fileChangeGroups = Object.fromEntries(Object.entries(thread.fileChangeGroups)
+      .map(([turnId, operations]) => [turnId, operations.filter((operation) => !ids.has(operation.messageId))]));
+  }
   const previous = thread.messages;
   thread.messages = removeMessagesWithNativeCompaction(previous, ids);
   const remainingIds = new Set(thread.messages.map((message) => message.id));

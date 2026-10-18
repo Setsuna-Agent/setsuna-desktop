@@ -1,4 +1,4 @@
-import type { RuntimeMessage, RuntimeToolRun } from '@setsuna-desktop/contracts';
+import type { RuntimeFileChangeGroups, RuntimeMessage, RuntimeToolRun } from '@setsuna-desktop/contracts';
 import { latestFileChangeSummaryFromMessages, type RuntimeFileChangeSummary } from '../tool-runs/runtimeFileChanges.js';
 
 export type ConversationPlanStatus = 'pending' | 'in_progress' | 'completed';
@@ -17,8 +17,9 @@ export type ConversationOverviewState = {
 export function conversationOverviewFromMessages(
   messages: RuntimeMessage[],
   activeTurnId: string | null = null,
+  fileChangeGroups?: RuntimeFileChangeGroups,
 ): ConversationOverviewState {
-  const fileChangeSummary = latestFileChangeSummaryFromMessages(messages);
+  const fileChangeSummary = latestFileChangeSummaryFromMessages(messages, fileChangeGroups);
   const plan = latestPlanFromMessages(messages);
   return {
     fileChangeSummary: fileChangeSummary?.files.length ? fileChangeSummary : null,

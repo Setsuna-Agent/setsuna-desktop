@@ -10,7 +10,7 @@ import { normalizeThreadKind, normalizeThreadMemoryMode, toSummary } from './thr
 import { encodeSqliteJson } from './sqlite/json.js';
 import { threadCheckpointHeader } from './sqlite/checkpoints.js';
 
-/** Keep a prompt and all of its work together, even after repeated compactions. */
+/** Keep ordinary prompts together, but a single very long turn must not defeat pagination. */
 export function threadTranscriptPage(
   messages: RuntimeMessage[],
   query: RuntimeMessagePageQuery,
@@ -33,6 +33,7 @@ export function threadTranscriptPage(
     if (firstPromptSeen) start = index;
     firstPromptSeen = true;
   }
+  if (before - start > 200) start = targetStart;
   return {
     messages: messages.slice(start, before),
     nextBefore: start > 0 ? start : null,

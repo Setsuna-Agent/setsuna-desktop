@@ -9,6 +9,7 @@ import {
   type RuntimeToolRunStatus,
 } from './threads.js';
 import { normalizeRuntimeMessageProviderMetadata } from './message-metadata.js';
+import { limitTurnDiff, TURN_DIFF_PREVIEW_CHARS } from './workspace/file-diff-preview.js';
 
 const TOOL_OUTPUT_PREVIEW_MAX_LENGTH = 12000;
 
@@ -585,11 +586,12 @@ export function appendPreviewDelta(current: string, delta: string): string {
 }
 
 export function appendTurnDiff(current: string | undefined, diff: string): string | undefined {
-  const next = diff.trim();
+  if (current && current.length >= TURN_DIFF_PREVIEW_CHARS) return limitTurnDiff(current);
+  const next = limitTurnDiff(diff.trim());
   if (!next) return current;
   if (!current) return next;
   if (current.split('\n\n').includes(next) || current.includes(next)) return current;
-  return `${current}\n\n${next}`;
+  return limitTurnDiff(`${current}\n\n${next}`);
 }
 
 export function updatePreviewFromMessage(thread: RuntimeThread, message: RuntimeMessage): void {

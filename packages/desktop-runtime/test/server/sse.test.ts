@@ -1,11 +1,27 @@
 import type { RuntimeEvent, RuntimeThread } from '@setsuna-desktop/contracts';
 import type { ServerResponse } from 'node:http';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { InMemoryEventBus } from '../../src/adapters/event/in-memory-event-bus.js';
 import { handleSse, runtimeEventStreamExperimentalApi } from '../../src/server/sse.js';
 import type { RuntimeFactory } from '../../src/server/types.js';
 
 describe('runtime SSE', () => {
+  it('resyncs a large reconnect backlog without loading thousands of retained events', async () => {
+    const chunks: string[] = [];
+    const thread = { ...threadSnapshot(5000), messagePage: { total: 430, nextBefore: 270 } };
+    const replayEvents = vi.fn();
+    const getThreadPage = vi.fn(async () => thread);
+    const runtime = {
+      threadStore: { getThreadMetadata: async () => ({ lastSeq: 5000 }), getSamplingState: async () => thread, replayEvents, getThreadPage },
+      eventBus: { subscribe: () => () => undefined },
+    } as unknown as RuntimeFactory;
+    await handleSse({ format: 'runtime', response: writableResponse(chunks), threadId: thread.id, sinceSeq: 0, runtime });
+    expect(replayEvents).not.toHaveBeenCalled();
+    expect(getThreadPage).toHaveBeenCalledWith(thread.id, { limit: 160 });
+    expect(chunks.join('')).toContain('"reason":"replay_limit"');
+    expect(chunks.join('')).toContain('"nextBefore":270');
+  });
+
   it('strips experimental SWE notification fields by default', async () => {
     const { output } = await renderSweSse([commandApprovalRequestedEvent()]);
 
@@ -50,7 +66,7 @@ describe('runtime SSE', () => {
           retainedFromSeq: 9,
           requiresResync: true,
         }),
-        getThread: async () => thread,
+        getThreadPage: async () => thread,
       },
       eventBus: { subscribe: () => () => undefined },
     } as unknown as RuntimeFactory;

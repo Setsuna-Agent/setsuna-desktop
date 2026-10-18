@@ -13,6 +13,7 @@
   "private": false,
   "scripts": {
     "benchmark:feature-projection": "tsx scripts/benchmark-feature-projection.ts",
+    "benchmark:large-thread": "tsx scripts/benchmark-large-thread.ts",
     "dev": "concurrently -k -s command-electron -n renderer,electron \"pnpm dev:renderer\" \"wait-on tcp:5174 && pnpm dev:electron\"",
     "dev:renderer": "vite --host 127.0.0.1 --port 5174",
     "dev:electron": "pnpm prepare:electron && tsx scripts/start-electron-dev.ts",

@@ -572,7 +572,8 @@ describe('sqlite thread store', () => {
 
     const replay = await store.replayEvents(thread.id, 0);
     expect(replay).toMatchObject({ requiresResync: true, retainedFromSeq: 4, latestSeq: 5 });
-    expect(replay.events.map((event) => event.seq)).toEqual([4, 5]);
+    // A resync sends a snapshot; decoding retained payloads that will be discarded wastes memory.
+    expect(replay.events).toEqual([]);
     // Full logical replay remains lossless even though the SSE hot path is bounded.
     const completeReplay = await store.listEvents(thread.id, 0);
     expect(completeReplay.map((event) => event.seq)).toEqual([1, 2, 3, 4, 5]);

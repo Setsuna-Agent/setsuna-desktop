@@ -3,12 +3,13 @@ import type {
   MessagePatch,
   PendingStoredThreadEvent,
   RuntimeMessagePageQuery,
+  RuntimeFileChangePreviewInput,
   RuntimeThread,
   RuntimeThreadMemoryMode,
   RuntimeThreadSummary,
   StoredThreadEvent,
 } from '@setsuna-desktop/contracts';
-import { applyRuntimeEventToThread, DEFAULT_THREAD_TITLE } from '@setsuna-desktop/contracts';
+import { applyRuntimeEventToThread, DEFAULT_THREAD_TITLE, projectThreadFilePreviews, resolveMessageDeletionIds } from '@setsuna-desktop/contracts';
 import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -249,6 +250,8 @@ export class SqliteThreadStore implements ThreadStore {
     return this.reader.getThread(threadId);
   }
 
+  getThreadMetadata(threadId: string) { return this.reader.getThreadMetadata(threadId); }
+
   async getSamplingState(threadId: string) {
     return this.reader.getSamplingState(threadId);
   }
@@ -262,10 +265,9 @@ export class SqliteThreadStore implements ThreadStore {
   }
 
   async getThreadLastSeq(threadId: string): Promise<number> {
-    const safeThreadId = assertSafeRuntimeId(threadId, 'Thread id');
-    await this.ensureReady();
-    this.assertOwnership();
-    return readEventArchiveState(this.requireDatabase(), safeThreadId).lastSeq;
+    const metadata = await this.reader.getThreadMetadata(threadId);
+    if (!metadata) throw new Error(`Thread not found: ${threadId}`);
+    return metadata.lastSeq;
   }
 
   async getTurnActivity(threadId: string, turnId: string) {
@@ -277,6 +279,10 @@ export class SqliteThreadStore implements ThreadStore {
     query: RuntimeMessagePageQuery = {},
   ) {
     return this.reader.listMessages(threadId, query);
+  }
+
+  getFileChangePreview(threadId: string, input: RuntimeFileChangePreviewInput) {
+    return this.reader.getFileChangePreview(threadId, input);
   }
 
   async getThreadPage(
@@ -397,10 +403,7 @@ export class SqliteThreadStore implements ThreadStore {
 
   async deleteMessages(threadId: string, input: MessageDeleteInput): Promise<RuntimeThread> {
     const thread = await this.requireThread(threadId);
-    const messageIds = [...new Set(input.messageIds.map((id) => id.trim()).filter(Boolean))];
-    if (!messageIds.length) throw new Error('At least one message id is required.');
-    const existingIds = new Set(thread.messages.map((message) => message.id));
-    const deletableIds = messageIds.filter((id) => existingIds.has(id));
+    const deletableIds = resolveMessageDeletionIds(thread.messages, input);
     if (!deletableIds.length) return thread;
     return this.enqueueThreadMutation(threadId, {
       id: this.ids.id('event'),
@@ -493,11 +496,7 @@ export class SqliteThreadStore implements ThreadStore {
     const retainedFromSeq = state.archivedThroughSeq + 1;
     const requiresResync = requestedSinceSeq < retainedFromSeq - 1;
     return {
-      events: readHotThreadEvents(
-        this.requireDatabase(),
-        safeThreadId,
-        requiresResync ? retainedFromSeq - 1 : requestedSinceSeq,
-      ),
+      events: requiresResync ? [] : readHotThreadEvents(this.requireDatabase(), safeThreadId, requestedSinceSeq),
       latestSeq: state.lastSeq,
       retainedFromSeq,
       requiresResync,
@@ -686,7 +685,9 @@ export class SqliteThreadStore implements ThreadStore {
     }
     if (thread.lastSeq !== lastSeq) throw new Error(`SQLite thread snapshot/event tail does not reach last_seq for ${threadId}.`);
     const replayNormalized = normalizeThreadAfterEventReplay(thread);
-    thread = hydrateMessageCompletionTimesFromEvents(replayNormalized.thread, events);
+    // Compact display-only legacy fields on demand. Do not force a database rewrite on open;
+    // the ordinary checkpoint path can persist changed message rows after a later mutation.
+    thread = projectThreadFilePreviews(hydrateMessageCompletionTimesFromEvents(replayNormalized.thread, events), 'storage');
     this.threadCache.set(threadId, thread);
     if (!partitioned || normalized.changed || replayNormalized.changed || events.length) {
       if (normalized.changed || replayNormalized.changed) this.checkpointCache.delete(threadId);

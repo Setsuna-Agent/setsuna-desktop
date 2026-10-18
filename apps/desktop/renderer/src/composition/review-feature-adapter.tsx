@@ -36,6 +36,7 @@ import { ContextMenu } from '../shared/ui/ContextMenu.js';
 import { SettingsDialog } from '../shared/ui/SettingsDialog.js';
 import { createDesktopRuntimeClient } from '../services/runtime-client/client.js';
 import { useReviewWorkspaceEntries } from './useReviewWorkspaceEntries.js';
+import { createReviewFileChangePreviewLoader } from '../features/workspace/reviewFileChangePreview.js';
 
 const reviewUi: ReviewRendererHost['ui'] = Object.freeze({
   Dialog: SettingsDialog,
@@ -58,9 +59,11 @@ const reviewUi: ReviewRendererHost['ui'] = Object.freeze({
 export function ReviewFeatureHostBoundary({ children }: PropsWithChildren) {
   const { t, locale } = useI18n();
   const toast = useToast();
+  const [loadFileChangePreview] = useState(() => createReviewFileChangePreviewLoader(createDesktopRuntimeClient));
   const host = useMemo<ReviewRendererHost>(() => ({
     bridge: window.setsunaDesktop?.desktopReview ?? null,
     buildPatch: codeDiffLinesToPatch,
+    loadFileChangePreview,
     copyText: copyTextToClipboard,
     openExternal: (url) => window.setsunaDesktop?.links.openExternal(url) ?? Promise.resolve(false),
     locale,
@@ -71,7 +74,7 @@ export function ReviewFeatureHostBoundary({ children }: PropsWithChildren) {
     platform: window.setsunaDesktop?.desktop.platform,
     translate: t,
     ui: reviewUi,
-  }), [t, toast, locale]);
+  }), [t, toast, locale, loadFileChangePreview]);
 
   return <ReviewRendererHostProvider host={host}>{children}</ReviewRendererHostProvider>;
 }

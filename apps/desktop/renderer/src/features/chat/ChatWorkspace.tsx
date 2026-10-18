@@ -184,7 +184,9 @@ export function ChatWorkspace({
     activeModelContextBudget(config, historyThread),
   ), [config, historyThread]);
   const contextCompactionRunning = contextCompacting || currentThread?.contextCompaction?.status === 'running';
-  const conversationOverview = useMemo(() => (variant === 'main' && currentThread ? conversationOverviewFromMessages(messages, activeTurnId) : null), [activeTurnId, currentThread, messages, variant]);
+  const conversationOverview = useMemo(() => (variant === 'main' && currentThread
+    ? conversationOverviewFromMessages(messages, activeTurnId, messageHistory.fileChangeGroups) : null),
+  [activeTurnId, currentThread, messageHistory.fileChangeGroups, messages, variant]);
   const overviewLayout = useConversationOverviewLayout(conversationRef, contentNode);
   const overviewVisible = conversationOverviewVisibility === 'shown'
     || (conversationOverviewVisibility === 'auto' && overviewLayout !== 'hidden');

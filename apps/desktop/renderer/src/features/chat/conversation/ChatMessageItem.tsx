@@ -16,7 +16,8 @@ import type { DesktopReviewOpenHandler } from '../../workspace/model.js';
 import type { RuntimePluginUse } from '../plugin-usage/runtimePluginUsage.js';
 import { RuntimePluginUses } from '../plugin-usage/RuntimePluginUses.js';
 import { MarkdownRenderer } from '../markdown/MarkdownRenderer.js';
-import { fileChangeSummaryFromRuns, fileChangeToolCallIds } from '../tool-runs/runtimeFileChanges.js';
+import { fileChangeRunsForMessages, fileChangeSummaryFromRuns, fileChangeToolCallIds } from '../tool-runs/runtimeFileChanges.js';
+import { useChatThreadFileChangeGroups } from './ChatThreadProvider.js';
 import {
   resolveRuntimeFeatureToolResult,
   useRuntimeFeatureToolResultResolver,
@@ -282,9 +283,10 @@ function AssistantRunContent({
 }) {
   const { locale, t } = useI18n();
   const resolveFeatureToolResult = useRuntimeFeatureToolResultResolver();
+  const fileChangeGroups = useChatThreadFileChangeGroups();
   // The transcript is append-only: collapsing a later write into an earlier row
   // would remove or rewrite work that the user has already seen above it.
-  const displaySegments = item.segments;
+  const displaySegments = item.displaySegments ?? item.segments;
   const planSegment = useMemo(() => [...displaySegments].reverse().find((segment) => segment.planMode), [displaySegments]);
   const status = assistantRunStatus(item);
   const hasStreamingSegment = displaySegments.some((segment) => segment.status === 'streaming');
@@ -347,10 +349,13 @@ function AssistantRunContent({
   );
   const guidanceBeforeFirstBlock = timelinePlan.placeholderGuidance;
   const leadingGuidance = guidanceBeforeFirstBlock.length ? <GuidanceMessageList handledMessageIds={guidanceMessageIds} markerMode="handled" messages={guidanceBeforeFirstBlock} /> : null;
-  const fileChangeSummary = useMemo(() => {
+  const fileChanges = useMemo(() => {
     if (active || !hasFinalAnswerContent) return null;
-    return fileChangeSummaryFromRuns(toolRuns);
-  }, [active, hasFinalAnswerContent, toolRuns]);
+    // Operation scope follows the full turn, independently of the timeline window.
+    const runs = fileChangeRunsForMessages(item.segments, fileChangeGroups);
+    const summary = fileChangeSummaryFromRuns(runs);
+    return summary ? { summary, toolCallIds: fileChangeToolCallIds(runs) } : null;
+  }, [active, fileChangeGroups, hasFinalAnswerContent, item.segments]);
   const memoryCitations = useMemo(() => memoryCitationEntriesFromMessages(displaySegments), [displaySegments]);
   const goalExitSummary = item.goalExit ? formatGoalExitSummary(item.goalExit, t, locale) : null;
   const reviewExit = item.reviewExit;
@@ -416,13 +421,13 @@ function AssistantRunContent({
         </div>
       ) : null}
       {showTrailingLoading ? <AssistantLoadingIndicator label={t('chat.assistant.processing')} showLabel={false} /> : null}
-      {fileChangeSummary ? (
+      {fileChanges ? (
         <div className="chat-assistant-run__segment">
           <FileChangesSummaryCard
-            key={fileChangeToolCallIds(toolRuns).join('\0')}
-            summary={fileChangeSummary}
-            toolCallIds={fileChangeToolCallIds(toolRuns)}
-            onApplyChanges={onFileChangesAction ? (action) => onFileChangesAction(fileChangeToolCallIds(toolRuns), action) : undefined}
+            key={fileChanges.toolCallIds.join('\0')}
+            summary={fileChanges.summary}
+            toolCallIds={fileChanges.toolCallIds}
+            onApplyChanges={onFileChangesAction ? (action) => onFileChangesAction(fileChanges.toolCallIds, action) : undefined}
             onOpenReview={onOpenFileReview}
           />
         </div>

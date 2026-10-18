@@ -48,6 +48,7 @@ Review 是跨四个运行面参与的完整业务闭环：
 - 变更菜单的“拉取”通过 preload/Main 执行 `git pull --no-edit`，遵循仓库的 upstream、`pull.rebase` 和 `pull.ff` 配置。“拉取（变基）”与“提交和同步”的拉取步骤共用 `main/git-pull.ts`：显式保存已跟踪的本地改动，执行 `--rebase --no-autostash`，再以 `stash apply --index` 恢复暂存选择和未暂存内容；恢复成功才删除本次备份，同步随后推送。未跟踪文件留在工作区，原有 stash 不受影响。拉取失败且未进入变基时恢复本地状态；变基暂停或恢复失败时保留备份并报告恢复命令，不将未提交内容混入进行中的变基。两种拉取均保留提交消息草稿，成功或失败后刷新 Review 状态及历史。
 - Branch diff 以 `merge-base(baseRef, HEAD)` 为基线，并单独合并 untracked summary。
 - Diff 文件数、行数、二进制/图片预览和 untracked 大小有明确上限。
+- `latest` 来源由聊天完整文件操作索引与已加载消息按工具调用 ID 合并，非 Git 工作区和分页隐藏的早期修改沿用相同摘要。索引缺省正文时，文件展开才通过宿主注入的 loader 请求 Core `/v1/threads/:id/file-changes/preview`；该接口只读取指定记录，不访问当前磁盘内容，不改变整轮撤销范围。返回的有界差异更新摘要本身，保证 finding 锚点与文件视图一致。预览缓存限制在当前摘要的操作集合内；切换会话或操作集合时失效，错误可通过重新展开重试。
 - Main 的受管 preview 由 native bridge registry 生成 opaque ID，renderer 不直接获取任意本地文件 URL。
 - Commit message 生成通过 Feature typed operation；Main 只提供调用接缝，不能读取 provider secret。生成接口支持请求内的 NDJSON 进度快照，复用结果 codec；Main/preload 按 requestId 将实时正文送回发起窗口，结束或失败后移除监听，断流不自动重试采样。
 - 提交生成模型、提交提示词、自动解决冲突开关、冲突模型与提示词统一保存于 `desktop-review/git-settings`；Git 弹窗与“专用模型”页面投影同一文档，使用 revision 防止旧表单覆盖新配置。首次启动从旧 `commit-message-model-selection` 和 `commit-message-prompt` 文档迁移；代码审查模型仍独立。两种 Git 模型均默认跟随当前对话，提交消息在无对话模型时使用全局默认模型。

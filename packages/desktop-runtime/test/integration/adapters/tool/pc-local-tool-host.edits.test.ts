@@ -1,6 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import type { WorkspaceFileChangePatch } from '@setsuna-desktop/contracts';
 import { createHost } from './pc-local-tool-host.support.js';
 
 describe('batch edit tool lifecycle', () => {
@@ -43,7 +44,8 @@ describe('batch edit tool lifecycle', () => {
     expect(result.content).toContain('export async function processCovers(');
     const updated = await readFile(filePath, 'utf8');
     expect(updated).toBe(original.replace('async function', 'export async function').replace('version = 1', 'version = 2'));
-    const undo = diff.undo;
+    expect(diff).not.toHaveProperty('undo');
+    const undo = (result.data as { diff: { undo: WorkspaceFileChangePatch } }).diff.undo;
     expect(updated.slice(0, undo.start) + undo.insert + updated.slice(undo.start + undo.deleteCount)).toBe(original);
     await expect(host.runTool('write_file', { file_path: args.file_path, content: 'replacement' }, context))
       .rejects.toThrow('完整读取');

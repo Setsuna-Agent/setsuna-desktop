@@ -3,6 +3,20 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createDesktopRuntimeClient } from '../../../../src/services/runtime-client/client.js';
 
 describe('desktop runtime client advanced thread methods', () => {
+  it('requests selected persisted file operations through the encoded preload route', async () => {
+    const request = installRuntimeBridge(() => []);
+    const input = { path: 'D:/project/a #.ts', toolCallIds: ['early', 'late'] };
+    await expect(createDesktopRuntimeClient().getThreadFileChangePreview('thread /1', input)).resolves.toEqual([]);
+    expect(request).toHaveBeenCalledExactlyOnceWith({ path: '/v1/threads/thread%20%2F1/file-changes/preview', method: 'POST', body: input });
+  });
+  it('polls the thread watermark through the bridge and accepts an unchanged response', async () => {
+    const request = installRuntimeBridge(() => ({ ok: true, value: null }));
+    await expect(createDesktopRuntimeClient().getThreadIfChanged!('thread 1', 42, 'turn/2')).resolves.toBeNull();
+    expect(request).toHaveBeenCalledWith({
+      path: '/v1/threads/thread%201?messageLimit=160&knownSeq=42&knownActiveTurnId=turn%2F2', responseMode: 'feature-operation',
+    });
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
   });

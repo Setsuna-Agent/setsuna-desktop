@@ -1,3 +1,4 @@
+import { readRuntimeThreadMetadata } from '../runtime/thread-metadata.js';
 import {
   WORKSPACE_ENTRY_EXISTS_ERROR_CODE,
   workspaceTarget,
@@ -72,7 +73,7 @@ export async function handleRuntimeWorkspaceRequest(
   if (request.method === 'GET' && url.pathname === '/v1/workspace/status') {
     if (url.searchParams.has('threadId')) {
       const threadId = runtimeQueryId(url.searchParams.get('threadId'), 'Thread id');
-      const thread = await runtime.threadStore.getThread(threadId);
+      const thread = await readRuntimeThreadMetadata(runtime.threadStore, threadId);
       if (!thread) {
         sendJson(response, 404, { error: 'Thread not found' });
         return true;
