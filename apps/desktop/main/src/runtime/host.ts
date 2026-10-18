@@ -23,6 +23,7 @@ import type {
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { RuntimeEventBatcher } from './runtime-event-batcher.js';
+import { RuntimeSseParser, type SseFrame } from './runtime-sse-parser.js';
 import { fetchRuntimeResponse } from './runtime-request.js';
 import { readRuntimeProgressResponse } from './runtime-progress-response.js';
 import { RuntimeProcess, type RuntimeProcessOptions } from './runtime-process.js';
@@ -378,18 +379,13 @@ export class RuntimeHost {
     if (!response.ok || !response.body) throw new Error(`Runtime SSE failed: ${response.status}`);
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    let buffer = '';
-    // SSE 按空行分帧；buffer 保留半截事件，避免流式读取拆包时丢事件。
+    const parser = new RuntimeSseParser();
     try {
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        buffer = buffer.replace(/\r\n/g, '\n');
-        const chunks = buffer.split('\n\n');
-        buffer = chunks.pop() ?? '';
-        for (const chunk of chunks) {
-          const frame = parseSseChunk(chunk);
+        for (const chunk of parser.push(decoder.decode(value, { stream: true }))) {
+          const frame = parseSseFrame(chunk);
           if (frame?.resync) {
             if (frame.resync.thread.id !== threadId) continue;
             if (webContents.isDestroyed()) return;
@@ -503,15 +499,12 @@ type RuntimeSseFrame =
   | { event: RuntimeEvent; resync?: never }
   | { event?: never; resync: RuntimeEventResync };
 
-function parseSseChunk(chunk: string): RuntimeSseFrame | null {
-  const eventName = chunk.split('\n').find((line) => line.startsWith('event: '))?.slice(7);
-  const dataLine = chunk.split('\n').find((line) => line.startsWith('data: '));
-  if (!dataLine) return null;
-  if (eventName === 'runtime-resync') {
-    return { resync: JSON.parse(dataLine.slice(6)) as RuntimeEventResync };
+function parseSseFrame(frame: SseFrame): RuntimeSseFrame | null {
+  if (frame.event === 'runtime-resync') {
+    return { resync: JSON.parse(frame.data) as RuntimeEventResync };
   }
-  if (eventName === 'runtime-event') {
-    return { event: JSON.parse(dataLine.slice(6)) as RuntimeEvent };
+  if (frame.event === 'runtime-event') {
+    return { event: JSON.parse(frame.data) as RuntimeEvent };
   }
   return null;
 }

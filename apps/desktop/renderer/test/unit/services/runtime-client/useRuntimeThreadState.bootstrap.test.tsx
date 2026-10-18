@@ -15,6 +15,48 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+it('keeps the live event stream authoritative and polls quietly for missed completion', async () => {
+  vi.useFakeTimers();
+  const initial: RuntimeThread = {
+    id: 'active', title: 'Large thread', createdAt: '', updatedAt: '', archived: false,
+    messageCount: 0, lastMessagePreview: '', messages: [], lastSeq: 1, activeTurnId: 'turn',
+  };
+  let deliver: Parameters<RuntimeThreadClient['subscribeEvents']>[2] = () => undefined;
+  const changed = vi.fn<NonNullable<RuntimeThreadClient['getThreadIfChanged']>>().mockResolvedValue(null);
+  const client: RuntimeThreadClient = {
+    answerApproval: vi.fn(), clearThreadContext: vi.fn(), compactThreadContext: vi.fn(),
+    createThread: vi.fn(), deleteThread: vi.fn(), updateThread: vi.fn(),
+    getThread: vi.fn(async () => initial), getThreadIfChanged: changed,
+    listThreads: vi.fn(async () => ({ threads: [initial] })),
+    subscribeEvents: vi.fn((_id, _seq, callback) => { deliver = callback; return () => undefined; }),
+  };
+  const options = {
+    activeProjectId: null, client, onError: vi.fn(), onTurnSettled: vi.fn(),
+    review: { start: vi.fn() }, setActiveProjectId: vi.fn(),
+  };
+  const events = new RendererFeatureEventHub();
+  const view = renderHook(() => useRuntimeThreadState(options), { wrapper: ({ children }: { children: ReactNode }) => (
+    <RendererFeatureEventsProvider events={events}>{children}</RendererFeatureEventsProvider>
+  ) });
+  await act(async () => { view.result.current.setCurrentThread(initial); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(250); });
+  expect(changed).toHaveBeenCalledExactlyOnceWith('active', 1, 'turn');
+  expect(view.result.current.currentThread).toBe(initial);
+  await act(async () => { deliver({ events: [{
+    id: 'progress', seq: 2, threadId: 'active', turnId: 'turn', createdAt: '', type: 'message.created',
+    payload: { message: { id: 'assistant', role: 'assistant', turnId: 'turn', status: 'streaming', content: 'Working', createdAt: '' } },
+  }] }); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(1500); });
+  expect(changed).toHaveBeenCalledTimes(1);
+  changed.mockResolvedValueOnce({ ...initial, lastSeq: 3, activeTurnId: null });
+  await act(async () => { await vi.advanceTimersByTimeAsync(1500); });
+  expect(changed).toHaveBeenLastCalledWith('active', 2, 'turn');
+  expect(view.result.current.currentThread?.activeTurnId).toBeNull();
+  expect(options.onTurnSettled).toHaveBeenCalledWith({ threadId: 'active', usageChanged: true });
+  expect(client.getThread).not.toHaveBeenCalled();
+  view.unmount();
+});
+
 it('discovers background execution chats from an idle sidebar without selecting their hidden setup conversation', async () => {
   vi.useFakeTimers();
   const execution: RuntimeThread = {

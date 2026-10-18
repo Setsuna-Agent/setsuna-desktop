@@ -14,8 +14,33 @@ import {
 } from '../../../../../src/features/chat/hooks/chatTurnSubmission.js';
 import { createIdentityRequestGuard } from '../../../../../src/shared/hooks/useIdentityRequestGuard.js';
 import { useChatComposerSession } from '../../../../../src/features/chat/hooks/useChatComposerSession.js';
+import { createChatDisplayItems } from '../../../../../src/features/chat/conversation/chatMessageDisplay.js';
+import { useChatMessageOperations } from '../../../../../src/features/chat/hooks/useChatMessageOperations.js';
 
 afterEach(cleanup);
+
+it.each(['turn', undefined])('requests complete turn deletion from a tail-only answer selection (turnId: %s)', async (turnId) => {
+  const currentThread = thread({ messages: Array.from({ length: 160 }, (_, index) => ({
+    id: `message_${270 + index}`, role: 'assistant', turnId, content: 'work', createdAt: '',
+  })), messagePage: { total: 430, nextBefore: 270 } });
+  const deleteMessages = vi.fn(async () => thread({}));
+  const setCurrentThread = vi.fn();
+  const displayItems = createChatDisplayItems(currentThread.messages);
+  const view = renderHook(() => {
+    const actions = useChatTurnActions({
+      activeProjectId: null, activeTurnId: null, client: { deleteMessages } as unknown as DesktopRuntimeClient,
+      composerKey: 'thread', currentThread, draft: '', claimComposerForThread: vi.fn(), reloadThreads: vi.fn(),
+      setActiveTurnId: vi.fn(), setCurrentThread, setDraft: vi.fn(), setError: vi.fn(), terminalTurnIdsRef: { current: new Set() },
+    });
+    return useChatMessageOperations({ activeTurnId: null, composerKey: 'thread', currentThreadId: currentThread.id,
+      displayItems, onDeleteMessages: actions.deleteMessages,
+    });
+  });
+  act(() => view.result.current.startDeleteSelection(displayItems[0].id));
+  await act(async () => { await view.result.current.confirmDeleteSelection(); });
+  expect(deleteMessages).toHaveBeenCalledExactlyOnceWith(currentThread.id, { messageIds: currentThread.messages.map((message) => message.id), scope: 'turns' });
+  expect(setCurrentThread).toHaveBeenCalledTimes(1);
+});
 
 describe('first-turn composer claim', () => {
   it('claims the created thread before publishing it to React', () => {

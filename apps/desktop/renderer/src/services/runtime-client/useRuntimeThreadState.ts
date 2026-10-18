@@ -19,6 +19,7 @@ import {
 } from 'react';
 import { startThreadReview } from '../../features/workspace/hooks/startThreadReview.js';
 import { isPrimaryConversationThread } from './runtimeThreadRelations.js';
+import { useThreadSnapshotRecovery } from './useThreadSnapshotRecovery.js';
 import { useRendererFeatureEvents } from '../../composition/renderer-feature-events-context.js';
 import type {
   ReviewFeatureService,
@@ -40,6 +41,7 @@ import {
   applyCurrentThreadEventBatch,
   isThreadContextCompacting,
   shouldFrameCoalesceThreadEvents,
+  shouldPollThreadSnapshot,
   updateThreadApprovalRun,
 } from './runtimeThreadState.js';
 
@@ -53,6 +55,7 @@ export type RuntimeThreadClient = Pick<
   | 'createThread'
   | 'deleteThread'
   | 'getThread'
+  | 'getThreadIfChanged'
   | 'listThreads'
   | 'subscribeEvents'
   | 'updateThread'
@@ -109,6 +112,8 @@ export function useRuntimeThreadState({
   const initializedSelectionRef = useRef(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const currentThreadLastSeqRef = useRef(0);
+  const lastThreadEventAtRef = useRef<number | null>(null);
+  const lastThreadPollAtRef = useRef<number | null>(null);
   const currentThreadRef = useRef<RuntimeThread | null>(currentThread);
   const threadListRefreshTimerRef = useRef<number | null>(null);
   const threadSummaryPollingActiveRef = useRef(false);
@@ -251,9 +256,24 @@ export function useRuntimeThreadState({
 
   useEffect(() => {
     setActivityEvents([]);
+    lastThreadEventAtRef.current = null;
+    lastThreadPollAtRef.current = null;
     terminalTurnIdsRef.current.clear();
     setActiveTurnId(null);
   }, [currentThreadId]);
+
+  const recoverThreadSnapshot = useThreadSnapshotRecovery(client, currentThreadId, (threadId, snapshot) => {
+    const previousTurnId = activeTurnIdFromThreadSnapshot(currentThreadRef.current, terminalTurnIdsRef.current);
+    if (!adoptSnapshot(threadId, snapshot)) return false;
+    terminalTurnIdsRef.current.clear();
+    const nextTurnId = activeTurnIdFromThreadSnapshot(snapshot, terminalTurnIdsRef.current);
+    setActiveTurnId(nextTurnId);
+    if (previousTurnId && !nextTurnId) onTurnSettled({ threadId, usageChanged: true });
+    setActivityEvents([]);
+    featureEvents.resync(threadId, snapshot.lastSeq);
+    refreshThreadsSoon(true);
+    return true;
+  });
 
   useEffect(() => {
     unsubscribeRef.current?.();
@@ -268,11 +288,13 @@ export function useRuntimeThreadState({
         if (!projection.resynced && (
           projection.thread === current || !projection.acceptedEvents.length
         )) return;
+        lastThreadEventAtRef.current = Date.now();
 
         currentThreadRef.current = projection.thread;
         currentThreadLastSeqRef.current = projection.thread?.lastSeq
           ?? projection.acceptedEvents.at(-1)?.seq
           ?? currentThreadLastSeqRef.current;
+        if (projection.requiresSnapshotRecovery && projection.thread) recoverThreadSnapshot(projection.thread.id);
         // Pure delta batches only need the latest projection for the next paint. The
         // synchronous owner ref still advances immediately, preserving event order.
         if (!projection.resynced && shouldFrameCoalesceThreadEvents(projection.acceptedEvents)) {
@@ -349,7 +371,7 @@ export function useRuntimeThreadState({
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
     };
-  }, [client, contextRequests, currentThreadCommit, currentThreadId, featureEvents, onError, onThreadDeleted, onTurnSettled, refreshThreadsSoon]);
+  }, [client, contextRequests, currentThreadCommit, currentThreadId, featureEvents, onError, onThreadDeleted, onTurnSettled, recoverThreadSnapshot, refreshThreadsSoon]);
 
   useEffect(() => {
     if (!effectiveActiveTurnId || !currentThreadId) {
@@ -362,10 +384,23 @@ export function useRuntimeThreadState({
 
     // polling 校正线程快照和 activeTurnId；runtime 快照里的 activeTurnId 是终态兜底真源。
     const pollThread = async () => {
+      // A healthy event stream already owns the snapshot. Reconcile after it goes quiet,
+      // including missed terminal events, instead of racing every streamed token with a full read.
+      if (!shouldPollThreadSnapshot(lastThreadEventAtRef.current, lastThreadPollAtRef.current, Date.now())) {
+        timeoutId = window.setTimeout(pollThread, 1000);
+        return;
+      }
+      lastThreadPollAtRef.current = Date.now();
       let continuePolling = true;
       try {
-        const nextThread = await client.getThread(threadId);
+        const nextThread = client.getThreadIfChanged
+          ? await client.getThreadIfChanged(threadId, currentThreadLastSeqRef.current, turnId)
+          : await client.getThread(threadId);
         if (cancelled) return;
+        if (!nextThread) {
+          timeoutId = window.setTimeout(pollThread, 1000);
+          return;
+        }
         if (!adoptSnapshot(threadId, nextThread)) {
           // A switched owner stops this polling loop. A temporarily older snapshot is
           // ignored and retried without applying turn or refresh side effects.

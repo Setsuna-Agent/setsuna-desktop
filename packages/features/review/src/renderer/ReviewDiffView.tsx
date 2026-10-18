@@ -50,6 +50,7 @@ import {
   useReviewNavigation,
   type ReviewDiffNavigationRegistration,
 } from './hooks/useReviewNavigation.js';
+import { useReviewFilePreviews, useReviewFilePreviewRequest, type RequestReviewFilePreview } from './hooks/useReviewFilePreviews.js';
 
 const reviewFilePathCollator = new Intl.Collator('en', {
   numeric: true,
@@ -72,7 +73,7 @@ export function ReviewSummarySection({
   focusRequest,
   lineWrap,
   pathContext,
-  summary,
+  summary: sourceSummary,
   workspaceApp,
   workspaceApps,
   onAddFileToConversation,
@@ -105,6 +106,7 @@ export function ReviewSummarySection({
   onOpenProjectFile: (filePath: string, line?: number) => void;
   onRevealFile: (filePath: string) => void;
 }) {
+  const { summary, requestPreview } = useReviewFilePreviews(sourceSummary);
   const files = useMemo(() => [...(summary?.files ?? [])].sort((left, right) => (
     reviewFilePathCollator.compare(left.path, right.path)
   )), [summary?.files]);
@@ -191,6 +193,7 @@ export function ReviewSummarySection({
               key={file.path}
               lineWrap={lineWrap}
               pathContext={pathContext}
+              requestPreview={requestPreview}
               workspaceApp={workspaceApp}
               workspaceApps={workspaceApps}
               onAddFileToConversation={onAddFileToConversation}
@@ -229,6 +232,7 @@ const ReviewFileCard = memo(function ReviewFileCard({
   getNavigationTargetRef,
   lineWrap,
   pathContext,
+  requestPreview,
   workspaceApp,
   workspaceApps,
   onAddFileToConversation,
@@ -253,6 +257,7 @@ const ReviewFileCard = memo(function ReviewFileCard({
   getNavigationTargetRef: (key: string) => RefCallback<HTMLElement>;
   lineWrap: boolean;
   pathContext: ReviewPathContext;
+  requestPreview: RequestReviewFilePreview;
   workspaceApp?: DesktopWorkspaceApp | null;
   workspaceApps: DesktopWorkspaceApp[];
   onAddFileToConversation: (filePath: string) => void;
@@ -279,6 +284,7 @@ const ReviewFileCard = memo(function ReviewFileCard({
   const documentDiffPreview = Boolean(documentFormat) && (documentFormat !== 'csv' || textFilePreview);
   const unsupportedPreview = file.contentKind === 'binary';
   const [expanded, setExpanded] = useState(fileExpansionRequest.expanded);
+  const preview = useReviewFilePreviewRequest(file.changeReference, expanded, requestPreview);
   const [lineContextMenu, setLineContextMenu] = useState<
     ReviewFileContextTarget | null
   >(null);
@@ -460,7 +466,11 @@ const ReviewFileCard = memo(function ReviewFileCard({
           </div>
           {fileHeaderControls ? <div className="desktop-review-file-card__view-controls">{fileHeaderControls.actions}</div> : null}
         </header>
-        {expanded && documentDiffPreview ? (
+        {preview.loading || preview.error ? (
+          <div className="desktop-review-document-status" role={preview.error ? 'alert' : 'status'}>
+            {preview.error ?? t('feature.review.workspace.file.documentLoading')}
+          </div>
+        ) : expanded && documentDiffPreview ? (
           <ReviewDocumentDiff file={file} pathContext={pathContext} />
         ) : expanded && markdownPreview && workspaceFilePath ? (
           <ReviewFileDocument file={file} filePath={workspaceFilePath} pathContext={pathContext}

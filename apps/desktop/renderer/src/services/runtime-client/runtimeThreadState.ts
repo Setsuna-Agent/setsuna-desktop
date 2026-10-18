@@ -9,6 +9,11 @@ import type {
 } from '@setsuna-desktop/contracts';
 import { applyRuntimeEventToThread, isActiveToolRun } from '@setsuna-desktop/contracts';
 
+/** Quiet streams reconcile quickly; busy streams still check for missed lifecycle events every five seconds. */
+export function shouldPollThreadSnapshot(lastEventAt: number | null, lastPollAt: number | null, now: number): boolean {
+  return lastEventAt === null || now - lastEventAt >= 2000 || lastPollAt === null || now - lastPollAt >= 5000;
+}
+
 export function isThreadContextCompacting(
   compactingThreadId: string | null,
   threadId: string | null,
@@ -49,6 +54,7 @@ export function applyCurrentThreadEvent(
 export type CurrentThreadEventBatchProjection = {
   acceptedEvents: StoredThreadEvent[];
   resynced: boolean;
+  requiresSnapshotRecovery: boolean;
   thread: RuntimeThread | null;
 };
 
@@ -78,6 +84,7 @@ export function applyCurrentThreadEventBatch(
   const acceptedEvents: StoredThreadEvent[] = [];
   let projected = thread;
   let resynced = false;
+  let requiresSnapshotRecovery = false;
   if (
     batch.resync
     && projected?.id === batch.resync.thread.id
@@ -89,10 +96,19 @@ export function applyCurrentThreadEventBatch(
   for (const event of batch.events) {
     const next = applyCurrentThreadEvent(projected, event);
     if (next === projected) continue;
+    // The largest seen sequence does not prove that every earlier event was received.
+    // Keep applying live updates, but require an unconditional snapshot to repair any gap.
+    requiresSnapshotRecovery ||= Boolean(projected && event.seq > projected.lastSeq + 1);
+    // Deletion changes page cursors and may expose older rows. Applying IDs fixes
+    // the visible tail immediately, but only a snapshot can rebuild its window.
+    requiresSnapshotRecovery ||= Boolean(projected?.messagePage && (
+      event.type === 'messages.deleted' || event.type === 'messages.truncated' || event.type === 'thread.context_cleared'
+    )) || (event.type === 'messages.truncated' && !Array.isArray(event.payload.removedMessageIds)
+      && !projected?.messages.some((message) => message.id === event.payload.messageId));
     projected = next;
     acceptedEvents.push(event);
   }
-  return { acceptedEvents, resynced, thread: projected };
+  return { acceptedEvents, resynced, requiresSnapshotRecovery, thread: projected };
 }
 
 /**

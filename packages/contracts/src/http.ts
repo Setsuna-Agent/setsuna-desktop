@@ -10,6 +10,7 @@ import type {
 } from './config.js';
 import type { RuntimeEventBatch } from './events.js';
 import type { ThreadDeletionOptions } from './threads/deletion.js';
+import type { RuntimeFileChangeOperation, RuntimeFileChangePreviewInput } from './workspace/file-change-group-types.js';
 import type {
   CreateThreadInput,
   ForkThreadInput,
@@ -89,11 +90,14 @@ export type RuntimeFeatureOperationResponse<TValue = unknown> =
     }>;
 
 export type DesktopRuntimeClient = {
+  getThreadFileChangePreview(threadId: string, input: RuntimeFileChangePreviewInput): Promise<RuntimeFileChangeOperation[]>;
   linkAttachment(file: File): Promise<RuntimeStoredMessageAttachment | null>;
   uploadAttachment(input: RuntimeAttachmentUploadInput): Promise<RuntimeStoredMessageAttachment>;
   deleteAttachment(assetId: string): Promise<RuntimeAttachmentDeleteResponse>;
   listThreads(query?: ThreadQuery): Promise<ThreadList>;
   getThread(threadId: string): Promise<RuntimeThread>;
+  /** Null means both the event watermark and active turn are unchanged. */
+  getThreadIfChanged?(threadId: string, lastSeq: number, activeTurnId: string | null): Promise<RuntimeThread | null>;
   listThreadMessages(threadId: string, query?: RuntimeMessagePageQuery): Promise<RuntimeMessagePage>;
   createThread(input?: CreateThreadInput): Promise<RuntimeThread>;
   forkThread(threadId: string, input: ForkThreadInput): Promise<RuntimeThread>;

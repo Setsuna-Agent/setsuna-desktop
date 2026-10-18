@@ -4,6 +4,7 @@ import type {
   RuntimeSandboxWorkspaceWrite,
   RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
+import { projectFileDiff } from '@setsuna-desktop/contracts';
 import path from 'node:path';
 import type { BackgroundShellProcessManager } from '../../../ports/background-shell-process-manager.js';
 import type { PolicyAmendmentStore } from '../../../ports/policy-amendment-store.js';
@@ -715,7 +716,7 @@ function parsePartialArguments(name: string, rawArguments: string): Record<strin
 function previewPayload(value: unknown): string {
   const record = recordInput(value);
   const diff = record.diff ?? (isDiffLike(record) ? record : null);
-  return JSON.stringify(diff ? { diff } : record);
+  return JSON.stringify(diff ? { diff: projectFileDiff(diff) } : record);
 }
 
 function isDiffLike(value: Record<string, unknown>): boolean {

@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 
-import { threadFileChangeKey, type RuntimeMessage, type RuntimeThread, type ThreadFileChangesResult, type WorkspaceFileChangeAction } from '@setsuna-desktop/contracts';
+import { projectMessagePageFileChanges, threadFileChangeKey, type RuntimeMessage, type RuntimeThread, type ThreadFileChangesResult, type WorkspaceFileChangeAction } from '@setsuna-desktop/contracts';
 import { ConfirmationProvider } from '@setsuna-desktop/renderer-ui';
 import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { MessageItem } from '../../../../../src/features/chat/conversation/ChatMessageItem.js';
+import { createChatRenderWindow, type ChatDisplayItem } from '../../../../../src/features/chat/conversation/chatMessageDisplay.js';
 import { ChatThreadProvider } from '../../../../../src/features/chat/conversation/ChatThreadProvider.js';
 import { ThreadFileChangesProvider } from '../../../../../src/features/chat/hooks/ThreadFileChangesProvider.js';
 import { createDesktopRuntimeClient } from '../../../../../src/services/runtime-client/client.js';
@@ -104,11 +105,65 @@ it('restores the action after an app remount and ignores older persisted state u
   expect(onApplyChanges.mock.calls.map((call) => call[2])).toEqual(['undo', 'redo']);
 });
 
-function TestConversation({ threadId, toolCallIds = ['edit_title', 'edit_body'], fileChangeStates, onApplyChanges }: {
+it.each(['late.ts', 'early.ts', null])('keeps every file operation when a long turn is folded (late target: %s)', async (latePath) => {
+  const segments: RuntimeMessage[] = Array.from({ length: 161 }, (_, index) => ({
+    id: `assistant_${index}`, turnId: 'turn_1', role: 'assistant', status: 'complete',
+    phase: index === 160 ? 'final_answer' : 'commentary', createdAt: '2026-09-12T00:00:00Z', content: `Progress ${index}`,
+    toolRuns: index === 0 ? [fileRun('early_edit', 'edit', 'early.ts', 'Edited')]
+      : index === 160 && latePath ? [fileRun('late_edit', 'edit', latePath, 'Edited')] : [],
+  }));
+  const onApplyChanges = vi.fn().mockResolvedValue(undefined);
+  const expectedIds = latePath ? ['early_edit', 'late_edit'] : ['early_edit'];
+  const props = { threadId: 'thread_1', segments, onApplyChanges };
+  const view = render(<TestConversation {...props} windowed />);
+  fireEvent.click(view.getByRole('button', { name: '撤销' }));
+  await view.findByRole('button', { name: '重新应用' });
+  expect(onApplyChanges).toHaveBeenCalledWith('thread_1', expectedIds, 'undo');
+  // Expanding history must retain the same operation batch and its persisted action state.
+  view.rerender(<TestConversation {...props} windowed={false} />);
+  fireEvent.click(view.getByRole('button', { name: '重新应用' }));
+  await view.findByRole('button', { name: '撤销' });
+  view.rerender(<TestConversation {...props} windowed />);
+  fireEvent.click(view.getByRole('button', { name: '撤销' }));
+  await view.findByRole('button', { name: '重新应用' });
+  expect(onApplyChanges.mock.calls).toEqual(['undo', 'redo', 'undo'].map((action) => ['thread_1', expectedIds, action]));
+});
+
+it.each([
+  { turnId: 'turn_1', lateEdit: true }, { turnId: 'turn_1', lateEdit: false },
+  { turnId: undefined, lateEdit: true }, { turnId: undefined, lateEdit: false },
+])('restores a full-turn reapply batch from a 430-message tail page (turn: $turnId, late edit: $lateEdit)', async ({ turnId, lateEdit }) => {
+  const messages: RuntimeMessage[] = Array.from({ length: 430 }, (_, index) => ({
+    id: `message_${index}`, turnId, role: 'assistant', status: 'complete',
+    phase: index === 429 ? 'final_answer' : 'commentary', createdAt: '2026-09-12T00:00:00Z', content: `Progress ${index}`,
+    toolRuns: index === 0 ? [fileRun('early_edit', 'edit', 'early.ts', 'Edited')]
+      : index === 429 && lateEdit ? [fileRun('late_edit', 'edit', 'late.ts', 'Edited')] : [],
+  }));
+  const page = projectMessagePageFileChanges(messages, { messages: messages.slice(-160), nextBefore: 270, total: 430 });
+  const ids = lateEdit ? ['early_edit', 'late_edit'] : ['early_edit'];
+  const restored = JSON.parse(JSON.stringify({
+    messages: page.messages, fileChangeGroups: page.fileChangeGroups,
+    fileChangeStates: { [threadFileChangeKey(ids)]: { action: 'undo', seq: 500 } },
+  })) as Pick<RuntimeThread, 'messages' | 'fileChangeGroups' | 'fileChangeStates'>;
+  const onApplyChanges = vi.fn().mockResolvedValue({ files: ['early.ts'], state: { action: 'redo', seq: 501 } });
+  const props = { threadId: 'thread_1', segments: restored.messages, onApplyChanges, ...restored };
+  const view = render(<TestConversation {...props} windowed />);
+  fireEvent.click(view.getByRole('button', { name: '重新应用' }));
+  await view.findByRole('button', { name: '撤销' });
+  view.rerender(<TestConversation {...props} segments={messages} windowed={false} />);
+  fireEvent.click(view.getByRole('button', { name: '撤销' }));
+  await waitFor(() => expect(onApplyChanges).toHaveBeenCalledTimes(2));
+  expect(onApplyChanges.mock.calls).toEqual(['redo', 'undo'].map((action) => ['thread_1', ids, action]));
+});
+
+function TestConversation({ threadId, toolCallIds = ['edit_title', 'edit_body'], fileChangeStates, fileChangeGroups, onApplyChanges, segments, windowed = false }: {
   threadId: string;
   toolCallIds?: string[];
   fileChangeStates?: RuntimeThread['fileChangeStates'];
+  fileChangeGroups?: RuntimeThread['fileChangeGroups'];
   onApplyChanges: (threadId: string, toolCallIds: string[], action: WorkspaceFileChangeAction) => Promise<void | ThreadFileChangesResult>;
+  segments?: RuntimeMessage[];
+  windowed?: boolean;
 }) {
   const message: RuntimeMessage = {
     id: 'assistant_1', turnId: 'turn_1', role: 'assistant', status: 'complete', phase: 'final_answer',
@@ -117,14 +172,18 @@ function TestConversation({ threadId, toolCallIds = ['edit_title', 'edit_body'],
       { id: 'read', name: 'read_file', status: 'success' },
     ],
   };
+  const messages = segments ?? [message];
+  const item: ChatDisplayItem = {
+    type: 'assistant', id: message.id, turnId: message.turnId, segments: messages,
+    messageIds: messages.map((segment) => segment.id), steerMessages: [], handledSteerMessageIds: [],
+  };
   return <RendererPluginTestHost><ConfirmationProvider><ThreadFileChangesProvider>
-    <ChatThreadProvider key={threadId} threadId={threadId} fileChangeStates={fileChangeStates}>
+    <ChatThreadProvider key={threadId} threadId={threadId} fileChangeStates={fileChangeStates} fileChangeGroups={fileChangeGroups}>
       <MessageItem
         activeAssistantItemId={null} activeTurnId={null} assistantItemIdByTurnId={new Map()}
         deleteMode={false}
         expandedWorkHistoryItemIds={new Set()} selectedForDelete={false} pluginUses={[]}
-        item={{ type: 'assistant', id: message.id, turnId: message.turnId, segments: [message],
-          messageIds: [message.id], steerMessages: [], handledSteerMessageIds: [] }}
+        item={createChatRenderWindow([item], { enabled: windowed }).items[0]}
         onAnswerApproval={async () => undefined} onWorkHistoryExpandedChange={() => undefined}
         onFileChangesAction={(ids, action) => onApplyChanges(threadId, ids, action)}
       />

@@ -1,4 +1,5 @@
-import type { RuntimeMessage, RuntimeToolRun } from '@setsuna-desktop/contracts';
+import type { RuntimeFileChangeGroups, RuntimeMessage, RuntimeToolRun } from '@setsuna-desktop/contracts';
+import { FILE_DIFF_PREVIEW_LINES, isFileMutationToolName, limitFileDiffLines, messageFileChangeGroupId } from '@setsuna-desktop/contracts';
 import { translate, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { buildChatTranscript } from '../conversation/chatMessageDisplay.js';
 
@@ -34,17 +35,7 @@ type FileMutationEntry = {
 };
 
 const fileDiffContextLines = 3;
-const fileDiffPreviewLineLimit = 240;
-
-const fileMutationToolNames = new Set([
-  'workspace_write_file',
-  'apply_patch',
-  'write_file',
-  'append_file',
-  'delete_file',
-  'edit',
-  'edit_file',
-]);
+const fileChangesCache = new WeakMap<RuntimeToolRun, RuntimeFileChange[]>();
 
 export function collapseFileMutationRunsInSegments(segments: RuntimeMessage[]): RuntimeMessage[] {
   const entriesByPath = new Map<string, FileMutationEntry[]>();
@@ -64,7 +55,7 @@ export function collapseFileMutationRunsInSegments(segments: RuntimeMessage[]): 
   const previewByPrimaryId = new Map<string, string>();
 
   for (const entries of entriesByPath.values()) {
-    if (!entries.length) continue;
+    if (entries.length < 2) continue;
     const primary = [...entries].reverse().find((entry) => entry.run.status === 'success') ?? entries[entries.length - 1];
     const summary = fileChangeSummaryFromRuns(entries.map((entry) => entry.run));
     if (primary.run.status === 'success') {
@@ -90,7 +81,21 @@ export function collapseFileMutationRunsInSegments(segments: RuntimeMessage[]): 
 }
 
 export function isRuntimeFileMutationRun(run: RuntimeToolRun): boolean {
-  return fileMutationToolNames.has(run.name);
+  return isFileMutationToolName(run.name);
+}
+
+/** Complete server operation identities survive pagination; loaded records supply the richer
+ * previews and live updates. Merge by tool call so loading history never double-counts edits. */
+export function fileChangeRunsForMessages(messages: RuntimeMessage[], groups?: RuntimeFileChangeGroups): RuntimeToolRun[] {
+  const runs = new Map<string, RuntimeToolRun>();
+  for (const groupId of new Set(messages.map(messageFileChangeGroupId))) {
+    if (!groupId) continue;
+    for (const operation of groups?.[groupId] ?? []) runs.set(operation.run.id, operation.run);
+  }
+  for (const message of messages) {
+    for (const run of message.toolRuns ?? []) if (isRuntimeFileMutationRun(run)) runs.set(run.id, run);
+  }
+  return [...runs.values()];
 }
 
 export function fileMutationDisplayPath(run: RuntimeToolRun, t: Translate = defaultTranslate): string {
@@ -111,6 +116,16 @@ export function fileMutationDisplayKey(run: RuntimeToolRun): string {
 }
 
 export function fileChangesFromToolRun(run: RuntimeToolRun): RuntimeFileChange[] {
+  const cached = fileChangesCache.get(run);
+  if (cached) return cached;
+  const changes = readFileChangesFromToolRun(run);
+  // Event projections replace tool-run objects. Unchanged history can reuse parsed previews
+  // across path labels, mutation grouping and the review summary without retaining old threads.
+  fileChangesCache.set(run, changes);
+  return changes;
+}
+
+function readFileChangesFromToolRun(run: RuntimeToolRun): RuntimeFileChange[] {
   if (run.status === 'error' || run.status === 'rejected' || run.status === 'cancelled') return [];
   const previewChanges = extractFileChanges(parseJson(run.resultPreview));
   if (previewChanges.length) {
@@ -161,17 +176,20 @@ export function fileChangeToolCallIds(runs: RuntimeToolRun[]): string[] {
     && run.status === 'success' && fileChangesFromToolRun(run).length > 0).map((run) => run.id))];
 }
 
-export function latestFileChangeSummaryFromMessages(messages: RuntimeMessage[]): RuntimeFileChangeSummary | null {
+export function latestFileChangeRunsFromMessages(messages: RuntimeMessage[], groups?: RuntimeFileChangeGroups): RuntimeToolRun[] {
   const transcript = buildChatTranscript(messages);
   for (let index = transcript.length - 1; index >= 0; index -= 1) {
     const item = transcript[index];
     if (item.type !== 'assistant') continue;
-    const displaySegments = collapseFileMutationRunsInSegments(item.segments);
-    const summary = fileChangeSummaryFromRuns(displaySegments.flatMap((segment) => segment.toolRuns ?? []));
-    if (summary?.files.length) return summary;
+    const runs = fileChangeRunsForMessages(item.segments, groups)
+      .filter((run) => run.status === 'success' && fileChangesFromToolRun(run).length > 0);
+    if (runs.length) return runs;
   }
+  return [];
+}
 
-  return null;
+export function latestFileChangeSummaryFromMessages(messages: RuntimeMessage[], groups?: RuntimeFileChangeGroups): RuntimeFileChangeSummary | null {
+  return fileChangeSummaryFromRuns(latestFileChangeRunsFromMessages(messages, groups));
 }
 
 function serializeFileChangePreview(files: RuntimeFileChange[]): string {
@@ -197,8 +215,8 @@ function extractFileChange(value: unknown): RuntimeFileChange | null {
     action: typeof value.action === 'string' ? value.action : null,
     additions: count(value.additions),
     deletions: count(value.deletions),
-    truncated: Boolean(value.truncated),
-    lines: Array.isArray(value.lines) ? value.lines.map(normalizeDiffLine).filter(isRuntimeFileDiffLine) : [],
+    truncated: Boolean(value.truncated) || (Array.isArray(value.lines) && value.lines.length > FILE_DIFF_PREVIEW_LINES),
+    lines: Array.isArray(value.lines) ? value.lines.slice(0, FILE_DIFF_PREVIEW_LINES).map(normalizeDiffLine).filter(isRuntimeFileDiffLine) : [],
   });
 }
 
@@ -213,13 +231,8 @@ function normalizeFileChange(file: RuntimeFileChange): RuntimeFileChange {
 }
 
 export function limitRuntimeFileChangePreview(change: RuntimeFileChange): RuntimeFileChange {
-  // Runtime tools may return every changed line; bound both syntax highlighting and DOM work.
-  if (change.lines.length <= fileDiffPreviewLineLimit) return change;
-  return {
-    ...change,
-    truncated: true,
-    lines: change.lines.slice(0, fileDiffPreviewLineLimit),
-  };
+  const bounded = limitFileDiffLines(change.lines);
+  return bounded.truncated ? { ...change, lines: bounded.lines, truncated: true } : change;
 }
 
 function normalizeDiffLines(lines: unknown): RuntimeFileDiffLine[] {

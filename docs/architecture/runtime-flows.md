@@ -127,8 +127,9 @@ useRuntimeClientState
 
 - Store 为每个 thread 分配递增 `seq`。
 - SSE 先订阅 event bus 并缓冲 live event，再回放 `seq > sinceSeq` 的持久化事件。
-- `sinceSeq` 早于 transient-event 保留窗口时，runtime 发送 canonical snapshot resync；
+- `sinceSeq` 早于 transient-event 保留窗口，或重连积压超过 512 个序号时，runtime 发送分页 snapshot resync；
   Electron main 先 flush 旧 batch，再把 resync 作为独立原子 batch 转发。
+- Main 的 SSE 解析器只扫描新到的数据片段，兼容跨分片的 CR/LF 与 UTF-8 字符，不反复复制、分割整个未完成帧。
 - Preload 为每个订阅维护 `subscriptionId`，避免旧连接的事件投递给新订阅。
 - Renderer 只接受当前线程且 `event.seq > thread.lastSeq` 的事件。
 - 线程列表摘要通过非运行期短 debounce 或运行期单一 polling 收敛，不为每个 delta 重拉。
@@ -137,6 +138,16 @@ useRuntimeClientState
   snapshot 对账已开始的消息或 queued input，再决定是否展示错误。
 
 SSE 是增量优化，不是唯一恢复手段。重新进入线程时仍可通过 REST snapshot 恢复。
+
+### 大会话的资源边界
+
+- 会话页通常请求 160 条记录，尽量保持同一问题完整，但单轮再长也不能超过 200 条；更早记录仍可按游标读取。单个助手组默认只展示最后 160 个片段，并保留尚未结束的工具片段，现有历史入口可展开完整内容。
+- 每页独立携带所涉及回合的完整文件操作索引，仅包含操作 ID、文件路径和增删统计。历史页按回合合并索引，汇总及撤销/重新应用不依赖消息窗口；索引不复制差异正文或撤销补丁。
+- 文件差异在生成及历史存储投影时，每个文件独立保留最多 240 行、24,000 个内容字符，保证多文件 patch 的后续文件仍可按需查看；向桌面传输时，整批 patch 共用该预算。二进制删除只生成文件元数据。`turn.diff` 汇总也有 64,000 字符上限。
+- 完整撤销补丁保留在 runtime 的工具数据中，预览字符串、REST 页面与 runtime SSE 不传输补丁正文。历史差异在选中会话时按需生成有界投影，原始事件不改写；不新增启动全库扫描或强制迁移。
+- 正常接收 SSE 时减少重复快照读取，至少每五秒对账一次，避免持续事件掩盖漏掉的终态。事件流安静两秒后恢复常规轮询；先比较 `knownSeq` 和 `knownActiveTurnId`，未变化返回 `null`，变化才读取分页快照。工作区状态查询只读取会话归属元数据。
+- 主会话和观察会话检测事件序号缺口；即使后续事件推进到最新序号，也必须单独执行无条件快照恢复。恢复请求合并并发缺口，失败或过期响应重试，切换会话/卸载后丢弃迟到响应。
+- `pnpm benchmark:large-thread` 使用 430 条消息和三个模拟二进制删除记录，对比旧数据体积、读取投影和分片解析开销，不访问用户数据。
 
 ## 一次 Agent turn
 

@@ -141,7 +141,8 @@ export function useChatMessageOperations({
     setDeletingMessages(true);
     setActionError(null);
     try {
-      // Runtime deletion operates on message ids; one display item can own several messages.
+      // Visible IDs identify selected turns; the chat action asks runtime to resolve
+      // their complete persisted scope, including any messages outside this page.
       await onDeleteMessages(selectedDeleteMessageIds);
       commitChatWorkspaceOperation(isCurrentOperation, cancelDeleteSelection);
     } catch (unknownError) {

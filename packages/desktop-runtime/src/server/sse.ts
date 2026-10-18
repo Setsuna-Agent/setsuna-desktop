@@ -3,7 +3,7 @@ import type {
   StoredThreadEvent,
   SweNotification,
 } from '@setsuna-desktop/contracts';
-import { createSweNotificationMapper, filterSweNotificationsForClientCapabilities } from '@setsuna-desktop/contracts';
+import { createSweNotificationMapper, filterSweNotificationsForClientCapabilities, projectEventFilePreviews } from '@setsuna-desktop/contracts';
 import type { ServerResponse } from 'node:http';
 import { mapBuiltinFeatureEventToSweCompatibilityEvent } from '../composition/builtin-swe-feature-event-adapters.js';
 import { runtimeThreadResponse } from './runtime-thread-response.js';
@@ -82,7 +82,7 @@ export async function handleSse({
   };
   const unsubscribe = runtime.eventBus.subscribe(threadId, (event) => {
     if (closed || !responseCanWrite(response) || event.seq <= processedSeq) return;
-    pending.push(event);
+    pending.push(format === 'runtime' ? projectEventFilePreviews(event) : event);
     if (pending.length > MAX_PENDING_EVENTS) {
       closeWithError(new Error(`Runtime SSE subscriber exceeded ${MAX_PENDING_EVENTS} pending events.`));
       return;
@@ -124,14 +124,19 @@ export async function handleSse({
         await writeEvent(event);
       }
     } else {
-      const replay = await runtime.threadStore.replayEvents(threadId, sinceSeq);
+      const metadata = await runtime.threadStore.getThreadMetadata?.(threadId);
+      // A reconnect can be thousands of events behind even before retention prunes anything.
+      // Send a paged snapshot instead of decoding and publishing the whole retained transcript.
+      const replayLimited = metadata !== null && metadata !== undefined && metadata.lastSeq - sinceSeq > MAX_PENDING_EVENTS;
+      const replay = replayLimited ? { requiresResync: true, retainedFromSeq: 1, events: [] }
+        : await runtime.threadStore.replayEvents(threadId, sinceSeq);
       if (closed) return;
       if (replay.requiresResync) {
-        const storedThread = await runtime.threadStore.getThread(threadId);
+        const storedThread = await runtime.threadStore.getThreadPage(threadId, { limit: 160 });
         if (!storedThread) throw new Error(`Thread not found: ${threadId}`);
         const thread = await runtimeThreadResponse(runtime, storedThread);
         const resync: RuntimeEventResync = {
-          reason: 'retention_gap',
+          reason: replayLimited ? 'replay_limit' : 'retention_gap',
           requestedSinceSeq: sinceSeq,
           retainedFromSeq: replay.retainedFromSeq,
           thread,
@@ -210,7 +215,7 @@ export function runtimeEventStreamExperimentalApi(value: string | null): boolean
 
 async function writeRuntimeSse(response: ServerResponse, event: StoredThreadEvent): Promise<void> {
   if (!responseCanWrite(response)) return;
-  return writeSseFrame(response, 'runtime-event', event);
+  return writeSseFrame(response, 'runtime-event', projectEventFilePreviews(event));
 }
 
 async function writeSweSse(

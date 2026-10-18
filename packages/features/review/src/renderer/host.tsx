@@ -7,6 +7,7 @@ import type { DesktopWorkspaceApp } from '@setsuna-desktop/feature-workspace-app
 import { createContext, useContext, type ComponentType, type ReactNode, type RefObject } from 'react';
 import type {
   DesktopDiffFile,
+  DesktopFileChangeReference,
   DesktopReviewBridge,
 } from '../contracts/index.js';
 import type { ReviewTranslate } from './messages.js';
@@ -75,6 +76,7 @@ export type ReviewConflictTaskProgressProps = {
 export type ReviewRendererHost = Readonly<{
   bridge: DesktopReviewBridge | null;
   buildPatch(file: DesktopDiffFile): string;
+  loadFileChangePreview(reference: DesktopFileChangeReference, signal: AbortSignal): Promise<DesktopDiffFile>;
   copyText(value: string): Promise<void>;
   openExternal(url: string): Promise<boolean>;
   locale: string;

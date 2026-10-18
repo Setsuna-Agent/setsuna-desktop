@@ -269,7 +269,7 @@ export type RuntimeEventBatch = {
 };
 
 export type RuntimeEventResync = {
-  reason: 'retention_gap';
+  reason: 'retention_gap' | 'replay_limit';
   requestedSinceSeq: number;
   retainedFromSeq: number;
   thread: RuntimeThread;

@@ -231,8 +231,8 @@ export function DesktopWorkspacePanelLayer({
   const toast = useToast();
   const { bindingsFor } = useKeyboardShortcuts();
   const latestReviewSummary = useMemo(
-    () => latestDesktopReviewSummaryFromMessages(context.currentThread?.messages ?? []),
-    [context.currentThread?.messages],
+    () => latestDesktopReviewSummaryFromMessages(context.currentThread?.messages ?? [], context.currentThread?.fileChangeGroups, context.currentThread?.id),
+    [context.currentThread?.messages, context.currentThread?.fileChangeGroups, context.currentThread?.id],
   );
   const latestReviewFindings = useMemo<RuntimeReviewFinding[]>(
     () => latestCompletedFeatureReview(

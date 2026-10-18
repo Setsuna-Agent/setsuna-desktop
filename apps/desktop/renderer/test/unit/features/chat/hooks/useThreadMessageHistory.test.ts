@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
-import type { RuntimeMessage, RuntimeThread } from '@setsuna-desktop/contracts';
+import type { RuntimeFileChangeGroups, RuntimeMessage, RuntimeThread } from '@setsuna-desktop/contracts';
+import { applyRuntimeEventToThread } from '@setsuna-desktop/contracts';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -12,6 +13,49 @@ import {
 afterEach(cleanup);
 
 describe('thread message history', () => {
+  it('invalidates cached older records and an in-flight page when deletion leaves the tail unchanged', async () => {
+    const initial = thread([message('tail', 'current answer')], { nextBefore: 4, total: 5 });
+    let finish!: (page: { messages: RuntimeMessage[]; nextBefore: null; total: number }) => void;
+    const client = { listThreadMessages: vi.fn().mockResolvedValueOnce({
+      messages: [message('old', 'removed answer')], nextBefore: 2, total: 5,
+      fileChangeGroups: { old_turn: [{ messageId: 'old', run: { id: 'edit', name: 'edit', status: 'success' } }] },
+    }).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; })) };
+    const view = renderHook(({ snapshot }) => useThreadMessageHistory(client, snapshot), { initialProps: { snapshot: initial } });
+    await act(async () => { await view.result.current.loadOlder(); });
+    expect(view.result.current.messages.map((row) => row.id)).toEqual(['old', 'tail']);
+    let pending!: Promise<void>;
+    act(() => { pending = view.result.current.loadOlder(); });
+    const deleted = applyRuntimeEventToThread(initial, { id: 'delete', threadId: initial.id, seq: 11, createdAt: '',
+      type: 'messages.deleted', payload: { messageIds: ['old'] },
+    });
+    view.rerender({ snapshot: deleted });
+    expect(view.result.current.messages.map((row) => row.id)).toEqual(['tail']);
+    expect(view.result.current.fileChangeGroups).toBeUndefined();
+    await act(async () => { finish({ messages: [message('old', 'stale response')], nextBefore: null, total: 5 }); await pending; });
+    expect(view.result.current.messages.map((row) => row.id)).toEqual(['tail']);
+    view.rerender({ snapshot: { ...deleted, messagePage: { total: 4, nextBefore: 3 } } });
+    expect(view.result.current.total).toBe(4);
+    expect(view.result.current.hasMore).toBe(true);
+  });
+  it('carries complete operation groups from older pages and replaces covered groups on resync', async () => {
+    const group = (turnId: string, id: string): RuntimeFileChangeGroups => ({ [turnId]: [{ messageId: id,
+      run: { id, name: 'edit', status: 'success' },
+    }] });
+    const older = group('old_turn', 'hidden_old_edit');
+    const latest = group('latest_turn', 'hidden_latest_edit');
+    const initial = { ...thread([message('tail', 'latest')], { nextBefore: 300, total: 301 }), fileChangeGroups: latest };
+    const client = { listThreadMessages: vi.fn(async () => ({
+      messages: [message('older', 'older work')], nextBefore: 100, total: 301, fileChangeGroups: older,
+    })) };
+    const view = renderHook(({ snapshot }) => useThreadMessageHistory(client, snapshot), { initialProps: { snapshot: initial } });
+    await act(async () => { await view.result.current.loadOlder(); });
+    expect(view.result.current.fileChangeGroups).toEqual({ ...older, ...latest });
+    view.rerender({ snapshot: { ...initial, fileChangeGroups: { latest_turn: [] } } });
+    expect(view.result.current.fileChangeGroups).toEqual({ ...older, latest_turn: [] });
+    view.rerender({ snapshot: { ...initial, id: 'different_thread', fileChangeGroups: {} } });
+    expect(view.result.current.fileChangeGroups).toEqual({});
+  });
+
   it('retains rows displaced when the server tail window advances', () => {
     const current = {
       error: null,

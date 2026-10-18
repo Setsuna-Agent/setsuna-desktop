@@ -1,3 +1,7 @@
+import type { RuntimeFileChangePreviewInput } from '@setsuna-desktop/contracts';
+
+export type DesktopFileChangeReference = RuntimeFileChangePreviewInput & { threadId: string };
+
 export type DesktopDiffLine = {
   type: 'context' | 'added' | 'removed' | 'gap';
   lineNumber: number;
@@ -19,6 +23,8 @@ export type DesktopDiffFile = {
   lines: DesktopDiffLine[];
   /** Original unified patch for complete previews; omitted when truncated. */
   patch?: string;
+  /** Recorded excerpts omitted from a paged conversation; loaded only on expansion. */
+  changeReference?: DesktopFileChangeReference;
 };
 
 export type DesktopDiffSummary = {

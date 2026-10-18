@@ -1,6 +1,8 @@
-import { resolveWorkspaceFileReference, workspaceProjectRoots, type RuntimeMessage, type WorkspaceProject } from '@setsuna-desktop/contracts';
+import { resolveWorkspaceFileReference, workspaceProjectRoots, type RuntimeFileChangeGroups, type RuntimeMessage, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import {
-  latestFileChangeSummaryFromMessages,
+  fileChangesFromToolRun,
+  fileChangeSummaryFromRuns,
+  latestFileChangeRunsFromMessages,
   type RuntimeFileChange,
   type RuntimeFileChangeSummary,
   type RuntimeFileDiffLine,
@@ -11,8 +13,31 @@ import type {
   DesktopDiffSummary,
 } from '@setsuna-desktop/feature-review/contracts';
 
-export function latestDesktopReviewSummaryFromMessages(messages: RuntimeMessage[]): DesktopDiffSummary | null {
-  return desktopDiffSummaryFromRuntimeFileChanges(latestFileChangeSummaryFromMessages(messages));
+export function latestDesktopReviewSummaryFromMessages(
+  messages: RuntimeMessage[], groups?: RuntimeFileChangeGroups, threadId?: string,
+): DesktopDiffSummary | null {
+  const runs = latestFileChangeRunsFromMessages(messages, groups);
+  const changes = fileChangeSummaryFromRuns(runs);
+  const summary = desktopDiffSummaryFromRuntimeFileChanges(changes);
+  if (!summary || !threadId) return summary;
+  // Truncation has one meaning across storage, transport, paging and merged edits:
+  // these lines are incomplete. Resolve the recorded file on demand regardless of
+  // which projection supplied it, retaining its path when the workspace root changes.
+  const incompletePaths = new Set(changes?.files.filter((file) => file.truncated).map((file) => file.absolutePath ?? file.path));
+  const toolCallsByPath = new Map<string, Set<string>>();
+  for (const run of runs) {
+    for (const file of fileChangesFromToolRun(run)) {
+      const path = file.absolutePath ?? file.path;
+      if (!incompletePaths.has(path)) continue;
+      const ids = toolCallsByPath.get(path) ?? new Set<string>();
+      ids.add(run.id);
+      toolCallsByPath.set(path, ids);
+    }
+  }
+  return { ...summary, files: summary.files.map((file) => {
+    const toolCallIds = toolCallsByPath.get(file.path);
+    return toolCallIds ? { ...file, changeReference: { threadId, path: file.path, toolCallIds: [...toolCallIds] } } : file;
+  }) };
 }
 
 /** Project recorded targets into the selected directory; legacy relative paths use the primary cwd. */

@@ -1,6 +1,7 @@
 import type {
   DesktopRuntimeClient,
   RuntimeMessage,
+  RuntimeFileChangeGroups,
   RuntimeThread,
 } from '@setsuna-desktop/contracts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -11,10 +12,12 @@ type ThreadMessageHistoryState = {
   error: string | null;
   loading: boolean;
   messages: RuntimeMessage[];
+  fileChangeGroups?: RuntimeFileChangeGroups;
   nextBefore: number | null;
   threadId: string | null;
   total: number;
   windowRevision: number;
+  invalidatedAtSeq?: number;
 };
 
 export function useThreadMessageHistory(
@@ -57,6 +60,7 @@ export function useThreadMessageHistory(
           error: null,
           loading: false,
           messages: mergeMessages(page.messages, value.messages),
+          fileChangeGroups: mergeFileChangeGroups(page.fileChangeGroups, value.fileChangeGroups),
           nextBefore: page.nextBefore,
           total: page.total,
         };
@@ -81,6 +85,7 @@ export function useThreadMessageHistory(
     loadOlder,
     loading: visibleState.loading,
     messages: visibleState.messages,
+    fileChangeGroups: visibleState.fileChangeGroups,
     total: visibleState.total,
   };
 }
@@ -93,6 +98,11 @@ export function reconcileThreadSnapshot(
     return stateFromThread(thread, current.windowRevision + 1);
   }
   if (!thread) return current;
+  // A deletion can affect only cached older pages, leaving the live tail unchanged.
+  // Its persisted revision invalidates both that cache and in-flight page cursors.
+  if ((current.invalidatedAtSeq ?? 0) !== (thread.contextBudgetInvalidatedAtSeq ?? 0)) {
+    return stateFromThread(thread, current.windowRevision + 1);
+  }
 
   const reconciled = thread.messagePage
     ? reconcilePagedMessageWindow(current.messages, thread.messages, thread.messagePage.nextBefore)
@@ -111,6 +121,9 @@ export function reconcileThreadSnapshot(
     // that boundary, so delete/truncate cannot resurrect messages removed by runtime.
     loading: windowChanged ? false : current.loading,
     messages: reconciled.messages,
+    fileChangeGroups: thread.messagePage && reconciled.overlaps
+      ? mergeFileChangeGroups(current.fileChangeGroups, thread.fileChangeGroups)
+      : thread.fileChangeGroups,
     nextBefore,
     total: thread.messagePage?.total ?? thread.messages.length,
     windowRevision: windowChanged
@@ -152,6 +165,13 @@ function minimumMessageCursor(
   return Math.min(current, incoming);
 }
 
+/** New snapshots replace each covered turn's operation set; older pages only fill missing turns. */
+function mergeFileChangeGroups(older?: RuntimeFileChangeGroups, newer?: RuntimeFileChangeGroups): RuntimeFileChangeGroups | undefined {
+  if (!older) return newer;
+  if (!newer || Object.entries(newer).every(([turnId, operations]) => older[turnId] === operations)) return older;
+  return { ...older, ...newer };
+}
+
 function isMessagePrefix(left: RuntimeMessage[], right: RuntimeMessage[]): boolean {
   return left.length <= right.length
     && left.every((message, index) => message.id === right[index]?.id);
@@ -174,9 +194,11 @@ function stateFromThread(
     error: null,
     loading: false,
     messages: thread?.messages ?? [],
+    fileChangeGroups: thread?.fileChangeGroups,
     nextBefore: thread?.messagePage?.nextBefore ?? null,
     threadId: thread?.id ?? null,
     total: thread?.messagePage?.total ?? thread?.messages.length ?? 0,
     windowRevision,
+    invalidatedAtSeq: thread?.contextBudgetInvalidatedAtSeq,
   };
 }

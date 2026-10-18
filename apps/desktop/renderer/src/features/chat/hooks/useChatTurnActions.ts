@@ -222,7 +222,7 @@ export function useChatTurnActions({
       const isCurrentRequest = actionRequests.begin();
       try {
         setError(null);
-        const updated = await client.deleteMessages(currentThread.id, { messageIds: ids });
+        const updated = await client.deleteMessages(currentThread.id, { messageIds: ids, scope: 'turns' });
         if (isCurrentRequest()) setCurrentThread(updated);
         await reloadThreads();
       } catch (unknownError) {

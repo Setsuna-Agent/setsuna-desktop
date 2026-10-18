@@ -13,7 +13,15 @@ import {
   isThreadContextCompacting,
   selectInitialThreadSummary,
   shouldFrameCoalesceThreadEvents,
+  shouldPollThreadSnapshot,
 } from '../../../../src/services/runtime-client/runtimeThreadState.js';
+
+it('suppresses redundant reads without starving recovery of missed terminal events', () => {
+  expect(shouldPollThreadSnapshot(null, null, 0)).toBe(true);
+  expect(shouldPollThreadSnapshot(500, 250, 1500)).toBe(false);
+  expect(shouldPollThreadSnapshot(500, 250, 2500)).toBe(true);
+  expect(shouldPollThreadSnapshot(5100, 250, 5250)).toBe(true);
+});
 
 describe('applyCurrentThreadEvent', () => {
   it('rejects events from another thread and events that do not advance sequence', () => {
@@ -80,6 +88,7 @@ describe('applyCurrentThreadEvent', () => {
     });
 
     expect(projection.acceptedEvents.map((event) => event.seq)).toEqual([1, 2, 4]);
+    expect(projection.requiresSnapshotRecovery).toBe(true);
     expect(projection.thread).toMatchObject({
       lastSeq: 4,
       messages: [expect.objectContaining({
@@ -110,6 +119,7 @@ describe('applyCurrentThreadEvent', () => {
     });
 
     expect(projection.resynced).toBe(true);
+    expect(projection.requiresSnapshotRecovery).toBe(false);
     expect(projection.acceptedEvents.map((event) => event.seq)).toEqual([9]);
     expect(projection.thread).toMatchObject({ lastSeq: 9, title: 'After resync' });
   });

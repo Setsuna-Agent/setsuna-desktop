@@ -1,4 +1,5 @@
-import type { RuntimeMessage, RuntimeMessagePage, RuntimeMessagePageQuery, RuntimeThread } from '@setsuna-desktop/contracts';
+import type { RuntimeFileChangePreviewInput, RuntimeMessage, RuntimeMessagePage, RuntimeMessagePageQuery, RuntimeThread } from '@setsuna-desktop/contracts';
+import { projectFileChangePreview, projectMessagePageFileChanges, projectThreadFilePreviews } from '@setsuna-desktop/contracts';
 import type { DatabaseSync } from 'node:sqlite';
 import { assertSafeRuntimeId } from '../../../security/runtime-id.js';
 import { threadMessagePage, threadMessagePageBounds, threadTranscriptPage } from '../sqlite-thread-projections.js';
@@ -8,6 +9,8 @@ import {
 } from '../thread-store-state.js';
 import { readCheckpointTranscript, readCompleteCheckpointHeader } from './checkpoints.js';
 import { decodeSqliteJson } from './json.js';
+import { numberColumn, stringColumn } from '../sqlite-thread-row.js';
+import type { RuntimeThreadMetadata } from '../../../ports/thread-store.js';
 import { checkpointRecoveryState, isCheckpointRecoveryState } from './recovery-state.js';
 
 /** Read projections share the store's lease and full-thread cache, but never cache partial threads. */
@@ -23,6 +26,30 @@ export class SqliteThreadReader {
     return this.read(threadId, () => {
       const thread = this.fullThread(threadId);
       return thread ? cloneThread(thread) : null;
+    });
+  }
+
+  getFileChangePreview(threadId: string, input: RuntimeFileChangePreviewInput) {
+    return this.read(threadId, () => {
+      const thread = this.fullThread(threadId);
+      return thread ? structuredClone(projectFileChangePreview(thread.messages, input)) : null;
+    });
+  }
+
+  getThreadMetadata(threadId: string): Promise<RuntimeThreadMetadata | null> {
+    return this.read(threadId, (database) => {
+      const cached = this.host.cached(threadId);
+      if (cached) return {
+        id: cached.id, createdAt: cached.createdAt, projectId: cached.projectId,
+        workspaceId: cached.workspaceId, lastSeq: cached.lastSeq,
+      };
+      const row = database.prepare('SELECT id, created_at, project_id, workspace_id, last_seq FROM threads WHERE id = ?').get(threadId);
+      return row ? {
+        id: stringColumn(row, 'id'), createdAt: stringColumn(row, 'created_at'),
+        projectId: row.project_id === null ? undefined : stringColumn(row, 'project_id'),
+        workspaceId: row.workspace_id === null ? undefined : stringColumn(row, 'workspace_id'),
+        lastSeq: numberColumn(row, 'last_seq'),
+      } : null;
     });
   }
 
@@ -49,8 +76,11 @@ export class SqliteThreadReader {
     return this.read(threadId, () => {
       const thread = this.fullThread(threadId);
       if (!thread) return null;
-      const page = threadTranscriptPage(thread.messages, query);
-      return cloneThread({ ...thread, messages: page.messages, messagePage: { nextBefore: page.nextBefore, total: page.total } });
+      const page = projectMessagePageFileChanges(thread.messages, threadTranscriptPage(thread.messages, query));
+      return cloneThread(projectThreadFilePreviews({
+        ...thread, messages: page.messages, messagePage: { nextBefore: page.nextBefore, total: page.total },
+        fileChangeGroups: page.fileChangeGroups,
+      }));
     });
   }
 

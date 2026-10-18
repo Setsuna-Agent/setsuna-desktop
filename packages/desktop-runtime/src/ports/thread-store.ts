@@ -6,6 +6,8 @@ import type {
   StoredThreadEvent,
   RuntimeMessagePage,
   RuntimeMessagePageQuery,
+  RuntimeFileChangeOperation,
+  RuntimeFileChangePreviewInput,
   RuntimeThread,
   RuntimeThreadMemoryMode,
   RuntimeThreadModelBinding,
@@ -14,6 +16,8 @@ import type {
   ThreadPatch,
   ThreadQuery,
 } from '@setsuna-desktop/contracts';
+
+export type RuntimeThreadMetadata = Pick<RuntimeThread, 'id' | 'createdAt' | 'projectId' | 'workspaceId' | 'lastSeq'>;
 
 export type ThreadStorePatch = Omit<ThreadPatch, 'modelSelection'> & {
   featureId?: string | null;
@@ -71,6 +75,8 @@ export type RuntimeThreadSamplingState = Pick<RuntimeThread, 'messages' | 'kind'
 export type ThreadStore = {
   listThreads(query?: ThreadStoreQuery): Promise<RuntimeThreadSummary[]>;
   getThread(threadId: string): Promise<RuntimeThread | null>;
+  getFileChangePreview?(threadId: string, input: RuntimeFileChangePreviewInput): Promise<RuntimeFileChangeOperation[] | null>;
+  getThreadMetadata?(threadId: string): Promise<RuntimeThreadMetadata | null>;
   /** Recovery can inspect live turns without copying the full transcript and model diagnostics. */
   getActiveTurnIds?(threadId: string): Promise<string[]>;
   /** Managed image references can be read from checkpoint metadata without loading message bodies. */

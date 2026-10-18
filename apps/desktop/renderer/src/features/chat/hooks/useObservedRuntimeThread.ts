@@ -4,16 +4,18 @@ import type {
   RuntimeThread,
 } from '@setsuna-desktop/contracts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useThreadSnapshotRecovery } from '../../../services/runtime-client/useThreadSnapshotRecovery.js';
 import {
   activeTurnIdFromThreadSnapshot,
   adoptOwnedThreadSnapshot,
   applyCurrentThreadEventBatch,
+  shouldPollThreadSnapshot,
   updateThreadApprovalRun,
 } from '../../../services/runtime-client/runtimeThreadState.js';
 
 export type ObservedRuntimeThreadClient = Pick<
   DesktopRuntimeClient,
-  'answerApproval' | 'getThread' | 'subscribeEvents'
+  'answerApproval' | 'getThread' | 'getThreadIfChanged' | 'subscribeEvents'
 >;
 
 type ObservedRuntimeThreadOptions = {
@@ -40,6 +42,8 @@ export function useObservedRuntimeThread({
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const terminalTurnIdsRef = useRef<Set<string>>(new Set());
   const currentThreadLastSeqRef = useRef(0);
+  const lastThreadEventAtRef = useRef<number | null>(null);
+  const lastThreadPollAtRef = useRef<number | null>(null);
   const currentThreadRef = useRef<RuntimeThread | null>(null);
   const threadIdRef = useRef(threadId);
   threadIdRef.current = threadId;
@@ -60,6 +64,8 @@ export function useObservedRuntimeThread({
 
   useEffect(() => {
     setCurrentThread(null);
+    lastThreadEventAtRef.current = null;
+    lastThreadPollAtRef.current = null;
     setActiveTurnId(null);
     terminalTurnIdsRef.current.clear();
   }, [threadId]);
@@ -83,6 +89,22 @@ export function useObservedRuntimeThread({
     };
   }, [client, threadId]);
 
+  const adoptSnapshot = useCallback((requestedThreadId: string, snapshot: RuntimeThread): boolean => {
+    const current = currentThreadRef.current;
+    const adopted = adoptOwnedThreadSnapshot(current, requestedThreadId, snapshot);
+    if (adopted === current) return false;
+    setCurrentThread(adopted);
+    return true;
+  }, []);
+
+  const recoverThreadSnapshot = useThreadSnapshotRecovery(client, threadId, (owner, snapshot) => {
+    if (!adoptSnapshot(owner, snapshot)) return false;
+    terminalTurnIdsRef.current.clear();
+    setActiveTurnId(activeTurnIdFromThreadSnapshot(snapshot, terminalTurnIdsRef.current));
+    onResyncedRef.current?.();
+    return true;
+  });
+
   useEffect(() => {
     if (!threadId) return undefined;
     return client.subscribeEvents(threadId, currentThreadLastSeqRef.current, (batch) => {
@@ -91,7 +113,9 @@ export function useObservedRuntimeThread({
       if (!projection.resynced && (
         projection.thread === current || !projection.acceptedEvents.length
       )) return;
+      lastThreadEventAtRef.current = Date.now();
       setCurrentThread(projection.thread);
+      if (projection.requiresSnapshotRecovery && projection.thread) recoverThreadSnapshot(projection.thread.id);
 
       if (projection.resynced) {
         terminalTurnIdsRef.current.clear();
@@ -123,15 +147,7 @@ export function useObservedRuntimeThread({
         }
       }
     });
-  }, [client, threadId]);
-
-  const adoptSnapshot = useCallback((requestedThreadId: string, snapshot: RuntimeThread): boolean => {
-    const current = currentThreadRef.current;
-    const adopted = adoptOwnedThreadSnapshot(current, requestedThreadId, snapshot);
-    if (adopted === current) return false;
-    setCurrentThread(adopted);
-    return true;
-  }, []);
+  }, [client, recoverThreadSnapshot, threadId]);
 
   const answerApproval = useCallback(async (approvalId: string, input: AnswerRuntimeApprovalInput) => {
     const requestedThreadId = threadIdRef.current;
@@ -162,9 +178,20 @@ export function useObservedRuntimeThread({
     let timeoutId: number | undefined;
     const requestedThreadId = threadId;
     const poll = async () => {
+      if (!shouldPollThreadSnapshot(lastThreadEventAtRef.current, lastThreadPollAtRef.current, Date.now())) {
+        timeoutId = window.setTimeout(poll, 1000);
+        return;
+      }
+      lastThreadPollAtRef.current = Date.now();
       try {
-        const snapshot = await client.getThread(requestedThreadId);
+        const snapshot = client.getThreadIfChanged
+          ? await client.getThreadIfChanged(requestedThreadId, currentThreadLastSeqRef.current, effectiveActiveTurnId)
+          : await client.getThread(requestedThreadId);
         if (cancelled) return;
+        if (!snapshot) {
+          timeoutId = window.setTimeout(poll, 1000);
+          return;
+        }
         if (!adoptSnapshot(requestedThreadId, snapshot)) {
           timeoutId = window.setTimeout(poll, 1000);
           return;
