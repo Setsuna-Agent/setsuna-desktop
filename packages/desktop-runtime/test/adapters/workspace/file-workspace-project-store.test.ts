@@ -1,6 +1,7 @@
 import {
   WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES,
   WORKSPACE_TEXT_FILE_MAX_BYTES,
+  type WorkspaceProjectIcon,
 } from '@setsuna-desktop/contracts';
 import { access, lstat, mkdir, mkdtemp, readFile, realpath, rename, symlink, truncate, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -19,6 +20,40 @@ const ONE_PIXEL_PNG = Buffer.from(
 );
 
 describe('file workspace project store', () => {
+  it('persists project icons across rename, directory association, restart and explicit reset', async () => {
+    const fixture = await createWorkspaceFixture();
+    const store = new FileWorkspaceProjectStore(fixture.dataDir, systemClock);
+    const icon = { key: 'code', color: '#31A183' } as const;
+    const project = await store.addProject({ name: 'Portable', icon });
+    const normalizedIcon = { key: 'code', color: '#31a183' };
+    expect(project.icon).toEqual(normalizedIcon);
+
+    const renamed = await store.updateProject(project.id, { name: 'Renamed' });
+    expect(renamed.icon).toEqual(normalizedIcon);
+    const rebound = await store.addProject({ name: 'Renamed', path: fixture.projectDir });
+    expect(rebound).toMatchObject({ id: project.id, icon: normalizedIcon });
+    const reopened = new FileWorkspaceProjectStore(fixture.dataDir, systemClock);
+    expect((await reopened.listProjects()).projects[0].icon).toEqual(normalizedIcon);
+
+    const changedIcon = { key: 'leaf', color: 'text' } as const;
+    expect((await reopened.updateProject(project.id, { icon: changedIcon })).icon).toEqual(changedIcon);
+    await reopened.updateProject(project.id, { icon: null });
+    expect((await store.listProjects()).projects[0]).not.toHaveProperty('icon');
+  });
+
+  it.each([
+    'terminal', { key: 'unknown' }, { key: 'code', color: 'red' },
+    { key: 'code', color: 'url(https://example.com)' }, { key: 'code', color: 42 },
+  ])('rejects invalid icon input without changing project data: %j', async (invalidIcon) => {
+    const fixture = await createWorkspaceFixture();
+    const store = new FileWorkspaceProjectStore(fixture.dataDir, systemClock);
+    const project = await store.addProject({ name: 'Keep', icon: { key: 'code' } });
+    const icon = invalidIcon as unknown as WorkspaceProjectIcon;
+    await expect(store.updateProject(project.id, { name: 'Changed', icon })).rejects.toThrow('Invalid project icon');
+    await expect(store.addProject({ name: 'Invalid', icon })).rejects.toThrow('Invalid project icon');
+    expect((await store.listProjects()).projects).toEqual([project]);
+  });
+
   it('serializes concurrent project additions', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-workspace-test-'));
     const dataDir = path.join(root, 'data');

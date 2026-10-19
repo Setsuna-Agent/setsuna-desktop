@@ -1,5 +1,5 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
-import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
+import type { RuntimeThreadSummary, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { Archive, ArrowDown, ArrowUp, LoaderCircle, Pin } from 'lucide-react';
 import { useContext, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
@@ -17,7 +17,7 @@ export function SidebarThreadRow({
   menuOpen,
   threadMenu,
   pinned = false,
-  projectName,
+  project,
   running = false,
   selected,
   thread,
@@ -32,7 +32,7 @@ export function SidebarThreadRow({
   menuOpen: boolean;
   threadMenu: ThreadMenuState;
   pinned?: boolean;
-  projectName?: string;
+  project?: WorkspaceProject;
   running?: boolean;
   selected: boolean;
   thread: RuntimeThreadSummary;
@@ -130,7 +130,7 @@ export function SidebarThreadRow({
       onMouseEnter={() => setHovered(!hoverDisabled)}
       onMouseLeave={() => setHovered(false)}
     >
-      <SidebarThreadHoverCard disabled={menuOpen || threadDrag.dragging} projectName={projectName} thread={thread}>
+      <SidebarThreadHoverCard disabled={menuOpen || threadDrag.dragging} project={project} thread={thread}>
         <Button variant="ghost"
           className="desktop-agent-session__select"
           data-sidebar-thread-id={thread.id}

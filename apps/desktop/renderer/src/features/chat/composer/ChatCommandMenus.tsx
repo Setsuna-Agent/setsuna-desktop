@@ -47,7 +47,7 @@ export function ChatMentionCommandMenu({
               onMouseDown={(event) => { event.preventDefault(); onSelect(item); }}
               onMouseMove={() => onHover(index)}
             >
-              {app ? <PluginAppAvatar avatar={app.avatar} variant="inline" className="chat-command-menu__item-icon" />
+              {app ? <PluginAppAvatar avatar={app.avatar} color={app.avatarColor} variant="inline" className="chat-command-menu__item-icon" />
                 : entry ? <WorkspaceEntryIcon className="chat-command-menu__item-icon" path={entry.path} type={entry.kind} />
                 : <span className="chat-command-menu__item-icon"><BrowserFavicon faviconUrl={tab?.faviconUrl ?? null} loading={false} /></span>}
               <span className="chat-command-menu__item-main">

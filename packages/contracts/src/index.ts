@@ -47,6 +47,7 @@ export * from './threads/file-preview-projection.js';
 export * from './usage.js';
 export * from './workspace.js';
 export * from './workspace/roots.js';
+export * from './workspace/project-icon.js';
 export * from './workspace/document-preview.js';
 export * from './workspace/file-diff-preview.js';
 export * from './workspace/file-change-groups.js';

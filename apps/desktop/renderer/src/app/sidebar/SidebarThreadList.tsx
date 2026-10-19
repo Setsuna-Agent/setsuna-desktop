@@ -1,6 +1,6 @@
 import type { ThreadMenuState } from '../thread-menu/useThreadMenu.js';
 import { Button } from '@setsuna-desktop/renderer-ui';
-import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
+import type { RuntimeThreadSummary, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { useState } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { SidebarThreadRow } from './SidebarThreadRow.js';
@@ -31,8 +31,8 @@ export function nextSidebarVisibleCount(
 
 export function SidebarThreadList({
   menuThreadId,
-  projectName,
-  projectNamesById,
+  project,
+  projectsById,
   runningThreadId,
   selectedThreadId,
   threads,
@@ -46,8 +46,8 @@ export function SidebarThreadList({
   onTogglePin,
 }: {
   menuThreadId: string | null;
-  projectName?: string;
-  projectNamesById?: ReadonlyMap<string, string>;
+  project?: WorkspaceProject;
+  projectsById?: ReadonlyMap<string, WorkspaceProject>;
   runningThreadId?: string | null;
   selectedThreadId?: string | null;
   threads: RuntimeThreadSummary[];
@@ -86,7 +86,7 @@ export function SidebarThreadList({
         <SidebarThreadRow
           key={thread.id}
           menuOpen={menuThreadId === thread.id}
-          projectName={projectName ?? (thread.projectId ? projectNamesById?.get(thread.projectId) : undefined)}
+          project={project ?? (thread.projectId ? projectsById?.get(thread.projectId) : undefined)}
           pinned={variant === 'pinned'}
           running={runningThreadId === thread.id}
           selected={selectedThreadId === thread.id}

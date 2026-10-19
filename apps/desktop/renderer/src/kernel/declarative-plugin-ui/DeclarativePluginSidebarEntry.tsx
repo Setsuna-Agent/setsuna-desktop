@@ -62,7 +62,7 @@ export function DeclarativePluginSidebarEntry({ active, contribution, entryId, m
           <Button variant="ghost" className={`app-navigation__button${active ? ' is-active' : ''}`}
             {...order.buttonProps}
             onClick={onOpen} aria-label={label} aria-current={active ? 'page' : undefined} type="button">
-            <PluginAppAvatar avatar={appearance.avatar} />
+            <PluginAppAvatar avatar={appearance.avatar} color={appearance.avatarColor} />
           </Button>
         </Dropdown>
       </Tooltip>

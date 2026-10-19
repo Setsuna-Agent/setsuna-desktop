@@ -5,6 +5,7 @@ import { useId, useRef, useState } from 'react';
 import { brandIconFileAccept } from '../../../shared/branding/brandIconUpload.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { PluginAppAvatar } from './PluginAppAvatar.js';
+import { IconColorPicker } from '../../../shared/ui/IconColorPicker.js';
 import { PLUGIN_APP_NAME_MAX_LENGTH, type PluginAppAppearance } from './preferences.js';
 import { APP_AVATAR_PRESETS } from './app-avatar-presets.js';
 import { usePluginAppAvatarDraft } from './usePluginAppAvatarDraft.js';
@@ -23,6 +24,7 @@ export function PluginAppAppearanceDialog({ appearance, defaultName, pluginName,
   const nameId = useId();
   const fileInput = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(appearance.name ?? defaultName);
+  const [avatarColor, setAvatarColor] = useState(appearance.avatarColor);
   const { avatar, setAvatar, customAvatar, loading, error, setError, upload, fetchWebsiteIcon } = usePluginAppAvatarDraft(appearance.avatar);
   const reading = loading !== null;
 
@@ -31,12 +33,13 @@ export function PluginAppAppearanceDialog({ appearance, defaultName, pluginName,
       <form className="plugin-app-appearance" onSubmit={(event) => {
         event.preventDefault();
         if (!name.trim() || reading) return;
-        const next = { ...(name.trim() !== defaultName ? { name: name.trim() } : {}), avatar };
+        const next = { ...(name.trim() !== defaultName ? { name: name.trim() } : {}), avatar,
+          ...(avatarColor ? { avatarColor } : {}) };
         if (onSave(next)) onClose();
         else setError(t('pluginUi.appearanceSaveFailed'));
       }}>
         <div className="plugin-app-appearance__identity">
-          <PluginAppAvatar avatar={avatar} variant="list" />
+          <PluginAppAvatar avatar={avatar} color={avatarColor} variant="list" />
           <div className="plugin-app-appearance__name">
             <label htmlFor={nameId}>{t('pluginUi.appName')}</label>
             <TextField id={nameId} autoFocus value={name} maxLength={PLUGIN_APP_NAME_MAX_LENGTH}
@@ -44,7 +47,11 @@ export function PluginAppAppearanceDialog({ appearance, defaultName, pluginName,
           </div>
         </div>
         <fieldset className="plugin-app-appearance__avatars" disabled={reading}>
-          <legend>{t('pluginUi.appAvatar')}</legend>
+          <legend>
+            <span>{t('pluginUi.appAvatar')}</span>
+            <IconColorPicker value={avatarColor} disabled={reading} onChange={setAvatarColor}
+              label={t('pluginUi.avatarColors')} colorLabel={(color) => t('pluginUi.avatarColor', { color })} />
+          </legend>
           <div className="plugin-app-appearance__presets">
             {APP_AVATAR_PRESETS.map((preset, index) => (
               <Tooltip key={preset.key} title={t('pluginUi.avatarPreset', { index: index + 1 })}>
@@ -52,7 +59,7 @@ export function PluginAppAppearanceDialog({ appearance, defaultName, pluginName,
                   aria-label={t('pluginUi.avatarPreset', { index: index + 1 })}
                   aria-pressed={avatar.type === 'preset' && avatar.key === preset.key}
                   onClick={() => setAvatar({ type: 'preset', key: preset.key })}>
-                  <PluginAppAvatar avatar={{ type: 'preset', key: preset.key }} />
+                  <PluginAppAvatar avatar={{ type: 'preset', key: preset.key }} color={avatarColor} />
                 </Button>
               </Tooltip>
             ))}

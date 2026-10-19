@@ -9,7 +9,8 @@
   gap: 7px;
 }
 
-.desktop-project-editor__field > span:first-child {
+.desktop-project-editor__field > span:first-child,
+.desktop-project-editor__field > label {
   color: var(--app-text-secondary);
   font-size: 12px;
   font-weight: 500;
@@ -21,12 +22,13 @@
   align-items: center;
 }
 
-.desktop-project-editor__name-input > svg {
+.desktop-project-editor__name-input > .desktop-project-editor__icon {
   position: absolute;
   z-index: 1;
-  left: 11px;
+  left: 5px;
+  width: 28px;
+  height: 28px;
   color: var(--app-text-muted);
-  pointer-events: none;
 }
 
 .desktop-project-editor__name-input .sd-field {

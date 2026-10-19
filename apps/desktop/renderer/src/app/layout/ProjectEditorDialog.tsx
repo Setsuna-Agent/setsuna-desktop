@@ -6,11 +6,13 @@ import {
   type WorkspaceProjectRoot,
   type UpdateWorkspaceProjectInput,
   type WorkspaceProject,
+  type WorkspaceProjectIcon,
 } from '@setsuna-desktop/contracts';
 import { Folder, FolderPlus, Link2Off, Star, X } from 'lucide-react';
 import { useId, useState, type FormEvent } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { Button, IconButton, TextField } from '../../shared/ui/primitives.js';
+import { ProjectIconPicker } from './ProjectIconPicker.js';
 
 type ProjectEditorDialogProps = {
   project: WorkspaceProject | null;
@@ -27,7 +29,9 @@ export function ProjectEditorDialog({
 }: ProjectEditorDialogProps) {
   const { t } = useI18n();
   const formId = useId();
+  const nameId = `${formId}-name`;
   const [name, setName] = useState(project?.name ?? '');
+  const [icon, setIcon] = useState<WorkspaceProjectIcon | null>(project?.icon ?? null);
   const [roots, setRoots] = useState<WorkspaceProjectRoot[]>(() => workspaceProjectRoots(project));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +63,7 @@ export function ProjectEditorDialog({
     setBusy(true);
     setError(null);
     try {
-      const saved = await onSave({ name: name.trim(), roots });
+      const saved = await onSave({ name: name.trim(), roots, icon });
       if (saved) onClose();
       else setBusy(false);
     } catch (unknownError) {
@@ -110,11 +114,12 @@ export function ProjectEditorDialog({
       width={520} footer={footer} dismissible={!busy} onClose={onClose}>
       <form id={formId} aria-busy={busy} onSubmit={(event) => void submit(event)}>
         <div className="desktop-project-editor__body">
-          <label className="desktop-project-editor__field">
-            <span>{t('sidebar.projectName')}</span>
+          <div className="desktop-project-editor__field">
+            <label htmlFor={nameId}>{t('sidebar.projectName')}</label>
             <span className="desktop-project-editor__name-input">
-              <Folder size={14} aria-hidden="true" />
+              <ProjectIconPicker value={icon} disabled={busy} onChange={setIcon} />
               <TextField
+                id={nameId}
                 autoFocus
                 disabled={busy}
                 maxLength={WORKSPACE_PROJECT_NAME_MAX_CHARS}
@@ -124,7 +129,7 @@ export function ProjectEditorDialog({
                 onChange={(event) => setName(event.currentTarget.value)}
               />
             </span>
-          </label>
+          </div>
 
           <div className="desktop-project-editor__field">
             <span>{t('sidebar.projectDirectory')}</span>

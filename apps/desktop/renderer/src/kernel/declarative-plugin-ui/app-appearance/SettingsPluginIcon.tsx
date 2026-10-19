@@ -16,5 +16,5 @@ function InstalledAppIcon({ appContributionId, className, pluginId, variant = 'c
   pluginId: string;
 }) {
   const { appearance } = usePluginAppAppearance(pluginId, appContributionId);
-  return <PluginAppAvatar avatar={appearance.avatar} className={className} variant={variant} />;
+  return <PluginAppAvatar avatar={appearance.avatar} color={appearance.avatarColor} className={className} variant={variant} />;
 }

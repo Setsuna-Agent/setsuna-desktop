@@ -13,7 +13,7 @@ export function PinnedThreadSection({ projects, threads, ...listProps }: {
 >) {
   const { t } = useI18n();
   const [collapsed, setCollapsed] = useState(false);
-  const projectNamesById = useMemo(() => new Map(projects.map((project) => [project.id, project.name])), [projects]);
+  const projectsById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects]);
   if (!threads.length) return null;
 
   return (
@@ -30,7 +30,7 @@ export function PinnedThreadSection({ projects, threads, ...listProps }: {
         </Button>
       </div>
       {!collapsed ? (
-        <SidebarThreadList {...listProps} projectNamesById={projectNamesById} threads={threads} variant="pinned" />
+        <SidebarThreadList {...listProps} projectsById={projectsById} threads={threads} variant="pinned" />
       ) : null}
     </section>
   );

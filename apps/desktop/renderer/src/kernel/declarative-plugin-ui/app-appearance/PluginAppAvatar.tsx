@@ -1,11 +1,13 @@
 import type { BrandIconConfig } from '@setsuna-desktop/contracts';
 import type { SettingsPluginIconProps } from '@setsuna-desktop/renderer-contracts/settings';
 import { useState, type CSSProperties } from 'react';
-import { APP_AVATAR_PRESETS } from './app-avatar-presets.js';
+import { iconColorCssValue } from '../../../shared/ui/icon-colors.js';
+import { APP_AVATAR_PRESETS, type AppAvatarColor } from './app-avatar-presets.js';
 import './app-appearance.css';
 
-export function PluginAppAvatar({ avatar, className, variant = 'menu' }: Readonly<{
+export function PluginAppAvatar({ avatar, color, className, variant = 'menu' }: Readonly<{
   avatar: BrandIconConfig;
+  color?: AppAvatarColor;
   className?: string;
   variant?: SettingsPluginIconProps['variant'];
 }>) {
@@ -19,7 +21,7 @@ export function PluginAppAvatar({ avatar, className, variant = 'menu' }: Readonl
   const Icon = preset.Icon;
   return (
     <span className={['plugin-app-avatar', `plugin-app-avatar-size--${variant}`, className].filter(Boolean).join(' ')} aria-hidden="true"
-      style={{ '--plugin-app-avatar-color': preset.color } as CSSProperties}>
+      style={{ '--plugin-app-avatar-color': iconColorCssValue(color ?? preset.color) } as CSSProperties}>
       <Icon strokeWidth={1.9} />
     </span>
   );
