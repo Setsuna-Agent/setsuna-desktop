@@ -25,6 +25,17 @@ export const usageTestUi = {
     title: string;
   }>) => <header><h1>{title}</h1>{description ? <p>{description}</p> : null}{action}</header>,
   Section: ({ children }: Readonly<{ children: ReactNode }>) => <section>{children}</section>,
+  // 原生 select 替代 Radix 下拉，测试可直接用 selectOptions 驱动筛选。
+  SelectField: ({ children, onValueChange, value, 'aria-label': label }: Readonly<{
+    'aria-label'?: string;
+    children: ReactNode;
+    onValueChange(value: string): void;
+    value: string;
+  }>) => (
+    <select aria-label={label} value={value} onChange={(event) => onValueChange(event.currentTarget.value)}>
+      {children}
+    </select>
+  ),
   Tooltip: ({ children, title }: Readonly<{ children: ReactElement; title: ReactNode }>) => (
     <span title={typeof title === 'string' ? title : undefined}>{children}</span>
   ),

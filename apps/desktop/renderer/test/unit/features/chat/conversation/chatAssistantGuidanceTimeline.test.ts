@@ -3,9 +3,76 @@ import { describe, expect, it } from 'vitest';
 import {
   createAssistantGuidanceTimelinePlan,
 } from '../../../../../src/features/chat/conversation/chatAssistantGuidanceTimeline.js';
-import type { AssistantRunTimelineBlock } from '../../../../../src/features/chat/conversation/chatAssistantTimeline.js';
+import { createAssistantRunTimeline, type AssistantRunTimelineBlock } from '../../../../../src/features/chat/conversation/chatAssistantTimeline.js';
+import { createChatDisplayItems } from '../../../../../src/features/chat/conversation/chatMessageDisplay.js';
 
 describe('createAssistantGuidanceTimelinePlan', () => {
+  it('preserves guidance order as tool-only followups arrive and the turn completes', () => {
+    const before = [
+      userMessage('user_initial', 'initial prompt'),
+      assistantMessage('assistant_commentary', 'Inspecting the issue.'),
+      toolMessage('assistant_read', 'call_read'),
+      toolMessage('assistant_search', 'call_search'),
+      userMessage('user_steer', 'extra guidance'),
+    ];
+    const after = [
+      toolMessage('assistant_followup_read', 'call_followup_read'),
+      toolMessage('assistant_followup_edit', 'call_followup_edit'),
+    ];
+    const final: RuntimeMessage = { ...assistantMessage('assistant_final', 'Done.'), phase: 'final_answer' };
+    const snapshots: Array<{ followups: RuntimeMessage[]; turnActive: boolean; expectedTail: string[] }> = [
+      { followups: [], turnActive: true, expectedTail: [] },
+      {
+        followups: [{
+          ...after[0]!,
+          status: 'streaming',
+          toolRuns: [{ ...after[0]!.toolRuns![0]!, status: 'running' }],
+        }],
+        turnActive: true,
+        expectedTail: ['assistant_followup_read:tools:call_followup_read'],
+      },
+      {
+        followups: after,
+        turnActive: true,
+        expectedTail: ['assistant_followup_read:tools:call_followup_read,call_followup_edit'],
+      },
+      {
+        followups: [...after, final],
+        turnActive: false,
+        expectedTail: ['assistant_followup_read:tools:call_followup_read,call_followup_edit', 'assistant_final:content'],
+      },
+    ];
+
+    for (const snapshot of snapshots) {
+      const messages = [...before, ...snapshot.followups].map((message) => ({ ...message, turnId: 'turn_1' }));
+      const assistant = createChatDisplayItems(messages).find((item) => item.type === 'assistant');
+      if (assistant?.type !== 'assistant') throw new Error('Expected assistant run');
+      const plan = createAssistantGuidanceTimelinePlan({
+        blocks: createAssistantRunTimeline(assistant.segments, [], { messageOrderIds: assistant.messageIds }),
+        guidanceMessages: assistant.steerMessages,
+        messageOrderIds: assistant.messageIds,
+        turnActive: snapshot.turnActive,
+      });
+      const order = plan.nodes.flatMap((node) => {
+        if (node.type === 'block') return [node.block.id];
+        return node.entries.map((entry) => {
+          if (entry.type === 'guidance') return entry.messages.map((message) => message.id).join(',');
+          if (entry.item.type === 'toolRuns') return `${entry.item.id}:${entry.item.toolRuns.map((run) => run.id).join(',')}`;
+          if (entry.item.type === 'content') return entry.item.segment.id;
+          throw new Error(`Unexpected work item: ${entry.item.type}`);
+        });
+      });
+
+      expect(plan.placeholderGuidance).toEqual([]);
+      expect(order).toEqual([
+        'assistant_commentary:content',
+        'assistant_read:tools:call_read,call_search',
+        'user_steer',
+        ...snapshot.expectedTail,
+      ]);
+    }
+  });
+
   it('interleaves active guidance before the next work item in message order', () => {
     const before = assistantMessage('assistant_before', 'before');
     const after = assistantMessage('assistant_after', 'after');
@@ -188,6 +255,13 @@ function assistantMessage(id: string, content: string): RuntimeMessage {
     content,
     createdAt: '2026-06-26T00:00:00.000Z',
     status: 'complete',
+  };
+}
+
+function toolMessage(id: string, toolCallId: string): RuntimeMessage {
+  return {
+    ...assistantMessage(id, ''),
+    toolRuns: [{ id: toolCallId, name: 'run_shell_command', status: 'success' }],
   };
 }
 

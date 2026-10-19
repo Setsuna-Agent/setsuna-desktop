@@ -13,6 +13,10 @@ export type RuntimeUsageQuery = Readonly<{
   from?: string;
   /** Exclusive ISO-8601 timestamp boundary for usage record creation time. */
   to?: string;
+  /** Provider bucket key from `summary.byProvider`; narrows records and summary alike. */
+  provider?: string;
+  /** Model bucket key from `summary.byModel`; narrows records and summary alike. */
+  model?: string;
 }>;
 
 export type RuntimeUsageBucket = Readonly<{

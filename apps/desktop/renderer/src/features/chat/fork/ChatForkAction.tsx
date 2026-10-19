@@ -1,6 +1,6 @@
 import type { ForkThreadInput } from '@setsuna-desktop/contracts';
 import { Button, Dropdown, Tooltip } from '@setsuna-desktop/renderer-ui';
-import { LoaderCircle, Split } from 'lucide-react';
+import { FolderGit2, LoaderCircle, Split } from 'lucide-react';
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useIdentityRequestGuard } from '../../../shared/hooks/useIdentityRequestGuard.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
@@ -77,7 +77,7 @@ export function ChatForkAction({ messageId, disabled }: { messageId: string; dis
         type: 'group', label: t('chat.fork.title'), children: [
           { key: 'workspace', label: t('chat.fork.workspace'), icon: <Split size={15} />,
             onClick: () => selectTarget('workspace') },
-          { key: 'worktree', label: t('chat.fork.worktree'), icon: <Split size={15} />,
+          { key: 'worktree', label: t('chat.fork.worktree'), icon: <FolderGit2 size={15} />,
             disabled: !state.canCreateWorktree,
             tooltip: state.canCreateWorktree ? undefined : t('chat.fork.requiresGit'),
             onClick: () => selectTarget('worktree') },

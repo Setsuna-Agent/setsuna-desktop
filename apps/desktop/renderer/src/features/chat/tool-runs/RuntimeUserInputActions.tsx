@@ -3,6 +3,7 @@ import type {
   RuntimeStructuredInputValue,
   RuntimeToolRun,
 } from '@setsuna-desktop/contracts';
+import { Lock } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { Button } from '../../../shared/ui/primitives.js';
@@ -67,15 +68,17 @@ export function RuntimeUserInputActions({
         void submit('submit');
       }}
     >
-      <div className="chat-tool-run__elicitation-header">
-        <strong>{request.title || t('toolRun.input.title')}</strong>
-        {request.autoResolutionMs ? (
-          <span>{timedOut
-            ? t('toolRun.input.autoContinuing')
-            : t('toolRun.input.autoContinueSeconds', { seconds: remainingSeconds ?? Math.ceil(request.autoResolutionMs / 1_000) })}</span>
-        ) : <span>{t('toolRun.input.awaiting')}</span>}
+      <div className="chat-tool-run__user-input-intro">
+        <div className="chat-tool-run__elicitation-header">
+          <strong>{request.title || t('toolRun.input.title')}</strong>
+          {request.autoResolutionMs ? (
+            <span>{timedOut
+              ? t('toolRun.input.autoContinuing')
+              : t('toolRun.input.autoContinueSeconds', { seconds: remainingSeconds ?? Math.ceil(request.autoResolutionMs / 1_000) })}</span>
+          ) : <span>{t('toolRun.input.awaiting')}</span>}
+        </div>
+        <p className="chat-tool-run__elicitation-message">{request.message}</p>
       </div>
-      <p className="chat-tool-run__elicitation-message">{request.message}</p>
       <div className="chat-tool-run__elicitation-fields">
         {Object.entries(request.requestedSchema.properties).map(([name, field]) => (
           <RuntimeStructuredInputField
@@ -88,19 +91,25 @@ export function RuntimeUserInputActions({
           />
         ))}
       </div>
-      <div className="chat-tool-run__user-input-note">{t('toolRun.input.secretWarning')}</div>
-      <div className="chat-tool-run__actions">
-        <Button type="submit" variant="primary" disabled={Boolean(submittingAction) || timedOut}>
-          {t(submittingAction === 'submit' ? 'toolRun.input.submitting' : 'toolRun.input.submit')}
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          disabled={Boolean(submittingAction) || timedOut}
-          onClick={() => void submit('decline')}
-        >
-          {t(submittingAction === 'decline' ? 'toolRun.input.skipping' : 'toolRun.input.skip')}
-        </Button>
+      <div className="chat-tool-run__user-input-footer">
+        <span className="chat-tool-run__user-input-note">
+          <Lock aria-hidden="true" size={12} />
+          {t('toolRun.input.secretWarning')}
+        </span>
+        {/* Dialog convention: secondary action first, primary submit at the trailing edge. */}
+        <div className="chat-tool-run__actions">
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={Boolean(submittingAction) || timedOut}
+            onClick={() => void submit('decline')}
+          >
+            {t(submittingAction === 'decline' ? 'toolRun.input.skipping' : 'toolRun.input.skip')}
+          </Button>
+          <Button type="submit" variant="primary" disabled={Boolean(submittingAction) || timedOut}>
+            {t(submittingAction === 'submit' ? 'toolRun.input.submitting' : 'toolRun.input.submit')}
+          </Button>
+        </div>
       </div>
       {error ? <div className="chat-tool-run__action-error" role="alert">{error}</div> : null}
     </form>

@@ -23,6 +23,8 @@ const usageQueryCodec = defineRuntimeCodec<RuntimeUsageQuery>((value) => {
     ...optionalNumber(record, 'offset'),
     ...optionalText(record, 'from'),
     ...optionalText(record, 'to'),
+    ...optionalText(record, 'provider'),
+    ...optionalText(record, 'model'),
   });
 });
 

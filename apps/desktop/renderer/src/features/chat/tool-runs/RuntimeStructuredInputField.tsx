@@ -70,7 +70,7 @@ export function RuntimeStructuredInputField({
             return (
               <Checkbox
                 checked={checked}
-                className={`chat-tool-run__elicitation-multi-select-option${checked ? ' is-selected' : ''}`}
+                className="chat-tool-run__elicitation-multi-select-option"
                 disabled={!checked && selectionLimitReached}
                 id={`${fieldId}-${index}`}
                 key={choice.const}

@@ -1,7 +1,7 @@
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
 import { Fragment, type ReactNode } from 'react';
 import type { WorkHistoryExpandedChangeHandler } from './chat-workspace-types.js';
-import { inferWorkTiming, WorkHistoryPanel } from './ChatWorkHistory.js';
+import { inferWorkTiming, WorkHistoryDetails, WorkHistoryPanel } from './ChatWorkHistory.js';
 
 export type WorkHistoryTimelineSection =
   | { type: 'content'; id: string; children: ReactNode }
@@ -32,16 +32,15 @@ export function ChatWorkHistoryTimeline({
   const firstWorkIndex = sections.findIndex((section) => section.type === 'work');
   const workSections = sections.filter((section) => section.type === 'work');
   const firstWork = workSections[0];
-  if (!firstWork) return <>{sections.map((section) => renderSection(section, true))}</>;
+  if (!firstWork) return <>{sections.map(renderSection)}</>;
 
   const followingSections = sections.slice(firstWorkIndex);
-  const hasPersistentContent = followingSections.some((section) => section.type === 'content' || section.persistentChildren);
   const hasFollowingContent = workSections.some((section) => section.hasFollowingContent);
   const timing = inferWorkTiming(workSections.flatMap((section) => section.segments));
   const panelId = `${itemId}:work-history:${firstWork.id}`;
   return (
     <>
-      {sections.slice(0, firstWorkIndex).map((section) => renderSection(section, true))}
+      {sections.slice(0, firstWorkIndex).map(renderSection)}
       <WorkHistoryPanel
         active={active}
         collapseWhenContentFollows={hasFollowingContent}
@@ -51,20 +50,20 @@ export function ChatWorkHistoryTimeline({
         key={panelId}
         onExpandedChange={onExpandedChange}
         panelId={panelId}
-        persistentChildren={hasPersistentContent ? followingSections.map((section) => renderSection(section, false)) : undefined}
         startedAtMs={timing.startedAtMs}
       >
-        {followingSections.map((section) => renderSection(section, true))}
+        {followingSections.map(renderSection)}
       </WorkHistoryPanel>
     </>
   );
 }
 
-function renderSection(section: WorkHistoryTimelineSection, expanded: boolean) {
-  // Keep result cards at the same keyed position when work is expanded or collapsed.
+function renderSection(section: WorkHistoryTimelineSection) {
+  // Content stays mounted at its keyed position; only work details animate with the panel.
+  if (section.type === 'content') return <Fragment key={section.id}>{section.children}</Fragment>;
   return (
-    <Fragment key={section.id}>
-      {section.type === 'content' || expanded ? section.children : section.persistentChildren}
-    </Fragment>
+    <WorkHistoryDetails key={section.id} persistentChildren={section.persistentChildren}>
+      {section.children}
+    </WorkHistoryDetails>
   );
 }

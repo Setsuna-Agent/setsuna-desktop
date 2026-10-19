@@ -128,7 +128,7 @@ describe('edit sidebar app', () => {
     expect(uploaded.result.current.appearance).toEqual(custom);
   });
 
-  it('cancels drafts, persists saved name/avatar, and synchronizes only the matching app', async () => {
+  it('cancels drafts, persists saved name/avatar/color, and synchronizes only the matching app', async () => {
     const onOpen = vi.fn();
     const observer = renderHook(() => usePluginAppAppearance(plugin.id, contribution.id));
     const other = renderHook(() => usePluginAppAppearance(plugin.id, 'other-page'));
@@ -138,6 +138,7 @@ describe('edit sidebar app', () => {
     await openEditor();
     expect(onOpen).not.toHaveBeenCalled();
     fireEvent.change(screen.getByRole('textbox', { name: '名称' }), { target: { value: '未保存' } });
+    fireEvent.click(screen.getByRole('button', { name: '头像颜色 #12b84c' }));
     fireEvent.click(screen.getByRole('button', { name: '内置头像 3' }));
     fireEvent.click(screen.getByRole('button', { name: '取消' }));
     expect(window.localStorage.getItem(key)).toBe(initialAppearance);
@@ -145,21 +146,27 @@ describe('edit sidebar app', () => {
     await openEditor();
     expect((screen.getByRole('textbox', { name: '名称' }) as HTMLInputElement).value).toBe('笔记');
     fireEvent.change(screen.getByRole('textbox', { name: '名称' }), { target: { value: '  工作笔记  ' } });
+    fireEvent.click(screen.getByRole('button', { name: '头像颜色 #0385ff' }));
     fireEvent.click(screen.getByRole('button', { name: '内置头像 3' }));
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
-    expect(observer.result.current.appearance).toEqual({ name: '工作笔记', avatar: { type: 'preset', key: 'chart-column' } });
+    expect(observer.result.current.appearance).toEqual({ name: '工作笔记', avatar: { type: 'preset', key: 'chart-column' }, avatarColor: '#0385ff' });
     expect(other.result.current.appearance).toEqual(otherAppearance);
     sidebar.unmount();
     render(entry(onOpen));
     fireEvent.click(screen.getByRole('button', { name: '工作笔记' }));
     expect(onOpen).toHaveBeenCalledOnce();
+    await openEditor('工作笔记');
+    fireEvent.click(screen.getByRole('button', { name: '正文颜色' }));
+    fireEvent.click(screen.getByRole('button', { name: '内置头像 2' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    expect(observer.result.current.appearance).toEqual({ name: '工作笔记', avatar: { type: 'preset', key: 'table' }, avatarColor: 'text' });
 
     // Another desktop window can update or clear this app's preferences.
     act(() => {
-      window.localStorage.setItem(key, JSON.stringify({ name: '跨窗口修改', avatar: { type: 'preset', key: 'table' } }));
+      window.localStorage.setItem(key, JSON.stringify({ name: '跨窗口修改', avatar: { type: 'preset', key: 'table' }, avatarColor: '#31a183' }));
       window.dispatchEvent(new StorageEvent('storage', { key }));
     });
-    expect(observer.result.current.appearance).toEqual({ name: '跨窗口修改', avatar: { type: 'preset', key: 'table' } });
+    expect(observer.result.current.appearance).toEqual({ name: '跨窗口修改', avatar: { type: 'preset', key: 'table' }, avatarColor: '#12b84c' });
     expect(screen.getByRole('button', { name: '跨窗口修改' })).toBeTruthy();
   });
 

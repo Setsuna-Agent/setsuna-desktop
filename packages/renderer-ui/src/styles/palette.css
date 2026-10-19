@@ -1,0 +1,10 @@
+/* Match ./palette.ts; surfaces, text and semantic status tokens remain host-owned. */
+:root {
+  --sd-palette-red: #fa423e;
+  --sd-palette-orange: #fb6a22;
+  --sd-palette-yellow: #ffc300;
+  --sd-palette-green: #12b84c;
+  --sd-palette-blue: #0385ff;
+  --sd-palette-purple: #924ff7;
+  --sd-palette-pink: #ff66ad;
+}

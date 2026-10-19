@@ -345,6 +345,7 @@ export function DesktopPanelHeader({
       ref={headerRef}
       className={['desktop-panel-chrome', 'chat-file-review-panel__header', dragOverlay ? 'is-reordering-tabs' : ''].filter(Boolean).join(' ')}
       data-desktop-panel-placement={placement}
+      data-workspace-panel-slot={placement}
       onPointerCancel={handlePointerEnd}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerEnd}
@@ -404,7 +405,7 @@ export function DesktopPanelHeader({
                     <Tooltip
                       placement="bottom"
                       disabled={closing || Boolean(dragOverlay)}
-                      title={placement === 'side' && activeId === panel.id
+                      title={activeId === panel.id
                         ? <ShortcutTooltipContent commandId="workspace.closeActiveSidePanel" label={closeLabel} />
                         : closeLabel}
                     >
@@ -428,15 +429,16 @@ export function DesktopPanelHeader({
             })}
             {onAddPanel ? (
               <span className="desktop-panel-launcher">
-                <Button variant="ghost"
-                  aria-label={addPanelLabel}
-                  title={addPanelLabel}
-                  className="app-shell-icon-control chat-file-review-panel__heading-action"
-                  type="button"
-                  onClick={() => onAddPanel()}
-                >
-                  <Plus size={14} />
-                </Button>
+                <Tooltip placement="bottom" title={<ShortcutTooltipContent commandId="workspace.addPanel" label={addPanelLabel} />}>
+                  <Button variant="ghost"
+                    aria-label={addPanelLabel}
+                    className="app-shell-icon-control chat-file-review-panel__heading-action"
+                    type="button"
+                    onClick={() => onAddPanel()}
+                  >
+                    <Plus size={14} />
+                  </Button>
+                </Tooltip>
               </span>
             ) : null}
           </span>

@@ -1,12 +1,12 @@
 // @vitest-environment happy-dom
 import { StrictMode, useState } from 'react';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { SettingsViewUi } from '@setsuna-desktop/renderer-contracts/settings';
 import type { BrowserDesktopBridge } from '../../../src/contracts/bridge.js';
 import type { BrowserExtension } from '../../../src/contracts/extensions.js';
-import { DEFAULT_BROWSER_PREFERENCES } from '../../../src/contracts/settings.js';
+import { DEFAULT_BROWSER_PREFERENCES, type BrowserPreferences } from '../../../src/contracts/settings.js';
 import { BrowserSettingsPage } from '../../../src/renderer/settings/BrowserSettingsPage.js';
 import { BrowserSettingsNavigationProvider, useBrowserSettingsNavigation } from '../../../src/renderer/settings/context.js';
 import { translateBrowserMessage } from '../../../src/renderer/messages.js';
@@ -20,7 +20,7 @@ afterEach(() => {
   window.localStorage.removeItem(BROWSER_EXTENSION_PINS_KEY);
 });
 
-function openSettings() {
+function openSettings(overrides: Partial<BrowserDesktopBridge> = {}) {
   const openPage = vi.fn();
   const bridge = {
     getBrowserPreferences: vi.fn().mockResolvedValue(DEFAULT_BROWSER_PREFERENCES),
@@ -28,6 +28,7 @@ function openSettings() {
     listBrowserPasswords: vi.fn().mockResolvedValue([{ id: 'saved', origin: 'https://example.org', username: 'test-user' }]),
     getExtensions: vi.fn().mockResolvedValue([]),
     onExtensionsChanged: () => () => undefined,
+    ...overrides,
   } as unknown as BrowserDesktopBridge;
   render(<StrictMode><BrowserSettingsNavigationProvider value={{ openPage, openSettings: vi.fn() }}>
     <BrowserSettingsPage bridge={bridge} ui={settingsTestUi as SettingsViewUi} translate={(key) => translateBrowserMessage('en-US', key)} />
@@ -39,6 +40,33 @@ function ExtensionSettingsShortcut() {
   const navigation = useBrowserSettingsNavigation();
   return <button onClick={navigation?.openExtensionSettings}>Open extension settings</button>;
 }
+
+it('prevents home URL edits during another save and saves edits after it completes', async () => {
+  const user = userEvent.setup();
+  let completeSave!: (preferences: BrowserPreferences) => void;
+  const pendingSave = new Promise<BrowserPreferences>((resolve) => { completeSave = resolve; });
+  const savedPreferences = { ...DEFAULT_BROWSER_PREFERENCES, showHomeButton: false };
+  const homeUrl = 'https://example.org/home';
+  const updateBrowserPreferences = vi.fn<BrowserDesktopBridge['updateBrowserPreferences']>()
+    .mockReturnValueOnce(pendingSave)
+    .mockResolvedValueOnce({ ...savedPreferences, homeUrl });
+  openSettings({ updateBrowserPreferences });
+
+  const home = await screen.findByRole<HTMLInputElement>('textbox', { name: 'Home page URL' });
+  await user.click(screen.getByRole('checkbox', { name: 'Show home button' }));
+  expect(updateBrowserPreferences).toHaveBeenCalledExactlyOnceWith({ showHomeButton: false });
+  await user.type(home, homeUrl);
+  await user.tab();
+  expect(home.value).toBe(DEFAULT_BROWSER_PREFERENCES.homeUrl);
+  expect(updateBrowserPreferences).toHaveBeenCalledTimes(1);
+
+  await act(async () => completeSave(savedPreferences));
+  await user.type(home, homeUrl);
+  await user.tab();
+  expect(updateBrowserPreferences).toHaveBeenCalledTimes(2);
+  expect(updateBrowserPreferences).toHaveBeenLastCalledWith({ homeUrl });
+  expect(home.value).toBe(homeUrl);
+});
 
 it('opens the requested extension subpage, toggles without uninstalling and returns to browser preferences', async () => {
   const extension: BrowserExtension = {

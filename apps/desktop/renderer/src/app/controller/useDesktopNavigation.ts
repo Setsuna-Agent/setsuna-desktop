@@ -386,6 +386,7 @@ export function useDesktopNavigation({
       ? await client.updateProject(existingProject.id, input)
       : await client.addProject({
           ...(input.name ? { name: input.name } : {}),
+          ...(input.icon !== undefined ? { icon: input.icon } : {}),
           ...(input.roots ? { roots: input.roots } : {}),
           ...(nextPath ? { path: nextPath } : {}),
         });

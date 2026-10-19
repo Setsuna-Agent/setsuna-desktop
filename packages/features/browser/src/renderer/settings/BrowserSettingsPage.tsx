@@ -27,13 +27,18 @@ export function BrowserSettingsPage({ bridge, children, translate: t, ui }: { br
   }, [extensionsRequested, consumeExtensionsRequest]);
   const [home, setHome] = useState('');
   useEffect(() => { setHome(preferences.homeUrl); }, [preferences.homeUrl]);
+  // Commit on blur/Enter rather than per keystroke: main rejects partial URLs, so typing would surface errors.
+  const commitHome = () => {
+    const homeUrl = home.trim();
+    if (homeUrl !== preferences.homeUrl) void update({ homeUrl });
+  };
   if (!bridge?.getBrowserPreferences) return <ui.EmptyState title={t('feature.browser.settings.unavailable')} />;
   if (!ready) return <ui.EmptyState title={t(error ? 'feature.browser.settings.failed' : 'feature.browser.settings.loading')} />;
   if (manager && manager !== 'clear') return <BrowserSettingsDetail kind={manager} bridge={bridge} translate={t} ui={ui} onBack={() => setManager(null)} />;
   const toggle = (key: ToggleSetting) => <ui.Toggle key={key} label={t(`feature.browser.settings.${key}`)} description={null} checked={preferences[key]} disabled={busy} onChange={(value) => void update({ [key]: value })} />;
   const manage = (label: Parameters<BrowserTranslate>[0], target: Manager) => <ui.NavigationRow
     icon={target === 'bookmarks' ? <BrowserFavoritesIcon aria-hidden="true" size={18} /> : target === 'history' ? <BrowserHistoryIcon aria-hidden="true" size={18} /> : undefined}
-    label={t(label)} actionLabel={t('feature.browser.settings.manage')} onClick={() => setManager(target)} />;
+    label={t(label)} onClick={() => setManager(target)} />;
   const dialogProps = { bridge, translate: t, ui, onClose: () => setManager(null) };
   return <ui.PageLayout title={t('feature.browser.settings.title')}>
     <ui.Section className="browser-settings" featureId="browser">
@@ -48,21 +53,22 @@ export function BrowserSettingsPage({ bridge, children, translate: t, ui }: { br
       />
     </ui.Group>
     <ui.Group title={t('feature.browser.settings.general')}>
-      <ui.Row label={t('feature.browser.settings.searchEngine')}><ui.SelectField className="sd-settings-select--compact" aria-label={t('feature.browser.settings.searchEngine')} value={preferences.searchEngine} disabled={busy} onValueChange={(searchEngine) => void update({ searchEngine: searchEngine as BrowserSearchEngine })}>
+      <ui.Row label={t('feature.browser.settings.searchEngine')}><ui.SelectField className="sd-settings-control--compact" aria-label={t('feature.browser.settings.searchEngine')} value={preferences.searchEngine} disabled={busy} onValueChange={(searchEngine) => void update({ searchEngine: searchEngine as BrowserSearchEngine })}>
         <option value="bing">Bing</option><option value="google">Google</option><option value="baidu">百度</option><option value="duckduckgo">DuckDuckGo</option>
       </ui.SelectField></ui.Row>
-      <ui.Row label={t('feature.browser.settings.homeUrl')}><form className="browser-settings__actions" onSubmit={(event) => { event.preventDefault(); void update({ homeUrl: home.trim() }); }}>
-        <ui.TextField type="url" value={home} aria-label={t('feature.browser.settings.homeUrl')} placeholder={t('feature.browser.settings.homePlaceholder')} onChange={(event) => setHome(event.target.value)} />
-        <ui.Button type="submit" disabled={busy || home === preferences.homeUrl}>{t('feature.browser.settings.save')}</ui.Button>
-      </form></ui.Row>
+      <ui.Row label={t('feature.browser.settings.homeUrl')}>
+        <ui.TextField className="sd-settings-control--compact" type="url" value={home} disabled={busy} aria-label={t('feature.browser.settings.homeUrl')} placeholder={t('feature.browser.settings.homePlaceholder')}
+          onChange={(event) => setHome(event.target.value)} onBlur={commitHome}
+          onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} />
+      </ui.Row>
       {toggle('useExtensionNewTab')}
-      {navigation ? <ui.NavigationRow label={t('feature.browser.settings.network')} actionLabel={t('feature.browser.settings.manage')} onClick={() => navigation.openSettings('network-proxy')} /> : null}
+      {navigation ? <ui.NavigationRow label={t('feature.browser.settings.network')} onClick={() => navigation.openSettings('network-proxy')} /> : null}
       {manage('feature.browser.import.title', 'import')}
     </ui.Group>
     {children}
     <ui.Group title={t('feature.browser.settings.appearance')}>
       {toggle('showHomeButton')}{toggle('showFullUrl')}{toggle('spellcheck')}
-      <ui.Row label={t('feature.browser.settings.defaultZoom')}><ui.SelectField className="sd-settings-select--compact" aria-label={t('feature.browser.settings.defaultZoom')} disabled={busy} value={String(preferences.defaultZoom)} onValueChange={(value) => void update({ defaultZoom: Number(value) })}>
+      <ui.Row label={t('feature.browser.settings.defaultZoom')}><ui.SelectField className="sd-settings-control--compact" aria-label={t('feature.browser.settings.defaultZoom')} disabled={busy} value={String(preferences.defaultZoom)} onValueChange={(value) => void update({ defaultZoom: Number(value) })}>
         {[0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3].map((value) => <option key={value} value={value}>{Math.round(value * 100)}%</option>)}
       </ui.SelectField></ui.Row>
     </ui.Group>
@@ -75,7 +81,7 @@ export function BrowserSettingsPage({ bridge, children, translate: t, ui }: { br
       {toggle('savePasswords')}{toggle('autofillPasswords')}{manage('feature.browser.settings.passwords', 'passwords')}
     </ui.Group>
     <ui.Group title={t('feature.browser.settings.permissions')}>
-      {BROWSER_PERMISSIONS.map((permission) => <ui.Row key={permission} label={t(`feature.browser.settings.${permission}`)}><ui.SelectField className="sd-settings-select--compact" aria-label={t(`feature.browser.settings.${permission}`)} disabled={busy} value={preferences.permissions[permission]} onValueChange={(value) => void update({ permissions: { [permission]: value as BrowserPermissionPolicy } })}>
+      {BROWSER_PERMISSIONS.map((permission) => <ui.Row key={permission} label={t(`feature.browser.settings.${permission}`)}><ui.SelectField className="sd-settings-control--compact" aria-label={t(`feature.browser.settings.${permission}`)} disabled={busy} value={preferences.permissions[permission]} onValueChange={(value) => void update({ permissions: { [permission]: value as BrowserPermissionPolicy } })}>
         {(['ask', 'allow', 'block'] as const).map((value) => <option key={value} value={value}>{t(`feature.browser.settings.${value}`)}</option>)}
       </ui.SelectField></ui.Row>)}
       {manage('feature.browser.settings.sitePermissions', 'permissions')}

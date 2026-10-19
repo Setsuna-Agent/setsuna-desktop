@@ -28,6 +28,8 @@ export type SelectFieldProps = {
   disabled?: boolean;
   id?: string;
   menuClassName?: string;
+  /** Horizontal edge of the trigger the popup lines up with; it always opens below. */
+  menuAlign?: 'start' | 'end';
   menuMinWidth?: number;
   name?: string;
   onValueChange: (value: string) => boolean | void;
@@ -51,6 +53,7 @@ export function SelectField({
   disabled = false,
   id,
   menuClassName = '',
+  menuAlign = 'start',
   menuMinWidth,
   name,
   onValueChange,
@@ -63,6 +66,8 @@ export function SelectField({
 }: SelectFieldProps) {
   const options = useMemo(() => optionElements(children), [children]);
   const selectedOption = options.find((option) => option.value === value) ?? options.find((option) => !option.disabled) ?? null;
+  // 只在当前选中项确实有图标时才给触发器留出图标位，避免“全部”之类无图标选项前出现空白。
+  const selectedIcon = renderOptionIcon && selectedOption ? renderOptionIcon(selectedOption.value) : null;
   const restoreFocus = useRef(true);
   const [open, setOpen] = useState(false);
   const onOpenChange = (next: boolean) => {
@@ -80,7 +85,7 @@ export function SelectField({
         <Primitive.Trigger
           id={id}
           type="button"
-          className={['sd-field', 'sd-select-field', renderOptionIcon ? 'sd-select-field--with-icon' : '', open ? 'is-open' : '', className].filter(Boolean).join(' ')}
+          className={['sd-field', 'sd-select-field', selectedIcon ? 'sd-select-field--with-icon' : '', open ? 'is-open' : '', className].filter(Boolean).join(' ')}
           aria-haspopup="listbox"
           aria-label={ariaLabel}
           aria-labelledby={ariaLabelledBy}
@@ -89,14 +94,14 @@ export function SelectField({
           style={style}
           title={title}
         >
-          {renderOptionIcon && selectedOption ? <span className="sd-select-field__icon" aria-hidden="true">{renderOptionIcon(selectedOption.value)}</span> : null}
+          {selectedIcon ? <span className="sd-select-field__icon" aria-hidden="true">{selectedIcon}</span> : null}
           <span className="sd-select-field__value">{valueContent ?? selectedOption?.label ?? ''}</span>
           <ChevronDown className="sd-select-field__chevron" size={15} aria-hidden="true" />
         </Primitive.Trigger>
         <Primitive.Portal container={overlayContainer()}>
           {/* Radix coordinates the nested modal's pointer, scroll and focus scopes. */}
           <Primitive.Content className={`sd-menu-surface sd-select-menu${menuClassName ? ` ${menuClassName}` : ''}`}
-            position="popper" align="start" sideOffset={6} collisionPadding={8}
+            position="popper" side="bottom" align={menuAlign} sideOffset={6} collisionPadding={8}
             aria-label={ariaLabel} aria-labelledby={ariaLabelledBy}
             style={{ ...style, '--sd-select-menu-min-width': `${menuMinWidth ?? 160}px` } as CSSProperties}
             onCloseAutoFocus={(event) => {

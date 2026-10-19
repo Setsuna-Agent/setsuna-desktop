@@ -60,16 +60,14 @@ export function UsageRecordsTable({ providers, records, loading }: UsageRecordsT
       header: t('feature.usage.totalTokens'),
       width: '32%',
       cell: (record) => (
-        <>
-          <strong className="settings-usage-records__tokens" title={t('feature.usage.rawTotal', { tokens: formatTokens(record.totalTokens ?? 0) })}>
-            {formatTokens(tokensExcludingCache(record))}
-          </strong>
+        <div className="settings-usage-records__tokens" title={t('feature.usage.rawTotal', { tokens: formatTokens(record.totalTokens ?? 0) })}>
+          <strong>{formatTokens(tokensExcludingCache(record))}</strong>
           <small>{t('feature.usage.tokenDetails', {
             input: formatTokens(uncachedInputTokens(record)),
             cache: formatTokens(record.cachedInputTokens ?? 0),
             output: formatTokens(record.outputTokens ?? 0),
           })}</small>
-        </>
+        </div>
       ),
     },
     {

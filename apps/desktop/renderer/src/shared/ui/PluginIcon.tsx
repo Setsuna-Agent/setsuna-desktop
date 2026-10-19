@@ -14,7 +14,6 @@ import {
   Globe,
   ListTodo,
   ListX,
-  MessageCircleQuestion,
   ScanSearch,
   ScrollText,
   ShieldAlert,
@@ -40,7 +39,6 @@ const pluginIconNames = [
   'prompt-secret-detector',
   'compact-warning',
   'stop-todo-continuation',
-  'question',
   'todo',
   'claude-rules',
 ] as const;
@@ -63,7 +61,6 @@ const pluginGlyphs: Partial<Record<PluginIconName, LucideIcon>> = {
   'prompt-secret-detector': ScanSearch,
   'compact-warning': Shrink,
   'stop-todo-continuation': ListX,
-  question: MessageCircleQuestion,
   todo: ListTodo,
   'claude-rules': ScrollText,
 };
@@ -117,7 +114,6 @@ export function PluginIcon({
         className,
       ].filter(Boolean).join(' ')}
       data-plugin-icon={icon ?? 'plugin'}
-      data-menu-color="preserve"
       aria-hidden="true"
     >
       {imageSource ? (

@@ -7,5 +7,5 @@ export function PluginAppReferenceLabel({ app }: { app: RuntimePluginAppReferenc
   const { appearance } = usePluginAppAppearance(app.pluginId, app.contributionId);
   const name = appearance.name ?? app.name;
   return <ChatInlineReference label={name} title={name}
-    icon={<PluginAppAvatar avatar={appearance.avatar} variant="inline" />} />;
+    icon={<PluginAppAvatar avatar={appearance.avatar} color={appearance.avatarColor} variant="inline" />} />;
 }

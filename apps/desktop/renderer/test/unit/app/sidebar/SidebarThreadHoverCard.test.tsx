@@ -16,7 +16,8 @@ it.each([0, 400])('dismisses pending and visible previews when selecting a threa
     updatedAt: new Date(Date.now() - 2 * 3_600_000).toISOString(), createdAt: '',
     archived: false, messageCount: 1, lastMessagePreview: '',
   };
-  const content = (disabled = false) => <SidebarThreadHoverCard disabled={disabled} projectName="agent" thread={thread}>
+  const project = { id: 'project-1', name: 'agent', createdAt: '', updatedAt: '' };
+  const content = (disabled = false) => <SidebarThreadHoverCard disabled={disabled} project={project} thread={thread}>
     <Button onClick={onSelect}>{thread.title}</Button>
   </SidebarThreadHoverCard>;
   const view = render(content());

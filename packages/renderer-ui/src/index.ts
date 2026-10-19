@@ -1,4 +1,5 @@
 export { Button, IconButton, type ButtonProps, type IconButtonProps } from './button.js';
+export { VIVID_PALETTE } from './styles/palette.js';
 export { TextField, TextArea, type TextFieldProps, type TextAreaProps } from './fields.js';
 export { Checkbox, CheckField, Switch, type CheckboxProps } from './selection-controls.js';
 export { Dialog, type DialogProps } from './dialog.js';
@@ -22,6 +23,7 @@ export { useNativeDragPreview, useDragReorderPreview } from './drag/drag-feedbac
 export { useReorderLayout, animateReorderLayout, reorderItemRect } from './drag/reorder-layout.js';
 export { FileIcon } from './file-icon.js';
 export { DetailSection } from './detail-section.js';
+export { CollapsibleContent } from './collapsible/collapsible.js';
 export { DiffViewControls } from './diff-view-controls.js';
 export { Skeleton } from './skeleton.js';
 export { Tabs, TabsList, TabsTrigger } from './tabs/tabs.js';

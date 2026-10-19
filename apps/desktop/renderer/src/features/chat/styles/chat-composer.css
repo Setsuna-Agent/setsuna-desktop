@@ -201,8 +201,9 @@
   padding: 0;
   border: 1px solid color-mix(in srgb, var(--desktop-agent-main-surface) 88%, transparent);
   border-radius: var(--app-radius-full);
-  color: #fff;
-  background: color-mix(in srgb, #111827 88%, transparent);
+  /* 反色按钮：亮色主题深底浅图标，暗色主题自动翻转，两种主题下都能从附件预览上分辨出来。 */
+  color: var(--app-bg);
+  background: color-mix(in srgb, var(--app-text) 88%, transparent);
   box-shadow: 0 1px 4px color-mix(in srgb, #000 22%, transparent);
 }
 
@@ -221,8 +222,7 @@
 }
 
 .chat-attachment__remove:hover {
-  color: #fff;
-  background: #111827;
+  background: var(--app-text);
 }
 
 .chat-attachment__remove:focus-visible {

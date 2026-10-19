@@ -156,13 +156,13 @@
 
 .sd-markdown-document__preview pre {
   padding: 14px 16px;
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   background: var(--app-surface-muted);
 }
 
 .sd-markdown-document__source:focus-visible,
 .sd-markdown-document__preview:focus-visible {
-  outline: 2px solid var(--app-border-strong);
+  outline: 2px solid var(--app-focus-outline);
   outline-offset: -2px;
 }
 

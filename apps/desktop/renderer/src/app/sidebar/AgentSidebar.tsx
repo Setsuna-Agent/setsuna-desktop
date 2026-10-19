@@ -5,8 +5,6 @@ import type { RuntimeThreadSummary, WorkspaceProject } from '@setsuna-desktop/co
 import {
   Archive,
   ChevronDown,
-  FolderClosed,
-  FolderOpen,
   FolderPlus,
   MoreHorizontal,
   Plus,
@@ -24,6 +22,7 @@ import {
 } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { AppSidebar } from '../../shared/ui/AppSidebar.js';
+import { ProjectIcon } from '../../shared/ui/ProjectIcon.js';
 import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
 import { SidebarFloatingMenu } from './SidebarFloatingMenu.js';
 import { SidebarMenuOpenContext } from './SidebarMenuContext.js';
@@ -364,9 +363,8 @@ function ProjectSection({
                             if (projectActionMenuId !== project.id) onToggleProjectActions(project.id);
                           }}
                         >
-                          {project.path && !isProjectCollapsed
-                            ? <FolderOpen className="desktop-agent-project__icon" size={14} />
-                            : <FolderClosed className="desktop-agent-project__icon" size={14} />}
+                          <ProjectIcon icon={project.icon} open={Boolean(project.path && !isProjectCollapsed)}
+                            className="desktop-agent-project__icon" />
                           <span className="desktop-agent-project__text">
                             <span className="desktop-agent-project__name">{project.name}</span>
                             {!project.path ? <small>{t('sidebar.projectUnbound')}</small> : null}
@@ -388,7 +386,7 @@ function ProjectSection({
                       projectThreads.length ? (
                         <SidebarThreadList
                           menuThreadId={threadActionMenuId}
-                          projectName={project.name}
+                          project={project}
                           runningThreadId={runningThreadId}
                           selectedThreadId={isActiveProject ? activeThreadId : null}
                           threads={unpinnedThreads}

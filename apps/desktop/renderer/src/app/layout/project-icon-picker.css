@@ -1,0 +1,35 @@
+.desktop-project-icon-picker {
+  width: min(344px, calc(100vw - 32px));
+  padding: 12px;
+}
+
+.desktop-project-icon-picker__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.desktop-project-icon-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  max-height: min(320px, 50vh);
+  overflow-y: auto;
+  gap: 4px;
+}
+
+.desktop-project-icon-picker__choice {
+  justify-content: center;
+  height: 34px;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: var(--app-radius-md);
+  padding: 6px;
+  background: color-mix(in srgb, var(--project-icon-color) 9%, transparent);
+}
+
+.desktop-project-icon-picker__choice[aria-pressed='true'] {
+  border-color: var(--project-icon-color);
+  background: color-mix(in srgb, var(--project-icon-color) 16%, transparent);
+}

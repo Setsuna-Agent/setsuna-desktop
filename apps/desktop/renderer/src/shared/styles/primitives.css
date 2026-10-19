@@ -279,6 +279,38 @@
   width: 100%;
 }
 
+/* A row-sized button: resets native button chrome and keeps the settings row geometry. */
+.sd-settings-navigation-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  color: var(--app-text);
+  background: transparent;
+  text-align: start;
+  transition: background 140ms ease;
+}
+
+.sd-settings-navigation-row:hover:not(:disabled) {
+  background: var(--desktop-agent-control-hover-bg);
+}
+
+.sd-settings-navigation-row:focus-visible {
+  outline: 2px solid var(--app-focus-outline);
+  outline-offset: -2px;
+}
+
+.sd-settings-navigation-row:disabled {
+  opacity: var(--app-disabled-opacity);
+}
+
+.sd-settings-navigation-row__chevron {
+  color: var(--app-text-muted);
+}
+
 .sd-settings-toggle > .sd-settings-row__label {
   display: flex;
   align-items: flex-start;
@@ -300,7 +332,8 @@
   gap: 4px;
 }
 
-.sd-settings-select--compact {
+/* Short-value controls (selects or brief inputs) share one width so a group's right edge lines up. */
+.sd-settings-control--compact {
   width: 160px;
   max-width: 100%;
   margin-inline-start: auto;

@@ -1,14 +1,12 @@
-import { Button, MessageBubble } from '@setsuna-desktop/renderer-ui';
+import { MessageBubble } from '@setsuna-desktop/renderer-ui';
 
 import {
-  normalizeRuntimeReviewNotice,
   type RuntimeMessage,
   type WorkspaceFileChangeAction,
   type ThreadFileChangesResult,
-  type RuntimeReviewModeNotice,
   type RuntimeToolRun,
 } from '@setsuna-desktop/contracts';
-import { BookOpen, MessageSquare } from 'lucide-react';
+import { BookOpen } from 'lucide-react';
 import { memo, useMemo, type ReactNode } from 'react';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { Checkbox } from '../../../shared/ui/primitives.js';
@@ -49,6 +47,7 @@ import { ChatMessageAttachments } from './ChatMessageAttachments.js';
 import { UserMessageContent } from './messages/ChatUserMessageContent.js';
 import { ChatErrorMessage } from './ChatErrorMessage.js';
 import { ChatMessageFooter } from './ChatMessageFooter.js';
+import { ChatReviewSummaryCard } from './review/ChatReviewSummaryCard.js';
 import {
   assistantRunCopyText,
   assistantRunIsActive,
@@ -71,11 +70,9 @@ export { DeleteSelectionBar } from './ChatDeleteSelectionBar.js';
 export const MessageItem = memo(function MessageItem({
   activeAssistantItemId,
   activeTurnId,
-  assistantItemIdByTurnId,
   contextCompactionRunning = false,
   deleteMode,
   editor,
-  expandedWorkHistoryItemIds,
   item,
   pending = false,
   onAnswerApproval,
@@ -89,14 +86,13 @@ export const MessageItem = memo(function MessageItem({
   pluginUses,
   selectedForDelete,
   showThinkingInTranscript = false,
+  workHistoryExpanded = false,
 }: {
   activeAssistantItemId: string | null;
   activeTurnId: string | null;
-  assistantItemIdByTurnId: Map<string, string>;
   contextCompactionRunning?: boolean;
   deleteMode: boolean;
   editor?: ReactNode;
-  expandedWorkHistoryItemIds: Set<string>;
   item: ChatDisplayItem;
   pending?: boolean;
   onAnswerApproval: AnswerApprovalHandler;
@@ -110,6 +106,11 @@ export const MessageItem = memo(function MessageItem({
   pluginUses: RuntimePluginUse[];
   selectedForDelete: boolean;
   showThinkingInTranscript?: boolean;
+  /**
+   * 用户消息对应的回复是否展开了工作记录。按条传布尔值，切换展开时只有受影响的消息重新渲染，
+   * 不会因为共享集合变化而让整段对话在收起动画的第一帧重新渲染。
+   */
+  workHistoryExpanded?: boolean;
 }) {
   const { t } = useI18n();
   if (item.type === 'assistant') {
@@ -147,10 +148,6 @@ export const MessageItem = memo(function MessageItem({
   const { message } = item;
   const streaming = message.status === 'streaming';
   const steered = item.steered;
-  const assistantItemId = message.turnId ? assistantItemIdByTurnId.get(message.turnId) : undefined;
-  const workHistoryExpanded = assistantItemId
-    ? hasExpandedWorkHistoryPanel(expandedWorkHistoryItemIds, assistantItemId)
-    : false;
   const assistantTimelineSteerMessageIds = new Set(item.assistantTimelineSteerMessageIds);
   const fallbackGuidanceMessages = item.steerMessages
     .filter((steerMessage) => !assistantTimelineSteerMessageIds.has(steerMessage.id));
@@ -254,7 +251,7 @@ function ReviewModeMarker({
 }) {
   const notice = message.reviewMode;
   return notice?.kind === 'exited'
-    ? <ReviewSummaryCard notice={notice} onOpenFile={onOpenFileReview} />
+    ? <ChatReviewSummaryCard notice={notice} onOpenFile={onOpenFileReview} />
     : null;
 }
 
@@ -435,7 +432,7 @@ function AssistantRunContent({
       {!active && memoryCitations.length ? <MemoryCitationCard entries={memoryCitations} /> : null}
       {!active && reviewExit ? (
         <div className="chat-assistant-run__segment">
-          <ReviewSummaryCard notice={reviewExit} onOpenFile={onOpenFileReview} />
+          <ChatReviewSummaryCard notice={reviewExit} onOpenFile={onOpenFileReview} />
         </div>
       ) : null}
       {!active && goalExitSummary ? <div className="chat-assistant-run__segment">{goalExitSummary}</div> : null}
@@ -590,72 +587,6 @@ function renderAssistantTimelinePlan({
   );
 }
 
-function ReviewSummaryCard({
-  notice,
-  onOpenFile,
-}: {
-  notice: RuntimeReviewModeNotice;
-  onOpenFile?: DesktopReviewOpenHandler;
-}) {
-  const { t } = useI18n();
-  const normalizedNotice = normalizeRuntimeReviewNotice(notice);
-  const findings = normalizedNotice.findings ?? [];
-  const summary = normalizedNotice.summary
-    || (!findings.length ? normalizedNotice.review : '');
-
-  return (
-    <section className="chat-review-summary-card" aria-label={t('chat.review.completed')}>
-      {summary ? (
-        <MarkdownRenderer
-          content={summary}
-          legacyThinkingTags={normalizedNotice.reasoningSeparated !== true}
-          streaming={false}
-        />
-      ) : null}
-      {findings.length ? (
-        <div className="chat-review-summary-card__panel">
-          <div className="chat-review-summary-card__header">
-            <MessageSquare aria-hidden="true" size={14} />
-            <span>{t('chat.review.comments', { count: findings.length })}</span>
-          </div>
-          <div className="chat-review-summary-card__findings">
-            {findings.map((finding, index) => {
-              const content = (
-                <>
-                  <span className="chat-review-summary-card__priority">{finding.priority}</span>
-                  <span className="chat-review-summary-card__title">{finding.title}</span>
-                </>
-              );
-              const key = `${finding.path}:${finding.startLine}:${index}`;
-              return onOpenFile ? (
-                <Button variant="ghost"
-                  className="chat-review-summary-card__finding"
-                  key={key}
-                  type="button"
-                  onClick={() => onOpenFile(
-                    finding.path,
-                    finding.startLine,
-                    finding,
-                  )}
-                >
-                  {content}
-                </Button>
-              ) : (
-                <div
-                  className="chat-review-summary-card__finding chat-review-summary-card__finding--static"
-                  key={key}
-                >
-                  {content}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
 function assistantWorkHistorySection({
   handledGuidanceMessageIds,
   itemId,
@@ -776,12 +707,6 @@ function splitWorkHistorySurfaces(
   }
   flushWork();
   return surfaces;
-}
-
-function hasExpandedWorkHistoryPanel(panelIds: Set<string>, itemId: string): boolean {
-  if (panelIds.has(itemId)) return true;
-  const prefix = `${itemId}:work-history:`;
-  return [...panelIds].some((panelId) => panelId.startsWith(prefix));
 }
 
 function assistantTimelineNode(

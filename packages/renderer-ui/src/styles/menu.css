@@ -12,12 +12,7 @@
   animation: none;
 }
 
-/* Choice menus keep the neutral fill and their existing semantic text colors. */
-.sd-menu-surface--neutral {
-  --app-menu-highlight-bg: var(--desktop-agent-control-hover-bg);
-  --app-menu-highlight-text: var(--app-text);
-}
-
+/* Choice menus additionally fill the selected row so the current value stays visible. */
 .sd-menu-surface--neutral .sd-menu__item.is-selected:not([data-disabled]) {
   background: var(--app-menu-highlight-bg);
 }
@@ -34,21 +29,20 @@
   transition: none;
 }
 
-/* The row itself highlights immediately, including when focus enters a submenu. */
+/* Every row reads as primary text; picker rows are ghost buttons whose muted tone would
+   otherwise apply. :where keeps this below semantic states such as `.is-danger`. */
+.sd-menu-surface :where([role='menuitem'], [role='option'], .sd-picker__item) {
+  color: var(--app-text);
+}
+
+/* The row itself highlights immediately, including when focus enters a submenu.
+   Only the fill changes; text and icons keep their semantic colors (e.g. danger). */
 .sd-menu-surface :is([role='menuitem'], [role='option'], .sd-picker__item):not(:disabled, [data-disabled]):is(
   :hover:not(.sd-menu__item, .sd-select-menu__option, [aria-selected]), :focus-visible, [data-highlighted], [data-state='open'], [aria-selected='true']
 ) {
-  color: var(--app-menu-highlight-text);
   background: var(--app-menu-highlight-bg);
   outline: none;
   box-shadow: none;
-}
-
-/* Text and plain icons follow the row; framed artwork keeps its own foreground/background pair. */
-.sd-menu-surface:not(.sd-menu-surface--neutral) :is([role='menuitem'], [role='option'], .sd-picker__item):not(:disabled, [data-disabled]):is(
-  :hover:not(.sd-menu__item, .sd-select-menu__option, [aria-selected]), :focus-visible, [data-highlighted], [data-state='open'], [aria-selected='true']
-) :where(svg, span, strong, small, kbd):not(:where([data-menu-color='preserve'], [data-menu-color='preserve'] *)) {
-  color: inherit;
 }
 
 .sd-menu-surface [role='separator'] {

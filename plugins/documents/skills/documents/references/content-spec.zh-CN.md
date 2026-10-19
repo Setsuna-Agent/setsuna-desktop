@@ -35,7 +35,7 @@
 {
   "runs": [
     { "text": "Decision: ", "bold": true },
-    { "text": "ship the guarded rollout", "color": "315E7D" }
+    { "text": "ship the guarded rollout", "color": "0385FF" }
   ]
 }
 ```

@@ -99,11 +99,11 @@
   gap: 12px;
 }
 
-.plugin-app-creation__shortcut--table { --app-template-accent: #47866b; }
-.plugin-app-creation__shortcut--form { --app-template-accent: #608bb6; }
-.plugin-app-creation__shortcut--chart { --app-template-accent: #b5894e; }
-.plugin-app-creation__shortcut--conversations { --app-template-accent: #9681b2; }
-.plugin-app-creation__shortcut--custom { --app-template-accent: #7c8797; }
+.plugin-app-creation__shortcut--table { --app-template-accent: var(--sd-palette-green); }
+.plugin-app-creation__shortcut--form { --app-template-accent: var(--sd-palette-blue); }
+.plugin-app-creation__shortcut--chart { --app-template-accent: var(--sd-palette-orange); }
+.plugin-app-creation__shortcut--conversations { --app-template-accent: var(--sd-palette-purple); }
+.plugin-app-creation__shortcut--custom { --app-template-accent: var(--sd-palette-pink); }
 
 .plugin-app-creation__shortcut.sd-button {
   display: flex;

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import type { RuntimeMessage, RuntimeToolRun } from '@setsuna-desktop/contracts';
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MessageItem } from '../../../../../src/features/chat/conversation/ChatMessageItem.js';
 import type { ChatDisplayItem } from '../../../../../src/features/chat/conversation/chatMessageDisplay.js';
@@ -38,7 +38,7 @@ afterEach(() => {
 
 describe('MessageItem collaboration updates', () => {
 
-  it('keeps tool chunks around a subagent card as uniquely keyed siblings', () => {
+  it('keeps tool chunks around a subagent card as uniquely keyed siblings', async () => {
     const keyWarnings: string[] = [];
     vi.spyOn(console, 'error').mockImplementation((...values: unknown[]) => {
       const message = values.map(String).join(' ');
@@ -51,7 +51,7 @@ describe('MessageItem collaboration updates', () => {
 
     view.rerender(messageItem([readBefore, persistentResult, readAfter]));
 
-    const bodyChildren = [...(view.container.querySelector('.chat-work-history__body')?.children ?? [])];
+    const bodyChildren = [...(view.container.querySelector('.chat-work-history__details-content')?.children ?? [])];
     expect(bodyChildren.map((element) => (
       element.querySelector('.subagent-task-card') ? 'subagent' : 'tools'
     ))).toEqual(['tools', 'subagent', 'tools']);
@@ -59,7 +59,9 @@ describe('MessageItem collaboration updates', () => {
 
     view.rerender(messageItem([readBefore, persistentResult, readAfter], true));
     expect(view.container.querySelector('.subagent-task-card')).not.toBeNull();
-    expect(view.container.querySelectorAll('.chat-tool-run')).toHaveLength(0);
+    // 自动收起后工具明细在动画结束时卸载，子代理卡片始终保留。
+    await waitFor(() => expect(view.container.querySelectorAll('.chat-tool-run')).toHaveLength(0));
+    expect(view.container.querySelectorAll('.subagent-task-card')).toHaveLength(1);
   });
 });
 
@@ -95,9 +97,7 @@ function messageItem(toolRuns: RuntimeToolRun[], completed = false) {
     <MessageItem
       activeAssistantItemId={item.id}
       activeTurnId={completed ? null : segment.turnId ?? null}
-      assistantItemIdByTurnId={new Map()}
       deleteMode={false}
-      expandedWorkHistoryItemIds={new Set()}
       item={item}
       onAnswerApproval={async () => undefined}
       onWorkHistoryExpandedChange={() => undefined}

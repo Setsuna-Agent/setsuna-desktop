@@ -181,18 +181,23 @@ function ToolRunDisclosure({
   const initiallyOpen = useRef(Boolean(autoOpenKey)).current;
   const previousAutoOpenKeyRef = useRef(autoOpenKey);
   const [expanded, setExpanded] = useState(initiallyOpen);
+  // lazy 内容首次展开后保持挂载，收起时才有内容可供高度动画过渡。
+  const [contentMounted, setContentMounted] = useState(initiallyOpen);
 
   useEffect(() => {
     if (shouldAutoOpenToolRunDisclosure(previousAutoOpenKeyRef.current, autoOpenKey)) {
       const details = detailsRef.current;
       if (details) details.open = true;
       setExpanded(true);
+      setContentMounted(true);
     }
     previousAutoOpenKeyRef.current = autoOpenKey;
   }, [autoOpenKey]);
 
   const handleToggle = (event: SyntheticEvent<HTMLDetailsElement>) => {
-    setExpanded(event.currentTarget.open);
+    const open = event.currentTarget.open;
+    setExpanded(open);
+    if (open) setContentMounted(true);
   };
 
   // open 只提供稳定的初始值；挂载后由原生 details 保存用户选择，流式更新不会反向改写。
@@ -202,7 +207,7 @@ function ToolRunDisclosure({
         {typeof summary === 'function' ? summary(expanded) : summary}
         <ChevronDown aria-hidden="true" className="chat-tool-run__chevron" size={12} />
       </summary>
-      {!lazy || expanded ? children : null}
+      {!lazy || contentMounted ? children : null}
     </details>
   );
 }

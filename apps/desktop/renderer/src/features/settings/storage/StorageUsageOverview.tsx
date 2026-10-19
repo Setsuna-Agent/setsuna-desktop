@@ -22,7 +22,7 @@ export function StorageUsageOverview({ usage, loading, disabled, dataRoot, onRef
     <h2>{t('storage.thisDevice')}</h2>
     <div className="storage-overview__heading">
       <strong>{t('storage.used', { size: usage ? formatDataBytes(usage.totalBytes, locale) : '—' })}</strong>
-      <Button className="storage-action" disabled={disabled || loading} loading={loading} onClick={onRefresh}>
+      <Button size="small" disabled={disabled || loading} loading={loading} onClick={onRefresh}>
         {t('storage.refresh')}
       </Button>
     </div>

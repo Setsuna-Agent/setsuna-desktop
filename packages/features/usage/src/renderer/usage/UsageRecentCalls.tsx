@@ -43,7 +43,7 @@ export function UsageRecentCalls({
     setPageRecords(records.slice(0, PAGE_SIZE));
     setPageLoading(false);
     setPageError(null);
-  }, [query.from, query.limit, query.offset, query.threadId, query.to, records]);
+  }, [query.from, query.limit, query.model, query.offset, query.provider, query.threadId, query.to, records]);
 
   useEffect(() => () => {
     requestVersionRef.current += 1;
@@ -75,12 +75,9 @@ export function UsageRecentCalls({
 
   return (
     <section className="settings-usage-card settings-usage-records" aria-labelledby="settings-usage-records-title">
-      <header className="settings-usage-card__header settings-usage-card__header--plain">
-        <div>
-          <strong id="settings-usage-records-title">{t('feature.usage.recentCalls')}</strong>
-          <span>{t('feature.usage.recentCallsSubtitle')}</span>
-        </div>
-        <span className="settings-usage-card__count">{totalRecordCount ? t('feature.usage.totalCalls', { count: totalRecordCount }) : t('feature.usage.noRecords')}</span>
+      <header className="settings-usage-card__header">
+        <span className="settings-usage-eyebrow" id="settings-usage-records-title">{t('feature.usage.recentCalls')}</span>
+        <span className="settings-usage-card__meta">{totalRecordCount ? t('feature.usage.totalCalls', { count: totalRecordCount }) : t('feature.usage.noRecords')}</span>
       </header>
       <UsageRecordsTable providers={providers} records={pageRecords} loading={pageLoading} />
       {totalPages > 1 ? (

@@ -1,5 +1,6 @@
 import {
   normalizeWorkspaceProjectName,
+  normalizeWorkspaceProjectIcon,
   workspaceProjectForRoot,
   workspaceProjectRoots,
   workspaceTargetProjectId,
@@ -107,6 +108,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
   }
 
   async addProject(input: AddWorkspaceProjectInput): Promise<WorkspaceProject> {
+    const requestedIcon = normalizeWorkspaceProjectIcon(input.icon);
     const requestedRoots = input.roots === undefined ? undefined : await normalizeProjectRoots(input.roots);
     const projectPath = requestedRoots ? requestedRoots[0]?.path : input.path === undefined ? undefined : await normalizeProjectPath(input.path);
     if (projectPath) await assertProjectDirectory(projectPath);
@@ -134,9 +136,11 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
         }
       }
       const existing = existingByPath ?? (existingByName?.path ? undefined : existingByName);
+      const icon = input.icon === undefined ? existing?.icon : requestedIcon;
       let project: WorkspaceProject = {
         id: existing?.id ?? `project_${randomUUID().replaceAll('-', '').slice(0, 20)}`,
         name: projectName,
+        ...(icon ? { icon } : {}),
         ...(projectPath ? { path: projectPath, gitRoot: requestedRoots ? requestedRoots[0]?.gitRoot : await findGitRoot(projectPath) } : {}),
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
@@ -155,6 +159,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
   }
 
   async updateProject(projectId: string, input: UpdateWorkspaceProjectInput): Promise<WorkspaceProject> {
+    const requestedIcon = normalizeWorkspaceProjectIcon(input.icon);
     const projectPath = input.path === undefined
       ? undefined
       : input.path === null
@@ -183,6 +188,10 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
           : projectPath === undefined ? existing.gitRoot : await findGitRoot(nextPath) } : {}),
         updatedAt: this.clock.now().toISOString(),
       };
+      if (input.icon !== undefined) {
+        if (requestedIcon) updated.icon = requestedIcon;
+        else delete updated.icon;
+      }
       if (roots) updated = projectWithRoots(updated, roots);
       else if (existing.roots && projectPath !== undefined) {
         const previous = workspaceProjectRoots(existing);

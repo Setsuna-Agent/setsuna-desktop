@@ -20,6 +20,7 @@ import {
   type AppKeyboardShortcutEvent,
   type AppKeyboardShortcutHandlers,
 } from '../controller/useAppKeyboardShortcuts.js';
+import { workspaceTabShortcutHandlers } from '../controller/workspaceTabShortcuts.js';
 import { useAppNavigationHistory, type AppNavigationLocation } from '../controller/useAppNavigationHistory.js';
 import { useSidebarThreadNavigation } from '../controller/useSidebarThreadNavigation.js';
 import { useToast } from '../providers/ToastProvider.js';
@@ -371,10 +372,16 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       enabled: activeView === 'chat' && workspacePanels.conversationDebugEnabled,
       execute: () => workspacePanels.openDesktopPanel('side', 'conversation-debug'),
     },
-    'workspace.closeActiveSidePanel': {
+    ...workspaceTabShortcutHandlers({
       enabled: activeView === 'chat',
-      execute: workspacePanels.closeActiveSidePanel,
-    },
+      sidePanels: workspacePanels.sidePanelSlot.panels,
+      bottomPanels: workspacePanels.bottomPanelSlot.panels,
+      bottomPanelVisible: workspacePanels.bottomPanelVisible,
+      bottomActivePanelId: workspacePanels.bottomActivePanel?.id ?? null,
+      closeSidePanel: workspacePanels.closeActiveSidePanel,
+      closePanel: workspacePanels.closeDesktopPanelItem,
+      openPanel: workspacePanels.openDesktopPanel,
+    }),
     'browser.reload': {
       enabled: activeView === 'chat' && Boolean(activeBrowserPanelId),
       execute: (event) => reloadBrowserPanel('normal', event),
@@ -414,10 +421,15 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     appHistory.goForward,
     startNewChat,
     workspacePanels.toggleBottomPanel,
+    workspacePanels.bottomActivePanel,
+    workspacePanels.bottomPanelSlot.panels,
+    workspacePanels.bottomPanelVisible,
     workspacePanels.closeActiveSidePanel,
+    workspacePanels.closeDesktopPanelItem,
     workspacePanels.conversationDebugEnabled,
     workspacePanels.openBrowserPanel,
     workspacePanels.openDesktopPanel,
+    workspacePanels.sidePanelSlot.panels,
     workspacePanels.toggleSidePanel,
   ]);
   useAppKeyboardShortcuts(shortcutHandlers);

@@ -15,7 +15,7 @@ export const ONE_PIXEL_PNG = Buffer.from(
   'base64',
 );
 
-export async function createPluginRuntime(root: string) {
+export async function createPluginRuntime(root: string, bundledPluginsDir?: string) {
   const dataDir = path.join(root, 'runtime');
   const builtinDir = path.join(root, 'builtin-skills');
   await mkdir(builtinDir, { recursive: true });
@@ -32,6 +32,7 @@ export async function createPluginRuntime(root: string) {
     config,
     systemClock,
     extensionState,
+    bundledPluginsDir,
   );
   return { config, dataDir, extensionState, invalidateServer, mcp, plugins, skills };
 }

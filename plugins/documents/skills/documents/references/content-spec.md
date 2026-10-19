@@ -35,7 +35,7 @@ Most text fields accept either a string or an object containing `runs`:
 {
   "runs": [
     { "text": "Decision: ", "bold": true },
-    { "text": "ship the guarded rollout", "color": "315E7D" }
+    { "text": "ship the guarded rollout", "color": "0385FF" }
   ]
 }
 ```

@@ -1,6 +1,6 @@
 import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
 import type { MenuItem } from '@setsuna-desktop/renderer-ui';
-import { AppWindow, Archive, GitFork, Pin, PinOff, Split, Trash2 } from 'lucide-react';
+import { AppWindow, Archive, FolderGit2, GitFork, Pin, PinOff, Split, Trash2 } from 'lucide-react';
 import { workspaceOpenWithMenu } from '../../composition/workspace-apps-feature-adapter.js';
 import type { Translate } from '../../shared/i18n/I18nProvider.js';
 import { EditIcon } from '../../shared/ui/EditIcon.js';
@@ -33,7 +33,7 @@ export function threadMenuItems({ thread, pinned, running, actions, onRename, on
     { key: 'fork', label: t('sidebar.fork'), icon: <GitFork size={14} />, disabled: !thread || running || !actions.canFork, children: [
       { key: 'fork-workspace', label: t('chat.fork.workspace'), icon: <Split size={14} />,
         onClick: () => { void actions.fork('workspace'); } },
-      { key: 'fork-worktree', label: t('chat.fork.worktree'), icon: <Split size={14} />,
+      { key: 'fork-worktree', label: t('chat.fork.worktree'), icon: <FolderGit2 size={14} />,
         disabled: !actions.canCreateWorktree, tooltip: !actions.canCreateWorktree ? t('chat.fork.requiresGit') : undefined,
         onClick: () => { void actions.fork('worktree'); } },
     ] },

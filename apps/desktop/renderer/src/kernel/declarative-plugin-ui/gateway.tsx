@@ -350,7 +350,7 @@ function DeclarativePluginPage({
   return (
     <main className={`declarative-plugin-page${fullPage ? ' declarative-plugin-page--app' : ''}`}>
       {!fullPage ? <header className="declarative-plugin-page__header">
-        <PluginAppAvatar avatar={appearance.avatar} variant="list" />
+        <PluginAppAvatar avatar={appearance.avatar} color={appearance.avatarColor} variant="list" />
         <div>
           <h1>{label}</h1>
           {plugin.description ? <p>{plugin.description}</p> : null}

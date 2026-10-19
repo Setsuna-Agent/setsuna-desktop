@@ -1,4 +1,4 @@
-import { Button, PointMenu, type MenuItem } from '@setsuna-desktop/renderer-ui';
+import { Button, PointMenu, VIVID_PALETTE, type MenuItem } from '@setsuna-desktop/renderer-ui';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal as XTermTerminal, type ITheme } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
@@ -70,6 +70,8 @@ export function TerminalPane({
       fontFamily: terminalFontFamily(),
       fontSize: terminalFontSize(),
       lineHeight: 1.42,
+      // Keep vivid ANSI text readable against either theme's neutral background.
+      minimumContrastRatio: 4.5,
       rows: initialGrid.rows,
       scrollback: 5_000,
       theme: terminalTheme(),
@@ -250,20 +252,28 @@ export function TerminalPane({
   );
 }
 
-const lightTerminalTheme: ITheme = {
-  background: '#ffffff', foreground: '#171717', cursor: '#000000', cursorAccent: '#ffffff',
-  selectionBackground: '#e5e5e5', black: '#171717', red: '#e5484d', green: '#0a7f3f',
-  yellow: '#a15c00', blue: '#006adc', magenta: '#8e4ec6', cyan: '#007c89', white: '#ededed',
-  brightBlack: '#737373', brightRed: '#e5484d', brightGreen: '#0a7f3f', brightYellow: '#a15c00',
-  brightBlue: '#3291ff', brightMagenta: '#8e4ec6', brightCyan: '#007c89', brightWhite: '#ffffff',
+const terminalAnsiColors: ITheme = {
+  red: VIVID_PALETTE.red, brightRed: VIVID_PALETTE.red,
+  green: VIVID_PALETTE.green, brightGreen: VIVID_PALETTE.green,
+  yellow: VIVID_PALETTE.yellow, brightYellow: VIVID_PALETTE.yellow,
+  blue: VIVID_PALETTE.blue, brightBlue: VIVID_PALETTE.blue,
+  magenta: VIVID_PALETTE.purple, brightMagenta: VIVID_PALETTE.pink,
+  cyan: '#00bfd6', brightCyan: '#00bfd6',
 };
 
+const lightTerminalTheme: ITheme = {
+  ...terminalAnsiColors,
+  background: '#ffffff', foreground: '#171717', cursor: '#000000', cursorAccent: '#ffffff',
+  selectionBackground: '#e5e5e5', black: '#171717', white: '#ededed',
+  brightBlack: '#737373', brightWhite: '#ffffff',
+};
+
+// background/cursorAccent 跟随暗色 --app-bg，使反色单元格与透明视口下的容器底色一致。
 const darkTerminalTheme: ITheme = {
-  background: '#000000', foreground: '#ededed', cursor: '#ffffff', cursorAccent: '#000000',
-  selectionBackground: '#333333', black: '#000000', red: '#ff6b6b', green: '#3dd68c',
-  yellow: '#f5d90a', blue: '#3291ff', magenta: '#b76eff', cyan: '#50e3c2', white: '#d4d4d4',
-  brightBlack: '#7d7d7d', brightRed: '#ff8585', brightGreen: '#63e6a5', brightYellow: '#ffeb57',
-  brightBlue: '#52a8ff', brightMagenta: '#c993ff', brightCyan: '#7eeed8', brightWhite: '#ffffff',
+  ...terminalAnsiColors,
+  background: '#181818', foreground: '#ededed', cursor: '#ffffff', cursorAccent: '#181818',
+  selectionBackground: '#333333', black: '#000000', white: '#d4d4d4',
+  brightBlack: '#7d7d7d', brightWhite: '#ffffff',
 };
 
 function terminalTheme(): ITheme {

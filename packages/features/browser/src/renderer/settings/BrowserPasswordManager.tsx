@@ -4,6 +4,7 @@ import type { BrowserSavedPassword } from '../../contracts/settings.js';
 import type { BrowserSettingsContentProps } from './types.js';
 import { useBrowserSavedPasswords } from './useBrowserSavedPasswords.js';
 import { BrowserSettingsSearch } from './BrowserSettingsSearch.js';
+import { BrowserSettingsEditor, BrowserSettingsField } from './BrowserSettingsEditor.js';
 import { groupBrowserSavedPasswords, type BrowserPasswordGroup } from './passwordGroups.js';
 import './password-manager.css';
 
@@ -17,13 +18,12 @@ export function BrowserPasswordManager({ bridge, translate: t, ui }: BrowserSett
     if (await save({ origin: editor.origin, username: editor.username, password: editor.password })) setEditor(null);
   };
   return <div className="browser-settings-collection">
-    {editor ? <form className="browser-settings__form browser-settings-page__card browser-settings-page__form" onSubmit={(event) => { event.preventDefault(); void saveEditor(); }}>
-      <h2>{t(editor.existing ? 'feature.browser.settings.edit' : 'feature.browser.settings.add')}</h2>
-      <label>{t('feature.browser.settings.origin')}<ui.TextField type="url" required readOnly={editor.existing} value={editor.origin} onChange={(event) => setEditor({ ...editor, origin: event.target.value })} /></label>
-      <label>{t('feature.browser.password.username')}<ui.TextField autoComplete="off" readOnly={editor.existing} value={editor.username} maxLength={512} onChange={(event) => setEditor({ ...editor, username: event.target.value })} /></label>
-      <label>{t('feature.browser.password.password')}<ui.TextField type="password" autoComplete="new-password" required value={editor.password} maxLength={4096} onChange={(event) => setEditor({ ...editor, password: event.target.value })} /></label>
-      <div className="browser-settings__actions"><ui.Button disabled={busy} onClick={() => setEditor(null)}>{t('feature.browser.settings.cancel')}</ui.Button><ui.Button variant="primary" type="submit" disabled={busy}>{t('feature.browser.settings.save')}</ui.Button></div>
-    </form> : <>
+    {editor ? <BrowserSettingsEditor title={t(editor.existing ? 'feature.browser.settings.edit' : 'feature.browser.settings.add')} busy={busy} translate={t} ui={ui}
+      onCancel={() => setEditor(null)} onSubmit={() => void saveEditor()}>
+      <BrowserSettingsField label={t('feature.browser.settings.origin')}><ui.TextField type="url" required readOnly={editor.existing} value={editor.origin} onChange={(event) => setEditor({ ...editor, origin: event.target.value })} /></BrowserSettingsField>
+      <BrowserSettingsField label={t('feature.browser.password.username')}><ui.TextField autoComplete="off" readOnly={editor.existing} value={editor.username} maxLength={512} onChange={(event) => setEditor({ ...editor, username: event.target.value })} /></BrowserSettingsField>
+      <BrowserSettingsField label={t('feature.browser.password.password')}><ui.TextField type="password" autoComplete="new-password" required value={editor.password} maxLength={4096} onChange={(event) => setEditor({ ...editor, password: event.target.value })} /></BrowserSettingsField>
+    </BrowserSettingsEditor> : <>
       <BrowserSettingsSearch label={t('feature.browser.settings.search')} value={query} onChange={setQuery} />
       <div className="browser-settings-page__toolbar">
         <div className="browser-settings-page__actions"><ui.Button disabled={busy} icon={<Plus size={14} />} onClick={() => setEditor({ origin: '', username: '', password: '', existing: false })}>{t('feature.browser.settings.add')}</ui.Button></div>

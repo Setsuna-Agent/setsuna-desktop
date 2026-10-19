@@ -1,5 +1,6 @@
 import {
   normalizeWorkspaceProjectName,
+  normalizeWorkspaceProjectIcon,
   workspaceProjectNameKey,
   type WorkspaceProject,
 } from '@setsuna-desktop/contracts';
@@ -26,6 +27,7 @@ type StoredProjectIndex = {
 export type PortableProjectRecord = {
   id: string;
   name: string;
+  icon?: WorkspaceProject['icon'];
   archivedAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -146,6 +148,8 @@ export async function stageMergedProjectIndex(input: {
 
   for (const remote of input.remoteProjects) {
     const local = localByName.get(workspaceProjectNameKey(remote.name));
+    // Reusing a local project preserves its current appearance, including the default icon.
+    const icon = local ? local.icon : remote.icon;
     const targetId = local?.id ?? uniqueProjectId(remote.id, usedIds);
     usedIds.add(targetId);
     projectIdMap.set(remote.id, targetId);
@@ -153,6 +157,7 @@ export async function stageMergedProjectIndex(input: {
     restoredProjects.push({
       id: targetId,
       name: remote.name,
+      ...(icon ? { icon } : {}),
       ...(local?.path ? { path: local.path } : {}),
       ...(local?.gitRoot ? { gitRoot: local.gitRoot } : {}),
       ...(local?.roots ? { roots: local.roots } : {}),
@@ -210,9 +215,11 @@ async function readLocalProjectIndex(dataRoot: string): Promise<StoredProjectInd
 function normalizePortableProjects(values: unknown[]): PortableProjectRecord[] {
   const projects = values.map((value) => {
     if (!isRecord(value)) throw new Error('备份中的项目条目无效。');
+    const icon = normalizeWorkspaceProjectIcon(value.icon);
     return {
       id: portableProjectId(value.id),
       name: normalizeWorkspaceProjectName(value.name),
+      ...(icon ? { icon } : {}),
       ...(optionalIsoDate(value.archivedAt) ? { archivedAt: optionalIsoDate(value.archivedAt) } : {}),
       createdAt: requiredIsoDate(value.createdAt, '项目创建时间'),
       updatedAt: requiredIsoDate(value.updatedAt, '项目更新时间'),
@@ -224,11 +231,13 @@ function normalizePortableProjects(values: unknown[]): PortableProjectRecord[] {
 
 function normalizeLocalProject(value: unknown): WorkspaceProject {
   if (!isRecord(value)) throw new Error('本机项目条目无效。');
+  const icon = normalizeWorkspaceProjectIcon(value.icon);
   const localPath = typeof value.path === 'string' && value.path.trim() ? value.path : undefined;
   const gitRoot = typeof value.gitRoot === 'string' && value.gitRoot.trim() ? value.gitRoot : undefined;
   return {
     id: portableProjectId(value.id),
     name: normalizeWorkspaceProjectName(value.name),
+    ...(icon ? { icon } : {}),
     ...(localPath ? { path: localPath } : {}),
     ...(gitRoot ? { gitRoot } : {}),
     ...(Array.isArray(value.roots) ? { roots: value.roots.map((root) => {
@@ -247,6 +256,7 @@ function toPortableProject(project: WorkspaceProject): PortableProjectRecord {
   return {
     id: project.id,
     name: project.name,
+    ...(project.icon ? { icon: project.icon } : {}),
     ...(project.archivedAt ? { archivedAt: project.archivedAt } : {}),
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,

@@ -57,7 +57,6 @@ export function MemoryPreferencesSettingsView({
           onChange={(disableOnExternalContext) => void settings.save({ disableOnExternalContext })}
         />
         <NavigationRow
-          actionLabel={translate('feature.memory.settings.view')}
           label={translate('feature.memory.settings.preview')}
           onClick={onOpenPreview}
         />

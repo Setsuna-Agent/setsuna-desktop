@@ -6,17 +6,16 @@ import type {
 } from '../../contracts/index.js';
 import { UsageActivityCalendar } from './UsageActivityCalendar.js';
 import { UsageBreakdownCard } from './UsageBreakdownCard.js';
-import { UsageMetricCard } from './UsageMetricCard.js';
+import { UsageFilterBar } from './UsageFilterBar.js';
+import { UsageHero } from './UsageHero.js';
 import { UsageRecentCalls } from './UsageRecentCalls.js';
-import { UsageTimeRangeFilter } from './UsageTimeRangeFilter.js';
-import { formatTokens, tokensExcludingCache, uncachedInputTokens } from './usage-format.js';
+import { usageRangeLabel } from './usage-format.js';
 import {
-  usageQueryForCustomRange,
-  usageQueryForPreset,
-  type UsageCustomTimeRange,
-  type UsageTimePreset,
-  type UsageTimeRangeId,
-} from './usageTimeRange.js';
+  DEFAULT_USAGE_FILTERS,
+  isDefaultUsageFilters,
+  usageQueryForFilters,
+  type UsageFilters,
+} from './usageFilters.js';
 import { useUsageView } from './view-context.js';
 
 type UsageSettingsProps = {
@@ -27,108 +26,83 @@ type UsageSettingsProps = {
 
 export function UsageSettings({ providers, usage, onQueryUsage }: UsageSettingsProps) {
   const { translate: t, ui: { PageHeading, Section } } = useUsageView();
-  const [activeRange, setActiveRange] = useState<UsageTimeRangeId>('all');
+  // 选择立即更新以组合连续操作；数据保持上次成功的筛选，请求失败时还原选择。
+  const [selectedFilters, setSelectedFilters] = useState<UsageFilters>(DEFAULT_USAGE_FILTERS);
+  const [filters, setFilters] = useState<UsageFilters>(DEFAULT_USAGE_FILTERS);
   const [filteredUsage, setFilteredUsage] = useState(usage);
   const [activeQuery, setActiveQuery] = useState<RuntimeUsageQuery>({});
   const [filterLoading, setFilterLoading] = useState(false);
   const [filterError, setFilterError] = useState<string | null>(null);
   const requestVersionRef = useRef(0);
-  const displayedUsage = activeRange === 'all' ? usage : filteredUsage;
+  const unfiltered = isDefaultUsageFilters(filters);
+  // 未筛选时直接使用基线快照，使会话结束后的失效刷新立即反映到页面。
+  const displayedUsage = unfiltered ? usage : filteredUsage;
   const summary = displayedUsage?.summary;
-  const totalTokens = tokensExcludingCache(summary);
   const recordCount = summary?.recordCount ?? 0;
 
   useEffect(() => () => {
     requestVersionRef.current += 1;
   }, []);
 
-  const loadRange = async (range: UsageTimeRangeId, query: RuntimeUsageQuery) => {
+  const applyFilters = async (next: UsageFilters) => {
     const requestVersion = requestVersionRef.current + 1;
     requestVersionRef.current = requestVersion;
-    setFilterLoading(true);
+    setSelectedFilters(next);
     setFilterError(null);
+    if (isDefaultUsageFilters(next)) {
+      setFilters(next);
+      setActiveQuery({});
+      setFilterLoading(false);
+      return;
+    }
+    setFilterLoading(true);
+    const query = usageQueryForFilters(next);
     try {
       const nextUsage = await onQueryUsage(query);
       if (requestVersionRef.current !== requestVersion) return;
-      setActiveRange(range);
+      setFilters(next);
       setActiveQuery(query);
       setFilteredUsage(nextUsage);
     } catch {
       if (requestVersionRef.current !== requestVersion) return;
+      setSelectedFilters(filters);
       setFilterError(t('feature.usage.rangeLoadFailed'));
     } finally {
       if (requestVersionRef.current === requestVersion) setFilterLoading(false);
     }
   };
 
-  const selectPreset = (preset: UsageTimePreset) => {
-    if (preset === 'all') {
-      requestVersionRef.current += 1;
-      setActiveRange('all');
-      setActiveQuery({});
-      setFilterLoading(false);
-      setFilterError(null);
-      return;
-    }
-    void loadRange(preset, usageQueryForPreset(preset));
-  };
-
-  const applyCustomRange = (range: UsageCustomTimeRange) => {
-    const query = usageQueryForCustomRange(range);
-    if (!query) {
-      setFilterError(t('feature.usage.invalidRange'));
-      return;
-    }
-    void loadRange('custom', query);
-  };
-
   return (
     <>
       <PageHeading
         action={(
-          <UsageTimeRangeFilter
-            activeRange={activeRange}
+          <UsageFilterBar
             error={filterError}
-            loading={filterLoading}
-            onApplyCustom={applyCustomRange}
-            onSelectPreset={selectPreset}
+            filters={selectedFilters}
+            modelBuckets={usage?.summary.byModel ?? []}
+            providerBuckets={usage?.summary.byProvider ?? []}
+            providers={providers}
+            onChange={(next) => void applyFilters(next)}
           />
         )}
         description={t('feature.usage.settings.description')}
         title={t('feature.usage.settings.title')}
       />
       <Section className="feature-usage chat-user-settings__usage-section" featureId="usage">
-        <div aria-busy={filterLoading}>
-          <div className="settings-usage-summary" aria-label={t('feature.usage.overview')}>
-            <UsageMetricCard
-              detail={t('feature.usage.rawTotal', { tokens: formatTokens(summary?.totalTokens ?? 0) })}
-              label={t('feature.usage.totalTokens')}
-              value={formatTokens(totalTokens)}
-            />
-            <UsageMetricCard
-              detail={t('feature.usage.shareOfTotal', { ratio: formatRatio(uncachedInputTokens(summary), totalTokens) })}
-              label={t('feature.usage.inputTokens')}
-              value={formatTokens(uncachedInputTokens(summary))}
-            />
-            <UsageMetricCard
-              detail={t('feature.usage.inputHitRate', { ratio: formatRatio(summary?.cachedInputTokens ?? 0, summary?.inputTokens ?? 0) })}
-              label={t('feature.usage.cacheHit')}
-              value={formatTokens(summary?.cachedInputTokens ?? 0)}
-            />
-            <UsageMetricCard
-              detail={t('feature.usage.shareOfTotal', { ratio: formatRatio(summary?.outputTokens ?? 0, totalTokens) })}
-              label={t('feature.usage.outputTokens')}
-              value={formatTokens(summary?.outputTokens ?? 0)}
-            />
-          </div>
-
-          {/* 年度热力图用于观察长期趋势，不随上方的短区间统计筛选。 */}
-          <UsageActivityCalendar buckets={usage?.summary.byDay ?? []} />
+        <div className="settings-usage-content" aria-busy={filterLoading}>
+          {/* 主数字、分布与明细随筛选变化；走势与年度热力图始终基于全部数据，用于观察长期趋势。 */}
+          <UsageHero
+            rangeLabel={usageRangeLabel(filters.range, t)}
+            summary={summary}
+            trendBuckets={usage?.summary.byDay ?? []}
+          />
 
           <div className="settings-usage-breakdowns">
-            <UsageBreakdownCard buckets={summary?.byProvider ?? []} providers={providers} totalTokens={totalTokens} variant="provider" />
-            <UsageBreakdownCard buckets={summary?.byModel ?? []} providers={providers} totalTokens={totalTokens} variant="model" />
+            <UsageBreakdownCard buckets={summary?.byModel ?? []} providers={providers} variant="model" />
+            <UsageBreakdownCard buckets={summary?.byProvider ?? []} providers={providers} variant="provider" />
           </div>
+
+          <UsageActivityCalendar buckets={usage?.summary.byDay ?? []} />
 
           <UsageRecentCalls
             providers={providers}
@@ -141,9 +115,4 @@ export function UsageSettings({ providers, usage, onQueryUsage }: UsageSettingsP
       </Section>
     </>
   );
-}
-
-function formatRatio(value: number, total: number): string {
-  if (!total || !Number.isFinite(value)) return '0%';
-  return `${Math.round((value / total) * 100)}%`;
 }

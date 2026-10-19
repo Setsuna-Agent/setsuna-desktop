@@ -107,4 +107,4 @@ Declare `document.libraries: ['echarts']` and add `<div id="chart" class="sa-cha
 });
 ```
 
-This is a single-series baseline. For multiple series, keep colors stable by series ID. The host blue/cyan/purple/teal palette is `#5b83e8, #31a6bc, #9a75dc, #36a89b` in light mode and `#86aaff, #73cede, #bd9cf1, #75d4c2` in dark mode; choose from the root element's current `colorScheme`. Theme legend text as well; do not convey meaning through color alone. Show actual empty states instead of fabricated chart data.
+This is a single-series baseline. For multiple series, keep colors stable by series ID and use the host's vivid palette: blue `#0385ff`, green `#12b84c`, purple `#924ff7`, orange `#fb6a22`, pink `#ff66ad`, red `#fa423e`, yellow `#ffc300`. Keep series colors consistent across light and dark modes while theming surfaces, grids, text, and legends. Do not convey meaning through color alone. Show actual empty states instead of fabricated chart data.

@@ -6,6 +6,7 @@ import {
 } from '@setsuna-desktop/feature-core/runtime';
 import {
   queryUsage,
+  type RuntimeUsageQuery,
   usageControlCapability,
   usageFeature,
   usageRuntimeHostCapability,
@@ -42,16 +43,7 @@ export const usageRuntimeFeature = defineRuntimeFeature({
   },
 });
 
-function requestsProviderCatalog(input: Readonly<{
-  threadId?: string;
-  limit?: number;
-  offset?: number;
-  from?: string;
-  to?: string;
-}>): boolean {
-  return input.threadId === undefined
-    && input.limit === undefined
-    && input.offset === undefined
-    && input.from === undefined
-    && input.to === undefined;
+/** 只有未加任何条件的设置页基线查询需要供应商目录。 */
+function requestsProviderCatalog(input: RuntimeUsageQuery): boolean {
+  return Object.values(input).every((value) => value === undefined);
 }

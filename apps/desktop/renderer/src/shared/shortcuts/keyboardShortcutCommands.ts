@@ -37,6 +37,7 @@ export const KEYBOARD_SHORTCUT_COMMAND_IDS = [
   'workspace.openSideChat',
   'workspace.openBrowser',
   'workspace.openConversationDebug',
+  'workspace.addPanel',
   'workspace.closeActiveSidePanel',
   'browser.reload',
   'browser.hardReload',
@@ -268,6 +269,13 @@ export const keyboardShortcutCommands: readonly KeyboardShortcutCommand[] = [
     labelKey: 'shortcuts.command.openConversationDebug',
     descriptionKey: 'shortcuts.command.openConversationDebugDescription',
     defaultBindings: primaryBinding('KeyD', true),
+  },
+  {
+    id: 'workspace.addPanel',
+    group: 'workspace',
+    labelKey: 'shortcuts.command.addPanel',
+    descriptionKey: 'shortcuts.command.addPanelDescription',
+    defaultBindings: primaryBinding('KeyT', true),
   },
   {
     id: 'workspace.closeActiveSidePanel',

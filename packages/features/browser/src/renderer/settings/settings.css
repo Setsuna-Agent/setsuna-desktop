@@ -1,9 +1,19 @@
 .browser-settings { display: flex; flex-direction: column; gap: 28px; }
 .browser-settings__actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; width: 100%; min-width: 0; }
-.browser-settings__actions input { min-width: 0; flex: 1; }
-.browser-settings__form { display: flex; flex-direction: column; gap: 16px; }
-.browser-settings__form > label { display: flex; flex-direction: column; gap: 6px; }
-.browser-settings__form > .sd-checkbox { flex-direction: row; }
+/* Inline editors and the clear-data dialog: stacked fields above a bordered row group, like the project editor. */
+.browser-settings-editor { display: grid; gap: 16px; padding: 18px; }
+.browser-settings-editor > h2 { margin: 0; font-size: 14px; font-weight: 500; line-height: 22px; }
+.browser-settings-editor__body { display: grid; gap: 14px; }
+.browser-settings-editor__field { display: grid; gap: 7px; min-width: 0; }
+.browser-settings-editor__field > span { color: var(--app-text-secondary); font-size: 12px; font-weight: 500; }
+.browser-settings-editor__field > .sd-field { min-height: 36px; }
+.browser-settings-editor__field > .sd-field:read-only { color: var(--app-text-muted); background: var(--app-surface-muted); }
+.browser-settings-editor__group { overflow: hidden; border: 1px solid var(--desktop-agent-subtle-divider); border-radius: var(--app-radius-lg); background: var(--app-surface-subtle); }
+.browser-settings-editor__group > * + * { border-top: 1px solid var(--desktop-agent-subtle-divider); }
+.browser-settings-editor__row { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 6px 12px; box-sizing: border-box; color: var(--app-text); font-size: 13px; }
+.browser-settings-editor__row.sd-checkbox { display: flex; width: 100%; gap: 10px; cursor: pointer; }
+.browser-settings-editor__row.sd-checkbox.is-disabled { cursor: default; }
+.browser-settings-editor__actions { display: flex; justify-content: flex-end; gap: 8px; }
 .browser-settings__path { min-width: 0; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: end; color: var(--app-text-muted); }
 .browser-settings__entry { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; overflow: hidden; }
 .browser-settings__entry > strong, .browser-settings__entry > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

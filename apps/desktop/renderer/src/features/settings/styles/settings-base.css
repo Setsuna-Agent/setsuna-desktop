@@ -93,17 +93,24 @@
 }
 
 .desktop-settings-panel .chat-user-settings__content {
+  /* Exposed so full-bleed children (subpage header) can offset the viewport padding. */
+  --settings-content-padding-top: 24px;
+  --settings-content-padding-inline: 42px;
+
   width: 100%;
   height: 100%;
   min-width: 0;
   min-height: 0;
-  padding: 24px 42px clamp(72px, 10vh, 96px);
+  padding: var(--settings-content-padding-top) var(--settings-content-padding-inline) clamp(72px, 10vh, 96px);
   overflow-x: hidden;
   overflow-y: auto;
   background: var(--app-bg);
 }
 
 .desktop-settings-panel .chat-user-settings__content--wide {
+  --settings-content-padding-top: 0px;
+  --settings-content-padding-inline: 0px;
+
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -176,10 +183,30 @@
 
 .sd-settings-page { min-width: 0; }
 .sd-settings-page__content { width: min(720px, 100%); margin-inline: auto; }
-.sd-settings-page__breadcrumbs { display: flex; align-items: center; gap: 8px; min-height: 28px; margin-bottom: 30px; color: var(--app-text-muted); font-size: 12px; line-height: 20px; }
+/* Subpage header spans the whole settings viewport and stays pinned while the page scrolls. */
+.sd-settings-page__breadcrumbs {
+  --settings-breadcrumb-control-size: 24px;
+
+  position: sticky;
+  /* Sticky offsets are measured inside the scroller's padding; cancel it so the header stays flush. */
+  top: calc(-1 * var(--settings-content-padding-top, 0px));
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  margin: calc(-1 * var(--settings-content-padding-top, 0px)) calc(-1 * var(--settings-content-padding-inline, 0px)) 30px;
+  padding-inline: 12px;
+  border-bottom: 1px solid var(--desktop-agent-subtle-divider);
+  background: var(--app-bg);
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 20px;
+}
 .sd-settings-page__breadcrumbs > svg { flex-shrink: 0; }
-.sd-settings-page__breadcrumbs > .sd-button { min-height: 28px; padding: 0 2px; font-size: 12px; }
-.sd-settings-page__breadcrumbs > .sd-icon-button { width: 28px; height: 28px; margin-inline-end: 4px; padding: 0; }
+/* Controls share one box height so text, chevrons and icons center on the same axis. */
+.sd-settings-page__breadcrumbs > .sd-button { height: var(--settings-breadcrumb-control-size); min-height: 0; padding: 0 4px; font-size: 12px; line-height: 20px; }
+.sd-settings-page__breadcrumbs > .sd-icon-button { width: var(--settings-breadcrumb-control-size); padding: 0; }
 .sd-settings-page__breadcrumbs > [aria-current] { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--app-text); }
 
 .desktop-settings-panel .chat-user-settings__section {
@@ -278,18 +305,31 @@
 }
 
 .desktop-settings-panel .chat-user-settings__row {
+  --settings-row-padding-inline: 14px;
+
   display: grid;
+  position: relative;
   grid-template-columns: 170px minmax(0, 1fr);
   align-items: center;
   column-gap: 16px;
   min-width: 0;
   min-height: 58px;
-  padding: 0 14px;
-  border-bottom: 1px solid var(--chat-settings-divider);
+  padding: 0 var(--settings-row-padding-inline);
 }
 
-.desktop-settings-panel .chat-user-settings__row:last-child {
-  border-bottom: 0;
+/* Inset separator so it lines up with the row content instead of touching the group edges. */
+.desktop-settings-panel .chat-user-settings__row::after {
+  content: '';
+  position: absolute;
+  right: var(--settings-row-padding-inline);
+  bottom: 0;
+  left: var(--settings-row-padding-inline);
+  border-bottom: 1px solid var(--chat-settings-divider);
+  pointer-events: none;
+}
+
+.desktop-settings-panel .chat-user-settings__row:last-child::after {
+  content: none;
 }
 
 .desktop-settings-panel .chat-user-settings__row-label {
@@ -322,7 +362,8 @@
   text-align: right;
 }
 
-.desktop-settings-panel .chat-user-settings__toggle-row {
+.desktop-settings-panel .chat-user-settings__toggle-row,
+.desktop-settings-panel .sd-settings-navigation-row {
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
@@ -535,8 +576,9 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Share the standard field column so the policy menu lines up with other runtime selects. */
 .desktop-settings-panel .chat-user-settings__runtime-policy-row {
-  grid-template-columns: minmax(0, 1fr) 180px;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, var(--settings-standard-control-width));
   min-height: 72px;
   padding-top: 10px;
   padding-bottom: 10px;
@@ -568,8 +610,7 @@
 }
 
 .desktop-settings-panel .chat-user-settings__runtime-policy-control {
-  width: 180px;
-  max-width: 180px;
+  width: 100%;
 }
 
 .desktop-settings-panel .runtime-access-mode-trigger__value {

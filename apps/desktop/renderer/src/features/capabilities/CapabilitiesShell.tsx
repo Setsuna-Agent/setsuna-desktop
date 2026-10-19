@@ -171,7 +171,7 @@ function CapabilitiesCreateMenu({
                 item.onSelect();
               }}
             >
-              <span className="desktop-capabilities-create-menu__icon" data-menu-color="preserve">{item.icon}</span>
+              <span className="desktop-capabilities-create-menu__icon">{item.icon}</span>
               <span className="desktop-capabilities-create-menu__content">
                 <strong>{item.title}</strong>
                 <span>{item.description}</span>

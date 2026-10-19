@@ -7,11 +7,13 @@ import {
 } from '@setsuna-desktop/feature-core/renderer';
 import {
   registerSettingsPageExtension,
+  registerSettingsPage,
   settingsPageExtensionSlot,
+  settingsPageSlot,
 } from '@setsuna-desktop/renderer-contracts/settings';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   RendererKernelProvider,
   RendererOwnedSlotsProvider,
@@ -19,10 +21,35 @@ import {
 } from '../../../../src/kernel/renderer-plugins/RendererKernelProvider.js';
 import { createRendererPluginRuntime } from '../../../../src/kernel/renderer-plugins/runtime.js';
 import { SettingsSectionExtensionOutlet } from '../../../../src/features/settings/SettingsSectionExtensionOutlet.js';
+import { SettingsPage } from '../../../../src/features/settings/SettingsPage.js';
 import { settingsViewUi } from '../../../../src/shared/ui/SettingsViewUi.js';
 
 describe('SettingsSectionExtensionOutlet', () => {
   afterEach(cleanup);
+
+  it('resets the settings viewport when switching sections that do not own a PageLayout', async () => {
+    const runtime = createSettingsFixtureRuntime();
+    const view = render(
+      <RendererKernelProvider runtime={runtime}>
+        <RendererRootSingleSlot slot={settingsFixtureHostSlot} props={{ children: (
+          <SettingsPage archivedThreads={[]} config={null} onSaveRuntimePreferences={vi.fn()}
+            onDeleteAllArchivedThreads={vi.fn()} onDeleteArchivedThread={vi.fn()} onRestoreArchivedThread={vi.fn()} />
+        ) }} />
+      </RendererKernelProvider>,
+    );
+    const viewport = view.container.querySelector<HTMLElement>('[data-settings-scroll-container]')!;
+    viewport.scrollTop = 360;
+    fireEvent.click(screen.getByRole('button', { name: '键盘快捷键' }));
+    await screen.findByText('Shortcut settings');
+    expect(viewport.scrollTop).toBe(0);
+
+    viewport.scrollTop = 180;
+    fireEvent.click(screen.getByRole('button', { name: '通用' }));
+    await screen.findByText('General settings');
+    expect(viewport.scrollTop).toBe(0);
+    view.unmount();
+    await runtime.dispose();
+  });
 
   it('replaces the parent section with a Feature subpage and restores it on back', () => {
     const runtime = createSettingsFixtureRuntime();
@@ -74,11 +101,20 @@ function createSettingsFixtureRuntime() {
   runtime.declareRoot(hostOwner, { slot: settingsFixtureHostSlot, required: true });
   runtime.createRegistrar(hostOwner).single(settingsFixtureHostSlot, {
     id: 'fixture.settings-host',
-    children: [declareRendererChildSlot(settingsPageExtensionSlot)],
+    children: [declareRendererChildSlot(settingsPageExtensionSlot), declareRendererChildSlot(settingsPageSlot)],
     render: ({ children }, slots) => (
       <RendererOwnedSlotsProvider slots={slots}>{children}</RendererOwnedSlotsProvider>
     ),
   });
+  for (const [sectionId, titleKey, label] of [
+    ['general', 'settings.section.general', 'General settings'],
+    ['shortcuts', 'settings.section.shortcuts', 'Shortcut settings'],
+  ] as const) {
+    registerSettingsPage(runtime.createRegistrar(hostOwner), {
+      entryId: `fixture.${sectionId}`, sectionId, titleKey, location: 'settings',
+      navigationGroupId: 'preferences', order: 0, pageHeading: 'view', render: () => <div>{label}</div>,
+    });
+  }
   registerSettingsPageExtension(runtime.createRegistrar({
     featureId: 'test-feature',
     pluginId: 'feature.test-feature',

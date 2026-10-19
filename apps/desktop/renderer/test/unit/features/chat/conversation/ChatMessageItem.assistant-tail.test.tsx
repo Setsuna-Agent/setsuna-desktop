@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import type { RuntimeMessage, RuntimeToolRun } from '@setsuna-desktop/contracts';
-import { cleanup, fireEvent, render } from '@testing-library/react';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MessageItem } from '../../../../../src/features/chat/conversation/ChatMessageItem.js';
 import type { ChatDisplayItem } from '../../../../../src/features/chat/conversation/chatMessageDisplay.js';
@@ -65,7 +65,7 @@ describe('MessageItem Feature result placement', () => {
     expect(view.container.querySelector('.chat-work-history')).toBeNull();
   });
 
-  it('keeps one work header across a card, subsequent streaming work, and the final answer', () => {
+  it('keeps one work header across a card, subsequent streaming work, and the final answer', async () => {
     const earlierWork: RuntimeMessage = {
       id: 'weather_lookup',
       turnId: 'turn_weather',
@@ -109,7 +109,7 @@ describe('MessageItem Feature result placement', () => {
     expect(view.getByText('weather-card')).toBe(card);
     expect(view.getByText('Tomorrow forecast.')).toBeTruthy();
     expect(view.getByText('Weather advice.')).toBeTruthy();
-    expect(view.queryByText('Looking up the weather.')).toBeNull();
+    await waitFor(() => expect(view.queryByText('Looking up the weather.')).toBeNull());
   });
 
   it('waits for completion and renders the result after the final answer', () => {
@@ -174,9 +174,7 @@ function timelineMessageItem(completed = true, followupSegments: RuntimeMessage[
     <MessageItem
       activeAssistantItemId={completed ? null : item.id}
       activeTurnId={completed ? null : toolSegment.turnId ?? null}
-      assistantItemIdByTurnId={new Map()}
       deleteMode={false}
-      expandedWorkHistoryItemIds={new Set()}
       item={item}
       onAnswerApproval={async () => undefined}
       onWorkHistoryExpandedChange={() => undefined}
@@ -219,9 +217,7 @@ function messageItem(completed: boolean, runs = [artifactRun()]) {
     <MessageItem
       activeAssistantItemId={completed ? null : item.id}
       activeTurnId={completed ? null : toolSegment.turnId ?? null}
-      assistantItemIdByTurnId={new Map()}
       deleteMode={false}
-      expandedWorkHistoryItemIds={new Set()}
       item={item}
       onAnswerApproval={async () => undefined}
       onWorkHistoryExpandedChange={() => undefined}

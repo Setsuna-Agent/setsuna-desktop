@@ -3,6 +3,7 @@ import { Button } from '@setsuna-desktop/renderer-ui';
 import { FolderClosed, MessageCircle, Settings } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import { ProjectIcon } from '../../shared/ui/ProjectIcon.js';
 import { SidebarHoverCard } from './SidebarHoverCard.js';
 
 export function SidebarProjectHoverCard({ children, disabled, project, threadCount, onEditProject }: {
@@ -21,7 +22,7 @@ export function SidebarProjectHoverCard({ children, disabled, project, threadCou
       content={(dismiss) => (
         <>
           <div className="desktop-agent-project-preview__row desktop-agent-project-preview__heading">
-            <FolderClosed size={14} aria-hidden="true" />
+            <ProjectIcon icon={project.icon} />
             <span>{project.name}</span>
           </div>
           <div className="desktop-agent-project-preview__row">

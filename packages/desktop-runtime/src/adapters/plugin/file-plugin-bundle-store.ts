@@ -68,6 +68,7 @@ import { readPluginUiDocument } from './plugin-ui-document-reader.js';
 import { sameLegacyMarketplaceSource, samePath } from './legacy-marketplace-source.js';
 import { installedPluginMessages, localizeBundledPlugin, localizedPluginMarkdownPath, pluginText, readBundledPluginMessages } from './bundled-plugin-localization.js';
 import { projectLegacyRootUiCards } from './legacy-plugin-ui-card-metadata.js';
+import { migrateBundledPluginInstallations } from './migrate-bundled-plugin-installations.js';
 
 export class FilePluginBundleStore implements PluginBundleStore {
   private readonly indexPath: string;
@@ -105,11 +106,11 @@ export class FilePluginBundleStore implements PluginBundleStore {
   }
 
   async listPlugins(): Promise<RuntimePluginList> {
-    await this.migrateConfiguredLegacyMarketplaceInstallations();
+    const retiredIds = await this.migrateConfiguredBundledInstallations(false);
     const index = await this.readIndex();
     const language = (await this.configStore.getConfig()).desktopSettings?.interfaceLanguage ?? 'zh-CN';
     return {
-      plugins: await Promise.all(index.plugins.map(async (indexedPlugin) => {
+      plugins: await Promise.all(index.plugins.filter((plugin) => !retiredIds.has(plugin.id)).map(async (indexedPlugin) => {
         const plugin = await projectLegacyRootUiCards(indexedPlugin);
         if (plugin.connectors === undefined) {
           // Old indexes gain declarative setup metadata without reinstalling or touching user MCP settings.
@@ -133,8 +134,8 @@ export class FilePluginBundleStore implements PluginBundleStore {
   }
 
   async listInstalledRecords(): Promise<InstalledPluginRecord[]> {
-    await this.migrateConfiguredLegacyMarketplaceInstallations();
-    return (await this.readIndex()).plugins.map(cloneInstalledRecord);
+    const retiredIds = await this.migrateConfiguredBundledInstallations(true);
+    return (await this.readIndex()).plugins.filter((plugin) => !retiredIds.has(plugin.id)).map(cloneInstalledRecord);
   }
 
   async migrateLegacyMarketplaceInstallations(
@@ -165,17 +166,9 @@ export class FilePluginBundleStore implements PluginBundleStore {
     });
   }
 
-  private async migrateConfiguredLegacyMarketplaceInstallations(): Promise<void> {
-    const bundledPluginsDir = this.bundledPluginsDir;
-    if (!bundledPluginsDir) return;
-    const index = await this.readIndex();
-    const candidates: Array<Pick<PluginBundleInspection, 'id' | 'sourcePath'>> = [];
-    for (const plugin of index.plugins) {
-      if (plugin.installationSource) continue;
-      const sourcePath = await requiredBundleDirectory(path.join(bundledPluginsDir, plugin.id)).catch(() => null);
-      if (sourcePath) candidates.push({ id: plugin.id, sourcePath });
-    }
-    await this.migrateLegacyMarketplaceInstallations(candidates);
+  private async migrateConfiguredBundledInstallations(retireObsolete: boolean): Promise<Set<string>> {
+    if (!this.bundledPluginsDir) return new Set();
+    return migrateBundledPluginInstallations(this.indexPath, this.bundledPluginsDir, this, retireObsolete);
   }
 
   async inspectPlugin(input: RuntimePluginInstallInput): Promise<PluginBundleInspection> {

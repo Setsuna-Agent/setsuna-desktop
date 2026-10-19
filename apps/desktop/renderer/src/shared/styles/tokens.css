@@ -51,18 +51,20 @@
     0 0 0 1px var(--app-border),
     0 8px 28px color-mix(in srgb, #000000 14%, transparent);
   --app-shadow-inset-field: inset 0 1px 2px color-mix(in srgb, #000000 10%, transparent);
-  --app-shadow-popover: 0 14px 42px color-mix(in srgb, #000000 12%, transparent), 0 2px 8px color-mix(in srgb, #000000 6%, transparent);
+  --app-shadow-popover: 0 8px 24px color-mix(in srgb, #000000 8%, transparent), 0 1px 3px color-mix(in srgb, #000000 6%, transparent);
   --app-shadow-modal: 0 24px 64px color-mix(in srgb, #000000 18%, transparent), 0 4px 16px color-mix(in srgb, #000000 8%, transparent);
-  /* Compact native-style menus have a stable selection color across accent presets. */
-  --app-menu-bg: rgb(246 247 249 / 72%);
-  --app-menu-backdrop-filter: blur(32px) saturate(160%);
-  --app-menu-border: color-mix(in srgb, var(--app-border-strong) 80%, transparent);
-  --app-menu-shadow: 0 8px 24px rgb(0 0 0 / 16%), 0 1px 5px rgb(0 0 0 / 10%);
+  /* Compact native-style menus highlight rows with the same neutral fill as other
+     controls, independent of accent presets. The surface stays near-opaque with a
+     hairline edge and a soft, short shadow so floating layers read as lifted without
+     a heavy halo or content bleeding through. */
+  --app-menu-bg: rgb(252 252 253 / 94%);
+  --app-menu-backdrop-filter: blur(24px) saturate(150%);
+  --app-menu-border: rgb(0 0 0 / 8%);
+  --app-menu-shadow: 0 6px 20px rgb(0 0 0 / 8%), 0 1px 3px rgb(0 0 0 / 6%);
   --app-menu-radius: 10px;
   --app-menu-item-radius: 5px;
   --app-menu-item-height: 26px;
-  --app-menu-highlight-bg: #5298f8;
-  --app-menu-highlight-text: #ffffff;
+  --app-menu-highlight-bg: var(--desktop-agent-control-hover-bg);
   --app-tooltip-bg: #1c1e20;
   --app-tooltip-text: #f9fafb;
   --app-tooltip-shadow: 0 2px 8px rgb(0 0 0 / 18%), 0 1px 2px rgb(0 0 0 / 12%);
@@ -97,13 +99,13 @@
   --app-mono-chip-radius: var(--app-radius-xs);
   --app-success: var(--app-green-active);
   --app-warning: var(--app-orange-active);
-  /* Cool Git lanes stay distinct; rose separates the sixth concurrent branch. */
-  --desktop-git-graph-blue: #5b83e8;
-  --desktop-git-graph-cyan: #31a6bc;
-  --desktop-git-graph-purple: #9a75dc;
-  --desktop-git-graph-teal: #36a89b;
-  --desktop-git-graph-rose: #d87da6;
-  --desktop-git-graph-indigo: #7b7de1;
+  /* Six vivid lanes share the app's icon palette in both themes. */
+  --desktop-git-graph-blue: var(--sd-palette-blue);
+  --desktop-git-graph-green: var(--sd-palette-green);
+  --desktop-git-graph-purple: var(--sd-palette-purple);
+  --desktop-git-graph-orange: var(--sd-palette-orange);
+  --desktop-git-graph-pink: var(--sd-palette-pink);
+  --desktop-git-graph-red: var(--sd-palette-red);
   /* beUI geometry: compact fields, pill actions, rounded surfaces. */
   --app-radius-xs: 6px;
   --app-radius-sm: 8px;
@@ -295,7 +297,10 @@
   --app-sidebar-text: #d5d4cf;
   --app-sidebar-text-secondary: #a3a29b;
   --app-surface: #202020;
-  --app-menu-bg: rgb(34 36 40 / 76%);
+  --app-menu-bg: rgb(36 36 36 / 94%);
+  /* Dark surfaces need a light hairline and a deeper shadow to separate from the page. */
+  --app-menu-border: rgb(255 255 255 / 9%);
+  --app-menu-shadow: 0 8px 24px rgb(0 0 0 / 36%), 0 1px 3px rgb(0 0 0 / 24%);
   --app-surface-subtle: #222222;
   --app-surface-muted: #282828;
   --app-border: #303030;
@@ -341,18 +346,13 @@
   --app-mono-chip-bg: color-mix(in srgb, var(--app-text) 8%, transparent);
   --app-success: var(--app-green-hover);
   --app-warning: var(--app-orange-hover);
-  --desktop-git-graph-blue: #86aaff;
-  --desktop-git-graph-cyan: #73cede;
-  --desktop-git-graph-purple: #bd9cf1;
-  --desktop-git-graph-teal: #75d4c2;
-  --desktop-git-graph-rose: #eea1c0;
-  --desktop-git-graph-indigo: #a7a4f4;
   --app-titlebar-text: var(--app-sidebar-text-secondary);
   --desktop-agent-panel-border: color-mix(in srgb, var(--app-border) 88%, transparent);
   --desktop-agent-main-bg: var(--app-bg);
   --desktop-agent-main-surface: var(--app-surface);
-  --desktop-agent-divider: #34383b;
-  --desktop-agent-subtle-divider: #2d3033;
+  /* 暗色表面为中性灰阶，分隔线保持同一色相，避免偏蓝的线条。 */
+  --desktop-agent-divider: #373737;
+  --desktop-agent-subtle-divider: #2e2e2e;
   --desktop-agent-control-hover-bg: color-mix(in srgb, var(--app-text) 10%, var(--app-surface));
   --desktop-agent-input-shadow:
     0 2px 10px rgba(0, 0, 0, 0.28),
