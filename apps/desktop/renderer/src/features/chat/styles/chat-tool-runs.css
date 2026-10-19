@@ -629,22 +629,25 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 
 /* 只限制最外层工具汇总，保留顶部摘要，避免子分组各自产生滚动区域。 */
 .chat-tool-runs > .chat-tool-run--group > .chat-tool-run__body {
+  --chat-tool-run-scrollbar-gap: 8px;
   max-height: min(360px, 50vh);
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior-y: contain;
-  scrollbar-gutter: stable;
+  scrollbar-gutter: auto;
   /* 聊天正文默认隐藏内部滚动条；长工具记录需要可拖动的滚动提示。 */
   scrollbar-width: auto !important;
 }
 
 .chat-tool-runs > .chat-tool-run--group > .chat-tool-run__body::-webkit-scrollbar {
   display: block !important;
-  width: var(--chat-scrollbar-width) !important;
+  /* 间距随滚动条占位，未溢出时不压缩内容宽度。 */
+  width: calc(var(--chat-scrollbar-width) + var(--chat-tool-run-scrollbar-gap)) !important;
 }
 
 .chat-tool-runs > .chat-tool-run--group > .chat-tool-run__body::-webkit-scrollbar-thumb {
   border: 0 !important;
+  border-left: var(--chat-tool-run-scrollbar-gap) solid transparent !important;
   border-radius: var(--app-radius-full);
   background: var(--sd-scrollbar-thumb) !important;
   background-clip: content-box !important;

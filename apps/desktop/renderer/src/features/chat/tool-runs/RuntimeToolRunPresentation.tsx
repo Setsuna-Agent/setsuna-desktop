@@ -79,7 +79,6 @@ export {
   shellTerminalStatus,
 } from './RuntimeShellToolRun.js';
 export {
-  mixedToolRunGroupIcon,
   statusTextFromStatus,
   ToolRunStatus,
   toolRunGroupIcon,
