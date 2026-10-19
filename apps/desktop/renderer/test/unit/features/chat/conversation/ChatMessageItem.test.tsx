@@ -63,9 +63,7 @@ function renderUserMessage(
           {...mutationHandlers}
           activeAssistantItemId={null}
           activeTurnId={null}
-          assistantItemIdByTurnId={new Map()}
           deleteMode={false}
-          expandedWorkHistoryItemIds={new Set()}
           item={{ ...userItem(message), ...options.item }}
           onAnswerApproval={async () => undefined}
           onWorkHistoryExpandedChange={() => undefined}
@@ -92,9 +90,7 @@ function renderPlanMessage(pluginUses: RuntimePluginUse[]): string {
       <MessageItem
         activeAssistantItemId={null}
         activeTurnId={null}
-        assistantItemIdByTurnId={new Map()}
         deleteMode={false}
-        expandedWorkHistoryItemIds={new Set()}
         item={{
           type: 'assistant',
           id: message.id,
@@ -128,9 +124,7 @@ function renderAssistantMessage(
       <MessageItem
         activeAssistantItemId={active ? 'assistant_item' : null}
         activeTurnId={active ? turnId : null}
-        assistantItemIdByTurnId={new Map()}
         deleteMode={false}
-        expandedWorkHistoryItemIds={new Set()}
         item={{
           type: 'assistant',
           id: 'assistant_item',

@@ -19,11 +19,15 @@
   background: linear-gradient(
     90deg,
     color-mix(in srgb, var(--app-text-muted) 14%, transparent) 0%,
-    color-mix(in srgb, var(--app-primary) 48%, transparent) 48%,
+    color-mix(in srgb, var(--app-text-muted) 14%, transparent) 44%,
+    color-mix(in srgb, var(--app-primary) 48%, transparent) 50%,
+    color-mix(in srgb, var(--app-text-muted) 14%, transparent) 56%,
     color-mix(in srgb, var(--app-text-muted) 14%, transparent) 100%
   );
-  background-size: 220% 100%;
-  animation: chat-timeline-divider-sweep 1.45s linear infinite;
+  /* 与标签的文字扫光同步（loading-indicators.css），线与字一起扫过、一起停顿。 */
+  background-position: 100% 0;
+  background-size: var(--app-loading-shimmer-size);
+  animation: var(--app-loading-shimmer-animation);
 }
 
 .chat-timeline-divider__label {
@@ -52,16 +56,6 @@
 
 .chat-timeline-divider__action:hover {
   color: var(--app-text);
-}
-
-@keyframes chat-timeline-divider-sweep {
-  from {
-    background-position: 110% 0;
-  }
-
-  to {
-    background-position: -110% 0;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

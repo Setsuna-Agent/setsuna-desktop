@@ -55,7 +55,9 @@ import {
   createChatRenderWindow,
   createChatScrollSignal,
   reconcileChatDisplayItems,
+  type ChatDisplayItem,
 } from './chatMessageDisplay.js';
+import { hasExpandedWorkHistoryPanel } from './chatWorkHistoryState.js';
 
 export type ChatTranscriptMessageHistory = ReturnType<typeof useThreadMessageHistory>;
 
@@ -361,14 +363,12 @@ export function ChatTranscript({
                           {...messageMutationHandlers}
                           activeAssistantItemId={activeAssistantItemId}
                           activeTurnId={activeTurnId}
-                          assistantItemIdByTurnId={assistantItemIdByTurnId}
                           contextCompactionRunning={contextCompactionRunning}
                           deleteMode={!readOnly && deleteMode && !pendingMessageIds.has(item.id)}
                           editor={!readOnly && item.type === 'user' && editingMessageId === item.message.id ? renderMessageEditor?.({
                             message: item.message, disabled: Boolean(activeTurnId), submitting: editingSubmitting,
                             onCancel: cancelEditingMessage, onSubmit: (input) => submitEditingMessage(item.message.id, input),
                           }) : undefined}
-                          expandedWorkHistoryItemIds={expandedWorkHistoryItemIds}
                           item={item}
                           pending={pendingMessageIds.has(item.id)}
                           onAnswerApproval={onAnswerApproval}
@@ -379,6 +379,7 @@ export function ChatTranscript({
                           hookUses={item.type === 'assistant' && item.turnId ? (hookUsesByTurnId.get(item.turnId) ?? emptyRuntimeHookUses) : emptyRuntimeHookUses}
                           selectedForDelete={!readOnly && selectedDeleteItemIds.has(item.id)}
                           showThinkingInTranscript={showThinkingInTranscript}
+                          workHistoryExpanded={userTurnWorkHistoryExpanded(item, assistantItemIdByTurnId, expandedWorkHistoryItemIds)}
                         />
                         {item.type === 'user' && (item.id === activePlaceholderUserItemId || (
                           item.message.turnId && !assistantItemIdByTurnId.has(item.message.turnId)
@@ -457,6 +458,16 @@ export function ChatTranscript({
       ) : null}
     </>
   );
+}
+
+function userTurnWorkHistoryExpanded(
+  item: ChatDisplayItem,
+  assistantItemIdByTurnId: Map<string, string>,
+  expandedWorkHistoryItemIds: ReadonlySet<string>,
+): boolean {
+  if (item.type !== 'user' || !item.message.turnId) return false;
+  const assistantItemId = assistantItemIdByTurnId.get(item.message.turnId);
+  return assistantItemId ? hasExpandedWorkHistoryPanel(expandedWorkHistoryItemIds, assistantItemId) : false;
 }
 
 function sameStringMap(left: Map<string, string>, right: Map<string, string>): boolean {

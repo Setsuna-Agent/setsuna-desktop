@@ -140,10 +140,29 @@ function createWorkHistoryPlan({
       type: 'workHistory',
       active: turnActive,
       blocks,
-      entries,
+      entries: mergeAdjacentToolRuns(entries),
       hasFollowingContent,
     },
   };
+}
+
+function mergeAdjacentToolRuns(entries: AssistantWorkHistoryPlanEntry[]): AssistantWorkHistoryPlanEntry[] {
+  const merged: AssistantWorkHistoryPlanEntry[] = [];
+  for (const entry of entries) {
+    const previous = merged.at(-1);
+    if (previous?.type === 'workItem' && previous.item.type === 'toolRuns'
+      && entry.type === 'workItem' && entry.item.type === 'toolRuns') {
+      // Guidance must already occupy its message position before tool rows are grouped.
+      // Keep the first row's identity so streamed calls preserve its disclosure state.
+      merged[merged.length - 1] = {
+        type: 'workItem',
+        item: { ...previous.item, toolRuns: [...previous.item.toolRuns, ...entry.item.toolRuns] },
+      };
+    } else {
+      merged.push(entry);
+    }
+  }
+  return merged;
 }
 
 function workHistoryPlanEntry(

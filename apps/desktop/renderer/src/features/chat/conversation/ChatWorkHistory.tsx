@@ -1,7 +1,7 @@
-import { Button } from '@setsuna-desktop/renderer-ui';
+import { Button, CollapsibleContent } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
 import { ChevronDown } from 'lucide-react';
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import type { WorkHistoryExpandedChangeHandler } from './chat-workspace-types.js';
 import { hasThinkingSegments } from './chatThinkingContent.js';
@@ -20,9 +20,11 @@ export function ActiveWorkPlaceholder({
 
   return (
     <WorkHistoryPanel active completedAtMs={null} hasDetails={Boolean(children) || showLoading} startedAtMs={inferActiveTurnStartedAtMs(segments)}>
-      {children}
-      {/* runtime 尚未产出内容时，在工作区内保留明确的进行中反馈。 */}
-      {showLoading ? <AssistantLoadingIndicator label={t('chat.assistant.processing')} showLabel={false} /> : null}
+      <WorkHistoryDetails>
+        {children}
+        {/* runtime 尚未产出内容时，在工作区内保留明确的进行中反馈。 */}
+        {showLoading ? <AssistantLoadingIndicator label={t('chat.assistant.processing')} showLabel={false} /> : null}
+      </WorkHistoryDetails>
     </WorkHistoryPanel>
   );
 }
@@ -71,6 +73,34 @@ export function inferWorkTiming(segments: RuntimeMessage[]): {
   };
 }
 
+const WorkHistoryExpandedContext = createContext(true);
+
+/**
+ * 工作记录中随面板展开收起的部分。正文和结果卡片放在它外面，
+ * 切换时保持原位且不重新挂载，只有这里的明细做高度动画。
+ */
+export function WorkHistoryDetails({
+  children,
+  persistentChildren,
+}: {
+  children?: ReactNode;
+  /** 折叠后仍需保留的节点（如 Feature 声明的常驻结果）；展开时它们已包含在 children 中。 */
+  persistentChildren?: ReactNode;
+}) {
+  const expanded = useContext(WorkHistoryExpandedContext);
+  // 收起动画期间明细仍在场，退场结束后再单独渲染常驻节点，避免同一内容出现两份。
+  const [detailsPresent, setDetailsPresent] = useState(expanded);
+  if (expanded && !detailsPresent) setDetailsPresent(true);
+  return (
+    <>
+      <CollapsibleContent className="chat-work-history__details" open={expanded} onExitComplete={() => setDetailsPresent(false)}>
+        <div className="chat-work-history__details-content">{children}</div>
+      </CollapsibleContent>
+      {detailsPresent ? null : persistentChildren}
+    </>
+  );
+}
+
 export function WorkHistoryPanel({
   active,
   children,
@@ -80,10 +110,10 @@ export function WorkHistoryPanel({
   hasDetails,
   onExpandedChange,
   panelId,
-  persistentChildren,
   startedAtMs,
 }: {
   active: boolean;
+  /** 面板正文；可折叠的明细用 WorkHistoryDetails 包裹，其余节点始终可见。 */
   children?: ReactNode;
   collapseWhenContentFollows?: boolean;
   completedAtMs?: number | null;
@@ -91,8 +121,6 @@ export function WorkHistoryPanel({
   hasDetails: boolean;
   onExpandedChange?: WorkHistoryExpandedChangeHandler;
   panelId?: string;
-  /** 折叠时仍需保留的时间线节点，由 Feature 结果视图按需声明。 */
-  persistentChildren?: ReactNode;
   startedAtMs?: number | null;
 }) {
   const { t } = useI18n();
@@ -170,7 +198,6 @@ export function WorkHistoryPanel({
       {hasDetails ? <ChevronDown aria-hidden="true" className="chat-work-history__chevron" size={12} /> : null}
     </>
   );
-  const visibleBody = expanded && hasDetails ? children : persistentChildren;
 
   return (
     <div className={`chat-work-history ${expanded ? 'is-expanded' : ''} ${hasDetails ? 'is-toggleable' : ''}`}>
@@ -181,7 +208,11 @@ export function WorkHistoryPanel({
       ) : (
         <div className="chat-work-history__summary">{summaryContent}</div>
       )}
-      {visibleBody ? <div className="chat-work-history__body">{visibleBody}</div> : null}
+      {children ? (
+        <WorkHistoryExpandedContext.Provider value={expanded}>
+          <div className="chat-work-history__body">{children}</div>
+        </WorkHistoryExpandedContext.Provider>
+      ) : null}
     </div>
   );
 }

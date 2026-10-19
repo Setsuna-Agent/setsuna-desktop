@@ -99,7 +99,8 @@ export function createAssistantRunTimeline(
     workBlock.contentSegments.push(...(input.contentSegments ?? []));
     workBlock.thinkingSegments.push(...(input.thinkingSegments ?? []));
     workBlock.toolRuns.push(...(input.toolRuns ?? []));
-    appendWorkItems(workBlock.items, input.items ?? defaultWorkItems(segment, input));
+    // Preserve each message anchor until guidance has been interleaved into the work history.
+    workBlock.items.push(...(input.items ?? defaultWorkItems(segment, input)));
   };
 
   const flushWork = () => {
@@ -375,24 +376,6 @@ function defaultWorkItems(
     ...(input.thinkingSegments ?? []).map((item): AssistantWorkItem => ({ type: 'thinking', segment: item })),
     ...(input.toolRuns?.length ? [{ type: 'toolRuns' as const, id: `${segment.id}:tools`, segment, toolRuns: input.toolRuns }] : []),
   ];
-}
-
-function appendWorkItems(items: AssistantWorkItem[], nextItems: AssistantWorkItem[]): void {
-  for (const nextItem of nextItems) {
-    const previousItem = items.at(-1);
-    if (previousItem?.type === 'toolRuns' && nextItem.type === 'toolRuns') {
-      items[items.length - 1] = {
-        type: 'toolRuns',
-        // Consecutive tool segments share one rendered disclosure. Keep the first id so
-        // streaming appends do not remount that disclosure and lose its local state.
-        id: previousItem.id,
-        segment: previousItem.segment,
-        toolRuns: [...previousItem.toolRuns, ...nextItem.toolRuns],
-      };
-      continue;
-    }
-    items.push(nextItem);
-  }
 }
 
 function assistantFinalStartIndex(segments: ParsedAssistantSegment[]): number {

@@ -625,6 +625,8 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
     }]);
     const text = renderedTextFromHtml(html);
 
+    expect(text).toContain('正在向你提问');
+    expect(text).not.toContain('等待授权');
     expect(text).toContain('发布目标');
     expect(text).toContain('请选择本次发布环境');
     expect(text).toContain('秒后自动继续');

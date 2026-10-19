@@ -3,7 +3,7 @@ import { RuntimePluginUses } from '../../plugin-usage/RuntimePluginUses.js';
 import type { RuntimePluginUse } from '../../plugin-usage/runtimePluginUsage.js';
 import { RuntimeHookRuns } from '../../tool-runs/RuntimeHookRunDetails.js';
 import type { RuntimeHookUse } from './runtimeHookUsage.js';
-import { ActiveWorkPlaceholder, WorkHistoryPanel } from '../ChatWorkHistory.js';
+import { ActiveWorkPlaceholder, WorkHistoryDetails, WorkHistoryPanel } from '../ChatWorkHistory.js';
 
 /** Keep pre-response activity visible even when a Hook stops the turn before sampling. */
 export function ChatTurnStartWork({
@@ -22,5 +22,5 @@ export function ChatTurnStartWork({
     <RuntimeHookRuns runs={hookUses.map(({ run }) => run)} />
   </>;
   if (active) return <ActiveWorkPlaceholder segments={segments}>{records}</ActiveWorkPlaceholder>;
-  return <WorkHistoryPanel active={false} defaultExpanded hasDetails>{records}</WorkHistoryPanel>;
+  return <WorkHistoryPanel active={false} defaultExpanded hasDetails><WorkHistoryDetails>{records}</WorkHistoryDetails></WorkHistoryPanel>;
 }

@@ -314,11 +314,6 @@
   background: transparent;
 }
 
-:root[data-theme='dark'] .chat-thinking-disclosure__panel {
-  color: var(--app-text-secondary);
-  background: transparent;
-}
-
 .chat-thinking-disclosure__content {
   box-sizing: border-box;
   max-height: 112px;
@@ -352,12 +347,13 @@
 .chat-work-history {
   display: flex;
   flex-direction: column;
-  gap: 4px;
   width: 100%;
   max-width: 100%;
 }
 
 .chat-work-history__summary {
+  --chat-work-history-divider: color-mix(in srgb, var(--app-border) 48%, transparent);
+
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -368,7 +364,7 @@
   margin: 0;
   padding: 0 0 5px;
   border: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 48%, transparent);
+  border-bottom: 1px solid var(--chat-work-history-divider);
   border-radius: 0;
   color: color-mix(in srgb, var(--app-text) 52%, transparent);
   background: transparent;
@@ -384,7 +380,9 @@
   cursor: pointer;
 }
 
-.chat-work-history.is-toggleable .chat-work-history__summary:hover {
+/* ghost 按钮的 hover/active 会把边框设为透明，这里保留分隔线。 */
+.chat-work-history.is-toggleable .chat-work-history__summary:is(:hover, :active) {
+  border-bottom-color: var(--chat-work-history-divider);
   color: var(--app-text);
   background: transparent;
 }
@@ -416,17 +414,46 @@
 
 .chat-work-history__body {
   --chat-work-history-item-gap: 8px;
+  /* 标题分隔线与第一项内容之间的距离。 */
+  --chat-work-history-lead-gap: 7px;
 
   display: grid;
   gap: var(--chat-work-history-item-gap);
   width: 100%;
   min-width: 0;
-  margin: 3px 0 0;
+  margin: 0;
   padding: 0;
   border: 0;
 }
 
-.chat-work-history__body > .chat-markdown {
+/* 可折叠明细作为首项时自己承担顶部间距，其余情况由正文容器提供。 */
+.chat-work-history__body:has(> :first-child:not(.chat-work-history__details)) {
+  padding-top: var(--chat-work-history-lead-gap);
+}
+
+/* 间距放进动画区域内：高度归零时 gap 一起收拢，卸载时不再跳动。 */
+.chat-work-history__details {
+  min-width: 0;
+  margin-top: calc(-1 * var(--chat-work-history-item-gap));
+}
+
+.chat-work-history__details:first-child {
+  margin-top: 0;
+}
+
+.chat-work-history__details-content {
+  display: grid;
+  gap: var(--chat-work-history-item-gap);
+  min-width: 0;
+  padding-top: var(--chat-work-history-item-gap);
+}
+
+.chat-work-history__details:first-child > .chat-work-history__details-content {
+  padding-top: var(--chat-work-history-lead-gap);
+}
+
+.chat-work-history__body > .chat-markdown,
+.chat-work-history__details-content > .chat-markdown {
   /* 相邻消息由 grid 留白；正文块只留底部间距，避免代码/表格的上下 margin 叠加。
      通过变量交给 Markdown 基础样式消费，不依赖两个样式文件的加载顺序。 */
   --chat-markdown-block-gap: var(--chat-work-history-item-gap);

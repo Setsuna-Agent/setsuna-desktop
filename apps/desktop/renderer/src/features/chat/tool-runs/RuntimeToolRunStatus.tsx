@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   Clock3,
   FileText,
+  MessageCircleQuestion,
   Search,
   ShieldAlert,
   SquareTerminal,
@@ -44,6 +45,7 @@ export function statusTextFromStatus(
     const title = summaryTitle.trim();
     return title.startsWith(t('toolRun.status.awaitingPrefix'))
       || title.startsWith(t('toolRun.approvalReview.pending'))
+      || title === t('toolRun.input.asking')
       ? ''
       : t('toolRun.status.confirm');
   }
@@ -84,7 +86,7 @@ export function mixedToolRunGroupIcon(status: RuntimeToolRun['status']) {
 }
 
 export function toolRunIcon(run: RuntimeToolRun) {
-  if (run.status === 'pending_approval') return <ShieldAlert size={14} />;
+  if (run.status === 'pending_approval') return run.userInput ? <MessageCircleQuestion size={14} /> : <ShieldAlert size={14} />;
   if (run.status === 'running') return <Clock3 size={14} />;
   if (run.status === 'error' || run.status === 'cancelled') return <XCircle size={14} />;
   if (run.status === 'rejected') return <AlertCircle size={14} />;

@@ -1,0 +1,181 @@
+/* Completed code review: summary markdown plus a compact list of findings. */
+.chat-review-summary-card {
+  display: grid;
+  gap: 10px;
+  width: min(760px, 100%);
+}
+
+.chat-review-summary-card__panel {
+  overflow: hidden;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-surface);
+}
+
+.chat-review-summary-card__header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 12px;
+  color: var(--app-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Rows sit on an inset list so hover reads as a rounded pill, not a full-bleed band. */
+.chat-review-summary-card__findings {
+  display: grid;
+  gap: 1px;
+  padding: 0 4px 4px;
+}
+
+.chat-review-summary-card__finding.sd-button,
+.chat-review-summary-card__finding {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  color: var(--app-text);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 400;
+  text-align: left;
+}
+
+.chat-review-summary-card__finding.sd-button:is(:hover, :focus-visible):not(:disabled) {
+  background: var(--desktop-agent-control-hover-bg);
+}
+
+.chat-review-summary-card__finding--static {
+  cursor: default;
+}
+
+.chat-review-summary-card__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-review-summary-card__location {
+  max-width: 180px;
+  overflow: hidden;
+  color: var(--app-text-subtle);
+  font-family: var(--app-code-font-family);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Priority chips share the review severity scale: P0/P1 urgent, P2 moderate, P3 minor. */
+.chat-review-summary-card__priority {
+  --chat-review-priority: var(--app-text-muted);
+  flex: 0 0 auto;
+  min-width: 22px;
+  padding: 0 5px;
+  border-radius: var(--app-radius-xs);
+  color: var(--chat-review-priority);
+  background: color-mix(in srgb, var(--chat-review-priority) 12%, transparent);
+  font-family: var(--app-code-font-family);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
+
+.chat-review-summary-card__priority:is([data-priority='P0'], [data-priority='P1']) {
+  --chat-review-priority: var(--app-danger);
+}
+
+.chat-review-summary-card__priority[data-priority='P2'] {
+  --chat-review-priority: var(--app-warning);
+}
+
+/* Hover detail: full title, location and the finding body. It opens below the row and
+   matches the row width so it reads as an expansion of the card, not a narrow tooltip. */
+.chat-review-finding-detail.sd-popover {
+  width: max(420px, var(--radix-hover-card-trigger-width, 0px));
+  max-width: calc(100vw - 16px);
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--app-radius-group);
+}
+
+/* The whole card scrolls edge to edge; padding lives on the content so the overlay
+   scrollbar sits on the card's right edge and never narrows the text column. */
+.chat-review-finding-detail__scroll-area {
+  position: relative;
+  display: flex;
+  max-height: min(380px, 55vh);
+}
+
+.chat-review-finding-detail__viewport {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.chat-review-finding-detail__viewport::-webkit-scrollbar {
+  display: none;
+}
+
+.chat-review-finding-detail__content {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 12px;
+}
+
+.chat-review-finding-detail__heading {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+
+.chat-review-finding-detail__heading strong {
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 19px;
+  overflow-wrap: anywhere;
+}
+
+.chat-review-finding-detail__heading .chat-review-summary-card__priority {
+  margin-top: 0.5px;
+}
+
+.chat-review-finding-detail__location {
+  overflow: hidden;
+  color: var(--app-text-muted);
+  font-family: var(--app-code-font-family);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-review-finding-detail__body {
+  padding-top: 8px;
+  border-top: 1px solid var(--app-border);
+}
+
+/* `.chat-markdown` pins its own size, line height and color to the chat transcript scale,
+   so the body must be sized on the markdown root itself: same 13px as the title, with
+   secondary color carrying the hierarchy instead of a smaller size. */
+.chat-review-finding-detail__body .chat-markdown {
+  --chat-markdown-block-gap: 0.6em;
+  color: var(--app-text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.chat-review-finding-detail__body .chat-markdown > :last-child {
+  margin-bottom: 0;
+}

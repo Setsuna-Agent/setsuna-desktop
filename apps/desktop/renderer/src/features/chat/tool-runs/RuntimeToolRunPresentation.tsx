@@ -743,6 +743,8 @@ export function fileMutationPathFromReason(value: string | undefined): string {
 }
 
 export function toolRunSummary(run: RuntimeToolRun, t: Translate = defaultTranslate): { title: string; target?: string } {
+  // 向用户提问复用审批通道，但不是权限请求，不能套用“等待授权”的文案。
+  if (run.userInput && run.status === 'pending_approval') return { title: t('toolRun.input.asking') };
   const search = shellSearchForRun(run);
   if (search?.kind === 'files') return { title: runningAware(run, t('toolRun.action.findFiles'), t('toolRun.action.findFilesDone'), t), target: search.target };
   if (search) return searchRunSummary(run, search.scope, search.query, t, search.paths.length > 1 ? search.scope : undefined);

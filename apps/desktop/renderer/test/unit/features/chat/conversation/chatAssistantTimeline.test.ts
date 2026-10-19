@@ -688,36 +688,6 @@ describe('createAssistantRunTimeline', () => {
     });
   });
 
-  it('merges adjacent tool-run items across assistant segment boundaries', () => {
-    const segments: RuntimeMessage[] = [
-      {
-        id: 'assistant_first',
-        role: 'assistant',
-        content: '',
-        createdAt: '2026-06-27T00:00:00.000Z',
-        status: 'complete',
-        toolRuns: [{ id: 'call_read', name: 'workspace_read_file', status: 'success' }],
-      },
-      {
-        id: 'assistant_second',
-        role: 'assistant',
-        content: '',
-        createdAt: '2026-06-27T00:00:01.000Z',
-        status: 'complete',
-        toolRuns: [{ id: 'call_search', name: 'workspace_search_text', status: 'success' }],
-      },
-    ];
-    const work = createAssistantRunTimeline(segments)[0];
-
-    if (work?.type !== 'work') throw new Error('expected a work block');
-    expect(work.items).toMatchObject([
-      {
-        type: 'toolRuns',
-        toolRuns: [{ id: 'call_read' }, { id: 'call_search' }],
-      },
-    ]);
-  });
-
   it('keeps final text that mentions completed tool targets', () => {
     const segments: RuntimeMessage[] = [
       {

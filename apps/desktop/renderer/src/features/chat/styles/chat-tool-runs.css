@@ -87,6 +87,43 @@ details.chat-tool-run > .chat-tool-run__summary:hover > .chat-tool-run__icon {
   color: var(--app-text);
 }
 
+/* 原生 details 的展开收起动画（参考 beUI Collapsible）：只过渡内容槽高度和透明度，
+   open 状态仍由 details 自己保存，流式更新不会改写用户的选择。 */
+details.chat-tool-run {
+  interpolate-size: allow-keywords;
+}
+
+details.chat-tool-run::details-content {
+  /* 将明细顶部 margin 留在动画高度内，避免 content-visibility 切换时再跳一次。 */
+  display: flow-root;
+  height: 0;
+  opacity: 0;
+  overflow: clip;
+  /* 给嵌套摘要的 -6px 偏移和焦点环留出余量。 */
+  overflow-clip-margin: 6px;
+  transition:
+    height 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 120ms cubic-bezier(0.16, 1, 0.3, 1),
+    content-visibility 200ms allow-discrete;
+}
+
+details.chat-tool-run[open]::details-content {
+  height: auto;
+  opacity: 1;
+  /* 展开保留原节奏；收起使用上面的短补间，避免接近零高度后继续拖尾。 */
+  transition:
+    height 300ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    content-visibility 300ms allow-discrete;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  details.chat-tool-run::details-content,
+  details.chat-tool-run[open]::details-content {
+    transition: none;
+  }
+}
+
 .chat-tool-run__chevron {
   flex: 0 0 auto;
   justify-self: start;
@@ -569,31 +606,15 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 /* Activity belongs to this row's summary, never its completed descendants. */
 .chat-tool-run--running:not([open]) > .chat-tool-run__summary > .chat-tool-run__summary-text > .chat-tool-run__title,
 .chat-tool-run--pending_approval:not([open]) > .chat-tool-run__summary > .chat-tool-run__summary-text > .chat-tool-run__title {
-  /* Derive from the row's title color so the sweep keeps state hues and works in both themes. */
-  --chat-tool-run-shimmer-highlight: color-mix(in srgb, var(--chat-tool-run-title-color) 45%, var(--app-bg));
-  color: transparent;
-  background: linear-gradient(
-    90deg,
-    var(--chat-tool-run-title-color) 0%,
-    var(--chat-tool-run-title-color) 42%,
-    var(--chat-tool-run-shimmer-highlight) 50%,
-    var(--chat-tool-run-title-color) 58%,
-    var(--chat-tool-run-title-color) 100%
-  );
-  background-size: 240% 100%;
+  /* 与思考状态共用扫光（loading-indicators.css）；高光取自标题的 currentColor，保留状态色。 */
+  background-image: var(--app-loading-shimmer-image);
+  background-position: 100% 0;
+  background-repeat: no-repeat;
+  background-size: var(--app-loading-shimmer-size);
   -webkit-background-clip: text;
   background-clip: text;
-  animation: chat-tool-run-text-shimmer 1.45s linear infinite;
-}
-
-@keyframes chat-tool-run-text-shimmer {
-  0% {
-    background-position: 100% 0;
-  }
-
-  100% {
-    background-position: -100% 0;
-  }
+  -webkit-text-fill-color: transparent;
+  animation: var(--app-loading-shimmer-animation);
 }
 
 .chat-tool-run__body {
@@ -930,19 +951,23 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
   background: var(--app-surface-muted);
 }
 
+/* Agent questions read like a compact dialog: neutral card, quiet status, footer with the actions. */
 .chat-tool-run__user-input {
   width: 100%;
-  gap: 12px;
-  padding: 14px;
-  border-color: color-mix(in srgb, var(--app-primary) 20%, var(--app-border));
+  gap: 14px;
+  padding: 16px 16px 14px;
+  border-color: var(--app-border);
   border-radius: var(--app-radius-lg);
   color: var(--app-text);
   background: var(--app-surface);
   box-shadow: var(--app-shadow-card);
 }
 
-.chat-tool-run--pending_approval:has(.chat-tool-run__user-input) .chat-tool-run__icon {
-  color: var(--app-primary);
+/* 提问不是权限审批：去掉警告色，与普通工具行同一灰度，等待状态只靠标题扫光提示。 */
+.chat-tool-run--pending_approval:has(.chat-tool-run__user-input) {
+  --chat-tool-run-icon-color: var(--app-text-secondary);
+  --chat-tool-run-title-color: var(--app-text-secondary);
+  color: var(--app-text-secondary);
 }
 
 .chat-tool-run__elicitation-header {
@@ -955,16 +980,14 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
 
 .chat-tool-run__user-input .chat-tool-run__elicitation-header strong {
   color: var(--app-text);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 600;
   line-height: 20px;
 }
 
 .chat-tool-run__user-input .chat-tool-run__elicitation-header > span {
-  padding: 2px 8px;
-  border-radius: var(--app-radius-full);
-  color: var(--app-primary);
-  background: var(--app-accent-soft);
+  color: var(--app-text-subtle);
+  font-variant-numeric: tabular-nums;
   line-height: 18px;
   white-space: nowrap;
 }
@@ -982,9 +1005,24 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
   white-space: pre-wrap;
 }
 
+.chat-tool-run__user-input-intro {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
 .chat-tool-run__user-input .chat-tool-run__elicitation-message {
+  color: var(--app-text-secondary);
   font-size: 13px;
   line-height: 20px;
+}
+
+.chat-tool-run__user-input .chat-tool-run__elicitation-fields {
+  gap: 14px;
+}
+
+.chat-tool-run__user-input .chat-tool-run__elicitation-field {
+  gap: 6px;
 }
 
 .chat-tool-run__elicitation-fields {
@@ -1005,7 +1043,7 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
 }
 
 .chat-tool-run__user-input .chat-tool-run__elicitation-field > label {
-  color: var(--app-text);
+  color: var(--app-text-secondary);
   font-weight: 500;
 }
 
@@ -1015,60 +1053,50 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
   font-style: normal;
 }
 
-.chat-tool-run__user-input .chat-tool-run__elicitation-field em {
-  color: var(--app-primary);
-}
-
-.chat-tool-run__elicitation-field input:not([type='checkbox']),
-.chat-tool-run__elicitation-field select:not(.sd-select-field__form-control),
-.chat-tool-run__elicitation-field textarea {
-  min-height: 30px;
-  padding: 4px 8px;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-xs);
-  color: var(--app-text);
-  background: var(--app-surface);
-  font: inherit;
-}
-
-.chat-tool-run__elicitation-field textarea {
+/* Inputs keep the shared .sd-field / .sd-textarea look; only the textarea gets a roomier default. */
+.chat-tool-run__elicitation-field > .sd-textarea {
   min-height: 76px;
-  resize: vertical;
+  max-height: 240px;
 }
 
+/* Multi-select renders as a settings-style group: one bordered block, rows split by dividers. */
 .chat-tool-run__elicitation-multi-select {
   display: grid;
-  gap: 2px;
   min-width: 0;
-  padding: 3px;
+  overflow: hidden;
   border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-xs);
+  border-radius: var(--app-radius-md);
   background: var(--app-surface);
 }
 
 .chat-tool-run__elicitation-multi-select-option {
   display: grid;
-  grid-template-columns: 15px minmax(0, 1fr);
+  grid-template-columns: 17px minmax(0, 1fr);
   align-items: start;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
-  min-height: 32px;
-  padding: 6px 7px;
-  border-radius: 4px;
+  min-height: 38px;
+  padding: 9px 12px;
+  box-sizing: border-box;
   color: var(--app-text);
+  cursor: pointer;
   transition: background 120ms ease;
 }
 
-.chat-tool-run__elicitation-multi-select-option:hover:not(.is-disabled) {
-  background: color-mix(in srgb, var(--app-text) 5%, transparent);
+.chat-tool-run__elicitation-multi-select-option + .chat-tool-run__elicitation-multi-select-option {
+  border-top: 1px solid var(--desktop-agent-subtle-divider);
 }
 
-.chat-tool-run__elicitation-multi-select-option.is-selected {
-  background: var(--app-accent-soft);
+.chat-tool-run__elicitation-multi-select-option:hover:not(.is-disabled) {
+  background: var(--app-surface-subtle);
+}
+
+.chat-tool-run__elicitation-multi-select-option.is-disabled {
+  cursor: default;
 }
 
 .chat-tool-run__elicitation-multi-select-option > .sd-checkbox__box {
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
 .chat-tool-run__elicitation-multi-select-copy {
@@ -1097,10 +1125,33 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
   font-size: 11px;
 }
 
+.chat-tool-run__user-input-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin: 2px -16px 0;
+  padding: 12px 16px 0;
+  border-top: 1px solid var(--desktop-agent-subtle-divider);
+}
+
+.chat-tool-run__user-input-footer > .chat-tool-run__actions {
+  margin-left: auto;
+}
+
 .chat-tool-run__user-input-note {
-  color: var(--app-text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--app-text-subtle);
   font-size: 11px;
-  line-height: 17px;
+  line-height: 16px;
+}
+
+.chat-tool-run__user-input-note > svg {
+  flex: 0 0 auto;
 }
 
 .chat-tool-run__actions button:not(.sd-button) {
