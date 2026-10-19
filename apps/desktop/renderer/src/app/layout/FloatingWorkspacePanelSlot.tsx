@@ -19,6 +19,7 @@ export function FloatingWorkspacePanelSlot({
         : 'desktop-floating-workspace-panel-slot'}
       hidden={hidden}
       data-keep-rendering={hidden && keepRenderingWhenHidden ? true : undefined}
+      data-workspace-panel-slot={placement}
     >
       {children}
     </div>

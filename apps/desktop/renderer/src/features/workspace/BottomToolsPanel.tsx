@@ -51,7 +51,7 @@ export function BottomToolsPanel({
   const { t } = useI18n();
 
   return (
-    <section className="bottom-panel" aria-label={t('workspace.bottom.tools')}>
+    <section className="bottom-panel" data-workspace-panel-slot="bottom" aria-label={t('workspace.bottom.tools')}>
       <ResizeHandle
         className="bottom-panel__resize-handle"
         type="button"
