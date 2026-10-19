@@ -15,8 +15,8 @@ export function BrowserClearDataDialog({ bridge, translate: t, ui, onClose }: Br
     <ui.Button disabled={busy} onClick={onClose}>{t('feature.browser.settings.cancel')}</ui.Button>
     <ui.Button variant="danger" disabled={busy || !Object.values(selection).some(Boolean)} onClick={() => void clear()}>{t('feature.browser.settings.clear')}</ui.Button>
   </>}>
-    <div className="browser-settings__form">{(['history', 'cookies', 'cache', 'siteStorage', 'passwords'] as const).map((key) =>
-      <ui.Checkbox key={key} checked={Boolean(selection[key])} disabled={busy} onChange={(checked) => setSelection({ ...selection, [key]: checked })}>{t(`feature.browser.settings.${key}`)}</ui.Checkbox>)}</div>
+    <div className="browser-settings-editor__group">{(['history', 'cookies', 'cache', 'siteStorage', 'passwords'] as const).map((key) =>
+      <ui.Checkbox key={key} className="browser-settings-editor__row" checked={Boolean(selection[key])} disabled={busy} onChange={(checked) => setSelection({ ...selection, [key]: checked })}>{t(`feature.browser.settings.${key}`)}</ui.Checkbox>)}</div>
     {error ? <ui.Toast tone="error" message={t('feature.browser.settings.failed')} /> : null}
   </ui.Dialog>;
 }

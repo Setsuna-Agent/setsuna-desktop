@@ -46,7 +46,7 @@
 }
 
 .sd-menu__item[data-disabled] {
-  opacity: 0.4;
+  opacity: var(--app-disabled-opacity);
   pointer-events: none;
 }
 

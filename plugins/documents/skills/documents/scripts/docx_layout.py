@@ -33,6 +33,15 @@ class DocumentPreset:
     table_cell_margin_dxa: int
 
 
+# Match the desktop's shared vivid palette; OOXML colors omit the leading '#'.
+ACCENT_COLORS = {
+    "blue": "0385FF",
+    "purple": "924FF7",
+    "green": "12B84C",
+    "orange": "FB6A22",
+}
+
+
 PRESETS: dict[str, DocumentPreset] = {
     "business": DocumentPreset(
         name="business",
@@ -46,11 +55,11 @@ PRESETS: dict[str, DocumentPreset] = {
         title_size_pt=25,
         subtitle_size_pt=12,
         heading_sizes_pt=(16, 13, 11),
-        accent="315E7D",
+        accent=ACCENT_COLORS["blue"],
         text="1F2933",
         muted="647383",
-        table_header_fill="315E7D",
-        callout_fill="EAF2F7",
+        table_header_fill=ACCENT_COLORS["blue"],
+        callout_fill="EEF6FF",
         table_cell_margin_dxa=120,
     ),
     "compact": DocumentPreset(
@@ -65,11 +74,11 @@ PRESETS: dict[str, DocumentPreset] = {
         title_size_pt=22,
         subtitle_size_pt=10.5,
         heading_sizes_pt=(14, 12, 10.5),
-        accent="4F5D75",
+        accent=ACCENT_COLORS["purple"],
         text="202833",
         muted="697386",
-        table_header_fill="4F5D75",
-        callout_fill="EEF0F4",
+        table_header_fill=ACCENT_COLORS["purple"],
+        callout_fill="F4EDFF",
         table_cell_margin_dxa=90,
     ),
 }

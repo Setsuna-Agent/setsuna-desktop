@@ -1,12 +1,14 @@
-[data-storage-category="conversations"] { --storage-color: #ffbd00; }
-[data-storage-category="attachments_images"] { --storage-color: #f4510b; }
-[data-storage-category="projects_capabilities"] { --storage-color: #16a43e; }
-[data-storage-category="memories"] { --storage-color: #9255ed; }
-[data-storage-category="runtime_dependencies"] { --storage-color: #5687da; }
-[data-storage-category="cache"] { --storage-color: #26a99a; }
-[data-storage-category="settings_credentials"] { --storage-color: #d2769b; }
-[data-storage-category="desktop_browser"] { --storage-color: #858585; }
-[data-storage-category="logs"] { --storage-color: #abb1b8; }
+/* System-style hues for user content; infrastructure categories use a gray ramp (no greens).
+   Mid-tone values keep enough contrast on both light and dark surfaces. */
+[data-storage-category="conversations"] { --storage-color: #0a84ff; }
+[data-storage-category="settings_credentials"] { --storage-color: #ff375f; }
+[data-storage-category="projects_capabilities"] { --storage-color: #636366; }
+[data-storage-category="memories"] { --storage-color: #bf5af2; }
+[data-storage-category="attachments_images"] { --storage-color: #ff9f0a; }
+[data-storage-category="runtime_dependencies"] { --storage-color: #5e5ce6; }
+[data-storage-category="desktop_browser"] { --storage-color: #8e8e93; }
+[data-storage-category="cache"] { --storage-color: #aeaeb2; }
+[data-storage-category="logs"] { --storage-color: #c7c7cc; }
 
 .storage-page {
   font-size: 13px;
@@ -96,35 +98,6 @@
   font-size: 12px;
   line-height: 18px;
   overflow-wrap: anywhere;
-}
-
-.storage-actions {
-  padding: 0 16px;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-xl);
-}
-
-.storage-actions__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  min-height: 62px;
-}
-
-.storage-action.sd-button {
-  min-height: 28px;
-  padding: 4px 12px;
-  border: 0;
-  border-radius: 10px;
-  background: var(--app-surface-muted);
-  box-shadow: none;
-  font-size: 12px;
-  font-weight: 400;
-}
-
-.storage-action.sd-button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--app-text) 8%, var(--app-surface));
 }
 
 .storage-review-dialog {

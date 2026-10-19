@@ -20,7 +20,7 @@ export function BrowserLinkSettings({ config, onSave }: {
     <SettingsGroup title={t('settings.general.links')}>
       <SettingsRow icon={<Globe2 size={14} />} label={t('settings.general.markdownLinks')}>
         <SelectField
-          className="sd-settings-select--compact"
+          className="sd-settings-control--compact"
           aria-label={t('settings.general.markdownLinksMode')}
           disabled={!config}
           value={markdownLinkOpenModeFromConfig(config)}

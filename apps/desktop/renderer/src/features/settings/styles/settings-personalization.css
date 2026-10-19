@@ -65,14 +65,6 @@
   pointer-events: none;
 }
 
-.desktop-settings-panel .chat-user-settings__local-action-row .sd-button {
-  justify-self: end;
-}
-
-.desktop-settings-panel .sd-settings-navigation-row__action .sd-button__icon {
-  order: 2;
-}
-
 .desktop-settings-panel .chat-user-settings__local-storage-control {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

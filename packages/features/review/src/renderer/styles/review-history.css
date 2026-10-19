@@ -488,7 +488,7 @@ button.git-history-section-heading { cursor: pointer; }
   line-height: 16px;
 }
 
-.git-history-ref.is-remote { --git-ref-color: var(--desktop-git-graph-teal); }
+.git-history-ref.is-remote { --git-ref-color: var(--desktop-git-graph-green); }
 .git-history-ref.is-tag { --git-ref-color: var(--desktop-git-graph-purple); }
 .git-history-ref:hover { background: color-mix(in srgb, var(--git-ref-color) 15%, var(--git-surface)); }
 .git-history-ref span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

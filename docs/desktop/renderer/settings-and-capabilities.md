@@ -17,6 +17,8 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 
 二级管理页面使用 `SettingsViewUi.PageLayout`（宿主实现为 `shared/ui/SettingsPageLayout.tsx`），统一设置面包屑、返回动作、标题和 720px 内容宽度。浏览器的管理页与「个性化 → 记忆预览」共用此布局。父页面标题置于 `SettingsSectionExtensionOutlet` 的默认内容内，进入扩展子页时一同替换，避免同时显示父、子两套标题。业务 Feature 继续持有列表、编辑表单与操作状态。
 
+宿主切换设置分区时将所属滚动容器归零；`PageLayout` 在页面就绪、进入或返回管理子页时同样重置这个容器，保留其顶部留白。初始化不对内容节点调用 `scrollIntoView`，避免把留白滚出视口或牵动外层页面；同一页面的数据刷新不重置用户的阅读位置。
+
 `SettingsPage.tsx` 负责宿主 section 导航和数据/回调分发，并消费 `renderer.settings.page` keyed Slot 与当前 page 拥有的 `renderer.settings.page.extensions` Slot。页面 metadata 和 renderer 来自同一 contribution，导航不再维护第二份 Feature catalog。具体宿主内容位于：
 
 - `sections/`
@@ -107,21 +109,22 @@ Review Feature 在“专用模型”中分别贡献“代码审查”和“提�
 Usage 是独立纵向 Feature，源码位于 `packages/features/usage/`。renderer setup 通过
 Usage 的 Renderer Feature 注册完整的“用量分析” Settings page entry，并归入宿主“模型与服务”导航组。
 `SettingsPage` 只渲染当前 Slot winner，不接收 usage 数据或 query callback。
-Usage 声明 view-owned page heading，把时段筛选作为 `ui.PageHeading` 的 action 渲染在标题右侧。
+Usage 声明 view-owned page heading，把「时段 / 厂商 / 模型」三个 `ui.SelectField` 筛选框作为 `ui.PageHeading` 的 action 渲染在标题右侧。
 
 Feature 自己负责：
 
-- Summary metrics。
-- Provider/model breakdown。
-- Activity calendar。
-- Recent calls。
+- 总览主视觉：当前时段 Token 主数字、Token 构成条，以及近 30 天每日走势。
+- Provider/model 分布：前 5 项加“其他”合并，堆叠条分段之和等于时段总量。
+- 年度 Activity calendar 及活跃天数、最长连续、活跃日均等年度统计。
+- 调用明细。
 - Provider/model branding 的语义输入；宿主通过 `usage.renderer-host` 注入实际图标与 Tooltip。
-- 全部时间、当天、滚动 24h/7d/30d 与分钟级自定义时间范围。
+- 全部时间、今天、滚动 4h/24h/7d/30d 时段，可与厂商、模型筛选组合；厂商/模型选项取自未筛选快照的分桶 key。
 - 最近调用明细按 10 条分页，翻页通过 usage query 的 `limit`/`offset` 按需读取。
 
-时间范围通过 Feature contract 中的 `RuntimeUsageQuery.from/to` 传给 runtime，按 `[from, to)` 过滤后再统一聚合；
-renderer 只负责范围选择与展示，不重新计算计费真源。年度 Activity calendar 始终使用未筛选的
-全局过去一年数据，避免短区间筛选把长期趋势图压缩成少量格子。
+筛选通过 Feature contract 中的 `RuntimeUsageQuery.from/to/provider/model` 传给 runtime：时间按 `[from, to)`，
+厂商/模型按与 `byProvider`/`byModel` 相同的分桶 key（含旧记录修正后的厂商名）过滤后再统一聚合；
+renderer 只负责范围选择与展示，不重新计算计费真源。近 30 天走势与年度 Activity calendar 始终使用未筛选的
+全局数据，避免短区间筛选把长期趋势图压缩成少量格子。所有图表只用强调色的明度梯度，跟随用户强调色与深浅主题。
 
 会话概览中的 Token/调用数也由 Usage Feature 的线程 controller 投影。它以持久化记录为基线，
 在 turn 运行或结算交接期间只补齐 thread 事件中的实时 token count，不再经过 App 级 `threadUsage` prop 链。

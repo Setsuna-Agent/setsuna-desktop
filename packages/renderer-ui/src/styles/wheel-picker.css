@@ -17,12 +17,12 @@
 }
 
 .sd-wheel-picker:focus-visible {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--app-primary) 45%, transparent);
+  box-shadow: 0 0 0 2px var(--app-focus-outline);
 }
 
 .sd-wheel-picker.is-disabled {
   cursor: default;
-  opacity: 0.5;
+  opacity: var(--app-disabled-opacity);
 }
 
 .sd-wheel-picker:not(.is-disabled):active {

@@ -39,8 +39,8 @@ export const testSettingsViewUi: SettingsViewUi = Object.freeze({
   EmptyState: ({ action, body, title }) => <div><strong>{title}</strong>{body}{action}</div>,
   Group: ({ children }) => <section>{children}</section>,
   IconButton,
-  NavigationRow: ({ actionLabel, disabled, label, onClick }) => (
-    <button disabled={disabled} onClick={onClick}>{label}{actionLabel}</button>
+  NavigationRow: ({ disabled, label, onClick }) => (
+    <button disabled={disabled} onClick={onClick}>{label}</button>
   ),
   PageHeading: ({ action, description, title }) => (
     <header><h1>{title}</h1>{description}{action}</header>

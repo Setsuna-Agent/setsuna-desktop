@@ -32,17 +32,29 @@
 .automation-starter__suggestions { display: flex; flex-direction: column; gap: 6px; width: min(560px, 100%); }
 .automation-starter__suggestion.sd-button { justify-content: flex-start; gap: 10px; width: 100%; padding: 8px 10px; border-radius: var(--app-radius-control); font-weight: 400; text-align: left; white-space: normal; }
 .automation-loading { display: grid; place-content: center; color: var(--app-text-muted); font-size: 13px; }
-.automation-form { display: flex; flex-direction: column; gap: 16px; }
-.automation-form :is(.sd-field, .automation-time-picker) { border-radius: var(--app-radius-control); }
-.automation-form .sd-textarea { border-radius: var(--app-radius-xl); }
-.automation-form__field { display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
-.automation-form__row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 44px; font-size: 13px; }
-.automation-form__row > .sd-field { width: min(300px, 60%); }
-.automation-form__days { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; }
-.automation-form__advanced summary { display: flex; align-items: center; gap: 6px; width: fit-content; padding: 8px 0; cursor: pointer; list-style: none; color: var(--app-text-muted); font-size: 13px; }
+/* Task editor: stacked text fields above settings-style row groups, matching the project editor dialog. */
+.automation-form { --automation-form-control-width: 220px; display: grid; gap: 18px; }
+.automation-form__field { display: grid; gap: 7px; min-width: 0; }
+.automation-form__field > span { color: var(--app-text-secondary); font-size: 12px; font-weight: 500; }
+.automation-form__field > .sd-field { min-height: 36px; }
+.automation-form__field > .sd-textarea { min-height: 96px; max-height: 240px; border-radius: var(--app-radius-lg); }
+.automation-form__group { overflow: hidden; border: 1px solid var(--desktop-agent-subtle-divider); border-radius: var(--app-radius-lg); background: var(--app-surface-subtle); }
+.automation-form__group > * + * { border-top: 1px solid var(--desktop-agent-subtle-divider); }
+.automation-form__row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 48px; padding: 6px 12px; box-sizing: border-box; color: var(--app-text); font-size: 13px; }
+.automation-form__row > span { min-width: 0; }
+/* Fields, the time trigger and the model picker share one column width so the right edge lines up. */
+.automation-form__row > :is(.sd-field, .automation-time-picker) { flex: 0 0 auto; width: min(var(--automation-form-control-width), 60%); }
+.automation-form__row > .automation-time-picker { min-height: var(--app-control-height); padding: 6px 10px; border-color: var(--app-border); border-radius: var(--app-radius-sm); font-size: 13px; }
+.automation-form__days { display: flex; gap: 6px; padding: 10px 12px; }
+.automation-form__day.sd-button { flex: 1; min-width: 0; padding-inline: 0; font-weight: 400; }
+.automation-form__day.sd-button[aria-pressed='true'] { border-color: var(--app-primary); color: var(--app-primary); background: color-mix(in srgb, var(--app-primary) 8%, var(--app-surface)); }
+.automation-form__advanced { display: grid; gap: 10px; }
+.automation-form__advanced summary { display: flex; align-items: center; gap: 6px; width: fit-content; cursor: pointer; list-style: none; color: var(--app-text-secondary); font-size: 12px; font-weight: 500; }
+.automation-form__advanced summary:hover { color: var(--app-text); }
 .automation-form__advanced summary::-webkit-details-marker { display: none; }
+.automation-form__advanced summary > svg { transition: transform 140ms ease; }
 .automation-form__advanced[open] summary > svg { transform: rotate(90deg); }
-.automation-form__advanced > .automation-form__row { margin-top: 8px; }
+.automation-form__error { margin: 0; padding: 9px 10px; border-radius: var(--app-radius-sm); color: var(--app-danger); background: color-mix(in srgb, var(--app-danger) 7%, transparent); font-size: 12px; line-height: 18px; }
 .automation-error { color: var(--app-danger); font-size: 13px; padding: 8px 16px; }
 .automation-result-card { display: flex; align-items: center; gap: 12px; padding: 14px; border: 1px solid var(--app-border); border-radius: var(--app-radius-group); margin: 12px 0; }
 .automation-result-card__icon { display: grid; place-content: center; width: 38px; height: 38px; border-radius: 10px; background: var(--desktop-agent-sidebar-hover-bg); color: var(--app-text-muted); }

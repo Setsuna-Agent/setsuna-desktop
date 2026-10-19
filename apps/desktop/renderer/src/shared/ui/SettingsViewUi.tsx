@@ -228,28 +228,21 @@ export function SettingsToggle({
   );
 }
 
+/** The whole row is the hit target for opening a subpage; the trailing chevron is its only affordance. */
 export function SettingsNavigationRow({
-  actionLabel,
   disabled = false,
   icon,
   label,
   onClick,
 }: SettingsNavigationRowProps) {
   return (
-    <div className="chat-user-settings__row chat-user-settings__local-action-row sd-settings-navigation-row">
+    <button type="button" className="chat-user-settings__row sd-settings-row sd-settings-navigation-row" disabled={disabled} onClick={onClick}>
       <span className="chat-user-settings__row-label sd-settings-row__label">
         {icon}
         <span>{label}</span>
       </span>
-      <Button
-        className="sd-settings-navigation-row__action"
-        disabled={disabled}
-        icon={<ChevronRight size={14} />}
-        onClick={onClick}
-      >
-        {actionLabel}
-      </Button>
-    </div>
+      <ChevronRight className="sd-settings-navigation-row__chevron" size={16} aria-hidden="true" />
+    </button>
   );
 }
 

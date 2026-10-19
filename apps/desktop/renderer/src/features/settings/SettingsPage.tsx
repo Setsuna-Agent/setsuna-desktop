@@ -12,7 +12,7 @@ import {
 import {
   Puzzle,
 } from 'lucide-react';
-import { startTransition, Suspense, useCallback, useState } from 'react';
+import { startTransition, Suspense, useCallback, useLayoutEffect, useRef, useState } from 'react';
 import {
   RendererOwnedKeyedSlot,
   useRendererOwnedKeyedEntries,
@@ -90,6 +90,10 @@ export function SettingsPage({
   const selectedPage = pages.find((entry) => entry.metadata.sectionId === activeSection)
     ?? pages.find((entry) => entry.metadata.sectionId === 'general');
   const resolvedSection = selectedPage?.metadata.sectionId ?? 'general';
+  const scrollContainer = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    if (scrollContainer.current) scrollContainer.current.scrollTop = 0;
+  }, [resolvedSection]);
   const translateFeature: RendererTranslate = t;
 
   const defaultContent = resolvedSection === 'general' ? (
@@ -155,6 +159,8 @@ export function SettingsPage({
       />
       <main className="desktop-settings-panel">
         <section
+          ref={scrollContainer}
+          data-settings-scroll-container=""
           className={`chat-user-settings__content ${
             selectedPage?.metadata.layout === 'wide' ? 'chat-user-settings__content--wide' : ''
           }`}

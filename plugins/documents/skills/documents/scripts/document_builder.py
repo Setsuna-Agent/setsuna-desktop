@@ -12,6 +12,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Inches, Pt, RGBColor
 
 from docx_layout import (
+    ACCENT_COLORS,
     DocumentPreset,
     apply_run_font,
     configure_new_document,
@@ -30,9 +31,9 @@ from docx_layout import (
 
 
 CALLOUT_TONES = {
-    "info": ("EAF2F7", "315E7D"),
-    "success": ("EAF5EF", "2F7A55"),
-    "warning": ("FFF4DF", "B46B12"),
+    "info": ("EEF6FF", ACCENT_COLORS["blue"]),
+    "success": ("EDF9F1", ACCENT_COLORS["green"]),
+    "warning": ("FFF3EB", ACCENT_COLORS["orange"]),
     "neutral": ("F1F3F5", "66717E"),
 }
 

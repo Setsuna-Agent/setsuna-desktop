@@ -1,5 +1,5 @@
 .desktop-plugin-icon {
-  --desktop-plugin-icon-color: #7656d6;
+  --desktop-plugin-icon-color: var(--sd-palette-purple);
 
   position: relative;
   display: inline-flex;
@@ -121,7 +121,7 @@
 }
 
 .desktop-plugin-icon[data-plugin-icon='context7'] {
-  --desktop-plugin-icon-color: #0d9b72;
+  --desktop-plugin-icon-color: var(--sd-palette-green);
 }
 
 .desktop-plugin-icon[data-plugin-icon='openai-docs'] {
@@ -129,67 +129,63 @@
 }
 
 .desktop-plugin-icon[data-plugin-icon='pdf'] {
-  --desktop-plugin-icon-color: #e34856;
+  --desktop-plugin-icon-color: var(--sd-palette-red);
 }
 
 .desktop-plugin-icon[data-plugin-icon='documents'] {
-  --desktop-plugin-icon-color: #3376c5;
+  --desktop-plugin-icon-color: var(--sd-palette-blue);
 }
 
 .desktop-plugin-icon[data-plugin-icon='image-generation'] {
-  --desktop-plugin-icon-color: #a14ed0;
+  --desktop-plugin-icon-color: var(--sd-palette-purple);
 }
 
 .desktop-plugin-icon[data-plugin-icon='vision-recognition'] {
-  --desktop-plugin-icon-color: #5268d8;
+  --desktop-plugin-icon-color: var(--sd-palette-blue);
 }
 
 .desktop-plugin-icon[data-plugin-icon='web-search'] {
-  --desktop-plugin-icon-color: #168da1;
+  --desktop-plugin-icon-color: var(--sd-palette-blue);
 }
 
 .desktop-plugin-icon[data-plugin-icon='guard-dangerous-shell'] {
-  --desktop-plugin-icon-color: #d94f55;
+  --desktop-plugin-icon-color: var(--sd-palette-red);
 }
 
 .desktop-plugin-icon[data-plugin-icon='protect-secret-paths'] {
-  --desktop-plugin-icon-color: #c98618;
+  --desktop-plugin-icon-color: var(--sd-palette-yellow);
 }
 
 .desktop-plugin-icon[data-plugin-icon='protect-generated-folders'] {
-  --desktop-plugin-icon-color: #687b96;
+  --desktop-plugin-icon-color: var(--sd-palette-blue);
 }
 
 .desktop-plugin-icon[data-plugin-icon='audit-file-mutations'] {
-  --desktop-plugin-icon-color: #168da1;
+  --desktop-plugin-icon-color: var(--sd-palette-blue);
 }
 
 .desktop-plugin-icon[data-plugin-icon='session-start-project-guidance'] {
-  --desktop-plugin-icon-color: #5268d8;
+  --desktop-plugin-icon-color: var(--sd-palette-blue);
 }
 
 .desktop-plugin-icon[data-plugin-icon='prompt-secret-detector'] {
-  --desktop-plugin-icon-color: #c54c87;
+  --desktop-plugin-icon-color: var(--sd-palette-pink);
 }
 
 .desktop-plugin-icon[data-plugin-icon='compact-warning'] {
-  --desktop-plugin-icon-color: #259589;
+  --desktop-plugin-icon-color: var(--sd-palette-green);
 }
 
 .desktop-plugin-icon[data-plugin-icon='stop-todo-continuation'] {
-  --desktop-plugin-icon-color: #dc6d32;
-}
-
-.desktop-plugin-icon[data-plugin-icon='question'] {
-  --desktop-plugin-icon-color: #7b5bd6;
+  --desktop-plugin-icon-color: var(--sd-palette-orange);
 }
 
 .desktop-plugin-icon[data-plugin-icon='todo'] {
-  --desktop-plugin-icon-color: #318b68;
+  --desktop-plugin-icon-color: var(--sd-palette-green);
 }
 
 .desktop-plugin-icon[data-plugin-icon='claude-rules'] {
-  --desktop-plugin-icon-color: #c16b2f;
+  --desktop-plugin-icon-color: var(--sd-palette-orange);
 }
 
 :root[data-theme='dark'] .desktop-plugin-icon__brand {
@@ -197,7 +193,7 @@
 }
 
 .desktop-skill-icon {
-  --desktop-skill-icon-color: #7b5bd6;
+  --desktop-skill-icon-color: var(--sd-palette-purple);
 
   position: relative;
   display: inline-flex;

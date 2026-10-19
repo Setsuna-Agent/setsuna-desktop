@@ -6,7 +6,8 @@
 .app-blank-surface {
   width: 100%;
   height: 100%;
-  background: #F7F7F7;
+  /* 与 .app-shell 的不透明基底一致，主题已在首帧前解析，暗色下不再闪浅底。 */
+  background: var(--app-sidebar-bg);
 }
 
 .app-route-loading {

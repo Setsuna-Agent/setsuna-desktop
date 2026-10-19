@@ -88,6 +88,10 @@ export type SettingsSelectFieldProps = Readonly<{
   className?: string;
   disabled?: boolean;
   id?: string;
+  /** Horizontal edge of the trigger the popup lines up with; it always opens below. */
+  menuAlign?: 'start' | 'end';
+  /** Minimum popup width in px; the menu never renders narrower than its trigger. */
+  menuMinWidth?: number;
   name?: string;
   onValueChange(value: string): boolean | void;
   renderOptionIcon?(value: string): ReactNode;
@@ -158,7 +162,6 @@ export type CheckboxProps = Omit<
 }>;
 
 export type SettingsNavigationRowProps = Readonly<{
-  actionLabel: ReactNode;
   disabled?: boolean;
   icon?: ReactNode;
   label: ReactNode;

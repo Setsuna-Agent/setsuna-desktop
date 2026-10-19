@@ -232,10 +232,16 @@
   }
 
   .desktop-settings-panel .chat-user-settings__content {
-    padding: 28px 18px 56px;
+    --settings-content-padding-top: 28px;
+    --settings-content-padding-inline: 18px;
+
+    padding: var(--settings-content-padding-top) var(--settings-content-padding-inline) 56px;
   }
 
   .desktop-settings-panel .chat-user-settings__content--wide {
+    --settings-content-padding-top: 0px;
+    --settings-content-padding-inline: 0px;
+
     padding: 0;
   }
 
@@ -244,6 +250,11 @@
     gap: 8px;
     padding-top: 10px;
     padding-bottom: 10px;
+  }
+
+  /* Navigation rows only carry a chevron, so keep it on the label line. */
+  .desktop-settings-panel .chat-user-settings__row.sd-settings-navigation-row {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .desktop-settings-panel .chat-user-settings__runtime-policy-row {

@@ -4,11 +4,11 @@ export const GIT_GRAPH_ROW_HEIGHT = 28;
 export const GIT_GRAPH_LANE_WIDTH = 12;
 const COLORS = [
   'var(--desktop-git-graph-blue)',
-  'var(--desktop-git-graph-teal)',
+  'var(--desktop-git-graph-green)',
   'var(--desktop-git-graph-purple)',
-  'var(--desktop-git-graph-cyan)',
-  'var(--desktop-git-graph-indigo)',
-  'var(--desktop-git-graph-rose)',
+  'var(--desktop-git-graph-orange)',
+  'var(--desktop-git-graph-pink)',
+  'var(--desktop-git-graph-red)',
 ];
 type Lane = { oid: string; color: string };
 export type GitGraphEdge = { from: number; to: number; start: number; end: number; color: string };

@@ -4,6 +4,7 @@ import { BROWSER_PERMISSIONS, type BrowserPreferences, type BrowserPermissionPol
 import type { BrowserSettingsContentProps } from './types.js';
 import { useBrowserPreferences } from './useBrowserPreferences.js';
 import { BrowserSettingsSearch } from './BrowserSettingsSearch.js';
+import { BrowserSettingsEditor, BrowserSettingsField } from './BrowserSettingsEditor.js';
 
 export function BrowserSitePermissions({ bridge, translate: t, ui }: BrowserSettingsContentProps) {
   const { preferences, update, busy, error, ready } = useBrowserPreferences(bridge);
@@ -21,18 +22,18 @@ export function BrowserSitePermissions({ bridge, translate: t, ui }: BrowserSett
   };
   const sites = Object.entries(preferences.sitePermissions).filter(([origin]) => origin.toLowerCase().includes(query.trim().toLowerCase()));
   return <div className="browser-settings-collection">
-    {editor ? <form className="browser-settings__form browser-settings-page__card browser-settings-page__form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
-      <h2>{t(editor.existing ? 'feature.browser.settings.edit' : 'feature.browser.settings.add')}</h2>
-      <label>{t('feature.browser.settings.origin')}<ui.TextField type="url" required readOnly={editor.existing} value={editor.origin} onChange={(event) => { setInvalid(false); setEditor({ ...editor, origin: event.target.value }); }} /></label>
-      {BROWSER_PERMISSIONS.map((permission) => <ui.Row key={permission} label={t(`feature.browser.settings.${permission}`)}>
-        <ui.SelectField className="sd-settings-select--compact" aria-label={t(`feature.browser.settings.${permission}`)} disabled={busy} value={editor.rules[permission] ?? 'inherit'} onValueChange={(value) => {
+    {editor ? <BrowserSettingsEditor title={t(editor.existing ? 'feature.browser.settings.edit' : 'feature.browser.settings.add')} busy={busy} translate={t} ui={ui}
+      onCancel={() => setEditor(null)} onSubmit={() => void save()}>
+      <BrowserSettingsField label={t('feature.browser.settings.origin')}><ui.TextField type="url" required readOnly={editor.existing} value={editor.origin} onChange={(event) => { setInvalid(false); setEditor({ ...editor, origin: event.target.value }); }} /></BrowserSettingsField>
+      <div className="browser-settings-editor__group">{BROWSER_PERMISSIONS.map((permission) => <div key={permission} className="browser-settings-editor__row">
+        <span>{t(`feature.browser.settings.${permission}`)}</span>
+        <ui.SelectField className="sd-settings-control--compact" aria-label={t(`feature.browser.settings.${permission}`)} disabled={busy} value={editor.rules[permission] ?? 'inherit'} onValueChange={(value) => {
           const rules = { ...editor.rules };
           if (value === 'inherit') delete rules[permission]; else rules[permission] = value as BrowserPermissionPolicy;
           setEditor({ ...editor, rules });
         }}><option value="inherit">{t('feature.browser.settings.inherit')}</option>{(['ask', 'allow', 'block'] as const).map((value) => <option key={value} value={value}>{t(`feature.browser.settings.${value}`)}</option>)}</ui.SelectField>
-      </ui.Row>)}
-      <div className="browser-settings__actions"><ui.Button disabled={busy} onClick={() => setEditor(null)}>{t('feature.browser.settings.cancel')}</ui.Button><ui.Button variant="primary" disabled={busy} type="submit">{t('feature.browser.settings.save')}</ui.Button></div>
-    </form> : <>
+      </div>)}</div>
+    </BrowserSettingsEditor> : <>
       <BrowserSettingsSearch label={t('feature.browser.settings.search')} value={query} onChange={setQuery} />
       <div className="browser-settings-page__toolbar"><div className="browser-settings-page__actions"><ui.Button icon={<Plus size={14} />} disabled={busy || !ready} onClick={() => { setInvalid(false); setEditor({ origin: '', rules: {}, existing: false }); }}>{t('feature.browser.settings.add')}</ui.Button></div></div>
       <div className="browser-settings-page__card">{sites.length ? <ul className="browser-settings-page__list">{sites.map(([origin, rules]) => <li key={origin}><span className="browser-settings__entry">{origin}</span>

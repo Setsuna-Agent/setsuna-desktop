@@ -267,7 +267,7 @@
 }
 
 .sd-checkbox.is-disabled {
-  opacity: 0.5;
+  opacity: var(--app-disabled-opacity);
 }
 
 .sd-checkbox__box {

@@ -1,5 +1,7 @@
-.chat-loading-text {
-  background-image: linear-gradient(
+/* 进行中状态的统一扫光：思考、工具运行、时间线分隔共用同一高光与节奏。
+   未注册的自定义属性在使用处展开，currentColor 会按各自状态色（警告、错误）解析。 */
+:root {
+  --app-loading-shimmer-image: linear-gradient(
     90deg,
     currentColor 0%,
     currentColor 44%,
@@ -7,14 +9,20 @@
     currentColor 56%,
     currentColor 100%
   );
+  --app-loading-shimmer-size: 300% 100%;
+  /* 每轮先用 1.6s 扫过，再停留 3.5s，避免连续扫光显得忙乱。 */
+  --app-loading-shimmer-animation: chat-loading-text-shimmer 5.1s linear infinite;
+}
+
+.chat-loading-text {
+  background-image: var(--app-loading-shimmer-image);
   background-position: 100% 0;
   background-repeat: no-repeat;
-  background-size: 300% 100%;
+  background-size: var(--app-loading-shimmer-size);
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  /* 每轮先用 1.6s 扫过，再停留 3.5s，避免连续扫光显得忙乱。 */
-  animation: chat-loading-text-shimmer 5.1s linear infinite;
+  animation: var(--app-loading-shimmer-animation);
 }
 
 @keyframes chat-loading-text-shimmer {
