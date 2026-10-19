@@ -36,7 +36,7 @@ describe('UsageSettings', () => {
 
     expect((await screen.findAllByText('100')).length).toBeGreaterThan(0);
     const heading = screen.getByRole('heading', { name: '用量分析' });
-    expect(heading.closest('header')?.contains(screen.getByRole('button', { name: '7d' }))).toBe(true);
+    expect(heading.closest('header')?.contains(screen.getByRole('combobox', { name: '统计时段' }))).toBe(true);
     totalTokens = 200;
     act(() => service.invalidate('thread-1'));
 
@@ -44,16 +44,16 @@ describe('UsageSettings', () => {
     expect((await screen.findAllByText('200')).length).toBeGreaterThan(0);
   });
 
-  it('filters summary data while keeping the annual calendar global', async () => {
+  it('combines time, provider and model filters while keeping the annual calendar global', async () => {
     const user = userEvent.setup();
     const query = vi.fn(async (input: RuntimeUsageQuery = {}) => ({
       providers: [],
-      usage: input.from
+      usage: Object.keys(input).length
         ? usageResponse(42)
-        : usageResponse(100, [usageDay(localDateKey(new Date()), 100)]),
+        : usageResponse(100, [usageDay(localDateKey(new Date()), 100)], [], [usageDay('Provider A', 100)], [usageDay('model-a', 100)]),
     }));
     const service = usageService(query);
-    const { container } = render(
+    render(
       <UsageSettingsView
         host={{ BrandIcon: () => null, Tooltip: usageTestUi.Tooltip }}
         service={service}
@@ -62,61 +62,68 @@ describe('UsageSettings', () => {
       />,
     );
 
-    expect(await screen.findByText('1 个活跃日')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: '7d' }));
+    // 年度活跃统计基于全量数据：切换短时段后仍保持“1 天”活跃。
+    const activeDays = () => screen.getByText('活跃天数').nextElementSibling?.textContent;
+    await screen.findByText('活跃天数');
+    expect(activeDays()).toBe('1 天');
+    await user.selectOptions(screen.getByRole('combobox', { name: '统计时段' }), '4h');
     await waitFor(() => expect(query).toHaveBeenCalledTimes(2));
     const rangeQuery = query.mock.calls[1][0];
-    expect(Date.parse(rangeQuery.to ?? '') - Date.parse(rangeQuery.from ?? '')).toBe(7 * 24 * 60 * 60 * 1000);
+    expect(Date.parse(rangeQuery.to ?? '') - Date.parse(rangeQuery.from ?? '')).toBe(4 * 60 * 60 * 1000);
     expect((await screen.findAllByText('42')).length).toBeGreaterThan(0);
-    expect(screen.getByText('1 个活跃日')).toBeTruthy();
+    expect(activeDays()).toBe('1 天');
+    expect(screen.getAllByText('过去 4 小时').length).toBeGreaterThan(0);
 
-    await user.click(screen.getByRole('button', { name: '自定义' }));
-    // 自定义时段使用滚轮选择，年月日与时分各自成组，不再暴露文本输入。
-    await screen.findByLabelText('开始时间 年');
-    for (const label of ['开始时间 年', '开始时间 月', '开始时间 日', '开始时间 时', '开始时间 分',
-      '结束时间 年', '结束时间 月', '结束时间 日', '结束时间 时', '结束时间 分']) {
-      expect(screen.getByLabelText(label)).toBeTruthy();
-    }
-    const startMinute = screen.getByLabelText('开始时间 分');
-    // 分钟滚轮取值是 0-59 的十进制文本；不假设零填充，避免依赖运行时刻。
-    const minuteText = startMinute.getAttribute('aria-valuetext') ?? '';
-    expect(Number(minuteText)).toBeGreaterThanOrEqual(0);
-    expect(Number(minuteText)).toBeLessThanOrEqual(59);
-    expect(screen.queryByLabelText('开始时间 秒')).toBeNull();
-    // 弹窗内容经 portal 渲染，不在 container 内。
-    expect(document.querySelectorAll('.sd-wheel-picker').length).toBe(10);
-    expect(screen.getByLabelText('统计时段').querySelector('input')).toBeNull();
-    expect(container.querySelector('input[type="datetime-local"]')).toBeNull();
-    expect(screen.getByText('过去一年的每日消耗')).toBeTruthy();
+    // 厂商与模型在已选时段上叠加；选项来自全量分桶，选中后其他选项仍可见。
+    await user.selectOptions(screen.getByRole('combobox', { name: '厂商' }), 'Provider A');
+    await user.selectOptions(screen.getByRole('combobox', { name: '模型' }), 'model-a');
+    await waitFor(() => expect(query).toHaveBeenCalledTimes(4));
+    expect(query.mock.calls[3][0]).toMatchObject({ provider: 'Provider A', model: 'model-a' });
+    expect(query.mock.calls[3][0].from).toBeTruthy();
+
+    // 全部清空后回到基线快照，最后一步不再发起查询。
+    await user.selectOptions(screen.getByRole('combobox', { name: '统计时段' }), 'all');
+    await user.selectOptions(screen.getByRole('combobox', { name: '厂商' }), '');
+    await user.selectOptions(screen.getByRole('combobox', { name: '模型' }), '');
+    expect((await screen.findAllByText('100')).length).toBeGreaterThan(0);
+    expect(query).toHaveBeenCalledTimes(6);
   });
 
-  it('explains a reversed custom range instead of only outlining the field', async () => {
+  it('combines selections made during pending requests and ignores stale results', async () => {
     const user = userEvent.setup();
-    const query = vi.fn(async () => usageResponse(100));
-    render(
-      <UsageSettingsView
-        host={{ BrandIcon: () => null, Tooltip: usageTestUi.Tooltip }}
-        service={usageService(query)}
-        translate={usageTestTranslate}
-        ui={usageTestUi}
+    const rangeRequest = deferred<RuntimeUsageResponse>();
+    const providerRequest = deferred<RuntimeUsageResponse>();
+    const modelRequest = deferred<RuntimeUsageResponse>();
+    const onQueryUsage = vi.fn<(query: RuntimeUsageQuery) => Promise<RuntimeUsageResponse>>()
+      .mockImplementationOnce(() => rangeRequest.promise)
+      .mockImplementationOnce(() => providerRequest.promise)
+      .mockImplementationOnce(() => modelRequest.promise);
+    render(usageView(
+      <UsageSettings
+        providers={[]}
+        usage={usageResponse(100, [], [], [usageDay('Provider A', 100)], [usageDay('model-a', 100)])}
+        onQueryUsage={onQueryUsage}
       />,
-    );
+    ));
 
-    await user.click(await screen.findByRole('button', { name: '自定义' }));
+    await user.selectOptions(screen.getByRole('combobox', { name: '统计时段' }), '7d');
+    await user.selectOptions(screen.getByRole('combobox', { name: '厂商' }), 'Provider A');
+    await user.selectOptions(screen.getByRole('combobox', { name: '模型' }), 'model-a');
 
-    // 默认范围合法：既没有提示，也没有字段标红。
-    const yearWheel = await screen.findByLabelText('开始时间 年');
-    expect(screen.queryByText('结束时间不能早于开始时间，请重新选择。')).toBeNull();
-    expect(document.querySelector('.settings-usage-custom-range__field.is-invalid')).toBeNull();
+    expect(onQueryUsage).toHaveBeenCalledTimes(3);
+    const query = onQueryUsage.mock.calls[2][0];
+    expect(query).toMatchObject({ provider: 'Provider A', model: 'model-a' });
+    expect(Date.parse(query.to ?? '') - Date.parse(query.from ?? '')).toBe(7 * 24 * 60 * 60 * 1000);
 
-    // 把开始时间推到年份上界，必然晚于结束时间。
-    yearWheel.focus();
-    await user.keyboard('{End}');
-
-    await screen.findByText('结束时间不能早于开始时间，请重新选择。');
-    expect(screen.getByRole('button', { name: '应用筛选' })).toHaveProperty('disabled', true);
-    // 两个字段都标红，提示指向具体原因。
-    expect(document.querySelectorAll('.settings-usage-custom-range__field.is-invalid').length).toBe(2);
+    await act(async () => modelRequest.resolve(usageResponse(42)));
+    await act(async () => rangeRequest.resolve(usageResponse(64)));
+    await act(async () => providerRequest.reject(new Error('stale request failed')));
+    expect(screen.getAllByText('42').length).toBeGreaterThan(0);
+    expect(screen.queryByText('64')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByRole<HTMLSelectElement>('combobox', { name: '统计时段' }).value).toBe('7d');
+    expect(screen.getByRole<HTMLSelectElement>('combobox', { name: '厂商' }).value).toBe('Provider A');
+    expect(screen.getByRole<HTMLSelectElement>('combobox', { name: '模型' }).value).toBe('model-a');
   });
 
   it('keeps the base provider catalog when filtered queries omit it', async () => {
@@ -145,7 +152,7 @@ describe('UsageSettings', () => {
     );
 
     await screen.findAllByText('100');
-    await user.click(screen.getByRole('button', { name: '7d' }));
+    await user.selectOptions(screen.getByRole('combobox', { name: '统计时段' }), '7d');
     await screen.findAllByText('42');
 
     const providerIconCall = BrandIcon.mock.calls.find(([props]) => props.name === 'Provider A');
@@ -169,12 +176,12 @@ describe('UsageSettings', () => {
       ),
     );
 
-    await user.click(screen.getByRole('button', { name: '7d' }));
-    await user.click(screen.getByRole('button', { name: '30d' }));
+    await user.selectOptions(screen.getByRole('combobox', { name: '统计时段' }), '7d');
+    await user.selectOptions(screen.getByRole('combobox', { name: '统计时段' }), '30d');
     await act(async () => secondRequest.reject(new Error('request failed')));
 
-    await screen.findByText('无法加载所选时段的用量，请稍后重试。');
-    expect(screen.getByRole('button', { name: '全部时间' }).getAttribute('aria-pressed')).toBe('true');
+    await screen.findByText('无法加载所选条件的用量，请稍后重试。');
+    expect(screen.getByRole<HTMLSelectElement>('combobox', { name: '统计时段' }).value).toBe('all');
     await act(async () => firstRequest.resolve(usageResponse(42)));
     expect(onQueryUsage).toHaveBeenCalledTimes(2);
     expect(screen.queryByText('42')).toBeNull();
@@ -217,6 +224,7 @@ function usageResponse(
   byDay: RuntimeUsageBucket[] = [],
   records: RuntimeUsageRecord[] = [],
   byProvider: RuntimeUsageBucket[] = [],
+  byModel: RuntimeUsageBucket[] = [],
 ): RuntimeUsageResponse {
   return {
     records,
@@ -228,7 +236,7 @@ function usageResponse(
       recordCount: 1,
       byDay,
       byProvider,
-      byModel: [],
+      byModel,
     },
   };
 }

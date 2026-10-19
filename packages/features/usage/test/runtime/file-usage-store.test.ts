@@ -71,6 +71,22 @@ describe('file usage store', () => {
     expect((await store.getUsage({ from: '2026-09-14T00:00:00.000Z' })).summary.requestCount).toBe(3);
   });
 
+  it('filters records and summary by provider and model bucket keys', async () => {
+    const store = await usageStore('setsuna-usage-dimension-test-');
+    const providers = [{ id: 'dashscope', name: '阿里云百炼', provider: 'openai-compatible', models: [{ name: 'Qwen', code: 'qwen' }] }] as const;
+    // 旧记录只存了协议名，筛选必须按修正后的厂商名命中，与分布卡片口径一致。
+    await store.recordUsage({ threadId: 't', turnId: 'legacy', createdAt: '2026-08-13T00:00:00.000Z', provider: 'openai-compatible', model: 'qwen', totalTokens: 5 });
+    await store.recordUsage({ threadId: 't', turnId: 'qwen', createdAt: '2026-08-13T00:00:01.000Z', providerId: 'dashscope', provider: '阿里云百炼', model: 'qwen', totalTokens: 7 });
+    await store.recordUsage({ threadId: 't', turnId: 'claude', createdAt: '2026-08-13T00:00:02.000Z', provider: 'Anthropic', model: 'claude', totalTokens: 11 });
+
+    const byProvider = await store.getUsage({ provider: '阿里云百炼' }, providers);
+    const byBoth = await store.getUsage({ provider: '阿里云百炼', model: 'claude' }, providers);
+
+    expect(byProvider.summary).toMatchObject({ recordCount: 2, totalTokens: 12 });
+    expect(byProvider.summary.byModel.map((bucket) => bucket.key)).toEqual(['qwen']);
+    expect(byBoth.records).toEqual([]);
+  });
+
   it('paginates records without narrowing the complete usage summary', async () => {
     const store = await usageStore('setsuna-usage-pagination-test-');
     for (let index = 0; index < 3; index += 1) {

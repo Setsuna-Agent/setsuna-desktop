@@ -1,5 +1,12 @@
 import type { RuntimeUsageBucket } from '../../contracts/index.js';
-import { tokensExcludingCache } from './usage-format.js';
+import { isActiveUsageBucket, tokensExcludingCache } from './usage-format.js';
+import {
+  addCalendarDays,
+  localCalendarDate,
+  localDateKey,
+  mergeBucketsByDate,
+  parseDateKey,
+} from './usageDates.js';
 
 export const USAGE_CALENDAR_WEEK_COUNT = 53;
 
@@ -22,6 +29,8 @@ export type UsageCalendarMonth = {
 export type UsageCalendarModel = {
   activeDays: number;
   averageTokensPerActiveDay: number;
+  /** 统计周期内连续有调用的最长天数。 */
+  longestStreakDays: number;
   months: UsageCalendarMonth[];
   periodTokens: number;
   weeks: UsageCalendarDay[][];
@@ -75,32 +84,31 @@ export function buildUsageCalendar(
     weeks.push(week);
   }
 
-  const activeBuckets = periodBuckets.filter((bucket) => bucket.recordCount > 0 || bucket.totalTokens > 0);
+  const activeBuckets = periodBuckets.filter(isActiveUsageBucket);
   const periodTokens = periodBuckets.reduce((total, bucket) => total + tokensExcludingCache(bucket), 0);
   return {
     activeDays: activeBuckets.length,
     averageTokensPerActiveDay: activeBuckets.length ? Math.round(periodTokens / activeBuckets.length) : 0,
+    longestStreakDays: longestStreak(activeBuckets.map((bucket) => bucket.key)),
     months: [...months].map(([weekIndex, label]) => ({ label, weekIndex })),
     periodTokens,
     weeks,
   };
 }
 
-function mergeBucketsByDate(buckets: readonly RuntimeUsageBucket[]): Map<string, RuntimeUsageBucket> {
-  const merged = new Map<string, RuntimeUsageBucket>();
-  for (const bucket of buckets) {
-    if (!parseDateKey(bucket.key)) continue;
-    const existing = merged.get(bucket.key);
-    merged.set(bucket.key, existing ? {
-      ...existing,
-      inputTokens: existing.inputTokens + bucket.inputTokens,
-      cachedInputTokens: existing.cachedInputTokens + bucket.cachedInputTokens,
-      outputTokens: existing.outputTokens + bucket.outputTokens,
-      recordCount: existing.recordCount + bucket.recordCount,
-      totalTokens: existing.totalTokens + bucket.totalTokens,
-    } : { ...bucket });
+/** 日期键已去重且合法；按日历顺序扫描，相邻两天相差一天即视为连续。 */
+function longestStreak(dateKeys: readonly string[]): number {
+  let longest = 0;
+  let current = 0;
+  let previous: Date | null = null;
+  for (const key of [...dateKeys].sort()) {
+    const date = parseDateKey(key);
+    if (!date) continue;
+    current = previous && localDateKey(addCalendarDays(previous, 1)) === key ? current + 1 : 1;
+    longest = Math.max(longest, current);
+    previous = date;
   }
-  return merged;
+  return longest;
 }
 
 function tokenLevelMap(buckets: readonly RuntimeUsageBucket[]): Map<number, 1 | 2 | 3 | 4> {
@@ -122,29 +130,4 @@ function activityLevel(bucket: RuntimeUsageBucket, levels: Map<number, 1 | 2 | 3
   const tokens = tokensExcludingCache(bucket);
   if (tokens > 0) return levels.get(tokens) ?? 1;
   return bucket.recordCount > 0 ? 1 : 0;
-}
-
-function parseDateKey(value: string): Date | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(value);
-  if (!match) return null;
-  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-  return localDateKey(date) === value ? date : null;
-}
-
-function localCalendarDate(value: Date): Date {
-  const date = Number.isNaN(value.getTime()) ? new Date() : value;
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-}
-
-function addCalendarDays(value: Date, amount: number): Date {
-  const next = new Date(value);
-  next.setDate(next.getDate() + amount);
-  return next;
-}
-
-function localDateKey(value: Date): string {
-  const year = String(value.getFullYear());
-  const month = String(value.getMonth() + 1).padStart(2, '0');
-  const day = String(value.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }

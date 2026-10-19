@@ -48,8 +48,11 @@ export class FileUsageStore {
     const allRecords = providers.length ? resolveLegacyProviders(storedRecords, providers) : storedRecords;
     const from = timestampBoundary(query.from);
     const to = timestampBoundary(query.to);
+    // 厂商/模型筛选复用分桶 key，保证筛选项与分布卡片口径一致（含旧记录修正后的厂商名）。
     const filtered = allRecords.filter((record) => (
       (!query.threadId || record.threadId === query.threadId)
+      && (!query.provider || usageProviderKey(record) === query.provider)
+      && (!query.model || usageModelKey(record) === query.model)
       && isWithinTimeRange(record.createdAt, from, to)
     ));
     const limit = clampLimit(query.limit);

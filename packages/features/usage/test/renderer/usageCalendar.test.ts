@@ -36,6 +36,21 @@ describe('buildUsageCalendar', () => {
     expect(calendar.activeDays).toBe(1);
     expect(today).toMatchObject({ level: 1, recordCount: 3, totalTokens: 0 });
   });
+
+  it('measures the longest consecutive streak inside the rolling year', () => {
+    const calendar = buildUsageCalendar([
+      // 超出滚动年度的日期不应接上周期内的连续天数。
+      usageDay('2025-07-19', 100, 1),
+      usageDay('2025-07-21', 100, 1),
+      usageDay('2025-07-22', 100, 1),
+      usageDay('2026-02-27', 100, 1),
+      usageDay('2026-02-28', 100, 1),
+      usageDay('2026-03-01', 100, 1),
+      usageDay('2026-07-20', 100, 1),
+    ], new Date(2026, 6, 20, 12));
+
+    expect(calendar.longestStreakDays).toBe(3);
+  });
 });
 
 function usageDay(key: string, totalTokens: number, recordCount: number): RuntimeUsageBucket {

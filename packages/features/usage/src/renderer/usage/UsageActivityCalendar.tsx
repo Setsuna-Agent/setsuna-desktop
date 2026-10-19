@@ -1,7 +1,6 @@
-import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import type { RuntimeUsageBucket } from '../../contracts/index.js';
 import { buildUsageCalendar } from './usageCalendar.js';
-import { formatTokens } from './usage-format.js';
+import { formatTokens, usageDayDetails } from './usage-format.js';
 import { useUsageView } from './view-context.js';
 
 type UsageActivityCalendarProps = {
@@ -9,27 +8,30 @@ type UsageActivityCalendarProps = {
 };
 
 export function UsageActivityCalendar({ buckets }: UsageActivityCalendarProps) {
-  const { host: { Tooltip }, locale, translate } = useUsageView();
-  const t = translate;
+  const { host: { Tooltip }, locale, translate: t } = useUsageView();
   const calendar = buildUsageCalendar(buckets, new Date(), locale);
-  const calendarDateFormatter = new Intl.DateTimeFormat(locale, {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  const dayFormatter = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long', year: 'numeric' });
+  const stats = [
+    { key: 'active', label: t('feature.usage.activeDaysLabel'), value: t('feature.usage.dayUnit', { count: calendar.activeDays }) },
+    { key: 'streak', label: t('feature.usage.longestStreak'), value: t('feature.usage.dayUnit', { count: calendar.longestStreakDays }) },
+    { key: 'average', label: t('feature.usage.averageActiveDayLabel'), value: formatTokens(calendar.averageTokensPerActiveDay) },
+    { key: 'total', label: t('feature.usage.yearTotal'), value: formatTokens(calendar.periodTokens) },
+  ];
 
   return (
     <section className="settings-usage-card settings-usage-calendar" aria-labelledby="settings-usage-calendar-title">
-      <header className="settings-usage-card__header settings-usage-card__header--plain settings-usage-calendar__header">
-        <div>
-          <strong id="settings-usage-calendar-title">{t('feature.usage.activity')}</strong>
-          <span>{t('feature.usage.activitySubtitle')}</span>
-        </div>
-        <div className="settings-usage-calendar__summary" aria-label={t('feature.usage.yearStats')}>
-          <span>{t('feature.usage.activeDays', { count: calendar.activeDays })}</span>
-          <span>{t('feature.usage.averageActiveDay', { tokens: formatTokens(calendar.averageTokensPerActiveDay) })}</span>
-        </div>
+      <header className="settings-usage-card__header">
+        <span className="settings-usage-eyebrow" id="settings-usage-calendar-title">{t('feature.usage.activity')}</span>
+        <span className="settings-usage-card__meta">{t('feature.usage.activitySubtitle')}</span>
       </header>
+      <dl className="settings-usage-calendar__stats" aria-label={t('feature.usage.yearStats')}>
+        {stats.map((stat) => (
+          <div key={stat.key}>
+            <dt>{stat.label}</dt>
+            <dd>{stat.value}</dd>
+          </div>
+        ))}
+      </dl>
       <div className="settings-usage-calendar__scroller">
         <div className="settings-usage-calendar__canvas">
           <div className="settings-usage-calendar__months" aria-hidden="true">
@@ -44,24 +46,20 @@ export function UsageActivityCalendar({ buckets }: UsageActivityCalendarProps) {
           >
             {calendar.weeks.map((week) => (
               <div className="settings-usage-calendar__week" aria-hidden="true" key={week[0].dateKey}>
-                {week.map((day) => {
-                  const label = calendarDayLabel(day.dateKey, day.totalTokens, day.cachedInputTokens, day.recordCount, day.isInRange, calendarDateFormatter, t);
-                  return (
-                    <Tooltip key={day.dateKey} title={label}>
-                      <span
-                        className={`settings-usage-calendar__day${day.isInRange ? '' : ' is-outside'}`}
-                        data-level={day.level}
-                      />
-                    </Tooltip>
-                  );
-                })}
+                {week.map((day) => (
+                  <Tooltip key={day.dateKey} title={day.isInRange ? usageDayDetails(day, dayFormatter, t) : t('feature.usage.outsidePeriod')}>
+                    <span
+                      className={`settings-usage-calendar__day${day.isInRange ? '' : ' is-outside'}`}
+                      data-level={day.level}
+                    />
+                  </Tooltip>
+                ))}
               </div>
             ))}
           </div>
         </div>
       </div>
       <footer className="settings-usage-calendar__footer">
-        <span>{t('feature.usage.periodTotal', { tokens: formatTokens(calendar.periodTokens) })}</span>
         <div className="settings-usage-calendar__legend" aria-label={t('feature.usage.intensity')}>
           <span>{t('feature.usage.less')}</span>
           {[0, 1, 2, 3, 4].map((level) => <i data-level={level} key={level} />)}
@@ -70,13 +68,4 @@ export function UsageActivityCalendar({ buckets }: UsageActivityCalendarProps) {
       </footer>
     </section>
   );
-}
-
-function calendarDayLabel(dateKey: string, totalTokens: number, cachedInputTokens: number, recordCount: number, isInRange: boolean, formatter: Intl.DateTimeFormat, t: RendererTranslate): string {
-  if (!isInRange) return t('feature.usage.outsidePeriod');
-  const [year, month, day] = dateKey.split('-').map(Number);
-  const label = formatter.format(new Date(year, month - 1, day));
-  if (!recordCount && !totalTokens) return t('feature.usage.noCallsOnDate', { date: label });
-  const cacheLabel = cachedInputTokens > 0 ? t('feature.usage.cacheOnDate', { tokens: formatTokens(cachedInputTokens) }) : '';
-  return t('feature.usage.dayDetails', { date: label, tokens: formatTokens(totalTokens), cache: cacheLabel, count: recordCount });
 }

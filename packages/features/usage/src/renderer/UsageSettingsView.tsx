@@ -15,7 +15,6 @@ import type { UsageRendererHost } from './capabilities.js';
 import { UsageSettings } from './usage/UsageSettings.js';
 import { UsageViewProvider } from './usage/view-context.js';
 import './usage.css';
-import './usage-filter.css';
 
 export function UsageSettingsView({
   host,
