@@ -9,7 +9,7 @@ import type {
   SendTurnInput,
 } from '@setsuna-desktop/contracts';
 import { isRuntimeInputMessageAttachment } from '@setsuna-desktop/contracts';
-import type { ReviewTurnRequest, WorkspaceTaskTurnRequest } from '@setsuna-desktop/feature-review/contracts';
+import type { ReviewControl, ReviewTurnRequest, WorkspaceTaskTurnRequest } from '@setsuna-desktop/feature-review/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { ConfigStore } from '../../ports/config-store.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
@@ -64,6 +64,7 @@ type RuntimeTurnRunFactoryOptions = {
   eventWriter: Pick<RuntimeEventWriter, 'append' | 'flushThread'>;
   ids: IdGenerator;
   inputGuard: Pick<RuntimeModelInputGuard, 'assertAttachmentsSupported'>;
+  reviewControl: Pick<ReviewControl, 'prepare'>;
   claimAttachments(threadId: string, attachments: NonNullable<RuntimeMessage['attachments']>): Promise<NonNullable<RuntimeMessage['attachments']>>;
   normalizeAttachments(value: unknown): NonNullable<RuntimeMessage['attachments']>;
   publishStoredEventsSince(threadId: string, sinceSeq: number): Promise<void>;
@@ -254,17 +255,7 @@ export class RuntimeTurnRunFactory {
       threadId,
       turnId,
       options: {
-        modelInput: prompt,
-        review: {
-          displayText,
-          language: input.language,
-        },
-        runtimeContextMessages: [reviewPolicyMessage(
-          turnId,
-          this.options.clock.now().toISOString(),
-          input.developerInstructions,
-        )],
-        taskKind: 'review',
+        ...reviewTurnOptions(input, turnId, this.options.clock.now().toISOString()),
         userMessage: {
           id: turnId,
           turnId,
@@ -325,24 +316,37 @@ export class RuntimeTurnRunFactory {
     threadId: string,
     messageId: string,
     input: RegenerateMessageInput,
-  ): Promise<{ turnId: string; done: Promise<void> }> {
+  ): Promise<{ turnId: string; taskKind: 'regular' | 'review'; done: Promise<void> }> {
     await this.options.turnTasks.waitForFinalizingRegularTurn(threadId);
     await this.options.eventWriter.flushThread(threadId);
     const originalThread = await this.requireThread(threadId);
     const originalMessage = originalThread.messages.find((message) => message.id === messageId);
     if (!originalMessage) throw new Error(`Message not found: ${messageId}`);
     if (originalMessage.role !== 'user' || originalMessage.contextCompaction) throw new Error('Only user messages can be regenerated.');
-    // Goal 与 Review 都有普通轮次不具备的执行语义，不能借“编辑并重试”降级成 regular turn。
-    if (originalMessage.inputKind === 'goal' || originalMessage.inputKind === 'review') {
-      throw new Error(`${originalMessage.inputKind === 'goal' ? 'Goal' : 'Review'} messages cannot be regenerated as regular turns.`);
+    if (originalMessage.inputKind === 'goal') {
+      throw new Error('Goal messages cannot be regenerated as regular turns.');
     }
 
     const text = typeof input.content === 'string' ? input.content.trim() : originalMessage.content.trim();
     const skillIds = input.skillIds ?? originalMessage.skillIds ?? [];
     let attachments = this.options.normalizeAttachments(input.attachments ?? originalMessage.attachments);
     if (!text && !attachments.length) throw new Error('Message content is required.');
-    const turnModel = await this.resolveTurnModel(originalThread);
-    await this.options.inputGuard.assertAttachmentsSupported(attachments, turnModel?.model);
+    const config = await this.options.configStore?.getConfig().catch(() => null);
+    const turnModel = resolveRuntimeTurnModel(config, originalThread);
+    // Review owns its policy and dedicated model. Resolve both before changing history,
+    // so an unavailable Feature or incompatible attachment leaves the original review intact.
+    const reviewRequest = originalMessage.inputKind === 'review'
+      ? await this.options.reviewControl.prepare({
+          threadId,
+          target: { type: 'custom', instructions: text },
+          language: config?.desktopSettings?.interfaceLanguage ?? 'en-US',
+          modelSelection: turnModel?.binding,
+        })
+      : undefined;
+    const samplingModel = reviewRequest
+      ? resolveRuntimeTurnModel(config, originalThread, reviewRequest.modelSelection)
+      : undefined;
+    await this.options.inputGuard.assertAttachmentsSupported(attachments, (samplingModel ?? turnModel)?.model);
     // Validate ownership before editing or truncating history; a rejected asset must leave it intact.
     attachments = await this.options.claimAttachments(threadId, attachments);
     if (
@@ -365,29 +369,32 @@ export class RuntimeTurnRunFactory {
     const userMessage = thread.messages.find((message) => message.id === messageId);
     if (!userMessage || userMessage.role !== 'user') throw new Error(`User message not found after regeneration setup: ${messageId}`);
     const turnId = this.options.ids.id('turn');
+    const taskKind = reviewRequest ? 'review' : 'regular';
     const run = this.options.turnTasks.run({
       turnId,
       threadId,
-      taskKind: 'regular',
+      taskKind,
       acceptingSteers: true,
     }, (task) => this.options.runTurn({
       attachments,
+      samplingModel,
       signal: task.controller.signal,
       skillIds: userMessage.skillIds ?? [],
       skillReferences: userMessage.skillReferences,
       text,
       turnModel,
-      thinkingOptions: turnThinkingOptions(input),
+      thinkingOptions: reviewRequest ? undefined : turnThinkingOptions(input),
       thread,
       threadId,
       turnId,
       options: {
+        ...(reviewRequest ? reviewTurnOptions(reviewRequest, turnId, this.options.clock.now().toISOString()) : {}),
         userMessage,
         publishUserMessage: false,
-        taskKind: 'regular',
+        taskKind,
       },
     }));
-    return { turnId, done: run.done };
+    return { turnId, taskKind, done: run.done };
   }
 
   private async requireThread(threadId: string): Promise<RuntimeThread> {
@@ -431,20 +438,25 @@ function unattendedTurnContext(turnId: string, createdAt: string): RuntimeMessag
   }];
 }
 
-function reviewPolicyMessage(
+function reviewTurnOptions(
+  request: ReviewTurnRequest,
   turnId: string,
   createdAt: string,
-  content: string,
-): RuntimeMessage {
+): RuntimeTurnExecutionOptions {
   return {
-    id: 'desktop_review_policy',
-    turnId,
-    role: 'developer',
-    promptSource: 'review',
-    visibility: 'model',
-    status: 'complete',
-    createdAt,
-    content,
+    modelInput: request.prompt.trim(),
+    review: { displayText: request.displayText.trim(), language: request.language },
+    runtimeContextMessages: [{
+      id: 'desktop_review_policy',
+      turnId,
+      role: 'developer',
+      promptSource: 'review',
+      visibility: 'model',
+      status: 'complete',
+      createdAt,
+      content: request.developerInstructions,
+    }],
+    taskKind: 'review',
   };
 }
 

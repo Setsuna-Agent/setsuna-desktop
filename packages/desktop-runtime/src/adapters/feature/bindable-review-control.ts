@@ -4,10 +4,11 @@ import {
   type ReviewSettingsState,
   type ReviewSettingsUpdate,
   type ReviewStartOutcome,
+  type ReviewTurnRequest,
   type StartReviewInput,
 } from '@setsuna-desktop/feature-review/contracts';
 
-/** Stable compatibility-adapter facade bound after the required Review Feature activates. */
+/** Stable Core and compatibility facade bound after the required Review Feature activates. */
 export class BindableReviewControl implements ReviewControl {
   private control: ReviewControl = createNoopReviewControl();
 
@@ -27,6 +28,10 @@ export class BindableReviewControl implements ReviewControl {
 
   readSettings(): Promise<ReviewSettingsState> {
     return this.control.readSettings();
+  }
+
+  prepare(input: StartReviewInput): Promise<ReviewTurnRequest> {
+    return this.control.prepare(input);
   }
 
   start(input: StartReviewInput): Promise<ReviewStartOutcome> {

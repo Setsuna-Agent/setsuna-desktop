@@ -1,5 +1,6 @@
 import type { McpStore } from '@setsuna-desktop/feature-mcp/contracts';
 import type { MemoryStore } from '@setsuna-desktop/feature-memory/contracts';
+import type { ReviewControl } from '@setsuna-desktop/feature-review/contracts';
 import type { SkillRegistry } from '@setsuna-desktop/feature-skills/contracts';
 import type { AppServerNotificationBus } from '../../ports/app-server-notification-bus.js';
 import type { ApprovalGate } from '../../ports/approval-gate.js';
@@ -45,6 +46,7 @@ export type AgentLoopOptions = {
   persistentToolApprovalStore?: PersistentToolApprovalStore;
   projectInstructions?: ProjectInstructionLoader;
   projectWorkflow?: ProjectWorkflowResolver;
+  reviewControl?: Pick<ReviewControl, 'prepare'>;
   environmentResolver?: RuntimeEnvironmentResolver;
   eventWriter?: RuntimeEventWriter;
   extensionManager?: Pick<ExtensionRuntime, 'dispatch'>;
