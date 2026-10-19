@@ -46,13 +46,13 @@ describe('runtime server REST skills and capabilities', () => {
       enabled: false,
     });
     for (const [interfaceLanguage, skillName, pluginName] of [
-      ['en-US', 'Create Skill in Chat', 'Structured Questions'],
-      ['zh-CN', '对话创建Skill', '结构化提问'],
+      ['en-US', 'Create Skill in Chat', 'Todo List'],
+      ['zh-CN', '对话创建Skill', '任务清单'],
     ]) {
       await harness.runtimeFetch('/v1/config', { method: 'PUT', body: JSON.stringify({ desktopSettings: { interfaceLanguage } }) });
       await expect(harness.runtimeFetch('/v1/features/skills/create-skill-in-chat')).resolves.toMatchObject({ name: skillName, enabled: false });
       await expect(harness.runtimeFetch('/v1/features/plugin-management')).resolves.toMatchObject({
-        marketplace: expect.arrayContaining([expect.objectContaining({ id: 'question', name: pluginName })]),
+        marketplace: expect.arrayContaining([expect.objectContaining({ id: 'todo', name: pluginName })]),
       });
     }
   });
@@ -89,18 +89,6 @@ describe('runtime server REST skills and capabilities', () => {
             name: 'Context7 文档查询',
             icon: 'context7',
             featured: false,
-            installed: false,
-          }),
-          expect.objectContaining({
-            id: 'question',
-            name: '结构化提问',
-            icon: 'question',
-            publisher: 'Setsuna',
-            tags: expect.arrayContaining(['交互', '工具']),
-            tools: [expect.objectContaining({ name: 'question' })],
-            resources: [],
-            extension: { apiVersion: 1, runtime: 'node-worker', capabilities: ['tools', 'ui'] },
-            capabilities: { extension: 1, tools: 1, skills: 0, mcpServers: 0, hooks: 0, resources: 0 },
             installed: false,
           }),
           expect.objectContaining({
@@ -361,16 +349,16 @@ describe('runtime server REST skills and capabilities', () => {
         data: [{ hooks: [] }],
       });
 
-      await expect(harness.runtimeFetch('/v1/features/plugin-management/marketplace/question/install', {
+      await expect(harness.runtimeFetch('/v1/features/plugin-management/marketplace/todo/install', {
         method: 'POST',
       })).resolves.toMatchObject({
         plugin: {
-          id: 'question',
+          id: 'todo',
           extension: { trust: 'trusted' },
         },
       });
-      await expect(harness.runtimeFetch('/v1/features/plugin-management/installed/question', { method: 'DELETE' })).resolves.toMatchObject({
-        pluginId: 'question',
+      await expect(harness.runtimeFetch('/v1/features/plugin-management/installed/todo', { method: 'DELETE' })).resolves.toMatchObject({
+        pluginId: 'todo',
       });
     });
   

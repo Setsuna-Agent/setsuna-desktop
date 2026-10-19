@@ -10,10 +10,6 @@ type BundledTool = {
 };
 
 type BundledToolContext = {
-  ui?: {
-    select(input: unknown): Promise<string | null>;
-    input(input: unknown): Promise<string | null>;
-  };
   state?: {
     get(key: string, scope: string): Promise<unknown>;
     set(key: string, value: unknown, scope: string): Promise<void>;
@@ -26,43 +22,6 @@ type BundledHandler = (
 ) => Promise<Record<string, unknown>> | Record<string, unknown>;
 
 describe('bundled Setsuna utility extensions', () => {
-  it('provides choices and free-form answers through structured Setsuna UI', async () => {
-    const { tools } = await loadBundledExtension('question');
-    const question = tools.get('question');
-    expect(question).toBeDefined();
-
-    const select = vi.fn(async () => '1');
-    const input = vi.fn(async () => 'custom answer');
-    await expect(question!.execute({
-      question: 'Which mode?',
-      options: [
-        { label: 'Safe', description: 'Ask before writes.' },
-        { label: 'Fast', description: 'Use current approvals.' },
-      ],
-    }, { ui: { select, input } })).resolves.toMatchObject({
-      content: 'User selected 2: Fast',
-      data: { answer: 'Fast', index: 1, custom: false },
-    });
-    expect(select).toHaveBeenCalledWith(expect.objectContaining({
-      message: 'Which mode?',
-      options: expect.arrayContaining([
-        expect.objectContaining({ value: '0', label: 'Safe' }),
-        expect.objectContaining({ value: '__setsuna_custom_answer__' }),
-      ]),
-    }));
-    expect(input).not.toHaveBeenCalled();
-
-    select.mockResolvedValueOnce('__setsuna_custom_answer__');
-    await expect(question!.execute({
-      question: 'Anything else?',
-      options: [{ label: 'No' }, { label: 'Later' }],
-    }, { ui: { select, input } })).resolves.toMatchObject({
-      content: 'User wrote: custom answer',
-      data: { answer: 'custom answer', custom: true },
-    });
-    expect(input).toHaveBeenCalledWith(expect.objectContaining({ message: 'Anything else?' }));
-  });
-
   it('persists the todo list in thread-scoped extension state', async () => {
     const { tools } = await loadBundledExtension('todo');
     const todo = tools.get('todo');

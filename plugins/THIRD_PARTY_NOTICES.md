@@ -2,9 +2,8 @@
 
 ## Pi extension examples
 
-Setsuna's built-in Structured Question, Todo List, and Claude Rules Compatibility plugins run on the Setsuna-native extension API. Their interaction and operation design was informed by, and adapted from, these MIT-licensed Pi examples at commit `936aff00918de1187f085f123c2812d8f2d67745`:
+Setsuna's built-in Todo List and Claude Rules Compatibility plugins run on the Setsuna-native extension API. Their interaction and operation design was informed by, and adapted from, these MIT-licensed Pi examples at commit `936aff00918de1187f085f123c2812d8f2d67745`:
 
-- `packages/coding-agent/examples/extensions/question.ts`
 - `packages/coding-agent/examples/extensions/todo.ts`
 - `packages/coding-agent/examples/extensions/claude-rules.ts`
 

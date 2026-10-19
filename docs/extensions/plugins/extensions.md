@@ -8,7 +8,6 @@ Setsuna 的可执行扩展允许插件动态注册工具、订阅 Agent 生命�
 
 普通用户通过“插件市场 → 工具与工作流”一键安装 Setsuna 原生扩展，不需要准备本地目录。首批随应用发布：
 
-- 结构化提问：使用 Setsuna 结构化选择和自由输入实现单问题交互。
 - 任务清单：通过 thread scope Extension State 保存任务。
 - Claude Rules 兼容：在 `session.start` 中发现 `.claude/rules` 路径并追加上下文。
 - 网络搜索：通过 host-managed network API 调用 Tavily keyless 服务并返回可引用来源。
@@ -16,6 +15,8 @@ Setsuna 的可执行扩展允许插件动态注册工具、订阅 Agent 生命�
 - 视觉识别：Bundle 定义 `analyze_image`，通过 marketplace 专用 host bridge 复用视觉模型并校验线程附件归属。
 
 这些实现都使用 Setsuna 原生 v1 API。历史内部 ID 仅为兼容已安装记录而保留，不在产品 UI 中展示。设计参考与第三方许可统一记录在 `plugins/THIRD_PARTY_NOTICES.md`，不再作为插件能力资源。
+
+模型补齐用户需求统一使用 runtime 内置的 [`request_user_input`](../../core/runtime/tools-and-capabilities.md#structured-user-input)。插件工具内部的交互继续使用通用 `ctx.ui.confirm/select/input` API。
 
 ## 最小 Bundle
 

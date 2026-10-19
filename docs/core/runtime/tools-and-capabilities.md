@@ -287,6 +287,8 @@ Shell 命令通过 `persist: true` 显式保留为后台进程，跨轮次运行
 - UI 与 runtime 双重字段校验。
 - 禁止索取密码、API key 或 token。
 
+模型提问统一使用此内置工具，不依赖插件安装。旧版 `question` 内置插件从目录摘要隐藏，在按需读取扩展/工具目录时通过正常卸载事务退役，同时停止 worker 并清理安装记录；启动读取市场摘要不等待这项卸载。只处理明确来自内置市场或可验证旧内置来源的副本，保留同名本地及仓库插件。插件自身的通用 `ctx.ui.confirm/select/input` API 继续保留。
+
 ## Browser
 
 `packages/features/browser` 的 `BrowserRuntimeTools` 通过 Feature-owned `BrowserControlPort`：
