@@ -78,9 +78,14 @@ export function ChatMessageFooter({
 
   return (
     <div className={`chat-message-footer chat-message-footer--${align}`} data-copied={copied || undefined}>
-      {timePosition === 'before-actions' ? timeNode : null}
-      {actionNodes}
-      {timePosition === 'after-actions' ? timeNode : null}
+      <div className="chat-message-footer__controls">
+        {timePosition === 'before-actions' ? timeNode : null}
+        {actionNodes}
+        {timePosition === 'after-actions' ? timeNode : null}
+      </div>
+      {message.role === 'user' && message.inputKind === 'review' ? (
+        <span className="chat-message-footer__kind">{t('chat.message.kind.review')}</span>
+      ) : null}
     </div>
   );
 }

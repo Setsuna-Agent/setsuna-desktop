@@ -156,8 +156,21 @@ export function createChatCapabilityCommandItems({ query, plugins = [], selected
   ChatSlashCommandItemsOptions, 'query' | 'plugins' | 'selectedPluginIds' | 'selectedSkills' | 'skills'
 >): SlashCommandMenuItem[] {
   const normalizedQuery = query.trim().toLowerCase();
+  const selectedPlugins = new Set(selectedPluginIds);
+  const visiblePlugins = plugins
+    .filter((plugin) => !selectedPlugins.has(plugin.id))
+    .filter((plugin) => !normalizedQuery || `${plugin.id} ${plugin.name} ${plugin.description ?? ''} ${(plugin.tags ?? []).join(' ')}`.toLowerCase().includes(normalizedQuery))
+    .map<SlashCommandMenuItem>((plugin) => ({ key: `plugin:${plugin.id}`, kind: 'plugin', plugin }));
+
+  return [...visiblePlugins, ...createChatSkillCommandItems({ query, selectedSkills, skills })];
+}
+
+export function createChatSkillCommandItems({ query, selectedSkills, skills }: Pick<
+  ChatSlashCommandItemsOptions, 'query' | 'selectedSkills' | 'skills'
+>): SlashCommandMenuItem[] {
+  const normalizedQuery = query.trim().toLowerCase();
   const selectedSkillIds = new Set(selectedSkills.map((skill) => skill.id));
-  const visibleSkills = skills
+  return skills
     .filter((skill) => skill.enabled && !selectedSkillIds.has(skill.id))
     .filter((skill) => (
       !normalizedQuery
@@ -171,14 +184,6 @@ export function createChatCapabilityCommandItems({ query, plugins = [], selected
       kind: 'skill',
       skill,
     }));
-
-  const selectedPlugins = new Set(selectedPluginIds);
-  const visiblePlugins = plugins
-    .filter((plugin) => !selectedPlugins.has(plugin.id))
-    .filter((plugin) => !normalizedQuery || `${plugin.id} ${plugin.name} ${plugin.description ?? ''} ${(plugin.tags ?? []).join(' ')}`.toLowerCase().includes(normalizedQuery))
-    .map<SlashCommandMenuItem>((plugin) => ({ key: `plugin:${plugin.id}`, kind: 'plugin', plugin }));
-
-  return [...visiblePlugins, ...visibleSkills];
 }
 
 const SIDE_CONVERSATION_HIDDEN_ACTIONS = new Set([

@@ -69,13 +69,13 @@ export function ChatSlashCommandMenu({
                 role="group"
                 aria-label={sectionLabel}
               >
-                <div className="chat-command-menu__title">{sectionLabel}</div>
+                {sections.length > 1 ? <div className="chat-command-menu__title">{sectionLabel}</div> : null}
                 {section.items.map(({ index, item }) => (
                   <Button variant="ghost"
                     ref={index === activeIndex ? activeOptionRef : undefined}
                     key={item.key}
                     type="button"
-                    className={`chat-command-menu__item ${item.kind === 'skill' ? 'chat-command-menu__item--skill' : ''} ${index === activeIndex ? 'is-active' : ''}`}
+                    className={`chat-command-menu__item ${index === activeIndex ? 'is-active' : ''}`}
                     disabled={item.kind === 'action' && item.disabled}
                     role="option"
                     aria-selected={index === activeIndex}
@@ -131,9 +131,9 @@ function unresolvedSkillMcpDependencyCount(skill: Extract<SlashCommandMenuItem, 
 }
 
 function SlashCommandIcon({ item }: { item: SlashCommandMenuItem }) {
-  if (item.kind === 'plugin') return <PluginIcon name={item.plugin.icon} iconImage={item.plugin.iconImage} pluginId={item.plugin.id} variant="menu" />;
+  if (item.kind === 'plugin') return <PluginIcon name={item.plugin.icon} iconImage={item.plugin.iconImage} pluginId={item.plugin.id} variant="inline" className="chat-command-menu__item-icon" />;
   if (item.kind === 'skill') {
-    return <SkillIcon skill={item.skill} variant="menu" />;
+    return <SkillIcon skill={item.skill} variant="inline" className="chat-command-menu__item-icon" />;
   }
   if (item.kind === 'model') return <Zap className="chat-command-menu__item-icon" fill="currentColor" size={15} strokeWidth={0} />;
   if (item.type === 'attachment') return <Paperclip className="chat-command-menu__item-icon" size={15} />;

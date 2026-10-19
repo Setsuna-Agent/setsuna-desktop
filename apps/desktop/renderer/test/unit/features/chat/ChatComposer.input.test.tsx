@@ -52,7 +52,7 @@ it('attaches an app by @ without a project, restores its draft and preserves its
   expect(serialized.trim()).toBe(pluginAppMentionText({ pluginId: plugin.id, contributionId: 'table.page', name: '我的表格' }));
 });
 
-it('continues selecting @ apps and / Skills after inserting an app reference', async () => {
+it.each(['/', '$'])('continues selecting @ apps and %s Skills after inserting an app reference', async (marker) => {
   const skill: RuntimeSkillSummary = { id: 'review', name: 'Review', kind: 'builtin', enabled: true };
   const send = vi.fn(async () => false);
   render(<Harness plugins={[plugin]} skills={[skill]} send={send} />);
@@ -63,11 +63,50 @@ it('continues selecting @ apps and / Skills after inserting an app reference', a
   await screen.findByRole('option', { name: '我的表格' });
   fireEvent.keyDown(input, { key: 'Enter' });
   expect(send).not.toHaveBeenCalled();
-  paste(input, '/Review');
-  fireEvent.mouseDown(await screen.findByRole('option', { name: /Review/ }));
+  paste(input, `${marker}Review`);
+  const option = await screen.findByRole('option', { name: /Review/ });
+  expect(document.activeElement).toBe(input);
+  fireEvent.mouseDown(option);
+  expect(document.activeElement).toBe(input);
   await act(async () => fireEvent.keyDown(input, { key: 'Enter' }));
   const appText = pluginAppMentionText({ pluginId: plugin.id, contributionId: 'table.page', name: '我的表格' });
   expect(send).toHaveBeenCalledExactlyOnceWith(`${appText} ${appText} Review `, expect.objectContaining({ skillIds: ['review'] }));
+});
+
+it('selects only enabled Skills with $ and preserves surrounding text and reference identities', async () => {
+  const skills: RuntimeSkillSummary[] = [
+    { id: 'build', name: 'Build', kind: 'builtin', enabled: true, description: 'Compile project' },
+    { id: 'review', name: 'Review', kind: 'builtin', enabled: true },
+    { id: 'disabled', name: 'Disabled', kind: 'builtin', enabled: false },
+  ];
+  const send = vi.fn(async () => false);
+  render(<Harness initialDraft="before  after" skills={skills} plugins={[plugin]} send={send} />);
+  const input = screen.getByRole('textbox');
+  act(() => placeCaret(input, 'before '.length));
+  paste(input, '$');
+  expect(screen.getAllByRole('option')).toHaveLength(2);
+  expect(screen.getByRole('option', { name: /Build/ })).toBeTruthy();
+  expect(screen.getByRole('option', { name: /Review/ })).toBeTruthy();
+  fireEvent.keyDown(input, { key: 'ArrowDown' });
+  fireEvent.keyDown(input, { key: 'Escape' });
+  expect(screen.queryByRole('listbox')).toBeNull();
+  expect(document.activeElement).toBe(input);
+  expect(input.textContent).toBe('before $ after');
+  paste(input, 'COMPILE');
+  expect(screen.getAllByRole('option')).toHaveLength(1);
+  fireEvent.keyDown(input, { key: 'Tab' });
+  expect(send).not.toHaveBeenCalled();
+  expect(caretSuffix(input)).toBe(' after');
+  paste(input, '$');
+  expect(screen.getAllByRole('option')).toHaveLength(1);
+  expect(screen.getByRole('option', { name: /Review/ })).toBeTruthy();
+  fireEvent.keyDown(input, { key: 'Enter' });
+  expect(send).not.toHaveBeenCalled();
+  await act(async () => { fireEvent.keyDown(input, { key: 'Enter' }); });
+  expect(send).toHaveBeenCalledExactlyOnceWith('before Build Review  after', expect.objectContaining({
+    skillIds: ['build', 'review'],
+    skillReferences: [{ skillId: 'build', start: 7, end: 12 }, { skillId: 'review', start: 13, end: 19 }],
+  }));
 });
 
 it('uploads a long paste verbatim as TXT, preserves the draft, and sends the stored attachment', async () => {
@@ -109,17 +148,18 @@ it('links dropped local files through the attachment pipeline and sends them wit
   expect(send).toHaveBeenCalledWith('请分析', expect.objectContaining({ attachments: [attachment] }));
 });
 
-it('inserts a regular paste at the selection then places the caret at the end', () => {
+it.each(['plain', 'structured'] as const)('keeps the caret after a %s paste so subsequent newlines stay at the insertion point', (format) => {
   render(<Harness initialDraft="before after" />);
   const input = screen.getByRole('textbox');
   placeCaret(input, 7);
   const text = 'x'.repeat(MAX_INLINE_PASTE_CHARACTERS);
-  paste(input, text);
+  paste(input, text, format === 'structured' ? JSON.stringify({ version: 1, parts: [{ type: 'text', value: text }] }) : '');
   expect(input.textContent).toBe(`before ${text}after`);
   expect(document.activeElement).toBe(input);
-  expect(caretSuffix(input)).toBe('');
+  expect(caretSuffix(input)).toBe('after');
   fireEvent.keyDown(input, { key: 'Enter', shiftKey: true });
-  expect(input.textContent).toBe(`before ${text}after\n`);
+  expect(input.textContent).toBe(`before ${text}\nafter`);
+  expect(caretSuffix(input)).toBe('after');
 });
 
 it('browses only user prompts from the start and restores the unsent draft', () => {

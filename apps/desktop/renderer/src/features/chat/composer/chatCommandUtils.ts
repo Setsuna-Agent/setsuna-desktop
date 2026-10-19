@@ -9,6 +9,8 @@ export type TextCommand = {
   start: number;
 };
 
+type CommandMarker = '@' | '/' | '$';
+
 export function parseMentionCommand(value: string, cursorOffset?: number | null): TextCommand | null {
   const cursor = clampCursorOffset(value, cursorOffset);
   const quoted = value.slice(0, cursor).match(/(^|\s)@"((?:\\.|[^"\\\n])*)$/u);
@@ -22,20 +24,24 @@ export function parseSlashCommand(value: string, cursorOffset?: number | null): 
   return parseCursorCommand(value, '/', cursorOffset);
 }
 
+export function parseSkillCommand(value: string, cursorOffset?: number | null): TextCommand | null {
+  return parseCursorCommand(value, '$', cursorOffset);
+}
+
 export function entryLabel(entry: WorkspaceEntrySearchItem): string {
   const path = entry.absolutePath ?? entry.path;
   const value = entry.kind === 'directory' ? `${path.replace(/\/$/, '')}/` : path;
   return /[\s"]/u.test(value) ? JSON.stringify(value) : value;
 }
 
-function parseCursorCommand(value: string, marker: '@' | '/', cursorOffset?: number | null): TextCommand | null {
+function parseCursorCommand(value: string, marker: CommandMarker, cursorOffset?: number | null): TextCommand | null {
   const cursor = clampCursorOffset(value, cursorOffset);
   const directCommand = parseCommandEndingAtCursor(value, marker, cursor);
   if (directCommand) return directCommand;
   return parseIsolatedCommandBeforeCursor(value, marker, cursor);
 }
 
-function parseCommandEndingAtCursor(value: string, marker: '@' | '/', cursor: number): TextCommand | null {
+function parseCommandEndingAtCursor(value: string, marker: CommandMarker, cursor: number): TextCommand | null {
   const escapedMarker = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const match = value.slice(0, cursor).match(new RegExp(`(^|\\s)${escapedMarker}([^\\s\\n]*)$`));
   if (!match || match.index === undefined) return null;
@@ -48,7 +54,7 @@ function parseCommandEndingAtCursor(value: string, marker: '@' | '/', cursor: nu
   };
 }
 
-function parseIsolatedCommandBeforeCursor(value: string, marker: '@' | '/', cursor: number): TextCommand | null {
+function parseIsolatedCommandBeforeCursor(value: string, marker: CommandMarker, cursor: number): TextCommand | null {
   let markerIndex = cursor - 1;
   while (markerIndex >= 0 && isInlineWhitespace(value.charAt(markerIndex))) {
     markerIndex -= 1;

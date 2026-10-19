@@ -5,7 +5,7 @@ export { Checkbox, CheckField, Switch, type CheckboxProps } from './selection-co
 export { Dialog, type DialogProps } from './dialog.js';
 export { Dropdown, PointMenu, type DropdownProps, type MenuProps, type MenuItem } from './menu.js';
 export { MenuSurface } from './menu-surface.js';
-export { Popover, Tooltip, type TooltipProps } from './popover.js';
+export { AnchoredPopover, Popover, Tooltip, type TooltipProps } from './popover.js';
 export { ConfirmDialog, ConfirmDialogTrigger, type ConfirmationOptions } from './confirm-dialog.js';
 export { ConfirmationProvider, useConfirm } from './confirmation-provider.js';
 export { ProgressRing } from './progress.js';

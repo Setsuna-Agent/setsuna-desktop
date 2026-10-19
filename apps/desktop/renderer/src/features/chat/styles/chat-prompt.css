@@ -28,7 +28,8 @@
   min-width: 0;
   min-height: calc(var(--prompt-min-rows, 2) * 24px + 16px);
   max-height: calc(var(--prompt-max-rows, 6) * 24px + 16px);
-  padding: 10px var(--chat-prompt-inline-padding) 6px;
+  margin-right: 6px;
+  padding: 10px calc(var(--chat-prompt-inline-padding) - 6px) 6px var(--chat-prompt-inline-padding);
   overflow-y: auto;
   overflow-x: hidden;
   white-space: pre-wrap;
@@ -41,11 +42,20 @@
   outline: none;
 }
 
+.chat-prompt__input::-webkit-scrollbar-track {
+  margin-block: 6px;
+}
+
 .chat-prompt__input[data-empty]::before {
   content: attr(data-placeholder);
   position: absolute;
   pointer-events: none;
   color: var(--app-text-muted);
+}
+
+/* 末尾换行也需要可见的空行；占位只参与排版，不写入草稿或剪贴板。 */
+.chat-prompt__input::after {
+  content: '\200b';
 }
 
 .chat-prompt__tag {

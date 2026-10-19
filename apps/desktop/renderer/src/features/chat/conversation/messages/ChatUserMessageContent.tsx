@@ -1,6 +1,6 @@
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
 import { parseBrowserAnnotationMessage } from '@setsuna-desktop/feature-browser/contracts';
-import { Goal as GoalIcon, ShieldCheck, Users } from 'lucide-react';
+import { Goal as GoalIcon, Users } from 'lucide-react';
 import { useI18n } from '../../../../shared/i18n/I18nProvider.js';
 import { SkillReferenceText } from '../../skills/SkillReference.js';
 import { ChatMessageAttachments } from '../ChatMessageAttachments.js';
@@ -11,7 +11,6 @@ export function UserMessageContent({ message, streaming }: {
   streaming: boolean;
 }) {
   const hasSemanticKind = message.inputKind === 'goal'
-    || message.inputKind === 'review'
     || message.inputKind === 'subagent_task';
   const annotations = parseBrowserAnnotationMessage(message.content);
   return (
@@ -36,13 +35,9 @@ export function UserMessageContent({ message, streaming }: {
 
 function UserMessageKindBadge({ kind }: { kind: RuntimeMessage['inputKind'] }) {
   const { t } = useI18n();
-  if (kind !== 'goal' && kind !== 'review' && kind !== 'subagent_task') return null;
-  const label = t(kind === 'goal'
-    ? 'chat.message.kind.goal'
-    : kind === 'review'
-      ? 'chat.message.kind.review'
-      : 'chat.message.kind.subagentTask');
-  const Icon = kind === 'goal' ? GoalIcon : kind === 'review' ? ShieldCheck : Users;
+  if (kind !== 'goal' && kind !== 'subagent_task') return null;
+  const label = t(kind === 'goal' ? 'chat.message.kind.goal' : 'chat.message.kind.subagentTask');
+  const Icon = kind === 'goal' ? GoalIcon : Users;
   return (
     <span className={`chat-user-message-kind chat-user-message-kind--${kind}`} aria-label={label}>
       <Icon size={13} strokeWidth={1.9} aria-hidden="true" />
