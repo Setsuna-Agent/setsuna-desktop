@@ -38,6 +38,9 @@ export function PullRequestHeaderActions({ changes, onDiff, onRefresh, refreshin
       {refreshing ? null : <RefreshCw size={14} />}
     </IconButton>
     <IconButton label={t('openGitHub')} size="small" disabled={!onOpen} onClick={onOpen}><ExternalLink size={14} /></IconButton>
-    {mergeAction ?? <Button size="small" icon={<GitMerge size={14} />} disabled>{t('merge')}<ChevronDown size={13} /></Button>}
+    {mergeAction ?? <div className="pr-merge-actions" role="group" aria-label={t('merge')}>
+      <Button variant="primary" size="small" icon={<GitMerge size={14} aria-hidden="true" />} disabled>{t('merge')}</Button>
+      <Button variant="primary" size="small" aria-label={t('mergeMethod')} disabled><ChevronDown size={13} aria-hidden="true" /></Button>
+    </div>}
   </>;
 }
