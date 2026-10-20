@@ -1,5 +1,5 @@
 import { FileIcon, FileTreeRow, FileTreeSurface } from '@setsuna-desktop/renderer-ui';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import type { PullRequestFile } from '../contracts/index.js';
 
 type TreeNode = { path: string; name: string; file?: PullRequestFile; children: Map<string, TreeNode> };
@@ -21,10 +21,16 @@ function fileTree(files: PullRequestFile[]) {
   }
   return root;
 }
-export function PullRequestFileTree({ files, path, onSelect }: { files: PullRequestFile[]; path: string | null; onSelect(path: string): void }) {
+export function PullRequestFileTree({ files, path, onSelect, collapsed, onCollapsedChange }: {
+  files: PullRequestFile[]; path: string | null; onSelect(path: string): void;
+  collapsed: ReadonlySet<string>; onCollapsedChange(collapsed: ReadonlySet<string>): void;
+}) {
   const tree = useMemo(() => fileTree(files), [files]);
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
-  const toggle = (path: string) => setCollapsed((current) => { const next = new Set(current); if (next.has(path)) next.delete(path); else next.add(path); return next; });
+  const toggle = (path: string) => {
+    const next = new Set(collapsed);
+    if (next.has(path)) next.delete(path); else next.add(path);
+    onCollapsedChange(next);
+  };
   return <FileTreeSurface><TreeChildren parent={tree} depth={0} path={path} collapsed={collapsed} toggle={toggle} onSelect={onSelect} /></FileTreeSurface>;
 }
 function TreeChildren({ parent, depth, path, collapsed, toggle, onSelect }: {

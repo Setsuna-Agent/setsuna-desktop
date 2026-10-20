@@ -3,6 +3,7 @@ import type { PublishPullRequestComment, PullRequestAction, PullRequestComment }
 import { comment, commentFields, readThread, type CommentNode } from './discussions.js';
 import { GitHubApi, GitHubApiFailure, nextCursor, repoPath, repoVariables, requestChanged, type Page, pageFields } from './github-api.js';
 import { readRequest } from './pull-requests.js';
+import { assertAccount } from './account.js';
 
 function blocked(message: string): never {
   throw new FeatureOperationFailure({ code: 'PR_ACTION_BLOCKED', message, retryable: false });
@@ -22,7 +23,7 @@ export class PullRequestActions {
 
   async publish(input: PublishPullRequestComment, signal?: AbortSignal): Promise<PullRequestComment> {
     try {
-      await this.assertAccount(input.expectedAccount, signal);
+      await assertAccount(this.api, input.expectedAccount, signal);
       const key = `${input.expectedAccount.toLowerCase()}:${input.requestId}`;
       const fingerprint = JSON.stringify([input.repository, input.number, input.threadId, input.body]);
       const existing = this.comments.get(key);
@@ -62,7 +63,7 @@ export class PullRequestActions {
     if (existing) return comment(existing);
     const body = `${input.body}\n${marker}`;
     // Pagination may take time; check again at the write boundary after all reads.
-    await this.assertAccount(input.expectedAccount, signal);
+    await assertAccount(this.api, input.expectedAccount, signal);
     signal?.throwIfAborted();
     try {
       if (input.threadId) {
@@ -107,23 +108,16 @@ export class PullRequestActions {
     return undefined;
   }
 
-  private async assertAccount(expectedAccount: string, signal?: AbortSignal): Promise<void> {
-    const { value: viewer } = await this.api.request<{ login: string }>('/user', { signal });
-    if (viewer.login?.toLowerCase() !== expectedAccount.toLowerCase()) {
-      throw new FeatureOperationFailure({ code: 'PR_ACCOUNT_CHANGED', message: 'The GitHub account changed. Confirm the current account before trying again.', retryable: false });
-    }
-  }
-
   async act(input: PullRequestAction, signal?: AbortSignal): Promise<{ state: 'merged' | 'auto-merge-enabled' | 'auto-merge-disabled' | 'queued' }> {
     const key = `${input.repository}:${input.number}`;
     if (this.active.has(key)) blocked('A pull request action is already in progress.');
     this.active.add(key);
     try {
-      await this.assertAccount(input.expectedAccount, signal);
+      await assertAccount(this.api, input.expectedAccount, signal);
       const pr = await readRequest(this.api, input, signal);
       if (pr.headSha !== input.headSha || pr.baseBranch !== input.baseBranch) requestChanged();
       if (pr.state !== 'OPEN') blocked('This pull request is no longer open.');
-      await this.assertAccount(input.expectedAccount, signal);
+      await assertAccount(this.api, input.expectedAccount, signal);
       if (input.action === 'disable-auto-merge') {
         if (!pr.canDisableAutoMerge) blocked('Auto-merge cannot be disabled by this account.');
         await this.api.graphql('mutation($input: DisablePullRequestAutoMergeInput!) { disablePullRequestAutoMerge(input: $input) { pullRequest { id } } }', { input: { pullRequestId: pr.id } }, signal);

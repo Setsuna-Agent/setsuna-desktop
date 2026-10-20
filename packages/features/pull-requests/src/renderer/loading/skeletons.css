@@ -2,8 +2,8 @@
 .pr-skeleton__row { display: grid; gap: 12px; min-width: 0; }
 .pr-skeleton .pr-skeleton__meta { width: 38%; }
 .pr-skeleton .pr-skeleton__title { height: 18px; }
-.pr-skeleton .pr-skeleton__avatar { width: 22px; height: 22px; border-radius: 50%; }
-.pr-skeleton__author { display: flex; align-items: center; gap: 8px; }
+.pr-skeleton .pr-skeleton__avatar { width: 24px; height: 24px; border-radius: 50%; }
+.pr-skeleton__author { display: flex; align-items: center; gap: 10px; }
 
 .pr-skeleton--list { gap: 2px; }
 .pr-skeleton--list .pr-skeleton__row { gap: 8px; padding: 7px 10px; }
@@ -19,10 +19,12 @@
 .pr-skeleton__row:nth-child(3n + 2) > .pr-skeleton__line { width: 60%; }
 
 .pr-skeleton .pr-skeleton__check { height: 52px; border-radius: var(--app-radius-lg); }
-.pr-skeleton--paragraphs { gap: 28px; }
-.pr-skeleton--paragraphs .pr-skeleton__row > :nth-child(2) { width: 94%; }
-.pr-skeleton--paragraphs .pr-skeleton__row > :last-child, .pr-skeleton--discussion .pr-skeleton__row > :last-child { width: 62%; }
-.pr-skeleton--discussion { padding: 14px 16px; }
+/* Mirrors .pr-comment: 28px header line, then body lines starting after the 24px avatar + 10px gap. */
+.pr-skeleton--discussion { padding: 12px 16px 16px; }
+.pr-skeleton--discussion .pr-skeleton__row { gap: 10px; }
+.pr-skeleton--discussion .pr-skeleton__author { height: 28px; }
+.pr-skeleton--discussion .pr-skeleton__row > .sd-skeleton { margin-left: 34px; }
+.pr-skeleton--discussion .pr-skeleton__row > :last-child { width: 62%; }
 
 .pr-skeleton--connection { width: min(320px, 100%); }
 .pr-skeleton--connection .pr-skeleton__row { justify-items: center; gap: 14px; }

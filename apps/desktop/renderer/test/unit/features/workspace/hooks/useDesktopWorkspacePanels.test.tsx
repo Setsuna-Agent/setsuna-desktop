@@ -477,6 +477,34 @@ it.each(['/worktree/child', 'C:\\worktree\\child'])('restores a terminal at its 
   expect(view.result.current.bottomActivePanel?.rootId).toBe('child');
 });
 
+it('opens multiple PRs in their owning conversation and reactivates the same PR without duplicate tabs', () => {
+  const savedFile = { id: 'file:README.md', type: 'file' as const, filePath: 'README.md' };
+  writeSessionRecord('pr-window', 'panels', 'thread:B', {
+    sidePanelExpanded: true, sidePanelSlot: { active: savedFile.id, panels: [savedFile] },
+    bottomPanelExpanded: false, bottomPanelSlot: { active: null, panels: [] },
+  });
+  const { view } = renderTerminalWorkspace('thread:A', undefined, 'pr-window');
+  const openForThread = view.result.current.openPullRequestPanel;
+  act(() => {
+    openForThread('B', { repository: 'Owner/Repo', number: 12 });
+    openForThread('B', { repository: 'owner/repo', number: 13 });
+    openForThread('B', { repository: 'other/repo', number: 12 });
+  });
+  expect(view.result.current.sidePanelSlot.panels).toEqual([]);
+  view.rerender({ targetIdentity: 'thread:B' });
+  expect(view.result.current.sidePanelSlot.panels.map((panel) => panel.id)).toEqual([
+    savedFile.id, 'pull-request:owner/repo#12', 'pull-request:owner/repo#13', 'pull-request:other/repo#12',
+  ]);
+  expect(view.result.current.sidePanelVisible).toBe(true);
+  act(() => view.result.current.moveDesktopPanel('side', 'pull-request:owner/repo#12', 'bottom', null, 'after'));
+  act(() => openForThread('B', { repository: 'owner/repo', number: 12 }));
+  expect(view.result.current.sidePanelSlot.active).toBe('pull-request:owner/repo#12');
+  expect(view.result.current.sidePanelSlot.panels).toHaveLength(4);
+  expect(view.result.current.bottomPanelSlot.panels).toEqual([]);
+  view.rerender({ targetIdentity: 'thread:A' });
+  expect(view.result.current.sidePanelSlot.panels).toEqual([]);
+});
+
 function renderTerminalWorkspace(targetIdentity: ChatComposerTargetIdentity = 'thread:A',
   project: WorkspaceProject = { id: 'project', path: '/repo', name: 'Repository', createdAt: '', updatedAt: '' },
   windowSessionKey: string | null = null) {

@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
-import type { PullRequestCommentInputProps } from '@setsuna-desktop/feature-pull-requests/renderer';
+import type { PullRequestCommentInputProps, PullRequestQuoteReference } from '@setsuna-desktop/feature-pull-requests/renderer';
 import { PullRequestCommentInput } from '../../../src/composition/PullRequestCommentInput.js';
 
 afterEach(cleanup);
@@ -80,4 +80,52 @@ it.each([
     expect(changed).toHaveBeenLastCalledWith(expected);
   }
   expect(changed).toHaveBeenCalledTimes(4);
+});
+
+it('keeps quote ranges through edits and removes a quote atomically without deleting the surrounding draft', () => {
+  const content = '@alice\n> Quoted passage';
+  const prefix = 'My reply\n\n';
+  const reference = { id: 'quote-one', author: 'alice', text: 'Quoted passage', start: prefix.length, end: prefix.length + content.length };
+  const changed = vi.fn();
+  function QuotedInput() {
+    const [draft, setDraft] = useState({ value: `${prefix}${content}\n\nAfter`, quotes: [reference] as PullRequestQuoteReference[] });
+    return <PullRequestCommentInput {...inputProps()} {...draft} onChange={(value, quotes = []) => {
+      changed(value, quotes); setDraft({ value, quotes });
+    }} />;
+  }
+  render(<QuotedInput />);
+  const input = screen.getByRole('textbox', { name: 'Comment' });
+  act(() => { input.focus(); document.getSelection()!.setBaseAndExtent(input.firstChild!, 0, input.firstChild!, 0); });
+  fireEvent.paste(input, { clipboardData: { files: [], getData: () => 'Before ' } });
+  expect(changed).toHaveBeenLastCalledWith(`Before ${prefix}${content}\n\nAfter`, [
+    { ...reference, start: reference.start + 7, end: reference.end + 7 },
+  ]);
+  fireEvent.click(screen.getByRole('button'));
+  expect(changed).toHaveBeenLastCalledWith(`Before ${prefix}After`, []);
+});
+
+it('removes quote separators and keeps the remaining quote valid through consecutive deletions', () => {
+  const first = '@alice\n> First passage';
+  const second = '@bob\n> Second passage\n> Another line';
+  const secondStart = first.length + 2;
+  const changed = vi.fn();
+  function QuotedInput() {
+    const [draft, setDraft] = useState({
+      value: `${first}\n\n${second}\n\n`,
+      quotes: [
+        { id: 'first', author: 'alice', text: 'First passage', start: 0, end: first.length },
+        { id: 'second', author: 'bob', text: 'Second passage\nAnother line', start: secondStart, end: secondStart + second.length },
+      ],
+    });
+    return <PullRequestCommentInput {...inputProps()} {...draft} onChange={(value, quotes = []) => {
+      changed(value, quotes); setDraft({ value, quotes });
+    }} />;
+  }
+  render(<QuotedInput />);
+  fireEvent.click(screen.getAllByRole('button')[0]);
+  expect(changed).toHaveBeenLastCalledWith(`${second}\n\n`, [
+    { id: 'second', author: 'bob', text: 'Second passage\nAnother line', start: 0, end: second.length },
+  ]);
+  fireEvent.click(screen.getByRole('button'));
+  expect(changed).toHaveBeenLastCalledWith('', []);
 });

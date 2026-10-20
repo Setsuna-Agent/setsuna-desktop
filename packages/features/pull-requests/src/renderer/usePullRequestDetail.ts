@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PullRequestDetail, PullRequestReference } from '../contracts/index.js';
 import type { PullRequestsClient } from './client.js';
 import { errorText } from './context.js';
@@ -8,21 +8,43 @@ export function usePullRequestDetail(client: PullRequestsClient, reference: Pull
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [revision, setRevision] = useState(0);
-  const refresh = useCallback(() => setRevision((value) => value + 1), []);
+  const current = useRef<AbortController | null>(null);
   const { repository, number } = reference;
-  useEffect(() => {
+  const load = useCallback(async () => {
+    current.current?.abort();
     const controller = new AbortController();
+    current.current = controller;
     setLoading(true);
-    void client.detail({ repository, number }, controller.signal).then((value) => {
-      if (!controller.signal.aborted) { setDetail(value); setError(''); }
-    }).catch((cause) => { if (!controller.signal.aborted) setError(errorText(cause)); })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
-  }, [client, repository, number, revision]);
+    setError('');
+    try {
+      const value = await client.detail({ repository, number }, controller.signal);
+      if (controller.signal.aborted) return false;
+      setDetail(value);
+      return true;
+    } catch (cause) {
+      if (!controller.signal.aborted) setError(errorText(cause));
+      return false;
+    } finally {
+      if (!controller.signal.aborted) {
+        current.current = null;
+        setLoading(false);
+      }
+    }
+  }, [client, repository, number]);
+  const refresh = useCallback(() => {
+    setRevision((value) => value + 1);
+    return load();
+  }, [load]);
   useEffect(() => {
-    const timer = setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 45_000);
-    window.addEventListener('focus', refresh);
-    return () => { clearInterval(timer); window.removeEventListener('focus', refresh); };
+    void load();
+    return () => current.current?.abort();
+  }, [load]);
+  useEffect(() => {
+    // Background updates must not cancel a manual refresh before its result can be reported.
+    const refreshWhenIdle = () => { if (!current.current) void refresh(); };
+    const timer = setInterval(() => { if (document.visibilityState === 'visible') refreshWhenIdle(); }, 45_000);
+    window.addEventListener('focus', refreshWhenIdle);
+    return () => { clearInterval(timer); window.removeEventListener('focus', refreshWhenIdle); };
   }, [refresh]);
   return { detail, error, loading, revision, refresh };
 }

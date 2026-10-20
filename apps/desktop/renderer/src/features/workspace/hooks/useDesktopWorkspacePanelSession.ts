@@ -185,8 +185,14 @@ export function useDesktopWorkspacePanelSession(
     identity: ChatComposerTargetIdentity,
     updater: (current: DesktopWorkspacePanelLayout) => DesktopWorkspacePanelLayout,
   ) => {
-    setLayouts((current) => updateDesktopWorkspacePanelLayout(current, identity, updater));
-  }, [setLayouts]);
+    setLayouts((current) => {
+      // Cross-thread opens can arrive before navigation renders that thread. Restore
+      // its saved tabs first so adding one panel does not replace an unvisited layout.
+      const restored = current[identity] || !windowKey ? current
+        : { ...current, [identity]: readWorkspaceLayout(windowKey, identity) };
+      return updateDesktopWorkspacePanelLayout(restored, identity, updater);
+    });
+  }, [setLayouts, windowKey]);
 
   const updateLayout = useCallback((updater: (current: DesktopWorkspacePanelLayout) => DesktopWorkspacePanelLayout) => {
     updateLayoutForIdentity(targetIdentity, updater);

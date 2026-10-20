@@ -17,6 +17,14 @@ export function summary(node: SummaryNode, repository: string): PullRequestSumma
     checksState: node.commits.nodes[0]?.commit.statusCheckRollup?.state ?? null,
   };
 }
+export async function readRequestSummary(api: GitHubApi, input: PullRequestReference, signal?: AbortSignal): Promise<PullRequestSummary> {
+  const result = await api.graphql<{ repository: { pullRequest: SummaryNode | null } }>(`
+    query($owner: String!, $name: String!, $number: Int!) {
+      repository(owner: $owner, name: $name) { pullRequest(number: $number) { ${summaryFields()} } }
+    }`, { ...repoVariables(input.repository), number: input.number }, signal);
+  if (!result.repository.pullRequest) throw new Error('Pull request not found.');
+  return summary(result.repository.pullRequest, input.repository);
+}
 export async function listRequests(api: GitHubApi, input: PullRequestListInput, signal?: AbortSignal): Promise<PullRequestListResult> {
   const states = input.filters.state === 'all' ? ['OPEN', 'CLOSED', 'MERGED']
     : input.filters.state === 'merged' ? ['MERGED'] : input.filters.state === 'closed' ? ['CLOSED'] : ['OPEN'];
@@ -50,7 +58,7 @@ const requestedReviewerFields = `requestedReviewer { ... on User { ${actorFields
 type Reviewer = { requestedReviewer: { login?: string; name?: string; avatarUrl?: string; teamAvatarUrl?: string | null } | null };
 type Review = { author: Actor; state: string };
 type DetailNode = SummaryNode<CheckRollup> & {
-  reactionGroups?: ReactionNode[]; body: string; createdAt: string; baseRefName: string; headRefName: string; baseRefOid: string;
+  reactionGroups?: ReactionNode[]; viewerCanReact?: boolean; body: string; createdAt: string; baseRefName: string; headRefName: string; baseRefOid: string;
   headRepository: { nameWithOwner: string } | null; additions: number; deletions: number; changedFiles: number;
   comments: { totalCount: number }; reviewThreads: { totalCount: number };
   mergeable: string; mergeStateStatus: string; reviewDecision: string | null; viewerCanEnableAutoMerge: boolean;
@@ -93,7 +101,7 @@ export async function readRequest(api: GitHubApi, input: PullRequestReference, s
   const checksCommit = node.potentialMergeCommit?.statusCheckRollup ? node.potentialMergeCommit.oid : node.headRefOid;
   const checks = await collectChecks(api, { ...input, commitSha: checksCommit, cursor: null }, rollup, signal);
   return {
-    ...summary(node, input.repository), ...summarizeChecks(checks), body: node.body, reactions: reactions(node.reactionGroups), createdAt: node.createdAt,
+    ...summary(node, input.repository), ...summarizeChecks(checks), body: node.body, canReact: Boolean(node.viewerCanReact), reactions: reactions(node.reactionGroups), createdAt: node.createdAt,
     baseBranch: node.baseRefName, headBranch: node.headRefName, baseSha: node.baseRefOid,
     headRepository: node.headRepository?.nameWithOwner ?? null, additions: node.additions, deletions: node.deletions,
     fileCount: node.changedFiles, commentCount: node.comments.totalCount + node.reviewThreads.totalCount,

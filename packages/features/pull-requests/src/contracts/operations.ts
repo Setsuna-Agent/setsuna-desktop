@@ -3,6 +3,9 @@ import { defineFeatureOperation } from '@setsuna-desktop/feature-core/operation'
 import type { RuntimeCodec } from '@setsuna-desktop/feature-core/codec';
 import { codec, object } from './schema.js';
 import * as models from './models.js';
+import { threadPullRequestsInput, threadPullRequestsResult } from './thread-pull-requests.js';
+import { activityInputCodec, activityResultCodec } from './activity.js';
+import { reactionInputCodec, reactionResultCodec } from './reactions.js';
 
 export const pullRequestsFeature = defineFeature('pull-requests');
 const empty = codec(object({}));
@@ -25,7 +28,10 @@ export const installGitHubCli = operation('cli-installation.start', empty, model
 export const readPullRequestRepositories = operation('repositories.list', empty, models.repositoriesCodec);
 export const listPullRequests = operation('requests.list', models.listInputCodec, models.listResultCodec);
 export const readPullRequest = operation('requests.read', models.referenceCodec, models.detailCodec);
+export const readThreadPullRequests = operation('threads.read', threadPullRequestsInput, threadPullRequestsResult);
 export const readPullRequestDiscussions = operation('discussions.list', models.discussionInputCodec, models.discussionResultCodec);
+export const readPullRequestActivity = operation('activity.list', activityInputCodec, activityResultCodec);
+export const setPullRequestReaction = operation('reactions.set', reactionInputCodec, reactionResultCodec, true);
 export const readPullRequestReplies = operation('replies.list', models.repliesInputCodec, models.repliesResultCodec);
 export const readPullRequestChecks = operation('checks.list', models.checksInputCodec, models.checksResultCodec);
 export const readPullRequestFiles = operation('files.list', models.filesInputCodec, models.filesResultCodec);

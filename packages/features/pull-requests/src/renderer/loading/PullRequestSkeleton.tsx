@@ -1,7 +1,7 @@
 import { Skeleton } from '@setsuna-desktop/renderer-ui';
 import './skeletons.css';
 
-const rowCounts = { list: 5, files: 8, patch: 12, checks: 4, paragraphs: 3, discussion: 1, connection: 1 };
+const rowCounts = { list: 5, files: 8, patch: 12, checks: 4, discussion: 1, connection: 1 };
 type SkeletonKind = keyof typeof rowCounts;
 
 /** Region skeletons also work before the feature's host context has mounted. */

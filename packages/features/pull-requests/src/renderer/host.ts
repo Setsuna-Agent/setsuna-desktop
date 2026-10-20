@@ -4,6 +4,7 @@ import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import type { SettingsPageHeaderProps } from '@setsuna-desktop/renderer-contracts/settings';
 import type { FileDiff, PostRenderPhase } from '@pierre/diffs';
 import type { DiffLineAnnotation } from '@pierre/diffs/react';
+import type { PullRequestQuoteReference } from './discussions/quote.js';
 
 export type PullRequestPatchViewProps = {
   patch: string; layout?: 'split' | 'unified'; wrap?: boolean; className?: string;
@@ -12,8 +13,9 @@ export type PullRequestPatchViewProps = {
 };
 export type PullRequestCommentInputProps = {
   value: string; label: string; placeholder: string; disabled: boolean; maxLength: number;
+  quotes?: PullRequestQuoteReference[];
   focusRequest?: number; footer: ReactNode;
-  onChange(value: string): void; onSubmit(): void;
+  onChange(value: string, quotes?: PullRequestQuoteReference[]): void; onSubmit(): void;
 };
 export type PullRequestsRendererHost = {
   PageHeader: ComponentType<SettingsPageHeaderProps>;

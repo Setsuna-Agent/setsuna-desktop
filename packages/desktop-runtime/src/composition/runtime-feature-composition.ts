@@ -4,7 +4,7 @@ import { pullRequestsRuntimeFeature } from '@setsuna-desktop/feature-pull-reques
 import { automationFeature, automationRuntimeHostCapability, automationToolServiceCapability } from '@setsuna-desktop/feature-automation/contracts';
 import { automationRuntimeFeature } from '@setsuna-desktop/feature-automation/runtime';
 import { createAutomationRuntimeHost } from './automation-runtime-host.js';
-import { githubCliInstallationHostCapability, pullRequestsWorkspaceCapability } from '@setsuna-desktop/feature-pull-requests/contracts';
+import { githubCliInstallationHostCapability, pullRequestsFeature, pullRequestsWorkspaceCapability, pullRequestToolServiceCapability } from '@setsuna-desktop/feature-pull-requests/contracts';
 import { readPluginConnectorStatuses } from '../adapters/plugin/plugin-connector-status.js';
 import {
   completeFeatureHostActivation,
@@ -553,6 +553,9 @@ export async function activateBuiltinRuntimeFeatures(
     host.bindWhenFeatureAvailable(notificationsFeature.id, {
       tools: requiredCapability(notificationToolServiceCapability),
     }, ({ tools }) => runtime.notificationToolHost.bind(tools));
+    host.bindWhenFeatureAvailable(pullRequestsFeature.id, {
+      tools: requiredCapability(pullRequestToolServiceCapability),
+    }, ({ tools }) => runtime.pullRequestToolHost.bind(tools));
     host.add(runtime.featureManagement.attach(host.composition));
     host.bindWhenFeatureAvailable(automationFeature.id, {
       tools: requiredCapability(automationToolServiceCapability),
