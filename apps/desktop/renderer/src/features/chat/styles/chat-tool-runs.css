@@ -1207,14 +1207,6 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
   cursor: default;
 }
 
-.chat-tool-run__action-error {
-  max-width: min(560px, 100%);
-  color: var(--app-danger);
-  font-size: 12px;
-  line-height: 18px;
-  overflow-wrap: anywhere;
-}
-
 .chat-mcp-terminal {
   position: relative;
   width: 100%;

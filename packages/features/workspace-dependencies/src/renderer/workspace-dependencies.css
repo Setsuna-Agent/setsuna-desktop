@@ -55,8 +55,7 @@
   gap: 7px;
 }
 
-[data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__source-row form > small,
-[data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__error {
+[data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__source-row form > small {
   color: var(--sd-color-danger);
   font-size: 11px;
   line-height: 16px;
@@ -113,10 +112,6 @@
 
 [data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__repair-tooltip-target > button:disabled {
   pointer-events: none;
-}
-
-[data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__error {
-  margin: 0 14px 12px;
 }
 
 [data-feature-id='workspace-dependencies'] .is-spinning {

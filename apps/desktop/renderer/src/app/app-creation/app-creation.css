@@ -200,14 +200,6 @@
   color: var(--app-text-secondary);
 }
 
-.plugin-app-creation__error {
-  margin: 0;
-  color: var(--sd-color-danger);
-  font-size: 12px;
-  line-height: 1.6;
-  overflow-wrap: anywhere;
-}
-
 @container (max-width: 760px) {
   .plugin-app-creation__shortcuts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }

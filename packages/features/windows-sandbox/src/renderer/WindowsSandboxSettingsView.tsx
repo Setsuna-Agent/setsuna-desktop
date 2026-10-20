@@ -1,4 +1,4 @@
-import { useConfirm } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, useConfirm } from '@setsuna-desktop/renderer-ui';
 import type {
   RendererTranslate,
 } from '@setsuna-desktop/feature-core/renderer';
@@ -121,7 +121,7 @@ export function WindowsSandboxSettingsView({
           </div>
         </Row>
       </Group>
-      {sandbox.error ? <p className="feature-windows-sandbox__error" role="alert">{sandbox.error}</p> : null}
+      {sandbox.error ? <ToastNotice message={sandbox.error} /> : null}
     </Section>
   );
 }

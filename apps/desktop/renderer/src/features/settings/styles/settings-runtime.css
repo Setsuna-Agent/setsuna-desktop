@@ -297,12 +297,6 @@
   white-space: nowrap;
 }
 
-.chat-user-settings__runtime-list-error {
-  color: var(--app-danger);
-  font-size: 11px;
-  line-height: 16px;
-}
-
 .chat-user-settings__runtime-json-field > button {
   align-self: flex-end;
 }

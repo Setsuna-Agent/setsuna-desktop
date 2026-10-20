@@ -1,5 +1,5 @@
 import type { ChatToolResultViewProps } from '@setsuna-desktop/renderer-contracts/chat';
-import { Button, Dropdown, type MenuProps } from '@setsuna-desktop/renderer-ui';
+import { Button, Dropdown, ToastNotice, type MenuProps } from '@setsuna-desktop/renderer-ui';
 import { ChevronDown, ExternalLink, FolderOpen, Globe2 } from 'lucide-react';
 import { useState, type DragEvent } from 'react';
 import type { ArtifactRendererHost, RuntimeArtifact } from '../contracts/index.js';
@@ -129,9 +129,7 @@ export function ArtifactToolResultView({
           </Dropdown>
         </div>
         {error ? (
-          <div className="artifact-card__error" role="alert">
-            {translate('feature.artifact.error', { error })}
-          </div>
+          <ToastNotice message={translate('feature.artifact.error', { error })} />
         ) : null}
       </article>
     </section>

@@ -1,4 +1,4 @@
-import { Button } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, Button } from '@setsuna-desktop/renderer-ui';
 import type {
   AnswerRuntimeApprovalInput,
   RuntimeApprovalAvailableDecision,
@@ -258,7 +258,7 @@ export function ApprovalActions({
         })}
       </div>
       {error
-        ? <div className="chat-tool-run__action-error">{error}</div>
+        ? <ToastNotice message={error} />
         : null}
     </div>
   );
@@ -398,7 +398,7 @@ export function McpElicitationActions({
         </Button>
       </div>
       {error
-        ? <div className="chat-tool-run__action-error">{error}</div>
+        ? <ToastNotice message={error} />
         : null}
     </form>
   );

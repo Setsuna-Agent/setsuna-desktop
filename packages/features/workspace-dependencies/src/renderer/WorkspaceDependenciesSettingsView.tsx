@@ -1,3 +1,4 @@
+import { ToastNotice } from '@setsuna-desktop/renderer-ui';
 import type {
   RendererTranslate,
 } from '@setsuna-desktop/feature-core/renderer';
@@ -110,7 +111,7 @@ export function WorkspaceDependenciesSettingsView({
         </Row>
       </Group>
       {dependencies.error ? (
-        <p className="feature-workspace-dependencies__error" role="alert">{dependencies.error}</p>
+        <ToastNotice message={dependencies.error} />
       ) : null}
     </Section>
   );

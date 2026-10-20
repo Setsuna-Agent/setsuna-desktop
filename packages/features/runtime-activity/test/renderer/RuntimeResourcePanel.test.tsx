@@ -34,7 +34,7 @@ it('requires confirmation, preserves a rejected target for retry and refreshes a
   await user.click(terminate);
   dialog = within(await screen.findByRole('dialog', { name: '终止进程 20？' }));
   await user.click(dialog.getByRole('button', { name: '终止', exact: true }));
-  await waitFor(() => expect(dialog.getByRole('alert').textContent).toContain('进程或关联页面已变化'));
+  expect(await screen.findByText(/进程或关联页面已变化/u)).toBeTruthy();
   expect(desktop.terminateResourceProcess).toHaveBeenCalledExactlyOnceWith({ pid: 20, startedAt: 100, pageIds: [1] });
   await user.click(dialog.getByRole('button', { name: '终止', exact: true }));
   await waitFor(() => expect(screen.queryByRole('button', { name: '终止进程 20' })).toBeNull());
@@ -60,7 +60,7 @@ it('requires a new selection when polling replaces the confirmed pages even with
   await act(() => vi.advanceTimersByTimeAsync(2_000));
   expect(desktop.sampleResources).toHaveBeenCalledTimes(2);
   await act(async () => fireEvent.click(dialog.getByRole('button', { name: '终止', exact: true })));
-  expect(dialog.getByRole('alert').textContent).toContain('进程或关联页面已变化');
+  expect(screen.getByText(/进程或关联页面已变化/u)).toBeTruthy();
   expect(desktop.terminateResourceProcess).not.toHaveBeenCalled();
 
   fireEvent.click(dialog.getByRole('button', { name: '取消' }));

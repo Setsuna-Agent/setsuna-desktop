@@ -1,3 +1,4 @@
+import { ToastNotice } from '@setsuna-desktop/renderer-ui';
 import type {
   DesktopWebDavSyncCategoryId,
   DesktopWebDavSyncOperationState,
@@ -139,7 +140,7 @@ export function WebDavRestorePanel({
       ) : (
         <div className="settings-webdav__empty">{t('feature.webdavSync.restore.empty')}</div>
       )}
-      {actionError && !plan ? <div className="settings-webdav__error" role="alert">{actionError}</div> : null}
+      {actionError && !plan ? <ToastNotice message={actionError} /> : null}
       {plan ? (
         <WebDavRestorePlanDialog
           busy={busy || restorePending}

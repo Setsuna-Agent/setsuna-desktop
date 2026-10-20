@@ -1,3 +1,4 @@
+import { ToastNotice } from '@setsuna-desktop/renderer-ui';
 import {
   RUNTIME_IMAGE_COMPRESSION_LEVELS,
   normalizeRuntimeImageCompression,
@@ -106,7 +107,7 @@ export function RuntimePolicySettings({
           </div>
           <DataLocationSettings fallbackRoot={config.dataPath} />
         </div>
-        {localPathError ? <div className="chat-user-settings__runtime-error">{localPathError}</div> : null}
+        {localPathError ? <ToastNotice message={localPathError} /> : null}
       </div>
     </div>
   );
@@ -144,7 +145,7 @@ function RuntimeImageCompressionSettings({ config, onSave }: {
           ))}
         </SelectField>
       </SettingsRow>
-      {saveError ? <div className="chat-user-settings__runtime-error" role="alert">{saveError}</div> : null}
+      {saveError ? <ToastNotice message={saveError} /> : null}
     </SettingsGroup>
   );
 }
@@ -243,7 +244,7 @@ export function RuntimeAdvancedSettings({
             }}>{t('settings.runtime.saveFeatureFlags')}</Button>
           </div>
         </div>
-        {advancedError ? <div className="chat-user-settings__runtime-error">{advancedError}</div> : null}
+        {advancedError ? <ToastNotice message={advancedError} /> : null}
       </details>
     </div>
   );

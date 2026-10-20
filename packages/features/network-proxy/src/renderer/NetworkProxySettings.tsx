@@ -1,3 +1,4 @@
+import { ToastNotice } from '@setsuna-desktop/renderer-ui';
 import type {
   DesktopNetworkProxyRoute,
   DesktopNetworkProxyScope,
@@ -182,7 +183,7 @@ export function NetworkProxySettings({
         )}
 
         {actionError || proxy.error ? (
-          <div className="settings-network-proxy__error" role="alert">{actionError ?? proxy.error}</div>
+          <ToastNotice message={actionError ?? proxy.error} />
         ) : null}
       </section>
       <p className="settings-network-proxy__footnote">

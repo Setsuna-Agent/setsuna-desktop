@@ -1,5 +1,5 @@
 import type { DesktopDataRootRetainedBackup } from '@setsuna-desktop/contracts';
-import { ConfirmDialogTrigger } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, ConfirmDialogTrigger } from '@setsuna-desktop/renderer-ui';
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useDesktopDataRoot } from '../../../app/providers/DesktopDataRootProvider.js';
@@ -66,7 +66,7 @@ export function DataRootBackupSettings() {
           );
         }}
       />
-      {error ? <div className="chat-user-settings__runtime-error" role="alert">{error}</div> : null}
+      {error ? <ToastNotice message={error} /> : null}
     </section>
   );
 }

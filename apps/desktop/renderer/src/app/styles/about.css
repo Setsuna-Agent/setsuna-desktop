@@ -93,9 +93,3 @@
   outline: none;
   box-shadow: var(--app-focus-ring);
 }
-
-.app-about__error {
-  margin: 0;
-  color: var(--app-danger);
-  font-size: 12px;
-}

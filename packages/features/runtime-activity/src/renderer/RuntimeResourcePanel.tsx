@@ -1,5 +1,6 @@
+import { ToastNotice } from '@setsuna-desktop/renderer-ui';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
-import { CircleAlert, LoaderCircle } from 'lucide-react';
+import { LoaderCircle } from 'lucide-react';
 import type { RuntimeActivityDesktopBridge, RuntimeActivityRendererService } from '../contracts/index.js';
 import { resourceProcessName } from './resource-model.js';
 import { ResourceProcessTerminateButton } from './ResourceProcessTerminateButton.js';
@@ -14,7 +15,7 @@ export function RuntimeResourcePanel({ desktopBridge, service, translate: t }: {
   const { processes, error, loading, refresh } = useResourceSnapshot(desktopBridge, service);
   if (loading) return <div className="runtime-activity-empty" aria-busy="true"><LoaderCircle size={18} className="is-spinning" /></div>;
   return <div className="runtime-resources">
-    {error ? <div className="runtime-resources__error" role="alert"><CircleAlert size={14} aria-hidden="true" />{t('feature.runtimeActivity.refreshFailed', { error })}</div> : null}
+    {error ? <ToastNotice message={t('feature.runtimeActivity.refreshFailed', { error })} /> : null}
     <div className="runtime-resources__table" role="table" aria-label={t('feature.runtimeActivity.resources.title')}>
       <div className="runtime-resources__row runtime-resources__header" role="row">
         <span role="columnheader">{t('feature.runtimeActivity.resources.process')}</span>

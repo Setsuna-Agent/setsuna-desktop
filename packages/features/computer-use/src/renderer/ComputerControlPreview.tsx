@@ -1,4 +1,4 @@
-import { Button, Popover } from '@setsuna-desktop/renderer-ui';
+import { Button, Popover, ToastNotice } from '@setsuna-desktop/renderer-ui';
 import type { ShellTopbarActionSlotProps } from '@setsuna-desktop/renderer-contracts/shell';
 import { Monitor, Square } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -55,7 +55,7 @@ export function ComputerControlPreview({ bridge, ui, translate: t }: {
             )}
           </div>
           <div className="computer-preview__actions">
-            {control.error ? <div className="computer-preview__error" role="alert">{control.error}</div> : null}
+            {control.error ? <ToastNotice message={control.error} /> : null}
             <div className="computer-preview__footer">
               <span className="computer-preview__status">
                 {t(control.stopping ? 'feature.computerUse.stopping' : 'feature.computerUse.active')}

@@ -1,4 +1,4 @@
-import { useConfirm } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, useConfirm } from '@setsuna-desktop/renderer-ui';
 import type {
   RendererTranslate,
 } from '@setsuna-desktop/feature-core/renderer';
@@ -62,7 +62,7 @@ export function MemoryPreferencesSettingsView({
         />
       </Group>
       {settings.error ? (
-        <p className="feature-memory__error" role="alert">{settings.error}</p>
+        <ToastNotice message={settings.error} />
       ) : null}
     </Section>
   );
@@ -147,7 +147,7 @@ export function MemoryPreviewSettingsView({
             {translate(previewBusy ? 'feature.memory.settings.refreshing' : 'feature.memory.settings.refresh')}
           </Button>
         </div>
-        {previewError ? <p className="feature-memory__error" role="alert">{previewError}</p> : null}
+        {previewError ? <ToastNotice message={previewError} /> : null}
         <div className="feature-memory__list">
           {preview?.items.map((item) => (
             <MemoryPreviewCard
@@ -217,7 +217,7 @@ export function MemoryTaskModelSettingsView({
         />
       </Group>
       {settings.error ? (
-        <p className="feature-memory__error" role="alert">{settings.error}</p>
+        <ToastNotice message={settings.error} />
       ) : null}
     </Section>
   );

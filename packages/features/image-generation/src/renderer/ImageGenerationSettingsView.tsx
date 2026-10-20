@@ -5,7 +5,7 @@ import type { RendererTranslate,
 import type {
   SettingsViewUi,
 } from '@setsuna-desktop/renderer-contracts/settings';
-import { ImagePreview, ImagePreviewGroup } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, ImagePreview, ImagePreviewGroup } from '@setsuna-desktop/renderer-ui';
 import { Copy, FolderOpen, KeyRound, Loader2, Play, Save, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import {
@@ -157,7 +157,7 @@ export function ImageGenerationSettingsView({
       ) : null}
       <footer>
         <div className="feature-image-generation-settings__status" aria-live="polite">
-          {error ? <span className="is-error">{error}</span> : null}
+          {error ? <ToastNotice message={error} /> : null}
           {!error && saved ? (
             <span className="is-success">{translate('feature.imageGeneration.settings.saved')}</span>
           ) : null}
@@ -241,7 +241,7 @@ function ImageGenerationConnectionTest({
         />
       </label>
       <div className="feature-image-generation-test__controls">
-        <div aria-live="polite">{error ? <span className="is-error">{error}</span> : result ? <span className="is-success">{translate('feature.imageGeneration.test.generated', { count: result.images.length, duration: formatDuration(result.durationMs) })}</span> : <span>{translate('feature.imageGeneration.test.shortcut')}</span>}</div>
+        <div aria-live="polite">{error ? <ToastNotice message={error} /> : result ? <span className="is-success">{translate('feature.imageGeneration.test.generated', { count: result.images.length, duration: formatDuration(result.durationMs) })}</span> : <span>{translate('feature.imageGeneration.test.shortcut')}</span>}</div>
         <Button
           disabled={generating || !prompt.trim()}
           icon={generating ? <Loader2 className="is-spinning" size={14} /> : <Play size={14} />}

@@ -1,4 +1,4 @@
-import { Button, Dialog } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, Button, Dialog } from '@setsuna-desktop/renderer-ui';
 import { ArrowRight, ArrowUpRight, PanelsTopLeft } from 'lucide-react';
 import { useState } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
@@ -55,7 +55,7 @@ export function PluginAppCreationDialog({ pending, error, onClose, onCloseAutoFo
           </Button>
         ))}
       </div>
-      {error ? <p role="alert" className="plugin-app-creation__error">{error}</p> : null}
+      {error ? <ToastNotice message={error} /> : null}
     </div>
   </Dialog>;
 }

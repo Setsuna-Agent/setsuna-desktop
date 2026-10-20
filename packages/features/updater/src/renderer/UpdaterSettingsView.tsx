@@ -1,4 +1,4 @@
-import { Button as UiButton, ConfirmDialogTrigger } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, Button as UiButton, ConfirmDialogTrigger } from '@setsuna-desktop/renderer-ui';
 import type {
   RendererTranslate,
 } from '@setsuna-desktop/feature-core/renderer';
@@ -308,7 +308,7 @@ function UpdateDownloadSourceSettings({
         ) : null}
 
         {sourceError ? (
-          <div className="updater-settings__download-source-error" role="alert">{sourceError}</div>
+          <ToastNotice message={sourceError} />
         ) : null}
       </div>
     </Group>

@@ -1,3 +1,4 @@
+import { ToastNotice } from '@setsuna-desktop/renderer-ui';
 import {
   DESKTOP_WEBDAV_SYNC_CATEGORY_IDS,
   type DesktopWebDavSyncCategoryId,
@@ -327,7 +328,7 @@ export function WebDavSyncSettings() {
             </Checkbox>
           ))}
         </div>
-        {categoryError ? <div className="settings-webdav__error" role="alert">{categoryError}</div> : null}
+        {categoryError ? <ToastNotice message={categoryError} /> : null}
       </section>
 
       <section className="settings-webdav__card">
@@ -387,7 +388,7 @@ export function WebDavSyncSettings() {
       />
 
       {sync.error || state.lastError ? (
-        <div className="settings-webdav__error" role="alert">{sync.error ?? state.lastError}</div>
+        <ToastNotice message={sync.error ?? state.lastError} />
       ) : null}
 
       {confirmAutomaticBackup ? (

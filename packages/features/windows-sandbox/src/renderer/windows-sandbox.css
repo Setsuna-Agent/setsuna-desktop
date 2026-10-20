@@ -50,15 +50,10 @@
   color: var(--sd-color-warning);
 }
 
-.feature-windows-sandbox__status.is-danger,
-.feature-windows-sandbox__error {
+.feature-windows-sandbox__status.is-danger {
   color: var(--sd-color-danger);
 }
 
 .feature-windows-sandbox__status.is-neutral {
   color: var(--sd-color-text-muted, GrayText);
-}
-
-.feature-windows-sandbox__error {
-  margin: 8px 0 0;
 }

@@ -4,6 +4,7 @@ import { useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { Button } from './button.js';
 import { Dialog } from './dialog.js';
 import { useUiLabels } from './locale.js';
+import { ToastNotice } from './toast/provider.js';
 
 export type ConfirmationOptions = {
   title: ReactNode;
@@ -36,7 +37,7 @@ export function ConfirmDialog({ open, title, description, confirmLabel, cancelLa
       </Button>
     </>}>
     {description ? <div className="sd-confirm-dialog__description">{description}</div> : null}
-    {error ? <p role="alert" className="sd-control-error">{error}</p> : null}
+    {open && error ? <ToastNotice message={error} /> : null}
   </Dialog>;
 }
 

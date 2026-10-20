@@ -1,4 +1,4 @@
-import { Button } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, Button } from '@setsuna-desktop/renderer-ui';
 import type { ChatTurnNavigationRequest } from '@setsuna-desktop/renderer-contracts/chat';
 import type {
   MessagePatch,
@@ -441,7 +441,7 @@ export function ChatTranscript({
         </div>
       ) : null}
       {actionError || messageHistory.error ? (
-        <div className="chat-action-error">{actionError ?? messageHistory.error}</div>
+        <ToastNotice message={actionError ?? messageHistory.error} />
       ) : null}
       {showEmptyStarter || readOnly ? null : deleteMode ? (
         <DeleteSelectionBar

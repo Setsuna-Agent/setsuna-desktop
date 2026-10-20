@@ -40,7 +40,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .chat-content-frame,
-  .chat-action-error,
   .chat-delete-bar__inner,
   .chat-scroll-bottom,
   .chat-sender:not(.chat-sender--starter) > .chat-composer-stack,

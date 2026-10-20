@@ -11,6 +11,7 @@ function loadBookmarks() {
 
 export function useBrowserBookmarks() {
   const [state, setState] = useState(loadBookmarks);
+  const [errorRevision, setErrorRevision] = useState(0);
   const refresh = useCallback(() => setState(loadBookmarks()), []);
   const commit = useCallback((change: (tree: BrowserBookmarkTree) => BrowserBookmarkTree | null) => {
     try {
@@ -20,7 +21,11 @@ export function useBrowserBookmarks() {
       writeBrowserBookmarkTree(tree);
       setState({ tree, error: false });
       return true;
-    } catch { setState((current) => ({ ...current, error: true })); return false; }
+    } catch {
+      setState((current) => ({ ...current, error: true }));
+      setErrorRevision((revision) => revision + 1);
+      return false;
+    }
   }, []);
   const toggle = useCallback((input: BrowserBookmarkInput) => commit((tree) => {
     const url = normalizeBrowserBookmarkUrl(input.url);
@@ -42,5 +47,5 @@ export function useBrowserBookmarks() {
     return () => { window.removeEventListener(BROWSER_BOOKMARKS_CHANGED, refresh); window.removeEventListener('storage', storage); };
   }, [refresh]);
   const entries = useMemo(() => bookmarkEntries(state.tree), [state.tree]);
-  return { tree: state.tree, entries, error: state.error, refresh, toggle, save, remove };
+  return { tree: state.tree, entries, error: state.error, errorRevision, refresh, toggle, save, remove };
 }

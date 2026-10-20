@@ -1,4 +1,4 @@
-import { Dialog } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, Dialog } from '@setsuna-desktop/renderer-ui';
 import type {
   DesktopWebDavSyncOperationState,
   DesktopWebDavSyncRestorePlan,
@@ -92,10 +92,7 @@ export function WebDavRestorePlanDialog({
               ) : <span>{restoreStatus}</span>}
             </div>
           ) : error ? (
-            <div className="settings-webdav-restore-dialog__feedback is-error" role="alert">
-              <AlertTriangle size={14} aria-hidden="true" />
-              <span>{error}</span>
-            </div>
+            <ToastNotice message={error} />
           ) : null}
           <Checkbox
             checked={confirmed}

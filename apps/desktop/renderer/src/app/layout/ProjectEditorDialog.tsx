@@ -1,4 +1,4 @@
-import { Button as UiButton, ConfirmDialogTrigger, Dialog } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, Button as UiButton, ConfirmDialogTrigger, Dialog } from '@setsuna-desktop/renderer-ui';
 import {
   WORKSPACE_PROJECT_NAME_MAX_CHARS,
   workspaceProjectRoots,
@@ -167,7 +167,7 @@ export function ProjectEditorDialog({
             </div>
           </div>
 
-          {error ? <div className="desktop-project-editor__error" role="alert">{error}</div> : null}
+          {error ? <ToastNotice message={error} /> : null}
         </div>
       </form>
     </Dialog>

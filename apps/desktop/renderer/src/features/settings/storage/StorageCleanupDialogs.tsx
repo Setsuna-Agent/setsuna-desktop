@@ -1,5 +1,5 @@
 import type { DesktopStorageCleanupCategory, DesktopStorageUsage, RuntimeThreadSummary } from '@setsuna-desktop/contracts';
-import { Button, Checkbox, ConfirmDialogTrigger, Dialog } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, Button, Checkbox, ConfirmDialogTrigger, Dialog } from '@setsuna-desktop/renderer-ui';
 import { useState } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { formatDataBytes } from '../data-root/dataRootFormat.js';
@@ -33,7 +33,7 @@ export function StorageHistoryDialog({ threads, working, error, onCleanup, onClo
       label={t('storage.deleteSelected')} onConfirm={removeSelected}
       description={t('storage.confirmHistory', { target: t('storage.selectedThreads', { count: selected.length }) })} />}>
     <StorageThreadPicker threads={threads} selectedIds={selected} disabled={working} onChange={setSelectedIds} />
-    {error ? <p className="sd-control-error" role="alert">{error}</p> : null}
+    {error ? <ToastNotice message={error} /> : null}
   </Dialog>;
 }
 
@@ -65,7 +65,7 @@ export function StorageCachesDialog({ usage, working, error, onCleanup, onClose 
         <span className="storage-choice-row__meta">{formatDataBytes(totalBytes, locale)}</span>
       </Checkbox>)}
     </div>
-    {error ? <p className="sd-control-error" role="alert">{error}</p> : null}
+    {error ? <ToastNotice message={error} /> : null}
   </Dialog>;
 }
 

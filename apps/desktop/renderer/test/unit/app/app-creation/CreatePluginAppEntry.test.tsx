@@ -111,7 +111,7 @@ it('keeps the introduction open with an actionable error when preparing a chat f
   const { onCreateApp, onFocusComposer } = setup();
   onCreateApp.mockRejectedValueOnce(new Error('无法创建对话'));
   fireEvent.click(screen.getByRole('button', { name: '可编辑表格' }));
-  expect((await screen.findByRole('alert')).textContent).toBe('无法创建对话');
+  expect(await screen.findByText('无法创建对话')).toBeTruthy();
   expect(onFocusComposer).not.toHaveBeenCalled();
   await act(async () => fireEvent.click(screen.getByRole('button', { name: '可编辑表格' })));
   await waitFor(() => expect(onCreateApp).toHaveBeenCalledTimes(2));

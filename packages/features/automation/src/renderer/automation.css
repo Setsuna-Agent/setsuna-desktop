@@ -54,7 +54,6 @@
 .automation-form__advanced summary::-webkit-details-marker { display: none; }
 .automation-form__advanced summary > svg { transition: transform 140ms ease; }
 .automation-form__advanced[open] summary > svg { transform: rotate(90deg); }
-.automation-form__error { margin: 0; padding: 9px 10px; border-radius: var(--app-radius-sm); color: var(--app-danger); background: color-mix(in srgb, var(--app-danger) 7%, transparent); font-size: 12px; line-height: 18px; }
 .automation-error { color: var(--app-danger); font-size: 13px; padding: 8px 16px; }
 .automation-result-card { display: flex; align-items: center; gap: 12px; padding: 14px; border: 1px solid var(--app-border); border-radius: var(--app-radius-group); margin: 12px 0; }
 .automation-result-card__icon { display: grid; place-content: center; width: 38px; height: 38px; border-radius: 10px; background: var(--desktop-agent-sidebar-hover-bg); color: var(--app-text-muted); }

@@ -13,11 +13,6 @@
   min-height: 30px;
 }
 
-[data-feature-id='memory'] .feature-memory__error {
-  margin: 0;
-  color: var(--app-danger);
-}
-
 [data-feature-id='memory'] .feature-memory__toolbar > span,
 [data-feature-id='memory'] .feature-memory__item-heading span {
   color: var(--app-text-muted);

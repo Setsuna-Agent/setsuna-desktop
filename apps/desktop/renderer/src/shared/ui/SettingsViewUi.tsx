@@ -15,10 +15,9 @@ import {
   settingsPageKey,
   settingsPageSlot,
 } from '@setsuna-desktop/renderer-contracts/settings';
-import { Dropdown, Switch, type MenuProps } from '@setsuna-desktop/renderer-ui';
+import { Dropdown, Switch, ToastNotice, type MenuProps } from '@setsuna-desktop/renderer-ui';
 import { ChevronRight, MoreHorizontal } from 'lucide-react';
-import { Component, useEffect, type ErrorInfo, type ReactNode } from 'react';
-import { useToast } from '../../app/providers/ToastProvider.js';
+import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { SettingsModelPicker } from '../../composition/ModelProviderFeatureBoundary.js';
 import { SandboxedUiFrame } from '../../kernel/sandboxed-plugin-ui/SandboxedUiFrame.js';
 import {
@@ -255,13 +254,7 @@ function SettingsTooltip(props: SettingsTooltipProps) {
 }
 
 function SettingsToast({ message, tone = 'info' }: SettingsToastProps) {
-  const toast = useToast();
-
-  useEffect(() => {
-    toast.show(message, { tone });
-  }, [message, toast, tone]);
-
-  return null;
+  return <ToastNotice message={message} tone={tone} />;
 }
 
 function classNames(...values: string[]): string {

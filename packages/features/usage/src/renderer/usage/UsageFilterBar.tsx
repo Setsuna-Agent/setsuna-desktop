@@ -1,3 +1,4 @@
+import { ToastNotice } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeUsageBucket, UsageProviderDescriptor } from '../../contracts/index.js';
 import { usageRangeLabel } from './usage-format.js';
 import { isUsageTimePreset, USAGE_TIME_PRESETS, type UsageFilters } from './usageFilters.js';
@@ -81,7 +82,7 @@ export function UsageFilterBar({
           {optionKeys(modelBuckets, filters.model).map((key) => <option key={key} value={key}>{key}</option>)}
         </SelectField>
       </div>
-      {error ? <p className="settings-usage-filters__error" role="alert">{error}</p> : null}
+      {error ? <ToastNotice message={error} /> : null}
     </div>
   );
 }

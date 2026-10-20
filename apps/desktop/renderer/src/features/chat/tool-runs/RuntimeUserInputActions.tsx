@@ -1,3 +1,4 @@
+import { ToastNotice } from '@setsuna-desktop/renderer-ui';
 import type {
   AnswerRuntimeApprovalInput,
   RuntimeStructuredInputValue,
@@ -111,7 +112,7 @@ export function RuntimeUserInputActions({
           </Button>
         </div>
       </div>
-      {error ? <div className="chat-tool-run__action-error" role="alert">{error}</div> : null}
+      {error ? <ToastNotice message={error} /> : null}
     </form>
   );
 }

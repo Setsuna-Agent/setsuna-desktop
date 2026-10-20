@@ -13,9 +13,11 @@ import {
 export function useBrowserHistory() {
   const [entries, setEntries] = useState(readBrowserHistory);
   const [error, setError] = useState(false);
+  const [errorRevision, setErrorRevision] = useState(0);
   const persist = useCallback((next: ReturnType<typeof readBrowserHistory>) => {
     const saved = writeBrowserHistory(next);
     setError(!saved);
+    if (!saved) setErrorRevision((revision) => revision + 1);
     if (saved) setEntries(next);
     return saved;
   }, []);
@@ -46,5 +48,5 @@ export function useBrowserHistory() {
   const clear = useCallback(() => persist([]), [persist]);
   const removeDay = useCallback((day: string) => persist(readBrowserHistory().filter((entry) => browserHistoryDay(entry.visitedAt) !== day)), [persist]);
 
-  return { entries, error, recordVisit, refresh, removeEntry, clear, removeDay };
+  return { entries, error, errorRevision, recordVisit, refresh, removeEntry, clear, removeDay };
 }

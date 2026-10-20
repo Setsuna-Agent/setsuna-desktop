@@ -1,3 +1,4 @@
+import { ToastNotice } from '@setsuna-desktop/renderer-ui';
 import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Globe, Trash2 } from 'lucide-react';
 import type { SettingsViewUi } from '@setsuna-desktop/renderer-contracts/settings';
@@ -30,7 +31,7 @@ export function BrowserHistoryPage({ translate: t, ui, onNavigate }: {
     <div className="browser-history-page__days">{groups.map((group) => <BrowserHistoryDay key={group.day} group={group} query={query.trim()}
       history={history} onNavigate={onNavigate} translate={t} ui={ui} />)}</div>
     {!groups.length ? <p className="browser-settings-page__card browser-settings-page__status">{t('feature.browser.settings.empty')}</p> : null}
-    {history.error ? <p role="alert" className="browser-settings-page__error">{t('feature.browser.settings.failed')}</p> : null}
+    {history.error ? <ToastNotice key={history.errorRevision} message={t('feature.browser.settings.failed')} /> : null}
   </div>;
 }
 

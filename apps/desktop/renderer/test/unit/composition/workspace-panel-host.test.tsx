@@ -167,7 +167,7 @@ it('creates, renames and deletes entries from the tree menu, preserving state wh
     fireEvent.click(screen.getByRole('menuitem', { name: '新建文件' }));
     fireEvent.change(screen.getByRole('textbox', { name: '名称' }), { target: { value: 'existing.vue' } });
     fireEvent.click(screen.getByRole('button', { name: '确认' }));
-    expect((await screen.findByRole('alert')).textContent).toBe('already exists');
+    expect(await screen.findByText('already exists')).toBeTruthy();
     expect((screen.getByRole('textbox', { name: '名称' }) as HTMLInputElement).value).toBe('existing.vue');
     fireEvent.change(screen.getByRole('textbox', { name: '名称' }), { target: { value: 'widget.vue' } });
     fireEvent.click(screen.getByRole('button', { name: '确认' }));

@@ -11,6 +11,7 @@
 - 不要写屎山代码；开发相关需求要尽可能做好组件、样式、hook、helper 的封装，并在复杂逻辑处添加必要注释。
 - 保留用户现有 WIP。开始前看 `git status --short`，只改请求相关文件，不回滚不属于自己的改动。
 - 未经用户明确要求，不使用子代理，也不在界面追加解释性文字、辅助说明、状态摘要或引导文案；图标含义沿用 tooltip 和 aria-label。
+- 普通操作失败统一使用现有 Toast 通知，不在页面、卡片或按钮旁追加红字，也不同时通知与行内报错。主动取消不作为失败；字段校验、执行结果和故障恢复页面保留必要的上下文，详见 `docs/design.md`。
 - 仅支持 macOS 和 Windows；不再维护 Linux 的开发、运行和发布兼容。路径、runtime 启动、打包和终端能力要按两个受支持平台考虑，优先用 `path.join`、`path.resolve`、`path.relative` 和规范化比较。
 - renderer 不应直接访问本地 runtime 端口、token、模型供应商或文件系统；这些能力必须通过 preload 暴露的窄 API 或 runtime client。
 

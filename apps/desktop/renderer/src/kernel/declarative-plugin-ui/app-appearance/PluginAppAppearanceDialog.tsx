@@ -1,5 +1,5 @@
 import type { BrandIconConfig } from '@setsuna-desktop/contracts';
-import { Button, Dialog, TextField, Tooltip } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, Button, Dialog, TextField, Tooltip } from '@setsuna-desktop/renderer-ui';
 import { Download, Upload } from 'lucide-react';
 import { useId, useRef, useState } from 'react';
 import { brandIconFileAccept } from '../../../shared/branding/brandIconUpload.js';
@@ -25,7 +25,7 @@ export function PluginAppAppearanceDialog({ appearance, defaultName, pluginName,
   const fileInput = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(appearance.name ?? defaultName);
   const [avatarColor, setAvatarColor] = useState(appearance.avatarColor);
-  const { avatar, setAvatar, customAvatar, loading, error, setError, upload, fetchWebsiteIcon } = usePluginAppAvatarDraft(appearance.avatar);
+  const { avatar, setAvatar, customAvatar, loading, error, errorRevision, reportError, upload, fetchWebsiteIcon } = usePluginAppAvatarDraft(appearance.avatar);
   const reading = loading !== null;
 
   return (
@@ -36,7 +36,7 @@ export function PluginAppAppearanceDialog({ appearance, defaultName, pluginName,
         const next = { ...(name.trim() !== defaultName ? { name: name.trim() } : {}), avatar,
           ...(avatarColor ? { avatarColor } : {}) };
         if (onSave(next)) onClose();
-        else setError(t('pluginUi.appearanceSaveFailed'));
+        else reportError(t('pluginUi.appearanceSaveFailed'));
       }}>
         <div className="plugin-app-appearance__identity">
           <PluginAppAvatar avatar={avatar} color={avatarColor} variant="list" />
@@ -89,7 +89,7 @@ export function PluginAppAppearanceDialog({ appearance, defaultName, pluginName,
             if (file) void upload(file);
           }} />
         </fieldset>
-        {error ? <div className="plugin-app-appearance__error" role="alert">{error}</div> : null}
+        {error ? <ToastNotice key={errorRevision} message={error} /> : null}
         <div className="sd-dialog-form-actions">
           <button type="button" className="plugin-app-appearance__plugin-link" onClick={() => {
             onClose();

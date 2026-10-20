@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Button, IconButton, TextField } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, Button, IconButton, TextField } from '@setsuna-desktop/renderer-ui';
 import { Globe, Search, Trash2, X } from 'lucide-react';
 import { useBrowserHistory } from '../useBrowserHistory.js';
 import type { BrowserRecordsProps } from './BrowserRecordsManager.js';
@@ -48,6 +48,6 @@ export function BrowserHistoryRecords(props: BrowserRecordsProps) {
       </section>)}
       {!groups.length ? <div className="browser-records__empty">{t('feature.browser.settings.empty')}</div> : null}</div>
     </>}
-    {history.error ? <p role="alert" className="browser-records__error">{t('feature.browser.settings.failed')}</p> : null}
+    {history.error ? <ToastNotice key={history.errorRevision} message={t('feature.browser.settings.failed')} /> : null}
   </>;
 }

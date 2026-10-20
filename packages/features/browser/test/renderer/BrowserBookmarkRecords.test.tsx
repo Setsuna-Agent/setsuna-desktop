@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { ToastProvider } from '@setsuna-desktop/renderer-ui';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import { BrowserRecordsManager } from '../../src/renderer/records/BrowserRecordsManager.js';
@@ -7,7 +8,37 @@ import { BROWSER_BOOKMARKS_STORAGE_KEY, LEGACY_BROWSER_BOOKMARKS_STORAGE_KEY, re
 import { OTHER_BOOKMARKS_ID } from '../../src/renderer/records/bookmarkTree.js';
 import { translateBrowserMessage } from '../../src/renderer/messages.js';
 
-afterEach(() => { cleanup(); window.localStorage.removeItem(BROWSER_BOOKMARKS_STORAGE_KEY); window.localStorage.removeItem(LEGACY_BROWSER_BOOKMARKS_STORAGE_KEY); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); window.localStorage.removeItem(BROWSER_BOOKMARKS_STORAGE_KEY); window.localStorage.removeItem(LEGACY_BROWSER_BOOKMARKS_STORAGE_KEY); });
+
+it.each(['save', 'delete'] as const)('notifies every failed %s after dismissing feedback and preserves data for a successful retry', async (action) => {
+  render(<ToastProvider closeLabel="Dismiss notification">
+    <BrowserRecordsManager kind="bookmarks" onClose={vi.fn()} onNavigate={vi.fn()}
+      currentPage={{ title: 'Example', url: 'https://example.org/' }} translate={(key) => translateBrowserMessage('en-US', key)} />
+  </ToastProvider>);
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: 'Add favorite' }));
+  if (action === 'delete') await user.click(screen.getByRole('button', { name: 'Save' }));
+  const previous = readBrowserBookmarkTree();
+  const actionName = action === 'save' ? 'Save' : 'Delete Example';
+  const write = vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => { throw new Error('Storage unavailable'); });
+  try {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await user.click(screen.getByRole('button', { name: actionName }));
+      const notice = await screen.findByRole('alert');
+      expect(notice.textContent).toContain(translateBrowserMessage('en-US', 'feature.browser.settings.failed'));
+      if (action === 'save') expect((screen.getByRole('textbox', { name: 'Name' }) as HTMLInputElement).value).toBe('Example');
+      expect(readBrowserBookmarkTree()).toEqual(previous);
+      fireEvent.click(within(notice).getByRole('button', { name: 'Dismiss notification' }));
+      await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    }
+    expect(write).toHaveBeenCalledTimes(2);
+  } finally {
+    write.mockRestore();
+  }
+  await user.click(screen.getByRole('button', { name: actionName }));
+  expect(screen.queryByRole('textbox', { name: 'Name' })).toBeNull();
+  expect(readBrowserBookmarkTree().nodes.some((node) => node.title === 'Example')).toBe(action === 'save');
+});
 
 it('creates nested folders, moves a subtree, and confirms deletion of its saved bookmarks', async () => {
   render(<BrowserRecordsManager kind="bookmarks" onClose={vi.fn()} onNavigate={vi.fn()}

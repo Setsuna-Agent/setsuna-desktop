@@ -1,4 +1,4 @@
-import { Button } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, Button } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeBackgroundShellProcess } from '@setsuna-desktop/contracts';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { LoaderCircle, Square, SquareTerminal } from 'lucide-react';
@@ -59,13 +59,7 @@ export function RuntimeActivityConversationServiceList({
         })}
       </div>
       {error ? (
-        <div
-          className="runtime-activity-conversation-services__error"
-          role="status"
-          title={error}
-        >
-          {t('feature.runtimeActivity.conversationServices.refreshFailed', { error })}
-        </div>
+        <ToastNotice message={t('feature.runtimeActivity.conversationServices.refreshFailed', { error })} />
       ) : null}
     </section>
   );

@@ -277,11 +277,6 @@
   font-size: 11px;
 }
 
-.desktop-settings-panel .settings-archives-error {
-  color: var(--app-danger);
-  font-size: 12px;
-}
-
 .desktop-settings-panel .chat-user-settings__section-block {
   display: grid;
   min-width: 0;
@@ -353,13 +348,6 @@
   display: grid;
   justify-items: end;
   gap: 4px;
-}
-
-.desktop-settings-panel .settings-window-close-behavior__error {
-  color: var(--app-danger);
-  font-size: 11px;
-  line-height: 16px;
-  text-align: right;
 }
 
 .desktop-settings-panel .chat-user-settings__toggle-row,
