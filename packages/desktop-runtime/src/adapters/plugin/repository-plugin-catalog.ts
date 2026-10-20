@@ -11,7 +11,7 @@ import { OPENAI_PLUGIN_INDEX, OPENAI_PLUGIN_MARKETPLACE_PREFIX, OPENAI_PLUGIN_RE
 // not completed. Keep them out of the default market, including cached indexes.
 // GitHub already has a registered Setsuna app; local imports stay user-managed.
 const REGISTRATION_REQUIRED_PLUGINS = new Set([
-  'canva', 'figma', 'monday-com', 'vercel',
+  'canva', 'figma', 'monday-com',
   'dropbox', 'gmail', 'google-calendar', 'google-drive', 'slack', 'zoom',
 ]);
 

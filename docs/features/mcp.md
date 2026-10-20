@@ -64,11 +64,17 @@ MCP server 的启用状态和 allow/deny 工具范围是执行边界。工具结
 
 ## OAuth 接入边界
 
-`packages/features/mcp/src/runtime/adapters/sdk/mcp-oauth-callback-server.ts` 在每次登录时监听 `127.0.0.1` 的动态端口，回调路径为 `/oauth/callback`；不能把该端口当成固定平台注册值。监听器校验随机 state，支持取消，默认等待上限为 5 分钟，并在流程结束后关闭。
+`packages/features/mcp/src/runtime/adapters/sdk/mcp-oauth-callback-server.ts` 在每次登录时监听 `127.0.0.1` 的动态端口，回调路径为 `/oauth/callback`；不能把该端口当成固定平台注册值。监听器校验随机 state，支持取消，默认等待上限为 5 分钟，并在流程结束后关闭。关闭时主动释放浏览器留下的预连接，避免回调已收到后仍等待 socket 退出而阻塞登录结果。登录的取消信号同时传入元数据发现和令牌交换请求，保证关闭登录请求或退出 runtime 时能够结束网络等待、释放回调连接与数据库所有权。
+
+取消登录会清除本次认证错误；`OPERATION_CANCELLED` / `AbortError` 保留取消语义，不包装成 MCP 操作失败。Renderer 对取消保持静默，真实连接失败通过共享 Toast 反馈，重试时清除旧错误；详情卡片不再另行显示同一条认证红字。
 
 手填配置支持 Client ID 和 Resource；静态 Client Secret、显式 scopes 和固定回调端口没有对应配置面。需要这些能力的平台必须先适配实际认证链路。插件导入成功只代表声明兼容，不证明平台准入、账号权限或 OAuth 登录已经验证。
 
+未配置 OAuth Client ID/Resource 且没有已保存凭据的远程 MCP 返回 `unknown`，表示尚未发现认证方式，仍提供“连接”操作；不能据此判定不支持 OAuth。OAuth 元数据发现和动态客户端注册由连接流程按需执行，读取列表、插件恢复和启动不增加网络探测。stdio 仍返回 `unsupported`，已配置 Token 或凭据配置错误的连接沿用原有处理。
+
 默认市场的筛选策略由 `packages/desktop-runtime/src/adapters/plugin/repository-plugin-catalog.ts` 维护，见 [仓库插件接入](../extensions/plugins/bundles.md#从-openai-仓库安装)。重新接入被排除的平台时，应重新核实平台要求与授权链路，不沿用历史申请步骤。
+
+Vercel 已恢复到默认市场，使用官方 `https://mcp.vercel.com` 端点和现有 OAuth 流程。其动态注册端点接受 `Setsuna Desktop` 的公开客户端声明与动态 loopback 回调，无需在插件中预置 Client ID 或 Client Secret。注册成功与授权页可访问不等于账号授权完成；实际登录和工具访问仍需用户完成 Vercel 授权。
 
 ## 验证
 

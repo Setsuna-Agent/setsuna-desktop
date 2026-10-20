@@ -24,10 +24,9 @@ export function McpDeviceAuthorizationNotice({ challenge, syncingTools, openExte
               {authorization.copied ? <Check size={17} /> : <Copy size={17} />}
             </ui.IconButton>
           </div>
-          {authorization.error ? <p className="desktop-mcp-device-authorization__error" role="alert">
-            {translate(authorization.error === 'copy' ? 'feature.mcp.device.copyFailed' : 'feature.mcp.device.openFailed')}
-            {authorization.error === 'open' ? <span>{challenge.verificationUri}</span> : null}
-          </p> : null}
+          {authorization.error ? <ui.Toast tone="error"
+            message={translate(authorization.error === 'copy' ? 'feature.mcp.device.copyFailed' : 'feature.mcp.device.openFailed')}
+          /> : null}
           <div className="desktop-mcp-device-authorization__actions">
             <ui.Button variant="primary" disabled={authorization.pending} icon={<ExternalLink size={15} />} onClick={() => void authorization.open()}>
               {translate('feature.mcp.device.open')}

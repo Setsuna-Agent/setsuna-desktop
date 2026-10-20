@@ -260,7 +260,8 @@ function deviceAuthorization(value: unknown) {
 
 function mcpAuthStatus(value: unknown): RuntimeMcpAuthStatus {
   if (
-    value === 'unsupported'
+    value === 'unknown'
+    || value === 'unsupported'
     || value === 'notLoggedIn'
     || value === 'bearerToken'
     || value === 'oAuth'

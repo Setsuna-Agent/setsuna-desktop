@@ -11,6 +11,7 @@ import { McpDeviceOAuthSession } from './mcp-device-oauth-session.js';
 import type { McpAuthStatusResult, McpCredentialStore } from '../../../contracts/control.js';
 import { errorMessage } from '../../shared.js';
 import { McpOAuthCallbackServer } from './mcp-oauth-callback-server.js';
+import { normalizedMcpTransport } from './mcp-transport-factory.js';
 
 type StoredOAuthTokens = {
   savedAt: string;
@@ -116,13 +117,16 @@ export class McpOAuthCoordinator {
   }
 
   async authStatus(server: RuntimeMcpServerInput): Promise<McpAuthStatusResult> {
+    if (normalizedMcpTransport(server) !== 'streamableHttp') return { status: 'unsupported' };
     if (mcpDeviceOAuthProvider(server)) return this.device.status(server);
     if (this.logins.has(server.key)) return { status: 'oAuthLoggingIn' };
     const error = this.errors.get(server.key);
     if (error) return { status: 'oAuthError', error };
     try {
       const stored = await readStoredTokens(this.credentials, oauthCredentialKeys(server).tokens, true);
-      if (!stored) return { status: server.oauthClientId || server.oauthResource ? 'notLoggedIn' : 'unsupported' };
+      // URL-only servers may register OAuth clients dynamically. Leave discovery
+      // to the connection flow instead of probing during status reads.
+      if (!stored) return { status: server.oauthClientId || server.oauthResource ? 'notLoggedIn' : 'unknown' };
       const expiresIn = stored.tokens.expires_in;
       const savedAt = Date.parse(stored.savedAt);
       if (typeof expiresIn === 'number' && Number.isFinite(savedAt) && savedAt + expiresIn * 1000 <= this.now()) {
@@ -161,25 +165,39 @@ export class McpOAuthCoordinator {
       state: callback.state,
       tolerateUnavailable: false,
     });
+    const fetch = this.fetchFor(server.key);
+    // Closing the login request must also cancel discovery and token exchange;
+    // otherwise runtime shutdown can wait indefinitely while retaining its database lease.
+    const fetchFn: FetchImpl = (input, init) => {
+      options.signal?.throwIfAborted();
+      return fetch(input, {
+        ...init,
+        signal: options.signal && init?.signal
+          ? AbortSignal.any([options.signal, init.signal])
+          : options.signal ?? init?.signal,
+      });
+    };
     try {
       const callbackPromise = callback.wait(options.signal, options.timeoutMs);
       void callbackPromise.catch(() => undefined);
       const result = await auth(provider, {
         serverUrl: requiredServerUrl(server),
-        fetchFn: this.fetchFor(server.key),
+        fetchFn,
       });
       if (result === 'REDIRECT') {
         const { code } = await callbackPromise;
         const completed = await auth(provider, {
           serverUrl: requiredServerUrl(server),
           authorizationCode: code,
-          fetchFn: this.fetchFor(server.key),
+          fetchFn,
         });
         if (completed !== 'AUTHORIZED') throw new Error('MCP OAuth authorization did not complete.');
       }
       this.errors.delete(server.key);
     } catch (error) {
-      this.errors.set(server.key, errorMessage(error));
+      // Cancellation is an operation outcome, not a persisted authentication failure.
+      if (options.signal?.aborted) this.errors.delete(server.key);
+      else this.errors.set(server.key, errorMessage(error));
       throw error;
     } finally {
       await callback.close().catch(() => undefined);

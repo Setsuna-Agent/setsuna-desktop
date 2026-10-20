@@ -61,7 +61,6 @@
 
 .desktop-capabilities-panel__inner--catalog > .desktop-capabilities-header,
 .desktop-capabilities-panel__inner--catalog > .desktop-capabilities-search-row,
-.desktop-capabilities-panel__inner--catalog > .desktop-capabilities-errors,
 .desktop-capabilities-panel__inner--catalog > .desktop-capabilities-tabs {
   width: min(
     var(--desktop-capabilities-content-width),

@@ -3,6 +3,8 @@ export type RuntimeMcpTransport = 'stdio' | 'streamableHttp';
 export type RuntimeMcpServerSource = 'local' | 'workspace' | 'legacy' | 'builtin';
 
 export type RuntimeMcpAuthStatus =
+  /** Remote authentication has not been discovered yet; explicit login may register a client. */
+  | 'unknown'
   | 'unsupported'
   | 'notLoggedIn'
   | 'bearerToken'

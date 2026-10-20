@@ -19,6 +19,7 @@ export function McpConnectionCard({ server, authAction, error, onLogin, onLogout
   ui: SettingsViewUi;
 }>) {
   const { github, name } = mcpConnectionPresentation(server);
+  const connectionError = authAction ? undefined : error ?? server.authError;
   const oauthConnected = server.authStatus === 'oAuth';
   const configured = oauthConnected || server.authStatus === 'bearerToken' || server.transport === 'stdio';
   const canLogin = server.transport === 'streamableHttp'
@@ -50,7 +51,7 @@ export function McpConnectionCard({ server, authAction, error, onLogin, onLogout
             {translate(canLogin ? 'feature.mcp.connection.connect' : 'feature.mcp.connection.configure')}
           </Button>}
     </div>
-    {error || server.authError ? <p className="desktop-mcp-connection__error" role="alert">{error ?? server.authError}</p> : null}
+    {connectionError ? <ui.Toast message={connectionError} tone="error" /> : null}
     {authAction === 'login' ? <ui.Dialog
       className="desktop-mcp-auth-dialog"
       size="small"

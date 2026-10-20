@@ -4,7 +4,7 @@ import {
   defineRuntimeFeature,
   runtimeRouteRegistrarCapability,
 } from '@setsuna-desktop/feature-core/runtime';
-import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
+import { FeatureOperationFailure, isFeatureOperationCancelled } from '@setsuna-desktop/feature-core/operation';
 import {
   deleteMcpServer,
   discoverMcpServerTools,
@@ -114,7 +114,7 @@ async function preserveMcpOperationError<T>(operation: () => Promise<T>): Promis
   try {
     return await operation();
   } catch (error) {
-    if (error instanceof FeatureOperationFailure) throw error;
+    if (error instanceof FeatureOperationFailure || isFeatureOperationCancelled(error)) throw error;
     const message = error instanceof Error && error.message.trim()
       ? error.message
       : 'MCP operation failed.';

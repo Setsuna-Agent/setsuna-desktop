@@ -78,14 +78,6 @@
   line-height: 18px;
 }
 
-.desktop-mcp-connection__error {
-  margin: 8px 12px 0;
-  color: var(--app-danger);
-  font-size: 12px;
-  line-height: 20px;
-  overflow-wrap: anywhere;
-}
-
 .desktop-mcp-connection-menu {
   min-width: 160px;
 }
@@ -176,18 +168,4 @@
 .desktop-mcp-device-authorization__preparing {
   color: var(--app-text-muted);
   font-size: 13px;
-}
-
-.desktop-mcp-device-authorization__error {
-  margin: 0;
-  max-width: 360px;
-  color: var(--app-danger);
-  font-size: 12px;
-  line-height: 20px;
-}
-
-.desktop-mcp-device-authorization__error > span {
-  display: block;
-  overflow-wrap: anywhere;
-  user-select: text;
 }
