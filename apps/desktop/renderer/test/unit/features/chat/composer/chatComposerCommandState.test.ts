@@ -47,14 +47,14 @@ describe('chat composer command state', () => {
   });
 
   it('blocks typed and forced slash menus during a queued edit', () => {
-    for (const forcedSlashMenuOpen of [false, true]) {
+    for (const draft of ['', '/review', '$review']) {
       const state = createChatComposerCommandState({
         cursorOffset: null,
         dismissedMentionDraft: '',
         dismissedSlashDraft: '',
-        draft: forcedSlashMenuOpen ? '' : '/review',
+        draft,
         focused: true,
-        forcedSlashMenuOpen,
+        forcedSlashMenuOpen: !draft,
         slashMenuBlocked: true,
       });
 
@@ -62,8 +62,8 @@ describe('chat composer command state', () => {
     }
   });
 
-  it('uses the cursor-local command and normalizes slash search text', () => {
-    const draft = 'first /ignored then /ReView later';
+  it.each(['/', '$'])('uses the cursor-local %s command and normalizes search text', (marker) => {
+    const draft = `first /ignored then ${marker}ReView later`;
     const state = createChatComposerCommandState({
       cursorOffset: 'first /ignored then /ReView'.length,
       dismissedMentionDraft: '',
@@ -74,7 +74,7 @@ describe('chat composer command state', () => {
       slashMenuBlocked: false,
     });
 
-    expect(state.slashCommand).toEqual({
+    expect(marker === '$' ? state.skillCommand : state.slashCommand).toEqual({
       start: 'first /ignored then '.length,
       end: 'first /ignored then /ReView'.length,
       query: 'ReView',

@@ -26,7 +26,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import { isCoreRuntimeEvent } from '@setsuna-desktop/contracts';
 import type { ApprovalReviewControl } from '@setsuna-desktop/feature-approval-review/contracts';
-import type { ReviewTurnRequest, WorkspaceTaskTurnRequest } from '@setsuna-desktop/feature-review/contracts';
+import { createNoopReviewControl, type ReviewTurnRequest, type WorkspaceTaskTurnRequest } from '@setsuna-desktop/feature-review/contracts';
 import {
   type CollaborationControl,
   type CollaborationRuntimeHost,
@@ -250,6 +250,7 @@ export class AgentLoop {
       eventWriter: this.eventWriter,
       ids: options.ids,
       inputGuard: this.inputGuard,
+      reviewControl: options.reviewControl ?? createNoopReviewControl(),
       claimAttachments: (threadId, attachments) => options.attachmentStore?.claimForThread(threadId, attachments) ?? Promise.resolve(attachments),
       threadStore: options.threadStore,
       turnTasks: this.turnTasks,
@@ -423,7 +424,12 @@ export class AgentLoop {
    * @param input 可选的新内容、skill 选择和思考参数。
    */
   async regenerateFromMessage(threadId: string, messageId: string, input: RegenerateMessageInput = {}): Promise<SendTurnResponse> {
-    return this.startPreparedTurn(threadId, 'regular', () => this.turnRuns.createRegenerate(threadId, messageId, input));
+    return this.withThreadMutation(threadId, async () => {
+      const run = await this.turnRuns.createRegenerate(threadId, messageId, input);
+      this.observeRun(threadId, run.turnId, run.taskKind, run.done);
+      void run.done.catch(() => undefined);
+      return { accepted: true, turnId: run.turnId };
+    });
   }
 
   /**

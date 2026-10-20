@@ -20,7 +20,7 @@ import { EditIcon } from '../../../shared/ui/EditIcon.js';
 import { PluginIcon } from '../../../shared/ui/PluginIcon.js';
 import { usePluginReferenceCatalog } from '../references/PluginReference.js';
 import type { ToolRunGroupKind } from './runtime-tool-run-types.js';
-import { isRuntimeFileMutationRun } from './runtimeFileChanges.js';
+import { toolRunGroupKind } from './runtimeToolRunGrouping.js';
 
 const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
@@ -77,23 +77,15 @@ export function toolRunGroupIcon(
   return toolRunKindIcon(kind);
 }
 
-export function mixedToolRunGroupIcon(status: RuntimeToolRun['status']) {
-  if (status === 'pending_approval') return <ShieldAlert size={14} />;
-  if (status === 'running') return <Clock3 size={14} />;
-  if (status === 'cancelled') return <XCircle size={14} />;
-  if (status === 'rejected') return <AlertCircle size={14} />;
-  return <CheckCircle2 size={14} />;
-}
-
 export function toolRunIcon(run: RuntimeToolRun) {
   if (run.status === 'pending_approval') return run.userInput ? <MessageCircleQuestion size={14} /> : <ShieldAlert size={14} />;
   if (run.status === 'running') return <Clock3 size={14} />;
   if (run.status === 'error' || run.status === 'cancelled') return <XCircle size={14} />;
   if (run.status === 'rejected') return <AlertCircle size={14} />;
   if (run.plugin) return <ToolRunPluginIcon plugin={run.plugin} />;
+  const kind = toolRunGroupKind(run);
+  if (kind !== 'generic') return toolRunKindIcon(kind);
   if (run.name.includes('search')) return <Search size={14} />;
-  if (run.name.includes('shell')) return <SquareTerminal size={14} />;
-  if (isRuntimeFileMutationRun(run)) return <EditIcon size={14} />;
   if (run.name.includes('file') || run.name.includes('workspace')) return <FileText size={14} />;
   if (run.status === 'success') return <CheckCircle2 size={14} />;
   return <Wrench size={14} />;

@@ -155,14 +155,14 @@ describe('MessageItem user messages', () => {
     expect(goalHtml).not.toContain('aria-label="编辑"');
   });
 
-  it('marks Review inputs distinctly without offering message editing', () => {
+  it('allows editing Review inputs', () => {
     const reviewHtml = renderUserMessage(
       'review',
       '请审查当前项目中尚未提交的代码更改',
     );
     expect(reviewHtml).toContain('审查');
     expect(reviewHtml).toContain('请审查当前项目中尚未提交的代码更改');
-    expect(reviewHtml).not.toContain('aria-label="编辑"');
+    expect(reviewHtml).toContain('aria-label="编辑"');
   });
 
   it('omits edit and delete actions when mutation handlers are not provided', () => {

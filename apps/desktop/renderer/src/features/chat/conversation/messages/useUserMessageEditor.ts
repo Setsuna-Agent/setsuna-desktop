@@ -14,9 +14,9 @@ import type { ChatAttachmentClient } from '../../composer/chatAttachmentStore.js
 import { useChatAttachments } from '../../composer/useChatAttachments.js';
 import { useChatCommandController } from '../../composer/useChatCommandController.js';
 import { useChatComposerClipboard } from '../../composer/useChatComposerClipboard.js';
-import { createChatCapabilityCommandItems } from '../../composer/chatSlashCommandItems.js';
+import { createChatCapabilityCommandItems, createChatSkillCommandItems } from '../../composer/chatSlashCommandItems.js';
 import type { SlashCommandMenuItem } from '../../composer/ChatSlashCommandMenu.js';
-import { parseMentionCommand, parseSlashCommand } from '../../composer/chatCommandUtils.js';
+import { parseMentionCommand, parseSkillCommand, parseSlashCommand } from '../../composer/chatCommandUtils.js';
 import {
   createBrowserTabMentionSlot,
   createMessageDraftSlots,
@@ -65,7 +65,7 @@ export function useUserMessageEditor({
   const [initialMessage] = useState(message);
   const [initialSlots] = useState(() => {
     const restored = createMessageDraftSlots(message, skills, plugins);
-    // Sent text is trimmed. Restore the separator after a final tag so typing @ or /
+    // Sent text is trimmed. Restore the separator after a final tag so typing @, / or $
     // immediately after opening the editor behaves like a freshly selected reference.
     return restored.at(-1)?.type === 'tag' ? [...restored, createTextSlot(' ')] : restored;
   });
@@ -84,17 +84,18 @@ export function useUserMessageEditor({
   const commands = useChatCommandController({ activeProject, draft, plugins, getInputElement, onSearchProjectEntries, slashMenuBlocked: locked, t });
   const selectedSkills = useMemo(() => filterSelectedSkillsBySlots(skills, slots), [skills, slots]);
   const slashEntries = useMemo(() => {
+    const query = commands.slashQuery;
+    if (commands.skillCommand) return createChatSkillCommandItems({ query, skills, selectedSkills });
     const upload: SlashCommandMenuItem = {
       key: 'attachment', kind: 'action', type: 'attachment', title: t('chat.composer.uploadAttachment'),
       description: t('chat.composer.uploadAttachmentHint'), disabled: locked || attachments.atLimit,
     };
-    const query = commands.slashQuery.trim().toLowerCase();
     return [
       ...(!query || `${upload.key} ${upload.title} ${upload.description}`.toLowerCase().includes(query) ? [upload] : []),
       ...createChatCapabilityCommandItems({ query, plugins, skills, selectedSkills,
         selectedPluginIds: parsePluginMentions(draft).map((mention) => mention.pluginId) }),
     ];
-  }, [attachments.atLimit, commands.slashQuery, draft, locked, plugins, selectedSkills, skills, t]);
+  }, [attachments.atLimit, commands.skillCommand, commands.slashQuery, draft, locked, plugins, selectedSkills, skills, t]);
 
   const addFiles = (files: File[]) => {
     if (!locked) void attachments.addFiles(files);
@@ -125,7 +126,8 @@ export function useUserMessageEditor({
   };
   const selectSlash = (item?: SlashCommandMenuItem) => {
     if (locked || !item || (item.kind === 'action' && item.disabled)) return;
-    const command = commands.slashCommand ?? parseSlashCommand(draft, commands.commandCursorOffset);
+    const command = commands.skillCommand ?? commands.slashCommand
+      ?? parseSkillCommand(draft, commands.commandCursorOffset) ?? parseSlashCommand(draft, commands.commandCursorOffset);
     if (!command && !commands.forcedSlashMenuOpen) return;
     const nextSlots = item.kind === 'skill' ? [createSelectedSkillSlot(item.skill), createTextSlot(' ')]
       : item.kind === 'plugin' ? [createSelectedPluginSlot(item.plugin), createTextSlot(' ')] : [createTextSlot('')];

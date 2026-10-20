@@ -41,30 +41,58 @@ export function applyComposerRange(range: Range): void {
   selection?.addRange(range);
 }
 
-/** Scroll only the editor, keeping the surrounding conversation at its reading position. */
-export function focusComposerEnd(element: HTMLElement): void {
-  element.focus({ preventScroll: true });
-  applyComposerRange(composerRange(element, 'end'));
-  element.scrollTop = element.scrollHeight;
+/** DOM text offsets remain stable when Chromium merges the inserted text nodes. */
+export function composerRangeAtTextOffset(element: HTMLElement, offset: number): Range {
+  const range = composerRange(element, 'end');
+  const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  let remaining = Math.max(0, offset);
+  let node = walker.nextNode();
+  while (node) {
+    const length = node.textContent?.length ?? 0;
+    if (remaining <= length) {
+      const tag = node.parentElement?.closest('[data-slot-key]');
+      if (tag && element.contains(tag)) {
+        if (remaining === 0) range.setStartBefore(tag);
+        else range.setStartAfter(tag);
+      } else {
+        range.setStart(node, remaining);
+      }
+      range.collapse(true);
+      return range;
+    }
+    remaining -= length;
+    node = walker.nextNode();
+  }
+  return range;
 }
 
 export function isComposerSelectionAtStart(element: HTMLElement): boolean {
+  return isComposerSelectionAtBoundary(element, 'start');
+}
+
+export function isComposerSelectionAtEnd(element: HTMLElement): boolean {
+  return isComposerSelectionAtBoundary(element, 'end');
+}
+
+function isComposerSelectionAtBoundary(element: HTMLElement, boundary: 'start' | 'end'): boolean {
   const selection = element.ownerDocument.getSelection();
   if (!selection?.isCollapsed || !selection.rangeCount) return false;
   const range = selection.getRangeAt(0);
   if (!element.contains(range.startContainer)) return false;
   let node: Node | null = range.startContainer;
+  const start = boundary === 'start';
   if (node.nodeType === Node.TEXT_NODE) {
-    if (range.startOffset !== 0) return false;
-  } else if (Array.from(node.childNodes).slice(0, range.startOffset).some(hasComposerContent)) {
+    if (range.startOffset !== (start ? 0 : node.textContent?.length ?? 0)) return false;
+  } else if (Array.from(node.childNodes)
+    .slice(start ? 0 : range.startOffset, start ? range.startOffset : undefined).some(hasComposerContent)) {
     return false;
   }
-  // Empty block siblings still represent preceding lines in contenteditable.
+  // Empty block siblings still represent lines before/after the caret in contenteditable.
   while (node && node !== element) {
-    let previous = node.previousSibling;
-    while (previous) {
-      if (hasComposerContent(previous)) return false;
-      previous = previous.previousSibling;
+    let sibling = start ? node.previousSibling : node.nextSibling;
+    while (sibling) {
+      if (hasComposerContent(sibling)) return false;
+      sibling = start ? sibling.previousSibling : sibling.nextSibling;
     }
     node = node.parentNode;
   }
@@ -84,15 +112,8 @@ export function extendCommandRange(range: Range, element: HTMLElement, command: 
   prefix.selectNodeContents(element);
   prefix.setEnd(range.startContainer, range.startOffset);
   if (!prefix.toString().endsWith(command)) return;
-  const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-  let offset = prefix.toString().length - command.length;
-  let node = walker.nextNode();
-  while (node) {
-    const length = node.textContent?.length ?? 0;
-    if (offset <= length) { range.setStart(node, offset); return; }
-    offset -= length;
-    node = walker.nextNode();
-  }
+  const start = composerRangeAtTextOffset(element, prefix.toString().length - command.length);
+  range.setStart(start.startContainer, start.startOffset);
 }
 
 export function composerFragment(document: Document, slots: ComposerSlot[], references: Map<string, ComposerSlot>): DocumentFragment {

@@ -1,7 +1,7 @@
 @import './chat-prompt.css';
 @import './chat-composer-stack.css';
 @import './chat-model-picker.css';
-@import './chat-mention-menu.css';
+@import './chat-command-menu.css';
 
 .chat-sender {
   --chat-composer-stack-gap: 8px;
@@ -14,10 +14,6 @@
   padding: 0 var(--chat-content-inline-padding) var(--chat-composer-bottom-inset);
   border-top: 0;
   background: var(--desktop-agent-main-bg);
-}
-
-.chat-sender:has(.chat-command-menu) {
-  z-index: 12;
 }
 
 .chat-sender--starter {
@@ -266,212 +262,6 @@
   .chat-attachment__file-icon .is-spinning {
     animation: none;
   }
-}
-
-.chat-command-menu {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr);
-  position: relative;
-  gap: 2px;
-  width: min(var(--chat-content-max-width), 100%);
-  max-height: 280px;
-  margin-bottom: 2px;
-  padding: 8px;
-  overflow: hidden;
-  border: 1px solid var(--desktop-agent-panel-border);
-  border-radius: var(--app-radius-xl);
-  /* Candidate lists cover page content, so their surface must stay opaque. */
-  background: var(--desktop-agent-main-surface);
-  box-shadow: var(--desktop-agent-composer-shadow);
-}
-
-.chat-sender > .chat-command-menu {
-  --chat-command-menu-shift: 0px;
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 50%;
-  z-index: 30;
-  width: min(var(--chat-content-max-width), calc(100% - var(--chat-content-inline-padding) - var(--chat-content-inline-padding)));
-  margin-bottom: 0;
-  transform: translateX(calc(-50% + var(--chat-command-menu-shift)));
-}
-
-/* 弹层和输入框属于同一悬浮组合；相同层级让后渲染的输入框盖住弹层向下扩散的阴影，
-   避免输入框看起来沉到弹层下面。 */
-.chat-sender:has(> .chat-command-menu) > .chat-prompt {
-  z-index: 30;
-}
-
-.chat-sender--starter > .chat-command-menu {
-  width: 100%;
-}
-
-.chat-command-menu__title {
-  padding: 4px 7px 6px;
-  color: var(--app-text-muted);
-  font-size: 12px;
-  line-height: 16px;
-}
-
-.chat-command-menu__section {
-  display: grid;
-  gap: 2px;
-}
-
-.chat-command-menu__section + .chat-command-menu__section {
-  margin-top: 2px;
-}
-
-.chat-command-menu__state {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  padding: 7px;
-  border-radius: var(--app-radius-sm);
-  color: var(--app-text-muted);
-  font-size: 13px;
-  line-height: 18px;
-}
-
-.chat-command-menu__state-icon.is-spinning {
-  animation: chat-command-menu-spin 0.9s linear infinite;
-}
-
-.chat-command-menu__item {
-  display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-height: 38px;
-  padding: 7px 8px;
-  border: 0;
-  border-radius: var(--app-radius-sm);
-  color: var(--app-text);
-  background: transparent;
-  text-align: left;
-  position: relative;
-  z-index: 1;
-  transition: none;
-}
-
-.chat-command-menu__item.is-active:not(:disabled) {
-  background: var(--desktop-agent-control-active-bg);
-}
-
-.chat-command-menu__item:disabled {
-  cursor: default;
-  opacity: var(--app-disabled-opacity);
-}
-
-.chat-command-menu__item-icon {
-  width: 15px;
-  height: 15px;
-  color: var(--app-text-muted);
-}
-
-.chat-command-progress-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.chat-command-progress-icon .sd-progress-ring__value {
-  stroke: var(--app-primary) !important;
-}
-
-.chat-command-progress-icon .sd-progress-ring__track {
-  stroke: color-mix(in srgb, var(--app-text-muted) 20%, transparent) !important;
-}
-
-.chat-command-menu__item-main {
-  display: grid;
-  min-width: 0;
-}
-
-.chat-command-menu__item-title,
-.chat-command-menu__item-desc {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chat-command-menu__item-title {
-  font-size: 13px;
-  line-height: 18px;
-}
-
-.chat-command-menu__item-desc {
-  color: var(--app-text-subtle);
-  font-size: 11px;
-  line-height: 15px;
-}
-
-.chat-command-menu__item-scope {
-  padding-left: 8px;
-  color: var(--app-text-muted);
-  font-size: 11px;
-  line-height: 15px;
-}
-
-.chat-skill-command-menu .chat-command-menu__item {
-  grid-template-columns: 16px minmax(0, 1fr);
-  min-height: 28px;
-  padding: 5px 8px;
-  gap: 8px;
-}
-
-.chat-skill-command-menu .chat-command-menu__item--skill {
-  grid-template-columns: 22px minmax(0, 1fr) auto;
-}
-
-.chat-skill-command-menu .chat-command-menu__item-icon {
-  width: 14px;
-  height: 14px;
-}
-
-.chat-skill-command-menu .chat-command-menu__item-main {
-  display: grid;
-  grid-template-columns: 118px minmax(0, 1fr);
-  align-items: center;
-  gap: 14px;
-}
-
-.chat-skill-command-menu .chat-command-menu__item-title {
-  max-width: 100%;
-  font-weight: 500;
-}
-
-.chat-skill-command-menu .chat-command-menu__item-desc {
-  width: 100%;
-  text-align: right;
-  font-size: 13px;
-  line-height: 18px;
-}
-
-.chat-skill-command-menu .chat-command-menu__item-scope {
-  padding-left: 8px;
-  font-size: 13px;
-  line-height: 18px;
-}
-
-.chat-command-menu__list {
-  display: grid;
-  /* Scroll overflow must not shrink two-line options down to their minimum height. */
-  grid-auto-rows: max-content;
-  align-content: start;
-  position: relative;
-  gap: 4px;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
-/* The padded shell owns the rounded border; only the inset options scroll. */
-.chat-sender > .chat-command-menu > .chat-command-menu__list {
-  gap: inherit;
 }
 
 .chat-sender__footer,
@@ -862,11 +652,6 @@
   white-space: nowrap;
 }
 
-@keyframes chat-command-menu-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
 .chat-composer-status-fallback {
   width: 100%;
   min-height: 32px;

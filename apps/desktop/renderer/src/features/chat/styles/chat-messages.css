@@ -139,14 +139,12 @@
 .chat-delete-bar__inner,
 .chat-scroll-bottom,
 .chat-sender:not(.chat-sender--starter) > .chat-composer-stack,
-.chat-sender:not(.chat-sender--starter) .chat-prompt,
-.chat-sender:not(.chat-sender--starter) > .chat-command-menu {
+.chat-sender:not(.chat-sender--starter) .chat-prompt {
   /* Keep overview offsets on the same timeline as the sidebar's grid motion. */
   transition: transform var(--app-sidebar-motion-duration, 220ms) var(--app-sidebar-motion-easing, cubic-bezier(0.2, 0.8, 0.2, 1));
 }
 
-/* 将正文放到概览卡片左侧的可用区域正中，最小间距与卡片右边距一致。
-   命令菜单保留自身的居中变换，并通过变量获得相同偏移。 */
+/* 将正文放到概览卡片左侧的可用区域正中，最小间距与卡片右边距一致。 */
 .chat-main-conversation--overview-shifted {
   --chat-overview-expanded-shift: 147px;
 }
@@ -157,10 +155,6 @@
 .chat-main-conversation--overview-shifted .chat-sender:not(.chat-sender--starter) > .chat-composer-stack,
 .chat-main-conversation--overview-shifted .chat-sender:not(.chat-sender--starter) .chat-prompt {
   transform: translateX(calc(0px - var(--chat-overview-expanded-shift)));
-}
-
-.chat-main-conversation--overview-shifted .chat-sender:not(.chat-sender--starter) > .chat-command-menu {
-  --chat-command-menu-shift: calc(0px - var(--chat-overview-expanded-shift));
 }
 
 .chat-messages--starter {
@@ -314,8 +308,7 @@
   color: color-mix(in srgb, var(--app-primary) 76%, var(--app-text));
 }
 
-.chat-user-message-kind--goal,
-.chat-user-message-kind--review {
+.chat-user-message-kind--goal {
   color: color-mix(in srgb, var(--app-primary) 76%, var(--app-text));
 }
 
@@ -638,11 +631,6 @@
   background: transparent;
 }
 
-.chat-user-edit > .chat-command-menu {
-  width: 100%;
-  box-sizing: border-box;
-}
-
 .chat-user-edit__footer {
   display: flex;
   align-items: center;
@@ -755,6 +743,13 @@
   color: var(--app-text-muted);
   font-size: 12px;
   line-height: 20px;
+}
+
+/* Keep the message kind visible while the timestamp and actions follow hover/focus. */
+.chat-message-footer__controls {
+  display: inline-flex;
+  align-items: center;
+  gap: inherit;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.14s ease;
@@ -762,6 +757,12 @@
 
 .chat-message-footer--end {
   justify-content: flex-end;
+}
+
+.chat-message-footer__kind {
+  margin-inline-start: 4px;
+  color: var(--app-text-secondary);
+  white-space: nowrap;
 }
 
 .chat-message-footer__time {
@@ -772,11 +773,11 @@
   transform: translateY(1px);
 }
 
-.chat-bubble-item:hover .chat-message-footer,
-.chat-bubble-item:focus-within .chat-message-footer,
+.chat-bubble-item:hover .chat-message-footer__controls,
+.chat-bubble-item:focus-within .chat-message-footer__controls,
 /* The menu is portaled outside the bubble, so its trigger owns visibility. */
-.chat-message-footer:has([aria-haspopup='menu'][aria-expanded='true']),
-.chat-message-footer[data-copied='true'] {
+.chat-message-footer__controls:has([aria-haspopup='menu'][aria-expanded='true']),
+.chat-message-footer[data-copied='true'] .chat-message-footer__controls {
   opacity: 1;
   pointer-events: auto;
 }

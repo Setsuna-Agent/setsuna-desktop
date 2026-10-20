@@ -111,7 +111,7 @@ export function useChatCommandController({
 
   useEffect(() => {
     setActiveSlashIndex(0);
-  }, [state.slashQuery]);
+  }, [state.slashQuery, state.skillCommand?.start]);
 
   const handleDraftValueChange = useCallback((value: string) => {
     setDismissedMentionDraft((current) => (current && current !== value ? '' : current));

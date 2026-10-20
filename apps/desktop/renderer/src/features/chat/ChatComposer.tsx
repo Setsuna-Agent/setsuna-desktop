@@ -40,7 +40,7 @@ import { ChatComposerFooter } from './composer/ChatComposerFooter.js';
 import { ChatComposerOverlays } from './composer/ChatComposerOverlays.js';
 import { ChatSendQueue } from './composer/ChatSendQueue.js';
 import type { SlashCommandMenuItem } from './composer/ChatSlashCommandMenu.js';
-import { parseMentionCommand, parseSlashCommand } from './composer/chatCommandUtils.js';
+import { parseMentionCommand, parseSkillCommand, parseSlashCommand } from './composer/chatCommandUtils.js';
 import { createComposerDraftSyncPlan } from './composer/chatComposerDraftSync.js';
 import type { ChatComposerSendOptions } from './composer/chatComposerSendOptions.js';
 import { startChatComposerCapabilitySelection, type ChatComposerCapabilitySelection } from './composer/chatComposerCapabilitySelection.js';
@@ -58,7 +58,7 @@ import {
   createWorkspaceMentionSlots,
   filterSelectedSkillsBySlots,
 } from './composer/chatComposerSlots.js';
-import { createChatSlashCommandItems } from './composer/chatSlashCommandItems.js';
+import { createChatSkillCommandItems, createChatSlashCommandItems } from './composer/chatSlashCommandItems.js';
 import type { ChatAttachmentStore } from './composer/chatAttachmentStore.js';
 import { useChatAttachments } from './composer/useChatAttachments.js';
 import type { ChatMentionItem } from './mentions/chatMentionItems.js';
@@ -375,7 +375,11 @@ export function ChatComposer({
     slashMenuBlocked: queuedTurnEdit.editing || queuedTurnEdit.retrieving,
     t,
   });
-  const slashEntries = useMemo(() => createChatSlashCommandItems({
+  const slashEntries = useMemo(() => commandController.skillCommand ? createChatSkillCommandItems({
+    query: commandController.slashQuery,
+    selectedSkills,
+    skills,
+  }) : createChatSlashCommandItems({
     activeModelName: modeController.activeModelName,
     activeProjectSelected: Boolean(activeProject),
     activeTurnId,
@@ -399,6 +403,7 @@ export function ChatComposer({
     activeTurnId,
     attachmentPickerDisabled,
     canClearContext,
+    commandController.skillCommand,
     commandController.slashQuery,
     contextCompactPercent,
     contextCompacting,
@@ -538,7 +543,8 @@ export function ChatComposer({
       commandController.focusComposer();
       return;
     }
-    const command = commandController.slashCommand
+    const command = commandController.skillCommand ?? commandController.slashCommand
+      ?? parseSkillCommand(draft, commandController.commandCursorOffset)
       ?? parseSlashCommand(draft, commandController.commandCursorOffset);
     if (!command && !commandController.forcedSlashMenuOpen) return;
     senderRef.current?.insert?.(
@@ -767,6 +773,7 @@ export function ChatComposer({
         }}
       />
       <ChatComposerOverlays
+        editorRef={senderRef}
         mentionMenu={{
           activeIndex: commandController.activeMentionIndex,
           items: commandController.mentionItems,

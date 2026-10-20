@@ -4,7 +4,8 @@ import { ArrowUp, Square } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { forwardRef, useCallback, useImperativeHandle, useLayoutEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type ReactNode } from 'react';
 import { useI18n } from '../../../../shared/i18n/I18nProvider.js';
-import { applyComposerRange, composerFragment, composerRange, extendCommandRange, focusComposerEnd, readComposerDocument, slotText } from './composerDocument.js';
+import { applyComposerRange, composerFragment, composerRange, composerRangeAtTextOffset, extendCommandRange, readComposerDocument, slotText } from './composerDocument.js';
+import { useComposerCaretScroll } from './useComposerCaretScroll.js';
 import type { ComposerEditor, ComposerSlot } from './types.js';
 
 type Props = Omit<HTMLAttributes<HTMLDivElement>, 'onChange' | 'onSubmit'> & {
@@ -23,6 +24,7 @@ type TagPortal = { element: HTMLElement; slot: Extract<ComposerSlot, { type: 'ta
 export const ChatPromptInput = forwardRef<ComposerEditor, Props>(function ChatPromptInput({ value = '', slotConfig, disabled, loading, placeholder, allowEmptySubmit = false, 'aria-label': ariaLabel, autoSize = { minRows: 2, maxRows: 6 }, submitOn = 'enter', header, footer, onChange, onSubmit, onCancel, onPasteFile, onKeyDown, ...props }, ref) {
   const { t } = useI18n();
   const elementRef = useRef<HTMLDivElement | null>(null);
+  const revealCaret = useComposerCaretScroll(elementRef);
   const references = useRef(new Map<string, ComposerSlot>());
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
@@ -32,6 +34,7 @@ export const ChatPromptInput = forwardRef<ComposerEditor, Props>(function ChatPr
   const initialized = useRef(false);
   const portalTargets = useRef(new WeakSet<HTMLElement>());
   const composing = useRef(false);
+  const inserting = useRef(false);
 
   const synchronize = useCallback(() => {
     const element = elementRef.current;
@@ -70,22 +73,36 @@ export const ChatPromptInput = forwardRef<ComposerEditor, Props>(function ChatPr
     if (!element) return;
     const range = composerRange(element, position);
     if (replaceCharacters) extendCommandRange(range, element, replaceCharacters);
+    const suffix = range.cloneRange();
+    suffix.selectNodeContents(element);
+    suffix.setStart(range.endContainer, range.endOffset);
+    const suffixLength = suffix.toString().length;
     element.focus({ preventScroll });
     applyComposerRange(range);
     const fragment = composerFragment(element.ownerDocument, slots, references.current);
     // Use the browser editing transaction so normal undo/redo includes inserted tags.
     const wrapper = element.ownerDocument.createElement('div');
     wrapper.append(fragment);
-    const edited = element.ownerDocument.execCommand?.('insertHTML', false, wrapper.innerHTML);
+    let edited = false;
+    // Native input fires inside execCommand. Mount reference labels only after
+    // the insertion caret is settled, so their text cannot invalidate its offset.
+    inserting.current = true;
+    try {
+      edited = element.ownerDocument.execCommand?.('insertHTML', false, wrapper.innerHTML) ?? false;
+    } finally {
+      inserting.current = false;
+    }
     if (!edited) {
       const content = element.ownerDocument.createDocumentFragment();
       content.append(...wrapper.childNodes);
-      const tail = content.lastChild;
       range.deleteContents(); range.insertNode(content);
-      if (tail) { range.setStartAfter(tail); range.collapse(true); applyComposerRange(range); }
     }
+    // insertHTML can leave Chromium's caret before a trailing newline. Locate the
+    // actual insertion end from the preserved suffix, including normalized CRLF.
+    applyComposerRange(composerRangeAtTextOffset(element, (element.textContent?.length ?? 0) - suffixLength));
     synchronize();
-  }, [synchronize]);
+    revealCaret();
+  }, [revealCaret, synchronize]);
 
   useImperativeHandle(ref, () => ({
     get inputElement() { return elementRef.current; },
@@ -123,14 +140,13 @@ export const ChatPromptInput = forwardRef<ComposerEditor, Props>(function ChatPr
     <div {...props} ref={elementRef} className="chat-prompt__input" contentEditable={!disabled} suppressContentEditableWarning role="textbox" aria-multiline="true" aria-label={ariaLabel ?? placeholder} aria-disabled={disabled}
       tabIndex={disabled ? -1 : 0}
       data-placeholder={placeholder} data-empty={empty || undefined} style={{ '--prompt-min-rows': autoSize.minRows, '--prompt-max-rows': autoSize.maxRows } as CSSProperties}
-      onInput={synchronize} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; synchronize(); }}
+      onInput={() => { if (!inserting.current) synchronize(); }} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; synchronize(); }}
       onPaste={(event) => {
         if (event.defaultPrevented) return;
         if (disabled) { event.preventDefault(); return; }
         if (event.clipboardData.files.length) { event.preventDefault(); onPasteFile?.(event.clipboardData.files); return; }
         event.preventDefault();
         insert([{ type: 'text', value: event.clipboardData.getData('text/plain') }]);
-        focusComposerEnd(event.currentTarget);
       }}
       onKeyDown={(event) => {
         if (disabled || composing.current || event.nativeEvent.isComposing) return;

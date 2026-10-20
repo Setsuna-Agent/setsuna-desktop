@@ -25,7 +25,7 @@ export function ChatMentionCommandMenu({
     activeItem ? chatMentionItemKey(activeItem) : null,
   );
   const hasFiles = items.some((item) => item.kind === 'workspace');
-  const showSectionTitles = items.some((item) => item.kind !== 'workspace');
+  const showSectionTitles = items.some((item) => item.kind !== items[0]?.kind);
   return (
     <div className="chat-command-menu chat-project-entry-command-menu" role="listbox" aria-label={t('chat.command.mentions')}>
       <div ref={scrollContainerRef} className="chat-command-menu__list">

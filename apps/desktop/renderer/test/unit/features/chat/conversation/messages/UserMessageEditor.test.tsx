@@ -21,13 +21,16 @@ const original = attachment('old', 'original.txt');
 const added = attachment('new', 'pasted.txt');
 const client = () => ({ linkAttachment: vi.fn(async () => null), uploadAttachment: vi.fn(async () => added), deleteAttachment: vi.fn(async () => ({ deleted: true })) });
 
-it('restores every reference kind as editable slots and submits further @ and / selections with their identities', async () => {
+it.each([
+  { inputKind: 'message', marker: '/' },
+  { inputKind: 'review', marker: '$' },
+] as const)('restores $inputKind references and submits further @ and $marker selections with their identities', async ({ inputKind, marker }) => {
   const app = pluginAppMentionText({ pluginId: plugin.id, contributionId: 'table.page', name: '我的表格' });
   const browser = browserTabMentionText({ id: 'tab-1', title: 'Docs', url: 'https://example.test' });
   const thread = threadMentionText({ id: 'thread-2', title: 'Other chat' });
   const content = `Review ${app} @"src/a b.ts" ${browser} ${thread}`;
   const submit = vi.fn(async (_input: MessagePatch) => false);
-  renderEditor({ message: message(content, { skillIds: ['review'], skillReferences: [{ skillId: 'review', start: 0, end: 6 }] }), onSubmit: submit });
+  renderEditor({ message: message(content, { inputKind, skillIds: ['review'], skillReferences: [{ skillId: 'review', start: 0, end: 6 }] }), onSubmit: submit });
   const input = screen.getByRole('textbox');
   const range = document.createRange();
   range.selectNodeContents(input);
@@ -44,8 +47,11 @@ it('restores every reference kind as editable slots and submits further @ and / 
   ]);
   range.collapse(false);
   paste(input, '@表格');
-  fireEvent.mouseDown(await screen.findByRole('option', { name: '我的表格' }));
-  paste(input, '/Build');
+  const option = await screen.findByRole('option', { name: '我的表格' });
+  expect(document.activeElement).toBe(input);
+  fireEvent.mouseDown(option);
+  expect(document.activeElement).toBe(input);
+  paste(input, `${marker}Build`);
   fireEvent.keyDown(input, { key: 'Enter' });
   expect(submit).not.toHaveBeenCalled();
   await act(async () => { fireEvent.keyDown(input, { key: 'Enter' }); });

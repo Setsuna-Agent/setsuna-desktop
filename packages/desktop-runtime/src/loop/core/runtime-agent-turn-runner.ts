@@ -123,7 +123,13 @@ export class RuntimeAgentTurnRunner {
       createdAt,
       status: 'complete',
     };
-    let modelUserMessage: RuntimeMessage = options.modelInput ? { ...userMessage, content: options.modelInput } : userMessage;
+    // Regeneration keeps the message ID, but compaction must recognize its input
+    // as part of the current execution rather than the original turn's history.
+    let modelUserMessage: RuntimeMessage = {
+      ...userMessage,
+      turnId,
+      content: options.modelInput || userMessage.content,
+    };
     const includeUserMessageInConversation = publishUserMessage || options.includeUserMessageInModel === true;
     let runtimeConfig = runtimeConfigForTurn(await this.options.configStore?.getConfig().catch(() => null), options.unattended);
     let responseLanguage = resolveRuntimeResponseLanguage({
@@ -219,7 +225,11 @@ export class RuntimeAgentTurnRunner {
       throwIfAborted(signal);
       // SamplingContextBuilder 统一管理单次请求边界，使压缩逻辑能够计入临时提示片段、
       // 工具模式和输出预留空间。
-      let conversationMessages = [...thread.messages, ...(includeUserMessageInConversation ? [modelUserMessage] : [])];
+      // Regeneration reuses the stored user message. Replace its model-facing copy in place
+      // so the full review prompt (or a hook rewrite) is applied without duplicating the input.
+      let conversationMessages = includeUserMessageInConversation
+        ? [...thread.messages, modelUserMessage]
+        : thread.messages.map((message) => message.id === userMessage.id ? modelUserMessage : message);
       // review turn 展示给用户的是简短文案，发给模型的是完整 review prompt，两者在这里分流。
       runtimeConfig = runtimeConfig ?? await this.options.configStore?.getConfig().catch(() => null);
       let explicitMemoryUserContent = userMessage.content;

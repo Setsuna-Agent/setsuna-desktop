@@ -1,7 +1,6 @@
 import type { ComposerEditor } from './editor/types.js';
 import type { RuntimePluginSummary, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import { useCallback, type ClipboardEvent as ReactClipboardEvent } from 'react';
-import { focusComposerEnd } from './editor/composerDocument.js';
 import {
   CHAT_COMPOSER_CLIPBOARD_TYPE,
   createChatComposerClipboardPastePlan,
@@ -94,7 +93,6 @@ export function useChatComposerClipboard({
     setNormalizedChatComposerSelection(input, editor.getValue().slotConfig);
     editor.insert(pastePlan.slots, 'cursor', undefined, true);
     onSkillsRestored(pastePlan.selectedSkills);
-    focusComposerEnd(input);
   }, [allowStructuredPaste, disabled, getEditor, onPasteTextAttachment, onSkillsRestored, skills, plugins]);
 
   return {

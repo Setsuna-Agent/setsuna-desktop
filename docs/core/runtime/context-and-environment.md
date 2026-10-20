@@ -230,6 +230,7 @@ Review 不是另一个绕过 thread event 的执行器。
 
 - Transcript-only message 不计入模型窗口。
 - Runtime system prompt 不被压缩。
+- 当前轮次的用户请求和最新补充在保留预算内使用原文；重发沿用消息 ID，但模型侧副本归属新轮次，避免被当作旧历史摘要。
 - 保留最近的模型可见消息。
 - 不能拆开 assistant tool call 与对应 tool result。
 - 中间有 steer 时仍按同一工具 transaction 处理。

@@ -60,6 +60,7 @@ export interface ReviewRuntimeHost {
 /** The protocol-neutral Agent Review surface consumed by Core and compatibility adapters. */
 export interface ReviewControl {
   readonly available: boolean;
+  prepare(input: StartReviewInput): Promise<ReviewTurnRequest>;
   readSettings(): Promise<ReviewSettingsState>;
   start(input: StartReviewInput): Promise<ReviewStartOutcome>;
   updateSettings(input: ReviewSettingsUpdate): Promise<ReviewSettingsState>;
@@ -95,6 +96,7 @@ export function createNoopReviewControl(): ReviewControl {
   };
   return Object.freeze({
     available: false,
+    prepare: async () => unavailable(),
     readSettings: async () => unavailable(),
     start: async () => unavailable(),
     updateSettings: async () => unavailable(),

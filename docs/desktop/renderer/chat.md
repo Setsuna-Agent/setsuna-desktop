@@ -68,7 +68,9 @@ Renderer Slot 的实例身份沿用这套 session 语义：Conversation/Details 
 - Review turn。
 - Goal mode。
 
-历史用户消息的编辑由 `conversation/messages/UserMessageEditor` 与 `useUserMessageEditor` 拥有临时草稿和上传资源，复用底部 Composer 的 `ChatPromptInput`、引用槽位、附件 tray、剪贴板和命令控制器。进入编辑时恢复消息中的应用/插件、Skill、文件、网页、对话引用及附件；`@` 继续选择引用，`/` 提供 Skill、插件和上传附件。提交把裁剪后的文字、Skill ID/范围与完整附件列表交给 regenerate；附件字段省略表示保留，空数组表示移除，允许仅附件消息。Runtime 先验证附件能力与归属，再更新消息、截断后续回复，`message.updated` 同步持久化附件变化。取消只回收未发送资源，提交期间离开页面的上传受发送租约保护；异步结果以当前对话身份隔离。
+历史用户消息的编辑由 `conversation/messages/UserMessageEditor` 与 `useUserMessageEditor` 拥有临时草稿和上传资源，复用底部 Composer 的 `ChatPromptInput`、引用槽位、附件 tray、剪贴板和命令控制器。进入编辑时恢复消息中的应用/插件、Skill、文件、网页、对话引用及附件；`@` 继续选择引用，`/` 提供 Skill、插件和上传附件，`$` 直接筛选 Skill。提交把裁剪后的文字、Skill ID/范围与完整附件列表交给 regenerate；附件字段省略表示保留，空数组表示移除，允许仅附件消息。Runtime 先验证附件能力与归属，再更新消息、截断后续回复，`message.updated` 同步持久化附件变化。取消只回收未发送资源，提交期间离开页面的上传受发送租约保护；异步结果以当前对话身份隔离。
+
+审查消息也使用这个编辑入口，保留原消息 ID 与审查类型。“审查模式”以灰色小字常显在气泡下方操作行的最右侧；时间与操作按钮由独立容器沿用悬停、焦点和操作反馈时的显示规则。重发由 runtime 恢复审查策略和专用模型，仍按只读审查执行；具体所有权见 [Review](../../features/desktop-workbench.md#review)。
 
 历史 HTTP(S) 图片附件保留原 URL；仅将内联图片 data URL 转为受管资源。解码和上传失败均进入单个附件的错误状态，不阻断编辑器挂载或其他附件的恢复。
 
@@ -87,9 +89,9 @@ Active turn 时普通提交默认排队；显式立即发送才尝试 steer。Go
 - `chatComposerModeState.ts`：当前模型能力、Goal 和 thinking selection 的纯状态模型。
 - `useChatComposerModeController.ts`：Goal、thinking、model/usage view state 与 send options。
 - `ChatComposerFooter.tsx`：命令入口、审批策略、模式徽标、模型/思考强度选择与 send/stop/queue 主操作的纯展示组合。
-- `ChatComposerOverlays.tsx`：mention、slash 和 usage 浮层的纯展示组合。
+- `ChatComposerOverlays.tsx`：`@`、`/`、`$` 候选浮层的展示组合，通过 `editor/composerCaretRect.ts` 读取真实光标位置；底部输入框和消息编辑框共用。
 - `chatAttachments.ts` / `chatImageAttachments.ts`：本地文件引用、无路径图片托管与清理。
-- `chatCommandUtils.ts`：slash/command 解析。
+- `chatCommandUtils.ts`：`@`、`/`、`$` 光标位置命令解析。
 - `chatComposerCommandState.ts`：mention/slash visibility、dismiss 和 cursor-local query 的纯状态模型。
 - `useChatCommandController.ts`：菜单 focus、键盘导航、光标监听和 workspace 搜索生命周期。
 - `chatProjectEntrySearch.ts`：可取消的 project entry 搜索，迟到结果不能覆盖最新 query。
@@ -100,7 +102,7 @@ Active turn 时普通提交默认排队；显式立即发送才尝试 steer。Go
 - `useQueuedTurnComposerEdit.ts`：带 token 的队列项取回编辑。
 - `useChatComposerHistory.ts`：光标折叠在首行开头时，用上下箭头遍历当前对话已加载的用户提问；消息来自 `ChatWorkspace` 合并后的分页历史，按消息 ID 保持浏览位置，分页新增的旧提问可继续向上取回。向下越过最新提问时恢复原草稿及结构化引用。输入法、修饰键、命令菜单和队列编辑保留原有键盘行为。
 
-粘贴超过 10,000 个 UTF-16 字符的文本时，`useChatComposerClipboard` 将原文转换为 UTF-8 TXT 附件，沿用附件准备、发送和清理流程；附件已满或当前模式不允许附件时保留为内联文本。普通文本和结构化引用粘贴后，光标移到输入末尾，仅滚动输入框到底部。
+粘贴超过 10,000 个 UTF-16 字符的文本时，`useChatComposerClipboard` 将原文转换为 UTF-8 TXT 附件，沿用附件准备、发送和清理流程；附件已满或当前模式不允许附件时保留为内联文本。普通文本、结构化引用粘贴和 Shift+Enter 换行后，按未替换的后缀重新定位插入结束点，再同步引用标签，避免 Chromium 把光标留在末尾换行前或被标签更新影响。`useComposerCaretScroll` 在编辑器更新后按实际光标位置滚动输入框；末尾空行直接使用滚动范围，中间空行用相邻字符测量行位置，不改变外层对话的滚动位置。
 
 输入框上方的 `chat-composer-stack` 统一承载状态贡献和 `ChatSendQueue`：目标状态与单条、多条队列共享一张向内收窄的卡片，底部留白与输入框重叠，呈现从后方露出的层次。状态贡献只绘制行内容，不再持有独立边框、阴影和外部间距；目标在队列上方，队列限高后内部滚动。两者都无内容时容器不占空间，主对话、侧边对话与概览偏移共用这套布局。
 
@@ -112,9 +114,9 @@ Active turn 时普通提交默认排队；显式立即发送才尝试 steer。Go
 
 Command controller 只拥有输入菜单交互，不负责发送、附件、Goal 或 queued edit 事务。Mention 菜单优先于强制打开的 slash 菜单；dismiss 只绑定当前 draft；queued edit 只阻止 slash menu。Project entry 搜索切换 query 或关闭菜单时会取消旧请求的写回。
 
-`@` 候选由 `ChatCommandMenus.tsx` 展示，紧凑样式独立放在 `styles/chat-mention-menu.css`。每行展示图标、名称和浅色路径，完整路径可悬停查看；只有文件结果时省略分类标题，有浏览器标签页时保留分类。
+`@`、`/`、`$` 候选通过共享 `AnchoredPopover` 挂到浮层容器，贴近光标展示，空间不足时自动翻转和避让视口边缘，不占用编辑框布局。定位仅在菜单打开时跟随选区、滚动和布局变化，保留编辑器焦点与原生撤销记录。紧凑单行样式统一放在 `styles/chat-command-menu.css`；名称按内容占宽，说明与路径截断，来源放在行尾，只有一种分类时省略分类标题。`@` 的完整路径仍可悬停查看。
 
-裸 `/` 菜单同时保留 quick actions 和最多 8 个 enabled、未选择的 Skill slot；quick action 数量不占用 Skill 的显示额度。
+裸 `/` 菜单同时保留 quick actions 和最多 8 个 enabled、未选择的 Skill slot；quick action 数量不占用 Skill 的显示额度。`$` 复用该菜单的焦点、关闭和键盘导航，仅提供 Skill；后续输入按名称、ID 和描述筛选，Enter/Tab 或点击将光标处的命令替换为 Skill 引用并保留周围文字。两种入口共用 Skill 过滤和引用插入逻辑。
 
 模型选择器的按钮同时显示当前模型和思考强度。上下文用量由独立的 `ChatContextUsageIndicator` 展示在模型按钮左侧，悬停查看用量详情，压缩期间显示加载状态。一级菜单直接选择该模型支持的思考档位（或开启/关闭），底部“模型”进入带搜索和独立滚动的二级列表。列表按配置的厂商分组，搜索后仅保留有匹配项的分组；模型行仅显示图标和模型名，完整名称、模型 ID、服务商、上下文窗口、最大输出与能力放在行悬停详情中。选模型后保持菜单打开，便于接着调整思考强度。模型选择和思考偏好仍由原 controller 持有，思考偏好按模型保存，不支持思考的模型不显示思考选项。
 
@@ -223,7 +225,7 @@ Enter / Shift+Enter 循环跳转，Esc 或关闭按钮清理观察器和高亮�
 - `RuntimeToolApprovalActions.tsx`：普通审批与 MCP elicitation。
 - `RuntimeShellToolRun.tsx`：Shell result 展示。
 
-工具历史展开后持续保留全部记录，新工具仅追加或更新对应条目。展开时分组标题显示整体统计，收起时才显示最新活动摘要，避免标题重复列表末尾的命令和目标。运行状态不能替换整段历史。分组和审批状态变化不重建 disclosure；只有新的待授权请求自动展开，普通输出更新保留用户的展开或收起选择。
+工具历史展开后持续保留全部记录，新工具仅追加或更新对应条目。展开时分组标题显示整体统计，收起时才显示最新活动摘要，避免标题重复列表末尾的命令和目标。外层已聚合多类工具时，标题图标沿用第一条实际记录的图标，内部直接展示各条调用或文件明细，不再嵌套同类分组摘要；单条调用的输出、文件差异与审批仍保留原有交互。运行状态不能替换整段历史。分组和审批状态变化不重建 disclosure；只有新的待授权请求自动展开，普通输出更新保留用户的展开或收起选择。
 
 工具摘要与命令标题只展示实际命令、文件等可读目标；读取命令输出时，没有命令信息就展示动作状态，不使用进程或会话 ID 补位。内部编号仅保留在按需展开的运行详情中。
 

@@ -163,7 +163,7 @@ export const MessageItem = memo(function MessageItem({
         <MessageBubble
           className={`chat-user-bubble ${hasAttachments ? 'chat-user-bubble--with-attachments' : ''}`}
           content={<UserMessageContent message={message} streaming={streaming} />}
-          footer={pending ? undefined : <ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} align="end" message={message} forkMessageId={steered ? null : message.id} onDelete={steered || !onStartDelete ? undefined : () => onStartDelete(item.id)} onEdit={steered || !onStartEdit || message.inputKind === 'goal' || message.inputKind === 'review' || message.inputKind === 'subagent_task' ? undefined : () => onStartEdit(message)} timePosition={steered ? 'none' : 'before-actions'} />}
+          footer={pending ? undefined : <ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} align="end" message={message} forkMessageId={steered ? null : message.id} onDelete={steered || !onStartDelete ? undefined : () => onStartDelete(item.id)} onEdit={steered || !onStartEdit || message.inputKind === 'goal' || message.inputKind === 'subagent_task' ? undefined : () => onStartEdit(message)} timePosition={steered ? 'none' : 'before-actions'} />}
           align="end"
           variant="soft"
         />

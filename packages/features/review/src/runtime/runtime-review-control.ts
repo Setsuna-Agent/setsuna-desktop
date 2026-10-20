@@ -25,7 +25,7 @@ export class RuntimeReviewControl implements ReviewControl {
     return updateReviewModelSettings(this.settings, this.host, input);
   }
 
-  async start(input: StartReviewInput) {
+  async prepare(input: StartReviewInput) {
     if (!await this.host.hasThread(input.threadId)) {
       throw new FeatureOperationFailure({
         code: 'THREAD_NOT_FOUND',
@@ -42,12 +42,16 @@ export class RuntimeReviewControl implements ReviewControl {
       selection,
       fallback: input.modelSelection,
     });
-    const request = createReviewTurnRequest(
+    return createReviewTurnRequest(
       input.target,
       input.language ?? 'en-US',
       modelSelection,
       input.modelSelection,
     );
+  }
+
+  async start(input: StartReviewInput) {
+    const request = await this.prepare(input);
     try {
       return Object.freeze({
         request,

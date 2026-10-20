@@ -1,5 +1,5 @@
 import { Slot, HoverCard, Popover as Primitive, Tooltip as TooltipPrimitive } from 'radix-ui';
-import { forwardRef, useEffect, useState, type ComponentPropsWithoutRef, type HTMLAttributes, type CSSProperties, type ReactElement, type ReactNode } from 'react';
+import { forwardRef, useEffect, useMemo, useState, type ComponentPropsWithoutRef, type HTMLAttributes, type CSSProperties, type ReactElement, type ReactNode } from 'react';
 import { floatingPlacement, overlayContainer, type Placement } from './portal.js';
 import { cn } from './utils.js';
 
@@ -21,6 +21,43 @@ export const Popover = forwardRef<HTMLElement, PopoverProps>(function Popover({ 
     <Primitive.Portal container={overlayContainer()}><Primitive.Content {...panel} aria-label={contentLabel} onOpenAutoFocus={onOpenAutoFocus} onCloseAutoFocus={onCloseAutoFocus}>{content}</Primitive.Content></Primitive.Portal>
   </Primitive.Root>;
 });
+
+/** Mount while open; the owning input retains focus and controls dismissal. */
+export function AnchoredPopover({
+  getAnchorRect, children, className,
+}: {
+  getAnchorRect: () => DOMRect;
+  children: ReactNode;
+  className?: string;
+}) {
+  const anchorRef = useMemo(() => ({
+    current: { getBoundingClientRect: getAnchorRect },
+  }), [getAnchorRect]);
+
+  return (
+    <Primitive.Root open modal={false}>
+      <Primitive.Anchor virtualRef={anchorRef} />
+      <Primitive.Portal container={overlayContainer()}>
+        <Primitive.Content
+          className={cn('sd-popover', className)}
+          role="presentation"
+          side="bottom"
+          align="start"
+          sideOffset={6}
+          collisionPadding={8}
+          hideWhenDetached
+          // Carets move without resizing their editor, including during scroll.
+          updatePositionStrategy="always"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+          onCloseAutoFocus={(event) => event.preventDefault()}
+          onInteractOutside={(event) => event.preventDefault()}
+        >
+          {children}
+        </Primitive.Content>
+      </Primitive.Portal>
+    </Primitive.Root>
+  );
+}
 
 export type TooltipProps = Omit<HTMLAttributes<HTMLElement>, 'children' | 'title'> & { children: ReactElement; title: ReactNode; open?: boolean; disabled?: boolean; mouseEnterDelay?: number; placement?: Placement; className?: string };
 export const Tooltip = forwardRef<HTMLElement, TooltipProps>(function Tooltip({ children, title, open, disabled = false, mouseEnterDelay = 0.18, placement = 'top', className, ...triggerProps }, ref) {

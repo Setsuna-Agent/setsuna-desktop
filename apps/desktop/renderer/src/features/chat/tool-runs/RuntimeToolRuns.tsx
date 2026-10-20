@@ -5,6 +5,7 @@ import type {
 import type { ResolvedChatToolResult } from '@setsuna-desktop/renderer-contracts/chat';
 import { ChevronDown } from 'lucide-react';
 import {
+  Fragment,
   useEffect,
   useRef,
   useState,
@@ -72,7 +73,6 @@ import {
   isPendingApprovalRun,
   isPreparingToolRun,
   isShellRun,
-  mixedToolRunGroupIcon,
   mixedToolRunGroupSummary,
   normalizeFileOperationPath,
   pathBaseName,
@@ -425,6 +425,7 @@ function mixedToolRunGroupPanelNode(
   nestedDetails?: ReactNode,
 ): JSX.Element {
   const runs = group.groups.flatMap(toolRunGroupRuns);
+  const firstRun = runs[0];
   const status = toolRunGroupStatus(runs);
   return (
     <ToolRunDisclosure
@@ -432,7 +433,7 @@ function mixedToolRunGroupPanelNode(
       className={`chat-tool-run chat-tool-run--group chat-tool-run--mixed chat-tool-run--${status}`}
       summary={(expanded) => (
         <ToolRunGroupHeading
-          icon={mixedToolRunGroupIcon(status)}
+          icon={firstRun ? toolRunIcon(firstRun) : null}
           status={status}
           summary={mixedToolRunGroupSummary(group.groups, expanded ? 'aggregate' : group.summaryMode, t)}
         />
@@ -483,12 +484,17 @@ function renderMixedToolRunChildGroup(
       </div>
     );
   }
+  // 外层已负责聚合；单项和多项共用稳定容器，追加调用时保留已展开的详情。
   return (
-    <ToolRunDisplayPanel
-      key={toolRunDisplayStableKey(group)}
-      group={group}
-      onAnswerApproval={onAnswerApproval}
-    />
+    <Fragment key={toolRunDisplayStableKey(group)}>
+      {runs.map((run) => (
+        <ToolRunDisplayPanel
+          key={run.id}
+          group={{ type: 'single', run }}
+          onAnswerApproval={onAnswerApproval}
+        />
+      ))}
+    </Fragment>
   );
 }
 
