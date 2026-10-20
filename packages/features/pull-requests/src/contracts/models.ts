@@ -100,10 +100,19 @@ export const commentInputCodec = codec(object({
   reconcileOnly: boolean,
 }));
 export type PublishPullRequestComment = ReturnType<typeof commentInputCodec.parse>;
+const mergeMessage = object({ title: text(100_000, /^[^\r\n]*\S[^\r\n]*$/u), body: text(1_000_000) });
+export const mergeMessageCodec = codec(mergeMessage);
+export type PullRequestMergeMessage = ReturnType<typeof mergeMessageCodec.parse>;
+export const mergeMessageInputCodec = codec(object({
+  repository: repositoryId, number: positiveInteger, headSha: oid, baseBranch: text(1024, /\S/u),
+  expectedAccount: text(200, /^\S+$/u), method: choice(['MERGE', 'SQUASH']),
+}));
+export type PullRequestMergeMessageInput = ReturnType<typeof mergeMessageInputCodec.parse>;
 export const actionInputCodec = codec(object({
   repository: repositoryId, number: positiveInteger, headSha: oid, baseBranch: text(1024, /\S/u),
   expectedAccount: text(200, /^\S+$/u),
   action: choice(['merge', 'enable-auto-merge', 'disable-auto-merge', 'enqueue']), method: mergeMethod,
+  commitMessage: nullable(mergeMessage),
 }));
 export type PullRequestAction = ReturnType<typeof actionInputCodec.parse>;
 export const actionResultCodec = codec(object({ state: choice(['merged', 'auto-merge-enabled', 'auto-merge-disabled', 'queued']) }));

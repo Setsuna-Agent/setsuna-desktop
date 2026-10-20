@@ -38,3 +38,4 @@ export const readPullRequestFiles = operation('files.list', models.filesInputCod
 export const readPullRequestPatch = operation('files.patch', models.patchInputCodec, models.patchResultCodec);
 export const publishPullRequestComment = operation('comments.publish', models.commentInputCodec, models.commentResultCodec, true);
 export const performPullRequestAction = operation('requests.act', models.actionInputCodec, models.actionResultCodec, true);
+export const readPullRequestMergeMessage = operation('merge-message.read', models.mergeMessageInputCodec, models.mergeMessageCodec);

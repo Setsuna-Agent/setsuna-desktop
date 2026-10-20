@@ -12,6 +12,7 @@ export function createPullRequestsClient(transport: FeatureOperationTransport) {
     activity: bind(operations.readPullRequestActivity), react: bind(operations.setPullRequestReaction),
     checks: bind(operations.readPullRequestChecks), files: bind(operations.readPullRequestFiles), patch: bind(operations.readPullRequestPatch),
     publish: bind(operations.publishPullRequestComment), act: bind(operations.performPullRequestAction),
+    mergeMessage: bind(operations.readPullRequestMergeMessage),
   };
 }
 export type PullRequestsClient = ReturnType<typeof createPullRequestsClient>;

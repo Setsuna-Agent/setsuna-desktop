@@ -117,6 +117,10 @@ export class PullRequestActions {
       const pr = await readRequest(this.api, input, signal);
       if (pr.headSha !== input.headSha || pr.baseBranch !== input.baseBranch) requestChanged();
       if (pr.state !== 'OPEN') blocked('This pull request is no longer open.');
+      if (input.commitMessage && (input.method === 'REBASE' || pr.queueRequired
+        || !['merge', 'enable-auto-merge'].includes(input.action))) {
+        blocked('This action does not support a custom merge commit message.');
+      }
       await assertAccount(this.api, input.expectedAccount, signal);
       if (input.action === 'disable-auto-merge') {
         if (!pr.canDisableAutoMerge) blocked('Auto-merge cannot be disabled by this account.');
@@ -128,7 +132,10 @@ export class PullRequestActions {
       if (input.action !== 'enqueue' && !pr.allowedMethods.includes(input.method)) blocked('This merge method is disabled in the repository.');
       if (input.action === 'enable-auto-merge') {
         if (!pr.canEnableAutoMerge) blocked('Auto-merge is unavailable for this pull request or account.');
-        await this.api.graphql('mutation($input: EnablePullRequestAutoMergeInput!) { enablePullRequestAutoMerge(input: $input) { pullRequest { id } } }', { input: { pullRequestId: pr.id, mergeMethod: input.method } }, signal);
+        await this.api.graphql('mutation($input: EnablePullRequestAutoMergeInput!) { enablePullRequestAutoMerge(input: $input) { pullRequest { id } } }', { input: {
+          pullRequestId: pr.id, mergeMethod: input.method,
+          ...(input.commitMessage ? { commitHeadline: input.commitMessage.title, commitBody: input.commitMessage.body } : {}),
+        } }, signal);
         return { state: 'auto-merge-enabled' };
       }
       if (!pr.canMerge) blocked('This account cannot merge into the target repository.');
@@ -141,7 +148,10 @@ export class PullRequestActions {
       if (pr.queueRequired) blocked('This branch requires the merge queue.');
       if (pr.mergeable !== 'MERGEABLE' || !['CLEAN', 'UNSTABLE', 'HAS_HOOKS'].includes(pr.mergeState)) blocked(`Merge requirements are not satisfied (${pr.mergeState}).`);
       const { value } = await this.api.request<{ merged: boolean; message: string }>(`${repoPath(input.repository)}/pulls/${input.number}/merge`, {
-        method: 'PUT', body: { sha: input.headSha, merge_method: input.method.toLowerCase() }, signal,
+        method: 'PUT', body: {
+          sha: input.headSha, merge_method: input.method.toLowerCase(),
+          ...(input.commitMessage ? { commit_title: input.commitMessage.title, commit_message: input.commitMessage.body } : {}),
+        }, signal,
       });
       if (!value.merged) blocked(value.message);
       return { state: 'merged' };

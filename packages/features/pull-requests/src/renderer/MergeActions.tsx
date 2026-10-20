@@ -1,10 +1,11 @@
 import { Button, Dropdown } from '@setsuna-desktop/renderer-ui';
 import { ChevronDown, GitMerge } from 'lucide-react';
 import { useRef, useState } from 'react';
-import type { MergeMethod, PullRequestAction, PullRequestDetail } from '../contracts/index.js';
+import type { MergeMethod, PullRequestAction, PullRequestDetail, PullRequestMergeMessage } from '../contracts/index.js';
 import { isAccountChangedError, type PullRequestsClient } from './client.js';
 import { errorText, usePrText, usePullRequestsHost } from './context.js';
-import { MergeConfirmationDialog, type MergeConfirmation } from './merge/MergeConfirmationDialog.js';
+import { MergeConfirmationDialog } from './merge/MergeConfirmationDialog.js';
+import type { MergeConfirmation } from './merge/useMergeCommitMessage.js';
 import './merge/merge-actions.css';
 
 export function MergeActions({ client, detail, account, onUpdated }: { client: PullRequestsClient; detail: PullRequestDetail; account: string; onUpdated(): void }) {
@@ -26,14 +27,14 @@ export function MergeActions({ client, detail, account, onUpdated }: { client: P
   const selectedMethod = detail.allowedMethods.includes(method) ? method : detail.allowedMethods[0] ?? 'MERGE';
   const snapshot = (action: PullRequestAction['action']): MergeConfirmation => ({ action, detail, account, method: selectedMethod });
   const openConfirmation = (next: MergeConfirmation) => { setError(''); setConfirmation(next); };
-  const submit = async () => {
+  const submit = async (commitMessage: PullRequestMergeMessage | null) => {
     if (!confirmation || submitting.current) return;
     const reviewed = confirmation.detail;
     submitting.current = true;
     setPending(true);
     setError('');
     try {
-      await client.act({ repository: reviewed.repository, number: reviewed.number, expectedAccount: confirmation.account, headSha: reviewed.headSha, baseBranch: reviewed.baseBranch, method: confirmation.method, action: confirmation.action });
+      await client.act({ repository: reviewed.repository, number: reviewed.number, expectedAccount: confirmation.account, headSha: reviewed.headSha, baseBranch: reviewed.baseBranch, method: confirmation.method, action: confirmation.action, commitMessage });
       setConfirmation(null);
     } catch (cause) {
       if (isAccountChangedError(cause)) { setConfirmation(null); notifyError(t('accountChanged')); }
@@ -74,7 +75,7 @@ export function MergeActions({ client, detail, account, onUpdated }: { client: P
         </Button>
       </Dropdown>
     </div>
-    {confirmation ? <MergeConfirmationDialog confirmation={confirmation} pending={pending} error={error}
-      onClose={() => setConfirmation(null)} onConfirm={() => void submit()} /> : null}
+    {confirmation ? <MergeConfirmationDialog client={client} confirmation={confirmation} pending={pending} error={error}
+      onClose={() => setConfirmation(null)} onConfirm={(message) => void submit(message)} /> : null}
   </>;
 }

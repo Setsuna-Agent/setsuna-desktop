@@ -20,3 +20,6 @@
 .pr-merge-confirm__sha { display: inline-flex; align-items: center; gap: 5px; color: var(--app-text-subtle); font-family: var(--app-code-font-family); font-size: 11px; line-height: 20px; }
 .pr-merge-confirm__automatic { display: grid; gap: 4px; color: var(--app-text-muted); font-size: 12px; line-height: 19px; }
 .pr-merge-confirm__automatic > span { color: var(--app-text); font-weight: 500; }
+.pr-merge-confirm__field { display: grid; gap: 6px; min-width: 0; }
+.pr-merge-confirm__field > span { color: var(--app-text); font-size: 12px; font-weight: 500; line-height: 20px; }
+.pr-merge-confirm__field .sd-textarea { min-height: 120px; resize: vertical; }

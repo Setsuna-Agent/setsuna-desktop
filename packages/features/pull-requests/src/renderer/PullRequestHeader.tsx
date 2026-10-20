@@ -3,7 +3,6 @@ import { Button, IconButton } from '@setsuna-desktop/renderer-ui';
 import { ChevronDown, ExternalLink, FileDiff, GitMerge, RefreshCw } from 'lucide-react';
 import type { PullRequestDetail, PullRequestSummary } from '../contracts/index.js';
 import { usePrText, usePullRequestsHost } from './context.js';
-import { GitHubIdentity } from './GitHubIdentity.js';
 import { PullRequestState, Timestamp } from './status.js';
 
 export function PullRequestToolbar({ pr, actions }: { pr: PullRequestSummary; actions: ReactNode }) {
@@ -17,8 +16,7 @@ export function PullRequestTitle({ pr, branches }: { pr: PullRequestSummary; bra
   const { PageHeader } = usePullRequestsHost();
   return <PageHeader className="sd-detail__header" title={pr.title} subtitle={<span className="pr-detail__byline">
       <span className="pr-detail__metadata">
-        <GitHubIdentity login={pr.author.login} avatarUrl={pr.author.avatarUrl} />
-        <span aria-hidden="true">·</span><Timestamp value={pr.updatedAt} />
+        <Timestamp value={pr.updatedAt} />
       </span>
       {branches}
     </span>} />;

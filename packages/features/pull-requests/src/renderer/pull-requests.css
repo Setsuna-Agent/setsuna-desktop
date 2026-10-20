@@ -74,21 +74,16 @@
 }
 /* Feature styles can load before shared detail defaults; keep this override independent of order. */
 .sd-detail.pr-detail { gap: 0; }
-.pr-detail .sd-detail__header .sd-page-header__title-group { gap: 10px; }
+.pr-detail .sd-detail__header .sd-page-header__title-group { flex: 1; gap: 10px; }
 .pr-detail__topline { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; min-height: calc(var(--app-control-height) + 8px); padding: 12px var(--pr-detail-gutter) 0; color: var(--app-text-muted); }
-.pr-detail .pr-detail__byline { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 16px; min-width: 0; }
+.pr-detail .pr-detail__byline { display: flex; align-items: baseline; gap: 16px; min-width: 0; }
 .pr-detail__eyebrow, .pr-detail .pr-detail__metadata { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; color: var(--app-text-muted); font-size: 12px; line-height: 20px; }
-/* PageHeader styles every nested subtitle span as a 13px block; restore one inline 12px/20px line box. */
-.pr-detail .pr-detail__metadata :is(> span, .pr-identity__name) { font-size: inherit; line-height: 20px; }
-.pr-detail .pr-detail__metadata .pr-identity__name { color: var(--app-text); font-weight: 500; }
-.pr-detail .pr-identity { align-items: baseline; }
-.pr-detail .pr-identity__avatar { align-self: center; }
-.pr-detail .pr-detail__metadata > [aria-hidden='true'] { color: var(--app-text-subtle); }
+.pr-detail .pr-detail__metadata { flex-shrink: 0; white-space: nowrap; }
 .pr-detail .sd-detail__header h2 { font-size: 22px; line-height: 30px; letter-spacing: -0.02em; }
 .pr-detail .pr-detail__metadata time { font-variant-numeric: tabular-nums; }
 .pr-detail .pr-branches, .pr-merge-confirm .pr-branches { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; max-width: 100%; color: var(--app-text-muted); }
 .pr-branches > svg { align-self: center; flex-shrink: 0; }
-.pr-branches code { min-width: 0; max-width: 28ch; overflow: hidden; padding: 0 6px; border-radius: var(--app-radius-xs); background: var(--app-mono-chip-bg); color: var(--app-text); font-family: var(--app-code-font-family); font-size: 11px; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
+.pr-branches code { min-width: 0; overflow: hidden; padding: 0 6px; border-radius: var(--app-radius-xs); background: var(--app-mono-chip-bg); color: var(--app-text); font-family: var(--app-code-font-family); font-size: 11px; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
 .pr-detail__eyebrow { flex: 1; min-width: 0; flex-wrap: nowrap; }
 /* The state is the strongest signal on the page, so it becomes a tinted pill derived from its tone colour. */
 .pr-detail__eyebrow .pr-state { align-items: baseline; flex-shrink: 0; min-height: 24px; padding: 2px 10px 2px 8px; border-radius: var(--app-radius-full); background: color-mix(in srgb, currentColor 12%, transparent); font-weight: 500; }
@@ -97,7 +92,7 @@
 .pr-detail .pr-detail__toolbar { flex-wrap: nowrap; gap: 8px; max-width: none; -webkit-app-region: no-drag; }
 .pr-detail__diff-action.sd-button { gap: 6px; padding-inline: 6px; }
 .pr-detail .sd-page-header__body { flex-wrap: wrap; }
-.pr-detail .sd-page-header__main { min-width: 0; }
+.pr-detail .sd-page-header__main { flex: 1; min-width: 0; }
 /* Keep one page gutter inside the viewport so the comment input shadow is not clipped. */
 .pr-detail > .pr-detail__body { flex: 1; min-height: 0; }
 .pr-detail__main { gap: 24px; min-width: 0; min-height: 0; padding: 20px var(--pr-detail-gutter) 16px; }

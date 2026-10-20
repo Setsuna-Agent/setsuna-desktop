@@ -17,6 +17,7 @@ import { PullRequestFiles } from './files.js';
 import { commentNotSentFailure, PullRequestActions } from './actions.js';
 import { readActivity } from './activity.js';
 import { PullRequestReactionActions } from './reaction-actions.js';
+import { readMergeMessage } from './merge-message.js';
 
 const dependencies = defineRuntimeDependencies({
   routes: requiredCapability(runtimeRouteRegistrarCapability),
@@ -95,6 +96,10 @@ export const pullRequestsRuntimeFeature = defineRuntimeFeature({
     routes.register(context.scope, operations.performPullRequestAction, async (input, { signal }) => {
       await repositories.root(input.repository, signal, true);
       return actions.act(input, signal);
+    });
+    routes.register(context.scope, operations.readPullRequestMergeMessage, async (input, { signal }) => {
+      await repositories.root(input.repository, signal);
+      return readMergeMessage(api, input, signal);
     });
   },
 });

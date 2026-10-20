@@ -57,7 +57,7 @@ describe('PR writes', () => {
       throw new Error('Unexpected request');
     });
     const actions = new PullRequestActions(api);
-    const input = { ...reference, expectedAccount: 'alice', headSha: head, baseBranch: 'main', method: 'SQUASH' as const, action };
+    const input = { ...reference, expectedAccount: 'alice', headSha: head, baseBranch: 'main', method: 'SQUASH' as const, action, commitMessage: null };
     await expect(actions.act(input)).rejects.toMatchObject({ code: 'PR_ACCOUNT_CHANGED' });
     login = 'alice';
     await expect(actions.act(input)).rejects.toMatchObject({ code: 'PR_ACCOUNT_CHANGED' });
@@ -85,7 +85,7 @@ describe('PR writes', () => {
     });
     const actions = new PullRequestActions(api);
     // REBASE is disabled for direct merges; enqueue does not send a merge method.
-    const input = { ...reference, expectedAccount: 'alice', headSha: head, baseBranch: 'main', method: 'REBASE' as const, action: 'enqueue' as const };
+    const input = { ...reference, expectedAccount: 'alice', headSha: head, baseBranch: 'main', method: 'REBASE' as const, action: 'enqueue' as const, commitMessage: null };
     await expect(actions.act(input)).resolves.toEqual({ state: 'queued' });
     expect(writes).toEqual([{ pullRequestId: 'PR_12', expectedHeadOid: head }]);
     rejectQueue = true;
@@ -287,7 +287,7 @@ describe('PR writes', () => {
       throw new Error('Unexpected request');
     });
     const actions = new PullRequestActions(api);
-    const action = { ...reference, expectedAccount: 'alice', headSha: head, baseBranch: 'main', method: 'SQUASH' as const, action: 'merge' as const };
+    const action = { ...reference, expectedAccount: 'alice', headSha: head, baseBranch: 'main', method: 'SQUASH' as const, action: 'merge' as const, commitMessage: null };
     await expect(actions.act({ ...action, headSha: 'd'.repeat(40) })).rejects.toMatchObject({ code: 'PR_CHANGED' });
     repository.viewerPermission = 'READ';
     await expect(actions.act(action)).rejects.toMatchObject({ code: 'PR_ACTION_BLOCKED' });
@@ -311,7 +311,7 @@ describe('PR writes', () => {
     repository.pullRequest.mergeQueue = action === 'enqueue' ? { id: 'Q1' } : null;
     const { api, request } = githubFixture(({ path }) => path === '/user' ? { login: 'alice' } : { repository });
     await expect(new PullRequestActions(api).act({
-      ...reference, expectedAccount: 'alice', headSha: head, baseBranch: 'develop', method: 'SQUASH', action,
+      ...reference, expectedAccount: 'alice', headSha: head, baseBranch: 'develop', method: 'SQUASH', action, commitMessage: null,
     })).rejects.toMatchObject({ code: 'PR_CHANGED' });
     expect(request.mock.calls.every(([path, init]) => path === '/user' || JSON.parse(String(init?.body)).query.trimStart().startsWith('query('))).toBe(true);
   });
