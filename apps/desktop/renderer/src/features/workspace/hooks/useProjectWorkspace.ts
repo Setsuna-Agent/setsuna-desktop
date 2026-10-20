@@ -204,6 +204,9 @@ export function useProjectWorkspace({ activeProjectId, rootId, project, client, 
         || activeProjectIdRef.current !== JSON.stringify([previous.projectId, previous.rootId])
         || fileDraftRef.current.dirty || fileDraftRef.current.saving) return;
       if (next.revision && next.revision === previous.revision) return;
+      // A queued refresh can start before React commits this snapshot. Publish
+      // it synchronously so that refresh does not mistake our own render for a newer selection.
+      filePreviewRef.current = next;
       setFilePreview(next);
     } catch {
       // Atomic replacements can briefly remove the file; retain the last snapshot until the next notification.

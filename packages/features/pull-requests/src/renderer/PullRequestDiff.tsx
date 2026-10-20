@@ -1,6 +1,6 @@
 import { Button, DiffViewControls, FileIcon, TextField } from '@setsuna-desktop/renderer-ui';
 import { Search } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import type { DiffLineAnnotation } from '@pierre/diffs/react';
 import type { ReactNode } from 'react';
 import type { PullRequestDetail, PullRequestDiscussion } from '../contracts/index.js';
@@ -13,38 +13,42 @@ import { PullRequestSkeleton } from './loading/PullRequestSkeleton.js';
 import { usePullRequestFiles } from './usePullRequestFiles.js';
 import { partitionDiffDiscussions } from './discussions/diff-discussions.js';
 import type { DiscussionsState } from './useDiscussions.js';
+import type { PullRequestDetailSession } from './session.js';
+import { usePullRequestDiffSession } from './reading/usePullRequestDiffSession.js';
+import { useReadingScroll } from './reading/useReadingScroll.js';
 
 export type DiffFocus = { discussion: PullRequestDiscussion; version: number };
-export function PullRequestDiff({ client, detail, account, discussions, focus, onPublished }: {
+export function PullRequestDiff({ client, detail, account, discussions, focus, onPublished, session }: {
   client: PullRequestsClient; detail: PullRequestDetail; account: string; discussions: DiscussionsState;
   focus: DiffFocus | null; onPublished(): void;
+  session: PullRequestDetailSession;
 }) {
   const t = usePrText();
   const { CodePatch } = usePullRequestsHost();
-  const [activePath, setActivePath] = useState<string | null>(focus?.discussion.path ?? null);
-  const [search, setSearch] = useState('');
-  const [layout, setLayout] = useState<'unified' | 'split'>('unified');
-  const [wrap, setWrap] = useState(true);
-  const codeScroll = useRef<HTMLDivElement>(null);
+  const { view: { activePath, search, layout, wrap, collapsed }, update } = usePullRequestDiffSession(session);
   const focusedAnnotation = useRef<number | null>(null);
   const files = usePullRequestFiles(client, detail, activePath);
-  useEffect(() => { if (codeScroll.current) codeScroll.current.scrollTop = 0; }, [files.path]);
+  const codeScroll = useReadingScroll(session.scroll, `diff:${detail.baseSha}:${detail.headSha}:${files.path}`, Boolean(files.patch));
+  const treeScroll = useReadingScroll(session.scroll, 'files', !files.loading);
   useEffect(() => {
     if (!focus) return;
-    setActivePath(focus.discussion.path);
-    setSearch('');
-  }, [focus]);
+    update({ activePath: focus.discussion.path, search: '' });
+  }, [focus, update]);
   const threads = discussions.items.filter((item) => item.kind === 'thread' && item.path === files.path);
   const grouped = partitionDiffDiscussions(threads, files.patch?.patch ?? '');
   const renderDiscussion = (discussion: PullRequestDiscussion, inline: boolean) => (
     <div key={discussion.id} ref={(node) => {
       if (node && focus?.discussion.id === discussion.id && focusedAnnotation.current !== focus.version) {
         focusedAnnotation.current = focus.version;
-        requestAnimationFrame(() => node.scrollIntoView({ block: 'center', inline: 'nearest' }));
+        requestAnimationFrame(() => {
+          if (!node.isConnected) return;
+          codeScroll.cancelRestore();
+          node.scrollIntoView({ block: 'center', inline: 'nearest' });
+        });
       }
     }}>
       <DiscussionCard discussion={discussion} client={client} detail={detail} account={account}
-        inline={inline} onPublished={onPublished} onDiff={(thread) => setActivePath(thread.path)}
+        inline={inline} onPublished={onPublished} onDiff={(thread) => update({ activePath: thread.path })}
         moreReplies={() => void discussions.moreReplies(discussion)}
         repliesPending={discussions.repliesPending === discussion.id} />
     </div>
@@ -58,10 +62,11 @@ export function PullRequestDiff({ client, detail, account, discussions, focus, o
   const file = files.files.find((item) => item.path === files.path);
   return <section className="pr-diff" aria-label={t('diff')}>
     <aside className="pr-diff__navigation">
-      <header><TextField leadingIcon={<Search size={14} />} aria-label={t('searchFiles')} placeholder={t('searchFiles')} value={search} onChange={(event) => setSearch(event.currentTarget.value)} />
+      <header><TextField leadingIcon={<Search size={14} />} aria-label={t('searchFiles')} placeholder={t('searchFiles')} value={search} onChange={(event) => update({ search: event.currentTarget.value })} />
       </header>
-      <PullRequestScrollArea className="pr-diff__files" contentClassName="pr-diff__files-content">
-        <PullRequestFileTree files={filtered} path={files.path} onSelect={setActivePath} />
+      <PullRequestScrollArea className="pr-diff__files" contentClassName="pr-diff__files-content" scrollRef={treeScroll.scrollRef} onScroll={treeScroll.onScroll}>
+        <PullRequestFileTree files={filtered} path={files.path} onSelect={(path) => update({ activePath: path })}
+          collapsed={collapsed} onCollapsedChange={(next) => update({ collapsed: next })} />
         {files.loading && !files.files.length ? <PullRequestSkeleton kind="files" label={t('loading')} /> : null}
       </PullRequestScrollArea>
     </aside>
@@ -75,10 +80,10 @@ export function PullRequestDiff({ client, detail, account, discussions, focus, o
         <div className="pr-diff__view-controls" role="group" aria-label={t('diffLayout')}>
           <DiffViewControls className="app-shell-icon-control" layout={layout} wrap={wrap}
             layoutLabel={t(layout === 'split' ? 'split' : 'unified')} wrapLabel={t(wrap ? 'wrapOn' : 'wrapOff')}
-            onLayoutChange={setLayout} onWrapChange={setWrap} />
+            onLayoutChange={(next) => update({ layout: next })} onWrapChange={(next) => update({ wrap: next })} />
         </div>
       </header>
-      <PullRequestScrollArea className="pr-diff__scroll" contentClassName="pr-diff__scroll-content" scrollRef={codeScroll}>
+      <PullRequestScrollArea className="pr-diff__scroll" contentClassName="pr-diff__scroll-content" scrollRef={codeScroll.scrollRef} onScroll={codeScroll.onScroll}>
         {files.error || files.patchError ? <div role="alert"><p className="sd-control-error">{files.error || files.patchError}</p><Button onClick={files.retry}>{t('retry')}</Button></div> : null}
         {!files.patch && !files.patchError && !files.error && (files.loading || files.path) ? <PullRequestSkeleton kind="patch" label={t('loading')} /> : null}
         {!files.path && !files.loading ? <p className="pr-muted">{t('noFiles')}</p> : null}

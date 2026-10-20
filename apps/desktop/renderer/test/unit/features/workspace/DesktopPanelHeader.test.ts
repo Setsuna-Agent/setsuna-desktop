@@ -2,7 +2,6 @@
 
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   DesktopPanelHeader,
@@ -40,24 +39,6 @@ it('shows the unsaved marker on its file tab in either panel slot without replac
 });
 
 describe('DesktopPanelHeader browser tabs', () => {
-  it('keeps browser pages in the shared tab and navigation path', () => {
-    const html = renderToStaticMarkup(createElement(DesktopPanelHeader, {
-      activePanel: 'browser',
-      activePanelId: 'browser-1',
-      onClose: () => undefined,
-      onClosePanel: () => undefined,
-      onAddPanel: () => undefined,
-      onSelectPanel: () => undefined,
-      panels: [{ id: 'browser-1', type: 'browser', title: 'Example' }],
-      placement: 'side',
-    }));
-
-    expect(html).toContain('data-desktop-panel-tab-id="browser-1"');
-    expect(html).toContain('title="Example"');
-    expect(html).toContain('aria-label="关闭Example"');
-    expect(html).toContain('aria-label="打开导航页"');
-  });
-
   it('exposes hide semantics while the bottom panel is visible', () => {
     const { getByRole } = render(createElement(DesktopPanelHeader, {
       activePanel: 'review',

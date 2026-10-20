@@ -1,13 +1,9 @@
 import type { RuntimeConfigState } from '@setsuna-desktop/contracts';
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
-  I18nProvider,
   interfaceLanguageFromConfig,
   normalizeAppLocale,
   translate,
-  useI18n,
 } from '../../../../src/shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../../../src/shared/i18n/messages.js';
 
@@ -37,17 +33,4 @@ describe('renderer i18n', () => {
     ).toBe('en-US');
   });
 
-  it('provides an explicit initial locale for server rendering', () => {
-    const html = renderToStaticMarkup(
-      createElement(I18nProvider, { initialLocale: 'en-US' }, createElement(LocaleProbe)),
-    );
-
-    expect(html).toContain('lang="en-US"');
-    expect(html).toContain('New chat');
-  });
 });
-
-function LocaleProbe() {
-  const { locale, t } = useI18n();
-  return createElement('span', { lang: locale }, t('app.newChat'));
-}

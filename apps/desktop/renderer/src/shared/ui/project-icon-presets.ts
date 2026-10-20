@@ -1,15 +1,24 @@
 import type { WorkspaceProjectIconKey } from '@setsuna-desktop/contracts';
 import {
-  AppWindow, Binary, Blocks, BookOpen, Bot, BriefcaseBusiness, Bug, CalendarDays, Camera,
-  ChartColumn, CircuitBoard, Cloud, CodeXml, Cog, Compass, Cpu, Database, FileCode2,
-  FileSpreadsheet, FileText, Film, FlaskConical, FolderClosed, FolderKanban, Gamepad2,
-  GitBranch, Globe2, GraduationCap, HardDrive, Headphones, House, Image, Languages,
-  Laptop, Layers, Leaf, Lightbulb, ListChecks, Map, Megaphone, Monitor, Music2,
-  Network, NotebookPen, Package, Palette, PenTool, Presentation, Puzzle, Rocket,
-  Search, Server, ShieldCheck, ShoppingBag, Smartphone, SquareTerminal, Store,
-  Tablet, Target, Wallet, Watch, Wifi, Workflow, Wrench,
+  Anchor, AppWindow, Binary, Bird, Blocks, BookOpen, Bot, BriefcaseBusiness, Brush, Bug,
+  CalendarDays, Camera, Castle, ChartColumn, Cherry, CircuitBoard, Citrus, Cloud, CodeXml,
+  Cog, Compass, Cpu, Crown, Database, Dices, Feather, FerrisWheel, FileCode2,
+  FileSpreadsheet, FileText, Film, Fish, FlaskConical, FolderClosed, FolderKanban, Gamepad2,
+  GitBranch, Globe2, GraduationCap, Guitar, HardDrive, Headphones, House, Image, Languages,
+  Laptop, Layers, Leaf, Lightbulb, ListChecks, Map, Megaphone, Monitor, Mountain, Music2,
+  Network, NotebookPen, Origami, Package, Palette, PawPrint, PenTool, Presentation, Puzzle,
+  Rocket, Sailboat, Satellite, Search, Server, ShieldCheck, ShoppingBag, Smartphone,
+  Sprout, SquareTerminal, Store, Tablet, Target, Telescope, Tent, TreePalm, Umbrella,
+  Wallet, Watch, Wifi, Workflow, Wrench,
   type LucideIcon,
 } from 'lucide-react';
+
+// Project emblems stay distinct from app controls; the full map also renders saved older choices.
+export const PROJECT_ICON_PRESET_KEYS = [
+  'mountain', 'tent', 'sailboat', 'anchor', 'telescope', 'satellite', 'castle', 'ferris-wheel',
+  'sprout', 'tree-palm', 'feather', 'bird', 'fish', 'paw-print', 'cherry', 'citrus',
+  'crown', 'origami', 'brush', 'guitar', 'gamepad', 'flask', 'dices', 'umbrella',
+] as const satisfies readonly WorkspaceProjectIconKey[];
 
 export const PROJECT_ICON_COMPONENTS = {
   folder: FolderClosed,
@@ -76,4 +85,26 @@ export const PROJECT_ICON_COMPONENTS = {
   compass: Compass,
   map: Map,
   leaf: Leaf,
+  mountain: Mountain,
+  tent: Tent,
+  sailboat: Sailboat,
+  anchor: Anchor,
+  telescope: Telescope,
+  satellite: Satellite,
+  castle: Castle,
+  'ferris-wheel': FerrisWheel,
+  sprout: Sprout,
+  'tree-palm': TreePalm,
+  feather: Feather,
+  bird: Bird,
+  fish: Fish,
+  'paw-print': PawPrint,
+  cherry: Cherry,
+  citrus: Citrus,
+  crown: Crown,
+  origami: Origami,
+  brush: Brush,
+  guitar: Guitar,
+  dices: Dices,
+  umbrella: Umbrella,
 } satisfies Record<WorkspaceProjectIconKey, LucideIcon>;

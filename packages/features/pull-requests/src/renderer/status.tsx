@@ -1,20 +1,29 @@
-import { Check, Circle, CircleX, Clock3, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft } from 'lucide-react';
+import { Check, Circle, CircleX, Clock3, GitMerge, GitPullRequestArrow, GitPullRequestClosed, GitPullRequestDraft } from 'lucide-react';
 import type { PullRequestDetail, PullRequestSummary } from '../contracts/index.js';
 import { usePrText, usePullRequestsHost } from './context.js';
 
 export function PullRequestState({ pr, label = true }: { pr: PullRequestSummary; label?: boolean }) {
   const t = usePrText();
   const state = pr.state === 'MERGED' ? 'merged' : pr.state === 'CLOSED' ? 'closed' : pr.draft ? 'draft' : 'open';
-  const Icon = state === 'merged' ? GitMerge : state === 'closed' ? GitPullRequestClosed : state === 'draft' ? GitPullRequestDraft : GitPullRequest;
+  const Icon = state === 'merged' ? GitMerge : state === 'closed' ? GitPullRequestClosed : state === 'draft' ? GitPullRequestDraft : GitPullRequestArrow;
   return <span className={`pr-state pr-state--${state}`} title={t(state)}><Icon size={15} />{label ? t(state) : null}</span>;
 }
+export type StatusTone = 'success' | 'danger' | 'pending' | 'muted';
+/** One icon per tone so checks, merge readiness and reviews read with the same visual vocabulary. */
+export const toneIcons = { success: Check, danger: CircleX, pending: Clock3, muted: Circle } as const;
+
 export function CheckState({ state, label = true }: { state: string | null; label?: boolean }) {
   const t = usePrText();
   const tone = checkTone(state);
-  const Icon = tone === 'success' ? Check : tone === 'danger' ? CircleX : tone === 'pending' ? Clock3 : Circle;
+  const Icon = toneIcons[tone];
   return <span className={`pr-check-state pr-check-state--${tone}`} title={state ? stateLabel(state, t) : t('unknown')}><Icon size={14} />{label ? state ? stateLabel(state, t) : t('unknown') : null}</span>;
 }
-export function checkTone(state: string | null): 'success' | 'danger' | 'pending' | 'muted' {
+export function reviewTone(state: string): StatusTone {
+  if (state === 'APPROVED') return 'success';
+  if (state === 'CHANGES_REQUESTED') return 'danger';
+  return ['PENDING', 'REQUESTED', 'REVIEW_REQUIRED'].includes(state) ? 'pending' : 'muted';
+}
+export function checkTone(state: string | null): StatusTone {
   if (state && ['SUCCESS', 'NEUTRAL', 'SKIPPED'].includes(state)) return 'success';
   if (state && ['FAILURE', 'ERROR', 'TIMED_OUT', 'ACTION_REQUIRED', 'STARTUP_FAILURE'].includes(state)) return 'danger';
   if (state && ['PENDING', 'QUEUED', 'IN_PROGRESS', 'WAITING', 'REQUESTED', 'EXPECTED'].includes(state)) return 'pending';
@@ -30,7 +39,7 @@ export function stateLabel(state: string, t: ReturnType<typeof usePrText>): stri
   return names[state] ? t(names[state]) : state;
 }
 export function mergeCondition(pr: PullRequestDetail, t: ReturnType<typeof usePrText>): {
-  label: string; tone: 'merged' | 'success' | 'danger' | 'pending' | 'muted';
+  label: string; tone: 'merged' | StatusTone;
 } {
   // Resolve the label and tone together so multiple blockers keep the same priority.
   if (pr.state === 'MERGED') return { label: t('merged'), tone: 'merged' };

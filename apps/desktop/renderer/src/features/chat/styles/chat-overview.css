@@ -12,6 +12,8 @@
   transform-origin: top right;
   animation: chat-conversation-overview-enter 160ms cubic-bezier(0.2, 0.82, 0.2, 1);
   display: grid;
+  /* Feature sections must shrink within the panel even with unbroken titles. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 7px;
   width: 284px;
   max-width: 100%;
@@ -73,6 +75,7 @@
 
 .chat-conversation-overview-panel__actions {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 3px;
 }
 

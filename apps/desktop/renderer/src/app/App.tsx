@@ -2,6 +2,8 @@ import { useNotificationNavigation } from '../composition/notifications/useNotif
 import { Component, useCallback, useEffect, type ErrorInfo, type ReactNode } from 'react';
 import { appReadySlot } from '@setsuna-desktop/renderer-contracts/shell';
 import { CollaborationFeatureNavigationBoundary } from '../composition/CollaborationFeatureBoundary.js';
+import { PullRequestsFeatureNavigationBoundary } from '../composition/PullRequestsFeatureBoundary.js';
+import type { PullRequestReference } from '@setsuna-desktop/feature-pull-requests/contracts';
 import { ReviewFeatureHostBoundary } from '../composition/review-feature-adapter.js';
 import { Button, EmptyState, StatusBadge } from '../shared/ui/primitives.js';
 import { interfaceLanguageFromConfig, useI18n } from '../shared/i18n/I18nProvider.js';
@@ -91,9 +93,20 @@ function ReadyAppContent({ controller }: Readonly<{
     },
     [controller.workspacePanels.openSubagentPanel],
   );
+  const openPullRequest = useCallback((threadId: string, reference: PullRequestReference) => {
+    const open = async () => {
+      if (controller.runtime.currentThread?.id !== threadId || controller.activeView !== 'chat') {
+        if (!await controller.navigation.selectThreadInView(threadId, 'chat')) return;
+      }
+      controller.workspacePanels.openPullRequestPanel(threadId, reference);
+    };
+    void open().catch((error: unknown) => toast.error(error instanceof Error ? error.message : String(error)));
+  }, [controller.runtime.currentThread?.id, controller.activeView, controller.navigation.selectThreadInView, controller.workspacePanels.openPullRequestPanel, toast]);
   return (
     <CollaborationFeatureNavigationBoundary onOpenTask={openCollaborationTask}>
-      <AppReadyLayout controller={controller} />
+      <PullRequestsFeatureNavigationBoundary onOpen={openPullRequest}>
+        <AppReadyLayout controller={controller} />
+      </PullRequestsFeatureNavigationBoundary>
     </CollaborationFeatureNavigationBoundary>
   );
 }

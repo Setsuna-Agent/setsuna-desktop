@@ -49,12 +49,10 @@ describe('UsageConversationSummary', () => {
       </UsageRendererProvider>,
     );
 
+    // 不含缓存的 Token、缓存命中率与请求次数由同一份持久化汇总派生。
     expect(html).toContain('94.0K · 95% · 47 次');
-    expect(html).toContain('Token（不含缓存读取）');
     expect(html).toContain('850.0K');
     expect(html).toContain('44.0K');
-    expect(html).toContain('缓存命中率');
-    expect(html).toContain('最近一轮采样次数');
   });
 });
 

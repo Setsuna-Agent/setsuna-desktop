@@ -31,7 +31,9 @@ Workspace host 管理右侧/底部工作区 surface 和项目文件；Review、T
 
 Panel 选择和 session 生命周期在 hooks，不应由各 tab 各自维护一份打开状态。
 
-`useDesktopWorkspacePanelSession` 使用与聊天草稿相同的窗口/会话恢复键，`workspaceSessionRecovery.ts` 只保存文件路径和目录 ID、网页 URL、终端目录选择、标签顺序、选中项及侧栏/底部槽位的展开状态。`useWorkspaceRecoveryKey` 等待 shell 绘制后再读取当前会话，退出会取消等待；期间用户已打开或关闭的标签优先于保存状态。其他会话第一次访问时才恢复，所以未访问的网页不会创建 webview。已访问的后台网页继续沿用原有挂载生命周期。终端在对应标签被选中后通过原桥接新建工作区目录下的 shell，不保存 PID、输出或重放命令。提交消息编辑等临时操作不恢复；文件读取继续经过现有 runtime 路径校验。首版不恢复手动尺寸、网页导航栈、表单和滚动位置。
+对话关联的 PR 通过 `pull-request` workspace 插槽展示，由 Pull Requests Feature 复用现有详情组件。宿主按目标对话打开右侧标签，仓库与编号作为稳定身份，支持同一对话的多个 PR 并存和恢复；状态跟踪与关联来源见 [Pull Request 工作台](../../features/pull-requests.md#对话中的-pr)。
+
+`useDesktopWorkspacePanelSession` 使用与聊天草稿相同的窗口/会话恢复键，`workspaceSessionRecovery.ts` 只保存文件路径和目录 ID、网页 URL、PR 仓库与编号、终端目录选择、标签顺序、选中项及侧栏/底部槽位的展开状态。`useWorkspaceRecoveryKey` 等待 shell 绘制后再读取当前会话，退出会取消等待；期间用户已打开或关闭的标签优先于保存状态。其他会话第一次访问时才恢复，所以未访问的网页不会创建 webview。已访问的后台网页继续沿用原有挂载生命周期。终端在对应标签被选中后通过原桥接新建工作区目录下的 shell，不保存 PID、输出或重放命令。提交消息编辑等临时操作不恢复；文件读取继续经过现有 runtime 路径校验。首版不恢复手动尺寸、网页导航栈、表单和滚动位置。
 
 目录就绪后，当前会话的标签在交给预览和终端生命周期前校验目录绑定；窗口恢复键延迟启用、会话切换或目录移除均使用同一校验。已有文件标签的预览加载只恢复文档，不改变侧栏或底部面板的展开状态；用户主动打开文件时才展开目标面板。
 

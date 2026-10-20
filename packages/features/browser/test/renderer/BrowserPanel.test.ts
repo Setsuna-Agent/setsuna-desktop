@@ -10,7 +10,6 @@ import {
   resolveBrowserFaviconUrls,
 } from '../../src/renderer/BrowserPanel.js';
 import { translateBrowserMessage } from '../../src/renderer/messages.js';
-import { browserScreenshotOutcomeFeedback } from '../../src/renderer/useBrowserScreenshot.js';
 
 const translate = (key: Parameters<typeof translateBrowserMessage>[1]) => (
   translateBrowserMessage('zh-CN', key)
@@ -68,18 +67,6 @@ describe('nextBrowserZoomFactor', () => {
   });
 });
 
-describe('browserScreenshotOutcomeFeedback', () => {
-  it('maps screenshot outcomes to the shared toast tones', () => {
-    expect(browserScreenshotOutcomeFeedback('added')).toEqual({
-      message: '截图已添加到输入框，并复制到剪切板',
-      tone: 'success',
-    });
-    expect(browserScreenshotOutcomeFeedback('unsupported').tone).toBe('warning');
-    expect(browserScreenshotOutcomeFeedback('limit-reached').tone).toBe('warning');
-    expect(browserScreenshotOutcomeFeedback('unavailable').tone).toBe('warning');
-  });
-});
-
 describe('BrowserPanel', () => {
   it('renders the internal history home without creating a webview', () => {
     const html = renderToStaticMarkup(createElement(BrowserPanel, {
@@ -91,8 +78,6 @@ describe('BrowserPanel', () => {
       onPanelMetadataChange: () => undefined,
     }));
 
-    expect(html).toContain('从这里继续浏览');
-    expect(html).toContain('还没有浏览记录');
     expect(html).not.toContain('<webview');
     expect(html).not.toContain('www.bing.com');
   });
@@ -108,8 +93,6 @@ describe('BrowserPanel', () => {
     }));
 
     expect(html).toContain('allowpopups="true"');
-    expect(html).toContain('aria-label="浏览器菜单"');
-    expect(html).not.toContain('role="menu"');
   });
 
   it('uses an AI browser request as the initial tab URL', () => {

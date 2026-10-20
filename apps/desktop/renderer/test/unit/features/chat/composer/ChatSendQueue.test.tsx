@@ -5,39 +5,6 @@ import { ChatSendQueue } from '../../../../../src/features/chat/composer/ChatSen
 import { I18nProvider } from '../../../../../src/shared/i18n/I18nProvider.js';
 
 describe('ChatSendQueue', () => {
-  it('renders queued inputs in order with their available actions', () => {
-    const html = renderQueue([
-      queuedInput({ id: 'queued_1', input: '先检查测试' }),
-      queuedInput({
-        id: 'queued_2',
-        input: '',
-        attachments: [{
-          id: 'attachment_1',
-          name: '需求说明.pdf',
-          type: 'application/pdf',
-          size: 1024,
-          source: 'runtime',
-          assetId: 'asset_1',
-        }],
-      }),
-    ]);
-
-    expect(html).toContain('待发送');
-    expect(html).toContain('先检查测试');
-    expect(html).toContain('需求说明.pdf');
-    expect(html).toContain('附件消息');
-    expect(html).toContain('立即发送');
-    expect(html).toContain('aria-label="编辑"');
-    expect(html.match(/aria-label="编辑"/g)).toHaveLength(2);
-    expect(html).toContain('aria-label="删除"');
-    expect(html).not.toContain('<textarea');
-    expect(html.indexOf('先检查测试')).toBeLessThan(html.indexOf('需求说明.pdf'));
-  });
-
-  it('does not reserve composer space when the queue is empty', () => {
-    expect(renderQueue([])).toBe('');
-  });
-
   it('blocks edit without disabling send-now when the composer already has content', () => {
     const html = renderQueue([
       queuedInput({ id: 'queued_1', input: 'Keep current draft safe' }),

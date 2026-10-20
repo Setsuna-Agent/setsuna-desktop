@@ -1,5 +1,5 @@
 import { Button, IconButton } from '@setsuna-desktop/renderer-ui';
-import { GitPullRequest, Github, RefreshCw } from 'lucide-react';
+import { GitPullRequestArrow, RefreshCw } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { PullRequestReference } from '../contracts/index.js';
 import type { PullRequestsRendererHost } from './host.js';
@@ -7,17 +7,17 @@ import type { PullRequestsClient } from './client.js';
 import type { PullRequestConnectionState } from './account/connection-state.js';
 import { PullRequestsHostContext, usePrText } from './context.js';
 import { useConnection } from './useConnection.js';
-import { useCliInstallation } from './useCliInstallation.js';
+import { PullRequestConnectionScreen } from './account/PullRequestConnectionScreen.js';
 import { usePullRequestList } from './usePullRequestList.js';
 import { PullRequestDetailPane } from './PullRequestDetailPane.js';
 import { PullRequestFilters } from './PullRequestFilters.js';
 import { GitHubIdentity } from './GitHubIdentity.js';
-import { GitHubCliLoginCommand } from './GitHubCliLoginCommand.js';
 import { PullRequestsSplit } from './PullRequestsSplit.js';
 import { PullRequestScrollArea } from './PullRequestScrollArea.js';
 import { CheckState, PullRequestState, Timestamp } from './status.js';
 import { PullRequestSkeleton } from './loading/PullRequestSkeleton.js';
 import type { PullRequestSession } from './session.js';
+import { getPullRequestDetailSession } from './session.js';
 
 type PullRequestsPageProps = { client: PullRequestsClient; connectionState: PullRequestConnectionState; host: PullRequestsRendererHost; session: PullRequestSession };
 
@@ -27,14 +27,7 @@ export function PullRequestsPage({ client, connectionState, host, session }: Pul
 function Workbench({ client, connectionState, session }: Omit<PullRequestsPageProps, 'host'>) {
   const t = usePrText();
   const auth = useConnection(client, connectionState);
-  const installation = useCliInstallation(client, auth.refresh);
-  const loginCommand = auth.connection?.loginCommand ?? 'gh auth login --hostname github.com --web';
-  const installLabel = installation.pending ? installation.state?.phase === 'downloading'
-    ? t('cliDownloading', { progress: Math.floor(100 * installation.state.receivedBytes / (installation.state.totalBytes || 1)) })
-    : t(installation.state?.phase === 'verifying' ? 'cliVerifying' : installation.state?.phase === 'installing' ? 'cliInstalling' : 'cliPreparing') : t('installCli');
   const account = auth.connection?.state === 'connected' ? auth.connection.login : null;
-  const checkingConnection = !auth.connection && (!auth.error || auth.pending);
-  const needsSetup = auth.connection?.state === 'not-installed' || auth.connection?.state === 'signed-out';
   const [repository, setRepository] = useState(session.repository);
   const [filters, setFilters] = useState(session.filters);
   const [selected, setSelected] = useState<PullRequestReference | null>(session.selected);
@@ -53,7 +46,7 @@ function Workbench({ client, connectionState, session }: Omit<PullRequestsPagePr
   return <PullRequestsSplit session={session} sidebar={account ?
     <aside className="pr-sidebar">
       <header className="pr-sidebar__header">
-        <h1><GitPullRequest size={18} />Pull Request</h1>
+        <h1><GitPullRequestArrow size={18} />Pull Request</h1>
         <IconButton size="small" label={t('refresh')} disabled={list.loading} onClick={() => { list.refresh(); void auth.refresh(); }}><RefreshCw size={14} /></IconButton>
       </header>
       <PullRequestFilters value={{ repository, filters }} repositories={list.inventory.repositories} authors={list.items.map((item) => item.author.login)} onChange={(next) => {
@@ -75,18 +68,7 @@ function Workbench({ client, connectionState, session }: Omit<PullRequestsPagePr
       </PullRequestScrollArea>
     </aside> : null
     }>
-    {account ? selected ? <PullRequestDetailPane key={`${account}/${selected.repository}/${selected.number}`} client={auth.client} reference={selected} summary={list.items.find((item) => item.repository === selected.repository && item.number === selected.number)} account={account} session={session} onUpdated={list.refresh} /> : <div className="pr-empty pr-welcome"><GitPullRequest size={32} /><h2>{t('selectPr')}</h2><p>{t('selectPrDescription')}</p></div>
-      : <main className="pr-empty pr-welcome">
-        {checkingConnection ? <PullRequestSkeleton kind="connection" label={t('loading')} /> : <>
-          <Github size={36} />
-          <h2>{t(needsSetup ? 'connectTitle' : 'connectionCheckFailed')}</h2>
-          {needsSetup ? <p>{t(auth.connection?.state === 'not-installed' ? 'cliNotInstalled' : 'connectDescription')}</p> : null}
-          {auth.connection?.state === 'signed-out' ? <GitHubCliLoginCommand command={loginCommand} /> : null}
-          <div className="pr-welcome__actions">
-            {auth.connection?.state === 'not-installed' ? <Button variant="primary" loading={installation.pending} disabled={installation.pending} onClick={() => void installation.start()}>{installLabel}</Button> : null}
-            <Button loading={auth.pending} disabled={auth.pending || installation.pending} onClick={() => void auth.refresh()}>{t('checkAgain')}</Button>
-          </div>
-        </>}
-      </main>}
+    {account ? selected ? <PullRequestDetailPane key={`${account}/${selected.repository}/${selected.number}`} client={auth.client} reference={selected} summary={list.items.find((item) => item.repository === selected.repository && item.number === selected.number)} account={account} session={getPullRequestDetailSession(session, account, selected)} onUpdated={list.refresh} /> : <div className="pr-empty pr-welcome"><GitPullRequestArrow size={32} /><h2>{t('selectPr')}</h2><p>{t('selectPrDescription')}</p></div>
+      : <PullRequestConnectionScreen client={client} auth={auth} />}
   </PullRequestsSplit>;
 }

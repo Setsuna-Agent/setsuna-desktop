@@ -37,7 +37,7 @@ export const listResultCodec = codec(object({ items: array(summary), cursor }));
 export type PullRequestListResult = ReturnType<typeof listResultCodec.parse>;
 
 export const detailCodec = codec(object({
-  ...summaryShape, body: text(1_000_000), createdAt: text(50), reactions: readReactions,
+  ...summaryShape, body: text(1_000_000), createdAt: text(50), reactions: readReactions, canReact: boolean,
   baseBranch: text(1024), headBranch: text(1024), baseSha: oid, headRepository: nullable(repositoryId),
   additions: integer, deletions: integer, fileCount: integer, commentCount: integer,
   mergeable: text(80), mergeState: text(80), reviewDecision: nullable(text(80)),
@@ -51,7 +51,7 @@ export type PullRequestDetail = ReturnType<typeof detailCodec.parse>;
 
 const comment = object({
   id: nodeId, databaseId: nullable(positiveInteger), author: actor,
-  body: text(1_000_000), createdAt: text(50), url: httpsUrl, reactions: readReactions,
+  body: text(1_000_000), createdAt: text(50), url: httpsUrl, reactions: readReactions, canReact: boolean,
 });
 export type PullRequestComment = ReturnType<typeof comment>;
 export const discussion = object({
@@ -100,10 +100,19 @@ export const commentInputCodec = codec(object({
   reconcileOnly: boolean,
 }));
 export type PublishPullRequestComment = ReturnType<typeof commentInputCodec.parse>;
+const mergeMessage = object({ title: text(100_000, /^[^\r\n]*\S[^\r\n]*$/u), body: text(1_000_000) });
+export const mergeMessageCodec = codec(mergeMessage);
+export type PullRequestMergeMessage = ReturnType<typeof mergeMessageCodec.parse>;
+export const mergeMessageInputCodec = codec(object({
+  repository: repositoryId, number: positiveInteger, headSha: oid, baseBranch: text(1024, /\S/u),
+  expectedAccount: text(200, /^\S+$/u), method: choice(['MERGE', 'SQUASH']),
+}));
+export type PullRequestMergeMessageInput = ReturnType<typeof mergeMessageInputCodec.parse>;
 export const actionInputCodec = codec(object({
   repository: repositoryId, number: positiveInteger, headSha: oid, baseBranch: text(1024, /\S/u),
   expectedAccount: text(200, /^\S+$/u),
   action: choice(['merge', 'enable-auto-merge', 'disable-auto-merge', 'enqueue']), method: mergeMethod,
+  commitMessage: nullable(mergeMessage),
 }));
 export type PullRequestAction = ReturnType<typeof actionInputCodec.parse>;
 export const actionResultCodec = codec(object({ state: choice(['merged', 'auto-merge-enabled', 'auto-merge-disabled', 'queued']) }));

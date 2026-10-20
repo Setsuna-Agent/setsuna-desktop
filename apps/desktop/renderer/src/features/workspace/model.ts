@@ -1,4 +1,5 @@
 import type { WorkspaceEntry } from '@setsuna-desktop/contracts';
+import { pullRequestPanelId, type PullRequestReference } from '@setsuna-desktop/feature-pull-requests/contracts';
 import {
   DEFAULT_BROWSER_URL,
   type BrowserPanelState,
@@ -89,6 +90,9 @@ export const createBrowserPanel = (id: string, url = DEFAULT_BROWSER_URL): Deskt
   };
 };
 export const createReviewPanel = (): DesktopPanelTab => ({ id: REVIEW_PANEL_ID, type: 'review', title: '审查' });
+export const createPullRequestPanel = (reference: PullRequestReference): DesktopPanelTab => ({
+  id: pullRequestPanelId(reference), type: 'pull-request', title: `${reference.repository} #${reference.number}`,
+});
 export const createChangesPanel = (): DesktopPanelTab => ({ id: 'changes', type: 'changes', title: '变更' });
 export const createFilesPanel = (): DesktopPanelTab => ({ id: FILES_PANEL_ID, type: 'files', title: '打开文件' });
 export const createFilePanel = (filePath: string, rootId?: string): DesktopPanelTab => ({

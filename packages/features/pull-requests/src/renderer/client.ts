@@ -7,9 +7,12 @@ export function createPullRequestsClient(transport: FeatureOperationTransport) {
     connection: bind(operations.readPullRequestConnection), repositories: bind(operations.readPullRequestRepositories),
     installation: bind(operations.readGitHubCliInstallation), install: bind(operations.installGitHubCli),
     list: bind(operations.listPullRequests), detail: bind(operations.readPullRequest),
+    threads: bind(operations.readThreadPullRequests),
     discussions: bind(operations.readPullRequestDiscussions), replies: bind(operations.readPullRequestReplies),
+    activity: bind(operations.readPullRequestActivity), react: bind(operations.setPullRequestReaction),
     checks: bind(operations.readPullRequestChecks), files: bind(operations.readPullRequestFiles), patch: bind(operations.readPullRequestPatch),
     publish: bind(operations.publishPullRequestComment), act: bind(operations.performPullRequestAction),
+    mergeMessage: bind(operations.readPullRequestMergeMessage),
   };
 }
 export type PullRequestsClient = ReturnType<typeof createPullRequestsClient>;

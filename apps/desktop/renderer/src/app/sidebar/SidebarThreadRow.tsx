@@ -12,6 +12,7 @@ import { SidebarThreadTitle } from './SidebarThreadTitle.js';
 import { SidebarThreadWorktreeBadge } from './SidebarThreadWorktreeBadge.js';
 import { SidebarThreadAutomationBadge } from './SidebarThreadAutomationBadge.js';
 import { useSidebarThreadDrag } from './useSidebarThreadDrag.js';
+import { PullRequestsFeatureThreadBadge } from '../../composition/PullRequestsFeatureBoundary.js';
 
 export function SidebarThreadRow({
   menuOpen,
@@ -149,6 +150,7 @@ export function SidebarThreadRow({
           <SidebarThreadAutomationBadge thread={thread} />
         </Button>
       </SidebarThreadHoverCard>
+      <PullRequestsFeatureThreadBadge threadId={thread.id} />
       {meta}
       {selected ? (
         <span className="desktop-agent-session__navigation-hint" aria-hidden="true">

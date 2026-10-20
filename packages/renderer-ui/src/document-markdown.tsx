@@ -6,10 +6,11 @@ import rehypeSlug from 'rehype-slug';
 import remarkGfm from 'remark-gfm';
 import remarkEmoji from 'remark-emoji';
 import { CheckField } from './selection-controls.js';
+import { rehypeGitHubAlerts } from './markdown/github-alerts.js';
 import { MermaidDiagram } from './mermaid-diagram.js';
 
 const remarkPlugins = [remarkGfm, remarkEmoji];
-const rehypePlugins = [rehypeRaw, rehypeSlug, rehypeSanitize];
+const rehypePlugins = [rehypeRaw, rehypeSlug, rehypeSanitize, rehypeGitHubAlerts];
 
 export type DocumentMarkdownProps = {
   content: string; baseUrl?: string; className?: string; onOpenLink?(url: string): void;

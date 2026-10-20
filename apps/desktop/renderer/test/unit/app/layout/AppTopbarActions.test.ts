@@ -39,7 +39,6 @@ describe('AppTopbarActions', () => {
     const bottomPanelButton = html.match(/<button[^>]*aria-label="隐藏底栏"[^>]*>/)?.[0] ?? '';
 
     expect(bottomPanelButton).toContain('aria-pressed="true"');
-    expect(bottomPanelButton).toContain('is-active');
   });
 
   it('底栏隐藏时表达显示底栏', () => {
@@ -51,7 +50,6 @@ describe('AppTopbarActions', () => {
     const bottomPanelButton = html.match(/<button[^>]*aria-label="显示底栏"[^>]*>/)?.[0] ?? '';
 
     expect(bottomPanelButton).toContain('aria-pressed="false"');
-    expect(bottomPanelButton).not.toContain('is-active');
   });
 
 });

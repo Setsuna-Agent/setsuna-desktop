@@ -121,14 +121,14 @@ describe('GitHub PR projections', () => {
   it('rejects paths and mutation inputs that cannot identify a valid PR revision', () => {
     for (const repository of ['owner/..', '../repo', 'owner/repo/extra', 'https://github.com/owner/repo']) expect(() => referenceCodec.parse({ repository, number: 1 })).toThrow();
     for (const path of ['/etc/passwd', '../secret', 'src/../../secret', 'src/\0file']) expect(() => patchInputCodec.parse({ ...reference, baseSha: base, headSha: head, path })).toThrow();
-    expect(() => actionInputCodec.parse({ ...reference, expectedAccount: 'alice', headSha: '--upload-pack=evil', baseBranch: 'main', action: 'merge', method: 'SQUASH' })).toThrow();
-    expect(() => actionInputCodec.parse({ ...reference, expectedAccount: 'alice', headSha: head, baseBranch: 'main', action: 'admin-merge', method: 'SQUASH' })).toThrow();
-    expect(() => actionInputCodec.parse({ ...reference, expectedAccount: 'alice', headSha: head, action: 'merge', method: 'SQUASH' })).toThrow();
+    expect(() => actionInputCodec.parse({ ...reference, expectedAccount: 'alice', headSha: '--upload-pack=evil', baseBranch: 'main', action: 'merge', method: 'SQUASH', commitMessage: null })).toThrow();
+    expect(() => actionInputCodec.parse({ ...reference, expectedAccount: 'alice', headSha: head, baseBranch: 'main', action: 'admin-merge', method: 'SQUASH', commitMessage: null })).toThrow();
+    expect(() => actionInputCodec.parse({ ...reference, expectedAccount: 'alice', headSha: head, action: 'merge', method: 'SQUASH', commitMessage: null })).toThrow();
     expect(() => referenceCodec.parse({ ...reference, number: 1.5 })).toThrow();
   });
 
   it('requires the expected account at the write boundary', () => {
-    const action = { ...reference, headSha: head, baseBranch: 'main', action: 'merge', method: 'SQUASH' };
+    const action = { ...reference, headSha: head, baseBranch: 'main', action: 'merge', method: 'SQUASH', commitMessage: null };
     const comment = { ...reference, body: 'Hello', threadId: null, requestId: 'draft_1234567890123456', reconcileOnly: false };
     for (const [codec, input] of [[actionInputCodec, action], [commentInputCodec, comment]] as const) {
       expect(() => codec.parse(input)).toThrow();

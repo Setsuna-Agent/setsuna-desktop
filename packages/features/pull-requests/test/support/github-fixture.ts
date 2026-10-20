@@ -13,7 +13,7 @@ export function checkNode(id: number, name = 'test', conclusion: string | null =
     checkSuite: { createdAt: '2026-09-15T04:00:00Z', app: { id: 'APP1', name: 'GitHub Actions' }, workflowRun: { event: 'pull_request', workflow: { id: 'CI' } } },
   };
 }
-export const commentNode = (id: string, body = id) => ({ id, databaseId: 1, body, reactions: [], createdAt: '2026-09-14T01:00:00Z', url: 'https://github.com/owner/repo/pull/12#comment', author: { login: 'alice', avatarUrl: 'https://avatars.githubusercontent.com/u/1' } });
+export const commentNode = (id: string, body = id) => ({ id, databaseId: 1, body, reactions: [], canReact: true, viewerCanReact: true, createdAt: '2026-09-14T01:00:00Z', url: 'https://github.com/owner/repo/pull/12#comment', author: { login: 'alice', avatarUrl: 'https://avatars.githubusercontent.com/u/1' } });
 export const summaryNode = (number: number, login = 'alice') => ({
   id: `PR_${number}`, number, title: `Change ${number}`, url: `https://github.com/owner/repo/pull/${number}`,
   state: 'OPEN' as const, isDraft: false, updatedAt: '2026-09-14T01:00:00Z', headRefOid: head,
@@ -26,7 +26,7 @@ export function repositoryNode() {
   return {
     viewerPermission: 'WRITE', isArchived: false, mergeCommitAllowed: true, squashMergeAllowed: true, rebaseMergeAllowed: false,
     pullRequest: {
-      ...summaryNode(12), body: 'Description', createdAt: '2026-09-13T01:00:00Z', baseRefName: 'main', headRefName: 'feature', baseRefOid: base,
+      ...summaryNode(12), body: 'Description', viewerCanReact: true, createdAt: '2026-09-13T01:00:00Z', baseRefName: 'main', headRefName: 'feature', baseRefOid: base,
       headRepository: { nameWithOwner: 'owner/repo' }, additions: 2, deletions: 1, changedFiles: 1,
       comments: { totalCount: 0 }, reviewThreads: { totalCount: 0 }, mergeable: 'MERGEABLE', mergeStateStatus: 'CLEAN', reviewDecision: null,
       viewerCanEnableAutoMerge: true, viewerCanDisableAutoMerge: false, locked: false, autoMergeRequest: null,

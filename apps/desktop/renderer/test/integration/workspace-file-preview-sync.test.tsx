@@ -32,7 +32,13 @@ it('refreshes an open document after external writes, without overwriting a dirt
     await writeFile(diskPath, input.content);
     return read();
   });
-  const client = { readProjectFile: vi.fn(read), saveProjectFile } as unknown as DesktopRuntimeClient;
+  let finishInitialRefresh!: (file: WorkspaceFileRead) => void;
+  let finishFollowupRefresh!: (file: WorkspaceFileRead) => void;
+  const readProjectFile = vi.fn(read)
+    .mockImplementationOnce(read)
+    .mockImplementationOnce(() => new Promise((resolve) => { finishInitialRefresh = resolve; }))
+    .mockImplementationOnce(() => new Promise((resolve) => { finishFollowupRefresh = resolve; }));
+  const client = { readProjectFile, saveProjectFile } as unknown as DesktopRuntimeClient;
   const listeners = new Set<() => void>();
   // Main tests exercise OS events; this renderer fixture supplies the corresponding preload notifications.
   const watchEntries = vi.fn((_workspaceRoot: string, _directories: string[], changed: () => void) => {
@@ -56,8 +62,16 @@ it('refreshes an open document after external writes, without overwriting a dirt
   try {
     await act(async () => { await view.result.current.workspace.openProjectFile(filePath); });
     await waitFor(() => expect(watchEntries).toHaveBeenCalledWith(root, ['src'], expect.any(Function)));
+    await waitFor(() => expect(finishInitialRefresh).toBeDefined());
+    // A writer can truncate the file before filling it. Deliver that snapshot
+    // while a second invalidation is queued, then finish the follow-up after React renders.
+    await writeFile(diskPath, '');
+    const intermediate = await read();
     await writeFile(diskPath, '# Updated by a tool');
     act(() => listeners.forEach((changed) => changed()));
+    await act(async () => { finishInitialRefresh(intermediate); });
+    expect(finishFollowupRefresh).toBeDefined();
+    await act(async () => { finishFollowupRefresh(await read()); });
     await waitFor(() => expect(view.result.current.workspace.fileDraft.content).toBe('# Updated by a tool'));
     expect(view.result.current.workspace.filePreview?.content).toBe('# Updated by a tool');
     expect(view.result.current.panels.sidePanelSlot.panels.map((panel) => panel.filePath)).toEqual([filePath]);

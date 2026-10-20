@@ -17,6 +17,7 @@ import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { ChangeCountText } from './ChangeCountText.js';
 import type { ConversationOverviewState } from './chatConversationOverview.js';
 import { ConversationPlanSummary } from './ConversationPlanSummary.js';
+import { PullRequestsFeatureConversation } from '../../../composition/PullRequestsFeatureBoundary.js';
 
 export function ConversationOverviewPanel({
   activeProject,
@@ -76,6 +77,7 @@ export function ConversationOverviewPanel({
         <UsageFeatureConversationSummary thread={currentThread} />
       </div>
       <RuntimeActivityFeatureConversationServices threadId={currentThread.id} />
+      <PullRequestsFeatureConversation threadId={currentThread.id} />
       <CollaborationFeatureTaskList
         parentThreadId={currentThread.id}
         tasks={collaboration.state.tasks}

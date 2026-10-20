@@ -15,6 +15,12 @@
   line-height: 20px;
 }
 
+/* Keep the popup's origin visible while focus moves into its search or menu. */
+.sd-picker-trigger.sd-button:is([data-state='open'], [aria-expanded='true']) {
+  color: var(--app-text);
+  background: var(--desktop-agent-control-hover-bg);
+}
+
 .sd-picker-trigger > svg { flex-shrink: 0; }
 .sd-picker-trigger > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 

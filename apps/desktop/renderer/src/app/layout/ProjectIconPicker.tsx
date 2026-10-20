@@ -1,4 +1,4 @@
-import { WORKSPACE_PROJECT_ICON_KEYS, type WorkspaceProjectIcon } from '@setsuna-desktop/contracts';
+import type { WorkspaceProjectIcon } from '@setsuna-desktop/contracts';
 import { Button, IconButton, Popover, Tooltip } from '@setsuna-desktop/renderer-ui';
 import { RotateCcw } from 'lucide-react';
 import { useState, type CSSProperties } from 'react';
@@ -6,6 +6,7 @@ import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { ICON_COLORS, iconColorCssValue, normalizeIconColor } from '../../shared/ui/icon-colors.js';
 import { IconColorPicker } from '../../shared/ui/IconColorPicker.js';
 import { ProjectIcon } from '../../shared/ui/ProjectIcon.js';
+import { PROJECT_ICON_PRESET_KEYS } from '../../shared/ui/project-icon-presets.js';
 import './project-icon-picker.css';
 
 export function ProjectIconPicker({ value, disabled, onChange }: Readonly<{
@@ -33,7 +34,7 @@ export function ProjectIconPicker({ value, disabled, onChange }: Readonly<{
           </div>
           <div className="desktop-project-icon-picker__grid" role="group" aria-label={t('sidebar.projectIcon')}
             style={{ '--project-icon-color': iconColorCssValue(color) } as CSSProperties}>
-            {WORKSPACE_PROJECT_ICON_KEYS.map((key) => (
+            {PROJECT_ICON_PRESET_KEYS.map((key) => (
               <Tooltip key={key} title={t(`sidebar.projectIcon.${key}`)}>
                 <Button type="button" variant="ghost" className="desktop-project-icon-picker__choice"
                   disabled={disabled} aria-label={t(`sidebar.projectIcon.${key}`)} aria-pressed={(value?.key ?? 'folder') === key}

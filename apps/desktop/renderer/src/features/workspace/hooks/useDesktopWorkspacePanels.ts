@@ -1,5 +1,6 @@
 import { workspaceProjectRoots, workspaceProjectForRoot, workspaceTarget, workspaceTargetKey, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import type { CollaborationTask } from '@setsuna-desktop/feature-collaboration/contracts';
+import type { PullRequestReference } from '@setsuna-desktop/feature-pull-requests/contracts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clearTerminalWorkspaceRestoreBuffer } from '../../../composition/TerminalWorkspaceFeatureBoundary.js';
 import {
@@ -24,6 +25,7 @@ import {
   createFilePanel,
   createFilesPanel,
   createReviewPanel,
+  createPullRequestPanel,
   createSideChatPanel as createSideChatPanelTab,
   createSubagentPanel,
   createWorkspaceOverviewPanel,
@@ -508,6 +510,17 @@ export function useDesktopWorkspacePanels({
     setBottomPanelSlot(updater);
   }, [setBottomPanelExpanded, setBottomPanelSlot, setSidePanelExpanded, setSidePanelSlot]);
 
+  const openPullRequestPanel = useCallback((threadId: string, reference: PullRequestReference) => {
+    closeWorkspaceMenus();
+    const panel = createPullRequestPanel(reference);
+    // Sidebar clicks may navigate asynchronously. Update the target thread explicitly.
+    updateLayoutForIdentity(chatComposerTargetIdentity(threadId, null), (current) => ({
+      ...current, sidePanelExpanded: true,
+      sidePanelSlot: addPanelToSlotState(current.sidePanelSlot, panel),
+      bottomPanelSlot: removePanelFromSlotState(current.bottomPanelSlot, panel.id),
+    }));
+  }, [closeWorkspaceMenus, updateLayoutForIdentity]);
+
   const activateDesktopPanelByType = useCallback((type: DesktopPanelType) => {
     const location = findDesktopPanelLocationByType(sidePanelSlot, bottomPanelSlot, type);
     if (!location) return false;
@@ -696,6 +709,7 @@ export function useDesktopWorkspacePanels({
       renameFilePanels,
       deleteFilePanels,
       openSubagentPanel,
+      openPullRequestPanel,
       openWorkspaceDirectory,
       openWorkspaceInApp,
       panelLauncherMenuOpen,
@@ -751,6 +765,7 @@ export function useDesktopWorkspacePanels({
       renameFilePanels,
       deleteFilePanels,
       openSubagentPanel,
+      openPullRequestPanel,
       openWorkspaceDirectory,
       openWorkspaceInApp,
       panelLauncherMenuOpen,

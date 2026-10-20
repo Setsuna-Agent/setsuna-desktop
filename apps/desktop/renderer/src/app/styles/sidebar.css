@@ -417,6 +417,15 @@
   cursor: grab;
 }
 
+/* PR entry stays visible; transient row actions sit immediately to its left. */
+.desktop-agent-session > .desktop-agent-session__pr { position: absolute; right: var(--desktop-agent-row-action-inset); top: 50%; transform: translateY(-50%); }
+.desktop-agent-session:has(.desktop-agent-session__pr) .desktop-agent-session__meta,
+.desktop-agent-session:has(.desktop-agent-session__pr) .desktop-agent-session__navigation-hint { right: calc(var(--desktop-agent-row-action-inset) + 24px); }
+.desktop-agent-session:has(.desktop-agent-session__pr) .desktop-agent-session__select { padding-right: 28px; }
+.desktop-agent-session.is-running:has(.desktop-agent-session__pr) .desktop-agent-session__select { padding-right: calc(var(--desktop-agent-row-action-size) + 32px); }
+.desktop-agent-session:has(.desktop-agent-session__pr):is(:hover, .is-menu-open, :has(:focus-visible), :has([data-state='open'])) .desktop-agent-session__select { padding-right: calc(var(--desktop-agent-row-action-size) * 2 + 32px); }
+.desktop-agent-session:has(.desktop-agent-session__pr[data-state='open']) { background: var(--desktop-agent-sidebar-hover-bg); }
+
 .desktop-agent-session[data-dragging] {
   opacity: 0.45;
 }

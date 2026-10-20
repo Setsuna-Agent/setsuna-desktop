@@ -4,9 +4,9 @@ import type { PullRequestComment, PullRequestDiscussion, PullRequestDiscussionIn
 import { actor, actorFields, GitHubApi, nextCursor, pageFields, repoVariables, type Actor, type Page } from './github-api.js';
 
 export const commentFields = `id databaseId body createdAt url author { ${actorFields} } ${reactionFields}`;
-export type CommentNode = { id: string; databaseId: number | null; body: string; createdAt: string; url: string; author: Actor; reactionGroups?: ReactionNode[] };
+export type CommentNode = { id: string; databaseId: number | null; body: string; createdAt: string; url: string; author: Actor; viewerCanReact?: boolean; reactionGroups?: ReactionNode[] };
 export function comment(node: CommentNode): PullRequestComment {
-  return { ...node, reactions: reactions(node.reactionGroups), author: actor(node.author), body: node.body.replace(/\n?<!-- setsuna-pr-comment:[a-zA-Z0-9_-]+ -->/gu, '') };
+  return { ...node, canReact: Boolean(node.viewerCanReact), reactions: reactions(node.reactionGroups), author: actor(node.author), body: node.body.replace(/\n?<!-- setsuna-pr-comment:[a-zA-Z0-9_-]+ -->/gu, '') };
 }
 const blankThread = {
   state: null, resolved: false, outdated: false, canReply: true, path: null, line: null, side: null,

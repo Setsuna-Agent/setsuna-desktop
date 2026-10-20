@@ -1,4 +1,5 @@
 import { pullRequestsRendererFeature, pullRequestsRendererHostCapability } from '@setsuna-desktop/feature-pull-requests/renderer';
+import { threadPullRequestsStateCapability } from '@setsuna-desktop/feature-pull-requests/contracts';
 import { automationClientCapability, automationRendererFeature, automationRendererHostCapability } from '@setsuna-desktop/feature-automation/renderer';
 import { AutomationModelPicker } from './automation/AutomationModelPicker.js';
 import { PullRequestsFeatureBoundary } from './PullRequestsFeatureBoundary.js';
@@ -326,6 +327,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
     rendererPlugins.commitInitial();
     const dependencies = host.composition.resolveHostDependencies({
       automation: optionalCapability(automationClientCapability, () => null),
+      pullRequests: optionalCapability(threadPullRequestsStateCapability, () => null),
       collaboration: optionalCapability(
         collaborationRendererStateCapability,
         createNoopCollaborationRendererStateService,

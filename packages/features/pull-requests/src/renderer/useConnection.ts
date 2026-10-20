@@ -14,13 +14,13 @@ export function useConnection(client: PullRequestsClient, state: PullRequestConn
   useEffect(() => {
     if (snapshot.error) notify.current(snapshot.error);
   }, [snapshot.error]);
-  // All nested comment and merge entry points share the same account refresh path.
+  // Writes and merge preparation share the same account refresh path.
   const accountClient = useMemo(() => {
     const guard = <Args extends unknown[], Result>(operation: (...args: Args) => Promise<Result>) => async (...args: Args) => {
       try { return await operation(...args); }
       catch (cause) { if (isAccountChangedError(cause)) void refresh(); throw cause; }
     };
-    return { ...client, publish: guard(client.publish), act: guard(client.act) };
+    return { ...client, publish: guard(client.publish), act: guard(client.act), react: guard(client.react), mergeMessage: guard(client.mergeMessage) };
   }, [client, refresh]);
   return { ...snapshot, refresh, client: accountClient };
 }

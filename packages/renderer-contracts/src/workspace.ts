@@ -19,6 +19,7 @@ export const RENDERER_WORKSPACE_PANEL_TYPES = Object.freeze([
   'files',
   'file',
   'review',
+  'pull-request',
   'changes',
   'commit-message',
   'terminal',

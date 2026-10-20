@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { PullRequestFile } from '../../src/contracts/index.js';
 import { PullRequestFileTree } from '../../src/renderer/PullRequestFileTree.js';
@@ -12,7 +13,12 @@ it.each(['added', 'removed'])('allows selecting a %s file and changes beneath it
   const file: PullRequestFile = { path: 'config', previousPath: null, status, additions: 1, deletions: 1 };
   const child: PullRequestFile = { ...file, path: 'config/database.yml', status: status === 'added' ? 'removed' : 'added' };
   const onSelect = vi.fn();
-  render(<PullRequestFileTree files={status === 'added' ? [file, child] : [child, file]} path="config" onSelect={onSelect} />);
+  function Tree() {
+    const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+    return <PullRequestFileTree files={status === 'added' ? [file, child] : [child, file]} path="config" onSelect={onSelect}
+      collapsed={collapsed} onCollapsedChange={setCollapsed} />;
+  }
+  render(<Tree />);
   const entries = screen.getAllByRole('button', { name: 'config', exact: true });
   const directory = entries.find((entry) => entry.hasAttribute('aria-expanded'))!;
   const target = entries.find((entry) => !entry.hasAttribute('aria-expanded'))!;

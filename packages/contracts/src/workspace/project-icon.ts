@@ -1,3 +1,4 @@
+/** Supported stored values include older icons that are no longer offered by the picker. */
 export const WORKSPACE_PROJECT_ICON_KEYS = [
   'folder', 'code', 'terminal', 'globe', 'server', 'database', 'package', 'blocks',
   'app-window', 'smartphone', 'cloud', 'git-branch', 'rocket', 'flask', 'wrench', 'shield',
@@ -7,6 +8,9 @@ export const WORKSPACE_PROJECT_ICON_KEYS = [
   'folder-kanban', 'list-checks', 'calendar', 'target', 'lightbulb', 'graduation-cap', 'languages', 'search',
   'file-text', 'file-code', 'file-spreadsheet', 'presentation', 'camera', 'image', 'film', 'headphones',
   'shopping-bag', 'store', 'megaphone', 'wallet', 'house', 'compass', 'map', 'leaf',
+  'mountain', 'tent', 'sailboat', 'anchor', 'telescope', 'satellite', 'castle', 'ferris-wheel',
+  'sprout', 'tree-palm', 'feather', 'bird', 'fish', 'paw-print', 'cherry', 'citrus',
+  'crown', 'origami', 'brush', 'guitar', 'dices', 'umbrella',
 ] as const;
 
 export type WorkspaceProjectIconKey = typeof WORKSPACE_PROJECT_ICON_KEYS[number];

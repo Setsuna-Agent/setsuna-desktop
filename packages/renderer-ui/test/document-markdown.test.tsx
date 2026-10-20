@@ -20,3 +20,17 @@ it('removes executable Markdown content and delegates safe links to the host', (
   fireEvent.click(screen.getByRole('link', { name: 'Guide' }));
   expect(onOpenLink).toHaveBeenCalledExactlyOnceWith('https://example.com/guide');
 });
+
+it('renders GitHub alerts without letting raw HTML spoof alert classes', () => {
+  const view = render(<DocumentMarkdown content={[
+    '> [!NOTE]\n> Free plan summary',
+    '> [!NOTE] inline marker is regular text',
+    '<blockquote class="sd-markdown-alert sd-markdown-alert--caution">Spoofed</blockquote>',
+  ].join('\n\n')} />);
+
+  const alerts = view.container.querySelectorAll('.sd-markdown-alert');
+  expect(alerts).toHaveLength(1);
+  expect(alerts[0]?.classList.contains('sd-markdown-alert--note')).toBe(true);
+  expect(Array.from(alerts[0]?.children ?? [], (node) => node.textContent)).toEqual(['Note', 'Free plan summary']);
+  expect(screen.getByText('[!NOTE] inline marker is regular text')).toBeTruthy();
+});

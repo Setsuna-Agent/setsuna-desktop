@@ -30,7 +30,10 @@ const host: PullRequestsRendererHost = {
   locale: 'en', openExternal: vi.fn(), copyText: vi.fn(), notifyError,
 };
 const wrapper = ({ children }: { children: ReactNode }) => <PullRequestsHostContext.Provider value={host}>{children}</PullRequestsHostContext.Provider>;
-const clientWith = (methods: Partial<PullRequestsClient>) => methods as PullRequestsClient;
+const defaultMergeMessage = { title: 'GitHub merge title', body: '* First commit\n\n* Second commit' };
+const clientWith = (methods: Partial<PullRequestsClient>) => ({
+  mergeMessage: vi.fn(async () => defaultMergeMessage), ...methods,
+}) as PullRequestsClient;
 const detail = () => readRequest(githubFixture(() => ({ repository: repositoryNode() })).api, reference);
 
 describe('PR navigation and drafts', () => {
@@ -355,9 +358,9 @@ describe('PR navigation and drafts', () => {
     const hook = renderHook(() => useConnection(client, connectionState), { wrapper });
     await waitFor(() => expect(hook.result.current.connection?.login).toBe('alice'));
     render(<MergeActions client={hook.result.current.client} detail={pr} account="alice" onUpdated={vi.fn()} />, { wrapper });
-    fireEvent.keyDown(screen.getByRole('button', { name: 'merge' }), { key: 'Enter' });
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'merge' }));
-    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'merge' }));
+    fireEvent.click(screen.getByRole('button', { name: 'mergeMethod.SQUASH' }));
+    await screen.findByDisplayValue(defaultMergeMessage.title);
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'mergeMethod.SQUASH' }));
     await waitFor(() => expect(hook.result.current.connection?.login).toBe('bob'));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(notifyError).toHaveBeenCalledWith('accountChanged');
@@ -369,11 +372,10 @@ describe('PR navigation and drafts', () => {
     const pr = { ...await detail(), mergeState: 'BEHIND', queueRequired };
     const perform = vi.fn(async () => ({ state: 'queued' as const }));
     render(<MergeActions client={clientWith({ act: perform })} detail={pr} account="alice" onUpdated={vi.fn()} />, { wrapper });
-    fireEvent.keyDown(screen.getByRole('button', { name: 'merge' }), { key: 'Enter' });
-    const item = await screen.findByRole('menuitem', { name: queueRequired ? 'enqueue' : 'merge' });
-    fireEvent.click(item);
+    const button = screen.getByRole('button', { name: queueRequired ? 'enqueue' : 'mergeMethod.SQUASH' });
+    fireEvent.click(button);
     if (!queueRequired) {
-      expect(item.getAttribute('aria-disabled')).toBe('true');
+      expect((button as HTMLButtonElement).disabled).toBe(true);
       expect(screen.queryByRole('dialog')).toBeNull();
       expect(perform).not.toHaveBeenCalled();
       return;
@@ -383,17 +385,106 @@ describe('PR navigation and drafts', () => {
     expect(perform.mock.calls[0][0]).toMatchObject({ expectedAccount: 'alice', headSha: head, baseBranch: 'main', action: 'enqueue' });
   });
 
-  it('submits the account, revision and target shown when confirmation opened even if the page updates', async () => {
-    const pr: PullRequestDetail = await detail();
+  it.each(['MERGE', 'SQUASH', 'REBASE'] as const)('submits the confirmed %s method, account and revision even if the page updates', async (method) => {
+    const user = userEvent.setup();
+    const pr: PullRequestDetail = { ...await detail(), allowedMethods: ['MERGE', 'SQUASH', 'REBASE'] };
     const perform = vi.fn(async () => ({ state: 'merged' as const }));
-    const client = clientWith({ act: perform });
+    const prepare = vi.fn(async () => defaultMergeMessage);
+    const client = clientWith({ act: perform, mergeMessage: prepare });
     const view = render(<MergeActions client={client} detail={pr} account="alice" onUpdated={vi.fn()} />, { wrapper });
-    fireEvent.keyDown(screen.getByRole('button', { name: 'merge' }), { key: 'Enter' });
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'merge' }));
+    await user.click(screen.getByRole('button', { name: 'mergeMethod' }));
+    await user.click(await screen.findByRole('menuitem', { name: `mergeMethod.${method}` }));
+    expect(perform).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await user.click(screen.getByRole('button', { name: `mergeMethod.${method}` }));
     const dialog = await screen.findByRole('dialog');
-    view.rerender(<MergeActions client={client} detail={{ ...pr, headSha: 'd'.repeat(40), baseBranch: 'develop' }} account="bob" onUpdated={vi.fn()} />);
-    fireEvent.click(within(dialog).getByRole('button', { name: 'merge' }));
+    const commitMessage = method === 'REBASE' ? null : { title: 'Reviewed title', body: 'Reviewed body\n\nSecond paragraph' };
+    if (commitMessage) {
+      await screen.findByDisplayValue(defaultMergeMessage.title);
+      fireEvent.change(within(dialog).getByRole('textbox', { name: 'commitTitle' }), { target: { value: commitMessage.title } });
+      fireEvent.change(within(dialog).getByRole('textbox', { name: 'commitBody' }), { target: { value: commitMessage.body } });
+      expect(prepare).toHaveBeenCalledWith({
+        ...reference, expectedAccount: 'alice', headSha: head, baseBranch: 'main', method,
+      }, expect.any(AbortSignal));
+    } else {
+      expect(within(dialog).queryByRole('textbox')).toBeNull();
+      expect(prepare).not.toHaveBeenCalled();
+    }
+    view.rerender(<MergeActions client={client} detail={{
+      ...pr, headSha: 'd'.repeat(40), baseBranch: 'develop', allowedMethods: [method === 'REBASE' ? 'MERGE' : 'REBASE'],
+    }} account="bob" onUpdated={vi.fn()} />);
+    await user.click(within(dialog).getByRole('button', { name: `mergeMethod.${method}` }));
     await waitFor(() => expect(perform).toHaveBeenCalledOnce());
-    expect(perform.mock.calls[0][0]).toMatchObject({ expectedAccount: 'alice', headSha: head, baseBranch: 'main', method: 'SQUASH', action: 'merge' });
+    expect(perform.mock.calls[0][0]).toMatchObject({ expectedAccount: 'alice', headSha: head, baseBranch: 'main', method, action: 'merge', commitMessage });
+  });
+
+  it('keeps auto-merge available while direct merging is blocked and returns focus after cancelling', async () => {
+    const user = userEvent.setup();
+    const pr = { ...await detail(), mergeState: 'BLOCKED' };
+    const perform = vi.fn(async () => ({ state: 'auto-merge-enabled' as const }));
+    render(<MergeActions client={clientWith({ act: perform })} detail={pr} account="alice" onUpdated={vi.fn()} />, { wrapper });
+    const trigger = screen.getByRole('button', { name: 'mergeMethod' });
+    trigger.focus();
+    await user.keyboard('{Enter}');
+    expect(screen.queryByRole('menuitem', { name: 'mergeMethod.REBASE' })).toBeNull();
+    await user.click(await screen.findByRole('menuitem', { name: 'mergeMethod.MERGE' }));
+    await user.click(trigger);
+    await user.click(await screen.findByRole('menuitem', { name: 'enableAutoMerge' }));
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'cancel' }));
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    expect(perform).not.toHaveBeenCalled();
+    await user.keyboard('{Enter}');
+    await user.click(await screen.findByRole('menuitem', { name: 'enableAutoMerge' }));
+    await screen.findByDisplayValue(defaultMergeMessage.title);
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'enableAutoMerge' }));
+    await waitFor(() => expect(perform).toHaveBeenCalledExactlyOnceWith({
+      ...reference, expectedAccount: 'alice', headSha: head, baseBranch: 'main', method: 'MERGE', action: 'enable-auto-merge', commitMessage: defaultMergeMessage,
+    }));
+  });
+
+  it('retries preparation, validates the title and preserves edited text after a rejected merge', async () => {
+    const pr = await detail();
+    const prepare = vi.fn().mockRejectedValueOnce(new Error('Could not load merge defaults')).mockResolvedValue(defaultMergeMessage);
+    const perform = vi.fn().mockRejectedValueOnce(new Error('Merge rejected')).mockResolvedValue({ state: 'merged' });
+    render(<MergeActions client={clientWith({ act: perform, mergeMessage: prepare })} detail={pr} account="alice" onUpdated={vi.fn()} />, { wrapper });
+    fireEvent.click(screen.getByRole('button', { name: 'mergeMethod.SQUASH' }));
+    const dialog = await screen.findByRole('dialog');
+    await screen.findByText('Could not load merge defaults');
+    expect(perform).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'retry' }));
+    await screen.findByDisplayValue(defaultMergeMessage.title);
+    const title = within(dialog).getByRole('textbox', { name: 'commitTitle' });
+    const submit = within(dialog).getByRole('button', { name: 'mergeMethod.SQUASH' }) as HTMLButtonElement;
+    fireEvent.change(title, { target: { value: '  ' } });
+    expect(submit.disabled).toBe(true);
+    fireEvent.change(title, { target: { value: 'Edited title' } });
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'commitBody' }), { target: { value: '' } });
+    fireEvent.click(submit);
+    await screen.findByText('Merge rejected');
+    expect((title as HTMLInputElement).value).toBe('Edited title');
+    expect((within(dialog).getByRole('textbox', { name: 'commitBody' }) as HTMLTextAreaElement).value).toBe('');
+    fireEvent.click(submit);
+    await waitFor(() => expect(perform).toHaveBeenCalledTimes(2));
+    expect(perform.mock.calls[1][0]).toMatchObject({ commitMessage: { title: 'Edited title', body: '' } });
+    expect(prepare).toHaveBeenCalledTimes(2);
+  });
+
+  it('cancels a closed merge form and ignores its late defaults after reopening', async () => {
+    const pr = await detail();
+    let finishFirst!: (value: typeof defaultMergeMessage) => void;
+    const prepare = vi.fn<PullRequestsClient['mergeMessage']>()
+      .mockImplementationOnce(() => new Promise((resolve) => { finishFirst = resolve; }))
+      .mockResolvedValue(defaultMergeMessage);
+    const perform = vi.fn();
+    render(<MergeActions client={clientWith({ act: perform, mergeMessage: prepare })} detail={pr} account="alice" onUpdated={vi.fn()} />, { wrapper });
+    fireEvent.click(screen.getByRole('button', { name: 'mergeMethod.SQUASH' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'cancel' }));
+    expect(prepare.mock.calls[0][1]?.aborted).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'mergeMethod.SQUASH' }));
+    await screen.findByDisplayValue(defaultMergeMessage.title);
+    await act(async () => { finishFirst({ title: 'Stale title', body: 'Stale body' }); });
+    expect(screen.queryByDisplayValue('Stale title')).toBeNull();
+    expect((screen.getByRole('textbox', { name: 'commitTitle' }) as HTMLInputElement).value).toBe(defaultMergeMessage.title);
+    expect(perform).not.toHaveBeenCalled();
   });
 });

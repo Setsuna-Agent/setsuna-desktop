@@ -1,8 +1,9 @@
 import type { CreateThreadInput, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { Button, Dropdown, Popover, TextField } from '@setsuna-desktop/renderer-ui';
-import { Check, FolderClosed, Laptop, Plus, Search, Split, X } from 'lucide-react';
+import { Check, Laptop, Plus, Search, Split, X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
+import { ProjectIcon } from '../../../shared/ui/ProjectIcon.js';
 
 export type ChatStarterProjectSelection = {
   projects: WorkspaceProject[];
@@ -63,7 +64,7 @@ export function ChatStarterWorkspace({ activeProject, projects, children, locati
           disabled={pending} title={project.path} aria-current={project.id === activeProject?.id ? 'true' : undefined}
           onClick={() => void selectProject(project.id)}
         >
-          <FolderClosed size={14} aria-hidden="true" />
+          <ProjectIcon icon={project.icon} size={14} />
           <span>{project.name}</span>
           {project.id === activeProject?.id ? <Check size={14} aria-hidden="true" /> : null}
         </Button>)}
@@ -81,7 +82,7 @@ export function ChatStarterWorkspace({ activeProject, projects, children, locati
       {error ? <div className="sd-picker__error" role="alert">{error}</div> : null}
     </>}>
       <Button variant="ghost" className="chat-starter-workspace__project sd-picker-trigger" aria-label={t('chat.starter.switchProject')} title={activeProject?.path} disabled={pending}>
-        <FolderClosed size={14} aria-hidden="true" />
+        <ProjectIcon icon={activeProject?.icon} size={14} />
         <span>{activeProject?.name ?? t('chat.starter.noProject')}</span>
       </Button>
     </Popover>

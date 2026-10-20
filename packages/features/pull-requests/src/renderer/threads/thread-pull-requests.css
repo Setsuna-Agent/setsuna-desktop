@@ -1,0 +1,32 @@
+.pr-thread-section { min-width: 0; padding: 10px 0; }
+.pr-thread-section__title { padding: 0 10px 6px; color: var(--app-text-muted); font-size: 12px; }
+.pr-thread-list { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pr-thread-list__item.sd-button {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  box-sizing: border-box;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  font-size: 13px;
+  text-align: left;
+}
+.pr-thread-list__item > .pr-thread-icon { justify-self: center; }
+.pr-thread-list__title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.pr-thread-list__number { flex-shrink: 0; color: var(--app-text-muted); font-size: 11px; }
+.pr-thread-popover { width: 300px; max-width: calc(100vw - 32px); max-height: 320px; padding: 6px; overflow-y: auto; }
+.pr-thread-icon { --pr-thread-status: var(--app-text-muted); position: relative; display: inline-flex; flex-shrink: 0; width: 16px; height: 16px; align-items: center; justify-content: center; color: var(--pr-thread-status); }
+.pr-thread-icon--open { --pr-thread-status: var(--app-success); }
+.pr-thread-icon--merged { --pr-thread-status: var(--desktop-git-graph-purple); }
+.pr-thread-icon--closed { --pr-thread-status: var(--app-danger); }
+.pr-thread-icon__dot { position: absolute; right: -2px; bottom: -1px; width: 5px; height: 5px; border-radius: 50%; background: var(--pr-thread-status); box-shadow: 0 0 0 1.5px var(--app-surface); }
+.pr-thread-badge.sd-button { flex-shrink: 0; width: 24px; min-width: 24px; height: 24px; padding: 4px; border-radius: var(--app-radius-sm); }
+.pr-thread-badge.sd-button[data-state='open'] { background: var(--desktop-agent-control-hover-bg); }
+.pr-workspace-detail { display: flex; flex: 1; min-width: 0; min-height: 0; height: 100%; overflow: hidden; container-type: inline-size; }
+.pr-workspace-detail > .pr-detail-pane { flex: 1; }
+.pr-workspace-detail .pr-detail__topline { -webkit-app-region: no-drag; }

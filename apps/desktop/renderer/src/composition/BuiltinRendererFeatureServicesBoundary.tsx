@@ -1,4 +1,6 @@
 import type { CollaborationRendererStateService } from '@setsuna-desktop/feature-collaboration/contracts';
+import type { ThreadPullRequestsStateService } from '@setsuna-desktop/feature-pull-requests/contracts';
+import { PullRequestsFeatureServiceBoundary } from './PullRequestsFeatureBoundary.js';
 import type { ConversationDebugRendererService } from '@setsuna-desktop/feature-conversation-debug/renderer';
 import type { ModelProviderRendererStateService } from '@setsuna-desktop/feature-model-provider/renderer';
 import type { NetworkProxyRendererStateService } from '@setsuna-desktop/feature-network-proxy/renderer';
@@ -25,6 +27,7 @@ import type { AutomationClient } from '@setsuna-desktop/feature-automation/rende
 import { AutomationFeatureServiceBoundary } from './automation/AutomationFeatureBoundary.js';
 
 export type BuiltinRendererFeatureServices = Readonly<{
+  pullRequests?: ThreadPullRequestsStateService | null;
   automation?: AutomationClient | null;
   collaboration: CollaborationRendererStateService;
   capabilitiesRefresh: CapabilitiesRefreshCoordinator;
@@ -62,7 +65,9 @@ export function BuiltinRendererFeatureServicesBoundary({
                     <RuntimeActivityFeatureServiceBoundary service={services.runtimeActivity}>
                       <PluginManagementFeatureServiceBoundary service={services.pluginManagement}>
                         <SkillsFeatureServiceBoundary service={services.skills}>
-                          <AutomationFeatureServiceBoundary client={services.automation ?? null}>{children}</AutomationFeatureServiceBoundary>
+                          <PullRequestsFeatureServiceBoundary service={services.pullRequests ?? null}>
+                            <AutomationFeatureServiceBoundary client={services.automation ?? null}>{children}</AutomationFeatureServiceBoundary>
+                          </PullRequestsFeatureServiceBoundary>
                         </SkillsFeatureServiceBoundary>
                       </PluginManagementFeatureServiceBoundary>
                     </RuntimeActivityFeatureServiceBoundary>
