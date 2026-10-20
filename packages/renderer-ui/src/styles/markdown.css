@@ -87,6 +87,80 @@
   margin-bottom: 0;
 }
 
+/* GitHub alerts are produced by rehypeGitHubAlerts; the left rule carries the alert tone. */
+.chat-markdown .sd-markdown-alert {
+  --sd-markdown-alert-color: var(--app-info);
+  border-left-color: var(--sd-markdown-alert-color);
+  color: var(--app-text);
+}
+
+.chat-markdown .sd-markdown-alert--tip { --sd-markdown-alert-color: var(--app-success); }
+.chat-markdown .sd-markdown-alert--important { --sd-markdown-alert-color: var(--sd-palette-purple); }
+.chat-markdown .sd-markdown-alert--warning { --sd-markdown-alert-color: var(--app-warning); }
+.chat-markdown .sd-markdown-alert--caution { --sd-markdown-alert-color: var(--app-danger); }
+
+.chat-markdown .sd-markdown-alert__title {
+  margin-bottom: 0.35em;
+  color: var(--sd-markdown-alert-color);
+  font-weight: 600;
+}
+
+/* Collapsible HTML blocks keep inline summary text and draw a chevron in the hanging indent. */
+.chat-markdown details {
+  margin: 0 0 var(--chat-markdown-block-gap, 0.9em);
+  padding-left: 1.15em;
+}
+
+.chat-markdown summary {
+  position: relative;
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  list-style: none;
+  cursor: pointer;
+}
+
+.chat-markdown summary::-webkit-details-marker {
+  display: none;
+}
+
+.chat-markdown summary::before {
+  position: absolute;
+  top: 0.62em;
+  left: -0.95em;
+  width: 0.34em;
+  height: 0.34em;
+  border-right: 1.5px solid var(--app-text-muted);
+  border-bottom: 1.5px solid var(--app-text-muted);
+  content: '';
+  transform: rotate(-45deg);
+  transition: transform 140ms ease;
+}
+
+.chat-markdown details[open] > summary {
+  margin-bottom: 0.5em;
+}
+
+.chat-markdown details[open] > summary::before {
+  transform: rotate(45deg);
+}
+
+.chat-markdown summary:focus-visible {
+  border-radius: var(--app-radius-xs);
+  outline: 2px solid var(--app-focus-outline);
+  outline-offset: 2px;
+}
+
+/* Task checkboxes hang in the marker gutter so item text aligns with regular list items. */
+.chat-markdown .task-list-item {
+  list-style: none;
+}
+
+.chat-markdown .task-list-item > .sd-checkbox__box {
+  margin: 0 0.4em 0 -1.45em;
+  vertical-align: -0.22em;
+}
+
 .chat-markdown hr {
   height: 1px;
   margin: 1.55em 0;
