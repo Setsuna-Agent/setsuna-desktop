@@ -21,7 +21,6 @@ function mockFrames() {
   } as MediaQueryList);
   return {
     callbacks,
-    elapse(ms: number) { now += ms; },
     reduce() { reducedMotion = true; },
     frame(ms = 16) {
       now += ms;
@@ -45,18 +44,17 @@ describe('useSmoothedStreamingContent', () => {
       { initialProps: { content: '' } },
     );
     const content = '连续输出的文字不会因为网络不断追加而重置等待时间';
-    for (let length = 1; length <= 4; length += 1) {
+    for (let length = 1; length <= content.length; length += 1) {
       view.rerender({ content: content.slice(0, length) });
-      frames.elapse(4);
+      frames.frame(4);
+      expect(content.startsWith(view.result.current)).toBe(true);
     }
-    expect(view.result.current).toBe('');
+    // Busy transports must not keep postponing publication until deltas stop.
+    expect(view.result.current.length).toBeGreaterThan(0);
+    expect(view.result.current.length).toBeLessThan(content.length);
     expect(frames.callbacks.size).toBe(1);
-    frames.frame(0);
-    expect(view.result.current).toBe('连');
-    frames.frame();
-    expect(view.result.current).toBe('连续输');
-    frames.frame();
-    expect(view.result.current).toBe('连续输出');
+    frames.frame(500);
+    expect(view.result.current).toBe(content);
     expect(frames.callbacks.size).toBe(0);
   });
 
@@ -68,9 +66,9 @@ describe('useSmoothedStreamingContent', () => {
     );
     const content = `Intro. ${'流式正文'.repeat(250)}`;
     view.rerender({ content });
-    frames.frame();
+    frames.frame(64);
     expect(view.result.current.length).toBeGreaterThan('Intro. '.length);
-    expect(view.result.current.length).toBeLessThan(content.length / 10);
+    expect(view.result.current.length).toBeLessThan(content.length / 4);
     let previous = view.result.current;
     for (let index = 0; index < 125; index += 1) {
       frames.frame();
@@ -87,11 +85,11 @@ describe('useSmoothedStreamingContent', () => {
       ({ content }) => useSmoothedStreamingContent(content, true),
       { initialProps: { content: '' } },
     );
-    const graphemes = ['中', '文', '👩🏽‍💻', 'e\u0301', '🇨🇳', '结', '束'];
+    const graphemes = Array.from({ length: 5 }, () => ['中', '文', '👩🏽‍💻', 'e\u0301', '🇨🇳', '结', '束']).flat();
     const content = graphemes.join('');
-    const prefixes = new Set(graphemes.map((_, index) => graphemes.slice(0, index + 1).join('')));
+    const prefixes = new Set(['', ...graphemes.map((_, index) => graphemes.slice(0, index + 1).join(''))]);
     view.rerender({ content });
-    for (let index = 0; index < 8; index += 1) {
+    for (let index = 0; index < 32; index += 1) {
       frames.frame();
       expect(prefixes.has(view.result.current)).toBe(true);
     }

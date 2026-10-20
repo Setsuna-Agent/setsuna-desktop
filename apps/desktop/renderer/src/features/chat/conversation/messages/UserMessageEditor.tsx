@@ -19,6 +19,7 @@ export function UserMessageEditor(props: UserMessageEditorProps) {
           disabled={locked || attachments.atLimit}
           onChange={(event) => { editor.addFiles(Array.from(event.currentTarget.files ?? [])); event.currentTarget.value = ''; }} />
         <ChatComposerOverlays
+          anchor="caret"
           editorRef={editor.editorRef}
           mentionMenu={{ activeIndex: commands.activeMentionIndex, items: commands.mentionItems, hasProject: Boolean(props.activeProject),
             loadError: commands.loadError, loading: commands.loading, open: !locked && commands.mentionMenuOpen,

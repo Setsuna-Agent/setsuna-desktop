@@ -9,9 +9,10 @@ import { chatMentionItemKey, type ChatMentionItem } from '../mentions/chatMentio
 import { useActiveOptionScroll } from './useActiveOptionScroll.js';
 
 export function ChatMentionCommandMenu({
-  activeIndex, items, hasProject, loadError, loading, onHover, onSelect,
+  activeIndex, compact = false, items, hasProject, loadError, loading, onHover, onSelect,
 }: {
   activeIndex: number;
+  compact?: boolean;
   items: ChatMentionItem[];
   hasProject: boolean;
   loadError: string;
@@ -25,7 +26,7 @@ export function ChatMentionCommandMenu({
     activeItem ? chatMentionItemKey(activeItem) : null,
   );
   const hasFiles = items.some((item) => item.kind === 'workspace');
-  const showSectionTitles = items.some((item) => item.kind !== items[0]?.kind);
+  const showSectionTitles = items.some((item) => item.kind !== (compact ? items[0]?.kind : 'workspace'));
   return (
     <div className="chat-command-menu chat-project-entry-command-menu" role="listbox" aria-label={t('chat.command.mentions')}>
       <div ref={scrollContainerRef} className="chat-command-menu__list">

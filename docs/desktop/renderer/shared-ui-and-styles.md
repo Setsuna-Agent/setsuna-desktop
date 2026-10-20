@@ -32,7 +32,9 @@
 `MermaidDiagram` 为聊天、工作区文件预览和 `DocumentMarkdown` 的 `mermaid` 代码块提供图表。Mermaid 按需加载，流式更新合并后串行布局，卸载或源码变化会取消尚未开始的任务并丢弃迟到结果；加载或语法失败保留各入口的源码视图。渲染使用 strict 安全模式，生成的 SVG 作为图片展示，不绑定图表中的链接或脚本。`mermaid-theme.ts` 将宿主字体与颜色 token 转成图片内可用的主题，使用无渐变、无阴影的扁平节点；主题和字体改变时重新渲染。图表在正文中按可用宽度完整展示，点击复用 `ImagePreview` 放大查看。
 
 - Motion 负责复选框、开关和通知动画；`motion.ts` 提供复选框与通知使用的 spring 参数，开关的参数随组件维护。
-- `collapsible/` 持有共享的 `CollapsibleContent`，负责受控展开与收起后的卸载；展开状态由调用方管理。
+- `toast/provider.tsx` 持有共享通知队列、去重、数量限制和 `useToast`。宿主 `app/providers/ToastProvider.tsx` 只注入本地化标签；Feature 的 `SettingsViewUi.Toast` 和页面中的 `ToastNotice` 复用同一队列。状态驱动的通知在错误清除、重试或组件卸载时撤下。独立 SDK 控件没有外层 provider 时，`ToastNotice` 使用局部队列；需要跨控件共享通知的应用应挂载 `ToastProvider`。
+- 通知区域保持 live-region 语义，避免被模态弹窗隐藏；点击通知不触发 Dialog 的外部点击关闭，失败后的表单和重试入口继续保留。
+- `collapsible/` 持有共享的 `CollapsibleContent`，负责受控展开与收起后的卸载；展开状态由调用方管理。通过 `0fr → 1fr` 网格轨道展开自然高度，不读取缩放后的 DOMRect 作为动画高度，避免切回 `auto` 时跳动；内层容器承接内容间距，完全收拢后再卸载，减少动态效果偏好下直接切换。
 - `drag/` 和 `styles/drag-feedback.css` 参考 beUI Sortable List，统一原生拖动快照、排序占位与弹簧让位；拖动时才测量位置和创建预览，结束或卸载后清理。业务 payload、保存和取消仍由各入口持有；面板标签命中检测使用未变换的目标位置，避免动画影响排序判断。
 - `FileIcon` 使用 Symbols，统一按跨平台路径的文件名选择文件类型图标；workspace、artifact 和插件卡片复用这个入口，尺寸由各自样式控制。
 - `FileTreeSurface` / `FileTreeRow` 为文件面板、审查和 PR Diff 文件树共用的 beUI 视觉层：26px 行高、12px 字号、16px 层级缩进、展开箭头、引导线与选中背景滑动。目录行默认只显示展开箭头，文件行保留类型图标并省略空白箭头占位，同层名称对齐；每行按深度延续所有祖先层级的引导线，展开多层目录后外层线段保持连续。每个 surface 隔离布局动画并跟踪自身滚动，减少动态效果时关闭移动动画。Surface 挂载时直接显示现有行，避免文件标签切换导致的重新挂载重播整树入场动画；目录展开后新增的行仍有入场过渡。目录加载、筛选、拖放、文件选择仍由各 Feature 持有。
@@ -49,7 +51,7 @@
 - 业务专用内容仍留在所属 Feature，弹窗外壳使用共享 `Dialog`，不要复制 backdrop、Escape 监听或 focus trap。
 - 标题同排的页签或操作使用 `Dialog.headerActions`，与标题保持独立语义；正文提交操作继续放在 `footer`。
 - 确认操作统一使用居中的 `ConfirmDialog`：按钮入口使用 `ConfirmDialogTrigger`，hook/流程入口使用 `useConfirm` 并等待结果。`I18nProvider` 挂载 `ConfirmationProvider`；调用方卸载会取消等待中的确认。不要使用原生 `window.confirm` / `alert`、Electron message box 或按钮旁的确认气泡。
-- 确认组件负责危险按钮、取消、执行中禁用和错误展示，沿用共享弹窗的边距、透明 footer 和初始焦点。原生文件/目录选择器仍由 Electron 持有。
+- 确认组件负责危险按钮、取消、执行中禁用和失败通知；失败后保留弹窗与重试操作，沿用共享弹窗的边距、透明 footer 和初始焦点。原生文件/目录选择器仍由 Electron 持有。
 
 新增组件前先确认：
 

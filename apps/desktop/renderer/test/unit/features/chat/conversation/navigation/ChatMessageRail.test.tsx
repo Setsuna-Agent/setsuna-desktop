@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { useRef } from 'react';
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -61,27 +62,30 @@ describe('chat message navigation', () => {
     ], 200, 600, 4000)).toBe(1);
   });
 
-  it('previews on hover and keyboard focus, jumps in scaled coordinates, and resumes follow only for the last tick', () => {
+  it('previews on hover and keyboard focus, jumps in scaled coordinates, and resumes follow only for the last tick', async () => {
+    const user = userEvent.setup();
     render(<Harness />);
     mockGeometry(1.25);
     const nav = screen.getByRole('navigation', { name: '消息导航' });
     const buttons = within(nav).getAllByRole('button');
     expect(buttons[0].getAttribute('aria-current')).toBe('location');
-    fireEvent.pointerEnter(buttons[1]);
+    await user.hover(buttons[1]);
     expect(screen.getByRole('tooltip').textContent).toContain('First response preview');
-    fireEvent.click(buttons[1]);
+    await user.click(buttons[1]);
     expect(onScrollToOffset).toHaveBeenCalledWith(300);
     expect(onScrollToBottom).not.toHaveBeenCalled();
-    fireEvent.pointerLeave(buttons[1].parentElement!);
-    act(() => buttons[1].focus());
-    fireEvent.keyDown(buttons[1], { key: 'ArrowDown' });
+    await user.unhover(buttons[1]);
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    await user.tab();
+    expect(document.activeElement).toBe(buttons[0]);
+    await user.keyboard('{ArrowDown}{ArrowDown}');
     expect(document.activeElement).toBe(buttons[2]);
     expect(screen.getByRole('tooltip').textContent).toContain('Latest question');
-    fireEvent.keyDown(buttons[2], { key: 'Escape' });
+    await user.keyboard('{Escape}');
     expect(screen.queryByRole('tooltip')).toBeNull();
-    fireEvent.keyDown(buttons[2], { key: 'End' });
+    await user.keyboard('{End}');
     expect(document.activeElement).toBe(buttons[3]);
-    fireEvent.click(buttons[3]);
+    await user.keyboard('{Enter}');
     expect(onScrollToBottom).toHaveBeenCalledOnce();
   });
 

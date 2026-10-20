@@ -6,6 +6,7 @@ import type { ResolvedChatToolResult } from '@setsuna-desktop/renderer-contracts
 import { ChevronDown } from 'lucide-react';
 import {
   Fragment,
+  memo,
   useEffect,
   useRef,
   useState,
@@ -109,17 +110,19 @@ function toolRunGroupKindClassName(kind: ToolRunGroupKind): string {
   return `chat-tool-run--${modifier}`;
 }
 
-export function RuntimeToolRuns({
-  children,
-  runs,
-  onAnswerApproval,
-  summaryMode = 'aggregate',
-}: {
+type RuntimeToolRunsProps = {
   children?: ReactNode;
   runs: RuntimeToolRun[];
   onAnswerApproval: AnswerApprovalHandler;
   summaryMode?: ToolRunSummaryMode;
-}) {
+};
+
+export const RuntimeToolRuns = memo(function RuntimeToolRuns({
+  children,
+  runs,
+  onAnswerApproval,
+  summaryMode = 'aggregate',
+}: RuntimeToolRunsProps) {
   const resolveFeatureToolResult = useRuntimeFeatureToolResultResolver();
   const visibleRuns = runs.filter(isDisplayableRuntimeToolRun);
   if (!visibleRuns.length) return null;
@@ -149,7 +152,15 @@ export function RuntimeToolRuns({
       <ToolRunDisplayPanel group={group} nestedDetails={children} onAnswerApproval={onAnswerApproval} />
     </div>
   );
-}
+}, (previous, next) => (
+  previous.children === next.children
+  && previous.onAnswerApproval === next.onAnswerApproval
+  && previous.summaryMode === next.summaryMode
+  // Timeline projection rebuilds the array while unrelated thinking grows.
+  // Runtime events replace changed runs, so unchanged entries can retain their subtree.
+  && previous.runs.length === next.runs.length
+  && previous.runs.every((run, index) => run === next.runs[index])
+));
 
 export function RuntimeAssistantTailToolResults({ runs }: Readonly<{ runs: RuntimeToolRun[] }>) {
   const resolveFeatureToolResult = useRuntimeFeatureToolResultResolver();

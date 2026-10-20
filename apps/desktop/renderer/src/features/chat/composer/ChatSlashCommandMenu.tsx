@@ -43,11 +43,13 @@ export type SlashCommandMenuItem =
 
 export function ChatSlashCommandMenu({
   activeIndex,
+  compact = false,
   items,
   onHover,
   onSelect,
 }: {
   activeIndex: number;
+  compact?: boolean;
   items: SlashCommandMenuItem[];
   onHover: (index: number) => void;
   onSelect: (item: SlashCommandMenuItem) => void;
@@ -69,13 +71,13 @@ export function ChatSlashCommandMenu({
                 role="group"
                 aria-label={sectionLabel}
               >
-                {sections.length > 1 ? <div className="chat-command-menu__title">{sectionLabel}</div> : null}
+                {!compact || sections.length > 1 ? <div className="chat-command-menu__title">{sectionLabel}</div> : null}
                 {section.items.map(({ index, item }) => (
                   <Button variant="ghost"
                     ref={index === activeIndex ? activeOptionRef : undefined}
                     key={item.key}
                     type="button"
-                    className={`chat-command-menu__item ${index === activeIndex ? 'is-active' : ''}`}
+                    className={`chat-command-menu__item ${item.kind === 'skill' ? 'chat-command-menu__item--skill' : ''} ${index === activeIndex ? 'is-active' : ''}`}
                     disabled={item.kind === 'action' && item.disabled}
                     role="option"
                     aria-selected={index === activeIndex}
@@ -86,7 +88,7 @@ export function ChatSlashCommandMenu({
                     }}
                     onMouseMove={() => onHover(index)}
                   >
-                    <SlashCommandIcon item={item} />
+                    <SlashCommandIcon item={item} compact={compact} />
                     <span className="chat-command-menu__item-main">
                       <span className="chat-command-menu__item-title">{item.kind === 'skill' ? item.skill.name : item.kind === 'plugin' ? item.plugin.name : item.title}</span>
                       {item.kind === 'plugin' ? <span className="chat-command-menu__item-desc">{item.plugin.description ?? item.plugin.id}</span> : item.kind === 'skill' ? (
@@ -130,10 +132,12 @@ function unresolvedSkillMcpDependencyCount(skill: Extract<SlashCommandMenuItem, 
     + (skill.dependencyErrors?.length ? 1 : 0);
 }
 
-function SlashCommandIcon({ item }: { item: SlashCommandMenuItem }) {
-  if (item.kind === 'plugin') return <PluginIcon name={item.plugin.icon} iconImage={item.plugin.iconImage} pluginId={item.plugin.id} variant="inline" className="chat-command-menu__item-icon" />;
+function SlashCommandIcon({ item, compact }: { item: SlashCommandMenuItem; compact: boolean }) {
+  const iconVariant = compact ? 'inline' : 'menu';
+  const iconClassName = compact ? 'chat-command-menu__item-icon' : undefined;
+  if (item.kind === 'plugin') return <PluginIcon name={item.plugin.icon} iconImage={item.plugin.iconImage} pluginId={item.plugin.id} variant={iconVariant} className={iconClassName} />;
   if (item.kind === 'skill') {
-    return <SkillIcon skill={item.skill} variant="inline" className="chat-command-menu__item-icon" />;
+    return <SkillIcon skill={item.skill} variant={iconVariant} className={iconClassName} />;
   }
   if (item.kind === 'model') return <Zap className="chat-command-menu__item-icon" fill="currentColor" size={15} strokeWidth={0} />;
   if (item.type === 'attachment') return <Paperclip className="chat-command-menu__item-icon" size={15} />;

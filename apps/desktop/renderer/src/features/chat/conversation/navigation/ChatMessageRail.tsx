@@ -22,7 +22,10 @@ export function ChatMessageRail({ items, scrollRef, contentRef, onScrollToOffset
   const previewIndex = items.findIndex((item) => item.id === (hoveredId ?? focusedId));
   const preview = items[previewIndex];
   const focusedIndex = items.findIndex((item) => item.id === focusedId);
-  const railHeight = Math.min(items.length * 14, Math.max(14, layout.height - 24));
+  const railHeight = Math.min(items.length * 12, Math.max(12, layout.height - 24));
+  // Snap filled strokes to device pixels; border widths round down and become too thin under zoom.
+  const tickHeight = Math.max(1, Math.round(2 * layout.pixelScale)) / layout.pixelScale;
+  const railPixelTop = layout.pixelTop + (layout.height - railHeight) / 2 * layout.pixelScale;
   const previewTop = Math.max(8, Math.min(layout.height - 88,
     (layout.height - railHeight) / 2 + (previewIndex + 0.5) * railHeight / items.length - 40));
   const roleLabel = (item: ChatMessageNavigationItem) => t(item.role === 'user' ? 'chat.navigation.user' : 'chat.navigation.assistant');
@@ -40,6 +43,7 @@ export function ChatMessageRail({ items, scrollRef, contentRef, onScrollToOffset
     else if (event.key === 'End') next = items.length - 1;
     else return;
     event.preventDefault();
+    setFocusedId(items[next].id);
     buttonsRef.current.get(items[next].id)?.focus({ preventScroll: true });
   };
 
@@ -50,7 +54,9 @@ export function ChatMessageRail({ items, scrollRef, contentRef, onScrollToOffset
           const distance = hoveredIndex < 0 ? Infinity : Math.abs(index - hoveredIndex);
           const scale = distance === 0 ? 1 : distance === 1 ? 0.68 : distance === 2 ? 0.44 : 0.25;
           const readingCoverage = Math.max(0, Math.min(1, index + 1 - layout.readingStart, layout.readingEnd - index));
-          const highlight = index === previewIndex ? 1 : readingCoverage;
+          const highlight = previewIndex >= 0 ? Number(index === previewIndex) : readingCoverage;
+          const tickTop = (index + 0.5) * railHeight / items.length - tickHeight / 2;
+          const alignedTop = (Math.round(railPixelTop + tickTop * layout.pixelScale) - railPixelTop) / layout.pixelScale;
           return (
             <button
               key={item.id}
@@ -62,6 +68,11 @@ export function ChatMessageRail({ items, scrollRef, contentRef, onScrollToOffset
               aria-describedby={index === previewIndex ? previewId : undefined}
               tabIndex={index === (focusedIndex < 0 ? layout.activeIndex : focusedIndex) ? 0 : -1}
               onPointerEnter={() => setHoveredId(item.id)}
+              onPointerDown={(event) => {
+                // Only keyboard navigation should retain a preview after the pointer leaves.
+                event.preventDefault();
+                setFocusedId(null);
+              }}
               onFocus={() => setFocusedId(item.id)}
               onBlur={() => setFocusedId(null)}
               onKeyDown={(event) => moveFocus(event, index)}
@@ -73,7 +84,13 @@ export function ChatMessageRail({ items, scrollRef, contentRef, onScrollToOffset
                 }
               }}
             >
-              <span style={{ '--chat-rail-highlight': `${highlight * 100}%`, transform: `scaleX(${scale})`, opacity: 0.45 + highlight * 0.55 } as CSSProperties} />
+              <span style={{
+                '--chat-rail-highlight': `${highlight * 100}%`,
+                top: alignedTop,
+                height: tickHeight,
+                transform: `scaleX(${scale})`,
+                opacity: 0.45 + highlight * 0.55,
+              } as CSSProperties} />
             </button>
           );
         })}

@@ -10,19 +10,27 @@ export function useChatMessageRail({ items, scrollRef, contentRef }: {
   const identity = JSON.stringify(items.map((item) => item.id));
   const ids = useMemo<string[]>(() => JSON.parse(identity), [identity]);
   const targetsRef = useRef(new Map<string, HTMLElement>());
-  const [layout, setLayout] = useState({ activeIndex: 0, readingStart: 0, readingEnd: 0, height: 0, top: 0, width: 0, visible: false });
+  const [layout, setLayout] = useState({
+    activeIndex: 0, readingStart: 0, readingEnd: 0, height: 0, top: 0, width: 0,
+    pixelScale: 1, pixelTop: 0, visible: false,
+  });
 
-  const readPositions = useCallback((): ChatMessagePosition[] => {
+  const measure = useCallback(() => {
     const viewport = scrollRef.current;
-    if (!viewport) return [];
+    if (!viewport) return null;
     const viewportTop = viewport.getBoundingClientRect().top;
     const inverse = pageScaleInverse();
-    return ids.flatMap((id) => {
+    const positions: ChatMessagePosition[] = ids.flatMap((id) => {
       const target = targetsRef.current.get(id);
       if (!target) return [];
       const rect = target.getBoundingClientRect();
       return [{ id, top: viewport.scrollTop + (rect.top - viewportTop) * inverse, height: rect.height * inverse }];
     });
+    return {
+      positions,
+      pixelScale: window.devicePixelRatio / inverse,
+      pixelTop: viewportTop * window.devicePixelRatio,
+    };
   }, [ids, scrollRef]);
 
   useLayoutEffect(() => {
@@ -34,7 +42,9 @@ export function useChatMessageRail({ items, scrollRef, contentRef }: {
     let frame: number | null = null;
     const sync = () => {
       frame = null;
-      const positions = readPositions();
+      const measured = measure();
+      if (!measured) return;
+      const { positions, pixelScale, pixelTop } = measured;
       const readingRange = chatMessageReadingRange(positions, viewport.scrollTop, viewport.clientHeight);
       const next = {
         activeIndex: activeChatMessageIndex(positions, viewport.scrollTop, viewport.clientHeight, viewport.scrollHeight),
@@ -43,10 +53,13 @@ export function useChatMessageRail({ items, scrollRef, contentRef }: {
         height: viewport.clientHeight,
         top: viewport.offsetTop,
         width: viewport.clientWidth,
+        pixelScale,
+        pixelTop,
         visible: positions.length > 1 && viewport.clientHeight > 0 && viewport.scrollHeight > viewport.clientHeight + 1,
       };
       setLayout((current) => current.activeIndex === next.activeIndex && current.height === next.height
         && current.readingStart === next.readingStart && current.readingEnd === next.readingEnd
+        && current.pixelScale === next.pixelScale && current.pixelTop === next.pixelTop
         && current.top === next.top && current.width === next.width && current.visible === next.visible ? current : next);
     };
     const schedule = () => {
@@ -66,14 +79,14 @@ export function useChatMessageRail({ items, scrollRef, contentRef }: {
       window.removeEventListener('resize', schedule);
       observer.disconnect();
     };
-  }, [contentRef, readPositions, scrollRef]);
+  }, [contentRef, measure, scrollRef]);
 
   const messageOffset = useCallback((id: string): number | null => {
     const viewport = scrollRef.current;
-    const position = readPositions().find((entry) => entry.id === id);
+    const position = measure()?.positions.find((entry) => entry.id === id);
     if (!viewport || !position) return null;
     return Math.max(0, position.top - Math.max(0, (viewport.clientHeight - position.height) / 2));
-  }, [readPositions, scrollRef]);
+  }, [measure, scrollRef]);
 
   return { layout, messageOffset };
 }

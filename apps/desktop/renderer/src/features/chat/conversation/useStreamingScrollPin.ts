@@ -84,13 +84,11 @@ export function useStreamingScrollPin(updateSignal: string, stateKey: string, in
   }, []);
 
   const scheduleScrollToBottom = useCallback(() => {
-    if (!pinnedRef.current) return;
-    scrollToBottom();
-    if (typeof window === 'undefined') return;
+    if (!pinnedRef.current || scheduledFrameRef.current !== null || typeof window === 'undefined') return;
 
     const token = scheduleTokenRef.current + 1;
     scheduleTokenRef.current = token;
-    if (scheduledFrameRef.current !== null) window.cancelAnimationFrame(scheduledFrameRef.current);
+    // Coalesce resize/scroll notifications without forcing layout during React's commit.
     scheduledFrameRef.current = window.requestAnimationFrame(() => {
       scheduledFrameRef.current = null;
       if (token !== scheduleTokenRef.current || !pinnedRef.current) return;
@@ -152,6 +150,12 @@ export function useStreamingScrollPin(updateSignal: string, stateKey: string, in
 
   useLayoutEffect(() => {
     if (pinnedRef.current) scheduleScrollToBottom();
+  }, [scheduleScrollToBottom, stateKey]);
+
+  useLayoutEffect(() => {
+    // Source deltas can arrive before smoothed Markdown changes height. The observer
+    // below follows the actual content; only older environments need this fallback.
+    if (typeof ResizeObserver === 'undefined') scheduleScrollToBottom();
   }, [scheduleScrollToBottom, stateKey, updateSignal]);
 
   useLayoutEffect(() => {

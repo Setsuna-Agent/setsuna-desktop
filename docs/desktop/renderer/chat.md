@@ -89,7 +89,7 @@ Active turn 时普通提交默认排队；显式立即发送才尝试 steer。Go
 - `chatComposerModeState.ts`：当前模型能力、Goal 和 thinking selection 的纯状态模型。
 - `useChatComposerModeController.ts`：Goal、thinking、model/usage view state 与 send options。
 - `ChatComposerFooter.tsx`：命令入口、审批策略、模式徽标、模型/思考强度选择与 send/stop/queue 主操作的纯展示组合。
-- `ChatComposerOverlays.tsx`：`@`、`/`、`$` 候选浮层的展示组合，通过 `editor/composerCaretRect.ts` 读取真实光标位置；底部输入框和消息编辑框共用。
+- `ChatComposerOverlays.tsx`：`@`、`/`、`$` 候选菜单的展示组合；调用方显式选择 `composer` 或 `caret` 定位，只有消息编辑框通过 `editor/composerCaretRect.ts` 读取真实光标位置。
 - `chatAttachments.ts` / `chatImageAttachments.ts`：本地文件引用、无路径图片托管与清理。
 - `chatCommandUtils.ts`：`@`、`/`、`$` 光标位置命令解析。
 - `chatComposerCommandState.ts`：mention/slash visibility、dismiss 和 cursor-local query 的纯状态模型。
@@ -114,7 +114,7 @@ Active turn 时普通提交默认排队；显式立即发送才尝试 steer。Go
 
 Command controller 只拥有输入菜单交互，不负责发送、附件、Goal 或 queued edit 事务。Mention 菜单优先于强制打开的 slash 菜单；dismiss 只绑定当前 draft；queued edit 只阻止 slash menu。Project entry 搜索切换 query 或关闭菜单时会取消旧请求的写回。
 
-`@`、`/`、`$` 候选通过共享 `AnchoredPopover` 挂到浮层容器，贴近光标展示，空间不足时自动翻转和避让视口边缘，不占用编辑框布局。定位仅在菜单打开时跟随选区、滚动和布局变化，保留编辑器焦点与原生撤销记录。紧凑单行样式统一放在 `styles/chat-command-menu.css`；名称按内容占宽，说明与路径截断，来源放在行尾，只有一种分类时省略分类标题。`@` 的完整路径仍可悬停查看。
+新建对话、底部和侧边对话输入框的 `@`、`/`、`$` 候选保留输入框上方的等宽菜单。只有对话内消息编辑使用共享 `AnchoredPopover` 挂到浮层容器，贴近光标展示窄菜单，空间不足时自动翻转和避让视口边缘。光标定位仅在消息编辑菜单打开时跟随选区、滚动和布局变化，保留编辑器焦点与原生撤销记录。菜单样式统一放在 `styles/chat-command-menu.css`，紧凑样式限定在 `.chat-command-popover` 内；窄菜单名称按内容占宽，说明与路径截断，来源放在行尾，只有一种分类时省略分类标题。`@` 的完整路径仍可悬停查看。
 
 裸 `/` 菜单同时保留 quick actions 和最多 8 个 enabled、未选择的 Skill slot；quick action 数量不占用 Skill 的显示额度。`$` 复用该菜单的焦点、关闭和键盘导航，仅提供 Skill；后续输入按名称、ID 和描述筛选，Enter/Tab 或点击将光标处的命令替换为 Skill 引用并保留周围文字。两种入口共用 Skill 过滤和引用插入逻辑。
 
@@ -165,7 +165,7 @@ Runtime 一轮可能包含：
 - 新消息、delta、工具卡高度变化后的锚点。
 - Thread 切换后的重置。
 
-展开的思考面板同时观察正文与视口尺寸，跟随 Markdown 分帧显示、代码和图片异步渲染后的实际高度。内容变化触发的滚动不会解除跟随；用户上滚、键盘向上翻页或拖动滚动条时暂停，回到底部后恢复。思考结束沿用同一视口，保留阅读位置；首次展开已完成的历史思考从开头阅读。
+展开的思考面板同时观察正文与视口尺寸，跟随 Markdown 分批显示、代码和图片异步渲染后的实际高度。尺寸与滚动通知合并到同一个 animation frame，原始文本 delta 不再触发同步布局读写。内容变化触发的滚动不会解除跟随；用户上滚、键盘向上翻页或拖动滚动条时暂停，回到底部后恢复。思考结束沿用同一视口，保留阅读位置；首次展开已完成的历史思考从开头阅读。
 
 `ChatWorkspaceScroll` 负责主滚动容器：流式增长由持续的 animation frame 平滑追踪，新的 delta 只更新终点。用户上滚立即停止跟随，向下回到距离底部 56px 内或点击回到底部才恢复；减少动态效果偏好和线程初始定位直接到达目标。加载更早的历史先退出跟随，再恢复 prepend 前的锚点。
 
@@ -252,9 +252,9 @@ Enter / Shift+Enter 循环跳转，Esc 或关闭按钮清理观察器和高亮�
 - 大内容虚拟块。
 - 外链与本地链接的不同打开策略。
 
-流式正文按 parser block 分成已提交稳定区和可变尾部。追加 delta 只对尾部执行修复与词法分析；表格、setext heading、列表、fenced code 和未闭合 display math 在后续 block 证明边界前不能提交。引用式链接、引用定义和脚注从首次出现处起保留在同一个可变 Markdown tree，确保稍后到达的定义仍能解析前面的引用。消息进入终态时必须丢弃流式补全字符，并用持久化原文做一次 canonical full parse。
+流式正文按 parser block 分成已提交稳定区和可变尾部。追加 delta 只对尾部执行修复与块边界词法分析，不重复执行 Markdown 渲染器负责的行内解析；表格、setext heading、列表、fenced code 和未闭合 display math 在后续 block 证明边界前不能提交。引用式链接、引用定义和脚注从首次出现处起保留在同一个可变 Markdown tree，确保稍后到达的定义仍能解析前面的引用。消息进入终态时必须丢弃流式补全字符，并用持久化原文做一次 canonical full parse。虚拟块由持续的 ResizeObserver 维护占位高度，避免文本更新时重建观察器并同步测量，也保留可变尾部变为稳定块前的实际高度。
 
-正文呈现参考 [beUI Streaming Response](https://beui.dev/components/agents/streaming-response)：`useSmoothedStreamingContent` 使用持续的 `requestAnimationFrame` 按约 110 个字素/秒追加内容，网络突发积压时提高推进速度。新的 delta 只更新目标文本，不重启正在运行的帧循环。普通文本节点直接更新，不再给每个词添加模糊、位移或延迟动画；历史内容、终态、正文改写和减少动态效果偏好直接显示原文。流式容器通过 `aria-busy` 标记状态，已有 Markdown 块继续复用。
+正文呈现参考 [beUI Streaming Response](https://beui.dev/components/agents/streaming-response)：`useSmoothedStreamingContent` 使用持续的 `requestAnimationFrame` 按约 110 个字素/秒累计内容，网络突发积压时提高推进速度。文本提交间隔至少 50 ms，并通过 React transition 让用户交互优先，避免长列表、代码和引用区域逐帧重解析。新的 delta 只更新目标文本，不重启正在运行的帧循环。普通文本节点直接更新，不再给每个词添加模糊、位移或延迟动画；历史内容、终态、正文改写和减少动态效果偏好直接显示原文。流式容器通过 `aria-busy` 标记状态，已有 Markdown 块和未变化的工具运行区域继续复用。`pnpm benchmark:streaming-markdown` 用合成长思考和实际输出 hook 测量提交次数及解析/渲染耗时，不启动浏览器。
 
 `MarkdownNavigationProvider` 统一导航，`WorkspaceFileLink` 走 workspace 能力，不能让 Markdown 任意调用 `window.open` 或本地 shell。
 

@@ -56,10 +56,12 @@ export const MarkdownVirtualBlock = memo(function MarkdownVirtualBlock({
     measure();
 
     if (typeof ResizeObserver === 'undefined') return undefined;
+    // Keep the observer across text updates. It measures actual growth after layout,
+    // including a mutable tail's final height before it can become a placeholder.
     const observer = new ResizeObserver(measure);
     observer.observe(block);
     return () => observer.disconnect();
-  }, [canVirtualize, content, shouldRender]);
+  }, [canVirtualize, shouldRender]);
 
   const className = [
     'chat-markdown__block',

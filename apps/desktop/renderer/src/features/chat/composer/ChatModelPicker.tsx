@@ -38,6 +38,8 @@ export function ChatModelPicker({
   const selectedKey = provider && model ? `model:${modelOptionKey(provider.id, model.id)}` : '';
   const thinkingMenu = createChatThinkingMenu(thinkingControl, t);
   const modelSelectorTitle = t(model ? 'chat.model.switch' : 'chat.model.select');
+  const modelLabel = model?.name
+    ?? t(config && fallbackModelCode ? 'chat.model.unavailable' : 'chat.model.noneSelected');
   const modelBrand = provider && model ? resolveModelBrand(model, provider) : null;
 
   const changeOpen = useCallback((nextOpen: boolean) => {
@@ -68,7 +70,7 @@ export function ChatModelPicker({
   items.push({
     key: 'models',
     label: t('chat.model.label'),
-    extra: <span className="chat-model-menu__current-model">{model?.name ?? fallbackModelCode ?? t('chat.model.noneSelected')}</span>,
+    extra: <span className="chat-model-menu__current-model">{modelLabel}</span>,
     submenuClassName: 'model-picker-menu sd-menu-surface--neutral',
     submenuInitialFocusRef: searchRef,
     children: createModelMenu({
@@ -103,7 +105,7 @@ export function ChatModelPicker({
                 ) : <Zap className="chat-model-selector__placeholder-icon" size={13} />}
               </span>
             ) : null}
-            <span className="chat-model-selector__name">{model?.name ?? fallbackModelCode ?? t('chat.model.noneSelected')}</span>
+            <span className="chat-model-selector__name">{modelLabel}</span>
             {thinkingMenu && thinkingControl.enabled ? <span className="chat-model-selector__effort">{thinkingMenu.label}</span> : null}
             <ChevronDown size={12} aria-hidden="true" />
           </Button>

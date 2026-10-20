@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { memo, useMemo, useRef } from 'react';
 import { OpenUiMarkdownDocument } from '../generative-ui/OpenUiMarkdownDocument.js';
 import { splitOpenUiContent } from '../generative-ui/openUiContent.js';
 import {
@@ -12,7 +12,7 @@ import {
 } from './streamingMarkdown.js';
 import { useSmoothedStreamingContent } from './useSmoothedStreamingContent.js';
 
-export function MarkdownRenderer({
+export const MarkdownRenderer = memo(function MarkdownRenderer({
   content,
   legacyThinkingTags = true,
   allowOpenUi = false,
@@ -58,7 +58,7 @@ export function MarkdownRenderer({
       ))}
     </>
   );
-}
+});
 
 function MarkdownSegment({
   allowOpenUi,

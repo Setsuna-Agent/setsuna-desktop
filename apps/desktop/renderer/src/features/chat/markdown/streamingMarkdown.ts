@@ -35,7 +35,7 @@ export function parseMarkdownBlocks(markdown: string): string[] {
   if (documentScopedMarkdownPattern.test(markdown)) return [markdown];
 
   try {
-    return Lexer.lex(markdown, { gfm: true })
+    return lexMarkdownBlocks(markdown)
       .filter((token) => {
         // MarkdownContentBlock enables skipHtml, so top-level HTML tokens produce no
         // layout box. Keeping them would make virtualization alternate between an
@@ -127,7 +127,7 @@ function partitionStreamingTail(source: string): {
 
 function markdownTokenBoundaries(markdown: string): MarkdownTokenBoundary[] | null {
   try {
-    const tokens = Lexer.lex(markdown, { gfm: true });
+    const tokens = lexMarkdownBlocks(markdown);
     const boundaries: MarkdownTokenBoundary[] = [];
     let cursor = 0;
     for (const token of tokens) {
@@ -145,6 +145,12 @@ function markdownTokenBoundaries(markdown: string): MarkdownTokenBoundary[] | nu
   } catch {
     return null;
   }
+}
+
+function lexMarkdownBlocks(markdown: string) {
+  // Only raw block boundaries are consumed here. Inline parsing belongs to
+  // ReactMarkdown; running Marked's inline queue too duplicates it on every delta.
+  return new Lexer({ gfm: true }).blockTokens(markdown.replace(/\r\n?/g, '\n'));
 }
 
 function documentScopedMarkdownOffset(markdown: string): number | null {
