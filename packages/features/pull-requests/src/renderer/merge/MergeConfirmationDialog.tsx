@@ -1,4 +1,4 @@
-import { Button, Dialog, TextArea, TextField } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, Button, Dialog, TextArea, TextField } from '@setsuna-desktop/renderer-ui';
 import { GitCommitHorizontal } from 'lucide-react';
 import { useId } from 'react';
 import type { PullRequestMergeMessage } from '../../contracts/index.js';
@@ -65,7 +65,7 @@ export function MergeConfirmationDialog({ client, confirmation, pending, error, 
         <span>{t(`mergeMethod.${method}`)}</span>
         <p>{t('autoMergeDescription')}</p>
       </div> : null}
-      {error || draft.error ? <p className="sd-control-error" role="alert">{error || draft.error}</p> : null}
+      {error || draft.error ? <ToastNotice message={error || draft.error} /> : null}
     </form>
   </Dialog>;
 }

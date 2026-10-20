@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { PullRequestDetail, PullRequestReference } from '../contracts/index.js';
+import { pullRequestKey, type PullRequestReference } from '../contracts/index.js';
 import type { PullRequestsClient } from './client.js';
 import { errorText } from './context.js';
+import { useSessionData, type PullRequestDetailData } from './reading/session-data.js';
 
-export function usePullRequestDetail(client: PullRequestsClient, reference: PullRequestReference) {
-  const [detail, setDetail] = useState<PullRequestDetail | null>(null);
+export function usePullRequestDetail(client: PullRequestsClient, reference: PullRequestReference, data: PullRequestDetailData) {
+  const [detail, setDetail] = useSessionData(data.detail, pullRequestKey(reference), null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [revision, setRevision] = useState(0);
@@ -30,7 +31,7 @@ export function usePullRequestDetail(client: PullRequestsClient, reference: Pull
         setLoading(false);
       }
     }
-  }, [client, repository, number]);
+  }, [client, repository, number, setDetail]);
   const refresh = useCallback(() => {
     setRevision((value) => value + 1);
     return load();

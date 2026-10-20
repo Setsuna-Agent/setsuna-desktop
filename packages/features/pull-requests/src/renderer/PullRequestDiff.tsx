@@ -27,7 +27,7 @@ export function PullRequestDiff({ client, detail, account, discussions, focus, o
   const { CodePatch } = usePullRequestsHost();
   const { view: { activePath, search, layout, wrap, collapsed }, update } = usePullRequestDiffSession(session);
   const focusedAnnotation = useRef<number | null>(null);
-  const files = usePullRequestFiles(client, detail, activePath);
+  const files = usePullRequestFiles(client, detail, activePath, session.data);
   const codeScroll = useReadingScroll(session.scroll, `diff:${detail.baseSha}:${detail.headSha}:${files.path}`, Boolean(files.patch));
   const treeScroll = useReadingScroll(session.scroll, 'files', !files.loading);
   useEffect(() => {

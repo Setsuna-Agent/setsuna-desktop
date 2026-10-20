@@ -20,7 +20,7 @@ import { useReadingScroll } from './reading/useReadingScroll.js';
 export function PullRequestDetailPane({ client, reference, summary, account, session, onUpdated }: {
   client: PullRequestsClient; reference: PullRequestReference; summary?: PullRequestSummary; account: string; session: PullRequestDetailSession; onUpdated(): void;
 }) {
-  const request = usePullRequestDetail(client, reference);
+  const request = usePullRequestDetail(client, reference, session.data);
   const t = usePrText();
   const updated = useCallback(() => { void request.refresh(); onUpdated(); }, [request.refresh, onUpdated]);
   return <main className="pr-detail-pane" aria-busy={request.loading}>
@@ -36,7 +36,7 @@ function DetailBody({ client, detail, account, session, revision, refreshing, on
   const [diff, setDiff] = useState<{ focus: DiffFocus | null } | null>(null);
   const checksRef = useRef<HTMLDivElement>(null);
   const scroll = useReadingScroll(session.scroll, 'detail');
-  const discussions = useDiscussions(client, detail, revision);
+  const discussions = useDiscussions(client, detail, revision, session.data);
   const openDiff = () => setDiff({ focus: null });
   const showChecks = () => {
     scroll.cancelRestore();
@@ -51,8 +51,8 @@ function DetailBody({ client, detail, account, session, revision, refreshing, on
       /></>} />
     <PullRequestScrollArea className="pr-detail__body" contentClassName="pr-detail__main" scrollRef={scroll.scrollRef} onScroll={scroll.onScroll}>
       <PullRequestTitle pr={detail} branches={<PullRequestBranches detail={detail} />} />
-      <DiscussionTimeline client={client} detail={detail} account={account} discussions={discussions} revision={revision} onPublished={onUpdated}
-        checks={<div ref={checksRef}><PullRequestChecks client={client} detail={detail} revision={revision} /></div>}
+      <DiscussionTimeline client={client} detail={detail} account={account} discussions={discussions} revision={revision} data={session.data} onPublished={onUpdated}
+        checks={<div ref={checksRef}><PullRequestChecks client={client} detail={detail} revision={revision} data={session.data} /></div>}
         onDiff={(discussion) => setDiff({ focus: { discussion, version: Date.now() } })} />
     </PullRequestScrollArea>
     {diff ? <PullRequestDiffDialog client={client} detail={detail} account={account} discussions={discussions}

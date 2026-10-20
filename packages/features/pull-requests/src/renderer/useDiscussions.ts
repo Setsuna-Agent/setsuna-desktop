@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import type { PullRequestDetail, PullRequestDiscussion, PullRequestDiscussionInput } from '../contracts/index.js';
+import { pullRequestKey, type PullRequestDetail, type PullRequestDiscussion, type PullRequestDiscussionInput } from '../contracts/index.js';
 import type { PullRequestsClient } from './client.js';
 import { errorText } from './context.js';
+import { useSessionData, type DiscussionFeeds, type PullRequestDetailData } from './reading/session-data.js';
 
 type Kind = PullRequestDiscussionInput['kind'];
 const kinds: Kind[] = ['comments', 'reviews', 'threads', 'commits'];
-type Feed = { items: PullRequestDiscussion[]; cursor: string | null; depth: number; error: string };
-export function useDiscussions(client: PullRequestsClient, detail: PullRequestDetail, revision: number) {
-  const [feeds, setFeeds] = useState<Partial<Record<Kind, Feed>>>({});
+const emptyFeeds: DiscussionFeeds = {};
+export function useDiscussions(client: PullRequestsClient, detail: PullRequestDetail, revision: number, data: PullRequestDetailData) {
+  const [feeds, setFeeds] = useSessionData(data.discussions, pullRequestKey(detail), emptyFeeds);
   const [pending, setPending] = useState(false);
   const [repliesPending, setRepliesPending] = useState<string | null>(null);
   const [replyError, setReplyError] = useState('');
@@ -48,7 +49,7 @@ export function useDiscussions(client: PullRequestsClient, detail: PullRequestDe
       }
     })).finally(() => { if (!request.signal.aborted) setPending(false); });
     return () => request.abort();
-  }, [client, repository, number, updatedAt, revision]);
+  }, [client, repository, number, updatedAt, revision, setFeeds]);
 
   const more = async () => {
     const signal = controller.current?.signal;
@@ -80,7 +81,7 @@ export function useDiscussions(client: PullRequestsClient, detail: PullRequestDe
     finally { if (!signal.aborted) setRepliesPending(null); }
   };
   const items = Object.values(feeds).flatMap((feed) => feed?.items ?? []).sort((a, b) => (a.comments[0]?.createdAt ?? '').localeCompare(b.comments[0]?.createdAt ?? ''));
-  return { items, pending, more, moreReplies, repliesPending, hasMore: Object.values(feeds).some((feed) => feed?.cursor), errors: [...Object.values(feeds).flatMap((feed) => feed?.error ? [feed.error] : []), ...(replyError ? [replyError] : [])] };
+  return { items, pending, loaded: kinds.every((kind) => feeds[kind]), more, moreReplies, repliesPending, hasMore: Object.values(feeds).some((feed) => feed?.cursor), errors: [...Object.values(feeds).flatMap((feed) => feed?.error ? [feed.error] : []), ...(replyError ? [replyError] : [])] };
 }
 export type DiscussionsState = ReturnType<typeof useDiscussions>;
 function mergeDiscussions(current: PullRequestDiscussion[], next: PullRequestDiscussion[]) {
