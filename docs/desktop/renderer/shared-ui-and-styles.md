@@ -8,6 +8,8 @@
 
 应用与项目图标、创建应用模板、插件/Skill 图标、Git 分支图和终端 ANSI 彩色输出共用鲜亮色板。TypeScript 色值由 `renderer-ui/src/styles/palette.ts` 的 `VIVID_PALETTE` 提供，CSS 使用同目录 `palette.css` 的 `--sd-palette-*`；两份定义保持一致。明暗主题保留相同的识别色，背景、正文、分隔线与禁用态继续使用宿主的中性 token；终端由 xterm 的最小对比度调整保证彩色文字可读。应用生成指南与 Documents 插件预设同步采用相同配色。
 
+项目图标选择器使用 `shared/ui/project-icon-presets.ts` 的 24 个精选图案，避开系统功能按钮使用的符号；各项目入口统一通过 `ProjectIcon` 展示。候选清单独立于 contracts 的完整图标键集合，旧项目图标继续支持显示、改色、保存和同步，恢复默认仍使用文件夹。
+
 ## 子目录
 
 | 目录 | 职责 |
