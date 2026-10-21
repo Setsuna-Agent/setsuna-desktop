@@ -1,11 +1,33 @@
-import type { AssistantMessage, AssistantMessageEvent } from '@earendil-works/pi-ai';
-import type { ProviderConfigState } from '@setsuna-desktop/contracts';
+import type { AssistantMessage, AssistantMessageEvent, ToolCall } from '@earendil-works/pi-ai';
+import type { ModelStreamEvent, ProviderConfigState } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import type { ModelProviderRuntimeConfig } from '../../src/contracts/index.js';
 import { createPiReplayContext } from '../../src/runtime/pi-context.js';
 import { bridgePiStream } from '../../src/runtime/pi-stream-bridge.js';
 
 describe('Pi stream bridge', () => {
+  it.each([true, false])('rejects malformed tool arguments before execution or replay (tool end event: %s)', async (withToolEnd) => {
+    const provider = providerFixture();
+    const toolCall: ToolCall = {
+      type: 'toolCall', id: 'call-invalid', name: 'run_shell_command', arguments: {},
+      argumentsError: 'Tool arguments are not a valid JSON object: {"command":',
+    };
+    const terminal = { ...assistantMessage(), content: [toolCall] };
+    const events: AssistantMessageEvent[] = [
+      ...(withToolEnd ? [{ type: 'toolcall_end' as const, contentIndex: 0, toolCall, partial: terminal }] : []),
+      { type: 'done', reason: 'toolUse', message: terminal },
+    ];
+    const projected: ModelStreamEvent[] = [];
+    const consume = async () => {
+      for await (const event of bridgePiStream(iterate(events), provider, createPiReplayContext(provider, 'gpt-test'))) {
+        projected.push(event);
+      }
+    };
+
+    await expect(consume()).rejects.toThrow(toolCall.argumentsError);
+    expect(projected).toEqual([]);
+  });
+
   it('projects item lifecycle, tool calls, usage, and replay metadata', async () => {
     const provider = providerFixture();
     const terminal = assistantMessage();

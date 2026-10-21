@@ -48,6 +48,8 @@ describe('remote model catalog', () => {
     const directory = await temporaryDirectory();
     const catalog = createCatalog(directory);
     const independent = createCatalog(await temporaryDirectory());
+    const bundledModels = catalog.snapshot().providers.find((provider) => provider.id === 'opencode-go')!.plans
+      .flatMap((plan) => plan.models).map((model) => model.code);
     const fetch = vi.fn(async () => remoteResponse()) as unknown as typeof globalThis.fetch;
     expect(findNewModel(catalog)).toBeUndefined();
     await catalog.refresh('opencode-go', fetch);
@@ -60,7 +62,7 @@ describe('remote model catalog', () => {
     await restored.restore();
     expect(findNewModel(restored)).toEqual(findNewModel(catalog));
     expect(restored.snapshot().providers.find((provider) => provider.id === 'opencode-go')?.plans
-      .flatMap((plan) => plan.models).some((model) => model.code === 'deepseek-v4-flash')).toBe(true);
+      .flatMap((plan) => plan.models).map((model) => model.code)).toEqual(expect.arrayContaining(bundledModels));
     expect(createPiModel({
       id: 'go', catalogProviderId: 'opencode-go', name: 'Go', provider: 'openai-compatible',
       baseUrl: 'https://opencode.ai/zen/go/v1', apiKey: 'private', enabled: true, models: [],

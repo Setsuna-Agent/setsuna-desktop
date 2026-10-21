@@ -29,9 +29,8 @@ describe('Anthropic thinking at the provider boundary', () => {
   });
 
   it.each([
-    ['claude-opus-5', null],
-    ['claude-opus-5', 'anthropic'],
     ['claude-fable-5', null],
+    ['claude-fable-5', 'anthropic'],
   ] as const)('does not send disabled thinking to an always-on title model (%s, catalog %s)', async (model, catalogProviderId) => {
     const capture = transport();
     await sample({ ...provider(model), catalogProviderId }, capture.fetch, {
@@ -59,11 +58,17 @@ describe('Anthropic thinking at the provider boundary', () => {
     expect(capture.bodies[0]).toHaveProperty('temperature', 0);
   });
 
-  it('keeps thinking disabled for a title model that supports disabling it', async () => {
+  it.each([
+    ['claude-opus-4-5', null, true],
+    ['claude-opus-5', null, false],
+    ['claude-opus-5', 'anthropic', false],
+  ] as const)('disables title thinking according to current capabilities (%s, catalog %s)', async (model, catalogProviderId, supportsTemperature) => {
     const capture = transport();
-    await sample(provider('claude-opus-4-5'), capture.fetch, { thinking: false, temperature: 0 });
+    await sample({ ...provider(model), catalogProviderId }, capture.fetch, { thinking: false, temperature: 0 });
 
-    expect(capture.bodies[0]).toMatchObject({ thinking: { type: 'disabled' }, temperature: 0 });
+    expect(capture.bodies[0]).toMatchObject({ thinking: { type: 'disabled' } });
+    if (supportsTemperature) expect(capture.bodies[0]).toHaveProperty('temperature', 0);
+    else expect(capture.bodies[0]).not.toHaveProperty('temperature');
   });
 
   it.each(['http', 'stream'] as const)('switches an unknown model alias to adaptive thinking without dropping effort or title schema (%s)', async (delivery) => {

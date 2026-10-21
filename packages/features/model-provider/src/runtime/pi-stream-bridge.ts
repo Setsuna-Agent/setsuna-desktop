@@ -160,11 +160,11 @@ export async function* bridgePiStream(
   const normalizedTerminal = decodeLegacyThinkTags && !state.dedicatedReasoningObserved
     ? normalizeLegacyAssistant(terminal)
     : terminal;
-  const providerMetadata = providerMetadataForAssistant(normalizedTerminal, replayContext);
-  if (providerMetadata) yield { type: 'assistant_metadata', providerMetadata };
   const toolCalls = normalizedTerminal.content
     .filter((block): block is ToolCall => block.type === 'toolCall')
     .map(toRuntimeToolCall);
+  const providerMetadata = providerMetadataForAssistant(normalizedTerminal, replayContext);
+  if (providerMetadata) yield { type: 'assistant_metadata', providerMetadata };
   if (toolCalls.length) yield { type: 'tool_calls', toolCalls };
   yield {
     type: 'usage',
@@ -378,6 +378,8 @@ function textPhase(block: TextContent | ThinkingContent | ToolCall | undefined):
 }
 
 function toRuntimeToolCall(toolCall: ToolCall) {
+  // Pi replaces malformed final arguments with {}; never execute that fallback.
+  if (toolCall.argumentsError) throw new Error(toolCall.argumentsError);
   return {
     id: callId(toolCall.id),
     name: toolCall.name,
