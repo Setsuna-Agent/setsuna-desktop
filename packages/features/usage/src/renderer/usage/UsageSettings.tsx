@@ -9,6 +9,8 @@ import { UsageBreakdownCard } from './UsageBreakdownCard.js';
 import { UsageFilterBar } from './UsageFilterBar.js';
 import { UsageHero } from './UsageHero.js';
 import { UsageRecentCalls } from './UsageRecentCalls.js';
+import { UsageSettingsLoading } from '../UsageSettingsLoading.js';
+import { UsageSkeleton } from './UsageSkeleton.js';
 import { usageRangeLabel } from './usage-format.js';
 import {
   DEFAULT_USAGE_FILTERS,
@@ -17,6 +19,7 @@ import {
   type UsageFilters,
 } from './usageFilters.js';
 import { useUsageView } from './view-context.js';
+import { useProgressiveUsageSections } from './useProgressiveUsageSections.js';
 
 type UsageSettingsProps = {
   providers: readonly UsageProviderDescriptor[];
@@ -25,7 +28,9 @@ type UsageSettingsProps = {
 };
 
 export function UsageSettings({ providers, usage, onQueryUsage }: UsageSettingsProps) {
-  const { translate: t, ui: { PageHeading, Section } } = useUsageView();
+  const { translate: t, ui } = useUsageView();
+  const { PageHeading, Section } = ui;
+  const visible = useProgressiveUsageSections(usage !== null);
   // 选择立即更新以组合连续操作；数据保持上次成功的筛选，请求失败时还原选择。
   const [selectedFilters, setSelectedFilters] = useState<UsageFilters>(DEFAULT_USAGE_FILTERS);
   const [filters, setFilters] = useState<UsageFilters>(DEFAULT_USAGE_FILTERS);
@@ -72,6 +77,8 @@ export function UsageSettings({ providers, usage, onQueryUsage }: UsageSettingsP
     }
   };
 
+  if (!usage) return <UsageSettingsLoading translate={t} ui={ui} />;
+
   return (
     <>
       <PageHeading
@@ -98,19 +105,21 @@ export function UsageSettings({ providers, usage, onQueryUsage }: UsageSettingsP
           />
 
           <div className="settings-usage-breakdowns">
-            <UsageBreakdownCard buckets={summary?.byModel ?? []} providers={providers} variant="model" />
-            <UsageBreakdownCard buckets={summary?.byProvider ?? []} providers={providers} variant="provider" />
+            {visible.breakdowns ? <>
+              <UsageBreakdownCard buckets={summary?.byModel ?? []} providers={providers} variant="model" />
+              <UsageBreakdownCard buckets={summary?.byProvider ?? []} providers={providers} variant="provider" />
+            </> : <><UsageSkeleton kind="breakdown" /><UsageSkeleton kind="breakdown" /></>}
           </div>
 
-          <UsageActivityCalendar buckets={usage?.summary.byDay ?? []} />
+          {visible.calendar ? <UsageActivityCalendar buckets={usage.summary.byDay} /> : <UsageSkeleton kind="calendar" />}
 
-          <UsageRecentCalls
+          {visible.records ? <UsageRecentCalls
             providers={providers}
             query={activeQuery}
             records={displayedUsage?.records ?? []}
             totalRecordCount={recordCount}
             onQueryUsage={onQueryUsage}
-          />
+          /> : <UsageSkeleton kind="records" />}
         </div>
       </Section>
     </>

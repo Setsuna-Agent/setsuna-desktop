@@ -1,3 +1,4 @@
+import { usageRecordMetadata, usageTurnModelKey } from '../contracts/record-metadata.js';
 import type {
   ModelProviderKind,
   RuntimeUsageRecord,
@@ -59,7 +60,14 @@ export class FileUsageStore {
     const offset = clampOffset(query.offset);
     return {
       records: filtered.slice(offset, offset + limit),
-      summary: summarizeUsage(filtered),
+      summary: {
+        ...summarizeUsage(filtered),
+        // Reconciliation must use the complete ledger, independently of the details page.
+        ...(query.threadId ? { byTurnModel: bucket(
+          filtered.filter((record) => !record.source || record.source === 'conversation' || record.source === 'compaction'),
+          (record) => usageTurnModelKey(record.turnId, record),
+        ) } : {}),
+      },
     };
   }
 
@@ -96,6 +104,10 @@ function resolveLegacyProviders(
   providers: readonly UsageProvider[],
 ): RuntimeUsageRecord[] {
   return records.map((record) => {
+    if (record.providerId && !record.provider) {
+      const provider = providers.find((item) => item.id === record.providerId);
+      return provider ? { ...record, provider: provider.name.trim() || provider.id } : record;
+    }
     if (record.providerId || !isLegacyProviderKind(record.provider)) return record;
     const protocolMatches = providers.filter((provider) => provider.provider === record.provider);
     const modelMatches = record.model
@@ -269,6 +281,7 @@ function sum(records: RuntimeUsageRecord[], key: 'inputTokens' | 'cachedInputTok
 function normalizeRecord(record: RuntimeUsageRecord): RuntimeUsageRecord {
   return {
     ...record,
+    ...usageRecordMetadata(record),
     inputTokens: numberValue(record.inputTokens),
     cachedInputTokens: numberValue(record.cachedInputTokens),
     outputTokens: numberValue(record.outputTokens),

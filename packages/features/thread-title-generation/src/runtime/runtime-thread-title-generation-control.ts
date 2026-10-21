@@ -83,6 +83,7 @@ export class RuntimeThreadTitleGenerationControl implements ThreadTitleGeneratio
       const generated = await generateThreadTitle({
         attachmentCount: input.attachmentCount,
         sessionId: input.thread.id,
+        turnId: input.turnId,
         host: this.host,
         model: model.model,
         now: this.host.now(),
@@ -91,7 +92,6 @@ export class RuntimeThreadTitleGenerationControl implements ThreadTitleGeneratio
         userContent: input.userContent,
       });
       signal.throwIfAborted();
-      if (generated.usage) await this.host.recordUsage(input.thread.id, input.turnId, generated.usage);
       if (generated.title) await this.commit(input, generated.title, signal);
     }).catch(() => undefined);
   }

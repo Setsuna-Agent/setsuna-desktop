@@ -1,3 +1,4 @@
+import { UsageTrackingModelClient } from '../../../src/adapters/model/usage-tracking-model-client.js';
 import {
   type ModelRequest,
   type ModelStreamEvent,
@@ -168,7 +169,11 @@ describe('RuntimeContextCompactor', () => {
     expect(requests).toBe(outcome === 'cancel' ? 2 : 3);
     expect(events.some((event) => event.type === 'thread.context_compacted')).toBe(false);
     expect(messages).toEqual(original);
-    expect(usageStore.records).toHaveLength(1);
+    expect(usageStore.records).toHaveLength(requests);
+    expect(usageStore.records.slice(1).map((record) => record.result)).toEqual(
+      outcome === 'cancel' ? ['cancelled'] : ['error', 'error'],
+    );
+    expect(usageStore.records.slice(1).every((record) => record.totalTokens === undefined)).toBe(true);
   });
 
   it('batches a single large tool-call record and retained context without dropping either source', async () => {
@@ -613,14 +618,13 @@ function createCompactor(
     clock: { now: () => new Date('2026-07-11T00:00:00.000Z') },
     debugTrace,
     ids: { id: (prefix) => `${prefix}_1` },
-    modelClient,
+    modelClient: usageStore ? new UsageTrackingModelClient(modelClient, { clock: { now: () => new Date() }, recorder: usageStore }) : modelClient,
     appendEvent: async (_threadId, event) => {
       events.push(event);
       return { ...event, seq: events.length } as RuntimeEvent;
     },
     onCompacted: () => undefined,
     runCompactHooks: async () => ({}),
-    usageStore,
   });
 }
 

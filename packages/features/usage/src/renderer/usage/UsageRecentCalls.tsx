@@ -1,15 +1,17 @@
-import { ToastNotice, IconButton } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice } from '@setsuna-desktop/renderer-ui';
 import type {
   RuntimeUsageRecord,
 } from '@setsuna-desktop/contracts';
 import { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type {
   RuntimeUsageQuery,
   RuntimeUsageResponse,
   UsageProviderDescriptor,
 } from '../../contracts/index.js';
+import { UsageColumnSettings } from './UsageColumnSettings.js';
 import { UsageRecordsTable } from './UsageRecordsTable.js';
+import { UsageRecordsPagination } from './UsageRecordsPagination.js';
+import { useUsageRecordColumns } from './useUsageRecordColumns.js';
 import { useUsageView } from './view-context.js';
 
 type UsageRecentCallsProps = {
@@ -30,6 +32,7 @@ export function UsageRecentCalls({
   onQueryUsage,
 }: UsageRecentCallsProps) {
   const { translate: t } = useUsageView();
+  const { columns, saveColumns } = useUsageRecordColumns();
   const [page, setPage] = useState(1);
   const [pageRecords, setPageRecords] = useState(() => records.slice(0, PAGE_SIZE));
   const [pageLoading, setPageLoading] = useState(false);
@@ -50,7 +53,7 @@ export function UsageRecentCalls({
   }, []);
 
   const loadPage = async (nextPage: number) => {
-    if (pageLoading || nextPage < 1 || nextPage > totalPages || nextPage === page) return;
+    if (pageLoading || !Number.isInteger(nextPage) || nextPage < 1 || nextPage > totalPages || nextPage === page) return;
     const requestVersion = requestVersionRef.current + 1;
     requestVersionRef.current = requestVersion;
     setPageLoading(true);
@@ -74,40 +77,17 @@ export function UsageRecentCalls({
   };
 
   return (
-    <section className="settings-usage-card settings-usage-records" aria-labelledby="settings-usage-records-title">
-      <header className="settings-usage-card__header">
-        <span className="settings-usage-eyebrow" id="settings-usage-records-title">{t('feature.usage.recentCalls')}</span>
-        <span className="settings-usage-card__meta">{totalRecordCount ? t('feature.usage.totalCalls', { count: totalRecordCount }) : t('feature.usage.noRecords')}</span>
-      </header>
-      <UsageRecordsTable providers={providers} records={pageRecords} loading={pageLoading} />
-      {totalPages > 1 ? (
-        <footer className="settings-usage-records__pagination" aria-label={t('feature.usage.pagination')}>
-          {pageError ? (
-            <ToastNotice message={pageError} />
-          ) : null}
-          <IconButton
-            label={t('feature.usage.previousPage')}
-            size="small"
-            variant="secondary"
-            disabled={page === 1 || pageLoading}
-            type="button"
-            onClick={() => void loadPage(page - 1)}
-          >
-            <ChevronLeft aria-hidden="true" />
-          </IconButton>
-          <span aria-live="polite">{t('feature.usage.pageStatus', { page, total: totalPages })}</span>
-          <IconButton
-            label={t('feature.usage.nextPage')}
-            size="small"
-            variant="secondary"
-            disabled={page === totalPages || pageLoading}
-            type="button"
-            onClick={() => void loadPage(page + 1)}
-          >
-            <ChevronRight aria-hidden="true" />
-          </IconButton>
-        </footer>
-      ) : null}
+    <section className="settings-usage-card settings-usage-records" aria-label={t('feature.usage.recentCalls')}>
+      <UsageRecordsTable visibleColumns={columns} providers={providers} records={pageRecords} loading={pageLoading} />
+      <UsageRecordsPagination
+        actions={<UsageColumnSettings columns={columns} onSave={saveColumns} />}
+        page={page}
+        totalPages={totalPages}
+        totalRecords={totalRecordCount}
+        loading={pageLoading}
+        onPageChange={(nextPage) => void loadPage(nextPage)}
+      />
+      {pageError ? <ToastNotice message={pageError} /> : null}
     </section>
   );
 }

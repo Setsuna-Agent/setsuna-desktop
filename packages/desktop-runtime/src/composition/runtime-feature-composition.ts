@@ -189,7 +189,6 @@ export async function activateBuiltinRuntimeFeatures(
           configStore: runtime.configStore,
           modelClient: runtime.modelClient,
           threadStore: runtime.threadStore,
-          usageStore: runtime.usageRecorder,
         }),
       ),
       provideHostCapability(

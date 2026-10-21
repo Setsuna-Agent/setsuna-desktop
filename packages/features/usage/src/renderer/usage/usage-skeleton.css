@@ -1,0 +1,85 @@
+.desktop-settings-panel .chat-user-settings__content[data-settings-feature='usage'] > .chat-user-settings__page-heading,
+.desktop-settings-panel .chat-user-settings__content[data-settings-feature='usage'] > .feature-usage {
+  width: min(1040px, 100%);
+}
+
+.feature-usage-loading { display: grid; gap: 16px; }
+.feature-usage-loading__breakdowns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+
+.feature-usage-skeleton {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid var(--settings-usage-hairline, var(--app-border));
+  border-radius: var(--settings-usage-radius, 14px);
+  background: var(--app-surface);
+  overflow: hidden;
+}
+
+.feature-usage-skeleton .feature-usage-skeleton__title { width: 100px; height: 16px; }
+.feature-usage-skeleton__caption { width: 65%; }
+.feature-usage-skeleton .feature-usage-skeleton__value { width: 55%; height: 56px; }
+.feature-usage-skeleton .feature-usage-skeleton__bar { height: 8px; }
+.feature-usage-skeleton__lines { display: grid; gap: 12px; }
+.feature-usage-skeleton__metrics { display: flex; gap: 24px; margin: 6px 0; }
+.feature-usage-skeleton__metrics > span { width: 64px; height: 36px; }
+
+.feature-usage-skeleton--overview {
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: 0;
+  min-height: 336px;
+  padding: 0;
+}
+
+.feature-usage-skeleton__summary { display: grid; align-content: start; gap: 16px; padding: 26px 24px 24px; }
+.feature-usage-skeleton__trend { display: grid; grid-template-rows: auto 1fr auto; gap: 16px; padding: 26px 24px 20px; }
+.feature-usage-skeleton .feature-usage-skeleton__plot { height: 100%; min-height: 180px; }
+.feature-usage-skeleton__row { display: grid; grid-template-columns: 24px minmax(0, 1fr) 60px; align-items: center; gap: 12px; min-height: 28px; }
+.feature-usage-skeleton .feature-usage-skeleton__icon { width: 24px; height: 24px; }
+.feature-usage-skeleton .feature-usage-skeleton__calendar { height: 120px; margin-bottom: 12px; }
+.feature-usage-skeleton--calendar .feature-usage-skeleton__metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.feature-usage-skeleton.feature-usage-skeleton--records { gap: 0; padding-block: 0; }
+.feature-usage-skeleton__table { min-width: 812px; }
+.feature-usage-skeleton__record {
+  display: grid;
+  grid-template-columns: 210fr 92fr 80fr 85fr 92fr 80fr 95fr 120fr;
+  align-items: center;
+  gap: 24px;
+  height: 56px;
+}
+.feature-usage-skeleton__record > span { justify-self: end; width: 40px; }
+.feature-usage-skeleton__record > span:last-child { width: 80px; }
+.feature-usage-skeleton__record--heading { height: 36px; }
+.feature-usage-skeleton__record--heading > span:first-child { justify-self: start; width: 64px; }
+.feature-usage-skeleton__record-model { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: center; gap: 10px; }
+.feature-usage-skeleton__record-model > div { display: grid; gap: 6px; }
+.feature-usage-skeleton__pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-block: 14px; }
+.feature-usage-skeleton__pagination > span { width: 100px; }
+.feature-usage-skeleton__pagination > div { display: flex; gap: 4px; margin-left: auto; }
+.feature-usage-skeleton__pagination > div > span { width: 28px; height: 28px; }
+
+.feature-usage-skeleton-filters { display: flex; flex: 0 1 516px; justify-content: flex-end; gap: 6px; min-width: 0; }
+.feature-usage-skeleton-filters > span { width: 168px; height: 28px; border-radius: var(--app-radius-full); }
+
+@media (max-width: 760px) {
+  .desktop-settings-panel .chat-user-settings__content[data-settings-feature='usage'] > .chat-user-settings__page-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .feature-usage-skeleton-filters { flex-basis: auto; }
+  .feature-usage-skeleton-filters > span { flex: 1; width: auto; }
+  .feature-usage-skeleton { padding: 18px; }
+  .feature-usage-skeleton--overview { padding: 0; }
+  .feature-usage-skeleton__summary,
+  .feature-usage-skeleton__trend { padding-inline: 18px; }
+  .feature-usage-skeleton .feature-usage-skeleton__value { height: 46px; }
+  .feature-usage-skeleton--calendar .feature-usage-skeleton__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 860px) {
+  .feature-usage-skeleton--overview,
+  .feature-usage-loading__breakdowns { grid-template-columns: minmax(0, 1fr); }
+  .feature-usage-skeleton .feature-usage-skeleton__plot { min-height: 140px; }
+}

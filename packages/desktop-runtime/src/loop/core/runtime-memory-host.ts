@@ -7,7 +7,6 @@ import type { ConfigStore } from '../../ports/config-store.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ModelClient } from '../../ports/model-client.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
-import type { UsageRecorder } from '../../ports/usage-store.js';
 import type { RuntimeEventWriter } from '../lifecycle/runtime-event-writer.js';
 import { resolveRuntimeTurnModel } from './runtime-thread-model.js';
 
@@ -19,7 +18,6 @@ type RuntimeMemoryHostDependencies = Readonly<{
   modelClient: ModelClient;
   store: MemoryStore;
   threadStore: ThreadStore;
-  usageStore?: UsageRecorder;
 }>;
 
 /** Adapts Core persistence/model services to Memory without exposing runtime internals. */
@@ -39,9 +37,6 @@ export function createRuntimeMemoryHost(
       await dependencies.eventWriter.append(threadId, event);
     },
     streamModel: (request) => dependencies.modelClient.stream(request),
-    recordUsage: async (input) => {
-      await dependencies.usageStore?.recordUsage(input);
-    },
     resolveModel: async ({
       selection,
       legacyModelCode,

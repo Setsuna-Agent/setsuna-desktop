@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, renderHook, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type {
   RuntimeUsageRecord,
@@ -11,14 +11,79 @@ import type {
   RuntimeUsageResponse,
   UsageProviderDescriptor,
   UsageRendererStateService,
+  UsageSnapshot,
 } from '../../src/contracts/index.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { UsageSettings } from '../../src/renderer/usage/UsageSettings.js';
 import { UsageRecentCalls } from '../../src/renderer/usage/UsageRecentCalls.js';
 import { UsageSettingsView } from '../../src/renderer/UsageSettingsView.js';
+import { useUsageSettingsData } from '../../src/renderer/useUsageSettingsData.js';
 import { usageTestTranslate, usageTestUi, usageView } from './support.js';
 
 afterEach(cleanup);
+
+describe('usage settings requests', () => {
+  it('cancels superseded loads and ignores late snapshots after refresh or unmount', async () => {
+    const first = deferred<UsageSnapshot>();
+    const second = deferred<UsageSnapshot>();
+    const third = deferred<UsageSnapshot>();
+    const query = vi.fn<UsageRendererStateService['query']>()
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise)
+      .mockReturnValueOnce(third.promise);
+    const service = usageService(query);
+    const view = renderHook(() => useUsageSettingsData(service));
+    expect(view.result.current.loading).toBe(true);
+    expect(view.result.current.snapshot).toBeNull();
+
+    act(() => service.invalidate('thread-1'));
+    expect(query.mock.calls[0][1]?.signal?.aborted).toBe(true);
+    const latest = { providers: [], usage: usageResponse(200) };
+    await act(async () => second.resolve(latest));
+    await act(async () => first.resolve({ providers: [], usage: usageResponse(100) }));
+    expect(view.result.current.snapshot).toBe(latest);
+    expect(view.result.current.loading).toBe(false);
+
+    act(() => service.invalidate('thread-1'));
+    expect(view.result.current.snapshot).toBe(latest);
+    view.unmount();
+    expect(query.mock.calls[2][1]?.signal?.aborted).toBe(true);
+    await act(async () => third.resolve({ providers: [], usage: usageResponse(300) }));
+    act(() => service.invalidate('thread-1'));
+    expect(query).toHaveBeenCalledTimes(3);
+  });
+
+  it('recovers from initial failure and keeps the baseline during filtering and a failed refresh', async () => {
+    const baseline = { providers: [], usage: usageResponse(100) };
+    const filtered = { providers: [], usage: usageResponse(42) };
+    const refreshed = { providers: [], usage: usageResponse(200) };
+    const query = vi.fn<UsageRendererStateService['query']>()
+      .mockRejectedValueOnce(new Error('Initial failure'))
+      .mockResolvedValueOnce(baseline)
+      .mockResolvedValueOnce(filtered)
+      .mockRejectedValueOnce(new Error('Refresh failure'))
+      .mockResolvedValueOnce(refreshed);
+    const service = usageService(query);
+    const view = renderHook(() => useUsageSettingsData(service));
+    await waitFor(() => expect(view.result.current.error).toBe('Initial failure'));
+    expect(view.result.current.snapshot).toBeNull();
+    expect(view.result.current.loading).toBe(false);
+
+    act(() => view.result.current.refresh());
+    await waitFor(() => expect(view.result.current.snapshot).toBe(baseline));
+    await act(async () => {
+      expect(await view.result.current.query({ model: 'model-a' })).toBe(filtered.usage);
+    });
+    expect(view.result.current.snapshot).toBe(baseline);
+
+    act(() => service.invalidate('thread-1'));
+    await waitFor(() => expect(view.result.current.error).toBe('Refresh failure'));
+    expect(view.result.current.snapshot).toBe(baseline);
+    act(() => view.result.current.refresh());
+    await waitFor(() => expect(view.result.current.snapshot).toBe(refreshed));
+    expect(view.result.current.error).toBeNull();
+  });
+});
 
 describe('UsageSettings', () => {
   it('refreshes the all-time snapshot after Usage is invalidated', async () => {
@@ -216,6 +281,48 @@ describe('UsageSettings', () => {
     }));
     expect(await screen.findByText('page-two-model')).toBeTruthy();
     expect(screen.getByText('2 / 2')).toBeTruthy();
+  });
+
+  it('navigates directly to distant pages and validates jumps without losing the current page on failure', async () => {
+    const user = userEvent.setup();
+    const onQueryUsage = vi.fn<(query: RuntimeUsageQuery) => Promise<RuntimeUsageResponse>>()
+      .mockResolvedValueOnce(usageResponse(100, [], [usageRecord(10, 'last-page-model')]))
+      .mockRejectedValueOnce(new Error('Page request failed'))
+      .mockResolvedValueOnce(usageResponse(100, [], [usageRecord(41, 'page-forty-two-model')]));
+    render(usageView(
+      <UsageRecentCalls
+        providers={[]}
+        query={{ provider: 'provider-1', model: 'model-a' }}
+        records={Array.from({ length: 10 }, (_, index) => usageRecord(index))}
+        totalRecordCount={1307}
+        onQueryUsage={onQueryUsage}
+      />,
+    ));
+
+    await user.click(screen.getByRole('button', { name: '第 131 页' }));
+    expect(await screen.findByText('last-page-model')).toBeTruthy();
+    expect(onQueryUsage).toHaveBeenLastCalledWith({ provider: 'provider-1', model: 'model-a', limit: 10, offset: 1300 });
+
+    const jumpInput = screen.getByRole<HTMLInputElement>('textbox', { name: '跳转页码' });
+    for (const invalidPage of ['0', '132', '2.5', 'abc', '131']) {
+      await user.clear(jumpInput);
+      await user.type(jumpInput, `${invalidPage}{Enter}`);
+    }
+    expect(onQueryUsage).toHaveBeenCalledTimes(1);
+
+    await user.clear(jumpInput);
+    await user.type(jumpInput, '42{Enter}');
+    expect(await screen.findByText('无法加载这一页，请重试。')).toBeTruthy();
+    expect(screen.getByText('last-page-model')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '第 131 页', current: 'page' })).toBeTruthy();
+    expect(jumpInput.value).toBe('42');
+
+    await user.click(screen.getByRole('button', { name: '跳转', exact: true }));
+    expect(await screen.findByText('page-forty-two-model')).toBeTruthy();
+    expect(onQueryUsage).toHaveBeenCalledTimes(3);
+    expect(onQueryUsage).toHaveBeenLastCalledWith({ provider: 'provider-1', model: 'model-a', limit: 10, offset: 410 });
+    expect(screen.getByRole('button', { name: '第 42 页', current: 'page' })).toBeTruthy();
+    expect(jumpInput.value).toBe('');
   });
 });
 

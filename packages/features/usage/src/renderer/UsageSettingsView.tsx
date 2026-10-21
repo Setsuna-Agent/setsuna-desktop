@@ -4,16 +4,12 @@ import type {
 import type {
   SettingsViewUi,
 } from '@setsuna-desktop/renderer-contracts/settings';
-import { useCallback, useEffect, useState } from 'react';
-import type {
-  RuntimeUsageQuery,
-  RuntimeUsageResponse,
-  UsageRendererStateService,
-  UsageSnapshot,
-} from '../contracts/index.js';
+import type { UsageRendererStateService } from '../contracts/index.js';
 import type { UsageRendererHost } from './capabilities.js';
+import { UsageSettingsLoading } from './UsageSettingsLoading.js';
 import { UsageSettings } from './usage/UsageSettings.js';
 import { UsageViewProvider } from './usage/view-context.js';
+import { useUsageSettingsData } from './useUsageSettingsData.js';
 import './usage.css';
 
 export function UsageSettingsView({
@@ -27,48 +23,7 @@ export function UsageSettingsView({
   translate: RendererTranslate;
   ui: SettingsViewUi;
 }>) {
-  const [snapshot, setSnapshot] = useState<UsageSnapshot | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const query = useCallback(async (
-    input: RuntimeUsageQuery = {},
-    options?: Readonly<{ signal?: AbortSignal }>,
-  ): Promise<RuntimeUsageResponse> => {
-    const next = await service.query(input, options);
-    const isBaseQuery = Object.keys(input).length === 0;
-    setSnapshot((current) => isBaseQuery || !current ? next : current);
-    return next.usage;
-  }, [service]);
-
-  const load = useCallback(async (signal?: AbortSignal) => {
-    setLoading(true);
-    setError(null);
-    try {
-      await query({}, { signal });
-    } catch (loadError) {
-      if (!signal?.aborted) {
-        setError(loadError instanceof Error ? loadError.message : String(loadError));
-      }
-    } finally {
-      if (!signal?.aborted) setLoading(false);
-    }
-  }, [query]);
-
-  useEffect(() => {
-    let abort: AbortController | null = null;
-    const refresh = () => {
-      abort?.abort();
-      abort = new AbortController();
-      void load(abort.signal);
-    };
-    const unsubscribe = service.subscribeInvalidation(refresh);
-    refresh();
-    return () => {
-      unsubscribe();
-      abort?.abort();
-    };
-  }, [load, service]);
+  const { snapshot, loading, error, refresh, query } = useUsageSettingsData(service);
 
   const { Button, EmptyState, PageHeading, Section } = ui;
   return (
@@ -79,26 +34,26 @@ export function UsageSettingsView({
           usage={snapshot.usage}
           onQueryUsage={query}
         />
-      ) : (
+      ) : loading ? <UsageSettingsLoading translate={translate} ui={ui} /> : (
         <>
           <PageHeading
             description={translate('feature.usage.settings.description')}
             title={translate('feature.usage.settings.title')}
           />
           <Section className="feature-usage" featureId="usage">
-            {loading ? <p className="feature-usage__status">{translate('feature.usage.loading')}</p> : null}
-            {!loading && error ? (
+            {error ? (
               <EmptyState
                 title={translate('feature.usage.loadFailed')}
                 body={error}
                 action={(
-                  <Button onClick={() => void load()}>{translate('feature.usage.retry')}</Button>
+                  <Button onClick={refresh}>{translate('feature.usage.retry')}</Button>
                 )}
               />
             ) : null}
           </Section>
         </>
       )}
+      {snapshot && error ? <ui.Toast tone="error" message={translate('feature.usage.loadFailed')} /> : null}
     </UsageViewProvider>
   );
 }

@@ -89,7 +89,6 @@ function memoryHost(): MemoryRuntimeHost {
     updateThreadMode: async () => { throw new Error('not used during setup'); },
     appendEvent: async () => undefined,
     streamModel: async function* streamModel() { yield* []; },
-    recordUsage: async () => undefined,
     resolveModel: async ({ fallbackModel }) => ({ model: fallbackModel }),
     hasActiveModel: async () => false,
     listModelOptions: async () => [],

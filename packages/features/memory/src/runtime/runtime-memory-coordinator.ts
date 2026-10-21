@@ -4,7 +4,6 @@ import type {
   RuntimeThread,
   RuntimeThreadSummary,
   RuntimeToolCall,
-  RuntimeUsage,
 } from '@setsuna-desktop/contracts';
 import type { RuntimeFeatureSettingsDocumentHandle } from '@setsuna-desktop/feature-core/settings';
 import type {
@@ -22,7 +21,6 @@ import type {
   RuntimeMemorySourceLocation,
 } from '../contracts/types.js';
 import {
-  addRuntimeUsage,
   compactForPrompt,
   errorMessage,
   escapeSkillAttribute,
@@ -417,10 +415,10 @@ export class RuntimeMemoryCoordinator implements MemoryControl {
       preferThreadModel: true,
     });
     let text = '';
-    let usage: RuntimeUsage | undefined;
     for await (const item of this.options.host.streamModel({
       ...extractionModel,
       sessionId: thread.id,
+      usageContext: { threadId: thread.id, turnId: sourceTurnId ?? 'memory_startup', source: 'memory' },
       messages: this.passiveMemoryPromptMessages(thread, messages, sourceLabel),
       maxOutputTokens: PASSIVE_MEMORY_MAX_OUTPUT_TOKENS,
       signal,
@@ -429,15 +427,6 @@ export class RuntimeMemoryCoordinator implements MemoryControl {
     })) {
       throwIfAborted(signal);
       if (item.type === 'text_delta') text += item.text;
-      if (item.type === 'usage') usage = addRuntimeUsage(usage, item.usage);
-    }
-    if (usage) {
-      await this.options.host.recordUsage({
-        threadId: thread.id,
-        turnId: sourceTurnId ?? 'memory_startup',
-        createdAt: this.options.host.now().toISOString(),
-        ...usage,
-      });
     }
 
     const extraction = passiveMemoryExtractionFromModelText(text, thread.projectId);
@@ -548,8 +537,11 @@ export class RuntimeMemoryCoordinator implements MemoryControl {
         legacyModelCode: preferences.consolidationModelCode,
         fallbackModel: MEMORY_CONSOLIDATION_MODEL,
       });
-      const consolidation = await runMemoryConsolidationAgent({
-        streamModel: (request) => this.options.host.streamModel(request),
+      await runMemoryConsolidationAgent({
+        streamModel: (request) => this.options.host.streamModel({
+          ...request,
+          usageContext: { threadId: ownerId, turnId: sourceTurnId ?? 'memory_startup', source: 'memory' },
+        }),
         ...consolidationModel,
         // Phase 2 is its own multi-round conversation, independent of the triggering thread.
         sessionId: this.options.host.id('memory_consolidation'),
@@ -561,15 +553,6 @@ export class RuntimeMemoryCoordinator implements MemoryControl {
           leaseSeconds: MEMORY_PHASE2_JOB_LEASE_SECONDS,
         }),
       });
-      if (consolidation.usage) {
-        await this.options.host.recordUsage({
-          threadId: ownerId,
-          turnId: sourceTurnId ?? 'memory_startup',
-          createdAt: this.options.host.now().toISOString(),
-          ...consolidation.usage,
-          requestCount: consolidation.rounds,
-        });
-      }
       throwIfAborted(signal);
       const stillOwnsLock = await memoryStore.heartbeatPhase2Job({
         ownershipToken,

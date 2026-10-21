@@ -21,7 +21,6 @@ import type { RuntimeEnvironmentResolver } from '../../ports/runtime-environment
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { ToolHost } from '../../ports/tool-host.js';
 import type { ToolResultStore } from '../../ports/tool-result-store.js';
-import type { UsageRecorder } from '../../ports/usage-store.js';
 import type { RuntimeEventWriter } from '../lifecycle/runtime-event-writer.js';
 
 export type AgentLoopOptions = {
@@ -39,7 +38,6 @@ export type AgentLoopOptions = {
   skillRegistry?: SkillRegistry;
   pluginStore?: Pick<import('../../ports/plugin-bundle-store.js').PluginBundleStore, 'listPlugins'>;
   toolHost?: ToolHost;
-  usageStore?: UsageRecorder;
   memoryStore?: MemoryStore;
   mcpStore?: Pick<McpStore, 'listServerInputs'>;
   policyAmendmentStore?: PolicyAmendmentStore;

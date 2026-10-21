@@ -1,4 +1,5 @@
-import { mkdtemp, realpath } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Terminal } from '@xterm/xterm';
@@ -8,6 +9,50 @@ import { terminalProcessOptions } from '../../../src/main/process-options.js';
 import { DesktopTerminalStore } from '../../../src/main/sessions.js';
 
 describe('desktop terminal store', () => {
+  it.skipIf(process.platform === 'win32')('keeps the action terminal usable after interrupting a running service', async () => {
+    const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-action-interrupt-'));
+    const events: DesktopTerminalEventPayload[] = [];
+    const store = new DesktopTerminalStore((event) => events.push(event));
+    try {
+      const session = await store.open({ workspaceRoot, command: { name: 'Server', command: 'printf "service-ready\\n"\nsleep 30' } });
+      await store.attach(session.sessionId, 80, 24);
+      await waitFor(() => events.some((event) => event.event === 'output' && String(event.data.text).includes('service-ready')));
+      store.write(session.sessionId, '\x03');
+      store.write(session.sessionId, 'pwd > after-interrupt.txt\r');
+      await waitFor(() => {
+        expect(events.filter((event) => event.event === 'exit')).toEqual([]);
+        return existsSync(path.join(workspaceRoot, 'after-interrupt.txt'));
+      });
+      expect((await readFile(path.join(workspaceRoot, 'after-interrupt.txt'), 'utf8')).trim()).toBe(await realpath(workspaceRoot));
+      expect(events.some((event) => event.event === 'exit')).toBe(false);
+    } finally { store.closeAll(); await rm(workspaceRoot, { recursive: true, force: true }); }
+  });
+
+  it('runs a multiline action once in its workspace and leaves an interactive shell after reattachment and restart', async () => {
+    const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-action-'));
+    const events: DesktopTerminalEventPayload[] = [];
+    const store = new DesktopTerminalStore((event) => events.push(event));
+    const command = process.platform === 'win32'
+      ? 'echo first>>runs.txt\necho second>>runs.txt\necho action-complete'
+      : 'printf "%s\\n" "first" >> runs.txt\nprintf "%s\\n" "it\'s a \\"quoted\\" value" >> runs.txt\nprintf "action-complete\\n" # trailing comment';
+    try {
+      await expect(store.open({ command: { name: 'Start', command } })).rejects.toThrow('workspace directory');
+      const session = await store.open({ workspaceRoot, command: { name: 'Start', command } });
+      await expect(readFile(path.join(workspaceRoot, 'runs.txt'))).rejects.toThrow();
+      await store.attach(session.sessionId, 80, 24);
+      await waitFor(() => events.some((event) => event.event === 'output' && String(event.data.text).includes('action-complete')));
+      const contents = await readFile(path.join(workspaceRoot, 'runs.txt'), 'utf8');
+      expect(contents.replaceAll('\r\n', '\n')).toBe(process.platform === 'win32' ? 'first\nsecond\n' : 'first\nit\'s a "quoted" value\n');
+      await store.attach(session.sessionId, 100, 30);
+      store.write(session.sessionId, terminalExitCommand());
+      await waitFor(() => events.some((event) => event.event === 'exit'));
+      await store.restart(session.sessionId);
+      store.write(session.sessionId, terminalSmokeCommand());
+      await waitFor(() => events.some((event) => event.event === 'output' && String(event.data.text).includes('setsuna-terminal-smoke')));
+      expect(await readFile(path.join(workspaceRoot, 'runs.txt'), 'utf8')).toBe(contents);
+    } finally { store.closeAll(); await rm(workspaceRoot, { recursive: true, force: true }); }
+  });
+
   it.skipIf(process.platform !== 'win32')('shows the initial Windows prompt without keyboard input', async () => {
     const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-terminal-prompt-test-'));
     let terminal: Terminal | undefined;

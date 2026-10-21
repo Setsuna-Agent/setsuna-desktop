@@ -16,3 +16,5 @@ export {
   terminalSessionExited,
 } from './terminalRestoreBuffer.js';
 export { terminalDisplayTitle } from './terminalTitle.js';
+export { TerminalActions } from './actions/TerminalActions.js';
+export { TerminalActionsHostProvider, type TerminalActionsHost } from './actions/context.js';

@@ -1,4 +1,5 @@
 import { defineCapability, type CapabilityToken } from '@setsuna-desktop/feature-core/capability';
+import type { TerminalCommand } from './actions.js';
 
 export type DesktopTerminalSession = Readonly<{
   sessionId: string;
@@ -6,6 +7,7 @@ export type DesktopTerminalSession = Readonly<{
   shell: string;
   cols: number;
   rows: number;
+  title?: string;
   windowsPty?: Readonly<{ backend: 'conpty' | 'winpty'; buildNumber: number }>;
 }>;
 
@@ -21,7 +23,7 @@ export type DesktopTerminalEventPayload = DesktopTerminalEvent & Readonly<{
 
 export interface TerminalDesktopBridge {
   /** Prepares a session; the shell starts after the renderer attaches at its actual size. */
-  open(workspaceRoot?: string | null, cols?: number, rows?: number): Promise<DesktopTerminalSession>;
+  open(workspaceRoot?: string | null, cols?: number, rows?: number, command?: TerminalCommand): Promise<DesktopTerminalSession>;
   attach(sessionId: string, cols: number, rows: number): Promise<boolean>;
   write(sessionId: string, input: string): Promise<boolean>;
   /** Returns a non-destructive snapshot of bounded history; consumers deduplicate by seq. */

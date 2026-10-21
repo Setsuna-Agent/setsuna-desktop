@@ -58,7 +58,7 @@ Facade 负责依赖组装、准入和窄事件桥接。新增横切能力时先�
 | `runtime-queued-turn-coordinator.ts` | 持久化 FIFO、edit token、调度 |
 | `runtime-compaction-turn-coordinator.ts` | 显式 compaction task |
 | `runtime-hook-coordinator.ts` | Session/UserPrompt/Stop/Compact hooks |
-| `runtime-turn-finalizer.ts` | Usage、message、Feature title commit、memory、completed |
+| `runtime-turn-finalizer.ts` | Message、Feature title commit、memory、completed；保留 turn usage 投影，不重复写统计明细 |
 | `runtime-turn-termination-coordinator.ts` | Cancel/error terminal event 串行化 |
 | `runtime-background-task-queue.ts` | 可取消后台任务 |
 | `turn-input-queue.ts` | Active turn 内部 steer 队列 |
@@ -139,7 +139,7 @@ Stream publisher 把可见状态转成 runtime events；provider raw event 不�
 输入无法装入摘要模型窗口时，在模型调用前失败并保留原历史。
 摘要使用普通交接文本，无需 JSON；仅完整结束、非空且不超长的摘要可替换历史。
 失败最多重试一次，仍失败则保留原历史并结束失败路径，不以原文片段冒充成功摘要。
-每次摘要或原生压缩调用结束时独立发布 `token.count` 并写入 UsageRecorder；截断、取消或
+每次摘要或原生压缩调用结束时独立发布 `token.count`，统一模型 adapter 写入 UsageRecorder；截断、取消或
 最终压缩提交失败都不丢弃供应商已返回的用量，同一调用的重复 usage 通知只结算一次。
 
 显式配置摘要任务模型时只调用该模型。否则优先尝试 Responses 原生压缩；原生结果不可用

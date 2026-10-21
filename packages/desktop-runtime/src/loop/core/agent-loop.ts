@@ -141,7 +141,6 @@ export class AgentLoop {
       debugTrace: options.debugTrace,
       ids: options.ids,
       modelClient: options.modelClient,
-      usageStore: options.usageStore,
       appendEvent: (threadId, event) => this.appendAndPublishWithResult(threadId, event),
       onCompacted: (threadId) => this.hooks.queueSessionStartSource(threadId, 'compact'),
       runCompactHooks: (input) => this.hooks.runCompactHooks(input),
@@ -181,7 +180,6 @@ export class AgentLoop {
       ids: options.ids,
       memoryControl: () => this.featureControls.memory,
       streamEvents: this.modelStreamEvents,
-      usageStore: options.usageStore,
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
     });
     this.turnTermination = new RuntimeTurnTerminationCoordinator({
@@ -588,7 +586,6 @@ export class AgentLoop {
       modelClient: this.options.modelClient,
       store: this.options.memoryStore,
       threadStore: this.options.threadStore,
-      usageStore: this.options.usageStore,
     });
   }
   /** Narrow host surface supplied to the Collaboration Feature by the composition root. */
@@ -628,7 +625,6 @@ export class AgentLoop {
       ids: this.options.ids,
       modelClient: this.options.modelClient,
       threadStore: this.options.threadStore,
-      usageStore: this.options.usageStore,
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
     });
   }

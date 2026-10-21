@@ -47,7 +47,7 @@ packages/features/<feature>/
 | `runtime-activity` | `runtime-activity` | R | O | R | R | 活跃 turn、approval、后台 shell/service 与按需进程资源观察 |
 | `side-conversation` | `side-conversation` | O | — | — | O | 临时侧边线程的快照创建、策略边界、崩溃清理与 renderer 创建生命周期 |
 | `skills` | `skills` | R | — | — | R | Skill catalog、CRUD、extra roots 与 MCP 依赖安装 |
-| `terminal` | `terminal` | — | R | B | R | PTY session、事件恢复、Terminal pane |
+| `terminal` | `terminal` | — | R | B | R | PTY session、事件恢复、Terminal pane、项目快捷脚本 |
 | `thread-title-generation` | `thread-title-generation` | O | — | — | O | 首轮自动标题、专用模型设置与重命名竞争保护 |
 | `ui-card` | `ui-card` | — | — | — | R | Plugin UI 卡片契约、来源校验与对话结果展示；沙箱 iframe 由宿主注入 |
 | `updater` | `updater` | — | R | B | R | 更新检查、下载源、校验、安装与 UI 状态 |

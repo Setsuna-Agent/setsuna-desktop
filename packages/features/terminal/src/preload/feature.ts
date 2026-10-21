@@ -14,8 +14,8 @@ export const terminalPreloadFeature = definePreloadFeature<TerminalPreloadBridge
   bridgeKeys: ['terminal'],
   contribute(writer) {
     const terminal: TerminalDesktopBridge = {
-      open: (workspaceRoot, cols, rows) =>
-        ipcRenderer.invoke(TERMINAL_IPC_CHANNELS.open, { workspaceRoot, cols, rows }),
+      open: (workspaceRoot, cols, rows, command) =>
+        ipcRenderer.invoke(TERMINAL_IPC_CHANNELS.open, { workspaceRoot, cols, rows, command }),
       attach: (sessionId, cols, rows) =>
         ipcRenderer.invoke(TERMINAL_IPC_CHANNELS.attach, { sessionId, cols, rows }),
       write: (sessionId, input) =>

@@ -3,8 +3,27 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FileUsageStore } from '../../src/runtime/file-usage-store.js';
+import { queryUsage } from '../../src/contracts/operations.js';
 
 describe('file usage store', () => {
+  it('round-trips request metadata through storage and the API while preserving unknown historical fields', async () => {
+    const store = await usageStore('setsuna-usage-metadata-');
+    const identity = { threadId: 'thread_1', turnId: 'turn_1', createdAt: '2026-10-21T00:00:00.000Z' };
+    await store.recordUsage({ ...identity, source: 'conversation', result: 'success', durationMs: 1400, totalTokens: 120, outputTokens: 20 });
+    await store.recordUsage({ ...identity, source: 'title', result: 'error', durationMs: 250, providerId: 'provider_1' });
+    await store.recordUsage({ ...identity, totalTokens: 60, requestCount: 2 });
+    const usage = await store.getUsage({}, [{ id: 'provider_1', name: 'Configured provider', provider: 'anthropic', models: [] }]);
+    const response = queryUsage.output.parse({ providers: [], usage }).usage;
+    expect(response.records[0]).toMatchObject({ source: 'conversation', result: 'success', durationMs: 1400 });
+    expect(response.records[1]).toMatchObject({ source: 'title', result: 'error', provider: 'Configured provider', durationMs: 250 });
+    expect(response.records[1]?.totalTokens).toBeUndefined();
+    expect(response.records[2]?.source).toBeUndefined();
+    expect(response.records[2]?.result).toBeUndefined();
+    expect(response.records[2]?.durationMs).toBeUndefined();
+    expect(response.summary).toMatchObject({ totalTokens: 180, requestCount: 4, recordCount: 3 });
+    const invalid = queryUsage.output.parse({ providers: [], usage: { ...usage, records: [{ ...usage.records[0], source: 'unrecognized', result: 'unrecognized', durationMs: -1 }] } });
+    expect(invalid.usage.records[0]).toMatchObject({ source: undefined, result: undefined, durationMs: undefined });
+  });
   it('records local usage and summarizes by provider and model', async () => {
     const store = await usageStore('setsuna-usage-test-');
 
@@ -102,6 +121,27 @@ describe('file usage store', () => {
 
     expect(usage.records.map((record) => record.turnId)).toEqual(['turn_1']);
     expect(usage.summary).toMatchObject({ recordCount: 3, totalTokens: 6 });
+  });
+
+  it('returns complete thread reconciliation totals independently of pagination and background calls', async () => {
+    const store = await usageStore('setsuna-usage-reconciliation-');
+    const identity = { threadId: 'thread_1', turnId: 'turn_1', providerId: 'provider_1', model: 'model-a', createdAt: '2026-10-21T00:00:00.000Z' };
+    await store.recordUsage({ ...identity, source: 'conversation', totalTokens: 11 });
+    await store.recordUsage({ ...identity, source: 'conversation', totalTokens: 13 });
+    await store.recordUsage({ ...identity, source: 'compaction', totalTokens: 17 });
+    await store.recordUsage({ ...identity, source: 'title', totalTokens: 100 });
+    await store.recordUsage({ ...identity, turnId: 'old-turn', totalTokens: 7 });
+    await store.recordUsage({ ...identity, threadId: 'other-thread', totalTokens: 200 });
+
+    const usage = await store.getUsage({ threadId: 'thread_1', limit: 1, offset: 3 });
+    const parsed = queryUsage.output.parse({ providers: [], usage }).usage;
+    expect(parsed.records).toHaveLength(1);
+    expect(parsed.summary).toMatchObject({ totalTokens: 148, recordCount: 5 });
+    expect(parsed.summary.byTurnModel).toEqual([
+      expect.objectContaining({ key: '["turn_1","id:provider_1","model-a"]', totalTokens: 41, recordCount: 3 }),
+      expect.objectContaining({ key: '["old-turn","id:provider_1","model-a"]', totalTokens: 7, recordCount: 1 }),
+    ]);
+    expect((await store.getUsage()).summary.byTurnModel).toBeUndefined();
   });
 
   it('resolves legacy protocol labels to configured provider names', async () => {

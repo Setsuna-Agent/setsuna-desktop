@@ -9,7 +9,10 @@ import type {
   DesktopTerminalEventPayload,
   DesktopTerminalSession,
   TerminalEnvironmentPatch,
+  TerminalCommand,
 } from '../contracts/index.js';
+import { normalizeTerminalCommand } from '../contracts/index.js';
+import { prepareTerminalCommand, type TerminalCommandLaunch } from './command.js';
 import { terminalProcessOptions, terminalWindowsPty } from './process-options.js';
 
 const require = createRequire(import.meta.url);
@@ -27,12 +30,15 @@ type TerminalSession = DesktopTerminalSession & {
   seq: number;
   shellArgs: string[];
   shellCommand: string;
+  initialCommand?: string;
+  commandLaunch?: TerminalCommandLaunch;
 };
 
 export type TerminalOpenInput = Readonly<{
   workspaceRoot?: string | null;
   cols?: number;
   rows?: number;
+  command?: TerminalCommand;
 }>;
 
 const MAX_EVENT_QUEUE = 2_000;
@@ -46,6 +52,8 @@ export class DesktopTerminalStore {
   ) {}
 
   async open(input: TerminalOpenInput, signal?: AbortSignal): Promise<DesktopTerminalSession> {
+    const command = input.command === undefined ? undefined : normalizeTerminalCommand(input.command);
+    if (command && !input.workspaceRoot?.trim()) throw new Error('Terminal actions require a workspace directory.');
     const workspaceRoot = await resolveWorkspaceRoot(input.workspaceRoot);
     signal?.throwIfAborted();
     const shell = defaultShellSpec();
@@ -66,6 +74,8 @@ export class DesktopTerminalStore {
       seq: 0,
       shellArgs: shell.args,
       shellCommand: shell.command,
+      initialCommand: command?.command,
+      title: command?.name,
     };
     this.sessions.set(sessionId, session);
 
@@ -76,6 +86,7 @@ export class DesktopTerminalStore {
       cols: session.cols,
       rows: session.rows,
       windowsPty: session.windowsPty,
+      title: session.title,
     };
   }
 
@@ -144,6 +155,7 @@ export class DesktopTerminalStore {
     } catch {
       // A restored renderer panel may outlive its already-terminated native PTY.
     }
+    void session.commandLaunch?.dispose().catch(() => undefined);
     this.publish({ sessionId, seq: session.seq + 1, event: 'closed', data: {} });
     return true;
   }
@@ -171,18 +183,34 @@ export class DesktopTerminalStore {
     const environmentPatch = await this.resolveEnvironment();
     signal?.throwIfAborted();
     if (this.sessions.get(session.sessionId) !== session) return false;
+    const commandLaunch = session.initialCommand === undefined ? undefined
+      : await prepareTerminalCommand(session.shellCommand, session.initialCommand);
+    if (signal?.aborted || this.sessions.get(session.sessionId) !== session) {
+      await commandLaunch?.dispose();
+      signal?.throwIfAborted();
+      return false;
+    }
     session.dataDisposable.dispose();
     session.exitDisposable.dispose();
-    const ptyProcess = pty.spawn(
-      session.shellCommand,
-      session.shellArgs,
-      terminalProcessOptions({
-        cols: session.cols,
-        cwd: session.workspaceRoot,
-        env: terminalEnvironment(environmentPatch),
-        rows: session.rows,
-      }),
-    );
+    let ptyProcess: IPty;
+    try {
+      ptyProcess = pty.spawn(
+        session.shellCommand,
+        commandLaunch?.args ?? session.shellArgs,
+        terminalProcessOptions({
+          cols: session.cols,
+          cwd: session.workspaceRoot,
+          env: { ...terminalEnvironment(environmentPatch), ...commandLaunch?.env },
+          rows: session.rows,
+        }),
+      );
+    } catch (error) {
+      await commandLaunch?.dispose();
+      throw error;
+    }
+    session.commandLaunch = commandLaunch;
+    // Reattaching and restarting the shell must never replay a user action.
+    session.initialCommand = undefined;
     session.ptyProcess = ptyProcess;
     session.exited = false;
     session.dataDisposable = ptyProcess.onData((text) => {
@@ -193,6 +221,8 @@ export class DesktopTerminalStore {
       if (this.sessions.get(session.sessionId) !== session || session.ptyProcess !== ptyProcess) return;
       session.exited = true;
       session.ptyProcess = null;
+      void session.commandLaunch?.dispose().catch(() => undefined);
+      session.commandLaunch = undefined;
       this.emit(session.sessionId, 'exit', { exitCode, signal });
     });
     this.emit(session.sessionId, 'ready', {

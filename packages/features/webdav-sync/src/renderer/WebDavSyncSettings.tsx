@@ -9,12 +9,14 @@ import {
   Check,
   Cloud,
   Copy,
+  ExternalLink,
   KeyRound,
   LockKeyhole,
   Play,
   RotateCcw,
   Server,
   ShieldCheck,
+  TriangleAlert,
   Unplug,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -31,6 +33,33 @@ import {
 import './webdav-sync.css';
 
 export function WebDavSyncSettings() {
+  const { t } = useWebDavSyncView();
+
+  return (
+    <div className="chat-user-settings__section settings-webdav">
+      <aside className="settings-webdav__deprecation">
+        <TriangleAlert size={20} aria-hidden="true" />
+        <div>
+          <strong>{t('feature.webdavSync.deprecation.title')}</strong>
+          <p>
+            {t('feature.webdavSync.deprecation.question')}{' '}
+            <a
+              href="https://github.com/Setsuna-Agent/setsuna-desktop/discussions/249"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {t('feature.webdavSync.deprecation.feedback')}
+              <ExternalLink size={13} aria-hidden="true" />
+            </a>
+          </p>
+        </div>
+      </aside>
+      <WebDavSyncSettingsContent />
+    </div>
+  );
+}
+
+function WebDavSyncSettingsContent() {
   const { locale, t, ui: { Button, Checkbox, EmptyState, TextField } } = useWebDavSyncView();
   const sync = useDesktopWebDavSync();
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null);
@@ -72,7 +101,7 @@ export function WebDavSyncSettings() {
   if (sync.loading) return <EmptyState title={t('feature.webdavSync.common.loading')} />;
   if (!state) {
     return (
-      <div className="chat-user-settings__section settings-webdav">
+      <>
         <section className="settings-webdav__card settings-webdav__unavailable">
           <div>
             <strong>{t('feature.webdavSync.unavailable')}</strong>
@@ -92,13 +121,13 @@ export function WebDavSyncSettings() {
             {t('feature.webdavSync.unavailableReset')}
           </Button>
         </section>
-      </div>
+      </>
     );
   }
 
   if (!state.configured || !state.connection) {
     return (
-      <div className="chat-user-settings__section settings-webdav">
+      <>
         <WebDavConnectionForm
           disabled={busy}
           onSubmit={async (input) => {
@@ -107,7 +136,7 @@ export function WebDavSyncSettings() {
           }}
           onTest={async (input) => { await sync.testConnection(input); }}
         />
-      </div>
+      </>
     );
   }
 
@@ -153,7 +182,7 @@ export function WebDavSyncSettings() {
   );
 
   return (
-    <div className="chat-user-settings__section settings-webdav">
+    <>
       {recoveryKey ? (
         <section className="settings-webdav__recovery-card" role="alert">
           <div className="settings-webdav__recovery-heading">
@@ -398,6 +427,6 @@ export function WebDavSyncSettings() {
           onConfirm={() => void enableAutomaticBackup().catch(() => undefined)}
         />
       ) : null}
-    </div>
+    </>
   );
 }

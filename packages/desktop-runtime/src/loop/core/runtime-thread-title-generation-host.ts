@@ -2,14 +2,11 @@ import type {
   ThreadTitleGenerationResolvedModel,
   ThreadTitleGenerationRuntimeHost,
 } from '@setsuna-desktop/feature-thread-title-generation/contracts';
-import { createFeatureEvent } from '@setsuna-desktop/feature-core/events';
-import { usageRecordedEvent } from '@setsuna-desktop/feature-usage/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { ConfigStore } from '../../ports/config-store.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ModelClient } from '../../ports/model-client.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
-import type { UsageRecorder } from '../../ports/usage-store.js';
 import { createModelStreamTextCollector } from '../../utils/model-stream-text-collector.js';
 import type { RuntimeEventWriter } from '../lifecycle/runtime-event-writer.js';
 
@@ -26,7 +23,6 @@ type RuntimeThreadTitleGenerationHostDependencies = Readonly<{
   ids: IdGenerator;
   modelClient: Pick<ModelClient, 'stream'>;
   threadStore: Pick<ThreadStore, 'getThread' | 'listEvents'>;
-  usageStore?: UsageRecorder;
 }>;
 
 /** Adapts Core model and event services without leaking runtime ports into the Feature. */
@@ -73,23 +69,6 @@ export function createRuntimeThreadTitleGenerationHost(
         ...(finishReason ? { finishReason } : {}),
         ...(reportedUsage ? { usage: reportedUsage } : {}),
       });
-    },
-    recordUsage: async (threadId, turnId, usage) => {
-      const recorded = await dependencies.usageStore?.recordUsage({
-        threadId,
-        turnId,
-        createdAt: dependencies.clock.now().toISOString(),
-        ...usage,
-      });
-      // Background title requests may finish after turn.completed, including
-      // requests whose generated title is discarded after a manual rename.
-      if (!recorded?.id) return;
-      await dependencies.appendEvent(threadId, createFeatureEvent(usageRecordedEvent, {
-        id: dependencies.ids.id('event'),
-        threadId,
-        turnId,
-        createdAt: dependencies.clock.now().toISOString(),
-      }, { recordId: recorded.id }));
     },
     flushThread: (threadId) => dependencies.eventWriter.flushThread(threadId),
     listEvents: (threadId, afterSeq) => dependencies.threadStore.listEvents(threadId, afterSeq),

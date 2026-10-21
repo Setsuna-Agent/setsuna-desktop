@@ -41,6 +41,8 @@ export type RuntimeUsageSummary = Readonly<{
   byDay: readonly RuntimeUsageBucket[];
   byProvider: readonly RuntimeUsageBucket[];
   byModel: readonly RuntimeUsageBucket[];
+  /** Complete conversation/compaction totals for thread queries, keyed by turn + provider + model. */
+  byTurnModel?: readonly RuntimeUsageBucket[];
 }>;
 
 export type RuntimeUsageResponse = Readonly<{

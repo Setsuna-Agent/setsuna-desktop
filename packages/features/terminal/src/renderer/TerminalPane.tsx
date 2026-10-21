@@ -87,10 +87,10 @@ export function TerminalPane({
       setLinkContextTarget,
     );
     const titleDisposable = terminal.onTitleChange((title) => {
-      onTitleChangeRef.current?.(terminalDisplayTitle(title, session.shell));
+      onTitleChangeRef.current?.(session.title ?? terminalDisplayTitle(title, session.shell));
     });
     terminalRef.current = terminal;
-    onTitleChangeRef.current?.(terminalDisplayTitle('', session.shell));
+    onTitleChangeRef.current?.(session.title ?? terminalDisplayTitle('', session.shell));
     let sessionActive = true;
     let outputRestored = false;
     let attached = false;

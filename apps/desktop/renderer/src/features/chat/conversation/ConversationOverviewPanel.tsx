@@ -18,6 +18,7 @@ import { ChangeCountText } from './ChangeCountText.js';
 import type { ConversationOverviewState } from './chatConversationOverview.js';
 import { ConversationPlanSummary } from './ConversationPlanSummary.js';
 import { PullRequestsFeatureConversation } from '../../../composition/PullRequestsFeatureBoundary.js';
+import { TerminalFeatureActions } from '../../../composition/TerminalWorkspaceFeatureBoundary.js';
 
 export function ConversationOverviewPanel({
   activeProject,
@@ -29,7 +30,7 @@ export function ConversationOverviewPanel({
   reviewError,
 }: {
   activeProject?: WorkspaceProject;
-  currentThread: RuntimeThread;
+  currentThread: RuntimeThread | null;
   overview: ConversationOverviewState;
   reviewControls?: ReactNode;
   reviewState: DesktopReviewState | null;
@@ -37,7 +38,8 @@ export function ConversationOverviewPanel({
   reviewError: string | null;
 }) {
   const { t } = useI18n();
-  const panelTitle = (currentThread.projectId ? activeProject?.name : undefined) || t('conversation.overview.title');
+  const projectId = currentThread?.projectId || activeProject?.id;
+  const panelTitle = (!currentThread || currentThread.projectId ? activeProject?.name : undefined) || t('conversation.overview.title');
   const changeStats = reviewState?.isGitRepository
     ? localFeatureReviewChangeStats(reviewState)
     : {
@@ -49,18 +51,18 @@ export function ConversationOverviewPanel({
   // The first status read is pending before the review state effect settles.
   const reviewPending = Boolean(activeProject && !reviewState && !reviewError);
   const reviewFailed = Boolean(activeProject && !reviewState && reviewError);
-  const collaboration = useCollaborationFeatureState(currentThread.id);
 
   return (
     <section className="chat-conversation-overview-panel" aria-label={panelTitle}>
       <div className="chat-conversation-overview-panel__header">
         <span title={panelTitle}>{panelTitle}</span>
+        {projectId ? <TerminalFeatureActions projectId={projectId} projectName={panelTitle} /> : null}
       </div>
       <div className="chat-conversation-overview-panel__actions">
         <Button variant="ghost"
           type="button"
           className="chat-conversation-overview-panel__row"
-          disabled={!onOpenReview}
+          disabled={!activeProject || !onOpenReview}
           onClick={() => onOpenReview?.()}
         >
           <span className="chat-conversation-overview-panel__icon">
@@ -74,15 +76,9 @@ export function ConversationOverviewPanel({
           </span>
         </Button>
         {reviewControls}
-        <UsageFeatureConversationSummary thread={currentThread} />
+        {currentThread ? <UsageFeatureConversationSummary thread={currentThread} /> : null}
       </div>
-      <RuntimeActivityFeatureConversationServices threadId={currentThread.id} />
-      <PullRequestsFeatureConversation threadId={currentThread.id} />
-      <CollaborationFeatureTaskList
-        parentThreadId={currentThread.id}
-        tasks={collaboration.state.tasks}
-        translate={t}
-      />
+      {currentThread ? <ThreadEnvironmentDetails threadId={currentThread.id} /> : null}
       {overview.planItems.length ? (
         <>
           <div className="chat-conversation-overview-panel__divider" />
@@ -91,4 +87,15 @@ export function ConversationOverviewPanel({
       ) : null}
     </section>
   );
+}
+
+/** Thread services are mounted only after the starter creates a real conversation. */
+function ThreadEnvironmentDetails({ threadId }: { threadId: string }) {
+  const { t } = useI18n();
+  const collaboration = useCollaborationFeatureState(threadId);
+  return <>
+    <RuntimeActivityFeatureConversationServices threadId={threadId} />
+    <PullRequestsFeatureConversation threadId={threadId} />
+    <CollaborationFeatureTaskList parentThreadId={threadId} tasks={collaboration.state.tasks} translate={t} />
+  </>;
 }

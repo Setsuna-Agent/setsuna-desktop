@@ -1,0 +1,196 @@
+.desktop-settings-panel .settings-usage-records__table {
+  --sd-table-min-width: var(--usage-records-min-width, 860px);
+  border: 0;
+  border-radius: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.desktop-settings-panel .settings-usage-records .sd-table__content th,
+.desktop-settings-panel .settings-usage-records .sd-table__content td {
+  padding-inline: 12px;
+}
+
+.desktop-settings-panel .settings-usage-records .sd-table__content th {
+  height: 36px;
+  border-bottom-color: var(--settings-usage-hairline);
+  background: var(--app-surface-subtle);
+  color: var(--app-text-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.desktop-settings-panel .settings-usage-records .sd-table__content td {
+  height: 56px;
+}
+
+.desktop-settings-panel .settings-usage-records .sd-table__content th:first-child,
+.desktop-settings-panel .settings-usage-records .sd-table__content td:first-child {
+  padding-left: var(--settings-usage-pad);
+}
+
+.desktop-settings-panel .settings-usage-records .sd-table__content th:last-child,
+.desktop-settings-panel .settings-usage-records .sd-table__content td:last-child {
+  padding-right: var(--settings-usage-pad);
+}
+
+.desktop-settings-panel .settings-usage-records .sd-table__row {
+  border-bottom-color: var(--settings-usage-hairline);
+}
+
+.desktop-settings-panel .settings-usage-records__model {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.desktop-settings-panel .settings-usage-records__model-icon {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface-subtle);
+  color: var(--app-text-muted);
+}
+
+.desktop-settings-panel .settings-usage-records__identity {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.desktop-settings-panel .settings-usage-records__identity strong {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-settings-panel .settings-usage-records__provider {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.desktop-settings-panel .settings-usage-records__provider > :first-child {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+}
+
+.desktop-settings-panel .settings-usage-records__provider > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-settings-panel .settings-usage-records__total {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.desktop-settings-panel .settings-usage-records__result {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  color: var(--app-text-muted);
+}
+
+.desktop-settings-panel .settings-usage-records__result > span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.desktop-settings-panel .settings-usage-records__result--success > span {
+  background: var(--app-success, #278453);
+}
+
+.desktop-settings-panel .settings-usage-records__result--error {
+  color: var(--app-danger);
+}
+
+.desktop-settings-panel .settings-usage-records time {
+  color: var(--app-text-muted);
+}
+
+.desktop-settings-panel .settings-usage-records__pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+  padding: 12px var(--settings-usage-pad);
+  border-top: 1px solid var(--settings-usage-hairline);
+  font-variant-numeric: tabular-nums;
+}
+
+.desktop-settings-panel .settings-usage-records__controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.desktop-settings-panel .settings-usage-records__count {
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.desktop-settings-panel .settings-usage-records__navigation,
+.desktop-settings-panel .settings-usage-records__pages,
+.desktop-settings-panel .settings-usage-records__jump {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.desktop-settings-panel .settings-usage-records__navigation {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.desktop-settings-panel .settings-usage-records__page {
+  justify-content: center;
+  min-width: 28px;
+  padding-inline: 7px;
+}
+
+.desktop-settings-panel .settings-usage-records__pages .sd-icon-button {
+  width: 28px;
+  height: 28px;
+}
+
+.desktop-settings-panel .settings-usage-records__pages svg {
+  width: 14px;
+  height: 14px;
+}
+
+.desktop-settings-panel .settings-usage-records__ellipsis {
+  width: 28px;
+  color: var(--app-text-subtle);
+  text-align: center;
+}
+
+.desktop-settings-panel .settings-usage-records__jump .sd-field {
+  width: 52px;
+  min-height: 28px;
+  padding: 3px 6px;
+  font-size: 12px;
+  text-align: center;
+}

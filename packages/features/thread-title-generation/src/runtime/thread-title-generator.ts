@@ -50,6 +50,7 @@ export async function generateThreadTitle({
   now,
   providerId,
   sessionId,
+  turnId,
   signal,
   userContent,
 }: {
@@ -59,6 +60,7 @@ export async function generateThreadTitle({
   now: Date;
   providerId?: string;
   sessionId: string;
+  turnId: string;
   signal: AbortSignal;
   userContent: string;
 }): Promise<GeneratedThreadTitle> {
@@ -67,6 +69,7 @@ export async function generateThreadTitle({
   const output = await host.generateText({
     model,
     sessionId,
+    usageContext: { threadId: sessionId, turnId, source: 'title' },
     ...(providerId ? { providerId } : {}),
     messages: titlePromptMessages(userContent, attachmentCount, now),
     toolChoice: 'none',

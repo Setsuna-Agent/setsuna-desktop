@@ -6,6 +6,7 @@ import {
 } from '@setsuna-desktop/contracts';
 import { defineRuntimeCodec } from '@setsuna-desktop/feature-core/codec';
 import { defineFeatureOperation } from '@setsuna-desktop/feature-core/operation';
+import { usageRecordMetadata } from './record-metadata.js';
 import type {
   RuntimeUsageBucket,
   RuntimeUsageQuery,
@@ -63,6 +64,7 @@ function usageRecord(value: unknown): RuntimeUsageRecord {
     threadId: requiredText(record.threadId, 'usage record threadId'),
     turnId: requiredText(record.turnId, 'usage record turnId'),
     createdAt: requiredText(record.createdAt, 'usage record createdAt'),
+    ...usageRecordMetadata(record),
     ...optionalNumber(record, 'inputTokens'),
     ...optionalNumber(record, 'cachedInputTokens'),
     ...optionalNumber(record, 'outputTokens'),
@@ -86,6 +88,7 @@ function usageSummary(value: unknown): RuntimeUsageSummary {
     byDay: usageBuckets(record.byDay, 'byDay'),
     byProvider: usageBuckets(record.byProvider, 'byProvider'),
     byModel: usageBuckets(record.byModel, 'byModel'),
+    ...(record.byTurnModel === undefined ? {} : { byTurnModel: usageBuckets(record.byTurnModel, 'byTurnModel') }),
   });
 }
 

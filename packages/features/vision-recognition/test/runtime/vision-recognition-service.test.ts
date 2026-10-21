@@ -1,6 +1,5 @@
 import type {
   ProviderConfigState,
-  RuntimeUsageRecord,
 } from '@setsuna-desktop/contracts';
 import { createFeatureScope } from '@setsuna-desktop/feature-core/scope';
 import type { RuntimeFeatureSettingsDocumentHandle } from '@setsuna-desktop/feature-core/settings';
@@ -21,7 +20,6 @@ const ONE_PIXEL_PNG = Buffer.from(
 describe('RuntimeVisionRecognitionService', () => {
   it('uses the selected image-capable model and records turn usage without exposing image bytes', async () => {
     const requests: VisionRecognitionTextRequest[] = [];
-    const usageRecords: Array<Omit<RuntimeUsageRecord, 'id'>> = [];
     const service = await createService({
       providers: [provider(), provider({
         id: 'text-provider',
@@ -34,7 +32,6 @@ describe('RuntimeVisionRecognitionService', () => {
           usage: { inputTokens: 12, outputTokens: 8, totalTokens: 20 },
         };
       },
-      async recordUsage(input) { usageRecords.push(input); },
     });
 
     await expect(service.readSettings()).resolves.toMatchObject({
@@ -81,17 +78,7 @@ describe('RuntimeVisionRecognitionService', () => {
       model: 'qwen-vl-max',
     });
     expect(JSON.stringify(result)).not.toContain(ONE_PIXEL_PNG.toString('base64'));
-    expect(usageRecords).toEqual([{
-      inputTokens: 12,
-      outputTokens: 8,
-      totalTokens: 20,
-      threadId: 'thread_1',
-      turnId: 'turn_1',
-      createdAt: '2026-08-08T01:02:03.000Z',
-      providerId: 'vision-provider',
-      provider: 'Configured Vision',
-      model: 'qwen-vl-max',
-    }]);
+    expect(requests[0]?.usageContext).toEqual({ threadId: 'thread_1', turnId: 'turn_1', source: 'vision' });
   });
 
   it('keeps an image-capable model available while another model is the provider active chat model', async () => {
@@ -175,7 +162,6 @@ async function createService(overrides: ServiceOverrides = {}): Promise<RuntimeV
       };
     },
     async generateText() { return { content: 'Recognized.' }; },
-    async recordUsage() {},
     now() { return new Date('2026-08-08T01:02:03.000Z'); },
     async isMarketplacePluginInstalled() { return true; },
     async readLegacySelection() { return null; },

@@ -24,7 +24,7 @@ export const browserRendererFeature = defineRendererFeature({
   setup(context) {
     registerSettingsPage(context.ui, {
       entryId: 'browser.settings-page', sectionId: 'browser', location: 'settings',
-      navigationGroupId: 'preferences', order: 180, titleKey: 'feature.browser.settings.title', icon: Globe,
+      navigationGroupId: 'workspace', order: 200, titleKey: 'feature.browser.settings.title', icon: Globe,
       pageHeading: 'view',
       render: ({ translate, ui, renderDefault }) => (
         <Suspense fallback={null}>

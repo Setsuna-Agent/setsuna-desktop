@@ -2,6 +2,59 @@
   gap: 16px;
 }
 
+.settings-webdav__deprecation {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-surface);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.settings-webdav__deprecation > svg {
+  flex: 0 0 auto;
+  color: var(--app-warning);
+}
+
+.settings-webdav__deprecation > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.settings-webdav__deprecation strong {
+  color: var(--app-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.settings-webdav__deprecation p {
+  margin: 0;
+  color: var(--app-text-secondary);
+}
+
+.settings-webdav__deprecation a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--app-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.settings-webdav__deprecation a:hover {
+  color: var(--app-primary-hover);
+}
+
+.settings-webdav__deprecation a:focus-visible {
+  outline: 2px solid var(--app-focus-outline);
+  outline-offset: 3px;
+}
+
 .settings-webdav__card,
 .settings-webdav__recovery-card {
   display: grid;

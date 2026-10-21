@@ -4,7 +4,6 @@ import type {
   RuntimeConfigState,
   RuntimeConfiguredModelReference,
   RuntimeThread,
-  RuntimeUsageRecord,
 } from '@setsuna-desktop/contracts';
 import { createFeatureScope } from '@setsuna-desktop/feature-core/scope';
 import { describe, expect, it, vi } from 'vitest';
@@ -25,9 +24,7 @@ type TestModelClient = Readonly<{
   stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent>;
 }>;
 
-type TestUsageStore = Readonly<{
-  recordUsage(input: Omit<RuntimeUsageRecord, 'id'>): Promise<RuntimeUsageRecord>;
-}>;
+
 
 type ApprovalReviewTestConfig = Omit<RuntimeConfigState, 'taskModels'> & Readonly<{
   taskModels?: RuntimeConfigState['taskModels'] & Readonly<{
@@ -43,11 +40,7 @@ describe('automatic approval reviewer', () => {
       userAuthorization: 'high',
       rationale: 'The user explicitly requested this exact test command.',
     }));
-    const recordUsage = vi.fn(async (input: Omit<RuntimeUsageRecord, 'id'>) => ({
-      id: 'usage_1',
-      ...input,
-    }));
-    const reviewer = createReviewer(modelClient, { recordUsage });
+    const reviewer = createReviewer(modelClient);
     const input = reviewInput({ cmd: ['pnpm', 'test', '--filter', 'approval'] });
 
     const result = await reviewer.review(input);
@@ -100,7 +93,7 @@ describe('automatic approval reviewer', () => {
       }),
     ]);
     expect(reviewMessage?.content).not.toContain('hidden chain of thought');
-    expect(recordUsage).toHaveBeenCalledOnce();
+    expect(modelClient.requests[0]?.usageContext).toEqual({ threadId: input.request.threadId, turnId: input.request.turnId, source: 'approval-review' });
   });
 
   it('exposes a pre-cancelled caller operation as an AbortError', async () => {
@@ -152,7 +145,6 @@ describe('automatic approval reviewer', () => {
     const controller = new AbortController();
     const fixture = createReviewerWithScope(
       new ReviewModelClient(() => ''),
-      undefined,
       configFixture(),
       threadFixture(),
       { getThread },
@@ -179,7 +171,6 @@ describe('automatic approval reviewer', () => {
     const controller = new AbortController();
     const fixture = createReviewerWithScope(
       new ReviewModelClient(() => ''),
-      undefined,
       configFixture(),
       threadFixture(),
       { resolveModel },
@@ -380,7 +371,7 @@ describe('automatic approval reviewer', () => {
       rationale: 'The action is authorized.',
     }), false);
 
-    const result = await createReviewer(modelClient, undefined, config).review(
+    const result = await createReviewer(modelClient, config).review(
       reviewInput({ cmd: 'pwd' }),
     );
 
@@ -418,7 +409,7 @@ describe('automatic approval reviewer', () => {
       rationale: 'The action is authorized.',
     }), false);
 
-    const result = await createReviewer(modelClient, undefined, config, thread).review(
+    const result = await createReviewer(modelClient, config, thread).review(
       reviewInput({ cmd: 'pwd' }),
     );
 
@@ -482,7 +473,7 @@ describe('automatic approval reviewer', () => {
             rationale: 'The user explicitly approved this exact command.',
           });
     });
-    const reviewer = createReviewer(modelClient, undefined, configFixture(), thread);
+    const reviewer = createReviewer(modelClient, configFixture(), thread);
 
     const first = await reviewer.review(reviewInput(
       { cmd: 'sudo su', workdir: '/work' },
@@ -613,16 +604,14 @@ class ReviewModelClient implements TestModelClient {
 
 function createReviewer(
   modelClient: TestModelClient,
-  usageStore?: TestUsageStore,
   config = configFixture(),
   thread = threadFixture(),
 ) {
-  return createReviewerWithScope(modelClient, usageStore, config, thread).reviewer;
+  return createReviewerWithScope(modelClient, config, thread).reviewer;
 }
 
 function createReviewerWithScope(
   modelClient: TestModelClient,
-  usageStore?: TestUsageStore,
   config = configFixture(),
   thread = threadFixture(),
   hostOverrides: Partial<ApprovalReviewRuntimeHost> = {},
@@ -649,14 +638,6 @@ function createReviewerWithScope(
         if (event.type === 'usage' || event.type === 'token_count') usage = event.usage;
       }
       return { content, ...(usage ? { usage } : {}) };
-    },
-    recordUsage: async (threadId, turnId, usage) => {
-      await usageStore?.recordUsage({
-        threadId,
-        turnId,
-        createdAt: '2026-08-13T00:00:00.000Z',
-        ...usage,
-      });
     },
     ...hostOverrides,
   };

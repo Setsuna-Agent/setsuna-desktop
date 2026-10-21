@@ -9,7 +9,6 @@ import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import type { ModelClient } from '../../../src/ports/model-client.js';
-import type { UsageRecorder } from '../../../src/ports/usage-store.js';
 import { closeTestThreadStores, createTestThreadStore } from '../../support/thread-store.js';
 
 const testDirs: string[] = [];
@@ -24,7 +23,6 @@ describe('agent loop thread title Feature seam', () => {
     'lets the first turn settle as %s while its title is still pending', async (outcome) => {
       const ids = new RandomIdGenerator();
       const threadStore = createTestThreadStore(await testDataDir(), systemClock, ids);
-      const recordUsage = vi.fn<UsageRecorder['recordUsage']>(async (input) => ({ id: ids.id('usage'), ...input }));
       const thread = await threadStore.createThread();
       const eventBus = new InMemoryEventBus();
       const publishedEvents: string[] = [];
@@ -35,14 +33,12 @@ describe('agent loop thread title Feature seam', () => {
         eventBus,
         clock: systemClock,
         ids,
-        usageStore: { recordUsage },
       });
       const host = loop.threadTitleGenerationRuntimeHost();
       let finishTitle!: (title: string) => void;
       const titleResult = new Promise<string>((resolve) => { finishTitle = resolve; });
       const start = vi.fn<ThreadTitleGenerationControl['start']>(async (input) => {
         const title = await titleResult;
-        await host.recordUsage(input.thread.id, input.turnId, { model: 'title-model', totalTokens: 23 });
         await host.appendTitleUpdate(input.thread.id, input.turnId, title);
       });
       loop.bindThreadTitleGenerationControl({ available: true, start });
@@ -65,19 +61,9 @@ describe('agent loop thread title Feature seam', () => {
       const updatedThread = await threadStore.getThread(thread.id);
       expect(updatedThread?.title).toBe('Feature 生成标题');
       expect(publishedEvents).toContain('thread.updated');
-      const events = await threadStore.listEvents(thread.id);
-      expect(events.find((event) => event.type === 'feature.event')).toMatchObject({
-        type: 'feature.event',
-        featureId: 'usage',
-        eventType: 'usage.recorded',
-      });
-      expect(recordUsage).toHaveBeenCalledWith(expect.objectContaining({ threadId: thread.id, totalTokens: 23 }));
       expect(updatedThread?.activeTurnId).toBeFalsy();
       expect(updatedThread?.turns).toEqual(settledThread?.turns);
       expect(updatedThread?.messages).toEqual(settledThread?.messages);
-      if (outcome === 'complete') {
-        expect(publishedEvents.indexOf('turn.completed')).toBeLessThan(publishedEvents.indexOf('feature.event'));
-      }
     },
   );
 });

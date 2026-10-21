@@ -2,7 +2,6 @@ import type {
   ModelRequest,
   ProviderConfigState,
   RuntimeUsage,
-  RuntimeUsageRecord,
 } from '@setsuna-desktop/contracts';
 import { defineCapability, type CapabilityToken } from '@setsuna-desktop/feature-core/capability';
 import type { FeatureSettingsDiagnosis } from '@setsuna-desktop/feature-core/settings';
@@ -84,7 +83,7 @@ export type VisionRecognitionResolvedImage = Readonly<{
 
 export type VisionRecognitionTextRequest = Pick<
   ModelRequest,
-  'providerId' | 'sessionId' | 'model' | 'messages' | 'maxOutputTokens' | 'tools' | 'toolChoice' | 'signal'
+  'providerId' | 'sessionId' | 'usageContext' | 'model' | 'messages' | 'maxOutputTokens' | 'tools' | 'toolChoice' | 'signal'
 > & Readonly<{ maxResultChars: number }>;
 
 export type VisionRecognitionTextResult = Readonly<{
@@ -102,7 +101,6 @@ export interface VisionRecognitionRuntimeHost {
   listProviders(): Promise<readonly ProviderConfigState[]>;
   resolveImage(threadId: string, requestedId: string): Promise<VisionRecognitionResolvedImage>;
   generateText(input: VisionRecognitionTextRequest): Promise<VisionRecognitionTextResult>;
-  recordUsage(input: Omit<RuntimeUsageRecord, 'id'>): Promise<void>;
   now(): Date;
   isMarketplacePluginInstalled(): Promise<boolean>;
   readLegacySelection(): Promise<VisionRecognitionModelSelection>;
