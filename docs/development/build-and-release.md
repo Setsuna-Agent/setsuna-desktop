@@ -147,6 +147,8 @@ macOS 开发应用缓存在仓库 `.cache/electron-dev/`，系统标识为
 
 根 `package.json` 的 `build` 字段定义：
 
+根 `dependencies` 只保留打包后仍从磁盘加载的 `node-pty`、`sharp`、`proxy-chain`、`undici`、`electron-chrome-web-store`、`corepack` 和 `vite`。其余应用与 workspace 依赖在 esbuild/Vite 构建时已进入 bundle，放在根 `devDependencies`，避免 Electron Builder 再收集完整前端依赖树。新增动态 `require` 或 external 时需同步复核此边界。
+
 - `appId`: `dev.setsuna.desktop`
 - `productName`: `Setsuna Desktop`
 - output：`release-artifacts`
@@ -155,16 +157,22 @@ macOS 开发应用缓存在仓库 `.cache/electron-dev/`，系统标识为
   - `dist/**/*`
   - `package.json`
   - workspace package metadata
+  - `packages/app-sdk` 的 manifest 和 `dist` 映射到 `node_modules/@setsuna/app`，保留 SDK 声明文件与样式，供独立应用复制并安装自身依赖
   - `skills/**/*`
   - `plugins/**/*`
+- 发布包排除 sourcemap 和 esbuild 的重复 CLI 副本；应用编译器使用 `@esbuild` 中实际解包的目标平台二进制。构建目录保留 sourcemap 供排错。
 - `asarUnpack`：
   - `**/node_modules/node-pty/prebuilds/**/*`
+  - `**/node_modules/@esbuild/**/*`
+  - `**/node_modules/@rollup/**/*`
   - `**/node_modules/sharp/**/*`
   - `**/node_modules/@img/**/*`
 - `extraResources`：
   - `.cache/ripgrep/${os}-${arch}` -> `resources/setsuna-path`
   - 当前平台的桌面控制助手 -> `resources/computer-use`
   - Windows 的沙箱程序 -> `resources/setsuna-sandbox`，curl 与证书/许可证 -> `resources/setsuna-path`
+
+`after-pack.cjs` 在原生架构打包时用包内 Electron 执行 `verify-packaged-runtime.cjs`：加载原生与网络模块、读取 Corepack 和 SDK，并通过包内 Vite worker 编译真实 TypeScript/CSS 项目。验证只解析发布包中的依赖，失败会中止打包；三个 Release runner 均使用原生架构执行此检查。
 
 macOS 的 `entitlements` 和 `entitlementsInherit` 均显式使用
 `assets/build/entitlements.mac.plist`，覆盖主应用和 Electron Helpers。该文件保留

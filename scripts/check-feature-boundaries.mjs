@@ -220,7 +220,7 @@ async function checkFeatureBuildGraph(
     }
   }
   for (const [manifestPath, dependencies] of [
-    [rootPackagePath, rootPackage.dependencies],
+    [rootPackagePath, { ...rootPackage.dependencies, ...rootPackage.devDependencies }],
     [runtimePackagePath, runtimePackage.dependencies],
   ]) {
     for (const packageName of Object.keys(dependencies ?? {})) {
@@ -274,9 +274,13 @@ async function checkFeatureBuildGraph(
     }
 
     const rootOwnsEntry = ['renderer', 'main', 'preload'].some((entry) => sourceEntries.has(entry));
-    if (rootOwnsEntry && rootPackage.dependencies?.[packageName] !== 'workspace:*') {
-      violations.push(`${repositoryPath(repositoryRoot, rootPackagePath)}: desktop host must depend on "${packageName}" as workspace:*.`);
-    } else if (!rootOwnsEntry && rootPackage.dependencies?.[packageName] !== undefined) {
+    // Desktop Features are bundled. Production workspace links make Electron
+    // Builder copy their renderer dependency trees into the app a second time.
+    if (rootOwnsEntry && (rootPackage.devDependencies?.[packageName] !== 'workspace:*'
+      || rootPackage.dependencies?.[packageName] !== undefined)) {
+      violations.push(`${repositoryPath(repositoryRoot, rootPackagePath)}: desktop host must declare bundled Feature "${packageName}" as workspace:* only in devDependencies.`);
+    } else if (!rootOwnsEntry && (rootPackage.dependencies?.[packageName] !== undefined
+      || rootPackage.devDependencies?.[packageName] !== undefined)) {
       violations.push(`${repositoryPath(repositoryRoot, rootPackagePath)}: desktop host must not depend on "${packageName}" without a renderer, main, or preload source entry.`);
     }
     if (sourceEntries.has('runtime') && runtimePackage.dependencies?.[packageName] !== 'workspace:*') {

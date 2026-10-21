@@ -431,7 +431,7 @@ Feature 状态同生命周期的标题栏动作，可在 contribution 声明 `pa
 
 | 文件 | `word-count` 需要的改动 |
 | --- | --- |
-| 根 `package.json` | 因为有 renderer entry，`dependencies` 加 `@setsuna-desktop/feature-word-count: workspace:*`；不用修改 `build:features` |
+| 根 `package.json` | 因为有 renderer entry，`devDependencies` 加 `@setsuna-desktop/feature-word-count: workspace:*`，由构建打进 bundle；不用修改 `build:features` |
 | 根 `tsconfig.json` | `references` 加 `./packages/features/word-count/tsconfig.build.json` |
 | `tsconfig.renderer.json` | 加 build reference 和 `@setsuna-desktop/feature-word-count/* -> packages/features/word-count/src/*` |
 | `packages/desktop-runtime/package.json` | `dependencies` 加 `@setsuna-desktop/feature-word-count: workspace:*` |
