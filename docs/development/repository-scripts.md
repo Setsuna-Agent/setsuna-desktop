@@ -111,6 +111,7 @@ Electron Builder 收集文件前：
 - 校验 app 内 sidecar、license 和 native asset。
 - 对本机目标运行 `rg --version`。
 - 执行平台后处理，例如 macOS ad-hoc signing。
+- 用包内 Electron 执行 `verify-packaged-runtime.cjs`，检查原生依赖、SDK 和真实 Vite 编译；缺失发布依赖时中止打包。
 
 ### `ripgrep/manifest.json`
 

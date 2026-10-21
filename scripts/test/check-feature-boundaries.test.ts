@@ -187,13 +187,13 @@ describe('Feature boundary checker', () => {
     });
   });
 
-  it('rejects stale host dependencies after their process entries are removed', async () => {
+  it.each(['dependencies', 'devDependencies'])('rejects stale host %s after their process entries are removed', async (field) => {
     await withFixture({
       'package.json': JSON.stringify({
         scripts: {
           'build:features': 'pnpm --recursive --filter "./packages/features/*" run build',
         },
-        dependencies: {
+        [field]: {
           '@setsuna-desktop/feature-memory': 'workspace:*',
         },
       }),
@@ -209,6 +209,27 @@ describe('Feature boundary checker', () => {
       ));
       expect(violations).toContainEqual(expect.stringContaining(
         'runtime host must not depend on "@setsuna-desktop/feature-memory" without a runtime source entry',
+      ));
+    });
+  });
+
+  it.each(['dependencies', 'devDependencies'])('checks bundled desktop Features declared in %s', async (field) => {
+    await withFixture({
+      'package.json': JSON.stringify({
+        scripts: { 'build:features': 'pnpm --recursive --filter "./packages/features/*" run build' },
+        [field]: { '@setsuna-desktop/feature-memory': 'workspace:*' },
+      }),
+      'packages/features/memory/package.json': JSON.stringify({
+        name: '@setsuna-desktop/feature-memory', version: '0.1.0',
+        exports: { './contracts': './dist/contracts/index.js', './main': './dist/main/index.js' },
+        scripts: { build: 'tsc -b tsconfig.build.json' },
+      }),
+      'packages/features/memory/src/main/index.ts': 'export const mainContribution = true;',
+    }, async (root) => {
+      const violations = await checkFeatureBoundaries(root);
+      if (field === 'devDependencies') expect(violations).toEqual([]);
+      else expect(violations).toContainEqual(expect.stringContaining(
+        'desktop host must declare bundled Feature "@setsuna-desktop/feature-memory" as workspace:* only in devDependencies',
       ));
     });
   });
