@@ -505,6 +505,60 @@ it('opens multiple PRs in their owning conversation and reactivates the same PR 
   expect(view.result.current.sidePanelSlot.panels).toEqual([]);
 });
 
+it('runs an action in a new bottom terminal at the current worktree and never replays it on conversation recovery', async () => {
+  const project: WorkspaceProject = { id: 'project', name: 'Repository', path: '/worktree/branch', createdAt: '', updatedAt: '' };
+  const { view, terminal } = renderTerminalWorkspace('thread:A', project, 'action-window');
+  act(() => view.result.current.openDesktopPanel('bottom', 'terminal'));
+  await waitFor(() => expect(terminal.open).toHaveBeenCalledTimes(1));
+  const originalId = view.result.current.bottomActivePanel!.id;
+  const command = { name: 'Server', command: 'export PORT=4000\npnpm dev' };
+  await act(async () => { await view.result.current.runTerminalAction(command); });
+  expect(terminal.open).toHaveBeenLastCalledWith(project.path, 100, 24, command);
+  expect(view.result.current.bottomPanelSlot.panels).toHaveLength(2);
+  expect(view.result.current.bottomActivePanel?.id).not.toBe(originalId);
+  expect(view.result.current.bottomPanelVisible).toBe(true);
+  act(() => view.result.current.hideBottomPanel());
+  view.rerender({ targetIdentity: 'thread:B' });
+  view.rerender({ targetIdentity: 'thread:A' });
+  act(() => view.result.current.toggleBottomPanel());
+  expect(terminal.open).toHaveBeenCalledTimes(2);
+  view.unmount();
+  const restored = renderTerminalWorkspace('thread:A', project, 'action-window');
+  await waitFor(() => expect(restored.terminal.open).toHaveBeenCalledExactlyOnceWith(project.path, 100, 24));
+});
+
+it('releases a late action session after its tab closes instead of running it in another conversation', async () => {
+  const { view, terminal } = renderTerminalWorkspace();
+  let resolve!: (session: Awaited<ReturnType<typeof terminal.open>>) => void;
+  terminal.open.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+  let launch!: Promise<void>;
+  act(() => { launch = view.result.current.runTerminalAction({ name: 'Start', command: 'pnpm dev' }); });
+  const panelId = view.result.current.bottomActivePanel!.id;
+  act(() => view.result.current.closeDesktopPanelItem('bottom', panelId));
+  view.rerender({ targetIdentity: 'thread:B' });
+  await act(async () => {
+    resolve({ sessionId: 'late-action', workspaceRoot: '/repo', shell: 'zsh', cols: 100, rows: 24 });
+    await launch;
+  });
+  expect(terminal.close).toHaveBeenCalledExactlyOnceWith('late-action');
+  expect(view.result.current.terminalSessionsByPanelId).toEqual({});
+  view.rerender({ targetIdentity: 'thread:A' });
+  expect(view.result.current.bottomPanelSlot.panels).toEqual([]);
+  expect(terminal.open).toHaveBeenCalledTimes(1);
+});
+
+it('removes a failed action tab and allows an explicit retry without silently opening a plain shell', async () => {
+  const { view, terminal } = renderTerminalWorkspace();
+  terminal.open.mockRejectedValueOnce(new Error('Directory unavailable'));
+  const command = { name: 'Start', command: 'pnpm dev' };
+  await act(async () => { await expect(view.result.current.runTerminalAction(command)).rejects.toThrow('Directory unavailable'); });
+  expect(view.result.current.bottomPanelSlot.panels).toEqual([]);
+  expect(terminal.open).toHaveBeenCalledTimes(1);
+  await act(async () => { await view.result.current.runTerminalAction(command); });
+  expect(terminal.open).toHaveBeenLastCalledWith('/repo', 100, 24, command);
+  expect(view.result.current.bottomPanelSlot.panels).toHaveLength(1);
+});
+
 function renderTerminalWorkspace(targetIdentity: ChatComposerTargetIdentity = 'thread:A',
   project: WorkspaceProject = { id: 'project', path: '/repo', name: 'Repository', createdAt: '', updatedAt: '' },
   windowSessionKey: string | null = null) {

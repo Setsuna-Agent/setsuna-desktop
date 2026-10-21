@@ -140,11 +140,11 @@ export class AutomaticApprovalReviewControl implements ApprovalReviewControl {
     const reviewSignal = AbortSignal.any([input.signal, timeoutSignal]);
     let lastFailure = 'Automatic approval review returned no valid decision.';
     for (let attempt = 0; attempt < APPROVAL_REVIEW_MAX_ATTEMPTS; attempt += 1) {
-      let usage: RuntimeUsage | undefined;
       try {
         const result = await this.host.generateText({
           ...modelRequest,
           sessionId: thread.id,
+          usageContext: { threadId: input.request.threadId, turnId: input.request.turnId, source: 'approval-review' },
           messages: prompt.messages,
           toolChoice: 'none',
           temperature: 0,
@@ -157,8 +157,7 @@ export class AutomaticApprovalReviewControl implements ApprovalReviewControl {
           },
           signal: reviewSignal,
         });
-        usage = result.usage;
-        await this.recordUsage(input, usage);
+        const usage = result.usage;
         const parsed = parseApprovalReviewOutput(result.content);
         if (!parsed) {
           lastFailure = 'Automatic approval review returned an invalid structured decision.';
@@ -187,7 +186,6 @@ export class AutomaticApprovalReviewControl implements ApprovalReviewControl {
             : {}),
         };
       } catch (error) {
-        await this.recordUsage(input, usage);
         if (input.signal.aborted) throw abortReason(input.signal);
         if (timeoutSignal.aborted || isTimeoutError(error)) {
           return this.technicalResult(
@@ -262,18 +260,6 @@ export class AutomaticApprovalReviewControl implements ApprovalReviewControl {
       state.consecutiveDenials >= CONSECUTIVE_DENIAL_LIMIT
       || rollingDenials >= ROLLING_DENIAL_LIMIT
     );
-  }
-
-  private async recordUsage(
-    input: ApprovalReviewInput,
-    usage: RuntimeUsage | undefined,
-  ): Promise<void> {
-    if (!usage) return;
-    await this.host.recordUsage(
-      input.request.threadId,
-      input.request.turnId,
-      usage,
-    ).catch(() => undefined);
   }
 }
 

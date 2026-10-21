@@ -19,7 +19,6 @@ import type { ConfigStore } from '../../ports/config-store.js';
 import type { ModelClient } from '../../ports/model-client.js';
 import type { PluginBundleStore } from '../../ports/plugin-bundle-store.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
-import type { UsageRecorder } from '../../ports/usage-store.js';
 import {
   detectSafeImageMimeType,
   MAX_IN_MEMORY_RASTER_IMAGE_BYTES,
@@ -36,7 +35,6 @@ type HostDependencies = Readonly<{
   models: Pick<ModelClient, 'stream'>;
   plugins: Pick<PluginBundleStore, 'listInstalledRecords'>;
   threads: Pick<ThreadStore, 'getThread'>;
-  usage: Pick<UsageRecorder, 'recordUsage'>;
 }>;
 
 /**
@@ -67,10 +65,6 @@ export class DesktopVisionRecognitionRuntimeHost implements VisionRecognitionRun
 
   retireLegacySelection() {
     return this.dependencies.legacySettings.retire();
-  }
-
-  async recordUsage(input: Parameters<UsageRecorder['recordUsage']>[0]): Promise<void> {
-    await this.dependencies.usage.recordUsage(input);
   }
 
   async generateText(input: VisionRecognitionTextRequest): Promise<VisionRecognitionTextResult> {

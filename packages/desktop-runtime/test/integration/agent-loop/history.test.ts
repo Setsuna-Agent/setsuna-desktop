@@ -1,3 +1,4 @@
+import { UsageTrackingModelClient } from '../../../src/adapters/model/usage-tracking-model-client.js';
 import {
   applyRuntimeEventToThread,
   type RuntimeEvent,
@@ -123,11 +124,11 @@ describe('agent loop stream history and regeneration', () => {
       const usageStore = new CapturingUsageStore();
       const loop = new AgentLoop({
         threadStore,
-        modelClient,
+        modelClient: new UsageTrackingModelClient(modelClient, { clock: systemClock, recorder: usageStore }),
         eventBus: new InMemoryEventBus(),
         clock: systemClock,
         ids,
-        usageStore,
+
       });
   
       await loop.sendTurn(thread.id, { input: 'stream using response items' });

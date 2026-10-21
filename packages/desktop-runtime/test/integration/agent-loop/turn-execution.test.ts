@@ -1,3 +1,4 @@
+import { UsageTrackingModelClient } from '../../../src/adapters/model/usage-tracking-model-client.js';
 import {
   type ModelRequest,
   type ModelStreamEvent,
@@ -45,12 +46,12 @@ describe('agent loop turn execution', () => {
       const usageStore = new CapturingUsageStore();
       const loop = new AgentLoop({
         threadStore,
-        modelClient,
+        modelClient: new UsageTrackingModelClient(modelClient, { clock: systemClock, recorder: usageStore }),
         eventBus: new InMemoryEventBus(),
         clock: systemClock,
         ids,
         toolHost,
-        usageStore,
+
       });
   
       await loop.sendTurn(thread.id, { input: 'read README' });
@@ -103,15 +104,8 @@ describe('agent loop turn execution', () => {
         { threadId: thread.id, projectId: 'project_1', turnId: startedTurnId, status: 'completed' },
       ]);
       expect(usageStore.records).toMatchObject([
-        {
-          threadId: thread.id,
-          provider: 'test-provider',
-          model: 'test-model',
-          inputTokens: 5,
-          outputTokens: 6,
-          totalTokens: 11,
-          requestCount: 2,
-        },
+        { threadId: thread.id, source: 'conversation', result: 'success', inputTokens: 2, outputTokens: 1, totalTokens: 3, requestCount: 1 },
+        { threadId: thread.id, source: 'conversation', result: 'success', inputTokens: 3, outputTokens: 5, totalTokens: 8, requestCount: 1 },
       ]);
     });
   

@@ -27,6 +27,19 @@ afterEach(() => {
 });
 
 describe('terminal IPC lifecycle', () => {
+  it('validates a launch command at the bridge and forwards only the supported fields', async () => {
+    const { terminal, scope } = setup();
+    const sender = createSender(1);
+    const open = ipcHandler('terminal:open');
+    await expect(open({ sender }, { command: { name: 'Run', command: ' \n' } })).rejects.toThrow('Invalid terminal action');
+    await expect(open({ sender }, { command: { name: 'Run', command: 'echo\0oops' } })).rejects.toThrow('Invalid terminal action');
+    expect(terminal.open).not.toHaveBeenCalled();
+    await open({ sender }, { workspaceRoot: '/repo', command: { name: ' Run ', command: 'echo one\r\necho two', shell: '/untrusted' } });
+    expect(terminal.open).toHaveBeenCalledWith({ workspaceRoot: '/repo', cols: undefined, rows: undefined,
+      command: { name: 'Run', command: 'echo one\necho two' } }, expect.any(AbortSignal));
+    await scope.finishDispose();
+  });
+
   it('waits for session attachment before closing PTYs during drain', async () => {
     const attached = deferred<boolean>();
     const closeAll = vi.fn();

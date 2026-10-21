@@ -45,8 +45,8 @@ export const networkProxyRendererFeature = defineRendererFeature({
         icon: Network,
         sectionId: 'network-proxy',
         location: 'settings',
-        navigationGroupId: 'models-and-services',
-        order: 250,
+        navigationGroupId: 'workspace',
+        order: 400,
         titleKey: 'feature.networkProxy.settings.title',
         render: ({ translate, ui }) => (
           <NetworkProxySettingsView service={service} translate={translate} ui={ui} />

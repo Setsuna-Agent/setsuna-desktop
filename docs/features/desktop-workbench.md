@@ -86,6 +86,12 @@ Terminal 拥有 PTY session、固定 IPC、preload bridge、xterm pane、恢复 
 
 Terminal 没有 runtime entry：用户可见终端属于 Electron main 管理的本机交互，不应绕路进入 Agent runtime。
 
+环境卡片右上角的快捷操作由 Terminal Feature 的 `renderer/actions/` 持有。名称、多行命令、图标、适用平台和最近选择保存在本机 localStorage 的 `setsuna.desktop.terminal.actions.v1:<projectId>`；同项目的对话和工作树共用配置，临时工作区按其独立 ID 隔离。配置在卡片挂载后读取，跨窗口通过 storage 事件同步；保存失败保留表单，损坏的数据不会被空配置覆盖。菜单只选择操作，工具栏按用户配置的图标运行当前操作；没有适用于当前平台的操作时隐藏运行入口。
+
+添加操作使用紧凑弹窗，图标选择器以网格提供运行、调试、构建、部署、终端、数据库等 24 种常用图标，含义通过 tooltip 和 aria-label 表达。弹窗与菜单都可以打开按需加载的环境设置页；弹窗中的未保存字段会交给设置页继续编辑。设置页复用宿主 `PageLayout` 的返回按钮和“设置 > 环境 > 项目”面包屑，按项目维护操作卡片；没有操作的项目进入时提供一张未保存的空白卡片。支持修改名称、图标、脚本和 macOS / Windows 平台，以及添加、删除，统一点击保存后生效。保存时检查原始配置，避免覆盖另一窗口的修改。`TerminalActionsHostProvider` 仅从宿主接收项目列表、平台、打开设置和终端执行回调；不在启动阶段读取各项目脚本，不提供工作树自动设置或清理脚本。
+
+宿主仅负责在当前对话工作目录新建底部终端标签。显式运行通过 `terminal.open` 的可选 `TerminalCommand` 传入名称和命令，Main 校验输入并要求明确的工作目录；创建和恢复普通终端不携带命令。命令在首次 `attach` 时由系统 shell 执行，macOS 使用交互 shell 求值后保留新提示符，Windows 使用 `cmd /K` 和临时 UTF-8 批处理文件保留多行结构，文件在退出、关闭或启动失败时释放。命令不会以逐行键盘输入发送给已有进程；重复 attach、重启 shell、切换对话和应用恢复均不会自动重跑。动作名称用于终端标签，失败反馈沿用 Toast，终端输出和用户输入继续经过原有 PTY 链路。
+
 ## Network Proxy
 
 源码：`packages/features/network-proxy/`

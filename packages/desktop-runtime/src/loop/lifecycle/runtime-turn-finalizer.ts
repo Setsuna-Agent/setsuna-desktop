@@ -10,7 +10,6 @@ import type { MemoryControl } from '@setsuna-desktop/feature-memory/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
-import type { UsageRecorder } from '../../ports/usage-store.js';
 import type { RuntimeModelStreamEventPublisher } from '../core/runtime-model-stream-event-publisher.js';
 
 export type RuntimeAssistantTurnFinalization = {
@@ -30,7 +29,6 @@ type RuntimeTurnFinalizerOptions = {
   ids: IdGenerator;
   memoryControl(): Pick<MemoryControl, 'schedulePassiveMemoriesForTurn' | 'rememberExplicitUserMemory'>;
   streamEvents: Pick<RuntimeModelStreamEventPublisher, 'completeMessage' | 'publishMessage'>;
-  usageStore?: UsageRecorder;
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
 };
 
@@ -45,7 +43,6 @@ export class RuntimeTurnFinalizer {
     threadId,
     turnId,
     usage,
-    requestCount,
   }: {
     finalization: RuntimeAssistantTurnFinalization;
     messageId: string;
@@ -53,17 +50,7 @@ export class RuntimeTurnFinalizer {
     threadId: string;
     turnId: string;
     usage?: RuntimeUsage;
-    requestCount: number;
   }): Promise<void> {
-    if (usage) {
-      await this.options.usageStore?.recordUsage({
-        threadId,
-        turnId,
-        createdAt: this.options.clock.now().toISOString(),
-        ...usage,
-        requestCount,
-      });
-    }
     await this.options.streamEvents.completeMessage(threadId, turnId, messageId, {
       content: finalization.content,
       phase: 'final_answer',

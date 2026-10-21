@@ -196,6 +196,8 @@ export type SettingsPageHeadingProps = Readonly<{
 export type SettingsPageLayoutProps = SettingsPageHeadingProps & Readonly<{
   children: ReactNode;
   parent?: Readonly<{ label: string; onBack(): void }>;
+  /** Keep the breadcrumb title when the content supplies its own heading. */
+  showHeading?: boolean;
 }>;
 
 export type SettingsPageHeaderProps = Readonly<{

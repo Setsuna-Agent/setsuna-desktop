@@ -10,7 +10,6 @@ import type { MainView } from '../types.js';
 export function AppTopbarActions({
   activeView,
   bottomPanelVisible,
-  conversationOverviewAvailable,
   conversationOverviewVisible,
   sidePanelVisible,
   onToggleConversationOverview,
@@ -19,7 +18,6 @@ export function AppTopbarActions({
 }: {
   activeView: MainView;
   bottomPanelVisible: boolean;
-  conversationOverviewAvailable: boolean;
   conversationOverviewVisible: boolean;
   sidePanelVisible: boolean;
   onToggleConversationOverview: () => void;
@@ -34,7 +32,7 @@ export function AppTopbarActions({
         slot={shellTopbarActionSlot}
         props={{ activeRouteId: activeView, translate: t, ui: { IconButton } }}
       />
-      {activeView === 'chat' && conversationOverviewAvailable ? (
+      {activeView === 'chat' ? (
         <ShortcutTooltip
           commandId="chat.toggleOverview"
           label={conversationOverviewVisible ? t('topbar.hideEnvironment') : t('topbar.showEnvironment')}

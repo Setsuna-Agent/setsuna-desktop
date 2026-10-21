@@ -114,7 +114,6 @@ function runtimeHost(
     },
     plugins: { async listInstalledRecords() { return []; } },
     threads: { async getThread(threadId) { return threadId === thread.id ? thread : null; } },
-    usage: { async recordUsage(input) { return { id: 'usage_1', ...input }; } },
   });
 }
 

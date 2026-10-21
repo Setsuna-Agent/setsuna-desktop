@@ -1,6 +1,6 @@
 import type { Awaitable, FeatureScope } from '@setsuna-desktop/feature-core/scope';
 import { ipcMain, type IpcMainInvokeEvent, type WebContents } from 'electron';
-import { TERMINAL_IPC_CHANNELS } from '../contracts/index.js';
+import { normalizeTerminalCommand, TERMINAL_IPC_CHANNELS } from '../contracts/index.js';
 import type { DesktopTerminalStore } from './sessions.js';
 
 const handlerChannels = [
@@ -45,6 +45,7 @@ export function registerTerminalIpc(scope: FeatureScope, terminal: DesktopTermin
       workspaceRoot: typeof input.workspaceRoot === 'string' ? input.workspaceRoot : null,
       cols: optionalNumber(input.cols),
       rows: optionalNumber(input.rows),
+      command: input.command === undefined ? undefined : normalizeTerminalCommand(input.command),
     }, signal);
     // Path resolution may finish after the window closes or the Feature drains.
     if (owners.get(event.sender.id) !== owner || event.sender.isDestroyed() || signal.aborted) {

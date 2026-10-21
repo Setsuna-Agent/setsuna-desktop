@@ -5,7 +5,6 @@ import type { Clock } from '../../ports/clock.js';
 import type { ConfigStore } from '../../ports/config-store.js';
 import type { ModelClient } from '../../ports/model-client.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
-import type { UsageRecorder } from '../../ports/usage-store.js';
 import { createModelStreamTextCollector } from '../../utils/model-stream-text-collector.js';
 import { resolveRuntimeTurnModel } from './runtime-thread-model.js';
 
@@ -16,7 +15,6 @@ type RuntimeApprovalReviewHostDependencies = Readonly<{
   configStore?: ConfigStore;
   modelClient: Pick<ModelClient, 'stream'>;
   threadStore: Pick<ThreadStore, 'getThread'>;
-  usageStore?: UsageRecorder;
 }>;
 
 /** Adapts Core model, thread, and usage services without leaking runtime ports into the Feature. */
@@ -80,14 +78,6 @@ export function createRuntimeApprovalReviewHost(
       return Object.freeze({
         content: output.text(),
         ...(reportedUsage ? { usage: reportedUsage } : {}),
-      });
-    },
-    recordUsage: async (threadId, turnId, usage) => {
-      await dependencies.usageStore?.recordUsage({
-        threadId,
-        turnId,
-        createdAt: dependencies.clock.now().toISOString(),
-        ...usage,
       });
     },
   } satisfies ApprovalReviewRuntimeHost);

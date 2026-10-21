@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserSettingsNavigationProvider } from '../../composition/BrowserWorkspaceFeatureBoundary.js';
+import { TerminalActionsHostProvider, type TerminalActionsHost } from '../../composition/TerminalWorkspaceFeatureBoundary.js';
 import {
   shellOverlaySlot,
   shellSidebarSlot,
@@ -341,7 +342,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       execute: () => void chatActions.cancelActiveTurn(),
     },
     'chat.toggleOverview': {
-      enabled: activeView === 'chat' && Boolean(runtime.currentThread),
+      enabled: activeView === 'chat',
       execute: handleToggleConversationOverview,
     },
     'workspace.openFiles': {
@@ -438,6 +439,14 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     openSettings: (section: string) => { setSettingsInitialSection(section); setActiveView('settings'); },
     openPage: (url: string) => { workspacePanels.openBrowserPanel(url); setActiveView('chat'); },
   }), [setActiveView, workspacePanels.openBrowserPanel]);
+  const terminalActionsHost = useMemo<TerminalActionsHost>(() => ({
+    projects: runtime.projects,
+    platform: window.setsunaDesktop?.desktop.platform ?? '',
+    runAction: workspacePanels.canRunTerminalAction ? workspacePanels.runTerminalAction : undefined,
+    openTerminal: workspacePanels.canRunTerminalAction ? () => workspacePanels.openDesktopPanel('bottom', 'terminal') : undefined,
+    openSettings: () => { setSettingsInitialSection('environments'); setActiveView('settings'); },
+  }), [runtime.projects, workspacePanels.canRunTerminalAction, workspacePanels.runTerminalAction,
+    workspacePanels.openDesktopPanel, setActiveView]);
   useEffect(() => window.setsunaDesktop?.browser.onOpenNewTab(({ url, tabId }) => {
     // Browser guests also live in sidebar website pages, outside the chat route.
     workspacePanels.openBrowserPanel(url, 'side', tabId);
@@ -445,7 +454,8 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   }), [setActiveView, workspacePanels.openBrowserPanel]);
 
   return (
-    <BrowserSettingsNavigationProvider value={browserSettingsNavigation}><ShellFrame
+    <BrowserSettingsNavigationProvider value={browserSettingsNavigation}>
+    <TerminalActionsHostProvider host={terminalActionsHost}><ShellFrame
       applicationMenu={<AppMenuBar handlers={shortcutHandlers} />}
       rootRef={shellRef}
       inspectorOpen={workspacePanelReservesLayout}
@@ -535,7 +545,6 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
               <AppTopbarActions
                 activeView={activeView}
                 bottomPanelVisible={workspacePanels.bottomPanelVisible}
-                conversationOverviewAvailable={Boolean(runtime.currentThread)}
                 conversationOverviewVisible={conversationOverviewRendered}
                 sidePanelVisible={workspacePanels.sidePanelVisible}
                 onToggleConversationOverview={handleToggleConversationOverview}
@@ -674,6 +683,6 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
           ),
         }}
       />
-    </ShellFrame></BrowserSettingsNavigationProvider>
+    </ShellFrame></TerminalActionsHostProvider></BrowserSettingsNavigationProvider>
   );
 }

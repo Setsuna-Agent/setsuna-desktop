@@ -30,8 +30,8 @@ describe('SettingsSidebar', () => {
         descriptionKey: 'feature.webdavSync.settings.description',
         icon: () => createElement('svg', { 'data-settings-icon': 'webdav-sync' }),
         location: 'settings',
-        navigationGroupId: 'models-and-services',
-        order: 350,
+        navigationGroupId: 'data-management',
+        order: 100,
         sectionId: 'webdav-sync',
         titleKey: 'feature.webdavSync.settings.title',
       }, webDavSyncFeature.id)],
@@ -43,15 +43,15 @@ describe('SettingsSidebar', () => {
     expect(html).toContain('同步');
   });
 
-  it('merges Feature settings into the host group by declared order', () => {
+  it('places network settings in the workspace group after model settings', () => {
     const html = renderSettingsSidebar({
       activeSection: 'network-proxy',
       pages: [...basePages, page({
         descriptionKey: 'feature.networkProxy.settings.description',
         icon: () => createElement('svg', { 'data-settings-icon': 'network-proxy' }),
         location: 'settings',
-        navigationGroupId: 'models-and-services',
-        order: 250,
+        navigationGroupId: 'workspace',
+        order: 400,
         sectionId: 'network-proxy',
         titleKey: 'feature.networkProxy.settings.title',
       }, networkProxyFeature.id)],
@@ -59,8 +59,8 @@ describe('SettingsSidebar', () => {
     });
 
     const featurePosition = html.indexOf('代理服务器');
-    expect(featurePosition).toBeGreaterThan(html.indexOf('模型服务'));
-    expect(featurePosition).toBeLessThan(html.indexOf('专用模型'));
+    expect(featurePosition).toBeGreaterThan(html.indexOf('工作环境'));
+    expect(featurePosition).toBeLessThan(html.indexOf('数据管理'));
   });
 });
 
@@ -81,22 +81,22 @@ const basePages: readonly SettingsPageEntryDescriptor[] = [
   }, 'host'),
   page({
     location: 'settings',
-    navigationGroupId: 'models-and-services',
-    order: 200,
+    navigationGroupId: 'models-and-usage',
+    order: 100,
     sectionId: 'model-provider',
     titleKey: 'feature.modelProvider.title',
   }, modelProviderFeature.id),
   page({
     location: 'settings',
-    navigationGroupId: 'models-and-services',
-    order: 300,
+    navigationGroupId: 'models-and-usage',
+    order: 200,
     sectionId: 'taskModels',
     titleKey: 'settings.section.taskModels',
   }, 'host'),
   page({
     location: 'settings',
-    navigationGroupId: 'data-and-system',
-    order: 100,
+    navigationGroupId: 'data-management',
+    order: 200,
     sectionId: 'archives',
     titleKey: 'settings.section.archives',
   }, 'host'),

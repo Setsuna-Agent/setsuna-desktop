@@ -184,9 +184,9 @@ export function ChatWorkspace({
     activeModelContextBudget(config, historyThread),
   ), [config, historyThread]);
   const contextCompactionRunning = contextCompacting || currentThread?.contextCompaction?.status === 'running';
-  const conversationOverview = useMemo(() => (variant === 'main' && currentThread
+  const conversationOverview = useMemo(() => (variant === 'main'
     ? conversationOverviewFromMessages(messages, activeTurnId, messageHistory.fileChangeGroups) : null),
-  [activeTurnId, currentThread, messageHistory.fileChangeGroups, messages, variant]);
+  [activeTurnId, messageHistory.fileChangeGroups, messages, variant]);
   const overviewLayout = useConversationOverviewLayout(conversationRef, contentNode);
   const overviewVisible = conversationOverviewVisibility === 'shown'
     || (conversationOverviewVisibility === 'auto' && overviewLayout !== 'hidden');
@@ -221,8 +221,8 @@ export function ChatWorkspace({
     conversationOverview && overviewShiftsContent ? 'chat-main-conversation--overview-shifted' : '',
   ].filter(Boolean).join(' ');
   useEffect(() => {
-    onConversationOverviewRenderedChange?.(Boolean(conversationOverview && currentThread && overviewVisible));
-  }, [conversationOverview, currentThread, onConversationOverviewRenderedChange, overviewVisible]);
+    onConversationOverviewRenderedChange?.(Boolean(conversationOverview && overviewVisible));
+  }, [conversationOverview, onConversationOverviewRenderedChange, overviewVisible]);
   const handleSend = useCallback<NonNullable<typeof onSend>>(
     async (value, options) => {
       // 发送消息代表用户重新关注最新进度；同时恢复 sticky，后续流式内容会持续贴底。
@@ -355,7 +355,7 @@ export function ChatWorkspace({
               onOpenFileReview={onOpenFileReview}
             />
           ))}
-          {overviewVisible && conversationOverview && currentThread ? (
+          {overviewVisible && conversationOverview ? (
             <div className="chat-conversation-overview">
               <RendererOwnedSingleSlot
                 instanceKey={surfaceInstanceId}

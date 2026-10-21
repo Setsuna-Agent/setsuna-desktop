@@ -229,13 +229,14 @@ runtime/memories/
 - Append-only `usage.jsonl`。
 - 按 thread/provider/model/time 查询。
 - Summary/bucket 聚合。
-- 只有模型返回 usage 时写记录。
+- 带有 `usageContext` 的模型调用结束时写一条记录，包括失败和取消；未报告的 Token 保持缺失，不能伪造为零。
+- `source`、`result`、`durationMs` 均为可选字段，旧汇总记录无需迁移。
 - Config provider metadata 用于安全展示，不保存 API key。
 
-Agent loop 仅依赖 Core `UsageRecorder` 窄口；composition 在 Usage Runtime Feature 激活后把
+模型调用 adapter 仅依赖 Core `UsageRecorder` 窄口；composition 在 Usage Runtime Feature 激活后把
 `usage.control` 绑定到稳定 recorder proxy。查询、分页、bucket 聚合和持久化实现都不在 Core runtime。
 
-后台标题用量写入成功后，宿主追加 `usage.recorded` Feature 事件。Usage renderer 通过现有事件订阅
+请求记录写入成功后，宿主为仍存在的线程追加 `usage.recorded` Feature 事件。Usage renderer 通过现有事件订阅
 重新查询当前线程用量，不依赖主回答的 `turn.completed` 或标题是否被采用；事件只用于失效通知，
 Core reducer 仅推进序列，不将标题消耗计入主回答的 usage。
 

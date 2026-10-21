@@ -11,6 +11,18 @@ export type RuntimeUsage = {
   model?: string;
 };
 
+export const RUNTIME_USAGE_SOURCES = ['conversation', 'title', 'memory', 'compaction', 'approval-review', 'vision'] as const;
+export type RuntimeUsageSource = typeof RUNTIME_USAGE_SOURCES[number];
+export const RUNTIME_USAGE_RESULTS = ['success', 'error', 'cancelled'] as const;
+export type RuntimeUsageResult = typeof RUNTIME_USAGE_RESULTS[number];
+
+/** Local attribution only; never part of the provider request body. */
+export type RuntimeUsageContext = {
+  threadId: string;
+  turnId: string;
+  source: RuntimeUsageSource;
+};
+
 export type RuntimeUsageRecord = RuntimeUsage & {
   id: string;
   threadId: string;
@@ -18,4 +30,8 @@ export type RuntimeUsageRecord = RuntimeUsage & {
   createdAt: string;
   /** 本条用量包含的模型采样次数；旧记录缺失时不能由记录条数推断。 */
   requestCount?: number;
+  source?: RuntimeUsageSource;
+  result?: RuntimeUsageResult;
+  /** Monotonic request duration, excluding usage persistence. */
+  durationMs?: number;
 };

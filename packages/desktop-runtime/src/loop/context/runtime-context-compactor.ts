@@ -25,7 +25,6 @@ import {
   runtimeDebugTraceEnabled,
   type RuntimeDebugTraceSink,
 } from '../../ports/runtime-debug-trace.js';
-import type { UsageRecorder } from '../../ports/usage-store.js';
 import { createModelStreamTextCollector } from '../../utils/model-stream-text-collector.js';
 import { PROVIDER_METADATA_SEMANTIC_BINDING_RESERVE_BYTES } from '../../utils/runtime-message-semantic-fingerprint.js';
 import {
@@ -67,7 +66,6 @@ type RuntimeContextCompactorOptions = {
   debugTrace?: RuntimeDebugTraceSink;
   ids: IdGenerator;
   modelClient: ModelClient;
-  usageStore?: UsageRecorder;
   appendEvent(
     threadId: string,
     event: PendingRuntimeEvent,
@@ -94,7 +92,8 @@ type RuntimeCompactionDebugContext = {
 type CompactionSamplingInput = {
   candidate: RuntimeContextCompactionCandidate;
   threadId: string;
-  recordUsage: (usage: RuntimeUsage) => Promise<void>;
+  turnId: string;
+  publishUsage: (usage: RuntimeUsage) => Promise<void>;
   signal?: AbortSignal;
   debugContext?: RuntimeCompactionDebugContext;
   runtimeConfig?: RuntimeConfigState | null;
@@ -211,11 +210,11 @@ export class RuntimeContextCompactor {
     runtimeConfig?: RuntimeConfigState | null;
     conversationModel?: Pick<ModelRequest, 'model' | 'providerId'>;
   }): Promise<GeneratedContextCompactionSummary> {
-    const recordUsage = async (usage: RuntimeUsage): Promise<void> => {
+    const publishUsage = async (usage: RuntimeUsage): Promise<void> => {
       const event = await this.publishContextCompactionUsage(threadId, turnId, usage);
       advanceDebugAnchor(debugContext, event);
     };
-    const samplingInput = { candidate, threadId, recordUsage, signal, debugContext, runtimeConfig, conversationModel };
+    const samplingInput = { candidate, threadId, turnId, publishUsage, signal, debugContext, runtimeConfig, conversationModel };
     const provider = runtimeConfig?.providers.find((item) => item.id === (conversationModel?.providerId ?? runtimeConfig.activeProviderId));
     // An explicit task model selects portable compaction. Native-only checkpoints require all
     // source messages to survive transcript archival, including on a later provider switch.
@@ -268,7 +267,7 @@ export class RuntimeContextCompactor {
   }
 
   private async generatePortableContextCompactionBatch({
-    candidate, threadId, recordUsage, signal, debugContext, budget, source, previousSummary,
+    candidate, threadId, turnId, publishUsage, signal, debugContext, budget, source, previousSummary,
   }: CompactionSamplingInput & { budget: ContextCompactionRequestBudget; source: CompactionSummarySource; previousSummary: string }): Promise<string> {
     this.traceCompaction(debugContext, 'context.compaction.portable', {
       olderMessageCount: candidate.olderMessages.length,
@@ -289,6 +288,7 @@ export class RuntimeContextCompactor {
         for await (const item of this.options.modelClient.stream({
           ...request,
           sessionId: threadId,
+          usageContext: { threadId, turnId, source: 'compaction' },
           signal,
         })) {
           if (item.type === 'usage' || item.type === 'token_count') usage = item.usage;
@@ -315,7 +315,7 @@ export class RuntimeContextCompactor {
         if (attempt === 1) throw new Error(`Context compaction failed; original history was retained. ${compactionDebugError(error)}`, { cause: error });
       } finally {
         // Usage belongs to the model call, including incomplete and cancelled attempts.
-        if (usage) await recordUsage(usage);
+        if (usage) await publishUsage(usage);
       }
     }
     throw new Error('Context compaction failed.');
@@ -325,7 +325,7 @@ export class RuntimeContextCompactor {
    * 原生结果只在原供应商边界回放；跨模型交接从归档原文重新生成，不猜测 opaque 内容。
    */
   private async generateNativeContextCompaction({
-    candidate, threadId, recordUsage, signal, debugContext, conversationModel,
+    candidate, threadId, turnId, publishUsage, signal, debugContext, conversationModel,
   }: CompactionSamplingInput): Promise<NativeContextCompactionArtifact> {
     if (!this.options.modelClient.compactConversation) {
       this.traceCompaction(debugContext, 'context.compaction.native', {
@@ -347,6 +347,7 @@ export class RuntimeContextCompactor {
         // its opaque metadata is only replayable by that provider/model pair.
         ...(conversationModel ?? { model: 'context-compaction' }),
         sessionId: threadId,
+        usageContext: { threadId, turnId, source: 'compaction' },
         // Native compact must see the real model window, including exact provider envelopes.
         messages: candidate.olderMessages,
         signal,
@@ -382,7 +383,7 @@ export class RuntimeContextCompactor {
       if (signal?.aborted) throw error;
       return {};
     } finally {
-      if (usage) await recordUsage(usage);
+      if (usage) await publishUsage(usage);
     }
   }
 
@@ -418,12 +419,6 @@ export class RuntimeContextCompactor {
       type: 'token.count',
       createdAt,
       payload: { usage },
-    });
-    await this.options.usageStore?.recordUsage({
-      threadId,
-      turnId,
-      createdAt,
-      ...usage,
     });
     return event;
   }

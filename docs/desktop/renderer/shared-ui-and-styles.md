@@ -45,6 +45,7 @@
 - 菜单、Select 与项目/分支选择器的行文字统一使用 `--app-text`（危险项等语义色优先）；菜单高亮只改变行底色（`--app-menu-highlight-bg`，即 `--desktop-agent-control-hover-bg`），文字、图标、快捷键和危险项保持原有颜色；选择类菜单通过 `sd-menu-surface--neutral` 额外为当前选中项保留同一底色。
 - `AppTextContextMenu` 使用 `PointMenu` 为输入框提供剪切、复制、粘贴，为正文选区提供复制；已处理的专用右键菜单优先。菜单关闭后恢复原焦点与选区，通过 preload 的 `windowControls.executeTextEdit` 调用当前宿主窗口的原生编辑命令，复用编辑器已有的结构化剪贴板、附件粘贴和撤销链路。
 - `ui/primitives.tsx` / `SelectField.tsx` 保留宿主导出；`SettingsViewUi.tsx` 将同一实现注入 Feature 的 Settings UI contract。
+- 设置子页复用 `SettingsViewUi.PageLayout` 的返回按钮、面包屑和内容宽度；表单自带标题时使用 `showHeading={false}` 保留导航，避免重复标题。
 - `shared/ui/model-picker/` 持有聊天、自动任务和设置页共用的模型搜索、服务分组、品牌图标与悬停详情。Feature 通过 `SettingsViewUi.ModelPicker` 传入可用模型和引用，宿主 `composition/ModelProviderFeatureBoundary.tsx` 只补充模型服务投影中的元数据；候选范围仍由各任务的可用列表决定，缺少元数据不隐藏候选。
 - 插件配置表单复用 `settings-form.css` 的 `sd-settings-form`：浅灰圆角卡片、统一输入控件间距、图标底板和中性分隔线。图片生成、视觉识别与声明式插件设置共用这层外观；各 Feature 只维护字段排布、业务状态和结果展示，不再各自绘制外框。
 - `I18nProvider` 同步共享控件的中英文标签；外观和字体继续由宿主偏好控制。

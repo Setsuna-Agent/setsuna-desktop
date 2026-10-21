@@ -37,7 +37,7 @@ Main Feature 为 optional，启动时只注册 IPC，不采样、不扫描页面
 
 源码：`packages/features/usage/`
 
-Usage 拥有模型调用记录的持久化、按时间/provider/model/thread 聚合、统计设置视图和会话摘要。Runtime Core 通过 `BindableUsageRecorder` 把 AgentLoop 的结算记录交给 Feature，不直接依赖具体文件 store。
+Usage 拥有模型调用记录的持久化、按时间/provider/model/thread 聚合、统计设置视图和会话摘要。Runtime Core 在模型调用边界使用 `UsageTrackingModelClient`，通过 `BindableUsageRecorder` 将每次调用交给 Feature；各业务调用方只提供 `ModelRequest.usageContext`，不再单独结算。
 
 `usage.query` 支持：
 
@@ -47,8 +47,13 @@ Usage 拥有模型调用记录的持久化、按时间/provider/model/thread 聚
 - 总输入、缓存输入、输出和 total token。
 - 按日、provider、model 的 bucket。
 - provider/model 的无 secret 描述信息。
+- 单次请求的来源、成功/失败/取消结果、耗时。没有 usage 的失败请求仍有记录，Token 保持未知。
 
-Renderer controller 以持久记录为基线；活跃 turn 或结算交接期间，可用 thread event 中的实时 token 补齐当前会话显示。补齐只用于 UI 瞬时投影，不能写成第二份 usage record。
+来源覆盖对话、标题生成、记忆、压缩、审批评审和图片识别。调用上下文在进入供应商前移除，不记录请求内容、错误响应正文或密钥。输出速度采用输出 Token 除以完整请求耗时的平均值，避免一次性返回输出时产生虚高速度；历史汇总或缺失数据展示 `—`。
+
+调用明细的显示设置通过表格底部分页栏内的齿轮按钮打开。列选择保存在 renderer 本地偏好中，应用时提交，取消保留原选择，至少显示一列。
+
+Renderer controller 以持久记录为基线；活跃 turn 或结算交接期间，可用 thread event 中的实时 token 补齐当前会话显示。线程查询额外返回完整的 `summary.byTurnModel` 对账汇总，仅包含对话、压缩和历史未分类记录，按 turn/provider/model 分桶；实时增量不依赖分页明细，避免长轮次或旧失败轮次重复累计。补齐只用于 UI 瞬时投影，不能写成第二份 usage record。
 
 Usage 是 optional Feature：记录或查询失败不应阻止 Agent turn，但必须通过状态/diagnostic 可见，并避免重复结算。
 

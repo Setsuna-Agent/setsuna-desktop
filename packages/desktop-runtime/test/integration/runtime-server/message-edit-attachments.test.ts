@@ -59,7 +59,10 @@ async function upload(name: string): Promise<RuntimeStoredMessageAttachment> {
 }
 
 async function sentMessage(attachment: RuntimeStoredMessageAttachment) {
-  const created = await harness.runtimeFetch('/v1/threads', { method: 'POST', body: '{}' });
+  // Keep unrelated title/memory jobs out of the ledger whose sequence is asserted below.
+  const created = await harness.runtimeFetch('/v1/threads', {
+    method: 'POST', body: JSON.stringify({ title: 'Attachment fixture', memoryMode: 'disabled' }),
+  });
   const started = await harness.runtimeFetch(`/v1/threads/${created.id}/turns`, {
     method: 'POST', body: JSON.stringify({ input: 'Original prompt', attachments: [attachment] }),
   });

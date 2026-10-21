@@ -1,0 +1,21 @@
+.settings-usage-columns__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settings-usage-columns__grid > label {
+  min-height: 40px;
+  padding: 10px 12px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-sm);
+}
+
+.settings-usage-columns__selection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+}

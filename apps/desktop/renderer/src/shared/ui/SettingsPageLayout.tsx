@@ -15,7 +15,7 @@ export function SettingsPageHeading({ action, description, title }: SettingsPage
 }
 
 /** Shared by Feature-owned settings pages and nested management views. */
-export function SettingsPageLayout({ title, description, action, parent, children }: SettingsPageLayoutProps) {
+export function SettingsPageLayout({ title, description, action, parent, showHeading = true, children }: SettingsPageLayoutProps) {
   const { t } = useI18n();
   const root = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -32,7 +32,7 @@ export function SettingsPageLayout({ title, description, action, parent, childre
       <ChevronRight size={12} aria-hidden="true" /><span aria-current="page">{title}</span>
     </nav> : null}
     <div className="sd-settings-page__content">
-      <SettingsPageHeading title={title} description={description} action={action} />
+      {showHeading ? <SettingsPageHeading title={title} description={description} action={action} /> : null}
       {children}
     </div>
   </div>;

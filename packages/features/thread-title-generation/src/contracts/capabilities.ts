@@ -31,6 +31,7 @@ export type ThreadTitleGenerationModelRequest = Pick<
   ModelRequest,
   | 'providerId'
   | 'sessionId'
+  | 'usageContext'
   | 'model'
   | 'messages'
   | 'toolChoice'
@@ -59,7 +60,6 @@ export interface ThreadTitleGenerationRuntimeHost {
   }>): Promise<ThreadTitleGenerationResolvedModel | null>;
   listModelOptions(): Promise<readonly ThreadTitleGenerationModelOption[]>;
   generateText(input: ThreadTitleGenerationModelRequest): Promise<ThreadTitleGenerationModelResult>;
-  recordUsage(threadId: string, turnId: string, usage: RuntimeUsage): Promise<void>;
   flushThread(threadId: string): Promise<void>;
   listEvents(threadId: string, afterSeq: number): Promise<StoredThreadEvent[]>;
   getThread(threadId: string): Promise<RuntimeThread | null>;

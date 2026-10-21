@@ -29,7 +29,17 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 
 页面根不应包含 provider normalize、calendar 聚合或数据根错误翻译等纯逻辑。
 
-“存储空间”是设置侧栏“数据与系统”组中的独立页面，点击后直接进入管理视图。`StorageUsageOverview` 用分段占用条和分类图例展示实际文件大小；历史对话、缓存与日志使用独立选择弹窗。历史对话可按最后更新时间、归档状态和标题筛选，切换筛选清空旧选择，避免删除不可见的目标。`useStorageManagement` 负责按需加载和操作状态；清理前使用共享确认对话框，批量删除遇到跨窗口取消会停止后续操作，关联附件沿用原有 owner 清理。部分失败保留未完成选择，刷新实际占用。只有进入存储空间页面或手动刷新才触发扫描。
+设置侧栏按用途分组，组内顺序由各页面 contribution 的 `order` 决定。未注册页面的分组不显示，未知分组的页面仍进入“功能”。
+
+| 分组（`navigationGroupId`） | 页面顺序 |
+| --- | --- |
+| 应用偏好（`preferences`） | 通用、键盘快捷键、个性化 |
+| 模型与用量（`models-and-usage`） | 模型服务、专用模型、用量分析 |
+| 工作环境（`workspace`） | 环境、浏览器、电脑控制、代理服务器 |
+| 数据管理（`data-management`） | 同步、归档对话、存储空间 |
+| 系统（`system`） | 高级设置、关于 |
+
+“存储空间”是设置侧栏“数据管理”组中的独立页面，点击后直接进入管理视图。`StorageUsageOverview` 用分段占用条和分类图例展示实际文件大小；历史对话、缓存与日志使用独立选择弹窗。历史对话可按最后更新时间、归档状态和标题筛选，切换筛选清空旧选择，避免删除不可见的目标。`useStorageManagement` 负责按需加载和操作状态；清理前使用共享确认对话框，批量删除遇到跨窗口取消会停止后续操作，关联附件沿用原有 owner 清理。部分失败保留未完成选择，刷新实际占用。只有进入存储空间页面或手动刷新才触发扫描。
 
 ### Sections
 
@@ -46,7 +56,7 @@ Memory 是独立 renderer Feature，但不单独占用设置导航。它在 setu
 
 Updater 也是独立 renderer Feature。它通过 Settings extension Slot 填充宿主保留的“关于”分区，并由 `UpdaterRendererStateService` 单点订阅 preload 状态；设置页和 App controller 不传递 updater 专用 props。顶栏铃铛由 Feature 自己注册到 `renderer.shell.topbar.action`，状态、动作、文案和样式均由 `packages/features/updater/src/renderer` 持有。
 
-WebDAV Sync 也是独立 renderer Feature，并通过 `registerSettingsPage(context.ui, ...)` 形成完整“同步”页面。它用 `navigationGroupId` 声明归入宿主“模型与服务”分组；没有已知宿主归属的 contribution 才进入独立“功能”分组。连接、自动备份、数据类别、当前快照、还原检查、文案和 scoped CSS 都位于 `packages/features/webdav-sync/src/renderer`；宿主设置页只消费 Slot descriptor，不读取 WebDAV 状态，也不持有 bridge 方法。
+WebDAV Sync 也是独立 renderer Feature，并通过 `registerSettingsPage(context.ui, ...)` 形成完整“同步”页面。它用 `navigationGroupId` 声明归入宿主“数据管理”分组；没有已知宿主归属的 contribution 才进入独立“功能”分组。连接、自动备份、数据类别、当前快照、还原检查、文案和 scoped CSS 都位于 `packages/features/webdav-sync/src/renderer`；宿主设置页只消费 Slot descriptor，不读取 WebDAV 状态，也不持有 bridge 方法。
 
 Network Proxy 同样通过 Settings page Slot 提供完整“代理服务器”页面，状态订阅、编辑动作、文案与 scoped CSS 位于 `packages/features/network-proxy/src/renderer`。Model Provider Feature 通过宿主 capability 读取代理服务器公开投影；宿主设置页不直接调用代理 bridge，也不拥有代理 section。preload 子桥类型由 Feature contract 贡献，renderer 不接触端口、凭据或本地文件。
 
@@ -120,6 +130,8 @@ Feature 自己负责：
 - Provider/model branding 的语义输入；宿主通过 `usage.renderer-host` 注入实际图标与 Tooltip。
 - 全部时间、今天、滚动 4h/24h/7d/30d 时段，可与厂商、模型筛选组合；厂商/模型选项取自未筛选快照的分桶 key。
 - 最近调用明细按 10 条分页，翻页通过 usage query 的 `limit`/`offset` 按需读取。
+
+用量页在 lazy chunk 和首次查询期间展示与内容区块对应的骨架。基线查询完成后先绘制概览，再按绘制帧逐块挂载模型/厂商分布、年度热力图与调用明细，避免全年 Tooltip 和表格一起阻塞首屏；刷新和筛选不重置已展示区块。`useUsageSettingsData` 持有基线查询、取消与重试，迟到结果不覆盖新快照，筛选/分页查询只返回结果；首次失败保留重试入口，后台刷新失败保留已有内容并通过 Toast 通知。
 
 筛选通过 Feature contract 中的 `RuntimeUsageQuery.from/to/provider/model` 传给 runtime：时间按 `[from, to)`，
 厂商/模型按与 `byProvider`/`byModel` 相同的分桶 key（含旧记录修正后的厂商名）过滤后再统一聚合；

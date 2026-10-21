@@ -76,6 +76,7 @@ export type ApprovalReviewModelRequest = Pick<
   ModelRequest,
   | 'providerId'
   | 'sessionId'
+  | 'usageContext'
   | 'model'
   | 'messages'
   | 'toolChoice'
@@ -99,7 +100,6 @@ export interface ApprovalReviewRuntimeHost {
   }>): Promise<ApprovalReviewResolvedModel>;
   listModelOptions(): Promise<readonly ApprovalReviewModelOption[]>;
   generateText(input: ApprovalReviewModelRequest): Promise<ApprovalReviewModelResult>;
-  recordUsage(threadId: string, turnId: string, usage: RuntimeUsage): Promise<void>;
 }
 
 export interface ApprovalReviewLegacySettingsAdapter {

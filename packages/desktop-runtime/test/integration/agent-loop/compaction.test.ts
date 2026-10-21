@@ -1,3 +1,4 @@
+import { UsageTrackingModelClient } from '../../../src/adapters/model/usage-tracking-model-client.js';
 import type { ModelRequest, ModelStreamEvent, RuntimeConfigState, RuntimeMessage } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
@@ -46,9 +47,9 @@ describe('agent loop context compaction', () => {
     ];
     let attempts = 0;
     const loop = new AgentLoop({
-      threadStore, ids, clock: systemClock, eventBus: new InMemoryEventBus(), usageStore,
+      threadStore, ids, clock: systemClock, eventBus: new InMemoryEventBus(),
       configStore: new ContextWindowConfigStore(16_000),
-      modelClient: { stream: async function* (request): AsyncGenerator<ModelStreamEvent> {
+      modelClient: new UsageTrackingModelClient({ stream: async function* (request): AsyncGenerator<ModelStreamEvent> {
         expect(request.messages.some((message) => message.id === 'context_compaction_system')).toBe(true);
         expect(request.maxOutputTokens).toBeLessThan(16_000);
         const usage = usages[attempts++]!;
@@ -56,7 +57,7 @@ describe('agent loop context compaction', () => {
         yield { type: 'usage', usage };
         yield { type: 'token_count', usage };
         yield { type: 'done', finishReason: 'length' };
-      } },
+      } }, { clock: systemClock, recorder: usageStore }),
     });
 
     await expect(mode === 'manual'
@@ -575,12 +576,12 @@ describe('agent loop context compaction', () => {
       const usageStore = new CapturingUsageStore();
       const loop = new AgentLoop({
         threadStore,
-        modelClient,
+        modelClient: new UsageTrackingModelClient(modelClient, { clock: systemClock, recorder: usageStore }),
         eventBus: new InMemoryEventBus(),
         clock: systemClock,
         ids,
         configStore: new NativeContextWindowConfigStore(16_000),
-        usageStore,
+
       });
   
       await loop.sendTurn(thread.id, { input: 'continue after remote compaction' });
@@ -624,7 +625,9 @@ describe('agent loop context compaction', () => {
           inputTokens: 10,
           outputTokens: 2,
           totalTokens: 12,
+          source: 'compaction',
         },
+        { source: 'conversation', result: 'success' },
       ]);
       expect(mainRequest?.messages.some((message) => message.contextCompaction?.nativeSourceMessageIds?.includes('remote_compact_msg_0'))).toBe(true);
       expect(mainRequest?.messages.map((message) => message.content).join('\n')).not.toContain(smallWindowHistory.slice(0, 200));

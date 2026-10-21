@@ -138,6 +138,7 @@ export class RuntimeModelSampler {
     for await (const item of this.options.modelClient.stream({
       ...step.modelRequest,
       sessionId: threadId,
+      usageContext: { threadId, turnId, source: 'conversation' },
       messages: modelRequestMessages(step.messages),
       tools: requestTools,
       toolChoice: requestToolChoice,

@@ -1,3 +1,4 @@
+import { UsageTrackingModelClient } from '../../../src/adapters/model/usage-tracking-model-client.js';
 import type { ProviderConfigState } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
@@ -37,12 +38,12 @@ describe('agent loop memory extraction', () => {
       const usageStore = new CapturingUsageStore();
       const loop = new AgentLoop({
         threadStore,
-        modelClient,
+        modelClient: new UsageTrackingModelClient(modelClient, { clock: systemClock, recorder: usageStore }),
         eventBus: new InMemoryEventBus(),
         clock: systemClock,
         ids,
         memoryStore,
-        usageStore,
+
       });
   
       await loop.sendTurn(thread.id, { input: '以后记忆生成模型要跟随当前切换的模型。' });
@@ -66,7 +67,10 @@ describe('agent loop memory extraction', () => {
         },
       ]);
       expect(preview.items[0].preview).toContain('记忆生成模型要跟随当前切换的模型');
-      expect(usageStore.records).toMatchObject([{ provider: 'test-provider', model: 'selected-model' }]);
+      expect(usageStore.records).toMatchObject([
+        { source: 'conversation', result: 'success' },
+        { source: 'memory', provider: 'test-provider', model: 'selected-model', totalTokens: 14 },
+      ]);
       await expect(memoryStore.listStage1Outputs()).resolves.toMatchObject({
         outputs: [
           expect.objectContaining({
@@ -328,12 +332,12 @@ function conversationProvider(id: string, modelCode: string): ProviderConfigStat
       const usageStore = new CapturingUsageStore();
       const loop = new AgentLoop({
         threadStore,
-        modelClient,
+        modelClient: new UsageTrackingModelClient(modelClient, { clock: systemClock, recorder: usageStore }),
         eventBus: new InMemoryEventBus(),
         clock: systemClock,
         ids,
         memoryStore,
-        usageStore,
+
         configStore: new ActiveMemorySettingsConfigStore({
           useMemories: true,
           generateMemories: true,
@@ -373,12 +377,12 @@ function conversationProvider(id: string, modelCode: string): ProviderConfigStat
       await expect(memoryStore.claimPhase2Job({ ownerId: 'after_success', leaseSeconds: 60, retryDelaySeconds: 60 })).resolves.toMatchObject({
         status: 'skipped_no_input',
       });
-      expect(usageStore.records).toMatchObject([{
-        threadId: thread.id,
-        inputTokens: 5,
-        outputTokens: 3,
-        totalTokens: 8,
-      }]);
+      expect(usageStore.records).toMatchObject([
+        { source: 'conversation' },
+        { source: 'memory' },
+        { source: 'memory', threadId: thread.id, inputTokens: 2, outputTokens: 1, totalTokens: 3, requestCount: 1 },
+        { source: 'memory', threadId: thread.id, inputTokens: 3, outputTokens: 2, totalTokens: 5, requestCount: 1 },
+      ]);
     });
   
   it('records startup stage-1 no-output results and skips the same rollout later', async () => {

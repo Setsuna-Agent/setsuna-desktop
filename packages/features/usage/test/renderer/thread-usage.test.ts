@@ -1,9 +1,52 @@
 import type { RuntimeThread, RuntimeUsageRecord } from '@setsuna-desktop/contracts';
 import type { RuntimeUsageResponse } from '../../src/contracts/index.js';
+import { usageTurnModelKey } from '../../src/contracts/record-metadata.js';
 import { describe, expect, it } from 'vitest';
 import { chatThreadUsageForDisplay } from '../../src/renderer/thread-usage.js';
 
 describe('chat thread usage projection', () => {
+  it('reconciles long turns and older cancelled turns against complete totals while details are paginated', () => {
+    const records = Array.from({ length: 101 }, (_, index) => ({
+      ...usageRecord(`usage_${index}`, 10, 1), source: 'conversation' as const,
+    }));
+    const old = { ...usageRecord('old', 18, 2), turnId: 'old-turn', source: 'conversation' as const };
+    const title = { ...usageRecord('title', 20, 5), source: 'title' as const };
+    const thread = runtimeThread('in_progress', Array.from({ length: 102 }, () => tokenCount('2026-07-16T00:00:02.000Z', 10, 1)));
+    thread.turns!.unshift({ id: old.turnId, items: [], status: 'cancelled', tokenCounts: [tokenCount(old.createdAt, 18, 2)] });
+    const snapshot = (conversation: RuntimeUsageRecord[]) => {
+      const stored = storedUsage(old, ...conversation, title);
+      const bucket = (rows: RuntimeUsageRecord[]) => ({
+        key: usageTurnModelKey(rows[0]!.turnId, rows[0]!),
+        ...storedUsage(...rows).summary,
+      });
+      return { ...stored, records: stored.records.slice(-100),
+        summary: { ...stored.summary, byTurnModel: [bucket([old]), bucket(conversation)] } };
+    };
+
+    const pending = chatThreadUsageForDisplay(snapshot(records), thread);
+    expect(pending?.summary).toMatchObject({ totalTokens: 1167, recordCount: 104, requestCount: 102 });
+    expect(pending?.records.filter((record) => record.id.startsWith('live_usage_'))).toHaveLength(1);
+
+    thread.turns!.at(-1)!.status = 'completed';
+    const settled = chatThreadUsageForDisplay(snapshot([...records, usageRecord('last', 10, 1)]), thread);
+    expect(settled?.summary).toMatchObject({ totalTokens: 1167, recordCount: 104, requestCount: 102 });
+    expect(settled?.records).toHaveLength(100);
+  });
+
+  it('merges the last sampling during refresh without subtracting background usage from it', () => {
+    const first = { ...usageRecord('first', 100, 20), source: 'conversation' as const, requestCount: 1 };
+    const title = { ...usageRecord('title', 20, 5), source: 'title' as const, requestCount: 1 };
+    const thread = runtimeThread('completed', [
+      tokenCount('2026-07-16T00:00:01.000Z', 100, 20),
+      tokenCount('2026-07-16T00:00:02.000Z', 50, 10),
+    ]);
+    const pending = chatThreadUsageForDisplay(storedUsage(first, title), thread);
+    expect(pending?.summary).toMatchObject({ totalTokens: 205, recordCount: 3, requestCount: 2 });
+    const last = { ...usageRecord('last', 50, 10), source: 'conversation' as const, requestCount: 1 };
+    const settled = chatThreadUsageForDisplay(storedUsage(first, title, last), thread);
+    expect(settled?.summary).toMatchObject({ totalTokens: 205, recordCount: 3, requestCount: 2 });
+    expect(settled?.records).toHaveLength(3);
+  });
   it('shows accumulated token counts before a turn is settled', () => {
     const usage = chatThreadUsageForDisplay(null, runtimeThread('in_progress', [
       tokenCount('2026-07-16T00:00:01.000Z', 100, 20, 70),

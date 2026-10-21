@@ -1,6 +1,9 @@
 import { NotificationToolHost } from '../adapters/tool/notification-tool-host.js';
 import { PullRequestToolHost } from '../adapters/tool/pull-request-tool-host.js';
 import path from 'node:path';
+import { createFeatureEvent } from '@setsuna-desktop/feature-core/events';
+import { usageRecordedEvent } from '@setsuna-desktop/feature-usage/contracts';
+import { UsageTrackingModelClient } from '../adapters/model/usage-tracking-model-client.js';
 import { InMemoryApprovalGate } from '../adapters/approval/in-memory-approval-gate.js';
 import { ConversationDebugRuntimeSink } from '../adapters/feature/conversation-debug-runtime-sink.js';
 import { BindableUsageRecorder } from '../adapters/feature/bindable-usage-recorder.js';
@@ -173,7 +176,20 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const projectInstructions = new FileProjectInstructionLoader();
   const projectWorkflow = new FileProjectWorkflowResolver();
   const providerModelClient = new BindableModelClient();
-  const modelClient = new ImageAssetResolvingModelClient(providerModelClient, generatedImageStore, {
+  const trackedModelClient = new UsageTrackingModelClient(providerModelClient, {
+    clock,
+    recorder: usageRecorder,
+    onRecordingError: () => console.warn('[usage] Failed to persist model request usage.'),
+    onRecorded: async (record) => {
+      // Background jobs can finish after the turn; refresh only after the ledger write commits.
+      if (!await threadStore.getThread(record.threadId)) return;
+      await eventWriter.append(record.threadId, createFeatureEvent(usageRecordedEvent, {
+        id: ids.id('event'), threadId: record.threadId, turnId: record.turnId,
+        createdAt: clock.now().toISOString(),
+      }, { recordId: record.id }));
+    },
+  });
+  const modelClient = new ImageAssetResolvingModelClient(trackedModelClient, generatedImageStore, {
     reportDiagnostic: (record) => modelLatencyLog.record(record),
     getImageCompression: async () => (await configStore.getConfig()).imageCompression,
   });
@@ -182,10 +198,9 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     clock,
     config: configStore,
     legacySettings: configStore.visionRecognitionLegacySettingsAdapter(),
-    models: providerModelClient,
+    models: trackedModelClient,
     plugins: pluginStore,
     threads: threadStore,
-    usage: usageRecorder,
   });
   const extensionUi = new ExtensionUiCoordinator(approvalGate, eventWriter, clock, ids);
   const extensionManager = new ExtensionManager(pluginStore, extensionState, extensionUi, {
@@ -255,7 +270,6 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     skillRegistry,
     pluginStore,
     toolHost,
-    usageStore: usageRecorder,
     memoryStore,
     mcpStore,
     policyAmendmentStore,

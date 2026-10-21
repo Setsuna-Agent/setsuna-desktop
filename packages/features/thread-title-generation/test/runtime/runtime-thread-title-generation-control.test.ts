@@ -25,11 +25,10 @@ const usage: RuntimeUsage = {
 };
 
 describe('RuntimeThreadTitleGenerationControl', () => {
-  it('generates on the first regular turn and commits usage plus the title', async () => {
+  it('generates on the first regular turn and attributes the request and commits the title', async () => {
     const current = threadAfterFirstMessage('请分析自动标题的归属');
-    const recordUsage = vi.fn<ThreadTitleGenerationRuntimeHost['recordUsage']>();
     const appendTitleUpdate = vi.fn<ThreadTitleGenerationRuntimeHost['appendTitleUpdate']>();
-    const host = runtimeHost({ current, recordUsage, appendTitleUpdate });
+    const host = runtimeHost({ current, appendTitleUpdate });
     const generateText = vi.spyOn(host, 'generateText');
     const { control } = activeControl(host, { providerId: 'provider-title', modelId: 'model-title' });
 
@@ -46,8 +45,7 @@ describe('RuntimeThreadTitleGenerationControl', () => {
       selection: { providerId: 'provider-title', modelId: 'model-title' },
       fallback: { model: 'chat-model', providerId: 'provider-chat' },
     });
-    expect(recordUsage).toHaveBeenCalledWith(current.id, 'turn_1', usage);
-    expect(generateText).toHaveBeenCalledWith(expect.objectContaining({ sessionId: current.id }));
+    expect(generateText).toHaveBeenCalledWith(expect.objectContaining({ sessionId: current.id, usageContext: { threadId: current.id, turnId: 'turn_1', source: 'title' } }));
     expect(appendTitleUpdate).toHaveBeenCalledWith(current.id, 'turn_1', '自动标题 Feature 归属');
   });
 
@@ -71,7 +69,6 @@ describe('RuntimeThreadTitleGenerationControl', () => {
     });
 
     expect(appendTitleUpdate).not.toHaveBeenCalled();
-    expect(host.recordUsage).toHaveBeenCalledWith(current.id, 'turn_1', usage);
   });
 
   it('cancels pending generation on Feature shutdown and discards a late provider result', async () => {
@@ -98,7 +95,6 @@ describe('RuntimeThreadTitleGenerationControl', () => {
     await pending;
     await scope.finishDispose();
 
-    expect(host.recordUsage).not.toHaveBeenCalled();
     expect(host.appendTitleUpdate).not.toHaveBeenCalled();
   });
 
@@ -161,12 +157,10 @@ function runtimeHost({
   appendTitleUpdate = vi.fn<ThreadTitleGenerationRuntimeHost['appendTitleUpdate']>(),
   current,
   events = [],
-  recordUsage = vi.fn<ThreadTitleGenerationRuntimeHost['recordUsage']>(),
 }: Readonly<{
   appendTitleUpdate?: ThreadTitleGenerationRuntimeHost['appendTitleUpdate'];
   current: RuntimeThread;
   events?: StoredThreadEvent[];
-  recordUsage?: ThreadTitleGenerationRuntimeHost['recordUsage'];
 }>): ThreadTitleGenerationRuntimeHost {
   return {
     now: () => new Date(NOW),
@@ -177,7 +171,6 @@ function runtimeHost({
       finishReason: 'stop',
       usage,
     }),
-    recordUsage,
     flushThread: async () => undefined,
     listEvents: async () => events,
     getThread: async () => current,

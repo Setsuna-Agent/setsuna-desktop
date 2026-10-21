@@ -3,7 +3,6 @@ import type {
   ProviderModelConfig,
   RuntimeConfiguredModelReference,
   RuntimeMessage,
-  RuntimeUsage,
 } from '@setsuna-desktop/contracts';
 import { randomUUID } from 'node:crypto';
 import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
@@ -247,6 +246,7 @@ export class RuntimeVisionRecognitionService implements VisionRecognitionService
       result = await this.host.generateText({
         providerId: selection.reference.providerId,
         sessionId,
+        ...(usageContext ? { usageContext: { ...usageContext, source: 'vision' as const } } : {}),
         model: selection.model.code,
         messages: [visionRequestMessage(prompt, image, this.host.now())],
         maxOutputTokens: Math.min(selection.model.maxOutputTokens, MAX_OUTPUT_TOKENS),
@@ -269,26 +269,8 @@ export class RuntimeVisionRecognitionService implements VisionRecognitionService
       this.markProviderUnavailable(selection);
       throw operationFailure('PROVIDER_UNAVAILABLE', 'Vision model returned no usable text.', true);
     }
-    if (usageContext && result.usage) {
-      await this.recordUsage(result.usage, selection, usageContext);
-    }
     if (this.applied?.signature === selection.signature) this.markReady();
     return content;
-  }
-
-  private async recordUsage(
-    usage: RuntimeUsage,
-    selection: AppliedVisionModel,
-    context: Readonly<{ threadId: string; turnId: string }>,
-  ): Promise<void> {
-    await this.host.recordUsage({
-      ...usage,
-      ...context,
-      createdAt: this.host.now().toISOString(),
-      providerId: usage.providerId ?? selection.reference.providerId,
-      provider: usage.provider ?? selection.provider.name,
-      model: usage.model ?? selection.model.code,
-    });
   }
 
   private setUnavailable(health: VisionRecognitionHealth, code: string, message: string): void {

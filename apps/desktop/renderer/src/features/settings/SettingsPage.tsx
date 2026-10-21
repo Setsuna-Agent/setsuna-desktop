@@ -49,12 +49,20 @@ const settingsSectionGroups = [
     labelKey: 'settings.group.preferences',
   },
   {
-    id: 'models-and-services',
-    labelKey: 'settings.group.modelsAndServices',
+    id: 'models-and-usage',
+    labelKey: 'settings.group.modelsAndUsage',
   },
   {
-    id: 'data-and-system',
-    labelKey: 'settings.group.dataAndSystem',
+    id: 'workspace',
+    labelKey: 'settings.group.workspace',
+  },
+  {
+    id: 'data-management',
+    labelKey: 'settings.group.dataManagement',
+  },
+  {
+    id: 'system',
+    labelKey: 'settings.group.system',
   },
 ] satisfies readonly SettingsSidebarGroup[];
 
@@ -215,6 +223,8 @@ export function SettingsSidebar({
       <div className="chat-user-settings__title">{t('settings.title')}</div>
       <div className="chat-user-settings__tabs">
         {settingsSectionGroups.map((group) => {
+          const groupPages = byGroup.get(group.id);
+          if (!groupPages?.length) return null;
           const titleId = `settings-sidebar-group-${group.id}`;
           return (
             <div
@@ -226,7 +236,7 @@ export function SettingsSidebar({
               <div id={titleId} className="chat-user-settings__tab-group-title">
                 {t(group.labelKey)}
               </div>
-              {(byGroup.get(group.id) ?? []).map((page) => (
+              {groupPages.map((page) => (
                 <SettingsPageButton
                   key={page.entryId}
                   active={activeSection === page.metadata.sectionId}

@@ -1,6 +1,7 @@
 import { workspaceProjectRoots, workspaceProjectForRoot, workspaceTarget, workspaceTargetKey, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import type { CollaborationTask } from '@setsuna-desktop/feature-collaboration/contracts';
 import type { PullRequestReference } from '@setsuna-desktop/feature-pull-requests/contracts';
+import type { TerminalCommand } from '@setsuna-desktop/feature-terminal/contracts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clearTerminalWorkspaceRestoreBuffer } from '../../../composition/TerminalWorkspaceFeatureBoundary.js';
 import {
@@ -324,7 +325,7 @@ export function useDesktopWorkspacePanels({
   }, [addPanelToDesktopSlot, closeWorkspaceMenus, createBrowserPanelTab]);
 
   const openTerminalSessionForPanel = useCallback(
-    async (panelId: string, rootId?: string) => {
+    async (panelId: string, rootId?: string, command?: TerminalCommand) => {
       const root = terminalRoot(rootId);
       const terminalProjectKey = terminalKey(rootId);
       const terminalWorkspacePath = activeProject && root
@@ -347,7 +348,9 @@ export function useDesktopWorkspacePanels({
       const pending = { projectId: activeProject.id, rootId: root.id };
       pendingTerminalSessionsRef.current.set(sessionKey, pending);
       try {
-        const session = await api.open(terminalWorkspacePath, 100, 24);
+        const session = await (command
+          ? api.open(terminalWorkspacePath, 100, 24, command)
+          : api.open(terminalWorkspacePath, 100, 24));
         if (pendingTerminalSessionsRef.current.get(sessionKey) !== pending) {
           closeTerminalSession(session.sessionId);
           return;
@@ -366,13 +369,28 @@ export function useDesktopWorkspacePanels({
           };
         });
       } catch (unknownError) {
+        if (command) {
+          removePanel(panelId);
+          throw unknownError;
+        }
         setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
       } finally {
         if (pendingTerminalSessionsRef.current.get(sessionKey) === pending) pendingTerminalSessionsRef.current.delete(sessionKey);
       }
     },
-    [activeProject, layoutForIdentity, setError, targetIdentity, terminalKey, terminalRoot, terminalSessionsByPanelId, updateBrowserPanel, workspaceStatus],
+    [activeProject, layoutForIdentity, removePanel, setError, targetIdentity, terminalKey, terminalRoot, terminalSessionsByPanelId, updateBrowserPanel, workspaceStatus],
   );
+
+  const canRunTerminalAction = Boolean(readyThreadWorkspacePath(activeProject, workspaceStatus));
+  const runTerminalAction = useCallback(async (command: TerminalCommand) => {
+    if (!canRunTerminalAction || !window.setsunaDesktop?.terminal) throw new Error(t('workspace.error.unavailable'));
+    const panel = { ...createTerminalPanel(), title: command.name, rootId: terminalRoot()?.id };
+    closeWorkspaceMenus();
+    addPanelToDesktopSlot('bottom', panel);
+    // Start opening synchronously so the panel effect shares the pending request.
+    // Only this explicit action carries a command; session recovery opens a plain shell.
+    await openTerminalSessionForPanel(panel.id, panel.rootId, command);
+  }, [addPanelToDesktopSlot, canRunTerminalAction, closeWorkspaceMenus, createTerminalPanel, openTerminalSessionForPanel, t, terminalRoot]);
 
   const openDesktopPanel = useCallback(
     (slot: DesktopPanelSlot, type: DesktopPanelType) => {
@@ -702,6 +720,8 @@ export function useDesktopWorkspacePanels({
       openBrowserPanel,
       openCommitMessageEditor,
       openDesktopPanel,
+      canRunTerminalAction,
+      runTerminalAction,
       openFileInWorkspaceApp,
       openFileWithWorkspaceApp,
       openFilePanel,
@@ -758,6 +778,8 @@ export function useDesktopWorkspacePanels({
       openBrowserPanel,
       openCommitMessageEditor,
       openDesktopPanel,
+      canRunTerminalAction,
+      runTerminalAction,
       openFileInWorkspaceApp,
       openFileWithWorkspaceApp,
       openFilePanel,

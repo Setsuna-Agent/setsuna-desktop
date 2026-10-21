@@ -10,7 +10,7 @@ import {
 } from '@setsuna-desktop/feature-core/renderer';
 import { registerSettingsPage } from '@setsuna-desktop/renderer-contracts/settings';
 import { ChartNoAxesCombined } from 'lucide-react';
-import { lazy } from 'react';
+import { lazy, Suspense } from 'react';
 import {
   usageFeature,
   usageRendererStateCapability,
@@ -19,6 +19,7 @@ import { usageRendererHostCapability } from './capabilities.js';
 import { createUsageClient } from './client.js';
 import { usageMessages } from './messages.js';
 import { RendererUsageStateService } from './service.js';
+import { UsageSettingsLoading } from './UsageSettingsLoading.js';
 
 const UsageSettingsView = lazy(async () => {
   const module = await import('./UsageSettingsView.js');
@@ -51,17 +52,19 @@ export const usageRendererFeature = defineRendererFeature({
         icon: ChartNoAxesCombined,
         sectionId: 'usage',
         location: 'settings',
-        navigationGroupId: 'models-and-services',
-        order: 100,
+        navigationGroupId: 'models-and-usage',
+        order: 300,
         pageHeading: 'view',
         titleKey: 'feature.usage.settings.title',
         render: ({ translate, ui }) => (
-          <UsageSettingsView
-            host={context.dependencies.host}
-            service={service}
-            translate={translate}
-            ui={ui}
-          />
+          <Suspense fallback={<UsageSettingsLoading translate={translate} ui={ui} />}>
+            <UsageSettingsView
+              host={context.dependencies.host}
+              service={service}
+              translate={translate}
+              ui={ui}
+            />
+          </Suspense>
         ),
     });
   },

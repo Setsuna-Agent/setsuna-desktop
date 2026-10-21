@@ -8,6 +8,7 @@ import type {
   RuntimeUsageResponse,
   RuntimeUsageSummary,
 } from '../contracts/index.js';
+import { usageTurnModelKey } from '../contracts/record-metadata.js';
 
 type UsageTotals = Pick<RuntimeUsageSummary, 'inputTokens' | 'cachedInputTokens' | 'outputTokens' | 'totalTokens'>;
 type UsageAggregate = UsageTotals & { recordCount: number };
@@ -32,8 +33,9 @@ export function chatThreadUsageForDisplay(
   if (!thread?.turns?.length) return storedUsage;
 
   const storedRecords = storedUsage?.records ?? [];
-  const storedByKey = aggregateStoredUsage(storedRecords);
-  const storedTurnIds = new Set(storedRecords.map((record) => record.turnId));
+  const storedByKey = storedUsage?.summary.byTurnModel
+    ? new Map(storedUsage.summary.byTurnModel.map((bucket) => [bucket.key, bucket]))
+    : aggregateStoredUsage(storedRecords);
   const latestTurnId = thread.turns.at(-1)?.id;
   const requestCount = latestTurnModelRequestCount(thread);
   const liveByKey = new Map<string, LiveUsageBucket>();
@@ -41,9 +43,9 @@ export function chatThreadUsageForDisplay(
   for (const turn of thread.turns) {
     // 已完成轮次已经包含在持久化摘要中。仅在 SSE 向用量刷新短暂交接期间，
     // 保留最新轮次的实时数据。
-    if (turn.status === 'completed' && (turn.id !== latestTurnId || storedTurnIds.has(turn.id))) continue;
+    if (turn.status === 'completed' && turn.id !== latestTurnId) continue;
     for (const count of turn.tokenCounts ?? []) {
-      const key = usageIdentity(turn.id, count.usage);
+      const key = usageTurnModelKey(turn.id, count.usage);
       const existing = liveByKey.get(key) ?? {
         createdAt: count.createdAt,
         inputTokens: 0,
@@ -75,7 +77,8 @@ export function chatThreadUsageForDisplay(
     const stored = storedByKey.get(key);
     const delta = usageDelta(live, stored);
     const recordCount = Math.max(0, live.recordCount - (stored?.recordCount ?? 0));
-    if (stored && !hasUsage(delta) && recordCount === 0) continue;
+    // Legacy rows may aggregate several samplings; equal token totals already cover them.
+    if (stored && !hasUsage(delta)) continue;
     liveRecords.push({
       recordCount,
       record: {
@@ -129,7 +132,10 @@ function withRequestCount(usage: RuntimeUsageResponse | null, requestCount: numb
 function aggregateStoredUsage(records: readonly RuntimeUsageRecord[]): Map<string, UsageAggregate> {
   const byKey = new Map<string, UsageAggregate>();
   for (const record of records) {
-    const key = usageIdentity(record.turnId, record);
+    // Only conversation/compaction tokens are mirrored by turn events. Background usage
+    // remains in the stored summary but must not consume a live conversation delta.
+    if (record.source && record.source !== 'conversation' && record.source !== 'compaction') continue;
+    const key = usageTurnModelKey(record.turnId, record);
     const existing = byKey.get(key) ?? { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, totalTokens: 0, recordCount: 0 };
     byKey.set(key, {
       inputTokens: existing.inputTokens + tokenCount(record.inputTokens),
@@ -140,11 +146,6 @@ function aggregateStoredUsage(records: readonly RuntimeUsageRecord[]): Map<strin
     });
   }
   return byKey;
-}
-
-function usageIdentity(turnId: string, usage: RuntimeUsage): string {
-  const provider = usage.providerId ? `id:${usage.providerId}` : `name:${usage.provider ?? ''}`;
-  return JSON.stringify([turnId, provider, usage.model ?? '']);
 }
 
 function usageDelta(live: UsageTotals, stored: UsageTotals | undefined): UsageTotals {

@@ -92,7 +92,6 @@ function renderActions({
   return renderToStaticMarkup(createElement(AppTopbarActions, {
     activeView,
     bottomPanelVisible,
-    conversationOverviewAvailable: true,
     conversationOverviewVisible,
     onToggleConversationOverview: vi.fn(),
     onToggleBottomTerminal: vi.fn(),

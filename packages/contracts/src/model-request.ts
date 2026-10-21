@@ -1,7 +1,7 @@
 import type { RuntimeModelRequestStepSnapshot, RuntimeToolChoice, RuntimeToolDefinition } from './provider.js';
 import type { RuntimeMessageProviderMetadata } from './message-metadata.js';
 import type { RuntimeMessage } from './threads.js';
-import type { RuntimeUsage } from './usage.js';
+import type { RuntimeUsage, RuntimeUsageContext } from './usage.js';
 
 export type ModelResponseFormat = {
   type: 'json';
@@ -16,6 +16,7 @@ export type ModelRequest = {
   providerId?: string;
   /** Stable conversation or task identity, shared across model rounds and retries. */
   sessionId?: string;
+  usageContext?: RuntimeUsageContext;
   messages: RuntimeMessage[];
   tools?: RuntimeToolDefinition[];
   toolChoice?: RuntimeToolChoice;
@@ -28,7 +29,7 @@ export type ModelRequest = {
   signal?: AbortSignal;
 };
 
-export type ModelCompactionRequest = Pick<ModelRequest, 'model' | 'providerId' | 'sessionId' | 'messages' | 'signal'>;
+export type ModelCompactionRequest = Pick<ModelRequest, 'model' | 'providerId' | 'sessionId' | 'usageContext' | 'messages' | 'signal'>;
 
 export type ModelCompactionResult =
   | {

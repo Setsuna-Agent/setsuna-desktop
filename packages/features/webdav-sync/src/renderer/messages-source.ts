@@ -1,6 +1,9 @@
 export const webDavSyncZhCN = {
   'feature.webdavSync.settings.title': '同步',
   'feature.webdavSync.settings.description': '使用端到端加密的 WebDAV 单份备份；可选择开启自动备份，还原始终手动确认。',
+  'feature.webdavSync.deprecation.title': '同步功能将于 v0.6.0 移除',
+  'feature.webdavSync.deprecation.question': '有疑问？',
+  'feature.webdavSync.deprecation.feedback': '前往 Discussions 反馈',
   'feature.webdavSync.unavailable': 'WebDAV 同步不可用',
   'feature.webdavSync.unavailableDescription': '无法读取本机同步配置。',
   'feature.webdavSync.unavailableResetHint': '可以重置本机连接配置后重新连接；远端备份不会被删除。',
@@ -131,6 +134,9 @@ export const webDavSyncZhCN = {
 export const webDavSyncEnUS: Record<keyof typeof webDavSyncZhCN, string> = {
   'feature.webdavSync.settings.title': 'Sync',
   'feature.webdavSync.settings.description': 'One rolling WebDAV backup with end-to-end encryption; optional automatic backup and always-reviewed manual restore.',
+  'feature.webdavSync.deprecation.title': 'Sync will be removed in v0.6.0',
+  'feature.webdavSync.deprecation.question': 'Questions?',
+  'feature.webdavSync.deprecation.feedback': 'Share feedback in Discussions',
   'feature.webdavSync.unavailable': 'WebDAV sync is unavailable',
   'feature.webdavSync.unavailableDescription': 'Setsuna could not read the local sync configuration.',
   'feature.webdavSync.unavailableResetHint': 'You can reset this device\'s connection and reconnect. Remote backups are not deleted.',
