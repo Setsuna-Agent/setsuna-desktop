@@ -1,12 +1,27 @@
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Terminal } from '@xterm/xterm';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { DesktopTerminalEventPayload } from '../../../src/contracts/index.js';
 import { terminalProcessOptions } from '../../../src/main/process-options.js';
 import { DesktopTerminalStore } from '../../../src/main/sessions.js';
+
+const shellPrompt = 'setsuna-test-shell> ';
+let shellDirectory: string | undefined;
+beforeAll(async () => {
+  if (process.platform !== 'darwin') return;
+  shellDirectory = await mkdtemp(path.join(tmpdir(), 'setsuna-terminal-shell-'));
+  // Real PTY tests must not run the developer's interactive shell plugins.
+  await writeFile(path.join(shellDirectory, '.zshrc'), `PROMPT='${shellPrompt}'\n`);
+  vi.stubEnv('SHELL', '/bin/zsh');
+  vi.stubEnv('ZDOTDIR', shellDirectory);
+});
+afterAll(async () => {
+  vi.unstubAllEnvs();
+  if (shellDirectory) await rm(shellDirectory, { recursive: true, force: true });
+});
 
 describe('desktop terminal store', () => {
   it.skipIf(process.platform === 'win32')('keeps the action terminal usable after interrupting a running service', async () => {
@@ -17,7 +32,9 @@ describe('desktop terminal store', () => {
       const session = await store.open({ workspaceRoot, command: { name: 'Server', command: 'printf "service-ready\\n"\nsleep 30' } });
       await store.attach(session.sessionId, 80, 24);
       await waitFor(() => events.some((event) => event.event === 'output' && String(event.data.text).includes('service-ready')));
+      const interruptedAt = events.length;
       store.write(session.sessionId, '\x03');
+      await waitForShellPrompt(events, interruptedAt);
       store.write(session.sessionId, 'pwd > after-interrupt.txt\r');
       await waitFor(() => {
         expect(events.filter((event) => event.event === 'exit')).toEqual([]);
@@ -44,9 +61,12 @@ describe('desktop terminal store', () => {
       const contents = await readFile(path.join(workspaceRoot, 'runs.txt'), 'utf8');
       expect(contents.replaceAll('\r\n', '\n')).toBe(process.platform === 'win32' ? 'first\nsecond\n' : 'first\nit\'s a "quoted" value\n');
       await store.attach(session.sessionId, 100, 30);
+      await waitForShellPrompt(events);
       store.write(session.sessionId, terminalExitCommand());
       await waitFor(() => events.some((event) => event.event === 'exit'));
+      const restartedAt = events.length;
       await store.restart(session.sessionId);
+      await waitForShellPrompt(events, restartedAt);
       store.write(session.sessionId, terminalSmokeCommand());
       await waitFor(() => events.some((event) => event.event === 'output' && String(event.data.text).includes('setsuna-terminal-smoke')));
       expect(await readFile(path.join(workspaceRoot, 'runs.txt'), 'utf8')).toBe(contents);
@@ -96,6 +116,7 @@ describe('desktop terminal store', () => {
     expect(session.workspaceRoot).toBe(await realpath(workspaceRoot));
     expect(store.read(session.sessionId)).toEqual([]);
     await store.attach(session.sessionId, 80, 24);
+    await waitForShellPrompt(events);
 
     store.write(session.sessionId, terminalSmokeCommand());
     await waitFor(() => events.some((event) => (
@@ -123,12 +144,15 @@ describe('desktop terminal store', () => {
     const session = await store.open({ workspaceRoot, cols: 80, rows: 24 });
 
     await store.attach(session.sessionId, 80, 24);
+    await waitForShellPrompt(events);
     store.write(session.sessionId, terminalExitCommand());
     await waitFor(() => events.some((event) => event.event === 'exit'));
 
     expect(store.read(session.sessionId).some((event) => event.event === 'exit')).toBe(true);
     expect(() => store.write(session.sessionId, terminalSmokeCommand())).toThrow('重新启动');
+    const restartedAt = events.length;
     await expect(store.restart(session.sessionId, 90, 30)).resolves.toBe(true);
+    await waitForShellPrompt(events, restartedAt);
     store.write(session.sessionId, terminalSmokeCommand());
     await waitFor(() => events.some((event) => (
       event.event === 'output' && String(event.data.text ?? '').includes('setsuna-terminal-smoke')
@@ -160,6 +184,7 @@ describe('desktop terminal store', () => {
       store.attach(session.sessionId, 80, 24),
     ])).resolves.toEqual([true, true]);
     expect(environmentResolutionCount).toBe(1);
+    await waitForShellPrompt(events);
     store.write(session.sessionId, terminalExitCommand());
     await waitFor(() => events.some((event) => event.event === 'exit'));
 
@@ -216,6 +241,7 @@ describe('desktop terminal store', () => {
     const session = await store.open({ workspaceRoot });
 
     await store.attach(session.sessionId, 80, 24);
+    await waitForShellPrompt(events);
     store.write(session.sessionId, terminalProxyCommand());
     await waitFor(() => events.some((event) => (
       event.event === 'output'
@@ -251,6 +277,14 @@ describe('desktop terminal store', () => {
     expect('encoding' in options).toBe(false);
   });
 });
+
+async function waitForShellPrompt(events: DesktopTerminalEventPayload[], from = 0): Promise<void> {
+  if (process.platform !== 'darwin') return;
+  // PTY creation (or Ctrl+C delivery) precedes the new interactive shell. Input
+  // sent before its prompt may be consumed by the exiting process or startup.
+  await waitFor(() => events.slice(from).filter(event => event.event === 'output')
+    .map(event => String(event.data.text ?? '')).join('').includes(shellPrompt));
+}
 
 function terminalSmokeCommand(): string {
   if (process.platform === 'win32') return 'echo setsuna-terminal-smoke\r\n';

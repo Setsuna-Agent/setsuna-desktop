@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import path from 'node:path';
 import { app, BrowserWindow, type WebContents } from 'electron';
 import { DesktopBrowserController } from '../../src/main/control.js';
+import { ElectronBrowserCdpAutomation } from '../../src/main/cdp/automation.js';
 
 app.setPath('userData', path.join(process.argv[2], 'profile'));
 app.commandLine.appendSwitch('use-fake-device-for-media-stream');
@@ -23,7 +24,10 @@ async function main() {
   const port = (server.address() as { port: number }).port;
   await app.whenReady();
   const owner = new BrowserWindow({ show: false, webPreferences: { webviewTag: true, contextIsolation: true, sandbox: true } });
-  const controller = new DesktopBrowserController();
+  let automation!: ElectronBrowserCdpAutomation;
+  const controller = new DesktopBrowserController({
+    createAutomation: contents => (automation = new ElectronBrowserCdpAutomation(contents.debugger)),
+  });
   try {
     await owner.loadURL('data:text/html,<!doctype html><body></body>');
     const attached = new Promise<WebContents>(resolve => owner.webContents.once('did-attach-webview', (_event, contents) => resolve(contents)));
@@ -79,7 +83,9 @@ async function main() {
     // Navigation must not leave a stale media block on the replacement document.
     await guest.loadURL(`http://127.0.0.1:${port}/next`);
     if (guest.isLoading()) await once(guest, 'did-stop-loading');
-    assert.deepEqual(await controller.setPageSuspended('capture', owner.webContents.id, true), { suspended: true }, 'navigation clears old capture state');
+    // Check navigation cleanup directly: the manual sleep request deliberately
+    // refuses slow inspections after two seconds, even when the new page is idle.
+    assert.equal(await automation.hasActiveMediaCapture(new AbortController().signal), false, 'navigation clears old capture state');
     console.log('PAGE_SLEEP_OK');
   } finally {
     controller.clear(); owner.destroy(); server.close(); clearTimeout(timeout);
