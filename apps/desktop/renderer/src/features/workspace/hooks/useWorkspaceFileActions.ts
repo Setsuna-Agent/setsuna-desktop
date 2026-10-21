@@ -7,6 +7,7 @@ export function useWorkspaceFileActions(
   activeProject: WorkspaceProject | null | undefined,
   workspaceApps: DesktopWorkspaceApp[],
   selectedWorkspaceApp: DesktopWorkspaceApp | null,
+  onSelectWorkspaceApp: (appId: string) => void,
   setError: (message: string | null) => void,
 ) {
   const { t } = useI18n();
@@ -21,12 +22,14 @@ export function useWorkspaceFileActions(
         const api = window.setsunaDesktop?.workspaceApps;
         if (!api) throw new Error(t('workspace.panels.externalOpenUnsupported'));
         const target = resolveFileTarget(activeProject, filePath ?? '.');
+        // Remember the choice before launching so native completion order cannot override it.
+        onSelectWorkspaceApp(appId);
         await api.open(target.root.path, appId, filePath == null ? null : target.path, line ?? null);
       } catch (unknownError) {
         setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
       }
     },
-    [activeProject, setError, t, workspaceApps],
+    [activeProject, onSelectWorkspaceApp, setError, t, workspaceApps],
   );
 
   const openFileInWorkspaceApp = useCallback(

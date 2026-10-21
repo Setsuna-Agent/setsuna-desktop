@@ -16,6 +16,7 @@ import { TestModelPicker } from './model-picker-test-ui.js';
 const ignoreCopy = async () => undefined;
 const ignoreError = () => undefined;
 const ignoreExternal = async () => false;
+const noFileContextMenu = () => null;
 const missingPreview = async (): Promise<DesktopDiffFile> => { throw new Error('No file preview configured.'); };
 
 export function ReviewRendererTestHost({
@@ -26,6 +27,8 @@ export function ReviewRendererTestHost({
   notifyError = ignoreError,
   openExternal = ignoreExternal,
   loadFileChangePreview = missingPreview,
+  fileContextMenu = noFileContextMenu,
+  codePatchView = TestCodePatchView,
 }: PropsWithChildren<{
   bridge?: DesktopReviewBridge | null;
   locale?: 'en-US' | 'zh-CN';
@@ -33,6 +36,8 @@ export function ReviewRendererTestHost({
   notifyError?: ReviewRendererHost['notifyError'];
   openExternal?: ReviewRendererHost['openExternal'];
   loadFileChangePreview?: ReviewRendererHost['loadFileChangePreview'];
+  fileContextMenu?: ReviewRendererHost['ui']['FileContextMenu'];
+  codePatchView?: ReviewRendererHost['ui']['CodePatchView'];
 }>) {
   const host = useMemo<ReviewRendererHost>(() => ({
     bridge,
@@ -68,17 +73,17 @@ export function ReviewRendererTestHost({
           onChange={(event) => onChange(event.currentTarget.checked)}
         /></label>
       ),
-      CodePatchView: TestCodePatchView,
+      CodePatchView: codePatchView,
       CommitMessageInput: TestCommitMessageInput,
       ConflictTaskProgress: ({ threadId, onBack }) => <section aria-label="Conflict task" data-thread-id={threadId}><button onClick={onBack}>Back to changes</button></section>,
       ScrollOverlay: () => null,
-      FileContextMenu: () => null,
+      FileContextMenu: fileContextMenu,
       FileIcon: ({ className }) => <span aria-hidden="true" className={className} />,
       FindingMarkdown: TestFindingMarkdown,
       FileDocument: ({ content, filePath }) => <section role="region" aria-label={filePath}>{content}</section>,
       DocumentPreview: ({ filePath, label }) => <section aria-label={label ?? filePath} />,
     },
-  }), [bridge, locale, copyText, notifyError, openExternal, loadFileChangePreview]);
+  }), [bridge, locale, copyText, notifyError, openExternal, loadFileChangePreview, fileContextMenu, codePatchView]);
   return <ReviewRendererHostProvider host={host}>{children}</ReviewRendererHostProvider>;
 }
 

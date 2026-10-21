@@ -2,11 +2,14 @@ import { ResizeHandle } from '@setsuna-desktop/renderer-ui';
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useReviewRendererHost } from '../host.js';
 
-export function GitChangesSplit({ navigation, children, detailOpen, editingMessage }: {
+export function GitChangesSplit({ navigation, children, overlay, detailOpen, editingMessage, navigationCollapsed, onCompactChange }: {
   navigation: ReactNode;
   children: ReactNode;
+  overlay?: ReactNode;
   detailOpen: boolean;
   editingMessage: boolean;
+  navigationCollapsed: boolean;
+  onCompactChange: (compact: boolean) => void;
 }) {
   const { translate: t } = useReviewRendererHost();
   const container = useRef<HTMLDivElement>(null);
@@ -27,7 +30,10 @@ export function GitChangesSplit({ navigation, children, detailOpen, editingMessa
 
   // Match the compact editor split while retaining the user's preferred width
   // when a smaller workspace temporarily limits the space available to it.
-  const compact = availableWidth <= 560;
+  const compact = availableWidth > 0 && availableWidth <= 560;
+  useLayoutEffect(() => onCompactChange(compact), [compact, onCompactChange]);
+  const navigationHidden = navigationCollapsed || (compact && detailOpen && !editingMessage);
+  const detailHidden = compact && !detailOpen && !editingMessage;
   const min = compact ? Math.min(160, availableWidth / 2) : 220;
   const max = Math.max(min, availableWidth - (compact ? 160 : 240));
   const clamp = (value: number) => Math.round(Math.max(min, Math.min(max, value)));
@@ -37,12 +43,16 @@ export function GitChangesSplit({ navigation, children, detailOpen, editingMessa
 
   return (
     <div
-      className={'git-changes-panel__body' + (detailOpen ? ' has-detail' : '') + (editingMessage ? ' has-message-editor' : '') + (resizing ? ' is-resizing' : '')}
+      className={'git-changes-panel__body' + (detailOpen ? ' has-detail' : '') + (editingMessage ? ' has-message-editor' : '') + (navigationHidden ? ' is-navigation-collapsed' : '') + (resizing ? ' is-resizing' : '')}
       ref={container}
       style={availableWidth ? { '--git-nav-width': width + 'px' } as CSSProperties : undefined}
     >
-      {children}
+      <div className="git-changes-panel__detail" aria-hidden={detailHidden || undefined}
+        {...(detailHidden ? { inert: '' } : {})}>
+        {children}
+      </div>
       <ResizeHandle
+        hidden={navigationHidden}
         className={'desktop-review-file-tree__resize-handle git-changes-panel__resize-handle' + (resizing ? ' is-resizing' : '')}
         type="button"
         role="separator"
@@ -84,7 +94,11 @@ export function GitChangesSplit({ navigation, children, detailOpen, editingMessa
           setPreferredWidth(clamp(next));
         }}
       />
-      {navigation}
+      <div className="git-changes-nav-slot" aria-hidden={navigationHidden || undefined}
+        {...(navigationHidden ? { inert: '' } : {})}>
+        {navigation}
+      </div>
+      {overlay}
     </div>
   );
 }

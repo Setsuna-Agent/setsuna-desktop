@@ -1,10 +1,13 @@
 // @vitest-environment happy-dom
 
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { PropsWithChildren } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DesktopDiffFile, DesktopGitCommit, DesktopGitCommitDetails, DesktopGitHistoryPage, DesktopGitRef, DesktopReviewBridge, DesktopReviewState } from '../../../src/contracts/index.js';
+import type { ReviewCodePatchViewProps, ReviewFileContextMenuProps, ReviewRendererHost } from '../../../src/renderer/host.js';
 import { GitChangesPanel } from '../../../src/renderer/history/GitChangesPanel.js';
+import { GitChangesFileNavigation } from '../../../src/renderer/history/GitChangesFileNavigation.js';
 import { GitHistoryGraph } from '../../../src/renderer/history/GitHistoryGraph.js';
 import { useGitCommitFile } from '../../../src/renderer/history/useGitCommit.js';
 import { useGitHistory } from '../../../src/renderer/history/useGitHistory.js';
@@ -37,6 +40,8 @@ function host(bridge: Partial<DesktopReviewBridge>, clipboard: {
   copyText?: (value: string) => Promise<void>;
   notifyError?: (message: string) => void;
   openExternal?: (url: string) => Promise<boolean>;
+  fileContextMenu?: ReviewRendererHost['ui']['FileContextMenu'];
+  codePatchView?: ReviewRendererHost['ui']['CodePatchView'];
 } = {}) {
   return ({ children }: PropsWithChildren) => <ReviewRendererTestHost bridge={bridge as DesktopReviewBridge} {...clipboard}>{children}</ReviewRendererTestHost>;
 }
@@ -48,6 +53,124 @@ function deferred<T>() {
 }
 
 describe('Git change navigation', () => {
+  it('applies Dock diff settings to the renderer and keeps them across file and commit selections', async () => {
+    const renderDiff = vi.fn<(props: ReviewCodePatchViewProps) => null>(() => null);
+    const staged: DesktopDiffFile = { ...file('staged.ts'), patch: undefined, lines: [{ type: 'added', lineNumber: 1, newLine: 1, content: 'const changed = true;' }] };
+    const working = { ...staged, path: 'working.ts' };
+    const committed = { ...staged, path: 'committed.ts' };
+    render(<GitChangesPanel workspaceRoot="/repo" reviewState={{
+      ...state,
+      stagedSummary: { files: [staged], additions: 1, deletions: 0 },
+      unstagedSummary: { files: [working], additions: 1, deletions: 0 },
+    }} reviewError={null} reviewLoading={false} onRefresh={noop} actions={actions} />, {
+      wrapper: host({
+        getHistory: vi.fn().mockResolvedValue(page()),
+        getCommitDetails: vi.fn().mockResolvedValue({ commit: commit(one), message: 'Commit', baseOid: null, files: [committed] }),
+        getCommitFileDiff: vi.fn().mockResolvedValue(committed),
+      }, { codePatchView: renderDiff }),
+    });
+    const dock = () => within(screen.getByRole('navigation', { name: '文件导航' }));
+    expect(renderDiff.mock.lastCall?.[0]).toMatchObject({ layout: 'unified', wrap: true });
+    fireEvent.click(dock().getByRole('button', { name: '当前：单列对比，点击切换为左右对比' }));
+    fireEvent.click(dock().getByRole('button', { name: '当前：自动换行已开启，点击关闭' }));
+    expect(renderDiff.mock.lastCall?.[0]).toMatchObject({ layout: 'split', wrap: false });
+    fireEvent.click(dock().getByRole('button', { name: '下一文件' }));
+    expect(renderDiff.mock.lastCall?.[0]).toMatchObject({ layout: 'split', wrap: false, patch: expect.stringContaining('working.ts') });
+
+    fireEvent.click(await screen.findByRole('button', { name: /Commit aaaaaaaa/ }));
+    await waitFor(() => expect(renderDiff.mock.lastCall?.[0]).toMatchObject({ layout: 'split', wrap: false, patch: expect.stringContaining('committed.ts') }));
+    fireEvent.click(dock().getByRole('button', { name: '当前：左右对比，点击切换为单列对比' }));
+    fireEvent.click(dock().getByRole('button', { name: '当前：自动换行已关闭，点击开启' }));
+    expect(renderDiff.mock.lastCall?.[0]).toMatchObject({ layout: 'unified', wrap: true });
+  });
+
+  it('searches filenames and directories without losing version identity, and supports keyboard selection', async () => {
+    const onSelect = vi.fn();
+    const sharedFile = file('packages/app/src/ChatTranscript.tsx');
+    const user = userEvent.setup();
+    render(<GitChangesFileNavigation
+      groups={[
+        { id: 'staged', label: '暂存', files: [sharedFile] },
+        { id: 'unstaged', label: '更改', files: [sharedFile, file('examples/ChatTranscript.tsx'), file('docs/guide.md')] },
+      ]}
+      selectedKey={'staged:' + sharedFile.path} sidebarExpanded={false}
+      pathContext={{ source: 'staged', workspaceRoot: '/repo', gitRoot: '/repo' }} actions={actions}
+      onSelect={onSelect} onToggleSidebar={noop}
+    />, { wrapper: host({}) });
+    const trigger = screen.getByRole('button', { name: '查看所有 diff 文件' });
+    act(() => trigger.focus());
+    await user.keyboard('{Enter}');
+    let search = await screen.findByRole<HTMLInputElement>('textbox', { name: '搜索文件名或路径' });
+    await waitFor(() => expect(document.activeElement).toBe(search));
+    await user.type(search, '  CHATTRANSCRIPT ');
+    expect(screen.getAllByRole('menuitem')).toHaveLength(3);
+    expect(screen.queryByRole('menuitem', { name: /guide.md/ })).toBeNull();
+
+    await user.clear(search);
+    await user.type(search, 'packages/app/src');
+    const versions = screen.getAllByRole('menuitem');
+    expect(versions).toHaveLength(2);
+    fireEvent.keyDown(search, { key: 'Enter', isComposing: true });
+    expect(onSelect).not.toHaveBeenCalled();
+    await user.keyboard('{ArrowDown}');
+    expect(document.activeElement).toBe(versions[0]);
+    await user.keyboard('{ArrowUp}');
+    expect(document.activeElement).toBe(search);
+    await user.keyboard('{ArrowDown}{ArrowDown}');
+    await waitFor(() => expect(document.activeElement).toBe(versions[1]));
+    await user.keyboard('{Enter}');
+    expect(onSelect).toHaveBeenCalledWith('unstaged', sharedFile);
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    await user.keyboard('{Enter}');
+    search = await screen.findByRole<HTMLInputElement>('textbox', { name: '搜索文件名或路径' });
+    expect(search.value).toBe('');
+    expect(screen.getAllByRole('menuitem')).toHaveLength(4);
+    await user.type(search, 'no matching path');
+    expect(screen.getByRole('menuitem', { name: '没有匹配的变更文件' }).getAttribute('aria-disabled')).toBe('true');
+    await user.keyboard('{Enter}');
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+  });
+
+  it('switches staged and working versions with the sidebar open or collapsed and preserves the sidebar filter', async () => {
+    const readTextFile = vi.fn().mockImplementation(async (_root: string, input: { source: string; filePath: string }) => ({
+      ok: true, content: `${input.source}:${input.filePath}`,
+    }));
+    render(<GitChangesPanel workspaceRoot="/repo" reviewState={{
+      ...state,
+      stagedSummary: { files: [file('README.md')], additions: 1, deletions: 1 },
+      unstagedSummary: { files: [file('README.md'), file('other.md')], additions: 2, deletions: 2 },
+    }} reviewError={null} reviewLoading={false} onRefresh={noop} actions={actions} />, {
+      wrapper: host({ getHistory: vi.fn().mockResolvedValue(page()), readTextFile }),
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: '筛选变更文件' }), { target: { value: 'README' } });
+    fireEvent.click(screen.getByRole('button', { name: '查看预览' }));
+    expect(await screen.findByText('staged:README.md')).toBeTruthy();
+    const navigation = within(screen.getByRole('navigation', { name: '文件导航' }));
+    expect(navigation.getByRole<HTMLButtonElement>('button', { name: '上一文件' }).disabled).toBe(true);
+    fireEvent.click(navigation.getByRole('button', { name: '下一文件' }));
+    expect(await screen.findByText('unstaged:README.md')).toBeTruthy();
+    fireEvent.click(navigation.getByRole('button', { name: '收起变更侧栏' }));
+    expect(screen.queryByRole('textbox', { name: '筛选变更文件' })).toBeNull();
+    fireEvent.click(navigation.getByRole('button', { name: '下一文件' }));
+    expect(await screen.findByText('unstaged:other.md')).toBeTruthy();
+    expect(navigation.getByRole<HTMLButtonElement>('button', { name: '下一文件' }).disabled).toBe(true);
+
+    fireEvent.pointerEnter(navigation.getByRole('button', { name: '查看所有 diff 文件' }), { pointerType: 'mouse' });
+    const versions = await screen.findAllByRole('menuitem', { name: /^README\.md\b/ });
+    expect(screen.getByRole('menuitem', { name: /^other\.md\b/ })).toBeTruthy();
+    fireEvent.click(versions[0]);
+    expect(await screen.findByText('staged:README.md')).toBeTruthy();
+    expect(readTextFile).toHaveBeenLastCalledWith('/repo', expect.objectContaining({ source: 'staged', filePath: 'README.md' }));
+    fireEvent.click(navigation.getByRole('button', { name: '展开变更侧栏' }));
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: '筛选变更文件' }).value).toBe('README');
+    fireEvent.click(navigation.getByRole('button', { name: '下一文件' }));
+    expect(await screen.findByText('unstaged:README.md')).toBeTruthy();
+  });
+
   it('selects the first diff after worktree data arrives and preserves an explicit file selection on refresh', () => {
     const renderPanel = (reviewState: DesktopReviewState | null, reviewLoading: boolean) => (
       <GitChangesPanel workspaceRoot="/repo" reviewState={reviewState} reviewError={null}
@@ -69,6 +192,14 @@ describe('Git change navigation', () => {
 
     view.rerender(renderPanel({ ...state, stagedSummary: null, unstagedSummary: null }, false));
     expect(detail().getByText('没有变更文件')).toBeTruthy();
+    const navigation = within(screen.getByRole('navigation', { name: '文件导航' }));
+    for (const name of ['上一文件', '下一文件', '查看所有 diff 文件', '打开文件', '复制文件路径', '添加到对话']) {
+      expect(navigation.getByRole<HTMLButtonElement>('button', { name }).disabled).toBe(true);
+    }
+    fireEvent.click(navigation.getByRole('button', { name: '收起变更侧栏' }));
+    expect(screen.queryByRole('navigation', { name: '变更' })).toBeNull();
+    fireEvent.click(navigation.getByRole('button', { name: '展开变更侧栏' }));
+    expect(screen.getByRole('navigation', { name: '变更' })).toBeTruthy();
   });
 
   it.each([
@@ -82,16 +213,30 @@ describe('Git change navigation', () => {
     const getCommitDetails = vi.fn().mockResolvedValue({ commit: commit(one), message: 'Commit', baseOid: null, files: [inside, outside, deleted] });
     const getCommitFileDiff = vi.fn().mockResolvedValue(inside);
     const onOpenProjectFile = vi.fn();
+    const onCopyFilePath = vi.fn();
+    const onAddFileToConversation = vi.fn();
+    const onExternalOpenFile = vi.fn();
+    const onOpenFileWithApp = vi.fn();
+    const workspaceApp = { id: 'cursor', label: 'Cursor', icon: 'cursor' };
+    const FileMenu = ({ target, onOpenWithApp, onOpenProjectFile, onClose }: ReviewFileContextMenuProps) => target ? <div role="menu">
+      <button onClick={() => { onOpenProjectFile?.(target.filePath); onClose(); }}>Open selected file in a new tab</button>
+      <button onClick={() => { onOpenWithApp('cursor', target.filePath); onClose(); }}>Open selected file with Cursor</button>
+      <button onClick={() => { onOpenWithApp('vscode', target.filePath); onClose(); }}>Open selected file with VS Code</button>
+    </div> : null;
     render(<GitChangesPanel workspaceRoot={workspaceRoot} reviewState={{
       ...state, workspaceRoot, gitRoot,
       stagedSummary: { files: [inside], additions: 1, deletions: 1 },
       unstagedSummary: { files: [outside, deleted], additions: 1, deletions: 2 },
-    }} reviewError={null} reviewLoading={false} onRefresh={noop} actions={{ ...actions, onOpenProjectFile }} />, {
-      wrapper: host({ getHistory, getCommitDetails, getCommitFileDiff }),
+    }} reviewError={null} reviewLoading={false} onRefresh={noop} actions={{
+      ...actions, workspaceApp, workspaceApps: [workspaceApp], onOpenProjectFile, onCopyFilePath,
+      onAddFileToConversation, onExternalOpenFile, onOpenFileWithApp,
+    }} />, {
+      wrapper: host({ getHistory, getCommitDetails, getCommitFileDiff }, { fileContextMenu: FileMenu }),
     });
     const nav = within(screen.getByRole('navigation', { name: '变更' }));
     const openButton = (filename: string) => within(nav.getByRole('button', { name: new RegExp(filename) })
       .closest<HTMLElement>('.git-changes-file')!).getByRole<HTMLButtonElement>('button', { name: '打开文件' });
+    const dock = () => within(screen.getByRole('navigation', { name: '文件导航' }));
     for (const source of ['worktree', 'commit']) {
       if (source === 'commit') {
         fireEvent.click(await nav.findByRole('button', { name: /Commit aaaaaaaa/ }));
@@ -100,12 +245,36 @@ describe('Git change navigation', () => {
       onOpenProjectFile.mockClear();
       fireEvent.click(openButton('index.ts'));
       expect(onOpenProjectFile).toHaveBeenCalledExactlyOnceWith('src/index.ts');
+      for (const label of ['复制文件路径', '添加到对话']) {
+        fireEvent.click(dock().getByRole('button', { name: label }));
+      }
+      for (const action of [onCopyFilePath, onAddFileToConversation]) {
+        expect(action).toHaveBeenLastCalledWith('src/index.ts');
+      }
+      fireEvent.click(dock().getByRole('button', { name: '打开文件' }));
+      expect(onExternalOpenFile).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole('button', { name: 'Open selected file with Cursor' }));
+      expect(onOpenFileWithApp).toHaveBeenLastCalledWith('cursor', 'src/index.ts');
+      fireEvent.click(dock().getByRole('button', { name: '打开文件' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Open selected file with VS Code' }));
+      expect(onOpenFileWithApp).toHaveBeenLastCalledWith('vscode', 'src/index.ts');
+      fireEvent.click(dock().getByRole('button', { name: '打开文件' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Open selected file in a new tab' }));
+      expect(onOpenProjectFile).toHaveBeenLastCalledWith('src/index.ts');
+      fireEvent.click(dock().getByRole('button', { name: '打开文件' }));
       for (const filename of ['outside.ts', 'deleted.ts']) {
         const button = openButton(filename);
         expect(button.disabled).toBe(true);
         fireEvent.click(button);
+        fireEvent.click(nav.getByRole('button', { name: new RegExp(filename) }));
+        expect(screen.queryByRole('menu')).toBeNull();
+        for (const label of ['打开文件', '复制文件路径', '添加到对话']) {
+          const shortcut = dock().getByRole<HTMLButtonElement>('button', { name: label });
+          expect(shortcut.disabled).toBe(true);
+          fireEvent.click(shortcut);
+        }
       }
-      expect(onOpenProjectFile).toHaveBeenCalledOnce();
+      expect(onOpenProjectFile).toHaveBeenCalledTimes(2);
     }
   });
 
@@ -126,6 +295,15 @@ describe('Git change navigation', () => {
     expect(getCommitFileDiff).toHaveBeenCalledTimes(1);
     fireEvent.click(nav.getByRole('button', { name: /b.ts/ }));
     await waitFor(() => expect(getCommitFileDiff).toHaveBeenLastCalledWith('/repo', { oid: one, filePath: 'b.ts', previousPath: undefined }));
+    fireEvent.click(screen.getByRole('button', { name: '收起变更侧栏' }));
+    fireEvent.click(screen.getByRole('button', { name: '上一文件' }));
+    await waitFor(() => expect(getCommitFileDiff).toHaveBeenLastCalledWith('/repo', { oid: one, filePath: 'a.ts', previousPath: undefined }));
+    fireEvent.keyDown(screen.getByRole('button', { name: '查看所有 diff 文件' }), { key: 'ArrowDown' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: /^b\.ts\b/ }));
+    await waitFor(() => expect(getCommitFileDiff).toHaveBeenLastCalledWith('/repo', { oid: one, filePath: 'b.ts', previousPath: undefined }));
+    expect(getCommitDetails).toHaveBeenCalledOnce();
+    expect(getCommitFileDiff).toHaveBeenCalledTimes(4);
+    fireEvent.click(screen.getByRole('button', { name: '展开变更侧栏' }));
     fireEvent.click(nav.getByRole('button', { name: 'feature' }));
     await waitFor(() => expect(getHistory).toHaveBeenLastCalledWith('/repo', { ref: 'refs/heads/feature' }));
     expect(getCommitDetails).toHaveBeenLastCalledWith('/repo', two);

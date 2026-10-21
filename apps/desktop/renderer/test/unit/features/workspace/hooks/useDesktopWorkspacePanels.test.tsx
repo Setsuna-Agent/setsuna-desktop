@@ -86,7 +86,7 @@ it.each(['side', 'bottom'] as const)('cancels amend in the %s slot when resettin
   expect(setError).not.toHaveBeenCalled();
 });
 
-it('opens the selected app at the current conversation workspace and remembers the choice', async () => {
+it('shares the preferred app between workspace and file opens across conversation workspaces', async () => {
   const workspace = { id: 'worktree-a', path: '/repo/.worktrees/a', name: 'Repository', createdAt: '', updatedAt: '' };
   const apps = [{ id: 'vscode', label: 'VS Code', icon: 'vscode' }, { id: 'cursor', label: 'Cursor', icon: 'cursor' }];
   const open = vi.fn().mockResolvedValue(true);
@@ -110,10 +110,15 @@ it('opens the selected app at the current conversation workspace and remembers t
   expect(view.result.current.selectedWorkspaceApp?.id).toBe('cursor');
   expect(localStorage.getItem(DESKTOP_WORKSPACE_APP_STORAGE_KEY)).toBe('cursor');
 
+  await act(async () => view.result.current.openFileWithWorkspaceApp('vscode', 'src/main.ts', 12));
+  expect(open).toHaveBeenLastCalledWith(workspace.path, 'vscode', 'src/main.ts', 12);
+  expect(view.result.current.selectedWorkspaceApp?.id).toBe('vscode');
+  expect(localStorage.getItem(DESKTOP_WORKSPACE_APP_STORAGE_KEY)).toBe('vscode');
+
   view.rerender({ activeProject: { ...workspace, id: 'worktree-b', path: '/repo/.worktrees/b' } });
   await waitFor(() => expect(list).toHaveBeenLastCalledWith('/repo/.worktrees/b'));
-  await act(async () => view.result.current.openWorkspaceInApp('vscode'));
-  expect(open).toHaveBeenLastCalledWith('/repo/.worktrees/b', 'vscode', null, null);
+  await act(async () => view.result.current.openFileInWorkspaceApp('src/next.ts'));
+  expect(open).toHaveBeenLastCalledWith('/repo/.worktrees/b', 'vscode', 'src/next.ts', null);
 });
 
 it('opens navigation from the side add button and creates only terminals from the bottom add button', () => {

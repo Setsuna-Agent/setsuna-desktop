@@ -1,6 +1,6 @@
 import { PointMenu, type MenuItem } from '@setsuna-desktop/renderer-ui';
 import type { WorkspaceEntry } from '@setsuna-desktop/contracts';
-import { Code2, Copy, FilePlus2, FolderOpen, FolderPlus, MessageSquare, Pencil, Trash2 } from 'lucide-react';
+import { Code2, Copy, FilePlus2, FolderOpen, FolderPlus, MessageSquare, PanelRightOpen, Pencil, Trash2 } from 'lucide-react';
 import { translate, useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
 import { WorkspaceAppGlyph, workspaceOpenWithMenu } from '../../composition/workspace-apps-feature-adapter.js';
 import type { DesktopWorkspaceApp } from './model.js';
@@ -19,6 +19,7 @@ export type WorkspaceFileContextTarget = {
 const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
 export function WorkspaceFileContextMenu({
+  openOnly = false,
   selectedWorkspaceApp,
   target,
   workspaceApps,
@@ -31,8 +32,10 @@ export function WorkspaceFileContextMenu({
   onDeleteEntry,
   entryActionsDisabled,
   onOpenWithApp,
+  onOpenProjectFile,
   onReveal,
 }: {
+  openOnly?: boolean;
   selectedWorkspaceApp: DesktopWorkspaceApp | null;
   target: WorkspaceFileContextTarget | null;
   workspaceApps: DesktopWorkspaceApp[];
@@ -45,6 +48,7 @@ export function WorkspaceFileContextMenu({
   onDeleteEntry?: (entryPath: string) => void;
   entryActionsDisabled?: boolean;
   onOpenWithApp: (appId: string, filePath: string, line?: number) => void;
+  onOpenProjectFile?: (filePath: string, line?: number) => void;
   onReveal: (filePath: string) => void;
 }) {
   const { t } = useI18n();
@@ -52,7 +56,28 @@ export function WorkspaceFileContextMenu({
   const directory = target.type === 'directory';
   const workspaceRoot = directory && !target.filePath;
   const image = target.image;
-  const items: MenuItem[] = [
+  const openItems: MenuItem[] = directory ? [] : [
+    ...(onOpenProjectFile ? [{
+      key: 'open-tab',
+      label: t('workspace.fileMenu.openInNewTab'),
+      icon: <PanelRightOpen size={14} />,
+      onClick: () => onOpenProjectFile(target.filePath, target.line),
+    }] : []),
+    ...(selectedWorkspaceApp || !onOpenProjectFile ? [{
+      key: 'open',
+      label: selectedWorkspaceApp ? openInAppLabel(selectedWorkspaceApp, target.line, t) : t('workspace.fileMenu.noApp'),
+      icon: selectedWorkspaceApp ? <WorkspaceAppGlyph app={selectedWorkspaceApp} /> : <Code2 size={14} />,
+      disabled: !selectedWorkspaceApp,
+      onClick: () => {
+        if (selectedWorkspaceApp) onOpenWithApp(selectedWorkspaceApp.id, target.filePath, target.line);
+      },
+    }] : []),
+    workspaceOpenWithMenu({
+      label: t('workspace.fileMenu.openWith'), apps: workspaceApps,
+      onOpen: (appId) => onOpenWithApp(appId, target.filePath, target.line),
+    }),
+  ];
+  const items: MenuItem[] = openOnly ? openItems : [
     ...(image && onCopyImage ? [
       { key: 'copy-image', label: t('workspace.fileMenu.copyImage'), icon: <Copy size={14} />,
         onClick: () => onCopyImage(image) },
@@ -71,17 +96,7 @@ export function WorkspaceFileContextMenu({
       { type: 'divider' as const },
     ] : []),
     ...(!directory ? [
-      {
-        key: 'open',
-        label: selectedWorkspaceApp ? openInAppLabel(selectedWorkspaceApp, target.line, t) : t('workspace.fileMenu.noApp'),
-        icon: selectedWorkspaceApp ? <WorkspaceAppGlyph app={selectedWorkspaceApp} /> : <Code2 size={14} />,
-        disabled: !selectedWorkspaceApp,
-        onClick: () => { if (selectedWorkspaceApp) onOpenWithApp(selectedWorkspaceApp.id, target.filePath, target.line); },
-      },
-      workspaceOpenWithMenu({
-        label: t('workspace.fileMenu.openWith'), apps: workspaceApps,
-        onOpen: (appId) => onOpenWithApp(appId, target.filePath, target.line),
-      }),
+      ...openItems,
       { type: 'divider' as const },
     ] : []),
     ...(!workspaceRoot ? [

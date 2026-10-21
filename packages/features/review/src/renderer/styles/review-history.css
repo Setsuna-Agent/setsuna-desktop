@@ -28,7 +28,7 @@
 .git-changes-panel .git-changes-files__group-toggle,
 .git-changes-panel .git-changes-file__select,
 .git-changes-panel .git-history-row__commit {
-  color: var(--app-text-muted);
+  color: var(--app-text);
   font-family: var(--app-font-family);
   font-size: 12px;
   font-weight: 400;
@@ -45,20 +45,78 @@
 }
 
 .git-changes-panel__body {
+  --git-navigation-width: var(--git-nav-width, 260px);
+  --git-navigation-track-width: var(--git-navigation-width);
   position: relative;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--git-navigation-track-width);
+  grid-template-rows: minmax(0, 1fr);
   flex: 1;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  transition: grid-template-columns var(--app-sidebar-motion-duration) var(--app-sidebar-motion-easing);
+}
+
+.git-changes-panel__body.is-navigation-collapsed {
+  --git-navigation-track-width: 0px;
+}
+
+.git-changes-panel__detail {
+  grid-area: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  visibility: visible;
+  transition: visibility 0s linear 0s;
+}
+
+.git-changes-panel__detail[aria-hidden='true'] {
+  visibility: hidden;
+  pointer-events: none;
+  transition-delay: var(--app-sidebar-motion-duration);
+}
+
+/* Clip a fixed-width surface as its grid track closes, matching the file explorer. */
+.git-changes-nav-slot {
+  grid-area: 1 / 2;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 130ms ease 70ms, visibility 0s linear 0s;
+}
+
+.git-changes-panel__body.is-navigation-collapsed > .git-changes-nav-slot {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 110ms ease, visibility 0s linear var(--app-sidebar-motion-duration);
+}
+
+.git-changes-panel__body.is-resizing {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .git-changes-panel__body,
+  .git-changes-panel__body > .git-changes-panel__detail,
+  .git-changes-panel__body > .git-changes-nav-slot,
+  .git-changes-panel__body.is-navigation-collapsed > .git-changes-nav-slot {
+    transition: none;
+  }
 }
 
 .git-changes-nav {
   --git-gutter: 12px;
 
   display: flex;
-  flex: 0 0 var(--git-nav-width, 260px);
   flex-direction: column;
+  width: var(--git-navigation-width);
+  height: 100%;
   min-width: 0;
   min-height: 0;
   border-left: 1px solid var(--git-border);
@@ -408,7 +466,7 @@ button.git-history-section-heading { cursor: pointer; }
 .git-changes-file__name,
 .git-changes-file__directory { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .git-changes-file__name { flex: 0 1 auto; min-width: 0; }
-.git-changes-file__directory { flex: 1 4 0; min-width: 0; color: var(--app-text-subtle); font-size: 11px; }
+.git-changes-file__directory { flex: 1 4 0; min-width: 0; color: var(--app-text-secondary); font-size: 11px; }
 .git-changes-file__actions,
 .git-changes-group__actions { display: none; flex-shrink: 0; align-self: center; align-items: center; }
 .git-changes-file:hover .git-changes-file__actions,
@@ -571,14 +629,14 @@ button.git-history-section-heading:hover,
 
 /* A narrow right panel keeps the navigation intact behind an explicit back action. */
 @container git-changes (max-width: 560px) {
-  .git-changes-nav { flex: 1; border-left: 0; }
+  .git-changes-panel__body:not(.has-message-editor) { --git-navigation-width: 100cqw; }
+  /* Match the initial compact view before ResizeObserver reports the panel width. */
+  .git-changes-panel__body.has-detail:not(.has-message-editor) { --git-navigation-track-width: 0px; }
+  .git-changes-nav { border-left: 0; }
   .git-changes-panel__body:not(.has-message-editor) > .git-changes-panel__resize-handle { display: none; }
-  .git-changes-panel__body:not(.has-detail) .git-history-diff { display: none; }
-  .git-changes-panel__body.has-detail:not(.has-message-editor) .git-changes-nav { display: none; }
   .git-changes-panel .git-history-diff__back.app-shell-icon-control { display: inline-flex; }
   /* Message editing keeps the SCM split visible instead of replacing the navigation. */
   .git-changes-panel__body.has-message-editor .git-changes-nav {
-    flex: 0 0 var(--git-nav-width, clamp(160px, 36%, 280px));
     border-left: 1px solid var(--git-border);
   }
 }

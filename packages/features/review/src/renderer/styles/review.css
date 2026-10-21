@@ -3,6 +3,7 @@
 @import './review-git.css';
 @import './review-history.css';
 @import './review-history-hover.css';
+@import './review-file-navigation.css';
 
 .desktop-review-panel {
   --desktop-review-panel-x-padding: 8px;
@@ -347,6 +348,26 @@
   padding: 0 0 10px;
 }
 
+/* A selected file fills its panel; only its diff body owns the scrollbar. */
+.desktop-review-section--single-file,
+.desktop-review-section--single-file > .desktop-review-file-list,
+.desktop-review-section--single-file .desktop-review-file-card {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.desktop-review-section--single-file > .desktop-review-file-list {
+  padding-bottom: 0;
+}
+
+.desktop-review-section--single-file .desktop-review-file-card__summary {
+  position: relative;
+  flex-shrink: 0;
+}
+
 .desktop-review-unanchored-findings {
   display: grid;
   gap: 8px;
@@ -476,7 +497,7 @@
   pointer-events: auto;
 }
 
-/* A single-file view keeps navigation and display controls in the sticky file header. */
+/* A single-file view keeps navigation and display controls in the file header. */
 .desktop-review-file-card__summary--toolbar {
   --desktop-review-file-row-bg: var(--app-bg);
 
