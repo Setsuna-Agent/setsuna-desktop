@@ -260,7 +260,7 @@ package job matrix：
 发布先在 macOS `quality-gate` job 中统一运行一次 typecheck 和完整 `test:unit`。门禁通过后，每个平台：
 
 1. 安装依赖。
-2. `test:release`，只覆盖必须跨平台验证的边界。
+2. Windows 先执行 `build:windows-sandbox`，为真实 shell 测试准备原生进程启动器；随后所有平台执行 `test:release`，只覆盖必须跨平台验证的边界。完全访问模式也使用该启动器，不要求安装沙箱账号。
 3. package。
 4. collect release assets。
 5. upload artifact。

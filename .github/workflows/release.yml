@@ -198,6 +198,15 @@ jobs:
           RUN_WITH_LOG_TIMEOUT_MINUTES: "20"
         run: node scripts/run-with-log.mjs release-logs/install-${{ matrix.artifact }}.log pnpm install --frozen-lockfile
 
+      # Full-access shell tests also use the native process supervisor.
+      # Prepare it before the gate instead of waiting for Electron Builder.
+      - name: Prepare Windows managed shell launcher
+        if: runner.os == 'Windows'
+        env:
+          RUN_WITH_LOG_HEARTBEAT_SECONDS: "30"
+          RUN_WITH_LOG_TIMEOUT_MINUTES: "15"
+        run: node scripts/run-with-log.mjs release-logs/windows-sandbox-build.log pnpm build:windows-sandbox
+
       - name: Release gate tests
         env:
           RUN_WITH_LOG_HEARTBEAT_SECONDS: "30"
