@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { resolveWorkspaceFileReference, workspaceFileKey, workspaceProjectForRoot, workspaceProjectRoots, type WorkspaceProject } from '../src/index.js';
+import { resolveWorkspaceFileReference, workspaceFileKey, workspaceProjectForRoot, workspaceProjectRoots, workspaceRootName, type WorkspaceProject } from '../src/index.js';
 
 const project: WorkspaceProject = {
   id: 'project', name: 'Workspace', createdAt: '', updatedAt: '', path: '/repo',
@@ -25,4 +25,16 @@ it('handles Windows drives, UNC paths, and legacy single-directory projects', ()
   expect(resolveWorkspaceFileReference(windows, '\\\\SERVER\\share\\agent\\a.ts')).toMatchObject({ root: { id: 'child' }, path: 'a.ts' });
   expect(resolveWorkspaceFileReference(windows, 'C:\\repo\\..\\external\\a.ts')).toBeNull();
   expect(workspaceProjectRoots({ ...project, roots: undefined })).toEqual([{ id: 'primary', path: '/repo' }]);
+});
+
+it('handles long separator runs without blocking path routing or losing root identities', () => {
+  // A suffix regex retries at every separator when the run ends in a filename.
+  const separators = '/\\'.repeat(50_000);
+  expect(workspaceRootName({ id: 'main', path: `C:\\repo${separators}agent${separators}` })).toBe('agent');
+  expect(workspaceRootName({ id: 'main', path: '/' })).toBe('/');
+  expect(workspaceRootName({ id: 'main', path: 'C:\\' })).toBe('C:');
+  expect(workspaceRootName({ id: 'main', path: '\\\\server\\share\\' })).toBe('share');
+  expect(resolveWorkspaceFileReference(project, `/repo${separators}src/a.ts${separators}`))
+    .toMatchObject({ root: { id: 'main' }, path: 'src/a.ts' });
+  expect(resolveWorkspaceFileReference(project, `/repo${separators}../outside/a.ts`)).toBeNull();
 });

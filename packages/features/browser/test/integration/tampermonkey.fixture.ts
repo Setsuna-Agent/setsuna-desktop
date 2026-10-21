@@ -95,7 +95,8 @@ async function main() {
       Object.keys(data).filter(key => key.startsWith('!extdb.@meta#')).map(key => key.slice('!extdb.@meta#'.length)))`) as Promise<string[]>;
     const openInstaller = async (scriptPath: string) => {
       await guest.loadURL(`http://127.0.0.1:${port}/`);
-      await guest.executeJavaScript(`(() => { const link = document.getElementById('install'); link.href = ${JSON.stringify(scriptPath)}; link.click(); })()`);
+      const scriptPathLiteral = JSON.stringify(scriptPath).replaceAll('<', '\\u003c');
+      await guest.executeJavaScript(`(() => { const link = document.getElementById('install'); link.href = ${scriptPathLiteral}; link.click(); })()`);
       const installer = await until(() => BrowserWindow.getAllWindows().find((window) =>
         window.webContents.getURL().startsWith(`chrome-extension://${id}/ask.html?aid=`)), 'Tampermonkey opens its installation confirmation');
       await until(() => installer.webContents.executeJavaScript(`document.body.innerText.includes('Setsuna native integration') &&

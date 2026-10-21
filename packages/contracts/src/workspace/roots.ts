@@ -7,7 +7,14 @@ export function workspaceProjectRoots(project: WorkspaceProject | null | undefin
 }
 
 export function workspaceRootName(root: WorkspaceProjectRoot): string {
-  return root.path.replace(/[\\/]+$/u, '').split(/[\\/]/u).at(-1) || root.path;
+  return trimTrailingSeparators(root.path).split(/[\\/]/u).at(-1) || root.path;
+}
+
+/** Scan once from the end; an unanchored suffix regex can backtrack on long separator runs. */
+function trimTrailingSeparators(value: string): string {
+  let end = value.length;
+  while (end > 0 && (value[end - 1] === '/' || value[end - 1] === '\\')) end -= 1;
+  return value.slice(0, end);
 }
 
 export function workspaceTarget(projectId: string, rootId?: string | null): WorkspaceProjectTarget {
@@ -73,5 +80,5 @@ function normalizeReferencePath(value: string): string {
       if (segments.length > minimum) segments.pop();
     } else if (part || !segments.length || (normalized.startsWith('//') && segments.length === 1)) segments.push(part);
   }
-  return segments.join('/').replace(/\/+$/u, '');
+  return trimTrailingSeparators(segments.join('/'));
 }

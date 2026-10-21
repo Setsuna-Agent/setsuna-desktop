@@ -157,7 +157,7 @@ it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('instal
           ? await manager.requestRuntimeApi({ pluginId: 'react-notes', contributionId: 'notes.page', request: input } as RuntimePluginUiRuntimeRequest)
           : await manager.readRendererUiData({ pluginId: 'react-notes', context });
         response.writeHead(200, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(result));
-      })().catch(error => { console.error(error); response.writeHead(500); response.end(String(error)); });
+      })().catch(error => { console.error(error); response.writeHead(500); response.end('Plugin test bridge request failed.'); });
     });
     await new Promise<void>(resolve => server!.listen(0, '127.0.0.1', resolve));
     const address = server.address(); if (!address || typeof address === 'string') throw new Error('Missing test bridge');

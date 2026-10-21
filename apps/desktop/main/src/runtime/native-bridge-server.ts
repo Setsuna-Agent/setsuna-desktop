@@ -218,7 +218,7 @@ export class DesktopNativeBridgeServer {
         return;
       }
       const featureRequest = request.method === 'POST' ? this.featureRequests.get(request.url ?? '') : undefined;
-      if (featureRequest) {
+      if (typeof featureRequest === 'function') {
         const controller = new AbortController();
         const onClose = () => { if (!response.writableEnded) controller.abort(); };
         response.once('close', onClose);

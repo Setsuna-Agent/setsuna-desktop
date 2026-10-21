@@ -89,7 +89,8 @@ async function main() {
     assert.equal(callback.error, undefined); assert.equal(callback.result[0].result, 44);
     await assert.rejects(control.executeJavaScript(`chrome.scripting.executeScript({target:{tabId:${primary.id}},files:['../private.js']})`), /Could not load/);
 
-    await primary.executeJavaScript(`(() => { for (const src of ${JSON.stringify([`${origin}/frame`, `${otherOrigin}/frame`])}) {
+    const frameSources = JSON.stringify([`${origin}/frame`, `${otherOrigin}/frame`]).replaceAll('<', '\\u003c');
+    await primary.executeJavaScript(`(() => { for (const src of ${frameSources}) {
       const frame = document.createElement('iframe'); frame.src = src; document.body.appendChild(frame); } })()`);
     const frames = await until(() => {
       const children = primary.mainFrame.framesInSubtree.filter(frame => frame.parent !== null);
@@ -170,7 +171,7 @@ async function createGuest(owner: BrowserWindow, url: string): Promise<WebConten
 }
 
 async function writeExtension(storagePath: string): Promise<string> {
-  const { publicKey } = generateKeyPairSync('rsa', { modulusLength: 1024 });
+  const { publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
   const key = publicKey.export({ type: 'spki', format: 'der' });
   const id = createHash('sha256').update(key).digest('hex').slice(0, 32).replace(/[0-9a-f]/g, digit => String.fromCharCode(97 + parseInt(digit, 16)));
   const root = path.join(storagePath, 'Extensions', id, '1.0.0_0'); await mkdir(root, { recursive: true });

@@ -24,9 +24,10 @@ async function main() {
   const ico = Buffer.concat([icoHeader, png]);
   const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="red"/></svg>';
   const server = createServer((request, response) => {
-    if (request.url?.startsWith('/site/')) {
+    const format = request.url === '/site/ico' ? 'ico' : request.url === '/site/svg' ? 'svg' : null;
+    if (format) {
       response.writeHead(200, { 'Content-Type': 'text/html' });
-      response.end(`<head><base href="/assets/"><link rel="icon" href="${request.url.slice('/site/'.length)}"></head>`);
+      response.end(`<head><base href="/assets/"><link rel="icon" href="${format}"></head>`);
     } else if (request.url === '/assets/ico' || request.url === '/assets/svg') {
       response.writeHead(200, { 'Content-Type': request.url.endsWith('svg') ? 'image/svg+xml' : 'image/x-icon' });
       response.end(request.url.endsWith('svg') ? svg : ico);

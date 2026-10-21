@@ -10,7 +10,7 @@
     "setsuna-desktop-runtime": "dist/cli.js"
   },
   "dependencies": {
-    "vite": "^6.0.5",
+    "vite": "^6.4.4",
     "@setsuna-desktop/contracts": "workspace:*",
     "@setsuna-desktop/feature-core": "workspace:*",
     "@setsuna-desktop/feature-approval-review": "workspace:*",
@@ -35,7 +35,7 @@
     "@setsuna-desktop/feature-windows-sandbox": "workspace:*",
     "@setsuna-desktop/feature-workspace-dependencies": "workspace:*",
     "node-pty": "^1.1.0",
-    "sharp": "0.35.4",
+    "sharp": "0.35.5",
     "tar": "7.5.22",
     "undici": "7.29.1",
     "yaml": "^2.8.1",
