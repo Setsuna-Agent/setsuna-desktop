@@ -261,7 +261,7 @@ package job matrix：
 
 1. 安装依赖。
 2. Windows 先执行 `build:windows-sandbox`，为真实 shell 测试准备原生进程启动器；随后所有平台执行 `test:release`，只覆盖必须跨平台验证的边界。完全访问模式也使用该启动器，不要求安装沙箱账号。
-3. package。
+3. package。打包步骤为 Node 设置 4 GiB 堆上限，避免 Vite 的 renderer 依赖图超过托管 runner 默认约 2 GiB 的堆限制；该配置仅作用于构建进程。
 4. collect release assets。
 5. upload artifact。
 

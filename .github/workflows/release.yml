@@ -217,6 +217,8 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         env:
+          # Vite's renderer graph exceeds Node's default 2 GiB heap on hosted macOS.
+          NODE_OPTIONS: --max-old-space-size=4096
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -249,6 +251,7 @@ jobs:
       - name: Package Windows app
         if: runner.os == 'Windows'
         env:
+          NODE_OPTIONS: --max-old-space-size=4096
           RUN_WITH_LOG_HEARTBEAT_SECONDS: "30"
           RUN_WITH_LOG_TIMEOUT_MINUTES: "35"
         run: node scripts/run-with-log.mjs release-logs/package-${{ matrix.artifact }}.log pnpm ${{ matrix.package_script }}
