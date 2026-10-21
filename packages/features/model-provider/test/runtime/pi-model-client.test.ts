@@ -16,6 +16,8 @@ describe('Pi model client protocol integration', () => {
     ['openai-compatible', openAiCompletionsSse, 'opencode-go'],
     ['anthropic', anthropicSse, null],
     ['anthropic', anthropicSse, 'opencode-go'],
+    ['anthropic', anthropicSse, 'kimi-coding'],
+    ['openai-compatible', openAiCompletionsSse, 'kimi-coding'],
     ['openai-responses', responsesSse, null],
     ['openai-responses', responsesSse, 'opencode-go'],
   ] as const)('sends instructions and tool schemas through %s (case %#)', async (kind, sse, catalogProviderId) => {

@@ -244,7 +244,10 @@ function streamForProvider(
     sessionId: input.sessionId,
     ...(typeof input.temperature === 'number' ? { temperature: input.temperature } : {}),
   };
+  // A catalog upgrade can change a provider's protocol (e.g. Kimi Code). Keep
+  // saved connections on their configured API instead of invoking the new adapter.
   const builtinProvider = catalogProvider?.id === model.provider
+    && getBuiltinCatalogProvider(model.provider)?.getModels().some((candidate) => candidate.api === model.api)
     ? catalogProvider
     : undefined;
   if (model.api === 'openai-responses') {

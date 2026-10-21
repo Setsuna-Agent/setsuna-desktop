@@ -38,6 +38,9 @@ jobs:
     name: Validate release version
     runs-on: macos-15
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
 
     steps:
       - uses: actions/checkout@v4
@@ -50,6 +53,19 @@ jobs:
         env:
           RELEASE_TAG: ${{ inputs.tag_name }}
         run: node scripts/validate-release-version.mjs
+
+      - name: Require successful CI for release commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ci_result="$(gh api --method GET "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
+            --field head_sha="$GITHUB_SHA" --field per_page=1 \
+            --jq '.workflow_runs[0] | "\(.head_sha) \(.status) \(.conclusion)"')"
+          if [[ "$ci_result" != "$GITHUB_SHA completed success" ]]; then
+            echo "::error::Release requires successful CI for $GITHUB_SHA; found: $ci_result"
+            exit 1
+          fi
 
   quality-gate:
     name: Static and unit quality gate
@@ -94,12 +110,11 @@ jobs:
           RUN_WITH_LOG_TIMEOUT_MINUTES: "20"
         run: node scripts/run-with-log.mjs release-logs/test-unit.log pnpm test:unit
 
-  integration-diagnostics:
-    name: Integration diagnostics
+  integration-gate:
+    name: Integration release gate
     needs: validate-release
     runs-on: macos-15
     timeout-minutes: 35
-    continue-on-error: true
 
     steps:
       - uses: actions/checkout@v4
@@ -146,7 +161,7 @@ jobs:
 
   package:
     name: Package ${{ matrix.label }}
-    needs: [validate-release, quality-gate]
+    needs: [validate-release, quality-gate, integration-gate]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     strategy:
@@ -198,6 +213,15 @@ jobs:
           RUN_WITH_LOG_TIMEOUT_MINUTES: "20"
         run: node scripts/run-with-log.mjs release-logs/install-${{ matrix.artifact }}.log pnpm install --frozen-lockfile
 
+      # Full-access shell tests also use the native process supervisor.
+      # Prepare it before the gate instead of waiting for Electron Builder.
+      - name: Prepare Windows managed shell launcher
+        if: runner.os == 'Windows'
+        env:
+          RUN_WITH_LOG_HEARTBEAT_SECONDS: "30"
+          RUN_WITH_LOG_TIMEOUT_MINUTES: "15"
+        run: node scripts/run-with-log.mjs release-logs/windows-sandbox-build.log pnpm build:windows-sandbox
+
       - name: Release gate tests
         env:
           RUN_WITH_LOG_HEARTBEAT_SECONDS: "30"
@@ -208,6 +232,8 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         env:
+          # Vite's renderer graph exceeds Node's default 2 GiB heap on hosted macOS.
+          NODE_OPTIONS: --max-old-space-size=4096
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -240,6 +266,7 @@ jobs:
       - name: Package Windows app
         if: runner.os == 'Windows'
         env:
+          NODE_OPTIONS: --max-old-space-size=4096
           RUN_WITH_LOG_HEARTBEAT_SECONDS: "30"
           RUN_WITH_LOG_TIMEOUT_MINUTES: "35"
         run: node scripts/run-with-log.mjs release-logs/package-${{ matrix.artifact }}.log pnpm ${{ matrix.package_script }}

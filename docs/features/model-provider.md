@@ -19,7 +19,7 @@ AgentLoop / Review / Vision / Thread title / Memory
                          │
        feature-model-provider/runtime
                          │
-          @earendil-works/pi-ai 1.1.0
+          @earendil-works/pi-ai 1.3.0
 ```
 
 `model-provider` 是 required runtime/renderer Feature。Runtime factory 先创建 `BindableModelClient`，Feature 激活完成后把 sampling capability 绑定进去；激活失败不会退回旧协议栈。
@@ -57,6 +57,8 @@ AgentLoop / Review / Vision / Thread title / Memory
 直接调用 provider/API stream 前，统一通过 Pi `normalizeContext()` 把系统提示词和工具声明转换为 transcript system message；不把 Pi transcript 类型扩散到共享 contracts 或持久存储。
 
 Setsuna provider ID 是配置和 metadata 身份。预置配置的 Pi model 保留 `deepseek`、`openrouter`、`openai`、`anthropic` 等真实 provider identity 和模型 compat；自定义配置使用 canonical `openai`/`anthropic` fallback。
+
+Pi 目录升级不改写已保存连接的协议和地址。若厂商已切换协议（例如 Kimi Code），旧连接仍使用原协议的通用 adapter；OpenCode Go 的历史 `/zen/go` 地址继续识别为该厂商，保留会话请求头。Pi 报告工具参数 JSON 无效时终止该次采样，不把其空对象占位值作为有效工具调用执行或保存到回放 metadata。
 
 思考参数以选中模型的能力为准。OpenAI 兼容协议保留用户填写的 effort 字符串（包括 `none`），只去除首尾空白，由供应商校验取值，不按 SDK 的类型枚举静默过滤。自定义 OpenAI 连接关闭思考时，精确匹配 OpenAI 目录或用户声明 `none` 的模型显式发送关闭参数，模型设置中的思考能力关闭也不丢失这个语义；其余未知模型不推断关闭值。不支持思考且没有明确关闭值的模型不发送思考控制。自定义 Anthropic 连接中精确匹配目录的模型复用思考模式、effort 映射和温度约束，不继承厂商请求头或原生工具能力。标题请求优先关闭思考，目录标记无法关闭的模型保留其默认模式。未知模型别名明确拒绝旧式 `enabled` 时改用 adaptive，拒绝 `disabled` 时省略思考控制；兼容重试覆盖 HTTP 参数错误和 HTTP 200 后 SSE 中的 `invalid_request_error`，仅发生在没有输出时，保留结构化输出 schema 和已选 effort。压缩使用压缩模型配置中的思考能力与默认 effort，不受聊天输入框的思考开关影响；其请求共用同一适配与兼容重试链路。
 

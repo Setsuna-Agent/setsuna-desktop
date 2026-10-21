@@ -150,7 +150,11 @@ export function inferBuiltinCatalogProviderId(
   source: readonly Provider[] = supportedProviders(),
 ): string | undefined {
   const api = KIND_API[provider.provider];
-  const baseUrl = normalizeBaseUrl(provider.baseUrl);
+  // Pi moved Go's presets to /inference; retain identity for saved /zen connections.
+  const baseUrl = normalizeBaseUrl(provider.baseUrl).replace(
+    /^https:\/\/opencode\.ai\/zen\/go(?=\/|$)/u,
+    'https://opencode.ai/inference/go',
+  );
   const matches = source.filter((candidate) => (
     candidate.getModels().some((model) => (
       model.api === api && normalizeBaseUrl(model.baseUrl) === baseUrl

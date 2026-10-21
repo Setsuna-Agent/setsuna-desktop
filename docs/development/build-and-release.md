@@ -257,15 +257,17 @@ package job matrix：
 - macOS Intel：`macos-15-intel`，`package:mac:x64`。
 - Windows x64：`windows-2025`，`package:win:x64`。
 
-发布先在 macOS `quality-gate` job 中统一运行一次 typecheck 和完整 `test:unit`。门禁通过后，每个平台：
+发布前必须先提交或复用发布 PR，并等待当前发布提交的 CI 全部通过。`validate-release` 校验版本后查询该 SHA 的最新 CI run；缺少记录、仍在运行或结果不是成功时立即阻止后续任务。已合入主分支的提交如没有对应 CI 记录，先对该提交手动运行 CI，不能用旧提交的通过结果代替。
+
+发布随后在 macOS `quality-gate` job 中统一运行一次 typecheck 和完整 `test:unit`，并运行下方的集成测试门禁。两项门禁通过后，每个平台：
 
 1. 安装依赖。
-2. `test:release`，只覆盖必须跨平台验证的边界。
-3. package。
+2. Windows 先执行 `build:windows-sandbox`，为真实 shell 测试准备原生进程启动器；随后所有平台执行 `test:release`，只覆盖必须跨平台验证的边界。完全访问模式也使用该启动器，不要求安装沙箱账号。
+3. package。打包步骤为 Node 设置 4 GiB 堆上限，避免 Vite 的 renderer 依赖图超过托管 runner 默认约 2 GiB 的堆限制；该配置仅作用于构建进程。
 4. collect release assets。
 5. upload artifact。
 
-release 另有 `Integration diagnostics` job，在 macOS 上先构建 contracts 和 Feature packages（源码插件 Worker 与 Electron fixture 需要真实的包导出，不经过 Vitest source alias），再跑 `test:integration` 并上传 `diagnostic-*` 日志 artifact。该 job 是诊断信号，不阻塞 package/publish；正式发布资产只从 `release-*` package artifacts 收集。
+`Integration release gate` job 在 macOS 上先构建 contracts 和 Feature packages（源码插件 Worker 与 Electron fixture 需要真实的包导出，不经过 Vitest source alias），再跑 `test:integration` 并上传 `diagnostic-*` 日志 artifact。集成测试失败会阻止 package/publish，不允许将失败降为诊断信号继续发布；正式发布资产只从 `release-*` package artifacts 收集。
 
 publish job：
 
