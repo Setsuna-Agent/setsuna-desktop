@@ -62,7 +62,7 @@ async function main() {
     const key = request.url!.split('/').at(-1)!;
     if (request.url!.startsWith('/hold/')) { holds.set(key, response); return; }
     response.writeHead(200, { 'Content-Type': 'text/html' });
-    response.end(`<!doctype html><head><script src="/hold/${key}"></script></head><body>Blocked parser</body>`);
+    response.end(`<!doctype html><head><script src="/hold/${encodeURIComponent(key)}"></script></head><body>Blocked parser</body>`);
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const address = server.address(); assert.ok(address && typeof address !== 'string');

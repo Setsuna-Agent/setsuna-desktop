@@ -30,6 +30,11 @@ corepack pnpm@7.33.7 <command>
 
 `apps/desktop` 不是独立 workspace package，根 package 脚本直接构建。
 
+根 `package.json` 的 `pnpm.overrides` 维护间接依赖的安全版本下限。其中两项跨版本约束需要随上游升级复核：
+
+- `@electron/get@3>global-agent` 使用兼容 `bootstrap()` 的 4.x，移除旧日志依赖链中的 `roarr` / `sprintf-js`；调整时验证 Electron 下载器的代理下载与校验和流程。
+- `katex@<0.18.2` 统一到已修复 trust 限制绕过问题的 0.18.10，覆盖 Markdown 和 Mermaid 的间接依赖，并避开上游因破坏性变更而弃用的 0.18.11；调整时验证公式解析及不可信命令处理。上游版本范围覆盖安全版本后可移除对应 override。
+
 ## 构建脚本
 
 常用脚本：

@@ -76,7 +76,7 @@ export default function activate(api) {
       }
     }
   });` : ''}
-  ${options.exitAfterActivation ? `setInterval(() => { if (existsSync(${JSON.stringify(exitPath)})) process.exit(17); }, 10);` : ''}
+  ${options.exitAfterActivation ? `setInterval(() => { if (existsSync(${JSON.stringify(exitPath).replaceAll('<', '\\u003c')})) process.exit(17); }, 10);` : ''}
   api.registerTool({
     name: 'echo',
     description: 'Echo a value and update state.',

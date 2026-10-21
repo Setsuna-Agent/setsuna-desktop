@@ -187,7 +187,7 @@ async function verifySystemApis(service: BrowserExtensionService, panel: WebCont
 }
 
 async function writeExtension(storagePath: string): Promise<string> {
-  const { publicKey } = generateKeyPairSync('rsa', { modulusLength: 1024 });
+  const { publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
   const key = publicKey.export({ type: 'spki', format: 'der' });
   const id = createHash('sha256').update(key).digest('hex').slice(0, 32).replace(/[0-9a-f]/g, (digit) => String.fromCharCode(97 + parseInt(digit, 16)));
   const root = path.join(storagePath, 'Extensions', id, '1.0.0_0'); await mkdir(root, { recursive: true });
