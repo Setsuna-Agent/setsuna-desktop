@@ -14,12 +14,9 @@
 }
 
 .browser-quick-links__header h2 {
-  display: flex;
-  align-items: center;
-  gap: 7px;
   margin: 0;
   color: var(--app-text);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
 }
 

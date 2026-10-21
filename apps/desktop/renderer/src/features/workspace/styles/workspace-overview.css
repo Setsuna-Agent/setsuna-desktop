@@ -125,11 +125,10 @@
 .desktop-workspace-overview__section-title {
   display: flex;
   align-items: center;
-  gap: 7px;
   min-height: 24px;
   margin: 0 0 6px;
   color: var(--app-text);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
 }
 
