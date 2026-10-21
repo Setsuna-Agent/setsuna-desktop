@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { IconButton, TextField } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, IconButton, TextField } from '@setsuna-desktop/renderer-ui';
 import { FolderPlus, Search } from 'lucide-react';
 import type { BrowserBookmarkNode } from '../../contracts/bookmarks.js';
 import { useBrowserBookmarks } from '../useBrowserBookmarks.js';
@@ -61,6 +61,6 @@ export function BrowserBookmarkRecords(props: BrowserRecordsProps) {
         onEdit={(node) => setEdit({ type: node.type, parentId: node.parentId ?? BOOKMARK_BAR_ID, node })}
         onRemove={(node) => { if (node.type === 'folder') setRemoving(node); else bookmarks.remove(node.id); }} />
     </>}
-    {bookmarks.error ? <p role="alert" className="browser-records__error">{t('feature.browser.settings.failed')}</p> : null}
+    {bookmarks.error ? <ToastNotice key={bookmarks.errorRevision} message={t('feature.browser.settings.failed')} /> : null}
   </>;
 }

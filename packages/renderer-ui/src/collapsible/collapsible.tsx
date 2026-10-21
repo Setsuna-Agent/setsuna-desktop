@@ -4,21 +4,21 @@ import type { ReactNode } from 'react';
 import { EASE_OUT, SPRING_LAYOUT } from '../motion.js';
 
 const REVEAL_TRANSITION: Transition = {
-  height: SPRING_LAYOUT,
+  gridTemplateRows: SPRING_LAYOUT,
   opacity: { duration: 0.2, ease: EASE_OUT },
 };
 
-// 收起用定时补间：过阻尼弹簧在接近 0 时会拖出一段长尾巴，
-// 内容看起来已经收起却还要停留一会儿才卸载，视觉上就是“顿一下”。
+// 收起用定时补间，避免接近折叠后还要等待弹簧收尾才能卸载。
 const COLLAPSE_TRANSITION: Transition = {
-  height: { duration: 0.2, ease: [0.4, 0, 0.2, 1] },
+  gridTemplateRows: { duration: 0.2, ease: [0.4, 0, 0.2, 1] },
   opacity: { duration: 0.12, ease: EASE_OUT },
 };
 
 const INSTANT_TRANSITION: Transition = { duration: 0 };
 
 /**
- * 受控折叠内容：展开时高度从 0 弹簧过渡到 auto 并淡入，收起动画结束后再卸载。
+ * 用网格轨道展开自然高度，避免 Motion 将缩放后的 DOMRect 当成 CSS 高度，
+ * 在动画结束切回 auto 时突然增减空白。收起动画结束后再卸载。
  * 只在动画期间裁切溢出，静止展开时不裁掉子元素的焦点环和阴影。
  */
 export function CollapsibleContent({ open, children, className, id, onExitComplete }: {
@@ -37,17 +37,19 @@ export function CollapsibleContent({ open, children, className, id, onExitComple
           key="collapsible-content"
           className={className}
           id={id}
-          initial={{ height: 0, opacity: 0, overflow: 'hidden' }}
-          animate={{ height: 'auto', opacity: 1, transitionEnd: { overflow: 'visible' } }}
+          style={{ display: 'grid' }}
+          initial={{ gridTemplateRows: '0fr', opacity: 0, overflow: 'hidden' }}
+          animate={{ gridTemplateRows: '1fr', opacity: 1, transitionEnd: { overflow: 'visible' } }}
           exit={{
-            height: 0,
+            gridTemplateRows: '0fr',
             opacity: 0,
             overflow: 'hidden',
             transition: reduceMotion ? INSTANT_TRANSITION : COLLAPSE_TRANSITION,
           }}
           transition={reduceMotion ? INSTANT_TRANSITION : REVEAL_TRANSITION}
         >
-          {children}
+          {/* 将内容的 padding/margin 留在可压缩轨道内，0fr 才能完全收拢。 */}
+          <div style={{ minHeight: 0, minWidth: 0 }}>{children}</div>
         </motion.div>
       ) : null}
     </AnimatePresence>

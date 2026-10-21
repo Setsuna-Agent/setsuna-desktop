@@ -2,7 +2,7 @@ import { useId, useRef, useState } from 'react';
 import type { RuntimeConfiguredModelReference } from '@setsuna-desktop/contracts';
 import { ChevronRight } from 'lucide-react';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
-import { Button, Dialog, SelectField, Switch, TextArea, TextField } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, Button, Dialog, SelectField, Switch, TextArea, TextField } from '@setsuna-desktop/renderer-ui';
 import type { AutomationModel, AutomationProject, AutomationTask } from '../contracts/index.js';
 import type { AutomationClient } from './client.js';
 import { automationForm, draftFromForm, type AutomationForm } from './form.js';
@@ -85,7 +85,7 @@ export function TaskEditor({ task, threadId, client, models, projects, ModelPick
           </label>
         </div>
       </details>
-      {error ? <p className="automation-form__error" role="alert">{error}</p> : null}
+      {error ? <ToastNotice message={error} /> : null}
     </form>
   </Dialog>;
 }

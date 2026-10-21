@@ -295,9 +295,7 @@ export function McpCapabilitiesPage({
           </div>
         </div>
         {snapshot?.errors.length ? (
-          <div className="desktop-capabilities-errors">
-            {snapshot.errors.map((error) => <span key={error}>{error}</span>)}
-          </div>
+          <ui.Toast message={snapshot.errors.join('\n')} tone="error" />
         ) : null}
       </section>
       {operationError ? <ui.Toast message={operationError} tone="error" /> : null}
@@ -531,7 +529,7 @@ function McpServerEditor({
                   {translate(discovering ? 'feature.mcp.fetchingTools' : 'feature.mcp.fetchTools')}
                 </ui.Button>
               </header>
-              {discoveryError ? <div className="desktop-capabilities-mcp-tools__error">{discoveryError}</div> : null}
+              {discoveryError ? <ui.Toast message={discoveryError} tone="error" /> : null}
               {draft.tools.length ? (
                 <>
                   <div className="desktop-capabilities-mcp-tools__toolbar">

@@ -1,5 +1,5 @@
 import type { DesktopDataMigrationPlan } from '@setsuna-desktop/contracts';
-import { Dialog } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, Dialog } from '@setsuna-desktop/renderer-ui';
 import { FolderOpen, MoveRight } from 'lucide-react';
 import { useState } from 'react';
 import { useDesktopDataRoot } from '../../../app/providers/DesktopDataRootProvider.js';
@@ -101,7 +101,7 @@ export function DataLocationSettings({ fallbackRoot }: { fallbackRoot: string })
         <SettingsPathValue kind="directory" path={activeRoot} />
       </div>
       <DataRootBackupSettings />
-      {error && !plan ? <div className="chat-user-settings__runtime-error">{error}</div> : null}
+      {error ? <ToastNotice message={error} /> : null}
       <Dialog
         width={680}
         open={scanning || Boolean(plan)}
@@ -177,7 +177,6 @@ export function DataLocationSettings({ fallbackRoot }: { fallbackRoot: string })
               />
             ))}
             <p className="data-root-plan__notice">{t('dataRoot.plan.notice')}</p>
-            {error ? <div className="data-root-plan__issue is-blocker">{error}</div> : null}
           </div>
         ) : null}
       </Dialog>

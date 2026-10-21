@@ -48,7 +48,11 @@ export function Dialog({ open = true, title, description, headerActions, childre
           previousFocus.current?.focus({ preventScroll: true });
         }}
         onEscapeKeyDown={(event) => { if (!dismissible) event.preventDefault(); }}
-        onPointerDownOutside={(event) => { if (!dismissible) event.preventDefault(); }}>
+        onPointerDownOutside={(event) => {
+          const target = event.detail.originalEvent.target;
+          // Dismissing feedback must not discard the form that reported the failure.
+          if (!dismissible || (target instanceof Element && target.closest('[data-toast-region]'))) event.preventDefault();
+        }}>
         <section ref={contentRef} className={cn('sd-dialog', className)} style={{ width }}>
           <header className={cn('sd-dialog__header', !title && 'sd-visually-hidden')}>
             {headerActions ? <div className="sd-dialog__header-row">

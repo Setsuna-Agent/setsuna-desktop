@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { startTransition, useEffect, useRef, useState } from 'react';
 
 // Match beUI's continuous text cadence, accelerating when transport bursts build up.
 const streamCharactersPerSecond = 110;
 const streamCatchUpWindowMs = 500;
+// Markdown parsing shares the main thread with input and disclosure animations.
+// Accumulate characters between commits instead of reparsing a long tail every frame.
+const streamRenderIntervalMs = 50;
 const streamSegmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
 type StreamState = {
@@ -30,6 +33,7 @@ export function useSmoothedStreamingContent(content: string, streaming: boolean)
     if (state.frame !== null || state.visible === content) return;
 
     let previousTime = performance.now();
+    let previousRenderTime = previousTime;
     let characterBudget = 0;
     const advance = (now: number) => {
       state.frame = null;
@@ -44,11 +48,13 @@ export function useSmoothedStreamingContent(content: string, streaming: boolean)
       characterBudget += Math.max(0, now - previousTime) * speed / 1000;
       previousTime = now;
       const count = Math.floor(characterBudget);
-      if (count > 0) {
+      if (count > 0 && now - previousRenderTime >= streamRenderIntervalMs) {
         const offset = nextVisibleOffset(state.target, state.visible.length, count);
         characterBudget -= count;
         state.visible = state.target.slice(0, offset);
-        setVisibleContent(state.visible);
+        previousRenderTime = now;
+        const nextContent = state.visible;
+        startTransition(() => setVisibleContent(nextContent));
       }
       if (state.visible.length < state.target.length) {
         state.frame = window.requestAnimationFrame(advance);

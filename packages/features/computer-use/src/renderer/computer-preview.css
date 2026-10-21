@@ -59,9 +59,3 @@
   font-size: 12px;
   line-height: 18px;
 }
-
-.computer-preview__error {
-  color: var(--app-danger);
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}

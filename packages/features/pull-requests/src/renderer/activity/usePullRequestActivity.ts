@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { PullRequestActivityEvent, PullRequestReference } from '../../contracts/index.js';
+import { pullRequestKey, type PullRequestActivityEvent, type PullRequestReference } from '../../contracts/index.js';
 import type { PullRequestsClient } from '../client.js';
 import { errorText } from '../context.js';
+import { useSessionData, type ActivitySnapshot, type PullRequestDetailData } from '../reading/session-data.js';
 
-type Snapshot = { items: PullRequestActivityEvent[]; cursor: string | null; depth: number };
-const empty: Snapshot = { items: [], cursor: null, depth: 0 };
+const empty: ActivitySnapshot = { items: [], cursor: null, depth: 0 };
 
-export function usePullRequestActivity(client: PullRequestsClient, { repository, number }: PullRequestReference, revision: number) {
-  const [snapshot, setSnapshot] = useState(empty);
+export function usePullRequestActivity(client: PullRequestsClient, { repository, number }: PullRequestReference, revision: number, data: PullRequestDetailData) {
+  const [snapshot, setSnapshot, loaded] = useSessionData(data.activity, pullRequestKey({ repository, number }), empty);
   const [pending, setPending] = useState(true);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
@@ -39,7 +39,7 @@ export function usePullRequestActivity(client: PullRequestsClient, { repository,
       finally { if (!request.signal.aborted) { busy.current = false; setPending(false); } }
     })();
     return () => request.abort();
-  }, [client, repository, number, revision, attempt]);
+  }, [client, repository, number, revision, attempt, setSnapshot]);
   const more = async () => {
     const request = controller.current;
     if (!request || request.signal.aborted || busy.current || !current.current.cursor) return;
@@ -55,5 +55,5 @@ export function usePullRequestActivity(client: PullRequestsClient, { repository,
     } catch (cause) { if (!request.signal.aborted) setError(errorText(cause)); }
     finally { if (!request.signal.aborted) { busy.current = false; setPending(false); } }
   };
-  return { items: snapshot.items, hasMore: Boolean(snapshot.cursor), pending, error, more, retry };
+  return { items: snapshot.items, hasMore: Boolean(snapshot.cursor), pending, loaded, error, more, retry };
 }

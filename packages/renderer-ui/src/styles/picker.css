@@ -73,4 +73,3 @@
 .sd-picker__item[aria-current='true']:disabled { opacity: 1; }
 .sd-picker__actions { display: grid; gap: 1px; padding-top: 4px; border-top: 1px solid var(--app-border); }
 .sd-picker__empty { padding: 8px 6px; color: var(--app-text-muted); font-size: 12px; }
-.sd-picker__error { padding: 4px 6px; color: var(--app-danger); font-size: 12px; overflow-wrap: anywhere; }

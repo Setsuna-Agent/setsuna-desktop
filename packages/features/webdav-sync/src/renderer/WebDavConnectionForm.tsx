@@ -1,3 +1,4 @@
+import { ToastNotice } from '@setsuna-desktop/renderer-ui';
 import type {
   DesktopWebDavSyncConfigureInput,
   DesktopWebDavSyncRepositoryMode,
@@ -194,7 +195,7 @@ export function WebDavConnectionForm({
           <small>{t('feature.webdavSync.connection.httpWarning')}</small>
         </span>
       </Checkbox>
-      {error ? <div className="settings-webdav__error" role="alert">{error}</div> : null}
+      {error ? <ToastNotice message={error} /> : null}
       {testSucceeded ? (
         <div className="settings-webdav__success" role="status">
           <Check size={13} />{t('feature.webdavSync.connection.testSuccess')}

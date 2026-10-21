@@ -135,7 +135,6 @@
 }
 
 .chat-content-frame,
-.chat-action-error,
 .chat-delete-bar__inner,
 .chat-scroll-bottom,
 .chat-sender:not(.chat-sender--starter) > .chat-composer-stack,
@@ -150,7 +149,6 @@
 }
 
 .chat-main-conversation--overview-shifted .chat-content-frame,
-.chat-main-conversation--overview-shifted .chat-action-error,
 .chat-main-conversation--overview-shifted .chat-delete-bar__inner,
 .chat-main-conversation--overview-shifted .chat-sender:not(.chat-sender--starter) > .chat-composer-stack,
 .chat-main-conversation--overview-shifted .chat-sender:not(.chat-sender--starter) .chat-prompt {
@@ -682,18 +680,6 @@
 .chat-user-edit__actions button:disabled {
   cursor: default;
   opacity: var(--app-disabled-opacity);
-}
-
-.chat-action-error {
-  width: min(var(--chat-content-max-width), calc(100% - var(--chat-content-inline-padding) * 2));
-  margin: 0 auto 8px;
-  padding: 7px 10px;
-  border: 1px solid color-mix(in srgb, var(--app-danger) 42%, var(--app-border));
-  border-radius: var(--app-radius-xs);
-  color: var(--app-danger);
-  background: color-mix(in srgb, var(--app-danger) 8%, var(--app-surface));
-  font-size: 12px;
-  line-height: 1.45;
 }
 
 .chat-delete-bar {

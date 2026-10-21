@@ -44,8 +44,12 @@ export class McpOAuthCallbackServer {
     this.rejectCallback = null;
     this.resolveCallback = null;
     if (!this.server.listening) return;
+    const closed = once(this.server, 'close');
     this.server.close();
-    await once(this.server, 'close');
+    // Browsers can leave speculative sockets open without sending an HTTP request.
+    // They must not keep the completed login waiting for callback-server cleanup.
+    this.server.closeAllConnections();
+    await closed;
   }
 
   private handleRequest(request: http.IncomingMessage, response: http.ServerResponse): void {

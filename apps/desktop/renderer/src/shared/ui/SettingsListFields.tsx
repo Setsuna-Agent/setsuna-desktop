@@ -1,3 +1,4 @@
+import { ToastNotice } from '@setsuna-desktop/renderer-ui';
 import type { SettingsDirectoryListProps } from '@setsuna-desktop/renderer-contracts/settings';
 import { Check, Folder, FolderOpen, Plus, X } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -265,7 +266,7 @@ export function SettingsListEditor({
       ) : !children && showEmpty ? (
         <span className="chat-user-settings__runtime-list-empty">{t('common.noneAdded')}</span>
       ) : null}
-      {error ? <span className="chat-user-settings__runtime-list-error" role="alert">{error}</span> : null}
+      {error ? <ToastNotice message={error} /> : null}
     </div>
   );
 }

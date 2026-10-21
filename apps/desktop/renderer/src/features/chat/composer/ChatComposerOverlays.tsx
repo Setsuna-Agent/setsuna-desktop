@@ -9,12 +9,16 @@ import {
   type SlashCommandMenuItem,
 } from './ChatSlashCommandMenu.js';
 
+type CommandMenuAnchor =
+  | { anchor: 'composer'; editorRef?: never }
+  | { anchor: 'caret'; editorRef: RefObject<ComposerEditor | null> };
+
 export function ChatComposerOverlays({
+  anchor,
   editorRef,
   mentionMenu,
   slashMenu,
-}: {
-  editorRef: RefObject<ComposerEditor | null>;
+}: CommandMenuAnchor & {
   mentionMenu: {
     activeIndex: number;
     items: ChatMentionItem[];
@@ -34,15 +38,16 @@ export function ChatComposerOverlays({
   };
 }) {
   const getAnchorRect = useCallback(
-    () => composerCaretRect(editorRef.current?.inputElement ?? null),
+    () => composerCaretRect(editorRef?.current?.inputElement ?? null),
     [editorRef],
   );
   if (!mentionMenu.open && !slashMenu.open) return null;
 
-  return (
-    <AnchoredPopover getAnchorRect={getAnchorRect} className="chat-command-popover">
+  const menus = (
+    <>
       {mentionMenu.open ? (
         <ChatMentionCommandMenu
+          compact={anchor === 'caret'}
           activeIndex={mentionMenu.activeIndex}
           items={mentionMenu.items}
           hasProject={mentionMenu.hasProject}
@@ -54,12 +59,18 @@ export function ChatComposerOverlays({
       ) : null}
       {slashMenu.open ? (
         <ChatSlashCommandMenu
+          compact={anchor === 'caret'}
           activeIndex={slashMenu.activeIndex}
           items={slashMenu.items}
           onHover={slashMenu.onHover}
           onSelect={slashMenu.onSelect}
         />
       ) : null}
-    </AnchoredPopover>
+    </>
   );
+
+  // Only in-message editing follows the caret; composers keep their full-width menu above the input.
+  return anchor === 'caret'
+    ? <AnchoredPopover getAnchorRect={getAnchorRect} className="chat-command-popover">{menus}</AnchoredPopover>
+    : menus;
 }

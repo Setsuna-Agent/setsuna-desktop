@@ -1,4 +1,4 @@
-import { Button as UiButton, Dialog } from '@setsuna-desktop/renderer-ui';
+import { Button as UiButton, Dialog, ToastNotice } from '@setsuna-desktop/renderer-ui';
 import type {
   RendererTranslate,
 } from '@setsuna-desktop/feature-core/renderer';
@@ -121,9 +121,7 @@ export function RuntimeActivityCenter({
       }
       footer={activeTab !== 'resources' && error && snapshot ? (
         <div className="runtime-activity-dialog__footer">
-          <span className="runtime-activity-dialog__status" role="status" title={error}>
-            {t('feature.runtimeActivity.refreshFailed', { error })}
-          </span>
+          <ToastNotice message={t('feature.runtimeActivity.refreshFailed', { error })} />
           <Button variant="ghost" onClick={() => void refresh(true)}>
             {t('feature.runtimeActivity.retry')}
           </Button>

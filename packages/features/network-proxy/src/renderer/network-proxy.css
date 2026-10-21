@@ -229,13 +229,6 @@
   line-height: 16px;
 }
 
-.desktop-settings-panel .settings-network-proxy__error {
-  margin: 0 14px 14px;
-  color: var(--app-danger);
-  font-size: 11px;
-  line-height: 16px;
-}
-
 .desktop-settings-panel .settings-network-proxy__footnote {
   margin: -4px 2px 0;
   color: var(--app-text-muted);
@@ -290,12 +283,6 @@
   width: fit-content;
   color: var(--app-text-secondary);
   font-size: 11px;
-}
-
-.settings-network-proxy-dialog__error {
-  color: var(--app-danger);
-  font-size: 11px;
-  line-height: 16px;
 }
 
 @media (max-width: 860px) {

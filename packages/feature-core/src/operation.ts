@@ -71,6 +71,13 @@ export class FeatureOperationFailure<TCode extends string = string> extends Erro
   }
 }
 
+/** Cancellation can cross a process boundary as a typed failure or come from fetch. */
+export function isFeatureOperationCancelled(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  return ('code' in error && error.code === 'OPERATION_CANCELLED')
+    || ('name' in error && error.name === 'AbortError');
+}
+
 export interface FeatureOperationTransport {
   call<TInput, TOutput, TErrors extends FeatureOperationErrorDefinitions>(
     operation: FeatureOperationDescriptor<TInput, TOutput, TErrors>,

@@ -23,6 +23,7 @@
 }
 
 .chat-message-rail__ticks {
+  position: relative;
   display: grid;
   width: 100%;
   pointer-events: auto;
@@ -49,8 +50,9 @@
 }
 
 .chat-message-rail__tick > span {
+  position: absolute;
   display: block;
-  width: 24px;
+  width: 28px;
   height: 2px;
   flex: 0 0 auto;
   color: color-mix(in srgb, var(--app-primary) var(--chat-rail-highlight, 0%), var(--app-text));

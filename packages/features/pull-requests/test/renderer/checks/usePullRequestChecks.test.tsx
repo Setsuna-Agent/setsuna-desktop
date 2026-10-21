@@ -5,6 +5,7 @@ import type { PullRequestCheck } from '../../../src/contracts/index.js';
 import type { PullRequestsClient } from '../../../src/renderer/client.js';
 import { PullRequestChecks } from '../../../src/renderer/PullRequestChecks.js';
 import { usePullRequestChecks } from '../../../src/renderer/checks/usePullRequestChecks.js';
+import { createPullRequestDetailData } from '../../../src/renderer/reading/session-data.js';
 import { readRequest } from '../../../src/runtime/pull-requests.js';
 import { githubFixture, reference, repositoryNode } from '../../support/github-fixture.js';
 import { RendererHost } from '../../support/renderer-host.js';
@@ -27,7 +28,8 @@ it('keeps later pages and the reader’s expansion through a paginated refresh a
   const checks = vi.fn<PullRequestsClient['checks']>().mockImplementation(async ({ cursor }) =>
     ({ items: [check(cursor ? 'second' : 'first')], cursor: cursor ? null : 'next' }));
   const client = { checks } as unknown as PullRequestsClient;
-  const view = render(<PullRequestChecks client={client} detail={pr} revision={0} />, { wrapper: RendererHost });
+  const data = createPullRequestDetailData();
+  const view = render(<PullRequestChecks client={client} detail={pr} revision={0} data={data} />, { wrapper: RendererHost });
   const second = await screen.findByRole('button', { name: /second/ });
   fireEvent.click(second);
   expect(second.getAttribute('aria-expanded')).toBe('false');
@@ -35,7 +37,7 @@ it('keeps later pages and the reader’s expansion through a paginated refresh a
   const page = deferred();
   checks.mockImplementationOnce(async () => ({ items: [check('first', 'updated first')], cursor: 'next' }))
     .mockImplementationOnce(() => page.promise);
-  view.rerender(<PullRequestChecks client={client} detail={pr} revision={1} />);
+  view.rerender(<PullRequestChecks client={client} detail={pr} revision={1} data={data} />);
   await waitFor(() => expect(checks).toHaveBeenCalledTimes(4));
   expect(screen.getByRole('button', { name: /second/ }).getAttribute('aria-expanded')).toBe('false');
   expect(screen.queryByText('updated first')).toBeNull();
@@ -45,7 +47,7 @@ it('keeps later pages and the reader’s expansion through a paginated refresh a
 
   checks.mockImplementationOnce(async () => ({ items: [check('first', 'partial replacement')], cursor: 'next' }))
     .mockRejectedValueOnce(new Error('Disconnected'));
-  view.rerender(<PullRequestChecks client={client} detail={pr} revision={2} />);
+  view.rerender(<PullRequestChecks client={client} detail={pr} revision={2} data={data} />);
   expect((await screen.findByRole('alert')).textContent).toContain('Disconnected');
   expect(screen.getByText('updated first')).toBeTruthy();
   expect(screen.queryByText('partial replacement')).toBeNull();
@@ -56,7 +58,8 @@ it('clears checks on commit changes and discards responses from cancelled refres
   const pr = await detail();
   const checks = vi.fn<PullRequestsClient['checks']>().mockResolvedValue({ items: [check('old')], cursor: null });
   const client = { checks } as unknown as PullRequestsClient;
-  const hook = renderHook(({ commit, revision }) => usePullRequestChecks(client, { ...pr, checksCommit: commit }, revision),
+  const data = createPullRequestDetailData();
+  const hook = renderHook(({ commit, revision }) => usePullRequestChecks(client, { ...pr, checksCommit: commit }, revision, data),
     { initialProps: { commit: pr.checksCommit, revision: 0 } });
   await waitFor(() => expect(hook.result.current.pending).toBe(false));
   const stale = deferred();

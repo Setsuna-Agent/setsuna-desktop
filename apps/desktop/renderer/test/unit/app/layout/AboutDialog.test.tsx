@@ -51,9 +51,9 @@ it('opens app information from the global navigation menu, handles external link
   };
   await clickReleaseNotes();
   expect(openExternal).toHaveBeenCalledWith('https://github.com/Setsuna-Agent/setsuna-desktop/releases');
-  expect(within(dialog).getByRole('alert').textContent).toContain('链接打开失败');
+  expect(screen.getByText(/链接打开失败/u)).toBeTruthy();
   await clickReleaseNotes();
-  expect(within(dialog).queryByRole('alert')).toBeNull();
+  await waitFor(() => expect(screen.queryByText(/链接打开失败/u)).toBeNull());
 
   fireEvent.click(within(dialog).getAllByRole('button', { name: '关闭' }).at(-1)!);
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());

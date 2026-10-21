@@ -67,14 +67,6 @@
   opacity: var(--app-disabled-opacity);
 }
 
-.error {
-  max-width: 140px;
-  overflow: hidden;
-  color: var(--app-danger);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .unavailable .target {
   color: var(--app-warning);
 }
@@ -114,10 +106,4 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-}
-
-.editorError {
-  margin: 8px 0 0;
-  color: var(--app-danger);
-  font-size: 12px;
 }

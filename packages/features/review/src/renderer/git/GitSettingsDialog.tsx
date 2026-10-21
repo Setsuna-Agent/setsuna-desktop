@@ -1,4 +1,4 @@
-import { TextArea, Button } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, TextArea, Button } from '@setsuna-desktop/renderer-ui';
 
 import { useId } from 'react';
 import { GitMerge, Settings, Sparkles } from 'lucide-react';
@@ -59,8 +59,8 @@ export function GitSettingsDialog({ onClose }: { onClose: () => void }) {
         </section>
         {pending === 'loading' ? <span role="status">{t('feature.review.git.settingsLoading')}</span> : null}
         {error ? (
-          <div className="git-settings__error" role="alert">
-            <span>{t(error === 'conflict' ? 'feature.review.git.settingsConflict' : error === 'load' ? 'feature.review.git.settingsLoadFailed' : 'feature.review.git.settingsSaveFailed')}</span>
+          <div>
+            <ToastNotice message={t(error === 'conflict' ? 'feature.review.git.settingsConflict' : error === 'load' ? 'feature.review.git.settingsLoadFailed' : 'feature.review.git.settingsSaveFailed')} />
             {error !== 'save' ? <Button variant="ghost" type="button" disabled={busy} onClick={() => { void load(); }}>{t('feature.review.git.promptReload')}</Button> : null}
           </div>
         ) : null}

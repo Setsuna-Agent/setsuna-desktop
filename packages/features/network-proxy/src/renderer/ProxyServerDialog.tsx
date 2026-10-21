@@ -1,3 +1,4 @@
+import { ToastNotice } from '@setsuna-desktop/renderer-ui';
 import type {
   DesktopNetworkProxyServerInput,
   DesktopNetworkProxyServerState,
@@ -153,7 +154,7 @@ export function ProxyServerDialog({
         ) : null}
 
         {actionError ? (
-          <div className="settings-network-proxy-dialog__error" role="alert">{actionError}</div>
+          <ToastNotice message={actionError} />
         ) : null}
       </form>
     </Dialog>

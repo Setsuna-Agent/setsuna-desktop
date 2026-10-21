@@ -240,16 +240,6 @@
   grid-column: 1 / -1;
 }
 
-[data-feature-id='updater'] .updater-settings__download-source-error {
-  padding: 7px 9px;
-  border: 1px solid color-mix(in srgb, var(--sd-color-danger) 28%, transparent);
-  border-radius: var(--sd-radius-sm);
-  color: var(--sd-color-danger);
-  background: color-mix(in srgb, var(--sd-color-danger) 7%, var(--sd-color-surface, Canvas));
-  font-size: 11px;
-  line-height: 17px;
-}
-
 [data-feature-id='updater'] .updater-settings__status {
   display: inline-flex;
   flex-shrink: 0;

@@ -1,5 +1,5 @@
 import type { CreateThreadInput, WorkspaceProject } from '@setsuna-desktop/contracts';
-import { Button, Dropdown, Popover, TextField } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, Button, Dropdown, Popover, TextField } from '@setsuna-desktop/renderer-ui';
 import { Check, Laptop, Plus, Search, Split, X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
@@ -79,7 +79,7 @@ export function ChatStarterWorkspace({ activeProject, projects, children, locati
           {!activeProject ? <Check size={14} aria-hidden="true" /> : null}
         </Button>
       </div>
-      {error ? <div className="sd-picker__error" role="alert">{error}</div> : null}
+      {error ? <ToastNotice message={error} /> : null}
     </>}>
       <Button variant="ghost" className="chat-starter-workspace__project sd-picker-trigger" aria-label={t('chat.starter.switchProject')} title={activeProject?.path} disabled={pending}>
         <ProjectIcon icon={activeProject?.icon} size={14} />

@@ -17,6 +17,7 @@ import { CommentComposer } from '../../src/renderer/CommentComposer.js';
 import { MergeActions } from '../../src/renderer/MergeActions.js';
 import { PullRequestsPage } from '../../src/renderer/PullRequestsPage.js';
 import { createPullRequestSession } from '../../src/renderer/session.js';
+import { createPullRequestDetailData, createPullRequestListData } from '../../src/renderer/reading/session-data.js';
 import { readDraft, saveDraft } from '../../src/renderer/useCommentDraft.js';
 import { readRequest, summary } from '../../src/runtime/pull-requests.js';
 import { commentNode, githubFixture, head, reference, repositoryNode, summaryNode } from '../support/github-fixture.js';
@@ -65,7 +66,8 @@ describe('PR navigation and drafts', () => {
     const client = clientWith({
       files: vi.fn(async () => ({ files, total: files.length, nextPage: null, reset: false })), patch,
     });
-    const hook = renderHook(({ path }) => usePullRequestFiles(client, pr, path), { initialProps: { path: 'a.ts' } });
+    const data = createPullRequestDetailData();
+    const hook = renderHook(({ path }) => usePullRequestFiles(client, pr, path, data), { initialProps: { path: 'a.ts' } });
     await waitFor(() => expect(hook.result.current.patch).toEqual(patchFor('a.ts')));
     hook.rerender({ path: 'z.ts' });
     const selectedPath = reused ? 'z.ts' : 'a.ts';
@@ -151,7 +153,8 @@ describe('PR navigation and drafts', () => {
       return { items: [summary(summaryNode(cursor ? 2 : 1), repository)], cursor: cursor ? null : 'page2' };
     });
     const client = clientWith({ list, repositories: vi.fn(async () => ({ repositories: ['owner/repo', 'owner/private'].map((id) => ({ id, fullName: id, projects: [], remotes: [] })), issues: [] })) });
-    const hook = renderHook(({ search }) => usePullRequestList(client, 'alice', '', { state: 'open', author: '', search }), { initialProps: { search: '' } });
+    const data = createPullRequestListData();
+    const hook = renderHook(({ search }) => usePullRequestList(client, 'alice', '', { state: 'open', author: '', search }, data), { initialProps: { search: '' } });
     await waitFor(() => expect(hook.result.current.loading).toBe(false));
     expect(hook.result.current.items.map((item) => item.number)).toEqual([1]);
     expect(hook.result.current.errors).toEqual([{ repository: 'owner/private', message: 'Permission denied' }]);
@@ -176,10 +179,17 @@ describe('PR navigation and drafts', () => {
       discussions: vi.fn(async ({ kind, cursor }) => kind === 'threads' ? { items: [thread(cursor ? 'T2' : 'T1')], cursor: cursor ? null : 'threads2' } : { items: [], cursor: null }),
       replies: vi.fn(async ({ threadId }) => ({ comments: [commentNode(`${threadId}_2`)], cursor: null })),
     });
-    const hook = renderHook(({ revision }) => useDiscussions(client, pr, revision), { initialProps: { revision: 0 } });
+    const data = createPullRequestDetailData();
+    const read = ({ revision }: { revision: number }) => useDiscussions(client, pr, revision, data);
+    let hook = renderHook(read, { initialProps: { revision: 0 } });
     await waitFor(() => expect(hook.result.current.pending).toBe(false));
     await act(() => hook.result.current.more());
     await act(() => hook.result.current.moreReplies(hook.result.current.items[0]));
+    hook.unmount();
+    hook = renderHook(read, { initialProps: { revision: 0 } });
+    expect(hook.result.current.items.map((item) => item.id)).toEqual(['T1', 'T2']);
+    expect(hook.result.current.items[0].comments.map((item) => item.id)).toEqual(['T1_1', 'T1_2']);
+    await waitFor(() => expect(hook.result.current.pending).toBe(false));
     hook.rerender({ revision: 1 });
     await waitFor(() => expect(hook.result.current.pending).toBe(false));
     expect(hook.result.current.items.map((item) => item.id)).toEqual(['T1', 'T2']);

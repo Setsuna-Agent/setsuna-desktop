@@ -79,12 +79,3 @@
   flex: 0 0 auto;
   padding: 0 9px;
   font-size: 13px;}
-
-.artifact-card__error {
-  padding: 8px 12px;
-  border-top: 1px solid color-mix(in srgb, var(--app-danger) 18%, var(--app-border));
-  color: var(--app-danger);
-  background: color-mix(in srgb, var(--app-danger) 5%, transparent);
-  font-size: 12px;
-  line-height: 18px;
-}

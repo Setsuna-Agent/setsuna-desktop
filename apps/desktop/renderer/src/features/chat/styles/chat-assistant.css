@@ -433,11 +433,15 @@
 
 /* 间距放进动画区域内：高度归零时 gap 一起收拢，卸载时不再跳动。 */
 .chat-work-history__details {
+  --chat-work-history-details-gap: var(--chat-work-history-item-gap);
+
   min-width: 0;
   margin-top: calc(-1 * var(--chat-work-history-item-gap));
 }
 
 .chat-work-history__details:first-child {
+  --chat-work-history-details-gap: var(--chat-work-history-lead-gap);
+
   margin-top: 0;
 }
 
@@ -445,11 +449,7 @@
   display: grid;
   gap: var(--chat-work-history-item-gap);
   min-width: 0;
-  padding-top: var(--chat-work-history-item-gap);
-}
-
-.chat-work-history__details:first-child > .chat-work-history__details-content {
-  padding-top: var(--chat-work-history-lead-gap);
+  padding-top: var(--chat-work-history-details-gap);
 }
 
 .chat-work-history__body > .chat-markdown,

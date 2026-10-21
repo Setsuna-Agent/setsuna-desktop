@@ -15,6 +15,11 @@ export function usePluginAppAvatarDraft(initialAvatar: BrandIconConfig) {
   const [customAvatar, setCustomAvatar] = useState<CustomAvatar | undefined>(initialAvatar.type === 'custom' ? initialAvatar : undefined);
   const [loading, setLoading] = useState<AvatarSource | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorRevision, setErrorRevision] = useState(0);
+  const reportError = (message: string) => {
+    setError(message);
+    setErrorRevision((revision) => revision + 1);
+  };
   useEffect(() => {
     mounted.current = true;
     return () => { mounted.current = false; };
@@ -32,7 +37,7 @@ export function usePluginAppAvatarDraft(initialAvatar: BrandIconConfig) {
       setAvatar(image);
     } catch (cause) {
       if (!mounted.current) return;
-      setError(source === 'website' ? t('pluginUi.fetchAvatarFailed')
+      reportError(source === 'website' ? t('pluginUi.fetchAvatarFailed')
         : cause instanceof Error ? cause.message : t('settings.brand.readError'));
     } finally {
       pending.current = false;
@@ -53,5 +58,5 @@ export function usePluginAppAvatarDraft(initialAvatar: BrandIconConfig) {
     return websiteIconToAvatar(dataUrl ?? null);
   });
 
-  return { avatar, setAvatar, customAvatar, loading, error, setError, upload, fetchWebsiteIcon };
+  return { avatar, setAvatar, customAvatar, loading, error, errorRevision, reportError, upload, fetchWebsiteIcon };
 }

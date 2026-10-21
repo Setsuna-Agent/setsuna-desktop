@@ -773,7 +773,7 @@ export function ChatComposer({
         }}
       />
       <ChatComposerOverlays
-        editorRef={senderRef}
+        anchor="composer"
         mentionMenu={{
           activeIndex: commandController.activeMentionIndex,
           items: commandController.mentionItems,

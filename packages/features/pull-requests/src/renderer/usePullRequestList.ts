@@ -2,18 +2,20 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PullRequestFilters, PullRequestRepositories, PullRequestSummary } from '../contracts/index.js';
 import type { PullRequestsClient } from './client.js';
 import { errorText } from './context.js';
+import { useSessionData, type PullRequestListData, type RepositoryPages } from './reading/session-data.js';
 
-type RepositoryPage = { items: PullRequestSummary[]; cursor: string | null; depth: number; error: string };
-export function usePullRequestList(client: PullRequestsClient, account: string | null, repository: string, filters: PullRequestFilters) {
-  const [inventory, setInventory] = useState<PullRequestRepositories>({ repositories: [], issues: [] });
-  const [pages, setPages] = useState<Record<string, RepositoryPage>>({});
+const emptyInventory: PullRequestRepositories = { repositories: [], issues: [] };
+const emptyPages: RepositoryPages = {};
+export function usePullRequestList(client: PullRequestsClient, account: string | null, repository: string, filters: PullRequestFilters, data: PullRequestListData) {
+  const key = JSON.stringify([account?.toLowerCase(), repository, filters]);
+  const [inventory, setInventory] = useSessionData(data.inventory, account?.toLowerCase() ?? '', emptyInventory);
+  const [pages, setPages] = useSessionData(data.pages, key, emptyPages);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [revision, setRevision] = useState(0);
   const controller = useRef<AbortController | null>(null);
   const currentPages = useRef(pages);
   currentPages.current = pages;
-  const key = JSON.stringify([account, repository, filters]);
   const previousKey = useRef(key);
 
   useEffect(() => {
@@ -22,8 +24,7 @@ export function usePullRequestList(client: PullRequestsClient, account: string |
     controller.current = request;
     const reset = previousKey.current !== key;
     previousKey.current = key;
-    if (reset) setPages({});
-    if (!account) { setPages({}); setLoading(false); return () => request.abort(); }
+    if (!account) { setLoading(false); return () => request.abort(); }
     setLoading(true);
     const timer = setTimeout(() => {
       void (async () => {
@@ -61,7 +62,7 @@ export function usePullRequestList(client: PullRequestsClient, account: string |
     }, reset ? 300 : 0);
     return () => { clearTimeout(timer); request.abort(); };
   // A stable serialized filter prevents object identities from restarting network work.
-  }, [client, key, revision]);
+  }, [client, key, revision, setInventory, setPages]);
 
   const more = async () => {
     const signal = controller.current?.signal;

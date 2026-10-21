@@ -122,11 +122,6 @@
   gap: 8px;
 }
 
-.plugin-app-appearance__error {
-  color: var(--sd-color-danger);
-  font-size: 12px;
-}
-
 .plugin-app-appearance__plugin-link {
   align-self: center;
   min-width: 0;

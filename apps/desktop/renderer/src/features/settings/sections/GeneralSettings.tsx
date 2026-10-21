@@ -1,4 +1,4 @@
-import { Slider } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, Slider } from '@setsuna-desktop/renderer-ui';
 import type {
   DesktopWindowCloseBehavior,
   RuntimeConfigState,
@@ -199,9 +199,7 @@ export function GeneralSettings({
                   <option value="hide-to-tray">{t('settings.general.closeHideToTray')}</option>
                 </SelectField>
                 {windowCloseBehavior.error ? (
-                  <small className="settings-window-close-behavior__error" role="alert">
-                    {t('settings.general.closeBehaviorError')}
-                  </small>
+                  <ToastNotice message={t('settings.general.closeBehaviorError')} />
                 ) : null}
               </span>
             </label>

@@ -1,3 +1,4 @@
+import { ToastNotice } from '@setsuna-desktop/renderer-ui';
 import { useState } from 'react';
 import { useDesktopDataRoot } from '../../../app/providers/DesktopDataRootProvider.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
@@ -21,7 +22,7 @@ export function StorageSettings() {
       <SettingsNavigationRow label={t('storage.cleanHistory')} disabled={loading || working} onClick={() => setDialog('history')} />
       <SettingsNavigationRow label={t('storage.cachesAndLogs')} disabled={loading || working || !usage} onClick={() => setDialog('caches')} />
     </SettingsGroup>
-    {error && !dialog ? <p className="sd-control-error" role="alert">{error}</p> : null}
+    {error && !dialog ? <ToastNotice message={error} /> : null}
     {dialog === 'history' ? <StorageHistoryDialog threads={threads} working={working} error={error}
       onCleanup={cleanup} onClose={closeDialog} /> : null}
     {dialog === 'caches' && usage ? <StorageCachesDialog usage={usage} working={working} error={error}

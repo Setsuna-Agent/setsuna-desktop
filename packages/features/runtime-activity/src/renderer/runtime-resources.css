@@ -54,12 +54,3 @@
 .runtime-resources__type {
   color: var(--app-text-muted);
 }
-
-.runtime-resources__error {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  color: var(--app-danger);
-  font-size: 11px;
-}

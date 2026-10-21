@@ -13,14 +13,15 @@ import { PullRequestDescription } from './discussions/PullRequestDescription.js'
 import { usePullRequestActivity } from './activity/usePullRequestActivity.js';
 import { pullRequestTimeline } from './activity/timeline.js';
 import { PullRequestActivityRow } from './activity/PullRequestActivityRow.js';
+import type { PullRequestDetailData } from './reading/session-data.js';
 
-export function DiscussionTimeline({ client, detail, account, discussions, revision, onPublished, onDiff, checks }: {
-  client: PullRequestsClient; detail: PullRequestDetail; account: string; discussions: DiscussionsState; revision: number;
+export function DiscussionTimeline({ client, detail, account, discussions, revision, data, onPublished, onDiff, checks }: {
+  client: PullRequestsClient; detail: PullRequestDetail; account: string; discussions: DiscussionsState; revision: number; data: PullRequestDetailData;
   onPublished(): void; onDiff(discussion: PullRequestDiscussion): void; checks?: ReactNode;
 }) {
   const t = usePrText();
   const [quote, setQuote] = useState<QuoteRequest | null>(null);
-  const activity = usePullRequestActivity(client, detail, revision);
+  const activity = usePullRequestActivity(client, detail, revision, data);
   const requestQuote = (comment: Pick<PullRequestComment, 'author'>, text: string) =>
     setQuote((previous) => ({ id: (previous?.id ?? 0) + 1, quote: { author: comment.author.login, text } }));
   const items = pullRequestTimeline(detail, activity.items, discussions.items);
@@ -37,7 +38,7 @@ export function DiscussionTimeline({ client, detail, account, discussions, revis
             : <DiscussionCard discussion={item.discussion} client={client} detail={detail} account={account}
               onPublished={onPublished} onDiff={onDiff} onQuote={requestQuote} moreReplies={() => void discussions.moreReplies(item.discussion)} repliesPending={discussions.repliesPending === item.discussion.id} />}
         </li>)}
-        {(discussions.pending && !discussions.items.length) || (activity.pending && !activity.items.length)
+        {(discussions.pending && !discussions.loaded) || (activity.pending && !activity.loaded)
           ? <li className="pr-timeline__entry"><div className="pr-card"><PullRequestSkeleton kind="discussion" label={t('loading')} /></div></li> : null}
       </ol>
       {discussions.hasMore || activity.hasMore ? <Button className="pr-timeline__more" disabled={discussions.pending || activity.pending}

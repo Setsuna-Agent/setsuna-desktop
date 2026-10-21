@@ -73,8 +73,7 @@
   min-width: 0;
 }
 
-.desktop-settings-panel .chat-user-settings__memory-error,
-.desktop-settings-panel .chat-user-settings__runtime-error {
+.desktop-settings-panel .chat-user-settings__memory-error {
   padding: 8px 10px;
   border: 1px solid color-mix(in srgb, var(--app-danger) 28%, transparent);
   border-radius: var(--app-radius-sm);

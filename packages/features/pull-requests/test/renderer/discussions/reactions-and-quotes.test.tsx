@@ -6,6 +6,7 @@ import type { PullRequestsClient } from '../../../src/renderer/client.js';
 import { PullRequestsHostContext } from '../../../src/renderer/context.js';
 import { DiscussionCard, DiscussionTimeline } from '../../../src/renderer/DiscussionTimeline.js';
 import { usePullRequestReaction } from '../../../src/renderer/discussions/usePullRequestReaction.js';
+import { createPullRequestDetailData } from '../../../src/renderer/reading/session-data.js';
 import { readDraft } from '../../../src/renderer/useCommentDraft.js';
 import { readRequest } from '../../../src/runtime/pull-requests.js';
 import { commentNode, githubFixture, reference, repositoryNode } from '../../support/github-fixture.js';
@@ -48,8 +49,8 @@ it('keeps quote references with the existing draft and only publishes after subm
   const client = { publish, activity: vi.fn(async () => ({ items: [], cursor: null })) } as unknown as PullRequestsClient;
   const item = discussion('comment');
   item.comments[0].body = 'Quoted passage';
-  render(<DiscussionTimeline client={client} detail={pr} account={account} revision={0} onPublished={vi.fn()} onDiff={vi.fn()}
-    discussions={{ items: [item], pending: false, errors: [], hasMore: false, more: vi.fn(), moreReplies: vi.fn(), repliesPending: null }} />, { wrapper: RendererHost });
+  render(<DiscussionTimeline client={client} detail={pr} account={account} revision={0} data={createPullRequestDetailData()} onPublished={vi.fn()} onDiff={vi.fn()}
+    discussions={{ items: [item], pending: false, loaded: true, errors: [], hasMore: false, more: vi.fn(), moreReplies: vi.fn(), repliesPending: null }} />, { wrapper: RendererHost });
   const editor = screen.getByRole('textbox', { name: 'comment' }) as HTMLTextAreaElement;
   fireEvent.change(editor, { target: { value: 'My existing draft' } });
   const comment = within(screen.getByRole('region', { name: 'activity' })).getByRole('region', { name: 'comment' });

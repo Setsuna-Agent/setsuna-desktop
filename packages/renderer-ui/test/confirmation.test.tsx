@@ -3,7 +3,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
-import { Button, ConfirmationProvider, ConfirmDialogTrigger, Dialog, useConfirm } from '../src/index.js';
+import { Button, ConfirmationProvider, ConfirmDialogTrigger, Dialog, ToastProvider, useConfirm } from '../src/index.js';
 
 afterEach(cleanup);
 
@@ -42,11 +42,11 @@ it('keeps a nested confirmation open while pending or failed, prevents duplicate
   let fail!: (error: Error) => void;
   const onConfirm = vi.fn().mockImplementationOnce(() => new Promise((_, reject) => { fail = reject; }))
     .mockResolvedValueOnce(undefined);
-  render(<Dialog title="Project" onClose={() => undefined}>
+  render(<ToastProvider closeLabel="Dismiss notification"><Dialog title="Project" onClose={() => undefined}>
     <ConfirmDialogTrigger title="Delete project?" confirmLabel="Delete" cancelLabel="Cancel" danger onConfirm={onConfirm}>
       <Button>Remove project</Button>
     </ConfirmDialogTrigger>
-  </Dialog>);
+  </Dialog></ToastProvider>);
   const opener = screen.getByRole('button', { name: 'Remove project' });
   await user.click(opener);
   const dialog = within(await screen.findByRole('dialog', { name: 'Delete project?' }));
@@ -58,7 +58,10 @@ it('keeps a nested confirmation open while pending or failed, prevents duplicate
   await user.keyboard('{Escape}');
   expect(screen.getByRole('dialog', { name: 'Delete project?' })).toBeTruthy();
   await act(async () => fail(new Error('Unable to delete')));
-  expect(dialog.getByRole('alert').textContent).toBe('Unable to delete');
+  expect(screen.getByRole('alert').textContent).toContain('Unable to delete');
+  // Toast pointer-events are supplied by CSS, which this DOM test does not load.
+  await userEvent.setup({ pointerEventsCheck: 0 }).click(screen.getByRole('button', { name: 'Dismiss notification' }));
+  expect(screen.getByRole('dialog', { name: 'Delete project?' })).toBeTruthy();
   await user.click(submit);
   await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Delete project?' })).toBeNull());
   expect(onConfirm).toHaveBeenCalledTimes(2);

@@ -251,21 +251,6 @@
   font-size: 13px;
 }
 
-.desktop-capabilities-errors {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-  max-height: 76px;
-  padding: 8px 10px;
-  overflow: auto;
-  border: 1px solid color-mix(in srgb, var(--app-danger) 24%, var(--app-border));
-  border-radius: var(--app-radius-md);
-  color: var(--app-danger);
-  background: color-mix(in srgb, var(--app-danger) 7%, transparent);
-  font-size: 13px;
-  line-height: 18px;
-}
-
 .desktop-capabilities-skill-editor,
 .desktop-capabilities-mcp-editor {
   width: min(var(--desktop-capabilities-content-width), 100%);
@@ -403,20 +388,10 @@
 }
 
 .desktop-capabilities-mcp-tools span,
-.desktop-capabilities-mcp-tools__empty,
-.desktop-capabilities-mcp-tools__error {
+.desktop-capabilities-mcp-tools__empty {
   color: var(--app-text-muted);
   font-size: 12px;
   line-height: 18px;
-}
-
-.desktop-capabilities-mcp-tools__error {
-  padding: 7px 8px;
-  border: 1px solid color-mix(in srgb, var(--app-danger) 28%, var(--app-border));
-  border-radius: var(--app-radius-sm);
-  color: var(--app-danger);
-  background: color-mix(in srgb, var(--app-danger) 7%, transparent);
-  white-space: pre-wrap;
 }
 
 .desktop-capabilities-mcp-tools__toolbar {

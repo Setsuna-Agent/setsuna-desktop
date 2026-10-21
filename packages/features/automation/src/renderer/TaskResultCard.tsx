@@ -1,6 +1,6 @@
 import { Clock3 } from 'lucide-react';
 import { useState } from 'react';
-import { Button } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, Button } from '@setsuna-desktop/renderer-ui';
 import type { ChatToolResultViewProps } from '@setsuna-desktop/renderer-contracts/chat';
 import type { AutomationSnapshot, AutomationTask } from '../contracts/index.js';
 import type { AutomationClient } from './client.js';
@@ -24,7 +24,7 @@ export function TaskResultCard({ payload, translate: t, client, ModelPicker }: C
     finally { setLoading(false); }
   };
   return <><div className="automation-result-card"><span className="automation-result-card__icon"><Clock3 size={20} /></span><div><strong>{task.title}</strong><span>{formatSchedule(task.schedule, t, navigator.language)}</span></div><Button size="small" loading={loading} onClick={() => void open()}>{t('feature.automation.open')}</Button></div>
-    {error ? <p className="automation-error" role="alert">{error}</p> : null}
+    {error ? <ToastNotice message={error} /> : null}
     {editor ? <TaskEditor task={editor.task} threadId={editor.task.conversationThreadId} client={client} models={editor.models} projects={editor.projects} ModelPicker={ModelPicker} translate={t} onClose={() => setEditor(null)} onSaved={setTask} /> : null}
   </>;
 }

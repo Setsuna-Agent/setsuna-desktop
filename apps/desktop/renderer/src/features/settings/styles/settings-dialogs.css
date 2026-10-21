@@ -203,13 +203,6 @@
   line-height: 15px;
 }
 
-.settings-provider-icon-upload__error {
-  margin: 0;
-  color: var(--app-danger);
-  font-size: 11px;
-  line-height: 16px;
-}
-
 .desktop-settings-panel .chat-user-settings__memory-heading {
   display: grid;
   gap: 3px;

@@ -1,3 +1,4 @@
+import { ToastNotice } from '@setsuna-desktop/renderer-ui';
 import type {
   RendererTranslate,
 } from '@setsuna-desktop/feature-core/renderer';
@@ -106,7 +107,7 @@ export function VisionRecognitionSettingsView({
       </label>
 
       <div className="feature-vision-recognition-settings__status" aria-live="polite">
-        {error ? <span className="is-error">{error}</span> : null}
+        {error ? <ToastNotice message={error} /> : null}
         {!error && saving ? <span><Loader2 className="is-spinning" size={13} /> {translate('feature.visionRecognition.settings.saving')}</span> : null}
         {!error && !saving && saved ? <span className="is-success">{translate('feature.visionRecognition.settings.saved')}</span> : null}
       </div>
@@ -187,7 +188,7 @@ function VisionRecognitionTestView({
 
       <div className="feature-vision-recognition-test__controls">
         <div className="feature-vision-recognition-test__status" aria-live="polite">
-          {error ? <span className="is-error">{error}</span> : null}
+          {error ? <ToastNotice message={error} /> : null}
           {!error && testing ? <span>{translate('feature.visionRecognition.test.testingStatus')}</span> : null}
           {!error && !testing && result ? (
             <span className="is-success">

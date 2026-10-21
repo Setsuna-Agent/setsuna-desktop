@@ -1,12 +1,12 @@
 import { Atom as ThinkIcon } from 'lucide-react';
 import { ChevronDown } from 'lucide-react';
-import { useState, type ReactNode, type SyntheticEvent } from 'react';
+import { memo, useState, type ReactNode, type SyntheticEvent } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { MarkdownRenderer } from '../markdown/MarkdownRenderer.js';
 import { LoadingText } from './LoadingText.js';
 import { useStreamingScrollPin } from './useStreamingScrollPin.js';
 
-export function ChatThinkingDisclosure({
+export const ChatThinkingDisclosure = memo(function ChatThinkingDisclosure({
   active,
   content,
   scrollStateKey,
@@ -42,7 +42,7 @@ export function ChatThinkingDisclosure({
       ) : null}
     </details>
   );
-}
+});
 
 function ThinkingContent({
   active,

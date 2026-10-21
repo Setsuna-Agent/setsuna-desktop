@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { isFeatureOperationCancelled } from '@setsuna-desktop/feature-core/operation';
 import type { McpRendererService } from '../contracts/index.js';
 import type { McpTranslate } from './messages.js';
 
@@ -32,7 +33,7 @@ export function useMcpAuthentication(service: McpRendererService, translate: Mcp
     try {
       await service[mode](serverKey, { signal: controller.signal });
     } catch (error) {
-      if (!controller.signal.aborted) {
+      if (!controller.signal.aborted && !isFeatureOperationCancelled(error)) {
         const message = error instanceof Error && 'code' in error && error.code === 'MCP_TOOL_SYNC_FAILED'
           ? translate('feature.mcp.toolSyncFailed')
           : error instanceof Error ? error.message : 'Authentication failed.';

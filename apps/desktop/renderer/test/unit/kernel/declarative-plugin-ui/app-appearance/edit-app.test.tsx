@@ -2,7 +2,7 @@
 
 import type { RuntimePluginSummary, RuntimePluginUiContribution } from '@setsuna-desktop/contracts';
 import type { PluginManagementRendererService } from '@setsuna-desktop/feature-plugin-management/contracts';
-import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import userEvent from '@testing-library/user-event';
 import { DeclarativePluginSidebarEntry } from '../../../../../src/kernel/declarative-plugin-ui/DeclarativePluginSidebarEntry.js';
@@ -193,15 +193,24 @@ describe('edit sidebar app', () => {
     await openEditor();
     const input = screen.getByRole('dialog').querySelector('input[type="file"]')!;
     fireEvent.change(input, { target: { files: [new File(['<svg/>'], 'avatar.svg', { type: 'image/svg+xml' })] } });
-    expect((await screen.findByRole('alert')).textContent).toContain('PNG');
+    expect(await screen.findByText(/PNG/u)).toBeTruthy();
     expect(JSON.parse(window.localStorage.getItem(key)!)).toEqual({ avatar: { type: 'preset', key: 'notebook' } });
     fireEvent.change(screen.getByRole('textbox', { name: '名称' }), { target: { value: '工作笔记' } });
-    vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => { throw new DOMException('Quota exceeded', 'QuotaExceededError'); });
+    const write = vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => { throw new DOMException('Quota exceeded', 'QuotaExceededError'); });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      fireEvent.click(screen.getByRole('button', { name: '保存' }));
+      const message = await screen.findByText('保存失败，请重试。');
+      expect((screen.getByRole('textbox', { name: '名称' }) as HTMLInputElement).value).toBe('工作笔记');
+      expect(screen.getByRole('dialog')).toBeTruthy();
+      expect(JSON.parse(window.localStorage.getItem(key)!)).toEqual({ avatar: { type: 'preset', key: 'notebook' } });
+      fireEvent.click(within(message.closest('[role="alert"]') as HTMLElement).getByRole('button', { name: '关闭' }));
+      await waitFor(() => expect(screen.queryByText('保存失败，请重试。')).toBeNull());
+    }
+    expect(write).toHaveBeenCalledTimes(2);
+    write.mockRestore();
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
-    expect(screen.getByRole('alert').textContent).toBe('保存失败，请重试。');
-    expect((screen.getByRole('textbox', { name: '名称' }) as HTMLInputElement).value).toBe('工作笔记');
-    expect(screen.getByRole('dialog')).toBeTruthy();
-    expect(JSON.parse(window.localStorage.getItem(key)!)).toEqual({ avatar: { type: 'preset', key: 'notebook' } });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(JSON.parse(window.localStorage.getItem(key)!)).toEqual({ name: '工作笔记', avatar: { type: 'preset', key: 'notebook' } });
   });
 
   it('cancels deletion, prevents duplicate removal and allows retry after failure', async () => {

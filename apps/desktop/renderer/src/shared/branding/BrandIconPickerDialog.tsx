@@ -1,4 +1,4 @@
-import { Button as UiButton } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, Button as UiButton } from '@setsuna-desktop/renderer-ui';
 import type { BrandIconConfig } from '@setsuna-desktop/contracts';
 import { Check, ImagePlus, Sparkles, Upload } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
@@ -201,7 +201,7 @@ export function BrandIconPickerDialog({
                   : customIcon ? t('settings.brand.replaceImage') : t('settings.brand.chooseImage')}
               </Button>
             </div>
-            {uploadError ? <p className="settings-provider-icon-upload__error" role="alert">{uploadError}</p> : null}
+            {uploadError ? <ToastNotice message={uploadError} /> : null}
           </section>
       </div>
     </SettingsDialog>

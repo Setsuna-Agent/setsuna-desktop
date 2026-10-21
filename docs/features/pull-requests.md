@@ -30,6 +30,7 @@
 - `runtime/repositories.ts` 归一化 remote，维护短期发现缓存。项目目录通过 Git 解析为实际工作树根目录，子目录项目的仓库相对路径也从根目录读取。项目删除立即失效，写操作强制重新检查 remote。
 - `runtime/pull-requests.ts`、`discussions.ts`、`checks.ts` 分别处理 GitHub 数据投影；任何 GraphQL partial error 都作为失败显示，避免把不完整数据当成完整结果。
 - `renderer/usePullRequest*`、`useDiscussions.ts` 管理分页、刷新、取消和过期响应。刷新保持已加载的页数和展开过的回复。列表筛选与选中项保存在本次 renderer feature session；Diff 选中文件、搜索、目录折叠、显示模式和滚动位置按账号与 PR 独立保存，右侧面板另按对话隔离。组件卸载后仍可恢复，本次应用会话结束后释放，不新增持久化存储。弹层开关只属于当前详情组件，切换 PR 不自动打开弹层。滚动恢复等待异步正文或 patch 到位，用户主动滚动时停止恢复。
+- `renderer/reading/session-data.ts` 保存会话内的读取结果。重新进入工作台或打开同一个 PR 时立即恢复列表、详情、讨论、动态与 Checks，再后台更新；失败保留已有内容，离开页面仍取消请求。列表按账号和筛选隔离，详情沿用账号、PR 和对话的会话边界，Checks 按检查提交隔离。Diff 按 base/head 提交复用已完成的文件列表与当前 patch，未完成的文件分页从断点继续；不缓存每个文件的正文或历史提交，不增加启动预取。
 
 列表使用 repository connection 分页，避免 GitHub Search 的 1,000 条上限。列表每 60 秒、详情每 45 秒在可见窗口刷新，并响应窗口重新聚焦；每个共享 API 实例最多执行四个请求。
 

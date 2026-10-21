@@ -31,7 +31,7 @@ function Workbench({ client, connectionState, session }: Omit<PullRequestsPagePr
   const [repository, setRepository] = useState(session.repository);
   const [filters, setFilters] = useState(session.filters);
   const [selected, setSelected] = useState<PullRequestReference | null>(session.selected);
-  const list = usePullRequestList(client, account, repository, filters);
+  const list = usePullRequestList(client, account, repository, filters, session.list);
   const scroll = useRef<HTMLDivElement>(null);
   const previousAccount = useRef(account);
   const restoredScroll = useRef(false);
@@ -47,7 +47,9 @@ function Workbench({ client, connectionState, session }: Omit<PullRequestsPagePr
     <aside className="pr-sidebar">
       <header className="pr-sidebar__header">
         <h1><GitPullRequestArrow size={18} />Pull Request</h1>
-        <IconButton size="small" label={t('refresh')} disabled={list.loading} onClick={() => { list.refresh(); void auth.refresh(); }}><RefreshCw size={14} /></IconButton>
+        <IconButton size="small" label={t(list.loading ? 'refreshing' : 'refresh')} loading={list.loading} onClick={() => { list.refresh(); void auth.refresh(); }}>
+          {list.loading ? null : <RefreshCw size={14} />}
+        </IconButton>
       </header>
       <PullRequestFilters value={{ repository, filters }} repositories={list.inventory.repositories} authors={list.items.map((item) => item.author.login)} onChange={(next) => {
         setRepository(next.repository); setFilters(next.filters);

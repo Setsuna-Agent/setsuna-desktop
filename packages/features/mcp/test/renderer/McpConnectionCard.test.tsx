@@ -6,6 +6,7 @@ import { Button, Dialog, IconButton } from '@setsuna-desktop/renderer-ui';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { McpConnectionCard } from '../../src/renderer/McpConnectionCard.js';
+import { readMcpServers } from '../../src/contracts/index.js';
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -23,6 +24,23 @@ const ui = {
 } as SettingsViewUi;
 
 describe('McpConnectionCard', () => {
+  it.each([
+    { authStatus: 'unknown', action: 'connect', loginCalls: 1, editCalls: 0 },
+    { authStatus: 'configurationError', action: 'configure', loginCalls: 0, editCalls: 1 },
+  ] as const)('routes $authStatus connections to the appropriate action', ({ authStatus, action, loginCalls, editCalls }) => {
+    const onLogin = vi.fn(async () => undefined);
+    const onEdit = vi.fn();
+    const snapshot = readMcpServers.output.parse({
+      configPath: '/tmp/mcp.json', workspaceConfigPaths: [], errors: [],
+      servers: [{ ...server, key: 'vercel', label: 'Vercel', url: 'https://mcp.vercel.com', authStatus }],
+    });
+    render(<McpConnectionCard server={snapshot.servers[0]} onLogin={onLogin} onLogout={async () => undefined}
+      onCancel={() => undefined} onEdit={onEdit} openExternal={async () => true} translate={(key) => key} ui={ui} />);
+    fireEvent.click(screen.getByRole('button', { name: `feature.mcp.connection.${action}` }));
+    expect(onLogin).toHaveBeenCalledTimes(loginCalls);
+    expect(onEdit).toHaveBeenCalledTimes(editCalls);
+  });
+
   it('offers reconnect and disconnect from the connected status menu', async () => {
     const onLogin = vi.fn(async () => undefined);
     const onLogout = vi.fn(async () => undefined);

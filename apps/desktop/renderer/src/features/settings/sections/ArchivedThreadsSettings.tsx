@@ -1,5 +1,5 @@
 import type { RuntimeThread, RuntimeThreadSummary } from '@setsuna-desktop/contracts';
-import { ConfirmDialogTrigger } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, ConfirmDialogTrigger } from '@setsuna-desktop/renderer-ui';
 import { Archive, Trash2, Undo2 } from 'lucide-react';
 import { useState } from 'react';
 import { Button, EmptyState, IconButton } from '../../../shared/ui/primitives.js';
@@ -82,7 +82,7 @@ export function ArchivedThreadsSettings({
             );
           }) : <EmptyState title={t('settings.archives.empty')} />}
         </div>
-        {error ? <div className="settings-archives-error" role="alert">{error}</div> : null}
+        {error ? <ToastNotice message={error} /> : null}
       </div>
     </div>
   );

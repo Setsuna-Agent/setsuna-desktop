@@ -1,4 +1,4 @@
-import { Button } from '@setsuna-desktop/renderer-ui';
+import { Button, ToastNotice } from '@setsuna-desktop/renderer-ui';
 import type { RuntimePluginSummary, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import type { ReviewConflictTaskProgressProps } from '@setsuna-desktop/feature-review/renderer/host';
 import { ArrowLeft, Square } from 'lucide-react';
@@ -53,7 +53,7 @@ export function ReviewConflictTaskProgress({ threadId, turnId, workspaceRoot, on
         </div>
         {!ended ? <Button variant="ghost" type="button" disabled={stopping} onClick={() => void stop()}><Square size={12} />{t('feature.review.git.conflictStop')}</Button> : null}
       </header>
-      {error ? <p className="git-history-status is-error" role="alert">{error}</p> : null}
+      {error ? <ToastNotice message={error} /> : null}
       <MarkdownNavigationProvider workspaceRoot={workspaceRoot} onOpenWorkspaceFile={onOpenWorkspaceFile} onSearchWorkspaceEntries={searchEntries}>
         <ChatTranscript
           activeTurnId={task.activeTurnId}

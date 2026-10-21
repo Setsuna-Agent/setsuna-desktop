@@ -1,4 +1,4 @@
-import { IconButton } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, IconButton } from '@setsuna-desktop/renderer-ui';
 import type {
   RuntimeUsageRecord,
 } from '@setsuna-desktop/contracts';
@@ -83,7 +83,7 @@ export function UsageRecentCalls({
       {totalPages > 1 ? (
         <footer className="settings-usage-records__pagination" aria-label={t('feature.usage.pagination')}>
           {pageError ? (
-            <span className="settings-usage-records__pagination-error" role="alert">{pageError}</span>
+            <ToastNotice message={pageError} />
           ) : null}
           <IconButton
             label={t('feature.usage.previousPage')}

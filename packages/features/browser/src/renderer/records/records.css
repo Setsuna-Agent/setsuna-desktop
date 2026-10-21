@@ -39,8 +39,7 @@
 .browser-records__editor { display: flex; flex-direction: column; gap: 12px; padding: 8px var(--browser-records-inset) 12px; overflow-y: auto; }
 .browser-records__editor > label { display: flex; flex-direction: column; gap: 6px; }
 .browser-records__editor > label > span { color: var(--app-text-secondary); font-size: 12px; font-weight: 500; }
-.browser-records__editor > [role="alert"], .browser-records__error { color: var(--app-danger); }
-.browser-records__error { padding: 0 var(--browser-records-inset); }
+.browser-records__editor > [role="alert"] { color: var(--app-danger); }
 .browser-records__actions { display: flex; justify-content: flex-end; gap: 8px; }
 .browser-records__confirmation { padding: 8px var(--browser-records-inset) 12px; }
 .browser-records__confirmation p { margin: 0 0 12px; }

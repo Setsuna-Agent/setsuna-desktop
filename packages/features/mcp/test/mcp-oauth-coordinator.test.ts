@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage } from 'node:http';
+import { FeatureOperationCancelledError } from '@setsuna-desktop/feature-core/status';
 import { describe, expect, it, vi } from 'vitest';
 import { McpOAuthCoordinator, McpOAuthLoginRequiredError } from '../src/runtime/adapters/sdk/mcp-oauth-coordinator.js';
 import { SdkMcpConnectionManager } from '../src/runtime/adapters/sdk/sdk-mcp-connection-manager.js';
@@ -21,6 +22,32 @@ function createManager(host: InMemoryMcpHost): SdkMcpConnectionManager {
 }
 
 describe('McpOAuthCoordinator', () => {
+  it('reports authentication failures but does not retain a cancelled retry as an auth error', async () => {
+    const oauthServer = await createOAuthServer();
+    const host = new InMemoryMcpHost();
+    const open = vi.spyOn(host, 'openExternal').mockRejectedValueOnce(new Error('Unable to open authorization.'));
+    const coordinator = createCoordinator(host);
+    const server = { key: 'docs', url: `${oauthServer.baseUrl}/mcp`, oauthClientId: 'fixture-client' };
+    try {
+      await expect(coordinator.login(server)).rejects.toThrow('Unable to open authorization.');
+      await expect(coordinator.authStatus(server)).resolves.toEqual({
+        status: 'oAuthError', error: 'Unable to open authorization.',
+      });
+      const controller = new AbortController();
+      const cancelled = new FeatureOperationCancelledError();
+      const login = coordinator.login(server, { signal: controller.signal });
+      const rejected = expect(login).rejects.toBe(cancelled);
+      await vi.waitFor(() => expect(open).toHaveBeenCalledTimes(2));
+      controller.abort(cancelled);
+      await rejected;
+      await expect(coordinator.authStatus(server)).resolves.toEqual({ status: 'notLoggedIn' });
+    } finally {
+      await coordinator.shutdown();
+      await oauthServer.close();
+      open.mockRestore();
+    }
+  });
+
   it('keeps token configuration failures out of OAuth and permits OAuth after removing the reference', async () => {
     const oauthServer = await createOAuthServer();
     const nativeBridge = new AutoCallbackNativeBridge();
@@ -84,7 +111,7 @@ describe('McpOAuthCoordinator', () => {
       .rejects.toBeInstanceOf(McpOAuthLoginRequiredError);
   });
 
-  it('authenticates persistent MCP manager connections after login', async () => {
+  it('registers a URL-only OAuth client on login and authenticates MCP connections', async () => {
     const oauthServer = await createOAuthServer();
     const nativeBridge = new AutoCallbackNativeBridge();
     const manager = createManager(nativeBridge);
@@ -92,15 +119,26 @@ describe('McpOAuthCoordinator', () => {
       key: 'docs',
       transport: 'streamableHttp' as const,
       url: `${oauthServer.baseUrl}/mcp`,
-      oauthClientId: 'setsuna-test-client',
     };
 
     try {
+      await expect(manager.authStatus(server)).resolves.toEqual({ status: 'unknown' });
+      await expect(manager.authStatus({ key: 'local', command: 'node' })).resolves.toEqual({ status: 'unsupported' });
+      expect(oauthServer.requests).toEqual([]);
+      expect(nativeBridge.openedUrls).toEqual([]);
       await manager.login(server);
+      expect(oauthServer.registrations).toEqual([expect.objectContaining({
+        client_name: 'Setsuna Desktop',
+        token_endpoint_auth_method: 'none',
+        redirect_uris: [expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+\/oauth\/callback$/u)],
+      })]);
+      expect(new URL(nativeBridge.openedUrls[0]).searchParams.get('client_id')).toBe('setsuna-dynamic-client');
       await expect(manager.listTools(server, { scopeId: 'thread:test' })).resolves.toMatchObject([
         { name: 'search_docs' },
       ]);
       await expect(manager.authStatus(server)).resolves.toEqual({ status: 'oAuth' });
+      await manager.logout(server);
+      await expect(manager.authStatus(server)).resolves.toEqual({ status: 'unknown' });
     } finally {
       await manager.shutdown();
       await oauthServer.close();
@@ -165,10 +203,13 @@ class AutoCallbackNativeBridge extends InMemoryMcpHost {
   }
 }
 
-async function createOAuthServer(): Promise<{ baseUrl: string; close(): Promise<void> }> {
+async function createOAuthServer() {
   let baseUrl = '';
+  const requests: string[] = [];
+  const registrations: Record<string, unknown>[] = [];
   const server = createServer(async (request, response) => {
     const url = new URL(request.url ?? '/', baseUrl || 'http://127.0.0.1');
+    requests.push(url.pathname);
     if (url.pathname === '/mcp') {
       if (request.headers.authorization !== 'Bearer access-token') {
         response.writeHead(401, {
@@ -220,11 +261,18 @@ async function createOAuthServer(): Promise<{ baseUrl: string; close(): Promise<
         issuer: baseUrl,
         authorization_endpoint: `${baseUrl}/authorize`,
         token_endpoint: `${baseUrl}/token`,
+        registration_endpoint: `${baseUrl}/register`,
         response_types_supported: ['code'],
         grant_types_supported: ['authorization_code', 'refresh_token'],
         code_challenge_methods_supported: ['S256'],
         token_endpoint_auth_methods_supported: ['none'],
       });
+      return;
+    }
+    if (url.pathname === '/register' && request.method === 'POST') {
+      const metadata = JSON.parse(await requestText(request)) as Record<string, unknown>;
+      registrations.push(metadata);
+      json(response, { ...metadata, client_id: 'setsuna-dynamic-client' }, 201);
       return;
     }
     if (url.pathname === '/token' && request.method === 'POST') {
@@ -250,7 +298,9 @@ async function createOAuthServer(): Promise<{ baseUrl: string; close(): Promise<
   baseUrl = `http://127.0.0.1:${address.port}`;
   return {
     baseUrl,
-    close: () => new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
+    requests,
+    registrations,
+    close: () => new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
   };
 }
 

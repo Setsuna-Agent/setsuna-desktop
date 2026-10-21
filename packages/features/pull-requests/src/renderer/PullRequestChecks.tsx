@@ -6,11 +6,12 @@ import { usePrText, usePullRequestsHost } from './context.js';
 import { CheckState } from './status.js';
 import { PullRequestSkeleton } from './loading/PullRequestSkeleton.js';
 import { usePullRequestChecks } from './checks/usePullRequestChecks.js';
+import type { PullRequestDetailData } from './reading/session-data.js';
 
-export function PullRequestChecks({ client, detail, revision }: { client: PullRequestsClient; detail: PullRequestDetail; revision: number }) {
+export function PullRequestChecks({ client, detail, revision, data }: { client: PullRequestsClient; detail: PullRequestDetail; revision: number; data: PullRequestDetailData }) {
   const t = usePrText();
   const { Markdown, openExternal } = usePullRequestsHost();
-  const { items, pending, error, retry } = usePullRequestChecks(client, detail, revision);
+  const { items, pending, loaded, error, retry } = usePullRequestChecks(client, detail, revision, data);
   const { checksCommit } = detail;
   return <section className="pr-checks" aria-label={t('checks')}>
     <header className="pr-checks__heading">
@@ -26,7 +27,7 @@ export function PullRequestChecks({ client, detail, revision }: { client: PullRe
         {check.summary ? <div className="pr-markdown"><Markdown content={check.summary} baseUrl={detail.url} /></div> : null}
       </div>
     </DetailSection>)}
-    {pending && !items.length ? <PullRequestSkeleton kind="checks" label={t('loading')} /> : null}
+    {pending && !loaded ? <PullRequestSkeleton kind="checks" label={t('loading')} /> : null}
     {!pending && !items.length && !error ? <p className="pr-empty">{t('noChecks')}</p> : null}
   </section>;
 }

@@ -87,17 +87,6 @@
   opacity: var(--app-disabled-opacity);
 }
 
-.runtime-activity-conversation-services__error {
-  min-width: 0;
-  padding: 3px 7px;
-  overflow: hidden;
-  color: var(--app-danger);
-  font-size: 11px;
-  line-height: 18px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .runtime-activity-conversation-services .is-spinning {
   animation: runtime-activity-conversation-service-spin 0.9s linear infinite;
 }
@@ -412,16 +401,6 @@
   justify-content: flex-end;
   gap: 16px;
   width: 100%;
-}
-
-.runtime-activity-dialog__status {
-  margin-right: auto;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--app-text-muted);
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 @media (max-width: 620px) {

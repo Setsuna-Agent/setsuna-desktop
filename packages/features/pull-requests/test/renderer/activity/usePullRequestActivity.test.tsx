@@ -4,6 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import type { PullRequestActivityEvent, PullRequestActivityResult } from '../../../src/contracts/index.js';
 import type { PullRequestsClient } from '../../../src/renderer/client.js';
 import { usePullRequestActivity } from '../../../src/renderer/activity/usePullRequestActivity.js';
+import { createPullRequestDetailData } from '../../../src/renderer/reading/session-data.js';
 import { pullRequestTimeline } from '../../../src/renderer/activity/timeline.js';
 import { readRequest } from '../../../src/runtime/pull-requests.js';
 import { commentNode, githubFixture, reference, repositoryNode } from '../../support/github-fixture.js';
@@ -16,9 +17,16 @@ it('retains loaded history on refresh failure and ignores cancelled pagination r
     items: [event(cursor ? 'second' : 'first')], cursor: cursor ? null : 'next',
   }));
   const client = { activity } as unknown as PullRequestsClient;
-  const hook = renderHook(({ revision }) => usePullRequestActivity(client, reference, revision), { initialProps: { revision: 0 } });
+  const data = createPullRequestDetailData();
+  const read = ({ revision }: { revision: number }) => usePullRequestActivity(client, reference, revision, data);
+  let hook = renderHook(read, { initialProps: { revision: 0 } });
   await waitFor(() => expect(hook.result.current.pending).toBe(false));
   await act(() => hook.result.current.more());
+  expect(hook.result.current.items.map((item) => item.id)).toEqual(['first', 'second']);
+  hook.unmount();
+  hook = renderHook(read, { initialProps: { revision: 0 } });
+  expect(hook.result.current.items.map((item) => item.id)).toEqual(['first', 'second']);
+  await waitFor(() => expect(hook.result.current.pending).toBe(false));
   expect(hook.result.current.items.map((item) => item.id)).toEqual(['first', 'second']);
 
   activity.mockRejectedValueOnce(new Error('Disconnected'));

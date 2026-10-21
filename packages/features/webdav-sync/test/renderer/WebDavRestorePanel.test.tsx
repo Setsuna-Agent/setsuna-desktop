@@ -51,7 +51,7 @@ describe('WebDavRestorePanel', () => {
     expect(screen.getByRole('button', { name: '还原中…' })).toBeTruthy();
   });
 
-  it('keeps restore failures visible beside the restore action', async () => {
+  it('notifies restore failures while retaining the confirmation and retry action', async () => {
     const user = userEvent.setup();
     renderRestorePanel({
       onRestore: async () => {
@@ -64,8 +64,7 @@ describe('WebDavRestorePanel', () => {
     await user.click(within(dialog).getByRole('checkbox', { name: /我已检查清单/u }));
     await user.click(within(dialog).getByRole('button', { name: '还原并重启' }));
 
-    const error = await within(dialog).findByRole('alert');
-    expect(error.textContent).toContain('会被覆盖或删除的本地内容发生了变化');
+    expect(await screen.findByText(/会被覆盖或删除的本地内容发生了变化/u)).toBeTruthy();
     expect(within(dialog).getByRole('button', { name: '还原并重启' })).toBeTruthy();
   });
 

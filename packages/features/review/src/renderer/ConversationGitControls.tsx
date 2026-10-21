@@ -1,4 +1,4 @@
-import { TextField, Button, Popover } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, TextField, Button, Popover } from '@setsuna-desktop/renderer-ui';
 
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { Check, GitBranch, Search } from 'lucide-react';
@@ -253,7 +253,7 @@ function BranchMenu({
           t={t}
         />
       </div>
-      {error ? <div className="sd-picker__error" role="alert">{error}</div> : null}
+      {error ? <ToastNotice message={error} /> : null}
     </>
   );
 }

@@ -3,9 +3,9 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { AlertCircle, AlertTriangle, CheckCircle2, Info, X } from 'lucide-react';
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { IconButton } from './button.js';
-import { SPRING_LAYOUT } from './motion.js';
-import { overlayContainer } from './portal.js';
+import { IconButton } from '../button.js';
+import { SPRING_LAYOUT } from '../motion.js';
+import { overlayContainer } from '../portal.js';
 
 export type ToastTone = 'error' | 'info' | 'success' | 'warning';
 export type ToastEntry = { durationMs: number; id: number; message: string; tone: ToastTone };
@@ -16,7 +16,8 @@ export function ToastStack({ entries, label, closeLabel, onDismiss }: {
 }) {
   const container = overlayContainer();
   if (!container) return null;
-  return createPortal(<div className="sd-toast-region" aria-label={label}>
+  // Radix keeps explicit live regions available while a modal hides the rest of the page.
+  return createPortal(<div className="sd-toast-region" data-toast-region aria-label={label} aria-live="polite">
     <AnimatePresence initial={false}>
       {entries.map((entry) => <ToastItem key={entry.id} entry={entry} closeLabel={closeLabel} onDismiss={onDismiss} />)}
     </AnimatePresence>

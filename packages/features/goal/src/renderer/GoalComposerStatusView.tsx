@@ -1,4 +1,4 @@
-import { Button, IconButton, TextArea, Dialog } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, Button, IconButton, TextArea, Dialog } from '@setsuna-desktop/renderer-ui';
 
 import { Goal as GoalIcon, Pause, Play, RefreshCw, SquarePen as EditIcon, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -171,9 +171,7 @@ function GoalStatus({
           <Trash2 size={13} />
         </GoalIconButton>
         {actionError || projectionError ? (
-          <span className={styles.error} title={actionError ?? projectionError ?? undefined}>
-            {actionError ?? translate('feature.goal.projectionUnavailable')}
-          </span>
+          <ToastNotice message={actionError ?? translate('feature.goal.projectionUnavailable')} />
         ) : null}
       </div>
       <Dialog
@@ -219,7 +217,6 @@ function GoalStatus({
             {draft.length} / {MAX_GOAL_OBJECTIVE_LENGTH}
           </span>
         </div>
-        {actionError ? <p className={styles.editorError}>{actionError}</p> : null}
       </Dialog>
     </>
   );

@@ -1,5 +1,5 @@
 import { isValidWorkspaceEntryName, WORKSPACE_ENTRY_EXISTS_ERROR_CODE, type WorkspaceEntry } from '@setsuna-desktop/contracts';
-import { Button, Dialog, TextField } from '@setsuna-desktop/renderer-ui';
+import { Button, Dialog, TextField, ToastNotice } from '@setsuna-desktop/renderer-ui';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { RuntimeClientError, runtimeClientErrorMessage } from '../../services/runtime-client/runtimeClientErrors.js';
@@ -17,6 +17,7 @@ export function WorkspaceEntryDialog({ request, onClose, onSubmit }: {
   const [name, setName] = useState(request.mode === 'rename' ? request.entry.name : '');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [operationError, setOperationError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const submitting = useRef(false);
   const formId = useId();
@@ -39,13 +40,16 @@ export function WorkspaceEntryDialog({ request, onClose, onSubmit }: {
     submitting.current = true;
     setPending(true);
     setError(null);
+    setOperationError(null);
     try {
       await onSubmit(name);
       onClose();
     } catch (cause) {
-      setError(cause instanceof RuntimeClientError && cause.code === WORKSPACE_ENTRY_EXISTS_ERROR_CODE
-        ? t('workspace.files.entryAlreadyExists', { name })
-        : runtimeClientErrorMessage(cause));
+      if (cause instanceof RuntimeClientError && cause.code === WORKSPACE_ENTRY_EXISTS_ERROR_CODE) {
+        setError(t('workspace.files.entryAlreadyExists', { name }));
+      } else {
+        setOperationError(runtimeClientErrorMessage(cause));
+      }
     } finally {
       submitting.current = false;
       setPending(false);
@@ -63,12 +67,13 @@ export function WorkspaceEntryDialog({ request, onClose, onSubmit }: {
       <form id={formId} className="desktop-entry-form" onSubmit={(event) => { void submit(event); }}>
         <TextField ref={inputRef} aria-label={t('workspace.files.entryName')} value={name} disabled={pending}
           aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined}
-          onChange={(event) => { setName(event.target.value); setError(null); }}
+          onChange={(event) => { setName(event.target.value); setError(null); setOperationError(null); }}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && event.nativeEvent.isComposing) event.preventDefault();
           }}
         />
         {error ? <p id={errorId} className="desktop-entry-form__error" role="alert">{error}</p> : null}
+        {operationError ? <ToastNotice message={operationError} /> : null}
       </form>
     </Dialog>
   );

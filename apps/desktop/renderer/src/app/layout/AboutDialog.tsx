@@ -1,4 +1,4 @@
-import { Button, Dialog } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, Button, Dialog } from '@setsuna-desktop/renderer-ui';
 import { useState, type MouseEvent } from 'react';
 import { author, license, version } from '../../../../../../package.json';
 import appIcon from '../../../../../../assets/build/icon.png';
@@ -63,7 +63,7 @@ export function AboutDialog({ onClose }: { onClose: () => void }) {
         <div><dt>{t('shell.about.developer')}</dt><dd>{author.name}</dd></div>
         <div><dt>{t('shell.about.license')}</dt><dd>{license}</dd></div>
       </dl>
-      {linkError ? <p className="app-about__error" role="alert">{t('shell.about.linkError')}</p> : null}
+      {linkError ? <ToastNotice message={t('shell.about.linkError')} /> : null}
     </Dialog>
   );
 }

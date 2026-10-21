@@ -17,18 +17,19 @@ export function ConversationDebugSettingsView({
   ui: SettingsViewUi;
 }>) {
   const state = useSyncExternalStore(service.subscribe, service.snapshot, service.snapshot);
-  const { Group, Section, Toggle } = ui;
+  const { Group, Section, Toggle, Toast } = ui;
   return (
     <Section featureId="conversation-debug">
       <Group>
         <Toggle
           checked={state.enabled}
-          description={state.error ?? translate('feature.conversationDebug.settings.description')}
+          description={translate('feature.conversationDebug.settings.description')}
           disabled={state.loading || state.saving || state.settings === null}
           label={translate('feature.conversationDebug.settings.label')}
           onChange={(enabled) => void service.setEnabled(enabled)}
         />
       </Group>
+      {state.error ? <Toast message={state.error} tone="error" /> : null}
     </Section>
   );
 }

@@ -106,15 +106,6 @@
   opacity: var(--app-disabled-opacity);
 }
 
-.desktop-project-editor__error {
-  padding: 9px 10px;
-  border-radius: var(--app-radius-sm);
-  color: var(--app-danger);
-  background: color-mix(in srgb, var(--app-danger) 7%, transparent);
-  font-size: 11px;
-  line-height: 16px;
-}
-
 .desktop-project-editor__footer {
   display: flex;
   align-items: center;
