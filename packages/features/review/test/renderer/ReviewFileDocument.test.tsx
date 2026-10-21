@@ -33,6 +33,7 @@ it.each(['latest', 'staged', 'commit'] as const)('switches Markdown and CSV docu
       error={null} latestSummary={{ files: visibleFiles, additions: visibleFiles.length, deletions: 0 }} loading={false} reviewState={null}
       focusRequest={focusRequest} onRefresh={vi.fn()} onSelectBaseRef={vi.fn()} />
       : <GitHistoryDiff files={visibleFiles} details={null} pathContext={pathContext} selectionKey={visibleFiles.map((entry) => entry.path).join(',')}
+        diffLayout="unified" lineWrap
         loading={false} error={null} actions={actions} onRetry={vi.fn()} onBack={vi.fn()} />}
   </ReviewRendererTestHost>;
   const view = render(panel());

@@ -679,8 +679,13 @@ export function useDesktopWorkspacePanels({
       .forEach((panel) => void openTerminalSessionForPanel(panel.id, panel.rootId));
   }, [bottomActivePanel, openTerminalSessionForPanel, sideActivePanel]);
 
+  const selectWorkspaceApp = useCallback((appId: string) => {
+    setSelectedWorkspaceAppId(appId);
+    writePreferredWorkspaceAppId(appId);
+  }, []);
+
   const { copyWorkspaceFilePath, openFileInWorkspaceApp, openFileWithWorkspaceApp, openWorkspaceDirectory, revealWorkspaceFile }
-    = useWorkspaceFileActions(activeProject, workspaceApps, selectedWorkspaceApp, setError);
+    = useWorkspaceFileActions(activeProject, workspaceApps, selectedWorkspaceApp, selectWorkspaceApp, setError);
 
   const togglePanelLauncherMenu = useCallback(() => {
     setPanelLauncherMenuOpen((value) => !value);
@@ -689,8 +694,6 @@ export function useDesktopWorkspacePanels({
   const openWorkspaceInApp = useCallback(
     async (appId: string) => {
       if (!activeProject?.path || !workspaceApps.some((app) => app.id === appId)) return;
-      setSelectedWorkspaceAppId(appId);
-      writePreferredWorkspaceAppId(appId);
       closeWorkspaceMenus();
       await openFileWithWorkspaceApp(appId);
     },

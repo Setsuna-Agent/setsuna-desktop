@@ -1,9 +1,8 @@
 import { Button, IconButton, Tooltip } from '@setsuna-desktop/renderer-ui';
-import { ChevronDown, ChevronRight, Globe, Pin, PinOff } from 'lucide-react';
+import { ChevronDown, ChevronRight, Pin, PinOff } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
 import type { BrowserDesktopBridge } from '../../contracts/index.js';
 import type { BrowserTranslate } from '../messages.js';
-import { BrowserFavoritesIcon, BrowserHistoryIcon } from '../records/recordIcons.js';
 import { useBrowserBookmarks } from '../useBrowserBookmarks.js';
 import { useBrowserHistory } from '../useBrowserHistory.js';
 import type { BrowserPinnedPage } from './browserPinnedPages.js';
@@ -39,16 +38,14 @@ export function BrowserQuickLinks({ onNavigate, onError, getWebsiteFavicon, tran
   };
   const shared = { onNavigate, onTogglePin: togglePin, pinnedUrls, faviconLoader, translate: t };
   return <div className="browser-quick-links">
-    {pins.pages.length ? <PageSection {...shared} title={t('feature.browser.shortcuts.pinned')}
-      icon={Pin} pages={pins.pages} /> : null}
-    <PageSection {...shared} title={t('feature.browser.bookmarksTitle')} icon={BrowserFavoritesIcon} pages={bookmarkPages} />
-    <PageSection {...shared} title={t('feature.browser.historyTitle')} icon={BrowserHistoryIcon} pages={recentPages} />
+    {pins.pages.length ? <PageSection {...shared} title={t('feature.browser.shortcuts.pinned')} pages={pins.pages} /> : null}
+    <PageSection {...shared} title={t('feature.browser.bookmarksTitle')} pages={bookmarkPages} />
+    <PageSection {...shared} title={t('feature.browser.historyTitle')} pages={recentPages} />
   </div>;
 }
 
-function PageSection({ title, icon: Icon, pages, pinnedUrls, faviconLoader, onNavigate, onTogglePin, translate: t }: {
+function PageSection({ title, pages, pinnedUrls, faviconLoader, onNavigate, onTogglePin, translate: t }: {
   title: string;
-  icon: typeof Globe;
   pages: readonly BrowserPinnedPage[];
   pinnedUrls: ReadonlySet<string>;
   faviconLoader: WebsiteFaviconLoader | null;
@@ -62,7 +59,7 @@ function PageSection({ title, icon: Icon, pages, pinnedUrls, faviconLoader, onNa
   const toggleLabel = t(expanded ? 'feature.browser.shortcuts.collapse' : 'feature.browser.shortcuts.more');
   return <section className="browser-quick-links__section" aria-labelledby={id}>
     <div className="browser-quick-links__header">
-      <h2 id={id}><Icon size={14} aria-hidden="true" />{title}</h2>
+      <h2 id={id}>{title}</h2>
       {pages.length > 8 ? <Button variant="ghost" className="browser-quick-links__more"
         aria-label={`${toggleLabel} · ${title}`} aria-expanded={expanded} aria-controls={`${id}-pages`}
         onClick={() => setExpanded((value) => !value)}>

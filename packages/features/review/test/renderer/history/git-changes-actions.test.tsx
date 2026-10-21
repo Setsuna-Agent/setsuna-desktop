@@ -198,7 +198,7 @@ it('shows AI progress before completion and ignores later chunks from a project 
   expect(commit).not.toHaveBeenCalled();
 });
 
-it.each(['close', 'save', 'shortcut'] as const)('keeps navigation beside the full message and accepts the latest edit once via %s', async (action) => {
+it.each(['close', 'save', 'shortcut'] as const)('keeps file navigation available while editing and accepts the latest edit once via %s', async (action) => {
   const previous = {
     oid: 'a'.repeat(40), branch: 'main',
     message: action === 'save' ? 'original subject\n\n# Original heading' : 'original subject\n\nOriginal body',
@@ -227,7 +227,6 @@ it.each(['close', 'save', 'shortcut'] as const)('keeps navigation beside the ful
   const comments = editor.value.slice(previous.message.length);
   const editorRegion = screen.getByRole('region', { name: 'COMMIT_EDITMSG' });
   const navigation = screen.getByRole('navigation', { name: '变更' });
-  expect(editorRegion.parentElement).toBe(navigation.parentElement);
   if (action !== 'close') {
     expect(within(navigation).getByRole('button', { name: 'staged.txt' })).toBeTruthy();
     expect(within(navigation).getByRole('button', { name: 'new.txt' })).toBeTruthy();

@@ -1,4 +1,4 @@
-import { Button, DiffViewControls } from '@setsuna-desktop/renderer-ui';
+import { Button } from '@setsuna-desktop/renderer-ui';
 import { Virtualizer } from '@pierre/diffs/react';
 import { ArrowLeft, FileDiff, GitCommitHorizontal } from 'lucide-react';
 import { memo, useMemo, useState, type ComponentProps } from 'react';
@@ -7,7 +7,7 @@ import { useReviewRendererHost } from '../host.js';
 import { ReviewIconButton } from '../primitives.js';
 import { ReviewSummarySection } from '../ReviewDiffView.js';
 import { canPreviewReviewTextFile, ReviewFileViewControls, type ReviewFileViewMode } from '../ReviewFileDocument.js';
-import type { ReviewPathContext } from '../review-types.js';
+import type { DesktopReviewDiffLayout, ReviewPathContext } from '../review-types.js';
 import { GitAuthorAvatar } from './GitAuthorAvatar.js';
 
 export type GitHistoryFileActions = Pick<ComponentProps<typeof ReviewSummarySection>,
@@ -19,9 +19,11 @@ const EXPANSION = { expanded: true, version: 0 };
 const NO_FINDINGS: ComponentProps<typeof ReviewSummarySection>['findings'] = [];
 
 export const GitHistoryDiff = memo(function GitHistoryDiff({
-  files, details, pathContext, selectionKey, loading, error, actions, onRetry, onBack,
+  files, diffLayout, lineWrap, details, pathContext, selectionKey, loading, error, actions, onRetry, onBack,
 }: {
   files: DesktopDiffFile[];
+  diffLayout: DesktopReviewDiffLayout;
+  lineWrap: boolean;
   details: DesktopGitCommitDetails | null;
   pathContext: ReviewPathContext;
   selectionKey: string;
@@ -32,8 +34,6 @@ export const GitHistoryDiff = memo(function GitHistoryDiff({
   onBack: () => void;
 }) {
   const { translate: t } = useReviewRendererHost();
-  const [layout, setLayout] = useState<'unified' | 'split'>('unified');
-  const [wrap, setWrap] = useState(true);
   const [fileView, setFileView] = useState<ReviewFileViewMode>('source');
   const hasTextPreview = files.some((file) => canPreviewReviewTextFile(file, pathContext));
   const summary = useMemo(() => ({
@@ -45,13 +45,22 @@ export const GitHistoryDiff = memo(function GitHistoryDiff({
   // Text previews share the panel toolbar mode across files and selections.
   const useFileToolbar = !hasTextPreview && !details && files.length === 1 && !loading && !error;
   const backButton = <ReviewIconButton className="app-shell-icon-control git-history-diff__back" label={t('feature.review.history.back')} onClick={onBack}><ArrowLeft size={15} /></ReviewIconButton>;
-  const viewControls = (
-    <DiffViewControls
-      className="app-shell-icon-control"
-      layout={layout} wrap={wrap}
-      layoutLabel={t(layout === 'split' ? 'feature.review.workspace.layout.split' : 'feature.review.workspace.layout.unified')}
-      wrapLabel={t(wrap ? 'feature.review.workspace.wrap.on' : 'feature.review.workspace.wrap.off')}
-      onLayoutChange={setLayout} onWrapChange={setWrap}
+  const singleFile = files.length === 1;
+  const diffContent = (
+    <ReviewSummarySection
+      {...actions}
+      key={selectionKey}
+      summary={summary}
+      diffLayout={diffLayout}
+      fileView={fileView}
+      lineWrap={lineWrap}
+      pathContext={pathContext}
+      singleFileViewport={singleFile}
+      showFileActions={false}
+      emptyText={{ title: t('feature.review.history.emptyFiles'), description: '' }}
+      fileExpansionRequest={EXPANSION}
+      fileHeaderControls={useFileToolbar ? { leading: backButton } : undefined}
+      findings={NO_FINDINGS}
     />
   );
   return (
@@ -61,9 +70,8 @@ export const GitHistoryDiff = memo(function GitHistoryDiff({
           {backButton}
           <span className="git-history-diff__title" title={title}>{title}</span>
         </div>
-        {!loading && !error && files.length > 0 ? <div className="desktop-review-panel__actions">
-          {hasTextPreview ? <ReviewFileViewControls mode={fileView} onChange={setFileView} /> : null}
-          {viewControls}
+        {!loading && !error && hasTextPreview ? <div className="desktop-review-panel__actions">
+          <ReviewFileViewControls mode={fileView} onChange={setFileView} />
         </div> : null}
       </div> : null}
       {details ? (
@@ -79,20 +87,9 @@ export const GitHistoryDiff = memo(function GitHistoryDiff({
       {error ? <div className="git-history-status" role="alert">{error}<Button variant="ghost" type="button" onClick={onRetry}>{t('feature.review.history.retry')}</Button></div>
         : loading ? <div className="git-history-diff__empty" role="status">{t('feature.review.history.loading')}</div>
           : !files.length ? <div className="git-history-diff__empty"><FileDiff size={30} strokeWidth={1.2} /><span>{t('feature.review.history.emptyFiles')}</span></div>
-            : (
+            : singleFile ? diffContent : (
               <Virtualizer className="desktop-review-panel__sections" contentClassName="desktop-review-panel__sections-content" key={selectionKey}>
-                <ReviewSummarySection
-                  {...actions}
-                  summary={summary}
-                  diffLayout={layout}
-                  fileView={fileView}
-                  lineWrap={wrap}
-                  pathContext={pathContext}
-                  emptyText={{ title: t('feature.review.history.emptyFiles'), description: '' }}
-                  fileExpansionRequest={EXPANSION}
-                  fileHeaderControls={useFileToolbar ? { leading: backButton, actions: viewControls } : undefined}
-                  findings={NO_FINDINGS}
-                />
+                {diffContent}
               </Virtualizer>
             )}
     </section>

@@ -33,6 +33,7 @@ export type ReviewCodePatchViewProps = {
 };
 
 export type ReviewFileContextMenuProps = {
+  openOnly?: boolean;
   selectedWorkspaceApp: DesktopWorkspaceApp | null;
   target: ReviewFileContextTarget | null;
   workspaceApps: DesktopWorkspaceApp[];
@@ -40,6 +41,7 @@ export type ReviewFileContextMenuProps = {
   onClose: () => void;
   onCopyPath: (filePath: string) => void;
   onOpenWithApp: (appId: string, filePath: string, line?: number) => void;
+  onOpenProjectFile?: (filePath: string, line?: number) => void;
   onReveal: (filePath: string) => void;
 };
 

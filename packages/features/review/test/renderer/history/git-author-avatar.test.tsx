@@ -23,6 +23,7 @@ it('loads the same author avatar in the hover card and detail without delaying l
   const view = render(<ReviewRendererTestHost bridge={bridge}>
     <GitHistoryCommitCard commit={details.commit} details={details} error={null} onRetry={noop} onCopyId={noop} />
     <GitHistoryDiff files={[]} details={details} pathContext={{ source: 'commit', workspaceRoot: '/repo', gitRoot: '/repo' }} selectionKey="commit" loading={false} error={null}
+      diffLayout="unified" lineWrap
       actions={{ workspaceApp: null, workspaceApps: [], onAddFileToConversation: noop, onCopyFilePath: noop, onExternalOpenFile: noop, onOpenFileWithApp: noop, onOpenProjectFile: noop, onRevealFile: noop }}
       onRetry={noop} onBack={noop} />
   </ReviewRendererTestHost>);

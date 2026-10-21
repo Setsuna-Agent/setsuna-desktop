@@ -1,6 +1,6 @@
 import { workspaceProjectRoots, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import { Button } from '@setsuna-desktop/renderer-ui';
-import { Bug, FileDiff, FolderOpen, GitBranch, LayoutGrid, MessageSquare, SquareTerminal } from 'lucide-react';
+import { Bug, FileDiff, FolderOpen, GitBranch, MessageSquare, SquareTerminal } from 'lucide-react';
 import { useId, type CSSProperties } from 'react';
 import { useToast } from '../../app/providers/ToastProvider.js';
 import { BrowserFeatureIcon, BrowserQuickLinks } from '../../composition/BrowserWorkspaceFeatureBoundary.js';
@@ -124,7 +124,7 @@ export function WorkspaceOverviewPanel({
         {headerVisible ? <WorkspaceOverviewHeader onNavigate={onOpenBrowser} /> : null}
         <section aria-labelledby={shortcutsHeadingId}>
           <h2 id={shortcutsHeadingId} className="desktop-workspace-overview__section-title">
-            <LayoutGrid size={14} aria-hidden="true" />{t('workspace.overview.shortcuts')}
+            {t('workspace.overview.shortcuts')}
           </h2>
           <div className="desktop-workspace-overview__actions">
             {actions.map((action) => (

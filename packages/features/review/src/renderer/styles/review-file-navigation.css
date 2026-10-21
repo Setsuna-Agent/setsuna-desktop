@@ -1,0 +1,142 @@
+.git-changes-panel__body:has(> .git-changes-file-navigation) {
+  --git-file-navigation-clearance: 68px;
+  isolation: isolate;
+}
+
+/* Keep the dock out of flow; only the scroll content needs room below its last line. */
+.git-changes-panel__body:has(> .git-changes-file-navigation) .desktop-review-panel__sections {
+  scroll-padding-bottom: var(--git-file-navigation-clearance);
+}
+
+.git-changes-panel__body:has(> .git-changes-file-navigation) .desktop-review-panel__sections-content {
+  padding-bottom: var(--git-file-navigation-clearance);
+}
+
+.git-changes-file-navigation {
+  container: git-file-navigation / inline-size;
+  position: absolute;
+  inset-inline: 16px;
+  bottom: 16px;
+  z-index: 7;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  transition: inset-inline-end var(--app-sidebar-motion-duration) var(--app-sidebar-motion-easing);
+}
+
+.git-changes-panel__body.is-resizing > .git-changes-file-navigation {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .git-changes-file-navigation { transition: none; }
+}
+
+/* Keep the portalled file menu and its Dock on the same beUI surface material. */
+.git-changes-file-navigation__dock,
+.git-changes-file-navigation__menu.sd-menu {
+  border-color: var(--app-border);
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--app-surface) 80%, transparent);
+  box-shadow: var(--shadow-2xl, 0 25px 50px -12px rgb(0 0 0 / 25%));
+  backdrop-filter: blur(var(--blur-xl, 24px));
+}
+
+.git-changes-file-navigation__dock {
+  gap: 4px;
+  padding: 3px 6px;
+  pointer-events: auto;
+}
+
+/* Keep navigation and the app chooser available when the diff is narrow. */
+@container git-file-navigation (max-width: 360px) {
+  .git-changes-file-navigation__shortcut { display: none; }
+}
+
+/* Center over the diff in split view; the dock also stays available in compact navigation. */
+@container git-changes (width > 560px) {
+  .git-changes-panel__body:not(.is-navigation-collapsed) > .git-changes-file-navigation {
+    inset-inline-end: calc(var(--git-nav-width, 260px) + 16px);
+  }
+}
+
+@container git-changes (max-width: 560px) {
+  .git-changes-panel__body:has(> .git-changes-file-navigation) .git-history-split {
+    padding-bottom: var(--git-file-navigation-clearance);
+  }
+}
+
+/* Match the shared icon buttons to the compact beUI Dock items. */
+.git-changes-file-navigation__dock .sd-icon-button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 8px;
+  color: var(--app-text);
+}
+
+.git-changes-file-navigation__dock .sd-icon-button.is-active {
+  background: var(--app-toolbar-control-active-bg);
+}
+
+.git-changes-file-navigation__separator {
+  height: 18px;
+  margin-inline: 2px;
+}
+
+.git-changes-file-navigation__menu.sd-menu {
+  display: flex;
+  flex-direction: column;
+  width: min(360px, calc(100vw - 24px));
+  max-height: min(280px, var(--radix-dropdown-menu-content-available-height, 280px));
+  overflow: hidden;
+}
+
+.git-changes-file-navigation__picker {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.git-changes-file-navigation__search {
+  flex-shrink: 0;
+  padding: 3px 4px 5px;
+}
+
+.git-changes-file-navigation__list {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.git-changes-file-navigation__file {
+  display: flex;
+  flex-direction: column;
+}
+
+.git-changes-file-navigation__file-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.git-changes-file-navigation__filename {
+  flex: 1;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 18px;
+}
+
+.git-changes-file-navigation__file-heading .desktop-review-change-counts {
+  font-size: 11px;
+}
+
+.git-changes-file-navigation__directory {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 16px;
+}

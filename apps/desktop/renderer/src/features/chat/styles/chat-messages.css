@@ -284,11 +284,28 @@
 .chat-user-message-content__text {
   display: grid;
   gap: 6px;
+  min-width: 0;
+}
+
+.chat-user-message-content__viewport {
+  display: block;
+  min-width: 0;
+}
+
+.chat-user-message-content__viewport.is-collapsed {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
 }
 
 .chat-user-message-content__body {
   display: block;
   min-width: 0;
+}
+
+.chat-user-message-content__toggle {
+  justify-self: start;
+  gap: 4px;
+  padding: 2px 4px;
+  margin-inline-start: -4px;
 }
 
 .chat-user-message-kind {

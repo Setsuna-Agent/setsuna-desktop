@@ -1,10 +1,13 @@
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
 import { parseBrowserAnnotationMessage } from '@setsuna-desktop/feature-browser/contracts';
-import { Goal as GoalIcon, Users } from 'lucide-react';
+import { Button } from '@setsuna-desktop/renderer-ui';
+import { ChevronDown, ChevronUp, Goal as GoalIcon, Users } from 'lucide-react';
+import { useId, type ReactNode } from 'react';
 import { useI18n } from '../../../../shared/i18n/I18nProvider.js';
 import { SkillReferenceText } from '../../skills/SkillReference.js';
 import { ChatMessageAttachments } from '../ChatMessageAttachments.js';
 import { BrowserAnnotationReference } from '../../mentions/BrowserAnnotationReference.js';
+import { useUserMessageDisclosure, userMessagePreviewHeight } from './useUserMessageDisclosure.js';
 
 export function UserMessageContent({ message, streaming }: {
   message: RuntimeMessage;
@@ -22,14 +25,48 @@ export function UserMessageContent({ message, streaming }: {
         <div className="chat-user-message-content__text">
           <UserMessageKindBadge kind={message.inputKind} />
           {message.content || streaming ? (
-            <span className="chat-user-message-content__body">
+            <UserMessageBody key={message.id}>
               {annotations ? <BrowserAnnotationReference message={annotations} />
                 : <SkillReferenceText content={message.content || '...'} skillReferences={message.skillReferences} />}
-            </span>
+            </UserMessageBody>
           ) : null}
         </div>
       ) : null}
     </div>
+  );
+}
+
+function UserMessageBody({ children }: { children: ReactNode }) {
+  const { t } = useI18n();
+  const id = useId();
+  const { collapsed, contentRef, handleFocus, showToggle, toggle, viewportRef } = useUserMessageDisclosure();
+  const Icon = collapsed ? ChevronDown : ChevronUp;
+
+  return (
+    <>
+      <span
+        className={`chat-user-message-content__viewport${collapsed && showToggle ? ' is-collapsed' : ''}`}
+        id={id}
+        ref={viewportRef}
+        style={collapsed ? { maxHeight: userMessagePreviewHeight, overflow: 'clip' } : undefined}
+        onFocusCapture={handleFocus}
+      >
+        <span className="chat-user-message-content__body" ref={contentRef}>{children}</span>
+      </span>
+      {showToggle ? (
+        <Button
+          variant="ghost"
+          size="small"
+          className="chat-user-message-content__toggle"
+          aria-controls={id}
+          aria-expanded={!collapsed}
+          onClick={toggle}
+        >
+          {t(collapsed ? 'chat.message.expand' : 'chat.message.collapse')}
+          <Icon size={14} aria-hidden="true" />
+        </Button>
+      ) : null}
+    </>
   );
 }
 

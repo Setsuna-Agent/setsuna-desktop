@@ -1,13 +1,14 @@
-import { Button } from '@setsuna-desktop/renderer-ui';
+import { Button, DiffViewControls } from '@setsuna-desktop/renderer-ui';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { DesktopDiffFile, DesktopGitCommit, DesktopGitRef, DesktopReviewState } from '../../contracts/index.js';
+import type { DesktopDiffFile, DesktopGitChangedFile, DesktopGitCommit, DesktopGitRef, DesktopReviewState } from '../../contracts/index.js';
 import { useReviewRendererHost } from '../host.js';
 import { useWorkspaceGitCommitDialog } from '../git/WorkspaceGitCommitDialog.js';
 import { GitCommitMessageEditor } from '../git/GitCommitMessageEditor.js';
 import { ReviewIconButton } from '../primitives.js';
-import type { ReviewPathContext } from '../review-types.js';
+import type { DesktopReviewDiffLayout, ReviewPathContext } from '../review-types.js';
 import { GitChangesFiles, type GitChangesFileGroup } from './GitChangesFiles.js';
+import { GitChangesFileNavigation } from './GitChangesFileNavigation.js';
 import { GitChangesCommitComposer } from './GitChangesCommitComposer.js';
 import { GitChangesMenu } from './GitChangesMenu.js';
 import { GitChangesSplit } from './GitChangesSplit.js';
@@ -49,6 +50,10 @@ function GitChangesWorkspace({ workspaceRoot, sourceRootPicker, editingMessage =
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [worktreeSelection, setWorktreeSelection] = useState<{ source: 'staged' | 'unstaged'; path: string | null } | null>(null);
   const [detailOpen, setDetailOpen] = useState(true);
+  const [navigationCollapsed, setNavigationCollapsed] = useState(false);
+  const [diffLayout, setDiffLayout] = useState<DesktopReviewDiffLayout>('unified');
+  const [lineWrap, setLineWrap] = useState(true);
+  const [compact, setCompact] = useState(false);
   // Opening a panel must not replay a progress request from before it mounted.
   const lastOpenedConflictId = useRef(conflictOpenRequest);
   const [selectedConflictId, setSelectedConflictId] = useState<string | null>(null);
@@ -87,7 +92,13 @@ function GitChangesWorkspace({ workspaceRoot, sourceRootPicker, editingMessage =
     history.selectRef(ref.name);
     selectCommit(ref.oid);
   }, [history.selectRef, selectCommit]);
-  const closeDetail = useCallback(() => setDetailOpen(false), []);
+  const closeDetail = useCallback(() => { setDetailOpen(false); setNavigationCollapsed(false); }, []);
+  const selectFile = useCallback((group: string, selectedFile: DesktopGitChangedFile) => {
+    setSelectedConflictId(null);
+    if (group === 'commit') setSelectedPath(selectedFile.path);
+    else if (group === 'staged' || group === 'unstaged') setWorktreeSelection({ source: group, path: selectedFile.path });
+    setDetailOpen(true);
+  }, []);
   const pathContext = useMemo<ReviewPathContext>(() => ({
     workspaceRoot,
     gitRoot: page?.gitRoot ?? reviewState?.gitRoot,
@@ -108,6 +119,14 @@ function GitChangesWorkspace({ workspaceRoot, sourceRootPicker, editingMessage =
   const refresh = () => { fileActions.clearError(); onRefresh(); history.refresh(); };
   const retryDiff = () => { if (details.error) details.retry(); else if (selectedOid) diff.retry(); else refresh(); };
   const emptyRepository = page && !page.gitRoot;
+  const compactNavigation = !showMessageEditor && !conflictTask && (navigationCollapsed || (compact && detailOpen));
+  const selectedFileKey = selectedOid ? 'commit:' + commitFile?.path : worktreePath ? source + ':' + worktreePath : null;
+  const toggleNavigation = () => {
+    // Closing a group preview's sidebar selects its first file for previous/next navigation.
+    if (!compactNavigation && worktreePath === null && !selectedOid && worktreeFile) selectFile(source, worktreeFile);
+    setNavigationCollapsed(!compactNavigation);
+    setDetailOpen(!(compact && compactNavigation));
+  };
 
   if (!bridge) return <div className="git-history-status">{t('feature.review.git.unsupported')}</div>;
   if (emptyRepository) return (
@@ -119,7 +138,8 @@ function GitChangesWorkspace({ workspaceRoot, sourceRootPicker, editingMessage =
 
   return (
     <section className="desktop-review-panel git-changes-panel" aria-label={t('feature.review.history.title')}>
-      <GitChangesSplit detailOpen={detailOpen} editingMessage={showMessageEditor} navigation={
+      <GitChangesSplit detailOpen={detailOpen} editingMessage={showMessageEditor} navigationCollapsed={compactNavigation}
+        onCompactChange={setCompact} navigation={
         <nav className="git-changes-nav" aria-label={t('feature.review.history.title')}>
           <div className="git-changes-nav__header">
             <div className="git-changes-nav__project">
@@ -142,7 +162,7 @@ function GitChangesWorkspace({ workspaceRoot, sourceRootPicker, editingMessage =
               <GitChangesFiles
                 groups={groups}
                 pathContext={pathContext}
-                selectedKey={selectedOid ? 'commit:' + commitFile?.path : worktreePath ? source + ':' + worktreePath : null}
+                selectedKey={selectedFileKey}
                 loading={selectedOid ? details.loading : reviewLoading}
                 error={selectedOid ? details.error : fileActions.error ?? reviewError}
                 busy={fileActions.busy || Boolean(composer?.busy)}
@@ -161,12 +181,7 @@ function GitChangesWorkspace({ workspaceRoot, sourceRootPicker, editingMessage =
                   });
                 }}
                 onRetry={selectedOid ? details.retry : refresh}
-                onSelect={(group, selectedFile) => {
-                  setSelectedConflictId(null);
-                  if (group === 'commit') setSelectedPath(selectedFile.path);
-                  else if (group === 'staged' || group === 'unstaged') setWorktreeSelection({ source: group, path: selectedFile.path });
-                  setDetailOpen(true);
-                }}
+                onSelect={selectFile}
               />
             )}
             conflicts={conflictTasks.length ? <GitConflictHistory workspaceRoot={workspaceRoot} tasks={conflictTasks} selectedTurnId={selectedConflictId} onSelect={(turnId) => {
@@ -190,7 +205,18 @@ function GitChangesWorkspace({ workspaceRoot, sourceRootPicker, editingMessage =
             )}
           />
         </nav>
-      }>
+      } overlay={!showMessageEditor && !conflictTask ? <GitChangesFileNavigation
+        key={selectedOid ?? 'worktree'} groups={groups} selectedKey={selectedFileKey} onSelect={selectFile}
+        pathContext={pathContext} actions={actions}
+        viewControls={<DiffViewControls
+          layout={diffLayout} wrap={lineWrap} tooltipPlacement="top"
+          disabled={!groups.some((group) => group.files.length > 0)}
+          layoutLabel={t(diffLayout === 'split' ? 'feature.review.workspace.layout.split' : 'feature.review.workspace.layout.unified')}
+          wrapLabel={t(lineWrap ? 'feature.review.workspace.wrap.on' : 'feature.review.workspace.wrap.off')}
+          onLayoutChange={setDiffLayout} onWrapChange={setLineWrap}
+        />}
+        sidebarExpanded={!compactNavigation} onToggleSidebar={toggleNavigation}
+      /> : null}>
         {showMessageEditor ? <GitCommitMessageEditor /> : conflictTask ? <ConflictTaskProgress
           key={conflictTask.turnId}
           {...conflictTask}
@@ -200,6 +226,8 @@ function GitChangesWorkspace({ workspaceRoot, sourceRootPicker, editingMessage =
           onOpenWorkspaceFile={actions.onOpenProjectFile}
         /> : <GitHistoryDiff
           files={files}
+          diffLayout={diffLayout}
+          lineWrap={lineWrap}
           details={details.data}
           pathContext={pathContext}
           selectionKey={JSON.stringify([workspaceRoot, selectedOid ?? source, selectedOid ? commitFile?.path : worktreePath])}

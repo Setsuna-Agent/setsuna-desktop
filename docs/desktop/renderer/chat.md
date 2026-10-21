@@ -156,6 +156,8 @@ Runtime 一轮可能包含：
 
 删除、复制、regenerate 必须回到持久化 message ID，不能把临时 display item ID 传给 runtime。
 
+长用户消息由 `conversation/messages/ChatUserMessageContent` 与 `useUserMessageDisclosure` 按实际正文高度折叠，默认预览 192px（约八行），提供“展开更多 / 收起”。附件和消息类型标记保留在正文折叠区域之外；复制、编辑和重发仍使用完整原文。尺寸监听跟随窗口宽度与字体变化，展开选择由消息本地持有。查找期间临时显示完整正文，关闭后恢复原选择；手动展开先解除底部跟随，收起时将已离开视口的消息起点带回阅读区。
+
 ## Streaming 与滚动
 
 `StreamingScrollPinProvider` / `useStreamingScrollPin` 管理：

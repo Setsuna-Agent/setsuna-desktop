@@ -20,6 +20,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
+import { pageScaleInverse } from '../../../shared/lib/zoomedPortalPosition.js';
 import type { DesktopReviewOpenHandler } from '../../workspace/model.js';
 import {
   reconcileRuntimePluginUsesByTurn,
@@ -27,6 +28,7 @@ import {
   type RuntimePluginUse,
 } from '../plugin-usage/runtimePluginUsage.js';
 import type { UserMessageEditorStateProps } from './messages/useUserMessageEditor.js';
+import { UserMessageDisclosureContext } from './messages/useUserMessageDisclosure.js';
 import { useChatMessageOperations } from '../hooks/useChatMessageOperations.js';
 import { useThreadMessageHistory } from '../hooks/useThreadMessageHistory.js';
 import { MarkdownViewportProvider } from '../markdown/MarkdownViewportProvider.js';
@@ -304,6 +306,18 @@ export function ChatTranscript({
     handleScroll();
     if (historyScrollAnchorRef.current) captureHistoryScrollAnchor();
   }, [captureHistoryScrollAnchor, handleScroll]);
+  const userMessageDisclosure = useMemo(() => ({
+    forceExpanded: findOpen,
+    onToggle: (element: HTMLElement, expanded: boolean) => {
+      const viewport = scrollRefInternal.current;
+      if (!viewport) return;
+      // Stop following before expansion; bring an offscreen message start back
+      // into view before collapse removes the text currently being read.
+      const offset = expanded ? 0 : Math.min(0,
+        (element.getBoundingClientRect().top - viewport.getBoundingClientRect().top) * pageScaleInverse() - 8);
+      scrollToReadingOffset(Math.max(0, viewport.scrollTop + offset), 'auto');
+    },
+  }), [findOpen, scrollRefInternal, scrollToReadingOffset]);
   const loadEarlierMessages = useCallback(() => {
     const scrollNode = scrollRefInternal.current;
     if (scrollNode) {
@@ -339,7 +353,7 @@ export function ChatTranscript({
   });
 
   return (
-    <>
+    <UserMessageDisclosureContext.Provider value={userMessageDisclosure}>
       <div className={`chat-messages ${showEmptyStarter ? 'chat-messages--starter' : ''}`} ref={scrollRefInternal} tabIndex={0} aria-label={t('chat.navigation.messages')} onKeyDownCapture={handleScrollKeyDown} onPointerDownCapture={handleScrollPointerDown} onScroll={handleTranscriptScroll} onTouchMoveCapture={handleScrollTouchMove} onWheelCapture={handleScrollWheel}>
         <MarkdownViewportProvider scrollRef={scrollRefInternal} renderAll={findOpen}>
           <div className="chat-content-frame" ref={attachContent}>
@@ -456,7 +470,7 @@ export function ChatTranscript({
           onToggleAll={toggleAllDeleteSelection}
         />
       ) : null}
-    </>
+    </UserMessageDisclosureContext.Provider>
   );
 }
 

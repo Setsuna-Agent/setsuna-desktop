@@ -1,5 +1,5 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
-import type { DiffLineAnnotation } from '@pierre/diffs/react';
+import { Virtualizer, type DiffLineAnnotation } from '@pierre/diffs/react';
 import { getDocumentPreviewFormat, type RuntimeReviewFinding } from '@setsuna-desktop/contracts';
 import type { DesktopWorkspaceApp } from '@setsuna-desktop/feature-workspace-apps/contracts';
 import { Code2, FileDiff, PanelRightOpen } from 'lucide-react';
@@ -60,7 +60,7 @@ const REVIEW_FOCUS_HIGHLIGHT_MS = 1_400;
 
 type ReviewFileHeaderControls = {
   leading?: ReactNode;
-  actions: ReactNode;
+  actions?: ReactNode;
 };
 
 export function ReviewSummarySection({
@@ -73,6 +73,8 @@ export function ReviewSummarySection({
   focusRequest,
   lineWrap,
   pathContext,
+  singleFileViewport = false,
+  showFileActions = true,
   summary: sourceSummary,
   workspaceApp,
   workspaceApps,
@@ -92,6 +94,8 @@ export function ReviewSummarySection({
   focusRequest?: DesktopReviewFocusRequest | null;
   lineWrap: boolean;
   pathContext: ReviewPathContext;
+  singleFileViewport?: boolean;
+  showFileActions?: boolean;
   summary: DesktopDiffSummary | null;
   workspaceApp?: DesktopWorkspaceApp | null;
   workspaceApps: DesktopWorkspaceApp[];
@@ -110,6 +114,7 @@ export function ReviewSummarySection({
   const files = useMemo(() => [...(summary?.files ?? [])].sort((left, right) => (
     reviewFilePathCollator.compare(left.path, right.path)
   )), [summary?.files]);
+  const scrollFileBody = singleFileViewport && files.length === 1;
   const findingTargets = useMemo(
     () => resolveReviewFindingTargets(summary, findings),
     [findings, summary],
@@ -155,7 +160,7 @@ export function ReviewSummarySection({
     onOpenProjectFile(targetPath, line);
   }, [onExternalOpenFile, onOpenProjectFile, resolveReviewWorkspaceFile, workspaceApp]);
   return (
-    <section className="desktop-review-section">
+    <section className={'desktop-review-section' + (scrollFileBody ? ' desktop-review-section--single-file' : '')}>
       {unanchoredFindingTarget ? (
         <div className="desktop-review-unanchored-findings">
           <ReviewUnanchoredFindingCard
@@ -194,6 +199,8 @@ export function ReviewSummarySection({
               lineWrap={lineWrap}
               pathContext={pathContext}
               requestPreview={requestPreview}
+              scrollBody={scrollFileBody}
+              showFileActions={showFileActions}
               workspaceApp={workspaceApp}
               workspaceApps={workspaceApps}
               onAddFileToConversation={onAddFileToConversation}
@@ -233,6 +240,8 @@ const ReviewFileCard = memo(function ReviewFileCard({
   lineWrap,
   pathContext,
   requestPreview,
+  scrollBody,
+  showFileActions,
   workspaceApp,
   workspaceApps,
   onAddFileToConversation,
@@ -258,6 +267,8 @@ const ReviewFileCard = memo(function ReviewFileCard({
   lineWrap: boolean;
   pathContext: ReviewPathContext;
   requestPreview: RequestReviewFilePreview;
+  scrollBody: boolean;
+  showFileActions: boolean;
   workspaceApp?: DesktopWorkspaceApp | null;
   workspaceApps: DesktopWorkspaceApp[];
   onAddFileToConversation: (filePath: string) => void;
@@ -432,7 +443,7 @@ const ReviewFileCard = memo(function ReviewFileCard({
               ) : null}
             </span>
           </Button>
-          <div className="desktop-review-file-card__meta">
+          {showFileActions ? <div className="desktop-review-file-card__meta">
             <ActionTooltip title={openPanelLabel}>
               <IconButton
                 disabled={!canOpenFile}
@@ -463,61 +474,63 @@ const ReviewFileCard = memo(function ReviewFileCard({
                 <Code2 size={13} />
               </IconButton>
             </ActionTooltip>
-          </div>
-          {fileHeaderControls ? <div className="desktop-review-file-card__view-controls">{fileHeaderControls.actions}</div> : null}
+          </div> : null}
+          {fileHeaderControls?.actions ? <div className="desktop-review-file-card__view-controls">{fileHeaderControls.actions}</div> : null}
         </header>
-        {preview.loading || preview.error ? (
-          <div className="desktop-review-document-status" role={preview.error ? 'alert' : 'status'}>
-            {preview.error ?? t('feature.review.workspace.file.documentLoading')}
-          </div>
-        ) : expanded && documentDiffPreview ? (
-          <ReviewDocumentDiff file={file} pathContext={pathContext} />
-        ) : expanded && markdownPreview && workspaceFilePath ? (
-          <ReviewFileDocument file={file} filePath={workspaceFilePath} pathContext={pathContext}
-            onOpenFile={onOpenProjectFile} />
-        ) : imagePreview ? (
-          <ReviewImageDiffPreview
-            diffLayout={diffLayout}
-            file={file}
-            filePath={workspaceFilePath}
-            pathContext={pathContext}
-            visible={expanded}
-          />
-        ) : unsupportedPreview && expanded ? (
-          <div className="desktop-review-unsupported-preview">
-            <strong>{t('feature.review.workspace.file.unsupportedTitle')}</strong>
-            <span>{t('feature.review.workspace.file.unsupportedDescription')}</span>
-          </div>
-        ) : expanded && visibleLines.length ? (
-          <div
-            className="desktop-review-diff-shell"
-            onContextMenu={openDiffLineContextMenu}
-          >
-            <CodePatchView
-              className={[
-                'desktop-review-diff',
-                `desktop-review-diff--${diffLayout}`,
-                lineWrap ? 'desktop-review-diff--wrap' : '',
-              ].filter(Boolean).join(' ')}
-              layout={diffLayout}
-              lineAnnotations={lineAnnotations}
-              onPostRender={getDiffTargetRegistration(
-                reviewFileNavigationTargetKey(file.path),
-              )}
-              patch={patch}
-              wrap={lineWrap}
+        <ReviewFileContent scrollable={scrollBody}>
+          {preview.loading || preview.error ? (
+            <div className="desktop-review-document-status" role={preview.error ? 'alert' : 'status'}>
+              {preview.error ?? t('feature.review.workspace.file.documentLoading')}
+            </div>
+          ) : expanded && documentDiffPreview ? (
+            <ReviewDocumentDiff file={file} pathContext={pathContext} />
+          ) : expanded && markdownPreview && workspaceFilePath ? (
+            <ReviewFileDocument file={file} filePath={workspaceFilePath} pathContext={pathContext}
+              onOpenFile={onOpenProjectFile} />
+          ) : imagePreview ? (
+            <ReviewImageDiffPreview
+              diffLayout={diffLayout}
+              file={file}
+              filePath={workspaceFilePath}
+              pathContext={pathContext}
+              visible={expanded}
             />
-            {file.truncated ? (
-              <div className="desktop-review-truncated">
-                {t('feature.review.workspace.file.truncated')}
-              </div>
-            ) : null}
-          </div>
-        ) : expanded && file.truncated ? (
-          <div className="desktop-review-truncated">
-            {t('feature.review.workspace.file.truncated')}
-          </div>
-        ) : null}
+          ) : unsupportedPreview && expanded ? (
+            <div className="desktop-review-unsupported-preview">
+              <strong>{t('feature.review.workspace.file.unsupportedTitle')}</strong>
+              <span>{t('feature.review.workspace.file.unsupportedDescription')}</span>
+            </div>
+          ) : expanded && visibleLines.length ? (
+            <div
+              className="desktop-review-diff-shell"
+              onContextMenu={openDiffLineContextMenu}
+            >
+              <CodePatchView
+                className={[
+                  'desktop-review-diff',
+                  `desktop-review-diff--${diffLayout}`,
+                  lineWrap ? 'desktop-review-diff--wrap' : '',
+                ].filter(Boolean).join(' ')}
+                layout={diffLayout}
+                lineAnnotations={lineAnnotations}
+                onPostRender={getDiffTargetRegistration(
+                  reviewFileNavigationTargetKey(file.path),
+                )}
+                patch={patch}
+                wrap={lineWrap}
+              />
+              {file.truncated ? (
+                <div className="desktop-review-truncated">
+                  {t('feature.review.workspace.file.truncated')}
+                </div>
+              ) : null}
+            </div>
+          ) : expanded && file.truncated ? (
+            <div className="desktop-review-truncated">
+              {t('feature.review.workspace.file.truncated')}
+            </div>
+          ) : null}
+        </ReviewFileContent>
       </article>
       <FileContextMenu
         selectedWorkspaceApp={workspaceApp ?? null}
@@ -532,6 +545,15 @@ const ReviewFileCard = memo(function ReviewFileCard({
     </>
   );
 });
+
+function ReviewFileContent({ children, scrollable }: { children: ReactNode; scrollable: boolean }) {
+  // Single-file panels scroll below the header; multi-file reviews share their outer virtualizer.
+  return scrollable ? (
+    <Virtualizer className="desktop-review-panel__sections" contentClassName="desktop-review-panel__sections-content">
+      {children}
+    </Virtualizer>
+  ) : children;
+}
 
 type ReviewImagePreviewSide = 'before' | 'after';
 

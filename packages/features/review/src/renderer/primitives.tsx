@@ -6,6 +6,7 @@ type ReviewIconButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   label: string;
   children: ReactNode;
   tooltip?: boolean;
+  tooltipPlacement?: 'bottom-end' | 'top';
   variant?: 'secondary' | 'ghost' | 'danger';
 };
 
@@ -14,6 +15,7 @@ export function ReviewIconButton({
   children,
   className = '',
   tooltip = false,
+  tooltipPlacement = 'bottom-end',
   title = label,
   variant = 'ghost',
   type = 'button',
@@ -30,7 +32,7 @@ export function ReviewIconButton({
       {children}
     </IconButton>
   );
-  return tooltip ? <ReviewActionTooltip title={title}>{button}</ReviewActionTooltip> : button;
+  return tooltip ? <ReviewActionTooltip title={title} placement={tooltipPlacement}>{button}</ReviewActionTooltip> : button;
 }
 
 export function ReviewActionTooltip({
