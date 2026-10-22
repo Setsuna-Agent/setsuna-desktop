@@ -100,7 +100,7 @@ importers:
       concurrently: ^10.0.4
       corepack: 0.34.7
       echarts: 6.1.0
-      electron: ^43.7.7
+      electron: ^43.8.3
       electron-builder: ^26.15.3
       electron-chrome-web-store: 0.13.0
       esbuild: ^0.28.1
@@ -200,7 +200,7 @@ importers:
       '@xterm/xterm': 6.0.0
       concurrently: 10.0.4
       echarts: 6.1.0
-      electron: 43.7.7
+      electron: 43.8.3
       electron-builder: 26.15.3_ssrvegiuozahpaxzouiywblfge
       esbuild: 0.28.1
       eslint: 9.39.5
@@ -383,7 +383,7 @@ importers:
       '@setsuna-desktop/feature-core': link:../../feature-core
       '@setsuna-desktop/renderer-contracts': link:../../renderer-contracts
       '@setsuna-desktop/renderer-ui': link:../../renderer-ui
-      electron: 43.7.7
+      electron: 43.8.3
       electron-chrome-web-store: 0.13.0_y73l3obx2zq7jqmqjdruke5fzy
       lucide-react: 0.468.0_react@18.3.1
       parse5: 7.3.0
@@ -419,7 +419,7 @@ importers:
       '@setsuna-desktop/feature-core': link:../../feature-core
       '@setsuna-desktop/renderer-contracts': link:../../renderer-contracts
       '@setsuna-desktop/renderer-ui': link:../../renderer-ui
-      electron: 43.7.7
+      electron: 43.8.3
       lucide-react: 0.468.0_react@18.3.1
       react: 18.3.1
 
@@ -543,7 +543,7 @@ importers:
       '@setsuna-desktop/feature-core': link:../../feature-core
       '@setsuna-desktop/renderer-contracts': link:../../renderer-contracts
       '@setsuna-desktop/renderer-ui': link:../../renderer-ui
-      electron: 43.7.7
+      electron: 43.8.3
       lucide-react: 0.468.0_react@18.3.1
       proxy-chain: 3.0.0
       react: 18.3.1
@@ -554,14 +554,14 @@ importers:
     specifiers:
       '@setsuna-desktop/contracts': workspace:*
       '@setsuna-desktop/feature-core': workspace:*
-      electron: ^43.7.7
+      electron: ^43.8.3
       undici: 7.29.1
     dependencies:
       '@setsuna-desktop/contracts': link:../../contracts
       '@setsuna-desktop/feature-core': link:../../feature-core
       undici: 7.29.1
     devDependencies:
-      electron: 43.7.7
+      electron: 43.8.3
 
   packages/features/plugin-management:
     specifiers:
@@ -579,7 +579,7 @@ importers:
       '@setsuna-desktop/feature-core': link:../../feature-core
       '@setsuna-desktop/renderer-contracts': link:../../renderer-contracts
       '@setsuna-desktop/renderer-ui': link:../../renderer-ui
-      electron: 43.7.7
+      electron: 43.8.3
       lucide-react: 0.468.0_react@18.3.1
       react: 18.3.1
       react-markdown: 10.1.0_ldrqq4ddkzwykih5vpyejmhynu
@@ -624,7 +624,7 @@ importers:
       '@setsuna-desktop/feature-workspace-apps': link:../workspace-apps
       '@setsuna-desktop/renderer-contracts': link:../../renderer-contracts
       '@setsuna-desktop/renderer-ui': link:../../renderer-ui
-      electron: 43.7.7
+      electron: 43.8.3
       lucide-react: 0.468.0_react@18.3.1
       react: 18.3.1
       react-dom: 18.3.1_react@18.3.1
@@ -688,7 +688,7 @@ importers:
       '@setsuna-desktop/renderer-ui': link:../../renderer-ui
       '@xterm/addon-fit': 0.11.0
       '@xterm/xterm': 6.0.0
-      electron: 43.7.7
+      electron: 43.8.3
       lucide-react: 0.468.0_react@18.3.1
       node-pty: 1.1.0_ehtrmlw75n3v2ehcvwsdrctske
       react: 18.3.1
@@ -731,7 +731,7 @@ importers:
       '@setsuna-desktop/feature-core': link:../../feature-core
       '@setsuna-desktop/renderer-contracts': link:../../renderer-contracts
       '@setsuna-desktop/renderer-ui': link:../../renderer-ui
-      electron: 43.7.7
+      electron: 43.8.3
       lucide-react: 0.468.0_react@18.3.1
       react: 18.3.1
 
@@ -786,7 +786,7 @@ importers:
       '@setsuna-desktop/feature-vision-recognition': link:../vision-recognition
       '@setsuna-desktop/renderer-contracts': link:../../renderer-contracts
       '@setsuna-desktop/renderer-ui': link:../../renderer-ui
-      electron: 43.7.7
+      electron: 43.8.3
       lucide-react: 0.468.0_react@18.3.1
       react: 18.3.1
       react-dom: 18.3.1_react@18.3.1
@@ -806,7 +806,7 @@ importers:
       '@setsuna-desktop/feature-core': link:../../feature-core
       '@setsuna-desktop/renderer-contracts': link:../../renderer-contracts
       '@setsuna-desktop/renderer-ui': link:../../renderer-ui
-      electron: 43.7.7
+      electron: 43.8.3
       lucide-react: 0.468.0_react@18.3.1
       proxy-chain: 3.0.0
       react: 18.3.1
@@ -824,7 +824,7 @@ importers:
       '@setsuna-desktop/feature-core': link:../../feature-core
       '@setsuna-desktop/renderer-contracts': link:../../renderer-contracts
       '@setsuna-desktop/renderer-ui': link:../../renderer-ui
-      electron: 43.7.7
+      electron: 43.8.3
       lucide-react: 0.468.0_react@18.3.1
       react: 18.3.1
       react-dom: 18.3.1_react@18.3.1
@@ -7132,8 +7132,8 @@ packages:
       - supports-color
     dev: true
 
-  /electron/43.7.7:
-    resolution: {integrity: sha512-y0pg+KhWLAkW2Ts2njkFFNFl3KtB1FmbUp9Te9i+R2Og2v1fcI/I6MADJ7jvnzB5UKdt+U+0EUoCnVL79xMPMA==}
+  /electron/43.8.3:
+    resolution: {integrity: sha512-KgvSm3bHXz96hSXzqxyRjLeli80rIdszbDQFKlRSfckmGazTPCH/CxUN31Dp9c5rFKTQSNf9gPJRWl1yWNB3pA==}
     engines: {node: '>= 22.12.0'}
     hasBin: true
     dependencies:
