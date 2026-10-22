@@ -9,7 +9,9 @@
 - Node.js `>=22.19.0`（满足 Pi runtime 与内置 `node:sqlite` 的共同要求）
 - pnpm `7.33.7`（本地与 CI 一致）
 - 原生依赖：`node-pty`、`sharp`
-- Electron：`43.x`
+- Electron：`43.x`，最低 `43.8.3`；根包和 Feature 中的 Electron 依赖保持一致。
+
+内置浏览器依赖 Electron/Chromium 的证书校验与吊销数据。Electron 升级必须同步 lockfile 中各 workspace 的解析版本，并重新打包发布，系统或独立浏览器更新不能替代应用内核更新。当前版本下限包含 [eMudhra 中间 CA 私钥泄露事件](https://emudhra.we-have-a-problem.com/)的修复。
 
 macOS 开发需要 macOS 14+ 和 Xcode Command Line Tools，见 [macOS 开发环境](README.md#macos)。Windows x64 源码开发和打包另需 Rust/Cargo `>=1.85`、`x86_64-pc-windows-msvc` 工具链、MSVC C++ 构建工具及 Windows SDK，安装和排错见 [Windows 开发环境](README.md#windows-x64)。发布版已携带编译后的原生助手，运行发布版不需要编译工具。
 

@@ -128,7 +128,7 @@
     "@xterm/xterm": "^6.0.0",
     "concurrently": "^10.0.4",
     "echarts": "6.1.0",
-    "electron": "^43.7.7",
+    "electron": "^43.8.3",
     "electron-builder": "^26.15.3",
     "esbuild": "^0.28.1",
     "eslint": "^9.17.0",
