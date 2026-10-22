@@ -29,7 +29,12 @@ describe('desktop terminal store', () => {
     const events: DesktopTerminalEventPayload[] = [];
     const store = new DesktopTerminalStore((event) => events.push(event));
     try {
-      const session = await store.open({ workspaceRoot, command: { name: 'Server', command: 'printf "service-ready\\n"\nsleep 30' } });
+      // Report readiness from the foreground job. A launcher-side printf can
+      // race Ctrl+C before sleep owns the terminal and miss the interrupt.
+      const session = await store.open({
+        workspaceRoot,
+        command: { name: 'Server', command: `/bin/sh -c 'printf "service-ready\\n"; exec sleep 30'` },
+      });
       await store.attach(session.sessionId, 80, 24);
       await waitFor(() => events.some((event) => event.event === 'output' && String(event.data.text).includes('service-ready')));
       const interruptedAt = events.length;
