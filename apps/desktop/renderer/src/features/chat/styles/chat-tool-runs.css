@@ -627,22 +627,62 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   padding: 0;
 }
 
+@property --chat-tool-run-edge-top-alpha {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 1;
+}
+
+@property --chat-tool-run-edge-bottom-alpha {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 1;
+}
+
 /* 只限制最外层工具汇总，保留顶部摘要，避免子分组各自产生滚动区域。 */
 .chat-tool-runs > .chat-tool-run--group > .chat-tool-run__body {
   --chat-tool-run-scrollbar-gap: 8px;
+  --chat-tool-run-scrollbar-space: calc(var(--chat-scrollbar-width) + var(--chat-tool-run-scrollbar-gap));
   max-height: min(360px, 50vh);
   overflow-x: hidden;
   overflow-y: auto;
-  overscroll-behavior-y: contain;
+  /* 到达边界后交给外层对话滚动，原生滚动与 Lenis 共用这一规则。 */
+  overscroll-behavior-y: auto;
   scrollbar-gutter: auto;
   /* 聊天正文默认隐藏内部滚动条；长工具记录需要可拖动的滚动提示。 */
   scrollbar-width: auto !important;
+  /* 只淡出边缘文字，保留字形清晰；右侧独立实色遮罩让滚动条始终完整显示。 */
+  mask-image:
+    linear-gradient(to bottom,
+      rgb(0 0 0 / var(--chat-tool-run-edge-top-alpha)),
+      #000 24px,
+      #000 calc(100% - 24px),
+      rgb(0 0 0 / var(--chat-tool-run-edge-bottom-alpha))),
+    linear-gradient(#000, #000);
+  mask-size: calc(100% - var(--chat-tool-run-scrollbar-space)) 100%, var(--chat-tool-run-scrollbar-space) 100%;
+  mask-position: left top, right top;
+  mask-repeat: no-repeat;
+  /* 无溢出时滚动时间线不激活，两端保持不透明；到达边界后也恢复完整文字。 */
+  animation: chat-tool-run-fade-top linear both, chat-tool-run-fade-bottom linear both;
+  animation-timeline: scroll(self block);
+  animation-direction: normal, reverse;
+  animation-range: 0px 12px, calc(100% - 12px) 100%;
+}
+
+@keyframes chat-tool-run-fade-top {
+  from { --chat-tool-run-edge-top-alpha: 1; }
+  to { --chat-tool-run-edge-top-alpha: 0; }
+}
+
+@keyframes chat-tool-run-fade-bottom {
+  from { --chat-tool-run-edge-bottom-alpha: 1; }
+  to { --chat-tool-run-edge-bottom-alpha: 0; }
 }
 
 .chat-tool-runs > .chat-tool-run--group > .chat-tool-run__body::-webkit-scrollbar {
   display: block !important;
   /* 间距随滚动条占位，未溢出时不压缩内容宽度。 */
-  width: calc(var(--chat-scrollbar-width) + var(--chat-tool-run-scrollbar-gap)) !important;
+  width: var(--chat-tool-run-scrollbar-space) !important;
 }
 
 .chat-tool-runs > .chat-tool-run--group > .chat-tool-run__body::-webkit-scrollbar-thumb {
