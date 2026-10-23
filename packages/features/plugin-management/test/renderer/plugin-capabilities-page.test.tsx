@@ -2,7 +2,7 @@
 
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { Button, ConfirmationProvider, IconButton } from '@setsuna-desktop/renderer-ui';
-import type { SettingsViewUi } from '@setsuna-desktop/renderer-contracts/settings';
+import type { CapabilitiesPageNavigation, SettingsViewUi } from '@setsuna-desktop/renderer-contracts/settings';
 import type { CapabilitiesRefreshCoordinator } from '@setsuna-desktop/renderer-contracts/capabilities';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { PluginManagementRendererService, PluginManagementSnapshot } from '../../src/contracts/index.js';
@@ -26,12 +26,16 @@ it('keeps plugin details and the error after a failed uninstall, then closes the
     ActionMenu: ({ items, onSelect }) => <>{items.map((item) => <Button key={item.id} disabled={item.disabled} onClick={() => onSelect(item.id)}>{item.label}</Button>)}</>,
     Toast: ({ message }) => <div role="alert">{message}</div>,
   } as SettingsViewUi;
+  const capabilities: CapabilitiesPageNavigation = {
+    activeItemId: plugin.id, catalogNavigation: null, catalogNavigationInPage: false, workspacePath: null,
+    openChat: vi.fn(), openPluginChat: vi.fn(), renderBreadcrumb: () => null, renderCreateMenu: () => null,
+    setActiveItemId: vi.fn(),
+  };
   await act(async () => {
-    render(<ConfirmationProvider><PluginCapabilitiesPage sectionId="plugins" service={service} ui={ui}
+    render(<ConfirmationProvider><PluginCapabilitiesPage sectionId="plugins" service={service} ui={ui} capabilities={capabilities}
       capabilitiesRefresh={{ refresh: vi.fn() } as unknown as CapabilitiesRefreshCoordinator}
       openExternal={async () => true} translate={(key, params) => params?.detail ? String(params.detail) : key} /></ConfirmationProvider>);
   });
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Local tools', exact: true })); });
   const uninstall = async () => {
     fireEvent.click(screen.getByRole('button', { name: 'feature.pluginManagement.uninstall' }));
     await act(async () => {
@@ -45,6 +49,7 @@ it('keeps plugin details and the error after a failed uninstall, then closes the
   expect(service.remove).toHaveBeenCalledTimes(2);
   expect(screen.queryByRole('heading', { name: 'Local tools' })).toBeNull();
   expect(screen.queryByRole('alert')).toBeNull();
+  expect(capabilities.setActiveItemId).toHaveBeenCalledWith(null);
 });
 
 it.each(['install', 'import', 'refresh'] as const)('reports a catalog %s failure through Toast and allows retry', async (operation) => {

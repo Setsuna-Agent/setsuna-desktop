@@ -51,56 +51,18 @@
   align-self: center;
 }
 
-.desktop-plugin-market__installed {
-  display: grid;
-  gap: 10px;
-}
-
-.desktop-plugin-market__installed > header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  min-width: 0;
-}
-
-.desktop-plugin-market__installed h3,
-.desktop-plugin-market__installed header span {
-  margin: 0;
-}
-
-.desktop-plugin-market__installed h3 {
-  color: var(--app-text);
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 22px;
-}
-
-.desktop-plugin-market__installed header span {
-  color: var(--app-text-subtle);
-  font-size: 11px;
-  line-height: 18px;
-}
-
-.desktop-plugin-market__installed-list {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 16px 24px;
-  min-width: 0;
-}
-
-.desktop-plugin-installed-shortcut,
-.desktop-plugin-installed-shortcut button {
+.desktop-plugin-legacy-hooks,
+.desktop-plugin-legacy-hooks button {
   display: inline-flex;
   flex: 0 0 auto;
 }
 
-.desktop-plugin-installed-shortcut {
+.desktop-plugin-legacy-hooks {
   position: relative;
+  justify-self: start;
 }
 
-.desktop-plugin-installed-shortcut button {
+.desktop-plugin-legacy-hooks button {
   appearance: none;
   position: relative;
   align-items: center;
@@ -112,16 +74,16 @@
   transition: transform 140ms ease;
 }
 
-.desktop-plugin-installed-shortcut button:hover {
+.desktop-plugin-legacy-hooks button:hover {
   transform: translateY(-1px);
 }
 
-.desktop-plugin-installed-shortcut button:focus-visible {
+.desktop-plugin-legacy-hooks button:focus-visible {
   outline: 0;
   box-shadow: var(--app-focus-ring);
 }
 
-.desktop-plugin-installed-shortcut__name {
+.desktop-plugin-legacy-hooks__name {
   position: absolute;
   top: calc(100% + 5px);
   left: 50%;
@@ -140,26 +102,15 @@
   white-space: nowrap;
 }
 
-.desktop-plugin-installed-shortcut:hover,
-.desktop-plugin-installed-shortcut:focus-within {
+.desktop-plugin-legacy-hooks:hover,
+.desktop-plugin-legacy-hooks:focus-within {
   z-index: 3;
 }
 
-.desktop-plugin-installed-shortcut:hover .desktop-plugin-installed-shortcut__name,
-.desktop-plugin-installed-shortcut:focus-within .desktop-plugin-installed-shortcut__name {
+.desktop-plugin-legacy-hooks:hover .desktop-plugin-legacy-hooks__name,
+.desktop-plugin-legacy-hooks:focus-within .desktop-plugin-legacy-hooks__name {
   opacity: 1;
   transform: translate(-50%, 0);
-}
-
-.desktop-plugin-installed-shortcut__update {
-  position: absolute;
-  right: -2px;
-  bottom: -2px;
-  width: 9px;
-  height: 9px;
-  border: 2px solid var(--app-bg);
-  border-radius: 50%;
-  background: var(--app-primary);
 }
 
 .desktop-plugin-market__get {

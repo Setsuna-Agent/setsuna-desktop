@@ -170,13 +170,13 @@ Hook 不再作为一级目录或独立表单暴露；它是 Plugin Bundle 内的
 
 Plugin 管理的跨层所有权位于 `packages/features/plugin-management/`：contracts 声明聚合 snapshot、Hook projection 与安装、更新、卸载、详情、扩展信任、Renderer UI data/action/document、Hook 状态 typed operations；runtime 只通过 Plugin Store、Marketplace、Extension Manager 和 `RuntimeHookManagement` 窄 host 能力实现；renderer service 持有 Plugin/Hook snapshot、并发 refresh 与 mutation 后收敛。`PluginCapabilitiesPage`、`PluginDetail`、`PluginItemDialog` 和展示 helper 同样位于 Feature 包内，宿主不再保存或适配 Plugin/Hook 状态。
 
-默认市场来自随应用打包的 `plugins/`，renderer 只接收无路径摘要。市场首页分别展示市场目录和不在目录内的本地安装项；卡片直接表达安装、更新和打开状态。详情页展示声明的 Tool/Skill/MCP/Hook/resource 元数据，并负责 install/update/uninstall 动作。
+默认市场来自随应用打包的 `plugins/`，renderer 只接收无路径摘要。市场首页展示市场目录，卡片直接表达安装、更新和打开状态；已安装插件统一从左侧列表进入详情，包含本地导入项和已离开市场目录的安装项。详情页展示声明的 Tool/Skill/MCP/Hook/resource 元数据，并负责 install/update/uninstall 动作。
 
 目录页的安装、导入和手动刷新失败通过宿主 `ui.Toast` 反馈，保留重试入口；页面进入时的后台仓库刷新失败不弹通知，也不插入常驻警告区域。
 
 Capabilities 的分类导航在 macOS、Windows 上共用左侧插件侧栏，详情面包屑继续通过 `AppRouteTopbarPortal` 挂载到顶部。各 Feature page 自己持有标题、搜索、刷新、创建/导入和详情返回动作，但复用宿主注入的 controls 与共享能力页布局样式。
 
-页面标题栏分别提供“用对话创建插件”和“导入本地插件”；不属于默认市场的已安装 Plugin 在本地来源分区单独展示。
+页面标题栏分别提供“用对话创建插件”和“导入本地插件”；存在旧版独立 Hook 时，目录页保留其清理入口。
 
 图片生成和视觉识别第一方 Plugin 的配置不在 Plugin Management 页面中硬编码。各自的 renderer Feature 在 setup 中通过 `context.ui` 向对应 Plugin 详情的 typed Slot 注册设置与测试视图：
 
