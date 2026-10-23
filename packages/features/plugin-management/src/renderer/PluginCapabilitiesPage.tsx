@@ -31,7 +31,6 @@ import type { PluginManagementTranslate } from './messages.js';
 import { PluginDetail } from './PluginDetail.js';
 import { PluginDetailSection, PluginRepositoryLink } from './PluginDetailPrimitives.js';
 import {
-  installedPluginsOutsideCatalog,
   installedPluginCatalogId,
   pluginIconProps,
   pluginMatchesQuery,
@@ -113,9 +112,6 @@ export function PluginCapabilitiesPage({
   const catalog = useMemo(() => snapshot.marketplace.filter((plugin) => (
     pluginMatchesQuery(plugin, query, installedById.get(plugin.id))
   )), [installedById, query, snapshot.marketplace]);
-  const localPlugins = useMemo(() => installedPluginsOutsideCatalog(snapshot.plugins, snapshot.marketplace).filter((plugin) => (
-    pluginMatchesQuery(plugin, query)
-  )), [query, snapshot.marketplace, snapshot.plugins]);
   const selectedMarketplace = selectedPluginId ? marketplaceById.get(selectedPluginId) : undefined;
   const selectedInstalled = selectedPluginId ? installedById.get(selectedPluginId)
     ?? (!selectedMarketplace ? snapshot.plugins.find((plugin) => plugin.id === selectedPluginId) : undefined) : undefined;
@@ -244,9 +240,7 @@ export function PluginCapabilitiesPage({
     );
   }
 
-  const installedMarketplacePlugins = catalog.filter((plugin) => installedById.has(plugin.id));
   const marketplaceSections = pluginMarketplaceSections(catalog, t, repositoryRefreshing && !query.trim());
-  const installedCount = installedMarketplacePlugins.length + localPlugins.length + Number(standaloneHooks.length > 0);
   const tabsInPage = capabilities?.catalogNavigationInPage ?? false;
   return (
     <main className="capabilities-page desktop-capabilities-panel" data-feature-id="plugin-management">
@@ -323,29 +317,13 @@ export function PluginCapabilitiesPage({
         </div>
         <div className="desktop-capabilities-grid"><div className="desktop-capabilities-grid__content">
           <div className="desktop-plugin-market">
-            {installedCount ? (
-              <section className="desktop-plugin-market__installed" aria-label={t('feature.pluginManagement.installed')}>
-                <header>
-                  <h3>{t('feature.pluginManagement.installed')}</h3>
-                  <span>{t('feature.pluginManagement.installedCount', { count: installedCount })}</span>
-                </header>
-                <div className="desktop-plugin-market__installed-list">
-                  {installedMarketplacePlugins.map((plugin) => (
-                    <InstalledPluginShortcut key={`installed-marketplace:${plugin.id}`} plugin={plugin} installed={installedById.get(plugin.id)} ui={ui} onOpen={() => openPlugin(plugin.id)} />
-                  ))}
-                  {localPlugins.map((plugin) => (
-                    <InstalledPluginShortcut key={`installed-local:${plugin.id}`} plugin={plugin} ui={ui} onOpen={() => openPlugin(plugin.id)} />
-                  ))}
-                  {standaloneHooks.length ? (
-                    <LegacyHooksShortcut
-                      count={standaloneHooks.length}
-                      translate={t}
-                      ui={ui}
-                      onOpen={() => setLegacyHooksOpen(true)}
-                    />
-                  ) : null}
-                </div>
-              </section>
+            {standaloneHooks.length ? (
+              <LegacyHooksShortcut
+                count={standaloneHooks.length}
+                translate={t}
+                ui={ui}
+                onOpen={() => setLegacyHooksOpen(true)}
+              />
             ) : null}
             <div className="desktop-plugin-market__catalog">
               {marketplaceSections.map((section) => (
@@ -379,7 +357,7 @@ export function PluginCapabilitiesPage({
                   ))}
                 </PluginSection>
               ))}
-              {!catalog.length && !localPlugins.length && !repositoryRefreshing ? <div className="desktop-capabilities-empty">{t('feature.pluginManagement.empty')}</div> : null}
+              {!catalog.length && !repositoryRefreshing ? <div className="desktop-capabilities-empty">{t('feature.pluginManagement.empty')}</div> : null}
             </div>
           </div>
         </div></div>
@@ -398,24 +376,6 @@ function PluginSection({ children, title, trailing }: Readonly<{ children: React
   );
 }
 
-function InstalledPluginShortcut({ onOpen, plugin, installed, ui }: Readonly<{
-  onOpen(): void;
-  plugin: RuntimePluginMarketplaceItem | RuntimePluginSummary;
-  installed?: RuntimePluginSummary;
-  ui: SettingsPageSlotProps['ui'];
-}>) {
-  const updateAvailable = 'updateAvailable' in plugin && plugin.updateAvailable;
-  return (
-    <article className={`desktop-plugin-installed-shortcut${updateAvailable ? ' has-update' : ''}`}>
-      <UiButton variant="ghost" aria-label={plugin.name} type="button" onClick={onOpen}>
-        <ui.PluginIcon {...pluginIconProps(plugin, installed)} variant="installed" />
-        {updateAvailable ? <span aria-hidden="true" className="desktop-plugin-installed-shortcut__update" /> : null}
-      </UiButton>
-      <span aria-hidden="true" className="desktop-plugin-installed-shortcut__name">{plugin.name}</span>
-    </article>
-  );
-}
-
 function LegacyHooksShortcut({ count, onOpen, translate, ui }: Readonly<{
   count: number;
   onOpen(): void;
@@ -424,11 +384,11 @@ function LegacyHooksShortcut({ count, onOpen, translate, ui }: Readonly<{
 }>) {
   const name = translate('feature.pluginManagement.legacyHooks');
   return (
-    <article className="desktop-plugin-installed-shortcut">
+    <article className="desktop-plugin-legacy-hooks">
       <UiButton variant="ghost" aria-label={name} title={`${name} · ${count}`} type="button" onClick={onOpen}>
         <ui.PluginIcon pluginId="setsuna-legacy-hooks" variant="installed" />
       </UiButton>
-      <span aria-hidden="true" className="desktop-plugin-installed-shortcut__name">{name}</span>
+      <span aria-hidden="true" className="desktop-plugin-legacy-hooks__name">{name}</span>
     </article>
   );
 }

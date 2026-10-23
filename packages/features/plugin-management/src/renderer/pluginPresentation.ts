@@ -51,17 +51,6 @@ export function pluginIconProps(
   };
 }
 
-export function installedPluginsOutsideCatalog(
-  installed: readonly RuntimePluginSummary[],
-  marketplace: readonly RuntimePluginMarketplaceItem[],
-): RuntimePluginSummary[] {
-  const catalogIds = new Set(marketplace.map((plugin) => plugin.id));
-  return installed.filter((plugin) => (
-    (plugin.installationSource !== 'marketplace' && plugin.installationSource !== 'repository')
-      || !catalogIds.has(installedPluginCatalogId(plugin))
-  ));
-}
-
 export function pluginMatchesQuery(
   plugin: RuntimePluginMarketplaceItem | RuntimePluginSummary,
   query: string,
