@@ -6,6 +6,7 @@ import type {
   ConversationDebugNodeKind,
 } from '../../src/renderer/conversationDebugGraph.js';
 import { createConversationDebugInspectorModel } from '../../src/renderer/conversationDebugInspectorModel.js';
+import { safeConversationDebugJson } from '../../src/renderer/conversationDebugSerialization.js';
 
 describe('conversation debug inspector model', () => {
   it('surfaces every useful turn field without requiring the raw payload', () => {
@@ -118,9 +119,8 @@ describe('conversation debug inspector model', () => {
   });
 
   it('replaces the bounded event preview with the complete tool arguments', () => {
-    const fullArguments = JSON.stringify({
-      cmd: `vitest ${'packages/features/conversation-debug/'.repeat(80)}`,
-    });
+    const command = `vitest ${'packages/features/conversation-debug/'.repeat(80)}`;
+    const fullArguments = JSON.stringify({ cmd: command });
     const completedMessage: RuntimeEvent = {
       createdAt: '2026-08-25T08:00:00.000Z',
       id: 'event_message_completed',
@@ -172,9 +172,8 @@ describe('conversation debug inspector model', () => {
 
     expect(model.sections.flatMap((section) => section.fields)).toContainEqual(
       expect.objectContaining({
-        language: 'json',
-        path: 'fullArguments',
-        value: fullArguments,
+        path: 'fullArguments.cmd',
+        value: command,
       }),
     );
     expect(model.sections.flatMap((section) => section.fields)).not.toContainEqual(
@@ -183,6 +182,41 @@ describe('conversation debug inspector model', () => {
     expect(model.sections.flatMap((section) => section.fields)).not.toContainEqual(
       expect.objectContaining({ path: 'argumentsPreview' }),
     );
+  });
+
+  it('decodes argument envelopes without changing source escapes, redaction or original records', () => {
+    const code = [
+      String.raw`const pattern = "\\n";`,
+      String.raw`const file = "C:\\new\\note.txt";`,
+      'text({ pattern, file });',
+    ].join('\n');
+    const argumentsText = JSON.stringify({ code, apiKey: 'private-key-value', count: 0, enabled: false });
+    const partialArguments = argumentsText.slice(0, 50);
+    const preview = toolEvent(1, 'tool.started', {
+      argumentsPreview: partialArguments, toolCallId: 'call_1', toolName: 'run_code',
+    });
+    const completed: RuntimeEvent = {
+      id: 'completed', createdAt: '2026-10-26T00:00:00.000Z', seq: 2, threadId: 'thread_1', turnId: 'turn_1',
+      type: 'item.completed', payload: { item: {
+        id: 'call_1', kind: 'tool_call', status: 'completed',
+        toolCall: { id: 'call_1', name: 'run_code', arguments: argumentsText },
+      } },
+    };
+    const records = [preview, completed];
+    const model = createConversationDebugInspectorModel({ locale: 'zh-CN', node: nodeFor(records, 'tool'), records, t: translate });
+    const fields = model.sections.flatMap(section => section.fields);
+
+    expect(fields).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: 'item.toolCall.arguments.code', value: code }),
+      expect.objectContaining({ path: 'item.toolCall.arguments.apiKey', value: '[redacted]' }),
+      expect.objectContaining({ path: 'item.toolCall.arguments.count', value: '0' }),
+      expect.objectContaining({ path: 'argumentsPreview', value: partialArguments }),
+    ]));
+    expect(JSON.stringify(fields)).not.toContain('private-key-value');
+    expect(completed.payload.item.toolCall?.arguments).toBe(argumentsText);
+    expect(JSON.parse(safeConversationDebugJson(completed))).toMatchObject({ payload: { item: { toolCall: {
+      arguments: JSON.stringify({ code, apiKey: '[redacted]', count: 0, enabled: false }),
+    } } } });
   });
 
   it('compresses streaming deltas while retaining a bounded stderr preview', () => {
