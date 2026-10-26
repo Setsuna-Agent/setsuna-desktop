@@ -3,8 +3,6 @@ import type { RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import {
   cloneRuntimeSkillReferences,
   cloneRuntimeThreadGoal,
-  DEFAULT_THREAD_TITLE,
-  fallbackThreadTitle,
   normalizeRuntimeQueuedTurnInputKind,
   type PendingStoredThreadEvent,
   type RuntimeEvent,
@@ -14,16 +12,12 @@ import {
   type RuntimeTaskKind,
   type RuntimeThreadGoal,
   type RuntimeThreadGoalPatch,
-  type StoredThreadEvent,
 } from '@setsuna-desktop/contracts';
-import {
-  createFeatureEvent,
-  isFeatureEventEnvelope,
-  parseFeatureEvent,
-} from '@setsuna-desktop/feature-core/events';
+import { createFeatureEvent } from '@setsuna-desktop/feature-core/events';
 import type { FeatureProjectionStore } from '@setsuna-desktop/feature-core/runtime';
 import {
   goalStateReplacedEvent,
+  goalVerificationRecordedEvent,
   type GoalControl,
   type GoalContinuationRun,
   type GoalRuntimeHost,
@@ -53,7 +47,10 @@ import {
   sameGoalState,
   withGoalStatus,
 } from './runtime-goal-state.js';
+import { goalLifecycleEvents, updateDefaultGoalTitle, type GoalPublishOptions } from './goal-lifecycle-events.js';
+import { MAX_GOAL_VERIFICATION_ATTEMPTS, verifyGoalCompletion, verificationWasInvalidated } from './goal-completion-verification.js';
 import { GoalConflictError, GoalThreadNotFoundError } from './runtime-goal-errors.js';
+import { goalStateFromRecord, restoredTurnBelongsToGoal, runtimeEvents } from './goal-history.js';
 
 type RuntimeGoalCoordinatorOptions = {
   host: GoalRuntimeHost;
@@ -77,6 +74,7 @@ export class RuntimeGoalCoordinator implements GoalControl {
   private readonly goalIdByTurnId = new Map<string, string>();
   private readonly goalObjectiveByTurnId = new Map<string, string>();
   private readonly pendingCompletionGoalIdByTurnId = new Map<string, string>();
+  private readonly pendingExitGoalIdByTurnId = new Map<string, string>();
   private readonly retiredGoalIds = new Set<string>();
   private readonly supersededGoalTurnIds = new Set<string>();
   private readonly suppressCancellationPauseThreads = new Set<string>();
@@ -102,6 +100,7 @@ export class RuntimeGoalCoordinator implements GoalControl {
     return Object.freeze({
       state: Object.freeze({
         goal: snapshot.state.goal ? cloneRuntimeThreadGoal(snapshot.state.goal) : null,
+        ...(snapshot.state.verification ? { verification: snapshot.state.verification } : {}),
       }),
       throughSeq: snapshot.throughSeq,
     });
@@ -110,6 +109,18 @@ export class RuntimeGoalCoordinator implements GoalControl {
   /** Completion is committed only after this turn reaches a successful terminal event. */
   isCompletionPending(turnId: string, goalId: string): boolean {
     return this.pendingCompletionGoalIdByTurnId.get(turnId) === goalId;
+  }
+
+  async completionBlockReason(threadId: string, turnId: string): Promise<string | null> {
+    const goalId = this.pendingCompletionGoalIdByTurnId.get(turnId);
+    if (!goalId) return null;
+    const { goal, verification } = (await this.options.projection.read(threadId)).state;
+    const events = await this.options.host.listEvents(threadId, { afterSeq: verification?.observedThroughSeq,
+      types: ['tool.started', 'tool.completed', 'message.created'] });
+    if (goal?.id === goalId && verification?.passed && verification.turnId === turnId
+      && !verificationWasInvalidated(verification, events)) return null;
+    this.pendingCompletionGoalIdByTurnId.delete(turnId);
+    return 'Goal completion evidence changed after verification. Inspect the new work or user input and request update_goal again when the objective is fully verified.';
   }
 
   /** Runtime restart never silently resumes an autonomous goal. */
@@ -213,7 +224,7 @@ export class RuntimeGoalCoordinator implements GoalControl {
         && goal.execution
       ),
     });
-    if (!previous) await this.updateDefaultTitle(threadId, thread.title, goal.objective);
+    if (!previous) await updateDefaultGoalTitle(this.options.host, threadId, thread.title, goal.objective);
 
     const currentActive = this.options.host.activeTask(threadId);
     if (
@@ -291,7 +302,7 @@ export class RuntimeGoalCoordinator implements GoalControl {
         sourceMessage,
         turnId,
       });
-      if (!previous) await this.updateDefaultTitle(threadId, thread.title, goal.objective);
+      if (!previous) await updateDefaultGoalTitle(this.options.host, threadId, thread.title, goal.objective);
       const run = await this.options.host.createContinuation(
         threadId,
         goal,
@@ -398,6 +409,7 @@ export class RuntimeGoalCoordinator implements GoalControl {
       this.goalIdByTurnId.delete(turnId);
       this.goalObjectiveByTurnId.delete(turnId);
       this.pendingCompletionGoalIdByTurnId.delete(turnId);
+      this.pendingExitGoalIdByTurnId.delete(turnId);
       this.supersededGoalTurnIds.delete(turnId);
       if (settledGoalId) this.retiredGoalIds.delete(settledGoalId);
       pending.delete(settlement);
@@ -444,8 +456,8 @@ export class RuntimeGoalCoordinator implements GoalControl {
   ): Promise<GoalToolExecutionResult> {
     const input = recordInput(parsedArguments);
     if (name === 'get_goal') {
-      const goal = await this.getGoal(context.threadId);
-      return goalToolResult(name, { goal }, context.interfaceLanguage);
+      const { goal, verification } = (await this.readState(context.threadId)).state;
+      return goalToolResult(name, { goal, ...(verification ? { verification } : {}) }, context.interfaceLanguage);
     }
     if (name === 'create_goal') {
       const objective = normalizeGoalObjective(input.objective);
@@ -473,20 +485,54 @@ export class RuntimeGoalCoordinator implements GoalControl {
     }
     if (name === 'update_goal') {
       normalizeCompletionStatus(input.status);
-      return this.withGoalMutation(context.threadId, async () => {
-        await this.requireThread(context.threadId);
-        const goal = await this.getGoal(context.threadId);
+      const prepared = await this.withGoalMutation(context.threadId, async () => {
+        context.signal?.throwIfAborted();
+        const snapshot = await this.readState(context.threadId);
+        const goal = snapshot.state.goal;
         if (!goal || goal.status !== 'active') throw new Error('No active goal is available to complete.');
         this.assertCurrentGoalRevision(context.turnId, goal);
+        return { goal, snapshot };
+      });
+      // Network I/O must not hold the queue needed by pause/clear/cancel. Event sequences
+      // detect even edits that change the objective away and back while the model is running.
+      const verification = await verifyGoalCompletion({ host: this.options.host, goal: prepared.goal, context,
+        previous: prepared.snapshot.state.verification });
+      return this.withGoalMutation(context.threadId, async () => {
+        context.signal?.throwIfAborted();
+        const changes = await this.options.host.listEvents(context.threadId, {
+          afterSeq: prepared.snapshot.throughSeq, types: ['feature.event', 'thread.goal_updated', 'thread.goal_cleared'],
+        });
+        const goal = await this.getGoal(context.threadId);
+        context.signal?.throwIfAborted();
+        if (this.stopped || this.deletionPausedThreads.has(context.threadId)
+          || !goal || goal.status !== 'active' || goal.id !== prepared.goal.id
+          || changes.some(event => goalStateFromRecord(event).recognized
+            || (event.type === 'feature.event' && event.featureId === goalVerificationRecordedEvent.featureId))) {
+          throw new GoalConflictError('Goal changed during completion verification. Inspect the current goal before requesting completion again.');
+        }
+        this.assertCurrentGoalRevision(context.turnId, goal);
+        await this.options.host.appendEvents(context.threadId, [createFeatureEvent(goalVerificationRecordedEvent, {
+          id: this.options.host.id('event'), threadId: context.threadId, turnId: context.turnId,
+          createdAt: this.options.host.now().toISOString(),
+        }, verification)]);
+        this.goalIdByTurnId.set(context.turnId, goal.id);
+        this.goalObjectiveByTurnId.set(context.turnId, goal.objective);
+        if (!verification.passed) {
+          const next = verification.attempt >= MAX_GOAL_VERIFICATION_ATTEMPTS
+            ? withGoalStatus(goal, 'blocked', this.options.host.now(), { code: 'noProgress', message: verification.gaps.join('\n') || 'Completion verification did not pass.' }) : goal;
+          if (next !== goal) {
+            await this.publishGoal(next);
+            this.pendingExitGoalIdByTurnId.set(context.turnId, goal.id);
+          }
+          return goalToolResult(name, { goal: next, verification }, context.interfaceLanguage);
+        }
         // The provider must still consume this tool result and finish the turn. Keep the durable
         // Goal active until that succeeds so a cancellation, runtime error, or restart cannot be
         // mistaken for verified completion.
-        this.goalIdByTurnId.set(context.turnId, goal.id);
-        this.goalObjectiveByTurnId.set(context.turnId, goal.objective);
         this.pendingCompletionGoalIdByTurnId.set(context.turnId, goal.id);
         return goalToolResult(
           name,
-          { goal, completionPending: true },
+          { goal, completionPending: true, verification },
           context.interfaceLanguage,
         );
       });
@@ -680,8 +726,11 @@ export class RuntimeGoalCoordinator implements GoalControl {
       };
     }
     if (nextStatus === 'active' && completionRequested && terminalEvent?.type === 'turn.completed') {
-      nextStatus = 'complete';
-      stopReason = undefined;
+      // Recheck at settlement too: input can arrive while the final response is publishing.
+      if (!await this.completionBlockReason(threadId, turnId)) {
+        nextStatus = 'complete';
+        stopReason = undefined;
+      }
     }
     let safety = accounted.safety;
     if (nextStatus === 'active') {
@@ -708,7 +757,8 @@ export class RuntimeGoalCoordinator implements GoalControl {
       safety,
       updatedAt: epochSeconds(this.options.host.now()),
     };
-    const exitKind = updated.status !== goal.status
+    const pendingExit = updated.status === 'blocked' && this.pendingExitGoalIdByTurnId.get(turnId) === goal.id;
+    const exitKind = updated.status !== goal.status || pendingExit
       ? goalExitKindForStatus(updated.status)
       : null;
     // The exit summary shares the final accounted event so its usage is exact, including this turn.
@@ -718,39 +768,15 @@ export class RuntimeGoalCoordinator implements GoalControl {
         ? goalExitMessage(updated, exitKind, this.options.host, this.options.host, turnId)
         : undefined,
     });
+    this.pendingExitGoalIdByTurnId.delete(turnId);
     if (updated.status === 'active') {
       await this.continueIfIdle(threadId);
     }
   }
 
-  private async publishGoal(
-    goal: RuntimeThreadGoal,
-    options: {
-      lifecycleMessage?: RuntimeMessage;
-      preserveExecution?: boolean;
-      queuedInputId?: string;
-      sourceMessage?: RuntimeMessage;
-      turnId?: string;
-    } = {},
-  ): Promise<void> {
-    const coreMessages = [options.sourceMessage, options.lifecycleMessage]
-      .filter((message): message is RuntimeMessage => Boolean(message))
-      .map((message) => ({
-        id: this.options.host.id('event'),
-        threadId: goal.threadId,
-        ...(message.turnId ? { turnId: message.turnId } : {}),
-        type: 'message.created' as const,
-        createdAt: message.createdAt,
-        payload: {
-          message,
-          ...(message === options.sourceMessage && options.queuedInputId
-            ? { queuedInputId: options.queuedInputId }
-            : {}),
-        },
-      }));
+  private async publishGoal(goal: RuntimeThreadGoal, options: GoalPublishOptions = {}): Promise<void> {
     await this.publishGoalState(goal.threadId, goal, {
-      coreMessages,
-      turnId: options.turnId,
+      coreMessages: goalLifecycleEvents(this.options.host, goal.threadId, options), turnId: options.turnId,
     });
   }
 
@@ -777,21 +803,6 @@ export class RuntimeGoalCoordinator implements GoalControl {
       ...(options.coreMessages ?? []),
       featureEvent,
     ]);
-  }
-
-  private async updateDefaultTitle(
-    threadId: string,
-    currentTitle: string,
-    objective: string,
-  ): Promise<void> {
-    if (currentTitle !== DEFAULT_THREAD_TITLE) return;
-    await this.options.host.appendEvents(threadId, [{
-      id: this.options.host.id('event'),
-      threadId,
-      type: 'thread.updated',
-      createdAt: this.options.host.now().toISOString(),
-      payload: { title: fallbackThreadTitle(objective) },
-    }]);
   }
 
   private async cancelGoalTurnWithoutPausing(threadId: string, turnId: string): Promise<boolean> {
@@ -851,63 +862,6 @@ function goalExitKindForStatus(status: RuntimeThreadGoal['status']): RuntimeGoal
   return status === 'complete' || status === 'blocked' || status === 'usageLimited'
     ? status
     : null;
-}
-
-function runtimeEvents(
-  events: readonly StoredThreadEvent[],
-): RuntimeEvent[] {
-  return events.filter((event): event is RuntimeEvent => event.type !== 'feature.event');
-}
-
-function restoredTurnBelongsToGoal(
-  allEvents: readonly StoredThreadEvent[],
-  turnEvents: RuntimeEvent[],
-  goal: RuntimeThreadGoal,
-): boolean {
-  const lifecycleEvent = [...turnEvents].reverse().find((event) => (
-    event.type === 'message.created'
-    && event.payload.message.goalMode
-  ));
-  let owner = lifecycleEvent?.type === 'message.created'
-    ? lifecycleEvent.payload.message.goalMode?.goal
-    : undefined;
-  if (!owner) {
-    const started = turnEvents.find((event) => event.type === 'turn.started');
-    if (started?.type !== 'turn.started' || started.payload.taskKind !== 'goal') return false;
-    const precedingState = [...allEvents].reverse().find((event) => (
-      event.seq < started.seq && goalStateFromRecord(event).recognized
-    ));
-    owner = precedingState ? goalStateFromRecord(precedingState).goal ?? undefined : undefined;
-  }
-  if (!owner) return false;
-  const ownerId = (owner as RuntimeThreadGoal & { id?: unknown }).id;
-  const currentId = (goal as RuntimeThreadGoal & { id?: unknown }).id;
-  // Snapshots written before Goal identities existed can only be matched by their objective.
-  return typeof currentId === 'string' && currentId.trim()
-    ? ownerId === currentId
-    : owner.objective === goal.objective;
-}
-
-function goalStateFromRecord(record: StoredThreadEvent): Readonly<{
-  recognized: boolean;
-  goal: RuntimeThreadGoal | null;
-}> {
-  if (record.type === 'thread.goal_updated') {
-    return { recognized: true, goal: cloneRuntimeThreadGoal(record.payload.goal) };
-  }
-  if (record.type === 'thread.goal_cleared') {
-    return record.payload.cleared
-      ? { recognized: true, goal: null }
-      : { recognized: false, goal: null };
-  }
-  if (
-    isFeatureEventEnvelope(record)
-    && record.featureId === goalStateReplacedEvent.featureId
-    && record.eventType === goalStateReplacedEvent.eventType
-  ) {
-    return { recognized: true, goal: parseFeatureEvent(goalStateReplacedEvent, record).goal };
-  }
-  return { recognized: false, goal: null };
 }
 
 function recordInput(value: unknown): Record<string, unknown> {

@@ -210,6 +210,13 @@ Review 不是另一个绕过 thread event 的执行器。
 
 ## Context compaction
 
+在摘要/原生压缩前，`tool-result-working-set.ts` 先投影可回读的工具工作集。消息估算超过
+40K token 或可用对话窗口的 70% 时，较早且已存储的成功工具结果可替换为 `result_id` 引用，
+通过 `read_tool_result` 按需取回。保留最近六个工具结果、错误、附件和非工具消息；替换前确认
+引用仍可读取，存储不可用时保留原文。该投影只改变当前模型窗口，不覆写持久 transcript，
+也不更改 assistant/tool 配对。投影后重新校准 token 预算，再决定是否需要摘要。
+细节见 [Harness 执行与验收](../../designs/current/harness-execution.md)。
+
 主要文件：
 
 - `context-compaction.ts`

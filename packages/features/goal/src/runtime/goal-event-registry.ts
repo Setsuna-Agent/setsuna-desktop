@@ -11,6 +11,8 @@ import {
   goalCodec,
   goalFeature,
   goalStateReplacedEvent,
+  goalVerificationRecordedEvent,
+  reduceGoalVerification,
   reduceGoalState,
   type GoalState,
 } from '../contracts/index.js';
@@ -24,6 +26,7 @@ type LegacyGoalUpdate = Readonly<{
 export function createRuntimeGoalEventRegistry(): FeatureEventRegistry<GoalState> {
   const registry = new FeatureEventRegistry<GoalState>(goalFeature.id);
   registry.register(goalStateReplacedEvent, (state, value) => reduceGoalState(state, value));
+  registry.register(goalVerificationRecordedEvent, reduceGoalVerification);
   registry.registerLegacy('thread.goal_updated', decodeLegacyGoalUpdate, (state, update) => {
     const execution = update.preserveExecution ? state.goal?.execution : update.goal.execution;
     return Object.freeze({

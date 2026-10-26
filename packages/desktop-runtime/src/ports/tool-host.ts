@@ -1,4 +1,5 @@
 import type {
+  ModelRequest,
   RuntimeEnvironment,
   RuntimeInterfaceLanguage,
   RuntimeMessage,
@@ -47,6 +48,8 @@ export type ToolExecutionContext = {
  * agent-loop 与 tool-orchestrator 共享该类型，避免重复定义导致字段漂移。
  */
 export type RuntimeToolExecutionContext = ToolExecutionContext & {
+  verificationInstructions?: string;
+  verificationModel?: Pick<ModelRequest, 'model' | 'providerId' | 'thinking' | 'reasoningEffort'> & { contextWindowTokens?: number; maxOutputTokens?: number };
   environment: ToolExecutionEnvironment;
   /** Input resources/options that a Goal created during this turn must retain for continuations. */
   goalExecution?: RuntimeThreadGoalExecutionOptions;

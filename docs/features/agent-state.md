@@ -60,8 +60,9 @@ Goal 拥有持久目标、状态、累计用量、自动续轮和用户更新/�
 - 更新使用冲突语义保护当前 Goal，不能让迟到写入覆盖已变化状态。
 - Renderer 提供 composer status/goal 状态呈现与控制，业务状态不进入 App controller。
 - Goal 自动续轮仍必须服从 turn queue、取消、用量限制、终态和 tool approval 的 Core 规则。
+- `update_goal` 完成请求先运行无工具的独立证据验收，`goal.verification-recorded` 保存逐项依据与缺口；失败返回修复反馈，同一 turn 三次失败进入 blocked。通过后仍需成功结束该 turn，期间新的工具操作或用户输入会使验收失效。Core 提供采样/用量/事件适配，不持有 Goal 私有审查逻辑。
 
-完整状态机见 [持久化 Goal](../designs/current/persistent-goals.md)；与 active turn 输入的交互见 [Active turn 发送队列](../designs/current/queued-turn-inputs.md)。
+完整状态机见 [持久化 Goal](../designs/current/persistent-goals.md)，证据验收见 [Harness 执行与验收](../designs/current/harness-execution.md)；与 active turn 输入的交互见 [Active turn 发送队列](../designs/current/queued-turn-inputs.md)。
 
 ## Memory
 

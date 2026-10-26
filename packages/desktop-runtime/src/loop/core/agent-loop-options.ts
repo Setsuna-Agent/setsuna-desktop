@@ -49,4 +49,6 @@ export type AgentLoopOptions = {
   eventWriter?: RuntimeEventWriter;
   extensionManager?: Pick<ExtensionRuntime, 'dispatch'>;
   toolResultStore?: ToolResultStore;
+  toolProgramRuntime?: ToolProgramRuntime;
 };
+import type { ToolProgramRuntime } from '../../ports/tool-program-runtime.js';

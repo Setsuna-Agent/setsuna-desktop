@@ -8,6 +8,7 @@ const releasePlatformTestGlobs = [
   'packages/desktop-runtime/test/adapters/tool/pc-local/**/*.test.{ts,tsx}',
   'packages/desktop-runtime/test/adapters/workspace/**/*.test.{ts,tsx}',
   'packages/desktop-runtime/test/integration/adapters/tool/pc-local-tool-host.*.test.ts',
+  'packages/desktop-runtime/test/integration/adapters/tool-program.test.ts',
   'packages/desktop-runtime/test/security/**/*.test.{ts,tsx}',
   'packages/desktop-runtime/test/server/app-server/command-process-runtime.test.ts',
   'scripts/test/**/*.test.ts',

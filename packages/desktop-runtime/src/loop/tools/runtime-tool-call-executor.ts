@@ -1,4 +1,7 @@
 import { SEARCH_TOOLS_TOOL_NAME } from './deferred-tools.js';
+import { ToolCallScheduler } from './tool-call-scheduler.js';
+import { RUN_CODE_TOOL_NAME, runToolProgram } from './programmatic-tool.js';
+import { TOOL_PROGRAM_VALUE_BYTES, type ToolProgramRuntime } from '../../ports/tool-program-runtime.js';
 import type {
   RuntimeApprovalDecision,
   RuntimeApprovalRequest,
@@ -81,6 +84,9 @@ type PendingAppServerDynamicToolCall = {
   resolve(result: RuntimeDynamicToolCallResult): void;
 };
 
+type ToolCallBatchEffects = { memorySavedByTool: boolean };
+type ToolCallBatchResult = ToolCallBatchEffects & { messages: RuntimeMessage[] };
+
 type RuntimeToolCallExecutorOptions = {
   approvalGate?: ApprovalGate;
   approvalReviewer?(): ApprovalReviewer | undefined;
@@ -94,6 +100,7 @@ type RuntimeToolCallExecutorOptions = {
   extensions?: Pick<ExtensionRuntime, 'dispatch'>;
   toolHost?: ToolHost;
   toolResultStore?: ToolResultStore;
+  toolProgramRuntime?: ToolProgramRuntime;
   collaborationControl(): CollaborationControl;
   goalCoordinator(): GoalControl;
   threadStore: Pick<ThreadStore, 'getThread'>;
@@ -104,12 +111,16 @@ type RuntimeToolCallExecutorOptions = {
 /** 管理工具审批、执行及相关事件投影。 */
 export class RuntimeToolCallExecutor {
   private readonly toolApprovalStore = new ToolApprovalStore();
+  private readonly nestedCalls = new Map<string, { content?: string }>();
   private readonly appServerDynamicToolsByThread = new Map<string, AppServerDynamicToolRegistration>();
   private readonly pendingAppServerDynamicToolCalls = new Map<string, PendingAppServerDynamicToolCall>();
 
   constructor(private readonly options: RuntimeToolCallExecutorOptions) {}
 
+  get programsEnabled(): boolean { return Boolean(this.options.toolProgramRuntime); }
+
   shutdown(error: Error): void {
+    this.options.toolProgramRuntime?.shutdown?.();
     for (const pending of this.pendingAppServerDynamicToolCalls.values()) pending.reject(error);
     this.pendingAppServerDynamicToolCalls.clear();
     this.appServerDynamicToolsByThread.clear();
@@ -153,25 +164,34 @@ export class RuntimeToolCallExecutor {
     return this.appServerDynamicToolsByThread.get(threadId)?.tools;
   }
 
-  async runToolCalls(toolCalls: RuntimeToolCall[], context: RuntimeToolExecutionContext, toolRouter: RuntimeToolRouter | null, runtimeConfig: RuntimeConfigState | null | undefined): Promise<RuntimeMessage[]> {
+  async runToolCalls(toolCalls: RuntimeToolCall[], context: RuntimeToolExecutionContext, toolRouter: RuntimeToolRouter | null, runtimeConfig: RuntimeConfigState | null | undefined): Promise<ToolCallBatchResult> {
     const messages: RuntimeMessage[] = [];
+    const effects: ToolCallBatchEffects = { memorySavedByTool: false };
     for (let index = 0; index < toolCalls.length; ) {
       const parallelBatch = toolRouter
         ? await this.collectParallelToolBatch(toolCalls, index, toolRouter)
         : [];
       if (parallelBatch.length > 1) {
-        // collect 阶段已确认这一连续批次都支持并行，可直接跳过逐项审批检查。
-        const executions = await Promise.all(parallelBatch.map((toolCall) => this.runSingleToolCall(toolCall, context, toolRouter, runtimeConfig, { skipApproval: true })));
-        messages.push(...executions);
+        const scheduler = new ToolCallScheduler(6, context.signal);
+        try {
+          // Hooks may rewrite inputs after collection. Recheck approval for the final input,
+          // and settle started work before cancellation escapes this batch.
+          const executions = await Promise.allSettled(parallelBatch.map(toolCall => scheduler.run(true,
+            () => this.runSingleToolCall(toolCall, context, toolRouter, runtimeConfig, effects))));
+          const failure = executions.find(result => result.status === 'rejected');
+          if (failure?.status === 'rejected') throw failure.reason;
+          messages.push(...executions.flatMap(result => result.status === 'fulfilled' ? [result.value] : []));
+        } finally { await scheduler.close(); }
         index += parallelBatch.length;
         continue;
       }
 
       const toolCall = toolCalls[index];
-      messages.push(await this.runSingleToolCall(toolCall, context, toolRouter, runtimeConfig));
+      messages.push(await this.runSingleToolCall(toolCall, context, toolRouter, runtimeConfig, effects));
       index += 1;
     }
-    return messages;
+    return { messages, memorySavedByTool: effects.memorySavedByTool
+      || messages.some(message => this.options.memoryControl().isSuccessfulRememberMessage(message)) };
   }
 
   /**
@@ -204,9 +224,8 @@ export class RuntimeToolCallExecutor {
    * @param toolCall 要执行的工具调用。
    * @param context 当前工具执行上下文。
    * @param toolRouter 当前 sampling step 捕获的工具路由器。
-   * @param options 批处理场景下可跳过审批的内部选项。
    */
-  private async runSingleToolCall(toolCall: RuntimeToolCall, context: RuntimeToolExecutionContext, toolRouter: RuntimeToolRouter | null, runtimeConfig: RuntimeConfigState | null | undefined, options: { skipApproval?: boolean } = {}): Promise<RuntimeMessage> {
+  private async runSingleToolCall(toolCall: RuntimeToolCall, context: RuntimeToolExecutionContext, toolRouter: RuntimeToolRouter | null, runtimeConfig: RuntimeConfigState | null | undefined, effects: ToolCallBatchEffects): Promise<RuntimeMessage> {
     let content = '';
     let status: 'success' | 'error' | 'rejected' = 'error';
     let attachments: RuntimeMessage['attachments'];
@@ -214,6 +233,37 @@ export class RuntimeToolCallExecutor {
     try {
       throwIfAborted(context.signal);
       parsedArguments = parseToolArguments(toolCall.arguments);
+      if (toolCall.name === RUN_CODE_TOOL_NAME) {
+        if (!toolRouter || !this.options.toolProgramRuntime) throw new Error('Tool program runtime is unavailable.');
+        await this.publishToolStarted(context.threadId, context.turnId, toolCall, parsedArguments);
+        const programAttachments: NonNullable<RuntimeMessage['attachments']> = [];
+        const programTools = toolRouter.programToolDefinitions.filter(tool => tool.name !== RUN_CODE_TOOL_NAME);
+        content = await runToolProgram({
+          arguments: parsedArguments, runtime: this.options.toolProgramRuntime, signal: context.signal,
+          sessionId: context.threadId,
+          toolCatalog: programTools.map(tool => ({ name: tool.name, description: tool.description })),
+          toolNames: programTools.map(tool => tool.name),
+          canRunInParallel: (name, args) => toolRouter.canRunInParallel({ id: '', name, arguments: JSON.stringify(args) }, args),
+          callTool: async (name, args, signal, observationStep) => {
+            const nested = { id: this.options.ids.id('tool_call'), name, arguments: JSON.stringify(args) };
+            const capture: { content?: string } = {};
+            this.nestedCalls.set(nested.id, capture);
+            try {
+              const message = await this.runSingleToolCall(nested, { ...context, signal,
+                samplingStepId: observationStep === 0 ? context.samplingStepId : `${toolCall.id}:${observationStep}` }, toolRouter, runtimeConfig, effects);
+              // A successful save remains an effect even if later program code fails.
+              effects.memorySavedByTool ||= this.options.memoryControl().isSuccessfulRememberMessage(message);
+              if (message.status !== 'complete') throw new Error(message.content);
+              programAttachments.push(...message.attachments ?? []);
+              const raw = capture.content ?? message.content;
+              return { content: Buffer.byteLength(raw) < TOOL_PROGRAM_VALUE_BYTES / 2 ? raw : message.content,
+                tool_call_id: nested.id, ...(message.toolResultRef ? { result_id: message.toolResultRef.resultId } : {}) };
+            } finally { this.nestedCalls.delete(nested.id); }
+          },
+        });
+        await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'success', content);
+        return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, 'success', programAttachments, toolRouter);
+      }
       if (
         (this.options.collaborationControl().isToolName(toolCall.name) || this.options.goalCoordinator().isToolName(toolCall.name))
         && (await this.options.threadStore.getThread(context.threadId))?.kind === 'side'
@@ -265,7 +315,6 @@ export class RuntimeToolCallExecutor {
         return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, 'error', undefined, toolRouter);
       }
       const execution = await toolRouter.runToolCall(toolCall, parsedArguments, {
-        checkApproval: options.skipApproval !== true,
         postProcessResult: async (result) => {
           const processedResult = {
             ...result,
@@ -279,12 +328,19 @@ export class RuntimeToolCallExecutor {
           );
           return processedResult;
         },
-      });
+      }, context);
       content = execution.content;
       status = execution.status;
       attachments = execution.result?.attachments;
     } catch (error) {
-      if (isAbortError(error)) throw error;
+      if (isAbortError(error)) {
+        if (this.nestedCalls.has(toolCall.id)) {
+          const cancelled = 'Nested tool cancelled when its program ended; inspect any earlier effects before retrying.';
+          await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', cancelled);
+          await this.publishToolMessage(context.threadId, context.turnId, toolCall, cancelled, 'error', undefined, toolRouter);
+        }
+        throw error;
+      }
       content = `Tool ${toolCall.name} failed: ${error instanceof Error ? error.message : String(error)}`;
       await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
     }
@@ -423,7 +479,7 @@ export class RuntimeToolCallExecutor {
    *
    * 这里是工具结果进入模型上下文的统一边界:所有普通、动态、Goal、协作和错误
    * 结果都经过限额处理(PostToolUse hook / extension 已在 orchestrator 内先执行,
-   * 因此截断发生在安全过滤之后)。超限结果只在此处落盘,保存的是最终允许暴露
+   * 因此截断发生在安全过滤之后)。值得保留的结果只在此处落盘,保存的是最终允许暴露
    * 给模型的完整文本,不保存原始 CDP 帧。
    *
    * @param threadId 目标线程 ID。
@@ -444,10 +500,13 @@ export class RuntimeToolCallExecutor {
     toolRouter: RuntimeToolRouter | null = null,
   ): Promise<RuntimeMessage> {
     const bounded = await this.boundToolMessageContent(threadId, toolCall, content, toolRouter);
+    const nested = this.nestedCalls.get(toolCall.id);
+    if (nested) nested.content = content;
     const message: RuntimeMessage = {
       id: this.options.ids.id('msg'),
       turnId,
       role: 'tool',
+      ...(nested ? { visibility: 'transcript' as const } : {}),
       toolCallId: toolCall.id,
       toolName: toolCall.name,
       content: bounded.content,
@@ -462,7 +521,7 @@ export class RuntimeToolCallExecutor {
 
   /**
    * 对工具结果应用模型可见 token 上限;超限时写入本地结果存储并返回引用。
-   * 未超限结果保持现有行为(不落盘)。保存失败时降级为只做有界截断,不让
+   * 中型结果也保存引用供工作集投影回读。保存失败时降级为只做有界截断,不让
    * 存储故障阻断工具消息发布。
    */
   private async boundToolMessageContent(
@@ -476,7 +535,8 @@ export class RuntimeToolCallExecutor {
       : TOOL_OUTPUT_BUDGET_DEFAULT_TOKENS;
     const tokenLimit = requestedToolOutputTokenLimit(toolCall.name, parseToolArguments(toolCall.arguments), policyLimit);
     const bounded = boundToolOutput({ content, tokenLimit });
-    if (!bounded.truncated) return { content };
+    // Keep medium observations retrievable too; tiny results do not justify disk/index churn.
+    if (!bounded.truncated && (bounded.originalEstimatedTokens < 1_024 || toolCall.name === READ_TOOL_RESULT_TOOL_NAME)) return { content };
     if (!this.options.toolResultStore) return { content: bounded.content };
 
     const resultId = this.options.ids.id('tool_result');
@@ -494,7 +554,7 @@ export class RuntimeToolCallExecutor {
       });
       locallyTruncated = saved.locallyTruncated;
     } catch (error) {
-      console.warn(`[desktop-runtime] Failed to store truncated tool result ${resultId}.`, error);
+      console.warn(`[desktop-runtime] Failed to store tool result ${resultId}.`, error);
       return { content: bounded.content };
     }
     const final = boundToolOutput({

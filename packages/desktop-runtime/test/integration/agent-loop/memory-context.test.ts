@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import type { ModelStreamEvent } from '@setsuna-desktop/contracts';
+import { QuickJsToolProgramRuntime } from '../../../src/adapters/tool-program/quickjs-tool-program-runtime.js';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
 import { FileMemoryStore } from '../../../src/adapters/store/file-memory-store.js';
@@ -152,32 +154,57 @@ describe('agent loop memory context', () => {
       });
     });
   
-  it('does not duplicate explicit memories when the memory tool already saved them', async () => {
+  it.each(['direct', 'program', 'program-throws', 'save-fails'] as const)('settles explicit memory exactly once after %s execution', async mode => {
       const ids = new RandomIdGenerator();
       const dataDir = await mkDataDir();
       const threadStore = createTestThreadStore(dataDir, systemClock, ids);
       const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Memory tool', projectId: 'project_1' });
+      const memoryContent = mode === 'save-fails' ? '' : '这个项目用 pnpm 管理依赖。';
+      let step = 0;
       const loop = new AgentLoop({
         threadStore,
-        modelClient: new RememberMemoryToolModelClient(),
+        modelClient: mode === 'direct' ? new RememberMemoryToolModelClient() : {
+          async *stream(): AsyncGenerator<ModelStreamEvent> {
+            if (++step === 1) {
+              const code = `await tools.remember_memory(${JSON.stringify({ content: memoryContent, scope: 'project' })});`
+                + (mode === 'program-throws' ? 'throw new Error("after the save");' : 'text("Finished");');
+              yield { type: 'tool_calls', toolCalls: [{ id: 'program', name: 'run_code', arguments: JSON.stringify({ code }) }] };
+              yield { type: 'done', finishReason: 'tool_calls' };
+            } else {
+              yield { type: 'text_delta', text: 'Memory request handled.' };
+              yield { type: 'done', finishReason: 'stop' };
+            }
+          },
+        },
         eventBus: new InMemoryEventBus(),
         clock: systemClock,
         ids,
         memoryStore,
         toolHost: new MemoryToolHost(),
+        toolProgramRuntime: new QuickJsToolProgramRuntime(),
       });
   
-      await loop.sendTurn(thread.id, { input: '请记住：这个项目用 pnpm 管理依赖。' });
+      try {
+        await loop.sendTurn(thread.id, { input: '请记住：这个项目用 pnpm 管理依赖。' });
+      } finally {
+        await loop.shutdown();
+      }
   
       const list = await memoryStore.listMemories({ projectId: 'project_1' });
       expect(list.memories).toHaveLength(1);
       expect(list.memories[0]).toMatchObject({
         scope: 'project',
         projectId: 'project_1',
-        content: '这个项目用 pnpm 管理依赖。',
+        content: mode === 'save-fails' ? '这个项目用 pnpm 管理依赖' : memoryContent,
         sourceThreadId: thread.id,
       });
+      const saved = await threadStore.getThread(thread.id);
+      expect(saved?.messages.filter(message => message.toolName === 'remember_memory')).toMatchObject([
+        { status: mode === 'save-fails' ? 'error' : 'complete' },
+      ]);
+      if (mode !== 'direct') expect(saved?.messages.find(message => message.toolName === 'run_code')?.status)
+        .toBe(mode === 'program' ? 'complete' : 'error');
     });
   
   it('injects desktop personalization and honors disabled memories', async () => {

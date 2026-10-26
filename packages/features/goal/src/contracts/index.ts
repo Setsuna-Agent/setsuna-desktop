@@ -1,5 +1,8 @@
 export { goalFeature } from './definition.js';
 export { goalStateReplacedEvent, reduceGoalState } from './events.js';
+export { goalVerificationRecordedEvent, reduceGoalVerification } from './events.js';
+export { goalCompletionVerificationCodec } from './verification.js';
+export type { GoalCompletionCheck, GoalCompletionVerification } from './verification.js';
 export {
   clearGoalState,
   readGoalState,

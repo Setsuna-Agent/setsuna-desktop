@@ -15,6 +15,7 @@ import type { ModelClient } from '../../../src/ports/model-client.js';
 import type { ThreadStore } from '../../../src/ports/thread-store.js';
 import { ImageCapabilityConfigStore } from '../../support/agent-loop/attachments.js';
 import { createGoalEnabledAgentLoop } from '../../support/agent-loop/goal-feature.js';
+import { lifecycleVerification } from '../../support/agent-loop/goals.js';
 import {
   ContextWindowConfigStore,
   mkDataDir,
@@ -782,6 +783,7 @@ class QueuedGoalModelClient implements ModelClient {
   });
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    if (request.responseFormat?.name === 'goal_completion_verification') { yield* lifecycleVerification(request); return; }
     this.requests.push(request);
     if (this.requests.length === 1) {
       yield { type: 'text_delta', text: 'Initial response.' };

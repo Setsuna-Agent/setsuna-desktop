@@ -160,6 +160,19 @@ runtime 还追加用于读取超限结果的 `read_tool_result`；工具是否�
 
 处理用户显式 shell action，与模型 tool call 共享环境和 policy，但有独立调用入口。
 
+### 程序化工具调用
+
+`run_code({ code })` 在按需创建的 Worker/QuickJS WASM 中执行 JavaScript，通过 `tools.NAME(args)`
+复用上述 executor、审批、hooks 和结果过滤。普通工具调用保持可用；嵌套调用仍写事件与
+transcript-only 消息，只有 `text` / `print` / `console.log` 输出回到模型，附件沿用现有资产链路。
+`ALL_TOOLS` 提供允许目录，`store/load` 显式保留线程内 JSON，普通变量不跨次保留。
+
+`ToolCallScheduler` 为普通只读批次和程序提供最多六个并发槽，独占操作形成队列屏障。
+审批始终检查 hook/extension 改写后的实际参数，不能把并发预判当作最终批准。
+程序里一起提交的调用共享采样步骤；结果返回后的调用才进入新观察步骤，因此
+`await 读取 → 覆盖` 可使用已读内容，`Promise.all([读取, 覆盖])` 仍不能绕过整文件覆盖保护。
+隔离、限额、取消与 Code Mode 后续协议见 [Harness 执行与验收](../../designs/current/harness-execution.md)。
+
 ## PC Local Tools
 
 目录：`adapters/tool/pc-local/`
@@ -212,6 +225,8 @@ Git 检查默认通过 shell 执行，模型工具目录不再提供单独的 st
 Shell 的 `max_output_tokens` 控制本次模型可见预算，默认和策略上限为 8k tokens，
 最小请求为 256 tokens；超限文本经 hooks/extensions 处理后由统一结果层保存，再返回
 首尾摘要和 `result_id`。`read_tool_result` 可按范围恢复已保存内容。
+未超限但至少约 1024 token 的中型结果也保存引用，供上下文工作集按需移出和回读；
+保存的是 hooks/extensions 处理后的文本，存储失败不阻断工具结果发布；分页读取不再次保存副本。
 
 进程输出在调用之间保留未读内容（共享 16 MiB UTF-8 硬上限），每次轮询取走本次内容，
 不重复返回旧正文。仅诊断尾部使用较小缓冲，供沙箱错误识别和进程统计使用。收集硬上限

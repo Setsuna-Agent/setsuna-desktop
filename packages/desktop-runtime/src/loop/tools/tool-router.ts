@@ -1,4 +1,5 @@
 import { runtimeText, type RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
+import { RUN_CODE_TOOL_NAME, runCodeDefinition } from './programmatic-tool.js';
 import {
   type ModelRequest,
   type RuntimeConfigState,
@@ -55,7 +56,7 @@ function readToolResultDefinition(language?: RuntimeInterfaceLanguage): RuntimeT
   const text = runtimeText(language);
   return {
     name: READ_TOOL_RESULT_TOOL_NAME,
-    description: text('Read a truncated tool result stored under result_id. Each page returns up to 8k tokens; pass the returned offset as the next offset to continue reading.', "读取按 result_id 保存的被截断工具结果。每页最多返回约 8k tokens；继续读取时把返回的 offset 作为下一次的 offset。"),
+    description: text('Read a tool result stored under result_id, including observations replaced by references in context. Each page returns up to 8k tokens; pass the returned offset as the next offset to continue reading.', '读取按 result_id 保存的工具原文，包括上下文中已替换为引用的历史结果。每页最多返回约 8k tokens；继续读取时把返回的 offset 作为下一次的 offset。'),
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -91,6 +92,7 @@ export type RuntimeToolRouterOptions = {
   allowTool?(tool: RuntimeToolDefinition): boolean;
   strictApprovalRequiresSerial?: boolean;
   toolResultStore?: ToolResultStore;
+  programsEnabled?: boolean;
   /** Turn-owned state survives router rebuilds and context compaction, but not permission filtering. */
   loadedToolNames?: Set<string>;
   /** Explicit mentions load owned schemas from the already permission-filtered catalog. */
@@ -152,12 +154,18 @@ export class RuntimeToolRouter {
     return this.catalogTools;
   }
 
+  get programToolDefinitions(): RuntimeToolDefinition[] {
+    return [...this.catalogTools, ...this.advertisedTools().filter(tool =>
+      !this.catalogToolNames.has(tool.name) && tool.name !== RUN_CODE_TOOL_NAME)];
+  }
+
   private advertisedTools(): RuntimeToolDefinition[] {
     return [
       ...this.catalogTools.filter((tool) => this.deferredTools.isVisible(tool))
         .map(({ source: _source, ...definition }) => definition),
       ...this.deferredTools.definition(),
       readToolResultDefinition(this.options.context.interfaceLanguage),
+      ...(this.options.programsEnabled ? [runCodeDefinition(this.options.context.interfaceLanguage)] : []),
     ];
   }
 
@@ -166,7 +174,7 @@ export class RuntimeToolRouter {
    * Schema，不是执行权限；真正的权限与审批仍由 catalog 过滤和 orchestrator 负责。
    */
   canRouteTool(name: string): boolean {
-    return this.catalogToolNames.has(name) || name === READ_TOOL_RESULT_TOOL_NAME || name === SEARCH_TOOLS_TOOL_NAME;
+    return this.catalogToolNames.has(name) || name === READ_TOOL_RESULT_TOOL_NAME || name === SEARCH_TOOLS_TOOL_NAME || name === RUN_CODE_TOOL_NAME;
   }
 
   /** host catalog 与 runtime 自带工具始终阻止同名动态工具接管。 */
@@ -232,6 +240,7 @@ export class RuntimeToolRouter {
     toolCall: RuntimeToolCall,
     parsedArguments: unknown,
     options: ToolOrchestratorRunOptions = {},
+    invocation: Pick<RuntimeToolExecutionContext, 'signal' | 'samplingStepId'> = this.options.context,
   ): Promise<ToolOrchestratorRunResult> {
     if (!this.catalogToolNames.has(toolCall.name)) {
       throw new Error(`Tool ${toolCall.name} is not registered in the allowed tool catalog.`);
@@ -241,7 +250,7 @@ export class RuntimeToolRouter {
     return this.options.orchestrator.runToolCall(
       toolCall,
       parsedArguments,
-      this.options.context,
+      { ...this.options.context, signal: invocation.signal, samplingStepId: invocation.samplingStepId },
       this.options.approvalPolicy,
       {
         ...options,
@@ -254,10 +263,10 @@ export class RuntimeToolRouter {
     );
   }
 
-  /** 读取超限工具结果的分页,线程无权访问时返回提示文本。 */
+  /** 分页读取已存储的工具原文，线程无权访问时返回提示文本。 */
   async runReadToolResult(input: unknown, threadId: string): Promise<string> {
     if (!this.options.toolResultStore) {
-      return 'Tool result storage is unavailable; no truncated results exist in this runtime.';
+      return 'Tool result storage is unavailable in this runtime.';
     }
     const args = normalizeReadToolResultArgs(input);
     if (!args) {

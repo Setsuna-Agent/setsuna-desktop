@@ -3,6 +3,8 @@ import type {
   GoalRuntimeHost,
 } from '@setsuna-desktop/feature-goal/contracts';
 import type { Clock } from '../../ports/clock.js';
+import type { ModelClient } from '../../ports/model-client.js';
+import { goalVerificationModel } from './runtime-goal-verification-model.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { RuntimeEventWriter } from '../lifecycle/runtime-event-writer.js';
@@ -12,6 +14,7 @@ import type { RuntimeTurnTaskRegistry } from '../lifecycle/turn-task-registry.js
 import type { RuntimeTurnRunFactory } from './runtime-turn-run-factory.js';
 
 type RuntimeGoalHostDependencies = Readonly<{
+  modelClient: ModelClient;
   clock: Clock;
   ids: IdGenerator;
   threadStore: ThreadStore;
@@ -29,6 +32,7 @@ export function createRuntimeGoalHost(
   dependencies: RuntimeGoalHostDependencies,
 ): GoalRuntimeHost {
   const host: GoalRuntimeHost = {
+    generateVerification: goalVerificationModel(dependencies),
     now: () => dependencies.clock.now(),
     id: (prefix) => dependencies.ids.id(prefix),
     listThreads: () => dependencies.threadStore.listThreads({
@@ -36,7 +40,7 @@ export function createRuntimeGoalHost(
       includeSide: true, includeFeatures: true,
     }),
     getThread: (threadId) => dependencies.threadStore.getThread(threadId),
-    listEvents: (threadId, query) => dependencies.threadStore.listEvents(threadId, 0, query),
+    listEvents: (threadId, query) => dependencies.threadStore.listEvents(threadId, query?.afterSeq ?? 0, query),
     activeTask: (threadId) => dependencies.turnTasks.activeForThread(threadId),
     registeredTask: (threadId) => dependencies.turnTasks.registeredForThread(threadId),
     cancelTurn: (threadId, turnId) => dependencies.cancelTurn(threadId, turnId),

@@ -98,6 +98,7 @@ export class RuntimeModelSampler {
 
     let toolCalls: RuntimeToolCall[] = [];
     let usage: RuntimeUsage | undefined;
+    let finishReason: string | undefined;
     const partialToolCalls = new Map<string, RuntimeToolCall>();
     const announcedToolPreviews = new Map<string, ToolPreviewAnnouncement>();
     const providerAgentItemIds = new Set<string>();
@@ -147,6 +148,7 @@ export class RuntimeModelSampler {
       signal,
     })) {
       throwIfAborted(signal);
+      if (item.type === 'done') finishReason = item.finishReason;
       if (item.type === 'assistant_metadata') {
         assistantMessage.providerMetadata = mergeRuntimeProviderMetadata(
           assistantMessage.providerMetadata,
@@ -217,6 +219,7 @@ export class RuntimeModelSampler {
     await this.options.streamEvents.completeLegacyStreamItems(mirror, threadId, turnId, assistantMessageId);
     const memoryCitation = await output.finish();
     const text = output.text();
+    if (finishReason === 'length') throw new Error('Model output reached its token limit before completing. The turn was not marked complete.');
     if (!text.trim() && !toolCalls.length) {
       // Reasoning travels on its own stream channel, so an empty content channel is an explicit
       // provider-boundary failure instead of a tag-parsing decision.

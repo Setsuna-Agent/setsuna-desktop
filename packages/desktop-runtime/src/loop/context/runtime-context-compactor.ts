@@ -47,6 +47,7 @@ import {
 import { contextCompactionRequest, contextCompactionRequestBudget, type ContextCompactionRequestBudget } from './context-compaction-request.js';
 import { nextContextCompactionBatch } from './context-compaction-batches.js';
 import { nativeCompactionMatchesModel, restoreNativeCompactionHistory } from './context-compaction-history.js';
+import { restoreToolObservations } from './tool-result-working-set.js';
 
 type GeneratedContextCompactionSummary = {
   source: 'local' | 'remote';
@@ -100,13 +101,32 @@ type CompactionSamplingInput = {
   conversationModel?: Pick<ModelRequest, 'model' | 'providerId'>;
 };
 
+type RuntimeContextCompactionInput = {
+  contextBudget?: RuntimeContextCompactionBudget;
+  conversationModel?: Pick<ModelRequest, 'model' | 'providerId'>;
+  force: boolean;
+  messages: RuntimeMessage[];
+  /** Canonical bodies for persistence; messages may contain temporary working-set references. */
+  transcriptMessages?: readonly RuntimeMessage[];
+  reservedTokens?: number;
+  runtimeConfig: RuntimeConfigState | null | undefined;
+  signal: AbortSignal;
+  thread: RuntimeThread;
+  threadId: string;
+  turnId: string;
+  unattended?: boolean;
+};
+
 /** 管理上下文窗口策略、摘要生成及压缩事件投影。 */
 export class RuntimeContextCompactor {
   constructor(private readonly options: RuntimeContextCompactorOptions) {}
 
-  async compactMessagesBeforeModelRequest({ contextBudget, conversationModel, force, messages, reservedTokens = 0, runtimeConfig, signal, thread, threadId, turnId, unattended }: { contextBudget?: RuntimeContextCompactionBudget; conversationModel?: Pick<ModelRequest, 'model' | 'providerId'>; force: boolean; messages: RuntimeMessage[]; reservedTokens?: number; runtimeConfig: RuntimeConfigState | null | undefined; signal: AbortSignal; thread: RuntimeThread; threadId: string; turnId: string; unattended?: boolean }): Promise<RuntimeMessage[]> {
+  async compactMessagesBeforeModelRequest({
+    contextBudget, conversationModel, force, messages, transcriptMessages, reservedTokens = 0,
+    runtimeConfig, signal, thread, threadId, turnId, unattended,
+  }: RuntimeContextCompactionInput): Promise<RuntimeMessage[]> {
     messages = restoreNativeCompactionHistory(messages, (message) => Boolean(conversationModel && nativeCompactionMatchesModel(message, runtimeConfig, conversationModel)));
-    // 自动压缩必须先持久化再发模型请求，保证 UI、存储历史和实际 prompt window 一致。
+    // 先持久化摘要和可恢复正文，再请求模型；临时工具引用只进入模型窗口。
     const budget = reserveRuntimeContextCompactionBudget(
       contextBudget ?? contextCompactionBudgetForConfig(runtimeConfig),
       reservedTokens,
@@ -169,7 +189,9 @@ export class RuntimeContextCompactor {
       turnId,
       type: 'thread.context_compacted',
       createdAt: this.options.clock.now().toISOString(),
-      payload: result,
+      // Working-set references belong only to model requests. Compaction replaces messages
+      // by ID in durable history, so restore their bodies before writing even archived entries.
+      payload: { ...result, messages: restoreToolObservations(result.messages, transcriptMessages ?? thread.messages) },
     });
     advanceDebugAnchor(debugContext, compactedEvent);
     this.options.onCompacted(threadId);

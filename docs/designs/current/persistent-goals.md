@@ -28,7 +28,7 @@
 | `create_goal` 仅响应显式 Goal 请求 | 对齐；工具说明与 `goal-writer` Skill 同时约束 |
 | active 时暴露 `get_goal` / `update_goal` | 对齐；非 active 只保留 `create_goal` |
 | `update_goal` 只能提交 `complete` | 对齐 |
-| 完成前按真实证据审计 | 对齐；续轮 prompt 明确要求逐项映射证据 |
+| 完成前按真实证据审计 | 续轮 prompt 要求逐项映射；完成工具另外触发独立、无工具的证据验收 |
 | 紧凑状态与最终用量 | 语义对齐；过程状态只进线程投影，退出后才写一次精确用量总结 |
 | 最终 turn 仍计入用量/耗时 | 对齐 |
 | reload 不静默续跑 | 对齐；恢复为 `paused(runtimeReloaded)` |
@@ -49,6 +49,8 @@
 - `execution`：初始附件、Skill、thinking 配置和 source message，供后续续轮复用。
 
 真源是 append-only `feature.event` envelope 中的 `goal/goal.state-replaced@1`；payload 是 `{ goal: Goal | null }`。runtime projection 使用 Goal reducer 从持久日志增量构建 `{ state, throughSeq }`，renderer 只读取这份 typed snapshot，不维护第二套 live reducer。旧 `thread.goal_updated` / `thread.goal_cleared` 只保留读取 decoder，新代码不再写入。`goal.id` 与 objective revision binding 共同阻止旧 turn 的迟到结算覆盖新版 Goal。
+
+`goal/goal.verification-recorded@1` 保存最后一次完成验收，包含原始 objective、turn、证据 sequence、尝试次数、检查项、引用消息 ID 和缺口。相同 Goal 的用量更新保留它，目标修改、替换或清除移除它；该记录不是可以跨 turn 直接使用的完成授权。
 
 ## 生命周期
 
@@ -93,6 +95,8 @@
 - active Goal：`create_goal`、`get_goal`、`update_goal`。
 - `create_goal` 是 replace/upsert；必须来自用户显式 Goal 请求。
 - `update_goal` 只接受 `{ status: "complete" }`。
+
+完成请求必须先通过独立模型采样审查现有证据，缺口返回给执行模型修复，同一 turn 最多三次；通过只建立待完成状态。后续工具操作或用户输入使证据失效，最终回答截断、取消或失败不能提交完成。验收也计入实际用量，既有恢复与无进展保护继续生效。协议与限制见 [Harness 执行与验收](harness-execution.md)。
 
 内置 `skills/goal-writer/` 帮助模型把显式请求改写成经压缩后仍可执行、可验证的目标，并明确禁止补入 Token 预算。
 

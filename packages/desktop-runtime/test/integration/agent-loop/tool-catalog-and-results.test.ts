@@ -1,6 +1,7 @@
 import type {
   ModelRequest,
   ModelStreamEvent,
+  RuntimeMessage,
   RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
 import { pluginAppMentionText, pluginMentionText } from '@setsuna-desktop/contracts';
@@ -16,7 +17,7 @@ import type {
   ToolExecutionContext,
   ToolHost,
 } from '../../../src/ports/tool-host.js';
-import { CapturingToolHost, mkDataDir, SingleToolCallModelClient } from '../../support/agent-loop/shared.js';
+import { CapturingToolHost, ContextWindowConfigStore, mkDataDir, SingleToolCallModelClient } from '../../support/agent-loop/shared.js';
 import { installedAppBuilder } from '../../support/app-builder.js';
 import { createTestThreadStore } from '../../support/thread-store.js';
 
@@ -186,6 +187,118 @@ describe('agent loop tool catalog and stored results', () => {
     expect(pages.every((message) => !message.content.includes('Warning: tool output was truncated.'))).toBe(true);
     expect(pages.every((message) => message.toolResultRef === undefined)).toBe(true);
     expect(pages.map(pageContent).join('')).toBe(original);
+  });
+
+  it.each(['projection', 'compaction'] as const)('preserves original evidence after %s and subsequent quota eviction', async mode => {
+    const ids = new RandomIdGenerator();
+    const dataDir = await mkDataDir();
+    const threadStore = createTestThreadStore(dataDir, systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Evicted working-set evidence' });
+    const resultBytes = mode === 'compaction' ? 32_000 : 16_000;
+    const toolResultStore = new FileToolResultStore(dataDir, resultBytes, 12 * resultBytes);
+    const originals: RuntimeMessage[] = [];
+    for (let index = 0; index < 12; index++) {
+      const resultId = `result_${String(index).padStart(2, '0')}`;
+      const call = { id: `history_call_${index}`, name: 'read_file', arguments: '{}' };
+      const content = `Historical evidence ${index}: `.padEnd(resultBytes, 'x');
+      await toolResultStore.save({ resultId, threadId: thread.id, toolCallId: call.id, toolName: call.name,
+        fullText: content, originalEstimatedTokens: resultBytes / 4, visibleTokenLimit: 8000, locallyTruncated: false });
+      const message: RuntimeMessage = { id: `history_result_${index}`, role: 'tool', toolCallId: call.id, toolName: call.name,
+        content, status: 'complete', createdAt: thread.createdAt,
+        toolResultRef: { resultId, originalEstimatedTokens: resultBytes / 4, visibleTokens: resultBytes / 4, visibleTokenLimit: 8000 } };
+      originals.push(message);
+      const pair: RuntimeMessage[] = [{ id: `history_assistant_${index}`, role: 'assistant', content: '',
+        status: 'complete', createdAt: thread.createdAt, toolCalls: [call] }, message];
+      for (const entry of pair) await threadStore.appendEvent(thread.id, {
+        id: ids.id('event'), threadId: thread.id, type: 'message.created', createdAt: entry.createdAt, payload: { message: entry },
+      });
+    }
+    const requests: ModelRequest[] = [];
+    const compactionRequests: ModelRequest[] = [];
+    const loop = new AgentLoop({ ids, threadStore, toolResultStore, clock: systemClock, eventBus: new InMemoryEventBus(),
+      configStore: mode === 'compaction' ? new ContextWindowConfigStore(32_000) : undefined,
+      toolHost: { listTools: async () => [{ name: 'read_file', description: 'Read evidence', inputSchema: { type: 'object' } }],
+        runTool: async () => ({ content: 'New evidence: '.padEnd(resultBytes, 'y') }) },
+      modelClient: { async *stream(request): AsyncGenerator<ModelStreamEvent> {
+        if (request.messages.some(message => message.id === 'context_compaction_system')) {
+          compactionRequests.push(request);
+          yield { type: 'text_delta', text: JSON.stringify({ summary: 'Historical evidence inspected.', decisions: [], open_items: ['Compare the next observation.'] }) };
+          yield { type: 'done', finishReason: 'stop' };
+          return;
+        }
+        requests.push(request);
+        if (requests.length === 1) {
+          yield { type: 'tool_calls', toolCalls: [{ id: 'new_evidence', name: 'read_file', arguments: '{}' }] };
+          yield { type: 'done', finishReason: 'tool_calls' };
+        } else {
+          yield { type: 'text_delta', text: 'Evidence retained.' };
+          yield { type: 'done', finishReason: 'stop' };
+        }
+      } },
+    });
+    await loop.sendTurn(thread.id, { input: 'Inspect one more result and compare it with the earliest evidence.' });
+    expect(requests).toHaveLength(2);
+    expect(await toolResultStore.read(thread.id, 'result_00', 0, 1)).toBeNull();
+    if (mode === 'projection') {
+      expect(requests[0].messages.find(message => message.id === originals[0].id)?.content).toContain('[Stored tool observation]');
+      expect(requests[1].messages.find(message => message.id === originals[0].id)).toMatchObject(originals[0]);
+    } else {
+      expect(compactionRequests.some(request => request.messages.some(message => message.content.includes('[Stored tool observation]')))).toBe(true);
+      const compactions = (await threadStore.listEvents(thread.id)).filter(event => event.type === 'thread.context_compacted');
+      expect(compactions.length).toBeGreaterThan(0);
+      for (const event of compactions) {
+        expect(event.payload.messages.find(message => message.id === originals[0].id)).toMatchObject(originals[0]);
+      }
+    }
+    await loop.shutdown();
+    await threadStore.close();
+    const restoredStore = createTestThreadStore(dataDir, systemClock, ids);
+    const saved = await restoredStore.getThread(thread.id);
+    for (const original of originals) expect(saved?.messages.find(message => message.id === original.id)).toMatchObject(original);
+  });
+
+  it('persists current-turn evidence during compaction even when sampling snapshots cannot be read', async () => {
+    const ids = new RandomIdGenerator();
+    const dataDir = await mkDataDir();
+    const threadStore = createTestThreadStore(dataDir, systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Current-turn evidence' });
+    threadStore.getSamplingState = async () => { throw new Error('Sampling snapshot unavailable'); };
+    const originals = Array.from({ length: 12 }, (_, index) => `Current evidence ${index}: `.padEnd(32_000, 'x'));
+    let step = 0;
+    let sawProjectedCompaction = false;
+    const loop = new AgentLoop({ ids, threadStore, clock: systemClock, eventBus: new InMemoryEventBus(),
+      configStore: new ContextWindowConfigStore(32_000), toolResultStore: new FileToolResultStore(dataDir),
+      toolHost: { listTools: async () => [{ name: 'read_file', description: 'Read evidence', inputSchema: { type: 'object' } }],
+        runTool: async (_name, args) => ({ content: originals[(args as { index: number }).index] }) },
+      modelClient: { async *stream(request): AsyncGenerator<ModelStreamEvent> {
+        if (request.messages.some(message => message.id === 'context_compaction_system')) {
+          sawProjectedCompaction ||= request.messages.some(message => message.content.includes('[Stored tool observation]'));
+          yield { type: 'text_delta', text: JSON.stringify({ summary: 'Inspected the requested evidence.', decisions: [], open_items: [] }) };
+          yield { type: 'done', finishReason: 'stop' };
+        } else if (++step === 1) {
+          yield { type: 'tool_calls', toolCalls: originals.map((_content, index) => ({
+            id: `call_${index}`, name: 'read_file', arguments: JSON.stringify({ index }),
+          })) };
+          yield { type: 'done', finishReason: 'tool_calls' };
+        } else {
+          yield { type: 'text_delta', text: 'Evidence inspected.' };
+          yield { type: 'done', finishReason: 'stop' };
+        }
+      } },
+    });
+    try {
+      await loop.sendTurn(thread.id, { input: 'Inspect all requested evidence.' });
+    } finally {
+      await loop.shutdown();
+    }
+    expect(sawProjectedCompaction).toBe(true);
+    const compactions = (await threadStore.listEvents(thread.id)).filter(event => event.type === 'thread.context_compacted');
+    expect(compactions.length).toBeGreaterThan(0);
+    const saved = await threadStore.getThread(thread.id);
+    for (const [index, content] of originals.entries()) {
+      expect(compactions.at(-1)?.payload.messages.find(message => message.toolCallId === `call_${index}`)?.content).toBe(content);
+      expect(saved?.messages.find(message => message.toolCallId === `call_${index}`)?.content).toBe(content);
+    }
   });
 });
 
