@@ -11,6 +11,11 @@ import type { BrowserContextMenuSession } from '../../src/main/context-menu-sess
 
 const directory = process.argv[2];
 let stage = 'application startup';
+const navigationTrace: string[] = [];
+function trace(message: string): void {
+  navigationTrace.push(`${Math.round(performance.now())} ms: ${message}`);
+  if (navigationTrace.length > 30) navigationTrace.shift();
+}
 app.setPath('userData', path.join(directory, 'profile'));
 app.commandLine.appendSwitch('host-resolver-rules', 'MAP example.test 127.0.0.1, MAP other.test 127.0.0.1');
 app.disableHardwareAcceleration(); app.dock?.hide();
@@ -29,11 +34,15 @@ async function until<T>(read: () => Promise<T> | T, label: string): Promise<NonN
 async function main() {
   // A pending native Promise can outlive polling deadlines; report its phase before
   // the parent kills Electron, including on slower headless CI runners.
-  const timeout = setTimeout(() => { console.error(`Active tab fixture timed out during ${stage}`); app.exit(1); }, 25_000);
+  const timeout = setTimeout(() => {
+    console.error(`Active tab fixture timed out during ${stage}\n${navigationTrace.join('\n')}`);
+    app.exit(1);
+  }, 25_000);
   await app.whenReady();
   // Serve real HTTP responses on loopback so cross-site navigation exercises the
   // native loader instead of Electron's intercepted HTTPS protocol on CI.
-  const server = createServer((_request, response) => {
+  const server = createServer((request, response) => {
+    trace(`HTTP ${request.headers.host}${request.url}`);
     response.writeHead(200, { 'Content-Type': 'text/html' });
     response.end('<!doctype html><title>Private page</title><body>page</body>');
   });
@@ -46,8 +55,11 @@ async function main() {
   // Resolver rules do not bypass system proxies for these test hostnames.
   // Keep both origins on loopback instead of loading a proxy error page or hanging.
   await browserSession.setProxy({ mode: 'direct' });
-  const owner = new BrowserWindow({ show: false, webPreferences: { webviewTag: true, contextIsolation: true, sandbox: true } });
-  const other = new BrowserWindow({ show: false, webPreferences: { webviewTag: true, contextIsolation: true, sandbox: true } });
+  // Keep hidden guests' compositor active across renderer swaps on headless
+  // runners, using the same offscreen setup as the page-find fixture.
+  const webPreferences = { webviewTag: true, contextIsolation: true, sandbox: true, backgroundThrottling: false, offscreen: true };
+  const owner = new BrowserWindow({ show: false, webPreferences });
+  const other = new BrowserWindow({ show: false, webPreferences });
   const service = new BrowserExtensionService({ session: browserSession, preloadPath: path.join(directory, 'actions.cjs'),
     owner: contents => contents.hostWebContents?.id === owner.webContents.id ? owner
       : contents.hostWebContents?.id === other.webContents.id ? other : null,
@@ -63,6 +75,10 @@ async function main() {
     stage = 'extension restoration';
     await service.start();
     const primary = await createGuest(owner, `${origin}/`);
+    primary.on('did-start-navigation', event => { if (event.isMainFrame) trace(`navigation started: ${event.url}`); });
+    primary.on('did-navigate', (_event, url, code) => trace(`navigation committed: ${code} ${url}`));
+    primary.on('did-finish-load', () => trace(`load finished: ${primary.getURL()}`));
+    primary.on('render-process-gone', (_event, details) => trace(`renderer gone: ${details.reason}`));
     const sibling = await createGuest(owner, `${origin}/sibling`);
     const foreign = await createGuest(other, `${origin}/foreign`);
     let control = await createGuest(owner, `chrome-extension://${first}/control.html`);
@@ -173,6 +189,7 @@ async function createGuest(owner: BrowserWindow, url: string): Promise<WebConten
   await owner.webContents.executeJavaScript(`(() => { const view = document.createElement('webview');
     view.setAttribute('partition', ${JSON.stringify(DESKTOP_BROWSER_PARTITION)}); view.src = ${JSON.stringify(url)}; document.body.appendChild(view); })()`);
   const contents = await attached;
+  contents.setBackgroundThrottling(false);
   await until(() => !contents.isLoading() && contents.getURL() === url, 'guest loads');
   if (url.startsWith('http:')) assert.equal(contents.getTitle(), 'Private page', `Expected the loopback fixture page at ${url}`);
   await owner.webContents.executeJavaScript(`document.querySelector('webview:last-child').dataset.id = '${contents.id}'`);
