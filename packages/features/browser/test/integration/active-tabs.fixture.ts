@@ -43,6 +43,9 @@ async function main() {
   const origin = `http://example.test:${address.port}`;
   const otherOrigin = `http://other.test:${address.port}`;
   const browserSession = session.fromPartition(DESKTOP_BROWSER_PARTITION);
+  // Resolver rules do not bypass system proxies for these test hostnames.
+  // Keep both origins on loopback instead of loading a proxy error page or hanging.
+  await browserSession.setProxy({ mode: 'direct' });
   const owner = new BrowserWindow({ show: false, webPreferences: { webviewTag: true, contextIsolation: true, sandbox: true } });
   const other = new BrowserWindow({ show: false, webPreferences: { webviewTag: true, contextIsolation: true, sandbox: true } });
   const service = new BrowserExtensionService({ session: browserSession, preloadPath: path.join(directory, 'actions.cjs'),
@@ -104,15 +107,15 @@ async function main() {
     await assert.rejects(control.executeJavaScript(`chrome.scripting.executeScript({target:{tabId:${primary.id},frameIds:[${cross.frameTreeNodeId}]},func:() => location.hostname})`), /Cannot access contents/);
     const originalDocument = (await inject(control, primary.id))[0].documentId;
     stage = 'same-origin navigation';
-    await primary.loadURL(`${origin}/next`);
+    await loadPage(primary, `${origin}/next`);
     const retained = await inject(control, primary.id);
     assert.equal(retained[0].result, 42); assert.notEqual(retained[0].documentId, originalDocument);
     await primary.executeJavaScript("history.pushState({},'', '/spa#hash')");
     assert.equal((await inject(control, primary.id))[0].result, 42);
     stage = 'cross-origin navigation';
-    await primary.loadURL(`${otherOrigin}/`);
+    await loadPage(primary, `${otherOrigin}/`);
     await assert.rejects(inject(control, primary.id), /Cannot access contents/);
-    await primary.loadURL(`${origin}/`);
+    await loadPage(primary, `${origin}/`);
     await assert.rejects(inject(control, primary.id), /Cannot access contents/);
     await service.open(first, 'action', owner, undefined, primary.id);
     assert.equal((await inject(control, primary.id))[0].result, 42);
@@ -143,6 +146,11 @@ async function inject(control: WebContents, tabId: number): Promise<Array<{ fram
   return control.executeJavaScript(`chrome.scripting.executeScript({target:{tabId:${tabId}},func:(a,b) => a+b,args:[20,22]})`);
 }
 
+async function loadPage(contents: WebContents, url: string): Promise<void> {
+  await contents.loadURL(url);
+  assert.equal(contents.getTitle(), 'Private page', `Expected the loopback fixture page at ${url}`);
+}
+
 async function verifyPopupGrant(service: BrowserExtensionService, control: WebContents, id: string, target: WebContents, owner: BrowserWindow) {
   const root = target.session.extensions.getExtension(id)!.path;
   await writeFile(path.join(root, 'popup.html'), '<!doctype html><body><script src="popup.js"></script></body>');
@@ -166,6 +174,7 @@ async function createGuest(owner: BrowserWindow, url: string): Promise<WebConten
     view.setAttribute('partition', ${JSON.stringify(DESKTOP_BROWSER_PARTITION)}); view.src = ${JSON.stringify(url)}; document.body.appendChild(view); })()`);
   const contents = await attached;
   await until(() => !contents.isLoading() && contents.getURL() === url, 'guest loads');
+  if (url.startsWith('http:')) assert.equal(contents.getTitle(), 'Private page', `Expected the loopback fixture page at ${url}`);
   await owner.webContents.executeJavaScript(`document.querySelector('webview:last-child').dataset.id = '${contents.id}'`);
   return contents;
 }
