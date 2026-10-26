@@ -1,4 +1,5 @@
 import type {
+  ModelRequest,
   RuntimeInterfaceLanguage,
   PendingStoredThreadEvent,
   RuntimeMessage,
@@ -26,6 +27,9 @@ export type GoalContinuationRun = Readonly<{
 }>;
 
 export type GoalToolExecutionContext = Readonly<{
+  verificationInstructions?: string;
+  signal?: AbortSignal;
+  verificationModel?: Pick<ModelRequest, 'model' | 'providerId' | 'thinking' | 'reasoningEffort'> & { contextWindowTokens?: number; maxOutputTokens?: number };
   interfaceLanguage?: RuntimeInterfaceLanguage;
   goalExecution?: RuntimeThreadGoalExecutionOptions;
   threadId: string;
@@ -39,11 +43,13 @@ export type GoalToolExecutionResult = Readonly<{
 }>;
 
 export interface GoalRuntimeHost {
+  generateVerification(request: ModelRequest): Promise<{ content: string; finishReason?: string }>;
   now(): Date;
   id(prefix: string): string;
   listThreads(): Promise<RuntimeThreadSummary[]>;
   getThread(threadId: string): Promise<RuntimeThread | null>;
   listEvents(threadId: string, query?: Readonly<{
+    afterSeq?: number;
     turnId?: string;
     types: readonly StoredThreadEvent['type'][];
   }>): Promise<StoredThreadEvent[]>;
@@ -70,6 +76,7 @@ export interface GoalControl {
   readState(threadId: string): Promise<GoalStateSnapshot>;
   getGoal(threadId: string): Promise<Goal | null>;
   isCompletionPending(turnId: string, goalId: string): boolean;
+  completionBlockReason(threadId: string, turnId: string): Promise<string | null>;
   reconcileRestoredGoals(): Promise<void>;
   validateQueuedGoal(threadId: string, objective: string): Promise<void>;
   setGoal(threadId: string, patch: RuntimeThreadGoalPatch): Promise<Goal>;
@@ -123,6 +130,7 @@ export function createNoopGoalControl(): GoalControl {
     readState: async () => unavailable(),
     getGoal: async () => null,
     isCompletionPending: () => false,
+    completionBlockReason: async () => null,
     reconcileRestoredGoals: async () => undefined,
     validateQueuedGoal: async () => unavailable(),
     setGoal: async () => unavailable(),

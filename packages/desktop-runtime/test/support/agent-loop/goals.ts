@@ -10,6 +10,7 @@ export class PersistentGoalModelClient implements ModelClient {
   requests: ModelRequest[] = [];
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    if (request.responseFormat?.name === 'goal_completion_verification') { yield* lifecycleVerification(request); return; }
     this.requests.push(request);
     if (this.requests.length === 1) {
       yield {
@@ -43,8 +44,10 @@ export class FailingGoalCompletionModelClient implements ModelClient {
   requests: ModelRequest[] = [];
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    if (request.responseFormat?.name === 'goal_completion_verification') { yield* lifecycleVerification(request); return; }
     this.requests.push(request);
     if (this.requests.length === 1) {
+      yield { type: 'text_delta', text: 'Fixture deliverable ready for the lifecycle verifier.' };
       yield {
         type: 'tool_calls',
         toolCalls: [{ id: 'goal_complete_before_failure', name: 'update_goal', arguments: '{"status":"complete"}' }],
@@ -68,6 +71,7 @@ export class GoalSteerModelClient implements ModelClient {
   }
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    if (request.responseFormat?.name === 'goal_completion_verification') { yield* lifecycleVerification(request); return; }
     this.requests.push(request);
     if (this.requests.length === 1) {
       yield { type: 'text_delta', text: 'Initial goal work.' };
@@ -92,6 +96,7 @@ export class NoProgressGoalModelClient implements ModelClient {
   requests: ModelRequest[] = [];
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    if (request.responseFormat?.name === 'goal_completion_verification') { yield* lifecycleVerification(request); return; }
     this.requests.push(request);
     yield { type: 'text_delta', text: 'No new evidence yet.' };
     yield { type: 'done', finishReason: 'stop' };
@@ -102,8 +107,10 @@ export class ReplacingGoalModelClient implements ModelClient {
   requests: ModelRequest[] = [];
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    if (request.responseFormat?.name === 'goal_completion_verification') { yield* lifecycleVerification(request); return; }
     this.requests.push(request);
     if (this.requests.length === 1) {
+      yield { type: 'text_delta', text: 'Fixture deliverable ready for the lifecycle verifier.' };
       yield {
         type: 'tool_calls',
         toolCalls: [{
@@ -116,6 +123,7 @@ export class ReplacingGoalModelClient implements ModelClient {
       return;
     }
     if (this.requests.length === 2) {
+      yield { type: 'text_delta', text: 'Fixture deliverable ready for the lifecycle verifier.' };
       yield {
         type: 'tool_calls',
         toolCalls: [{ id: 'goal_replace_complete', name: 'update_goal', arguments: '{"status":"complete"}' }],
@@ -133,6 +141,7 @@ export class RegularTurnCreatesPersistentGoalModelClient implements ModelClient 
   requests: ModelRequest[] = [];
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    if (request.responseFormat?.name === 'goal_completion_verification') { yield* lifecycleVerification(request); return; }
     this.requests.push(request);
     if (this.requests.length === 1) {
       yield {
@@ -180,6 +189,7 @@ export class RegularTurnCreatesCancellableGoalModelClient implements ModelClient
   }
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    if (request.responseFormat?.name === 'goal_completion_verification') { yield* lifecycleVerification(request); return; }
     this.requests.push(request);
     if (this.requests.length === 1) {
       yield {
@@ -214,6 +224,7 @@ export class EditedGoalModelClient implements ModelClient {
   }
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    if (request.responseFormat?.name === 'goal_completion_verification') { yield* lifecycleVerification(request); return; }
     this.requests.push(request);
     if (this.requests.length === 1) {
       await this.firstReleased;
@@ -240,4 +251,14 @@ export class EditedGoalModelClient implements ModelClient {
     yield { type: 'text_delta', text: 'Edited goal verified complete.' };
     yield { type: 'done', finishReason: 'stop' };
   }
+}
+
+/** Lifecycle fixtures stub the evaluator separately; evidence behavior has dedicated tests. */
+export function lifecycleVerification(request: ModelRequest): ModelStreamEvent[] {
+  const evidence = JSON.parse(request.messages.find(message => message.id === 'goal_verification_evidence')!.content) as { sources: Array<{ id: string }> };
+  return [
+    { type: 'text_delta', text: JSON.stringify({ passed: true, checks: [{ requirement: 'Fixture objective', passed: true,
+      evidenceIds: [evidence.sources[0]?.id ?? 'missing'], finding: 'Fixture evidence accepted.' }], gaps: [] }) },
+    { type: 'done', finishReason: 'stop' },
+  ];
 }

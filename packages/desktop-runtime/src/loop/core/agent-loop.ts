@@ -123,6 +123,7 @@ export class AgentLoop {
       extensions: options.extensionManager,
       toolHost: options.toolHost,
       toolResultStore: options.toolResultStore,
+      toolProgramRuntime: options.toolProgramRuntime,
       collaborationControl: () => this.featureControls.collaboration,
       goalCoordinator: () => this.featureControls.goals,
       threadStore: options.threadStore,
@@ -219,6 +220,7 @@ export class AgentLoop {
         this.modelStreamEvents.publishMessage(threadId, turnId, message, publishOptions),
     });
     this.turnRunner = new RuntimeAgentTurnRunner({
+      goalCompletionBlockReason: (threadId, turnId) => this.featureControls.goals.completionBlockReason(threadId, turnId),
       clock: options.clock,
       collaborationControl: () => this.featureControls.collaboration,
       memoryControl: () => this.featureControls.memory,
@@ -539,6 +541,7 @@ export class AgentLoop {
       return result;
     } finally {
       this.featureControls.goals.finishThreadDeletion(threadId, deleted);
+      if (deleted) this.options.toolProgramRuntime?.releaseThread?.(threadId);
       this.turnTasks.unblockThread(threadId);
       this.deletingThreads.delete(threadId);
     }
@@ -603,6 +606,7 @@ export class AgentLoop {
   /** Narrow host surface supplied to the Goal Feature by the runtime composition root. */
   goalRuntimeHost(): GoalRuntimeHost {
     return createRuntimeGoalHost({
+      modelClient: this.options.modelClient,
       clock: this.options.clock,
       ids: this.options.ids,
       threadStore: this.options.threadStore,

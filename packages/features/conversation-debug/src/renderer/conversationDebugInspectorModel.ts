@@ -305,7 +305,7 @@ function collectPayloadFields(
 
   const fields = [...occurrences.values()]
     .sort((left, right) => left.firstSeen - right.firstSeen)
-    .map((occurrence) => fieldFromOccurrences(occurrence, t));
+    .flatMap((occurrence) => fieldsFromOccurrences(occurrence, t));
   for (const [streamKey, stats] of streamStats) {
     fields.push({
       id: `stream:${streamKey}`,
@@ -402,6 +402,27 @@ function flattenDebugPayload(
       depth + 1,
     );
   }
+}
+
+function fieldsFromOccurrences(
+  occurrence: FieldOccurrences,
+  t: RendererTranslate,
+): ConversationDebugDiagnosticField[] {
+  if (occurrence.values.size === 1 && /(?:^|\.)(?:arguments|argumentsPreview|fullArguments)$/u.test(occurrence.path)) {
+    const value = occurrence.values.keys().next().value!;
+    let parsed: unknown;
+    try { parsed = JSON.parse(value); } catch { /* Partial or bounded arguments remain visible as received. */ }
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const fields: ConversationDebugDiagnosticField[] = [];
+      // Arguments are a serialized JSON object. Decode that layer, not escape
+      // sequences inside the source text; the records view keeps the original shape.
+      flattenDebugPayload(parsed, occurrence.path, (path, text) => {
+        fields.push(fieldFromOccurrences({ ...occurrence, path, values: new Map([[text, 1]]) }, t));
+      }, t);
+      if (fields.length) return fields;
+    }
+  }
+  return [fieldFromOccurrences(occurrence, t)];
 }
 
 function fieldFromOccurrences(

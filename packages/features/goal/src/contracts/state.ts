@@ -5,12 +5,13 @@ import {
   type RuntimeThreadGoalStatus,
 } from '@setsuna-desktop/contracts';
 import { defineRuntimeCodec } from '@setsuna-desktop/feature-core/codec';
+import { goalCompletionVerificationCodec, type GoalCompletionVerification } from './verification.js';
 
 export type Goal = RuntimeThreadGoal;
 export type GoalPatch = RuntimeThreadGoalPatch;
 export type GoalStatus = RuntimeThreadGoalStatus;
 
-export type GoalState = Readonly<{ goal: Goal | null }>;
+export type GoalState = Readonly<{ goal: Goal | null; verification?: GoalCompletionVerification }>;
 export type GoalStateSnapshot = Readonly<{
   state: GoalState;
   throughSeq: number;
@@ -73,7 +74,10 @@ export const goalPatchCodec = defineRuntimeCodec<GoalPatch>((value) => {
 
 export const goalStateCodec = defineRuntimeCodec<GoalState>((value) => {
   const record = objectRecord(value, 'Goal state must be an object.');
-  return Object.freeze({ goal: record.goal === null ? null : goalCodec.parse(record.goal) });
+  const goal = record.goal === null ? null : goalCodec.parse(record.goal);
+  const verification = record.verification === undefined ? undefined : goalCompletionVerificationCodec.parse(record.verification);
+  if (verification && (!goal || verification.goalId !== goal.id || verification.objective !== goal.objective)) throw new Error('Goal verification belongs to a different objective.');
+  return Object.freeze({ goal, ...(verification ? { verification } : {}) });
 });
 
 export const goalStateSnapshotCodec = defineRuntimeCodec<GoalStateSnapshot>((value) => {
@@ -89,7 +93,7 @@ export function createInitialGoalState(): GoalState {
 }
 
 export function cloneGoalState(state: GoalState): GoalState {
-  return Object.freeze({ goal: state.goal ? goalCodec.parse(state.goal) : null });
+  return goalStateCodec.parse(state);
 }
 
 function validateGoalNestedState(record: Record<string, unknown>): void {

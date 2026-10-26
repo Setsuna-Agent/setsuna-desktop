@@ -4,7 +4,7 @@ import type {
   RuntimeThreadGoal,
   RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
-import type { GoalToolExecutionResult } from '../contracts/index.js';
+import type { GoalToolExecutionResult, GoalCompletionVerification } from '../contracts/index.js';
 
 const GOAL_TOOL_NAMES = new Set(['get_goal', 'create_goal', 'update_goal']);
 
@@ -40,7 +40,7 @@ function updateGoalDefinition(language?: RuntimeInterfaceLanguage): RuntimeToolD
   const text = runtimeText(language);
   return {
     name: 'update_goal',
-    description: text('Mark the active goal complete only after a strict audit proves every requirement is achieved. Pausing, clearing, and blocking are runtime or user actions.', "只有严格核验表明所有要求均已达成时，才把当前目标标记为完成。暂停、清除和阻塞由运行时或用户控制。"),
+    description: text('Request completion after verifying every requirement. The runtime independently audits the original objective against recorded evidence. Missing evidence returns specific gaps to repair; three unsuccessful audits in one turn block the Goal. Further tools or user input invalidate a passing audit. Pausing, clearing, and blocking are runtime or user actions.', '完成所有要求的验证后申请完成。运行时会独立对照原始目标审查已记录证据，缺失时返回待修复项；单轮三次验收未通过会阻塞目标。验收通过后的工具执行或用户输入会使其失效。暂停、清除和阻塞由运行时或用户控制。'),
     inputSchema: {
       type: 'object',
       properties: {
@@ -70,7 +70,7 @@ export function isGoalToolName(name: string): boolean {
 
 export function goalToolResult(
   name: string,
-  data: { goal: RuntimeThreadGoal | null; completionPending?: boolean },
+  data: { goal: RuntimeThreadGoal | null; completionPending?: boolean; verification?: GoalCompletionVerification },
   language?: RuntimeInterfaceLanguage,
 ): GoalToolExecutionResult {
   const text = runtimeText(language);
@@ -80,6 +80,8 @@ export function goalToolResult(
   };
   const preview = name === 'create_goal'
     ? text('Goal created.', '目标已创建。')
+    : data.verification && !data.verification.passed
+      ? text('Completion verification found gaps.', '完成验收发现未满足项。')
     : data.completionPending
       ? text('Goal completion will be finalized when this turn completes successfully.', '本轮成功结束后，目标将被标记为完成。')
       : data.goal

@@ -56,6 +56,11 @@ export function createRuntimeBuildOptions(projectRoot: string): BuildOptions[] {
       outfile: resolve(projectRoot, 'dist/runtime/plugin-app-build-worker.js'),
       bundle: true, platform: 'node', target: 'node22', format: 'esm', sourcemap: true, external: ['vite'],
     },
+    {
+      entryPoints: [resolve(projectRoot, 'packages/desktop-runtime/src/adapters/tool-program/quickjs-worker.ts')],
+      outfile: resolve(projectRoot, 'dist/runtime/tool-program-worker.cjs'),
+      bundle: true, platform: 'node', target: 'node22', format: 'cjs', sourcemap: true,
+    },
   ];
 }
 

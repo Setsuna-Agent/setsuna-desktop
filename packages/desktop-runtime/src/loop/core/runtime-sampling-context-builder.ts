@@ -1,7 +1,10 @@
 import type { ContextTokenCalibration } from '../context/context-token-calibration.js';
+import { projectToolResultWorkingSet, restoreToolObservations } from '../context/tool-result-working-set.js';
+import { RUN_CODE_TOOL_NAME } from '../tools/programmatic-tool.js';
 import { SEARCH_TOOLS_TOOL_NAME } from '../tools/deferred-tools.js';
 import { selectedPluginIdsForInput } from '../context/runtime-plugin-selection-context.js';
 import {
+  DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
   cloneRuntimeSkillReferences,
   isRuntimeInputMessageAttachment,
   type ModelRequest,
@@ -94,6 +97,7 @@ type RuntimeSamplingContextBuilderOptions = {
   toolExecutor: Pick<
     RuntimeToolCallExecutor,
     | 'dynamicToolsForThread'
+    | 'programsEnabled'
     | 'toolOrchestratorFor'
   >;
   toolHost?: ToolHost;
@@ -228,6 +232,8 @@ export class RuntimeSamplingContextBuilder {
         : undefined,
     });
     const toolContext: RuntimeToolExecutionContext = {
+      verificationModel: { ...modelForSampling.request, ...thinkingOptions,
+        contextWindowTokens: modelForSampling.model?.contextWindowTokens, maxOutputTokens: modelForSampling.model?.maxOutputTokens },
       environment,
       ...(unattended ? { unattended: true } : {}),
       samplingStepId: this.options.ids.id('sampling_step'),
@@ -277,6 +283,7 @@ export class RuntimeSamplingContextBuilder {
           ...(toolAccess === 'read-only' ? { allowTool: (tool: RuntimeToolDefinition) => isRuntimeReadOnlyTool(tool.name) } : {}),
           strictApprovalRequiresSerial: Boolean(this.options.approvalGate && (stepRuntimeConfig?.approvalPolicy ?? 'on-request') === 'strict'),
           toolResultStore: this.options.toolResultStore,
+          programsEnabled: this.options.toolExecutor.programsEnabled,
         })
       : null;
     const availableTools = toolAccess === 'none'
@@ -296,7 +303,7 @@ export class RuntimeSamplingContextBuilder {
       : availableTools;
     const tools = toolAccess === 'read-only'
       ? scopedTools?.filter((tool) => (
-          isRuntimeReadOnlyTool(tool.name) || tool.name === READ_TOOL_RESULT_TOOL_NAME || tool.name === SEARCH_TOOLS_TOOL_NAME
+          isRuntimeReadOnlyTool(tool.name) || tool.name === READ_TOOL_RESULT_TOOL_NAME || tool.name === SEARCH_TOOLS_TOOL_NAME || tool.name === RUN_CODE_TOOL_NAME
         ))
       : scopedTools;
     const advertisedToolNames = tools?.map((tool) => tool.name) ?? [];
@@ -339,12 +346,21 @@ export class RuntimeSamplingContextBuilder {
       + reservedOutputTokens;
     // Every task uses the actual sampling model's budget and usage correction.
     // A request-only tail trim would become the next step's history without a handoff.
+    const sourceMessages = restoreToolObservations(orderedConversationMessages, snapshotThread?.messages ?? thread.messages);
+    const workingMessages = await projectToolResultWorkingSet({
+      messages: sourceMessages,
+      transcriptMessages: sourceMessages,
+      store: this.options.toolResultStore,
+      threadId,
+      conversationTokenLimit: Math.max(1, (contextBudget?.autoCompactTokenLimit ?? contextBudget?.maxContextTokens ?? DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS) - reservedTokens),
+    });
     const compactedConversationMessages = await this.options.contextCompactor.compactMessagesBeforeModelRequest({
       unattended,
-      contextBudget,
+      contextBudget: { ...contextBudget, inputTokenAdjustment: contextTokenCalibration?.adjustment(modelForSampling.request, workingMessages) ?? 0 },
       conversationModel: modelForSampling.request,
       force: false,
-      messages: orderedConversationMessages,
+      messages: workingMessages,
+      transcriptMessages: sourceMessages,
       reservedTokens,
       runtimeConfig: stepRuntimeConfig,
       signal,
@@ -362,6 +378,11 @@ export class RuntimeSamplingContextBuilder {
       createdAt: this.options.clock.now().toISOString(),
     });
     const messages = compiledPrompt.messages;
+    // Include scoped project/Skill instructions without promoting external context to policy.
+    toolContext.verificationInstructions = JSON.stringify(fragments
+      .filter(fragment => fragment.role === 'system' || fragment.role === 'developer' || fragment.trust === 'user'
+        || fragment.source === 'project_workflow' || fragment.source === 'skill')
+      .map(({ role, source, trust, sourcePath, content }) => ({ role, source, trust, sourcePath, content })));
     const toolChoice = tools?.length ? (await toolRouter?.toolChoice(messages) ?? 'auto') : undefined;
     const mcpServerKeys = await this.mcpServerKeysForSnapshot();
     const snapshot: RuntimeModelRequestStepSnapshot = {
@@ -405,7 +426,8 @@ export class RuntimeSamplingContextBuilder {
       },
     };
     return {
-      conversationMessages: compactedConversationMessages,
+      // Keep the next step's source canonical even if a later sampling snapshot cannot be read.
+      conversationMessages: restoreToolObservations(compactedConversationMessages, sourceMessages),
       responseLanguage,
       messages,
       modelRequest: modelForSampling.request,

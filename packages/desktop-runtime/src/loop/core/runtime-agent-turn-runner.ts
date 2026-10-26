@@ -40,6 +40,7 @@ import { addRuntimeUsage } from './runtime-usage.js';
 import { runtimeConfigForTurn } from './runtime-turn-policy.js';
 
 type RuntimeAgentTurnRunnerOptions = {
+  goalCompletionBlockReason(threadId: string, turnId: string): Promise<string | null>;
   clock: Clock;
   collaborationControl(): CollaborationControl;
   memoryControl(): MemoryControl;
@@ -360,11 +361,9 @@ export class RuntimeAgentTurnRunner {
             toolCalls,
             status: 'complete',
           });
-          const toolMessages = await this.options.toolExecutor.runToolCalls(toolCalls, stepContext.toolContext, stepContext.toolRouter, stepContext.runtimeConfig);
-          if (toolMessages.some((message) => this.options.memoryControl().isSuccessfulRememberMessage(message))) {
-            memorySavedByTool = true;
-          }
-          conversationMessages.push(...toolMessages);
+          const execution = await this.options.toolExecutor.runToolCalls(toolCalls, stepContext.toolContext, stepContext.toolRouter, stepContext.runtimeConfig);
+          memorySavedByTool ||= execution.memorySavedByTool;
+          conversationMessages.push(...execution.messages);
           continue;
         }
 
@@ -407,7 +406,8 @@ export class RuntimeAgentTurnRunner {
           continue;
         }
 
-        const stopHookOutcome = await this.options.hooks.runStopHooks({
+        const completionBlock = await this.options.goalCompletionBlockReason(threadId, turnId);
+        const stopHookOutcome = completionBlock ? { shouldBlock: true, blockReason: completionBlock } : await this.options.hooks.runStopHooks({
           context: stepContext.toolContext,
           lastAssistantMessage: roundText,
           runtimeConfig,

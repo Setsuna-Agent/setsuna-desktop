@@ -9,6 +9,7 @@
 - [Renderer Plugin Runtime](current/renderer-plugin-runtime.md)：已实施；记录静态 Renderer Plugin、层级 Slot Tree、布局偏好、Inspector、第三方 host tree/sandbox UI、安全边界与 React client bundle 延期门槛。
 - [Active turn 发送队列](current/queued-turn-inputs.md)：Contract event、runtime FIFO/steer/Goal 调度、REST 和 renderer composer 的完整链路。
 - [持久化 Goal](current/persistent-goals.md)：`pi-goal` 对齐、状态机、自动续轮、安全停止、恢复和 composer 控制。
+- [Harness 执行与验收](current/harness-execution.md)：程序化工具调用、可回读的上下文工作集、Goal 独立证据验收与修复。
 - [WebDAV 自动备份与手动还原](current/webdav-backup-and-restore.md)：已实施的数据白名单、API Key 端到端加密、不可变快照、还原损失清单和崩溃回滚协议。
 - [Windows 原生沙箱 V1](current/windows-native-sandbox.md)：Rust sidecar、双账户、restricted token、NTFS ACL、Job Object、WFP 出口和设置页的完整边界。
 

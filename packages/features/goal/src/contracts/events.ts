@@ -1,6 +1,7 @@
 import { defineRuntimeCodec } from '@setsuna-desktop/feature-core/codec';
 import { defineFeatureEventContract } from '@setsuna-desktop/feature-core/events';
 import { goalFeature } from './definition.js';
+import { goalCompletionVerificationCodec, type GoalCompletionVerification } from './verification.js';
 import {
   goalStateCodec,
   type GoalState,
@@ -17,8 +18,20 @@ export const goalStateReplacedEvent = defineFeatureEventContract<GoalState>({
 });
 
 export function reduceGoalState(
-  _state: GoalState,
+  state: GoalState,
   value: GoalState,
 ): GoalState {
-  return goalStateCodec.parse(value);
+  const verification = value.verification ?? (state.verification?.goalId === value.goal?.id
+    && state.verification?.objective === value.goal?.objective ? state.verification : undefined);
+  return goalStateCodec.parse({ ...value, ...(verification ? { verification } : {}) });
+}
+
+export const goalVerificationRecordedEvent = defineFeatureEventContract<GoalCompletionVerification>({
+  featureId: goalFeature.id, eventType: 'goal.verification-recorded', currentVersion: 1,
+  codecs: { 1: goalCompletionVerificationCodec }, migrate: (_version, value) => goalCompletionVerificationCodec.parse(value),
+});
+
+export function reduceGoalVerification(state: GoalState, verification: GoalCompletionVerification): GoalState {
+  if (verification.goalId !== state.goal?.id || verification.objective !== state.goal.objective) return state;
+  return Object.freeze({ ...state, verification });
 }

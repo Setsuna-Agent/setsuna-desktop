@@ -1,4 +1,5 @@
 import { NotificationToolHost } from '../adapters/tool/notification-tool-host.js';
+import { QuickJsToolProgramRuntime } from '../adapters/tool-program/quickjs-tool-program-runtime.js';
 import { PullRequestToolHost } from '../adapters/tool/pull-request-tool-host.js';
 import path from 'node:path';
 import { createFeatureEvent } from '@setsuna-desktop/feature-core/events';
@@ -254,6 +255,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     memoryToolHost,
   ]);
   const agentLoop = new AgentLoop({
+    toolProgramRuntime: new QuickJsToolProgramRuntime(),
     attachmentStore,
     threadStore,
     modelClient,
