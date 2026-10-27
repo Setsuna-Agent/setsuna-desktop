@@ -48,9 +48,21 @@ describe('programmatic tools in the agent loop', () => {
     const threadStore = createTestThreadStore(path.join(fixtureRoot, 'loop-data'), systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Program file integrity', projectId });
     const runtime = new QuickJsToolProgramRuntime();
+    let finishInitialRead!: () => void;
+    const initialReadFinished = new Promise<void>(resolve => { finishInitialRead = resolve; });
     const requests: ModelRequest[] = [];
     const loop = new AgentLoop({ ids, threadStore, eventBus: new InMemoryEventBus(), clock: systemClock,
-      toolHost: host, toolProgramRuntime: runtime,
+      toolHost: host, toolProgramRuntime: {
+        execute: input => runtime.execute({ ...input,
+          // Reproduce delayed worker delivery: the write was submitted in the same
+          // batch, but the host finishes the read before admitting that message.
+          callTool: async (name, args, observationStep) => {
+            if (name === 'write_file') await initialReadFinished;
+            try { return await input.callTool(name, args, observationStep); }
+            finally { if (name === 'read_file') finishInitialRead(); }
+          },
+        }),
+      },
       modelClient: { async *stream(request): AsyncGenerator<ModelStreamEvent> {
         requests.push(request);
         if (requests.length === 1) {

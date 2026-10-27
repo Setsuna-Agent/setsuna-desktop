@@ -37,6 +37,7 @@ async function execute(code: string, toolNames: string[], snapshot: [string, str
   const lines: string[] = [];
   let bytes = 0;
   let callCount = 0;
+  let observationStep = 0;
   let alive = true;
   let pump = () => {};
   const call = vm.newFunction('__call', (name, args) => {
@@ -48,9 +49,14 @@ async function execute(code: string, toolNames: string[], snapshot: [string, str
     const id = callCount;
     new Promise<string>((resolve, reject) => {
       pending.set(id, { resolve, reject });
-      port!.postMessage({ type: 'call', id, name: vm.getString(name), arguments: serialized });
+      port!.postMessage({ type: 'call', id, name: vm.getString(name), arguments: serialized, observationStep });
     }).then(value => {
-      if (alive) { const handle = vm.newString(value); promise.resolve(handle); handle.dispose(); }
+      if (alive) {
+        // Host completion may race ahead of messages from this synchronous batch.
+        // Only delivery into the VM makes the result available to subsequent code.
+        observationStep++;
+        const handle = vm.newString(value); promise.resolve(handle); handle.dispose();
+      }
     }, error => {
       if (alive) { const handle = vm.newError(String(error)); promise.reject(handle); handle.dispose(); }
     }).finally(() => { if (alive) pump(); });

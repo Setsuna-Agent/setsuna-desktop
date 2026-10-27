@@ -51,7 +51,7 @@ export class QuickJsToolProgramRuntime implements ToolProgramRuntime {
         input.signal.addEventListener('abort', cancel, { once: true });
         worker.once('error', reject);
         worker.once('exit', code => { if (!finished) reject(new Error(`Tool program worker exited (${code}).`)); });
-        worker.on('message', (message: { type: string; id: number; name: string; values: [string, string][]; arguments: string; output: string; error: string }) => {
+        worker.on('message', (message: { type: string; id: number; name: string; values: [string, string][]; arguments: string; observationStep: number; output: string; error: string }) => {
           if (finished || input.signal.aborted) return;
           if (message.type === 'done') {
             if (typeof message.output !== 'string' || Buffer.byteLength(message.output) > TOOL_PROGRAM_OUTPUT_BYTES) reject(new Error('Invalid tool program output.'));
@@ -67,7 +67,7 @@ export class QuickJsToolProgramRuntime implements ToolProgramRuntime {
               try {
                 if (++count > TOOL_PROGRAM_MAX_CALLS || !input.toolNames.includes(message.name)) throw new Error('Tool is outside this program catalog or call budget.');
                 if (Buffer.byteLength(message.arguments) > 256 * 1024) throw new Error('Tool arguments exceed 256 KiB.');
-                const result = await input.callTool(message.name, JSON.parse(message.arguments));
+                const result = await input.callTool(message.name, JSON.parse(message.arguments), message.observationStep);
                 const value = JSON.stringify(result ?? null);
                 if (Buffer.byteLength(value) > TOOL_PROGRAM_VALUE_BYTES) throw new Error('Tool value exceeds 2 MiB; request a smaller range.');
                 if (!finished) worker.postMessage({ type: 'result', id: message.id, value });

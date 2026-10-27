@@ -169,7 +169,8 @@ transcript-only 消息，只有 `text` / `print` / `console.log` 输出回到模
 
 `ToolCallScheduler` 为普通只读批次和程序提供最多六个并发槽，独占操作形成队列屏障。
 审批始终检查 hook/extension 改写后的实际参数，不能把并发预判当作最终批准。
-程序里一起提交的调用共享采样步骤；结果返回后的调用才进入新观察步骤，因此
+程序里一起提交的调用共享采样步骤；观察步骤由 Worker 在结果交给 QuickJS 后推进，并随调用发送，
+宿主执行完成或队列串行化不能提前推进它。结果返回后的调用才进入新观察步骤，因此
 `await 读取 → 覆盖` 可使用已读内容，`Promise.all([读取, 覆盖])` 仍不能绕过整文件覆盖保护。
 隔离、限额、取消与 Code Mode 后续协议见 [Harness 执行与验收](../../designs/current/harness-execution.md)。
 
