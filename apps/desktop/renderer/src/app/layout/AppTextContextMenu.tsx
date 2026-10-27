@@ -3,7 +3,7 @@ import { PointMenu } from '@setsuna-desktop/renderer-ui';
 import { ClipboardPaste, Copy, Scissors } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
-import { captureTextContextMenuTarget, type TextContextMenuTarget } from '../controller/textContextMenu.js';
+import { captureTextContextMenuTarget, type TextContextMenuTarget } from '../../shared/lib/textContextMenu.js';
 
 type TextMenuRequest = { id: number; x: number; y: number; target: TextContextMenuTarget };
 
