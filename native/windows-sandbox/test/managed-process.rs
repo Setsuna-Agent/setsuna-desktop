@@ -105,6 +105,39 @@ fn shell_builtins_preserve_chinese_output_and_exit_code() {
 }
 
 #[test]
+fn shell_handoff_preserves_quoting_expansion_and_pipelines() {
+    for (command, expected) in [
+        ("echo \"one & two\"", "\"one & two\""),
+        ("echo %SETSUNA_TEST_VALUE%", "%SETSUNA_TEST_OTHER%"),
+        ("echo !SETSUNA_TEST_OTHER!", "!SETSUNA_TEST_OTHER!"),
+        ("echo caret ^^ end ^& literal", "caret ^ end & literal"),
+        ("(echo 管道中文) | findstr .", "管道中文"),
+        ("for %I in (one two) do @echo %I", "one\r\ntwo"),
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_setsuna-sandbox-win"))
+            .args([
+                "run-managed",
+                "--command",
+                command,
+                "--supervisor-pids",
+                &std::process::id().to_string(),
+            ])
+            .env("SETSUNA_TEST_VALUE", "%SETSUNA_TEST_OTHER%")
+            .env("SETSUNA_TEST_OTHER", "unexpected-expansion")
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{command}: {output:?}");
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap().trim(),
+            expected,
+            "{command}"
+        );
+        assert!(output.stderr.is_empty(), "{command}: {:?}", output.stderr);
+    }
+}
+
+#[test]
 fn killing_the_launcher_terminates_its_descendants() {
     let mut child = RunningChild(launcher("sleep").spawn().unwrap());
     let stdout = child.0.stdout.take().unwrap();

@@ -1,48 +1,150 @@
 name: CI
 
 on:
+  pull_request:
+    branches: [master]
+    types: [opened, reopened, synchronize, edited]
   workflow_dispatch:
 
 permissions:
   contents: read
 
+env:
+  # Hosted runners download directly from Electron instead of the local China mirror.
+  ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  windows-sandbox:
-    name: CI / Windows encoding diagnostics
-    runs-on: windows-2025
-    timeout-minutes: 5
+  checks:
+    name: CI / ${{ matrix.name }}
+    runs-on: macos-15
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: typecheck, lint
+            suite: static
+            command: pnpm typecheck && pnpm lint
+          - name: unit tests 1/2
+            suite: unit
+            command: pnpm test:unit --shard=1/2
+          - name: unit tests 2/2
+            suite: unit
+            command: pnpm test:unit --shard=2/2
+          - name: integration tests 1/2
+            suite: integration
+            command: pnpm test:integration --shard=1/2
+          - name: integration tests 2/2
+            suite: integration
+            command: pnpm test:integration --shard=2/2
+
     steps:
-      - name: Verify command handoff after UTF-8 initialization
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 7.33.7
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Configure node-gyp Python
+        run: node scripts/configure-node-gyp-python.mjs
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Worker fixtures resolve package exports outside Vitest's source aliases.
+      # These were previously built by the preceding typecheck.
+      - name: Build contracts for worker fixtures
+        if: matrix.suite != 'static'
+        run: pnpm build:contracts
+
+      - name: Build shared packages for Electron fixtures
+        if: matrix.suite == 'integration'
+        run: |
+          pnpm build:feature-core
+          pnpm build:renderer-ui
+
+      - name: Run ${{ matrix.name }}
+        run: ${{ matrix.command }}
+
+  windows-sandbox:
+    name: CI / Windows native sandbox
+    runs-on: windows-2025
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust target and components
+        run: |
+          rustup target add x86_64-pc-windows-msvc
+          rustup component add clippy rustfmt
+
+      - name: Check formatting
+        run: cargo fmt --manifest-path native/windows-sandbox/Cargo.toml -- --check
+
+      - name: Lint Windows sidecar
+        run: cargo clippy --locked --manifest-path native/windows-sandbox/Cargo.toml --target x86_64-pc-windows-msvc --all-targets -- -D warnings
+
+      - name: Test Windows sidecar
+        run: cargo test --locked --manifest-path native/windows-sandbox/Cargo.toml --all-targets
+
+      - name: Check Windows input helper
+        run: |
+          cargo fmt --manifest-path native/computer-use-windows/Cargo.toml -- --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo clippy --locked --manifest-path native/computer-use-windows/Cargo.toml --all-targets -- -D warnings
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --locked --manifest-path native/computer-use-windows/Cargo.toml --all-targets
+
+      - name: Smoke-test Windows executable protocol
         shell: pwsh
         run: |
-          $cases = @(
-            @{ name = 'chinese'; command = '(echo 中文输出) & (echo 中文错误 1>&2) & exit /b 23' },
-            @{ name = 'quoted'; command = 'echo "one & two" & (echo 中文输出) & exit /b 23' },
-            @{ name = 'percent'; command = 'echo %SETSUNA_TEST_VALUE% & exit /b 23' },
-            @{ name = 'exclamation'; command = 'echo !SETSUNA_TEST_OTHER! & echo caret ^^ end ^& literal & exit /b 23' },
-            @{ name = 'pipe'; command = '(echo 中文输出) | findstr . & exit /b 23' },
-            @{ name = 'for'; command = 'for %I in (one two) do @echo %I' },
-            @{ name = 'executable'; command = '"C:\Windows\System32\cmd.exe" /d /c echo 嵌套中文' }
-          )
-          foreach ($case in $cases) {
-            $start = [System.Diagnostics.ProcessStartInfo]::new()
-            $start.FileName = "$env:SystemRoot\System32\cmd.exe"
-            $start.Arguments = '/d /v:on /s /c "chcp 65001 >nul && "' + $start.FileName + '" /d /s /c !SETSUNA_SHELL_COMMAND!"'
-            $start.Environment['SETSUNA_SHELL_COMMAND'] = '"' + $case.command + '"'
-            $start.Environment['SETSUNA_TEST_VALUE'] = '%SETSUNA_TEST_OTHER%'
-            $start.Environment['SETSUNA_TEST_OTHER'] = 'unexpected-expansion'
-            $start.UseShellExecute = $false
-            $start.CreateNoWindow = $true
-            $start.RedirectStandardOutput = $true
-            $start.RedirectStandardError = $true
-            $start.RedirectStandardInput = $true
-            $start.StandardOutputEncoding = [System.Text.UTF8Encoding]::new($false)
-            $start.StandardErrorEncoding = [System.Text.UTF8Encoding]::new($false)
-            $process = [System.Diagnostics.Process]::Start($start)
-            $process.StandardInput.Close()
-            $stdout = $process.StandardOutput.ReadToEndAsync()
-            $stderr = $process.StandardError.ReadToEndAsync()
-            if (-not $process.WaitForExit(10000)) { $process.Kill($true); throw "Probe timed out" }
-            @{ name = $case.name; exit = $process.ExitCode; stdout = $stdout.GetAwaiter().GetResult(); stderr = $stderr.GetAwaiter().GetResult() } | ConvertTo-Json -Compress
-            $process.Dispose()
+          $result = cargo run --quiet --locked --manifest-path native/windows-sandbox/Cargo.toml --target x86_64-pc-windows-msvc -- version | Select-Object -Last 1 | ConvertFrom-Json
+          if (-not $result.ok -or -not $result.version) {
+            throw "Windows sandbox version protocol failed"
+          }
+          cargo build --quiet --locked --manifest-path native/windows-sandbox/Cargo.toml --target x86_64-pc-windows-msvc --example windows-network-probe
+          if ($LASTEXITCODE -ne 0) { throw "Windows sandbox network probe build failed" }
+
+      - name: Exercise Windows accounts, ACLs, firewall, and restricted process
+        timeout-minutes: 5
+        shell: pwsh
+        run: |
+          $binary = (Resolve-Path "native/windows-sandbox/target/x86_64-pc-windows-msvc/debug/setsuna-sandbox-win.exe").Path
+          $ownerSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+          $install = Start-Process -FilePath $binary `
+            -ArgumentList @("install-elevated", "--owner-sid", $ownerSid) `
+            -WindowStyle Hidden -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Windows sandbox installation smoke test failed" }
+
+          $status = & $binary status | Select-Object -Last 1 | ConvertFrom-Json
+          if (-not $status.ok -or $status.status.state -ne "ready") {
+            throw "Windows sandbox did not report ready after installation"
+          }
+          $probe = (Resolve-Path "native/windows-sandbox/target/x86_64-pc-windows-msvc/debug/examples/windows-network-probe.exe").Path
+          & scripts/windows-sandbox/smoke-test.ps1 -Binary $binary -ProbeBinary $probe
+
+      - name: Remove Windows sandbox smoke-test identities
+        if: always()
+        shell: pwsh
+        run: |
+          $binary = "native/windows-sandbox/target/x86_64-pc-windows-msvc/debug/setsuna-sandbox-win.exe"
+          if (Test-Path $binary) {
+            $cleanup = Start-Process -FilePath $binary `
+              -ArgumentList @("uninstall-elevated") `
+              -WindowStyle Hidden -Wait -PassThru
+            if ($cleanup.ExitCode -ne 0) { throw "Windows sandbox cleanup failed" }
           }

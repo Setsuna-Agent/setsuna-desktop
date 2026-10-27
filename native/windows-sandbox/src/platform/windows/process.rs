@@ -51,18 +51,26 @@ pub struct AccountRunnerContext<'a> {
 
 pub fn spawn_managed_shell(command: &str, supervisor_pids: &[u32]) -> Result<i32, SandboxError> {
     let executable = system_command_processor()?;
-    let command_line = shell_command_line(&executable, command);
-    spawn_managed_program(&executable, command_line, supervisor_pids)
+    let mut environment = std::env::vars().collect();
+    let command_line = prepare_shell_command_line(&executable, command, &mut environment);
+    let environment = environment_block(&environment);
+    spawn_managed_program(&executable, command_line, supervisor_pids, Some(&environment))
 }
 
-fn shell_command_line(command_processor: &Path, command: &str) -> String {
-    // Runtime decodes both pipes as UTF-8. The builtin chcp updates cmd's cached
-    // encoding as well as the console code pages inherited by native tools.
-    // Calling chcp.com instead leaves cmd builtins (e.g. echo) on the old encoding.
+fn prepare_shell_command_line(
+    command_processor: &Path,
+    command: &str,
+    environment: &mut BTreeMap<String, String>,
+) -> String {
+    // cmd parses a whole line before executing chcp, so Chinese echo literals
+    // on that same line would already use the old encoding. Start a fresh cmd
+    // after initialization. Delayed expansion passes the original command intact
+    // without the bootstrap parsing its quotes, operators, or variable references.
+    const COMMAND_ENV: &str = "SETSUNA_SHELL_COMMAND";
+    set_environment_key(environment, COMMAND_ENV, &format!("\"{command}\""));
+    let processor = quote_windows_argument(&command_processor.to_string_lossy());
     format!(
-        "{} /d /s /c \"chcp 65001 >nul && {}\"",
-        quote_windows_argument(&command_processor.to_string_lossy()),
-        command
+        "{processor} /d /v:on /s /c \"chcp 65001 >nul && {processor} /d /s /c !{COMMAND_ENV}!\""
     )
 }
 
@@ -82,13 +90,14 @@ pub fn spawn_sandbox_broker(
         quote_windows_argument(&executable.to_string_lossy()),
         quote_windows_argument(&request_path.to_string_lossy())
     );
-    spawn_managed_program(&executable, command_line, supervisor_pids)
+    spawn_managed_program(&executable, command_line, supervisor_pids, None)
 }
 
 fn spawn_managed_program(
     executable: &Path,
     command: String,
     supervisor_pids: &[u32],
+    environment: Option<&[u16]>,
 ) -> Result<i32, SandboxError> {
     let supervisors = open_supervisors(supervisor_pids)?;
     let executable_wide = to_wide(executable.as_os_str());
@@ -113,8 +122,11 @@ fn spawn_managed_program(
             std::ptr::null(),
             std::ptr::null(),
             1,
-            CREATE_NO_WINDOW | CREATE_SUSPENDED | EXTENDED_STARTUPINFO_PRESENT,
-            std::ptr::null(),
+            CREATE_NO_WINDOW
+                | CREATE_SUSPENDED
+                | CREATE_UNICODE_ENVIRONMENT
+                | EXTENDED_STARTUPINFO_PRESENT,
+            environment.map_or(std::ptr::null(), |block| block.as_ptr().cast::<c_void>()),
             std::ptr::null(),
             startup,
             &mut process_info,
@@ -329,12 +341,13 @@ pub fn spawn_restricted_shell(
     }
     let token = create_restricted_token(capability_sid)?;
     let command_processor = system_command_processor()?;
-    let command_line = shell_command_line(&command_processor, &request.command);
+    let mut environment = request.environment.clone();
+    harden_environment(&mut environment, request.network_access);
+    let command_line =
+        prepare_shell_command_line(&command_processor, &request.command, &mut environment);
     let mut command_line_wide = to_wide(command_line);
     let command_processor_wide = to_wide(command_processor.as_os_str());
     let cwd_wide = to_wide(request.cwd.as_os_str());
-    let mut environment = request.environment.clone();
-    harden_environment(&mut environment, request.network_access);
     let environment_block = environment_block(&environment);
     let (stdin, stdout, stderr) = inheritable_standard_handles()?;
     // Keep every window created by cmd and its descendants off the interactive
