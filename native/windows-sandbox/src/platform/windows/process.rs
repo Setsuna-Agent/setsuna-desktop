@@ -56,14 +56,12 @@ pub fn spawn_managed_shell(command: &str, supervisor_pids: &[u32]) -> Result<i32
 }
 
 fn shell_command_line(command_processor: &Path, command: &str) -> String {
-    // Runtime decodes both pipes as UTF-8. Set the new shell's console code pages
-    // before cmd builtins or native tools (e.g. ping) write locale-encoded bytes.
-    // Resolve chcp beside the trusted cmd.exe instead of through the workspace/PATH.
-    let chcp = command_processor.with_file_name("chcp.com");
+    // Runtime decodes both pipes as UTF-8. The builtin chcp updates cmd's cached
+    // encoding as well as the console code pages inherited by native tools.
+    // Calling chcp.com instead leaves cmd builtins (e.g. echo) on the old encoding.
     format!(
-        "{} /d /s /c \"\"{}\" 65001 >nul && {}\"",
+        "{} /d /s /c \"chcp 65001 >nul && {}\"",
         quote_windows_argument(&command_processor.to_string_lossy()),
-        chcp.display(),
         command
     )
 }
