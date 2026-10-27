@@ -51,12 +51,21 @@ pub struct AccountRunnerContext<'a> {
 
 pub fn spawn_managed_shell(command: &str, supervisor_pids: &[u32]) -> Result<i32, SandboxError> {
     let executable = system_command_processor()?;
-    let command_line = format!(
-        "{} /d /s /c \"{}\"",
-        quote_windows_argument(&executable.to_string_lossy()),
-        command
-    );
+    let command_line = shell_command_line(&executable, command);
     spawn_managed_program(&executable, command_line, supervisor_pids)
+}
+
+fn shell_command_line(command_processor: &Path, command: &str) -> String {
+    // Runtime decodes both pipes as UTF-8. Set the new shell's console code pages
+    // before cmd builtins or native tools (e.g. ping) write locale-encoded bytes.
+    // Resolve chcp beside the trusted cmd.exe instead of through the workspace/PATH.
+    let chcp = command_processor.with_file_name("chcp.com");
+    format!(
+        "{} /d /s /c \"\"{}\" 65001 >nul && {}\"",
+        quote_windows_argument(&command_processor.to_string_lossy()),
+        chcp.display(),
+        command
+    )
 }
 
 pub fn spawn_sandbox_broker(
@@ -322,11 +331,7 @@ pub fn spawn_restricted_shell(
     }
     let token = create_restricted_token(capability_sid)?;
     let command_processor = system_command_processor()?;
-    let command_line = format!(
-        "{} /d /s /c \"{}\"",
-        quote_windows_argument(&command_processor.to_string_lossy()),
-        request.command
-    );
+    let command_line = shell_command_line(&command_processor, &request.command);
     let mut command_line_wide = to_wide(command_line);
     let command_processor_wide = to_wide(command_processor.as_os_str());
     let cwd_wide = to_wide(request.cwd.as_os_str());

@@ -88,6 +88,10 @@ launcher 自身使用 Windows GUI subsystem，宿主 shell 使用 `CREATE_NO_WIN
 GUI 设置 `SW_HIDE`，也不通过私有桌面隐藏所有后代。宿主命令主动创建的窗口可以出现。后台与 `persist`
 只描述生命周期，不决定桌面归属，不按命令关键词、执行时长或 `persist` 猜测窗口模式，也没有 `display` 参数。
 
+宿主和受限 shell 共用命令行构造逻辑，在执行用户命令前通过系统目录中的 `chcp.com` 将当前控制台的
+输入、输出代码页切换为 UTF-8（65001），匹配 runtime 的流式 UTF-8 解码。切换只作用于本次命令的控制台，
+不修改系统区域设置；`ping` 等遵循控制台代码页的子进程继承该设置。显式指定其他编码的程序仍按自身设置输出。
+
 两条 Windows 路径都保证进程挂起时已经加入不可 breakaway 的 Job，然后才恢复执行。首次创建使用
 `PROC_THREAD_ATTRIBUTE_JOB_LIST` 原子绑定，避免 launcher 在创建与单独分配 Job 之间被杀时留下挂起孤儿。
 `CreateProcessWithLogonW` 不支持该扩展启动参数，因此 `run` 先创建已在 Job 内的 `internal-run` broker；
@@ -209,7 +213,8 @@ Windows native sandbox 执行计划会把固定版本、固定 SHA-256 的 curl-
 - before-pack 复制 binary、Apache-2.0 license、NOTICE 和 SHA-256 metadata；
 - after-pack 再校验完整文件清单、哈希、协议、版本和 sidecar `version` 输出；
 - TypeScript 单测覆盖 provider、fail-closed policy、IPC manager、native bridge、代理认证与端口占用。
-- `pnpm test:windows-sandbox` 运行真实宿主进程树测试，覆盖桌面继承、stdio/中文 cwd/退出码、根命令提前退出、
+- `pnpm test:windows-sandbox` 运行真实宿主进程树测试，覆盖桌面继承、stdio/中文 cwd/退出码、UTF-8 代码页继承与中文输出、
+  根命令提前退出、
   launcher 被杀、owner 正常退出与崩溃、跨登录挂起子进程的 Job 继承；受限 token 的实际启动测试验证私有桌面，
   不修改机器账户或防火墙；
 - Windows 上先运行 `pnpm build:windows-sandbox`，再运行 `pnpm test:integration packages/desktop-runtime/test/integration/adapters/tool`。
@@ -222,6 +227,7 @@ Windows native sandbox 执行计划会把固定版本、固定 SHA-256 的 curl-
 ## 设计依据
 
 - [Microsoft：Assigning a process to a job at creation time](https://devblogs.microsoft.com/oldnewthing/20230209-00/?p=107812)
+- [Microsoft：chcp 与子进程代码页](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/chcp)
 - [OpenAI：Building a safe, effective sandbox to enable Codex on Windows](https://openai.com/index/building-codex-windows-sandbox/)
 - [OpenAI Codex：windows-sandbox-rs/token.rs](https://github.com/openai/codex/blob/main/codex-rs/windows-sandbox-rs/src/token.rs)
 - [Microsoft：CreateRestrictedToken](https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-createrestrictedtoken)

@@ -1,6 +1,7 @@
 use super::spawn_restricted_shell;
 use crate::protocol::{PermissionProfile, SandboxRunRequest};
 use std::process::Command;
+use windows_sys::Win32::System::Console::{GetConsoleCP, GetConsoleOutputCP};
 use windows_sys::Win32::System::StationsAndDesktops::{
     GetThreadDesktop, GetUserObjectInformationW, UOI_NAME,
 };
@@ -11,7 +12,7 @@ const CALLER: &str = "SETSUNA_TEST_HOST_DESKTOP";
 const PREFIX: &str = "platform::windows::process::desktop_tests";
 
 #[test]
-fn restricted_shell_uses_a_private_desktop() {
+fn restricted_shell_uses_a_private_desktop_and_utf8_output() {
     let output = Command::new(std::env::current_exe().unwrap())
         .args([
             "--exact",
@@ -23,9 +24,12 @@ fn restricted_shell_uses_a_private_desktop() {
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
-    assert!(
-        String::from_utf8_lossy(&output.stdout).contains("restricted desktop verified"),
-        "{output:?}"
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("restricted desktop verified"), "{stdout}");
+    assert!(stdout.contains("受限标准输出"), "{stdout}");
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap().trim(),
+        "受限标准错误"
     );
 }
 
@@ -44,7 +48,7 @@ fn restricted_launcher() {
         execution_id: "desktop-test".to_string(),
         supervisor_pids: vec![std::process::id()],
         command: format!(
-            "\"{}\" --exact {PREFIX}::restricted_probe --nocapture",
+            "\"{}\" --exact {PREFIX}::restricted_probe --nocapture && (echo 受限标准输出) && (echo 受限标准错误 1>&2)",
             std::env::current_exe().unwrap().display()
         ),
         cwd: cwd.clone(),
@@ -70,6 +74,8 @@ fn restricted_probe() {
     let desktop = desktop_name();
     assert!(desktop.starts_with("SetsunaSandbox-"), "{desktop}");
     assert_ne!(desktop, std::env::var(CALLER).unwrap());
+    assert_eq!(unsafe { GetConsoleCP() }, 65001);
+    assert_eq!(unsafe { GetConsoleOutputCP() }, 65001);
     println!("restricted desktop verified");
 }
 

@@ -4,7 +4,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::windows::process::CommandExt;
 use std::process::{Command, Stdio};
 use windows_sys::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
-use windows_sys::Win32::System::Console::GetConsoleWindow;
+use windows_sys::Win32::System::Console::{GetConsoleCP, GetConsoleOutputCP, GetConsoleWindow};
 use windows_sys::Win32::System::StationsAndDesktops::{
     GetThreadDesktop, GetUserObjectInformationW, UOI_NAME,
 };
@@ -81,6 +81,30 @@ fn nested_commands_inherit_the_user_desktop_and_preserve_io_and_exit_code() {
 }
 
 #[test]
+fn shell_builtins_preserve_chinese_output_and_exit_code() {
+    let output = Command::new(env!("CARGO_BIN_EXE_setsuna-sandbox-win"))
+        .args([
+            "run-managed",
+            "--command",
+            "(echo 中文标准输出) & (echo 中文标准错误 1>&2) & exit /b 23",
+            "--supervisor-pids",
+            &std::process::id().to_string(),
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(23), "{output:?}");
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap().trim(),
+        "中文标准输出"
+    );
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap().trim(),
+        "中文标准错误"
+    );
+}
+
+#[test]
 fn killing_the_launcher_terminates_its_descendants() {
     let mut child = RunningChild(launcher("sleep").spawn().unwrap());
     let stdout = child.0.stdout.take().unwrap();
@@ -139,6 +163,8 @@ fn background_probe() {
     }
     if mode == "io" {
         assert_hidden_console();
+        assert_eq!(unsafe { GetConsoleCP() }, 65001);
+        assert_eq!(unsafe { GetConsoleOutputCP() }, 65001);
         assert_eq!(
             unsafe { GetConsoleWindow() }.to_string(),
             std::env::var(EXPECTED_CONSOLE).unwrap(),
