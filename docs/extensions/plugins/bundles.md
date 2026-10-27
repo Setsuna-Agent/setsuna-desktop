@@ -89,6 +89,8 @@ my-plugin/
 
 ### Renderer UI：宿主组件与沙箱页面
 
+插件配置表单使用 `renderer.capabilities.plugin.details` + `tree`，直接显示在所属插件详情页，不声明 `navigation` 或创建侧栏页面。schema v2 的 `field` 可声明 `secret: true` 配置 API Key；该字段禁止 `defaultValue`，仅限详情页。宿主渲染密码输入框，支持留空保留、替换和清除，提交时将密钥修改从普通 `values` 中分离，在调用 action handler 前保存到系统加密凭据库。密钥不进入普通 Plugin state 或读取响应，只有字段名称级别的 `configuredSecrets`；仅有密钥的表单无需 `data` 或 `state` capability。worker 用 `context.secrets.get(name)` 读取本插件声明的凭据，未配置返回 `null`。完整示例见[构建器配置表单指南](../../../plugins/app-builder/skills/create-plugin-in-chat/references/plugin-settings.md)。
+
 需要在 Setsuna 宿主界面中显示配置或状态时，Bundle 可以在 manifest 的 `extension` 对象内增加 `rendererUi`。它必须声明 `ui`；使用 runtime 状态时还要声明 `state`。每个 contribution 选择一种模式：`reactApp` 提供独立 React/Vite 项目、多文件 TSX、路由与 package 安装，详见[React 自定义应用](react-apps.md)；`tree` 使用宿主组件；`document` 加载 Bundle 的 HTML/CSS/JS，自由页面拥有独立的浏览器 origin；`webpage: { "url": "https://www.baidu.com/" }` 在 `renderer.plugin.page` 中直接打开原生浏览器页面。已有网站优先使用 `webpage`，点击 `navigation.label` 生成的侧栏入口即可打开，不经过 iframe 嵌套，也不受网站的 iframe 嵌入策略影响。网页显示完整浏览器导航条，复用浏览器的登录、下载、扩展和设置；新标签页链接、带网址的 `window.open()` 和新窗口表单在当前网页内跳转，保留表单数据并支持后退。网页不获得 Plugin action 或 runtime bridge。
 
 ```json

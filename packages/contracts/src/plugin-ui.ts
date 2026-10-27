@@ -1,6 +1,6 @@
 import {
   RUNTIME_PLUGIN_UI_SCHEMA_VERSION, RUNTIME_PLUGIN_UI_LEGACY_SCHEMA_VERSION,
-  RUNTIME_PLUGIN_UI_LIMITS, RUNTIME_PLUGIN_UI_LIBRARIES, parsePluginUiWebpage,
+  RUNTIME_PLUGIN_UI_LIMITS, RUNTIME_PLUGIN_UI_LIBRARIES, parsePluginUiWebpage, runtimePluginUiSecretFields,
   type RuntimePluginUiManifest, type RuntimePluginUiContribution, type RuntimePluginUiData,
   type RuntimePluginUiDataValue, type RuntimePluginUiNode, type RuntimePluginUiSlotId,
   type RuntimePluginUiDocument, type RuntimePluginUiLibrary, type RuntimePluginUiTextSource,
@@ -147,6 +147,10 @@ export function parseRuntimePluginUiManifest(value: unknown): RuntimePluginUiMan
     const tree = hasTree
       ? parseNode(contribution.tree, 1, budget, actionIds, fieldNames, schemaVersion)
       : undefined;
+    if (runtimePluginUiSecretFields(tree).length
+      && (schemaVersion !== 2 || slot !== 'renderer.capabilities.plugin.details')) {
+      throw new Error('Secret fields require the schema v2 Plugin details Slot.');
+    }
     const document = hasDocument
       ? parseDocument(contribution.document, id, actionIds)
       : undefined;
@@ -321,11 +325,15 @@ function parseNode(
   if (input.type === 'field') {
     const node = exactRecord(
       input,
-      ['type', 'name', 'label', 'defaultValue', 'placeholder', 'required', 'maxLength'],
+      ['type', 'name', 'label', 'secret', 'defaultValue', 'placeholder', 'required', 'maxLength'],
       'Plugin rendererUi field',
     );
     const name = fieldName(node.name, 'Plugin rendererUi field name');
     registerField(name, fieldNames, budget);
+    const secret = node.secret === undefined ? false : booleanValue(node.secret, 'Plugin rendererUi field secret');
+    if (secret && node.defaultValue !== undefined) {
+      throw new Error('Secret fields cannot declare a defaultValue.');
+    }
     const maxLength = node.maxLength === undefined
       ? RUNTIME_PLUGIN_UI_LIMITS.valueCharacters
       : boundedInteger(node.maxLength, 1, RUNTIME_PLUGIN_UI_LIMITS.valueCharacters, 'Plugin rendererUi field maxLength');
@@ -339,6 +347,7 @@ function parseNode(
     return Object.freeze({
       type: 'field',
       name,
+      ...(secret ? { secret: true } : {}),
       label: budgetText(node.label, 'Plugin rendererUi field label', budget),
       ...(defaultValue === undefined ? {} : { defaultValue }),
       ...(node.placeholder === undefined ? {} : {

@@ -70,6 +70,7 @@ import { RuntimeFeatureManagement } from '../features/management/runtime-feature
 import { ThreadStoreEventReader } from '../features/events/thread-store-event-reader.js';
 import { ExtensionUiCoordinator } from '../extensions/extension-ui-coordinator.js';
 import { FileExtensionStateStore } from '../extensions/file-extension-state-store.js';
+import { ExtensionSecretStore } from '../extensions/extension-secret-store.js';
 import { RuntimeHookManagement } from '../hooks/runtime-hook-management.js';
 import { AgentLoop } from '../loop/core/agent-loop.js';
 import { RuntimeEventWriter } from '../loop/lifecycle/runtime-event-writer.js';
@@ -151,6 +152,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   });
   const skillRegistry = new SkillMcpDependencyCoordinator(fileSkillRegistry, mcpStore, mcpControl);
   const extensionState = new FileExtensionStateStore(runtimeDataDir);
+  const extensionSecrets = new ExtensionSecretStore(extensionState, nativeBridge);
   const pluginStore = new FilePluginBundleStore(
     runtimeDataDir,
     fileSkillRegistry,
@@ -160,6 +162,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     clock,
     extensionState,
     builtinPluginsDir,
+    extensionSecrets,
   );
   const pluginDraftStore = new FilePluginDraftStore(path.join(runtimeDataDir, 'plugin-drafts'));
   const bundledPluginMarketplace = new FilePluginMarketplace(builtinPluginsDir, pluginStore);
@@ -205,6 +208,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   });
   const extensionUi = new ExtensionUiCoordinator(approvalGate, eventWriter, clock, ids);
   const extensionManager = new ExtensionManager(pluginStore, extensionState, extensionUi, {
+    secrets: extensionSecrets,
     runtimeApi: options.runtimeApi,
     bundledPluginsDir: builtinPluginsDir,
     getLanguage: async () => (await configStore.getConfig()).desktopSettings?.interfaceLanguage ?? 'zh-CN',

@@ -88,6 +88,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
     private readonly clock: Clock,
     private readonly extensionState: Pick<ExtensionStateStore, 'deletePlugin'>,
     private readonly bundledPluginsDir?: string,
+    private readonly extensionSecrets?: { deletePlugin(pluginId: string, removeState: () => Promise<void>): Promise<void> },
   ) {
     this.indexPath = path.join(dataDir, 'plugins.json');
     this.pluginsDir = path.join(dataDir, 'plugins');
@@ -690,7 +691,9 @@ export class FilePluginBundleStore implements PluginBundleStore {
         indexUpdated = true;
         // State is keyed only by plugin ID, so it must not survive a successful
         // uninstall and become visible to a different bundle reusing that ID.
-        await this.extensionState.deletePlugin(plugin.id);
+        const removeState = () => this.extensionState.deletePlugin(plugin.id);
+        if (this.extensionSecrets) await this.extensionSecrets.deletePlugin(plugin.id, removeState);
+        else await removeState();
       } catch (error) {
         const rollbackErrors: unknown[] = [];
         if (plugin.hookCount) {

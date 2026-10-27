@@ -1,4 +1,4 @@
-import { TextField as UiTextField, SelectField as UiSelectField, Button as UiButton } from '@setsuna-desktop/renderer-ui';
+import { TextField as UiTextField, SelectField as UiSelectField, Button as UiButton, ToastNotice } from '@setsuna-desktop/renderer-ui';
 
 import type {
   RuntimePluginUiAction,
@@ -24,6 +24,7 @@ import {
   resolveRuntimePluginUiText,
   useDeclarativePluginUiData,
 } from './useDeclarativePluginUiData.js';
+import { PluginSecretField } from './PluginSecretField.js';
 
 type ActionState =
   | Readonly<{ state: 'idle' }>
@@ -79,6 +80,7 @@ function DeclarativePluginUiViewInstance({
     [contribution.tree, dataState.data],
   );
   const [values, setValues] = useState<Readonly<Record<string, string>>>(initialValues);
+  const [secretChanges, setSecretChanges] = useState<Readonly<Record<string, string | null>>>({});
   const dirtyFields = useRef(new Set<string>());
   const [hydrationState, setHydrationState] = useState<HydrationState>(stateKey ? 'loading' : 'ready');
   const [actionState, setActionState] = useState<ActionState>({ state: 'idle' });
@@ -119,13 +121,17 @@ function DeclarativePluginUiViewInstance({
     setValues((current) => Object.freeze({ ...current, [name]: value }));
     setActionState({ state: 'idle' });
   };
+  const updateSecret = (name: string, value: string | null) => {
+    setSecretChanges((current) => ({ ...current, [name]: value }));
+    setActionState({ state: 'idle' });
+  };
   const requestAction = (action: RuntimePluginUiAction) => {
     if (
       actionState.state === 'running'
       || hydrationState === 'loading'
       || dataState.status === 'loading'
     ) return;
-    if (!requiredFieldsComplete(node, values)) {
+    if (!requiredFieldsComplete(node, values, secretChanges, dataState.configuredSecrets)) {
       setActionState({ actionId: action.id, reason: 'required', state: 'error' });
       return;
     }
@@ -145,6 +151,7 @@ function DeclarativePluginUiViewInstance({
       pluginId,
       actionId: action.id,
       values: Object.freeze({ ...values }),
+      ...(Object.keys(secretChanges).length ? { secretChanges: Object.freeze({ ...secretChanges }) } : {}),
       context: Object.freeze({
         contributionId: contribution.id,
         ...(cwd ? { cwd } : {}),
@@ -155,6 +162,7 @@ function DeclarativePluginUiViewInstance({
     });
     try {
       await service.runRendererUiAction(input, { signal: controller.signal });
+      if (!controller.signal.aborted) setSecretChanges({});
       dirtyFields.current.clear();
       if (stateKey) {
         setHydrationState('loading');
@@ -188,9 +196,11 @@ function DeclarativePluginUiViewInstance({
     || actionState.state === 'running';
   const status = [
     dataState.status === 'loading' ? t('pluginUi.dataLoading') : null,
-    dataState.status === 'error' ? t('pluginUi.dataUnavailable') : null,
     actionStatus(actionState, hydrationState, translateFeature),
   ].filter(Boolean).join(' ');
+  const failure = actionState.state === 'error' && actionState.reason === 'action'
+    ? translateFeature('feature.pluginManagement.rendererUi.actionError')
+    : dataState.status === 'error' || hydrationState === 'error' ? t('pluginUi.dataUnavailable') : null;
   const mode = contribution.slot === 'renderer.chat.composer.status'
     ? 'compact'
     : contribution.slot === 'renderer.plugin.page'
@@ -202,11 +212,14 @@ function DeclarativePluginUiViewInstance({
         actions,
         actionState,
         data: dataState.data,
+        configuredSecrets: dataState.configuredSecrets,
         disabled,
         requestAction,
         settingsUi,
         translate: translateFeature,
         updateValue,
+        updateSecret,
+        secretChanges,
         values,
       })}
       {pendingAction?.approval ? (
@@ -221,6 +234,7 @@ function DeclarativePluginUiViewInstance({
       <div aria-live="polite" className="declarative-plugin-ui__action-status">
         {status}
       </div>
+      {failure ? <ToastNotice message={failure} /> : null}
     </div>
   );
 }
@@ -229,11 +243,14 @@ type RenderContext = Readonly<{
   actions: ReadonlyMap<string, RuntimePluginUiAction>;
   actionState: ActionState;
   data: RuntimePluginUiData;
+  configuredSecrets: readonly string[];
+  secretChanges: Readonly<Record<string, string | null>>;
   disabled: boolean;
   requestAction(action: RuntimePluginUiAction): void;
   settingsUi?: SettingsViewUi;
   translate: RendererTranslate;
   updateValue(name: string, value: string): void;
+  updateSecret(name: string, value: string | null): void;
   values: Readonly<Record<string, string>>;
 }>;
 
@@ -272,6 +289,17 @@ function renderNode(node: RuntimePluginUiNode, path: string, context: RenderCont
     );
   }
   if (node.type === 'field') {
+    if (node.secret) return (
+      <PluginSecretField
+        key={path}
+        field={node}
+        configured={context.configuredSecrets.includes(node.name)}
+        change={context.secretChanges[node.name]}
+        disabled={context.disabled}
+        onChange={(value) => context.updateSecret(node.name, value)}
+        translate={context.translate}
+      />
+    );
     const inputProps = {
       disabled: context.disabled,
       maxLength: node.maxLength,
@@ -404,13 +432,8 @@ function actionStatus(
   translate: RendererTranslate,
 ): string {
   if (hydrationState === 'loading') return translate('feature.pluginManagement.rendererUi.loading');
-  if (hydrationState === 'error') return translate('feature.pluginManagement.rendererUi.stateError');
   if (actionState.state === 'completed') return translate('feature.pluginManagement.rendererUi.completed');
-  if (actionState.state === 'error') {
-    return translate(actionState.reason === 'required'
-      ? 'feature.pluginManagement.rendererUi.requiredError'
-      : 'feature.pluginManagement.rendererUi.actionError');
-  }
+  if (actionState.state === 'error' && actionState.reason === 'required') return translate('feature.pluginManagement.rendererUi.requiredError');
   return '';
 }
 
@@ -420,7 +443,7 @@ function collectInitialValues(
 ): Readonly<Record<string, string>> {
   const values: Record<string, string> = {};
   visitNodes(node, (candidate) => {
-    if (candidate.type === 'field') {
+    if (candidate.type === 'field' && !candidate.secret) {
       values[candidate.name] = resolveRuntimePluginUiText(candidate.defaultValue, data)
         .slice(0, candidate.maxLength);
     }
@@ -434,10 +457,20 @@ function collectInitialValues(
   return Object.freeze(values);
 }
 
-function requiredFieldsComplete(node: RuntimePluginUiNode, values: Readonly<Record<string, string>>): boolean {
+function requiredFieldsComplete(
+  node: RuntimePluginUiNode,
+  values: Readonly<Record<string, string>>,
+  secretChanges: Readonly<Record<string, string | null>>,
+  configuredSecrets: readonly string[],
+): boolean {
   let complete = true;
   visitNodes(node, (candidate) => {
-    if (candidate.type === 'field' && candidate.required && !values[candidate.name]?.trim()) complete = false;
+    if (candidate.type !== 'field' || !candidate.required) return;
+    const change = secretChanges[candidate.name];
+    const present = candidate.secret
+      ? Boolean(change?.trim() || (change !== null && configuredSecrets.includes(candidate.name)))
+      : Boolean(values[candidate.name]?.trim());
+    if (!present) complete = false;
   });
   return complete;
 }

@@ -120,6 +120,7 @@ const rendererUiActionInputCodec = defineRuntimeCodec<RuntimePluginUiActionInput
     pluginId: nonEmptyText(record.pluginId, 'pluginId'),
     actionId: nonEmptyText(record.actionId, 'actionId'),
     values: Object.freeze(normalizedValues),
+    ...(record.secretChanges === undefined ? {} : { secretChanges: rendererUiSecretChanges(record.secretChanges) }),
     ...(record.payload === undefined ? {} : { payload: parseRuntimePluginUiData(record.payload) }),
     context: rendererUiContext(record.context),
   });
@@ -156,7 +157,16 @@ const rendererUiDataInputCodec = defineRuntimeCodec<RuntimePluginUiDataInput>((v
 
 const rendererUiDataResultCodec = defineRuntimeCodec<RuntimePluginUiDataResult>((value) => {
   const record = objectRecord(value, 'Plugin renderer UI data result must be an object.');
-  return Object.freeze({ data: parseRuntimePluginUiData(record.data) });
+  const configuredSecrets = record.configuredSecrets === undefined ? undefined
+    : stringArray(record.configuredSecrets, 'configuredSecrets');
+  if (configuredSecrets && (configuredSecrets.length > RUNTIME_PLUGIN_UI_LIMITS.fields
+    || configuredSecrets.some((name) => !/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/u.test(name)))) {
+    throw new Error('Plugin renderer UI configured secrets are invalid.');
+  }
+  return Object.freeze({
+    data: parseRuntimePluginUiData(record.data),
+    ...(configuredSecrets ? { configuredSecrets: Object.freeze(configuredSecrets) } : {}),
+  });
 });
 
 const rendererUiDocumentInputCodec = defineRuntimeCodec<RuntimePluginUiDocumentReadInput>((value) => {
@@ -575,6 +585,13 @@ function rendererUiValues(value: unknown, label: string): Readonly<Record<string
     normalized[key] = item;
   }
   return Object.freeze(normalized);
+}
+
+function rendererUiSecretChanges(value: unknown): Readonly<Record<string, string | null>> {
+  const record = objectRecord(value, 'Plugin secret changes must be an object.');
+  // Reuse the form's name/count/size boundary without accepting arbitrary JSON.
+  rendererUiValues(Object.fromEntries(Object.entries(record).map(([name, item]) => [name, item === null ? '' : item])), 'Plugin secret changes');
+  return Object.freeze({ ...record }) as Readonly<Record<string, string | null>>;
 }
 
 function arrayValue(value: unknown, label: string): unknown[] {

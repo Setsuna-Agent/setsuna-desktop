@@ -1,6 +1,6 @@
 ---
 name: "Create Plugin in Chat"
-description: "Create or update a Setsuna Plugin Bundle from a natural-language request, including standalone apps below Plugins in the left sidebar, editable tables, forms, and ECharts views. Generate a complete manifest and UTF-8 file snapshot and call configure_plugin; also supports Skills, MCP servers, Hooks, and executable extensions."
+description: "Create or update Setsuna plugins from chat, including Plugin details configuration forms, API key settings, sidebar apps, Skills, MCP servers, Hooks, and executable tools. Generate a complete manifest and file snapshot, then call configure_plugin."
 ---
 
 # Create Plugin in Chat
@@ -25,6 +25,7 @@ Read these resources only when creating or changing a local React or HTML/CSS/JS
 - For external services, use `mcpServers`; never embed API keys, fixed secrets, authentication headers, or credential-bearing URLs.
 - For local commands around the Agent lifecycle, use `hooks` and reference bundled scripts through `{{pluginRoot}}`.
 - For dynamic tools, lifecycle events, state, or structured user questions, use `extension`.
+- For plugin settings, use a host `tree` in `extension.rendererUi` at `renderer.capabilities.plugin.details`. The form appears in the owning Plugin details; omit `navigation` and do not create a sidebar app for configuration fields. API keys use `field.secret: true`. Read the [complete form example](references/plugin-settings.en-US.md) through `read_plugin_resource({pluginId:'app-builder',resourceId:'plugin-settings-guide'})` first.
 - For sidebar entries or standalone pages, use Renderer UI v2 in `extension.rendererUi`. Use `webpage: { url: "https://…" }` to load an existing website directly in the native browser, host-rendered `tree` for simple forms and status, or an independent React/Vite `reactApp` project for new local apps. Existing HTML/CSS/JS `document` pages remain compatible; migrate only when appropriate for the requested update.
 - For interactive cards after a tool runs, declare the card name, tool, and static sandbox preview in `extension.uiCards`, then return `plugin.ui-card@1` from the tool. One Plugin can provide both cards and persistent sidebar pages.
 - `tools` is display metadata and does not register executable tools; use `api.registerTool` in the extension.
@@ -107,6 +108,7 @@ Handler capabilities:
 - Tool: `async execute(input, context)`; declared capabilities provide `context.network`, `context.state`, and `context.ui`, and `context.signal` is always available.
 - Event: `api.on(name, async (payload, context) => ...)`; the first argument is event data, not necessarily tool input.
 - UI Action: `api.onUiAction(id, async (input, context) => ...)`; form values are in `input.values`, page arguments in `input.payload`. Interactive `context.ui` is unavailable here.
+- Secrets: handlers use `await context.secrets.get(name)` to read their plugin's declared details credential as a string or `null`. The host encrypts form edits; `input.values` excludes secrets. Never put keys in state, source files, tool arguments or outputs, or ask users to provide real keys in chat.
 - State: `context.state.get(key, scope?)`, `set(key, value, scope?)`, `delete(key, scope?)`. Tool/Event default to `thread`; UI Action uses the contribution's `data.scope`. Explicitly use the matching `global`/`project`/`thread` scope when sharing sidebar state across entry points.
 - Network response: `{ ok, status, statusText, headers, body, text(), json() }`. `body` is UTF-8 text, not an object; do not use `response.body.current`.
 
@@ -169,6 +171,7 @@ Each request/response is bounded to 8 MiB with a 120-second timeout; paginate la
 
 Renderer UI v2 supports these controlled slots:
 
+- `renderer.capabilities.plugin.details`: configuration forms embedded in the owning Plugin details, including ordinary fields, selects and host-managed secrets. No sidebar entry is needed. A secrets-only form needs neither `data` nor the `state` capability.
 - `renderer.plugin.page`: standalone page, with a sidebar entry generated from `navigation.label`.
 - `renderer.settings.page.extensions`: allowed extension settings sections, currently targeting `general` or `about`.
 - `renderer.chat.composer.status`: compact composer status using only `stack`, `text`, `badge`, `notice`, and `button`.

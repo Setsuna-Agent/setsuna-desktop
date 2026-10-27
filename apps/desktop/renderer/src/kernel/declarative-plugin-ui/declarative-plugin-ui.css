@@ -80,6 +80,17 @@
   gap: 8px;
 }
 
+.declarative-plugin-ui__secret-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.declarative-plugin-ui__secret-input > input {
+  flex: 1;
+  min-width: 0;
+}
+
 .declarative-plugin-ui__approval {
   background: var(--sd-color-surface-muted);
   border: 1px solid var(--sd-color-border);

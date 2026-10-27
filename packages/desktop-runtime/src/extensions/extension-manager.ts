@@ -14,9 +14,9 @@ import type {
   RuntimePluginUiRuntimeRequest,
 } from '@setsuna-desktop/contracts';
 import {
-  parseRuntimePluginUiData,
   parseRuntimeApiRequest,
   RUNTIME_EXTENSION_EVENT_NAMES,
+  runtimePluginUiSecretFields,
 } from '@setsuna-desktop/contracts';
 import { createHash } from 'node:crypto';
 import { realpath } from 'node:fs/promises';
@@ -61,6 +61,8 @@ import {
 import { stateScope } from './extension-state-scope.js';
 import { normalizeExtensionToolResult } from './extension-tool-result.js';
 import { projectRendererUiState } from './extension-renderer-ui.js';
+import { readExtensionRendererUiData } from './extension-renderer-ui-data.js';
+import type { ExtensionSecretStore } from './extension-secret-store.js';
 import {
   ExtensionWorkerClient,
   type ExtensionWorkerReady,
@@ -81,6 +83,7 @@ type ActiveExtension = {
 };
 
 type ExtensionManagerOptions = {
+  secrets?: ExtensionSecretStore;
   runtimeApi?: RuntimeApi;
   bundledPluginsDir?: string;
   getLanguage?(): Promise<RuntimeInterfaceLanguage>;
@@ -351,6 +354,15 @@ export class ExtensionManager implements ExtensionRuntime {
       if (!active.ready.uiActions.includes(input.actionId)) {
         throw new Error(`Extension worker did not register Renderer UI action: ${input.actionId}`);
       }
+      const secretFields = runtimePluginUiSecretFields(contribution.tree);
+      if (secretFields.length || Object.keys(input.secretChanges ?? {}).length) {
+        if (!this.options.secrets) throw new Error('Plugin credential storage is unavailable.');
+        // Keep credential writes inside the same mutation gate as uninstall.
+        await this.withPluginLock(plugin.id, async () => {
+          if (this.active.get(plugin.id) !== active) throw new Error('Plugin changed before saving credentials.');
+          await this.options.secrets!.apply(plugin.id, secretFields, input.secretChanges ?? {}, signal);
+        });
+      }
       await active.client.request(
         'ui.action',
         {
@@ -413,30 +425,10 @@ export class ExtensionManager implements ExtensionRuntime {
 
   async readRendererUiData(input: RuntimePluginUiDataInput): Promise<RuntimePluginUiDataResult> {
     if (this.shuttingDown) throw new Error('Extension runtime is shutting down.');
-    const plugin = (await this.plugins.listInstalledRecords()).find((candidate) => candidate.id === input.pluginId);
-    if (!plugin?.extension) throw new Error(`Extension plugin is not installed: ${input.pluginId}`);
-    const rendererUi = plugin.extension.rendererUi;
-    if (!rendererUi || !plugin.extension.capabilities.includes('ui')) {
-      throw new Error(`Extension did not declare Renderer UI: ${input.pluginId}`);
-    }
-    if (!plugin.extension.capabilities.includes('state')) {
-      throw new Error(`Extension did not declare state for Renderer UI data: ${input.pluginId}`);
-    }
-    const contribution = rendererUi.contributions.find((candidate) => (
-      candidate.id === input.context.contributionId
-      && candidate.slot === input.context.surface
-    ));
-    if (!contribution?.data) {
-      throw new Error(`Extension Renderer UI contribution does not declare data: ${input.context.contributionId}`);
-    }
-    assertRendererUiScopeContext(contribution.data.scope, input.context);
-    await this.assertRendererUiBundleTrusted(plugin);
-    const scope = stateScope(contribution.data.scope, {
-      threadId: input.context.threadId ?? `renderer-ui:${plugin.id}`,
-      ...(input.context.projectId ? { projectId: input.context.projectId } : {}),
+    return readExtensionRendererUiData(input, {
+      plugins: this.plugins, state: this.state, secrets: this.options.secrets,
+      verify: (plugin) => this.assertRendererUiBundleTrusted(plugin),
     });
-    const value = await this.state.get(plugin.id, scope, contribution.data.stateKey);
-    return Object.freeze({ data: parseRuntimePluginUiData(value ?? {}) });
   }
 
   private toolTimeoutFor(plugin: InstalledPluginRecord): number {
@@ -636,6 +628,15 @@ export class ExtensionManager implements ExtensionRuntime {
     // JSONL protocol directly. Enforce Renderer action restrictions at dispatch.
     if (context.rendererUiAction && RENDERER_UI_ACTION_MODEL_METHODS.has(method)) {
       throw new Error('Renderer UI actions cannot use model host capabilities.');
+    }
+    if (method === 'secrets.get') {
+      requireCapability(extension, 'ui');
+      const input = requiredRecord(params, 'Plugin secret request must be an object.');
+      const name = requiredText(input.name, 'Plugin secret name');
+      const fields = extension.rendererUi?.contributions.flatMap((item) => runtimePluginUiSecretFields(item.tree)) ?? [];
+      if (!fields.some((field) => field.name === name)) throw new Error('Plugin secret is not declared.');
+      if (!this.options.secrets) throw new Error('Plugin credential storage is unavailable.');
+      return (await this.options.secrets.get(plugin.id, name)) ?? null;
     }
     if (method.startsWith('state.')) {
       requireCapability(extension, 'state');
