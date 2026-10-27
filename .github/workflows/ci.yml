@@ -12,20 +12,25 @@ jobs:
     runs-on: windows-2025
     timeout-minutes: 5
     steps:
-      - name: Compare console encoding initialization
+      - name: Verify command handoff after UTF-8 initialization
         shell: pwsh
         run: |
           $cases = @(
-            @{ name = 'same-line'; command = 'chcp 65001 >nul && (echo 中文输出) && (echo 中文错误 1>&2) & exit /b 23' },
-            @{ name = 'new-line'; command = "chcp 65001 >nul`r`n(echo 中文输出)`r`n(echo 中文错误 1>&2)`r`nexit /b 23" },
-            @{ name = 'nested'; command = 'chcp 65001 >nul && cmd.exe /d /s /c "(echo 中文输出) && (echo 中文错误 1>&2) & exit /b 23"' },
-            @{ name = 'nested-quoted'; command = 'chcp 65001 >nul && cmd.exe /d /s /c "echo "one & two" & (echo 中文输出) & exit /b 23"' },
-            @{ name = 'nested-caret'; command = 'chcp 65001 >nul && cmd.exe /d /s /c ^"echo ^"one ^& two^" ^& ^(echo 中文输出^) ^& exit /b 23^"' }
+            @{ name = 'chinese'; command = '(echo 中文输出) & (echo 中文错误 1>&2) & exit /b 23' },
+            @{ name = 'quoted'; command = 'echo "one & two" & (echo 中文输出) & exit /b 23' },
+            @{ name = 'percent'; command = 'echo %SETSUNA_TEST_VALUE% & exit /b 23' },
+            @{ name = 'exclamation'; command = 'echo !SETSUNA_TEST_OTHER! & echo caret ^^ end ^& literal & exit /b 23' },
+            @{ name = 'pipe'; command = '(echo 中文输出) | findstr . & exit /b 23' },
+            @{ name = 'for'; command = 'for %I in (one two) do @echo %I' },
+            @{ name = 'executable'; command = '"C:\Windows\System32\cmd.exe" /d /c echo 嵌套中文' }
           )
           foreach ($case in $cases) {
             $start = [System.Diagnostics.ProcessStartInfo]::new()
             $start.FileName = "$env:SystemRoot\System32\cmd.exe"
-            $start.Arguments = '/d /s /c "' + $case.command + '"'
+            $start.Arguments = '/d /v:on /s /c "chcp 65001 >nul && "' + $start.FileName + '" /d /s /c !SETSUNA_SHELL_COMMAND!"'
+            $start.Environment['SETSUNA_SHELL_COMMAND'] = '"' + $case.command + '"'
+            $start.Environment['SETSUNA_TEST_VALUE'] = '%SETSUNA_TEST_OTHER%'
+            $start.Environment['SETSUNA_TEST_OTHER'] = 'unexpected-expansion'
             $start.UseShellExecute = $false
             $start.CreateNoWindow = $true
             $start.RedirectStandardOutput = $true
