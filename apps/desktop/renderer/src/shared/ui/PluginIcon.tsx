@@ -1,159 +1,49 @@
-import { FileIcon } from '@setsuna-desktop/renderer-ui';
-import { isRuntimePluginIconDataUrl, type RuntimePluginIconImage } from '@setsuna-desktop/contracts';
+import { isRuntimePluginIconDataUrl } from '@setsuna-desktop/contracts';
+import type { SettingsPluginIconProps } from '@setsuna-desktop/renderer-contracts/settings';
 import { useState } from 'react';
-import type { LucideIcon } from 'lucide-react';
-import {
-  BookOpenText,
-  AppWindow,
-  Braces,
-  Compass,
-  Eye,
-  FileSearch,
-  FolderLock,
-  FolderX,
-  Globe,
-  ListTodo,
-  ListX,
-  ScanSearch,
-  ScrollText,
-  ShieldAlert,
-  Shrink,
-  Sparkles,
-} from 'lucide-react';
-import openaiLogoUrl from '@lobehub/icons-static-svg/icons/openai.svg';
+import { IconAvatar } from './IconAvatar.js';
+import { resolvePluginIconPreset } from './plugin-icon-presets.js';
 
-const pluginIconNames = [
-  'app-builder',
-  'context7',
-  'openai-docs',
-  'pdf',
-  'documents',
-  'image-generation',
-  'vision-recognition',
-  'web-search',
-  'guard-dangerous-shell',
-  'protect-secret-paths',
-  'protect-generated-folders',
-  'audit-file-mutations',
-  'session-start-project-guidance',
-  'prompt-secret-detector',
-  'compact-warning',
-  'stop-todo-continuation',
-  'todo',
-  'claude-rules',
-] as const;
-
-type PluginIconName = typeof pluginIconNames[number];
-type PluginIconVariant = 'card' | 'detail' | 'inline' | 'installed' | 'list' | 'menu';
-
-const pluginGlyphs: Partial<Record<PluginIconName, LucideIcon>> = {
-  'app-builder': AppWindow,
-  context7: Braces,
-  'openai-docs': BookOpenText,
-  'image-generation': Sparkles,
-  'vision-recognition': Eye,
-  'web-search': Globe,
-  'guard-dangerous-shell': ShieldAlert,
-  'protect-secret-paths': FolderLock,
-  'protect-generated-folders': FolderX,
-  'audit-file-mutations': FileSearch,
-  'session-start-project-guidance': Compass,
-  'prompt-secret-detector': ScanSearch,
-  'compact-warning': Shrink,
-  'stop-todo-continuation': ListX,
-  todo: ListTodo,
-  'claude-rules': ScrollText,
-};
-
-const knownPluginIcons = new Set<string>(pluginIconNames);
-const pluginIconById: Partial<Record<string, PluginIconName>> = {
-  'context7-docs': 'context7',
-  'openai-image-generation': 'image-generation',
-  'openai-vision-recognition': 'vision-recognition',
-};
-const pluginIconMonograms: Partial<Record<PluginIconName, string>> = {
-  context7: 'C7',
-};
-const pluginIconBrandSources: Partial<Record<PluginIconName, string>> = {
-  'openai-docs': openaiLogoUrl,
-};
-const pluginIconFileNames: Partial<Record<PluginIconName, string>> = {
-  documents: 'document.docx',
-  pdf: 'document.pdf',
-};
-
-/** Displays bundled tokens or repository artwork exclusively as inert images. */
+/** Repository artwork stays inert; missing or failed images use a color-and-glyph avatar. */
 export function PluginIcon({
   className,
   name,
   iconImage,
   pluginId,
   variant = 'card',
-}: {
-  className?: string;
-  name?: string;
-  iconImage?: RuntimePluginIconImage;
-  pluginId?: string;
-  variant?: PluginIconVariant;
-}) {
-  const icon = pluginIconName(name) ?? pluginIconName(pluginId) ?? pluginIconById[pluginId ?? ''] ?? null;
-  const Glyph = icon ? pluginGlyphs[icon] : null;
-  const monogram = icon ? pluginIconMonograms[icon] : pluginInitials(pluginId?.split(':').at(-1) ?? name ?? 'Plugin');
-  const brandSource = icon ? pluginIconBrandSources[icon] : undefined;
-  const fileName = icon ? pluginIconFileNames[icon] : undefined;
+}: Omit<SettingsPluginIconProps, 'appContributionId'>) {
   const [failedImages, setFailedImages] = useState<readonly string[]>([]);
   const light = isRuntimePluginIconDataUrl(iconImage?.light) && !failedImages.includes(iconImage.light) ? iconImage.light : undefined;
   const dark = isRuntimePluginIconDataUrl(iconImage?.dark) && !failedImages.includes(iconImage.dark) ? iconImage.dark : undefined;
   const imageSource = light ?? dark;
+  const classes = ['desktop-plugin-icon', className].filter(Boolean).join(' ');
+
+  if (!imageSource) {
+    const preset = resolvePluginIconPreset(name, pluginId);
+    return <IconAvatar Icon={preset.Icon} color={preset.color} className={classes} variant={variant} />;
+  }
 
   return (
     <span
-      className={[
-        'desktop-plugin-icon',
-        `desktop-plugin-icon--${variant}`,
-        className,
-      ].filter(Boolean).join(' ')}
-      data-plugin-icon={icon ?? 'plugin'}
+      className={`${classes} desktop-icon-avatar-size--${variant}`}
       aria-hidden="true"
     >
-      {imageSource ? (
-        <>
-          <img
-            alt=""
-            className={`desktop-plugin-icon__artwork${light && dark ? ' is-light-variant' : ''}`}
-            draggable={false}
-            src={imageSource}
-            onError={() => setFailedImages((failed) => [...failed, imageSource])}
-          />
-          {light && dark ? (
-            <img
-              alt=""
-              className="desktop-plugin-icon__artwork is-dark-variant"
-              draggable={false}
-              src={dark}
-              onError={() => setFailedImages((failed) => [...failed, dark])}
-            />
-          ) : null}
-        </>
-      ) : fileName ? (
-        <FileIcon className="desktop-plugin-icon__file-type" path={fileName} />
-      ) : brandSource ? (
-        <img alt="" className="desktop-plugin-icon__brand" draggable={false} src={brandSource} />
-      ) : monogram ? (
-        <span className={`desktop-plugin-icon__monogram${monogram.length > 1 ? ' desktop-plugin-icon__monogram--wide' : ''}`}>
-          {monogram}
-        </span>
-      ) : Glyph ? <Glyph strokeWidth={2} /> : null}
+      <img
+        alt=""
+        className={`desktop-plugin-icon__artwork${light && dark ? ' is-light-variant' : ''}`}
+        draggable={false}
+        src={imageSource}
+        onError={() => setFailedImages((failed) => [...failed, imageSource])}
+      />
+      {light && dark ? (
+        <img
+          alt=""
+          className="desktop-plugin-icon__artwork is-dark-variant"
+          draggable={false}
+          src={dark}
+          onError={() => setFailedImages((failed) => [...failed, dark])}
+        />
+      ) : null}
     </span>
   );
-}
-
-function pluginIconName(value: string | undefined): PluginIconName | null {
-  return value && knownPluginIcons.has(value) ? value as PluginIconName : null;
-}
-
-function pluginInitials(value: string): string {
-  const words = value.split(/[^a-z0-9]+/iu).filter(Boolean);
-  if (words.length > 1) return words.slice(0, 2).map((word) => word[0]).join('').toLocaleUpperCase();
-  return (words[0] ?? 'P').slice(0, 2).toLocaleUpperCase();
 }

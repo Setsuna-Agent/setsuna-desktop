@@ -1,0 +1,56 @@
+.desktop-icon-avatar {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--desktop-icon-avatar-color);
+  background: color-mix(in srgb, var(--desktop-icon-avatar-color) 14%, transparent);
+}
+
+.desktop-icon-avatar svg {
+  flex: none;
+  width: 68%;
+  height: 68%;
+}
+
+.desktop-icon-avatar-image {
+  display: block;
+  flex: 0 0 auto;
+  object-fit: cover;
+}
+
+.desktop-icon-avatar-size--menu {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+}
+
+.desktop-icon-avatar-size--list {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+}
+
+.desktop-icon-avatar-size--inline {
+  width: var(--desktop-inline-icon-size);
+  height: var(--desktop-inline-icon-size);
+  border-radius: 5px;
+}
+
+.desktop-icon-avatar-size--installed {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+}
+
+.desktop-icon-avatar-size--card {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+}
+
+.desktop-icon-avatar-size--detail {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+}

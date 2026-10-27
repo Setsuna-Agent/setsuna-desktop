@@ -142,7 +142,7 @@ describe('AgentSidebar project actions', () => {
     const html = container.innerHTML;
 
     expect(html).toContain('aria-label="新建项目"');
-    expect(html).toContain('aria-label="在 test-project 中新建会话"');
+    expect(html).toContain('aria-label="在 test-project 中新建对话"');
     expect(html).toContain('>编辑项目</button>');
     expect(html).toContain('>归档项目</button>');
   });
@@ -259,7 +259,6 @@ function sidebarProps(project: WorkspaceProject): ComponentProps<typeof AgentSid
     onCreateCurrentThread: noop,
     onCreateGlobalThread: noop,
     onCreateProjectThread: noop,
-    onEnterChatMode: noop,
     onEditProject: noop,
     onRemoveProject: noop,
     threadMenu: { canFork: false, canCreateWorktree: false, apps: [],

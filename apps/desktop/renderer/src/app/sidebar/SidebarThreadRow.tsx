@@ -1,6 +1,6 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeThreadSummary, WorkspaceProject } from '@setsuna-desktop/contracts';
-import { Archive, ArrowDown, ArrowUp, LoaderCircle, Pin } from 'lucide-react';
+import { Archive, ArrowDown, ArrowUp, LoaderCircle, MessageCircleQuestion, Pin, ShieldQuestion } from 'lucide-react';
 import { useContext, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { ActionTooltip } from '../../shared/ui/primitives.js';
@@ -52,6 +52,9 @@ export function SidebarThreadRow({
   // 线程列表快照包含整个 runtime 的活动状态；在经过防抖的侧边栏快照尚未更新时，
   // 当前打开线程仍可回退使用显式属性。
   const isRunning = running || Boolean(thread.activeTurnId);
+  const activityState = thread.activeTurnId ? thread.activeTurnState : null;
+  const activityLabel = t(activityState === 'waiting_for_input' ? 'sidebar.chatWaitingForInput'
+    : activityState === 'waiting_for_approval' ? 'sidebar.chatWaitingForApproval' : 'sidebar.chatRunning');
   const [hovered, setHovered] = useState(false);
   const [menuAnchorPoint, setMenuAnchorPoint] = useState({ x: 0, y: 0 });
   const openContextMenu = (x: number, y: number) => {
@@ -102,9 +105,11 @@ export function SidebarThreadRow({
       </ActionTooltip>
       {/* 运行状态与归档操作共用同一位置，进行中不挂载归档按钮。 */}
       {isRunning ? (
-        <ActionTooltip title={t('sidebar.chatRunning')}>
-          <span className="desktop-agent-session__running" aria-label={t('sidebar.chatRunning')} role="status">
-            <LoaderCircle className="is-spinning" size={13} />
+        <ActionTooltip title={activityLabel}>
+          <span className="desktop-agent-session__running" aria-label={activityLabel} role="status">
+            {activityState === 'waiting_for_input' ? <MessageCircleQuestion size={13} />
+              : activityState === 'waiting_for_approval' ? <ShieldQuestion size={13} />
+                : <LoaderCircle className="is-spinning" size={13} />}
           </span>
         </ActionTooltip>
       ) : (

@@ -306,15 +306,17 @@ Bundle 是否执行代码由 `extension` 字段决定，而不是由 schema 版�
 
 当前兼容范围：
 
-- 插件名称、版本、描述、作者和关键词。`interface.displayName` 用作展示名；`interface.logo`、`logoDark` 和 `composerIcon` 从包内读取为受限图片数据，支持 PNG/JPEG/GIF/WebP/SVG 与深浅色图标。SVG 仅作为 `<img>` 图片显示，不注入 DOM；不加载外部图标 URL。缺失或超过 96 KiB 的图标回退为插件自身的缩写。
+- 插件名称、版本、描述、作者和关键词。`interface.displayName` 用作展示名；`interface.logo`、`logoDark` 和 `composerIcon` 从包内读取为受限图片数据，支持 PNG/JPEG/GIF/WebP/SVG 与深浅色图标。SVG 仅作为 `<img>` 图片显示，不注入 DOM；不加载外部图标 URL。缺失、超过 96 KiB 或加载失败的图标回退为内置配色与线条图标，未知插件使用紫色拼图图标，与侧栏应用共用头像组件。
 - Skills 默认发现 `skills/`；显式 `skills` 可为一个目录或目录数组，支持 Skill 本身的目录和包含多个 Skill 的目录。引用文件仍受路径、大小写、符号链接和包体积检查约束。Skill 正文不会改写，依赖 Codex 专属工具的流程需要另行适配。
 - MCP 默认读取 `.mcp.json` 的 `mcpServers` 对象，也可由 manifest 的 `mcpServers` 指定配置文件或内联服务对象。支持 `http`/streamable HTTP 和 `stdio`，保留启停、工具范围和超时（兼容 `startup_timeout_sec`、`tool_timeout_sec`）。`oauth.client_id`、`oauth.resource` 转为原生 OAuth 字段；`title`、`note` 作为名称和描述的备选值，`icons` 仅为展示信息，不改变服务能力。stdio 默认工作目录为受管安装目录，command/args/cwd 中的 `${CODEX_PLUGIN_ROOT}` 转为安装路径。
 - `bearer_token_env_var` / `bearerTokenEnvVar` 只声明环境变量名称，不在导入时读取或保存 token。非空 `env`、`headers`、环境变量 header 映射和未知 MCP 字段暂不支持，导入会给出错误；实际凭据通过现有 MCP 设置保存到系统安全存储。
 - `.app.json` 或 manifest `apps` 中省略 `required` 的服务，可由同名 MCP 替代；单个 `app-…` 不透明键也可匹配插件同名 MCP。这是直连入口兼容，不模拟 OpenAI 托管 App 的工具协议。显式 `required: true` 的托管 App 仍拒绝；`required: false` 的已适配 App 映射为连接器，其余可选 App 显示不可用提示。无匹配入口的隐式依赖、可执行扩展、无可用 Skill/MCP/连接器的包仍拒绝。
 - `agents/openai.yaml` 是展示元数据，不视为自定义 Agent。其他 Agent、Hooks 和 commands 文件原样保留但不注册，通过 `unsupportedComponents` 在市场、安装记录、详情和插件选择上下文中提示。Skills 正文保持原样，实际调用必须使用 Setsuna 当前可用的工具目录。
-- OAuth 配置中只有占位符的 Client ID，以及未支持的 scopes、Client Secret 或固定回调端口要求，仍会明确报错，不能静默丢弃后假定认证可用。导入成功只代表声明可接入；远程服务登录、账号权限和平台工具依赖仍需在使用时满足。
+- OAuth 配置中只有占位符的 Client ID，以及未支持的 scopes、Client Secret 或固定回调端口要求，仍会明确报错，不能静默丢弃后假定认证可用。已适配的官方 GitHub MCP 可将宿主专用客户端声明转换为 Setsuna Device Flow，规则见下文；其他服务沿用上述校验。导入成功只代表声明可接入；远程服务登录、账号权限和平台工具依赖仍需在使用时满足。
 
 GitHub 插件声明的 `GITHUB_PAT_TOKEN` 是可选的手动认证方式。官方远程端点 `https://api.githubcopilot.com/mcp/` 在没有 Token 时使用 Setsuna 已注册的 GitHub OAuth App，通过 Device Flow 登录：用户点击“连接”后，Setsuna 在弹窗中展示验证码；只有用户点击“复制并打开 GitHub”时才复制验证码并打开授权页。只有用户完成授权后才保存凭据，随后自动获取并保存完整工具列表，保留已有工具权限；若同步失败则保留登录状态与旧工具列表，并提示重试。Client ID 是可公开分发的应用标识，不需要在桌面端配置 Client Secret，也不依赖本机安装 gh。
+
+上游 GitHub 插件若在 `oauth` 中附带专用 `client_secret`、`callback_port` 或 `callback_url`，导入器在确认其为官方远程 MCP 端点后移除该组客户端与 Resource 声明，使用同一套 Setsuna Device Flow；这些值不进入运行时 MCP 配置。端点识别由 MCP contracts 与实际登录流程共用，HTTP、非官方域名/端口、带用户信息或 fragment 的 URL、stdio 不适用。仅声明受支持公开 Client ID/Resource 的配置保持原意，未知 OAuth 字段仍拒绝。
 
 Device Flow 的提供方配置由 MCP runtime 宿主持有；插件不能指定授权/Token 端点。公开状态仅包含用户验证码、GitHub 验证地址和过期时间，私有 device code 留在运行中的登录操作内，Token 保存到现有安全凭据存储。轮询遵守 GitHub 的间隔和退避响应，支持取消及过期提示；带 refresh token 的凭据在请求前续期，退出登录会终止待处理认证并删除本地凭据。授权弹窗保留验证码复制和“复制并打开 GitHub”入口；复制成功通过图标反馈，复制失败会提示手动复制。关闭弹窗会取消当前登录操作。工具列表随窗口剩余高度伸展，内容超出后在列表内滚动。参见 [GitHub Device Flow 文档](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#device-flow) 与 [MCP 宿主接入说明](https://github.com/github/github-mcp-server/blob/main/docs/host-integration.md)。
 
@@ -374,6 +376,8 @@ GitHub / GitHub Enterprise 的可选 OpenAI App ID 通过兼容数据映射为 g
 - 本地可执行扩展默认不加载，必须由用户信任当前完整 Bundle 哈希；内置市场安装和升级会自动校验并启用随包内容，不向普通用户提供信任或撤销入口。
 - 静态资源可通过 `list_plugin_resources` 和 `read_plugin_resource` 读取，始终标记为外部不可信上下文。
 
+更新未被用户修改的 Plugin 自有 MCP 时，名称、描述、超时、启停或工具权限变化会保留已获取的完整工具列表；连接地址、transport、stdio 启动配置或认证配置变化时才清除该连接的旧列表。更新仍使该插件关联的运行连接失效，由后续使用按需重新发现工具，不在更新事务中联网。用户修改过的 MCP 配置继续保留，工具列表本身不视为用户配置修改。
+
 卸载会移除 Plugin 拥有的 Skills、Hooks、资源和未被修改的 MCP。安装后被用户修改过的 MCP 会保留，复用的 MCP 从不由 Plugin 删除。
 
 ### Agent 创建和更新
@@ -403,9 +407,9 @@ GitHub / GitHub Enterprise 的可选 OpenAI App ID 通过兼容数据映射为 g
 - worker 使用环境变量 allowlist，不继承 runtime/native bridge token；但被信任代码仍拥有当前用户的文件系统和网络权限，不宣称 OS 沙箱隔离。
 - 安装失败会回滚已复制文件、Hooks 和由该次安装新建的 MCP；卸载在提交索引前也会恢复已移除的 MCP 与 Hook 配置。
 
-能力页不再提供独立 Hooks 目录或手动 Hook 表单。原先的 8 个推荐模板已分别迁移为独立插件；新的 Hook 通过“用对话创建插件”生成，或随本地 Bundle 导入。已有 runtime Hook 配置不会因为入口移除而被删除，执行链仍由 runtime 兼容处理。
+能力页不再提供独立 Hooks 目录或手动 Hook 表单。新的 Hook 通过“用对话创建插件”生成，或随本地 Bundle 导入，执行链仍由 runtime 兼容处理。内置的文件改动审计提示、会话开始读取项目提示、压缩前状态提示和结束前检查未完成 TODO 已退役：前者只追加 Review 提醒，项目指令加载与压缩状态已有核心链路，TODO Hook 仅凭回复中的关键词阻止结束。内置安装及其 Hook 配置复用退役迁移清理；同名本地或仓库插件保留。启动目录读取仅隐藏退役项，卸载沿用后续扩展/工具读取时机，不增加启动等待。
 
-内置市场是随应用发布的精选目录，已包含网络搜索、图片生成、视觉识别、OpenAI 官方文档、Context7 文档查询、PDF 文档处理、Word 文档处理、任务清单、Claude Rules 兼容，以及危险命令防护、敏感路径防护、生成目录防护、文件改动审计、项目提示、消息密钥提醒、压缩提示和 TODO 续作 8 个 Hook 插件。任务清单和 Claude Rules 兼容由 Setsuna 使用原生扩展 API 实现；其行为设计参考与许可记录保留在 Bundle 源码内部，不作为用户侧品牌或能力资源。网络搜索插件使用 Tavily keyless 搜索并受匿名额度限制；图片生成插件调用用户配置的 OpenAI 兼容 `POST /v1/images/generations` 服务；视觉识别插件通过现有模型 adapter 调用用户选定的视觉模型，并使用当前会话受管图片，因此实际协议和端点跟随该模型的 provider 配置；Word 文档插件复用 runtime 的 Python/uv、工作区图片读取和成品发布能力。LibreOffice 仍是可选的外部渲染依赖，缺失时只能进行结构检查。远程来源目前固定为 openai/plugins；不提供任意仓库管理、后台自动升级、签名验证或安装脚本执行。内置可信目录和仓库 Skill/MCP 来源保持各自的权限边界。
+内置市场是随应用发布的精选目录，已包含网络搜索、图片生成、视觉识别、OpenAI 官方文档、Context7 文档查询、PDF 文档处理、Word 文档处理、任务清单、Claude Rules 兼容，以及危险命令防护、敏感路径防护、生成目录防护和消息密钥提醒 4 个 Hook 插件。任务清单和 Claude Rules 兼容由 Setsuna 使用原生扩展 API 实现；其行为设计参考与许可记录保留在 Bundle 源码内部，不作为用户侧品牌或能力资源。网络搜索插件使用 Tavily keyless 搜索并受匿名额度限制；图片生成插件调用用户配置的 OpenAI 兼容 `POST /v1/images/generations` 服务；视觉识别插件通过现有模型 adapter 调用用户选定的视觉模型，并使用当前会话受管图片，因此实际协议和端点跟随该模型的 provider 配置；Word 文档插件复用 runtime 的 Python/uv、工作区图片读取和成品发布能力。LibreOffice 仍是可选的外部渲染依赖，缺失时只能进行结构检查。远程来源目前固定为 openai/plugins；不提供任意仓库管理、后台自动升级、签名验证或安装脚本执行。内置可信目录和仓库 Skill/MCP 来源保持各自的权限边界。
 
 ## 在对话中选择插件
 

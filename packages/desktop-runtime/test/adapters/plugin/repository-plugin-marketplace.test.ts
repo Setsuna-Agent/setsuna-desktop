@@ -1,4 +1,4 @@
-import { mkdir, readFile, symlink, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { create } from 'tar';
 import { describe, expect, it, vi } from 'vitest';
@@ -106,6 +106,38 @@ describe('repository plugin marketplace', () => {
     const failed = await combined.listPlugins();
     expect(failed.plugins.map((plugin) => plugin.id)).toEqual(['demo']);
     expect(failed.errors).toEqual(['openai/plugins: Repository unavailable']);
+  });
+
+  it('lists and installs GitHub bundles with host-owned OAuth instead of bundled client credentials', async () => {
+    const { source, marketplace, runtime, publish, cacheRoot } = await repositoryFixture();
+    await rm(path.join(source, 'skills'), { recursive: true });
+    await writeBundleJson(source, '.codex-plugin/plugin.json', {
+      name: 'github', version: '0.1.12', apps: './.app.json', mcpServers: './.mcp.json',
+      interface: { displayName: 'GitHub' },
+    });
+    await writeBundleJson(source, '.mcp.json', { mcpServers: { github: {
+      type: 'http', url: 'https://api.githubcopilot.com/mcp/',
+      oauth: {
+        client_id: 'upstream-client', client_secret: 'fixture-upstream-secret',
+        callback_port: 12799, callback_url: 'http://127.0.0.1:12799/callback/upstream',
+      },
+    } } });
+    await publish(FIRST_REVISION);
+
+    const catalog = await marketplace.listPlugins({ refreshRepositories: true });
+    expect(catalog.plugins).toEqual([expect.objectContaining({
+      id: PLUGIN_KEY, version: '0.1.12', capabilities: { skills: 0, mcpServers: 1, hooks: 0, resources: 0 },
+    })]);
+    const installed = await marketplace.installPlugin(PLUGIN_KEY);
+    expect(installed.installedMcpServers).toEqual(['github']);
+    const [server] = await runtime.mcp.listServerInputs();
+    expect(server).toMatchObject({ key: 'github', transport: 'streamableHttp', url: 'https://api.githubcopilot.com/mcp/' });
+    expect(server.oauthClientId).toBeUndefined();
+    expect(server.oauthResource).toBeUndefined();
+    expect(JSON.stringify({ catalog, installed, server })).not.toContain('fixture-upstream-secret');
+
+    const reloaded = new RepositoryPluginMarketplace(cacheRoot, runtime.plugins, vi.fn(async () => { throw new Error('Offline'); }));
+    expect((await reloaded.listPlugins()).plugins).toEqual([expect.objectContaining({ id: PLUGIN_KEY, installed: true })]);
   });
 
   it('does not replace another source or install bytes modified after catalog inspection', async () => {

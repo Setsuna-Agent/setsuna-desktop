@@ -699,6 +699,8 @@ export type RuntimeThreadKind = 'regular' | 'side';
 /** Records the feature entity that created a conversation without owning its navigation. */
 export type RuntimeThreadOrigin = { featureId: string; entityId: string };
 
+export type RuntimeActiveTurnState = 'running' | 'waiting_for_approval' | 'waiting_for_input';
+
 export type RuntimeThreadSummary = {
   id: string;
   kind?: RuntimeThreadKind;
@@ -706,6 +708,8 @@ export type RuntimeThreadSummary = {
   featureId?: string;
   origin?: RuntimeThreadOrigin;
   activeTurnId?: string | null;
+  /** Live list projection; never persisted or inferred from the last message. */
+  activeTurnState?: RuntimeActiveTurnState | null;
   forkedFromId?: string;
   parentThreadId?: string;
   projectId?: string;
@@ -727,7 +731,6 @@ export type RuntimeThread = RuntimeThreadSummary & {
   fileChangeStates?: Record<string, ThreadFileChangeState>;
   /** Display-only complete operation sets for turns in a paged snapshot; no undo bodies. */
   fileChangeGroups?: RuntimeFileChangeGroups;
-  activeTurnId?: string | null;
   contextCompaction?: RuntimeThreadContextCompactionState;
   /** Budgets sampled before this history mutation no longer describe the current context. */
   contextBudgetInvalidatedAtSeq?: number;

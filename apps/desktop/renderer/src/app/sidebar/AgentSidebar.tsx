@@ -61,7 +61,6 @@ export function AgentSidebar({
   onCreateCurrentThread,
   onCreateGlobalThread,
   onCreateProjectThread,
-  onEnterChatMode,
   onEditProject,
   onRemoveProject,
   onResizeStep,
@@ -105,7 +104,6 @@ export function AgentSidebar({
   onCreateCurrentThread: () => void;
   onCreateGlobalThread: () => void;
   onCreateProjectThread: (projectId: string) => void;
-  onEnterChatMode: () => void;
   onEditProject: (project: WorkspaceProject) => void;
   onRemoveProject: (project: WorkspaceProject) => void;
   onResizeStep: (delta: number) => void;
@@ -206,7 +204,6 @@ export function AgentSidebar({
           threadActionMenuId={threadActionMenuId}
           onArchiveThread={onArchiveThread}
           onCreateGlobalThread={onCreateGlobalThread}
-          onEnterChatMode={onEnterChatMode}
           threadMenu={threadMenu}
           onOpenThreadInNewWindow={onOpenThreadInNewWindow}
           onRenameThread={onRenameThread}
@@ -540,7 +537,6 @@ function GlobalThreadSection({
   threadActionMenuId,
   onArchiveThread,
   onCreateGlobalThread,
-  onEnterChatMode,
   threadMenu,
   onOpenThreadInNewWindow,
   onRenameThread,
@@ -558,7 +554,6 @@ function GlobalThreadSection({
   threadActionMenuId: string | null;
   onArchiveThread: (thread: RuntimeThreadSummary) => void;
   onCreateGlobalThread: () => void;
-  onEnterChatMode: () => void;
   threadMenu: ThreadMenuState;
   onOpenThreadInNewWindow: (threadId: string) => void;
   onRenameThread: (thread: RuntimeThreadSummary) => void;
@@ -575,7 +570,8 @@ function GlobalThreadSection({
         <Button variant="ghost"
           className={`desktop-agent-sidebar__section-title-button ${!activeProjectId ? 'is-active' : ''}`}
           type="button"
-          onClick={activeProjectId ? onEnterChatMode : onToggleSessionsCollapsed}
+          aria-expanded={!sessionsCollapsed}
+          onClick={onToggleSessionsCollapsed}
         >
           <span>{t('sidebar.chats')}</span>
           <ChevronDown className={`desktop-agent-sidebar__section-toggle ${sessionsCollapsed ? 'is-collapsed' : ''}`} size={13} />

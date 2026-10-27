@@ -10,6 +10,45 @@ import { PluginCapabilitiesPage } from '../../src/renderer/PluginCapabilitiesPag
 
 afterEach(cleanup);
 
+it('distinguishes a failed catalog load, an empty catalog and an empty search, and recovers on refresh', async () => {
+  let snapshot: PluginManagementSnapshot = { catalogRevision: 'local', extensions: [], plugins: [], marketplace: [], marketplaceErrors: [] };
+  const hooks = { hooks: [] };
+  const listeners = new Set<() => void>();
+  const service = {
+    getSnapshot: () => snapshot, getHookSnapshot: () => hooks,
+    subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); },
+    refresh: vi.fn().mockRejectedValueOnce(new Error('Repository unavailable')).mockImplementation(async () => {
+      listeners.forEach((listener) => listener());
+      return snapshot;
+    }),
+    refreshHooks: vi.fn(async () => hooks),
+  };
+  const Toast = vi.fn(() => null);
+  await act(async () => {
+    render(<PluginCapabilitiesPage sectionId="plugins" service={service as unknown as PluginManagementRendererService}
+      capabilitiesRefresh={{ refresh: vi.fn() } as unknown as CapabilitiesRefreshCoordinator}
+      openExternal={async () => true} translate={(key) => key}
+      ui={{ Button, IconButton, PluginIcon: () => null, Toast } as unknown as SettingsViewUi} />);
+  });
+  expect(screen.getByText('feature.pluginManagement.loadFailed')).toBeTruthy();
+  expect(screen.queryByText('feature.pluginManagement.empty')).toBeNull();
+  expect(Toast).not.toHaveBeenCalled();
+  const refresh = screen.getByRole('button', { name: 'feature.pluginManagement.refresh' });
+  await act(async () => { fireEvent.click(refresh); });
+  expect(screen.getByText('feature.pluginManagement.emptyCatalog')).toBeTruthy();
+  expect(screen.queryByText('feature.pluginManagement.loadFailed')).toBeNull();
+
+  snapshot = { ...snapshot, marketplace: [{
+    id: 'tools', name: 'Local tools', tags: [], featured: true, skills: [], mcpServers: [], hooks: [], resources: [],
+    installed: false, updateAvailable: false, capabilities: { skills: 0, mcpServers: 0, hooks: 0, resources: 0 },
+  }] };
+  await act(async () => { fireEvent.click(refresh); });
+  expect(screen.getByText('Local tools')).toBeTruthy();
+  fireEvent.change(screen.getByRole('textbox', { name: 'feature.pluginManagement.search' }), { target: { value: 'unmatched' } });
+  expect(screen.getByText('feature.pluginManagement.empty')).toBeTruthy();
+  expect(screen.queryByText('feature.pluginManagement.emptyCatalog')).toBeNull();
+});
+
 it('keeps plugin details and the error after a failed uninstall, then closes them after a successful retry', async () => {
   const plugin = { id: 'local-tools', name: 'Local tools', installationSource: 'local' as const,
     installedAt: '2026-01-01T00:00:00Z', hookCount: 0, hooks: [], skills: [], mcpServers: [], resources: [] };

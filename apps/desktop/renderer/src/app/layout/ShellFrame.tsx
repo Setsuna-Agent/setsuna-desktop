@@ -1,4 +1,4 @@
-import { Minus, PanelLeft, Plus, Square, X } from 'lucide-react';
+import { Copy, Minus, PanelLeft, Plus, Square, X } from 'lucide-react';
 import {
   useEffect,
   useState,
@@ -91,7 +91,7 @@ export function ShellFrame({
         </div>
         {insetHeaders ? applicationMenu : contentHeader}
         {insetHeaders ? null : workspaceHeader}
-        {showWindowControls ? <WindowControls /> : null}
+        {showWindowControls ? <WindowControls maximized={windowMaximized} /> : null}
       </header>
       {navigationRail}
       <div className={`app-workbench ${inspectorOpen ? '' : 'app-workbench--inspector-closed'}`}>
@@ -172,7 +172,7 @@ function TitlebarNavigation({
   );
 }
 
-function WindowControls() {
+function WindowControls({ maximized }: { maximized: boolean }) {
   const controls = window.setsunaDesktop?.windowControls;
   const { t } = useI18n();
 
@@ -181,8 +181,8 @@ function WindowControls() {
       <IconButton className="app-shell-icon-control" label={t('shell.window.minimize')} onClick={() => void controls?.minimize()}>
         <Minus size={14} />
       </IconButton>
-      <IconButton className="app-shell-icon-control" label={t('shell.window.maximize')} onClick={() => void controls?.toggleMaximize()}>
-        <Square size={14} />
+      <IconButton className="app-shell-icon-control" label={t(maximized ? 'shell.window.restore' : 'shell.window.maximize')} onClick={() => void controls?.toggleMaximize()}>
+        {maximized ? <Copy size={14} /> : <Square size={14} />}
       </IconButton>
       <IconButton className="app-shell-icon-control app-window-controls__close" label={t('shell.window.close')} onClick={() => void controls?.close()}>
         <X size={14} />

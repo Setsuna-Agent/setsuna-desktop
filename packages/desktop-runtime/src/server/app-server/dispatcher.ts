@@ -1,4 +1,6 @@
 import { copyRuntimeThread } from '../../runtime/use-cases/thread-fork.js';
+import { restoredThreadProjectPatch } from '../../runtime/use-cases/workspace-operations.js';
+import { publishThreadEventsSince } from '../sse.js';
 import {
   DEFAULT_THREAD_TITLE,
   type ThreadQuery,
@@ -556,8 +558,10 @@ export async function dispatchAppServerRpcRequest(
     const input = recordInput(params);
     const threadId = requiredString(input.threadId, 'threadId');
     return runtime.agentLoop.withThreadMutation(threadId, async () => {
-      await requireRuntimeThread(runtime, threadId);
-      const thread = await runtime.threadStore.updateThread(threadId, { archived: false });
+      const before = await requireRuntimeThread(runtime, threadId);
+      const projectPatch = await restoredThreadProjectPatch(runtime.workspaceProjects, before.projectId);
+      const thread = await runtime.threadStore.updateThread(threadId, { archived: false, ...projectPatch });
+      await publishThreadEventsSince(runtime, threadId, before.lastSeq);
       return { thread: sweThreadFromRuntimeThread(thread, process.cwd(), options) };
     });
   }

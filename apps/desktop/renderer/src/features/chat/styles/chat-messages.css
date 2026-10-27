@@ -800,7 +800,7 @@
   background: transparent;
   line-height: 1;
   vertical-align: middle;
-  transition: background 150ms ease, color 150ms ease, transform 180ms var(--app-ease-out);
+  transition: background 150ms ease, color 150ms ease;
 }
 
 .chat-message-footer button svg {
@@ -825,18 +825,9 @@
   background: var(--desktop-agent-control-hover-bg);
 }
 
-/* Keep the tooltip anchor still while the action itself responds to a press. */
-.chat-message-footer button:active:not(:disabled) {
-  transform: scale(0.9);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .chat-message-footer button {
     transition: none;
-  }
-
-  .chat-message-footer button:active:not(:disabled) {
-    transform: none;
   }
 }
 

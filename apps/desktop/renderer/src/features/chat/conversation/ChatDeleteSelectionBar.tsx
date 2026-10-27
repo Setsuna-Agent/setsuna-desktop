@@ -1,4 +1,5 @@
 import { Button, Checkbox } from '@setsuna-desktop/renderer-ui';
+import { useEffect, useRef } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 
 export function DeleteSelectionBar({
@@ -23,9 +24,25 @@ export function DeleteSelectionBar({
   totalCount: number;
 }) {
   const { t } = useI18n();
+  const barRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (loading) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;
+      const panel = barRef.current?.closest('main');
+      if (!panel || (event.target instanceof Element && event.target !== document.body && !panel.contains(event.target))) return;
+      // Nested controls and find own Escape before the conversation selection does.
+      if (document.querySelector('[role="dialog"][aria-modal="true"], [role="menu"], [role="listbox"], .sd-popover[data-state="open"]')
+        || panel.querySelector('[role="search"]')) return;
+      event.preventDefault();
+      onCancel();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [loading, onCancel]);
 
   return (
-    <div className="chat-delete-bar">
+    <div className="chat-delete-bar" ref={barRef}>
       <div className="chat-delete-bar__inner">
         <Checkbox
           checked={allChecked}

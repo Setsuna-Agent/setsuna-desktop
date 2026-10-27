@@ -38,7 +38,7 @@
 
 .sd-dialog.feature-terminal-action-dialog {
   --sd-dialog-gutter: 20px;
-  border-radius: 24px;
+  border-radius: var(--app-radius-xl);
 }
 
 .feature-terminal-action-dialog .sd-dialog__header { padding-top: 20px; padding-bottom: 20px; }
@@ -65,7 +65,7 @@
 
 .feature-terminal-action__name { display: flex; align-items: center; gap: 8px; }
 .feature-terminal-action__name > input { flex: 1; min-width: 0; height: 36px; }
-.feature-terminal-action__name .feature-terminal-action__icon { width: 28px; height: 28px; flex-shrink: 0; border-radius: 9px; background: var(--app-surface-muted); }
+.feature-terminal-action__name .feature-terminal-action__icon { width: 28px; height: 28px; flex-shrink: 0; border-radius: var(--app-radius-sm); background: var(--app-surface-muted); }
 
 .feature-terminal-action-settings__editor { display: grid; gap: 12px; }
 .feature-terminal-action-settings__heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

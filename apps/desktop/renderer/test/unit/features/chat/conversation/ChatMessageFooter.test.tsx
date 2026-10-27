@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 
+import { ToastProvider } from '@setsuna-desktop/renderer-ui';
+import type { ReactElement } from 'react';
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render as renderComponent, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import userEvent from '@testing-library/user-event';
 import { ChatMessageFooter } from '../../../../../src/features/chat/conversation/ChatMessageFooter.js';
@@ -12,6 +14,8 @@ import { copyTextToClipboard } from '../../../../../src/shared/lib/clipboard.js'
 
 vi.mock('../../../../../src/shared/lib/clipboard.js', () => ({ copyTextToClipboard: vi.fn() }));
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.resetAllMocks(); });
+
+const render = (ui: ReactElement) => renderComponent(ui, { wrapper: ToastProvider });
 
 const message: RuntimeMessage = {
   id: 'message', role: 'assistant', content: 'Message to copy', status: 'complete',
@@ -70,6 +74,7 @@ it('does not confirm failed clipboard writes and disables copying empty text', a
   const view = render(<ChatMessageFooter message={message} />);
   await act(async () => fireEvent.click(screen.getByRole('button', { name: '复制' })));
   expect(screen.queryByRole('button', { name: '已复制' })).toBeNull();
+  expect(screen.getByRole('alert').textContent).toContain('复制消息失败。');
   view.rerender(<ChatMessageFooter message={{ ...message, content: '' }} />);
   const button = screen.getByRole('button', { name: '复制' }) as HTMLButtonElement;
   expect(button.disabled).toBe(true);

@@ -87,7 +87,6 @@ export function AppSidebarSurface({
       onCreateProjectThread={(projectId) => {
         navigation.startProjectThread(projectId);
       }}
-      onEnterChatMode={() => void navigation.enterChatMode()}
       onEditProject={navigation.editProject}
       onRemoveProject={(project) => {
         navigation.setProjectActionMenuId(null);

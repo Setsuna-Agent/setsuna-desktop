@@ -233,7 +233,7 @@ function ChatComposerPrimaryAction({
           aria-label={t('chat.composer.stop')}
           onClick={primaryAction.onCancelActiveTurn}
         >
-          <Square size={11} />
+          <Square size={13} fill="currentColor" />
         </UiButton>
       </ShortcutTooltip>
     );

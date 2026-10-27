@@ -99,25 +99,38 @@ export function pluginMcpServerUnmodified(current: RuntimeMcpServerInput, expect
   return JSON.stringify(comparablePluginMcpServer(current)) === JSON.stringify(comparablePluginMcpServer(expected));
 }
 
+export function pluginMcpServerReplacement(current: RuntimeMcpServerInput, next: RuntimeMcpServerInput): RuntimeMcpServerInput {
+  // Inventory belongs to the connection, not the bundle's labels, timeouts or tool permissions.
+  const sameConnection = JSON.stringify(comparablePluginMcpConnection(current))
+    === JSON.stringify(comparablePluginMcpConnection(next));
+  return { ...next, tools: sameConnection ? current.tools ?? [] : [] };
+}
+
 export function comparablePluginMcpServer(server: RuntimeMcpServerInput): Record<string, unknown> {
   // Discovered inventory is runtime metadata, not a user change to plugin configuration.
-  const transport = normalizeMcpTransport(server.transport, server.command, server.url);
   const timeoutMs = normalizedMcpTimeout(server.timeoutMs, 120_000);
   return {
-    key: server.key,
+    ...comparablePluginMcpConnection(server),
     label: server.label?.trim() || server.key,
     description: server.description?.trim() || null,
-    transport,
-    command: transport === 'stdio' ? server.command?.trim() || null : null,
-    args: transport === 'stdio' ? normalizedStringList(server.args) : [],
-    cwd: transport === 'stdio' ? normalizeOptionalPath(server.cwd) || null : null,
-    url: transport === 'streamableHttp' ? comparableUrl(server.url) || null : null,
     timeoutMs,
     startupTimeoutMs: normalizedMcpTimeout(server.startupTimeoutMs, timeoutMs),
     toolTimeoutMs: normalizedMcpTimeout(server.toolTimeoutMs, timeoutMs),
     enabled: server.enabled !== false,
     allowedTools: normalizedStringSet(server.allowedTools),
     disabledTools: normalizedStringSet(server.disabledTools),
+  };
+}
+
+function comparablePluginMcpConnection(server: RuntimeMcpServerInput): Record<string, unknown> {
+  const transport = normalizeMcpTransport(server.transport, server.command, server.url);
+  return {
+    key: server.key,
+    transport,
+    command: transport === 'stdio' ? server.command?.trim() || null : null,
+    args: transport === 'stdio' ? normalizedStringList(server.args) : [],
+    cwd: transport === 'stdio' ? normalizeOptionalPath(server.cwd) || null : null,
+    url: transport === 'streamableHttp' ? comparableUrl(server.url) || null : null,
     env: canonicalStringMap(server.env),
     headers: canonicalStringMap(server.headers),
     envHttpHeaders: canonicalStringMap(server.envHttpHeaders),

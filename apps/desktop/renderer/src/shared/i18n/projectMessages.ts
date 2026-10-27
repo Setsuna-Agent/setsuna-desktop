@@ -1,4 +1,6 @@
 export const projectZhCN = {
+  'sidebar.chatWaitingForApproval': '等待审批',
+  'sidebar.chatWaitingForInput': '等待输入',
   'sidebar.directoryPickerUnavailable': '当前环境不支持选择项目目录。',
   'sidebar.createProject': '新建项目',
   'sidebar.emptyProjects': '暂无项目',
@@ -114,6 +116,8 @@ export const projectZhCN = {
 } as const;
 
 export const projectEnUS: Record<keyof typeof projectZhCN, string> = {
+  'sidebar.chatWaitingForApproval': 'Waiting for approval',
+  'sidebar.chatWaitingForInput': 'Waiting for input',
   'sidebar.directoryPickerUnavailable': 'The project folder picker is unavailable in this environment.',
   'sidebar.createProject': 'New project',
   'sidebar.emptyProjects': 'No projects yet',

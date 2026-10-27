@@ -65,6 +65,7 @@ export function PluginCapabilitiesPage({
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [repositoryRefreshing, setRepositoryRefreshing] = useState(true);
+  const [catalogLoadFailed, setCatalogLoadFailed] = useState(false);
   const navigationVersion = useRef(0);
   const pendingActionRef = useRef<string | null>(null);
   const t = translate as PluginManagementTranslate;
@@ -75,9 +76,10 @@ export function PluginCapabilitiesPage({
     let active = true;
     // The service publishes local state while the page-scoped repository refresh runs.
     setRepositoryRefreshing(true);
+    setCatalogLoadFailed(false);
     void service.refresh({ refreshRepositories: true })
       // Background repository failures stay quiet; explicit actions report through Toast.
-      .catch(() => undefined)
+      .catch(() => { if (active) setCatalogLoadFailed(true); })
       .finally(() => { if (active) setRepositoryRefreshing(false); });
     return () => { active = false; };
   }, [service]);
@@ -112,6 +114,9 @@ export function PluginCapabilitiesPage({
   const catalog = useMemo(() => snapshot.marketplace.filter((plugin) => (
     pluginMatchesQuery(plugin, query, installedById.get(plugin.id))
   )), [installedById, query, snapshot.marketplace]);
+  const emptyCatalogLabel = snapshot.marketplace.length ? 'feature.pluginManagement.empty'
+    : catalogLoadFailed || snapshot.marketplaceErrors.length ? 'feature.pluginManagement.loadFailed'
+      : 'feature.pluginManagement.emptyCatalog';
   const selectedMarketplace = selectedPluginId ? marketplaceById.get(selectedPluginId) : undefined;
   const selectedInstalled = selectedPluginId ? installedById.get(selectedPluginId)
     ?? (!selectedMarketplace ? snapshot.plugins.find((plugin) => plugin.id === selectedPluginId) : undefined) : undefined;
@@ -254,10 +259,19 @@ export function PluginCapabilitiesPage({
               disabled={repositoryRefreshing}
               onClick={() => {
                 setRepositoryRefreshing(true);
+                setCatalogLoadFailed(false);
                 setError(null);
                 // Refresh has its own busy state; installs and local actions remain available.
-                void Promise.all([service.refresh({ refreshRepositories: true }), service.refreshHooks()])
-                  .catch((error: unknown) => setError(pluginErrorMessage(error, t)))
+                void Promise.all([
+                  service.refresh({ refreshRepositories: true }).catch((error: unknown) => {
+                    setCatalogLoadFailed(true);
+                    throw error;
+                  }),
+                  service.refreshHooks(),
+                ])
+                  .catch((error: unknown) => {
+                    setError(pluginErrorMessage(error, t));
+                  })
                   .finally(() => setRepositoryRefreshing(false));
               }}
             >
@@ -357,7 +371,7 @@ export function PluginCapabilitiesPage({
                   ))}
                 </PluginSection>
               ))}
-              {!catalog.length && !repositoryRefreshing ? <div className="desktop-capabilities-empty">{t('feature.pluginManagement.empty')}</div> : null}
+              {!catalog.length && !repositoryRefreshing ? <div className="desktop-capabilities-empty">{t(emptyCatalogLabel)}</div> : null}
             </div>
           </div>
         </div></div>

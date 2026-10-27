@@ -772,7 +772,7 @@
 .desktop-agent-project__text > small {
   flex: 0 0 auto;
   color: var(--app-sidebar-text-secondary);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 16px;
 }
 

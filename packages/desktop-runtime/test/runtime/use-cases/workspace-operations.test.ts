@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { RuntimeContainer } from '../../../src/runtime/runtime-factory.js';
 import {
   archiveRuntimeWorkspaceProject,
+  removeRuntimeWorkspaceProject,
   saveRuntimeWorkspaceFile,
 } from '../../../src/runtime/use-cases/workspace-operations.js';
 
@@ -53,6 +54,65 @@ describe('archiveRuntimeWorkspaceProject', () => {
     await expect(archiveRuntimeWorkspaceProject(runtime, 'project_1'))
       .rejects.toThrow('thread archive failed');
     expect(runtime.workspaceProjects.archiveProject).not.toHaveBeenCalled();
+  });
+});
+
+describe('removeRuntimeWorkspaceProject', () => {
+  function setup() {
+    const threads = ['first', 'second'].map((id) => ({
+      id, projectId: 'project' as string | undefined, workspaceId: 'worktree', archived: id === 'second', lastSeq: 1,
+    }));
+    const activeTurnId = vi.fn((_id: string): string | null => null);
+    const updateThread = vi.fn(async (id: string) => {
+      const thread = threads.find((item) => item.id === id)!;
+      thread.projectId = undefined;
+      thread.lastSeq += 1;
+      return thread;
+    });
+    const removeProject = vi.fn(async () => undefined);
+    const publish = vi.fn();
+    const withThreadMutation = vi.fn(async (_id: string, mutation: () => Promise<unknown>) => mutation());
+    const runtime = {
+      agentLoop: { activeTurnId, withThreadMutation }, workspaceProjects: { removeProject }, eventBus: { publish },
+      threadStore: {
+        listThreads: vi.fn(async () => threads.filter((thread) => thread.projectId === 'project')),
+        getThreadMetadata: async (id: string) => ({ ...threads.find((thread) => thread.id === id)! }),
+        updateThread,
+        listEvents: async (id: string) => [{ threadId: id, type: 'thread.updated', payload: { projectId: null } }],
+      },
+    } as unknown as RuntimeContainer;
+    return { runtime, threads, activeTurnId, updateThread, removeProject, publish, withThreadMutation };
+  }
+
+  it('preserves remaining membership on failure and retries without losing archive or worktree state', async () => {
+    const harness = setup();
+    const update = harness.updateThread.getMockImplementation()!;
+    harness.updateThread.mockImplementationOnce(update).mockRejectedValueOnce(new Error('Write failed'));
+    await expect(removeRuntimeWorkspaceProject(harness.runtime, 'project')).rejects.toThrow('Write failed');
+    expect(harness.removeProject).not.toHaveBeenCalled();
+    expect(harness.threads.map((thread) => thread.projectId)).toEqual([undefined, 'project']);
+    await removeRuntimeWorkspaceProject(harness.runtime, 'project');
+    expect(harness.updateThread.mock.calls.map(([id]) => id)).toEqual(['first', 'second', 'second']);
+    expect(harness.threads.map((thread) => [thread.projectId, thread.workspaceId, thread.archived]))
+      .toEqual([[undefined, 'worktree', false], [undefined, 'worktree', true]]);
+    expect(harness.publish).toHaveBeenCalledTimes(2);
+    expect(harness.removeProject).toHaveBeenCalledExactlyOnceWith('project');
+    expect(harness.runtime.threadStore.listThreads).toHaveBeenCalledWith({
+      includeFeatures: true, includeSide: true, includeArchived: true, projectId: 'project',
+    });
+  });
+
+  it.each([false, true])('refuses to move running conversations, including a turn admitted during the mutation wait: %s', async (startsWhileWaiting) => {
+    const harness = setup();
+    if (startsWhileWaiting) {
+      harness.withThreadMutation.mockImplementationOnce(async (_id, mutation) => {
+        harness.activeTurnId.mockReturnValue('turn');
+        return mutation();
+      });
+    } else harness.activeTurnId.mockImplementation((id) => id === 'second' ? 'turn' : null);
+    await expect(removeRuntimeWorkspaceProject(harness.runtime, 'project')).rejects.toMatchObject({ code: 'conflict' });
+    expect(harness.updateThread).not.toHaveBeenCalled();
+    expect(harness.removeProject).not.toHaveBeenCalled();
   });
 });
 

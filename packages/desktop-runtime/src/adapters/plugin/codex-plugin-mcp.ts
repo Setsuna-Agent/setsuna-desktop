@@ -1,3 +1,4 @@
+import { isGitHubMcpEndpoint } from '@setsuna-desktop/feature-mcp/contracts';
 import { safeRelativePath } from './file-plugin-bundle-paths.js';
 import { objectRecord, optionalString, stringArray } from './file-plugin-bundle-values.js';
 
@@ -8,13 +9,18 @@ const SUPPORTED_FIELDS = new Set([
   'allowed_tools', 'allowedTools', 'disabled_tools', 'disabledTools',
   'oauth_client_id', 'oauthClientId', 'oauth_resource', 'oauthResource',
 ]);
+const HOST_BOUND_OAUTH_FIELDS = ['client_secret', 'callback_port', 'callback_url'];
 
 /** Convert declarations only. Secrets are configured separately in the MCP settings. */
 export function convertCodexMcpServers(value: unknown): Record<string, unknown>[] {
   const servers = objectRecord(value, 'Codex plugin mcpServers must be an object.');
   return Object.entries(servers).map(([key, value]) => {
     const server = { ...objectRecord(value, `Codex MCP server ${key} must be an object.`) };
-    normalizeCodexMcpOptions(key, server);
+    const transport = String(server.type ?? server.transport ?? (server.command ? 'stdio' : 'http'));
+    if (!['stdio', 'http', 'streamable-http', 'streamable_http', 'streamableHttp'].includes(transport)) {
+      throw new Error(`Codex MCP server ${key} uses an unsupported transport.`);
+    }
+    normalizeCodexMcpOptions(key, server, transport);
     for (const field of ['env', 'headers', 'envHttpHeaders', 'env_http_headers']) {
       if (server[field] === undefined) continue;
       const entries = objectRecord(server[field], `Codex MCP ${field} must be an object.`);
@@ -25,10 +31,6 @@ export function convertCodexMcpServers(value: unknown): Record<string, unknown>[
     }
     const unsupported = Object.keys(server).filter((field) => !SUPPORTED_FIELDS.has(field));
     if (unsupported.length) throw new Error(`Codex MCP server ${key} has unsupported fields: ${unsupported.join(', ')}.`);
-    const transport = server.type ?? server.transport ?? (server.command ? 'stdio' : 'http');
-    if (!['stdio', 'http', 'streamable-http', 'streamable_http', 'streamableHttp'].includes(String(transport))) {
-      throw new Error(`Codex MCP server ${key} uses an unsupported transport.`);
-    }
     const { type: _type, ...fields } = server;
     if (transport !== 'stdio') return { ...fields, key, transport };
     return {
@@ -42,7 +44,7 @@ export function convertCodexMcpServers(value: unknown): Record<string, unknown>[
   });
 }
 
-function normalizeCodexMcpOptions(key: string, server: Record<string, unknown>): void {
+function normalizeCodexMcpOptions(key: string, server: Record<string, unknown>, transport: string): void {
   // Presentation fields do not alter transport behavior or grant capabilities.
   server.label ??= optionalString(server.title);
   server.description ??= optionalString(server.note);
@@ -62,9 +64,20 @@ function normalizeCodexMcpOptions(key: string, server: Record<string, unknown>):
   }
   if (server.oauth === undefined) return;
   const oauth = objectRecord(server.oauth, `Codex MCP server ${key}.oauth must be an object.`);
-  const unsupported = Object.keys(oauth).filter((field) => !['client_id', 'resource'].includes(field));
+  const hostOAuth = transport !== 'stdio' && isGitHubMcpEndpoint(optionalString(server.url))
+    && HOST_BOUND_OAUTH_FIELDS.some((field) => Object.hasOwn(oauth, field));
+  const allowedOAuthFields = hostOAuth
+    ? ['client_id', 'resource', ...HOST_BOUND_OAUTH_FIELDS]
+    : ['client_id', 'resource'];
+  const unsupported = Object.keys(oauth).filter((field) => !allowedOAuthFields.includes(field));
   if (unsupported.length) {
     throw new Error(`Codex MCP server ${key} requires unsupported OAuth options: ${unsupported.join(', ')}. Bundled OAuth secrets and host-specific callbacks cannot be imported.`);
+  }
+  if (hostOAuth) {
+    // GitHub bundles may describe another host's confidential OAuth client.
+    // Keep only the MCP endpoint; Setsuna owns its Device Flow client and all credentials.
+    for (const field of ['oauth', 'oauthClientId', 'oauth_client_id', 'oauthResource', 'oauth_resource']) delete server[field];
+    return;
   }
   const clientId = optionalString(oauth.client_id);
   if (clientId && /^<.+>$/u.test(clientId)) {

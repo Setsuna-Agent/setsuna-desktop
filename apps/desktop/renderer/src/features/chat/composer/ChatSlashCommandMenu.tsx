@@ -137,7 +137,7 @@ function SlashCommandIcon({ item, compact }: { item: SlashCommandMenuItem; compa
   const iconClassName = compact ? 'chat-command-menu__item-icon' : undefined;
   if (item.kind === 'plugin') return <PluginIcon name={item.plugin.icon} iconImage={item.plugin.iconImage} pluginId={item.plugin.id} variant={iconVariant} className={iconClassName} />;
   if (item.kind === 'skill') {
-    return <SkillIcon skill={item.skill} variant={iconVariant} className={iconClassName} />;
+    return <SkillIcon variant={iconVariant} className={iconClassName} />;
   }
   if (item.kind === 'model') return <Zap className="chat-command-menu__item-icon" fill="currentColor" size={15} strokeWidth={0} />;
   if (item.type === 'attachment') return <Paperclip className="chat-command-menu__item-icon" size={15} />;
