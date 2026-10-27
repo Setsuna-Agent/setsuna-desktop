@@ -278,7 +278,7 @@ describe('runtime server REST runtime state', () => {
           id: 'local-test',
           name: 'Local test provider',
           provider: 'openai-compatible',
-          models: [{ code: 'local-runtime-smoke', name: 'Local runtime smoke' }],
+          models: [{ code: 'local-runtime-smoke', name: '本地测试模型' }],
         }],
         usage: {
           records: [],

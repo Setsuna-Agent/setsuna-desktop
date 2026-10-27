@@ -8,7 +8,7 @@ import {
   type WorkspaceProject,
   type WorkspaceProjectIcon,
 } from '@setsuna-desktop/contracts';
-import { Folder, FolderPlus, Link2Off, Star, X } from 'lucide-react';
+import { Folder, FolderPlus, Star, X } from 'lucide-react';
 import { useId, useState, type FormEvent } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { Button, IconButton, TextField } from '../../shared/ui/primitives.js';
@@ -134,7 +134,7 @@ export function ProjectEditorDialog({
           <div className="desktop-project-editor__field">
             <span>{t('sidebar.projectDirectory')}</span>
             <div className="desktop-project-editor__directory">
-              {roots.length ? roots.map((root, index) => (
+              {roots.map((root, index) => (
                 <div className="desktop-project-editor__directory-row" key={root.id}>
                   <Folder size={15} aria-hidden="true" />
                   <span title={root.path}>{workspaceRootName(root)}</span>
@@ -149,12 +149,7 @@ export function ProjectEditorDialog({
                     <X size={14} />
                   </IconButton>
                 </div>
-              )) : (
-                <div className="desktop-project-editor__directory-empty">
-                  <Link2Off size={15} aria-hidden="true" />
-                  <span>{t('sidebar.projectDirectoryUnbound')}</span>
-                </div>
-              )}
+              ))}
               <UiButton variant="ghost"
                 className="desktop-project-editor__choose-directory"
                 type="button"

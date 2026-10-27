@@ -400,16 +400,14 @@ function ProjectSection({
                           onTogglePin={onToggleThreadPin}
                         />
                       ) : (
-                        <div className="desktop-agent-sidebar__empty-session">{t('sidebar.emptyChats')}</div>
+                        <div className="desktop-agent-sidebar__empty desktop-agent-sidebar__empty--nested">{t('sidebar.emptyChats')}</div>
                       )
                     ) : null}
                   </div>
                 );
               })
             ) : (
-              <Button variant="ghost" className="desktop-agent-sidebar__empty-project" type="button" onClick={onCreateProject}>
-                {t('sidebar.createProject')}
-              </Button>
+              <div className="desktop-agent-sidebar__empty">{t('sidebar.emptyProjects')}</div>
             )}
           </div>
         </div>
@@ -606,7 +604,7 @@ function GlobalThreadSection({
           />
         ) : (
           <div className="app-sidebar__list">
-            <div className="desktop-agent-sidebar__empty-session">{t('sidebar.emptyGlobalChats')}</div>
+            <div className="desktop-agent-sidebar__empty">{t('sidebar.emptyGlobalChats')}</div>
           </div>
         )
       ) : null}

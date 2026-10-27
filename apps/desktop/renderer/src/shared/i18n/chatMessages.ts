@@ -264,7 +264,7 @@ export const chatEnUS = {
   'chat.model.unavailable': 'Model unavailable',
   'chat.model.contextUsage': 'Current context usage: {usage}',
   'chat.modelSetup.title': 'No model provider configured',
-  'chat.modelSetup.description': 'Add a model provider with an API key to start real conversations. Until then, only the built-in local smoke reply is available.',
+  'chat.modelSetup.description': 'Add a model provider with an API key to start real conversations. Until then, only the built-in local test reply is available.',
   'chat.modelSetup.configure': 'Set up',
   'chat.modelSetup.dismiss': 'Dismiss',
   'chat.command.projectFiles': 'Project files',

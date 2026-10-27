@@ -46,7 +46,6 @@
 }
 
 .desktop-project-editor__directory-row,
-.desktop-project-editor__directory-empty,
 .desktop-project-editor__choose-directory {
   display: flex;
   align-items: center;
@@ -59,14 +58,12 @@
 }
 
 .desktop-project-editor__directory-row > svg,
-.desktop-project-editor__directory-empty > svg,
 .desktop-project-editor__choose-directory > svg {
   flex: 0 0 auto;
   color: var(--app-text-muted);
 }
 
-.desktop-project-editor__directory-row > span,
-.desktop-project-editor__directory-empty > span {
+.desktop-project-editor__directory-row > span {
   min-width: 0;
   flex: 1;
   overflow: hidden;
@@ -74,12 +71,7 @@
   white-space: nowrap;
 }
 
-.desktop-project-editor__directory-empty {
-  color: var(--app-text-muted);
-}
-
-.desktop-project-editor__directory-row + .desktop-project-editor__choose-directory,
-.desktop-project-editor__directory-empty + .desktop-project-editor__choose-directory {
+.desktop-project-editor__directory-row + .desktop-project-editor__choose-directory {
   border-top: 1px solid var(--desktop-agent-subtle-divider);
 }
 
