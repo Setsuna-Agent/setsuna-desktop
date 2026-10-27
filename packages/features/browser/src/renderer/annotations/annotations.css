@@ -30,7 +30,7 @@
   place-items: center;
   height: 20px;
   /* Matches the badge drawn into the page by main/annotations/page-overlay.ts. */
-  border-radius: 7px;
+  border-radius: var(--app-radius-xs);
   background: #6366f1;
   color: #fff;
   font-size: 11px;

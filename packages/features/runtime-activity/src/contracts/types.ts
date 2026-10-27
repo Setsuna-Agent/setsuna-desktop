@@ -1,13 +1,11 @@
 import type {
   RuntimeBackgroundShellProcess,
+  RuntimeActiveTurnState,
   RuntimeTaskKind,
   RuntimeThreadKind,
 } from '@setsuna-desktop/contracts';
 
-export type RuntimeActiveTaskState =
-  | 'running'
-  | 'waiting_for_approval'
-  | 'waiting_for_input';
+export type RuntimeActiveTaskState = RuntimeActiveTurnState;
 
 /** A user-facing projection of one turn that is still owned by the runtime. */
 export type RuntimeActiveTask = Readonly<{

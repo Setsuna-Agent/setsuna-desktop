@@ -1,4 +1,4 @@
-import { Button } from '@setsuna-desktop/renderer-ui';
+import { Button, useToast } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
 import { Check, Copy, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -28,6 +28,7 @@ export function ChatMessageFooter({
   forkMessageId?: string | null;
 }) {
   const { locale, t } = useI18n();
+  const toast = useToast();
   const [copied, setCopied] = useState(false);
   const copyTimerRef = useRef<number | null>(null);
   const formattedTime = useMemo(() => formatTime(message.createdAt, locale), [locale, message.createdAt]);
@@ -46,6 +47,7 @@ export function ChatMessageFooter({
       copyTimerRef.current = window.setTimeout(() => setCopied(false), 1600);
     } catch {
       setCopied(false);
+      toast.error(t('chat.message.copyFailed'));
     }
   };
   const timeNode = (

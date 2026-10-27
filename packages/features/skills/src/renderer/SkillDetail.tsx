@@ -80,7 +80,7 @@ export function SkillDetail({
         <section className="sd-detail desktop-capabilities-skill-detail">
           <ui.PageHeader
             className="sd-detail__header"
-            leading={<ui.SkillIcon skill={active} variant="list" />}
+            leading={<ui.SkillIcon variant="list" />}
             actions={(
               <>
                 <span className="sd-toggle-label"><Switch disabled={pending || loading} label={translate('feature.skills.enableHint')} checked={active.enabled} onCheckedChange={(checked) => onToggle(checked)} /><span>{translate('feature.skills.enabled')}</span></span>

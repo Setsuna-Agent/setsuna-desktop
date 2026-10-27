@@ -16,6 +16,7 @@ import type { WorkspaceProjectStore } from '../ports/workspace-project-store.js'
 import { WorkspaceSearchCancelledError } from '../ports/workspace-search-engine.js';
 import {
   archiveRuntimeWorkspaceProject,
+  removeRuntimeWorkspaceProject,
   saveRuntimeWorkspaceFile,
 } from '../runtime/use-cases/workspace-operations.js';
 import { assertSafeRuntimeId } from '../security/runtime-id.js';
@@ -107,7 +108,7 @@ export async function handleRuntimeWorkspaceRequest(
 
   const projectMatch = url.pathname.match(/^\/v1\/projects\/([^/]+)$/u);
   if (projectMatch && request.method === 'DELETE') {
-    await runtime.workspaceProjects.removeProject(decodeURIComponent(projectMatch[1]));
+    await removeRuntimeWorkspaceProject(runtime, decodeURIComponent(projectMatch[1]));
     sendJson(response, 200, { ok: true });
     return true;
   }

@@ -25,6 +25,10 @@
 
 Summary 不包含完整 messages，避免列表接口加载所有 transcript。
 
+列表查询实时附加 `activeTurnId` 和 `activeTurnState`（运行、等待审批、等待输入），不写入持久事件。等待状态只取当前 turn 的待处理人工审批或输入请求，自动审批不算等待用户；无活动 turn 时不查询审批。Renderer 复用既有摘要轮询。
+
+项目归档会归档其对话并隐藏项目。恢复一条归档对话时，同时恢复仍存在的所属项目，保留项目身份和其他对话的归档状态；旧版遗留的已移除项目则清除对话归属。移除项目先通过各线程的 mutation 边界清除 `projectId` 并发布 `thread.updated`，保留历史、归档状态和独立 `workspaceId`，最后删除项目记录；活动 turn 会阻止移除，中途失败仍保留项目供重试。Renderer 恢复对话后刷新项目列表。
+
 ### `RuntimeThread`
 
 Full snapshot 通常包含：

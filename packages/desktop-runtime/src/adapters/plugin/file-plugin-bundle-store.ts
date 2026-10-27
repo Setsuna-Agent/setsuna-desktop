@@ -50,6 +50,7 @@ import {
   pathsOverlap,
   pluginHookDescriptor,
   pluginMcpServerDescriptor,
+  pluginMcpServerReplacement,
   pluginMcpServerUnmodified,
   publicPluginSummary,
   pathIsInside,
@@ -431,7 +432,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
             // untouched; the new expected input still lets removal preserve them.
             if (current && oldExpected && pluginMcpServerUnmodified(current, oldExpected)
               && !pluginMcpServerUnmodified(current, server)) {
-              mcpActions.push({ type: 'replace', server });
+              mcpActions.push({ type: 'replace', server: pluginMcpServerReplacement(current, server) });
             }
             continue;
           }

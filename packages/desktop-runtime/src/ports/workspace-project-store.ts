@@ -57,6 +57,7 @@ export type WorkspaceProjectStore = {
   addProject(input: AddWorkspaceProjectInput): Promise<WorkspaceProject>;
   updateProject(projectId: string, input: UpdateWorkspaceProjectInput): Promise<WorkspaceProject>;
   archiveProject(projectId: string): Promise<void>;
+  restoreProject(projectId: string): Promise<WorkspaceProject | null>;
   removeProject(projectId: string): Promise<void>;
   ensureTemporaryWorkspace(input: TemporaryWorkspaceInput): Promise<WorkspaceProject>;
   removeTemporaryWorkspace(input: TemporaryWorkspaceInput): Promise<void>;

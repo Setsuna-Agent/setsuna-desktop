@@ -1,10 +1,14 @@
 // @vitest-environment happy-dom
 
+import { ToastProvider } from '@setsuna-desktop/renderer-ui';
+import type { ReactElement } from 'react';
 import type { RuntimeMessage, RuntimeToolRun } from '@setsuna-desktop/contracts';
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { cleanup, render as renderComponent, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MessageItem } from '../../../../../src/features/chat/conversation/ChatMessageItem.js';
 import type { ChatDisplayItem } from '../../../../../src/features/chat/conversation/chatMessageDisplay.js';
+
+const render = (ui: ReactElement) => renderComponent(ui, { wrapper: ToastProvider });
 
 vi.mock('../../../../../src/features/chat/tool-runs/runtimeFeatureToolResults.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('../../../../../src/features/chat/tool-runs/runtimeFeatureToolResults.js')>();

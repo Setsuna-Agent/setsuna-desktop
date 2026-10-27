@@ -1,4 +1,4 @@
-import { ToastNotice, Slider } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, Slider, useToast } from '@setsuna-desktop/renderer-ui';
 import type {
   DesktopWindowCloseBehavior,
   RuntimeConfigState,
@@ -89,6 +89,7 @@ export function GeneralSettings({
   onSave: (input: RuntimePreferenceInput) => Promise<void>;
 }) {
   const { locale, setLocale, t } = useI18n();
+  const toast = useToast();
   const { fontFamily, fontSize, fontWeight, setFontFamily, setFontSize, setFontWeight } = useAppearancePreferences();
   const { codeFontFamily, codeTheme, setCodeFontFamily, setCodeTheme } = useCodeAppearance();
   const { sidebarBackgroundStyle, setSidebarBackgroundStyle } = useSidebarBackgroundPreference();
@@ -148,7 +149,10 @@ export function GeneralSettings({
         ...(config.desktopSettings ?? {}),
         interfaceLanguage: nextLocale,
       },
-    }).catch(() => setLocale(previousLocale));
+    }).catch((error: unknown) => {
+      setLocale(previousLocale);
+      toast.error(error instanceof Error ? error.message : t('settings.runtime.saveError', { label: t('settings.general.interfaceLanguage') }));
+    });
   };
 
   return (

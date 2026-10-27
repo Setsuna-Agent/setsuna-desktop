@@ -709,6 +709,8 @@ describe('file plugin bundle store', () => {
     const fixture = await createPluginFixture();
     const runtime = await createPluginRuntime(fixture.root);
     await runtime.plugins.installPlugin({ path: fixture.bundleDir });
+    const tools = [{ name: 'search_docs', inputSchema: { type: 'object' } }];
+    await runtime.mcp.updateServer('plugin_docs', { tools });
 
     await writeFile(path.join(fixture.bundleDir, 'skills', 'docs-helper', 'SKILL.md'), [
       '---',
@@ -743,7 +745,7 @@ describe('file plugin bundle store', () => {
       plugins: [expect.objectContaining({ id: 'demo', version: '1.0.0' })],
     });
     await expect(runtime.mcp.listServerInputs()).resolves.toEqual([
-      expect.objectContaining({ key: 'plugin_docs', url: 'https://docs.example/mcp' }),
+      expect.objectContaining({ key: 'plugin_docs', url: 'https://docs.example/mcp', tools }),
     ]);
     expect(discoverRuntimeHooks(await runtime.config.getConfig()).hooks).toEqual([
       expect.objectContaining({ pluginId: 'demo', matcher: 'read_file' }),

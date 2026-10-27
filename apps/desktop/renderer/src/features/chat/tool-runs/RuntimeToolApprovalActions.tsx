@@ -416,7 +416,7 @@ function approvalDecisionTone(
   decision: RuntimeApprovalAvailableDecision,
 ): 'primary' | 'secondary' | 'danger' {
   if (decision.type === 'approve') return 'primary';
-  if (decision.type === 'reject' || decision.type === 'cancel') return 'danger';
+  if (decision.type === 'cancel') return 'danger';
   if (decision.type === 'approve_network_policy_amendment'
     && decision.networkPolicyAmendment.action === 'deny') return 'danger';
   return 'secondary';

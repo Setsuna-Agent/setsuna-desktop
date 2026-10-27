@@ -226,6 +226,21 @@ describe('file workspace project store', () => {
     expect((await store.listProjects()).projects).toMatchObject([{ id: project.id }]);
   });
 
+  it('restores an archived project by identity even when its directory is offline', async () => {
+    const fixture = await createWorkspaceFixture();
+    const store = new FileWorkspaceProjectStore(fixture.dataDir, systemClock);
+    const project = await store.addProject({ path: fixture.projectDir });
+    await store.archiveProject(project.id);
+    await rename(fixture.projectDir, `${fixture.projectDir}-offline`);
+    const restored = await store.restoreProject(project.id);
+    expect(restored).toMatchObject({ id: project.id, path: project.path });
+    expect(restored?.archivedAt).toBeUndefined();
+    expect((await new FileWorkspaceProjectStore(fixture.dataDir, systemClock).listProjects()).projects)
+      .toMatchObject([{ id: project.id }]);
+    await store.removeProject(project.id);
+    await expect(store.restoreProject(project.id)).resolves.toBeNull();
+  });
+
   it('provides a hidden temporary workspace when no project is selected', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-workspace-test-'));
     const store = new FileWorkspaceProjectStore(path.join(root, 'data'), systemClock);

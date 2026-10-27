@@ -261,7 +261,7 @@ function SkillListItem({
   return (
     <article className="desktop-capability-list-item desktop-capability-list-item--skill">
       <UiButton variant="ghost" className="desktop-capability-list-item__identity" type="button" onClick={onOpen}>
-        <ui.SkillIcon skill={skill} variant="list" />
+        <ui.SkillIcon variant="list" />
         <span className="desktop-capability-list-item__copy"><strong>{skill.name}</strong><span title={skill.description || skill.id}>{skill.description || skill.id}</span></span>
       </UiButton>
       <div className="desktop-capability-list-item__aside">

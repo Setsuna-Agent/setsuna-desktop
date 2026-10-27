@@ -225,6 +225,23 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     });
   }
 
+  async restoreProject(projectId: string): Promise<WorkspaceProject | null> {
+    return withFileStateUpdate(this.indexPath, async () => {
+      const index = await this.readIndex();
+      const existing = index.projects.find((project) => project.id === projectId);
+      if (!existing) return null;
+      if (!existing.archivedAt) return existing;
+      // Restoring navigation must also work when a linked directory is offline.
+      const restored = { ...existing, updatedAt: this.clock.now().toISOString() };
+      delete restored.archivedAt;
+      await this.writeIndex({
+        version: 1,
+        projects: index.projects.map((project) => project.id === projectId ? restored : project),
+      });
+      return restored;
+    });
+  }
+
   async removeProject(projectId: string): Promise<void> {
     await withFileStateUpdate(this.indexPath, async () => {
       const index = await this.readIndex();

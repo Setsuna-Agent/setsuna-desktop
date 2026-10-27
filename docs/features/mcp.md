@@ -70,6 +70,8 @@ MCP server 的启用状态和 allow/deny 工具范围是执行边界。工具结
 
 手填配置支持 Client ID 和 Resource；静态 Client Secret、显式 scopes 和固定回调端口没有对应配置面。需要这些能力的平台必须先适配实际认证链路。插件导入成功只代表声明兼容，不证明平台准入、账号权限或 OAuth 登录已经验证。
 
+GitHub 官方远程 MCP 使用 Setsuna 已注册的 OAuth App 和 Device Flow，无需本机回调监听。`contracts/oauth-endpoints.ts` 持有插件导入与运行时共用的官方端点判断；导入器可将该端点附带的宿主专用 OAuth 客户端声明转换为 Setsuna 登录流程，不保存或使用包内 Client Secret 与固定回调地址。手动设置其他 Client ID 时保留通用 OAuth 流程。具体 Bundle 转换与凭据优先级见 [GitHub 插件认证](../extensions/plugins/bundles.md#本地-codex-插件兼容)。
+
 未配置 OAuth Client ID/Resource 且没有已保存凭据的远程 MCP 返回 `unknown`，表示尚未发现认证方式，仍提供“连接”操作；不能据此判定不支持 OAuth。OAuth 元数据发现和动态客户端注册由连接流程按需执行，读取列表、插件恢复和启动不增加网络探测。stdio 仍返回 `unsupported`，已配置 Token 或凭据配置错误的连接沿用原有处理。
 
 默认市场的筛选策略由 `packages/desktop-runtime/src/adapters/plugin/repository-plugin-catalog.ts` 维护，见 [仓库插件接入](../extensions/plugins/bundles.md#从-openai-仓库安装)。重新接入被排除的平台时，应重新核实平台要求与授权链路，不沿用历史申请步骤。

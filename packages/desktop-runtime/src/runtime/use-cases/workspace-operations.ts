@@ -6,6 +6,8 @@ import {
 } from '@setsuna-desktop/contracts';
 import { Buffer } from 'node:buffer';
 import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
+import type { ThreadStorePatch } from '../../ports/thread-store.js';
+import { readRuntimeThreadMetadata } from '../thread-metadata.js';
 import type { RuntimeContainer } from '../runtime-factory.js';
 import { RuntimeUseCaseError } from './errors.js';
 
@@ -39,6 +41,43 @@ export async function archiveRuntimeWorkspaceProject(
   }
 
   await runtime.workspaceProjects.archiveProject(projectId);
+}
+
+/** Preserve an archived project's identity; only a removed project loses ownership. */
+export async function restoredThreadProjectPatch(
+  workspaceProjects: Pick<WorkspaceProjectStore, 'restoreProject'>,
+  projectId: string | undefined,
+): Promise<Pick<ThreadStorePatch, 'projectId'>> {
+  if (!projectId) return {};
+  return await workspaceProjects.restoreProject(projectId) ? {} : { projectId: null };
+}
+
+export async function removeRuntimeWorkspaceProject(
+  runtime: RuntimeWorkspaceOperations & Pick<RuntimeContainer, 'eventBus'>,
+  projectId: string,
+): Promise<void> {
+  const threads = await runtime.threadStore.listThreads({
+    includeFeatures: true, includeSide: true, includeArchived: true, projectId,
+  });
+  const assertIdle = (threadId: string) => {
+    if (runtime.agentLoop.activeTurnId(threadId)) {
+      throw new RuntimeUseCaseError('conflict', 'Wait for project conversations to finish before removing the project.');
+    }
+  };
+  // Check the whole project before moving anything, then recheck inside each admission boundary.
+  threads.forEach((thread) => assertIdle(thread.id));
+  for (const thread of threads) {
+    await runtime.agentLoop.withThreadMutation(thread.id, async () => {
+      assertIdle(thread.id);
+      const current = await readRuntimeThreadMetadata(runtime.threadStore, thread.id);
+      if (!current || current.projectId !== projectId) return;
+      await runtime.threadStore.updateThread(thread.id, { projectId: null });
+      const events = await runtime.threadStore.listEvents(thread.id, current.lastSeq);
+      for (const event of events) runtime.eventBus.publish(event);
+    });
+  }
+  // Keep the project available if a move fails; retrying only visits remaining members.
+  await runtime.workspaceProjects.removeProject(projectId);
 }
 
 /**

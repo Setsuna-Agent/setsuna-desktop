@@ -36,7 +36,7 @@ packages/features/<feature>/
 | `conversation-debug` | `conversation-debug` | O | — | — | O | 调试设置、事件/trace 查询与时间线面板 |
 | `goal` | `goal` | O | — | — | O | 持久 Goal、自动续轮、用量/状态与 UI |
 | `image-generation` | `image-generation` | O | — | — | O | 图片生成配置、服务、资产结果与 Plugin 详情贡献 |
-| `mcp` | `mcp` | R | — | — | R | MCP transport、OAuth、tools/resources 与管理面 |
+| `mcp` | `mcp` | R | — | — | R | MCP transport、OAuth 与宿主端点策略、tools/resources 与管理面 |
 | `memory` | `memory` | O | — | — | O | 记忆设置、CRUD、后台提取与上下文注入 |
 | `model-provider` | `model-provider` | R | — | — | R | Pi 模型协议、provider 配置、发现、stream/replay |
 | `network-proxy` | `network-proxy` | — | R | B | R | 代理配置、凭据引用、loopback relay 与路由状态 |

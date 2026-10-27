@@ -5,6 +5,16 @@ import { readJsonFile } from '../store/json-file.js';
 import { requiredBundleDirectory, type PluginIndexFile } from './file-plugin-bundle-model.js';
 import { sameLegacyMarketplaceSource } from './legacy-marketplace-source.js';
 
+// Core owns question handling, project guidance and compaction status. The other
+// retired hooks only repeated review advice or inferred unfinished work from keywords.
+const RETIRED_BUNDLED_PLUGIN_IDS = new Set([
+  'question',
+  'audit-file-mutations',
+  'session-start-project-guidance',
+  'compact-warning',
+  'stop-todo-continuation',
+]);
+
 /** Retire obsolete built-ins and recover provenance without touching same-ID local bundles. */
 export async function migrateBundledPluginInstallations(
   indexPath: string,
@@ -20,9 +30,8 @@ export async function migrateBundledPluginInstallations(
     const candidates: Array<Pick<PluginBundleInspection, 'id' | 'sourcePath'>> = [];
     for (const plugin of Array.isArray(index.plugins) ? index.plugins : []) {
       const bundledSource = path.join(bundledPluginsDir, plugin.id);
-      // The standalone question tool was superseded by core request_user_input.
-      // Its source directory is gone, so legacy provenance must not require it to exist.
-      if (plugin.id === 'question' && (
+      // Deleted source directories must not be required to recover legacy provenance.
+      if (RETIRED_BUNDLED_PLUGIN_IDS.has(plugin.id) && (
         plugin.installationSource === 'marketplace'
         || (!plugin.installationSource && await sameLegacyMarketplaceSource(plugin.sourcePath, bundledSource))
       )) {
@@ -33,7 +42,7 @@ export async function migrateBundledPluginInstallations(
           await store.removePlugin(plugin.id).catch((error) => {
             // A locked file must not restore the retired tool or block other plugins.
             // The normal removal transaction rolls back, so a later read can retry.
-            console.warn('Could not remove retired bundled plugin question:', error);
+            console.warn(`Could not remove retired bundled plugin ${plugin.id}:`, error);
           });
         }
         continue;

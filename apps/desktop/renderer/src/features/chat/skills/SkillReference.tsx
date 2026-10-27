@@ -33,7 +33,6 @@ export const SkillReferenceLabel = memo(function SkillReferenceLabel({
   return (
     <SkillReferencePresentation
       displayText={displayText ?? (skill ? skillDisplayText(skill) : skillId ?? '')}
-      skill={skill}
       title={skill?.description || skill?.id || skillId || displayText || ''}
     />
   );
@@ -58,7 +57,6 @@ export const SkillReferenceText = memo(function SkillReferenceText({
           <SkillReferencePresentation
             key={`skill:${part.start}:${part.skillId}`}
             displayText={part.value}
-            skill={part.skill}
             title={part.skill?.description || part.skillId}
           />
         )
@@ -69,17 +67,15 @@ export const SkillReferenceText = memo(function SkillReferenceText({
 
 function SkillReferencePresentation({
   displayText,
-  skill,
   title,
 }: {
   displayText: string;
-  skill?: RuntimeSkillSummary;
   title: string;
 }) {
   return (
     <ChatInlineReference
       className="chat-skill-reference"
-      icon={<SkillIcon skill={skill} />}
+      icon={<SkillIcon />}
       label={displayText}
       title={title}
     />

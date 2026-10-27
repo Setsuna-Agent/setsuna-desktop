@@ -160,6 +160,14 @@ export function useRuntimeClientState({
     void refresh().catch(() => undefined);
   }, [refresh]);
 
+  const restoreArchivedThread = useCallback(async (threadId: string) => {
+    const restored = await threadState.restoreArchivedThread(threadId);
+    // Restoring one conversation can also restore its archived project.
+    const projectList = await client.listProjects();
+    setProjects(projectList.projects);
+    return restored;
+  }, [client, threadState.restoreArchivedThread]);
+
   return {
     ...configState,
     ...threadState,
@@ -168,6 +176,7 @@ export function useRuntimeClientState({
     loadState,
     projects,
     refresh,
+    restoreArchivedThread,
     selectConversationModel,
     setError,
     setProjects,

@@ -1,4 +1,4 @@
-import { Square } from 'lucide-react';
+import { Info } from 'lucide-react';
 import { shellTopbarActionSlot } from '@setsuna-desktop/renderer-contracts/shell';
 import { RendererOwnedListSlot } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
 import { PanelPlacementIcon } from '../../features/workspace/PanelPlacementIcon.js';
@@ -44,7 +44,7 @@ export function AppTopbarActions({
             className={`app-shell-icon-control ${conversationOverviewVisible ? 'is-active' : ''}`}
             onClick={onToggleConversationOverview}
           >
-            <Square size={16} />
+            <Info size={16} />
           </IconButton>
         </ShortcutTooltip>
       ) : null}

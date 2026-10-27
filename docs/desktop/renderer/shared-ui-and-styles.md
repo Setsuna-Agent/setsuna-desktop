@@ -10,6 +10,10 @@
 
 项目图标选择器使用 `shared/ui/project-icon-presets.ts` 的 24 个精选图案，避开系统功能按钮使用的符号；各项目入口统一通过 `ProjectIcon` 展示。候选清单独立于 contracts 的完整图标键集合，旧项目图标继续支持显示、改色、保存和同步，恢复默认仍使用文件夹。
 
+Skill 列表、详情、命令菜单和聊天引用统一通过 `shared/ui/SkillIcon` 展示固定的魔杖图标，插件来源的 Skill 也沿用同一图标。`SettingsViewUi.SkillIcon` 只接收尺寸变体和样式类名，不接收 Skill 或插件元数据。
+
+插件默认头像与侧栏应用复用 `shared/ui/IconAvatar` 的线条图标、同色浅底和尺寸变体。`plugin-icon-presets.ts` 集中维护内置插件的图标与配色，未知插件使用紫色拼图图标，不生成字母缩写。插件提供的有效图片优先展示；已安装侧栏应用的自定义头像和颜色仍由宿主外观偏好统一提供。
+
 ## 子目录
 
 | 目录 | 职责 |
@@ -37,7 +41,7 @@
 - 通知区域保持 live-region 语义，避免被模态弹窗隐藏；点击通知不触发 Dialog 的外部点击关闭，失败后的表单和重试入口继续保留。
 - `collapsible/` 持有共享的 `CollapsibleContent`，负责受控展开与收起后的卸载；展开状态由调用方管理。通过 `0fr → 1fr` 网格轨道展开自然高度，不读取缩放后的 DOMRect 作为动画高度，避免切回 `auto` 时跳动；内层容器承接内容间距，完全收拢后再卸载，减少动态效果偏好下直接切换。
 - `drag/` 和 `styles/drag-feedback.css` 参考 beUI Sortable List，统一原生拖动快照、排序占位与弹簧让位；拖动时才测量位置和创建预览，结束或卸载后清理。业务 payload、保存和取消仍由各入口持有；面板标签命中检测使用未变换的目标位置，避免动画影响排序判断。
-- `FileIcon` 使用 Symbols，统一按跨平台路径的文件名选择文件类型图标；workspace、artifact 和插件卡片复用这个入口，尺寸由各自样式控制。
+- `FileIcon` 使用 Symbols，统一按跨平台路径的文件名选择文件类型图标；workspace 和 artifact 复用这个入口，尺寸由各自样式控制。
 - `FileTreeSurface` / `FileTreeRow` 为文件面板、审查和 PR Diff 文件树共用的 beUI 视觉层：26px 行高、12px 字号、16px 层级缩进、展开箭头、引导线与选中背景滑动。目录行默认只显示展开箭头，文件行保留类型图标并省略空白箭头占位，同层名称对齐；每行按深度延续所有祖先层级的引导线，展开多层目录后外层线段保持连续。每个 surface 隔离布局动画并跟踪自身滚动，减少动态效果时关闭移动动画。Surface 挂载时直接显示现有行，避免文件标签切换导致的重新挂载重播整树入场动画；目录展开后新增的行仍有入场过渡。目录加载、筛选、拖放、文件选择仍由各 Feature 持有。
 - `Table` / `TableColumn` 参考 [beUI Table](https://beui.dev/components/motion/table)，统一列定义、表头、行悬停、空状态和横向滚动，沿用宿主主题与减少动态效果偏好。用量记录的列内容由 `UsageRecordsTable` 持有，`UsageRecentCalls` 负责每页 10 条的数据加载与分页；共享表格直接渲染当前页。
 - Dialog 的入场动画由 `overlays.css` 持有：弹窗上移 12px 并淡入（180ms ease-out），遮罩淡入（160ms ease）。弹窗已去掉 scale 动画，居中与入场位移统一使用 `translate`；12px 按应用密度缩放，减少动态效果偏好下禁用入场动画。

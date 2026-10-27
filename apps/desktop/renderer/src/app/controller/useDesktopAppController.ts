@@ -1,4 +1,5 @@
 import { workspaceProjectRoots, workspaceProjectForRoot } from '@setsuna-desktop/contracts';
+import { useToast } from '@setsuna-desktop/renderer-ui';
 import {
   pluginMentionText,
   type CreateThreadInput,
@@ -46,6 +47,7 @@ import { useThreadDeletionGuard } from './useThreadDeletionGuard.js';
 
 export function useDesktopAppController() {
   const { t } = useI18n();
+  const toast = useToast();
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [newThreadDraftId, setNewThreadDraftId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<MainView>('chat');
@@ -262,8 +264,8 @@ export function useDesktopAppController() {
     client,
     confirmDiscardProjectFile: projectWorkspace.fileDraft.confirmDiscardAllChanges,
     currentThread,
-    globalThreads,
     onNewThreadProjectChange: composerSession.claimForProject,
+    onError: toast.error,
     projects,
     reloadThreads,
     resetNewThreadWorkspacePanels: workspacePanels.resetNewThreadPanelSession,

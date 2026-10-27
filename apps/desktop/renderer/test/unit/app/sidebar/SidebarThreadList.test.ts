@@ -18,7 +18,6 @@ describe('SidebarThreadList', () => {
     expect(html).toContain('conversation-5');
     expect(html).not.toContain('conversation-6');
     expect(html).toContain('aria-label="再显示 1 个对话"');
-    expect(html).toContain('展开显示');
   });
 
   it('initially renders twenty global conversations', () => {
@@ -36,7 +35,7 @@ describe('SidebarThreadList', () => {
     const html = renderThreadList(count, variant);
 
     expect(html).toContain(`conversation-${count}`);
-    expect(html).not.toContain('展开显示');
+    expect(html).not.toContain('aria-label="再显示 ');
   });
 
   it('keeps selected and running conversations visible beyond the initial batch', () => {
@@ -47,7 +46,7 @@ describe('SidebarThreadList', () => {
 
     expect(html).toContain('conversation-21');
     expect(html).toContain('conversation-22');
-    expect(html).not.toContain('展开显示');
+    expect(html).not.toContain('aria-label="再显示 ');
   });
 
   it('expands from a pinned conversation instead of the stale page boundary', () => {

@@ -21,7 +21,9 @@ import { applyThreadFileChanges } from '../runtime/use-cases/thread-file-changes
 import { readThreadFileChangePreview } from '../runtime/use-cases/thread-file-change-preview.js';
 import { forkRuntimeThread } from '../runtime/use-cases/thread-fork.js';
 import { createRuntimeThread } from '../runtime/use-cases/thread-create.js';
+import { listRuntimeThreadSummaries } from '../runtime/use-cases/thread-list.js';
 import { validateRuntimeThreadWorkspaceReset } from '../runtime/use-cases/thread-operations.js';
+import { restoredThreadProjectPatch } from '../runtime/use-cases/workspace-operations.js';
 import { RuntimeUseCaseError } from '../runtime/use-cases/errors.js';
 import { stringInput } from './app-server/input.js';
 import { runtimeSkillReferenceList } from './runtime-skill-reference-input.js';
@@ -53,10 +55,7 @@ export async function handleRuntimeThreadRequest(
       scope: threadScope(url.searchParams.get('scope')),
       projectId: url.searchParams.get('projectId') ?? undefined,
     };
-    const threads = await runtime.threadStore.listThreads(query);
-    sendJson(response, 200, {
-      threads: threads.map((thread) => withActiveTurn(runtime, thread)),
-    });
+    sendJson(response, 200, { threads: await listRuntimeThreadSummaries(runtime, query) });
     return true;
   }
 
@@ -134,9 +133,11 @@ export async function handleRuntimeThreadRequest(
       threadId,
       async () => {
         if (input.workspaceId === null) await validateRuntimeThreadWorkspaceReset(runtime, threadId);
-        const beforeSeq = (await runtime.threadStore.getThread(threadId))?.lastSeq ?? 0;
-        const updated = await runtime.threadStore.updateThread(threadId, patch);
-        await publishThreadEventsSince(runtime, threadId, beforeSeq);
+        const before = await readRuntimeThreadMetadata(runtime.threadStore, threadId);
+        const projectPatch = before && patch.archived === false
+          ? await restoredThreadProjectPatch(runtime.workspaceProjects, before.projectId) : {};
+        const updated = await runtime.threadStore.updateThread(threadId, { ...patch, ...projectPatch });
+        await publishThreadEventsSince(runtime, threadId, before?.lastSeq ?? 0);
         return updated;
       },
     );

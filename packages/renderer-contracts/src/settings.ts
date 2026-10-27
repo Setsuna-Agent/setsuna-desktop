@@ -253,11 +253,6 @@ export type SettingsPluginIconProps = Readonly<{
 
 export type SettingsSkillIconProps = Readonly<{
   className?: string;
-  skill?: Readonly<{
-    icon?: string;
-    kind: 'builtin' | 'plugin' | 'user';
-    pluginId?: string;
-  }>;
   variant?: 'inline' | 'list' | 'menu';
 }>;
 

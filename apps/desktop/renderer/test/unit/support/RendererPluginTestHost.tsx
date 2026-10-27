@@ -1,4 +1,5 @@
 import type { RendererOwnedSlotRenderer } from '@setsuna-desktop/feature-core/renderer';
+import { ToastProvider } from '@setsuna-desktop/renderer-ui';
 import { chatToolResultResolverSlot } from '@setsuna-desktop/renderer-contracts/chat';
 import { createElement, type ReactNode } from 'react';
 import {
@@ -26,7 +27,7 @@ const ownedSlots: RendererOwnedSlotRenderer = Object.freeze({
   single: () => null,
 });
 
-/** Supplies the minimal committed Kernel graph needed by isolated leaf-component tests. */
+/** Supplies the committed Kernel and host feedback boundary for isolated component tests. */
 export function RendererPluginTestHost({
   children,
   slots = ownedSlots,
@@ -37,7 +38,7 @@ export function RendererPluginTestHost({
   return (
     <RendererKernelProvider runtime={runtime}>
       <RendererOwnedSlotsProvider slots={slots}>
-        {children}
+        <ToastProvider>{children}</ToastProvider>
       </RendererOwnedSlotsProvider>
     </RendererKernelProvider>
   );

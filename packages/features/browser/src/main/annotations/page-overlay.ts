@@ -115,7 +115,7 @@ export function annotationPageOverlay(
         const outline = document.createElement('div');
         outline.style.cssText = 'position:fixed;pointer-events:none;box-sizing:border-box;border:1.5px solid #6366f1;border-radius:4px;';
         const badge = document.createElement('span');
-        badge.style.cssText = 'position:absolute;display:grid;place-items:center;min-width:20px;height:20px;padding:0 2px;box-sizing:border-box;border-radius:7px;background:#6366f1;color:#fff;font:600 11px/1 system-ui;box-shadow:0 0 0 2px #fff,0 2px 6px #0002;';
+        badge.style.cssText = 'position:absolute;display:grid;place-items:center;min-width:20px;height:20px;padding:0 2px;box-sizing:border-box;border-radius:6px;background:#6366f1;color:#fff;font:600 11px/1 system-ui;box-shadow:0 0 0 2px #fff,0 2px 6px #0002;';
         outline.append(badge);
         root.append(outline);
         marker = { outline, badge };
