@@ -4,7 +4,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::windows::process::CommandExt;
 use std::process::{Command, Stdio};
 use windows_sys::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
-use windows_sys::Win32::System::Console::GetConsoleWindow;
+use windows_sys::Win32::System::Console::{GetConsoleCP, GetConsoleOutputCP, GetConsoleWindow};
 use windows_sys::Win32::System::StationsAndDesktops::{
     GetThreadDesktop, GetUserObjectInformationW, UOI_NAME,
 };
@@ -81,6 +81,70 @@ fn nested_commands_inherit_the_user_desktop_and_preserve_io_and_exit_code() {
 }
 
 #[test]
+fn shell_bootstrap_uses_system_tools_and_preserves_chinese_output_and_exit_code() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::write(
+        root.path().join("chcp.cmd"),
+        "@echo off\r\necho workspace chcp executed 1>&2\r\nexit /b 99\r\n",
+    )
+    .unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_setsuna-sandbox-win"))
+        .args([
+            "run-managed",
+            "--command",
+            "(echo 中文标准输出) & (echo 中文标准错误 1>&2) & exit /b 23",
+            "--supervisor-pids",
+            &std::process::id().to_string(),
+        ])
+        .current_dir(root.path())
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(23), "{output:?}");
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap().trim(),
+        "中文标准输出"
+    );
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap().trim(),
+        "中文标准错误"
+    );
+}
+
+#[test]
+fn shell_handoff_preserves_quoting_expansion_and_pipelines() {
+    for (command, expected) in [
+        ("echo \"one & two\"", "\"one & two\""),
+        ("echo %SETSUNA_TEST_VALUE%", "%SETSUNA_TEST_OTHER%"),
+        ("echo !SETSUNA_TEST_OTHER!", "!SETSUNA_TEST_OTHER!"),
+        ("echo caret ^^ end ^& literal", "caret ^ end & literal"),
+        ("(echo 管道中文) | findstr .", "管道中文"),
+        ("for %I in (one two) do @echo %I", "one\r\ntwo"),
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_setsuna-sandbox-win"))
+            .args([
+                "run-managed",
+                "--command",
+                command,
+                "--supervisor-pids",
+                &std::process::id().to_string(),
+            ])
+            .env("SETSUNA_TEST_VALUE", "%SETSUNA_TEST_OTHER%")
+            .env("SETSUNA_TEST_OTHER", "unexpected-expansion")
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{command}: {output:?}");
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap().trim(),
+            expected,
+            "{command}"
+        );
+        assert!(output.stderr.is_empty(), "{command}: {:?}", output.stderr);
+    }
+}
+
+#[test]
 fn killing_the_launcher_terminates_its_descendants() {
     let mut child = RunningChild(launcher("sleep").spawn().unwrap());
     let stdout = child.0.stdout.take().unwrap();
@@ -139,6 +203,8 @@ fn background_probe() {
     }
     if mode == "io" {
         assert_hidden_console();
+        assert_eq!(unsafe { GetConsoleCP() }, 65001);
+        assert_eq!(unsafe { GetConsoleOutputCP() }, 65001);
         assert_eq!(
             unsafe { GetConsoleWindow() }.to_string(),
             std::env::var(EXPECTED_CONSOLE).unwrap(),

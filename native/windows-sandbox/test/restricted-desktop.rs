@@ -11,7 +11,7 @@ const CALLER: &str = "SETSUNA_TEST_HOST_DESKTOP";
 const PREFIX: &str = "platform::windows::process::desktop_tests";
 
 #[test]
-fn restricted_shell_uses_a_private_desktop() {
+fn restricted_shell_uses_a_private_desktop_and_utf8_output() {
     let output = Command::new(std::env::current_exe().unwrap())
         .args([
             "--exact",
@@ -23,9 +23,13 @@ fn restricted_shell_uses_a_private_desktop() {
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
-    assert!(
-        String::from_utf8_lossy(&output.stdout).contains("restricted desktop verified"),
-        "{output:?}"
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("restricted desktop verified"), "{stdout}");
+    assert!(stdout.contains("65001"), "{stdout}");
+    assert!(stdout.contains("受限标准输出"), "{stdout}");
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap().trim(),
+        "受限标准错误"
     );
 }
 
@@ -43,8 +47,10 @@ fn restricted_launcher() {
         protocol_version: 1,
         execution_id: "desktop-test".to_string(),
         supervisor_pids: vec![std::process::id()],
+        // This test binary uses the sidecar's GUI subsystem and has no console.
+        // A nested cmd probes the inherited code page as real console tools do.
         command: format!(
-            "\"{}\" --exact {PREFIX}::restricted_probe --nocapture",
+            "\"{}\" --exact {PREFIX}::restricted_probe --nocapture && cmd.exe /d /c chcp && (echo 受限标准输出) && (echo 受限标准错误 1>&2)",
             std::env::current_exe().unwrap().display()
         ),
         cwd: cwd.clone(),
