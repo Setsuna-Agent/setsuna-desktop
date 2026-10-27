@@ -74,8 +74,11 @@ fn prepare_shell_command_line(
     const COMMAND_ENV: &str = "SETSUNA_SHELL_COMMAND";
     set_environment_key(environment, COMMAND_ENV, &format!("\"{command}\""));
     let processor = quote_windows_argument(&command_processor.to_string_lossy());
+    // Bootstrap tools must not resolve through the untrusted working directory or PATH.
+    let chcp = command_processor.with_file_name("chcp.com");
+    let chcp = quote_windows_argument(&chcp.to_string_lossy());
     format!(
-        "{processor} /d /v:on /s /c \"chcp 65001 >nul && {processor} /d /s /c !{COMMAND_ENV}!\""
+        "{processor} /d /v:on /s /c \"{chcp} 65001 >nul && {processor} /d /s /c !{COMMAND_ENV}!\""
     )
 }
 

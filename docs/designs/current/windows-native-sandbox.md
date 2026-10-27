@@ -88,7 +88,7 @@ launcher 自身使用 Windows GUI subsystem，宿主 shell 使用 `CREATE_NO_WIN
 GUI 设置 `SW_HIDE`，也不通过私有桌面隐藏所有后代。宿主命令主动创建的窗口可以出现。后台与 `persist`
 只描述生命周期，不决定桌面归属，不按命令关键词、执行时长或 `persist` 猜测窗口模式，也没有 `display` 参数。
 
-宿主和受限 shell 共用命令准备逻辑：引导 shell 通过 `chcp` 将当前控制台的输入、输出代码页切换为
+宿主和受限 shell 共用命令准备逻辑：引导 shell 通过系统目录中 `chcp.com` 的绝对路径将当前控制台的输入、输出代码页切换为
 UTF-8（65001），再启动实际执行命令的 `cmd.exe`，匹配 runtime 的流式 UTF-8 解码。不能把原命令直接
 拼接在 `chcp` 后面，因为 `cmd.exe` 会先解析整行，中文 `echo` 参数可能已经按旧代码页转换。
 原命令通过本次子进程的 Unicode 环境块保存，引导 shell 使用延迟展开将其原样传入新 shell，避免提前解析

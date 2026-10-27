@@ -81,7 +81,13 @@ fn nested_commands_inherit_the_user_desktop_and_preserve_io_and_exit_code() {
 }
 
 #[test]
-fn shell_builtins_preserve_chinese_output_and_exit_code() {
+fn shell_bootstrap_uses_system_tools_and_preserves_chinese_output_and_exit_code() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::write(
+        root.path().join("chcp.cmd"),
+        "@echo off\r\necho workspace chcp executed 1>&2\r\nexit /b 99\r\n",
+    )
+    .unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_setsuna-sandbox-win"))
         .args([
             "run-managed",
@@ -90,6 +96,7 @@ fn shell_builtins_preserve_chinese_output_and_exit_code() {
             "--supervisor-pids",
             &std::process::id().to_string(),
         ])
+        .current_dir(root.path())
         .stdin(Stdio::null())
         .output()
         .unwrap();
