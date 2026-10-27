@@ -54,7 +54,12 @@ pub fn spawn_managed_shell(command: &str, supervisor_pids: &[u32]) -> Result<i32
     let mut environment = std::env::vars().collect();
     let command_line = prepare_shell_command_line(&executable, command, &mut environment);
     let environment = environment_block(&environment);
-    spawn_managed_program(&executable, command_line, supervisor_pids, Some(&environment))
+    spawn_managed_program(
+        &executable,
+        command_line,
+        supervisor_pids,
+        Some(&environment),
+    )
 }
 
 fn prepare_shell_command_line(
