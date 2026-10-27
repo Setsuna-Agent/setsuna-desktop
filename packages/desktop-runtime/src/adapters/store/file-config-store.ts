@@ -9,7 +9,6 @@ import type {
 import {
   defaultModelMaxOutputTokens,
   normalizeDesktopNetworkProxyRoute,
-  normalizeModelIconConfig,
   normalizeProviderIconConfig,
   normalizeProviderRequestHeaders,
   normalizeProviderSupportsDeveloperRole,
@@ -72,10 +71,12 @@ import {
   retireLegacyConversationDebugSettings,
 } from './legacy-conversation-debug-config.js';
 import {
+  DEFAULT_LOCAL_TEST_MODEL_NAME,
   normalizeConfiguredModelReference,
+  normalizeProviderModels,
   taskModelSettingsForSave,
   taskModelSettingsForState,
-} from './task-model-config.js';
+} from './model-config.js';
 
 const MAX_GLOBAL_PROMPT_CHARS = 8000;
 const CONFIG_SCHEMA_VERSION = 7;
@@ -497,7 +498,7 @@ export class FileConfigStore implements ConfigStore {
         requestHeaders: normalizeProviderRequestHeaders(provider.requestHeaders),
         proxyRoute: normalizeDesktopNetworkProxyRoute(provider.proxyRoute) ?? { mode: 'inherit' },
         ...(icon ? { icon } : {}),
-        models: normalizeModels(provider.models, provider.provider),
+        models: normalizeProviderModels(provider.models, provider.provider),
         apiKeySet: apiKey.length > 0,
         apiKeyPreview: maskApiKey(apiKey),
       };
@@ -565,7 +566,7 @@ function defaultConfig(): StoredConfig {
         models: [
           {
             id: 'local-runtime-smoke',
-            name: 'Local runtime smoke',
+            name: DEFAULT_LOCAL_TEST_MODEL_NAME,
             code: 'local-runtime-smoke',
             enabled: true,
             contextWindowTokens: 256_000,
@@ -623,36 +624,12 @@ function normalizeProviders(
         Object.hasOwn(provider, 'proxyRoute') ? provider.proxyRoute : previous?.proxyRoute,
       ) ?? { mode: 'inherit' },
       ...(icon ? { icon } : {}),
-      models: normalizeModels(
+      models: normalizeProviderModels(
         provider.models ?? previous?.models ?? [],
         provider.provider ?? previous?.provider ?? 'openai-compatible',
       ),
     };
   });
-}
-
-function normalizeModels(
-  models: ProviderConfigState['models'],
-  provider: ProviderConfigState['provider'],
-): ProviderConfigState['models'] {
-  const normalized = models.map((model, index) => {
-    const code = nonEmpty(model.code) ?? nonEmpty(model.id) ?? `model-${index + 1}`;
-    const icon = normalizeModelIconConfig(model.icon);
-    return {
-      id: nonEmpty(model.id) ?? code,
-      name: nonEmpty(model.name) ?? code,
-      code,
-      enabled: model.enabled ?? true,
-      ...(icon ? { icon } : {}),
-      contextWindowTokens: positiveOptionalInt(model.contextWindowTokens),
-      maxOutputTokens: positiveInt(model.maxOutputTokens, defaultModelMaxOutputTokens(provider)),
-      thinkingEnabled: model.thinkingEnabled ?? false,
-      thinkingEfforts: Array.isArray(model.thinkingEfforts) ? model.thinkingEfforts : [],
-      defaultThinkingEffort: nonEmpty(model.defaultThinkingEffort),
-      supportsImages: model.supportsImages ?? false,
-    };
-  });
-  return normalized;
 }
 
 function normalizeSecrets(value: unknown): StoredSecrets {
@@ -701,7 +678,7 @@ function runtimeProviderConfig(
   secrets: StoredSecrets,
 ): RuntimeProviderConfig | null {
   if (!provider) return null;
-  const models = normalizeModels(provider.models, provider.provider);
+  const models = normalizeProviderModels(provider.models, provider.provider);
   return {
     ...provider,
     proxyRoute: normalizeDesktopNetworkProxyRoute(provider.proxyRoute) ?? { mode: 'inherit' },
@@ -715,10 +692,6 @@ function nonEmpty(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
   return trimmed || undefined;
-}
-
-function positiveInt(value: unknown, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
 }
 
 function normalizePermissionProfile(value: unknown): RuntimeConfigState['permissionProfile'] {
@@ -817,10 +790,6 @@ function normalizeStoragePath(value: unknown): string {
 
 function booleanOrUndefined(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
-}
-
-function positiveOptionalInt(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
 }
 
 function normalizeSetsunaStyle(value: unknown): RuntimeConfigState['setsunaStyle'] {

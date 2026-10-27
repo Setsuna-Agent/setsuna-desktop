@@ -31,6 +31,7 @@ import {
 import { GitChangesFeaturePanel, ReviewFeaturePanel } from '../../composition/review-feature-panel-adapter.js';
 import { CodeFileView } from '../../shared/code/PierreCode.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import { captureTextContextMenuTarget } from '../../shared/lib/textContextMenu.js';
 import { EmptyState } from '../../shared/ui/primitives.js';
 import {
   useWorkspaceCodeViewSurface,
@@ -345,6 +346,8 @@ export function WorkspacePanel({
       <section
         className={`desktop-editor ${filePreview && fileDraft.errorMessage ? 'has-save-error' : ''}`}
         onContextMenu={filePreview ? (event) => {
+          // Let selected text and editors reach the shared text menu before the file fallback.
+          if (event.defaultPrevented || captureTextContextMenuTarget(event.nativeEvent)) return;
           event.preventDefault();
           const line = workspaceFileLineNumberFromEvent(event);
           setContextMenu({

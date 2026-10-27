@@ -1,6 +1,7 @@
 export const projectZhCN = {
   'sidebar.directoryPickerUnavailable': '当前环境不支持选择项目目录。',
   'sidebar.createProject': '新建项目',
+  'sidebar.emptyProjects': '暂无项目',
   'sidebar.editProject': '编辑项目',
   'sidebar.projectChatCountOne': '{count} 个对话',
   'sidebar.projectChatCount': '{count} 个对话',
@@ -115,6 +116,7 @@ export const projectZhCN = {
 export const projectEnUS: Record<keyof typeof projectZhCN, string> = {
   'sidebar.directoryPickerUnavailable': 'The project folder picker is unavailable in this environment.',
   'sidebar.createProject': 'New project',
+  'sidebar.emptyProjects': 'No projects yet',
   'sidebar.editProject': 'Edit project',
   'sidebar.projectChatCountOne': '{count} conversation',
   'sidebar.projectChatCount': '{count} conversations',

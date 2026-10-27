@@ -1,5 +1,4 @@
-import { Button as UiButton, Button } from '@setsuna-desktop/renderer-ui';
-
+import { Button, IconButton } from '@setsuna-desktop/renderer-ui';
 import { Cable, X } from 'lucide-react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 
@@ -22,14 +21,14 @@ export function ChatModelSetupNotice({
       <Button size="small" variant="primary" onClick={onConfigure}>
         {t('chat.modelSetup.configure')}
       </Button>
-      <UiButton variant="ghost"
-        aria-label={t('chat.modelSetup.dismiss')}
+      <IconButton
+        label={t('chat.modelSetup.dismiss')}
         className="chat-starter__model-setup-notice-dismiss"
         type="button"
         onClick={onDismiss}
       >
         <X size={14} aria-hidden="true" />
-      </UiButton>
+      </IconButton>
     </div>
   );
 }

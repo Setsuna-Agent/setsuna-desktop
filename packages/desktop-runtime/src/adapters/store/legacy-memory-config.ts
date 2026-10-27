@@ -3,7 +3,7 @@ import type {
   RuntimeTaskModelSettings,
 } from '@setsuna-desktop/contracts';
 import type { MemoryPreferences } from '@setsuna-desktop/feature-memory/contracts';
-import { normalizeConfiguredModelReference } from './task-model-config.js';
+import { normalizeConfiguredModelReference } from './model-config.js';
 
 /** Pre-Feature fields read once by the Memory migration adapter. */
 export type LegacyRuntimeMemorySettings = {

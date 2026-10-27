@@ -62,7 +62,8 @@
 .chat-file-diff__viewport {
   max-height: 320px;
   overflow: auto;
-  overscroll-behavior: contain;
+  /* Vertical wheel input continues into the tool history and chat at the diff's edges. */
+  overscroll-behavior: contain auto;
 }
 
 .chat-file-diff__viewport > .setsuna-pierre-surface {
