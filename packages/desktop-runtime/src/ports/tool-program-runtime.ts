@@ -6,7 +6,8 @@ export type ToolProgramRuntime = {
     sessionId?: string;
     toolCatalog?: Array<{ name: string; description: string }>;
     signal: AbortSignal;
-    callTool(name: string, input: unknown): Promise<unknown>;
+    /** Worker-owned count of successful results delivered before this call was submitted. */
+    callTool(name: string, input: unknown, observationStep: number): Promise<unknown>;
   }): Promise<string>;
   releaseThread?(threadId: string): void;
   shutdown?(): void;

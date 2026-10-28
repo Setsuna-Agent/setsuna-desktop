@@ -35,20 +35,17 @@ export async function runToolProgram(input: {
   // Classification can await policy. Serialize admission so an exclusive call remains
   // a barrier even when a later read has a faster policy lookup.
   let admission = Promise.resolve();
-  let observationStep = 0;
   try {
     return await input.runtime.execute({ code, toolNames: input.toolNames, sessionId: input.sessionId, toolCatalog: input.toolCatalog, signal,
-      callTool: (name, args) => new Promise((resolve, reject) => {
-        // Calls submitted together share an observation step, even if a write waits in
-        // the queue. Only a returned result lets subsequent code use a newer step.
-        const submittedStep = observationStep;
+      callTool: (name, args, submittedStep) => new Promise((resolve, reject) => {
+        // Preserve the worker's submission step through policy and execution queues.
+        // A result completed here may not yet have been delivered to the program.
         admission = admission.then(async () => {
           signal.throwIfAborted();
           const parallel = await abortable(input.canRunInParallel(name, args), signal);
           void scheduler.run(parallel, async () => {
             const result = await input.callTool(name, args, signal, submittedStep);
             if (Buffer.byteLength(JSON.stringify(result)) > TOOL_PROGRAM_VALUE_BYTES) throw new Error('Result too large; request a smaller range.');
-            observationStep++;
             return result;
           }).then(resolve, reject);
         }).catch(reject);

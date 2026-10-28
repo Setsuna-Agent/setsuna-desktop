@@ -479,7 +479,7 @@ type RendererSlotInspection = Readonly<{
 以下 surface 永不向普通第三方 schema 开放：
 
 - 权限与工具审批的最终确认；
-- 凭据输入、secret reveal 与导出；
+- 宿主账号凭据输入、secret reveal 与导出；插件详情的 `field.secret: true` 仅声明插件自有凭据，输入和加密保存由宿主控件管理，不开放凭据 surface 替换；
 - 数据删除、还原和覆盖确认；
 - updater 签名、完整性与强制升级；
 - Kernel error/recovery；

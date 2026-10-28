@@ -42,9 +42,10 @@ function rendererUiSchema(language?: RuntimeInterfaceLanguage): Record<string, u
     description: [
       text('Recursive host-rendered node. Allowed exact shapes are:', "递归的宿主渲染节点。允许的准确结构为："),
       'stack {type,direction?,gap?,children}; text/badge {type,text,tone?};',
-      'notice {type,title?,text,tone?}; field {type,name,label,defaultValue?,placeholder?,required?,maxLength?};',
+      'notice {type,title?,text,tone?}; field {type,name,label,secret?,defaultValue?,placeholder?,required?,maxLength?};',
       'select {type,name,label,defaultValue?,options}; button {type,actionId,label,variant?}.',
       text('Text, badge, notice text/title, and field/select defaults may use a {path,fallback?} binding.', "text、badge、notice 的 text/title，以及 field/select 默认值可以使用 {path,fallback?} 绑定。"),
+      text('Use field.secret:true for API keys in renderer.capabilities.plugin.details, with no defaultValue. The host renders a password input and securely saves edits before the action; input.values excludes secrets. Worker handlers read only their declared credentials through context.secrets.get(name), returning a string or null. Never put credentials in state, files, tool arguments or outputs.', '插件详情页中的 API Key 使用 field.secret:true，禁止 defaultValue。宿主显示密码输入框并在 action 前安全保存修改；input.values 不含密钥。worker handler 通过 context.secrets.get(name) 读取本插件声明的密钥，返回字符串或 null。密钥不得写入 state、文件、工具参数或输出。'),
     ].join(' '),
   };
 
@@ -53,7 +54,7 @@ function rendererUiSchema(language?: RuntimeInterfaceLanguage): Record<string, u
     type: 'object',
     additionalProperties: false,
     description: [
-      text('Renderer UI v2 supports three modes.', 'Renderer UI v2 支持三种模式。'),
+      text('Renderer UI v2 supports Plugin details configuration forms and standalone pages.', 'Renderer UI v2 支持插件详情配置表单和独立页面。'),
       text('webpage opens an existing HTTP(S) website directly in the native browser from a sidebar entry. Use webpage.url for website shortcuts; no iframe or HTML/CSS/JS resources are needed.', 'webpage 从侧栏入口直接在原生浏览器中打开已有 HTTP(S) 网站。网站快捷入口使用 webpage.url，无需 iframe 或 HTML/CSS/JS 资源。'),
       text('For new local apps, reactApp declares an independent React/Vite project with root, entry, optional routes and actionIds. Submit multi-file TSX and package.json; approved install/update prepares default React/Router/Lucide packages, @setsuna/app components/styles and additional browser-compatible registry packages. Normal opens read compiled cache. Package scripts and custom build configurations do not run.', '新建本地应用使用 reactApp 声明独立 React/Vite 项目：root、entry、可选 routes 和 actionIds。提交多文件 TSX 和 package.json；获批安装/更新时准备默认 React/Router/Lucide 包、@setsuna/app 组件/样式及其他浏览器兼容 registry 包，普通打开读取构建缓存，不运行包脚本或自定义构建配置。'),
       text('tree is a bounded host-rendered UI.', "tree 是由宿主渲染的受限 UI。"),
@@ -91,7 +92,7 @@ function rendererUiSchema(language?: RuntimeInterfaceLanguage): Record<string, u
           description: [
             text('renderer.plugin.page requires navigation.', "renderer.plugin.page 需要 navigation。"),
             text('renderer.settings.page.extensions requires target general or about.', "renderer.settings.page.extensions 的 target 必须为 general 或 about。"),
-            text('renderer.capabilities.plugin.details adds one contribution to the Plugin details page.', "renderer.capabilities.plugin.details 向插件详情页添加一个 contribution。"),
+            text('For plugin configuration, use renderer.capabilities.plugin.details with a tree, fields and a save button. This embeds a form in that plugin’s details without a sidebar entry; do not declare navigation or create a standalone app unless requested.', '插件配置使用 renderer.capabilities.plugin.details，提供 tree、字段和保存按钮，直接嵌入所属插件详情页。无需侧栏入口，不声明 navigation；仅在用户要求独立应用时创建独立页面。'),
             text('Settings and Plugin details data must use global scope.', "设置及插件详情数据必须使用 global scope。"),
             text('Put stateKey and scope inside data, never at this contribution root.', "stateKey 和 scope 应放在 data 内，不要放在 contribution 根层级。"),
           ].join(' '),

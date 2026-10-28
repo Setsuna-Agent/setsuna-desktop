@@ -34,6 +34,7 @@ export function validateRendererUiActionValues(
   for (const [name, value] of Object.entries(values)) {
     const field = fields.get(name);
     if (!field) throw new Error(`Renderer UI action contains an undeclared field: ${name}`);
+    if (field.type === 'field' && field.secret) throw new Error('Secret fields must use host-only secretChanges.');
     if (field.type === 'field' && value.length > (field.maxLength ?? 4_000)) {
       throw new Error(`Renderer UI action field is too large: ${name}`);
     }
@@ -42,7 +43,7 @@ export function validateRendererUiActionValues(
     }
   }
   for (const field of fields.values()) {
-    if (field.type === 'field' && field.required && !values[field.name]?.trim()) {
+    if (field.type === 'field' && !field.secret && field.required && !values[field.name]?.trim()) {
       throw new Error(`Renderer UI action field is required: ${field.name}`);
     }
   }

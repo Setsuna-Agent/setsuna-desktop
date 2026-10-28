@@ -135,6 +135,10 @@ handler 可以返回：
 
 ### `api.onUiAction(actionId, handler)`
 
+插件详情页的 `field.secret: true` 由宿主保存到现有系统加密凭据库；宿主在调用 handler 前应用 `secretChanges`，省略或空字符串保留，`null` 明确删除。该字段不会进入 `input.values`，handler 失败不回滚已经保存的凭据。Tool/Event/UI action handler 可用 `await context.secrets.get(name)` 读取自身插件详情声明的密钥，结果是字符串或 `null`；无写入、枚举其他插件或 renderer reveal API。名称和插件归属在 host dispatch 校验，不依赖 worker helper。普通配置仍使用 `ctx.state`，密钥不得写入 state、工具结果或日志。
+
+`ExtensionSecretStore` 按需使用 `DesktopNativeBridge` 的 OS 加密凭据库，普通状态文件仅保存不可被 worker scope 访问的随机凭据引用。未使用密钥的插件不会访问凭据库；密钥初始化不进入启动就绪链路。保存与卸载共享插件 mutation gate，成功卸载删除密钥和引用；状态清理失败时从仅保留在内存中的副本恢复密钥，恢复失败明确报告。加密存储不可用时操作失败，不回退到明文文件。
+
 声明 `ui` capability 且 manifest 包含 [`rendererUi`](bundles.md#renderer-ui宿主组件与沙箱页面) 时，extension 可以为已声明的 tree button 或 sandbox document/reactApp action 注册 handler：
 
 ```js

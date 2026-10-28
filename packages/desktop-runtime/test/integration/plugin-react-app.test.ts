@@ -5,6 +5,7 @@ import { createServer } from 'node:http';
 import { readFile, rm, writeFile, mkdir, readdir } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { performance } from 'node:perf_hooks';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import electron from 'electron';
@@ -23,6 +24,12 @@ const context = { contributionId: 'notes.page', surface: 'renderer.plugin.page' 
 const appLifecycleTimeoutMs = 240_000;
 
 it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('installs a multi-file React app with packages, routes and the existing state/action bridge; reopens from cache and preserves a failed update', async () => {
+  let phaseStarted = performance.now();
+  const finishPhase = (name: string) => {
+    const now = performance.now();
+    process.stdout.write(`[plugin-react-app] ${name}: ${Math.round(now - phaseStarted)} ms\n`);
+    phaseStarted = now;
+  };
   const { root, bundleDir } = await createPluginFixture();
   const runtime = await createPluginRuntime(root);
   const prepareToolchain = async () => ({ environment: { npm_config_prefer_offline: 'true' }, commands: {}, readableRoots: [], writableCacheRoots: [] });
@@ -39,6 +46,7 @@ it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('instal
     // The SDK is a shipped build artifact, prepared by the repository's declared build script.
     const pnpm = path.join(path.dirname(require.resolve('corepack/package.json')), 'dist/pnpm.js');
     await promisify(execFile)(process.execPath, [pnpm, 'build:app-sdk'], { cwd: process.cwd(), windowsHide: true });
+    finishPhase('SDK build');
     const appRoot = path.join(bundleDir, 'apps/notes');
     await mkdir(path.join(appRoot, 'pages'), { recursive: true });
     await mkdir(path.join(appRoot, 'components'), { recursive: true });
@@ -92,18 +100,21 @@ it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('instal
         await context.state.set('view', {count:view.count + 1, value:input.payload.value});
       });
     }`);
-    await patchPluginManifest(bundleDir, { schemaVersion: 2, id: 'react-notes', tools: [], skills: [], hooks: [], mcpServers: [], resources: [],
-      extension: { apiVersion: 1, runtime: 'node-worker', entry: 'extension/entry.mjs', capabilities: ['ui', 'state'],
-        rendererUi: { schemaVersion: 2, actions: [{ id: 'notes.save' }, { id: 'notes.hidden' }], contributions: [{
-          id: 'notes.page', slot: 'renderer.plugin.page', navigation: { label: 'Notes' }, data: { stateKey: 'view', scope: 'global' },
-          reactApp: { root: 'apps/notes', entry: 'pages/Home.tsx', routes: [
-            {path:'/detail/:id', entry:'pages/Detail.tsx'},
-            {path:'/openui', entry:'pages/OpenUi0.tsx'}, {path:'/openui-en', entry:'pages/OpenUi1.tsx'},
-          ], actionIds: ['notes.save'] },
-        }, { id:'stats.page', slot:'renderer.plugin.page', navigation:{label:'Stats'},
-          reactApp: {root:'apps/stats', entry:'App.tsx', actionIds:[]} }] } },
-    });
+    const detailRoute = { path: '/detail/:id', entry: 'pages/Detail.tsx' };
+    const notesApp = { root: 'apps/notes', entry: 'pages/Home.tsx', routes: [
+      detailRoute, { path: '/openui', entry: 'pages/OpenUi0.tsx' }, { path: '/openui-en', entry: 'pages/OpenUi1.tsx' },
+    ], actionIds: ['notes.save'] };
+    const extension = { apiVersion: 1, runtime: 'node-worker', entry: 'extension/entry.mjs', capabilities: ['ui', 'state'],
+      rendererUi: { schemaVersion: 2, actions: [{ id: 'notes.save' }, { id: 'notes.hidden' }], contributions: [{
+        id: 'notes.page', slot: 'renderer.plugin.page', navigation: { label: 'Notes' }, data: { stateKey: 'view', scope: 'global' },
+        reactApp: notesApp,
+      }, { id: 'stats.page', slot: 'renderer.plugin.page', navigation: { label: 'Stats' },
+        reactApp: { root: 'apps/stats', entry: 'App.tsx', actionIds: [] } }] },
+    };
+    await patchPluginManifest(bundleDir, { schemaVersion: 2, id: 'react-notes', tools: [], skills: [], hooks: [],
+      mcpServers: [], resources: [], extension });
     const installed = await runtime.plugins.installPlugin({ path: bundleDir }, { trustExtension: true });
+    finishPhase('initial app installation');
     expect(installed.plugin).not.toHaveProperty('reactAppBuilds');
     const source = await runtime.plugins.readTrustedRendererUiDocument('react-notes', 'notes.page');
     expect(source.js).not.toContain('private-build-value');
@@ -120,6 +131,7 @@ it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('instal
     expect(JSON.parse(await readFile(path.join(project, 'node_modules/zod/package.json'), 'utf8')).name).toBe('zod');
     // A minimal real app covers ASAR/ESM/native dependencies without recompiling all SDK widgets.
     await verifyPackagedAppCompiler(root, path.join(statsCache, 'project'));
+    finishPhase('packaged compiler');
     // Identical updates must reuse both approved pages, even when package preparation is unavailable.
     const preparedBeforeUpdate = prepare.mock.calls.length;
     const validateActivation = vi.spyOn(manager, 'validatePluginActivation');
@@ -173,6 +185,7 @@ it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('instal
     const result = await promisify(execFile)(electron as unknown as string,
       [path.join(native, 'main.cjs'), native, `http://127.0.0.1:${address.port}`], { env, windowsHide: true, timeout: 30_000 });
     expect(result.stdout).toContain('PLUGIN_REACT_APP_PASSED');
+    finishPhase('cache reuse and native app interaction');
     expect(await runtime.extensionState.get('react-notes', 'global', 'view')).toEqual({ count: 1, value: 'Shared note' });
     const preparedBeforeOpen = prepare.mock.calls.length;
     unbind();
@@ -184,9 +197,17 @@ it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('instal
     await expect(runtime.plugins.readTrustedRendererUiDocument('react-notes', 'notes.page')).rejects.toThrow('changed');
     await writeFile(path.join(cache, 'source.json'), original);
     runtime.plugins.bindAppToolchain({ prepareShellToolchain: prepare } as unknown as WorkspaceDependenciesControl);
+    // After exercising both OpenUI guides and native interaction, keep update
+    // fixtures small. SDK typechecking and the detail route remain real; rollback
+    // still compares against the original complete app.
+    notesApp.routes = [detailRoute];
+    await patchPluginManifest(bundleDir, { extension });
+    for (const index of guides.keys()) await rm(path.join(appRoot, `pages/OpenUi${index}.tsx`));
+    await writeFile(path.join(appRoot, 'package.json'), JSON.stringify({ devDependencies }));
     // One type-invalid update proves both SDK typechecking and rollback of a populated app.
     await writeFile(path.join(appRoot, 'pages/Home.tsx'), "import {Button} from '@setsuna/app'; export default () => <Button variant='icon'/>");
     await expect(runtime.plugins.updatePlugin({ path: bundleDir }, { trustExtension: true })).rejects.toThrow('TS2322');
+    finishPhase('type-invalid update');
     await expect(runtime.plugins.readTrustedRendererUiDocument('react-notes', 'notes.page')).resolves.toEqual(source);
     expect(await runtime.extensionState.get('react-notes', 'global', 'view')).toMatchObject({ count: 1 });
     expect((await readdir(path.dirname(cache))).sort()).toEqual(Object.values(record.reactAppBuilds!).map(build => build.cacheKey).sort());
@@ -203,6 +224,7 @@ it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('instal
     // Cache replacement and state retention do not need another build of every SDK control.
     await writeFile(path.join(appRoot, 'pages/Home.tsx'), 'export default () => <main>Updated notes app</main>');
     await runtime.plugins.updatePlugin({ path: bundleDir }, { trustExtension: true });
+    finishPhase('successful app update');
     expect((await runtime.plugins.readTrustedRendererUiDocument('react-notes', 'notes.page')).js).toContain('Updated notes app');
     const [updated] = await runtime.plugins.listInstalledRecords();
     expect(updated.reactAppBuilds!['notes.page'].cacheKey).not.toBe(reference.cacheKey);
@@ -213,6 +235,7 @@ it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('instal
     await expect(manager.requestRuntimeApi({ pluginId: 'react-notes', contributionId: 'notes.page', request: { path: '/v1/projects' } })).rejects.toThrow('not trusted');
     await runtime.plugins.removePlugin('react-notes');
     await expect(readdir(path.dirname(cache))).rejects.toThrow();
+    finishPhase('app removal');
   } finally {
     unbind(); await manager.shutdown();
     if (server) await new Promise<void>(resolve => server!.close(() => resolve()));

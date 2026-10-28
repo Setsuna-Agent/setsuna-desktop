@@ -20,6 +20,21 @@ import {
 import { pluginManagementRuntimeFeature } from '../../src/runtime/index.js';
 
 describe('plugin management runtime feature', () => {
+  it('transports bounded credential edits separately and returns only configured field names', () => {
+    const input = {
+      pluginId: 'search', actionId: 'settings.save', values: { city: 'Hangzhou' },
+      secretChanges: { apiKey: 'new-key', token: null },
+      context: { contributionId: 'settings', surface: 'renderer.capabilities.plugin.details' },
+    };
+    expect(runInstalledPluginRendererUiAction.input.parse(input)).toEqual(input);
+    for (const secretChanges of [{ apiKey: 123 }, { apiKey: 'x'.repeat(4_001) }, { 'invalid/name': 'key' }]) {
+      expect(() => runInstalledPluginRendererUiAction.input.parse({ ...input, secretChanges })).toThrow();
+    }
+    expect(readInstalledPluginRendererUiData.output.parse({ data: {}, configuredSecrets: ['apiKey'] }))
+      .toEqual({ data: {}, configuredSecrets: ['apiKey'] });
+    expect(() => readInstalledPluginRendererUiData.output.parse({ data: {}, configuredSecrets: ['invalid/name'] })).toThrow();
+  });
+
   it('owns the aggregate management snapshot and main-only local install operation', async () => {
     const installLocal = vi.fn(async () => ({
       installedMcpServers: [],

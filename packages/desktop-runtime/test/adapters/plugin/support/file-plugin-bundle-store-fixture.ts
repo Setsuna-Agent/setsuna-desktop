@@ -7,6 +7,7 @@ import { FileSkillRegistry } from '../../../../src/adapters/skill/file-skill-reg
 import { FileConfigStore } from '../../../../src/adapters/store/file-config-store.js';
 import { FileMcpStore } from '../../../../src/adapters/store/file-mcp-store.js';
 import { FileExtensionStateStore } from '../../../../src/extensions/file-extension-state-store.js';
+import { ExtensionSecretStore } from '../../../../src/extensions/extension-secret-store.js';
 import { systemClock } from '../../../../src/ports/clock.js';
 import { InMemoryDesktopNativeBridge } from '../../../support/in-memory-secret-store.js';
 
@@ -20,9 +21,11 @@ export async function createPluginRuntime(root: string, bundledPluginsDir?: stri
   const builtinDir = path.join(root, 'builtin-skills');
   await mkdir(builtinDir, { recursive: true });
   const skills = new FileSkillRegistry(builtinDir, dataDir);
-  const mcp = new FileMcpStore(dataDir, new InMemoryDesktopNativeBridge());
+  const nativeBridge = new InMemoryDesktopNativeBridge();
+  const mcp = new FileMcpStore(dataDir, nativeBridge);
   const config = new FileConfigStore(dataDir);
   const extensionState = new FileExtensionStateStore(dataDir);
+  const extensionSecrets = new ExtensionSecretStore(extensionState, nativeBridge);
   const invalidateServer = vi.fn(async () => undefined);
   const plugins = new FilePluginBundleStore(
     dataDir,
@@ -33,8 +36,9 @@ export async function createPluginRuntime(root: string, bundledPluginsDir?: stri
     systemClock,
     extensionState,
     bundledPluginsDir,
+    extensionSecrets,
   );
-  return { config, dataDir, extensionState, invalidateServer, mcp, plugins, skills };
+  return { config, dataDir, extensionState, extensionSecrets, nativeBridge, invalidateServer, mcp, plugins, skills };
 }
 
 export async function readPluginManifestFixture(bundleDir: string): Promise<Record<string, unknown>> {

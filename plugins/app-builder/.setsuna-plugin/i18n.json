@@ -1,5 +1,7 @@
 {
   "en-US": {
+    "插件配置与密钥字段": "Plugin settings and secret fields",
+    "通过对话创建或更新 Setsuna 插件，包括详情页配置表单、API Key 配置、侧栏应用、Skill、MCP、Hook 和可执行工具。生成完整 manifest 和文件快照并调用 configure_plugin。": "Create or update Setsuna plugins from chat, including Plugin details configuration forms, API key settings, sidebar apps, Skills, MCP servers, Hooks, and executable tools. Generate a complete manifest and file snapshot, then call configure_plugin.",
     "公共组件与图标用法": "Shared components and icons guide",
     "公共交互组件": "Shared interactive components",
     "Lucide 离线图标库": "Offline Lucide icon library",

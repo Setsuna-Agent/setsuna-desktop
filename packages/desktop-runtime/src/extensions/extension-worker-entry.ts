@@ -18,6 +18,7 @@ type UiActionHandler = (input: unknown, context: ExtensionHandlerContext) => unk
 type ExtensionHandlerContext = Record<string, unknown> & {
   signal: AbortSignal;
   runtime: { request(input: unknown): Promise<unknown> };
+  secrets?: { get(name: string): Promise<string | null> };
   state?: {
     get(key: string, scope?: ExtensionStateScope): Promise<unknown>;
     set(key: string, value: unknown, scope?: ExtensionStateScope): Promise<void>;
@@ -275,6 +276,9 @@ function handlerContext(
     ...context,
     signal,
     runtime: { request: (input: unknown) => hostCall(requestId, 'runtime.request', input) },
+    ...(capabilities.has('ui') ? {
+      secrets: { get: (name: string) => hostCall(requestId, 'secrets.get', { name }) as Promise<string | null> },
+    } : {}),
     ...(capabilities.has('state') ? {
       state: {
         get: (key: string, scope: ExtensionStateScope = defaultStateScope) => hostCall(requestId, 'state.get', { key, scope }),

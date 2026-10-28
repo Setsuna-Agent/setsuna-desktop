@@ -46,6 +46,23 @@ describe('Plugin UI card declarations', () => {
 });
 
 describe('Plugin declarative Renderer UI contract', () => {
+  it('accepts host-managed details credentials without allowing bundled defaults or other surfaces', () => {
+    const field = { type: 'field', name: 'apiKey', label: 'API Key', secret: true };
+    const parse = (node: unknown, slot = 'renderer.capabilities.plugin.details', schemaVersion = 2) => parseRuntimePluginUiManifest({
+      schemaVersion, actions: [], contributions: [{
+        id: 'settings', slot, tree: node,
+        ...(slot === 'renderer.plugin.page' ? { navigation: { label: 'App' } } : {}),
+      }],
+    });
+    expect(parse(field).contributions[0].tree).toMatchObject(field);
+    expect(() => parse({ ...field, defaultValue: 'sk-embedded' })).toThrow('defaultValue');
+    expect(() => parse({ ...field, defaultValue: { path: 'key' } })).toThrow('defaultValue');
+    expect(() => parse({ ...field, secret: 'true' })).toThrow();
+    expect(() => parse(field, 'renderer.plugin.page')).toThrow('Plugin details');
+    expect(() => parse(field, 'renderer.chat.composer.status')).toThrow('Plugin details');
+    expect(() => parse(field, 'renderer.capabilities.plugin.details', 1)).toThrow('schema v2');
+  });
+
   it('opens an HTTP(S) sidebar website without requiring document resources or a UI tree', () => {
     const manifest = parseRuntimePluginUiManifest({
       schemaVersion: 2, actions: [], contributions: [{

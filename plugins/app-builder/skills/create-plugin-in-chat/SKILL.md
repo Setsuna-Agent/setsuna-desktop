@@ -1,6 +1,6 @@
 ---
 name: create-plugin-in-chat
-description: "通过对话创建或更新 Setsuna Plugin Bundle，包括左侧栏插件下方的独立应用、可编辑表格、表单和 ECharts 视图。根据一句话需求生成完整 manifest 和 UTF-8 文件快照并调用 configure_plugin，也支持 Skill、MCP、Hook 和可执行扩展。"
+description: "通过对话创建或更新 Setsuna 插件，包括详情页配置表单、API Key 配置、侧栏应用、Skill、MCP、Hook 和可执行工具。生成完整 manifest 和文件快照并调用 configure_plugin。"
 ---
 
 # 对话创建插件
@@ -25,6 +25,7 @@ description: "通过对话创建或更新 Setsuna Plugin Bundle，包括左侧�
 - 需要连接外部服务时，使用 manifest 的 `mcpServers`；不得写入 API key、固定密钥、认证 header 或带凭据 URL。
 - 需要在 Agent 生命周期前后运行本地命令时，使用 `hooks`，脚本路径通过 `{{pluginRoot}}` 引用。
 - 需要注册动态工具、订阅生命周期事件、保存状态或结构化询问用户时，使用 `extension`。
+- 需要插件配置字段时，使用 `extension.rendererUi` 的 `renderer.capabilities.plugin.details` 和宿主 `tree`，表单直接显示在该插件详情页；不声明 `navigation`，不为几个配置项另建侧栏应用。API Key 使用 `field.secret: true`。先用 `read_plugin_resource({pluginId:'app-builder',resourceId:'plugin-settings-guide'})` 读取[完整配置表单示例](references/plugin-settings.md)。
 - 需要侧栏入口或独立功能页时，在 `extension.rendererUi` 使用 Renderer UI v2。打开已有网站使用 `webpage: { url: "https://…" }`，原生浏览器直接加载；简单表单/状态使用宿主渲染的 `tree`；新建本地应用默认使用独立 React/Vite 项目的 `reactApp`；已有 HTML/CSS/JS `document` 保持兼容，更新时按用户需求决定是否迁移。
 - 需要在工具执行后把结果显示成自由交互卡片时，在 `extension.uiCards` 声明卡片名称、对应工具和静态沙箱预览，并让该工具返回 `plugin.ui-card@1`；卡片与持久侧栏页面可以由同一个 Plugin 同时提供。
 - `tools` 只是展示元数据，不会注册可执行工具；动态工具必须由 extension 的 `api.registerTool` 注册。
@@ -107,6 +108,7 @@ Handler 能力如下：
 - Tool：`async execute(input, context)`；按 capability 提供 `context.network`、`context.state`、`context.ui`，并始终提供 `context.signal`。
 - Event：`api.on(name, async (payload, context) => ...)`；事件输入是第一个参数，不要假设工具 input 形状。
 - UI Action：`api.onUiAction(id, async (input, context) => ...)`；表单在 `input.values`，沙箱页面参数在 `input.payload`。这里不提供交互式 `context.ui`。
+- 密钥：handler 用 `await context.secrets.get(name)` 读取本插件详情页声明的密钥，返回字符串或 `null`。宿主负责加密保存表单提交，`input.values` 不含密钥；不把密钥写入 state、源码、工具参数或输出，也不要求用户在聊天里提供真实密钥。
 - 状态方法：`context.state.get(key, scope?)`、`set(key, value, scope?)`、`delete(key, scope?)`。Tool/Event 默认 `thread`；UI Action 默认使用 contribution 的 `data.scope`。需要跨入口共享侧栏数据时显式使用与 manifest 一致的 `global`/`project`/`thread`。
 - 网络响应：`{ ok, status, statusText, headers, body, text(), json() }`。`body` 是 UTF-8 字符串，不是对象；不要写 `response.body.current`。
 
@@ -169,6 +171,7 @@ renderConversations(response.data.threads);
 
 Renderer UI v2 支持这些受控位置：
 
+- `renderer.capabilities.plugin.details`：所属插件详情页内的配置表单，支持普通字段、下拉和宿主管理的密钥字段；无需侧栏入口。仅有密钥时不需要 `data` 或 `state` capability。
 - `renderer.plugin.page`：独立功能页，并由 `navigation.label` 自动生成侧栏入口。
 - `renderer.settings.page.extensions`：扩展宿主允许的设置分区，目前 target 使用 `general` 或 `about`。
 - `renderer.chat.composer.status`：输入框附近的紧凑状态，只使用 `stack`、`text`、`badge`、`notice`、`button`。

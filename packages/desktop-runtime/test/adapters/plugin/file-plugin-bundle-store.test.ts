@@ -140,12 +140,17 @@ describe('file plugin bundle store', () => {
     await runtime.extensionState.set('demo', 'global', 'token', 'old secret');
     await runtime.extensionState.set('demo', 'thread:thread_1', 'count', 3);
     await runtime.extensionState.set('other-plugin', 'global', 'value', 'keep');
+    await runtime.extensionSecrets.apply('demo', [{ type: 'field', name: 'apiKey', label: 'API Key', secret: true }], { apiKey: 'private-key' });
+    const deleteCredential = vi.spyOn(runtime.nativeBridge, 'delete');
 
     await runtime.plugins.removePlugin('demo');
 
     await expect(runtime.extensionState.get('demo', 'global', 'token')).resolves.toBeUndefined();
     await expect(runtime.extensionState.get('demo', 'thread:thread_1', 'count')).resolves.toBeUndefined();
     await expect(runtime.extensionState.get('other-plugin', 'global', 'value')).resolves.toBe('keep');
+    expect(deleteCredential).toHaveBeenCalledOnce();
+    await runtime.plugins.installPlugin({ path: fixture.bundleDir });
+    await expect(runtime.extensionSecrets.get('demo', 'apiKey')).resolves.toBeUndefined();
   });
 
   it('rolls back plugin removal when extension state cannot be cleared', async () => {
@@ -155,6 +160,7 @@ describe('file plugin bundle store', () => {
     await runtime.plugins.installPlugin({ path: fixture.bundleDir });
     const [installed] = await runtime.plugins.listInstalledRecords();
     await runtime.extensionState.set('demo', 'global', 'value', 'keep after rollback');
+    await runtime.extensionSecrets.apply('demo', [{ type: 'field', name: 'apiKey', label: 'API Key', secret: true }], { apiKey: 'keep-private-key' });
     vi.spyOn(runtime.extensionState, 'deletePlugin').mockRejectedValueOnce(new Error('state file is locked'));
 
     await expect(runtime.plugins.removePlugin('demo')).rejects.toThrow('state file is locked');
@@ -162,6 +168,7 @@ describe('file plugin bundle store', () => {
     await expect(runtime.plugins.listPlugins()).resolves.toMatchObject({ plugins: [{ id: 'demo' }] });
     await expect(stat(installed.installPath)).resolves.toBeDefined();
     await expect(runtime.extensionState.get('demo', 'global', 'value')).resolves.toBe('keep after rollback');
+    await expect(runtime.extensionSecrets.get('demo', 'apiKey')).resolves.toBe('keep-private-key');
   });
 
   it('requires schemaVersion 2 and an existing mjs entry for executable extensions', async () => {

@@ -70,6 +70,8 @@ export type RuntimePluginUiFieldNode = Readonly<{
   type: 'field';
   name: string;
   label: string;
+  /** Host-managed credential: never hydrated from or persisted into Plugin state. */
+  secret?: boolean;
   defaultValue?: RuntimePluginUiTextSource;
   placeholder?: string;
   required?: boolean;
@@ -134,6 +136,8 @@ export type RuntimePluginUiActionInput = Readonly<{
   pluginId: string;
   actionId: string;
   values: Readonly<Record<string, string>>;
+  /** Host-only edits: omitted/empty retains the credential; null explicitly clears it. */
+  secretChanges?: Readonly<Record<string, string | null>>;
   /** Bounded JSON supplied by an isolated Plugin document. */
   payload?: RuntimePluginUiData;
   context: Readonly<{
@@ -176,7 +180,11 @@ export type RuntimePluginUiDataInput = Readonly<{
   }>;
 }>;
 
-export type RuntimePluginUiDataResult = Readonly<{ data: RuntimePluginUiData }>;
+export type RuntimePluginUiDataResult = Readonly<{
+  data: RuntimePluginUiData;
+  /** Presence only; plaintext credentials never cross the read boundary. */
+  configuredSecrets?: readonly string[];
+}>;
 
 export type RuntimePluginUiDocumentReadInput = Readonly<{
   pluginId: string;
@@ -244,6 +252,12 @@ export type RuntimePluginUiContribution =
   | RuntimePluginUiDocumentContribution
   | RuntimePluginUiReactAppContribution
   | RuntimePluginUiWebpageContribution;
+
+export function runtimePluginUiSecretFields(node?: RuntimePluginUiNode): readonly RuntimePluginUiFieldNode[] {
+  if (!node) return [];
+  if (node.type === 'field') return node.secret ? [node] : [];
+  return node.type === 'stack' ? node.children.flatMap(runtimePluginUiSecretFields) : [];
+}
 
 export function parsePluginUiWebpage(value: unknown): Readonly<{ url: string }> {
   if (!value || typeof value !== 'object' || Array.isArray(value)
