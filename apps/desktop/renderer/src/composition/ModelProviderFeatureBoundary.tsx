@@ -39,6 +39,10 @@ export function useModelProviderFeatureService(): ModelProviderRendererStateServ
   return useModelProviderRendererService();
 }
 
+export function useConfiguredModelState() {
+  return useModelProviderSnapshot().state;
+}
+
 export function SettingsModelPicker({ models, ...props }: SettingsModelPickerProps) {
   const { state } = useModelProviderSnapshot();
   const options = useMemo(() => configuredModelOptions(models, state), [models, state]);

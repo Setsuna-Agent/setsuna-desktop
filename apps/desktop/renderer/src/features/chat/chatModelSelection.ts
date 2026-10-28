@@ -26,7 +26,7 @@ export type ChatDefaultModelSelection = Pick<
 
 /** Resolves the global model choice that will bind the next new conversation. */
 export function chatDefaultModelSelection(
-  config: RuntimeConfigState | null,
+  config: Pick<RuntimeConfigState, 'providers' | 'activeProviderId'> | null,
 ): ChatDefaultModelSelection {
   const provider = config?.providers?.find((item) => item.id === config.activeProviderId && item.enabled)
     ?? config?.providers?.find((item) => item.enabled)

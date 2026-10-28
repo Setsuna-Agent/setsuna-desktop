@@ -1,3 +1,4 @@
+import { DesktopActivitySettings } from './DesktopActivitySettings.js';
 import { ToastNotice, Slider, useToast } from '@setsuna-desktop/renderer-ui';
 import type {
   DesktopWindowCloseBehavior,
@@ -65,8 +66,13 @@ const accentColorLabelKeys: Record<AccentColor, MessageKey> = {
   neutral: 'settings.general.accent.default',
   blue: 'settings.general.accent.blue',
   purple: 'settings.general.accent.purple',
+  pink: 'settings.general.accent.pink',
+  red: 'settings.general.accent.red',
   green: 'settings.general.accent.green',
   orange: 'settings.general.accent.orange',
+  amber: 'settings.general.accent.amber',
+  teal: 'settings.general.accent.teal',
+  cyan: 'settings.general.accent.cyan',
 };
 
 const sidebarBackgroundLabelKeys: Record<SidebarBackgroundStyle, MessageKey> = {
@@ -110,7 +116,7 @@ export function GeneralSettings({
     { value: 'dark', label: t(themeModeLabelKeys.dark), icon: <Moon size={14} /> },
     { value: 'system', label: t(themeModeLabelKeys.system), icon: <Monitor size={14} /> },
   ];
-  const accentColorChoiceOptions: Array<SettingsChoiceOption<AccentColor>> = accentColorOptions.map((option) => ({
+  const accentColorSelectOptions = accentColorOptions.map((option) => ({
     value: option.value,
     label: t(accentColorLabelKeys[option.value]),
     icon: (
@@ -157,6 +163,7 @@ export function GeneralSettings({
 
   return (
     <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__section--general">
+      <DesktopActivitySettings />
       <div className="chat-user-settings__section-block">
         <div className="chat-user-settings__group-title">{t('settings.general.language')}</div>
         <div className="chat-user-settings__group chat-user-settings__general-section">
@@ -348,12 +355,22 @@ export function GeneralSettings({
             </span>
             <SettingsChoiceGroup ariaLabel={t('settings.general.appearanceMode')} options={themeModeOptions} value={mode} onChange={setThemeModeWithTransition} />
           </div>
-          <div className="chat-user-settings__row chat-user-settings__accent-row">
+          <div className="chat-user-settings__row sd-settings-field-row">
             <span className="chat-user-settings__row-label">
               <Palette size={14} />
               <span>{t('settings.general.accentColor')}</span>
             </span>
-            <SettingsChoiceGroup ariaLabel={t('settings.general.accentColor')} options={accentColorChoiceOptions} value={accentColor} onChange={setAccentColor} />
+            <SelectField
+              aria-label={t('settings.general.accentColor')}
+              className="settings-local-control"
+              value={accentColor}
+              onValueChange={(value) => setAccentColor(value as AccentColor)}
+              renderOptionIcon={(value) => accentColorSelectOptions.find((option) => option.value === value)?.icon}
+            >
+              {accentColorSelectOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </SelectField>
           </div>
         </div>
       </div>

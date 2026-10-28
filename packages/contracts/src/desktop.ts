@@ -1,3 +1,5 @@
+import type { DesktopActivityPreferences } from './desktop/activity-preferences.js';
+export * from './desktop/activity-preferences.js';
 import type { RuntimeAttachmentUploadInput, RuntimeStoredMessageAttachment } from './attachments.js';
 import type { RuntimeEventBatch } from './events.js';
 import type { RuntimeRequestInput } from './http.js';
@@ -200,6 +202,9 @@ export type SetsunaDesktopBridge = {
     minimize(): Promise<boolean>;
     toggleMaximize(): Promise<boolean>;
     close(): Promise<boolean>;
+    getActivityPreferences(): Promise<DesktopActivityPreferences>;
+    setActivityPreferences(value: DesktopActivityPreferences): Promise<DesktopActivityPreferences>;
+    onNewChat(callback: () => void): () => void;
     getCloseBehavior(): Promise<DesktopWindowCloseBehavior>;
     setCloseBehavior(behavior: DesktopWindowCloseBehavior): Promise<DesktopWindowCloseBehavior>;
     isMaximized(): Promise<boolean>;

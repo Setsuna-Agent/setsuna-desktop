@@ -5,6 +5,9 @@ export const modelProviderMessages = defineRendererMessageBundle({
   fallbackLocale: 'zh-CN',
   messages: {
     'zh-CN': {
+      'feature.modelProvider.actions': '服务操作',
+      'feature.modelProvider.duplicate': '复制配置',
+      'feature.modelProvider.copyName': '{name} 副本',
       'feature.modelProvider.title': '模型服务',
       'feature.modelProvider.description': '选择厂商、填写 API Key，再添加要使用的模型。',
       'feature.modelProvider.loading': '正在读取模型服务配置…',
@@ -106,6 +109,9 @@ export const modelProviderMessages = defineRendererMessageBundle({
       'feature.modelProvider.discoveryFailed': '同步模型失败：{message}',
     },
     'en-US': {
+      'feature.modelProvider.actions': 'Provider actions',
+      'feature.modelProvider.duplicate': 'Duplicate configuration',
+      'feature.modelProvider.copyName': '{name} copy',
       'feature.modelProvider.title': 'Model providers',
       'feature.modelProvider.description': 'Choose a provider, enter its API key, and add the models you want to use.',
       'feature.modelProvider.loading': 'Loading model provider settings…',

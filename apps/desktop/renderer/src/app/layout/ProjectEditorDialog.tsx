@@ -1,21 +1,25 @@
 import { ToastNotice, Button as UiButton, ConfirmDialogTrigger, Dialog } from '@setsuna-desktop/renderer-ui';
 import {
   WORKSPACE_PROJECT_NAME_MAX_CHARS,
+  canFollowWorkspaceConversationDefaults,
   workspaceProjectRoots,
   workspaceRootName,
   type WorkspaceProjectRoot,
   type UpdateWorkspaceProjectInput,
   type WorkspaceProject,
   type WorkspaceProjectIcon,
+  type WorkspaceConversationDefaults,
 } from '@setsuna-desktop/contracts';
 import { Folder, FolderPlus, Star, X } from 'lucide-react';
 import { useId, useState, type FormEvent } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { Button, IconButton, TextField } from '../../shared/ui/primitives.js';
+import { ProjectConversationDefaultsFields } from './ProjectConversationDefaultsFields.js';
 import { ProjectIconPicker } from './ProjectIconPicker.js';
 
 type ProjectEditorDialogProps = {
   project: WorkspaceProject | null;
+  projects?: readonly WorkspaceProject[];
   onClose: () => void;
   onRemove: (project: WorkspaceProject) => Promise<boolean>;
   onSave: (input: UpdateWorkspaceProjectInput) => Promise<boolean>;
@@ -23,6 +27,7 @@ type ProjectEditorDialogProps = {
 
 export function ProjectEditorDialog({
   project,
+  projects = [],
   onClose,
   onRemove,
   onSave,
@@ -33,6 +38,9 @@ export function ProjectEditorDialog({
   const [name, setName] = useState(project?.name ?? '');
   const [icon, setIcon] = useState<WorkspaceProjectIcon | null>(project?.icon ?? null);
   const [roots, setRoots] = useState<WorkspaceProjectRoot[]>(() => workspaceProjectRoots(project));
+  const [conversationDefaults, setConversationDefaults] = useState<WorkspaceConversationDefaults>(project?.conversationDefaults ?? {});
+  const validDefaults = conversationDefaults.sourceProjectId === undefined
+    || canFollowWorkspaceConversationDefaults(project?.id, conversationDefaults.sourceProjectId, projects);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,11 +67,11 @@ export function ProjectEditorDialog({
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (busy || !name.trim()) return;
+    if (busy || !name.trim() || !validDefaults) return;
     setBusy(true);
     setError(null);
     try {
-      const saved = await onSave({ name: name.trim(), roots, icon });
+      const saved = await onSave({ name: name.trim(), roots, icon, conversationDefaults });
       if (saved) onClose();
       else setBusy(false);
     } catch (unknownError) {
@@ -101,7 +109,7 @@ export function ProjectEditorDialog({
         <Button disabled={busy} type="button" variant="ghost" onClick={onClose}>
           {t('common.cancel')}
         </Button>
-        <Button disabled={busy || !name.trim()} form={formId} type="submit" variant="primary">
+        <Button disabled={busy || !name.trim() || !validDefaults} form={formId} type="submit" variant="primary">
           {t('common.save')}
         </Button>
       </span>
@@ -162,6 +170,8 @@ export function ProjectEditorDialog({
             </div>
           </div>
 
+          <ProjectConversationDefaultsFields value={conversationDefaults} projects={projects} projectId={project?.id}
+            disabled={busy} onChange={setConversationDefaults} />
           {error ? <ToastNotice message={error} /> : null}
         </div>
       </form>

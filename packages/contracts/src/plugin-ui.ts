@@ -7,6 +7,8 @@ import {
   type RuntimePluginUiBinding,
 } from './plugin-ui/model.js';
 export * from './plugin-ui/model.js';
+export { validPluginUiScalarValue } from './plugin-ui/scalar-fields.js';
+import { parsePluginUiScalarNode } from './plugin-ui/scalar-fields.js';
 import { parsePluginUiReactApp } from './plugin-ui/react-app.js';
 export { pluginAppRelativePath } from './plugin-ui/react-app.js';
 
@@ -321,6 +323,15 @@ function parseNode(
       label: budgetText(node.label, 'Plugin rendererUi button label', budget),
       ...(variant ? { variant } : {}),
     });
+  }
+  if (input.type === 'number' || input.type === 'boolean') {
+    if (schemaVersion !== RUNTIME_PLUGIN_UI_SCHEMA_VERSION) throw new Error('Scalar fields require schema v2.');
+    const node = exactRecord(input, input.type === 'number'
+      ? ['type', 'name', 'label', 'defaultValue', 'min', 'max', 'step', 'required']
+      : ['type', 'name', 'label', 'defaultValue'], 'Plugin rendererUi scalar field');
+    const name = fieldName(node.name, 'Plugin rendererUi scalar field name');
+    registerField(name, fieldNames, budget);
+    return parsePluginUiScalarNode(node, name, budgetText(node.label, 'Plugin rendererUi scalar field label', budget));
   }
   if (input.type === 'field') {
     const node = exactRecord(

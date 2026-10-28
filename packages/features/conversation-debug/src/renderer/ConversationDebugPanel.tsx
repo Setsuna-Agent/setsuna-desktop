@@ -1,6 +1,6 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeThread } from '@setsuna-desktop/contracts';
-import { Activity, GitBranch, List } from 'lucide-react';
+import { Activity, Download, GitBranch, List } from 'lucide-react';
 import {
   useDeferredValue,
   useEffect,
@@ -30,6 +30,7 @@ import { useConversationDebugTraces } from './useConversationDebugTraces.js';
 import type { ConversationDebugEventSource } from './useConversationDebugEvents.js';
 import type { ConversationDebugRendererService } from './service.js';
 import { useConversationDebugUi } from './host-ui.js';
+import { downloadConversationDebugExport } from './conversationDebugExport.js';
 import './conversation-debug.css';
 
 export function ConversationDebugPanel({
@@ -58,7 +59,7 @@ export function ConversationDebugPanel({
   const { t } = useConversationDebugI18n();
   const { EmptyState, ResizeHandle, SelectField } = useConversationDebugUi();
   const [mode, setMode] = useState<'events' | 'flow'>('flow');
-  const [turnScope, setTurnScope] = useState<'all' | 'latest'>('all');
+  const [turnScope, setTurnScope] = useState<string>('all');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
   const visibility = useMemo(
@@ -67,7 +68,7 @@ export function ConversationDebugPanel({
   );
   const turnGroupIds = useStableTurnGroupIds(visibility.turnGroupIds);
   const eventState = useConversationDebugEvents(eventSource, service, thread, visibility);
-  const traceState = useConversationDebugTraces(service, thread, visibility);
+  const traceState = useConversationDebugTraces(service, thread, visibility, hidden);
   const deferredEvents = useDeferredValue(eventState.events);
   const deferredTraces = useDeferredValue(traceState.traces);
   const eventGraph = useMemo(
@@ -82,7 +83,7 @@ export function ConversationDebugPanel({
   const visibleGraph = useMemo(
     () => filterConversationDebugGraphByTurn(
       graph,
-      turnScope === 'latest' ? latestTurnId : null,
+      turnScope === 'latest' ? latestTurnId : turnScope === 'all' ? null : turnScope,
     ),
     [graph, latestTurnId, turnScope],
   );
@@ -149,18 +150,23 @@ export function ConversationDebugPanel({
                 </Button>
               </div>
               <div className="conversation-debug-toolbar__context">
+                <Button variant="ghost" aria-label={t('feature.conversationDebug.export')} title={t('feature.conversationDebug.export')}
+                  disabled={!visibleGraph.nodes.length} onClick={() => downloadConversationDebugExport(thread, visibleGraph)}>
+                  <Download size={14} aria-hidden="true" />
+                </Button>
                 <SelectField
                   aria-label={t('feature.conversationDebug.turn.all')}
                   className="conversation-debug-toolbar__turn-scope"
                   disabled={graph.turns.length < 2}
                   value={turnScope}
                   onValueChange={(value) => {
-                    setTurnScope(value === 'latest' ? 'latest' : 'all');
+                    setTurnScope(value);
                     closeInspector();
                   }}
                 >
                   <option value="all">{t('feature.conversationDebug.turn.all')}</option>
                   <option value="latest">{t('feature.conversationDebug.turn.latest')}</option>
+                  {graph.turns.map((turn, index) => <option key={turn.id} value={turn.id}>{t('feature.conversationDebug.turn.number', { index: index + 1 })}</option>)}
                 </SelectField>
                 <span className={`conversation-debug-toolbar__status ${eventState.syncing ? 'is-syncing' : 'is-live'}`}>
                   <Activity aria-hidden="true" size={14} />

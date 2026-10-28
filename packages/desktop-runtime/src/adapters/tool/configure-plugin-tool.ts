@@ -44,6 +44,7 @@ function rendererUiSchema(language?: RuntimeInterfaceLanguage): Record<string, u
       'stack {type,direction?,gap?,children}; text/badge {type,text,tone?};',
       'notice {type,title?,text,tone?}; field {type,name,label,secret?,defaultValue?,placeholder?,required?,maxLength?};',
       'select {type,name,label,defaultValue?,options}; button {type,actionId,label,variant?}.',
+      'Schema v2 also supports number {type,name,label,defaultValue?,min?,max?,step?,required?} and boolean {type,name,label,defaultValue?}. Defaults are JSON numbers/booleans; input.values keeps canonical strings. Numeric steps are relative to min (or zero).',
       text('Text, badge, notice text/title, and field/select defaults may use a {path,fallback?} binding.', "text、badge、notice 的 text/title，以及 field/select 默认值可以使用 {path,fallback?} 绑定。"),
       text('Use field.secret:true for API keys in renderer.capabilities.plugin.details, with no defaultValue. The host renders a password input and securely saves edits before the action; input.values excludes secrets. Worker handlers read only their declared credentials through context.secrets.get(name), returning a string or null. Never put credentials in state, files, tool arguments or outputs.', '插件详情页中的 API Key 使用 field.secret:true，禁止 defaultValue。宿主显示密码输入框并在 action 前安全保存修改；input.values 不含密钥。worker handler 通过 context.secrets.get(name) 读取本插件声明的密钥，返回字符串或 null。密钥不得写入 state、文件、工具参数或输出。'),
     ].join(' '),

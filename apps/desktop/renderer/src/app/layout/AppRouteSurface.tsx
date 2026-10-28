@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { shellRouteSlot, type RendererAppRouteId } from '@setsuna-desktop/renderer-contracts/shell';
 import { useRendererOwnedSlots } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
 import { PluginRouteAdapter, type PluginRouteAdapterProps } from './PluginRouteAdapter.js';
+import { PageSessionProvider } from '@setsuna-desktop/renderer-ui';
 
 export function AppRouteSurface({ activeView, pluginProps, renderDefault }: Readonly<{
   activeView: RendererAppRouteId;
@@ -12,7 +13,7 @@ export function AppRouteSurface({ activeView, pluginProps, renderDefault }: Read
   const active = activeView === 'plugin';
   const [opened, setOpened] = useState(active);
   useEffect(() => { if (active) setOpened(true); }, [active]);
-  return <>
+  return <PageSessionProvider>
     {activeView === 'plugin' ? null : slots.keyed(shellRouteSlot, activeView, {
       routeId: activeView, renderDefault: () => renderDefault(activeView),
     })}
@@ -24,5 +25,5 @@ export function AppRouteSurface({ activeView, pluginProps, renderDefault }: Read
         renderDefault: () => <PluginRouteAdapter {...pluginProps} active={active} />,
       })}
     </div> : null}
-  </>;
+  </PageSessionProvider>;
 }

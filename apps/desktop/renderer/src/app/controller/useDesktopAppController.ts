@@ -1,4 +1,4 @@
-import { workspaceProjectRoots, workspaceProjectForRoot } from '@setsuna-desktop/contracts';
+import { resolveWorkspaceConversationDefaults, workspaceProjectRoots, workspaceProjectForRoot } from '@setsuna-desktop/contracts';
 import { useToast } from '@setsuna-desktop/renderer-ui';
 import {
   pluginMentionText,
@@ -10,6 +10,7 @@ import type { ReviewTarget } from '@setsuna-desktop/feature-review/contracts';
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -136,6 +137,10 @@ export function useDesktopAppController() {
 
   const effectiveProjectId = currentThread ? currentThread.projectId ?? null : activeProjectId;
   const effectiveProject = effectiveProjectId ? projects.find((project) => project.id === effectiveProjectId) : undefined;
+  const conversationProject = useMemo(() => effectiveProject ? {
+    ...effectiveProject,
+    conversationDefaults: resolveWorkspaceConversationDefaults(effectiveProject, projects),
+  } : undefined, [effectiveProject, projects]);
   const activeWorkspaceState = useThreadWorkspace({ client, projectWorkspace: effectiveProject, setError, thread: currentThread });
   const activeWorkspace = activeWorkspaceState.workspace;
 
@@ -391,7 +396,7 @@ export function useDesktopAppController() {
 
   return {
     newThreadDraftId,
-    activeProject: effectiveProject,
+    activeProject: conversationProject,
     activeWorkspace,
     fileWorkspace,
     worktreeRecovery: {

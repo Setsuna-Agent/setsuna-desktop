@@ -85,7 +85,7 @@ export function Tabs({
             inside fixed/scrolled containers it would replay scroll offsets as
             movement. The pill only ever travels within the list, so scoping
             projection to the Tabs wrapper is always correct. */}
-        <motion.div layoutRoot className={className}>
+        <motion.div layoutRoot className={cn("sd-tabs", className)} data-variant={variant}>
           {children}
         </motion.div>
       </TabsCtx.Provider>
@@ -220,7 +220,7 @@ export function TabsList({
     const viewport = viewportRef.current;
     if (viewport) viewport.scrollBy({ left: direction * viewport.clientWidth * 0.8, behavior: reduce ? "instant" : "smooth" });
   };
-  const controlClass = "absolute inset-y-0 z-20 inline-flex w-9 items-center justify-center text-foreground transition-opacity hover:opacity-70 focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-0";
+  const controlClass = "sd-tabs__scroll absolute inset-y-0 z-20 inline-flex w-9 items-center justify-center text-foreground transition-opacity hover:opacity-70 focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-0";
   const surfaceClass = variant === "pill" ? "rounded-full bg-card" : variant === "segment" ? "rounded-lg bg-card" : "";
 
   return (
@@ -242,7 +242,7 @@ export function TabsList({
           if (event.target instanceof HTMLElement && event.target.getAttribute("role") === "tab") reveal(event.target);
         }}
       >
-        <div {...props} ref={listRef} role="tablist" className={cn(listClasses[variant], "w-max", className)}>
+        <div {...props} ref={listRef} role="tablist" className={cn("sd-tabs__list", listClasses[variant], "w-max", className)}>
           {children}
         </div>
       </motion.div>
@@ -287,6 +287,7 @@ export function TabsTrigger({
         aria-selected={active}
         onClick={() => setValue(value)}
         className={cn(
+          "sd-tabs__trigger",
           "relative isolate px-3 pb-2.5 pt-1 -mb-px text-sm font-medium transition-colors min-h-[44px] inline-flex items-center whitespace-nowrap shrink-0",
           active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
           className,
@@ -316,7 +317,7 @@ export function TabsTrigger({
           data-tabs-indicator=""
           layoutId={layoutId}
           layout
-          style={{ borderRadius: variant === "pill" ? 9999 : 8 }}
+          style={{ borderRadius: variant === "pill" ? 9999 : "var(--app-radius-xs)" }}
           className={cn(
             "absolute inset-0 bg-primary",
             radius,
@@ -332,6 +333,7 @@ export function TabsTrigger({
         data-tabs-value={value}
         onClick={() => setValue(value)}
         className={cn(
+          "sd-tabs__trigger",
           "relative z-10 inline-flex items-center justify-center whitespace-nowrap bg-transparent px-3.5 py-1.5 text-sm font-medium outline-none",
           "text-muted-foreground hover:text-foreground",
           radius,

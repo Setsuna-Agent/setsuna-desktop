@@ -302,3 +302,14 @@ Workspace 测试位于 `apps/desktop/renderer/test/unit/features/workspace/`，�
 Conversation debug 测试位于 `packages/features/conversation-debug/test/`，重点覆盖分页切换 SSE、语义化活动展示、record folding、graph identity、serialization 脱敏、trace watermark、turn filtering、canvas navigation、virtual window 和内存 store 边界。
 
 Main 对应 review、browser、workspace tests，以及 Workspace Apps/Terminal Feature tests，也必须随跨层改动更新。
+
+
+## 项目新对话默认配置与诊断导出
+
+项目编辑表单的「新对话默认配置」保存 `WorkspaceProject.conversationDefaults`，通过分段控件在自行配置和跟随其他项目之间二选一。自行配置包含模型引用、可选思考强度和技能 ID；沿用全局模型时仍可设置该模型支持的思考强度。跟随模式仅保存 `sourceProjectId`，新对话按最新项目清单解析来源链；表单和存储层拒绝自引用与循环，来源删除、归档或缺失时回退全局设置。新建交互式对话使用项目模型，显式选择优先；模型已删除或所属服务被禁用时回退全局模型，已有对话保持原绑定。模型的 `enabled` 表示服务当前选中项，不是可用性开关。思考模式按当前模型能力归一化，载入项目默认值不会改写全局偏好。默认技能进入普通输入引用，可直接删除；有内容的恢复草稿不自动追加。自动化任务、fork 和已有对话继续使用各自的模型/输入来源。
+
+项目清单更新中 omission 保留默认配置，`null` 清除；WebDAV 备份携带默认配置，恢复新项目时重映射来源项目 ID，同名已有本机项目保留本机选择。默认配置不包含凭据或权限策略。
+
+调试 traces 在活动时保持快速读取，空页和错误逐步退避至 10 秒；文档隐藏或面板隐藏时暂停，重新显示或收到线程事件立即唤醒，继续使用原游标。关闭面板取消后续轮询，单个请求未结束时不并发发起下一次读取。
+
+调试工具栏支持指定轮次，并将当前范围导出为 JSON。导出采用白名单，只包含线程/项目标识、轮次状态、阶段类型、序号、起止时间和已完成阶段的耗时；不导出输入文本、节点摘要、工具参数或供应商请求体。文件名固定由项目标识、线程标识、UTC 时间组成，并清理 Windows/macOS 不可用字符。

@@ -48,6 +48,20 @@ function fixture(onExit: () => Promise<void>) {
   return host;
 }
 
+it('accepts chunked activity frames after ready and ignores frames from an exited process', async () => {
+  const onActivity = vi.fn();
+  const host = new RuntimeHost({ appRoot: process.cwd(), appVersion: 'test', dataDir: 'unused', onActivity });
+  hosts.push(host);
+  await host.start();
+  children[0]!.stdout.write('{"type":"activity","active');
+  expect(onActivity).not.toHaveBeenCalled();
+  children[0]!.stdout.write('Turns":2}\n{"type":"activity","activeTurns":-1}\n');
+  expect(onActivity).toHaveBeenCalledExactlyOnceWith(2);
+  children[0]!.exit(1, null);
+  children[0]!.stdout.write('{"type":"activity","activeTurns":7}\n');
+  expect(onActivity).toHaveBeenCalledTimes(1);
+});
+
 describe('runtime process exit cleanup', () => {
   it.each([[1, null], [null, 'SIGKILL'], [0, null]] as const)('revokes idle resources on exit %s/%s and drains before restarting', async (code, signal) => {
     let release!: () => void;

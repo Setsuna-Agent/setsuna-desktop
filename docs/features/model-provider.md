@@ -170,3 +170,6 @@ reasoning tokens，按实际摘要模型的输入、窗口及输出上限计算�
 - `packages/desktop-runtime/test/adapters/model/image-asset-resolving-model-client.test.ts`
 - `packages/contracts/test/message-metadata.test.ts`
 - AgentLoop history、tool continuation 与 context compaction integration。
+
+
+服务操作菜单支持复制配置和删除。复制生成新的 provider ID，保留协议、模型列表及普通配置，但清空 API Key presence/preview 和自定义请求头；副本默认关闭，原活动模型不变。服务顺序在左侧列表拖动调整，复用应用侧栏的拖动预览与占位让位；拖动期间不保存，松手后通过既有配置保存链路持久化。搜索结果中的移动保留未显示的服务，取消拖动或列表变化时丢弃未提交顺序；聚焦服务后也可用 Alt+上/下调整。高级配置保留连接卡片左下角的原有按钮，与测试连接处于同一行，关闭时保留表单草稿。

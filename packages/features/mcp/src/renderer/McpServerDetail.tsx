@@ -1,14 +1,14 @@
 import type { RuntimeMcpServer } from '@setsuna-desktop/contracts';
 import type { CapabilitiesPageNavigation, SettingsViewUi } from '@setsuna-desktop/renderer-contracts/settings';
 import { Switch } from '@setsuna-desktop/renderer-ui';
-import { ChevronDown, Pencil, Search, Trash2 } from 'lucide-react';
+import { ChevronDown, Copy, Pencil, Search, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { McpConnectionCard } from './McpConnectionCard.js';
 import { mcpConnectionPresentation, mcpServerCategory, mcpToolDisplayName } from './mcpPresentation.js';
 import type { McpTranslate } from './messages.js';
 
 export function McpServerDetail({ server, authAction, authError, onCancelLogin, openExternal, capabilities,
-  onBack, onDelete, onEdit, onLogin, onLogout, onUpdate, pending, translate, ui,
+  onBack, onDelete, onDuplicate, onEdit, onLogin, onLogout, onUpdate, pending, translate, ui,
 }: Readonly<{
   server: RuntimeMcpServer;
   authAction?: 'login' | 'logout';
@@ -19,6 +19,7 @@ export function McpServerDetail({ server, authAction, authError, onCancelLogin, 
   onBack(): void;
   onDelete(): Promise<void>;
   onEdit(): void;
+  onDuplicate?(): void;
   onLogin(): Promise<void>;
   onLogout(): Promise<void>;
   onUpdate(enabled: boolean): Promise<unknown>;
@@ -36,9 +37,10 @@ export function McpServerDetail({ server, authAction, authError, onCancelLogin, 
           actions={<>
             <span className="sd-toggle-label"><Switch label={translate('feature.mcp.enabled')} checked={server.enabled} disabled={server.readOnly || pending} onCheckedChange={(checked) => void onUpdate(checked)} /><span>{translate('feature.mcp.enabled')}</span></span>
             <ui.ActionMenu label={translate('feature.mcp.actions')} items={[
+              { id: 'copy', label: translate('feature.mcp.duplicate'), icon: <Copy size={14} />, disabled: pending || !onDuplicate },
               { id: 'edit', label: translate('feature.mcp.edit'), icon: <Pencil size={14} />, disabled: server.readOnly || pending },
               { id: 'delete', label: translate('feature.mcp.delete'), icon: <Trash2 size={14} />, danger: true, disabled: server.readOnly || pending },
-            ]} onSelect={(action) => { if (action === 'edit') onEdit(); if (action === 'delete') void onDelete(); }} />
+            ]} onSelect={(action) => { if (action === 'copy') onDuplicate?.(); if (action === 'edit') onEdit(); if (action === 'delete') void onDelete(); }} />
           </>}
         />
         <McpConnectionCard server={server} authAction={authAction} error={authError}

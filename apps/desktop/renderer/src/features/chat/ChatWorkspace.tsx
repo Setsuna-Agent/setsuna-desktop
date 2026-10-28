@@ -250,6 +250,7 @@ export function ChatWorkspace({
         renderDefault: () => (
           <ChatComposer
             key={composerKey}
+            preferenceKey={composerKey}
             attachmentStore={attachmentStore}
             activeTurnId={activeTurnId}
             activeProject={activeProject}

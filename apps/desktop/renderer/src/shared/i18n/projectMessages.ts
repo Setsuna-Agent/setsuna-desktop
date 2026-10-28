@@ -1,4 +1,20 @@
 export const projectZhCN = {
+  'sidebar.conversationDefaults': '新对话默认配置',
+  'sidebar.defaultModel': '默认模型',
+  'sidebar.inheritDefault': '沿用全局设置',
+  'sidebar.unavailableDefault': '模型不可用',
+  'sidebar.defaultThinking': '思考强度',
+  'sidebar.thinkingUnsupported': '当前模型不支持思考',
+  'sidebar.thinkingOff': '关闭',
+  'sidebar.thinkingOn': '开启',
+  'sidebar.defaultSkills': '默认技能',
+  'sidebar.defaultSkillsNotice': '所选技能会自动带入本项目新对话的输入框，发送时注入上下文；发送前可以移除。已有对话和有内容的草稿不会自动追加。',
+  'sidebar.customDefaults': '自行配置',
+  'sidebar.followDefaults': '跟随其他项目',
+  'sidebar.defaultsSource': '来源项目',
+  'sidebar.chooseDefaultsSource': '选择项目',
+  'sidebar.unavailableDefaultsSource': '来源项目不可用',
+
   'sidebar.chatWaitingForApproval': '等待审批',
   'sidebar.chatWaitingForInput': '等待输入',
   'sidebar.directoryPickerUnavailable': '当前环境不支持选择项目目录。',
@@ -116,6 +132,22 @@ export const projectZhCN = {
 } as const;
 
 export const projectEnUS: Record<keyof typeof projectZhCN, string> = {
+  'sidebar.conversationDefaults': 'New conversation defaults',
+  'sidebar.defaultModel': 'Default model',
+  'sidebar.inheritDefault': 'Use global preference',
+  'sidebar.unavailableDefault': 'Model unavailable',
+  'sidebar.defaultThinking': 'Thinking effort',
+  'sidebar.thinkingUnsupported': 'This model does not support thinking',
+  'sidebar.thinkingOff': 'Off',
+  'sidebar.thinkingOn': 'On',
+  'sidebar.defaultSkills': 'Default skills',
+  'sidebar.defaultSkillsNotice': 'Selected skills are added to new conversation inputs in this project and injected into context when sent. You can remove them before sending. Existing conversations and nonempty drafts are left unchanged.',
+  'sidebar.customDefaults': 'Custom',
+  'sidebar.followDefaults': 'Follow project',
+  'sidebar.defaultsSource': 'Source project',
+  'sidebar.chooseDefaultsSource': 'Select a project',
+  'sidebar.unavailableDefaultsSource': 'Source project unavailable',
+
   'sidebar.chatWaitingForApproval': 'Waiting for approval',
   'sidebar.chatWaitingForInput': 'Waiting for input',
   'sidebar.directoryPickerUnavailable': 'The project folder picker is unavailable in this environment.',

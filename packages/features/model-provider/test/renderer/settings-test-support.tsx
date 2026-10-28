@@ -128,6 +128,7 @@ export const translate = ((key: string, params?: Record<string, unknown>) => {
 }) as RendererTranslate;
 
 export const testUi = {
+  ActionMenu: ({ items, onSelect }: ComponentProps<SettingsViewUi['ActionMenu']>) => <div>{items.map((item) => <button key={item.id} disabled={item.disabled} onClick={() => onSelect(item.id)}>{item.label}</button>)}</div>,
   Button: ({ children, icon: _icon, variant: _variant, ...props }: ComponentProps<SettingsViewUi['Button']>) => (
     <button type="button" {...props}>{children}</button>
   ),

@@ -11,6 +11,8 @@ import {
   autoUpdater,
   BrowserWindow,
   clipboard,
+  globalShortcut,
+  powerSaveBlocker,
   dialog,
   Menu,
   safeStorage,
@@ -82,6 +84,7 @@ import { desktopWindows } from './window/registry.js';
 import { registerThreadWindowIpc } from './window/thread-windows.js';
 import { loadDesktopRenderer } from './window/renderer-loading.js';
 import { DesktopWindowCloseBehaviorController } from './window/close-behavior.js';
+import { DesktopActivityPreferencesController } from './window/activity-preferences.js';
 import { DesktopWindowPreferencesStore } from './window/preferences.js';
 import { showStartupSplash, waitForRendererFirstPaint } from './window/splash/window.js';
 import { loadDesktopWindowState, trackDesktopWindowState } from './window/state.js';
@@ -116,6 +119,7 @@ const macTrafficLightSize = 14;
 const appTopbarHeight = 42;
 let mainWindow: BrowserWindow | null = null;
 let runtimeHost: RuntimeHost | null = null;
+let activityPreferences: DesktopActivityPreferencesController | null = null;
 let desktopNativeBridgeServer: DesktopNativeBridgeServer | null = null;
 let mainFeatureComposition: MainFeatureComposition | null = null;
 let desktopUpdaterLifecycle: ActivatedBuiltinMainFeatures['updater'] | null = null;
@@ -219,12 +223,19 @@ async function createWindow(): Promise<void> {
   let startupClosedBeforeHandoff = false;
   let startupInProgress = true;
   mainWindow = currentMainWindow;
+  const currentActivityPreferences = new DesktopActivityPreferencesController({
+    filePath: dataLayout.activityPreferencesPath, power: powerSaveBlocker, shortcuts: globalShortcut,
+    onSummon: () => { if (mainWindow) revealDesktopWindow(mainWindow); },
+  });
+  activityPreferences = currentActivityPreferences;
   const currentDesktopTray = new DesktopTrayController({
     buildMenu: (template) => Menu.buildFromTemplate(template),
     createTray: (icon) => new Tray(icon),
     getInterfaceLanguage: () => interfaceLanguage,
     icon: desktopIcon,
     onOpen: () => { if (mainWindow) revealDesktopWindow(mainWindow); },
+    canNewChat: () => !startupInProgress,
+    onNewChat: () => { if (mainWindow) { revealDesktopWindow(mainWindow); mainWindow.webContents.send('window-control:new-chat'); } },
     onQuit: () => app.quit(),
   });
   const closeBehaviorController = new DesktopWindowCloseBehaviorController(
@@ -424,7 +435,8 @@ async function createWindow(): Promise<void> {
     appVersion: app.getVersion(),
     browserControl: activatedMainFeatures.browserControl,
     computerControl: activatedMainFeatures.computerControl,
-    onExit: () => activatedMainFeatures.computerLifecycle.runtimeExited(),
+    onActivity: (count) => currentActivityPreferences.setActiveTurns(count),
+    onExit: () => { currentActivityPreferences.setActiveTurns(0); return activatedMainFeatures.computerLifecycle.runtimeExited(); },
     nativeBridge,
     dataDir: dataLayout.root,
     ripgrepPath,
@@ -484,6 +496,7 @@ async function createWindow(): Promise<void> {
       });
       registerWindowIpc({
         macTrafficLightPosition: getMacTrafficLightPosition,
+        activityPreferences: currentActivityPreferences,
         getCloseBehavior: () => closeBehaviorController.getCloseBehavior(),
         setCloseBehavior: (behavior) => process.platform === 'win32'
           ? closeBehaviorController.setCloseBehavior(behavior)
@@ -530,6 +543,8 @@ async function createWindow(): Promise<void> {
   await waitForRendererFirstPaint(currentMainWindow);
   startupInProgress = false;
   startupSplashLayer.reveal();
+  currentDesktopTray.refreshMenu();
+  void currentActivityPreferences.initialize().catch((error) => console.error('[desktop] preferences initialization failed', error));
   prepareDesktopAppIdentity();
   currentDesktopUpdaterLifecycle.start();
 }
@@ -678,6 +693,8 @@ function shutdownDesktopServices(
 ): Promise<void> {
   if (desktopServicesShutdownPromise) return desktopServicesShutdownPromise;
 
+  activityPreferences?.dispose();
+  activityPreferences = null;
   const currentRuntimeHost = runtimeHost;
   const currentDesktopNativeBridgeServer = desktopNativeBridgeServer;
   const currentMainFeatureComposition = mainFeatureComposition;

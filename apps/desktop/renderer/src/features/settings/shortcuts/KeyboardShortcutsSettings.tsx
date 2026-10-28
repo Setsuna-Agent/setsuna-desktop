@@ -8,6 +8,7 @@ import type { MessageKey } from '../../../shared/i18n/messages.js';
 import {
   captureKeyboardShortcut,
   formatKeyboardShortcutBinding,
+  formatKeyboardShortcutBindingParts,
   type KeyboardShortcutCaptureError,
 } from '../../../shared/shortcuts/keyboardShortcutBindings.js';
 import {
@@ -88,8 +89,15 @@ export function KeyboardShortcutsSettings() {
   }, [bindingsFor, recordingTarget, setBindings, stopRecording]);
 
   const recordShortcut = useCallback(async (event: KeyboardEvent, target: RecordingTarget) => {
+    // Preserve native focus navigation, including reverse navigation with Shift.
+    if (event.key === 'Tab' && !event.ctrlKey && !event.altKey && !event.metaKey) {
+      stopRecording();
+      return;
+    }
+    if (event.isComposing || event.keyCode === 229) return;
     event.preventDefault();
     event.stopPropagation();
+    if (event.repeat) return;
     if (event.key === 'Escape') {
       stopRecording();
       return;
@@ -248,7 +256,7 @@ function KeyboardShortcutRow({
         <span className="settings-shortcuts__values">
           {!bindings.length && !adding ? <em>{t('shortcuts.unbound')}</em> : null}
           {bindings.map((binding, index) => {
-            const label = formatKeyboardShortcutBinding(binding, platform);
+            const label = formatKeyboardShortcutBindingParts(binding, platform).join(' + ');
             if (recordingIndex === index) {
               return (
                 <span className="settings-shortcuts__binding settings-shortcuts__binding--recording" key={`${binding}:recording`}>

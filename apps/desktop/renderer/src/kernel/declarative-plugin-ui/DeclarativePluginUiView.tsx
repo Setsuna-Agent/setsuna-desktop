@@ -1,4 +1,5 @@
-import { TextField as UiTextField, SelectField as UiSelectField, Button as UiButton, ToastNotice } from '@setsuna-desktop/renderer-ui';
+import { validPluginUiScalarValue } from '@setsuna-desktop/contracts';
+import { Switch, TextField as UiTextField, SelectField as UiSelectField, Button as UiButton, ToastNotice } from '@setsuna-desktop/renderer-ui';
 
 import type {
   RuntimePluginUiAction,
@@ -288,6 +289,16 @@ function renderNode(node: RuntimePluginUiNode, path: string, context: RenderCont
       </div>
     );
   }
+  if (node.type === 'boolean') return <label className="declarative-plugin-ui__field" key={path}>
+    <span>{node.label}</span><Switch label={node.label} checked={context.values[node.name] === 'true'} disabled={context.disabled}
+      onCheckedChange={(checked) => context.updateValue(node.name, String(checked))} />
+  </label>;
+  if (node.type === 'number') return <label className="declarative-plugin-ui__field" key={path}>
+    <span>{node.label}</span><UiTextField type="number" min={node.min} max={node.max} step={node.step ?? 'any'} required={node.required}
+      disabled={context.disabled} value={context.values[node.name] ?? ''}
+      aria-invalid={!validPluginUiScalarValue(node, context.values[node.name] ?? '') || undefined}
+      onChange={(event) => context.updateValue(node.name, event.currentTarget.value)} />
+  </label>;
   if (node.type === 'field') {
     if (node.secret) return (
       <PluginSecretField
@@ -443,6 +454,7 @@ function collectInitialValues(
 ): Readonly<Record<string, string>> {
   const values: Record<string, string> = {};
   visitNodes(node, (candidate) => {
+    if (candidate.type === 'number' || candidate.type === 'boolean') values[candidate.name] = String(candidate.defaultValue ?? (candidate.type === 'boolean' ? false : ''));
     if (candidate.type === 'field' && !candidate.secret) {
       values[candidate.name] = resolveRuntimePluginUiText(candidate.defaultValue, data)
         .slice(0, candidate.maxLength);
@@ -465,6 +477,7 @@ function requiredFieldsComplete(
 ): boolean {
   let complete = true;
   visitNodes(node, (candidate) => {
+    if ((candidate.type === 'number' || candidate.type === 'boolean') && !validPluginUiScalarValue(candidate, values[candidate.name] ?? '')) complete = false;
     if (candidate.type !== 'field' || !candidate.required) return;
     const change = secretChanges[candidate.name];
     const present = candidate.secret

@@ -1,3 +1,4 @@
+import { observeRuntimeActivity } from './runtime-activity.js';
 import type { RuntimeHealth } from '@setsuna-desktop/contracts';
 import http from 'node:http';
 import { URL } from 'node:url';
@@ -78,6 +79,7 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
   }
   // Recovery 完成后再排队历史记忆抽取，避免读取尚未结算的 turn；shutdown 会取消该后台队列。
   void runtime.agentLoop.runMemoryStartupExtraction().catch(() => undefined);
+  const stopObservingActivity = options.onActivity ? observeRuntimeActivity(runtime.eventBus, options.onActivity) : () => undefined;
   const commandExecManager = createAppServerCommandExecManager(runtime.appServerNotificationBus, {
     ptyFactory: options.commandExecPtyFactory,
   });
@@ -185,6 +187,7 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
     close: () => {
       if (closingPromise) return closingPromise;
       shuttingDown = true;
+      stopObservingActivity();
       closingPromise = (async () => {
         // 先停止接收请求，再关闭长连接流，让服务器回调能在后台轮次逐步结束时完成。
         const serverClosed = server.listening

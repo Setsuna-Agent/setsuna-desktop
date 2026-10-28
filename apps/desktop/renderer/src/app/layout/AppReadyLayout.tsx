@@ -252,6 +252,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   const startNewChat = useCallback(() => {
     navigation.startCurrentThread();
   }, [navigation]);
+  useEffect(() => window.setsunaDesktop?.windowControls.onNewChat?.(() => { void navigation.startGlobalThread(); }), [navigation]);
   const shortcutHandlers = useMemo<AppKeyboardShortcutHandlers>(() => ({
     'app.newChat': {
       execute: startNewChat,

@@ -1,3 +1,4 @@
+import { canFollowWorkspaceConversationDefaults, normalizeWorkspaceConversationDefaults } from '@setsuna-desktop/contracts';
 import {
   normalizeWorkspaceProjectName,
   normalizeWorkspaceProjectIcon,
@@ -141,12 +142,17 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
         id: existing?.id ?? `project_${randomUUID().replaceAll('-', '').slice(0, 20)}`,
         name: projectName,
         ...(icon ? { icon } : {}),
+        conversationDefaults: input.conversationDefaults === undefined ? existing?.conversationDefaults : normalizeWorkspaceConversationDefaults(input.conversationDefaults),
         ...(projectPath ? { path: projectPath, gitRoot: requestedRoots ? requestedRoots[0]?.gitRoot : await findGitRoot(projectPath) } : {}),
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       };
       if (requestedRoots) project = projectWithRoots(project, requestedRoots);
       else if (existing?.roots?.length) project = projectWithRoots(project, existing.roots);
+      if (input.conversationDefaults !== undefined && project.conversationDefaults?.sourceProjectId !== undefined
+        && !canFollowWorkspaceConversationDefaults(project.id, project.conversationDefaults.sourceProjectId, index.projects)) {
+        throw new Error('Conversation defaults source is unavailable or creates a cycle.');
+      }
       assertProjectRootsAvailable(project, index.projects);
       await this.writeIndex({
         version: 1,
@@ -188,6 +194,13 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
           : projectPath === undefined ? existing.gitRoot : await findGitRoot(nextPath) } : {}),
         updatedAt: this.clock.now().toISOString(),
       };
+      if (input.conversationDefaults !== undefined) {
+        updated.conversationDefaults = normalizeWorkspaceConversationDefaults(input.conversationDefaults);
+        if (updated.conversationDefaults?.sourceProjectId !== undefined
+          && !canFollowWorkspaceConversationDefaults(projectId, updated.conversationDefaults.sourceProjectId, index.projects)) {
+          throw new Error('Conversation defaults source is unavailable or creates a cycle.');
+        }
+      }
       if (input.icon !== undefined) {
         if (requestedIcon) updated.icon = requestedIcon;
         else delete updated.icon;

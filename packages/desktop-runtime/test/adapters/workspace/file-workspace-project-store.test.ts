@@ -1,6 +1,7 @@
 import {
   WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES,
   WORKSPACE_TEXT_FILE_MAX_BYTES,
+  resolveWorkspaceConversationDefaults,
   type WorkspaceProjectIcon,
 } from '@setsuna-desktop/contracts';
 import { access, lstat, mkdir, mkdtemp, readFile, realpath, rename, symlink, truncate, writeFile } from 'node:fs/promises';
@@ -20,6 +21,40 @@ const ONE_PIXEL_PNG = Buffer.from(
 );
 
 describe('file workspace project store', () => {
+  it('persists live project following and rejects missing sources and cycles without changing saved defaults', async () => {
+    const fixture = await createWorkspaceFixture();
+    const store = new FileWorkspaceProjectStore(fixture.dataDir, systemClock);
+    const source = await store.addProject({ name: 'Source', conversationDefaults: { thinking: { enabled: true, effort: 'low' } } });
+    const follower = await store.addProject({ name: 'Follower', conversationDefaults: { sourceProjectId: source.id } });
+    const nextDefaults = { model: { providerId: 'provider', modelId: 'model' }, thinking: { enabled: true, effort: 'high' }, skillIds: ['skill'] };
+    await store.updateProject(source.id, { conversationDefaults: nextDefaults });
+    await expect(store.updateProject(source.id, { conversationDefaults: { sourceProjectId: follower.id } })).rejects.toThrow('cycle');
+    await expect(store.updateProject(follower.id, { conversationDefaults: { sourceProjectId: follower.id } })).rejects.toThrow('cycle');
+    await expect(store.addProject({ name: 'Invalid', conversationDefaults: { sourceProjectId: 'missing' } })).rejects.toThrow('unavailable');
+    const reopened = new FileWorkspaceProjectStore(fixture.dataDir, systemClock);
+    const { projects } = await reopened.listProjects();
+    expect(projects.find((project) => project.id === follower.id)?.conversationDefaults).toEqual({ sourceProjectId: source.id });
+    expect(resolveWorkspaceConversationDefaults(follower, projects)).toEqual(nextDefaults);
+    await reopened.archiveProject(source.id);
+    expect(resolveWorkspaceConversationDefaults(follower, (await reopened.listProjects()).projects)).toBeUndefined();
+  });
+
+  it('preserves conversation defaults across rebinding and restart, and clears only on explicit reset', async () => {
+    const fixture = await createWorkspaceFixture();
+    const store = new FileWorkspaceProjectStore(fixture.dataDir, systemClock);
+    const conversationDefaults = { model: { providerId: 'provider-a', modelId: 'model-a' }, thinking: { enabled: true, effort: 'high' }, skillIds: ['skill-a'] };
+    const project = await store.addProject({ name: 'Defaults', conversationDefaults });
+    await store.updateProject(project.id, { name: 'Renamed defaults' });
+    const rebound = await store.addProject({ name: 'Renamed defaults', path: fixture.projectDir });
+    expect(rebound.conversationDefaults).toEqual(conversationDefaults);
+    const reopened = new FileWorkspaceProjectStore(fixture.dataDir, systemClock);
+    expect((await reopened.listProjects()).projects[0].conversationDefaults).toEqual(conversationDefaults);
+    await expect(reopened.updateProject(project.id, { conversationDefaults: { skillIds: Array(25).fill('skill') } })).rejects.toThrow();
+    expect((await store.listProjects()).projects[0].conversationDefaults).toEqual(conversationDefaults);
+    await reopened.updateProject(project.id, { conversationDefaults: null });
+    expect((await store.listProjects()).projects[0].conversationDefaults).toBeUndefined();
+  });
+
   it('persists project icons across rename, directory association, restart and explicit reset', async () => {
     const fixture = await createWorkspaceFixture();
     const store = new FileWorkspaceProjectStore(fixture.dataDir, systemClock);

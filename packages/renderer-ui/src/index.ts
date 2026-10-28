@@ -32,3 +32,6 @@ export { Tabs, TabsList, TabsTrigger } from './tabs/tabs.js';
 export { Table, type TableColumn, type TableProps } from './table.js';
 export { DocumentMarkdown, documentUrl, type DocumentMarkdownProps } from './document-markdown.js';
 export { MermaidDiagram } from './mermaid-diagram.js';
+export { PageSessionProvider, usePageSessionState, usePageScrollRestoration } from './navigation/page-session.js';
+
+export { Disclosure } from './disclosure/disclosure.js';

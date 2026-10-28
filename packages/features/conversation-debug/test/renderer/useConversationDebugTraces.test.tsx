@@ -1,0 +1,41 @@
+// @vitest-environment happy-dom
+import { act, cleanup, renderHook } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
+import type { RuntimeThread } from '@setsuna-desktop/contracts';
+import { useConversationDebugTraces } from '../../src/renderer/useConversationDebugTraces.js';
+import { createConversationDebugVisibility } from '../../src/renderer/conversationDebugVisibility.js';
+import type { ConversationDebugRendererService } from '../../src/renderer/service.js';
+
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
+it('backs off empty pages and resumes at the saved cursor without overlapping requests', async () => {
+  vi.useFakeTimers();
+  let hidden = false;
+  vi.spyOn(document, 'hidden', 'get').mockImplementation(() => hidden);
+  const listTraces = vi.fn().mockResolvedValue({ traces: [], nextSeq: 9 });
+  const client = { listTraces } as unknown as ConversationDebugRendererService;
+  const thread = { id: 'thread', lastSeq: 1 } as RuntimeThread;
+  const visibility = createConversationDebugVisibility(null);
+  const view = renderHook(({ lastSeq }) => useConversationDebugTraces(client, { ...thread, lastSeq }, visibility), { initialProps: { lastSeq: 1 } });
+  await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+  expect(listTraces).toHaveBeenCalledTimes(1);
+  await act(async () => { await vi.advanceTimersByTimeAsync(650); });
+  expect(listTraces).toHaveBeenLastCalledWith('thread', 8);
+  await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+  expect(listTraces.mock.calls.length).toBeLessThan(7);
+  hidden = true; act(() => document.dispatchEvent(new Event('visibilitychange')));
+  const count = listTraces.mock.calls.length;
+  await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+  expect(listTraces).toHaveBeenCalledTimes(count);
+  hidden = false;
+  await act(async () => document.dispatchEvent(new Event('visibilitychange')));
+  expect(listTraces).toHaveBeenLastCalledWith('thread', 8);
+  let resolve!: (value: unknown) => void;
+  listTraces.mockReturnValueOnce(new Promise((done) => { resolve = done; }));
+  await act(async () => view.rerender({ lastSeq: 2 }));
+  const pendingCount = listTraces.mock.calls.length;
+  await act(async () => view.rerender({ lastSeq: 3 }));
+  expect(listTraces).toHaveBeenCalledTimes(pendingCount);
+  view.unmount();
+  await act(async () => { resolve({ traces: [], nextSeq: 10 }); await vi.advanceTimersByTimeAsync(20_000); });
+  expect(listTraces).toHaveBeenCalledTimes(pendingCount);
+});

@@ -1,9 +1,10 @@
+import { validPluginUiScalarValue } from '@setsuna-desktop/contracts';
 import type {
   RuntimePluginUiContribution,
   RuntimePluginUiNode,
 } from '@setsuna-desktop/contracts';
 
-type RendererUiField = Extract<RuntimePluginUiNode, { type: 'field' | 'select' }>;
+type RendererUiField = Extract<RuntimePluginUiNode, { type: 'field' | 'select' | 'number' | 'boolean' }>;
 
 /** Returns only bounded string values declared by this contribution. */
 export function projectRendererUiState(
@@ -15,10 +16,12 @@ export function projectRendererUiState(
   const projected: Record<string, string> = {};
   for (const [name, field] of rendererUiFields(contribution)) {
     if (field.type === 'field' && field.secret) continue;
-    const candidate = record[name];
+    const raw = record[name];
+    const candidate = (field.type === 'number' || field.type === 'boolean') && (typeof raw === 'number' || typeof raw === 'boolean') ? String(raw) : raw;
     if (typeof candidate !== 'string') continue;
     if (field.type === 'field' && candidate.length > (field.maxLength ?? 4_000)) continue;
     if (field.type === 'select' && !field.options.some((option) => option.value === candidate)) continue;
+    if ((field.type === 'number' || field.type === 'boolean') && !validPluginUiScalarValue(field, candidate)) continue;
     projected[name] = candidate;
   }
   return Object.freeze(projected);
@@ -27,7 +30,7 @@ export function projectRendererUiState(
 function rendererUiFields(contribution: RuntimePluginUiContribution): Map<string, RendererUiField> {
   const fields = new Map<string, RendererUiField>();
   const visit = (node: RuntimePluginUiNode): void => {
-    if (node.type === 'field' || node.type === 'select') fields.set(node.name, node);
+    if (node.type === 'field' || node.type === 'select' || node.type === 'number' || node.type === 'boolean') fields.set(node.name, node);
     if (node.type === 'stack') node.children.forEach(visit);
   };
   if (contribution.tree) visit(contribution.tree);

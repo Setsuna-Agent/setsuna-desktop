@@ -1,3 +1,5 @@
+import type { WorkspaceConversationDefaults } from './workspace/conversation-defaults.js';
+export * from './workspace/conversation-defaults.js';
 import type { WorkspaceProjectIcon } from './workspace/project-icon.js';
 
 export const TEMPORARY_WORKSPACE_PROJECT_ID = 'temporary_workspace';
@@ -47,6 +49,7 @@ export type WorkspaceProject = {
   id: string;
   name: string;
   icon?: WorkspaceProjectIcon;
+  conversationDefaults?: WorkspaceConversationDefaults;
   /** Device-local directory binding. Missing for a restored project awaiting association. */
   path?: string;
   gitRoot?: string;
@@ -77,12 +80,14 @@ export type AddWorkspaceProjectInput = {
   name?: string;
   roots?: WorkspaceProjectRootInput[];
   icon?: WorkspaceProjectIcon | null;
+  conversationDefaults?: WorkspaceConversationDefaults | null;
 };
 
 export type UpdateWorkspaceProjectInput = {
   name?: string;
   /** `null` restores the default folder icon; omission preserves the current icon. */
   icon?: WorkspaceProjectIcon | null;
+  conversationDefaults?: WorkspaceConversationDefaults | null;
   /** `null` explicitly removes the device-local directory binding. */
   path?: string | null;
   roots?: WorkspaceProjectRootInput[];
