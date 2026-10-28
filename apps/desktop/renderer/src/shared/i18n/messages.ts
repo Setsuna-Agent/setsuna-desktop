@@ -13,6 +13,10 @@ import { toolRunEnUS, toolRunZhCN } from './toolRunMessages.js';
 import { workspaceEnUS, workspaceZhCN } from './workspaceMessages.js';
 
 const zhCN = {
+  'settings.desktop.behavior': '桌面行为',
+  'settings.desktop.keepAwake': '任务运行时防止系统休眠',
+  'settings.desktop.summon': '全局唤起快捷键',
+  'settings.desktop.disabled': '关闭',
   'common.back': '返回',
   'common.cancel': '取消',
   'common.close': '关闭',
@@ -277,8 +281,13 @@ const zhCN = {
   'settings.general.accent.default': '默认',
   'settings.general.accent.blue': '蓝色',
   'settings.general.accent.purple': '紫色',
+  'settings.general.accent.pink': '玫红',
+  'settings.general.accent.red': '红色',
   'settings.general.accent.green': '绿色',
   'settings.general.accent.orange': '橙色',
+  'settings.general.accent.amber': '琥珀',
+  'settings.general.accent.teal': '青绿',
+  'settings.general.accent.cyan': '青蓝',
   'settings.general.sidebar.soft': '柔和',
   'settings.general.sidebar.plain': '素净',
   'settings.general.sidebar.contrast': '层次',
@@ -555,6 +564,10 @@ const zhCN = {
 export type MessageKey = keyof typeof zhCN;
 
 const enUS = {
+  'settings.desktop.behavior': 'Desktop behavior',
+  'settings.desktop.keepAwake': 'Prevent sleep during active tasks',
+  'settings.desktop.summon': 'Global summon shortcut',
+  'settings.desktop.disabled': 'Off',
   'common.back': 'Back',
   'common.cancel': 'Cancel',
   'common.close': 'Close',
@@ -819,8 +832,13 @@ const enUS = {
   'settings.general.accent.default': 'Default',
   'settings.general.accent.blue': 'Blue',
   'settings.general.accent.purple': 'Purple',
+  'settings.general.accent.pink': 'Pink',
+  'settings.general.accent.red': 'Red',
   'settings.general.accent.green': 'Green',
   'settings.general.accent.orange': 'Orange',
+  'settings.general.accent.amber': 'Amber',
+  'settings.general.accent.teal': 'Teal',
+  'settings.general.accent.cyan': 'Cyan',
   'settings.general.sidebar.soft': 'Soft',
   'settings.general.sidebar.plain': 'Plain',
   'settings.general.sidebar.contrast': 'Contrast',

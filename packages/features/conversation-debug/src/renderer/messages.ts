@@ -5,6 +5,8 @@ export const conversationDebugMessages = defineRendererMessageBundle({
   fallbackLocale: 'zh-CN',
   messages: {
     'zh-CN': {
+      'feature.conversationDebug.export': '导出诊断元数据',
+      'feature.conversationDebug.turn.number': '第 {index} 轮',
       'feature.conversationDebug.title': '对话调试',
       'feature.conversationDebug.preparing': '正在准备流程数据…',
       'feature.conversationDebug.empty': '没有可调试的对话',
@@ -221,6 +223,8 @@ export const conversationDebugMessages = defineRendererMessageBundle({
       'feature.conversationDebug.settings.description': '显示当前对话的事件流程，并在内存中收集模型与上下文诊断轨迹。',
     },
     'en-US': {
+      'feature.conversationDebug.export': 'Export diagnostic metadata',
+      'feature.conversationDebug.turn.number': 'Turn {index}',
       'feature.conversationDebug.title': 'Conversation debug',
       'feature.conversationDebug.preparing': 'Preparing flow data…',
       'feature.conversationDebug.empty': 'No conversation to debug',

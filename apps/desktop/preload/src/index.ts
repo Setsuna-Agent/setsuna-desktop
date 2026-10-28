@@ -147,6 +147,13 @@ const windowControls: SetsunaDesktopBridge['windowControls'] = {
   minimize: () => ipcRenderer.invoke('window-control:minimize'),
   toggleMaximize: () => ipcRenderer.invoke('window-control:toggle-maximize'),
   close: () => ipcRenderer.invoke('window-control:close'),
+  getActivityPreferences: () => ipcRenderer.invoke('window-control:get-activity-preferences'),
+  setActivityPreferences: (value) => ipcRenderer.invoke('window-control:set-activity-preferences', value),
+  onNewChat: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on('window-control:new-chat', listener);
+    return () => ipcRenderer.off('window-control:new-chat', listener);
+  },
   getCloseBehavior: () => ipcRenderer.invoke('window-control:get-close-behavior'),
   setCloseBehavior: (behavior) => ipcRenderer.invoke('window-control:set-close-behavior', behavior),
   isMaximized: () => ipcRenderer.invoke('window-control:is-maximized'),

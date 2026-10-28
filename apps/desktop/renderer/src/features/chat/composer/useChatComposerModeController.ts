@@ -1,3 +1,5 @@
+import { usePageSessionState } from '@setsuna-desktop/renderer-ui';
+import { useId } from 'react';
 import type {
   ProviderConfigState,
   ProviderModelConfig,
@@ -34,14 +36,21 @@ import {
 type ModelThinkingSelectionState = {
   modelKey: string | null;
   selection: ChatThinkingSelection;
+  persist: boolean;
+  defaults?: ChatThinkingSelection;
+  explicitlySelected: boolean;
 };
 
 export function useChatComposerModeController({
   currentThreadId,
+  preferenceKey,
+  defaultThinking,
   model,
   provider,
 }: {
   currentThreadId?: string | null;
+  preferenceKey?: string;
+  defaultThinking?: ChatThinkingSelection;
   model: ProviderModelConfig | null;
   provider: ProviderConfigState | null;
 }) {
@@ -51,15 +60,24 @@ export function useChatComposerModeController({
   );
   const [localModes, setLocalModes] = useState(emptyChatComposerLocalModes);
   const [modelOpenSignal, setModelOpenSignal] = useState(0);
-  const [modelThinkingSelection, setModelThinkingSelection] = useState<ModelThinkingSelectionState>(() => (
-    createModelThinkingSelectionState(modelCapabilities)
-  ));
+  const instanceId = useId();
+  const [modelThinkingSelection, setModelThinkingSelection] = usePageSessionState<ModelThinkingSelectionState>(
+    `chat:${preferenceKey ?? instanceId}:thinking`, () => createModelThinkingSelectionState(modelCapabilities, defaultThinking),
+  );
   const thinkingSelection = modelThinkingSelection.selection;
 
   useEffect(() => {
     setModelThinkingSelection((current) => {
       if (current.modelKey !== modelCapabilities.preferenceKey) {
-        return createModelThinkingSelectionState(modelCapabilities);
+        return createModelThinkingSelectionState(modelCapabilities, defaultThinking);
+      }
+      // Project selection can reuse a new-chat session with the same model.
+      // Refresh its defaults until the user chooses or the conversation starts.
+      if (!currentThreadId && !current.explicitlySelected && (
+        current.defaults?.enabled !== defaultThinking?.enabled
+        || current.defaults?.effort !== defaultThinking?.effort
+      )) {
+        return createModelThinkingSelectionState(modelCapabilities, defaultThinking);
       }
       const selection = normalizeChatThinkingSelection(
         current.selection,
@@ -67,11 +85,12 @@ export function useChatComposerModeController({
       );
       return selection === current.selection ? current : { ...current, selection };
     });
-  }, [modelCapabilities.preferenceKey, modelCapabilities.thinking]);
+  }, [currentThreadId, defaultThinking, modelCapabilities.preferenceKey, modelCapabilities.thinking, setModelThinkingSelection]);
 
   useEffect(() => {
     if (
-      !modelThinkingSelection.modelKey
+      !modelThinkingSelection.persist
+      || !modelThinkingSelection.modelKey
       || modelThinkingSelection.modelKey !== modelCapabilities.preferenceKey
     ) return;
     writeChatThinkingPreference(
@@ -89,23 +108,27 @@ export function useChatComposerModeController({
 
   const setThinkingEnabled = useCallback((enabled: boolean) => {
     setModelThinkingSelection((current) => {
-      if (current.selection.enabled === enabled) return current;
+      if (current.explicitlySelected && current.selection.enabled === enabled) return current;
       return {
         ...current,
+        persist: true,
+        explicitlySelected: true,
         selection: { ...current.selection, enabled },
       };
     });
-  }, []);
+  }, [setModelThinkingSelection]);
 
   const setThinkingEffort = useCallback((effort: string) => {
     setModelThinkingSelection((current) => {
-      if (current.selection.effort === effort) return current;
+      if (current.explicitlySelected && current.selection.effort === effort) return current;
       return {
         ...current,
+        persist: true,
+        explicitlySelected: true,
         selection: { ...current.selection, effort },
       };
     });
-  }, []);
+  }, [setModelThinkingSelection]);
 
   const clearGoalMode = useCallback(() => {
     setLocalModes(clearChatComposerGoalMode);
@@ -181,9 +204,13 @@ export function useChatComposerModeController({
 
 function createModelThinkingSelectionState(
   modelCapabilities: ReturnType<typeof createChatComposerModelCapabilities>,
+  defaults?: ChatThinkingSelection,
 ): ModelThinkingSelectionState {
   return {
+    persist: !defaults,
+    defaults,
+    explicitlySelected: false,
     modelKey: modelCapabilities.preferenceKey,
-    selection: readChatModelThinkingSelection(modelCapabilities),
+    selection: defaults ? normalizeChatThinkingSelection(defaults, modelCapabilities.thinking) : readChatModelThinkingSelection(modelCapabilities),
   };
 }

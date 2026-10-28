@@ -9,6 +9,7 @@ export type RuntimeServerOptions = Pick<RuntimeFactoryOptions, 'extensionWorkerE
   version: string;
   builtinSkillsDir?: string;
   builtinPluginsDir?: string;
+  onActivity?(activeTurns: number): void;
   commandExecPtyFactory?: AppServerPtyFactory;
   nativeBridge?: DesktopNativeBridge;
 };

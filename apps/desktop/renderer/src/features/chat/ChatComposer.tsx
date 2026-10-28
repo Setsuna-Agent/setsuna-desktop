@@ -1,3 +1,5 @@
+import { useComposerModelSelection } from './composer/preferences/useComposerModelSelection.js';
+import { useProjectDefaultSkills } from './composer/preferences/useProjectDefaultSkills.js';
 import { ChatPromptInput } from './composer/editor/ChatPromptInput.js';
 import type { WorkspaceDraftReference } from './session/chatDraftReferences.js';
 import type { ComposerSlot } from './composer/editor/types.js';
@@ -72,7 +74,6 @@ import type { ChatContextTokenUsage } from './conversation/chatContextUsage.js';
 import type { ChatQueuedTurnActions } from './hooks/useQueuedTurnInputActions.js';
 import type { SetChatComposerDraft } from './hooks/useChatComposerSession.js';
 import {
-  chatThreadModelSelection,
   type ChatModelSelectionHandler,
 } from './chatModelSelection.js';
 
@@ -111,6 +112,7 @@ export function composerActiveTurn(
 }
 
 export function ChatComposer({
+  preferenceKey,
   activeTurnId,
   activeProject,
   client,
@@ -153,6 +155,7 @@ export function ChatComposer({
 }: {
   activeTurnId: string | null;
   activeProject?: WorkspaceProject;
+  preferenceKey?: string;
   client: DesktopRuntimeClient;
   config: RuntimeConfigState | null;
   canClearContext: boolean;
@@ -199,10 +202,6 @@ export function ChatComposer({
   if (initialSlotConfigRef.current === null) initialSlotConfigRef.current = createReferenceDraftSlots(draft, plugins, skills, draftSkillReferences, draftWorkspaceReferences);
   const [selectedSkills, setSelectedSkills] = useState(() => filterSelectedSkillsBySlots(skills, initialSlotConfigRef.current!));
   const selectedPluginIds = useMemo(() => [...new Set(parsePluginMentions(draft).map((mention) => mention.pluginId))], [draft]);
-  const [pendingModelSelection, setPendingModelSelection] = useState<{
-    reference: RuntimeConfiguredModelReference;
-    threadId: string | null;
-  } | null>(null);
   const [localSubmitting, setSubmitting] = useState(false);
   const submitting = localSubmitting || submissionPending;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -212,7 +211,6 @@ export function ChatComposer({
   const consumedImageAttachmentRequestIdRef = useRef<number | null>(null);
   const consumedCapabilitySelectionRequestIdRef = useRef<number | null>(null);
   const consumedWorkspaceMentionRequestIdRef = useRef<number | null>(null);
-  const modelSelectionRequestRef = useRef(0);
   const mountedRef = useRef(true);
   const addSelectedSkills = useCallback((nextSkills: RuntimeSkillSummary[]) => {
     if (!nextSkills.length) return;
@@ -230,58 +228,18 @@ export function ChatComposer({
   const sendQueuedTurnInputNow = queuedTurnActions.sendQueuedTurnInputNow;
   const getComposerEditor = useCallback(() => senderRef.current, []);
   const getComposerInputElement = useCallback(() => getComposerEditor()?.inputElement ?? null, [getComposerEditor]);
-  const persistedThreadModel = useMemo(
-    () => chatThreadModelSelection(config, currentThread),
-    [config, currentThread],
-  );
-  const persistedReference = persistedThreadModel.reference;
-  const pendingMatchesPersisted = Boolean(
-    pendingModelSelection
-    && pendingModelSelection.threadId === (currentThread?.id ?? null)
-    && pendingModelSelection.reference.providerId === persistedReference?.providerId
-    && pendingModelSelection.reference.modelId === persistedReference.modelId
-    // A matching configured model proves that the persisted modelCode is still the same.
-    && (!currentThread?.modelBinding || persistedThreadModel.model),
-  );
-  const pendingReference = pendingModelSelection
-    && pendingModelSelection.threadId === (currentThread?.id ?? null)
-    && !pendingMatchesPersisted
-    ? pendingModelSelection.reference
-    : undefined;
-  const selectedThreadModel = useMemo(
-    () => pendingReference
-      ? chatThreadModelSelection(config, currentThread, pendingReference)
-      : persistedThreadModel,
-    [config, currentThread, pendingReference, persistedThreadModel],
-  );
-  const turnModelSelection = pendingReference
-    ?? (currentThread?.modelBinding ? undefined : selectedThreadModel.reference ?? undefined);
-  useEffect(() => {
-    if (pendingMatchesPersisted) setPendingModelSelection(null);
-  }, [pendingMatchesPersisted]);
+  const { selectedThreadModel, turnModelSelection, selectModel, defaultThinking } = useComposerModelSelection({ preferenceKey, config, currentThread, activeProject, onSelectModel });
   const activeComposerTurn = useMemo(
     () => composerActiveTurn(currentThread, activeTurnId),
     [activeTurnId, currentThread?.turns],
   );
   const modeController = useChatComposerModeController({
     currentThreadId: currentThread?.id,
+    preferenceKey,
+    defaultThinking,
     model: selectedThreadModel.model,
     provider: selectedThreadModel.provider,
   });
-  const selectModel = useCallback((providerId: string, modelId: string) => {
-    const requestId = modelSelectionRequestRef.current + 1;
-    modelSelectionRequestRef.current = requestId;
-    const reference = { providerId, modelId };
-    setPendingModelSelection({ reference, threadId: currentThread?.id ?? null });
-    try {
-      const result = onSelectModel(providerId, modelId, currentThread?.id);
-      void Promise.resolve(result).catch(() => {
-        if (modelSelectionRequestRef.current === requestId) setPendingModelSelection(null);
-      });
-    } catch {
-      if (modelSelectionRequestRef.current === requestId) setPendingModelSelection(null);
-    }
-  }, [currentThread?.id, onSelectModel]);
   const {
     addExistingImage,
     addFiles: addAttachmentFiles,
@@ -594,6 +552,8 @@ export function ChatComposer({
       editor.insert(createReferenceDraftSlots(syncPlan.value, plugins, skills, references, workspaceReferences), 'end', undefined, true);
     }
   }, [draft, draftSkillReferences, draftWorkspaceReferences, plugins, skills]);
+
+  useProjectDefaultSkills({ preferenceKey, currentThread, activeProject, skills, draft, senderRef, addSelectedSkills });
 
   const handleKeyDown = (event: ReactKeyboardEvent) => {
     if (commandController.slashMenuOpen) {

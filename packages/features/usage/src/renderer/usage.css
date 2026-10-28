@@ -28,11 +28,21 @@
   transition: opacity 160ms ease;
 }
 
-/* ---------- 筛选（位于页面标题右侧） ---------- */
+/* ---------- 页头与筛选 ---------- */
+
+.desktop-settings-panel .chat-user-settings__content[data-settings-feature='usage'] {
+  /* 侧栏会压缩内容区，页头按实际可用宽度换行。 */
+  container: usage-settings / inline-size;
+}
+
+.desktop-settings-panel .chat-user-settings__content[data-settings-feature='usage'] > .chat-user-settings__page-heading,
+.desktop-settings-panel .chat-user-settings__content[data-settings-feature='usage'] > .feature-usage {
+  width: min(1040px, 100%);
+}
 
 .desktop-settings-panel .settings-usage-filters {
   display: grid;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   justify-items: end;
   gap: 6px;
   min-width: 0;
@@ -53,6 +63,33 @@
   min-height: 28px;
   border-radius: var(--app-radius-full);
   font-size: 12px;
+}
+
+@container usage-settings (max-width: 800px) {
+  .desktop-settings-panel .chat-user-settings__page-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .desktop-settings-panel .settings-usage-filters {
+    justify-items: stretch;
+  }
+
+  .desktop-settings-panel .settings-usage-filters__fields,
+  .desktop-settings-panel .feature-usage-skeleton-filters {
+    flex-wrap: wrap;
+  }
+
+  .desktop-settings-panel .feature-usage-skeleton-filters {
+    flex-basis: auto;
+  }
+
+  .desktop-settings-panel .settings-usage-filters__field,
+  .desktop-settings-panel .feature-usage-skeleton-filters > span {
+    flex: 1 1 112px;
+    width: auto;
+    min-width: min(112px, 100%);
+  }
 }
 
 /* ---------- 通用卡片 ---------- */
@@ -569,15 +606,5 @@
 
   .desktop-settings-panel .settings-usage-calendar__stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .desktop-settings-panel .settings-usage-filters,
-  .desktop-settings-panel .settings-usage-filters__fields {
-    justify-items: stretch;
-  }
-
-  .desktop-settings-panel .settings-usage-filters__field {
-    flex: 1 1 0;
-    width: auto;
   }
 }

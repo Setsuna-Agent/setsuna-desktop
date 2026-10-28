@@ -189,3 +189,12 @@ Main handler 要确认请求来自 `DesktopWindowRegistry` 登记的可信桌面
 - `apps/desktop/main/test/unit/security/credential-vault.test.ts`
 
 IPC 的领域行为通常由被调用 service 的测试和 renderer bridge/client 测试共同覆盖；新增复杂校验时应为 IPC helper 提取可测试的纯函数。
+
+
+### 任务防休眠、全局唤起与托盘
+
+`DesktopActivityPreferencesController` 持有设备级 `activity-preferences.json`。一般设置提供任务期间防休眠和单个全局唤起快捷键，两项默认关闭；快捷键冲突或持久化失败保留原设置。只注销自身的快捷键，不影响 Computer Use 的紧急停止键。托盘的「新建对话」经窄 preload 事件进入现有全局新对话流程。
+
+Runtime 在恢复结束后观察实时持久化事件，用 stdout 控制帧 `{type:"activity",activeTurns:N}` 报告实际活动轮次。排队输入不会计入；完成、取消、失败和 shutdown 清理计数。Main 只接受当前子进程的帧，进程退出清零。多个任务共用一个 `prevent-app-suspension` blocker，允许屏幕息屏；未开启偏好时不申请 blocker。
+
+偏好恢复在首帧等待结束、splash reveal 之后后台执行，不加入 `whenReady` 或 runtime health 关键路径。启动观察仅注册内存监听，不读取历史、不请求网络。销毁时立即释放 blocker、已注册及保存中的快捷键；迟到读取不能重新注册。

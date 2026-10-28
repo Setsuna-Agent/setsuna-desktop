@@ -1,6 +1,8 @@
 import { defineRendererMessageBundle } from '@setsuna-desktop/feature-core/renderer';
 
 const zhCN = {
+  'feature.mcp.duplicate': '复制配置',
+  'feature.mcp.copyName': '{name} 副本',
   'feature.mcp.device.title': '连接 {name}',
   'feature.mcp.device.instructions': '在 GitHub 页面粘贴验证码，完成账号授权。',
   'feature.mcp.device.open': '复制并打开 GitHub',
@@ -119,6 +121,8 @@ export type McpTranslate = (
 ) => string;
 
 const enUS: Record<McpMessageKey, string> = {
+  'feature.mcp.duplicate': 'Duplicate configuration',
+  'feature.mcp.copyName': '{name} copy',
   'feature.mcp.device.title': 'Connect {name}',
   'feature.mcp.device.instructions': 'Paste this code on GitHub to authorize your account.',
   'feature.mcp.device.open': 'Copy code and open GitHub',

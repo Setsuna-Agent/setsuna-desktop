@@ -9,10 +9,12 @@ import type {
 import { Plus, Search } from 'lucide-react';
 import { useState } from 'react';
 import type { ModelProviderRendererHost } from './capabilities.js';
+import { useProviderRailReorder } from './useProviderRailReorder.js';
 
 export function ProviderRail({
   host,
   onAdd,
+  onReorder,
   onSelect,
   providers,
   selectedProviderId,
@@ -21,6 +23,7 @@ export function ProviderRail({
 }: Readonly<{
   host: ModelProviderRendererHost;
   onAdd(): void;
+  onReorder(providers: ProviderConfigState[]): void;
   onSelect(providerId: string): void;
   providers: readonly ProviderConfigState[];
   selectedProviderId?: string;
@@ -32,6 +35,7 @@ export function ProviderRail({
   const visibleProviders = providers.filter((provider) => (
     (provider.name || provider.id).toLocaleLowerCase().includes(query)
   ));
+  const reorder = useProviderRailReorder({ providers, visibleProviders, onReorder });
   const BrandIcon = host.BrandIcon;
   return (
     <aside className="model-provider-settings__rail">
@@ -57,10 +61,12 @@ export function ProviderRail({
           onChange={(event) => setSearch(event.target.value)}
         />
       </label>
-      <nav className="model-provider-settings__rail-list" aria-label={translate('feature.modelProvider.title')}>
+      <nav ref={reorder.listRef} {...reorder.listProps}
+        className="model-provider-settings__rail-list" aria-label={translate('feature.modelProvider.title')}>
         {visibleProviders.map((provider) => (
           <UiButton variant="ghost"
             key={provider.id}
+            {...reorder.itemProps(provider.id)}
             aria-current={provider.id === selectedProviderId ? 'true' : undefined}
             className={`model-provider-settings__rail-item${provider.id === selectedProviderId ? ' is-active' : ''}${provider.enabled ? '' : ' is-disabled'}`}
             type="button"

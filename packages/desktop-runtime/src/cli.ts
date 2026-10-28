@@ -72,6 +72,7 @@ async function main(): Promise<void> {
     version: process.env.SETSUNA_DESKTOP_APP_VERSION ?? process.env.npm_package_version ?? 'dev',
     builtinSkillsDir,
     builtinPluginsDir,
+    onActivity: (activeTurns) => console.log(JSON.stringify({ type: 'activity', activeTurns })),
   });
   activeServer = server;
   if (shutdownRequested) {

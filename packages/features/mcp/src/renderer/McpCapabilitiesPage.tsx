@@ -212,6 +212,12 @@ export function McpCapabilitiesPage({
             })) return;
             await runServerAction(selectedServer.key, () => service.deleteServer(selectedServer.key), () => selectServer(null));
           }}
+          onDuplicate={() => {
+            openCreate();
+            let key = `${selectedServer.key}-copy`;
+            for (let suffix = 2; servers.some((server) => server.key === key); suffix += 1) key = `${selectedServer.key}-copy-${suffix}`;
+            setDraft({ ...draftFromServer(selectedServer), key, label: translate('feature.mcp.copyName', { name: selectedServer.label }), enabled: false, tools: [] });
+          }}
           onEdit={() => openEditor(selectedServer)}
           onLogin={() => authentication.run(selectedServer.key, 'login')}
           onLogout={() => authentication.run(selectedServer.key, 'logout')}

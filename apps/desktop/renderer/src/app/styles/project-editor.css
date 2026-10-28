@@ -9,6 +9,76 @@
   gap: 7px;
 }
 
+.desktop-project-editor__defaults-mode {
+  position: relative;
+  isolation: isolate;
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  justify-self: start;
+  padding: 2px;
+  border-radius: var(--app-radius-sm);
+  background: color-mix(in srgb, var(--app-text) 5%, transparent);
+}
+
+/* A fixed-size slider avoids shared-layout scaling and dialog position changes. */
+.desktop-project-editor__defaults-mode::before {
+  content: '';
+  position: absolute;
+  inset-block: 2px;
+  left: 2px;
+  width: calc(50% - 2px);
+  border-radius: var(--app-radius-xs);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-card), 0 0 0 1px color-mix(in srgb, var(--app-text) 6%, transparent);
+  transform: translateX(0);
+  transition: transform 160ms linear;
+}
+
+.desktop-project-editor__defaults-mode[data-following='true']::before {
+  transform: translateX(100%);
+}
+
+.desktop-project-editor__defaults-mode > .sd-button {
+  position: relative;
+  justify-content: center;
+  min-height: 28px;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: var(--app-radius-xs);
+  color: var(--app-text-muted);
+  background: transparent;
+  font-size: 12px;
+}
+
+.desktop-project-editor__defaults-mode > .sd-button:is([aria-pressed='true'], :hover:not(:disabled)) {
+  color: var(--app-text);
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .desktop-project-editor__defaults-mode::before { transition: none; }
+}
+
+.desktop-project-editor__notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--app-primary) 20%, transparent);
+  border-radius: var(--app-radius-md);
+  color: var(--app-text-secondary);
+  background: color-mix(in srgb, var(--app-primary) 6%, var(--app-surface));
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.desktop-project-editor__notice > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--app-primary);
+}
+
 .desktop-project-editor__field > span:first-child,
 .desktop-project-editor__field > label {
   color: var(--app-text-secondary);

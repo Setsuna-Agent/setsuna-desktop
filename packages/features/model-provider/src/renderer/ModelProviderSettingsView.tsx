@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ModelProviderCatalog } from '../contracts/index.js';
 import type { ModelProviderRendererHost } from './capabilities.js';
 import { useModelProviderSnapshot } from './context.js';
+import { copyProvider } from './provider-copy.js';
 import { ProviderEditor } from './ProviderEditor.js';
 import { ProviderRail } from './ProviderRail.js';
 import {
@@ -189,6 +190,7 @@ export function ModelProviderSettingsView({
             translate={translate}
             ui={ui}
             onAdd={addProvider}
+            onReorder={stageProviders}
             onSelect={setSelectedProviderId}
           />
           {selectedProvider ? (
@@ -221,6 +223,11 @@ export function ModelProviderSettingsView({
                 providerId: selectedProvider.id,
                 apiKey: apiKeys[selectedProvider.id],
               })}
+              onDuplicate={() => {
+                const copy = copyProvider(selectedProvider, translate('feature.modelProvider.copyName', { name: selectedProvider.name }));
+                stageProviders([...providers, copy]);
+                setSelectedProviderId(copy.id);
+              }}
               onDelete={removeProvider}
               onDiscover={discoverModels}
               onTestConnection={async (input, signal) => { await service.discover(input, { signal }); }}

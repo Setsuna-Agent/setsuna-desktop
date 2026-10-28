@@ -8,7 +8,7 @@ import type { RendererTranslate,
 import type {
   SettingsViewUi,
 } from '@setsuna-desktop/renderer-contracts/settings';
-import { Pencil, Trash2, TriangleAlert } from 'lucide-react';
+import { Copy, Pencil, Trash2, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import type { ModelProviderCatalog } from '../contracts/index.js';
 import { withBrandIcon } from './brand-icon.js';
@@ -23,6 +23,7 @@ export function ProviderEditor({
   apiKey,
   catalog,
   canDelete,
+  onDuplicate,
   discovering,
   refreshingCatalog,
   host,
@@ -42,6 +43,7 @@ export function ProviderEditor({
   apiKey: string;
   catalog: ModelProviderCatalog;
   canDelete: boolean;
+  onDuplicate?(): void;
   discovering: boolean;
   refreshingCatalog: boolean;
   host: ModelProviderRendererHost;
@@ -95,15 +97,13 @@ export function ProviderEditor({
               onCheckedChange={(enabled) => onChange({ ...provider, enabled })}
             />
           </label>
-          {canDelete ? (
-            <ui.IconButton
-              label={translate('feature.modelProvider.deleteProvider')}
-              variant="danger"
-              onClick={() => setDeleteDialogOpen(true)}
-            >
-              <Trash2 size={14} />
-            </ui.IconButton>
-          ) : null}
+          <ui.ActionMenu label={translate('feature.modelProvider.actions')} items={[
+            { id: 'copy', label: translate('feature.modelProvider.duplicate'), icon: <Copy size={14} />, disabled: !onDuplicate },
+            { id: 'delete', label: translate('feature.modelProvider.deleteProvider'), icon: <Trash2 size={14} />, danger: true, disabled: !canDelete },
+          ]} onSelect={(id) => {
+            if (id === 'copy') onDuplicate?.();
+            if (id === 'delete') setDeleteDialogOpen(true);
+          }} />
         </div>
       </header>
       <div className="model-provider-settings__editor-body">

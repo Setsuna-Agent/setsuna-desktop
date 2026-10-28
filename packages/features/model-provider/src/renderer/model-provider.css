@@ -144,6 +144,21 @@
   background: var(--desktop-agent-control-hover-bg);
 }
 
+.model-provider-settings__rail-item[draggable='true'] {
+  cursor: grab;
+}
+
+.model-provider-settings__rail-item.sd-button[data-dragging='true']:not(:disabled) {
+  background: var(--sd-drag-placeholder);
+  outline: 1px dashed var(--sd-drag-outline);
+  outline-offset: -1px;
+  cursor: grabbing;
+}
+
+.model-provider-settings__rail-item[data-dragging='true'] > * {
+  opacity: 0;
+}
+
 .model-provider-settings__rail-copy {
   display: grid;
   gap: 3px;

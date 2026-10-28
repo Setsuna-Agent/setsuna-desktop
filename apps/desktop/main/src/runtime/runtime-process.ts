@@ -15,6 +15,7 @@ export type RuntimeProcessOptions = RuntimeProcessEnvironmentOptions & {
   browserControl?: BrowserControlConnection;
   computerControl?: ComputerConnection;
   nativeBridge?: { token: string; url: string };
+  onActivity?: (activeTurns: number) => void;
   onExit?: () => void | Promise<void>;
   runtimeEntry?: string;
   shutdownTimeoutMs?: number;
@@ -114,7 +115,9 @@ export class RuntimeProcess {
     child.once('exit', (code, signal) => this.exited(child, code, signal));
     const timeout = setTimeout(() => abort.abort(new Error('Runtime did not become ready in time')), READY_TIMEOUT_MS);
     try {
-      await waitForReady(child, abort.signal);
+      await waitForReady(child, abort.signal, (count) => {
+        if (this.child === child) this.options.onActivity?.(count);
+      });
       const response = await fetch(`http://127.0.0.1:${port}/health`, { signal: abort.signal });
       if (!response.ok) throw new Error(`Runtime health check failed: ${response.status}`);
       abort.signal.throwIfAborted();
@@ -227,7 +230,7 @@ export class RuntimeProcess {
   }
 }
 
-function waitForReady(child: RuntimeChildProcess, signal: AbortSignal): Promise<void> {
+function waitForReady(child: RuntimeChildProcess, signal: AbortSignal, onActivity: (count: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     let buffer = '';
     const finish = (error?: Error) => {
@@ -253,7 +256,9 @@ function waitForReady(child: RuntimeChildProcess, signal: AbortSignal): Promise<
         buffer = buffer.slice(newline + 1);
         if (!line) continue;
         try {
-          if ((JSON.parse(line) as { type?: string }).type === 'ready') finish();
+          const message = JSON.parse(line) as { type?: string; activeTurns?: unknown };
+          if (message.type === 'ready') finish();
+          if (message.type === 'activity' && typeof message.activeTurns === 'number' && Number.isSafeInteger(message.activeTurns) && message.activeTurns >= 0) onActivity(message.activeTurns);
         } catch { console.log(`[runtime] ${line}`); }
       }
     });

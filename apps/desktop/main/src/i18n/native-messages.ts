@@ -2,6 +2,7 @@ import type { RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 
 const zhCNMessages = {
   'tray.open': '打开 Setsuna Desktop',
+  'tray.newChat': '新建对话',
   'tray.quit': '退出',
 } as const;
 
@@ -10,6 +11,7 @@ export type NativeTranslate = (key: NativeMessageKey, params?: Record<string, st
 
 const enUSMessages: Record<NativeMessageKey, string> = {
   'tray.open': 'Open Setsuna Desktop',
+  'tray.newChat': 'New conversation',
   'tray.quit': 'Exit',
 };
 

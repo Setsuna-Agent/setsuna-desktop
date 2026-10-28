@@ -33,10 +33,11 @@ export function Checkbox({ checked, indeterminate, children, className, onChange
   </label>;
 }
 
-export function Switch({ checked, onCheckedChange, disabled, label, className }: {
-  checked: boolean; onCheckedChange(checked: boolean): void; disabled?: boolean; label?: string; className?: string;
+export function Switch({ id: suppliedId, checked, onCheckedChange, disabled, label, className }: {
+  id?: string; checked: boolean; onCheckedChange(checked: boolean): void; disabled?: boolean; label?: string; className?: string;
 }) {
-  const id = useId();
+  const generatedId = useId();
+  const id = suppliedId ?? generatedId;
   const reduce = useReducedMotion();
   return <button id={id} type="button" role="switch" aria-label={label} aria-checked={checked} disabled={disabled}
     className={cn('sd-switch', className)} data-state={checked ? 'checked' : 'unchecked'} onClick={() => onCheckedChange(!checked)}>

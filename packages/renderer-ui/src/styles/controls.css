@@ -440,3 +440,8 @@
 .sd-resize-handle:is(:hover, :focus-visible, :active, .is-resizing)::after {
   background: var(--app-border-strong);
 }
+
+.sd-disclosure > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; padding: 10px 0; }
+.sd-disclosure > summary::-webkit-details-marker { display: none; }
+.sd-disclosure[open] > summary > svg { transform: rotate(90deg); }
+.sd-disclosure__body { display: grid; gap: 12px; padding-block: 4px 12px; min-width: 0; }

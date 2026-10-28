@@ -62,6 +62,7 @@ export function AppOverlays({
         <ProjectEditorDialog
           key={projectEditorProject?.id ?? 'new-project'}
           project={projectEditorProject}
+          projects={projects}
           onClose={navigation.closeProjectEditor}
           onRemove={navigation.removeProject}
           onSave={navigation.saveProject}

@@ -62,7 +62,7 @@
   padding: 0 8px;
   border: 0;
   border-radius: var(--app-radius-sm);
-  color: var(--app-sidebar-text-secondary);
+  color: var(--app-sidebar-text);
   background: transparent;
   font-size: 13px;
   line-height: 18px;
@@ -664,11 +664,14 @@
   width: 14px;
 }
 
-.desktop-settings-panel .chat-user-settings__accent-swatch {
-  width: 11px;
-  height: 11px;
+/* Select menus are portaled outside the settings panel. */
+.chat-user-settings__accent-swatch {
+  display: block;
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
   border: 1px solid color-mix(in srgb, var(--app-text) 14%, transparent);
-  border-radius: var(--app-radius-full);
+  border-radius: 3px;
   background: var(--settings-accent-swatch-light);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-surface) 84%, transparent);
 }
@@ -682,17 +685,12 @@
   box-shadow: inset -3px 0 0 color-mix(in srgb, var(--app-text) 14%, transparent);
 }
 
-:root[data-theme='dark'] .desktop-settings-panel .chat-user-settings__accent-swatch {
+:root[data-theme='dark'] .chat-user-settings__accent-swatch {
   background: var(--settings-accent-swatch-dark);
 }
 
 :root[data-theme='dark'] .desktop-settings-panel .chat-user-settings__sidebar-background-swatch {
   background: var(--settings-sidebar-background-swatch-dark);
-}
-
-.desktop-settings-panel .chat-user-settings__accent-row .chat-user-settings__option-button.is-active {
-  color: var(--app-text);
-  background: var(--desktop-agent-control-active-bg);
 }
 
 .desktop-settings-panel .chat-user-settings__font-preview {
@@ -801,4 +799,12 @@
 .desktop-settings-panel .chat-user-settings__code-preview-body {
   display: block;
   min-width: 0;
+}
+
+.sd-settings-group, .chat-user-settings__group { container: settings-group / inline-size; }
+.sd-settings-toggle label { cursor: pointer; }
+@container settings-group (max-width: 480px) {
+  .desktop-settings-panel .sd-settings-field-row { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .desktop-settings-panel .sd-settings-field-row > .sd-settings-row__control,
+  .desktop-settings-panel .sd-settings-field-row > .settings-local-control { width: 100%; min-width: 0; }
 }

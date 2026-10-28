@@ -86,6 +86,14 @@ export type RuntimePluginUiSelectNode = Readonly<{
   options: readonly Readonly<{ label: string; value: string }>[];
 }>;
 
+export type RuntimePluginUiNumberNode = Readonly<{
+  type: 'number'; name: string; label: string;
+  defaultValue?: number; min?: number; max?: number; step?: number; required?: boolean;
+}>;
+export type RuntimePluginUiBooleanNode = Readonly<{
+  type: 'boolean'; name: string; label: string; defaultValue?: boolean;
+}>;
+
 export type RuntimePluginUiNode =
   | RuntimePluginUiStackNode
   | RuntimePluginUiTextNode
@@ -93,7 +101,9 @@ export type RuntimePluginUiNode =
   | RuntimePluginUiNoticeNode
   | RuntimePluginUiButtonNode
   | RuntimePluginUiFieldNode
-  | RuntimePluginUiSelectNode;
+  | RuntimePluginUiSelectNode
+  | RuntimePluginUiNumberNode
+  | RuntimePluginUiBooleanNode;
 
 export type RuntimePluginUiAction = Readonly<{
   id: string;

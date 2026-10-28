@@ -66,3 +66,6 @@ if (!apiKey) throw new Error('请先在插件详情中配置 API Key。');
 ## 验证
 
 安装后，用 `verify_plugin` 的 `ui-action` 检查 `settings.save`，指定 `contributionId: "settings"` 和普通字段的 `values`；密钥由用户在详情页输入，不通过验证工具提交。需要外部服务的检查在用户配置后进行；缺少密钥时明确说明尚未验证服务调用，不宣称已经通过。
+
+
+Schema v2 的数字和布尔配置使用宿主标量控件，例如 `{ "type": "number", "name": "strength", "label": "强度", "defaultValue": 0.5, "min": 0, "max": 1, "step": 0.1 }` 和 `{ "type": "boolean", "name": "enabled", "label": "启用", "defaultValue": false }`。默认值使用 JSON 数字/布尔值，action 的 `input.values` 为兼容旧 handler 仍使用字符串。需要实际数字/布尔值时显式转换再保存；宿主会校验数值范围、步长与必填规则，恢复状态时也丢弃无效值。

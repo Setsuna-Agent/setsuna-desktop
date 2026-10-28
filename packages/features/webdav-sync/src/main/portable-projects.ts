@@ -1,3 +1,4 @@
+import { normalizeWorkspaceConversationDefaults } from '@setsuna-desktop/contracts';
 import {
   normalizeWorkspaceProjectName,
   normalizeWorkspaceProjectIcon,
@@ -28,6 +29,7 @@ export type PortableProjectRecord = {
   id: string;
   name: string;
   icon?: WorkspaceProject['icon'];
+  conversationDefaults?: WorkspaceProject['conversationDefaults'];
   archivedAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -157,6 +159,7 @@ export async function stageMergedProjectIndex(input: {
     restoredProjects.push({
       id: targetId,
       name: remote.name,
+      conversationDefaults: local ? local.conversationDefaults : remote.conversationDefaults,
       ...(icon ? { icon } : {}),
       ...(local?.path ? { path: local.path } : {}),
       ...(local?.gitRoot ? { gitRoot: local.gitRoot } : {}),
@@ -169,6 +172,15 @@ export async function stageMergedProjectIndex(input: {
       createdAt: remote.createdAt,
       updatedAt: remote.updatedAt,
     });
+  }
+
+  // Remap following references only after every restored id is known. Reused local defaults stay local.
+  for (const project of restoredProjects) {
+    if (localByName.has(workspaceProjectNameKey(project.name))) continue;
+    const sourceId = project.conversationDefaults?.sourceProjectId;
+    if (sourceId === undefined) continue;
+    const targetSourceId = projectIdMap.get(sourceId);
+    project.conversationDefaults = targetSourceId ? { sourceProjectId: targetSourceId } : undefined;
   }
 
   const remoteNameKeys = new Set(input.remoteProjects.map((project) => workspaceProjectNameKey(project.name)));
@@ -220,6 +232,7 @@ function normalizePortableProjects(values: unknown[]): PortableProjectRecord[] {
       id: portableProjectId(value.id),
       name: normalizeWorkspaceProjectName(value.name),
       ...(icon ? { icon } : {}),
+      conversationDefaults: normalizeWorkspaceConversationDefaults(value.conversationDefaults),
       ...(optionalIsoDate(value.archivedAt) ? { archivedAt: optionalIsoDate(value.archivedAt) } : {}),
       createdAt: requiredIsoDate(value.createdAt, '项目创建时间'),
       updatedAt: requiredIsoDate(value.updatedAt, '项目更新时间'),
@@ -238,6 +251,7 @@ function normalizeLocalProject(value: unknown): WorkspaceProject {
     id: portableProjectId(value.id),
     name: normalizeWorkspaceProjectName(value.name),
     ...(icon ? { icon } : {}),
+    conversationDefaults: normalizeWorkspaceConversationDefaults(value.conversationDefaults),
     ...(localPath ? { path: localPath } : {}),
     ...(gitRoot ? { gitRoot } : {}),
     ...(Array.isArray(value.roots) ? { roots: value.roots.map((root) => {
@@ -257,6 +271,7 @@ function toPortableProject(project: WorkspaceProject): PortableProjectRecord {
     id: project.id,
     name: project.name,
     ...(project.icon ? { icon: project.icon } : {}),
+    ...(project.conversationDefaults ? { conversationDefaults: project.conversationDefaults } : {}),
     ...(project.archivedAt ? { archivedAt: project.archivedAt } : {}),
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,

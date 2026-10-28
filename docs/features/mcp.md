@@ -85,3 +85,6 @@ Vercel 已恢复到默认市场，使用官方 `https://mcp.vercel.com` 端点�
 - `packages/desktop-runtime/test/integration/runtime-server/mcp.test.ts`：REST、headers/env、resources、tools 与配置兼容。
 
 静态验收要求 `packages/desktop-runtime` 中没有 `@modelcontextprotocol/sdk` import，Feature 实现只由 runtime composition root 通过公开 runtime 入口装配。
+
+
+详情操作菜单的「复制配置」打开创建草稿，生成不冲突的新 key，保留传输方式、命令/参数、地址、工具筛选和超时；不会携带系统凭据、环境变量值、请求头或 OAuth 登录状态。副本默认关闭且不复制工具发现缓存，保存前可以修改连接配置。

@@ -14,6 +14,8 @@ interface DesktopTrayControllerOptions {
   getInterfaceLanguage(): RuntimeInterfaceLanguage;
   icon?: NativeImage;
   onOpen(): void;
+  onNewChat?(): void;
+  canNewChat?(): boolean;
   onQuit(): void;
 }
 
@@ -51,6 +53,7 @@ export class DesktopTrayController {
     const t = createNativeTranslate(this.options.getInterfaceLanguage());
     this.tray.setContextMenu(this.options.buildMenu([
       { label: t('tray.open'), click: this.options.onOpen },
+      ...(this.options.onNewChat ? [{ label: t('tray.newChat'), enabled: this.options.canNewChat?.() ?? true, click: this.options.onNewChat }] : []),
       { type: 'separator' },
       { label: t('tray.quit'), click: this.options.onQuit },
     ]));

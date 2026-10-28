@@ -191,8 +191,8 @@ renderConversations(response.data.threads);
 固定边界：
 
 - schemaVersion 1 继续兼容插件详情设置和紧凑 Chat contribution；早期 `renderer.settings.page.extensions` 的 `general/about` 输入会归一化到所属插件详情。详情 contribution 可用 `stateKey` 绑定一条 global state，且至少包含一个字段。
-- schemaVersion 2 新增 `renderer.plugin.page`、宿主侧栏入口、作用域数据和绑定；允许的 Slot 为 `renderer.capabilities.plugin.details`、`renderer.plugin.page`、`renderer.settings.page.extensions` 和 `renderer.chat.composer.status`。Settings target 只允许 `general/about`，Chat 区域不允许 `field/select`。
-- `tree` node 只允许 `stack/text/badge/notice/button/field/select`，未知字段直接拒绝；它不接受 HTML、CSS、`className`、script、函数 handler 或任意 URL。
+- schemaVersion 2 新增 `renderer.plugin.page`、宿主侧栏入口、作用域数据和绑定；允许的 Slot 为 `renderer.capabilities.plugin.details`、`renderer.plugin.page`、`renderer.settings.page.extensions` 和 `renderer.chat.composer.status`。Settings target 只允许 `general/about`，Chat 区域不用于编辑表单。
+- `tree` node 只允许 `stack/text/badge/notice/button/field/select/number/boolean`，未知字段直接拒绝；它不接受 HTML、CSS、`className`、script、函数 handler 或任意 URL。
 - `document` 接受已声明的 `.html/.htm`、`.css`、`.js/.mjs` 文本资源，不再额外限制单文件或合计 UI 源码大小。宿主从完整 Bundle hash 快照同时取得源码字节；当前 hash 与用户信任的 hash 不一致时拒绝返回。Bundle 的整体安装预算仍适用。
 - `document.libraries` 可选，目前提供随应用打包的 `echarts`。宿主按需在隔离 frame 内先加载库、再执行页面源码，以 `window.echarts` 提供离线图表 API。页面也可按需要加载远程脚本、样式和其他浏览器库。图表随容器变化调用 `chart.resize()`，移除时调用 `chart.dispose()`。
 - document 由 `setsuna-plugin-ui://` 独立 origin 加载，不再设置 iframe sandbox 或额外 CSP 禁用浏览器能力。支持直接联网、远程资源、浏览器存储、worker、嵌套 frame、媒体、下载及 HTTP(S) 表单提交，仍遵循网站 CORS、嵌入策略和操作系统权限。同一 Plugin 页面或卡片 ID 保持稳定存储 origin。页面没有 Node、Electron、preload、文件系统或宿主 DOM；宿主能力通过文档绑定的 `window.setsunaUI` 使用，导航离开会撤销授权。
@@ -467,3 +467,15 @@ CLI 连接器的 `command` 也用于工具调用归属：runtime 按本轮已安
 侧栏应用支持拖动图标调整顺序，顺序沿用宿主 Renderer 布局偏好保存，不改写插件清单；列表末尾始终显示「+」，没有应用时位于插件导航下方；侧栏内容超出高度后可滚动，悬浮滚动条不占布局宽度，底部用户菜单固定；介绍弹窗提供表格、表单、ECharts 看板和对话汇总快捷选项。选项创建无项目新对话，使用可恢复的插件 mention 填充草稿，保留原对话输入和附件，不自动发送。
 
 「编辑应用」的头像标题右侧提供圆形色块，包含跟随主题的正文颜色与红、橙、黄、绿、蓝、紫、粉七种鲜亮配色，点击后统一预览全部内置头像。保存后的配色归属当前应用的宿主外观偏好，同步用于侧栏、应用标题、插件详情和对话引用；取消不保存，上传图片沿用原图。旧版低饱和配色在读取与渲染时映射为新色板，保留头像、名称和正文颜色。
+
+
+Schema v2 的标量表单字段：
+
+```json
+[
+  { "type": "number", "name": "strength", "label": "强度", "min": 0, "max": 1, "step": 0.1, "defaultValue": 0.5, "required": true },
+  { "type": "boolean", "name": "enabled", "label": "启用", "defaultValue": false }
+]
+```
+
+`number` 的默认值、上下界、步长必须是有限数字，步长大于零且相对 `min`（未设置时为零）对齐；`boolean` 默认值为 JSON 布尔值。manifest、宿主表单和 runtime action 边界使用同一校验，伪造 action 不能绕过范围与步长。为兼容已有 handler，`input.values` 仍使用字符串（例如 `"0.5"`、`"false"`），handler 可用 `Number(input.values.strength)`、`input.values.enabled === 'true'` 转换。保存后通过现有 data/state 机制恢复；普通字符串字段的语法保持兼容。

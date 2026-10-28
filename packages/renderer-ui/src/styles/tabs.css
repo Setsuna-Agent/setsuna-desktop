@@ -1,0 +1,44 @@
+/* The host deliberately omits Tailwind Preflight; shared tabs own their button reset. */
+.sd-tabs__trigger,
+.sd-tabs__scroll {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+}
+
+.sd-tabs[data-variant='segment'] .sd-tabs__list {
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--app-radius-sm);
+  background: color-mix(in srgb, var(--app-text) 5%, transparent);
+}
+
+.sd-tabs[data-variant='segment'] .sd-tabs__trigger {
+  min-height: 28px;
+  padding: 3px 10px;
+  border-radius: var(--app-radius-xs);
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 20px;
+  user-select: none;
+}
+
+.sd-tabs[data-variant='segment'] .sd-tabs__trigger:hover:not(:disabled),
+.sd-tabs[data-variant='segment'] [data-tabs-label] {
+  color: var(--app-text);
+}
+
+.sd-tabs[data-variant='segment'] [data-tabs-indicator] {
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-card), 0 0 0 1px color-mix(in srgb, var(--app-text) 6%, transparent);
+}
+
+.sd-tabs__trigger:focus-visible {
+  outline: 2px solid var(--app-focus-outline);
+  outline-offset: -2px;
+}
+
+.sd-tabs__trigger:disabled {
+  opacity: var(--app-disabled-opacity);
+}

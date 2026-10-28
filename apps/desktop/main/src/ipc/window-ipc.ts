@@ -1,4 +1,4 @@
-import type { DesktopWindowCloseBehavior } from '@setsuna-desktop/contracts';
+import type { DesktopActivityPreferences, DesktopWindowCloseBehavior } from '@setsuna-desktop/contracts';
 import { BrowserWindow, ipcMain } from 'electron';
 import { toggleWindowMaximized } from '../window/frame.js';
 import { showApplicationMenu } from '../window/application-menu.js';
@@ -6,16 +6,20 @@ import { isDesktopRendererSender } from './sender.js';
 
 type WindowIpcOptions = {
   macTrafficLightPosition(pageScale: number): { x: number; y: number };
+  activityPreferences?: { get(): Promise<DesktopActivityPreferences>; set(value: unknown): Promise<DesktopActivityPreferences> };
   getCloseBehavior?: () => DesktopWindowCloseBehavior;
   setCloseBehavior?: (behavior: DesktopWindowCloseBehavior) => Promise<DesktopWindowCloseBehavior>;
 };
 
 export function registerWindowIpc({
   macTrafficLightPosition,
+  activityPreferences,
   getCloseBehavior,
   setCloseBehavior,
 }: WindowIpcOptions): void {
   const channels = [
+    'window-control:get-activity-preferences',
+    'window-control:set-activity-preferences',
     'window-control:show-application-menu',
     'window-control:execute-text-edit',
     'window-control:minimize',
@@ -28,7 +32,15 @@ export function registerWindowIpc({
   ];
   for (const channel of channels) ipcMain.removeHandler(channel);
 
-  ipcMain.handle('window-control:show-application-menu', (event, input: unknown) => {
+  ipcMain.handle('window-control:get-activity-preferences', (event) => {
+    if (!isDesktopRendererSender(event.sender) || !activityPreferences) throw new Error('Desktop preferences unavailable.');
+    return activityPreferences.get();
+  });
+  ipcMain.handle('window-control:set-activity-preferences', (event, value: unknown) => {
+    if (!isDesktopRendererSender(event.sender) || !activityPreferences) throw new Error('Desktop preferences unavailable.');
+    return activityPreferences.set(value);
+  });
+  ipcMain.handle('window-control:show-application-menu' , (event, input: unknown) => {
     if (!isDesktopRendererSender(event.sender)) return null;
     const window = BrowserWindow.fromWebContents(event.sender);
     return window ? showApplicationMenu(window, input) : null;

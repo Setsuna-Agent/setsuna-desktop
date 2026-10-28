@@ -17,7 +17,7 @@ import {
 } from '@setsuna-desktop/renderer-contracts/settings';
 import { Dropdown, Switch, ToastNotice, type MenuProps } from '@setsuna-desktop/renderer-ui';
 import { ChevronRight, MoreHorizontal } from 'lucide-react';
-import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { Component, useId, type ErrorInfo, type ReactNode } from 'react';
 import { SettingsModelPicker } from '../../composition/ModelProviderFeatureBoundary.js';
 import { SandboxedUiFrame } from '../../kernel/sandboxed-plugin-ui/SandboxedUiFrame.js';
 import {
@@ -209,6 +209,7 @@ export function SettingsToggle({
   label,
   onChange,
 }: SettingsToggleProps) {
+  const controlId = useId();
   const accessibleLabel = typeof label === 'string' ? label : undefined;
   return (
     <div className={classNames(
@@ -218,11 +219,11 @@ export function SettingsToggle({
       <span className="chat-user-settings__row-label chat-user-settings__toggle-label sd-settings-row__label">
         {icon}
         <span className="chat-user-settings__toggle-copy sd-settings-row__copy">
-          <span>{label}</span>
+          <label htmlFor={controlId}>{label}</label>
           {description ? <small>{description}</small> : null}
         </span>
       </span>
-      <Switch label={accessibleLabel} checked={checked} disabled={disabled} onCheckedChange={onChange} />
+      <Switch id={controlId} label={accessibleLabel} checked={checked} disabled={disabled} onCheckedChange={onChange} />
     </div>
   );
 }

@@ -2,11 +2,16 @@ import { useCallback, useEffect, useState } from 'react';
 import { readBrowserStorageValue, writeBrowserStorageValue } from './browserStorage.js';
 
 export const accentColorOptions = [
-  { value: 'neutral', label: '默认', lightSwatch: '#15171a', darkSwatch: '#f4f4f5' },
-  { value: 'blue', label: '蓝色', lightSwatch: '#4b9afe', darkSwatch: '#4b9afe' },
-  { value: 'purple', label: '紫色', lightSwatch: '#7c3aed', darkSwatch: '#c084fc' },
-  { value: 'green', label: '绿色', lightSwatch: 'var(--app-green)', darkSwatch: 'var(--app-green)' },
-  { value: 'orange', label: '橙色', lightSwatch: 'var(--app-orange)', darkSwatch: 'var(--app-orange)' },
+  { value: 'neutral', label: '默认', lightSwatch: '#242424', darkSwatch: '#f4f4f5' },
+  { value: 'blue', label: '蓝色', lightSwatch: '#1677ff', darkSwatch: '#60a5fa' },
+  { value: 'purple', label: '紫色', lightSwatch: '#8b3dff', darkSwatch: '#c084fc' },
+  { value: 'pink', label: '玫红', lightSwatch: '#ff268d', darkSwatch: '#ff4d9d' },
+  { value: 'red', label: '红色', lightSwatch: '#ff3b30', darkSwatch: '#ff4d4f' },
+  { value: 'orange', label: '橙色', lightSwatch: '#ff7a00', darkSwatch: 'var(--app-orange)' },
+  { value: 'amber', label: '琥珀', lightSwatch: '#ffb800', darkSwatch: '#ffc400' },
+  { value: 'green', label: '绿色', lightSwatch: '#00c853', darkSwatch: 'var(--app-green)' },
+  { value: 'teal', label: '青绿', lightSwatch: '#00bea3', darkSwatch: '#00c2a8' },
+  { value: 'cyan', label: '青蓝', lightSwatch: '#00b5f5', darkSwatch: '#00b8e6' },
 ] as const;
 
 export type AccentColor = typeof accentColorOptions[number]['value'];
