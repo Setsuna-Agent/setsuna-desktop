@@ -47,6 +47,7 @@ import { ChatStarter, ChatStarterContent } from './conversation/ChatStarter.js';
 import { activeModelContextBudget, contextTokenUsageFromThread } from './conversation/chatContextUsage.js';
 import { conversationOverviewFromMessages } from './conversation/chatConversationOverview.js';
 import { ChatTranscript } from './conversation/ChatTranscript.js';
+import { CollaborationApprovals } from './CollaborationApprovals.js';
 import type { ChatQueuedTurnActions } from './hooks/useQueuedTurnInputActions.js';
 import { useModelSetupNotice } from './hooks/useModelSetupNotice.js';
 import { useChatStarterTransition } from './hooks/useChatStarterTransition.js';
@@ -356,6 +357,7 @@ export function ChatWorkspace({
               onOpenFileReview={onOpenFileReview}
             />
           ))}
+          {currentThread && !currentThread.parentThreadId ? <CollaborationApprovals key={currentThread.id} parentThreadId={currentThread.id} client={client} /> : null}
           {overviewVisible && conversationOverview ? (
             <div className="chat-conversation-overview">
               <RendererOwnedSingleSlot

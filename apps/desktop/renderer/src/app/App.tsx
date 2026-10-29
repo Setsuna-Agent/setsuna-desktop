@@ -88,12 +88,6 @@ function ReadyAppContent({ controller }: Readonly<{
 }>) {
   const toast = useToast();
   useNotificationNavigation(controller.navigation.selectThread, toast.error);
-  const openCollaborationTask = useCallback(
-    (parentThreadId: string, task: Parameters<typeof controller.workspacePanels.openSubagentPanel>[1]) => {
-      controller.workspacePanels.openSubagentPanel(parentThreadId, task);
-    },
-    [controller.workspacePanels.openSubagentPanel],
-  );
   const openPullRequest = useCallback((threadId: string, reference: PullRequestReference) => {
     const open = async () => {
       if (controller.runtime.currentThread?.id !== threadId || controller.activeView !== 'chat') {
@@ -104,7 +98,10 @@ function ReadyAppContent({ controller }: Readonly<{
     void open().catch((error: unknown) => toast.error(error instanceof Error ? error.message : String(error)));
   }, [controller.runtime.currentThread?.id, controller.activeView, controller.navigation.selectThreadInView, controller.workspacePanels.openPullRequestPanel, toast]);
   return (
-    <CollaborationFeatureNavigationBoundary onOpenTask={openCollaborationTask}>
+    <CollaborationFeatureNavigationBoundary
+      onOpenTask={controller.workspacePanels.openSubagentPanel}
+      onOpenList={controller.workspacePanels.openSubagentPanel}
+    >
       <PullRequestsFeatureNavigationBoundary onOpen={openPullRequest}>
         <ModelProviderFeatureFeedback />
         <AppReadyLayout controller={controller} />

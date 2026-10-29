@@ -1,7 +1,8 @@
-import type { RuntimeTaskKind } from '@setsuna-desktop/contracts';
+import type { ModelRequest, RuntimeTaskKind } from '@setsuna-desktop/contracts';
 import { RuntimeTurnInputQueue } from './turn-input-queue.js';
 
 export type RuntimeTurnTask = {
+  thinkingOptions?: Pick<ModelRequest, 'thinking' | 'reasoningEffort'>;
   acceptingSteers: boolean;
   controller: AbortController;
   done?: Promise<unknown>;
@@ -26,7 +27,7 @@ export type RuntimeTurnTaskRun<T = void> = {
 
 /** 用户补充可进入审查轮次，但不会改变该轮次的只读工具权限。 */
 export function runtimeTaskSupportsSteering(kind: RuntimeTaskKind): boolean {
-  return kind === 'regular' || kind === 'goal' || kind === 'review';
+  return kind === 'regular' || kind === 'goal' || kind === 'review' || kind === 'subagent';
 }
 
 export class RuntimeTurnTaskRegistry {

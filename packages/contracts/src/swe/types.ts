@@ -23,7 +23,7 @@ export type SweDynamicToolCallStatus = 'inProgress' | 'completed' | 'failed';
 
 export type SweCollabToolCallStatus = 'inProgress' | 'completed' | 'failed';
 
-export type SweCollabToolName = 'spawn_agent' | 'send_input' | 'resume_agent' | 'wait' | 'close_agent';
+export type SweCollabToolName = 'spawn_agent' | 'send_input' | 'resume_agent' | 'interrupt_agent' | 'wait' | 'close_agent' | 'read_agent_result' | 'list_agent_profiles';
 
 export type SweThreadActiveFlag = 'waitingOnApproval' | 'waitingOnUserInput';
 

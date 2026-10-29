@@ -5,6 +5,7 @@ import {
   defineRuntimeDependencies,
   defineRuntimeFeature,
   runtimeRouteRegistrarCapability,
+  runtimeFeatureSettingsRegistryCapability,
   threadEventReaderCapability,
 } from '@setsuna-desktop/feature-core/runtime';
 import {
@@ -15,26 +16,31 @@ import {
   createInitialCollaborationState,
   readCollaborationState,
   type CollaborationState,
+  collaborationSettings, readCollaborationSettings, updateCollaborationSettings, actOnCollaborationTask,
 } from '../contracts/index.js';
 import { createRuntimeCollaborationEventRegistry } from './collaboration-event-registry.js';
 import { RuntimeCollaborationCoordinator } from './runtime-collaboration-coordinator.js';
 import { CollaborationThreadNotFoundError } from './runtime-collaboration-errors.js';
+import { CollaborationAgentSettingsStore } from './collaboration-agent-settings.js';
 
 const dependencies = defineRuntimeDependencies({
   routes: requiredCapability(runtimeRouteRegistrarCapability),
   threadEvents: requiredCapability(threadEventReaderCapability),
   host: requiredCapability(collaborationRuntimeHostCapability),
+  settings: requiredCapability(runtimeFeatureSettingsRegistryCapability),
 });
 
 export const collaborationRuntimeFeature = defineRuntimeFeature({
   definition: collaborationFeature,
   provides: [declareCapabilityProvider(collaborationControlCapability)],
   dependencies,
+  settings: [collaborationSettings],
   setup(context) {
+    const agents = new CollaborationAgentSettingsStore(context.dependencies.settings.open(collaborationSettings.documents.agents), context.dependencies.host);
     const registry = createRuntimeCollaborationEventRegistry();
     const projection = createFeatureProjectionStore<CollaborationState>({
       eventReader: context.dependencies.threadEvents,
-      checkpoint: { key: `${collaborationFeature.id}:1`, codec: collaborationStateCodec },
+      checkpoint: { key: `${collaborationFeature.id}:2`, codec: collaborationStateCodec },
       initialState: createInitialCollaborationState,
       reduce: (state, record) => registry.reduce(state, record),
     });
@@ -43,6 +49,7 @@ export const collaborationRuntimeFeature = defineRuntimeFeature({
     const control = new RuntimeCollaborationCoordinator({
       host: context.dependencies.host,
       projection,
+      agentSettings: () => agents.value(),
       onProjectionFailure: (threadId) => {
         context.health.setCondition(`projection:${threadId}`, {
           code: 'COLLABORATION_PROJECTION_UNAVAILABLE',
@@ -51,6 +58,14 @@ export const collaborationRuntimeFeature = defineRuntimeFeature({
       },
     });
     context.scope.add(() => control.shutdown());
+    context.dependencies.routes.register(context.scope, readCollaborationSettings, () => agents.read());
+    context.dependencies.routes.register(context.scope, updateCollaborationSettings, (input) => agents.update(input));
+    context.dependencies.routes.register(context.scope, actOnCollaborationTask, async (input) => {
+      try { return await context.scope.runOperation((signal) => control.act(input, signal)); }
+      catch (error) {
+        throw new FeatureOperationFailure({ code: 'TASK_CONFLICT', message: error instanceof Error ? error.message : String(error), retryable: true });
+      }
+    });
 
     context.dependencies.routes.register(
       context.scope,

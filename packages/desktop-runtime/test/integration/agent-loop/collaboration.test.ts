@@ -40,10 +40,13 @@ describe('agent loop collaboration tools', () => {
       const childEvents = child ? await threadStore.listEvents(child.id, 0) : [];
   
       expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual([
+        'list_agent_profiles',
         'spawn_agent',
         'send_input',
         'resume_agent',
         'wait',
+        'read_agent_result',
+        'interrupt_agent',
         'close_agent',
       ]);
       expect(modelClient.requests[0].messages.find((message) => message.id === 'desktop_collaboration_mode')).toMatchObject({
@@ -63,7 +66,6 @@ describe('agent loop collaboration tools', () => {
       ]);
       expect(childEvents.filter((event) => event.type === 'mailbox.delivered').map((event) => event.payload.deliveryMode)).toEqual([
         'queue_only',
-        'trigger_turn',
       ]);
       expect(childEvents.filter((event) => event.type === 'turn.started').map((event) => event.payload.taskKind)).toEqual([
         'subagent',
@@ -73,7 +75,7 @@ describe('agent loop collaboration tools', () => {
         message.content === 'Inspect auth as child' || message.content.includes('<mailbox_message')
       )));
       expect(childRequests).toHaveLength(2);
-      expect(childRequests.every((request) => (request.tools ?? []).length === 0)).toBe(true);
+      expect(childRequests.every((request) => (request.tools ?? []).every((tool) => tool.name === 'send_input'))).toBe(true);
       expect(childRequests.every((request) => request.messages.every((message) => message.id !== 'desktop_collaboration_mode'))).toBe(true);
       expect(child?.messages.some((message) => message.role === 'assistant' && message.content.includes('Child resumed with mailbox.'))).toBe(true);
       const waitResultMessage = modelClient.requests
@@ -107,14 +109,14 @@ describe('agent loop collaboration tools', () => {
       );
       const waitingThread = await waitForTestState(
         () => threadStore.getThread(parent.id),
-        (thread) => Boolean(thread?.messages.some((message) => message.content.includes('主任务会继续等待'))),
-        (thread) => `Timed out waiting for the persisted collaboration wait note; messages=${thread?.messages.length ?? 0}`,
+        (thread) => Boolean(thread?.messages.some((message) => message.phase === 'commentary' && message.content.includes('will not wait'))),
+        (thread) => `Timed out waiting for the persisted commentary; messages=${thread?.messages.length ?? 0}`,
       );
       const waitingEvents = await threadStore.listEvents(parent.id, 0);
   
       expect(loop.activeTurnId(parent.id)).toBe(started.turnId);
       expect(waitingEvents.some((event) => event.type === 'turn.completed' && event.turnId === started.turnId)).toBe(false);
-      expect(waitingThread?.messages.some((message) => message.content.includes('主任务会继续等待'))).toBe(true);
+      expect(waitingThread?.messages.some((message) => message.phase === 'final_answer')).toBe(false);
   
       modelClient.finishChild();
       await waitForTurnCompleted(threadStore, parent.id, started.turnId!);

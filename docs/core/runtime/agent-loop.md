@@ -234,14 +234,18 @@ Goal continuation 复用 execution metadata，避免重复保存内联图片。
 Collaboration 业务由 `packages/features/collaboration` 纵向拥有。Feature 内的
 `RuntimeCollaborationCoordinator` 管理协作工具、子任务台账及其生命周期：
 
-- Mailbox input 到独立 turn 或当前协作任务。
-- Cancel 后恢复调度。
-- `collaboration.task-created` / `collaboration.task-status-changed` 是唯一新写事件；旧下划线事件只在 Feature decoder 中兼容读取。
+- 子线程身份与每次执行分开，执行绑定父轮次；父轮次取消或失败会取消所属子执行。
+- 父子双向 mailbox 只投递，不由子代理启动父任务；队列消费通过持久模型消息确认，重启后可恢复。
+- `collaboration.task-created` / `collaboration.execution-changed` 是新写事件；旧 status/下划线事件只兼容读取。
+- 每次采样前非阻塞地接收已完成子结果，结束前再等待剩余执行；等待由可消费结果或新输入唤醒。终态结果和交付回执一起写入父线程，超长输出按稳定执行引用分页读取。
 - renderer 通过 Feature state operation 和全局序号事件流维护任务投影，不从通用 thread snapshot 读取协作私有状态。
+- 子代理模型与思考配置在派发时解析并保存；角色指令、Skill 和受管附件引用经现有 turn 工厂进入采样。用户补充、中断、继续和关闭通过 Feature typed action 接入，历史转录仍保持只读。
+- 自动审批的父授权上下文由 Collaboration 根据持久执行归属解析；运行时生成的任务描述和邮箱不会因此提升为用户授权。
 
 Agent loop 只消费 `collaboration.control`，并通过 `collaboration.runtime-host` 向 Feature
 提供通用 thread、turn、cancel、mailbox 和事件写入能力。协议展示可以通过 app-server
 mapper，但实际任务状态仍由 Feature event 表达；child thread 关系和 turn 本身仍属于 Core。
+恢复按父线程惰性执行，不阻塞 runtime ready。详细边界、迁移和上下文选择见 [Agent 状态 Feature](../../features/agent-state.md#collaboration)。
 
 ## Review
 

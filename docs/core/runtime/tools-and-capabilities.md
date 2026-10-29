@@ -235,12 +235,15 @@ Shell 的 `max_output_tokens` 控制本次模型可见预算，默认和策略�
 Shell 结果的 `data` 只保留进程元数据与失败诊断，不包含 `content` / `display` 正文副本；
 完成事件和会话快照仅持有有界预览，超限正文通过统一结果存储分页读取。
 
-Review/subagent turn 可使用 shell 检查 Git；Core 的任务只读标记强制宿主使用无写入、
+带有 Core 任务只读标记的检查轮次可使用 shell 检查 Git；该标记强制宿主使用无写入、
 无网络的沙箱，不继承可写授权，也不通过失败重试扩大权限。
 缺少可用 OS 沙箱的环境在只读任务中用 `git_inspect` 替代 shell 执行入口。
 该工具直接启动 Git，仅接受 status/diff/log/show 的结构化参数和工作区路径，
 禁用可执行 helpers、可选 index 写入与网络协议；输出共用 16 MiB 收集上限和结果分页，
 普通任务仍只提供 shell Git 路径。
+
+子代理不额外附加只读标记，工具访问、沙箱和审批设置与父任务采用相同的运行时配置；
+仅当所选权限或任务指令要求只读时，才按对应边界执行。
 
 ## Shell 与 network
 

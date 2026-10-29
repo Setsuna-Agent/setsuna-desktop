@@ -52,13 +52,7 @@ type RuntimeTurnInputCoordinatorOptions = {
 
 /** 管理活动轮次的 steer 与邮箱队列及其持久化边界。 */
 export class RuntimeTurnInputCoordinator {
-  private readonly idleMailboxByThread = new Map<string, RuntimeMailboxDelivery[]>();
-
   constructor(private readonly options: RuntimeTurnInputCoordinatorOptions) {}
-
-  clear(): void {
-    this.idleMailboxByThread.clear();
-  }
 
   async steer(threadId: string, input: SteerTurnInput): Promise<SendTurnResponse> {
     return this.writeSteer(threadId, input);
@@ -178,7 +172,6 @@ export class RuntimeTurnInputCoordinator {
 
     if (triggerTurn && !active) {
       const turnId = this.options.ids.id('turn');
-      this.queueIdleMailbox(threadId, delivery);
       await this.options.appendEvent(threadId, {
         id: this.options.ids.id('event'),
         threadId,
@@ -192,7 +185,6 @@ export class RuntimeTurnInputCoordinator {
       return { accepted: true, turnId };
     }
 
-    this.queueIdleMailbox(threadId, delivery);
     await this.options.appendEvent(threadId, {
       id: this.options.ids.id('event'),
       threadId,
@@ -211,12 +203,25 @@ export class RuntimeTurnInputCoordinator {
 
   async drainMailboxMessages(threadId: string, turnId: string): Promise<RuntimeMessage[]> {
     await this.waitForPendingWrites(threadId, turnId);
-    const pendingIdle = this.takeIdleMailbox(threadId);
     const active = this.activeTask(threadId, turnId);
-    return [
-      ...pendingIdle,
-      ...(active?.inputQueue.takeMailbox() ?? []),
-    ].map((delivery) => this.mailboxMessageForModel(turnId, delivery));
+    const thread = await this.options.threadStore.getThread(threadId);
+    if (!thread || !active) return [];
+    const consumedIds = new Set(thread.messages.map((message) => message.id));
+    const pending = (thread.mailboxDeliveries ?? []).filter((delivery) => !consumedIds.has(`mailbox_${delivery.id}`));
+    const messages: RuntimeMessage[] = [];
+    for (const delivery of pending) {
+      active.controller.signal.throwIfAborted();
+      const message = this.mailboxMessageForModel(turnId, delivery);
+      // The persisted model message is the consumption receipt and survives a process restart.
+      await this.options.appendEvent(threadId, {
+        id: this.options.ids.id('event'), threadId, turnId, type: 'message.created',
+        createdAt: message.createdAt, payload: { message },
+      });
+      messages.push(message);
+    }
+    // Only remove notifications whose durable deliveries were included in this snapshot.
+    active.inputQueue.takeMailbox((thread.mailboxDeliveries ?? []).map((delivery) => delivery.id));
+    return messages;
   }
 
   private activeTask(threadId: string, turnId: string): RuntimeTurnTask | null {
@@ -232,19 +237,6 @@ export class RuntimeTurnInputCoordinator {
     if (this.activeTask(threadId, turnId) !== active || active.controller.signal.aborted) return;
   }
 
-  private queueIdleMailbox(threadId: string, input: RuntimeMailboxDelivery): void {
-    const pending = this.idleMailboxByThread.get(threadId) ?? [];
-    pending.push(input);
-    this.idleMailboxByThread.set(threadId, pending);
-  }
-
-  private takeIdleMailbox(threadId: string): RuntimeMailboxDelivery[] {
-    const pending = this.idleMailboxByThread.get(threadId);
-    if (!pending?.length) return [];
-    this.idleMailboxByThread.delete(threadId);
-    return pending;
-  }
-
   private mailboxMessageForModel(turnId: string, input: RuntimeMailboxDelivery): RuntimeMessage {
     const fromAttribute = input.fromAgentId ? ` from_agent_id="${escapeSkillAttribute(input.fromAgentId)}"` : '';
     const fromThreadAttribute = input.fromThreadId ? ` from_thread_id="${escapeSkillAttribute(input.fromThreadId)}"` : '';
@@ -255,6 +247,7 @@ export class RuntimeTurnInputCoordinator {
       id: `mailbox_${input.id}`,
       turnId,
       role: 'user',
+      promptSource: input.fromAgentId || input.fromThreadId ? 'collaboration' : undefined,
       content: `<mailbox_message id="${escapeSkillAttribute(input.id)}"${fromAttribute}${fromThreadAttribute}${toAttribute}${modeAttribute}${triggerAttribute}>\n${neutralizeMailboxTags(input.content)}\n</mailbox_message>`,
       createdAt: this.options.clock.now().toISOString(),
       status: 'complete',
@@ -264,6 +257,6 @@ export class RuntimeTurnInputCoordinator {
 }
 
 function turnTaskCanReceiveMailbox(task: RuntimeTurnTask): boolean {
-  return (task.taskKind === 'regular' || task.taskKind === 'goal')
+  return (task.taskKind === 'regular' || task.taskKind === 'goal' || task.taskKind === 'subagent')
     && task.acceptingSteers && !task.controller.signal.aborted;
 }

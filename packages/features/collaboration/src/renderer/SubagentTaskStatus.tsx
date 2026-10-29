@@ -22,23 +22,15 @@ export function SubagentTaskStatus({
   status,
   translate,
   className = '',
-  showLabel = true,
 }: Readonly<{
   status: CollaborationTaskStatus;
   translate: RendererTranslate;
   className?: string;
-  showLabel?: boolean;
 }>) {
   const label = collaborationTaskStatusLabel(status, translate);
   return (
-    <span
-      className={`subagent-task-status subagent-task-status--${status} ${className}`.trim()}
-      aria-label={showLabel ? undefined : label}
-      role={showLabel ? undefined : 'img'}
-      title={showLabel ? undefined : label}
-    >
-      <span className="subagent-task-status__dot" aria-hidden="true" />
-      {showLabel ? <span>{label}</span> : null}
+    <span className={`subagent-task-status ${className}`.trim()}>
+      {label}
     </span>
   );
 }

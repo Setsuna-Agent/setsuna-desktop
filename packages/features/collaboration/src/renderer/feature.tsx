@@ -6,6 +6,8 @@ import {
   rendererFeatureOperationTransportCapability,
 } from '@setsuna-desktop/feature-core/renderer';
 import { registerChatToolResult } from '@setsuna-desktop/renderer-contracts/chat';
+import { registerSettingsPageExtension } from '@setsuna-desktop/renderer-contracts/settings';
+import { CollaborationSettingsView } from './CollaborationSettingsView.js';
 import {
   collaborationFeature,
   collaborationLegacySpawnResultCodec,
@@ -29,12 +31,17 @@ export const collaborationRendererFeature = defineRendererFeature({
   dependencies,
   messages: [collaborationMessages],
   setup(context) {
+    const client = createCollaborationClient(context.dependencies.transport);
     const service = new RendererCollaborationStateService({
-      client: createCollaborationClient(context.dependencies.transport),
+      client,
       feed: context.dependencies.eventFeed,
       scope: context.scope,
     });
     context.provide(declareCapabilityProvider(collaborationRendererStateCapability), service);
+    registerSettingsPageExtension(context.ui, {
+      entryId: 'collaboration.agent-settings', id: 'collaboration-agents', targetSectionId: 'taskModels', order: 300,
+      render: ({ translate, ui }) => <CollaborationSettingsView client={client} translate={translate} ui={ui} />,
+    });
     registerChatToolResult(context.ui, {
         id: 'collaboration.spawn-result-view',
         resultKind: 'collaboration.spawn-result',

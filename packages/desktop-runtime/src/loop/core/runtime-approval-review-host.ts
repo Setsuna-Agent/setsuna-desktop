@@ -15,6 +15,7 @@ type RuntimeApprovalReviewHostDependencies = Readonly<{
   configStore?: ConfigStore;
   modelClient: Pick<ModelClient, 'stream'>;
   threadStore: Pick<ThreadStore, 'getThread'>;
+  getDelegatedAuthorizationContext?: ApprovalReviewRuntimeHost['getDelegatedAuthorizationContext'];
 }>;
 
 /** Adapts Core model, thread, and usage services without leaking runtime ports into the Feature. */
@@ -24,6 +25,7 @@ export function createRuntimeApprovalReviewHost(
   return Object.freeze({
     now: () => dependencies.clock.now(),
     getThread: (threadId) => dependencies.threadStore.getThread(threadId),
+    getDelegatedAuthorizationContext: dependencies.getDelegatedAuthorizationContext,
     resolveModel: async ({ selection, thread }) => {
       const config = await dependencies.configStore?.getConfig().catch(() => null) ?? null;
       if (!config) throw new Error('Approval review model configuration is unavailable.');

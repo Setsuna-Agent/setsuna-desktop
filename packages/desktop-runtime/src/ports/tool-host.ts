@@ -27,7 +27,7 @@ export type ToolExecutionContext = {
   };
   environment?: ToolExecutionEnvironment;
   permissionProfile?: RuntimePermissionProfile;
-  /** Core review/subagent turns cannot gain write access through session grants or sandbox retries. */
+  /** Turn-scoped inspection policy cannot be widened through session grants or sandbox retries. */
   readOnly?: boolean;
   /** Host-owned scheduled execution; interactive tools must not wait for a user. */
   unattended?: boolean;

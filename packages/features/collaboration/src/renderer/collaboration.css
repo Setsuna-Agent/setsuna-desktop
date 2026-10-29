@@ -11,6 +11,14 @@
   display: none;
 }
 
+.collaboration-approvals {
+  flex-shrink: 0;
+  max-height: 40%;
+  padding: 8px 12px;
+  overflow-y: auto;
+  border-top: 1px solid var(--app-border);
+}
+
 .desktop-subagent-panel > .chat-messages {
   flex: 1 1 auto;
 }
@@ -28,50 +36,24 @@
   user-select: none;
 }
 
-.subagent-avatar svg {
+.subagent-avatar svg,
+.subagent-avatar img {
   display: block;
   width: 100%;
   height: 100%;
   pointer-events: none;
 }
 
+.subagent-avatar img {
+  object-fit: contain;
+  border-radius: var(--app-radius-xs);
+}
+
 .subagent-task-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
   color: var(--app-text-muted);
   font-size: 11px;
   line-height: 1;
   white-space: nowrap;
-}
-
-.subagent-task-status__dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--app-muted);
-}
-
-.subagent-task-status--queued .subagent-task-status__dot,
-.subagent-task-status--cancelled .subagent-task-status__dot {
-  background: var(--app-muted);
-}
-
-.subagent-task-status--waiting_approval .subagent-task-status__dot {
-  background: var(--app-warning);
-}
-
-.subagent-task-status--running .subagent-task-status__dot {
-  background: var(--app-info);
-}
-
-.subagent-task-status--completed .subagent-task-status__dot {
-  background: var(--app-success);
-}
-
-.subagent-task-status--failed .subagent-task-status__dot,
-.subagent-task-status--interrupted .subagent-task-status__dot {
-  background: var(--app-danger);
 }
 
 .subagent-task-card {
@@ -126,15 +108,6 @@
   display: contents;
 }
 
-.subagent-task-card .subagent-task-status {
-  flex: 0 0 auto;
-}
-
-.subagent-task-card .subagent-task-status__dot {
-  width: 6px;
-  height: 6px;
-}
-
 .subagent-task-card__name {
   flex: 0 1 auto;
   min-width: 0;
@@ -163,15 +136,9 @@
   border-bottom: 1px solid color-mix(in srgb, var(--app-border, var(--app-muted)) 50%, transparent);
 }
 
-.subagent-panel-header__identity {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-}
-
 .subagent-panel-header__text {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
@@ -180,21 +147,138 @@
 .subagent-panel-header__name-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
+  row-gap: 2px;
   min-width: 0;
+  line-height: 20px;
 }
 
 .subagent-panel-header__name {
+  min-width: 0;
+  overflow: hidden;
   font-size: 13px;
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subagent-panel-header__name-row .subagent-task-status {
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 20px;
 }
 
 .subagent-panel-header__title {
+  min-width: 0;
   overflow: hidden;
   color: var(--app-text-muted);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.collaboration-agent-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.collaboration-agent-info__role.sd-button {
+  min-width: 0;
+  max-width: 120px;
+  min-height: 0;
+  height: auto;
+  padding: 0 3px;
+  gap: 3px;
+  color: inherit;
+  font-size: inherit;
+  line-height: 20px;
+}
+
+.collaboration-agent-info__role span,
+.collaboration-agent-info__model-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collaboration-agent-info__role svg {
+  flex-shrink: 0;
+}
+
+.collaboration-agent-info__model {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.collaboration-agent-info__model-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.collaboration-agent-info__effort {
+  flex-shrink: 0;
+  color: var(--app-primary);
+  white-space: nowrap;
+}
+
+.collaboration-agent-info__popover.sd-popover {
+  width: min(300px, calc(100vw - 24px));
+  max-height: min(60vh, 520px);
+  overflow-y: auto;
+  padding: 10px;
+  border-radius: var(--app-radius-xl);
+}
+
+.collaboration-agent-info__details {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+}
+
+.collaboration-agent-info__details > div {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+}
+
+.collaboration-agent-info__details dt {
+  margin: 0;
+  color: var(--app-text-muted);
+  font-size: 11px;
+}
+
+.collaboration-agent-info__details dd {
+  margin: 0;
+  color: var(--app-text);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.collaboration-agent-info__details > .collaboration-agent-info__text {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+}
+
+.collaboration-agent-info__value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 
 .subagent-panel-header__actions {
@@ -204,7 +288,7 @@
   flex: 0 0 auto;
 }
 
-.subagent-panel-header__cancel,
+.subagent-panel-header__back,
 .subagent-panel-header__close {
   display: inline-flex;
   align-items: center;
@@ -217,20 +301,14 @@
   font-size: 12px;
 }
 
-.subagent-panel-header__cancel {
-  padding: 5px 9px;
-}
-
-.subagent-panel-header__cancel:hover {
-  background: color-mix(in srgb, var(--app-surface) 88%, var(--app-text) 12%);
-  color: var(--app-text);
-}
-
+.subagent-panel-header__back,
 .subagent-panel-header__close {
+  flex-shrink: 0;
   width: 26px;
   height: 26px;
 }
 
+.subagent-panel-header__back:hover,
 .subagent-panel-header__close:hover {
   background: color-mix(in srgb, var(--app-surface) 88%, var(--app-text) 12%);
   color: var(--app-text);
@@ -242,33 +320,69 @@
   background: color-mix(in srgb, var(--app-border, var(--app-muted)) 55%, transparent);
 }
 
-.collaboration-overview__tasks {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+.collaboration-overview .collaboration-overview__avatars {
+  gap: 0;
 }
 
-.collaboration-overview__title {
-  display: flex;
+.collaboration-overview__avatar,
+.collaboration-overview__remaining {
+  display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
-  justify-content: space-between;
-  padding: 2px 8px 5px;
-  color: var(--app-text-muted);
-  font-size: 11px;
+  justify-content: center;
+  width: 20px;
+  height: 22px;
 }
 
-.collaboration-overview__title > span:last-child {
+.collaboration-overview__avatar + .collaboration-overview__avatar {
+  margin-left: -4px;
+}
+
+.collaboration-overview__remaining {
+  width: auto;
+  min-width: 20px;
+  margin-left: 4px;
   font-variant-numeric: tabular-nums;
 }
 
-.collaboration-overview__task {
+.collaboration-task-directory__list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  /* 8px list gutter + 4px item padding align with the panel header's 12px inset. */
+  padding: 6px 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.collaboration-task-directory__group {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.collaboration-task-directory__group-title {
+  margin: 0;
+  padding: 2px 4px;
+  color: var(--app-text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.collaboration-task-row {
   display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) auto;
+  flex-shrink: 0;
+  grid-template-columns: 18px minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   width: 100%;
   min-width: 0;
-  padding: 5px 8px;
+  padding: 5px 4px;
   border: 0;
   border-radius: var(--app-radius-sm);
   background: transparent;
@@ -277,14 +391,35 @@
   text-align: left;
 }
 
-.collaboration-overview__task:hover {
+.collaboration-task-row:hover {
   background: color-mix(in srgb, var(--app-surface) 88%, var(--app-text) 12%);
 }
 
-.collaboration-overview__task strong {
+.collaboration-task-row:focus-visible {
+  outline-offset: -2px;
+}
+
+.collaboration-task-row__text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.collaboration-task-row strong {
   overflow: hidden;
   font-size: 12px;
   font-weight: 500;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collaboration-task-row__title {
+  overflow: hidden;
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

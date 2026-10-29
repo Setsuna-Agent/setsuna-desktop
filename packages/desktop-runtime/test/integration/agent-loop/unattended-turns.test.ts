@@ -17,7 +17,7 @@ import { mkDataDir, TestConfigStore, waitForTurnCompleted } from '../../support/
 import { bindTestCollaborationFeature, childThreadIdFromCollaborationToolMessages, hasToolMessage } from '../../support/agent-loop/collaboration.js';
 
 describe('unattended turn execution', () => {
-  it('keeps spawned and resumed children unattended under strict approval without granting write access', async () => {
+  it('inherits the unattended parent full-access policy for spawned and resumed child writes', async () => {
     const ids = new RandomIdGenerator();
     const store = createTestThreadStore(await mkDataDir(), systemClock, ids);
     const parent = await store.createThread({ title: 'Scheduled research' });
@@ -39,10 +39,10 @@ describe('unattended turn execution', () => {
         const child = request.messages.some((message) => message.inputKind === 'subagent_task' || message.content.includes('<mailbox_message'));
         if (child) {
           childRequests.push(request);
-          const resumed = request.messages.some((message) => message.content.includes('<mailbox_message'));
+          const resumed = request.messages.some((message) => message.content === 'Inspect again' || message.content.includes('<mailbox_message'));
           const callId = resumed ? 'resumed_read' : 'spawned_read';
           if (!request.messages.some((message) => message.role === 'tool' && message.toolCallId === callId)) {
-            yield { type: 'tool_calls', toolCalls: [{ id: callId, name: 'read_file', arguments: '{"file_path":"README.md"}' }, { id: `${callId}_write`, name: 'write_file', arguments: '{"file_path":"report.txt","content":"unsafe"}' }] };
+            yield { type: 'tool_calls', toolCalls: [{ id: callId, name: 'read_file', arguments: '{"file_path":"README.md"}' }, { id: `${callId}_write`, name: 'write_file', arguments: '{"file_path":"report.txt","content":"done"}' }] };
             yield { type: 'done', finishReason: 'tool_calls' };
             return;
           }
@@ -75,11 +75,11 @@ describe('unattended turn execution', () => {
     try {
       const started = await loop.startTurn(parent.id, { input: 'Research using a child.' }, { unattended: true });
       await waitForTurnCompleted(store, parent.id, started.turnId!);
-      expect(executions).toHaveLength(2);
-      expect(executions.every((context) => context.unattended && context.readOnly && context.permissionProfile === 'read-only')).toBe(true);
-      expect(vi.mocked(toolHost.runTool).mock.calls.every(([name]) => name === 'read_file')).toBe(true);
+      expect(executions).toHaveLength(4);
+      expect(executions.every((context) => context.unattended && !context.readOnly && context.permissionProfile === 'danger-full-access')).toBe(true);
+      expect(vi.mocked(toolHost.runTool).mock.calls.map(([name]) => name)).toEqual(['read_file', 'write_file', 'read_file', 'write_file']);
       expect(childRequests).toHaveLength(4);
-      expect(childRequests.every((request) => !request.tools?.some((tool) => tool.name === 'write_file' || tool.name === 'request_user_input'))).toBe(true);
+      expect(childRequests.every((request) => request.tools?.some((tool) => tool.name === 'write_file') && !request.tools?.some((tool) => tool.name === 'request_user_input'))).toBe(true);
       await expect(approvals.listApprovals()).resolves.toEqual({ approvals: [] });
       await expect(configStore.getConfig()).resolves.toMatchObject({ approvalPolicy: 'strict', permissionProfile: 'read-only' });
     } finally { await loop.shutdown(); }

@@ -7,6 +7,8 @@ import {
   collaborationTaskCodec,
   collaborationTaskCreatedEvent,
   collaborationTaskStatusChangedEvent,
+  collaborationExecutionChangedEvent,
+  reduceCollaborationExecutionChanged,
   reduceCollaborationTaskCreated,
   reduceCollaborationTaskStatusChanged,
   type CollaborationState,
@@ -18,6 +20,7 @@ export function createRuntimeCollaborationEventRegistry(): FeatureEventRegistry<
   const registry = new FeatureEventRegistry<CollaborationState>(collaborationFeature.id);
   registry.register(collaborationTaskCreatedEvent, reduceCollaborationTaskCreated);
   registry.register(collaborationTaskStatusChangedEvent, reduceCollaborationTaskStatusChanged);
+  registry.register(collaborationExecutionChangedEvent, reduceCollaborationExecutionChanged);
   registry.registerLegacy(
     'collaboration.task_created',
     decodeLegacyTaskCreated,

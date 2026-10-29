@@ -4,12 +4,21 @@ export {
 export {
   collaborationTaskCreatedEvent,
   collaborationTaskStatusChangedEvent,
+  collaborationExecutionChangedEvent,
+  reduceCollaborationExecutionChanged,
   reduceCollaborationTaskCreated,
   reduceCollaborationTaskStatusChanged,
 } from './events.js';
 export type { CollaborationTaskStatusChange } from './events.js';
+export { collaborationExecutionCodec } from './execution.js';
+export type { CollaborationExecution } from './execution.js';
 export { readCollaborationState } from './operations.js';
 export type { CollaborationThreadInput } from './operations.js';
+export * from './agents.js';
+export * from './avatar.js';
+export * from './agent-role-text.js';
+export * from './actions.js';
+export * from './settings-operations.js';
 export {
   cloneCollaborationState,
   collaborationAgentIdentityCodec,

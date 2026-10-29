@@ -4,9 +4,35 @@ import type {
   RuntimeThread,
 } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
-import { chatThreadModelSelection } from '../../../../src/features/chat/chatModelSelection.js';
+import { chatExecutionModelSelection, chatThreadModelSelection } from '../../../../src/features/chat/chatModelSelection.js';
 
 describe('chat thread model selection', () => {
+  it('uses the active or latest execution model instead of a changed default or future thread binding', () => {
+    const original = { providerId: 'provider-a', modelId: 'model-a', modelCode: 'model-a-code' };
+    const newer = { providerId: 'provider-b', modelId: 'model-b', modelCode: 'model-b-code' };
+    const thread = runtimeThread(newer);
+    thread.turns = [
+      { id: 'active', items: [], modelBinding: original },
+      { id: 'latest', items: [], modelBinding: newer },
+    ];
+    expect(chatExecutionModelSelection(runtimeConfig('provider-b'), thread, 'active', newer))
+      .toMatchObject({ model: { id: 'model-a' }, fallbackModelCode: 'model-a-code' });
+    expect(chatExecutionModelSelection(runtimeConfig('provider-a'), thread, null, original))
+      .toMatchObject({ model: { id: 'model-b' }, fallbackModelCode: 'model-b-code' });
+  });
+
+  it('retains a captured model identity after configuration changes without guessing missing history', () => {
+    const dispatched = { providerId: 'provider-a', modelId: 'model-a', modelCode: 'historical-code' };
+    expect(chatExecutionModelSelection(runtimeConfig('provider-b'), null, null, dispatched))
+      .toMatchObject({ model: null, fallbackModelCode: 'historical-code' });
+    expect(chatExecutionModelSelection(null, null, null, dispatched))
+      .toMatchObject({ model: null, fallbackModelCode: 'historical-code' });
+    const legacy = runtimeThread({ providerId: 'provider-b', modelId: 'model-b', modelCode: 'model-b-code' });
+    legacy.turns = [{ id: 'legacy', items: [] }];
+    expect(chatExecutionModelSelection(runtimeConfig('provider-b'), legacy, null)).toBeNull();
+    expect(chatExecutionModelSelection(runtimeConfig('provider-b'), null, null)).toBeNull();
+  });
+
   it('uses the latest global choice only for a new conversation', () => {
     const config = runtimeConfig('provider-b');
 

@@ -176,7 +176,7 @@ export type RuntimeStreamItemKind =
   | 'warning'
   | 'error';
 
-export type RuntimeCollabToolName = 'spawn_agent' | 'send_input' | 'resume_agent' | 'wait' | 'close_agent';
+export type RuntimeCollabToolName = 'spawn_agent' | 'send_input' | 'resume_agent' | 'interrupt_agent' | 'wait' | 'close_agent' | 'read_agent_result' | 'list_agent_profiles';
 
 export type RuntimeCollabToolCall = {
   tool: RuntimeCollabToolName;

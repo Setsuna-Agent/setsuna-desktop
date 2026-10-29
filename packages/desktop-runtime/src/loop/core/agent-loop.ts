@@ -338,7 +338,6 @@ export class AgentLoop {
     const tasks = this.turnTasks.cancelAll(error);
     this.options.approvalGate?.rejectPending?.(error);
     this.toolExecutor.shutdown(error);
-    this.turnInputs.clear();
     const memoryDrained = this.featureControls.memory.shutdown(timeoutMs);
     await Promise.allSettled(tasks.map((task) =>
       this.turnTermination.publishCancelledOnce(task.threadId, task.turnId, task.taskKind, reason, { marker: true }),
@@ -402,18 +401,10 @@ export class AgentLoop {
    */
   async startSubagentTurn(
     threadId: string,
-    input: { prompt: string; title?: string },
+    input: Parameters<CollaborationRuntimeHost['startTurn']>[1],
     execution: { unattended?: boolean } = {},
   ): Promise<StartTurnResponse> {
     return this.startPreparedTurn(threadId, 'subagent', () => this.turnRuns.createSubagent(threadId, input, execution));
-  }
-
-  /**
-   * 重启后把账本上仍非终态、但 child 已无活动 turn 的协作任务修正为 interrupted。
-   * 必须在 settleStaleRuntimeTurns 之后调用。
-   */
-  reconcileCollaborationTasks(): Promise<void> {
-    return this.featureControls.collaboration.reconcileInterruptedTasks();
   }
 
   /**
@@ -498,7 +489,11 @@ export class AgentLoop {
     const cancelled = this.turnTasks.cancel(threadId, turnId, new TurnCancelledError());
     if (!cancelled) return false;
     // 取消是最高优先级交互：先落终态事件释放 UI，不等待 provider/tool 主动响应 AbortSignal。
-    await this.turnTermination.publishCancelledOnce(threadId, turnId, task?.taskKind ?? 'regular', 'Turn cancelled.', { marker: true });
+    try {
+      await this.turnTermination.publishCancelledOnce(threadId, turnId, task?.taskKind ?? 'regular', 'Turn cancelled.', { marker: true });
+    } finally {
+      await this.featureControls.collaboration.cancelChildren(threadId, turnId);
+    }
     return true;
   }
 
@@ -594,13 +589,19 @@ export class AgentLoop {
   /** Narrow host surface supplied to the Collaboration Feature by the composition root. */
   collaborationRuntimeHost(): CollaborationRuntimeHost {
     return createRuntimeCollaborationHost({
+      configStore: this.options.configStore,
+      attachmentStore: this.options.attachmentStore,
       clock: this.options.clock,
       ids: this.options.ids,
       threadStore: this.options.threadStore,
       eventWriter: this.eventWriter,
-      activeTask: (threadId) => this.turnTasks.activeForThread(threadId),
+      turnTasks: this.turnTasks,
       turns: this,
     });
+  }
+
+  collaborationAuthorizationContext(threadId: string, turnId: string): Promise<RuntimeThread | null> {
+    return this.featureControls.collaboration.authorizationContext(threadId, turnId);
   }
 
   /** Narrow host surface supplied to the Goal Feature by the runtime composition root. */

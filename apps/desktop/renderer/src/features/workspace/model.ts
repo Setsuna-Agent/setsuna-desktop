@@ -43,11 +43,12 @@ export type DesktopPanelTab = {
   filePath?: string;
   rootId?: string;
   subagent?: {
-    threadId: string;
+    /** Null selects the parent thread's collaboration task list. */
+    threadId: string | null;
     parentThreadId: string;
   };
 };
-export type DesktopPanelTabPatch = Partial<Pick<DesktopPanelTab, 'browser' | 'title' | 'rootId'>>;
+export type DesktopPanelTabPatch = Partial<Pick<DesktopPanelTab, 'browser' | 'title' | 'rootId' | 'subagent'>>;
 export type DesktopPanelDropPlacement = 'before' | 'after';
 export type DesktopPanelSlotState = {
   active: string | null;
@@ -67,8 +68,8 @@ export const createDefaultSidePanelSlot = (): DesktopPanelSlotState => {
 };
 export const createWorkspaceOverviewPanel = (): DesktopPanelTab => ({ id: WORKSPACE_OVERVIEW_PANEL_ID, type: 'overview', title: '汇总目录' });
 export const createSideChatPanel = (id = SIDE_CHAT_PANEL_ID, title = '侧边对话'): DesktopPanelTab => ({ id, type: 'chat', title });
-export const createSubagentPanel = (threadId: string, parentThreadId: string, title?: string): DesktopPanelTab => ({
-  id: `subagent:${threadId}`,
+export const createSubagentPanel = (threadId: string | null, parentThreadId: string, title?: string): DesktopPanelTab => ({
+  id: `collaboration:${parentThreadId}`,
   type: 'subagent',
   title: title ?? '子代理',
   subagent: { threadId, parentThreadId },
@@ -177,7 +178,9 @@ export const updatePanelInSlotState = (
     );
   const titleUnchanged = patch.title === undefined || panel.title === patch.title;
   const rootUnchanged = !Object.hasOwn(patch, 'rootId') || panel.rootId === patch.rootId;
-  if (browserUnchanged && titleUnchanged && rootUnchanged) return slot;
+  const subagentUnchanged = patch.subagent === undefined
+    || (panel.subagent?.threadId === patch.subagent.threadId && panel.subagent?.parentThreadId === patch.subagent.parentThreadId);
+  if (browserUnchanged && titleUnchanged && rootUnchanged && subagentUnchanged) return slot;
 
   const panels = [...slot.panels];
   panels[panelIndex] = { ...panel, ...patch };

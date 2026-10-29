@@ -6,6 +6,7 @@ import type {
 import {
   createInitialCollaborationState,
   type CollaborationState,
+  type CollaborationAgentSettings,
 } from '@setsuna-desktop/feature-collaboration/contracts';
 import {
   createRuntimeCollaborationEventRegistry,
@@ -18,7 +19,7 @@ import type { ModelClient } from '../../../src/ports/model-client.js';
 import type { ThreadStore } from '../../../src/ports/thread-store.js';
 
 /** Activates the Collaboration Feature control for AgentLoop integration tests. */
-export function bindTestCollaborationFeature(loop: AgentLoop, threadStore: ThreadStore): void {
+export function bindTestCollaborationFeature(loop: AgentLoop, threadStore: ThreadStore, agentSettings?: () => Promise<CollaborationAgentSettings>): RuntimeCollaborationCoordinator {
   const registry = createRuntimeCollaborationEventRegistry();
   const projection: FeatureProjectionStore<CollaborationState> = {
     async read(threadId) {
@@ -33,10 +34,13 @@ export function bindTestCollaborationFeature(loop: AgentLoop, threadStore: Threa
     },
     dispose: async () => undefined,
   };
-  loop.bindCollaborationControl(new RuntimeCollaborationCoordinator({
+  const control = new RuntimeCollaborationCoordinator({
     host: loop.collaborationRuntimeHost(),
     projection,
-  }));
+    agentSettings,
+  });
+  loop.bindCollaborationControl(control);
+  return control;
 }
 
 

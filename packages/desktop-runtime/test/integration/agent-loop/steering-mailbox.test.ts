@@ -548,6 +548,7 @@ describe('agent loop turn steering and mailbox input', () => {
       }));
       expect(requestText).toContain('<mailbox_message id="mail_trigger_1" from_agent_id="agent_child" delivery_mode="trigger_turn" trigger_turn="true">');
       expect(requestText).toContain('wake the parent agent');
-      expect(saved?.messages.filter((message) => message.turnId === delivered.turnId && message.role === 'user')).toHaveLength(0);
+      expect(saved?.messages.filter((message) => message.turnId === delivered.turnId && message.role === 'user' && message.visibility !== 'model')).toHaveLength(0);
+      expect(saved?.messages.find((message) => message.id === 'mailbox_mail_trigger_1')).toMatchObject({ visibility: 'model', promptSource: 'collaboration' });
     });
 });
