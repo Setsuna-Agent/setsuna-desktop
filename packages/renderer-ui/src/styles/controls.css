@@ -190,8 +190,10 @@
   border-color: var(--app-border-strong);
 }
 
-:where(.sd-field:focus, .sd-textarea:focus) {
+:is(.sd-field:focus, .sd-textarea:focus) {
   outline: none;
+  background: var(--app-field-focus-bg);
+  border-color: var(--app-field-focus-border);
 }
 
 :where(.sd-field:disabled, .sd-textarea:disabled) {

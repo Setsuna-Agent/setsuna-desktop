@@ -1,4 +1,4 @@
-import { Button as UiButton, MenuSurface } from '@setsuna-desktop/renderer-ui';
+import { Button as UiButton, MenuSurface, usePageSessionState } from '@setsuna-desktop/renderer-ui';
 import {
   CAPABILITIES_CATALOG_NAVIGATION_GROUP_ID,
   settingsPageKey,
@@ -41,19 +41,19 @@ export function CapabilitiesShell({
     ))
     .sort((left, right) => left.metadata.order - right.metadata.order || left.entryId.localeCompare(right.entryId)), [entries]);
   const defaultSectionId = catalogEntries[0]?.metadata.sectionId ?? 'plugins';
-  const [sectionItemId, setSectionItemId] = useState<string | null>(null);
+  const [sectionItemId, setSectionItemId] = usePageSessionState<string | null>('capabilities:item', null);
   const [catalogVisit, setCatalogVisit] = useState(0);
-  const [activeSectionId, setActiveSectionId] = useState(() => selectedPluginId ? 'plugins' : defaultSectionId);
+  const [activeSectionId, setActiveSectionId] = usePageSessionState('capabilities:section', () => selectedPluginId ? 'plugins' : defaultSectionId);
 
   useEffect(() => {
     if (selectedPluginId) setActiveSectionId('plugins');
-  }, [selectedPluginId]);
+  }, [selectedPluginId, setActiveSectionId]);
 
   useEffect(() => {
     if (!catalogEntries.some((entry) => entry.metadata.sectionId === activeSectionId)) {
       setActiveSectionId(defaultSectionId);
     }
-  }, [activeSectionId, catalogEntries, defaultSectionId]);
+  }, [activeSectionId, catalogEntries, defaultSectionId, setActiveSectionId]);
 
   const openSection = useCallback((sectionId: string, itemId?: string) => {
     if (!catalogEntries.some((entry) => entry.metadata.sectionId === sectionId)) return;
@@ -67,7 +67,7 @@ export function CapabilitiesShell({
       // 一级入口返回目录，同时清理各 Feature 自己持有的详情或编辑模式。
       if (!itemId) setCatalogVisit((visit) => visit + 1);
     });
-  }, [catalogEntries, onSelectedPluginIdChange]);
+  }, [catalogEntries, onSelectedPluginIdChange, setActiveSectionId, setSectionItemId]);
   const renderBreadcrumb = useCallback(({
     currentLabel,
     parentLabel,
@@ -107,6 +107,7 @@ export function CapabilitiesShell({
     renderBreadcrumb,
     renderCreateMenu,
     selectedPluginId,
+    setSectionItemId,
   ]);
 
   return (

@@ -1,12 +1,12 @@
 // @vitest-environment happy-dom
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it } from 'vitest';
 import { SettingsPageLayout } from '../../../../src/shared/ui/SettingsPageLayout.js';
 
 afterEach(cleanup);
 
-it('resets the owning viewport for delayed pages and subpage navigation while preserving live reading positions', () => {
+it('restores the owning viewport after subpage navigation while preserving live reading positions', () => {
   const content = (title?: string, version = 0) => (
     <div data-testid="outer-page">
       <section data-testid="settings-viewport" data-settings-scroll-container="">
@@ -26,13 +26,15 @@ it('resets the owning viewport for delayed pages and subpage navigation while pr
   expect(outerPage.scrollTop).toBe(400);
 
   viewport.scrollTop = 300;
+  fireEvent.scroll(viewport);
   view.rerender(content('Browser', 1));
   expect(viewport.scrollTop).toBe(300);
 
   view.rerender(content('Saved passwords'));
   expect(viewport.scrollTop).toBe(0);
   viewport.scrollTop = 180;
+  fireEvent.scroll(viewport);
   view.rerender(content('Browser'));
-  expect(viewport.scrollTop).toBe(0);
+  expect(viewport.scrollTop).toBe(300);
   expect(outerPage.scrollTop).toBe(400);
 });

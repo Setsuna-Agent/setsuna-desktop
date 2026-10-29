@@ -16,6 +16,7 @@ import { DesktopDataRootProvider } from './providers/DesktopDataRootProvider.js'
 import { ToastProvider, useToast } from './providers/ToastProvider.js';
 import { RendererRootSingleSlot } from '../kernel/renderer-plugins/RendererKernelProvider.js';
 import { ThreadFileChangesProvider } from '../features/chat/hooks/ThreadFileChangesProvider.js';
+import { ModelProviderFeatureFeedback } from '../composition/ModelProviderFeatureBoundary.js';
 
 export function App() {
   // 沙箱化的浏览器预览不会注入桌面 preload bridge；误打开 renderer 开发地址时只显示中性底色。
@@ -105,6 +106,7 @@ function ReadyAppContent({ controller }: Readonly<{
   return (
     <CollaborationFeatureNavigationBoundary onOpenTask={openCollaborationTask}>
       <PullRequestsFeatureNavigationBoundary onOpen={openPullRequest}>
+        <ModelProviderFeatureFeedback />
         <AppReadyLayout controller={controller} />
       </PullRequestsFeatureNavigationBoundary>
     </CollaborationFeatureNavigationBoundary>

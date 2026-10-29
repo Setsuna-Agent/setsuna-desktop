@@ -9,5 +9,6 @@ export type {
 } from './capabilities.js';
 export { ModelProviderRendererProvider, useModelProviderRendererService, useModelProviderSnapshot } from './context.js';
 export { modelProviderRendererFeature } from './feature.js';
+export { ModelProviderSaveFeedback } from './ModelProviderSaveFeedback.js';
 export { ModelProviderRendererStateService } from './service.js';
 export type { ModelProviderRendererSnapshot } from './service.js';

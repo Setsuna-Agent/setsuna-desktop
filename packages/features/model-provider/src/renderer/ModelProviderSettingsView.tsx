@@ -10,6 +10,7 @@ import type {
   SettingsViewUi,
 } from '@setsuna-desktop/renderer-contracts/settings';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { usePageSessionState } from '@setsuna-desktop/renderer-ui';
 import type { ModelProviderCatalog } from '../contracts/index.js';
 import type { ModelProviderRendererHost } from './capabilities.js';
 import { useModelProviderSnapshot } from './context.js';
@@ -43,13 +44,10 @@ export function ModelProviderSettingsView({
       : []
   ), [snapshot.catalog, snapshot.state]);
   const activeProviderId = snapshot.state?.activeProviderId;
-  const [selectedProviderId, setSelectedProviderId] = useState<string>();
-  const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
-  const [saveRevision, setSaveRevision] = useState(0);
+  const [selectedProviderId, setSelectedProviderId] = usePageSessionState<string | undefined>('settings:model-provider:selected', undefined);
+  const [apiKeys, setApiKeys] = useState<Record<string, string>>(() => service.draftApiKeys());
   const [operationError, setOperationError] = useState('');
   const [discoveringProviderId, setDiscoveringProviderId] = useState<string>();
-  const saveRevisionRef = useRef(0);
-  const lastStartedRevisionRef = useRef(0);
   const discoveryRevisionRef = useRef(0);
   const providersRef = useRef(providers);
   const apiKeysRef = useRef(apiKeys);
@@ -64,30 +62,9 @@ export function ModelProviderSettingsView({
     if (!selectedProviderId || !providers.some((provider) => provider.id === selectedProviderId)) {
       setSelectedProviderId(activeProviderId ?? providers[0]?.id);
     }
-  }, [activeProviderId, providers, selectedProviderId]);
+  }, [activeProviderId, providers, selectedProviderId, setSelectedProviderId]);
 
-  useEffect(() => {
-    if (saveRevision === 0) return;
-    const revision = saveRevision;
-    const timer = window.setTimeout(() => {
-      lastStartedRevisionRef.current = revision;
-      void service.commit().then(() => {
-        if (revision !== saveRevisionRef.current) return;
-        setOperationError('');
-      }).catch((error: unknown) => {
-        if (revision !== saveRevisionRef.current) return;
-        setOperationError(errorMessage(error));
-      });
-    }, 450);
-    return () => window.clearTimeout(timer);
-  }, [saveRevision, service]);
-
-  useEffect(() => () => {
-    const revision = saveRevisionRef.current;
-    if (revision <= lastStartedRevisionRef.current) return;
-    lastStartedRevisionRef.current = revision;
-    void service.commit().catch((error: unknown) => console.error('[model-provider] failed to flush settings', error));
-  }, [service]);
+  useEffect(() => () => service.flushScheduledSave(), [service]);
 
   const selectedProvider = providers.find((provider) => provider.id === selectedProviderId);
   const selectedCatalogProviderId = selectedProvider?.catalogProviderId;
@@ -108,9 +85,8 @@ export function ModelProviderSettingsView({
       ...(nextActiveProviderId ? { activeProviderId: nextActiveProviderId } : {}),
       providers: nextProviders,
     });
-    saveRevisionRef.current += 1;
     setOperationError('');
-    setSaveRevision(saveRevisionRef.current);
+    service.scheduleSave();
   };
   const replaceProvider = (nextProvider: ProviderConfigState) => {
     stageProviders(providers.map((provider) => provider.id === nextProvider.id ? nextProvider : provider));

@@ -2,7 +2,7 @@ import { useId, useRef, useState } from 'react';
 import type { RuntimeConfiguredModelReference } from '@setsuna-desktop/contracts';
 import { ChevronRight } from 'lucide-react';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
-import { ToastNotice, Button, Dialog, SelectField, Switch, TextArea, TextField } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, Button, ConfirmDialog, Dialog, SelectField, Switch, TextArea, TextField } from '@setsuna-desktop/renderer-ui';
 import type { AutomationModel, AutomationProject, AutomationTask } from '../contracts/index.js';
 import type { AutomationClient } from './client.js';
 import { automationForm, draftFromForm, type AutomationForm } from './form.js';
@@ -15,6 +15,8 @@ export function TaskEditor({ task, threadId, client, models, projects, ModelPick
   translate: RendererTranslate; onClose(): void; onSaved(task: AutomationTask): void;
 }) {
   const [form, setForm] = useState(() => automationForm(task));
+  const initialForm = useRef(form);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [busy, setBusy] = useState(false);
   const saving = useRef(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,6 +24,11 @@ export function TaskEditor({ task, threadId, client, models, projects, ModelPick
   const update = <K extends keyof AutomationForm>(key: K, value: AutomationForm[K]) => setForm((current) => ({ ...current, [key]: value }));
   const selection = form.modelKey ? JSON.parse(form.modelKey) as RuntimeConfiguredModelReference : undefined;
   const model = models.find((item) => item.providerId === selection?.providerId && item.modelId === selection?.modelId);
+  const requestClose = () => {
+    if (saving.current) return;
+    if (JSON.stringify(form) !== JSON.stringify(initialForm.current)) setConfirmDiscard(true);
+    else onClose();
+  };
   const save = async () => {
     if (saving.current) return;
     saving.current = true;
@@ -33,8 +40,8 @@ export function TaskEditor({ task, threadId, client, models, projects, ModelPick
     } catch (error) { setError(error instanceof Error ? error.message : String(error)); }
     finally { saving.current = false; setBusy(false); }
   };
-  return <Dialog title={t(task ? 'feature.automation.edit' : 'feature.automation.createTitle')} onClose={onClose} dismissible={!busy} width={560} className="automation-editor"
-    footer={<><Button onClick={onClose} disabled={busy}>{t('feature.automation.cancel')}</Button><Button variant="primary" type="submit" form={formId} loading={busy}>{t(task ? 'feature.automation.save' : 'feature.automation.create')}</Button></>}>
+  return <><Dialog title={t(task ? 'feature.automation.edit' : 'feature.automation.createTitle')} onClose={requestClose} dismissible={!busy && !confirmDiscard} width={560} className="automation-editor"
+    footer={<><Button onClick={requestClose} disabled={busy}>{t('feature.automation.cancel')}</Button><Button variant="primary" type="submit" form={formId} loading={busy}>{t(task ? 'feature.automation.save' : 'feature.automation.create')}</Button></>}>
     <form id={formId} className="automation-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
       <label className="automation-form__field">
         <span>{t('feature.automation.taskTitle')}</span>
@@ -87,7 +94,11 @@ export function TaskEditor({ task, threadId, client, models, projects, ModelPick
       </details>
       {error ? <ToastNotice message={error} /> : null}
     </form>
-  </Dialog>;
+  </Dialog>
+    <ConfirmDialog open={confirmDiscard} title={t('feature.automation.discardTitle')}
+      confirmLabel={t('feature.automation.discard')} cancelLabel={t('feature.automation.keepEditing')}
+      danger onClose={() => setConfirmDiscard(false)} onConfirm={onClose} />
+  </>;
 }
 
 /** Monday-first day chips; `weekly` keeps exactly one day while `custom` toggles a set. */

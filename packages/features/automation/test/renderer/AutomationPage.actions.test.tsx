@@ -13,6 +13,40 @@ import { TaskEditor } from '../../src/renderer/TaskEditor.js';
 afterEach(cleanup);
 const t: RendererTranslate = (key) => automationMessages.messages['en-US'][key] ?? key;
 
+it('protects an edited task on Escape and only discards it after confirmation', async () => {
+  const user = userEvent.setup();
+  const onClose = vi.fn();
+  render(<TaskEditor threadId="draft" client={{} as AutomationClient} models={[]} projects={[]}
+    ModelPicker={() => null} translate={t} onClose={onClose} onSaved={vi.fn()} />);
+  await user.type(screen.getByRole('textbox', { name: 'Task name' }), 'Keep this draft');
+  await user.keyboard('{Escape}');
+  expect(onClose).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('button', { name: 'Keep editing' }));
+  expect((screen.getByRole('textbox', { name: 'Task name' }) as HTMLInputElement).value).toBe('Keep this draft');
+  await user.click(screen.getByRole('button', { name: 'Cancel' }));
+  await user.click(screen.getByRole('button', { name: 'Discard' }));
+  expect(onClose).toHaveBeenCalledOnce();
+});
+
+it('accepts a pasted schedule time and blocks submission until an invalid time is corrected', async () => {
+  const user = userEvent.setup();
+  const create = vi.fn().mockResolvedValue({ id: 'saved' });
+  render(<TaskEditor threadId="draft" client={{ create } as unknown as AutomationClient} models={[]} projects={[]}
+    ModelPicker={() => null} translate={t} onClose={vi.fn()} onSaved={vi.fn()} />);
+  await user.type(screen.getByRole('textbox', { name: 'Task name' }), 'Daily task');
+  await user.type(screen.getByRole('textbox', { name: 'Instructions' }), 'Do the work');
+  const time = screen.getByRole('textbox', { name: 'Time' }) as HTMLInputElement;
+  await user.clear(time);
+  await user.paste('25:00');
+  await user.click(screen.getByRole('button', { name: 'Create' }));
+  expect(create).not.toHaveBeenCalled();
+  expect(time.validity.valid).toBe(false);
+  await user.clear(time);
+  await user.paste('17:45');
+  await user.click(screen.getByRole('button', { name: 'Create' }));
+  expect(create).toHaveBeenCalledWith('draft', expect.objectContaining({ schedule: expect.objectContaining({ kind: 'daily', time: '17:45' }) }));
+});
+
 it('locks the submitted task draft, retains it on failure, and allows a corrected retry', async () => {
   const user = userEvent.setup();
   let rejectSave!: (reason: Error) => void;

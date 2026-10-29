@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
-import { CalendarDays, ChevronDown, Clock3 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { CalendarDays, Clock3 } from 'lucide-react';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
-import { Button, Popover, WheelPicker, type WheelPickerOption } from '@setsuna-desktop/renderer-ui';
-import { daysInScheduleMonth, scheduleTimeParts, updateScheduleTime, type ScheduleTimeField } from './schedule-time-input.js';
+import { Button, IconButton, Popover, TextField, WheelPicker, type WheelPickerOption } from '@setsuna-desktop/renderer-ui';
+import { daysInScheduleMonth, parseScheduleTimeInput, scheduleTimeParts, updateScheduleTime, type ScheduleTimeField } from './schedule-time-input.js';
 import './schedule-time-picker.css';
 
 type ScheduleTimePickerProps = {
@@ -18,12 +18,30 @@ const MINUTES = numberOptions(0, 59);
 
 export function ScheduleTimePicker({ disabled, value, onChange, translate: t }: ScheduleTimePickerProps) {
   const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(() => value.replace('T', ' '));
+  const lastCommitted = useRef(value);
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (value !== lastCommitted.current) {
+      lastCommitted.current = value;
+      setDraft(value.replace('T', ' '));
+    }
+  }, [value]);
   useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
   const parts = scheduleTimeParts(value);
   const date = parts.date;
   const displayValue = value.replace('T', ' ').replaceAll('-', '/');
   const TimeIcon = date ? CalendarDays : Clock3;
-  const select = (field: ScheduleTimeField, next: string) => onChange(updateScheduleTime(value, field, Number(next)));
+  const validDraft = parseScheduleTimeInput(draft, Boolean(date));
+  useEffect(() => {
+    input.current?.setCustomValidity(validDraft ? '' : t(date ? 'feature.automation.time.invalidDateTime' : 'feature.automation.time.invalid'));
+  }, [date, t, validDraft]);
+  const select = (field: ScheduleTimeField, next: string) => {
+    const updated = updateScheduleTime(value, field, Number(next));
+    setDraft(updated.replace('T', ' '));
+    lastCommitted.current = updated;
+    onChange(updated);
+  };
   const column = (field: ScheduleTimeField, selected: number, options: WheelPickerOption[]) => (
     <div className="automation-time-picker__column" key={field}>
       <span>{t(`feature.automation.time.${field}`)}</span>
@@ -33,29 +51,38 @@ export function ScheduleTimePicker({ disabled, value, onChange, translate: t }: 
   );
 
   return (
-    <Popover open={open && !disabled} onOpenChange={setOpen} placement="bottomRight"
-      className={`automation-time-picker__popover${date ? ' automation-time-picker__popover--date' : ''}`}
-      content={(
-        <div className="automation-time-picker__panel">
-          <div className="automation-time-picker__group">
-            {date ? <>
-              {column('year', date.year, yearOptions(date.year))}
-              {column('month', date.month, MONTHS)}
-              {column('day', date.day, numberOptions(1, daysInScheduleMonth(date.year, date.month)))}
-            </> : null}
-            {column('hour', parts.hour, HOURS)}
-            <span className="automation-time-picker__separator" aria-hidden="true">:</span>
-            {column('minute', parts.minute, MINUTES)}
+    <div className="automation-time-picker">
+      <TextField ref={input} disabled={disabled} required aria-label={t('feature.automation.time')}
+        value={draft} spellCheck={false} autoComplete="off"
+        onChange={(event) => {
+          const next = event.target.value;
+          setDraft(next);
+          const parsed = parseScheduleTimeInput(next, Boolean(date));
+          if (parsed) { lastCommitted.current = parsed; onChange(parsed); }
+        }}
+        onBlur={() => { if (validDraft) setDraft(validDraft.replace('T', ' ')); }} />
+      <Popover open={open && !disabled} onOpenChange={setOpen} placement="bottomRight"
+        className={`automation-time-picker__popover${date ? ' automation-time-picker__popover--date' : ''}`}
+        content={(
+          <div className="automation-time-picker__panel">
+            <div className="automation-time-picker__group">
+              {date ? <>
+                {column('year', date.year, yearOptions(date.year))}
+                {column('month', date.month, MONTHS)}
+                {column('day', date.day, numberOptions(1, daysInScheduleMonth(date.year, date.month)))}
+              </> : null}
+              {column('hour', parts.hour, HOURS)}
+              <span className="automation-time-picker__separator" aria-hidden="true">:</span>
+              {column('minute', parts.minute, MINUTES)}
+            </div>
+            <footer><Button type="button" size="small" onClick={() => setOpen(false)}>{t('feature.automation.time.done')}</Button></footer>
           </div>
-          <footer><Button type="button" size="small" onClick={() => setOpen(false)}>{t('feature.automation.time.done')}</Button></footer>
-        </div>
-      )}>
-      <Button disabled={disabled} type="button" className="automation-time-picker" aria-label={`${t('feature.automation.time')}: ${displayValue}`} aria-expanded={open && !disabled}>
-        <TimeIcon size={15} aria-hidden="true" />
-        <span>{displayValue}</span>
-        <ChevronDown size={14} aria-hidden="true" />
-      </Button>
-    </Popover>
+        )}>
+        <IconButton disabled={disabled} type="button" label={`${t('feature.automation.time')}: ${displayValue}`} aria-expanded={open && !disabled}>
+          <TimeIcon size={15} aria-hidden="true" />
+        </IconButton>
+      </Popover>
+    </div>
   );
 }
 

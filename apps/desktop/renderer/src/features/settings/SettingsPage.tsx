@@ -1,4 +1,4 @@
-import { Button } from '@setsuna-desktop/renderer-ui';
+import { Button, usePageSessionState } from '@setsuna-desktop/renderer-ui';
 import type {
   RuntimeConfigState,
   RuntimeThread,
@@ -12,7 +12,7 @@ import {
 import {
   Puzzle,
 } from 'lucide-react';
-import { startTransition, Suspense, useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { startTransition, Suspense, useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import {
   RendererOwnedKeyedSlot,
   useRendererOwnedKeyedEntries,
@@ -87,21 +87,25 @@ export function SettingsPage({
   const pages = useRendererOwnedKeyedEntries(settingsPageSlot)
     .filter((entry) => entry.metadata.location === 'settings')
     .sort(compareSettingsPages);
-  // initialSection 支持从聊天页引导卡片直达某个分区；设置页每次进入都会重新挂载，
-  // 所以这里只需在挂载时取一次初始值。
-  const [activeSection, setActiveSection] = useState<SettingsSectionId>(initialSection ?? 'general');
+  // Explicit navigation wins over the last section; ordinary returns restore it.
+  const [rememberedSection, setActiveSection] = usePageSessionState<SettingsSectionId>('settings:section', 'general');
+  const [requestedSection, setRequestedSection] = useState(initialSection);
+  const activeSection = requestedSection ?? rememberedSection;
+  useLayoutEffect(() => {
+    if (initialSection) setActiveSection(initialSection);
+  }, [initialSection, setActiveSection]);
   // Feature 分区多为 lazy chunk；用 transition 切换，首次加载期间保留当前分区，
   // 而不是让路由级 Suspense 把整页替换成加载态。
   const selectSection = useCallback((section: SettingsSectionId) => {
-    startTransition(() => setActiveSection(section));
-  }, []);
+    startTransition(() => { setRequestedSection(undefined); setActiveSection(section); });
+  }, [setActiveSection]);
   const selectedPage = pages.find((entry) => entry.metadata.sectionId === activeSection)
     ?? pages.find((entry) => entry.metadata.sectionId === 'general');
   const resolvedSection = selectedPage?.metadata.sectionId ?? 'general';
-  const scrollContainer = useRef<HTMLElement>(null);
-  useLayoutEffect(() => {
-    if (scrollContainer.current) scrollContainer.current.scrollTop = 0;
-  }, [resolvedSection]);
+  const [scrollElement, setScrollElement] = useState<HTMLElement | null>(null);
+  // Descendant layout effects run before an ancestor ref attaches. Publishing
+  // the viewport node ensures restoration also subscribes on the first visit.
+  const scrollContainer = useMemo(() => ({ current: scrollElement }), [scrollElement]);
   const translateFeature: RendererTranslate = t;
 
   const defaultContent = resolvedSection === 'general' ? (
@@ -167,7 +171,7 @@ export function SettingsPage({
       />
       <main className="desktop-settings-panel">
         <section
-          ref={scrollContainer}
+          ref={setScrollElement}
           data-settings-scroll-container=""
           className={`chat-user-settings__content ${
             selectedPage?.metadata.layout === 'wide' ? 'chat-user-settings__content--wide' : ''
@@ -180,6 +184,7 @@ export function SettingsPage({
             <SettingsSectionExtensionOutlet
               key={resolvedSection}
               sectionId={resolvedSection}
+              scrollContainer={scrollContainer}
               trailingContent={trailingContent}
               translate={translateFeature}
               ui={settingsViewUi}

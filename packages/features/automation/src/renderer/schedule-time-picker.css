@@ -1,19 +1,19 @@
 .automation-time-picker {
+  display: flex;
+  align-items: center;
   width: min(300px, 60%);
-  justify-content: flex-start;
-  gap: 10px;
+  gap: 4px;
   font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
 
-.automation-time-picker > span {
+.automation-time-picker > .sd-field {
   flex: 1;
-  text-align: left;
+  min-width: 0;
 }
 
-.automation-time-picker > svg {
+.automation-time-picker .sd-icon-button {
   flex-shrink: 0;
-  color: var(--app-text-muted);
 }
 
 .automation-time-picker__popover {

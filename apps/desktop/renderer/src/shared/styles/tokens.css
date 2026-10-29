@@ -25,12 +25,14 @@
   /* The chat prompt keeps a persistent shadow; compact fields stay flat. */
   --chat-prompt-shadow: 0 2px 10px rgb(0 0 0 / 10%);
   --app-text: #242424;
-  --app-text-muted: #7d7d7d;
+  --app-text-muted: #666666;
   --app-text-secondary: var(--app-text-muted);
-  --app-text-subtle: #a3a3a3;
+  --app-text-subtle: #707070;
   --app-muted: #a3a3a3;
   --app-focus: rgba(0, 0, 0, 0.12);
   --app-focus-ring: 0 0 0 3px var(--app-focus);
+  --app-field-focus-bg: color-mix(in srgb, var(--app-text) 7%, var(--app-surface));
+  --app-field-focus-border: color-mix(in srgb, var(--app-text) 50%, var(--app-surface));
   /* 非文本控件的 outline 焦点色；共享控件用实色 primary，内嵌文字与行操作用较轻的这一档。 */
   --app-focus-outline: color-mix(in srgb, var(--app-primary) 50%, transparent);
   --app-shadow-hairline: 0 0 0 1px var(--app-border);
@@ -177,7 +179,7 @@
   --app-sidebar-width: 240px;
   --desktop-agent-main-min-width: 420px;
   --desktop-agent-workspace-width: clamp(520px, 37vw, 760px);
-  --app-bottom-panel-height: 228px;
+  --app-bottom-panel-height: 260px;
   --app-control-height: 32px;
   --desktop-settings-nav-width: var(--app-sidebar-width);
   --desktop-agent-panel-bg: var(--app-surface);
@@ -307,9 +309,9 @@
   --app-border-strong: #454545;
   --chat-prompt-shadow: 0 2px 10px rgb(0 0 0 / 35%);
   --app-text: #e4e4e4;
-  --app-text-muted: #9d9d9d;
+  --app-text-muted: #aaaaaa;
   --app-text-secondary: var(--app-text-muted);
-  --app-text-subtle: #737373;
+  --app-text-subtle: #999999;
   --app-muted: #737373;
   --app-focus: rgba(255, 255, 255, 0.14);
   --app-shadow-hairline: 0 0 0 1px var(--app-border);
@@ -404,11 +406,14 @@
 }
 
 /* 强调色预设仅用于主要操作、链接、焦点环和显式强调。
-   保持鲜亮底色，按各色分别设置文字、图标和开关圆点的前景色。 */
+   彩色主题共用白色前景，避免逐色配置漏掉按钮、图标或开关圆点。 */
+:root[data-accent-color]:not([data-accent-color='neutral']) {
+  --app-primary-text: #ffffff;
+}
+
 :root[data-accent-color='blue'] {
   --app-primary: #1677ff;
   --app-primary-hover: color-mix(in srgb, var(--app-primary) 92%, #000000);
-  --app-primary-text: #ffffff;
   --app-focus: color-mix(in srgb, var(--app-primary) 24%, transparent);
   --chat-send-bg: var(--app-primary);
   --chat-send-bg-hover: var(--app-primary-hover);
@@ -418,7 +423,6 @@
 :root[data-accent-color='purple'] {
   --app-primary: #8b3dff;
   --app-primary-hover: color-mix(in srgb, var(--app-primary) 92%, #000000);
-  --app-primary-text: #ffffff;
   --app-focus: color-mix(in srgb, var(--app-primary) 24%, transparent);
   --chat-send-bg: var(--app-primary);
   --chat-send-bg-hover: var(--app-primary-hover);
@@ -428,7 +432,6 @@
 :root[data-accent-color='pink'] {
   --app-primary: #ff268d;
   --app-primary-hover: color-mix(in srgb, var(--app-primary) 92%, #000000);
-  --app-primary-text: #ffffff;
   --app-focus: color-mix(in srgb, var(--app-primary) 24%, transparent);
   --chat-send-bg: var(--app-primary);
   --chat-send-bg-hover: var(--app-primary-hover);
@@ -438,7 +441,6 @@
 :root[data-accent-color='red'] {
   --app-primary: #ff3b30;
   --app-primary-hover: color-mix(in srgb, var(--app-primary) 92%, #000000);
-  --app-primary-text: #ffffff;
   --app-focus: color-mix(in srgb, var(--app-primary) 24%, transparent);
   --chat-send-bg: var(--app-primary);
   --chat-send-bg-hover: var(--app-primary-hover);
@@ -448,7 +450,6 @@
 :root[data-accent-color='green'] {
   --app-primary: #00c853;
   --app-primary-hover: color-mix(in srgb, var(--app-primary) 92%, #ffffff);
-  --app-primary-text: #111111;
   --app-focus: color-mix(in srgb, var(--app-primary) 24%, transparent);
   --chat-send-bg: var(--app-primary);
   --chat-send-bg-hover: var(--app-primary-hover);
@@ -458,7 +459,6 @@
 :root[data-accent-color='orange'] {
   --app-primary: #ff7a00;
   --app-primary-hover: color-mix(in srgb, var(--app-primary) 92%, #ffffff);
-  --app-primary-text: #111111;
   --app-focus: color-mix(in srgb, var(--app-primary) 24%, transparent);
   --chat-send-bg: var(--app-primary);
   --chat-send-bg-hover: var(--app-primary-hover);
@@ -468,7 +468,6 @@
 :root[data-accent-color='amber'] {
   --app-primary: #ffb800;
   --app-primary-hover: color-mix(in srgb, var(--app-primary) 92%, #ffffff);
-  --app-primary-text: #111111;
   --app-focus: color-mix(in srgb, var(--app-primary) 24%, transparent);
   --chat-send-bg: var(--app-primary);
   --chat-send-bg-hover: var(--app-primary-hover);
@@ -478,7 +477,6 @@
 :root[data-accent-color='teal'] {
   --app-primary: #00bea3;
   --app-primary-hover: color-mix(in srgb, var(--app-primary) 92%, #ffffff);
-  --app-primary-text: #111111;
   --app-focus: color-mix(in srgb, var(--app-primary) 24%, transparent);
   --chat-send-bg: var(--app-primary);
   --chat-send-bg-hover: var(--app-primary-hover);
@@ -488,7 +486,6 @@
 :root[data-accent-color='cyan'] {
   --app-primary: #00b5f5;
   --app-primary-hover: color-mix(in srgb, var(--app-primary) 92%, #ffffff);
-  --app-primary-text: #111111;
   --app-focus: color-mix(in srgb, var(--app-primary) 24%, transparent);
   --chat-send-bg: var(--app-primary);
   --chat-send-bg-hover: var(--app-primary-hover);
@@ -497,7 +494,6 @@
 
 :root[data-theme='dark'][data-accent-color='blue'] {
   --app-primary: #60a5fa;
-  --app-primary-text: #0f172a;
   --app-primary-hover: color-mix(in srgb, var(--app-primary) 76%, #ffffff);
   --app-focus: color-mix(in srgb, var(--app-primary) 28%, transparent);
   --chat-send-bg-active: color-mix(in srgb, var(--app-primary) 52%, #ffffff);
@@ -506,7 +502,6 @@
 :root[data-theme='dark'][data-accent-color='purple'] {
   --app-primary: #c084fc;
   --app-primary-hover: #d8b4fe;
-  --app-primary-text: #1e102c;
   --app-focus: rgb(192 132 252 / 28%);
   --chat-send-bg-active: #e9d5ff;
 }
@@ -514,7 +509,6 @@
 :root[data-theme='dark'][data-accent-color='pink'] {
   --app-primary: #ff4d9d;
   --app-primary-hover: color-mix(in srgb, var(--app-primary) 76%, #ffffff);
-  --app-primary-text: #181818;
   --app-focus: color-mix(in srgb, var(--app-primary) 28%, transparent);
   --chat-send-bg-active: color-mix(in srgb, var(--app-primary) 52%, #ffffff);
 }
@@ -522,7 +516,6 @@
 :root[data-theme='dark'][data-accent-color='red'] {
   --app-primary: #ff4d4f;
   --app-primary-hover: color-mix(in srgb, var(--app-primary) 76%, #ffffff);
-  --app-primary-text: #181818;
   --app-focus: color-mix(in srgb, var(--app-primary) 28%, transparent);
   --chat-send-bg-active: color-mix(in srgb, var(--app-primary) 52%, #ffffff);
 }
@@ -530,7 +523,6 @@
 :root[data-theme='dark'][data-accent-color='green'] {
   --app-primary: var(--app-green);
   --app-primary-hover: var(--app-green-hover);
-  --app-primary-text: #102817;
   --app-focus: color-mix(in srgb, var(--app-green) 28%, transparent);
   --chat-send-bg-active: var(--app-green-active);
 }
@@ -538,7 +530,6 @@
 :root[data-theme='dark'][data-accent-color='orange'] {
   --app-primary: var(--app-orange);
   --app-primary-hover: var(--app-orange-hover);
-  --app-primary-text: #321b0a;
   --app-focus: color-mix(in srgb, var(--app-orange) 28%, transparent);
   --chat-send-bg-active: var(--app-orange-active);
 }
@@ -546,7 +537,6 @@
 :root[data-theme='dark'][data-accent-color='amber'] {
   --app-primary: #ffc400;
   --app-primary-hover: color-mix(in srgb, var(--app-primary) 76%, #ffffff);
-  --app-primary-text: #181818;
   --app-focus: color-mix(in srgb, var(--app-primary) 28%, transparent);
   --chat-send-bg-active: color-mix(in srgb, var(--app-primary) 52%, #ffffff);
 }
@@ -554,7 +544,6 @@
 :root[data-theme='dark'][data-accent-color='teal'] {
   --app-primary: #00c2a8;
   --app-primary-hover: color-mix(in srgb, var(--app-primary) 76%, #ffffff);
-  --app-primary-text: #181818;
   --app-focus: color-mix(in srgb, var(--app-primary) 28%, transparent);
   --chat-send-bg-active: color-mix(in srgb, var(--app-primary) 52%, #ffffff);
 }
@@ -562,7 +551,6 @@
 :root[data-theme='dark'][data-accent-color='cyan'] {
   --app-primary: #00b8e6;
   --app-primary-hover: color-mix(in srgb, var(--app-primary) 76%, #ffffff);
-  --app-primary-text: #181818;
   --app-focus: color-mix(in srgb, var(--app-primary) 28%, transparent);
   --chat-send-bg-active: color-mix(in srgb, var(--app-primary) 52%, #ffffff);
 }

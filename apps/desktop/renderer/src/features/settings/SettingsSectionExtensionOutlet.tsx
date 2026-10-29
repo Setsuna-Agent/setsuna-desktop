@@ -4,7 +4,8 @@ import {
   type SettingsPageExtensionEntryDescriptor,
   type SettingsViewUi,
 } from '@setsuna-desktop/renderer-contracts/settings';
-import { useState, type ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
+import { usePageSessionState, usePageScrollRestoration } from '@setsuna-desktop/renderer-ui';
 import {
   RendererOwnedKeyedSlot,
   useRendererOwnedKeyedEntries,
@@ -24,12 +25,14 @@ type ActiveSubpage = Readonly<{
 export function SettingsSectionExtensionOutlet({
   children,
   sectionId,
+  scrollContainer,
   trailingContent,
   translate,
   ui,
 }: Readonly<{
   children: ReactNode;
   sectionId: string;
+  scrollContainer: RefObject<HTMLElement | null>;
   trailingContent?: ReactNode;
   translate: RendererTranslate;
   ui: SettingsViewUi;
@@ -37,7 +40,7 @@ export function SettingsSectionExtensionOutlet({
   const extensions = useRendererOwnedKeyedEntries(settingsPageExtensionSlot)
     .filter((entry) => entry.metadata.targetSectionId === sectionId)
     .sort(compareExtensions);
-  const [active, setActive] = useState<ActiveSubpage | null>(null);
+  const [active, setActive] = usePageSessionState<ActiveSubpage | null>(`settings:${sectionId}:subpage`, null);
   const activeExtension = active
     ? extensions.find((extension) => extension.metadata.id === active.extensionId)
     : undefined;
@@ -45,25 +48,27 @@ export function SettingsSectionExtensionOutlet({
 
   if (activeExtension && activeSubpage && active) {
     return (
-      <RendererOwnedKeyedSlot
-        entryKey={activeExtension.key}
-        slot={settingsPageExtensionSlot}
-        props={{
-          mode: {
-            kind: 'subpage',
-            onBack: () => setActive(null),
-            subpageId: active.subpageId,
-          },
-          sectionId,
-          translate,
-          ui,
-        }}
-      />
+      <SettingsScrollRestoration scrollContainer={scrollContainer} identity={`${sectionId}:${active.extensionId}:${active.subpageId}`}>
+        <RendererOwnedKeyedSlot
+          entryKey={activeExtension.key}
+          slot={settingsPageExtensionSlot}
+          props={{
+            mode: {
+              kind: 'subpage',
+              onBack: () => setActive(null),
+              subpageId: active.subpageId,
+            },
+            sectionId,
+            translate,
+            ui,
+          }}
+        />
+      </SettingsScrollRestoration>
     );
   }
 
   return (
-    <>
+    <SettingsScrollRestoration scrollContainer={scrollContainer} identity={sectionId}>
       {children}
       {extensions.length ? (
         <div className="chat-user-settings__section-extensions">
@@ -93,8 +98,17 @@ export function SettingsSectionExtensionOutlet({
         </div>
       ) : null}
       {trailingContent}
-    </>
+    </SettingsScrollRestoration>
   );
+}
+
+function SettingsScrollRestoration({ identity, scrollContainer, children }: {
+  identity: string; scrollContainer: RefObject<HTMLElement | null>; children: ReactNode;
+}) {
+  usePageScrollRestoration(`settings:section:${identity}`, scrollContainer, { delegateTo: '.sd-settings-page' });
+  // Restore the existing viewport without changing the DOM: settings and usage
+  // deliberately apply different widths to the viewport's direct children.
+  return <>{children}</>;
 }
 
 function compareExtensions(

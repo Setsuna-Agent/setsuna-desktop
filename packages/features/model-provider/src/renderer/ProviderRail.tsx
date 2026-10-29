@@ -1,4 +1,4 @@
-import { Button as UiButton } from '@setsuna-desktop/renderer-ui';
+import { Button as UiButton, usePageSessionState } from '@setsuna-desktop/renderer-ui';
 import type {
   ProviderConfigState } from '@setsuna-desktop/contracts';
 import type { RendererTranslate,
@@ -7,7 +7,6 @@ import type {
   SettingsViewUi,
 } from '@setsuna-desktop/renderer-contracts/settings';
 import { Plus, Search } from 'lucide-react';
-import { useState } from 'react';
 import type { ModelProviderRendererHost } from './capabilities.js';
 import { useProviderRailReorder } from './useProviderRailReorder.js';
 
@@ -30,7 +29,7 @@ export function ProviderRail({
   translate: RendererTranslate;
   ui: SettingsViewUi;
 }>) {
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = usePageSessionState('settings:model-provider:query', '');
   const query = search.trim().toLocaleLowerCase();
   const visibleProviders = providers.filter((provider) => (
     (provider.name || provider.id).toLocaleLowerCase().includes(query)
