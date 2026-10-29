@@ -1,5 +1,4 @@
 import type {
-  CollaborationActiveTask,
   CollaborationRuntimeHost,
   CollaborationSubagentTurnInput,
 } from '@setsuna-desktop/feature-collaboration/contracts';
@@ -8,8 +7,14 @@ import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { RuntimeEventWriter } from '../lifecycle/runtime-event-writer.js';
+import type { RuntimeTurnTaskRegistry } from '../lifecycle/turn-task-registry.js';
+import { TurnCancelledError } from './runtime-turn-errors.js';
+import type { ConfigStore } from '../../ports/config-store.js';
+import type { AttachmentStore } from '../../ports/attachment-store.js';
+import { collaborationModelServices } from './runtime-collaboration-model.js';
 
 type RuntimeCollaborationTurnServices = Readonly<{
+  steerTurn(threadId: string, input: { input: string; expectedTurnId: string }): Promise<unknown>;
   cancelTurn(threadId: string, turnId: string): Promise<boolean>;
   deliverMailboxInput(
     threadId: string,
@@ -28,8 +33,10 @@ type RuntimeCollaborationHostDependencies = Readonly<{
   ids: IdGenerator;
   threadStore: ThreadStore;
   eventWriter: RuntimeEventWriter;
-  activeTask(threadId: string): CollaborationActiveTask | null;
+  turnTasks: Pick<RuntimeTurnTaskRegistry, 'registeredForThread' | 'taskFor'>;
   turns: RuntimeCollaborationTurnServices;
+  configStore?: ConfigStore;
+  attachmentStore?: AttachmentStore;
 }>;
 
 /** Adapt Core thread and turn services to the Collaboration Feature's narrow host port. */
@@ -37,15 +44,36 @@ export function createRuntimeCollaborationHost(
   dependencies: RuntimeCollaborationHostDependencies,
 ): CollaborationRuntimeHost {
   const host: CollaborationRuntimeHost = {
+    ...collaborationModelServices(dependencies.configStore, dependencies.turnTasks),
+    steerTurn: async (threadId, content, expectedTurnId) => { await dependencies.turns.steerTurn(threadId, { input: content, expectedTurnId }); },
+    retainAttachments: async (parentThreadId, childThreadId, attachments) => {
+      if (!attachments.length) return;
+      const parent = await dependencies.threadStore.getThread(parentThreadId);
+      const owned = new Map(parent?.messages.flatMap((message) => message.attachments ?? []).map((attachment) => [attachment.id, attachment]));
+      for (const attachment of attachments) {
+        if (JSON.stringify(owned.get(attachment.id)) !== JSON.stringify(attachment)) throw new Error('Handoff attachment is not owned by the parent thread.');
+      }
+      const runtimeAttachments = attachments.filter((attachment) => attachment.source === 'runtime');
+      if (runtimeAttachments.length) {
+        if (!dependencies.attachmentStore) throw new Error('Attachment store is unavailable.');
+        const resolved = await dependencies.attachmentStore.resolveForThread(parentThreadId, runtimeAttachments);
+        if (resolved.length !== runtimeAttachments.length) throw new Error('A parent attachment is no longer available.');
+        await dependencies.attachmentStore.retainForThread(childThreadId, runtimeAttachments);
+      }
+    },
     now: () => dependencies.clock.now(),
     id: (prefix) => dependencies.ids.id(prefix),
-    listThreads: () => dependencies.threadStore.listThreads({
-      includeArchived: true,
-      includeSide: true, includeFeatures: true,
-    }),
     getThread: (threadId) => dependencies.threadStore.getThread(threadId),
     createThread: (input) => dependencies.threadStore.createThread(input),
-    activeTask: (threadId) => dependencies.activeTask(threadId),
+    activeTask: (threadId) => {
+      const task = dependencies.turnTasks.registeredForThread(threadId);
+      return task ? { threadId, turnId: task.turnId, done: task.done,
+        acceptingInput: task.acceptingSteers && !task.controller.signal.aborted } : null;
+    },
+    waitForInput: (threadId, turnId, signal) => {
+      const task = dependencies.turnTasks.taskFor(threadId, turnId);
+      return task ? task.inputQueue.waitForInput(signal) : Promise.reject(new TurnCancelledError());
+    },
     cancelTurn: (threadId, turnId) => dependencies.turns.cancelTurn(threadId, turnId),
     deliverMailbox: (threadId, input, execution) => dependencies.turns.deliverMailboxInput(threadId, input, execution),
     startTurn: async (threadId, input, execution) => {

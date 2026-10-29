@@ -498,25 +498,26 @@ export function useDesktopWorkspacePanels({
     setBottomPanelSlot((slot) => deleteFilePanelsInSlot(slot, entryPath, rootId));
   }, [setBottomPanelSlot, setSidePanelSlot]);
 
-  /**
-   * 打开子代理只读面板。面板 id 固定为 subagent:<childThreadId>，因此正文卡片和
-   * 环境面板反复点击只会激活同一个 tab；关闭面板不影响 child 线程本身。
-   */
-  const openSubagentPanel = useCallback((parentThreadId: string, task: CollaborationTask) => {
+  /** 列表和任务详情共用父线程的同一个 tab；导航与关闭都不改变 child 的执行状态。 */
+  const openSubagentPanel = useCallback((parentThreadId: string, task?: CollaborationTask) => {
     closeWorkspaceMenus();
-    const panel = createSubagentPanel(task.childThreadId, parentThreadId, task.identity.displayName);
+    const panel = createSubagentPanel(task?.childThreadId ?? null, parentThreadId,
+      task?.identity.displayName ?? t('feature.collaboration.overview.tasks'));
+    const activate = (current: DesktopPanelSlotState) => activatePanelInSlotState(
+      updatePanelInSlotState(current, panel.id, { subagent: panel.subagent, title: panel.title }), panel.id,
+    );
     if (sidePanelSlot.panels.some((item) => item.id === panel.id)) {
       setSidePanelExpanded(true);
-      setSidePanelSlot((current) => activatePanelInSlotState(current, panel.id));
+      setSidePanelSlot(activate);
       return;
     }
     if (bottomPanelSlot.panels.some((item) => item.id === panel.id)) {
       setBottomPanelExpanded(true);
-      setBottomPanelSlot((current) => activatePanelInSlotState(current, panel.id));
+      setBottomPanelSlot(activate);
       return;
     }
     addPanelToDesktopSlot('side', panel);
-  }, [addPanelToDesktopSlot, bottomPanelSlot.panels, closeWorkspaceMenus, setBottomPanelExpanded, setBottomPanelSlot, setSidePanelExpanded, setSidePanelSlot, sidePanelSlot.panels]);
+  }, [addPanelToDesktopSlot, bottomPanelSlot.panels, closeWorkspaceMenus, setBottomPanelExpanded, setBottomPanelSlot, setSidePanelExpanded, setSidePanelSlot, sidePanelSlot.panels, t]);
 
   const activateDesktopPanel = useCallback((slot: DesktopPanelSlot, panelId: string) => {
     const updater = (current: DesktopPanelSlotState) => activatePanelInSlotState(current, panelId);

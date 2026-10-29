@@ -10,10 +10,15 @@ import { createTestThreadStore } from '../../support/thread-store.js';
 import { ContextWindowConfigStore, mkDataDir, waitForTurnCompleted, WORKSPACE_READ_FILE_TOOL } from '../../support/agent-loop/shared.js';
 
 describe('review context compaction', () => {
-  it.each([false, true])('preserves the full review request through repeated compaction (regenerated: %s)', async (regenerate) => {
+  it.each([
+    { regenerate: false, child: false },
+    { regenerate: true, child: false },
+    { regenerate: true, child: true },
+  ])('preserves review policy through compaction (regenerated: $regenerate, child: $child)', async ({ regenerate, child }) => {
     const ids = new RandomIdGenerator();
     const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
-    const thread = await threadStore.createThread({ title: 'Review with calibrated context' });
+    const parent = child ? await threadStore.createThread({ title: 'Parent' }) : undefined;
+    const thread = await threadStore.createThread({ title: 'Review with calibrated context', parentThreadId: parent?.id });
     const instructions = 'Review only the cancellation flow; report verified findings without changing files.';
     const review = createReviewTurnRequest({ type: 'custom', instructions }, 'en-US');
     const evidence = 'Cancellation releases the pending tool before completing the turn.';
@@ -25,7 +30,7 @@ describe('review context compaction', () => {
       configStore: new ContextWindowConfigStore(32_000),
       reviewControl: { prepare: async ({ target, language }) => createReviewTurnRequest(target, language ?? 'en-US') },
       toolHost: {
-        listTools: async () => [WORKSPACE_READ_FILE_TOOL],
+        listTools: async () => [WORKSPACE_READ_FILE_TOOL, { name: 'write_file', description: 'Write a file', inputSchema: {} }],
         runTool: async () => ({ content: `${evidence}\n${'source evidence '.repeat(800)}` }),
       },
       modelClient: { stream: async function* (request): AsyncGenerator<ModelStreamEvent> {
@@ -70,6 +75,7 @@ describe('review context compaction', () => {
     expect(requests).toHaveLength(13);
     expect(summaries.length).toBeGreaterThanOrEqual(2);
     for (const [index, request] of requests.entries()) {
+      expect(request.tools?.some((tool) => tool.name === 'write_file')).toBe(false);
       expect(request.messages.filter((message) => message.id === userMessageId), `Sampling step ${index + 1}`).toEqual([
         expect.objectContaining({ role: 'user', content: review.prompt }),
       ]);
@@ -84,6 +90,7 @@ describe('review context compaction', () => {
       expect(nextRequest?.messages.some((message) => message.contextCompaction && message.content.includes(evidence))).toBe(true);
     }
     const saved = await threadStore.getThread(thread.id);
+    expect(saved?.turns?.find((turn) => turn.id === started.turnId)?.taskKind).toBe('review');
     expect(saved?.messages.filter((message) => message.inputKind === 'review')).toEqual([
       expect.objectContaining({ id: userMessageId, role: 'user', content: review.prompt }),
     ]);

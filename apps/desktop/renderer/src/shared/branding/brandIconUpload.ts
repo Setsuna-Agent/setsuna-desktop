@@ -4,6 +4,7 @@ import {
   normalizeBrandIconConfig,
   type BrandIconConfig,
 } from '@setsuna-desktop/contracts';
+import { imageFileError, readImageFile } from '@setsuna-desktop/renderer-ui';
 
 type BrandIconFileMetadata = Pick<File, 'name' | 'size' | 'type'>;
 type CustomBrandIcon = Extract<BrandIconConfig, { type: 'custom' }>;
@@ -31,32 +32,15 @@ export function brandIconFileError(
   file: BrandIconFileMetadata,
   copy: BrandIconUploadCopy = defaultUploadCopy,
 ): string | null {
-  if (!BRAND_ICON_MIME_TYPES.includes(file.type.toLocaleLowerCase() as typeof BRAND_ICON_MIME_TYPES[number])) {
-    return copy.invalidType;
-  }
-  if (file.size <= 0) return copy.emptyFile;
-  if (file.size > BRAND_ICON_MAX_BYTES) return copy.tooLarge;
-  return null;
+  return imageFileError(file, { mimeTypes: BRAND_ICON_MIME_TYPES, maxBytes: BRAND_ICON_MAX_BYTES, copy });
 }
 
-export function readBrandIconFile(
+export async function readBrandIconFile(
   file: File,
   copy: BrandIconUploadCopy = defaultUploadCopy,
 ): Promise<CustomBrandIcon> {
-  const validationError = brandIconFileError(file, copy);
-  if (validationError) return Promise.reject(new Error(validationError));
-
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(reader.error ?? new Error(copy.readError));
-    reader.onload = () => {
-      const icon = normalizeBrandIconConfig({ type: 'custom', dataUrl: reader.result });
-      if (icon?.type !== 'custom') {
-        reject(new Error(copy.invalidContent));
-        return;
-      }
-      resolve(icon);
-    };
-    reader.readAsDataURL(file);
-  });
+  const dataUrl = await readImageFile(file, { mimeTypes: BRAND_ICON_MIME_TYPES, maxBytes: BRAND_ICON_MAX_BYTES, copy });
+  const icon = normalizeBrandIconConfig({ type: 'custom', dataUrl });
+  if (icon?.type !== 'custom') throw new Error(copy.invalidContent);
+  return icon;
 }

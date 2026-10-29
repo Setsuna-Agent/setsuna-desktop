@@ -4,6 +4,7 @@ import type {
   RuntimeConfiguredModelReference,
   RuntimeConfigState,
   RuntimeThread,
+  RuntimeThreadModelBinding,
 } from '@setsuna-desktop/contracts';
 
 export type ChatThreadModelSelection = {
@@ -58,16 +59,7 @@ export function chatThreadModelSelection(
 
   const bound = thread?.modelBinding;
   if (bound) {
-    const provider = config?.providers?.find((item) => item.id === bound.providerId) ?? null;
-    const model = provider?.models.find((item) => (
-      item.id === bound.modelId && item.code.trim() === bound.modelCode
-    )) ?? null;
-    return {
-      fallbackModelCode: bound.modelCode,
-      model,
-      provider,
-      reference: { providerId: bound.providerId, modelId: bound.modelId },
-    };
+    return boundModelSelection(config, bound);
   }
 
   const selection = chatDefaultModelSelection(config);
@@ -75,5 +67,35 @@ export function chatThreadModelSelection(
     // Histories that predate model metadata cannot be safely guessed. They stay selectable
     // until the next turn persists an explicit binding.
     ...selection,
+  };
+}
+
+/** Execution details use the recorded turn, never the current global or next-turn choice. */
+export function chatExecutionModelSelection(
+  config: RuntimeConfigState | null,
+  thread: RuntimeThread | null,
+  activeTurnId: string | null,
+  dispatchedModel?: RuntimeThreadModelBinding,
+): ChatThreadModelSelection | null {
+  const turn = activeTurnId
+    ? thread?.turns?.find((turn) => turn.id === activeTurnId)
+    : thread?.turns?.at(-1);
+  const bound = turn?.stepSnapshots?.at(-1)?.snapshot.modelBinding
+    ?? turn?.modelBinding
+    ?? dispatchedModel
+    ?? (!turn ? thread?.modelBinding : undefined);
+  return bound ? boundModelSelection(config, bound) : null;
+}
+
+function boundModelSelection(config: RuntimeConfigState | null, bound: RuntimeThreadModelBinding): ChatThreadModelSelection {
+  const provider = config?.providers?.find((item) => item.id === bound.providerId) ?? null;
+  const model = provider?.models.find((item) => (
+    item.id === bound.modelId && item.code.trim() === bound.modelCode
+  )) ?? null;
+  return {
+    fallbackModelCode: bound.modelCode,
+    model,
+    provider,
+    reference: { providerId: bound.providerId, modelId: bound.modelId },
   };
 }

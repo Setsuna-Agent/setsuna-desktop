@@ -12,6 +12,7 @@ import {
   chatToolResultResolverSlot,
   registerChatToolResult,
 } from '@setsuna-desktop/renderer-contracts/chat';
+import { settingsPageExtensionSlot } from '@setsuna-desktop/renderer-contracts/settings';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createRendererPluginRuntime,
@@ -104,6 +105,7 @@ describe('Chat tool-result resolver Slot', () => {
 
   it('recovers Collaboration legacy results registered during Feature activation', async () => {
     const runtime = createToolResultRuntime();
+    runtime.declareRoot({ pluginId: 'core.settings-host', scopeId: 'fixture:settings' }, { slot: settingsPageExtensionSlot });
     const transport: FeatureOperationTransport = {
       call: vi.fn(async () => {
         throw new Error('State reads are not expected in this resolver test.');

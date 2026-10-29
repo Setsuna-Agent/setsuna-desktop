@@ -30,7 +30,7 @@ export class CollaborationRendererController implements CollaborationRendererSta
   });
 
   constructor(private readonly options: Readonly<{
-    client: CollaborationClient;
+    client: Pick<CollaborationClient, 'readState'>;
     feed: RendererFeatureEventFeed;
     scope: FeatureScope;
     threadId: string;

@@ -127,10 +127,13 @@ export class AutomaticApprovalReviewControl implements ApprovalReviewControl {
         approvalReviewTechnicalFailureRationale(error),
       );
     }
+    const delegatedContext = await this.host.getDelegatedAuthorizationContext?.(thread.id, input.request.turnId).catch(() => null);
+    if (input.signal.aborted) throw abortReason(input.signal);
     const prompt = buildApprovalReviewPrompt(
       input,
       thread,
       this.host.now().toISOString(),
+      delegatedContext ?? undefined,
     );
     if ('unavailableReason' in prompt) {
       return this.failedResult(input.request.turnId, prompt.unavailableReason, modelRequest);

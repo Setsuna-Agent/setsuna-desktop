@@ -12,6 +12,7 @@
 
 @import './overlays.css';
 @import './picker.css';
+@import './icon-color-picker.css';
 @import './menu.css';
 @import './file-tree.css';
 @import './drag-feedback.css';

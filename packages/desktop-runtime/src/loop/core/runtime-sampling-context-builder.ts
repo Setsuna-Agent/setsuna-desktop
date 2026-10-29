@@ -3,6 +3,7 @@ import { projectToolResultWorkingSet, restoreToolObservations } from '../context
 import { RUN_CODE_TOOL_NAME } from '../tools/programmatic-tool.js';
 import { SEARCH_TOOLS_TOOL_NAME } from '../tools/deferred-tools.js';
 import { selectedPluginIdsForInput } from '../context/runtime-plugin-selection-context.js';
+import { currentTurnSkillActivationText } from '../context/runtime-skill-activation-context.js';
 import {
   DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
   cloneRuntimeSkillReferences,
@@ -267,9 +268,11 @@ export class RuntimeSamplingContextBuilder {
       stepGoal
       && goalControl.isCompletionPending(turnId, stepGoal.id),
     );
-    const goalTools = goalControl.toolDefinitions(stepGoal, goalCompletionPending, toolContext.interfaceLanguage);
+    const goalTools = thread.parentThreadId || thread.kind === 'side'
+      ? [] : goalControl.toolDefinitions(stepGoal, goalCompletionPending, toolContext.interfaceLanguage);
     const collaborationControl = this.options.collaborationControl();
-    const collaborationTools = collaborationControl.toolDefinitions(stepRuntimeConfig);
+    const collaborationTools = collaborationControl.toolDefinitions(stepRuntimeConfig)
+      .filter((tool) => taskKind !== 'subagent' || tool.name === 'send_input');
     const skillActivationText = currentTurnSkillActivationText(orderedConversationMessages, turnId);
     const toolRouter = this.options.toolHost && toolAccess !== 'none'
       ? await RuntimeToolRouter.create({
@@ -304,6 +307,7 @@ export class RuntimeSamplingContextBuilder {
     const tools = toolAccess === 'read-only'
       ? scopedTools?.filter((tool) => (
           isRuntimeReadOnlyTool(tool.name) || tool.name === READ_TOOL_RESULT_TOOL_NAME || tool.name === SEARCH_TOOLS_TOOL_NAME || tool.name === RUN_CODE_TOOL_NAME
+          || (taskKind === 'subagent' && tool.name === 'send_input')
         ))
       : scopedTools;
     const advertisedToolNames = tools?.map((tool) => tool.name) ?? [];
@@ -516,16 +520,6 @@ function runtimeToolFeatureFlags(
   return Object.fromEntries(
     Object.entries(features ?? {}),
   );
-}
-
-function currentTurnSkillActivationText(messages: RuntimeMessage[], turnId: string): string {
-  const currentTurnMessages = messages.filter((message) => message.role === 'user' && message.turnId === turnId);
-  const fallbackMessage = [...messages].reverse().find((message) => message.role === 'user');
-  const activationMessages = currentTurnMessages.length ? currentTurnMessages : fallbackMessage ? [fallbackMessage] : [];
-  return activationMessages.flatMap((message) => [
-    message.content,
-    ...(message.attachments ?? []).flatMap((attachment) => [attachment.name, attachment.type]),
-  ]).map((value) => value.trim()).filter(Boolean).join('\n');
 }
 
 function modelRequestMessages(messages: RuntimeMessage[]): RuntimeMessage[] {

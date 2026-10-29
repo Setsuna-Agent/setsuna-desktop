@@ -1,644 +1,356 @@
-import type {
-  PendingStoredThreadEvent,
-  RuntimeEvent,
-  RuntimeThread,
-  StoredThreadEvent,
-} from '@setsuna-desktop/contracts';
-import type { FeatureProjectionStore } from '@setsuna-desktop/feature-core/runtime';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  createInitialCollaborationState,
-  type CollaborationRuntimeHost,
-  type CollaborationState,
-  type CollaborationTask,
-  type CollaborationTaskStatus,
-  type CollaborationToolExecutionContext,
-} from '../../src/contracts/index.js';
-import {
-  createRuntimeCollaborationEventRegistry,
-  RuntimeCollaborationCoordinator,
-} from '../../src/runtime/index.js';
+import { context, createHarness, deferred, thread } from './collaboration-harness.js';
 
-describe('RuntimeCollaborationCoordinator', () => {
-  it('owns spawn ledger events and enforces the active-child limit from its projection', async () => {
-    const harness = createHarness();
-    const coordinator = harness.coordinator;
-
-    const first = await coordinator.execute(
-      'spawn_agent',
-      { prompt: 'Inspect contracts.', name: 'Scout' },
-      toolContext(),
-    );
-
-    expect(first.data).toMatchObject({
-      resultKind: 'collaboration.spawn-result',
-      resultMajor: 1,
-      payload: {
-        parentThreadId: 'thread_parent',
-        status: 'running',
-      },
+describe('collaboration dispatch and ownership', () => {
+  it('starts the follow-up if the active receiver becomes idle while a resume message is delivered', async () => {
+    const h = createHarness();
+    const child = await h.spawn();
+    h.host.deliverMailbox = vi.fn(async () => {
+      await h.finish(child.childThreadId, 'completed', 'Previous answer');
+      return { queued: true, turnId: null };
     });
-    expect(harness.events('thread_parent').map(featureEventType)).toEqual([
-      'collaboration.task-created',
-      'collaboration.task-status-changed',
-    ]);
-    expect((await coordinator.readState('thread_parent')).state.tasks[0]).toMatchObject({
-      identity: { displayName: 'Scout' },
-      status: 'running',
-    });
-
-    await coordinator.execute('spawn_agent', { prompt: 'Inspect runtime.' }, toolContext());
-    await coordinator.execute('spawn_agent', { prompt: 'Inspect renderer.' }, toolContext());
-    await expect(
-      coordinator.execute('spawn_agent', { prompt: 'Inspect packaging.' }, toolContext()),
-    ).rejects.toThrow('maximum is 3');
+    const resumed = await h.coordinator.execute('resume_agent', { thread_id: child.childThreadId, content: 'Follow up' }, context());
+    expect(resumed.data).toMatchObject({ status: 'running', queued: false });
+    expect(h.host.startTurn).toHaveBeenCalledTimes(2);
+    expect((await h.coordinator.readState('parent')).state.executions).toHaveLength(2);
   });
 
-  it('projects child approval and terminal lifecycle into the parent task ledger', async () => {
-    const harness = createHarness();
-    const coordinator = harness.coordinator;
-    const spawned = await coordinator.execute(
-      'spawn_agent',
-      { prompt: 'Inspect the repository.' },
-      toolContext(),
-    );
-    const payload = spawned.data.payload as { childThreadId: string; turnId: string };
-
-    await coordinator.observeCoreEvent(approvalEvent(payload.childThreadId, payload.turnId));
-    expect((await coordinator.readState('thread_parent')).state.tasks[0]?.status).toBe('waiting_approval');
-
-    await coordinator.observeCoreEvent(approvalResolvedEvent(payload.childThreadId, payload.turnId));
-    expect((await coordinator.readState('thread_parent')).state.tasks[0]?.status).toBe('running');
-
-    harness.completeChild(payload.childThreadId, payload.turnId, 'Detailed child result.');
-    await coordinator.observeCoreEvent(turnCompletedEvent(payload.childThreadId, payload.turnId));
-    expect((await coordinator.readState('thread_parent')).state.tasks[0]).toMatchObject({
-      status: 'completed',
-      resultPreview: 'Detailed child result.',
-    });
-  });
-
-  it('awaits close-agent cancellation before reporting its status', async () => {
-    let finishCancellation: ((cancelled: boolean) => void) | undefined;
-    const cancelTurn = vi.fn(() => new Promise<boolean>((resolve) => {
-      finishCancellation = resolve;
-    }));
-    const coordinator = createHarness({
-      activeTask: () => ({ threadId: 'thread_child', turnId: 'turn_child' }),
-      cancelTurn,
-    }).coordinator;
-
-    const executing = coordinator.execute('close_agent', { thread_id: 'thread_child' }, toolContext());
-    await vi.waitFor(() => expect(cancelTurn).toHaveBeenCalledWith('thread_child', 'turn_child'));
-    let settled = false;
-    void executing.finally(() => { settled = true; });
+  it('starts a requested follow-up after a finalizing child releases its resources', async () => {
+    const h = createHarness();
+    const child = await h.spawn();
+    const cleanup = deferred();
+    h.active.set(child.childThreadId, { threadId: child.childThreadId, turnId: child.turnId, done: cleanup.promise, acceptingInput: false });
+    await h.event(child.childThreadId, child.turnId, 'turn.completed', { taskKind: 'subagent' });
+    const resuming = h.coordinator.execute('resume_agent', { thread_id: child.childThreadId, content: 'New assignment' }, context());
     await Promise.resolve();
-    expect(settled).toBe(false);
-
-    finishCancellation?.(false);
-    await expect(executing).resolves.toMatchObject({
-      data: { cancelled: false, status: 'closed' },
-      collabToolCall: { agentStatus: 'closed' },
-    });
+    expect(h.host.startTurn).toHaveBeenCalledTimes(1);
+    expect(h.host.deliverMailbox).not.toHaveBeenCalled();
+    h.active.delete(child.childThreadId);
+    cleanup.resolve();
+    await resuming;
+    expect(h.host.startTurn).toHaveBeenLastCalledWith(child.childThreadId, expect.objectContaining({ prompt: 'New assignment' }), expect.anything());
+    expect((await h.coordinator.readState('parent')).state.executions).toHaveLength(2);
   });
 
-  it('rejects collaboration tool targets that are not direct children', async () => {
-    const coordinator = createHarness({
-      getThread: async (threadId) => threadId === 'thread_child'
-        ? runtimeThread('thread_child', 'Child', 'thread_other')
-        : null,
-    }).coordinator;
-
-    await expect(
-      coordinator.execute('close_agent', { thread_id: 'thread_child' }, toolContext()),
-    ).rejects.toThrow('not a direct child');
+  it('starts more than three active children while keeping concurrent dispatch identities and executions distinct', async () => {
+    const h = createHarness();
+    const children = await Promise.all(Array.from({ length: 5 }, () => h.spawn()));
+    const { state } = await h.coordinator.readState('parent');
+    expect(state.tasks).toHaveLength(5);
+    expect(state.executions).toHaveLength(5);
+    expect(new Set(children.map((child) => child.childThreadId)).size).toBe(5);
+    expect(new Set(children.map((child) => child.turnId)).size).toBe(5);
+    expect(state.executions.every((execution) => execution.parentTurnId === 'parent_turn' && execution.status === 'running')).toBe(true);
+    expect(h.active.size).toBe(5);
+    expect(h.host.createThread).toHaveBeenCalledTimes(5);
   });
 
-  it('rejects spawn_agent from a collaboration child thread', async () => {
-    const coordinator = createHarness({
-      getThread: async () => runtimeThread('thread_child', 'Child', 'thread_root'),
-    }).coordinator;
+  it('resumes a completed child while more than three other children are active', async () => {
+    const h = createHarness();
+    const child = await h.spawn();
+    await h.finish(child.childThreadId, 'completed', 'Initial result');
+    await Promise.all(Array.from({ length: 4 }, () => h.spawn()));
 
-    await expect(
-      coordinator.execute('spawn_agent', { prompt: 'Do work.' }, toolContext(undefined, 'thread_child')),
-    ).rejects.toThrow('cannot spawn its own agents');
+    const resumed = await h.coordinator.execute('resume_agent', { thread_id: child.childThreadId, content: 'Continue the investigation' }, context());
+
+    expect(resumed.data).toMatchObject({ status: 'running', queued: false });
+    expect(h.active.size).toBe(5);
+    const { state } = await h.coordinator.readState('parent');
+    expect(state.executions.filter((execution) => execution.status === 'running')).toHaveLength(5);
+    expect(state.executions.find((execution) => execution.turnId === child.turnId)?.status).toBe('completed');
+    expect(state.tasks.find((task) => task.id === child.taskId)).toMatchObject({ status: 'running', activeTurnId: resumed.data.turnId });
   });
 
-  it('rejects resuming a completed child when three other children are active', async () => {
-    const parent = runtimeThread('thread_parent', 'Parent');
-    const deliverMailbox = vi.fn(async () => ({ turnId: 'turn_child_4_resumed' }));
-    const coordinator = createHarness({
-      initialTasks: [
-        ...[1, 2, 3].map((index) => task(index, 'running')),
-        task(4, 'completed'),
-      ],
-      deliverMailbox,
-      threads: [parent, runtimeThread('thread_child_4', 'Child 4', parent.id)],
-    }).coordinator;
-
-    await expect(
-      coordinator.execute(
-        'resume_agent',
-        { thread_id: 'thread_child_4', content: 'Continue.' },
-        toolContext(),
-      ),
-    ).rejects.toThrow('maximum is 3');
-    expect(deliverMailbox).not.toHaveBeenCalled();
+  it('allows only adjacent messaging; a child cannot spawn, resume its parent, or message a sibling', async () => {
+    const h = createHarness();
+    const child = await h.spawn();
+    const sibling = await h.spawn();
+    const caller = context(undefined, child.childThreadId, child.turnId);
+    await h.coordinator.execute('send_input', { thread_id: 'parent', content: 'Important finding.' }, caller);
+    expect(h.host.deliverMailbox).toHaveBeenCalledWith('parent', expect.objectContaining({ triggerTurn: false, deliveryMode: 'queue_only' }), expect.anything());
+    for (const [name, args] of [
+      ['spawn_agent', { prompt: 'Nested task' }],
+      ['resume_agent', { thread_id: 'parent', content: 'Wake up' }],
+      ['send_input', { thread_id: sibling.childThreadId, content: 'Do this' }],
+    ] as const) await expect(h.coordinator.execute(name, args, caller)).rejects.toThrow();
+    await expect(h.coordinator.execute('send_input', { thread_id: 'parent', content: 'x'.repeat(8001) }, caller)).rejects.toThrow('8000');
+    h.active.set('parent', { threadId: 'parent', turnId: 'new_parent_turn' });
+    await expect(h.coordinator.execute('send_input', { thread_id: 'parent', content: 'Late finding' }, caller)).rejects.toThrow('owning parent turn');
   });
 
-  it('ignores stale terminal events from a superseded child turn', async () => {
-    const onAppendEvent = vi.fn(async () => undefined);
-    const coordinator = createHarness({ onAppendEvent }).coordinator;
-
-    await coordinator.execute('spawn_agent', { prompt: 'Inspect.', name: 'Scout' }, toolContext());
-    onAppendEvent.mockClear();
-    await coordinator.observeCoreEvent(turnStartedEvent('thread_child', 'turn_child_v2'));
-    expectLastStatusEvent(onAppendEvent, 'running', { activeTurnId: 'turn_child_v2' });
-
-    onAppendEvent.mockClear();
-    await coordinator.observeCoreEvent(turnCompletedEvent('thread_child', 'turn_child'));
-    expect(onAppendEvent).not.toHaveBeenCalled();
+  it('cancels owned children and does not cancel an execution reassigned in a later parent turn', async () => {
+    const h = createHarness();
+    const child = await h.spawn();
+    await h.coordinator.cancelChildren('parent', 'parent_turn');
+    expect(h.active.has(child.childThreadId)).toBe(false);
+    await h.coordinator.execute('resume_agent', { thread_id: child.childThreadId, content: 'Continue' }, context(undefined, 'parent', 'next_turn'));
+    const resumed = h.active.get(child.childThreadId)!;
+    await h.coordinator.cancelChildren('parent', 'parent_turn');
+    expect(h.active.get(child.childThreadId)?.turnId).toBe(resumed.turnId);
+    const { state } = await h.coordinator.readState('parent');
+    expect(state.tasks).toHaveLength(1);
+    expect(state.executions.map((execution) => execution.status)).toEqual(['cancelled', 'running']);
+    expect(state.tasks[0]?.error).toBeUndefined();
   });
 
-  it('does not commit an old completion after preview loading yields to a resumed turn', async () => {
-    const parent = runtimeThread('thread_parent', 'Parent');
-    const child = runtimeThread('thread_child', 'Child', parent.id);
-    child.messages = [{
-      id: 'message_child_result',
-      turnId: 'turn_child',
-      role: 'assistant',
-      content: 'Old turn result.',
-      phase: 'final_answer',
-      createdAt: '2026-07-11T00:00:01.000Z',
-      status: 'complete',
-    }];
-    child.turns = [{ id: 'turn_child', items: [], status: 'completed' }];
-    let signalPreviewStarted: () => void = () => undefined;
-    const previewStarted = new Promise<void>((resolve) => { signalPreviewStarted = resolve; });
-    let releasePreview: () => void = () => undefined;
-    const previewReleased = new Promise<void>((resolve) => { releasePreview = resolve; });
-    const onAppendEvent = vi.fn(async () => undefined);
-    const coordinator = createHarness({
-      createThread: async () => child,
-      getThread: async (threadId) => {
-        if (threadId === parent.id) return parent;
-        signalPreviewStarted();
-        await previewReleased;
-        return child;
-      },
-      onAppendEvent,
-      startTurn: async () => ({ turnId: 'turn_child' }),
-    }).coordinator;
-
-    await coordinator.execute('spawn_agent', { prompt: 'Inspect.' }, toolContext());
-    onAppendEvent.mockClear();
-    const completingOldTurn = coordinator.observeCoreEvent(
-      turnCompletedEvent(child.id, 'turn_child'),
-    );
-    await previewStarted;
-
-    await coordinator.observeCoreEvent(turnStartedEvent(child.id, 'turn_child_v2'));
-    releasePreview();
-    await completingOldTurn;
-
-    expect(onAppendEvent).toHaveBeenCalledTimes(1);
-    expectLastStatusEvent(onAppendEvent, 'running', { activeTurnId: 'turn_child_v2' });
-  });
-
-  it('revives a completed task when the child starts a new turn', async () => {
-    const onAppendEvent = vi.fn(async () => undefined);
-    const coordinator = createHarness({ onAppendEvent }).coordinator;
-
-    await coordinator.execute('spawn_agent', { prompt: 'Inspect.', name: 'Scout' }, toolContext());
-    await coordinator.observeCoreEvent(turnStartedEvent('thread_child', 'turn_child'));
-    await coordinator.observeCoreEvent(turnCompletedEvent('thread_child', 'turn_child'));
-    onAppendEvent.mockClear();
-
-    await coordinator.observeCoreEvent(turnStartedEvent('thread_child', 'turn_child_v2'));
-
-    expect(onAppendEvent).toHaveBeenCalledTimes(1);
-    expectLastStatusEvent(onAppendEvent, 'running', { activeTurnId: 'turn_child_v2' });
-  });
-
-  it('persists the resumed running status before returning resume_agent', async () => {
-    const parent = runtimeThread('thread_parent', 'Parent');
-    const onAppendEvent = vi.fn(async () => undefined);
-    const coordinator = createHarness({
-      initialTasks: [task(1, 'completed')],
-      deliverMailbox: async () => ({ turnId: 'turn_child_1_resumed' }),
-      onAppendEvent,
-      threads: [parent, runtimeThread('thread_child_1', 'Child 1', parent.id)],
-    }).coordinator;
-
-    await coordinator.execute(
-      'resume_agent',
-      { thread_id: 'thread_child_1', content: 'Continue.' },
-      toolContext(),
-    );
-
-    expectLastStatusEvent(onAppendEvent, 'running', { activeTurnId: 'turn_child_1_resumed' });
-  });
-
-  it('removes its abort listener after a wait timeout', async () => {
+  it('cancels a child whose start completes after the parent was aborted', async () => {
+    const h = createHarness();
+    const start = h.host.startTurn;
+    const reachedStart = deferred();
+    const releaseStart = deferred();
+    h.host.startTurn = async (...args) => { reachedStart.resolve(); await releaseStart.promise; return start(...args); };
     const controller = new AbortController();
-    const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
-    const coordinator = createHarness({
-      activeTask: () => ({
-        threadId: 'thread_child',
-        turnId: 'turn_child',
-        done: new Promise(() => undefined),
-      }),
-    }).coordinator;
-
-    await expect(coordinator.execute(
-      'wait',
-      { thread_id: 'thread_child', timeout_ms: 5 },
-      toolContext(controller.signal),
-    )).resolves.toMatchObject({ data: { status: 'running', timedOut: true } });
-    expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+    const spawning = h.spawn(controller.signal);
+    const rejected = expect(spawning).rejects.toThrow('cancel parent');
+    await reachedStart.promise;
+    controller.abort(new Error('cancel parent'));
+    await h.coordinator.cancelChildren('parent', 'parent_turn');
+    releaseStart.resolve();
+    await rejected;
+    expect(h.active.size).toBe(0);
+    expect((await h.coordinator.readState('parent')).state.executions[0]?.status).toBe('cancelled');
   });
 
-  it('returns the complete child assistant output when wait reaches idle', async () => {
-    const fullOutput = `Research result start.\n${'Detailed evidence. '.repeat(40)}\nResearch result end.`;
-    const child = terminalChildThread(fullOutput);
-    const coordinator = createHarness({ threads: [child] }).coordinator;
-
-    const result = await coordinator.execute('wait', { thread_id: child.id }, toolContext());
-
-    expect(result.data).toMatchObject({ status: 'idle', output: fullOutput });
-    expect(result.content).toContain('Research result end.');
-    expect(result.content.length).toBeGreaterThan(fullOutput.length);
+  it('does not let a delayed old completion overwrite a resumed execution', async () => {
+    const h = createHarness();
+    const child = await h.spawn();
+    await h.finish(child.childThreadId, 'completed', 'First result.');
+    await h.coordinator.execute('resume_agent', { thread_id: child.childThreadId, content: 'Second task' }, context());
+    const resumed = h.active.get(child.childThreadId)!;
+    await h.event(child.childThreadId, child.turnId, 'turn.cancelled', { taskKind: 'subagent', reason: 'Late cancellation' });
+    const { state } = await h.coordinator.readState('parent');
+    expect(state.tasks[0]).toMatchObject({ status: 'running', activeTurnId: resumed.turnId });
+    expect(state.executions[0]?.status).toBe('completed');
   });
 
-  it('consumes a child after wait returns its terminal output', async () => {
-    const parent = runtimeThread('thread_parent', 'Parent');
-    const child = terminalChildThread('Completed child result.');
-    const coordinator = createHarness({
-      createThread: async () => child,
-      threads: [parent, child],
-    }).coordinator;
-
-    await coordinator.execute('spawn_agent', { prompt: 'Inspect the repository.' }, toolContext());
-    expect(coordinator.pendingChildren(parent.id)).toEqual({ active: 0, total: 1 });
-
-    const result = await coordinator.execute('wait', { thread_id: child.id }, toolContext());
-
-    expect(result.data).toMatchObject({ status: 'idle', output: 'Completed child result.' });
-    expect(coordinator.pendingChildren(parent.id)).toEqual({ active: 0, total: 0 });
-  });
-
-  it('returns only the child final answer when commentary is also persisted', async () => {
-    const child = terminalChildThread('Final result.');
-    child.messages.unshift({
-      id: 'message_child_status',
-      turnId: 'turn_child',
-      role: 'assistant',
-      content: 'I will inspect the repository.',
-      phase: 'commentary',
-      createdAt: '2026-07-11T00:00:00.500Z',
-      status: 'complete',
-    });
-    child.messageCount = child.messages.length;
-    const coordinator = createHarness({ threads: [child] }).coordinator;
-
-    const result = await coordinator.execute('wait', { thread_id: child.id }, toolContext());
-
-    expect(result.data).toMatchObject({ status: 'idle', output: 'Final result.' });
-    expect(result.content).not.toContain('I will inspect the repository.');
-  });
-
-  it('normalizes each child answer before creating structured parent history', async () => {
-    const parent = runtimeThread('thread_parent', 'Parent');
-    const child = runtimeThread('thread_child', 'Mixed history child', parent.id);
-    child.messages = [
-      {
-        id: 'message_child_legacy',
-        turnId: 'turn_child',
-        role: 'assistant',
-        content: '<think>private legacy reasoning</think>Legacy answer.',
-        phase: 'final_answer',
-        createdAt: '2026-07-11T00:00:01.000Z',
-        status: 'complete',
-      },
-      {
-        id: 'message_child_structured',
-        turnId: 'turn_child',
-        role: 'assistant',
-        content: '<think>literal example</think> Structured answer.',
-        streamParts: [{ type: 'content', content: '<think>literal example</think> Structured answer.' }],
-        phase: 'final_answer',
-        createdAt: '2026-07-11T00:00:02.000Z',
-        status: 'complete',
-      },
-    ];
-    child.messageCount = child.messages.length;
-    child.turns = [{ id: 'turn_child', items: [], status: 'completed' }];
-    const coordinator = createHarness({
-      createThread: async () => child,
-      threads: [parent, child],
-    }).coordinator;
-
-    await coordinator.execute('spawn_agent', { prompt: 'Inspect the repository.' }, toolContext());
-    const [result] = await coordinator.collectPendingChildren(
-      parent.id,
-      'turn_parent',
-      new AbortController().signal,
-    );
-
-    expect(result?.content).not.toContain('private legacy reasoning');
-    expect(result?.content).toContain('Legacy answer.');
-    expect(result?.content).toContain('<think>literal example</think> Structured answer.');
-    expect(result).toMatchObject({ role: 'user', promptSource: 'collaboration' });
-    expect(result?.streamParts).toEqual([{ type: 'content', content: result?.content }]);
-  });
-
-  it('reports a failed child outcome without reusing its stale thread preview', async () => {
-    const parent = runtimeThread('thread_parent', 'Parent');
-    const child = runtimeThread('thread_child', 'Failed child', parent.id);
-    child.lastMessagePreview = 'Previous successful answer.';
-    child.messages = [{
-      id: 'message_child_status',
-      turnId: 'turn_child',
-      role: 'assistant',
-      content: 'I am still checking.',
-      phase: 'commentary',
-      createdAt: '2026-07-11T00:00:01.000Z',
-      status: 'complete',
-    }];
-    child.messageCount = 1;
-    child.turns = [{
-      id: 'turn_child',
-      items: [],
-      status: 'failed',
-      error: 'Repository became unavailable.',
-    }];
-    const coordinator = createHarness({
-      createThread: async () => child,
-      threads: [parent, child],
-    }).coordinator;
-
-    await coordinator.execute('spawn_agent', { prompt: 'Inspect the repository.' }, toolContext());
-    const [result] = await coordinator.collectPendingChildren(
-      parent.id,
-      'turn_parent',
-      new AbortController().signal,
-    );
-
-    expect(result?.content).toContain('Child turn failed: Repository became unavailable.');
-    expect(result?.content).not.toContain('Previous successful answer.');
-    expect(result?.content).not.toContain('I am still checking.');
+  it('projects approvals and waits for close cancellation before dismissing results', async () => {
+    const h = createHarness();
+    const child = await h.spawn();
+    await h.event(child.childThreadId, child.turnId, 'approval.requested', { approval: { id: 'approval' } });
+    expect((await h.coordinator.readState('parent')).state.tasks[0]?.status).toBe('waiting_approval');
+    const cancel = h.host.cancelTurn;
+    const reachedCancel = deferred();
+    const release = deferred();
+    h.host.cancelTurn = async (...args) => { reachedCancel.resolve(); await release.promise; return cancel(...args); };
+    let finished = false;
+    const closing = h.coordinator.execute('close_agent', { thread_id: child.childThreadId }, context()).then(() => { finished = true; });
+    await reachedCancel.promise;
+    expect(finished).toBe(false);
+    release.resolve();
+    await closing;
+    expect(await h.coordinator.pendingChildren('parent')).toEqual({ active: 0, total: 0 });
+    expect((await h.coordinator.readState('parent')).state.executions[0]).toMatchObject({ status: 'cancelled', delivery: 'dismissed' });
   });
 });
 
-type HarnessOptions = Readonly<{
-  activeTask?: CollaborationRuntimeHost['activeTask'];
-  cancelTurn?: CollaborationRuntimeHost['cancelTurn'];
-  createThread?: CollaborationRuntimeHost['createThread'];
-  deliverMailbox?: CollaborationRuntimeHost['deliverMailbox'];
-  getThread?: CollaborationRuntimeHost['getThread'];
-  initialTasks?: readonly CollaborationTask[];
-  onAppendEvent?: (
-    threadId: string,
-    event: PendingStoredThreadEvent,
-  ) => void | Promise<void>;
-  startTurn?: CollaborationRuntimeHost['startTurn'];
-  threads?: readonly RuntimeThread[];
-}>;
+describe('collaboration waits and durable results', () => {
+  it.each([undefined, 120_000])('keeps wait suspended through bookkeeping and 30 seconds without a result (timeout=%s)', async (timeoutMs) => {
+    const h = createHarness();
+    const child = await h.spawn();
+    const controller = new AbortController();
+    vi.useFakeTimers();
+    let settled = false;
+    const waiting = h.coordinator.execute('wait', { thread_id: child.childThreadId, timeout_ms: timeoutMs }, context(controller.signal))
+      .then((result) => { settled = true; return result; });
+    try {
+      await vi.waitFor(() => expect(h.inputWaiters.size).toBe(1));
+      await h.spawn();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(settled).toBe(false);
+      expect(h.inputWaiters.size).toBe(1);
+      await h.finish(child.childThreadId, 'completed', 'Ready evidence');
+      await expect(waiting).resolves.toMatchObject({ data: { status: 'completed', timedOut: false, output: 'Ready evidence' } });
+      expect(h.inputWaiters.size).toBe(0);
+    } finally {
+      controller.abort(new Error('Test finished'));
+      await waiting.catch(() => undefined);
+      vi.useRealTimers();
+    }
+  });
 
-function createHarness(options: HarnessOptions = {}): Readonly<{
-  coordinator: RuntimeCollaborationCoordinator;
-  completeChild(threadId: string, turnId: string, output: string): void;
-  events(threadId: string): StoredThreadEvent[];
-}> {
-  const threads = new Map<string, RuntimeThread>([
-    ['thread_parent', runtimeThread('thread_parent', 'Parent')],
-    ['thread_child', runtimeThread('thread_child', 'Child', 'thread_parent')],
-  ]);
-  for (const thread of options.threads ?? []) threads.set(thread.id, thread);
-  const eventsByThread = new Map<string, StoredThreadEvent[]>();
-  const registry = createRuntimeCollaborationEventRegistry();
-  let childIndex = 0;
-  let idIndex = 0;
+  it('wakes a targeted wait when another child has a result and drains it without blocking on the target', async () => {
+    const h = createHarness();
+    const target = await h.spawn();
+    const other = await h.spawn();
+    const waiting = h.coordinator.execute('wait', { thread_id: target.childThreadId }, context());
+    await vi.waitFor(() => expect(h.inputWaiters.size).toBe(1));
+    await h.finish(other.childThreadId, 'completed', 'Independent evidence');
+    await expect(waiting).resolves.toMatchObject({ data: { status: 'running', timedOut: false, interruptedByResult: true } });
+    const delivered = await h.coordinator.collectPendingChildren('parent', 'parent_turn', context().signal, { wait: false });
+    expect(delivered).toHaveLength(1);
+    expect(delivered[0]?.content).toContain('Independent evidence');
+    expect(await h.coordinator.collectPendingChildren('parent', 'parent_turn', context().signal, { wait: false })).toEqual([]);
+    expect(h.active.has(target.childThreadId)).toBe(true);
+    expect(h.inputWaiters.size).toBe(0);
+  });
 
-  const projection: FeatureProjectionStore<CollaborationState> = {
-    async read(threadId) {
-      let state: CollaborationState = threadId === 'thread_parent' && options.initialTasks
-        ? Object.freeze({ tasks: Object.freeze([...options.initialTasks]) })
-        : createInitialCollaborationState();
-      let throughSeq = 0;
-      for (const event of eventsByThread.get(threadId) ?? []) {
-        state = registry.reduce(state, event);
-        throughSeq = event.seq;
-      }
-      return { state, throughSeq };
-    },
-    dispose: async () => undefined,
-  };
+  it('subscribes while a registered child is still starting instead of returning an empty result', async () => {
+    const h = createHarness();
+    const starting = deferred<string>();
+    const release = deferred();
+    const startTurn = h.host.startTurn;
+    h.host.startTurn = vi.fn(async (id, input, policy) => {
+      starting.resolve(id);
+      await release.promise;
+      return startTurn(id, input, policy);
+    });
+    const spawning = h.spawn();
+    const childId = await starting.promise;
+    const waiting = h.coordinator.execute('wait', { thread_id: childId }, context());
+    await vi.waitFor(() => expect(h.inputWaiters.size).toBe(1));
+    expect(h.active.has(childId)).toBe(false);
+    release.resolve();
+    await spawning;
+    await h.finish(childId, 'completed', 'Started and completed');
+    await expect(waiting).resolves.toMatchObject({ data: { status: 'completed', output: 'Started and completed' } });
+    expect(h.inputWaiters.size).toBe(0);
+  });
 
-  const host: CollaborationRuntimeHost = {
-    now: () => new Date(`2026-08-20T00:00:${String(idIndex).padStart(2, '0')}.000Z`),
-    id: (prefix) => `${prefix}_${++idIndex}`,
-    listThreads: async () => [...threads.values()],
-    getThread: options.getThread ?? (async (threadId) => threads.get(threadId) ?? null),
-    createThread: async (input) => {
-      const nextIndex = ++childIndex;
-      const thread = options.createThread
-        ? await options.createThread(input)
-        : runtimeThread(
-            nextIndex === 1 ? 'thread_child' : `thread_child_${nextIndex}`,
-            input.title,
-            input.parentThreadId,
-          );
-      threads.set(thread.id, thread);
-      return thread;
-    },
-    activeTask: options.activeTask ?? (() => null),
-    cancelTurn: options.cancelTurn ?? (async () => false),
-    deliverMailbox: options.deliverMailbox ?? (async () => ({ turnId: null })),
-    startTurn: options.startTurn ?? (async (threadId) => {
-      return { turnId: threadId.replace(/^thread_/u, 'turn_') };
-    }),
-    appendEvents: async (threadId, pendingEvents) => {
-      const saved = appendEvents(eventsByThread, threadId, pendingEvents);
-      for (const event of pendingEvents) {
-        await options.onAppendEvent?.(threadId, event);
-      }
-      return saved;
-    },
-  };
+  it('bounds a recovered backlog per delivery without discarding remaining results', async () => {
+    const h = createHarness();
+    for (let index = 0; index < 4; index += 1) {
+      const child = await h.spawn();
+      await h.finish(child.childThreadId, 'completed', `Result ${index}`);
+    }
+    h.restart();
+    expect(await h.coordinator.collectPendingChildren('parent', 'parent_turn', context().signal)).toHaveLength(3);
+    expect(await h.coordinator.pendingChildren('parent')).toEqual({ active: 0, total: 1 });
+    expect(await h.coordinator.collectPendingChildren('parent', 'parent_turn', context().signal)).toHaveLength(1);
+    expect(await h.coordinator.pendingChildren('parent')).toEqual({ active: 0, total: 0 });
+  });
 
-  return {
-    coordinator: new RuntimeCollaborationCoordinator({ host, projection }),
-    completeChild(threadId, turnId, output) {
-      const thread = threads.get(threadId);
-      if (!thread) throw new Error(`Missing child ${threadId}.`);
-      thread.messages = [{
-        id: `message_${threadId}`,
-        turnId,
-        role: 'assistant',
-        content: output,
-        phase: 'final_answer',
-        createdAt: '2026-08-20T00:00:10.000Z',
-        status: 'complete',
-      }];
-      thread.turns = [{ id: turnId, items: [], status: 'completed' }];
-    },
-    events: (threadId) => [...(eventsByThread.get(threadId) ?? [])],
-  };
-}
+  it('migrates a legacy task without a receipt and only delivers its recovered result once', async () => {
+    const h = createHarness();
+    const child = thread('legacy_child', 'parent');
+    child.turns = [{ id: 'legacy_turn', items: [], status: 'completed' }];
+    child.messages = [{ id: 'legacy_answer', turnId: 'legacy_turn', role: 'assistant', phase: 'final_answer',
+      content: 'Legacy result', status: 'complete', createdAt: h.host.now().toISOString() }];
+    h.threads.set(child.id, child);
+    await h.host.appendEvents('parent', [{
+      id: 'legacy_event', threadId: 'parent', type: 'collaboration.task_created', createdAt: child.createdAt,
+      payload: { task: { id: 'legacy_task', childThreadId: child.id, activeTurnId: 'legacy_turn', title: 'Legacy', objective: 'Inspect',
+        identity: { displayName: 'Legacy', avatarSeed: 'legacy' }, status: 'completed', createdAt: child.createdAt, updatedAt: child.createdAt } },
+    }]);
+    h.restart();
+    expect((await h.coordinator.collectPendingChildren('parent', 'parent_turn', context().signal))[0]?.content).toContain('Legacy result');
+    h.restart();
+    expect(await h.coordinator.collectPendingChildren('parent', 'next_turn', context().signal)).toEqual([]);
+  });
 
-function appendEvents(
-  eventsByThread: Map<string, StoredThreadEvent[]>,
-  threadId: string,
-  pendingEvents: readonly PendingStoredThreadEvent[],
-): StoredThreadEvent[] {
-  const current = eventsByThread.get(threadId) ?? [];
-  const saved = pendingEvents.map((event, index) => ({
-    ...event,
-    seq: current.length + index + 1,
-  } as StoredThreadEvent));
-  current.push(...saved);
-  eventsByThread.set(threadId, current);
-  return saved;
-}
+  it('wakes on the persisted terminal event even when child cleanup has not settled', async () => {
+    const h = createHarness();
+    const child = await h.spawn();
+    const waiting = h.coordinator.collectPendingChildren('parent', 'parent_turn', context().signal);
+    await vi.waitFor(() => expect(h.inputWaiters.size).toBe(1));
+    // Keep the active task and its done promise pending while publishing completion.
+    await h.event(child.childThreadId, child.turnId, 'turn.completed', { taskKind: 'subagent' });
+    expect((await waiting)[0]?.content).toContain('completed');
+    expect(h.active.has(child.childThreadId)).toBe(true);
+    expect(h.inputWaiters.size).toBe(0);
+    expect((await h.coordinator.execute('wait', { thread_id: child.childThreadId }, context())).data.status).toBe('completed');
+  });
 
-function featureEventType(event: StoredThreadEvent): string {
-  return event.type === 'feature.event' ? event.eventType : event.type;
-}
+  it('wakes a join for input and returns the first completed result without waiting for every child', async () => {
+    const h = createHarness();
+    const first = await h.spawn();
+    await h.spawn();
+    const waiting = h.coordinator.collectPendingChildren('parent', 'parent_turn', context().signal);
+    await vi.waitFor(() => expect(h.inputWaiters.has('parent')).toBe(true));
+    h.inputWaiters.get('parent')!();
+    expect(await waiting).toEqual([]);
+    const nextWait = h.coordinator.collectPendingChildren('parent', 'parent_turn', context().signal);
+    await h.finish(first.childThreadId, 'completed', 'Useful result.');
+    expect((await nextWait)[0]?.content).toContain('Useful result.');
+    expect(await h.coordinator.pendingChildren('parent')).toEqual({ active: 1, total: 1 });
+  });
 
-function runtimeThread(id: string, title: string, parentThreadId?: string): RuntimeThread {
-  return {
-    id,
-    title,
-    ...(parentThreadId ? { parentThreadId } : {}),
-    createdAt: '2026-08-20T00:00:00.000Z',
-    updatedAt: '2026-08-20T00:00:00.000Z',
-    archived: false,
-    memoryMode: 'enabled',
-    messageCount: 0,
-    lastMessagePreview: '',
-    messages: [],
-    turns: [],
-    lastSeq: 0,
-  };
-}
+  it('removes wait subscriptions after timeout and cancellation', async () => {
+    const h = createHarness();
+    const child = await h.spawn();
+    const controller = new AbortController();
+    const remove = vi.spyOn(controller.signal, 'removeEventListener');
+    await expect(h.coordinator.execute('wait', { thread_id: child.childThreadId, timeout_ms: 1 }, context(controller.signal)))
+      .resolves.toMatchObject({ data: { status: 'running', timedOut: true } });
+    expect(h.inputWaiters.size).toBe(0);
+    expect(remove).toHaveBeenCalled();
+    const waiting = h.coordinator.collectPendingChildren('parent', 'parent_turn', controller.signal);
+    const rejected = expect(waiting).rejects.toThrow('cancel wait');
+    await vi.waitFor(() => expect(h.inputWaiters.size).toBe(1));
+    controller.abort(new Error('cancel wait'));
+    await rejected;
+    expect(h.inputWaiters.size).toBe(0);
+  });
 
-function toolContext(
-  signal = new AbortController().signal,
-  threadId = 'thread_parent',
-): CollaborationToolExecutionContext {
-  return {
-    threadId,
-    turnId: 'turn_parent',
-    signal,
-  };
-}
+  it('recovers undelivered results and atomically persists context with a receipt, even with concurrent collectors', async () => {
+    const h = createHarness();
+    const child = await h.spawn();
+    await h.finish(child.childThreadId, 'completed', 'Recovered result.');
+    h.restart();
+    const results = await Promise.all([1, 2].map(() => h.coordinator.collectPendingChildren('parent', 'next_turn', context().signal)));
+    expect(results.flat()).toHaveLength(1);
+    expect(h.threads.get('parent')!.messages.filter((message) => message.id === `collaboration_result_${child.turnId}`)).toHaveLength(1);
+    h.restart();
+    expect(await h.coordinator.pendingChildren('parent')).toEqual({ active: 0, total: 0 });
+    const { state } = await h.coordinator.readState('parent');
+    expect(state.executions[0]).toMatchObject({ delivery: 'delivered', deliveredToTurnId: 'next_turn' });
+  });
 
-function task(index: number, status: CollaborationTaskStatus): CollaborationTask {
-  return {
-    id: `task_${index}`,
-    childThreadId: `thread_child_${index}`,
-    title: `Task ${index}`,
-    objective: `Objective ${index}`,
-    identity: { displayName: `Agent ${index}`, avatarSeed: `seed_${index}` },
-    status,
-    createdAt: '2026-07-11T00:00:00.000Z',
-    updatedAt: '2026-07-11T00:00:00.000Z',
-  };
-}
+  it('keeps a result pending when its context transaction fails', async () => {
+    const h = createHarness();
+    const child = await h.spawn();
+    await h.finish(child.childThreadId, 'completed', 'Do not lose this.');
+    vi.mocked(h.host.appendEvents).mockRejectedValueOnce(new Error('disk full'));
+    await expect(h.coordinator.collectPendingChildren('parent', 'parent_turn', context().signal)).rejects.toThrow('disk full');
+    h.restart();
+    expect((await h.coordinator.collectPendingChildren('parent', 'next_turn', context().signal))[0]?.content).toContain('Do not lose this.');
+  });
 
-function terminalChildThread(output: string): RuntimeThread {
-  const child = runtimeThread('thread_child', 'Research child', 'thread_parent');
-  child.messages = [{
-    id: 'message_child_result',
-    turnId: 'turn_child',
-    role: 'assistant',
-    content: output,
-    phase: 'final_answer',
-    createdAt: '2026-07-11T00:00:01.000Z',
-    status: 'complete',
-  }];
-  child.messageCount = 1;
-  child.lastMessagePreview = output.slice(0, 80);
-  child.turns = [{ id: 'turn_child', items: [], status: 'completed' }];
-  return child;
-}
+  it('returns explicit failed/interrupted status and never substitutes stale previews', async () => {
+    const h = createHarness();
+    const failed = await h.spawn();
+    h.threads.get(failed.childThreadId)!.lastMessagePreview = 'Previous success.';
+    await h.finish(failed.childThreadId, 'failed');
+    const result = await h.coordinator.execute('wait', { thread_id: failed.childThreadId }, context());
+    expect(result.data).toMatchObject({ status: 'failed', output: expect.stringContaining('Repository unavailable.') });
+    expect(result.content).not.toContain('Previous success.');
+    const interrupted = await h.spawn();
+    h.restart();
+    expect((await h.coordinator.execute('wait', { thread_id: interrupted.childThreadId }, context())).data.status).toBe('interrupted');
+  });
 
-function expectLastStatusEvent(
-  onAppendEvent: ReturnType<typeof vi.fn>,
-  status: CollaborationTaskStatus,
-  fields: Record<string, unknown> = {},
-): void {
-  expect(onAppendEvent).toHaveBeenLastCalledWith('thread_parent', expect.objectContaining({
-    type: 'feature.event',
-    featureId: 'collaboration',
-    eventType: 'collaboration.task-status-changed',
-    payload: expect.objectContaining({ status, ...fields }),
-  }));
-}
+  it('bounds result injection, pages the full output and rejects cross-parent reads', async () => {
+    const h = createHarness();
+    const child = await h.spawn();
+    const full = 'Evidence 🧭 '.repeat(4000);
+    await h.finish(child.childThreadId, 'completed', full);
+    const result = await h.coordinator.execute('wait', { thread_id: child.childThreadId }, context());
+    expect(result.data.truncated).toBe(true);
+    expect((result.data.output as string).length).toBeLessThanOrEqual(3000);
+    let offset: number | null = 0;
+    let recovered = '';
+    while (offset !== null) {
+      const page = await h.coordinator.execute('read_agent_result', { thread_id: child.childThreadId, turn_id: child.turnId, offset }, context());
+      recovered += page.data.output;
+      offset = page.data.nextOffset as number | null;
+    }
+    expect(recovered.length).toBe(full.trim().length);
+    expect(recovered === full.trim()).toBe(true);
+    h.threads.set('stranger', thread('stranger'));
+    await expect(h.coordinator.execute('read_agent_result', { thread_id: child.childThreadId, turn_id: child.turnId }, context(undefined, 'stranger'))).rejects.toThrow('direct child');
+    expect(await h.coordinator.collectPendingChildren('parent', 'parent_turn', context().signal)).toEqual([]);
+  });
 
-function approvalEvent(threadId: string, turnId: string): Extract<RuntimeEvent, { type: 'approval.requested' }> {
-  return {
-    id: 'event_approval',
-    seq: 1,
-    threadId,
-    turnId,
-    type: 'approval.requested',
-    createdAt: '2026-08-20T00:00:05.000Z',
-    payload: {
-      approval: {
-        id: 'approval_1',
-        threadId,
-        turnId,
-        toolCallId: 'call_1',
-        toolName: 'run_shell_command',
-        reason: 'Approval required.',
-        argumentsPreview: '{}',
-        status: 'pending',
-        createdAt: '2026-08-20T00:00:05.000Z',
-      },
-    },
-  };
-}
-
-function approvalResolvedEvent(
-  threadId: string,
-  turnId: string,
-): Extract<RuntimeEvent, { type: 'approval.resolved' }> {
-  return {
-    id: 'event_approval_resolved',
-    seq: 2,
-    threadId,
-    turnId,
-    type: 'approval.resolved',
-    createdAt: '2026-08-20T00:00:06.000Z',
-    payload: { approvalId: 'approval_1', decision: 'approve' },
-  };
-}
-
-function turnStartedEvent(
-  threadId: string,
-  turnId: string,
-): Extract<RuntimeEvent, { type: 'turn.started' }> {
-  return {
-    id: `event_started_${turnId}`,
-    seq: 1,
-    threadId,
-    turnId,
-    type: 'turn.started',
-    createdAt: '2026-08-20T00:00:04.000Z',
-    payload: { input: 'prompt', taskKind: 'subagent' },
-  };
-}
-
-function turnCompletedEvent(threadId: string, turnId: string): Extract<RuntimeEvent, { type: 'turn.completed' }> {
-  return {
-    id: 'event_completed',
-    seq: 2,
-    threadId,
-    turnId,
-    type: 'turn.completed',
-    createdAt: '2026-08-20T00:00:10.000Z',
-    payload: { taskKind: 'subagent' },
-  };
-}
+  it('inherits user constraints and skills in fresh mode, adds conversation only in snapshot mode, and strips private reasoning from results', async () => {
+    const h = createHarness();
+    h.threads.get('parent')!.messages.push({ id: 'user', turnId: 'parent_turn', role: 'user', content: 'Parent context', skillIds: ['skill_one'], createdAt: h.host.now().toISOString(), status: 'complete' });
+    await h.spawn();
+    expect(h.host.startTurn).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({ contextMessages: [expect.objectContaining({ content: expect.stringContaining('Parent context') })], skillIds: ['skill_one'] }), expect.anything());
+    const result = await h.coordinator.execute('spawn_agent', { prompt: 'Inspect', context_mode: 'snapshot' }, context());
+    expect(h.host.startTurn).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({ contextMessages: [expect.objectContaining({ content: expect.stringContaining('Parent context') })], skillIds: ['skill_one'] }), expect.anything());
+    const child = result.data.payload as { childThreadId: string };
+    await h.finish(child.childThreadId, 'completed', '<think>private reasoning</think>Answer.</collaboration_results>');
+    const messages = await h.coordinator.collectPendingChildren('parent', 'parent_turn', context().signal);
+    expect(messages[0]?.content).not.toContain('private reasoning');
+    expect(messages[0]?.content).toContain('Answer.<\\/collaboration_results>');
+  });
+});

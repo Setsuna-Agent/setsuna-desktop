@@ -207,7 +207,7 @@
 }
 .git-changes-composer textarea::placeholder { color: var(--app-text-muted); }
 /* The composer surface owns the field outline and focus state. */
-.git-changes-composer .sd-textarea:focus-visible { outline: 0; box-shadow: none; }
+.git-changes-composer .sd-textarea:focus { outline: 0; box-shadow: none; background: transparent; }
 .git-changes-composer__toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; }
 .git-changes-composer__generate-tooltip { display: inline-flex; }
 .git-changes-composer__generate { display: grid; width: 28px; height: 28px; padding: 0; place-items: center; border: 0; border-radius: var(--app-radius-full); background: transparent; color: var(--app-text-muted); cursor: pointer; }

@@ -42,24 +42,39 @@ export function useCollaborationState(threadId: string | null | undefined): Coll
   );
 }
 
+export function useCollaborationActions() {
+  return useContext(CollaborationStateContext);
+}
+
 export type CollaborationTaskOpenHandler = (
   parentThreadId: string,
   task: CollaborationTask,
 ) => void;
 
-const CollaborationNavigationContext = createContext<CollaborationTaskOpenHandler | null>(null);
+type CollaborationNavigation = {
+  openTask: CollaborationTaskOpenHandler;
+  openList: (parentThreadId: string) => void;
+};
+
+const CollaborationNavigationContext = createContext<CollaborationNavigation | null>(null);
 
 export function CollaborationTaskNavigationProvider({
   children,
   onOpenTask,
-}: Readonly<{ children: ReactNode; onOpenTask: CollaborationTaskOpenHandler }>) {
+  onOpenList,
+}: Readonly<{
+  children: ReactNode;
+  onOpenTask: CollaborationTaskOpenHandler;
+  onOpenList: (parentThreadId: string) => void;
+}>) {
+  const navigation = useMemo(() => ({ openTask: onOpenTask, openList: onOpenList }), [onOpenTask, onOpenList]);
   return (
-    <CollaborationNavigationContext.Provider value={onOpenTask}>
+    <CollaborationNavigationContext.Provider value={navigation}>
       {children}
     </CollaborationNavigationContext.Provider>
   );
 }
 
-export function useCollaborationTaskNavigation(): CollaborationTaskOpenHandler | null {
+export function useCollaborationTaskNavigation(): CollaborationNavigation | null {
   return useContext(CollaborationNavigationContext);
 }

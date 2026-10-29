@@ -9,6 +9,7 @@ import type {
   SendTurnInput,
 } from '@setsuna-desktop/contracts';
 import { isRuntimeInputMessageAttachment } from '@setsuna-desktop/contracts';
+import type { CollaborationSubagentTurnInput } from '@setsuna-desktop/feature-collaboration/contracts';
 import type { ReviewControl, ReviewTurnRequest, WorkspaceTaskTurnRequest } from '@setsuna-desktop/feature-review/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { ConfigStore } from '../../ports/config-store.js';
@@ -26,6 +27,7 @@ import {
 export type RuntimeTurnThinkingOptions = Pick<ModelRequest, 'thinking' | 'reasoningEffort'>;
 
 export type RuntimeTurnExecutionOptions = {
+  userInitiated?: boolean;
   unattended?: boolean;
   clientId?: string;
   includeUserMessageInModel?: boolean;
@@ -143,7 +145,7 @@ export class RuntimeTurnRunFactory {
       turnId,
       threadId,
       taskKind,
-      acceptingSteers: taskKind === 'regular',
+      acceptingSteers: true,
     }, (task) => this.options.runTurn({
       attachments: [],
       signal: task.controller.signal,
@@ -173,34 +175,55 @@ export class RuntimeTurnRunFactory {
    */
   async createSubagent(
     threadId: string,
-    input: { prompt: string; title?: string },
+    input: CollaborationSubagentTurnInput,
     execution: { unattended?: boolean } = {},
   ): Promise<{ turnId: string; done: Promise<void> }> {
     const text = input.prompt.trim();
     if (!text) throw new Error('Subagent prompt is required.');
     await this.options.turnTasks.waitForFinalizingRegularTurn(threadId);
-    const thread = await this.requireThread(threadId);
+    let thread = await this.requireThread(threadId);
     const turnModel = await this.resolveTurnModel(thread);
-    const turnId = this.options.ids.id('turn');
+    const turnId = input.turnId ?? this.options.ids.id('turn');
+    const attachments = input.attachments ?? [];
+    await this.options.inputGuard.assertAttachmentsSupported(attachments, turnModel?.model);
+    for (const message of input.contextMessages ?? []) {
+      await this.options.eventWriter.append(threadId, {
+        id: this.options.ids.id('event'), threadId, turnId, type: 'message.created',
+        createdAt: message.createdAt, payload: { message },
+      });
+    }
+    if (input.contextMessages?.length) thread = await this.requireThread(threadId);
     const run = this.options.turnTasks.run({
       turnId,
       threadId,
       taskKind: 'subagent',
-      acceptingSteers: false,
+      acceptingSteers: true,
     }, (task) => this.options.runTurn({
-      attachments: [],
+      attachments,
       signal: task.controller.signal,
-      skillIds: [],
+      skillIds: [...(input.skillIds ?? [...thread.messages].reverse().find((message) => message.role === 'user' && message.skillIds?.length)?.skillIds ?? [])],
       text,
       turnModel,
+      thinkingOptions: input.configuration ? {
+        ...(input.configuration.thinking !== undefined ? { thinking: input.configuration.thinking } : {}),
+        ...(input.configuration.reasoningEffort ? { reasoningEffort: input.configuration.reasoningEffort } : {}),
+      } : undefined,
       thread,
       threadId,
       turnId,
       options: {
         unattended: execution.unattended,
-        runtimeContextMessages: execution.unattended ? unattendedTurnContext(turnId, this.options.clock.now().toISOString()) : undefined,
-        inputKind: 'subagent_task',
-        promptSource: 'collaboration',
+        runtimeContextMessages: [
+          ...(input.configuration?.instructions ? [{
+            id: `collaboration_role_${turnId}`, turnId, role: 'developer' as const,
+            content: input.configuration.instructions, createdAt: this.options.clock.now().toISOString(),
+            visibility: 'model' as const, status: 'complete' as const,
+          }] : []),
+          ...(execution.unattended ? unattendedTurnContext(turnId, this.options.clock.now().toISOString()) : []),
+        ],
+        userInitiated: input.userInitiated,
+        inputKind: input.userInitiated ? undefined : 'subagent_task',
+        promptSource: input.userInitiated ? undefined : 'collaboration',
         taskKind: 'subagent',
       },
     }));
@@ -433,7 +456,6 @@ export class RuntimeTurnRunFactory {
 function unattendedTurnContext(turnId: string, createdAt: string): RuntimeMessage[] {
   return [{
     id: 'unattended_task_policy', turnId, role: 'developer', visibility: 'model', status: 'complete', createdAt,
-    // Child agents retain their read-only boundary even when their parent runs with full access.
     content: 'This is an unattended scheduled task. Execute the assigned work autonomously within this turn\'s tool permissions. Do not ask the user questions or display input forms. Infer reasonable defaults; if essential information or credentials are missing, report the blocker in the final answer and finish. Do not create new schedules or persistent goals from this run.',
   }];
 }

@@ -94,6 +94,8 @@ export type ApprovalReviewModelResult = Readonly<{
 export interface ApprovalReviewRuntimeHost {
   now(): Date;
   getThread(threadId: string): Promise<RuntimeThread | null>;
+  /** Returns only the owning parent context verified against the durable execution ledger. */
+  getDelegatedAuthorizationContext?(threadId: string, turnId: string): Promise<RuntimeThread | null>;
   resolveModel(input: Readonly<{
     selection: ApprovalReviewModelSelection;
     thread: RuntimeThread;

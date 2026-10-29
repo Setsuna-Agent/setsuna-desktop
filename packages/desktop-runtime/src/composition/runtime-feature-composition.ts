@@ -185,6 +185,7 @@ export async function activateBuiltinRuntimeFeatures(
       provideHostCapability(
         approvalReviewRuntimeHostCapability,
         createRuntimeApprovalReviewHost({
+          getDelegatedAuthorizationContext: (threadId, turnId) => runtime.agentLoop.collaborationAuthorizationContext(threadId, turnId),
           clock: runtime.clock,
           configStore: runtime.configStore,
           modelClient: runtime.modelClient,

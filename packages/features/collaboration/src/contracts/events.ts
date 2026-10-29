@@ -4,6 +4,7 @@ import {
   type SequencedThreadEventRecord,
 } from '@setsuna-desktop/feature-core/events';
 import { collaborationFeature } from './definition.js';
+import { collaborationExecutionCodec, type CollaborationExecution } from './execution.js';
 import {
   collaborationTaskCodec,
   isTerminalCollaborationTaskStatus,
@@ -41,7 +42,7 @@ export function reduceCollaborationTaskCreated(
   task: CollaborationTask,
 ): CollaborationState {
   if (state.tasks.some((candidate) => candidate.id === task.id)) return state;
-  return Object.freeze({ tasks: Object.freeze([...state.tasks, collaborationTaskCodec.parse(task)]) });
+  return Object.freeze({ ...state, tasks: Object.freeze([...state.tasks, collaborationTaskCodec.parse(task)]) });
 }
 
 export function reduceCollaborationTaskStatusChanged(
@@ -63,7 +64,44 @@ export function reduceCollaborationTaskStatusChanged(
       : {}),
   });
   return Object.freeze({
+    ...state,
     tasks: Object.freeze(state.tasks.map((task) => task.id === updated.id ? updated : task)),
+  });
+}
+
+export const collaborationExecutionChangedEvent = defineFeatureEventContract<CollaborationExecution>({
+  featureId: collaborationFeature.id,
+  eventType: 'collaboration.execution-changed',
+  currentVersion: 1,
+  codecs: { 1: collaborationExecutionCodec },
+  migrate: (_version, value) => collaborationExecutionCodec.parse(value),
+});
+
+export function reduceCollaborationExecutionChanged(state: CollaborationState, execution: CollaborationExecution): CollaborationState {
+  if (!state.tasks.some((task) => task.id === execution.taskId)) return state;
+  const existing = state.executions.find((entry) => entry.turnId === execution.turnId);
+  // Ownership and terminal outcomes cannot be rewritten by a late event or a delivery receipt.
+  if (existing && (existing.taskId !== execution.taskId || existing.parentTurnId !== execution.parentTurnId
+    || (isTerminalCollaborationTaskStatus(existing.status) && existing.status !== execution.status)
+    || (existing.delivery !== 'pending' && existing.delivery !== execution.delivery))) return state;
+  const executions = existing
+    ? state.executions.map((entry) => entry.turnId === execution.turnId ? execution : entry)
+    : [...state.executions, execution];
+  const latest = executions.filter((entry) => entry.taskId === execution.taskId).at(-1);
+  return Object.freeze({
+    executions: Object.freeze(executions),
+    tasks: Object.freeze(state.tasks.map((task) => {
+      if (task.id !== execution.taskId || latest?.turnId !== execution.turnId) return task;
+      if (existing && existing.status === execution.status && existing.error === execution.error
+        && existing.resultPreview === execution.resultPreview) return task;
+      const { error: _error, resultPreview: _preview, completedAt: _completed, ...base } = task;
+      return collaborationTaskCodec.parse({
+        ...base, activeTurnId: execution.turnId, status: execution.status, updatedAt: execution.updatedAt,
+        ...(execution.error ? { error: execution.error } : {}),
+        ...(execution.resultPreview ? { resultPreview: execution.resultPreview } : {}),
+        ...(isTerminalCollaborationTaskStatus(execution.status) ? { completedAt: task.activeTurnId === execution.turnId ? task.completedAt ?? execution.updatedAt : execution.updatedAt } : {}),
+      });
+    })),
   });
 }
 

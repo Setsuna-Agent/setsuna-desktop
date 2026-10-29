@@ -27,7 +27,7 @@ import {
   neutralizeSkillTags,
 } from './prompt-utils.js';
 import { runtimeBaseInstructions } from './runtime-base-instructions.js';
-import { runtimeCollaborationPrompt } from './runtime-collaboration-prompt.js';
+import { runtimeCollaborationChildPrompt, runtimeCollaborationPrompt } from './runtime-collaboration-prompt.js';
 import { runtimeEnvironmentPrompt } from './runtime-environment-prompt.js';
 import { runtimePermissionsPrompt } from './runtime-permissions-prompt.js';
 import { runtimeProjectWorkflowPrompt } from './runtime-project-workflow-prompt.js';
@@ -121,7 +121,9 @@ export class RuntimePromptContextAssembler {
       fragments: [
         baseInstructionFragment(language),
         ...(toolPrompt ? [toolPolicyFragment(toolPrompt)] : []),
-        ...(tools.some((tool) => tool.name === 'spawn_agent') ? [collaborationModeFragment(language)] : []),
+        ...(thread.kind !== 'side' && thread.parentThreadId
+          ? [collaborationModeFragment(language, thread.parentThreadId)]
+          : tools.some((tool) => tool.name === 'spawn_agent') ? [collaborationModeFragment(language)] : []),
         environmentFragment(environment, language),
         permissionsFragment(config, toolContext, permissionToolNames),
         ...personalizationFragments(config, language),
@@ -304,14 +306,14 @@ function toolPolicyFragment(content: string): RuntimePromptFragment {
   };
 }
 
-function collaborationModeFragment(language: RuntimeInterfaceLanguage): RuntimePromptFragment {
+function collaborationModeFragment(language: RuntimeInterfaceLanguage, parentThreadId?: string): RuntimePromptFragment {
   return {
-    id: 'desktop_collaboration_mode',
+    id: parentThreadId ? 'desktop_collaboration_child' : 'desktop_collaboration_mode',
     role: 'developer',
     source: 'tool_policy',
     trust: 'runtime',
     lifecycle: 'turn',
-    content: runtimeCollaborationPrompt(language),
+    content: parentThreadId ? runtimeCollaborationChildPrompt(parentThreadId, language) : runtimeCollaborationPrompt(language),
   };
 }
 

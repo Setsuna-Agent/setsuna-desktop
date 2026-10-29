@@ -38,12 +38,13 @@ describe('CollaborationSpawnResultView', () => {
     const controllerForThread = vi.fn(() => controller);
     const service: CollaborationRendererStateService = {
       available: true,
+      act: vi.fn(),
       controller: controllerForThread,
     };
     const openTask = vi.fn();
     const view = render(
       <CollaborationRendererProvider service={service}>
-        <CollaborationTaskNavigationProvider onOpenTask={openTask}>
+        <CollaborationTaskNavigationProvider onOpenTask={openTask} onOpenList={vi.fn()}>
           <CollaborationSpawnResultView
             payload={spawnResult()}
             threadId="thread_fork"

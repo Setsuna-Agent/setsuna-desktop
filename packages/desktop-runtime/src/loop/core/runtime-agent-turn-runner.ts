@@ -54,7 +54,7 @@ type RuntimeAgentTurnRunnerOptions = {
   toolHost?: ToolHost;
   turnFinalizer: Pick<RuntimeTurnFinalizer, 'finish' | 'publishReviewModeMessage'>;
   turnInputs: Pick<RuntimeTurnInputCoordinator, 'drainMailboxMessages' | 'drainSteers'>;
-  turnTasks: Pick<RuntimeTurnTaskRegistry, 'stopAcceptingSteers'>;
+  turnTasks: Pick<RuntimeTurnTaskRegistry, 'stopAcceptingSteers' | 'taskFor'>;
   turnTermination: Pick<RuntimeTurnTerminationCoordinator, 'publishCancelledOnce'>;
   extensions?: Pick<ExtensionRuntime, 'dispatch'>;
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
@@ -81,7 +81,6 @@ type RuntimeAgentTurnRunnerOptions = {
   ): Promise<void>;
 };
 
-const COLLABORATION_WAIT_NOTE = '\n\n子线程仍在执行；主任务会继续等待，收到调研结果后再统一收口。';
 
 export class RuntimeAgentTurnRunner {
   constructor(private readonly options: RuntimeAgentTurnRunnerOptions) {}
@@ -103,7 +102,9 @@ export class RuntimeAgentTurnRunner {
     const createdAt = this.options.clock.now().toISOString();
     let activeAssistantMessageId: string | null = null;
     const publishUserMessage = options.publishUserMessage !== false;
-    const taskKind = options.taskKind ?? 'regular';
+    // Direct ordinary resumes keep delegated provenance; explicit review/goal modes keep their own policy.
+    const taskKind = (options.taskKind === undefined || options.taskKind === 'regular')
+      && thread.kind !== 'side' && thread.parentThreadId ? 'subagent' : options.taskKind ?? 'regular';
     const selectedSkillIds = [...new Set(skillIds.map((skillId) => skillId.trim()).filter(Boolean))];
     const selectedSkillReferences = normalizeRuntimeSkillReferences({
       content: text,
@@ -115,8 +116,8 @@ export class RuntimeAgentTurnRunner {
       clientId: options.clientId,
       turnId,
       role: 'user',
-      inputKind: options.inputKind,
-      promptSource: options.promptSource,
+      inputKind: taskKind === 'subagent' && !options.userInitiated ? 'subagent_task' : options.inputKind,
+      promptSource: taskKind === 'subagent' && !options.userInitiated ? 'collaboration' : options.promptSource,
       content: text,
       skillIds: selectedSkillIds.length ? selectedSkillIds : undefined,
       skillReferences: selectedSkillReferences.length ? selectedSkillReferences : undefined,
@@ -146,6 +147,8 @@ export class RuntimeAgentTurnRunner {
     });
     let activeSkillIds = [...selectedSkillIds];
     let activeThinkingOptions = thinkingOptions;
+    const runningTask = this.options.turnTasks.taskFor(threadId, turnId);
+    if (runningTask) runningTask.thinkingOptions = activeThinkingOptions;
 
     await this.options.appendEvent(threadId, {
       id: this.options.ids.id('event'),
@@ -278,6 +281,10 @@ export class RuntimeAgentTurnRunner {
         throwIfAborted(signal);
         appendMailboxMessagesToConversation(await this.options.turnInputs.drainMailboxMessages(threadId, turnId));
         appendSteersToConversation(await this.options.turnInputs.drainSteers(threadId, turnId));
+        if (runningTask) runningTask.thinkingOptions = activeThinkingOptions;
+        const collaboration = this.options.collaborationControl();
+        // Receive child results between model steps even while the parent still has tools to run.
+        conversationMessages.push(...await collaboration.collectPendingChildren(threadId, turnId, signal, { wait: false }));
         const stepContext = await this.options.samplingContexts.build({
           loadedToolNames,
           contextTokenCalibration,
@@ -295,7 +302,7 @@ export class RuntimeAgentTurnRunner {
           turnId,
           samplingModel,
           turnModel,
-          toolAccess: taskKind === 'review' || taskKind === 'subagent' ? 'read-only' : 'all',
+          toolAccess: taskKind === 'review' ? 'read-only' : 'all',
         });
         cleanupEnvironment = stepContext.toolContext.environment;
         conversationMessages = stepContext.conversationMessages;
@@ -367,41 +374,30 @@ export class RuntimeAgentTurnRunner {
           continue;
         }
 
+        const continueWithInput = async (mailbox: RuntimeMessage[], steers: RuntimeQueuedSteer[]) => {
+          await this.options.completeMessage(threadId, turnId, assistantMessageId, { content: roundText, phase: 'commentary', usage: sampled.usage, memoryCitation: roundMemoryCitation, providerMetadata: assistantMessage.providerMetadata });
+          activeAssistantMessageId = null;
+          conversationMessages.push({
+            ...assistantMessage,
+            content: roundText,
+            phase: 'commentary',
+            memoryCitation: roundMemoryCitation,
+            status: 'complete',
+          });
+          appendMailboxMessagesToConversation(mailbox);
+          appendSteersToConversation(steers);
+        };
         const pendingMailboxMessages = await this.options.turnInputs.drainMailboxMessages(threadId, turnId);
         const pendingSteers = await this.options.turnInputs.drainSteers(threadId, turnId);
         if (pendingMailboxMessages.length || pendingSteers.length) {
-          await this.options.completeMessage(threadId, turnId, assistantMessageId, { content: roundText, phase: 'commentary', usage: sampled.usage, memoryCitation: roundMemoryCitation, providerMetadata: assistantMessage.providerMetadata });
-          activeAssistantMessageId = null;
-          conversationMessages.push({
-            ...assistantMessage,
-            content: roundText,
-            phase: 'commentary',
-            memoryCitation: roundMemoryCitation,
-            status: 'complete',
-          });
-          appendMailboxMessagesToConversation(pendingMailboxMessages);
-          appendSteersToConversation(pendingSteers);
+          await continueWithInput(pendingMailboxMessages, pendingSteers);
           continue;
         }
 
-        const collaboration = this.options.collaborationControl();
-        const pendingChildren = collaboration.pendingChildren(threadId);
+        const pendingChildren = await collaboration.pendingChildren(threadId);
         if (pendingChildren.total > 0) {
-          if (pendingChildren.active > 0) {
-            roundText += COLLABORATION_WAIT_NOTE;
-            await this.options.publishAssistantItemDelta(threadId, turnId, assistantMessageId, COLLABORATION_WAIT_NOTE);
-            await this.options.publishAssistantDelta(threadId, turnId, assistantMessageId, COLLABORATION_WAIT_NOTE);
-          }
-          await this.options.completeMessage(threadId, turnId, assistantMessageId, { content: roundText, phase: 'commentary', usage: sampled.usage, memoryCitation: roundMemoryCitation, providerMetadata: assistantMessage.providerMetadata });
-          activeAssistantMessageId = null;
-          conversationMessages.push({
-            ...assistantMessage,
-            content: roundText,
-            phase: 'commentary',
-            memoryCitation: roundMemoryCitation,
-            status: 'complete',
-          });
-          // 由 runtime 强制汇合：只要派生子任务尚未结束，父协作轮次就不能完成。
+          await continueWithInput([], []);
+          // A child completion or newly queued input wakes this join; the next step drains input.
           conversationMessages.push(...await collaboration.collectPendingChildren(threadId, turnId, signal));
           continue;
         }
@@ -429,6 +425,16 @@ export class RuntimeAgentTurnRunner {
         }
 
         this.options.turnTasks.stopAcceptingSteers(threadId, turnId);
+        // Close admission before the last drain. Input accepted during ledger/hook awaits
+        // belongs to this turn and must not be stranded behind its final answer.
+        const finalMailbox = await this.options.turnInputs.drainMailboxMessages(threadId, turnId);
+        const finalSteers = await this.options.turnInputs.drainSteers(threadId, turnId);
+        if (finalMailbox.length || finalSteers.length) {
+          const task = this.options.turnTasks.taskFor(threadId, turnId);
+          if (task) task.acceptingSteers = true;
+          await continueWithInput(finalMailbox, finalSteers);
+          continue;
+        }
         settledContent = roundText;
         await this.options.turnFinalizer.finish({
           threadId,
@@ -516,26 +522,31 @@ export class RuntimeAgentTurnRunner {
       });
       throw error;
     } finally {
-      await this.dispatchTurnSettled(
-        thread,
-        turnId,
-        cleanupStatus,
-        settledContent,
-        cleanupEnvironment?.cwd,
-        runtimeConfig?.features,
-        options.unattended,
-      );
       try {
-        await this.cleanupToolHostTurn({
-          ...(options.unattended ? { unattended: true } : {}),
-          ...(cleanupEnvironment ? { environment: cleanupEnvironment } : {}),
-          threadId,
-          projectId: thread.projectId,
+        // Hooks may end a turn before its normal join. No owned child outlives that boundary.
+        await this.options.collaborationControl().cancelChildren(threadId, turnId);
+        await this.dispatchTurnSettled(
+          thread,
           turnId,
-        }, { status: cleanupStatus });
+          cleanupStatus,
+          settledContent,
+          cleanupEnvironment?.cwd,
+          runtimeConfig?.features,
+          options.unattended,
+        );
       } finally {
-        // 轮次级审批只在当前轮次活动期间有效。
-        this.options.toolExecutor.cleanupTurn(turnId);
+        try {
+          await this.cleanupToolHostTurn({
+            ...(options.unattended ? { unattended: true } : {}),
+            ...(cleanupEnvironment ? { environment: cleanupEnvironment } : {}),
+            threadId,
+            projectId: thread.projectId,
+            turnId,
+          }, { status: cleanupStatus });
+        } finally {
+          // 轮次级审批只在当前轮次活动期间有效。
+          this.options.toolExecutor.cleanupTurn(turnId);
+        }
       }
     }
   }

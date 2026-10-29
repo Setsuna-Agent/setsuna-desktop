@@ -24,6 +24,7 @@
   background: transparent;
   font-size: 14px;
 }
+.browser-start-search .browser-start-search__input:focus { background: transparent; }
 .browser-start-search .browser-start-search__submit {
   flex: 0 0 auto;
   color: var(--app-text-muted);

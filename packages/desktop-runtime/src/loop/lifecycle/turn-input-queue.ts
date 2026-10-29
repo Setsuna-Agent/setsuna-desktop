@@ -14,13 +14,13 @@ export type RuntimeQueuedTurnInput =
 /**
  * 用于任务启动后到达、且模型可见输入的轮次本地队列。
  *
- * 当前循环会消费 steer 消息；邮箱条目复用同一顺序边界，使多代理投递无需增加
- * 更多 ActiveTurn 字段即可接入。
+ * 队列通知可唤醒协作等待；邮箱正文和消费凭据由 coordinator 持久化。
  */
 export class RuntimeTurnInputQueue {
   private readonly pending: RuntimeQueuedTurnInput[] = [];
   private writesInFlight = 0;
   private readonly writeWaiters: Array<() => void> = [];
+  private readonly inputWaiters = new Set<() => void>();
 
   beginWrite(): void {
     this.writesInFlight += 1;
@@ -41,10 +41,28 @@ export class RuntimeTurnInputQueue {
 
   enqueueSteer(input: RuntimeQueuedSteer): void {
     this.pending.push({ type: 'steer', input });
+    this.inputWaiters.forEach((resolve) => resolve());
   }
 
   enqueueMailbox(input: RuntimeMailboxDelivery): void {
     this.pending.push({ type: 'mailbox', input });
+    this.inputWaiters.forEach((resolve) => resolve());
+  }
+
+  waitForInput(signal: AbortSignal): Promise<void> {
+    signal.throwIfAborted();
+    if (this.hasPending()) return Promise.resolve();
+    return new Promise<void>((resolve, reject) => {
+      const cleanup = () => {
+        this.inputWaiters.delete(ready);
+        signal.removeEventListener('abort', abort);
+      };
+      const ready = () => { cleanup(); resolve(); };
+      const abort = () => { cleanup(); reject(signal.reason); };
+      this.inputWaiters.add(ready);
+      signal.addEventListener('abort', abort, { once: true });
+      if (this.hasPending()) ready();
+    });
   }
 
   takeSteers(): RuntimeQueuedSteer[] {
@@ -57,10 +75,11 @@ export class RuntimeTurnInputQueue {
     return steers;
   }
 
-  takeMailbox(): RuntimeMailboxDelivery[] {
+  takeMailbox(ids?: readonly string[]): RuntimeMailboxDelivery[] {
     const inputs: RuntimeMailboxDelivery[] = [];
     this.takeMatching((item) => {
       if (item.type !== 'mailbox') return false;
+      if (ids && !ids.includes(item.input.id)) return false;
       inputs.push(item.input);
       return true;
     });

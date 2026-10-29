@@ -1,4 +1,7 @@
 import { defineRuntimeCodec } from '@setsuna-desktop/feature-core/codec';
+import { collaborationExecutionCodec, type CollaborationExecution } from './execution.js';
+import { collaborationAgentConfigurationCodec, type CollaborationAgentConfiguration } from './agents.js';
+import { collaborationAgentAvatarCodec, type CollaborationAgentAvatar } from './avatar.js';
 
 export type CollaborationTaskStatus =
   | 'queued'
@@ -10,11 +13,14 @@ export type CollaborationTaskStatus =
   | 'interrupted';
 
 export type CollaborationAgentIdentity = Readonly<{
+  /** Snapshot of the configured avatar; absent for generated and older identities. */
+  avatar?: CollaborationAgentAvatar;
   avatarSeed: string;
   displayName: string;
 }>;
 
 export type CollaborationTask = Readonly<{
+  configuration?: CollaborationAgentConfiguration;
   activeTurnId?: string;
   childThreadId: string;
   completedAt?: string;
@@ -31,6 +37,7 @@ export type CollaborationTask = Readonly<{
 
 export type CollaborationState = Readonly<{
   tasks: readonly CollaborationTask[];
+  executions: readonly CollaborationExecution[];
 }>;
 
 export type CollaborationStateSnapshot = Readonly<{
@@ -51,6 +58,7 @@ const TASK_STATUSES = new Set<CollaborationTaskStatus>([
 export const collaborationAgentIdentityCodec = defineRuntimeCodec<CollaborationAgentIdentity>((value) => {
   const record = objectRecord(value, 'Collaboration agent identity must be an object.');
   return Object.freeze({
+    ...(record.avatar != null ? { avatar: collaborationAgentAvatarCodec.parse(record.avatar) } : {}),
     avatarSeed: requiredString(record.avatarSeed, 'Collaboration avatarSeed'),
     displayName: requiredString(record.displayName, 'Collaboration displayName'),
   });
@@ -63,6 +71,7 @@ export const collaborationTaskCodec = defineRuntimeCodec<CollaborationTask>((val
   }
   return Object.freeze({
     id: requiredString(record.id, 'Collaboration task id'),
+    ...(record.configuration !== undefined ? { configuration: collaborationAgentConfigurationCodec.parse(record.configuration) } : {}),
     childThreadId: requiredString(record.childThreadId, 'Collaboration childThreadId'),
     title: stringValue(record.title, 'Collaboration title'),
     objective: stringValue(record.objective, 'Collaboration objective'),
@@ -80,7 +89,11 @@ export const collaborationTaskCodec = defineRuntimeCodec<CollaborationTask>((val
 export const collaborationStateCodec = defineRuntimeCodec<CollaborationState>((value) => {
   const record = objectRecord(value, 'Collaboration state must be an object.');
   if (!Array.isArray(record.tasks)) throw new Error('Collaboration tasks must be an array.');
-  return Object.freeze({ tasks: Object.freeze(record.tasks.map((task) => collaborationTaskCodec.parse(task))) });
+  if (record.executions !== undefined && !Array.isArray(record.executions)) throw new Error('Collaboration executions must be an array.');
+  return Object.freeze({
+    tasks: Object.freeze(record.tasks.map((task) => collaborationTaskCodec.parse(task))),
+    executions: Object.freeze((record.executions ?? []).map((execution: unknown) => collaborationExecutionCodec.parse(execution))),
+  });
 });
 
 export const collaborationStateSnapshotCodec = defineRuntimeCodec<CollaborationStateSnapshot>((value) => {
@@ -92,7 +105,7 @@ export const collaborationStateSnapshotCodec = defineRuntimeCodec<CollaborationS
 });
 
 export function createInitialCollaborationState(): CollaborationState {
-  return Object.freeze({ tasks: Object.freeze([]) });
+  return Object.freeze({ tasks: Object.freeze([]), executions: Object.freeze([]) });
 }
 
 export function cloneCollaborationState(state: CollaborationState): CollaborationState {

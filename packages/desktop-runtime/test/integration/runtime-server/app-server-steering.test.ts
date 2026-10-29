@@ -217,7 +217,8 @@ describe('runtime server AppServer steering and dynamic tools', () => {
   
         expect(hasMailboxEvent).toBe(true);
         expect(hasCollabItem).toBe(true);
-        expect(updated.messages.filter((message) => message.turnId === startedTurn.turn.id && message.role === 'user')).toHaveLength(1);
+        expect(updated.messages.filter((message) => message.turnId === startedTurn.turn.id && message.role === 'user' && message.visibility !== 'model')).toHaveLength(1);
+        expect(updated.messages.find((message) => message.id === 'mailbox_mail_appserver_1')).toMatchObject({ visibility: 'model', promptSource: 'collaboration' });
       } finally {
         capture.release();
         await capture.close();
@@ -264,7 +265,7 @@ describe('runtime server AppServer steering and dynamic tools', () => {
   
         expect(hasMailboxEvent).toBe(true);
         expect(hasCollabItem).toBe(true);
-        expect(updated.messages.filter((message) => message.turnId === delivered.turnId && message.role === 'user')).toHaveLength(0);
+        expect(updated.messages.filter((message) => message.turnId === delivered.turnId && message.role === 'user' && message.visibility !== 'model')).toHaveLength(0);
       } finally {
         capture.release();
         await capture.close();

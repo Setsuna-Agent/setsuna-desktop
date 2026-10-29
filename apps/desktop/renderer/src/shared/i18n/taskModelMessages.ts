@@ -14,6 +14,6 @@ export const taskModelEnUS = {
   'settings.taskModels.groupContext': 'Context',
   'settings.taskModels.contextCompaction': 'Context compaction',
   'settings.taskModels.contextCompactionDescription': 'Summarize older conversation history when the context window approaches its limit.',
-  'settings.taskModels.followCurrent': 'Follow current chat model',
+  'settings.taskModels.followCurrent': 'Follow the current conversation model',
   'settings.taskModels.unavailable': 'Selected model is unavailable',
 } as const;

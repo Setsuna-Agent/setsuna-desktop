@@ -68,10 +68,15 @@ describe('review steering', () => {
     }
   });
 
-  it.each(['send-now', 'steer'] as const)('applies %s guidance in the same review after a tool, preserving read-only access', async (route) => {
+  it.each([
+    { route: 'send-now', child: false },
+    { route: 'steer', child: false },
+    { route: 'steer', child: true },
+  ] as const)('applies $route guidance in a review (child: $child), preserving read-only access', async ({ route, child }) => {
     const ids = new RandomIdGenerator();
     const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
-    const thread = await threadStore.createThread({ title: 'Review steering' });
+    const parent = child ? await threadStore.createThread({ title: 'Parent' }) : undefined;
+    const thread = await threadStore.createThread({ title: 'Review steering', parentThreadId: parent?.id });
     const modelClient = new ToolCallingModelClient();
     const toolHost = new BlockingToolHost();
     const listTools = vi.spyOn(toolHost, 'listTools').mockResolvedValue([

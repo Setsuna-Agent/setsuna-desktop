@@ -45,7 +45,7 @@ import {
 } from 'react';
 import { latestCompletedFeatureReview, type CommitMessageEditorLauncher } from '../../composition/review-feature-adapter.js';
 import { SideChatPanel } from '../../features/chat/SideChatPanel.js';
-import { SubagentConversationPanel } from '../../features/chat/SubagentConversationPanel.js';
+import { SubagentPanel } from '../../features/chat/SubagentPanel.js';
 import type { ChatModelSelectionHandler } from '../../features/chat/chatModelSelection.js';
 import type { DesktopBrowserPanelInstance } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
 import { desktopWorkspacePanelTargetContext } from '../../features/workspace/hooks/useDesktopWorkspacePanelSession.js';
@@ -475,7 +475,7 @@ export function DesktopWorkspacePanelLayer({
             <FloatingWorkspacePanelSlot hidden={hidden} key={panel.id} placement={placement}>
               <WorkspacePanelRenderer panel={panel} placement={placement} projectId={context.activeProject?.id ?? null} threadId={context.currentThread?.id ?? null} visible={!hidden}>
                 {subagent ? (
-                  <SubagentConversationPanel
+                  <SubagentPanel
                     childThreadId={subagent.threadId}
                     client={context.runtimeClient}
                     config={context.config}

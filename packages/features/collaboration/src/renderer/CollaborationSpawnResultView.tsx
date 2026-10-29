@@ -3,7 +3,6 @@ import type { ChatToolResultViewProps } from '@setsuna-desktop/renderer-contract
 import type { CollaborationSpawnResult } from '../contracts/index.js';
 import { AgentAvatar } from './AgentAvatar.js';
 import { useCollaborationState, useCollaborationTaskNavigation } from './context.js';
-import { SubagentTaskStatus } from './SubagentTaskStatus.js';
 
 export function CollaborationSpawnResultView({
   payload,
@@ -19,7 +18,6 @@ export function CollaborationSpawnResultView({
     : undefined;
   const navigation = useCollaborationTaskNavigation();
   const identity = task?.identity ?? payload.identity;
-  const status = task?.status ?? payload.status;
   const historical = !liveParentThreadId || (!snapshot.loading && !task);
   const canOpen = Boolean(liveParentThreadId && task && navigation);
   return (
@@ -29,14 +27,13 @@ export function CollaborationSpawnResultView({
       disabled={!canOpen}
       title={historical ? translate('feature.collaboration.card.historicalTitle') : undefined}
       onClick={() => {
-        if (liveParentThreadId && task && navigation) navigation(liveParentThreadId, task);
+        if (liveParentThreadId && task && navigation) navigation.openTask(liveParentThreadId, task);
       }}
     >
       <AgentAvatar identity={identity} size={18} />
       <strong className="subagent-task-card__name">
         {identity.displayName || translate('feature.collaboration.card.unnamedAgent')}
       </strong>
-      <SubagentTaskStatus status={status} translate={translate} showLabel={false} />
     </Button>
   );
 }

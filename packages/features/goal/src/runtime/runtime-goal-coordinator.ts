@@ -454,6 +454,9 @@ export class RuntimeGoalCoordinator implements GoalControl {
     parsedArguments: unknown,
     context: GoalToolExecutionContext,
   ): Promise<GoalToolExecutionResult> {
+    // Delegated tasks must settle under their parent; a durable Goal would schedule independent turns.
+    const thread = await this.requireThread(context.threadId);
+    if (thread.parentThreadId || thread.kind === 'side') throw new GoalConflictError('Goal tools are only available in main conversations.');
     const input = recordInput(parsedArguments);
     if (name === 'get_goal') {
       const { goal, verification } = (await this.readState(context.threadId)).state;
