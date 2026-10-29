@@ -74,6 +74,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
     next.origin = event.payload.origin ? { ...event.payload.origin } : next.origin;
     next.workspaceId = event.payload.workspaceId ?? next.workspaceId;
     next.modelBinding = event.payload.modelBinding ? { ...event.payload.modelBinding } : next.modelBinding;
+    next.defaultSkillIds = event.payload.defaultSkillIds ? [...event.payload.defaultSkillIds] : next.defaultSkillIds;
     return next;
   }
 

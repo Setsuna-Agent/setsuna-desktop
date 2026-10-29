@@ -33,6 +33,7 @@ export type ThreadStoreCreateInput = Omit<CreateThreadInput, 'workspaceMode'> & 
   featureId?: string;
   origin?: RuntimeThreadSummary['origin'];
   modelBinding?: RuntimeThreadModelBinding;
+  defaultSkillIds?: readonly string[];
 };
 
 export type ThreadStoreQuery = ThreadQuery & {

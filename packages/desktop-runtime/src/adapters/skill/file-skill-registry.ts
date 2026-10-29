@@ -202,6 +202,7 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
     const state = await this.readState();
     const skills = await this.readSkills(activation?.interfaceLanguage, state);
     const explicitSkillIds = new Set(skillIds.filter(Boolean));
+    const defaultSkillIds = new Set(activation?.defaultSkillIds ?? []);
     const allowAutomaticPluginActivation = explicitSkillIds.size === 0 && Boolean(activation?.text.trim());
     const resolvedSkills = skills.map((parsed) => ({ parsed, detail: toDetail(parsed, state) }));
     return {
@@ -211,6 +212,7 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
       selectedInjections: resolvedSkills
         .filter(({ parsed, detail }) => detail.enabled && (
           explicitSkillIds.has(detail.id)
+          || defaultSkillIds.has(detail.id)
           || (allowAutomaticPluginActivation && pluginSkillMatchesActivation(parsed, activation?.text ?? ''))
         ))
         .map(({ parsed, detail }) => ({

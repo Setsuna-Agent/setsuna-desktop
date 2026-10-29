@@ -36,66 +36,14 @@ import type { RuntimeUsage } from './usage.js';
 import type { ThreadFileChangeState } from './workspace.js';
 import type { RuntimeFileChangeGroups } from './workspace/file-change-group-types.js';
 import type { RuntimeThreadMessagePageInfo } from './threads/message-page.js';
+import { cloneRuntimeSkillReferences, type RuntimeSkillReference } from './threads/skill-references.js';
 import { visibleTextOutsideThinkTags } from './swe/think-tag-scanner.js';
 
 export type * from './message-metadata.js';
 export type * from './thread-context.js';
 export type * from './threads/message-page.js';
+export * from './threads/skill-references.js';
 
-/** UTF-16 offsets into RuntimeMessage.content for one serialized Skill slot. */
-export type RuntimeSkillReference = {
-  skillId: string;
-  start: number;
-  end: number;
-};
-
-export function cloneRuntimeSkillReferences(
-  references: RuntimeSkillReference[] | undefined,
-): RuntimeSkillReference[] | undefined {
-  return references?.map((reference) => ({ ...reference }));
-}
-
-/** Keep only ordered, non-overlapping references for Skills selected on this input. */
-export function normalizeRuntimeSkillReferences({
-  content,
-  references,
-  skillIds,
-}: {
-  content: string;
-  references: RuntimeSkillReference[] | undefined;
-  skillIds: string[];
-}): RuntimeSkillReference[] {
-  const selectedIds = new Set(skillIds);
-  const ordered = (references ?? [])
-    .map((reference, order) => ({
-      order,
-      skillId: reference.skillId.trim(),
-      start: reference.start,
-      end: reference.end,
-    }))
-    .filter((reference) => (
-      selectedIds.has(reference.skillId)
-      && Number.isInteger(reference.start)
-      && Number.isInteger(reference.end)
-      && reference.start >= 0
-      && reference.end > reference.start
-      && reference.end <= content.length
-    ))
-    .sort((left, right) => left.start - right.start || left.end - right.end || left.order - right.order);
-
-  const normalized: RuntimeSkillReference[] = [];
-  let previousEnd = 0;
-  for (const reference of ordered) {
-    if (reference.start < previousEnd) continue;
-    normalized.push({
-      skillId: reference.skillId,
-      start: reference.start,
-      end: reference.end,
-    });
-    previousEnd = reference.end;
-  }
-  return normalized;
-}
 export type RuntimeMessage = {
   id: string;
   clientId?: string;
@@ -736,6 +684,8 @@ export type RuntimeThread = RuntimeThreadSummary & {
   contextBudgetInvalidatedAtSeq?: number;
   mailboxDeliveries?: RuntimeMailboxDeliveryRecord[];
   modelBinding?: RuntimeThreadModelBinding;
+  /** Project skill defaults captured when this conversation is created; applied on every turn. */
+  defaultSkillIds?: string[];
   /** Present only on paged REST snapshots; persisted runtime snapshots omit it. */
   messagePage?: RuntimeThreadMessagePageInfo;
   pendingHookRuns?: RuntimeHookRun[];

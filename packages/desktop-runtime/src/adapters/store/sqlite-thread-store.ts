@@ -323,6 +323,7 @@ export class SqliteThreadStore implements ThreadStore {
         origin: input.origin ? { ...input.origin } : undefined,
         workspaceId: optionalSafeRuntimeId(input.workspaceId, 'Workspace id'),
         modelBinding: input.modelBinding ? { ...input.modelBinding } : undefined,
+        defaultSkillIds: input.defaultSkillIds?.length ? [...new Set(input.defaultSkillIds)] : undefined,
       },
       seq: 1,
     } satisfies StoredThreadEvent;

@@ -8,7 +8,10 @@ import { ProjectEditorDialog } from '../../../../src/app/layout/ProjectEditorDia
 import { useConfiguredModelState } from '../../../../src/composition/ModelProviderFeatureBoundary.js';
 
 vi.mock('../../../../src/composition/ModelProviderFeatureBoundary.js', () => ({ useConfiguredModelState: vi.fn(() => null) }));
-vi.mock('../../../../src/composition/SkillsFeatureBoundary.js', () => ({ useSkillsFeatureSnapshot: () => ({ skills: [{ id: 'skill', name: 'Project skill', enabled: true }] }) }));
+vi.mock('../../../../src/composition/SkillsFeatureBoundary.js', () => ({ useSkillsFeatureSnapshot: () => ({ skills: [
+  { id: 'skill', name: 'Project skill', enabled: true },
+  { id: 'review', name: 'Review', description: 'Inspect changes', enabled: true },
+] }) }));
 afterEach(() => { cleanup(); vi.mocked(useConfiguredModelState).mockReturnValue(null); });
 
 const modelState = {
@@ -45,6 +48,27 @@ describe('ProjectEditorDialog', () => {
     } })));
   });
 
+  it('preserves selections across skill searches and saves hidden selections', async () => {
+    const project: WorkspaceProject = { id: 'target', name: 'Target', createdAt: '', updatedAt: '',
+      conversationDefaults: { skillIds: ['skill', 'missing-skill'] } };
+    const onSave = vi.fn(async () => true);
+    const user = userEvent.setup();
+    render(<ProjectEditorDialog project={project} onSave={onSave} onClose={vi.fn()} onRemove={vi.fn()} />);
+    await user.click(screen.getByRole('button', { name: '新对话默认配置' }));
+    await user.click(screen.getByRole('button', { name: '默认技能' }));
+    const search = screen.getByRole('textbox', { name: '搜索 Skill...' });
+    await user.type(search, 'INSPECT');
+    expect(screen.queryByRole('checkbox', { name: 'Project skill' })).toBeNull();
+    await user.click(screen.getByRole('checkbox', { name: 'Review' }));
+    await user.clear(search);
+    await user.type(search, 'missing-skill');
+    await user.click(screen.getByRole('checkbox', { name: 'missing-skill' }));
+    await user.click(screen.getByRole('button', { name: '保存' }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      conversationDefaults: { skillIds: ['skill', 'review'] },
+    })));
+  });
+
   it('preserves custom edits across mode switches and saves only the following relationship', async () => {
     vi.mocked(useConfiguredModelState).mockReturnValue(modelState);
     const custom = { model: { providerId: 'provider', modelId: 'project' }, thinking: { enabled: true, effort: 'high' } };
@@ -71,7 +95,7 @@ describe('ProjectEditorDialog', () => {
     const actions = { onClose: vi.fn(), onRemove: vi.fn(async () => true), onSave: vi.fn(async () => true) };
     const view = render(<ProjectEditorDialog {...actions} project={null} />);
     expect(screen.queryByRole('button', { name: '移除项目' })).toBeNull();
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'New project' } });
+    fireEvent.change(screen.getByRole('textbox', { name: '项目名称' }), { target: { value: 'New project' } });
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
     await waitFor(() => expect(actions.onSave).toHaveBeenCalledWith({ name: 'New project', conversationDefaults: {}, roots: [], icon: null }));
     view.unmount();

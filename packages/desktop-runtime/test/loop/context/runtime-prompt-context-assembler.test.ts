@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { RuntimePromptContextAssembler } from '../../../src/loop/context/runtime-prompt-context-assembler.js';
 
 describe('RuntimePromptContextAssembler', () => {
-  it('prioritizes explicitly selected skills over automatic activations when the full-content budget is exhausted', async () => {
+  it.each(['explicit', 'default'])('prioritizes %s skills over automatic activations when the full-content budget is exhausted', async (selection) => {
     let instructionEnvironment: unknown;
     const assembler = new RuntimePromptContextAssembler({
       memoryControl: () => ({ contextMessages: async () => [] }),
@@ -51,8 +51,8 @@ describe('RuntimePromptContextAssembler', () => {
     const result = await assembler.build({
       config: runtimeConfig(),
       hookContextMessages: [],
-      skillIds: ['explicit'],
-      thread: { id: 'thread_1', projectId: 'project_1' } as RuntimeThread,
+      skillIds: selection === 'explicit' ? ['explicit'] : [],
+      thread: { id: 'thread_1', projectId: 'project_1', defaultSkillIds: selection === 'default' ? ['explicit'] : [] } as unknown as RuntimeThread,
       toolContext: {
         interfaceLanguage: 'en-US',
         environment,

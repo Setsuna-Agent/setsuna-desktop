@@ -79,6 +79,15 @@
   color: var(--app-primary);
 }
 
+.desktop-project-editor__skills-list {
+  display: grid;
+  grid-auto-rows: min-content;
+  gap: 8px;
+  max-height: min(240px, 30vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .desktop-project-editor__field > span:first-child,
 .desktop-project-editor__field > label {
   color: var(--app-text-secondary);
