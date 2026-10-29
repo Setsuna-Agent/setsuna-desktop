@@ -487,27 +487,6 @@ body.desktop-terminal-resizing {
   user-select: none;
 }
 
-@media (max-width: 879px) {
-  .app-workbench {
-    grid-template-columns: var(--app-sidebar-width) minmax(0, 1fr);
-  }
-
-  .app-shell--inspector-open .app-topbar__right {
-    padding: 0;
-  }
-}
-
-@media (max-width: 760px) {
-  .app-workbench,
-  .app-workbench--inspector-closed {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .app-sidebar-slot {
-    display: none;
-  }
-}
-
 /* The grid track is the sole source of workspace motion. Its clipping slot keeps
    panel contents at full width while the shared boundary opens or closes. */
 .desktop-agent-page--workspace-opening .desktop-workspace-panel-slot,
@@ -536,4 +515,30 @@ body.desktop-terminal-resizing {
   width: max(0px, calc(var(--desktop-agent-workspace-visual-width) - var(--app-titlebar-control-width)));
   margin-left: auto;
   will-change: transform;
+}
+/* Only explicit maximize hides the conversation; restore works at every window width.
+   Keep the chat mounted so returning preserves its draft and conversation state. */
+.desktop-agent-page--workspace-focused .app-workbench {
+  grid-template-columns: 0 0 minmax(0, 1fr);
+}
+
+.desktop-agent-page--workspace-focused .desktop-chat-panel:not(.desktop-chat-panel--side),
+.desktop-agent-page--workspace-focused .app-topbar__right,
+.desktop-agent-page--workspace-focused .app-content-header,
+.desktop-agent-page--workspace-focused .desktop-workspace-panel__resize-handle {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.desktop-agent-page--workspace-focused .app-workspace-header,
+.desktop-agent-page--workspace-focused .desktop-workspace-panel-slot,
+.desktop-agent-page--workspace-focused .desktop-workspace-panel:not(.desktop-workspace-panel--bottom-floating) {
+  grid-column: 3;
+  width: 100%;
+  border-left: 0;
+  box-shadow: none;
+}
+
+.desktop-agent-page--workspace-focused:not(.app-shell--inset-headers) .app-topbar {
+  grid-template-columns: var(--app-topbar-leading-width) 0 minmax(0, 1fr) var(--app-topbar-trailing-width);
 }

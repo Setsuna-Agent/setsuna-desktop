@@ -1,5 +1,4 @@
 import { useComposerModelSelection } from './composer/preferences/useComposerModelSelection.js';
-import { useProjectDefaultSkills } from './composer/preferences/useProjectDefaultSkills.js';
 import { ChatPromptInput } from './composer/editor/ChatPromptInput.js';
 import type { WorkspaceDraftReference } from './session/chatDraftReferences.js';
 import type { ComposerSlot } from './composer/editor/types.js';
@@ -553,7 +552,6 @@ export function ChatComposer({
     }
   }, [draft, draftSkillReferences, draftWorkspaceReferences, plugins, skills]);
 
-  useProjectDefaultSkills({ preferenceKey, currentThread, activeProject, skills, draft, senderRef, addSelectedSkills });
 
   const handleKeyDown = (event: ReactKeyboardEvent) => {
     if (commandController.slashMenuOpen) {

@@ -17,6 +17,42 @@ import {
 afterEach(cleanup);
 
 describe('providerModelSelectionConfigInput', () => {
+  it('preserves a concurrent preference save when a model selection fails', async () => {
+    const selection = deferred<RuntimeConfigState>();
+    const initial = runtimeConfig([provider('a', true, [model('one', true), model('two', false)])]);
+    initial.activeProviderId = 'a';
+    const preferences = { ...initial, globalPrompt: 'Latest preference' };
+    const client = { saveConfig: vi.fn(async () => preferences) } as unknown as RuntimeConfigClient;
+    const modelProvider = projectionService(vi.fn(() => selection.promise));
+    const { result } = renderHook(() => useRuntimeConfigState({ client, modelProvider }));
+    act(() => result.current.replaceConfig(initial));
+    let pending!: Promise<void>;
+    act(() => { pending = result.current.selectProviderModel('a', 'two'); });
+    await act(async () => result.current.saveRuntimePreferences({ globalPrompt: preferences.globalPrompt }));
+    expect(result.current.config?.providers[0].models[1].enabled).toBe(true);
+    const failed = expect(pending).rejects.toThrow('Unavailable');
+    await act(async () => { selection.reject(new Error('Unavailable')); await failed; });
+    expect(result.current.config).toEqual(preferences);
+  });
+
+  it('serializes preference writes without a failed write blocking the next one', async () => {
+    const first = deferred<RuntimeConfigState>();
+    const latest = { ...runtimeConfig([]), globalPrompt: 'Latest' };
+    const saveConfig = vi.fn().mockImplementationOnce(() => first.promise).mockResolvedValueOnce(latest);
+    const { result } = renderHook(() => useRuntimeConfigState({ client: { saveConfig } }));
+    let firstSave!: Promise<void>;
+    let secondSave!: Promise<void>;
+    act(() => {
+      firstSave = result.current.saveRuntimePreferences({ globalPrompt: 'First' });
+      secondSave = result.current.saveRuntimePreferences({ globalPrompt: 'Latest' });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(saveConfig).toHaveBeenCalledTimes(1);
+    const failed = expect(firstSave).rejects.toThrow('Failed');
+    await act(async () => { first.reject(new Error('Failed')); await failed; await secondSave; });
+    expect(saveConfig).toHaveBeenLastCalledWith({ globalPrompt: 'Latest' });
+    expect(result.current.config?.globalPrompt).toBe('Latest');
+  });
   it('enables only the selected model for the selected provider', () => {
     const config = runtimeConfig([
       provider('provider_a', false, [

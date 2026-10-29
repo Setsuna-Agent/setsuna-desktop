@@ -13,6 +13,7 @@ function setup(methods: Partial<McpRendererService>) {
   const snapshot = { servers: [], errors: [] };
   const service = { getSnapshot: () => snapshot, subscribe: () => () => undefined, ...methods } as McpRendererService;
   const capabilities = {
+    setActiveItemId: vi.fn(),
     renderBreadcrumb: ({ onBack }) => <Button onClick={onBack}>Back</Button>,
     renderCreateMenu: ({ items }) => <Button onClick={items[1].onSelect}>Create MCP</Button>,
   } as CapabilitiesPageNavigation;

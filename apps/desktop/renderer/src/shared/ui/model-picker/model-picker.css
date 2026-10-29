@@ -36,6 +36,7 @@
 }
 
 .model-picker-menu__search.sd-field:focus {
+  background: transparent;
   box-shadow: none;
 }
 

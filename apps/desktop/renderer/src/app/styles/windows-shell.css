@@ -95,18 +95,3 @@
   margin-left: auto;
   will-change: transform;
 }
-
-@media (max-width: 879px) {
-  .app-workspace-header {
-    grid-column: 2;
-    justify-self: end;
-    width: min(var(--desktop-agent-workspace-width), 100%);
-  }
-}
-
-@media (max-width: 760px) {
-  .app-content-header,
-  .app-workspace-header {
-    grid-column: 1;
-  }
-}

@@ -11,29 +11,36 @@ import type { ModelProviderClient } from './client.js';
 
 export type ModelProviderRendererSnapshot = Readonly<{
   error: string | null;
+  saveError: string | null;
   loading: boolean;
   catalog: ModelProviderCatalog | null;
   refreshingCatalogProviderId: string | null;
   catalogError: string | null;
   proxyServers: readonly DesktopNetworkProxyServerState[];
   state: ModelProviderSettingsState | null;
+  confirmedState: ModelProviderSettingsState | null;
 }>;
 
 const INITIAL_SNAPSHOT: ModelProviderRendererSnapshot = Object.freeze({
   error: null,
+  saveError: null,
   loading: true,
   catalog: null,
   refreshingCatalogProviderId: null,
   catalogError: null,
   proxyServers: Object.freeze([]),
   state: null,
+  confirmedState: null,
 });
 
 export class ModelProviderRendererStateService {
   private current = INITIAL_SNAPSHOT;
   private stagedInput: ModelProviderSettingsInput | null = null;
   private stageRevision = 0;
+  private savedRevision = 0;
   private saveTail: Promise<void> = Promise.resolve();
+  private saveTimer: ReturnType<typeof setTimeout> | undefined;
+  private lastCommit: { revision: number; promise: Promise<ModelProviderSettingsState> } | null = null;
   private readonly listeners = new Set<() => void>();
   private generation = 0;
   private started = false;
@@ -75,6 +82,8 @@ export class ModelProviderRendererStateService {
   }
 
   dispose(): void {
+    clearTimeout(this.saveTimer);
+    this.saveTimer = undefined;
     this.generation += 1;
     this.started = false;
     this.unsubscribeProxy?.();
@@ -85,10 +94,15 @@ export class ModelProviderRendererStateService {
   }
 
   async refresh(): Promise<ModelProviderSettingsState> {
+    const revision = this.stageRevision;
     try {
       const [state, catalog] = await Promise.all([this.client.read(), this.client.catalog()]);
-      this.stagedInput = inputFromState(state);
-      this.update({ catalog, error: null, state });
+      if (revision === this.stageRevision && revision === this.savedRevision) {
+        this.stagedInput = inputFromState(state);
+        this.update({ catalog, error: null, state, confirmedState: state });
+      } else {
+        this.update({ catalog, error: null, confirmedState: state });
+      }
       return state;
     } catch (error) {
       const message = errorMessage(error);
@@ -101,6 +115,25 @@ export class ModelProviderRendererStateService {
     this.stageRevision += 1;
     this.stagedInput = structuredClone(input);
     this.update({ error: null, state: structuredClone(state) });
+  }
+
+  draftApiKeys(): Record<string, string> {
+    return Object.fromEntries(this.stagedInput?.providers.flatMap((provider) => (
+      provider.apiKey ? [[provider.id, provider.apiKey]] : []
+    )) ?? []);
+  }
+
+  scheduleSave(): void {
+    clearTimeout(this.saveTimer);
+    this.saveTimer = setTimeout(() => { this.flushScheduledSave(); }, 450);
+  }
+
+  flushScheduledSave(): void {
+    if (this.saveTimer === undefined) return;
+    clearTimeout(this.saveTimer);
+    this.saveTimer = undefined;
+    // Feedback is owned by the service and survives the settings view that started the save.
+    void this.commit().catch(() => undefined);
   }
 
   async refreshCatalog(input: RefreshModelProviderCatalogInput): Promise<void> {
@@ -126,22 +159,37 @@ export class ModelProviderRendererStateService {
   }
 
   commit(): Promise<ModelProviderSettingsState> {
+    return this.saveStaged(true);
+  }
+
+  private saveStaged(notifyFailure: boolean): Promise<ModelProviderSettingsState> {
+    clearTimeout(this.saveTimer);
+    this.saveTimer = undefined;
     const input = this.stagedInput;
     if (!input) return this.refresh();
     const revision = this.stageRevision;
+    if (this.lastCommit?.revision === revision) return this.lastCommit.promise;
+    this.update({ saveError: null });
     const pending = this.saveTail.then(() => this.client.save(structuredClone(input)));
     this.saveTail = pending.then(() => undefined, () => undefined);
-    return pending.then((state) => {
+    const promise = pending.then((state) => {
+      this.savedRevision = revision;
       if (revision === this.stageRevision) {
         this.stagedInput = inputFromState(state);
-        this.update({ error: null, state });
+        this.update({ saveError: null, state, confirmedState: state });
+      } else {
+        this.update({ confirmedState: state });
       }
       return state;
     }).catch((error: unknown) => {
       const message = errorMessage(error);
-      this.update({ error: message });
+      if (revision === this.stageRevision && notifyFailure) this.update({ saveError: message });
       throw new Error(message, { cause: error });
+    }).finally(() => {
+      if (this.lastCommit?.revision === revision) this.lastCommit = null;
     });
+    this.lastCommit = { revision, promise };
+    return promise;
   }
 
   async selectProviderModel(
@@ -166,7 +214,8 @@ export class ModelProviderRendererStateService {
     };
     const input = inputFromState(nextState, this.stagedInput);
     this.stage(input, nextState);
-    return this.commit();
+    // The chat command owns model-selection failure feedback; do not duplicate its toast.
+    return this.saveStaged(false);
   }
 
   discover(input: RuntimeFetchModelsInput, options?: Readonly<{ signal?: AbortSignal }>): Promise<RuntimeAvailableModelsResponse> {
@@ -177,7 +226,7 @@ export class ModelProviderRendererStateService {
     activeProviderId?: string;
     providers: ProviderConfigState[];
   }> | null {
-    return this.current.state;
+    return this.current.confirmedState;
   }
 
   private update(patch: Partial<ModelProviderRendererSnapshot>): void {

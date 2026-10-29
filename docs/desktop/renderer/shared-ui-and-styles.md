@@ -37,7 +37,7 @@ Skill 列表、详情、命令菜单和聊天引用统一通过 `shared/ui/Skill
 
 - Motion 负责复选框、开关和通知动画；`motion.ts` 提供复选框与通知使用的 spring 参数，开关的参数随组件维护。
 - `Dock` / `DockItem` / `DockSeparator` 直接采用 [beUI Dock](https://beui.dev/components/motion/dock) 的组件源码，复用已有 `motion.ts` 和 `utils.ts`；变更面板组合它们承载常驻的文件导航与侧栏开关，业务选择与悬停列表仍由 Review Feature 持有。
-- `toast/provider.tsx` 持有共享通知队列、去重、数量限制和 `useToast`。宿主 `app/providers/ToastProvider.tsx` 只注入本地化标签；Feature 的 `SettingsViewUi.Toast` 和页面中的 `ToastNotice` 复用同一队列。状态驱动的通知在错误清除、重试或组件卸载时撤下。独立 SDK 控件没有外层 provider 时，`ToastNotice` 使用局部队列；需要跨控件共享通知的应用应挂载 `ToastProvider`。
+- `toast/provider.tsx` 持有共享通知队列、去重、同时展示数量限制和 `useToast`。宿主 `app/providers/ToastProvider.tsx` 只注入本地化标签；Feature 的 `SettingsViewUi.Toast` 和页面中的 `ToastNotice` 复用同一队列。状态驱动的通知在错误清除、重试或组件卸载时撤下。最多同时展示四条，其余等待展示后才开始计时；hover 或内部键盘焦点暂停剩余计时。`durationMs: null` 保留至主动关闭或 owner 撤下，`action` 提供重试等操作。跨页面保存的错误由常驻 owner 持有，不随编辑页卸载撤下。独立 SDK 控件没有外层 provider 时，`ToastNotice` 使用局部队列；需要跨控件共享通知的应用应挂载 `ToastProvider`。
 - 通知区域保持 live-region 语义，避免被模态弹窗隐藏；点击通知不触发 Dialog 的外部点击关闭，失败后的表单和重试入口继续保留。
 - `collapsible/` 持有共享的 `CollapsibleContent`，负责受控展开与收起后的卸载；展开状态由调用方管理。通过 `0fr → 1fr` 网格轨道展开自然高度，不读取缩放后的 DOMRect 作为动画高度，避免切回 `auto` 时跳动；内层容器承接内容间距，完全收拢后再卸载，减少动态效果偏好下直接切换。
 - `drag/` 和 `styles/drag-feedback.css` 参考 beUI Sortable List，统一原生拖动快照、排序占位与弹簧让位；拖动时才测量位置和创建预览，结束或卸载后清理。业务 payload、保存和取消仍由各入口持有；面板标签命中检测使用未变换的目标位置，避免动画影响排序判断。

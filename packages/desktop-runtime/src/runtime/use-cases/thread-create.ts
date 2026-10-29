@@ -1,4 +1,4 @@
-import type { CreateThreadInput, RuntimeThread } from '@setsuna-desktop/contracts';
+import { resolveWorkspaceConversationDefaults, type CreateThreadInput, type RuntimeThread } from '@setsuna-desktop/contracts';
 import type { RuntimeContainer } from '../runtime-factory.js';
 import type { ThreadStoreCreateInput } from '../../ports/thread-store.js';
 import { RuntimeUseCaseError } from './errors.js';
@@ -9,12 +9,16 @@ export async function createRuntimeThread(runtime: RuntimeContainer, input: Crea
     throw new RuntimeUseCaseError('invalid_input', 'workspaceMode must be local or worktree.');
   }
   const settings = await runtime.agentLoop.memoryControl().readSettings().catch(() => null);
+  const projects = input.projectId ? (await runtime.workspaceProjects.listProjects()).projects : [];
+  const project = projects.find((candidate) => candidate.id === input.projectId && !candidate.archivedAt);
   const threadInput: ThreadStoreCreateInput = {
     title: input.title,
     projectId: input.projectId,
     forkedFromId: input.forkedFromId,
     parentThreadId: input.parentThreadId,
     memoryMode: input.memoryMode ?? (settings?.value.generateMemories ? 'enabled' : 'disabled'),
+    // Resolve following projects once; later project edits must not change existing conversations.
+    defaultSkillIds: resolveWorkspaceConversationDefaults(project, projects)?.skillIds,
   };
   if (input.workspaceMode !== 'worktree') return runtime.threadStore.createThread(threadInput);
 

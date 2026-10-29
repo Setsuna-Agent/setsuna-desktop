@@ -7,7 +7,7 @@ import { ModelProviderRendererStateService } from '../../src/renderer/service.js
 import { clientFixture, modelFixture, providerInputFixture, stateFromInput, testUi, translate } from './settings-test-support.js';
 
 const services: ModelProviderRendererStateService[] = [];
-afterEach(() => { cleanup(); services.splice(0).forEach((service) => service.dispose()); vi.useRealTimers(); });
+afterEach(() => { cleanup(); services.splice(0).forEach((service) => service.dispose()); });
 
 async function setup() {
   const client = clientFixture(async (input) => stateFromInput(input));
@@ -62,6 +62,7 @@ it('commits only on drop and preserves the selected service, active model and un
   drag('drop', source, data, -1);
   expect(view.order()).toEqual(['c', 'a', 'b', 'd']);
   expect((screen.getByLabelText('显示名称') as HTMLInputElement).value).toBe('Hidden');
+  act(() => view.service.flushScheduledSave());
   await waitFor(() => expect(view.save).toHaveBeenCalledWith(expect.objectContaining({
     activeProviderId: 'b', providers: [
       expect.objectContaining({ id: 'c' }), expect.objectContaining({ id: 'a' }),
@@ -80,13 +81,13 @@ it('reorders filtered results within the full list without removing hidden servi
   fireEvent.dragStart(view.rail.getByRole('button', { name: /Match Alpha/ }), { dataTransfer: data });
   drag('drop', view.rail.getByRole('button', { name: /Match Gamma/ }), data, 1);
   expect(view.order()).toEqual(['b', 'c', 'a', 'd']);
+  act(() => view.service.flushScheduledSave());
   await waitFor(() => expect(view.save).toHaveBeenCalledOnce());
   expect(view.save.mock.calls[0]![0].providers.map((provider) => provider.id)).toEqual(['b', 'c', 'a', 'd']);
 });
 
 it('does not save cancelled, external, mismatched or no-op drops', async () => {
   const view = await setup();
-  vi.useFakeTimers();
   const source = view.rail.getByRole('button', { name: /Match Alpha/ });
   const target = view.rail.getByRole('button', { name: /Other/ });
   const data = transfer();
@@ -102,7 +103,7 @@ it('does not save cancelled, external, mismatched or no-op drops', async () => {
   drag('drop', target, data, 1);
   fireEvent.dragStart(source, { dataTransfer: data });
   drag('drop', source, data);
-  await act(() => vi.advanceTimersByTimeAsync(500));
+  act(() => view.service.flushScheduledSave());
   expect(view.order()).toEqual(['a', 'b', 'c', 'd']);
   expect(view.save).not.toHaveBeenCalled();
 });
@@ -119,5 +120,6 @@ it('invalidates a drag when providers change and supports keyboard reordering th
   expect(view.save).not.toHaveBeenCalled();
   fireEvent.keyDown(view.rail.getByRole('button', { name: /Hidden/ }), { altKey: true, key: 'ArrowUp' });
   expect(view.order()).toEqual(['d', 'b', 'c', 'a']);
+  act(() => view.service.flushScheduledSave());
   await waitFor(() => expect(view.save).toHaveBeenCalledOnce());
 });

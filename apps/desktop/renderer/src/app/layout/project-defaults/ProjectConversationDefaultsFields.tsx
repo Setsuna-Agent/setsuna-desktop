@@ -1,8 +1,8 @@
 import { canFollowWorkspaceConversationDefaults, type WorkspaceConversationDefaults, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import { Button, Disclosure } from '@setsuna-desktop/renderer-ui';
 import { useRef } from 'react';
-import { useI18n } from '../../shared/i18n/I18nProvider.js';
-import { SelectField } from '../../shared/ui/primitives.js';
+import { useI18n } from '../../../shared/i18n/I18nProvider.js';
+import { SelectField } from '../../../shared/ui/primitives.js';
 import { ProjectConversationOptionsFields } from './ProjectConversationOptionsFields.js';
 
 export function ProjectConversationDefaultsFields({ value, projects, projectId, disabled, onChange }: Readonly<{

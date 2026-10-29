@@ -11,19 +11,8 @@ afterEach(() => {
 });
 
 it.each([false, true])('preserves the workspace sizing mode across sidebar collapse/expand (customized: %s)', (customized) => {
-  const frames = new Map<number, FrameRequestCallback>();
-  let frameId = 0;
-  vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
-    frames.set(++frameId, callback);
-    return frameId;
-  });
-  vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((id) => { frames.delete(id); });
+  const flushFrames = mockAnimationFrames();
   const viewportWidth = vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(1400);
-  const flushFrames = () => act(() => {
-    const pending = [...frames.values()];
-    frames.clear();
-    pending.forEach((callback) => callback(0));
-  });
   const { result } = renderHook(() => {
     const shellRef = useRef<HTMLDivElement | null>(null);
     const [collapsed, setCollapsed] = useState(false);
@@ -56,3 +45,37 @@ it.each([false, true])('preserves the workspace sizing mode across sidebar colla
     expect(result.current.resize.workspaceWidth).toBe(fresh.result.current.workspaceWidth);
   }
 });
+
+it('keeps the conversation accessible after resizing and restores a manually maximized workspace without resizing again', () => {
+  const flushFrames = mockAnimationFrames();
+  const viewportWidth = vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(1400);
+  const { result } = renderHook(() => useDesktopPanelResize(useRef<HTMLDivElement | null>(null)));
+  flushFrames();
+  viewportWidth.mockReturnValue(700);
+  act(() => window.dispatchEvent(new Event('resize')));
+  flushFrames();
+  expect(result.current.workspaceSinglePane).toBe(false);
+
+  act(() => result.current.toggleWorkspaceMaximized());
+  flushFrames();
+  expect(result.current.workspaceSinglePane).toBe(true);
+  act(() => result.current.toggleWorkspaceMaximized());
+  flushFrames();
+  expect(result.current.workspaceSinglePane).toBe(false);
+  expect(result.current.workspaceMaximized).toBe(false);
+});
+
+function mockAnimationFrames() {
+  const frames = new Map<number, FrameRequestCallback>();
+  let frameId = 0;
+  vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+    frames.set(++frameId, callback);
+    return frameId;
+  });
+  vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((id) => { frames.delete(id); });
+  return () => act(() => {
+    const pending = [...frames.values()];
+    frames.clear();
+    pending.forEach((callback) => callback(0));
+  });
+}

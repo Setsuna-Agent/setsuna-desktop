@@ -70,7 +70,7 @@ describe('conversation forks', () => {
 
   it('forks an inclusive historical boundary repeatedly, with independent assets and no source mutation', async () => {
     const source = await runtime.threadStore.createThread({ title: 'Original', projectId: 'project_1', memoryMode: 'disabled',
-      modelBinding: { providerId: 'provider', modelId: 'model', modelCode: 'code' } });
+      modelBinding: { providerId: 'provider', modelId: 'model', modelCode: 'code' }, defaultSkillIds: ['project-review'] });
     const attachment = await runtime.attachmentStore.create({ name: 'reference.txt', type: 'text/plain', data: Buffer.from('reference') });
     await runtime.attachmentStore.claimForThread(source.id, [attachment]);
     const generated = await runtime.generatedImageStore.create({ name: 'result.png', type: 'image/png', data: png });
@@ -82,7 +82,8 @@ describe('conversation forks', () => {
     const before = await runtime.threadStore.getThread(source.id);
     const fork = await forkRuntimeThread(runtime, source.id, { messageId: 'answer', target: 'workspace' });
     const second = await forkRuntimeThread(runtime, source.id, { messageId: 'question', target: 'workspace' });
-    expect(fork).toMatchObject({ forkedFromId: source.id, projectId: 'project_1', memoryMode: 'disabled', modelBinding: source.modelBinding });
+    expect(fork).toMatchObject({ forkedFromId: source.id, projectId: 'project_1', memoryMode: 'disabled', modelBinding: source.modelBinding,
+      defaultSkillIds: source.defaultSkillIds });
     expect(fork.messages.map((message) => message.id)).toEqual(['question', 'answer']);
     expect(second.messages.map((message) => message.id)).toEqual(['question']);
     expect(await runtime.threadStore.getThread(source.id)).toEqual(before);

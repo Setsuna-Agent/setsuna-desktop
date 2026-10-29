@@ -547,12 +547,19 @@ describe('file skill registry', () => {
     expect((await registry.listSkills()).skills[0]).toMatchObject({ id: 'builtin-demo', enabled: true });
   });
 
-  it('automatically injects a matching Plugin Skill from the current turn input', async () => {
+  it.each([
+    { state: 'none', defaultSkillIds: [] },
+    { state: 'enabled', defaultSkillIds: ['builtin-demo'] },
+    { state: 'disabled', defaultSkillIds: ['builtin-demo'] },
+    { state: 'missing', defaultSkillIds: ['missing-skill'] },
+    { state: 'matching-plugin', defaultSkillIds: ['documents.documents'] },
+  ])('preserves automatic Plugin activation with $state defaults and only suppresses it for explicit selections', async ({ state, defaultSkillIds }) => {
     const { builtinDir, dataDir } = await createSkillFixture();
     await installDocumentsPluginFixture(dataDir);
     const registry = new FileSkillRegistry(builtinDir, dataDir);
+    if (state === 'disabled') await registry.updateSkill('builtin-demo', { enabled: false });
     const threadStore = createTestThreadStore(dataDir, systemClock, new RandomIdGenerator());
-    const thread = await threadStore.createThread({ title: 'Automatic Plugin Skill routing' });
+    const thread = await threadStore.createThread({ title: 'Automatic Plugin Skill routing', defaultSkillIds });
     const modelClient = new CapturingModelClient();
     const loop = new AgentLoop({
       threadStore,
@@ -565,14 +572,25 @@ describe('file skill registry', () => {
 
     await loop.sendTurn(thread.id, { input: '生成一个 docx 报告给我' });
 
+    const injectedIds = () => modelClient.messages.filter((message) => message.id.startsWith('skill_')).map((message) => message.id).sort();
+    expect(injectedIds()).toEqual([
+      ...(state === 'enabled' ? ['skill_builtin-demo'] : []),
+      'skill_documents.documents',
+    ]);
     expect(modelClient.messages.find((message) => message.id === 'skill_documents.documents')?.content)
       .toContain('<skill name="Word 文档处理" id="documents.documents" path="');
     const updated = await threadStore.getThread(thread.id);
-    expect(updated?.turns?.at(-1)?.stepSnapshots?.[0]?.snapshot.selectedSkills).toEqual([
+    expect(updated?.turns?.at(-1)?.stepSnapshots?.[0]?.snapshot.selectedSkills).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'documents.documents',
         plugin: { id: 'documents', name: 'Word 文档处理', icon: 'documents' },
       }),
+    ]));
+
+    await loop.sendTurn(thread.id, { input: '再生成一个 docx 报告', skillIds: ['builtin-demo'] });
+    expect(injectedIds()).toEqual([
+      ...(state === 'disabled' ? [] : ['skill_builtin-demo']),
+      ...(state === 'matching-plugin' ? ['skill_documents.documents'] : []),
     ]);
   });
 });

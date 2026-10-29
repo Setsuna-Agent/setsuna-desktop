@@ -68,6 +68,7 @@ export async function copyRuntimeThread(
     forkedFromId: source.id,
     memoryMode: source.memoryMode,
     modelBinding: source.modelBinding ? { ...source.modelBinding } : undefined,
+    defaultSkillIds: source.defaultSkillIds,
   });
   try {
     await runtime.attachmentStore.retainForThread(thread.id, messages.flatMap((message) => message.attachments ?? []));

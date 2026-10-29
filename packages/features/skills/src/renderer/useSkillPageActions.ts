@@ -1,14 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useConfirm } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import type { CapabilitiesRefreshCoordinator } from '@setsuna-desktop/renderer-contracts/capabilities';
 import type { SkillsRendererHost, SkillsRendererService } from '../contracts/index.js';
 import type { SkillsTranslate } from './messages.js';
+import type { CapabilitiesPageNavigation } from '@setsuna-desktop/renderer-contracts/settings';
 
 type SkillPageMode = 'catalog' | 'create' | 'detail' | 'edit';
 type SkillAction = 'save' | 'toggle' | 'delete' | 'install' | 'refresh' | 'reveal';
 
-export function useSkillPageActions(service: SkillsRendererService, capabilitiesRefresh: CapabilitiesRefreshCoordinator, translate: SkillsTranslate, host: SkillsRendererHost) {
+export function useSkillPageActions(service: SkillsRendererService, capabilitiesRefresh: CapabilitiesRefreshCoordinator, translate: SkillsTranslate, host: SkillsRendererHost, navigation?: CapabilitiesPageNavigation) {
   const confirm = useConfirm();
   const [mode, setMode] = useState<SkillPageMode>('catalog');
   const [summary, setSummary] = useState<RuntimeSkillSummary | null>(null);
@@ -19,21 +20,27 @@ export function useSkillPageActions(service: SkillsRendererService, capabilities
   const [pending, setPending] = useState<ReadonlyMap<string, SkillAction>>(new Map());
   const pendingRef = useRef(new Map<string, SkillAction>());
   const viewVersion = useRef(0);
+  const restoredItem = useRef<string | null>(null);
+  const setActiveItemId = navigation?.setActiveItemId;
   useEffect(() => () => { viewVersion.current += 1; }, []);
 
-  const navigate = (next: SkillPageMode) => {
+  const navigate = useCallback((next: SkillPageMode) => {
     viewVersion.current += 1;
     setMode(next);
     setError(null);
     setOperationError(null);
     setLoading(false);
-  };
-  const closeDetail = () => {
+  }, []);
+  const closeDetail = useCallback(() => {
     navigate('catalog');
     setSummary(null);
     setDetail(null);
-  };
-  const openSkill = async (skill: RuntimeSkillSummary) => {
+    restoredItem.current = null;
+    setActiveItemId?.(null);
+  }, [navigate, setActiveItemId]);
+  const openSkill = useCallback(async (skill: RuntimeSkillSummary) => {
+    restoredItem.current = skill.id;
+    setActiveItemId?.(skill.id);
     navigate('detail');
     const view = viewVersion.current;
     setSummary(skill);
@@ -49,7 +56,15 @@ export function useSkillPageActions(service: SkillsRendererService, capabilities
     } finally {
       if (view === viewVersion.current) setLoading(false);
     }
-  };
+  }, [navigate, service, setActiveItemId]);
+  const requestedItem = navigation?.activeItemId;
+  const skills = service.getSnapshot().skills;
+  useEffect(() => {
+    if (requestedItem === undefined || requestedItem === restoredItem.current) return;
+    if (!requestedItem) { closeDetail(); return; }
+    const skill = skills.find((item) => item.id === requestedItem);
+    if (skill) void openSkill(skill);
+  }, [closeDetail, openSkill, requestedItem, skills]);
 
   const run = async <T,>(key: string, action: SkillAction, operation: () => Promise<T>, apply?: (result: T) => void) => {
     if (pendingRef.current.has(key)) return;
@@ -79,6 +94,8 @@ export function useSkillPageActions(service: SkillsRendererService, capabilities
     if (summary?.id === updated.id) { setSummary(updated); setDetail(updated); }
   });
   const showSaved = (saved: RuntimeSkillDetail) => {
+    restoredItem.current = saved.id;
+    setActiveItemId?.(saved.id);
     setSummary(saved);
     setDetail(saved);
     setMode('detail');

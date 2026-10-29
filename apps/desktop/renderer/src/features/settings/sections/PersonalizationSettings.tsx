@@ -1,13 +1,13 @@
 import type { RuntimeConfigState } from '@setsuna-desktop/contracts';
 import { Code2, Sun } from 'lucide-react';
-import { useEffect, useState } from 'react';
 import { TextArea } from '../../../shared/ui/primitives.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { SettingsChoiceGroup, type SettingsChoiceOption } from '../components/SettingsControls.js';
 import type { RuntimePreferenceInput } from '../settings-types.js';
+import { usePersonalizationPrompt } from './usePersonalizationPrompt.js';
+import { useToast } from '../../../app/providers/ToastProvider.js';
 
 const PERSONALIZATION_PROMPT_MAX_LENGTH = 8000;
-const PERSONALIZATION_PROMPT_SAVE_DELAY_MS = 360;
 
 /** Host-owned personalization that is independent from optional business Features. */
 export function PersonalizationSettings({
@@ -18,24 +18,13 @@ export function PersonalizationSettings({
   onSavePreferences: (input: RuntimePreferenceInput) => Promise<void>;
 }>) {
   const { t } = useI18n();
+  const toast = useToast();
   const setsunaStyleOptions: Array<SettingsChoiceOption<RuntimeConfigState['setsunaStyle']>> = [
     { value: 'developer', label: t('settings.personalization.styleDeveloper'), icon: <Code2 size={14} /> },
     { value: 'daily', label: t('settings.personalization.styleDaily'), icon: <Sun size={14} /> },
   ];
-  const [globalPromptDraft, setGlobalPromptDraft] = useState(config.globalPrompt);
+  const { draft: globalPromptDraft, change, flush } = usePersonalizationPrompt(config.globalPrompt, onSavePreferences);
   const globalPromptLength = Array.from(globalPromptDraft).length;
-
-  useEffect(() => {
-    setGlobalPromptDraft(config.globalPrompt);
-  }, [config.globalPrompt]);
-
-  useEffect(() => {
-    if (globalPromptDraft === config.globalPrompt) return undefined;
-    const timer = window.setTimeout(() => {
-      void onSavePreferences({ globalPrompt: globalPromptDraft });
-    }, PERSONALIZATION_PROMPT_SAVE_DELAY_MS);
-    return () => window.clearTimeout(timer);
-  }, [config.globalPrompt, globalPromptDraft, onSavePreferences]);
 
   return (
     <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__personalization-section">
@@ -50,7 +39,9 @@ export function PersonalizationSettings({
               ariaLabel={t('settings.personalization.setsunaStyle')}
               options={setsunaStyleOptions}
               value={config.setsunaStyle}
-              onChange={(setsunaStyle) => void onSavePreferences({ setsunaStyle })}
+              onChange={(setsunaStyle) => void onSavePreferences({ setsunaStyle }).catch((error: unknown) => {
+                toast.error(error instanceof Error ? error.message : String(error));
+              })}
             />
           </div>
         </div>
@@ -69,15 +60,12 @@ export function PersonalizationSettings({
               <div className="chat-user-settings__prompt-input-shell">
                 <TextArea
                   className="chat-user-settings__prompt-input"
+                  aria-label={t('settings.personalization.prompt')}
                   value={globalPromptDraft}
                   maxLength={PERSONALIZATION_PROMPT_MAX_LENGTH}
                   placeholder={t('settings.personalization.promptPlaceholder')}
-                  onBlur={() => {
-                    if (globalPromptDraft !== config.globalPrompt) {
-                      void onSavePreferences({ globalPrompt: globalPromptDraft });
-                    }
-                  }}
-                  onChange={(event) => setGlobalPromptDraft(event.target.value)}
+                  onBlur={flush}
+                  onChange={(event) => change(event.target.value)}
                 />
                 <span className="chat-user-settings__prompt-count">
                   {globalPromptLength} / {PERSONALIZATION_PROMPT_MAX_LENGTH}

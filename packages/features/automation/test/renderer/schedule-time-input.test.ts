@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { scheduleTimeParts, updateScheduleTime } from '../../src/renderer/schedule-time-input.js';
+import { parseScheduleTimeInput, scheduleTimeParts, updateScheduleTime } from '../../src/renderer/schedule-time-input.js';
 
 describe('schedule time editing', () => {
+  it('normalizes pasted local dates and rejects impossible dates and incomplete times', () => {
+    expect(parseScheduleTimeInput(' 2028/2/29 9:05 ', true)).toBe('2028-02-29T09:05');
+    expect(parseScheduleTimeInput('9:05', false)).toBe('09:05');
+    for (const value of ['2026-02-29T09:05', '2028-13-01T09:05', '0000-01-01T09:05', '2028-01-01T24:00']) {
+      expect(parseScheduleTimeInput(value, true)).toBeNull();
+    }
+    for (const value of ['', '09:', '09:60', '24:00', '09:05Z']) expect(parseScheduleTimeInput(value, false)).toBeNull();
+  });
   it('keeps the day in the selected month instead of overflowing into the next month', () => {
     expect(updateScheduleTime('2026-01-31T10:51', 'month', 2)).toBe('2026-02-28T10:51');
     expect(updateScheduleTime('2026-03-31T10:51', 'month', 4)).toBe('2026-04-30T10:51');

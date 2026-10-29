@@ -1,5 +1,6 @@
 import {
   ModelProviderRendererProvider,
+  ModelProviderSaveFeedback,
   useModelProviderRendererService,
   useModelProviderSnapshot,
   type ModelProviderBrandIconPickerProps,
@@ -19,6 +20,7 @@ import {
 } from '../shared/branding/providerBranding.js';
 import { ConfiguredModelPicker } from '../shared/ui/model-picker/ConfiguredModelPicker.js';
 import { configuredModelOptions } from '../shared/ui/model-picker/modelOptions.js';
+import { useI18n } from '../shared/i18n/I18nProvider.js';
 
 export const modelProviderRendererHost: Pick<ModelProviderRendererHost, 'BrandIcon' | 'BrandIconPicker'> = Object.freeze({
   BrandIcon: ModelProviderBrandIcon,
@@ -39,12 +41,17 @@ export function useModelProviderFeatureService(): ModelProviderRendererStateServ
   return useModelProviderRendererService();
 }
 
+export function ModelProviderFeatureFeedback() {
+  const { t } = useI18n();
+  return <ModelProviderSaveFeedback translate={t} />;
+}
+
 export function useConfiguredModelState() {
-  return useModelProviderSnapshot().state;
+  return useModelProviderSnapshot().confirmedState;
 }
 
 export function SettingsModelPicker({ models, ...props }: SettingsModelPickerProps) {
-  const { state } = useModelProviderSnapshot();
+  const { confirmedState: state } = useModelProviderSnapshot();
   const options = useMemo(() => configuredModelOptions(models, state), [models, state]);
   return <ConfiguredModelPicker {...props} options={options} />;
 }

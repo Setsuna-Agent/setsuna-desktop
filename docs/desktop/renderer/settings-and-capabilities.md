@@ -17,7 +17,7 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 
 二级管理页面使用 `SettingsViewUi.PageLayout`（宿主实现为 `shared/ui/SettingsPageLayout.tsx`），统一设置面包屑、返回动作、标题和 720px 内容宽度。浏览器的管理页与「个性化 → 记忆预览」共用此布局。父页面标题置于 `SettingsSectionExtensionOutlet` 的默认内容内，进入扩展子页时一同替换，避免同时显示父、子两套标题。业务 Feature 继续持有列表、编辑表单与操作状态。
 
-宿主切换设置分区时将所属滚动容器归零；`PageLayout` 在页面就绪、进入或返回管理子页时同样重置这个容器，保留其顶部留白。初始化不对内容节点调用 `scrollIntoView`，避免把留白滚出视口或牵动外层页面；同一页面的数据刷新不重置用户的阅读位置。
+`AppRouteSurface` 挂载窗口级 `PageSessionProvider`，只保留轻量导航状态。普通进入设置恢复上次分区，显式指定分区的跳转优先；分区、扩展子页和 `PageLayout` 按页面身份记录所属容器的滚动位置，首次进入从顶部开始，返回恢复。同一页面刷新不重置位置，不对内容节点调用 `scrollIntoView`。隐藏的设置与能力页面仍卸载，不因此增加启动加载。能力目录同样保留类别、详情选择、搜索和列表滚动；主动点击一级目录入口回到目录。
 
 `SettingsPage.tsx` 负责宿主 section 导航和数据/回调分发，并消费 `renderer.settings.page` keyed Slot 与当前 page 拥有的 `renderer.settings.page.extensions` Slot。页面 metadata 和 renderer 来自同一 contribution，导航不再维护第二份 Feature catalog。具体宿主内容位于：
 
@@ -27,7 +27,7 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 - `components/`
 - `styles/`
 
-页面根不应包含 provider normalize、calendar 聚合或数据根错误翻译等纯逻辑。
+页面根不应包含 provider normalize、calendar 聚合或数据根错误翻译等纯逻辑。Global prompt 由独立 hook 持有编辑版本，旧保存回包不能替换后续输入；离开时 flush，失败草稿在当前窗口内保留，通知可重试。共享 runtime 偏好写入串行执行。
 
 设置侧栏按用途分组，组内顺序由各页面 contribution 的 `order` 决定。未注册页面的分组不显示，未知分组的页面仍进入“功能”。
 
@@ -66,7 +66,7 @@ Network Proxy 同样通过 Settings page Slot 提供完整“代理服务器”�
 
 模型服务由 `packages/features/model-provider/` 独立拥有，并通过 Settings page Slot 挂载到宿主设置页。renderer service 负责读取、暂存和串行保存，宿主只注入 Settings UI、品牌图标和网络代理能力。
 
-模型服务使用铺满设置内容区的 `wide` 布局。左栏承载标题、添加、搜索和服务选择，右栏承载服务开关、连接配置及单列模型列表；两栏独立滚动，窄内容区按容器宽度收缩。设置仍自动保存。
+模型服务使用铺满设置内容区的 `wide` 布局。左栏承载标题、添加、搜索和服务选择，右栏承载服务开关、连接配置及单列模型列表；两栏独立滚动，窄内容区按容器宽度收缩。设置仍自动保存。防抖与离页 flush 由常驻 service 管理；失败保留草稿，由全局 Toast 提供重试，其他页面只读取已确认保存的投影。
 
 Feature 管理：
 
@@ -269,6 +269,6 @@ Capabilities：
 Git 的提交生成与冲突解决模型同时出现在“专用模型”设置和变更记录的“设置”弹窗中，均默认跟随当前对话模型。两处读取同一个 `desktop-review/git-settings` 文档；选定冲突解决模型不会自动打开解决冲突开关，开关和两种提示词在 Git 弹窗中配置。
 
 
-快捷键录制中的 Tab/Shift+Tab 退出录制并保留浏览器焦点导航；IME 组合输入和按键重复不会写入绑定。设置开关标题关联真实 switch，点击标题可以切换；通用设置组按容器宽度折行，不依赖整个窗口尺寸。`Disclosure` 统一局部展开语义并保留折叠表单状态。
+快捷键录制中的 Tab/Shift+Tab 退出录制并保留浏览器焦点导航；IME 组合输入和按键重复不会写入绑定。设置开关标题关联真实 switch，点击标题可以切换；通用设置组按容器宽度折行，不依赖整个窗口尺寸。`Disclosure` 统一局部展开语义并保留折叠表单状态。设置分类及滚动位置继续由 `PageSessionProvider` 维护，不保活隐藏设置页面。
 
-沿用原有宽度规则：普通表单上限 720px，用量分析上限 1040px，模型服务保留原来的全宽工作区。
+沿用原有宽度规则：普通表单上限 720px，用量分析上限 1040px，模型服务保留原来的全宽工作区。滚动恢复直接使用 SettingsPage 的 viewport ref，不插入 DOM 包装层，避免破坏原有直接子节点选择器。

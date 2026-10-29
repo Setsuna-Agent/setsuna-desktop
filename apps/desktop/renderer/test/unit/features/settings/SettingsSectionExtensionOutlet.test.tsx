@@ -23,30 +23,43 @@ import { createRendererPluginRuntime } from '../../../../src/kernel/renderer-plu
 import { SettingsSectionExtensionOutlet } from '../../../../src/features/settings/SettingsSectionExtensionOutlet.js';
 import { SettingsPage } from '../../../../src/features/settings/SettingsPage.js';
 import { settingsViewUi } from '../../../../src/shared/ui/SettingsViewUi.js';
+import { PageSessionProvider } from '@setsuna-desktop/renderer-ui';
 
 describe('SettingsSectionExtensionOutlet', () => {
   afterEach(cleanup);
 
-  it('resets the settings viewport when switching sections that do not own a PageLayout', async () => {
+  it('restores sections and reading positions across route visits while honoring an explicit destination', async () => {
     const runtime = createSettingsFixtureRuntime();
-    const view = render(
+    const tree = (visible = true, initialSection?: string) => <PageSessionProvider>
       <RendererKernelProvider runtime={runtime}>
         <RendererRootSingleSlot slot={settingsFixtureHostSlot} props={{ children: (
-          <SettingsPage archivedThreads={[]} config={null} onSaveRuntimePreferences={vi.fn()}
-            onDeleteAllArchivedThreads={vi.fn()} onDeleteArchivedThread={vi.fn()} onRestoreArchivedThread={vi.fn()} />
+          visible ? <SettingsPage archivedThreads={[]} config={null} initialSection={initialSection} onSaveRuntimePreferences={vi.fn()}
+            onDeleteAllArchivedThreads={vi.fn()} onDeleteArchivedThread={vi.fn()} onRestoreArchivedThread={vi.fn()} /> : null
         ) }} />
-      </RendererKernelProvider>,
-    );
-    const viewport = view.container.querySelector<HTMLElement>('[data-settings-scroll-container]')!;
+      </RendererKernelProvider></PageSessionProvider>;
+    const view = render(tree());
+    let viewport = view.container.querySelector<HTMLElement>('[data-settings-scroll-container]')!;
     viewport.scrollTop = 360;
+    fireEvent.scroll(viewport);
     fireEvent.click(screen.getByRole('button', { name: '键盘快捷键' }));
     await screen.findByText('Shortcut settings');
     expect(viewport.scrollTop).toBe(0);
 
     viewport.scrollTop = 180;
+    fireEvent.scroll(viewport);
     fireEvent.click(screen.getByRole('button', { name: '通用' }));
     await screen.findByText('General settings');
-    expect(viewport.scrollTop).toBe(0);
+    expect(viewport.scrollTop).toBe(360);
+    view.rerender(tree(false));
+    view.rerender(tree());
+    await screen.findByText('General settings');
+    viewport = view.container.querySelector<HTMLElement>('[data-settings-scroll-container]')!;
+    expect(viewport.scrollTop).toBe(360);
+    view.rerender(tree(false));
+    view.rerender(tree(true, 'shortcuts'));
+    await screen.findByText('Shortcut settings');
+    viewport = view.container.querySelector<HTMLElement>('[data-settings-scroll-container]')!;
+    expect(viewport.scrollTop).toBe(180);
     view.unmount();
     await runtime.dispose();
   });
@@ -61,6 +74,7 @@ describe('SettingsSectionExtensionOutlet', () => {
             children: (
               <SettingsSectionExtensionOutlet
                 sectionId="personalization"
+                scrollContainer={{ current: null }}
                 trailingContent={<div>Advanced settings</div>}
                 translate={translate}
                 ui={settingsViewUi}

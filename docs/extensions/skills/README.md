@@ -92,9 +92,10 @@ Skill 目录页按已继承目录和 Skill 文件路径分组，每个 extra roo
 注入来源：
 
 - 用户在当前输入显式选择的 Skill。
+- 会话创建时绑定的项目默认 Skill，持续参与每轮上下文。
 - Plugin Skill 的 auto-activation。
 
-显式选择存在时，不再追加自动匹配的 Plugin Skill。自动匹配可使用：
+仅当轮显式选择会阻止自动匹配；项目默认 Skill 不关闭自动匹配，禁用或缺失的默认项会跳过。各来源合并后按 Skill ID 去重。自动匹配可使用：
 
 - `auto-activate` 短语。
 - 用户文本。

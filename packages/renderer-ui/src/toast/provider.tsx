@@ -2,7 +2,11 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useUiLabels } from '../locale.js';
 import { ToastStack, type ToastEntry, type ToastTone } from './stack.js';
 
-export type ToastOptions = { durationMs?: number };
+export type ToastOptions = {
+  /** null keeps actionable feedback available until dismissed or resolved. */
+  durationMs?: number | null;
+  action?: ToastEntry['action'];
+};
 export type ToastApi = {
   dismiss(id: number): void;
   error(message: string, options?: ToastOptions): number | null;
@@ -27,7 +31,8 @@ export function ToastProvider({ children, label, closeLabel }: PropsWithChildren
     if (!normalizedMessage) return null;
     const tone = options.tone ?? 'info';
     const entry: ToastEntry = {
-      durationMs: Number.isFinite(options.durationMs)
+      action: options.action,
+      durationMs: options.durationMs === null ? null : Number.isFinite(options.durationMs)
         ? Math.max(1_000, Number(options.durationMs))
         : tone === 'error' ? 5_000 : 3_500,
       id: ++nextToastId.current,
@@ -48,7 +53,7 @@ export function ToastProvider({ children, label, closeLabel }: PropsWithChildren
 
   return <ToastContext.Provider value={api}>
     {children}
-    <ToastStack entries={toasts} label={label ?? labels.notifications} closeLabel={closeLabel ?? labels.close} onDismiss={dismiss} />
+    <ToastStack entries={toasts.slice(0, 4)} label={label ?? labels.notifications} closeLabel={closeLabel ?? labels.close} onDismiss={dismiss} />
   </ToastContext.Provider>;
 }
 
@@ -77,5 +82,5 @@ function ToastFeedback({ message, tone = 'error' }: { message?: string | null; t
 
 export function enqueueToast(current: ToastEntry[], entry: ToastEntry): ToastEntry[] {
   const withoutDuplicate = current.filter((toast) => toast.message !== entry.message || toast.tone !== entry.tone);
-  return [...withoutDuplicate, entry].slice(-4);
+  return [...withoutDuplicate, entry];
 }

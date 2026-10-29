@@ -188,11 +188,13 @@ export function useDesktopAppController() {
     workspaceLayoutWidth,
     workspaceMaxWidth,
     workspaceMaximized,
+    workspaceSinglePane,
     workspaceMinWidth,
     workspaceWidth,
   } = useDesktopPanelResize(shellRef, {
     bottomPanelVisible: bottomPanelReservesLayout,
     sidebarManuallyCollapsed,
+    sidebarManuallyExpanded,
     workspaceVisible: workspacePanelReservesLayout,
   });
   const sidebarCanExpand = useDesktopSidebarAutoCollapse({
@@ -207,7 +209,8 @@ export function useDesktopAppController() {
     manuallyExpanded: sidebarManuallyExpanded,
   });
   // 插件导航有独立的折叠状态，切换页面不会改写聊天侧栏的偏好。
-  const sidebarCollapsed = activeView === 'capabilities' ? capabilitiesSidebarCollapsed : chatSidebarCollapsed;
+  const sidebarCollapsed = activeView === 'capabilities' ? capabilitiesSidebarCollapsed
+    : (activeView === 'chat' && workspaceSinglePane) || chatSidebarCollapsed;
   const setSidebarCollapsed = useCallback((value: SetStateAction<boolean>) => {
     if (activeView === 'capabilities') {
       setCapabilitiesSidebarCollapsed(value);
@@ -385,6 +388,7 @@ export function useDesktopAppController() {
   const shellClassName = [
     activeView === 'settings' ? 'desktop-agent-page--settings-open' : '',
     activeView === 'capabilities' ? 'desktop-agent-page--capabilities-open' : '',
+    activeView === 'chat' && workspaceSinglePane ? 'desktop-agent-page--workspace-focused' : '',
     shellSidebarState.collapsed ? 'desktop-agent-page--sidebar-collapsed' : '',
     bottomPanelVisible ? 'desktop-agent-page--bottom-panel-open' : '',
     activeView === 'chat' && sidePanelTransitionPhase

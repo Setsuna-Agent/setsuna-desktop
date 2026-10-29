@@ -1,4 +1,4 @@
-import { TextField as UiTextField, Button as UiButton, Switch } from '@setsuna-desktop/renderer-ui';
+import { TextField as UiTextField, Button as UiButton, Switch, usePageSessionState, usePageScrollRestoration } from '@setsuna-desktop/renderer-ui';
 
 import type {
   RuntimeSkillDetail,
@@ -22,6 +22,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from 'react';
@@ -57,9 +58,11 @@ export function SkillsCapabilitiesPage({
     () => service.getSnapshot(),
   );
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const actions = useSkillPageActions(service, capabilitiesRefresh, translate, host);
+  const [query, setQuery] = usePageSessionState('capabilities:skills:query', '');
+  const actions = useSkillPageActions(service, capabilitiesRefresh, translate, host, capabilities);
   const { mode, summary, detail, error, loading, saving, operationError, pending } = actions;
+  const catalogViewport = useRef<HTMLDivElement>(null);
+  usePageScrollRestoration(`capabilities:skills:${mode}:${query}`, catalogViewport);
 
   useEffect(() => {
     if (snapshot.skills.length) return;
@@ -169,7 +172,7 @@ export function SkillsCapabilitiesPage({
             />
           </label>
         </div>
-        <div className="desktop-capabilities-grid">
+        <div className="desktop-capabilities-grid" ref={catalogViewport}>
           <div className="desktop-capabilities-grid__content">
             <div className="desktop-capability-catalog">
               {skillGroups.map(({ id, title, skills: groupSkills }) => (

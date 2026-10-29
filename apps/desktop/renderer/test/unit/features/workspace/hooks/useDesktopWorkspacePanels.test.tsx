@@ -15,6 +15,7 @@ import { ReviewFeatureHostBoundary } from '../../../../../src/composition/review
 import { BottomToolsPanel } from '../../../../../src/features/workspace/BottomToolsPanel.js';
 import { useDesktopWorkspacePanels, useSidePanelTransition } from '../../../../../src/features/workspace/hooks/useDesktopWorkspacePanels.js';
 import type { ProjectWorkspaceState } from '../../../../../src/features/workspace/hooks/useProjectWorkspace.js';
+import type { ThreadWorkspaceStatus } from '../../../../../src/features/workspace/hooks/useThreadWorkspace.js';
 import type { ChatComposerTargetIdentity } from '../../../../../src/features/chat/hooks/useChatComposerSession.js';
 import type { DesktopTerminalEvent } from '../../../../../src/features/workspace/model.js';
 import { I18nProvider } from '../../../../../src/shared/i18n/I18nProvider.js';
@@ -564,8 +565,33 @@ it('removes a failed action tab and allows an explicit retry without silently op
   expect(view.result.current.bottomPanelSlot.panels).toHaveLength(1);
 });
 
+it('starts a home-directory terminal in a projectless draft and reuses it after hiding the panel', async () => {
+  const { view, terminal } = renderTerminalWorkspace('new-thread-slot:global', null);
+  act(() => view.result.current.toggleBottomPanel());
+  const panelId = view.result.current.bottomActivePanel!.id;
+  await waitFor(() => expect(view.result.current.terminalSessionsByPanelId[panelId]?.sessionId).toBe('session-1'));
+  expect(terminal.open).toHaveBeenCalledExactlyOnceWith(null, 100, 24);
+  act(() => view.result.current.hideBottomPanel());
+  act(() => view.result.current.toggleBottomPanel());
+  expect(view.result.current.terminalSessionsByPanelId[panelId]?.sessionId).toBe('session-1');
+  expect(terminal.open).toHaveBeenCalledOnce();
+});
+
+it('waits for an unresolved project directory instead of opening a home-directory shell', async () => {
+  const { view, terminal } = renderTerminalWorkspace('thread:A', null);
+  view.rerender({ targetIdentity: 'thread:A', workspaceStatus: 'loading' });
+  act(() => view.result.current.toggleBottomPanel());
+  for (const workspaceStatus of ['missing', 'error'] as const) {
+    view.rerender({ targetIdentity: 'thread:A', workspaceStatus });
+  }
+  expect(terminal.open).not.toHaveBeenCalled();
+  const project = { id: 'project', path: '/repo', name: 'Repository', createdAt: '', updatedAt: '' };
+  view.rerender({ targetIdentity: 'thread:A', project, workspaceStatus: 'ready' });
+  await waitFor(() => expect(terminal.open).toHaveBeenCalledExactlyOnceWith('/repo', 100, 24));
+});
+
 function renderTerminalWorkspace(targetIdentity: ChatComposerTargetIdentity = 'thread:A',
-  project: WorkspaceProject = { id: 'project', path: '/repo', name: 'Repository', createdAt: '', updatedAt: '' },
+  project: WorkspaceProject | null = { id: 'project', path: '/repo', name: 'Repository', createdAt: '', updatedAt: '' },
   windowSessionKey: string | null = null) {
   const listeners = new Map<string, Set<(event: DesktopTerminalEvent) => void>>();
   let sequence = 0;
@@ -584,10 +610,10 @@ function renderTerminalWorkspace(targetIdentity: ChatComposerTargetIdentity = 't
     configurable: true,
     value: { desktop: { platform: 'darwin' }, terminal, workspaceApps: { list: vi.fn().mockResolvedValue([]) } },
   });
-  const initialProps: { targetIdentity: ChatComposerTargetIdentity; project?: WorkspaceProject } = { targetIdentity };
-  const view = renderHook(({ targetIdentity: identity, project: currentProject }) => useDesktopWorkspacePanels({
+  const initialProps: { targetIdentity: ChatComposerTargetIdentity; project?: WorkspaceProject; workspaceStatus?: ThreadWorkspaceStatus } = { targetIdentity };
+  const view = renderHook(({ targetIdentity: identity, project: currentProject, workspaceStatus = project ? 'ready' : 'idle' }) => useDesktopWorkspacePanels({
     activeProject: currentProject ?? project, activeView: 'chat', conversationDebugEnabled: false,
-    targetIdentity: identity, workspaceStatus: 'ready', setError: vi.fn(), windowSessionKey,
+    targetIdentity: identity, workspaceStatus, setError: vi.fn(), windowSessionKey,
   }), {
     initialProps,
     wrapper: ({ children }) => <I18nProvider initialLocale="zh-CN" messageCatalog={messageCatalog}>

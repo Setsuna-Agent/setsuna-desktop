@@ -14,7 +14,7 @@ import { Folder, FolderPlus, Star, X } from 'lucide-react';
 import { useId, useState, type FormEvent } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { Button, IconButton, TextField } from '../../shared/ui/primitives.js';
-import { ProjectConversationDefaultsFields } from './ProjectConversationDefaultsFields.js';
+import { ProjectConversationDefaultsFields } from './project-defaults/ProjectConversationDefaultsFields.js';
 import { ProjectIconPicker } from './ProjectIconPicker.js';
 
 type ProjectEditorDialogProps = {

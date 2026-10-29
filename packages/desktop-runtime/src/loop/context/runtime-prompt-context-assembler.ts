@@ -8,7 +8,7 @@ import type {
   RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
 import type { MemoryControl } from '@setsuna-desktop/feature-memory/contracts';
-import type { SkillInjection, SkillRegistry } from '@setsuna-desktop/feature-skills/contracts';
+import type { SkillActivationContext, SkillInjection, SkillRegistry } from '@setsuna-desktop/feature-skills/contracts';
 import type { ProjectInstructionLoader } from '../../ports/project-instruction-loader.js';
 import type { ProjectWorkflow, ProjectWorkflowResolver } from '../../ports/project-workflow-resolver.js';
 import type {
@@ -101,7 +101,7 @@ export class RuntimePromptContextAssembler {
         [...new Set([...skillIds, ...pluginContext.skillIds])],
         config,
         language,
-        skillActivationText,
+        { text: skillActivationText, defaultSkillIds: thread.defaultSkillIds },
         skillCatalogContextWindowTokens,
         tools.some((tool) => tool.name === 'read_skill'),
       ),
@@ -147,12 +147,12 @@ export class RuntimePromptContextAssembler {
     skillIds: string[],
     config: RuntimeConfigState | null | undefined,
     language: RuntimeInterfaceLanguage,
-    skillActivationText: string,
+    activation: SkillActivationContext,
     skillCatalogContextWindowTokens: number | undefined,
     readSkillAvailable: boolean,
   ): Promise<RuntimePromptContext> {
     const text = runtimeText(language);
-    const snapshot = await this.options.skillRegistry?.resolvePromptContext(skillIds, { text: skillActivationText, interfaceLanguage: language });
+    const snapshot = await this.options.skillRegistry?.resolvePromptContext(skillIds, { ...activation, interfaceLanguage: language });
     if (!snapshot) return { fragments: [], selectedSkills: [] };
     const injections = snapshot.selectedInjections;
     const catalog = runtimeSkillCatalogPrompt(snapshot.availableSkills, {
@@ -160,10 +160,10 @@ export class RuntimePromptContextAssembler {
       readSkillAvailable,
       language,
     });
-    const explicitSkillIds = new Set(skillIds);
+    const selectedSkillIds = new Set([...skillIds, ...(activation.defaultSkillIds ?? [])]);
     const orderedInjections = injections
       .map((skill, index) => ({ index, skill }))
-      .sort((left, right) => Number(explicitSkillIds.has(right.skill.id)) - Number(explicitSkillIds.has(left.skill.id)) || left.index - right.index)
+      .sort((left, right) => Number(selectedSkillIds.has(right.skill.id)) - Number(selectedSkillIds.has(left.skill.id)) || left.index - right.index)
       .map(({ skill }) => skill);
     let remainingBytes = positiveSetting(config?.desktopSettings?.skillPromptMaxBytes) ?? DEFAULT_SKILL_PROMPT_MAX_BYTES;
     const selectedSkillFragments = orderedInjections.map((skill): RuntimePromptFragment => {

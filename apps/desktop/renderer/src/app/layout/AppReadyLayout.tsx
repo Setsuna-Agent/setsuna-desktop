@@ -107,6 +107,9 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   const pluginPageRefresh = usePluginPageRefreshRequests();
   // 记录下一次进入设置页时应定位到的分区；普通入口会先清空，避免上一次的直达请求残留。
   const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSectionId | null>(null);
+  useEffect(() => {
+    if (activeView !== 'settings') setSettingsInitialSection(null);
+  }, [activeView]);
   const [runtimeActivityOpen, setRuntimeActivityOpen] = useState(false);
   const [focusComposerRequest, setFocusComposerRequest] = useState(0);
   const [findInChatRequest, setFindInChatRequest] = useState(0);

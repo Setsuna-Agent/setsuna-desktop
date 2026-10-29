@@ -1,7 +1,7 @@
 import { useMcpAuthentication } from './useMcpAuthentication.js';
 import { McpServerDetail } from './McpServerDetail.js';
 import { useConfirm } from '@setsuna-desktop/renderer-ui';
-import { TextField as UiTextField, Button as UiButton, Switch } from '@setsuna-desktop/renderer-ui';
+import { TextField as UiTextField, Button as UiButton, Switch, usePageSessionState, usePageScrollRestoration } from '@setsuna-desktop/renderer-ui';
 
 import type {
   RuntimeMcpServer,
@@ -99,7 +99,7 @@ export function McpCapabilitiesPage({
     () => service.getSnapshot(),
     () => service.getSnapshot(),
   );
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = usePageSessionState('capabilities:mcp:query', '');
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [selectedKey, setSelectedKey] = useState<string | null>(capabilities?.activeItemId ?? null);
   const [editingServer, setEditingServer] = useState<RuntimeMcpServer | null>(null);
@@ -108,6 +108,8 @@ export function McpCapabilitiesPage({
   const [pendingServers, setPendingServers] = useState<ReadonlySet<string>>(new Set());
   const pendingServersRef = useRef(new Set<string>());
   const navigationVersion = useRef(0);
+  const catalogViewport = useRef<HTMLDivElement>(null);
+  usePageScrollRestoration(`capabilities:mcp:${selectedKey ?? 'catalog'}:${query}:${editingServer?.key ?? ''}`, catalogViewport);
   useEffect(() => () => { navigationVersion.current += 1; }, []);
   useEffect(() => {
     navigationVersion.current += 1;
@@ -142,6 +144,7 @@ export function McpCapabilitiesPage({
     navigationVersion.current += 1;
     setOperationError(null);
     setSelectedKey(null);
+    capabilities?.setActiveItemId(null);
     setEditingServer(null);
     setDraft({ ...emptyDraft });
   };
@@ -155,6 +158,7 @@ export function McpCapabilitiesPage({
     navigationVersion.current += 1;
     setOperationError(null);
     setSelectedKey(key);
+    capabilities?.setActiveItemId(key);
   };
   const runServerAction = async (key: string, operation: () => Promise<unknown>, onSuccess?: () => void) => {
     if (pendingServersRef.current.has(key)) return;
@@ -276,7 +280,7 @@ export function McpCapabilitiesPage({
             />
           </label>
         </div>
-        <div className="desktop-capabilities-grid">
+        <div className="desktop-capabilities-grid" ref={catalogViewport}>
           <div className="desktop-capabilities-grid__content desktop-capability-catalog">
             {serverGroups.map(({ id, titleKey, servers: groupServers }) => (
               <section className="desktop-capability-catalog__section" key={id}>

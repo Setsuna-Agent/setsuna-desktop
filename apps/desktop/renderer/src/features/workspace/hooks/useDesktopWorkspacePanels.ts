@@ -330,13 +330,14 @@ export function useDesktopWorkspacePanels({
       const terminalProjectKey = terminalKey(rootId);
       const terminalWorkspacePath = activeProject && root
         ? readyThreadWorkspacePath(workspaceProjectForRoot(activeProject, root.id), workspaceStatus) : null;
-      // Loading/error/empty states must never fall back to terminal.open(null), which starts in the user home directory.
-      if (!activeProject || !root || !terminalWorkspacePath) return;
+      // A projectless draft may use the home directory; an unresolved project must never fall back to it.
+      const homeTerminal = !activeProject && workspaceStatus === 'idle' && !command;
+      if (!homeTerminal && !terminalWorkspacePath) return;
       // Resolve the implicit primary selection while the owning project is available.
       // Exit events can then identify that selection even while another project is active.
       const layout = layoutForIdentity(targetIdentity);
       const panel = [...layout.sidePanelSlot.panels, ...layout.bottomPanelSlot.panels].find((item) => item.id === panelId);
-      if (panel && !panel.rootId) updateBrowserPanel(targetIdentity, panelId, { rootId: root.id });
+      if (panel && root && !panel.rootId) updateBrowserPanel(targetIdentity, panelId, { rootId: root.id });
       const sessionKey = terminalSessionKey(panelId, terminalProjectKey);
       if (terminalSessionsByPanelId[panelId]?.[terminalProjectKey]) return;
       if (pendingTerminalSessionsRef.current.has(sessionKey)) return;
@@ -345,7 +346,7 @@ export function useDesktopWorkspacePanels({
         setError('Desktop terminal bridge is unavailable.');
         return;
       }
-      const pending = { projectId: activeProject.id, rootId: root.id };
+      const pending = { projectId: activeProject?.id ?? GLOBAL_TERMINAL_PROJECT_KEY, rootId: root?.id ?? '' };
       pendingTerminalSessionsRef.current.set(sessionKey, pending);
       try {
         const session = await (command

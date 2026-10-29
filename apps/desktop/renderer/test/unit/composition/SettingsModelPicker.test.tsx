@@ -22,6 +22,7 @@ it('keeps vision choices restricted to runtime availability and saves selection 
   providers[0]!.models.push({ ...providers[0]!.models[0]!, id: 'text', name: 'Text only', code: 'text-code', supportsImages: false });
   vi.mocked(useModelProviderSnapshot).mockReturnValue({
     state: { activeProviderId: 'a', providers },
+    confirmedState: { activeProviderId: 'a', providers }, saveError: null,
     error: null, loading: false, catalog: null, refreshingCatalogProviderId: null, catalogError: null, proxyServers: [],
   });
   let state: VisionRecognitionSettingsState = {

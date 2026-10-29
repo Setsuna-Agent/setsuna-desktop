@@ -41,8 +41,6 @@
 }
 
 .sd-popover.desktop-workspace-overview__settings-popover {
-  --app-primary: var(--app-text);
-  --app-primary-text: var(--app-surface);
   width: 264px;
   padding: 6px;
   border-radius: var(--app-radius-group);

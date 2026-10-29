@@ -1,13 +1,11 @@
 import type { WorkspaceConversationOptions } from '@setsuna-desktop/contracts';
-import { Checkbox, Disclosure } from '@setsuna-desktop/renderer-ui';
-import { Info } from 'lucide-react';
-import { useConfiguredModelState } from '../../composition/ModelProviderFeatureBoundary.js';
-import { useSkillsFeatureSnapshot } from '../../composition/SkillsFeatureBoundary.js';
-import { chatDefaultModelSelection } from '../../features/chat/chatModelSelection.js';
-import { useI18n } from '../../shared/i18n/I18nProvider.js';
-import { ConfiguredModelPicker } from '../../shared/ui/model-picker/ConfiguredModelPicker.js';
-import { modelOptions } from '../../shared/ui/model-picker/modelOptions.js';
-import { SelectField } from '../../shared/ui/primitives.js';
+import { useConfiguredModelState } from '../../../composition/ModelProviderFeatureBoundary.js';
+import { chatDefaultModelSelection } from '../../../features/chat/chatModelSelection.js';
+import { useI18n } from '../../../shared/i18n/I18nProvider.js';
+import { ConfiguredModelPicker } from '../../../shared/ui/model-picker/ConfiguredModelPicker.js';
+import { modelOptions } from '../../../shared/ui/model-picker/modelOptions.js';
+import { SelectField } from '../../../shared/ui/primitives.js';
+import { ProjectDefaultSkillsField } from './ProjectDefaultSkillsField.js';
 
 export function ProjectConversationOptionsFields({ value, disabled, onChange }: Readonly<{
   value: WorkspaceConversationOptions;
@@ -16,13 +14,9 @@ export function ProjectConversationOptionsFields({ value, disabled, onChange }: 
 }>) {
   const { t } = useI18n();
   const state = useConfiguredModelState();
-  const { skills } = useSkillsFeatureSnapshot();
   const model = value.model
     ? state?.providers.find((provider) => provider.enabled && provider.id === value.model?.providerId)?.models.find((model) => model.id === value.model?.modelId)
     : chatDefaultModelSelection(state).model;
-  const selected = new Set(value.skillIds);
-  const choices = [...skills.filter((skill) => skill.enabled || selected.has(skill.id)),
-    ...[...selected].filter((id) => !skills.some((skill) => skill.id === id)).map((id) => ({ id, name: id }))];
 
   return <>
     <label className="desktop-project-editor__field">
@@ -44,14 +38,7 @@ export function ProjectConversationOptionsFields({ value, disabled, onChange }: 
           <option key={effort} value={effort}>{effort === 'enabled' ? t('sidebar.thinkingOn') : effort}</option>)}
       </SelectField>
     </label>
-    <Disclosure title={t('sidebar.defaultSkills')}>
-      <p className="desktop-project-editor__notice" role="note"><Info size={16} aria-hidden="true" />
-        <span>{t('sidebar.defaultSkillsNotice')}</span>
-      </p>
-      {choices.map((skill) => <Checkbox key={skill.id} checked={selected.has(skill.id)} disabled={disabled}
-        onChange={(checked) => onChange({ ...value, skillIds: checked ? [...selected, skill.id] : [...selected].filter((id) => id !== skill.id) })}>
-        {skill.name}
-      </Checkbox>)}
-    </Disclosure>
+    <ProjectDefaultSkillsField value={value.skillIds} disabled={disabled}
+      onChange={(skillIds) => onChange({ ...value, skillIds })} />
   </>;
 }

@@ -2,7 +2,6 @@
 
 import { parsePluginMentions, pluginAppMentionText, type WorkspaceProject, type DesktopRuntimeClient, type RuntimeMessage, type RuntimePluginSummary, type RuntimeQueuedTurnInput, type RuntimeSkillSummary, type RuntimeThread } from '@setsuna-desktop/contracts';
 import { browserTabMentionText, type BrowserTabReference } from '@setsuna-desktop/feature-browser/contracts';
-import { PageSessionProvider } from '@setsuna-desktop/renderer-ui';
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -459,35 +458,17 @@ it.each([false, true])('excludes a borrowed queue edit from restart recovery and
   expect(ordinary.result.current.draft).toBe('Ordinary draft');
 });
 
-it('inserts default skills once after loading and respects removing them before sending', async () => {
+it.each(['', 'Restored draft'])('keeps project default skills out of the composer draft %j', async (initialDraft) => {
   const project: WorkspaceProject = { id: 'project', name: 'Project', createdAt: '', updatedAt: '', conversationDefaults: { skillIds: ['review'] } };
   const skill: RuntimeSkillSummary = { id: 'review', name: 'Review', enabled: true, kind: 'builtin' };
   const send = vi.fn(async () => true);
-  const view = render(<Harness newThread project={project} skills={[]} send={send} />);
-  view.rerender(<Harness newThread project={project} skills={[skill]} send={send} />);
+  const view = render(<Harness newThread project={project} initialDraft={initialDraft} skills={[]} send={send} />);
+  view.rerender(<Harness newThread project={project} initialDraft={initialDraft} skills={[skill]} send={send} />);
   const input = screen.getByRole('textbox');
-  await waitFor(() => expect(input.textContent).toContain('Review'));
-  const range = document.createRange(); range.selectNodeContents(input);
-  document.getSelection()?.removeAllRanges(); document.getSelection()?.addRange(range);
-  fireEvent.cut(input, { clipboardData: { setData: vi.fn() } });
-  expect(input.textContent?.trim()).toBe('');
+  expect(input.textContent).toBe(initialDraft);
   input.textContent = 'ask'; fireEvent.input(input);
   fireEvent.keyDown(input, { key: 'Enter' });
   await waitFor(() => expect(send).toHaveBeenCalledWith('ask', expect.objectContaining({ skillIds: [] })));
-});
-
-it('does not resurrect removed default skill tags when returning to the same empty draft', async () => {
-  const project: WorkspaceProject = { id: 'project', name: 'Project', createdAt: '', updatedAt: '', conversationDefaults: { skillIds: ['review'] } };
-  const skills: RuntimeSkillSummary[] = [{ id: 'review', name: 'Review', enabled: true, kind: 'builtin' }];
-  const view = render(<PageSessionProvider><Harness preferenceKey="draft" newThread project={project} skills={skills} /></PageSessionProvider>);
-  const input = screen.getByRole('textbox');
-  await waitFor(() => expect(input.textContent).toContain('Review'));
-  const range = document.createRange(); range.selectNodeContents(input);
-  document.getSelection()?.removeAllRanges(); document.getSelection()?.addRange(range);
-  fireEvent.cut(input, { clipboardData: { setData: vi.fn() } });
-  view.rerender(<PageSessionProvider><span /></PageSessionProvider>);
-  view.rerender(<PageSessionProvider><Harness preferenceKey="draft" newThread project={project} skills={skills} /></PageSessionProvider>);
-  expect(screen.getByRole('textbox').textContent?.trim()).toBe('');
 });
 
 function SessionHarness({ target, client, send, skills, windowKey, queuedTurnInputs, queuedTurnActions }: {

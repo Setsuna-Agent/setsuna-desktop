@@ -1,4 +1,4 @@
-import { TextField, Button as UiButton, useConfirm } from '@setsuna-desktop/renderer-ui';
+import { TextField, Button as UiButton, useConfirm, usePageSessionState, usePageScrollRestoration } from '@setsuna-desktop/renderer-ui';
 import { APP_BUILDER_PLUGIN_ID } from '@setsuna-desktop/contracts';
 
 import type {
@@ -58,7 +58,7 @@ export function PluginCapabilitiesPage({
     () => service.getHookSnapshot(),
     () => service.getHookSnapshot(),
   );
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = usePageSessionState('capabilities:plugins:query', '');
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [legacyHooksOpen, setLegacyHooksOpen] = useState(false);
   const [selectedPluginId, setSelectedPluginId] = useState<string | null>(capabilities?.activeItemId ?? null);
@@ -66,6 +66,8 @@ export function PluginCapabilitiesPage({
   const [error, setError] = useState<string | null>(null);
   const [repositoryRefreshing, setRepositoryRefreshing] = useState(true);
   const [catalogLoadFailed, setCatalogLoadFailed] = useState(false);
+  const catalogViewport = useRef<HTMLDivElement>(null);
+  usePageScrollRestoration(`capabilities:plugins:${selectedPluginId ?? 'catalog'}:${query}:${legacyHooksOpen}`, catalogViewport);
   const navigationVersion = useRef(0);
   const pendingActionRef = useRef<string | null>(null);
   const t = translate as PluginManagementTranslate;
@@ -329,7 +331,7 @@ export function PluginCapabilitiesPage({
             <TextField aria-label={t('feature.pluginManagement.search')} placeholder={t('feature.pluginManagement.search')} value={query} onChange={(event) => setQuery(event.currentTarget.value)} />
           </label>
         </div>
-        <div className="desktop-capabilities-grid"><div className="desktop-capabilities-grid__content">
+        <div className="desktop-capabilities-grid" ref={catalogViewport}><div className="desktop-capabilities-grid__content">
           <div className="desktop-plugin-market">
             {standaloneHooks.length ? (
               <LegacyHooksShortcut

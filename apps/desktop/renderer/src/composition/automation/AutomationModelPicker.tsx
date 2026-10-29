@@ -6,7 +6,7 @@ import { ConfiguredModelPicker } from '../../shared/ui/model-picker/ConfiguredMo
 import { modelOptionKey, modelOptions } from '../../shared/ui/model-picker/modelOptions.js';
 
 export function AutomationModelPicker({ models, value, disabled, translate, onChange }: AutomationModelPickerProps) {
-  const { state } = useModelProviderSnapshot();
+  const { confirmedState: state } = useModelProviderSnapshot();
   const { t } = useI18n();
   const options = useMemo(() => {
     const available = new Set(models.map((model) => modelOptionKey(model.providerId, model.modelId)));

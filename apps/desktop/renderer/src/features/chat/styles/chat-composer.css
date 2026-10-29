@@ -221,6 +221,17 @@
   background: var(--app-text);
 }
 
+/* Preserve the compact mark while providing a 24px target even at 80% scale. */
+.chat-attachment__remove::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 30px;
+  height: 30px;
+  transform: translate(-50%, -50%);
+  content: '';
+}
+
 .chat-attachment__remove:focus-visible {
   outline: 2px solid var(--app-primary);
   outline-offset: 2px;

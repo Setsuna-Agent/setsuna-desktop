@@ -101,6 +101,7 @@ async function fixture() {
   vi.mocked(useModelProviderSnapshot).mockReturnValue({
     error: null, loading: false, catalog: null, refreshingCatalogProviderId: null, catalogError: null, proxyServers: [],
     state: { activeProviderId: 'provider-a', providers },
+    confirmedState: { activeProviderId: 'provider-a', providers }, saveError: null,
   });
   const at = '2026-09-30T00:00:00Z';
   let task: AutomationTask = {

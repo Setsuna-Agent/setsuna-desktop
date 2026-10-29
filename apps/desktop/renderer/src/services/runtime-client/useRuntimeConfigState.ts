@@ -77,6 +77,8 @@ export function useRuntimeConfigState({ client, modelProvider }: RuntimeConfigSt
   const confirmedConfigRef = useRef<RuntimeConfigState | null>(null);
   const modelSelectionRequestRef = useRef(0);
   const modelSelectionSaveTailRef = useRef<Promise<void>>(Promise.resolve());
+  const preferenceSaveTailRef = useRef<Promise<void>>(Promise.resolve());
+  const pendingSelectionRef = useRef<number | null>(null);
 
   const replaceConfig = useCallback((nextConfig: RuntimeConfigState) => {
     const merged = mergeProviderProjection(nextConfig, modelProvider?.providerProjection() ?? null);
@@ -87,20 +89,23 @@ export function useRuntimeConfigState({ client, modelProvider }: RuntimeConfigSt
   useEffect(() => modelProvider?.subscribe(() => {
     const projection = modelProvider.providerProjection();
     if (!projection) return;
-    setConfig((current) => {
-      if (!current) return current;
-      const merged = mergeProviderProjection(current, projection);
-      confirmedConfigRef.current = merged;
-      return merged;
-    });
+    if (confirmedConfigRef.current) confirmedConfigRef.current = mergeProviderProjection(confirmedConfigRef.current, projection);
+    if (pendingSelectionRef.current === null) {
+      setConfig((current) => current ? mergeProviderProjection(current, projection) : current);
+    }
   }), [modelProvider]);
 
   const saveConfig = useCallback(async (input: RuntimeConfigInput) => {
-    const nextConfig = await client.saveConfig(input);
+    // Preferences share one persisted document; order writes before accepting their acknowledgements.
+    const pending = preferenceSaveTailRef.current.then(() => client.saveConfig(input));
+    preferenceSaveTailRef.current = pending.then(() => undefined, () => undefined);
+    const nextConfig = mergeProviderProjection(await pending, modelProvider?.providerProjection() ?? null);
     confirmedConfigRef.current = nextConfig;
-    setConfig(nextConfig);
+    setConfig((current) => pendingSelectionRef.current !== null && current
+      ? mergeProviderProjection(nextConfig, current)
+      : nextConfig);
     return nextConfig;
-  }, [client]);
+  }, [client, modelProvider]);
 
   const saveRuntimePreferences = useCallback(
     async (input: RuntimePreferenceInput) => {
@@ -115,6 +120,7 @@ export function useRuntimeConfigState({ client, modelProvider }: RuntimeConfigSt
       if (!modelProvider) throw new Error('Required model-provider Feature is unavailable.');
       const requestId = modelSelectionRequestRef.current + 1;
       modelSelectionRequestRef.current = requestId;
+      pendingSelectionRef.current = requestId;
       const input = providerModelSelectionConfigInput(config, providerId, modelId);
       const optimistic: RuntimeConfigState = {
         ...config,
@@ -143,14 +149,15 @@ export function useRuntimeConfigState({ client, modelProvider }: RuntimeConfigSt
       try {
         const saved = await savedConfig;
         confirmedConfigRef.current = saved;
-        if (modelSelectionRequestRef.current === requestId) setConfig(saved);
+        if (modelSelectionRequestRef.current === requestId) {
+          pendingSelectionRef.current = null;
+          setConfig(saved);
+        }
       } catch (error) {
         if (modelSelectionRequestRef.current === requestId) {
-          setConfig((current) => (
-            current === optimistic && confirmedConfigRef.current
-              ? confirmedConfigRef.current
-              : current
-          ));
+          pendingSelectionRef.current = null;
+          // A preference acknowledgement may have produced a new optimistic object in the meantime.
+          setConfig((current) => confirmedConfigRef.current ?? current);
         }
         throw error;
       }

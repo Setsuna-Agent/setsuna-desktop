@@ -1,4 +1,5 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useRef } from 'react';
+import { usePageScrollRestoration } from '@setsuna-desktop/renderer-ui';
 import { ArrowLeft, ChevronRight } from 'lucide-react';
 import type { SettingsPageHeadingProps, SettingsPageLayoutProps } from '@setsuna-desktop/renderer-contracts/settings';
 import { Button, IconButton } from './primitives.js';
@@ -18,12 +19,7 @@ export function SettingsPageHeading({ action, description, title }: SettingsPage
 export function SettingsPageLayout({ title, description, action, parent, showHeading = true, children }: SettingsPageLayoutProps) {
   const { t } = useI18n();
   const root = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    // Aligning the child with scrollIntoView consumes the viewport's top padding.
-    // Reset only the owning settings viewport, including after async page loading.
-    const scrollContainer = root.current?.closest<HTMLElement>('[data-settings-scroll-container]');
-    if (scrollContainer) scrollContainer.scrollTop = 0;
-  }, [title]);
+  usePageScrollRestoration(`settings:page:${parent?.label ?? ''}:${title}`, root, { closest: '[data-settings-scroll-container]' });
   return <div className="sd-settings-page" ref={root}>
     {parent ? <nav className="sd-settings-page__breadcrumbs" aria-label={t('settings.title')}>
       <IconButton label={t('common.back')} onClick={parent.onBack}><ArrowLeft size={14} /></IconButton>
