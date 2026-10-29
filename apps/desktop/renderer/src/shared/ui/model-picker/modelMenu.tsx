@@ -1,4 +1,5 @@
 import { TextField, type MenuItem } from '@setsuna-desktop/renderer-ui';
+import { Search } from 'lucide-react';
 import type { Translate } from '../../i18n/I18nProvider.js';
 import type { KeyboardEvent, ReactNode, RefObject } from 'react';
 import { BrandIconMark } from '../../branding/BrandIconMark.js';
@@ -37,7 +38,7 @@ export function createModelMenu({ options, query, onQueryChange, onSelect, searc
   }));
   return [{
     key: 'model-search', type: 'group',
-    label: <TextField ref={searchRef} className="model-picker-menu__search"
+    label: <TextField ref={searchRef} className="model-picker-menu__search" leadingIcon={<Search size={14} />}
       aria-label={t('chat.model.search')} placeholder={t('chat.model.search')} value={query}
       onChange={(event) => onQueryChange(event.target.value)} onKeyDown={handleModelSearchKeyDown} />,
     children: [{
