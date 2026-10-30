@@ -6,6 +6,7 @@
 
 ## 当前设计
 
+- [上下文压缩执行方案](current/context-compaction.md)：已实施；共享请求、原生 V2、可移植交接、窗口预算、条件安装与后台压缩。
 - [Renderer Plugin Runtime](current/renderer-plugin-runtime.md)：已实施；记录静态 Renderer Plugin、层级 Slot Tree、布局偏好、Inspector、第三方 host tree/sandbox UI、安全边界与 React client bundle 延期门槛。
 - [Active turn 发送队列](current/queued-turn-inputs.md)：Contract event、runtime FIFO/steer/Goal 调度、REST 和 renderer composer 的完整链路。
 - [持久化 Goal](current/persistent-goals.md)：`pi-goal` 对齐、状态机、自动续轮、安全停止、恢复和 composer 控制。
@@ -15,6 +16,7 @@
 
 ## 评审与治理
 
+- [上下文压缩验收记录](history/context-compaction-evaluation-2026-10-30.md)：真实供应商连续续跑、旧 runtime 对照、失败与复测、后台启用决策。
 - [Feature Composition 决策概览](../architecture/feature-composition.md)：当前所有权边界、统一 FeatureHost API 与生命周期规则。
 - [Feature Composition 历史评审记录](history/feature-composition-architecture.md)：保留业务收拢的取舍和被后续实现替代的方案，不再包含施工计划。
 - [Model Provider Pi 迁移记录](history/model-provider-pi-migration.md)：替换旧协议栈时的所有权与持久兼容决策；当前 owner 规则以 [Model Provider Feature](../features/model-provider.md) 为准。

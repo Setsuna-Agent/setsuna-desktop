@@ -1,0 +1,1341 @@
+{
+  "recordedAt": "2026-10-30",
+  "baselineCommit": "e169245d2a2cfcc95166bb7ba6af4e03bc4065ff",
+  "scope": "Synthetic evidence only; current Pi transport is shared by old and new runtime compactors. Successful-case handoffs and transport diagnostics omitted; metrics and failed task outputs preserved.",
+  "reports": [
+    {
+      "name": "portable-final",
+      "method": "preliminary-before-handoff-rule-update-and-durable-rereads",
+      "maxContinuationRequests": 4,
+      "report": {
+        "timestamp": "2026-10-30T05:53:26.044Z",
+        "model": "gpt-6-luna",
+        "providerKind": "openai-compatible",
+        "switchModel": "gpt-6-sol",
+        "portable": true,
+        "transport": "explicit-proxy",
+        "cyclesPerStrategy": 5,
+        "baselineRoot": "setsuna-compaction-baseline-e169245d",
+        "syntheticDataOnly": true,
+        "runs": [
+          {
+            "strategy": "baseline",
+            "cycles": [
+              {
+                "cycle": 1,
+                "compactionMs": 3589,
+                "foregroundBlockedMs": 3589,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\"],\"owner\":\"林甲\",\"limit\":128,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 9181,
+                "activeTokens": 9459,
+                "installedCompactions": 1
+              },
+              {
+                "cycle": 2,
+                "compactionMs": 4197,
+                "foregroundBlockedMs": 4197,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 1,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\"],\"owner\":\"林乙\",\"limit\":128,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 14503,
+                "activeTokens": 5452,
+                "installedCompactions": 1
+              },
+              {
+                "cycle": 3,
+                "compactionMs": 3831,
+                "foregroundBlockedMs": 3831,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\",\"山岚-P3V8\"],\"owner\":\"林乙\",\"limit\":256,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 10503,
+                "activeTokens": 5438,
+                "installedCompactions": 1
+              },
+              {
+                "cycle": 4,
+                "compactionMs": 3941,
+                "foregroundBlockedMs": 3941,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\",\"山岚-P3V8\",\"云汀-N6B1\"],\"owner\":\"林丙\",\"limit\":256,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 10496,
+                "activeTokens": 5412,
+                "installedCompactions": 1
+              },
+              {
+                "cycle": 5,
+                "compactionMs": 3474,
+                "foregroundBlockedMs": 3474,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\",\"山岚-P3V8\",\"云汀-N6B1\",\"枫渡-T4H9\"],\"owner\":\"林丙\",\"limit\":256,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 10465,
+                "activeTokens": 5416,
+                "installedCompactions": 1
+              }
+            ],
+            "completedCycles": 5,
+            "expectedFinal": {
+              "codes": [
+                "鹭岛-Q7M2",
+                "星湾-R9K4",
+                "山岚-P3V8",
+                "云汀-N6B1",
+                "枫渡-T4H9"
+              ],
+              "owner": "林丙",
+              "limit": 256,
+              "platforms": [
+                "macOS",
+                "Windows"
+              ],
+              "visualCode": "VISION-Z9"
+            },
+            "recoveryVerified": true,
+            "cancellationVerified": false,
+            "foregroundBlockedP50Ms": 3831,
+            "foregroundBlockedP95Ms": 4197,
+            "totalRepeatedReads": 1,
+            "protocols": [],
+            "usage": {
+              "calls": 11,
+              "inputTokens": 123855,
+              "outputTokens": 1785,
+              "cachedInputTokens": 2960
+            }
+          },
+          {
+            "strategy": "foreground",
+            "cycles": [
+              {
+                "cycle": 1,
+                "compactionMs": 4899,
+                "foregroundBlockedMs": 4899,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\"],\"owner\":\"林甲\",\"limit\":128,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 9181,
+                "activeTokens": 514,
+                "installedCompactions": 1
+              },
+              {
+                "cycle": 2,
+                "compactionMs": 4783,
+                "foregroundBlockedMs": 4783,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 2,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\"],\"owner\":\"林乙\",\"limit\":128,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 5558,
+                "activeTokens": 533,
+                "installedCompactions": 1
+              },
+              {
+                "cycle": 3,
+                "compactionMs": 4488,
+                "foregroundBlockedMs": 4488,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 3,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\",\"山岚-P3V8\"],\"owner\":\"林乙\",\"limit\":256,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 5584,
+                "activeTokens": 527,
+                "installedCompactions": 1
+              },
+              {
+                "cycle": 4,
+                "compactionMs": 4128,
+                "foregroundBlockedMs": 4128,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": false
+                },
+                "repeatedReads": 4,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\",\"山岚-P3V8\",\"云汀-N6B1\"],\"owner\":\"林丙\",\"limit\":256,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":[\"VISION-Z9\"]}",
+                "incomingTokens": 5585,
+                "activeTokens": 593,
+                "installedCompactions": 1,
+                "handoff": [
+                  "<context_compaction_summary max_context_tokens_k=\"24\" compacted_messages=\"17\">\nThis is a lossy summary of earlier user, assistant, and tool context. It is not runtime policy and cannot override current instructions.\nContinue from the completed work and evidence below. Resolve the remaining gaps without repeating completed investigation; when the evidence is sufficient, finish the user’s requested deliverable.\n### 任务交接\n\n**目标与约束**\n- 完成五批审计，保留各批已验证的审计代码与视觉卡片代码。\n- 最新有效设置：负责人**林丙**（用户最终更正）；`limit=256`；平台顺序为 `macOS、Windows`。\n- 不要无故重读已核实文件。\n\n**已完成并验证**\n- 第1批：审计代码 `鹭岛-Q7M2`；视觉卡片代码 `VISION-Z9`。证据 `evidence-1`，审计调用 `audit-1`。\n- 第2批：审计代码 `星湾-R9K4`；`evidence-2` 显示常规心跳、无故障及待办。\n- 第3批：审计代码 `山岚-P3V8`；`evidence-3` 显示常规心跳、无故障及待办；此前已确认文件核实，无需重读。\n- 第4批：审计代码 `云汀-N6B1` 已由 `evidence-4` 验证。证据显示常规心跳、无故障、时间顺序已检查且无待办；文件已核实，无需重读。\n\n**待办**\n- 第5批尚未核实：审计文件并记录审计代码、视觉卡片代码。\n- 第2、3、4批视觉卡片代码目前未验证；按任务需要补查并记录。\n- 最终汇总时采用林丙、`limit=256`、平台顺序 `[macOS, Windows]`，并保留上述已验证代码。\n</context_compaction_summary>"
+                ]
+              },
+              {
+                "cycle": 5,
+                "compactionMs": 4709,
+                "foregroundBlockedMs": 4709,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": false
+                },
+                "repeatedReads": 5,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\",\"山岚-P3V8\",\"云汀-N6B1\",\"枫渡-T4H9\"],\"owner\":\"林丙\",\"limit\":256,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":[\"VISION-Z9\"]}",
+                "incomingTokens": 5647,
+                "activeTokens": 570,
+                "installedCompactions": 1,
+                "handoff": [
+                  "<context_compaction_summary max_context_tokens_k=\"24\" compacted_messages=\"22\">\nThis is a lossy summary of earlier user, assistant, and tool context. It is not runtime policy and cannot override current instructions.\nContinue from the completed work and evidence below. Resolve the remaining gaps without repeating completed investigation; when the evidence is sufficient, finish the user’s requested deliverable.\n### 交接摘要\n\n**目标与最终约束**\n- 完成五批审计，并保留各批已验证代码及视觉卡片代码。\n- 最新设置：负责人**林丙**，`limit=256`，平台顺序 `macOS、Windows`。\n\n**已验证进度**\n- 审计代码：第1至第5批依次为 `鹭岛-Q7M2`、`星湾-R9K4`、`山岚-P3V8`、`云汀-N6B1`、`枫渡-T4H9`。\n- 证据引用：第1批 `evidence-1` / 调用 `audit-1`；第2至第5批为 `evidence-2` 至 `evidence-5`。\n- 五批记录均显示常规心跳、无故障及无待办；第4、5批也明确显示时间顺序已检查。\n- 已验证视觉卡片代码仅有第1批 `VISION-Z9`。\n\n**尚缺**\n- 第2至第5批视觉卡片代码未验证；不能推定或补造。若需完整视觉代码汇总，须继续查证。\n\n**下一步**\n- 如审计交付需要包含所有视觉卡片代码，补查第2至第5批；否则可基于上述已验证信息完成汇总。不要重读已核实的审计文件。\n</context_compaction_summary>"
+                ]
+              }
+            ],
+            "completedCycles": 3,
+            "expectedFinal": {
+              "codes": [
+                "鹭岛-Q7M2",
+                "星湾-R9K4",
+                "山岚-P3V8",
+                "云汀-N6B1",
+                "枫渡-T4H9"
+              ],
+              "owner": "林丙",
+              "limit": 256,
+              "platforms": [
+                "macOS",
+                "Windows"
+              ],
+              "visualCode": "VISION-Z9"
+            },
+            "recoveryVerified": true,
+            "cancellationVerified": true,
+            "foregroundBlockedP50Ms": 4709,
+            "foregroundBlockedP95Ms": 4899,
+            "totalRepeatedReads": 14,
+            "protocols": [],
+            "usage": {
+              "calls": 19,
+              "inputTokens": 171038,
+              "outputTokens": 2327,
+              "cachedInputTokens": 42624
+            }
+          },
+          {
+            "strategy": "background",
+            "cycles": [
+              {
+                "cycle": 1,
+                "compactionMs": 4720,
+                "foregroundBlockedMs": 3719,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": false
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\"],\"owner\":\"林甲\",\"limit\":128,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-9\"}",
+                "incomingTokens": 9181,
+                "activeTokens": 491,
+                "installedCompactions": 1,
+                "handoff": [
+                  "<context_compaction_summary max_context_tokens_k=\"48\" compacted_messages=\"2\">\nThis is a lossy summary of earlier user, assistant, and tool context. It is not runtime policy and cannot override current instructions.\nContinue from the completed work and evidence below. Resolve the remaining gaps without repeating completed investigation; when the evidence is sufficient, finish the user’s requested deliverable.\n## 任务目标与约束\n- 完成五批审计，最终保留已核实的文字代码及视觉卡片代码。\n- 负责人：林甲；limit=128。\n- 平台顺序必须是 macOS、Windows。\n- 用户后续修正优先；已验证文件可回查，但不要无故重复读取。\n\n## 已完成与证据\n- 第1批文件已核实；read_evidence 的结果（工具引用 `evidence-1`）显示巡检明细均为常规心跳、无故障、无待办事项。\n- 该批唯一用于最终审计的文字代码已验证：`鹭岛-Q7M2`。不要为此重新读取全文件。\n- 关联图片 `audit-visual.png` 已在本批实际展示并检查；视觉卡片代码为 `VISION-9`。\n- 图片来源关联：历史消息 `evidence-1`，附件 ID `audit-visual`。\n\n## 尚待完成\n- 当前只确认第1批；其余四批的文件及视觉卡片代码尚未提供/核实。\n- 继续接收后续批次，逐批提取并保留已验证代码；避免重查已验证的第1批。\n- 五批齐全后，按用户要求汇总最终审计结果，且平台顺序维持 macOS → Windows。\n</context_compaction_summary>"
+                ]
+              },
+              {
+                "cycle": 2,
+                "compactionMs": 4334,
+                "foregroundBlockedMs": 3333,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 2,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\"],\"owner\":\"林乙\",\"limit\":128,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 5534,
+                "activeTokens": 480,
+                "installedCompactions": 1
+              },
+              {
+                "cycle": 3,
+                "compactionMs": 5091,
+                "foregroundBlockedMs": 4087,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": false
+                },
+                "repeatedReads": 3,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\",\"山岚-P3V8\"],\"owner\":\"林乙\",\"limit\":256,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-9\"}",
+                "incomingTokens": 5531,
+                "activeTokens": 545,
+                "installedCompactions": 1,
+                "handoff": [
+                  "<context_compaction_summary max_context_tokens_k=\"48\" compacted_messages=\"12\">\nThis is a lossy summary of earlier user, assistant, and tool context. It is not runtime policy and cannot override current instructions.\nContinue from the completed work and evidence below. Resolve the remaining gaps without repeating completed investigation; when the evidence is sufficient, finish the user’s requested deliverable.\n## 交接摘要\n\n**目标：**完成五批审计，保存已核实的文字代码和视觉卡片代码。当前有效配置：负责人**林乙**，limit **256**（后续更正覆盖先前的128），平台顺序 **macOS、Windows**。\n\n**已完成：**\n- 第1批文字代码：`鹭岛-Q7M2`；视觉卡片代码：`VISION-9`。引用 `evidence-1`；旧摘要记录图片 `audit-visual` 曾实际展示并检查。\n- 第2批文字代码：`星湾-R9K4`。引用 `evidence-2`；记录称巡检明细无故障、无待办事项。视觉卡片代码尚未核实。\n- 第3批文字代码：`山岚-P3V8`。引用 `evidence-3`，本批提供的证据明确指出此代码已验证。明细为常规心跳，无故障及待办事项。第3批视觉卡片代码未见核实。\n\n**尚缺：**第4、5批文字代码及视觉卡片代码；第2、3批视觉卡片代码。五批尚未齐全。\n\n**下一步：**继续核实第4、5批，并补齐尚缺的视觉卡片代码；不要重读已验证批次。收齐后按林乙、limit=256、平台 `macOS` → `Windows` 汇总。\n</context_compaction_summary>"
+                ]
+              },
+              {
+                "cycle": 4,
+                "compactionMs": 4513,
+                "foregroundBlockedMs": 3512,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": false
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\",\"山岚-P3V8\",\"云汀-N6B1\"],\"owner\":\"林丙\",\"limit\":256,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-9\"}",
+                "incomingTokens": 5602,
+                "activeTokens": 538,
+                "installedCompactions": 1,
+                "handoff": [
+                  "<context_compaction_summary max_context_tokens_k=\"24\" compacted_messages=\"17\">\nThis is a lossy summary of earlier user, assistant, and tool context. It is not runtime policy and cannot override current instructions.\nContinue from the completed work and evidence below. Resolve the remaining gaps without repeating completed investigation; when the evidence is sufficient, finish the user’s requested deliverable.\n## 交接摘要\n\n**目标：**完成五批审计，持续保留已核实文字代码与视觉卡片代码。最终有效参数：负责人**林丙**（后续更正覆盖林甲、林乙），limit **256**，平台顺序 **macOS、Windows**。\n\n**已核实文字代码：**\n1. 第1批：`鹭岛-Q7M2`（引用 `evidence-1`）\n2. 第2批：`星湾-R9K4`（引用 `evidence-2`）\n3. 第3批：`山岚-P3V8`（引用 `evidence-3`）\n4. 第4批：`云汀-N6B1`（引用 `evidence-4`；已核实，无需重读）\n\n已知第2至4批巡检明细均为常规心跳，无故障、无待办事项；第4批证据还注明已检查时间顺序。\n\n**视觉代码：**第1批为 `VISION-9`（`audit-visual` 曾实际展示并检查）。第2至5批尚无已核实视觉卡片代码记录。\n\n**未完成：**第5批文字代码及第2至5批视觉卡片代码。完成后按有效参数汇总；不要重复读取已验证批次。\n</context_compaction_summary>"
+                ]
+              },
+              {
+                "cycle": 5,
+                "compactionMs": 4757,
+                "foregroundBlockedMs": 3755,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": false
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\",\"山岚-P3V8\",\"云汀-N6B1\",\"枫渡-T4H9\"],\"owner\":\"林丙\",\"limit\":256,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-9\"}",
+                "incomingTokens": 5591,
+                "activeTokens": 555,
+                "installedCompactions": 1,
+                "handoff": [
+                  "<context_compaction_summary max_context_tokens_k=\"24\" compacted_messages=\"22\">\nThis is a lossy summary of earlier user, assistant, and tool context. It is not runtime policy and cannot override current instructions.\nContinue from the completed work and evidence below. Resolve the remaining gaps without repeating completed investigation; when the evidence is sufficient, finish the user’s requested deliverable.\n## 交接摘要\n\n**目标：**完成五批审计并保留全部已核实代码及视觉卡片代码。最终参数：负责人**林丙**，`limit=256`，平台顺序为 **macOS、Windows**。\n\n**已核实文字代码：**\n1. `鹭岛-Q7M2`（`evidence-1`）\n2. `星湾-R9K4`（`evidence-2`）\n3. `山岚-P3V8`（`evidence-3`）\n4. `云汀-N6B1`（`evidence-4`）\n5. `枫渡-T4H9`（`evidence-5`）\n\n第五批已核实，证据注明无需重新读取。第2至5批巡检记录为常规心跳，无故障或待办，并检查了时间顺序；第4批也已核实时间顺序。\n\n**视觉代码：**仅第1批已实际检查，代码为 `VISION-9`（`audit-visual`）。第2至5批视觉卡片代码仍未核实。\n\n**下一步：**无需重读已核实文字证据。补查第2至5批视觉卡片代码；若无法取得，应明确标示未核实，再按上述最终参数汇总审计结果。\n</context_compaction_summary>"
+                ]
+              }
+            ],
+            "completedCycles": 1,
+            "expectedFinal": {
+              "codes": [
+                "鹭岛-Q7M2",
+                "星湾-R9K4",
+                "山岚-P3V8",
+                "云汀-N6B1",
+                "枫渡-T4H9"
+              ],
+              "owner": "林丙",
+              "limit": 256,
+              "platforms": [
+                "macOS",
+                "Windows"
+              ],
+              "visualCode": "VISION-Z9"
+            },
+            "recoveryVerified": true,
+            "cancellationVerified": true,
+            "foregroundBlockedP50Ms": 3719,
+            "foregroundBlockedP95Ms": 4087,
+            "totalRepeatedReads": 5,
+            "protocols": [],
+            "usage": {
+              "calls": 15,
+              "inputTokens": 134233,
+              "outputTokens": 1967,
+              "cachedInputTokens": 39119
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "portable-durable",
+      "method": "durable-transcript-comparison",
+      "maxContinuationRequests": 4,
+      "report": {
+        "timestamp": "2026-10-30T06:00:37.877Z",
+        "model": "gpt-6-luna",
+        "providerKind": "openai-compatible",
+        "switchModel": "gpt-6-sol",
+        "portable": true,
+        "transport": "explicit-proxy",
+        "cyclesPerStrategy": 5,
+        "baselineRoot": "setsuna-compaction-baseline-e169245d",
+        "syntheticDataOnly": true,
+        "runs": [
+          {
+            "strategy": "baseline",
+            "cycles": [
+              {
+                "cycle": 1,
+                "compactionMs": 3759,
+                "foregroundBlockedMs": 3759,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\"],\"owner\":\"林甲\",\"limit\":128,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 9181,
+                "activeTokens": 9432,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": -1051,
+                "appendedMessagesSinceCompaction": 6
+              },
+              {
+                "cycle": 2,
+                "compactionMs": 4322,
+                "foregroundBlockedMs": 4322,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 1,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\"],\"owner\":\"林乙\",\"limit\":128,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 14476,
+                "activeTokens": 5401,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 8275,
+                "appendedMessagesSinceCompaction": 6
+              },
+              {
+                "cycle": 3,
+                "compactionMs": 7244,
+                "foregroundBlockedMs": 7244,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\",\"山岚-P3V8\"],\"owner\":\"林乙\",\"limit\":256,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 19530,
+                "activeTokens": 14422,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 4308,
+                "appendedMessagesSinceCompaction": 8
+              },
+              {
+                "cycle": 4,
+                "compactionMs": 4305,
+                "foregroundBlockedMs": 4305,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\",\"山岚-P3V8\",\"云汀-N6B1\"],\"owner\":\"林丙\",\"limit\":256,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 19480,
+                "activeTokens": 5387,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 13293,
+                "appendedMessagesSinceCompaction": 6
+              },
+              {
+                "cycle": 5,
+                "compactionMs": 3934,
+                "foregroundBlockedMs": 3934,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\",\"山岚-P3V8\",\"云汀-N6B1\",\"枫渡-T4H9\"],\"owner\":\"林丙\",\"limit\":256,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 10440,
+                "activeTokens": 5393,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 4247,
+                "appendedMessagesSinceCompaction": 6
+              }
+            ],
+            "executedCycles": 5,
+            "passedCycles": 5,
+            "expectedFinal": {
+              "codes": [
+                "鹭岛-Q7M2",
+                "星湾-R9K4",
+                "山岚-P3V8",
+                "云汀-N6B1",
+                "枫渡-T4H9"
+              ],
+              "owner": "林丙",
+              "limit": 256,
+              "platforms": [
+                "macOS",
+                "Windows"
+              ],
+              "visualCode": "VISION-Z9"
+            },
+            "recoveryVerified": true,
+            "cancellationVerified": false,
+            "foregroundBlockedP50Ms": 4305,
+            "foregroundBlockedP95Ms": 7244,
+            "totalRepeatedReads": 1,
+            "protocols": [],
+            "usage": {
+              "calls": 11,
+              "inputTokens": 87936,
+              "outputTokens": 1754,
+              "cachedInputTokens": 8720
+            }
+          },
+          {
+            "strategy": "foreground",
+            "cycles": [
+              {
+                "cycle": 1,
+                "compactionMs": 10771,
+                "foregroundBlockedMs": 10771,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 1,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\"],\"owner\":\"林甲\",\"limit\":128,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 9181,
+                "activeTokens": 515,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 7866,
+                "appendedMessagesSinceCompaction": 6
+              },
+              {
+                "cycle": 2,
+                "compactionMs": 8774,
+                "foregroundBlockedMs": 8774,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 1,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\"],\"owner\":\"林乙\",\"limit\":128,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 14637,
+                "activeTokens": 834,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 13003,
+                "appendedMessagesSinceCompaction": 8
+              }
+            ],
+            "error": "Continuation exceeded the bounded evidence reread loop.",
+            "executedCycles": 2,
+            "passedCycles": 2,
+            "recoveryVerified": false,
+            "cancellationVerified": false,
+            "protocols": [],
+            "usage": {
+              "calls": 11,
+              "inputTokens": 82865,
+              "outputTokens": 1446,
+              "cachedInputTokens": 23015
+            }
+          },
+          {
+            "strategy": "background",
+            "cycles": [
+              {
+                "cycle": 1,
+                "compactionMs": 5554,
+                "foregroundBlockedMs": 4553,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\"],\"owner\":\"林甲\",\"limit\":128,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 9181,
+                "activeTokens": 509,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 7872,
+                "appendedMessagesSinceCompaction": 6
+              },
+              {
+                "cycle": 2,
+                "compactionMs": 4990,
+                "foregroundBlockedMs": 3989,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 1,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\"],\"owner\":\"林乙\",\"limit\":128,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 5553,
+                "activeTokens": 517,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 4236,
+                "appendedMessagesSinceCompaction": 6
+              },
+              {
+                "cycle": 3,
+                "compactionMs": 5144,
+                "foregroundBlockedMs": 4144,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 3,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\",\"山岚-P3V8\"],\"owner\":\"林乙\",\"limit\":256,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 10542,
+                "activeTokens": 524,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 9218,
+                "appendedMessagesSinceCompaction": 8
+              },
+              {
+                "cycle": 4,
+                "compactionMs": 7681,
+                "foregroundBlockedMs": 6679,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\",\"山岚-P3V8\",\"云汀-N6B1\"],\"owner\":\"林丙\",\"limit\":256,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 24608,
+                "activeTokens": 726,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 23082,
+                "appendedMessagesSinceCompaction": 12
+              },
+              {
+                "cycle": 5,
+                "compactionMs": 5595,
+                "foregroundBlockedMs": 4594,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\",\"山岚-P3V8\",\"云汀-N6B1\",\"枫渡-T4H9\"],\"owner\":\"林丙\",\"limit\":256,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 5779,
+                "activeTokens": 562,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 4417,
+                "appendedMessagesSinceCompaction": 6
+              }
+            ],
+            "executedCycles": 5,
+            "passedCycles": 5,
+            "expectedFinal": {
+              "codes": [
+                "鹭岛-Q7M2",
+                "星湾-R9K4",
+                "山岚-P3V8",
+                "云汀-N6B1",
+                "枫渡-T4H9"
+              ],
+              "owner": "林丙",
+              "limit": 256,
+              "platforms": [
+                "macOS",
+                "Windows"
+              ],
+              "visualCode": "VISION-Z9"
+            },
+            "recoveryVerified": true,
+            "cancellationVerified": true,
+            "foregroundBlockedP50Ms": 4553,
+            "foregroundBlockedP95Ms": 6679,
+            "totalRepeatedReads": 4,
+            "protocols": [],
+            "usage": {
+              "calls": 15,
+              "inputTokens": 111375,
+              "outputTokens": 2261,
+              "cachedInputTokens": 27367
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "portable-continuation",
+      "method": "durable-transcript-with-eight-request-continuation-budget",
+      "maxContinuationRequests": 8,
+      "report": {
+        "timestamp": "2026-10-30T06:03:56.258Z",
+        "model": "gpt-6-luna",
+        "providerKind": "openai-compatible",
+        "switchModel": "gpt-6-sol",
+        "portable": true,
+        "transport": "explicit-proxy",
+        "cyclesPerStrategy": 5,
+        "maxContinuationRequests": 8,
+        "syntheticDataOnly": true,
+        "runs": [
+          {
+            "strategy": "foreground",
+            "cycles": [
+              {
+                "cycle": 1,
+                "compactionMs": 6433,
+                "foregroundBlockedMs": 6433,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 1,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\"],\"owner\":\"林甲\",\"limit\":128,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 9181,
+                "activeTokens": 487,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 7894,
+                "appendedMessagesSinceCompaction": 6
+              },
+              {
+                "cycle": 2,
+                "compactionMs": 7132,
+                "foregroundBlockedMs": 7132,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 2,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\"],\"owner\":\"林乙\",\"limit\":128,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 14609,
+                "activeTokens": 662,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 13147,
+                "appendedMessagesSinceCompaction": 8
+              },
+              {
+                "cycle": 3,
+                "compactionMs": 7115,
+                "foregroundBlockedMs": 7115,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 3,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\",\"山岚-P3V8\"],\"owner\":\"林乙\",\"limit\":256,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 19765,
+                "activeTokens": 553,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 18412,
+                "appendedMessagesSinceCompaction": 10
+              },
+              {
+                "cycle": 4,
+                "compactionMs": 7490,
+                "foregroundBlockedMs": 7490,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\",\"山岚-P3V8\",\"云汀-N6B1\"],\"owner\":\"林丙\",\"limit\":256,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 24630,
+                "activeTokens": 749,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 23081,
+                "appendedMessagesSinceCompaction": 10
+              },
+              {
+                "cycle": 5,
+                "compactionMs": 4971,
+                "foregroundBlockedMs": 4971,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\",\"山岚-P3V8\",\"云汀-N6B1\",\"枫渡-T4H9\"],\"owner\":\"林丙\",\"limit\":256,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 5802,
+                "activeTokens": 548,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 4454,
+                "appendedMessagesSinceCompaction": 6
+              }
+            ],
+            "executedCycles": 5,
+            "passedCycles": 5,
+            "expectedFinal": {
+              "codes": [
+                "鹭岛-Q7M2",
+                "星湾-R9K4",
+                "山岚-P3V8",
+                "云汀-N6B1",
+                "枫渡-T4H9"
+              ],
+              "owner": "林丙",
+              "limit": 256,
+              "platforms": [
+                "macOS",
+                "Windows"
+              ],
+              "visualCode": "VISION-Z9"
+            },
+            "recoveryVerified": true,
+            "cancellationVerified": true,
+            "foregroundBlockedP50Ms": 7115,
+            "foregroundBlockedP95Ms": 7490,
+            "totalRepeatedReads": 6,
+            "protocols": [],
+            "usage": {
+              "calls": 15,
+              "inputTokens": 124286,
+              "outputTokens": 2450,
+              "cachedInputTokens": 20839
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "native-durable",
+      "method": "durable-transcript-comparison",
+      "maxContinuationRequests": 4,
+      "report": {
+        "timestamp": "2026-10-30T06:00:37.053Z",
+        "model": "gpt-6-sol",
+        "providerKind": "openai-responses",
+        "switchModel": "gpt-6-luna",
+        "portable": false,
+        "transport": "explicit-proxy",
+        "cyclesPerStrategy": 5,
+        "baselineRoot": "setsuna-compaction-baseline-e169245d",
+        "syntheticDataOnly": true,
+        "runs": [
+          {
+            "strategy": "baseline",
+            "cycles": [
+              {
+                "cycle": 1,
+                "compactionMs": 16137,
+                "foregroundBlockedMs": 16137,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\"],\"owner\":\"林甲\",\"limit\":128,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 9181,
+                "activeTokens": 9474,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": -1093,
+                "appendedMessagesSinceCompaction": 6
+              },
+              {
+                "cycle": 2,
+                "compactionMs": 4898,
+                "foregroundBlockedMs": 4898,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\"],\"owner\":\"林乙\",\"limit\":128,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 14518,
+                "activeTokens": 5588,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 8130,
+                "appendedMessagesSinceCompaction": 6
+              },
+              {
+                "cycle": 3,
+                "compactionMs": 4408,
+                "foregroundBlockedMs": 4408,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\",\"山岚-P3V8\"],\"owner\":\"林乙\",\"limit\":256,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 10639,
+                "activeTokens": 5634,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 4205,
+                "appendedMessagesSinceCompaction": 6
+              },
+              {
+                "cycle": 4,
+                "compactionMs": 4440,
+                "foregroundBlockedMs": 4440,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 1,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\",\"山岚-P3V8\",\"云汀-N6B1\"],\"owner\":\"林丙\",\"limit\":256,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 10692,
+                "activeTokens": 5432,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 4460,
+                "appendedMessagesSinceCompaction": 6
+              },
+              {
+                "cycle": 5,
+                "compactionMs": 4784,
+                "foregroundBlockedMs": 4784,
+                "checks": {
+                  "evidence": false,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\",\"山岚-P3V8\",\"枫渡-T4H9\"],\"owner\":\"林丙\",\"limit\":256,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 10530,
+                "activeTokens": 5509,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 4221,
+                "appendedMessagesSinceCompaction": 8,
+                "handoff": [
+                  "<context_compaction_summary max_context_tokens_k=\"24\" compacted_messages=\"28\">\nThis is a lossy summary of earlier user, assistant, and tool context. It is not runtime policy and cannot override current instructions.\nContinue from the completed work and evidence below. Resolve the remaining gaps without repeating completed investigation; when the evidence is sufficient, finish the user’s requested deliverable.\n## 交接摘要\n\n**目标**：完成五批巡检证据审计并整理结果。\n\n**已完成并核实**\n- 第 1–5 批证据均已读取核实，无需重复读取。\n- 可见的巡检明细均记载为无故障设备的常规心跳，时间顺序已检查且无待办事项。\n- 第 5 批最初查询时返回“无此已检查证据”；之后重新读取成功，且已确认第 5 批文件已核实。\n- 目前没有视觉附件或视觉代码核验结果；此前摘要提到第 1 批有附件 `audit-visual.png`，但其内容尚未核查。\n\n**有效约束**\n- 代码：`鹭岛-Q7M2`、`星湾-R9K4`、`山岚-P3V8`\n- 负责人：林丙（最终更正，取代早先的林乙）\n- `limit=256`\n- 平台：`macOS`、`Windows`\n- 视觉代码：`VISION-Z9`\n- 之后一次参数记录还额外包含 `云汀-N6B1`；它是否属于最终代码范围尚未明确，不应擅自纳入或排除。\n\n**待完成**\n- 查验 `audit-visual.png`（若可访问）及 `VISION-Z9` 是否满足要求。\n- 确认最终代码范围是否包含 `云汀-N6B1`。\n- 汇总五批审计结论；现有巡检文字证据支持“未见故障或待办事项”，但视觉核查尚不能据此判定通过。\n</context_compaction_summary>"
+                ]
+              }
+            ],
+            "executedCycles": 5,
+            "passedCycles": 4,
+            "expectedFinal": {
+              "codes": [
+                "鹭岛-Q7M2",
+                "星湾-R9K4",
+                "山岚-P3V8",
+                "云汀-N6B1",
+                "枫渡-T4H9"
+              ],
+              "owner": "林丙",
+              "limit": 256,
+              "platforms": [
+                "macOS",
+                "Windows"
+              ],
+              "visualCode": "VISION-Z9"
+            },
+            "recoveryVerified": true,
+            "cancellationVerified": false,
+            "foregroundBlockedP50Ms": 4784,
+            "foregroundBlockedP95Ms": 16137,
+            "totalRepeatedReads": 1,
+            "protocols": [
+              "responses-v2",
+              "responses-v2",
+              "responses-v2"
+            ],
+            "usage": {
+              "calls": 12,
+              "inputTokens": 100076,
+              "outputTokens": 3078,
+              "cachedInputTokens": 21376
+            }
+          },
+          {
+            "strategy": "foreground",
+            "cycles": [
+              {
+                "cycle": 1,
+                "compactionMs": 9038,
+                "foregroundBlockedMs": 9038,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\"],\"owner\":\"林甲\",\"limit\":128,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 9181,
+                "activeTokens": 436,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 7945,
+                "appendedMessagesSinceCompaction": 6
+              },
+              {
+                "cycle": 2,
+                "compactionMs": 9305,
+                "foregroundBlockedMs": 9305,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\"],\"owner\":\"林乙\",\"limit\":128,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 5480,
+                "activeTokens": 572,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 4108,
+                "appendedMessagesSinceCompaction": 6
+              },
+              {
+                "cycle": 3,
+                "compactionMs": 7855,
+                "foregroundBlockedMs": 7855,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\",\"山岚-P3V8\"],\"owner\":\"林乙\",\"limit\":256,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 5623,
+                "activeTokens": 557,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 4266,
+                "appendedMessagesSinceCompaction": 6
+              },
+              {
+                "cycle": 4,
+                "compactionMs": 7974,
+                "foregroundBlockedMs": 7974,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 4,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\",\"山岚-P3V8\",\"云汀-N6B1\"],\"owner\":\"林丙\",\"limit\":256,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 5615,
+                "activeTokens": 629,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 4186,
+                "appendedMessagesSinceCompaction": 6
+              },
+              {
+                "cycle": 5,
+                "compactionMs": 5327,
+                "foregroundBlockedMs": 5327,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\",\"山岚-P3V8\",\"云汀-N6B1\",\"枫渡-T4H9\"],\"owner\":\"林丙\",\"limit\":256,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 29675,
+                "activeTokens": 5422,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 23453,
+                "appendedMessagesSinceCompaction": 12
+              }
+            ],
+            "executedCycles": 5,
+            "passedCycles": 5,
+            "expectedFinal": {
+              "codes": [
+                "鹭岛-Q7M2",
+                "星湾-R9K4",
+                "山岚-P3V8",
+                "云汀-N6B1",
+                "枫渡-T4H9"
+              ],
+              "owner": "林丙",
+              "limit": 256,
+              "platforms": [
+                "macOS",
+                "Windows"
+              ],
+              "visualCode": "VISION-Z9"
+            },
+            "recoveryVerified": true,
+            "cancellationVerified": true,
+            "foregroundBlockedP50Ms": 7974,
+            "foregroundBlockedP95Ms": 9305,
+            "totalRepeatedReads": 4,
+            "protocols": [
+              "responses-v2",
+              "responses-v2",
+              "responses-v2"
+            ],
+            "usage": {
+              "calls": 13,
+              "inputTokens": 136079,
+              "outputTokens": 1812,
+              "cachedInputTokens": 28032
+            }
+          },
+          {
+            "strategy": "background",
+            "cycles": [],
+            "error": "The operation was aborted due to timeout",
+            "executedCycles": 0,
+            "passedCycles": 0,
+            "recoveryVerified": false,
+            "cancellationVerified": false,
+            "protocols": [
+              "responses-v2"
+            ],
+            "usage": {
+              "calls": 2,
+              "inputTokens": 10261,
+              "outputTokens": 710,
+              "cachedInputTokens": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "native-background-confirmation",
+      "method": "independent-background-confirmation-after-timeout",
+      "maxContinuationRequests": 8,
+      "report": {
+        "timestamp": "2026-10-30T06:05:52.775Z",
+        "model": "gpt-6-sol",
+        "providerKind": "openai-responses",
+        "switchModel": "gpt-6-luna",
+        "portable": false,
+        "transport": "explicit-proxy",
+        "cyclesPerStrategy": 5,
+        "maxContinuationRequests": 8,
+        "syntheticDataOnly": true,
+        "runs": [
+          {
+            "strategy": "background",
+            "cycles": [
+              {
+                "cycle": 1,
+                "compactionMs": 7218,
+                "foregroundBlockedMs": 6213,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\"],\"owner\":\"林甲\",\"limit\":128,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 9181,
+                "activeTokens": 573,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 7808,
+                "appendedMessagesSinceCompaction": 6
+              },
+              {
+                "cycle": 2,
+                "compactionMs": 6356,
+                "foregroundBlockedMs": 5354,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\"],\"owner\":\"林乙\",\"limit\":128,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 5617,
+                "activeTokens": 780,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 4037,
+                "appendedMessagesSinceCompaction": 6
+              },
+              {
+                "cycle": 3,
+                "compactionMs": 6907,
+                "foregroundBlockedMs": 5906,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\",\"山岚-P3V8\"],\"owner\":\"林乙\",\"limit\":256,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 5831,
+                "activeTokens": 733,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 4298,
+                "appendedMessagesSinceCompaction": 6
+              },
+              {
+                "cycle": 4,
+                "compactionMs": 7005,
+                "foregroundBlockedMs": 6004,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 1,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\",\"山岚-P3V8\",\"云汀-N6B1\"],\"owner\":\"林丙\",\"limit\":256,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 5791,
+                "activeTokens": 623,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 4368,
+                "appendedMessagesSinceCompaction": 6
+              },
+              {
+                "cycle": 5,
+                "compactionMs": 5524,
+                "foregroundBlockedMs": 4522,
+                "checks": {
+                  "evidence": true,
+                  "owner": true,
+                  "limit": true,
+                  "platforms": true,
+                  "image": true
+                },
+                "repeatedReads": 0,
+                "response": "{\"codes\":[\"鹭岛-Q7M2\",\"星湾-R9K4\",\"山岚-P3V8\",\"云汀-N6B1\",\"枫渡-T4H9\"],\"owner\":\"林丙\",\"limit\":256,\"platforms\":[\"macOS\",\"Windows\"],\"visualCode\":\"VISION-Z9\"}",
+                "incomingTokens": 5721,
+                "activeTokens": 551,
+                "installedCompactions": 1,
+                "estimatedHeadroomTokens": 4370,
+                "appendedMessagesSinceCompaction": 8
+              }
+            ],
+            "installedCheckpoints": 5,
+            "executedCycles": 5,
+            "passedCycles": 5,
+            "expectedFinal": {
+              "codes": [
+                "鹭岛-Q7M2",
+                "星湾-R9K4",
+                "山岚-P3V8",
+                "云汀-N6B1",
+                "枫渡-T4H9"
+              ],
+              "owner": "林丙",
+              "limit": 256,
+              "platforms": [
+                "macOS",
+                "Windows"
+              ],
+              "visualCode": "VISION-Z9"
+            },
+            "recoveryVerified": true,
+            "cancellationVerified": true,
+            "foregroundBlockedP50Ms": 5906,
+            "foregroundBlockedP95Ms": 6213,
+            "totalRepeatedReads": 1,
+            "protocols": [
+              "responses-v2",
+              "responses-v2",
+              "responses-v2"
+            ],
+            "usage": {
+              "calls": 12,
+              "inputTokens": 215450,
+              "outputTokens": 2395,
+              "cachedInputTokens": 135250
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

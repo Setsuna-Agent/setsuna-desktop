@@ -145,6 +145,20 @@ Goal 与 Collaboration 已使用版本化、可校验的持久 checkpoint；基�
 
 基准不进入普通 CI；在目标平台和代表性硬件上保存对比结果，不把跨机器数字当作统一阈值。启动链路变更还需遵循 [启动性能约束](../architecture/runtime-flows.md#启动性能约束硬性)，验证慢任务、失败和取消不阻塞核心就绪。
 
+## 上下文压缩真实供应商评测
+
+```bash
+pnpm benchmark:context-compaction --data-dir /path/to/runtime --provider provider-id --model model-code --output /tmp/compaction.json
+```
+
+该命令从现有配置读取指定模型与凭据，使用临时 SQLite、合成中文证据和合成图片；不读取用户对话或修改供应商设置。它会调用真实供应商并产生模型用量，因此只手动执行，不进入普通测试或 CI。
+
+默认比较新实现的前台与后台路径，每条路径连续压缩五次并实际续跑，包括多次用户修正、工具回查落盘、第三轮后重启与取消验证。每轮强制检查恰好安装一个检查点，输出任务字段校验、回查次数、token 用量、窗口余量与前台阻塞时间。`--portable` 固定使用所选模型做可移植交接；`--switch-provider <id> --switch-model <code>` 在第四轮更换续跑模型并收紧本地窗口。后台比较人为重叠一秒工作，不能据此推断生产延迟分位数或自然压缩频率。
+
+`--baseline-root /path/to/detached-worktree` 可以加载旧版 runtime compactor，策略变为 `baseline,foreground,background`；旧 worktree 需能解析依赖。基线仍共用当前供应商传输层，衡量 runtime 窗口与交接行为，不等价于运行旧版完整应用。`--strategies foreground,background` 可缩小范围。
+
+默认使用直连；需要代理时显式传入 `--proxy <url>`，可通过 `--proxy-bypass host-a,host-b` 指定直连主机。评测不更改应用的代理设置。详细方法、真实失败和一次性数字见[压缩验收记录](../designs/history/context-compaction-evaluation-2026-10-30.md)。
+
 ## 测试编写规则
 
 - 不新增 UI 展示和样式单测：不锁定 CSS、类名、颜色、字体、图标、DOM 排列、布局尺寸或动画效果。混合用例只保留业务行为、数据处理、安全边界和实际功能交互断言。
